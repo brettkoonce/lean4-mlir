@@ -870,61 +870,52 @@ def sm_kappa(u, eexp, n):
     return (eexp + rho) / (1 - rho)
 
 
-def vit_softmax(st, n=NTOK_VIT, eexp=VIT_EEXP, q=U32, cap=True):
-    """**The row softmax, and the one place the cap costs nothing.**
+def sm_cap(u, eexp, n):
+    """`Proofs.smCap` — `u(1+kappa) + kappa`, the float softmax row's absolute distance from the
+    real one at the SAME logits.  This is `smErr` with its `Real.exp (2*delta) - 1` term absent,
+    and keeping it as its own name is what keeps the exponential out of the numerals."""
+    kap = sm_kappa(u, eexp, n)
+    return u * (1 + kap) + kap
 
-    WINDOW: `softmax_abs_le_one` puts the real row in (0,1), and `softmaxF_close` puts the
-    float row within `u(1+κ) + κ` of it — so the window is `1 + κ'`, a RATIONAL with no
-    `Real.exp` in it, at ANY input window.  MODULUS under the cap: `2·window`, likewise
-    exp-free.
 
-    ⭐ That is the whole trick.  `smErr u eexp δ n = u(1+κ) + κ + (Real.exp (2δ) − 1)` is
-    EXPONENTIAL in the inherited error δ, and δ reaching the logits is ~10¹⁶ by block 0.
-    The problem is not that the resulting number is large — it is that `Real.exp` at that
-    argument has NO rational bound the kernel will check, so there is no stage numeral to
-    write at all.  Capping deletes the `Real.exp` rather than bounding it.
+def vit_softmax_window(n=NTOK_VIT, eexp=VIT_EEXP, q=U32):
+    """The capped row softmax's window, `1 + smCap` (`Proofs.smCap`).  ⭐ CONSTANT in the input
+    window: `softmax_abs_le_one` puts the real row in [0,1] and `softmaxF_close` puts the float
+    row within `smCap = u(1+kappa) + kappa` of it.  Rational — no `Real.exp` — which is the
+    whole point, since `smErr`'s modulus is exponential in the inherited error."""
+    return 1 + sm_cap(q, eexp, n)
 
-    `cap=False` reverts to `smErr` at the inherited perturbation, for the ablation; it
-    returns an `exp_tainted` marker because the honest answer there is "unwritable", not a
-    number (Python's `expm1` overflowing to a finite float would hide exactly that)."""
+
+def vit_attn(st, m=D_VIT, n=NTOK_VIT, w=VIT_WA, b=VIT_BB, eexp=VIT_EEXP, q=U32,
+             mode='cap'):
+    """**Multi-head projected attention, as ONE stage** — `Maps.mhProjAttnFullCap`.
+
+    ⛔ It is one stage and not four because `FloatBridgesTo` composes single-input maps, and
+    attention FANS OUT (X -> Q,K,V) before it rejoins.  The repo's `mhProjAttnFullFlat` already
+    bundles it for that reason; what is new here is the WINDOW.
+
+    `mode='cap'` (shipped) is `mhpBCap`: the float output is a rounded dot of float softmax
+    weights (<= 1 + smCap) against float V (<= the dense window), giving
+    `(1+g2)*n*(1+smCap)*(1+g1)*(m*w*A + b)` — exp-free.
+    `mode='convex'` additionally uses the convex-combination bound (drop the `n`), which needs
+    a float-side peer of `sdpa_abs_le` that is NOT proved.
+    `mode='mhpB'` is the ORIGINAL window `vA_F + attnOutErr`, derived as |real| + |float-real|;
+    it carries `smErr` and therefore `Real.exp`, so it returns an exp-taint marker.  ⛔ Capping
+    does NOT rescue it: `capped` replaces the modulus, never the window."""
     A, E = st
-    kap = sm_kappa(q, eexp, n)
-    mag = 1 + (q * (1 + kap) + kap)
-    if cap:
-        return (mag, 2 * mag, False)
-    return (mag, q * (1 + kap) + kap, True)      # the `Real.exp(2δ)` term is unwritable
-
-
-def matmul2(st_a, st_b, m, q=U32):
-    """A matmul of two ACTIVATIONS over fan-in `m` (Q·Kᵀ at `m = d_head`, attn·V at `m = n`)
-    — the leaf with no weight bound to lean on, so its window is the PRODUCT of two windows.
-    Quadratic in the window, which is why it may only ever feed something that RESETS: here
-    Q·Kᵀ feeds the softmax, whose window is 1 whatever arrives, so the quadratic never
-    compounds across blocks."""
-    A, Ea = st_a
-    B, Eb = st_b
-    g = r4(gamma_q(m + 1, q))
-    return ((1 + g) * (m * A * B),
-            g * (m * (A + Ea) * (B + Eb)) + m * (A * Eb + B * Ea + Ea * Eb))
-
-
-def attn_v(st_w, st_v, n=NTOK_VIT, q=U32, convex=True):
-    """The attention-weights × V matmul.
-
-    `convex=True` uses what `sdpa_abs_le` already proves: the softmax row is a probability
-    vector, so the output is a CONVEX COMBINATION of V's rows and the window is `vA` — no
-    factor of `n`.  ⚠ On the FLOAT side this needs the peer fact (rounded weights are still
-    nonnegative and sum to ≤ 1+κ), which is NOT currently proved.
-    `convex=False` is the generic `matmul2` fan-in bound, which needs no new lemma and
-    charges `n = 197` per attention site — 27 orders across the net, and still statable.
-    That is a real choice and the ablation prices it."""
-    if not convex:
-        return matmul2(st_w, st_v, n, q)
-    Aw, Ew = st_w
-    Av, Ev = st_v
-    g = r4(gamma_q(n + 1, q))
-    return ((1 + g) * (Aw * Av),
-            g * (Aw + Ew) * (Av + Ev) + (Aw * Ev + Av * Ew + Ew * Ev))
+    g1 = r4(gamma_q(m + 2, q))
+    g2 = r4(gamma_q(n + 1, q))
+    sc = r4(sm_cap(q, eexp, n))
+    vAF = (1 + g1) * (m * w * A + b)                 # the float Q/K/V projection window
+    if mode == 'mhpB':
+        mag = r4(vAF)
+        return (mag, r4(2 * mag), True)              # unwritable: the Real.exp is in the window
+    fan = F(1) if mode == 'convex' else F(n)
+    # ⚠ round the WINDOW first, then double it. `Maps.capped` closes `2·Ā' ≤ Ē'` against the
+    # EMITTED window, and rounding `mag` and `2·mag` up independently can break exactly that
+    # (`2·r4(x)` can exceed `r4(2·x)`). `verify_vit` caught this on its first run.
+    mag = r4((1 + g2) * (fan * ((1 + sc) * vAF)))
+    return (mag, r4(2 * mag), False)
 
 
 def vit_ln_leaf(A, S=VIT_S, emr=VIT_EMR, ei=VIT_EI, q=U32):
@@ -944,7 +935,7 @@ def concat_cls(st, cls_b):
 def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
               gl=VIT_GL, bl=VIT_BL, cls=VIT_CLS, pos=VIT_POS,
               S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
-              k=K_VIT, ln_cap=True, sm_cap=True, gelu_sat=True, convex_av=True,
+              k=K_VIT, ln_cap=True, gelu_sat=True, attn_mode='cap',
               uniform=False):
     """Every stage of `vitForwardKV` at ViT-Tiny's shapes, at the granularity a Lean `Maps`
     chain composes them.  Returns (rows, exp_tainted_tags) — the second is the list of stage
@@ -992,20 +983,14 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
     # ── k transformer blocks, pre-norm, two residual sublayers each ──
     for i in range(k):
         t = f'b{i}'
-        # attention sublayer:  X + Wo·concat_h sdpa_h(LN(X)Wq, ·Wk, ·Wv)
+        # attention sublayer:  X + Wo·(capped multi-head attention over LN(X))
         skip = st
         s = lnsite(st, t + '.a', gl, bl)
-        qp = R(dense(s, D_VIT, wa, bb)); emit(t + '.q', qp)
-        kp = R(dense(s, D_VIT, wa, bb)); emit(t + '.k', kp)
-        vp = R(dense(s, D_VIT, wa, bb)); emit(t + '.v', vp)
-        sc = R(matmul2(qp, kp, DH_VIT, q)); emit(t + '.qk', sc)
-        sc = R(cnx_diag(sc, F(1, 8), q));   emit(t + '.sc', sc)   # the 1/√d_head scale
-        smag, smod, sm_taint = vit_softmax(sc, NTOK_VIT, eexp, q, sm_cap)
-        if sm_taint:
+        amag, amod, a_taint = vit_attn(s, D_VIT, NTOK_VIT, wa, bb, eexp, q, attn_mode)
+        if a_taint:
             taint = True
-        sm = R((smag, smod)); emit(t + '.sm', sm)
-        av = R(attn_v(sm, vp, NTOK_VIT, q, convex_av)); emit(t + '.av', av)
-        s = R(dense(av, D_VIT, wa, bb));  emit(t + '.o', s)
+        s = (amag, amod);                 emit(t + '.attn', s)   # already rounded, see vit_attn
+        s = R(dense(s, D_VIT, wa, bb));   emit(t + '.o', s)
         st = R(residual(skip, s, q));     emit(t + '.ares', st)
         # mlp sublayer:  X + fc2(gelu(fc1(LN(X))))
         skip = st
@@ -1020,6 +1005,93 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
     emit('cls', st)
     st = R(dense(st, D_VIT, wh, bb)); emit('logits', st)
     return out, tainted
+
+
+def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
+               gl=VIT_GL, bl=VIT_BL, cls=VIT_CLS, pos=VIT_POS,
+               S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
+               k=K_VIT) -> int:
+    """Re-assert EVERY rounded inequality a `ViTFloatBudget.lean` would close, exactly: each
+    stage's emitted numeral must still dominate the exact value computed from the PREVIOUS
+    stage's emitted numerals.  Returns the count checked; raises on the first failure.
+
+    ⚠ This is the pass that catches folding with the exact `(1+u)^k − 1` instead of the ROUNDED
+    `gamma_num` the Lean chain passes (§0).  Run it before emitting a single numeral."""
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: left > right"
+        n += 1
+
+    def conv_ck(tag, m, w, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2, q))
+        ck(tag + '.A', (1 + g) * (m * w * A + bb), dst[0])
+        ck(tag + '.E', g * (m * w * (A + E) + bb) + m * w * E, dst[1])
+
+    def ln_ck(tag, src):
+        A, E = src
+        ck(tag + '.ln.A', vit_ln_leaf(A, S, emr, ei, q), r[tag + '.ln'][0])
+        ck(tag + '.ln.E', 2 * r[tag + '.ln'][0], r[tag + '.ln'][1])
+        A1, E1 = r[tag + '.ln']
+        me = mulErr(q, gl, A1, F(0), F(0))
+        ck(tag + '.lng.A', gl * A1 + me, r[tag + '.lng'][0])
+        ck(tag + '.lng.E', me + gl * E1, r[tag + '.lng'][1])
+        A2, E2 = r[tag + '.lng']
+        ck(tag + '.lnb.A', A2 + bl + q * (A2 + bl), r[tag + '.lnb'][0])
+        ck(tag + '.lnb.E', q * (A2 + bl) + E2, r[tag + '.lnb'][1])
+        return r[tag + '.lnb']
+
+    # patch embed
+    st = (F(1), F(0))
+    conv_ck('pe.conv', PATCH_FANIN, wp, st, r['pe.conv'])
+    A, E = r['pe.conv']
+    ck('pe.cls.A', max(A, cls), r['pe.cls'][0])
+    ck('pe.cls.E', E, r['pe.cls'][1])
+    A, E = r['pe.cls']
+    ck('pe.pos.A', A + pos + q * (A + pos), r['pe.pos'][0])
+    ck('pe.pos.E', q * (A + pos) + E, r['pe.pos'][1])
+    st = r['pe.pos']
+
+    for i in range(k):
+        t = f'b{i}'
+        # attention sublayer
+        skip = st
+        s = ln_ck(t + '.a', st)
+        A, E = s
+        g1 = r4(gamma_q(D_VIT + 2, q))
+        g2 = r4(gamma_q(NTOK_VIT + 1, q))
+        sc = r4(sm_cap(q, eexp, NTOK_VIT))
+        vAF = (1 + g1) * (D_VIT * wa * A + bb)
+        ck(t + '.attn.A', (1 + g2) * (F(NTOK_VIT) * ((1 + sc) * vAF)), r[t + '.attn'][0])
+        ck(t + '.attn.E', 2 * r[t + '.attn'][0], r[t + '.attn'][1])   # `Maps.capped`
+        conv_ck(t + '.o', D_VIT, wa, r[t + '.attn'], r[t + '.o'])
+        A8, E8 = r[t + '.o']
+        ck(t + '.ares.A', A8 + skip[0] + q * (A8 + skip[0]), r[t + '.ares'][0])
+        ck(t + '.ares.E', q * (A8 + E8 + skip[0] + skip[1]) + (E8 + skip[1]),
+           r[t + '.ares'][1])
+        st = r[t + '.ares']
+        # mlp sublayer
+        skip = st
+        s = ln_ck(t + '.m', st)
+        conv_ck(t + '.fc1', D_VIT, wm, s, r[t + '.fc1'])
+        A, E = r[t + '.fc1']
+        ck(t + '.ge.A', A + eg, r[t + '.ge'][0])
+        ck(t + '.ge.E', eg + F(3, 2) * E, r[t + '.ge'][1])            # the saturation branch
+        conv_ck(t + '.fc2', MLP_VIT, wm, r[t + '.ge'], r[t + '.fc2'])
+        A8, E8 = r[t + '.fc2']
+        ck(t + '.mres.A', A8 + skip[0] + q * (A8 + skip[0]), r[t + '.mres'][0])
+        ck(t + '.mres.E', q * (A8 + E8 + skip[0] + skip[1]) + (E8 + skip[1]),
+           r[t + '.mres'][1])
+        st = r[t + '.mres']
+
+    st = ln_ck('headln', st)
+    ck('cls.A', st[0], r['cls'][0])          # the CLS gather is exact
+    ck('cls.E', st[1], r['cls'][1])
+    conv_ck('logits', D_VIT, wh, r['cls'], r['logits'])
+    return n
 
 
 def sci(x: F) -> str:
@@ -1044,17 +1116,18 @@ if __name__ == "__main__":
     print(f"    window        {sci(A)}")
     print(f"    budget        {sci(E)}")
     print(f"    budget/window {float(E / A):.3f}   ⛔ the CAP, not the fold (§9)")
+    print(f"    re-assertions {verify_vit(rows)} — every rounded inequality re-checked exactly")
     print(f"    statable      {'YES' if max(ilog10(A), ilog10(E)) < 300 else 'NO'}"
           f"   (norm_num ceiling ≈ 1e300)")
 
     print(f"\n  {'variant':<42} {'window':>12} {'budget':>12} {'unwritable':>11}  statable")
     print("  " + "-" * 84)
     for name, kw in [
-        ("shipped shape", {}),
+        ("shipped shape (Maps.mhProjAttnFullCap)", {}),
         ("uniform param bound (ConvNeXt's mistake)", dict(uniform=True)),
-        ("generic n-fan-in attn·V (no convex bnd)", dict(convex_av=False)),
+        ("+ convex attn·V bound (lemma NOT proved)", dict(attn_mode='convex')),
+        ("mhpB window (|real| + |float-real|)", dict(attn_mode='mhpB')),
         ("cubic GELU (no saturation constant)", dict(gelu_sat=False)),
-        ("softmax UNCAPPED (smErr's Real.exp)", dict(sm_cap=False)),
         ("LN UNCAPPED (the §0.1 quadratic)", dict(ln_cap=False)),
         ("depth 2 (the vitForward2V shape)", dict(k=2)),
         ("depth 6", dict(k=6)),

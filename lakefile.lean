@@ -350,6 +350,16 @@ lean_lib «Certs» where
              -- patchify conv — plus the three composites the ConvNeXt chain walks (LN site,
              -- block, downsample).
              `LeanMlir.Proofs.Float.FloatBudgetEnvLN,
+             -- ⭐ The two `Maps` leaves a TRANSFORMER needs on top of the LayerNorm kit: the
+             -- capped row softmax (window `1 + smCap`, CONSTANT in the input — a softmax resets)
+             -- and multi-head projected attention at an EXP-FREE window. ⛔ Both exist for one
+             -- reason: `smErr`'s `Real.exp (2δ)` is exponential in the inherited error, which is
+             -- ~1e10 at ViT-Tiny's block 0, so the failure mode is not size but REPRESENTABILITY
+             -- — there is no numeral at all. ⛔ `mhpB` puts that `Real.exp` in the WINDOW, where
+             -- `capped` cannot reach it, so `floatBridges_mhProjAttnFull` cannot carry a number;
+             -- `mhpBCap` bounds the float output directly instead (floatClose_seScale's fix, one
+             -- net later — the error never needed to enter the window).
+             `LeanMlir.Proofs.Float.FloatBudgetEnvAttn,
              -- ⛔ The fourth ImageNet-scale whole-net float statement, and NOT the same kind of
              -- statement as the three above: the ConvNeXt-T forward, window 4.858e227 / budget
              -- 9.706e227, and `budget / window = 2.00` is the tell that every one of the 23

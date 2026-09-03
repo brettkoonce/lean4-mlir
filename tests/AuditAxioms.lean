@@ -101,6 +101,7 @@ import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.EfficientNetFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvLN
+import LeanMlir.Proofs.Float.FloatBudgetEnvAttn
 import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
@@ -2241,6 +2242,47 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.capped
 #print axioms Proofs.FloatBridgesTo.Maps.bnCapped
 #print axioms Proofs.FloatBridgesTo.Maps.gelu
+-- ════════════════════════════════════════════════════════════════
+-- ViT / ATTENTION Maps kit (FloatBudgetEnvAttn.lean) — chunk 1 of the ViT-Tiny number.
+-- ⛔ These exist because `Real.exp` must never reach a stage numeral. `smErr u eexp δ n` is
+-- EXPONENTIAL in the inherited error δ, and δ reaching ViT-Tiny's attention logits is ~3.6e10 by
+-- block 0 — past `exp_sub_one_le`'s x < 1, so it has no rational bound. That is a REPRESENTABILITY
+-- failure, not a size one: `scripts/float_budget_envelope.py` measures the uncapped variant at an
+-- IDENTICAL magnitude with 36 stage numerals that cannot be written down at all. New failure mode
+-- for this repo; §0.1's quadratic blow-up is the other one.
+-- ⭐ smCap = u(1+κ) + κ is `smErr` with the exp term absent — the float softmax row's distance
+-- from the real one at the SAME logits. softmax_abs_le_one + softmaxF_close then bound the float
+-- row by 1 + smCap at ANY logits, so the softmax leaf's window is CONSTANT and it RESETS the fold.
+-- ⛔ mhpB (ViTBlockFloatBridge) derives attention's WINDOW as |real| + |float − real|, dragging
+-- smErr — and therefore Real.exp — into the window, where `capped` cannot reach it (capped bounds
+-- the modulus by 2·mag; it never touches mag). So floatBridges_mhProjAttnFull CANNOT carry this
+-- number. mhpBCap bounds the float output directly instead: a rounded dot of float softmax weights
+-- (≤ 1 + smCap) against float V. That is floatClose_seScale's fix from EfficientNet-B0, one net
+-- later, and it is both exp-free AND tighter.
+-- ⚠ The `n` in that window is the generic fan-in bound; sdpa_abs_le proves the REAL side is a
+-- convex combination (no n). The float peer is deliberately NOT proved — worth 27 orders, and the
+-- fold is statable without it (3.612e218 vs 1.055e191).
+-- ⚠ smRho u eexp n < 1 is a standing side condition the whole-net statement must carry and
+-- disclose, like DeviceRsqrt/DeviceSigmoid: 0.0100120 < 1 at n = 197, eexp = 1e-2.
+#print axioms Proofs.smCap
+#print axioms Proofs.smCap_le
+#print axioms Proofs.smRho_le_of
+#print axioms Proofs.FloatModel.smRho_nonneg'
+#print axioms Proofs.FloatModel.smKappa_nonneg
+#print axioms Proofs.FloatModel.smCap_nonneg
+#print axioms Proofs.FloatModel.softmaxF_abs_le
+#print axioms Proofs.FloatModel.dot_abs_le_of
+#print axioms Proofs.floatClose_softmaxRow
+#print axioms Proofs.floatBridgesTo_softmaxRow
+#print axioms Proofs.FloatBridgesTo.Maps.softmaxRow
+#print axioms Proofs.mhpBCap
+#print axioms Proofs.floatClose_mhProjAttnFullCap
+#print axioms Proofs.floatBridgesTo_mhProjAttnFullCap
+#print axioms Proofs.FloatBridgesTo.Maps.mhProjAttnFullCap
+-- ⭐ FloatBudgetEnvAttn.lean also carries ViT-Tiny's block-0 attention site and its softmax leaf
+-- as compiled `example`s at the numerals vit_chain emits — §5's rule (an unexercised Maps leaf is
+-- the stale-gates failure mode in proof form), and simultaneously the check that the generator's
+-- arithmetic IS these lemmas'.
 #print axioms Proofs.FloatBridgesTo.Maps.chanLNTensor3
 #print axioms Proofs.FloatBridgesTo.Maps.cnxBlockChW
 #print axioms Proofs.FloatBridgesTo.Maps.cnxDownChW

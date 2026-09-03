@@ -232,7 +232,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
-| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBED 2026-09-03 — REACHABLE**, window 1.065·10¹⁹¹ / budget 2.129·10¹⁹¹ (§3.5), the cap again. No Lean written. | ⛔ a `FloatBridgesTo` TIER MIGRATION first — the ViT float cone is all `FloatBridges`, so none of `vit_floatBridgesTo`'s hypotheses can be discharged (§3.5.1); then the `Maps` leaves and `ViTFloatBudget.lean` (§3.5.2) |
+| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBED + LEAVES LANDED 2026-09-03**, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap again. `FloatBudgetEnvAttn.lean` closes the attention leaves; the whole net is not written. | ⛔ the `FloatBridgesTo` TIER MIGRATION for the LN / MLP / patch-embed cone — still all `FloatBridges`, so `vit_floatBridgesTo`'s hypotheses stay undischargeable (§3.5.1); then `Maps.concatCls` / `flatConvStride16` and `ViTFloatBudget.lean` (§3.5.2) |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -551,16 +551,28 @@ been relying on layer order.
    metavariable; the block/downsample sites were fine only because their other arguments pinned
    it. Passing the input window explicitly costs nothing and removes the order dependence.
 
-### 3.5 ViT-Tiny — ⭐ PROBED 2026-09-03, and it is REACHABLE: 1.065·10¹⁹¹ / 2.129·10¹⁹¹
+### 3.5 ViT-Tiny — ⭐ PROBED and the leaves LANDED 2026-09-03: 3.612·10²¹⁸ / 7.222·10²¹⁸
 
-**The probe says yes.** `vit_chain` (`scripts/float_budget_envelope.py`) folds all 236 stages of
-`vitForwardKV` at ViT-Tiny's shapes and lands at
+**The probe says yes, and chunk 1 of the Lean is in** (`FloatBudgetEnvAttn.lean`). `vit_chain`
+(`scripts/float_budget_envelope.py`) folds all 164 stages of `vitForwardKV` at ViT-Tiny's shapes
+and lands at
 
-    window ≤ 1.065·10¹⁹¹      budget ≤ 2.129·10¹⁹¹      budget/window = 1.999
+    window ≤ 3.612·10²¹⁸      budget ≤ 7.222·10²¹⁸      budget/window = 1.999
+    328 re-assertions (`verify_vit`)
 
-— under `norm_num`'s ~10³⁰⁰ ceiling with 100 orders to spare, and ⛔ **it is the CAP, not the
-fold** (the 1.999 is the same tell ConvNeXt's 2.00 is; §9 applies verbatim). Nothing has been
-opened in Lean yet; §3.5.1 is the order of work.
+— under `norm_num`'s ~10³⁰⁰ ceiling with 80 orders to spare, and ⛔ **it is the CAP, not the
+fold** (the 1.999 is the same tell ConvNeXt's 2.00 is; §9 applies verbatim).
+
+⚠ **That number is 27 orders above the first probe's 1.065·10¹⁹¹, and the reason is a real
+constraint, not a regression.** The first fold decomposed attention into four stages
+(`Q·Kᵀ → scale → softmax → ·V`) the way the emitted graph spells it. **`FloatBridgesTo` cannot
+express that**: it composes single-input maps, and attention FANS OUT (`X ↦ Q,K,V`) before it
+rejoins. The repo's `mhProjAttnFullFlat` already bundles attention monolithically for exactly
+that reason. So the softmax's window reset happens INSIDE one leaf, the output matmul takes the
+generic `n = 197` fan-in bound, and the whole net is the probe's old `convex_av=False` row —
+which is why that row was worth costing. ⭐ The lesson for the next architecture: **check that
+the probe's granularity is expressible in the composition framework before trusting its
+number.** A `Maps` chain is a line, and any op that fans out has to be one leaf.
 
 **⭐⭐ The finding, and it is a new category: there are TWO kinds of unstatable.** ConvNeXt's
 ablations only ever failed one way — the numeral got too big. ViT fails both ways, and the two
@@ -568,21 +580,22 @@ escapes are load-bearing for *different* reasons:
 
 | variant | window | budget | unwritable stages | statable |
 |---|---|---|---|---|
-| **shipped shape** | **1.065·10¹⁹¹** | **2.129·10¹⁹¹** | 0 | **yes** |
-| uniform param bound | 3.248·10²⁰⁹ | 6.503·10²⁰⁹ | 0 | yes |
-| generic `n`-fan-in attn·V | 3.634·10²¹⁸ | 7.266·10²¹⁸ | 0 | yes |
-| cubic GELU (no saturation) | 1.065·10¹⁹¹ | 2.129·10¹⁹¹ | 0 | yes |
-| **softmax UNCAPPED** | 1.065·10¹⁹¹ | 2.129·10¹⁹¹ | **48** | **NO** |
-| **LN UNCAPPED** | 1.065·10¹⁹¹ | **6.616·10⁵⁰⁶²** | 0 | **NO** |
-| depth 2 (`vitForward2V`) | 8.126·10³⁷ | 1.625·10³⁸ | 0 | yes |
-| depth 6 | 1.435·10⁹⁹ | 2.869·10⁹⁹ | 0 | yes |
+| **shipped (`Maps.mhProjAttnFullCap`)** | **3.612·10²¹⁸** | **7.222·10²¹⁸** | 0 | **yes** |
+| uniform param bound | 1.105·10²³⁷ | 2.210·10²³⁷ | 0 | yes |
+| + convex attn·V (lemma NOT proved) | 1.055·10¹⁹¹ | 2.109·10¹⁹¹ | 0 | yes |
+| **`mhpB` window** (`\|real\| + \|float−real\|`) | 8.257·10¹⁹⁰ | 1.652·10¹⁹¹ | **36** | **NO** |
+| cubic GELU (no saturation) | 3.612·10²¹⁸ | 7.222·10²¹⁸ | 0 | yes |
+| **LN UNCAPPED** | 3.612·10²¹⁸ | **3.523·10³²³⁹** | 0 | **NO** |
+| depth 2 (`vitForward2V`) | 3.145·10⁴² | 6.290·10⁴² | 0 | yes |
+| depth 6 | 8.364·10¹¹² | 1.673·10¹¹³ | 0 | yes |
 
-* **LN uncapped is a MAGNITUDE failure** — 10⁵⁰⁶², the §0.1 quadratic, exactly ConvNeXt's story.
-* **Softmax uncapped is a REPRESENTABILITY failure, and the magnitude is IDENTICAL.** `smErr`'s
+* **LN uncapped is a MAGNITUDE failure** — 10³²³⁹, the §0.1 quadratic, exactly ConvNeXt's story.
+* **`mhpB` is a REPRESENTABILITY failure at a SMALLER magnitude.** `smErr`'s
   `Real.exp (2δ)` sits at δ ≈ 10¹⁶ by block 0, and `Real.exp` at that argument has no rational
   bound the kernel will check. The fold's *number* does not move — the next capped LN resets the
-  error two stages later regardless — but 48 stage numerals (4 per block × 12) **cannot be
-  written down at all**. ⚠ A Python fold hides this: `math.expm1` overflows to a finite float and
+  error two stages later regardless — but 36 stage numerals (3 per block × 12) **cannot be
+  written down at all**. ⛔ Quantified in chunk 1: `δ = attnScaledErr = 3.609·10¹⁰` at block 0,
+  where `exp_sub_one_le` (which the repo already has) needs `x < 1`. There is no bound. ⚠ A Python fold hides this: `math.expm1` overflows to a finite float and
   the chain sails on. `vit_chain` therefore returns an `exp_tainted` tag list alongside the rows,
   and "statable" is `max(exponent) < 300 AND no taint`. Carry that instrument to any net with a
   transcendental leaf; magnitude alone is the wrong test.
@@ -610,7 +623,8 @@ LayerNorm sites are the whole story: each contributes `2S = 634` (`|x−μ| ≤ 
 So §0.1 item 2 — an operating-point variance floor — is worth ~10⁶⁸ here and nothing else is,
 the same conclusion §3.2 reached on MobileNetV2.
 
-**⛔⛔ Do NOT build the number on `floatBridges_mhProjAttnFull`.** §3.5's earlier note asked
+**⛔⛔ Do NOT build the number on `floatBridges_mhProjAttnFull` — ✅ and the replacement landed
+2026-09-03 as `floatClose_mhProjAttnFullCap` / `Maps.mhProjAttnFullCap`.** §3.5's earlier note asked
 whether attention is "a fourth quadratic site". It is not — **it is worse, and it is the reason
 the decomposition matters.** Reading the two definitions (`ViTBlockFloatBridge.lean` :851/:858):
 
@@ -624,11 +638,21 @@ the decomposition matters.** Reading the two definitions (`ViTBlockFloatBridge.l
   lemma to write, and capping the monolithic leaf does **not** avoid it, because `capped` bounds
   the modulus by `2·mag` and the `Real.exp` is in `mag`.
 
-Decomposed to the granularity the render actually emits, none of that arises: Q·Kᵀ feeds the
-softmax, whose window is `1` whatever arrives, so the quadratic never compounds and the `exp`
-never enters a numeral. **The graph is the right granularity and the monolithic bridge is a
-trap.** `vitFwdGraphKMHV` already spells `softmaxRowF` as its own token, so this is also the
-faithful choice.
+⭐⭐ **The fix is `floatClose_seScale`'s fix again, one net later (§3.4 finding 2).** `mhpB`
+derives the float window as `|real| + |float − real|`; but `FloatClose`'s magnitude clause bounds
+the FLOAT output directly, and the float output is a rounded dot of float softmax weights
+(`≤ 1 + smCap`, exp-free) against float `V`. That gives `(1+γ_{n+1})·n·(1+smCap)·vA_F` —
+**exp-free AND tighter than `mhpB`**. The identical sentence closes both findings: *the error
+never needed to enter the window at all.* Twice now the blocker has been a window derived through
+an error term when a direct bound on the float side was available; ⭐ **add that to §0.1's
+checklist — when a window contains an error term, ask why.**
+
+⚠ The softmax's window reset therefore happens INSIDE the attention leaf rather than as its own
+chain stage. `Maps.softmaxRow` exists and is proved (window `1 + smCap`, constant in the input),
+but ViT's chain does not compose it — it is there for the loss head, for a decomposed variant,
+and because the leaf is the clearest statement of the trick. ⚠ That makes it an unexercised
+`Maps` leaf in §5's sense, which is why `FloatBudgetEnvAttn.lean` closes it as its own compiled
+`example`.
 
 ### 3.5.1 ⛔ The two questions §3.5 said to settle — both settled, and the second reverses
 
@@ -659,18 +683,28 @@ need a closed `FloatBridgesTo` at real weights". The actual state is that **the 
 the bulk of the remaining work. Budget for it explicitly; it is not visible from the whole-net
 file, which looks finished.
 
-### 3.5.2 The order of work
+### 3.5.2 The order of work — ✅ steps 1–2 LANDED 2026-09-03 (`FloatBudgetEnvAttn.lean`)
 
-1. **`FloatBridgesTo` peers for the ViT leaves**, in the `EnetFloatBridge` mould — each existing
-   `floatClose_*` already carries the magnitude and modulus, so this is naming the float net, not
-   re-proving: softmax (⭐ window `1 + κ'`, `κ' = u(1+smKappa) + smKappa`, `smKappa` from
-   `smRho`), the two activation×activation matmuls, `layerNormVec` (= `Maps.bnCapped` + `diagBack`
-   + `biasAdd`, all three already in `FloatBudgetEnvLN.lean`), GELU, the row-wise dense, and the
-   patch embed (strided conv at fan-in 768 + CLS concat + pos add).
-2. **`Maps` leaves** — new: `Maps.softmax` (capped), `Maps.matmul2`, `Maps.concatCls`,
-   `Maps.flatConvStride16`. ⭐ Reused unchanged from `FloatBudgetEnvLN.lean`: `bnCapped`,
-   `diagBack`, `biasAdd`, `gelu`, `gather`, `perRow`, `idVec`. Close one worked attention site as
-   a compiled `example` at the emitted numerals (§5's rule).
+1. ✅ **`FloatBridgesTo` peers for the attention leaves.** `floatBridgesTo_softmaxRow` (window
+   `1 + smCap`, `smCap = u(1+smKappa) + smKappa`) and `floatBridgesTo_mhProjAttnFullCap` (window
+   `mhpBCap`), plus the supporting `softmaxF_abs_le`, `dot_abs_le_of`, and the two numeral
+   helpers every ViT stage needs — `smRho_le_of` (the side condition from a `gamma_num` bound)
+   and `smCap_le` (a rational bound on `smKappa`'s quotient). ⭐ `floatClose_mhProjAttnFullCap`
+   reuses `floatClose_mhProjAttnFull`'s ERROR clause verbatim — `FloatClose`'s error clause does
+   not mention the window — so only the magnitude was reproved.
+   ⛔ **Still open, and it is the bulk:** the LN / MLP / patch-embed peers. The ViT float cone is
+   still `FloatBridges` everywhere else (§3.5.1).
+2. ✅ **`Maps` leaves** — `Maps.softmaxRow` and `Maps.mhProjAttnFullCap`, both capped. ⛔ `matmul2`
+   and a standalone softmax stage turned out NOT to be needed (the fan-out finding, §3.5); still
+   to write are `Maps.concatCls` and `Maps.flatConvStride16`. ⭐ Reused unchanged from
+   `FloatBudgetEnvLN.lean`: `bnCapped`, `diagBack`, `biasAdd`, `gelu`, `gather`, `perRow`,
+   `idVec`. Block-0's attention site and the softmax leaf are closed as compiled `example`s at
+   `vit_chain`'s numerals (§5's rule).
+   ⚠ **`verify_vit` earned itself on its first run.** It rejected the attention stage because the
+   chain rounded `mag` and `2·mag` up INDEPENDENTLY, and `2·r4(x)` can exceed `r4(2·x)` — which
+   breaks `Maps.capped`'s own `2·Ā' ≤ Ē'`. Round the window first, then double the rounded value
+   (`cnx_eval_chain`'s `lnsite` already did; the ViT leaf did not). Any capped leaf has this
+   trap.
 3. **The `*Gen` layer** for `blockV`/`vitBodyKVFlat`, if the eval/training split needs it — ⭐ ViT
    needs NO eval twin and none is possible (LN has no running statistics), so unlike r34/mnv2/B0
    there is no second render and no `*RenderPCEval.lean`. That made ConvNeXt cheaper and it makes
@@ -729,13 +763,18 @@ bridge transformer, §3.3.0(a)), `Maps.bnCapped` (the capped pure-normalise LN),
 could not be `norm_num`'d), and `Maps.flatConvStride4`. Plus the three composites the chain
 actually walks: `Maps.chanLNTensor3`, `Maps.cnxBlockChW`, `Maps.cnxDownChW`.
 
-Still to add — ⭐ only ViT's, and ✅ §3.5's probe has now said ViT is reachable: `softmax`
-(⭐ window `1 + κ'`, so `capped` gives modulus `2(1+κ')` and the `exp` disappears rather than
-being bounded), `matmul2` (the activation×activation matmul, at `d_head` for Q·Kᵀ and at `n` for
-attn·V), `concatCls` and `flatConvStride16`. ⛔ **NOT `mhProjAttnFull`** — §3.5 explains why the
-monolithic attention leaf is a trap: its `Real.exp` is in the *window*, so the cap cannot remove
-it. Decompose to the graph's own tokens instead. Then, if a net needs them, identity steps for
-`clsSlice` and `iterate k`.
+✅ **The attention set landed 2026-09-03, in `FloatBudgetEnvAttn.lean`**: `Maps.softmaxRow`
+(⭐ window `1 + smCap`, CONSTANT in the input — a softmax RESETS — so `capped` gives modulus
+`2(1+smCap)` and `smErr`'s `Real.exp` disappears rather than being bounded) and
+`Maps.mhProjAttnFullCap` (⭐⭐ attention as ONE leaf at an exp-free window — `FloatBridgesTo`
+composes single-input maps and attention fans out, so it CANNOT be decomposed into the graph's
+tokens; §3.5). ⛔ **NOT `floatBridges_mhProjAttnFull`** — its `Real.exp` is in the *window*, where
+`capped` cannot reach it (`capped` replaces `mod`, never `mag`), and at `δ = 3.6·10¹⁰` it has no
+rational bound at all.
+
+Still to add for ViT: `Maps.concatCls` and `Maps.flatConvStride16` (the patch embed), and the
+`FloatBridgesTo` peers for the LN / MLP / patch-embed cone (§3.5.1 — the tier migration, and the
+bulk of what is left). Then, if a net needs them, identity steps for `clsSlice` and `iterate k`.
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
 
