@@ -2280,6 +2280,35 @@ open Proofs
 #print axioms Proofs.floatClose_mhProjAttnFullCap
 #print axioms Proofs.floatBridgesTo_mhProjAttnFullCap
 #print axioms Proofs.FloatBridgesTo.Maps.mhProjAttnFullCap
+-- ⭐ The patch embedding, the third ViT leaf and the odd one out: floatClose_patchEmbed already
+-- carried both clauses against a NAMED float peer (FloatModel.patchEmbedF), so
+-- floatBridgesTo_patchEmbed is a repackage and needed no new mathematics.
+-- ⛔ It must stay ONE leaf: patchEmbed_flat is a single definition with an `if n.val = 0` branch
+-- selecting the CLS token, NOT a composition concatCls . convStride16 — so the Maps.concatCls /
+-- Maps.flatConvStride16 the plan plotted are the wrong decomposition and do not exist. The same
+-- granularity trap attention set, and the probe had modelled it as three stages too.
+-- ⭐ What the envelope needs instead is MONOTONICITY of the budget, in the input window AND in
+-- the rounding unit: `Maps` quantifies over every A ≤ Ā, and the hypotheses mention M.u, which no
+-- norm_num can evaluate. peRoundErrQ is the same expression over a plain rational; a caller bounds
+-- M.u ≤ q once with patchEmbedRoundErr_le and everything downstream is a numeral.
+-- ⭐ No gamma_num detour is needed here, uniquely: the reductions are ic = 3 and patchSize = 16,
+-- so norm_num takes the exact (1+u)^4 and (1+u)^17 directly.
+-- ⛔ And it is NOT capped — the patch embed does not reduce, its modulus is linear in the
+-- inherited error, and at the net's input that error is 0. It is the one honest fold in ViT.
+#print axioms Proofs.redErr_mono
+#print axioms Proofs.redErr_mono_u
+#print axioms Proofs.patchEmbedConvMag_mono
+#print axioms Proofs.patchEmbedTripleErr_mono
+#print axioms Proofs.patchEmbedBranchErr_mono
+#print axioms Proofs.patchEmbedRoundErr_mono
+#print axioms Proofs.patchEmbedWindow_mono
+#print axioms Proofs.peTripleErrQ
+#print axioms Proofs.peBranchErrQ
+#print axioms Proofs.peRoundErrQ
+#print axioms Proofs.patchEmbedRoundErr_eq_Q
+#print axioms Proofs.patchEmbedRoundErr_le
+#print axioms Proofs.floatBridgesTo_patchEmbed
+#print axioms Proofs.FloatBridgesTo.Maps.patchEmbed
 -- ⭐ FloatBudgetEnvAttn.lean also carries ViT-Tiny's block-0 attention site and its softmax leaf
 -- as compiled `example`s at the numerals vit_chain emits — §5's rule (an unexercised Maps leaf is
 -- the stale-gates failure mode in proof form), and simultaneously the check that the generator's

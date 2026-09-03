@@ -322,7 +322,7 @@ set_option maxHeartbeats 2000000 in
     `Np1 = 197` tokens; the profile is the measured checkpoint's, split by parameter kind
     (attention kernels `7/10`, MLP kernels `8/10`, biases `9/10`, LN γ `17/10`, LN β `6/10`).
 
-    In: the patch embed's `(23.23, 1.064·10⁻²)`. Out: `(9.365·10¹⁹, 2.811·10²⁰)` — one block
+    In: the patch embed's `(23.23, 5.633·10⁻⁴)`. Out: `(9.365·10¹⁹, 2.811·10²⁰)` — one block
     costs ~10¹⁸ of window, and twelve of them are what put the whole net at 10²¹⁸.
 
     ⚠ The device-LayerNorm envelopes `mln1`/`mln2` are hypotheses, as they must be: a device
@@ -338,12 +338,12 @@ example (M : FloatModel) (hMu : M.u ≤ u32) (fgelu fexp : ℝ → ℝ)
     (lnF : Vec (3 * 64) → Vec (3 * 64))
     (hb : BlockVBounded p (7 / 10) (8 / 10) (9 / 10) (17 / 10) (6 / 10))
     (hln : FloatBridgesTo (layerNormForward (3 * 64) ε 1 0) lnF)
-    (mln1 : hln.Maps (2323 / 10 ^ 1) (1064 / 10 ^ 5) (1481 * 10 ^ 2) (2962 * 10 ^ 2))
+    (mln1 : hln.Maps (2323 / 10 ^ 1) (5633 / 10 ^ 7) (1481 * 10 ^ 2) (2962 * 10 ^ 2))
     (mln2 : hln.Maps (9148 * 10 ^ 8) (1831 * 10 ^ 9) (5830 * 10 ^ 11) (1166 * 10 ^ 12)) :
     (floatBridgesTo_blockVFlat (Np1 := 197) M fgelu fexp ε p lnF (by norm_num) (by norm_num)
       (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num) hg
       (by norm_num) (by norm_num) hfexp hscaleA hρ hb hln).Maps
-      (2323 / 10 ^ 1) (1064 / 10 ^ 5) (9365 * 10 ^ 16) (2811 * 10 ^ 17) := by
+      (2323 / 10 ^ 1) (5633 / 10 ^ 7) (9365 * 10 ^ 16) (2811 * 10 ^ 17) := by
   have hsc : smCap M.u (1 / 100) 197 ≤ 2022 / 10 ^ 5 :=
     smCap_le M (n := 197) (eexp := 1 / 100) (rb := 10012 / 10 ^ 6) (c := 2022 / 10 ^ 5)
       (by norm_num) hMu

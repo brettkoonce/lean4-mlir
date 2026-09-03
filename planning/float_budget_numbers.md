@@ -232,7 +232,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
-| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBE + ATTENTION LEAVES + BLOCK landed 2026-09-03**, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap again. `Maps.blockVFlat` closes block 0 at the emitted numerals. | the patch embed (`Maps.concatCls` / `flatConvStride16` + a `FloatBridgesTo` peer for `patchEmbed_flat`), the depth-`k` fold, then `ViTFloatBudget.lean` (§3.5.2 steps 4–5) |
+| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBE + ALL THREE LEAF GROUPS + BLOCK landed 2026-09-03**, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap again. Attention, softmax, patch embed and the whole block close at the emitted numerals. | the depth-`k` fold over `vitBodyKVFlat`, then `ViTFloatBudget.lean` (§3.5.2 steps 4–5) |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -739,10 +739,31 @@ architecture is named after that architecture and will not be found by searching
    ⭐ ViT needs NO eval twin and none is possible (LN has no running statistics), so unlike
    r34/mnv2/B0 there is no second render and no `*RenderPCEval.lean` — the same saving ConvNeXt
    had.
-4. **Still to write: the patch embed** (`Maps.concatCls`, `Maps.flatConvStride16`, and the
-   `FloatBridgesTo` peer for `patchEmbed_flat`, which is still `FloatBridges`-only), and the
-   depth-`k` fold over `vitBodyKVFlat` (head-first recursion — ⚠ check the association before
-   writing the chain, §3.3's lesson 2).
+4. ✅ **The PATCH EMBED landed 2026-09-03 (`FloatBudgetEnvAttn.lean`)** —
+   `floatBridgesTo_patchEmbed`, `Maps.patchEmbed`, and a worked site at ViT-Tiny's shapes
+   (window `232.3`, rounding `5.633·10⁻⁴`).
+   ⛔ **And `Maps.concatCls` / `Maps.flatConvStride16` do not exist, because that decomposition
+   is wrong.** `patchEmbed_flat` is a SINGLE definition with an `if n.val = 0` branch selecting
+   the CLS token — not `concatCls ∘ convStride16`. ⭐ **That is the granularity trap for the
+   THIRD time** (attention's fan-out was the first, the probe's own 3-stage patch embed the
+   second), so promote it to a rule: **read the committed definition before planning a
+   decomposition, and never infer one from the emitted graph** — the graph spells what the
+   kernel does, the definition says what the theorem is about, and only the second constrains a
+   `Maps` chain.
+   ⭐ It needed no new mathematics: `floatClose_patchEmbed` already carried both clauses against a
+   NAMED float peer (`FloatModel.patchEmbedF`), so the bridge is a repackage. What it needed was
+   **monotonicity, in two directions**: in the input window (because `Maps` quantifies over every
+   `A ≤ Ā`) and ⭐ in the ROUNDING UNIT — the budget mentions `M.u`, which no `norm_num` can
+   evaluate, so `peRoundErrQ` restates it over a plain rational and `patchEmbedRoundErr_le`
+   bridges `M.u ≤ q` once. **Carry that pattern to any leaf whose budget is not already stated
+   through a `gamma_num`-style rational.**
+   ⭐ Uniquely in this repo, no `gamma_num` detour is needed here at all: the reductions are
+   `ic = 3` and `patchSize = 16`, so `norm_num` takes the exact `(1+u)⁴` and `(1+u)¹⁷` directly.
+   ⛔ And it is the ONE stage of ViT's chain that is NOT capped — the patch embed does not reduce,
+   its modulus is linear in the inherited error, and at the net's input that error is `0`. It is
+   the only honest fold ViT has.
+   ⚠ Still to write: the depth-`k` fold over `vitBodyKVFlat` (head-first recursion — check the
+   association before writing the chain, §3.3's lesson 2).
 5. **`ViTFloatBudget.lean`** on the r34 recipe: records (`ViTProfile`/`ViTWeights`), a
    `DeviceExp` alongside `DeviceLN`/`DeviceGelu`, the 164-stage chain, the tie through
    `vitFwdGraphKMHV_faithful`, `vit_float_logits_le` + `_committed`.
@@ -810,9 +831,12 @@ tokens; §3.5). ⛔ **NOT `floatBridges_mhProjAttnFull`** — its `Real.exp` is 
 `capped` cannot reach it (`capped` replaces `mod`, never `mag`), and at `δ = 3.6·10¹⁰` it has no
 rational bound at all.
 
-Still to add for ViT: `Maps.concatCls` and `Maps.flatConvStride16` (the patch embed), and the
-`FloatBridgesTo` peers for the LN / MLP / patch-embed cone (§3.5.1 — the tier migration, and the
-bulk of what is left). Then, if a net needs them, identity steps for `clsSlice` and `iterate k`.
+✅ **The patch embed landed too** — `Maps.patchEmbed`, one leaf. ⛔ NOT `Maps.concatCls` +
+`Maps.flatConvStride16`: `patchEmbed_flat` is a single definition with an `if n.val = 0` branch,
+so that decomposition describes a function the repo does not contain (§3.5.2 item 4).
+
+Nothing is left in the kit for ViT. What remains is the depth-`k` fold and the budget file.
+Then, if a net needs them, identity steps for `clsSlice` and `iterate k`.
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
 

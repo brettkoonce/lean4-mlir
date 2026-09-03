@@ -1,12 +1,13 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnvLN
 import LeanMlir.Proofs.Float.ViTBlockFloatBridge
+import LeanMlir.Proofs.Float.PatchEmbedFloatBridge
 
 /-! # `FloatBridgesTo.Maps` leaves for the ATTENTION family (ViT)
 
 `FloatBudgetEnv.lean` holds the kit and ResNet-34's leaves, `FloatBudgetEnvMBConv.lean` the
 inverted-bottleneck family's, `FloatBudgetEnvLN.lean` the LayerNorm family's. This file holds
-the two a transformer needs on top of those: the **row softmax** and **multi-head projected
-attention**.
+the three a transformer needs on top of those: the **row softmax**, **multi-head projected
+attention**, and the **patch embedding**.
 
 ⛔ **Both exist because of one thing: `Real.exp` must never reach a stage numeral.**
 `FloatModel.smErr u eexp δ n = u(1+κ) + κ + (Real.exp (2δ) − 1)` is EXPONENTIAL in the
@@ -43,6 +44,16 @@ are still nonnegative and sum to `≤ 1 + smCap` — is NOT proved here, deliber
 27 orders on ViT-Tiny and the fold is statable without it (`vit_chain(convex_av=False)` in
 `scripts/float_budget_envelope.py`), and §1's non-goal is making the numbers small. If a deeper
 transformer ever needs it, that is the lemma to write.
+
+⭐ The patch embed is the odd one out and needed no new mathematics at all.
+`floatClose_patchEmbed` already carried both clauses against a NAMED float peer
+(`FloatModel.patchEmbedF`), so `floatBridgesTo_patchEmbed` is a repackage. ⛔ And it must stay
+ONE leaf: `patchEmbed_flat` is a single definition with a `if n.val = 0` branch selecting the CLS
+token, NOT a composition `concatCls ∘ convStride16` — so the `Maps.concatCls` /
+`Maps.flatConvStride16` the plan plotted are the wrong decomposition and do not exist. What the
+envelope needs instead is MONOTONICITY of the budget in the input window, which is the whole of
+`patchEmbed*_mono` below: `redErr` is monotone in its magnitude and error slots, and the three
+nested reductions inherit it.
 
 ⚠ Why this file and not `FloatBudgetEnv.lean`: a `Maps` lemma names its bridge, and these name
 `FloatModel.softmaxF` / `mhProjAttnFullFlat`, neither of which is on that file's import path.
@@ -394,6 +405,232 @@ end FloatBridgesTo
 
 
 -- ════════════════════════════════════════════════════════════════
+-- § The patch embedding
+-- ════════════════════════════════════════════════════════════════
+
+/-- `redErr` is monotone in its magnitude and error slots. -/
+theorem redErr_mono {u : ℝ} (n : Nat) {Mr Mr' ef ef' : ℝ} (hu : 0 ≤ u)
+    (hM : Mr ≤ Mr') (he : ef ≤ ef') : redErr u n Mr ef ≤ redErr u n Mr' ef' := by
+  unfold redErr
+  have hg0 : (0:ℝ) ≤ (1 + u) ^ (n + 1) - 1 := sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have hn0 : (0:ℝ) ≤ (n : ℝ) := Nat.cast_nonneg n
+  have h1 : (n : ℝ) * (Mr + ef) ≤ (n : ℝ) * (Mr' + ef') := by nlinarith
+  nlinarith
+
+/-- The conv-dot magnitude is monotone in the input window. -/
+theorem patchEmbedConvMag_mono (ic patchSize : Nat) {wc A Ā : ℝ} (hwc0 : 0 ≤ wc)
+    (hAĀ : A ≤ Ā) :
+    patchEmbedConvMag ic patchSize wc A ≤ patchEmbedConvMag ic patchSize wc Ā := by
+  unfold patchEmbedConvMag
+  have hic : (0:ℝ) ≤ (ic : ℝ) := Nat.cast_nonneg ic
+  have hp : (0:ℝ) ≤ (patchSize : ℝ) := Nat.cast_nonneg patchSize
+  gcongr
+
+/-- The nested triple-sum rounding budget is monotone in the input window. -/
+theorem patchEmbedTripleErr_mono (M : FloatModel) (ic patchSize : Nat) {wc A Ā : ℝ}
+    (hwc0 : 0 ≤ wc) (hAĀ : A ≤ Ā) :
+    patchEmbedTripleErr M ic patchSize wc A ≤ patchEmbedTripleErr M ic patchSize wc Ā := by
+  have hu := M.u_nonneg
+  have hp : (0:ℝ) ≤ (patchSize : ℝ) := Nat.cast_nonneg patchSize
+  have hwA : wc * A ≤ wc * Ā := mul_le_mul_of_nonneg_left hAĀ hwc0
+  have hme : FloatModel.mulErr M.u wc A 0 0 ≤ FloatModel.mulErr M.u wc Ā 0 0 := by
+    unfold FloatModel.mulErr; nlinarith
+  have h1 := redErr_mono (u := M.u) patchSize hu hwA hme
+  have h2 := redErr_mono (u := M.u) patchSize hu
+    (by gcongr : (patchSize : ℝ) * (wc * A) ≤ (patchSize : ℝ) * (wc * Ā)) h1
+  exact redErr_mono (u := M.u) ic hu
+    (by gcongr : (patchSize : ℝ) * ((patchSize : ℝ) * (wc * A))
+          ≤ (patchSize : ℝ) * ((patchSize : ℝ) * (wc * Ā))) h2
+
+/-- The inner-add rounding level is monotone. -/
+theorem patchEmbedBranchErr_mono (M : FloatModel) (ic patchSize : Nat) {wc pb A Ā : ℝ}
+    (hwc0 : 0 ≤ wc) (hAĀ : A ≤ Ā) :
+    patchEmbedBranchErr M ic patchSize wc pb A ≤ patchEmbedBranchErr M ic patchSize wc pb Ā := by
+  have hu := M.u_nonneg
+  have hcm := patchEmbedConvMag_mono ic patchSize hwc0 hAĀ
+  have htr := patchEmbedTripleErr_mono M ic patchSize hwc0 hAĀ
+  unfold patchEmbedBranchErr
+  have hin : M.u * (pb + patchEmbedConvMag ic patchSize wc A
+                      + patchEmbedTripleErr M ic patchSize wc A)
+      ≤ M.u * (pb + patchEmbedConvMag ic patchSize wc Ā
+                      + patchEmbedTripleErr M ic patchSize wc Ā) :=
+    mul_le_mul_of_nonneg_left (by linarith) hu
+  linarith
+
+/-- The patch-embed rounding budget is monotone (the modulus's constant term). -/
+theorem patchEmbedRoundErr_mono (M : FloatModel) (ic patchSize : Nat) {wc pb A Ā : ℝ}
+    (hwc0 : 0 ≤ wc) (hAĀ : A ≤ Ā) :
+    patchEmbedRoundErr M ic patchSize wc pb A ≤ patchEmbedRoundErr M ic patchSize wc pb Ā := by
+  have hu := M.u_nonneg
+  have hcm := patchEmbedConvMag_mono ic patchSize hwc0 hAĀ
+  have hbr := patchEmbedBranchErr_mono M ic patchSize (pb := pb) hwc0 hAĀ
+  unfold patchEmbedRoundErr
+  have hin : M.u * (pb + (pb + patchEmbedConvMag ic patchSize wc A)
+                      + patchEmbedBranchErr M ic patchSize wc pb A)
+      ≤ M.u * (pb + (pb + patchEmbedConvMag ic patchSize wc Ā)
+                      + patchEmbedBranchErr M ic patchSize wc pb Ā) :=
+    mul_le_mul_of_nonneg_left (by linarith) hu
+  linarith
+
+/-- The full patch-embed WINDOW (`patchEmbedMag + patchEmbedRoundErr`) is monotone in the input
+    window — which is all a `Maps` leaf needs, since `Maps` quantifies over every `A ≤ Ā`. -/
+theorem patchEmbedWindow_mono (M : FloatModel) (ic patchSize : Nat) {wc pb A Ā : ℝ}
+    (hwc0 : 0 ≤ wc) (hAĀ : A ≤ Ā) :
+    patchEmbedMag ic patchSize wc pb A + patchEmbedRoundErr M ic patchSize wc pb A
+      ≤ patchEmbedMag ic patchSize wc pb Ā + patchEmbedRoundErr M ic patchSize wc pb Ā := by
+  have hcm := patchEmbedConvMag_mono ic patchSize hwc0 hAĀ
+  have hre := patchEmbedRoundErr_mono M ic patchSize (pb := pb) hwc0 hAĀ
+  unfold patchEmbedMag
+  linarith
+
+/-- `redErr` is monotone in the rounding unit too. -/
+theorem redErr_mono_u {u q : ℝ} (n : Nat) {Mr ef : ℝ} (hu : 0 ≤ u) (huq : u ≤ q)
+    (hM : 0 ≤ Mr) (he : 0 ≤ ef) : redErr u n Mr ef ≤ redErr q n Mr ef := by
+  unfold redErr
+  have hn0 : (0:ℝ) ≤ (n : ℝ) := Nat.cast_nonneg n
+  have hpow : (1 + u) ^ (n + 1) ≤ (1 + q) ^ (n + 1) := by gcongr
+  have hprod : (0:ℝ) ≤ (n : ℝ) * (Mr + ef) := mul_nonneg hn0 (by linarith)
+  nlinarith
+
+/-- **The patch-embed rounding budget with the unit as a plain parameter.** `patchEmbedRoundErr`
+    mentions `M.u`, which no `norm_num` can evaluate; this is the same expression over a rational
+    `q`, so a caller bounds `M.u ≤ q` once (`patchEmbedRoundErr_le`) and then everything is a
+    numeral. ⭐ The reductions here are `ic = 3` and `patchSize = 16`, so the exact powers
+    `(1+q)^4` and `(1+q)^17` are small enough for `norm_num` to take directly — no `gamma_num`
+    detour is needed, unlike every conv leaf in this repo. -/
+noncomputable def peTripleErrQ (u : ℝ) (ic patchSize : Nat) (wc A : ℝ) : ℝ :=
+  redErr u ic ((patchSize : ℝ) * ((patchSize : ℝ) * (wc * A)))
+    (redErr u patchSize ((patchSize : ℝ) * (wc * A))
+      (redErr u patchSize (wc * A) (FloatModel.mulErr u wc A 0 0)))
+
+/-- `patchEmbedBranchErr` over a plain unit. -/
+noncomputable def peBranchErrQ (u : ℝ) (ic patchSize : Nat) (wc pb A : ℝ) : ℝ :=
+  u * (pb + patchEmbedConvMag ic patchSize wc A + peTripleErrQ u ic patchSize wc A)
+    + peTripleErrQ u ic patchSize wc A
+
+/-- `patchEmbedRoundErr` over a plain unit. -/
+noncomputable def peRoundErrQ (u : ℝ) (ic patchSize : Nat) (wc pb A : ℝ) : ℝ :=
+  u * (pb + (pb + patchEmbedConvMag ic patchSize wc A)
+        + peBranchErrQ u ic patchSize wc pb A)
+    + peBranchErrQ u ic patchSize wc pb A
+
+theorem patchEmbedRoundErr_eq_Q (M : FloatModel) (ic patchSize : Nat) (wc pb A : ℝ) :
+    patchEmbedRoundErr M ic patchSize wc pb A = peRoundErrQ M.u ic patchSize wc pb A := rfl
+
+/-- **`patchEmbedRoundErr M ≤ peRoundErrQ q`** at any `M.u ≤ q` — the bridge from the opaque
+    model unit to a numeral. -/
+theorem patchEmbedRoundErr_le (M : FloatModel) (ic patchSize : Nat) {wc pb A q : ℝ}
+    (hMu : M.u ≤ q) (hwc0 : 0 ≤ wc) (hpb0 : 0 ≤ pb) (hA : 0 ≤ A) :
+    patchEmbedRoundErr M ic patchSize wc pb A ≤ peRoundErrQ q ic patchSize wc pb A := by
+  have hu := M.u_nonneg
+  have hq0 : (0:ℝ) ≤ q := le_trans hu hMu
+  have hp0 : (0:ℝ) ≤ (patchSize : ℝ) := Nat.cast_nonneg patchSize
+  have hwA : (0:ℝ) ≤ wc * A := mul_nonneg hwc0 hA
+  have hcm0 : 0 ≤ patchEmbedConvMag ic patchSize wc A :=
+    patchEmbedConvMag_nonneg ic patchSize hwc0 hA
+  have hme0 : (0:ℝ) ≤ FloatModel.mulErr M.u wc A 0 0 := by
+    unfold FloatModel.mulErr; nlinarith
+  have hme : FloatModel.mulErr M.u wc A 0 0 ≤ FloatModel.mulErr q wc A 0 0 := by
+    unfold FloatModel.mulErr; nlinarith
+  -- innermost reduction
+  have r1 : redErr M.u patchSize (wc * A) (FloatModel.mulErr M.u wc A 0 0)
+      ≤ redErr q patchSize (wc * A) (FloatModel.mulErr q wc A 0 0) :=
+    le_trans (redErr_mono patchSize hu le_rfl hme)
+      (redErr_mono_u patchSize hu hMu hwA (by unfold FloatModel.mulErr; nlinarith))
+  have r10 : (0:ℝ) ≤ redErr M.u patchSize (wc * A) (FloatModel.mulErr M.u wc A 0 0) :=
+    redErr_nonneg M.u patchSize hu hwA hme0
+  have r2 : redErr M.u patchSize ((patchSize : ℝ) * (wc * A))
+        (redErr M.u patchSize (wc * A) (FloatModel.mulErr M.u wc A 0 0))
+      ≤ redErr q patchSize ((patchSize : ℝ) * (wc * A))
+        (redErr q patchSize (wc * A) (FloatModel.mulErr q wc A 0 0)) :=
+    le_trans (redErr_mono patchSize hu le_rfl r1)
+      (redErr_mono_u patchSize hu hMu (by nlinarith)
+        (redErr_nonneg q patchSize hq0 hwA (by unfold FloatModel.mulErr; nlinarith)))
+  have r20 : (0:ℝ) ≤ redErr M.u patchSize ((patchSize : ℝ) * (wc * A))
+        (redErr M.u patchSize (wc * A) (FloatModel.mulErr M.u wc A 0 0)) :=
+    redErr_nonneg M.u patchSize hu (by nlinarith) r10
+  have r3 : patchEmbedTripleErr M ic patchSize wc A ≤ peTripleErrQ q ic patchSize wc A := by
+    unfold patchEmbedTripleErr peTripleErrQ
+    exact le_trans (redErr_mono ic hu le_rfl r2)
+      (redErr_mono_u ic hu hMu (by positivity)
+        (redErr_nonneg q patchSize hq0 (by positivity)
+          (redErr_nonneg q patchSize hq0 hwA (by unfold FloatModel.mulErr; nlinarith))))
+  have r30 : 0 ≤ patchEmbedTripleErr M ic patchSize wc A :=
+    patchEmbedTripleErr_nonneg M ic patchSize hwc0 hA
+  have rQ0 : 0 ≤ peTripleErrQ q ic patchSize wc A := le_trans r30 r3
+  -- the inner add, then the outer add
+  have hbr : patchEmbedBranchErr M ic patchSize wc pb A ≤ peBranchErrQ q ic patchSize wc pb A := by
+    unfold patchEmbedBranchErr peBranchErrQ
+    have hstep : M.u * (pb + patchEmbedConvMag ic patchSize wc A
+                          + patchEmbedTripleErr M ic patchSize wc A)
+        ≤ q * (pb + patchEmbedConvMag ic patchSize wc A + peTripleErrQ q ic patchSize wc A) := by
+      nlinarith
+    linarith
+  have hbr0 : 0 ≤ patchEmbedBranchErr M ic patchSize wc pb A :=
+    patchEmbedBranchErr_nonneg M ic patchSize hwc0 hpb0 hA
+  show patchEmbedRoundErr M ic patchSize wc pb A ≤ peRoundErrQ q ic patchSize wc pb A
+  unfold patchEmbedRoundErr peRoundErrQ
+  have hstep2 : M.u * (pb + (pb + patchEmbedConvMag ic patchSize wc A)
+                        + patchEmbedBranchErr M ic patchSize wc pb A)
+      ≤ q * (pb + (pb + patchEmbedConvMag ic patchSize wc A)
+              + peBranchErrQ q ic patchSize wc pb A) := by
+    nlinarith [le_trans hbr0 hbr]
+  linarith
+
+/-- **The patch embed float-bridges to `FloatModel.patchEmbedF`.** A repackage of
+    `floatClose_patchEmbed`, which already named its float peer — the `FloatBridgesTo` migration
+    for this leaf is bookkeeping, not mathematics. -/
+noncomputable def floatBridgesTo_patchEmbed (M : FloatModel) (ic H W patchSize N D : Nat)
+    (W_conv : Kernel4 D ic patchSize patchSize) (b_conv cls_token : Vec D)
+    (pos_embed : Mat (N + 1) D)
+    {wc pb : ℝ} (hwc0 : 0 ≤ wc) (hpb0 : 0 ≤ pb) (hnd : 0 < (N + 1) * D)
+    (himgpos : 0 < ic * H * W)
+    (hwc : ∀ d c kh kw, |W_conv d c kh kw| ≤ wc) (hpos : ∀ n d, |pos_embed n d| ≤ pb)
+    (hcls : ∀ d, |cls_token d| ≤ pb) (hbc : ∀ d, |b_conv d| ≤ pb) :
+    FloatBridgesTo (patchEmbed_flat ic H W patchSize N D W_conv b_conv cls_token pos_embed)
+      (M.patchEmbedF ic H W patchSize N D W_conv b_conv cls_token pos_embed) where
+  mag := fun A => patchEmbedMag ic patchSize wc pb A + patchEmbedRoundErr M ic patchSize wc pb A
+  mod := fun A e => patchEmbedRoundErr M ic patchSize wc pb A
+                      + patchEmbedConvMag ic patchSize wc e
+  close := fun _A hA =>
+    ⟨(floatClose_patchEmbed M ic H W patchSize N D W_conv b_conv cls_token pos_embed
+        hwc0 hpb0 hA himgpos hwc hpos hcls hbc).cod_nonneg hA hnd,
+     floatClose_patchEmbed M ic H W patchSize N D W_conv b_conv cls_token pos_embed
+       hwc0 hpb0 hA himgpos hwc hpos hcls hbc⟩
+
+namespace FloatBridgesTo
+
+/-- **An envelope through the patch embedding.** ⭐ Both closing inequalities are stated at the
+    INPUT WINDOW `Ā` and transported to every `A ≤ Ā` by the monotonicity lemmas above — the leaf
+    is affine in the image, so there is nothing cleverer to do and nothing is lost.
+    ⛔ Unlike every other ViT stage this one is NOT capped: the patch embed does not reduce, its
+    modulus is linear in the inherited error, and at the net's input the inherited error is `0`
+    anyway. It is the one honest fold in ViT's chain. -/
+theorem Maps.patchEmbed (M : FloatModel) (ic H W patchSize N D : Nat)
+    (W_conv : Kernel4 D ic patchSize patchSize) (b_conv cls_token : Vec D)
+    (pos_embed : Mat (N + 1) D)
+    {wc pb : ℝ} (hwc0 : 0 ≤ wc) (hpb0 : 0 ≤ pb) (hnd : 0 < (N + 1) * D)
+    (himgpos : 0 < ic * H * W)
+    (hwc : ∀ d c kh kw, |W_conv d c kh kw| ≤ wc) (hpos : ∀ n d, |pos_embed n d| ≤ pb)
+    (hcls : ∀ d, |cls_token d| ≤ pb) (hbc : ∀ d, |b_conv d| ≤ pb)
+    {Ā Ē Ā' Ē' rq : ℝ}
+    (hrq : patchEmbedRoundErr M ic patchSize wc pb Ā ≤ rq)
+    (hĀ' : patchEmbedMag ic patchSize wc pb Ā + rq ≤ Ā')
+    (hĒ' : rq + patchEmbedConvMag ic patchSize wc Ē ≤ Ē') :
+    (floatBridgesTo_patchEmbed M ic H W patchSize N D W_conv b_conv cls_token pos_embed
+      hwc0 hpb0 hnd himgpos hwc hpos hcls hbc).Maps Ā Ē Ā' Ē' where
+  mag_le := fun A h0 hle => by
+    refine le_trans (patchEmbedWindow_mono M ic patchSize (pb := pb) hwc0 hle) ?_
+    linarith
+  mod_le := fun A E _h0 _hE0 hle hEle => by
+    show patchEmbedRoundErr M ic patchSize wc pb A + patchEmbedConvMag ic patchSize wc E ≤ Ē'
+    have h1 := patchEmbedRoundErr_mono M ic patchSize (pb := pb) hwc0 hle
+    have h2 := patchEmbedConvMag_mono ic patchSize hwc0 hEle
+    linarith
+
+end FloatBridgesTo
+
+-- ════════════════════════════════════════════════════════════════
 -- § Worked sites at ViT-Tiny's emitted numerals
 -- ════════════════════════════════════════════════════════════════
 
@@ -463,5 +700,33 @@ example (M : FloatModel) (hMu : M.u ≤ u32) (fexp : ℝ → ℝ)
         (M.gamma_num (k := 3 * 64 + 2) (q := 1157 / 10 ^ 8) hMu (by norm_num [u32])
           (by norm_num [u32]))
         (Ā' := 9147 * 10 ^ 8) (Ē' := 1830 * 10 ^ 9) (by norm_num [u32]) (by norm_num [u32])))
+
+set_option maxHeartbeats 1000000 in
+/-- ⭐ **ViT-Tiny's patch embedding, closed at the emitted numerals.** `3×224×224` image,
+    `16×16/s16` patches, `D = 192`, `N = 196`; conv kernel `≤ 3/10`, and ONE bound `9/10`
+    covering `pos_embed`, `cls_token` and `b_conv` together, because `floatClose_patchEmbed`
+    takes one (measured: 0.7229 / 0.5454 / 0.8624).
+
+    Window `232.3` from a unit input, rounding budget `5.633·10⁻⁴`. ⛔ **The one stage of ViT's
+    chain that is an honest fold** — the patch embed does not reduce, so nothing here is capped.
+    ⭐ And no `gamma_num` detour: the reductions are `ic = 3` and `patchSize = 16`, so `norm_num`
+    takes the exact `(1+u)⁴` and `(1+u)¹⁷` directly. -/
+example (M : FloatModel) (hMu : M.u ≤ u32)
+    (W_conv : Kernel4 192 3 16 16) (b_conv cls_token : Vec 192)
+    (pos_embed : Mat (196 + 1) 192)
+    (hwc : ∀ d c kh kw, |W_conv d c kh kw| ≤ 3 / 10)
+    (hpos : ∀ n d, |pos_embed n d| ≤ 9 / 10)
+    (hcls : ∀ d, |cls_token d| ≤ 9 / 10) (hbc : ∀ d, |b_conv d| ≤ 9 / 10) :
+    (floatBridgesTo_patchEmbed M 3 224 224 16 196 192 W_conv b_conv cls_token pos_embed
+      (by norm_num) (by norm_num) (by norm_num) (by norm_num) hwc hpos hcls hbc).Maps
+      1 0 (2323 / 10 ^ 1) (5633 / 10 ^ 7) :=
+  FloatBridgesTo.Maps.patchEmbed M 3 224 224 16 196 192 W_conv b_conv cls_token pos_embed
+    (by norm_num) (by norm_num) (by norm_num) (by norm_num) hwc hpos hcls hbc
+    (rq := 5633 / 10 ^ 7)
+    (le_trans (patchEmbedRoundErr_le M 3 16 hMu (by norm_num) (by norm_num) (by norm_num))
+      (by norm_num [peRoundErrQ, peBranchErrQ, peTripleErrQ, redErr, patchEmbedConvMag,
+                    FloatModel.mulErr, u32]))
+    (by norm_num [patchEmbedMag, patchEmbedConvMag])
+    (by norm_num [patchEmbedConvMag])
 
 end Proofs

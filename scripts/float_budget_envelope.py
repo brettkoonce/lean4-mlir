@@ -847,8 +847,11 @@ VIT_WH = F(4, 10)       # classifier head kernel
 VIT_BB = F(9, 10)       # every bias
 VIT_GL = F(17, 10)      # LayerNorm γ
 VIT_BL = F(6, 10)       # LayerNorm β
-VIT_CLS = F(6, 10)      # CLS token
-VIT_POS = F(8, 10)      # positional embedding
+VIT_CLS = F(6, 10)      # CLS token                                   measured 0.5454
+VIT_POS = F(8, 10)      # positional embedding                         measured 0.7229
+VIT_PB = F(9, 10)       # ⭐ the patch embed's SINGLE bound, covering pos_embed, cls_token AND
+                        # b_conv — `floatClose_patchEmbed` takes one `pb` for all three, so it
+                        # is their max (0.7229 / 0.5454 / 0.8624)
 VIT_UNI = F(17, 10)     # the single uniform bound, for the ablation
 
 VIT_S = F(317)          # 1/√ε at ε ≥ 1e-5 (ViTRender.lean: ε=1e-5)
@@ -925,15 +928,56 @@ def vit_ln_leaf(A, S=VIT_S, emr=VIT_EMR, ei=VIT_EI, q=U32):
     return 2 * A * S + bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
 
 
-def concat_cls(st, cls_b):
-    """Prepending the CLS token: the window is the MAX of the patch rows' and the CLS
-    token's, and the CLS row is a stored parameter carrying no inherited error."""
+def redErr(u, n, Mr, ef):
+    """`redErr` (`PatchEmbedBackFloatBridge.lean`): one rounded-reduction level,
+    `gamma_{n+1}*(n*(Mr+ef)) + n*ef`.  ⚠ EXACT `(1+u)^(n+1) - 1` here, not `gamma_q` — the
+    patch-embed lemmas are stated on the exact power and the reductions are small (n = 3, 16),
+    so `norm_num` evaluates them directly."""
+    return ((1 + u) ** (n + 1) - 1) * (F(n) * (Mr + ef)) + F(n) * ef
+
+
+def pe_convMag(ic, P, wc, A):
+    """`patchEmbedConvMag`: the real conv-dot magnitude `ic*P^2*wc*A`."""
+    return F(ic) * (F(P) * (F(P) * (wc * A)))
+
+
+def pe_mag(ic, P, wc, pb, A):
+    """`patchEmbedMag`: `pos_embed + (b_conv | cls_token) + conv-dot`."""
+    return pb + (pb + pe_convMag(ic, P, wc, A))
+
+
+def pe_tripleErr(u, ic, P, wc, A):
+    """`patchEmbedTripleErr`: the c/kh/kw nest, three `redErr`s over one `mulErr` leaf."""
+    return redErr(u, ic, F(P) * (F(P) * (wc * A)),
+             redErr(u, P, F(P) * (wc * A),
+               redErr(u, P, wc * A, mulErr(u, wc, A, F(0), F(0)))))
+
+
+def pe_roundErr(u, ic, P, wc, pb, A):
+    """`patchEmbedRoundErr`: the triple-sum error plus the two constant adds."""
+    t = pe_tripleErr(u, ic, P, wc, A)
+    b = u * (pb + pe_convMag(ic, P, wc, A) + t) + t
+    return u * (pb + (pb + pe_convMag(ic, P, wc, A)) + b) + b
+
+
+def vit_patch_embed(st, ic=3, P=16, wc=VIT_WP, pb=VIT_BB, q=U32):
+    """**The patch embed, as ONE stage** — `Maps.patchEmbed`.
+
+    ⛔ It is one stage and not three because `patchEmbed_flat` is a single definition with an
+    `if n.val = 0` branch selecting the CLS token, NOT a composition `concatCls . convStride16`.
+    An earlier fold here modelled it as conv -> CLS-concat -> pos-add and was describing a
+    function the repo does not contain; the same granularity trap attention set (see `vit_attn`).
+    ⭐ `pb` is ONE bound covering pos_embed, cls_token AND b_conv, because the lemma takes one —
+    so it is the max of the three measured kinds (0.7229, 0.5454, 0.8624 -> 9/10).
+    ⛔ Not capped: the patch embed does not reduce, its modulus is linear in the inherited error,
+    and at the net's input that error is 0. It is the one honest fold in ViT's chain."""
     A, E = st
-    return (max(A, cls_b), E)
+    return (pe_mag(ic, P, wc, pb, A) + pe_roundErr(q, ic, P, wc, pb, A),
+            pe_roundErr(q, ic, P, wc, pb, A) + pe_convMag(ic, P, wc, E))
 
 
 def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
-              gl=VIT_GL, bl=VIT_BL, cls=VIT_CLS, pos=VIT_POS,
+              gl=VIT_GL, bl=VIT_BL, pb=VIT_PB,
               S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
               k=K_VIT, ln_cap=True, gelu_sat=True, attn_mode='cap',
               uniform=False):
@@ -944,7 +988,7 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
 
     `uniform=True` reproduces ConvNeXt's mistake — one bound for every parameter kind."""
     if uniform:
-        wa = wm = wp = wh = bb = gl = bl = cls = pos = VIT_UNI
+        wa = wm = wp = wh = bb = gl = bl = pb = VIT_UNI
 
     def R(st):
         return (r4(st[0]), r4(st[1]))
@@ -974,11 +1018,9 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
         st = R(cnx_bias(st, b_b, q)); emit(tag + '.lnb', st)
         return st
 
-    # ── patch embed: 16×16/s16 conv → 196 tokens, prepend CLS, add pos ──
+    # ── patch embed: ONE leaf (conv + CLS branch + pos add, as the definition spells it) ──
     st = (F(1), F(0))
-    st = R(conv(st, PATCH_FANIN, wp, bb)); emit('pe.conv', st)
-    st = R(concat_cls(st, cls));           emit('pe.cls', st)
-    st = R(cnx_bias(st, pos, q));          emit('pe.pos', st)
+    st = R(vit_patch_embed(st, 3, 16, wp, pb, q)); emit('pe', st)
 
     # ── k transformer blocks, pre-norm, two residual sublayers each ──
     for i in range(k):
@@ -1008,7 +1050,7 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
 
 
 def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
-               gl=VIT_GL, bl=VIT_BL, cls=VIT_CLS, pos=VIT_POS,
+               gl=VIT_GL, bl=VIT_BL, pb=VIT_PB,
                S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
                k=K_VIT) -> int:
     """Re-assert EVERY rounded inequality a `ViTFloatBudget.lean` would close, exactly: each
@@ -1044,16 +1086,10 @@ def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
         ck(tag + '.lnb.E', q * (A2 + bl) + E2, r[tag + '.lnb'][1])
         return r[tag + '.lnb']
 
-    # patch embed
-    st = (F(1), F(0))
-    conv_ck('pe.conv', PATCH_FANIN, wp, st, r['pe.conv'])
-    A, E = r['pe.conv']
-    ck('pe.cls.A', max(A, cls), r['pe.cls'][0])
-    ck('pe.cls.E', E, r['pe.cls'][1])
-    A, E = r['pe.cls']
-    ck('pe.pos.A', A + pos + q * (A + pos), r['pe.pos'][0])
-    ck('pe.pos.E', q * (A + pos) + E, r['pe.pos'][1])
-    st = r['pe.pos']
+    # patch embed — ONE leaf (`Maps.patchEmbed`), stated on the exact `redErr` nest
+    ck('pe.A', pe_mag(3, 16, wp, pb, F(1)) + pe_roundErr(q, 3, 16, wp, pb, F(1)), r['pe'][0])
+    ck('pe.E', pe_roundErr(q, 3, 16, wp, pb, F(1)) + pe_convMag(3, 16, wp, F(0)), r['pe'][1])
+    st = r['pe']
 
     for i in range(k):
         t = f'b{i}'
