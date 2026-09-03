@@ -100,6 +100,8 @@ import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.EfficientNetFloatBudget
+import LeanMlir.Proofs.Float.FloatBudgetEnvLN
+import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2212,6 +2214,53 @@ open Proofs
 #print axioms Proofs.b0EvalForward_eq_forwardBEval
 #print axioms Proofs.b0EvalGraph_faithful
 #print axioms Proofs.b0_float_logits_le_committed
+-- ⛔⛔ The FOURTH ImageNet-scale whole-net float statement, and it is NOT the same kind of
+-- statement as the three above. The ConvNeXt-T forward as a CLOSED FloatBridgesTo (cnxBridge),
+-- window 4.858e227 (cnxBridge_mag_le) and |float − real| ≤ 9.706e227 per logit on |x| ≤ 1 at the
+-- measured 300-epoch profile (cnx_float_logits_le). 366 rational inequalities, generated and
+-- re-asserted by scripts/float_budget_envelope.py's verify_cnx before emission.
+-- ⛔ `budget / window = 2.00` is the tell: all 23 LayerNorm sites go through
+-- FloatBridgesTo.capped, whose modulus is min(fold, 2·window), and the right branch is what
+-- closes. So this says "the float and real forwards both land in the certified window" — the
+-- TRIANGLE INEQUALITY — where r34 / mnv2 / B0 say "the rounding error folds to this". Do not
+-- table it beside them without that label (planning/float_budget_numbers.md §9).
+-- ⭐⭐ It has to be capped. LayerNorm reduces its mean and variance out of its own input, so its
+-- modulus is quadratic in the window; BatchNorm escapes by freezing the statistics (which is why
+-- the other three numbers are at inference BN) and LayerNorm has no running statistics to freeze
+-- — no eval twin exists to build. Uncapped the same fold is 1e11631, and norm_num refuses
+-- numerals past ~1e300.
+-- ⭐ The measured profile also had to be split by parameter KIND: conv/dense kernels max at 0.596
+-- over 28.5M entries, biases and LN β at 2.95, LN γ at 4.77, the layer scale at 8.38. A single
+-- uniform 8.4 is 14x loose on exactly the entries the conv fan-in multiplies, and that fold lands
+-- at 1e301 — unstatable. CnxBlockChBounded carries four bounds for that reason alone.
+-- ⚠ The head LayerNorm: convnextCh_floatBridgesTo held `id` in that slot until 2026-09-03, so it
+-- bridged a net the tie did not describe (the head LN came back 2026-08-30). Fixing the slot is
+-- also what made the cap sufficient on its own — with `id` there the last GELU's cubic modulus is
+-- never capped again, and the fold then also needs the 3/2 saturation constant.
+#print axioms Proofs.FloatBridgesTo.capped
+#print axioms Proofs.FloatBridgesTo.Maps.capped
+#print axioms Proofs.FloatBridgesTo.Maps.bnCapped
+#print axioms Proofs.FloatBridgesTo.Maps.gelu
+#print axioms Proofs.FloatBridgesTo.Maps.chanLNTensor3
+#print axioms Proofs.FloatBridgesTo.Maps.cnxBlockChW
+#print axioms Proofs.FloatBridgesTo.Maps.cnxDownChW
+#print axioms Proofs.DeviceLN.bridge
+#print axioms Proofs.DeviceLN.maps
+#print axioms Proofs.cnxBridge
+#print axioms Proofs.cnxBridge_maps
+#print axioms Proofs.cnxBridge_mag_le
+#print axioms Proofs.cnxBridge_fresh_le
+#print axioms Proofs.cnx_float_logits_le
+-- The tie: the bridged skeleton IS the committed convNextForwardTCh, head LayerNorm included.
+#print axioms Proofs.cnxForward_eq_committed
+#print axioms Proofs.cnx_float_logits_le_committed
+-- ⭐ GELU is globally 3/2-Lipschitz (Architectures/GeluSaturation.lean), and floatClose_gelu now
+-- states the min of that and its magnitude polynomial. The polynomial is CUBIC in the window and
+-- reaches ~400 at ConvNeXt's magnitudes against a true constant of ≈1.13; the saturation bound was
+-- already proved in the repo (for the adjoint chain) and sat one import ABOVE the float bridge
+-- that needed it — the §3.3.0 pattern in its purest form.
+#print axioms Proofs.geluScalar_lipschitz
+#print axioms Proofs.geluScalarDeriv_abs_le
 #print axioms Proofs.floatBridgesTo_invresBodyGen
 #print axioms Proofs.floatBridgesTo_invresBodyStridedGen
 #print axioms Proofs.floatBridgesTo_r34IdBlock

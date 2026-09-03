@@ -206,6 +206,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "cnx_float_logits_le"   # ⛔ the fourth ImageNet-scale statement and NOT the same KIND as the other three: the ConvNeXt-T forward's float logits are within 9.706e227 of the real ones on |x| <= 1, at the measured 300-epoch profile (kernels <= 6/10, biases/LN-beta <= 3, LN-gamma <= 48/10, layer scale <= 84/10), eps >= 1e-5, device LN statistics and GELU accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 23 LayerNorm sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold. LayerNorm has no frozen-statistics mode, so no version of this net has a fold (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/ConvNeXtFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "mnv2_float_logits_le"   # the second ImageNet-scale number: the DEPLOYED MobileNetV2 inference forward's float logits are within 1.444e96 of the real ones on |x| <= 1, at the measured 350-epoch profile (|param| <= 28/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24. ⭐ Its certified WINDOW is 2154, not vacuous: relu6 clamps at 6 whatever its input, so every relu6 site resets the window (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
       sorry_count: 0
@@ -645,6 +651,66 @@ fidelity:
        three; twenty would end it the way r34's 33 training-BN sites end its training-mode fold.
        The question to ask of a new architecture is therefore not "does it normalise" but "does
        any op consume a reduction of its own input and then multiply by that input".
+
+       ⛔⛔ A FOURTH, AND A DIFFERENT KIND OF STATEMENT (2026-09-03):
+       `ConvNeXtFloatBudget.lean`. `cnxBridge` is the committed channel-LayerNorm ConvNeXt-T
+       forward -- 4x4/s4 patchify stem, 18 blocks of depthwise 7x7 / channel-LN / 1x1 expand /
+       GELU / 1x1 project / layer scale / skip, three LN+2x2/s2 downsamples, GAP, head LayerNorm,
+       classifier -- as a CLOSED bridge, and `cnxBridge_maps` pushes the envelope through its 183
+       numeric stages (366 rational inequalities, generated AND re-asserted by
+       `scripts/float_budget_envelope.py`'s `cnx_eval_chain` / `verify_cnx`). At the profile
+       measured on the finished 300-epoch checkpoint, `eps >= 1e-5`, unit input window and
+       `u <= 2^-24`:
+           output window  <= 4.858e227      (cnxBridge_mag_le)
+           fresh budget   <= 9.706e227      (cnxBridge_fresh_le)
+       and per logit `|float - real| <= 9.706e227` (`cnx_float_logits_le`), tied to the committed
+       net by `cnxForward_eq_committed` (= `convNextForwardTCh_eq_skeleton` read backwards) and
+       restated on it by `cnx_float_logits_le_committed`. Three modelled hypotheses, all named:
+       `DeviceLN` (the deployed LayerNorm's mean, relative accuracy `emr`, and its inverse-stddev,
+       absolute accuracy `ei`) and `DeviceGelu` (`egelu`), all at 1e-2.
+
+       ⛔ IT IS NOT A FOLD. `budget / window = 2.00`, and that ratio is the whole caveat: every
+       one of the 23 LayerNorm sites is discharged by `FloatBridgesTo.capped`, whose modulus is
+       `min(fold, 2*mag)`, and the right branch is what closes. So this number says THE FLOAT AND
+       THE REAL FORWARD BOTH LAND IN THE CERTIFIED WINDOW -- the triangle inequality -- where
+       r34's 1.548e209, mnv2's 1.444e96 and B0's 8.408e210 say the rounding error folds to that
+       value. It must not be tabled beside them without the label. It is still worth having: it
+       is a kernel-checked whole-net statement about a LayerNorm net, which nothing else in the
+       repo is, and its WINDOW half is the honest fold.
+
+       ⭐⭐ AND THE CAP IS NOT OPTIONAL. LayerNorm reduces its mean and variance out of its own
+       input, so `bnReluBudget`'s mean-and-variance shift term applies and its modulus is
+       quadratic in the window -- the same structure that makes training-mode BatchNorm
+       unstatable (above). BatchNorm escapes by freezing the statistics, which is exactly why the
+       other three numbers are stated at inference BN. LayerNorm has NO running statistics to
+       freeze: there is no eval-mode variant, no second render to build, and no version of this
+       net whose fold exists. Uncapped, the same chain is 1e11631; `norm_num` refuses numerals
+       past ~1e300. Measured ablation at the committed profile (`cnx_eval_chain`'s three flags):
+       leaves as they stood 1e233/1e11631; saturation-GELU only 1e233/1e5390; LN cap only
+       1e233/1e233; both 1e233/1e233.
+
+       ⭐ TWO THINGS HAD TO BE RIGHT BESIDES THE CAP, and neither was about the architecture.
+         (a) THE PROFILE DOES NOT SPLIT UNIFORMLY. On the 300-epoch checkpoint the conv and dense
+             kernels max at 0.5962 over 28,524,000 entries, the biases and LN beta at 2.9499, the
+             LN gamma at 4.7700 and the layer scale at 8.3766. A single uniform bound is therefore
+             8.4 -- 14x loose on exactly the entries the conv fan-in multiplies -- and that fold
+             lands at 1e301, unstatable. `CnxBlockChBounded` now carries FOUR bounds and the split
+             one lands at 1e227. This is the r34/mnv2/B0 leaf lesson one level up: the looseness
+             was in the INPUT, not in a lemma.
+         (b) THE HEAD LAYERNORM SLOT WAS STALE. `convnextCh_floatBridges{,To}` held `id` there
+             while `convNextForwardTCh_eq_skeleton` had carried `rowLNVecFlat 1 768` since the
+             head LN was restored on 2026-08-30 -- so the whole-net bridges described a net with
+             no head LayerNorm and their docstrings' claim to tie through that lemma was false for
+             four days. Both now take the real head LN and its bridge. Fixing it is also what made
+             the cap sufficient on its own: with `id` in the slot the last block's GELU is never
+             capped again and the fold needs the saturation constant too (1e896 vs 1e230).
+
+       ⭐ GELU'S MODULUS, tightened on the way (`Architectures/GeluSaturation.lean`, moved out of
+       `Certificates/GeluLipschitz.lean`): `floatClose_gelu` now states the MIN of its magnitude
+       polynomial `(1 + sqrt(2/pi)/2*A*(1+3*0.044715*A^2))*e` -- CUBIC in the window, ~400 at
+       ConvNeXt's magnitudes -- and the global saturation constant `(3/2)*e`, which was already
+       proved in this repo for the adjoint chain and sat one import ABOVE the float bridge that
+       needed it. Same shape as swish's fix, and the same lesson: the bound was already there.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

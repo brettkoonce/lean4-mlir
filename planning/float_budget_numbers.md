@@ -1,7 +1,18 @@
-# Whole-net float budgets as NUMBERS: ResNet-34 and MobileNetV2 landed, and the wall the rest hit
+# Whole-net float budgets as NUMBERS: five nets landed; ViT-Tiny is what is left
 
-Written 2026-09-02; revised 2026-09-03 after MobileNetV2. Read §0 and §0.1 before touching
-anything; §3 is the work list; §7 is the checklist you run before every commit.
+Written 2026-09-02; revised 2026-09-03 after ResNet-34, MobileNetV2, EfficientNet-B0 and
+ConvNeXt-T.
+
+**Picking this up cold?** Read §0.1 (the one structural finding) and §9 (⛔ what the ConvNeXt
+number is and is not), then §3.5 (ViT-Tiny, the only net left). §7 is the checklist you run
+before every commit — including the "stage, then STOP and ask" rule.
+
+⭐ The single most useful habit from the five nets that landed: **when a fold overshoots, ablate
+before concluding anything about the architecture.** Four times running the blocker was
+something already true that the statement threw away — relu6's clamp, swish's modulus, seScale's
+window, and then ConvNeXt's **profile** (a uniform parameter bound where the checkpoint has four
+scales 14× apart). Each diagnosis was a Python probe, not a Lean session, and the last of them
+was not a leaf lemma at all — which is the refinement to carry: **ablate the inputs too.**
 
 ## 0. Where we are
 
@@ -11,17 +22,24 @@ anything; §3 is the work list; §7 is the checklist you run before every commit
 `mag`/`mod` explicitly, every leaf writes them out. (Why it had to be data and not `∃ L`:
 `formalization.yaml` fidelity §4d — the `∃`-modulus was discharged by `L := 2B`.)
 
-Four whole nets now carry kernel-checked numbers:
+Five whole nets now carry kernel-checked numbers — ⛔ **but not all five are the same claim.**
 
-| net | window | budget | budget/window | over the chain | file |
+| net | window | budget | budget/window | kind | file |
 |---|---|---|---|---|---|
-| CIFAR-8 (8 conv, no BN) | 6.121·10¹⁸ | 6.37·10¹⁴ | 1·10⁻⁴ | — | `Cifar8FloatBudget.lean` |
-| ResNet-34 @224², **inference BN** | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 4.9·10⁻³ | ~10¹⁵⁷ | `Resnet34FloatBudget.lean` |
-| MobileNetV2 @224², **inference BN** | **2.154·10³** | 1.444·10⁹⁶ | — | ~10³⁶ | `MobileNetV2FloatBudget.lean` |
-| EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | — | `EfficientNetFloatBudget.lean` |
+| CIFAR-8 (8 conv, no BN) | 6.121·10¹⁸ | 6.37·10¹⁴ | 1·10⁻⁴ | fold | `Cifar8FloatBudget.lean` |
+| ResNet-34 @224², **inference BN** | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 4.9·10⁻³ | fold | `Resnet34FloatBudget.lean` |
+| MobileNetV2 @224², **inference BN** | **2.154·10³** | 1.444·10⁹⁶ | — | fold | `MobileNetV2FloatBudget.lean` |
+| EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | fold | `EfficientNetFloatBudget.lean` |
+| ConvNeXt-T @224², channel LN | 4.858·10²²⁷ | 9.706·10²²⁷ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
 
-All four are the interval fold and all four are vacuous as *budgets*; the point is that the
-kernel checks them. The r34 number sits 157 orders above the adjoint chain's proven-H figure for
+The first four are the interval fold and all four are vacuous as *budgets*; the point is that the
+kernel checks them. **ConvNeXt-T's is the triangle inequality** — its 23 LayerNorm sites all go
+through `FloatBridgesTo.capped`, so it says "the float and the real forward both land in the
+certified window" and not "the rounding error folds to this". `budget/window = 2.00` is the tell,
+and §9 is the rule for saying so. There is no version of ConvNeXt for which the fold exists
+(§0.1), so this is not a weaker choice; it is the only statement available.
+
+The r34 number sits 157 orders above the adjoint chain's proven-H figure for
 the same net (6.5·10⁵¹, `scripts/adjoint_chain_probe.py` §5), and the two documented reasons are
 `layerBudget`'s uniform `m·w'·A` face (§5 of the probe measures 257× per stage) and worst-case
 rather than measured windows.
@@ -70,9 +88,19 @@ The machinery built for r34 and reusable for the rest:
   them there would make the ResNet-34 budget depend on the whole MobileNet/EfficientNet cone.
   ⚠ It also carries a worked B0 b1 squeeze-excite site as a compiled `example` — a `Maps` leaf
   nothing composes is a leaf nobody has checked composes.
+* `FloatBudgetEnvLN.lean` — the `Maps` kit a LayerNorm net needs: the capped pure-normalise LN
+  (`Maps.bnCapped`), the two halves of its affine (`diagBack`/`biasAdd`), the gathers and the
+  per-row lift they are conjugated by, `gelu` (through the `3/2` branch), `flatConvStride4`, and
+  the three composites the whole-net chain walks (`Maps.chanLNTensor3` / `.cnxBlockChW` /
+  `.cnxDownChW`). ⚠ It imports `FloatBudgetEnvMBConv` for one leaf, `Maps.depthwise`.
+* `Architectures/GeluSaturation.lean` — `geluScalarDeriv_abs_le` / `geluScalar_lipschitz`, moved
+  down out of `Certificates/GeluLipschitz.lean` so `floatClose_gelu` can state the `min` of its
+  magnitude polynomial and the global `3/2` (§3.3.0(b)).
 * `scripts/float_budget_envelope.py` — the exact-rational fold in the lemmas' semantics, the
   4-significant-figure round-up, the re-assertion passes (`verify_r34`, 180 inequalities;
-  `verify_mnv2`, 116; `verify_b0`, 96) and the numerals. Its CIFAR-8 regression case reproduces `Cifar8FloatBudget.lean` stage for stage.
+  `verify_mnv2`, 116; `verify_b0`, 96; `verify_cnx`, 366) and the numerals. Its CIFAR-8
+  regression case reproduces `Cifar8FloatBudget.lean` stage for stage, and `cnx_eval_chain`'s
+  three flags (`ln_cap`, `gelu_sat`, `head_ln`) reproduce §3.3's ablation table.
   ⚠ It must fold with the **rounded** γ (`r4(gamma_q k)`), not the exact `(1+u)^k − 1` — the
   Lean chain passes the rounded one, and folding with the exact value silently emits stage
   numerals a hair too small, which the kernel then rejects. That is what the re-assertion pass
@@ -102,13 +130,24 @@ reason r34's number is stated at inference BN.
 (`ViTFloatBridge.lean`) IS `floatClose_bn` — same `bnReluBudget` modulus — and LN has no
 running statistics, so there is no eval-mode variant to switch to. So ConvNeXt-T and ViT-Tiny
 hit this wall unconditionally, and §3.3's "ConvNeXt-T is the cheapest ImageNet closure" is right
-about the *closure* and wrong about the *number*. Do not plan a ConvNeXt or ViT number until
-one of the following is done:
+about the *closure* and wrong about the *number*. There are three escapes; ConvNeXt-T landed on
+the first:
 
-1. **A cap.** Any modulus can be replaced by `2·mag` (both float and real outputs lie in the
-   certified window), so `Maps` could carry `Ē' := min(fold, 2Ā')`. Cheap, and it stops the
-   squaring cold. But it is the triangle inequality, not the fold, and it should be labelled as
-   such wherever it is used.
+1. ✅ **A cap — LANDED 2026-09-03 as `FloatBridgesTo.capped` (`FloatBudgetEnv.lean`).** Any
+   modulus can be replaced by `2·mag` (both float and real outputs lie in the certified window),
+   so a bridge carries `mod' := min(mod, 2·mag)`. It stops the squaring cold, because `mag`
+   depends on the input WINDOW and not on the inherited error: a capped site resets the error
+   however big it arrived. ⛔ It is the triangle inequality, not the fold, and it must be
+   labelled wherever it is used (§9). ConvNeXt-T is `10²²⁷ / 10²²⁷` with it and `10²³³ / 10¹¹⁶³¹`
+   without.
+   ⚠ **The earlier note here said "it is not sufficient on its own — the cap alone is still
+   `10⁸³²`, because GELU is separately CUBIC in the window". That was measured against the net
+   the whole-net bridge described at the time, which had `id` in its head-LayerNorm slot.** With
+   the real head LN restored (§3.3) the last GELU is capped like every other, and the cap IS
+   sufficient on its own: cap + cubic GELU is `10²³³`, the same as cap + the saturation constant.
+   The saturation constant is still worth having — without the head LN it is the difference
+   between `10⁸⁹⁶` and `10²³⁰` — but it is not what makes ConvNeXt statable, and the "neither
+   escape alone is enough" finding was an artifact of a stale slot.
 2. **A tighter input-sensitivity for the reducing normalisation.** The `A²/ε^{3/2}` factor is
    worst-case-at-the-ε-floor twice over. An operating-point variance floor `V` shrinks it by
    `(V/ε)^{3/2}` but leaves it quadratic, so it postpones the wall rather than removing it.
@@ -140,7 +179,8 @@ content. Do not chase the adjoint chain here.
 **Success per net.** (i) `<net>Bridge` with no `FloatBridgesTo` hypotheses; (ii) a tie to a
 committed real def — see the r34 caveat in §3.1; (iii) `<net>Bridge_maps` and
 `<net>_float_logits_le`; (iv) the number cross-checked against the probe; (v) 3-axiom clean, in
-`AuditAxioms`, disclosed in `formalization.yaml` §4d.
+`AuditAxioms`, disclosed in `formalization.yaml` §4d; (vi) ⛔ **if §3.3.0(a)'s cap bites
+anywhere, say so** — the statement is then the triangle inequality and not the fold (§9).
 
 ## 2. The mechanism
 
@@ -167,8 +207,8 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **ResNet-34 fwd** | ✅ **DONE** (inference BN) — `r34_float_logits_le`, 1.548·10²⁰⁹, tied to the graph | — |
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
-| ConvNeXt-T Ch fwd | open: 22 pure-normalise LN bridges | ⛔ blocked on §0.1 — the LN modulus is quadratic and LN has no eval mode |
-| ViT-Tiny fwd | open: `hFinalLN`, `hblocks`, `hPatch` | ⛔ blocked on §0.1, and additionally the softmax modulus carries `Real.exp` |
+| **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
+| ViT-Tiny fwd | ⭐ **NEXT** (§3.5) — ConvNeXt's cap now exists and is exactly what softmax wants; `smErr`'s `Real.exp (2δ)` is the last unknown | probe the softmax cap first — softmax outputs are in `(0,1)` (`softmax_abs_le_one`), so `capped` gives modulus `2` UNCONDITIONALLY and deletes `Real.exp` rather than bounding it. Then `mhProjAttnFull` (§3.5) |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -355,10 +395,176 @@ magnitude-NON-increasing — its `mag` is `A + mulErr`, like relu's. It does not
 it simply does not RESET it, which is the relu case, not an unboundedness case. What actually
 threatened B0 was swish's *modulus* and SE's *window*, neither of which that note mentions.
 
-### 3.3, 3.5 ConvNeXt-T and ViT-Tiny
+### 3.3.0 ✅ The two shared prerequisites — BOTH LANDED 2026-09-03
 
-Both blocked on §0.1; if one of the escapes there works, ConvNeXt is the cheapest (one LN leaf
-closes 22 hypotheses) and ViT is still gated on `Real.exp` in the softmax modulus.
+Both are the pattern the previous three commits established: **a bound that is already true,
+which the leaf does not state.** They are what ConvNeXt-T's number was built on, and ViT-Tiny
+inherits them.
+
+**(a) ✅ `FloatBridgesTo.capped` — the §0.1 escape-1 combinator (`FloatBudgetEnv.lean`).** `FloatClose`'s magnitude clause
+bounds the real AND the float output by `mag A`, so their difference is at most `2·mag A`,
+always. As a bridge transformer:
+
+```
+FloatBridgesTo.capped (b : FloatBridgesTo f fF) : FloatBridgesTo f fF
+  mag := b.mag
+  mod := fun A e => min (b.mod A e) (2 * b.mag A)
+```
+
+⭐ The shipped `Maps.capped` takes **only the WINDOW bound** — `hmag : ∀ A, 0 ≤ A → A ≤ Ā →
+b.mag A ≤ Ā'` and `2 * Ā' ≤ Ē'` — because the output error is `2·Ā'` whatever the underlying
+modulus does. That is the mechanism, not a convenience: at a capped site the quadratic term is
+never turned into a numeral, so `norm_num` never meets it. `Maps.bnCapped` (`FloatBudgetEnvLN`)
+is the LN leaf in that shape.
+⚠ **Label every use.** Wherever the `min` selects the `2·mag` branch the result is the triangle
+inequality, not the fold — the statement becomes "both maps land in the certified window", which
+is much weaker than "the rounding error is bounded by the fold". It bites at *every* LN site of
+ConvNeXt-T, so that number is entirely of that kind (§9).
+
+**(b) ✅ GELU's modulus — and ⛔ the bound did NOT have to be written; it was already in the
+repo.** `floatClose_gelu`'s modulus was
+
+    egelu + (1 + √(2/π)/2 · A · (1 + 3·0.044715·A²)) · e        — CUBIC in the window
+
+and the plan here was to prove the additive `A + |a−b|` split, the way swish got one. That was
+unnecessary: `Certificates/GeluLipschitz.lean` had already proved the *global* constant
+`|gelu′| ≤ 3/2` (`geluScalarDeriv_abs_le` / `geluScalar_lipschitz`) — saturation-aware, because
+past the small-`|x|` region `gelu′`'s `sech²` decays like `e^{−2√(2/π)|x|}` and beats the cubic
+growth — and it sat **one import above** the float bridge that needed it, written for the
+adjoint chain. `3/2·e` beats the additive `A + e` everywhere the window is not tiny.
+The fix was therefore a MOVE, not a proof: the analysis is now
+`Architectures/GeluSaturation.lean` (imports only `LayerNorm.lean`), `floatClose_gelu` states
+the `min` of the polynomial and `3/2·e` as `floatClose_swish` states its `min`, and
+`Maps.gelu` closes through the `3/2` branch (the polynomial branch carries `√(2/π)` and could
+not be `norm_num`'d even where it is tighter).
+⭐ **The lesson is the sharpest instance of this file's habit yet:** before writing a tighter
+leaf bound, grep the repo for it. The chain tier and the float tier had proved and needed the
+same constant for a month without meeting.
+
+### 3.3 ConvNeXt-T — ⛔ DONE (2026-09-03), and it is the CAP, not the fold
+
+`cnx_float_logits_le` / `cnx_float_logits_le_committed`: **window 4.858·10²²⁷, budget
+9.706·10²²⁷**, at the measured 300-epoch profile, `ε ≥ 10⁻⁵`, device LayerNorm statistics and
+device GELU accurate to `10⁻²`, `u ≤ 2⁻²⁴`. Files: `ConvNeXtFloatBudget.lean` (781 lines, ~2 min
+to elaborate — 183 numeric stages, 366 inequalities), plus `FloatBudgetEnvLN.lean`,
+`Architectures/GeluSaturation.lean`, `FloatBridgesTo.capped` in `FloatBudgetEnv.lean`, and the
+head-LN and four-bound fixes in `ConvNeXtWholeFloatBridge.lean`.
+
+⛔ **`budget / window = 2.00`.** All 23 LayerNorm sites are discharged by `Maps.bnCapped`, so the
+statement is "the float and the real forward both land in the certified window" — the triangle
+inequality — and NOT r34/mnv2/B0's "the rounding error folds to this". Say it every time (§9).
+It is still worth having: it is the only kernel-checked whole-net statement about a LayerNorm net
+in the repo, and its WINDOW half is an honest fold.
+
+**⭐ No eval twin was needed and none is possible** — LN has no running statistics, so unlike the
+other three nets there is no second render to build. That made ConvNeXt *cheaper* than B0, as
+predicted, and it is also exactly why the number has to be capped (§0.1).
+
+**⭐⭐ Two things had to be right besides the cap, and neither was about the architecture.**
+
+**(a) The measured profile does not split uniformly, and a uniform bound is unstatable.** On the
+finished 300-epoch run (`/home/skoonce/convnext/convnext_t300_4gpu/convnext_tiny_imagenet.bin`,
+28,587,592 f32):
+
+| kind | count | max | bound used |
+|---|---|---|---|
+| conv / dense kernels | 28,524,000 | **0.5962** | `w' = 6/10` |
+| biases + LayerNorm β | 49,576 | 2.9499 | `bb = 3` |
+| LayerNorm γ | 7,392 | 4.7700 | `gl = 48/10` |
+| layer scale | 6,624 | **8.3766** | `sl = 84/10` |
+
+A single uniform bound is `8.4` — 14× loose on exactly the entries the conv fan-in multiplies —
+and that fold lands at **`10³⁰¹`**, past `norm_num`'s ceiling. Split it is `10²²⁷`.
+`CnxBlockChBounded` / `CnxDownChBounded` therefore carry four bounds and three, not two.
+⚠ This is the file's ⭐ habit one level up: the looseness was in the INPUT, not in a lemma, and
+the ablation that found it is the same three-line Python probe.
+⚠ The checkpoint predates the 2026-08-30 head-LN restoration (it is short by exactly
+1,536 = 2×768, which is how the missing layer was found), so the head LN's γ/β are not in the
+measurement; they initialise at γ=1, β=0 and the bounds cover them with room. The plan's earlier
+"provisional profile, global max 1.1135 at e9" was the in-progress run — the finished one is 7×
+larger, and it changes the answer.
+
+**(b) ⛔ The head-LayerNorm slot was stale, so the whole-net bridge described a different net.**
+`convnextCh_floatBridges` and `convnextCh_floatBridgesTo` both held `id` in the `lnHead` slot,
+while `WholeNetForwardTies.convNextForwardTCh_eq_skeleton` had carried
+`rowLNVecFlat 1 768 w.hε w.hγ w.hβ` since the head LN came back on 2026-08-30. Their docstrings
+claimed to tie through that lemma; they could not. Both now take the real head LN, its two
+bounds and its bridge (23 LN hypotheses, not 22). ⚠ The `imagenet_specs_drift_from_twins`
+lesson exactly: *"same net as the tie" is an unchecked claim until something forces the two
+statements to unify* — and what finally forced it was needing the tie for a number.
+
+**⭐ Fixing (b) also changed the §0.1 finding.** The ablation, at the committed profile
+(`cnx_eval_chain`'s `ln_cap` / `gelu_sat` / `head_ln` flags):
+
+| variant | window | budget | statable |
+|---|---|---|---|
+| leaves as they stood (no cap, cubic GELU) | 10²³³ | 10¹¹⁶³¹ | no |
+| saturation GELU only | 10²³³ | 10⁵³⁹⁰ | no |
+| **LN cap only, cubic GELU** | 10²³³ | **10²³³** | **yes** |
+| both (shipped) | 10²³³ | 10²³³ | yes |
+| cap + cubic GELU, **head LN removed** | 10²²⁹ | 10⁸⁹⁶ | no |
+
+So **the cap alone is sufficient**, and the earlier "neither escape alone is enough" was measured
+against the net with `id` in the head slot — the bottom row, which reproduces it. The reason is
+mechanical: `capped`'s `2·mag` depends on the input WINDOW, not on the inherited error, so a
+capped site resets the error however big it arrived, and the head LN sits after the last GELU.
+The saturation constant stays in anyway (it is free, it is tighter everywhere, and ViT's GELU
+sites want it) — but it is not load-bearing here, and a plan that had relied on it would have
+been relying on layer order.
+
+**⚠ Three things that cost time, for ViT.**
+1. **A bound bundle read with `obtain` is a bridge that does not reduce.** `rcases` on a `∧`
+   compiles to `And.casesOn`, which is stuck on a variable, so `Maps.residual … ≟ (that
+   bridge).Maps …` fails to unify and no numeric envelope can be attached.
+   `floatBridgesTo_cnxBlockChW` / `_cnxDownChW` are now term-mode with `hb.1` / `hb.2.1` /…
+   projections. Anything a budget file will compose onto must reduce.
+2. **The recursive stage fold associates to the RIGHT.**
+   `floatBridgesTo_convNextStageChK` at `k = 3` is `b0.comp (b1.comp (b2.comp idVec))`, not
+   `((b0.comp b1).comp b2)`. The `Maps` chain has to match, and the error points at the first
+   block, not at the association.
+3. **Pin `(Ā := …)` on any `Maps` leaf whose input window the elaborator has not yet unified.**
+   The head-LN site's `by norm_num`s ran before `Maps.comp` had determined `Ā` and met a
+   metavariable; the block/downsample sites were fine only because their other arguments pinned
+   it. Passing the input window explicitly costs nothing and removes the order dependence.
+
+### 3.5 ViT-Tiny — the `exp` is the real gate, and the cap is CHEAPEST exactly there
+
+⭐ **ViT is now the only net left, and both of ConvNeXt's problems are already solved for it**:
+`FloatBridgesTo.capped` exists and `floatClose_gelu` already carries the `3/2` saturation branch,
+so `Maps.gelu` and `Maps.bnCapped` apply to ViT's LN and MLP sites unchanged. What is left is
+one problem of ViT's own, and it is worse than either: `FloatModel.smErr` (`FloatBridge.lean`) is
+
+    smErr u eexp δ n = u·(1 + smKappa) + smKappa + (Real.exp (2δ) − 1)
+
+— **exponential in the inherited error `δ`**, where `δ` is the perturbation reaching the
+attention logits. After two blocks that is already past anything `norm_num` can evaluate, and
+unlike a big rational there is no numeral at all: `Real.exp` of a large argument has no cheap
+rational bound the kernel will check.
+
+⭐ **But the softmax is the one place where the cap costs nothing.** A softmax output is a
+probability vector — every entry is in `(0,1)`, and `softmax_abs_le_one` is already proved
+(`FloatBridge.lean`, used by `SdpaBackFloatBridge.lean`). So the softmax leaf's window is `1`
+and §3.3.0(a)'s cap bounds its modulus by `2` **unconditionally**, which deletes
+`Real.exp (2δ)` from the fold entirely rather than bounding it. Elsewhere the cap is a
+concession; here it is simply the right bound. ⭐ **Test this first** — it is the cheapest way to
+find out whether ViT is reachable at all, and it is a probe script, not Lean.
+
+⚠ Two more things to check before committing to ViT:
+* `smErr` carries a side condition `smRho u eexp n < 1` where
+  `smRho u eexp n = ((1+u)^(n+1) − 1)(1 + eexp) + eexp`. At ViT-Tiny's `n = 197` tokens that is
+  `≈ 198u + eexp ≈ 1.2·10⁻⁵ + eexp`, so it is satisfiable for any sane `eexp` — but it is a
+  hypothesis the whole-net statement must carry and disclose, like `DeviceRsqrt`/`DeviceSigmoid`.
+* The attention block is `mhProjAttnFull` with its own `mhpB`/`mhpL` magnitude and modulus
+  (`ViTBlockFloatBridge.lean`, ~1100 lines). Read those two definitions before folding — the
+  `n · (1 + attnWeightErr) · vA` shape suggests the same "reduction fed back multiplicatively"
+  structure §0.1 warns about, in which case attention is a fourth quadratic site.
+
+**ConvNeXt is done, so ViT is a probe away from a decision.** Order: (i) extend
+`cnx_eval_chain`'s pattern to a `vit_chain` sizing fold with the softmax capped and `smErr`
+deleted, and see whether the number is under `10³⁰⁰`; (ii) if it is, read `mhProjAttnFull`'s
+`mhpB`/`mhpL` and decide whether attention is a fourth quadratic site; (iii) only then open Lean.
+⚠ And carry §3.3's three mechanical lessons: bound bundles by projection not `obtain`, the
+recursion's association, and `(Ā := …)` on every leaf.
 
 ### 3.6 Common sub-steps for every net
 
@@ -389,14 +595,19 @@ bridges is on that file's import path.
 generator's arithmetic IS these lemmas'. Do that for every new leaf: an unexercised `Maps` leaf
 is the `stale lean_exe gates` failure mode in proof form.
 
-Still to add:
+✅ **The LayerNorm set landed too, in `FloatBudgetEnvLN.lean`**: `capped` / `Maps.capped` (the
+bridge transformer, §3.3.0(a)), `Maps.bnCapped` (the capped pure-normalise LN), `Maps.diagBack`
+(the LN γ multiply AND the layer scale — `layerScale γ = diagBack γ` definitionally),
+`Maps.biasAdd`, `Maps.gather` / `Maps.idVec` / `Maps.perRow` (the structural steps), `Maps.gelu`
+(⭐ through the `3/2` saturation branch, NOT the cubic polynomial — which is also irrational and
+could not be `norm_num`'d), and `Maps.flatConvStride4`. Plus the three composites the chain
+actually walks: `Maps.chanLNTensor3`, `Maps.cnxBlockChW`, `Maps.cnxDownChW`.
 
-`comp_flatConvStride4`,
-`comp_gelu` (rational slack for `√(2/π)`), `comp_biasAdd`,
-`comp_diagBack`, `comp_layerNormVec`, identity steps for `gather`/`transposeFlat`/`reassoc*`/
-`broadcast`/`clsSlice`, and `seScale` / `perRow` / `batchMap` / `iterate k`. Each is ten lines
-in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone lemma, `linarith`.
-Write one only when a net in §3 needs it.
+Still to add — ⭐ only ViT's, and only after §3.5's probe says ViT is reachable: `softmax`
+(⭐ window `1`, so `capped` gives modulus `2` and the `exp` disappears rather than being bounded)
+and `mhProjAttnFull`. Then, if a net needs them, identity steps for `clsSlice` and `iterate k`.
+Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
+lemma, `linarith`. Write one only when a net in §3 needs it.
 
 ⚠ `Cifar8FloatBudget.lean` still runs on the older `FloatBridgesTo.Env` (fixed input error,
 per-op `comp_*` lemmas). Migrating it to `Maps` is a coherence pass, not a correctness one — the
@@ -434,6 +645,17 @@ anyway, not as its own commit.
 
 ## 9. What to say about the numbers
 
+⛔ **And say when the number is the CAP rather than the fold.** If §3.3.0(a)'s `min(mod, 2·mag)`
+selects its right branch anywhere on the chain, the statement has changed from "the rounding
+error folds to this" to "both maps land in the certified window" — the triangle inequality. On
+ConvNeXt-T it selects the right branch at every one of the 23 LN sites and the budget comes out
+at exactly **`2.00 ×`** the window, which is the tell. That number must not be tabled beside
+r34/mnv2/B0's without the label — the §0 table carries a `kind` column for exactly this.
+⭐ And say WHY, because the reason is the interesting part: LayerNorm reduces its statistics out
+of its own input, BatchNorm escapes that by freezing them, and LayerNorm has nothing to freeze.
+The cap is not a shortcut past a fold that exists; it is what makes a statement possible where no
+fold does.
+
 ⭐ Say the WINDOW and the BUDGET separately — after MobileNetV2 they are not the same story.
 A clamped-activation net can have a tight window and a vacuous budget at the same time, and
 collapsing them into "the number" loses the only half that is currently believable.
@@ -442,6 +664,9 @@ Per net: the budget is the interval fold at the stated magnitudes; it is vacuous
 certificate; it agrees in order with nothing tighter than itself and sits far above the adjoint
 chain's figure for the same net, for two documented reasons; relative to the certified output
 window it is ≈ Σ(mᵢ+2)·u. What is new is that a wrong `layerBudget`, a dropped stage, a misread
-fan-in or a mis-plugged block now fails to compile. The blueprint's "adjoint chain" paragraph
+fan-in, a mis-plugged block — or, after ConvNeXt, a stale layer slot — now fails to compile.
+⭐ Say the PROFILE too, and say it per parameter kind if the checkpoint has more than one scale:
+ConvNeXt-T's conv kernels max at `0.60` and its layer scale at `8.38`, and quoting a single
+"|param| ≤ 8.4" would be both true and 74 orders misleading. The blueprint's "adjoint chain" paragraph
 carries the measured-magnitude caveat; do not quote the fold's numbers there as if they were the
 chain's. And say which BN mode the number is at — after §0.1 that is not a footnote.

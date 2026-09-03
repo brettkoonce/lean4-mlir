@@ -603,3 +603,200 @@ def verify_b0(rows, w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32) -> int:
     gap_ck("gap", 56 * 56, r_["head.swish"], r_["gap"])
     conv_ck("dense", 1280, r_["gap"], r_["dense"])
     return n
+
+
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ConvNeXt-T @224², channel LayerNorm — the CAPPED fold (`ConvNeXtFloatBudget.lean`)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ READ THIS BEFORE QUOTING THE NUMBER. Every LayerNorm site here goes through
+# `FloatBridgesTo.capped`: its modulus is `min(fold, 2·window)` and the right branch is what
+# closes. So the ConvNeXt budget is the TRIANGLE INEQUALITY — "the float and real forwards both
+# land in the certified window" — and not the interval fold that r34 / MobileNetV2 /
+# EfficientNet-B0's numbers are. The tell is `budget / window = 2.00`. It has to be that way:
+# LayerNorm reduces its statistics out of its own input, so its modulus is quadratic in the
+# window, and unlike BatchNorm it has no frozen-statistics variant to switch to
+# (planning/float_budget_numbers.md §0.1). Uncapped, this fold is 10^11631.
+#
+# Profile MEASURED on /home/skoonce/convnext/convnext_t300_4gpu/convnext_tiny_imagenet.bin (the
+# finished 300-epoch 4-GPU run, 28,587,592 f32) — and it does NOT split uniformly:
+#
+#     conv/dense kernels  28,524,000   max 0.5962      →  w' = 6/10
+#     biases + LN β           49,576   max 2.9499      →  bb = 3
+#     LN γ                     7,392   max 4.7700      →  gl = 48/10
+#     layer scale              6,624   max 8.3766      →  sl = 84/10
+#
+# ⭐ A single uniform bound is therefore 8.4, which is 14× loose on exactly the entries the conv
+# fan-in multiplies, and the fold then lands at 10^301 — past what `norm_num` will evaluate.
+# Split by kind it is 10^227. The four-bound `CnxBlockChBounded` is not tidiness; it is what
+# makes the theorem exist.
+#
+# ⚠ That checkpoint predates the 2026-08-30 head-LayerNorm restoration (it is short by exactly
+# 1,536 = 2×768, which is how the missing layer was found), so the head LN's γ/β are not in the
+# measurement. They initialise at γ=1, β=0 and the bounds above cover them with room.
+
+CNX_W = F(6, 10)        # conv / dense kernels
+CNX_BB = F(3)           # conv / dense biases, and every LayerNorm β
+CNX_GL = F(48, 10)      # LayerNorm γ
+CNX_SL = F(84, 10)      # layer scale
+CNX_S = F(317)          # 1/√ε at ε ≥ 1e-5
+CNX_EMR = F(1, 100)     # deployed LN mean accuracy, RELATIVE to the window
+CNX_EI = F(1, 100)      # deployed LN inverse-stddev accuracy, absolute
+CNX_EGELU = F(1, 100)   # deployed GELU accuracy
+
+# (channels, expand, blocks, spatial) — the [3,3,9,3] ch-variant schedule of `CnxTWeightsCh`.
+CNX_STAGES = [(96, 384, 3, 56), (192, 768, 3, 28), (384, 1536, 9, 14), (768, 3072, 3, 7)]
+
+
+def cnx_ln_leaf(A, S=CNX_S, emr=CNX_EMR, ei=CNX_EI, q=U32):
+    """`Maps.bnCapped` at the pure-normalise LayerNorm (γ=1, β=0): the window is the honest
+    `2Ā·S + bnNormBudget`, the modulus is `2·Ā'` — the cap, not the fold."""
+    return 2 * A * S + bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
+
+
+def cnx_diag(st, Sd, q=U32):
+    """`Maps.diagBack` at `es = 0` (a stored weight, no transcendental): the LN γ multiply and
+    the layer scale."""
+    A, E = st
+    me = mulErr(q, Sd, A, F(0), F(0))
+    return (Sd * A + me, me + Sd * E)
+
+
+def cnx_bias(st, Bb, q=U32):
+    """`Maps.biasAdd`: the LN β shift, one rounded add per coordinate."""
+    A, E = st
+    return (A + Bb + q * (A + Bb), q * (A + Bb) + E)
+
+
+def cnx_gelu(st, egelu=CNX_EGELU, sat=True):
+    """`Maps.gelu`, through the `3/2` branch of `floatClose_gelu`'s `min` — the global
+    saturation constant (`Architectures/GeluSaturation.lean`). `sat=False` reverts to the
+    magnitude polynomial, which is CUBIC in the window and reaches ~400 here."""
+    A, E = st
+    L = F(3, 2) * E if sat else (1 + F(4, 5) / 2 * A * (1 + 3 * F(44715, 10 ** 6) * A ** 2)) * E
+    return (A + egelu, egelu + L)
+
+
+def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
+                   emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32,
+                   ln_cap=True, gelu_sat=True, head_ln=True):
+    """Every stage of the ConvNeXt-T forward, at exactly the granularity the Lean `Maps` chain
+    composes them (the four layout permutations and the per-row lift are envelope-preserving and
+    produce no entry).
+
+    The three flags reproduce planning/float_budget_numbers.md §3.3's ablation table:
+    `ln_cap=False` is the LayerNorm leaf as `Maps.bn` would state it (quadratic in the window),
+    `gelu_sat=False` is `floatClose_gelu` before the saturation branch was wired in, and
+    `head_ln=False` is the net the whole-net bridge described until 2026-09-03, when its head
+    slot still held `id`."""
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out = []
+
+    def lnsite(st, tag):
+        A, E = st
+        mag = r4(cnx_ln_leaf(A, S, emr, ei, q))
+        if ln_cap:
+            err = r4(2 * mag)
+        else:                                   # the uncapped `bnLeafMod`, for the ablation only
+            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
+            err = r4(nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000))))
+        st = (mag, err); out.append((tag + '.ln', st))
+        st = R(cnx_diag(st, gl, q)); out.append((tag + '.lng', st))
+        st = R(cnx_bias(st, bb, q)); out.append((tag + '.lnb', st))
+        return st
+
+    st = (F(1), F(0))
+    st = R(conv(st, 3 * 4 * 4, w, bb)); out.append(('stem.conv', st))   # 4×4/s4 patchify
+    st = lnsite(st, 'stem')
+    for si, (c, ce, nblk, _hw) in enumerate(CNX_STAGES):
+        if si > 0:
+            cin = CNX_STAGES[si - 1][0]
+            st = lnsite(st, f'd{si}')
+            st = R(conv(st, cin * 2 * 2, w, bb)); out.append((f'd{si}.conv', st))
+        for b in range(nblk):
+            t = f's{si + 1}b{b}'
+            blkin = st
+            s = R(conv(st, 7 * 7, w, bb)); out.append((t + '.dw', s))
+            s = lnsite(s, t)
+            s = R(conv(s, c, w, bb)); out.append((t + '.ex', s))
+            s = R(cnx_gelu(s, egelu, gelu_sat)); out.append((t + '.ge', s))
+            s = R(conv(s, ce, w, bb)); out.append((t + '.pr', s))
+            s = R(cnx_diag(s, sl, q)); out.append((t + '.ls', s))
+            st = R(residual(blkin, s, q)); out.append((t + '.out', st))
+    st = R(gap(st, 49, q)); out.append(('gap', st))
+    if head_ln:
+        st = lnsite(st, 'head')
+    st = R(dense(st, 768, w, bb)); out.append(('dense', st))
+    return out
+
+
+def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
+               emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32) -> int:
+    """Re-assert EVERY rounded inequality `ConvNeXtFloatBudget.lean` closes, exactly — each
+    stage's emitted numeral must still dominate the exact value computed from the PREVIOUS
+    stage's emitted numerals. Returns the count checked; raises on the first failure."""
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: {tag} left > right"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2))
+        ck(tag + '.A', (1 + g) * (m * w * A + bb), dst[0])
+        ck(tag + '.E', g * (m * w * (A + E) + bb) + m * w * E, dst[1])
+
+    def ln_ck(tag, src):
+        A, E = src
+        ck(tag + '.ln.A', cnx_ln_leaf(A, S, emr, ei, q), r[tag + '.ln'][0])
+        ck(tag + '.ln.E', 2 * r[tag + '.ln'][0], r[tag + '.ln'][1])
+        A1, E1 = r[tag + '.ln']
+        me = mulErr(q, gl, A1, F(0), F(0))
+        ck(tag + '.lng.A', gl * A1 + me, r[tag + '.lng'][0])
+        ck(tag + '.lng.E', me + gl * E1, r[tag + '.lng'][1])
+        A2, E2 = r[tag + '.lng']
+        ck(tag + '.lnb.A', A2 + bb + q * (A2 + bb), r[tag + '.lnb'][0])
+        ck(tag + '.lnb.E', q * (A2 + bb) + E2, r[tag + '.lnb'][1])
+        return r[tag + '.lnb']
+
+    st = (F(1), F(0))
+    conv_ck('stem.conv', 3 * 4 * 4, st, r['stem.conv'])
+    st = ln_ck('stem', r['stem.conv'])
+    for si, (c, ce, nblk, _hw) in enumerate(CNX_STAGES):
+        if si > 0:
+            cin = CNX_STAGES[si - 1][0]
+            st = ln_ck(f'd{si}', st)
+            conv_ck(f'd{si}.conv', cin * 2 * 2, st, r[f'd{si}.conv'])
+            st = r[f'd{si}.conv']
+        for b in range(nblk):
+            t = f's{si + 1}b{b}'
+            blkin = st
+            conv_ck(t + '.dw', 7 * 7, blkin, r[t + '.dw'])
+            s = ln_ck(t, r[t + '.dw'])
+            conv_ck(t + '.ex', c, s, r[t + '.ex'])
+            A, E = r[t + '.ex']
+            ck(t + '.ge.A', A + egelu, r[t + '.ge'][0])
+            ck(t + '.ge.E', egelu + F(3, 2) * E, r[t + '.ge'][1])
+            conv_ck(t + '.pr', ce, r[t + '.ge'], r[t + '.pr'])
+            A, E = r[t + '.pr']
+            me = mulErr(q, sl, A, F(0), F(0))
+            ck(t + '.ls.A', sl * A + me, r[t + '.ls'][0])
+            ck(t + '.ls.E', me + sl * E, r[t + '.ls'][1])
+            A8, E8 = r[t + '.ls']
+            ck(t + '.res.A', A8 + blkin[0] + q * (A8 + blkin[0]), r[t + '.out'][0])
+            ck(t + '.res.E', q * (A8 + E8 + blkin[0] + blkin[1]) + (E8 + blkin[1]),
+               r[t + '.out'][1])
+            st = r[t + '.out']
+    g50 = r4(gamma_q(49 + 1))
+    ck('gap.A', st[0] * ((1 + g50) * (1 + q)), r['gap'][0])
+    ck('gap.E', st[0] * (q * (1 + g50) + g50) + st[1], r['gap'][1])
+    st = ln_ck('head', r['gap'])
+    conv_ck('dense', 768, st, r['dense'])
+    return n

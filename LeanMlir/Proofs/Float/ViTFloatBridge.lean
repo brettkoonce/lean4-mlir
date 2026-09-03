@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Architectures.LayerNorm
+import LeanMlir.Proofs.Architectures.GeluSaturation
 import LeanMlir.Proofs.Float.FloatComposeBridge
 
 /-!
@@ -126,15 +127,25 @@ theorem gelu_close {n : Nat} (fgelu : ℝ → ℝ) {egelu : ℝ} (v : Vec n)
     |fgelu (v i) - gelu n v i| ≤ egelu := by
   unfold gelu; exact hg (v i)
 
-/-- **GELU is `FloatClose`** — the ViT MLP nonlinearity as a composable instance.
-    Rounding from `gelu_close`, input-shift from `geluScalar_lipschitz_abs`. The
-    smooth-world analogue of `floatClose_relu`/`floatClose_swish`; with `floatClose_dense`
-    and `floatClose_layerNorm`, the ViT MLP block `dense→gelu→dense` folds through `.comp`. -/
+/-- ⭐ **GELU is `FloatClose`** — the ViT MLP / ConvNeXt block nonlinearity as a composable
+    instance. Rounding from `gelu_close`; the input-shift modulus is the **`min` of GELU's two
+    sensitivities**, and that `min` is load-bearing exactly the way `floatClose_swish`'s is.
+
+    `geluScalar_lipschitz_abs`'s `(1 + √(2/π)/2·A·(1+3·0.044715·A²))·e` is **cubic in the
+    window** — it reaches ~400 at ConvNeXt-T's operating magnitudes, and folded through 18 GELU
+    sites it puts a whole-net budget past what `norm_num` will evaluate.
+    `geluScalar_lipschitz`'s `3/2·e` is flat, because past the small-`|x|` region `gelu′`'s
+    `sech²` factor decays faster than the cubic grows (`Architectures/GeluSaturation.lean`).
+    The two are incomparable — the polynomial wins below `A ≈ 1/2`, the constant everywhere
+    above — so the leaf states their `min` and every fold gets whichever is tighter at its own
+    window. `planning/float_budget_numbers.md` §3.3.0(b). -/
 theorem floatClose_gelu {n : Nat} (fgelu : ℝ → ℝ) {egelu A : ℝ}
     (hegelu : 0 ≤ egelu) (hA : 0 ≤ A) (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu) :
     FloatClose A (A + egelu)
       (gelu n) (fun v i => fgelu (v i))
-      (fun e => egelu + (1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * e) := by
+      (fun e => egelu
+        + min ((1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * e)
+              (3 / 2 * e)) := by
   refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
   · -- magnitudes: |gelu| ≤ A (½x(1+tanh) with |1+tanh|≤2 ⟹ ≤ |x|), float ≤ A + egelu
     have hAi : |v i| ≤ A := hv i
@@ -156,21 +167,26 @@ theorem floatClose_gelu {n : Nat} (fgelu : ℝ → ℝ) {egelu A : ℝ}
         _ ≤ egelu + A := add_le_add (hg (v i)) hgs
         _ = A + egelu := by ring
     exact ⟨hreal.trans (by linarith), hf⟩
-  · -- error
-    have h2 : |geluScalar (vt i) - geluScalar (va i)|
-        ≤ (1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * |vt i - va i| :=
-      geluScalar_lipschitz_abs (hvt i) (hva i)
+  · -- error: both sensitivities hold, so their `min` does — the magnitude polynomial
+    -- (`geluScalar_lipschitz_abs`) wins at a small window, the global saturation constant
+    -- (`geluScalar_lipschitz`) everywhere above it
     have hL0 : 0 ≤ 1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2) := by
       have := Real.sqrt_nonneg (2 / Real.pi); positivity
-    have h3 : (1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * |vt i - va i|
+    have hpoly : |geluScalar (vt i) - geluScalar (va i)|
         ≤ (1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * e :=
-      mul_le_mul_of_nonneg_left (hd i) hL0
+      (geluScalar_lipschitz_abs (hvt i) (hva i)).trans
+        (mul_le_mul_of_nonneg_left (hd i) hL0)
+    have hsat : |geluScalar (vt i) - geluScalar (va i)| ≤ 3 / 2 * e :=
+      (geluScalar_lipschitz (vt i) (va i)).trans
+        (mul_le_mul_of_nonneg_left (hd i) (by norm_num))
     unfold gelu
     calc |fgelu (vt i) - geluScalar (va i)|
         ≤ |fgelu (vt i) - geluScalar (vt i)| + |geluScalar (vt i) - geluScalar (va i)| :=
           abs_sub_le _ _ _
-      _ ≤ egelu + (1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * e :=
-          add_le_add (hg (vt i)) (h2.trans h3)
+      _ ≤ egelu
+            + min ((1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * e)
+                  (3 / 2 * e) :=
+          add_le_add (hg (vt i)) (le_min hpoly hsat)
 
 /-- GELU float-bridges (output magnitude `A + egelu`). -/
 theorem floatBridges_gelu {n : Nat} (fgelu : ℝ → ℝ) {egelu : ℝ}
@@ -184,7 +200,8 @@ noncomputable def floatBridgesTo_gelu {n : Nat} (fgelu : ℝ → ℝ) {egelu : �
     (hegelu : 0 ≤ egelu) (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu) :
     FloatBridgesTo (gelu n) (fun v i => fgelu (v i)) :=
   ⟨fun A => A + egelu,
-   fun A e => egelu + (1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * e,
+   fun A e => egelu
+     + min ((1 + Real.sqrt (2 / Real.pi) / 2 * A * (1 + 3 * 0.044715 * A ^ 2)) * e) (3 / 2 * e),
    fun A hA => ⟨by linarith, floatClose_gelu fgelu hegelu hA hg⟩⟩
 
 -- ════════════════════════════════════════════════════════════════

@@ -343,6 +343,25 @@ lean_lib «Certs» where
              -- discarded by the generic combinator — the relu6 pattern. ⚠ SE is quadratic in the
              -- window like training BN/LN: each site roughly DOUBLES the budget's exponent.
              `LeanMlir.Proofs.Float.EfficientNetFloatBudget,
+             -- The `Maps` leaves a LayerNorm net needs: the CAPPED pure-normalise LN
+             -- (Maps.bnCapped — window honest, modulus the triangle inequality), the two halves
+             -- of its affine (diagBack / biasAdd), the structural gathers and the per-row lift
+             -- they are conjugated by, GELU through the 3/2 saturation branch, and the stride-4
+             -- patchify conv — plus the three composites the ConvNeXt chain walks (LN site,
+             -- block, downsample).
+             `LeanMlir.Proofs.Float.FloatBudgetEnvLN,
+             -- ⛔ The fourth ImageNet-scale whole-net float statement, and NOT the same kind of
+             -- statement as the three above: the ConvNeXt-T forward, window 4.858e227 / budget
+             -- 9.706e227, and `budget / window = 2.00` is the tell that every one of the 23
+             -- LayerNorm sites is discharged by FloatBridgesTo.capped — the triangle
+             -- inequality, not the fold. It has to be: LayerNorm reduces its statistics out of
+             -- its own input (modulus quadratic in the window) and, unlike BatchNorm, has no
+             -- frozen-statistics mode to switch to, so there is no version of this net whose
+             -- fold exists. Uncapped it is 1e11631. ⭐ The measured profile also had to be split
+             -- by parameter KIND (kernels 0.60, biases/LN-β 2.95, LN-γ 4.77, layer scale 8.38):
+             -- one uniform 8.4 is 14x loose on the entries the conv fan-in multiplies and puts
+             -- the fold at 1e301, past what norm_num will evaluate.
+             `LeanMlir.Proofs.Float.ConvNeXtFloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

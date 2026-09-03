@@ -112,6 +112,48 @@ theorem Maps.comp {p : Nat} {g gF : Vec n → Vec p}
       (hb.mag_le A h0 hle) (hb.mod_le A E h0 hE0 hle hEle)
 
 -- ════════════════════════════════════════════════════════════════
+-- § The cap: the triangle inequality as a bridge transformer
+-- ════════════════════════════════════════════════════════════════
+
+/-- ⚠ **The capped bridge — same map, same window, modulus `min(mod, 2·mag)`.**
+    `FloatClose`'s magnitude clause bounds the REAL and the FLOAT output by `mag A`, so their
+    difference is at most `2·mag A` whatever the fold says. Taking the `min` therefore costs
+    nothing and stops a modulus that grows faster than the window does.
+
+    ⛔ **A number that goes through this is a DIFFERENT CLAIM and must be labelled.** Wherever
+    the `min` selects its right branch the statement has changed from *"the rounding error folds
+    to this"* to *"both maps land in the certified window"* — the triangle inequality, not the
+    fold. The tell is `budget / window ≈ 2`. `planning/float_budget_numbers.md` §9.
+
+    ⭐ Why it exists at all: a reducing normalisation's modulus is QUADRATIC in the window
+    (§0.1), so a LayerNorm net's fold squares at every one of its LN sites and reaches no
+    numeral `norm_num` will evaluate — ConvNeXt-T is past `10¹⁰³⁰⁰` uncapped. The honest reading
+    is that the cap is what makes a *statement* about a LayerNorm net possible at all, and that
+    the statement it makes is the weak one. -/
+noncomputable def capped (b : FloatBridgesTo f fF) : FloatBridgesTo f fF where
+  mag := b.mag
+  mod := fun A e => min (b.mod A e) (2 * b.mag A)
+  close := fun A hA =>
+    ⟨b.mag_nonneg hA, ⟨(b.floatClose hA).1, fun vt va e hva hvt hd i =>
+      le_min ((b.floatClose hA).2 vt va e hva hvt hd i) (by
+        have hreal := ((b.floatClose hA).1 va hva i).1
+        have hfl := ((b.floatClose hA).1 vt hvt i).2
+        have htri : |fF vt i - f va i| ≤ |fF vt i| + |f va i| := by
+          simpa using abs_sub_le (fF vt i) 0 (f va i)
+        linarith)⟩⟩
+
+/-- **The capped envelope** — and note what it does NOT take: only the WINDOW bound `hmag` is
+    needed, because the output error is `2·Ā'` whatever the underlying modulus does. That is the
+    whole mechanism: at a capped site the quadratic term is never turned into a numeral, so
+    `norm_num` never meets it. A caller that already has a full envelope passes `hM.mag_le`. -/
+theorem Maps.capped {b : FloatBridgesTo f fF} {Ā Ē Ā' Ē' : ℝ}
+    (hmag : ∀ A, 0 ≤ A → A ≤ Ā → b.mag A ≤ Ā') (hĒ' : 2 * Ā' ≤ Ē') :
+    b.capped.Maps Ā Ē Ā' Ē' where
+  mag_le := hmag
+  mod_le := fun A E h0 _hE0 hle _hEle =>
+    (min_le_right (b.mod A E) (2 * b.mag A)).trans (by linarith [hmag A h0 hle])
+
+-- ════════════════════════════════════════════════════════════════
 -- § The skip combinators
 -- ════════════════════════════════════════════════════════════════
 
