@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnv
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.BnPerChannelBackFloatBridge
+import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
 
 /-! # `FloatBridgesTo.Maps` leaves for the BACKWARD (phase 2)
 
@@ -621,6 +622,165 @@ theorem Maps.flatConvStride2Back {ic oc h w kH kW : Nat} (M : FloatModel)
 end FloatBridgesTo
 
 -- ════════════════════════════════════════════════════════════════
+-- § The two ResNet-34 block backwards, at real weights
+-- ════════════════════════════════════════════════════════════════
+
+/-- The float identity-block input-gradient — `r34IdBlockBack`'s deployed peer, every stage the
+    float map its bridge names. ⭐ The residual-skip backward needs NO new combinator: the skip
+    routes the cotangent to both branches and adds, so the block backward is itself a *forward*
+    `Proofs.residual`, and `FloatBridgesTo.residual`'s rounded skip-add is the backward's too. -/
+noncomputable def r34IdBlockBackF {c h w : Nat} (M : FloatModel) (W₁ W₂ : Kernel4 c c 3 3)
+    (bnB1F bnB2F : Vec (c * h * w) → Vec (c * h * w))
+    (m_out m_mid : Fin (c * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid] :
+    Vec (c * h * w) → Vec (c * h * w) :=
+  (fun v j => M.add
+      ((M.flatConvF (h := h) (w := w) (IR.reverseSwap W₁) (fun _ => 0) ∘ bnB1F
+          ∘ reluMaskBack m_mid
+          ∘ M.flatConvF (h := h) (w := w) (IR.reverseSwap W₂) (fun _ => 0) ∘ bnB2F) v j) (v j))
+    ∘ reluMaskBack m_out
+
+/-- **The r34 identity-block input-gradient VJP float-bridges TO its float peer** — the
+    `FloatBridgesTo` peer of `floatBridges_r34IdBlockBack`, with the float map NAMED. The two
+    per-channel BN-backs are supplied as bridges (discharge with
+    `floatBridgesTo_bnPerChannelBack`); everything else is concrete. -/
+noncomputable def floatBridgesTo_r34IdBlockBack {c h w : Nat} (M : FloatModel)
+    (W₁ W₂ : Kernel4 c c 3 3)
+    {bnB1 bnB2 bnB1F bnB2F : Vec (c * h * w) → Vec (c * h * w)}
+    (m_out m_mid : Fin (c * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid]
+    {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < c * h * w)
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w')
+    (hbnB1 : FloatBridgesTo bnB1 bnB1F) (hbnB2 : FloatBridgesTo bnB2 bnB2F) :
+    FloatBridgesTo (r34IdBlockBack W₁ W₂ bnB1 bnB2 m_out m_mid)
+      (r34IdBlockBackF M W₁ W₂ bnB1F bnB2F m_out m_mid) :=
+  (floatBridgesTo_reluMaskBack m_out).comp
+    (FloatBridgesTo.residual M
+      ((((hbnB2.comp (floatBridgesTo_convBack (h := h) (w := w) M W₂ hw' hn hW₂)).comp
+          (floatBridgesTo_reluMaskBack m_mid)).comp hbnB1).comp
+          (floatBridgesTo_convBack (h := h) (w := w) M W₁ hw' hn hW₁)))
+
+/-- The float downsample-block input-gradient — `r34DownBlockBack`'s deployed peer. The
+    two-branch fan-in is `FloatBridgesTo.biPathSum`, the forward downsample skip's combinator. -/
+noncomputable def r34DownBlockBackF {ic oc h w kHp kWp : Nat} (M : FloatModel)
+    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic kHp kWp)
+    (bnB1F bnB2F bnBpF : Vec (oc * h * w) → Vec (oc * h * w))
+    (m_out m_mid : Fin (oc * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid] :
+    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
+  (fun v j => M.add
+      (((M.flatConvF (h := 2 * h) (w := 2 * w) (IR.reverseSwap Wp) (fun _ => 0)
+            ∘ decimateBack oc h w) ∘ bnBpF) v j)
+      (((M.flatConvF (h := 2 * h) (w := 2 * w) (IR.reverseSwap W₁) (fun _ => 0)
+            ∘ decimateBack oc h w) ∘ bnB1F ∘ reluMaskBack m_mid
+          ∘ M.flatConvF (h := h) (w := w) (IR.reverseSwap W₂) (fun _ => 0) ∘ bnB2F) v j))
+    ∘ reluMaskBack m_out
+
+/-- **The r34 downsample-block input-gradient VJP float-bridges TO its float peer** — the outer
+    ReLU mask, then the two-branch fan-in of the projection backward and the body backward. The
+    three per-channel BN-backs are supplied as bridges. -/
+noncomputable def floatBridgesTo_r34DownBlockBack {ic oc h w kHp kWp : Nat} (M : FloatModel)
+    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic kHp kWp)
+    {bnB1 bnB2 bnBp bnB1F bnB2F bnBpF : Vec (oc * h * w) → Vec (oc * h * w)}
+    (m_out m_mid : Fin (oc * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid]
+    {w₁ w₂ wp : ℝ} (hw₁ : 0 ≤ w₁) (hw₂ : 0 ≤ w₂) (hwp : 0 ≤ wp)
+    (hW₁ : ∀ o c kh kw, |W₁ o c kh kw| ≤ w₁) (hW₂ : ∀ o c kh kw, |W₂ o c kh kw| ≤ w₂)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ wp)
+    (hoc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
+    (hbnB1 : FloatBridgesTo bnB1 bnB1F) (hbnB2 : FloatBridgesTo bnB2 bnB2F)
+    (hbnBp : FloatBridgesTo bnBp bnBpF) :
+    FloatBridgesTo (r34DownBlockBack W₁ W₂ Wp bnB1 bnB2 bnBp m_out m_mid)
+      (r34DownBlockBackF M W₁ W₂ Wp bnB1F bnB2F bnBpF m_out m_mid) :=
+  (floatBridgesTo_reluMaskBack m_out).comp
+    (FloatBridgesTo.biPathSum M
+      (hbnBp.comp (floatBridgesTo_flatConvStride2Back (h := h) (w := w) M Wp hwp
+        (by positivity) hWp))
+      ((((hbnB2.comp (floatBridgesTo_convBack (h := h) (w := w) M W₂ hw₂ (by positivity)
+            hW₂)).comp
+          (floatBridgesTo_reluMaskBack m_mid)).comp hbnB1).comp
+          (floatBridgesTo_flatConvStride2Back (h := h) (w := w) M W₁ hw₁ (by positivity) hW₁)))
+
+namespace FloatBridgesTo
+
+/-- ⭐ **An envelope through one r34 identity-block input-gradient.** Six numeric stages and the
+    skip: `mask → bnB₂ → convBack W₂ → mask → bnB₁ → convBack W₁`, then `Maps.residual` against
+    the block's own input cotangent. Twelve inequalities — the backward peer of
+    `R34IdBlk.maps`'s ten, and the two ReLU masks contribute none because a select rounds
+    nothing. -/
+theorem Maps.r34IdBlockBack {c h w : Nat} (M : FloatModel) (W₁ W₂ : Kernel4 c c 3 3)
+    {bnB1 bnB2 bnB1F bnB2F : Vec (c * h * w) → Vec (c * h * w)}
+    (m_out m_mid : Fin (c * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid]
+    {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < c * h * w)
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w')
+    (hbnB1 : FloatBridgesTo bnB1 bnB1F) (hbnB2 : FloatBridgesTo bnB2 bnB2F)
+    {q g Ā Ē A1 E1 A2 E2 A3 E3 A4 E4 Ā' Ē' : ℝ} (hq : M.u ≤ q)
+    (hg : (1 + M.u) ^ (c * 3 * 3 + 2) - 1 ≤ g)
+    (mbn2 : hbnB2.Maps Ā Ē A1 E1)
+    (c2A : (1 + g) * (((c * 3 * 3 : ℕ) : ℝ) * w' * A1 + 0) ≤ A2)
+    (c2E : g * (((c * 3 * 3 : ℕ) : ℝ) * w' * (A1 + E1) + 0)
+            + ((c * 3 * 3 : ℕ) : ℝ) * w' * E1 ≤ E2)
+    (mbn1 : hbnB1.Maps A2 E2 A3 E3)
+    (c1A : (1 + g) * (((c * 3 * 3 : ℕ) : ℝ) * w' * A3 + 0) ≤ A4)
+    (c1E : g * (((c * 3 * 3 : ℕ) : ℝ) * w' * (A3 + E3) + 0)
+            + ((c * 3 * 3 : ℕ) : ℝ) * w' * E3 ≤ E4)
+    (rA : A4 + Ā + q * (A4 + Ā) ≤ Ā') (rE : q * (A4 + E4 + Ā + Ē) + (E4 + Ē) ≤ Ē') :
+    (floatBridgesTo_r34IdBlockBack M W₁ W₂ m_out m_mid hw' hn hW₁ hW₂ hbnB1 hbnB2).Maps
+      Ā Ē Ā' Ē' :=
+  (Maps.reluMaskBack m_out).comp hn
+    (Maps.residual M hn
+      ((((mbn2.comp hn (Maps.convBack (h := h) (w := w) M W₂ hw' hn hW₂ hg c2A c2E)).comp hn
+          (Maps.reluMaskBack m_mid)).comp hn mbn1).comp hn
+          (Maps.convBack (h := h) (w := w) M W₁ hw' hn hW₁ hg c1A c1E)) hq rA rE)
+
+set_option maxHeartbeats 1000000 in
+/-- ⭐ **An envelope through one r34 downsample-block input-gradient.** The outer mask, then the
+    two-branch fan-in: the projection backward (`bnBp → 1×1 strided convBack`) and the body
+    backward (`bnB₂ → convBack W₂ → mask → bnB₁ → strided convBack W₁`), summed by
+    `Maps.biPathSum`. Both branches read the SAME cotangent — the downsample skip is where a
+    backward chain fans out, exactly as the forward's is where it fans in. -/
+theorem Maps.r34DownBlockBack {ic oc h w kHp kWp : Nat} (M : FloatModel)
+    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic kHp kWp)
+    {bnB1 bnB2 bnBp bnB1F bnB2F bnBpF : Vec (oc * h * w) → Vec (oc * h * w)}
+    (m_out m_mid : Fin (oc * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid]
+    {w₁ w₂ wp : ℝ} (hw₁ : 0 ≤ w₁) (hw₂ : 0 ≤ w₂) (hwp : 0 ≤ wp)
+    (hW₁ : ∀ o c kh kw, |W₁ o c kh kw| ≤ w₁) (hW₂ : ∀ o c kh kw, |W₂ o c kh kw| ≤ w₂)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ wp)
+    (hoc : 0 < oc) (hh : 0 < h) (hw : 0 < w) (hic : 0 < ic * (2 * h) * (2 * w))
+    (hbnB1 : FloatBridgesTo bnB1 bnB1F) (hbnB2 : FloatBridgesTo bnB2 bnB2F)
+    (hbnBp : FloatBridgesTo bnBp bnBpF)
+    {q gp g1 g2 Ā Ē P1 F1 P2 F2 A1 E1 A2 E2 A3 E3 A4 E4 Ā' Ē' : ℝ} (hq : M.u ≤ q)
+    (hgp : (1 + M.u) ^ (oc * kHp * kWp + 2) - 1 ≤ gp)
+    (hg2 : (1 + M.u) ^ (oc * 3 * 3 + 2) - 1 ≤ g2)
+    (hg1 : (1 + M.u) ^ (oc * 3 * 3 + 2) - 1 ≤ g1)
+    -- projection branch
+    (mbnp : hbnBp.Maps Ā Ē P1 F1)
+    (cpA : (1 + gp) * (((oc * kHp * kWp : ℕ) : ℝ) * wp * P1 + 0) ≤ P2)
+    (cpE : gp * (((oc * kHp * kWp : ℕ) : ℝ) * wp * (P1 + F1) + 0)
+            + ((oc * kHp * kWp : ℕ) : ℝ) * wp * F1 ≤ F2)
+    -- body branch
+    (mbn2 : hbnB2.Maps Ā Ē A1 E1)
+    (c2A : (1 + g2) * (((oc * 3 * 3 : ℕ) : ℝ) * w₂ * A1 + 0) ≤ A2)
+    (c2E : g2 * (((oc * 3 * 3 : ℕ) : ℝ) * w₂ * (A1 + E1) + 0)
+            + ((oc * 3 * 3 : ℕ) : ℝ) * w₂ * E1 ≤ E2)
+    (mbn1 : hbnB1.Maps A2 E2 A3 E3)
+    (c1A : (1 + g1) * (((oc * 3 * 3 : ℕ) : ℝ) * w₁ * A3 + 0) ≤ A4)
+    (c1E : g1 * (((oc * 3 * 3 : ℕ) : ℝ) * w₁ * (A3 + E3) + 0)
+            + ((oc * 3 * 3 : ℕ) : ℝ) * w₁ * E3 ≤ E4)
+    (rA : P2 + A4 + q * (P2 + A4) ≤ Ā') (rE : q * (P2 + F2 + A4 + E4) + (F2 + E4) ≤ Ē') :
+    (floatBridgesTo_r34DownBlockBack M W₁ W₂ Wp m_out m_mid hw₁ hw₂ hwp hW₁ hW₂ hWp
+      hoc hh hw hbnB1 hbnB2 hbnBp).Maps Ā Ē Ā' Ē' :=
+  (Maps.reluMaskBack m_out).comp (Nat.mul_pos (Nat.mul_pos hoc hh) hw)
+    (Maps.biPathSum M hic
+      (mbnp.comp (Nat.mul_pos (Nat.mul_pos hoc hh) hw)
+        (Maps.flatConvStride2Back (h := h) (w := w) M Wp hwp (by positivity) hWp hgp cpA cpE))
+      ((((mbn2.comp (Nat.mul_pos (Nat.mul_pos hoc hh) hw)
+          (Maps.convBack (h := h) (w := w) M W₂ hw₂ (by positivity) hW₂ hg2 c2A c2E)).comp
+          (Nat.mul_pos (Nat.mul_pos hoc hh) hw) (Maps.reluMaskBack m_mid)).comp
+          (Nat.mul_pos (Nat.mul_pos hoc hh) hw) mbn1).comp
+          (Nat.mul_pos (Nat.mul_pos hoc hh) hw)
+          (Maps.flatConvStride2Back (h := h) (w := w) M W₁ hw₁ (by positivity) hW₁ hg1 c1A c1E))
+      hq rA rE)
+
+end FloatBridgesTo
+
+-- ════════════════════════════════════════════════════════════════
 -- § A worked ResNet-34 backward site, at the emitted numerals
 -- ════════════════════════════════════════════════════════════════
 
@@ -675,5 +835,77 @@ example (M : FloatModel) (hMu : M.u ≤ u32) (Wd : Mat 512 10) (γ : Vec 512)
     (by norm_num [bnGradInputReMag, bnGradInputBudgetG, bgMTr, bgEP, bgE2, bgM1, bgMXSf,
                   bgE1, bgEXS, bgESXD, bgEXD, bgMND, bgEND, bgMSD, bgESD, bgED,
                   FloatModel.mulErr, u32]))
+
+
+set_option maxHeartbeats 2000000 in
+/-- ⭐⭐ **ResNet-34's block `e1` input-gradient, end to end, at `r34_back_chain`'s numerals** —
+    an identity basic block at `512 × 7 × 7`, six numeric stages and the skip, twelve
+    inequalities plus the two BN sites' four, all `norm_num`.
+
+    In: the GAP backward's `(2.452·10⁻⁴, 1.898·10⁻¹⁰)`. Out: `(8.702·10¹², 5.299·10¹⁰)` — one
+    block costs ~10¹⁶ of cotangent window, and sixteen of them put the net at 10²⁸⁸.
+
+    ⭐ Both BatchNorm sites are the real `floatBridgesTo_bnPerChannelBack`, with `Xh := 7` from
+    `bnXhat_abs_le_num` (`√(7·7)`), NOT supplied envelopes — this is the exact shape the budget
+    file plugs at all 33 sites. ⛔ What IS supplied is `es`/`exh` at `10⁻²`: the float
+    inverse-stddev's and normalised activation's accuracies, which §3.7's caveat is about. -/
+example (M : FloatModel) (hMu : M.u ≤ u32) (W₁ W₂ : Kernel4 512 512 3 3)
+    (γ₁ γ₂ : Vec 512) (x₁ x₂ : Vec (512 * 7 * 7))
+    (fs₁ fs₂ : Fin 512 → ℝ) (fxh₁ fxh₂ : Fin 512 → Vec (7 * 7)) {ε : ℝ} (hε : 0 < ε)
+    (m_out m_mid : Fin (512 * 7 * 7) → Prop) [DecidablePred m_out] [DecidablePred m_mid]
+    (hW₁ : ∀ o c kh kw, |W₁ o c kh kw| ≤ 12 / 10) (hW₂ : ∀ o c kh kw, |W₂ o c kh kw| ≤ 12 / 10)
+    (hγ₁ : ∀ c, |γ₁ c| ≤ 21 / 10) (hγ₂ : ∀ c, |γ₂ c| ≤ 21 / 10)
+    (hs₁ : ∀ c, |fs₁ c - bnIstd (7 * 7) (Mat.unflatten (reassocFwd 512 7 7 x₁) c) ε| ≤ 1 / 100)
+    (hs₂ : ∀ c, |fs₂ c - bnIstd (7 * 7) (Mat.unflatten (reassocFwd 512 7 7 x₂) c) ε| ≤ 1 / 100)
+    (hS₁ : ∀ c, |bnIstd (7 * 7) (Mat.unflatten (reassocFwd 512 7 7 x₁) c) ε| ≤ 317)
+    (hS₂ : ∀ c, |bnIstd (7 * 7) (Mat.unflatten (reassocFwd 512 7 7 x₂) c) ε| ≤ 317)
+    (hf₁ : ∀ c i,
+      |fxh₁ c i - bnXhat (7 * 7) ε (Mat.unflatten (reassocFwd 512 7 7 x₁) c) i| ≤ 1 / 100)
+    (hf₂ : ∀ c i,
+      |fxh₂ c i - bnXhat (7 * 7) ε (Mat.unflatten (reassocFwd 512 7 7 x₂) c) i| ≤ 1 / 100) :
+    (floatBridgesTo_r34IdBlockBack (h := 7) (w := 7) M W₁ W₂ m_out m_mid (by norm_num)
+      (by norm_num) hW₁ hW₂
+      (floatBridgesTo_bnPerChannelBack M γ₁ x₁ fs₁ fxh₁ (by norm_num) (by norm_num) hγ₁ hs₁ hS₁
+        (fun c i => bnXhat_abs_le_num (X := 7) hε _ (by norm_num) (by norm_num) i) hf₁)
+      (floatBridgesTo_bnPerChannelBack M γ₂ x₂ fs₂ fxh₂ (by norm_num) (by norm_num) hγ₂ hs₂ hS₂
+        (fun c i => bnXhat_abs_le_num (X := 7) hε _ (by norm_num) (by norm_num) i)
+        hf₂)).Maps
+      (2452 / 10 ^ 4) (1898 / 10 ^ 10) (8702 * 10 ^ 12) (5299 * 10 ^ 10) := by
+  exact FloatBridgesTo.Maps.r34IdBlockBack (h := 7) (w := 7) M W₁ W₂ m_out m_mid (by norm_num)
+    (by norm_num) hW₁ hW₂ _ _
+    (q := u32) (g := 2749 / 10 ^ 7)
+    (A1 := 8348) (E1 := 2317 / 10 ^ 2)
+    (A2 := 4618 * 10 ^ 4) (E2 := 1409 * 10 ^ 2)
+    (A3 := 1573 * 10 ^ 9) (E3 := 9146 * 10 ^ 6)
+    (A4 := 8701 * 10 ^ 12) (E4 := 5298 * 10 ^ 10)
+    hMu
+    (M.gamma_num (k := 512 * 3 * 3 + 2) (q := 2749 / 10 ^ 7) hMu (by norm_num [u32])
+      (by norm_num [u32]))
+    (FloatBridgesTo.Maps.bnPerChannelBack M γ₂ x₂ fs₂ fxh₂ (by norm_num) (by norm_num) hγ₂ hs₂
+      hS₂ (fun c i => bnXhat_abs_le_num (X := 7) hε _ (by norm_num) (by norm_num) i) hf₂
+      (q := u32) (gn := 2981 / 10 ^ 9) hMu
+      (M.gamma_num (k := 7 * 7 + 1) (q := 2981 / 10 ^ 9) hMu (by norm_num [u32])
+        (by norm_num [u32]))
+      (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
+      (by norm_num [bnGradInputReMag, bnGradInputBudgetG, bgMTr, bgEP, bgE2, bgM1, bgMXSf,
+                    bgE1, bgEXS, bgESXD, bgEXD, bgMND, bgEND, bgMSD, bgESD, bgED,
+                    FloatModel.mulErr, u32])
+      (by norm_num [bnGradInputReMag, bnGradInputBudgetG, bgMTr, bgEP, bgE2, bgM1, bgMXSf,
+                    bgE1, bgEXS, bgESXD, bgEXD, bgMND, bgEND, bgMSD, bgESD, bgED,
+                    FloatModel.mulErr, u32]))
+    (by norm_num [u32]) (by norm_num [u32])
+    (FloatBridgesTo.Maps.bnPerChannelBack M γ₁ x₁ fs₁ fxh₁ (by norm_num) (by norm_num) hγ₁ hs₁
+      hS₁ (fun c i => bnXhat_abs_le_num (X := 7) hε _ (by norm_num) (by norm_num) i) hf₁
+      (q := u32) (gn := 2981 / 10 ^ 9) hMu
+      (M.gamma_num (k := 7 * 7 + 1) (q := 2981 / 10 ^ 9) hMu (by norm_num [u32])
+        (by norm_num [u32]))
+      (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
+      (by norm_num [bnGradInputReMag, bnGradInputBudgetG, bgMTr, bgEP, bgE2, bgM1, bgMXSf,
+                    bgE1, bgEXS, bgESXD, bgEXD, bgMND, bgEND, bgMSD, bgESD, bgED,
+                    FloatModel.mulErr, u32])
+      (by norm_num [bnGradInputReMag, bnGradInputBudgetG, bgMTr, bgEP, bgE2, bgM1, bgMXSf,
+                    bgE1, bgEXS, bgESXD, bgEXD, bgMND, bgEND, bgMSD, bgESD, bgED,
+                    FloatModel.mulErr, u32]))
+    (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32])
 
 end Proofs

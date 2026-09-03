@@ -988,11 +988,26 @@ blocks themselves are only at the `∃`-tier. In order:
    second BN backward, out `(8348, 2.317·10⁻²)`. ⭐ Note the SHAPE that example makes visible:
    the head's fan-in is `10` and the GAP backward divides by `49`, so a backward chain's first
    two stages SHRINK and the growth only starts at the first normalisation.
-3. **The two block backwards at real weights** — `floatBridgesTo_r34IdBlockBack` /
-   `_r34DownBlockBack` and their `Maps` peers. ⭐ Both reuse forward combinators: the identity
-   block's skip is `FloatBridgesTo.residual` and the downsample's is `biPathSum`, so no new
-   combinator is needed.
-4. **`Resnet34BackFloatBudget.lean`** — the numerals, on the r34 forward recipe.
+3. ✅ **The two block backwards at real weights — LANDED 2026-09-03**, in the same file.
+   `floatBridgesTo_r34IdBlockBack` / `_r34DownBlockBack` (float peers NAMED), and
+   `Maps.r34IdBlockBack` / `.r34DownBlockBack`. ⭐ **Neither needs a new combinator, and the
+   reason is worth stating**: the identity block's residual-skip backward is itself a *forward*
+   `Proofs.residual` — the skip routes the cotangent to both branches and adds — and the
+   downsample's two-branch fan-in is `biPathSum`. The forward's fan-IN is the backward's
+   fan-OUT, and the same two combinators serve both directions.
+   ⭐ Block `e1` (identity, `512 × 7 × 7`) is closed as a compiled `example` at
+   `r34_back_chain`'s numerals with BOTH BatchNorm sites the real
+   `floatBridgesTo_bnPerChannelBack`: in `(2.452·10⁻⁴, 1.898·10⁻¹⁰)`, out
+   `(8.702·10¹², 5.299·10¹⁰)`. One block costs ~10¹⁶ of cotangent window; sixteen put the net at
+   10²⁸⁸.
+   ⚠ Two mechanical traps, both new: `Resnet34BackFloatBridge.lean` is NOT on
+   `Resnet34WholeBackFloatBridge`'s import path (the whole-net file takes its blocks abstractly,
+   so it never needed them), and `x.residual M` inside a `.comp` chain parses as
+   `(A.comp x.residual) M` — write `FloatBridgesTo.residual M x` explicitly.
+4. **`Resnet34BackFloatBudget.lean`** — the numerals, on the r34 forward recipe. ⚠ The one
+   design question left is the parameter record: the backward's per-site inputs are the two
+   kernels, the two BN γ, the two SAVED ACTIVATIONS and their two float statistics, per block —
+   roughly twice the forward's `R34IdBlk`, so nest it the same way and generate the signature.
 
 ⚠ And one framing decision to make before step 4: the cotangent's input window is `1`, which is
 `|p − y| ≤ 1` for softmax cross-entropy. `LossHeadCotFloatBridge.lean` exists; deciding whether

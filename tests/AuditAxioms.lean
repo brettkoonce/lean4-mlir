@@ -2444,6 +2444,21 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.convBack
 #print axioms Proofs.FloatBridgesTo.Maps.linBack
 #print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2Back
+-- ⭐ The two r34 BLOCK backwards at real weights, and NEITHER needs a new combinator: the
+-- identity block's residual-skip backward is a FORWARD `Proofs.residual` (the skip routes the
+-- cotangent to both branches and adds), and the downsample's two-branch fan-in is `biPathSum` —
+-- the same pair the forward uses. The three per-channel BN-backs are supplied as bridges and
+-- discharged by floatBridgesTo_bnPerChannelBack.
+#print axioms Proofs.r34IdBlockBackF
+#print axioms Proofs.floatBridgesTo_r34IdBlockBack
+#print axioms Proofs.FloatBridgesTo.Maps.r34IdBlockBack
+#print axioms Proofs.r34DownBlockBackF
+#print axioms Proofs.floatBridgesTo_r34DownBlockBack
+#print axioms Proofs.FloatBridgesTo.Maps.r34DownBlockBack
+-- ⭐ Block `e1` (identity, 512x7x7) is closed as a compiled `example` at r34_back_chain's
+-- numerals with BOTH BatchNorm sites the real floatBridgesTo_bnPerChannelBack (Xh := 7 from
+-- bnXhat_abs_le_num): in (2.452e-4, 1.898e-10), out (8.702e12, 5.299e10). One block costs ~1e16
+-- of cotangent window; sixteen of them put the net at 1e288.
 -- ⭐ FloatBudgetEnvBack.lean closes the HEAD of r34's input-gradient chain as a compiled
 -- `example` at r34_back_chain's numerals: loss cotangent (1, 0) -> classifier input-gradient ->
 -- GAP backward -> block e1's second BN backward at 512x7x7, out (8348, 2.317e-2). Note the shape
