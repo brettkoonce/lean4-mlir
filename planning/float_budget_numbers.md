@@ -13,7 +13,8 @@ all** (§0.1's 10⁷⁴¹⁷). A VJP reads its statistics off the saved activati
 does not perturb, so §0.1's quadratic never appears. Read §3.7 for that, and read it with its
 three hypotheses (§3.7 step 4) — the wall relocates rather than vanishing.
 
-**§3.8's THREE items are ALL DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
+⭐ **Two whole-net BACKWARD numbers now, and the second needs no operating point** —
+MobileNetV2's, 4.750·10¹⁵³ / 1.076·10¹⁵² (§3.13, 2026-09-04). **§3.8's THREE items are ALL DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
 (**§3.9**) and r34's whole-net certified tie (**§3.10**), both 2026-09-03, and the CIFAR-8
 `Env → Maps` coherence pass (**§3.11**, 2026-09-04). What is open is now §3.9's "what to do
 next" list, which starts at one unproved scalar lemma. Three sentences of §3.8: a
@@ -66,6 +67,7 @@ window contains an error term, ask why.**
 | ConvNeXt-T @224², channel LN | 4.858·10²²⁷ | 9.706·10²²⁷ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
 | ViT-Tiny @224², depth 12, vector LN | 3.612·10²¹⁸ | 7.222·10²¹⁸ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
 | **ResNet-34 BACKWARD** @224², **training BN** | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 7.8·10⁻² | ⭐ fold | `Resnet34BackFloatBudget.lean` |
+| **MobileNetV2 BACKWARD** @224², **training BN**, ⭐ no operating point | 4.750·10¹⁵³ | 1.076·10¹⁵² | 2.3·10⁻² | ⭐ fold | `MobileNetV2BackFloatBudget.lean` |
 
 Six nets now carry kernel-checked numbers — ⛔ **but not all six are the same claim.** The first
 four are the interval fold and all four are vacuous as *budgets*; the point is that the kernel
@@ -1257,10 +1259,9 @@ orders on B0 (10⁹⁵ → 10⁸⁹) and cheap to fix, but it is not what blocks
 1. ✅ **`swishScalarDeriv_abs_le : |swishScalarDeriv x| ≤ 2` — DONE 2026-09-04
    (`Architectures/SwishSaturation.lean`, §3.12).** B0's backward is 7.640·10¹⁶⁹ / 1.735·10¹⁶⁹
    with it, from 10⁴³¹ — statable, and the fold's last window import is gone.
-2. **MobileNetV2's backward budget file** — the r34 recipe transfers with two new `Maps` leaves
-   (`Maps.depthwiseBack` is `Maps.flatConv` at fan-in `kH·kW`; `Maps.depthwiseStride2Back` is
-   that composed with the existing `Maps.decimateBack`), and `Maps.reluMaskBack` already exists.
-   ⭐ State it at the ε-floor, not at an operating point — finding 2 says it does not need one.
+2. ✅ **MobileNetV2's backward budget file — DONE 2026-09-04 (§3.13).** 4.750·10¹⁵³ /
+   1.076·10¹⁵² at the ε-floor, with no operating-point hypothesis, exactly as finding 2 said. The
+   costing above was right to the leaf: two new `Maps`, both compositions of existing ones.
 3. **B0's backward** then needs `Maps.diagBack`, `Maps.broadcastBack` and the `Maps.seBack`
    composite (`biPathSum` of two `.comp` chains — no new combinator, the same point §3.7 step 3
    made about the r34 blocks), plus four supplied saved-vector accuracies where r34 has two.
@@ -1436,6 +1437,79 @@ which is §3.2's separate-levers finding in its cleanest form. ⛔ Not wired: it
 `b0_float_logits_le`, a committed number with a `formalization.yaml` entry and an `AuditAxioms`
 line, and §7 says one commit per net. Do it when B0's forward is next opened.
 
+### 3.13 ✅ MobileNetV2's BACKWARD NUMBER (2026-09-04) — §3.9 item 2, and the first with NO operating point
+
+`mnv2_grad_float_le` (`MobileNetV2BackFloatBudget.lean`, 709 lines, **40 s**): the deployed
+MobileNetV2 input-gradient is within **1.076·10¹⁵²** of the certified one, per input pixel, on
+loss cotangents of magnitude `≤ 1`, certified window **4.750·10¹⁵³**, `budget/window = 0.023` —
+the interval FOLD, no cap anywhere, at TRAINING-mode BatchNorm. 48 stages, 136 inequalities,
+generated and re-asserted by `mnv2_back_chain` / `verify_mnv2_back` before a line of Lean was
+written.
+
+**⭐⭐ The result is the hypothesis that is ABSENT.** r34's number carries three: `es`, `exh`, and
+the operating point `|istd| ≤ 16`. This one carries two. `MnvBnBack` has **no `hS` field** —
+`MnvBnBack.hS` is a THEOREM, deriving `|istd| ≤ 317` from `ε ≥ 10⁻⁵` alone through the new
+`bnIstd_abs_le_of` (`FloatBudgetEnvBack.lean`), the rational form of `bnIstd_abs_le`'s
+irrational `1/√ε`: `317² = 100489 ≥ 100000`, with room. ⭐ **That is what §3.9 finding 2 predicted
+and it is worth stating as a rule: an operating-point hypothesis is not a property of backwards,
+it is what you pay when the ε-floor fold does not fit under `norm_num`'s ceiling.** r34 at the
+floor is 5.503·10²⁸⁸ against §3.7(a)'s ~10²⁵³; MobileNetV2 is 10¹⁵³ and pays nothing.
+
+| net | window | budget | ratio | hypotheses |
+|---|---|---|---|---|
+| ResNet-34 back | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 0.078 | `es`, `exh`, **`\|istd\| ≤ 16`** |
+| **MobileNetV2 back** | **4.750·10¹⁵³** | **1.076·10¹⁵²** | **0.023** | `es`, `exh` |
+
+**⭐ What it cost: two `Maps` leaves, and both are compositions of leaves that existed.**
+`Maps.depthwiseBack` is `Maps.depthwise` at the spatially-reversed kernel and zero bias
+(`depthwiseFlatBack W = depthwiseFlat (dwReverse W) 0`, already proved); `Maps.depthwiseStride2Back`
+is that composed with `Maps.decimateBack`, exactly as `Maps.flatConvStride2Back` is `Maps.convBack`
+composed with it. ⭐ The fan-in is the whole story: **`kH·kW = 9`, the kernel window ALONE**,
+because a depthwise conv mixes no channels — where `Maps.convBack` carries `oc·kH·kW` and r34's
+blocks carry `512·9`. Plus the two block envelopes (`Maps.invresBodyBackPC` /
+`.invresBodyStridedBackPC`, six stages each) and the `FloatBridgesTo` peers of the two body
+backwards, which were only at the `∃`-tier. §3.9's costing was exactly right, for once.
+
+**⭐ MobileNetV2's downsample is a LINE where ResNet-34's is a fan-out.** `Maps.r34DownBlockBack`
+is a `biPathSum` — the projection skip means the cotangent goes two ways. The inverted residual
+changes stride *inside* the body, so `Maps.invresBodyStridedBackPC` is a straight `.comp` chain
+and the only `Maps.residual` in the net is at `b2`/`b4`, applied by the caller OUTSIDE the body.
+⭐ Worth carrying: **the block record does not have to own its skip.**
+
+**⚠ Three things that cost time, all mechanical.**
+1. ⛔ **The generator was off by one at two BN sites** — it fed `bnBd` the *bnBp* output and
+   `bnBe` the *bnBd* output, when the chain is `bnBp → cBp → bnBd → dwB → bnBe → cBe`. The stage
+   NUMERALS were right (they come from the probe by tag); only the `(Ā := …)` annotations were
+   wrong, so `verify_mnv2_back` could not catch it and the elaborator did — as a type mismatch
+   naming both numerals, which reads straight. ⭐ **Pinning all four numerals (§3.7(c)) is what
+   turned a silent wrong-input into a compile error.**
+2. `floatBridgesTo_invresBodyStridedBackPC` does NOT need `0 < mid·h·w` — the depthwise stage
+   scatters to `2h × 2w` before anything joins at the middle width, so only `hnM2` appears. The
+   `Maps` peer DOES need both. An unused binder in a `def` is a lint, not an error, so it is worth
+   deleting rather than `_`-prefixing.
+3. The whole-net bridge `mnv2GradBridge` cost **2.5 s**, against §3.7(d)'s 25-minute
+   non-terminating `isDefEq` on r34's. The difference is §3.7's grouping lesson applied from the
+   start: `mnv2GradR`/`mnv2GradF` are written with the stem and head groups parenthesised exactly
+   as `mnv2InputGrad` writes them.
+
+⚠ **What is NOT claimed, checked rather than assumed.** There is no
+`mnv2InputGrad_eq_mobilenetv2_vjp` — the whole-net CERTIFIED tie r34 got in §3.10. `mnv2GradR` is
+`mnv2InputGrad`'s body with every slot pinned to the certified per-op backward, which is exactly
+the standing r34's number had *before* §3.10 — and §3.10 is the record of what closing that tie
+found. ⭐ **This is the next thing to do on this net, and it must be done before anyone quotes the
+number as "the certified gradient".**
+
+⭐ **And the state of it is NOT r34's, which is why it is written down here rather than guessed.**
+Grepped 2026-09-04: the per-BODY ties already exist and are in the right vocabulary —
+`invresBodyBackPC_eq_invresBodyPC_vjp` and `invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp`
+(`Architectures/MobileNetV2BackCertifiedTie.lean`), both non-batched per-channel-BN, both
+3-axiom-clean. ⛔ **What is missing is the APEX**: there is no `HasVJPAt` for
+`mobilenetv2Forward_full_pc` at all. r34's §3.8 blocker was a misreading because
+`resnet34_has_vjp_at` existed and was dimension-generic; here the analogous theorem does not
+exist, so the work is real — and ⚠ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`) is
+NOT it: it is over `MNV2PaperWeights`, the 17-block paper net, where `mnv2InputGrad` reverses the
+ch7 6-block render. Reaching for it would be `imagenet_specs_drift_from_twins` a fifth time.
+
 ## 5. The `Maps` kit — ✅ complete for all six forwards, and for r34's backward
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
@@ -1481,11 +1555,13 @@ both r34 block backwards, the fourteen homogeneity lemmas, and `bnXhat_abs_le_nu
 ⛔ **`Maps.maxPool3s2Back` is the one backward leaf that is NOT envelope-preserving** — `Ā ↦ 4Ā`,
 because He et al.'s 3×3/s2 windows overlap and the backward accumulates (§3.10). Its 2×2 sibling
 `Maps.maxPoolBack` carries `Ā ↦ Ā` and using it for the 3×3 pool is exactly the drift §3.10
-records; the two have the same shape and are different functions. ⚠ What a SECOND backward
-net still needs — ✅ now costed by §3.9's probes, not guessed: MobileNetV2 needs
-`Maps.depthwiseBack` (`Maps.flatConv` at fan-in `kH·kW`) and `Maps.depthwiseStride2Back` (that,
-composed with the existing `Maps.decimateBack`) and nothing else — `Maps.reluMaskBack` already
-covers the relu6 kink. EfficientNet-B0 needs `Maps.diagBack`, `Maps.broadcastBack` and the
+records; the two have the same shape and are different functions. ✅ **And `FloatBudgetEnvBackMBConv.lean` is the SECOND backward net's** (2026-09-04, §3.13):
+`Maps.depthwiseBack` (`Maps.depthwise` at the reversed kernel, ⭐ fan-in `kH·kW` alone),
+`Maps.depthwiseStride2Back` (that composed with `Maps.decimateBack`) and the two inverted-residual
+body envelopes. §3.9's costing was exact — nothing else was needed, and `Maps.reluMaskBack`
+already covered the relu6 kink. ⭐ `bnIstd_abs_le_of` joined `FloatBudgetEnvBack.lean` with them:
+the rational `|istd| ≤ S` from the ε-floor, which is what lets a backward be stated without an
+operating point. EfficientNet-B0 needs `Maps.diagBack`, `Maps.broadcastBack` and the
 `Maps.seBack` composite, and ⛔ **a `Maps` leaf was never what blocked it** — a global `|swish′|`
 bound was, and ✅ that landed 2026-09-04 (§3.12), so B0's backward budget file is now only
 `Maps` leaves away. All the `∃`-tier bridges exist (`DepthwiseBackFloatBridge.lean`,

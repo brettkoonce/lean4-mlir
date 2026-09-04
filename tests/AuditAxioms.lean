@@ -107,6 +107,7 @@ import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.ViTFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvBack
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
+import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2475,8 +2476,11 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelBackGain
 -- ════════════════════════════════════════════════════════════════════════════════════════
 -- THE r34 BACKWARD'S NUMBER (Resnet34BackFloatBudget.lean) — the whole-net INPUT-GRADIENT VJP,
--- window 2.188e245 / budget 1.458e244 on loss cotangents of magnitude <= 1 (|p − y| <= 1 for
--- softmax cross-entropy). ⭐ budget/window = 0.067: the interval FOLD, not the cap ConvNeXt-T's
+-- window 8.857e245 / budget 6.894e244 on loss cotangents of magnitude <= 1 (|p − y| <= 1 for
+-- softmax cross-entropy). ⚠ Those are 4x the numbers first committed here (2.188e245 /
+-- 1.458e244): closing the whole-net certified tie found the chain missing the 3x3/s2 stem pool's
+-- backward entirely (Resnet34BackCertifiedTie.lean, planning §3.10).
+-- ⭐ budget/window = 0.078: the interval FOLD, not the cap ConvNeXt-T's
 -- and ViT-Tiny's 2.00 are — and at TRAINING-mode BatchNorm, where the FORWARD of this same net
 -- has no statable number at all (1e7417). A VJP reads its statistics off the SAVED activations,
 -- which the cotangent does not perturb.
@@ -2506,6 +2510,42 @@ open Proofs
 -- GAP backward -> block e1's second BN backward at 512x7x7, out (8348, 2.317e-2). Note the shape
 -- of a backward chain: fan-in 10 at the head and a division by 49 at the GAP, so the first two
 -- stages SHRINK and the growth only starts at the first normalisation.
+-- ⭐⭐ THE SECOND WHOLE-NET BACKWARD NUMBER, MobileNetV2's (MobileNetV2BackFloatBudget.lean):
+-- window 4.750e153 / budget 1.076e152, ratio 0.023 — the interval FOLD again, no cap anywhere,
+-- at TRAINING-mode BatchNorm. 48 numeric stages, 136 rational inequalities.
+-- ⭐⭐ AND IT ASSUMES NO OPERATING POINT. r34's needs |istd| <= 16 to come down from 1e288 to
+-- something norm_num will evaluate; MobileNetV2's is 1e153 at the eps-FLOOR, so |istd| <= 317
+-- follows from eps >= 1e-5 alone and MnvBnBack.hS is a THEOREM where R34BnBack.hS is a field
+-- (bnIstd_abs_le_of, FloatBudgetEnvBack.lean). Two structural reasons, both measured: 20 BN
+-- sites against 33, and the inverted residual's backward fan-ins are 1x1 (24..256) and the
+-- DEPTHWISE's 9, where r34's are 512*9. So this is the first whole-net backward number in the
+-- repo with nothing supplied but the two saved-activation accuracies.
+-- ⛔ es/exh ARE still supplied (1e-2) and are still the caveat: they are what the forward's own
+-- training-mode fold cannot discharge. §0.1's wall is a fact about COMPOSING a backward with the
+-- forward that feeds it, not about backwards.
+-- ⭐ relu6's clamp — the FORWARD's headline lever, 97 orders of window (§3.2) — buys this chain
+-- nothing: its backward is reluMaskBack, a 0/1 select, exact in float and envelope-preserving.
+#print axioms Proofs.MnvBnBack.hS
+#print axioms Proofs.MnvBnBack.bridge
+#print axioms Proofs.MnvBodyBack.bridge
+#print axioms Proofs.MnvBodyStridedBack.bridge
+#print axioms Proofs.mnv2BackProfile_committed
+#print axioms Proofs.mnv2GradR
+#print axioms Proofs.mnv2GradF
+#print axioms Proofs.mnv2GradBridge
+#print axioms Proofs.mnv2GradBridge_maps
+#print axioms Proofs.mnv2GradBridge_mag_le
+#print axioms Proofs.mnv2GradBridge_fresh_le
+#print axioms Proofs.mnv2_grad_float_le
+-- ⭐ The two leaves it needed, and both are compositions of ones that existed
+-- (FloatBudgetEnvBackMBConv.lean): Maps.depthwiseBack is Maps.depthwise at the spatially-reversed
+-- kernel and zero bias — ⭐ fan-in kH*kW = 9, the kernel window ALONE, because a depthwise conv
+-- mixes no channels — and Maps.depthwiseStride2Back is that composed with Maps.decimateBack.
+#print axioms Proofs.FloatBridgesTo.Maps.depthwiseBack
+#print axioms Proofs.FloatBridgesTo.Maps.depthwiseStride2Back
+#print axioms Proofs.FloatBridgesTo.Maps.invresBodyBackPC
+#print axioms Proofs.FloatBridgesTo.Maps.invresBodyStridedBackPC
+#print axioms Proofs.bnIstd_abs_le_of
 -- ⭐ GELU is globally 3/2-Lipschitz (Architectures/GeluSaturation.lean), and floatClose_gelu now
 -- states the min of that and its magnitude polynomial. The polynomial is CUBIC in the window and
 -- reaches ~400 at ConvNeXt's magnitudes against a true constant of ≈1.13; the saturation bound was

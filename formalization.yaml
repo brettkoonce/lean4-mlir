@@ -224,6 +224,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "mnv2_grad_float_le"   # ⭐⭐ the SECOND whole-net backward number, and the first with NO operating-point hypothesis: the deployed MobileNetV2 whole-net INPUT-GRADIENT VJP is within 1.076e152 of the certified one, per input pixel, on loss cotangents of magnitude <= 1, certified window 4.750e153, budget/window = 0.023 -- the interval FOLD at TRAINING-mode BatchNorm. |istd| <= 317 is DERIVED from eps >= 1e-5 (MnvBnBack.hS), where r34's file assumes |istd| <= 16; affordable because 20 BN sites and a depthwise fan-in of 9 put the fold 135 orders below r34's. ⛔ es/exh (the saved float activations' accuracies, 1e-2) remain supplied and remain the caveat (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "r34_grad_float_le"   # ⭐⭐ PHASE 2, and the first number in this repo that is a FOLD at TRAINING-mode BatchNorm -- the mode the FORWARD of this same net has no statable number for at all (1e7417): the deployed ResNet-34 whole-net INPUT-GRADIENT VJP is within 6.894e244 of the certified one, per input pixel, on loss cotangents of magnitude <= 1 (|p - y| <= 1 for softmax cross-entropy), certified window 8.857e245, budget/window = 0.078 (NOT the 2.00 cap ConvNeXt-T's and ViT-Tiny's forwards carry). A VJP reads its statistics off the SAVED activations, which the cotangent does not perturb, so the modulus is linear in the inherited error. ⛔ THREE HYPOTHESES: es/exh (the saved float activations' accuracies, 1e-2, which the forward's own training-mode fold cannot discharge) and the OPERATING POINT |istd| <= 16 i.e. sigma >= 1/16 (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/Resnet34BackFloatBudget.lean"
       sorry_count: 0
@@ -867,6 +873,34 @@ fidelity:
        moved 1.458e244 -> 6.894e244. ⚠ The 4 is PROVED from `win3Row_mem_le_two`
        (`maxPool3s2Back_mask_sum_abs_le`), not assumed: the trivial c*h*w fibre bound puts the
        fold at 1e251, four orders under the ~1e253 shape-dependent norm_num wall above.
+
+       ⭐⭐ THE SECOND WHOLE-NET BACKWARD NUMBER, AND IT NEEDS NO OPERATING POINT (2026-09-04):
+       `MobileNetV2BackFloatBudget.lean`. `mnv2_grad_float_le` -- the deployed MobileNetV2
+       whole-net INPUT-GRADIENT VJP is within 1.076e152 of the certified one, per input pixel, on
+       loss cotangents of magnitude <= 1, certified window 4.750e153, budget/window = 0.023 (the
+       interval FOLD again, no cap anywhere, at TRAINING-mode BatchNorm). 48 numeric stages, 136
+       rational inequalities, generated AND re-asserted by `mnv2_back_chain` / `verify_mnv2_back`.
+
+       ⭐⭐ WHAT IS NEW IS THE HYPOTHESIS THAT IS ABSENT. r34's third hypothesis -- the operating
+       point |istd| <= 16 -- is not here: `MnvBnBack` has NO inverse-stddev field, and
+       `MnvBnBack.hS` DERIVES |istd| <= 317 from eps >= 1e-5 alone (`bnIstd_abs_le_of`, the
+       rational form of `bnIstd_abs_le`'s 1/sqrt(eps)). It is affordable because the fold lands at
+       1e153 where r34's at the same eps-floor is 1e288, past the ~1e253 norm_num wall. Two
+       structural reasons, both measured: 20 BatchNorm sites against 33, and the inverted
+       residual's backward fan-ins are the 1x1s (24..256) and the DEPTHWISE's 9, where r34's are
+       512*9. So this is the first whole-net backward statement in the repo with nothing supplied
+       but `es`/`exh` -- which ARE still supplied at 1e-2, and are still what the forward's own
+       training-mode fold cannot discharge. §0.1's wall is a fact about COMPOSING a backward with
+       the forward that feeds it, not about backwards.
+
+       ⭐ The only new machinery is two `Maps` leaves, both compositions of existing ones
+       (`FloatBudgetEnvBackMBConv.lean`): `Maps.depthwiseBack` is `Maps.depthwise` at the
+       spatially-reversed kernel and zero bias -- fan-in kH*kW = 9, the kernel window ALONE,
+       because a depthwise conv mixes no channels -- and `Maps.depthwiseStride2Back` is that
+       composed with `Maps.decimateBack`. ⭐ And relu6's clamp, the FORWARD's headline lever here
+       (97 orders of window, `min A 6` at 13 sites), buys the backward NOTHING: its backward is
+       `reluMaskBack`, a 0/1 select, exact in float and envelope-preserving. Window and budget are
+       separate levers on a forward; on a backward the clamp is not a lever at all.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

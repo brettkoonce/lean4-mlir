@@ -491,6 +491,34 @@ theorem bnXhat_abs_le_num {n : Nat} {ε X : ℝ} (hε : 0 < ε) (v : Vec n)
     rw [sq_abs]; linarith
   nlinarith [abs_nonneg (bnXhat n ε v k)]
 
+/-- ⭐ **`|istd| ≤ S` from the `ε`-FLOOR ALONE, at a RATIONAL `S`.** `bnIstd_abs_le` gives
+    `|istd| ≤ 1/√ε`, which is irrational and which `norm_num` cannot meet; this turns it into a
+    numeral wherever `1/S² ≤ ε` — at the repo's `ε ≥ 10⁻⁵` that is `S = 317` (`317² = 100489 ≥
+    100000`), with room.
+
+    ⛔ **It is what lets a backward budget be stated with NO operating-point hypothesis.**
+    `Resnet34BackFloatBudget.lean` carries `|istd| ≤ 16` as an assumption on its saved
+    activations — `σ ≥ 1/16`, §0.1's escape 2 — because at the ε-floor its fold is `10²⁸⁸` and
+    §3.7(a)'s `norm_num` ceiling is ~`10²⁵³`. MobileNetV2's is `10¹⁵³` at the floor, so it needs
+    none, and this lemma is what discharges the field instead of assuming it
+    (`planning/float_budget_numbers.md` §3.9 finding 2).
+
+    ⚠ Nothing about it is backward-specific — a forward profile's `1/√ε ≤ S` field is the same
+    quantity. It lives here because the backward budgets are its only consumers today; move it up
+    to `FloatBudgetEnv.lean` the first time a forward wants a rational `S`. -/
+theorem bnIstd_abs_le_of {n : ℕ} (x : Vec n) {ε S : ℝ} (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) :
+    |bnIstd n x ε| ≤ S := by
+  have hSi : (0:ℝ) < 1 / S := by positivity
+  have hε : 0 < ε := lt_of_lt_of_le (by positivity) hSε
+  have hsq : (1 / S) ^ 2 = 1 / S ^ 2 := by rw [div_pow, one_pow]
+  have h1 : 1 / S ≤ Real.sqrt ε := by
+    have := Real.sqrt_le_sqrt hSε
+    rwa [← hsq, Real.sqrt_sq hSi.le] at this
+  have h2 : 1 / Real.sqrt ε ≤ S := by
+    have := one_div_le_one_div_of_le hSi h1
+    rwa [one_div_one_div] at this
+  exact (bnIstd_abs_le x hε).trans h2
+
 /-- The float flat BN backward, NAMED (`formalization.yaml` fidelity §4d) — the deployed
     three-term input-gradient at the supplied float inverse-stddev and normalised activation. -/
 noncomputable def bnBackF {n : Nat} (M : FloatModel) (γ fs : ℝ) (fxh : Vec n) :

@@ -68,6 +68,19 @@ theorem floatBridges_depthwiseBack {c h w kH kW : Nat} (M : FloatModel)
   exact floatBridges_depthwise (h := h) (w := w) M (dwReverse W) (fun _ => 0)
     hw' le_rfl hn (fun ch kh kw => dwReverse_abs_le hW ch kh kw) (fun _ => by simp)
 
+/-- The depthwise conv input-VJP float-bridges TO the model's rounded reversed-kernel depthwise
+    conv — `floatBridgesTo_depthwise` at `dwReverse W` and zero bias, so `mag`/`mod` are the
+    forward depthwise leaf's at the depthwise fan-in `kH·kW`. The `FloatBridgesTo` peer of
+    `floatBridges_depthwiseBack`, and what `Maps.depthwiseBack` names. -/
+noncomputable def floatBridgesTo_depthwiseBack {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < c * h * w)
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') :
+    FloatBridgesTo (depthwiseFlatBack (h := h) (w := w) W)
+      (M.depthwiseFlatF (h := h) (w := w) (dwReverse W) (fun _ => 0)) := by
+  unfold depthwiseFlatBack
+  exact floatBridgesTo_depthwise (h := h) (w := w) M (dwReverse W) (fun _ => 0)
+    hw' le_rfl hn (fun ch kh kw => dwReverse_abs_le hW ch kh kw) (fun _ => by simp)
+
 -- ════════════════════════════════════════════════════════════════
 -- § The strided depthwise backward: `depthwiseFlatBack ∘ decimateBack`
 -- ════════════════════════════════════════════════════════════════
@@ -92,5 +105,18 @@ theorem floatBridges_depthwiseStride2Back {c h w kH kW : Nat} (M : FloatModel)
   unfold depthwiseStride2FlatBack
   exact (floatBridges_decimateBack c h w).comp
     (floatBridges_depthwiseBack (h := 2 * h) (w := 2 * w) M W hw' hn hW)
+
+/-- The strided depthwise input-VJP float-bridges TO the exact decimation scatter followed by the
+    rounded reversed-kernel depthwise conv at the doubled resolution. The `FloatBridgesTo` peer of
+    `floatBridges_depthwiseStride2Back`; `Maps.depthwiseStride2Back` is its envelope. -/
+noncomputable def floatBridgesTo_depthwiseStride2Back {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < c * (2 * h) * (2 * w))
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') :
+    FloatBridgesTo (depthwiseStride2FlatBack (h := h) (w := w) W)
+      (M.depthwiseFlatF (h := 2 * h) (w := 2 * w) (dwReverse W) (fun _ => 0)
+        ∘ decimateBack c h w) := by
+  unfold depthwiseStride2FlatBack
+  exact (floatBridgesTo_decimateBack c h w).comp
+    (floatBridgesTo_depthwiseBack (h := 2 * h) (w := 2 * w) M W hw' hn hW)
 
 end Proofs

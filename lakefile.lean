@@ -414,6 +414,12 @@ lean_lib «Certs» where
              -- OPERATING POINT |istd| <= 16 (sigma >= 1/16), which is §0.1's escape 2 — worth
              -- ~43 orders across 33 BN sites, and needed because norm_num's ceiling is ~1e253.
              `LeanMlir.Proofs.Float.Resnet34BackFloatBudget,
+             -- ⭐ The SECOND whole-net backward number, MobileNetV2's — window 4.750e153 /
+             -- budget 1.076e152, ratio 0.023, at TRAINING-mode BatchNorm, and ⭐⭐ at the
+             -- UNCONDITIONAL eps-floor: |istd| <= 317 follows from eps >= 1e-5 (MnvBnBack.hS),
+             -- so unlike r34's this one assumes no operating point. 20 BN sites against 33, and
+             -- the depthwise backward's fan-in is 9 where r34's convs are 512*9.
+             `LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

@@ -243,7 +243,7 @@ noncomputable def R34BnBack.bridge {c h w : Nat} (s : R34BnBack c h w ε gl S es
     {Xh : ℝ} (hXh0 : 0 ≤ Xh) (hnX : ((h * w : ℕ) : ℝ) ≤ Xh ^ 2) :
     FloatBridgesTo s.real (s.float M) :=
   floatBridgesTo_bnPerChannelBack M s.γ s.x s.fs s.fxh hc hhw s.hγ s.hs s.hS
-    (fun k i => bnXhat_abs_le_num (X := Xh) P.hε _ hXh0 hnX i) s.hfxh
+    (fun _k i => bnXhat_abs_le_num (X := Xh) P.hε _ hXh0 hnX i) s.hfxh
 
 /-- One identity block's certified input-gradient VJP at the record's real data. -/
 noncomputable def R34IdBlkBack.real {c h w : Nat} (b : R34IdBlkBack c h w ε wk gl S es exh) :
