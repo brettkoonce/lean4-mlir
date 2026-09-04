@@ -128,6 +128,7 @@ import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Float.ConvNeXtBackFloatBudget
+import LeanMlir.Proofs.Float.EfficientNetBackFloatBudget
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie
@@ -2593,6 +2594,14 @@ open Proofs
 #print axioms Proofs.floatBridgesTo_mbNoExpBodyBack
 #print axioms Proofs.floatBridgesTo_mbStridedBodyBack
 #print axioms Proofs.floatBridgesTo_mbconvBodyBack
+-- ⭐ And the three MBConv body BACKWARD envelopes the budget file composes (the
+-- Maps.invresBodyBackPC peers, one per B0 block kind): no-expand (b1, six stages), strided (b2,
+-- nine, with the expand arm at the doubled grid) and full (b3's body, nine at one resolution).
+-- The squeeze-excite envelope is supplied by the caller and the skip is the caller's too — §3.13's
+-- "the block record does not have to own its skip", one net over.
+#print axioms Proofs.FloatBridgesTo.Maps.mbNoExpBodyBack
+#print axioms Proofs.FloatBridgesTo.Maps.mbStridedBodyBack
+#print axioms Proofs.FloatBridgesTo.Maps.mbconvBodyBack
 -- ⭐⭐ AND B0'S SHAPE CHECK (EfficientNetChainClose.lean): efficientnetForwardB IS the ∘-chain
 -- efficientnetForwardB_has_vjp is stated on. Until now that bridge lived in the apex's docstring
 -- ("its nested-application spelling ... is definitionally this composition"), which is the same
@@ -2857,6 +2866,58 @@ open Proofs
 #print axioms Proofs.cnxGradBridge_mag_le
 #print axioms Proofs.cnxGradBridge_fresh_le
 #print axioms Proofs.cnx_grad_float_le
+-- ⭐⭐ THE FOURTH WHOLE-NET BACKWARD NUMBER, EfficientNet-B0's
+-- (EfficientNetBackFloatBudget.lean, 2026-09-04): window 7.104e182 / budget 1.578e182, ratio
+-- 0.222 — the interval FOLD, no cap anywhere, at TRAINING-mode BatchNorm. 59 numeric stages,
+-- 138 rational inequalities (b0_back_chain(ssw = 2, S = 317, N = 1) / verify_b0_back).
+-- ⭐⭐ AND IT IS THE SQUEEZE-EXCITE FOLD — three SE sites, and squeeze-excite is the site §0.1
+-- lists as making a FORWARD quadratic in the window. seInputGrad g x gateBack =
+-- biPathSum (diagBack g) (gateBack . diagBack x): g and x are SAVED constants, both branches are
+-- linear in the cotangent, nothing multiplies the cotangent by itself. §0.1's closing sentence,
+-- as a theorem.
+-- ⭐⭐ |swish'| <= 2 is what makes it EXIST: the nine swish diagBack slots take the REAL saved
+-- derivative (fun i => swishScalarDeriv (xpre i)) at Ssw = 2, discharged by
+-- swishScalarDeriv_abs_le, so the FORWARD's certified window never enters. With the repo's other
+-- bound (swishScalar_lipschitz_abs's 1 + A/4 at that window) the same fold is 1e431. 262 orders.
+-- ⭐⭐ AND IT ASSUMES NO OPERATING POINT — the second such backward after MobileNetV2's.
+-- EnetBnBack.hS derives |istd| <= 317 from eps >= 1e-5 alone (bnIstd_abs_le_of), and the eps-floor
+-- fold lands 70 orders under §3.7(a)'s ~1e253 ceiling, so §3.13's rule is APPLIED rather than
+-- inherited: an operating-point hypothesis is what you pay when the eps-floor fold does not fit.
+-- b0_back_chain's S = 16 default is ResNet-34's; §3.12's 7.640e169 is that stronger hypothesis.
+-- ⛔ THE NUMBER IS AT N = 1 AND IS NOT BATCH-FREE, unlike b0_float_logits_le. bnBatchLA is the one
+-- op in this net that is not batchMap N of a per-example op — it reduces mu/var ACROSS examples —
+-- so every BatchNorm site's width is N*h*w and the number moves with the batch: 7.104e182 at N=1,
+-- 2.880e194 at N=256 (a fold and statable throughout). At N = 1 the two widths coincide, which is
+-- why the per-example floatBridgesTo_bnPerChannelBack at width h*w is the right leaf here.
+-- ⛔ es/exh/esav ARE supplied at 1e-2 and are what this net's own TRAINING-mode forward fold
+-- cannot discharge — ⭐ but unlike ConvNeXt-T, B0 has an INFERENCE mode where its forward IS a
+-- fold (b0_float_logits_le), so the gap is quantitative and not a gap in kind (§3.16 finding 1).
+-- ⚠ The one remaining window import is the SE's saved input: Sx = 4.903e40 / 5.451e24 / 7.572e9
+-- for b3/b2/b1, the forward's certified pre-swish window. An operating point on it is worth ~71
+-- orders and is deliberately NOT taken.
+-- ⭐ Stated DIRECTLY on the committed efficientnetInputGradB (§3.22's shape, as ConvNeXt-T's is on
+-- convnextInputGrad), so B0's whole-net tie — against efficientnetForwardB_has_vjp, NOT the
+-- 16-block efficientnetForwardB_full_has_vjp — will make it a statement about the certified
+-- gradient with nothing in between. ⚠ That tie is still open.
+#print axioms Proofs.EnetBnBack.hS
+#print axioms Proofs.EnetBnBack.bridge
+#print axioms Proofs.EnetSwBack.bridge
+#print axioms Proofs.EnetSeBack.gateBridge
+#print axioms Proofs.EnetSeBack.bridge
+#print axioms Proofs.EnetNoExpBack.bridge
+#print axioms Proofs.EnetStridedBack.bridge
+#print axioms Proofs.EnetResidBack.bridge
+#print axioms Proofs.EnetBnBack.maps
+#print axioms Proofs.EnetSwBack.maps
+#print axioms Proofs.EnetSeBack.maps
+#print axioms Proofs.b0BackProfile_committed
+#print axioms Proofs.b0GradR
+#print axioms Proofs.b0GradF
+#print axioms Proofs.b0GradBridge
+#print axioms Proofs.b0GradBridge_maps
+#print axioms Proofs.b0GradBridge_mag_le
+#print axioms Proofs.b0GradBridge_fresh_le
+#print axioms Proofs.b0_grad_float_le
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

@@ -383,6 +383,138 @@ noncomputable def floatBridgesTo_mbconvBodyBack {cin cmid cout h w kHe kWe kHd k
       (floatBridgesTo_convBack (h := h) (w := w) M We hwe hnM hWe))
 
 -- ════════════════════════════════════════════════════════════════
+-- § The three MBConv body BACKWARD envelopes
+--   (`Maps.invresBodyBackPC`'s peers, one per B0 block kind)
+-- ════════════════════════════════════════════════════════════════
+
+namespace FloatBridgesTo
+
+/-- ⭐ **An envelope through the NO-EXPAND MBConv body input-gradient** (EfficientNet-B0's `b1`).
+    Six numeric stages and no skip — `bnBp → convBack Wp → seB → swBd → bnBd → depthwiseBack Wd`
+    — with the squeeze-excite envelope supplied by the caller (`Maps.seBack`, which is itself ten
+    stages) and the two BatchNorm sites by `Maps.bnPerChannelBackGain`. ⭐ The depthwise stage's
+    fan-in is `kHd·kWd` alone, the kernel window: a depthwise conv mixes no channels, so unlike
+    `Maps.convBack`'s `oc·kH·kW` the cotangent's channel count never enters. -/
+theorem Maps.mbNoExpBodyBack {cin cout h w kHd kWd kHp kWp : Nat} (M : FloatModel)
+    (Wd : DepthwiseKernel cin kHd kWd) (Wp : Kernel4 cout cin kHp kWp)
+    {bnBd swBd seB bnBdF swBdF seBF : Vec (cin * h * w) → Vec (cin * h * w)}
+    {bnBp bnBpF : Vec (cout * h * w) → Vec (cout * h * w)}
+    {wd wp : ℝ} (hwd : 0 ≤ wd) (hwp : 0 ≤ wp)
+    (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ wd) (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ wp)
+    (hnI : 0 < cin * h * w) (hnO : 0 < cout * h * w)
+    (hbnBd : FloatBridgesTo bnBd bnBdF) (hswBd : FloatBridgesTo swBd swBdF)
+    (hseB : FloatBridgesTo seB seBF) (hbnBp : FloatBridgesTo bnBp bnBpF)
+    {gp gd Ā Ē A1 E1 A2 E2 A3 E3 A4 E4 A5 E5 Ā' Ē' : ℝ}
+    (hgp : (1 + M.u) ^ (cout * kHp * kWp + 2) - 1 ≤ gp)
+    (hgd : (1 + M.u) ^ (kHd * kWd + 2) - 1 ≤ gd)
+    (mbnp : hbnBp.Maps Ā Ē A1 E1)
+    (cpA : (1 + gp) * (((cout * kHp * kWp : ℕ) : ℝ) * wp * A1 + 0) ≤ A2)
+    (cpE : gp * (((cout * kHp * kWp : ℕ) : ℝ) * wp * (A1 + E1) + 0)
+            + ((cout * kHp * kWp : ℕ) : ℝ) * wp * E1 ≤ E2)
+    (mse : hseB.Maps A2 E2 A3 E3) (msw : hswBd.Maps A3 E3 A4 E4)
+    (mbnd : hbnBd.Maps A4 E4 A5 E5)
+    (cdA : (1 + gd) * (((kHd * kWd : ℕ) : ℝ) * wd * A5 + 0) ≤ Ā')
+    (cdE : gd * (((kHd * kWd : ℕ) : ℝ) * wd * (A5 + E5) + 0)
+            + ((kHd * kWd : ℕ) : ℝ) * wd * E5 ≤ Ē') :
+    (floatBridgesTo_mbNoExpBodyBack M Wd Wp hwd hwp hWd hWp hnI hnO
+      hbnBd hswBd hseB hbnBp).Maps Ā Ē Ā' Ē' :=
+  ((mbnp.comp hnO (Maps.convBack (h := h) (w := w) M Wp hwp hnO hWp hgp cpA cpE)).comp hnI
+    mse).comp hnI
+    ((msw.comp hnI mbnd).comp hnI
+      (Maps.depthwiseBack (h := h) (w := w) M Wd hwd hnI hWd hgd cdA cdE))
+
+/-- ⭐ **An envelope through the STRIDED MBConv body input-gradient** (B0's `b2`). Nine numeric
+    stages: the no-expand chain with the depthwise threading `Maps.depthwiseStride2Back` (the
+    zero-fill scatter, then the reversed-kernel depthwise at the doubled grid) and the expand arm
+    — `swBe → bnBe → convBack We` — running at `2h × 2w`. ⚠ The expand BatchNorm therefore sits at
+    the PRE-downsample resolution and needs its own `Xh`; on B0's `b2` that is `112` where the
+    project and depthwise sites take `56`. -/
+theorem Maps.mbStridedBodyBack {cin cmid cout h w kHe kWe kHd kWd kHp kWp : Nat} (M : FloatModel)
+    (We : Kernel4 cmid cin kHe kWe) (Wd : DepthwiseKernel cmid kHd kWd)
+    (Wp : Kernel4 cout cmid kHp kWp)
+    {bnBe swBe bnBeF swBeF : Vec (cmid * (2 * h) * (2 * w)) → Vec (cmid * (2 * h) * (2 * w))}
+    {bnBd swBd seB bnBdF swBdF seBF : Vec (cmid * h * w) → Vec (cmid * h * w)}
+    {bnBp bnBpF : Vec (cout * h * w) → Vec (cout * h * w)}
+    {we wd wp : ℝ} (hwe : 0 ≤ we) (hwd : 0 ≤ wd) (hwp : 0 ≤ wp)
+    (hWe : ∀ o c kh kw, |We o c kh kw| ≤ we) (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ wd)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ wp)
+    (hnM : 0 < cmid * h * w) (hnM2 : 0 < cmid * (2 * h) * (2 * w)) (hnO : 0 < cout * h * w)
+    (hbnBe : FloatBridgesTo bnBe bnBeF) (hswBe : FloatBridgesTo swBe swBeF)
+    (hbnBd : FloatBridgesTo bnBd bnBdF) (hswBd : FloatBridgesTo swBd swBdF)
+    (hseB : FloatBridgesTo seB seBF) (hbnBp : FloatBridgesTo bnBp bnBpF)
+    {gp gd ge Ā Ē A1 E1 A2 E2 A3 E3 A4 E4 A5 E5 A6 E6 A7 E7 A8 E8 Ā' Ē' : ℝ}
+    (hgp : (1 + M.u) ^ (cout * kHp * kWp + 2) - 1 ≤ gp)
+    (hgd : (1 + M.u) ^ (kHd * kWd + 2) - 1 ≤ gd)
+    (hge : (1 + M.u) ^ (cmid * kHe * kWe + 2) - 1 ≤ ge)
+    (mbnp : hbnBp.Maps Ā Ē A1 E1)
+    (cpA : (1 + gp) * (((cout * kHp * kWp : ℕ) : ℝ) * wp * A1 + 0) ≤ A2)
+    (cpE : gp * (((cout * kHp * kWp : ℕ) : ℝ) * wp * (A1 + E1) + 0)
+            + ((cout * kHp * kWp : ℕ) : ℝ) * wp * E1 ≤ E2)
+    (mse : hseB.Maps A2 E2 A3 E3) (msw : hswBd.Maps A3 E3 A4 E4)
+    (mbnd : hbnBd.Maps A4 E4 A5 E5)
+    (cdA : (1 + gd) * (((kHd * kWd : ℕ) : ℝ) * wd * A5 + 0) ≤ A6)
+    (cdE : gd * (((kHd * kWd : ℕ) : ℝ) * wd * (A5 + E5) + 0)
+            + ((kHd * kWd : ℕ) : ℝ) * wd * E5 ≤ E6)
+    (mswe : hswBe.Maps A6 E6 A7 E7) (mbne : hbnBe.Maps A7 E7 A8 E8)
+    (ceA : (1 + ge) * (((cmid * kHe * kWe : ℕ) : ℝ) * we * A8 + 0) ≤ Ā')
+    (ceE : ge * (((cmid * kHe * kWe : ℕ) : ℝ) * we * (A8 + E8) + 0)
+            + ((cmid * kHe * kWe : ℕ) : ℝ) * we * E8 ≤ Ē') :
+    (floatBridgesTo_mbStridedBodyBack M We Wd Wp hwe hwd hwp hWe hWd hWp hnM2 hnO
+      hbnBe hswBe hbnBd hswBd hseB hbnBp).Maps Ā Ē Ā' Ē' :=
+  (((mbnp.comp hnO (Maps.convBack (h := h) (w := w) M Wp hwp hnO hWp hgp cpA cpE)).comp hnM
+    mse).comp hnM
+    ((msw.comp hnM mbnd).comp hnM
+      (Maps.depthwiseStride2Back (h := h) (w := w) M Wd hwd hnM2 hWd hgd cdA cdE))).comp hnM2
+    ((mswe.comp hnM2 mbne).comp hnM2
+      (Maps.convBack (h := 2 * h) (w := 2 * w) M We hwe hnM2 hWe hge ceA ceE))
+
+/-- ⭐ **An envelope through the FULL MBConv body input-gradient** (B0's `b3`'s body). The strided
+    shape at one resolution: `bnBp → convBack Wp → seB → swBd → bnBd → depthwiseBack Wd → swBe →
+    bnBe → convBack We`. ⚠ The additive skip is the CALLER's — `b3` closes as
+    `Maps.residual` over this, exactly as MobileNetV2's `b2`/`b4` do (`planning` §3.13: the block
+    record does not have to own its skip). -/
+theorem Maps.mbconvBodyBack {cin cmid cout h w kHe kWe kHd kWd kHp kWp : Nat} (M : FloatModel)
+    (We : Kernel4 cmid cin kHe kWe) (Wd : DepthwiseKernel cmid kHd kWd)
+    (Wp : Kernel4 cout cmid kHp kWp)
+    {bnBe bnBd swBe swBd seB bnBeF bnBdF swBeF swBdF seBF :
+      Vec (cmid * h * w) → Vec (cmid * h * w)}
+    {bnBp bnBpF : Vec (cout * h * w) → Vec (cout * h * w)}
+    {we wd wp : ℝ} (hwe : 0 ≤ we) (hwd : 0 ≤ wd) (hwp : 0 ≤ wp)
+    (hWe : ∀ o c kh kw, |We o c kh kw| ≤ we) (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ wd)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ wp)
+    (hnM : 0 < cmid * h * w) (hnO : 0 < cout * h * w)
+    (hbnBe : FloatBridgesTo bnBe bnBeF) (hbnBd : FloatBridgesTo bnBd bnBdF)
+    (hswBe : FloatBridgesTo swBe swBeF) (hswBd : FloatBridgesTo swBd swBdF)
+    (hseB : FloatBridgesTo seB seBF) (hbnBp : FloatBridgesTo bnBp bnBpF)
+    {gp gd ge Ā Ē A1 E1 A2 E2 A3 E3 A4 E4 A5 E5 A6 E6 A7 E7 A8 E8 Ā' Ē' : ℝ}
+    (hgp : (1 + M.u) ^ (cout * kHp * kWp + 2) - 1 ≤ gp)
+    (hgd : (1 + M.u) ^ (kHd * kWd + 2) - 1 ≤ gd)
+    (hge : (1 + M.u) ^ (cmid * kHe * kWe + 2) - 1 ≤ ge)
+    (mbnp : hbnBp.Maps Ā Ē A1 E1)
+    (cpA : (1 + gp) * (((cout * kHp * kWp : ℕ) : ℝ) * wp * A1 + 0) ≤ A2)
+    (cpE : gp * (((cout * kHp * kWp : ℕ) : ℝ) * wp * (A1 + E1) + 0)
+            + ((cout * kHp * kWp : ℕ) : ℝ) * wp * E1 ≤ E2)
+    (mse : hseB.Maps A2 E2 A3 E3) (msw : hswBd.Maps A3 E3 A4 E4)
+    (mbnd : hbnBd.Maps A4 E4 A5 E5)
+    (cdA : (1 + gd) * (((kHd * kWd : ℕ) : ℝ) * wd * A5 + 0) ≤ A6)
+    (cdE : gd * (((kHd * kWd : ℕ) : ℝ) * wd * (A5 + E5) + 0)
+            + ((kHd * kWd : ℕ) : ℝ) * wd * E5 ≤ E6)
+    (mswe : hswBe.Maps A6 E6 A7 E7) (mbne : hbnBe.Maps A7 E7 A8 E8)
+    (ceA : (1 + ge) * (((cmid * kHe * kWe : ℕ) : ℝ) * we * A8 + 0) ≤ Ā')
+    (ceE : ge * (((cmid * kHe * kWe : ℕ) : ℝ) * we * (A8 + E8) + 0)
+            + ((cmid * kHe * kWe : ℕ) : ℝ) * we * E8 ≤ Ē') :
+    (floatBridgesTo_mbconvBodyBack M We Wd Wp hwe hwd hwp hWe hWd hWp hnM hnO
+      hbnBe hbnBd hswBe hswBd hseB hbnBp).Maps Ā Ē Ā' Ē' :=
+  (((mbnp.comp hnO (Maps.convBack (h := h) (w := w) M Wp hwp hnO hWp hgp cpA cpE)).comp hnM
+    mse).comp hnM
+    ((msw.comp hnM mbnd).comp hnM
+      (Maps.depthwiseBack (h := h) (w := w) M Wd hwd hnM hWd hgd cdA cdE))).comp hnM
+    ((mswe.comp hnM mbne).comp hnM
+      (Maps.convBack (h := h) (w := w) M We hwe hnM hWe hge ceA ceE))
+
+end FloatBridgesTo
+
+-- ════════════════════════════════════════════════════════════════
 -- § ⭐ The kit EXERCISED — B0's `b1` squeeze-excite site at `b0_back_chain`'s numerals
 -- ════════════════════════════════════════════════════════════════
 

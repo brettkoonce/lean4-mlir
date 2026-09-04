@@ -453,6 +453,20 @@ lean_lib «Certs» where
              -- forward statement is `capped`, so the saved-activation accuracy it can supply is
              -- 2 x window ~ 1e227, and LayerNorm has no eval mode to switch to.
              `LeanMlir.Proofs.Float.ConvNeXtBackFloatBudget,
+             -- ⭐⭐ The FOURTH whole-net backward number, EfficientNet-B0's — window
+             -- 7.104e182 / budget 1.578e182, ratio 0.222, at TRAINING-mode BatchNorm, and it is
+             -- the SQUEEZE-EXCITE fold: seInputGrad g x gateBack = biPathSum (diagBack g)
+             -- (gateBack . diagBack x), where g and x are SAVED constants, so both branches are
+             -- linear in the cotangent and §0.1's third quadratic site is a FORWARD fact.
+             -- ⭐⭐ |swish'| <= 2 (swishScalarDeriv_abs_le) is what makes it exist — the nine
+             -- swish slots take the REAL saved derivative, so the forward's certified window
+             -- never enters; with the repo's other bound the same fold is 1e431.
+             -- ⭐⭐ And it needs NO OPERATING POINT (EnetBnBack.hS: |istd| <= 317 from
+             -- eps >= 1e-5 alone), the second such backward after MobileNetV2's.
+             -- ⛔ At N = 1, and that is not cosmetic: bnBatchLA reduces mu/var ACROSS examples,
+             -- so each BatchNorm site's width is N*h*w and the number moves with the batch size
+             -- (2.880e194 at N = 256) where the FORWARD's b0_float_logits_le holds at any N.
+             `LeanMlir.Proofs.Float.EfficientNetBackFloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

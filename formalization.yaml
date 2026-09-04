@@ -236,6 +236,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "b0_grad_float_le"   # ⭐⭐ the FOURTH whole-net BACKWARD number and the SQUEEZE-EXCITE one: the deployed EfficientNet-B0 input-gradient is within 1.578e182 of the certified one per input pixel, certified window 7.104e182, budget/window = 0.222 -- the interval FOLD, no `capped` anywhere, at TRAINING-mode BatchNorm and through THREE squeeze-excite sites. ⭐⭐ SE is the site §0.1 lists as making a FORWARD quadratic in the window, and its backward folds for a structural reason: seInputGrad g x gateBack = biPathSum (diagBack g) (gateBack . diagBack x), where the gate g and the SE input x are SAVED constants, so both branches are linear in the cotangent. ⭐⭐ |swish′| <= 2 (swishScalarDeriv_abs_le) is what makes it EXIST -- the nine swish diagBack slots take the REAL saved derivative, so the FORWARD's certified window never enters; with the repo's only other bound (1 + A/4 at that window) the same fold is 1e431. ⭐⭐ AND IT NEEDS NO OPERATING POINT, the second such backward after MobileNetV2's: |istd| <= 317 is DERIVED from eps >= 1e-5 (EnetBnBack.hS), and the eps-floor fold lands 70 orders under norm_num's ~1e253 ceiling. At the measured 350-epoch per-kind profile (kernels <= 37/10, BN gamma <= 41/10), eps >= 1e-5, u <= 2^-24, saved-vector accuracies 1e-2, on loss cotangents of magnitude <= 1. ⛔ AT BATCH SIZE N = 1, and that qualifier is NOT cosmetic: bnBatchLA is the one op in this net that is not batchMap N of a per-example op -- it reduces mu/var ACROSS examples -- so every BatchNorm site's width is N*h*w and the number moves with the batch (2.880e194 at N = 256, still a fold and still statable), where the FORWARD's b0_float_logits_le genuinely holds at any N. ⚠ The one remaining forward-window import is the SE's saved input (4.903e40 / 5.451e24 / 7.572e9 for b3/b2/b1); an operating point on it is worth ~71 orders and is deliberately not taken. ⭐ Stated DIRECTLY on the committed efficientnetInputGradB, so B0's whole-net tie -- against efficientnetForwardB_has_vjp, NOT the 16-block efficientnetForwardB_full_has_vjp -- will make it a statement about the certified gradient with nothing in between; that tie is still open (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/EfficientNetBackFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "cnx_grad_float_le"   # ⭐⭐ the THIRD whole-net BACKWARD number and the repo's FIRST honest whole-net FOLD for a LAYERNORM net: the deployed ConvNeXt-T input-gradient is within 1.563e250 of the certified one per input pixel, certified window 1.023e251, budget/window = 0.153 -- no `capped` anywhere, at the net whose own FORWARD number is a 2.00 CAP. §0.1's quadratic is a FORWARD fact; a VJP reads its statistics off the SAVED activations, which the cotangent does not perturb. At the measured 300-epoch per-kind profile (kernels <= 6/10, LN gamma <= 48/10, layer scale <= 84/10 -- the split is worth 68 orders here, the largest of any net), eps >= 1e-5, u <= 2^-24, saved-activation accuracies 1e-2, operating point |istd| <= 16, on loss cotangents of magnitude <= 1. ⭐ Stated DIRECTLY on the committed convnextInputGrad, so convnextInputGrad_eq_convNextForwardTCh_vjp makes it a statement about the certified whole-net gradient with nothing in between. ⛔ It does NOT compose with the forward and not for r34's reason: this net's forward statement is `capped`, whose modulus is 2*mag by construction, so the activation accuracy it can supply is 2 x window ~ 1e227, and LayerNorm has no eval mode to freeze (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/ConvNeXtBackFloatBudget.lean"
       sorry_count: 0
@@ -1020,6 +1026,46 @@ fidelity:
        inside every block). ⛔ Quote it with its caveat: it does not compose with the forward, and
        not for r34's reason -- this net's forward statement is `capped`, so the activation accuracy
        it can supply is 2 x window ~ 1e227, and LayerNorm has no eval mode to switch to.
+
+       ⭐⭐ THE FOURTH WHOLE-NET BACKWARD NUMBER, AND THE SQUEEZE-EXCITE ONE: `b0_grad_float_le`
+       (`Float/EfficientNetBackFloatBudget.lean`, 27 s) -- window 7.104e182, budget 1.578e182,
+       ratio 0.222, no `capped` anywhere, at TRAINING-mode BatchNorm. 59 stages, 138 rational
+       inequalities, generated and re-asserted by b0_back_chain / verify_b0_back before a line of
+       Lean. Squeeze-excite was the reason to doubt that a backward folds at all -- §0.1 lists it
+       as the third site whose FORWARD modulus is quadratic in the window, and its backward fans
+       out and rejoins -- and it is not the counterexample:
+       `seInputGrad g x gateBack = biPathSum (diagBack g) (gateBack . diagBack x)`, where the gate
+       and the SE's input are SAVED CONSTANTS, so both branches are `diagBack` scales of the
+       cotangent and nothing multiplies the cotangent by itself.
+       ⭐⭐ What makes the number EXIST is `swishScalarDeriv_abs_le`'s global `|swish'| <= 2`: the
+       nine swish backward slots take the REAL saved derivative, so the FORWARD's certified window
+       enters nowhere. The repo's only other bound is `swishScalar_lipschitz_abs`'s `1 + A/4` AT
+       that window (1.216e51 at the head alone), and with it the same fold is 1e431 -- past
+       norm_num's ~1e253 shape-dependent ceiling, so there is no theorem. 262 orders, and the
+       crude constant costs 2.6 of them against the unproved sharp one.
+       ⭐⭐ It also assumes NO OPERATING POINT -- the second such backward after MobileNetV2's.
+       `EnetBnBack.hS` derives |istd| <= 317 from eps >= 1e-5 alone, and the eps-floor fold lands
+       70 orders under the ceiling, so an operating point is not a property of backwards but what
+       you pay when the eps-floor fold does not fit (ResNet-34's and ConvNeXt-T's both pay it).
+       ⛔ THE NUMBER IS AT BATCH SIZE N = 1, and that qualifier is load-bearing. `b0_float_logits_le`
+       holds at any N because at INFERENCE every stage is `batchMap N` of a per-example op; this
+       fold is at training-mode BatchNorm, and `bnBatchLA` is the one op in this net that is not of
+       that shape -- it reduces mu/var ACROSS examples, so each site's per-channel width is N*h*w.
+       All nine BatchNorm sites therefore scale with N: 7.104e182 at N = 1, 2.880e194 at N = 256,
+       a fold and statable throughout but a different number per batch size. At N = 1 the batched
+       and per-example widths coincide, which is why the chain is `batchMap 1` of per-example maps.
+       ⛔ es/exh/esav remain supplied at 1e-2 and remain the caveat -- but unlike ConvNeXt-T, B0 HAS
+       an inference mode in which its forward statement is an honest fold, so this is r34's and
+       MobileNetV2's quantitative gap and not a gap in KIND.
+       ⚠ The fold's one remaining forward-window import is the SE's saved input (4.903e40 /
+       5.451e24 / 7.572e9 at b3/b2/b1). An operating point on it is worth a further ~71 orders and
+       is deliberately not taken.
+       ⭐ Like ConvNeXt-T's and unlike r34's and mnv2's, it is stated DIRECTLY on the committed
+       `efficientnetInputGradB`. ⚠ B0's whole-net certified TIE is still open, and it is a bigger
+       job than the forward's was: the apex to aim at is `efficientnetForwardB_has_vjp` (HasVJP
+       everywhere, so no smoothness side-condition) and NOT the 16-block
+       `efficientnetForwardB_full_has_vjp`, and the only existing block tie is stated per-example
+       at scalar `bnForward` where the batched net composes `bnBatchLA`.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

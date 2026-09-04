@@ -1,8 +1,9 @@
-# Whole-net float budgets as NUMBERS: six forwards, and the first BACKWARD
+# Whole-net float budgets as NUMBERS: SIX forwards, and FOUR backwards
 
 Written 2026-09-02; revised 2026-09-03 after ResNet-34, MobileNetV2, EfficientNet-B0 and
-ConvNeXt-T, again the same day after ViT-Tiny, and again after **`Resnet34BackFloatBudget.lean`**
-— phase 2's first number.
+ConvNeXt-T, again the same day after ViT-Tiny and after **`Resnet34BackFloatBudget.lean`** —
+phase 2's first number — and through 2026-09-04 as MobileNetV2's, ConvNeXt-T's and
+EfficientNet-B0's backwards followed.
 
 **Picking this up cold?** ⭐⭐ **Every forward in §0's table carries a kernel-checked number, and
 so does ResNet-34's INPUT-GRADIENT VJP** — `r34_grad_float_le`, window 8.857·10²⁴⁵ / budget
@@ -13,8 +14,9 @@ all** (§0.1's 10⁷⁴¹⁷). A VJP reads its statistics off the saved activati
 does not perturb, so §0.1's quadratic never appears. Read §3.7 for that, and read it with its
 three hypotheses (§3.7 step 4) — the wall relocates rather than vanishing.
 
-⭐ **Two whole-net BACKWARD numbers now, and the second needs no operating point** —
-MobileNetV2's, 4.750·10¹⁵³ / 1.076·10¹⁵² (§3.13, 2026-09-04). **§3.8's THREE items are ALL DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
+⭐ **FOUR whole-net BACKWARD numbers now, and TWO of them need no operating point** —
+MobileNetV2's, 4.750·10¹⁵³ / 1.076·10¹⁵² (§3.13), and EfficientNet-B0's, 7.104·10¹⁸² /
+1.578·10¹⁸² (§3.26), both 2026-09-04. **§3.8's THREE items are ALL DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
 (**§3.9**) and r34's whole-net certified tie (**§3.10**), both 2026-09-03, and the CIFAR-8
 `Env → Maps` coherence pass (**§3.11**, 2026-09-04).
 Three sentences of §3.8: a
@@ -24,7 +26,8 @@ all**, unlike ResNet-34's; and EfficientNet-B0's was a fold that could not be wr
 blocked by ONE unproved scalar lemma — a *global* bound on `|swish′|`, which §3.4 costed as
 calculus and is three elementary steps. ✅ **That lemma landed 2026-09-04**
 (`swishScalarDeriv_abs_le`, `Architectures/SwishSaturation.lean`), and B0's backward fold is now
-**7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** — statable, from 10⁴³¹. §3.12.
+**7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** — statable, from 10⁴³¹. §3.12. ⚠ That row is at the INHERITED
+`|istd| ≤ 16`; the committed theorem is stated at the ε-floor instead (§3.26).
 
 ⭐⭐ **And §3.15's probe has been RUN: a LayerNorm net's BACKWARD folds.** ConvNeXt-T's is
 5.766·10²⁴⁹ / 8.791·10²⁴⁸, ratio 0.15, no cap anywhere — **the repo's first honest whole-net fold
@@ -67,14 +70,23 @@ LayerNorm net now exists as a theorem, and it is stated **directly on the commit
 nothing in between. ⭐ §3.19's ceiling worry was unfounded: the eighteen largest goals close at
 `S = 16` AND `S = 8`, so the operating point was not overpaid.
 
-⭐⭐ **STARTING A SESSION? GO TO §3.25.** The next task is
-**`EfficientNetBackFloatBudget.lean`**, and §3.25 is a cold-start recipe: the number to state
-(⭐ **7.104·10¹⁸² / 1.578·10¹⁸² at the ε-floor and `N = 1`** — B0 needs NO operating point, which
-§3.12's inherited `|istd| ≤ 16` row obscured), the 59 stages in order, the measured profile, the
-`.comp` association to match, what already exists so you do not rebuild it, and the four generator
-faults that are already known. Everything in it was measured 2026-09-04; you should not need to
-re-derive anything. ⚠ Two things it tells you that are easy to get wrong: the number is **not**
-batch-free (§3.24), and the generator is **not** in the repo.
+⭐⭐ **AND THE FOURTH BACKWARD NUMBER LANDED — §3.26, 2026-09-04: `b0_grad_float_le`,
+7.104·10¹⁸² / 1.578·10¹⁸², ratio 0.222, no `capped` anywhere.** EfficientNet-B0's, so the fold now
+runs through **three squeeze-excite sites** — the site §0.1 lists as making a FORWARD quadratic in
+the window, and the one that was the reason to doubt that every backward folds. ⭐⭐ It needs **no
+operating point** (the second such backward, after MobileNetV2's): §3.13's rule applied rather than
+inherited, since `b0_back_chain`'s `S = 16` default is ResNet-34's and the ε-floor fold fits with 70
+orders to spare. ⛔ Quote it at **`N = 1`** — `bnBatchLA` reduces μ/var across examples, so unlike
+the forward's this number moves with the batch size (§3.24). ⛔ §3.24's *"everything the budget file
+needs exists"* was wrong in one place and the miss is reusable: the three MBConv body **`Maps`
+envelopes** did not exist, only their `floatBridgesTo_` peers, and §3.17's grep-for-`floatBridgesTo_`
+rule comes back GREEN on exactly that gap. **Grep for `Maps.` too** (§3.26).
+
+⭐⭐ **STARTING A SESSION? GO TO §4.** With B0's number in, the ranked list is: **2b** B0's
+whole-net certified tie (⛔ a bigger job than §4 costed — the apex is
+`efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched block ties at
+`bnBatchLA` are missing), then **3** §0.1's escape 2 for the FORWARDS — the only open item that
+changes what the numbers MEAN — then **4** ViT's backward, parked with its cost measured.
 
 §4 carries the rest of the order, and each item's state was measured before it was ranked.
 ✅ **(1) `resnet34Forward_full_pc_eq_chain` is DONE (2026-09-04, §3.23)** — all three whole-net
@@ -127,8 +139,9 @@ window contains an error term, ask why.**
 | **ResNet-34 BACKWARD** @224², **training BN** | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 7.8·10⁻² | ⭐ fold | `Resnet34BackFloatBudget.lean` |
 | **MobileNetV2 BACKWARD** @224², **training BN**, ⭐ no operating point | 4.750·10¹⁵³ | 1.076·10¹⁵² | 2.3·10⁻² | ⭐ fold | `MobileNetV2BackFloatBudget.lean` |
 | **ConvNeXt-T BACKWARD** @224², **channel LN**, `|istd| ≤ 16` | 1.023·10²⁵¹ | 1.563·10²⁵⁰ | 1.5·10⁻¹ | ⭐⭐ fold | `ConvNeXtBackFloatBudget.lean` |
+| **EfficientNet-B0 BACKWARD** @224², **training BN**, ⭐ no operating point, ⛔ `N = 1` | 7.104·10¹⁸² | 1.578·10¹⁸² | 2.2·10⁻¹ | ⭐⭐ fold | `EfficientNetBackFloatBudget.lean` |
 
-Six nets now carry kernel-checked numbers — ⛔ **but not all six are the same claim.** The first
+Six nets now carry kernel-checked FORWARD numbers, and four of them a BACKWARD one — ⛔ **but not all six are the same claim.** The first
 four are the interval fold and all four are vacuous as *budgets*; the point is that the kernel
 checks them. **ConvNeXt-T's and ViT-Tiny's are the triangle inequality** — ConvNeXt's 23
 LayerNorm sites and ViT's 25 LayerNorm *and* 12 attention sites all go through
@@ -394,6 +407,10 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
 | **ViT-Tiny fwd** (`vitForwardKV`) | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `vit_float_logits_le`, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸, tied to the committed spec's denotation | — |
 | **ResNet-34 BACKWARD** (`r34InputGrad`) | ⭐ **DONE (2026-09-03), the FOLD, and TIED to the certified whole-net VJP** — `r34_grad_float_le`, window 8.857·10²⁴⁵ / budget 6.894·10²⁴⁴, at TRAINING BN; ⛔ three hypotheses, §3.7; the tie is §3.10 | — |
+| **MobileNetV2 BACKWARD** (`mnv2InputGrad`) | ⭐ **DONE (2026-09-04), the FOLD, TIED, and the FIRST with NO operating point** — `mnv2_grad_float_le`, window 4.750·10¹⁵³ / budget 1.076·10¹⁵², at TRAINING BN; §3.13, the tie is §3.14 | — |
+| **ConvNeXt-T BACKWARD** (`convnextInputGrad`) | ⭐⭐ **DONE (2026-09-04), the FOLD at a LAYERNORM net** — `cnx_grad_float_le`, window 1.023·10²⁵¹ / budget 1.563·10²⁵⁰, `\|istd\| ≤ 16`; §3.22, the tie is §3.21 and is `HasVJP` everywhere | — |
+| **EfficientNet-B0 BACKWARD** (`efficientnetInputGradB`) | ⭐⭐ **DONE (2026-09-04), the SQUEEZE-EXCITE FOLD, no operating point** — `b0_grad_float_le`, window 7.104·10¹⁸² / budget 1.578·10¹⁸² at `N = 1`; §3.26 | ⛔ the whole-net certified TIE (§4 item 2b) |
+| **ViT-Tiny BACKWARD** (`vit_grad_*`) | ⭐ **PARKED with its cost measured** — 8 `floatBridgesTo_` against 46 `floatBridges_`, so the `∃`-tier migration is most of the job (§3.16 finding 7, §4 item 4) | the migration, then the assembly |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -2470,7 +2487,12 @@ not reduce (§3.5.2 item 5's trap, fourth instance), but `batchMap_eq_rowwiseFla
 `hasVJPMat_to_hasVJP (rowwise_has_vjp_mat hf hd)` typechecks directly at
 `HasVJP (StableHLO.batchMap N f)` with a `.backward` that reduces — verified, 2 s.
 
-### 3.25 ⭐⭐ NEXT SESSION: `EfficientNetBackFloatBudget.lean` — the recipe, and ⛔ state it at the ε-FLOOR
+### 3.25 ✅ DONE (2026-09-04, §3.26) — `EfficientNetBackFloatBudget.lean`: the recipe, and ⛔ state it at the ε-FLOOR
+
+⭐ **The recipe below is kept as written, because it was RIGHT and the record of that is the
+useful part**: the number, the ε-floor decision, the 59 stages, the profile, the `.comp`
+association and the four generator faults all held. §3.26 has what landed and the two things
+it did not cover.
 
 Everything below was measured 2026-09-04, after §3.24's kit landed. **Read this section and §3.24;
 you should not need to re-derive anything.**
@@ -2563,10 +2585,105 @@ remain what B0's own training-mode forward cannot discharge — but unlike ConvN
 inference mode in which its forward statement is an honest fold (`b0_float_logits_le`), so this is
 r34's and MobileNetV2's quantitative gap, not §3.16 finding 1's kind-gap. Say it that way.
 
+### 3.26 ⭐⭐ EfficientNet-B0's BACKWARD NUMBER (2026-09-04) — the SQUEEZE-EXCITE fold, and it needs no operating point
+
+`b0_grad_float_le` (`EfficientNetBackFloatBudget.lean`, 888 lines, **27 s**): the deployed
+EfficientNet-B0 input-gradient is within **1.578·10¹⁸²** of the certified one, per input pixel, on
+loss cotangents of magnitude `≤ 1`, certified window **7.104·10¹⁸²**, `budget/window = 0.222` — the
+interval FOLD, **no `capped` anywhere**, at TRAINING-mode BatchNorm and through **three
+squeeze-excite sites**. 59 stages, 138 inequalities, all from
+`b0_back_chain(ssw = 2, S = 317, N = 1)` with `verify_b0_back` run first.
+
+| net | window | budget | ratio | hypotheses |
+|---|---|---|---|---|
+| ResNet-34 back | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 0.078 | `es`, `exh`, `\|istd\| ≤ 16` |
+| MobileNetV2 back | 4.750·10¹⁵³ | 1.076·10¹⁵² | 0.023 | `es`, `exh` |
+| ConvNeXt-T back | 1.023·10²⁵¹ | 1.563·10²⁵⁰ | 0.153 | `es`, `exh`, `\|istd\| ≤ 16` |
+| **EfficientNet-B0 back**, `N = 1` | **7.104·10¹⁸²** | **1.578·10¹⁸²** | **0.222** | `es`, `exh`, `esav` |
+
+**⭐⭐ The result is §0.1's closing sentence as a theorem, at the net that was the reason to doubt
+it.** §0.1 lists squeeze-excite as the third site whose FORWARD modulus is quadratic in the window,
+and its backward genuinely fans out and rejoins — so if any backward were going to fail to fold, it
+was this one. `Maps.seBack` is the whole answer: `seInputGrad g xinp gateBack = biPathSum (diagBack
+g) (gateBack ∘ diagBack xinp)`, the gate and the SE's input are SAVED constants, both branches are
+`diagBack` scales of the cotangent, and nothing multiplies the cotangent by itself. Three sites,
+ratio 0.222, no cap.
+
+**⭐⭐ And it needs NO OPERATING POINT — §3.13's rule APPLIED rather than inherited.** §3.25's
+first instruction was to notice that `b0_back_chain`'s `S = 16` default is ResNet-34's and not a
+necessity here; `EnetBnBack.hS` derives `|istd| ≤ 317` from `ε ≥ 10⁻⁵` alone (`bnIstd_abs_le_of`,
+the `MnvBnBack.hS` shape), the fold lands 70 orders under §3.7(a)'s ceiling, and the theorem is
+strictly stronger than §3.12's `7.640·10¹⁶⁹` row would have given. **Two of the four backwards now
+pay an operating point and two do not**, and which is which is a fact about the fold's size, not
+about the architecture.
+
+⛔ **Quote it at `N = 1`** (§3.24). `b0_float_logits_le` holds at any batch size; this one does not,
+because `bnBatchLA` reduces μ/var across examples and every BatchNorm site's width is `N·h·w`. At
+`N = 1` that coincides with the per-example `h·w`, which is why the chain is `StableHLO.batchMap 1`
+of per-example maps and why `floatBridgesTo_bnPerChannelBack` is the right leaf. ⚠ A tie at general
+`N` will need a batched-BN-backward leaf — `bnBatchTensor4 = bnchwBack ∘ bnPerChannelFlat oc (N·h·w)
+… ∘ bnchwFwd`, i.e. the ConvNeXt `chanLNTensor3Back` treatment (a reduction conjugated by two exact
+gathers) — and that leaf does not exist. Cost it with B0's tie, not separately.
+
+**⛔⛔ THE ONE THING §3.24 GOT WRONG, and it is §3.17's finding with the tiers swapped.** §3.24 says
+*"the B0 backward cone is now closed at the `Maps` tier: everything `EfficientNetBackFloatBudget.lean`
+needs exists and is exercised."* It was not: **`Maps.mbNoExpBodyBack`, `Maps.mbStridedBodyBack` and
+`Maps.mbconvBodyBack` did not exist** — only their `floatBridgesTo_` peers did, so a budget file
+could name the block map but could not carry an envelope through it. §3.17 found the mirror image
+one net earlier (the *leaves* existed at the `Maps` tier and the *block bridges* were still `∃`), and
+§3.17's own rule — *when scoping a budget file, grep the cone for `floatBridgesTo_`, not for the
+defs* — is what missed this, because the `floatBridgesTo_` grep comes back GREEN. ⭐ **The rule needs
+its other half: grep for `Maps.` too.** A block needs three things at three tiers (`def`, a
+`floatBridgesTo_`, a `Maps.`) and each of the three has now been the missing one. The repair was
+~100 lines in `FloatBudgetEnvBackSE.lean`, all three compiled first try, and the shape is
+`Maps.invresBodyBackPC`'s with the squeeze-excite envelope supplied by the caller.
+
+**⭐ What §3.25 got right, which is most of it.** The number to state (`7.104·10¹⁸² / 1.578·10¹⁸²`
+at the ε-floor, `N = 1`) reproduced to the digit; the 59-stage order, the measured profile, the
+three `Sx` values and the `.comp` association were used verbatim; and of the four known generator
+faults, three did not fire because the recipe named them. ⭐ **Fault 3 fired twice** — the head
+BatchNorm was fed the GAP backward's window instead of the head swish's, and `b1`'s block input was
+fed the head conv's instead of `b2`'s — and both times §3.7(c)'s *pin all four numerals* turned it
+into a type mismatch printing both numerals side by side, which reads straight. `verify_b0_back`
+cannot catch either, because the stage numerals themselves come from the probe by tag. That is the
+third net on which pinning has converted a silent wrong-input into a compile error.
+
+**⭐ 27 s, against MobileNetV2's 40 and ConvNeXt-T's 218** — at 59 stages against 48 and 137. Two
+reasons, both structural rather than lucky: the whole-net chain is **six** `.comp` steps because
+each block is one `Maps` lemma (§2's rule), and at `N = 1` the nine BatchNorm sites have only **two**
+distinct reduction widths, so `Maps.bnPerChannelBackGain`'s factoring needs two `Kr`/`Kb` pairs where
+ResNet-34 needed five.
+
+**⚠ One small gap, priced and left: `|σ′| ≤ 1/4` is a HYPOTHESIS where `|swish′| ≤ 2` is a
+theorem.** `EnetSwBack` stores the saved pre-activation and its bridge discharges `Ssw = 2` with
+`swishScalarDeriv_abs_le`; `EnetSeBack.hssig` cannot do the same because the repo has
+`sigmoidScalar_lipschitz` (the Lipschitz *modulus* `1/4`) and no pointwise
+`|sigmoidScalarDeriv x| ≤ 1/4`. It is not load-bearing — it scales one stage of the gate path and
+never the window — and it is one `LipschitzWith`-to-`deriv` step if anyone wants it. ⚠ Recorded
+because §3.12's lesson is that an estimate written next to a bound is what stops it being re-derived,
+and this is the same shape one rung down.
+
+**⚠ The generator was session scratch again, and that is now four for four.** `Resnet34Back`'s,
+`MobileNetV2Back`'s, `ConvNeXtBack`'s and this one were all written, run once and thrown away; only
+`scripts/float_budget_envelope.py`'s probe and `verify_*` passes are in the repo. That is defensible
+per file — the numerals are checked by the kernel and the probe re-asserts them — but it means
+regenerating any of the four is a rewrite, and it is why §3.25's cold-start recipe had to exist at
+all. Committing one of them as `scripts/` would make the next three cheaper; it is a standing
+decision, not this net's.
+
+**⚠ And a check worth adding to all four backward budget files, run here in session scratch and NOT
+committed: the weights record is INHABITED.** Every field of `EnetBackWeights` is satisfiable at the
+committed profile (γ = 0, the saved activations 0, the float peers exact), so `b0_grad_float_le` is
+not vacuous. ⛔ Nothing in the repo checks this for any of the four, and a record with one
+unsatisfiable field would make its whole-net number a theorem about nothing — the `stale lean_exe
+gates` failure mode with the gate removed entirely. Ten lines per file.
+
 ## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
 
-§3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward now has a certified tie
-(§3.21) and a number (§3.22). What follows is the agreed order, and each item's state was
+§3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward has a certified tie
+(§3.21) and a number (§3.22), and ✅ **items 1 and 2 below are DONE** (§3.23, §3.26) — four of
+the six nets now carry a whole-net BACKWARD number and three of those a certified tie. What
+follows is the agreed order, and each item's state was
 **measured** before it was ranked — §3.17's rule (*when scoping, grep the cone for
 `floatBridgesTo_`, not for the defs, which exist either way*) applied to all three candidates.
 
@@ -2578,12 +2695,14 @@ MobileNetV2's; it cannot be one, because `resnet34_has_vjp_at` groups its `[3,4,
 deterministic timeout. Peel `chainComp` once between VARIABLES and `rw` — 0.1 s against a `simp
 only` route that costs five minutes and still does not close. §3.23 has the table.
 
-**2. EfficientNet-B0's BACKWARD — ⭐ THE KIT IS DONE (§3.24, 2026-09-04); the BUDGET FILE is what
-is left.** The fold is statable and its number is known: **7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** since
-§3.12's `|swish′| ≤ 2` — ⛔ **at `N = 1`, and that qualifier is new**: §3.24 found the number is
-NOT batch-free, because `bnBatchLA` is the one op in this net that is not `batchMap N` of a
-per-example op and its reduction width is `N·h·w`. The table is in §3.24; it stays a fold and stays
-statable to `N = 256`. ⚠ **The `∃`-tier migration was the bulk of the job, exactly as measured:**
+**2. ✅ EfficientNet-B0's BACKWARD — DONE 2026-09-04 (§3.26).** `b0_grad_float_le`:
+**7.104·10¹⁸² / 1.578·10¹⁸²** at the ε-floor and `N = 1`, ratio 0.222, no cap, three
+squeeze-excites — the fourth whole-net backward number and the second needing no operating point.
+⛔ Item **2b**, the tie, is what is left of it. ⛔ **The `N = 1` qualifier is not cosmetic**: §3.24
+found the number is NOT batch-free, because `bnBatchLA` is the one op in this net that is not
+`batchMap N` of a per-example op and its reduction width is `N·h·w`. The table is in §3.24; it
+stays a fold and stays statable to `N = 256`. ⚠ **The `∃`-tier migration was the bulk of the job,
+exactly as measured:**
 
 | file | `floatBridgesTo_` | `floatBridges_` (`∃`) |
 |---|---|---|
@@ -2595,15 +2714,17 @@ envelope has to name one — so this is §3.5.1's surprise for the THIRD time (�
 and it is exactly what §3.17 says to check before costing. On top of the migration: `Maps.diagBack`
 exists (`FloatBudgetEnvLN.lean`), ⛔ `Maps.broadcastBack` and the `Maps.seBack` composite do NOT
 (`biPathSum` of two `.comp` chains — no new combinator, the same point §3.7 step 3 made about the
-r34 blocks). Four supplied saved-vector accuracies where r34 has two. ⚠ `batchMap` never enters a
-numeral, so the number holds at any `N`.
+r34 blocks). Four supplied saved-vector accuracies where r34 has two. ⛔ **This item's closing
+line used to read *"`batchMap` never enters a numeral, so the number holds at any `N`"* — right
+about `batchMap` and wrong about this net; §3.24.**
 ✅ **All of that landed 2026-09-04 as `FloatBudgetEnvBackSE.lean`** (§3.24) — `Maps.broadcastBack`
 was indeed the one new leaf, `Maps.seBack` is the `biPathSum` composite, and the migration was
-nine `floatBridgesTo_` peers. **What is left is `EfficientNetBackFloatBudget.lean` itself, and
-⭐ §3.25 is its cold-start recipe** — including the correction that it should be stated at the
-ε-floor (`7.104·10¹⁸² / 1.578·10¹⁸²`, no operating point) rather than at §3.12's inherited
-`|istd| ≤ 16`. ⚠ A generator for it is part of the job: §3.13's was session scratch and is not in
-the repo.
+nine `floatBridgesTo_` peers. ✅ **And the budget file followed the same day** (§3.26), at
+§3.25's recipe and at the ε-floor rather than §3.12's inherited `|istd| ≤ 16`. ⛔ **One thing
+§3.24's *"everything the budget file needs exists"* missed: the three MBConv body `Maps`
+ENVELOPES did not exist, only their `floatBridgesTo_` peers** — §3.17's finding with the tiers
+swapped, and the rule it adds is *grep for `Maps.` as well as for `floatBridgesTo_`* (§3.26).
+⚠ The generator was session scratch again and is not in the repo.
 ⭐ **Do it in §3.22's shape**: fill the committed `efficientnetInputGradB`'s slots rather than
 defining a `*GradR` skeleton, so B0's tie (item 2b) makes the number a statement about the
 certified gradient with nothing in between.
@@ -2650,9 +2771,18 @@ out, so it is ONE leaf, and the same is true of its backward.
 
 * **`swishScalar_lipschitz` into `floatClose_swish`** — 8 orders on B0's FORWARD
   (8.408·10²¹⁰ → 3.679·10²⁰²), window unchanged. Moves a committed number; §3.12, §7's one-commit-
-  per-net rule. ⭐ Do it during item 2, when B0's files are open.
-* **`floatClose_broadcastBack`'s spurious factor of `c`** — 6 orders on B0's backward, cheap, blocks
-  nothing (§3.9 finding 7). ⭐ Also during item 2.
+  per-net rule. ⚠ This said *"do it during item 2, when B0's files are open"*; item 2 landed
+  2026-09-04 (§3.26) and it was NOT taken, because §7 is one commit per net and this one moves the
+  FORWARD's number. Take it with item 2b or on its own.
+* **`floatClose_broadcastBack`'s spurious factor of `c`** — 6 orders on B0's backward, blocks
+  nothing (§3.9 finding 7). ⛔ **Not cheap** — the honest `h·w` count needs the cardinality of
+  `flatChannel`'s fibre and that lemma does not exist (§3.24 correction 3). Also not taken during
+  item 2.
+* ⚠ **`|sigmoidScalarDeriv x| ≤ 1/4`** — new 2026-09-04 (§3.26). `EnetSeBack.hssig` is a
+  HYPOTHESIS where `EnetSwBack`'s `Ssw = 2` is a theorem, because the repo has
+  `sigmoidScalar_lipschitz` (the Lipschitz modulus) and no pointwise derivative bound. Not
+  load-bearing — it scales one gate stage and never the window — and it is one
+  `LipschitzWith`-to-`deriv` step.
 * **The `FloatBudgetEnvCore` split** — cone hygiene, zero mathematical gain (§3.11).
 * ⛔ **The sharp `|swish′| ≈ 1.1`** — 2.6 orders against the proved `2`, and §3.12 says explicitly
   not to prove it.
@@ -2669,7 +2799,7 @@ forward)` — the whole-net form of "at inference the batch decouples". Only the
 proved (`den_batchOp_bnEval`); it needs a `batchMap` composition lemma plus a per-example B0 def as
 the witness (§3.4).
 
-## 5. The `Maps` kit — ✅ complete for all six forwards, and for THREE backwards
+## 5. The `Maps` kit — ✅ complete for all six forwards, and for FOUR backwards
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
 (window `min Ā 6`, NOT a copy of `Maps.relu` — §3.2), `depthwise`, `depthwiseStride2Flat`,
@@ -2720,11 +2850,15 @@ records; the two have the same shape and are different functions. ✅ **And `Flo
 body envelopes. §3.9's costing was exact — nothing else was needed, and `Maps.reluMaskBack`
 already covered the relu6 kink. ⭐ `bnIstd_abs_le_of` joined `FloatBudgetEnvBack.lean` with them:
 the rational `|istd| ≤ S` from the ε-floor, which is what lets a backward be stated without an
-operating point. EfficientNet-B0 needs `Maps.diagBack`, `Maps.broadcastBack` and the
-`Maps.seBack` composite, and ⛔ **a `Maps` leaf was never what blocked it** — a global `|swish′|`
-bound was, and ✅ that landed 2026-09-04 (§3.12), so B0's backward budget file is now only
-`Maps` leaves away. All the `∃`-tier bridges exist (`DepthwiseBackFloatBridge.lean`,
-`SEBackFloatBridge.lean`, `LinBackFloatBridge.lean`).
+operating point.
+✅ **And `FloatBudgetEnvBackSE.lean` is the FOURTH backward net's** (2026-09-04, §3.24 and §3.26):
+`Maps.broadcastBack` — ⭐ the one leaf new in kind, the squeeze-excite gate's spatial reduce —
+`Maps.seGateBack` (six stages), ⭐⭐ `Maps.seBack` (the product rule, and the theorem behind
+§0.1's closing sentence), and the three MBConv body envelopes `Maps.mbNoExpBodyBack` /
+`.mbStridedBodyBack` / `.mbconvBodyBack`. ⛔ **The last three landed a commit LATER than the rest of
+the kit**, because §3.24 measured the cone with §3.17's `floatBridgesTo_` grep and that grep comes
+back green when the *envelope* is what is missing (§3.26). ⛔ **And a `Maps` leaf was never what
+blocked B0** — a global `|swish′|` bound was, and it landed 2026-09-04 (§3.12).
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
 
@@ -2836,6 +2970,17 @@ is no eval-mode LayerNorm to switch to. So the number is *an honest fold of the 
 rounding, at a hypothesised operating point, given saved-activation accuracies this net's forward
 cannot supply in any mode* — never "the deployed ConvNeXt gradient is within this of the certified
 one end to end". The fold is real and the composition does not exist; say both halves.
+
+⭐⭐ **AND SAY THE BATCH SIZE ON A BACKWARD — new 2026-09-04 (§3.24, §3.26), and it is the first
+place in this file where a FORWARD number and its BACKWARD differ in what they quantify over.**
+`b0_float_logits_le` holds at **any** `N`, because at inference every stage of B0 is `batchMap N`
+of a per-example op and `Maps.batchMap` carries an envelope through the lift unchanged. Its
+backward's does not: the fold is at TRAINING-mode BatchNorm, `bnBatchLA` reduces μ/var **across**
+examples, and every BatchNorm site's per-channel width is `N·h·w`. So `b0_grad_float_le` is stated
+at `N = 1` — 7.104·10¹⁸², where `N = 256` is 2.880·10¹⁹⁴ — and it stays a fold and stays statable
+throughout, with the RATIO climbing 0.222 → 0.761 as the batch grows. ⚠ Never quote a backward
+number as "for any batch size" by analogy with its forward; ask which of the net's ops reduces
+across the batch. The other three backwards are per-example nets and the question does not arise.
 
 ⭐ Say the WINDOW and the BUDGET separately — after MobileNetV2 they are not the same story.
 A clamped-activation net can have a tight window and a vacuous budget at the same time, and
