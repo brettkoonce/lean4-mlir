@@ -413,6 +413,18 @@ lean_lib «Certs» where
              -- conjugation, the 4x4/s4 patchify backward, and the block-body / downsample
              -- envelopes. Exercised on ConvNeXt-T's block s4b2 at the probe's numerals.
              `LeanMlir.Proofs.Float.FloatBudgetEnvBackLN,
+             -- ⭐ The `Maps` kit a SQUEEZE-EXCITE backward needs (EfficientNet-B0, the fourth
+             -- backward net). Maps.broadcastBack is the ONE leaf new in kind — the SE gate's
+             -- spatial reduce, Vec (c*h*w) -> Vec c — and everything else the SE backward wants
+             -- (diagBack / linBack / gapBack / biPathSum / convBack / depthwiseBack) already
+             -- existed at both tiers. ⛔ What did NOT exist is the TIER: SEBackFloatBridge.lean
+             -- carried three `floatBridges_` and ZERO `floatBridgesTo_`, and a budget file cannot
+             -- use an existential bridge because it discards the float map a Maps envelope must
+             -- name. ⭐⭐ seInputGrad = biPathSum (diagBack g) (gateBack . diagBack x) is why a
+             -- squeeze-excite BACKWARD folds where its forward is quadratic: g and x are SAVED
+             -- constants, so both branches are linear in the cotangent. Exercised on B0's b1 SE
+             -- site at the probe's numerals, with the REAL saved swish derivative at Ssw = 2.
+             `LeanMlir.Proofs.Float.FloatBudgetEnvBackSE,
              -- ⭐⭐ The r34 BACKWARD's NUMBER: the whole-net input-gradient VJP at 224²,
              -- window 2.188e245 / budget 1.458e244, ratio 0.067 — the interval FOLD, not a cap,
              -- and at TRAINING-mode BatchNorm, the mode the forward has no number for at all

@@ -1678,7 +1678,7 @@ def se_back(st, out, tag, se_c, hw, se_r, Sx, Sg, Ssw, w=B0_WK, esav=B0_ESAV,
 
 
 def b0_back_chain(wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ESAV,
-                  q=U32, xhat='sqrt', ssw='window', sx='window', se_nnz=False):
+                  q=U32, xhat='sqrt', ssw='window', sx='window', se_nnz=False, N=1):
     """Every stage of `efficientnetInputGradB` at B0's shapes, folded over the LOSS COTANGENT.
 
     `ssw` / `sx` are the two forward-window imports this probe exists to measure:
@@ -1687,11 +1687,30 @@ def b0_back_chain(wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ES
       `ssw=<rat>`    : a global constant (11/10 is the true one; ⛔ NOT proved).
       `sx='window'`  : the SE's saved input bounded by the forward's certified window.
       `sx=<rat>`     : an operating-point bound, §3.7's `|istd| ≤ 16` one op over.
-    `se_nnz=True` tightens `broadcastBack` to its `h·w` nonzero terms."""
+    `se_nnz=True` tightens `broadcastBack` to its `h·w` nonzero terms.
+
+    ⛔⛔ `N` IS THE BATCH SIZE AND IT ENTERS THE NUMERALS — unlike the FORWARD's, this fold is
+    NOT batch-free, and the reason is one op. `efficientnetForwardB` is `batchMap N` of a
+    per-example net at every stage but `bnBatchLA`, true batch-norm, which reduces mu/var ACROSS
+    examples (`EfficientNetClose.lean`: `bnBatchTensor4 = bnchwBack . bnPerChannelFlat oc
+    (N*h*w) eps gamma beta . bnchwFwd`). At INFERENCE those statistics are frozen, there is no
+    reduction, and `b0_float_logits_le` holds at any `N`; this fold is at TRAINING-mode BN, where
+    the reduction is live and each BatchNorm site's per-channel width is `N*h*w`, not `h*w`.
+    `bnGradInputReMag`'s gain is `S*G*(2 + Xh^2)` with `Xh^2 = n`, so all nine BN sites scale with
+    `N` — about 3 orders per doubling: 7.640e169 at N=1, 2.880e194 at N=256, statable throughout.
+    ⚠ `planning/float_budget_numbers.md` §3.9's "`batchMap` never enters a numeral, so the number
+    holds at any `N`, like the forward's" is right about `batchMap` and wrong about this net: §3.4
+    records the one batch-coupled op two sections earlier, and the two were never read together."""
     fwd = dict(b0_eval_chain())
 
+    def bnw(hw):
+        """The batched BatchNorm's per-channel reduction width — `N*h*w`, not `h*w`."""
+        return N * hw
+
     def Xh(hw, fwd_tag):
-        return F(isqrt_exact(hw)) if xhat == 'sqrt' else 2 * fwd[fwd_tag][0] * S
+        # ⚠ the CEILING root (`isqrt_ceil`, what `bnXhat_abs_le_num` needs): `N*h*w` is a perfect
+        # square only when `N` is, where `isqrt_exact` would have sufficed.
+        return F(isqrt_ceil(N * hw)) if xhat == 'sqrt' else 2 * fwd[fwd_tag][0] * S
 
     def Ssw(fwd_tag):
         return (1 + fwd[fwd_tag][0] / 4) if ssw == 'window' else ssw
@@ -1708,7 +1727,7 @@ def b0_back_chain(wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ES
     st = R(gap_back(st, 56 * 56, q));            out.append(("gapBack", st))
     # head: swBh -> bnBh (1280ch @ 56×56) -> convFlatBack Wh (1×1, fan-in 1280)
     st = R(diag_back(st, Ssw("head.bn"), esav, q));  out.append(("head.swB", st))
-    st = R(bn_back(st, 3136, Xh(3136, "head.bn"), G, S, es, exh, q))
+    st = R(bn_back(st, bnw(3136), Xh(3136, "head.bn"), G, S, es, exh, q))
     out.append(("head.bnB", st))
     st = R(conv_back(st, 1280, wk, q));          out.append(("head.cB", st))
     for tag, kind, cin, cmid, cout, h, w, kd, se_c, se_r in B0_BACK_PLAN:
@@ -1716,7 +1735,7 @@ def b0_back_chain(wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ES
         hw = h * w
         he = (2 * h) * (2 * w) if kind == "strided" else hw
         # project back: bnBp (cout @ h×w) then convFlatBack Wp (1×1, fan-in cout)
-        s = R(bn_back(blkin, hw, Xh(hw, tag + ".pbn"), G, S, es, exh, q))
+        s = R(bn_back(blkin, bnw(hw), Xh(hw, tag + ".pbn"), G, S, es, exh, q))
         out.append((tag + ".bnBp", s))
         s = R(conv_back(s, cout, wk, q));        out.append((tag + ".cBp", s))
         # the squeeze-excite product-rule backward
@@ -1725,27 +1744,27 @@ def b0_back_chain(wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ES
                     nnz=(hw if se_nnz else None))
         # depthwise back: swBd -> bnBd (cmid @ h×w) -> depthwiseFlatBack (fan-in kd)
         s = R(diag_back(s, Ssw(tag + ".dbn"), esav, q));  out.append((tag + ".swBd", s))
-        s = R(bn_back(s, hw, Xh(hw, tag + ".dbn"), G, S, es, exh, q))
+        s = R(bn_back(s, bnw(hw), Xh(hw, tag + ".dbn"), G, S, es, exh, q))
         out.append((tag + ".bnBd", s))
         s = R(conv_back(s, kd, wk, q));          out.append((tag + ".dwB", s))
         if kind != "noexp":
             # expand back: swBe -> bnBe (cmid @ he) -> convFlatBack We (fan-in cmid)
             s = R(diag_back(s, Ssw(tag + ".ebn"), esav, q));  out.append((tag + ".swBe", s))
-            s = R(bn_back(s, he, Xh(he, tag + ".ebn"), G, S, es, exh, q))
+            s = R(bn_back(s, bnw(he), Xh(he, tag + ".ebn"), G, S, es, exh, q))
             out.append((tag + ".bnBe", s))
             s = R(conv_back(s, cmid, wk, q));    out.append((tag + ".cBe", s))
         st = R(residual(blkin, s, q)) if kind == "resid" else s
         out.append((tag + ".out", st))
     # stem: swBs -> bnBs (32ch @ 112×112) -> flatConvStride2Back Ws (fan-in 32·9)
     st = R(diag_back(st, Ssw("stem.bn"), esav, q));  out.append(("stem.swB", st))
-    st = R(bn_back(st, 12544, Xh(12544, "stem.bn"), G, S, es, exh, q))
+    st = R(bn_back(st, bnw(12544), Xh(12544, "stem.bn"), G, S, es, exh, q))
     out.append(("stem.bnB", st))
     st = R(conv_back(st, 32 * 9, wk, q));        out.append(("stem.cB", st))
     return out
 
 
 def verify_b0_back(rows, wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ESAV,
-                   q=U32, ssw='window', sx='window', se_nnz=False) -> int:
+                   q=U32, ssw='window', sx='window', se_nnz=False, N=1) -> int:
     """Re-assert EVERY rounded inequality an `EfficientNetBackFloatBudget.lean` would close,
     exactly — the peer of `verify_r34_back`. Returns the count checked; raises on the first
     failure."""
@@ -1772,10 +1791,11 @@ def verify_b0_back(rows, wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esa
 
     def bn_ck(tag, hw, src, dst):
         A, E = src
-        Xh = F(isqrt_exact(hw))
-        Kr, Kb = bn_back_gain(hw, Xh, G, S, es, exh, q)
-        ck(tag + '.Kr', bnGradInputReMag(hw, G, F(1), S, Xh), Kr)
-        ck(tag + '.Kb', bnGradInputBudgetQ(hw, G, F(1), S, Xh, es, exh, q), Kb)
+        nn = N * hw                  # ⛔ the batched BN reduces over N*h*w — see b0_back_chain
+        Xh = F(isqrt_ceil(nn))
+        Kr, Kb = bn_back_gain(nn, Xh, G, S, es, exh, q)
+        ck(tag + '.Kr', bnGradInputReMag(nn, G, F(1), S, Xh), Kr)
+        ck(tag + '.Kb', bnGradInputBudgetQ(nn, G, F(1), S, Xh, es, exh, q), Kb)
         ck(tag + '.A', A * (Kr + Kb), dst[0])
         ck(tag + '.E', A * Kb + E * Kr, dst[1])
 
@@ -1814,9 +1834,12 @@ def verify_b0_back(rows, wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esa
         diag_ck(tag + '.se.main', 1 + B0_ESIG, sein, r[tag + '.se.main'])
         diag_ck(tag + '.se.pre', Sx(tag + ".dswish"), sein, r[tag + '.se.pre'])
         A, E = r[tag + '.se.pre']
-        N = se_c * hw
-        g = r4(gamma_q(N + 1, q))
-        NN = F(hw if se_nnz else N)
+        # ⚠ NOT `N` — that is the BATCH SIZE in this function's signature, and binding it here
+        # silently rescaled every later BatchNorm site's reduction width (`bn_ck`'s `N * hw`)
+        # to `se_c*h*w * h*w`, which presents as `gamma_q` hanging on a 10⁸-power rational.
+        Nbc = se_c * hw
+        g = r4(gamma_q(Nbc + 1, q))
+        NN = F(hw if se_nnz else Nbc)
         ck(tag + '.se.bc.A', NN * A + g * (NN * A), r[tag + '.se.bc'][0])
         ck(tag + '.se.bc.E', g * (NN * (A + E)) + NN * E, r[tag + '.se.bc'][1])
         diag_ck(tag + '.se.sig', B0_SSIG, r[tag + '.se.bc'], r[tag + '.se.sig'])

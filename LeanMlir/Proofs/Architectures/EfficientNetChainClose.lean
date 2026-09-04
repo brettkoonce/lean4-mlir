@@ -397,4 +397,56 @@ noncomputable def efficientnetForwardB_has_vjp
   have d3 := dB3.comp d2
   exact vjp_comp _ _ d3 dH v3 vH
 
+/-- ⭐⭐ **THE SHAPE CHECK — `efficientnetForwardB` IS the `∘`-chain `efficientnetForwardB_has_vjp`
+    is stated on.** The committed forward is written in nested-application form so its faithfulness
+    proof closes by pure delta; the apex above is stated on the composition `vjp_comp` builds. Until
+    now the bridge between the two lived in that apex's docstring — *"its nested-application
+    spelling … is definitionally this composition"*.
+
+    ⛔ **A justification in a docstring is what stops anyone re-checking it.** Every whole-net tie
+    takes its blocks OPAQUE so the `isDefEq` compares variables, which means the tie's subject is a
+    chain of *variables* and nothing in it says which net they are — that is how ResNet-34's tie
+    reversed the 2×2 pool for a month while the committed forward pooled 3×3/s2, and it moved a
+    committed number 4×. The peers are `mobilenetv2Forward_full_pc_eq_chain`,
+    `convNextForwardTCh_eq_chain`, `resnet34Forward_full_pc_eq_chain` and, for the 16-block net,
+    `efficientnetForwardB_full_eq_chain` — this is the same theorem for the 3-block batched
+    representative, which is the net `efficientnetInputGradB` reverses and `b0_float_logits_le` is
+    about.
+
+    ⚠ PROOF SHAPE MATTERS, and `efficientnetForwardB_full_eq_chain` records why: the equation-lemma
+    `rw` plus one `Function.comp_apply` per stage closes syntactically, where a `simp`/`rfl` of the
+    same statement makes the kernel reduce the block bodies and time out. -/
+theorem efficientnetForwardB_eq_chain
+    (N : Nat)
+    (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (γs βs : Vec 32)
+    (Wd1 : DepthwiseKernel 32 3 3) (bd1 : Vec 32) (εd1 : ℝ) (γd1 βd1 : Vec 32)
+    (Wz1a : Mat 32 8) (bz1a : Vec 8) (Wz1b : Mat 8 32) (bz1b : Vec 32)
+    (Wp1 : Kernel4 16 32 1 1) (bp1 : Vec 16) (εp1 : ℝ) (γp1 βp1 : Vec 16)
+    (We2 : Kernel4 96 16 1 1) (be2 : Vec 96) (εe2 : ℝ) (γe2 βe2 : Vec 96)
+    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 : ℝ) (γd2 βd2 : Vec 96)
+    (Wz2a : Mat 96 4) (bz2a : Vec 4) (Wz2b : Mat 4 96) (bz2b : Vec 96)
+    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 : ℝ) (γp2 βp2 : Vec 24)
+    (We3 : Kernel4 144 24 1 1) (be3 : Vec 144) (εe3 : ℝ) (γe3 βe3 : Vec 144)
+    (Wd3 : DepthwiseKernel 144 5 5) (bd3 : Vec 144) (εd3 : ℝ) (γd3 βd3 : Vec 144)
+    (Wz3a : Mat 144 6) (bz3a : Vec 6) (Wz3b : Mat 6 144) (bz3b : Vec 144)
+    (Wp3 : Kernel4 24 144 1 1) (bp3 : Vec 24) (εp3 : ℝ) (γp3 βp3 : Vec 24)
+    (Wh : Kernel4 1280 24 1 1) (bh : Vec 1280) (εh : ℝ) (γh βh : Vec 1280)
+    (Wfc : Mat 1280 10) (bfc : Vec 10)
+    (x : Vec (N * (3 * 224 * 224))) :
+    efficientnetForwardB
+      N Ws bs εs γs βs Wd1 bd1 εd1 γd1 βd1 Wz1a bz1a Wz1b bz1b Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2
+      γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wz2a bz2a Wz2b bz2b Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3
+      bd3 εd3 γd3 βd3 Wz3a bz3a Wz3b bz3b Wp3 bp3 εp3 γp3 βp3 Wh bh εh γh βh Wfc bfc
+      x =
+      (headFwdB N (h := 56) (w := 56) Wh bh εh γh βh Wfc bfc ∘
+        mbResidFwdB N (h := 56) (w := 56) We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3
+          Wz3a bz3a Wz3b bz3b Wp3 bp3 εp3 γp3 βp3 ∘
+        mbStridedFwdB N (h := 56) (w := 56) We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2
+          Wz2a bz2a Wz2b bz2b Wp2 bp2 εp2 γp2 βp2 ∘
+        mbNoExpFwdB N (h := 112) (w := 112) Wd1 bd1 εd1 γd1 βd1 Wz1a bz1a Wz1b bz1b
+          Wp1 bp1 εp1 γp1 βp1 ∘
+        stemB N (h := 112) (w := 112) Ws bs εs γs βs) x := by
+  rw [efficientnetForwardB]
+  rw [Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply]
+
 end Proofs

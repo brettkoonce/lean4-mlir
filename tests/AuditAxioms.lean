@@ -107,6 +107,7 @@ import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.ViTFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvBack
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackLN
+import LeanMlir.Proofs.Float.FloatBudgetEnvBackSE
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
@@ -2570,6 +2571,37 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.invresBodyBackPC
 #print axioms Proofs.FloatBridgesTo.Maps.invresBodyStridedBackPC
 #print axioms Proofs.bnIstd_abs_le_of
+-- ⭐ THE SQUEEZE-EXCITE BACKWARD KIT (FloatBudgetEnvBackSE.lean), EfficientNet-B0's.
+-- Maps.broadcastBack is the one leaf new in kind: the SE gate's spatial reduce, Vec (c*h*w) -> Vec c,
+-- one rounded reduction of fan-in c*h*w. ⚠ Its window charges all c*h*w terms because that is what
+-- floatClose_broadcastBack proves — the (c-1)*h*w masked entries are identically ZERO and the honest
+-- count is h*w, worth 6 orders on B0's fold (1e169 -> 1e164) at no new hypothesis. ⛔ Priced and NOT
+-- taken, and planning §3.9's "cheap to fix" is wrong: the honest count needs the cardinality of
+-- flatChannel's fibre, a Finset.card argument through two finProdFinEquiv's, which does not exist.
+-- ⭐⭐ Maps.seBack is the product rule, and it is the theorem behind §0.1's closing sentence: the SE
+-- forward is quadratic in the window because the gate is grown out of the same input the rescale
+-- multiplies, but on the BACKWARD the saved gate g and saved input x are CONSTANTS, both branches are
+-- diagBack scales of the cotangent, and nothing multiplies the cotangent by itself. So it folds.
+-- ⛔ The migration was the bulk, not the leaves: SEBackFloatBridge.lean was 0 floatBridgesTo_ against
+-- 3, EfficientNetWholeBackFloatBridge.lean 0 against 2 — §3.5.1's surprise for the fourth time.
+#print axioms Proofs.floatBridgesTo_broadcastBack
+#print axioms Proofs.FloatBridgesTo.Maps.broadcastBack
+#print axioms Proofs.floatBridgesTo_seGateBack
+#print axioms Proofs.FloatBridgesTo.Maps.seGateBack
+#print axioms Proofs.floatBridgesTo_seBack
+#print axioms Proofs.FloatBridgesTo.Maps.seBack
+#print axioms Proofs.floatBridgesTo_mbNoExpBodyBack
+#print axioms Proofs.floatBridgesTo_mbStridedBodyBack
+#print axioms Proofs.floatBridgesTo_mbconvBodyBack
+-- ⭐⭐ AND B0'S SHAPE CHECK (EfficientNetChainClose.lean): efficientnetForwardB IS the ∘-chain
+-- efficientnetForwardB_has_vjp is stated on. Until now that bridge lived in the apex's docstring
+-- ("its nested-application spelling ... is definitionally this composition"), which is the same
+-- failure mode as ResNet-34's wrong stem pool: a justification in a docstring is what stops anyone
+-- re-checking it. ⚠ The apex to aim B0's whole-net backward tie at is THIS one, not
+-- efficientnetForwardB_full_has_vjp — that one is the 16-block B0Weights net, where
+-- efficientnetInputGradB reverses the 3-block batched representative. Same trap as
+-- mobilenetv2_full_has_vjp_at, one net over.
+#print axioms Proofs.efficientnetForwardB_eq_chain
 -- ⭐ GELU is globally 3/2-Lipschitz (Architectures/GeluSaturation.lean), and floatClose_gelu now
 -- states the min of that and its magnitude polynomial. The polynomial is CUBIC in the window and
 -- reaches ~400 at ConvNeXt's magnitudes against a true constant of ≈1.13; the saturation bound was
