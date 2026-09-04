@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.Cifar8FloatBridge
+import LeanMlir.Proofs.Float.FloatBudgetEnv
 import LeanMlir.Proofs.Architectures.Cifar8ChainCert
 
 /-! # A NUMBER for a whole-net float budget: CIFAR-8 at the committed shape, He profile
@@ -17,12 +18,22 @@ unit input window, for any rounding model at binary32 accuracy (`u ≤ 2⁻²⁴
 
 and hence, per logit, `|float − real| ≤ 6.37·10¹⁴` on `|x| ≤ 1` (`cifar8_float_logits_le`).
 
-The method is a numeric ENVELOPE (`FloatBridgesTo.Env`): an upper bound on the output
-window and on the fresh budget, pushed through each layer by two rational inequalities.
-Each conv/dense step uses `layerBudget_le_num` (the monotone form of the per-op Higham
-budget) with the γ-term bounded through `FloatModel.gamma_num`, so `norm_num` discharges
-every step with no big-power evaluation; `relu` and the pools pass the envelope through
-unchanged. Eleven steps, twenty-two numerals, one `exact`.
+The method is the numeric ENVELOPE `FloatBridgesTo.Maps` (`FloatBudgetEnv.lean`): an upper
+bound on the output window and on the output error, pushed through each layer by two
+rational inequalities. Each conv/dense step uses `Maps.flatConv` / `Maps.dense`, whose
+`layerBudget_le_num'` (the monotone form of the per-op Higham budget) takes the γ-term
+through `FloatModel.gamma_num`, so `norm_num` discharges every step with no big-power
+evaluation; `relu` and the pools pass the envelope through unchanged. Eleven rounding
+stages, twenty-two numerals, twenty-four generic `Maps.comp`s and one `exact`.
+
+⚠ **This file used to carry its own kit.** `FloatBridgesTo.Env` — the same pair of numbers,
+but with the input error FIXED at `0` — lived here with one `Env.comp_*` lemma per
+operation, because it was the first whole-net budget in the repo and nothing else needed a
+kit. `Maps` quantifies over the input window and the inherited error instead, which is what
+makes `Maps.comp` generic and what lets a skip be expressed at all (`FloatBudgetEnv.lean`
+header). The per-stage inequalities are identical — the numerals below are the ones `Env`
+carried, unchanged — and the statement is strictly stronger: `Maps 1 0 …` holds at every
+input window `A ≤ 1`, where `Env 1 …` held only at `A = 1`.
 
 ⚠ **What the number means.** 6.37·10¹⁴ against logits of ≈ 10 is vacuous as a
 certificate, and that is the honest content: this is the interval fold — `FloatClose.comp`
@@ -38,149 +49,6 @@ The relative scale, 6.4·10¹⁴ / 6.1·10¹⁸ ≈ 10⁻⁴, is the same as the
 namespace Proofs
 
 open FloatModel
-
--- ════════════════════════════════════════════════════════════════
--- § Numeric envelopes for bridges
--- ════════════════════════════════════════════════════════════════
-
-/-- A numeric envelope for a bridge at input window `A`: its output window is at most `Ā`
-    and its fresh budget at most `Ē`. The `Env.comp_*` lemmas below push an envelope through
-    one layer with two rational inequalities, so a whole-net `.fresh` is bounded by
-    `norm_num` a stage at a time. -/
-structure FloatBridgesTo.Env {m n : Nat} {f fF : Vec m → Vec n} (b : FloatBridgesTo f fF)
-    (A Ā Ē : ℝ) : Prop where
-  /-- The output window at input window `A` is at most `Ā`. -/
-  mag_le : b.mag A ≤ Ā
-  /-- The fresh budget at input window `A` is at most `Ē`. -/
-  fresh_le : b.fresh A ≤ Ē
-
-/-- The fresh budget is nonnegative (it bounds an absolute value at the zero input). -/
-theorem FloatBridgesTo.fresh_nonneg {m n : Nat} {f fF : Vec m → Vec n} (b : FloatBridgesTo f fF)
-    {A : ℝ} (hA : 0 ≤ A) (hn : 0 < n) : 0 ≤ b.fresh A :=
-  (b.floatClose hA).modulus_zero_nonneg hA hn
-
-/-- `layerAct` under an upper bound on the activation magnitude. -/
-theorem layerAct_le_num {m : ℕ} {w β A Ā : ℝ} (hw : 0 ≤ w) (hAĀ : A ≤ Ā) :
-    layerAct m w β A ≤ (m : ℝ) * w * Ā + β := by
-  unfold layerAct
-  have hmw : (0:ℝ) ≤ (m : ℝ) * w := mul_nonneg (Nat.cast_nonneg m) hw
-  have := mul_le_mul_of_nonneg_left hAĀ hmw
-  linarith
-
-/-- `layerBudget` under upper bounds on the magnitude, the inherited error and the γ-term —
-    the public monotone form the numeric envelopes chain through (the per-net private
-    `layerBudget_le_of` in `FloatBridge.lean`, plus monotonicity in the magnitude). -/
-theorem layerBudget_le_num {u : ℝ} {m : ℕ} {w β A Ā E Ē g : ℝ}
-    (hu : 0 ≤ u) (hw : 0 ≤ w) (hβ : 0 ≤ β) (hA : 0 ≤ A) (hAĀ : A ≤ Ā)
-    (hE : 0 ≤ E) (hEĒ : E ≤ Ē) (hg : (1 + u) ^ (m + 2) - 1 ≤ g) :
-    layerBudget u m w β A E ≤ g * ((m : ℝ) * w * (Ā + Ē) + β) + (m : ℝ) * w * Ē := by
-  unfold layerBudget
-  have hG0 : (0 : ℝ) ≤ (1 + u) ^ (m + 2) - 1 := sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hmw : (0 : ℝ) ≤ (m : ℝ) * w := mul_nonneg (Nat.cast_nonneg m) hw
-  have hX0 : (0 : ℝ) ≤ (m : ℝ) * w * (A + E) + β :=
-    add_nonneg (mul_nonneg hmw (add_nonneg hA hE)) hβ
-  have hX : (m : ℝ) * w * (A + E) + β ≤ (m : ℝ) * w * (Ā + Ē) + β := by
-    have := mul_le_mul_of_nonneg_left (add_le_add hAĀ hEĒ) hmw
-    linarith
-  have h1 : ((1 + u) ^ (m + 2) - 1) * ((m : ℝ) * w * (A + E) + β)
-      ≤ g * ((m : ℝ) * w * (Ā + Ē) + β) := mul_le_mul hg hX hX0 (hG0.trans hg)
-  have h2 : (m : ℝ) * w * E ≤ (m : ℝ) * w * Ē := mul_le_mul_of_nonneg_left hEĒ hmw
-  linarith
-
-namespace FloatBridgesTo
-
-/-- The γ-term is nonnegative, so any upper bound on it is. -/
-private theorem gamma_ub_nonneg (M : FloatModel) {k : ℕ} {g : ℝ}
-    (hg : (1 + M.u) ^ k - 1 ≤ g) : 0 ≤ g :=
-  (sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))).trans hg
-
-/-- Envelope of a conv leaf at input window `A` (the first layer of a chain). -/
-theorem Env.flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * h * w)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β)
-    {A : ℝ} (hA : 0 ≤ A) {g : ℝ} (hg : (1 + M.u) ^ (ic * kH * kW + 2) - 1 ≤ g)
-    {Ā' Ē' : ℝ}
-    (hĀ' : (1 + g) * (((ic * kH * kW : ℕ) : ℝ) * w' * A + β) ≤ Ā')
-    (hĒ' : g * (((ic * kH * kW : ℕ) : ℝ) * w' * A + β) ≤ Ē') :
-    (floatBridgesTo_flatConv (h := h) (w := w) M W b hw' hβ hn hW hb).Env A Ā' Ē' := by
-  have h1 := layerAct_le_num (m := ic * kH * kW) (β := β) hw' (le_refl A)
-  have h2 := layerBudget_le_num (m := ic * kH * kW) M.u_nonneg hw' hβ hA (le_refl A)
-    (le_refl 0) (le_refl 0) hg
-  simp only [add_zero, mul_zero] at h2
-  have hX : (1 + g) * (((ic * kH * kW : ℕ) : ℝ) * w' * A + β)
-      = (((ic * kH * kW : ℕ) : ℝ) * w' * A + β) + g * (((ic * kH * kW : ℕ) : ℝ) * w' * A + β) := by
-    ring
-  rw [hX] at hĀ'
-  exact ⟨by show layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0 ≤ Ā'
-            linarith,
-         by show layerBudget M.u (ic * kH * kW) w' β A 0 ≤ Ē'
-            linarith⟩
-
-/-- Push an envelope through a conv layer. -/
-theorem Env.comp_flatConv {p ic oc h w kH kW : Nat} {f fF : Vec p → Vec (ic * h * w)}
-    {b : FloatBridgesTo f fF} {A Ā Ē : ℝ} (e : b.Env A Ā Ē) (hA : 0 ≤ A)
-    (M : FloatModel) (W : Kernel4 oc ic kH kW) (b' : Vec oc) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * h * w)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b' o| ≤ β)
-    {g : ℝ} (hg : (1 + M.u) ^ (ic * kH * kW + 2) - 1 ≤ g)
-    {Ā' Ē' : ℝ}
-    (hĀ' : (1 + g) * (((ic * kH * kW : ℕ) : ℝ) * w' * Ā + β) ≤ Ā')
-    (hĒ' : g * (((ic * kH * kW : ℕ) : ℝ) * w' * (Ā + Ē) + β)
-            + ((ic * kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
-    (b.comp (floatBridgesTo_flatConv (h := h) (w := w) M W b' hw' hβ hn hW hb)).Env A Ā' Ē' := by
-  have hmag0 : 0 ≤ b.mag A := b.mag_nonneg hA
-  have hfr0 : 0 ≤ b.fresh A := b.fresh_nonneg hA hn
-  have h1 := layerAct_le_num (m := ic * kH * kW) (β := β) hw' e.mag_le
-  have h2 := layerBudget_le_num (m := ic * kH * kW) M.u_nonneg hw' hβ hmag0 e.mag_le
-    (le_refl 0) (le_refl 0) hg
-  simp only [add_zero, mul_zero] at h2
-  have hX : (1 + g) * (((ic * kH * kW : ℕ) : ℝ) * w' * Ā + β)
-      = (((ic * kH * kW : ℕ) : ℝ) * w' * Ā + β) + g * (((ic * kH * kW : ℕ) : ℝ) * w' * Ā + β) := by
-    ring
-  rw [hX] at hĀ'
-  exact ⟨by show layerAct (ic * kH * kW) w' β (b.mag A)
-              + layerBudget M.u (ic * kH * kW) w' β (b.mag A) 0 ≤ Ā'
-            linarith,
-         by show layerBudget M.u (ic * kH * kW) w' β (b.mag A) (b.fresh A) ≤ Ē'
-            exact (layerBudget_le_num M.u_nonneg hw' hβ hmag0 e.mag_le hfr0 e.fresh_le hg).trans hĒ'⟩
-
-/-- Push an envelope through a dense layer. -/
-theorem Env.comp_dense {p m n : Nat} {f fF : Vec p → Vec m}
-    {b : FloatBridgesTo f fF} {A Ā Ē : ℝ} (e : b.Env A Ā Ē) (hA : 0 ≤ A)
-    (M : FloatModel) (W : Mat m n) (b' : Vec n) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hm : 0 < m)
-    (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b' j| ≤ β)
-    {g : ℝ} (hg : (1 + M.u) ^ (m + 2) - 1 ≤ g)
-    {Ā' Ē' : ℝ}
-    (hĀ' : (1 + g) * ((m : ℝ) * w' * Ā + β) ≤ Ā')
-    (hĒ' : g * ((m : ℝ) * w' * (Ā + Ē) + β) + (m : ℝ) * w' * Ē ≤ Ē') :
-    (b.comp (floatBridgesTo_dense M W b' hw' hβ hm hW hb)).Env A Ā' Ē' := by
-  have hmag0 : 0 ≤ b.mag A := b.mag_nonneg hA
-  have hfr0 : 0 ≤ b.fresh A := b.fresh_nonneg hA hm
-  have h1 := layerAct_le_num (m := m) (β := β) hw' e.mag_le
-  have h2 := layerBudget_le_num (m := m) M.u_nonneg hw' hβ hmag0 e.mag_le (le_refl 0) (le_refl 0) hg
-  simp only [add_zero, mul_zero] at h2
-  have hX : (1 + g) * ((m : ℝ) * w' * Ā + β)
-      = ((m : ℝ) * w' * Ā + β) + g * ((m : ℝ) * w' * Ā + β) := by ring
-  rw [hX] at hĀ'
-  exact ⟨by show layerAct m w' β (b.mag A) + layerBudget M.u m w' β (b.mag A) 0 ≤ Ā'
-            linarith,
-         by show layerBudget M.u m w' β (b.mag A) (b.fresh A) ≤ Ē'
-            exact (layerBudget_le_num M.u_nonneg hw' hβ hmag0 e.mag_le hfr0 e.fresh_le hg).trans hĒ'⟩
-
-/-- ReLU passes an envelope through unchanged (exact in float, never grows magnitudes). -/
-theorem Env.comp_relu {p n : Nat} {f fF : Vec p → Vec n} {b : FloatBridgesTo f fF}
-    {A Ā Ē : ℝ} (e : b.Env A Ā Ē) : (b.comp (floatBridgesTo_relu (n := n))).Env A Ā Ē :=
-  ⟨e.mag_le, e.fresh_le⟩
-
-/-- Max-pool passes an envelope through unchanged. -/
-theorem Env.comp_maxPool {p c h w : Nat} {f fF : Vec p → Vec (c * (2 * h) * (2 * w))}
-    {b : FloatBridgesTo f fF} {A Ā Ē : ℝ} (e : b.Env A Ā Ē) :
-    (b.comp (floatBridgesTo_maxPool (c := c) (h := h) (w := w))).Env A Ā Ē :=
-  ⟨e.mag_le, e.fresh_le⟩
-
-end FloatBridgesTo
 
 -- ════════════════════════════════════════════════════════════════
 -- § The committed CIFAR-8 bridge and its number
@@ -225,79 +93,126 @@ noncomputable def cifar8Bridge (M : FloatModel) {w' β : ℝ} (W : Cifar8Weights
     (by norm_num) (by norm_num) (by norm_num)
 
 set_option maxRecDepth 100000 in
-/-- **The envelope, kernel-checked.** At `|W| ≤ 2/5`, `|b| ≤ 1/100`, unit input window and
-    `u ≤ 2⁻²⁴`: output window `≤ 6.121·10¹⁸`, fresh budget `≤ 6.37·10¹⁴`. Eleven
-    `Env.comp_*` steps, each with its γ-term through `gamma_num` and two rational
-    inequalities by `norm_num`; the per-stage numerals are the exact fold rounded up to four
-    significant figures, and the kernel re-checks every inequality. The chain is built
-    bottom-up so each step elaborates against a small, fully determined type; the closing
-    `exact` is one structural comparison with `cifar8Bridge`'s definition. -/
-theorem cifar8Bridge_env (M : FloatModel) (hMu : M.u ≤ u32)
+/-- **The envelope, kernel-checked.** At `|W| ≤ 2/5`, `|b| ≤ 1/100`, input window `≤ 1`,
+    no inherited input error and `u ≤ 2⁻²⁴`: output window `≤ 6.121·10¹⁸`, output error
+    `≤ 6.37·10¹⁴`. Eleven rounding stages, each with its γ-term through `gamma_num` and two
+    rational inequalities by `norm_num`, threaded by twenty-four generic `Maps.comp`s; the
+    per-stage numerals are the exact fold rounded up to four significant figures, and the
+    kernel re-checks every inequality. The chain is built bottom-up so each step elaborates
+    against a small, fully determined type; the closing `exact` is one structural comparison
+    with `cifar8Bridge`'s definition. All four numerals are pinned on every rounding leaf
+    (`planning/float_budget_numbers.md` §3.7(c)) — a `by norm_num` inside a `have` runs
+    before `Maps.comp` unifies anything, so an unpinned output window is a metavariable and
+    the failure reads like arithmetic. -/
+theorem cifar8Bridge_maps (M : FloatModel) (hMu : M.u ≤ u32)
     (W : Cifar8Weights (2/5) (1/100)) :
-    (cifar8Bridge M W).Env 1 6121000000000000000 637000000000000 := by
+    (cifar8Bridge M W).Maps 1 0 6121000000000000000 637000000000000 := by
   have hw : (0:ℝ) ≤ 2/5 := by norm_num
   have hβ : (0:ℝ) ≤ 1/100 := by norm_num
-  have e1 := FloatBridgesTo.Env.flatConv (h := 32) (w := 32) (A := 1) M W.cW1 W.cb1 hw hβ
-    (by norm_num) W.hcW1 W.hcb1 (by norm_num)
-    (M.gamma_num (q := 173/100000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 541/50) (Ē' := 1871/100000000) (by norm_num) (by norm_num)
-  have e2 := FloatBridgesTo.Env.comp_relu e1
-  have e3 := FloatBridgesTo.Env.comp_flatConv e2 (by norm_num) M W.cW2 W.cb2 hw hβ
-    (by norm_num) W.hcW2 W.hcb2
-    (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 6233/10) (Ē' := 6507/1000000) (by norm_num) (by norm_num)
-  have e4 := FloatBridgesTo.Env.comp_relu e3
-  have e5 := FloatBridgesTo.Env.comp_maxPool (c := 16) (h := 16) (w := 16) e4
-  have e6 := FloatBridgesTo.Env.comp_flatConv e5 (by norm_num) M W.cW3 W.cb3 hw hβ
-    (by norm_num) W.hcW3 W.hcb3
-    (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 35910) (Ē' := 1719/2500) (by norm_num) (by norm_num)
-  have e7 := FloatBridgesTo.Env.comp_relu e6
-  have e8 := FloatBridgesTo.Env.comp_flatConv e7 (by norm_num) M W.cW4 W.cb4 hw hβ
-    (by norm_num) W.hcW4 W.hcb4
-    (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 2069000) (Ē' := 5763/100) (by norm_num) (by norm_num)
-  have e9 := FloatBridgesTo.Env.comp_relu e8
-  have e10 := FloatBridgesTo.Env.comp_maxPool (c := 16) (h := 8) (w := 8) e9
-  have e11 := FloatBridgesTo.Env.comp_flatConv e10 (by norm_num) M W.cW5 W.cb5 hw hβ
-    (by norm_num) W.hcW5 W.hcb5
-    (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 119200000) (Ē' := 4358) (by norm_num) (by norm_num)
-  have e12 := FloatBridgesTo.Env.comp_relu e11
-  have e13 := FloatBridgesTo.Env.comp_flatConv e12 (by norm_num) M W.cW6 W.cb6 hw hβ
-    (by norm_num) W.hcW6 W.hcb6
-    (M.gamma_num (q := 173/10000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 13740000000) (Ē' := 739700) (by norm_num) (by norm_num)
-  have e14 := FloatBridgesTo.Env.comp_relu e13
-  have e15 := FloatBridgesTo.Env.comp_maxPool (c := 32) (h := 4) (w := 4) e14
-  have e16 := FloatBridgesTo.Env.comp_flatConv e15 (by norm_num) M W.cW7 W.cb7 hw hβ
-    (by norm_num) W.hcW7 W.hcb7
-    (M.gamma_num (q := 173/10000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 1583000000000) (Ē' := 112600000) (by norm_num) (by norm_num)
-  have e17 := FloatBridgesTo.Env.comp_relu e16
-  have e18 := FloatBridgesTo.Env.comp_flatConv e17 (by norm_num) M W.cW8 W.cb8 hw hβ
-    (by norm_num) W.hcW8 W.hcb8
-    (M.gamma_num (q := 173/10000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 182400000000000) (Ē' := 16130000000) (by norm_num) (by norm_num)
-  have e19 := FloatBridgesTo.Env.comp_relu e18
-  have e20 := FloatBridgesTo.Env.comp_maxPool (c := 32) (h := 2) (w := 2) e19
-  have e21 := FloatBridgesTo.Env.comp_dense e20 (by norm_num) M W.dW1 W.db1 hw hβ
-    (by norm_num) W.hdW1 W.hdb1
-    (M.gamma_num (q := 31/4000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 9339000000000000) (Ē' := 898300000000) (by norm_num) (by norm_num)
-  have e22 := FloatBridgesTo.Env.comp_relu e21
-  have e23 := FloatBridgesTo.Env.comp_dense e22 (by norm_num) M W.dW2 W.db2 hw hβ
-    (by norm_num) W.hdW2 W.hdb2
-    (M.gamma_num (q := 197/50000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 239100000000000000) (Ē' := 23940000000000) (by norm_num) (by norm_num)
-  have e24 := FloatBridgesTo.Env.comp_relu e23
-  have e25 := FloatBridgesTo.Env.comp_dense e24 (by norm_num) M W.dW3 W.db3 hw hβ
-    (by norm_num) W.hdW3 W.hdb3
-    (M.gamma_num (q := 197/50000000) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 6121000000000000000) (Ē' := 637000000000000) (by norm_num) (by norm_num)
-  exact e25
+  have m1 := FloatBridgesTo.Maps.flatConv (h := 32) (w := 32) M W.cW1 W.cb1 hw hβ
+      (by norm_num) W.hcW1 W.hcb1
+      (Ā := 1) (Ē := 0) (Ā' := 541/50) (Ē' := 1871/100000000)
+      (M.gamma_num (q := 173/100000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num)
+  have m2 := FloatBridgesTo.Maps.comp (by norm_num) m1
+    (FloatBridgesTo.Maps.relu (Ā := 541/50) (Ē := 1871/100000000))
+  have m3 := FloatBridgesTo.Maps.comp (by norm_num) m2
+    (FloatBridgesTo.Maps.flatConv (h := 32) (w := 32) M W.cW2 W.cb2 hw hβ
+      (by norm_num) W.hcW2 W.hcb2
+      (Ā := 541/50) (Ē := 1871/100000000) (Ā' := 6233/10) (Ē' := 6507/1000000)
+      (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m4 := FloatBridgesTo.Maps.comp (by norm_num) m3
+    (FloatBridgesTo.Maps.relu (Ā := 6233/10) (Ē := 6507/1000000))
+  have m5 := FloatBridgesTo.Maps.comp (by norm_num) m4
+    (FloatBridgesTo.Maps.maxPool (c := 16) (h := 16) (w := 16) (Ā := 6233/10) (Ē := 6507/1000000))
+  have m6 := FloatBridgesTo.Maps.comp (by norm_num) m5
+    (FloatBridgesTo.Maps.flatConv (h := 16) (w := 16) M W.cW3 W.cb3 hw hβ
+      (by norm_num) W.hcW3 W.hcb3
+      (Ā := 6233/10) (Ē := 6507/1000000) (Ā' := 35910) (Ē' := 1719/2500)
+      (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m7 := FloatBridgesTo.Maps.comp (by norm_num) m6
+    (FloatBridgesTo.Maps.relu (Ā := 35910) (Ē := 1719/2500))
+  have m8 := FloatBridgesTo.Maps.comp (by norm_num) m7
+    (FloatBridgesTo.Maps.flatConv (h := 16) (w := 16) M W.cW4 W.cb4 hw hβ
+      (by norm_num) W.hcW4 W.hcb4
+      (Ā := 35910) (Ē := 1719/2500) (Ā' := 2069000) (Ē' := 5763/100)
+      (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m9 := FloatBridgesTo.Maps.comp (by norm_num) m8
+    (FloatBridgesTo.Maps.relu (Ā := 2069000) (Ē := 5763/100))
+  have m10 := FloatBridgesTo.Maps.comp (by norm_num) m9
+    (FloatBridgesTo.Maps.maxPool (c := 16) (h := 8) (w := 8) (Ā := 2069000) (Ē := 5763/100))
+  have m11 := FloatBridgesTo.Maps.comp (by norm_num) m10
+    (FloatBridgesTo.Maps.flatConv (h := 8) (w := 8) M W.cW5 W.cb5 hw hβ
+      (by norm_num) W.hcW5 W.hcb5
+      (Ā := 2069000) (Ē := 5763/100) (Ā' := 119200000) (Ē' := 4358)
+      (M.gamma_num (q := 871/100000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m12 := FloatBridgesTo.Maps.comp (by norm_num) m11
+    (FloatBridgesTo.Maps.relu (Ā := 119200000) (Ē := 4358))
+  have m13 := FloatBridgesTo.Maps.comp (by norm_num) m12
+    (FloatBridgesTo.Maps.flatConv (h := 8) (w := 8) M W.cW6 W.cb6 hw hβ
+      (by norm_num) W.hcW6 W.hcb6
+      (Ā := 119200000) (Ē := 4358) (Ā' := 13740000000) (Ē' := 739700)
+      (M.gamma_num (q := 173/10000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m14 := FloatBridgesTo.Maps.comp (by norm_num) m13
+    (FloatBridgesTo.Maps.relu (Ā := 13740000000) (Ē := 739700))
+  have m15 := FloatBridgesTo.Maps.comp (by norm_num) m14
+    (FloatBridgesTo.Maps.maxPool (c := 32) (h := 4) (w := 4) (Ā := 13740000000) (Ē := 739700))
+  have m16 := FloatBridgesTo.Maps.comp (by norm_num) m15
+    (FloatBridgesTo.Maps.flatConv (h := 4) (w := 4) M W.cW7 W.cb7 hw hβ
+      (by norm_num) W.hcW7 W.hcb7
+      (Ā := 13740000000) (Ē := 739700) (Ā' := 1583000000000) (Ē' := 112600000)
+      (M.gamma_num (q := 173/10000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m17 := FloatBridgesTo.Maps.comp (by norm_num) m16
+    (FloatBridgesTo.Maps.relu (Ā := 1583000000000) (Ē := 112600000))
+  have m18 := FloatBridgesTo.Maps.comp (by norm_num) m17
+    (FloatBridgesTo.Maps.flatConv (h := 4) (w := 4) M W.cW8 W.cb8 hw hβ
+      (by norm_num) W.hcW8 W.hcb8
+      (Ā := 1583000000000) (Ē := 112600000) (Ā' := 182400000000000) (Ē' := 16130000000)
+      (M.gamma_num (q := 173/10000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m19 := FloatBridgesTo.Maps.comp (by norm_num) m18
+    (FloatBridgesTo.Maps.relu (Ā := 182400000000000) (Ē := 16130000000))
+  have m20 := FloatBridgesTo.Maps.comp (by norm_num) m19
+    (FloatBridgesTo.Maps.maxPool (c := 32) (h := 2) (w := 2) (Ā := 182400000000000) (Ē := 16130000000))
+  have m21 := FloatBridgesTo.Maps.comp (by norm_num) m20
+    (FloatBridgesTo.Maps.dense M W.dW1 W.db1 hw hβ (by norm_num) W.hdW1 W.hdb1
+      (Ā := 182400000000000) (Ē := 16130000000) (Ā' := 9339000000000000) (Ē' := 898300000000)
+      (M.gamma_num (q := 31/4000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m22 := FloatBridgesTo.Maps.comp (by norm_num) m21
+    (FloatBridgesTo.Maps.relu (Ā := 9339000000000000) (Ē := 898300000000))
+  have m23 := FloatBridgesTo.Maps.comp (by norm_num) m22
+    (FloatBridgesTo.Maps.dense M W.dW2 W.db2 hw hβ (by norm_num) W.hdW2 W.hdb2
+      (Ā := 9339000000000000) (Ē := 898300000000) (Ā' := 239100000000000000) (Ē' := 23940000000000)
+      (M.gamma_num (q := 197/50000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  have m24 := FloatBridgesTo.Maps.comp (by norm_num) m23
+    (FloatBridgesTo.Maps.relu (Ā := 239100000000000000) (Ē := 23940000000000))
+  have m25 := FloatBridgesTo.Maps.comp (by norm_num) m24
+    (FloatBridgesTo.Maps.dense M W.dW3 W.db3 hw hβ (by norm_num) W.hdW3 W.hdb3
+      (Ā := 239100000000000000) (Ē := 23940000000000) (Ā' := 6121000000000000000) (Ē' := 637000000000000)
+      (M.gamma_num (q := 197/50000000) hMu (by norm_num [u32]) (by norm_num [u32]))
+      (by norm_num) (by norm_num))
+  exact m25
 
 /-- The committed CIFAR-8 bridge's fresh budget at the He profile: `≤ 6.37·10¹⁴`. -/
 theorem cifar8Bridge_fresh_le (M : FloatModel) (hMu : M.u ≤ u32)
     (W : Cifar8Weights (2/5) (1/100)) :
     (cifar8Bridge M W).fresh 1 ≤ 637000000000000 :=
-  (cifar8Bridge_env M hMu W).fresh_le
+  (cifar8Bridge_maps M hMu W).mod_le 1 0 (by norm_num) le_rfl le_rfl le_rfl
 
 /-- The committed CIFAR-8 bridge's certified output window at the He profile: `≤ 6.121·10¹⁸`
     — the worst-case logit magnitude the interval fold can promise. -/
 theorem cifar8Bridge_mag_le (M : FloatModel) (hMu : M.u ≤ u32)
     (W : Cifar8Weights (2/5) (1/100)) :
     (cifar8Bridge M W).mag 1 ≤ 6121000000000000000 :=
-  (cifar8Bridge_env M hMu W).mag_le
+  (cifar8Bridge_maps M hMu W).mag_le 1 (by norm_num) le_rfl
 
 /-- ⭐ **The deployed CIFAR-8 float forward is within `6.37·10¹⁴` of the certified real
     forward, per logit**, on inputs of magnitude `≤ 1`, at `|W| ≤ 2/5`, `|b| ≤ 1/100`, for
@@ -317,6 +232,6 @@ theorem cifar8_float_logits_le (M : FloatModel) (hMu : M.u ≤ u32)
         W.cW1 W.cb1 W.cW2 W.cb2 W.cW3 W.cb3 W.cW4 W.cb4
         W.cW5 W.cb5 W.cW6 W.cb6 W.cW7 W.cb7 W.cW8 W.cb8
         W.dW1 W.db1 W.dW2 W.db2 W.dW3 W.db3 x j| ≤ 637000000000000 :=
-  ((cifar8Bridge M W).fresh_le (by norm_num) x hx j).trans (cifar8Bridge_fresh_le M hMu W)
+  (cifar8Bridge_maps M hMu W).budget_le (by norm_num) le_rfl x hx j
 
 end Proofs

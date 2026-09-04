@@ -520,8 +520,8 @@ fidelity:
        for the first time. `floatBridgesTo_cifar8` is the committed 8-conv CIFAR-10
        forward as a CLOSED bridge (all leaves, no block hypotheses) to its float
        skeleton `cifarCnn8ForwardF`; `cifar8Bridge` instantiates it at the committed
-       shape over `Cifar8Weights w' beta`; and `cifar8Bridge_env` pushes a numeric
-       envelope (`FloatBridgesTo.Env`: output window and fresh budget, both as
+       shape over `Cifar8Weights w' beta`; and `cifar8Bridge_maps` pushes a numeric
+       envelope (`FloatBridgesTo.Maps`: output window and output error, both as
        rationals) through the eleven conv/dense stages with `norm_num`, the gamma-term
        through `gamma_num`, so at `|W| <= 2/5`, `|b| <= 1/100`, unit input window and
        `u <= 2^-24`:

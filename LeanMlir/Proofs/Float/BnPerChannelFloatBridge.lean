@@ -134,7 +134,7 @@ theorem floatBridges_bnPerChannelTensor3 {oc h w : Nat} (M : FloatModel) {ε : �
 /-! The `FloatBridges` rungs above name neither the float map nor the modulus, so a
 whole-net fold built on them cannot state a number (`formalization.yaml` fidelity §4d).
 These are their `FloatBridgesTo` peers: `mag`/`mod` written out, so
-`FloatBridgesTo.Env` can push a numeric envelope through a BatchNorm the way it pushes
+`FloatBridgesTo.Maps` can push a numeric envelope through a BatchNorm the way it pushes
 one through a conv.
 
 **The two magnitude constants.** `floatClose_bn` is parameterised by the centered bound

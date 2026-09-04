@@ -2032,13 +2032,18 @@ open Proofs
 #print axioms Proofs.cifar8_chain_cert_committed
 -- ⭐ A NUMBER for a whole-net `.mod`: the committed CIFAR-8 forward as a closed
 -- FloatBridgesTo (floatBridgesTo_cifar8, all leaves, no block hypotheses), its envelope
--- at the He profile pushed through eleven stages by norm_num (cifar8Bridge_env), and the
--- headline: |float − real| ≤ 6.37e14 per logit on |x| ≤ 1 (cifar8_float_logits_le). The
--- size of that number is the interval fold at He magnitudes — vacuous as a certificate,
+-- at the He profile pushed through eleven rounding stages by norm_num (cifar8Bridge_maps),
+-- and the headline: |float − real| ≤ 6.37e14 per logit on |x| ≤ 1 (cifar8_float_logits_le).
+-- The size of that number is the interval fold at He magnitudes — vacuous as a certificate,
 -- and now kernel-checked rather than asserted (Cifar8FloatBudget.lean header).
+-- ⚠ As of 2026-09-04 this runs on the SAME kit as the five ImageNet budgets: the file's own
+-- FloatBridgesTo.Env (input error fixed at 0, one Env.comp_* lemma per operation) is retired
+-- and the chain is Maps.flatConv / .dense / .relu / .maxPool threaded by the generic
+-- Maps.comp. Same numerals — the per-stage inequalities were identical — and a strictly
+-- stronger statement, since Maps quantifies over every input window A ≤ 1.
 #print axioms Proofs.floatBridgesTo_cifar8
-#print axioms Proofs.FloatBridgesTo.Env.comp_flatConv
-#print axioms Proofs.cifar8Bridge_env
+#print axioms Proofs.FloatBridgesTo.Maps.flatConv
+#print axioms Proofs.cifar8Bridge_maps
 #print axioms Proofs.cifar8Bridge_fresh_le
 #print axioms Proofs.cifar8_float_logits_le
 -- ⭐⭐ The same, at ImageNet scale: the DEPLOYED ResNet-34 inference forward (frozen

@@ -7,22 +7,22 @@ import LeanMlir.Proofs.Float.BnEvalRuntimeFloatBridge
 pushing a pair `(output window, error budget)` through the net a layer at a time. That worked
 because the CIFAR-8 chain is a straight `.comp` of leaves. The ImageNet-scale nets are not: a
 ResNet basic block is `relu ∘ residual body`, and the residual's modulus is evaluated at the
-block's **inherited** input error, not at `0`. So the CIFAR file's `FloatBridgesTo.Env` — which
-fixes the input error at `0` and is therefore only closed under `.comp` with a per-op monotone
-lemma — does not compose through a skip.
+block's **inherited** input error, not at `0`. That file's original kit, `FloatBridgesTo.Env` —
+which fixed the input error at `0` and was therefore only closed under `.comp` with a per-op
+monotone lemma — does not compose through a skip.
 
 `FloatBridgesTo.Maps Ā Ē Ā' Ē'` is the fix: read it as *"on every input window `A ≤ Ā` and every
 inherited error `E ≤ Ē`, this bridge's output window is `≤ Ā'` and its output error is `≤ Ē'`."*
 Quantifying over the inputs rather than fixing them is what buys monotonicity, and monotonicity is
 what makes the combinators GENERIC:
 
-* `Maps.comp` composes two envelopes with no per-op reasoning at all — the CIFAR kit needed one
-  `Env.comp_*` lemma per operation.
+* `Maps.comp` composes two envelopes with no per-op reasoning at all — the retired `Env` kit
+  needed one `Env.comp_*` lemma per operation.
 * `Maps.residual` / `Maps.biPathSum` push an envelope through a skip, which `Env` could not
   express.
 
 Only the LEAVES still need work, and each is ten lines: `show` the unfolded `mag`/`mod`, one
-monotone bound (`layerAct_le_num` / `layerBudget_le_num` / the γ-term through
+monotone bound (`layerAct_le_num'` / `layerBudget_le_num'` / the γ-term through
 `FloatModel.gamma_num`), `linarith`. The γ-term is always bounded by a rational `g` so `norm_num`
 never evaluates a big power.
 
@@ -30,9 +30,12 @@ never evaluates a big power.
 unfolding to `∧`: the unifier then delta-unfolded the whole net's `.mag` chain and timed out at
 20× the heartbeat budget. Inductive types unify argument-wise and never unfold.
 
-The CIFAR-8 instance still runs on `Env` (`Cifar8FloatBudget.lean`); migrating it to `Maps` is a
-coherence pass, not a correctness one — the per-stage inequalities are the same, and this file
-holds the two monotone lemmas (`layerAct_le_num`, `layerBudget_le_num`) both kits share.
+✅ **`Env` is retired (2026-09-04).** `Cifar8FloatBudget.lean` — the only file that ever used it
+— now runs on `Maps`, at the same numerals: the per-stage inequalities were identical, so the
+migration changed no number and the statement it makes is strictly stronger (`Maps 1 0 …` holds at
+every input window `A ≤ 1`, where `Env 1 …` held only at `A = 1`). Every whole-net budget in the
+repo is therefore on one kit, and the two monotone lemmas both kits shared (`layerAct_le_num'`,
+`layerBudget_le_num'`) live here.
 -/
 
 namespace Proofs

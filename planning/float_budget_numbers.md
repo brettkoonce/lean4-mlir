@@ -13,9 +13,10 @@ all** (§0.1's 10⁷⁴¹⁷). A VJP reads its statistics off the saved activati
 does not perturb, so §0.1's quadratic never appears. Read §3.7 for that, and read it with its
 three hypotheses (§3.7 step 4) — the wall relocates rather than vanishing.
 
-**§3.8's first TWO items are DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
-(**§3.9**) and r34's whole-net certified tie (**§3.10**), both 2026-09-03; only item 3, the
-CIFAR-8 `Env → Maps` coherence pass, is left. Three sentences of it: a
+**§3.8's THREE items are ALL DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
+(**§3.9**) and r34's whole-net certified tie (**§3.10**), both 2026-09-03, and the CIFAR-8
+`Env → Maps` coherence pass (**§3.11**, 2026-09-04). What is open is now §3.9's "what to do
+next" list, which starts at one unproved scalar lemma. Three sentences of §3.8: a
 backward is *always* a fold (squeeze-excite included, so §0.1's list of quadratic sites is a
 forward-only list); MobileNetV2's backward is statable with **no operating-point hypothesis at
 all**, unlike ResNet-34's; and EfficientNet-B0's is a fold that cannot be written down, blocked
@@ -1144,10 +1145,9 @@ item named was a misreading** — `resnet34_has_vjp_at` is dimension-generic and
 component maps, so no new apex was needed. What the tie actually cost was a leaf nobody knew was
 missing, and it moved the number; §3.10.
 
-**3. Coherence: migrate `Cifar8FloatBudget.lean` off `FloatBridgesTo.Env` onto `Maps`.** §5 has
-said to do this "when touching that file anyway" since the kit was built; the per-stage
-inequalities are identical and the two shared monotone lemmas already live in
-`FloatBudgetEnv.lean`. Cheap, low value, and the right thing to fold into whatever touches it.
+**3. ✅ Coherence: migrate `Cifar8FloatBudget.lean` off `FloatBridgesTo.Env` onto `Maps` — DONE
+2026-09-04. See §3.11.** It was as cheap as advertised — same numerals, compiled first try — and
+it found one thing worth keeping: the retired kit had been hiding a duplicate declaration.
 
 ⚠ **And one thing to flag rather than schedule.** §0.1's escape 2 — *"a genuinely linear bound
 needs the NORMALISED output's Lipschitz constant, not the pre-normalisation one; that is real
@@ -1327,6 +1327,48 @@ and it lands two stages before the input so almost nothing compounds on it.
    rewrites at the FUNCTION level: a `funext dy` first makes the `show` that exposes the stem group
    cost more than the whole rest of the proof.
 
+### 3.11 ✅ CIFAR-8 `Env → Maps` (2026-09-04) — the last item of §3.8, and what it found
+
+`cifar8Bridge_maps` replaces `cifar8Bridge_env`: `(cifar8Bridge M W).Maps 1 0 6.121·10¹⁸
+6.37·10¹⁴`, twenty-five stages built bottom-up from `Maps.flatConv` / `.dense` / `.relu` /
+`.maxPool` threaded by twenty-four generic `Maps.comp`s. Deleted with `FloatBridgesTo.Env`: its
+five `Env.comp_*` lemmas, its private `layerAct_le_num` / `layerBudget_le_num`, and one
+`private theorem gamma_ub_nonneg` nothing called. 322 lines → 237, ~73 s.
+
+**⚠ It was exactly as mechanical as §5 promised, and the reason is worth writing down once:
+`Env.comp_flatConv`'s two hypotheses are LITERALLY `Maps.flatConv`'s** —
+`(1+g)·(m·w'·Ā + β) ≤ Ā'` and `g·(m·w'·(Ā+Ē) + β) + m·w'·Ē ≤ Ē'`. So all twenty-two numerals
+transfer unchanged, both headline numbers are the same to the digit, and the whole migration is
+a re-spelling. Re-asserted independently before the edit (exact rationals, 22 stage inequalities
+plus the 22 `gamma_num` side conditions) rather than trusted from the old file.
+
+**⭐ The statement got STRONGER for free.** `Env A Ā Ē` fixed the input window at `A`; `Maps Ā Ē
+Ā' Ē'` quantifies over every `A ≤ Ā` and every `E ≤ Ē`. `cifar8Bridge_maps` therefore holds at
+every input window `≤ 1`, and `cifar8_float_logits_le` now closes through the generic
+`Maps.budget_le` instead of `FloatBridgesTo.fresh_le` + a bespoke projection.
+
+**⭐⭐ The finding: a superseded kit that is never imported alongside its successor hides
+duplicate declarations.** `Cifar8FloatBudget.lean` and `FloatBudgetEnv.lean` each defined
+`Proofs.FloatBridgesTo.fresh_nonneg`, with different proofs, for two days. Neither file was on
+the other's import path, so nothing ever elaborated both and Lean never complained — the
+`FloatClose is precision-agnostic` note's duplicate-`convWindow` failure, one import edge away
+from firing. ⚠ The generalisation: **the moment a kit is superseded, the successor's file
+inherits the obligation to be imported by the old one's consumers, and until that happens the
+two namespaces are unchecked against each other.** Grepping for the collision is a one-liner;
+nothing runs it.
+
+**⚠ What it cost, and the split that was NOT done.** Importing `FloatBudgetEnv.lean` adds 15
+modules to the CIFAR-8 budget's cone (70 → 85), including `Codegen.ResNet34RenderPC` and the ViT
+float bridges. None of them is needed for CIFAR-8's four leaves — `floatBridgesTo_flatConv`,
+`_dense`, `_relu` and `_maxPool` are all in `FloatComposeBridge.lean` — the weight comes from
+`FloatBudgetEnv.lean` importing `Resnet34WholeFloatBridge` for `Maps.flatConvStride2` /
+`Maps.biPathSum` and `BnEvalRuntimeFloatBridge` for `Maps.bnEvalPC`. So a `FloatBudgetEnvCore`
+holding the structure, `comp`/`mono`/`capped`/`residual`, the two monotone lemmas and the six
+`FloatComposeBridge` leaves would be a clean cut, on exactly the reasoning that created
+`FloatBudgetEnvMBConv.lean` (§0: *a `Maps` lemma names its bridge*). ⛔ Not done: it edits a file
+five landed budget files elaborate against, for zero mathematical gain, and a full build compiles
+all 85 modules anyway. Do it if a sixth consumer wants the kit without a net attached.
+
 ## 5. The `Maps` kit — ✅ complete for all six forwards, and for r34's backward
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
@@ -1383,11 +1425,9 @@ bound is (§3.9 finding 3). All the `∃`-tier bridges exist (`DepthwiseBackFloa
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
 
-⚠ `Cifar8FloatBudget.lean` still runs on the older `FloatBridgesTo.Env` (fixed input error,
-per-op `comp_*` lemmas). Migrating it to `Maps` is a coherence pass, not a correctness one — the
-per-stage inequalities are identical and the two shared monotone lemmas (`layerAct_le_num'`,
-`layerBudget_le_num'`) already live in `FloatBudgetEnv.lean`. Do it when touching that file
-anyway, not as its own commit.
+✅ **`Cifar8FloatBudget.lean` is on `Maps` too (2026-09-04, §3.11), and `FloatBridgesTo.Env` is
+retired** — deleted with its five `Env.comp_*` lemmas, its private copies of the two monotone
+lemmas, and one dead `private theorem`. Every whole-net budget in the repo now runs on one kit.
 
 ## 7. Process (every commit)
 
