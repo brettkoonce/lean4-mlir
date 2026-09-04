@@ -75,6 +75,11 @@ Final epoch 350: 77.18% / 93.31% in-training, **77.15% / 93.30% full-50k rescore
 - `enet_val_curve.tex` — pgfplots snippet (this dir), reprinted in Ch 7.
 - `training_epochs.log` — all 350 `[Epoch N]` lines; `training_tail.log` — the end.
 
-⛔ `jax/scripts/eval_enet_full50k.py` does NOT run: it calls `m.forward(params, x)`
-against the 4-arg `forward(params, x, bn, training)` and sources no BN stats at
-all. The rescore above was done with a corrected one-off.
+Reproduce the headline number with:
+
+```
+CKPT=/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.state.npz \
+  /home/skoonce/.venv-cuda/bin/python3 jax/scripts/eval_enet_full50k.py
+```
+
+which prints both arms (EMA and raw) over all 50,000.
