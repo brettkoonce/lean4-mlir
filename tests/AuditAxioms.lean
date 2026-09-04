@@ -122,6 +122,7 @@ import LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie
@@ -2709,6 +2710,31 @@ open Proofs
 #print axioms Proofs.cbrStridedPC_differentiableAt
 #print axioms Proofs.cbrStridedPCBack_eq_vjp_backward
 #print axioms Proofs.r34InputGrad_eq_resnet34_vjp
+-- ⭐⭐ THE SAME TIE FOR THE WHOLE MOBILENETV2 (MobileNetV2WholeBackCertifiedTie.lean, ~2 s):
+-- mnv2InputGrad, with every slot pinned to the certified per-op backward, IS
+-- (mobilenetv2PC_has_vjp_at ...).backward. So mnv2_grad_float_le is a statement about the
+-- certified WHOLE-NET gradient, not only about each of its pieces.
+-- ⭐ The apex is STRUCTURALLY SIMPLER than resnet34_has_vjp_at: MobileNetV2's skips live INSIDE
+-- the block maps (residual (invresBodyPC ...) at b2/b4) and its stride changes inside the strided
+-- bodies, so there is no ChainData list and no separate downsample slot — nine vjp_comp_diff_at's.
+-- Two pieces were genuinely missing and are built here: the STEM's certified VJP
+-- (convStridedBnRelu6PC_has_vjp_at — the repo had strided-conv-with-relu, r34's, and non-strided
+-- relu6, but not the corner) and the stem/head leaf ties.
+-- ⭐⭐ AND mobilenetv2Forward_full_pc_eq_chain IS THE PIECE r34's FILE DOES NOT HAVE: a rfl saying
+-- the ten-stage chain the apex is instantiated at IS the committed forward, block slot by block
+-- slot. ⛔ That is the theorem that would have caught r34's wrong pool — §3.10's drift survived a
+-- month because "the same net as the tie" was prose in a docstring.
+-- ⭐ NO DRIFT WAS FOUND HERE, which is a result and not a non-event: the tie went through against
+-- mnv2InputGrad exactly as committed, so 4.750e153 / 1.076e152 stand unchanged, where closing
+-- r34's moved its number 4x.
+#print axioms Proofs.convStridedBnRelu6PC_has_vjp_at
+#print axioms Proofs.convStridedBnRelu6PC_differentiableAt
+#print axioms Proofs.convStridedBnRelu6PCBack_eq_vjp_backward
+#print axioms Proofs.convBnRelu6PCBack_eq_vjp_backward
+#print axioms Proofs.residualBack_eq_vjp_backward
+#print axioms Proofs.mobilenetv2PC_has_vjp_at
+#print axioms Proofs.mobilenetv2Forward_full_pc_eq_chain
+#print axioms Proofs.mnv2InputGrad_eq_mobilenetv2_vjp
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

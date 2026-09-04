@@ -513,6 +513,12 @@ lean_lib «Certs» where
              -- via IR.convBackDenote_eq_input_grad_formula) ⇒ r34IdBlockBack(pinned) = its .backward.
              -- b1-free (no batched↔non-batched reconciliation).
              `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie,
+             -- ⭐⭐ The same tie for the WHOLE MobileNetV2: mnv2InputGrad(pinned) =
+             -- (mobilenetv2PC_has_vjp_at ...).backward, plus the piece r34's file does NOT have —
+             -- mobilenetv2Forward_full_pc_eq_chain, a rfl saying the ten-stage chain the apex is
+             -- instantiated at IS the committed forward. That is the shape check §3.10's wrong
+             -- pool slipped past. ⭐ No drift found here: the mnv2 backward number is unchanged.
+             `LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie,
              -- R50 phase 1 (planning/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck
              -- blocks' certified VJPs. bblkPC (identity, 12 blocks), bblkPStridedPC (strided
              -- projection, stages 2/3/4 block 0) and — the one with NO R34 analogue —

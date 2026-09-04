@@ -1492,23 +1492,65 @@ and the only `Maps.residual` in the net is at `b2`/`b4`, applied by the caller O
    start: `mnv2GradR`/`mnv2GradF` are written with the stem and head groups parenthesised exactly
    as `mnv2InputGrad` writes them.
 
-⚠ **What is NOT claimed, checked rather than assumed.** There is no
-`mnv2InputGrad_eq_mobilenetv2_vjp` — the whole-net CERTIFIED tie r34 got in §3.10. `mnv2GradR` is
-`mnv2InputGrad`'s body with every slot pinned to the certified per-op backward, which is exactly
-the standing r34's number had *before* §3.10 — and §3.10 is the record of what closing that tie
-found. ⭐ **This is the next thing to do on this net, and it must be done before anyone quotes the
-number as "the certified gradient".**
+✅ **The whole-net CERTIFIED tie followed the same day — §3.14.** When this section was written
+the tie was open and the scoping said the APEX was genuinely missing (unlike r34, where §3.8's
+blocker was a misreading because `resnet34_has_vjp_at` already existed and was dimension-generic).
+That scoping was right, and the apex turned out to be nine `vjp_comp_diff_at`s.
 
-⭐ **And the state of it is NOT r34's, which is why it is written down here rather than guessed.**
-Grepped 2026-09-04: the per-BODY ties already exist and are in the right vocabulary —
-`invresBodyBackPC_eq_invresBodyPC_vjp` and `invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp`
-(`Architectures/MobileNetV2BackCertifiedTie.lean`), both non-batched per-channel-BN, both
-3-axiom-clean. ⛔ **What is missing is the APEX**: there is no `HasVJPAt` for
-`mobilenetv2Forward_full_pc` at all. r34's §3.8 blocker was a misreading because
-`resnet34_has_vjp_at` existed and was dimension-generic; here the analogous theorem does not
-exist, so the work is real — and ⚠ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`) is
-NOT it: it is over `MNV2PaperWeights`, the 17-block paper net, where `mnv2InputGrad` reverses the
-ch7 6-block render. Reaching for it would be `imagenet_specs_drift_from_twins` a fifth time.
+### 3.14 ✅ The whole-net CERTIFIED TIE for MobileNetV2 (2026-09-04) — and the shape check r34 lacks
+
+`mnv2InputGrad_eq_mobilenetv2_vjp` (`Foundation/MobileNetV2WholeBackCertifiedTie.lean`, 355 lines,
+**~2 s**): `mnv2InputGrad`, with every slot pinned to the certified per-op backward, IS
+`(mobilenetv2PC_has_vjp_at …).backward`. So §1's criterion (ii) is met for MobileNetV2's backward
+in the same form r34's has since §3.10 — the reading of `mnv2_grad_float_le` is now *"the chain IS
+the certified whole-net gradient"*, not *"every piece of this chain is"*.
+
+**⭐⭐ The result is a NEGATIVE that is worth as much as §3.10's positive: no drift.** Closing
+r34's tie found `r34InputGrad` reversing the **2×2** pool while the committed forward pools 3×3/s2,
+and moved that number 4× (2.188·10²⁴⁵ → 8.857·10²⁴⁵). This tie went through against `mnv2InputGrad`
+exactly as committed, so **4.750·10¹⁵³ / 1.076·10¹⁵² stand unchanged**. ⛔ A tie that finds nothing
+is not a wasted tie — it is the only way to know the previous section's number was about the net it
+claimed to be about.
+
+**⭐⭐ And this file carries the piece `Resnet34BackCertifiedTie.lean` does NOT have.**
+`mobilenetv2Forward_full_pc_eq_chain` states by `rfl` that the ten-stage chain the apex is
+instantiated at IS the committed forward — `b1/b3/b5/b6` the strided inverted-residual bodies,
+`b2/b4` those bodies under `Proofs.residual`, the stem and head spelled as the render spells them.
+⛔ **That is the theorem that would have caught r34's wrong pool.** Both whole-net ties take their
+blocks OPAQUE (r34's through `ChainData`/`PProd`, this one through `PProd`), so the apex's subject
+is a chain of *variables*; nothing in either theorem says which net those variables are. §3.10's
+drift survived a month for exactly that reason — *"the same net as the tie"* was prose in a
+docstring. ⭐ **Add the shape `rfl` to any future whole-net tie, and add one to r34's.**
+
+**What it cost: two genuinely missing pieces and three repackages.**
+
+| piece | state before | work |
+|---|---|---|
+| `convStridedBnRelu6PC_has_vjp_at` (stem) | ⛔ missing — the repo had strided-conv-with-**relu** (r34's `cbrStridedPC`) and **non-strided** relu6, not the corner | ~25 lines, copy of r34's with `relu → relu6` |
+| stem + head leaf ties | ⛔ missing (the body ties do their leaves inline) | one conv-leaf `rw` then `rfl` each |
+| `mobilenetv2PC_has_vjp_at` (apex) | ⛔ missing | nine `vjp_comp_diff_at`s |
+| `residualBack_eq_vjp_backward` | ⛔ missing | `rfl` |
+| body VJPs + body ties, relu6 VJP, residual VJP, conv/depthwise/dense/GAP leaf ties | ✅ all existed | — |
+
+**⭐ The apex is SIMPLER than ResNet-34's, and the reason is architectural.** `resnet34_has_vjp_at`
+needs `ChainData` lists and separate downsample slots because r34's stages are *runs of same-shaped
+identity blocks punctuated by a shape change*. MobileNetV2's skips live INSIDE the block maps
+(`residual (invresBodyPC …)` at `b2`/`b4`) and its stride changes inside the strided bodies, so the
+net is a straight ten-stage chain: nine `vjp_comp_diff_at`s and nothing else. ⭐ Same finding as
+§3.13's *"the block record does not have to own its skip"*, one tier up — **where a net puts its
+skip decides how much scaffolding its whole-net theorem needs.**
+
+**⚠ Why it cost 2 s where r34's needed `maxRecDepth 400000` and a 25-minute debugging detour.**
+Same two disciplines, applied from the start: the blocks stay opaque so the whole-net `isDefEq`
+compares variables (§3.7(a)'s lesson in the direction that works), and `mnv2GradR`/`mnv2InputGrad`
+are grouped identically so only the four concrete endpoints — stem, head, GAP, dense — are
+rewritten. The proof is `unfold`, three `rw`s, `rfl`.
+
+⚠ It stays a SMOOTH-POINT statement, as every `HasVJPAt` in this cone is: the stem's and head's
+post-BN clamp windows (`≠ 0 ∧ ≠ 6`, relu6's kink) and the six blocks' own VJP witnesses are
+hypotheses. ⚠ And `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`) is still NOT this
+theorem and must not be confused with it: that one is over `MNV2PaperWeights`, the 17-block paper
+net, where `mnv2InputGrad` reverses the ch7 6-block render.
 
 ## 5. The `Maps` kit — ✅ complete for all six forwards, and for r34's backward
 

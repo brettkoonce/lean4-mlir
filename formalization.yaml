@@ -224,6 +224,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "mnv2InputGrad_eq_mobilenetv2_vjp"   # ⭐⭐ the whole-net CERTIFIED tie for MobileNetV2's backward: mnv2InputGrad, every slot pinned to the certified per-op backward, IS (mobilenetv2PC_has_vjp_at ...).backward -- so mnv2_grad_float_le is a statement about the certified WHOLE-NET gradient, not only about each of its pieces. ⭐ NO drift found (r34's peer tie moved its number 4x by exposing the wrong stem pool), and this file adds the shape check r34's lacks: mobilenetv2Forward_full_pc_eq_chain, a rfl saying the ten-stage chain the apex is instantiated at IS the committed forward. ⚠ smooth-point, as every HasVJPAt in this cone is (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "mnv2_grad_float_le"   # ⭐⭐ the SECOND whole-net backward number, and the first with NO operating-point hypothesis: the deployed MobileNetV2 whole-net INPUT-GRADIENT VJP is within 1.076e152 of the certified one, per input pixel, on loss cotangents of magnitude <= 1, certified window 4.750e153, budget/window = 0.023 -- the interval FOLD at TRAINING-mode BatchNorm. |istd| <= 317 is DERIVED from eps >= 1e-5 (MnvBnBack.hS), where r34's file assumes |istd| <= 16; affordable because 20 BN sites and a depthwise fan-in of 9 put the fold 135 orders below r34's. ⛔ es/exh (the saved float activations' accuracies, 1e-2) remain supplied and remain the caveat (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
       sorry_count: 0
@@ -892,6 +898,31 @@ fidelity:
        but `es`/`exh` -- which ARE still supplied at 1e-2, and are still what the forward's own
        training-mode fold cannot discharge. §0.1's wall is a fact about COMPOSING a backward with
        the forward that feeds it, not about backwards.
+
+       ⭐⭐ AND THE WHOLE-NET CERTIFIED TIE FOLLOWED THE SAME DAY:
+       `mnv2InputGrad_eq_mobilenetv2_vjp` (`Foundation/MobileNetV2WholeBackCertifiedTie.lean`,
+       ~2 s) — `mnv2InputGrad`, every slot pinned to the certified per-op backward, IS
+       `(mobilenetv2PC_has_vjp_at ...).backward`, so the reading of `mnv2_grad_float_le` is "the
+       chain IS the certified whole-net gradient" and not only "every piece of it is". Two pieces
+       were genuinely missing: the STEM's certified VJP `convStridedBnRelu6PC_has_vjp_at` (the repo
+       had strided-conv-with-relu, r34's, and non-strided relu6, but not the corner) and the
+       stem/head leaf ties; the apex `mobilenetv2PC_has_vjp_at` is nine `vjp_comp_diff_at`s, with
+       no `ChainData` list and no downsample slot, because MobileNetV2's skips live INSIDE the
+       block maps and its stride changes inside the strided bodies.
+
+       ⭐⭐ NO DRIFT WAS FOUND, and that is the result. Closing r34's tie found `r34InputGrad`
+       reversing the 2x2 pool while the committed forward pools 3x3/s2, and moved that number 4x.
+       This one went through against `mnv2InputGrad` exactly as committed, so 4.750e153 / 1.076e152
+       stand unchanged. ⛔ A tie that finds nothing is the only way to know the number was about
+       the net it claimed to be about.
+
+       ⭐⭐ AND THIS FILE CARRIES A PIECE `Resnet34BackCertifiedTie.lean` DOES NOT:
+       `mobilenetv2Forward_full_pc_eq_chain`, a `rfl` saying the ten-stage chain the apex is
+       instantiated at IS the committed forward, block slot by block slot. Both whole-net ties take
+       their blocks OPAQUE, so the apex's subject is a chain of VARIABLES and nothing in either
+       theorem otherwise says which net those variables are — which is exactly how r34's wrong pool
+       survived a month, with "the same net as the tie" living in a docstring. Add the shape `rfl`
+       to any future whole-net tie, and add one to r34's.
 
        ⭐ The only new machinery is two `Maps` leaves, both compositions of existing ones
        (`FloatBudgetEnvBackMBConv.lean`): `Maps.depthwiseBack` is `Maps.depthwise` at the
