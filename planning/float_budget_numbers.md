@@ -82,11 +82,24 @@ needs exists"* was wrong in one place and the miss is reusable: the three MBConv
 envelopes** did not exist, only their `floatBridgesTo_` peers, and §3.17's grep-for-`floatBridgesTo_`
 rule comes back GREEN on exactly that gap. **Grep for `Maps.` too** (§3.26).
 
-⭐⭐ **STARTING A SESSION? GO TO §4.** With B0's number in, the ranked list is: **2b** B0's
-whole-net certified tie (⛔ a bigger job than §4 costed — the apex is
+⭐⭐ **AND §0.1's ESCAPE 2 HAS BEEN MEASURED — §3.27, 2026-09-04, and it goes the opposite way
+from the premise that ranked it.** ⭐⭐ The modulus does not merely become *"a smaller quadratic"*:
+it loses the window **entirely** (`2e·S·(1+Xh)` against `2e·S + 8A²·e·S³`), and §0.1's *"real work
+and probably the interesting result"* is three elementary steps — write the two normalised outputs
+over a common denominator and the factor multiplying the σ-difference is the NORMALISED activation,
+with `|σ_a − σ_t| ≤ 2e` by the reverse triangle inequality. ⭐⭐ **The payoff is on the WINDOW: 53
+orders on ConvNeXt-T's committed number and 57 on ViT-Tiny's, at NO new hypothesis, from
+`bnXhat_sq_le` — a lemma already in the repo and load-bearing on all four backwards.** ⛔ **It does
+not change the KIND**: even with the quadratic gone the fold is 82 and 7 orders above the triangle
+inequality, so both numbers stay caps, and §4 item 3's *"the only open item that changes what the
+numbers MEAN"* is not borne out. ⭐ It did turn up a lever this file has not had — a normalisation
+resets the window **iff `emr·S < 1`**, a MODELLING constant, not architecture.
+
+⭐⭐ **STARTING A SESSION? GO TO §4.** The ranked list, after B0's number and §3.27's measurement:
+**3-window** the cheap half of escape 2 (two commits, ~55 orders each, no new mathematics — §3.27),
+**2b** B0's whole-net certified tie (⛔ a bigger job than §4 costed — the apex is
 `efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched block ties at
-`bnBatchLA` are missing), then **3** §0.1's escape 2 for the FORWARDS — the only open item that
-changes what the numbers MEAN — then **4** ViT's backward, parked with its cost measured.
+`bnBatchLA` are missing), then **4** ViT's backward, parked with its cost measured.
 
 §4 carries the rest of the order, and each item's state was measured before it was ranked.
 ✅ **(1) `resnet34Forward_full_pc_eq_chain` is DONE (2026-09-04, §3.23)** — all three whole-net
@@ -238,11 +251,17 @@ The machinery built for r34 and reusable for the rest:
   ConvNeXt's spells all 183 stages out).
 * `scripts/float_budget_envelope.py` — the exact-rational fold in the lemmas' semantics, the
   4-significant-figure round-up, the re-assertion passes (`verify_r34`, 180 inequalities;
-  `verify_mnv2`, 116; `verify_b0`, 96; `verify_cnx`, 366; `verify_vit`, 324; and the three
-  backwards' `verify_r34_back`, 252, `verify_mnv2_back`, 136, `verify_b0_back`, 138) and the
-  numerals. Its CIFAR-8
+  `verify_mnv2`, 116; `verify_b0`, 96; `verify_cnx`, 366; `verify_vit`, 324; and the four
+  backwards' `verify_r34_back`, 254, `verify_mnv2_back`, 136, `verify_b0_back`, 138, and
+  `verify_cnx_back`, 322) and the numerals. Its CIFAR-8
   regression case reproduces `Cifar8FloatBudget.lean` stage for stage, and `cnx_eval_chain`'s
   three flags (`ln_cap`, `gelu_sat`, `head_ln`) reproduce §3.3's ablation table.
+  ⭐⭐ `ln_lin` (added 2026-09-04, on both `cnx_eval_chain` and `vit_chain`) is §0.1's escape 2 —
+  `cnx_ln_leaf_lin` / `bn_norm_budget_x`, the normalisation leaf with `|x̂| ≤ √n` in place of
+  `|x−μ|·|istd| ≤ 2A·S` and an input-sensitivity free of the window (§3.27). ⚠ `ln_cap` is now the
+  true `min(mod, 2·mag)` that `FloatBridgesTo.capped` computes, so the fold and the cap are
+  COMPARABLE at every site; all six committed rows and all six `verify_*` passes reproduce
+  unchanged.
   ⭐ `vit_chain` (added 2026-09-03) is the ViT-Tiny sizing fold — 162 stages, five flags, and
   unlike the others it returns `(rows, exp_tainted)`: the tag list of stage numerals that would
   contain a `Real.exp` with no rational bound. "Statable" for a net with a transcendental leaf is
@@ -311,11 +330,19 @@ the first:
    The saturation constant is still worth having — without the head LN it is the difference
    between `10⁸⁹⁶` and `10²³⁰` — but it is not what makes ConvNeXt statable, and the "neither
    escape alone is enough" finding was an artifact of a stale slot.
-2. **A tighter input-sensitivity for the reducing normalisation.** The `A²/ε^{3/2}` factor is
-   worst-case-at-the-ε-floor twice over. An operating-point variance floor `V` shrinks it by
-   `(V/ε)^{3/2}` but leaves it quadratic, so it postpones the wall rather than removing it.
-   A genuinely linear bound needs the *normalised* output's Lipschitz constant, not the
-   pre-normalisation one — that is real work and probably the interesting result.
+2. ✅ **A tighter input-sensitivity for the reducing normalisation — MEASURED 2026-09-04, §3.27,
+   and BOTH halves of this paragraph were wrong.** It said *"a genuinely linear bound needs the
+   normalised output's Lipschitz constant … that is real work and probably the interesting
+   result"*. ⭐⭐ The bound is not linear in the window, it is **free of** it —
+   `2e·S·(1 + Xh)` against `2e·S + 8A²·e·S³` — because
+   `x̂_t − x̂_a = (u−w)/σ_t + x̂_a·(σ_a−σ_t)/σ_t` puts the NORMALISED activation against the
+   σ-difference, and `|σ_a − σ_t| ≤ 2e` by the reverse triangle inequality plus `s ↦ √(s²+ε)`
+   being 1-Lipschitz. Three elementary steps, no MVT — §3.12's swish lesson again.
+   ⭐⭐ And its payoff is on the **WINDOW**, worth **53 orders on ConvNeXt-T and 57 on ViT-Tiny
+   with no new hypothesis**, from `|x̂| ≤ √n` — `bnXhat_sq_le`, already in the repo. ⛔ But it does
+   NOT remove the cap: even with this quadratic gone the fold is 82 orders above the triangle
+   inequality on ConvNeXt-T and 7 on ViT-Tiny. ⛔ An operating-point variance floor is still a
+   separate lever and still does not remove the quadratic *by itself* — that part stands.
 3. **Accept a per-site cap on `eistd`.** `|istd| ≤ 1/√ε` bounds the inverse-stddev, so
    `eistd ≤ 2/√ε` always; that removes the `eistd` growth but not the `D²` growth.
 
@@ -2678,6 +2705,120 @@ not vacuous. ⛔ Nothing in the repo checks this for any of the four, and a reco
 unsatisfiable field would make its whole-net number a theorem about nothing — the `stale lean_exe
 gates` failure mode with the gate removed entirely. Ten lines per file.
 
+### 3.27 ⭐⭐ §0.1's ESCAPE 2, MEASURED (2026-09-04) — and it is 55 orders on the WINDOW, not on the kind
+
+§4 item 3 promoted this above ViT's backward because it is *"the only open item that would change
+what the numbers MEAN rather than adding a sixth of a kind we have five of"*, and §0.1 has said
+since it was written that *"a genuinely linear bound needs the normalised output's Lipschitz
+constant, not the pre-normalisation one — that is real work and probably the interesting result"*.
+⭐ Probed first, as §3.8 says (`cnx_eval_chain(ln_lin = True)` / `vit_chain(ln_lin = True)`; the
+committed rows and all six `verify_*` passes reproduce byte-for-byte). **Three findings, and the
+first two go the opposite way from the premise.**
+
+**⭐⭐ Finding 1 — the modulus loses the window ENTIRELY, and §0.1's costing was wrong the way
+§3.4's swish costing was.** §4's question was *"whether the bound is linear in the window at all,
+or merely a smaller quadratic"*. It is neither: it is **free of the window**. Write the two
+normalised outputs over a common denominator, with `u = vt − μ_t` and `w = va − μ_a`:
+
+    x̂_t,i − x̂_a,i = (u_i − w_i)/σ_t + x̂_a,i · (σ_a − σ_t)/σ_t
+
+The first term is `≤ 2e·S`. ⭐ **In the second, the factor multiplying the σ-difference is the
+NORMALISED activation and not `|x − μ|` — that is the whole trick** — so it is `≤ Xh` by
+`bnXhat_sq_le`. And `|σ_a − σ_t| ≤ 2e` with no window and no quadratic, because
+`σ = √(‖centred‖²/n + ε)` is a 1-Lipschitz scalar map of a norm: the reverse triangle inequality
+gives `|σ_a − σ_t| ≤ ‖w − u‖₂/√n ≤ 2e`. So the input-sensitivity is
+
+    2e·S·(1 + Xh)          against the shipped leaf's      2e·S + 8A²·e·S³
+
+⛔ **No MVT, no Jacobian, no projection argument** — the sharp constant would want the standardisation
+map's Jacobian (`istd·(I − 11ᵀ/n − x̂x̂ᵀ/n)`, an orthogonal projection scaled by `istd`, so operator
+norm exactly `istd`), and nobody needs it. §3.12's rule for the third time: **a cost estimate written
+down next to a bound reads as a finding, and it is what stops anyone re-deriving it.** This one sat
+in §0.1 from the day it was written.
+
+**⭐⭐ Finding 2 — the payoff is on the WINDOW, it is worth 53 and 57 orders, and it needs NO NEW
+MATHEMATICS AT ALL.** Both committed LayerNorm numbers are `capped`, i.e. `2 × window`, so they
+follow the window and not the modulus. And the window half of escape 2 is just `|x̂| ≤ √n` —
+**`bnXhat_sq_le`, already in the repo, and the load-bearing lemma on all FOUR whole-net backward
+numbers** (§3.9 finding 4, §3.16 finding 5, §3.22). The forward LayerNorm leaf throws it away by
+bounding `|x̂| = |x − μ|·|istd| ≤ 2A·S`. ⭐ §3.3.0(b) — *before writing a tighter leaf bound, grep
+the whole cone for it* — for the ninth time, and the largest instance yet: two committed numbers,
+~55 orders each, from a lemma the repo has had for a month.
+
+| net | shipped | escape 2, ε-floor, no new hypothesis | orders |
+|---|---|---|---|
+| **ConvNeXt-T fwd** | 4.858·10²²⁷ / 9.706·10²²⁷ | **6.609·10¹⁷⁴ / 1.321·10¹⁷⁵** | 53 |
+| **ViT-Tiny fwd** | 3.612·10²¹⁸ / 7.222·10²¹⁸ | **1.130·10¹⁶¹ / 2.259·10¹⁶¹** | 57 |
+
+**⛔⛔ Finding 3 — IT DOES NOT CHANGE THE KIND, and §4 item 3's premise is not borne out.** Even
+with §0.1's quadratic gone, the honest fold is still **82 orders above the triangle inequality** on
+ConvNeXt-T and **7** on ViT-Tiny, so `FloatBridgesTo.capped`'s `min(mod, 2·mag)` keeps selecting the
+cap. The full ablation (`cnx_eval_chain`, `S` at the ε-floor unless stated):
+
+| ConvNeXt-T forward | window | budget | bud/win | statable |
+|---|---|---|---|---|
+| SHIPPED: old leaf, LN capped | 4.858·10²²⁷ | 9.706·10²²⁷ | 2.00 | yes |
+| old leaf, UNCAPPED (§0.1's quadratic) | 4.858·10²²⁷ | 1.453·10⁵²⁶² | 10⁵⁰³⁵ | ⛔ no |
+| ⭐ escape 2, UNCAPPED | 6.609·10¹⁷⁴ | 2.823·10²⁵⁶ | 10⁸² | ⛔ no |
+| ⭐⭐ escape 2, capped | **6.609·10¹⁷⁴** | **1.321·10¹⁷⁵** | 2.00 | yes |
+| escape 2, UNCAPPED, `\|istd\| ≤ 16` | 3.414·10¹⁴⁶ | 4.710·10²²⁶ | 10⁸⁰ | yes |
+| escape 2, capped, `\|istd\| ≤ 16` | 3.414·10¹⁴⁶ | 6.835·10¹⁴⁶ | 2.00 | yes |
+| old leaf, capped, `\|istd\| ≤ 16` (control) | 7.305·10¹⁹⁷ | 1.461·10¹⁹⁸ | 2.00 | yes |
+
+⭐ Read the control row against the shipped one: 30 of ConvNeXt's orders are the operating point and
+51 are escape 2, so the two are nearly independent levers. ⭐ And read the two UNCAPPED rows
+together: the uncapped fold at the ε-floor is 3 orders past §3.7(a)'s ~10²⁵³ ceiling and 3 orders
+inside it at `|istd| ≤ 16` — so **an honest whole-net FOLD for a LayerNorm FORWARD does exist**, at
+one operating-point hypothesis, and it is 80 orders worse than the cap it would replace. §9's rule
+stands and now has a measurement behind it: *the cap is not a shortcut past a fold that exists; it
+is the better bound.*
+
+**⭐⭐ Finding 4 — and this is the new lever: what stops the window RESETTING is the DEVICE MEAN
+ACCURACY, not the arithmetic.** Under escape 2 a LayerNorm's output window is `√n` — `10` at
+ConvNeXt's stem, `28` at its head, `14` at ViT's — **plus the rounding**, and the rounding carries
+the modelled mean error `emr·A` multiplied by `|istd| ≤ S`. So a normalisation **resets** the window
+iff `emr·S < 1`:
+
+| `emr` | `S` | `emr·S` | measured site gain |
+|---|---|---|---|
+| 10⁻² | 317 (ε-floor) | 3.17 | ⛔ **3.19** — the site MULTIPLIES |
+| 10⁻² | 16 | 0.16 | ⭐ **0.18** — the site SHRINKS |
+| 10⁻³ | 317 | 0.32 | 0.34 |
+| 10⁻⁴ | 317 | 0.032 | 0.052 |
+
+⭐⭐ **That is a MODELLING constant, not an architectural one**, and it is the first place in this
+file where a device accuracy — not a fan-in, not a normalisation, not a profile — is what makes a
+whole-net window compound. `DeviceLN`'s mean accuracy is stated RELATIVE to the window and its
+inverse-stddev accuracy absolutely; §3.5.2 item 6.1 already noted that `DeviceExp`'s spec is
+relative where the other two are not, so the shapes are not settled by anything but what each proof
+needed. ⚠ **Before spending the operating point to buy `emr·S < 1`, ask whether `emr` should be
+`10⁻²` at all** — it is a hypothesis about a reduction the device performs in float, and a rounded
+mean of `n` terms is `γ_n·A`, which at `n = 96` and `u = 2⁻²⁴` is `6·10⁻⁶`, not `10⁻²`.
+
+**What it would cost in Lean, and ⭐ the two halves are very different prices.**
+* **The window half — 53/57 orders, and no new mathematics.** A `floatClose_bn`-family leaf stated
+  at `|x̂| ≤ Xh` instead of at `D` and `S` separately, plus the same restatement inside
+  `bnNormBudget` (`bn_norm_budget_x` in the probe is the exact shape: the float product
+  `fl(fl(x−fl(μ))·fistd)` IS the normalised activation one rounding away, so bounding it by
+  `(D+ea)(S+ei)` is `floatClose_seScale`'s mistake at a different leaf, §3.4 finding 2). The bound
+  itself is `bnXhat_abs_le_num`, which four backward budget files already call. ⛔ It moves TWO
+  committed numbers, so §7 says two commits.
+* **The modulus half — 5006 orders on ConvNeXt's uncapped fold, and worth nothing to the shipped
+  statements**, because they are capped and the fold stays above the cap. Take it only if an
+  honest-fold LayerNorm FORWARD is wanted for its own sake, and note it needs `|istd| ≤ 16` on top.
+  The Lean is the reverse triangle inequality for `‖·‖₂` over `Vec n` plus `s ↦ √(s²+ε)` being
+  1-Lipschitz — elementary, but neither is currently used anywhere in the float tier.
+
+⚠ **One thing this probe did NOT settle, and it is the cheapest remaining check.** §0.1 says of
+training-mode BatchNorm *"there is no numeral to write down, so there is no theorem to state"*, on
+the strength of a budget of `10⁷⁴¹⁷` — but that same measurement records the **window** as `10²²¹`,
+which is under §3.7(a)'s ceiling, and `FloatBridgesTo.capped` turns any statable window into a
+statable theorem. So a capped training-mode forward number may have been available all along, and
+escape 2 would improve its window as it does ConvNeXt's. ⛔ Not measured here: `bn()` — the
+training-mode leaf — is defined in `float_budget_envelope.py` and **called by nothing**, so
+reconstructing r34's 90-stage training chain is the work. Do that before quoting §0.1's
+"no theorem to state" again.
+
 ## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
 
 §3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward has a certified tie
@@ -2745,10 +2886,17 @@ only existing block tie, `mbconvBodyBack_eq_mbconvBody_vjp`, is per-example at s
 so all three batched block ties at `bnBatchLA` are missing. ⭐ The batched leaf ties are a solved
 shape — §3.24's last paragraph.
 
-**3. ⭐⭐ THEN THE ESCAPE: §0.1's item 2 for the FORWARDS — a Lipschitz constant for the
-NORMALISED output.** Promoted here from "flagged rather than scheduled", because it is the only
-open item that would change what the numbers MEAN rather than adding a sixth of a kind we already
-have five of. Every forward number in §0's table is vacuous by hundreds of orders, and §0.1 has
+**3. ✅ THE ESCAPE — MEASURED 2026-09-04 (§3.27), and the ranking's own premise was wrong.**
+⛔ It is NOT "the only open item that would change what the numbers MEAN": the fold stays 82 orders
+(ConvNeXt-T) and 7 orders (ViT-Tiny) above the triangle inequality even with §0.1's quadratic gone,
+so both numbers stay CAPS. ⭐⭐ What it changes is what they SAY — **53 orders on ConvNeXt-T's
+window and 57 on ViT-Tiny's, at no new hypothesis, from a lemma already in the repo**
+(`bnXhat_sq_le`). ⛔ Two committed numbers, so §7 says two commits; the probe is in
+`float_budget_envelope.py` (`ln_lin`) and §3.27 has the Lean costing, which splits sharply — the
+window half is a restatement with no new mathematics, the modulus half is new (a reverse triangle
+inequality over `Vec n`) and is worth NOTHING to the shipped statements. ⭐ And it turned up a
+lever this file has not had: a normalisation resets the window iff `emr·S < 1`, a MODELLING
+constant. What follows is the ranking as it stood. Every forward number in §0's table is vacuous by hundreds of orders, and §0.1 has
 said since it was written that a genuinely linear bound needs *the normalised output's* Lipschitz
 constant rather than the pre-normalisation one — "real work and probably the interesting result".
 ⭐ It now has a worked precedent for its price: the backward's operating-point `S` bought ~43
@@ -2981,6 +3129,15 @@ at `N = 1` — 7.104·10¹⁸², where `N = 256` is 2.880·10¹⁹⁴ — and it
 throughout, with the RATIO climbing 0.222 → 0.761 as the batch grows. ⚠ Never quote a backward
 number as "for any batch size" by analogy with its forward; ask which of the net's ops reduces
 across the batch. The other three backwards are per-example nets and the question does not arise.
+
+⭐⭐ **AND SAY THAT THE CAP IS THE BETTER BOUND, NOT A SHORTCUT — measured 2026-09-04 (§3.27).**
+This section has said since it was written that *"the cap is not a shortcut past a fold that
+exists; it is what makes a statement possible where no fold does"*. That is now stronger and
+narrower: an honest whole-net FOLD for a LayerNorm FORWARD **does** exist once §0.1's quadratic is
+removed — ConvNeXt-T's is 4.710·10²²⁶ at `|istd| ≤ 16` — and it is **80 orders WORSE than the
+triangle inequality** at the same window, so `FloatBridgesTo.capped`'s `min` still selects the cap.
+On ViT-Tiny the gap is 7 orders. ⭐ So the right thing to say is not "no fold exists" but "the fold
+exists and is worse", which is a claim about magnitudes and not about LayerNorm.
 
 ⭐ Say the WINDOW and the BUDGET separately — after MobileNetV2 they are not the same story.
 A clamped-activation net can have a tight window and a vacuous budget at the same time, and

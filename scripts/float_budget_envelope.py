@@ -671,6 +671,56 @@ def cnx_ln_leaf(A, S=CNX_S, emr=CNX_EMR, ei=CNX_EI, q=U32):
     return 2 * A * S + bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
 
 
+def bn_norm_budget_x(u, Xh, D, S, G, Bb, em, ei):
+    """`bnNormBudget` restated at `|x̂| ≤ Xh` — the ROUNDING half of §0.1's escape 2.
+
+    The only change is which bound the two rounding steps are charged at. `bnNormBudget` bounds
+    the float product `fl(fl(x−fl(mu)) * fistd)` by `(D+ea)*(S+ei)`, the product of the two
+    factors' windows; but that product IS the normalised activation, one rounding away, so the
+    honest bound is `|x̂| + <the error already being computed>` — `floatClose_seScale`'s fix
+    (planning §3.4 finding 2) at a different leaf. The `D*ei + ea*S` terms survive: they are the
+    DEVICE's mean/inverse-stddev accuracies, which are absolute, and they are what keeps this
+    half linear in the window rather than free of it."""
+    ea = u * (D + em) + em
+    t = D * ei + ea * S + ea * ei
+    inner = u * (Xh + t) + t
+    outer = mulErr(u, G, Xh, F(0), inner)
+    return u * (G * Xh + outer + Bb) + outer
+
+
+def cnx_ln_leaf_lin(st, nred, S=CNX_S, emr=CNX_EMR, ei=CNX_EI, q=U32):
+    """⭐⭐ §0.1's ESCAPE 2 at the pure-normalise LayerNorm (gamma = 1, beta = 0), as a FOLD.
+
+    Two changes, each of which is one lemma:
+
+    (a) THE WINDOW RESETS. `|x̂_i| <= sqrt(n)` (`bnXhat_sq_le`, already in the repo — it is the
+        load-bearing lemma on all four whole-net BACKWARD numbers), where the shipped leaf uses
+        `|x−mu| * |istd| <= 2A * S`. A normalisation therefore RESETS the certified magnitude the
+        way relu6's clamp does (§3.2), and `Xh` is the CEILING root because sqrt(96) etc. are
+        irrational (§3.16 finding 5).
+
+    (b) THE INPUT-SENSITIVITY LOSES THE WINDOW ENTIRELY: `2e*S*(1 + Xh)` where the shipped leaf
+        has `2e*S + 8A^2*e*S^3`. Write the two normalised outputs over a common denominator,
+
+            x̂_t,i − x̂_a,i = (u_i − w_i)/sigma_t + x̂_a,i * (sigma_a − sigma_t)/sigma_t
+
+        with u = vt − mu_t and w = va − mu_a. The first term is `<= 2e*S`. In the second, the
+        factor multiplying the sigma-difference is the NORMALISED activation, not `|x−mu|` — that
+        is the whole trick — and `|sigma_a − sigma_t| <= 2e` with no window and no quadratic,
+        because sigma = sqrt(||centred||^2/n + eps) is the composition of a 1-Lipschitz scalar
+        map with a norm, so the reverse triangle inequality gives
+        `|sigma_a − sigma_t| <= ||w − u||_2/sqrt(n) <= 2e`.
+
+    ⛔ §0.1 costed this as "real work and probably the interesting result" and (b) is three
+    elementary steps — the same correction §3.12 made to §3.4's swish estimate. What IS real work
+    is (b) in Lean over `Vec n`: it needs the reverse triangle inequality for the euclidean norm
+    and `s -> sqrt(s^2+eps)` being 1-Lipschitz, neither of which the float tier currently uses."""
+    A, E = st
+    Xh = F(isqrt_ceil(nred))
+    nb = bn_norm_budget_x(q, Xh, 2 * A, S, F(1), F(0), emr * A, ei)
+    return (Xh + nb, nb + 2 * E * S * (1 + Xh))
+
+
 def cnx_diag(st, Sd, q=U32):
     """`Maps.diagBack` at `es = 0` (a stored weight, no transcendental): the LN γ multiply and
     the layer scale."""
@@ -696,7 +746,7 @@ def cnx_gelu(st, egelu=CNX_EGELU, sat=True):
 
 def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
                    emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32,
-                   ln_cap=True, gelu_sat=True, head_ln=True):
+                   ln_cap=True, gelu_sat=True, head_ln=True, ln_lin=False):
     """Every stage of the ConvNeXt-T forward, at exactly the granularity the Lean `Maps` chain
     composes them (the four layout permutations and the per-row lift are envelope-preserving and
     produce no entry).
@@ -711,14 +761,19 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
 
     out = []
 
-    def lnsite(st, tag):
+    def lnsite(st, tag, nred):
         A, E = st
-        mag = r4(cnx_ln_leaf(A, S, emr, ei, q))
-        if ln_cap:
-            err = r4(2 * mag)
-        else:                                   # the uncapped `bnLeafMod`, for the ablation only
+        if ln_lin:            # ⭐⭐ §0.1's escape 2 — the window RESETS and the modulus is linear
+            mag, mod = cnx_ln_leaf_lin(st, nred, S, emr, ei, q)
+        else:
+            mag = cnx_ln_leaf(A, S, emr, ei, q)
             nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
-            err = r4(nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000))))
+            mod = nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000)))
+        mag = r4(mag)
+        # ⚠ `FloatBridgesTo.capped` is `min(mod, 2*mag)`, so the two branches are COMPARABLE and
+        # the cap only ever helps. Round the window FIRST and double the rounded value (§3.5.2
+        # item 2: `2*r4(x)` can exceed `r4(2*x)`, which breaks `Maps.capped`'s own `2*Ā' <= Ē'`).
+        err = min(r4(2 * mag), r4(mod)) if ln_cap else r4(mod)
         st = (mag, err); out.append((tag + '.ln', st))
         st = R(cnx_diag(st, gl, q)); out.append((tag + '.lng', st))
         st = R(cnx_bias(st, bb, q)); out.append((tag + '.lnb', st))
@@ -726,17 +781,17 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
 
     st = (F(1), F(0))
     st = R(conv(st, 3 * 4 * 4, w, bb)); out.append(('stem.conv', st))   # 4×4/s4 patchify
-    st = lnsite(st, 'stem')
+    st = lnsite(st, 'stem', 96)
     for si, (c, ce, nblk, _hw) in enumerate(CNX_STAGES):
         if si > 0:
             cin = CNX_STAGES[si - 1][0]
-            st = lnsite(st, f'd{si}')
+            st = lnsite(st, f'd{si}', cin)
             st = R(conv(st, cin * 2 * 2, w, bb)); out.append((f'd{si}.conv', st))
         for b in range(nblk):
             t = f's{si + 1}b{b}'
             blkin = st
             s = R(conv(st, 7 * 7, w, bb)); out.append((t + '.dw', s))
-            s = lnsite(s, t)
+            s = lnsite(s, t, c)
             s = R(conv(s, c, w, bb)); out.append((t + '.ex', s))
             s = R(cnx_gelu(s, egelu, gelu_sat)); out.append((t + '.ge', s))
             s = R(conv(s, ce, w, bb)); out.append((t + '.pr', s))
@@ -744,7 +799,7 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
             st = R(residual(blkin, s, q)); out.append((t + '.out', st))
     st = R(gap(st, 49, q)); out.append(('gap', st))
     if head_ln:
-        st = lnsite(st, 'head')
+        st = lnsite(st, 'head', 768)
     st = R(dense(st, 768, w, bb)); out.append(('dense', st))
     return out
 
@@ -989,7 +1044,7 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
               gl=VIT_GL, bl=VIT_BL, pb=VIT_PB,
               S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
               k=K_VIT, ln_cap=True, gelu_sat=True, attn_mode='cap',
-              uniform=False):
+              uniform=False, ln_lin=False):
     """Every stage of `vitForwardKV` at ViT-Tiny's shapes, at the granularity a Lean `Maps`
     chain composes them.  Returns (rows, exp_tainted_tags) — the second is the list of stage
     numerals that would contain a `Real.exp` and therefore CANNOT BE WRITTEN, which is the
@@ -1015,13 +1070,18 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
         WINDOW, resets it. That is why the taint is per-segment and not terminal."""
         nonlocal taint
         A, E = st
-        mag = r4(vit_ln_leaf(A, S, emr, ei, q))
+        if ln_lin:        # ⭐⭐ §0.1's escape 2 — ViT's vector LN reduces over D = 192
+            mag, mod = cnx_ln_leaf_lin(st, D_VIT, S, emr, ei, q)
+        else:
+            mag = vit_ln_leaf(A, S, emr, ei, q)
+            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
+            mod = nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000)))
+        mag = r4(mag)
         if ln_cap:
-            err = r4(2 * mag)
+            err = min(r4(2 * mag), r4(mod))
             taint = False                     # the cap discards the inherited error entirely
         else:
-            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
-            err = r4(nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000))))
+            err = r4(mod)
         st = (mag, err); emit(tag + '.ln', st)
         st = R(cnx_diag(st, g_b, q)); emit(tag + '.lng', st)
         st = R(cnx_bias(st, b_b, q)); emit(tag + '.lnb', st)
@@ -2350,3 +2410,71 @@ if __name__ == "__main__":
     print("  ⛔⛔ AND THE SHIPPED BRIDGE HAS `id` IN ITS HEAD-LAYERNORM SLOT —")
     print("     `convnextCh_grad_floatBridges` reverses a net with no head LN, the same slot")
     print("     §3.3(b) fixed on the FORWARD on 2026-09-03. Drift, fifth time.")
+
+    print("\n── §0.1's ESCAPE 2, MEASURED: the normalised output's sensitivity (planning §3.27) ──")
+
+    def _r(a, e):
+        d = ilog10(e) - ilog10(a)
+        if abs(d) <= 3:
+            try:
+                return f"{float(e / a):8.3f}"
+            except OverflowError:
+                pass
+        return f"  1e{d:+d}"
+
+    print("  ⭐⭐ THE MODULUS LOSES THE WINDOW ENTIRELY — not 'a smaller quadratic' (§0.1's own")
+    print("     question). x̂_t − x̂_a = (u−w)/σ_t + x̂_a·(σ_a−σ_t)/σ_t, the factor multiplying the")
+    print("     σ-difference is the NORMALISED activation, and |σ_a − σ_t| ≤ 2e with no window and")
+    print("     no quadratic (reverse triangle inequality + s ↦ √(s²+ε) is 1-Lipschitz). So the")
+    print("     input-sensitivity is 2e·S·(1+Xh) where the shipped leaf has 2e·S + 8A²·e·S³.")
+    print(f"\n  {'ConvNeXt-T FORWARD':<44} {'window':>12} {'budget':>12} {'bud/win':>9}  statable")
+    print("  " + "-" * 88)
+    for name, kw in [
+        ("SHIPPED: old leaf, LN capped", {}),
+        ("old leaf, UNCAPPED (the §0.1 quadratic)", dict(ln_cap=False)),
+        ("⭐ escape 2, UNCAPPED, ε-floor S = 317", dict(ln_lin=True, ln_cap=False)),
+        ("⭐⭐ escape 2, capped, ε-floor (NO new hypothesis)", dict(ln_lin=True)),
+        ("escape 2, UNCAPPED, |istd| ≤ 16", dict(ln_lin=True, ln_cap=False, S=F(16))),
+        ("escape 2, capped, |istd| ≤ 16", dict(ln_lin=True, S=F(16))),
+        ("old leaf, capped, |istd| ≤ 16 (the control)", dict(S=F(16))),
+    ]:
+        rr = cnx_eval_chain(**kw)
+        a, e = rr[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'NO'
+        print(f"  {name:<44} {sci(a):>12} {sci(e):>12} {_r(a, e)}  {ok}")
+    print(f"\n  {'ViT-Tiny FORWARD':<44} {'window':>12} {'budget':>12} {'bud/win':>9}  statable")
+    print("  " + "-" * 88)
+    for name, kw in [
+        ("SHIPPED: old leaf, LN + attention capped", {}),
+        ("LN uncapped (attention still capped)", dict(ln_cap=False)),
+        ("⭐ escape 2, LN UNCAPPED, ε-floor S = 317", dict(ln_lin=True, ln_cap=False)),
+        ("⭐⭐ escape 2, LN capped, ε-floor (NO new hyp.)", dict(ln_lin=True)),
+        ("escape 2, LN capped, |istd| ≤ 16", dict(ln_lin=True, S=F(16))),
+        ("old leaf, capped, |istd| ≤ 16 (the control)", dict(S=F(16))),
+    ]:
+        rr, tt = vit_chain(**kw)
+        a, e = rr[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 and not tt else 'NO'
+        print(f"  {name:<44} {sci(a):>12} {sci(e):>12} {_r(a, e)}  {ok}")
+    print("\n  ⭐⭐ THE PAYOFF IS ON THE WINDOW, NOT THE BUDGET, and it needs NO new hypothesis:")
+    print("     ConvNeXt-T 4.858e227 → 6.609e174 (53 orders), ViT-Tiny 3.612e218 → 1.130e161 (57).")
+    print("     Both committed numbers are CAPPED, so they are `2 x window` and follow the window.")
+    print("  ⭐⭐ And that half needs NO NEW MATHEMATICS: |x̂| ≤ √n is `bnXhat_sq_le`, already in the")
+    print("     repo and load-bearing on all FOUR whole-net backward numbers. The forward LN leaf")
+    print("     throws it away by bounding |x̂| = |x−mu|·|istd| ≤ 2A·S. §3.3.0(b), ninth instance.")
+    print("  ⛔ BUT IT DOES NOT CHANGE THE KIND. Even with §0.1's quadratic gone the fold is 82")
+    print("     orders above the triangle inequality on ConvNeXt-T and 7 on ViT-Tiny, so")
+    print("     `FloatBridgesTo.capped`'s min still selects the cap. §4 item 3's premise — that")
+    print("     this is the item that changes what the numbers MEAN — is not borne out: it changes")
+    print("     what they SAY by ~55 orders and leaves them caps.")
+    print("  ⭐⭐ WHAT STOPS THE WINDOW RESETTING IS THE DEVICE MEAN ACCURACY, NOT THE ARITHMETIC.")
+    print("     The LN's output window is √n (10…28) plus the rounding, and the rounding carries")
+    print("     the modelled mean error emr·A multiplied by |istd| ≤ S. So a normalisation RESETS")
+    print("     the window iff emr·S < 1 — at the ε-floor that is 0.01·317 = 3.17 and the site")
+    print("     MULTIPLIES by 3.19; at |istd| ≤ 16 it is 0.16 and the site SHRINKS (gain 0.49).")
+    for emr, S in [(F(1, 100), F(317)), (F(1, 100), F(16)), (F(1, 1000), F(317)),
+                   (F(1, 10 ** 4), F(317))]:
+        A = F(10) ** 6
+        mg, _ = cnx_ln_leaf_lin((A, F(0)), 96, S, emr, F(1, 100), U32)
+        print(f"       emr = {float(emr):.0e}, S = {int(S):>3}   emr·S = {float(emr * S):>6.3f}"
+              f"   site gain {float(mg / A):>7.4g}")
