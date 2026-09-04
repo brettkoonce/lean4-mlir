@@ -1,0 +1,703 @@
+[Epoch 1] lr=0.0032 loss(train_avg)=6.408 val_top1=5046/50000 (0.1009) val_top5=0.2581 val_loss=4.944  [526.7s train, 22.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e1.state.npz (1048 arrays, step=5004)
+[Epoch 2] lr=0.0064 loss(train_avg)=5.0446 val_top1=15467/50000 (0.3093) val_top5=0.5625 val_loss=3.3848  [464.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e2.state.npz (1048 arrays, step=10008)
+[Epoch 3] lr=0.0096 loss(train_avg)=4.3747 val_top1=21387/50000 (0.4277) val_top5=0.6847 val_loss=2.6872  [468.2s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e3.state.npz (1048 arrays, step=15012)
+[Epoch 4] lr=0.0128 loss(train_avg)=4.0486 val_top1=24550/50000 (0.491) val_top5=0.7412 val_loss=2.3451  [464.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e4.state.npz (1048 arrays, step=20016)
+[Epoch 5] lr=0.016 loss(train_avg)=3.8777 val_top1=26374/50000 (0.5275) val_top5=0.7693 val_loss=2.1662  [464.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e5.state.npz (1048 arrays, step=25020)
+[Epoch 6] lr=0.015798 loss(train_avg)=3.7435 val_top1=27940/50000 (0.5588) val_top5=0.7939 val_loss=2.006  [468.2s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e6.state.npz (1048 arrays, step=30024)
+[Epoch 7] lr=0.015599 loss(train_avg)=3.6196 val_top1=29059/50000 (0.5812) val_top5=0.8124 val_loss=1.8737  [463.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e7.state.npz (1048 arrays, step=35028)
+[Epoch 8] lr=0.015402 loss(train_avg)=3.5305 val_top1=29856/50000 (0.5971) val_top5=0.8249 val_loss=1.7907  [467.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e8.state.npz (1048 arrays, step=40032)
+[Epoch 9] lr=0.015208 loss(train_avg)=3.4716 val_top1=30297/50000 (0.6059) val_top5=0.8312 val_loss=1.7391  [463.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e9.state.npz (1048 arrays, step=45036)
+[Epoch 10] lr=0.015016 loss(train_avg)=3.4177 val_top1=30847/50000 (0.6169) val_top5=0.8394 val_loss=1.6848  [465.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e10.state.npz (1048 arrays, step=50040)
+[Epoch 11] lr=0.014827 loss(train_avg)=3.3744 val_top1=31155/50000 (0.6231) val_top5=0.8434 val_loss=1.6624  [464.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e11.state.npz (1048 arrays, step=55044)
+[Epoch 12] lr=0.01464 loss(train_avg)=3.3417 val_top1=31510/50000 (0.6302) val_top5=0.8484 val_loss=1.6322  [463.9s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e12.state.npz (1048 arrays, step=60048)
+[Epoch 13] lr=0.014455 loss(train_avg)=3.3117 val_top1=31828/50000 (0.6366) val_top5=0.8523 val_loss=1.6022  [463.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e13.state.npz (1048 arrays, step=65052)
+[Epoch 14] lr=0.014273 loss(train_avg)=3.286 val_top1=32042/50000 (0.6408) val_top5=0.855 val_loss=1.5832  [463.5s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e14.state.npz (1048 arrays, step=70056)
+[Epoch 15] lr=0.014093 loss(train_avg)=3.2588 val_top1=32367/50000 (0.6473) val_top5=0.8599 val_loss=1.5496  [464.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e15.state.npz (1048 arrays, step=75060)
+[Epoch 16] lr=0.013915 loss(train_avg)=3.2401 val_top1=32528/50000 (0.6506) val_top5=0.8614 val_loss=1.5346  [463.7s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e16.state.npz (1048 arrays, step=80064)
+[Epoch 17] lr=0.01374 loss(train_avg)=3.2171 val_top1=32661/50000 (0.6532) val_top5=0.8637 val_loss=1.5119  [463.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e17.state.npz (1048 arrays, step=85068)
+[Epoch 18] lr=0.013567 loss(train_avg)=3.2009 val_top1=32853/50000 (0.6571) val_top5=0.8654 val_loss=1.4973  [463.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e18.state.npz (1048 arrays, step=90072)
+[Epoch 19] lr=0.013395 loss(train_avg)=3.183 val_top1=32963/50000 (0.6593) val_top5=0.8679 val_loss=1.4822  [463.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e19.state.npz (1048 arrays, step=95076)
+[Epoch 20] lr=0.013226 loss(train_avg)=3.1693 val_top1=33173/50000 (0.6635) val_top5=0.8703 val_loss=1.4622  [462.9s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e20.state.npz (1048 arrays, step=100080)
+[Epoch 21] lr=0.01306 loss(train_avg)=3.1548 val_top1=33312/50000 (0.6662) val_top5=0.8717 val_loss=1.4478  [464.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e21.state.npz (1048 arrays, step=105084)
+[Epoch 22] lr=0.012895 loss(train_avg)=3.1405 val_top1=33524/50000 (0.6705) val_top5=0.8736 val_loss=1.4296  [463.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e22.state.npz (1048 arrays, step=110088)
+[Epoch 23] lr=0.012732 loss(train_avg)=3.1292 val_top1=33647/50000 (0.6729) val_top5=0.8754 val_loss=1.4175  [467.3s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e23.state.npz (1048 arrays, step=115092)
+[Epoch 24] lr=0.012572 loss(train_avg)=3.1168 val_top1=33732/50000 (0.6746) val_top5=0.8775 val_loss=1.4041  [463.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e24.state.npz (1048 arrays, step=120096)
+[Epoch 25] lr=0.012413 loss(train_avg)=3.1059 val_top1=33884/50000 (0.6777) val_top5=0.8789 val_loss=1.3888  [463.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e25.state.npz (1048 arrays, step=125100)
+[Epoch 26] lr=0.012257 loss(train_avg)=3.0949 val_top1=34007/50000 (0.6801) val_top5=0.8798 val_loss=1.3791  [464.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e26.state.npz (1048 arrays, step=130104)
+[Epoch 27] lr=0.012102 loss(train_avg)=3.0843 val_top1=34064/50000 (0.6813) val_top5=0.8812 val_loss=1.3706  [463.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e27.state.npz (1048 arrays, step=135108)
+[Epoch 28] lr=0.01195 loss(train_avg)=3.0769 val_top1=34241/50000 (0.6848) val_top5=0.8826 val_loss=1.3561  [463.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e28.state.npz (1048 arrays, step=140112)
+[Epoch 29] lr=0.011799 loss(train_avg)=3.0665 val_top1=34311/50000 (0.6862) val_top5=0.8849 val_loss=1.3482  [464.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e29.state.npz (1048 arrays, step=145116)
+[Epoch 30] lr=0.01165 loss(train_avg)=3.0575 val_top1=34417/50000 (0.6883) val_top5=0.8865 val_loss=1.3359  [467.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e30.state.npz (1048 arrays, step=150120)
+[Epoch 31] lr=0.011503 loss(train_avg)=3.0506 val_top1=34390/50000 (0.6878) val_top5=0.8869 val_loss=1.3356  [463.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e31.state.npz (1048 arrays, step=155124)
+[Epoch 32] lr=0.011358 loss(train_avg)=3.0388 val_top1=34462/50000 (0.6892) val_top5=0.8865 val_loss=1.326  [463.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e32.state.npz (1048 arrays, step=160128)
+[Epoch 33] lr=0.011215 loss(train_avg)=3.0314 val_top1=34558/50000 (0.6912) val_top5=0.8873 val_loss=1.3148  [463.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e33.state.npz (1048 arrays, step=165132)
+[Epoch 34] lr=0.011073 loss(train_avg)=3.0228 val_top1=34626/50000 (0.6925) val_top5=0.8885 val_loss=1.3109  [467.4s train, 17.7s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e34.state.npz (1048 arrays, step=170136)
+[Epoch 35] lr=0.010934 loss(train_avg)=3.0153 val_top1=34683/50000 (0.6937) val_top5=0.8901 val_loss=1.3072  [464.2s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e35.state.npz (1048 arrays, step=175140)
+[Epoch 36] lr=0.010796 loss(train_avg)=3.0069 val_top1=34762/50000 (0.6952) val_top5=0.8907 val_loss=1.3011  [467.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e36.state.npz (1048 arrays, step=180144)
+[Epoch 37] lr=0.01066 loss(train_avg)=2.9984 val_top1=34787/50000 (0.6957) val_top5=0.8914 val_loss=1.2962  [464.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e37.state.npz (1048 arrays, step=185148)
+[Epoch 38] lr=0.010525 loss(train_avg)=2.9932 val_top1=34864/50000 (0.6973) val_top5=0.892 val_loss=1.2878  [467.6s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e38.state.npz (1048 arrays, step=190152)
+[Epoch 39] lr=0.010393 loss(train_avg)=2.986 val_top1=34924/50000 (0.6985) val_top5=0.8927 val_loss=1.2848  [463.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e39.state.npz (1048 arrays, step=195156)
+[Epoch 40] lr=0.010261 loss(train_avg)=2.9793 val_top1=35009/50000 (0.7002) val_top5=0.8936 val_loss=1.2786  [467.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e40.state.npz (1048 arrays, step=200160)
+[Epoch 41] lr=0.010132 loss(train_avg)=2.9735 val_top1=35075/50000 (0.7015) val_top5=0.8945 val_loss=1.2717  [463.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e41.state.npz (1048 arrays, step=205164)
+[Epoch 42] lr=0.010004 loss(train_avg)=2.9689 val_top1=35105/50000 (0.7021) val_top5=0.8947 val_loss=1.2701  [467.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e42.state.npz (1048 arrays, step=210168)
+[Epoch 43] lr=0.009878 loss(train_avg)=2.9599 val_top1=35155/50000 (0.7031) val_top5=0.8941 val_loss=1.2665  [463.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e43.state.npz (1048 arrays, step=215172)
+[Epoch 44] lr=0.009754 loss(train_avg)=2.9524 val_top1=35223/50000 (0.7045) val_top5=0.8945 val_loss=1.259  [467.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e44.state.npz (1048 arrays, step=220176)
+[Epoch 45] lr=0.009631 loss(train_avg)=2.9486 val_top1=35239/50000 (0.7048) val_top5=0.8958 val_loss=1.2539  [463.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e45.state.npz (1048 arrays, step=225180)
+[Epoch 46] lr=0.009509 loss(train_avg)=2.9402 val_top1=35294/50000 (0.7059) val_top5=0.8963 val_loss=1.2519  [463.0s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e46.state.npz (1048 arrays, step=230184)
+[Epoch 47] lr=0.009389 loss(train_avg)=2.9353 val_top1=35342/50000 (0.7068) val_top5=0.8957 val_loss=1.2489  [467.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e47.state.npz (1048 arrays, step=235188)
+[Epoch 48] lr=0.009271 loss(train_avg)=2.9272 val_top1=35334/50000 (0.7067) val_top5=0.8968 val_loss=1.245  [463.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e48.state.npz (1048 arrays, step=240192)
+[Epoch 49] lr=0.009154 loss(train_avg)=2.922 val_top1=35351/50000 (0.707) val_top5=0.8967 val_loss=1.2486  [467.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e49.state.npz (1048 arrays, step=245196)
+[Epoch 50] lr=0.009038 loss(train_avg)=2.9168 val_top1=35391/50000 (0.7078) val_top5=0.8977 val_loss=1.2423  [463.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e50.state.npz (1048 arrays, step=250200)
+[Epoch 51] lr=0.008924 loss(train_avg)=2.9105 val_top1=35499/50000 (0.71) val_top5=0.899 val_loss=1.2346  [467.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e51.state.npz (1048 arrays, step=255204)
+[Epoch 52] lr=0.008812 loss(train_avg)=2.9051 val_top1=35529/50000 (0.7106) val_top5=0.8985 val_loss=1.2346  [463.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e52.state.npz (1048 arrays, step=260208)
+[Epoch 53] lr=0.008701 loss(train_avg)=2.8987 val_top1=35561/50000 (0.7112) val_top5=0.8989 val_loss=1.2296  [463.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e53.state.npz (1048 arrays, step=265212)
+[Epoch 54] lr=0.008591 loss(train_avg)=2.8933 val_top1=35577/50000 (0.7115) val_top5=0.8992 val_loss=1.2317  [467.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e54.state.npz (1048 arrays, step=270216)
+[Epoch 55] lr=0.008483 loss(train_avg)=2.8899 val_top1=35594/50000 (0.7119) val_top5=0.9005 val_loss=1.2292  [464.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e55.state.npz (1048 arrays, step=275220)
+[Epoch 56] lr=0.008376 loss(train_avg)=2.8829 val_top1=35669/50000 (0.7134) val_top5=0.9011 val_loss=1.2268  [467.6s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e56.state.npz (1048 arrays, step=280224)
+[Epoch 57] lr=0.00827 loss(train_avg)=2.8794 val_top1=35710/50000 (0.7142) val_top5=0.9014 val_loss=1.2212  [464.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e57.state.npz (1048 arrays, step=285228)
+[Epoch 58] lr=0.008166 loss(train_avg)=2.871 val_top1=35658/50000 (0.7132) val_top5=0.9006 val_loss=1.2182  [463.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e58.state.npz (1048 arrays, step=290232)
+[Epoch 59] lr=0.008063 loss(train_avg)=2.8671 val_top1=35784/50000 (0.7157) val_top5=0.9015 val_loss=1.2116  [463.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e59.state.npz (1048 arrays, step=295236)
+[Epoch 60] lr=0.007961 loss(train_avg)=2.8606 val_top1=35850/50000 (0.717) val_top5=0.9022 val_loss=1.2068  [463.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e60.state.npz (1048 arrays, step=300240)
+[Epoch 61] lr=0.007861 loss(train_avg)=2.8548 val_top1=35877/50000 (0.7175) val_top5=0.9023 val_loss=1.2023  [463.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e61.state.npz (1048 arrays, step=305244)
+[Epoch 62] lr=0.007762 loss(train_avg)=2.8513 val_top1=35867/50000 (0.7173) val_top5=0.9025 val_loss=1.2032  [463.1s train, 17.7s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e62.state.npz (1048 arrays, step=310248)
+[Epoch 63] lr=0.007664 loss(train_avg)=2.8474 val_top1=35747/50000 (0.7149) val_top5=0.9008 val_loss=1.2181  [464.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e63.state.npz (1048 arrays, step=315252)
+[Epoch 64] lr=0.007567 loss(train_avg)=2.8423 val_top1=35847/50000 (0.7169) val_top5=0.9019 val_loss=1.2059  [463.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e64.state.npz (1048 arrays, step=320256)
+[Epoch 65] lr=0.007472 loss(train_avg)=2.8347 val_top1=35882/50000 (0.7176) val_top5=0.9026 val_loss=1.2009  [467.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e65.state.npz (1048 arrays, step=325260)
+[Epoch 66] lr=0.007377 loss(train_avg)=2.832 val_top1=36011/50000 (0.7202) val_top5=0.9036 val_loss=1.1952  [463.7s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e66.state.npz (1048 arrays, step=330264)
+[Epoch 67] lr=0.007284 loss(train_avg)=2.8262 val_top1=35963/50000 (0.7193) val_top5=0.9044 val_loss=1.1948  [464.1s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e67.state.npz (1048 arrays, step=335268)
+[Epoch 68] lr=0.007192 loss(train_avg)=2.819 val_top1=36030/50000 (0.7206) val_top5=0.9047 val_loss=1.1923  [462.9s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e68.state.npz (1048 arrays, step=340272)
+[Epoch 69] lr=0.007102 loss(train_avg)=2.8163 val_top1=35987/50000 (0.7197) val_top5=0.9048 val_loss=1.1882  [463.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e69.state.npz (1048 arrays, step=345276)
+[Epoch 70] lr=0.007012 loss(train_avg)=2.8121 val_top1=35973/50000 (0.7195) val_top5=0.9038 val_loss=1.1919  [467.6s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e70.state.npz (1048 arrays, step=350280)
+[Epoch 71] lr=0.006924 loss(train_avg)=2.8069 val_top1=35957/50000 (0.7191) val_top5=0.9035 val_loss=1.1942  [463.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e71.state.npz (1048 arrays, step=355284)
+[Epoch 72] lr=0.006836 loss(train_avg)=2.8027 val_top1=35870/50000 (0.7174) val_top5=0.9022 val_loss=1.2044  [463.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e72.state.npz (1048 arrays, step=360288)
+[Epoch 73] lr=0.00675 loss(train_avg)=2.7989 val_top1=36006/50000 (0.7201) val_top5=0.9045 val_loss=1.1902  [462.8s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e73.state.npz (1048 arrays, step=365292)
+[Epoch 74] lr=0.006665 loss(train_avg)=2.7938 val_top1=36078/50000 (0.7216) val_top5=0.9059 val_loss=1.1834  [462.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e74.state.npz (1048 arrays, step=370296)
+[Epoch 75] lr=0.006581 loss(train_avg)=2.7888 val_top1=36124/50000 (0.7225) val_top5=0.9072 val_loss=1.1761  [463.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e75.state.npz (1048 arrays, step=375300)
+[Epoch 76] lr=0.006498 loss(train_avg)=2.7832 val_top1=36208/50000 (0.7242) val_top5=0.908 val_loss=1.1697  [463.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e76.state.npz (1048 arrays, step=380304)
+[Epoch 77] lr=0.006416 loss(train_avg)=2.7788 val_top1=36213/50000 (0.7243) val_top5=0.9076 val_loss=1.1672  [478.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e77.state.npz (1048 arrays, step=385308)
+[Epoch 78] lr=0.006335 loss(train_avg)=2.7736 val_top1=36294/50000 (0.7259) val_top5=0.9076 val_loss=1.1621  [462.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e78.state.npz (1048 arrays, step=390312)
+[Epoch 79] lr=0.006255 loss(train_avg)=2.7714 val_top1=36269/50000 (0.7254) val_top5=0.9084 val_loss=1.1585  [466.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e79.state.npz (1048 arrays, step=395316)
+[Epoch 80] lr=0.006176 loss(train_avg)=2.7664 val_top1=36155/50000 (0.7231) val_top5=0.9064 val_loss=1.174  [462.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e80.state.npz (1048 arrays, step=400320)
+[Epoch 81] lr=0.006099 loss(train_avg)=2.7627 val_top1=36169/50000 (0.7234) val_top5=0.9063 val_loss=1.1761  [466.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e81.state.npz (1048 arrays, step=405324)
+[Epoch 82] lr=0.006022 loss(train_avg)=2.7586 val_top1=36273/50000 (0.7255) val_top5=0.9076 val_loss=1.162  [462.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e82.state.npz (1048 arrays, step=410328)
+[Epoch 83] lr=0.005946 loss(train_avg)=2.7527 val_top1=36302/50000 (0.726) val_top5=0.9082 val_loss=1.1591  [466.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e83.state.npz (1048 arrays, step=415332)
+[Epoch 84] lr=0.005871 loss(train_avg)=2.748 val_top1=36347/50000 (0.7269) val_top5=0.9095 val_loss=1.1526  [463.5s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e84.state.npz (1048 arrays, step=420336)
+[Epoch 85] lr=0.005797 loss(train_avg)=2.744 val_top1=36441/50000 (0.7288) val_top5=0.9097 val_loss=1.1477  [465.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e85.state.npz (1048 arrays, step=425340)
+[Epoch 86] lr=0.005724 loss(train_avg)=2.7401 val_top1=36474/50000 (0.7295) val_top5=0.9101 val_loss=1.1448  [462.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e86.state.npz (1048 arrays, step=430344)
+[Epoch 87] lr=0.005651 loss(train_avg)=2.7385 val_top1=36508/50000 (0.7302) val_top5=0.9106 val_loss=1.1442  [466.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e87.state.npz (1048 arrays, step=435348)
+[Epoch 88] lr=0.00558 loss(train_avg)=2.7331 val_top1=36487/50000 (0.7297) val_top5=0.9112 val_loss=1.1392  [462.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e88.state.npz (1048 arrays, step=440352)
+[Epoch 89] lr=0.00551 loss(train_avg)=2.7287 val_top1=36570/50000 (0.7314) val_top5=0.9116 val_loss=1.1342  [462.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e89.state.npz (1048 arrays, step=445356)
+[Epoch 90] lr=0.00544 loss(train_avg)=2.724 val_top1=36560/50000 (0.7312) val_top5=0.911 val_loss=1.1389  [466.5s train, 17.7s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e90.state.npz (1048 arrays, step=450360)
+[Epoch 91] lr=0.005372 loss(train_avg)=2.7196 val_top1=36545/50000 (0.7309) val_top5=0.9113 val_loss=1.1379  [462.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e91.state.npz (1048 arrays, step=455364)
+[Epoch 92] lr=0.005304 loss(train_avg)=2.7167 val_top1=36569/50000 (0.7314) val_top5=0.911 val_loss=1.1335  [467.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e92.state.npz (1048 arrays, step=460368)
+[Epoch 93] lr=0.005237 loss(train_avg)=2.7117 val_top1=36565/50000 (0.7313) val_top5=0.9108 val_loss=1.1353  [462.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e93.state.npz (1048 arrays, step=465372)
+[Epoch 94] lr=0.005171 loss(train_avg)=2.7066 val_top1=36548/50000 (0.731) val_top5=0.9112 val_loss=1.1358  [464.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e94.state.npz (1048 arrays, step=470376)
+[Epoch 95] lr=0.005106 loss(train_avg)=2.705 val_top1=36576/50000 (0.7315) val_top5=0.9121 val_loss=1.1328  [462.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e95.state.npz (1048 arrays, step=475380)
+[Epoch 96] lr=0.005041 loss(train_avg)=2.7006 val_top1=36454/50000 (0.7291) val_top5=0.9105 val_loss=1.1499  [462.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e96.state.npz (1048 arrays, step=480384)
+[Epoch 97] lr=0.004978 loss(train_avg)=2.6968 val_top1=36529/50000 (0.7306) val_top5=0.9115 val_loss=1.1376  [462.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e97.state.npz (1048 arrays, step=485388)
+[Epoch 98] lr=0.004915 loss(train_avg)=2.6938 val_top1=36617/50000 (0.7323) val_top5=0.9126 val_loss=1.1296  [462.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e98.state.npz (1048 arrays, step=490392)
+[Epoch 99] lr=0.004853 loss(train_avg)=2.6879 val_top1=36636/50000 (0.7327) val_top5=0.913 val_loss=1.1264  [466.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e99.state.npz (1048 arrays, step=495396)
+[Epoch 100] lr=0.004792 loss(train_avg)=2.684 val_top1=36568/50000 (0.7314) val_top5=0.912 val_loss=1.1311  [462.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e100.state.npz (1048 arrays, step=500400)
+[Epoch 101] lr=0.004731 loss(train_avg)=2.6829 val_top1=36647/50000 (0.7329) val_top5=0.9125 val_loss=1.1247  [462.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e101.state.npz (1048 arrays, step=505404)
+[Epoch 102] lr=0.004672 loss(train_avg)=2.6755 val_top1=36703/50000 (0.7341) val_top5=0.9136 val_loss=1.1183  [464.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e102.state.npz (1048 arrays, step=510408)
+[Epoch 103] lr=0.004613 loss(train_avg)=2.675 val_top1=36724/50000 (0.7345) val_top5=0.9144 val_loss=1.1139  [467.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e103.state.npz (1048 arrays, step=515412)
+[Epoch 104] lr=0.004555 loss(train_avg)=2.669 val_top1=36803/50000 (0.7361) val_top5=0.9145 val_loss=1.1106  [463.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e104.state.npz (1048 arrays, step=520416)
+[Epoch 105] lr=0.004497 loss(train_avg)=2.6663 val_top1=36770/50000 (0.7354) val_top5=0.9141 val_loss=1.1165  [465.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e105.state.npz (1048 arrays, step=525420)
+[Epoch 106] lr=0.00444 loss(train_avg)=2.6642 val_top1=36696/50000 (0.7339) val_top5=0.9132 val_loss=1.1274  [462.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e106.state.npz (1048 arrays, step=530424)
+[Epoch 107] lr=0.004384 loss(train_avg)=2.6599 val_top1=36709/50000 (0.7342) val_top5=0.9133 val_loss=1.1241  [466.4s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e107.state.npz (1048 arrays, step=535428)
+[Epoch 108] lr=0.004329 loss(train_avg)=2.6552 val_top1=36748/50000 (0.735) val_top5=0.9135 val_loss=1.1235  [462.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e108.state.npz (1048 arrays, step=540432)
+[Epoch 109] lr=0.004275 loss(train_avg)=2.6542 val_top1=36779/50000 (0.7356) val_top5=0.9137 val_loss=1.1189  [462.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e109.state.npz (1048 arrays, step=545436)
+[Epoch 110] lr=0.004221 loss(train_avg)=2.6483 val_top1=36784/50000 (0.7357) val_top5=0.914 val_loss=1.1154  [462.1s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e110.state.npz (1048 arrays, step=550440)
+[Epoch 111] lr=0.004167 loss(train_avg)=2.6455 val_top1=36853/50000 (0.7371) val_top5=0.9147 val_loss=1.114  [466.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e111.state.npz (1048 arrays, step=555444)
+[Epoch 112] lr=0.004115 loss(train_avg)=2.6405 val_top1=36814/50000 (0.7363) val_top5=0.9141 val_loss=1.1167  [463.1s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e112.state.npz (1048 arrays, step=560448)
+[Epoch 113] lr=0.004063 loss(train_avg)=2.6375 val_top1=36875/50000 (0.7375) val_top5=0.915 val_loss=1.1101  [467.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e113.state.npz (1048 arrays, step=565452)
+[Epoch 114] lr=0.004012 loss(train_avg)=2.6347 val_top1=36983/50000 (0.7397) val_top5=0.9159 val_loss=1.1024  [462.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e114.state.npz (1048 arrays, step=570456)
+[Epoch 115] lr=0.003961 loss(train_avg)=2.6299 val_top1=36944/50000 (0.7389) val_top5=0.9157 val_loss=1.1041  [466.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e115.state.npz (1048 arrays, step=575460)
+[Epoch 116] lr=0.003911 loss(train_avg)=2.6276 val_top1=36972/50000 (0.7394) val_top5=0.9166 val_loss=1.0972  [462.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e116.state.npz (1048 arrays, step=580464)
+[Epoch 117] lr=0.003862 loss(train_avg)=2.6256 val_top1=37004/50000 (0.7401) val_top5=0.9172 val_loss=1.0969  [462.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e117.state.npz (1048 arrays, step=585468)
+[Epoch 118] lr=0.003813 loss(train_avg)=2.6193 val_top1=36992/50000 (0.7398) val_top5=0.9161 val_loss=1.0976  [461.8s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e118.state.npz (1048 arrays, step=590472)
+[Epoch 119] lr=0.003765 loss(train_avg)=2.6173 val_top1=37076/50000 (0.7415) val_top5=0.9163 val_loss=1.0951  [463.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e119.state.npz (1048 arrays, step=595476)
+[Epoch 120] lr=0.003718 loss(train_avg)=2.6162 val_top1=37076/50000 (0.7415) val_top5=0.9173 val_loss=1.092  [462.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e120.state.npz (1048 arrays, step=600480)
+[Epoch 121] lr=0.003671 loss(train_avg)=2.6106 val_top1=36939/50000 (0.7388) val_top5=0.916 val_loss=1.1013  [462.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e121.state.npz (1048 arrays, step=605484)
+[Epoch 122] lr=0.003624 loss(train_avg)=2.6051 val_top1=37017/50000 (0.7403) val_top5=0.9166 val_loss=1.0946  [466.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e122.state.npz (1048 arrays, step=610488)
+[Epoch 123] lr=0.003579 loss(train_avg)=2.6041 val_top1=37040/50000 (0.7408) val_top5=0.9173 val_loss=1.0895  [462.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e123.state.npz (1048 arrays, step=615492)
+[Epoch 124] lr=0.003534 loss(train_avg)=2.6008 val_top1=37053/50000 (0.7411) val_top5=0.9174 val_loss=1.0857  [462.2s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e124.state.npz (1048 arrays, step=620496)
+[Epoch 125] lr=0.003489 loss(train_avg)=2.5967 val_top1=37045/50000 (0.7409) val_top5=0.9173 val_loss=1.0911  [466.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e125.state.npz (1048 arrays, step=625500)
+[Epoch 126] lr=0.003445 loss(train_avg)=2.597 val_top1=37043/50000 (0.7409) val_top5=0.917 val_loss=1.0938  [462.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e126.state.npz (1048 arrays, step=630504)
+[Epoch 127] lr=0.003402 loss(train_avg)=2.591 val_top1=37037/50000 (0.7407) val_top5=0.9169 val_loss=1.0922  [466.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e127.state.npz (1048 arrays, step=635508)
+[Epoch 128] lr=0.003359 loss(train_avg)=2.5874 val_top1=37096/50000 (0.7419) val_top5=0.9179 val_loss=1.0864  [462.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e128.state.npz (1048 arrays, step=640512)
+[Epoch 129] lr=0.003316 loss(train_avg)=2.5852 val_top1=37186/50000 (0.7437) val_top5=0.9182 val_loss=1.0801  [466.5s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e129.state.npz (1048 arrays, step=645516)
+[Epoch 130] lr=0.003275 loss(train_avg)=2.5813 val_top1=37163/50000 (0.7433) val_top5=0.918 val_loss=1.0802  [461.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e130.state.npz (1048 arrays, step=650520)
+[Epoch 131] lr=0.003233 loss(train_avg)=2.5785 val_top1=37228/50000 (0.7446) val_top5=0.9189 val_loss=1.0755  [462.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e131.state.npz (1048 arrays, step=655524)
+[Epoch 132] lr=0.003192 loss(train_avg)=2.5758 val_top1=37252/50000 (0.745) val_top5=0.9194 val_loss=1.0725  [462.4s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e132.state.npz (1048 arrays, step=660528)
+[Epoch 133] lr=0.003152 loss(train_avg)=2.5716 val_top1=37322/50000 (0.7464) val_top5=0.92 val_loss=1.0672  [462.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e133.state.npz (1048 arrays, step=665532)
+[Epoch 134] lr=0.003112 loss(train_avg)=2.5679 val_top1=37363/50000 (0.7473) val_top5=0.9196 val_loss=1.0647  [462.6s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e134.state.npz (1048 arrays, step=670536)
+[Epoch 135] lr=0.003073 loss(train_avg)=2.5652 val_top1=37367/50000 (0.7473) val_top5=0.9193 val_loss=1.0659  [462.5s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e135.state.npz (1048 arrays, step=675540)
+[Epoch 136] lr=0.003034 loss(train_avg)=2.5609 val_top1=37407/50000 (0.7481) val_top5=0.9194 val_loss=1.0638  [463.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e136.state.npz (1048 arrays, step=680544)
+[Epoch 137] lr=0.002996 loss(train_avg)=2.5589 val_top1=37428/50000 (0.7486) val_top5=0.9202 val_loss=1.0637  [462.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e137.state.npz (1048 arrays, step=685548)
+[Epoch 138] lr=0.002958 loss(train_avg)=2.5568 val_top1=37460/50000 (0.7492) val_top5=0.9202 val_loss=1.0616  [462.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e138.state.npz (1048 arrays, step=690552)
+[Epoch 139] lr=0.002921 loss(train_avg)=2.5546 val_top1=37421/50000 (0.7484) val_top5=0.9209 val_loss=1.0609  [462.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e139.state.npz (1048 arrays, step=695556)
+[Epoch 140] lr=0.002884 loss(train_avg)=2.5491 val_top1=37422/50000 (0.7484) val_top5=0.9213 val_loss=1.0603  [466.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e140.state.npz (1048 arrays, step=700560)
+[Epoch 141] lr=0.002848 loss(train_avg)=2.5483 val_top1=37402/50000 (0.748) val_top5=0.9212 val_loss=1.0595  [462.7s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e141.state.npz (1048 arrays, step=705564)
+[Epoch 142] lr=0.002812 loss(train_avg)=2.5444 val_top1=37381/50000 (0.7476) val_top5=0.9211 val_loss=1.0594  [462.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e142.state.npz (1048 arrays, step=710568)
+[Epoch 143] lr=0.002776 loss(train_avg)=2.5424 val_top1=37403/50000 (0.7481) val_top5=0.9208 val_loss=1.0633  [462.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e143.state.npz (1048 arrays, step=715572)
+[Epoch 144] lr=0.002741 loss(train_avg)=2.5383 val_top1=37408/50000 (0.7482) val_top5=0.9214 val_loss=1.0629  [462.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e144.state.npz (1048 arrays, step=720576)
+[Epoch 145] lr=0.002707 loss(train_avg)=2.5343 val_top1=37498/50000 (0.75) val_top5=0.9217 val_loss=1.0594  [461.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e145.state.npz (1048 arrays, step=725580)
+[Epoch 146] lr=0.002673 loss(train_avg)=2.5321 val_top1=37477/50000 (0.7495) val_top5=0.9223 val_loss=1.0561  [462.4s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e146.state.npz (1048 arrays, step=730584)
+[Epoch 147] lr=0.002639 loss(train_avg)=2.5304 val_top1=37556/50000 (0.7511) val_top5=0.9223 val_loss=1.0541  [461.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e147.state.npz (1048 arrays, step=735588)
+[Epoch 148] lr=0.002606 loss(train_avg)=2.5277 val_top1=37567/50000 (0.7513) val_top5=0.9223 val_loss=1.0524  [466.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e148.state.npz (1048 arrays, step=740592)
+[Epoch 149] lr=0.002573 loss(train_avg)=2.5242 val_top1=37536/50000 (0.7507) val_top5=0.922 val_loss=1.0505  [462.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e149.state.npz (1048 arrays, step=745596)
+Resumed full train state from /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e149.state.npz: step=745596 (epoch 150/350)
+[Epoch 150] lr=0.00254 loss(train_avg)=2.5211 val_top1=37533/50000 (0.7507) val_top5=0.9216 val_loss=1.051  [496.8s train, 22.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e150.state.npz (1048 arrays, step=750600)
+[Epoch 151] lr=0.002508 loss(train_avg)=2.5186 val_top1=37554/50000 (0.7511) val_top5=0.9215 val_loss=1.0501  [457.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e151.state.npz (1048 arrays, step=755604)
+[Epoch 152] lr=0.002477 loss(train_avg)=2.5165 val_top1=37549/50000 (0.751) val_top5=0.9221 val_loss=1.0494  [453.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e152.state.npz (1048 arrays, step=760608)
+[Epoch 153] lr=0.002446 loss(train_avg)=2.5146 val_top1=37568/50000 (0.7514) val_top5=0.922 val_loss=1.0518  [452.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e153.state.npz (1048 arrays, step=765612)
+[Epoch 154] lr=0.002415 loss(train_avg)=2.5108 val_top1=37510/50000 (0.7502) val_top5=0.9223 val_loss=1.0532  [452.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e154.state.npz (1048 arrays, step=770616)
+[Epoch 155] lr=0.002384 loss(train_avg)=2.5052 val_top1=37545/50000 (0.7509) val_top5=0.923 val_loss=1.0488  [452.6s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e155.state.npz (1048 arrays, step=775620)
+[Epoch 156] lr=0.002354 loss(train_avg)=2.5037 val_top1=37615/50000 (0.7523) val_top5=0.9228 val_loss=1.0465  [452.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e156.state.npz (1048 arrays, step=780624)
+[Epoch 157] lr=0.002325 loss(train_avg)=2.5033 val_top1=37595/50000 (0.7519) val_top5=0.9231 val_loss=1.0509  [452.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e157.state.npz (1048 arrays, step=785628)
+[Epoch 158] lr=0.002295 loss(train_avg)=2.5001 val_top1=37581/50000 (0.7516) val_top5=0.9229 val_loss=1.0497  [456.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e158.state.npz (1048 arrays, step=790632)
+[Epoch 159] lr=0.002266 loss(train_avg)=2.4964 val_top1=37650/50000 (0.753) val_top5=0.9229 val_loss=1.0467  [452.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e159.state.npz (1048 arrays, step=795636)
+[Epoch 160] lr=0.002238 loss(train_avg)=2.4946 val_top1=37650/50000 (0.753) val_top5=0.9234 val_loss=1.0438  [455.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e160.state.npz (1048 arrays, step=800640)
+[Epoch 161] lr=0.002209 loss(train_avg)=2.4912 val_top1=37648/50000 (0.753) val_top5=0.9235 val_loss=1.0436  [452.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e161.state.npz (1048 arrays, step=805644)
+[Epoch 162] lr=0.002182 loss(train_avg)=2.4896 val_top1=37640/50000 (0.7528) val_top5=0.9231 val_loss=1.0431  [452.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e162.state.npz (1048 arrays, step=810648)
+[Epoch 163] lr=0.002154 loss(train_avg)=2.4872 val_top1=37622/50000 (0.7524) val_top5=0.923 val_loss=1.0415  [452.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e163.state.npz (1048 arrays, step=815652)
+[Epoch 164] lr=0.002127 loss(train_avg)=2.4844 val_top1=37652/50000 (0.753) val_top5=0.9243 val_loss=1.0396  [455.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e164.state.npz (1048 arrays, step=820656)
+[Epoch 165] lr=0.0021 loss(train_avg)=2.4811 val_top1=37664/50000 (0.7533) val_top5=0.9248 val_loss=1.0381  [452.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e165.state.npz (1048 arrays, step=825660)
+[Epoch 166] lr=0.002074 loss(train_avg)=2.4789 val_top1=37713/50000 (0.7543) val_top5=0.9252 val_loss=1.0361  [452.5s train, 17.7s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e166.state.npz (1048 arrays, step=830664)
+[Epoch 167] lr=0.002047 loss(train_avg)=2.4771 val_top1=37691/50000 (0.7538) val_top5=0.9255 val_loss=1.0345  [452.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e167.state.npz (1048 arrays, step=835668)
+[Epoch 168] lr=0.002022 loss(train_avg)=2.474 val_top1=37724/50000 (0.7545) val_top5=0.9246 val_loss=1.0352  [453.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e168.state.npz (1048 arrays, step=840672)
+[Epoch 169] lr=0.001996 loss(train_avg)=2.474 val_top1=37715/50000 (0.7543) val_top5=0.9249 val_loss=1.034  [452.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e169.state.npz (1048 arrays, step=845676)
+[Epoch 170] lr=0.001971 loss(train_avg)=2.4685 val_top1=37735/50000 (0.7547) val_top5=0.9251 val_loss=1.0321  [453.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e170.state.npz (1048 arrays, step=850680)
+[Epoch 171] lr=0.001946 loss(train_avg)=2.467 val_top1=37726/50000 (0.7545) val_top5=0.9251 val_loss=1.0333  [453.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e171.state.npz (1048 arrays, step=855684)
+[Epoch 172] lr=0.001922 loss(train_avg)=2.4632 val_top1=37719/50000 (0.7544) val_top5=0.9251 val_loss=1.0317  [453.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e172.state.npz (1048 arrays, step=860688)
+[Epoch 173] lr=0.001897 loss(train_avg)=2.4628 val_top1=37717/50000 (0.7543) val_top5=0.9242 val_loss=1.0378  [452.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e173.state.npz (1048 arrays, step=865692)
+[Epoch 174] lr=0.001873 loss(train_avg)=2.4595 val_top1=37746/50000 (0.7549) val_top5=0.9242 val_loss=1.0386  [456.8s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e174.state.npz (1048 arrays, step=870696)
+[Epoch 175] lr=0.00185 loss(train_avg)=2.4538 val_top1=37822/50000 (0.7564) val_top5=0.9248 val_loss=1.035  [454.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e175.state.npz (1048 arrays, step=875700)
+[Epoch 176] lr=0.001826 loss(train_avg)=2.4538 val_top1=37824/50000 (0.7565) val_top5=0.925 val_loss=1.0317  [456.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e176.state.npz (1048 arrays, step=880704)
+[Epoch 177] lr=0.001803 loss(train_avg)=2.4513 val_top1=37846/50000 (0.7569) val_top5=0.9253 val_loss=1.0303  [452.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e177.state.npz (1048 arrays, step=885708)
+[Epoch 178] lr=0.001781 loss(train_avg)=2.4485 val_top1=37883/50000 (0.7577) val_top5=0.9257 val_loss=1.0287  [453.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e178.state.npz (1048 arrays, step=890712)
+[Epoch 179] lr=0.001758 loss(train_avg)=2.4461 val_top1=37866/50000 (0.7573) val_top5=0.9259 val_loss=1.0278  [456.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e179.state.npz (1048 arrays, step=895716)
+[Epoch 180] lr=0.001736 loss(train_avg)=2.4457 val_top1=37826/50000 (0.7565) val_top5=0.9254 val_loss=1.0268  [453.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e180.state.npz (1048 arrays, step=900720)
+[Epoch 181] lr=0.001714 loss(train_avg)=2.4417 val_top1=37844/50000 (0.7569) val_top5=0.926 val_loss=1.0256  [453.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e181.state.npz (1048 arrays, step=905724)
+[Epoch 182] lr=0.001693 loss(train_avg)=2.439 val_top1=37883/50000 (0.7577) val_top5=0.9256 val_loss=1.0251  [453.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e182.state.npz (1048 arrays, step=910728)
+[Epoch 183] lr=0.001671 loss(train_avg)=2.4378 val_top1=37887/50000 (0.7577) val_top5=0.9261 val_loss=1.0235  [453.3s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e183.state.npz (1048 arrays, step=915732)
+[Epoch 184] lr=0.00165 loss(train_avg)=2.4329 val_top1=37903/50000 (0.7581) val_top5=0.9265 val_loss=1.0224  [453.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e184.state.npz (1048 arrays, step=920736)
+[Epoch 185] lr=0.001629 loss(train_avg)=2.4294 val_top1=37906/50000 (0.7581) val_top5=0.9271 val_loss=1.0221  [453.6s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e185.state.npz (1048 arrays, step=925740)
+[Epoch 186] lr=0.001609 loss(train_avg)=2.4302 val_top1=37903/50000 (0.7581) val_top5=0.9268 val_loss=1.022  [453.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e186.state.npz (1048 arrays, step=930744)
+[Epoch 187] lr=0.001588 loss(train_avg)=2.43 val_top1=37884/50000 (0.7577) val_top5=0.9264 val_loss=1.023  [453.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e187.state.npz (1048 arrays, step=935748)
+[Epoch 188] lr=0.001568 loss(train_avg)=2.4266 val_top1=37849/50000 (0.757) val_top5=0.9262 val_loss=1.0247  [453.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e188.state.npz (1048 arrays, step=940752)
+[Epoch 189] lr=0.001549 loss(train_avg)=2.423 val_top1=37880/50000 (0.7576) val_top5=0.9267 val_loss=1.0225  [453.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e189.state.npz (1048 arrays, step=945756)
+[Epoch 190] lr=0.001529 loss(train_avg)=2.4225 val_top1=37922/50000 (0.7584) val_top5=0.9262 val_loss=1.0228  [454.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e190.state.npz (1048 arrays, step=950760)
+[Epoch 191] lr=0.00151 loss(train_avg)=2.4201 val_top1=37867/50000 (0.7573) val_top5=0.9262 val_loss=1.0249  [453.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e191.state.npz (1048 arrays, step=955764)
+[Epoch 192] lr=0.001491 loss(train_avg)=2.417 val_top1=37859/50000 (0.7572) val_top5=0.9261 val_loss=1.0226  [454.5s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e192.state.npz (1048 arrays, step=960768)
+[Epoch 193] lr=0.001472 loss(train_avg)=2.4136 val_top1=37930/50000 (0.7586) val_top5=0.9266 val_loss=1.0203  [454.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e193.state.npz (1048 arrays, step=965772)
+[Epoch 194] lr=0.001453 loss(train_avg)=2.4136 val_top1=37947/50000 (0.7589) val_top5=0.9267 val_loss=1.0187  [457.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e194.state.npz (1048 arrays, step=970776)
+[Epoch 195] lr=0.001435 loss(train_avg)=2.4091 val_top1=37943/50000 (0.7589) val_top5=0.9273 val_loss=1.017  [455.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e195.state.npz (1048 arrays, step=975780)
+[Epoch 196] lr=0.001417 loss(train_avg)=2.4087 val_top1=37967/50000 (0.7593) val_top5=0.9277 val_loss=1.0151  [458.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e196.state.npz (1048 arrays, step=980784)
+[Epoch 197] lr=0.001399 loss(train_avg)=2.4049 val_top1=37950/50000 (0.759) val_top5=0.9275 val_loss=1.0145  [454.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e197.state.npz (1048 arrays, step=985788)
+[Epoch 198] lr=0.001381 loss(train_avg)=2.4029 val_top1=37924/50000 (0.7585) val_top5=0.9276 val_loss=1.0144  [458.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e198.state.npz (1048 arrays, step=990792)
+[Epoch 199] lr=0.001364 loss(train_avg)=2.4021 val_top1=37927/50000 (0.7585) val_top5=0.9279 val_loss=1.0166  [454.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e199.state.npz (1048 arrays, step=995796)
+[Epoch 200] lr=0.001347 loss(train_avg)=2.3971 val_top1=37963/50000 (0.7593) val_top5=0.9274 val_loss=1.0142  [454.9s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e200.state.npz (1048 arrays, step=1000800)
+[Epoch 201] lr=0.00133 loss(train_avg)=2.3957 val_top1=37958/50000 (0.7592) val_top5=0.9266 val_loss=1.0142  [458.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e201.state.npz (1048 arrays, step=1005804)
+[Epoch 202] lr=0.001313 loss(train_avg)=2.3957 val_top1=37936/50000 (0.7587) val_top5=0.9271 val_loss=1.0155  [455.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e202.state.npz (1048 arrays, step=1010808)
+[Epoch 203] lr=0.001297 loss(train_avg)=2.3935 val_top1=37956/50000 (0.7591) val_top5=0.927 val_loss=1.0168  [454.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e203.state.npz (1048 arrays, step=1015812)
+[Epoch 204] lr=0.00128 loss(train_avg)=2.3878 val_top1=37999/50000 (0.76) val_top5=0.9274 val_loss=1.0136  [453.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e204.state.npz (1048 arrays, step=1020816)
+[Epoch 205] lr=0.001264 loss(train_avg)=2.3854 val_top1=38008/50000 (0.7602) val_top5=0.9271 val_loss=1.0126  [469.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e205.state.npz (1048 arrays, step=1025820)
+[Epoch 206] lr=0.001248 loss(train_avg)=2.3867 val_top1=37982/50000 (0.7596) val_top5=0.9266 val_loss=1.0129  [454.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e206.state.npz (1048 arrays, step=1030824)
+[Epoch 207] lr=0.001232 loss(train_avg)=2.3846 val_top1=38005/50000 (0.7601) val_top5=0.9267 val_loss=1.0116  [453.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e207.state.npz (1048 arrays, step=1035828)
+[Epoch 208] lr=0.001217 loss(train_avg)=2.3814 val_top1=38046/50000 (0.7609) val_top5=0.9274 val_loss=1.0109  [454.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e208.state.npz (1048 arrays, step=1040832)
+[Epoch 209] lr=0.001201 loss(train_avg)=2.3805 val_top1=38084/50000 (0.7617) val_top5=0.9272 val_loss=1.0095  [455.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e209.state.npz (1048 arrays, step=1045836)
+[Epoch 210] lr=0.001186 loss(train_avg)=2.3792 val_top1=38034/50000 (0.7607) val_top5=0.9275 val_loss=1.0091  [455.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e210.state.npz (1048 arrays, step=1050840)
+[Epoch 211] lr=0.001171 loss(train_avg)=2.375 val_top1=38031/50000 (0.7606) val_top5=0.9285 val_loss=1.0079  [454.3s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e211.state.npz (1048 arrays, step=1055844)
+[Epoch 212] lr=0.001157 loss(train_avg)=2.3739 val_top1=38024/50000 (0.7605) val_top5=0.9285 val_loss=1.0075  [458.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e212.state.npz (1048 arrays, step=1060848)
+[Epoch 213] lr=0.001142 loss(train_avg)=2.3731 val_top1=38037/50000 (0.7607) val_top5=0.928 val_loss=1.0076  [455.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e213.state.npz (1048 arrays, step=1065852)
+[Epoch 214] lr=0.001128 loss(train_avg)=2.3693 val_top1=38065/50000 (0.7613) val_top5=0.9285 val_loss=1.0063  [455.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e214.state.npz (1048 arrays, step=1070856)
+[Epoch 215] lr=0.001113 loss(train_avg)=2.3682 val_top1=38048/50000 (0.761) val_top5=0.9285 val_loss=1.0054  [455.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e215.state.npz (1048 arrays, step=1075860)
+[Epoch 216] lr=0.001099 loss(train_avg)=2.3657 val_top1=38023/50000 (0.7605) val_top5=0.9288 val_loss=1.0049  [458.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e216.state.npz (1048 arrays, step=1080864)
+[Epoch 217] lr=0.001085 loss(train_avg)=2.3662 val_top1=38068/50000 (0.7614) val_top5=0.929 val_loss=1.0044  [454.5s train, 17.7s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e217.state.npz (1048 arrays, step=1085868)
+[Epoch 218] lr=0.001072 loss(train_avg)=2.3619 val_top1=38075/50000 (0.7615) val_top5=0.9289 val_loss=1.0036  [458.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e218.state.npz (1048 arrays, step=1090872)
+[Epoch 219] lr=0.001058 loss(train_avg)=2.3611 val_top1=38084/50000 (0.7617) val_top5=0.9294 val_loss=1.002  [456.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e219.state.npz (1048 arrays, step=1095876)
+[Epoch 220] lr=0.001045 loss(train_avg)=2.3575 val_top1=38099/50000 (0.762) val_top5=0.929 val_loss=1.0014  [459.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e220.state.npz (1048 arrays, step=1100880)
+[Epoch 221] lr=0.001032 loss(train_avg)=2.357 val_top1=38080/50000 (0.7616) val_top5=0.9293 val_loss=1.0021  [454.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e221.state.npz (1048 arrays, step=1105884)
+[Epoch 222] lr=0.001019 loss(train_avg)=2.3547 val_top1=38092/50000 (0.7618) val_top5=0.9294 val_loss=1.0008  [453.8s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e222.state.npz (1048 arrays, step=1110888)
+[Epoch 223] lr=0.001006 loss(train_avg)=2.352 val_top1=38100/50000 (0.762) val_top5=0.9294 val_loss=1.0004  [454.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e223.state.npz (1048 arrays, step=1115892)
+[Epoch 224] lr=0.000993 loss(train_avg)=2.3539 val_top1=38134/50000 (0.7627) val_top5=0.9295 val_loss=1.0003  [458.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e224.state.npz (1048 arrays, step=1120896)
+[Epoch 225] lr=0.000981 loss(train_avg)=2.347 val_top1=38114/50000 (0.7623) val_top5=0.9297 val_loss=0.9996  [455.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e225.state.npz (1048 arrays, step=1125900)
+[Epoch 226] lr=0.000968 loss(train_avg)=2.3477 val_top1=38094/50000 (0.7619) val_top5=0.93 val_loss=1.0002  [455.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e226.state.npz (1048 arrays, step=1130904)
+[Epoch 227] lr=0.000956 loss(train_avg)=2.346 val_top1=38105/50000 (0.7621) val_top5=0.9296 val_loss=0.9992  [454.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e227.state.npz (1048 arrays, step=1135908)
+[Epoch 228] lr=0.000944 loss(train_avg)=2.3444 val_top1=38145/50000 (0.7629) val_top5=0.9294 val_loss=0.9997  [458.1s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e228.state.npz (1048 arrays, step=1140912)
+[Epoch 229] lr=0.000932 loss(train_avg)=2.3426 val_top1=38143/50000 (0.7629) val_top5=0.9289 val_loss=0.9994  [455.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e229.state.npz (1048 arrays, step=1145916)
+[Epoch 230] lr=0.00092 loss(train_avg)=2.3397 val_top1=38111/50000 (0.7622) val_top5=0.9294 val_loss=0.9996  [456.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e230.state.npz (1048 arrays, step=1150920)
+[Epoch 231] lr=0.000909 loss(train_avg)=2.339 val_top1=38098/50000 (0.762) val_top5=0.9288 val_loss=0.9993  [456.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e231.state.npz (1048 arrays, step=1155924)
+[Epoch 232] lr=0.000897 loss(train_avg)=2.3371 val_top1=38135/50000 (0.7627) val_top5=0.9288 val_loss=0.9984  [455.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e232.state.npz (1048 arrays, step=1160928)
+[Epoch 233] lr=0.000886 loss(train_avg)=2.3345 val_top1=38163/50000 (0.7633) val_top5=0.9295 val_loss=0.9983  [456.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e233.state.npz (1048 arrays, step=1165932)
+[Epoch 234] lr=0.000875 loss(train_avg)=2.3321 val_top1=38140/50000 (0.7628) val_top5=0.9291 val_loss=0.9991  [459.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e234.state.npz (1048 arrays, step=1170936)
+[Epoch 235] lr=0.000864 loss(train_avg)=2.3328 val_top1=38141/50000 (0.7628) val_top5=0.9291 val_loss=0.9986  [455.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e235.state.npz (1048 arrays, step=1175940)
+[Epoch 236] lr=0.000853 loss(train_avg)=2.3299 val_top1=38154/50000 (0.7631) val_top5=0.9295 val_loss=0.9965  [458.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e236.state.npz (1048 arrays, step=1180944)
+[Epoch 237] lr=0.000842 loss(train_avg)=2.3285 val_top1=38183/50000 (0.7637) val_top5=0.9296 val_loss=0.9964  [455.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e237.state.npz (1048 arrays, step=1185948)
+[Epoch 238] lr=0.000832 loss(train_avg)=2.3257 val_top1=38144/50000 (0.7629) val_top5=0.9297 val_loss=0.9962  [455.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e238.state.npz (1048 arrays, step=1190952)
+[Epoch 239] lr=0.000821 loss(train_avg)=2.3247 val_top1=38151/50000 (0.763) val_top5=0.9297 val_loss=0.9955  [455.8s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e239.state.npz (1048 arrays, step=1195956)
+[Epoch 240] lr=0.000811 loss(train_avg)=2.3239 val_top1=38174/50000 (0.7635) val_top5=0.9302 val_loss=0.9956  [455.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e240.state.npz (1048 arrays, step=1200960)
+[Epoch 241] lr=0.0008 loss(train_avg)=2.3222 val_top1=38173/50000 (0.7635) val_top5=0.9299 val_loss=0.9965  [454.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e241.state.npz (1048 arrays, step=1205964)
+[Epoch 242] lr=0.00079 loss(train_avg)=2.3178 val_top1=38174/50000 (0.7635) val_top5=0.9301 val_loss=0.9957  [454.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e242.state.npz (1048 arrays, step=1210968)
+[Epoch 243] lr=0.00078 loss(train_avg)=2.3154 val_top1=38162/50000 (0.7632) val_top5=0.9302 val_loss=0.994  [454.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e243.state.npz (1048 arrays, step=1215972)
+[Epoch 244] lr=0.000771 loss(train_avg)=2.3165 val_top1=38184/50000 (0.7637) val_top5=0.93 val_loss=0.9942  [454.6s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e244.state.npz (1048 arrays, step=1220976)
+[Epoch 245] lr=0.000761 loss(train_avg)=2.3142 val_top1=38199/50000 (0.764) val_top5=0.9299 val_loss=0.9939  [454.7s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e245.state.npz (1048 arrays, step=1225980)
+[Epoch 246] lr=0.000751 loss(train_avg)=2.3103 val_top1=38238/50000 (0.7648) val_top5=0.9301 val_loss=0.993  [455.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e246.state.npz (1048 arrays, step=1230984)
+[Epoch 247] lr=0.000742 loss(train_avg)=2.3121 val_top1=38253/50000 (0.7651) val_top5=0.9304 val_loss=0.9933  [456.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e247.state.npz (1048 arrays, step=1235988)
+[Epoch 248] lr=0.000732 loss(train_avg)=2.3091 val_top1=38224/50000 (0.7645) val_top5=0.9305 val_loss=0.9922  [456.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e248.state.npz (1048 arrays, step=1240992)
+[Epoch 249] lr=0.000723 loss(train_avg)=2.3078 val_top1=38232/50000 (0.7646) val_top5=0.9302 val_loss=0.9925  [455.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e249.state.npz (1048 arrays, step=1245996)
+[Epoch 250] lr=0.000714 loss(train_avg)=2.3047 val_top1=38210/50000 (0.7642) val_top5=0.9311 val_loss=0.9913  [455.1s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e250.state.npz (1048 arrays, step=1251000)
+[Epoch 251] lr=0.000705 loss(train_avg)=2.3057 val_top1=38235/50000 (0.7647) val_top5=0.9307 val_loss=0.991  [458.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e251.state.npz (1048 arrays, step=1256004)
+[Epoch 252] lr=0.000696 loss(train_avg)=2.3031 val_top1=38252/50000 (0.765) val_top5=0.9305 val_loss=0.9902  [455.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e252.state.npz (1048 arrays, step=1261008)
+[Epoch 253] lr=0.000687 loss(train_avg)=2.3024 val_top1=38243/50000 (0.7649) val_top5=0.9308 val_loss=0.9899  [455.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e253.state.npz (1048 arrays, step=1266012)
+[Epoch 254] lr=0.000679 loss(train_avg)=2.2985 val_top1=38213/50000 (0.7643) val_top5=0.9309 val_loss=0.9896  [460.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e254.state.npz (1048 arrays, step=1271016)
+[Epoch 255] lr=0.00067 loss(train_avg)=2.299 val_top1=38218/50000 (0.7644) val_top5=0.931 val_loss=0.9894  [456.5s train, 17.3s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e255.state.npz (1048 arrays, step=1276020)
+[Epoch 256] lr=0.000662 loss(train_avg)=2.2975 val_top1=38227/50000 (0.7645) val_top5=0.9312 val_loss=0.9896  [456.7s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e256.state.npz (1048 arrays, step=1281024)
+[Epoch 257] lr=0.000653 loss(train_avg)=2.2959 val_top1=38234/50000 (0.7647) val_top5=0.9308 val_loss=0.9889  [455.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e257.state.npz (1048 arrays, step=1286028)
+[Epoch 258] lr=0.000645 loss(train_avg)=2.291 val_top1=38258/50000 (0.7652) val_top5=0.9308 val_loss=0.9887  [455.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e258.state.npz (1048 arrays, step=1291032)
+[Epoch 259] lr=0.000637 loss(train_avg)=2.2926 val_top1=38224/50000 (0.7645) val_top5=0.9307 val_loss=0.9879  [454.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e259.state.npz (1048 arrays, step=1296036)
+[Epoch 260] lr=0.000629 loss(train_avg)=2.2894 val_top1=38260/50000 (0.7652) val_top5=0.9312 val_loss=0.9872  [454.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e260.state.npz (1048 arrays, step=1301040)
+[Epoch 261] lr=0.000621 loss(train_avg)=2.2883 val_top1=38293/50000 (0.7659) val_top5=0.9314 val_loss=0.9877  [455.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e261.state.npz (1048 arrays, step=1306044)
+[Epoch 262] lr=0.000613 loss(train_avg)=2.2877 val_top1=38318/50000 (0.7664) val_top5=0.931 val_loss=0.988  [455.0s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e262.state.npz (1048 arrays, step=1311048)
+[Epoch 263] lr=0.000605 loss(train_avg)=2.2855 val_top1=38269/50000 (0.7654) val_top5=0.9307 val_loss=0.9873  [455.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e263.state.npz (1048 arrays, step=1316052)
+[Epoch 264] lr=0.000598 loss(train_avg)=2.2827 val_top1=38282/50000 (0.7656) val_top5=0.9312 val_loss=0.9865  [454.8s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e264.state.npz (1048 arrays, step=1321056)
+[Epoch 265] lr=0.00059 loss(train_avg)=2.2838 val_top1=38290/50000 (0.7658) val_top5=0.931 val_loss=0.986  [455.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e265.state.npz (1048 arrays, step=1326060)
+[Epoch 266] lr=0.000583 loss(train_avg)=2.2816 val_top1=38297/50000 (0.7659) val_top5=0.9308 val_loss=0.9857  [455.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e266.state.npz (1048 arrays, step=1331064)
+[Epoch 267] lr=0.000575 loss(train_avg)=2.2799 val_top1=38320/50000 (0.7664) val_top5=0.9308 val_loss=0.9855  [457.1s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e267.state.npz (1048 arrays, step=1336068)
+[Epoch 268] lr=0.000568 loss(train_avg)=2.2791 val_top1=38314/50000 (0.7663) val_top5=0.931 val_loss=0.9858  [456.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e268.state.npz (1048 arrays, step=1341072)
+[Epoch 269] lr=0.000561 loss(train_avg)=2.2779 val_top1=38291/50000 (0.7658) val_top5=0.9312 val_loss=0.9852  [460.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e269.state.npz (1048 arrays, step=1346076)
+[Epoch 270] lr=0.000554 loss(train_avg)=2.2763 val_top1=38323/50000 (0.7665) val_top5=0.931 val_loss=0.9852  [456.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e270.state.npz (1048 arrays, step=1351080)
+[Epoch 271] lr=0.000547 loss(train_avg)=2.2744 val_top1=38295/50000 (0.7659) val_top5=0.9311 val_loss=0.9853  [456.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e271.state.npz (1048 arrays, step=1356084)
+[Epoch 272] lr=0.00054 loss(train_avg)=2.2736 val_top1=38337/50000 (0.7667) val_top5=0.9314 val_loss=0.9845  [456.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e272.state.npz (1048 arrays, step=1361088)
+[Epoch 273] lr=0.000533 loss(train_avg)=2.2729 val_top1=38382/50000 (0.7676) val_top5=0.9315 val_loss=0.9833  [460.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e273.state.npz (1048 arrays, step=1366092)
+[Epoch 274] lr=0.000527 loss(train_avg)=2.2703 val_top1=38379/50000 (0.7676) val_top5=0.9316 val_loss=0.9826  [455.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e274.state.npz (1048 arrays, step=1371096)
+[Epoch 275] lr=0.00052 loss(train_avg)=2.2684 val_top1=38352/50000 (0.767) val_top5=0.9318 val_loss=0.9822  [455.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e275.state.npz (1048 arrays, step=1376100)
+[Epoch 276] lr=0.000513 loss(train_avg)=2.2673 val_top1=38364/50000 (0.7673) val_top5=0.9315 val_loss=0.9828  [455.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e276.state.npz (1048 arrays, step=1381104)
+[Epoch 277] lr=0.000507 loss(train_avg)=2.2671 val_top1=38349/50000 (0.767) val_top5=0.931 val_loss=0.9831  [460.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e277.state.npz (1048 arrays, step=1386108)
+[Epoch 278] lr=0.000501 loss(train_avg)=2.2657 val_top1=38363/50000 (0.7673) val_top5=0.9306 val_loss=0.9825  [456.4s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e278.state.npz (1048 arrays, step=1391112)
+[Epoch 279] lr=0.000494 loss(train_avg)=2.2624 val_top1=38360/50000 (0.7672) val_top5=0.9317 val_loss=0.9823  [455.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e279.state.npz (1048 arrays, step=1396116)
+[Epoch 280] lr=0.000488 loss(train_avg)=2.2604 val_top1=38337/50000 (0.7667) val_top5=0.9313 val_loss=0.9826  [455.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e280.state.npz (1048 arrays, step=1401120)
+[Epoch 281] lr=0.000482 loss(train_avg)=2.2591 val_top1=38331/50000 (0.7666) val_top5=0.9318 val_loss=0.9817  [456.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e281.state.npz (1048 arrays, step=1406124)
+[Epoch 282] lr=0.000476 loss(train_avg)=2.258 val_top1=38377/50000 (0.7675) val_top5=0.931 val_loss=0.9819  [458.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e282.state.npz (1048 arrays, step=1411128)
+[Epoch 283] lr=0.00047 loss(train_avg)=2.2576 val_top1=38402/50000 (0.768) val_top5=0.9315 val_loss=0.982  [456.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e283.state.npz (1048 arrays, step=1416132)
+[Epoch 284] lr=0.000464 loss(train_avg)=2.2568 val_top1=38393/50000 (0.7679) val_top5=0.9307 val_loss=0.9819  [456.3s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e284.state.npz (1048 arrays, step=1421136)
+[Epoch 285] lr=0.000458 loss(train_avg)=2.2538 val_top1=38368/50000 (0.7674) val_top5=0.9309 val_loss=0.9817  [456.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e285.state.npz (1048 arrays, step=1426140)
+[Epoch 286] lr=0.000452 loss(train_avg)=2.2524 val_top1=38382/50000 (0.7676) val_top5=0.9312 val_loss=0.9824  [456.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e286.state.npz (1048 arrays, step=1431144)
+[Epoch 287] lr=0.000446 loss(train_avg)=2.2526 val_top1=38387/50000 (0.7677) val_top5=0.9318 val_loss=0.9818  [456.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e287.state.npz (1048 arrays, step=1436148)
+[Epoch 288] lr=0.000441 loss(train_avg)=2.2501 val_top1=38384/50000 (0.7677) val_top5=0.9318 val_loss=0.9818  [455.3s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e288.state.npz (1048 arrays, step=1441152)
+[Epoch 289] lr=0.000435 loss(train_avg)=2.2484 val_top1=38381/50000 (0.7676) val_top5=0.9315 val_loss=0.9815  [455.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e289.state.npz (1048 arrays, step=1446156)
+[Epoch 290] lr=0.00043 loss(train_avg)=2.2463 val_top1=38382/50000 (0.7676) val_top5=0.9319 val_loss=0.9813  [455.8s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e290.state.npz (1048 arrays, step=1451160)
+[Epoch 291] lr=0.000424 loss(train_avg)=2.246 val_top1=38388/50000 (0.7678) val_top5=0.9318 val_loss=0.9814  [459.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e291.state.npz (1048 arrays, step=1456164)
+[Epoch 292] lr=0.000419 loss(train_avg)=2.245 val_top1=38386/50000 (0.7677) val_top5=0.9315 val_loss=0.9808  [456.4s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e292.state.npz (1048 arrays, step=1461168)
+[Epoch 293] lr=0.000414 loss(train_avg)=2.244 val_top1=38367/50000 (0.7673) val_top5=0.9317 val_loss=0.9806  [456.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e293.state.npz (1048 arrays, step=1466172)
+[Epoch 294] lr=0.000409 loss(train_avg)=2.2421 val_top1=38412/50000 (0.7682) val_top5=0.9319 val_loss=0.9807  [459.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e294.state.npz (1048 arrays, step=1471176)
+[Epoch 295] lr=0.000403 loss(train_avg)=2.24 val_top1=38432/50000 (0.7686) val_top5=0.9319 val_loss=0.9803  [456.6s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e295.state.npz (1048 arrays, step=1476180)
+[Epoch 296] lr=0.000398 loss(train_avg)=2.2392 val_top1=38407/50000 (0.7681) val_top5=0.9328 val_loss=0.9803  [456.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e296.state.npz (1048 arrays, step=1481184)
+[Epoch 297] lr=0.000393 loss(train_avg)=2.2378 val_top1=38409/50000 (0.7682) val_top5=0.9325 val_loss=0.979  [456.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e297.state.npz (1048 arrays, step=1486188)
+[Epoch 298] lr=0.000388 loss(train_avg)=2.2381 val_top1=38400/50000 (0.768) val_top5=0.9324 val_loss=0.9784  [455.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e298.state.npz (1048 arrays, step=1491192)
+[Epoch 299] lr=0.000383 loss(train_avg)=2.2364 val_top1=38440/50000 (0.7688) val_top5=0.9325 val_loss=0.9794  [455.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e299.state.npz (1048 arrays, step=1496196)
+[Epoch 300] lr=0.000379 loss(train_avg)=2.2345 val_top1=38462/50000 (0.7692) val_top5=0.9325 val_loss=0.9781  [455.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e300.state.npz (1048 arrays, step=1501200)
+[Epoch 301] lr=0.000374 loss(train_avg)=2.2353 val_top1=38446/50000 (0.7689) val_top5=0.9325 val_loss=0.9782  [455.0s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e301.state.npz (1048 arrays, step=1506204)
+[Epoch 302] lr=0.000369 loss(train_avg)=2.2324 val_top1=38469/50000 (0.7694) val_top5=0.9328 val_loss=0.9773  [455.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e302.state.npz (1048 arrays, step=1511208)
+[Epoch 303] lr=0.000364 loss(train_avg)=2.2333 val_top1=38431/50000 (0.7686) val_top5=0.9328 val_loss=0.9788  [454.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e303.state.npz (1048 arrays, step=1516212)
+[Epoch 304] lr=0.00036 loss(train_avg)=2.2306 val_top1=38426/50000 (0.7685) val_top5=0.9326 val_loss=0.9783  [455.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e304.state.npz (1048 arrays, step=1521216)
+[Epoch 305] lr=0.000355 loss(train_avg)=2.2284 val_top1=38415/50000 (0.7683) val_top5=0.9324 val_loss=0.9792  [455.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e305.state.npz (1048 arrays, step=1526220)
+[Epoch 306] lr=0.000351 loss(train_avg)=2.228 val_top1=38430/50000 (0.7686) val_top5=0.9324 val_loss=0.9792  [455.6s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e306.state.npz (1048 arrays, step=1531224)
+[Epoch 307] lr=0.000346 loss(train_avg)=2.2276 val_top1=38435/50000 (0.7687) val_top5=0.9323 val_loss=0.9787  [455.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e307.state.npz (1048 arrays, step=1536228)
+[Epoch 308] lr=0.000342 loss(train_avg)=2.2276 val_top1=38426/50000 (0.7685) val_top5=0.9322 val_loss=0.9784  [456.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e308.state.npz (1048 arrays, step=1541232)
+[Epoch 309] lr=0.000338 loss(train_avg)=2.2245 val_top1=38417/50000 (0.7683) val_top5=0.9323 val_loss=0.9781  [456.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e309.state.npz (1048 arrays, step=1546236)
+[Epoch 310] lr=0.000333 loss(train_avg)=2.2246 val_top1=38418/50000 (0.7684) val_top5=0.9325 val_loss=0.9775  [456.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e310.state.npz (1048 arrays, step=1551240)
+[Epoch 311] lr=0.000329 loss(train_avg)=2.2214 val_top1=38436/50000 (0.7687) val_top5=0.9324 val_loss=0.9765  [456.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e311.state.npz (1048 arrays, step=1556244)
+[Epoch 312] lr=0.000325 loss(train_avg)=2.2207 val_top1=38406/50000 (0.7681) val_top5=0.9329 val_loss=0.9765  [460.3s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e312.state.npz (1048 arrays, step=1561248)
+[Epoch 313] lr=0.000321 loss(train_avg)=2.221 val_top1=38452/50000 (0.769) val_top5=0.9324 val_loss=0.976  [455.8s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e313.state.npz (1048 arrays, step=1566252)
+[Epoch 314] lr=0.000317 loss(train_avg)=2.2187 val_top1=38464/50000 (0.7693) val_top5=0.9324 val_loss=0.9761  [458.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e314.state.npz (1048 arrays, step=1571256)
+[Epoch 315] lr=0.000313 loss(train_avg)=2.2176 val_top1=38484/50000 (0.7697) val_top5=0.9331 val_loss=0.9766  [455.4s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e315.state.npz (1048 arrays, step=1576260)
+[Epoch 316] lr=0.000309 loss(train_avg)=2.2174 val_top1=38490/50000 (0.7698) val_top5=0.9328 val_loss=0.9762  [458.9s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e316.state.npz (1048 arrays, step=1581264)
+[Epoch 317] lr=0.000305 loss(train_avg)=2.2151 val_top1=38468/50000 (0.7694) val_top5=0.9331 val_loss=0.9759  [455.7s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e317.state.npz (1048 arrays, step=1586268)
+[Epoch 318] lr=0.000301 loss(train_avg)=2.2136 val_top1=38466/50000 (0.7693) val_top5=0.9334 val_loss=0.9756  [455.2s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e318.state.npz (1048 arrays, step=1591272)
+[Epoch 319] lr=0.000297 loss(train_avg)=2.2115 val_top1=38466/50000 (0.7693) val_top5=0.9332 val_loss=0.9747  [456.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e319.state.npz (1048 arrays, step=1596276)
+[Epoch 320] lr=0.000294 loss(train_avg)=2.2113 val_top1=38477/50000 (0.7695) val_top5=0.933 val_loss=0.9746  [456.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e320.state.npz (1048 arrays, step=1601280)
+[Epoch 321] lr=0.00029 loss(train_avg)=2.2101 val_top1=38469/50000 (0.7694) val_top5=0.9327 val_loss=0.9747  [456.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e321.state.npz (1048 arrays, step=1606284)
+[Epoch 322] lr=0.000286 loss(train_avg)=2.2105 val_top1=38444/50000 (0.7689) val_top5=0.9324 val_loss=0.9747  [456.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e322.state.npz (1048 arrays, step=1611288)
+[Epoch 323] lr=0.000283 loss(train_avg)=2.2073 val_top1=38467/50000 (0.7693) val_top5=0.9325 val_loss=0.9744  [455.7s train, 17.7s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e323.state.npz (1048 arrays, step=1616292)
+[Epoch 324] lr=0.000279 loss(train_avg)=2.2071 val_top1=38500/50000 (0.77) val_top5=0.9322 val_loss=0.9744  [455.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e324.state.npz (1048 arrays, step=1621296)
+[Epoch 325] lr=0.000276 loss(train_avg)=2.207 val_top1=38490/50000 (0.7698) val_top5=0.9324 val_loss=0.9744  [455.7s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e325.state.npz (1048 arrays, step=1626300)
+[Epoch 326] lr=0.000272 loss(train_avg)=2.207 val_top1=38505/50000 (0.7701) val_top5=0.9328 val_loss=0.974  [455.1s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e326.state.npz (1048 arrays, step=1631304)
+[Epoch 327] lr=0.000269 loss(train_avg)=2.2041 val_top1=38533/50000 (0.7707) val_top5=0.9329 val_loss=0.9738  [456.0s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e327.state.npz (1048 arrays, step=1636308)
+[Epoch 328] lr=0.000265 loss(train_avg)=2.2036 val_top1=38585/50000 (0.7717) val_top5=0.933 val_loss=0.9728  [457.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e328.state.npz (1048 arrays, step=1641312)
+[Epoch 329] lr=0.000262 loss(train_avg)=2.2026 val_top1=38586/50000 (0.7717) val_top5=0.9328 val_loss=0.9723  [460.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e329.state.npz (1048 arrays, step=1646316)
+[Epoch 330] lr=0.000259 loss(train_avg)=2.2034 val_top1=38590/50000 (0.7718) val_top5=0.9328 val_loss=0.9723  [456.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e330.state.npz (1048 arrays, step=1651320)
+[Epoch 331] lr=0.000255 loss(train_avg)=2.2009 val_top1=38556/50000 (0.7711) val_top5=0.9325 val_loss=0.9722  [457.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e331.state.npz (1048 arrays, step=1656324)
+[Epoch 332] lr=0.000252 loss(train_avg)=2.2017 val_top1=38552/50000 (0.771) val_top5=0.9327 val_loss=0.9722  [456.5s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e332.state.npz (1048 arrays, step=1661328)
+[Epoch 333] lr=0.000249 loss(train_avg)=2.1991 val_top1=38562/50000 (0.7712) val_top5=0.9328 val_loss=0.9714  [459.9s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e333.state.npz (1048 arrays, step=1666332)
+[Epoch 334] lr=0.000246 loss(train_avg)=2.2005 val_top1=38555/50000 (0.7711) val_top5=0.9331 val_loss=0.9716  [456.6s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e334.state.npz (1048 arrays, step=1671336)
+[Epoch 335] lr=0.000243 loss(train_avg)=2.1977 val_top1=38556/50000 (0.7711) val_top5=0.933 val_loss=0.9724  [460.5s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e335.state.npz (1048 arrays, step=1676340)
+[Epoch 336] lr=0.00024 loss(train_avg)=2.1971 val_top1=38567/50000 (0.7713) val_top5=0.933 val_loss=0.9725  [457.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e336.state.npz (1048 arrays, step=1681344)
+[Epoch 337] lr=0.000237 loss(train_avg)=2.196 val_top1=38572/50000 (0.7714) val_top5=0.9333 val_loss=0.9718  [460.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e337.state.npz (1048 arrays, step=1686348)
+[Epoch 338] lr=0.000234 loss(train_avg)=2.1933 val_top1=38593/50000 (0.7719) val_top5=0.9329 val_loss=0.9722  [455.4s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e338.state.npz (1048 arrays, step=1691352)
+[Epoch 339] lr=0.000231 loss(train_avg)=2.1926 val_top1=38596/50000 (0.7719) val_top5=0.933 val_loss=0.9718  [458.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e339.state.npz (1048 arrays, step=1696356)
+[Epoch 340] lr=0.000228 loss(train_avg)=2.1927 val_top1=38595/50000 (0.7719) val_top5=0.9326 val_loss=0.9718  [455.8s train, 17.7s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e340.state.npz (1048 arrays, step=1701360)
+[Epoch 341] lr=0.000225 loss(train_avg)=2.19 val_top1=38602/50000 (0.772) val_top5=0.9327 val_loss=0.9715  [455.4s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e341.state.npz (1048 arrays, step=1706364)
+[Epoch 342] lr=0.000222 loss(train_avg)=2.1899 val_top1=38598/50000 (0.772) val_top5=0.9329 val_loss=0.9714  [459.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e342.state.npz (1048 arrays, step=1711368)
+[Epoch 343] lr=0.000219 loss(train_avg)=2.1877 val_top1=38574/50000 (0.7715) val_top5=0.9335 val_loss=0.9713  [455.0s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e343.state.npz (1048 arrays, step=1716372)
+[Epoch 344] lr=0.000217 loss(train_avg)=2.1886 val_top1=38557/50000 (0.7711) val_top5=0.9332 val_loss=0.971  [459.2s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e344.state.npz (1048 arrays, step=1721376)
+[Epoch 345] lr=0.000214 loss(train_avg)=2.1874 val_top1=38583/50000 (0.7717) val_top5=0.9335 val_loss=0.9705  [456.3s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e345.state.npz (1048 arrays, step=1726380)
+[Epoch 346] lr=0.000211 loss(train_avg)=2.187 val_top1=38584/50000 (0.7717) val_top5=0.933 val_loss=0.9708  [456.5s train, 17.6s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e346.state.npz (1048 arrays, step=1731384)
+[Epoch 347] lr=0.000208 loss(train_avg)=2.1862 val_top1=38605/50000 (0.7721) val_top5=0.933 val_loss=0.97  [456.5s train, 17.5s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e347.state.npz (1048 arrays, step=1736388)
+[Epoch 348] lr=0.000206 loss(train_avg)=2.1859 val_top1=38605/50000 (0.7721) val_top5=0.933 val_loss=0.9705  [455.8s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e348.state.npz (1048 arrays, step=1741392)
+[Epoch 349] lr=0.000203 loss(train_avg)=2.1836 val_top1=38610/50000 (0.7722) val_top5=0.9327 val_loss=0.97  [471.2s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e349.state.npz (1048 arrays, step=1746396)
+[Epoch 350] lr=0.000201 loss(train_avg)=2.1824 val_top1=38588/50000 (0.7718) val_top5=0.9331 val_loss=0.9699  [457.1s train, 17.4s val]
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e350.state.npz (1048 arrays, step=1751400)
+  saved full train state -> /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.state.npz (1048 arrays, step=1751400)
+Done. Total time: 95233.9s

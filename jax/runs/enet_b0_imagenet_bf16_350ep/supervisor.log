@@ -1,0 +1,5 @@
+[sup] 2026-09-03 13:18:47 START EfficientNet-B0 ImageNet 350ep · GPUs 0,1,2,3 · bf16 · batch 256 (4x64) · SPE 5004 · rest when any GPU >= 80C
+[sup] 13:18:47 attempt 1: RESUME full state from epoch 149 (/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet_e149.state.npz)
+[sup] 13:18:47 launched PID=11008
+[sup]   last: [Epoch 350] lr=0.000201 loss(train_avg)=2.1824 val_top1=38588/50000 (0.7718) val_top5=0.9331 val_loss=0.9699  [457.1s train, 17.4s val]
+[sup] 15:46:17 ✅ TRAINING COMPLETE (350 epochs). final=/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.bin
