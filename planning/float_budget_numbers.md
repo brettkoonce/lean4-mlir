@@ -67,8 +67,14 @@ LayerNorm net now exists as a theorem, and it is stated **directly on the commit
 nothing in between. ⭐ §3.19's ceiling worry was unfounded: the eighteen largest goals close at
 `S = 16` AND `S = 8`, so the operating point was not overpaid.
 
-⭐ **Starting a session?** §4 is what is open. The next items are EfficientNet-B0's backward budget
-file (unblocked since §3.12) and B0's whole-net certified tie.
+⭐ **Starting a session?** §4 carries the decided order, and each item's state was measured before
+it was ranked. ✅ **(1) `resnet34Forward_full_pc_eq_chain` is DONE (2026-09-04, §3.23) — all three
+whole-net backward ties carry a shape check now, and r34's found no drift.** Next up:
+(2) EfficientNet-B0's backward — ⛔ its cone is at the `∃`
+tier (`SEBackFloatBridge.lean` is 0 `floatBridgesTo_` against 3), which is the bulk of the job and
+not the `Maps` leaves; (3) ⭐⭐ then §0.1's escape 2 for the FORWARDS, the only open item that
+changes what the numbers mean rather than adding another of a kind we have five of; (4) ViT's
+backward is PARKED with its cost measured — 8 `floatBridgesTo_` against 46.
 
 Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
 (⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
@@ -2139,8 +2145,9 @@ Once (a) is unblocked and `convnextInputGrad_eq_convNextForwardTCh_vjp` is close
 
 #### (c) ⭐ And while you are in the neighbourhood
 
-* **`resnet34Forward_full_pc_eq_chain`** (§4 item 8) — ResNet-34 is now the only net whose
-  whole-net backward tie has no shape check, and it is the net the hole already bit. Cheap.
+* ✅ **`resnet34Forward_full_pc_eq_chain`** — DONE 2026-09-04 (§3.23). ⛔ Not as cheap as this
+  line said, and the reason is reusable: r34's apex groups its stages under `chainComp`, so it is
+  the one shape check in the repo that cannot be a bare `rfl`.
 * ⛔ **Grep every other definition that claims to denote a map an emitter was fixed for.** §3.19's
   lesson: `.convStridedBack`'s even-kernel pad was fixed twice on the codegen side and the float
   tier's hand-written peer of the same map was never touched. A `den` stated as the certified VJP
@@ -2305,84 +2312,150 @@ saved-activation accuracy it can supply is `2 × window ≈ 10²²⁷` and Layer
 switch to. *An honest fold of the backward kernel's rounding, at a hypothesised operating point,
 given saved-activation accuracies this net's forward cannot supply in any mode.*
 
-## 4. What is open (2026-09-04)
+### 3.23 ✅ ResNet-34's SHAPE CHECK (2026-09-04) — §4 item 1, and it is not a `rfl`
 
-§3.8's three items are all closed, so this is its successor. Ordered by what I would do next.
+`resnet34Forward_full_pc_eq_chain` (`Foundation/Resnet34BackCertifiedTie.lean`): the eleven slots
+`r34InputGrad_eq_resnet34_vjp` instantiates `resnet34_has_vjp_at` at — the stem `cbrStridedPC`, He
+et al.'s 3×3/s2 pool, the four `chainComp` stages `[a2,a1,a0]` / `[b2,b1,b0]` / `[c4,c3,c2,c1,c0]` /
+`[e1,e0]`, the three `downFwd` downsamples, GAP and the dense head — ARE `resnet34Forward_full_pc`.
+**All three whole-net backward ties now carry one** (`mobilenetv2Forward_full_pc_eq_chain` §3.14,
+`convNextForwardTCh_eq_chain` §3.18), which closes §3.14's *"add one to r34's"* and §3.20(c).
 
-**1. ✅ Probe a LAYERNORM net's BACKWARD — DONE 2026-09-04. See §3.16.** It folds:
-5.766·10²⁴⁹ / 8.791·10²⁴⁸ at `|istd| ≤ 16`, ratio 0.15, no cap anywhere — the repo's first honest
-whole-net fold for a LayerNorm net. What it opened is below.
+**⭐ No drift.** The committed chain is the committed net slot for slot, so §3.7's
+**8.857·10²⁴⁵ / 6.894·10²⁴⁴ stand unchanged** — §3.14's point again: a tie that finds nothing is
+the only way to know the previous section's number was about the net it claimed to be about. What
+it now rules out is the class of defect §3.10 found here and §3.16 found on ConvNeXt: a whole-net
+tie keeps its blocks OPAQUE so the `isDefEq` compares variables, and the price of that is a theorem
+whose subject is a chain of *variables*, saying nothing about which net they are.
 
-**2. ✅ Fix ConvNeXt's head-LayerNorm BACKWARD slot — DONE 2026-09-04, §3.16 finding 6.** Both
-tiers now take `rowLNVecFlatBack 1 768` and `rowLNVecFlatBackF`; every piece already existed, and
-the `id` was justified in its own docstring by a LayerNorm count that had gone stale.
+**⛔⛔ The costing said "an afternoon, shape: `mobilenetv2Forward_full_pc_eq_chain`'s, a `rfl`".
+The theorem is right and the shape is wrong: r34's cannot be a bare `rfl`, and the difference is
+the apex.** MobileNetV2's and ConvNeXt's chain one block per slot; `resnet34_has_vjp_at` groups its
+`[3,4,6,3]` runs under `chainComp`. Handing the kernel
 
-**3. ✅ The `Maps` kit for a LayerNorm net's backward — DONE 2026-09-04, §3.17.**
-`FloatBudgetEnvBackLN.lean`: `Maps.rowLNVecFlatBack` (the one new leaf), the channel-LN
-conjugation, the patchify backward, the block-body and downsample envelopes, plus the
-`FloatBridgesTo` migration of the three ConvNeXt backward block defs — and ConvNeXt-T's block
-`s4b2` closed as a compiled `example` at the probe's numerals.
+    resnet34Forward_full_pc … = … ∘ chainComp [idFwd e1, idFwd e0] ∘ downFwd d4 ∘ …
 
-**4. ✅ THE APEX — DONE 2026-09-04 (§3.21), and §3.19's even-kernel finding came out of it.**
-`convnextInputGrad_eq_convNextForwardTCh_vjp`: ConvNeXt-T's whole-net backward IS the certified
-gradient, and the tie is **stronger than r34's and MobileNetV2's** — `HasVJP` everywhere, not their
-smooth-point `HasVJPAt`, so no smoothness side-condition. ⛔ §3.20(a)'s "bisect the import" premise
-was wrong: the two cones are indistinguishable (166.23 s / 165.58 s on the same declaration). The
-cost was a computed dimension in an APPLIED position, and one `def` per offending stage takes the
-whole chain from non-terminating to **2.9 s**. The tie found no drift, so §3.19's corrected
-1.023·10²⁵¹ / 1.563·10²⁵⁰ stands. The historical scoping is below.
+is a `(kernel) deterministic timeout`, and the mechanism is a *structural short-circuit guessing
+wrong*: both sides are `Function.comp` applications, so the kernel compares arguments pairwise and
+tries to align `idFwd e1` — whnf `relu ∘ residual F` — against the whole `chainComp` node. That
+fails structurally, and the fallback is eta-expanding two 18-stage nets. ⚠ It does not finish at
+`maxHeartbeats 4000000` either; raising the budget is not the fix.
 
-**4b. (superseded) The original §3.18 scoping.** r34 and mnv2 folded first and tied
-after; §3.10 is why not to repeat that — the tie found r34 reversing the wrong pool and moved the
-committed number 4×, and ConvNeXt has already produced one defect of that class this week
-(§3.16 finding 6). ⭐ The apex `convNextForwardTCh_has_vjp` **already exists at the committed net**,
-and so does §3.14's shape `rfl`. Missing: the stage-fold backward tie (the one real proof), the
-downsample tie, the patchify-backward leaf tie, and the assembly.
+**⭐⭐ The fix is §3.21's rule with a third face: prove the reduction once where the slots are
+VARIABLES, then REWRITE.** `chainComp₂_comp : chainComp [f, g] ∘ k = f ∘ g ∘ k` is one `rfl`
+between variables — `chainComp` folds with `id` at the base and `Function.comp` is definitionally
+associative, so the kernel closes it without looking at anything — and four `rw`s with the 2/3/5
+peels turn the goal into the def body syntactically. Measured, same file, 1.9 s import baseline:
 
-**5. ✅ `ConvNeXtBackFloatBudget.lean` — DONE 2026-09-04 (§3.22).** `cnx_grad_float_le`:
-1.023·10²⁵¹ / 1.563·10²⁵⁰, ratio 0.153, the interval FOLD and the repo's first for a LayerNorm net,
-stated directly on the committed `convnextInputGrad`. The ceiling probe was re-run at the corrected
-fan-ins and all eighteen largest goals close at `S = 16` and at `S = 8`, so the operating point was
-not overpaid.
+| proof | cost |
+|---|---|
+| bare `rfl` | ⛔ kernel timeout (also at `maxHeartbeats 4000000`) |
+| `simp only [chainComp_cons, chainComp_nil, Function.comp_id, Function.comp_assoc]` | ⛔ 3m17s, then the closing defeq still times out |
+| `simp only [chainComp₂_comp, chainComp₃_comp, chainComp₅_comp]` (the comp-form peels) | ⚠ 5m05s |
+| ⭐ **`rw [chainComp₂_comp, chainComp₅_comp, chainComp₃_comp, chainComp₃_comp]; rfl`** | ✅ **0.1 s** |
 
-**6. EfficientNet-B0's backward budget file** — §3.9's "what to do next" item 3.
-The blocker is gone (§3.12's `|swish′| ≤ 2`), the fold is **7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** and
-statable. Needs `Maps.diagBack`, `Maps.broadcastBack` and the `Maps.seBack` composite (`biPathSum`
-of two `.comp` chains — no new combinator), plus four supplied saved-vector accuracies where r34
-has two. ⚠ `batchMap` never enters a numeral, so the number holds at any `N`.
+⛔ **And a new pitfall worth §8: `Function.comp_assoc` in a `simp only` set is not a tidy-up, it is
+an unfolder.** `idFwd`/`downFwd`/`rblkPC` are `@[reducible]`, so simp matches `(f ∘ g) ∘ h` *inside*
+a block body through `whnfR` and rewrites there — the goal comes back with the architecture spelled
+out as `relu ∘ residual (bnPerChannelTensor3 … ∘ flatConv … ) ∘ relu ∘ …`, re-associated straight
+through the block boundaries, while the left-hand side is still the folded `resnet34Forward_full_pc`.
+That is what made the two `simp only` rows above both slow AND unable to close. `rw` never
+traverses, which is the whole reason it costs nothing here.
 
-**7. B0's whole-net certified tie** — the §3.14 analogue, and §1's criterion (ii) for that net. Not
-scoped; scope it the way §3.14 was, by reading the cone rather than guessing.
+⭐ The three peels are `private` to the tie file rather than added beside `chainComp_cons` in
+`Foundation/ResNet34.lean`: they are two lines each, and that file is 2000 modules of rebuild
+(§8's `layerBudget_le_of` note, same reasoning).
 
-**8. ⭐ `resnet34Forward_full_pc_eq_chain`** — §3.14's own recommendation. ⭐ ConvNeXt already has
-its peer (`convNextForwardTCh_eq_chain`, §3.18); ResNet-34 is now the only net whose whole-net
-backward tie has no shape check, and it is the net the hole already bit.
-`Resnet34BackCertifiedTie.lean` has no shape check: its apex's subject is a chain of VARIABLES and
-nothing in the theorem says which net they are. That is precisely how §3.10's wrong pool survived a
-month. Cheap, and it closes the hole that already bit once.
+## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
+
+§3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward now has a certified tie
+(§3.21) and a number (§3.22). What follows is the agreed order, and each item's state was
+**measured** before it was ranked — §3.17's rule (*when scoping, grep the cone for
+`floatBridgesTo_`, not for the defs, which exist either way*) applied to all three candidates.
+
+**1. ✅ `resnet34Forward_full_pc_eq_chain` — DONE 2026-09-04, §3.23.** All three whole-net
+backward ties carry a shape check now, and r34's found **no drift**, so §3.7's 8.857·10²⁴⁵ /
+6.894·10²⁴⁴ stand. ⛔ The costing here said *"a `rfl` block slot by block slot"* like
+MobileNetV2's; it cannot be one, because `resnet34_has_vjp_at` groups its `[3,4,6,3]` runs under
+`chainComp` and a `chainComp` node handed to the kernel against a `Function.comp` node is a
+deterministic timeout. Peel `chainComp` once between VARIABLES and `rw` — 0.1 s against a `simp
+only` route that costs five minutes and still does not close. §3.23 has the table.
+
+**2. EfficientNet-B0's BACKWARD — the last of the five conv nets, and ⛔ the cone is at the `∃`
+tier.** The fold is statable and its number is known: **7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** since §3.12's
+`|swish′| ≤ 2`. ⚠ **Measured 2026-09-04, and it is the bulk of the job, not the `Maps` leaves:**
+
+| file | `floatBridgesTo_` | `floatBridges_` (`∃`) |
+|---|---|---|
+| `SEBackFloatBridge.lean` | ⛔ **0** | 3 |
+| `EfficientNetWholeBackFloatBridge.lean` | 1 | 2 |
+
+A budget file cannot use an `∃`-tier bridge — `FloatBridges` discards the float map and a `Maps`
+envelope has to name one — so this is §3.5.1's surprise for the THIRD time (§3.17 was the second),
+and it is exactly what §3.17 says to check before costing. On top of the migration: `Maps.diagBack`
+exists (`FloatBudgetEnvLN.lean`), ⛔ `Maps.broadcastBack` and the `Maps.seBack` composite do NOT
+(`biPathSum` of two `.comp` chains — no new combinator, the same point §3.7 step 3 made about the
+r34 blocks). Four supplied saved-vector accuracies where r34 has two. ⚠ `batchMap` never enters a
+numeral, so the number holds at any `N`.
+⭐ **Do it in §3.22's shape**: fill the committed `efficientnetInputGradB`'s slots rather than
+defining a `*GradR` skeleton, so B0's tie (item 2b) makes the number a statement about the
+certified gradient with nothing in between.
+⭐ Two priced-and-declined items sit inside this one and should be taken while the files are open:
+`floatClose_broadcastBack`'s spurious factor of `c` (6 orders on this fold, §3.9 finding 7) and
+`swishScalar_lipschitz` into `floatClose_swish` (8 orders on B0's FORWARD — ⚠ that one moves a
+committed number, so it is its own commit).
+
+**2b. B0's whole-net certified TIE** — §1's criterion (ii) for that net, and §3.18's rule says do
+it BEFORE the number, not after. ⭐ An apex exists to aim at: `efficientnetForwardB_full_has_vjp`
+(`Architectures/EfficientNetFullB0.lean`) with `_correct` beside it. ⚠ Scope it by reading the
+cone the way §3.14 was scoped, not by guessing — and add the shape `rfl` from the start.
+
+**3. ⭐⭐ THEN THE ESCAPE: §0.1's item 2 for the FORWARDS — a Lipschitz constant for the
+NORMALISED output.** Promoted here from "flagged rather than scheduled", because it is the only
+open item that would change what the numbers MEAN rather than adding a sixth of a kind we already
+have five of. Every forward number in §0's table is vacuous by hundreds of orders, and §0.1 has
+said since it was written that a genuinely linear bound needs *the normalised output's* Lipschitz
+constant rather than the pre-normalisation one — "real work and probably the interesting result".
+⭐ It now has a worked precedent for its price: the backward's operating-point `S` bought ~43
+orders across ResNet-34's 33 BatchNorm sites and was the difference between a number that exists
+and one that does not (§3.7 step 4(b)); and §3.2's sweep measured ~19 orders per decade of `S`
+across MobileNetV2's 20 sites. ⚠ Start with the probe, not the Lean (§3.8): the ablation belongs in
+`float_budget_envelope.py` as a flag on the BN/LN leaf, and the question it must answer first is
+whether the bound is linear in the window at all, or merely a smaller quadratic.
+
+**4. ⭐ PARKED, with its cost measured: ViT-Tiny's BACKWARD.** ⛔ Not next, and the reason is a
+number rather than a preference — `MhsaBackFloatBridge.lean` is **8 `floatBridgesTo_` against 46
+`floatBridges_`**, so the `∃`-tier migration is five times B0's and is most of the job (§3.16
+finding 7 predicted this; the count confirms it). It would give a sixth whole-net backward number
+of a kind the repo already has four of, at the architecture whose forward number is the most capped
+of the six. ⭐ Take it after item 3, or sooner if completeness across all six nets is wanted for its
+own sake — but cost it as a migration, and re-read §3.5's granularity lesson first: attention fans
+out, so it is ONE leaf, and the same is true of its backward.
 
 **Priced, deliberately NOT taken** (each is a decision, not an oversight):
 
 * **`swishScalar_lipschitz` into `floatClose_swish`** — 8 orders on B0's FORWARD
   (8.408·10²¹⁰ → 3.679·10²⁰²), window unchanged. Moves a committed number; §3.12, §7's one-commit-
-  per-net rule. Do it when B0's forward is next opened.
+  per-net rule. ⭐ Do it during item 2, when B0's files are open.
 * **`floatClose_broadcastBack`'s spurious factor of `c`** — 6 orders on B0's backward, cheap, blocks
-  nothing (§3.9 finding 7).
+  nothing (§3.9 finding 7). ⭐ Also during item 2.
 * **The `FloatBudgetEnvCore` split** — cone hygiene, zero mathematical gain (§3.11).
+* ⛔ **The sharp `|swish′| ≈ 1.1`** — 2.6 orders against the proved `2`, and §3.12 says explicitly
+  not to prove it.
 
-**Flagged rather than scheduled.** §0.1's escape 2 — *a genuinely linear bound needs the NORMALISED
-output's Lipschitz constant, not the pre-normalisation one* — is still open for the FORWARDS, and is
-still "real work and probably the interesting result". Every forward number in §0's table is vacuous
-by hundreds of orders and this is the only item that would change that. ⭐ The backward's
-operating-point `S` is the worked precedent for what such a bound is worth: ~43 orders across 33 BN
-sites, and the difference between a number that exists and one that does not (§3.7 step 4(b)).
+**Standing audit, from §3.19's lesson and not yet run.** *When a fix lands on an emitter, grep for
+every other definition that claims to denote the same map.* `.convStridedBack`'s even-kernel pad was
+fixed TWICE on the codegen side and never reached the float tier's hand-written peer, which is the
+tier a committed number was folded through. A `den` stated as the certified VJP cannot drift; a
+hand-written peer can, and did. One pass over the emitters' fix history would say whether the
+even-kernel case was the only one.
 
 **Stated as missing, still missing.** `efficientnetForwardBEval N = batchMap N (per-example
 forward)` — the whole-net form of "at inference the batch decouples". Only the per-SITE claim is
 proved (`den_batchOp_bnEval`); it needs a `batchMap` composition lemma plus a per-example B0 def as
 the witness (§3.4).
 
-## 5. The `Maps` kit — ✅ complete for all six forwards, and for r34's backward
+## 5. The `Maps` kit — ✅ complete for all six forwards, and for THREE backwards
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
 (window `min Ā 6`, NOT a copy of `Maps.relu` — §3.2), `depthwise`, `depthwiseStride2Flat`,
@@ -2489,6 +2562,18 @@ lemmas, and one dead `private theorem`. Every whole-net budget in the repo now r
 * ⚠ `Elab.async` shares caches across declarations, so per-`rfl` cost is order-dependent and a
   timing can move between declarations when nothing relevant changed. Measure with
   `set_option Elab.async false` (§3.21).
+* ⭐⭐ **A `Function.comp` chain compared against a GROUPED one is the same trap a third way.**
+  `resnet34_has_vjp_at` folds its `[3,4,6,3]` runs under `chainComp`; the committed forward spells
+  them flat. Both sides are `Function.comp` applications, so the kernel compares arguments
+  pairwise and tries to align `idFwd e1` against `chainComp [idFwd e1, idFwd e0]` — it fails
+  structurally and falls through to eta-expanding two 18-stage nets (`(kernel) deterministic
+  timeout`, and `maxHeartbeats 4000000` does not help). Peel the grouping ONCE where the slots are
+  variables (`chainComp [f,g] ∘ k = f ∘ g ∘ k`, an abstract `rfl`) and `rw` it away first (§3.23).
+* ⛔ **`Function.comp_assoc` inside a `simp only` set is an UNFOLDER, not a tidy-up.** The block
+  wrappers (`idFwd`, `downFwd`, `rblkPC`) are `@[reducible]`, so simp matches `(f ∘ g) ∘ h` inside
+  a block body through `whnfR` and rewrites there: the goal comes back with the architecture
+  spelled out and re-associated through the block boundaries. 3–5 minutes, and it still does not
+  close (§3.23).
 * ⭐ After peeling a chain of `vjp_comp` reductions, close with
   `simp only [Function.comp_apply, <the base witness>]`, not `rfl`: the two sides differ only by
   `Function.comp`, and `rfl` does not take that route — 75 s and 10⁶ heartbeats against instant.

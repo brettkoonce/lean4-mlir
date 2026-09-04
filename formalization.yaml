@@ -224,7 +224,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "mnv2InputGrad_eq_mobilenetv2_vjp"   # ⭐⭐ the whole-net CERTIFIED tie for MobileNetV2's backward: mnv2InputGrad, every slot pinned to the certified per-op backward, IS (mobilenetv2PC_has_vjp_at ...).backward -- so mnv2_grad_float_le is a statement about the certified WHOLE-NET gradient, not only about each of its pieces. ⭐ NO drift found (r34's peer tie moved its number 4x by exposing the wrong stem pool), and this file adds the shape check r34's lacks: mobilenetv2Forward_full_pc_eq_chain, a rfl saying the ten-stage chain the apex is instantiated at IS the committed forward. ⚠ smooth-point, as every HasVJPAt in this cone is (fidelity.divergences 4d)
+    - declaration: "mnv2InputGrad_eq_mobilenetv2_vjp"   # ⭐⭐ the whole-net CERTIFIED tie for MobileNetV2's backward: mnv2InputGrad, every slot pinned to the certified per-op backward, IS (mobilenetv2PC_has_vjp_at ...).backward -- so mnv2_grad_float_le is a statement about the certified WHOLE-NET gradient, not only about each of its pieces. ⭐ NO drift found (r34's peer tie moved its number 4x by exposing the wrong stem pool), and this file was FIRST to carry the shape check: mobilenetv2Forward_full_pc_eq_chain, a rfl saying the ten-stage chain the apex is instantiated at IS the committed forward (r34's peer, resnet34Forward_full_pc_eq_chain, followed 2026-09-04). ⚠ smooth-point, as every HasVJPAt in this cone is (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTie.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -250,6 +250,12 @@ status:
       literature_dependencies: []
     - declaration: "r34_grad_float_le"   # ⭐⭐ PHASE 2, and the first number in this repo that is a FOLD at TRAINING-mode BatchNorm -- the mode the FORWARD of this same net has no statable number for at all (1e7417): the deployed ResNet-34 whole-net INPUT-GRADIENT VJP is within 6.894e244 of the certified one, per input pixel, on loss cotangents of magnitude <= 1 (|p - y| <= 1 for softmax cross-entropy), certified window 8.857e245, budget/window = 0.078 (NOT the 2.00 cap ConvNeXt-T's and ViT-Tiny's forwards carry). A VJP reads its statistics off the SAVED activations, which the cotangent does not perturb, so the modulus is linear in the inherited error. ⛔ THREE HYPOTHESES: es/exh (the saved float activations' accuracies, 1e-2, which the forward's own training-mode fold cannot discharge) and the OPERATING POINT |istd| <= 16 i.e. sigma >= 1/16 (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/Resnet34BackFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "resnet34Forward_full_pc_eq_chain"   # ⭐⭐ the SHAPE CHECK for r34's whole-net backward tie, and the last of the three nets to get one (2026-09-04): the eleven slots r34InputGrad_eq_resnet34_vjp instantiates resnet34_has_vjp_at at -- stem, the 3x3/s2 pool, the four chainComp stages [a2,a1,a0]/[b2,b1,b0]/[c4..c0]/[e1,e0], the three downsamples, GAP, dense -- ARE resnet34Forward_full_pc. ⛔ A whole-net tie keeps its blocks OPAQUE so the isDefEq compares variables, which means its subject is a chain of VARIABLES and nothing in it says which net they are; that is exactly how the 2x2-vs-3x3/s2 stem-pool drift survived a month and moved a committed number 4x. ⚠ Unlike the MobileNetV2 and ConvNeXt peers this is NOT a bare rfl: this apex groups its [3,4,6,3] runs under chainComp, and a chainComp node handed to the kernel against a Function.comp node is a deterministic timeout -- the peel is proved once between VARIABLES (chainComp2_comp) and then rewritten (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTie.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -939,13 +945,26 @@ fidelity:
        stand unchanged. ⛔ A tie that finds nothing is the only way to know the number was about
        the net it claimed to be about.
 
-       ⭐⭐ AND THIS FILE CARRIES A PIECE `Resnet34BackCertifiedTie.lean` DOES NOT:
+       ⭐⭐ AND THIS FILE WAS FIRST TO CARRY THE SHAPE CHECK:
        `mobilenetv2Forward_full_pc_eq_chain`, a `rfl` saying the ten-stage chain the apex is
-       instantiated at IS the committed forward, block slot by block slot. Both whole-net ties take
-       their blocks OPAQUE, so the apex's subject is a chain of VARIABLES and nothing in either
-       theorem otherwise says which net those variables are — which is exactly how r34's wrong pool
-       survived a month, with "the same net as the tie" living in a docstring. Add the shape `rfl`
-       to any future whole-net tie, and add one to r34's.
+       instantiated at IS the committed forward, block slot by block slot. Every whole-net tie takes
+       its blocks OPAQUE, so the apex's subject is a chain of VARIABLES and nothing in the tie
+       otherwise says which net those variables are — which is exactly how r34's wrong pool
+       survived a month, with "the same net as the tie" living in a docstring. ✅ All three nets
+       now have one: `convNextForwardTCh_eq_chain` had it before anyone needed it, and
+       `resnet34Forward_full_pc_eq_chain` closed the last hole 2026-09-04.
+
+       ⚠ r34's is the one that is NOT a bare `rfl`, and the reason generalises. `resnet34_has_vjp_at`
+       groups its [3,4,6,3] runs under `chainComp` where the other two apexes chain one block per
+       slot, and handing the kernel `resnet34Forward_full_pc … = … ∘ chainComp [idFwd e1, idFwd e0]
+       ∘ …` is a deterministic timeout: `Function.comp`'s arguments are compared pairwise, so the
+       kernel tries to align `idFwd e1` (whnf `relu ∘ residual F`) against the `chainComp` node,
+       fails structurally, and falls through to eta-expanding two 18-stage nets. `simp only` with
+       `chainComp_cons`/`Function.comp_assoc` reaches the goal but costs 3-5 MINUTES and unfolds the
+       reducible block bodies on the way; peeling `chainComp` once where the slots are VARIABLES
+       (`chainComp2_comp : chainComp [f,g] ∘ k = f ∘ g ∘ k`, one abstract `rfl`) and then rewriting
+       costs nothing. Same rule as the ConvNeXt apex's applied-position blowup: never let a defeq
+       meet two spellings of one chain in a concrete net.
 
        ⭐ The only new machinery is two `Maps` leaves, both compositions of existing ones
        (`FloatBudgetEnvBackMBConv.lean`): `Maps.depthwiseBack` is `Maps.depthwise` at the

@@ -35,9 +35,11 @@ Five pieces, and only the first two are new mathematics:
    only the four concrete endpoints — stem, head, GAP, dense — are rewritten, and the proof is
    `unfold`, three `rw`s, `rfl`. The whole file elaborates in ~2 s.
 
-⭐⭐ **And `mobilenetv2Forward_full_pc_eq_chain` is the piece `Resnet34BackCertifiedTie.lean` does
-NOT have.** It states, by `rfl`, that the ten-stage chain the apex is instantiated at IS the
-committed forward — `b1/b3/b5/b6` the strided bodies, `b2/b4` those bodies under
+⭐⭐ **And `mobilenetv2Forward_full_pc_eq_chain` was the piece `Resnet34BackCertifiedTie.lean` did
+NOT have** (r34 got its own, `resnet34Forward_full_pc_eq_chain`, on 2026-09-04 — ⚠ not a bare
+`rfl` there: `resnet34_has_vjp_at` groups its `[3,4,6,3]` runs under `chainComp`, which has to be
+peeled at the abstract level first). It states, by `rfl`, that the ten-stage chain the apex is
+instantiated at IS the committed forward — `b1/b3/b5/b6` the strided bodies, `b2/b4` those bodies under
 `Proofs.residual`, and the two endpoints spelled as the render spells them. ⛔ **That is the
 theorem that would have caught ResNet-34's wrong pool.** §3.10's drift — `r34InputGrad` reversing
 the 2×2 pool while the committed forward pools 3×3/s2 — survived a month because *"the same net as

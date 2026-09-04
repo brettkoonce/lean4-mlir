@@ -494,4 +494,107 @@ theorem r34InputGrad_eq_resnet34_vjp
             (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x))))))))))]
   rfl
 
+/-- ⭐⭐ **`chainComp` peeled at the ABSTRACT level, which is the only place it is cheap.**
+    `chainComp [f, g] ∘ k = f ∘ g ∘ k` is one `rfl` between VARIABLES — `chainComp` folds with
+    `id` at the base and `Function.comp` is definitionally associative, so the kernel closes it
+    without looking at anything.
+
+    ⛔ **The same equation is not free once the slots are the committed blocks.** Handing the
+    kernel `resnet34Forward_full_pc … = … ∘ chainComp [idFwd e1, idFwd e0] ∘ …` directly is a
+    `(kernel) deterministic timeout`: `Function.comp`'s arguments are compared pairwise, so it
+    tries to align `idFwd e1` (whnf `relu ∘ residual F`) against `chainComp [idFwd e1, idFwd e0]`,
+    fails structurally, and falls through to eta-expanding two 18-stage nets. ⚠ `simp only` with
+    `chainComp_cons` / `Function.comp_assoc` reaches the goal but costs **3–5 minutes** and
+    unfolds the `@[reducible]` block bodies while doing it; four `rw`s cost **nothing** (the whole
+    file's shape check is under a second). ⭐ §3.21's rule with a third face: prove the reduction
+    once where the terms are variables, then REWRITE — never let a defeq meet two spellings of the
+    same chain in a concrete net. -/
+private theorem chainComp₂_comp {m n : Nat} (f g : Vec n → Vec n) (k : Vec m → Vec n) :
+    chainComp [f, g] ∘ k = f ∘ g ∘ k := rfl
+
+/-- Three-block peel — stages 1 and 2 of `[3,4,6,3]` (`[a2,a1,a0]`, `[b2,b1,b0]`).
+    See `chainComp₂_comp` for why this is a rewrite and not part of the defeq. -/
+private theorem chainComp₃_comp {m n : Nat} (f g h : Vec n → Vec n) (k : Vec m → Vec n) :
+    chainComp [f, g, h] ∘ k = f ∘ g ∘ h ∘ k := rfl
+
+/-- Five-block peel — stage 3 of `[3,4,6,3]` (`[c4,c3,c2,c1,c0]`; the sixth block of that stage is
+    the downsample `d3`, which the apex takes in its own slot). -/
+private theorem chainComp₅_comp {m n : Nat} (f g h i j : Vec n → Vec n) (k : Vec m → Vec n) :
+    chainComp [f, g, h, i, j] ∘ k = f ∘ g ∘ h ∘ i ∘ j ∘ k := rfl
+
+/-- ⭐⭐ **THE SHAPE CHECK — the eleven-slot chain the whole-net tie is about IS the committed
+    forward.** `resnet34Forward_full_pc`, regrouped into exactly the eleven arguments
+    `resnet34_has_vjp_at` takes: the stem `cbrStridedPC`, He et al.'s 3×3/s2 pool, the four
+    `chainComp` stages `[a2,a1,a0]` / `[b2,b1,b0]` / `[c4,c3,c2,c1,c0]` / `[e1,e0]`, the three
+    `downFwd` downsamples, GAP and the dense head.
+
+    ⛔ **This is the theorem that would have caught the 2×2 pool.** `r34InputGrad_eq_resnet34_vjp`
+    keeps its blocks OPAQUE — they enter as the `ChainData`/`PProd` witnesses, so the apex's
+    subject is a chain of VARIABLES and nothing in that theorem says which net they are. The
+    drift it eventually found (`maxPoolFlatBack`, the **2×2** pool's backward, against a forward
+    that pools 3×3/s2) lived a month for exactly that reason: *"the same net as the tie"* was
+    prose in a docstring. Here the pool appears on both sides of one statement the kernel
+    checks.
+
+    The MobileNetV2 peer is `mobilenetv2Forward_full_pc_eq_chain`
+    (`MobileNetV2WholeBackCertifiedTie.lean`), which had this from the day it was written; the
+    ConvNeXt peer is `convNextForwardTCh_eq_chain` (`Architectures/ConvNeXtFullT.lean`). ⚠ Both of
+    those are a bare `rfl` and this one CANNOT be: their apexes chain their blocks one slot each,
+    where `resnet34_has_vjp_at` groups its `[3,4,6,3]` runs under `chainComp`, and a `chainComp`
+    node has to be reduced away BEFORE the defeq — see `chainComp₂_comp` above. -/
+theorem resnet34Forward_full_pc_eq_chain
+    (ε : ℝ)
+    (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (γs βs : Vec 64)
+    (a0W1 : Kernel4 64 64 3 3) (a0b1 : Vec 64) (a0g1 a0t1 : Vec 64) (a0W2 : Kernel4 64 64 3 3) (a0b2 : Vec 64) (a0g2 a0t2 : Vec 64)
+    (a1W1 : Kernel4 64 64 3 3) (a1b1 : Vec 64) (a1g1 a1t1 : Vec 64) (a1W2 : Kernel4 64 64 3 3) (a1b2 : Vec 64) (a1g2 a1t2 : Vec 64)
+    (a2W1 : Kernel4 64 64 3 3) (a2b1 : Vec 64) (a2g1 a2t1 : Vec 64) (a2W2 : Kernel4 64 64 3 3) (a2b2 : Vec 64) (a2g2 a2t2 : Vec 64)
+    (d2W1 : Kernel4 128 64 3 3) (d2b1 : Vec 128) (d2g1 d2t1 : Vec 128) (d2W2 : Kernel4 128 128 3 3) (d2b2 : Vec 128) (d2g2 d2t2 : Vec 128) (d2Wp : Kernel4 128 64 1 1) (d2bp : Vec 128) (d2gp d2tp : Vec 128)
+    (b0W1 : Kernel4 128 128 3 3) (b0b1 : Vec 128) (b0g1 b0t1 : Vec 128) (b0W2 : Kernel4 128 128 3 3) (b0b2 : Vec 128) (b0g2 b0t2 : Vec 128)
+    (b1W1 : Kernel4 128 128 3 3) (b1b1 : Vec 128) (b1g1 b1t1 : Vec 128) (b1W2 : Kernel4 128 128 3 3) (b1b2 : Vec 128) (b1g2 b1t2 : Vec 128)
+    (b2W1 : Kernel4 128 128 3 3) (b2b1 : Vec 128) (b2g1 b2t1 : Vec 128) (b2W2 : Kernel4 128 128 3 3) (b2b2 : Vec 128) (b2g2 b2t2 : Vec 128)
+    (d3W1 : Kernel4 256 128 3 3) (d3b1 : Vec 256) (d3g1 d3t1 : Vec 256) (d3W2 : Kernel4 256 256 3 3) (d3b2 : Vec 256) (d3g2 d3t2 : Vec 256) (d3Wp : Kernel4 256 128 1 1) (d3bp : Vec 256) (d3gp d3tp : Vec 256)
+    (c0W1 : Kernel4 256 256 3 3) (c0b1 : Vec 256) (c0g1 c0t1 : Vec 256) (c0W2 : Kernel4 256 256 3 3) (c0b2 : Vec 256) (c0g2 c0t2 : Vec 256)
+    (c1W1 : Kernel4 256 256 3 3) (c1b1 : Vec 256) (c1g1 c1t1 : Vec 256) (c1W2 : Kernel4 256 256 3 3) (c1b2 : Vec 256) (c1g2 c1t2 : Vec 256)
+    (c2W1 : Kernel4 256 256 3 3) (c2b1 : Vec 256) (c2g1 c2t1 : Vec 256) (c2W2 : Kernel4 256 256 3 3) (c2b2 : Vec 256) (c2g2 c2t2 : Vec 256)
+    (c3W1 : Kernel4 256 256 3 3) (c3b1 : Vec 256) (c3g1 c3t1 : Vec 256) (c3W2 : Kernel4 256 256 3 3) (c3b2 : Vec 256) (c3g2 c3t2 : Vec 256)
+    (c4W1 : Kernel4 256 256 3 3) (c4b1 : Vec 256) (c4g1 c4t1 : Vec 256) (c4W2 : Kernel4 256 256 3 3) (c4b2 : Vec 256) (c4g2 c4t2 : Vec 256)
+    (d4W1 : Kernel4 512 256 3 3) (d4b1 : Vec 512) (d4g1 d4t1 : Vec 512) (d4W2 : Kernel4 512 512 3 3) (d4b2 : Vec 512) (d4g2 d4t2 : Vec 512) (d4Wp : Kernel4 512 256 1 1) (d4bp : Vec 512) (d4gp d4tp : Vec 512)
+    (e0W1 : Kernel4 512 512 3 3) (e0b1 : Vec 512) (e0g1 e0t1 : Vec 512) (e0W2 : Kernel4 512 512 3 3) (e0b2 : Vec 512) (e0g2 e0t2 : Vec 512)
+    (e1W1 : Kernel4 512 512 3 3) (e1b1 : Vec 512) (e1g1 e1t1 : Vec 512) (e1W2 : Kernel4 512 512 3 3) (e1b2 : Vec 512) (e1g2 e1t2 : Vec 512)
+    (Wd : Mat 512 10) (bd : Vec 10) :
+    resnet34Forward_full_pc
+      ε Ws bs γs βs a0W1 a0b1 a0g1 a0t1 a0W2 a0b2 a0g2 a0t2 a1W1 a1b1 a1g1 a1t1 a1W2 a1b2 a1g2
+      a1t2 a2W1 a2b1 a2g1 a2t1 a2W2 a2b2 a2g2 a2t2 d2W1 d2b1 d2g1 d2t1 d2W2 d2b2 d2g2 d2t2 d2Wp
+      d2bp d2gp d2tp b0W1 b0b1 b0g1 b0t1 b0W2 b0b2 b0g2 b0t2 b1W1 b1b1 b1g1 b1t1 b1W2 b1b2 b1g2
+      b1t2 b2W1 b2b1 b2g1 b2t1 b2W2 b2b2 b2g2 b2t2 d3W1 d3b1 d3g1 d3t1 d3W2 d3b2 d3g2 d3t2 d3Wp
+      d3bp d3gp d3tp c0W1 c0b1 c0g1 c0t1 c0W2 c0b2 c0g2 c0t2 c1W1 c1b1 c1g1 c1t1 c1W2 c1b2 c1g2
+      c1t2 c2W1 c2b1 c2g1 c2t1 c2W2 c2b2 c2g2 c2t2 c3W1 c3b1 c3g1 c3t1 c3W2 c3b2 c3g2 c3t2 c4W1
+      c4b1 c4g1 c4t1 c4W2 c4b2 c4g2 c4t2 d4W1 d4b1 d4g1 d4t1 d4W2 d4b2 d4g2 d4t2 d4Wp d4bp d4gp
+      d4tp e0W1 e0b1 e0g1 e0t1 e0W2 e0b2 e0g2 e0t2 e1W1 e1b1 e1g1 e1t1 e1W2 e1b2 e1g2 e1t2 Wd bd
+      = dense Wd bd ∘ globalAvgPoolFlat 512 7 7
+        ∘ chainComp
+           [idFwd (h := 7) (w := 7) ε e1W1 e1b1 e1g1 e1t1 e1W2 e1b2 e1g2 e1t2,
+            idFwd (h := 7) (w := 7) ε e0W1 e0b1 e0g1 e0t1 e0W2 e0b2 e0g2 e0t2]
+        ∘ downFwd (h := 7) (w := 7) ε d4W1 d4b1 d4g1 d4t1 d4W2 d4b2 d4g2 d4t2 d4Wp d4bp d4gp d4tp
+        ∘ chainComp
+           [idFwd (h := 14) (w := 14) ε c4W1 c4b1 c4g1 c4t1 c4W2 c4b2 c4g2 c4t2,
+            idFwd (h := 14) (w := 14) ε c3W1 c3b1 c3g1 c3t1 c3W2 c3b2 c3g2 c3t2,
+            idFwd (h := 14) (w := 14) ε c2W1 c2b1 c2g1 c2t1 c2W2 c2b2 c2g2 c2t2,
+            idFwd (h := 14) (w := 14) ε c1W1 c1b1 c1g1 c1t1 c1W2 c1b2 c1g2 c1t2,
+            idFwd (h := 14) (w := 14) ε c0W1 c0b1 c0g1 c0t1 c0W2 c0b2 c0g2 c0t2]
+        ∘ downFwd (h := 14) (w := 14) ε d3W1 d3b1 d3g1 d3t1 d3W2 d3b2 d3g2 d3t2 d3Wp d3bp d3gp d3tp
+        ∘ chainComp
+           [idFwd (h := 28) (w := 28) ε b2W1 b2b1 b2g1 b2t1 b2W2 b2b2 b2g2 b2t2,
+            idFwd (h := 28) (w := 28) ε b1W1 b1b1 b1g1 b1t1 b1W2 b1b2 b1g2 b1t2,
+            idFwd (h := 28) (w := 28) ε b0W1 b0b1 b0g1 b0t1 b0W2 b0b2 b0g2 b0t2]
+        ∘ downFwd (h := 28) (w := 28) ε d2W1 d2b1 d2g1 d2t1 d2W2 d2b2 d2g2 d2t2 d2Wp d2bp d2gp d2tp
+        ∘ chainComp
+           [idFwd (h := 56) (w := 56) ε a2W1 a2b1 a2g1 a2t1 a2W2 a2b2 a2g2 a2t2,
+            idFwd (h := 56) (w := 56) ε a1W1 a1b1 a1g1 a1t1 a1W2 a1b2 a1g2 a1t2,
+            idFwd (h := 56) (w := 56) ε a0W1 a0b1 a0g1 a0t1 a0W2 a0b2 a0g2 a0t2]
+        ∘ maxPool3s2Flat 64 56 56
+        ∘ cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs := by
+  rw [chainComp₂_comp, chainComp₅_comp, chainComp₃_comp, chainComp₃_comp]
+  rfl
+
 end Proofs

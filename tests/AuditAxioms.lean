@@ -2733,6 +2733,21 @@ open Proofs
 #print axioms Proofs.cbrStridedPC_differentiableAt
 #print axioms Proofs.cbrStridedPCBack_eq_vjp_backward
 #print axioms Proofs.r34InputGrad_eq_resnet34_vjp
+-- ⭐⭐ AND THE SHAPE CHECK — the last net to get one (2026-09-04). resnet34_has_vjp_at takes its
+-- blocks OPAQUE, so the tie above is stated about a chain of VARIABLES and nothing in it says
+-- which net they are; that is exactly how the 2×2-vs-3×3/s2 stem-pool drift survived a month and
+-- moved a committed number 4×. resnet34Forward_full_pc_eq_chain closes the hole the way
+-- mobilenetv2Forward_full_pc_eq_chain and convNextForwardTCh_eq_chain do: the eleven slots the
+-- apex is instantiated at ARE the committed forward, and the pool now appears on both sides of one
+-- statement the kernel checks.
+-- ⛔ It is NOT a bare `rfl`, and that is the reusable part: the other two apexes chain one block
+-- per slot where this one groups its [3,4,6,3] runs under chainComp, and handing the kernel a
+-- chainComp node against a Function.comp node is a deterministic timeout (comp's arguments are
+-- compared pairwise, so it tries to align `idFwd e1` with `chainComp [idFwd e1, idFwd e0]`, fails
+-- structurally, and eta-expands two 18-stage nets). ⚠ simp only with chainComp_cons /
+-- Function.comp_assoc reaches the goal but costs 3–5 MINUTES; peeling chainComp once at the
+-- ABSTRACT level (chainComp₂_comp, between variables) and then rewriting costs nothing.
+#print axioms Proofs.resnet34Forward_full_pc_eq_chain
 -- ⭐⭐ THE SAME TIE FOR THE WHOLE MOBILENETV2 (MobileNetV2WholeBackCertifiedTie.lean, ~2 s):
 -- mnv2InputGrad, with every slot pinned to the certified per-op backward, IS
 -- (mobilenetv2PC_has_vjp_at ...).backward. So mnv2_grad_float_le is a statement about the
@@ -2743,10 +2758,11 @@ open Proofs
 -- Two pieces were genuinely missing and are built here: the STEM's certified VJP
 -- (convStridedBnRelu6PC_has_vjp_at — the repo had strided-conv-with-relu, r34's, and non-strided
 -- relu6, but not the corner) and the stem/head leaf ties.
--- ⭐⭐ AND mobilenetv2Forward_full_pc_eq_chain IS THE PIECE r34's FILE DOES NOT HAVE: a rfl saying
--- the ten-stage chain the apex is instantiated at IS the committed forward, block slot by block
--- slot. ⛔ That is the theorem that would have caught r34's wrong pool — §3.10's drift survived a
--- month because "the same net as the tie" was prose in a docstring.
+-- ⭐⭐ AND mobilenetv2Forward_full_pc_eq_chain WAS THE PIECE r34's FILE DID NOT HAVE (r34 got its
+-- own, resnet34Forward_full_pc_eq_chain, on 2026-09-04): a rfl saying the ten-stage chain the apex
+-- is instantiated at IS the committed forward, block slot by block slot. ⛔ That is the theorem
+-- that would have caught r34's wrong pool — §3.10's drift survived a month because "the same net
+-- as the tie" was prose in a docstring.
 -- ⭐ NO DRIFT WAS FOUND HERE, which is a result and not a non-event: the tie went through against
 -- mnv2InputGrad exactly as committed, so 4.750e153 / 1.076e152 stand unchanged, where closing
 -- r34's moved its number 4x.
