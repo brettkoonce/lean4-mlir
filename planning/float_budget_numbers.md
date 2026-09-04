@@ -34,8 +34,11 @@ forward-then-backward composition it looks like it supports **does not exist** �
 row. ⛔⛔ The probe also turned up the fifth instance of `imagenet_specs_drift_from_twins`: the
 shipped ConvNeXt BACKWARD bridge held `id` in its head-LayerNorm slot — the same slot §3.3(b)
 fixed on the FORWARD on 2026-09-03 — **and its docstring justified it with a LayerNorm count that
-had gone stale**. ✅ Fixed the same day; it needed no new leaves. ⭐ **What is open is now §4**,
-headed by `ConvNeXtBackFloatBudget.lean`.
+had gone stale** — and a THIRD copy of that count sits in the certified apex's docstring (§3.18).
+✅ Fixed the same day; it needed no new leaves, and the `Maps` kit followed (**§3.17**).
+⭐ **What is open is now §4**, and it is headed by the whole-net certified TIE, not by the number
+(**§3.18**): §3.10's tie moved a committed number 4×, and this net has already produced one defect
+of that class this week. ⭐ The apex it needs already exists at the committed net.
 
 Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
 (⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
@@ -1758,11 +1761,16 @@ work**, and it is not visible from the whole-net file.
    costing above was wrong twice.** It said "nothing new in kind"; there was one genuinely new
    leaf, and the block bridges the budget file composes did not exist at the `FloatBridgesTo`
    tier at all. §3.17.
-3. **`ConvNeXtBackFloatBudget.lean`** — the number. Everything it needs now exists and is
-   exercised; what is left is assembly on the `Resnet34BackFloatBudget.lean` recipe (records,
-   `cnxGradR`/`cnxGradF`/`cnxGradBridge` grouped exactly as `convnextInputGrad` groups, the 137-stage
-   `Maps` chain, the apex). ⭐ State it at `S = 16`: the ceiling probe below says the shape closes.
-4. **The whole-net certified tie**, with §3.14's shape `rfl` from the start.
+3. ⭐⭐ **THE APEX FIRST — the whole-net certified tie, §3.18.** ⛔ Not the number: r34 and mnv2
+   folded first and tied after, and §3.10 is why not to repeat it — that tie found r34 reversing the
+   wrong pool and moved the committed number 4×. This net has already produced one defect of that
+   class this week (finding 6). ⭐ `convNextForwardTCh_has_vjp` already exists at the committed net,
+   and so does §3.14's shape `rfl`; what is missing is the stage-fold backward tie, the downsample
+   tie, the patchify leaf tie, and the assembly.
+4. **`ConvNeXtBackFloatBudget.lean`** — the number, against whatever chain item 3 certifies.
+   Assembly on the `Resnet34BackFloatBudget.lean` recipe (records,
+   `cnxGradR`/`cnxGradF`/`cnxGradBridge` grouped exactly as `convnextInputGrad` groups, the
+   137-stage `Maps` chain). ⭐ State it at `S = 16`: §3.17's ceiling probe says the shape closes.
 
 ### 3.17 ✅ The `Maps` kit for a LAYERNORM net's BACKWARD (2026-09-04) — and two costings that were wrong
 
@@ -1837,6 +1845,70 @@ declarations on `[propext, Classical.choice, Quot.sound]`; `docstring-checkrefs`
 `check_audit_coverage` 204 imports. The module is a lakefile `Proofs` root (nothing imports it
 until the budget file does — the `render guard on a new artifact` failure mode, one tier over).
 
+### 3.18 ⭐⭐ THE APEX: scoped 2026-09-04 — and it EXISTS, at the committed net
+
+⭐ **Do this BEFORE the budget file, reversing the order r34 and MobileNetV2 were done in.** Both
+of those stated the number first and tied afterwards (§3.7 → §3.10, §3.13 → §3.14), and §3.10 is
+the reason not to: closing r34's tie found `r34InputGrad` reversing the **2×2** pool while the
+committed forward pools 3×3/s2, and **moved the committed number 4×**. ConvNeXt has already shown
+the same class of defect once this week — the head-LayerNorm slot (§3.16 finding 6) — so spending
+137 stages of numerals before knowing the chain is the right net is buying the same lottery ticket
+twice. ⭐ **Tie first, then fold.**
+
+**⛔ The blocker one would write down — "the apex is missing" — is a misreading, for the second
+time in this file** (§3.8 item 2 was the first, on r34). `convNextForwardTCh_has_vjp`
+(`Architectures/ConvNeXtFullT.lean`) is the whole committed net: `[3,3,9,3]`, channel LayerNorm,
+vector affines, layer scale, three downsamples, the 4×4/s4 patchify stem, GAP, **the head
+`rowLNVecFlat 1 768`**, dense — chain-stated with the blocks opaque, exactly the shape §3.14 says a
+whole-net tie wants. It is `HasVJP` (everywhere) rather than `HasVJPAt`, which is *stronger* than
+r34's and mnv2's smooth-point statements. `convNextForwardTCh_has_vjp_correct` is beside it.
+
+⭐⭐ **And ConvNeXt already HAS the piece §3.14 said to add to every future tie and r34 still
+lacks**: `convNextForwardTCh_eq_chain` — the `rfl` saying the chain the apex is instantiated at IS
+the committed forward. That is the theorem that would have caught r34's wrong pool, and here it
+was written before anyone needed it.
+
+**⛔⛔ But `convnext_has_vjp_at` is the WRONG TIER and must not be used** — it is a fixed-depth
+TWO-block net over `layerNormForward`'s **scalar** γ/β normalising the whole flattened vector,
+where the committed net is `chanLNTensor3`'s per-position channel LN with **vector** affines.
+⚠ That is §3.5.1's `vit_full` trap and §3.5.2 item 3's scalar-vs-vector block, for the third time:
+*the two statements look interchangeable until something forces them to unify.* Same name stem,
+different function.
+
+**⚠ And a THIRD copy of §3.16's fossil is sitting in that apex's docstring.**
+`convNextForwardTCh_has_vjp` says *"22 LN positivities (stem + 18 blocks via the per-stage `∀ i` +
+3 downsamples), **no head LN**"* — while its own statement composes `rowLNVecFlat 1 768 w.hε w.hγ
+w.hβ` and takes `hhε : 0 < w.hε`. Count them: 1 + 18 + 3 + 1 = **23**. The statement is right and
+the docstring is the pre-2026-08-30 count, in a third place. ⛔ `docstring-checkrefs` cannot see
+this — it resolves cited identifiers, and a stale COUNT cites nothing. Fix it while you are there.
+
+**What exists, and what is actually missing.**
+
+| piece | state |
+|---|---|
+| `convNextForwardTCh_has_vjp` (apex, committed net, `HasVJP`) | ✅ exists |
+| `convNextForwardTCh_eq_chain` (§3.14's shape `rfl`) | ✅ exists |
+| block ties: `cnxBlockBack_eq_convNextBlock_vjp`, `cnxBlockChBack_eq_vjp`, `cnxBodyWithChanLNBack_eq_vjp` | ✅ exist |
+| `chanLNTensor3Back_eq_chanLN_vjp`, `rowLNVecFlat_has_vjp_backward_eq`, `bn_grad_input_eq_vjp_backward` | ✅ exist |
+| leaf ties: `convFlatBack_`, `depthwiseFlatBack_`, `dense_transpose_`, `gapBack_`, `flatConvStride2Back_`, `decimateBack_eq_vjp` | ✅ exist |
+| `flatConvStride4Back_eq_vjp_backward` (the patchify backward) | ⛔ **missing** — the stride-2 peer exists; this is it with one more exact scatter |
+| the STAGE-fold backward tie (`convNextStageChK`'s VJP backward = the `k`-fold composition of block backwards) | ⛔ **missing** — `convNextStageChK_has_vjp` exists, its backward is not yet identified; a `k`-recursion, the one real proof here |
+| `cnxDownBack_eq_vjp` (`lnB ∘ flatConvStride2Back` = `(cnxDownChW_has_vjp …).backward`) | ⛔ **missing** — two existing ties composed |
+| `convnextInputGrad_eq_convNextForwardTCh_vjp` (the assembly) | ⛔ **missing** — the §3.10 / §3.14 apex theorem |
+
+⭐ So the shape of the job is MobileNetV2's, not ResNet-34's: one genuinely new recursion (the
+stage fold), two composed ties, one leaf tie, and an assembly. ⚠ Keep the stages OPAQUE the way
+§3.14 did — `convnextInputGrad`'s `s1B..s4B` slots pin to the certified stage backwards and the
+whole-net `isDefEq` then compares variables, which is why mnv2's tie cost 2 s where r34's cost a
+25-minute debugging detour. And ⚠ group `cnxGradR` exactly as `convnextInputGrad` groups its stem
+(`flatConvStride4Back ∘ lnBstem`), for the same reason.
+
+⚠ **Pin every implicit over a computed dimension in the STATEMENT** (§3.10 note 1): the patchify
+backward is declared over `Vec (ic * (2*(2*h)) * (2*(2*w)))`, so using it at `3 × 224²` asks the
+elaborator to solve `2*(2*?h) = 224` — §3.7(d)'s trap, presenting as a `whnf` timeout inside the
+theorem's TYPE. `(ic := 3) (oc := 96) (h := 56) (w := 56)`. The three downsamples' stride-2
+backwards have the same shape.
+
 ## 4. What is open (2026-09-04)
 
 §3.8's three items are all closed, so this is its successor. Ordered by what I would do next.
@@ -1855,21 +1927,31 @@ conjugation, the patchify backward, the block-body and downsample envelopes, plu
 `FloatBridgesTo` migration of the three ConvNeXt backward block defs — and ConvNeXt-T's block
 `s4b2` closed as a compiled `example` at the probe's numerals.
 
-**4. ⭐ `ConvNeXtBackFloatBudget.lean` — the next thing to build.** §3.16's number, `S = 16`
-(⭐ the ceiling probe in §3.17 says the shape closes; the four-orders worry was unfounded).
-Everything it needs exists and is exercised; what is left is assembly on the
-`Resnet34BackFloatBudget.lean` recipe.
+**4. ⭐⭐ THE APEX — ConvNeXt's whole-net certified tie, `convnextInputGrad_eq_convNextForwardTCh_vjp`.
+Scoped 2026-09-04, §3.18, and it goes BEFORE the number.** r34 and mnv2 folded first and tied
+after; §3.10 is why not to repeat that — the tie found r34 reversing the wrong pool and moved the
+committed number 4×, and ConvNeXt has already produced one defect of that class this week
+(§3.16 finding 6). ⭐ The apex `convNextForwardTCh_has_vjp` **already exists at the committed net**,
+and so does §3.14's shape `rfl`. Missing: the stage-fold backward tie (the one real proof), the
+downsample tie, the patchify-backward leaf tie, and the assembly.
 
-**5. EfficientNet-B0's backward budget file** — §3.9's "what to do next" item 3.
+**5. `ConvNeXtBackFloatBudget.lean`** — §3.16's number, at `S = 16` (⭐ the ceiling probe in §3.17
+says the shape closes; the four-orders worry was unfounded). Everything it needs exists and is
+exercised; what is left is assembly on the `Resnet34BackFloatBudget.lean` recipe. ⚠ Build it
+against whatever chain item 4 certifies, not against today's.
+
+**6. EfficientNet-B0's backward budget file** — §3.9's "what to do next" item 3.
 The blocker is gone (§3.12's `|swish′| ≤ 2`), the fold is **7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** and
 statable. Needs `Maps.diagBack`, `Maps.broadcastBack` and the `Maps.seBack` composite (`biPathSum`
 of two `.comp` chains — no new combinator), plus four supplied saved-vector accuracies where r34
 has two. ⚠ `batchMap` never enters a numeral, so the number holds at any `N`.
 
-**6. B0's whole-net certified tie** — the §3.14 analogue, and §1's criterion (ii) for that net. Not
+**7. B0's whole-net certified tie** — the §3.14 analogue, and §1's criterion (ii) for that net. Not
 scoped; scope it the way §3.14 was, by reading the cone rather than guessing.
 
-**7. ⭐ `resnet34Forward_full_pc_eq_chain`** — §3.14's own recommendation.
+**8. ⭐ `resnet34Forward_full_pc_eq_chain`** — §3.14's own recommendation. ⭐ ConvNeXt already has
+its peer (`convNextForwardTCh_eq_chain`, §3.18); ResNet-34 is now the only net whose whole-net
+backward tie has no shape check, and it is the net the hole already bit.
 `Resnet34BackCertifiedTie.lean` has no shape check: its apex's subject is a chain of VARIABLES and
 nothing in the theorem says which net they are. That is precisely how §3.10's wrong pool survived a
 month. Cheap, and it closes the hole that already bit once.
