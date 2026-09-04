@@ -429,6 +429,18 @@ lean_lib «Certs» where
              -- so unlike r34's this one assumes no operating point. 20 BN sites against 33, and
              -- the depthwise backward's fan-in is 9 where r34's convs are 512*9.
              `LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget,
+             -- ⭐⭐ The THIRD whole-net backward number, ConvNeXt-T's — window 1.023e251 /
+             -- budget 1.563e250, ratio 0.153 — and the repo's FIRST honest whole-net FOLD for a
+             -- LAYERNORM net, at the net whose own FORWARD number is a 2.00 CAP. §0.1's quadratic
+             -- is a forward fact: a VJP reads its statistics off the SAVED activations, which the
+             -- cotangent does not perturb. Stated DIRECTLY on the committed convnextInputGrad, so
+             -- convnextInputGrad_eq_convNextForwardTCh_vjp makes it a statement about the
+             -- certified whole-net gradient with nothing in between. Fan-ins at padOdd
+             -- (cout*3*3, 96*5*5) — convFlatBack is the adjoint only at an ODD kernel.
+             -- ⛔ It does NOT compose with the forward, and not for r34's reason: this net's
+             -- forward statement is `capped`, so the saved-activation accuracy it can supply is
+             -- 2 x window ~ 1e227, and LayerNorm has no eval mode to switch to.
+             `LeanMlir.Proofs.Float.ConvNeXtBackFloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

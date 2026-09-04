@@ -126,6 +126,7 @@ import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
+import LeanMlir.Proofs.Float.ConvNeXtBackFloatBudget
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie
@@ -2795,6 +2796,19 @@ open Proofs
 #print axioms Proofs.cnxSavedA10
 #print axioms Proofs.convNextForwardTCh_vjp_chain
 #print axioms Proofs.convnextInputGrad_eq_convNextForwardTCh_vjp
+-- ⭐⭐ ConvNeXt-T's whole-net BACKWARD NUMBER, the third and the first for a LAYERNORM net:
+-- window 1.023e251 / budget 1.563e250, ratio 0.153 — the interval FOLD, no `capped` anywhere, at
+-- the net whose own FORWARD number is a 2.00 cap. Stated directly on the committed
+-- convnextInputGrad (r34's and mnv2's budget files define their own skeleton), so the tie above
+-- makes it a statement about the certified gradient. At |istd| <= 16, the measured per-kind
+-- profile (kernels 0.60, LN gamma 4.80, layer scale 8.38 — the split is worth 68 orders here) and
+-- padOdd fan-ins. ⛔ Does NOT compose with the forward: that statement is `capped`, so the
+-- activation accuracy it supplies is 2 x window ~ 1e227 and LayerNorm has no eval mode.
+#print axioms Proofs.cnxGradBridge
+#print axioms Proofs.cnxGradBridge_maps
+#print axioms Proofs.cnxGradBridge_mag_le
+#print axioms Proofs.cnxGradBridge_fresh_le
+#print axioms Proofs.cnx_grad_float_le
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

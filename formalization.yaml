@@ -236,6 +236,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "cnx_grad_float_le"   # ⭐⭐ the THIRD whole-net BACKWARD number and the repo's FIRST honest whole-net FOLD for a LAYERNORM net: the deployed ConvNeXt-T input-gradient is within 1.563e250 of the certified one per input pixel, certified window 1.023e251, budget/window = 0.153 -- no `capped` anywhere, at the net whose own FORWARD number is a 2.00 CAP. §0.1's quadratic is a FORWARD fact; a VJP reads its statistics off the SAVED activations, which the cotangent does not perturb. At the measured 300-epoch per-kind profile (kernels <= 6/10, LN gamma <= 48/10, layer scale <= 84/10 -- the split is worth 68 orders here, the largest of any net), eps >= 1e-5, u <= 2^-24, saved-activation accuracies 1e-2, operating point |istd| <= 16, on loss cotangents of magnitude <= 1. ⭐ Stated DIRECTLY on the committed convnextInputGrad, so convnextInputGrad_eq_convNextForwardTCh_vjp makes it a statement about the certified whole-net gradient with nothing in between. ⛔ It does NOT compose with the forward and not for r34's reason: this net's forward statement is `capped`, whose modulus is 2*mag by construction, so the activation accuracy it can supply is 2 x window ~ 1e227, and LayerNorm has no eval mode to freeze (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/ConvNeXtBackFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "mnv2_grad_float_le"   # ⭐⭐ the SECOND whole-net backward number, and the first with NO operating-point hypothesis: the deployed MobileNetV2 whole-net INPUT-GRADIENT VJP is within 1.076e152 of the certified one, per input pixel, on loss cotangents of magnitude <= 1, certified window 4.750e153, budget/window = 0.023 -- the interval FOLD at TRAINING-mode BatchNorm. |istd| <= 317 is DERIVED from eps >= 1e-5 (MnvBnBack.hS), where r34's file assumes |istd| <= 16; affordable because 20 BN sites and a depthwise fan-in of 9 put the fold 135 orders below r34's. ⛔ es/exh (the saved float activations' accuracies, 1e-2) remain supplied and remain the caveat (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
       sorry_count: 0
@@ -975,6 +981,26 @@ fidelity:
        offending stage, its type ascribed in the chain's spelling, takes the whole chain from
        non-terminating to 2.9 s. An UNAPPLIED comparison of the same twelve-factor composition is
        free -- which is the test for which of the two situations one is in.
+
+       ⭐⭐ AND THE NUMBER FOLLOWED THE SAME DAY: `cnx_grad_float_le`
+       (`Float/ConvNeXtBackFloatBudget.lean`, 218 s) -- window 1.023e251, budget 1.563e250, ratio
+       0.153, no `capped` anywhere. It is the THIRD whole-net backward number and the repo's FIRST
+       honest whole-net FOLD for a LayerNorm net, at the net whose own FORWARD number is a 2.00 cap:
+       §0.1's quadratic is a forward fact, because a VJP reads its statistics off the SAVED
+       activations and the cotangent does not perturb them. 137 stages, 322 rational inequalities,
+       generated and re-asserted by cnx_back_chain / verify_cnx_back before a line of Lean.
+       ⭐ Unlike r34's and mnv2's budget files, which define their own *GradR skeleton and tie it
+       afterwards, this one fills the COMMITTED convnextInputGrad's eleven slots, so the tie above
+       makes it a statement about the certified gradient with nothing in between -- and it was free,
+       because convnextInputGrad's composition is right-associated and FloatBridgesTo.comp builds
+       right-associated compositions. ⭐ Four leaf facts carry it and all four predate the need:
+       bnXhat_sq_le at the CHANNEL count (1e5147 without it), geluScalarDeriv_abs_le's global 3/2
+       (1e6330 without it -- and this net's own forward ablation had measured that constant as NOT
+       load-bearing), padOdd's even-kernel repair, and the per-kind profile split (68 orders here,
+       against r34's 8 and mnv2's 4, because the outlier kind is the layer scale and it multiplies
+       inside every block). ⛔ Quote it with its caveat: it does not compose with the forward, and
+       not for r34's reason -- this net's forward statement is `capped`, so the activation accuracy
+       it can supply is 2 x window ~ 1e227, and LayerNorm has no eval mode to switch to.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
