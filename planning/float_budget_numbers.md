@@ -36,9 +36,22 @@ shipped ConvNeXt BACKWARD bridge held `id` in its head-LayerNorm slot — the sa
 fixed on the FORWARD on 2026-09-03 — **and its docstring justified it with a LayerNorm count that
 had gone stale** — and a THIRD copy of that count sits in the certified apex's docstring (§3.18).
 ✅ Fixed the same day; it needed no new leaves, and the `Maps` kit followed (**§3.17**).
-⭐ **What is open is now §4**, and it is headed by the whole-net certified TIE, not by the number
-(**§3.18**): §3.10's tie moved a committed number 4×, and this net has already produced one defect
-of that class this week. ⭐ The apex it needs already exists at the committed net.
+⛔⛔ **AND THE TIE WAS RUN — §3.19, 2026-09-04 — AND IT FOUND ONE, at the first leaf it touched:
+`convFlatBack` IS NOT THE ADJOINT AT AN EVEN KERNEL.** `conv2d` pads by `pH = (kH-1)/2`, so the
+reversed-kernel forward conv is the adjoint only when `kH-1-pH = pH`, i.e. only for odd `kH`.
+ConvNeXt is the only net in the repo with an even kernel and it has four — the 4×4/s4 patchify stem
+and the three 2×2/s2 downsamples — so **§3.16's 5.766·10²⁴⁹ is stale at 4 of its 137 stages**
+(corrected: **1.023·10²⁵¹ / 1.563·10²⁵⁰**). ⚠ Nothing trained is affected: the emitted backward is
+correct and `StableHLO.lean`'s emitter had already fixed exactly this, twice — the float tier is a
+THIRD spelling of the same map and never got the fix. ⭐ That is a new form of
+`imagenet_specs_drift_from_twins`: *a fix that landed on one tier while its twin kept the old
+spelling.* ⭐ The repair is `padOdd` and it needed no new float machinery. §3.19 has the census, the
+measurements and what is still open (the assembly, an elaboration problem).
+
+⭐ **Starting a session?** §3.20 is the next two pieces of work, scoped: (a) bisect the IMPORT to
+find why eleven one-iota `rfl`s cost 2m43s in one file and do not terminate in another, which is
+all that stands between here and ConvNeXt's whole-net certified tie; (b) then its backward number,
+at §3.19's corrected chain.
 
 Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
 (⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
@@ -1647,6 +1660,12 @@ over the loss cotangent, in the leaves' own semantics. No Lean was written.
     window ≤ 5.766·10²⁴⁹      budget ≤ 8.791·10²⁴⁸      budget/window = 0.15
     at the operating point |istd| ≤ 16; 322 re-assertions
 
+⛔⛔ **STALE at 4 of these 137 stages — see §3.19.** The whole-net tie found that
+`convFlatBack` is not the adjoint at an EVEN kernel, and ConvNeXt's 4×4/s4 stem and three
+2×2/s2 downsamples are the repo's only even kernels. Corrected (fan-ins `cout·3·3` and
+`96·5·5`, `cnx_back_chain(pad_odd=True)`): **1.023·10²⁵¹ / 1.563·10²⁵⁰**, ratio 0.153.
+⚠ That is 2 orders under §3.7(a)'s ceiling where finding 2 below measured 4.
+
 **⭐⭐ The answer is YES.** Ratio 0.15, no `capped` anywhere — **the repo's first honest whole-net
 fold for a LayerNorm net**, at the net whose FORWARD number is a 2.00 cap. §0.1's quadratic is a
 forward fact and §3.9's finding 1 now holds at the fourth net and the third normalisation: a VJP
@@ -1909,6 +1928,199 @@ elaborator to solve `2*(2*?h) = 224` — §3.7(d)'s trap, presenting as a `whnf`
 theorem's TYPE. `(ic := 3) (oc := 96) (h := 56) (w := 56)`. The three downsamples' stride-2
 backwards have the same shape.
 
+### 3.19 ⛔⛔ THE APEX, RUN — and it found that `convFlatBack` IS NOT THE ADJOINT AT AN EVEN KERNEL (2026-09-04)
+
+§3.18 said *tie first, then fold*, because §3.10's tie found r34 reversing the wrong pool and moved
+a committed number 4×. It paid out again, at the first leaf the ConvNeXt tie touched.
+
+**The finding.** `convFlatBack W = flatConv (reverseSwap W) 0` is the reversed-kernel forward conv
+every backward in this repo runs, and `convFlatBack_eq_vjp_backward` ties it to the certified input
+VJP **for odd kernels only**. That hypothesis is not a convenience — the statement is FALSE without
+it. `conv2d` pads by `pH = (kH-1)/2`, so `convFlatBack`'s coefficient of `dy[j]` at output `hi` is
+`W[hi - j + (kH-1-pH)]` where the adjoint's is `W[hi - j + pH]`; they agree iff `kH - 1 - pH = pH`,
+i.e. iff `kH` is odd. At `kH = 4` the hand-written backward is the adjoint of a conv **shifted one
+pixel**. Measured against a basis-probed true adjoint (`scripts/`-style probe, in the session
+scratch): `k = 1,3,7` agree exactly; `k = 2` differs by 9.19, `k = 4` by 21.08.
+
+**⛔ ConvNeXt-T is the only net in the repo with an even kernel, and it has four** — the 4×4/s4
+patchify stem and the three 2×2/s2 downsamples. Census of every `Kernel4` size literal in the
+Proofs cone: 922 × 1×1, 498 × 3×3, 32 × 7×7 (all odd), then 28 × 2×2 and 15 × 4×4 (ConvNeXt) and
+10 × 16×16 (ViT). ⭐ **ViT is NOT affected**: `patchEmbed_flat` is its own definition over
+non-overlapping patches, with no `conv2d` and no padding convention, and its backward ties to
+`patchEmbed_flat_has_vjp.backward` directly. R34, MobileNetV2 and EfficientNet-B0 are all-odd.
+
+**⚠ Nothing trained is affected, and TWO OF THE THREE TIERS WERE ALREADY RIGHT.** The emitted
+ConvNeXt backward is correct: `StableHLO.lean`'s `.convStridedBack` pads ASYMMETRICALLY,
+`[[kH-1-pH, pH]]`, in both the per-example (:6120) and the batched (:8248) arms, and its `den` is
+`(flatConvStride2_has_vjp W b).backward` — the certified VJP, generically. The batched arm's own
+comment names the same quantity: *"The symmetric `[[p,p],[p,p]]` this emitted AGREES at every odd
+kernel (kH=3 ⇒ pH=1 ⇒ kH−1−pH=1) and is WRONG at even ones (kH=2 ⇒ `[[0,0]]` where the VJP needs
+`[[1,0]]`) … Found by the whole-net backward tie … Inert on every committed batched artifact, all
+of which are odd."* So this exact bug was found and fixed **twice on the codegen side** (§2f-bis on
+the per-example emitter, then again on the batched one) and never reached the third spelling of the
+same map — the float tier's `flatConvStride2Back` / `flatConvStride4Back`, which are
+`convFlatBack ∘ scatter` at the SYMMETRIC pad.
+
+⭐⭐ **That is `imagenet_specs_drift_from_twins` in a form this file has not recorded before: a fix
+that landed on one tier while its twin kept the old spelling.** Third instance (§3.10's pool and
+§3.16's head LayerNorm were the first two), and the first where the stale tier is the one a
+NUMBER was folded through. ⛔ **The rule to add: when a fix is made to an emitter, grep for every
+other definition that claims to denote the same map.** A `den` that is stated as the certified VJP
+cannot drift; a hand-written peer of it can, and does.
+
+**⚠ §3.16's number is stale at 4 of its 137 stages.** `cnx_back_chain` now takes a `pad_odd` flag;
+it reproduces the committed row EXACTLY on `pad_odd=False`, which is the check that the probe and
+this document are in sync:
+
+| | window | budget | ratio |
+|---|---|---|---|
+| §3.16 as committed (`pad_odd=False`, `S=16`) | 5.766·10²⁴⁹ | 8.790·10²⁴⁸ | 0.152 |
+| **corrected** (`pad_odd=True`, `S=16`) | **1.023·10²⁵¹** | **1.563·10²⁵⁰** | 0.153 |
+| corrected, ε-floor `S=317` | 6.847·10²⁸⁰ | 9.663·10²⁷⁹ | 0.141 |
+| corrected, `S=8` | 1.239·10²⁴⁴ | 2.039·10²⁴³ | 0.165 |
+| corrected, `S=4` | 1.514·10²³⁷ | 2.854·10²³⁶ | 0.189 |
+
+1.25 orders, and the reason is only the fan-in: `cout·2·2 → cout·3·3` and `96·4·4 → 96·5·5`.
+⚠ **But it eats half the headroom §3.16 finding 2 measured** — 2 orders under §3.7(a)'s ~10²⁵³
+shape-dependent ceiling where that section said 4. §3.17's ceiling probe was run at the OLD
+fan-ins; **re-run it before writing the budget file**, and be ready to state at `S = 8` (9 more
+orders) rather than `S = 16`.
+
+**⭐ The repair costs no new float machinery: `padOdd`** (`Proofs/Foundation/EvenKernelConvBack.lean`,
+~1 s). An even-kernel conv IS an odd-kernel conv on the kernel zero-extended at `(+1,+1)`
+(`conv2d_padOdd_eq`), because for even `kH` the pad at `kH+1` is `pH' = kH/2 = pH + 1` and the
+shifted tap `kh+1` reads the original's window under the original's guard. That is **the emitter's
+asymmetric pad expressed in the vocabulary the float tier already has**: a symmetric `[[pH', pH']]`
+on a kernel whose leading tap is zero is `[[kH-1-pH, pH]]` on the original. So the existing
+odd-kernel leaf tie does all the work at `kH+1`, `|padOdd W| ≤ w'` is free, and every
+`floatBridges_convBack` / `Maps.convBack` transfers unchanged. ⚠ The only cost is that a numeral
+charges 25 taps where the device rounds 16 — an upper bound for the emitted program, simply not
+tight there.
+
+**What landed.**
+* `EvenKernelConvBack.lean` — `padOdd`, `padOdd_abs_le`, `conv2d_padOdd_eq`, `flatConv_padOdd_eq`,
+  ⭐ `HasVJP.backward_unique_of_eq` (uniqueness across a respelling WITHOUT transport — `hfg ▸ ·`
+  gives an `Eq.mpr`-blocked `backward`, §3.5.2 item 5's trap one tier down), and the three
+  even-kernel leaf ties (`convFlatBack_`, `flatConvStride2Back_`, `flatConvStride4Back_padOdd_eq_vjp_backward`).
+* `cnxDownBack` / `cnxDownBackF` / `convnextInputGrad` / `convnextInputGradF` and
+  `Maps.cnxDownBack` made generic in `kH`/`kW` (they hardcoded `2 2` and `4 4`). Backward
+  compatible — every existing call site infers the old values.
+* `ConvNeXtWholeBackCertifiedTie.lean` — `cnxDownChBack_eq_vjp` (the downsample tie, at `padOdd`),
+  ⭐ `cnxStageChKBack_eq_vjp` (**the depth-`k` stage fold, §3.18's "one real proof"** — head-first
+  recursion, so the backward composes block backwards in the OPPOSITE order and the tail's saved
+  input is block 0's forward OUTPUT), and the eleven named saved activations.
+
+**⛔ WHAT DID NOT LAND: the assembly** `convnextInputGrad_eq_convNextForwardTCh_vjp`. Every
+mathematical piece exists; it is an ELABORATION problem, and the measurements are the useful part:
+
+| shape | cost |
+|---|---|
+| whole-net `rfl` against `convNextForwardTCh_has_vjp` | ⛔ no result at `maxHeartbeats 8000000`, ~8 min, twice |
+| the same chain rebuilt as a `let` chain in one term-mode def | ⛔ no result, ~8 min — a `let` used twice per level zeta-expands to `2^11` copies |
+| the chain as **twelve top-level `def`s** | ✅ **2.4 s** |
+| eleven applied-form single-level `rfl`s, importing `ConvNeXtFullT` only | ✅ **2m43s** |
+| the same eleven, in a file importing the ConvNeXt float cone | ⛔ **103 GB, no result** |
+
+⭐⭐ **Three lessons, all reusable.** (1) A tactic-built `HasVJP` apex has `letFun` intermediates,
+so its `.backward` does not reduce; a term-mode peer plus `HasVJP.backward_unique` is the escape,
+and it is `chanLNTensor3_vjp_chain`'s move one tier up. (2) That peer must be top-level `def`s, not
+a `let` chain — 200× on the same twelve links. (3) State the single-level reductions APPLIED
+(`… .backward x dy`, after `funext`) rather than as function equalities: application nesting has
+one shape where `(a ∘ b) ∘ c` and `a ∘ (b ∘ c)` are two.
+⚠ **What is NOT explained is the last row**, and it is the thing to diagnose next: the same eleven
+`rfl`s that cost 2m43s against a small import do not terminate against the full cone. Neither
+`open Classical` nor the `let`/`def` binding accounts for it. ⭐ **Bisect the IMPORT, not the term**
+— §3.7's growing-depth method applied to the environment rather than the composition.
+
+### 3.20 ⭐⭐ NEXT SESSION: bisect the IMPORT, then finish ConvNeXt (scoped 2026-09-04)
+
+Two things, in this order. The first is a half-day of measurement that unblocks the second, and it
+is a *new kind* of bisect for this file — §3.7's growing-depth method aimed at the environment
+rather than at the composition.
+
+#### (a) ⛔ Why eleven `rfl`s cost 2m43s in one file and do not terminate in another
+
+**The measurement, restated so it can be reproduced.** The eleven single-level reductions
+
+    cnxT{k} : (cnxV{k} …).backward x dy
+            = (cnxV{k-1} …).backward x ((vjp_k).backward (cnxSavedA{k-1} w x) dy) := rfl
+
+are each one iota-step on a `vjp_comp` structure literal. In a file importing
+**`ConvNeXtFullT` alone** they compile in **2m43s** and the twelve chain links in **2.4 s**. In
+`ConvNeXtWholeBackCertifiedTie.lean`, whose cone is `EvenKernelConvBack` (→
+`Resnet34BackCertifiedTie`) plus `ConvNeXtBackCertifiedTie`, the *same eleven* reach **103 GB
+without terminating**. Ruled out already: `open Classical` (removed, no change) and the `let`-vs-
+`def` binding (that one is separately worth 200× — a `let` used twice per level zeta-expands to
+`2^11` copies — and the shipped shape is already twelve top-level `def`s).
+
+**⭐ The cheapest experiment, and it was NOT run: `set_option diagnostics true` on ONE tie in the
+big environment.** It names the constants unfolded and the instance counts, and it costs one
+compile. Do that before anything else. `count_heartbeats in` on the same declaration gives the
+second number. Only then start removing imports.
+
+**Then bisect the import, from both ends** (§3.7's method, one level up):
+* From the fast end: start at `import ConvNeXtFullT`, add `ConvNeXtBackCertifiedTie`, then
+  `EvenKernelConvBack`, then `Resnet34BackCertifiedTie`'s own cone, timing one tie each step.
+* From the slow end: take the real file and drop imports until it is fast. ⚠ Only
+  `cnxBlockChBack_eq_vjp` (from `ConvNeXtBackCertifiedTie`) and the `padOdd` ties (from
+  `EvenKernelConvBack`) are actually needed by the parts that landed — the ties themselves need
+  neither, so a `ConvNeXtChainTies` module holding only the chain + the eleven reductions, imported
+  by nothing else, may simply be the answer.
+* ⭐ Suspects worth naming before measuring, so the measurement can refute them: a `@[simp]`/
+  instance set that only the float cone brings in and that `whnf` now has to consider; a
+  `local instance` or `Decidable` path that makes `conv2d`'s `dite` reducible where it was not; and
+  a competing unfolding path for `Function.comp` or `Vec`.
+
+**The shape to regenerate** (it was generated, not typed — the arms are mechanical):
+
+    private noncomputable def cnxD{k} … := (diff_k).comp (cnxD{k-1} …)
+    private noncomputable def cnxV{k} … := vjp_comp _ _ (cnxD{k-1} …) (diff_k) (cnxV{k-1} …) (vjp_k)
+    private theorem cnxT{k} … (x) (dy : Vec <out_k>) :
+        (cnxV{k} …).backward x dy
+          = (cnxV{k-1} …).backward x ((vjp_k).backward (cnxSavedA{k-1} w x) dy) := rfl
+
+over the twelve links `flatConvStride4 → chanLNTensor3 96 56 56 → convNextStageChK 3 w.s1 →
+cnxDownChW 28 28 w.d1 → … → globalAvgPoolFlat 768 7 7 → rowLNVecFlat 1 768 → dense w.Wd w.bd`.
+⚠ `dy`'s type is per level (`Vec (96·56·56)` … `Vec 768` … `Vec 10`), not `Vec 10` throughout.
+⚠ Pin `(h := 7) (w := 7)` etc. on every `cnxDownChBack_eq_vjp` — otherwise the rewrite asks for
+`2 * ?h = 14` and fails to fire (§3.7(d), §3.10 note 1).
+
+**Then the assembly closes as:**
+
+    unfold convnextInputGrad; funext dy; simp only [Function.comp_apply]
+    rw [<the twelve leaf ties>]
+    rw [HasVJP.backward_unique (convNextForwardTCh_has_vjp …) (convNextForwardTCh_vjp_chain …) x dy,
+        cnxT11 …, cnxT10 …, …, cnxT1 …]
+
+⭐ Every one of those rewrites already fires; the leaf ties and `backward_unique` were verified to
+land in the failing run. Only the eleven `rfl`s are slow.
+
+#### (b) Finish ConvNeXt: the number, at the corrected chain
+
+Once (a) is unblocked and `convnextInputGrad_eq_convNextForwardTCh_vjp` is closed:
+
+1. ⛔ **Re-run §3.17's ceiling probe at the CORRECTED fan-ins** (`cout·3·3`, `96·5·5`). It was
+   measured at the old ones, and §3.19 leaves 2 orders under §3.7(a)'s ~10²⁵³ where §3.16 finding 2
+   measured 4. The largest goals to throw at `norm_num` are the stem's `convBack` (now 10²⁵¹), the
+   stem LN gain, the deepest residual, and the 49- and 384-fan-in convs.
+2. `ConvNeXtBackFloatBudget.lean` on the `Resnet34BackFloatBudget.lean` recipe, at
+   **1.023·10²⁵¹ / 1.563·10²⁵⁰** (`S = 16`) or **1.239·10²⁴⁴ / 2.039·10²⁴³** (`S = 8`) if the
+   ceiling probe balks. ⚠ Every numeral from `cnx_back_chain(pad_odd=True)`; `verify_cnx_back`
+   before a line of Lean.
+3. ⛔ **Quote it with §3.16 finding 1's caveat**, which §9 now carries: an honest fold of the
+   backward kernel's rounding, at a hypothesised operating point, given saved-activation
+   accuracies this net's forward cannot supply *in any mode* — its forward statement is a `capped`
+   one. The forward-then-backward composition does not exist.
+
+#### (c) ⭐ And while you are in the neighbourhood
+
+* **`resnet34Forward_full_pc_eq_chain`** (§4 item 8) — ResNet-34 is now the only net whose
+  whole-net backward tie has no shape check, and it is the net the hole already bit. Cheap.
+* ⛔ **Grep every other definition that claims to denote a map an emitter was fixed for.** §3.19's
+  lesson: `.convStridedBack`'s even-kernel pad was fixed twice on the codegen side and the float
+  tier's hand-written peer of the same map was never touched. A `den` stated as the certified VJP
+  cannot drift; a hand-written peer can.
+
 ## 4. What is open (2026-09-04)
 
 §3.8's three items are all closed, so this is its successor. Ordered by what I would do next.
@@ -1927,16 +2139,26 @@ conjugation, the patchify backward, the block-body and downsample envelopes, plu
 `FloatBridgesTo` migration of the three ConvNeXt backward block defs — and ConvNeXt-T's block
 `s4b2` closed as a compiled `example` at the probe's numerals.
 
-**4. ⭐⭐ THE APEX — ConvNeXt's whole-net certified tie, `convnextInputGrad_eq_convNextForwardTCh_vjp`.
-Scoped 2026-09-04, §3.18, and it goes BEFORE the number.** r34 and mnv2 folded first and tied
+**4. ⭐⭐ THE APEX — RUN 2026-09-04, and it FOUND ONE (§3.19).** ✅ The even-kernel conv backward
+(`padOdd` + the three leaf ties), ✅ the downsample tie and ✅ **the depth-`k` stage fold** — §3.18's
+"one real proof" — all landed. ⛔ **What is left is the assembly**
+`convnextInputGrad_eq_convNextForwardTCh_vjp`, and it is an ELABORATION problem, not a mathematical
+one: the term-mode chain costs 2.4 s and the eleven single-level reductions 2m43s against a small
+import, but do not terminate against the ConvNeXt float cone (103 GB). ⭐ **§3.20 is the scoping
+for that** — bisect the IMPORT, not the term, and run `set_option diagnostics true` on one tie
+first. The historical scoping is below.
+
+**4b. (superseded) The original §3.18 scoping.** r34 and mnv2 folded first and tied
 after; §3.10 is why not to repeat that — the tie found r34 reversing the wrong pool and moved the
 committed number 4×, and ConvNeXt has already produced one defect of that class this week
 (§3.16 finding 6). ⭐ The apex `convNextForwardTCh_has_vjp` **already exists at the committed net**,
 and so does §3.14's shape `rfl`. Missing: the stage-fold backward tie (the one real proof), the
 downsample tie, the patchify-backward leaf tie, and the assembly.
 
-**5. `ConvNeXtBackFloatBudget.lean`** — §3.16's number, at `S = 16` (⭐ the ceiling probe in §3.17
-says the shape closes; the four-orders worry was unfounded). Everything it needs exists and is
+**5. `ConvNeXtBackFloatBudget.lean`** — ⚠ **at §3.19's CORRECTED number, 1.023·10²⁵¹ / 1.563·10²⁵⁰,
+not §3.16's**, and ⛔ **re-run §3.17's ceiling probe first**: it was measured at the old fan-ins, and
+the correction leaves 2 orders under §3.7(a)'s ~10²⁵³ rather than 4. Be ready to state at `S = 8`
+(1.239·10²⁴⁴, 9 more orders) rather than `S = 16`. Everything it needs exists and is
 exercised; what is left is assembly on the `Resnet34BackFloatBudget.lean` recipe. ⚠ Build it
 against whatever chain item 4 certifies, not against today's.
 

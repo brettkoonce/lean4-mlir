@@ -94,14 +94,14 @@ theorem floatBridges_cnxBlockBack {c cExp h w kHd kWd : Nat} (M : FloatModel)
 
 /-- The ConvNeXt downsample input-gradient VJP — the **reverse of `cnxDownChW = flatConvStride2 W ∘ LN`**:
     `lnB ∘ flatConvStride2Back W` (run the strided-conv backward, then the LayerNorm back). -/
-noncomputable def cnxDownBack {cin cout h w : Nat} (W : Kernel4 cout cin 2 2)
+noncomputable def cnxDownBack {cin cout h w kH kW : Nat} (W : Kernel4 cout cin kH kW)
     (lnB : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))) :
     Vec (cout * h * w) → Vec (cin * (2 * h) * (2 * w)) :=
   lnB ∘ flatConvStride2Back (h := h) (w := w) W
 
 /-- **The ConvNeXt downsample backward float-bridges** — the §A3 strided-conv backward then the
     supplied LayerNorm back. -/
-theorem floatBridges_cnxDownBack {cin cout h w : Nat} (M : FloatModel) (W : Kernel4 cout cin 2 2)
+theorem floatBridges_cnxDownBack {cin cout h w kH kW : Nat} (M : FloatModel) (W : Kernel4 cout cin kH kW)
     (lnB : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w)))
     {wd : ℝ} (hwd : 0 ≤ wd) (hW : ∀ o c kh kw, |W o c kh kw| ≤ wd)
     (hn : 0 < cout * (2 * h) * (2 * w)) (hlnB : FloatBridges lnB) :
@@ -172,15 +172,15 @@ noncomputable def floatBridgesTo_cnxBlockBack {c cExp h w kHd kWd : Nat} (M : Fl
 
 /-- The float ConvNeXt downsample input-gradient — the strided-conv backward's float peer
     (zero-fill scatter, then the rounded reversed-kernel conv) then the float LayerNorm back. -/
-noncomputable def cnxDownBackF {cin cout h w : Nat} (M : FloatModel) (W : Kernel4 cout cin 2 2)
+noncomputable def cnxDownBackF {cin cout h w kH kW : Nat} (M : FloatModel) (W : Kernel4 cout cin kH kW)
     (lnBF : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))) :
     Vec (cout * h * w) → Vec (cin * (2 * h) * (2 * w)) :=
   lnBF ∘ (M.flatConvF (h := 2 * h) (w := 2 * w) (IR.reverseSwap W) (fun _ => 0)
     ∘ decimateBack cout h w)
 
 /-- **The ConvNeXt downsample backward float-bridges TO its float skeleton.** -/
-noncomputable def floatBridgesTo_cnxDownBack {cin cout h w : Nat} (M : FloatModel)
-    (W : Kernel4 cout cin 2 2)
+noncomputable def floatBridgesTo_cnxDownBack {cin cout h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 cout cin kH kW)
     {lnB lnBF : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))}
     {wd : ℝ} (hwd : 0 ≤ wd) (hW : ∀ o c kh kw, |W o c kh kw| ≤ wd)
     (hn : 0 < cout * (2 * h) * (2 * w)) (hlnB : FloatBridgesTo lnB lnBF) :
@@ -199,7 +199,7 @@ noncomputable def floatBridgesTo_cnxDownBack {cin cout h w : Nat} (M : FloatMode
     `floatBridges_cnxBlockBack`, the downsamples by `floatBridges_cnxDownBack`, the LN-backs by
     `floatBridges_bnBack`). The `[3,3,9,3]` structure is in the stage maps' depths; the channel/spatial
     schedule (96→192→384→768, 56→28→14→7) in their dims. -/
-noncomputable def convnextInputGrad (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+noncomputable def convnextInputGrad {kH kW : Nat} (Wd : Mat 768 10) (sW : Kernel4 96 3 kH kW)
     (lnBstem : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (lnBhead : Vec 768 → Vec 768)
     (s1B : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
@@ -223,7 +223,7 @@ set_option maxRecDepth 100000 in
     4×4/s4 patchify backward). The deployed float backward of the whole net is within an explicit budget
     of the certified `ℝ` backward — the backward peer of `convNextForwardTCh`. Closes under
     `[propext, Classical.choice, Quot.sound]`. -/
-theorem convnext_grad_floatBridges (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+theorem convnext_grad_floatBridges (M : FloatModel) {kH kW : Nat} (Wd : Mat 768 10) (sW : Kernel4 96 3 kH kW)
     (lnBstem : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (lnBhead : Vec 768 → Vec 768)
     (s1B : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
@@ -278,7 +278,7 @@ set_option maxRecDepth 100000 in
     they are discharged by folding `floatBridges_cnxBlockBack` / `floatBridges_cnxDownBack`, whose
     own `lnB` slots take `floatBridges_chanLNTensor3Back` at each site's dims. Closes under
     `[propext, Classical.choice, Quot.sound]`. -/
-theorem convnextCh_grad_floatBridges (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+theorem convnextCh_grad_floatBridges (M : FloatModel) {kH kW : Nat} (Wd : Mat 768 10) (sW : Kernel4 96 3 kH kW)
     {εs εh : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
     (fst : Fin (56 * 56) → ℝ) (fxh : Fin (56 * 56) → Vec 96)
     (γh fγh : Vec 768) (xhead : Vec (1 * 768))
@@ -324,7 +324,7 @@ theorem convnextCh_grad_floatBridges (M : FloatModel) (Wd : Mat 768 10) (sW : Ke
 /-- **The float ConvNeXt-T input-gradient skeleton** — `convnextInputGrad` with each
     concrete slot replaced by the model's rounded peer and each supplied stage /
     downsample backward by its float map. -/
-noncomputable def convnextInputGradF (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+noncomputable def convnextInputGradF (M : FloatModel) {kH kW : Nat} (Wd : Mat 768 10) (sW : Kernel4 96 3 kH kW)
     (lnBstemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (lnBheadF : Vec 768 → Vec 768)
     (s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
@@ -348,7 +348,7 @@ set_option maxRecDepth 100000 in
     Same `.comp` chain as `convnext_grad_floatBridges`, with every float map named —
     the statement that carries "the deployed float backward of the whole net is within
     the bridge's `.mod` budget of the certified `ℝ` backward" (`formalization.yaml` §4d). -/
-noncomputable def convnext_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+noncomputable def convnext_grad_floatBridgesTo (M : FloatModel) {kH kW : Nat} (Wd : Mat 768 10) (sW : Kernel4 96 3 kH kW)
     (lnBstem lnBstemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (lnBhead lnBheadF : Vec 768 → Vec 768)
     (s1B s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
@@ -399,7 +399,7 @@ set_option maxRecDepth 100000 in
     for the stale count that justified it and what it cost. This is the bridge a
     `ConvNeXtBackFloatBudget.lean` states its number over, and it could not have been stated
     against the `id` version: that one reverses a net with no head LayerNorm. -/
-noncomputable def convnextCh_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+noncomputable def convnextCh_grad_floatBridgesTo (M : FloatModel) {kH kW : Nat} (Wd : Mat 768 10) (sW : Kernel4 96 3 kH kW)
     {εs εh : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
     (fst : Fin (56 * 56) → ℝ) (fxh : Fin (56 * 56) → Vec 96)
     (γh fγh : Vec 768) (xhead : Vec (1 * 768))

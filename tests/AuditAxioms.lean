@@ -124,6 +124,8 @@ import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.EvenKernelConvBack
+import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie
@@ -2755,6 +2757,39 @@ open Proofs
 #print axioms Proofs.mobilenetv2PC_has_vjp_at
 #print axioms Proofs.mobilenetv2Forward_full_pc_eq_chain
 #print axioms Proofs.mnv2InputGrad_eq_mobilenetv2_vjp
+-- ⛔⛔ THE EVEN-KERNEL CONV BACKWARD (EvenKernelConvBack.lean, ~1 s). convFlatBack W is the
+-- reversed-kernel forward conv, and convFlatBack_eq_vjp_backward ties it to the certified input-VJP
+-- for ODD kernels only. That hypothesis is load-bearing and the statement is FALSE without it:
+-- conv2d pads by pH = (kH-1)/2, so convFlatBack's coefficient of dy[j] at output hi is
+-- W[hi - j + (kH-1-pH)] where the adjoint's is W[hi - j + pH], and those agree iff kH is odd.
+-- ConvNeXt-T is the only net in the repo with an even kernel and it has four: the 4x4/s4 patchify
+-- stem and the three 2x2/s2 downsamples. ⚠ The EMITTED backward is correct (StableHLO's
+-- .convStridedBack pads asymmetrically [[kH-1-pH, pH]] and its den is the certified VJP), so
+-- nothing trained is affected — what drifted is the float tier, and planning §3.16's 5.766e249 is
+-- stale at 4 of its 137 stages (corrected: 1.023e251 / 1.563e250 at S = 16).
+-- ⭐ padOdd is the repair and it costs no new float machinery: an even-kernel conv IS an odd-kernel
+-- conv on the kernel zero-extended at (+1,+1) (conv2d_padOdd_eq), which is the emitter's asymmetric
+-- pad in the vocabulary the float tier already has, and |padOdd W| <= w' is free.
+#print axioms Proofs.padOdd
+#print axioms Proofs.padOdd_abs_le
+#print axioms Proofs.conv2d_padOdd_eq
+#print axioms Proofs.flatConv_padOdd_eq
+#print axioms Proofs.HasVJP.backward_unique_of_eq
+#print axioms Proofs.convFlatBack_padOdd_eq_vjp_backward
+#print axioms Proofs.flatConvStride2Back_padOdd_eq_vjp_backward
+#print axioms Proofs.flatConvStride4Back_padOdd_eq_vjp_backward
+-- ConvNeXt-T's whole-net backward tie, the two pieces that landed: the stage-boundary downsample
+-- (cnxDownChBack_eq_vjp, at padOdd — load-bearing, p.W is 2x2) and the depth-k STAGE FOLD, the one
+-- real proof planning §3.18 scoped. convNextStageChK's HasVJP is built head-first (block 0 runs
+-- first), so its backward composes the block backwards in the OPPOSITE order, each at its own saved
+-- activation, and the tail's saved input is block 0's forward OUTPUT.
+-- ⛔ The assembly convnextInputGrad_eq_convNextForwardTCh_vjp is NOT here; planning §3.19 scopes it.
+#print axioms Proofs.cnxDownChBack_eq_vjp
+#print axioms Proofs.cnxBlockChBackAt
+#print axioms Proofs.cnxStageChKBack
+#print axioms Proofs.cnxStageChKBack_eq_vjp
+#print axioms Proofs.rowLNVecFlat_has_vjp_backward_eq_fun
+#print axioms Proofs.cnxSavedA10
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

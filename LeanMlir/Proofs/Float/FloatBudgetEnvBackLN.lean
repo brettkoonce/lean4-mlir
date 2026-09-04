@@ -230,15 +230,15 @@ theorem Maps.cnxBlockBodyBack {c cExp h w kHd kWd : Nat} (M : FloatModel)
 /-- ⭐ **An envelope through one ConvNeXt stage-boundary DOWNSAMPLE input-gradient** — the §A3
     strided-conv backward (zero-fill scatter then the reversed 2×2 kernel at the doubled grid),
     then the LayerNorm back at the INPUT resolution and channel count. Two numeric stages. -/
-theorem Maps.cnxDownBack {cin cout h w : Nat} (M : FloatModel) (W : Kernel4 cout cin 2 2)
+theorem Maps.cnxDownBack {cin cout h w kH kW : Nat} (M : FloatModel) (W : Kernel4 cout cin kH kW)
     {lnB lnBF : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))}
     {wd : ℝ} (hwd : 0 ≤ wd) (hW : ∀ o c kh kw, |W o c kh kw| ≤ wd)
     (hn : 0 < cout * (2 * h) * (2 * w)) (hnIn : 0 < cin * (2 * h) * (2 * w))
     (hlnB : FloatBridgesTo lnB lnBF)
-    {g Ā Ē A1 E1 Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (cout * 2 * 2 + 2) - 1 ≤ g)
-    (cA : (1 + g) * (((cout * 2 * 2 : ℕ) : ℝ) * wd * Ā + 0) ≤ A1)
-    (cE : g * (((cout * 2 * 2 : ℕ) : ℝ) * wd * (Ā + Ē) + 0)
-            + ((cout * 2 * 2 : ℕ) : ℝ) * wd * Ē ≤ E1)
+    {g Ā Ē A1 E1 Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (cout * kH * kW + 2) - 1 ≤ g)
+    (cA : (1 + g) * (((cout * kH * kW : ℕ) : ℝ) * wd * Ā + 0) ≤ A1)
+    (cE : g * (((cout * kH * kW : ℕ) : ℝ) * wd * (Ā + Ē) + 0)
+            + ((cout * kH * kW : ℕ) : ℝ) * wd * Ē ≤ E1)
     (mln : hlnB.Maps A1 E1 Ā' Ē') :
     (floatBridgesTo_cnxDownBack (h := h) (w := w) M W hwd hW hn hlnB).Maps Ā Ē Ā' Ē' :=
   (Maps.flatConvStride2Back (h := h) (w := w) M W hwd hn hW hg cA cE).comp hnIn mln

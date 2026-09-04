@@ -528,6 +528,20 @@ lean_lib «Certs» where
              -- instantiated at IS the committed forward. That is the shape check §3.10's wrong
              -- pool slipped past. ⭐ No drift found here: the mnv2 backward number is unchanged.
              `LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie,
+             -- ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel: conv2d pads by pH=(kH-1)/2
+             -- and the reversed-kernel forward conv is the adjoint only when kH-1-pH = pH, i.e.
+             -- only for odd kH. ConvNeXt's 4x4/s4 patchify stem and three 2x2/s2 downsamples are
+             -- the repo's only even kernels (ViT's 16x16 patch embed does not use conv2d). The
+             -- EMITTED backward is correct — StableHLO's .convStridedBack already pads
+             -- asymmetrically [[kH-1-pH, pH]] — so nothing trained is affected; the float tier is
+             -- the third spelling of that map and never got the fix. padOdd is the repair: an
+             -- even-kernel conv IS an odd-kernel conv on the kernel zero-extended at (+1,+1), so
+             -- the existing odd leaf tie does all the work and no new float machinery is needed.
+             `LeanMlir.Proofs.Foundation.EvenKernelConvBack,
+             -- ConvNeXt-T's whole-net backward tie: the stage-boundary downsample tie and the
+             -- depth-k STAGE FOLD (planning §3.18's "one real proof"), plus the eleven named saved
+             -- activations. ⛔ The assembly is not here — see the file header and planning §3.19.
+             `LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie,
              -- R50 phase 1 (planning/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck
              -- blocks' certified VJPs. bblkPC (identity, 12 blocks), bblkPStridedPC (strided
              -- projection, stages 2/3/4 block 0) and — the one with NO R34 analogue —

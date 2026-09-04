@@ -1964,7 +1964,8 @@ def cnx_ln_inputs():
 
 
 def cnx_back_chain(wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB, exh=CNX_EXH,
-                   esav=CNX_ESAV, q=U32, xhat='sqrt', gelu='sat', head_ln=True):
+                   esav=CNX_ESAV, q=U32, xhat='sqrt', gelu='sat', head_ln=True,
+                   pad_odd=True):
     """Every stage of `convnextInputGrad` at ConvNeXt-T's shapes, folded over the LOSS
     COTANGENT (`|p − y| ≤ 1`), at the granularity a Lean `Maps` chain composes them. The four
     layout permutations, the per-row lift and both decimation scatters are envelope-preserving
@@ -1977,7 +1978,15 @@ def cnx_back_chain(wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB, exh=C
     `gelu='sat'`    : `|gelu′| ≤ 3/2`, the proved global constant.
     `gelu='window'` : `floatClose_gelu`'s magnitude polynomial at the forward's pre-GELU
                       window — CUBIC in it, the B0-swish shape (§3.12).
-    `head_ln=False` : the head-LN slot as the SHIPPED bridge instantiates it, `id`."""
+    `head_ln=False` : the head-LN slot as the SHIPPED bridge instantiates it, `id`.
+    `pad_odd=True`  : ⛔ the CORRECTED even-kernel conv backwards. `convFlatBack W` is the
+                      adjoint only for ODD `kH` (`Proofs/Foundation/EvenKernelConvBack.lean`), and
+                      ConvNeXt's 4×4/s4 stem and three 2×2/s2 downsamples are the repo's only
+                      even kernels. The repair spells them at `padOdd W`, one size up with a zero
+                      leading row/column, so the FAN-IN a numeral charges is `cout·3·3` and
+                      `96·5·5` rather than `cout·2·2` and `96·4·4`.
+    `pad_odd=False` : what the fold assumed before the whole-net tie was closed — kept only to
+                      price the correction."""
     fwd = dict(cnx_eval_chain())
     lnin = cnx_ln_inputs()
 
@@ -2019,18 +2028,21 @@ def cnx_back_chain(wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB, exh=C
                 st = R(residual(blkin, s, q));              out.append((t + ".out", st))
         else:
             _, dtag, cin, cout = entry
-            st = R(conv_back(st, cout * 2 * 2, wk, q));     out.append((dtag + ".cB", st))
+            dk = 3 if pad_odd else 2
+            st = R(conv_back(st, cout * dk * dk, wk, q));   out.append((dtag + ".cB", st))
             st = R(ln_back(st, cin, Xh(cin, dtag + '.ln'), G, S, es, exh, F(0), q))
             out.append((dtag + ".lnB", st))
     # stem: the stem LayerNorm's backward, then the 4×4/s4 patchify backward (fan-in 96·16)
     st = R(ln_back(st, 96, Xh(96, 'stem.ln'), G, S, es, exh, F(0), q))
     out.append(("stem.lnB", st))
-    st = R(conv_back(st, 96 * 4 * 4, wk, q));        out.append(("stem.cB", st))
+    sk = 5 if pad_odd else 4
+    st = R(conv_back(st, 96 * sk * sk, wk, q));      out.append(("stem.cB", st))
     return out
 
 
 def verify_cnx_back(rows, wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB,
-                    exh=CNX_EXH, esav=CNX_ESAV, q=U32, head_ln=True) -> int:
+                    exh=CNX_EXH, esav=CNX_ESAV, q=U32, head_ln=True,
+                    pad_odd=True) -> int:
     """Re-assert EVERY rounded inequality a `ConvNeXtBackFloatBudget.lean` would close,
     exactly — the peer of `verify_r34_back`. Returns the count checked; raises on the first
     failure."""
@@ -2096,11 +2108,12 @@ def verify_cnx_back(rows, wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB
                 st = r[t + '.out']
         else:
             _, dtag, cin, cout = entry
-            conv_ck(dtag + '.cB', cout * 2 * 2, st, r[dtag + '.cB'])
+            dk = 3 if pad_odd else 2
+            conv_ck(dtag + '.cB', cout * dk * dk, st, r[dtag + '.cB'])
             ln_ck(dtag + '.lnB', cin, r[dtag + '.cB'], r[dtag + '.lnB'])
             st = r[dtag + '.lnB']
     ln_ck('stem.lnB', 96, st, r['stem.lnB'])
-    conv_ck('stem.cB', 96 * 4 * 4, r['stem.lnB'], r['stem.cB'])
+    conv_ck('stem.cB', 96 * (5 if pad_odd else 4) ** 2, r['stem.lnB'], r['stem.cB'])
     return n
 
 
@@ -2287,6 +2300,8 @@ if __name__ == "__main__":
         ("x̂ from the forward WINDOW (2·A·S)", dict(S=F(16), xhat='window')),
         ("GELU cubic polynomial (no saturation constant)", dict(S=F(16), gelu='window')),
         ("⛔ head-LN slot = id (what the SHIPPED bridge says)", dict(S=F(16), head_ln=False)),
+        ("⛔ even-kernel convBack UNFIXED (what §3.16 folded)", dict(S=F(16), pad_odd=False)),
+        ("S = 8, at the corrected fan-ins", dict(S=F(8))),
     ]:
         rr = cnx_back_chain(**kw)
         a, e = rr[-1][1]
@@ -2301,6 +2316,13 @@ if __name__ == "__main__":
     print("     for the seventh time: grep the whole cone, not the files named after your net.")
     print("  ⭐ The per-kind profile split is worth 68 orders here, against r34's 8 and mnv2's 4,")
     print("     and it is what makes the theorem exist (§3.3(a) predicted exactly this).")
+    print("  ⛔⛔ AND THE WHOLE-NET TIE FOUND ONE (§3.19): `convFlatBack` is NOT the adjoint at an")
+    print("     EVEN kernel — conv2d pads by (kH-1)/2 and the reversed-kernel conv is the adjoint")
+    print("     only when kH-1-pH = pH. ConvNeXt's 4x4/s4 stem and three 2x2/s2 downsamples are the")
+    print("     repo's only even kernels, so the row above is what §3.16 folded and the shipped")
+    print("     numbers here are the corrected ones (padOdd: fan-ins cout·3·3 and 96·5·5).")
+    print("     ⚠ It costs half the headroom: 1e2 under norm_num's ceiling where §3.16 said 1e4 —")
+    print("     re-run §3.17's ceiling probe, and be ready to state at S = 8 rather than S = 16.")
     print("  ⛔ `bnXhat_sq_le` decisive for the FOURTH net: 1e5236 without it.")
     print("  ⛔⛔ AND THE SHIPPED BRIDGE HAS `id` IN ITS HEAD-LAYERNORM SLOT —")
     print("     `convnextCh_grad_floatBridges` reverses a net with no head LN, the same slot")
