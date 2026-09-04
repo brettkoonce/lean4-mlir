@@ -2513,6 +2513,24 @@ open Proofs
 -- that needed it — the §3.3.0 pattern in its purest form.
 #print axioms Proofs.geluScalar_lipschitz
 #print axioms Proofs.geluScalarDeriv_abs_le
+-- ⭐ SWISH's derivative is globally bounded: |swish'| <= 2 at every x
+-- (Architectures/SwishSaturation.lean, 2026-09-04). The bound EfficientNet-B0's BACKWARD
+-- diagBack slots take as their Ssw, where the repo's only prior one was
+-- swishScalar_lipschitz_abs's `1 + A/4` at the FORWARD's certified window — 1.216e51 at the head
+-- alone. That single window import is what put efficientnetInputGradB's fold at 1e431, past
+-- norm_num's ~1e253 shape-dependent ceiling; with the global constant it is 7.640e169 and
+-- statable (b0_back_chain(ssw = 2), scripts/float_budget_envelope.py).
+-- ⭐ The proof is three elementary steps, against §3.4's estimate that a global constant "needs
+-- the decay of sigma', i.e. calculus": sigma <= 1, sigma'(x) <= exp(-|x|) by a two-line case
+-- split on the sign of x, and |x|exp(-|x|) <= 1 off Real.add_one_le_exp. That estimate was true
+-- of the SHARP constant (≈1.1, worth 2.6 orders here) and is exactly why nobody re-derived it.
+-- ⛔ swishScalar_lipschitz — the mean-value corollary, swish is globally 2-Lipschitz — is NOT
+-- wired into floatClose_swish. It would beat both of that modulus's window-dependent branches
+-- and is worth 8 orders on B0's FORWARD (8.408e210 -> 3.679e202), which moves a committed
+-- number; §7 says one commit per net.
+#print axioms Proofs.swishScalarDeriv_eq
+#print axioms Proofs.swishScalarDeriv_abs_le
+#print axioms Proofs.swishScalar_lipschitz
 #print axioms Proofs.floatBridgesTo_invresBodyGen
 #print axioms Proofs.floatBridgesTo_invresBodyStridedGen
 #print axioms Proofs.floatBridgesTo_r34IdBlock

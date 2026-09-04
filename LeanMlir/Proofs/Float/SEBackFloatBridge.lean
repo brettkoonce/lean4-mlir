@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
 import LeanMlir.Proofs.Float.EnetFloatBridge
+import LeanMlir.Proofs.Architectures.SwishSaturation
 
 /-! # ℝ→Float32 bridge for the SQUEEZE-EXCITE backward (mnv2 / efficientnet)
 
@@ -202,5 +203,32 @@ theorem floatBridges_seBack {n : Nat} (M : FloatModel)
   exact FloatBridges.biPathSum M
     (floatBridges_diagBack M g fg hn hg hfg)
     ((floatBridges_diagBack M xinp fx hn hx hfx).comp hgateBack)
+
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐ The swish slot at a WINDOW-FREE `Ssw` (2026-09-04)
+-- ════════════════════════════════════════════════════════════════
+
+/-- ⭐ **The SE gate's backward at the REAL saved swish derivative, with `Ssw = 2` and no
+    forward window in sight.** `swishScalarDeriv_abs_le` (`Architectures/SwishSaturation.lean`)
+    discharges `hssw` at a global constant, where the repo's only prior bound was
+    `swishScalar_lipschitz_abs`'s `1 + A/4` at the pre-swish window — `1.216·10⁵¹` at B0's
+    certified forward window, one stage. That import is what put `efficientnetInputGradB`'s fold
+    at `10⁴³¹`; without it, `10¹⁶⁹` (`b0_back_chain(ssw = 2)`).
+
+    ⚠ It is an `example` because no EfficientNet-B0 backward BUDGET file exists yet
+    (`planning/float_budget_numbers.md` §3.9, "what to do next" item 3) — and a leaf nothing
+    composes is a leaf nobody has checked composes (§5). This is the shape that file will use at
+    every swish site: `(Ssw := 2)`, `fun i => swishScalarDeriv_abs_le _`. -/
+example {c h w r : Nat} (M : FloatModel) (W₁ : Mat c r) (W₂ : Mat r c)
+    (ssig fssig : Vec c) (xsw fssw : Vec r)
+    {w' Ssig esig eswish : ℝ} (hw' : 0 ≤ w')
+    (hc : 0 < c) (hr : 0 < r) (hh : 0 < h) (hww : 0 < w)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hW₂ : ∀ i j, |W₂ i j| ≤ w')
+    (hssig : ∀ i, |ssig i| ≤ Ssig) (hfssig : ∀ i, |fssig i - ssig i| ≤ esig)
+    (hfssw : ∀ i, |fssw i - swishScalarDeriv (xsw i)| ≤ eswish) :
+    FloatBridges (seGateInputGrad (h := h) (w := w) W₁ W₂ ssig
+      (fun i => swishScalarDeriv (xsw i))) :=
+  floatBridges_seGateBack M W₁ W₂ ssig fssig _ fssw (Ssw := 2) hw' hc hr hh hww
+    hW₁ hW₂ hssig hfssig (fun _i => swishScalarDeriv_abs_le _) hfssw
 
 end Proofs

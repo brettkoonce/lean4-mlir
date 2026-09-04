@@ -655,6 +655,20 @@ fidelity:
        1e55/1e211. The lesson generalises past this net: when a whole-net fold overshoots, ablate
        the LEAVES in the generator before concluding anything about the architecture.
 
+       ⭐ AND (a)'s PARENTHESIS WAS THE NEXT BLOCKER (2026-09-04). The note beside it said the
+       true global Lipschitz constant of x*sigma(x) is ~1.1 and "getting THAT needs the decay of
+       sigma', i.e. calculus" -- true of the SHARP constant, and it stopped anyone deriving a
+       CRUDE one for a month. `swishScalarDeriv_abs_le` (Architectures/SwishSaturation.lean)
+       proves |swish'| <= 2 globally in three elementary steps: sigma <= 1, sigma'(x) <=
+       exp(-|x|) by a case split on the sign of x, and |x|exp(-|x|) <= 1 off
+       Real.add_one_le_exp. It is the bound B0's BACKWARD diagBack slots take as their Ssw
+       (the only prior one being (a)'s `1 + A/4` at the forward's certified window, 1.216e51 at
+       the head alone), and it moves efficientnetInputGradB's fold from 1e431 -- past norm_num's
+       ceiling, no theorem statable -- to 7.640e169. ⛔ Its mean-value corollary
+       `swishScalar_lipschitz` (swish is globally 2-Lipschitz) beats BOTH of (a)'s branches and is
+       worth 8 orders on this FORWARD (8.408e210 -> 3.679e202); it is deliberately NOT wired into
+       `floatClose_swish`, because that moves `b0_float_logits_le` and is its own commit.
+
        ⚠ AND A THIRD QUADRATIC SITE. Squeeze-excite's modulus `mulErr q A Cg E Eg` carries
        `A * Eg` -- the block window times the gate error -- and the gate grows that error out of
        the same window through the squeeze's `GAP -> dense`. So SE is quadratic in the window for

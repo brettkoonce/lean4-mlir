@@ -464,13 +464,20 @@ B0_PLAN = [("b1", "noexp",   None, 9,  32,  8, 112 * 112, 32),
 
 
 def b0_eval_chain(w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32,
-                  swish_min=True, se_tight=True):
+                  swish_min=True, se_tight=True, swish_lip=None):
     """Every stage of the deployed EfficientNet-B0 eval forward, at block granularity.
 
     Yields (tag, (window, budget)) in exactly the order the Lean `Maps` chain composes
     them. `swish_min=False` / `se_tight=False` revert to the pre-2026-09-03 leaves and are
     kept only to reproduce the "not statable" comparison in
-    planning/float_budget_numbers.md §3.4 — do not emit numerals from them."""
+    planning/float_budget_numbers.md §3.4 — do not emit numerals from them.
+
+    `swish_lip=<rat>` adds a GLOBAL Lipschitz branch `L*E` to the swish modulus' `min`, the
+    forward consequence of `swishScalarDeriv_abs_le` (`Architectures/SwishSaturation.lean`,
+    2026-09-04): `|swish'| <= 2` globally, so swish is globally 2-Lipschitz and the modulus
+    need not mention the window at all. ⛔ NOT wired into `floatClose_swish` — it would move
+    B0's committed forward number, which is its own commit (§3.12). Default None reproduces
+    the shipped chain exactly."""
     G = Bb = Mb = w
 
     def R(st):
@@ -488,6 +495,8 @@ def b0_eval_chain(w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32,
         A, E = st
         me = mulErr(q, A, F(1), F(0), esig)
         tail = min((1 + A / 4) * E, A + E) if swish_min else (1 + A / 4) * E
+        if swish_lip is not None:
+            tail = min(tail, swish_lip * E)
         return R((A + me, me + tail))
 
     def sigmoid(st):

@@ -19,9 +19,11 @@ three hypotheses (§3.7 step 4) — the wall relocates rather than vanishing.
 next" list, which starts at one unproved scalar lemma. Three sentences of §3.8: a
 backward is *always* a fold (squeeze-excite included, so §0.1's list of quadratic sites is a
 forward-only list); MobileNetV2's backward is statable with **no operating-point hypothesis at
-all**, unlike ResNet-34's; and EfficientNet-B0's is a fold that cannot be written down, blocked
-by ONE unproved scalar lemma — a *global* bound on `|swish′|`, which §3.4 costed as calculus and
-is three elementary steps.
+all**, unlike ResNet-34's; and EfficientNet-B0's was a fold that could not be written down,
+blocked by ONE unproved scalar lemma — a *global* bound on `|swish′|`, which §3.4 costed as
+calculus and is three elementary steps. ✅ **That lemma landed 2026-09-04**
+(`swishScalarDeriv_abs_le`, `Architectures/SwishSaturation.lean`), and B0's backward fold is now
+**7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** — statable, from 10⁴³¹. §3.12.
 
 Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
 (⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
@@ -135,6 +137,11 @@ The machinery built for r34 and reusable for the rest:
   per-row lift they are conjugated by, `gelu` (through the `3/2` branch), `flatConvStride4`, and
   the three composites the whole-net chain walks (`Maps.chanLNTensor3` / `.cnxBlockChW` /
   `.cnxDownChW`). ⚠ It imports `FloatBudgetEnvMBConv` for one leaf, `Maps.depthwise`.
+* `Architectures/SwishSaturation.lean` — `swishScalarDeriv_abs_le` (⭐ `|swish′| ≤ 2`, GLOBAL:
+  the bound B0's backward `diagBack` slots take as their `Ssw`, where the only prior one was
+  `swishScalar_lipschitz_abs`'s `1 + A/4` at the forward's window) plus `swishScalarDeriv_eq` and
+  `swishScalar_lipschitz`. ⛔ The Lipschitz corollary is deliberately NOT wired into
+  `floatClose_swish` — it is worth 8 orders on the forward and moves a committed number (§3.12).
 * `Architectures/GeluSaturation.lean` — `geluScalarDeriv_abs_le` / `geluScalar_lipschitz`, moved
   down out of `Certificates/GeluLipschitz.lean` so `floatClose_gelu` can state the `min` of its
   magnitude polynomial and the global `3/2` (§3.3.0(b)).
@@ -442,9 +449,13 @@ combinator.** Ablated at the measured profile:
    that constant from `|σa − σb| ≤ ¼|a−b|`; bounding the same factor by the gate's own *range*
    instead (`|σa − σb| ≤ 1`, `sigmoidScalar_sub_abs_le_one`) gives `A + |a−b|` —
    **additive in the window rather than multiplicative** (`swishScalar_lipschitz_abs'`). The two
-   are incomparable, so `floatClose_swish` now states their `min`. ⚠ The true global Lipschitz
-   constant of `x·σ(x)` is ≈ 1.1 (`σ' → 0` at both ends); getting *that* needs the decay of `σ'`,
-   i.e. calculus, and the additive bound is what avoids needing it.
+   are incomparable, so `floatClose_swish` now states their `min`. ⛔ **The sentence that stood
+   here — *"the true global Lipschitz constant of `x·σ(x)` is ≈ 1.1; getting THAT needs the decay
+   of `σ'`, i.e. calculus, and the additive bound is what avoids needing it"* — was true of the
+   SHARP constant and cost a month.** A CRUDE global constant needs no calculus at all: `≤ 2` is
+   three elementary steps (§3.12), and the only property that matters is that the window does not
+   appear. ⚠ It is also a forward improvement worth 8 orders here, priced and NOT taken —
+   `floatClose_swish` still states the two window-dependent branches; §3.12.
 2. **`floatClose_seScale`'s window was derived as `|float − real| + |real|`** — which charges
    `A · Lg 0`, the block window times the GATE'S ERROR, to the magnitude. But `FloatClose`'s
    magnitude clause bounds the *float* gate as well as the real one, so the float product is one
@@ -1200,7 +1211,7 @@ the SE's saved input `x`, and `swish′(saved)`. The last two have no bound but 
 certified window, and `swishScalar_lipschitz_abs`'s `1 + A/4` is 1.216·10⁵¹ at the head alone —
 **one stage, 51 orders**, visible in the chain as `head.swB` going from 10⁻² to 10⁴⁹.
 
-**⭐⭐ And the lemma is elementary, against what §3.4 says.** §3.4 records *"the true global
+**⭐⭐ And the lemma is elementary, against what §3.4 says. ✅ PROVED 2026-09-04, §3.12.** §3.4 records *"the true global
 Lipschitz constant of `x·σ(x)` is ≈ 1.1; getting THAT needs the decay of `σ′`, i.e. calculus"* —
 true of the sharp constant and irrelevant, because **the sharpness does not matter**: `Ssw =
 11/10` gives 10⁹⁵, `137/100` gives 10⁹⁶, and the crudest global `2` gives 10⁹⁸. What is needed is
@@ -1243,9 +1254,9 @@ honest count is `h·w`, so the window carries a spurious factor of `c` at each S
 orders on B0 (10⁹⁵ → 10⁸⁹) and cheap to fix, but it is not what blocks anything.
 
 **What to do next, in order.**
-1. ⭐ **Prove `swishScalarDeriv_abs_le : |swishScalarDeriv x| ≤ 2`** in the `GeluSaturation.lean`
-   mould, and state `floatClose_diagBack`'s swish instances through it. One scalar lemma, and it
-   is the only thing between B0's backward and a number.
+1. ✅ **`swishScalarDeriv_abs_le : |swishScalarDeriv x| ≤ 2` — DONE 2026-09-04
+   (`Architectures/SwishSaturation.lean`, §3.12).** B0's backward is 7.640·10¹⁶⁹ / 1.735·10¹⁶⁹
+   with it, from 10⁴³¹ — statable, and the fold's last window import is gone.
 2. **MobileNetV2's backward budget file** — the r34 recipe transfers with two new `Maps` leaves
    (`Maps.depthwiseBack` is `Maps.flatConv` at fan-in `kH·kW`; `Maps.depthwiseStride2Back` is
    that composed with the existing `Maps.decimateBack`), and `Maps.reluMaskBack` already exists.
@@ -1369,6 +1380,62 @@ holding the structure, `comp`/`mono`/`capped`/`residual`, the two monotone lemma
 five landed budget files elaborate against, for zero mathematical gain, and a full build compiles
 all 85 modules anyway. Do it if a sixth consumer wants the kit without a net attached.
 
+### 3.12 ✅ `|swish′| ≤ 2` (2026-09-04) — §3.9's one unproved lemma, and B0's backward is statable
+
+`swishScalarDeriv_abs_le` (`Architectures/SwishSaturation.lean`, 134 lines, **1.5 s**), in the
+`GeluSaturation.lean` mould: pure real analysis about `swishScalar`, importing only
+`LayerNorm.lean`, consumed by the float tier. Four declarations —
+`swishScalarDeriv_eq` (the closed form as `σ + x·σ′`, the split the bound needs), two private
+helpers, the theorem, and `swishScalar_lipschitz` as its mean-value corollary.
+
+| B0 backward variant | window | budget | statable |
+|---|---|---|---|
+| leaves as they stood (`\|swish′\| ≤ 1 + A/4`) | 2.491·10⁴³¹ | 4.624·10⁴³⁰ | ⛔ no |
+| global `11/10` (⛔ still not proved, and not needed) | 2.021·10¹⁶⁷ | 5.225·10¹⁶⁶ | yes |
+| ⭐ **global `2` — what is PROVED** | **7.640·10¹⁶⁹** | **1.735·10¹⁶⁹** | **yes** |
+| + operating point `\|x\| ≤ 16` on the SE input | 1.551·10⁹⁸ | 3.535·10⁹⁷ | yes |
+| + `broadcastBack` tightened to its `h·w` nonzeros | 3.499·10⁹² | 7.994·10⁹¹ | yes |
+
+**262 orders, and the crude constant costs 2.6 of them against the sharp one.** That is the whole
+of §3.9's point made concrete: the shipped `2` is 10¹⁶⁹ and the unproved-sharp `11/10` is 10¹⁶⁷,
+both a hundred orders under §3.7(a)'s ~10²⁵³ ceiling. ⛔ Do not prove the sharp constant.
+
+**The proof, and why §3.4's cost estimate was wrong.** `swish′ = σ + x·σ′`, and each summand is
+bounded by `1` for a *different* reason: `σ ≤ 1` because `1 + e^{−x} ≥ 1`, and `|x|·σ′ ≤ 1`
+because `σ′(x) = e^{−x}/(1+e^{−x})² ≤ e^{−|x|}` and `|x|·e^{−|x|} ≤ 1` off
+`Real.add_one_le_exp`. ⭐ The only place saturation enters is a two-line case split on the sign of
+`x`: the denominator is `≥ 1` when `x ≥ 0` and `≥ (e^{−x})²` when `x < 0`. No MVT, no `deriv`
+analysis, no sup — §3.4's *"needs the decay of `σ′`, i.e. calculus"* is true of the SHARP constant
+and was never true of a usable one. ⚠ The estimate sat unchallenged from the day B0's forward
+landed to the day someone needed the backward; **a cost written next to a bound reads as a
+finding and is what stops it being re-derived.**
+
+**⚠ Where it is exercised, and why that is an `example`.** Every consumer takes the bound as a
+parameter — `floatBridges_seGateBack`'s `Ssw`, `EfficientNetBackFloatBridge`'s `swBe`/`swBd` —
+so nothing in the repo *changed*; what changed is that a caller can now pass `2` instead of
+deriving a window. `SEBackFloatBridge.lean` closes the SE gate's backward at
+`(Ssw := 2)` with `fun _i => swishScalarDeriv_abs_le _` as a compiled `example`, at the REAL
+saved derivative `fun i => swishScalarDeriv (xsw i)`. It is an `example` because B0's backward
+budget file does not exist yet (§3.9 item 3) — and §5's rule is that a leaf nothing composes is a
+leaf nobody has checked composes.
+
+**⛔ THE FORWARD IMPLICATION IS PRICED AND NOT TAKEN.** `swishScalar_lipschitz` says swish is
+globally `2`-Lipschitz, so `floatClose_swish`'s modulus could carry a third branch `2·e` — and
+`2·e` beats BOTH shipped branches at B0's windows (the multiplicative `(1+A/4)·e` for `A > 4`, the
+additive `A + e` whenever `e ≤ A`). Measured with a new `b0_eval_chain(swish_lip = …)` flag,
+default `None` so the shipped chain and `verify_b0`'s 96 inequalities reproduce byte-for-byte:
+
+| B0 forward | window | budget |
+|---|---|---|
+| shipped (`min` of multiplicative and additive) | 2.580·10⁵⁵ | 8.408·10²¹⁰ |
+| + global `L = 2` | 2.580·10⁵⁵ | **3.679·10²⁰²** |
+| + global `L = 11/10` | 2.580·10⁵⁵ | 1.814·10²⁰¹ |
+
+**Eight orders, window unchanged** — a Lipschitz constant is a modulus fact, not a window one,
+which is §3.2's separate-levers finding in its cleanest form. ⛔ Not wired: it moves
+`b0_float_logits_le`, a committed number with a `formalization.yaml` entry and an `AuditAxioms`
+line, and §7 says one commit per net. Do it when B0's forward is next opened.
+
 ## 5. The `Maps` kit — ✅ complete for all six forwards, and for r34's backward
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
@@ -1419,8 +1486,9 @@ net still needs — ✅ now costed by §3.9's probes, not guessed: MobileNetV2 n
 `Maps.depthwiseBack` (`Maps.flatConv` at fan-in `kH·kW`) and `Maps.depthwiseStride2Back` (that,
 composed with the existing `Maps.decimateBack`) and nothing else — `Maps.reluMaskBack` already
 covers the relu6 kink. EfficientNet-B0 needs `Maps.diagBack`, `Maps.broadcastBack` and the
-`Maps.seBack` composite, and ⛔ **a `Maps` leaf is not what blocks it** — a global `|swish′|`
-bound is (§3.9 finding 3). All the `∃`-tier bridges exist (`DepthwiseBackFloatBridge.lean`,
+`Maps.seBack` composite, and ⛔ **a `Maps` leaf was never what blocked it** — a global `|swish′|`
+bound was, and ✅ that landed 2026-09-04 (§3.12), so B0's backward budget file is now only
+`Maps` leaves away. All the `∃`-tier bridges exist (`DepthwiseBackFloatBridge.lean`,
 `SEBackFloatBridge.lean`, `LinBackFloatBridge.lean`).
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
