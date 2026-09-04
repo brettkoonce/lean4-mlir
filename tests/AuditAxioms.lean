@@ -2783,13 +2783,18 @@ open Proofs
 -- real proof planning §3.18 scoped. convNextStageChK's HasVJP is built head-first (block 0 runs
 -- first), so its backward composes the block backwards in the OPPOSITE order, each at its own saved
 -- activation, and the tail's saved input is block 0's forward OUTPUT.
--- ⛔ The assembly convnextInputGrad_eq_convNextForwardTCh_vjp is NOT here; planning §3.19 scopes it.
+-- and the ASSEMBLY, landed 2026-09-04: convnextInputGrad, every slot pinned to the certified per-op
+-- backward at its own saved activation, IS (convNextForwardTCh_has_vjp ...).backward x. Stronger
+-- than r34's and mnv2's ties: the apex is HasVJP (everywhere), not the smooth-point HasVJPAt, so
+-- the only hypotheses are the 23 LayerNorm positivities and there is no smoothness side-condition.
 #print axioms Proofs.cnxDownChBack_eq_vjp
 #print axioms Proofs.cnxBlockChBackAt
 #print axioms Proofs.cnxStageChKBack
 #print axioms Proofs.cnxStageChKBack_eq_vjp
 #print axioms Proofs.rowLNVecFlat_has_vjp_backward_eq_fun
 #print axioms Proofs.cnxSavedA10
+#print axioms Proofs.convNextForwardTCh_vjp_chain
+#print axioms Proofs.convnextInputGrad_eq_convNextForwardTCh_vjp
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

@@ -230,6 +230,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "convnextInputGrad_eq_convNextForwardTCh_vjp"   # ⭐⭐ the whole-net CERTIFIED tie for ConvNeXt-T's backward, and the STRONGEST of the three: convnextInputGrad, every slot pinned to the certified per-op backward at its own saved activation, IS (convNextForwardTCh_has_vjp ...).backward x. ⭐ The apex is HasVJP -- EVERYWHERE -- not the smooth-point HasVJPAt r34's and mnv2's are (GELU, LayerNorm, convolution and the layer scale are all smooth and ConvNeXt has no kink), so its only hypotheses are the 23 LayerNorm positivities and it carries NO smoothness side-condition. ⭐ No drift found; the even-kernel defect this tie's own leaf work exposed (convFlatBack is not the adjoint at an even kernel; ConvNeXt's 4x4/s4 stem and three 2x2/s2 downsamples) was already repaired by padOdd, which this assembly consumes. Shape check present: convNextForwardTCh_eq_chain (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Foundation/ConvNeXtWholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "mnv2_grad_float_le"   # ⭐⭐ the SECOND whole-net backward number, and the first with NO operating-point hypothesis: the deployed MobileNetV2 whole-net INPUT-GRADIENT VJP is within 1.076e152 of the certified one, per input pixel, on loss cotangents of magnitude <= 1, certified window 4.750e153, budget/window = 0.023 -- the interval FOLD at TRAINING-mode BatchNorm. |istd| <= 317 is DERIVED from eps >= 1e-5 (MnvBnBack.hS), where r34's file assumes |istd| <= 16; affordable because 20 BN sites and a depthwise fan-in of 9 put the fold 135 orders below r34's. ⛔ es/exh (the saved float activations' accuracies, 1e-2) remain supplied and remain the caveat (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
       sorry_count: 0
@@ -943,6 +949,32 @@ fidelity:
        (97 orders of window, `min A 6` at 13 sites), buys the backward NOTHING: its backward is
        `reluMaskBack`, a 0/1 select, exact in float and envelope-preserving. Window and budget are
        separate levers on a forward; on a backward the clamp is not a lever at all.
+
+       ⭐⭐ AND THE THIRD WHOLE-NET BACKWARD TIE, ConvNeXt-T's, LANDED 2026-09-04:
+       `convnextInputGrad_eq_convNextForwardTCh_vjp` (`Foundation/ConvNeXtWholeBackCertifiedTie.lean`,
+       17 s). It is the STRONGEST of the three, and the reason is architectural rather than
+       effort: `convNextForwardTCh_has_vjp` is `HasVJP` -- everywhere -- not the smooth-point
+       `HasVJPAt` r34's and mnv2's apexes are, because GELU, LayerNorm, convolution and the layer
+       scale are all smooth and ConvNeXt has no kink anywhere. Its only hypotheses are the 23
+       LayerNorm positivities, so unlike every other whole-net backward tie here it carries no
+       smoothness side-condition. The shape check is present (`convNextForwardTCh_eq_chain`), and
+       no drift was found: the even-kernel defect this tie's own leaf work had already exposed --
+       `convFlatBack` is the adjoint only at an ODD kernel, and ConvNeXt's 4x4/s4 patchify stem and
+       three 2x2/s2 downsamples are the repo's only even ones -- was repaired first, by `padOdd`,
+       which this assembly consumes.
+
+       ⚠ What the assembly cost was ELABORATION, not mathematics, and the diagnosis is worth
+       recording because the obvious one was wrong. The eleven single-level `rfl`s that identify
+       the tactic-built apex with a term-mode `vjp_comp` chain appeared to depend on the IMPORT
+       (fast against a small cone, 103 GB against the full one); measured with `diagnostics` and
+       `Elab.async false` the two cones are indistinguishable (166.23 s vs 165.58 s on the same
+       declaration), and the cost is a COMPUTED DIMENSION IN AN APPLIED POSITION: `cnxDownChW h w`
+       is declared over `Vec (cin*(2h)*(2w))` where the chain spells `Vec (96*56*56)`, and rather
+       than reduce `2*28` the unifier descends into the net's semantics
+       (`conv2d_input_grad_formula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`). One `def` per
+       offending stage, its type ascribed in the chain's spelling, takes the whole chain from
+       non-terminating to 2.9 s. An UNAPPLIED comparison of the same twelve-factor composition is
+       free -- which is the test for which of the two situations one is in.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

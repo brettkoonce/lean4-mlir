@@ -48,10 +48,20 @@ THIRD spelling of the same map and never got the fix. ⭐ That is a new form of
 spelling.* ⭐ The repair is `padOdd` and it needed no new float machinery. §3.19 has the census, the
 measurements and what is still open (the assembly, an elaboration problem).
 
-⭐ **Starting a session?** §3.20 is the next two pieces of work, scoped: (a) bisect the IMPORT to
-find why eleven one-iota `rfl`s cost 2m43s in one file and do not terminate in another, which is
-all that stands between here and ConvNeXt's whole-net certified tie; (b) then its backward number,
-at §3.19's corrected chain.
+⭐⭐ **AND THE APEX LANDED — §3.21, 2026-09-04: `convnextInputGrad_eq_convNextForwardTCh_vjp`.**
+ConvNeXt-T's whole-net backward is now the certified gradient, and the tie is **stronger than r34's
+and MobileNetV2's** — its apex is `HasVJP` everywhere, not their smooth-point `HasVJPAt`, so it
+carries no smoothness side-condition. ⛔ §3.20(a)'s premise was wrong and the refutation is the
+reusable part: **the import was never the variable** (166.23 s against a small cone, 165.58 s
+against the big one, same declaration), and the cost was a computed dimension in an APPLIED
+position — `cnxDownChW h w` is declared over `Vec (cin·(2h)·(2w))` where the chain spells
+`Vec (96·56·56)`, and the unifier descends into the net's SEMANTICS rather than reducing `2·28`.
+One `def` per offending stage with the type ascribed in the chain's spelling: **2m43s /
+non-terminating → 2.9 s.** ⚠ Also: `Elab.async` shares caches across declarations, so per-`rfl`
+timings are order-dependent — measure with `Elab.async false` or the attribution is fiction.
+
+⭐ **Starting a session?** §3.21's closing paragraph is the next piece: re-run §3.17's ceiling probe
+at §3.19's corrected fan-ins, then ConvNeXt's backward NUMBER at that corrected chain.
 
 Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
 (⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
@@ -2032,7 +2042,14 @@ one shape where `(a ∘ b) ∘ c` and `a ∘ (b ∘ c)` are two.
 `open Classical` nor the `let`/`def` binding accounts for it. ⭐ **Bisect the IMPORT, not the term**
 — §3.7's growing-depth method applied to the environment rather than the composition.
 
-### 3.20 ⭐⭐ NEXT SESSION: bisect the IMPORT, then finish ConvNeXt (scoped 2026-09-04)
+### 3.20 ⛔ (SUPERSEDED BY §3.21) bisect the IMPORT, then finish ConvNeXt (scoped 2026-09-04)
+
+⛔ **(a) was RUN and its premise was WRONG — the import is not the variable; see §3.21 for the
+measurement and the actual cause.** The scoping below is kept because its suspect list is a good
+example of a plausible-and-wrong one: not one of the three named suspects (a `@[simp]`/instance set,
+a `Decidable` path making `conv2d`'s `dite` reducible, a competing `Function.comp` unfolding) was
+involved, and the cheapest experiment it named — `set_option diagnostics true` on ONE tie — is what
+found the answer in a single compile. ⭐ (b) is still the live work, at §3.19's corrected chain.
 
 Two things, in this order. The first is a half-day of measurement that unblocks the second, and it
 is a *new kind* of bisect for this file — §3.7's growing-depth method aimed at the environment
@@ -2121,6 +2138,102 @@ Once (a) is unblocked and `convnextInputGrad_eq_convNextForwardTCh_vjp` is close
   tier's hand-written peer of the same map was never touched. A `den` stated as the certified VJP
   cannot drift; a hand-written peer can.
 
+### 3.21 ⛔⛔ THE BISECT: the import was NOT the variable — and ⭐⭐ THE APEX LANDED (2026-09-04)
+
+§3.20(a) said to bisect the import, because eleven one-iota `rfl`s cost 2m43s against
+`ConvNeXtFullT` alone and reached 103 GB without terminating against the ConvNeXt float cone. ⛔ **That
+premise does not reproduce. The two environments are indistinguishable.** Same declaration, same
+shape, `set_option diagnostics true` with a bounded heartbeat budget:
+
+| environment | wall | max RSS | outcome |
+|---|---|---|---|
+| `import ConvNeXtFullT` alone | 166.23 s | 15.89 GB | `(kernel) deterministic timeout` |
+| the real cone (`EvenKernelConvBack` + `ConvNeXtBackCertifiedTie`) | 165.58 s | 15.92 GB | identical |
+
+Within 0.4%, and the first link is bit-identical in both (4435 heartbeats). ⭐ **The recorded
+asymmetry was two artifacts, and the second is worth carrying:** the two files held *different tie
+shapes* (one composition-form, one applied-form), and **`Elab.async` shares caches across
+declarations, so per-declaration cost is order-dependent** — the same file blamed `cnxT11` on one
+run and `cnxT7` on the next, with nothing changed but a def three screens up. ⚠ **Measure a `rfl`
+with `set_option Elab.async false` or the attribution is fiction.** That is what made this look like
+an environment effect for a day.
+
+**⭐⭐ THE ACTUAL CAUSE, and it is one rule: never hand the unifier two spellings of the same thing
+in an APPLIED position.** Per-tie, deterministic, the pattern is unmistakable — ties 1, 2, 4, 6 and
+8–11 are free (2.6 s is the import+defs baseline) and **ties 3, 5, 7 are the three downsamples**:
+
+| link | 3 (`cnxDownChW 28 28`) | 5 (`cnxDownChW 14 14`) | 7 (`cnxDownChW 7 7`) | every other |
+|---|---|---|---|---|
+| as spelled | 5.6 s | 17.4 s | ⛔ **fails at 148 s** | free |
+| with the wrapper | **2.67 s** | **2.63 s** | **2.75 s** | free |
+
+`cnxDownChW h w p` is declared over `Vec (cin * (2 * h) * (2 * w))` where the chain spells
+`Vec (96 * 56 * 56)`. Both are closed terms and they are equal — and rather than reduce `2 * 28` the
+unifier descends into the SEMANTICS of both sides. The diagnostics name exactly what it reaches:
+`conv2d_input_grad_formula ↦ 44`, `Finset.sum ↦ 124`, `Mat.unflatten ↦ 168`, `cnxBlockChW ↦ 48`,
+`instHAdd ↦ 398`. ⚠ **This is §3.7(d)'s trap without the metavariable.** There an op over a computed
+dimension made a HIGHER-ORDER unification (`2 * ?h = 112`) and the fix was to pin the implicit; here
+`h` is given explicitly as `28` and it still costs, because two CLOSED spellings of one numeral are
+enough. §8 has both forms now.
+
+**The fix is a one-line `def` per offending stage** — the type ascribed in the chain's spelling,
+with `Differentiable` and `HasVJP` peers ascribed the same way (`cnxDn1`/`cnxDn2`/`cnxDn3`, and
+`cnxLNh` for `rowLNVecFlat 1 768`'s `Vec (1 * 768)` against the chain's `Vec 768`). ⛔ **And a LEAF
+TIE goes the other way: state it in the LEMMA's spelling, not the chain's.** `cnxLNhBack_eq_vjp`
+takes `v : Vec (1 * 768)` and compiles in 2.4 s; the same statement at `Vec 768` does not finish,
+in either the applied or the `funext`ed form. The normalisation belongs at the `HasVJP` wrapper and
+nowhere else.
+
+**⭐ Three more measurements, each of which refutes a plausible diagnosis.**
+1. **The iota peel was never the cost.** `rw [cnxV3, vjp_comp_backward]` — the one-step reduction,
+   proved once at the abstract level — then `sorry`: **2.53 s**. A generic `vjp_comp_backward`
+   lemma is not what was needed.
+2. **The saved activation was.** `(chanLNTensor3 … ∘ flatConvStride4 …) x = cnxSavedA1 w x := rfl`
+   is 2.4 s; the same identification one stage deeper, under `convNextStageChK 3 w.s1`, does not
+   finish in 240 s — `simp only [Function.comp_apply, cnxSavedA2, cnxSavedA1, cnxSavedA0]`
+   included. ⭐ So the saved activations are now FUNCTIONS (`cnxSavedA k w : Vec (3·224²) → Vec _`)
+   and double as each `vjp_comp`'s `f`, which makes every tie a one-step iota with *syntactically
+   identical* sides. One family of constants, both jobs.
+3. **The whole-net `rfl` is not what times out either — the LAST step is.** With the shape above,
+   the apex's statement elaborates in 2.42 s and every proof prefix through the eleven peels is
+   2.5–2.7 s; the closing `rfl` then blows past 1 000 000 heartbeats in 75 s. After the peels the
+   two sides differ *only* by `Function.comp`, and `rfl` will not take that route:
+   **`simp only [Function.comp_apply, cnxV0]` closes it.** ⭐ §3.19's lesson 3 said to state the
+   reductions applied because `(a ∘ b) ∘ c` and `a ∘ (b ∘ c)` are two shapes; this is the same fact
+   at the closing step, where the fix is a syntactic rewrite rather than a defeq.
+
+**⭐⭐ THE APEX LANDED: `convnextInputGrad_eq_convNextForwardTCh_vjp`**
+(`Foundation/ConvNeXtWholeBackCertifiedTie.lean`, 519 lines, **17 s**). `convnextInputGrad`, with
+every slot pinned to the certified per-op backward at its own saved activation, IS
+`(convNextForwardTCh_has_vjp …).backward x`. §1's criterion (ii) is met for a third whole-net
+backward, and **this one is stronger than r34's and MobileNetV2's**: the apex is `HasVJP` —
+everywhere — not the smooth-point `HasVJPAt` those two are, so its only hypotheses are the 23
+LayerNorm positivities and it carries no smoothness side-condition. ⭐ Twelve chain defs + eleven
+ties + the ascription to the committed composition: **2.9 s, identical in both cones**, from
+2m43s / non-terminating.
+
+**⭐ The unapplied half of the rule, which is the reason the ascription is free.**
+`convNextForwardTCh_vjp_chain` compares a twelve-factor composition against the committed one and
+costs nothing, because no `x` is in sight to evaluate. **A function comparison never descends into
+semantics; an applied one does.** That is the whole difference between the two halves of this file.
+
+⛔ **The tie found NO drift** — unlike §3.10's (r34's 2×2 pool, which moved a committed number 4×)
+and like §3.14's (MobileNetV2's). §3.19's even-kernel finding had already been extracted by the
+`padOdd` work, which is what this assembly consumes; nothing further moved, so §3.19's
+**1.023·10²⁵¹ / 1.563·10²⁵⁰** stands as the number `ConvNeXtBackFloatBudget.lean` should be built
+at. ⭐ And the THIRD copy of §3.16's stale LayerNorm count is now gone —
+`convNextForwardTCh_has_vjp`'s docstring said *"22 LN positivities … no head LN"* while its own
+statement composes `rowLNVecFlat 1 768` and takes `hhε` (§3.18 flagged it; fixed 2026-09-04).
+
+**What is next, unchanged from §3.20(b) except that (a) is closed:** re-run §3.17's ceiling probe at
+§3.19's CORRECTED fan-ins (`cout·3·3`, `96·5·5`) — it was measured at the old ones and the
+correction leaves 2 orders under §3.7(a)'s ~10²⁵³ rather than 4 — then write
+`ConvNeXtBackFloatBudget.lean` at `S = 16` (1.023·10²⁵¹ / 1.563·10²⁵⁰) or `S = 8`
+(1.239·10²⁴⁴ / 2.039·10²⁴³) if the shape balks, every numeral from `cnx_back_chain(pad_odd=True)`
+with `verify_cnx_back` run first, and quote it with §3.16 finding 1's caveat (§9's row): an honest
+fold of the backward kernel's rounding, at a hypothesised operating point, given saved-activation
+accuracies this net's forward cannot supply *in any mode*.
+
 ## 4. What is open (2026-09-04)
 
 §3.8's three items are all closed, so this is its successor. Ordered by what I would do next.
@@ -2139,14 +2252,14 @@ conjugation, the patchify backward, the block-body and downsample envelopes, plu
 `FloatBridgesTo` migration of the three ConvNeXt backward block defs — and ConvNeXt-T's block
 `s4b2` closed as a compiled `example` at the probe's numerals.
 
-**4. ⭐⭐ THE APEX — RUN 2026-09-04, and it FOUND ONE (§3.19).** ✅ The even-kernel conv backward
-(`padOdd` + the three leaf ties), ✅ the downsample tie and ✅ **the depth-`k` stage fold** — §3.18's
-"one real proof" — all landed. ⛔ **What is left is the assembly**
-`convnextInputGrad_eq_convNextForwardTCh_vjp`, and it is an ELABORATION problem, not a mathematical
-one: the term-mode chain costs 2.4 s and the eleven single-level reductions 2m43s against a small
-import, but do not terminate against the ConvNeXt float cone (103 GB). ⭐ **§3.20 is the scoping
-for that** — bisect the IMPORT, not the term, and run `set_option diagnostics true` on one tie
-first. The historical scoping is below.
+**4. ✅ THE APEX — DONE 2026-09-04 (§3.21), and §3.19's even-kernel finding came out of it.**
+`convnextInputGrad_eq_convNextForwardTCh_vjp`: ConvNeXt-T's whole-net backward IS the certified
+gradient, and the tie is **stronger than r34's and MobileNetV2's** — `HasVJP` everywhere, not their
+smooth-point `HasVJPAt`, so no smoothness side-condition. ⛔ §3.20(a)'s "bisect the import" premise
+was wrong: the two cones are indistinguishable (166.23 s / 165.58 s on the same declaration). The
+cost was a computed dimension in an APPLIED position, and one `def` per offending stage takes the
+whole chain from non-terminating to **2.9 s**. The tie found no drift, so §3.19's corrected
+1.023·10²⁵¹ / 1.563·10²⁵⁰ stands. The historical scoping is below.
 
 **4b. (superseded) The original §3.18 scoping.** r34 and mnv2 folded first and tied
 after; §3.10 is why not to repeat that — the tie found r34 reversing the wrong pool and moved the
@@ -2296,6 +2409,19 @@ lemmas, and one dead `private theorem`. Every whole-net budget in the repo now r
   — makes any composition containing it a higher-order unification (`2 * ?h = 112`), which
   presents as a non-terminating whole-net `isDefEq`, not as a missing argument. Pin those
   implicits: `(c := 64) (h := 56) (w := 56)` (§3.7(d)).
+* ⭐⭐ **Pinning is not enough when the term is APPLIED.** `cnxDownChW 28 28` has no metavariable
+  left and its `Vec (cin * (2 * 28) * (2 * 28))` still costs, because the chain spells the same
+  type `Vec (96 * 56 * 56)` and the unifier descends into the net's semantics rather than reducing
+  `2 * 28`. Give the stage a `def` with the type ascribed in the chain's spelling, and ascribe its
+  `Differentiable`/`HasVJP` peers the same way (§3.21). ⛔ A LEAF TIE goes the other way: state it
+  in the LEMMA's spelling. And an UNAPPLIED comparison is free either way — that is the test for
+  which of the two you are looking at.
+* ⚠ `Elab.async` shares caches across declarations, so per-`rfl` cost is order-dependent and a
+  timing can move between declarations when nothing relevant changed. Measure with
+  `set_option Elab.async false` (§3.21).
+* ⭐ After peeling a chain of `vjp_comp` reductions, close with
+  `simp only [Function.comp_apply, <the base witness>]`, not `rfl`: the two sides differ only by
+  `Function.comp`, and `rfl` does not take that route — 75 s and 10⁶ heartbeats against instant.
 * Diagnose a non-terminating whole-net `isDefEq` by probing compositions of GROWING DEPTH with
   explicit type ascriptions, from both ends — it takes minutes and lands on the exact argument.
 * Time a whole-net `Maps` chain SEPARATELY from its closing step. A truncation that ends in

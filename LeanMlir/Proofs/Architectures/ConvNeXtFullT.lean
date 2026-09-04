@@ -287,9 +287,16 @@ noncomputable def convNextForwardTCh (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224
                     (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ
                       (flatConvStride4 (h := 56) (w := 56) w.sW w.sb x)))))))))))
 
-/-- **The channel-LN ConvNeXt-T has a (correct) VJP — at every input.** Same shape and the same
-    hypothesis count as `convNextForwardTCh_has_vjp`: 22 LN positivities (stem + 18 blocks via the
-    per-stage `∀ i` + 3 downsamples), no head LN. Chain-stated to keep the blocks opaque. -/
+/-- **The channel-LN ConvNeXt-T has a (correct) VJP — at every input.** 23 LayerNorm
+    positivities: stem + 18 blocks (via the per-stage `∀ i`) + 3 downsamples + **the head LN**,
+    which this statement composes as `rowLNVecFlat 1 768 w.hε w.hγ w.hβ` and takes `hhε` for.
+    Chain-stated to keep the blocks opaque.
+
+    ⚠ The count read `22 … no head LN` until 2026-09-04 — the pre-2026-08-30 net, in the third
+    place that number was written down. The other two were the FORWARD float bridge's head slot
+    (fixed 2026-09-03) and the BACKWARD bridge's, which held `id` and cited this same stale count
+    as its justification (fixed 2026-09-04). ⛔ `docstring-checkrefs` cannot catch this: it
+    resolves cited identifiers, and a stale COUNT cites nothing. -/
 noncomputable def convNextForwardTCh_has_vjp (w : CnxTWeightsCh)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
