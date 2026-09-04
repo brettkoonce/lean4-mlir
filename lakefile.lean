@@ -404,6 +404,15 @@ lean_lib «Certs» where
              -- for the realistic-seal work) into a rational numeral — Xh enters as Xh², and
              -- deriving it from the forward's window instead is 1e7271 against 1e288.
              `LeanMlir.Proofs.Float.FloatBudgetEnvBack,
+             -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
+             -- backward net and the first whose normalisation reduces over the CHANNEL axis).
+             -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT
+             -- Maps.bnPerChannelBackGain at a different n: floatBridgesTo_rowLNVecFlatBack runs
+             -- bn_grad_input at gamma = 1 and folds the gamma scale in FRONT of it as a separate
+             -- diagBack, so that multiply is a rounded stage of its own. Plus the channel-LN
+             -- conjugation, the 4x4/s4 patchify backward, and the block-body / downsample
+             -- envelopes. Exercised on ConvNeXt-T's block s4b2 at the probe's numerals.
+             `LeanMlir.Proofs.Float.FloatBudgetEnvBackLN,
              -- ⭐⭐ The r34 BACKWARD's NUMBER: the whole-net input-gradient VJP at 224²,
              -- window 2.188e245 / budget 1.458e244, ratio 0.067 — the interval FOLD, not a cap,
              -- and at TRAINING-mode BatchNorm, the mode the forward has no number for at all

@@ -1849,6 +1849,261 @@ def verify_b0_back(rows, wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esa
     return n
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# ConvNeXt-T BACKWARD — the LAYERNORM question (planning §3.15)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# ⭐⭐ THE QUESTION: every forward number for a LayerNorm net in this repo is a `2.00` CAP
+# (§9) — LayerNorm reduces its statistics out of its own input, its modulus is quadratic in
+# the window, and unlike BatchNorm it has no frozen-statistics variant to switch to. But
+# §3.9 finding 1 says every BACKWARD folds: a VJP is linear at a fixed point. Put the two
+# together and ask whether a LayerNorm net's backward is the repo's first honest whole-net
+# fold for one.
+#
+# The chain is `convnextInputGrad` (`ConvNeXtBackFloatBridge.lean`), at the granularity a
+# Lean `Maps` chain composes it — read off the committed DEFINITION, not the emitted graph
+# (§3.5.2 item 4):
+#
+#     (flatConvStride4Back sW ∘ lnBstem) ∘ s1B ∘ d1B ∘ s2B ∘ d2B ∘ s3B ∘ d3B ∘ s4B
+#       ∘ gapBack 768 7 7 ∘ lnBhead ∘ dense (transpose Wd) 0
+#
+# with the block body backward (`cnxBlockBodyBack`)
+#
+#     depthwiseFlatBack Wdw ∘ lnB ∘ convFlatBack Wex ∘ geluB ∘ convFlatBack Wpr ∘ lsB
+#
+# under `Proofs.residual`, and the downsample (`cnxDownBack`) `lnB ∘ flatConvStride2Back W`.
+#
+# ⭐ THE REDUCTION WIDTH IS THE CHANNEL COUNT. `convnextCh_grad_floatBridges` states its
+# LN-back hypotheses through `bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r)` and
+# `bnXhat 96 …` — literally r34's two quantities, conjugated by `chanLNRows` instead of
+# `reassocFwd`, so `bnXhat_sq_le` covers them verbatim and `n` is 96/192/384/768 where
+# r34's and mnv2's is `h·w` (49…12544). `bnGradInputReMag` is `S·G·Cdy·(2 + Xh²)` with
+# `Xh² = n`, so a site's real gain is `S·G·(n+2)`: far smaller per site than r34's.
+#
+# ⛔⛔ AND THE SHIPPED BRIDGE HOLDS `id` IN THE HEAD-LAYERNORM SLOT.
+# `convnextCh_grad_floatBridges` / `convnextCh_grad_floatBridgesTo` both instantiate
+# `convnextInputGrad`'s `lnBhead` at `id`, and say so in the docstring ("and the head slot
+# `id`") — but `convNextForwardTCh` has had a head LayerNorm since 2026-08-30, and §3.3(b)
+# fixed exactly this slot on the FORWARD bridge on 2026-09-03. So the backward bridge is the
+# reverse of a net the repo does not train. `head_ln=False` prices it.
+
+CNX_WK = CNX_W          # conv / dense kernels      measured 0.5962  (the forward's profile)
+CNX_GLB = CNX_GL        # LayerNorm γ               measured 4.7700
+CNX_SLB = CNX_SL        # layer scale               measured 8.3766
+CNX_SB = F(317)         # |istd| ≤ 1/√ε at ε ≥ 1e-5 — the ε-FLOOR, no operating point
+CNX_ESB = F(1, 100)     # supplied float inverse-stddev accuracy
+CNX_EXH = F(1, 100)     # supplied float normalised-activation accuracy
+CNX_ESAV = F(1, 100)    # supplied accuracy on the saved `gelu′(preact)` vector
+CNX_SGE = F(3, 2)       # ⭐ |gelu′| ≤ 3/2, PROVED (`Architectures/GeluSaturation.lean`) —
+                        # the analogue of the swish lemma that blocked B0 for a month, and it
+                        # was in the repo before anyone needed it (§3.15 item 2)
+
+# cotangent-first, the order `convnextInputGrad` applies them.
+#   ("stage", tag, c, cExp, nblocks)  — `residual (cnxBlockBodyBack …)` × nblocks
+#   ("down",  tag, cin, cout)         — `lnB ∘ flatConvStride2Back W`, cotangent at `cout`
+CNX_BACK_PLAN = [
+    ("stage", "s4", 768, 3072, 3),
+    ("down",  "d3", 384, 768),
+    ("stage", "s3", 384, 1536, 9),
+    ("down",  "d2", 192, 384),
+    ("stage", "s2", 192, 768, 3),
+    ("down",  "d1", 96, 192),
+    ("stage", "s1", 96, 384, 3),
+]
+
+
+def ln_back_gain(c, Xh, S, es, exh, q=U32):
+    """⭐ The LayerNorm backward site's two PER-UNIT constants, rounded up, taken at **γ = 1**.
+    `floatBridgesTo_rowLNVecFlatBack` runs `bn_grad_input` with `|(1:ℝ)|` in its `G` slot and
+    folds the γ scale in FRONT of it as a separate `diagBack`, so the gains here are the BN
+    backward's at unit γ and unit cotangent — the `Maps.bnPerChannelBackGain` factoring, one
+    reduction axis over."""
+    return (r4(bnGradInputReMag(c, F(1), F(1), S, Xh)),
+            r4(bnGradInputBudgetQ(c, F(1), F(1), S, Xh, es, exh, q)))
+
+
+def ln_back(st, c, Xh, G, S, es, exh, egam=F(0), q=U32):
+    """One LayerNorm BACKWARD site — `floatBridgesTo_rowLNVecFlatBack`, and (conjugated by four
+    exact permutations, which carry the envelope unchanged) `floatBridgesTo_chanLNTensor3Back`.
+
+    ⚠ **This is NOT `bn_back` at `n = c`.** The bridge is `diagBack γ` THEN `bn_grad_input` at
+    γ = 1, so the γ multiply is a rounded stage of its own and its `mulErr` enters the fold:
+
+        D    = G·A + mulErr(q, G, A, egam, 0)          — the diagBack's output window
+        mag  = D·(Kr + Kb)
+        mod  = D·Kb + (mulErr(q, G, A, egam, 0) + G·E)·Kr
+
+    `egam` is the float γ's accuracy; the budget file passes `fγ := γ`, so it is 0, exactly as
+    `Maps.chanLNTensor3` does on the forward."""
+    A, E = st
+    Kr, Kb = ln_back_gain(c, Xh, S, es, exh, q)
+    me = mulErr(q, G, A, egam, F(0))
+    D = G * A + me
+    return (D * (Kr + Kb), D * Kb + (me + G * E) * Kr)
+
+
+def isqrt_ceil(n: int) -> int:
+    """The least `X` with `n ≤ X²` — what `bnXhat_abs_le_num` needs to turn `bnXhat_sq_le`'s
+    `x̂² ≤ n` into a RATIONAL bound (`√n` is irrational and `norm_num` cannot see it).
+    `isqrt_exact` suffices for the square feature maps r34 and mnv2 reduce over; ConvNeXt's
+    LayerNorm reduces over the CHANNEL count and 96/192/384/768 are not squares."""
+    import math
+    r = math.isqrt(n)
+    return r if r * r == n else r + 1
+
+
+def cnx_ln_inputs():
+    """The forward window ARRIVING at each LayerNorm site, keyed by the forward chain's tag —
+    the `A` in the window-derived `|x̂| ≤ 2·A·S`, for the `xhat='window'` ablation."""
+    prev, inp = (F(1), F(0)), {}
+    for tag, st in cnx_eval_chain():
+        if tag.endswith('.ln'):
+            inp[tag] = prev
+        prev = st
+    return inp
+
+
+def cnx_back_chain(wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB, exh=CNX_EXH,
+                   esav=CNX_ESAV, q=U32, xhat='sqrt', gelu='sat', head_ln=True):
+    """Every stage of `convnextInputGrad` at ConvNeXt-T's shapes, folded over the LOSS
+    COTANGENT (`|p − y| ≤ 1`), at the granularity a Lean `Maps` chain composes them. The four
+    layout permutations, the per-row lift and both decimation scatters are envelope-preserving
+    and produce no entry.
+
+    `xhat='sqrt'`   : `|x̂| ≤ √n` at the CHANNEL count (`bnXhat_sq_le`, via `chanLNRows`).
+    `xhat='window'` : `|x̂| ≤ 2·A·S` from the forward's certified window at that site.
+                      ⚠ `A` is the window ARRIVING at the LN, the honest reading; r34's peer
+                      takes the site's OUTPUT window, which is another ~G·S looser.
+    `gelu='sat'`    : `|gelu′| ≤ 3/2`, the proved global constant.
+    `gelu='window'` : `floatClose_gelu`'s magnitude polynomial at the forward's pre-GELU
+                      window — CUBIC in it, the B0-swish shape (§3.12).
+    `head_ln=False` : the head-LN slot as the SHIPPED bridge instantiates it, `id`."""
+    fwd = dict(cnx_eval_chain())
+    lnin = cnx_ln_inputs()
+
+    def Xh(n, ln_tag):
+        return F(isqrt_ceil(n)) if xhat == 'sqrt' else 2 * lnin[ln_tag][0] * S
+
+    def Sge(ge_tag):
+        if gelu == 'sat':
+            return CNX_SGE
+        A = fwd[ge_tag][0]
+        return 1 + F(4, 5) / 2 * A * (1 + 3 * F(44715, 10 ** 6) * A ** 2)
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out = []
+    st = (F(1), F(0))
+    # head: linBack (fan-in 10) -> the head LayerNorm's backward -> gapBack
+    st = R(conv_back(st, 10, wk, q));                out.append(("linBack", st))
+    if head_ln:
+        st = R(ln_back(st, 768, Xh(768, 'head.ln'), G, S, es, exh, F(0), q))
+        out.append(("head.lnB", st))
+    st = R(gap_back(st, 49, q));                     out.append(("gapBack", st))
+    for entry in CNX_BACK_PLAN:
+        if entry[0] == "stage":
+            _, stag, c, ce, nblk = entry
+            for b in reversed(range(nblk)):          # blocks reverse inside the stage
+                t = f"{stag}b{b}"
+                blkin = st
+                # lsB -> convFlatBack Wpr -> geluB -> convFlatBack Wex -> lnB -> dwBack
+                s = R(diag_back(blkin, sl, F(0), q));       out.append((t + ".lsB", s))
+                s = R(conv_back(s, c, wk, q));              out.append((t + ".prB", s))
+                s = R(diag_back(s, Sge(t + '.ex'), esav, q))
+                out.append((t + ".geB", s))
+                s = R(conv_back(s, ce, wk, q));             out.append((t + ".exB", s))
+                s = R(ln_back(s, c, Xh(c, t + '.ln'), G, S, es, exh, F(0), q))
+                out.append((t + ".lnB", s))
+                s = R(conv_back(s, 7 * 7, wk, q));          out.append((t + ".dwB", s))
+                st = R(residual(blkin, s, q));              out.append((t + ".out", st))
+        else:
+            _, dtag, cin, cout = entry
+            st = R(conv_back(st, cout * 2 * 2, wk, q));     out.append((dtag + ".cB", st))
+            st = R(ln_back(st, cin, Xh(cin, dtag + '.ln'), G, S, es, exh, F(0), q))
+            out.append((dtag + ".lnB", st))
+    # stem: the stem LayerNorm's backward, then the 4×4/s4 patchify backward (fan-in 96·16)
+    st = R(ln_back(st, 96, Xh(96, 'stem.ln'), G, S, es, exh, F(0), q))
+    out.append(("stem.lnB", st))
+    st = R(conv_back(st, 96 * 4 * 4, wk, q));        out.append(("stem.cB", st))
+    return out
+
+
+def verify_cnx_back(rows, wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB,
+                    exh=CNX_EXH, esav=CNX_ESAV, q=U32, head_ln=True) -> int:
+    """Re-assert EVERY rounded inequality a `ConvNeXtBackFloatBudget.lean` would close,
+    exactly — the peer of `verify_r34_back`. Returns the count checked; raises on the first
+    failure."""
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: left > right"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2, q))
+        ck(tag + '.A', (1 + g) * (m * wk * A + 0), dst[0])
+        ck(tag + '.E', g * (m * wk * (A + E) + 0) + m * wk * E, dst[1])
+
+    def diag_ck(tag, Sd, ea, src, dst):
+        A, E = src
+        me = mulErr(q, Sd, A, ea, F(0))
+        ck(tag + '.A', Sd * A + me, dst[0])
+        ck(tag + '.E', me + Sd * E, dst[1])
+
+    def ln_ck(tag, nred, src, dst):
+        A, E = src
+        Xh = F(isqrt_ceil(nred))
+        Kr, Kb = ln_back_gain(nred, Xh, S, es, exh, q)
+        me = mulErr(q, G, A, F(0), F(0))
+        D = G * A + me
+        ck(tag + '.Kr', bnGradInputReMag(nred, F(1), F(1), S, Xh), Kr)
+        ck(tag + '.Kb', bnGradInputBudgetQ(nred, F(1), F(1), S, Xh, es, exh, q), Kb)
+        ck(tag + '.A', D * (Kr + Kb), dst[0])
+        ck(tag + '.E', D * Kb + (me + G * E) * Kr, dst[1])
+
+    conv_ck('linBack', 10, (F(1), F(0)), r['linBack'])
+    st = r['linBack']
+    if head_ln:
+        ln_ck('head.lnB', 768, st, r['head.lnB'])
+        st = r['head.lnB']
+    A, E = st
+    inv = F(1) / F(49)
+    me = mulErr(q, inv, A, F(0), F(0))
+    ck('gapBack.A', inv * A + me, r['gapBack'][0])
+    ck('gapBack.E', me + inv * E, r['gapBack'][1])
+    n += 2
+    st = r['gapBack']
+    for entry in CNX_BACK_PLAN:
+        if entry[0] == "stage":
+            _, stag, c, ce, nblk = entry
+            for b in reversed(range(nblk)):
+                t = f"{stag}b{b}"
+                blkin = st
+                diag_ck(t + '.lsB', sl, F(0), blkin, r[t + '.lsB'])
+                conv_ck(t + '.prB', c, r[t + '.lsB'], r[t + '.prB'])
+                diag_ck(t + '.geB', CNX_SGE, esav, r[t + '.prB'], r[t + '.geB'])
+                conv_ck(t + '.exB', ce, r[t + '.geB'], r[t + '.exB'])
+                ln_ck(t + '.lnB', c, r[t + '.exB'], r[t + '.lnB'])
+                conv_ck(t + '.dwB', 7 * 7, r[t + '.lnB'], r[t + '.dwB'])
+                Bd, Ed = r[t + '.dwB']
+                ck(t + '.out.A', Bd + blkin[0] + q * (Bd + blkin[0]), r[t + '.out'][0])
+                ck(t + '.out.E', q * (Bd + Ed + blkin[0] + blkin[1]) + (Ed + blkin[1]),
+                   r[t + '.out'][1])
+                st = r[t + '.out']
+        else:
+            _, dtag, cin, cout = entry
+            conv_ck(dtag + '.cB', cout * 2 * 2, st, r[dtag + '.cB'])
+            ln_ck(dtag + '.lnB', cin, r[dtag + '.cB'], r[dtag + '.lnB'])
+            st = r[dtag + '.lnB']
+    ln_ck('stem.lnB', 96, st, r['stem.lnB'])
+    conv_ck('stem.cB', 96 * 4 * 4, r['stem.lnB'], r['stem.cB'])
+    return n
+
+
 def sci(x: F) -> str:
     """4-significant-figure scientific form for a rational the size of a whole-net window."""
     if x == 0:
@@ -2007,3 +2262,46 @@ if __name__ == "__main__":
     print("     straight from e^t ≥ 1+t ≥ t — so |swish′| = |σ + x·σ′| ≤ 2 with")
     print("     `Real.add_one_le_exp` and no MVT, no sup, no derivative analysis. (The sharp")
     print("     1.0998 does need the sup; the table above says nobody needs it.)")
+
+    print("\n── ConvNeXt-T BACKWARD sizing probe: does a LAYERNORM net's backward FOLD? (§3.15) ──")
+    crows = cnx_back_chain(S=F(16))
+    cA, cE = crows[-1][1]
+    print(f"  SHIPPED SHAPE: {len(crows)} stages, |istd| <= 16")
+    print(f"    window        {sci(cA)}")
+    print(f"    budget        {sci(cE)}")
+    print(f"    budget/window {float(cE / cA):.4f}   ⭐⭐ a FOLD — and this net's FORWARD is a "
+          f"2.00 CAP")
+    print(f"    re-assertions {verify_cnx_back(crows, S=F(16))} — every rounded inequality "
+          f"re-checked exactly")
+    print(f"    statable      YES, by 1e{253 - max(ilog10(cA), ilog10(cE))} — the tightest "
+          f"margin of the four backwards")
+    print(f"\n  {'variant':<50} {'window':>12} {'budget':>12} {'ratio':>7}  statable")
+    print("  " + "-" * 94)
+    for name, kw in [
+        ("⭐ shipped: |istd| ≤ 16, per-kind, x̂ ≤ √C, gelu 3/2", dict(S=F(16))),
+        ("the unconditional ε-floor S = 317", {}),
+        ("variance floor 1e-3 (S = 32)", dict(S=F(32))),
+        ("variance floor 1e-1 (S = 4)", dict(S=F(4))),
+        ("σ² ≈ 1 (S = 1)", dict(S=F(1))),
+        ("uniform 84/10 (the layer scale) at S = 16", dict(S=F(16), wk=F(84, 10))),
+        ("x̂ from the forward WINDOW (2·A·S)", dict(S=F(16), xhat='window')),
+        ("GELU cubic polynomial (no saturation constant)", dict(S=F(16), gelu='window')),
+        ("⛔ head-LN slot = id (what the SHIPPED bridge says)", dict(S=F(16), head_ln=False)),
+    ]:
+        rr = cnx_back_chain(**kw)
+        a, e = rr[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'NO'
+        print(f"  {name:<50} {sci(a):>12} {sci(e):>12} {float(e / a):>7.4f}  {ok}")
+    print("\n  ⭐⭐ THE ANSWER IS YES. Ratio 0.15, no `capped` anywhere — the repo's FIRST honest")
+    print("     whole-net fold for a LayerNorm net, and it is at the net whose FORWARD number is")
+    print("     the triangle inequality. §0.1's quadratic is a FORWARD fact; a VJP reads its")
+    print("     statistics off the saved activations, which the cotangent does not perturb.")
+    print("  ⭐⭐ GELU's `3/2` IS LOAD-BEARING — 6081 orders, the exact shape of B0's swish")
+    print("     blocker (§3.12) — and `geluScalarDeriv_abs_le` was already in the repo. §3.3.0(b)")
+    print("     for the seventh time: grep the whole cone, not the files named after your net.")
+    print("  ⭐ The per-kind profile split is worth 68 orders here, against r34's 8 and mnv2's 4,")
+    print("     and it is what makes the theorem exist (§3.3(a) predicted exactly this).")
+    print("  ⛔ `bnXhat_sq_le` decisive for the FOURTH net: 1e5236 without it.")
+    print("  ⛔⛔ AND THE SHIPPED BRIDGE HAS `id` IN ITS HEAD-LAYERNORM SLOT —")
+    print("     `convnextCh_grad_floatBridges` reverses a net with no head LN, the same slot")
+    print("     §3.3(b) fixed on the FORWARD on 2026-09-03. Drift, fifth time.")

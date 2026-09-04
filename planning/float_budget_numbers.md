@@ -16,8 +16,8 @@ three hypotheses (§3.7 step 4) — the wall relocates rather than vanishing.
 ⭐ **Two whole-net BACKWARD numbers now, and the second needs no operating point** —
 MobileNetV2's, 4.750·10¹⁵³ / 1.076·10¹⁵² (§3.13, 2026-09-04). **§3.8's THREE items are ALL DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
 (**§3.9**) and r34's whole-net certified tie (**§3.10**), both 2026-09-03, and the CIFAR-8
-`Env → Maps` coherence pass (**§3.11**, 2026-09-04). What is open is now §3.9's "what to do
-next" list, which starts at one unproved scalar lemma. Three sentences of §3.8: a
+`Env → Maps` coherence pass (**§3.11**, 2026-09-04).
+Three sentences of §3.8: a
 backward is *always* a fold (squeeze-excite included, so §0.1's list of quadratic sites is a
 forward-only list); MobileNetV2's backward is statable with **no operating-point hypothesis at
 all**, unlike ResNet-34's; and EfficientNet-B0's was a fold that could not be written down,
@@ -25,6 +25,17 @@ blocked by ONE unproved scalar lemma — a *global* bound on `|swish′|`, which
 calculus and is three elementary steps. ✅ **That lemma landed 2026-09-04**
 (`swishScalarDeriv_abs_le`, `Architectures/SwishSaturation.lean`), and B0's backward fold is now
 **7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** — statable, from 10⁴³¹. §3.12.
+
+⭐⭐ **And §3.15's probe has been RUN: a LayerNorm net's BACKWARD folds.** ConvNeXt-T's is
+5.766·10²⁴⁹ / 8.791·10²⁴⁸, ratio 0.15, no cap anywhere — **the repo's first honest whole-net fold
+for a LayerNorm net**, at the net whose FORWARD number is a `2.00` cap (**§3.16**, 2026-09-04).
+⛔ Read finding 1 with the number: because that forward is a cap, the fold is real and the
+forward-then-backward composition it looks like it supports **does not exist** — §9 has the new
+row. ⛔⛔ The probe also turned up the fifth instance of `imagenet_specs_drift_from_twins`: the
+shipped ConvNeXt BACKWARD bridge held `id` in its head-LayerNorm slot — the same slot §3.3(b)
+fixed on the FORWARD on 2026-09-03 — **and its docstring justified it with a LayerNorm count that
+had gone stale**. ✅ Fixed the same day; it needed no new leaves. ⭐ **What is open is now §4**,
+headed by `ConvNeXtBackFloatBudget.lean`.
 
 Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
 (⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
@@ -1552,6 +1563,338 @@ hypotheses. ⚠ And `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`) is
 theorem and must not be confused with it: that one is over `MNV2PaperWeights`, the 17-block paper
 net, where `mnv2InputGrad` reverses the ch7 6-block render.
 
+### 3.15 ⭐⭐ THE NEXT PROBE: a BACKWARD number for a LAYERNORM net — scoped 2026-09-04,
+✅ **RUN THE SAME DAY: it folds. 5.766·10²⁴⁹ / 8.791·10²⁴⁸, ratio 0.15 — §3.16.** Everything
+below is the scoping as written before the probe ran; all four of its predictions held (the
+reduction width, the GELU bound, the profile split, and ViT's cone), and it missed one thing —
+the head-LN slot (§3.16 finding 6)
+
+**The question nobody in this file has asked.** §0.1 says LayerNorm's forward is quadratic in the
+window with no eval mode to escape to, so ConvNeXt-T's and ViT-Tiny's numbers are `2.00` **caps**
+(§9) and there is no honest whole-net fold for a LayerNorm net anywhere in the repo. §3.9 finding 1
+says **every backward folds** — a VJP is linear at a fixed point. Put those together and the
+obvious question is whether **a LayerNorm net's BACKWARD is the first honest fold for one**. It has
+never been probed: there is no `cnx_back_chain` or `vit_back_chain` in
+`scripts/float_budget_envelope.py`, and no section of this file mentions the possibility.
+
+⭐ **Start with the probe, not the Lean** (§3.8), and start with **ConvNeXt, not ViT** (below).
+
+**What was verified today, so the probe does not re-derive it.**
+
+1. ⭐⭐ **ConvNeXt's channel-LayerNorm BACKWARD is BatchNorm's backward at a different row
+   decomposition, and `bnXhat_sq_le` already covers it.** `convnextCh_grad_floatBridgesTo`
+   (`ConvNeXtBackFloatBridge.lean`) states its stem LN-back's hypotheses through **`bnIstd`** and
+   **`bnXhat`** at `Mat.unflatten (chanLNRows 96 56 56 xstem) r` — literally the same two
+   quantities `R34BnBack` carries, conjugated by `chanLNRows` instead of `reassocFwd`. ⛔ **So the
+   gap you would predict — "there is no `lnXhat_sq_le`" — does not exist.** §3.7's ⭐⭐
+   load-bearing lemma applies verbatim, with the reduction width the CHANNEL count. §3.3.0(b)'s
+   rule for the sixth time: the bound was already there, under the other net's name.
+2. ⭐ **GELU's global derivative bound is already proved.** `geluScalarDeriv_abs_le : |gelu′| ≤ 3/2`
+   (`Architectures/GeluSaturation.lean`) — the analogue of the swish lemma that blocked B0's
+   backward for a month (§3.12) is in the repo for these nets *before* anyone needs it.
+3. ⭐ **The softmax backward's saved quantity is bounded by `1`, unconditionally.**
+   `floatClose_softmaxBack` (`SoftmaxBackFloatBridge.lean`) is stated at `|p| ≤ P` and instantiates
+   at `P = 1` for softmax, because a softmax row IS a probability vector. So §3.7's relocated
+   question — *which saved activations does the backward scale by, and is each bounded by something
+   other than the forward's window?* — is answered favourably for attention before it is asked,
+   which is the opposite of B0's `swish′(saved)` and `x`.
+4. ⚠ **The two nets are NOT in the same state, and this decides the order.** ConvNeXt's cone is
+   closed down to the stem LN — `convnextCh_grad_floatBridgesTo` takes only the four stages and
+   three downsamples abstractly, exactly the state r34's was in before §3.7 and mnv2's before
+   §3.13. ViT's `vit_grad_floatBridgesTo` (`MhsaBackFloatBridge.lean`) takes the **final LN, the
+   whole block LIST, and the patch embed** as supplied bridges — a tier up. ⛔ Expect §3.5.1's
+   surprise to repeat there (*"the cone is at the `∃` tier essentially everywhere, and that is the
+   bulk of the work"*); check it before costing ViT.
+
+**What the probe must measure.**
+
+* The fold for `convnextInputGrad` at ConvNeXt-T's shapes over the loss cotangent, at the
+  granularity a `Maps` chain composes — the `r34_back_chain` / `mnv2_back_chain` mould, reusing
+  `bn_back` for every LN site at `n = C` and `Xh = √C`.
+  ⚠ **The reduction width is the CHANNEL count (96/192/384/768), where r34's and mnv2's is `h·w`
+  (49…12544).** `bnGradInputReMag` is `S·G·Cdy·(2 + Xh²)` and `Xh² = n`, so a site's real gain is
+  `S·G·(n+2)`: ConvNeXt's per-site gain is far smaller than r34's, and it has 23 LN sites against
+  r34's 33 BN sites. ⛔ **That is arithmetic, not a prediction — the fold is NOT computed here, on
+  purpose.** §3.9's rule: a number written down beside a bound and not re-derived is what stops
+  anyone checking it.
+* Whether it lands under §3.7(a)'s **~10²⁵³** shape-dependent `norm_num` ceiling, and whether it
+  needs an operating point. §3.13's rule: *an operating-point hypothesis is not a property of
+  backwards, it is what you pay when the ε-floor fold does not fit.*
+* The ablations this file always wants: `x̂` from `bnXhat_sq_le` vs from the forward's window
+  (decisive three times — §3.9 finding 4), the per-kind profile split (⚠ ConvNeXt's kinds are
+  **14× apart** and the outlier is the LAYER SCALE, §3.3(a) — expect it to matter more here than
+  on any other net), and GELU's `3/2` against the cubic polynomial.
+* ⭐ For ViT, the **`exp_tainted` instrument is mandatory** (§3.5, §0.1): a Python fold hides a
+  `Real.exp` at an unbounded argument, and "statable" is `max(exponent) < 253` **AND** no taint.
+
+**⭐⭐ And the genuinely new question, which is not about size.** On r34 and mnv2 the caveat is that
+`es`/`exh` — the saved float activations' accuracies — are quantities *the forward's own
+training-mode fold cannot discharge* (§0.1's 10⁷⁴¹⁷). For ConvNeXt and ViT the forward has **no
+fold at all**: its number is the triangle inequality, and it never claimed a rounding bound to
+begin with. So a LayerNorm net's backward number would be an honest fold composed against a
+forward that is a *cap*. ⛔ **Decide what that statement means before quoting one**, and write the
+answer into §9 — it is a new row in the "what to say about the numbers" table, not a footnote.
+
+### 3.16 ⭐⭐ A LAYERNORM NET'S BACKWARD FOLDS (2026-09-04) — §3.15's probe, run
+
+`cnx_back_chain` / `verify_cnx_back` (`scripts/float_budget_envelope.py`, 137 stages, 322
+re-assertions) fold `convnextInputGrad` (`ConvNeXtBackFloatBridge.lean`) at ConvNeXt-T's shapes
+over the loss cotangent, in the leaves' own semantics. No Lean was written.
+
+    window ≤ 5.766·10²⁴⁹      budget ≤ 8.791·10²⁴⁸      budget/window = 0.15
+    at the operating point |istd| ≤ 16; 322 re-assertions
+
+**⭐⭐ The answer is YES.** Ratio 0.15, no `capped` anywhere — **the repo's first honest whole-net
+fold for a LayerNorm net**, at the net whose FORWARD number is a 2.00 cap. §0.1's quadratic is a
+forward fact and §3.9's finding 1 now holds at the fourth net and the third normalisation: a VJP
+reads its statistics off the saved activations, which the cotangent does not perturb.
+
+| variant | window | budget | ratio | statable |
+|---|---|---|---|---|
+| **shipped shape: `\|istd\| ≤ 16`, per-kind profile, `x̂ ≤ √C`, GELU `3/2`** | **5.766·10²⁴⁹** | **8.791·10²⁴⁸** | 0.153 | **yes** |
+| the unconditional ε-floor `S = 317` | 3.833·10²⁷⁹ | 5.394·10²⁷⁸ | 0.141 | ⛔ no |
+| variance floor 10⁻³ (`S = 32`) | 4.795·10²⁵⁶ | 7.012·10²⁵⁵ | 0.146 | ⛔ no |
+| variance floor 10⁻¹ (`S = 4`) | 8.520·10²³⁵ | 1.607·10²³⁵ | 0.189 | yes |
+| `σ² ≈ 1` (`S = 1`) | 1.438·10²²² | 4.551·10²²¹ | 0.317 | yes |
+| uniform `84/10` param bound, at `S = 16` | 2.406·10³¹⁷ | 3.663·10³¹⁶ | 0.152 | ⛔ no |
+| `x̂` from the forward WINDOW (`2·A·S`) | 1.472·10⁵¹⁴⁷ | 1.889·10⁵¹⁴⁶ | 0.128 | ⛔ no |
+| **GELU's cubic polynomial (no saturation constant)** | 3.769·10⁶³³⁰ | 1.685·10⁶³²⁹ | 0.045 | ⛔ **no** |
+| ⛔ head-LN slot `id` — **what the SHIPPED bridge says** | 9.549·10²⁴⁴ | 1.444·10²⁴⁴ | 0.151 | yes |
+
+**⭐⭐ Finding 1 — the genuinely new question §3.15 asked, and the answer it needs before anyone
+quotes this number.** On r34 and mnv2 the caveat is that `es`/`exh` — the saved float activations'
+accuracies, taken at `10⁻²` — are quantities the forward's own training-mode fold cannot discharge
+(§0.1's 10⁷⁴¹⁷). ConvNeXt's forward supplies something **different in kind, not merely in size**:
+its certified statement is `FloatBridgesTo.capped`, whose modulus is `2·mag` *by construction*, so
+the activation accuracy it implies is `2 × window ≈ 10²²⁷` and no tightening of the profile or the
+operating point moves it below that. On r34 the gap between hypothesis and forward is quantitative
+and the forward has an inference mode where its statement IS a fold; ConvNeXt has no such mode,
+because LayerNorm has no statistics to freeze (§0.1). **So say it this way: the ConvNeXt backward
+number is an honest fold of the BACKWARD kernel's rounding, at a hypothesised operating point,
+given saved-activation accuracies that this net's forward cannot supply in any mode.** It is not,
+and cannot be assembled into, a statement about a deployed forward-then-backward composition.
+⭐ That sharpens §3.7's closing line — *the wall is not a fact about backwards, it is a fact about
+composing a backward with the forward that feeds it* — with the case where the composition is
+blocked by the forward's KIND rather than its magnitude. §9 has the new row.
+
+**⭐ Finding 2 — it pays an operating point, and it has the tightest margin of the four
+backwards.** At the ε-floor it is 10²⁷⁹; `|istd| ≤ 16` buys 30 orders and lands 10²⁴⁹, **four
+orders under §3.7(a)'s ~10²⁵³ shape-dependent ceiling** — where r34's is eight and MobileNetV2's
+pays nothing at all. §3.13's rule for the third time: *an operating-point hypothesis is not a
+property of backwards, it is what you pay when the ε-floor fold does not fit.* ⚠ Four orders is
+close enough that a Lean file should be written against `S = 8` (11 orders) or `S = 4` (18) if
+`norm_num` balks at the shape; the headroom sweep is in the probe.
+
+**⭐⭐ Finding 3 — GELU's global derivative bound is LOAD-BEARING, and it is worth 6081 orders.**
+`geluScalarDeriv_abs_le : |gelu′| ≤ 3/2` (`Architectures/GeluSaturation.lean`) is what the 18
+`geluB = diagBack (gelu'(saved))` slots take; `floatClose_gelu`'s magnitude polynomial — cubic in
+the forward's pre-GELU window — puts the same fold at 10⁶³³⁰. **This is B0's swish blocker exactly
+(§3.12), one net over, with the opposite ending: the lemma was already in the repo, written for
+ConvNeXt's FORWARD, where §3.3 measured it as *not* load-bearing.** ⭐ §3.15 item 2 predicted this
+before the probe ran, and the pair is the sharpest statement of §3.3.0(b) yet: *a bound that is
+free and not load-bearing on the forward can be the whole theorem on the backward.* Do not retire
+a saturation constant because a forward ablation says it buys nothing.
+
+**⭐ Finding 4 — the per-kind profile split is worth 68 orders, by far the largest of any net.**
+r34's is 8, MobileNetV2's 4, B0's under 1; here the uniform `84/10` — ConvNeXt's layer scale, 14×
+the conv kernels (§3.3(a)) — is 10³¹⁷ against the split's 10²⁴⁹, and it is the difference between
+a theorem and none. §3.15 expected this and the reason is the same as the forward's: the outlier
+kind multiplies *inside* every block, so every conv fan-in in the chain pays for it.
+
+**⚠ Finding 5 — `bnXhat_sq_le` is decisive for the FOURTH net.** 10⁵¹⁴⁷ from the forward's window,
+10²⁴⁹ from `|x̂| ≤ √n`. ⭐ And it needed nothing new: `convnextCh_grad_floatBridges` already states
+its LN-back hypotheses through `bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r)` and
+`bnXhat 96 …` — r34's two quantities under a different conjugation — so the lemma applies verbatim
+at reduction width `C`. ⚠ `√C` is irrational for all four of 96/192/384/768, so the Lean leaf needs
+`bnXhat_abs_le_num` at the CEILING root (10/14/20/28), not the exact one r34's square feature maps
+gave for free.
+
+**⛔⛔ Finding 6 — THE SHIPPED BACKWARD BRIDGE HOLDS `id` IN ITS HEAD-LAYERNORM SLOT.**
+`convnextCh_grad_floatBridges` and `convnextCh_grad_floatBridgesTo` both instantiate
+`convnextInputGrad`'s `lnBhead` at `id` — and say so in the docstring, *"and the head slot `id`"*,
+as though it were a choice. The committed forward `convNextForwardTCh` has carried
+`rowLNVecFlat 1 768 w.hε w.hγ w.hβ` since 2026-08-30, and **§3.3(b) fixed this exact slot on the
+FORWARD bridge on 2026-09-03 and did not look at the backward.** So the shipped backward bridge is
+the reverse of a net the repo does not train. ⚠ `imagenet_specs_drift_from_twins` for the FIFTH
+time in this file, and the second time (§3.10's 2×2 pool was the first) that it is the BACKWARD
+that drifted while the forward was right. ⭐ Note what found it: not a review of the backward, but
+needing its number — the same trigger every time. Worth 6 orders (10²⁴⁴ → 10²⁴⁹), which is the
+least interesting thing about it.
+
+⭐⭐ **And the docstring said WHY, which is what makes this instructive rather than just a bug:**
+*"the head LN back becomes the identity — the reference's 22 LN sites are 1 stem + 18 block + 3
+downsample, so there is no head LN to reverse."* **That count is a fossil.** It was true of the
+pre-2026-08-30 net; the FORWARD bridge's docstring two files over says **23**. So the slot was not
+an oversight — it was a *justified* choice, correctly derived from a number that had since changed,
+and the justification is what stopped anyone re-checking it. ⛔ **That is §3.9's swish lesson in a
+second guise: a cost estimate written next to a bound reads as a finding, and so does a COUNT
+written next to a slot.** When a docstring justifies an `id`, check the count.
+
+✅ **FIXED 2026-09-04** (`ConvNeXtBackFloatBridge.lean`). Both tiers —
+`convnextCh_grad_floatBridges` and `convnextCh_grad_floatBridgesTo` — now take
+`rowLNVecFlatBack 1 768 εh γh xhead` and its float peer `rowLNVecFlatBackF`, discharged by
+`floatBridges_rowLNVecFlatBack` / `floatBridgesTo_rowLNVecFlatBack`. ⭐ **It cost no new
+mathematics: every piece already existed**, written for the channel LN's own conjugation
+(`chanLNTensor3Back` IS `rowLNVecFlatBack` between two permutations), so the fix is six hypotheses
+and a slot — §3.3.0(b) for the eighth time. ⚠ The head carries its own `Xhh` (`√768` rounds to 28
+where the stem's `√96` rounds to 10) but shares the profile's `Gd`/`egam`/`S`/`es`/`exh`, which is
+the factoring a budget file wants: γ bound, float accuracies and operating point are net-level,
+`Xh` is per-site. `lake build Proofs Certs` 3948 jobs, `AuditAxioms` exit 0, both theorems on
+`[propext, Classical.choice, Quot.sound]`, `docstring-checkrefs` and `check_audit_coverage` clean.
+
+**⚠ Finding 7 — ViT's backward cone is where §3.15 said, so ConvNeXt-first was the right order.**
+`vit_grad_floatBridgesTo` (`MhsaBackFloatBridge.lean`) takes the final LN, the whole block LIST
+(`FloatBridgesToList`) and the patch embed as supplied bridges, and the block-level facts under it
+— `floatBridges_vitBlockBack`, `_mhsaBack`, `_coreQ/K/V`, `floatBridges_patchEmbedBack` — are all
+at the `∃` tier, with no `FloatBridgesTo` peers but the structural `id` / `towerBack` /
+`clsScatter`. §3.5.1's surprise repeats verbatim: **the migration is the bulk of ViT's backward
+work**, and it is not visible from the whole-net file.
+
+**What to do next, in order.**
+1. ✅ **Fix the head-LN slot — DONE 2026-09-04** (finding 6). Both tiers take the real
+   `rowLNVecFlatBack 1 768` and its float peer; no new leaves were needed, and the whole cone
+   rebuilt in 1.7 s.
+2. ✅ **The `Maps` KIT — DONE 2026-09-04 (`FloatBudgetEnvBackLN.lean`, §3.17).** ⛔ **And the
+   costing above was wrong twice.** It said "nothing new in kind"; there was one genuinely new
+   leaf, and the block bridges the budget file composes did not exist at the `FloatBridgesTo`
+   tier at all. §3.17.
+3. **`ConvNeXtBackFloatBudget.lean`** — the number. Everything it needs now exists and is
+   exercised; what is left is assembly on the `Resnet34BackFloatBudget.lean` recipe (records,
+   `cnxGradR`/`cnxGradF`/`cnxGradBridge` grouped exactly as `convnextInputGrad` groups, the 137-stage
+   `Maps` chain, the apex). ⭐ State it at `S = 16`: the ceiling probe below says the shape closes.
+4. **The whole-net certified tie**, with §3.14's shape `rfl` from the start.
+
+### 3.17 ✅ The `Maps` kit for a LAYERNORM net's BACKWARD (2026-09-04) — and two costings that were wrong
+
+`FloatBudgetEnvBackLN.lean` (330 lines, **7.5 s**), the third backward net's kit beside
+`FloatBudgetEnvBack.lean`'s (r34) and `FloatBudgetEnvBackMBConv.lean`'s (MobileNetV2). With it the
+ConvNeXt-T backward cone is closed at the `Maps` tier: everything
+`ConvNeXtBackFloatBudget.lean` needs exists and is exercised.
+
+**⛔ §3.16 costed this as "nothing new in kind" and was wrong twice.**
+
+**⭐⭐ Wrong once: there IS a new leaf, and reusing `Maps.bnPerChannelBackGain` at `n = C` would
+have been a silent numeral error.** `floatBridgesTo_rowLNVecFlatBack` does not carry γ inside the
+gain the way the BN backward does — it runs `bn_grad_input` with `|(1:ℝ)|` in its `G` slot and
+folds the γ scale in FRONT of it as a separate `diagBack`, so the γ multiply is a rounded stage of
+its own and its `mulErr` enters the fold:
+
+    D    = Gd·Ā + mulErr q Gd Ā egam 0            — the diagBack's output window
+    mag  = D·(Kr + Kb)
+    mod  = D·Kb + (mulErr q Gd Ā egam 0 + Gd·Ē)·Kr
+
+with `Kr`/`Kb` the per-unit gains at **unit γ**. ⚠ The probe had folded it as `bn_back` at `n = c`,
+`G = γ` — the same leading term, ~0.2 % apart per site — so the NUMBER barely moved (5.766·10²⁴⁹
+window unchanged at four figures, budget 8.791 → 8.790·10²⁴⁸). **But the kernel checks the leaf's
+arithmetic, not the leading term**, and a chain folded at the wrong shape emits stage numerals the
+kernel then rejects. §0's ⚠ — *the fold must assert exactly what the proof asserts* — reaches one
+level deeper than "use the rounded γ": ⭐ **read the leaf's `mag`/`mod` before folding it, even
+when a peer leaf with the same name-shape exists.**
+⭐ The homogeneity still pays, and pays MORE here than on r34: ConvNeXt-T has 23 LN sites but only
+**four** distinct reduction widths (96/192/384/768), so four `hKr`/`hKb` pairs serve the whole net.
+
+**⛔⛔ Wrong twice: the block bridges the budget file composes did not exist at the
+`FloatBridgesTo` tier.** `ConvNeXtBackFloatBridge.lean` had `floatBridges_cnxBlockBodyBack`,
+`_cnxBlockBack` and `_cnxDownBack` — all `∃`-tier — and a budget file cannot use those: `FloatBridges`
+discards the float map and a `Maps` envelope has to name one. **That is §3.5.1's surprise, one net
+over and on the backward** (*"the cone is at the `∃` tier essentially everywhere, and that is the
+bulk of the work"*), and §3.16 finding 7 had flagged it for ViT while missing it for the net it was
+about to build. ⭐ The rule to carry: **when scoping a budget file, grep the cone for
+`floatBridgesTo_` — not for the defs, which exist either way.** Three defs, three float skeletons,
+~80 lines, and all three compiled first try.
+
+**What landed.**
+
+| piece | what it is |
+|---|---|
+| `Maps.rowLNVecFlatBack` | ⭐⭐ the new leaf, in per-unit-gain form; both monotonicity branches |
+| `Maps.chanLNTensor3Back` | that leaf between the four exact layout gathers — the forward's `Maps.chanLNTensor3` shape |
+| `Maps.decimateOddBack` / `Maps.flatConvStride4Back` | the 4×4/s4 patchify backward: `Maps.convBack` after two exact scatters |
+| `Maps.cnxBlockBodyBack` | the six-stage body envelope; the skip is the caller's (`Maps.residual`), as MobileNetV2's is |
+| `Maps.cnxDownBack` | strided-conv backward then the LN back at the INPUT resolution |
+| `cnxBlockBodyBackF` / `cnxDownBackF` + three `floatBridgesTo_*` | the tier migration |
+
+⭐ **And the block is EXERCISED, not just written.** The file closes ConvNeXt-T's `s4b2` — the
+first block the cotangent meets, `c = 768`, `cExp = 3072`, 7×7 — as a compiled `example` at
+`cnx_back_chain`'s numerals: in `(7407, 1.025·10¹)`, out `(1.421·10¹⁴, 1.365·10¹²)`, with the real
+`floatBridgesTo_chanLNTensor3Back` in the LN slot and both `diagBack`s (layer scale at `es = 0`,
+saved `gelu′` at `10⁻²`) in theirs. §5's rule, and simultaneously the check that the generator's
+arithmetic IS these lemmas' — which is what caught the leaf-shape error above.
+
+**⭐⭐ And the four-orders worry in §3.16 finding 2 was unfounded — measured, not assumed.**
+Before writing a line of the budget file, the largest goals the chain will assert were emitted at
+both `S = 16` and `S = 8` and thrown at `norm_num`: the stem's `convBack` at 10²⁴⁹, the stem LN
+gain, the deepest residual, the 49- and 384-fan-in convs. **All close, both values, 2.8 s total.**
+§3.7(a)'s ceiling is shape-dependent, and the shape that hit it was a NESTED tree
+(`317/12544 * (12544 * (21/10 * ⋯))`) — which `Maps.bnPerChannelBackGain`'s factoring already
+flattens, and `Maps.rowLNVecFlatBack` inherits. ⭐ **So state ConvNeXt's number at `S = 16` and do
+not overpay the hypothesis.** The general lesson: §3.7(a) says the ceiling depends on the operation
+tree, so **probe the tree** — a ten-line file and three minutes, against choosing a stronger
+hypothesis for the rest of the theorem's life.
+
+**Process.** `lake build Proofs Certs` 3949 jobs; `AuditAxioms` exit 0 with all twelve new
+declarations on `[propext, Classical.choice, Quot.sound]`; `docstring-checkrefs` 1454 citations;
+`check_audit_coverage` 204 imports. The module is a lakefile `Proofs` root (nothing imports it
+until the budget file does — the `render guard on a new artifact` failure mode, one tier over).
+
+## 4. What is open (2026-09-04)
+
+§3.8's three items are all closed, so this is its successor. Ordered by what I would do next.
+
+**1. ✅ Probe a LAYERNORM net's BACKWARD — DONE 2026-09-04. See §3.16.** It folds:
+5.766·10²⁴⁹ / 8.791·10²⁴⁸ at `|istd| ≤ 16`, ratio 0.15, no cap anywhere — the repo's first honest
+whole-net fold for a LayerNorm net. What it opened is below.
+
+**2. ✅ Fix ConvNeXt's head-LayerNorm BACKWARD slot — DONE 2026-09-04, §3.16 finding 6.** Both
+tiers now take `rowLNVecFlatBack 1 768` and `rowLNVecFlatBackF`; every piece already existed, and
+the `id` was justified in its own docstring by a LayerNorm count that had gone stale.
+
+**3. ✅ The `Maps` kit for a LayerNorm net's backward — DONE 2026-09-04, §3.17.**
+`FloatBudgetEnvBackLN.lean`: `Maps.rowLNVecFlatBack` (the one new leaf), the channel-LN
+conjugation, the patchify backward, the block-body and downsample envelopes, plus the
+`FloatBridgesTo` migration of the three ConvNeXt backward block defs — and ConvNeXt-T's block
+`s4b2` closed as a compiled `example` at the probe's numerals.
+
+**4. ⭐ `ConvNeXtBackFloatBudget.lean` — the next thing to build.** §3.16's number, `S = 16`
+(⭐ the ceiling probe in §3.17 says the shape closes; the four-orders worry was unfounded).
+Everything it needs exists and is exercised; what is left is assembly on the
+`Resnet34BackFloatBudget.lean` recipe.
+
+**5. EfficientNet-B0's backward budget file** — §3.9's "what to do next" item 3.
+The blocker is gone (§3.12's `|swish′| ≤ 2`), the fold is **7.640·10¹⁶⁹ / 1.735·10¹⁶⁹** and
+statable. Needs `Maps.diagBack`, `Maps.broadcastBack` and the `Maps.seBack` composite (`biPathSum`
+of two `.comp` chains — no new combinator), plus four supplied saved-vector accuracies where r34
+has two. ⚠ `batchMap` never enters a numeral, so the number holds at any `N`.
+
+**6. B0's whole-net certified tie** — the §3.14 analogue, and §1's criterion (ii) for that net. Not
+scoped; scope it the way §3.14 was, by reading the cone rather than guessing.
+
+**7. ⭐ `resnet34Forward_full_pc_eq_chain`** — §3.14's own recommendation.
+`Resnet34BackCertifiedTie.lean` has no shape check: its apex's subject is a chain of VARIABLES and
+nothing in the theorem says which net they are. That is precisely how §3.10's wrong pool survived a
+month. Cheap, and it closes the hole that already bit once.
+
+**Priced, deliberately NOT taken** (each is a decision, not an oversight):
+
+* **`swishScalar_lipschitz` into `floatClose_swish`** — 8 orders on B0's FORWARD
+  (8.408·10²¹⁰ → 3.679·10²⁰²), window unchanged. Moves a committed number; §3.12, §7's one-commit-
+  per-net rule. Do it when B0's forward is next opened.
+* **`floatClose_broadcastBack`'s spurious factor of `c`** — 6 orders on B0's backward, cheap, blocks
+  nothing (§3.9 finding 7).
+* **The `FloatBudgetEnvCore` split** — cone hygiene, zero mathematical gain (§3.11).
+
+**Flagged rather than scheduled.** §0.1's escape 2 — *a genuinely linear bound needs the NORMALISED
+output's Lipschitz constant, not the pre-normalisation one* — is still open for the FORWARDS, and is
+still "real work and probably the interesting result". Every forward number in §0's table is vacuous
+by hundreds of orders and this is the only item that would change that. ⭐ The backward's
+operating-point `S` is the worked precedent for what such a bound is worth: ~43 orders across 33 BN
+sites, and the difference between a number that exists and one that does not (§3.7 step 4(b)).
+
+**Stated as missing, still missing.** `efficientnetForwardBEval N = batchMap N (per-example
+forward)` — the whole-net form of "at inference the batch decouples". Only the per-SITE claim is
+proved (`den_batchOp_bnEval`); it needs a `batchMap` composition lemma plus a per-example B0 def as
+the witness (§3.4).
+
 ## 5. The `Maps` kit — ✅ complete for all six forwards, and for r34's backward
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
@@ -1683,6 +2026,17 @@ capped for SIZE (uncapped, 10³²³⁹), attention for REPRESENTABILITY — its 
 a `Real.exp` at an argument with no rational bound, so 36 stage numerals cannot be written at
 all, at a magnitude *smaller* than the shipped one. "Too big" and "not writable" are different
 failures and the second is invisible to a Python fold.
+
+⭐⭐ **AND SAY WHAT A FOLD COMPOSED AGAINST A CAPPED FORWARD IS** — the ConvNeXt backward's row,
+new 2026-09-04 (§3.16 finding 1). r34's and mnv2's backward numbers hypothesise `es`/`exh` = 10⁻² on
+the saved float activations, which their own training-mode forward fold cannot discharge (10⁷⁴¹⁷) —
+a quantitative gap, and both nets have an inference mode where the forward IS a fold. ConvNeXt has
+neither: its forward statement is `capped`, whose modulus is `2·mag` by construction, so the
+activation accuracy it supplies is `2 × window ≈ 10²²⁷` and nothing moves it below that; and there
+is no eval-mode LayerNorm to switch to. So the number is *an honest fold of the backward kernel's
+rounding, at a hypothesised operating point, given saved-activation accuracies this net's forward
+cannot supply in any mode* — never "the deployed ConvNeXt gradient is within this of the certified
+one end to end". The fold is real and the composition does not exist; say both halves.
 
 ⭐ Say the WINDOW and the BUDGET separately — after MobileNetV2 they are not the same story.
 A clamped-activation net can have a tight window and a vacuous budget at the same time, and

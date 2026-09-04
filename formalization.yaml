@@ -742,6 +742,17 @@ fidelity:
              four days. Both now take the real head LN and its bridge. Fixing it is also what made
              the cap sufficient on its own: with `id` in the slot the last block's GELU is never
              capped again and the fold needs the saturation constant too (1e896 vs 1e230).
+             ⛔ THE BACKWARD PAIR HAD THE SAME SLOT AND WAS NOT FIXED WITH THEM (2026-09-04):
+             `convnextCh_grad_floatBridges{,To}` held `id` in `convnextInputGrad`'s lnBhead, and
+             its docstring JUSTIFIED it -- "the reference's 22 LN sites are 1 stem + 18 block + 3
+             downsample, so there is no head LN to reverse" -- a count that was true before
+             2026-08-30 and that the forward's own docstring already contradicts (23). So the
+             shipped backward reversed a net the repo does not train, for five days, and what
+             forced it out was needing the backward's NUMBER (planning/float_budget_numbers.md
+             3.16). Both backward tiers now take `rowLNVecFlatBack 1 768` / `rowLNVecFlatBackF`,
+             discharged by `floatBridges{,To}_rowLNVecFlatBack`; no new leaves were needed. ⚠ The
+             lesson is not "check slots" but "a COUNT written next to a slot reads as a finding and
+             stops it being re-derived", the twin of the swish cost estimate in 3.9/3.12.
 
        ⭐ GELU'S MODULUS, tightened on the way (`Architectures/GeluSaturation.lean`, moved out of
        `Certificates/GeluLipschitz.lean`): `floatClose_gelu` now states the MIN of its magnitude

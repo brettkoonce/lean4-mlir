@@ -106,6 +106,7 @@ import LeanMlir.Proofs.Float.ViTBlockVFloatBridge
 import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.ViTFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvBack
+import LeanMlir.Proofs.Float.FloatBudgetEnvBackLN
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
@@ -2449,6 +2450,25 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.reluMaskBack
 #print axioms Proofs.FloatBridgesTo.Maps.maxPoolBack
 #print axioms Proofs.FloatBridgesTo.Maps.decimateBack
+-- ⭐⭐ The LAYERNORM BACKWARD kit (ConvNeXt-T, planning/float_budget_numbers.md §3.16). The one
+-- new leaf is Maps.rowLNVecFlatBack: floatBridgesTo_rowLNVecFlatBack runs bn_grad_input at
+-- gamma = 1 with the gamma scale folded in FRONT as a diagBack, so it is NOT
+-- Maps.bnPerChannelBackGain at a different reduction width. Kr/Kb are the per-unit gains at unit
+-- gamma; ConvNeXt-T has 23 LN sites but only FOUR distinct reduction widths, so four pairs serve
+-- the net. The rest is composition: the channel-LN conjugation by four exact permutations, the
+-- patchify backward (Maps.convBack after two exact scatters) and the block/downsample envelopes.
+#print axioms Proofs.FloatBridgesTo.Maps.rowLNVecFlatBack
+#print axioms Proofs.FloatBridgesTo.Maps.chanLNTensor3Back
+#print axioms Proofs.FloatBridgesTo.Maps.decimateOddBack
+#print axioms Proofs.FloatBridgesTo.Maps.flatConvStride4Back
+#print axioms Proofs.FloatBridgesTo.Maps.cnxBlockBodyBack
+#print axioms Proofs.FloatBridgesTo.Maps.cnxDownBack
+-- The FloatBridgesTo peers of the three ConvNeXt backward block defs — the §3.5.1 migration one
+-- net over. Until 2026-09-04 these existed only at the exists-tier (floatBridges_*), which a
+-- budget file cannot use: FloatBridges discards the float map and a Maps envelope must name one.
+#print axioms Proofs.floatBridgesTo_cnxBlockBodyBack
+#print axioms Proofs.floatBridgesTo_cnxBlockBack
+#print axioms Proofs.floatBridgesTo_cnxDownBack
 #print axioms Proofs.FloatBridgesTo.Maps.gapBack
 #print axioms Proofs.FloatBridgesTo.Maps.convBack
 #print axioms Proofs.FloatBridgesTo.Maps.linBack

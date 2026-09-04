@@ -110,6 +110,84 @@ theorem floatBridges_cnxDownBack {cin cout h w : Nat} (M : FloatModel) (W : Kern
   exact (floatBridges_flatConvStride2Back (h := h) (w := w) M W hwd hn hW).comp hlnB
 
 -- ════════════════════════════════════════════════════════════════
+-- § The block and downsample backwards with their float maps NAMED
+--   (the `FloatBridgesTo` migration, §3.5.1's shape one net over)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The float ConvNeXt block body input-gradient — `cnxBlockBodyBack` with each concrete slot
+    replaced by the model's rounded peer and each supplied backward by its float map. -/
+noncomputable def cnxBlockBodyBackF {c cExp h w kHd kWd : Nat} (M : FloatModel)
+    (Wdw : DepthwiseKernel c kHd kWd) (Wex : Kernel4 cExp c 1 1) (Wpr : Kernel4 c cExp 1 1)
+    (lnBF lsBF : Vec (c * h * w) → Vec (c * h * w))
+    (geluBF : Vec (cExp * h * w) → Vec (cExp * h * w)) :
+    Vec (c * h * w) → Vec (c * h * w) :=
+  M.depthwiseFlatF (h := h) (w := w) (dwReverse Wdw) (fun _ => 0)
+  ∘ lnBF
+  ∘ M.flatConvF (h := h) (w := w) (IR.reverseSwap Wex) (fun _ => 0)
+  ∘ geluBF
+  ∘ M.flatConvF (h := h) (w := w) (IR.reverseSwap Wpr) (fun _ => 0)
+  ∘ lsBF
+
+/-- **The ConvNeXt block body backward float-bridges TO its float skeleton** — the same six-stage
+    `.comp` chain as `floatBridges_cnxBlockBodyBack`, with every float map named. ⛔ The `∃`-tier
+    peer was all this file had until 2026-09-04; a budget file cannot use it, because
+    `FloatBridges` discards the float map and a `Maps` envelope has to name one
+    (planning/float_budget_numbers.md §3.5.1, the same migration one net over). -/
+noncomputable def floatBridgesTo_cnxBlockBodyBack {c cExp h w kHd kWd : Nat} (M : FloatModel)
+    (Wdw : DepthwiseKernel c kHd kWd) (Wex : Kernel4 cExp c 1 1) (Wpr : Kernel4 c cExp 1 1)
+    {lnB lsB lnBF lsBF : Vec (c * h * w) → Vec (c * h * w)}
+    {geluB geluBF : Vec (cExp * h * w) → Vec (cExp * h * w)}
+    {wdw wex wpr : ℝ} (hwdw : 0 ≤ wdw) (hwex : 0 ≤ wex) (hwpr : 0 ≤ wpr)
+    (hWdw : ∀ ch kh kw, |Wdw ch kh kw| ≤ wdw) (hWex : ∀ o cc kh kw, |Wex o cc kh kw| ≤ wex)
+    (hWpr : ∀ o cc kh kw, |Wpr o cc kh kw| ≤ wpr)
+    (hnC : 0 < c * h * w) (hnE : 0 < cExp * h * w)
+    (hlnB : FloatBridgesTo lnB lnBF) (hlsB : FloatBridgesTo lsB lsBF)
+    (hgeluB : FloatBridgesTo geluB geluBF) :
+    FloatBridgesTo (cnxBlockBodyBack Wdw Wex Wpr lnB lsB geluB)
+      (cnxBlockBodyBackF M Wdw Wex Wpr lnBF lsBF geluBF) :=
+  ((((hlsB.comp (floatBridgesTo_convBack (h := h) (w := w) M Wpr hwpr hnC hWpr)).comp
+    hgeluB).comp
+    (floatBridgesTo_convBack (h := h) (w := w) M Wex hwex hnE hWex)).comp hlnB).comp
+    (floatBridgesTo_depthwiseBack (h := h) (w := w) M Wdw hwdw hnC hWdw)
+
+/-- **The ConvNeXt block backward float-bridges TO its float skeleton** — the block is
+    `residual (body)`, so the backward is `residual (bodyBack)` and the float peer is the rounded
+    add of the float body against the cotangent. ⭐ The forward's fan-IN is the backward's
+    fan-OUT, and `FloatBridgesTo.residual` serves both directions (§3.7 step 3). -/
+noncomputable def floatBridgesTo_cnxBlockBack {c cExp h w kHd kWd : Nat} (M : FloatModel)
+    (Wdw : DepthwiseKernel c kHd kWd) (Wex : Kernel4 cExp c 1 1) (Wpr : Kernel4 c cExp 1 1)
+    {lnB lsB lnBF lsBF : Vec (c * h * w) → Vec (c * h * w)}
+    {geluB geluBF : Vec (cExp * h * w) → Vec (cExp * h * w)}
+    {wdw wex wpr : ℝ} (hwdw : 0 ≤ wdw) (hwex : 0 ≤ wex) (hwpr : 0 ≤ wpr)
+    (hWdw : ∀ ch kh kw, |Wdw ch kh kw| ≤ wdw) (hWex : ∀ o cc kh kw, |Wex o cc kh kw| ≤ wex)
+    (hWpr : ∀ o cc kh kw, |Wpr o cc kh kw| ≤ wpr)
+    (hnC : 0 < c * h * w) (hnE : 0 < cExp * h * w)
+    (hlnB : FloatBridgesTo lnB lnBF) (hlsB : FloatBridgesTo lsB lsBF)
+    (hgeluB : FloatBridgesTo geluB geluBF) :
+    FloatBridgesTo (Proofs.residual (cnxBlockBodyBack Wdw Wex Wpr lnB lsB geluB))
+      (fun v j => M.add (cnxBlockBodyBackF M Wdw Wex Wpr lnBF lsBF geluBF v j) (v j)) :=
+  FloatBridgesTo.residual M
+    (floatBridgesTo_cnxBlockBodyBack M Wdw Wex Wpr hwdw hwex hwpr hWdw hWex hWpr hnC hnE
+      hlnB hlsB hgeluB)
+
+/-- The float ConvNeXt downsample input-gradient — the strided-conv backward's float peer
+    (zero-fill scatter, then the rounded reversed-kernel conv) then the float LayerNorm back. -/
+noncomputable def cnxDownBackF {cin cout h w : Nat} (M : FloatModel) (W : Kernel4 cout cin 2 2)
+    (lnBF : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))) :
+    Vec (cout * h * w) → Vec (cin * (2 * h) * (2 * w)) :=
+  lnBF ∘ (M.flatConvF (h := 2 * h) (w := 2 * w) (IR.reverseSwap W) (fun _ => 0)
+    ∘ decimateBack cout h w)
+
+/-- **The ConvNeXt downsample backward float-bridges TO its float skeleton.** -/
+noncomputable def floatBridgesTo_cnxDownBack {cin cout h w : Nat} (M : FloatModel)
+    (W : Kernel4 cout cin 2 2)
+    {lnB lnBF : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))}
+    {wd : ℝ} (hwd : 0 ≤ wd) (hW : ∀ o c kh kw, |W o c kh kw| ≤ wd)
+    (hn : 0 < cout * (2 * h) * (2 * w)) (hlnB : FloatBridgesTo lnB lnBF) :
+    FloatBridgesTo (cnxDownBack W lnB) (cnxDownBackF M W lnBF) :=
+  (floatBridgesTo_flatConvStride2Back (h := h) (w := w) M W hwd hn hW).comp hlnB
+
+-- ════════════════════════════════════════════════════════════════
 -- § The whole-net input-gradient VJP (the [3,3,9,3] fold)
 -- ════════════════════════════════════════════════════════════════
 
@@ -186,16 +264,25 @@ set_option maxRecDepth 100000 in
     `FloatBridges` in the block body, the downsample AND the whole-net fold), so the §2m flip costs
     the backward exactly **one op**: the stem LN back becomes `chanLNTensor3Back`, discharged here
     from its operating-point data by `floatBridges_chanLNTensor3Back`, and the head LN back becomes
-    the identity — the reference's 22 LN sites are 1 stem + 18 block + 3 downsample, so there is no
-    head LN to reverse (`floatBridges_idVec`).
+    `rowLNVecFlatBack 1 768` at the head's own saved activation.
+
+    ⚠⚠ **The head slot held `id` until 2026-09-04, and the docstring here justified it: *"the
+    reference's 22 LN sites are 1 stem + 18 block + 3 downsample, so there is no head LN to
+    reverse"*.** That count is the pre-2026-08-30 net. `convNextForwardTCh` has carried
+    `rowLNVecFlat 1 768 hε hγ hβ` since the head LayerNorm was restored, its forward peer
+    `convnextCh_floatBridgesTo` was corrected on 2026-09-03 (23 LN bridges, not 22), and this
+    backward was not — so it reversed a net the repo does not train. `imagenet_specs_drift_from_twins`;
+    what forced it was needing the backward's NUMBER (planning/float_budget_numbers.md §3.16).
 
     The 4 stage backwards and 3 downsample backwards stay supplied, exactly as in the scalar peer;
     they are discharged by folding `floatBridges_cnxBlockBack` / `floatBridges_cnxDownBack`, whose
     own `lnB` slots take `floatBridges_chanLNTensor3Back` at each site's dims. Closes under
     `[propext, Classical.choice, Quot.sound]`. -/
 theorem convnextCh_grad_floatBridges (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
-    {εs : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
+    {εs εh : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
     (fst : Fin (56 * 56) → ℝ) (fxh : Fin (56 * 56) → Vec 96)
+    (γh fγh : Vec 768) (xhead : Vec (1 * 768))
+    (fsh : Fin 1 → ℝ) (fxhh : Fin 1 → Vec 768)
     (s1B : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (d1B : Vec (192 * 28 * 28) → Vec (96 * 56 * 56))
     (s2B : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
@@ -203,23 +290,30 @@ theorem convnextCh_grad_floatBridges (M : FloatModel) (Wd : Mat 768 10) (sW : Ke
     (s3B : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
     (d3B : Vec (768 * 7 * 7) → Vec (384 * 14 * 14))
     (s4B : Vec (768 * 7 * 7) → Vec (768 * 7 * 7))
-    {wd ws Gd egam S Xh es exh : ℝ} (hwd : 0 ≤ wd) (hWd : ∀ i j, |Wd i j| ≤ wd)
+    {wd ws Gd egam S Xh Xhh es exh : ℝ} (hwd : 0 ≤ wd) (hWd : ∀ i j, |Wd i j| ≤ wd)
     (hws : 0 ≤ ws) (hsW : ∀ o c kh kw, |sW o c kh kw| ≤ ws)
     (hγs : ∀ i, |γs i| ≤ Gd) (hfγs : ∀ i, |fγs i - γs i| ≤ egam)
     (hst : ∀ r, |fst r - bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r) εs| ≤ es)
     (hSabs : ∀ r, |bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r) εs| ≤ S)
     (hxh : ∀ r i, |bnXhat 96 εs (Mat.unflatten (chanLNRows 96 56 56 xstem) r) i| ≤ Xh)
     (hfxh : ∀ r i, |fxh r i - bnXhat 96 εs (Mat.unflatten (chanLNRows 96 56 56 xstem) r) i| ≤ exh)
+    (hγh : ∀ i, |γh i| ≤ Gd) (hfγh : ∀ i, |fγh i - γh i| ≤ egam)
+    (hsth : ∀ r, |fsh r - bnIstd 768 (Mat.unflatten xhead r) εh| ≤ es)
+    (hSabsh : ∀ r, |bnIstd 768 (Mat.unflatten xhead r) εh| ≤ S)
+    (hxhh : ∀ r i, |bnXhat 768 εh (Mat.unflatten xhead r) i| ≤ Xhh)
+    (hfxhh : ∀ r i, |fxhh r i - bnXhat 768 εh (Mat.unflatten xhead r) i| ≤ exh)
     (hs1B : FloatBridges s1B) (hd1B : FloatBridges d1B) (hs2B : FloatBridges s2B)
     (hd2B : FloatBridges d2B) (hs3B : FloatBridges s3B) (hd3B : FloatBridges d3B)
     (hs4B : FloatBridges s4B) :
-    FloatBridges (convnextInputGrad Wd sW (chanLNTensor3Back 96 56 56 εs γs xstem) id
-      s1B d1B s2B d2B s3B d3B s4B) :=
-  convnext_grad_floatBridges M Wd sW (chanLNTensor3Back 96 56 56 εs γs xstem) id
+    FloatBridges (convnextInputGrad Wd sW (chanLNTensor3Back 96 56 56 εs γs xstem)
+      (rowLNVecFlatBack 1 768 εh γh xhead) s1B d1B s2B d2B s3B d3B s4B) :=
+  convnext_grad_floatBridges M Wd sW (chanLNTensor3Back 96 56 56 εs γs xstem)
+    (rowLNVecFlatBack 1 768 εh γh xhead)
     s1B d1B s2B d2B s3B d3B s4B hwd hWd hws hsW
     (floatBridges_chanLNTensor3Back M γs fγs xstem fst fxh (by norm_num) (by norm_num)
       hγs hfγs hst hSabs hxh hfxh)
-    floatBridges_idVec
+    (floatBridges_rowLNVecFlatBack M γh fγh xhead fsh fxhh (by norm_num) (by norm_num)
+      hγh hfγh hsth hSabsh hxhh hfxhh)
     hs1B hd1B hs2B hd2B hs3B hd3B hs4B
 
 
@@ -296,12 +390,20 @@ noncomputable def convnext_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10
 set_option maxRecDepth 100000 in
 /-- **THE SHIPPED ConvNeXt-T BACKWARD float-bridges TO its float skeleton** —
     `convnext_grad_floatBridgesTo` at the channel LayerNorm, with the stem LN backward
-    replaced by its named float peer (`chanLNTensor3BackF`) and the head slot `id`.
-    The four stage backwards and three downsample backwards stay supplied, each paired
-    with its float map (`formalization.yaml` fidelity §4d). -/
+    replaced by its named float peer (`chanLNTensor3BackF`) and the head LN backward by
+    `rowLNVecFlatBackF` at the head's own saved activation. The four stage backwards and three
+    downsample backwards stay supplied, each paired with its float map (`formalization.yaml`
+    fidelity §4d).
+
+    ⚠⚠ **The head slot held `id` until 2026-09-04** — see `convnextCh_grad_floatBridges` above
+    for the stale count that justified it and what it cost. This is the bridge a
+    `ConvNeXtBackFloatBudget.lean` states its number over, and it could not have been stated
+    against the `id` version: that one reverses a net with no head LayerNorm. -/
 noncomputable def convnextCh_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
-    {εs : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
+    {εs εh : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
     (fst : Fin (56 * 56) → ℝ) (fxh : Fin (56 * 56) → Vec 96)
+    (γh fγh : Vec 768) (xhead : Vec (1 * 768))
+    (fsh : Fin 1 → ℝ) (fxhh : Fin 1 → Vec 768)
     (s1B s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (d1B d1BF : Vec (192 * 28 * 28) → Vec (96 * 56 * 56))
     (s2B s2BF : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
@@ -309,28 +411,35 @@ noncomputable def convnextCh_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 
     (s3B s3BF : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
     (d3B d3BF : Vec (768 * 7 * 7) → Vec (384 * 14 * 14))
     (s4B s4BF : Vec (768 * 7 * 7) → Vec (768 * 7 * 7))
-    {wd ws Gd egam S Xh es exh : ℝ} (hwd : 0 ≤ wd) (hWd : ∀ i j, |Wd i j| ≤ wd)
+    {wd ws Gd egam S Xh Xhh es exh : ℝ} (hwd : 0 ≤ wd) (hWd : ∀ i j, |Wd i j| ≤ wd)
     (hws : 0 ≤ ws) (hsW : ∀ o c kh kw, |sW o c kh kw| ≤ ws)
     (hγs : ∀ i, |γs i| ≤ Gd) (hfγs : ∀ i, |fγs i - γs i| ≤ egam)
     (hst : ∀ r, |fst r - bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r) εs| ≤ es)
     (hSabs : ∀ r, |bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r) εs| ≤ S)
     (hxh : ∀ r i, |bnXhat 96 εs (Mat.unflatten (chanLNRows 96 56 56 xstem) r) i| ≤ Xh)
     (hfxh : ∀ r i, |fxh r i - bnXhat 96 εs (Mat.unflatten (chanLNRows 96 56 56 xstem) r) i| ≤ exh)
+    (hγh : ∀ i, |γh i| ≤ Gd) (hfγh : ∀ i, |fγh i - γh i| ≤ egam)
+    (hsth : ∀ r, |fsh r - bnIstd 768 (Mat.unflatten xhead r) εh| ≤ es)
+    (hSabsh : ∀ r, |bnIstd 768 (Mat.unflatten xhead r) εh| ≤ S)
+    (hxhh : ∀ r i, |bnXhat 768 εh (Mat.unflatten xhead r) i| ≤ Xhh)
+    (hfxhh : ∀ r i, |fxhh r i - bnXhat 768 εh (Mat.unflatten xhead r) i| ≤ exh)
     (hs1B : FloatBridgesTo s1B s1BF) (hd1B : FloatBridgesTo d1B d1BF)
     (hs2B : FloatBridgesTo s2B s2BF) (hd2B : FloatBridgesTo d2B d2BF)
     (hs3B : FloatBridgesTo s3B s3BF) (hd3B : FloatBridgesTo d3B d3BF)
     (hs4B : FloatBridgesTo s4B s4BF) :
     FloatBridgesTo
-      (convnextInputGrad Wd sW (chanLNTensor3Back 96 56 56 εs γs xstem) id
-        s1B d1B s2B d2B s3B d3B s4B)
-      (convnextInputGradF M Wd sW (chanLNTensor3BackF M fγs fst fxh) id
-        s1BF d1BF s2BF d2BF s3BF d3BF s4BF) :=
+      (convnextInputGrad Wd sW (chanLNTensor3Back 96 56 56 εs γs xstem)
+        (rowLNVecFlatBack 1 768 εh γh xhead) s1B d1B s2B d2B s3B d3B s4B)
+      (convnextInputGradF M Wd sW (chanLNTensor3BackF M fγs fst fxh)
+        (rowLNVecFlatBackF (s := 1) M fγh fsh fxhh) s1BF d1BF s2BF d2BF s3BF d3BF s4BF) :=
   convnext_grad_floatBridgesTo M Wd sW
-    (chanLNTensor3Back 96 56 56 εs γs xstem) (chanLNTensor3BackF M fγs fst fxh) id id
+    (chanLNTensor3Back 96 56 56 εs γs xstem) (chanLNTensor3BackF M fγs fst fxh)
+    (rowLNVecFlatBack 1 768 εh γh xhead) (rowLNVecFlatBackF (s := 1) M fγh fsh fxhh)
     s1B s1BF d1B d1BF s2B s2BF d2B d2BF s3B s3BF d3B d3BF s4B s4BF hwd hWd hws hsW
     (floatBridgesTo_chanLNTensor3Back M γs fγs xstem fst fxh (by norm_num) (by norm_num)
       hγs hfγs hst hSabs hxh hfxh)
-    floatBridgesTo_idVec
+    (floatBridgesTo_rowLNVecFlatBack (s := 1) M γh fγh xhead fsh fxhh (by norm_num) (by norm_num)
+      hγh hfγh hsth hSabsh hxhh hfxhh)
     hs1B hd1B hs2B hd2B hs3B hd3B hs4B
 
 end Proofs
