@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnv
+import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.BnPerChannelBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
@@ -689,6 +690,28 @@ theorem Maps.reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePred cond]
 theorem Maps.maxPoolBack {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) {Ā Ē : ℝ} :
     (floatBridgesTo_maxPoolBack x).Maps Ā Ē Ā Ē :=
   ⟨fun _ _ hle => hle, fun _ _ _ _ _ hEle => hEle⟩
+
+/-- ⛔ **An envelope through the 3×3/s2 pool backward — and it is NOT envelope-preserving.**
+    The 2×2 peer above carries `Ā ↦ Ā` because its windows tile and its backward is an exact
+    lookup. He et al.'s stem pool overlaps, so an input can be the argmax of up to FOUR outputs;
+    the backward ACCUMULATES, which costs a factor of four on the window and a rounding term
+    (`floatClose_maxPool3s2Back`). ⭐ The `4` is proved from `win3Row_mem_le_two`, not assumed —
+    the trivial `c·h·w` fibre bound costs six orders on the r34 backward number. -/
+theorem Maps.maxPool3s2Back {c h w : Nat} (M : FloatModel) (x : Tensor3 c (2 * h) (2 * w))
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    {g Ā Ē Ā' Ē' : ℝ} (hg0 : 0 ≤ g) (hg : (1 + M.u) ^ (c * h * w + 1) - 1 ≤ g)
+    (hĀ' : 4 * Ā + g * (4 * Ā) ≤ Ā') (hĒ' : g * (4 * Ā) + 4 * Ē ≤ Ē') :
+    (floatBridgesTo_maxPool3s2Back M x hc hh hw).Maps Ā Ē Ā' Ē' where
+  mag_le := fun A h0 hle => by
+    show 4 * A + ((1 + M.u) ^ (c * h * w + 1) - 1) * (4 * A) ≤ Ā'
+    have hγ0 : (0:ℝ) ≤ (1 + M.u) ^ (c * h * w + 1) - 1 :=
+      sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+    nlinarith
+  mod_le := fun A E h0 hE0 hle hEle => by
+    show ((1 + M.u) ^ (c * h * w + 1) - 1) * (4 * A) + 4 * E ≤ Ē'
+    have hγ0 : (0:ℝ) ≤ (1 + M.u) ^ (c * h * w + 1) - 1 :=
+      sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+    nlinarith
 
 /-- The stride-2 decimation backward is a zero-fill scatter — exact, envelope unchanged. -/
 theorem Maps.decimateBack (oc h w : Nat) {Ā Ē : ℝ} :

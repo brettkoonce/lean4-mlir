@@ -1,13 +1,26 @@
-# Whole-net float budgets as NUMBERS: six nets landed, and ViT-Tiny is DONE
+# Whole-net float budgets as NUMBERS: six forwards, and the first BACKWARD
 
 Written 2026-09-02; revised 2026-09-03 after ResNet-34, MobileNetV2, EfficientNet-B0 and
-ConvNeXt-T, again the same day after ViT-Tiny's probe and its four Lean chunks, and finally
-after **`ViTFloatBudget.lean`** — the number itself.
+ConvNeXt-T, again the same day after ViT-Tiny, and again after **`Resnet34BackFloatBudget.lean`**
+— phase 2's first number.
 
-**Picking this up cold?** ⭐⭐ **Every forward in §0's table now carries a kernel-checked
-number, ViT-Tiny included** — `vit_float_logits_le` / `vit_float_logits_le_committed`, window
-**3.612·10²¹⁸** / budget **7.222·10²¹⁸**, tied to the committed spec's denotation. Nothing in §3
-is open. What is left is phase 2, the backwards (§3.7).
+**Picking this up cold?** ⭐⭐ **Every forward in §0's table carries a kernel-checked number, and
+so does ResNet-34's INPUT-GRADIENT VJP** — `r34_grad_float_le`, window 8.857·10²⁴⁵ / budget
+6.894·10²⁴⁴, ratio 0.078, and ⭐⭐ **as of 2026-09-03 that chain IS the certified whole-net
+gradient** (`r34InputGrad_eq_resnet34_vjp`, §3.10), not just a chain each of whose pieces is. That last one is the interesting one: **it is the interval FOLD, and it
+is at TRAINING-mode BatchNorm — the mode this same net's forward has no statable number for at
+all** (§0.1's 10⁷⁴¹⁷). A VJP reads its statistics off the saved activations, which the cotangent
+does not perturb, so §0.1's quadratic never appears. Read §3.7 for that, and read it with its
+three hypotheses (§3.7 step 4) — the wall relocates rather than vanishing.
+
+**§3.8's first TWO items are DONE** — the MobileNetV2 and EfficientNet-B0 backward probes
+(**§3.9**) and r34's whole-net certified tie (**§3.10**), both 2026-09-03; only item 3, the
+CIFAR-8 `Env → Maps` coherence pass, is left. Three sentences of it: a
+backward is *always* a fold (squeeze-excite included, so §0.1's list of quadratic sites is a
+forward-only list); MobileNetV2's backward is statable with **no operating-point hypothesis at
+all**, unlike ResNet-34's; and EfficientNet-B0's is a fold that cannot be written down, blocked
+by ONE unproved scalar lemma — a *global* bound on `|swish′|`, which §3.4 costed as calculus and
+is three elementary steps.
 
 Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
 (⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
@@ -49,7 +62,7 @@ window contains an error term, ask why.**
 | EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | fold | `EfficientNetFloatBudget.lean` |
 | ConvNeXt-T @224², channel LN | 4.858·10²²⁷ | 9.706·10²²⁷ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
 | ViT-Tiny @224², depth 12, vector LN | 3.612·10²¹⁸ | 7.222·10²¹⁸ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
-| **ResNet-34 BACKWARD** @224², **training BN** | 2.188·10²⁴⁵ | 1.458·10²⁴⁴ | 6.7·10⁻² | ⭐ fold | `Resnet34BackFloatBudget.lean` |
+| **ResNet-34 BACKWARD** @224², **training BN** | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 7.8·10⁻² | ⭐ fold | `Resnet34BackFloatBudget.lean` |
 
 Six nets now carry kernel-checked numbers — ⛔ **but not all six are the same claim.** The first
 four are the interval fold and all four are vacuous as *budgets*; the point is that the kernel
@@ -143,7 +156,9 @@ The machinery built for r34 and reusable for the rest:
   ConvNeXt's spells all 183 stages out).
 * `scripts/float_budget_envelope.py` — the exact-rational fold in the lemmas' semantics, the
   4-significant-figure round-up, the re-assertion passes (`verify_r34`, 180 inequalities;
-  `verify_mnv2`, 116; `verify_b0`, 96; `verify_cnx`, 366) and the numerals. Its CIFAR-8
+  `verify_mnv2`, 116; `verify_b0`, 96; `verify_cnx`, 366; `verify_vit`, 324; and the three
+  backwards' `verify_r34_back`, 252, `verify_mnv2_back`, 136, `verify_b0_back`, 138) and the
+  numerals. Its CIFAR-8
   regression case reproduces `Cifar8FloatBudget.lean` stage for stage, and `cnx_eval_chain`'s
   three flags (`ln_cap`, `gelu_sat`, `head_ln`) reproduce §3.3's ablation table.
   ⭐ `vit_chain` (added 2026-09-03) is the ViT-Tiny sizing fold — 162 stages, five flags, and
@@ -245,6 +260,28 @@ third case is qualitatively different, because it fails by REPRESENTABILITY rath
 Recording the size of the training-mode number (10⁷⁴¹⁷, script-computed, not kernel-checked) is
 itself a result: it is why the adjoint chain exists.
 
+⭐⭐ **AND EVERY ONE OF THOSE FOUR SITES IS A FORWARD FACT. The closing sentence, settled
+2026-09-03 by the MobileNetV2 and EfficientNet-B0 backward probes (§3.8 item 1): a VJP is linear
+at a fixed point, so EVERY backward folds — squeeze-excite included.** The obvious suspect was
+SE, because §0.1 lists it as the third quadratic site and its backward genuinely fans out and
+rejoins. It is not one. `seInputGrad g xinp gateBack = biPathSum (diagBack g) (gateBack ∘
+diagBack xinp)` (`SEBackFloatBridge.lean`): the gate `g` and the input `x` are **saved
+constants**, both branches are linear maps, and nothing multiplies the cotangent by itself. The
+forward's quadratic came from the gate being grown out of the same input the rescale multiplies;
+on the backward that input is not the cotangent. Measured ratios: r34 0.078, MobileNetV2 0.034,
+EfficientNet-B0 0.186 — three folds, no cap anywhere.
+
+⛔ **"Folds" is not "is statable", and B0 is the counterexample — which relocates the wall a
+second time.** A backward's numerals are built from the SAVED ACTIVATIONS' magnitude bounds, and
+§3.7's escape was that BatchNorm's enter *normalised* (`|x̂| ≤ √n`). B0 has two that do not:
+`swish'(saved)`, whose only repo bound is `swishScalar_lipschitz_abs`'s window-dependent
+`1 + A/4`, and the SE's own saved input `x`, a post-swish activation with no clamp at all. Both
+import the forward's certified window LINEARLY — no new quadratic, just a huge constant — and B0's
+backward lands at 10⁴³¹. So the refined question for a new architecture's BACKWARD is neither
+"does it normalise" nor "how does the error enter": it is **which saved activations does it scale
+by, and is each one bounded by something other than the forward's window?** (§3.8 has the
+ablation, and the answer for B0 is one unproved scalar lemma.)
+
 ## 1. Goal, non-goals, success
 
 **Goal.** For each committed ImageNet-scale forward, a closed `FloatBridgesTo` over the real
@@ -287,6 +324,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
 | **ViT-Tiny fwd** (`vitForwardKV`) | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `vit_float_logits_le`, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸, tied to the committed spec's denotation | — |
+| **ResNet-34 BACKWARD** (`r34InputGrad`) | ⭐ **DONE (2026-09-03), the FOLD, and TIED to the certified whole-net VJP** — `r34_grad_float_le`, window 8.857·10²⁴⁵ / budget 6.894·10²⁴⁴, at TRAINING BN; ⛔ three hypotheses, §3.7; the tie is §3.10 | — |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -911,12 +949,14 @@ pinned on every leaf whose input window the elaborator has not yet unified.
 ✅ **`r34_grad_float_le` (`Resnet34BackFloatBudget.lean`): the ResNet-34 whole-net
 input-gradient VJP has a kernel-checked number, and it is a FOLD, at TRAINING-mode BatchNorm** —
 the mode this same net's forward has no number for at all (§0.1's 10⁷⁴¹⁷). `r34_back_chain` /
-`verify_r34_back` (`scripts/float_budget_envelope.py`, 90 stages, 252 re-assertions):
+`verify_r34_back` (`scripts/float_budget_envelope.py`, 91 stages, 254 re-assertions):
 
-    window ≤ 2.188·10²⁴⁵      budget ≤ 1.458·10²⁴⁴      budget/window = 0.067
+    window ≤ 8.857·10²⁴⁵      budget ≤ 6.894·10²⁴⁴      budget/window = 0.078
 
 ⚠ at the operating point `|istd| ≤ 16`; at the unconditional `ε`-floor (`|istd| ≤ 317`) the same
-fold is 1.359·10²⁸⁸ and is past `norm_num`'s real ceiling — see step 4(a)/(b) below.
+fold is 5.503·10²⁸⁸ and is past `norm_num`'s real ceiling — see step 4(a)/(b) below.
+⚠ **These numbers are 4× the ones first committed (2.188·10²⁴⁵ / 1.458·10²⁴⁴), and the reason is
+§3.10: the chain was missing the 3×3/s2 stem pool's backward entirely.**
 
 ⛔ **The old text here said "§0.1 applies with more force: a backward's BN-back modulus inherits
 the same reduction structure." It does not.** §0.1's quadratic came from the statistics MOVING
@@ -941,12 +981,13 @@ ablation is decisive:
 
 | variant | window | budget | statable |
 |---|---|---|---|
-| **shipped: per-kind profile, `x̂ ≤ √n`** | **1.345·10²⁸⁸** | **6.473·10²⁸⁶** | **yes** |
-| uniform `21/10` (the forward's profile) | 2.463·10²⁹⁶ | 1.185·10²⁹⁵ | yes |
-| **`x̂` from the FORWARD window (`2·A·S`)** | 6.858·10⁷²⁷¹ | 5.285·10⁷²⁶⁹ | **NO** |
-| variance floor `10⁻³` (`S = 32`) | 1.854·10²⁵⁵ | 1.053·10²⁵⁴ | yes |
-| variance floor `10⁻¹` (`S = 4`) | 3.135·10²²⁵ | 3.849·10²²⁴ | yes |
-| `σ² ≈ 1` (`S = 1`) | 5.451·10²⁰⁵ | 1.713·10²⁰⁵ | yes |
+| **shipped leaves at the ε-floor `S = 317`** (per-kind profile, `x̂ ≤ √n`) | **5.503·10²⁸⁸** | **3.276·10²⁸⁷** | **yes** |
+| the committed statement, at `\|istd\| ≤ 16` | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | yes |
+| uniform `21/10` (the forward's profile) | 1.008·10²⁹⁷ | 5.997·10²⁹⁵ | yes |
+| **`x̂` from the FORWARD window (`2·A·S`)** | 2.798·10⁷²⁷² | 5.480·10⁷²⁷⁰ | **NO** |
+| variance floor `10⁻³` (`S = 32`) | 7.547·10²⁵⁵ | 5.130·10²⁵⁴ | yes |
+| variance floor `10⁻¹` (`S = 4`) | 1.278·10²²⁶ | 1.702·10²²⁵ | yes |
+| `σ² ≈ 1` (`S = 1`) | 2.211·10²⁰⁶ | 7.126·10²⁰⁵ | yes |
 
 That is §3.3.0(b)'s lesson for the FOURTH time — *before writing a bound, grep the whole repo for
 it, not the files named after your net.* Every place the activations enter the input-gradient
@@ -1009,12 +1050,12 @@ blocks themselves are only at the `∃`-tier. In order:
    so it never needed them), and `x.residual M` inside a `.comp` chain parses as
    `(A.comp x.residual) M` — write `FloatBridgesTo.residual M x` explicitly.
 4. ✅ **`Resnet34BackFloatBudget.lean` — LANDED 2026-09-03.** `r34_grad_float_le`: the deployed
-   ResNet-34 input-gradient is within **1.458·10²⁴⁴** of the certified one, per input pixel, on
+   ResNet-34 input-gradient is within **6.894·10²⁴⁴** of the certified one, per input pixel, on
    loss cotangents of magnitude `≤ 1` (`|p − y| ≤ 1` for softmax cross-entropy), certified window
-   **2.188·10²⁴⁵**. ⭐ `budget / window = 0.067` — **the interval FOLD**, where ConvNeXt-T's and
+   **8.857·10²⁴⁵**. ⭐ `budget / window = 0.078` — **the interval FOLD**, where ConvNeXt-T's and
    ViT-Tiny's forward numbers are `2.00` caps — **and at TRAINING-mode BatchNorm, the mode this
    same net's FORWARD has no statable number for at all** (§0.1's `10⁷⁴¹⁷`). 1026 lines, 90
-   stages, 252 inequalities, ~80 s / 3.8 GB.
+   stages, 254 inequalities, ~80 s / 3.8 GB.
 
    ⛔ **Three hypotheses carry the caveat**, and they must be quoted with the number: `es` and
    `exh` (the saved float activations' inverse-stddev and normalised-activation accuracies, at
@@ -1039,7 +1080,7 @@ blocks themselves are only at the `∃`-tier. In order:
    **(b) ⭐ The operating-point `S` is what buys the room.** `R34BnBack.hS` — `|istd| ≤ S` at the
    saved activations — is a HYPOTHESIS, not a consequence of the `ε`-floor, so `S` is free to
    choose; it multiplies at all 33 BatchNorm sites, so `317 → 16` is worth ~43 orders:
-   `1.359·10²⁸⁸ → 2.188·10²⁴⁵`. ⚠ `hSε` then has no business in the profile and was dropped — at
+   `5.503·10²⁸⁸ → 8.857·10²⁴⁵`. ⚠ `hSε` then has no business in the profile and was dropped — at
    `S = 16` it is false at `ε = 10⁻⁵`, and nothing in the backward uses it.
 
    **(c) ⚠ PIN ALL FOUR NUMERALS ON EVERY LEAF** — `(Ā := …) (Ē := …) (Ā' := …) (Ē' := …)`.
@@ -1084,7 +1125,209 @@ blocks themselves are only at the `∃`-tier. In order:
    numerals factor. ⚠ The FORWARD budgets are NOT homogeneous — a bias breaks it — which is
    exactly why five forward nets never needed this.
 
-## 5. The `Maps` kit — ✅ complete for all six nets
+### 3.8 What is open — ⭐ start with the probe, not the Lean
+
+Three things, in the order I would do them. ⚠ Every one of them has a cheap first move; §3.7's
+history is four wrong structural guesses at 2–25 minutes of compile each, and the thing that
+finally worked was a five-minute bisect.
+
+**1. ✅ PROBE THE MOBILENETV2 AND EFFICIENTNET-B0 BACKWARDS — DONE 2026-09-03. See §3.9.**
+Both folds now live in `scripts/float_budget_envelope.py` (`mnv2_back_chain` / `verify_mnv2_back`,
+136 inequalities; `b0_back_chain` / `verify_b0_back`, 138) with their ablations. The question is
+answered — **yes, a backward is always a fold; SE does not break it** — and it turned up a
+different blocker, which §3.9 records. What is open moved down to §3.9's "what to do next".
+
+**2. ✅ Close the whole-net CERTIFIED-TIE fold for r34's backward — DONE 2026-09-03. See §3.10.**
+`r34InputGrad_eq_resnet34_vjp` assembles the per-op ties into
+`r34InputGrad = (resnet34_has_vjp_at …).backward` at the full `3×224²` dims. ⛔ **The blocker this
+item named was a misreading** — `resnet34_has_vjp_at` is dimension-generic and parametric in its
+component maps, so no new apex was needed. What the tie actually cost was a leaf nobody knew was
+missing, and it moved the number; §3.10.
+
+**3. Coherence: migrate `Cifar8FloatBudget.lean` off `FloatBridgesTo.Env` onto `Maps`.** §5 has
+said to do this "when touching that file anyway" since the kit was built; the per-stage
+inequalities are identical and the two shared monotone lemmas already live in
+`FloatBudgetEnv.lean`. Cheap, low value, and the right thing to fold into whatever touches it.
+
+⚠ **And one thing to flag rather than schedule.** §0.1's escape 2 — *"a genuinely linear bound
+needs the NORMALISED output's Lipschitz constant, not the pre-normalisation one; that is real
+work and probably the interesting result"* — is still open for the FORWARDS. The backward's
+operating-point `S` is now a worked precedent for what such a bound is worth: ~43 orders across
+33 BatchNorm sites, and the difference between a number that exists and one that does not
+(§3.7 step 4(b)).
+
+### 3.9 ⭐⭐ The MobileNetV2 and EfficientNet-B0 BACKWARD probes (2026-09-03)
+
+`mnv2_back_chain` / `verify_mnv2_back` (48 stages, 136 re-assertions) and `b0_back_chain` /
+`verify_b0_back` (59 stages, 138) fold `mnv2InputGrad` (`MobileNetV2BackFloatBridge.lean`) and
+`efficientnetInputGradB` (`EfficientNetWholeBackFloatBridge.lean`) in the leaves' own semantics,
+over the loss cotangent, at training-mode BatchNorm. No Lean was written.
+
+| net | window | budget | budget/window | statable |
+|---|---|---|---|---|
+| ResNet-34 back (`\|istd\| ≤ 16`) | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 0.078 | yes |
+| **MobileNetV2 back** (`\|istd\| ≤ 16`) | **5.508·10¹²⁷** | **1.882·10¹²⁶** | 0.034 | **yes** |
+| MobileNetV2 back, **ε-floor** `S = 317` | 4.750·10¹⁵³ | 1.076·10¹⁵² | 0.023 | **yes** |
+| **EfficientNet-B0 back**, leaves as they stand | 2.491·10⁴³¹ | 4.624·10⁴³⁰ | 0.186 | ⛔ **NO** |
+| EfficientNet-B0 back, global `\|swish′\|` | 2.021·10¹⁶⁷ | 5.225·10¹⁶⁶ | 0.259 | yes |
+
+**⭐⭐ Finding 1 — the question §3.8 asked: YES, a backward is always a fold, SE included.**
+The ratios are 0.034 / 0.186, not 2.00, and no `capped` appears anywhere. §0.1 now says why.
+
+**⭐⭐ Finding 2 — MobileNetV2's backward needs NO operating-point hypothesis.** At the
+unconditional ε-floor `S = 1/√ε ≤ 317` it is 4.750·10¹⁵³ — comfortably under §3.7(a)'s ~10²⁵³
+shape-dependent ceiling — where ResNet-34's needs `|istd| ≤ 16` to come down from 10²⁸⁸ (§3.7
+step 4(b)). Two reasons, both structural: 20 BatchNorm sites against r34's 33, and the
+inverted-residual's backward fan-ins are 1×1 (24…256) and depthwise (9) where r34's are 512·9.
+**So the first backward this repo could state with no hypothesis beyond the device-kernel
+accuracies is MobileNetV2's, not ResNet-34's** — worth knowing before picking the next net.
+
+**⛔ Finding 3 — B0's backward is a fold and is NOT statable, and ONE UNPROVED SCALAR LEMMA is
+the entire difference.** The ablation, at the measured profile:
+
+| variant | window | budget | statable |
+|---|---|---|---|
+| leaves as they stand | 10⁴³¹ | 10⁴³⁰ | no |
+| **global `\|swish′\| ≤ 11/10` ONLY** | **10¹⁶⁷** | **10¹⁶⁶** | **yes** |
+| operating-point `\|x\| ≤ 16` on the SE input ONLY | 10³⁵⁹ | 10³⁵⁸ | no |
+| both | 10⁹⁵ | 10⁹⁵ | yes |
+| both + `broadcastBack` tightened to its `h·w` nonzeros | 10⁸⁹ | 10⁸⁹ | yes |
+| both, `x̂` from the forward WINDOW | 10⁶⁴⁸ | 10⁶⁴⁷ | no |
+
+B0's backward scales the cotangent by four saved vectors r34's does not: the SE gate `g`
+(bounded, `≤ 1`), `σ′(saved)` (bounded, `≤ 1/4` — `sigmoidScalar_lipschitz` already proves it),
+the SE's saved input `x`, and `swish′(saved)`. The last two have no bound but the forward's
+certified window, and `swishScalar_lipschitz_abs`'s `1 + A/4` is 1.216·10⁵¹ at the head alone —
+**one stage, 51 orders**, visible in the chain as `head.swB` going from 10⁻² to 10⁴⁹.
+
+**⭐⭐ And the lemma is elementary, against what §3.4 says.** §3.4 records *"the true global
+Lipschitz constant of `x·σ(x)` is ≈ 1.1; getting THAT needs the decay of `σ′`, i.e. calculus"* —
+true of the sharp constant and irrelevant, because **the sharpness does not matter**: `Ssw =
+11/10` gives 10⁹⁵, `137/100` gives 10⁹⁶, and the crudest global `2` gives 10⁹⁸. What is needed is
+only that *the window does not appear*. And `≤ 2` is three steps: `σ′(x) = σ(x)(1−σ(x)) =
+e^{−|x|}/(1+e^{−|x|})² ≤ e^{−|x|}`, then `|x|·e^{−|x|} ≤ 1` straight from `Real.add_one_le_exp`,
+then `|swish′| = |σ + x·σ′| ≤ 1 + 1 = 2`. No MVT, no derivative analysis, no sup.
+⭐ **This is the file's ⭐ habit for the sixth time — when a fold overshoots, ablate before
+concluding anything about the architecture — with one new twist.** The previous five blockers
+(relu6's clamp, swish's modulus, seScale's window, ConvNeXt's profile, attention's window) were
+all bounds *already true and thrown away*, and §3.3.0(b)'s rule for them is "grep the repo before
+writing one". This one is not in the repo, and the rule it needs is different: **a cost estimate
+written down next to a bound is not evidence, and it is exactly what stops anyone re-checking.**
+§3.4's parenthesis has been sitting there since the B0 forward landed.
+
+**⚠ Finding 4 — `bnXhat_sq_le` is load-bearing on both nets**, as it was on r34: without it
+MobileNetV2 is 10⁴²¹ and B0 10⁶⁴⁸. Three nets, three times decisive.
+
+**⚠ Finding 5 — the per-kind profile split runs the OPPOSITE way on MobileNetV2.** Measured on
+`/home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin` (3,504,872 f32): conv/dense kernels max
+**2.7157** over 3.47 M entries, BN γ 1.6869, BN β 1.6406, dense bias 0.1029. On ResNet-34 the
+uniform bound was a BN γ and the kernels were 1.9× tighter; here the maximum IS a kernel, so the
+split buys the BN gain and not the conv fan-in — 4 orders, not 8. On B0
+(`/home/skoonce/enet_b0_350_4gpu/…`, 5,288,548 f32) it runs r34's way — kernels 3.6857, BN γ
+4.0545 — but at 1.1× it is worth under an order. ⭐ **Measure it; do not assume which kind is the
+outlier.** `scripts/param_kind_profile.py` does it from the net's own generated
+`init_params_from_file` (parsed, so it cannot drift from the loader that reads the checkpoint);
+it reproduces §3.7's committed ResNet-34 table exactly, which is the check that it reads the
+layout right.
+
+**⭐ Finding 6 — relu6's clamp buys the backward NOTHING.** §3.2's headline is that `min A 6`
+resets MobileNetV2's forward window at 13 sites (10¹⁰⁰ → 2154). Its backward is `reluMaskBack`, a
+0/1 select: exact in float, envelope-*preserving*, and there is nothing for a cotangent window to
+be clamped to. **Window and budget are separate levers on a forward; on a backward the clamp is
+not a lever at all.**
+
+**⚠ Finding 7 — a loose leaf, found and priced, not load-bearing.** `floatClose_broadcastBack`
+(`SEBackFloatBridge.lean`) bounds the SE gate's spatial reduce by `(c·h·w)·A` — its `hsumabs`
+step bounds *every* masked entry by `A`, including the `(c−1)·h·w` that are identically zero. The
+honest count is `h·w`, so the window carries a spurious factor of `c` at each SE site. Worth 6
+orders on B0 (10⁹⁵ → 10⁸⁹) and cheap to fix, but it is not what blocks anything.
+
+**What to do next, in order.**
+1. ⭐ **Prove `swishScalarDeriv_abs_le : |swishScalarDeriv x| ≤ 2`** in the `GeluSaturation.lean`
+   mould, and state `floatClose_diagBack`'s swish instances through it. One scalar lemma, and it
+   is the only thing between B0's backward and a number.
+2. **MobileNetV2's backward budget file** — the r34 recipe transfers with two new `Maps` leaves
+   (`Maps.depthwiseBack` is `Maps.flatConv` at fan-in `kH·kW`; `Maps.depthwiseStride2Back` is
+   that composed with the existing `Maps.decimateBack`), and `Maps.reluMaskBack` already exists.
+   ⭐ State it at the ε-floor, not at an operating point — finding 2 says it does not need one.
+3. **B0's backward** then needs `Maps.diagBack`, `Maps.broadcastBack` and the `Maps.seBack`
+   composite (`biPathSum` of two `.comp` chains — no new combinator, the same point §3.7 step 3
+   made about the r34 blocks), plus four supplied saved-vector accuracies where r34 has two.
+   ⚠ `batchMap` never enters a numeral, so the number holds at any `N`, like the forward's.
+
+### 3.10 ⭐⭐ The whole-net CERTIFIED TIE for r34's backward (2026-09-03) — and the drift it found
+
+`r34InputGrad_eq_resnet34_vjp` (`Foundation/Resnet34BackCertifiedTie.lean`, ~57 s):
+
+    r34InputGrad <every slot pinned to the certified per-op backward>
+      = (resnet34_has_vjp_at <the committed components at 3×224²> …).backward
+
+So §1's success criterion (ii) is now met for the backward in the strongest available form: the
+reading is no longer *"every piece of this chain is the certified gradient"* but **"the chain IS
+the certified whole-net gradient"**. ⚠ It stays a SMOOTH-POINT statement — the pool's
+`MaxPool3s2Smooth`, the stem's post-BN no-zero and the four per-stage `ChainData` bundles are
+hypotheses, as every `HasVJPAt` in this cone is.
+
+**⛔ §3.8 item 2's stated blocker was wrong, and that is worth recording.** It said
+*"`resnet34_has_vjp_at` is parametric and only concretely instantiated at toy `resnet34Concrete`
+dims, so the whole-net certified term does not exist at full dims yet … real work in
+`Foundation/`."* That theorem is **dimension-generic and parametric in its component maps** — the
+toy instantiation is one *use*, not a limit — so instantiating it at ImageNet dims needed no new
+apex at all. One component witness was genuinely missing, the stem's: `cbrStridedPC_has_vjp_at`,
+which is `convBnReluPC_has_vjp_at` with `flatConvStride2` in place of `flatConv`, twelve lines.
+⭐ **A blocker written down once and not re-read is the same failure as a cost estimate written
+down once and not re-derived** (§3.9's swish lemma, the same day). Both were load-bearing and both
+were wrong.
+
+**⛔⛔ WHAT THE TIE ACTUALLY COST: `r34InputGrad` WAS THE REVERSE OF THE WRONG POOL.** It used
+`maxPoolFlatBack` — the **2×2** pool's backward — while the committed forward
+`resnet34Forward_full_pc` pools with `maxPool3s2Flat`, He et al.'s 3×3/s2 stem pool restored
+2026-08-03. `MaxPool3s2.lean`'s header warns in as many words that the two share a TYPE and are
+different functions, and the whole-net backward's docstring claimed to be *"the exact reverse of
+`resnet34Forward_full_pc`"*. ⚠ **`imagenet_specs_drift_from_twins` for the fourth time in this
+file** (§3.3(b) ConvNeXt's head LN was the second, §3.5.2 item 3's scalar-vs-vector LN block the
+third): *"the same net as the tie" is an unchecked claim until something forces the two statements
+to unify, and what forces it is needing the tie.* ⭐ Note which direction it ran this time — the
+FORWARD budget was right (`Maps.maxPool3s2` has been in the chain since r34's forward landed) and
+the BACKWARD was wrong, so a per-tier consistency check would not have caught it; only a statement
+naming both did.
+
+**The missing leaf, and why it is not free.** `MaxPool3s2BackFloatBridge.lean`:
+
+* `maxPool2`'s windows TILE, so each input is the argmax of at most one output, its backward is a
+  LOOKUP, and `Maps.maxPoolBack` carries `Ā ↦ Ā` — exact in float, envelope-preserving.
+* 3×3/s2 windows OVERLAP, so an input can be the argmax of up to FOUR outputs and the backward
+  **accumulates**: a rounded reduction, window `4Ā(1+γ)`, modulus `γ·4Ā + 4Ē`.
+* ⭐ **The `4` is proved, not assumed.** `win3Row_mem_le_two` (already in `MaxPool3s2.lean`, for
+  the row axis) says an input row lies in at most two windows, so the fibre of the smooth-point
+  reindex is inside a `1 × 2 × 2` box (`maxPool3s2Back_mask_sum_abs_le`). ⛔ Settling for the
+  trivial `c·h·w` fibre bound — the shape `floatClose_broadcastBack` uses, §3.9 finding 7 — costs
+  **six orders**, landing the fold at `10²⁵¹` against §3.7(a)'s shape-dependent `norm_num` wall at
+  ~`10²⁵³`. This is the one place in the file where the loose bound would have been fatal rather
+  than merely vacuous.
+* ⭐ `maxPool3s2Flat_has_vjp_at_vec` restates the certified witness at a `Vec` point with its
+  `backward` field **definitionally the leaf**. Transporting with `▸`/`rwa` gives the right TYPE
+  and an `Eq.mpr`-blocked `backward` — §3.5.2 item 5's `FloatBridgesTo.ofEq` trap, one tier down,
+  and the same fix: build the structure field-by-field.
+
+**The number moved: 2.188·10²⁴⁵ → 8.857·10²⁴⁵, budget 1.458·10²⁴⁴ → 6.894·10²⁴⁴** (ratio 0.067 →
+0.078; still the fold, no cap anywhere). One extra stage, ×4 on the window and a rounding term,
+and it lands two stages before the input so almost nothing compounds on it.
+
+**⚠ Two mechanical notes for the next whole-net tie.**
+1. **Pin every implicit over a computed dimension, in the STATEMENT as well as the proof.** Both
+   `cbrStridedPC_has_vjp_at` and `maxPool3s2Flat_has_vjp_at_vec` are declared over
+   `Vec (ic·(2h)·(2w))`, so using them at `3×224²` / `64×112²` asks the elaborator to solve
+   `2·?h = 224` — §3.7(d)'s trap, and it presents as a `whnf` timeout inside the theorem's TYPE,
+   not inside its proof. `(ic := 3) (oc := 64) (h := 112) (w := 112)` fixes it.
+2. **Keep the blocks OPAQUE.** They enter as the `ChainData`/`PProd` bundles `resnet34_has_vjp_at`
+   already takes, and `r34InputGrad`'s block slots are pinned to those witnesses' `.backward`, so
+   the whole-net `isDefEq` compares variables. Only the four concrete endpoints — stem, pool, GAP,
+   dense — are rewritten, and the proof is `unfold r34InputGrad`, two `rw`s, `rfl`. ⚠ Do the
+   rewrites at the FUNCTION level: a `funext dy` first makes the `show` that exposes the stem group
+   cost more than the whole rest of the proof.
+
+## 5. The `Maps` kit — ✅ complete for all six forwards, and for r34's backward
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
 (window `min Ā 6`, NOT a copy of `Maps.relu` — §3.2), `depthwise`, `depthwiseStride2Flat`,
@@ -1121,10 +1364,22 @@ rational bound at all.
 `Maps.flatConvStride16`: `patchEmbed_flat` is a single definition with an `if n.val = 0` branch,
 so that decomposition describes a function the repo does not contain (§3.5.2 item 4).
 
-✅ **Nothing is left in the kit, and nothing is left in §3.** `Maps.clsSlice` and
-`Maps.vitHead` landed with the whole net (`ViTBlockVFloatBridge.lean`), and
-`ViTFloatBudget.lean` closed the last number on 2026-09-03. The next leaf is written when
-phase 2 (§3.7) needs one.
+✅ **The forward kit is closed**, and ✅ **`FloatBudgetEnvBack.lean` is the backward's**:
+`Maps.bnPerChannelBack` and ⭐ `Maps.bnPerChannelBackGain` (the per-unit-gain form every whole-net
+backward chain must use — §3.7 step 4), `Maps.convBack` / `.linBack` / `.gapBack` /
+`.reluMaskBack` / `.maxPoolBack` / ⛔ `.maxPool3s2Back` / `.decimateBack` / `.flatConvStride2Back`,
+both r34 block backwards, the fourteen homogeneity lemmas, and `bnXhat_abs_le_num`.
+⛔ **`Maps.maxPool3s2Back` is the one backward leaf that is NOT envelope-preserving** — `Ā ↦ 4Ā`,
+because He et al.'s 3×3/s2 windows overlap and the backward accumulates (§3.10). Its 2×2 sibling
+`Maps.maxPoolBack` carries `Ā ↦ Ā` and using it for the 3×3 pool is exactly the drift §3.10
+records; the two have the same shape and are different functions. ⚠ What a SECOND backward
+net still needs — ✅ now costed by §3.9's probes, not guessed: MobileNetV2 needs
+`Maps.depthwiseBack` (`Maps.flatConv` at fan-in `kH·kW`) and `Maps.depthwiseStride2Back` (that,
+composed with the existing `Maps.decimateBack`) and nothing else — `Maps.reluMaskBack` already
+covers the relu6 kink. EfficientNet-B0 needs `Maps.diagBack`, `Maps.broadcastBack` and the
+`Maps.seBack` composite, and ⛔ **a `Maps` leaf is not what blocks it** — a global `|swish′|`
+bound is (§3.9 finding 3). All the `∃`-tier bridges exist (`DepthwiseBackFloatBridge.lean`,
+`SEBackFloatBridge.lean`, `LinBackFloatBridge.lean`).
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
 

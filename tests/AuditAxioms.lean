@@ -112,6 +112,7 @@ import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
 import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
+import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
 import LeanMlir.Proofs.Codegen.BnBackComposeBridge
 import LeanMlir.Proofs.Float.BnPerChannelBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
@@ -2620,6 +2621,31 @@ open Proofs
 #print axioms Proofs.dense_transpose_eq_vjp_backward
 #print axioms Proofs.gapBack_eq_vjp_backward
 #print axioms Proofs.maxPoolFlatBack_eq_vjp_backward
+-- ⛔ He et al.'s 3×3/s2 stem pool's BACKWARD — the leaf `r34InputGrad` was MISSING (it used the
+-- 2×2 peer, whose windows tile; the committed forward pools with maxPool3s2Flat). 3×3/s2 windows
+-- OVERLAP, so an input can be the argmax of up to FOUR outputs and the backward ACCUMULATES:
+-- window 4A, not the 2×2 peer's A, plus a rounding term. The 4 is PROVED (win3Row_mem_le_two
+-- squared, via maxPool3s2Back_mask_sum_abs_le), not assumed — the trivial c·h·w fibre bound costs
+-- six orders on the r34 backward number. maxPool3s2FlatBack_eq_vjp_backward ties it to the
+-- certified maxPool3s2Flat_has_vjp_at; maxPool3s2Flat_has_vjp_at_vec restates that witness at a
+-- Vec point with its backward DEFINITIONALLY the leaf (an `Eq.mpr` transport would not reduce).
+#print axioms Proofs.sum_ite_win3Row_le_two
+#print axioms Proofs.maxPool3s2Back_mask_sum_abs_le
+#print axioms Proofs.floatClose_maxPool3s2Back
+#print axioms Proofs.floatBridges_maxPool3s2Back
+#print axioms Proofs.floatBridgesTo_maxPool3s2Back
+#print axioms Proofs.maxPool3s2FlatBack_eq_vjp_backward
+#print axioms Proofs.maxPool3s2Flat_has_vjp_at_vec
+#print axioms Proofs.FloatBridgesTo.Maps.maxPool3s2Back
+-- ⭐⭐ THE WHOLE-NET CERTIFIED TIE. cbrStridedPC_has_vjp_at is the stem's VJP (the strided peer of
+-- convBnReluPC_has_vjp_at, the one component witness resnet34_has_vjp_at was missing at full
+-- dims); r34InputGrad_eq_resnet34_vjp assembles every per-op tie into
+-- `r34InputGrad = (resnet34_has_vjp_at …).backward` at 3×224², so the r34 backward number is a
+-- statement about the certified WHOLE-NET gradient and not only about each of its pieces.
+#print axioms Proofs.cbrStridedPC_has_vjp_at
+#print axioms Proofs.cbrStridedPC_differentiableAt
+#print axioms Proofs.cbrStridedPCBack_eq_vjp_backward
+#print axioms Proofs.r34InputGrad_eq_resnet34_vjp
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge
+import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
 
 /-! # ℝ→Float32 bridge: the WHOLE ResNet-34 backward — the [3,4,6,3] input-gradient fold
 
@@ -7,7 +8,7 @@ The forward `resnet34Forward_full_pc` is `dense ∘ GAP ∘ [3,4,6,3] blocks ∘
 backward is its exact reverse, each op replaced by its backward, threaded through one `.comp` chain.
 
 Every op is already bridged: `linBack` (dense), `gapBack` (GAP, built here), the 16 block backwards
-(`floatBridges_r34IdBlockBack` ×13 / `floatBridges_r34DownBlockBack` ×3), `maxPoolFlatBack`, and the
+(`floatBridges_r34IdBlockBack` ×13 / `floatBridges_r34DownBlockBack` ×3), `maxPool3s2FlatBack`, and the
 stem `flatConvStride2Back ∘ bnBack ∘ reluMaskBack`. The stem/GAP/maxpool/dense **endpoints are
 concrete** (so the certificate runs from the loss logits to the image gradient); the 16 **blocks are
 supplied as `FloatBridges` facts** — exactly as `cifarBn_floatBridges`/`cifarBn_grad_floatBridges`
@@ -108,7 +109,7 @@ theorem floatBridges_gapBack (M : FloatModel) (c h w : Nat) (hc : 0 < c) (hh : 0
 
 /-- The whole ResNet-34 input-gradient VJP at a smooth point — the **exact reverse of
     `resnet34Forward_full_pc`**: `dense ∘ GAP ∘ [3,4,6,3] blocks ∘ maxpool ∘ stem` reversed. The
-    stem/GAP/maxpool/dense endpoints are concrete (`flatConvStride2Back`/`gapBack`/`maxPoolFlatBack`/
+    stem/GAP/maxpool/dense endpoints are concrete (`flatConvStride2Back`/`gapBack`/`maxPool3s2FlatBack`/
     `dense (transposeᵀ) 0`); the 16 block backwards `a0B..e1B` are supplied (each
     `floatBridges_r34IdBlockBack`/`floatBridges_r34DownBlockBack`). The `[3,4,6,3]` stage structure
     is in the block maps' dims (down-blocks change channels×spatial; identity blocks preserve). -/
@@ -125,7 +126,7 @@ noncomputable def r34InputGrad (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
     (m_stem : Fin (64 * 112 * 112) → Prop) [DecidablePred m_stem] :
     Vec 10 → Vec (3 * 224 * 224) :=
   (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
-  ∘ maxPoolFlatBack xmp
+  ∘ maxPool3s2FlatBack xmp
   ∘ a0B ∘ a1B ∘ a2B
   ∘ d2B
   ∘ b0B ∘ b1B ∘ b2B
@@ -139,7 +140,7 @@ noncomputable def r34InputGrad (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
 set_option maxRecDepth 100000 in
 /-- **The whole ResNet-34 input-gradient VJP float-bridges** — the first Imagenette whole-net
     backward. One `.comp` chain over the per-op backward bridges: `linBack` (dense), `gapBack`, the
-    16 supplied block backwards, `maxPoolFlatBack`, and the stem `flatConvStride2Back ∘ bnBack ∘
+    16 supplied block backwards, `maxPool3s2FlatBack`, and the stem `flatConvStride2Back ∘ bnBack ∘
     reluMaskBack`. The deployed float backward of the whole 34-layer net is within an explicit budget
     of the certified `ℝ` backward — the backward peer of the r34 forward. Closes under
     `[propext, Classical.choice, Quot.sound]`. -/
@@ -180,7 +181,7 @@ theorem r34_grad_floatBridges (M : FloatModel)
   have hB := ((hD3.comp hb2B).comp hb1B).comp hb0B
   have hD2 := hB.comp hd2B
   have hA := ((hD2.comp ha2B).comp ha1B).comp ha0B
-  have hMP := hA.comp (floatBridges_maxPoolBack xmp)
+  have hMP := hA.comp (floatBridges_maxPool3s2Back M xmp (by norm_num) (by norm_num) (by norm_num))
   exact hMP.comp hstem
 
 
@@ -199,8 +200,11 @@ noncomputable def floatBridgesTo_gapBack (M : FloatModel) (c h w : Nat)
 
 /-- **The float ResNet-34 input-gradient skeleton** — `r34InputGrad` with each
     concrete slot replaced by the model's rounded peer and each supplied block
-    backward by its float map. `reluMaskBack`, `maxPoolFlatBack` and `decimateBack`
-    are structural selects/scatters, exact in float, so they are unchanged. -/
+    backward by its float map. `reluMaskBack` and `decimateBack` are structural
+    selects/scatters, exact in float, so they are unchanged — ⛔ but the 3×3/s2 pool's backward
+    is NOT: its windows overlap, so it accumulates and rounds
+    (`FloatModel.maxPool3s2FlatBackF`). That is the one place this net's backward differs from
+    the 2×2-pool net whose reverse this used to be. -/
 noncomputable def r34InputGradF (M : FloatModel)
     (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
     (bnBsF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
@@ -217,7 +221,7 @@ noncomputable def r34InputGradF (M : FloatModel)
   (M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
       ∘ decimateBack 64 112 112)
   ∘ bnBsF ∘ reluMaskBack m_stem
-  ∘ maxPoolFlatBack xmp
+  ∘ M.maxPool3s2FlatBackF xmp
   ∘ a0BF ∘ a1BF ∘ a2BF
   ∘ d2BF
   ∘ b0BF ∘ b1BF ∘ b2BF
@@ -280,7 +284,7 @@ noncomputable def r34_grad_floatBridgesTo (M : FloatModel)
   have hB := ((hD3.comp hb2B).comp hb1B).comp hb0B
   have hD2 := hB.comp hd2B
   have hA := ((hD2.comp ha2B).comp ha1B).comp ha0B
-  have hMP := hA.comp (floatBridgesTo_maxPoolBack xmp)
+  have hMP := hA.comp (floatBridgesTo_maxPool3s2Back M xmp (by norm_num) (by norm_num) (by norm_num))
   exact hMP.comp hstem
 
 end Proofs

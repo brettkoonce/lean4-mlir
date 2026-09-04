@@ -224,7 +224,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "r34_grad_float_le"   # ⭐⭐ PHASE 2, and the first number in this repo that is a FOLD at TRAINING-mode BatchNorm -- the mode the FORWARD of this same net has no statable number for at all (1e7417): the deployed ResNet-34 whole-net INPUT-GRADIENT VJP is within 1.458e244 of the certified one, per input pixel, on loss cotangents of magnitude <= 1 (|p - y| <= 1 for softmax cross-entropy), certified window 2.188e245, budget/window = 0.067 (NOT the 2.00 cap ConvNeXt-T's and ViT-Tiny's forwards carry). A VJP reads its statistics off the SAVED activations, which the cotangent does not perturb, so the modulus is linear in the inherited error. ⛔ THREE HYPOTHESES: es/exh (the saved float activations' accuracies, 1e-2, which the forward's own training-mode fold cannot discharge) and the OPERATING POINT |istd| <= 16 i.e. sigma >= 1/16 (fidelity.divergences 4d)
+    - declaration: "r34_grad_float_le"   # ⭐⭐ PHASE 2, and the first number in this repo that is a FOLD at TRAINING-mode BatchNorm -- the mode the FORWARD of this same net has no statable number for at all (1e7417): the deployed ResNet-34 whole-net INPUT-GRADIENT VJP is within 6.894e244 of the certified one, per input pixel, on loss cotangents of magnitude <= 1 (|p - y| <= 1 for softmax cross-entropy), certified window 8.857e245, budget/window = 0.078 (NOT the 2.00 cap ConvNeXt-T's and ViT-Tiny's forwards carry). A VJP reads its statistics off the SAVED activations, which the cotangent does not perturb, so the modulus is linear in the inherited error. ⛔ THREE HYPOTHESES: es/exh (the saved float activations' accuracies, 1e-2, which the forward's own training-mode fold cannot discharge) and the OPERATING POINT |istd| <= 16 i.e. sigma >= 1/16 (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/Resnet34BackFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -785,12 +785,12 @@ fidelity:
 
        ⭐⭐ PHASE 2 OPENS, AND IT REVERSES THE PLAN'S OWN PREMISE (2026-09-03):
        `Resnet34BackFloatBudget.lean`. `r34_grad_float_le` -- the deployed ResNet-34 whole-net
-       INPUT-GRADIENT VJP is within 1.458e244 of the certified one, per input pixel, on loss
+       INPUT-GRADIENT VJP is within 6.894e244 of the certified one, per input pixel, on loss
        cotangents of magnitude <= 1 (which is what softmax cross-entropy gives), certified window
-       2.188e245. 90 numeric stages, 252 rational inequalities, generated AND re-asserted by
+       8.857e245. 91 numeric stages, 254 rational inequalities, generated AND re-asserted by
        `scripts/float_budget_envelope.py`'s `r34_back_chain` / `verify_r34_back`.
 
-       ⭐ IT IS THE INTERVAL FOLD -- budget/window = 0.067, not the 2.00 cap ConvNeXt-T's and
+       ⭐ IT IS THE INTERVAL FOLD -- budget/window = 0.078, not the 2.00 cap ConvNeXt-T's and
        ViT-Tiny's forwards carry -- AND IT IS AT TRAINING-MODE BATCHNORM, the mode this same
        net's FORWARD has no statable number for at all (1e7417 above). The plan had recorded
        "a backward's BN-back modulus inherits the same reduction structure"; it does not. §0.1's
@@ -830,11 +830,29 @@ fidelity:
        without meeting it. That is why the operating-point S is needed: it is worth ~43 orders
        across 33 BatchNorm sites.
 
-       ⚠ Every per-op backward in this chain is already tied to its certified VJP by
-       `Resnet34BackCertifiedTie.lean` (both block types and all the endpoint leaves); only the
-       whole-net FOLD of those ties is open there, so the honest reading is "every piece of this
-       chain is the certified gradient" and not yet "this chain is the certified whole-net
-       gradient".
+       ⭐⭐ THE WHOLE-NET CERTIFIED TIE IS CLOSED (2026-09-03):
+       `r34InputGrad_eq_resnet34_vjp` (`Resnet34BackCertifiedTie.lean`) assembles the per-op ties
+       into `r34InputGrad = (resnet34_has_vjp_at ...).backward` at the full 3x224x224 dims, so
+       the reading is no longer "every piece of this chain is the certified gradient" but "the
+       chain IS the certified whole-net gradient". The blocker recorded here previously --
+       "`resnet34_has_vjp_at` is only concretely instantiated at toy dims" -- was a misreading:
+       that theorem is dimension-generic and parametric in its component maps, and every
+       component witness existed except the stem's (`cbrStridedPC_has_vjp_at`, the strided peer
+       of `convBnReluPC_has_vjp_at`). ⚠ It remains a SMOOTH-POINT statement: the pool's
+       MaxPool3s2Smooth, the stem's post-BN no-zero and the per-block ChainData bundles are
+       hypotheses, as every HasVJPAt in this cone is.
+
+       ⛔⛔ AND CLOSING IT FOUND A DRIFT THAT MOVED THE NUMBER. `r34InputGrad` pooled with
+       `maxPoolFlatBack` -- the 2x2 pool's backward -- while the committed forward
+       `resnet34Forward_full_pc` pools with `maxPool3s2Flat`, He et al.'s 3x3/s2 stem pool
+       (restored 2026-08-03). `MaxPool3s2.lean`'s header warns the two share a TYPE and are
+       different functions; nothing forced the statements to unify until a theorem needed them to
+       be about ONE net. The missing leaf is `MaxPool3s2BackFloatBridge.lean`: 3x3/s2 windows
+       OVERLAP, so an input can be the argmax of up to FOUR outputs and the backward ACCUMULATES
+       -- window 4A where the 2x2 peer is envelope-preserving, plus a rounding term. The number
+       moved 1.458e244 -> 6.894e244. ⚠ The 4 is PROVED from `win3Row_mem_le_two`
+       (`maxPool3s2Back_mask_sum_abs_le`), not assumed: the trivial c*h*w fibre bound puts the
+       fold at 1e251, four orders under the ~1e253 shape-dependent norm_num wall above.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

@@ -442,6 +442,13 @@ lean_lib «Certs» where
              -- reuses floatBridges_flatConv) compose into the whole 8-conv CIFAR input-gradient VJP
              -- (cifar8_grad_floatBridges) — the backward peer of cifar8_floatBridges.
              `LeanMlir.Proofs.Float.CnnBackFloatBridge,
+             -- ⛔ He et al.'s 3×3/s2 stem pool's BACKWARD — the ACCUMULATING scatter. maxPool2's
+             -- windows tile so its backward is a lookup and is exact in float; 3×3/s2 windows
+             -- OVERLAP, so an input can be the argmax of up to FOUR outputs and the backward is a
+             -- rounded reduction with window 4A, not A. The `4` is proved from win3Row_mem_le_two
+             -- (maxPool3s2Back_mask_sum_abs_le), and maxPool3s2FlatBack_eq_vjp_backward ties the
+             -- leaf to the certified maxPool3s2Flat_has_vjp_at. r34InputGrad used the 2×2 peer.
+             `LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge,
              -- A3 1c: BatchNorm BACKWARD as a composable FloatClose MAP over the cotangent
              -- (floatClose_bnBack / floatBridges_bnBack) — wraps the bnGradInput_close keystone
              -- with the real map's magnitude (bn_grad_input_abs_le) + Lipschitz-in-dy modulus

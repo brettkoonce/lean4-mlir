@@ -48,11 +48,33 @@ The **endpoint leaf ties** (`§ The ENDPOINT leaf ties` below) close the rest of
 arg-max scatter). With these + the conv/strided-conv leaves above, **every per-op backward of the r34
 whole-net `r34InputGrad` is now individually tied to its certified VJP.**
 
-(Remaining §B: only the whole-net FOLD — assembling the per-op/per-block ties into
-`r34InputGrad = (resnet34 …_has_vjp).backward` — which stays gated by the fact that the certified
-whole-net VJP `resnet34_has_vjp_at` is parametric / only concretely instantiated at toy
-`resnet34Concrete` dims, so the honest whole-net statement is "every piece ties" + the parametric
-skeleton, not a full-dim concrete certified term.)
+⭐⭐ **THE WHOLE-NET FOLD IS CLOSED (2026-09-03): `r34InputGrad_eq_resnet34_vjp`.** The last
+section of this file assembles the per-op ties into `r34InputGrad = (resnet34_has_vjp_at …
+).backward` at the full `3×224²` dims — so the claim is no longer "every piece of the chain is
+the certified gradient" but "the chain IS the certified whole-net gradient".
+
+⛔ The blocker recorded here previously — *"`resnet34_has_vjp_at` is parametric / only concretely
+instantiated at toy `resnet34Concrete` dims"* — was a misreading. That theorem is **dimension-
+generic and parametric in its component maps**, so instantiating it at ImageNet dims needs no new
+apex: it needs the components' `HasVJPAt`/`DifferentiableAt` witnesses, and every one already
+existed except the stem's (`cbrStridedPC_has_vjp_at`, added below — the strided peer of
+`convBnReluPC_has_vjp_at`). ⭐ The blocks stay OPAQUE, entering as the `ChainData`/`PProd` bundles
+`resnet34_has_vjp_at` already takes, so the whole-net `isDefEq` runs between variables.
+
+⛔⛔ **What the tie actually found was a DRIFT, and it moved the r34 backward number.**
+`r34InputGrad` pooled with `maxPoolFlatBack` — the **2×2** pool's backward — while the committed
+forward `resnet34Forward_full_pc` pools with `maxPool3s2Flat`, He et al.'s 3×3/s2 stem pool.
+`MaxPool3s2.lean`'s header warns the two share a TYPE and are different functions; nothing forced
+the two statements to unify until a theorem needed them to be about ONE net. The missing leaf is
+`MaxPool3s2BackFloatBridge.lean` (the ACCUMULATING scatter — 3×3/s2 windows overlap, so an input
+can be the argmax of up to four outputs, window `4A` not `A`), and `r34_grad_float_le` moved
+`1.458·10²⁴⁴ → 6.894·10²⁴⁴`. ⚠ This is `imagenet_specs_drift_from_twins` for the fourth time and
+ConvNeXt's stale head-LayerNorm slot for the second: *"the same net as the tie" is an unchecked
+claim until something forces the two statements to unify, and what forces it is needing the tie.*
+
+⚠ Still supplied, and unchanged by this: the SMOOTHNESS side. The tie takes the pool's
+`MaxPool3s2Smooth`, the stem's post-BN no-zero, and the per-block `ChainData` bundles as
+hypotheses — a smooth-point statement, as every `HasVJPAt` in this cone is.
 -/
 
 namespace Proofs
@@ -302,5 +324,174 @@ theorem maxPoolFlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2*w)
   funext dy idx
   simp only [maxPoolFlatBack, Tensor3.flatten, maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
     IR.maxPoolBackDenote, maxPool2_has_vjp_at3]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The STEM leaf tie — conv(stride-2) → per-channel BN → relu
+-- ════════════════════════════════════════════════════════════════
+
+/-- **conv(stride-2) → per-channel-BN → relu VJP at a smooth point** — the strided peer of
+    `convBnReluPC_has_vjp_at`, i.e. the certified VJP of `cbrStridedPC`, which is r34's stem. Two
+    `vjp_comp_at`s: the strided conv, the per-channel BN (differentiable everywhere at `ε > 0`),
+    then the ReLU at its smooth point. -/
+noncomputable def cbrStridedPC_has_vjp_at {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth : ∀ k, bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0) :
+    HasVJPAt (cbrStridedPC (h := h) (w := w) W b ε γ β) v := by
+  have hconv_diff : Differentiable ℝ
+      (flatConvStride2 W b : Vec (ic * (2*h) * (2*w)) → Vec (oc * h * w)) :=
+    flatConvStride2_differentiable W b
+  have hbn_diff : Differentiable ℝ (bnPerChannelTensor3 oc h w ε γ β) :=
+    bnPerChannelTensor3_differentiable oc h w ε hε γ β
+  have step1 : HasVJPAt (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
+    vjp_comp_at (flatConvStride2 W b) (bnPerChannelTensor3 oc h w ε γ β) v
+      (hconv_diff v) (hbn_diff _)
+      ((flatConvStride2_has_vjp W b).toHasVJPAt v)
+      ((bnPerChannelTensor3_has_vjp oc h w ε hε γ β).toHasVJPAt _)
+  have step1_diff : DifferentiableAt ℝ
+      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
+    DifferentiableAt.comp v (hbn_diff (flatConvStride2 W b v)) (hconv_diff v)
+  exact vjp_comp_at (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b)
+    (relu (oc * h * w)) v step1_diff
+    (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
+    step1 (relu_has_vjp_at (oc * h * w) _ h_smooth)
+
+/-- `cbrStridedPC` is differentiable at a smooth point (the companion `resnet34_has_vjp_at`
+    threads alongside every `HasVJPAt`). -/
+theorem cbrStridedPC_differentiableAt {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth : ∀ k, bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0) :
+    DifferentiableAt ℝ (cbrStridedPC (h := h) (w := w) W b ε γ β) v := by
+  have hinner : DifferentiableAt ℝ
+      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
+    ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp
+      (flatConvStride2_differentiable W b)) v
+  exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
+
+/-- **The stem tie.** `r34InputGrad`'s stem slot — `flatConvStride2Back Ws ∘ bnB ∘ reluMaskBack`,
+    with the BN-back pinned to the certified per-channel backward and the mask to the actual
+    post-BN sign — IS `(cbrStridedPC_has_vjp_at …).backward`. Closes by rewriting the one strided
+    conv leaf; the BN-back and the ReLU mask are definitionally the certified terms
+    (`relu_has_vjp_at`'s backward is `fun dy i => if x i > 0 then dy i else 0`, which is
+    `reluMaskBack (· > 0)`). -/
+theorem cbrStridedPCBack_eq_vjp_backward {ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth : ∀ k, bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0) :
+    flatConvStride2Back (h := h) (w := w) W
+      ∘ (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward (flatConvStride2 W b v)
+      ∘ reluMaskBack (fun i => bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) i > 0)
+      = (cbrStridedPC_has_vjp_at W b ε γ β hε v h_smooth).backward := by
+  funext dy
+  rw [flatConvStride2Back_eq_vjp_backward hkH hkW W b v]
+  rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐⭐ THE WHOLE-NET FOLD — `r34InputGrad` IS the certified whole-net gradient
+-- ════════════════════════════════════════════════════════════════
+
+set_option maxRecDepth 400000 in
+set_option maxHeartbeats 2000000 in
+/-- **The whole-net certified tie.** `r34InputGrad`, with every one of its slots pinned to the
+    certified per-op backward, IS `(resnet34_has_vjp_at …).backward` — the certified
+    input-gradient VJP of `dense ∘ GAP ∘ [3,4,6,3] ∘ maxPool3s2 ∘ stem` at `x`.
+
+    ⭐ This is the statement the per-op ties above could not make. Until it existed the honest
+    reading of `r34_grad_float_le` was *"every piece of this chain is the certified gradient"*;
+    with it, the chain IS the certified whole-net gradient.
+
+    ⛔⛔ **And closing it is what found the drift.** `r34InputGrad` used `maxPoolFlatBack` — the
+    **2×2** pool's backward — while the committed forward `resnet34Forward_full_pc` pools with
+    `maxPool3s2Flat`, He et al.'s 3×3/s2 stem pool. `MaxPool3s2.lean` warns that the two share a
+    TYPE and are different functions; nothing forced them to unify until this theorem needed the
+    two statements to be about one net. The fix is `MaxPool3s2BackFloatBridge.lean` (the
+    accumulating scatter, window `4A` not `A`), and the r34 backward number moved
+    `2.188·10²⁴⁵ → 8.857·10²⁴⁵`.
+
+    ⭐ The blocks stay OPAQUE — they enter as the `ChainData`/`PProd` witnesses
+    `resnet34_has_vjp_at` already takes, and `r34InputGrad`'s block slots are pinned to their
+    backwards — so the composition is checked between variables and costs nothing (§3.7(a)'s
+    lesson, in the direction that works). Only the four concrete endpoints are rewritten: the
+    dense head, GAP, the 3×3/s2 pool and the stem. -/
+theorem r34InputGrad_eq_resnet34_vjp
+    (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (ε : ℝ) (γs βs : Vec 64) (hε : 0 < ε)
+    (Wd : Mat 512 10) (bd : Vec 10)
+    (a2 a1 a0 : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
+    (down2 : Vec (64 * 56 * 56) → Vec (128 * 28 * 28))
+    (b2 b1 b0 : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
+    (down3 : Vec (128 * 28 * 28) → Vec (256 * 14 * 14))
+    (c4 c3 c2 c1 c0 : Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
+    (down4 : Vec (256 * 14 * 14) → Vec (512 * 7 * 7))
+    (e1 e0 : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))
+    (x : Vec (3 * 224 * 224))
+    (hstem_smooth : ∀ k,
+      bnPerChannelTensor3 64 112 112 ε γs βs (flatConvStride2 Ws bs x) k ≠ 0)
+    (hmp_smooth : MaxPool3s2Smooth
+      (Tensor3.unflatten (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x)
+        : Tensor3 64 (2 * 56) (2 * 56)))
+    (hids1 : ChainData (maxPool3s2Flat 64 56 56
+      (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x)) [a2, a1, a0])
+    (hdown2 : PProd (HasVJPAt down2 (chainComp [a2, a1, a0] (maxPool3s2Flat 64 56 56
+        (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x))))
+      (DifferentiableAt ℝ down2 (chainComp [a2, a1, a0] (maxPool3s2Flat 64 56 56
+        (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x)))))
+    (hids2 : ChainData (down2 (chainComp [a2, a1, a0] (maxPool3s2Flat 64 56 56
+      (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x)))) [b2, b1, b0])
+    (hdown3 : PProd (HasVJPAt down3 (chainComp [b2, b1, b0] (down2 (chainComp [a2, a1, a0]
+        (maxPool3s2Flat 64 56 56 (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x))))))
+      (DifferentiableAt ℝ down3 (chainComp [b2, b1, b0] (down2 (chainComp [a2, a1, a0]
+        (maxPool3s2Flat 64 56 56 (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x)))))))
+    (hids3 : ChainData (down3 (chainComp [b2, b1, b0] (down2 (chainComp [a2, a1, a0]
+      (maxPool3s2Flat 64 56 56 (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x))))))
+      [c4, c3, c2, c1, c0])
+    (hdown4 : PProd (HasVJPAt down4 (chainComp [c4, c3, c2, c1, c0] (down3 (chainComp [b2, b1, b0]
+        (down2 (chainComp [a2, a1, a0] (maxPool3s2Flat 64 56 56
+          (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x))))))))
+      (DifferentiableAt ℝ down4 (chainComp [c4, c3, c2, c1, c0] (down3 (chainComp [b2, b1, b0]
+        (down2 (chainComp [a2, a1, a0] (maxPool3s2Flat 64 56 56
+          (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x)))))))))
+    (hids4 : ChainData (down4 (chainComp [c4, c3, c2, c1, c0] (down3 (chainComp [b2, b1, b0]
+      (down2 (chainComp [a2, a1, a0] (maxPool3s2Flat 64 56 56
+        (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x)))))))) [e1, e0]) :
+    r34InputGrad Ws Wd
+      ((bnPerChannelTensor3_has_vjp 64 112 112 ε hε γs βs).backward (flatConvStride2 Ws bs x))
+      hids4.snd.fst.backward hids4.snd.snd.snd.fst.backward
+      hdown4.fst.backward
+      hids3.snd.fst.backward hids3.snd.snd.snd.fst.backward
+      hids3.snd.snd.snd.snd.snd.fst.backward
+      hids3.snd.snd.snd.snd.snd.snd.snd.fst.backward
+      hids3.snd.snd.snd.snd.snd.snd.snd.snd.snd.fst.backward
+      hdown3.fst.backward
+      hids2.snd.fst.backward hids2.snd.snd.snd.fst.backward
+      hids2.snd.snd.snd.snd.snd.fst.backward
+      hdown2.fst.backward
+      hids1.snd.fst.backward hids1.snd.snd.snd.fst.backward
+      hids1.snd.snd.snd.snd.snd.fst.backward
+      (Tensor3.unflatten (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x))
+      (fun i => bnPerChannelTensor3 64 112 112 ε γs βs (flatConvStride2 Ws bs x) i > 0)
+      = (resnet34_has_vjp_at (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs)
+          (maxPool3s2Flat 64 56 56) [a2, a1, a0] down2 [b2, b1, b0] down3 [c4, c3, c2, c1, c0]
+          down4 [e1, e0] (globalAvgPoolFlat 512 7 7) (dense Wd bd) x
+          ⟨cbrStridedPC_has_vjp_at (ic := 3) (oc := 64) (h := 112) (w := 112)
+              Ws bs ε γs βs hε x hstem_smooth,
+            cbrStridedPC_differentiableAt (ic := 3) (oc := 64) (h := 112) (w := 112)
+              Ws bs ε γs βs hε x hstem_smooth⟩
+          ⟨maxPool3s2Flat_has_vjp_at_vec (c := 64) (h := 56) (w := 56) _ hmp_smooth,
+            maxPool3s2Flat_differentiableAt_vec (c := 64) (h := 56) (w := 56) _ hmp_smooth
+              (by norm_num) (by norm_num) (by norm_num)⟩
+          hids1 hdown2 hids2 hdown3 hids3 hdown4 hids4
+          ⟨(globalAvgPoolFlat_has_vjp 512 7 7).toHasVJPAt _,
+            (globalAvgPoolFlat_differentiable 512 7 7) _⟩
+          ⟨(dense_has_vjp Wd bd).toHasVJPAt _, (dense_differentiable Wd bd) _⟩).backward := by
+  unfold r34InputGrad
+  rw [cbrStridedPCBack_eq_vjp_backward (ic := 3) (oc := 64) (h := 112) (w := 112)
+        (by decide) (by decide) Ws bs ε γs βs hε x hstem_smooth,
+      dense_transpose_eq_vjp_backward Wd bd
+        (globalAvgPoolFlat 512 7 7 (chainComp [e1, e0] (down4 (chainComp [c4, c3, c2, c1, c0]
+          (down3 (chainComp [b2, b1, b0] (down2 (chainComp [a2, a1, a0] (maxPool3s2Flat 64 56 56
+            (cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs x))))))))))]
+  rfl
 
 end Proofs

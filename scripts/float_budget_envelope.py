@@ -1249,6 +1249,20 @@ def bn_back(st, n, Xh, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH, q=U32):
     return (A * (Kr + Kb), A * Kb + E * Kr)
 
 
+def maxpool3s2_back(st, n, q=U32):
+    """⛔ `floatClose_maxPool3s2Back` — He et al.'s 3×3/s2 stem pool's backward, the ACCUMULATING
+    scatter. `maxPool2`'s windows tile so its backward is an exact lookup and its envelope is the
+    identity; 3×3/s2 windows OVERLAP, so an input can be the argmax of up to FOUR outputs and the
+    backward is a rounded reduction — window `4A(1+γ)`, modulus `γ·4A + 4E`, at `γ` over the
+    `n = c·h·w` terms the kernel reduces over.
+
+    ⛔ `r34InputGrad` used the 2×2 peer until 2026-09-03, so this stage was missing entirely and
+    the whole-net backward was the reverse of a net the repo does not train (§3.10)."""
+    A, E = st
+    g = r4(gamma_q(n + 1, q))
+    return (4 * A + g * (4 * A), g * (4 * A) + 4 * E)
+
+
 def conv_back(st, m, w=R34_WK, q=U32):
     """`convFlatBack W = flatConv (reverseSwap W) 0` — the forward conv leaf at zero bias,
     fan-in `m` = (the cotangent's channel count)·kH·kW."""
@@ -1307,7 +1321,9 @@ def r34_back_chain(wk=R34_WK, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH, q=U32,
             out.append((tag + ".bnB1", s))
             s = R(conv_back(s, oc * 9, wk, q)); out.append((tag + ".cB1", s))
             st = R(bipath(p, s, q));            out.append((tag + ".out", st))
-    # maxPoolFlatBack (exact), then the stem: reluMaskBack (exact) -> bnB -> flatConvStride2Back
+    # ⛔ the 3×3/s2 stem pool's backward ACCUMULATES (×4); then the stem:
+    # reluMaskBack (exact) -> bnB -> flatConvStride2Back
+    st = R(maxpool3s2_back(st, 64 * 56 * 56, q));  out.append(("mp3s2B", st))
     st = R(bn_back(st, 12544, Xh(12544, "stem.bn"), G, S, es, exh, q))
     out.append(("stem.bnB", st))
     st = R(conv_back(st, 64 * 49, wk, q));      out.append(("stem.cB", st))
@@ -1373,8 +1389,454 @@ def verify_r34_back(rows, wk=R34_WK, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH,
             ck(tag + '.out.A', Pd + Bd + q * (Pd + Bd), r[tag + '.out'][0])
             ck(tag + '.out.E', q * (Pd + Ep + Bd + Ed) + (Ep + Ed), r[tag + '.out'][1])
         st = r[tag + '.out']
-    bn_ck('stem.bnB', 12544, st, r['stem.bnB'])
+    A, E = st
+    gmp = r4(gamma_q(64 * 56 * 56 + 1, q))
+    ck('mp3s2B.A', 4 * A + gmp * (4 * A), r['mp3s2B'][0])
+    ck('mp3s2B.E', gmp * (4 * A) + 4 * E, r['mp3s2B'][1])
+    bn_ck('stem.bnB', 12544, r['mp3s2B'], r['stem.bnB'])
     conv_ck('stem.cB', 64 * 49, r['stem.bnB'], r['stem.cB'])
+    return n
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# MobileNetV2 BACKWARD — the input-gradient VJP over the loss cotangent
+# ════════════════════════════════════════════════════════════════════════════
+#
+# `mnv2InputGrad` (`MobileNetV2BackFloatBridge.lean`): the exact reverse of
+# `mobilenetv2Forward_full_pc`. The r34 backward's story transfers WITHOUT CHANGE — every
+# leaf is linear in the cotangent, the BN backs read their statistics off saved activations,
+# and `reluMaskBack` (the relu6 kink at the smooth point `0 < preact < 6`) is a structural
+# select: exact in float, envelope-preserving. ⭐ Note what that costs: relu6's CLAMP, which
+# is the whole reason mnv2's forward window is 2154 instead of 1e100 (§3.2), buys the
+# backward NOTHING — a 0/1 mask cannot reset a cotangent window the way `min A 6` resets an
+# activation window. Window and budget are separate levers on the forward; on the backward
+# the clamp is not a lever at all.
+#
+# Profile, measured per parameter KIND on /home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin
+# (3,504,872 f32, the layout `init_params_from_file` spells):
+#
+#     kind                 count       max|·|    bound
+#     conv/dense kernels   3,469,760   2.7157    28/10
+#     BN γ                 17,056      1.6869    17/10
+#     BN β                 17,056      1.6406    —      (the backward has no bias anywhere)
+#     dense bias           1,000       0.1029    —
+#
+# ⚠ The split runs the OPPOSITE way from ResNet-34's: there the uniform bound was a BN γ and
+# the kernels were 1.9× tighter, here the maximum IS a kernel and it is γ that is 1.6× loose.
+# So the split buys the BN gain and not the conv fan-in, and it is worth ~4 orders, not 8.
+
+MNV2_WK = F(28, 10)     # conv / dense kernels         measured 2.7157
+MNV2_GLB = F(17, 10)    # BN γ                         measured 1.6869
+MNV2_SB = F(16)         # |istd| at the operating point (σ ≥ 1/16) — §3.7's escape 2
+MNV2_ESB = F(1, 100)    # supplied float inverse-stddev accuracy
+MNV2_EXH = F(1, 100)    # supplied float normalised-activation accuracy
+
+# (tag, kind, ic, mid, oc, h, w), cotangent-first. `h`/`w` are the block's OUTPUT spatial dims;
+# a "strided" block's expand stage runs at 2h × 2w (`invresBodyStridedBackPC`).
+MNV2_BACK_PLAN = [
+    ("b6", "strided", 64, 256, 64, 7, 7),
+    ("b5", "strided", 32, 128, 64, 14, 14),
+    ("b4", "skip", 32, 128, 32, 28, 28),
+    ("b3", "strided", 24, 96, 32, 28, 28),
+    ("b2", "skip", 24, 96, 24, 56, 56),
+    ("b1", "strided", 16, 64, 24, 56, 56),
+]
+
+
+def mnv2_back_chain(wk=MNV2_WK, G=MNV2_GLB, S=MNV2_SB, es=MNV2_ESB, exh=MNV2_EXH, q=U32,
+                    xhat='sqrt'):
+    """Every stage of `mnv2InputGrad` at MobileNetV2's shapes, folded over the LOSS COTANGENT
+    (`|p − y| ≤ 1`), at the granularity a Lean `Maps` chain composes them.
+
+    `reluMaskBack` and `decimateBack` are exact structural selects/scatters and produce no
+    entry. `xhat='sqrt'` is `bnXhat_sq_le`'s `|x̂| ≤ √(h·w)`; `xhat='window'` derives it from
+    the forward's certified window (`2·A·S`) instead — the r34 ablation, repeated."""
+    fwd = dict(mnv2_eval_chain())
+
+    def Xh(hw, fwd_tag):
+        return F(isqrt_exact(hw)) if xhat == 'sqrt' else 2 * fwd[fwd_tag][0] * S
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out = []
+    st = (F(1), F(0))
+    st = R(conv_back(st, 10, wk, q));           out.append(("linBack", st))
+    st = R(gap_back(st, 49, q));                out.append(("gapBack", st))
+    # head: reluMaskBack (exact) -> bnBh (128ch @ 7×7) -> convFlatBack Wh (1×1, fan-in 128)
+    st = R(bn_back(st, 49, Xh(49, "head.bn"), G, S, es, exh, q))
+    out.append(("head.bnB", st))
+    st = R(conv_back(st, 128, wk, q));          out.append(("head.cB", st))
+    for tag, kind, ic, mid, oc, h, w in MNV2_BACK_PLAN:
+        blkin = st
+        hw = h * w
+        he = (2 * h) * (2 * w) if kind == "strided" else hw
+        # project back: bnBp (oc @ h×w) then convFlatBack Wp (1×1, fan-in oc)
+        s = R(bn_back(blkin, hw, Xh(hw, tag + ".pbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBp", s))
+        s = R(conv_back(s, oc, wk, q));         out.append((tag + ".cBp", s))
+        # depthwise back: reluMaskBack (exact) -> bnBd (mid @ h×w) -> depthwiseFlatBack (fan-in 9)
+        s = R(bn_back(s, hw, Xh(hw, tag + ".dbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBd", s))
+        s = R(conv_back(s, 9, wk, q));          out.append((tag + ".dwB", s))
+        # expand back: reluMaskBack (exact) -> bnBe (mid @ he) -> convFlatBack We (fan-in mid)
+        s = R(bn_back(s, he, Xh(he, tag + ".ebn"), G, S, es, exh, q))
+        out.append((tag + ".bnBe", s))
+        s = R(conv_back(s, mid, wk, q));        out.append((tag + ".cBe", s))
+        st = R(residual(blkin, s, q)) if kind == "skip" else s
+        out.append((tag + ".out", st))
+    # stem: reluMaskBack (exact) -> bnBs (16ch @ 112×112) -> flatConvStride2Back Ws (fan-in 16·9)
+    st = R(bn_back(st, 12544, Xh(12544, "stem.bn"), G, S, es, exh, q))
+    out.append(("stem.bnB", st))
+    st = R(conv_back(st, 16 * 9, wk, q));       out.append(("stem.cB", st))
+    return out
+
+
+def verify_mnv2_back(rows, wk=MNV2_WK, G=MNV2_GLB, S=MNV2_SB, es=MNV2_ESB, exh=MNV2_EXH,
+                     q=U32) -> int:
+    """Re-assert EVERY rounded inequality a `MobileNetV2BackFloatBudget.lean` would close,
+    exactly — the peer of `verify_r34_back`. Returns the count checked; raises on the first
+    failure."""
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: left > right"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2, q))
+        ck(tag + '.A', (1 + g) * (m * wk * A + 0), dst[0])
+        ck(tag + '.E', g * (m * wk * (A + E) + 0) + m * wk * E, dst[1])
+
+    def bn_ck(tag, hw, src, dst):
+        A, E = src
+        Xh = F(isqrt_exact(hw))
+        Kr, Kb = bn_back_gain(hw, Xh, G, S, es, exh, q)
+        ck(tag + '.Kr', bnGradInputReMag(hw, G, F(1), S, Xh), Kr)
+        ck(tag + '.Kb', bnGradInputBudgetQ(hw, G, F(1), S, Xh, es, exh, q), Kb)
+        ck(tag + '.A', A * (Kr + Kb), dst[0])
+        ck(tag + '.E', A * Kb + E * Kr, dst[1])
+
+    conv_ck('linBack', 10, (F(1), F(0)), r['linBack'])
+    A, E = r['linBack']
+    inv = F(1) / F(49)
+    me = mulErr(q, inv, A, F(0), F(0))
+    ck('gapBack.A', inv * A + me, r['gapBack'][0])
+    ck('gapBack.E', me + inv * E, r['gapBack'][1])
+    bn_ck('head.bnB', 49, r['gapBack'], r['head.bnB'])
+    conv_ck('head.cB', 128, r['head.bnB'], r['head.cB'])
+    st = r['head.cB']
+    for tag, kind, ic, mid, oc, h, w in MNV2_BACK_PLAN:
+        blkin = st
+        hw = h * w
+        he = (2 * h) * (2 * w) if kind == "strided" else hw
+        bn_ck(tag + '.bnBp', hw, blkin, r[tag + '.bnBp'])
+        conv_ck(tag + '.cBp', oc, r[tag + '.bnBp'], r[tag + '.cBp'])
+        bn_ck(tag + '.bnBd', hw, r[tag + '.cBp'], r[tag + '.bnBd'])
+        conv_ck(tag + '.dwB', 9, r[tag + '.bnBd'], r[tag + '.dwB'])
+        bn_ck(tag + '.bnBe', he, r[tag + '.dwB'], r[tag + '.bnBe'])
+        conv_ck(tag + '.cBe', mid, r[tag + '.bnBe'], r[tag + '.cBe'])
+        if kind == "skip":
+            Bd, Ed = r[tag + '.cBe']
+            ck(tag + '.out.A', Bd + blkin[0] + q * (Bd + blkin[0]), r[tag + '.out'][0])
+            ck(tag + '.out.E', q * (Bd + Ed + blkin[0] + blkin[1]) + (Ed + blkin[1]),
+               r[tag + '.out'][1])
+        else:
+            ck(tag + '.out.A', r[tag + '.cBe'][0], r[tag + '.out'][0])
+            ck(tag + '.out.E', r[tag + '.cBe'][1], r[tag + '.out'][1])
+        st = r[tag + '.out']
+    bn_ck('stem.bnB', 12544, st, r['stem.bnB'])
+    conv_ck('stem.cB', 16 * 9, r['stem.bnB'], r['stem.cB'])
+    return n
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# EfficientNet-B0 BACKWARD — the squeeze-excite question (§3.8 item 1)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# ⭐⭐ THE STRUCTURAL ANSWER, and it is the one the r34 result predicts: SE's backward is
+# LINEAR in the cotangent, so a backward really is always a fold. `seInputGrad`
+# (`SEBackFloatBridge.lean`) is
+#
+#     seBack(dy) = diagBack g dy  +  gateBack (diagBack xinp dy)
+#
+# — a `biPathSum` of two LINEAR maps, because the gate `g = gate(x)` and the input `x` are
+# SAVED CONSTANTS. §0.1's forward quadratic came from the gate being grown out of the same
+# input the rescale multiplies; on the backward that input is not the cotangent. Nothing in
+# the SE backward is quadratic, and `budget/window` stays a fold ratio.
+#
+# ⛔⛔ AND IT IS NOT STATABLE ANYWAY — for a reason r34's backward does not have. Both of the
+# SE backward's saved constants, AND the swish backward's saved derivative, are magnitudes the
+# forward window has to supply:
+#
+#   * `diagBack xinp` scales by `Sx = |x|`, the SE block's own input activation. There is no
+#     `bnXhat_sq_le` here: `x` is a post-swish activation, not a normalised one, so the only
+#     available bound is the forward's certified window (7.6e9 / 5.5e24 / 4.9e40 at b1/b2/b3).
+#   * `swBd`/`swBe`/`swBs`/`swBh` scale by `Ssw = |swish'(preact)|`, and the repo's only bound
+#     is `swishScalar_lipschitz_abs`'s WINDOW-DEPENDENT `1 + A/4` — 1.2e51 at the head.
+#     ⭐ The global constant `|swish'| ≤ 1.1` is NOT proved (§3.4 says so explicitly); it is
+#     GELU's `geluScalarDeriv_abs_le` for the other smooth activation, and proving it is the
+#     single highest-value lemma this probe found.
+#
+# So the question §3.8 asked ("is a backward always a fold?") answers YES, and the question it
+# did not ask ("is a backward always STATABLE?") answers NO — and the two failure modes are
+# §0.1's two, a third time: this one is MAGNITUDE, and it is imported from the forward.
+#
+# Profile, per KIND on /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.bin
+# (5,288,548 f32):
+#
+#     kind                 count       max|·|    bound
+#     conv/dense kernels   5,236,192   3.6857    37/10
+#     BN γ                 21,008      4.0545    41/10
+#     BN β                 21,008      2.5103    —      (no bias anywhere in the backward)
+#     SE dense + fc bias   10,340      2.5185    —
+#
+# ⚠ Here the split runs r34's way — the uniform 41/10 is a BN γ, 1.1× loose on the 5.24 M
+# entries every conv fan-in multiplies — but at 1.1× it is worth under an order.
+#
+# ⭐ `batchMap` never enters a numeral (`Maps.batchMap` is the identity on the envelope), so
+# this fold is per-example and holds at any batch size `N`, exactly like the forward's.
+
+B0_WK = F(37, 10)       # conv / dense kernels         measured 3.6857
+B0_GLB = F(41, 10)      # BN γ                         measured 4.0545
+B0_SB = F(16)           # |istd| at the operating point
+B0_ESB = F(1, 100)      # supplied float inverse-stddev accuracy
+B0_EXH = F(1, 100)      # supplied float normalised-activation accuracy
+B0_ESAV = F(1, 100)     # supplied accuracy on EVERY saved vector the backward scales by
+                        # (the gate `g`, the SE input `x`, `σ'(saved)`, `swish'(saved)`)
+B0_SSIG = F(1, 4)       # |σ'| = |σ(1−σ)| ≤ 1/4
+B0_SSW_TRUE = F(11, 10) # the TRUE global |swish'| — ⛔ NOT proved in the repo (see above)
+
+# (tag, kind, cin, cmid, cout, h, w, kd, se_c, se_r), cotangent-first. `h`/`w` are the block's
+# OUTPUT spatial dims; a "strided" block's expand stage runs at 2h × 2w. `se_c` is the SE's
+# channel count (= cmid, or cin for the no-expand block) and `se_r` its reduced width.
+B0_BACK_PLAN = [
+    ("b3", "resid", 24, 144, 24, 56, 56, 25, 144, 6),
+    ("b2", "strided", 16, 96, 24, 56, 56, 9, 96, 4),
+    ("b1", "noexp", 32, 32, 16, 112, 112, 9, 32, 8),
+]
+
+
+def diag_back(st, Sd, esav, q=U32):
+    """`floatClose_diagBack` — the saved-vector pointwise scale. Covers the swish/sigmoid
+    backward (`s = act'(saved preact)`) and both of `seInputGrad`'s two saved multipliers."""
+    A, E = st
+    me = mulErr(q, Sd, A, esav, F(0))
+    return (Sd * A + me, me + Sd * E)
+
+
+def broadcast_back(st, N, nnz=None, q=U32):
+    """`floatClose_broadcastBack` — the SE gate's spatial reduce (`Vec (c·h·w) → Vec c`, each
+    channel summing its own `h·w` cells).
+
+    ⚠ `nnz` is the ablation this leaf deserves. As PROVED the bound charges all `c·h·w` terms
+    (`hsumabs` bounds every masked entry by `A`, including the `(c−1)·h·w` that are identically
+    ZERO), so the window carries a spurious factor of `c`. `nnz = h·w` is the honest count."""
+    A, E = st
+    if nnz is None:
+        nnz = N
+    g = r4(gamma_q(N + 1, q))
+    NN = F(nnz)
+    return (NN * A + g * (NN * A), g * (NN * (A + E)) + NN * E)
+
+
+def se_back(st, out, tag, se_c, hw, se_r, Sx, Sg, Ssw, w=B0_WK, esav=B0_ESAV,
+            Ssig=B0_SSIG, q=U32, nnz=None):
+    """`seInputGrad g xinp gateBack = biPathSum (diagBack g) (gateBack ∘ diagBack xinp)`, with
+    `gateBack = gapBack ∘ linBack W₁ ∘ diagBack ssw ∘ linBack W₂ ∘ diagBack ssig ∘ broadcastBack`
+    (`floatBridges_seGateBack`, the exact reverse of the gate's six forward stages).
+
+    ⭐ BOTH branches are linear in the cotangent — the gate and the input are saved constants —
+    which is the whole answer to §3.8's question. What the gate path costs is not nonlinearity
+    but MAGNITUDE: `Sx` is the block's saved input activation, and `broadcastBack` multiplies by
+    the reduce's fan-in before `gapBack` divides it back out."""
+    def R(s):
+        return (r4(s[0]), r4(s[1]))
+
+    main = R(diag_back(st, Sg, esav, q));           out.append((tag + ".se.main", main))
+    p = R(diag_back(st, Sx, esav, q));              out.append((tag + ".se.pre", p))
+    p = R(broadcast_back(p, se_c * hw, nnz, q));    out.append((tag + ".se.bc", p))
+    p = R(diag_back(p, Ssig, esav, q));             out.append((tag + ".se.sig", p))
+    p = R(conv(p, se_c, w, F(0), q));               out.append((tag + ".se.d2", p))
+    p = R(diag_back(p, Ssw, esav, q));              out.append((tag + ".se.sw", p))
+    p = R(conv(p, se_r, w, F(0), q));               out.append((tag + ".se.d1", p))
+    p = R(gap_back(p, hw, q));                      out.append((tag + ".se.gap", p))
+    st = R(bipath(main, p, q));                     out.append((tag + ".se.out", st))
+    return st
+
+
+def b0_back_chain(wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ESAV,
+                  q=U32, xhat='sqrt', ssw='window', sx='window', se_nnz=False):
+    """Every stage of `efficientnetInputGradB` at B0's shapes, folded over the LOSS COTANGENT.
+
+    `ssw` / `sx` are the two forward-window imports this probe exists to measure:
+      `ssw='window'` : `|swish'| ≤ 1 + A/4` at the forward's pre-swish window — what the repo
+                       proves today (`swishScalar_lipschitz_abs`).
+      `ssw=<rat>`    : a global constant (11/10 is the true one; ⛔ NOT proved).
+      `sx='window'`  : the SE's saved input bounded by the forward's certified window.
+      `sx=<rat>`     : an operating-point bound, §3.7's `|istd| ≤ 16` one op over.
+    `se_nnz=True` tightens `broadcastBack` to its `h·w` nonzero terms."""
+    fwd = dict(b0_eval_chain())
+
+    def Xh(hw, fwd_tag):
+        return F(isqrt_exact(hw)) if xhat == 'sqrt' else 2 * fwd[fwd_tag][0] * S
+
+    def Ssw(fwd_tag):
+        return (1 + fwd[fwd_tag][0] / 4) if ssw == 'window' else ssw
+
+    def Sx(fwd_tag):
+        return fwd[fwd_tag][0] if sx == 'window' else sx
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out = []
+    st = (F(1), F(0))
+    st = R(conv_back(st, 10, wk, q));            out.append(("linBack", st))
+    st = R(gap_back(st, 56 * 56, q));            out.append(("gapBack", st))
+    # head: swBh -> bnBh (1280ch @ 56×56) -> convFlatBack Wh (1×1, fan-in 1280)
+    st = R(diag_back(st, Ssw("head.bn"), esav, q));  out.append(("head.swB", st))
+    st = R(bn_back(st, 3136, Xh(3136, "head.bn"), G, S, es, exh, q))
+    out.append(("head.bnB", st))
+    st = R(conv_back(st, 1280, wk, q));          out.append(("head.cB", st))
+    for tag, kind, cin, cmid, cout, h, w, kd, se_c, se_r in B0_BACK_PLAN:
+        blkin = st
+        hw = h * w
+        he = (2 * h) * (2 * w) if kind == "strided" else hw
+        # project back: bnBp (cout @ h×w) then convFlatBack Wp (1×1, fan-in cout)
+        s = R(bn_back(blkin, hw, Xh(hw, tag + ".pbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBp", s))
+        s = R(conv_back(s, cout, wk, q));        out.append((tag + ".cBp", s))
+        # the squeeze-excite product-rule backward
+        s = se_back(s, out, tag, se_c, hw, se_r, Sx(tag + ".dswish"), 1 + B0_ESIG,
+                    Ssw(tag + ".sd1"), wk, esav, B0_SSIG, q,
+                    nnz=(hw if se_nnz else None))
+        # depthwise back: swBd -> bnBd (cmid @ h×w) -> depthwiseFlatBack (fan-in kd)
+        s = R(diag_back(s, Ssw(tag + ".dbn"), esav, q));  out.append((tag + ".swBd", s))
+        s = R(bn_back(s, hw, Xh(hw, tag + ".dbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBd", s))
+        s = R(conv_back(s, kd, wk, q));          out.append((tag + ".dwB", s))
+        if kind != "noexp":
+            # expand back: swBe -> bnBe (cmid @ he) -> convFlatBack We (fan-in cmid)
+            s = R(diag_back(s, Ssw(tag + ".ebn"), esav, q));  out.append((tag + ".swBe", s))
+            s = R(bn_back(s, he, Xh(he, tag + ".ebn"), G, S, es, exh, q))
+            out.append((tag + ".bnBe", s))
+            s = R(conv_back(s, cmid, wk, q));    out.append((tag + ".cBe", s))
+        st = R(residual(blkin, s, q)) if kind == "resid" else s
+        out.append((tag + ".out", st))
+    # stem: swBs -> bnBs (32ch @ 112×112) -> flatConvStride2Back Ws (fan-in 32·9)
+    st = R(diag_back(st, Ssw("stem.bn"), esav, q));  out.append(("stem.swB", st))
+    st = R(bn_back(st, 12544, Xh(12544, "stem.bn"), G, S, es, exh, q))
+    out.append(("stem.bnB", st))
+    st = R(conv_back(st, 32 * 9, wk, q));        out.append(("stem.cB", st))
+    return out
+
+
+def verify_b0_back(rows, wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ESAV,
+                   q=U32, ssw='window', sx='window', se_nnz=False) -> int:
+    """Re-assert EVERY rounded inequality an `EfficientNetBackFloatBudget.lean` would close,
+    exactly — the peer of `verify_r34_back`. Returns the count checked; raises on the first
+    failure."""
+    fwd = dict(b0_eval_chain())
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: left > right"
+        n += 1
+
+    def Ssw(t):
+        return (1 + fwd[t][0] / 4) if ssw == 'window' else ssw
+
+    def Sx(t):
+        return fwd[t][0] if sx == 'window' else sx
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2, q))
+        ck(tag + '.A', (1 + g) * (m * wk * A + 0), dst[0])
+        ck(tag + '.E', g * (m * wk * (A + E) + 0) + m * wk * E, dst[1])
+
+    def bn_ck(tag, hw, src, dst):
+        A, E = src
+        Xh = F(isqrt_exact(hw))
+        Kr, Kb = bn_back_gain(hw, Xh, G, S, es, exh, q)
+        ck(tag + '.Kr', bnGradInputReMag(hw, G, F(1), S, Xh), Kr)
+        ck(tag + '.Kb', bnGradInputBudgetQ(hw, G, F(1), S, Xh, es, exh, q), Kb)
+        ck(tag + '.A', A * (Kr + Kb), dst[0])
+        ck(tag + '.E', A * Kb + E * Kr, dst[1])
+
+    def diag_ck(tag, Sd, src, dst):
+        A, E = src
+        me = mulErr(q, Sd, A, esav, F(0))
+        ck(tag + '.A', Sd * A + me, dst[0])
+        ck(tag + '.E', me + Sd * E, dst[1])
+
+    def gap_ck(tag, hw, src, dst):
+        A, E = src
+        inv = F(1) / F(hw)
+        me = mulErr(q, inv, A, F(0), F(0))
+        ck(tag + '.A', inv * A + me, dst[0])
+        ck(tag + '.E', me + inv * E, dst[1])
+
+    def bipath_ck(tag, p, b, dst):
+        Pd, Ep = p
+        Bd, Ed = b
+        ck(tag + '.A', Pd + Bd + q * (Pd + Bd), dst[0])
+        ck(tag + '.E', q * (Pd + Ep + Bd + Ed) + (Ep + Ed), dst[1])
+
+    conv_ck('linBack', 10, (F(1), F(0)), r['linBack'])
+    gap_ck('gapBack', 56 * 56, r['linBack'], r['gapBack'])
+    diag_ck('head.swB', Ssw("head.bn"), r['gapBack'], r['head.swB'])
+    bn_ck('head.bnB', 3136, r['head.swB'], r['head.bnB'])
+    conv_ck('head.cB', 1280, r['head.bnB'], r['head.cB'])
+    st = r['head.cB']
+    for tag, kind, cin, cmid, cout, h, w, kd, se_c, se_r in B0_BACK_PLAN:
+        blkin = st
+        hw = h * w
+        he = (2 * h) * (2 * w) if kind == "strided" else hw
+        bn_ck(tag + '.bnBp', hw, blkin, r[tag + '.bnBp'])
+        conv_ck(tag + '.cBp', cout, r[tag + '.bnBp'], r[tag + '.cBp'])
+        sein = r[tag + '.cBp']
+        diag_ck(tag + '.se.main', 1 + B0_ESIG, sein, r[tag + '.se.main'])
+        diag_ck(tag + '.se.pre', Sx(tag + ".dswish"), sein, r[tag + '.se.pre'])
+        A, E = r[tag + '.se.pre']
+        N = se_c * hw
+        g = r4(gamma_q(N + 1, q))
+        NN = F(hw if se_nnz else N)
+        ck(tag + '.se.bc.A', NN * A + g * (NN * A), r[tag + '.se.bc'][0])
+        ck(tag + '.se.bc.E', g * (NN * (A + E)) + NN * E, r[tag + '.se.bc'][1])
+        diag_ck(tag + '.se.sig', B0_SSIG, r[tag + '.se.bc'], r[tag + '.se.sig'])
+        conv_ck(tag + '.se.d2', se_c, r[tag + '.se.sig'], r[tag + '.se.d2'])
+        diag_ck(tag + '.se.sw', Ssw(tag + ".sd1"), r[tag + '.se.d2'], r[tag + '.se.sw'])
+        conv_ck(tag + '.se.d1', se_r, r[tag + '.se.sw'], r[tag + '.se.d1'])
+        gap_ck(tag + '.se.gap', hw, r[tag + '.se.d1'], r[tag + '.se.gap'])
+        bipath_ck(tag + '.se.out', r[tag + '.se.main'], r[tag + '.se.gap'], r[tag + '.se.out'])
+        diag_ck(tag + '.swBd', Ssw(tag + ".dbn"), r[tag + '.se.out'], r[tag + '.swBd'])
+        bn_ck(tag + '.bnBd', hw, r[tag + '.swBd'], r[tag + '.bnBd'])
+        conv_ck(tag + '.dwB', kd, r[tag + '.bnBd'], r[tag + '.dwB'])
+        last = r[tag + '.dwB']
+        if kind != "noexp":
+            diag_ck(tag + '.swBe', Ssw(tag + ".ebn"), last, r[tag + '.swBe'])
+            bn_ck(tag + '.bnBe', he, r[tag + '.swBe'], r[tag + '.bnBe'])
+            conv_ck(tag + '.cBe', cmid, r[tag + '.bnBe'], r[tag + '.cBe'])
+            last = r[tag + '.cBe']
+        if kind == "resid":
+            Bd, Ed = last
+            ck(tag + '.out.A', Bd + blkin[0] + q * (Bd + blkin[0]), r[tag + '.out'][0])
+            ck(tag + '.out.E', q * (Bd + Ed + blkin[0] + blkin[1]) + (Ed + blkin[1]),
+               r[tag + '.out'][1])
+        else:
+            ck(tag + '.out.A', last[0], r[tag + '.out'][0])
+            ck(tag + '.out.E', last[1], r[tag + '.out'][1])
+        st = r[tag + '.out']
+    diag_ck('stem.swB', Ssw("stem.bn"), st, r['stem.swB'])
+    bn_ck('stem.bnB', 12544, r['stem.swB'], r['stem.bnB'])
+    conv_ck('stem.cB', 32 * 9, r['stem.bnB'], r['stem.cB'])
     return n
 
 
@@ -1429,20 +1891,21 @@ if __name__ == "__main__":
     print("     'a bigger number', it is NO NUMBER: those stages cannot be written down at all.")
 
     print("\n── ResNet-34 BACKWARD sizing probe (planning/float_budget_numbers.md §3.7) ──")
-    brows = r34_back_chain()
+    brows = r34_back_chain(S=F(16))
     bA, bE = brows[-1][1]
-    print(f"  SHIPPED SHAPE: {len(brows)} stages, TRAINING-mode BatchNorm")
+    print(f"  SHIPPED SHAPE: {len(brows)} stages, TRAINING-mode BatchNorm, |istd| <= 16")
     print(f"    window        {sci(bA)}")
     print(f"    budget        {sci(bE)}")
     print(f"    budget/window {float(bE / bA):.4f}   ⭐ a FOLD — the backward is LINEAR in the "
           f"cotangent")
-    print(f"    re-assertions {verify_r34_back(brows)} — every rounded inequality re-checked "
+    print(f"    re-assertions {verify_r34_back(brows, S=F(16))} — every rounded inequality re-checked "
           f"exactly")
     print(f"    statable      {'YES' if max(ilog10(bA), ilog10(bE)) < 300 else 'NO'}")
     print(f"\n  {'variant':<44} {'window':>12} {'budget':>12}  statable")
     print("  " + "-" * 76)
     for name, kw in [
-        ("shipped (per-kind profile, x̂ ≤ √n)", {}),
+        ("⭐ shipped: |istd| ≤ 16, per-kind profile, x̂ ≤ √n", dict(S=F(16))),
+        ("the same at the unconditional ε-floor S = 317", {}),
         ("uniform 21/10 (the FORWARD's profile)", dict(wk=F(21, 10))),
         ("x̂ from the forward WINDOW (2·A·S)", dict(xhat='window')),
         ("variance floor 1e-3 (S = 32)", dict(S=F(32))),
@@ -1461,3 +1924,77 @@ if __name__ == "__main__":
     print("\n  window growth through block 0 (the per-block multiplier that sets the answer):")
     for tag, (a, e) in rows[3:25]:
         print(f"    {tag:<12} {sci(a):>12} {sci(e):>12}")
+
+    print("\n── MobileNetV2 BACKWARD sizing probe (planning/float_budget_numbers.md §3.8) ──")
+    mrows = mnv2_back_chain()
+    mA, mE = mrows[-1][1]
+    print(f"  SHIPPED SHAPE: {len(mrows)} stages, TRAINING-mode BatchNorm")
+    print(f"    window        {sci(mA)}")
+    print(f"    budget        {sci(mE)}")
+    print(f"    budget/window {float(mE / mA):.4f}   ⭐ a FOLD — every leaf is linear in the "
+          f"cotangent")
+    print(f"    re-assertions {verify_mnv2_back(mrows)} — every rounded inequality re-checked "
+          f"exactly")
+    print(f"\n  {'variant':<44} {'window':>12} {'budget':>12}  statable")
+    print("  " + "-" * 76)
+    for name, kw in [
+        ("shipped (per-kind profile, x̂ ≤ √n)", {}),
+        ("uniform 28/10 (the FORWARD's profile)", dict(G=F(28, 10))),
+        ("x̂ from the forward WINDOW (2·A·S)", dict(xhat='window')),
+        ("⭐ NO operating point: S = 317 (the ε-floor)", dict(S=F(317))),
+        ("variance floor 1e-3 (S = 32)", dict(S=F(32))),
+        ("variance floor 1e-1 (S = 4)", dict(S=F(4))),
+        ("σ² ≈ 1 (S = 1)", dict(S=F(1))),
+    ]:
+        rr = mnv2_back_chain(**kw)
+        a, e = rr[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'NO'
+        print(f"  {name:<44} {sci(a):>12} {sci(e):>12}  {ok}")
+    print("\n  ⭐⭐ The ε-floor row is the result: MobileNetV2's backward is statable with NO")
+    print("     operating-point hypothesis at all, where ResNet-34's needs |istd| ≤ 16 (§3.7(b)).")
+    print("     20 BN sites against r34's 33, and 1×1 fan-ins (24–256) against r34's 512·9.")
+    print("  ⛔ relu6's CLAMP — the whole reason the forward window is 2154 — buys the backward")
+    print("     NOTHING: `reluMaskBack` is a 0/1 select, envelope-preserving, and a cotangent")
+    print("     window has nothing to be clamped to.")
+
+    print("\n── EfficientNet-B0 BACKWARD sizing probe: the SQUEEZE-EXCITE question ──")
+    erows = b0_back_chain()
+    eA, eE = erows[-1][1]
+    print(f"  SHIPPED LEAVES: {len(erows)} stages, TRAINING-mode BatchNorm, any batch size N")
+    print(f"    window        {sci(eA)}")
+    print(f"    budget        {sci(eE)}")
+    print(f"    budget/window {float(eE / eA):.4f}   ⭐ STILL A FOLD — SE does not break "
+          f"linearity")
+    print(f"    re-assertions {verify_b0_back(erows)} — every rounded inequality re-checked "
+          f"exactly")
+    print(f"    statable      NO — 1e{ilog10(eA)}, past `norm_num`'s ~1e253 ceiling (§3.7(a))")
+    print(f"\n  {'variant':<48} {'window':>12} {'budget':>12}  statable")
+    print("  " + "-" * 80)
+    for name, kw in [
+        ("shipped leaves (swish 1+A/4, Sx = fwd window)", {}),
+        ("⭐ global |swish′| ≤ 11/10 ONLY (NOT proved)", dict(ssw=F(11, 10))),
+        ("operating-point Sx ≤ 16 ONLY", dict(sx=F(16))),
+        ("both", dict(ssw=F(11, 10), sx=F(16))),
+        ("both + broadcastBack tightened to its h·w nonzeros", dict(ssw=F(11, 10), sx=F(16),
+                                                                   se_nnz=True)),
+        ("both + uniform 41/10 param bound", dict(ssw=F(11, 10), sx=F(16), wk=F(41, 10))),
+        ("both, x̂ from the forward WINDOW", dict(ssw=F(11, 10), sx=F(16), xhat='window')),
+        ("both, S = 317 (the ε-floor)", dict(ssw=F(11, 10), sx=F(16), S=F(317))),
+    ]:
+        rr = b0_back_chain(**kw)
+        a, e = rr[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'NO'
+        print(f"  {name:<48} {sci(a):>12} {sci(e):>12}  {ok}")
+    print("\n  ⭐⭐ ONE UNPROVED SCALAR LEMMA IS THE WHOLE DIFFERENCE. A *global* bound on")
+    print("     |swish′| — any constant, the window must simply not appear — moves B0's backward")
+    print("     from 1e431 to 1e167 on its own; the operating-point Sx does NOT (1e359, still no).")
+    print("     And the constant need not be sharp:")
+    for nm, c in [("11/10 (the true sup)", F(11, 10)), ("137/100 (1 + 1/e)", F(137, 100)),
+                  ("2 (the crudest global)", F(2))]:
+        a, e = b0_back_chain(ssw=c, sx=F(16))[-1][1]
+        print(f"       Ssw = {nm:<24} {sci(a):>12} {sci(e):>12}")
+    print("  ⛔ §3.4 says that constant needs \"the decay of σ′, i.e. calculus\". It does NOT:")
+    print("     σ′(x) = σ(x)(1−σ(x)) = e^{−|x|}/(1+e^{−|x|})² ≤ e^{−|x|}, and |x|·e^{−|x|} ≤ 1")
+    print("     straight from e^t ≥ 1+t ≥ t — so |swish′| = |σ + x·σ′| ≤ 2 with")
+    print("     `Real.add_one_le_exp` and no MVT, no sup, no derivative analysis. (The sharp")
+    print("     1.0998 does need the sup; the table above says nobody needs it.)")

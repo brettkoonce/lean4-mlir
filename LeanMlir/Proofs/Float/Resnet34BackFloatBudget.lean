@@ -8,13 +8,13 @@ the `[3,4,6,3]` ResNet-34 at `224²` — the exact reverse of `resnet34Forward_f
 the loss cotangent — at the profile measured per parameter KIND on the trained checkpoint, for
 any rounding model at binary32 accuracy:
 
-    output window  ≤ 2.188·10²⁴⁵      (`r34GradBridge_mag_le`)
-    fresh budget   ≤ 1.458·10²⁴⁴      (`r34GradBridge_fresh_le`)
+    output window  ≤ 8.857·10²⁴⁵      (`r34GradBridge_mag_le`)
+    fresh budget   ≤ 6.894·10²⁴⁴      (`r34GradBridge_fresh_le`)
 
-and hence, per input-pixel gradient, `|float − real| ≤ 1.458·10²⁴⁴` (`r34_grad_float_le`), on
+and hence, per input-pixel gradient, `|float − real| ≤ 6.894·10²⁴⁴` (`r34_grad_float_le`), on
 cotangents of magnitude `≤ 1` — which is what softmax cross-entropy gives (`|p − y| ≤ 1`).
 
-⭐ **`budget / window = 0.0666`, and that ratio is the point.** ConvNeXt-T's and ViT-Tiny's
+⭐ **`budget / window = 0.0778`, and that ratio is the point.** ConvNeXt-T's and ViT-Tiny's
 forward numbers come out at `2.00` because every normalisation site is discharged by
 `FloatBridgesTo.capped` — the triangle inequality. This one is not capped anywhere: it is the
 interval fold, at a net whose FORWARD has no number at all in this mode (§0.1's `10⁷⁴¹⁷`).
@@ -78,10 +78,24 @@ backwards are `r34IdBlockBack` / `r34DownBlockBack` at the record's real kernels
 certified per-channel BatchNorm backwards, and `Resnet34BackCertifiedTie.lean` already ties each
 of those — and every endpoint leaf — to its certified VJP
 (`r34IdBlockBack_eq_rblkPC_vjp`, `r34DownBlockBack_eq_rblkPStridedPC_vjp`,
-`dense_transpose_eq_vjp_backward`, `gapBack_eq_vjp_backward`, `maxPoolFlatBack_eq_vjp_backward`,
-`convFlatBack_eq_vjp_backward`). ⚠ The whole-net FOLD of those ties is still open there, so the
-honest reading is "every piece of this chain is the certified gradient" and not yet "this chain
-is the certified whole-net gradient".
+`dense_transpose_eq_vjp_backward`, `gapBack_eq_vjp_backward`,
+`maxPool3s2FlatBack_eq_vjp_backward`, `cbrStridedPCBack_eq_vjp_backward`,
+`convFlatBack_eq_vjp_backward`). ⭐⭐ **And the whole-net FOLD of those ties is now CLOSED too**
+(`r34InputGrad_eq_resnet34_vjp`, 2026-09-03): `r34InputGrad` with every slot pinned to the
+certified per-op backward IS `(resnet34_has_vjp_at …).backward` at the full `224²` dims. So the
+reading is no longer "every piece of this chain is the certified gradient" — the chain IS the
+certified whole-net gradient.
+
+⛔⛔ **AND CLOSING IT MOVED THIS NUMBER, because it found a drift.** `r34InputGrad` pooled with
+`maxPoolFlatBack` — the **2×2** pool's backward — while the committed forward
+`resnet34Forward_full_pc` uses `maxPool3s2Flat`, He et al.'s 3×3/s2 stem pool (restored
+2026-08-03). `MaxPool3s2.lean` warns in its header that the two share a TYPE and are different
+functions; nothing forced the two statements to unify until the whole-net tie needed them to be
+about one net. `maxPool3s2FlatBack` (`MaxPool3s2BackFloatBridge.lean`) is the missing leaf, and
+because 3×3/s2 windows OVERLAP its backward ACCUMULATES — window `4A`, not the 2×2 peer's `A`.
+The number moved `2.188·10²⁴⁵ → 8.857·10²⁴⁵`. ⚠ The `4` is proved from `win3Row_mem_le_two`, not
+assumed: the trivial `c·h·w` fibre bound would put this at `10²⁵¹`, four orders under (a)'s
+shape-dependent `norm_num` wall.
 
 ⚠ **Two mechanical lessons this file cost, both about ELABORATION ORDER and both new.**
 (a) The whole-net bridge could not be rebuilt as one 22-stage `.comp` term: that makes the
@@ -93,8 +107,8 @@ nothing. (b) **Pin all FOUR numerals on every leaf** — `(Ā := …) (Ē := …
 `have` runs before `Maps.comp` unifies anything, so an unpinned OUTPUT window is a metavariable
 too, and the failure reads `⊢ <huge numeral> ≤ ?m.2125` rather than as a missing argument.
 
-Provenance for the 252 numerals: `scripts/float_budget_envelope.py`'s `r34_back_chain`, which
-folds 90 stages in exactly these lemmas' semantics with exact rationals and rounds every stage
+Provenance for the 254 numerals: `scripts/float_budget_envelope.py`'s `r34_back_chain`, which
+folds 91 stages in exactly these lemmas' semantics with exact rationals and rounds every stage
 UP to four significant figures, and `verify_r34_back`, which re-asserts each rounded inequality
 before any of them is emitted.
 -/
@@ -280,7 +294,7 @@ noncomputable def R34DownBlkBack.bridge {ic oc h w : Nat}
 noncomputable def r34GradR (w : R34BackWeights ε wk gl S es exh) :
     Vec 10 → Vec (3 * 224 * 224) :=
   (flatConvStride2Back (h := 112) (w := 112) w.stemK.W ∘ w.stemBn.real ∘ reluMaskBack w.mstem)
-  ∘ maxPoolFlatBack (c := 64) (h := 56) (w := 56) w.xmp
+  ∘ maxPool3s2FlatBack (c := 64) (h := 56) (w := 56) w.xmp
   ∘ w.a0.real ∘ w.a1.real ∘ w.a2.real ∘ w.d2.real
   ∘ w.b0.real ∘ w.b1.real ∘ w.b2.real ∘ w.d3.real
   ∘ w.c0.real ∘ w.c1.real ∘ w.c2.real ∘ w.c3.real ∘ w.c4.real ∘ w.d4.real
@@ -294,7 +308,7 @@ noncomputable def r34GradF (M : FloatModel) (w : R34BackWeights ε wk gl S es ex
     Vec 10 → Vec (3 * 224 * 224) :=
   ((M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap w.stemK.W) (fun _ => 0)
       ∘ decimateBack 64 112 112) ∘ w.stemBn.float M ∘ reluMaskBack w.mstem)
-  ∘ maxPoolFlatBack (c := 64) (h := 56) (w := 56) w.xmp
+  ∘ M.maxPool3s2FlatBackF (c := 64) (h := 56) (w := 56) w.xmp
   ∘ w.a0.float M ∘ w.a1.float M ∘ w.a2.float M ∘ w.d2.float M
   ∘ w.b0.float M ∘ w.b1.float M ∘ w.b2.float M ∘ w.d3.float M
   ∘ w.c0.float M ∘ w.c1.float M ∘ w.c2.float M ∘ w.c3.float M ∘ w.c4.float M ∘ w.d4.float M
@@ -333,7 +347,8 @@ noncomputable def r34GradBridge (M : FloatModel) (P : R34BackProfile M ε wk gl 
       (w.a2.bridge M P (Xh := 56) (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num))).comp
       (w.a1.bridge M P (Xh := 56) (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num))).comp
       (w.a0.bridge M P (Xh := 56) (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num))).comp
-      (floatBridgesTo_maxPoolBack (c := 64) (h := 56) (w := 56) w.xmp)).comp
+      (floatBridgesTo_maxPool3s2Back M (c := 64) (h := 56) (w := 56) w.xmp
+        (by norm_num) (by norm_num) (by norm_num))).comp
     (((floatBridgesTo_reluMaskBack w.mstem).comp
         (w.stemBn.bridge M P (Xh := 112) (by norm_num) (by norm_num) (by norm_num)
           (by norm_num))).comp
@@ -367,15 +382,16 @@ theorem r34BackProfile_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
 
 set_option maxRecDepth 4000000 in
 set_option maxHeartbeats 8000000 in
-/-- ⭐ **The envelope, kernel-checked.** 90 numeric stages, 252 rational inequalities, built
+/-- ⭐ **The envelope, kernel-checked.** 91 numeric stages, 254 rational inequalities, built
     bottom-up at block granularity (16 block steps rather than 90 leaf steps), with every γ-term
     bounded through `FloatModel.gamma_num` so `norm_num` never evaluates a big power.
 
-    ⭐ Of the 252, NONE is a cap: `budget / window = 0.0666`, not `2.00`. Every one is the
+    ⭐ Of the 254, NONE is a cap: `budget / window = 0.0778`, not `2.00`. Every one is the
     interval fold, at a net whose forward has no number in this mode at all. -/
 theorem r34GradBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
     (w : R34BackWeights ε (12/10) (21/10) 16 (1/100) (1/100)) :
-    (r34GradBridge M (r34BackProfile_committed M hMu hε5) w).Maps 1 0 (2188 * 10 ^ 242) (1458 * 10 ^ 241) := by
+    (r34GradBridge M (r34BackProfile_committed M hMu hε5) w).Maps 1 0
+      (8857 * 10 ^ 242) (6894 * 10 ^ 241) := by
   have P := r34BackProfile_committed M hMu hε5
   -- ⭐ the five per-resolution gain constants, each proved once
   have K49r : bnGradInputReMag (7 * 7) (21/10) 1 16 7
@@ -409,7 +425,7 @@ theorem r34GradBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5
     norm_num [bnGradInputBudgetG, bgMTr, bgEP, bgE2, bgM1, bgMXSf, bgE1, bgEXS,
     bgESXD, bgEXD, bgMND, bgEND, bgMSD, bgESD, bgED, FloatModel.mulErr, u32]
   -- the stem's three stages, grouped as `r34_grad_floatBridgesTo` groups them
-  have hstem := ((FloatBridgesTo.Maps.reluMaskBack w.mstem (Ā := 1376 * 10 ^ 233) (Ē := 8944 * 10 ^ 231)).comp (by norm_num)
+  have hstem := ((FloatBridgesTo.Maps.reluMaskBack w.mstem (Ā := 5571 * 10 ^ 233) (Ē := 4245 * 10 ^ 232)).comp (by norm_num)
     (FloatBridgesTo.Maps.bnPerChannelBackGain M w.stemBn.γ w.stemBn.x w.stemBn.fs w.stemBn.fxh
       (by norm_num) (by norm_num) w.stemBn.hγ w.stemBn.hs w.stemBn.hS
       (fun c i => bnXhat_abs_le_num (X := 112) P.hε _ (by norm_num) (by norm_num) i)
@@ -417,13 +433,13 @@ theorem r34GradBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5
       (M.gamma_num (k := 112 * 112 + 1) (q := 7483 / 10 ^ 7) hMu (by norm_num [u32]) (by norm_num [u32]))
       P.hgl P.hS0 (by norm_num) P.hes P.hexh K12544r K12544b
       (by norm_num) (by norm_num)
-      (Ā := 1376 * 10 ^ 233) (Ē := 8944 * 10 ^ 231) (Ā' := 5811 * 10 ^ 238) (Ē' := 3861 * 10 ^ 237)
+      (Ā := 5571 * 10 ^ 233) (Ē := 4245 * 10 ^ 232) (Ā' := 2353 * 10 ^ 239) (Ē' := 1827 * 10 ^ 238)
       (by norm_num) (by norm_num))
     ).comp (by norm_num)
     (FloatBridgesTo.Maps.flatConvStride2Back (h := 112) (w := 112) M w.stemK.W
       P.hwk (by norm_num) w.stemK.hW
       (M.gamma_num (k := 64 * 7 * 7 + 2) (q := 1871 / 10 ^ 7) hMu (by norm_num [u32]) (by norm_num [u32]))
-      (Ā' := 2188 * 10 ^ 242) (Ē' := 1458 * 10 ^ 241) (by norm_num [u32]) (by norm_num [u32]))
+      (Ā' := 8857 * 10 ^ 242) (Ē' := 6894 * 10 ^ 241) (by norm_num [u32]) (by norm_num [u32]))
   -- the loss head, then the trunk in the same groups
   have h0 := (FloatBridgesTo.Maps.linBack M w.head.W P.hwk (by norm_num) w.head.hW
     (M.gamma_num (k := 10 + 2) (q := 7153 / 10 ^ 10) hMu (by norm_num [u32]) (by norm_num [u32]))
@@ -992,36 +1008,42 @@ theorem r34GradBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5
           (Ā := 1883 * 10 ^ 225) (Ē := 1203 * 10 ^ 224) (Ā' := 1989 * 10 ^ 230) (Ē' := 1293 * 10 ^ 229)
           (by norm_num) (by norm_num))
         (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32]))
-  have hMP := hA.comp (by norm_num) (FloatBridgesTo.Maps.maxPoolBack (c := 64) (h := 56) (w := 56) w.xmp)
+  have hMP := hA.comp (by norm_num)
+    (FloatBridgesTo.Maps.maxPool3s2Back M (c := 64) (h := 56) (w := 56) w.xmp
+      (by norm_num) (by norm_num) (by norm_num) (g := 1211 / 10 ^ 5) (by norm_num)
+      (M.gamma_num (k := 64 * 56 * 56 + 1) (q := 1211 / 10 ^ 5) hMu
+        (by norm_num [u32]) (by norm_num [u32]))
+      (Ā := 1376 * 10 ^ 233) (Ē := 8944 * 10 ^ 231)
+      (Ā' := 5571 * 10 ^ 233) (Ē' := 4245 * 10 ^ 232) (by norm_num) (by norm_num))
   exact hMP.comp (by norm_num) hstem
 
 /-- The deployed r34 backward bridge's certified output window at the committed profile. -/
 theorem r34GradBridge_mag_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
     (w : R34BackWeights ε (12/10) (21/10) 16 (1/100) (1/100)) :
-    (r34GradBridge M (r34BackProfile_committed M hMu hε5) w).mag 1 ≤ 2188 * 10 ^ 242 :=
+    (r34GradBridge M (r34BackProfile_committed M hMu hε5) w).mag 1 ≤ 8857 * 10 ^ 242 :=
   (r34GradBridge_maps M hMu hε5 w).mag_le 1 (by norm_num) le_rfl
 
-/-- ⭐ The deployed r34 backward bridge's fresh budget — `0.0666 ×` the certified window, and that
+/-- ⭐ The deployed r34 backward bridge's fresh budget — `0.0778 ×` the certified window, and that
     ratio is the tell that this is the FOLD and not the triangle inequality (§9). -/
 theorem r34GradBridge_fresh_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
     (w : R34BackWeights ε (12/10) (21/10) 16 (1/100) (1/100)) :
-    (r34GradBridge M (r34BackProfile_committed M hMu hε5) w).fresh 1 ≤ 1458 * 10 ^ 241 :=
+    (r34GradBridge M (r34BackProfile_committed M hMu hε5) w).fresh 1 ≤ 6894 * 10 ^ 241 :=
   (r34GradBridge_maps M hMu hε5 w).mod_le 1 0 (by norm_num) le_rfl le_rfl le_rfl
 
-/-- ⭐⭐ **The deployed ResNet-34 input-gradient is within `1.458·10²⁴⁴` of the certified real
+/-- ⭐⭐ **The deployed ResNet-34 input-gradient is within `6.894·10²⁴⁴` of the certified real
     input-gradient, per pixel**, on loss cotangents of magnitude `≤ 1` (which is what softmax
     cross-entropy gives, `|p − y| ≤ 1`), at the measured per-kind parameter profile, for
     `ε ≥ 10⁻⁵`, any float inverse-stddev and normalised activation accurate to `10⁻²`, and any
     rounding model at binary32 accuracy.
 
-    ⭐ **It is the interval FOLD, at TRAINING-mode BatchNorm** — `budget / window = 0.0666`, not
+    ⭐ **It is the interval FOLD, at TRAINING-mode BatchNorm** — `budget / window = 0.0778`, not
     `2.00` — where the forward of this same net in this same mode has no statable number at all.
     ⛔ **And read the file header before quoting it**: `es` and `exh` are supplied, and they are
     the two quantities the forward's own training-mode fold cannot discharge. -/
 theorem r34_grad_float_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
     (w : R34BackWeights ε (12/10) (21/10) 16 (1/100) (1/100))
     (dy : Vec 10) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (3 * 224 * 224)) :
-    |r34GradF M w dy j - r34GradR w dy j| ≤ 1458 * 10 ^ 241 :=
+    |r34GradF M w dy j - r34GradR w dy j| ≤ 6894 * 10 ^ 241 :=
   (r34GradBridge_maps M hMu hε5 w).budget_le (by norm_num) le_rfl dy hdy j
 
 end Proofs
