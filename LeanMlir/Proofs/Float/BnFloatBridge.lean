@@ -240,57 +240,107 @@ theorem FloatModel.bnForward_close_of {n : Nat} (M : FloatModel)
 -- § The mean reduction (the easy Higham budget)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **BN mean rounding budget.** The float mean `fl((Σx)/n)` (rounded sum, then a
-    rounded division by the exact `n`) is within
-    `u·(1+u)^{n+1}·A + ((1+u)^{n+1}−1)·A` of the real `bnMean`, under `|xᵢ| ≤ A`.
-    Standard: `sum_close`'s fan-in `γ` plus one division rounding. -/
-theorem FloatModel.bnMean_close {n : ℕ} (M : FloatModel) (x : Vec n) {A : ℝ}
-    (hn : 0 < n) (hA : ∀ i, |x i| ≤ A) :
-    |M.div (M.sum x) (n : ℝ) - bnMean n x| ≤
-      M.u * ((1 + M.u) ^ (n + 1) * A) + ((1 + M.u) ^ (n + 1) - 1) * A := by
+/-- ⭐⭐ **The mean reduction's budget, parameterised by the REDUCTION'S OWN SPEC.**
+    `bnMean_close` below is this at `fsum := M.sum`, the concrete LEFT FOLD — and a GPU does not
+    reduce left to right, so a number stated through that instance is about a program we do not
+    ship. This form takes any `fsum` whose forward error meets a fan-in `γn`, which is what every
+    summation order satisfies: sequential summation is the worst of them at
+    `γ = (1+u)^{n+1} − 1`, and a tree's is `(1+u)^{⌈log₂n⌉+1} − 1`, strictly smaller, so the
+    bound holds a fortiori. **The resulting mean accuracy is DERIVED for the kernel actually
+    shipped rather than supplied by analogy** (`planning/float_budget_numbers.md` §3.31 route 3);
+    it is `bnMean_close`'s proof with one hypothesis substituted.
+
+    ⚠ Only the SUM is parameterised. The division by the exact width is `M.div`, one rounding,
+    and there is nothing to model about it. -/
+theorem FloatModel.bnMean_close_of {n : ℕ} (M : FloatModel) {fsum : Vec n → ℝ} {γn A : ℝ}
+    (x : Vec n) (hn : 0 < n) (hγn0 : 0 ≤ γn)
+    (hsc : |fsum x - ∑ i, x i| ≤ γn * ∑ i, |x i|) (hA : ∀ i, |x i| ≤ A) :
+    |M.div (fsum x) (n : ℝ) - bnMean n x| ≤ M.u * ((γn + 1) * A) + γn * A := by
   have hu := M.u_nonneg
   have hnR : (0:ℝ) < (n:ℝ) := by exact_mod_cast hn
   have hA0 : 0 ≤ A := (abs_nonneg _).trans (hA ⟨0, hn⟩)
-  set γn := (1 + M.u) ^ (n + 1) - 1 with hγn
-  have hγn0 : 0 ≤ γn := sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hpow : (1 + M.u) ^ (n + 1) = γn + 1 := by rw [hγn]; ring
   have hsumabs : ∑ i, |x i| ≤ (n:ℝ) * A := by
     calc ∑ i, |x i| ≤ ∑ _i : Fin n, A := Finset.sum_le_sum fun i _ => hA i
       _ = (n:ℝ) * A := by
           rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
   have hsumabs0 : 0 ≤ ∑ i, |x i| := Finset.sum_nonneg fun i _ => abs_nonneg _
-  have hsc : |M.sum x - ∑ i, x i| ≤ γn * ∑ i, |x i| := M.sum_close x
-  -- |Σx| ≤ Σ|x|, hence |S| ≤ (γn+1)·Σ|x|
-  have hSabs : |M.sum x| ≤ (γn + 1) * ((n:ℝ) * A) := by
-    have htri := abs_sub_le (M.sum x) (∑ i, x i) 0
+  -- |Σx| ≤ Σ|x|, hence |fsum x| ≤ (γn+1)·Σ|x|
+  have hSabs : |fsum x| ≤ (γn + 1) * ((n:ℝ) * A) := by
+    have htri := abs_sub_le (fsum x) (∑ i, x i) 0
     simp only [sub_zero] at htri
     have hSig : |∑ i, x i| ≤ ∑ i, |x i| := Finset.abs_sum_le_sum_abs _ _
-    calc |M.sum x| ≤ |M.sum x - ∑ i, x i| + |∑ i, x i| := htri
+    calc |fsum x| ≤ |fsum x - ∑ i, x i| + |∑ i, x i| := htri
       _ ≤ γn * ∑ i, |x i| + ∑ i, |x i| := add_le_add hsc hSig
       _ = (γn + 1) * ∑ i, |x i| := by ring
-      _ ≤ (γn + 1) * ((n:ℝ) * A) :=
-          mul_le_mul_of_nonneg_left hsumabs (by linarith)
+      _ ≤ (γn + 1) * ((n:ℝ) * A) := mul_le_mul_of_nonneg_left hsumabs (by linarith)
   rw [show bnMean n x = (∑ i, x i) / (n:ℝ) from rfl]
-  -- triangle through (M.sum x)/n
-  have step1 : |M.div (M.sum x) (n:ℝ) - (M.sum x) / (n:ℝ)| ≤ M.u * |(M.sum x) / (n:ℝ)| :=
-    M.err _
-  have hSn : |(M.sum x) / (n:ℝ)| ≤ (γn + 1) * A := by
+  -- triangle through (fsum x)/n
+  have step1 : |M.div (fsum x) (n:ℝ) - (fsum x) / (n:ℝ)| ≤ M.u * |(fsum x) / (n:ℝ)| := M.err _
+  have hSn : |(fsum x) / (n:ℝ)| ≤ (γn + 1) * A := by
     rw [abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
-    calc |M.sum x| ≤ (γn + 1) * ((n:ℝ) * A) := hSabs
+    calc |fsum x| ≤ (γn + 1) * ((n:ℝ) * A) := hSabs
       _ = (γn + 1) * A * (n:ℝ) := by ring
-  have step2 : |(M.sum x) / (n:ℝ) - (∑ i, x i) / (n:ℝ)| ≤ γn * A := by
+  have step2 : |(fsum x) / (n:ℝ) - (∑ i, x i) / (n:ℝ)| ≤ γn * A := by
     rw [div_sub_div_same, abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
-    calc |M.sum x - ∑ i, x i| ≤ γn * ∑ i, |x i| := hsc
+    calc |fsum x - ∑ i, x i| ≤ γn * ∑ i, |x i| := hsc
       _ ≤ γn * ((n:ℝ) * A) := mul_le_mul_of_nonneg_left hsumabs hγn0
       _ = γn * A * (n:ℝ) := by ring
-  calc |M.div (M.sum x) (n:ℝ) - (∑ i, x i) / (n:ℝ)|
-      ≤ |M.div (M.sum x) (n:ℝ) - (M.sum x) / (n:ℝ)|
-        + |(M.sum x) / (n:ℝ) - (∑ i, x i) / (n:ℝ)| := abs_sub_le _ _ _
+  calc |M.div (fsum x) (n:ℝ) - (∑ i, x i) / (n:ℝ)|
+      ≤ |M.div (fsum x) (n:ℝ) - (fsum x) / (n:ℝ)|
+        + |(fsum x) / (n:ℝ) - (∑ i, x i) / (n:ℝ)| := abs_sub_le _ _ _
+    _ ≤ M.u * |(fsum x) / (n:ℝ)| + γn * A := add_le_add step1 step2
     _ ≤ M.u * ((γn + 1) * A) + γn * A := by
-        refine add_le_add (le_trans step1 ?_) step2
-        exact mul_le_mul_of_nonneg_left hSn hu
-    _ = M.u * ((1 + M.u) ^ (n + 1) * A) + ((1 + M.u) ^ (n + 1) - 1) * A := by
-        rw [hpow]; ring
+        linarith [mul_le_mul_of_nonneg_left hSn hu]
+
+/-- **BN mean rounding budget.** The float mean `fl((Σx)/n)` (rounded sum, then a
+    rounded division by the exact `n`) is within
+    `u·(1+u)^{n+1}·A + ((1+u)^{n+1}−1)·A` of the real `bnMean`, under `|xᵢ| ≤ A`.
+    Standard: `sum_close`'s fan-in `γ` plus one division rounding. ⚠ Stated at the concrete
+    left fold `M.sum`; `bnMean_close_of` above is the form that covers the kernels we ship. -/
+theorem FloatModel.bnMean_close {n : ℕ} (M : FloatModel) (x : Vec n) {A : ℝ}
+    (hn : 0 < n) (hA : ∀ i, |x i| ≤ A) :
+    |M.div (M.sum x) (n : ℝ) - bnMean n x| ≤
+      M.u * ((1 + M.u) ^ (n + 1) * A) + ((1 + M.u) ^ (n + 1) - 1) * A := by
+  have h := M.bnMean_close_of (fsum := M.sum) x hn
+    (sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))) (M.sum_close x) hA
+  simpa using h
+
+/-- ⭐⭐ **The derived mean accuracy as a RATIONAL** — the form a budget file's profile takes.
+    `bnMean_close_of` at the fan-in every summation order meets, with `gamma_num`'s
+    `k·u/(1−k·u)` relaxation and one more round-up, so what a record has to carry is a numeral
+    and not an expression in `M.u`.
+
+    ⭐ At `n = 12544` (ResNet-34's stem BatchNorm) and `u ≤ 2⁻²⁴` it is `7.484·10⁻⁴`, where every
+    committed normalisation number SUPPLIED `10⁻²` — by analogy with the device `rsqrt`, which
+    genuinely has no IEEE specification, when a rounded reduction plainly does have one. That is
+    §3.3.0(b)'s rule (*before writing a bound, grep the whole cone for it*) at the tenth
+    instance: `bnMean_close` has been in this file since the MNIST work. -/
+theorem FloatModel.bnMean_num_le {n : ℕ} (M : FloatModel) (hMu : M.u ≤ u32)
+    {fsum : Vec n → ℝ} {gq eq : ℝ} (hn : 0 < n)
+    (hsum : ∀ x : Vec n, |fsum x - ∑ i, x i| ≤ ((1 + M.u) ^ (n + 1) - 1) * ∑ i, |x i|)
+    (hk : ((n + 1 : ℕ) : ℝ) * u32 < 1)
+    (hgq : ((n + 1 : ℕ) : ℝ) * u32 / (1 - ((n + 1 : ℕ) : ℝ) * u32) ≤ gq)
+    (heq : u32 * (1 + gq) + gq ≤ eq) :
+    ∀ A : ℝ, 0 ≤ A → ∀ v : Vec n, (∀ k, |v k| ≤ A) →
+      |M.div (fsum v) (n : ℝ) - bnMean n v| ≤ eq * A := by
+  intro A hA0 v hv
+  have hu := M.u_nonneg
+  have hγ0 : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have hγq : (1 + M.u) ^ (n + 1) - 1 ≤ gq := M.gamma_num hMu hk hgq
+  have h := M.bnMean_close_of (fsum := fsum) v hn hγ0 (hsum v) hv
+  refine h.trans ?_
+  have hstep : M.u * (((1 + M.u) ^ (n + 1) - 1 + 1) * A) + ((1 + M.u) ^ (n + 1) - 1) * A
+      ≤ u32 * ((gq + 1) * A) + gq * A := by
+    have h1 : M.u * (((1 + M.u) ^ (n + 1) - 1 + 1) * A) ≤ u32 * ((gq + 1) * A) :=
+      mul_le_mul hMu (by nlinarith) (by nlinarith) (by norm_num [u32])
+    have h2 : ((1 + M.u) ^ (n + 1) - 1) * A ≤ gq * A :=
+      mul_le_mul_of_nonneg_right hγq hA0
+    linarith
+  refine hstep.trans ?_
+  have : u32 * ((gq + 1) * A) + gq * A = (u32 * (1 + gq) + gq) * A := by ring
+  rw [this]
+  exact mul_le_mul_of_nonneg_right heq hA0
 
 -- ════════════════════════════════════════════════════════════════
 -- § The variance reduction (the coupled Higham budget)

@@ -139,16 +139,25 @@ the MODULUS is improved, and escape 2's window half leaves the modulus alone —
 smaller branch at all 36 sites), and **the probe was folding the LayerNorm net's leaf shape**,
 whose affine sits outside where a BatchNorm's sits inside.
 
-⭐⭐ **STARTING A SESSION? GO TO §3.31's ITEM (D)**, measured 2026-09-05 and re-asserted by a
-`verify_*` pass: deriving the device MEAN's accuracy `emr` instead of supplying it at `10⁻²`,
-worth 47 more orders on ConvNeXt-T, 53 on ViT-Tiny and 65 more on r34 on top of (C)
-(**8.705·10⁸⁰ / 1.743·10⁸¹**), with the mathematics already in the repo
-(`FloatModel.bnMean_close`) and one real question attached — `M.sum` is a left fold where a GPU
-reduces in a tree, so the honest form parameterises the reduction by `sum_close`'s spec.
-⭐⭐ And read §3.31's closing measurement whatever you do next: with `emr` derived the
-normalisation sites SHRINK and the whole remaining growth is the **conv fan-in** — `layerBudget`'s
-uniform `m·w'·A` face, §0's own documented gap to the adjoint chain, which nothing in this file
-has ever attacked.
+⭐⭐ **AND §3.31's ITEM (D) LANDED TOO — §3.33, 2026-09-05: the device MEAN's accuracy is now
+DERIVED, not supplied.** All three normalisation numbers moved and none of them by a modelling
+concession: **r34 @ training BN 4.304·10¹⁴⁵ → 8.748·10⁸⁰** (65 orders, and **140 in total** from
+where §3.29 landed it), **ConvNeXt-T 6.609·10¹⁷⁴ → 4.871·10¹³⁰** (44), **ViT-Tiny
+1.130·10¹⁶¹ → 2.397·10¹⁰⁸** (53). ⭐ Every file supplied `emr = 10⁻²` *by analogy with the device
+`rsqrt`* — and the analogy is false: a `rsqrt` genuinely has no IEEE spec, a MEAN is a rounded
+reduction then a divide and `FloatModel.bnMean_close` has bounded it since the MNIST work.
+⭐ Route 3, as §3.31 said: `bnMean_close_of` takes the reduction's **spec** rather than its
+**order**, because `M.sum` is a concrete left fold and no GPU kernel is one. ⛔ All three stay
+CAPS.
+
+⭐⭐ **STARTING A SESSION? THE WALL HAS MOVED — go to §3.33's closing finding.** With `emr`
+derived the normalisation sites shrink and the whole remaining growth is the **conv fan-in**:
+`layerBudget`'s uniform `m·w'·A` face, §0's own documented gap to the adjoint chain (257× per
+stage), shared with every number in this file including the four backwards, and never attacked.
+That is the next problem, and it is the first one in a while that is not about a normalisation.
+⭐ Two smaller items are measured and waiting: state the device inverse-stddev `ei` RELATIVE
+rather than absolute (it is now the loose constant, by four orders — §3.33 finding 2), and
+ConvNeXt-T's 2 remaining orders from a per-width `emr` (priced and declined, §3.33).
 
 §4 carries the rest of the order — **2b** B0's whole-net certified tie (⛔ bigger than §4 costed:
 the apex is `efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched
@@ -201,9 +210,9 @@ window contains an error term, ask why.**
 | ResNet-34 @224², **inference BN** | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 4.9·10⁻³ | fold | `Resnet34FloatBudget.lean` |
 | MobileNetV2 @224², **inference BN** | **2.154·10³** | 1.444·10⁹⁶ | — | fold | `MobileNetV2FloatBudget.lean` |
 | EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | fold | `EfficientNetFloatBudget.lean` |
-| ConvNeXt-T @224², channel LN | 6.609·10¹⁷⁴ | 1.321·10¹⁷⁵ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
-| ViT-Tiny @224², depth 12, vector LN | 1.130·10¹⁶¹ | 2.259·10¹⁶¹ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
-| ⛔ **ResNet-34 @224², TRAINING BN**, per-example | 4.304·10¹⁴⁵ | 8.605·10¹⁴⁵ | **2.00** | ⛔ **cap** | `Resnet34TrainFloatBudget.lean` |
+| ConvNeXt-T @224², channel LN | 4.871·10¹³⁰ | 9.738·10¹³⁰ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
+| ViT-Tiny @224², depth 12, vector LN | 2.397·10¹⁰⁸ | 4.794·10¹⁰⁸ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
+| ⛔ **ResNet-34 @224², TRAINING BN**, per-example | 8.748·10⁸⁰ | 1.752·10⁸¹ | **2.00** | ⛔ **cap** | `Resnet34TrainFloatBudget.lean` |
 | **ResNet-34 BACKWARD** @224², **training BN** | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 7.8·10⁻² | ⭐ fold | `Resnet34BackFloatBudget.lean` |
 | **MobileNetV2 BACKWARD** @224², **training BN**, ⭐ no operating point | 4.750·10¹⁵³ | 1.076·10¹⁵² | 2.3·10⁻² | ⭐ fold | `MobileNetV2BackFloatBudget.lean` |
 | **ConvNeXt-T BACKWARD** @224², **channel LN**, `|istd| ≤ 16` | 1.023·10²⁵¹ | 1.563·10²⁵⁰ | 1.5·10⁻¹ | ⭐⭐ fold | `ConvNeXtBackFloatBudget.lean` |
@@ -363,8 +372,8 @@ THEOREM THE SAME DAY (§3.29).** It conflates *the FOLD's numeral is unwritable*
 no theorem*. The very same measurement records the
 **window** as 10²²¹, which is under §3.7(a)'s ~10²⁵³ ceiling, and escape 1 below
 (`FloatBridgesTo.capped`) turns any statable window into a statable theorem. r34's training-mode
-forward is **4.304·10¹⁴⁵ / 8.605·10¹⁴⁵ under escape 2** (§3.32), and was
-3.176·10²²¹ / 6.349·10²²¹ with the leaf exactly as shipped when it first landed. ⭐ It is a CAP, so §9's label applies — and it IS now
+forward is **8.748·10⁸⁰ / 1.752·10⁸¹** — escape 2 (§3.32) and then the derived device mean
+(§3.33) — and was 3.176·10²²¹ / 6.349·10²²¹ with the leaf exactly as shipped when it landed. ⭐ It is a CAP, so §9's label applies — and it IS now
 `r34_train_float_logits_le` (§3.29), the first statement in this file about the program the repo
 actually TRAINS with, where the other six committed forward numbers are about inference. ⭐⭐ And note the shape of the miss: **escape 1 was
 invented for LayerNorm and never tried on BatchNorm, whose problem this paragraph describes** —
@@ -498,11 +507,11 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | net | state | what closing needs |
 |---|---|---|
 | **ResNet-34 fwd** | ✅ **DONE** (inference BN) — `r34_float_logits_le`, 1.548·10²⁰⁹, tied to the graph | — |
-| **ResNet-34 fwd @ TRAINING BN** | ⛔ **DONE (2026-09-05), and it is the CAP** — `r34_train_float_logits_le`, **4.304·10¹⁴⁵ / 8.605·10¹⁴⁵** after escape 2 (§3.32; 3.176·10²²¹ as first landed, §3.29), tied to the graph | — |
+| **ResNet-34 fwd @ TRAINING BN** | ⛔ **DONE (2026-09-05), and it is the CAP** — `r34_train_float_logits_le`, **8.748·10⁸⁰ / 1.752·10⁸¹** after escape 2 (§3.32) and the derived `emr` (§3.33); 3.176·10²²¹ as first landed (§3.29), tied to the graph | — |
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
-| **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 6.609·10¹⁷⁴ / budget 1.321·10¹⁷⁵ (§3.30's escape 2), tied to the committed net | — |
-| **ViT-Tiny fwd** (`vitForwardKV`) | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `vit_float_logits_le`, window 1.130·10¹⁶¹ / budget 2.259·10¹⁶¹ (§3.30's escape 2), tied to the committed spec's denotation | — |
+| **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window **4.871·10¹³⁰** / budget **9.738·10¹³⁰** (§3.30's escape 2, then §3.33's derived `emr`), tied to the committed net | — |
+| **ViT-Tiny fwd** (`vitForwardKV`) | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `vit_float_logits_le`, window **2.397·10¹⁰⁸** / budget **4.794·10¹⁰⁸** (§3.30's escape 2, then §3.33's derived `emr`), tied to the committed spec's denotation | — |
 | **ResNet-34 BACKWARD** (`r34InputGrad`) | ⭐ **DONE (2026-09-03), the FOLD, and TIED to the certified whole-net VJP** — `r34_grad_float_le`, window 8.857·10²⁴⁵ / budget 6.894·10²⁴⁴, at TRAINING BN; ⛔ three hypotheses, §3.7; the tie is §3.10 | — |
 | **MobileNetV2 BACKWARD** (`mnv2InputGrad`) | ⭐ **DONE (2026-09-04), the FOLD, TIED, and the FIRST with NO operating point** — `mnv2_grad_float_le`, window 4.750·10¹⁵³ / budget 1.076·10¹⁵², at TRAINING BN; §3.13, the tie is §3.14 | — |
 | **ConvNeXt-T BACKWARD** (`convnextInputGrad`) | ⭐⭐ **DONE (2026-09-04), the FOLD at a LAYERNORM net** — `cnx_grad_float_le`, window 1.023·10²⁵¹ / budget 1.563·10²⁵⁰, `\|istd\| ≤ 16`; §3.22, the tie is §3.21 and is `HasVJP` everywhere | — |
@@ -3270,7 +3279,12 @@ costs nothing and it is what the Lean leaf proves.
 
 ---
 
-#### (D) ⭐⭐ `emr` DERIVED RATHER THAN SUPPLIED — and the mathematics is already in the repo
+#### (D) ✅ DONE 2026-09-05 (§3.33) — `emr` DERIVED RATHER THAN SUPPLIED
+
+⭐ **Route 3 was right and the scoping held**, except in one place: *"do not fold it uniformly"*
+is right for ResNet-34 (five widths, 65 orders) and was costed against the wrong baseline for the
+LayerNorm pair — uniform-at-widest costs ConvNeXt-T 2 orders and ViT-Tiny nothing, against a
+`DeviceLN.emr : Nat → ℝ` inside 366 + 324 `norm_num` goals. Priced, declined; §3.33.
 
 Every committed normalisation number supplies the device MEAN's accuracy as `emr = 10⁻²`,
 relative to the window. That number was taken by analogy with the device `rsqrt` and is not
@@ -3442,6 +3456,96 @@ declarations on `[propext, Classical.choice, Quot.sound]`; `docstring-checkrefs`
 imports, so a leaf edited in the same session must be `lake build`-ed before the file above it
 will see it — two "Unknown identifier" errors that are not about the code.
 
+### 3.33 ✅ `emr` DERIVED RATHER THAN SUPPLIED (2026-09-05) — §3.31(D), on all three normalisation nets
+
+All three committed normalisation numbers moved, and none of them by a modelling concession:
+
+| forward | before (D) | after (D) | orders |
+|---|---|---|---|
+| **ResNet-34 @ TRAINING BN** | 4.304·10¹⁴⁵ / 8.605·10¹⁴⁵ | **8.748·10⁸⁰ / 1.752·10⁸¹** | 65 |
+| **ConvNeXt-T** | 6.609·10¹⁷⁴ / 1.321·10¹⁷⁵ | **4.871·10¹³⁰ / 9.738·10¹³⁰** | 44 |
+| **ViT-Tiny** | 1.130·10¹⁶¹ / 2.259·10¹⁶¹ | **2.397·10¹⁰⁸ / 4.794·10¹⁰⁸** | 53 |
+
+⛔ All three stay **CAPS**; §9's label is untouched. r34's is now **140 orders** below where §3.29
+landed it, in two steps.
+
+**⭐⭐ It is a MODELLING correction, not a tighter constant, and that is the whole point.** Every
+normalisation number in this file supplied `emr = 10⁻²` — the device mean's accuracy relative to
+the window — *by analogy with the device `rsqrt`*. The analogy is false. A GPU `rsqrt` genuinely
+has no IEEE specification, which is why `ei` is still modelled; a device MEAN is a rounded
+reduction followed by a divide, and that plainly has one. `FloatModel.bnMean_close` has proved it
+since the MNIST work. ⭐ §3.3.0(b)'s rule — *before writing a bound, grep the whole cone for it* —
+for the **tenth** time, and the third in three days.
+
+**⛔ Route 3 was the right one and §3.31's catch is real.** `bnMean_close` is stated at `M.sum`, a
+concrete **left fold**, and no GPU kernel reduces left to right — so that instance is a theorem
+about a program we do not ship (§3.1's `BnEvalFloatBridge` warning, one tier over).
+`FloatModel.bnMean_close_of` is that proof with **one hypothesis substituted**: it takes any
+`fsum` whose forward error meets a fan-in `γ`, which **every** summation order does — sequential
+is the worst at `(1+u)^{n+1} − 1`, a tree is `(1+u)^{⌈log₂n⌉+1} − 1`, so the bound holds a
+fortiori. `bnMean_num_le` is its numeral form (through `gamma_num`'s `k·u/(1−k·u)` and one more
+round-up), because a record carries a rational and not an expression in `M.u`. §3.31 costed route
+3 as *"barely more work than route 1"* and that held: the parameterised lemma is 40 lines and the
+numeral form 20.
+
+**⭐ The theorems still QUANTIFY over the device.** `R34TrainBn.hmean` and `DeviceLN.specMu` are
+still hypotheses, so each number holds for *any* device mean at least this accurate — the shape
+`DeviceRsqrt` has always had, and strictly stronger than fixing one kernel.
+`r34TrainBn_emr_committed` and `deviceLN_emr_committed` are the witnesses that a rounded reduction
+achieves every committed numeral, so the constants are **computed and not chosen**. ⭐ That also
+turns §3.26's *"nothing in the repo checks the record is inhabited"* into a theorem for this one
+field.
+
+**⛔ PER SITE on r34, UNIFORM AT THE WIDEST on the two LayerNorm nets — and the second is a
+priced decline.** r34's five BatchNorm widths give `3.041·10⁻⁹` at 7×7 up to `7.484·10⁻⁴` at
+112×112, so `emr` moved into the record's type beside `Xh` (§3.32's trick, second use); folding
+them uniformly at the widest throws most of the 65 orders away. `DeviceLN` keeps ONE `emr`, which
+costs **ConvNeXt-T 2 orders** (4.871·10¹³⁰ against a per-width 1.727·10¹²⁸) and **ViT-Tiny
+nothing**, because all 25 of its LayerNorm sites reduce over the same `D = 192`. Per-width there
+means `DeviceLN.emr : Nat → ℝ` inside 366 + 324 `norm_num` goals in two committed budget files —
+measured, priced at 2 orders, declined. ⚠ §3.31 said *"do not fold it uniformly"*; that was
+right about r34 and costed against the wrong baseline for the LayerNorm pair.
+
+**⛔⛔ Finding 1 — the probe's DEFAULTS were the superseded shape, and had been since §3.30.**
+`cnx_eval_chain()` and `vit_chain()` default to `ln_lin=False`, so a no-argument call returned
+`4.858·10²²⁷` / `3.612·10²¹⁸` — the numbers those files carried *before* escape 2 — while the
+committed Lean said `6.609·10¹⁷⁴` / `1.130·10¹⁶¹`. `verify_cnx`/`verify_vit` still passed at 366
+and 324, because a re-assertion pass checks a chain against ITSELF and both configurations are
+internally consistent. ⭐ **A `verify_*` count is not a sync check**, and §0's ⚠ (*the probe and
+this document must be in sync*) had quietly stopped holding for two nets. Fixed: the defaults are
+now the committed shape (`ln_lin=True`, `ln_cap='force'`, the derived `emr`), and
+`r34_train_chain()`'s too, so all three reproduce their Lean files with no arguments. ⭐ **The rule
+to carry: when a flag becomes the committed shape, flip its DEFAULT in the same commit** — the
+ablation stays reachable, and "the default is the committed row" is the only invariant that a
+count cannot silently break.
+
+**⚠ Finding 2 — `emr` still does not RESET the window, and the residue is now `ei`.** §3.27
+finding 4 says a normalisation resets iff `emr·S < 1`; derived, that is `0.0019` at the ε-floor,
+and the sites still only shrink. The floor is `ea·S = emr·A·S`, proportional to the window however
+small `emr` gets, and the term that keeps it is `D·ei` — the device inverse-stddev, still `10⁻²`
+absolute and now the loose constant by four orders. §3.31's two sub-findings stand: state `ei`
+RELATIVE (worth a further 3.7× per site), and a true reset needs `A·S` bounded, which is a new
+kind of operating point.
+
+**⭐⭐ AND THE WALL HAS MOVED, which is the result of this item.** With `emr` derived the
+normalisation sites shrink and the whole remaining growth is the **conv fan-in** — `layerBudget`'s
+uniform `m·w'·A` face, §0's own documented gap to the adjoint chain (257× per stage,
+`scripts/adjoint_chain_probe.py` §5). That is shared with every number in this file, the four
+backwards included, and **nothing in the float tier has ever attacked it.** It is the next problem.
+
+**⭐ The re-emission: §3.30's learned map, and it caught its own trap again.** ConvNeXt's 429
+slots and ViT's 374 were remapped by value against the two folds of the same chain (0 ambiguous,
+and every unmapped literal checked to be a structural parameter, a `gamma_num` `q`, `Xh`, or the
+input `(1,0)`). ⚠ ViT needed **two extra regexes**: its depth-12 envelope fold passes per-block
+boundaries as `| k => <numeral>` match arms (§3.30 recorded this) **and a `| _ => <numeral>`
+fall-through** that the arm regex missed — which presented as a `Maps` type mismatch naming the
+whole `vitBodyKVFlat` application, exactly as §3.30 says it does.
+
+**Process.** `lake build Proofs Certs` 3956 jobs; `AuditAxioms` exit 0 with all six new
+declarations on `[propext, Classical.choice, Quot.sound]`; `docstring-checkrefs` 1492 citations;
+`check_audit_coverage` 211 imports. Elaboration: r34 38 s, ViT 33 s, ConvNeXt 2m14s.
+⚠ `BnFloatBridge.lean` has 85 dependent modules, so develop against it in scratch and edit once.
+
 ## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
 
 §3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward has a certified tie
@@ -3517,9 +3621,9 @@ by a theorem; **4.304·10¹⁴⁵ / 8.605·10¹⁴⁵** after (C), §3.32.
 **6.609·10¹⁷⁴**, ViT-Tiny 3.612·10²¹⁸ → **1.130·10¹⁶¹**. ⭐ **What is left is §3.31, scoped and
 measured the same day**: ✅ **(C) LANDED 2026-09-05 (§3.32)** — the same escape at the
 PER-CHANNEL BatchNorm, **76 orders on r34's training number**, 3.176·10²²¹ → **4.304·10¹⁴⁵**, at
-no new hypothesis and no modelling decision. What is left is **(D)**, deriving `emr` — 47 more on
-ConvNeXt-T, 53 on ViT-Tiny, 65 more on r34 on top of (C) (8.705·10⁸⁰ / 1.743·10⁸¹, re-measured
-against the corrected leaf). ⛔ Neither changes the KIND; all seven numbers stay caps.
+no new hypothesis and no modelling decision. ✅ **And (D) LANDED the same day (§3.33)** — deriving `emr`: 44 orders
+on ConvNeXt-T, 53 on ViT-Tiny, 65 on r34 on top of (C). ⛔ Neither changed the KIND; all seven
+numbers stay caps. ⭐ **What is open after both is the CONV FAN-IN** — §3.33's closing finding.
 ⛔ It is NOT "the only open item that would change what the numbers MEAN": the fold stays 82 orders
 (ConvNeXt-T) and 7 orders (ViT-Tiny) above the triangle inequality even with §0.1's quadratic gone,
 so both numbers stay CAPS. ⭐⭐ What it changes is what they SAY — **53 orders on ConvNeXt-T's

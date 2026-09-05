@@ -10,10 +10,10 @@ layer scale → skip`, three LN+2×2/s2 downsamples, GAP, head LayerNorm, classi
 input window, at the profile measured on the finished 300-epoch ImageNet checkpoint, for any
 rounding model at binary32 accuracy:
 
-    output window  ≤ 6.609·10¹⁷⁴      (`cnxBridge_mag_le`)
-    fresh budget   ≤ 1.321·10¹⁷⁵      (`cnxBridge_fresh_le`)
+    output window  ≤ 4.871·10¹³⁰      (`cnxBridge_mag_le`)
+    fresh budget   ≤ 9.738·10¹³⁰      (`cnxBridge_fresh_le`)
 
-and hence, per logit, `|float − real| ≤ 1.321·10¹⁷⁵` (`cnx_float_logits_le`).
+and hence, per logit, `|float − real| ≤ 9.738·10¹³⁰` (`cnx_float_logits_le`).
 
 ⛔ **`budget / window = 2.00`, and that ratio is the whole caveat.** Every one of the 23
 LayerNorm sites goes through `FloatBridgesTo.capped`, whose modulus is `min(fold, 2·window)`,
@@ -273,11 +273,17 @@ noncomputable def cnxBridge (M : FloatModel) (R : DeviceLN emr ei) (G : DeviceGe
     LayerNorm β within `3` (max `2.9499`), LayerNorm γ within `48/10` (max `4.7700`), the layer
     scale within `84/10` (max `8.3766`). ⭐ The four scales are 14× apart and the fold is
     exquisitely sensitive to the first of them — see the file header. `ε ≥ 10⁻⁵` (the trainer's
-    value) puts every LayerNorm's inverse-stddev under `317`; the device mean is taken accurate
-    to `10⁻²` relative, the device `rsqrt` and the device GELU to `10⁻²` absolute. -/
+    value) puts every LayerNorm's inverse-stddev under `317`; the device `rsqrt` and the device
+    GELU are taken accurate to `10⁻²` absolute, and ⭐ the device MEAN to **`4.590·10⁻⁵`
+    relative — DERIVED, not supplied** (`deviceLN_emr_committed`, `FloatBudgetEnvLN.lean`): a
+    rounded reduction of `c` terms then a divide is within `u·(1+γ)+γ` of the certified mean at
+    the fan-in every summation order meets, which at this net's widest LayerNorm (`c = 768`) is
+    that numeral. It was `10⁻²` by analogy with the `rsqrt` until 2026-09-05, and the change is
+    worth **44 orders**. ⛔ Uniform at the widest rather than per width, which costs 2 more
+    (4.871·10¹³⁰ against 1.727·10¹²⁸); priced and declined, `FloatBudgetEnvLN.lean`. -/
 theorem cnxProfile_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
     (hε5 : 1 / 100000 ≤ ε) :
-    CnxProfile M ε (6/10) 3 (48/10) (84/10) (1/100) (1/100) (1/100) 317 u32 where
+    CnxProfile M ε (6/10) 3 (48/10) (84/10) (1/100) (4590 / 10 ^ 8) (1/100) 317 u32 where
   hw' := by norm_num
   hbb := by norm_num
   hgl := by norm_num
@@ -307,12 +313,12 @@ set_option maxHeartbeats 4000000 in
 
     ⛔ Of the 366, the 23 that read `2 * Ā' ≤ Ē'` are the CAP, not the fold: at each LayerNorm
     site the modulus is discharged by the triangle inequality rather than by the propagated
-    error. That is why `1.321·10¹⁷⁵ / 6.609·10¹⁷⁴ = 2.00`. -/
+    error. That is why `9.738·10¹³⁰ / 4.871·10¹³⁰ = 2.00`. -/
 theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
-    (R : DeviceLN (1/100) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
+    (R : DeviceLN (4590 / 10 ^ 8) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
     (B : CnxBounded wts (6/10) 3 (48/10) (84/10)) (Eps : CnxEps wts ε) :
     (cnxBridge M R G (cnxProfile_committed M hMu hε5) wts B Eps).Maps 1 0
-      (6609 * 10 ^ 171) (1321 * 10 ^ 172) := by
+      (4871 * 10 ^ 127) (9738 * 10 ^ 127) := by
   have P := cnxProfile_committed M hMu hε5
   have mStemC := FloatBridgesTo.Maps.flatConvStride4 (h := 56) (w := 56) M
     wts.sW wts.sb P.hw' P.hbb (by norm_num) B.sW B.sb
@@ -322,8 +328,8 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
     (cnxChanLNMaps M R P 10 wts.sγ wts.sβ B.sγ B.sβ Eps.hs (by norm_num) (by norm_num)
       (by norm_num) (by norm_num)
       (Ā := 3181 / 10 ^ 2) (Ē := 9480 / 10 ^ 8)
-      (A1 := 1115 / 10 ^ 1) (E1 := 223) (A2 := 5353 / 10 ^ 1) (E2 := 1071)
-      (Ā' := 5384 / 10 ^ 1) (Ē' := 1072)
+      (A1 := 1111 / 10 ^ 2) (E1 := 2222 / 10 ^ 2) (A2 := 5333 / 10 ^ 2) (E2 := 1067 / 10 ^ 1)
+      (Ā' := 5634 / 10 ^ 2) (Ē' := 1068 / 10 ^ 1)
       (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
   have mS1 := mStem.comp (by norm_num)
     ((FloatBridgesTo.Maps.cnxBlockChW M G.g (wts.s1 0) (R.lnF M 96 ((wts.s1 0).εn))
@@ -331,16 +337,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
       (B.s1 0) (R.bridge M P 96 10 (by norm_num) (by norm_num) (by norm_num) ((wts.s1 0).εn) (Eps.h1 0))
       P.hq P.hgl P.hbb P.hsl
       (R.maps M P 96 10 (by norm_num) (by norm_num) (by norm_num) ((wts.s1 0).εn) (Eps.h1 0)
-        (Ā := 1584 * 10 ^ 1) (Ā' := 5055 * 10 ^ 1) (Ē' := 1011 * 10 ^ 2) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-      (A1 := 1584 * 10 ^ 1) (E1 := 3152 * 10 ^ 1)
-      (A2 := 5055 * 10 ^ 1) (E2 := 1011 * 10 ^ 2)
-      (A3 := 2427 * 10 ^ 2) (E3 := 4853 * 10 ^ 2)
-      (A4 := 2428 * 10 ^ 2) (E4 := 4854 * 10 ^ 2)
-      (A5 := 1399 * 10 ^ 4) (E5 := 2796 * 10 ^ 4)
-      (A6 := 1400 * 10 ^ 4) (E6 := 4195 * 10 ^ 4)
-      (A7 := 3226 * 10 ^ 6) (E7 := 9666 * 10 ^ 6)
-      (A8 := 2710 * 10 ^ 7) (E8 := 8120 * 10 ^ 7)
-      (Ā' := 2711 * 10 ^ 7) (Ē' := 8121 * 10 ^ 7)
+        (Ā := 1660) (Ā' := 6742 / 10 ^ 2) (Ē' := 1349 / 10 ^ 1) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+      (A1 := 1660) (E1 := 3140)
+      (A2 := 6742 / 10 ^ 2) (E2 := 1349 / 10 ^ 1)
+      (A3 := 3237 / 10 ^ 1) (E3 := 6476 / 10 ^ 1)
+      (A4 := 3268 / 10 ^ 1) (E4 := 6477 / 10 ^ 1)
+      (A5 := 1883 * 10 ^ 1) (E5 := 3731 * 10 ^ 1)
+      (A6 := 1884 * 10 ^ 1) (E6 := 5597 * 10 ^ 1)
+      (A7 := 4341 * 10 ^ 3) (E7 := 1290 * 10 ^ 4)
+      (A8 := 3647 * 10 ^ 4) (E8 := 1084 * 10 ^ 5)
+      (Ā' := 3648 * 10 ^ 4) (Ē' := 1085 * 10 ^ 5)
       (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 5842 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -349,16 +355,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
         (B.s1 1) (R.bridge M P 96 10 (by norm_num) (by norm_num) (by norm_num) ((wts.s1 1).εn) (Eps.h1 1))
         P.hq P.hgl P.hbb P.hsl
         (R.maps M P 96 10 (by norm_num) (by norm_num) (by norm_num) ((wts.s1 1).εn) (Eps.h1 1)
-          (Ā := 7971 * 10 ^ 8) (Ā' := 2543 * 10 ^ 9) (Ē' := 5086 * 10 ^ 9) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-        (A1 := 7971 * 10 ^ 8) (E1 := 2388 * 10 ^ 9)
-        (A2 := 2543 * 10 ^ 9) (E2 := 5086 * 10 ^ 9)
-        (A3 := 1221 * 10 ^ 10) (E3 := 2442 * 10 ^ 10)
-        (A4 := 1222 * 10 ^ 10) (E4 := 2443 * 10 ^ 10)
-        (A5 := 7039 * 10 ^ 11) (E5 := 1408 * 10 ^ 12)
-        (A6 := 7040 * 10 ^ 11) (E6 := 2113 * 10 ^ 12)
-        (A7 := 1623 * 10 ^ 14) (E7 := 4869 * 10 ^ 14)
-        (A8 := 1364 * 10 ^ 15) (E8 := 4090 * 10 ^ 15)
-        (Ā' := 1365 * 10 ^ 15) (Ē' := 4091 * 10 ^ 15)
+          (Ā := 1073 * 10 ^ 6) (Ā' := 3712 * 10 ^ 4) (Ē' := 7424 * 10 ^ 4) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+        (A1 := 1073 * 10 ^ 6) (E1 := 3190 * 10 ^ 6)
+        (A2 := 3712 * 10 ^ 4) (E2 := 7424 * 10 ^ 4)
+        (A3 := 1782 * 10 ^ 5) (E3 := 3564 * 10 ^ 5)
+        (A4 := 1783 * 10 ^ 5) (E4 := 3565 * 10 ^ 5)
+        (A5 := 1028 * 10 ^ 7) (E5 := 2054 * 10 ^ 7)
+        (A6 := 1029 * 10 ^ 7) (E6 := 3082 * 10 ^ 7)
+        (A7 := 2371 * 10 ^ 9) (E7 := 7102 * 10 ^ 9)
+        (A8 := 1992 * 10 ^ 10) (E8 := 5966 * 10 ^ 10)
+        (Ā' := 1993 * 10 ^ 10) (Ē' := 5967 * 10 ^ 10)
         (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 5842 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -367,16 +373,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
           (B.s1 2) (R.bridge M P 96 10 (by norm_num) (by norm_num) (by norm_num) ((wts.s1 2).εn) (Eps.h1 2))
           P.hq P.hgl P.hbb P.hsl
           (R.maps M P 96 10 (by norm_num) (by norm_num) (by norm_num) ((wts.s1 2).εn) (Eps.h1 2)
-            (Ā := 4014 * 10 ^ 16) (Ā' := 1281 * 10 ^ 17) (Ē' := 2562 * 10 ^ 17) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-          (A1 := 4014 * 10 ^ 16) (E1 := 1203 * 10 ^ 17)
-          (A2 := 1281 * 10 ^ 17) (E2 := 2562 * 10 ^ 17)
-          (A3 := 6149 * 10 ^ 17) (E3 := 1230 * 10 ^ 18)
-          (A4 := 6150 * 10 ^ 17) (E4 := 1231 * 10 ^ 18)
-          (A5 := 3543 * 10 ^ 19) (E5 := 7091 * 10 ^ 19)
-          (A6 := 3544 * 10 ^ 19) (E6 := 1064 * 10 ^ 20)
-          (A7 := 8166 * 10 ^ 21) (E7 := 2452 * 10 ^ 22)
-          (A8 := 6860 * 10 ^ 22) (E8 := 2060 * 10 ^ 23)
-          (Ā' := 6861 * 10 ^ 22) (Ē' := 2061 * 10 ^ 23)
+            (Ā := 5860 * 10 ^ 11) (Ā' := 2027 * 10 ^ 10) (Ē' := 4054 * 10 ^ 10) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+          (A1 := 5860 * 10 ^ 11) (E1 := 1755 * 10 ^ 12)
+          (A2 := 2027 * 10 ^ 10) (E2 := 4054 * 10 ^ 10)
+          (A3 := 9730 * 10 ^ 10) (E3 := 1946 * 10 ^ 11)
+          (A4 := 9731 * 10 ^ 10) (E4 := 1947 * 10 ^ 11)
+          (A5 := 5606 * 10 ^ 12) (E5 := 1122 * 10 ^ 13)
+          (A6 := 5607 * 10 ^ 12) (E6 := 1684 * 10 ^ 13)
+          (A7 := 1292 * 10 ^ 15) (E7 := 3881 * 10 ^ 15)
+          (A8 := 1086 * 10 ^ 16) (E8 := 3261 * 10 ^ 16)
+          (Ā' := 1087 * 10 ^ 16) (Ē' := 3262 * 10 ^ 16)
           (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 5842 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -386,9 +392,9 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
       P.hw' P.hbb (by norm_num) (by norm_num) (by norm_num) B.d1
       (R.bridge M P 96 10 (by norm_num) (by norm_num) (by norm_num) wts.d1.ε Eps.hd1) P.hq P.hgl P.hbb
       (R.maps M P 96 10 (by norm_num) (by norm_num) (by norm_num) wts.d1.ε Eps.hd1
-        (Ā := 6861 * 10 ^ 22) (Ā' := 2189 * 10 ^ 23) (Ē' := 4378 * 10 ^ 23) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-      (A1 := 2189 * 10 ^ 23) (E1 := 4378 * 10 ^ 23) (A2 := 1051 * 10 ^ 24) (E2 := 2102 * 10 ^ 24)
-      (A3 := 1052 * 10 ^ 24) (E3 := 2103 * 10 ^ 24) (Ā' := 2424 * 10 ^ 26) (Ē' := 4846 * 10 ^ 26)
+        (Ā := 1087 * 10 ^ 16) (Ā' := 3760 * 10 ^ 14) (Ē' := 7520 * 10 ^ 14) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+      (A1 := 3760 * 10 ^ 14) (E1 := 7520 * 10 ^ 14) (A2 := 1805 * 10 ^ 15) (E2 := 3610 * 10 ^ 15)
+      (A3 := 1806 * 10 ^ 15) (E3 := 3611 * 10 ^ 15) (Ā' := 4162 * 10 ^ 17) (Ē' := 8321 * 10 ^ 17)
       (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]))
   have mS2 := mD1.comp (by norm_num)
     ((FloatBridgesTo.Maps.cnxBlockChW M G.g (wts.s2 0) (R.lnF M 192 ((wts.s2 0).εn))
@@ -396,16 +402,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
       (B.s2 0) (R.bridge M P 192 14 (by norm_num) (by norm_num) (by norm_num) ((wts.s2 0).εn) (Eps.h2 0))
       P.hq P.hgl P.hbb P.hsl
       (R.maps M P 192 14 (by norm_num) (by norm_num) (by norm_num) ((wts.s2 0).εn) (Eps.h2 0)
-        (Ā := 7127 * 10 ^ 27) (Ā' := 2274 * 10 ^ 28) (Ē' := 4548 * 10 ^ 28) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-      (A1 := 7127 * 10 ^ 27) (E1 := 1425 * 10 ^ 28)
-      (A2 := 2274 * 10 ^ 28) (E2 := 4548 * 10 ^ 28)
-      (A3 := 1092 * 10 ^ 29) (E3 := 2184 * 10 ^ 29)
-      (A4 := 1093 * 10 ^ 29) (E4 := 2185 * 10 ^ 29)
-      (A5 := 1260 * 10 ^ 31) (E5 := 2518 * 10 ^ 31)
-      (A6 := 1261 * 10 ^ 31) (E6 := 3778 * 10 ^ 31)
-      (A7 := 5811 * 10 ^ 33) (E7 := 1742 * 10 ^ 34)
-      (A8 := 4882 * 10 ^ 34) (E8 := 1464 * 10 ^ 35)
-      (Ā' := 4883 * 10 ^ 34) (Ē' := 1465 * 10 ^ 35)
+        (Ā := 1224 * 10 ^ 19) (Ā' := 4234 * 10 ^ 17) (Ē' := 8468 * 10 ^ 17) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+      (A1 := 1224 * 10 ^ 19) (E1 := 2447 * 10 ^ 19)
+      (A2 := 4234 * 10 ^ 17) (E2 := 8468 * 10 ^ 17)
+      (A3 := 2033 * 10 ^ 18) (E3 := 4065 * 10 ^ 18)
+      (A4 := 2034 * 10 ^ 18) (E4 := 4066 * 10 ^ 18)
+      (A5 := 2344 * 10 ^ 20) (E5 := 4685 * 10 ^ 20)
+      (A6 := 2345 * 10 ^ 20) (E6 := 7028 * 10 ^ 20)
+      (A7 := 1081 * 10 ^ 23) (E7 := 3239 * 10 ^ 23)
+      (A8 := 9081 * 10 ^ 23) (E8 := 2721 * 10 ^ 24)
+      (Ā' := 9082 * 10 ^ 23) (Ē' := 2722 * 10 ^ 24)
       (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 1157 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -414,16 +420,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
         (B.s2 1) (R.bridge M P 192 14 (by norm_num) (by norm_num) (by norm_num) ((wts.s2 1).εn) (Eps.h2 1))
         P.hq P.hgl P.hbb P.hsl
         (R.maps M P 192 14 (by norm_num) (by norm_num) (by norm_num) ((wts.s2 1).εn) (Eps.h2 1)
-          (Ā := 1436 * 10 ^ 36) (Ā' := 4582 * 10 ^ 36) (Ē' := 9164 * 10 ^ 36) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-        (A1 := 1436 * 10 ^ 36) (E1 := 4308 * 10 ^ 36)
-        (A2 := 4582 * 10 ^ 36) (E2 := 9164 * 10 ^ 36)
-        (A3 := 2200 * 10 ^ 37) (E3 := 4399 * 10 ^ 37)
-        (A4 := 2201 * 10 ^ 37) (E4 := 4400 * 10 ^ 37)
-        (A5 := 2536 * 10 ^ 39) (E5 := 5069 * 10 ^ 39)
-        (A6 := 2537 * 10 ^ 39) (E6 := 7604 * 10 ^ 39)
-        (A7 := 1170 * 10 ^ 42) (E7 := 3505 * 10 ^ 42)
-        (A8 := 9829 * 10 ^ 42) (E8 := 2945 * 10 ^ 43)
-        (Ā' := 9830 * 10 ^ 42) (Ē' := 2946 * 10 ^ 43)
+          (Ā := 2671 * 10 ^ 25) (Ā' := 9239 * 10 ^ 23) (Ē' := 1848 * 10 ^ 24) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+        (A1 := 2671 * 10 ^ 25) (E1 := 8003 * 10 ^ 25)
+        (A2 := 9239 * 10 ^ 23) (E2 := 1848 * 10 ^ 24)
+        (A3 := 4435 * 10 ^ 24) (E3 := 8871 * 10 ^ 24)
+        (A4 := 4436 * 10 ^ 24) (E4 := 8872 * 10 ^ 24)
+        (A5 := 5111 * 10 ^ 26) (E5 := 1023 * 10 ^ 27)
+        (A6 := 5112 * 10 ^ 26) (E6 := 1535 * 10 ^ 27)
+        (A7 := 2356 * 10 ^ 29) (E7 := 7074 * 10 ^ 29)
+        (A8 := 1980 * 10 ^ 30) (E8 := 5943 * 10 ^ 30)
+        (Ā' := 1981 * 10 ^ 30) (Ē' := 5944 * 10 ^ 30)
         (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 1157 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -432,16 +438,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
           (B.s2 2) (R.bridge M P 192 14 (by norm_num) (by norm_num) (by norm_num) ((wts.s2 2).εn) (Eps.h2 2))
           P.hq P.hgl P.hbb P.hsl
           (R.maps M P 192 14 (by norm_num) (by norm_num) (by norm_num) ((wts.s2 2).εn) (Eps.h2 2)
-            (Ā := 2891 * 10 ^ 44) (Ā' := 9223 * 10 ^ 44) (Ē' := 1845 * 10 ^ 45) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-          (A1 := 2891 * 10 ^ 44) (E1 := 8662 * 10 ^ 44)
-          (A2 := 9223 * 10 ^ 44) (E2 := 1845 * 10 ^ 45)
-          (A3 := 4428 * 10 ^ 45) (E3 := 8857 * 10 ^ 45)
-          (A4 := 4429 * 10 ^ 45) (E4 := 8858 * 10 ^ 45)
-          (A5 := 5103 * 10 ^ 47) (E5 := 1021 * 10 ^ 48)
-          (A6 := 5104 * 10 ^ 47) (E6 := 1532 * 10 ^ 48)
-          (A7 := 2353 * 10 ^ 50) (E7 := 7060 * 10 ^ 50)
-          (A8 := 1977 * 10 ^ 51) (E8 := 5931 * 10 ^ 51)
-          (Ā' := 1978 * 10 ^ 51) (Ē' := 5932 * 10 ^ 51)
+            (Ā := 5825 * 10 ^ 31) (Ā' := 2015 * 10 ^ 30) (Ē' := 4030 * 10 ^ 30) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+          (A1 := 5825 * 10 ^ 31) (E1 := 1748 * 10 ^ 32)
+          (A2 := 2015 * 10 ^ 30) (E2 := 4030 * 10 ^ 30)
+          (A3 := 9673 * 10 ^ 30) (E3 := 1935 * 10 ^ 31)
+          (A4 := 9674 * 10 ^ 30) (E4 := 1936 * 10 ^ 31)
+          (A5 := 1115 * 10 ^ 33) (E5 := 2231 * 10 ^ 33)
+          (A6 := 1116 * 10 ^ 33) (E6 := 3347 * 10 ^ 33)
+          (A7 := 5143 * 10 ^ 35) (E7 := 1543 * 10 ^ 36)
+          (A8 := 4321 * 10 ^ 36) (E8 := 1297 * 10 ^ 37)
+          (Ā' := 4322 * 10 ^ 36) (Ē' := 1298 * 10 ^ 37)
           (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 1157 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -451,9 +457,9 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
       P.hw' P.hbb (by norm_num) (by norm_num) (by norm_num) B.d2
       (R.bridge M P 192 14 (by norm_num) (by norm_num) (by norm_num) wts.d2.ε Eps.hd2) P.hq P.hgl P.hbb
       (R.maps M P 192 14 (by norm_num) (by norm_num) (by norm_num) wts.d2.ε Eps.hd2
-        (Ā := 1978 * 10 ^ 51) (Ā' := 6311 * 10 ^ 51) (Ē' := 1263 * 10 ^ 52) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-      (A1 := 6311 * 10 ^ 51) (E1 := 1263 * 10 ^ 52) (A2 := 3030 * 10 ^ 52) (E2 := 6063 * 10 ^ 52)
-      (A3 := 3031 * 10 ^ 52) (E3 := 6064 * 10 ^ 52) (Ā' := 1397 * 10 ^ 55) (Ē' := 2795 * 10 ^ 55)
+        (Ā := 4322 * 10 ^ 36) (Ā' := 1495 * 10 ^ 35) (Ē' := 2990 * 10 ^ 35) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+      (A1 := 1495 * 10 ^ 35) (E1 := 2990 * 10 ^ 35) (A2 := 7177 * 10 ^ 35) (E2 := 1436 * 10 ^ 36)
+      (A3 := 7178 * 10 ^ 35) (E3 := 1437 * 10 ^ 36) (Ā' := 3308 * 10 ^ 38) (Ē' := 6623 * 10 ^ 38)
       (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]))
   have mS3 := mD2.comp (by norm_num)
     ((FloatBridgesTo.Maps.cnxBlockChW M G.g (wts.s3 0) (R.lnF M 384 ((wts.s3 0).εn))
@@ -461,16 +467,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
       (B.s3 0) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 0).εn) (Eps.h3 0))
       P.hq P.hgl P.hbb P.hsl
       (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 0).εn) (Eps.h3 0)
-        (Ā := 4108 * 10 ^ 56) (Ā' := 1311 * 10 ^ 57) (Ē' := 2622 * 10 ^ 57) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-      (A1 := 4108 * 10 ^ 56) (E1 := 8218 * 10 ^ 56)
-      (A2 := 1311 * 10 ^ 57) (E2 := 2622 * 10 ^ 57)
-      (A3 := 6293 * 10 ^ 57) (E3 := 1259 * 10 ^ 58)
-      (A4 := 6294 * 10 ^ 57) (E4 := 1260 * 10 ^ 58)
-      (A5 := 1451 * 10 ^ 60) (E5 := 2904 * 10 ^ 60)
-      (A6 := 1452 * 10 ^ 60) (E6 := 4357 * 10 ^ 60)
-      (A7 := 1339 * 10 ^ 63) (E7 := 4016 * 10 ^ 63)
-      (A8 := 1125 * 10 ^ 64) (E8 := 3374 * 10 ^ 64)
-      (Ā' := 1126 * 10 ^ 64) (Ē' := 3375 * 10 ^ 64)
+        (Ā := 9726 * 10 ^ 39) (Ā' := 3365 * 10 ^ 38) (Ē' := 6730 * 10 ^ 38) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+      (A1 := 9726 * 10 ^ 39) (E1 := 1948 * 10 ^ 40)
+      (A2 := 3365 * 10 ^ 38) (E2 := 6730 * 10 ^ 38)
+      (A3 := 1616 * 10 ^ 39) (E3 := 3231 * 10 ^ 39)
+      (A4 := 1617 * 10 ^ 39) (E4 := 3232 * 10 ^ 39)
+      (A5 := 3726 * 10 ^ 41) (E5 := 7447 * 10 ^ 41)
+      (A6 := 3727 * 10 ^ 41) (E6 := 1118 * 10 ^ 42)
+      (A7 := 3436 * 10 ^ 44) (E7 := 1031 * 10 ^ 45)
+      (A8 := 2887 * 10 ^ 45) (E8 := 8661 * 10 ^ 45)
+      (Ā' := 2888 * 10 ^ 45) (Ē' := 8662 * 10 ^ 45)
       (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -479,16 +485,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
         (B.s3 1) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 1).εn) (Eps.h3 1))
         P.hq P.hgl P.hbb P.hsl
         (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 1).εn) (Eps.h3 1)
-          (Ā := 3311 * 10 ^ 65) (Ā' := 1057 * 10 ^ 66) (Ē' := 2114 * 10 ^ 66) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-        (A1 := 3311 * 10 ^ 65) (E1 := 9923 * 10 ^ 65)
-        (A2 := 1057 * 10 ^ 66) (E2 := 2114 * 10 ^ 66)
-        (A3 := 5074 * 10 ^ 66) (E3 := 1015 * 10 ^ 67)
-        (A4 := 5075 * 10 ^ 66) (E4 := 1016 * 10 ^ 67)
-        (A5 := 1170 * 10 ^ 69) (E5 := 2341 * 10 ^ 69)
-        (A6 := 1171 * 10 ^ 69) (E6 := 3512 * 10 ^ 69)
-        (A7 := 1080 * 10 ^ 72) (E7 := 3238 * 10 ^ 72)
-        (A8 := 9073 * 10 ^ 72) (E8 := 2720 * 10 ^ 73)
-        (Ā' := 9074 * 10 ^ 72) (Ē' := 2721 * 10 ^ 73)
+          (Ā := 8491 * 10 ^ 46) (Ā' := 2937 * 10 ^ 45) (Ē' := 5874 * 10 ^ 45) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+        (A1 := 8491 * 10 ^ 46) (E1 := 2547 * 10 ^ 47)
+        (A2 := 2937 * 10 ^ 45) (E2 := 5874 * 10 ^ 45)
+        (A3 := 1410 * 10 ^ 46) (E3 := 2820 * 10 ^ 46)
+        (A4 := 1411 * 10 ^ 46) (E4 := 2821 * 10 ^ 46)
+        (A5 := 3252 * 10 ^ 48) (E5 := 6500 * 10 ^ 48)
+        (A6 := 3253 * 10 ^ 48) (E6 := 9751 * 10 ^ 48)
+        (A7 := 2999 * 10 ^ 51) (E7 := 8988 * 10 ^ 51)
+        (A8 := 2520 * 10 ^ 52) (E8 := 7550 * 10 ^ 52)
+        (Ā' := 2521 * 10 ^ 52) (Ē' := 7551 * 10 ^ 52)
         (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -497,16 +503,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
           (B.s3 2) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 2).εn) (Eps.h3 2))
           P.hq P.hgl P.hbb P.hsl
           (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 2).εn) (Eps.h3 2)
-            (Ā := 2668 * 10 ^ 74) (Ā' := 8512 * 10 ^ 74) (Ē' := 1703 * 10 ^ 75) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-          (A1 := 2668 * 10 ^ 74) (E1 := 8000 * 10 ^ 74)
-          (A2 := 8512 * 10 ^ 74) (E2 := 1703 * 10 ^ 75)
-          (A3 := 4086 * 10 ^ 75) (E3 := 8175 * 10 ^ 75)
-          (A4 := 4087 * 10 ^ 75) (E4 := 8176 * 10 ^ 75)
-          (A5 := 9417 * 10 ^ 77) (E5 := 1884 * 10 ^ 78)
-          (A6 := 9418 * 10 ^ 77) (E6 := 2827 * 10 ^ 78)
-          (A7 := 8681 * 10 ^ 80) (E7 := 2606 * 10 ^ 81)
-          (A8 := 7293 * 10 ^ 81) (E8 := 2190 * 10 ^ 82)
-          (Ā' := 7294 * 10 ^ 81) (Ē' := 2191 * 10 ^ 82)
+            (Ā := 7412 * 10 ^ 53) (Ā' := 2564 * 10 ^ 52) (Ē' := 5128 * 10 ^ 52) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+          (A1 := 7412 * 10 ^ 53) (E1 := 2221 * 10 ^ 54)
+          (A2 := 2564 * 10 ^ 52) (E2 := 5128 * 10 ^ 52)
+          (A3 := 1231 * 10 ^ 53) (E3 := 2462 * 10 ^ 53)
+          (A4 := 1232 * 10 ^ 53) (E4 := 2463 * 10 ^ 53)
+          (A5 := 2839 * 10 ^ 55) (E5 := 5675 * 10 ^ 55)
+          (A6 := 2840 * 10 ^ 55) (E6 := 8513 * 10 ^ 55)
+          (A7 := 2618 * 10 ^ 58) (E7 := 7847 * 10 ^ 58)
+          (A8 := 2200 * 10 ^ 59) (E8 := 6592 * 10 ^ 59)
+          (Ā' := 2201 * 10 ^ 59) (Ē' := 6593 * 10 ^ 59)
           (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -515,16 +521,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
             (B.s3 3) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 3).εn) (Eps.h3 3))
             P.hq P.hgl P.hbb P.hsl
             (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 3).εn) (Eps.h3 3)
-              (Ā := 2145 * 10 ^ 83) (Ā' := 6843 * 10 ^ 83) (Ē' := 1369 * 10 ^ 84) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-            (A1 := 2145 * 10 ^ 83) (E1 := 6442 * 10 ^ 83)
-            (A2 := 6843 * 10 ^ 83) (E2 := 1369 * 10 ^ 84)
-            (A3 := 3285 * 10 ^ 84) (E3 := 6572 * 10 ^ 84)
-            (A4 := 3286 * 10 ^ 84) (E4 := 6573 * 10 ^ 84)
-            (A5 := 7572 * 10 ^ 86) (E5 := 1515 * 10 ^ 87)
-            (A6 := 7573 * 10 ^ 86) (E6 := 2273 * 10 ^ 87)
-            (A7 := 6980 * 10 ^ 89) (E7 := 2096 * 10 ^ 90)
-            (A8 := 5864 * 10 ^ 90) (E8 := 1761 * 10 ^ 91)
-            (Ā' := 5865 * 10 ^ 90) (Ē' := 1762 * 10 ^ 91)
+              (Ā := 6471 * 10 ^ 60) (Ā' := 2239 * 10 ^ 59) (Ē' := 4478 * 10 ^ 59) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+            (A1 := 6471 * 10 ^ 60) (E1 := 1939 * 10 ^ 61)
+            (A2 := 2239 * 10 ^ 59) (E2 := 4478 * 10 ^ 59)
+            (A3 := 1075 * 10 ^ 60) (E3 := 2150 * 10 ^ 60)
+            (A4 := 1076 * 10 ^ 60) (E4 := 2151 * 10 ^ 60)
+            (A5 := 2480 * 10 ^ 62) (E5 := 4957 * 10 ^ 62)
+            (A6 := 2481 * 10 ^ 62) (E6 := 7436 * 10 ^ 62)
+            (A7 := 2287 * 10 ^ 65) (E7 := 6854 * 10 ^ 65)
+            (A8 := 1922 * 10 ^ 66) (E8 := 5758 * 10 ^ 66)
+            (Ā' := 1923 * 10 ^ 66) (Ē' := 5759 * 10 ^ 66)
             (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
             (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
             (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -533,16 +539,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
               (B.s3 4) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 4).εn) (Eps.h3 4))
               P.hq P.hgl P.hbb P.hsl
               (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 4).εn) (Eps.h3 4)
-                (Ā := 1725 * 10 ^ 92) (Ā' := 5503 * 10 ^ 92) (Ē' := 1101 * 10 ^ 93) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-              (A1 := 1725 * 10 ^ 92) (E1 := 5181 * 10 ^ 92)
-              (A2 := 5503 * 10 ^ 92) (E2 := 1101 * 10 ^ 93)
-              (A3 := 2642 * 10 ^ 93) (E3 := 5285 * 10 ^ 93)
-              (A4 := 2643 * 10 ^ 93) (E4 := 5286 * 10 ^ 93)
-              (A5 := 6090 * 10 ^ 95) (E5 := 1218 * 10 ^ 96)
-              (A6 := 6091 * 10 ^ 95) (E6 := 1828 * 10 ^ 96)
-              (A7 := 5614 * 10 ^ 98) (E7 := 1685 * 10 ^ 99)
-              (A8 := 4716 * 10 ^ 99) (E8 := 1416 * 10 ^ 100)
-              (Ā' := 4717 * 10 ^ 99) (Ē' := 1417 * 10 ^ 100)
+                (Ā := 5654 * 10 ^ 67) (Ā' := 1956 * 10 ^ 66) (Ē' := 3912 * 10 ^ 66) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+              (A1 := 5654 * 10 ^ 67) (E1 := 1694 * 10 ^ 68)
+              (A2 := 1956 * 10 ^ 66) (E2 := 3912 * 10 ^ 66)
+              (A3 := 9389 * 10 ^ 66) (E3 := 1878 * 10 ^ 67)
+              (A4 := 9390 * 10 ^ 66) (E4 := 1879 * 10 ^ 67)
+              (A5 := 2164 * 10 ^ 69) (E5 := 4330 * 10 ^ 69)
+              (A6 := 2165 * 10 ^ 69) (E6 := 6496 * 10 ^ 69)
+              (A7 := 1996 * 10 ^ 72) (E7 := 5988 * 10 ^ 72)
+              (A8 := 1677 * 10 ^ 73) (E8 := 5030 * 10 ^ 73)
+              (Ā' := 1678 * 10 ^ 73) (Ē' := 5031 * 10 ^ 73)
               (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
               (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
               (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -551,16 +557,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
                 (B.s3 5) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 5).εn) (Eps.h3 5))
                 P.hq P.hgl P.hbb P.hsl
                 (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 5).εn) (Eps.h3 5)
-                  (Ā := 1387 * 10 ^ 101) (Ā' := 4425 * 10 ^ 101) (Ē' := 8850 * 10 ^ 101) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-                (A1 := 1387 * 10 ^ 101) (E1 := 4166 * 10 ^ 101)
-                (A2 := 4425 * 10 ^ 101) (E2 := 8850 * 10 ^ 101)
-                (A3 := 2125 * 10 ^ 102) (E3 := 4249 * 10 ^ 102)
-                (A4 := 2126 * 10 ^ 102) (E4 := 4250 * 10 ^ 102)
-                (A5 := 4899 * 10 ^ 104) (E5 := 9793 * 10 ^ 104)
-                (A6 := 4900 * 10 ^ 104) (E6 := 1469 * 10 ^ 105)
-                (A7 := 4517 * 10 ^ 107) (E7 := 1354 * 10 ^ 108)
-                (A8 := 3795 * 10 ^ 108) (E8 := 1138 * 10 ^ 109)
-                (Ā' := 3796 * 10 ^ 108) (Ē' := 1139 * 10 ^ 109)
+                  (Ā := 4934 * 10 ^ 74) (Ā' := 1707 * 10 ^ 73) (Ē' := 3414 * 10 ^ 73) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+                (A1 := 4934 * 10 ^ 74) (E1 := 1480 * 10 ^ 75)
+                (A2 := 1707 * 10 ^ 73) (E2 := 3414 * 10 ^ 73)
+                (A3 := 8194 * 10 ^ 73) (E3 := 1639 * 10 ^ 74)
+                (A4 := 8195 * 10 ^ 73) (E4 := 1640 * 10 ^ 74)
+                (A5 := 1889 * 10 ^ 76) (E5 := 3779 * 10 ^ 76)
+                (A6 := 1890 * 10 ^ 76) (E6 := 5669 * 10 ^ 76)
+                (A7 := 1742 * 10 ^ 79) (E7 := 5226 * 10 ^ 79)
+                (A8 := 1464 * 10 ^ 80) (E8 := 4390 * 10 ^ 80)
+                (Ā' := 1465 * 10 ^ 80) (Ē' := 4391 * 10 ^ 80)
                 (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                 (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                 (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -569,16 +575,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
                   (B.s3 6) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 6).εn) (Eps.h3 6))
                   P.hq P.hgl P.hbb P.hsl
                   (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 6).εn) (Eps.h3 6)
-                    (Ā := 1117 * 10 ^ 110) (Ā' := 3564 * 10 ^ 110) (Ē' := 7128 * 10 ^ 110) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-                  (A1 := 1117 * 10 ^ 110) (E1 := 3349 * 10 ^ 110)
-                  (A2 := 3564 * 10 ^ 110) (E2 := 7128 * 10 ^ 110)
-                  (A3 := 1711 * 10 ^ 111) (E3 := 3422 * 10 ^ 111)
-                  (A4 := 1712 * 10 ^ 111) (E4 := 3423 * 10 ^ 111)
-                  (A5 := 3945 * 10 ^ 113) (E5 := 7887 * 10 ^ 113)
-                  (A6 := 3946 * 10 ^ 113) (E6 := 1184 * 10 ^ 114)
-                  (A7 := 3637 * 10 ^ 116) (E7 := 1092 * 10 ^ 117)
-                  (A8 := 3056 * 10 ^ 117) (E8 := 9173 * 10 ^ 117)
-                  (Ā' := 3057 * 10 ^ 117) (Ē' := 9174 * 10 ^ 117)
+                    (Ā := 4308 * 10 ^ 81) (Ā' := 1491 * 10 ^ 80) (Ē' := 2982 * 10 ^ 80) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+                  (A1 := 4308 * 10 ^ 81) (E1 := 1291 * 10 ^ 82)
+                  (A2 := 1491 * 10 ^ 80) (E2 := 2982 * 10 ^ 80)
+                  (A3 := 7157 * 10 ^ 80) (E3 := 1432 * 10 ^ 81)
+                  (A4 := 7158 * 10 ^ 80) (E4 := 1433 * 10 ^ 81)
+                  (A5 := 1650 * 10 ^ 83) (E5 := 3302 * 10 ^ 83)
+                  (A6 := 1651 * 10 ^ 83) (E6 := 4954 * 10 ^ 83)
+                  (A7 := 1522 * 10 ^ 86) (E7 := 4567 * 10 ^ 86)
+                  (A8 := 1279 * 10 ^ 87) (E8 := 3837 * 10 ^ 87)
+                  (Ā' := 1280 * 10 ^ 87) (Ē' := 3838 * 10 ^ 87)
                   (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                   (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                   (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -587,16 +593,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
                     (B.s3 7) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 7).εn) (Eps.h3 7))
                     P.hq P.hgl P.hbb P.hsl
                     (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 7).εn) (Eps.h3 7)
-                      (Ā := 8988 * 10 ^ 118) (Ā' := 2868 * 10 ^ 119) (Ē' := 5736 * 10 ^ 119) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-                    (A1 := 8988 * 10 ^ 118) (E1 := 2698 * 10 ^ 119)
-                    (A2 := 2868 * 10 ^ 119) (E2 := 5736 * 10 ^ 119)
-                    (A3 := 1377 * 10 ^ 120) (E3 := 2754 * 10 ^ 120)
-                    (A4 := 1378 * 10 ^ 120) (E4 := 2755 * 10 ^ 120)
-                    (A5 := 3175 * 10 ^ 122) (E5 := 6348 * 10 ^ 122)
-                    (A6 := 3176 * 10 ^ 122) (E6 := 9523 * 10 ^ 122)
-                    (A7 := 2928 * 10 ^ 125) (E7 := 8778 * 10 ^ 125)
-                    (A8 := 2460 * 10 ^ 126) (E8 := 7374 * 10 ^ 126)
-                    (Ā' := 2461 * 10 ^ 126) (Ē' := 7375 * 10 ^ 126)
+                      (Ā := 3764 * 10 ^ 88) (Ā' := 1302 * 10 ^ 87) (Ē' := 2604 * 10 ^ 87) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+                    (A1 := 3764 * 10 ^ 88) (E1 := 1129 * 10 ^ 89)
+                    (A2 := 1302 * 10 ^ 87) (E2 := 2604 * 10 ^ 87)
+                    (A3 := 6250 * 10 ^ 87) (E3 := 1250 * 10 ^ 88)
+                    (A4 := 6251 * 10 ^ 87) (E4 := 1251 * 10 ^ 88)
+                    (A5 := 1441 * 10 ^ 90) (E5 := 2883 * 10 ^ 90)
+                    (A6 := 1442 * 10 ^ 90) (E6 := 4325 * 10 ^ 90)
+                    (A7 := 1330 * 10 ^ 93) (E7 := 3987 * 10 ^ 93)
+                    (A8 := 1118 * 10 ^ 94) (E8 := 3350 * 10 ^ 94)
+                    (Ā' := 1119 * 10 ^ 94) (Ē' := 3351 * 10 ^ 94)
                     (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                     (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                     (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -605,16 +611,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
                       (B.s3 8) (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 8).εn) (Eps.h3 8))
                       P.hq P.hgl P.hbb P.hsl
                       (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) ((wts.s3 8).εn) (Eps.h3 8)
-                        (Ā := 7236 * 10 ^ 127) (Ā' := 2309 * 10 ^ 128) (Ē' := 4618 * 10 ^ 128) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-                      (A1 := 7236 * 10 ^ 127) (E1 := 2169 * 10 ^ 128)
-                      (A2 := 2309 * 10 ^ 128) (E2 := 4618 * 10 ^ 128)
-                      (A3 := 1109 * 10 ^ 129) (E3 := 2217 * 10 ^ 129)
-                      (A4 := 1110 * 10 ^ 129) (E4 := 2218 * 10 ^ 129)
-                      (A5 := 2558 * 10 ^ 131) (E5 := 5111 * 10 ^ 131)
-                      (A6 := 2559 * 10 ^ 131) (E6 := 7667 * 10 ^ 131)
-                      (A7 := 2359 * 10 ^ 134) (E7 := 7067 * 10 ^ 134)
-                      (A8 := 1982 * 10 ^ 135) (E8 := 5937 * 10 ^ 135)
-                      (Ā' := 1983 * 10 ^ 135) (Ē' := 5938 * 10 ^ 135)
+                        (Ā := 3290 * 10 ^ 95) (Ā' := 1138 * 10 ^ 94) (Ē' := 2276 * 10 ^ 94) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+                      (A1 := 3290 * 10 ^ 95) (E1 := 9852 * 10 ^ 95)
+                      (A2 := 1138 * 10 ^ 94) (E2 := 2276 * 10 ^ 94)
+                      (A3 := 5463 * 10 ^ 94) (E3 := 1093 * 10 ^ 95)
+                      (A4 := 5464 * 10 ^ 94) (E4 := 1094 * 10 ^ 95)
+                      (A5 := 1259 * 10 ^ 97) (E5 := 2521 * 10 ^ 97)
+                      (A6 := 1260 * 10 ^ 97) (E6 := 3782 * 10 ^ 97)
+                      (A7 := 1162 * 10 ^ 100) (E7 := 3486 * 10 ^ 100)
+                      (A8 := 9761 * 10 ^ 100) (E8 := 2929 * 10 ^ 101)
+                      (Ā' := 9762 * 10 ^ 100) (Ē' := 2930 * 10 ^ 101)
                       (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                       (M.gamma_num (q := 2301 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
                       (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -624,9 +630,9 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
       P.hw' P.hbb (by norm_num) (by norm_num) (by norm_num) B.d3
       (R.bridge M P 384 20 (by norm_num) (by norm_num) (by norm_num) wts.d3.ε Eps.hd3) P.hq P.hgl P.hbb
       (R.maps M P 384 20 (by norm_num) (by norm_num) (by norm_num) wts.d3.ε Eps.hd3
-        (Ā := 1983 * 10 ^ 135) (Ā' := 6327 * 10 ^ 135) (Ē' := 1266 * 10 ^ 136) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-      (A1 := 6327 * 10 ^ 135) (E1 := 1266 * 10 ^ 136) (A2 := 3037 * 10 ^ 136) (E2 := 6077 * 10 ^ 136)
-      (A3 := 3038 * 10 ^ 136) (E3 := 6078 * 10 ^ 136) (Ā' := 2801 * 10 ^ 139) (Ē' := 5603 * 10 ^ 139)
+        (Ā := 9762 * 10 ^ 100) (Ā' := 3377 * 10 ^ 99) (Ē' := 6754 * 10 ^ 99) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+      (A1 := 3377 * 10 ^ 99) (E1 := 6754 * 10 ^ 99) (A2 := 1621 * 10 ^ 100) (E2 := 3242 * 10 ^ 100)
+      (A3 := 1622 * 10 ^ 100) (E3 := 3243 * 10 ^ 100) (Ā' := 1495 * 10 ^ 103) (Ē' := 2990 * 10 ^ 103)
       (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (M.gamma_num (q := 9169 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]))
   have mS4 := mD3.comp (by norm_num)
     ((FloatBridgesTo.Maps.cnxBlockChW M G.g (wts.s4 0) (R.lnF M 768 ((wts.s4 0).εn))
@@ -634,16 +640,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
       (B.s4 0) (R.bridge M P 768 28 (by norm_num) (by norm_num) (by norm_num) ((wts.s4 0).εn) (Eps.h4 0))
       P.hq P.hgl P.hbb P.hsl
       (R.maps M P 768 28 (by norm_num) (by norm_num) (by norm_num) ((wts.s4 0).εn) (Eps.h4 0)
-        (Ā := 8235 * 10 ^ 140) (Ā' := 2628 * 10 ^ 141) (Ē' := 5256 * 10 ^ 141) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-      (A1 := 8235 * 10 ^ 140) (E1 := 1648 * 10 ^ 141)
-      (A2 := 2628 * 10 ^ 141) (E2 := 5256 * 10 ^ 141)
-      (A3 := 1262 * 10 ^ 142) (E3 := 2523 * 10 ^ 142)
-      (A4 := 1263 * 10 ^ 142) (E4 := 2524 * 10 ^ 142)
-      (A5 := 5821 * 10 ^ 144) (E5 := 1164 * 10 ^ 145)
-      (A6 := 5822 * 10 ^ 144) (E6 := 1747 * 10 ^ 145)
-      (A7 := 1074 * 10 ^ 148) (E7 := 3221 * 10 ^ 148)
-      (A8 := 9022 * 10 ^ 148) (E8 := 2706 * 10 ^ 149)
-      (Ā' := 9023 * 10 ^ 148) (Ē' := 2707 * 10 ^ 149)
+        (Ā := 4396 * 10 ^ 104) (Ā' := 1521 * 10 ^ 103) (Ē' := 3042 * 10 ^ 103) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+      (A1 := 4396 * 10 ^ 104) (E1 := 8791 * 10 ^ 104)
+      (A2 := 1521 * 10 ^ 103) (E2 := 3042 * 10 ^ 103)
+      (A3 := 7301 * 10 ^ 103) (E3 := 1461 * 10 ^ 104)
+      (A4 := 7302 * 10 ^ 103) (E4 := 1462 * 10 ^ 104)
+      (A5 := 3365 * 10 ^ 106) (E5 := 6738 * 10 ^ 106)
+      (A6 := 3366 * 10 ^ 106) (E6 := 1011 * 10 ^ 107)
+      (A7 := 6206 * 10 ^ 109) (E7 := 1864 * 10 ^ 110)
+      (A8 := 5214 * 10 ^ 110) (E8 := 1566 * 10 ^ 111)
+      (Ā' := 5215 * 10 ^ 110) (Ē' := 1567 * 10 ^ 111)
       (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
       (M.gamma_num (q := 1833 / 10 ^ 7) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -652,16 +658,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
         (B.s4 1) (R.bridge M P 768 28 (by norm_num) (by norm_num) (by norm_num) ((wts.s4 1).εn) (Eps.h4 1))
         P.hq P.hgl P.hbb P.hsl
         (R.maps M P 768 28 (by norm_num) (by norm_num) (by norm_num) ((wts.s4 1).εn) (Eps.h4 1)
-          (Ā := 2653 * 10 ^ 150) (Ā' := 8464 * 10 ^ 150) (Ē' := 1693 * 10 ^ 151) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-        (A1 := 2653 * 10 ^ 150) (E1 := 7959 * 10 ^ 150)
-        (A2 := 8464 * 10 ^ 150) (E2 := 1693 * 10 ^ 151)
-        (A3 := 4063 * 10 ^ 151) (E3 := 8127 * 10 ^ 151)
-        (A4 := 4064 * 10 ^ 151) (E4 := 8128 * 10 ^ 151)
-        (A5 := 1873 * 10 ^ 154) (E5 := 3746 * 10 ^ 154)
-        (A6 := 1874 * 10 ^ 154) (E6 := 5620 * 10 ^ 154)
-        (A7 := 3455 * 10 ^ 157) (E7 := 1037 * 10 ^ 158)
-        (A8 := 2903 * 10 ^ 158) (E8 := 8711 * 10 ^ 158)
-        (Ā' := 2904 * 10 ^ 158) (Ē' := 8712 * 10 ^ 158)
+          (Ā := 1534 * 10 ^ 112) (Ā' := 5306 * 10 ^ 110) (Ē' := 1062 * 10 ^ 111) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+        (A1 := 1534 * 10 ^ 112) (E1 := 4607 * 10 ^ 112)
+        (A2 := 5306 * 10 ^ 110) (E2 := 1062 * 10 ^ 111)
+        (A3 := 2547 * 10 ^ 111) (E3 := 5098 * 10 ^ 111)
+        (A4 := 2548 * 10 ^ 111) (E4 := 5099 * 10 ^ 111)
+        (A5 := 1175 * 10 ^ 114) (E5 := 2350 * 10 ^ 114)
+        (A6 := 1176 * 10 ^ 114) (E6 := 3526 * 10 ^ 114)
+        (A7 := 2169 * 10 ^ 117) (E7 := 6501 * 10 ^ 117)
+        (A8 := 1822 * 10 ^ 118) (E8 := 5461 * 10 ^ 118)
+        (Ā' := 1823 * 10 ^ 118) (Ē' := 5462 * 10 ^ 118)
         (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
         (M.gamma_num (q := 1833 / 10 ^ 7) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -670,16 +676,16 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
           (B.s4 2) (R.bridge M P 768 28 (by norm_num) (by norm_num) (by norm_num) ((wts.s4 2).εn) (Eps.h4 2))
           P.hq P.hgl P.hbb P.hsl
           (R.maps M P 768 28 (by norm_num) (by norm_num) (by norm_num) ((wts.s4 2).εn) (Eps.h4 2)
-            (Ā := 8538 * 10 ^ 159) (Ā' := 2724 * 10 ^ 160) (Ē' := 5448 * 10 ^ 160) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
-          (A1 := 8538 * 10 ^ 159) (E1 := 2562 * 10 ^ 160)
-          (A2 := 2724 * 10 ^ 160) (E2 := 5448 * 10 ^ 160)
-          (A3 := 1308 * 10 ^ 161) (E3 := 2616 * 10 ^ 161)
-          (A4 := 1309 * 10 ^ 161) (E4 := 2617 * 10 ^ 161)
-          (A5 := 6033 * 10 ^ 163) (E5 := 1206 * 10 ^ 164)
-          (A6 := 6034 * 10 ^ 163) (E6 := 1810 * 10 ^ 164)
-          (A7 := 1113 * 10 ^ 167) (E7 := 3338 * 10 ^ 167)
-          (A8 := 9350 * 10 ^ 167) (E8 := 2804 * 10 ^ 168)
-          (Ā' := 9351 * 10 ^ 167) (Ē' := 2805 * 10 ^ 168)
+            (Ā := 5360 * 10 ^ 119) (Ā' := 1854 * 10 ^ 118) (Ē' := 3708 * 10 ^ 118) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
+          (A1 := 5360 * 10 ^ 119) (E1 := 1606 * 10 ^ 120)
+          (A2 := 1854 * 10 ^ 118) (E2 := 3708 * 10 ^ 118)
+          (A3 := 8900 * 10 ^ 118) (E3 := 1780 * 10 ^ 119)
+          (A4 := 8901 * 10 ^ 118) (E4 := 1781 * 10 ^ 119)
+          (A5 := 4102 * 10 ^ 121) (E5 := 8208 * 10 ^ 121)
+          (A6 := 4103 * 10 ^ 121) (E6 := 1232 * 10 ^ 122)
+          (A7 := 7565 * 10 ^ 124) (E7 := 2272 * 10 ^ 125)
+          (A8 := 6355 * 10 ^ 125) (E8 := 1909 * 10 ^ 126)
+          (Ā' := 6356 * 10 ^ 125) (Ē' := 1910 * 10 ^ 126)
           (M.gamma_num (q := 3040 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])
           (M.gamma_num (q := 1833 / 10 ^ 7) hMu (by norm_num [u32]) (by norm_num [u32])) (by norm_num [u32]) (by norm_num [u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32])).comp (by norm_num)
@@ -687,48 +693,48 @@ theorem cnxBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1
   have mGAP := mS4.comp (by norm_num)
     (FloatBridgesTo.Maps.gap (c := 768) (h := 7) (w := 7) M (by norm_num) (by norm_num)
       P.hq (by norm_num [u32]) (by norm_num [u32]) (M.gamma_num (q := 2981 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32]))
-      (Ā' := 9352 * 10 ^ 167) (Ē' := 2806 * 10 ^ 168) (by norm_num [u32]) (by norm_num [u32]))
+      (Ā' := 6357 * 10 ^ 125) (Ē' := 1911 * 10 ^ 126) (by norm_num [u32]) (by norm_num [u32]))
   have mHead := mGAP.comp (by norm_num)
     (cnxRowLNMaps (s := 1) M R P 28 wts.hγ wts.hβ B.hγ B.hβ Eps.hh (by norm_num)
       (by norm_num) (by norm_num)
-      (Ā := 9352 * 10 ^ 167) (Ē := 2806 * 10 ^ 168)
-      (A1 := 2984 * 10 ^ 168) (E1 := 5968 * 10 ^ 168) (A2 := 1433 * 10 ^ 169) (E2 := 2865 * 10 ^ 169)
-      (Ā' := 1434 * 10 ^ 169) (Ē' := 2866 * 10 ^ 169)
+      (Ā := 6357 * 10 ^ 125) (Ē := 1911 * 10 ^ 126)
+      (A1 := 2199 * 10 ^ 124) (E1 := 4398 * 10 ^ 124) (A2 := 1056 * 10 ^ 125) (E2 := 2112 * 10 ^ 125)
+      (Ā' := 1057 * 10 ^ 125) (Ē' := 2113 * 10 ^ 125)
       (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]) (by norm_num [bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]))
   exact mHead.comp (by norm_num)
     (FloatBridgesTo.Maps.dense M wts.Wd wts.bd P.hw' P.hbb (by norm_num) B.Wd B.bd
-      (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 6609 * 10 ^ 171) (Ē' := 1321 * 10 ^ 172) (by norm_num [u32]) (by norm_num [u32]))
+      (M.gamma_num (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32])) (Ā' := 4871 * 10 ^ 127) (Ē' := 9738 * 10 ^ 127) (by norm_num [u32]) (by norm_num [u32]))
 
 /-- The deployed ConvNeXt-T bridge's certified output window at the committed profile. -/
 theorem cnxBridge_mag_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
-    (R : DeviceLN (1/100) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
+    (R : DeviceLN (4590 / 10 ^ 8) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
     (B : CnxBounded wts (6/10) 3 (48/10) (84/10)) (Eps : CnxEps wts ε) :
-    (cnxBridge M R G (cnxProfile_committed M hMu hε5) wts B Eps).mag 1 ≤ 6609 * 10 ^ 171 :=
+    (cnxBridge M R G (cnxProfile_committed M hMu hε5) wts B Eps).mag 1 ≤ 4871 * 10 ^ 127 :=
   (cnxBridge_maps M hMu hε5 R G wts B Eps).mag_le 1 (by norm_num) le_rfl
 
 /-- ⛔ The deployed ConvNeXt-T bridge's fresh budget at the committed profile — `2.00 ×` the
     certified window, which is the tell that the cap is biting at every LayerNorm site and the
     statement is the triangle inequality rather than the fold. -/
 theorem cnxBridge_fresh_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
-    (R : DeviceLN (1/100) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
+    (R : DeviceLN (4590 / 10 ^ 8) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
     (B : CnxBounded wts (6/10) 3 (48/10) (84/10)) (Eps : CnxEps wts ε) :
-    (cnxBridge M R G (cnxProfile_committed M hMu hε5) wts B Eps).fresh 1 ≤ 1321 * 10 ^ 172 :=
+    (cnxBridge M R G (cnxProfile_committed M hMu hε5) wts B Eps).fresh 1 ≤ 9738 * 10 ^ 127 :=
   (cnxBridge_maps M hMu hε5 R G wts B Eps).mod_le 1 0 (by norm_num) le_rfl le_rfl le_rfl
 
-/-- ⭐ **The deployed ConvNeXt-T forward is within `1.321·10¹⁷⁵` of the certified real forward,
+/-- ⭐ **The deployed ConvNeXt-T forward is within `9.738·10¹³⁰` of the certified real forward,
     per logit**, on inputs of magnitude `≤ 1`, at the measured parameter profile, for `ε ≥ 10⁻⁵`,
     any device LayerNorm statistics accurate to `10⁻²` and any device GELU accurate to `10⁻²`,
     for any rounding model at binary32 accuracy.
 
     ⛔ **Read the file header before quoting this.** It is a capped statement — the float and
-    real forwards both land in the certified `6.609·10¹⁷⁴` window — and NOT the interval fold
+    real forwards both land in the certified `4.871·10¹³⁰` window — and NOT the interval fold
     that ResNet-34's, MobileNetV2's and EfficientNet-B0's numbers are. LayerNorm has no
     frozen-statistics mode, so there is no version of this net for which the fold exists. -/
 theorem cnx_float_logits_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 : 1 / 100000 ≤ ε)
-    (R : DeviceLN (1/100) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
+    (R : DeviceLN (4590 / 10 ^ 8) (1/100)) (G : DeviceGelu (1/100)) (wts : CnxTWeightsCh)
     (B : CnxBounded wts (6/10) 3 (48/10) (84/10)) (Eps : CnxEps wts ε)
     (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
-    |cnxForwardF M R G wts x j - cnxForward wts x j| ≤ 1321 * 10 ^ 172 :=
+    |cnxForwardF M R G wts x j - cnxForward wts x j| ≤ 9738 * 10 ^ 127 :=
   (cnxBridge_maps M hMu hε5 R G wts B Eps).budget_le (by norm_num) le_rfl x hx j
 
 -- ════════════════════════════════════════════════════════════════
@@ -747,10 +753,10 @@ theorem cnxForward_eq_committed (wts : CnxTWeightsCh) :
     `convNextForwardTCh` on the real side instead of the record-plugged skeleton — so the
     budget is a claim about the net `ConvNeXtRender.lean` renders. -/
 theorem cnx_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
-    (hε5 : 1 / 100000 ≤ ε) (R : DeviceLN (1/100) (1/100)) (G : DeviceGelu (1/100))
+    (hε5 : 1 / 100000 ≤ ε) (R : DeviceLN (4590 / 10 ^ 8) (1/100)) (G : DeviceGelu (1/100))
     (wts : CnxTWeightsCh) (B : CnxBounded wts (6/10) 3 (48/10) (84/10)) (Eps : CnxEps wts ε)
     (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
-    |cnxForwardF M R G wts x j - convNextForwardTCh wts x j| ≤ 1321 * 10 ^ 172 := by
+    |cnxForwardF M R G wts x j - convNextForwardTCh wts x j| ≤ 9738 * 10 ^ 127 := by
   have h := cnx_float_logits_le M hMu hε5 R G wts B Eps x hx j
   rwa [cnxForward_eq_committed wts] at h
 

@@ -195,7 +195,7 @@ status:
       comparator_config: ""
       literature_dependencies: []
     - declaration: "r34_float_logits_le"   # the same at ImageNet scale: the DEPLOYED ResNet-34 inference forward's float logits are within 1.548e209 of the real ones on |x| <= 1, at the measured 79-epoch checkpoint profile (|param| <= 21/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24 -- 4.9e-3 of the certified window, kernel-checked across 90 stages (fidelity.divergences 4d)
-    - declaration: "r34_train_float_logits_le"   # ⛔ the SEVENTH forward number and the FIRST about the program the repo actually TRAINS with: the same [3,4,6,3] ResNet-34 at 224 with bnPerChannelTensor3 at all 36 BN sites, window 4.304e145 / budget 8.605e145 at the same measured 79-epoch profile (|param| <= 21/10), eps >= 1e-5, a device batch MEAN accurate to 1e-2 RELATIVE to the layer window and a device inverse-stddev accurate to 1e-2 absolute, u <= 2^-24, tied to the committed resnet34Forward_full_pc and its rendered graph (r34TrainForward_eq_full_pc / r34TrainGraph_faithful). ⛔⛔ IT IS THE CAP, NOT THE FOLD -- budget/window = 2.00 is the tell, all 36 BN sites go through FloatBridgesTo.Maps.bnPerChannelTensor3CappedX whose error clause is 2*A' <= E' and mentions neither the inherited error nor eps, so it proves "the float and the real forward both land in the certified window" (the triangle inequality) and NOT "the rounding error folds to this". Never table it beside r34_float_logits_le, which IS the fold, without that label. ⭐⭐ It exists because "the training-mode fold is 1e7419, so there is no theorem to state" conflated the fold's numeral with the statement: the same measurement puts the WINDOW at 1e221 and capped turns any statable window into a theorem. ⭐ The window half is an honest fold and needs NO operating point -- the eps-floor |istd| <= 317 leaves 108 orders under norm_num's shape-dependent ceiling. ⭐⭐ 2026-09-05: 76 of those orders are §0.1's ESCAPE 2 at the per-channel BatchNorm (3.176e221 -> 4.304e145), the same |x-hat| <= sqrt(n) leaf the two LayerNorm nets took the day before, carried through BnPerChannelFloatBridge's three rungs as Maps.bnPerChannelTensor3CappedX -- no new hypothesis, no modelling change, and r34's reduction widths are perfect squares so the root is EXACT. ⛔ Still the cap: uncapped the same chain is 3.494e4993, still 4740 orders past the ceiling. ⚠ Per-example: at batch N > 1 a training-mode BN site reduces over N*h*w and Xh grows with it. (fidelity.divergences 4d)
+    - declaration: "r34_train_float_logits_le"   # ⛔ the SEVENTH forward number and the FIRST about the program the repo actually TRAINS with: the same [3,4,6,3] ResNet-34 at 224 with bnPerChannelTensor3 at all 36 BN sites, window 8.748e80 / budget 1.752e81 at the same measured 79-epoch profile (|param| <= 21/10), eps >= 1e-5, a device batch MEAN accurate to 1e-2 RELATIVE to the layer window and a device inverse-stddev accurate to 1e-2 absolute, u <= 2^-24, tied to the committed resnet34Forward_full_pc and its rendered graph (r34TrainForward_eq_full_pc / r34TrainGraph_faithful). ⛔⛔ IT IS THE CAP, NOT THE FOLD -- budget/window = 2.00 is the tell, all 36 BN sites go through FloatBridgesTo.Maps.bnPerChannelTensor3CappedX whose error clause is 2*A' <= E' and mentions neither the inherited error nor eps, so it proves "the float and the real forward both land in the certified window" (the triangle inequality) and NOT "the rounding error folds to this". Never table it beside r34_float_logits_le, which IS the fold, without that label. ⭐⭐ It exists because "the training-mode fold is 1e7419, so there is no theorem to state" conflated the fold's numeral with the statement: the same measurement puts the WINDOW at 1e221 and capped turns any statable window into a theorem. ⭐ The window half is an honest fold and needs NO operating point -- the eps-floor |istd| <= 317 leaves 108 orders under norm_num's shape-dependent ceiling. ⭐⭐ 2026-09-05: 76 of those orders are §0.1's ESCAPE 2 at the per-channel BatchNorm (3.176e221 -> 4.304e145), the same |x-hat| <= sqrt(n) leaf the two LayerNorm nets took the day before, carried through BnPerChannelFloatBridge's three rungs as Maps.bnPerChannelTensor3CappedX -- no new hypothesis, no modelling change, and r34's reduction widths are perfect squares so the root is EXACT. ⛔ Still the cap: uncapped the same chain is 3.494e4993, still 4740 orders past the ceiling. ⚠ Per-example: at batch N > 1 a training-mode BN site reduces over N*h*w and Xh grows with it. ⭐⭐ 2026-09-05 (item D): the device batch MEAN's accuracy is now DERIVED rather than supplied at 1e-2 -- a device rsqrt has no IEEE spec and is why ei stays modelled, but a MEAN is a rounded reduction then a divide and bnMean_close_of bounds it by u*(1+g)+g at the fan-in EVERY summation order meets (FloatModel.sum is a concrete LEFT FOLD and no GPU kernel is one, so the SPEC is parameterised and not the order). PER SITE: r34's five reduction widths give 3.041e-9 at 7x7 up to 7.484e-4 at 112x112, and r34TrainBn_emr_committed proves a rounded reduction achieves each of the five numerals R34TrainWeights pins, so they are computed and not chosen. Worth 65 orders (4.304e145 -> 8.748e80); 140 in total from where this number landed. ⚠ ei is now the loose one, by four orders (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/Resnet34FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -207,7 +207,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "cnx_float_logits_le"   # ⛔ the fourth ImageNet-scale statement and NOT the same KIND as the other three: the ConvNeXt-T forward's float logits are within 1.321e175 of the real ones on |x| <= 1, at the measured 300-epoch profile (kernels <= 6/10, biases/LN-beta <= 3, LN-gamma <= 48/10, layer scale <= 84/10), eps >= 1e-5, device LN statistics and GELU accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 23 LayerNorm sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold. LayerNorm has no frozen-statistics mode, so no version of this net has a fold. \u2b50\u2b50 2026-09-05: the WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX) instead of at |x-mu|*|istd| <= 2A*S -- \u00a70.1's escape 2, worth 53 orders (was 4.858e227 / 9.706e227), at NO new hypothesis and no new mathematics. \u26d4 Still the cap: the modulus half of escape 2 is deliberately not taken, and even with \u00a70.1's quadratic gone the honest fold is 82 orders ABOVE the triangle inequality here (fidelity.divergences 4d)
+    - declaration: "cnx_float_logits_le"   # ⛔ the fourth ImageNet-scale statement and NOT the same KIND as the other three: the ConvNeXt-T forward's float logits are within 9.738e130 of the real ones on |x| <= 1, at the measured 300-epoch profile (kernels <= 6/10, biases/LN-beta <= 3, LN-gamma <= 48/10, layer scale <= 84/10), eps >= 1e-5, device LN statistics and GELU accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 23 LayerNorm sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold. LayerNorm has no frozen-statistics mode, so no version of this net has a fold. \u2b50\u2b50 2026-09-05: the WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX) instead of at |x-mu|*|istd| <= 2A*S -- \u00a70.1's escape 2, worth 53 orders (was 4.858e227 / 9.706e227), at NO new hypothesis and no new mathematics. ⭐⭐ 2026-09-05 (item D): the device batch MEAN's accuracy is now DERIVED rather than supplied at 1e-2 -- a device rsqrt has no IEEE spec and is why ei stays modelled, but a MEAN is a rounded reduction then a divide and bnMean_close_of bounds it by u*(1+g)+g at the fan-in EVERY summation order meets (FloatModel.sum is a concrete LEFT FOLD and no GPU kernel is one, so the SPEC is parameterised and not the order). At this net's widest LayerNorm (c = 768) that is 4.590e-5, worth 44 more orders (6.609e174 -> 4.871e130); deviceLN_emr_committed discharges it. ⛔ UNIFORM at the widest width rather than per width, which costs 2 more orders (against 1.727e128) -- priced and declined, because per-width makes DeviceLN's emr a Nat -> R that 366 + 324 norm_num goals must reduce. \u26d4 Still the cap: the modulus half of escape 2 is deliberately not taken, and even with \u00a70.1's quadratic gone the honest fold is 82 orders ABOVE the triangle inequality here (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/ConvNeXtFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -219,7 +219,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "vit_float_logits_le"   # ⛔ the fifth ImageNet-scale statement, ConvNeXt's KIND not r34's: the committed depth-12 vector-LN ViT-Tiny forward's float logits are within 2.259e161 of the real ones on |x| <= 1, at the per-kind measured profile (attention kernels <= 7/10, MLP <= 8/10, patch conv <= 3/10, head <= 4/10, biases <= 9/10, LN-gamma <= 17/10, LN-beta <= 6/10), eps >= 1e-5, device LN statistics / GELU / exp accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 25 LayerNorm sites AND all 12 attention sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold; the patch embed is the one honest stage. ⚠ Also carries the softmax side condition smRho u eexp 197 < 1. ⭐⭐ 2026-09-05: the LayerNorm WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX, Xh = 14 for D = 192) -- §0.1's escape 2, worth 57 orders (was 3.612e218 / 7.222e218), at NO new hypothesis. ⚠ It does NOTHING for the twelve ATTENTION caps, which are there for REPRESENTABILITY rather than size: a tighter window cannot reach a Real.exp with no rational bound (fidelity.divergences 4d)
+    - declaration: "vit_float_logits_le"   # ⛔ the fifth ImageNet-scale statement, ConvNeXt's KIND not r34's: the committed depth-12 vector-LN ViT-Tiny forward's float logits are within 4.794e108 of the real ones on |x| <= 1, at the per-kind measured profile (attention kernels <= 7/10, MLP <= 8/10, patch conv <= 3/10, head <= 4/10, biases <= 9/10, LN-gamma <= 17/10, LN-beta <= 6/10), eps >= 1e-5, device LN statistics / GELU / exp accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 25 LayerNorm sites AND all 12 attention sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold; the patch embed is the one honest stage. ⚠ Also carries the softmax side condition smRho u eexp 197 < 1. ⭐⭐ 2026-09-05: the LayerNorm WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX, Xh = 14 for D = 192) -- §0.1's escape 2, worth 57 orders (was 3.612e218 / 7.222e218), at NO new hypothesis. ⭐⭐ 2026-09-05 (item D): the device batch MEAN's accuracy is now DERIVED rather than supplied at 1e-2 -- a device rsqrt has no IEEE spec and is why ei stays modelled, but a MEAN is a rounded reduction then a divide and bnMean_close_of bounds it by u*(1+g)+g at the fan-in EVERY summation order meets (FloatModel.sum is a concrete LEFT FOLD and no GPU kernel is one, so the SPEC is parameterised and not the order). At D = 192 that is 1.157e-5, worth 53 more orders (1.130e161 -> 2.397e108). ⭐ The uniform-at-widest choice costs this net NOTHING, unlike ConvNeXt-T: all 25 of its LayerNorm sites reduce over the same D = 192. ⚠ It does NOTHING for the twelve ATTENTION caps, which are there for REPRESENTABILITY rather than size: a tighter window cannot reach a Real.exp with no rational bound (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/ViTFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -845,6 +845,10 @@ fidelity:
            ConvNeXt-T  4.858e227 / 9.706e227  ->  6.609e174 / 1.321e175
            ViT-Tiny    3.612e218 / 7.222e218  ->  1.130e161 / 2.259e161
            r34 @ train 3.176e221 / 6.349e221  ->  4.304e145 / 8.605e145
+       and then DERIVING the device MEAN's accuracy (below) took all three further still:
+           ConvNeXt-T  6.609e174 / 1.321e175  ->  4.871e130 / 9.738e130   (44 orders)
+           ViT-Tiny    1.130e161 / 2.259e161  ->  2.397e108 / 4.794e108   (53)
+           r34 @ train 4.304e145 / 8.605e145  ->   8.748e80 /  1.752e81   (65)
        The r34 row is the same leaf at a different conjugation -- lifted per channel by
        `FloatClose.perRowIdx` and conjugated by the two layout gathers, i.e.
        `BnPerChannelFloatBridge.lean`'s rungs 2 and 3, both repackages. It is the largest
@@ -862,6 +866,48 @@ fidelity:
        and 4.710e226 at an operating point |istd| <= 16 -- statable, and 80 orders WORSE than
        the capped number above. The fold exists and is worse; that is a claim about magnitudes,
        not about LayerNorm.
+       ⭐⭐ THE DEVICE MEAN'S ACCURACY, DERIVED (2026-09-05) -- 44 orders on ConvNeXt-T, 53 on
+       ViT-Tiny and 65 on ResNet-34's training-mode forward, and it is a MODELLING correction
+       rather than a tighter constant. Every normalisation number in this file supplied
+       `emr = 1e-2`, the device batch/layer MEAN's accuracy relative to the window, by analogy
+       with the device `rsqrt`. The analogy is false: a GPU `rsqrt` genuinely has no IEEE
+       specification, which is why `ei` stays modelled, but a MEAN is a rounded reduction
+       followed by a divide and that plainly has one. `FloatModel.bnMean_close` has proved it
+       since the MNIST work -- §3.3.0(b)'s rule (*before writing a bound, grep the whole cone
+       for it*) for the tenth time.
+       ⛔ THE CATCH, AND IT DECIDES THE SHAPE. `bnMean_close` is stated at `M.sum`, a concrete
+       LEFT FOLD, and no GPU kernel reduces left to right -- so that instance is about a program
+       we do not ship (`BnEvalFloatBridge.lean`'s warning, one tier over).
+       `FloatModel.bnMean_close_of` is the same proof with ONE hypothesis substituted: it takes
+       any `fsum` whose forward error meets a fan-in `gamma`, which EVERY summation order does --
+       sequential is the worst at `(1+u)^{n+1}-1` and a tree is `(1+u)^{ceil(log2 n)+1}-1`, so the
+       bound holds a fortiori. `bnMean_num_le` is its numeral form, through `gamma_num`'s
+       `k*u/(1-k*u)` and one more round-up, because a record has to carry a rational and not an
+       expression in `M.u`.
+       ⭐ The constants are then computed from the width alone: 3.041e-9 at 7x7 up to 7.484e-4 at
+       112x112 for ResNet-34's five BatchNorm widths, 4.590e-5 at ConvNeXt-T's widest LayerNorm
+       (c = 768), 1.157e-5 at ViT-Tiny's D = 192. `r34TrainBn_emr_committed` and
+       `deviceLN_emr_committed` prove a rounded reduction achieves each committed numeral, so
+       they are DERIVED and not chosen. The theorems still QUANTIFY over any device mean at least
+       that accurate, which is the shape `DeviceRsqrt` has always had and is strictly stronger
+       than fixing one kernel.
+       ⛔ PER SITE on ResNet-34, UNIFORM AT THE WIDEST on the two LayerNorm nets. r34's `emr`
+       moved into the record's type beside `Xh` (five numerals), because folding its five widths
+       uniformly at 112x112 throws most of the 65 orders away. `DeviceLN` keeps one `emr`: that
+       costs ConvNeXt-T 2 orders (4.871e130 against a per-width 1.727e128) and ViT-Tiny NOTHING,
+       since all 25 of its LayerNorm sites reduce over the same D = 192 -- and per-width would
+       make `DeviceLN`'s `emr` a `Nat -> R` that two committed budget files elaborate against and
+       that 366 + 324 `norm_num` goals must reduce. Priced, measured, declined.
+       ⚠ `ei` -- the device inverse-stddev, still 1e-2 absolute -- is now the LOOSE one by four
+       orders, and §3.27 finding 4's `emr*S < 1` reset condition is met (0.0019 at the eps-floor)
+       without the window resetting, because `ea*S = emr*A*S` stays proportional to the window
+       however small `emr` gets. A true reset needs `A*S` bounded, which is a new kind of
+       operating point and is not taken.
+       ⭐⭐ AND WHERE THE SIZE GOES AFTERWARDS: with `emr` derived the normalisation sites shrink
+       and the whole remaining growth is the CONV FAN-IN -- `layerBudget`'s uniform `m*w'*A` face,
+       one of the two documented gaps to the adjoint chain (4d's own r34 paragraph), shared with
+       every number in this file including the four backwards, and never attacked.
+
        ⚠ `bnXhat_abs_le_num` moved down from `FloatBudgetEnvBack.lean` (the ResNet-34 BACKWARD
        kit) into `BnXhatFloatBridge.lean` so a FORWARD leaf need not import the backward cone to
        reach it -- and so the two tiers cannot drift into two copies, which is the duplicate

@@ -184,7 +184,7 @@ def bn_train(st, S=R34_S, G=R34_G, Bb=R34_BB, emr=R34_EMR, ei=R34_ES, q=U32, lin
     return bn(st, S, G, Bb, emr, ei, S, S ** 3 / 2, q)
 
 
-def r34_train_chain(S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB, emr=R34_EMR,
+def r34_train_chain(S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB, emr='derived',
                     ei=R34_ES, q=U32, lin=True, nred=None, cap='force'):
     """⭐⭐ The r34 forward at TRAINING-mode BatchNorm — the mode the repo actually trains in,
     and the one §0.1 says has "no numeral to write down, so no theorem to state".
@@ -375,7 +375,7 @@ def verify_r34(rows) -> int:
 
 
 def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
-                     emr=R34_EMR, ei=R34_ES, q=U32, lin=True) -> int:
+                     emr='derived', ei=R34_ES, q=U32, lin=True) -> int:
     """Re-assert every rounded inequality the TRAINING-mode CAPPED Lean chain closes.
 
     ⚠ The BN rows are a DIFFERENT shape from `verify_r34`'s, and asserting the eval shape here
@@ -855,7 +855,8 @@ CNX_BB = F(3)           # conv / dense biases, and every LayerNorm β
 CNX_GL = F(48, 10)      # LayerNorm γ
 CNX_SL = F(84, 10)      # layer scale
 CNX_S = F(317)          # 1/√ε at ε ≥ 1e-5
-CNX_EMR = F(1, 100)     # deployed LN mean accuracy, RELATIVE to the window
+CNX_EMR = F(4590, 10 ** 8)  # LN mean accuracy, RELATIVE — ⭐ DERIVED at the widest
+                        # reduction (c = 768), not supplied; planning §3.32/(D)
 CNX_EI = F(1, 100)      # deployed LN inverse-stddev accuracy, absolute
 CNX_EGELU = F(1, 100)   # deployed GELU accuracy
 
@@ -899,10 +900,16 @@ def emr_derived(nred, u=U32):
 
     ⛔ Using it is a MODELLING change, not just a tighter constant: `bnMean_close` is about
     `M.div (M.sum x) n`, and `M.sum` is a concrete LEFT FOLD where a GPU reduces in a tree. The
-    bound holds for a tree too (its gamma is smaller), but the honest form parameterises the
-    reduction by `sum_close`'s spec instead of fixing the order. planning §3.31."""
-    g = (1 + u) ** (nred + 1) - 1
-    return u * (1 + g) + g
+    bound holds for ANY summation order -- `gamma_q(n+1)` dominates every one of them, a tree's
+    being `gamma_q(ceil(log2 n)+1)` -- so the honest form parameterises the reduction by
+    `sum_close`'s spec instead of fixing the order (`bnMean_close_of`). planning §3.31.
+
+    ⚠ It folds the ROUNDED chain the Lean passes, not the exact `(1+u)^(n+1) - 1`: the record's
+    `emr` is a rational numeral, reached by `gamma_num` (`k*u/(1-k*u)`, rounded up) and then one
+    more round-up of `u*(1+g) + g`. Folding the exact value instead emits stage numerals a hair
+    too small, which the kernel then rejects -- §0's standing trap, one leaf over."""
+    g = r4(gamma_q(nred + 1, u))
+    return r4(u * (1 + g) + g)
 
 
 def cnx_ln_leaf_lin(st, nred, S=CNX_S, emr=CNX_EMR, ei=CNX_EI, q=U32):
@@ -963,7 +970,7 @@ def cnx_gelu(st, egelu=CNX_EGELU, sat=True):
 
 def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
                    emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32,
-                   ln_cap=True, gelu_sat=True, head_ln=True, ln_lin=False):
+                   ln_cap='force', gelu_sat=True, head_ln=True, ln_lin=True):
     """Every stage of the ConvNeXt-T forward, at exactly the granularity the Lean `Maps` chain
     composes them (the four layout permutations and the per-row lift are envelope-preserving and
     produce no entry).
@@ -1034,7 +1041,7 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
 
 
 def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
-               emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32, ln_lin=False) -> int:
+               emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32, ln_lin=True) -> int:
     """Re-assert EVERY rounded inequality `ConvNeXtFloatBudget.lean` closes, exactly — each
     stage's emitted numeral must still dominate the exact value computed from the PREVIOUS
     stage's emitted numerals. Returns the count checked; raises on the first failure.
@@ -1159,7 +1166,8 @@ VIT_PB = F(9, 10)       # ⭐ the patch embed's SINGLE bound, covering pos_embed
 VIT_UNI = F(17, 10)     # the single uniform bound, for the ablation
 
 VIT_S = F(317)          # 1/√ε at ε ≥ 1e-5 (ViTRender.lean: ε=1e-5)
-VIT_EMR = F(1, 100)     # deployed LN mean accuracy, RELATIVE to the window
+VIT_EMR = F(1157, 10 ** 8)  # LN mean accuracy, RELATIVE — ⭐ DERIVED at D = 192,
+                        # which is every one of ViT's 25 LN sites; planning §3.32/(D)
 VIT_EI = F(1, 100)      # deployed LN inverse-stddev accuracy, absolute
 VIT_EG = F(1, 100)      # deployed GELU accuracy
 VIT_EEXP = F(1, 100)    # deployed exp accuracy (softmax), RELATIVE
@@ -1283,8 +1291,8 @@ def vit_patch_embed(st, ic=3, P=16, wc=VIT_WP, pb=VIT_BB, q=U32):
 def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
               gl=VIT_GL, bl=VIT_BL, pb=VIT_PB,
               S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
-              k=K_VIT, ln_cap=True, gelu_sat=True, attn_mode='cap',
-              uniform=False, ln_lin=False):
+              k=K_VIT, ln_cap='force', gelu_sat=True, attn_mode='cap',
+              uniform=False, ln_lin=True):
     """Every stage of `vitForwardKV` at ViT-Tiny's shapes, at the granularity a Lean `Maps`
     chain composes them.  Returns (rows, exp_tainted_tags) — the second is the list of stage
     numerals that would contain a `Real.exp` and therefore CANNOT BE WRITTEN, which is the
@@ -1365,7 +1373,7 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
 def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
                gl=VIT_GL, bl=VIT_BL, pb=VIT_PB,
                S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
-               k=K_VIT, ln_lin=False) -> int:
+               k=K_VIT, ln_lin=True) -> int:
     """Re-assert EVERY rounded inequality a `ViTFloatBudget.lean` would close, exactly: each
     stage's emitted numeral must still dominate the exact value computed from the PREVIOUS
     stage's emitted numerals.  Returns the count checked; raises on the first failure.

@@ -2104,7 +2104,7 @@ open Proofs
 -- ⭐⭐ And the TRAINING-mode number those generic block bridges make cheap: the same [3,4,6,3]
 -- net with bnPerChannelTensor3 at all 36 BN sites — the program the repo actually TRAINS with,
 -- and the one Resnet34BackFloatBudget's input-gradient number is taken through. Window
--- 4.304e145 (r34TrainBridge_mag_le) and |float − real| ≤ 8.605e145 per logit
+-- 8.748e80 (r34TrainBridge_mag_le) and |float − real| ≤ 1.752e81 per logit
 -- (r34_train_float_logits_le), tied to the committed resnet34Forward_full_pc and its rendered
 -- graph (r34TrainForward_eq_full_pc, r34TrainGraph_faithful).
 -- ⛔ IT IS THE CAP, NOT THE FOLD, and it must never be tabled beside r34_float_logits_le
@@ -2120,14 +2120,27 @@ open Proofs
 -- counts need the ceiling one). ⛔ It does NOT change the kind — uncapped, the same chain is
 -- 3.494e4993, still 4740 orders past norm_num's ceiling.
 -- ⭐ The window half IS an honest fold, and it needs no operating point: the ε-floor
--- |istd| ≤ 317 now leaves 108 orders under norm_num's shape-dependent ceiling, where the
--- pre-escape-2 number left 32.
+-- |istd| ≤ 317 now leaves 172 orders under norm_num's shape-dependent ceiling, where the
+-- number as first landed left 32.
+-- ⭐⭐ 65 MORE orders (4.304e145 -> 8.748e80, 2026-09-05) came from DERIVING the device batch
+-- MEAN's accuracy instead of supplying it at 1e-2. A device rsqrt has no IEEE specification,
+-- which is why ei stays modelled; a device MEAN is a rounded reduction then a divide, and
+-- bnMean_close_of bounds it by u*(1+g)+g at the fan-in EVERY summation order meets (sequential
+-- is the worst at (1+u)^{n+1}-1, a tree is smaller, so a fortiori). PER SITE, because r34's five
+-- reduction widths give 3.041e-9 at 7x7 up to 7.484e-4 at 112x112 and folding them uniformly at
+-- the widest throws most of it away; r34TrainBn_emr_committed is the proof that a rounded
+-- reduction achieves each of the five numerals R34TrainWeights pins, so they are computed and
+-- not chosen. ⚠ ei is now the loose one, by four orders.
 #print axioms Proofs.FloatBridgesTo.capped
 #print axioms Proofs.FloatBridgesTo.Maps.capped
 #print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelTensor3Capped
 #print axioms Proofs.floatBridgesTo_bnPerChannelFlatX
 #print axioms Proofs.floatBridgesTo_bnPerChannelTensor3X
 #print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelTensor3CappedX
+#print axioms Proofs.FloatModel.bnMean_close_of
+#print axioms Proofs.FloatModel.bnMean_num_le
+#print axioms Proofs.r34TrainBn_emr_derived
+#print axioms Proofs.r34TrainBn_emr_committed
 #print axioms Proofs.R34TrainBn.maps
 #print axioms Proofs.R34TrainIdBlk.maps
 #print axioms Proofs.R34TrainDownBlk.maps
@@ -2279,7 +2292,7 @@ open Proofs
 #print axioms Proofs.b0_float_logits_le_committed
 -- ⛔⛔ The FOURTH ImageNet-scale whole-net float statement, and it is NOT the same kind of
 -- statement as the three above. The ConvNeXt-T forward as a CLOSED FloatBridgesTo (cnxBridge),
--- window 6.609e174 (cnxBridge_mag_le) and |float − real| ≤ 1.321e175 per logit on |x| ≤ 1 at the
+-- window 4.871e130 (cnxBridge_mag_le) and |float − real| ≤ 9.738e130 per logit on |x| ≤ 1 at the
 -- measured 300-epoch profile (cnx_float_logits_le). 366 rational inequalities, generated and
 -- re-asserted by scripts/float_budget_envelope.py's verify_cnx before emission.
 -- ⛔ `budget / window = 2.00` is the tell: all 23 LayerNorm sites go through
@@ -2318,6 +2331,19 @@ open Proofs
 -- a modulus half worth 5006 orders on ConvNeXt's UNCAPPED fold and NOTHING to either shipped
 -- statement, because both are capped and the fold stays above the cap (82 orders on ConvNeXt-T,
 -- 7 on ViT-Tiny). Priced, measured, not taken.
+-- ⭐⭐ AND THE DEVICE MEAN'S ACCURACY IS NOW DERIVED (2026-09-05) — 44 more orders on ConvNeXt-T
+-- (6.609e174 -> 4.871e130) and 53 on ViT-Tiny (1.130e161 -> 2.397e108). Both files SUPPLIED
+-- emr = 1e-2 by analogy with the device rsqrt; a rsqrt genuinely has no IEEE specification and a
+-- MEAN is a rounded reduction then a divide, which does. bnMean_close_of takes the reduction's
+-- SPEC rather than its ORDER — FloatModel.sum is a concrete LEFT FOLD and no GPU kernel is one —
+-- and every summation order meets the fan-in it asks for, sequential being the worst.
+-- deviceLN_emr_committed discharges the two committed numerals (4.590e-5 at ConvNeXt's widest
+-- LayerNorm, 1.157e-5 at ViT's D = 192), so they are computed and not chosen.
+-- ⛔ UNIFORM at the widest width rather than per width: costs ConvNeXt-T 2 orders (against a
+-- per-width 1.727e128) and ViT-Tiny NOTHING, since all 25 of its LN sites reduce over D = 192.
+-- Per-width would make DeviceLN's emr a Nat -> ℝ that 366 + 324 norm_num goals must reduce.
+#print axioms Proofs.deviceLN_emr_derived
+#print axioms Proofs.deviceLN_emr_committed
 #print axioms Proofs.bnXhat_abs_le_num
 #print axioms Proofs.prod_sub_abs_le
 #print axioms Proofs.FloatModel.mul_close_at
@@ -2481,7 +2507,7 @@ open Proofs
 #print axioms Proofs.cnx_float_logits_le_committed
 -- ════════════════════════════════════════════════════════════════════════════════════════
 -- ViT-Tiny's NUMBER (ViTFloatBudget.lean) — the fifth ImageNet-scale whole-net float statement,
--- window 1.130e161 / budget 2.259e161 on the committed depth-12 vector-LN vitForwardKV @ 224².
+-- window 2.397e108 / budget 4.794e108 on the committed depth-12 vector-LN vitForwardKV @ 224².
 -- ⛔ The CAP, not the fold, and more thoroughly than ConvNeXt: all 25 LayerNorm sites AND all 12
 -- attention sites go through FloatBridgesTo.capped, so no stage inside a block is a fold. The
 -- patch embed is the one honest stage (it does not reduce). budget/window = 2.00 is the tell.

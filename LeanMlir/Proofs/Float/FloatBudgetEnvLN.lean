@@ -407,6 +407,66 @@ structure DeviceLN (emr ei : ℝ) where
   specIstd : ∀ (c : Nat) (e : ℝ), 0 < e → ∀ (A : ℝ), 0 ≤ A → ∀ v : Vec c, (∀ k, |v k| ≤ A) →
     |fistd c e v - bnIstd c v e| ≤ ei
 
+/-- ⭐⭐ **`DeviceLN`'s mean accuracy is DERIVED, not supplied** — §3.31's item (D). A device
+    `rsqrt` genuinely has no IEEE specification, which is why `ei` is modelled; a device MEAN is a
+    rounded reduction followed by a divide, and that plainly does have one. Take any reduction
+    `fsum` whose forward error meets the fan-in `γ` that EVERY summation order meets — sequential
+    is the worst at `(1+u)^{n+1} − 1`, a tree is `(1+u)^{⌈log₂n⌉+1} − 1` and so a fortiori — and
+    the mean is within `emr·A` for a numeral `emr` computed from the width alone.
+
+    At ConvNeXt-T's widest LayerNorm (`c = 768`) that is `4.590·10⁻⁵` and at ViT-Tiny's
+    (`D = 192`) `1.157·10⁻⁵`, where both files SUPPLIED `10⁻²` by analogy with the `rsqrt` until
+    2026-09-05. Worth **44 orders on ConvNeXt-T and 53 on ViT-Tiny**.
+
+    ⚠ What is NOT claimed: that the device sums left to right. `FloatModel.sum` is a concrete left
+    fold and no GPU kernel is one, so `bnMean_close`'s instance at it is about a program we do not
+    ship; `bnMean_close_of` takes the SPEC instead of the order (`BnEvalFloatBridge.lean`'s
+    warning, one tier over). -/
+theorem deviceLN_emr_derived (M : FloatModel) (hMu : M.u ≤ u32)
+    {n : ℕ} {fsum : Vec n → ℝ} {gq eqn : ℝ} (hn : 0 < n)
+    (hsum : ∀ x : Vec n, |fsum x - ∑ i, x i| ≤ ((1 + M.u) ^ (n + 1) - 1) * ∑ i, |x i|)
+    (hk : ((n + 1 : ℕ) : ℝ) * u32 < 1)
+    (hgq : ((n + 1 : ℕ) : ℝ) * u32 / (1 - ((n + 1 : ℕ) : ℝ) * u32) ≤ gq)
+    (heq : u32 * (1 + gq) + gq ≤ eqn) :
+    ∀ A : ℝ, 0 ≤ A → ∀ v : Vec n, (∀ k, |v k| ≤ A) →
+      |M.div (fsum v) (n : ℝ) - bnMean n v| ≤ eqn * A :=
+  M.bnMean_num_le hMu hn hsum hk hgq heq
+
+/-- ⭐ **The two committed numerals discharged, at every reduction width their nets use.**
+    ConvNeXt-T normalises over its channel counts `96/192/384/768` and ViT-Tiny over `D = 192`;
+    each row is `u·(1+γ) + γ` at `gamma_num`'s rational `γ`, rounded up to four significant
+    figures — the chain `scripts/float_budget_envelope.py`'s `emr_derived` folds.
+
+    ⛔ **A UNIFORM `emr` at the widest site is what both budget files commit, and it costs
+    ConvNeXt-T 2 orders** (4.871·10¹³⁰ against a per-width 1.727·10¹²⁸); ViT-Tiny loses nothing,
+    because all 25 of its LayerNorm sites reduce over the same `D = 192`. Per-width would mean
+    `DeviceLN`'s `emr` becoming a `Nat → ℝ` that two committed budget files elaborate against and
+    that 366 + 324 `norm_num` goals have to reduce — priced, measured, declined. The first three
+    rows below are why the uniform choice is sound: a narrower reduction is strictly more
+    accurate, so `4590/10⁻⁸` dominates every site ConvNeXt has. -/
+theorem deviceLN_emr_committed (M : FloatModel) (hMu : M.u ≤ u32)
+    {f96 : Vec 96 → ℝ} {f192 : Vec 192 → ℝ} {f384 : Vec 384 → ℝ} {f768 : Vec 768 → ℝ}
+    (h96 : ∀ x, |f96 x - ∑ i, x i| ≤ ((1 + M.u) ^ 97 - 1) * ∑ i, |x i|)
+    (h192 : ∀ x, |f192 x - ∑ i, x i| ≤ ((1 + M.u) ^ 193 - 1) * ∑ i, |x i|)
+    (h384 : ∀ x, |f384 x - ∑ i, x i| ≤ ((1 + M.u) ^ 385 - 1) * ∑ i, |x i|)
+    (h768 : ∀ x, |f768 x - ∑ i, x i| ≤ ((1 + M.u) ^ 769 - 1) * ∑ i, |x i|) :
+    (∀ A : ℝ, 0 ≤ A → ∀ v : Vec 96, (∀ k, |v k| ≤ A) →
+        |M.div (f96 v) (96 : ℝ) - bnMean 96 v| ≤ (4590 / 10 ^ 8) * A)
+    ∧ (∀ A : ℝ, 0 ≤ A → ∀ v : Vec 192, (∀ k, |v k| ≤ A) →
+        |M.div (f192 v) (192 : ℝ) - bnMean 192 v| ≤ (1157 / 10 ^ 8) * A)
+    ∧ (∀ A : ℝ, 0 ≤ A → ∀ v : Vec 384, (∀ k, |v k| ≤ A) →
+        |M.div (f384 v) (384 : ℝ) - bnMean 384 v| ≤ (4590 / 10 ^ 8) * A)
+    ∧ (∀ A : ℝ, 0 ≤ A → ∀ v : Vec 768, (∀ k, |v k| ≤ A) →
+        |M.div (f768 v) (768 : ℝ) - bnMean 768 v| ≤ (4590 / 10 ^ 8) * A) :=
+  ⟨deviceLN_emr_derived M hMu (gq := 5782 / 10 ^ 9) (by norm_num) h96
+      (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32]),
+   deviceLN_emr_derived M hMu (gq := 1151 / 10 ^ 8) (by norm_num) h192
+      (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32]),
+   deviceLN_emr_derived M hMu (gq := 2295 / 10 ^ 8) (by norm_num) h384
+      (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32]),
+   deviceLN_emr_derived M hMu (gq := 4584 / 10 ^ 8) (by norm_num) h768
+      (by norm_num [u32]) (by norm_num [u32]) (by norm_num [u32])⟩
+
 /-- **The deployed GELU.** `stablehlo.tanh` has no IEEE specification either; `egelu` is its
     absolute accuracy against the certified `geluScalar`. -/
 structure DeviceGelu (egelu : ℝ) where
