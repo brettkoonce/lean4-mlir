@@ -170,12 +170,12 @@ noncomputable def cbsB_has_vjp (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc
 theorem stemB_differentiable (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     Differentiable ℝ (stemB N (h := h) (w := w) W b ε γ β) :=
-  bnSwishStage_differentiable N (flatConvStride2 W b) (flatConvStride2_differentiable W b) ε hε γ β
+  bnSwishStage_differentiable N (flatConvStride2Xla W b) (flatConvStride2Xla_differentiable W b) ε hε γ β
 noncomputable def stemB_has_vjp (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     HasVJP (stemB N (h := h) (w := w) W b ε γ β) :=
-  bnSwishStage_has_vjp N (flatConvStride2 W b) (flatConvStride2_differentiable W b)
-    (flatConvStride2_has_vjp W b) ε hε γ β
+  bnSwishStage_has_vjp N (flatConvStride2Xla W b) (flatConvStride2Xla_differentiable W b)
+    (flatConvStride2Xla_has_vjp W b) ε hε γ β
 
 theorem dwbsB_differentiable (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :

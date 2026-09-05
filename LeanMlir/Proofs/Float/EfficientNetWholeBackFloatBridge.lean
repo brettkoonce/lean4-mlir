@@ -15,7 +15,8 @@ blueprint). Exactly as `mnv2_grad_floatBridges`, the per-block backwards (`b1B`/
 stem/head batch-norm + swish backwards enter as **supplied** `FloatBridges` hypotheses (each separately
 dischargeable — the BNs by `floatBridges_bnBack`, the swishes by `floatBridges_diagBack`, the residual
 block `b3B` by `floatBridges_mbconvBatchedResidBack`), around the concrete `batchMap`-lifted endpoints:
-the strided-stem conv (`flatConvStride2Back`), the head conv (`convFlatBack`), the GAP scatter
+the strided-stem conv (`flatConvStride2XlaBack`, the odd-phase backward of the XLA-`SAME`
+stem the render ships), the head conv (`convFlatBack`), the GAP scatter
 (`gapBack`), and the classifier (`linBack`). Pure `.comp` assembly — A3 = closeness at a smooth point.
 3-axiom-clean.
 -/
@@ -42,7 +43,7 @@ noncomputable def efficientnetInputGradB (N : Nat)
     (b2B : Vec (N * (24 * 56 * 56)) → Vec (N * (16 * 112 * 112)))
     (b3B : Vec (N * (24 * 56 * 56)) → Vec (N * (24 * 56 * 56))) :
     Vec (N * 10) → Vec (N * (3 * 224 * 224)) :=
-  (StableHLO.batchMap N (flatConvStride2Back (h := 112) (w := 112) Ws) ∘ bnBs ∘ swBs)
+  (StableHLO.batchMap N (flatConvStride2XlaBack (h := 112) (w := 112) Ws) ∘ bnBs ∘ swBs)
   ∘ b1B ∘ b2B ∘ b3B
   ∘ (StableHLO.batchMap N (convFlatBack (h := 56) (w := 56) Wh) ∘ bnBh ∘ swBh)
   ∘ StableHLO.batchMap N (gapBack 1280 56 56)
@@ -69,9 +70,9 @@ theorem efficientnet_grad_floatBridges (N : Nat) (M : FloatModel)
     FloatBridges (efficientnetInputGradB N Ws Wh Wfc bnBs swBs bnBh swBh b1B b2B b3B) := by
   unfold efficientnetInputGradB
   have hstem : FloatBridges
-      (StableHLO.batchMap N (flatConvStride2Back (h := 112) (w := 112) Ws) ∘ bnBs ∘ swBs) :=
+      (StableHLO.batchMap N (flatConvStride2XlaBack (h := 112) (w := 112) Ws) ∘ bnBs ∘ swBs) :=
     (hswBs.comp hbnBs).comp
-      (FloatBridges.batchMap N (floatBridges_flatConvStride2Back M Ws hws (by positivity) hWs))
+      (FloatBridges.batchMap N (floatBridges_flatConvStride2XlaBack M Ws hws (by positivity) hWs))
   have hhead : FloatBridges
       (StableHLO.batchMap N (convFlatBack (h := 56) (w := 56) Wh) ∘ bnBh ∘ swBh) :=
     (hswBh.comp hbnBh).comp
@@ -178,7 +179,7 @@ noncomputable def efficientnetInputGradBF (N : Nat) (M : FloatModel)
     Vec (N * 10) → Vec (N * (3 * 224 * 224)) :=
   (StableHLO.batchMap N
       (M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
-        ∘ decimateBack 32 112 112) ∘ bnBsF ∘ swBsF)
+        ∘ decimateOddBack 32 112 112) ∘ bnBsF ∘ swBsF)
   ∘ b1BF ∘ b2BF ∘ b3BF
   ∘ (StableHLO.batchMap N
       (M.flatConvF (h := 56) (w := 56) (IR.reverseSwap Wh) (fun _ => 0)) ∘ bnBhF ∘ swBhF)
@@ -209,7 +210,7 @@ noncomputable def efficientnet_grad_floatBridgesTo (N : Nat) (M : FloatModel)
   unfold efficientnetInputGradB efficientnetInputGradBF
   have hstem := (hswBs.comp hbnBs).comp
     (FloatBridgesTo.batchMap N
-      (floatBridgesTo_flatConvStride2Back (h := 112) (w := 112) M Ws hws (by positivity) hWs))
+      (floatBridgesTo_flatConvStride2XlaBack (h := 112) (w := 112) M Ws hws (by positivity) hWs))
   have hhead := (hswBh.comp hbnBh).comp
     (FloatBridgesTo.batchMap N
       (floatBridgesTo_convBack (h := 56) (w := 56) M Wh hwh (by positivity) hWh))

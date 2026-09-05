@@ -1,6 +1,8 @@
 # Re-spell the TF-origin nets at XLA-SAME padding, tie B0, then audit the blueprint
 
-**For a fresh session. Scoped 2026-09-05, nothing below has been started.** Three items in order:
+**Scoped 2026-09-05; steps 0 to 2 and the EfficientNet half of step 3 landed the same day
+(`ec977de`, `0773e20`, `0584ab8`, and the B0 commit). Section 3a is the handoff for the next
+session: what is done, what is scripted, what is left.** Three items in order:
 (A) move EfficientNet-B0's and MobileNetV2's Proofs tier from symmetric stride-2 padding to the
 XLA-SAME forms the shipped renders and the TF-origin references use, (B) EfficientNet-B0's whole-net
 certified backward tie, which must not be built before (A), and (C) an audit of the LaTeX blueprint
@@ -108,70 +110,111 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    they are hand copies of the batched arms and a copy is what drifts. `convention_audit.py`
    audits `_fwd` directly again; `--selftest` reproduces the ledger.
 
-1. **Foundation: the two hand-written odd-phase backwards and their leaf ties.**
-   `flatConvStride2XlaBack W` is `convFlatBack W` after scattering the cotangent to the ODD
-   positions, mirroring `flatConvStride2Back = convFlatBack ∘ decimateBack`. Prove
-   `flatConvStride2XlaBack_eq_vjp_backward` against `flatConvStride2Xla_has_vjp` the way
-   `flatConvStride2Back_eq_vjp_backward` is proved; same for depthwise. ⚠ `3d9b14d`: the
-   input-VJP's pad shift runs OPPOSITE to the weight-grad's because the reversed kernel flips the
-   index shift; a version derived "by symmetry" type-checks, has the right shape, trains, and is
-   wrong. Basis-probe the new backward against the certified `.backward` at k = 3 on a small even
-   grid before writing the tie (the method of the archived log, section 3.19). Done when both ties
-   compile and the probe agrees exactly.
+1. **Foundation: the two hand-written odd-phase backwards and their leaf ties. Done 2026-09-05
+   (`0773e20`).** `flatConvStride2XlaBack = convFlatBack ∘ decimateOddBack` and
+   `depthwiseStride2FlatXlaBack = depthwiseFlatBack ∘ decimateOddBack`, beside their symmetric
+   peers, each with `floatBridges_` / `floatBridgesTo_` by one `.comp`; the leaf ties
+   `flatConvStride2XlaBack_eq_vjp_backward` / `depthwiseStride2FlatXlaBack_eq_vjp_backward` by the
+   same four-line proof as the symmetric ones. No basis probe was needed: the definition is the
+   composition, the kernel checks it is the certified VJP, and the emitted arms were
+   `jax.vjp`-checked in step 0.
 
-2. **Float leaves. Done 2026-09-05** (`floatClose_` / `floatBridges_` / `floatBridgesTo_` for
-   `flatConvStride2Xla` in `Resnet34WholeFloatBridge.lean` and for `depthwiseStride2FlatXla` in
-   `EfficientNetWholeFloatBridge.lean`; the float peers `FloatModel.flatConvStride2XlaF` /
-   `depthwiseStride2FlatXlaF`; `Maps.flatConvStride2Xla`, `Maps.depthwiseStride2FlatXla`,
+2. **Float leaves. Done 2026-09-05 (`0584ab8`).** `floatClose_` / `floatBridges_` /
+   `floatBridgesTo_` for `flatConvStride2Xla` (`Resnet34WholeFloatBridge.lean`) and
+   `depthwiseStride2FlatXla` (`EfficientNetWholeFloatBridge.lean`); `FloatModel.flatConvStride2XlaF`
+   / `depthwiseStride2FlatXlaF`; `Maps.flatConvStride2Xla`, `Maps.depthwiseStride2FlatXla`,
    `Maps.flatConvStride2XlaBack`, `Maps.depthwiseStride2XlaBack`; `Maps.decimateOddBack` moved
-   from the LN file to `FloatBudgetEnvBack.lean` so the stride-2 leaves reach it; an `example`
-   in `EfficientNetFloatBudget.lean` closes the stem at `b0EvalBridge_maps`'s numerals through
-   the XLA leaf, to be retired by step 5). Original text: `floatClose_flatConvStride2Xla` / `floatBridgesTo_` / `Maps.flatConvStride2Xla`
-   with the float peer `decimateOddFlat ∘ flatConvF`, and the depthwise peer; backward
-   `Maps.flatConvStride2XlaBack` and `Maps.depthwiseStride2XlaBack` as `convBack` after
-   `decimateOddBack`. Put them beside the symmetric ones (`Resnet34WholeFloatBridge.lean` /
-   `FloatBudgetEnv.lean` for the conv, `FloatBudgetEnvMBConv.lean` for depthwise,
-   `FloatBudgetEnvBack*.lean` for the backwards), not in a new file, so no two files carry the
-   same name unseen. Done when a compiled `example` closes one site at `b0_eval_chain`'s stem
-   numerals with the Xla leaf.
+   from the LN file to `FloatBudgetEnvBack.lean`. All verbatim copies of the symmetric leaves,
+   since a decimation picks coordinates.
 
-3. **Re-spell the committed forwards.** `stemB` (`Codegen/EfficientNetRenderPC.lean:50-54`) and
-   `stemB_has_vjp` (`Architectures/EfficientNetChainClose.lean:174`); the mnv2 stem
-   (`Codegen/MobileNetV2RenderPC.lean:131`) and the strided depthwise stage (`:54`); the two
-   `*RenderPCEval` twins; the PC graphs' tokens (`.convStrided` to `.convStridedXla`, depthwise
-   likewise) and the `_faithful` proofs through the `den_batchOp_*Xla` lemmas; the apexes
-   `efficientnetForwardB_has_vjp` and `mobilenetv2PC_has_vjp_at` (its stem witness
-   `convStridedBnRelu6PC_has_vjp_at` moves to the Xla VJP); `WholeNetForwardTies.lean`,
-   `*ChainClose.lean`, `*Close.lean`, `*FaithfulPoC.lean`, `*TiePoC.lean` wherever they name the
-   stem. The shape checks `efficientnetForwardB_eq_chain` and `mobilenetv2Forward_full_pc_eq_chain`
-   must stay `rfl`. Section 4 has the file list. Done when `lake build Proofs Certs` is green and
-   `grep -rn "flatConvStride2 \|depthwiseStride2Flat " LeanMlir/Proofs --include=*.lean` returns
-   only ResNet, ConvNeXt, MobileNetV4, the paper-MobileNetV2 files, and the leaf definitions.
+3. **Re-spell the committed forwards.** ⚠ Steps 4 and 5 fold INTO this step per net: a net's
+   budget files name its leaves, so the forward cannot move without the backward chain and both
+   budget files moving in the same commit, and the acceptance for 4 and 5 (numerals unchanged)
+   is checked here.
 
-4. **Backward chains and the two backward numbers.** `efficientnetInputGradB`'s stem
-   (`EfficientNetWholeBackFloatBridge.lean:45`, `flatConvStride2Back`) and `mnv2InputGrad`'s stem
-   plus four `depthwiseStride2Back` sites (`MobileNetV2BackFloatBridge.lean:133` and the strided
-   bodies); the `Maps` chains in `EfficientNetBackFloatBudget.lean` and
-   `MobileNetV2BackFloatBudget.lean` at the new leaves; `mnv2InputGrad_eq_mobilenetv2_vjp` re-tied
-   with the Xla leaf ties. ⚠ Expect **7.104e182 / 1.578e182** and **4.750e153 / 1.076e152** to
-   reproduce to the digit (`verify_b0_back` 138 and `verify_mnv2_back` 136 unchanged, since the
-   probe's fan-ins and roundings are the same). If a numeral moves, stop and explain before
-   committing. Done when both files compile with the committed numerals and the mnv2 tie is green.
+   **3a. EfficientNet-B0. Done 2026-09-05.** One site, the stem. `stemB` and `stemBEval`,
+   the two PC graphs (`.convStridedXla`, faithfulness through `den_batchOp_convStridedXla`),
+   `stemB_has_vjp`, `EnetPoC.convStridedWB_den` and `enetStemTied` (now about
+   `convStridedXlaWeightSgdB`, the op `efficientnet_train_step.mlir` has emitted since
+   2026-08-08), `floatBridges_stemB` / `stemBGen` / `stemBF` / `floatBridgesTo_stemBGen`,
+   `efficientnetInputGradB` and `efficientnetInputGradBF` (stem scatter `decimateOddBack`),
+   and both budget files. `EfficientNetFullB0.lean` and the 262-param tie follow through
+   `stemB`. Both numbers reproduced to the digit. B0's strided depthwises stay symmetric:
+   render and reference both pad them `(p,p)`. Collateral: `MobileNetV4BackB0.lean` had
+   borrowed `stemB` for MNv4's fused 3x3/s2 stage, which is symmetric in MNv4's render, so that
+   stage now has its own `fusedConvB` with the same lemmas; its docstring had also claimed the
+   shared backward graph certified B0's stem, which it cannot (no render emits a gradient into
+   the image, and no batched XLA input-VJP token exists), and that is now recorded.
 
-5. **Forward numbers.** `b0EvalForward` and `mnv2EvalForward` at the Xla leaves. Expect
-   **2.580e55 / 8.408e210** and **2.154e3 / 1.444e96** unchanged, `verify_b0` 96 and `verify_mnv2`
-   116 unchanged. Same rule if anything moves.
+   **3b. MobileNetV2, the 6-block reduced cone, the 17-block paper files and the batched Adam
+   backward graphs. Scripted, not applied: `scripts/respell_mnv2_xla.py`.** Run it from the
+   repo root after committing 3a; it substitutes the 55-rule name map over the sixteen
+   MobileNetV2 files (the two PC graphs, ChainClose, FaithfulPoC, FaithfulPoCPaper, TiePoCPaper,
+   FullPaper, FullVJP, BackB0, BackCertifiedTie, WholeBackCertifiedTie, the four Float files,
+   and `tests/TestMobilenetV2TrainPC.lean`), adds the four XLA twins of the shared certs to
+   `MobileNetV2Close.lean`, the two per-example XLA stem dens to `MobileNetV2FaithfulPoC.lean`,
+   `depthwiseStridedXlaBackBatched_faithful` to `EfficientNetBackB0.lean`, and the seven
+   `#print axioms` lines to `tests/AuditAxioms.lean`. It refuses to run twice. Then
+   `lake build LeanMlir.Proofs.Architectures.MobileNetV2TiePoCPaper
+   LeanMlir.Proofs.Float.MobileNetV2FloatBudget LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
+   LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
+   LeanMlir.Proofs.Architectures.MobileNetV2FullVJP LeanMlir.Proofs.Foundation.BackNetFolds` for
+   the fast signal, then the section-6 gates. Expect to hand-fix: (i) any `rfl` that fails
+   because a term still spells the even phase (grep the failing file for `decimateBack` and
+   `flatConvStride2 `; the B0 float backward net needed exactly this), (ii) prose in the
+   sixteen files that names ResNet or ConvNeXt next to a now-XLA name (the script's final grep
+   lists candidates; ResNet's `cbrStridedPC` is symmetric and must read so), (iii)
+   `tests/TestMobilenetV2TrainPC.lean`, which is a retired demo run only by
+   `regen_verified_mlir.sh tests`; if it will not compile leave its tokens symmetric and say so
+   in its header. **Numerals: `2.154e3 / 1.444e96` and `4.750e153 / 1.076e152` must reproduce,
+   `verify_mnv2` 116 and `verify_mnv2_back` 136 unchanged; if one moves, stop and explain.**
 
-6. **Artifacts, ties, disclosures.** Re-render `mobilenetv2_fwd.mlir` (and the SGD train step if
-   step 0 moves it); add or run a byte tie between `pretty` of each PC graph and its artifact
-   (`efficientnet_fwd`, `efficientnet_fwd_eval`, `mobilenetv2_fwd`, `mobilenetv2_fwd_eval`) so the
-   `_faithful` theorem is about the file that ships; `convention_audit.py --selftest`;
-   `scripts/mnv2_forward_tie.py` on shared weights (CPU is enough; use the pinned jax venv). Then
-   remove the "A PADDING-CONVENTION GAP" paragraph from `formalization.yaml` 4d and the four flags
-   on the B0 / MobileNetV2 `main_results` comments; in `planning/float_budget_numbers.md` mark
-   section 5 item 2 (a) done and update the section 4 row. Update the four budget files' headers
-   where they say "the deployed forward". Done when every artifact for the two nets has the same
-   pad profile as its JAX reference and the docs say so.
+   ⛔ **The trap the script is built around: shared lemmas.** `mnv2_render_stem_conv{W,b}_certified`
+   are reused by ResNet-34 (`ResNet34Close.lean`, `ResNet34ChainClose.lean`,
+   `ResNet34FaithfulPoC.lean`) and `mnv2_render_depthwise{W,b}_strided_certified` by
+   EfficientNet-B0 (`EfficientNetClose.lean`), both at symmetric padding, correctly. They must
+   NOT flip; the script adds `_xla_` twins and repoints only the MobileNetV2 consumers.
+   `ResNet34PoC.convStrided{W,B}_den` likewise stays; MobileNetV2's paper PoC gets
+   `Mnv2PoC.convStridedXla{W,B}_den`. The same shape as the MNv4 `stemB` collision in 3a: a
+   shared definition is right for one net and wrong for the other the moment the conventions
+   diverge, and nothing structural says which.
+
+   **3c. The scalar-BN twin, a third commit.** `MobileNetV2.lean`'s `mobilenetv2Forward_full`
+   (scalar `bnForward`, the reduced 6-block net), `convBnRelu6Strided_has_vjp_at`,
+   `invresBodyStrided`, and `StableHLO.lean`'s `mobilenetv2FwdGraphFull` + `_faithful` are the
+   scalar-BN stepping stone the PC net replaced; no artifact and no number rest on them. Flip
+   them for the acceptance grep (they name `flatConvStride2` / `depthwiseStride2Flat`), or
+   leave them and add their file names to the grep's allow-list with a sentence. Flipping
+   touches `StableHLO.lean`, which is a 6.5-minute rebuild of everything, so do it last. The
+   2-block generic `mobilenetv2Forward` (yaml headline, `Mnv2Live`, the three seals) has a
+   stride-1 stem and is untouched either way.
+
+   **Acceptance (unchanged):** `lake build Proofs Certs` green and
+   `grep -rn "flatConvStride2 \|depthwiseStride2Flat " LeanMlir/Proofs --include=*.lean`
+   returns only ResNet, ConvNeXt, MobileNetV4, `EfficientNetClose.lean`'s strided-depthwise
+   reuse, the shared symmetric certs in `MobileNetV2Close.lean`, the scalar twin if left, and
+   the leaf definitions.
+
+4. **Backward chains and the two backward numbers.** Folded into step 3 per net (see the
+   note there). B0's landed with 3a: `7.104e182 / 1.578e182` unchanged. MobileNetV2's is
+   part of 3b.
+
+5. **Forward numbers.** Folded into step 3 per net. B0's `2.580e55 / 8.408e210` unchanged with
+   3a; MobileNetV2's `2.154e3 / 1.444e96` is part of 3b.
+
+6. **Artifacts, ties, disclosures.** Every MobileNetV2 artifact was re-rendered in step 0 and
+   ties at 5.5e-6 (`scripts/mnv2_forward_tie.py --diag`, per-example BN row); B0's artifacts
+   were already XLA-SAME. The byte tie between a PC graph's `pretty` and a shipped artifact
+   cannot exist (section 1's correction: the PC nets are the reduced and representative ones);
+   the achievable one is `mobilenetv2FwdGraphFullPC`'s `pretty` against the forward prefix of
+   `mobilenetv2_reduced_train_step.mlir`, optional. Left for the session after 3b/3c: in
+   `formalization.yaml`, rewrite 4d's "A PADDING-CONVENTION GAP" paragraph as a closed item
+   (dates: renders 2026-08-08, SGD pair and Proofs tier 2026-09-05) and drop the two flags on
+   the MobileNetV2 rows (`mnv2_float_logits_le`, `mnv2_grad_float_le`; B0's are done); in
+   `planning/float_budget_numbers.md` mark section 5 item 2 (a) done and update the section 4
+   row; the MobileNetV2 budget headers gain the one sentence B0's got ("the stem / four strided
+   depthwises at the XLA-SAME phase the shipped render uses, re-spelled 2026-09-05; the numerals
+   did not move"). Then `python3 scripts/convention_audit.py --selftest` once more.
 
 7. **EfficientNet-B0's whole-net certified tie**, as scoped in `planning/float_budget_numbers.md`
    section 5 item 3, now against the XLA stem: apex `efficientnetForwardB_has_vjp`, the three

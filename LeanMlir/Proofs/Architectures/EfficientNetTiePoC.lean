@@ -604,9 +604,10 @@ theorem enet_noexp_tied {N ic oc h w r kHd kWd : Nat}
 
 /-! ## Stem — the 3×3/s2 conv-bn-swish (4 params), feeding block 1
 
-`swish(bn(convStride2 Ws bs x))`, 3→32 at 224→112. The cotangent block 1 delivers at the stem swish
-output (`dyStem`) lifts through swish-back + true-BN-back to the conv-out cotangent (the
-`convStridedWeightSgdB` consumes it; NO conv-back past `%x`). 4 params. -/
+`swish(bn(convStride2Xla Ws bs x))`, 3→32 at 224→112, at the XLA-`SAME` phase the shipped stem
+uses. The cotangent block 1 delivers at the stem swish output (`dyStem`) lifts through swish-back
++ true-BN-back to the conv-out cotangent (the `convStridedXlaWeightSgdB` consumes it; NO conv-back
+past `%x`). 4 params. -/
 
 /-- **Stem, tied.** The 3×3/s2 conv (`Ws`/`bs`) + its true-BN (`γs`/`βs`) at the real stem forward +
     the cotangent through the stem swish (no maxpool, no conv-back). -/
@@ -614,15 +615,15 @@ def enetStemTied {N ic oc h w kHs kWs : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String) (εs : ℝ) (hεs : 0 < εs)
     (Ws : Kernel4 oc ic kHs kWs) (bs γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) (lr : ℝ) : Prop :=
-  let stc : Vec (N * (oc * h * w)) := batchMap N (flatConvStride2 Ws bs) x
+  let stc : Vec (N * (oc * h * w)) := batchMap N (flatConvStride2Xla Ws bs) x
   let stn : Vec (N * (oc * h * w)) := bnBatchLA N oc h w εs γs βs stc
   let cotBnS : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) stn dyStem
   let cotStc : Vec (N * (oc * h * w)) := bnBackB N oc h w εs hεs γs βs stc cotBnS
   (∀ idx : Fin (oc * ic * kHs * kWs),
-        den (SHlo.convStridedWeightSgdB xN wN lrStr bs x Ws lr (.operand cotN cotStc)) idx
+        den (SHlo.convStridedXlaWeightSgdB xN wN lrStr bs x Ws lr (.operand cotN cotStc)) idx
           = Kernel4.flatten Ws idx - lr * ∑ n : Fin N, ∑ j : Fin (oc * h * w),
               pdiv (fun v' : Vec (oc * ic * kHs * kWs) =>
-                      flatConvStride2 (Kernel4.unflatten v') bs (batchSlice N (ic * (2 * h) * (2 * w)) x n))
+                      flatConvStride2Xla (Kernel4.unflatten v') bs (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                    (Kernel4.flatten Ws) idx j * batchSlice N (oc * h * w) cotStc n j)
   ∧ (∀ o : Fin oc,
         den (SHlo.bnBetaSgdB bN lrStr bs lr (.operand cotN (reassocB N oc h w cotStc))) o

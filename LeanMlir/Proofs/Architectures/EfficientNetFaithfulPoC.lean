@@ -17,7 +17,7 @@ inside `Σ_n`" — the **batch-sum bridge**. For the linear families (conv/dense
 per-channel reduction count `m = N·(h·w)`, so it is the cert's exact LHS (delegation).
 
 `Σ_n` of the per-example VJP `.correct`: `conv_weight_grad_bridge` / `conv_bias_grad_bridge` (1×1
-expand/project/head + the strided stem via `flatConvStride2`), the dense outer-product
+expand/project/head + the strided stem via `flatConvStride2Xla`), the dense outer-product
 (`denseWeightSgdB`/`denseBiasSgdB`, SE squeeze/excite + head dense), and the depthwise grads
 (`mnv2_render_depthwise*` / `enet_render_dw5*`). -/
 
@@ -52,21 +52,24 @@ theorem convWB_den {N ic oc h w kH kW : Nat}
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
 /-- **Batched strided-stem 3×3 conv weight op denotes the certified Σ_n batched weight gradient.**
-    `Σ_n` of `flatConvStride2_weight_grad_has_vjp.correct`. -/
+    `Σ_n` of `flatConvStride2Xla_weight_grad_has_vjp.correct`. The op is the XLA-`SAME`
+    `convStridedXlaWeightSgdB` the render emits at the stem (`EfficientNetRender.lean`), whose
+    weight-grad correlation pad is shifted one position; its `den` is the odd-phase weight VJP,
+    so the certified gradient here is the gradient of the net that ships. -/
 theorem convStridedWB_den {N ic oc h w kH kW : Nat}
     (xN wN lrStr cotN : String) (b : Vec oc) (x : Vec (N * (ic * (2*h) * (2*w))))
     (W : Kernel4 oc ic kH kW) (cot : Vec (N * (oc * h * w))) (lr : ℝ) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStridedWeightSgdB xN wN lrStr b x W lr (.operand cotN cot)) idx
+    den (SHlo.convStridedXlaWeightSgdB xN wN lrStr b x W lr (.operand cotN cot)) idx
       = Kernel4.flatten W idx - lr * ∑ n : Fin N, ∑ j : Fin (oc * h * w),
           pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                  flatConvStride2 (Kernel4.unflatten v') b (batchSlice N (ic * (2*h) * (2*w)) x n))
+                  flatConvStride2Xla (Kernel4.unflatten v') b (batchSlice N (ic * (2*h) * (2*w)) x n))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
   simp only [den]
   congr 1
   apply congrArg (lr * ·)
   apply Finset.sum_congr rfl
   intro n _
-  exact (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic * (2*h) * (2*w)) x n)).correct
+  exact (flatConvStride2Xla_weight_grad_has_vjp b (batchSlice N (ic * (2*h) * (2*w)) x n)).correct
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
 -- ════════════════════════════════════════════════════════════════

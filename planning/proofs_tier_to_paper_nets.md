@@ -40,7 +40,7 @@ shipped config count as paper-net statements.
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ⚠ scalar LN | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ | ✓ 262 params (stem symmetric) | ✗ 3-block | ✗ 3-block, N=1 | ✗ open at 3-block | none |
-| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✗ 2-block generic | ✓ | ✓ 210 params (symmetric) | ✗ 6-block | ✗ 6-block | ✗ 6-block | 17 blocks at toy dims; 2 blocks at 224 |
+| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), with shape check `mobilenetv2ForwardPaper_eq_chain`; the yaml headline still points at the 2-block generic | ✓ | ✓ 210 params (symmetric) | ✗ 6-block | ✗ 6-block | ✗ 6-block | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 
@@ -92,14 +92,13 @@ current file, edited in place; the LN certs are the only new proofs.
 
 Everything here lands on the XLA-SAME spelling from 3.0.
 
-**(a) T1, the whole-net VJP.** `MobileNetV2FullPaper.lean` has forward, graph and faithfulness
-and no VJP. Build `mobilenetv2ForwardPaper_has_vjp_at` the way `mobilenetv2PC_has_vjp_at`
-(`MobileNetV2ChainClose.lean`) builds the 6-block one: `vjp_comp_at` over the per-channel
-stages, with the relu6 two-sided clauses (`≠ 0 ∧ ≠ 6` at every expand and depthwise BN output)
-collected into one hypothesis record, not 100 binders. Then point `formalization.yaml`'s
-headline `mobilenetv2_has_vjp_at_correct` at it (the current headline is the 2-block generic
-net in `MobileNetV2.lean`). Mirror: `efficientnetForwardB_full_has_vjp` (`EfficientNetFullB0.lean`)
-for the record-of-hypotheses shape. Done when the theorem compiles and the yaml row points at it.
+**(a) T1 exists; the headline does not point at it.** `MobileNetV2FullVJP.lean` folds the whole
+`[t,c,n,s]` table: `mobilenetv2_full_has_vjp_at` / `_correct` over the `MNV2PaperWeights` bundle,
+pointwise (relu6 is kinked, so `_at` is the form), with the shape check
+`mobilenetv2ForwardPaper_eq_chain` already audited. `formalization.yaml`'s headline
+`mobilenetv2_has_vjp_at_correct` is still the 2-block generic net in `MobileNetV2.lean`. Point
+the yaml row (and the blueprint's `\lean{}` tag) at `mobilenetv2_full_has_vjp_at_correct`. A
+doc change; done when the row's file is `MobileNetV2FullVJP.lean`.
 
 **(b) T4 and T5, the numbers. Probe first.** Extend `scripts/float_budget_envelope.py`'s
 `mnv2_eval_chain` / `mnv2_back_chain` to the `[t,c,n,s]` table (the block list is

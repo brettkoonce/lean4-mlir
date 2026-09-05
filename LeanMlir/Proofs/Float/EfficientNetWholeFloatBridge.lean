@@ -128,7 +128,7 @@ theorem floatBridges_cbsB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fs
       (floatBridges_flatConv (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
     (floatBridges_swish M fsig hesig hsig)
 
-/-- Batched stride-2 stem conv → bn → swish float-bridges (the `flatConvStride2` downsample). -/
+/-- Batched stride-2 stem conv → bn → swish float-bridges (the `flatConvStride2Xla` downsample). -/
 theorem floatBridges_stemB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
@@ -139,7 +139,7 @@ theorem floatBridges_stemB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (f
     FloatBridges (stemB N (h := h) (w := w) W b ε γ β) := by
   unfold stemB
   exact ((FloatBridges.batchMap N
-      (floatBridges_flatConvStride2 (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
+      (floatBridges_flatConvStride2Xla (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
     (floatBridges_swish M fsig hesig hsig)
 
 /-- Batched depthwise → bn → swish float-bridges (stride-1). -/
@@ -464,7 +464,7 @@ theorem cbsB_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) 
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (bn : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w))) :
     Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
-  swish (N * (oc * h * w)) ∘ bn ∘ StableHLO.batchMap N (flatConvStride2 W b)
+  swish (N * (oc * h * w)) ∘ bn ∘ StableHLO.batchMap N (flatConvStride2Xla W b)
 
 /-- `stemB` IS `stemBGen` at true batch-norm. -/
 theorem stemB_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
@@ -544,7 +544,7 @@ noncomputable def stemBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel) (fsi
     (bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w))) :
     Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
   swishF M fsig (N * (oc * h * w)) ∘ bnF
-    ∘ StableHLO.batchMap N (M.flatConvStride2F (h := h) (w := w) W b)
+    ∘ StableHLO.batchMap N (M.flatConvStride2XlaF (h := h) (w := w) W b)
 
 /-- The strided stem stage float-bridges, generic in the normalisation. -/
 noncomputable def floatBridgesTo_stemBGen {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
@@ -558,7 +558,7 @@ noncomputable def floatBridgesTo_stemBGen {ic oc h w kH kW : Nat} (N : Nat) (M :
     FloatBridgesTo (stemBGen N (h := h) (w := w) W b bn)
       (stemBF N (h := h) (w := w) M fsig W b bnF) :=
   ((FloatBridgesTo.batchMap N
-      (floatBridgesTo_flatConvStride2 (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
+      (floatBridgesTo_flatConvStride2Xla (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
     (floatBridgesTo_swish M fsig hesig hsig)
 
 /-- The strided stem stage at TRUE batch-norm — `floatBridgesTo_stemBGen` at

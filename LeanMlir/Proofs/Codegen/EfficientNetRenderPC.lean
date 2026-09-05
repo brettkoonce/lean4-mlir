@@ -46,12 +46,16 @@ open scoped BigOperators
     Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
   swish (N * (oc * h * w)) ∘ StableHLO.bnBatchLA N oc h w ε γ β ∘ StableHLO.batchMap N (flatConv W b)
 
-/-- Batched strided (3×3 s2) stem conv → bn → swish (halves spatial). -/
+/-- Batched strided (3×3 s2) stem conv → bn → swish (halves spatial). ⚠ At the XLA-`SAME` phase
+    (`flatConvStride2Xla` = `decimateOddFlat ∘ flatConv`): the TF-origin B0 pads its stem `(0,1)`,
+    and the shipped render has emitted `convStridedXla` there since 2026-08-08. The symmetric
+    `flatConvStride2` has the same type and output shape; nothing structural would notice the
+    wrong one (re-spelled 2026-09-05, `planning/xla_same_respell_and_blueprint_audit.md`). -/
 noncomputable def stemB (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) :
     Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
   swish (N * (oc * h * w)) ∘ StableHLO.bnBatchLA N oc h w ε γ β ∘
-    StableHLO.batchMap N (flatConvStride2 W b)
+    StableHLO.batchMap N (flatConvStride2Xla W b)
 
 /-- Batched depthwise (stride-1, k×k) → bn → swish. -/
 @[reducible] noncomputable def dwbsB (N : Nat) {c h w kH kW : Nat}
@@ -172,14 +176,14 @@ def stemGraphB (epsStr : String) {N ic oc h w : Nat}
     (Ws : Kernel4 oc ic 3 3) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .swishF (.bnBatchF "%sg" "%sbt" epsStr εs γs βs
-    (.batchOp (N := N) (.convStrided (h := h) (w := w) "%sW" "%sb" Ws bs) e))
+    (.batchOp (N := N) (.convStridedXla (h := h) (w := w) "%sW" "%sb" Ws bs) e))
 
 theorem stemGraphB_faithful (epsStr : String) {N ic oc h w : Nat}
     (Ws : Kernel4 oc ic 3 3) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (stemGraphB epsStr Ws bs εs γs βs e) = stemB N (h := h) (w := w) Ws bs εs γs βs (den e) := by
   unfold stemGraphB stemB
-  simp only [den_batchOp_convStrided, den_bnBatchF, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp_convStridedXla, den_bnBatchF, swishF_faithful, Function.comp_apply]
 
 /-- MBConv1 (no expand): dw-bn-swish → SE → project-bn, batched. -/
 def mbNoExpGraphB (p epsStr : String) {N ic oc h w kHd kWd r : Nat}

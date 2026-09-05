@@ -5,7 +5,9 @@ import LeanMlir.Proofs.Float.Binary32Instance
 
 The backward peer of `EfficientNetFloatBudget.lean`, and the fourth whole-net input-gradient
 number in the repo after ResNet-34's (`Resnet34BackFloatBudget.lean`), MobileNetV2's
-(`MobileNetV2BackFloatBudget.lean`) and ConvNeXt-T's (`ConvNeXtBackFloatBudget.lean`).
+(`MobileNetV2BackFloatBudget.lean`) and ConvNeXt-T's (`ConvNeXtBackFloatBudget.lean`). The stem
+backward is the odd-phase `flatConvStride2XlaBack` since 2026-09-05, matching the XLA-`SAME`
+stem the render ships; the numerals did not move, since a scatter is exact at either phase.
 
     certified window ≤ 7.104·10¹⁸²      (`b0GradBridge_mag_le`)
     fresh budget     ≤ 1.578·10¹⁸²      (`b0GradBridge_fresh_le`)
@@ -580,7 +582,7 @@ noncomputable def b0GradBridge (M : FloatModel)
             (w.stemBn.bridge M P (by norm_num) (by norm_num) (Xh := 112) (by norm_num)
               (by norm_num)))).comp
         (FloatBridgesTo.batchMap 1
-          (floatBridgesTo_flatConvStride2Back (h := 112) (w := 112) M w.stemK.W P.hwk
+          (floatBridgesTo_flatConvStride2XlaBack (h := 112) (w := 112) M w.stemK.W P.hwk
             (by norm_num) w.stemK.hW)))
 
 end Net
@@ -830,7 +832,7 @@ theorem b0GradBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 
           (by norm_num) (by norm_num)))
       |>.comp (by norm_num)
       (FloatBridgesTo.Maps.batchMap 1
-        (FloatBridgesTo.Maps.flatConvStride2Back (h := 112) (w := 112) M w.stemK.W P.hwk
+        (FloatBridgesTo.Maps.flatConvStride2XlaBack (h := 112) (w := 112) M w.stemK.W P.hwk
           (by norm_num) w.stemK.hW
           (M.gamma_num (k := 32 * 3 * 3 + 2) (q := 1729 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32]))
           (Ā := 6666 * 10 ^ 176) (Ē := 1480 * 10 ^ 176) (Ā' := 7104 * 10 ^ 179) (Ē' := 1578 * 10 ^ 179)

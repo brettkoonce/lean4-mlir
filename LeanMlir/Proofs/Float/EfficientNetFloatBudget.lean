@@ -6,8 +6,10 @@ import LeanMlir.Proofs.Float.Binary32Instance
     had to be tightened first
 
 The third ImageNet-scale whole-net float budget, after ResNet-34 and MobileNetV2. For the
-representative batched B0 — 3×3/s2 stem, MBConv1 (no expand, SE), MBConv6 (stride-2 3×3, SE),
-MBConv6 (5×5, SE, residual), 1×1 head, GAP, dense — with **inference** BatchNorm, on the unit
+representative batched B0 — 3×3/s2 stem at the XLA-`SAME` phase the shipped render uses
+(`flatConvStride2Xla`, re-spelled 2026-09-05; the numerals did not move), MBConv1 (no expand,
+SE), MBConv6 (stride-2 3×3, SE), MBConv6 (5×5, SE, residual), 1×1 head, GAP, dense — with
+**inference** BatchNorm, on the unit
 input window, at the profile measured on the 350-epoch checkpoint (`|parameter| ≤ 41/10`), for
 any rounding model at binary32 accuracy:
 
@@ -605,7 +607,7 @@ theorem b0EvalBridge_maps (N : Nat) (hN : 0 < N) (M : FloatModel) (hMu : M.u ≤
       (2580 * 10 ^ 52) (8408 * 10 ^ 207) := by
   have hP := b0Profile_committed M hMu hε5
   -- stem: 3×3/s2 conv, inference BN, swish
-  have t1 := FloatBridgesTo.Maps.batchMap N (FloatBridgesTo.Maps.flatConvStride2
+  have t1 := FloatBridgesTo.Maps.batchMap N (FloatBridgesTo.Maps.flatConvStride2Xla
     (h := 112) (w := 112) M W.stem.W W.stem.b hP.hw' hP.hβ' (by norm_num) W.stem.hW W.stem.hb (M.gamma_num (q := 1729 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32]))
     (Ā := 1) (Ē := 0) (Ā' := 1149 / 10 ^ 1) (Ē' := 1985 / 10 ^ 7) (by norm_num [bnNormBudget, FloatModel.mulErr, u32]) (by norm_num [bnNormBudget, FloatModel.mulErr, u32]))
   have t2 := t1.comp (Nat.mul_pos hN (by norm_num : 0 < 32 * 112 * 112)) (W.bns.maps N M Rq hP (by norm_num) (by norm_num) (h := 112) (w := 112)
@@ -736,23 +738,6 @@ theorem b0_float_logits_le (N : Nat) (hN : 0 < N) (M : FloatModel) (hMu : M.u �
     (x : Vec (N * (3 * 224 * 224))) (hx : ∀ k, |x k| ≤ 1) (j : Fin (N * 10)) :
     |b0EvalForwardF N M D Rq W x j - b0EvalForward N W ε x j| ≤ 8408 * 10 ^ 207 :=
   (b0EvalBridge_maps N hN M hMu hε5 D Rq W).budget_le (by norm_num) le_rfl x hx j
-
-/-- **Step 2 of the XLA-`SAME` re-spelling (2026-09-05): the odd-phase stem leaf closes the same
-    numerals.** `Maps.flatConvStride2Xla` is `Maps.flatConvStride2` verbatim (a decimation picks
-    coordinates, so the `3·3·3` fan-in and the budget are unchanged), and this is the kernel-checked
-    form of that sentence: the committed stem numerals `Ā' = 114.9`, `Ē' = 1.985e-7` of
-    `b0EvalBridge_maps`'s first stage go through the XLA leaf untouched. Scaffolding for step 5,
-    which moves `b0EvalBridge` itself to the XLA stem and retires this. -/
-example (M : FloatModel) (hMu : M.u ≤ u32)
-    (W : EnetWeights (41/10) (41/10) (41/10) (41/10) (41/10)) :
-    (floatBridgesTo_flatConvStride2Xla (h := 112) (w := 112) M W.stem.W W.stem.b
-      (by norm_num) (by norm_num) (by norm_num) W.stem.hW W.stem.hb).Maps
-      1 0 (1149 / 10 ^ 1) (1985 / 10 ^ 7) :=
-  FloatBridgesTo.Maps.flatConvStride2Xla (h := 112) (w := 112) M W.stem.W W.stem.b
-    (by norm_num) (by norm_num) (by norm_num) W.stem.hW W.stem.hb
-    (M.gamma_num (q := 1729 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32]))
-    (by norm_num [bnNormBudget, FloatModel.mulErr, u32])
-    (by norm_num [bnNormBudget, FloatModel.mulErr, u32])
 
 -- ════════════════════════════════════════════════════════════════
 -- § The tie: this IS the committed inference forward, and the graph denotes it

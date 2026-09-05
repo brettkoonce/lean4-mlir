@@ -374,15 +374,37 @@ smoothness side conditions, and the VJPs are global `HasVJP`s rather than `_at`.
 the cheapest part of MNv4's backward despite being the part §1b records as *missed by the original
 scoping*.
 
-⭐⭐ **The forward stage already existed and was already certified** — `stemB` (EfficientNet's
-strided conv-bn-swish, `EfficientNetRenderPC`) is exactly this shape, with `stemB_has_vjp` and
-`stemB_differentiable` in `EfficientNetChainClose`. What was missing repo-wide is its **backward
-graph**: grep found no `stemBackBatchedGraph`. So EfficientNet's own stem was not graph-certified
-either, and building it here closes that for both nets. -/
+⭐⭐ **The forward stage is `fusedConvB`, EfficientNet's `stemB` shape at SYMMETRIC padding.** Until
+2026-09-05 the two nets shared `stemB` (`EfficientNetRenderPC`) outright. B0's stem then moved to
+the XLA-`SAME` phase (`flatConvStride2Xla`, the TF-origin convention its render has shipped since
+2026-08-08), while MNv4's fused 3×3/s2 stays symmetric — the reference's `fused_ib` passes an
+explicit `(p,p)` tuple and `scripts/convention_audit.py` reads the render at `sym` there — so the
+stage gets its own name with the same `bnSwishStage_*` lemmas. What was missing repo-wide was the
+**backward graph**: `stemBackBatchedGraph` below, at the symmetric `convStridedBackBatched`. ⚠ It
+serves MNv4's fused stage only; B0's XLA stem has no batched input-VJP token (no render emits a
+gradient into the image), so `enetTrunk` takes its stem layer as a parameter and B0's stem stays
+un-graph-certified — recorded in `planning/proofs_tier_to_paper_nets.md`. -/
+
+/-- MNv4's fused stage forward: **symmetric** strided k×k conv → bn → swish. -/
+noncomputable def fusedConvB (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) :
+    Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
+  swish (N * (oc * h * w)) ∘ StableHLO.bnBatchLA N oc h w ε γ β ∘
+    StableHLO.batchMap N (flatConvStride2 W b)
+
+theorem fusedConvB_differentiable (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Differentiable ℝ (fusedConvB N (h := h) (w := w) W b ε γ β) :=
+  bnSwishStage_differentiable N (flatConvStride2 W b) (flatConvStride2_differentiable W b) ε hε γ β
+
+noncomputable def fusedConvB_has_vjp (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    HasVJP (fusedConvB N (h := h) (w := w) W b ε γ β) :=
+  bnSwishStage_has_vjp N (flatConvStride2 W b) (flatConvStride2_differentiable W b)
+    (flatConvStride2_has_vjp W b) ε hε γ β
 
 /-- Batched **strided conv → bn → swish** backward graph — the `cbsBackBatchedGraph` sibling with
-    `convStridedBackBatched` for `convBackBatched`. Serves MNv4's fused stage AND EfficientNet's
-    stem, neither of which had one. -/
+    `convStridedBackBatched` for `convBackBatched`, at symmetric padding: MNv4's fused stage. -/
 noncomputable def stemBackBatchedGraph {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
@@ -396,20 +418,20 @@ theorem stemBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
     den (stemBackBatchedGraph W b ε γ β x e)
-      = (stemB_has_vjp N W b ε hε γ β).backward x (den e) := by
+      = (fusedConvB_has_vjp N W b ε hε γ β).backward x (den e) := by
   rw [stemBackBatchedGraph, convStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [stemB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [fusedConvB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
 
 /-- The fused stage's **k×k strided conv → bn → swish** as a `CertLayer`. ⚠ Globally certified
     (`ok = True`) — swish has no kink, so unlike every UIB stage this one carries no hypothesis. -/
 noncomputable def mnv4FusedConvLayer (N : Nat) {ic mid h w kH kW : Nat}
     (W : Kernel4 mid ic kH kW) (b : Vec mid) (ε : ℝ) (hε : 0 < ε) (γ β : Vec mid) :
     CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * h * w)) where
-  fwd := stemB N (h := h) (w := w) W b ε γ β
+  fwd := fusedConvB N (h := h) (w := w) W b ε γ β
   ok := fun _ => True
-  diff := fun x _ => (stemB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (stemB_has_vjp N W b ε hε γ β).toHasVJPAt x
+  diff := fun x _ => (fusedConvB_differentiable N W b ε hε γ β) x
+  vjp := fun x _ => (fusedConvB_has_vjp N W b ε hε γ β).toHasVJPAt x
   graph := fun x e => stemBackBatchedGraph W b ε γ β x e
   faithful := fun x _ e => stemBackBatchedGraph_faithful W b ε hε γ β x e
 

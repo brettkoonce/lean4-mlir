@@ -212,7 +212,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "b0_float_logits_le"   # EfficientNet-B0 inference-BN forward, any batch size: 8.408e210 / 2.580e55, fold; stem at symmetric padding, the shipped render is XLA-SAME (4d)
+    - declaration: "b0_float_logits_le"   # EfficientNet-B0 inference-BN forward, any batch size: 8.408e210 / 2.580e55, fold; XLA-SAME stem, as the shipped render (re-spelled 2026-09-05)
       file: "LeanMlir/Proofs/Float/EfficientNetFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -251,7 +251,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "b0_grad_float_le"   # EfficientNet-B0 backward at batch size 1: 1.578e182 / 7.104e182; through three squeeze-excite sites; no operating point; symmetric-padding spelling (4d)
+    - declaration: "b0_grad_float_le"   # EfficientNet-B0 backward at batch size 1: 1.578e182 / 7.104e182; through three squeeze-excite sites; no operating point; XLA-SAME stem (re-spelled 2026-09-05)
       file: "LeanMlir/Proofs/Float/EfficientNetBackFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]

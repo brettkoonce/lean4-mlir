@@ -56,12 +56,14 @@ namespace Proofs
   swish (N * (oc * h * w)) ∘ StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)
     ∘ StableHLO.batchMap N (flatConv W b)
 
-/-- Batched strided (3×3 s2) stem conv → inference bn → swish (halves spatial). -/
+/-- Batched strided (3×3 s2) stem conv → inference bn → swish (halves spatial). At the
+    XLA-`SAME` phase, as `stemB` (`EfficientNetRenderPC.lean`) and the shipped
+    `efficientnet_fwd_eval`. -/
 noncomputable def stemBEval (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β μ v : Vec oc) :
     Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
   swish (N * (oc * h * w)) ∘ StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)
-    ∘ StableHLO.batchMap N (flatConvStride2 W b)
+    ∘ StableHLO.batchMap N (flatConvStride2Xla W b)
 
 /-- Batched depthwise (stride-1, k×k) → inference bn → swish. -/
 @[reducible] noncomputable def dwbsBEval (N : Nat) {c h w kH kW : Nat}
@@ -178,7 +180,7 @@ def stemGraphBEval (epsStr : String) {N ic oc h w : Nat}
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) "%sg" "%sbt" "%smu" "%svar" epsStr
       ε γs βs μs vs)
-    (.batchOp (N := N) (.convStrided (h := h) (w := w) "%sW" "%sb" Ws bs) e))
+    (.batchOp (N := N) (.convStridedXla (h := h) (w := w) "%sW" "%sb" Ws bs) e))
 
 theorem stemGraphBEval_faithful (epsStr : String) {N ic oc h w : Nat}
     (Ws : Kernel4 oc ic 3 3) (bs : Vec oc) (ε : ℝ) (γs βs μs vs : Vec oc)
@@ -186,7 +188,7 @@ theorem stemGraphBEval_faithful (epsStr : String) {N ic oc h w : Nat}
     den (stemGraphBEval epsStr Ws bs ε γs βs μs vs e)
       = stemBEval N (h := h) (w := w) Ws bs ε γs βs μs vs (den e) := by
   unfold stemGraphBEval stemBEval
-  simp only [den_batchOp_convStrided, den_batchOp_bnEval, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp_convStridedXla, den_batchOp_bnEval, swishF_faithful, Function.comp_apply]
 
 /-- MBConv1 (no expand) at inference: dw-bn-swish → SE → project-bn, batched. -/
 def mbNoExpGraphBEval (p epsStr : String) {N ic oc h w kHd kWd r : Nat} (ε : ℝ)
