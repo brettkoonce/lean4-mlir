@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for EfficientNet-B0: the deployed inference forward, and the two bounds that
     had to be tightened first
@@ -790,5 +791,90 @@ theorem b0_float_logits_le_committed (N : Nat) (hN : 0 < N) (M : FloatModel) (hM
     W.hd.W W.hd.b W.bnh.γ W.bnh.β W.bnh.μ W.bnh.v W.head.W W.head.b x j| ≤ 8408 * 10 ^ 207 := by
   rw [← b0EvalForward_eq_forwardBEval N W ε x]
   exact b0_float_logits_le N hN M hMu hε5 D Rq W x hx j
+
+/-! ### Inhabitation
+
+`b0_float_logits_le`'s record at the committed constants and `N = 1`: zero weights, zero running
+statistics, the exact sigmoid and `rsqrt` as the device kernels, `binary32`, `ε = 1/100000`. -/
+noncomputable def DeviceSigmoid.exact {esig : ℝ} (h : 0 ≤ esig) : DeviceSigmoid esig where
+  sig := sigmoidScalar
+  spec := fun _ => by simpa using h
+
+noncomputable def EnetConv.zero (oc ic kH kW : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    EnetConv oc ic kH kW w' β' where
+  W := fun _ _ _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def EnetDw.zero (c kH kW : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    EnetDw c kH kW w' β' where
+  W := fun _ _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def EnetSE.zero (c r : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    EnetSE c r w' β' where
+  W₁ := fun _ _ => 0
+  b₁ := fun _ => 0
+  W₂ := fun _ _ => 0
+  b₂ := fun _ => 0
+  hW₁ := fun _ _ => by simpa using hw
+  hb₁ := fun _ => by simpa using hb
+  hW₂ := fun _ _ => by simpa using hw
+  hb₂ := fun _ => by simpa using hb
+
+noncomputable def EnetHead.zero (m n : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    EnetHead m n w' β' where
+  W := fun _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def EnetBn.zero (c : Nat) {G Bb Mb : ℝ} (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) :
+    EnetBn c G Bb Mb where
+  γ := fun _ => 0
+  β := fun _ => 0
+  μ := fun _ => 0
+  v := fun _ => 0
+  hγ := fun _ => by simpa using hG
+  hβ := fun _ => by simpa using hBb
+  hμ := fun _ => by simpa using hMb
+  hv := fun _ => le_rfl
+
+noncomputable def EnetNoExpBlk.zero (ic oc r kHd kWd : Nat) {w' β' G Bb Mb : ℝ}
+    (hw : 0 ≤ w') (hb : 0 ≤ β') (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) :
+    EnetNoExpBlk ic oc r kHd kWd w' β' G Bb Mb where
+  dw := EnetDw.zero _ _ _ hw hb
+  bnd := EnetBn.zero _ hG hBb hMb
+  se := EnetSE.zero _ _ hw hb
+  pr := EnetConv.zero _ _ _ _ hw hb
+  bnp := EnetBn.zero _ hG hBb hMb
+
+noncomputable def EnetMBBlk.zero (ic mid oc r kHd kWd : Nat) {w' β' G Bb Mb : ℝ}
+    (hw : 0 ≤ w') (hb : 0 ≤ β') (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) :
+    EnetMBBlk ic mid oc r kHd kWd w' β' G Bb Mb where
+  ex := EnetConv.zero _ _ _ _ hw hb
+  bne := EnetBn.zero _ hG hBb hMb
+  dw := EnetDw.zero _ _ _ hw hb
+  bnd := EnetBn.zero _ hG hBb hMb
+  se := EnetSE.zero _ _ hw hb
+  pr := EnetConv.zero _ _ _ _ hw hb
+  bnp := EnetBn.zero _ hG hBb hMb
+
+noncomputable def EnetWeights.zero : EnetWeights (41/10) (41/10) (41/10) (41/10) (41/10) :=
+  have h : (0:ℝ) ≤ 41/10 := by norm_num
+  { stem := EnetConv.zero _ _ _ _ h h, bns := EnetBn.zero _ h h h
+    b1 := EnetNoExpBlk.zero _ _ _ _ _ h h h h h
+    b2 := EnetMBBlk.zero _ _ _ _ _ _ h h h h h
+    b3 := EnetMBBlk.zero _ _ _ _ _ _ h h h h h
+    hd := EnetConv.zero _ _ _ _ h h, bnh := EnetBn.zero _ h h h, head := EnetHead.zero _ _ h h }
+
+example (x : Vec (1 * (3 * 224 * 224))) (hx : ∀ k, |x k| ≤ 1) (j : Fin (1 * 10)) :
+    |b0EvalForwardF 1 binary32 (DeviceSigmoid.exact (esig := 1/100) (by norm_num))
+        (DeviceRsqrt.exact (1/100000) (es := 1/100) (by norm_num)) EnetWeights.zero x j
+      - b0EvalForward 1 EnetWeights.zero (1/100000) x j| ≤ 8408 * 10 ^ 207 :=
+  b0_float_logits_le 1 Nat.one_pos binary32 binary32_u.le (by norm_num) _ _ _ x hx j
 
 end Proofs

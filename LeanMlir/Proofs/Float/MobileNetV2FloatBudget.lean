@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for MobileNetV2: the deployed inference forward, and a TIGHT window
 
@@ -665,5 +666,64 @@ theorem mnv2_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε 
     W.b6.ex.W W.b6.ex.b W.b6.bne.γ W.b6.bne.β W.b6.bne.μ W.b6.bne.v W.b6.dw.W W.b6.dw.b W.b6.bnd.γ W.b6.bnd.β W.b6.bnd.μ W.b6.bnd.v W.b6.pr.W W.b6.pr.b W.b6.bnp.γ W.b6.bnp.β W.b6.bnp.μ W.b6.bnp.v
     W.hd.W W.hd.b W.bnh.γ W.bnh.β W.bnh.μ W.bnh.v W.head.W W.head.b x j| ≤ 1444 * 10 ^ 93 :=
   mnv2_float_logits_le M hMu hε5 R W x hx j
+
+/-! ### Inhabitation
+
+`mnv2_float_logits_le`'s record at the committed constants: zero weights, zero running
+statistics, the exact `rsqrt`, `binary32`, `ε = 1/100000`. -/
+noncomputable def MnvConv.zero (oc ic kH kW : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    MnvConv oc ic kH kW w' β' where
+  W := fun _ _ _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def MnvDw.zero (c kH kW : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    MnvDw c kH kW w' β' where
+  W := fun _ _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def MnvHead.zero (m n : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    MnvHead m n w' β' where
+  W := fun _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def MnvBn.zero (c : Nat) {G Bb Mb : ℝ} (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) :
+    MnvBn c G Bb Mb where
+  γ := fun _ => 0
+  β := fun _ => 0
+  μ := fun _ => 0
+  v := fun _ => 0
+  hγ := fun _ => by simpa using hG
+  hβ := fun _ => by simpa using hBb
+  hμ := fun _ => by simpa using hMb
+  hv := fun _ => le_rfl
+
+noncomputable def MnvBlock.zero (ic mid oc : Nat) {w' β' G Bb Mb : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β')
+    (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) : MnvBlock ic mid oc w' β' G Bb Mb where
+  ex := MnvConv.zero _ _ _ _ hw hb
+  bne := MnvBn.zero _ hG hBb hMb
+  dw := MnvDw.zero _ _ _ hw hb
+  bnd := MnvBn.zero _ hG hBb hMb
+  pr := MnvConv.zero _ _ _ _ hw hb
+  bnp := MnvBn.zero _ hG hBb hMb
+
+noncomputable def MnvWeights.zero : MnvWeights (28/10) (28/10) (28/10) (28/10) (28/10) :=
+  have h : (0:ℝ) ≤ 28/10 := by norm_num
+  { stem := MnvConv.zero _ _ _ _ h h, bns := MnvBn.zero _ h h h
+    b1 := MnvBlock.zero _ _ _ h h h h h, b2 := MnvBlock.zero _ _ _ h h h h h
+    b3 := MnvBlock.zero _ _ _ h h h h h, b4 := MnvBlock.zero _ _ _ h h h h h
+    b5 := MnvBlock.zero _ _ _ h h h h h, b6 := MnvBlock.zero _ _ _ h h h h h
+    hd := MnvConv.zero _ _ _ _ h h, bnh := MnvBn.zero _ h h h, head := MnvHead.zero _ _ h h }
+
+example (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
+    |mnv2EvalForwardF binary32 (DeviceRsqrt.exact (1/100000) (es := 1/100) (by norm_num))
+        MnvWeights.zero x j
+      - mnv2EvalForward MnvWeights.zero (1/100000) x j| ≤ 1444 * 10 ^ 93 :=
+  mnv2_float_logits_le binary32 binary32_u.le (by norm_num) _ _ x hx j
 
 end Proofs

@@ -66,7 +66,7 @@ order qualifies). The backwards additionally take the saved activations' accurac
 right composition, at the right normalisation mode, and the whole is tied to the committed net
 by `rfl` and to the rendered graph by the `*_faithful` theorems. A dropped stage, a misread
 fan-in, a stale layer slot or a mis-plugged block fails to compile. That is the property the
-thread actually exercised, and it found seven defects (section 4).
+thread actually exercised, and it found eight defects (section 4).
 
 **They certify that three backward chains are the certified gradient.** That is a statement
 about this repo's purpose, and it is the strongest thing here.
@@ -158,6 +158,7 @@ tie or a number, never by review.
 | `convFlatBack` is not the adjoint at an even kernel; the emitter had been fixed twice, the float tier's peer never | `EvenKernelConvBack.lean` (`padOdd`) | the ConvNeXt whole-net tie | ConvNeXt backward 1.25 orders |
 | CIFAR-8 chain's dense head had three bare denses where the committed layers interleave relu | `Cifar8ChainCert.lean` | the `rfl` tie | fixed in the tie commit |
 | Counts in docstrings: ResNet-34 has 36 BatchNorm sites, not 33 (nine places); ConvNeXt 23 LayerNorm sites, not 22 (three places) | budget files, `AuditAxioms.lean`, `formalization.yaml` | needing the number | prose only; no fold reads the count |
+| The Proofs tier spells EfficientNet-B0's and MobileNetV2's stride-2 convolutions at symmetric padding; the shipped renders moved to XLA-SAME padding on 2026-08-08 (B0's stem; MobileNetV2's stem and four strided depthwises) | `EfficientNetRenderPC.lean`, `MobileNetV2RenderPC.lean`, both `*Eval` twins, `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, both backward chains, all four B0/MNv2 numbers | the standing audit (section 5, item 2) | numbers unchanged; the claim "the deployed forward" is one padding phase off at those sites; open |
 
 Nothing trained was affected: the emitted programs were right in every case. What drifted was
 a hand-written spelling of a map that also has a certified spelling. The rule that follows is
@@ -167,23 +168,44 @@ in section 7.
 
 Each has an acceptance criterion. None makes a number smaller.
 
-1. **Inhabitation checks for every budget file.** Add one compiled `example` per budget file
-   constructing its weights record at the committed profile (gamma 0, saved activations 0,
-   float peers exact). Eleven files. The check that the theorem is not about an empty type
-   currently lives in session scratch for two of them and nowhere for the other nine. A record
-   with one unsatisfiable field would make a whole-net number vacuous in the bad sense, and
-   this is the one way the table could be wrong rather than merely loose. Done when all eleven
-   compile with the example in the file.
+1. **Inhabitation checks for every budget file. Done 2026-09-05.** Each of the eleven budget
+   files ends with an `Inhabitation` section: a `*.zero` / `*.exact` witness per record (zero
+   weights, zero saved activations, the exact device kernels `DeviceRsqrt.exact`,
+   `DeviceSigmoid.exact`, `DeviceLN.exact`, `DeviceGelu.exact`, `DeviceExp.exact`, the last three
+   in `FloatBudgetEnvLN.lean`) and an `example` applying the headline theorem to the witness at
+   `binary32`, so every hypothesis is discharged by data and none of the eleven theorems is about
+   an empty type. The two backwards with an operating point (`|istd| ≤ 16`) are witnessed at
+   `ε = 1/256`: at zero saved activations the inverse-stddev is `1/√ε`, so the operating point at
+   the eps-floor needs saved activations with per-channel variance at least `1/256 − ε`, a
+   checkpoint fact rather than a shape fact. The other nine are at `ε = 1/100000`.
 
-2. **The standing audit.** Walk the emitters' fix history (`git log -- LeanMlir/StableHLO.lean`
-   and the render files, for backward and padding fixes) and for each fix grep for every other
-   definition that claims to denote the same map: the float tier's `*Back` leaves, the
-   `Proofs` hand-written backwards, the `Maps` leaves. The even-kernel pad was fixed twice on
-   the codegen side and reached the float tier only through the ConvNeXt tie. Deliverable: a
-   table in this document, one row per emitter fix, saying which peers were checked and whether
-   any drifted. Done when the table exists.
+2. **The standing audit. Done 2026-09-05.** Every commit touching `Codegen/StableHLO.lean`
+   whose message names a fix (8 of 56) was read, and for each fix that changed what a map
+   denotes, every other definition of the same map was checked. Emit-only, performance-only and
+   proof-only fixes (`2936318` bf16 convert, `b71a596` shape table, `517224b` ite regression)
+   change no `den` and have no peers to drift.
 
-3. **EfficientNet-B0's whole-net certified tie.** Aim at `efficientnetForwardB_has_vjp`
+   | emitter fix | map | hand-written peers checked | drift |
+   |---|---|---|---|
+   | `63f6370` 2026-08-04, stem pool 2x2 to 3x3/s2 | `maxPool3s2F` / `maxPool3s2Back` | committed forward (3x3/s2), `Maps.maxPool3s2`, `r34InputGrad` (was `maxPoolFlatBack`) | found by the 2026-09-03 tie and fixed; residual: the `ResNet34Live*` non-degeneracy witnesses are stated over a 2x2-pool net, which is a witness net and not the committed one, and should say so |
+   | `9e056ce` 2026-08-03, even-kernel pad in the batched strided-conv backward | `convStridedBack` at `kH` even | `flatConvStride2Back` / `flatConvStride4Back` (`convFlatBack ∘ scatter`, symmetric) | found by the 2026-09-04 ConvNeXt tie, repaired by `padOdd`; every even-kernel call site now goes through it (36 uses, no other file carries an even-kernel literal) |
+   | `3d9b14d` + `601a900` 2026-08-08, XLA-SAME strided convs in the EfficientNet and MobileNetV2 renders | `convStridedXla`, `depthwiseStridedXlaF` (`flatConvStride2Xla` = `decimateOdd ∘ flatConv`) | `stemB` (`EfficientNetRenderPC.lean:54`), `efficientnetForwardB` and its `_faithful` graph, `b0EvalForward`, `efficientnetInputGradB`; `mobilenetv2Forward_full_pc`, `MobileNetV2RenderPC` / `PCEval`, `mnv2EvalForward`, `mnv2InputGrad`, `mobilenetv2PC_has_vjp_at` | **yes, and unrecorded at this tier.** No `Architectures` definition uses the XLA forms. Shipped artifacts: `efficientnet_fwd`, `_fwd_eval`, `_adam_train_step` each have 1 asymmetric site; `mobilenetv2_fwd_eval`, `_adam_train_step` 5 each; `mobilenetv2_fwd` (the SGD pair) 0, deliberately (`scripts/convention_audit.py`). So the Proofs describe MobileNetV2's SGD-pair net and, for B0, a net no shipped artifact has run since 2026-08-08 |
+   | `019e09d` 2026-07-28, MobileNetV2 forward rendered at batch BN against a per-example train step | `bnBatchF` vs `bnPerChannelF` | `MobileNetV2RenderPC` (per example), both budgets (inference BN, where the two worlds coincide), `mnv2InputGrad` (per example, tied); B0 batch-BN on both sides (`bnBatchLA`) | none |
+
+   **What the third row means and does not.** The four B0 and MobileNetV2 numbers do not move:
+   `decimateOdd` selects the odd positions where `decimate` selects the even ones, the fan-in
+   and the rounding are identical, so the fold is the same to the digit. What is off is the
+   sentence "the deployed forward" in four docstrings and in `formalization.yaml`: at 1 (B0) or
+   5 (MobileNetV2) stride-2 sites the certified program reads its window one pixel from where
+   the shipped program does. Two honest resolutions, and the choice is the user's:
+   (a) re-spell the Proofs chains at `flatConvStride2Xla` / `depthwiseStride2FlatXla` (the
+   definitions and VJPs have existed since `3d9b14d`; the float tier needs the two `Xla` leaves,
+   whose envelopes equal the symmetric ones) and re-tie the PC graphs to the XLA ops, or (b)
+   leave the spelling and disclose. `formalization.yaml` 4d now discloses it; (a) is open.
+
+3. **EfficientNet-B0's whole-net certified tie.** Decide item 2's stem spelling first: a tie
+   of `efficientnetInputGradB` to `efficientnetForwardB_has_vjp` at the symmetric stem certifies
+   a net no shipped artifact runs. Then aim at `efficientnetForwardB_has_vjp`
    (`Architectures/EfficientNetChainClose.lean`, `HasVJP` everywhere), not the 16-block
    `efficientnetForwardB_full_has_vjp`. Missing: the three batched block ties at `bnBatchLA`
    (`mbNoExpFwdB`, `mbStridedFwdB`, `mbResidFwdB`; the one existing tie is per example at scalar

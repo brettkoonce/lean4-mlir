@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Float.ViTBlockVFloatBridge
 import LeanMlir.Proofs.Foundation.SpecVJP
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for ViT-Tiny: the committed depth-12 vector-LN forward, at the cap
 
@@ -744,5 +745,83 @@ theorem vit_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε :
     |vitForwardTinyF M R G X w x j - denoteVitTiny vitVerified.layers w x j| ≤ 4794 * 10 ^ 105 := by
   have h := vit_float_logits_le M hMu hε5 R G X w B hεw x hx j
   rwa [vitVerified_denote_eq w]
+
+/-! ### Inhabitation
+
+`vit_float_logits_le`'s hypotheses at the committed constants: the all-zero `ViTTinyWeights` at
+`ε = 1/100000`, the exact device mean, inverse-stddev, GELU and exponential, `binary32`. -/
+noncomputable def BlockParamsV.zero (D mlpDim : Nat) : BlockParamsV D mlpDim where
+  γ1 := fun _ => 0
+  β1 := fun _ => 0
+  Wq := fun _ _ => 0
+  Wk := fun _ _ => 0
+  Wv := fun _ _ => 0
+  Wo := fun _ _ => 0
+  bq := fun _ => 0
+  bk := fun _ => 0
+  bv := fun _ => 0
+  bo := fun _ => 0
+  γ2 := fun _ => 0
+  β2 := fun _ => 0
+  Wfc1 := fun _ _ => 0
+  bfc1 := fun _ => 0
+  Wfc2 := fun _ _ => 0
+  bfc2 := fun _ => 0
+
+theorem BlockParamsV.zero_bounded {D mlpDim : Nat} {wa wm bb gl bl : ℝ}
+    (hwa : 0 ≤ wa) (hwm : 0 ≤ wm) (hbb : 0 ≤ bb) (hgl : 0 ≤ gl) (hbl : 0 ≤ bl) :
+    BlockVBounded (BlockParamsV.zero D mlpDim) wa wm bb gl bl where
+  hWq := fun _ _ => by simpa [BlockParamsV.zero] using hwa
+  hWk := fun _ _ => by simpa [BlockParamsV.zero] using hwa
+  hWv := fun _ _ => by simpa [BlockParamsV.zero] using hwa
+  hWo := fun _ _ => by simpa [BlockParamsV.zero] using hwa
+  hbq := fun _ => by simpa [BlockParamsV.zero] using hbb
+  hbk := fun _ => by simpa [BlockParamsV.zero] using hbb
+  hbv := fun _ => by simpa [BlockParamsV.zero] using hbb
+  hbo := fun _ => by simpa [BlockParamsV.zero] using hbb
+  hWfc1 := fun _ _ => by simpa [BlockParamsV.zero] using hwm
+  hWfc2 := fun _ _ => by simpa [BlockParamsV.zero] using hwm
+  hbfc1 := fun _ => by simpa [BlockParamsV.zero] using hbb
+  hbfc2 := fun _ => by simpa [BlockParamsV.zero] using hbb
+  hγ1 := fun _ => by simpa [BlockParamsV.zero] using hgl
+  hγ2 := fun _ => by simpa [BlockParamsV.zero] using hgl
+  hβ1 := fun _ => by simpa [BlockParamsV.zero] using hbl
+  hβ2 := fun _ => by simpa [BlockParamsV.zero] using hbl
+
+noncomputable def ViTTinyWeights.zero (ε : ℝ) : ViTTinyWeights where
+  ε := ε
+  Wc := fun _ _ _ _ => 0
+  bc := fun _ => 0
+  cls := fun _ => 0
+  pos := fun _ _ => 0
+  blocks := fun _ => BlockParamsV.zero _ _
+  γF := fun _ => 0
+  βF := fun _ => 0
+  Wcls := fun _ _ => 0
+  bcls := fun _ => 0
+
+theorem ViTTinyWeights.zero_bounded (ε : ℝ) {wa wm wp wh bb gl bl pb : ℝ}
+    (hwa : 0 ≤ wa) (hwm : 0 ≤ wm) (hwp : 0 ≤ wp) (hwh : 0 ≤ wh) (hbb : 0 ≤ bb) (hgl : 0 ≤ gl)
+    (hbl : 0 ≤ bl) (hpb : 0 ≤ pb) :
+    ViTBounded (ViTTinyWeights.zero ε) wa wm wp wh bb gl bl pb where
+  hWc := fun _ _ _ _ => by simpa [ViTTinyWeights.zero] using hwp
+  hbc := fun _ => by simpa [ViTTinyWeights.zero] using hpb
+  hcls := fun _ => by simpa [ViTTinyWeights.zero] using hpb
+  hpos := fun _ _ => by simpa [ViTTinyWeights.zero] using hpb
+  hblk := fun _ => BlockParamsV.zero_bounded hwa hwm hbb hgl hbl
+  hγF := fun _ => by simpa [ViTTinyWeights.zero] using hgl
+  hβF := fun _ => by simpa [ViTTinyWeights.zero] using hbl
+  hWcls := fun _ _ => by simpa [ViTTinyWeights.zero] using hwh
+  hbcls := fun _ => by simpa [ViTTinyWeights.zero] using hbb
+
+example (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
+    |vitForwardTinyF binary32 (DeviceLN.exact (emr := 1157 / 10 ^ 8) (ei := 1/100) (by norm_num) (by norm_num))
+        (DeviceGelu.exact (egelu := 1/100) (by norm_num)) (DeviceExp.exact (eexp := 1/100) (by norm_num))
+        (ViTTinyWeights.zero (1/100000)) x j
+      - vitForwardTiny (ViTTinyWeights.zero (1/100000)) x j| ≤ 4794 * 10 ^ 105 :=
+  vit_float_logits_le (ε := 1/100000) binary32 binary32_u.le (by norm_num) _ _ _ _
+    (ViTTinyWeights.zero_bounded _ (by norm_num) (by norm_num) (by norm_num) (by norm_num)
+      (by norm_num) (by norm_num) (by norm_num) (by norm_num))
+    le_rfl x hx j
 
 end Proofs

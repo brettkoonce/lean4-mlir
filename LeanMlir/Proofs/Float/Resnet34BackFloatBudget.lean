@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnvBack
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for the ResNet-34 BACKWARD: the whole-net input-gradient VJP
 
@@ -1045,5 +1046,87 @@ theorem r34_grad_float_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 
     (dy : Vec 10) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (3 * 224 * 224)) :
     |r34GradF M w dy j - r34GradR w dy j| ≤ 6894 * 10 ^ 241 :=
   (r34GradBridge_maps M hMu hε5 w).budget_le (by norm_num) le_rfl dy hdy j
+
+/-! ### Inhabitation
+
+`r34_grad_float_le`'s record. Zero kernels, zero saved activations, the exact inverse-stddev and
+normalised activation as the deployed float values, every ReLU mask `True`. ⚠ The operating point
+`|istd| ≤ 16` is a fact about the SAVED activations, and at zero saved activations the
+inverse-stddev is `1/√ε`, so the witness is taken at `ε = 1/256`, where `bnIstd_abs_le_of` closes
+it — the theorem allows any `ε ≥ 1/100000`. At the ε-floor the same record needs saved activations
+with per-channel variance at least `1/256 − ε`, which is a fact about a checkpoint, not a shape. -/
+noncomputable def R34KerB.zero (oc ic kH kW : Nat) {wk : ℝ} (h : 0 ≤ wk) : R34KerB oc ic kH kW wk where
+  W := fun _ _ _ _ => 0
+  hW := fun _ _ _ _ => by simpa using h
+
+noncomputable def R34HeadB.zero (m n : Nat) {wk : ℝ} (h : 0 ≤ wk) : R34HeadB m n wk where
+  W := fun _ _ => 0
+  hW := fun _ _ => by simpa using h
+
+noncomputable def R34BnBack.exact (c h w : Nat) {ε gl S es exh : ℝ}
+    (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) :
+    R34BnBack c h w ε gl S es exh where
+  γ := fun _ => 0
+  x := fun _ => 0
+  fs := fun k => bnIstd (h * w) (Mat.unflatten (reassocFwd c h w (fun _ => 0)) k) ε
+  fxh := fun k => bnXhat (h * w) ε (Mat.unflatten (reassocFwd c h w (fun _ => 0)) k)
+  hγ := fun _ => by simpa using hgl
+  hs := fun _ => by simpa using hes
+  hS := fun _ => bnIstd_abs_le_of _ hS0 hSε
+  hfxh := fun _ _ => by simpa using hexh
+
+noncomputable def R34IdBlkBack.exact (c h w : Nat) {ε wk gl S es exh : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) :
+    R34IdBlkBack c h w ε wk gl S es exh where
+  k1 := R34KerB.zero _ _ _ _ hwk
+  k2 := R34KerB.zero _ _ _ _ hwk
+  bn1 := R34BnBack.exact _ _ _ hgl hes hexh hS0 hSε
+  bn2 := R34BnBack.exact _ _ _ hgl hes hexh hS0 hSε
+  mout := fun _ => True
+  mmid := fun _ => True
+
+noncomputable def R34DownBlkBack.exact (ic oc h w : Nat) {ε wk gl S es exh : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) :
+    R34DownBlkBack ic oc h w ε wk gl S es exh where
+  k1 := R34KerB.zero _ _ _ _ hwk
+  k2 := R34KerB.zero _ _ _ _ hwk
+  kp := R34KerB.zero _ _ _ _ hwk
+  bn1 := R34BnBack.exact _ _ _ hgl hes hexh hS0 hSε
+  bn2 := R34BnBack.exact _ _ _ hgl hes hexh hS0 hSε
+  bnp := R34BnBack.exact _ _ _ hgl hes hexh hS0 hSε
+  mout := fun _ => True
+  mmid := fun _ => True
+
+noncomputable def R34BackWeights.exact {ε : ℝ} (hSε : 1 / (16:ℝ) ^ 2 ≤ ε) :
+    R34BackWeights ε (12/10) (21/10) 16 (1/100) (1/100) :=
+  have hwk : (0:ℝ) ≤ 12/10 := by norm_num
+  have hgl : (0:ℝ) ≤ 21/10 := by norm_num
+  have he : (0:ℝ) ≤ 1/100 := by norm_num
+  have hS0 : (0:ℝ) < 16 := by norm_num
+  { stemK := R34KerB.zero _ _ _ _ hwk, stemBn := R34BnBack.exact _ _ _ hgl he he hS0 hSε
+    head := R34HeadB.zero _ _ hwk, xmp := fun _ _ _ => 0, mstem := fun _ => True
+    a0 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    a1 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    a2 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    d2 := R34DownBlkBack.exact _ _ _ _ hwk hgl he he hS0 hSε
+    b0 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    b1 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    b2 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    d3 := R34DownBlkBack.exact _ _ _ _ hwk hgl he he hS0 hSε
+    c0 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    c1 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    c2 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    c3 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    c4 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    d4 := R34DownBlkBack.exact _ _ _ _ hwk hgl he he hS0 hSε
+    e0 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε
+    e1 := R34IdBlkBack.exact _ _ _ hwk hgl he he hS0 hSε }
+
+noncomputable def r34GradWitness : R34BackWeights (1/256) (12/10) (21/10) 16 (1/100) (1/100) :=
+  R34BackWeights.exact (by norm_num)
+
+example (dy : Vec 10) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (3 * 224 * 224)) :
+    |r34GradF binary32 r34GradWitness dy j - r34GradR r34GradWitness dy j| ≤ 6894 * 10 ^ 241 :=
+  r34_grad_float_le binary32 binary32_u.le (by norm_num) _ dy hdy j
 
 end Proofs

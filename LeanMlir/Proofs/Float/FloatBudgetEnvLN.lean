@@ -541,4 +541,23 @@ theorem DeviceLN.mapsAt {emr ei : ℝ} (R : DeviceLN emr ei) (M : FloatModel)
     hq (by norm_num) (by norm_num) hS0
     (fun A h0 hle => mul_le_mul_of_nonneg_left hle hemr) (fun _ _ _ => le_rfl) nA nE
 
+/-! ### Exact device kernels
+
+The true mean, inverse-stddev, GELU and exponential satisfy every `Device*` spec at any
+nonnegative accuracy. They are the witnesses the whole-net budget files use to show their
+hypotheses are jointly satisfiable (`ConvNeXtFloatBudget.lean`, `ViTFloatBudget.lean`). -/
+noncomputable def DeviceLN.exact {emr ei : ℝ} (hemr : 0 ≤ emr) (hei : 0 ≤ ei) : DeviceLN emr ei where
+  fmu := fun c v => bnMean c v
+  fistd := fun c e v => bnIstd c v e
+  specMu := fun _ A hA _ _ => by simpa using mul_nonneg hemr hA
+  specIstd := fun _ _ _ _ _ _ _ => by simpa using hei
+
+noncomputable def DeviceGelu.exact {egelu : ℝ} (h : 0 ≤ egelu) : DeviceGelu egelu where
+  g := geluScalar
+  spec := fun _ => by simpa using h
+
+noncomputable def DeviceExp.exact {eexp : ℝ} (h : 0 ≤ eexp) : DeviceExp eexp where
+  e := Real.exp
+  spec := fun t => by simpa using mul_nonneg h (Real.exp_pos t).le
+
 end Proofs

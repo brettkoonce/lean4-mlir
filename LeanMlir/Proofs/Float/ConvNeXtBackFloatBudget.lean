@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackLN
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for a LAYERNORM net's whole-net BACKWARD — ConvNeXt-T, and it is the FOLD
 
@@ -1345,5 +1346,96 @@ theorem cnx_grad_float_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 
     (dy : Vec 10) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (3 * 224 * 224)) :
     |cnxGradF M w dy j - cnxGradR w dy j| ≤ 1563 * 10 ^ 247 :=
   (cnxGradBridge_maps M hMu hε5 w).budget_le (by norm_num) le_rfl dy hdy j
+
+/-! ### Inhabitation
+
+`cnx_grad_float_le`'s record. Zero kernels, layer scales and saved GELU derivatives, zero saved
+activations, the exact inverse-stddev and normalised activation as the deployed float values. As
+for ResNet-34's backward, the operating point `|istd| ≤ 16` at zero saved activations forces
+`ε ≥ 1/256`, so the witness is at `ε = 1/256`. -/
+noncomputable def CnxKerB.zero (oc ic kH kW : Nat) {wk : ℝ} (h : 0 ≤ wk) : CnxKerB oc ic kH kW wk where
+  W := fun _ _ _ _ => 0
+  hW := fun _ _ _ _ => by simpa using h
+
+noncomputable def CnxDwKerB.zero (c kH kW : Nat) {wk : ℝ} (h : 0 ≤ wk) : CnxDwKerB c kH kW wk where
+  W := fun _ _ _ => 0
+  hW := fun _ _ _ => by simpa using h
+
+noncomputable def CnxHeadB.zero (m n : Nat) {wk : ℝ} (h : 0 ≤ wk) : CnxHeadB m n wk where
+  W := fun _ _ => 0
+  hW := fun _ _ => by simpa using h
+
+noncomputable def CnxLnBack.exact (c h w : Nat) {ε gl S es exh : ℝ}
+    (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) :
+    CnxLnBack c h w ε gl S es exh where
+  γ := fun _ => 0
+  fγ := fun _ => 0
+  x := fun _ => 0
+  fs := fun r => bnIstd c (Mat.unflatten (chanLNRows c h w (fun _ => 0)) r) ε
+  fxh := fun r => bnXhat c ε (Mat.unflatten (chanLNRows c h w (fun _ => 0)) r)
+  hγ := fun _ => by simpa using hgl
+  hfγ := fun _ => by simp
+  hst := fun _ => by simpa using hes
+  hSabs := fun _ => bnIstd_abs_le_of _ hS0 hSε
+  hfxh := fun _ _ => by simpa using hexh
+
+noncomputable def CnxRowLnBack.exact (s c : Nat) {ε gl S es exh : ℝ}
+    (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) :
+    CnxRowLnBack s c ε gl S es exh where
+  γ := fun _ => 0
+  fγ := fun _ => 0
+  X := fun _ => 0
+  fs := fun r => bnIstd c (Mat.unflatten (fun _ => (0:ℝ) : Vec (s * c)) r) ε
+  fxh := fun r => bnXhat c ε (Mat.unflatten (fun _ => (0:ℝ) : Vec (s * c)) r)
+  hγ := fun _ => by simpa using hgl
+  hfγ := fun _ => by simp
+  hst := fun _ => by simpa using hes
+  hSabs := fun _ => bnIstd_abs_le_of _ hS0 hSε
+  hfxh := fun _ _ => by simpa using hexh
+
+noncomputable def CnxBlockBack.exact (c cExp h w : Nat) {ε wk gl sl S es exh esav : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hsl : 0 ≤ sl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hesav : 0 ≤ esav)
+    (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) : CnxBlockBack c cExp h w ε wk gl sl S es exh esav where
+  kdw := CnxDwKerB.zero _ _ _ hwk
+  kex := CnxKerB.zero _ _ _ _ hwk
+  kpr := CnxKerB.zero _ _ _ _ hwk
+  ln := CnxLnBack.exact _ _ _ hgl hes hexh hS0 hSε
+  γls := fun _ => 0
+  hγls := fun _ => by simpa using hsl
+  sge := fun _ => 0
+  fsge := fun _ => 0
+  hsge := fun _ => by norm_num
+  hfsge := fun _ => by simpa using hesav
+
+noncomputable def CnxDownB.exact (cin cout h w : Nat) {ε wk gl S es exh : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hS0 : 0 < S) (hSε : 1 / S ^ 2 ≤ ε) :
+    CnxDownB cin cout h w ε wk gl S es exh where
+  k := CnxKerB.zero _ _ _ _ hwk
+  ln := CnxLnBack.exact _ _ _ hgl hes hexh hS0 hSε
+
+noncomputable def CnxBackWeights.exact {ε : ℝ} (hSε : 1 / (16:ℝ) ^ 2 ≤ ε) :
+    CnxBackWeights ε (6/10) (48/10) (84/10) 16 (1/100) (1/100) (1/100) :=
+  have hwk : (0:ℝ) ≤ 6/10 := by norm_num
+  have hgl : (0:ℝ) ≤ 48/10 := by norm_num
+  have hsl : (0:ℝ) ≤ 84/10 := by norm_num
+  have he : (0:ℝ) ≤ 1/100 := by norm_num
+  have hS0 : (0:ℝ) < 16 := by norm_num
+  { sW := CnxKerB.zero _ _ _ _ hwk, lnStem := CnxLnBack.exact _ _ _ hgl he he hS0 hSε
+    s1 := fun _ => CnxBlockBack.exact _ _ _ _ hwk hgl hsl he he he hS0 hSε
+    d1 := CnxDownB.exact _ _ _ _ hwk hgl he he hS0 hSε
+    s2 := fun _ => CnxBlockBack.exact _ _ _ _ hwk hgl hsl he he he hS0 hSε
+    d2 := CnxDownB.exact _ _ _ _ hwk hgl he he hS0 hSε
+    s3 := fun _ => CnxBlockBack.exact _ _ _ _ hwk hgl hsl he he he hS0 hSε
+    d3 := CnxDownB.exact _ _ _ _ hwk hgl he he hS0 hSε
+    s4 := fun _ => CnxBlockBack.exact _ _ _ _ hwk hgl hsl he he he hS0 hSε
+    lnHead := CnxRowLnBack.exact _ _ hgl he he hS0 hSε, fc := CnxHeadB.zero _ _ hwk }
+
+noncomputable def cnxGradWitness :
+    CnxBackWeights (1/256) (6/10) (48/10) (84/10) 16 (1/100) (1/100) (1/100) :=
+  CnxBackWeights.exact (by norm_num)
+
+example (dy : Vec 10) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (3 * 224 * 224)) :
+    |cnxGradF binary32 cnxGradWitness dy j - cnxGradR cnxGradWitness dy j| ≤ 1563 * 10 ^ 247 :=
+  cnx_grad_float_le binary32 binary32_u.le (by norm_num) _ dy hdy j
 
 end Proofs

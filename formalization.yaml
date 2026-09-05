@@ -206,13 +206,13 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "mnv2_float_logits_le"   # MobileNetV2 inference-BN forward: 1.444e96 / 2154, fold; the one non-vacuous window
+    - declaration: "mnv2_float_logits_le"   # MobileNetV2 inference-BN forward: 1.444e96 / 2154, fold; the one non-vacuous window; stride-2 sites at symmetric padding, the shipped render is XLA-SAME (4d)
       file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "b0_float_logits_le"   # EfficientNet-B0 inference-BN forward, any batch size: 8.408e210 / 2.580e55, fold
+    - declaration: "b0_float_logits_le"   # EfficientNet-B0 inference-BN forward, any batch size: 8.408e210 / 2.580e55, fold; stem at symmetric padding, the shipped render is XLA-SAME (4d)
       file: "LeanMlir/Proofs/Float/EfficientNetFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -239,7 +239,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "mnv2_grad_float_le"   # MobileNetV2 backward: 1.076e152 / 4.750e153; no operating point
+    - declaration: "mnv2_grad_float_le"   # MobileNetV2 backward: 1.076e152 / 4.750e153; no operating point; symmetric-padding spelling (4d)
       file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -251,7 +251,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "b0_grad_float_le"   # EfficientNet-B0 backward at batch size 1: 1.578e182 / 7.104e182; through three squeeze-excite sites; no operating point
+    - declaration: "b0_grad_float_le"   # EfficientNet-B0 backward at batch size 1: 1.578e182 / 7.104e182; through three squeeze-excite sites; no operating point; symmetric-padding spelling (4d)
       file: "LeanMlir/Proofs/Float/EfficientNetBackFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -558,6 +558,19 @@ fidelity:
        fan-in, in the right composition, at the right normalisation mode,
        kernel-checked; a dropped stage, a misread fan-in or a stale slot fails to
        compile.
+
+       A PADDING-CONVENTION GAP (audit 2026-09-05). The EfficientNet-B0 and MobileNetV2
+       renders moved their stride-2 convolutions to XLA-SAME padding on 2026-08-08 to
+       match the TF-origin references (B0's stem; MobileNetV2's stem and four strided
+       depthwises; the MobileNetV2 SGD pair `mobilenetv2_fwd` / `_train_step` stays
+       symmetric on purpose, scripts/convention_audit.py). The Proofs tier did not move:
+       `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, their PC graphs and
+       `_faithful` theorems, the hand-written backward chains and all four B0 / MobileNetV2
+       numbers above are at the symmetric spelling (`flatConvStride2`, never
+       `flatConvStride2Xla`). The numbers are identical either way (same fan-in, same
+       rounding), but "the deployed forward" for those two nets is one padding phase off
+       at 1 (B0) or 5 (MobileNetV2) sites; the B0 chain describes a program no shipped
+       artifact has run since 2026-08-08. Re-spelling the chains at the XLA forms is open.
 
        THE TIES. Three backward chains are proven to BE the certified whole-net
        VJP, each with a shape check that the opaque-block chain the apex is

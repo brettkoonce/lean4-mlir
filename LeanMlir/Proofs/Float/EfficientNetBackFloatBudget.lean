@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackSE
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for EfficientNet-B0's whole-net BACKWARD — the fourth, and the SQUEEZE-EXCITE one
 
@@ -884,5 +885,115 @@ theorem b0_grad_float_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5 :
     (dy : Vec (1 * 10)) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (1 * (3 * 224 * 224))) :
     |b0GradF M w dy j - b0GradR w dy j| ≤ 1578 * 10 ^ 179 :=
   (b0GradBridge_maps M hMu hε5 w).budget_le (by norm_num) le_rfl dy hdy j
+
+/-! ### Inhabitation
+
+`b0_grad_float_le`'s record at the ε-floor and `N = 1`: zero kernels, zero saved activations and
+gates, the exact inverse-stddev, normalised activation and swish derivative as the deployed float
+values, zero saved squeeze-excite inputs (the `Sx` bounds are positive numerals). No operating
+point, so `ε = 1/100000`. -/
+noncomputable def EnetKerB.zero (oc ic kH kW : Nat) {wk : ℝ} (h : 0 ≤ wk) : EnetKerB oc ic kH kW wk where
+  W := fun _ _ _ _ => 0
+  hW := fun _ _ _ _ => by simpa using h
+
+noncomputable def EnetDwKerB.zero (c kH kW : Nat) {wk : ℝ} (h : 0 ≤ wk) : EnetDwKerB c kH kW wk where
+  W := fun _ _ _ => 0
+  hW := fun _ _ _ => by simpa using h
+
+noncomputable def EnetHeadB.zero (m n : Nat) {wk : ℝ} (h : 0 ≤ wk) : EnetHeadB m n wk where
+  W := fun _ _ => 0
+  hW := fun _ _ => by simpa using h
+
+noncomputable def EnetBnBack.exact (c h w : Nat) {ε gl es exh : ℝ}
+    (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) : EnetBnBack c h w ε gl es exh where
+  γ := fun _ => 0
+  x := fun _ => 0
+  fs := fun k => bnIstd (h * w) (Mat.unflatten (reassocFwd c h w (fun _ => 0)) k) ε
+  fxh := fun k => bnXhat (h * w) ε (Mat.unflatten (reassocFwd c h w (fun _ => 0)) k)
+  hγ := fun _ => by simpa using hgl
+  hs := fun _ => by simpa using hes
+  hfxh := fun _ _ => by simpa using hexh
+
+noncomputable def EnetSwBack.exact (n : Nat) {esav : ℝ} (h : 0 ≤ esav) : EnetSwBack n esav where
+  xpre := fun _ => 0
+  fsw := fun _ => swishScalarDeriv 0
+  hfsw := fun _ => by simpa using h
+
+noncomputable def EnetSeBack.exact (c r h w : Nat) {wk Sx esav : ℝ}
+    (hwk : 0 ≤ wk) (hSx : 0 ≤ Sx) (hesav : 0 ≤ esav) : EnetSeBack c r h w wk Sx esav where
+  W₁ := fun _ _ => 0
+  W₂ := fun _ _ => 0
+  hW₁ := fun _ _ => by simpa using hwk
+  hW₂ := fun _ _ => by simpa using hwk
+  ssig := fun _ => 0
+  fssig := fun _ => 0
+  hssig := fun _ => by norm_num
+  hfssig := fun _ => by simpa using hesav
+  xsw := fun _ => 0
+  fssw := fun _ => swishScalarDeriv 0
+  hfssw := fun _ => by simpa using hesav
+  gate := fun _ => 0
+  fgate := fun _ => 0
+  hgate := fun _ => by norm_num
+  hfgate := fun _ => by simpa using hesav
+  xinp := fun _ => 0
+  fxinp := fun _ => 0
+  hxinp := fun _ => by simpa using hSx
+  hfxinp := fun _ => by simpa using hesav
+
+noncomputable def EnetNoExpBack.exact (cin cout r h w : Nat) {ε wk gl es exh esav Sx : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hesav : 0 ≤ esav) (hSx : 0 ≤ Sx) :
+    EnetNoExpBack cin cout r h w ε wk gl es exh esav Sx where
+  dw := EnetDwKerB.zero _ _ _ hwk
+  kp := EnetKerB.zero _ _ _ _ hwk
+  bnp := EnetBnBack.exact _ _ _ hgl hes hexh
+  se := EnetSeBack.exact _ _ _ _ hwk hSx hesav
+  swd := EnetSwBack.exact _ hesav
+  bnd := EnetBnBack.exact _ _ _ hgl hes hexh
+
+noncomputable def EnetStridedBack.exact (cin cmid cout r h w : Nat) {ε wk gl es exh esav Sx : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hesav : 0 ≤ esav) (hSx : 0 ≤ Sx) :
+    EnetStridedBack cin cmid cout r h w ε wk gl es exh esav Sx where
+  ke := EnetKerB.zero _ _ _ _ hwk
+  dw := EnetDwKerB.zero _ _ _ hwk
+  kp := EnetKerB.zero _ _ _ _ hwk
+  bnp := EnetBnBack.exact _ _ _ hgl hes hexh
+  se := EnetSeBack.exact _ _ _ _ hwk hSx hesav
+  swd := EnetSwBack.exact _ hesav
+  bnd := EnetBnBack.exact _ _ _ hgl hes hexh
+  swe := EnetSwBack.exact _ hesav
+  bne := EnetBnBack.exact _ _ _ hgl hes hexh
+
+noncomputable def EnetResidBack.exact (c cmid r h w : Nat) {ε wk gl es exh esav Sx : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) (hesav : 0 ≤ esav) (hSx : 0 ≤ Sx) :
+    EnetResidBack c cmid r h w ε wk gl es exh esav Sx where
+  ke := EnetKerB.zero _ _ _ _ hwk
+  dw := EnetDwKerB.zero _ _ _ hwk
+  kp := EnetKerB.zero _ _ _ _ hwk
+  bnp := EnetBnBack.exact _ _ _ hgl hes hexh
+  se := EnetSeBack.exact _ _ _ _ hwk hSx hesav
+  swd := EnetSwBack.exact _ hesav
+  bnd := EnetBnBack.exact _ _ _ hgl hes hexh
+  swe := EnetSwBack.exact _ hesav
+  bne := EnetBnBack.exact _ _ _ hgl hes hexh
+
+noncomputable def EnetBackWeights.exact {ε : ℝ} :
+    EnetBackWeights ε (37/10) (41/10) (1/100) (1/100) (1/100)
+      (7572 * 10 ^ 6) (5451 * 10 ^ 21) (4903 * 10 ^ 37) :=
+  have hwk : (0:ℝ) ≤ 37/10 := by norm_num
+  have hgl : (0:ℝ) ≤ 41/10 := by norm_num
+  have he : (0:ℝ) ≤ 1/100 := by norm_num
+  { stemK := EnetKerB.zero _ _ _ _ hwk, stemSw := EnetSwBack.exact _ he
+    stemBn := EnetBnBack.exact _ _ _ hgl he he
+    b1 := EnetNoExpBack.exact _ _ _ _ _ hwk hgl he he he (by norm_num)
+    b2 := EnetStridedBack.exact _ _ _ _ _ _ hwk hgl he he he (by norm_num)
+    b3 := EnetResidBack.exact _ _ _ _ _ hwk hgl he he he (by norm_num)
+    headK := EnetKerB.zero _ _ _ _ hwk, headSw := EnetSwBack.exact _ he
+    headBn := EnetBnBack.exact _ _ _ hgl he he, fc := EnetHeadB.zero _ _ hwk }
+
+example (dy : Vec (1 * 10)) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (1 * (3 * 224 * 224))) :
+    |b0GradF binary32 (EnetBackWeights.exact (ε := 1/100000)) dy j
+      - b0GradR (EnetBackWeights.exact (ε := 1/100000)) dy j| ≤ 1578 * 10 ^ 179 :=
+  b0_grad_float_le binary32 binary32_u.le (by norm_num) _ dy hdy j
 
 end Proofs

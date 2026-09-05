@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Float.BnXhatFloatBridge
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for ResNet-34 at TRAINING-mode BatchNorm — and it is the CAP
 
@@ -858,5 +859,74 @@ theorem r34_train_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32)
     W.e1.cv1.W W.e1.cv1.b W.e1.bn1.γ W.e1.bn1.β W.e1.cv2.W W.e1.cv2.b W.e1.bn2.γ W.e1.bn2.β
     W.head.W W.head.b x j| ≤ 1752 * 10 ^ 78 :=
   r34_train_float_logits_le M hMu hε5 W x hx j
+
+/-! ### Inhabitation
+
+`r34_train_float_logits_le`'s record at the committed constants: zero weights and affines, the
+exact batch mean and inverse-stddev as the device kernels (so `hmean`/`histd` are `0 ≤ emr·A` and
+`0 ≤ ei`), the per-site `Xh` and `emr` numerals `R34TrainWeights` pins, `ε = 1/100000`. -/
+noncomputable def R34TrainBn.exact (c h w : Nat) {ε G Bb emr ei Xh : ℝ}
+    (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hemr : 0 ≤ emr) (hei : 0 ≤ ei) (hXh0 : 0 ≤ Xh)
+    (hmXh : ((h * w : ℕ) : ℝ) ≤ Xh ^ 2) : R34TrainBn c h w ε G Bb emr ei Xh where
+  γ := fun _ => 0
+  β := fun _ => 0
+  hγ := fun _ => by simpa using hG
+  hβ := fun _ => by simpa using hBb
+  fμ := fun _ v => bnMean (h * w) v
+  fistd := fun _ v => bnIstd (h * w) v ε
+  hmean := fun _ A hA _ _ => by simpa using mul_nonneg hemr hA
+  histd := fun _ _ _ _ _ => by simpa using hei
+  hXh0 := hXh0
+  hmXh := hmXh
+  hemr0 := hemr
+
+noncomputable def R34TrainIdBlk.exact (c h w : Nat) {w' β' ε G Bb emr ei Xh : ℝ}
+    (hw : 0 ≤ w') (hb : 0 ≤ β') (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hemr : 0 ≤ emr) (hei : 0 ≤ ei)
+    (hXh0 : 0 ≤ Xh) (hmXh : ((h * w : ℕ) : ℝ) ≤ Xh ^ 2) :
+    R34TrainIdBlk c h w w' β' ε G Bb emr ei Xh where
+  cv1 := R34Conv.zero _ _ _ _ hw hb
+  bn1 := R34TrainBn.exact _ _ _ hG hBb hemr hei hXh0 hmXh
+  cv2 := R34Conv.zero _ _ _ _ hw hb
+  bn2 := R34TrainBn.exact _ _ _ hG hBb hemr hei hXh0 hmXh
+
+noncomputable def R34TrainDownBlk.exact (ic oc h w : Nat) {w' β' ε G Bb emr ei Xh : ℝ}
+    (hw : 0 ≤ w') (hb : 0 ≤ β') (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hemr : 0 ≤ emr) (hei : 0 ≤ ei)
+    (hXh0 : 0 ≤ Xh) (hmXh : ((h * w : ℕ) : ℝ) ≤ Xh ^ 2) :
+    R34TrainDownBlk ic oc h w w' β' ε G Bb emr ei Xh where
+  cv1 := R34Conv.zero _ _ _ _ hw hb
+  bn1 := R34TrainBn.exact _ _ _ hG hBb hemr hei hXh0 hmXh
+  cv2 := R34Conv.zero _ _ _ _ hw hb
+  bn2 := R34TrainBn.exact _ _ _ hG hBb hemr hei hXh0 hmXh
+  cvp := R34Conv.zero _ _ _ _ hw hb
+  bnp := R34TrainBn.exact _ _ _ hG hBb hemr hei hXh0 hmXh
+
+noncomputable def R34TrainWeights.exact {ε : ℝ} :
+    R34TrainWeights (21/10) (21/10) ε (21/10) (21/10) (1/100) :=
+  have h : (0:ℝ) ≤ 21/10 := by norm_num
+  have he : (0:ℝ) ≤ 1/100 := by norm_num
+  { stem := R34Conv.zero _ _ _ _ h h
+    bns := R34TrainBn.exact _ _ _ h h (by norm_num) he (by norm_num) (by norm_num)
+    a0 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    a1 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    a2 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    d2 := R34TrainDownBlk.exact _ _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    b0 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    b1 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    b2 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    d3 := R34TrainDownBlk.exact _ _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    c0 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    c1 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    c2 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    c3 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    c4 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    d4 := R34TrainDownBlk.exact _ _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    e0 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    e1 := R34TrainIdBlk.exact _ _ _ h h h h (by norm_num) he (by norm_num) (by norm_num)
+    head := R34Head.zero _ _ h h }
+
+example (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
+    |r34TrainForwardF binary32 (R34TrainWeights.exact (ε := 1/100000)) x j
+      - r34TrainForward (R34TrainWeights.exact (ε := 1/100000)) x j| ≤ 1752 * 10 ^ 78 :=
+  r34_train_float_logits_le binary32 binary32_u.le (by norm_num) _ x hx j
 
 end Proofs

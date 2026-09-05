@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackMBConv
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for MobileNetV2's whole-net BACKWARD — and it needs NO operating point
 
@@ -705,5 +706,76 @@ theorem mnv2_grad_float_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε5
     (dy : Vec 10) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (3 * 224 * 224)) :
     |mnv2GradF M w dy j - mnv2GradR w dy j| ≤ 1076 * 10 ^ 149 :=
   (mnv2GradBridge_maps M hMu hε5 w).budget_le (by norm_num) le_rfl dy hdy j
+
+/-! ### Inhabitation
+
+`mnv2_grad_float_le`'s record at the ε-floor: zero kernels, zero saved activations, the exact
+inverse-stddev and normalised activation as the deployed float values, every ReLU6 mask `True`.
+No operating point, so `ε = 1/100000` is fine here. -/
+noncomputable def MnvKerB.zero (oc ic kH kW : Nat) {wk : ℝ} (h : 0 ≤ wk) : MnvKerB oc ic kH kW wk where
+  W := fun _ _ _ _ => 0
+  hW := fun _ _ _ _ => by simpa using h
+
+noncomputable def MnvDwKerB.zero (c kH kW : Nat) {wk : ℝ} (h : 0 ≤ wk) : MnvDwKerB c kH kW wk where
+  W := fun _ _ _ => 0
+  hW := fun _ _ _ => by simpa using h
+
+noncomputable def MnvHeadB.zero (m n : Nat) {wk : ℝ} (h : 0 ≤ wk) : MnvHeadB m n wk where
+  W := fun _ _ => 0
+  hW := fun _ _ => by simpa using h
+
+noncomputable def MnvBnBack.exact (c h w : Nat) {ε gl es exh : ℝ}
+    (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) : MnvBnBack c h w ε gl es exh where
+  γ := fun _ => 0
+  x := fun _ => 0
+  fs := fun k => bnIstd (h * w) (Mat.unflatten (reassocFwd c h w (fun _ => 0)) k) ε
+  fxh := fun k => bnXhat (h * w) ε (Mat.unflatten (reassocFwd c h w (fun _ => 0)) k)
+  hγ := fun _ => by simpa using hgl
+  hs := fun _ => by simpa using hes
+  hfxh := fun _ _ => by simpa using hexh
+
+noncomputable def MnvBodyBack.exact (ic mid oc h w : Nat) {ε wk gl es exh : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) :
+    MnvBodyBack ic mid oc h w ε wk gl es exh where
+  ke := MnvKerB.zero _ _ _ _ hwk
+  kd := MnvDwKerB.zero _ _ _ hwk
+  kp := MnvKerB.zero _ _ _ _ hwk
+  bne := MnvBnBack.exact _ _ _ hgl hes hexh
+  bnd := MnvBnBack.exact _ _ _ hgl hes hexh
+  bnp := MnvBnBack.exact _ _ _ hgl hes hexh
+  m_e := fun _ => True
+  m_d := fun _ => True
+
+noncomputable def MnvBodyStridedBack.exact (ic mid oc h w : Nat) {ε wk gl es exh : ℝ}
+    (hwk : 0 ≤ wk) (hgl : 0 ≤ gl) (hes : 0 ≤ es) (hexh : 0 ≤ exh) :
+    MnvBodyStridedBack ic mid oc h w ε wk gl es exh where
+  ke := MnvKerB.zero _ _ _ _ hwk
+  kd := MnvDwKerB.zero _ _ _ hwk
+  kp := MnvKerB.zero _ _ _ _ hwk
+  bne := MnvBnBack.exact _ _ _ hgl hes hexh
+  bnd := MnvBnBack.exact _ _ _ hgl hes hexh
+  bnp := MnvBnBack.exact _ _ _ hgl hes hexh
+  m_e := fun _ => True
+  m_d := fun _ => True
+
+noncomputable def MnvBackWeights.exact {ε : ℝ} : MnvBackWeights ε (28/10) (17/10) (1/100) (1/100) :=
+  have hwk : (0:ℝ) ≤ 28/10 := by norm_num
+  have hgl : (0:ℝ) ≤ 17/10 := by norm_num
+  have he : (0:ℝ) ≤ 1/100 := by norm_num
+  { stemK := MnvKerB.zero _ _ _ _ hwk, stemBn := MnvBnBack.exact _ _ _ hgl he he
+    mstem := fun _ => True
+    b1 := MnvBodyStridedBack.exact _ _ _ _ _ hwk hgl he he
+    b2 := MnvBodyBack.exact _ _ _ _ _ hwk hgl he he
+    b3 := MnvBodyStridedBack.exact _ _ _ _ _ hwk hgl he he
+    b4 := MnvBodyBack.exact _ _ _ _ _ hwk hgl he he
+    b5 := MnvBodyStridedBack.exact _ _ _ _ _ hwk hgl he he
+    b6 := MnvBodyStridedBack.exact _ _ _ _ _ hwk hgl he he
+    headK := MnvKerB.zero _ _ _ _ hwk, headBn := MnvBnBack.exact _ _ _ hgl he he
+    mhead := fun _ => True, fc := MnvHeadB.zero _ _ hwk }
+
+example (dy : Vec 10) (hdy : ∀ k, |dy k| ≤ 1) (j : Fin (3 * 224 * 224)) :
+    |mnv2GradF binary32 (MnvBackWeights.exact (ε := 1/100000)) dy j
+      - mnv2GradR (MnvBackWeights.exact (ε := 1/100000)) dy j| ≤ 1076 * 10 ^ 149 :=
+  mnv2_grad_float_le binary32 binary32_u.le (by norm_num) _ dy hdy j
 
 end Proofs

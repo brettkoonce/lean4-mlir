@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Float.Cifar8FloatBridge
 import LeanMlir.Proofs.Float.FloatBudgetEnv
 import LeanMlir.Proofs.Architectures.Cifar8ChainCert
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for a whole-net float budget: CIFAR-8 at the committed shape, He profile
 
@@ -233,5 +234,30 @@ theorem cifar8_float_logits_le (M : FloatModel) (hMu : M.u ≤ u32)
         W.cW5 W.cb5 W.cW6 W.cb6 W.cW7 W.cb7 W.cW8 W.cb8
         W.dW1 W.db1 W.dW2 W.db2 W.dW3 W.db3 x j| ≤ 637000000000000 :=
   (cifar8Bridge_maps M hMu W).budget_le (by norm_num) le_rfl x hx j
+
+/-! ### Inhabitation
+
+`cifar8_float_logits_le`'s record at the He profile: every weight and bias zero. -/
+
+noncomputable def Cifar8Weights.zero : Cifar8Weights (2/5) (1/100) :=
+  { cW1 := fun _ _ _ _ => 0, cb1 := fun _ => 0, cW2 := fun _ _ _ _ => 0, cb2 := fun _ => 0
+    cW3 := fun _ _ _ _ => 0, cb3 := fun _ => 0, cW4 := fun _ _ _ _ => 0, cb4 := fun _ => 0
+    cW5 := fun _ _ _ _ => 0, cb5 := fun _ => 0, cW6 := fun _ _ _ _ => 0, cb6 := fun _ => 0
+    cW7 := fun _ _ _ _ => 0, cb7 := fun _ => 0, cW8 := fun _ _ _ _ => 0, cb8 := fun _ => 0
+    dW1 := fun _ _ => 0, db1 := fun _ => 0, dW2 := fun _ _ => 0, db2 := fun _ => 0
+    dW3 := fun _ _ => 0, db3 := fun _ => 0
+    hcW1 := fun _ _ _ _ => by norm_num, hcb1 := fun _ => by norm_num
+    hcW2 := fun _ _ _ _ => by norm_num, hcb2 := fun _ => by norm_num
+    hcW3 := fun _ _ _ _ => by norm_num, hcb3 := fun _ => by norm_num
+    hcW4 := fun _ _ _ _ => by norm_num, hcb4 := fun _ => by norm_num
+    hcW5 := fun _ _ _ _ => by norm_num, hcb5 := fun _ => by norm_num
+    hcW6 := fun _ _ _ _ => by norm_num, hcb6 := fun _ => by norm_num
+    hcW7 := fun _ _ _ _ => by norm_num, hcb7 := fun _ => by norm_num
+    hcW8 := fun _ _ _ _ => by norm_num, hcb8 := fun _ => by norm_num
+    hdW1 := fun _ _ => by norm_num, hdb1 := fun _ => by norm_num
+    hdW2 := fun _ _ => by norm_num, hdb2 := fun _ => by norm_num
+    hdW3 := fun _ _ => by norm_num, hdb3 := fun _ => by norm_num }
+
+example := cifar8_float_logits_le binary32 binary32_u.le Cifar8Weights.zero
 
 end Proofs

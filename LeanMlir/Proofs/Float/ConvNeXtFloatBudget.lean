@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnvLN
 import LeanMlir.Proofs.Foundation.WholeNetForwardTies
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for ConvNeXt-T: the committed channel-LayerNorm forward, at the cap
 
@@ -759,5 +760,108 @@ theorem cnx_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε :
     |cnxForwardF M R G wts x j - convNextForwardTCh wts x j| ≤ 9738 * 10 ^ 127 := by
   have h := cnx_float_logits_le M hMu hε5 R G wts B Eps x hx j
   rwa [cnxForward_eq_committed wts] at h
+
+/-! ### Inhabitation
+
+`cnx_float_logits_le`'s hypotheses at the committed constants: the all-zero `CnxTWeightsCh` with
+every LayerNorm `ε` field at `1/100000` (so `CnxEps` is `le_rfl` at every site), the exact device
+mean, inverse-stddev and GELU, `binary32`. -/
+noncomputable def CnxBlockParamsCh.zero (c cExp h w kH kW : Nat) (ε : ℝ) :
+    CnxBlockParamsCh c cExp h w kH kW where
+  Wdw := fun _ _ _ => 0
+  bdw := fun _ => 0
+  εn := ε
+  γn := fun _ => 0
+  βn := fun _ => 0
+  Wex := fun _ _ _ _ => 0
+  bex := fun _ => 0
+  Wpr := fun _ _ _ _ => 0
+  bpr := fun _ => 0
+  γls := fun _ => 0
+
+noncomputable def CnxDownParamsCh.zero (cin cout : Nat) (ε : ℝ) : CnxDownParamsCh cin cout where
+  ε := ε
+  γ := fun _ => 0
+  β := fun _ => 0
+  W := fun _ _ _ _ => 0
+  b := fun _ => 0
+
+noncomputable def CnxTWeightsCh.zero (ε : ℝ) : CnxTWeightsCh where
+  sW := fun _ _ _ _ => 0
+  sb := fun _ => 0
+  sε := ε
+  sγ := fun _ => 0
+  sβ := fun _ => 0
+  s1 := fun _ => CnxBlockParamsCh.zero _ _ _ _ _ _ ε
+  d1 := CnxDownParamsCh.zero _ _ ε
+  s2 := fun _ => CnxBlockParamsCh.zero _ _ _ _ _ _ ε
+  d2 := CnxDownParamsCh.zero _ _ ε
+  s3 := fun _ => CnxBlockParamsCh.zero _ _ _ _ _ _ ε
+  d3 := CnxDownParamsCh.zero _ _ ε
+  s4 := fun _ => CnxBlockParamsCh.zero _ _ _ _ _ _ ε
+  hε := ε
+  hγ := fun _ => 0
+  hβ := fun _ => 0
+  Wd := fun _ _ => 0
+  bd := fun _ => 0
+
+theorem CnxBlockParamsCh.zero_bounded {c cExp h w kH kW : Nat} {ε w' bb gl sl : ℝ}
+    (hw : 0 ≤ w') (hbb : 0 ≤ bb) (hgl : 0 ≤ gl) (hsl : 0 ≤ sl) :
+    CnxBlockChBounded (CnxBlockParamsCh.zero c cExp h w kH kW ε) w' bb gl sl :=
+  ⟨fun _ _ _ => by simpa [CnxBlockParamsCh.zero] using hw,
+   fun _ => by simpa [CnxBlockParamsCh.zero] using hbb,
+   fun _ _ _ _ => by simpa [CnxBlockParamsCh.zero] using hw,
+   fun _ => by simpa [CnxBlockParamsCh.zero] using hbb,
+   fun _ _ _ _ => by simpa [CnxBlockParamsCh.zero] using hw,
+   fun _ => by simpa [CnxBlockParamsCh.zero] using hbb,
+   fun _ => by simpa [CnxBlockParamsCh.zero] using hsl,
+   fun _ => by simpa [CnxBlockParamsCh.zero] using hgl,
+   fun _ => by simpa [CnxBlockParamsCh.zero] using hbb⟩
+
+theorem CnxDownParamsCh.zero_bounded {cin cout : Nat} {ε w' bb gl : ℝ}
+    (hw : 0 ≤ w') (hbb : 0 ≤ bb) (hgl : 0 ≤ gl) :
+    CnxDownChBounded (CnxDownParamsCh.zero cin cout ε) w' bb gl :=
+  ⟨fun _ _ _ _ => by simpa [CnxDownParamsCh.zero] using hw,
+   fun _ => by simpa [CnxDownParamsCh.zero] using hbb,
+   fun _ => by simpa [CnxDownParamsCh.zero] using hgl,
+   fun _ => by simpa [CnxDownParamsCh.zero] using hbb⟩
+
+theorem CnxTWeightsCh.zero_bounded (ε : ℝ) {w' bb gl sl : ℝ}
+    (hw : 0 ≤ w') (hbb : 0 ≤ bb) (hgl : 0 ≤ gl) (hsl : 0 ≤ sl) :
+    CnxBounded (CnxTWeightsCh.zero ε) w' bb gl sl where
+  sW := fun _ _ _ _ => by simpa [CnxTWeightsCh.zero] using hw
+  sb := fun _ => by simpa [CnxTWeightsCh.zero] using hbb
+  sγ := fun _ => by simpa [CnxTWeightsCh.zero] using hgl
+  sβ := fun _ => by simpa [CnxTWeightsCh.zero] using hbb
+  s1 := fun _ => CnxBlockParamsCh.zero_bounded hw hbb hgl hsl
+  d1 := CnxDownParamsCh.zero_bounded hw hbb hgl
+  s2 := fun _ => CnxBlockParamsCh.zero_bounded hw hbb hgl hsl
+  d2 := CnxDownParamsCh.zero_bounded hw hbb hgl
+  s3 := fun _ => CnxBlockParamsCh.zero_bounded hw hbb hgl hsl
+  d3 := CnxDownParamsCh.zero_bounded hw hbb hgl
+  s4 := fun _ => CnxBlockParamsCh.zero_bounded hw hbb hgl hsl
+  hγ := fun _ => by simpa [CnxTWeightsCh.zero] using hgl
+  hβ := fun _ => by simpa [CnxTWeightsCh.zero] using hbb
+  Wd := fun _ _ => by simpa [CnxTWeightsCh.zero] using hw
+  bd := fun _ => by simpa [CnxTWeightsCh.zero] using hbb
+
+theorem CnxTWeightsCh.zero_eps (ε : ℝ) : CnxEps (CnxTWeightsCh.zero ε) ε where
+  hs := le_rfl
+  h1 := fun _ => le_rfl
+  hd1 := le_rfl
+  h2 := fun _ => le_rfl
+  hd2 := le_rfl
+  h3 := fun _ => le_rfl
+  hd3 := le_rfl
+  h4 := fun _ => le_rfl
+  hh := le_rfl
+
+example (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
+    |cnxForwardF binary32 (DeviceLN.exact (emr := 4590 / 10 ^ 8) (ei := 1/100) (by norm_num) (by norm_num))
+        (DeviceGelu.exact (egelu := 1/100) (by norm_num)) (CnxTWeightsCh.zero (1/100000)) x j
+      - cnxForward (CnxTWeightsCh.zero (1/100000)) x j| ≤ 9738 * 10 ^ 127 :=
+  cnx_float_logits_le binary32 binary32_u.le (by norm_num) _ _ _
+    (CnxTWeightsCh.zero_bounded _ (by norm_num) (by norm_num) (by norm_num) (by norm_num))
+    (CnxTWeightsCh.zero_eps _) x hx j
 
 end Proofs

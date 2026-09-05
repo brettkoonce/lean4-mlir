@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnv
 import LeanMlir.Proofs.Codegen.ResNet34RenderPCEval
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # A NUMBER for ResNet-34: the deployed inference forward at the measured profile
 
@@ -716,5 +717,75 @@ theorem r34_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε :
     W.e1.cv1.W W.e1.cv1.b W.e1.bn1.γ W.e1.bn1.β W.e1.bn1.μ W.e1.bn1.v W.e1.cv2.W W.e1.cv2.b W.e1.bn2.γ W.e1.bn2.β W.e1.bn2.μ W.e1.bn2.v
     W.head.W W.head.b x j| ≤ 1548 * 10 ^ 206 :=
   r34_float_logits_le M hMu hε5 R W x hx j
+
+/-! ### Inhabitation
+
+The record `r34_float_logits_le` quantifies over is satisfiable at the committed constants, so
+the theorem is not about an empty type: zero weights, zero running statistics, the exact `rsqrt`
+as the device kernel, `binary32` as the rounding model and `ε = 1/100000`. A record with one
+unsatisfiable field would make the whole-net number a theorem about nothing; the `example` at the
+end applies the headline theorem to the witness so every hypothesis is discharged by data. -/
+noncomputable def DeviceRsqrt.exact (ε : ℝ) {es : ℝ} (hes : 0 ≤ es) : DeviceRsqrt ε es where
+  rsq := fun t => 1 / Real.sqrt t
+  spec := fun _ _ => by simpa using hes
+
+noncomputable def R34Conv.zero (oc ic kH kW : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    R34Conv oc ic kH kW w' β' where
+  W := fun _ _ _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def R34Head.zero (m n : Nat) {w' β' : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β') :
+    R34Head m n w' β' where
+  W := fun _ _ => 0
+  b := fun _ => 0
+  hW := fun _ _ => by simpa using hw
+  hb := fun _ => by simpa using hb
+
+noncomputable def R34Bn.zero (c : Nat) {G Bb Mb : ℝ} (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) :
+    R34Bn c G Bb Mb where
+  γ := fun _ => 0
+  β := fun _ => 0
+  μ := fun _ => 0
+  v := fun _ => 0
+  hγ := fun _ => by simpa using hG
+  hβ := fun _ => by simpa using hBb
+  hμ := fun _ => by simpa using hMb
+  hv := fun _ => le_rfl
+
+noncomputable def R34IdBlk.zero (c : Nat) {w' β' G Bb Mb : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β')
+    (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) : R34IdBlk c w' β' G Bb Mb where
+  cv1 := R34Conv.zero _ _ _ _ hw hb
+  bn1 := R34Bn.zero _ hG hBb hMb
+  cv2 := R34Conv.zero _ _ _ _ hw hb
+  bn2 := R34Bn.zero _ hG hBb hMb
+
+noncomputable def R34DownBlk.zero (ic oc : Nat) {w' β' G Bb Mb : ℝ} (hw : 0 ≤ w') (hb : 0 ≤ β')
+    (hG : 0 ≤ G) (hBb : 0 ≤ Bb) (hMb : 0 ≤ Mb) : R34DownBlk ic oc w' β' G Bb Mb where
+  cv1 := R34Conv.zero _ _ _ _ hw hb
+  bn1 := R34Bn.zero _ hG hBb hMb
+  cv2 := R34Conv.zero _ _ _ _ hw hb
+  bn2 := R34Bn.zero _ hG hBb hMb
+  cvp := R34Conv.zero _ _ _ _ hw hb
+  bnp := R34Bn.zero _ hG hBb hMb
+
+noncomputable def R34Weights.zero : R34Weights (21/10) (21/10) (21/10) (21/10) (21/10) :=
+  have h : (0:ℝ) ≤ 21/10 := by norm_num
+  { stem := R34Conv.zero _ _ _ _ h h, bns := R34Bn.zero _ h h h
+    a0 := R34IdBlk.zero _ h h h h h, a1 := R34IdBlk.zero _ h h h h h, a2 := R34IdBlk.zero _ h h h h h
+    d2 := R34DownBlk.zero _ _ h h h h h
+    b0 := R34IdBlk.zero _ h h h h h, b1 := R34IdBlk.zero _ h h h h h, b2 := R34IdBlk.zero _ h h h h h
+    d3 := R34DownBlk.zero _ _ h h h h h
+    c0 := R34IdBlk.zero _ h h h h h, c1 := R34IdBlk.zero _ h h h h h, c2 := R34IdBlk.zero _ h h h h h
+    c3 := R34IdBlk.zero _ h h h h h, c4 := R34IdBlk.zero _ h h h h h
+    d4 := R34DownBlk.zero _ _ h h h h h
+    e0 := R34IdBlk.zero _ h h h h h, e1 := R34IdBlk.zero _ h h h h h
+    head := R34Head.zero _ _ h h }
+
+example (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
+    |r34EvalForwardF binary32 (DeviceRsqrt.exact (1/100000) (es := 1/100) (by norm_num)) R34Weights.zero x j
+      - r34EvalForward R34Weights.zero (1/100000) x j| ≤ 1548 * 10 ^ 206 :=
+  r34_float_logits_le binary32 binary32_u.le (by norm_num) _ _ x hx j
 
 end Proofs
