@@ -201,11 +201,13 @@ Each has an acceptance criterion. None makes a number smaller.
    (a) re-spell the Proofs chains at `flatConvStride2Xla` / `depthwiseStride2FlatXla` (the
    definitions and VJPs have existed since `3d9b14d`; the float tier needs the two `Xla` leaves,
    whose envelopes equal the symmetric ones) and re-tie the PC graphs to the XLA ops, or (b)
-   leave the spelling and disclose. `formalization.yaml` 4d now discloses it; (a) is open.
+   leave the spelling and disclose. `formalization.yaml` 4d now discloses it. **Decided 2026-09-05:
+   (a).** The work is scoped in `planning/xla_same_respell_and_blueprint_audit.md`, which also
+   carries item 3 and the blueprint audit.
 
-3. **EfficientNet-B0's whole-net certified tie.** Decide item 2's stem spelling first: a tie
-   of `efficientnetInputGradB` to `efficientnetForwardB_has_vjp` at the symmetric stem certifies
-   a net no shipped artifact runs. Then aim at `efficientnetForwardB_has_vjp`
+3. **EfficientNet-B0's whole-net certified tie.** After the re-spelling (item 2, the new doc's
+   steps 0 to 6): a tie of `efficientnetInputGradB` to `efficientnetForwardB_has_vjp` at the
+   symmetric stem would certify a net no shipped artifact runs. Then aim at `efficientnetForwardB_has_vjp`
    (`Architectures/EfficientNetChainClose.lean`, `HasVJP` everywhere), not the 16-block
    `efficientnetForwardB_full_has_vjp`. Missing: the three batched block ties at `bnBatchLA`
    (`mbNoExpFwdB`, `mbStridedFwdB`, `mbResidFwdB`; the one existing tie is per example at scalar
@@ -218,9 +220,10 @@ Each has an acceptance criterion. None makes a number smaller.
    tie compiles, `efficientnetForwardB_eq_chain` is used as its shape check, and the number in
    `EfficientNetBackFloatBudget.lean` is unchanged or the change is explained.
 
-4. **Freeze.** Add the table in section 1 and the sentence at the end of section 2 to the
-   blueprint; the blueprint currently mentions the float budgets in one clause and tables none
-   of them. After that this document changes only when a number moves.
+4. **Freeze.** The blueprint audit in `planning/xla_same_respell_and_blueprint_audit.md` step 8
+   adds the table in section 1 and the sentence at the end of section 2 to the blueprint, which
+   currently mentions the float budgets in one clause and tables none of them. After that this
+   document changes only when a number moves.
 
 ## 6. Priced and declined
 
