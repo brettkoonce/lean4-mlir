@@ -95,11 +95,29 @@ inequality, so both numbers stay caps, and §4 item 3's *"the only open item tha
 numbers MEAN"* is not borne out. ⭐ It did turn up a lever this file has not had — a normalisation
 resets the window **iff `emr·S < 1`**, a MODELLING constant, not architecture.
 
-⭐⭐ **STARTING A SESSION? GO TO §4.** The ranked list, after B0's number and §3.27's measurement:
-**3-window** the cheap half of escape 2 (two commits, ~55 orders each, no new mathematics — §3.27),
-**2b** B0's whole-net certified tie (⛔ a bigger job than §4 costed — the apex is
-`efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched block ties at
-`bnBatchLA` are missing), then **4** ViT's backward, parked with its cost measured.
+⛔⛔ **AND §0.1's "THERE IS NO THEOREM TO STATE" IS FALSE — measured 2026-09-05, §3.28.** That
+sentence is why all six committed FORWARD numbers are at INFERENCE normalisation, and it conflates
+*the fold's numeral is unwritable* with *there is no theorem*: the same measurement records the
+training-mode **window** as 10²²¹, under `norm_num`'s ceiling, and `FloatBridgesTo.capped` turns
+any statable window into a theorem. **r34 at training-mode BatchNorm is 3.176·10²²¹ / 6.349·10²²¹
+with the leaf exactly as shipped**, and 4.304·10¹⁴⁵ / 8.605·10¹⁴⁵ under escape 2. ⭐⭐ It would be
+the first statement in this file about the program the repo actually TRAINS with. ⭐ And the shape
+of the miss is this file's recurring one: **escape 1 was invented for LayerNorm and never tried on
+BatchNorm, whose problem it was invented to describe** — §0.1 itself says LayerNorm "has the same
+quadratic term and no escape". ⚠ The probe is `r34_train_chain`, which is `bn()` — the
+training-mode leaf, in the script and **called by nothing** since the 10⁷⁴¹⁷ figure was measured —
+finally wired to a caller.
+
+⭐⭐ **STARTING A SESSION? GO TO §3.28.** It is a cold-start recipe for the two next items, both
+measured 2026-09-05: **(A)** the training-mode forward number above — the probe is done, the Lean
+is `Resnet34FloatBudget.lean`'s twin at `bnPerChannelTensor3` with `Maps.bnCapped` at all 33 sites,
+and most of the machinery already exists because `Resnet34WholeFloatBridge.lean`'s block bridges
+are generic in the normalisation; and **(B)** escape 2's WINDOW half — 53 orders on ConvNeXt-T and
+57 on ViT-Tiny, no new mathematics and no new hypothesis, two commits. ⭐ Do (A) first: it changes
+the scope of (B), because if training-mode numbers exist then the escape-2 leaf serves five nets
+rather than two. §4 carries the rest of the order — **2b** B0's whole-net certified tie (⛔ bigger
+than §4 costed: the apex is `efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all
+three batched block ties at `bnBatchLA` are missing), then **4** ViT's backward, parked.
 
 §4 carries the rest of the order, and each item's state was measured before it was ranked.
 ✅ **(1) `resnet34Forward_full_pc_eq_chain` is DONE (2026-09-04, §3.23)** — all three whole-net
@@ -302,6 +320,19 @@ on top of the rounding. Fold that through a net and the budget does not grow geo
 training-mode net gives window 10²²¹ and budget **10⁷⁴¹⁷** — past the point where `norm_num`
 will evaluate the numeral at all (it refuses around 10³⁰⁰; verified). There is no numeral to
 write down, so there is no theorem to state.
+
+⛔⛔ **THAT LAST SENTENCE IS WRONG — measured 2026-09-05, §3.28.** It conflates *the FOLD's
+numeral is unwritable* with *there is no theorem*. The very same measurement records the
+**window** as 10²²¹, which is under §3.7(a)'s ~10²⁵³ ceiling, and escape 1 below
+(`FloatBridgesTo.capped`) turns any statable window into a statable theorem. r34's training-mode
+forward is **3.176·10²²¹ / 6.349·10²²¹ with the leaf exactly as shipped**, and
+4.304·10¹⁴⁵ / 8.605·10¹⁴⁵ under escape 2. ⭐ It is a CAP, so §9's label applies — but it would be
+the first statement in this file about the program the repo actually TRAINS with, where all six
+committed forward numbers are about inference. ⭐⭐ And note the shape of the miss: **escape 1 was
+invented for LayerNorm and never tried on BatchNorm, whose problem this paragraph describes** —
+two paragraphs down this section says LayerNorm *"has the same quadratic term and no escape"*, so
+the escape transfers verbatim. BatchNorm simply also has an eval mode, which made the cap look
+unnecessary, and the sentence above stopped anyone re-checking.
 
 Inference BN has no reduction: `μ` and `rsqrt(var+ε)` are frozen constants, the map is affine in
 `x` with slope `γ·s`, and the modulus is `rounding + G·S·e` — **linear**. The fold then behaves
@@ -2819,6 +2850,138 @@ training-mode leaf — is defined in `float_budget_envelope.py` and **called by 
 reconstructing r34's 90-stage training chain is the work. Do that before quoting §0.1's
 "no theorem to state" again.
 
+### 3.28 ⭐⭐ NEXT SESSION (scoped 2026-09-05): two items, both measured — ⛔⛔ §0.1's "no theorem to state" IS FALSE, and escape 2's WINDOW half
+
+**Read this and §3.27; everything below was measured 2026-09-05 and you should not need to
+re-derive anything.** The two items are independent and can be done in either order, but (A) is
+half a day and changes the scope of (B), so it goes first.
+
+---
+
+#### (A) ⛔⛔ A TRAINING-MODE FORWARD NUMBER EXISTS AND ALWAYS DID
+
+§0.1 says of training-mode BatchNorm: *"Measured with the generator: the same r34 fold on the
+training-mode net gives window 10²²¹ and budget 10⁷⁴¹⁷ — past the point where `norm_num` will
+evaluate the numeral at all. **There is no numeral to write down, so there is no theorem to
+state.**"* That sentence is why all six committed FORWARD numbers are at inference normalisation,
+and it is **wrong**. It conflates *"the FOLD's numeral is unwritable"* with *"there is no
+theorem"*: the same measurement records the **window** as 10²²¹, which is under §3.7(a)'s ~10²⁵³
+ceiling, and `FloatBridgesTo.capped` (§3.3.0(a)) turns any statable window into a statable
+theorem. Measured (`r34_train_chain`, 90 stages):
+
+| ResNet-34 forward at TRAINING-mode BatchNorm | window | budget | bud/win | statable |
+|---|---|---|---|---|
+| shipped leaf, UNCAPPED — what §0.1 quotes | 3.176·10²²¹ | 5.949·10⁷⁴¹⁹ | 10⁷¹⁹⁸ | ⛔ no |
+| ⭐⭐ **shipped leaf, CAPPED — available TODAY** | **3.176·10²²¹** | **6.349·10²²¹** | 2.00 | **yes** |
+| shipped leaf, capped, `\|istd\| ≤ 16` | 5.142·10¹⁷⁸ | 1.029·10¹⁷⁹ | 2.00 | yes |
+| escape 2, uncapped | 4.304·10¹⁴⁵ | 9.456·10²⁶⁰ | 10¹¹⁵ | ⛔ no |
+| ⭐⭐ **escape 2, CAPPED** | **4.304·10¹⁴⁵** | **8.605·10¹⁴⁵** | 2.00 | **yes** |
+| escape 2, capped, `\|istd\| ≤ 16` | 7.462·10¹⁰⁴ | 1.495·10¹⁰⁵ | 2.00 | yes |
+| the committed INFERENCE number, for scale | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 0.005 | yes |
+
+⭐⭐ **Why it matters more than the size:** it would be **the first statement in this file about the
+program the repo actually TRAINS with.** All six committed forward numbers are about inference —
+a program that is run, but not the one the gradients in §3.7/§3.13/§3.22/§3.26 are taken through.
+And §3.7's closing point (*"§0.1's wall is not a fact about backwards, it is a fact about
+COMPOSING a backward with the forward that feeds it"*) is exactly about this gap: the backwards
+supply `es`/`exh` as hypotheses because the training-mode forward has nothing to say. It would now
+have something — a `capped` something, so §9's label applies, but the composition question changes
+shape.
+
+⭐⭐ **Why nobody noticed, and it is this file's recurring shape one more time.** `capped` was
+invented FOR LayerNorm (§3.3.0(a)) and never tried on the net whose problem it was invented to
+describe — §0.1 itself says *"LayerNorm has the same quadratic term and no escape"*, so the escape
+LayerNorm got applies to training-mode BatchNorm **verbatim**. BatchNorm simply also has an eval
+mode, which made the cap look unnecessary, and the sentence above stopped anyone re-checking.
+
+**The order of work.**
+1. ⭐ **The probe is DONE** — `r34_train_chain` (`scripts/float_budget_envelope.py`), which is
+   `bn()` finally wired to a caller. ⚠ `bn()` had been in that file **unused** since the 10⁷⁴¹⁷
+   figure was measured, which is why the window half of that measurement was never looked at again.
+   It reproduces §0.1's window to the exponent (10²²¹) and its budget to 2 parts in 7419
+   (10⁷⁴¹⁹ against 10⁷⁴¹⁷ — the residue is `Tq`, see the ⚠ below); that agreement is the
+   cross-check that the 90-stage reconstruction is the same net.
+2. **The Lean is `Resnet34FloatBudget.lean`'s twin at `bnPerChannelTensor3` instead of
+   `bnPerChannelEvalTensor3`**, with `Maps.bnCapped` at all 33 sites. ⭐ Most of it exists:
+   `Resnet34WholeFloatBridge.lean`'s block bridges are **already generic in the normalisation**
+   (`rblkGen`/`rblkStridedGen`, §0), which is exactly what the training net needs, and
+   `ResNet34RenderPC.lean` is the training render — so unlike the eval number there is no
+   `*RenderPCEval` twin to build. ⛔ What does not exist is a `Maps.bnCapped` peer for the
+   per-channel BatchNorm: `FloatBudgetEnvLN.lean`'s is stated at the pure-normalise LayerNorm.
+3. ⚠ **Decide what it is called and where it sits.** It is a SEVENTH forward number for a net that
+   already has one, so §0's table needs a `mode` distinction and §9's cap rule applies. Do not let
+   it be quoted beside `r34_float_logits_le` without the label.
+4. ⛔ **Then MobileNetV2's and EfficientNet-B0's, which are NOT measured here.** Both have 20 and
+   9 BatchNorm sites against r34's 33, so both should be smaller — but §3.9 finding 5's rule holds
+   (measure, do not assume), and B0's would carry §3.24's batch-size caveat on the FORWARD as well,
+   since `bnBatchLA` reduces across examples at training. Add `mnv2_train_chain` /
+   `b0_train_chain` before costing them.
+
+---
+
+#### (B) ⭐⭐ BANK ESCAPE 2's WINDOW HALF — 53 orders on ConvNeXt-T, 57 on ViT-Tiny
+
+§3.27 has the mathematics and the ablation. What follows is only what the Lean needs.
+
+**The number to state** (at the ε-floor, everything else exactly as shipped):
+
+| net | committed | after | theorem |
+|---|---|---|---|
+| ConvNeXt-T fwd | 4.858·10²²⁷ / 9.706·10²²⁷ | **6.609·10¹⁷⁴ / 1.321·10¹⁷⁵** | `cnx_float_logits_le` |
+| ViT-Tiny fwd | 3.612·10²¹⁸ / 7.222·10²¹⁸ | **1.130·10¹⁶¹ / 2.259·10¹⁶¹** | `vit_float_logits_le` |
+
+⭐ **It needs NO new mathematics and NO new hypothesis.** The bound is `|x̂| ≤ √n`, i.e.
+`bnXhat_sq_le` → `bnXhat_abs_le_num`, which four backward budget files already call. What is new
+is the SHAPE of the leaf: state the pure-normalise BatchNorm/LayerNorm closeness at `|x̂| ≤ Xh`
+instead of at `|x−μ| ≤ D` and `|istd| ≤ S` separately.
+
+**The two edits, and they are the same edit twice.**
+1. The window's leading term: `G·(D·S) + Bb` becomes `G·Xh + Bb`.
+2. Inside `bnNormBudget`, the float product `fl(fl(x − fl(μ))·fistd)` is bounded by `(D+ea)(S+ei)`
+   — the product of the two factors' windows. But that product **is** the normalised activation,
+   one rounding away, so the honest bound is `Xh + <the error the same expression already
+   computes>`. ⭐ That is `floatClose_seScale`'s fix (§3.4 finding 2) and `mhpB`'s (§3.5) at a
+   third leaf — **the third time a window has been derived through an error term when a direct
+   bound on the float side was available.** §0.1's checklist item (*when a window contains an error
+   term, ask why*) for the third time. `bn_norm_budget_x` in the probe is the exact shape.
+
+⚠ **What survives, and it is the interesting residue.** `D·ei + ea·S` — the DEVICE's inverse-stddev
+and mean accuracies — stay linear in the window, and they are what stops the site RESETTING. §3.27
+finding 4: a normalisation resets iff `emr·S < 1`, which at the ε-floor is `0.01·317 = 3.17`.
+⭐ **Before buying that with an operating point, question `emr = 10⁻²` itself**: it is a hypothesis
+about a reduction the device performs in float, and a rounded mean of `n` terms is `γ_n·A`, which at
+`n = 96` and `u = 2⁻²⁴` is `6·10⁻⁶`, not `10⁻²`. That single change is worth more than the operating
+point and costs no hypothesis at all — it costs a `DeviceLN` field being derived rather than
+supplied. **Measure it before writing the leaf**, because it decides whether the leaf wants `Xh`
+at all or whether the window genuinely resets.
+
+⛔ **Do NOT take the modulus half with it.** It is 5006 orders on ConvNeXt's uncapped fold and
+worth **nothing** to either shipped statement, because both are capped and the fold stays above the
+cap (82 orders on ConvNeXt-T, 7 on ViT-Tiny). It also needs a reverse triangle inequality for `‖·‖₂`
+over `Vec n` and `s ↦ √(s²+ε)` being 1-Lipschitz, neither of which the float tier currently uses.
+
+⛔ **Blast radius, and it is bigger than a new file.** Both are committed numbers with
+`formalization.yaml` §4d prose and `declarations:` entries, `AuditAxioms` lines, lakefile comments
+and blueprint references. §7 says one commit per net, so this is **two** commits, and each
+regenerates its budget file (`ConvNeXtFloatBudget.lean`, 781 lines / ~2 min; `ViTFloatBudget.lean`,
+731 lines / 30 s — §3.5.2 item 6's envelope fold is why ViT's is a quarter of the time).
+⚠ Both generators were session scratch (§3.26: four for four).
+
+⚠ **And re-read §3.5.2 item 2's trap before emitting a capped numeral**: round the window FIRST and
+double the rounded value, because `2·r4(x)` can exceed `r4(2·x)` and that breaks `Maps.capped`'s
+own `2·Ā' ≤ Ē'`. `verify_vit` caught exactly this once.
+
+---
+
+⚠ **One correction that landed with the probe.** `1/(2ε√ε)` was hardcoded as `1.585·10⁸` in the
+uncapped-LayerNorm ablation branch of `cnx_eval_chain` / `vit_chain`. It is 10× the true ε-floor
+value (`S³/2 = 1.593·10⁷`) and, worse, **it did not track `S`** — so any `S`-sweep of that branch
+was folding at the ε-floor constant whatever `S` said. Now `S³/2`. ⚠ The ablation-only figures move
+~23–25 orders (ConvNeXt's LN-uncapped 10⁵²⁶² → 1.633·10⁵²³⁹, ViT's 10³²³⁹ → 3.741·10³²²⁶) and stay
+unstatable; **no committed number and no `verify_*` count is affected**, and all nine passes
+reproduce byte-for-byte. §3.3's and §3.5's ablation tables have the pre-fix digits, like §0's
+`ilog10` note.
+
 ## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
 
 §3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward has a certified tie
@@ -2887,6 +3050,10 @@ so all three batched block ties at `bnBatchLA` are missing. ⭐ The batched leaf
 shape — §3.24's last paragraph.
 
 **3. ✅ THE ESCAPE — MEASURED 2026-09-04 (§3.27), and the ranking's own premise was wrong.**
+⭐⭐ **Its cheap half is now item (B) of §3.28's recipe, and a NEW item (A) went in front of it:**
+§0.1's *"there is no theorem to state"* for training-mode normalisation is false, so a forward
+number for the mode the repo actually trains in is available today (§3.28). Do (A) first — it
+decides whether the escape-2 leaf serves two nets or five.
 ⛔ It is NOT "the only open item that would change what the numbers MEAN": the fold stays 82 orders
 (ConvNeXt-T) and 7 orders (ViT-Tiny) above the triangle inequality even with §0.1's quadratic gone,
 so both numbers stay CAPS. ⭐⭐ What it changes is what they SAY — **53 orders on ConvNeXt-T's
@@ -3138,6 +3305,12 @@ removed — ConvNeXt-T's is 4.710·10²²⁶ at `|istd| ≤ 16` — and it is **
 triangle inequality** at the same window, so `FloatBridgesTo.capped`'s `min` still selects the cap.
 On ViT-Tiny the gap is 7 orders. ⭐ So the right thing to say is not "no fold exists" but "the fold
 exists and is worse", which is a claim about magnitudes and not about LayerNorm.
+
+⭐⭐ **AND SAY WHICH NORMALISATION MODE — which after §3.28 is a choice and not a fact.** Every
+committed FORWARD number is at INFERENCE normalisation because §0.1 said the training-mode one had
+"no theorem to state"; it has one, as a CAP (r34: 3.176·10²²¹ / 6.349·10²²¹). So "the deployed
+ResNet-34 forward" now needs its mode said out loud in a way it did not when only one existed, and
+a training-mode number must carry the cap label as well as the mode.
 
 ⭐ Say the WINDOW and the BUDGET separately — after MobileNetV2 they are not the same story.
 A clamped-activation net can have a tight window and a vacuous budget at the same time, and

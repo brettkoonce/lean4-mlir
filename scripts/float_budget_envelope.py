@@ -151,6 +151,85 @@ def bn_eval(st, S=R34_S, G=R34_G, Bb=R34_BB, Mb=R34_MB, es=R34_ES, q=U32):
     return (G * ((A + Mb) * S) + Bb + nb, nb + G * S * E)
 
 
+R34_EMR = F(1, 100)   # deployed batch-MEAN accuracy, RELATIVE to the window (training mode)
+
+
+def bn_train(st, S=R34_S, G=R34_G, Bb=R34_BB, emr=R34_EMR, ei=R34_ES, q=U32, lin=False):
+    """TRAINING-mode BatchNorm: the statistics are reduced out of this batch, so perturbing the
+    input moves mu AND var and the modulus is QUADRATIC in the window (planning §0.1). This is
+    `bn()` wired to a caller — the leaf has been in this file, unused, since the 1e7417 figure
+    §0.1 quotes was measured.
+
+    `lin=True` is §0.1's ESCAPE 2 (§3.27): `|x̂| <= sqrt(n)` for the window and an
+    input-sensitivity `2e*S*(1+Xh)` free of the window. ⚠ `n` here is the reduction width the
+    BATCH normalises over — `N*h*w` at training, not the channel count a LayerNorm reduces over —
+    so `Xh` is much larger than ConvNeXt's 10..28 and the reset is correspondingly weaker."""
+    if lin:
+        return cnx_ln_leaf_lin(st, 1, S, emr, ei, q)     # placeholder width; see r34_train_chain
+    A, E = st
+    return bn(st, S, G, Bb, emr, ei, S, S ** 3 / 2, q)
+
+
+def r34_train_chain(S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB, emr=R34_EMR,
+                    ei=R34_ES, q=U32, lin=False, nred=None, cap=False):
+    """⭐⭐ The r34 forward at TRAINING-mode BatchNorm — the mode the repo actually trains in,
+    and the one §0.1 says has "no numeral to write down, so no theorem to state".
+
+    Same 90 stages as `r34_eval_chain`, with `bn_eval` replaced by `bn_train` at all 33 sites.
+    ⚠ Its purpose is to check §0.1's claim, which is about the BUDGET (1e7417) — the same
+    measurement records the WINDOW as 1e221, and `FloatBridgesTo.capped` turns any statable
+    window into a statable theorem. `cap=True` is that statement.
+
+    `lin=True` folds the escape-2 leaf instead; `nred` is the BatchNorm reduction width
+    (`h*w` per site at N = 1), which the escape needs and the shipped leaf does not."""
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    def bnsite(st, hw):
+        A, E = st
+        if lin:
+            mag, mod = cnx_ln_leaf_lin(st, nred if nred else hw, S, emr, ei, q)
+            mag = G * mag + Bb          # the affine the pure-normalise leaf does not carry
+            mod = G * mod
+        else:
+            mag, mod = bn_train(st, S, G, Bb, emr, ei, q)
+        mag = r4(mag)
+        return (mag, min(r4(2 * mag), r4(mod)) if cap else r4(mod))
+
+    out = []
+    st = (F(1), F(0))
+    st = R(conv(st, 3 * 7 * 7, w, b));   out.append(("stem.conv", st))
+    st = bnsite(st, 112 * 112);          out.append(("stem.bn", st))
+    plan = [("id", 64, 64, "a0", 56), ("id", 64, 64, "a1", 56), ("id", 64, 64, "a2", 56),
+            ("down", 64, 128, "d2", 28),
+            ("id", 128, 128, "b0", 28), ("id", 128, 128, "b1", 28), ("id", 128, 128, "b2", 28),
+            ("down", 128, 256, "d3", 14),
+            ("id", 256, 256, "c0", 14), ("id", 256, 256, "c1", 14), ("id", 256, 256, "c2", 14),
+            ("id", 256, 256, "c3", 14), ("id", 256, 256, "c4", 14),
+            ("down", 256, 512, "d4", 7),
+            ("id", 512, 512, "e0", 7), ("id", 512, 512, "e1", 7)]
+    for kind, ic, oc, tag, r in plan:
+        hw = r * r
+        blkin = st
+        if kind == "id":
+            s = R(conv(blkin, oc * 9, w, b)); out.append((f"{tag}.conv1", s))
+            s = bnsite(s, hw);                out.append((f"{tag}.bn1", s))
+            s = R(conv(s, oc * 9, w, b));     out.append((f"{tag}.conv2", s))
+            s = bnsite(s, hw);                out.append((f"{tag}.bn2", s))
+            st = R(residual(blkin, s));       out.append((f"{tag}.out", st))
+        else:
+            p = R(conv(blkin, ic, w, b));     out.append((f"{tag}.projconv", p))
+            p = bnsite(p, hw);                out.append((f"{tag}.projbn", p))
+            s = R(conv(blkin, ic * 9, w, b)); out.append((f"{tag}.conv1", s))
+            s = bnsite(s, hw);                out.append((f"{tag}.bn1", s))
+            s = R(conv(s, oc * 9, w, b));     out.append((f"{tag}.conv2", s))
+            s = bnsite(s, hw);                out.append((f"{tag}.bn2", s))
+            st = R(bipath(p, s));             out.append((f"{tag}.out", st))
+    st = R(gap(st, 49));                      out.append(("gap", st))
+    st = R(dense(st, 512, w, b));             out.append(("dense", st))
+    return out
+
+
 def r34_eval_chain():
     """Every stage of the deployed r34 eval forward, at block granularity.
 
@@ -768,7 +847,7 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
         else:
             mag = cnx_ln_leaf(A, S, emr, ei, q)
             nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
-            mod = nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000)))
+            mod = nb + ((E + E) * S + 2 * A * (8 * A * E * S ** 3 / 2))
         mag = r4(mag)
         # ⚠ `FloatBridgesTo.capped` is `min(mod, 2*mag)`, so the two branches are COMPARABLE and
         # the cap only ever helps. Round the window FIRST and double the rounded value (§3.5.2
@@ -1075,7 +1154,7 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
         else:
             mag = vit_ln_leaf(A, S, emr, ei, q)
             nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
-            mod = nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000)))
+            mod = nb + ((E + E) * S + 2 * A * (8 * A * E * S ** 3 / 2))
         mag = r4(mag)
         if ln_cap:
             err = min(r4(2 * mag), r4(mod))
@@ -2478,3 +2557,41 @@ if __name__ == "__main__":
         mg, _ = cnx_ln_leaf_lin((A, F(0)), 96, S, emr, F(1, 100), U32)
         print(f"       emr = {float(emr):.0e}, S = {int(S):>3}   emr·S = {float(emr * S):>6.3f}"
               f"   site gain {float(mg / A):>7.4g}")
+
+    print("\n── ⛔⛔ §0.1's \"NO THEOREM TO STATE\" IS FALSE: r34 at TRAINING-mode BN (§3.28) ──")
+    print("  §0.1 says of training-mode BatchNorm: \"There is no numeral to write down, so there")
+    print("  is no theorem to state\", on the strength of a BUDGET of 1e7417. But the same")
+    print("  measurement records the WINDOW as 1e221 — under §3.7(a)'s ~1e253 ceiling — and")
+    print("  `FloatBridgesTo.capped` (§3.3.0(a)) turns any statable window into a theorem.")
+    print(f"\n  {'ResNet-34 FORWARD at TRAINING-mode BatchNorm':<46} {'window':>12} {'budget':>12}"
+          f" {'bud/win':>9}  statable")
+    print("  " + "-" * 92)
+    for name, kw in [
+        ("shipped leaf, UNCAPPED — what §0.1 quotes", {}),
+        ("⭐⭐ shipped leaf, CAPPED — available TODAY", dict(cap=True)),
+        ("⭐ shipped leaf, capped, |istd| ≤ 16", dict(cap=True, S=F(16))),
+        ("escape 2, uncapped", dict(lin=True)),
+        ("⭐⭐ escape 2, CAPPED", dict(lin=True, cap=True)),
+        ("⭐ escape 2, capped, |istd| ≤ 16", dict(lin=True, cap=True, S=F(16))),
+    ]:
+        rr = r34_train_chain(**kw)
+        a, e = rr[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'NO'
+        print(f"  {name:<46} {sci(a):>12} {sci(e):>12} {_r(a, e)}  {ok}")
+    ea, ee = r34_eval_chain()[-1][1]
+    print(f"  {'the committed INFERENCE number, for scale':<46} {sci(ea):>12} {sci(ee):>12}"
+          f" {_r(ea, ee)}  yes")
+    print("\n  ⭐⭐ A TRAINING-MODE FORWARD NUMBER EXISTS AND ALWAYS DID: 3.176e221 / 6.349e221 with")
+    print("     the leaf exactly as shipped, and 4.304e145 / 8.605e145 under escape 2 (76 orders).")
+    print("     It is a CAP, so §9's label applies — but it is the first statement in this file")
+    print("     about the program the repo actually TRAINS with; all six committed forward numbers")
+    print("     are about inference.")
+    print("  ⭐⭐ WHY NOBODY NOTICED: §0.1 conflated \"the FOLD's numeral is unwritable\" with")
+    print("     \"there is no theorem\". `capped` was invented for LayerNorm and never tried on the")
+    print("     net whose problem it was invented to describe — §0.1 itself says LayerNorm \"has the")
+    print("     same quadratic term and no escape\", so the escape LN got applies to training BN")
+    print("     verbatim. BatchNorm just also has an eval mode, which made the cap look unneeded.")
+    print("  ⚠ The chain is `r34_train_chain` — `bn()`, the training-mode leaf, had been in this")
+    print("     file UNUSED since the 1e7417 figure was measured. It reproduces §0.1's window to")
+    print("     the exponent (1e221) and its budget to 2 parts in 7419 (1e7419 vs 1e7417), which")
+    print("     is the cross-check that the 90-stage reconstruction is the same net.")
