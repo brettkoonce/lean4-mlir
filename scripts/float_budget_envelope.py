@@ -1956,17 +1956,20 @@ def mnv2_paper_eval_chain(cap_bn=True, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32,
                           relu6_clamp=True):
     """`mnv2_eval_chain` at the 17-block paper net.
 
-    ⭐ `cap_bn` applies `FloatBridgesTo.capped` at every BN site — modulus `min(fold, 2·window)`,
-    the ConvNeXt-T treatment. Uncapped the 52-site fold is 2.104e266, past `norm_num`'s ceiling;
-    capped it is 8.176e16.
+    ⭐ `cap_bn` applies `FloatBridgesTo.capped` at ALL 52 BN sites — modulus `min(fold, 2·window)`,
+    of which only the `2·window` branch is ever emitted, the ConvNeXt-T treatment. Uncapped the
+    52-site fold is 2.104e266, past `norm_num`'s ceiling; capped it is 8.176e16.
 
-    ⛔ Read the label honestly: the `min` selects its RIGHT branch at 40 of the 52 sites, so this
-    is mostly the triangle inequality and not a fold. What the output numeral does say is that
-    from the last cap (`head.bn`) the three remaining stages — relu6, GAP, the classifier — fold
-    that capped error to 8.176e16. `budget/window` is 3.8e12 rather than the pure cap's 2.
+    ⛔ Read the label honestly: at a capped site the claim is the TRIANGLE INEQUALITY — both maps
+    land in the certified window — and not a fold. Taking the `min` instead would pick the fold at
+    12 of the 52 sites and change nothing downstream (same 8.176e16 to four figures), because the
+    last cap discards the history; capping uniformly is the statement
+    `MobileNetV2PaperFloatBudget.lean` makes and the one this emits. What the output numeral does
+    say is that from the last cap (`head.bn`) the three remaining stages — relu6, GAP, the
+    classifier — fold that capped error to 8.176e16. `budget/window` is 3.8e12 rather than the pure cap's 2.
 
-    ⚠ The window is ROUNDED before it is doubled. `2 * r4(x)` can exceed `r4(2 * x)` and break
-    `Maps.capped`'s own `2 * Ā' ≤ Ē'`."""
+    ⚠ The window is rounded, and the DOUBLE is rounded again (`r4(2·Ā')`, never `2·r4(Ā')`), so
+    the emitted numeral dominates `2·Ā'` and `Maps.capped`'s own `2 * Ā' ≤ Ē'` closes."""
     def R(st):
         return (r4(st[0]), r4(st[1]))
 
@@ -1975,7 +1978,7 @@ def mnv2_paper_eval_chain(cap_bn=True, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32,
 
     def bnE(st):
         A, E = R(bn_eval_mnv2(st, S, w, es, q))
-        return (A, min(E, 2 * A)) if cap_bn else (A, E)
+        return (A, r4(2 * A)) if cap_bn else (A, E)
 
     def cv(st, m):
         return R(conv(st, m, w, w))
@@ -2032,8 +2035,8 @@ def verify_mnv2_paper(rows, cap_bn=True, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32) 
         ck(tag + ".A", G * ((A + Mb) * S) + Bb + nb, dst[0])
         fold = nb + G * S * E
         ck(tag + ".E", min(fold, 2 * dst[0]) if cap_bn else fold, dst[1])
-        if cap_bn:                       # Maps.capped's own side condition
-            ck(tag + ".cap", 2 * dst[0], 2 * dst[0])
+        if cap_bn:                       # Maps.capped's own side condition, against the numeral
+            ck(tag + ".cap", 2 * dst[0], dst[1])
 
     def r6_ck(tag, src, dst):
         ck(tag + ".A", min(src[0], F(6)), dst[0])
@@ -2067,10 +2070,9 @@ def verify_mnv2_paper(rows, cap_bn=True, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32) 
     bn_ck("head.bn", r["head.conv"], r["head.bn"])
     r6_ck("head.r6", r["head.bn"], r["head.r6"])
     A, E = r["head.r6"]
-    inv = F(1) / F(49)
-    me = mulErr(q, inv, 49 * A, F(0), F(0))
-    ck("gap.A", inv * (49 * A) + me, r["gap"][0])
-    ck("gap.E", me + inv * (49 * E), r["gap"][1])
+    g50 = r4(gamma_q(49 + 1))
+    ck("gap.A", A * ((1 + g50) * (1 + q)), r["gap"][0])
+    ck("gap.E", A * (q * (1 + g50) + g50) + E, r["gap"][1])
     conv_ck("dense", MNV2_PAPER_DENSE_FAN, r["gap"], r["dense"])
     return n
 
@@ -2815,11 +2817,11 @@ if __name__ == "__main__":
     prows = mnv2_paper_eval_chain()
     pA, pE = prows[-1][1]
     uA, uE = mnv2_paper_eval_chain(cap_bn=False)[-1][1]
-    ncap = sum(1 for t, (a, e) in prows if t.endswith("bn") and e == 2 * a)
+    ncap = sum(1 for t, (a, e) in prows if t.endswith("bn") and e >= 2 * a)
     print(f"  FORWARD, eval-mode BN, 52 BN sites (the reduced net has 20)")
     print(f"    window        {sci(pA)}   (2154 at 6 blocks; the growth is the HEAD width,")
     print(f"                              dense fan-in 1280 vs 128 — relu6 still pins the body)")
-    print(f"    budget        {sci(pE)}   ⭐ CAPPED at the BN sites, {ncap} of 52 selected")
+    print(f"    budget        {sci(pE)}   ⭐ CAPPED at all {ncap} of the 52 BN sites")
     print(f"    uncapped      {sci(uE)}   — past norm_num's ~1e253, no theorem to state")
     print(f"    re-assertions {verify_mnv2_paper(prows)} — every rounded inequality re-checked")
     print(f"  ⭐⭐ The capped 17-block number is 79 orders SMALLER than the shipped UNCAPPED")

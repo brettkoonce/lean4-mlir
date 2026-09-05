@@ -98,6 +98,7 @@ import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Float.Resnet34TrainFloatBudget
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
+import LeanMlir.Proofs.Float.MobileNetV2PaperFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.EfficientNetFloatBudget
@@ -2197,7 +2198,7 @@ open Proofs
 -- measured 350-epoch profile (mnv2_float_logits_le). ⭐ The window is 97 orders below ResNet-34's
 -- 3.152e211 for ONE reason: relu6 clamps at 6 whatever its input (relu6_le_six), so
 -- floatClose_relu6 states FloatClose A (min A 6) and Maps.relu6 RESETS the window at each of the
--- 13 relu6 sites — where floatClose_relu's FloatClose A A is the best plain relu can do. ⚠ The
+-- 14 relu6 sites — where floatClose_relu's FloatClose A A is the best plain relu can do. ⚠ The
 -- BUDGET moves one order (3.072e97 -> 1.444e96): error gain per BN site is G*S and does not care
 -- how small the window is, so window and budget are separate levers and only the eps-floor
 -- S = 1/sqrt(eps) touches the budget.
@@ -2244,6 +2245,35 @@ open Proofs
 -- rblkGen pattern, transferred.
 #print axioms Proofs.invresBodyPC_eq_gen
 #print axioms Proofs.invresBodyStridedPC_eq_gen
+-- ⛔ The SAME whole-net number at the PAPER depth (MobileNetV2PaperFloatBudget.lean, ~95 s;
+-- proofs_tier_to_paper_nets 3.2b): all 17 bottlenecks of the [t,c,n,s] table, 52 inference-BN
+-- sites, window 2.152e4 and |float − real| ≤ 8.176e16 per logit (354 rational inequalities
+-- re-asserted by verify_mnv2_paper before emission). Every BatchNorm enters under
+-- FloatBridgesTo.capped, so AT those sites the claim is the triangle inequality and not the
+-- fold — uncapped the chain is 2.104e266, past norm_num, and there is no theorem to state.
+-- ⭐⭐ The capped 17-block number is 79 orders SMALLER than the six-block UNCAPPED 1.444e96:
+-- capping the normalisations is worth more than the eleven extra blocks cost, which is the same
+-- lesson as the reduced net's (window and budget are separate levers) from the other side.
+-- ⭐ MnvBn.cappedMaps takes no bound on the inherited error at all, which is the mechanism: the
+-- error entering a capped site is discarded, so a block's numerals depend only on its
+-- (ic, mid, oc) and b8/b9/b10 are numerically one block. The four *_eq_pcEval rfls tie each
+-- block to the abbreviation the committed inference forward is built from; ⚠ the whole-net
+-- graph tie does NOT exist here, because the paper net's eval twin has no typed graph in Lean.
+#print axioms Proofs.MnvBn.cappedMaps
+#print axioms Proofs.MnvBlockNoExp.bridgeC
+#print axioms Proofs.MnvBlockNoExp.mapsC
+#print axioms Proofs.MnvBlock.bodyMapsC
+#print axioms Proofs.MnvBlock.stridedMapsC
+#print axioms Proofs.MnvBlock.resMapsC
+#print axioms Proofs.MnvBlock.bodyFwd_eq_pcEval
+#print axioms Proofs.MnvBlock.stridedFwd_eq_pcEval
+#print axioms Proofs.MnvBlock.resFwd_eq_pcEval
+#print axioms Proofs.MnvBlockNoExp.fwd_eq_pcEval
+#print axioms Proofs.mnv2PaperEvalBridge
+#print axioms Proofs.mnv2PaperEvalBridge_maps
+#print axioms Proofs.mnv2PaperEvalBridge_mag_le
+#print axioms Proofs.mnv2PaperEvalBridge_fresh_le
+#print axioms Proofs.mnv2Paper_float_logits_le
 -- The EfficientNet-B0 INFERENCE forward and its graph — the eval twin of
 -- efficientnetFwdGraphB_faithful, and the BN mode a whole-net B0 float number can be stated at
 -- (the training one's modulus is quadratic in the window, so its fold squares at each of the ten

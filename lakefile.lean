@@ -341,6 +341,15 @@ lean_lib «Certs» where
              -- budget moves one order, because error gain per BN site is G*S and only the
              -- eps-floor S = 1/sqrt(eps) touches it. Window and budget are separate levers.
              `LeanMlir.Proofs.Float.MobileNetV2FloatBudget,
+             -- ⛔ The SAME net at the PAPER depth — all 17 bottlenecks of the [t,c,n,s] table, 52
+             -- BN sites — with a CAP at every one of them: window 2.152e4 / budget 8.176e16. The
+             -- cap is not a preference: uncapped the 52-site fold is 2.104e266, past norm_num,
+             -- so there is no theorem without it, and the claim AT those sites is the triangle
+             -- inequality rather than the fold. What it buys is 79 orders below the six-block
+             -- UNCAPPED 1.444e96 — capping the normalisations is worth more than eleven blocks
+             -- cost. ⚠ No whole-net graph tie: the paper net's eval twin has no typed graph in
+             -- Lean (its blocks are tied to invresBodyPCEval by rfl; the file says so).
+             `LeanMlir.Proofs.Float.MobileNetV2PaperFloatBudget,
              -- The B0 INFERENCE forward graph + whole-net faithfulness (the eval twin of
              -- efficientnetFwdGraphB_faithful). bnBatchLA is the ONE op in the B0 render that is
              -- not batchMap N of a per-example op — it reduces across examples; at frozen stats

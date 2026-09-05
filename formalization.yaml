@@ -71,11 +71,11 @@ status:
     ERROR -- a binary32 rounding model constructed from scratch (rndP, standard
     model proved, no hardware axioms); Type-valued whole-net float bridges
     (FloatBridgesTo, with the output window and error modulus carried as data)
-    for every net, forward and backward; kernel-checked numeric budgets for seven
+    for every net, forward and backward; kernel-checked numeric budgets for eight
     forwards and four input-gradient backwards (the *_float_logits_le and
     *_grad_float_le families), three of those backward chains proven to BE the
     certified whole-net VJP -- the budgets are interval folds, vacuous as numerical
-    certificates, and three are caps rather than folds (fidelity.divergences 4d);
+    certificates, and four are caps rather than folds (fidelity.divergences 4d);
     depth-linear adjoint-chain bounds plus a CIFAR-8 argmax-preservation
     certificate at the committed shape whose budget does not bite at trained
     magnitudes (fidelity.divergences 4c); an fp8-E4M3 argmax-preservation theorem;
@@ -208,6 +208,12 @@ status:
       literature_dependencies: []
     - declaration: "mnv2_float_logits_le"   # MobileNetV2 inference-BN forward: 1.444e96 / 2154, fold; the one non-vacuous window; XLA-SAME stem and four strided depthwises, as the shipped render (re-spelled 2026-09-05)
       file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "mnv2Paper_float_logits_le"   # MobileNetV2 at the 17-block PAPER depth, inference BN, 52 sites: 8.176e16 / 2.152e4, CAP at every BN site (uncapped 2.104e266, no theorem); 79 orders below the six-block UNCAPPED number; blocks tied to invresBodyPCEval by rfl, no whole-net graph tie (the paper net's eval twin has none)
+      file: "LeanMlir/Proofs/Float/MobileNetV2PaperFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -477,7 +483,7 @@ fidelity:
        `mag : R -> R` (input window -> output window), `mod : R -> R -> R` (input
        window, inherited error -> error modulus) and `close : forall A, 0 <= A ->
        0 <= mag A /\ FloatClose A (mag A) f fF (mod A)`; every combinator composes
-       the bookkeeping explicitly; the twelve whole-net bridges are noncomputable
+       the bookkeeping explicitly; the thirteen whole-net bridges are noncomputable
        defs whose `.mod` is a closed term over the per-op budgets; and a numeric
        bound on a whole-net `.mod` is a statement the kernel checks. The `2B`
        witness is still constructible, but its `.mod` is visibly `2B`. The legacy
@@ -486,7 +492,10 @@ fidelity:
 
        THE NUMBERS. Each is a theorem closed over the real leaves (no bridge
        hypothesis left), tied to the committed net by rfl and, for the forwards,
-       to the rendered graph by the `*_faithful` theorems. Every numeral is
+       to the rendered graph by the `*_faithful` theorems -- with one exception,
+       the 17-block MobileNetV2 forward, whose blocks are tied to the committed
+       inference block abbreviations by rfl but which has no whole-net graph tie,
+       because the paper net's eval twin has no typed graph in Lean. Every numeral is
        generated in the leaves' own exact-rational arithmetic and re-asserted by
        scripts/float_budget_envelope.py before the kernel checks it. Window =
        certified output magnitude; budget = |float - real| per logit (forwards) or
@@ -498,6 +507,7 @@ fidelity:
            ResNet-34 forward, inference BN       1.548e209 / 3.152e211  fold   r34_float_logits_le
            ResNet-34 forward, training BN        1.752e81  / 8.748e80   CAP    r34_train_float_logits_le  (per example)
            MobileNetV2 forward, inference BN     1.444e96  / 2.154e3    fold   mnv2_float_logits_le
+           MobileNetV2 forward, 17-block paper   8.176e16  / 2.152e4    CAP    mnv2Paper_float_logits_le  (52 BN sites, all capped)
            EfficientNet-B0 forward, inference BN 8.408e210 / 2.580e55   fold   b0_float_logits_le         (any batch size)
            ConvNeXt-T forward                    9.738e130 / 4.871e130  CAP    cnx_float_logits_le
            ViT-Tiny forward                      4.794e108 / 2.397e108  CAP    vit_float_logits_le
@@ -512,8 +522,12 @@ fidelity:
        and the `2*mag` branch is what closes at every normalisation site, so it
        states only that the float and the real output both lie in the certified
        window -- the triangle inequality; budget/window = 2.00 is the tell, and a
-       cap must never be tabled beside a fold without the label. The three caps
-       are caps because a normalisation that reduces its statistics out of its
+       cap must never be tabled beside a fold without the label. Read the tell
+       carefully on the 17-block MobileNetV2 forward: it caps at every BatchNorm
+       and then runs three more stages (relu6, GAP, the classifier) which collapse
+       the window and carry the error forward, so its ratio is 3.8e12 and the
+       label has to be read off the file rather than off the ratio. The first
+       three caps are caps because a normalisation that reduces its statistics out of its
        own input has a modulus QUADRATIC in the window (training-mode BatchNorm,
        LayerNorm; squeeze-excite likewise; attention exponentially), so the
        uncapped fold runs past what `norm_num` will evaluate (~1e253 for a nested
@@ -525,7 +539,7 @@ fidelity:
        not perturb. Two numbers carry a batch qualifier: B0's backward is at
        batch size 1 because `bnBatchLA` reduces across examples (2.880e194 at
        N = 256), and ResNet-34's training forward is per example for the same
-       reason; the six inference forwards hold at any batch size.
+       reason; the seven inference forwards hold at any batch size.
 
        WHAT IS SUPPLIED. Device kernels with no IEEE specification carry an
        accuracy hypothesis of 1e-2, quantified over any device at least that
@@ -684,7 +698,7 @@ alignment:
       lean: "rndP_err; <net>_float_logits_le (7 forwards) and <net>_grad_float_le (4 backwards); r34InputGrad_eq_resnet34_vjp / mnv2InputGrad_eq_mobilenetv2_vjp / convnextInputGrad_eq_convNextForwardTCh_vjp; chain_adjointClose; cifar8_chain_argmaxSafeH"
       module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Float/*FloatBudget.lean, LeanMlir/Proofs/Foundation/*CertifiedTie.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       status: "proved"
-      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the budgets are interval folds, vacuous as numerical certificates, three of them caps (fidelity 4d); the CIFAR-8 argmax certificate does not bite at trained magnitudes (fidelity 4c)"
+      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the budgets are interval folds, vacuous as numerical certificates, four of them caps (fidelity 4d); the CIFAR-8 argmax certificate does not bite at trained magnitudes (fidelity 4c)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
       module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"

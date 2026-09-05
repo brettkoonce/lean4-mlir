@@ -23,7 +23,7 @@ and hence, per logit, `|float − real| ≤ 1.444·10⁹⁶` (`mnv2_float_logits
 ⭐⭐ **The window is essentially tight, and that is the new thing here.** ResNet-34's certified
 window is `3.152·10²¹¹` against logits of a few; MobileNetV2's is `2154`. The whole difference is
 one lemma: `relu6 x i = min (max (x i) 0) 6` is bounded by `6` *whatever its input*, so
-`floatClose_relu6` states `FloatClose A (min A 6)` and every one of the net's 13 relu6 sites
+`floatClose_relu6` states `FloatClose A (min A 6)` and every one of the net's 14 relu6 sites
 RESETS the certified magnitude rather than passing the incoming one through. ResNet-34 cannot
 have this — plain `relu` has no upper clamp, and `floatClose_relu`'s `FloatClose A A` is the best
 it can do. Folded without the clamp this net's window is `4.309·10¹⁰⁰`

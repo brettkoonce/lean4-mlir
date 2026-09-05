@@ -254,7 +254,7 @@ rather than measured windows.
 ⭐⭐ **MobileNetV2's WINDOW is not vacuous, and that is the result of the second net.** 2154,
 against logits of a few — where ResNet-34's is 10²¹¹. One lemma does all of it: `relu6` is
 bounded by 6 whatever its input, so `floatClose_relu6` now states `FloatClose A (min A 6)` and
-every one of the net's 13 relu6 sites RESETS the certified magnitude. Without the clamp the same
+every one of the net's 14 relu6 sites RESETS the certified magnitude. Without the clamp the same
 fold gives 4.309·10¹⁰⁰ (`mnv2_eval_chain(relu6_clamp := False)`). ResNet-34 cannot have this;
 plain `relu` has no upper clamp. ⚠ **And the budget moved one order, 3.072·10⁹⁷ → 1.444·10⁹⁶.**
 Window and budget are separate levers (§3.2), and only `S = 1/√ε` moves the budget. MobileNetV2

@@ -1,8 +1,11 @@
 # Whole-net float budgets
 
-**Status, 2026-09-05: the research thread is closed.** Seven forwards and four input-gradient
+**Status, 2026-09-05: the research thread is closed.** Eight forwards and four input-gradient
 backwards carry kernel-checked numbers; three backward chains are proven to be the certified
-whole-net gradient. What remains is three closing items (section 5) and then a freeze. The
+whole-net gradient. The eighth forward — MobileNetV2 at its seventeen-block paper depth — came
+from `planning/proofs_tier_to_paper_nets.md` package 3.2(b), not from re-opening this thread: it
+states an existing kind of number about a bigger net, and shaves no orders off any row below.
+What remains is three closing items (section 5) and then a freeze. The
 session-by-session record, with the ablations and the corrections, is
 `planning/archive/float_budget_numbers_log.md`; its section numbers are what the Lean docstrings
 cite (`§0.1`, `§3.16`, `§9`, ...) and are preserved there.
@@ -14,10 +17,13 @@ what to do if one of these files is opened again.
 
 Every row is a theorem in `LeanMlir/Proofs/Float/`, closed over the real leaves (no
 `FloatBridgesTo` hypothesis left), tied to the committed net definition and, for the forwards,
-to the rendered graph. Every numeral was produced by `scripts/float_budget_envelope.py` in the
-leaves' own exact-rational arithmetic, re-asserted by that script's `verify_*` pass, and then
-checked again by the kernel. All are 3-axiom clean and listed in `tests/AuditAxioms.lean` and
-`formalization.yaml` (status.main_results, fidelity 4d).
+to the rendered graph — with one exception, flagged in the table: the seventeen-block MobileNetV2
+row ties each of its blocks to the committed inference block abbreviation by `rfl` but has no
+whole-net graph tie, because the paper net's eval twin has no typed graph in Lean. Every numeral
+was produced by `scripts/float_budget_envelope.py` in the leaves' own exact-rational arithmetic,
+re-asserted by that script's `verify_*` pass, and then checked again by the kernel. All are
+3-axiom clean and listed in `tests/AuditAxioms.lean` and `formalization.yaml`
+(status.main_results, fidelity 4d).
 
 | net | mode and qualifiers | window | budget | kind | theorem | file |
 |---|---|---|---|---|---|---|
@@ -25,6 +31,7 @@ checked again by the kernel. All are 3-axiom clean and listed in `tests/AuditAxi
 | ResNet-34 forward | inference BN | 3.152e211 | 1.548e209 | fold | `r34_float_logits_le` | `Resnet34FloatBudget.lean` |
 | ResNet-34 forward | training BN, per example | 8.748e80 | 1.752e81 | cap | `r34_train_float_logits_le` | `Resnet34TrainFloatBudget.lean` |
 | MobileNetV2 forward | inference BN | 2.154e3 | 1.444e96 | fold | `mnv2_float_logits_le` | `MobileNetV2FloatBudget.lean` |
+| MobileNetV2 forward, 17-block paper | inference BN, 52 sites, capped at every one; blocks tied, no graph tie | 2.152e4 | 8.176e16 | cap | `mnv2Paper_float_logits_le` | `MobileNetV2PaperFloatBudget.lean` |
 | EfficientNet-B0 forward | inference BN, any batch size | 2.580e55 | 8.408e210 | fold | `b0_float_logits_le` | `EfficientNetFloatBudget.lean` |
 | ConvNeXt-T forward | channel LayerNorm | 4.871e130 | 9.738e130 | cap | `cnx_float_logits_le` | `ConvNeXtFloatBudget.lean` |
 | ViT-Tiny forward | vector LayerNorm, depth 12 | 2.397e108 | 4.794e108 | cap | `vit_float_logits_le` | `ViTFloatBudget.lean` |
@@ -78,13 +85,17 @@ worst-case windows through 30 or more layers; on ResNet-34 the conv fan-in face 
 95 times loose per layer against the measured row-L1 norm, and even at that measured face the
 training forward would land at 1e19. A bound that bites needs the on-trajectory Jacobian, which
 the adjoint-chain probe measures and which is not a static hypothesis (`planning/adjoint_chain.md`,
-`formalization.yaml` fidelity 4c). The one non-vacuous number is MobileNetV2's window, 2154,
-and that is the window, not the budget.
+`formalization.yaml` fidelity 4c). The one non-vacuous number is MobileNetV2's window, 2154
+(2.152e4 at the paper depth, and the growth is the wider classifier, not the eleven extra
+blocks), and that is the window, not the budget.
 
-**The three caps are the triangle inequality.** `FloatBridgesTo.capped` replaces a modulus by
+**The four caps are the triangle inequality.** `FloatBridgesTo.capped` replaces a modulus by
 `2 * mag`, so a capped statement says only that the float and the real output both lie in the
-certified window. `budget / window = 2.00` is the tell. Never table a cap beside a fold without
-the label.
+certified window. `budget / window = 2.00` is the tell — with one exception to read carefully:
+the seventeen-block MobileNetV2 forward caps at every BatchNorm and then runs three more stages
+(relu6, GAP, the classifier) which collapse the window and carry the error forward, so its ratio
+is 3.8e12 and the label has to be read off the file, not off the ratio. Never table a cap beside
+a fold without the label.
 
 **No forward-then-backward composition exists.** The backwards assume the saved activations
 are accurate to 1e-2. No forward statement supplies that: the inference forwards are about a
@@ -155,10 +166,19 @@ vacuous, and a tight bound needs measured Jacobians that are not static.
    three BatchNorm-backward sites at x5.4e3 each. Same shape as EfficientNet-B0's backward at 16
    MBConvs (1e431), and the same answer: report that there is no number, do not shave.
 
-   ⭐ Its FORWARD is the opposite result. Uncapped the 52-site fold is 2.104e266 — no theorem —
-   but capped at the BatchNorm sites it is 8.176e16, which is 79 orders SMALLER than the shipped
-   UNCAPPED six-block number (1.444e96). Capping the normalisation sites is worth more than the
-   eleven extra blocks cost. ⛔ Label it: the `min` selects the cap at 40 of the 52 sites.
+   ⭐ Its FORWARD is the opposite result, and it is now a theorem
+   (`MobileNetV2PaperFloatBudget.lean`, 2026-09-05). Uncapped the 52-site fold is 2.104e266 — no
+   theorem — but capped at the BatchNorm sites it is 8.176e16, which is 79 orders SMALLER than the
+   shipped UNCAPPED six-block number (1.444e96). Capping the normalisation sites is worth more
+   than the eleven extra blocks cost. ⛔ Label it: the Lean caps at ALL 52 sites, so at every
+   normalisation the claim is the triangle inequality and not the fold. Taking `min(fold, 2·mag)`
+   instead would select the fold at 12 of the 52 and change nothing to four figures — the last cap
+   discards the history — so the uniform cap is both the simpler statement and the honest one.
+
+   ⭐ A property of the cap worth keeping: at a capped site the output error is `2·window` and the
+   inherited error is discarded, so a block's stage numerals depend only on its `(ic, mid, oc)` and
+   not on its depth. `b8`, `b9` and `b10` are numerically one block. That is what makes a
+   seventeen-block chain writable at all; it is not a fact about the net.
 
 ## 4. What the thread found in the repo
 
@@ -185,16 +205,16 @@ in section 7.
 
 Each has an acceptance criterion. None makes a number smaller.
 
-1. **Inhabitation checks for every budget file. Done 2026-09-05.** Each of the eleven budget
+1. **Inhabitation checks for every budget file. Done 2026-09-05.** Each of the twelve budget
    files ends with an `Inhabitation` section: a `*.zero` / `*.exact` witness per record (zero
    weights, zero saved activations, the exact device kernels `DeviceRsqrt.exact`,
    `DeviceSigmoid.exact`, `DeviceLN.exact`, `DeviceGelu.exact`, `DeviceExp.exact`, the last three
    in `FloatBudgetEnvLN.lean`) and an `example` applying the headline theorem to the witness at
-   `binary32`, so every hypothesis is discharged by data and none of the eleven theorems is about
+   `binary32`, so every hypothesis is discharged by data and none of the twelve theorems is about
    an empty type. The two backwards with an operating point (`|istd| ≤ 16`) are witnessed at
    `ε = 1/256`: at zero saved activations the inverse-stddev is `1/√ε`, so the operating point at
    the eps-floor needs saved activations with per-channel variance at least `1/256 − ε`, a
-   checkpoint fact rather than a shape fact. The other nine are at `ε = 1/100000`.
+   checkpoint fact rather than a shape fact. The other ten are at `ε = 1/100000`.
 
 2. **The standing audit. Done 2026-09-05.** Every commit touching `Codegen/StableHLO.lean`
    whose message names a fix (8 of 56) was read, and for each fix that changed what a map

@@ -1,8 +1,8 @@
 # Bringing every net's Proofs tier to its paper-faithful net
 
 **Scoped 2026-09-05 from the Proofs-tier audit run during the XLA-SAME re-spelling. Nothing
-below is started except where a row says so; 3.1 has since landed.** The target is the level
-ConvNeXt-T sits at: every certification tier stated at the net the artifact runs, the column
+below is started except where a row says so; 3.1 and 3.2 have since landed.** The target is the
+level ConvNeXt-T sits at: every certification tier stated at the net the artifact runs, the column
 "tiers only at a reduced or representative net" empty for every architecture. ConvNeXt-T had one
 hole of its own when this was scoped — its train-step tie was at the retired scalar LN — and
 3.1 closed it, so it is now the clean reference the other six are measured against.
@@ -42,7 +42,7 @@ shipped config count as paper-net statements.
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ | ✓ 262 params (stem symmetric) | ✗ 3-block | ✗ 3-block, N=1 | ✗ open at 3-block | none |
-| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ | ✓ 210 params | ⚠ probed, CAP 8.176e16, Lean unwritten | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
+| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 
@@ -57,6 +57,10 @@ Two axes cut across the table and are recorded separately from it:
   trainers at batch BN (`scripts/convention_audit.py` reports `bn-split` for exactly these two).
   EfficientNet is batch BN on both sides (`bnBatchLA`). Section 4 prices the batched forwards;
   it is a larger gap than padding, and a decision, not a task.
+  ⚠ A third, narrower split sits under T4 specifically: every whole-net forward BUDGET is stated
+  at INFERENCE BN, because the training-mode modulus is quadratic in the window, and a net's
+  eval-BN graph is a separate artifact from its training one. MobileNetV2 has an eval graph at
+  six blocks and none at seventeen, which is why 3.2(b)'s number has no whole-net graph tie.
 
 ## 3. Work packages, in order
 
@@ -109,13 +113,13 @@ Gates: `lake build Certs` 3956 green, `lake env lean tests/AuditAxioms.lean` 3-a
 `lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`. No renderer or `.mlir`
 change — this is a den-level tie, as r34/mnv2 are.
 
-### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6) — **(a) and (c) DONE 2026-09-05; (b) probed, Lean unwritten**
+### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6) — **DONE 2026-09-05**
 
 **(a) DONE.** `formalization.yaml`'s headline row now names `mobilenetv2_full_has_vjp_at_correct`
 in `MobileNetV2FullVJP.lean` — the 17-block paper net — where it named the 2-block generic in
 `MobileNetV2.lean`. The blueprint (`content.tex:6249`) already had the right theorem.
 
-**(b) PROBED; the forward has a number, the backward does not.** `scripts/float_budget_envelope.py`
+**(b) DONE; the forward has a number, the backward does not.** `scripts/float_budget_envelope.py`
 gains `mnv2_paper_{plan,eval_chain,back_chain}` and `verify_mnv2_paper` (354 rounded inequalities
 re-asserted). The block table is read from TWO Lean sources rather than a fourth hand-written
 copy — kinds and spatial dims from `mobilenetv2ForwardPaper`, widths from `paperSig` — and the
@@ -145,11 +149,35 @@ blaming the depth: the BN γ bound 1.69 → 1 buys 12 orders and the conv kernel
 fiction gets under. This is EfficientNet-B0's backward situation (1e431) and takes the same
 answer.
 
-**Left in (b):** `MobileNetV2PaperFloatBudget.lean` for the capped forward, and the §1 row plus
-the backward finding in `planning/float_budget_numbers.md`. ⛔ Label it honestly when written: the
-`min` selects the CAP at 40 of the 52 sites, so it is mostly the triangle inequality; what the
-output numeral says is that from the last cap (`head.bn`) the three remaining stages fold that
-capped error to 8.176e16. No `MobileNetV2PaperBackFloatBudget.lean` — there is nothing to state.
+**What landed for (b).** `MobileNetV2PaperFloatBudget.lean`: `mnv2Paper_float_logits_le`, window
+`2152 * 10 ^ 1` and budget `8176 * 10 ^ 13`, over a closed `FloatBridgesTo` for the whole
+seventeen-block inference net, 25 `Maps` steps at block granularity, ~90 s to elaborate. The §1
+row and the backward finding are in `planning/float_budget_numbers.md`. No
+`MobileNetV2PaperBackFloatBudget.lean` — there is nothing to state.
+
+⛔ **The cap is at ALL 52 sites, not 40.** The scoping said the `min` selects the fold at 12 of
+them; the Lean caps uniformly instead, and the headline is the same to four figures, because the
+last cap discards everything before it. Capping uniformly avoids a per-site case split in the
+block combinators (`bodyMapsC` / `stridedMapsC` / `resMapsC` / `MnvBlockNoExp.mapsC` take
+`2 * Ā' ≤ Ē'` at every normalisation and no bound on the inherited error at all) and makes the
+label unambiguous: at every BatchNorm the claim is the triangle inequality. The probe was moved
+to match (`mnv2_paper_eval_chain` now emits `r4(2·Ā')`, rounded AFTER doubling so
+`Maps.capped`'s own side condition closes; `verify_mnv2_paper` checks it against the numeral
+rather than against itself, and its GAP check was corrected to `Maps.gap`'s shape).
+
+⭐ **Why the file is writable at seventeen blocks at all**: at a capped site the output error is
+`2·window` and the incoming error is discarded, so a block's stage numerals depend only on its
+`(ic, mid, oc)` — `b8`, `b9` and `b10` are numerically one block, and every relu6 resets the
+window to 6. A property of the cap, not of the net.
+
+⚠ **One rung is open and the file says so.** The number is tied to the paper ladder by four
+dimension-polymorphic `rfl`s (`MnvBlock.{body,strided,res}Fwd_eq_pcEval`,
+`MnvBlockNoExp.fwd_eq_pcEval`: each block IS the abbreviation the committed inference forward is
+built from) but NOT to a whole-net graph, because the paper net's *eval* twin has no ℝ-def and no
+typed `SHlo` graph in Lean — `MobileNetV2RenderPCEval.lean` covers the six-block net only, while
+`MobileNetV2FullPaper.lean` is at training BN. Closing it is the eval twin of that file's graph
+section (four block-kind graphs + faithfulness + the chain, mechanical) and a `_committed`
+restatement; it is T2-at-eval for the paper net and is scoped nowhere else in this document.
 
 **(c) DONE.** `MobileNetV2PaperWholeBackCertifiedTie.lean`:
 `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp`, the 6-block tie at depth 17. No new mathematics —
@@ -331,9 +359,10 @@ either answer should be written into `formalization.yaml` 4d, which today says n
 
 ## 6. Files
 
-New, by package: 3.1 none; 3.2 `MobileNetV2PaperFloatBudget.lean`,
-`MobileNetV2PaperBackFloatBudget.lean`, `MobileNetV2PaperWholeBackCertifiedTie.lean`, a VJP in
-`MobileNetV2FullPaper.lean`; 3.3 `EfficientNetFullFloatBudget.lean`,
+New, by package: 3.1 none; 3.2 all landed — `MobileNetV2PaperFloatBudget.lean` and
+`MobileNetV2PaperWholeBackCertifiedTie.lean` (⛔ `MobileNetV2PaperBackFloatBudget.lean` is
+CANCELLED, there is no backward number to state, and the VJP was already in
+`MobileNetV2FullVJP.lean`); 3.3 `EfficientNetFullFloatBudget.lean`,
 `EfficientNetFullBackFloatBudget.lean`, `EfficientNetFullWholeBackCertifiedTie.lean`; 3.4
 `ViTWholeBackCertifiedTie.lean`, `ViTBackFloatBudget.lean`; 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
