@@ -42,11 +42,9 @@ namespace FloatBridgesTo
 -- § The patchify backward (the second scatter, then the conv)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The odd-decimation backward is a zero-fill scatter — exact, envelope unchanged. The
-    `Maps.decimateBack` of the stride-4 stem's second upsample. -/
-theorem Maps.decimateOddBack (oc h w : Nat) {Ā Ē : ℝ} :
-    (floatBridgesTo_decimateOddBack oc h w).Maps Ā Ē Ā Ē :=
-  ⟨fun _ _ hle => hle, fun _ _ _ _ _ hEle => hEle⟩
+-- `Maps.decimateOddBack` (the second scatter's leaf) lives beside `Maps.decimateBack` in
+-- `FloatBudgetEnvBack.lean` since 2026-09-05: the XLA-`SAME` stride-2 backwards need it too, and
+-- they must not import this LayerNorm cone to get it.
 
 /-- **An envelope through the 4×4/s4 PATCHIFY input-gradient** — two zero-fill scatters, then the
     reversed-kernel conv at the quadrupled resolution. Three stages, two of them exact, so the

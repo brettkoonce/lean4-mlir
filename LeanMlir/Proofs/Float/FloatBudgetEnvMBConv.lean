@@ -114,6 +114,29 @@ theorem Maps.depthwiseStride2Flat {c h w kH kW : Nat} (M : FloatModel)
     show layerBudget M.u (kH * kW) w' β A E ≤ Ē'
     exact (layerBudget_le_num' M.u_nonneg hw' hβ h0 hle hE0 hEle hg).trans hĒ'
 
+/-- **An envelope through an XLA-`SAME` stride-2 depthwise convolution** — `Maps.depthwiseStride2Flat`
+    verbatim at the odd phase; MobileNetV2's four strided depthwises after the re-spelling. -/
+theorem Maps.depthwiseStride2FlatXla {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) (bb : Vec c) {w' β : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < c * (2 * h) * (2 * w))
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |bb ch| ≤ β)
+    {g Ā Ē Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (kH * kW + 2) - 1 ≤ g)
+    (hĀ' : (1 + g) * (((kH * kW : ℕ) : ℝ) * w' * Ā + β) ≤ Ā')
+    (hĒ' : g * (((kH * kW : ℕ) : ℝ) * w' * (Ā + Ē) + β)
+            + ((kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
+    (floatBridgesTo_depthwiseStride2FlatXla (h := h) (w := w) M W bb hw' hβ hn hW hb).Maps
+      Ā Ē Ā' Ē' where
+  mag_le := fun A h0 hle => by
+    show layerAct (kH * kW) w' β A + layerBudget M.u (kH * kW) w' β A 0 ≤ Ā'
+    have h1 := layerAct_le_num' (m := kH * kW) (β := β) hw' hle
+    have h2 := layerBudget_le_num' (m := kH * kW) M.u_nonneg hw' hβ h0 hle
+      (le_refl (0:ℝ)) (le_refl (0:ℝ)) hg
+    simp only [add_zero, mul_zero] at h2
+    nlinarith
+  mod_le := fun A E h0 hE0 hle hEle => by
+    show layerBudget M.u (kH * kW) w' β A E ≤ Ē'
+    exact (layerBudget_le_num' M.u_nonneg hw' hβ h0 hle hE0 hEle hg).trans hĒ'
+
 -- ════════════════════════════════════════════════════════════════
 -- § EfficientNet's smooth activations and the squeeze-excite rescale
 -- ════════════════════════════════════════════════════════════════

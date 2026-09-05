@@ -372,6 +372,30 @@ theorem Maps.flatConvStride2 {ic oc h w kH kW : Nat} (M : FloatModel)
     show layerBudget M.u (ic * kH * kW) w' β A E ≤ Ē'
     exact (layerBudget_le_num' M.u_nonneg hw' hβ h0 hle hE0 hEle hg).trans hĒ'
 
+/-- **An envelope through an XLA-`SAME` stride-2 convolution** — `Maps.flatConvStride2` verbatim:
+    the odd decimation picks coordinates too, so the fan-in `ic·kH·kW` and the budget are unchanged.
+    The B0 and MobileNetV2 stems' leaf after the 2026-09-05 re-spelling; the numerals a chain
+    closes through this are the ones it closed through the symmetric leaf. -/
+theorem Maps.flatConvStride2Xla {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (bb : Vec oc) {w' β : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |bb o| ≤ β)
+    {g Ā Ē Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (ic * kH * kW + 2) - 1 ≤ g)
+    (hĀ' : (1 + g) * (((ic * kH * kW : ℕ) : ℝ) * w' * Ā + β) ≤ Ā')
+    (hĒ' : g * (((ic * kH * kW : ℕ) : ℝ) * w' * (Ā + Ē) + β)
+            + ((ic * kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
+    (floatBridgesTo_flatConvStride2Xla (h := h) (w := w) M W bb hw' hβ hn hW hb).Maps Ā Ē Ā' Ē' where
+  mag_le := fun A h0 hle => by
+    show layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0 ≤ Ā'
+    have h1 := layerAct_le_num' (m := ic * kH * kW) (β := β) hw' hle
+    have h2 := layerBudget_le_num' (m := ic * kH * kW) M.u_nonneg hw' hβ h0 hle
+      (le_refl (0:ℝ)) (le_refl (0:ℝ)) hg
+    simp only [add_zero, mul_zero] at h2
+    nlinarith
+  mod_le := fun A E h0 hE0 hle hEle => by
+    show layerBudget M.u (ic * kH * kW) w' β A E ≤ Ē'
+    exact (layerBudget_le_num' M.u_nonneg hw' hβ h0 hle hE0 hEle hg).trans hĒ'
+
 end FloatBridgesTo
 
 -- ════════════════════════════════════════════════════════════════

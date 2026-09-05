@@ -737,6 +737,23 @@ theorem b0_float_logits_le (N : Nat) (hN : 0 < N) (M : FloatModel) (hMu : M.u �
     |b0EvalForwardF N M D Rq W x j - b0EvalForward N W ε x j| ≤ 8408 * 10 ^ 207 :=
   (b0EvalBridge_maps N hN M hMu hε5 D Rq W).budget_le (by norm_num) le_rfl x hx j
 
+/-- **Step 2 of the XLA-`SAME` re-spelling (2026-09-05): the odd-phase stem leaf closes the same
+    numerals.** `Maps.flatConvStride2Xla` is `Maps.flatConvStride2` verbatim (a decimation picks
+    coordinates, so the `3·3·3` fan-in and the budget are unchanged), and this is the kernel-checked
+    form of that sentence: the committed stem numerals `Ā' = 114.9`, `Ē' = 1.985e-7` of
+    `b0EvalBridge_maps`'s first stage go through the XLA leaf untouched. Scaffolding for step 5,
+    which moves `b0EvalBridge` itself to the XLA stem and retires this. -/
+example (M : FloatModel) (hMu : M.u ≤ u32)
+    (W : EnetWeights (41/10) (41/10) (41/10) (41/10) (41/10)) :
+    (floatBridgesTo_flatConvStride2Xla (h := 112) (w := 112) M W.stem.W W.stem.b
+      (by norm_num) (by norm_num) (by norm_num) W.stem.hW W.stem.hb).Maps
+      1 0 (1149 / 10 ^ 1) (1985 / 10 ^ 7) :=
+  FloatBridgesTo.Maps.flatConvStride2Xla (h := 112) (w := 112) M W.stem.W W.stem.b
+    (by norm_num) (by norm_num) (by norm_num) W.stem.hW W.stem.hb
+    (M.gamma_num (q := 1729 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32]))
+    (by norm_num [bnNormBudget, FloatModel.mulErr, u32])
+    (by norm_num [bnNormBudget, FloatModel.mulErr, u32])
+
 -- ════════════════════════════════════════════════════════════════
 -- § The tie: this IS the committed inference forward, and the graph denotes it
 -- ════════════════════════════════════════════════════════════════

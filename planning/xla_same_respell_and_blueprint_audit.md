@@ -119,7 +119,14 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    grid before writing the tie (the method of the archived log, section 3.19). Done when both ties
    compile and the probe agrees exactly.
 
-2. **Float leaves.** `floatClose_flatConvStride2Xla` / `floatBridgesTo_` / `Maps.flatConvStride2Xla`
+2. **Float leaves. Done 2026-09-05** (`floatClose_` / `floatBridges_` / `floatBridgesTo_` for
+   `flatConvStride2Xla` in `Resnet34WholeFloatBridge.lean` and for `depthwiseStride2FlatXla` in
+   `EfficientNetWholeFloatBridge.lean`; the float peers `FloatModel.flatConvStride2XlaF` /
+   `depthwiseStride2FlatXlaF`; `Maps.flatConvStride2Xla`, `Maps.depthwiseStride2FlatXla`,
+   `Maps.flatConvStride2XlaBack`, `Maps.depthwiseStride2XlaBack`; `Maps.decimateOddBack` moved
+   from the LN file to `FloatBudgetEnvBack.lean` so the stride-2 leaves reach it; an `example`
+   in `EfficientNetFloatBudget.lean` closes the stem at `b0EvalBridge_maps`'s numerals through
+   the XLA leaf, to be retired by step 5). Original text: `floatClose_flatConvStride2Xla` / `floatBridgesTo_` / `Maps.flatConvStride2Xla`
    with the float peer `decimateOddFlat ∘ flatConvF`, and the depthwise peer; backward
    `Maps.flatConvStride2XlaBack` and `Maps.depthwiseStride2XlaBack` as `convBack` after
    `decimateOddBack`. Put them beside the symmetric ones (`Resnet34WholeFloatBridge.lean` /

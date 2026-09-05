@@ -76,6 +76,40 @@ theorem floatBridges_depthwiseStride2Flat {c h w kH kW : Nat} (M : FloatModel)
     add_nonneg (layerAct_nonneg hw' hbb hA) (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
     floatClose_depthwiseStride2Flat M W b hw' hbb hA hn hW hb⟩
 
+/-- The float XLA-`SAME` stride-2 depthwise: the ODD decimation of the float stride-1 depthwise
+    (the float peer of `depthwiseStride2FlatXla = decimateOddFlat ∘ depthwiseFlat`). MobileNetV2's
+    four strided depthwises at the TF-origin convention. -/
+noncomputable def FloatModel.depthwiseStride2FlatXlaF {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w) :=
+  decimateOddFlat c h w ∘ (M.depthwiseFlatF (h := 2 * h) (w := 2 * w) W b)
+
+/-- **XLA-`SAME` stride-2 depthwise is `FloatClose`** — `floatClose_depthwiseStride2Flat` read at
+    the odd coordinates; same `kH·kW` fan-in, same `layerBudget`. -/
+theorem floatClose_depthwiseStride2FlatXla {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) {w' bb A : ℝ}
+    (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hA : 0 ≤ A) (hn : 0 < c * (2 * h) * (2 * w))
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb) :
+    FloatClose A
+      (layerAct (kH * kW) w' bb A + layerBudget M.u (kH * kW) w' bb A 0)
+      (depthwiseStride2FlatXla (h := h) (w := w) W b)
+      (M.depthwiseStride2FlatXlaF (h := h) (w := w) W b)
+      (fun e => layerBudget M.u (kH * kW) w' bb A e) := by
+  obtain ⟨hm, he⟩ := floatClose_depthwise (h := 2 * h) (w := 2 * w) M W b hw' hbb hA hn hW hb
+  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
+  · exact hm v hv (decimateOddIdx c h w i)
+  · exact he vt va e hva hvt hd (decimateOddIdx c h w i)
+
+/-- **XLA-`SAME` stride-2 depthwise float-bridges.** -/
+theorem floatBridges_depthwiseStride2FlatXla {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) {w' bb : ℝ}
+    (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < c * (2 * h) * (2 * w))
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb) :
+    FloatBridges (depthwiseStride2FlatXla (h := h) (w := w) W b) :=
+  fun _A hA => ⟨_, _, _,
+    add_nonneg (layerAct_nonneg hw' hbb hA) (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
+    floatClose_depthwiseStride2FlatXla M W b hw' hbb hA hn hW hb⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § The batched stage bridges (each `batchMap N` of a per-example op + supplied BN)
 -- ════════════════════════════════════════════════════════════════
@@ -371,6 +405,19 @@ noncomputable def floatBridgesTo_depthwiseStride2Flat {c h w kH kW : Nat} (M : F
    fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hbb hA)
       (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
     floatClose_depthwiseStride2Flat M W b hw' hbb hA hn hW hb⟩⟩
+
+/-- XLA-`SAME` stride-2 depthwise float-bridges TO the model's rounded odd-phase stride-2 depthwise. -/
+noncomputable def floatBridgesTo_depthwiseStride2FlatXla {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) {w' bb : ℝ}
+    (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < c * (2 * h) * (2 * w))
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb) :
+    FloatBridgesTo (depthwiseStride2FlatXla (h := h) (w := w) W b)
+      (M.depthwiseStride2FlatXlaF (h := h) (w := w) W b) :=
+  ⟨fun A => layerAct (kH * kW) w' bb A + layerBudget M.u (kH * kW) w' bb A 0,
+   fun A e => layerBudget M.u (kH * kW) w' bb A e,
+   fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hbb hA)
+      (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
+    floatClose_depthwiseStride2FlatXla M W b hw' hbb hA hn hW hb⟩⟩
 
 /-- The deployed batched swish: the rounded product with the deployed sigmoid. -/
 noncomputable def swishF (M : FloatModel) (fsig : ℝ → ℝ) (n : Nat) : Vec n → Vec n :=

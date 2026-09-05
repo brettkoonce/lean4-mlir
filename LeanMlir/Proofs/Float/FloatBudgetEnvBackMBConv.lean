@@ -73,6 +73,20 @@ theorem Maps.depthwiseStride2Back {c h w kH kW : Nat} (M : FloatModel)
   (Maps.decimateBack c h w).comp hn
     (Maps.depthwiseBack (h := 2 * h) (w := 2 * w) M W hw' hn hW hg hĀ' hĒ')
 
+/-- **An envelope through an XLA-`SAME` STRIDED depthwise input-gradient** — the odd scatter,
+    then the reversed-kernel depthwise conv at the doubled resolution. `Maps.depthwiseStride2Back`
+    at the other phase; identical arithmetic. -/
+theorem Maps.depthwiseStride2XlaBack {c h w kH kW : Nat} (M : FloatModel)
+    (W : DepthwiseKernel c kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < c * (2 * h) * (2 * w))
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w')
+    {g Ā Ē Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (kH * kW + 2) - 1 ≤ g)
+    (hĀ' : (1 + g) * (((kH * kW : ℕ) : ℝ) * w' * Ā + 0) ≤ Ā')
+    (hĒ' : g * (((kH * kW : ℕ) : ℝ) * w' * (Ā + Ē) + 0)
+            + ((kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
+    (floatBridgesTo_depthwiseStride2XlaBack (h := h) (w := w) M W hw' hn hW).Maps Ā Ē Ā' Ē' :=
+  (Maps.decimateOddBack c h w).comp hn
+    (Maps.depthwiseBack (h := 2 * h) (w := 2 * w) M W hw' hn hW hg hĀ' hĒ')
+
 end FloatBridgesTo
 
 -- ════════════════════════════════════════════════════════════════

@@ -66,6 +66,33 @@ theorem floatBridges_flatConvStride2 {ic oc h w kH kW : Nat} (M : FloatModel)
     add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
     floatClose_flatConvStride2 M W b hw' hβ hA hn hW hb⟩
 
+/-- **XLA-`SAME` stride-2 conv is `FloatClose`.** `floatClose_flatConvStride2` read at the ODD
+    coordinates (`decimateOddIdx`): `flatConvStride2Xla = decimateOddFlat ∘ flatConv` selects the
+    stride-1 conv's output one position later, and a selection changes no bound. Same fan-in, same
+    `layerBudget`, same numerals — the TF-origin stems' leaf. -/
+theorem floatClose_flatConvStride2Xla {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
+    FloatClose A
+      (layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0)
+      (flatConvStride2Xla (h := h) (w := w) W b) (M.flatConvStride2XlaF (h := h) (w := w) W b)
+      (fun e => layerBudget M.u (ic * kH * kW) w' β A e) := by
+  obtain ⟨hm, he⟩ := floatClose_flatConv (h := 2 * h) (w := 2 * w) M W b hw' hβ hA hn hW hb
+  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
+  · exact hm v hv (decimateOddIdx oc h w i)
+  · exact he vt va e hva hvt hd (decimateOddIdx oc h w i)
+
+/-- **XLA-`SAME` stride-2 conv float-bridges.** -/
+theorem floatBridges_flatConvStride2Xla {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
+    FloatBridges (flatConvStride2Xla (h := h) (w := w) W b) :=
+  fun _A hA => ⟨_, _, _,
+    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
+    floatClose_flatConvStride2Xla M W b hw' hβ hA hn hW hb⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § Forward GAP as a `FloatBridges`  (the squeeze)
 -- ════════════════════════════════════════════════════════════════
@@ -173,6 +200,19 @@ noncomputable def floatBridgesTo_flatConvStride2 {ic oc h w kH kW : Nat} (M : Fl
    fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hβ hA)
       (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
     floatClose_flatConvStride2 M W b hw' hβ hA hn hW hb⟩⟩
+
+/-- XLA-`SAME` stride-2 conv float-bridges TO the model's rounded odd-phase stride-2 conv. -/
+noncomputable def floatBridgesTo_flatConvStride2Xla {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
+    FloatBridgesTo (flatConvStride2Xla (h := h) (w := w) W b)
+      (M.flatConvStride2XlaF (h := h) (w := w) W b) :=
+  ⟨fun A => layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0,
+   fun A e => layerBudget M.u (ic * kH * kW) w' β A e,
+   fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hβ hA)
+      (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
+    floatClose_flatConvStride2Xla M W b hw' hβ hA hn hW hb⟩⟩
 
 -- `floatBridgesTo_gap` lives in `FloatComposeBridge.lean` (the SE gate needs it too).
 

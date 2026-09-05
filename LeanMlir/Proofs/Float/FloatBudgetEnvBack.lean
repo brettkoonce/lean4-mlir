@@ -742,6 +742,15 @@ theorem Maps.decimateBack (oc h w : Nat) {Ā Ē : ℝ} :
     (floatBridgesTo_decimateBack oc h w).Maps Ā Ē Ā Ē :=
   ⟨fun _ _ hle => hle, fun _ _ _ _ _ hEle => hEle⟩
 
+/-- The odd-decimation backward is a zero-fill scatter — exact, envelope unchanged. The
+    `Maps.decimateBack` of the odd phase: the stride-4 stem's second upsample
+    (`Maps.flatConvStride4Back`, `FloatBudgetEnvBackLN.lean`) and the XLA-`SAME` stride-2
+    backwards below. Moved here from `FloatBudgetEnvBackLN.lean` on 2026-09-05 so the stride-2
+    leaves can reach it without importing the LayerNorm cone. -/
+theorem Maps.decimateOddBack (oc h w : Nat) {Ā Ē : ℝ} :
+    (floatBridgesTo_decimateOddBack oc h w).Maps Ā Ē Ā Ē :=
+  ⟨fun _ _ hle => hle, fun _ _ _ _ _ hEle => hEle⟩
+
 /-- **An envelope through the GAP backward** — broadcast ÷ `h·w`, one rounded multiply.
     ⭐ Magnitude-NONincreasing (`h·w ≥ 1`): the only stage of a backward chain that shrinks. -/
 theorem Maps.gapBack (M : FloatModel) (c h w : Nat) (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
@@ -813,6 +822,20 @@ theorem Maps.flatConvStride2Back {ic oc h w kH kW : Nat} (M : FloatModel)
             + ((oc * kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
     (floatBridgesTo_flatConvStride2Back (h := h) (w := w) M W hw' hn hW).Maps Ā Ē Ā' Ē' :=
   (Maps.decimateBack oc h w).comp hn
+    (Maps.convBack (h := 2 * h) (w := 2 * w) M W hw' hn hW hg hĀ' hĒ')
+
+/-- **An envelope through an XLA-`SAME` STRIDED conv input-gradient** — the odd zero-fill
+    scatter, then the reversed-kernel conv at the doubled resolution. `Maps.flatConvStride2Back`
+    with the other scatter; both scatters are exact, so the arithmetic is identical. -/
+theorem Maps.flatConvStride2XlaBack {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < oc * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w')
+    {g Ā Ē Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (oc * kH * kW + 2) - 1 ≤ g)
+    (hĀ' : (1 + g) * (((oc * kH * kW : ℕ) : ℝ) * w' * Ā + 0) ≤ Ā')
+    (hĒ' : g * (((oc * kH * kW : ℕ) : ℝ) * w' * (Ā + Ē) + 0)
+            + ((oc * kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
+    (floatBridgesTo_flatConvStride2XlaBack (h := h) (w := w) M W hw' hn hW).Maps Ā Ē Ā' Ē' :=
+  (Maps.decimateOddBack oc h w).comp hn
     (Maps.convBack (h := 2 * h) (w := 2 * w) M W hw' hn hW hg hĀ' hĒ')
 
 end FloatBridgesTo

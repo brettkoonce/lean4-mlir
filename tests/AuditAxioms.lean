@@ -1991,6 +1991,8 @@ open Proofs
 -- the 2h×2w grid read at decimateIdx) + floatBridges_gap (wraps floatClose_gap). Stem/maxpool/GAP/dense
 -- concrete; the stem BN + 16 blocks supplied as FloatBridges. Closes the forward/backward asymmetry.
 #print axioms Proofs.floatBridges_flatConvStride2
+-- Its XLA-SAME peer (2026-09-05): floatClose_flatConv read at decimateOddIdx, same envelope.
+#print axioms Proofs.floatBridges_flatConvStride2Xla
 #print axioms Proofs.floatBridges_gap
 #print axioms Proofs.r34_floatBridges
 -- ⚠ FloatBridges existentially binds the FLOAT MAP, so the line above constrains
@@ -2172,6 +2174,8 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.relu6
 #print axioms Proofs.FloatBridgesTo.Maps.depthwise
 #print axioms Proofs.FloatBridgesTo.Maps.depthwiseStride2Flat
+#print axioms Proofs.FloatBridgesTo.Maps.depthwiseStride2FlatXla
+#print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2Xla
 -- …and the rest of the MBConv-family Maps kit (FloatBudgetEnvMBConv.lean), which EfficientNet-B0
 -- needs: swish (⭐ its modulus is the MIN of a multiplicative and an additive input sensitivity —
 -- the multiplicative branch alone multiplies the inherited error by the window at every swish
@@ -2580,6 +2584,7 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.convBack
 #print axioms Proofs.FloatBridgesTo.Maps.linBack
 #print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2Back
+#print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2XlaBack
 -- ⭐ The two r34 BLOCK backwards at real weights, and NEITHER needs a new combinator: the
 -- identity block's residual-skip backward is a FORWARD `Proofs.residual` (the skip routes the
 -- cotangent to both branches and adds), and the downsample's two-branch fan-in is `biPathSum` —
@@ -2671,6 +2676,7 @@ open Proofs
 -- mixes no channels — and Maps.depthwiseStride2Back is that composed with Maps.decimateBack.
 #print axioms Proofs.FloatBridgesTo.Maps.depthwiseBack
 #print axioms Proofs.FloatBridgesTo.Maps.depthwiseStride2Back
+#print axioms Proofs.FloatBridgesTo.Maps.depthwiseStride2XlaBack
 #print axioms Proofs.FloatBridgesTo.Maps.invresBodyBackPC
 #print axioms Proofs.FloatBridgesTo.Maps.invresBodyStridedBackPC
 #print axioms Proofs.bnIstd_abs_le_of
@@ -3088,6 +3094,7 @@ open Proofs
 -- diagonal, the 10 true-batch-norms bnBatchLA supplied); efficientnetForwardB_floatBridges = the
 -- stem→MBConv1→MBConv6-strided→MBConv6-resid→head .comp fold.
 #print axioms Proofs.floatBridges_depthwiseStride2Flat
+#print axioms Proofs.floatBridges_depthwiseStride2FlatXla
 #print axioms Proofs.floatBridges_stemB
 #print axioms Proofs.floatBridges_mbNoExpFwdB
 #print axioms Proofs.floatBridges_mbStridedFwdB

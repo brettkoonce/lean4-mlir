@@ -100,6 +100,28 @@ theorem flatConvStride2F_close {ic oc h w kH kW : Nat} (M : FloatModel)
   exact M.flatConvF_close (h := 2 * h) (w := 2 * w) W b vt va hw' ha he hW hb hva hvte
     (decimateIdx oc h w k)
 
+/-- The float XLA-`SAME` stride-2 conv: the ODD decimation of the float stride-1 conv (the float
+    peer of `flatConvStride2Xla = decimateOddFlat ∘ flatConv`, `StridedConv.lean`). The TF-origin
+    stems (EfficientNet-B0, MobileNetV2). -/
+noncomputable def flatConvStride2XlaF {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+  decimateOddFlat oc h w ∘ (M.flatConvF (h := 2 * h) (w := 2 * w) W b)
+
+/-- **XLA-`SAME` stride-2 conv forward budget** — `flatConvStride2F_close` at the odd coordinate:
+    the same conv-fan-in `layerBudget`, since either decimation only selects outputs. -/
+theorem flatConvStride2XlaF_close {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (vt va : Vec (ic * (2 * h) * (2 * w)))
+    {w' β a e : ℝ} (hw' : 0 ≤ w') (ha : 0 ≤ a) (he : 0 ≤ e)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β)
+    (hva : ∀ k, |va k| ≤ a) (hvte : ∀ k, |vt k - va k| ≤ e)
+    (k : Fin (oc * h * w)) :
+    |M.flatConvStride2XlaF W b vt k - flatConvStride2Xla W b va k| ≤
+      FloatModel.layerBudget M.u (ic * kH * kW) w' β a e := by
+  simp only [FloatModel.flatConvStride2XlaF, flatConvStride2Xla, Function.comp, decimateOddFlat]
+  exact M.flatConvF_close (h := 2 * h) (w := 2 * w) W b vt va hw' ha he hW hb hva hvte
+    (decimateOddIdx oc h w k)
+
 -- ════════════════════════════════════════════════════════════════
 -- § Per-channel BatchNorm  (bnForward applied per channel-row)
 -- ════════════════════════════════════════════════════════════════
