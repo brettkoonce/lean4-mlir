@@ -1,9 +1,11 @@
 # Bringing every net's Proofs tier to its paper-faithful net
 
 **Scoped 2026-09-05 from the Proofs-tier audit run during the XLA-SAME re-spelling. Nothing
-below is started except where a row says so.** The target is the level ConvNeXt-T sits at
-today, minus its one hole: every certification tier stated at the net the artifact runs, the
-column "tiers only at a reduced or representative net" empty for every architecture.
+below is started except where a row says so; 3.1 has since landed.** The target is the level
+ConvNeXt-T sits at: every certification tier stated at the net the artifact runs, the column
+"tiers only at a reduced or representative net" empty for every architecture. ConvNeXt-T had one
+hole of its own when this was scoped — its train-step tie was at the retired scalar LN — and
+3.1 closed it, so it is now the clean reference the other six are measured against.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
@@ -20,7 +22,7 @@ nets, symmetric for the PyTorch-origin ones), BatchNorm mode, activation, LayerN
 |---|---|---|
 | T1 forward + VJP | the ℝ forward and a whole-net `HasVJP` (or `HasVJPAt` with the kink clauses) | `convNextForwardTCh`, `convNextForwardTCh_has_vjp` |
 | T2 graph faithfulness | a typed `SHlo` graph with `den graph = forward`, block by block then chained | `ConvNeXtFullT.lean` |
-| T3 train-step tie | every emitted param-SGD op `den = certified` (§1 fold), then each pinned to the real backward-chain cotangent (§1a tie) | `ConvNeXtFaithfulPoC.lean`, `ConvNeXtTiePoC.lean` (⚠ scalar LN, see 2.1) |
+| T3 train-step tie | every emitted param-SGD op `den = certified` (§1 fold), then each pinned to the real backward-chain cotangent (§1a tie) | `ConvNeXtFaithfulPoC.lean`, `ConvNeXtTiePoC.lean` (all 182 params, 3.1) |
 | T4 forward budget | `*_float_logits_le`, fold or CAP, kernel-checked numerals from `scripts/float_budget_envelope.py` | `cnx_float_logits_le`, CAP |
 | T5 backward budget | `*_grad_float_le` on the input gradient | `cnx_grad_float_le` |
 | T6 certified backward tie | the float-tier hand-written backward chain IS the certified VJP, with a `rfl` shape check that the opaque-block chain is the committed forward | `convnextInputGrad_eq_convNextForwardTCh_vjp`, `convNextForwardTCh_eq_chain` |
@@ -37,7 +39,7 @@ shipped config count as paper-net statements.
 | net | paper net in Proofs | T1 | T2 | T3 | T4 | T5 | T6 | T7 |
 |---|---|---|---|---|---|---|---|---|
 | ResNet-34 | `resnet34Forward_full_pc`, [3,4,6,3], 64 to 512 | ✓ | ✓ | ✓ 146 params | ✓ eval and train BN | ✓ | ✓ | full depth at 2 channels; 224 realistic |
-| ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ⚠ scalar LN | ✓ CAP | ✓ | ✓ | none |
+| ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ | ✓ 262 params (stem symmetric) | ✗ 3-block | ✗ 3-block, N=1 | ✗ open at 3-block | none |
 | MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), with shape check `mobilenetv2ForwardPaper_eq_chain`; the yaml headline still points at the 2-block generic | ✓ | ✓ 210 params (symmetric) | ✗ 6-block | ✗ 6-block | ✗ 6-block | 17 blocks at toy dims; 2 blocks at 224 |
@@ -65,28 +67,47 @@ paper-net file is an enumeration of an existing block file, not new mathematics.
 
 ### 3.0 Prerequisite: the re-spelling thread, steps 3 to 7
 
-`planning/xla_same_respell_and_blueprint_audit.md`. Steps 0 to 2 landed 2026-09-05 (the per-example
-XLA tokens, the odd-phase backwards with leaf ties, the float leaves and `Maps`). Steps 3 to 6
-re-spell the forwards, chains and PoC files; step 7 is B0's 3-block T6. Packages 3.2 and 3.3
-below extend those to the paper nets and must not start before step 6.
+`planning/xla_same_respell_and_blueprint_audit.md`. **Steps 0 to 7 all landed 2026-09-05** (the
+per-example XLA tokens, the odd-phase backwards with leaf ties, the float leaves and `Maps`, the
+re-spelled forwards/chains/PoC files, and B0's 3-block T6 in `d3b0db6`). Only step 8, the
+blueprint audit, is left, and it is a docs commit that gates nothing in Lean. Packages 3.2 and
+3.3 extend those to the paper nets; 3.1 touches neither B0 nor MobileNetV2 and never depended on
+this thread.
 
-### 3.1 ConvNeXt-T: the train-step tie at channel LN (T3)
+### 3.1 ConvNeXt-T: the train-step tie at channel LN (T3) — **DONE 2026-09-05**
 
-**Gap.** `ConvNeXtTiePoC.lean` and the LN half of `ConvNeXtFaithfulPoC.lean` are stated at
-`chLN := false`, the scalar-LN render that `verified_mlir/convnext_train_step.mlir` stopped being
-on 2026-07-31 (§2m/§2n in `planning/convnext_close.md`). The file says so in its header; every
-theorem is true and none is about the committed bytes.
+**Gap, as scoped.** `ConvNeXtTiePoC.lean` and the LN half of `ConvNeXtFaithfulPoC.lean` were
+stated at the scalar-LN render that `verified_mlir/convnext_train_step.mlir` stopped being on
+2026-07-31 (§2m/§2n in `planning/convnext_close.md`). Every theorem was true and none was about
+the committed bytes.
 
-**Work.** The per-channel LN backward chain already exists (`ConvNeXtChannelLN.lean`,
-`ConvNeXtChainClose.lean` at `chanLNTensor3`, used by the T6 tie). Re-state the §1 LN γ/β
-certs at `chanLNTensor3`'s parameters (`Vec c`, the `lnGradCh` reduce), then re-thread
-`ConvNeXtTiePoC` at the `chLN := true` chain cotangents. The per-channel layer-scale γ cert is
-already the channel form. Mirror: the file itself, block by block; the ViT vector-LN certs
-(`vit_render_vecln{gamma,beta}_certified`, `ViTVecLN.lean`) are the same shape at `Vec D`.
+**What landed.** The one piece of new mathematics is the channel-LN γ/β parameter certs
+(`cnx_render_chln{gamma,beta}_certified`, in `ConvNeXtChannelLN.lean` beside `chanLNTensor3`).
+The render's γ/β tails re-emit the `[h·w, c]` transposes and then run ViT's `veclnGammaSgd` /
+`rowDenseBiasSgd` on that view, so ViT's certs apply *at the row layout*; the theorem the net
+needs is about `chanLNTensor3` at the `c·h·w` activation layout, contracted with the cotangent
+the block backward delivers there. The bridge is that `chanLNTensor3`'s pre- and post-
+conjugations are inverse permutations (`chanRowsPerm`), so the output-side one moves onto the
+cotangent as its inverse — which is exactly the transposed cotangent the op is fed.
+`pdiv_reindexOut_contract` states that generically; it is a permutation's adjoint, not new
+analysis. `chanLNRows` moved from `Float/ChannelLNFloatBridge.lean` to sit with them.
 
-**Done when** the capstone names `convNextTrainStepFaithfulV … (chLN := true)`'s ops and
-`grep -c "chLN := false" LeanMlir/Proofs/Architectures/ConvNeXtTiePoC.lean` is 0. Size: the
-current file, edited in place; the LN certs are the only new proofs.
+Everything else was re-threading `ConvNeXtTiePoC` at the shipped spelling: `cnxCotD` becomes
+`chanLNTensor3Back` (the certified VJP, by `chanLNTensor3Back_eq_chanLN_vjp`); the head becomes
+ViT's vector-LN at `N = 1`, stated at the literal 768 because `1 * m` does not reduce at a
+variable `m`; the stem LN joins the thread, with the patchify conv's own gradients now behind its
+input-VJP. `cnxCotP`/`cnxCotE`/`cnxCotN` are LN-form-agnostic and were reused verbatim.
+
+**And the scope grew, correctly.** The "four even-kernel weight grads" the old file carried as a
+render gap are no longer one: the three downsample 2×2/s2 weights are `convStridedWeightSgd`
+(kernel-generic, since `sWGradGeom` split the odd/even padding cases) and the stem 4×4/s4 is
+`convStride4WeightGrad`. So `cnx_net_tied_certified` now covers **all 182** parameters — 181 as
+`θ − lr·∂Loss/∂θ`, and `psW` at its **gradient**, because that op's SGD wrap is hand-written text
+(a declared §5 carve-out, and the reason it cannot take the `den(op) = θ − lr·…` shape).
+
+Gates: `lake build Certs` 3956 green, `lake env lean tests/AuditAxioms.lean` 3-axiom clean,
+`lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`. No renderer or `.mlir`
+change — this is a den-level tie, as r34/mnv2 are.
 
 ### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6)
 
@@ -131,7 +152,7 @@ blueprint.
 
 ### 3.3 EfficientNet-B0 at 16 blocks (T4, T5, T6)
 
-After 3.0 step 7 (the 3-block T6) and on the XLA stem.
+3.0 step 7 (the 3-block T6) landed in `d3b0db6`, so 3.3(c) generalises it rather than waiting on it. On the XLA stem.
 
 **(a) T4, and it will not be a fold. Probe first.** Each squeeze-excite site roughly doubles
 the budget's exponent (1e25, 1e83, 1e199 across the representative's three blocks:

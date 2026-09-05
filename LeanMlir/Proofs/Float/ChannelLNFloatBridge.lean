@@ -221,11 +221,8 @@ theorem floatBridges_rowLNVecFlatBack {s c : Nat} (M : FloatModel) {ε : ℝ} (�
   have hpr := FloatClose.perRowIdx (d := c) s hrow
   exact ⟨_, _, _, hpr.cod_nonneg hA (Nat.mul_pos hs0 hc), hpr⟩
 
-/-- The saved activation as the row backward sees it: the `[h·w, c]` view of `x`, one row per
-    spatial position holding its `c` channels. Naming this keeps the backward's operating-point
-    hypotheses (`bnIstd`/`bnXhat` per row) readable — it is `chanLNTensor3`'s own first two factors. -/
-noncomputable def chanLNRows (c h w : Nat) (x : Vec (c * h * w)) : Vec ((h * w) * c) :=
-  transposeFlat c (h * w) (reassocFwd c h w x)
+-- `chanLNRows` (the `[h·w, c]` row view) moved to `ConvNeXtChannelLN.lean` when the channel-LN
+-- γ/β parameter certs landed there: it is the layout both the certs and this file read from.
 
 /-- **The channel-LN input-VJP** (as a function of the cotangent, at a saved input `x`) — the exact
     reverse of `chanLNTensor3`'s five factors. A permutation's adjoint is its inverse permutation,

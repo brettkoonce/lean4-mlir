@@ -43,6 +43,7 @@ natural and is therefore exactly the type-level cast. `den_reassocS` lifts that 
 
 namespace Proofs
 
+open scoped BigOperators
 open Proofs.StableHLO (transposeFlat)
 
 -- ════════════════════════════════════════════════════════════════
@@ -166,6 +167,205 @@ theorem rowLN_affine_eq (s c : Nat) (ε : ℝ) (γ β : Vec c) (u : Vec (s * c))
   unfold StableHLO.rowBiasFlat StableHLO.rowScaleFlat StableHLO.rowLNFlat
          rowLNVecFlat layerNormVec layerScale layerNormForward
   simp only [Mat.unflatten_flatten]
+
+
+-- ════════════════════════════════════════════════════════════════
+-- § The per-channel γ/β parameter Jacobians — ViT's `[D]` certs, conjugated
+--
+-- The render's γ/β tails (`ConvNeXtRender.lnGammaTail`/`lnBetaTail`) re-emit the two transposes
+-- and then run ViT's `veclnGammaSgd`/`rowDenseBiasSgd` on the `[h·w, c]` view. So the emitted op
+-- is certified by ViT's `vit_render_vecln{gamma,beta}_certified` *at that layout* — but the
+-- theorem the net needs is about `chanLNTensor3` at the `c·h·w` activation layout, contracted
+-- with the chain cotangent the block backward delivers there.
+--
+-- The bridge is one fact: `chanLNTensor3`'s pre- and post-conjugations are inverse PERMUTATIONS,
+-- so the output-side one moves onto the cotangent as its inverse — which is exactly the
+-- transposed cotangent the render feeds the op. No new analysis; a permutation's adjoint.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The saved activation as the row backward sees it: the `[h·w, c]` view of `x`, one row per
+    spatial position holding its `c` channels. Naming this keeps the backward's operating-point
+    hypotheses (`bnIstd`/`bnXhat` per row) readable — it is `chanLNTensor3`'s own first two
+    factors, and it is the value the render's re-emitted `transposeF` pair denotes. -/
+noncomputable def chanLNRows (c h w : Nat) (x : Vec (c * h * w)) : Vec ((h * w) * c) :=
+  transposeFlat c (h * w) (reassocFwd c h w x)
+
+/-- `chanLNTensor3`'s conjugation as ONE index map: the activation index `j` of the `c·h·w` layout,
+    read in the `[h·w, c]` row view. Composition of the Mat-split re-association and the
+    transpose, both pure reindexes. -/
+noncomputable def chanRowsIdx (c h w : Nat) (j : Fin (c * h * w)) : Fin ((h * w) * c) :=
+  let ch := finProdFinEquiv.symm (reassocBackIdx c h w j)
+  finProdFinEquiv (ch.2, ch.1)
+
+/-- The inverse direction — the row-view index `o`, read back in the activation layout. -/
+noncomputable def chanRowsIdxInv (c h w : Nat) (o : Fin ((h * w) * c)) : Fin (c * h * w) :=
+  let sc := finProdFinEquiv.symm o
+  reassocFwdIdx c h w (finProdFinEquiv (sc.2, sc.1))
+
+theorem chanRowsIdxInv_chanRowsIdx (c h w : Nat) (j : Fin (c * h * w)) :
+    chanRowsIdxInv c h w (chanRowsIdx c h w j) = j := by
+  unfold chanRowsIdx chanRowsIdxInv
+  simp only [Equiv.symm_apply_apply]
+  rw [Prod.mk.eta, Equiv.apply_symm_apply, reassocFwdIdx_reassocBackIdx]
+
+theorem chanRowsIdx_chanRowsIdxInv (c h w : Nat) (o : Fin ((h * w) * c)) :
+    chanRowsIdx c h w (chanRowsIdxInv c h w o) = o := by
+  unfold chanRowsIdx chanRowsIdxInv
+  simp only [reassocBackIdx_reassocFwdIdx, Equiv.symm_apply_apply]
+  rw [Prod.mk.eta, Equiv.apply_symm_apply]
+
+/-- **The conjugation is a permutation.** Both directions are `finProdFinEquiv` round-trips, so
+    the `[c·h·w] ↔ [h·w, c]` relabeling is a genuine bijection — the fact the two certs below
+    turn into "the adjoint is the inverse". -/
+noncomputable def chanRowsPerm (c h w : Nat) : Fin (c * h * w) ≃ Fin ((h * w) * c) :=
+  ⟨chanRowsIdx c h w, chanRowsIdxInv c h w,
+   chanRowsIdxInv_chanRowsIdx c h w, chanRowsIdx_chanRowsIdxInv c h w⟩
+
+/-- The row view IS the reindex by the inverse permutation (definitional; stated so the two
+    spellings are visibly one map rather than two that happen to agree). -/
+theorem chanLNRows_eq_reindex (c h w : Nat) (v : Vec (c * h * w)) :
+    chanLNRows c h w v = fun o => v ((chanRowsPerm c h w).symm o) := rfl
+
+/-- And channel-LN is the row-LN read through the permutation. -/
+theorem chanLNTensor3_eq_rows (c h w : Nat) (ε : ℝ) (γ β : Vec c) (x : Vec (c * h * w)) :
+    chanLNTensor3 c h w ε γ β x
+      = fun j => rowLNVecFlat (h * w) c ε γ β (chanLNRows c h w x) (chanRowsPerm c h w j) := rfl
+
+/-- **An output-side permutation moves onto the cotangent as its inverse.** Generic: for any
+    differentiable `f` and any bijection `σ` of output indices, contracting the Jacobian of
+    `σ`-reindexed `f` with a cotangent is contracting `f`'s own Jacobian with the `σ⁻¹`-reindexed
+    cotangent. `pdiv_comp` against `pdiv_reindex`'s indicator, then `Equiv.sum_comp`. -/
+theorem pdiv_reindexOut_contract {m n n' : Nat} (f : Vec m → Vec n) (x : Vec m)
+    (hf : DifferentiableAt ℝ f x) (σ : Fin n' ≃ Fin n) (i : Fin m) (cot : Vec n') :
+    ∑ j : Fin n', pdiv (fun y : Vec m => fun k : Fin n' => f y (σ k)) x i j * cot j
+      = ∑ o : Fin n, pdiv f x i o * cot (σ.symm o) := by
+  have hstep : ∀ j : Fin n',
+      pdiv (fun y : Vec m => fun k : Fin n' => f y (σ k)) x i j = pdiv f x i (σ j) := by
+    intro j
+    have hg : DifferentiableAt ℝ (fun z : Vec n => fun k : Fin n' => z (σ k)) (f x) :=
+      (reindexCLM (fun k : Fin n' => σ k)).differentiableAt
+    rw [show (fun y : Vec m => fun k : Fin n' => f y (σ k))
+          = (fun z : Vec n => fun k : Fin n' => z (σ k)) ∘ f from rfl,
+        pdiv_comp f (fun z : Vec n => fun k : Fin n' => z (σ k)) x hf hg i j]
+    simp_rw [pdiv_reindex (fun k : Fin n' => σ k)]
+    rw [Finset.sum_eq_single (σ j)
+        (fun o _ hne => by rw [if_neg hne, mul_zero])
+        (fun h => absurd (Finset.mem_univ (σ j)) h), if_pos rfl, mul_one]
+  simp_rw [hstep]
+  rw [← Equiv.sum_comp σ (fun o => pdiv f x i o * cot (σ.symm o))]
+  exact Finset.sum_congr rfl (fun j _ => by rw [Equiv.symm_apply_apply])
+
+/-- As a function of γ the row-LN is `x̂ ⊙ gather γ + β` — a masked gather plus a constant, hence
+    differentiable. (ViT proves the Jacobian of this shape; the differentiability is what
+    `pdiv_comp` needs and what it does not export.) -/
+theorem rowLNVecFlat_gamma_diffAt (s c : Nat) (ε : ℝ) (β : Vec c) (X : Vec (s * c)) (γ : Vec c) :
+    DifferentiableAt ℝ (fun γ' : Vec c => rowLNVecFlat s c ε γ' β X) γ := by
+  have hmul : DifferentiableAt ℝ
+      (fun (v : Vec c) (o : Fin (s * c)) =>
+        layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o).1)
+            (finProdFinEquiv.symm o).2 * v (finProdFinEquiv.symm o).2) γ :=
+    (differentiableAt_const _).mul
+      (reindexCLM (fun o : Fin (s * c) => (finProdFinEquiv.symm o).2)).differentiableAt
+  have hconst : DifferentiableAt ℝ
+      (fun (_ : Vec c) (o : Fin (s * c)) => β (finProdFinEquiv.symm o).2) γ :=
+    differentiableAt_const _
+  have hshape : (fun γ' : Vec c => rowLNVecFlat s c ε γ' β X)
+      = (fun γ' : Vec c => fun o : Fin (s * c) =>
+          (fun (v : Vec c) (o' : Fin (s * c)) =>
+            layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o').1)
+                (finProdFinEquiv.symm o').2 * v (finProdFinEquiv.symm o').2) γ' o
+          + (fun (_ : Vec c) (o' : Fin (s * c)) => β (finProdFinEquiv.symm o').2) γ' o) := by
+    funext γ' o
+    unfold rowLNVecFlat layerNormVec Mat.flatten Mat.unflatten
+    ring
+  rw [hshape]
+  exact hmul.add hconst
+
+/-- The β peer: `const + gather β`. -/
+theorem rowLNVecFlat_beta_diffAt (s c : Nat) (ε : ℝ) (γ : Vec c) (X : Vec (s * c)) (β : Vec c) :
+    DifferentiableAt ℝ (fun β' : Vec c => rowLNVecFlat s c ε γ β' X) β := by
+  have hconst : DifferentiableAt ℝ
+      (fun (_ : Vec c) (o : Fin (s * c)) =>
+        γ (finProdFinEquiv.symm o).2 *
+          layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o).1)
+            (finProdFinEquiv.symm o).2) β := differentiableAt_const _
+  have hgather : DifferentiableAt ℝ
+      (fun (v : Vec c) (o : Fin (s * c)) => v (finProdFinEquiv.symm o).2) β :=
+    (reindexCLM (fun o : Fin (s * c) => (finProdFinEquiv.symm o).2)).differentiableAt
+  have hshape : (fun β' : Vec c => rowLNVecFlat s c ε γ β' X)
+      = (fun β' : Vec c => fun o : Fin (s * c) =>
+          (fun (_ : Vec c) (o' : Fin (s * c)) =>
+            γ (finProdFinEquiv.symm o').2 *
+              layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o').1)
+                (finProdFinEquiv.symm o').2) β' o
+          + (fun (v : Vec c) (o' : Fin (s * c)) => v (finProdFinEquiv.symm o').2) β' o) := by
+    funext β' o
+    unfold rowLNVecFlat layerNormVec Mat.flatten Mat.unflatten
+    ring
+  rw [hshape]
+  exact hconst.add hgather
+
+/-- **The γ contraction, moved to the row layout.** The activation-layout Jacobian against the
+    activation-layout cotangent equals the row-layout Jacobian against the TRANSPOSED cotangent —
+    which is the operand `lnGammaTail` actually emits. -/
+theorem chanLN_gamma_contract {c h w : Nat} (ε : ℝ) (β γ : Vec c) (x cot : Vec (c * h * w))
+    (k : Fin c) :
+    ∑ j : Fin (c * h * w),
+        pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j
+      = ∑ o : Fin ((h * w) * c),
+          pdiv (fun γ' : Vec c => rowLNVecFlat (h * w) c ε γ' β (chanLNRows c h w x)) γ k o
+            * chanLNRows c h w cot o := by
+  rw [show (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x)
+        = (fun γ' : Vec c => fun j : Fin (c * h * w) =>
+            (fun v : Vec c => rowLNVecFlat (h * w) c ε v β (chanLNRows c h w x)) γ'
+              (chanRowsPerm c h w j)) from rfl,
+      pdiv_reindexOut_contract _ γ (rowLNVecFlat_gamma_diffAt (h * w) c ε β _ γ)
+        (chanRowsPerm c h w) k cot]
+  rfl
+
+/-- The β peer of `chanLN_gamma_contract`. -/
+theorem chanLN_beta_contract {c h w : Nat} (ε : ℝ) (γ β : Vec c) (x cot : Vec (c * h * w))
+    (k : Fin c) :
+    ∑ j : Fin (c * h * w),
+        pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j
+      = ∑ o : Fin ((h * w) * c),
+          pdiv (fun β' : Vec c => rowLNVecFlat (h * w) c ε γ β' (chanLNRows c h w x)) β k o
+            * chanLNRows c h w cot o := by
+  rw [show (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x)
+        = (fun β' : Vec c => fun j : Fin (c * h * w) =>
+            (fun v : Vec c => rowLNVecFlat (h * w) c ε γ v (chanLNRows c h w x)) β'
+              (chanRowsPerm c h w j)) from rfl,
+      pdiv_reindexOut_contract _ β (rowLNVecFlat_beta_diffAt (h * w) c ε γ _ β)
+        (chanRowsPerm c h w) k cot]
+  rfl
+
+/-- **Channel-LN γ output, certified.** The rendered per-channel reduce — ViT's
+    `vecLN_grad_gamma` on the two transposed views the tail emits — equals the certified Jacobian
+    of `chanLNTensor3` in its `Vec c` γ, contracted with the activation-layout cotangent. The
+    `Vec c` peer of `ConvNeXtClose.cnx_render_lngamma_certified`, and the `den` target of the
+    render's `veclnGammaSgd` LN tail. -/
+theorem cnx_render_chlngamma_certified {c h w : Nat} (ε : ℝ) (β γ : Vec c)
+    (x cot : Vec (c * h * w)) (lr : ℝ) (k : Fin c) :
+    γ k - lr * vecLN_grad_gamma (h * w) c ε (Mat.unflatten (chanLNRows c h w x))
+                  (Mat.unflatten (chanLNRows c h w cot)) k
+      = γ k - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j := by
+  rw [chanLN_gamma_contract ε β γ x cot k]
+  exact congrArg (fun t => γ k - lr * t)
+    (vit_veclnGamma_grad_bridge ε β γ (Mat.unflatten (chanLNRows c h w x))
+      (chanLNRows c h w cot) k)
+
+/-- **Channel-LN β output, certified.** The β grad is the plain reduce `Σ_rows dy`, so the same
+    `rowDenseBiasSgd` op ViT's LN-β uses denotes it here too. -/
+theorem cnx_render_chlnbeta_certified {c h w : Nat} (ε : ℝ) (γ β : Vec c)
+    (x cot : Vec (c * h * w)) (lr : ℝ) (k : Fin c) :
+    β k - lr * vecLN_grad_beta (h * w) c (Mat.unflatten (chanLNRows c h w cot)) k
+      = β k - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j := by
+  rw [chanLN_beta_contract ε γ β x cot k]
+  exact congrArg (fun t => β k - lr * t)
+    (vit_veclnBeta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
+      (chanLNRows c h w cot) k)
 
 end Proofs
 

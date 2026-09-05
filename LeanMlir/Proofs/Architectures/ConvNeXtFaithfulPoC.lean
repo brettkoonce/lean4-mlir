@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.ConvNeXtClose
+import LeanMlir.Proofs.Architectures.ConvNeXtChannelLN
 
 /-! # ConvNeXt-T §1 fold — the per-channel layer-scale γ gradient cert (the one new proof)
 
@@ -98,5 +99,41 @@ theorem lnBetaSgd_den {n : Nat} (bN lrStr cotN : String)
           pdiv (fun β' : Vec 1 => layerNormForward n ε γ (β' 0) x) β 0 j * dy j := by
   simp only [den]
   exact cnx_render_lnbeta_certified n ε γ β x dy lr
+
+/-! ## The channel-LN γ/β ops — the two the committed render actually emits
+
+`ConvNeXtRender.lnGammaTail`/`lnBetaTail` re-emit the `[h·w, c]` transposes and then run ViT's
+`veclnGammaSgd` / `rowDenseBiasSgd` on that view, so the op operands below are the transposed
+views `chanLNRows` of the saved LN input and of the chain cotangent — the values those SSA names
+denote. The certified Jacobian on the right is `chanLNTensor3`'s, in the `c·h·w` activation
+layout the rest of the block lives in; `ConvNeXtChannelLN`'s permutation argument is what lets
+one op serve both layouts. These replace the scalar `lnGammaSgd_den`/`lnBetaSgd_den` above at
+every one of the net's 22 spatial LN sites (1 stem + 18 block + 3 downsample); the 23rd, the
+head, runs after GAP and is ViT's vector-LN at `N = 1` (`ViTPoC.veclnGammaSgd_den`). -/
+
+/-- **Channel-LN γ op denotes the certified step.** One-line delegation to
+    `cnx_render_chlngamma_certified`. The free `β` is the site's LN β (the γ grad is β-free). -/
+theorem chanLnGammaSgd_den {c h w : Nat} (gN xN epsStr lrStr cotN : String)
+    (ε : ℝ) (β : Vec c) (x : Vec (c * h * w)) (γ : Vec c) (cot : Vec (c * h * w))
+    (lr : ℝ) (k : Fin c) :
+    den (SHlo.veclnGammaSgd (N := h * w) (D := c) gN xN epsStr lrStr ε
+          (chanLNRows c h w x) γ lr (.operand cotN (chanLNRows c h w cot))) k
+      = γ k - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j := by
+  simp only [den]
+  exact cnx_render_chlngamma_certified ε β γ x cot lr k
+
+/-- **Channel-LN β op denotes the certified step.** The β grad is the plain row reduce, so the
+    render uses the same `rowDenseBiasSgd` op ViT's LN-β does. The free `ε`/`γ` carry the LN
+    constants (the β grad is independent of both). -/
+theorem chanLnBetaSgd_den {c h w : Nat} (bN lrStr cotN : String)
+    (ε : ℝ) (γ : Vec c) (x : Vec (c * h * w)) (β : Vec c) (cot : Vec (c * h * w))
+    (lr : ℝ) (k : Fin c) :
+    den (SHlo.rowDenseBiasSgd (N := h * w) (c := c) bN lrStr β lr
+          (.operand cotN (chanLNRows c h w cot))) k
+      = β k - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j := by
+  simp only [den]
+  exact cnx_render_chlnbeta_certified ε γ β x cot lr k
 
 end Proofs.CnxPoC

@@ -177,7 +177,7 @@ jobs:
             echo "| r34 (ch6)          | $(faithful ResNet34PoC.convStridedW_den) | $(faithful ResNet34PoC.convStridedB_den) | $(faithful ResNet34PoC.r34_net_tied_certified) | \`r34_net_tied_certified\` (full [3,4,6,3], 146 params) |"
             echo "| mobilenetv2 (ch7)  | $(faithful Mnv2PaperPoC.mnv2Stride1ParamsCertified) | $(faithful Mnv2PaperPoC.mnv2DenseParamsCertified) | $(faithful Mnv2TiePoC.mnv2_net_tied_certified) | \`mnv2_net_tied_certified\` (full 17-block paper, 210 params) |"
             echo "| efficientnet (ch8) | $(faithful EnetPoC.convWB_den) | $(faithful EnetPoC.bnGammaB_den) | $(faithful EnetTiePoC.efficientnet_net_tied) | \`efficientnet_net_tied\` (full 16-MBConv B0, 262 params; batched true-BN + SE) |"
-            echo "| convnext (ch9)     | $(faithful CnxPoC.lnGammaSgd_den) | $(faithful CnxPoC.lnBetaSgd_den) | $(faithful CnxTiePoC.cnx_net_tied_certified) | \`cnx_net_tied_certified\` (full [3,3,9,3], 176/180 params; 4 even-kernel weight-grad gaps) |"
+            echo "| convnext (ch9)     | $(faithful CnxPoC.chanLnGammaSgd_den) | $(faithful CnxPoC.chanLnBetaSgd_den) | $(faithful CnxTiePoC.cnx_net_tied_certified) | \`cnx_net_tied_certified\` (full [3,3,9,3], 182/182 params at the shipped channel-LN; psW at its gradient) |"
             echo "| vit (ch10)         | $(faithful ViTPoC.rowDenseWeightSgd_den) | $(faithful ViTPoC.veclnGammaSgd_den) | $(faithful ViTTiePoC.vit_net_tied_certified) | \`vit_net_tied_certified\` (ViT-Tiny depth-12 multi-head, 200 params — ZERO param gaps) |"
           } >> $GITHUB_STEP_SUMMARY
 

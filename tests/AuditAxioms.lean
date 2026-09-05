@@ -1222,13 +1222,30 @@ open Proofs
 -- pending layerScaleChGammaSgd core op. pdiv via the chanIdx reindex (pdiv_mul/pdiv_reindex/pdiv_const).
 #print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
 #print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
--- ConvNeXt §1 fold — the three new core SHlo param-SGD ops' `den` = the certified loss-descent step.
+-- ConvNeXt §1 fold — the core SHlo param-SGD ops' `den` = the certified loss-descent step.
 -- layerScaleChGammaSgd (per-channel layer-scale γ, the lsGradCh reduce + SGD), lnGammaSgd/lnBetaSgd
 -- (scalar LN γ/β, the lnParamGrad reduces + SGD, output SHlo 1 ≅ tensor<1xf32>). One-line delegations
 -- to the certs above / ConvNeXtClose. The ops build clean in StableHLO (roundtrip intact) + iree-compile.
 #print axioms Proofs.CnxPoC.layerScaleChGammaSgd_den
 #print axioms Proofs.CnxPoC.lnGammaSgd_den
 #print axioms Proofs.CnxPoC.lnBetaSgd_den
+-- The CHANNEL-LN γ/β param certs (ConvNeXtChannelLN) and their den-fold — the two the committed
+-- render actually emits at all 22 spatial LN sites. lnGammaTail/lnBetaTail re-emit the [h·w, c]
+-- transposes and run ViT's veclnGammaSgd / rowDenseBiasSgd on that view; the certified Jacobian is
+-- chanLNTensor3's, in the c·h·w activation layout. The bridge is one fact: chanLNTensor3's pre- and
+-- post-conjugations are inverse PERMUTATIONS (chanRowsPerm), so the output-side one moves onto the
+-- cotangent as its inverse — which is exactly the transposed cotangent the op is fed. Generic in
+-- pdiv_reindexOut_contract; no new analysis, a permutation's adjoint. The scalar peers above stay:
+-- the op still exists and TestBatchedEmitTie exercises its emit.
+#print axioms Proofs.chanRowsIdxInv_chanRowsIdx
+#print axioms Proofs.chanRowsIdx_chanRowsIdxInv
+#print axioms Proofs.pdiv_reindexOut_contract
+#print axioms Proofs.chanLN_gamma_contract
+#print axioms Proofs.chanLN_beta_contract
+#print axioms Proofs.cnx_render_chlngamma_certified
+#print axioms Proofs.cnx_render_chlnbeta_certified
+#print axioms Proofs.CnxPoC.chanLnGammaSgd_den
+#print axioms Proofs.CnxPoC.chanLnBetaSgd_den
 -- ConvNeXt cotangent-chain CLOSE (planning/convnext_close.md Item D) — the MobileNetV2ChainClose/
 -- ResNet34ChainClose analogue: the Item C bridges pinned to the cotangent the ACTUAL backward chain
 -- delivers through a ConvNeXt block. The chain composes the rendered backward denotations —
@@ -1252,16 +1269,19 @@ open Proofs
 #print axioms cnx_stem_render_convW_chain_certified
 #print axioms cnx_stem_render_convb_chain_certified
 -- ch9-ConvNeXt-T FULL [3,3,9,3] §1a TIE — the whole train step den-composed forward→loss→backward
--- through the REAL committed render forward (cnxStemFwdO/cnxBlockFwdO/cnxDownFwdO) + the loss-driven
--- cotangent chain: GELU masks (smooth, no kink), the residual fan-in `+ dyOut` at each of the 18
--- identity-skip merges, the LN-back at each of the 3 downsamples, scalar-LN γ/β + per-channel
--- layer-scale γ. Per-block / down / head / stem-bias ties applied across all 18 blocks. The 4
--- even-kernel weight grads (stem 4×4/s4 + 3 downsample 2×2/s2) are the documented render gap, outside
--- this den-tie. ZERO new ops/bridges — pure thread + fan-in over the §1-fold generics.
-#print axioms Proofs.CnxTiePoC.cnx_block_tied
-#print axioms Proofs.CnxTiePoC.cnx_down_tied
-#print axioms Proofs.CnxTiePoC.cnx_stem_bias_tied
-#print axioms Proofs.CnxTiePoC.cnx_head_tied
+-- through the REAL committed render forward (cnxStemFwdO/cnxBlockFwdChO/cnxDownFwdChO) + the
+-- loss-driven cotangent chain: GELU masks (smooth, no kink), the residual fan-in `+ dyOut` at each of
+-- the 18 identity-skip merges, the channel-LN-back at each of the 3 downsamples and at the stem,
+-- channel-LN γ/β (Vec c) + per-channel layer-scale γ, and the head at ViT's vector-LN with N = 1.
+-- Re-stated at the SHIPPED spelling 2026-09-05: §2m flipped the render to the real channel_layer_norm
+-- and added the stem LN, 2026-08-30 restored the head LN, and the four even-kernel weight grads became
+-- SHlo ops — so this now covers ALL 182 parameters (181 as θ − lr·∂Loss/∂θ; psW at its gradient,
+-- because convStride4WeightGrad's SGD wrap is hand-written text). Per-stem / block / down / head ties
+-- applied across all 18 blocks. ZERO new bridges — pure thread + fan-in over the §1-fold generics.
+#print axioms Proofs.CnxTiePoC.cnx_block_ch_tied
+#print axioms Proofs.CnxTiePoC.cnx_down_ch_tied
+#print axioms Proofs.CnxTiePoC.cnx_stem_ch_tied
+#print axioms Proofs.CnxTiePoC.cnx_head_ch_tied
 #print axioms Proofs.CnxTiePoC.cnxLossCot_den
 #print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
 -- ViT RENDER (planning/vit_close.md Item A) — the representative distinct-param 2-block ViT.
