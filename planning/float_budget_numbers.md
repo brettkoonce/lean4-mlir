@@ -1,10 +1,13 @@
 # Whole-net float budgets
 
-**Status, 2026-09-05: the research thread is closed.** Eight forwards and four input-gradient
-backwards carry kernel-checked numbers; three backward chains are proven to be the certified
-whole-net gradient. The eighth forward — MobileNetV2 at its seventeen-block paper depth — came
-from `planning/proofs_tier_to_paper_nets.md` package 3.2(b), not from re-opening this thread: it
-states an existing kind of number about a bigger net, and shaves no orders off any row below.
+**Status, 2026-09-05: the research thread is closed.** Nine forwards and four input-gradient
+backwards carry kernel-checked numbers; six backward chains are proven to be the certified
+whole-net gradient. The eighth and ninth forwards — MobileNetV2 at its seventeen-block paper
+depth and EfficientNet-B0 at its sixteen-block paper depth — came from
+`planning/proofs_tier_to_paper_nets.md` packages 3.2(b) and 3.3(a), not from re-opening this
+thread: each states an existing kind of number about a bigger net, and shaves no orders off any
+row below. The ninth did correct one standing claim (section 3, finding 5): `norm_num`'s
+"ceiling" is an option, not a wall.
 What remains is three closing items (section 5) and then a freeze. The
 session-by-session record, with the ablations and the corrections, is
 `planning/archive/float_budget_numbers_log.md`; its section numbers are what the Lean docstrings
@@ -17,9 +20,10 @@ what to do if one of these files is opened again.
 
 Every row is a theorem in `LeanMlir/Proofs/Float/`, closed over the real leaves (no
 `FloatBridgesTo` hypothesis left), tied to the committed net definition and, for the forwards,
-to the rendered graph — with one exception, flagged in the table: the seventeen-block MobileNetV2
-row ties each of its blocks to the committed inference block abbreviation by `rfl` but has no
-whole-net graph tie, because the paper net's eval twin has no typed graph in Lean. Every numeral
+to the rendered graph — with two exceptions, flagged in the table: the seventeen-block MobileNetV2
+row and the sixteen-block EfficientNet-B0 row tie each of their blocks to the committed inference
+block abbreviations by `rfl` but have no whole-net graph tie, because neither paper net's eval
+twin has a typed graph in Lean. Every numeral
 was produced by `scripts/float_budget_envelope.py` in the leaves' own exact-rational arithmetic,
 re-asserted by that script's `verify_*` pass, and then checked again by the kernel. All are
 3-axiom clean and listed in `tests/AuditAxioms.lean` and `formalization.yaml`
@@ -33,6 +37,7 @@ re-asserted by that script's `verify_*` pass, and then checked again by the kern
 | MobileNetV2 forward | inference BN | 2.154e3 | 1.444e96 | fold | `mnv2_float_logits_le` | `MobileNetV2FloatBudget.lean` |
 | MobileNetV2 forward, 17-block paper | inference BN, 52 sites, capped at every one; blocks tied, no graph tie | 2.152e4 | 8.176e16 | cap | `mnv2Paper_float_logits_le` | `MobileNetV2PaperFloatBudget.lean` |
 | EfficientNet-B0 forward | inference BN, any batch size | 2.580e55 | 8.408e210 | fold | `b0_float_logits_le` | `EfficientNetFloatBudget.lean` |
+| EfficientNet-B0 forward, 16-block paper | inference BN, 49 sites; the sigmoid of each of the 16 SE gates capped, nothing else; blocks tied, no graph tie; any batch size, any class count | 1.886e279 | 2.416e287 | cap | `b0Full_float_logits_le` | `EfficientNetFullFloatBudget.lean` |
 | ConvNeXt-T forward | channel LayerNorm | 4.871e130 | 9.738e130 | cap | `cnx_float_logits_le` | `ConvNeXtFloatBudget.lean` |
 | ViT-Tiny forward | vector LayerNorm, depth 12 | 2.397e108 | 4.794e108 | cap | `vit_float_logits_le` | `ViTFloatBudget.lean` |
 | ResNet-34 backward | training BN, `\|istd\| <= 16` | 8.857e245 | 6.894e244 | fold | `r34_grad_float_le` | `Resnet34BackFloatBudget.lean` |
@@ -44,7 +49,7 @@ Window is the certified bound on the output's magnitude; budget is the bound on 
 between the float output and the real output, per logit (forwards) or per input pixel
 (backwards, on loss cotangents of magnitude at most 1). Inputs are on the unit box.
 
-The five whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
+The six whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
 
 | net | tie | shape check | apex kind |
 |---|---|---|---|
@@ -53,10 +58,16 @@ The five whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
 | ConvNeXt-T | `convnextInputGrad_eq_convNextForwardTCh_vjp` | `convNextForwardTCh_eq_chain` | `HasVJP` (everywhere) |
 | EfficientNet-B0 | `efficientnetInputGradB_eq_efficientnetForwardB_vjp` | `efficientnetForwardB_eq_chain` | `HasVJP` (everywhere) |
 | MobileNetV2, 17-block paper | `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | `mobilenetv2ForwardPaper_eq_slots` | `HasVJPAt` (smooth point) |
+| EfficientNet-B0, 16-block paper | `efficientnetInputGradB_full_correct` | `efficientnetForwardB_full_eq_chain` (inside `efficientnetForwardB_full_has_vjp_correct`) | `HasVJP` (everywhere); through `HasVJP.backward_unique` to the concrete `efficientnetForwardB_full_has_vjp` |
 
 The tie says the hand-written backward chain the number is stated on IS the certified whole-net
 VJP, not merely that each of its pieces is. The shape check says the chain of opaque block
-variables the apex is instantiated at IS the committed forward, slot for slot.
+variables the apex is instantiated at IS the committed forward, slot for slot. The sixteen-block
+B0 tie is the strongest form: `HasVJP.backward_unique` (two witnesses for one map have one
+backward) carries the opaque-block tie to the tactic-built concrete witness without unfolding
+it, and `_correct` then states the chain is the `pdiv`-contracted Jacobian of the committed
+nested-application forward. The three-block B0 file could not take that step and stopped at a
+`▸`-transported `_committed` witness; the difference is the lemma, not the depth.
 
 **Hypotheses every number carries.** A per-parameter-kind magnitude profile measured on the
 trained checkpoint (`scripts/param_kind_profile.py`; the checkpoints are outside the repo, paths
@@ -76,7 +87,7 @@ by `rfl` and to the rendered graph by the `*_faithful` theorems. A dropped stage
 fan-in, a stale layer slot or a mis-plugged block fails to compile. That is the property the
 thread actually exercised, and it found eight defects (section 4).
 
-**They certify that three backward chains are the certified gradient.** That is a statement
+**They certify that six backward chains are the certified gradient.** That is a statement
 about this repo's purpose, and it is the strongest thing here.
 
 **They do not certify numerical accuracy.** The budgets are 1e80 to 1e251 against logits of
@@ -89,13 +100,17 @@ the adjoint-chain probe measures and which is not a static hypothesis (`planning
 (2.152e4 at the paper depth, and the growth is the wider classifier, not the eleven extra
 blocks), and that is the window, not the budget.
 
-**The four caps are the triangle inequality.** `FloatBridgesTo.capped` replaces a modulus by
+**The five caps are the triangle inequality.** `FloatBridgesTo.capped` replaces a modulus by
 `2 * mag`, so a capped statement says only that the float and the real output both lie in the
-certified window. `budget / window = 2.00` is the tell — with one exception to read carefully:
-the seventeen-block MobileNetV2 forward caps at every BatchNorm and then runs three more stages
+certified window. `budget / window = 2.00` is the tell — with two exceptions to read carefully.
+The seventeen-block MobileNetV2 forward caps at every BatchNorm and then runs three more stages
 (relu6, GAP, the classifier) which collapse the window and carry the error forward, so its ratio
-is 3.8e12 and the label has to be read off the file, not off the ratio. Never table a cap beside
-a fold without the label.
+is 3.8e12. The sixteen-block EfficientNet-B0 forward caps only the sigmoid of each squeeze-excite
+gate — the one stage whose window is a constant, `1 + esig`, so the cap costs one side condition
+and turns the rescale's quadratic `A · Eg` into `≈ 2A + 3E` — and folds everything else, so its
+ratio is 1.3e8 (sixteen gate caps compounding) while its window is honest and uncapped. In both
+the label has to be read off the file, not off the ratio. Never table a cap beside a fold without
+the label.
 
 **No forward-then-backward composition exists.** The backwards assume the saved activations
 are accurate to 1e-2. No forward statement supplies that: the inference forwards are about a
@@ -143,12 +158,22 @@ vacuous, and a tight bound needs measured Jacobians that are not static.
    growth is the conv fan-in face `m * w'` shared by every number in the table. That face is the
    interval-arithmetic floor.
 
-5. **There are two ways a number fails to exist.** Magnitude: `norm_num` refuses around 1e253
-   for a nested arithmetic tree, and the ceiling depends on the tree's shape, not the value (the
-   same number closes flattened). Representability: ViT's attention window carried `Real.exp` at
-   an argument with no rational bound, so 36 stage numerals could not be written at all, at a
-   magnitude smaller than the shipped one. A Python fold hides the second (`math.expm1`
-   overflows to a finite float); `vit_chain` returns an `exp_tainted` tag list for it.
+5. **There are two ways a number fails to exist — and the first is an option, not a wall
+   (corrected 2026-09-05).** Magnitude: every earlier note here and in the archive puts
+   `norm_num`'s ceiling near 1e253, "shape-dependent". Measured while writing the sixteen-block
+   B0 forward: the ceiling is Lean's `exponentiation.threshold` (default 256). In the exact goal
+   shape that was failing, `10 ^ 256` evaluates and `10 ^ 257` does not, and under
+   `set_option exponentiation.threshold 400` the same goals close at `10 ^ 290` in the same time.
+   The "shape dependence" was which stages' numerals happened to carry an exponent above 256.
+   The kernel's `Nat.pow` is GMP-backed and never had a limit. Consequences: `b0Full_float_logits_le`
+   is stated at the eps-floor with no operating point, window 1.886e279; "no theorem to state" is
+   retired as a reason everywhere it was given (finding 7 below, the 3-block B0 backward's
+   `1e431` history, the seventeen-block MobileNetV2 backward at 1e323); and none of that changes
+   what any number means (section 2), so none of those has been or should be written down.
+   Representability is unchanged: ViT's attention window carried `Real.exp` at an argument with
+   no rational bound, so 36 stage numerals could not be written at all, at a magnitude smaller
+   than the shipped one. A Python fold hides it (`math.expm1` overflows to a finite float);
+   `vit_chain` returns an `exp_tainted` tag list for it.
 
 6. **A whole-net budget is homogeneous of degree 1 in the cotangent window on a backward, and
    a bias breaks that on a forward.** Factoring a BatchNorm-backward site's gain as one constant
@@ -163,8 +188,11 @@ vacuous, and a tight bound needs measured Jacobians that are not static.
    depth and not a loose leaf: dropping the BN gamma bound from its measured 1.69 to 1 buys 12
    orders, dropping the conv kernel bound from 2.72 to 1 buys 24, and only their simultaneous
    fiction gets under the ceiling. Per block the chain costs 17 to 21 orders, dominated by the
-   three BatchNorm-backward sites at x5.4e3 each. Same shape as EfficientNet-B0's backward at 16
-   MBConvs (1e431), and the same answer: report that there is no number, do not shave.
+   three BatchNorm-backward sites at x5.4e3 each. EfficientNet-B0's backward at 16 MBConvs is the
+   same shape at a larger scale: 9.112e2648 at the shipped leaves (`b0_full_back_chain`), and the
+   fiction that sets every measured bound to 1 still lands at 1e344. Same answer for both: report
+   that there is no number, do not shave — and, since finding 5's correction, "cannot be stated"
+   is no longer the reason; "would say nothing" is.
 
    ⭐ Its FORWARD is the opposite result, and it is now a theorem
    (`MobileNetV2PaperFloatBudget.lean`, 2026-09-05). Uncapped the 52-site fold is 2.104e266 — no
@@ -179,6 +207,16 @@ vacuous, and a tight bound needs measured Jacobians that are not static.
    inherited error is discarded, so a block's stage numerals depend only on its `(ic, mid, oc)` and
    not on its depth. `b8`, `b9` and `b10` are numerically one block. That is what makes a
    seventeen-block chain writable at all; it is not a fact about the net.
+
+   ⭐ EfficientNet-B0's sixteen-block forward is the other kind of cap (`EfficientNetFullFloatBudget.lean`,
+   2026-09-05). Squeeze-excite is quadratic in the window because `seScale`'s modulus carries
+   `A · Eg` and the gate grows `Eg` out of the same window, so sixteen sites fold to 1e1897907. The
+   cap goes on the gate's SIGMOID — the one stage whose window is the constant `1 + esig`, so
+   `Maps.capped` there needs no error numeral at all, only `2·(1+esig) ≤ Eg` — and the rescale's
+   error becomes `≈ 2A + 3E`. Nothing else is capped: 49 BatchNorms, the rescale, every conv.
+   Window 1.886e279 (honest; swish never resets a window), budget 2.416e287, ratio 1.3e8. Where to
+   cap is a per-op question: cap the stage whose window is bounded, not the stage whose error is
+   large.
 
 ## 4. What the thread found in the repo
 
@@ -284,6 +322,14 @@ Each has an acceptance criterion. None makes a number smaller.
    tie compiles, `efficientnetForwardB_eq_chain` is used as its shape check, and the number in
    `EfficientNetBackFloatBudget.lean` is unchanged or the change is explained.
 
+   **And at the paper depth, 2026-09-05** (`EfficientNetFullWholeBackCertifiedTie.lean`, package
+   3.3(c)): the sixteen-block chain `efficientnetInputGradB_full` is tied to the generic
+   eighteen-stage apex with the blocks opaque, then — the step the three-block file could not
+   take — instantiated at the concrete `mb*W` blocks and carried to
+   `efficientnetForwardB_full_has_vjp` by `HasVJP.backward_unique`, and read through
+   `efficientnetForwardB_full_has_vjp_correct` as the `pdiv`-contracted Jacobian of the committed
+   `efficientnetForwardB_full`. ~3 s. No number at sixteen blocks (finding 7).
+
 4. **Freeze.** The blueprint audit in `planning/xla_same_respell_and_blueprint_audit.md` step 8
    adds the table in section 1 and the sentence at the end of section 2 to the blueprint, which
    currently mentions the float budgets in one clause and tables none of them. After that this
@@ -320,6 +366,10 @@ that is not "the number gets smaller".
 * **A `FloatBudgetEnvCore` split** of the `Maps` kit. Cone hygiene only.
 * **MobileNetV2's and B0's training-mode forwards.** Would be two more caps. B0's would also be
   per example.
+* **The sixteen-block B0 backward number and the seventeen-block MobileNetV2 backward number.**
+  Statable since finding 5's correction (9.112e2648 and 1.246e323 at the shipped leaves; the
+  threshold is an option). Declined: a number that says nothing at 1e182 says nothing at 1e2648,
+  and the sixteen-block chain has its certified tie without one.
 * **ViT-Tiny's backward.** `MhsaBackFloatBridge.lean` is 8 `floatBridgesTo_` against 46
   existential-tier `floatBridges_`, so it is a tier migration first, for a fifth number of a
   kind there are four of.
@@ -409,9 +459,11 @@ for its headline theorem. Stage, then stop and ask before committing. One commit
   a variable and the bridge will not reduce.
 * Check which way a recursive fold associates before writing its chain: `vitBodyKVFlat`
   recurses head-first, `convNextStageChK` right-associated. The definition decides.
-* `norm_num`'s ceiling is about 1e253 for a nested tree, shape-dependent; heartbeats, recursion
-  depth, `ring_nf`, `nlinarith` and `simp only` first do not move it. Flatten the tree
-  (per-unit-gain factoring) or take an operating point.
+* `norm_num`'s "ceiling" is `exponentiation.threshold` (default 256): a `10 ^ e` literal with
+  `e > 256` is left unevaluated and the goal stays open, whatever the tree's shape. Heartbeats,
+  recursion depth, `ring_nf`, `nlinarith` and `simp only` first do not move it;
+  `set_option exponentiation.threshold 400 in` does, at no cost (`b0FullEvalBridge_maps`). Prefer
+  it to an operating point taken only to get under 1e253.
 * Round the window first, then double it, for any capped leaf: `2 * r4(x)` can exceed
   `r4(2 * x)` and break `Maps.capped`'s own `2 * A' <= E'`.
 * Fold with the rounded gamma (`r4(gamma_q k)`), never the exact `(1+u)^k - 1`; the Lean chain

@@ -2429,6 +2429,311 @@ def verify_b0_back(rows, wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esa
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# EfficientNet-B0 at the FULL 16-BLOCK PAPER NET (proofs_tier_to_paper_nets 3.3)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# The `[t,c,n,s,k]` table is read from TWO Lean sources rather than typed a third time:
+# widths, SE reductions and kernel sizes from `B0Weights` (`EfficientNetFullB0.lean`), and
+# the block KINDS and spatial sizes from `efficientnetForwardB_full` in the same file.
+# `b0_full_plan` asserts the two name the same 16 blocks, that "has an identity skip"
+# (`mbResidW`) agrees with `ic == oc`, that the no-expand form is exactly the `MBWNoExp`
+# record, and that the first three rows reproduce the shipped `B0_PLAN`.
+#
+# ⛔⛔ THE FORWARD CANNOT FOLD AT SIXTEEN SQUEEZE-EXCITE SITES, and the reason is §0.1's
+# shape: `seScale`'s modulus carries `A · Eg`, the block window times the gate's error, and
+# the gate grows that error out of the same window through `GAP → dense`. Each SE site
+# roughly doubles the budget's EXPONENT (1e25 / 1e83 / 1e199 across the representative's
+# three), so the honest 16-site fold is astronomically past `norm_num`'s ~1e253 ceiling.
+#
+# ⭐ THE CAP GOES ON THE GATE'S SIGMOID, not on the rescale and not on the BatchNorms.
+# `floatBridgesTo_sigmoid`'s window is the CONSTANT `1 + esig` whatever the input, so
+# `Maps.capped` there needs no error numeral at all — its side condition is `2·(1+esig) ≤ Eg`
+# — and the rescale's `mulErr q A Cg E Eg` becomes `≈ 2·A + 3·E`, LINEAR in both. The window
+# (which swish never resets, unlike relu6) is untouched by the cap and is the honest half;
+# the BatchNorm sites stay as folds; the label is CAP because at every one of the sixteen
+# gates the claim is the triangle inequality on the sigmoid's range.
+#
+# ⛔ The BACKWARD has no number at sixteen blocks and no cap can rescue one (its WINDOW is
+# past the ceiling), exactly as MobileNetV2's at seventeen (`mnv2_paper_back_chain`).
+
+
+def b0_full_plan():
+    """(forward plan, backward plan, stem oc, head fan-in, head oc, dense fan-in, head h·w),
+    read from Lean.
+
+    The forward plan is `(tag, kind, expand fan-in, depthwise fan-in, SE channels, SE
+    reduction, SE spatial h·w, project fan-in)` in forward order — `B0_PLAN`'s shape — and the
+    backward plan is `(tag, kind, cin, cmid, cout, h, w, kd, se_c, se_r)` cotangent-first —
+    `B0_BACK_PLAN`'s. `kind` is `noexp` (t=1), `strided`, `resid` (stride 1, identity skip),
+    or `exp` (stride 1, `ic != oc`, no skip — the fourth block shape, stages 5 and 7)."""
+    src = _lean("LeanMlir/Proofs/Architectures/EfficientNetFullB0.lean")
+    sig = src.split("structure B0Weights where")[1].split("\n\n")[0]
+    width = {}
+    for tag, ic, oc, r, kh, kw in re.findall(
+            r'(b\d+) : MBWNoExp (\d+) (\d+) (\d+) (\d+) (\d+)', sig):
+        width[tag] = ("noexp", int(ic), int(ic), int(oc), int(r), int(kh) * int(kw))
+    for tag, ic, mid, oc, r, kh, kw in re.findall(
+            r'(b\d+) : MBW (\d+) (\d+) (\d+) (\d+) (\d+) (\d+)', sig):
+        width[tag] = ("mb", int(ic), int(mid), int(oc), int(r), int(kh) * int(kw))
+    stem_oc = int(re.search(r'sW : Kernel4 (\d+) 3 3 3', sig).group(1))
+    head_oc, head_ic = map(int, re.search(r'hW : Kernel4 (\d+) (\d+) 1 1', sig).groups())
+    dense_fan = int(re.search(r'fcW : Mat (\d+) \d+', sig).group(1))
+
+    fwd = src.split("noncomputable def efficientnetForwardB_full")[1]
+    fwd = fwd.split("namespace StableHLO")[0]
+    shape = {tag: (kind, int(h), int(w)) for kind, h, w, tag in
+             re.findall(r'mb(NoExp|Strided|Resid|Exp)W N (\d+) (\d+) w\.(b\d+)', fwd)}
+    hh, hw_ = map(int, re.search(r'headFwdB N \(h := (\d+)\) \(w := (\d+)\)', fwd).groups())
+
+    assert set(shape) == set(width), f"block sets differ: {set(shape) ^ set(width)}"
+    for t, (k, _h, _w) in shape.items():
+        form, ic, _mid, oc, _r, _kd = width[t]
+        assert (k == "Resid") == (ic == oc), f"{t}: forward says {k}, record says {ic}->{oc}"
+        assert (k == "NoExp") == (form == "noexp"), f"{t}: forward says {k}, record is {form}"
+    kindOf = {"NoExp": "noexp", "Resid": "resid", "Strided": "strided", "Exp": "exp"}
+    order = sorted(shape, key=lambda t: int(t[1:]))
+    plan, back = [], []
+    for t in order:
+        k, h, w_ = shape[t]
+        _form, ic, mid, oc, r, kd = width[t]
+        plan.append((t, kindOf[k], None if k == "NoExp" else ic, kd, mid, r, h * w_, mid))
+    for t in reversed(order):
+        k, h, w_ = shape[t]
+        _form, ic, mid, oc, r, kd = width[t]
+        back.append((t, kindOf[k], ic, mid, oc, h, w_, kd, mid, r))
+    return plan, back, stem_oc, head_ic, head_oc, dense_fan, hh * hw_
+
+
+B0_FULL_PLAN, B0_FULL_BACK_PLAN, B0_FULL_STEM_OC, B0_FULL_HEAD_IC, B0_FULL_HEAD_OC, \
+    B0_FULL_DENSE_FAN, B0_FULL_HEAD_HW = b0_full_plan()
+
+# ⚠ The representative is a SHAPE COVER of the paper table, not a prefix of it: its b1/b2 are
+# the paper's, but its b3 carries a 5×5 depthwise (so the 5×5 kernel shape is exercised) where
+# the paper's b3 — stage 2, k = 3 — is 3×3. Everything else about b3 (24 → 144 → 24, r = 6,
+# 56×56, identity skip) agrees. The head differs too: the reduced net's runs on b3's 24
+# channels at 56×56, the paper's on b16's 320 at 7×7.
+assert B0_FULL_PLAN[:2] == B0_PLAN[:2], (B0_FULL_PLAN[:2], B0_PLAN[:2])
+assert B0_FULL_PLAN[2][:3] + B0_FULL_PLAN[2][4:] == B0_PLAN[2][:3] + B0_PLAN[2][4:]
+assert (B0_FULL_PLAN[2][3], B0_PLAN[2][3]) == (9, 25), (B0_FULL_PLAN[2], B0_PLAN[2])
+assert B0_FULL_BACK_PLAN[-2:] == B0_BACK_PLAN[-2:], (B0_FULL_BACK_PLAN[-2:], B0_BACK_PLAN[-2:])
+assert B0_FULL_BACK_PLAN[-3][:7] + B0_FULL_BACK_PLAN[-3][8:] \
+    == B0_BACK_PLAN[0][:7] + B0_BACK_PLAN[0][8:]
+# 49 BN sites: stem + b1's two + 15 blocks x 3 + head (the representative has 10); 16 SE gates.
+assert 1 + sum(2 if k == "noexp" else 3 for _, k, *_ in B0_FULL_PLAN) + 1 == 49
+assert len(B0_FULL_PLAN) == 16
+
+
+def b0_full_eval_chain(cap_sig=True, w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32):
+    """`b0_eval_chain` at the 16-block paper net.
+
+    ⭐ `cap_sig` applies `FloatBridgesTo.capped` at every SE gate's SIGMOID — the one site
+    in the block whose window is a constant (`1 + esig`), so the cap's side condition
+    `2·Cg ≤ Eg` is the only numeral it adds and the quadratic `A · Eg` never forms. Every
+    other stage, the 49 BatchNorms included, is the fold. Uncapped (`cap_sig=False`) the
+    chain is the honest sixteen-site fold, kept only to print the comparison."""
+    G = Bb = Mb = w
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    def bnE(st):
+        A, E = st
+        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+        return R((G * ((A + Mb) * S) + Bb + nb, nb + G * S * E))
+
+    def cv(st, m):
+        return R(conv(st, m, w, w))
+
+    def swish(st):
+        A, E = st
+        me = mulErr(q, A, F(1), F(0), esig)
+        return R((A + me, me + min((1 + A / 4) * E, A + E)))
+
+    def sigmoid(st):
+        Cg = r4(1 + esig)
+        if cap_sig:
+            return (Cg, r4(2 * Cg))          # `Maps.capped`: Eg := 2·Cg, the fold discarded
+        return R((1 + esig, esig + st[1] / 4))
+
+    out = []
+    st = (F(1), F(0))
+    st = cv(st, 3 * 3 * 3);  out.append(("stem.conv", st))
+    st = bnE(st);            out.append(("stem.bn", st))
+    st = swish(st);          out.append(("stem.swish", st))
+    for tag, kind, fe, fd, c, r, hw, fp in B0_FULL_PLAN:
+        blkin = st
+        if fe is not None:
+            st = cv(st, fe);   out.append((f"{tag}.econv", st))
+            st = bnE(st);      out.append((f"{tag}.ebn", st))
+            st = swish(st);    out.append((f"{tag}.eswish", st))
+        st = cv(st, fd);       out.append((f"{tag}.dw", st))
+        st = bnE(st);          out.append((f"{tag}.dbn", st))
+        st = swish(st);        out.append((f"{tag}.dswish", st))
+        A, E = st
+        g = R(gap(st, hw, q)); out.append((f"{tag}.sq", g))
+        g = cv(g, c);          out.append((f"{tag}.sd1", g))
+        g = swish(g);          out.append((f"{tag}.ssw", g))
+        g = cv(g, r);          out.append((f"{tag}.sd2", g))
+        g = sigmoid(g);        out.append((f"{tag}.ssig", g))
+        Cg, Eg = g
+        st = R((A * Cg + q * (A * Cg), mulErr(q, A, Cg, E, Eg)))
+        out.append((f"{tag}.se", st))
+        st = cv(st, fp);       out.append((f"{tag}.pconv", st))
+        st = bnE(st);          out.append((f"{tag}.pbn", st))
+        if kind == "resid":
+            st = R(residual(blkin, st, q)); out.append((f"{tag}.out", st))
+    st = cv(st, B0_FULL_HEAD_IC);          out.append(("head.conv", st))
+    st = bnE(st);                          out.append(("head.bn", st))
+    st = swish(st);                        out.append(("head.swish", st))
+    st = R(gap(st, B0_FULL_HEAD_HW, q));   out.append(("gap", st))
+    st = R(dense(st, B0_FULL_DENSE_FAN, w, w)); out.append(("dense", st))
+    return out
+
+
+def verify_b0_full(rows, cap_sig=True, w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32) -> int:
+    """Re-assert EVERY rounded inequality `EfficientNetFullFloatBudget.lean` closes, exactly —
+    `verify_b0` at the paper table, with the sigmoid stage's error clause replaced by the
+    cap's `2·Cg ≤ Eg`. Returns the count checked; raises on the first failure."""
+    G = Bb = Mb = w
+    r_ = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: {float(lhs)} > {float(rhs)}"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2))
+        ck(tag + ".A", (1 + g) * (m * w * A + w), dst[0])
+        ck(tag + ".E", g * (m * w * (A + E) + w) + m * w * E, dst[1])
+
+    def bn_ck(tag, src, dst):
+        A, E = src
+        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+        ck(tag + ".A", G * ((A + Mb) * S) + Bb + nb, dst[0])
+        ck(tag + ".E", nb + G * S * E, dst[1])
+
+    def swish_ck(tag, src, dst):
+        A, E = src
+        me = mulErr(q, A, F(1), F(0), esig)
+        ck(tag + ".A", A + me, dst[0])
+        ck(tag + ".E", me + min((1 + A / 4) * E, A + E), dst[1])
+
+    def gap_ck(tag, hw, src, dst):
+        A, E = src
+        g = r4(gamma_q(hw + 1))
+        ck(tag + ".A", A * ((1 + g) * (1 + q)), dst[0])
+        ck(tag + ".E", A * (q * (1 + g) + g) + E, dst[1])
+
+    conv_ck("stem.conv", 3 * 3 * 3, (F(1), F(0)), r_["stem.conv"])
+    bn_ck("stem.bn", r_["stem.conv"], r_["stem.bn"])
+    swish_ck("stem.swish", r_["stem.bn"], r_["stem.swish"])
+    st = r_["stem.swish"]
+    for tag, kind, fe, fd, c, r, hw, fp in B0_FULL_PLAN:
+        blkin = st
+        if fe is not None:
+            conv_ck(f"{tag}.econv", fe, st, r_[f"{tag}.econv"])
+            bn_ck(f"{tag}.ebn", r_[f"{tag}.econv"], r_[f"{tag}.ebn"])
+            swish_ck(f"{tag}.eswish", r_[f"{tag}.ebn"], r_[f"{tag}.eswish"])
+            st = r_[f"{tag}.eswish"]
+        conv_ck(f"{tag}.dw", fd, st, r_[f"{tag}.dw"])
+        bn_ck(f"{tag}.dbn", r_[f"{tag}.dw"], r_[f"{tag}.dbn"])
+        swish_ck(f"{tag}.dswish", r_[f"{tag}.dbn"], r_[f"{tag}.dswish"])
+        A, E = r_[f"{tag}.dswish"]
+        gap_ck(f"{tag}.sq", hw, (A, E), r_[f"{tag}.sq"])
+        conv_ck(f"{tag}.sd1", c, r_[f"{tag}.sq"], r_[f"{tag}.sd1"])
+        swish_ck(f"{tag}.ssw", r_[f"{tag}.sd1"], r_[f"{tag}.ssw"])
+        conv_ck(f"{tag}.sd2", r, r_[f"{tag}.ssw"], r_[f"{tag}.sd2"])
+        Ain, Ein = r_[f"{tag}.sd2"]
+        Cg, Eg = r_[f"{tag}.ssig"]
+        ck(f"{tag}.ssig.A", 1 + esig, Cg)
+        if cap_sig:
+            ck(f"{tag}.ssig.cap", 2 * Cg, Eg)         # `Maps.capped`'s side condition
+        else:
+            ck(f"{tag}.ssig.E", esig + Ein / 4, Eg)
+        ck(f"{tag}.se.A", A * Cg + q * (A * Cg), r_[f"{tag}.se"][0])
+        ck(f"{tag}.se.E", mulErr(q, A, Cg, E, Eg), r_[f"{tag}.se"][1])
+        conv_ck(f"{tag}.pconv", fp, r_[f"{tag}.se"], r_[f"{tag}.pconv"])
+        bn_ck(f"{tag}.pbn", r_[f"{tag}.pconv"], r_[f"{tag}.pbn"])
+        st = r_[f"{tag}.pbn"]
+        if kind == "resid":
+            Bd, Ed = st
+            ck(f"{tag}.resA", Bd + blkin[0] + q * (Bd + blkin[0]), r_[f"{tag}.out"][0])
+            ck(f"{tag}.resE", q * (Bd + Ed + blkin[0] + blkin[1]) + (Ed + blkin[1]),
+               r_[f"{tag}.out"][1])
+            st = r_[f"{tag}.out"]
+    conv_ck("head.conv", B0_FULL_HEAD_IC, st, r_["head.conv"])
+    bn_ck("head.bn", r_["head.conv"], r_["head.bn"])
+    swish_ck("head.swish", r_["head.bn"], r_["head.swish"])
+    gap_ck("gap", B0_FULL_HEAD_HW, r_["head.swish"], r_["gap"])
+    conv_ck("dense", B0_FULL_DENSE_FAN, r_["gap"], r_["dense"])
+    return n
+
+
+def b0_full_back_chain(wk=B0_WK, G=B0_GLB, S=F(317), es=B0_ESB, exh=B0_EXH, esav=B0_ESAV,
+                       q=U32, xhat='sqrt', ssw=F(2), sx='window', se_nnz=False, N=1):
+    """`b0_back_chain` at the 16-block paper net, at the SHIPPED leaves by default: the
+    global `|swish'| <= 2` (`swishScalarDeriv_abs_le`) and the ε-floor `S = 317` (no operating
+    point) — the settings `b0_grad_float_le` is stated at. `sx='window'` imports the SE's
+    saved input from the FORWARD's certified window (`b0_full_eval_chain`), as the 3-block
+    number does; every other knob is `b0_back_chain`'s."""
+    fwd = dict(b0_full_eval_chain())
+
+    def bnw(hw):
+        return N * hw
+
+    def Xh(hw, fwd_tag):
+        return F(isqrt_ceil(N * hw)) if xhat == 'sqrt' else 2 * fwd[fwd_tag][0] * S
+
+    def Ssw(fwd_tag):
+        return (1 + fwd[fwd_tag][0] / 4) if ssw == 'window' else ssw
+
+    def Sx(fwd_tag):
+        return fwd[fwd_tag][0] if sx == 'window' else sx
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    hhw = B0_FULL_HEAD_HW
+    out = []
+    st = (F(1), F(0))
+    st = R(conv_back(st, 10, wk, q));            out.append(("linBack", st))
+    st = R(gap_back(st, hhw, q));                out.append(("gapBack", st))
+    st = R(diag_back(st, Ssw("head.bn"), esav, q));  out.append(("head.swB", st))
+    st = R(bn_back(st, bnw(hhw), Xh(hhw, "head.bn"), G, S, es, exh, q))
+    out.append(("head.bnB", st))
+    st = R(conv_back(st, B0_FULL_HEAD_OC, wk, q));   out.append(("head.cB", st))
+    for tag, kind, cin, cmid, cout, h, w, kd, se_c, se_r in B0_FULL_BACK_PLAN:
+        blkin = st
+        hw = h * w
+        he = (2 * h) * (2 * w) if kind == "strided" else hw
+        s = R(bn_back(blkin, bnw(hw), Xh(hw, tag + ".pbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBp", s))
+        s = R(conv_back(s, cout, wk, q));        out.append((tag + ".cBp", s))
+        s = se_back(s, out, tag, se_c, hw, se_r, Sx(tag + ".dswish"), 1 + B0_ESIG,
+                    Ssw(tag + ".sd1"), wk, esav, B0_SSIG, q,
+                    nnz=(hw if se_nnz else None))
+        s = R(diag_back(s, Ssw(tag + ".dbn"), esav, q));  out.append((tag + ".swBd", s))
+        s = R(bn_back(s, bnw(hw), Xh(hw, tag + ".dbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBd", s))
+        s = R(conv_back(s, kd, wk, q));          out.append((tag + ".dwB", s))
+        if kind != "noexp":
+            s = R(diag_back(s, Ssw(tag + ".ebn"), esav, q));  out.append((tag + ".swBe", s))
+            s = R(bn_back(s, bnw(he), Xh(he, tag + ".ebn"), G, S, es, exh, q))
+            out.append((tag + ".bnBe", s))
+            s = R(conv_back(s, cmid, wk, q));    out.append((tag + ".cBe", s))
+        st = R(residual(blkin, s, q)) if kind == "resid" else s
+        out.append((tag + ".out", st))
+    st = R(diag_back(st, Ssw("stem.bn"), esav, q));  out.append(("stem.swB", st))
+    st = R(bn_back(st, bnw(12544), Xh(12544, "stem.bn"), G, S, es, exh, q))
+    out.append(("stem.bnB", st))
+    st = R(conv_back(st, B0_FULL_STEM_OC * 9, wk, q)); out.append(("stem.cB", st))
+    return out
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # ConvNeXt-T BACKWARD — the LAYERNORM question (planning §3.15)
 # ════════════════════════════════════════════════════════════════════════════
 #
@@ -2901,6 +3206,64 @@ if __name__ == "__main__":
     print("     straight from e^t ≥ 1+t ≥ t — so |swish′| = |σ + x·σ′| ≤ 2 with")
     print("     `Real.add_one_le_exp` and no MVT, no sup, no derivative analysis. (The sharp")
     print("     1.0998 does need the sup; the table above says nobody needs it.)")
+
+    print("\n── EfficientNet-B0 at the FULL 16-BLOCK PAPER NET (proofs_tier_to_paper_nets 3.3) ──")
+    frows = b0_full_eval_chain()
+    fA, fE = frows[-1][1]
+    uA, uE = b0_full_eval_chain(cap_sig=False)[-1][1]
+    print(f"  FORWARD, eval-mode BN, 49 BN sites and 16 SE gates (the representative has 10 / 3)")
+    print(f"    window        {sci(fA)}   (2.580e55 at 3 blocks; swish never resets it, so the")
+    print(f"                              body's growth is honest and the head is 320 → 1280 at 7×7)")
+    print(f"    budget        {sci(fE)}   ⭐ CAPPED at the SIGMOID of all 16 SE gates, nowhere else")
+    print(f"    budget/window {float(fE / fA):.3f}   — the sixteen gate caps compound to this ratio")
+    print(f"    uncapped      window {sci(uA)} / budget 1e{ilog10(uE)} — SE is quadratic in the window")
+    print(f"    re-assertions {verify_b0_full(frows)} — every rounded inequality re-checked exactly")
+    print(f"    statable      YES — at `set_option exponentiation.threshold 400`. ⭐⭐ norm_num's")
+    print(f"                  '~1e253 ceiling' (§3.7(a)) is Lean's exponentiation.threshold option,")
+    print(f"                  default 256: 10^256 evaluates and 10^257 does not, in exactly the")
+    print(f"                  failing shape; raised, the same goals close at 10^290 in the same time.")
+    print(f"\n  {'forward variant':<52} {'window':>12} {'budget':>12}  statable")
+    print("  " + "-" * 84)
+    for name, kw in [
+        ("⭐ shipped: capped at the 16 sigmoids, ε-floor S = 317", {}),
+        ("uncapped (the honest fold; SE quadratic)", dict(cap_sig=False)),
+        ("capped, operating point |istd| ≤ 16 (NOT taken)", dict(S=F(16))),
+        ("capped, S = 32 (variance floor 1e-3, NOT taken)", dict(S=F(32))),
+        ("capped, uniform |·| ≤ 1 (a fiction; not the profile)", dict(w=F(1))),
+    ]:
+        a, e = b0_full_eval_chain(**kw)[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'yes, threshold'
+        print(f"  {name:<52} {sci(a):>12} {sci(e):>12}  {ok}")
+    print("  ('yes, threshold' = every numeral is a plain rational; only the default")
+    print("   exponentiation.threshold stands between the goal and norm_num.)")
+    print("\n  window growth per block (the per-block multiplier that sets the answer):")
+    prev = F(1)
+    for tag, kind, *_ in B0_FULL_PLAN:
+        last = f"{tag}.out" if kind == "resid" else f"{tag}.pbn"
+        a = dict(frows)[last][0]
+        print(f"    {tag:<4} {kind:<8} window {sci(a):>12}   ×1e{ilog10(a / prev)}")
+        prev = a
+
+    print(f"\n  BACKWARD — ⛔ THERE IS NO NUMBER AT 16 BLOCKS. Not because it cannot be stated —")
+    print(f"  with the threshold raised 10^2648 is a numeral the kernel carries — but because a")
+    print(f"  number that says nothing at 1e182 says nothing at 1e2648 (float_budget_numbers §2, §6).")
+    print(f"\n  {'backward variant':<52} {'window':>12} {'budget':>12}  statable")
+    print("  " + "-" * 84)
+    for name, kw in [
+        ("shipped leaves: |swish'| ≤ 2, S = 317, Sx = fwd window", {}),
+        ("operating point |istd| ≤ 16", dict(S=F(16))),
+        ("operating point Sx ≤ 16 on the SE input", dict(sx=F(16))),
+        ("both operating points", dict(S=F(16), sx=F(16))),
+        ("both + broadcastBack at its h·w nonzeros", dict(S=F(16), sx=F(16), se_nnz=True)),
+        ("σ² ≈ 1 (S = 1), Sx ≤ 16 — the crudest possible", dict(S=F(1), sx=F(16))),
+        ("S = 1, Sx ≤ 16, |W| ≤ 1, |γ| ≤ 1 — a fiction", dict(S=F(1), sx=F(16), wk=F(1), G=F(1))),
+    ]:
+        a, e = b0_full_back_chain(**kw)[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'declined'
+        print(f"  {name:<52} {sci(a):>12} {sci(e):>12}  {ok}")
+    print("  ⛔ No loose leaf: the γ and kernel bounds are MEASURED, and even the fiction that sets")
+    print("     every one of them to 1 stays at 1e344. This is MobileNetV2's 17-block backward")
+    print("     situation, and the same answer: report that there is no number, do not shave.")
 
     print("\n── ConvNeXt-T BACKWARD sizing probe: does a LAYERNORM net's backward FOLD? (§3.15) ──")
     crows = cnx_back_chain(S=F(16))

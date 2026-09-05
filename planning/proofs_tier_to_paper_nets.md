@@ -1,7 +1,7 @@
 # Bringing every net's Proofs tier to its paper-faithful net
 
 **Scoped 2026-09-05 from the Proofs-tier audit run during the XLA-SAME re-spelling. Nothing
-below is started except where a row says so; 3.1 and 3.2 have since landed.** The target is the
+below is started except where a row says so; 3.1, 3.2(a)–(c) and 3.3 have since landed.** The target is the
 level ConvNeXt-T sits at: every certification tier stated at the net the artifact runs, the column
 "tiers only at a reduced or representative net" empty for every architecture. ConvNeXt-T had one
 hole of its own when this was scoped — its train-step tie was at the retired scalar LN — and
@@ -41,8 +41,8 @@ shipped config count as paper-net statements.
 | ResNet-34 | `resnet34Forward_full_pc`, [3,4,6,3], 64 to 512 | ✓ | ✓ | ✓ 146 params | ✓ eval and train BN | ✓ | ✓ | full depth at 2 channels; 224 realistic |
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
-| EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ | ✓ 262 params (stem symmetric) | ✗ 3-block | ✗ 3-block, N=1 | ✗ open at 3-block | none |
-| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
+| EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train BN (eval: 3.3e) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
+| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train BN (eval: 3.2e) | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 
@@ -113,7 +113,7 @@ Gates: `lake build Certs` 3956 green, `lake env lean tests/AuditAxioms.lean` 3-a
 `lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`. No renderer or `.mlir`
 change — this is a den-level tie, as r34/mnv2 are.
 
-### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6) — **DONE 2026-09-05**
+### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6) — **(a)–(c) DONE 2026-09-05; (e) OPEN**
 
 **(a) DONE.** `formalization.yaml`'s headline row now names `mobilenetv2_full_has_vjp_at_correct`
 in `MobileNetV2FullVJP.lean` — the 17-block paper net — where it named the 2-block generic in
@@ -200,31 +200,172 @@ skip blocks are the affine shift `a ↦ a + 3`; γ-scaling keeps BN inside `(0,6
 a 17-block 224 seal is their product. Skip unless a witness at the paper net is wanted for the
 blueprint.
 
-### 3.3 EfficientNet-B0 at 16 blocks (T4, T5, T6)
+**(e) OPEN — the whole-net eval tie, and the artifact it would end at.** One session.
 
-3.0 step 7 (the 3-block T6) landed in `d3b0db6`, so 3.3(c) generalises it rather than waiting on it. On the XLA stem.
+**Gap.** `mnv2Paper_float_logits_le` is about `mnv2PaperEvalForward`, the record-bundled
+composition in `MobileNetV2PaperFloatBudget.lean`. Each of the seventeen blocks is `rfl`-tied to
+the abbreviation the committed inference forward is built from
+(`MnvBlock.{body,strided,res}Fwd_eq_pcEval`, `MnvBlockNoExp.fwd_eq_pcEval`), but the WHOLE net is
+tied to nothing: the paper net's eval twin has no ℝ-def and no typed `SHlo` graph in Lean.
+`MobileNetV2RenderPCEval.lean` covers the six-block net; `MobileNetV2FullPaper.lean` is at
+training BN, the world the VJP and the graph live in. So `MobileNetV2FloatBudget.lean` has a
+`*_committed` restatement and this file does not.
 
-**(a) T4, and it will not be a fold. Probe first.** Each squeeze-excite site roughly doubles
-the budget's exponent (1e25, 1e83, 1e199 across the representative's three blocks:
-`planning/archive/float_budget_numbers_log.md` §3.4). Sixteen SE sites cannot fold. Extend
-`b0_eval_chain` to the `[t,c,n,s,k]` table and confirm; then state the number the way
-ConvNeXt-T and ViT-Tiny state theirs, `FloatBridgesTo.capped` at every SE gate (the gate's own
-range `≤ 1` is what the cap uses), and label it CAP in the yaml and the blueprint table. The
-window is the honest half; report it. Mirror: `ConvNeXtFloatBudget.lean` for the capped fold,
-`EfficientNetFloatBudget.lean` for the record shapes (`EnetWeights`, `EnetMBBlk.maps`). Done when
-the file compiles, `verify_b0_full` passes, and the yaml row says CAP.
+⭐⭐ **And this rung is worth more here than the one it mirrors.** The six-block eval graph
+denotes a net with NO committed artifact — `verified_mlir/` has
+`mobilenetv2_reduced_train_step.mlir` and no reduced eval forward — so that number's "tie to the
+rendered graph" ends at a typed graph. The paper net's eval forward IS shipped, twice:
+`mobilenetv2_fwd_eval.mlir` (315 inputs — `%x`, `paperSig`'s 210 params, 104 stat slots) and its
+1000-class twin `mobilenetv2in_fwd_eval.mlir`. This tie ends at bytes.
 
-**(b) T5.** `b0_back_chain` at 16 blocks; the SE backward is linear at a fixed point so the
-backward folds (`backward_is_always_a_fold`), but 16 SE sites of `A · Eg` will also pass 1e300.
-Same decision as (a); state at `N = 1` as the 3-block number is, and say so.
+**Order.**
 
-**(c) T6.** The 3-block tie from 3.0 step 7 generalizes: the three batched block ties at
-`bnBatchLA` are already dim-polymorphic; the assembly is 16 opaque blocks. Same elaboration
-discipline as 3.2(c). Done when it compiles against `efficientnetForwardB_full_has_vjp` with a
-used shape check.
+1. `LeanMlir/Proofs/Architectures/MobileNetV2FullPaperEval.lean`, the eval twin of
+   `MobileNetV2FullPaper.lean`: records (`IVW`/`IVWNoExp` plus μ/v per site — ⚠ **one shared ε**,
+   as `mobilenetv2Forward_full_pc_eval` and the render both do, where the training file carries a
+   per-site ε), the four block wrappers in the committed `ivExpandPCEval`/`ivDepthwisePCEval`/
+   `ivDepthwiseStridedPCEval`/`ivProjectPCEval` vocabulary, `mobilenetv2ForwardPaperEval`, the four
+   block graphs with `bnPerChannelEvalF`, their `_faithful` lemmas, then
+   `mobilenetv2FwdGraphPaperEval` + `_faithful`. Two mirrors: that file for the structure,
+   `MobileNetV2RenderPCEval.lean` for the eval nodes.
+2. ⚠ **SSA names: `bnSiteP`'s, not the six-block file's.** The render names the stat slots
+   `%stnmu`/`%stnvar`, `%b{k}{en,dn,pn}{mu,var}`, `%hnmu`/`%hnvar`;
+   `mobilenetv2FwdGraphFullPCEval` uses `%mue1`/`%vare1`, which matches no artifact and could not,
+   since its net has none. Names are pretty-printing metadata and do not enter `den` — matching
+   them is what lets a reader diff the typed graph against the committed text.
+3. In `MobileNetV2PaperFloatBudget.lean`: `MnvPaperWeights.toEval`,
+   `mnv2PaperEvalForward_eq_paperEval` (`rfl`), `mnv2PaperEvalGraph_faithful`,
+   `mnv2Paper_float_logits_le_committed`. ⭐ Try defining `mnv2PaperEvalForward` AS
+   `mobilenetv2ForwardPaperEval (W.toEval ε)` outright — one spelling, no `rfl` needed — and fall
+   back to the separate spelling plus the `rfl` if the `.comp` chain will not typecheck against a
+   17-deep nested def.
+4. ⭐ **Make the head generic in `nCls` while there, and the profile becomes exact.**
+   `Maps.dense`'s envelope depends on the fan-in `1280` and never on the output count, so
+   `MnvHead 1280 nCls` carries the same two numerals verbatim and one theorem covers both shipped
+   eval artifacts. It also closes a real qualification in the header: the 3,504,872-entry
+   checkpoint the profile is measured on is the **1000-class** net, so at 10 classes
+   `|·| ≤ 28/10` is a measurement on all 52 convolutions and 52 BatchNorms and an assumption on
+   the `1280 × 10` head.
 
-**(d) `enetTrunk` at 16 blocks.** Optional; the `CertLayer` fold is a type-level check that the
-block ladder is the shipped one, and the current one is the 3-block ladder.
+**Traps.**
+
+* **Two lists for one net.** This adds a third spelling of the ladder (the eval forward and its
+  graph) and a fourth of the widths. The forward/graph pair is pinned by its own faithfulness
+  theorem and the float file's spelling by the `rfl`; the WIDTHS are pinned only by
+  `scripts/float_budget_envelope.py`'s `mnv2_paper_plan`, which today asserts
+  `mobilenetv2ForwardPaper` and `paperSig` name the same 17 blocks. Extend that loader to read the
+  eval file too, or the new record is the one list nothing checks.
+* **Elaboration.** `mobilenetv2FwdGraphPaper_faithful` is `simp only [...]` then `rfl` at 17
+  blocks; the eval twin adds 52 `bnPerChannelEvalF_faithful` rewrites and needs `maxRecDepth`
+  raised (the six-block eval needed 10000). §5's discipline applies unchanged.
+* **The eval graph must be the same net as the train step whose statistics it consumes** —
+  `mnv2FwdEvalFaithfulV`'s own header comment, and the reason the padding thread mattered. Both
+  are XLA-`SAME` since 2026-09-05, so this is now a check rather than a risk.
+
+**Done when** `den (mobilenetv2FwdGraphPaperEval …) = mobilenetv2ForwardPaperEval …` compiles,
+`mnv2Paper_float_logits_le_committed` states the number with that forward on the real side, the
+`formalization.yaml` row and `planning/float_budget_numbers.md` §1's "one exception" note both
+come out, and the four gates are green. The mathematics is nil; the cost is elaboration.
+
+### 3.3 EfficientNet-B0 at 16 blocks (T4, T5, T6) — **(a), (c) DONE 2026-09-05; (b) probed, declined; (e) OPEN**
+
+On the XLA stem, as 3.0 required. Probe first, and the probe changed the plan twice.
+
+**(a) DONE — T4 is a CAP, and the cap is on the gate's sigmoid.** `scripts/float_budget_envelope.py`
+gains `b0_full_plan` (the `[t,c,n,s,k]` table read from TWO Lean sources — widths, SE reductions
+and kernels from `B0Weights`, kinds and spatial sizes from `efficientnetForwardB_full` — with the
+loader asserting they name the same 16 blocks, that "has an identity skip" is `ic = oc`, and that
+the no-expand form is exactly the `MBWNoExp` record), `b0_full_eval_chain`, `verify_b0_full` (476
+inequalities) and `b0_full_back_chain`.
+
+| | window | budget | statable |
+|---|---|---|---|
+| forward, uncapped fold at the ε-floor | 1.886e279 | 1e1897907 | no |
+| forward, **capped at the sigmoid of all 16 SE gates** | 1.886e279 | **2.416e287** | yes, at `exponentiation.threshold 400` |
+| forward, capped, operating point `\|istd\| ≤ 16` | 5.490e215 | 6.829e223 | yes, and not taken |
+| backward, shipped leaves (`\|swish'\| ≤ 2`, `S = 317`, `Sx` = fwd window) | 9.112e2648 | 6.550e2648 | in principle; declined |
+| backward, every measured bound set to 1, `S = 1`, `Sx ≤ 16` (a fiction) | 1.379e344 | 1.178e344 | in principle; declined |
+
+Three things the scoping did not anticipate. **First, where the cap goes.** The scoping said
+"at every SE gate (the gate's own range ≤ 1 is what the cap uses)", and the probe made that
+precise: capping the SE *rescale* is unwritable, because `Maps.capped` needs the site's window
+and the rescale's window comes from the gate's `Maps`, whose error numerals are the quadratic
+`A · Eg` themselves. The cap has to sit on the **sigmoid**, the one stage in the gate path whose
+window is a constant (`1 + esig`), where `Maps.capped` needs no error numeral at all and the side
+condition is `2·(1 + esig) ≤ Eg`. The rescale's modulus then reads `≈ 2A + 3E`, linear in both,
+and everything else — 49 BatchNorms, the rescale, every conv — stays the fold. The tell is not
+`budget/window ≈ 2` but `≈ 1.3·10⁸`: sixteen gate caps compounding.
+
+**Second, the window is 1.886e279, and that is past the "ceiling".** Swish never resets a window
+(relu6 pins MobileNetV2's body flat; nothing pins B0's), so sixteen blocks cost `10¹⁶`–`10¹⁸`
+each. Under §5's stated rule the next step was an operating point (`|istd| ≤ 16` lands at
+5.490e215). Before paying it the ceiling was tested directly, and ⭐⭐ **it is Lean's
+`exponentiation.threshold` option (default 256), not a wall**: in the exact goal shape that was
+failing, `10 ^ 256` evaluates and `10 ^ 257` does not, and under `set_option
+exponentiation.threshold 400` the same goals close at `10 ^ 290` in the same time. The kernel's
+`Nat.pow` is GMP-backed and never had a limit. So the number is stated at the ε-floor with no
+operating point. `planning/float_budget_numbers.md` §3 finding 5 carries the correction, §7's
+pitfall list the new rule; every "no theorem to state" in the archive now reads "at the default
+threshold".
+
+**Third, the representative is a shape cover, not a prefix.** The loader's prefix assertion
+failed: the 3-block net's `b3` is a 5×5 depthwise (so the 5×5 shape is exercised) where the
+paper's `b3` — stage 2, `k = 3` — is 3×3; and its head runs on 24 channels at 56×56 where the
+paper's runs on 320 at 7×7. Recorded in the probe and the file header; nothing downstream
+depended on the assumption.
+
+**What landed for (a).** `EfficientNetFullFloatBudget.lean` (1177 lines, ~6.6 min to elaborate):
+the capped SE gate (`floatBridgesTo_seGateC` / `seBlockFullC` / `seBC`, `EnetSE.bridgeC`,
+`EnetSE.mapsC`), the four block shapes with the gate capped — including the **fourth block
+shape** the representative has no instance of, `EnetMBBlk.expFwd` (stride 1, `ic ≠ oc`, no skip;
+`b9`, `b16`) — `EnetFullWeights nCls` (generic in the class count, since `Maps.dense`'s envelope
+depends on the fan-in only), `b0FullEvalForward`, the closed bridge, `b0FullEvalBridge_maps` under
+the raised threshold, and `b0Full_float_logits_le`. The profile is the 3-block file's, and it is
+measured on THIS net (5,288,548 f32 is the 16-block count).
+
+⚠ **One rung is open, and it is 3.2(e)'s twin — call it (e).** The four `*_eq_eval` `rfl`s tie
+each block to the eval-stage abbreviations the committed inference forward is built from
+(`mbNoExpFwdBEval`, `mbStridedFwdBEval`, `mbResidFwdBEval`; the no-skip widening to
+`projBEval ∘ seB ∘ dwbsBEval ∘ cbsBEval`, since the eval render has no `mbExp` form), but the
+whole net is tied to nothing: `efficientnetForwardB_full` is at training BN and the paper net's
+eval twin has no ℝ-def and no typed graph. Closing it is the eval twin of `EfficientNetFullB0.lean`'s
+graph section plus an `mbExpGraphBEval` in `EfficientNetRenderPCEval.lean`, then a `_committed`
+restatement. The shipped artifact it would end at is `efficientnet_fwd_eval.mlir`. Same shape and
+cost as 3.2(e); do them together.
+
+**(b) PROBED, DECLINED — the backward has no number at 16 blocks, and the reason changed.**
+`b0_full_back_chain` at the shipped leaves (the global `|swish'| ≤ 2`, the ε-floor `S = 317`, the
+SE's saved input from the forward's certified window) is 9.112e2648 / 6.550e2648. No loose leaf:
+the fiction that sets every measured bound to 1 with `S = 1` and `Sx ≤ 16` is still 1e344. With
+the threshold finding this IS statable — `10 ^ 2645` is a numeral the kernel carries — so the
+scoping's "cannot state" is no longer the reason not to. The reason is §2 of
+`planning/float_budget_numbers.md`: a number that says nothing at 1e182 says nothing at 1e2648,
+and the sixteen-block chain has its certified tie (c) without one. Declined and listed in that
+document's §6. The chain itself, `efficientnetInputGradB_full` with its `FloatBridgesTo` thread,
+lives in `EfficientNetFullWholeBackFloatBridge.lean` so that (c) is about a named term of the
+representative's shape.
+
+**(c) DONE — and one step further than the representative.** `EfficientNetFullWholeBackCertifiedTie.lean`
+(~3 s): `b0OpaqueA0 … A16` prefix defs, the generic eighteen-stage apex
+`efficientnetB_full_has_vjp` (seventeen `vjp_comp`s), the tie with stem and head concrete and the
+sixteen blocks opaque (`unfold`, two `rw`s, `rfl`, exactly the 3-block proof), and then
+`efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp`: the tie instantiated at the
+concrete `mbNoExpW`/`mbStridedW`/`mbResidW`/`mbExpW` blocks and carried to
+`efficientnetForwardB_full_has_vjp` by `HasVJP.backward_unique` (`ConvNeXtBackCertifiedTie.lean`:
+two witnesses for one map have one backward). ⭐ That is the step the 3-block file could not take
+— it stopped at a `▸`-transported `_committed` witness the kernel could not reduce through — and
+the difference is the lemma, not the depth. `efficientnetInputGradB_full_correct` then reads the
+result through `efficientnetForwardB_full_has_vjp_correct`, whose proof IS the shape check
+`efficientnetForwardB_full_eq_chain`, so the hand-written chain is stated to be the
+`pdiv`-contracted Jacobian of the committed nested-application forward. Every batch size, no
+smooth point.
+
+**(d) `enetTrunk` at 16 blocks.** Optional and untouched; the `CertLayer` fold is a type-level
+check that the block ladder is the shipped one, and the current one is the 3-block ladder.
+
+Gates: `lake build Certs` green, `lake env lean tests/AuditAxioms.lean` 3-axiom clean,
+`lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`; the probe end to end
+with every other net's output unchanged.
 
 ### 3.4 ViT-Tiny: the backward tiers (T5, T6)
 
@@ -327,8 +468,11 @@ either answer should be written into `formalization.yaml` 4d, which today says n
 ## 5. Traps, all previously paid for
 
 * **Probe before Lean.** Every number comes from `scripts/float_budget_envelope.py` first; the
-  Lean re-asserts rounded rows. A fold that passes 1e300 is a CAP, decided at the probe, not
-  discovered at `norm_num`.
+  Lean re-asserts rounded rows. A fold whose modulus is quadratic in the window is a CAP, decided
+  at the probe, not discovered at `norm_num`. ⭐ A numeral past 1e253 is NOT a reason for a cap or
+  an operating point: `norm_num`'s ceiling is `exponentiation.threshold` (default 256) and
+  `set_option exponentiation.threshold 400 in` lifts it at no cost (3.3(a)). Cap the stage whose
+  WINDOW is bounded (a sigmoid, a relu6), not the stage whose error is large.
 * **Loose leaf bounds block folds.** A whole-net fold that will not state is usually one leaf
   discarding a bound proved one lemma down (relu6's clamp, swish's modulus, seScale's window).
   Ablate in the probe before blaming the depth.
@@ -359,11 +503,13 @@ either answer should be written into `formalization.yaml` 4d, which today says n
 
 ## 6. Files
 
-New, by package: 3.1 none; 3.2 all landed — `MobileNetV2PaperFloatBudget.lean` and
-`MobileNetV2PaperWholeBackCertifiedTie.lean` (⛔ `MobileNetV2PaperBackFloatBudget.lean` is
-CANCELLED, there is no backward number to state, and the VJP was already in
-`MobileNetV2FullVJP.lean`); 3.3 `EfficientNetFullFloatBudget.lean`,
-`EfficientNetFullBackFloatBudget.lean`, `EfficientNetFullWholeBackCertifiedTie.lean`; 3.4
+New, by package: 3.1 none; 3.2 `MobileNetV2PaperFloatBudget.lean` and
+`MobileNetV2PaperWholeBackCertifiedTie.lean` landed, `MobileNetV2FullPaperEval.lean` is 3.2(e)'s
+(⛔ `MobileNetV2PaperBackFloatBudget.lean` is CANCELLED, there is no backward number to state, and
+the VJP was already in `MobileNetV2FullVJP.lean`); 3.3 `EfficientNetFullFloatBudget.lean`,
+`EfficientNetFullWholeBackFloatBridge.lean` and `EfficientNetFullWholeBackCertifiedTie.lean`
+landed (⛔ `EfficientNetFullBackFloatBudget.lean` is DECLINED: statable at 1e2648 since the
+threshold finding, and worth nothing), `EfficientNetFullB0Eval.lean` would be 3.3(e)'s; 3.4
 `ViTWholeBackCertifiedTie.lean`, `ViTBackFloatBudget.lean`; 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for

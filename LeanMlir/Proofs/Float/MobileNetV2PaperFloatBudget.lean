@@ -45,7 +45,14 @@ against the reduced net's 128, and `gap`'s output window `6.001·10⁻³` times 
 `/home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin`, whose 3,504,872 f32 entries are the
 seventeen-block net — global max `2.7157`, 99.99th percentile `1.5347`, exactly two entries above
 `2` (re-measured 2026-09-05). At the reduced net that profile was a transplant; here it is the
-checkpoint of the net being bounded. `ε ≥ 10⁻⁵` puts the inference inverse-stddev under `317`.
+checkpoint of the net being bounded — ⚠ with one qualification. Those entries are the
+**1000-class** net (the twin `@mobilenetv2_fwd_eval` renders as `mobilenetv2in_fwd_eval.mlir`),
+and this file's classifier is the committed 10-class one, so the bound is a MEASUREMENT on all 52
+convolutions and 52 BatchNorms and an ASSUMPTION on the `1280 × 10` head. `Maps.dense`'s
+envelope depends on the fan-in `1280` and never on the output count, so both numerals hold
+verbatim at 1000 classes; making the head generic in `nCls` is
+`planning/proofs_tier_to_paper_nets.md` 3.2(e). `ε ≥ 10⁻⁵` puts the inference inverse-stddev
+under `317`.
 
 ⚠ **The one hypothesis this number rests on, named.** The deployed inverse-stddev is a device
 `rsqrt` with no IEEE specification, so it is *modelled*: `DeviceRsqrt ε es` (shared with

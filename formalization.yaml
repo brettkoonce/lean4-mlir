@@ -224,6 +224,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "b0Full_float_logits_le"   # EfficientNet-B0 at the 16-block PAPER depth, inference BN, 49 BN sites, 16 SE gates, any batch size, any class count: 2.416e287 / 1.886e279, CAP at the SIGMOID of every SE gate only (uncapped 1e1897907); the window is honest; the first number past 1e253 (norm_num's ceiling is exponentiation.threshold, raised to 400); blocks tied to the *BEval abbreviations by rfl, no whole-net graph tie (the paper net's eval twin has none)
+      file: "LeanMlir/Proofs/Float/EfficientNetFullFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "cnx_float_logits_le"   # ConvNeXt-T forward: 9.738e130 / 4.871e130, CAP
       file: "LeanMlir/Proofs/Float/ConvNeXtFloatBudget.lean"
       sorry_count: 0
@@ -280,6 +286,12 @@ status:
       literature_dependencies: []
     - declaration: "convnextInputGrad_eq_convNextForwardTCh_vjp"   # ConvNeXt-T; HasVJP everywhere, no smoothness side-condition; shape check convNextForwardTCh_eq_chain
       file: "LeanMlir/Proofs/Foundation/ConvNeXtWholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "efficientnetInputGradB_full_correct"   # EfficientNet-B0 at the 16-block PAPER depth; the hand-written chain IS the pdiv-contracted Jacobian of efficientnetForwardB_full, via HasVJP.backward_unique against efficientnetForwardB_full_has_vjp; shape check efficientnetForwardB_full_eq_chain (inside _has_vjp_correct); HasVJP everywhere, every batch size
+      file: "LeanMlir/Proofs/Foundation/EfficientNetFullWholeBackCertifiedTie.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -492,10 +504,11 @@ fidelity:
 
        THE NUMBERS. Each is a theorem closed over the real leaves (no bridge
        hypothesis left), tied to the committed net by rfl and, for the forwards,
-       to the rendered graph by the `*_faithful` theorems -- with one exception,
-       the 17-block MobileNetV2 forward, whose blocks are tied to the committed
-       inference block abbreviations by rfl but which has no whole-net graph tie,
-       because the paper net's eval twin has no typed graph in Lean. Every numeral is
+       to the rendered graph by the `*_faithful` theorems -- with two exceptions,
+       the 17-block MobileNetV2 forward and the 16-block EfficientNet-B0 forward,
+       whose blocks are tied to the committed inference block abbreviations by rfl
+       but which have no whole-net graph tie, because neither paper net's eval twin
+       has a typed graph in Lean. Every numeral is
        generated in the leaves' own exact-rational arithmetic and re-asserted by
        scripts/float_budget_envelope.py before the kernel checks it. Window =
        certified output magnitude; budget = |float - real| per logit (forwards) or
@@ -509,6 +522,7 @@ fidelity:
            MobileNetV2 forward, inference BN     1.444e96  / 2.154e3    fold   mnv2_float_logits_le
            MobileNetV2 forward, 17-block paper   8.176e16  / 2.152e4    CAP    mnv2Paper_float_logits_le  (52 BN sites, all capped)
            EfficientNet-B0 forward, inference BN 8.408e210 / 2.580e55   fold   b0_float_logits_le         (any batch size)
+           EfficientNet-B0 forward, 16-block paper 2.416e287 / 1.886e279 CAP    b0Full_float_logits_le     (16 SE sigmoids capped; the window is honest)
            ConvNeXt-T forward                    9.738e130 / 4.871e130  CAP    cnx_float_logits_le
            ViT-Tiny forward                      4.794e108 / 2.397e108  CAP    vit_float_logits_le
            ResNet-34 backward, training BN       6.894e244 / 8.857e245  fold   r34_grad_float_le          (|istd| <= 16)
@@ -526,7 +540,14 @@ fidelity:
        carefully on the 17-block MobileNetV2 forward: it caps at every BatchNorm
        and then runs three more stages (relu6, GAP, the classifier) which collapse
        the window and carry the error forward, so its ratio is 3.8e12 and the
-       label has to be read off the file rather than off the ratio. The first
+       label has to be read off the file rather than off the ratio; and on the
+       16-block EfficientNet-B0 forward, which caps only the SIGMOID of each of
+       its sixteen squeeze-excite gates (the one stage whose window is a constant,
+       1 + esig) and folds everything else, so its ratio is 1.3e8 -- sixteen gate
+       caps compounding as E -> 2A + 3E -- and its window is honest and uncapped.
+       That number is also the first past 1e253: norm_num's "ceiling" is Lean's
+       `exponentiation.threshold` option (default 256), not a wall, and the file
+       raises it. The first
        three caps are caps because a normalisation that reduces its statistics out of its
        own input has a modulus QUADRATIC in the window (training-mode BatchNorm,
        LayerNorm; squeeze-excite likewise; attention exponentially), so the
@@ -604,7 +625,14 @@ fidelity:
        `efficientnetInputGradB_eq_efficientnetForwardB_vjp` with
        `efficientnetForwardB_eq_chain` (HasVJP everywhere, at every batch size).
        B0's had to wait for the padding re-spelling above: at the symmetric stem
-       it would have certified a program no shipped artifact runs. Closing the ties found drift that
+       it would have certified a program no shipped artifact runs. The two paper
+       nets have theirs too: `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` with
+       `mobilenetv2ForwardPaper_eq_slots` (17 blocks, HasVJPAt), and
+       `efficientnetInputGradB_full_correct` (16 blocks, HasVJP), which goes one
+       step further -- through `HasVJP.backward_unique` to the concrete
+       `efficientnetForwardB_full_has_vjp` and its `_correct`, so the hand-written
+       chain is stated to be the pdiv-contracted Jacobian of the committed
+       nested-application forward itself. Closing the ties found drift that
        no review had: `r34InputGrad` reversed the 2x2 pool where the committed
        forward pools 3x3/s2 (the number moved 4x); both ConvNeXt bridges held
        `id` in the head-LayerNorm slot, the backward one justified by a stale

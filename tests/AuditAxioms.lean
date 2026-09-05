@@ -102,6 +102,7 @@ import LeanMlir.Proofs.Float.MobileNetV2PaperFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.EfficientNetFloatBudget
+import LeanMlir.Proofs.Float.EfficientNetFullFloatBudget
 import LeanMlir.Proofs.Float.BnXhatFloatBridge
 import LeanMlir.Proofs.Float.FloatBudgetEnvLN
 import LeanMlir.Proofs.Float.FloatBudgetEnvAttn
@@ -130,6 +131,7 @@ import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.EfficientNetFullWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Float.ConvNeXtBackFloatBudget
@@ -145,6 +147,7 @@ import LeanMlir.Proofs.Float.MobileNetV2BackFloatBridge
 import LeanMlir.Proofs.Float.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.Float.EfficientNetWholeFloatBridge
 import LeanMlir.Proofs.Float.EfficientNetWholeBackFloatBridge
+import LeanMlir.Proofs.Float.EfficientNetFullWholeBackFloatBridge
 import LeanMlir.Proofs.Float.MobileNetV2WholeFloatBridge
 import LeanMlir.Proofs.Float.ViTWholeFloatBridge
 import LeanMlir.Proofs.Float.PatchEmbedFloatBridge
@@ -2359,6 +2362,48 @@ open Proofs
 #print axioms Proofs.b0EvalForward_eq_forwardBEval
 #print axioms Proofs.b0EvalGraph_faithful
 #print axioms Proofs.b0_float_logits_le_committed
+-- ⭐⭐ THE SAME NET AT THE PAPER DEPTH (EfficientNetFullFloatBudget.lean): all 16 MBConv blocks of
+-- the [t,c,n,s,k] table, 49 BN sites and 16 SE gates, window 1.886e279 / budget 2.416e287 at the
+-- eps-floor, any batch size, any class count — with a CAP at the SIGMOID of every SE gate and
+-- nowhere else. Why the gate: seScale's modulus carries A·Eg and the gate grows Eg out of the same
+-- window (SE is quadratic in the window, §0.1), so sixteen sites fold to 1e1897907; the sigmoid is
+-- the one stage whose WINDOW is a constant (1 + esig), so Maps.capped there costs one side
+-- condition, 2·Cg ≤ Eg, and the rescale's error becomes ≈ 2A + 3E. The window is honest and
+-- uncapped. ⛔ Label it CAP: at the sixteen gates the claim is the triangle inequality on the
+-- sigmoid's range; budget/window = 1.3e8 is sixteen gate caps compounding as E ↦ 2A + 3E.
+-- ⭐⭐ THE FIRST NUMBER PAST 1e253, and what that taught: norm_num's shape-dependent "ceiling"
+-- (§3.7(a)) is Lean's `exponentiation.threshold` option (default 256) — 10^256 evaluates, 10^257
+-- does not, in exactly the failing shape — and with it raised to 400 the maps theorem is the same
+-- norm_num proof as every other budget file's. The kernel's Nat.pow is GMP-backed and never had a
+-- limit. It retires "no theorem to state" as a reason; it changes what no number MEANS.
+-- ⚠ The representative is a SHAPE COVER of the paper table, not a prefix: its b3 is a 5×5
+-- depthwise where the paper's b3 (stage 2, k = 3) is 3×3, and its head runs on 24 channels at
+-- 56×56 where the paper's runs on 320 at 7×7. b0_full_plan asserts exactly this.
+-- ⚠ No whole-net graph tie: the paper net's eval twin has no typed graph in Lean; the four
+-- *_eq_eval rfls tie each block to the eval-stage abbreviations the committed inference forward
+-- is built from (the no-skip widening to the stage composition, as MobileNetV2's t=1 block is).
+#print axioms Proofs.floatBridgesTo_seGateC
+#print axioms Proofs.floatBridgesTo_seBlockFullC
+#print axioms Proofs.floatBridgesTo_seBC
+#print axioms Proofs.EnetSE.bridgeC
+#print axioms Proofs.EnetSE.mapsC
+#print axioms Proofs.EnetNoExpBlk.bridgeC
+#print axioms Proofs.EnetNoExpBlk.mapsC
+#print axioms Proofs.EnetMBBlk.stridedBridgeC
+#print axioms Proofs.EnetMBBlk.stridedMapsC
+#print axioms Proofs.EnetMBBlk.expBridgeC
+#print axioms Proofs.EnetMBBlk.expMapsC
+#print axioms Proofs.EnetMBBlk.residBridgeC
+#print axioms Proofs.EnetMBBlk.residMapsC
+#print axioms Proofs.EnetNoExpBlk.fwd_eq_eval
+#print axioms Proofs.EnetMBBlk.stridedFwd_eq_eval
+#print axioms Proofs.EnetMBBlk.residFwd_eq_eval
+#print axioms Proofs.EnetMBBlk.expFwd_eq_eval
+#print axioms Proofs.b0FullEvalBridge
+#print axioms Proofs.b0FullEvalBridge_maps
+#print axioms Proofs.b0FullEvalBridge_mag_le
+#print axioms Proofs.b0FullEvalBridge_fresh_le
+#print axioms Proofs.b0Full_float_logits_le
 -- ⛔⛔ The FOURTH ImageNet-scale whole-net float statement, and it is NOT the same kind of
 -- statement as the three above. The ConvNeXt-T forward as a CLOSED FloatBridgesTo (cnxBridge),
 -- window 4.871e130 (cnxBridge_mag_le) and |float − real| ≤ 9.738e130 per logit on |x| ≤ 1 at the
@@ -3026,6 +3071,24 @@ open Proofs
 #print axioms Proofs.headFwdBBack_eq_vjp_backward
 #print axioms Proofs.efficientnetInputGradB_eq_efficientnetForwardB_vjp
 #print axioms Proofs.efficientnetForwardB_has_vjp_committed
+-- ⭐⭐ AND AT THE PAPER DEPTH — all 16 MBConv blocks (EfficientNetFullWholeBackCertifiedTie.lean,
+-- ~3 s): efficientnetInputGradB_full, with its stem/head BatchNorm and swish slots pinned to the
+-- certified per-op backwards and its sixteen blocks opaque, IS the generic 18-stage apex's
+-- backward (unfold, two rw, rfl; b0OpaqueA0 … A16 are the prefix defs for the running
+-- activations, MobileNetV2's answer to the quadratic writing). ⭐ Then ONE STEP FURTHER than the
+-- representative: instantiated at the concrete mbNoExpW/mbStridedW/mbResidW/mbExpW blocks and
+-- carried to efficientnetForwardB_full_has_vjp by HasVJP.backward_unique — two witnesses for one
+-- map have one backward, so the tactic-built whole-net witness is never unfolded, where the
+-- 3-block file stopped at a ▸-transported `_committed` the kernel could not reduce through. And
+-- efficientnetInputGradB_full_correct reads it through efficientnetForwardB_full_has_vjp_correct,
+-- whose proof IS the shape check efficientnetForwardB_full_eq_chain: the hand-written chain is
+-- the pdiv-contracted Jacobian of the committed nested-application efficientnetForwardB_full.
+-- Every batch size, HasVJP everywhere. ⛔ No backward NUMBER at 16 blocks — the shipped-leaf
+-- window is 9.112e2648; the chain exists for the tie.
+#print axioms Proofs.efficientnetB_full_has_vjp
+#print axioms Proofs.efficientnetInputGradB_full_eq_efficientnetB_full_vjp
+#print axioms Proofs.efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp
+#print axioms Proofs.efficientnetInputGradB_full_correct
 -- ⛔⛔ THE EVEN-KERNEL CONV BACKWARD (EvenKernelConvBack.lean, ~1 s). convFlatBack W is the
 -- reversed-kernel forward conv, and convFlatBack_eq_vjp_backward ties it to the certified input-VJP
 -- for ODD kernels only. That hypothesis is load-bearing and the statement is FALSE without it:

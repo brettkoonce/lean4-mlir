@@ -1291,6 +1291,15 @@ blocks themselves are only at the `∃`-tier. In order:
    nor `simp only` + `norm_num` closes what `norm_num` alone will not. ⚠ ConvNeXt-T's `10²²⁷` and
    ViT-Tiny's `10²¹⁸` sit under it, which is why five nets landed without meeting it.
 
+   **[Corrected 2026-09-05, `planning/float_budget_numbers.md` §3 finding 5.]** The ceiling is
+   Lean's `exponentiation.threshold` option (default 256): a `10 ^ e` literal with `e > 256` is
+   left unevaluated. Every row above is that and nothing else — row 2 carries `10²⁶⁰`, row 3's
+   "same value" fails on its right-hand side's `10²⁵⁷`, and row 4 closes because `simp` cancels
+   the common factor before anything is evaluated. `set_option exponentiation.threshold 400 in`
+   closes rows 2 and 3 unchanged; the 16-block EfficientNet-B0 forward is stated that way at
+   `10²⁸⁷`. The shape dependence was an artefact; (b)'s operating point is still the right lever
+   when a number is wanted smaller, never when it is wanted to exist.
+
    **(b) ⭐ The operating-point `S` is what buys the room.** `R34BnBack.hS` — `|istd| ≤ S` at the
    saved activations — is a HYPOTHESIS, not a consequence of the `ε`-floor, so `S` is free to
    choose; it multiplies at all 36 BatchNorm sites, so `317 → 16` is worth ~43 orders:

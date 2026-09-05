@@ -366,6 +366,16 @@ lean_lib «Certs» where
              -- discarded by the generic combinator — the relu6 pattern. ⚠ SE is quadratic in the
              -- window like training BN/LN: each site roughly DOUBLES the budget's exponent.
              `LeanMlir.Proofs.Float.EfficientNetFloatBudget,
+             -- ⭐ The same net at the PAPER depth — all 16 MBConv blocks of the [t,c,n,s,k] table,
+             -- 49 BN sites, 16 SE gates — window 1.886e279 / budget 2.416e287, with a CAP at the
+             -- SIGMOID of every SE gate and nowhere else. The sigmoid's window is the constant
+             -- 1 + esig, so the cap costs one side condition and turns seScale's quadratic
+             -- A·Eg into ≈ 2A + 3E; uncapped the 16-site fold is 1e1897907. ⭐⭐ It is the first
+             -- number past 1e253: norm_num's "ceiling" is Lean's `exponentiation.threshold`
+             -- option (default 256), not a wall — 10^256 evaluates and 10^257 does not — and the
+             -- maps theorem raises it to 400. ⚠ No whole-net graph tie: the paper net's eval
+             -- twin has no typed graph in Lean (blocks tied to the *BEval abbreviations by rfl).
+             `LeanMlir.Proofs.Float.EfficientNetFullFloatBudget,
              -- The `Maps` leaves a LayerNorm net needs: the CAPPED pure-normalise LN
              -- (Maps.bnCapped — window honest, modulus the triangle inequality), the two halves
              -- of its affine (diagBack / biasAdd), the structural gathers and the per-row lift
@@ -605,6 +615,17 @@ lean_lib «Certs» where
              -- for the XLA-SAME re-spelling — at the symmetric stem it would have certified a
              -- program no shipped B0 artifact runs. ⭐ The b0 backward number is unchanged.
              `LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie,
+             -- ⭐⭐ And at the PAPER depth, all 16 MBConv blocks, one step further than the
+             -- representative's: efficientnetInputGradB_full(pinned) = the generic 18-stage
+             -- apex's backward (blocks opaque), then instantiated at the concrete mb*W blocks
+             -- and carried to efficientnetForwardB_full_has_vjp by HasVJP.backward_unique —
+             -- two witnesses for one map have one backward, so the tactic-built whole-net
+             -- witness is never unfolded (the representative's file stopped at a ▸-transported
+             -- `_committed` the kernel could not reduce through). Then _correct reads it through
+             -- efficientnetForwardB_full_has_vjp_correct, whose proof is the shape check
+             -- efficientnetForwardB_full_eq_chain: the chain IS the Jacobian-transpose of the
+             -- committed nested-application forward. Every batch size; no smooth point.
+             `LeanMlir.Proofs.Foundation.EfficientNetFullWholeBackCertifiedTie,
              -- ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel: conv2d pads by pH=(kH-1)/2
              -- and the reversed-kernel forward conv is the adjoint only when kH-1-pH = pH, i.e.
              -- only for odd kH. ConvNeXt's 4x4/s4 patchify stem and three 2x2/s2 downsamples are
@@ -669,6 +690,11 @@ lean_lib «Certs» where
              -- conv/GAP/dense endpoints and supplied BN/swish/block backs; + the no-exp/strided block-back
              -- bridges (mbNoExpBodyBack/mbStridedBodyBack) so every supplied block back is dischargeable.
              `LeanMlir.Proofs.Float.EfficientNetWholeBackFloatBridge,
+             -- The same chain at the PAPER depth (16 supplied block backs, head 320→1280 at 7×7),
+             -- named so the 16-block certified tie is about a chain of the representative's
+             -- shape. ⛔ No number is stated on it: the shipped-leaf window is 9.112e2648 —
+             -- a numeral Lean could now carry (exponentiation.threshold) and nobody should.
+             `LeanMlir.Proofs.Float.EfficientNetFullWholeBackFloatBridge,
              -- §2n: ConvNeXt's REAL channel LayerNorm (the §2m flip) in float, fwd AND bwd. Route A's
              -- conjugation is four gathers around one row map, so floatBridges_chanLNTensor3 is
              -- floatBridges_bnPerChannelTensor3's blueprint with a transpose inserted. Three new op
