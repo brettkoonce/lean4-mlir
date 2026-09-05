@@ -158,7 +158,7 @@ tie or a number, never by review.
 | `convFlatBack` is not the adjoint at an even kernel; the emitter had been fixed twice, the float tier's peer never | `EvenKernelConvBack.lean` (`padOdd`) | the ConvNeXt whole-net tie | ConvNeXt backward 1.25 orders |
 | CIFAR-8 chain's dense head had three bare denses where the committed layers interleave relu | `Cifar8ChainCert.lean` | the `rfl` tie | fixed in the tie commit |
 | Counts in docstrings: ResNet-34 has 36 BatchNorm sites, not 33 (nine places); ConvNeXt 23 LayerNorm sites, not 22 (three places) | budget files, `AuditAxioms.lean`, `formalization.yaml` | needing the number | prose only; no fold reads the count |
-| The Proofs tier spells EfficientNet-B0's and MobileNetV2's stride-2 convolutions at symmetric padding; the shipped renders moved to XLA-SAME padding on 2026-08-08 (B0's stem; MobileNetV2's stem and four strided depthwises) | `EfficientNetRenderPC.lean`, `MobileNetV2RenderPC.lean`, both `*Eval` twins, `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, both backward chains, all four B0/MNv2 numbers | the standing audit (section 5, item 2) | numbers unchanged; the claim "the deployed forward" is one padding phase off at those sites; open |
+| The Proofs tier spelled EfficientNet-B0's and MobileNetV2's stride-2 convolutions at symmetric padding; the shipped renders moved to XLA-SAME padding on 2026-08-08 (B0's stem; MobileNetV2's stem and four strided depthwises) | `EfficientNetRenderPC.lean`, `MobileNetV2RenderPC.lean`, both `*Eval` twins, `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, both backward chains, all four B0/MNv2 numbers | the standing audit (section 5, item 2) | numbers unchanged; the claim "the deployed forward" was one padding phase off at those sites; **re-spelled 2026-09-05**, all four numbers reproduced |
 
 Nothing trained was affected: the emitted programs were right in every case. What drifted was
 a hand-written spelling of a map that also has a certified spelling. The rule that follows is
@@ -201,13 +201,22 @@ Each has an acceptance criterion. None makes a number smaller.
    (a) re-spell the Proofs chains at `flatConvStride2Xla` / `depthwiseStride2FlatXla` (the
    definitions and VJPs have existed since `3d9b14d`; the float tier needs the two `Xla` leaves,
    whose envelopes equal the symmetric ones) and re-tie the PC graphs to the XLA ops, or (b)
-   leave the spelling and disclose. `formalization.yaml` 4d now discloses it. **Decided 2026-09-05:
-   (a).** The work is scoped in `planning/xla_same_respell_and_blueprint_audit.md`, which also
-   carries item 3 and the blueprint audit.
+   leave the spelling and disclose. **Decided 2026-09-05: (a), and done the same day** in five
+   commits (`ec977de`, `0773e20`, `0584ab8`, the B0 commit, `ee81d36`) plus the scalar-BN twin,
+   scoped in `planning/xla_same_respell_and_blueprint_audit.md`. The odd-phase backwards, their
+   float leaves and the four `Maps` envelopes were built first; then B0's stem cone and
+   MobileNetV2's five sites, the latter with a one-off name map
+   (`scripts/respell_mnv2_xla.py`). All four numbers reproduced to the digit. Four certs are
+   shared across net boundaries — ResNet-34 reuses MobileNetV2's stem pair, EfficientNet-B0 its
+   strided-depthwise pair, MobileNetV4 borrowed B0's `stemB` — and each is right for one net and
+   wrong for the other the moment the conventions diverge; they kept their symmetric statements
+   and gained `_xla_` twins (`stemB` gained a separate `fusedConvB`). `formalization.yaml` 4d
+   now records the item closed. Left open: the blueprint audit, and item 3 below.
 
-3. **EfficientNet-B0's whole-net certified tie.** After the re-spelling (item 2, the new doc's
-   steps 0 to 6): a tie of `efficientnetInputGradB` to `efficientnetForwardB_has_vjp` at the
-   symmetric stem would certify a net no shipped artifact runs. Then aim at `efficientnetForwardB_has_vjp`
+3. **EfficientNet-B0's whole-net certified tie.** Unblocked 2026-09-05 by the re-spelling
+   (item 2): a tie of `efficientnetInputGradB` to `efficientnetForwardB_has_vjp` at the
+   symmetric stem would have certified a net no shipped artifact runs; the chain is now at
+   the XLA stem, so the tie can be built. Then aim at `efficientnetForwardB_has_vjp`
    (`Architectures/EfficientNetChainClose.lean`, `HasVJP` everywhere), not the 16-block
    `efficientnetForwardB_full_has_vjp`. Missing: the three batched block ties at `bnBatchLA`
    (`mbNoExpFwdB`, `mbStridedFwdB`, `mbResidFwdB`; the one existing tie is per example at scalar

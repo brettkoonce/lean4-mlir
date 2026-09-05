@@ -13,6 +13,10 @@ from `10²⁸⁸` to something `norm_num` will evaluate.
     fresh budget     ≤ 1.076·10¹⁵²      (`mnv2GradBridge_fresh_le`)
     budget / window  = 0.023            — ⭐ the interval FOLD, not a cap
 
+The chain reverses the stem and the four strided depthwises at the XLA-`SAME` phase the shipped
+render uses (`flatConvStride2XlaBack` / `depthwiseStride2FlatXlaBack`, re-spelled 2026-09-05; the
+numerals did not move — a scatter onto the odd positions is as linear as one onto the even ones).
+
 at `|W| ≤ 28/10`, BatchNorm `|γ| ≤ 17/10`, `ε ≥ 10⁻⁵`, `u ≤ 2⁻²⁴`, on loss cotangents of
 magnitude `≤ 1` (`|p − y| ≤ 1` for softmax cross-entropy), at **training-mode BatchNorm** — the
 mode this net's own forward has no statable number for at all (`planning/archive/float_budget_numbers_log.md`

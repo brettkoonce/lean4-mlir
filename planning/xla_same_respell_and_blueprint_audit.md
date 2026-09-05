@@ -1,8 +1,8 @@
 # Re-spell the TF-origin nets at XLA-SAME padding, tie B0, then audit the blueprint
 
-**Scoped 2026-09-05; steps 0 to 2 and the EfficientNet half of step 3 landed the same day
-(`ec977de`, `0773e20`, `0584ab8`, and the B0 commit). Section 3a is the handoff for the next
-session: what is done, what is scripted, what is left.** Three items in order:
+**Scoped 2026-09-05; steps 0 to 6 all landed the same day (`ec977de`, `0773e20`, `0584ab8`,
+the B0 commit, `ee81d36`, and the 3c/docs commit). What is left is step 7 (B0's whole-net
+certified tie) and step 8 (the blueprint audit).** Three items in order:
 (A) move EfficientNet-B0's and MobileNetV2's Proofs tier from symmetric stride-2 padding to the
 XLA-SAME forms the shipped renders and the TF-origin references use, (B) EfficientNet-B0's whole-net
 certified backward tie, which must not be built before (A), and (C) an audit of the LaTeX blueprint
@@ -147,8 +147,21 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    the image, and no batched XLA input-VJP token exists), and that is now recorded.
 
    **3b. MobileNetV2, the 6-block reduced cone, the 17-block paper files and the batched Adam
-   backward graphs. Scripted, not applied: `scripts/respell_mnv2_xla.py`.** Run it from the
-   repo root after committing 3a; it substitutes the 55-rule name map over the sixteen
+   backward graphs. Done 2026-09-05 (`ee81d36`), by running `scripts/respell_mnv2_xla.py`.**
+   All four numerals reproduced (`2.154e3 / 1.444e96`, `4.750e153 / 1.076e152`) and the two
+   counts held (116, 136). Four hand-fixes were needed, all one shape — a float skeleton still
+   spelling the even-phase scatter after its real side had moved: `mnv2InputGradF` and the
+   `hstem` ascription (`MobileNetV2BackFloatBridge.lean`, which failed as a `maxRecDepth`),
+   `mnv2GradF` (`MobileNetV2BackFloatBudget.lean`), and `FloatBudgetEnvBackMBConv.lean` —
+   NOT on the script's list — where `invresBodyStridedBackPCF` and the bridge and `Maps`
+   proofs still reached for the symmetric depthwise; nothing outside MobileNetV2 consumes
+   those three, so they flip in place. The fourth was `tests/TestMobilenetV2TrainPC.lean`:
+   the script moved its `pretty` tokens but not its hand-emitted weight grads, which left an
+   XLA forward against symmetric weight gradients — shape-preserving, so IREE compiles it
+   either way and nothing would have caught it. `convWGrad` / `dwWGrad` took an `xla` flag
+   copying the emitter's `jax.vjp`-checked arms (`[[0,2],[0,2]]`, the `[p-1,p+1]` shift, NOT
+   the `[p+1,p-1]` the reversed-kernel input-VJP takes); five sites carry it. The script
+   substitutes the 55-rule name map over the sixteen
    MobileNetV2 files (the two PC graphs, ChainClose, FaithfulPoC, FaithfulPoCPaper, TiePoCPaper,
    FullPaper, FullVJP, BackB0, BackCertifiedTie, WholeBackCertifiedTie, the four Float files,
    and `tests/TestMobilenetV2TrainPC.lean`), adds the four XLA twins of the shared certs to
@@ -179,21 +192,25 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    shared definition is right for one net and wrong for the other the moment the conventions
    diverge, and nothing structural says which.
 
-   **3c. The scalar-BN twin, a third commit.** `MobileNetV2.lean`'s `mobilenetv2Forward_full`
-   (scalar `bnForward`, the reduced 6-block net), `convBnRelu6Strided_has_vjp_at`,
-   `invresBodyStrided`, and `StableHLO.lean`'s `mobilenetv2FwdGraphFull` + `_faithful` are the
-   scalar-BN stepping stone the PC net replaced; no artifact and no number rest on them. Flip
-   them for the acceptance grep (they name `flatConvStride2` / `depthwiseStride2Flat`), or
-   leave them and add their file names to the grep's allow-list with a sentence. Flipping
-   touches `StableHLO.lean`, which is a 6.5-minute rebuild of everything, so do it last. The
-   2-block generic `mobilenetv2Forward` (yaml headline, `Mnv2Live`, the three seals) has a
-   stride-1 stem and is untouched either way.
+   **3c. The scalar-BN twin. Done 2026-09-05: FLIPPED, not allow-listed.** `MobileNetV2.lean`'s
+   `mobilenetv2Forward_full` (scalar `bnForward`, the reduced 6-block net) with
+   `convBnRelu6Strided_has_vjp_at` / `dwBnRelu6Strided_has_vjp_at` / `invresBodyStrided` — 42
+   occurrences over six identifiers, each with an `Xla` peer already — and `StableHLO.lean`'s
+   `mobilenetv2FwdGraphFull` (5 token sites, scoped to that def's body: the same constructors
+   appear in ResNet's, EfficientNet's and MNv4's graphs) with `_faithful`'s simp set at
+   `flatConvStridedXlaF_faithful` / `depthwiseStridedXlaF_faithful`. Both green first try, and
+   `SpecVJP.lean`'s `rfl` denotation ties followed without an edit (they name the net, not its
+   leaves). Flipped rather than allow-listed because the whole MobileNetV2 cone then reads one
+   phase and no reader can mistake the stepping stone for the deployed net; the cost was one
+   6.5-minute `StableHLO.lean` rebuild. The 2-block generic `mobilenetv2Forward` (yaml headline,
+   `Mnv2Live`, the three seals) has a stride-1 stem and was untouched.
 
-   **Acceptance (unchanged):** `lake build Proofs Certs` green and
+   **Acceptance: met, with the scalar twin flipped rather than allow-listed.**
+   `lake build Proofs Certs` green (3956 jobs) and
    `grep -rn "flatConvStride2 \|depthwiseStride2Flat " LeanMlir/Proofs --include=*.lean`
    returns only ResNet, ConvNeXt, MobileNetV4, `EfficientNetClose.lean`'s strided-depthwise
-   reuse, the shared symmetric certs in `MobileNetV2Close.lean`, the scalar twin if left, and
-   the leaf definitions.
+   reuse, the shared symmetric certs in `MobileNetV2Close.lean`, and the leaf definitions —
+   no MobileNetV2 file at all.
 
 4. **Backward chains and the two backward numbers.** Folded into step 3 per net (see the
    note there). B0's landed with 3a: `7.104e182 / 1.578e182` unchanged. MobileNetV2's is
@@ -202,19 +219,19 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
 5. **Forward numbers.** Folded into step 3 per net. B0's `2.580e55 / 8.408e210` unchanged with
    3a; MobileNetV2's `2.154e3 / 1.444e96` is part of 3b.
 
-6. **Artifacts, ties, disclosures.** Every MobileNetV2 artifact was re-rendered in step 0 and
-   ties at 5.5e-6 (`scripts/mnv2_forward_tie.py --diag`, per-example BN row); B0's artifacts
-   were already XLA-SAME. The byte tie between a PC graph's `pretty` and a shipped artifact
-   cannot exist (section 1's correction: the PC nets are the reduced and representative ones);
-   the achievable one is `mobilenetv2FwdGraphFullPC`'s `pretty` against the forward prefix of
-   `mobilenetv2_reduced_train_step.mlir`, optional. Left for the session after 3b/3c: in
-   `formalization.yaml`, rewrite 4d's "A PADDING-CONVENTION GAP" paragraph as a closed item
-   (dates: renders 2026-08-08, SGD pair and Proofs tier 2026-09-05) and drop the two flags on
-   the MobileNetV2 rows (`mnv2_float_logits_le`, `mnv2_grad_float_le`; B0's are done); in
-   `planning/float_budget_numbers.md` mark section 5 item 2 (a) done and update the section 4
-   row; the MobileNetV2 budget headers gain the one sentence B0's got ("the stem / four strided
-   depthwises at the XLA-SAME phase the shipped render uses, re-spelled 2026-09-05; the numerals
-   did not move"). Then `python3 scripts/convention_audit.py --selftest` once more.
+6. **Artifacts, ties, disclosures. Done 2026-09-05.** Every MobileNetV2 artifact was
+   re-rendered in step 0 and ties at 5.5e-6 (`scripts/mnv2_forward_tie.py --diag`, per-example
+   BN row); B0's artifacts were already XLA-SAME, and nothing in steps 3b/3c writes an artifact
+   (the PC render files have no writers), so `verified_mlir/` did not move. The byte tie between
+   a PC graph's `pretty` and a shipped artifact cannot exist (section 1's correction: the PC nets
+   are the reduced and representative ones); the achievable one, `mobilenetv2FwdGraphFullPC`'s
+   `pretty` against the forward prefix of `mobilenetv2_reduced_train_step.mlir`, stays optional
+   and was not built. Disclosures closed: `formalization.yaml` 4d's "A PADDING-CONVENTION GAP"
+   is now "THE PADDING CONVENTION, CLOSED" and names what stayed symmetric and why; the two
+   MobileNetV2 rows lost their flags; `planning/float_budget_numbers.md`'s section 4 row and
+   section 5 item 2 record the decision as taken and done, and item 3 as unblocked; both
+   MobileNetV2 budget headers gained the sentence B0's got. `convention_audit.py --selftest`
+   passes (⚠ it needs `.venv/bin/python` — the system interpreter has a jaxlib-less jax).
 
 7. **EfficientNet-B0's whole-net certified tie**, as scoped in `planning/float_budget_numbers.md`
    section 5 item 3, now against the XLA stem: apex `efficientnetForwardB_has_vjp`, the three

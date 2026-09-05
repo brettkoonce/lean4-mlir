@@ -358,7 +358,7 @@ inverted-residual blocks `[16→64→24, 24→96→24, 24→96→32, 32→128→
 64→256→64]` with 4 stride-2 depthwise downsamples 224→7 and 2 stride-1 skips → 1×1
 conv-bn-relu6 head → GAP → dense) — to `mobilenetv2Forward_full`, the faithful 6-block
 composition built in `Proofs/MobileNetV2.lean` from the strided inverted-residual VJP
-infrastructure (`invresBodyStrided`, `flatConvStride2`, `depthwiseStride2Flat`). The
+infrastructure (`invresBodyStrided`, `flatConvStride2Xla`, `depthwiseStride2FlatXla`). The
 `rfl` tie is drift-sensitive: change any block's `[t,c,n,s]` and the match stops reducing.
 
 **History note**: this rung used to tie `mobilenetv2Verified.layers` itself — true while

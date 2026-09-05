@@ -206,7 +206,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "mnv2_float_logits_le"   # MobileNetV2 inference-BN forward: 1.444e96 / 2154, fold; the one non-vacuous window; stride-2 sites at symmetric padding, the shipped render is XLA-SAME (4d)
+    - declaration: "mnv2_float_logits_le"   # MobileNetV2 inference-BN forward: 1.444e96 / 2154, fold; the one non-vacuous window; XLA-SAME stem and four strided depthwises, as the shipped render (re-spelled 2026-09-05)
       file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -239,7 +239,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "mnv2_grad_float_le"   # MobileNetV2 backward: 1.076e152 / 4.750e153; no operating point; symmetric-padding spelling (4d)
+    - declaration: "mnv2_grad_float_le"   # MobileNetV2 backward: 1.076e152 / 4.750e153; no operating point; XLA-SAME at the five stride-2 sites (re-spelled 2026-09-05)
       file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -559,19 +559,24 @@ fidelity:
        kernel-checked; a dropped stage, a misread fan-in or a stale slot fails to
        compile.
 
-       A PADDING-CONVENTION GAP (audit 2026-09-05). The EfficientNet-B0 and MobileNetV2
-       renders moved their stride-2 convolutions to XLA-SAME padding on 2026-08-08 to
-       match the TF-origin references (B0's stem; MobileNetV2's stem and four strided
-       depthwises; the MobileNetV2 SGD pair `mobilenetv2_fwd` / `_train_step` followed
-       on 2026-09-05, so every shipped MobileNetV2 artifact is XLA-SAME). The Proofs
-       tier did not move:
-       `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, their PC graphs and
-       `_faithful` theorems, the hand-written backward chains and all four B0 / MobileNetV2
-       numbers above are at the symmetric spelling (`flatConvStride2`, never
-       `flatConvStride2Xla`). The numbers are identical either way (same fan-in, same
-       rounding), but "the deployed forward" for those two nets is one padding phase off
-       at 1 (B0) or 5 (MobileNetV2) sites; the B0 chain describes a program no shipped
-       artifact has run since 2026-08-08. Re-spelling the chains at the XLA forms is open.
+       THE PADDING CONVENTION, CLOSED (found and closed 2026-09-05). The
+       EfficientNet-B0 and MobileNetV2 renders moved their stride-2 convolutions to
+       XLA-SAME padding on 2026-08-08 to match the TF-origin references, and the one
+       symmetric pair left (`mobilenetv2_fwd` / `_train_step`, SGD) followed on
+       2026-09-05, so every shipped artifact of both nets is XLA-SAME. The Proofs tier
+       had not moved: `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, their PC
+       graphs and `_faithful` theorems, the hand-written backward chains and all four
+       numbers above were at the symmetric spelling, so they described a program one
+       padding phase off at 1 (B0) or 5 (MobileNetV2) sites. They were re-spelled on
+       2026-09-05 at `flatConvStride2Xla` / `depthwiseStride2FlatXla` and the matching
+       emitted tokens, down to the scalar-BN stepping stones. All four numbers
+       reproduced to the digit, as expected: a decimation picks coordinates, so the
+       odd-phase leaves carry the same fan-in and the same rounding as the even-phase
+       ones. What moved is what the theorems are about. Not affected, and correctly
+       symmetric: ResNet-34/50 (PyTorch-origin), ConvNeXt, ViT, MobileNetV4's UIB
+       bodies, and EfficientNet-B0's own strided depthwises, whose render and reference
+       agree — four certs are shared across those net boundaries and kept their
+       symmetric statements, gaining `_xla_` twins for MobileNetV2's use.
 
        THE TIES. Three backward chains are proven to BE the certified whole-net
        VJP, each with a shape check that the opaque-block chain the apex is

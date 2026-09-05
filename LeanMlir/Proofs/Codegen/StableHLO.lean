@@ -4202,10 +4202,13 @@ theorem mobilenetv2FwdGraph_faithful
   simp only [Function.comp_apply]
 
 /-- Whole **MobileNetV2 forward** graph at the FULL ch7 render dims (3×224² → 7×7×64):
-    strided stem (`flatConvStridedF`, 224→112) → 6 inverted-residual blocks (`b1/b3/b5/b6`
-    stride-2 downsample via `depthwiseStridedF`, `b2/b4` stride-1 SAME with an `addV` skip)
+    strided stem (`flatConvStridedXlaF`, 224→112) → 6 inverted-residual blocks (`b1/b3/b5/b6`
+    stride-2 downsample via `depthwiseStridedXlaF`, `b2/b4` stride-1 SAME with an `addV` skip)
     → 1×1 conv-bn-relu6 head → global-avg-pool → dense. Concrete (not symbolic) peer of
-    `mobilenetv2FwdGraph`, tied to the *full* forward `mobilenetv2Forward_full`. Scalar BN. -/
+    `mobilenetv2FwdGraph`, tied to the *full* forward `mobilenetv2Forward_full`. Scalar BN.
+    ⚠ The five stride-2 sites read the XLA-`SAME` (odd) phase, like every other MobileNetV2
+    graph since 2026-09-05; this one is the scalar-BN stepping stone `mobilenetv2FwdGraphFullPC`
+    replaced, and writes no artifact. -/
 def mobilenetv2FwdGraphFull
     (epsStr : String)
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
@@ -4232,12 +4235,12 @@ def mobilenetv2FwdGraphFull
     (x : Vec (3 * 224 * 224)) : SHlo 10 :=
   let stemOut : SHlo (16 * 112 * 112) :=
     .relu6F (.bnF "%gs" "%bts" epsStr εs γs βs
-      (.flatConvStridedF (h := 112) (w := 112) "%Ws" "%bs" Ws bs (.operand "%x" x)))
+      (.flatConvStridedXlaF (h := 112) (w := 112) "%Ws" "%bs" Ws bs (.operand "%x" x)))
   let b1Out : SHlo (24 * 56 * 56) :=
     .bnF "%gp1" "%btp1" epsStr εp1 γp1 βp1
       (.flatConvF (h := 56) (w := 56) "%Wp1" "%bp1" Wp1 bp1
         (.relu6F (.bnF "%gd1" "%btd1" epsStr εd1 γd1 βd1
-          (.depthwiseStridedF (h := 56) (w := 56) "%Wd1" "%bd1" Wd1 bd1
+          (.depthwiseStridedXlaF (h := 56) (w := 56) "%Wd1" "%bd1" Wd1 bd1
             (.relu6F (.bnF "%ge1" "%bte1" epsStr εe1 γe1 βe1
               (.flatConvF (h := 112) (w := 112) "%We1" "%be1" We1 be1 stemOut)))))))
   let b2Out : SHlo (24 * 56 * 56) :=
@@ -4251,7 +4254,7 @@ def mobilenetv2FwdGraphFull
     .bnF "%gp3" "%btp3" epsStr εp3 γp3 βp3
       (.flatConvF (h := 28) (w := 28) "%Wp3" "%bp3" Wp3 bp3
         (.relu6F (.bnF "%gd3" "%btd3" epsStr εd3 γd3 βd3
-          (.depthwiseStridedF (h := 28) (w := 28) "%Wd3" "%bd3" Wd3 bd3
+          (.depthwiseStridedXlaF (h := 28) (w := 28) "%Wd3" "%bd3" Wd3 bd3
             (.relu6F (.bnF "%ge3" "%bte3" epsStr εe3 γe3 βe3
               (.flatConvF (h := 56) (w := 56) "%We3" "%be3" We3 be3 b2Out)))))))
   let b4Out : SHlo (32 * 28 * 28) :=
@@ -4265,14 +4268,14 @@ def mobilenetv2FwdGraphFull
     .bnF "%gp5" "%btp5" epsStr εp5 γp5 βp5
       (.flatConvF (h := 14) (w := 14) "%Wp5" "%bp5" Wp5 bp5
         (.relu6F (.bnF "%gd5" "%btd5" epsStr εd5 γd5 βd5
-          (.depthwiseStridedF (h := 14) (w := 14) "%Wd5" "%bd5" Wd5 bd5
+          (.depthwiseStridedXlaF (h := 14) (w := 14) "%Wd5" "%bd5" Wd5 bd5
             (.relu6F (.bnF "%ge5" "%bte5" epsStr εe5 γe5 βe5
               (.flatConvF (h := 28) (w := 28) "%We5" "%be5" We5 be5 b4Out)))))))
   let b6Out : SHlo (64 * 7 * 7) :=
     .bnF "%gp6" "%btp6" epsStr εp6 γp6 βp6
       (.flatConvF (h := 7) (w := 7) "%Wp6" "%bp6" Wp6 bp6
         (.relu6F (.bnF "%gd6" "%btd6" epsStr εd6 γd6 βd6
-          (.depthwiseStridedF (h := 7) (w := 7) "%Wd6" "%bd6" Wd6 bd6
+          (.depthwiseStridedXlaF (h := 7) (w := 7) "%Wd6" "%bd6" Wd6 bd6
             (.relu6F (.bnF "%ge6" "%bte6" epsStr εe6 γe6 βe6
               (.flatConvF (h := 14) (w := 14) "%We6" "%be6" We6 be6 b5Out)))))))
   let headOut : SHlo (128 * 7 * 7) :=
@@ -4312,8 +4315,8 @@ theorem mobilenetv2FwdGraphFull_faithful
     den (mobilenetv2FwdGraphFull epsStr Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc x)
       = mobilenetv2Forward_full Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc x := by
   simp only [mobilenetv2FwdGraphFull, denseF_faithful, gapF_faithful, relu6F_faithful,
-             bnF_faithful, flatConvF_faithful, flatConvStridedF_faithful, depthwiseF_faithful,
-             depthwiseStridedF_faithful, den_addV, den_operand]
+             bnF_faithful, flatConvF_faithful, flatConvStridedXlaF_faithful, depthwiseF_faithful,
+             depthwiseStridedXlaF_faithful, den_addV, den_operand]
   unfold mobilenetv2Forward_full invresBodyStrided invresBody ivExpand ivDepthwiseStrided
          ivDepthwise ivProject residual biPath
   simp only [Function.comp_apply]

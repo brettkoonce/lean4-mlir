@@ -8,6 +8,9 @@ import LeanMlir.Proofs.Float.Binary32Instance
 The second ImageNet-scale whole-net float budget, after `Resnet34FloatBudget.lean`. For the
 6-block inverted-residual MobileNetV2 forward at `224²` — 3×3/s2 stem, `[b1…b6]` with stride-2
 downsamples at `b1/b3/b5/b6` and matched-channel skips at `b2/b4`, 1×1 head, GAP, dense — with
+the stem and the four strided depthwises at the XLA-`SAME` phase the shipped render uses
+(`flatConvStride2Xla` / `depthwiseStride2FlatXla`, re-spelled 2026-09-05; the numerals did not
+move) — with
 **inference** BatchNorm (frozen running statistics), on the unit input window, at the profile
 measured on the 350-epoch checkpoint (`|parameter| ≤ 28/10`), for any rounding model at binary32
 accuracy:

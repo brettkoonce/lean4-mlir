@@ -30,6 +30,16 @@ the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
   dense head. Fixed block counts; generic channel/kernel dims; spatial
   `h w` preserved throughout (SAME convs).
 
+## Padding convention
+
+The strided sites — the 6-block `mobilenetv2Forward_full`'s stem and its four downsample
+depthwises — read `flatConvStride2Xla` / `depthwiseStride2FlatXla`, the XLA-`SAME` (odd)
+phase every MobileNetV2 artifact emits, re-spelled 2026-09-05 with the rest of the Proofs
+tier. This net is the scalar-BN stepping stone `mobilenetv2Forward_full_pc` replaced: no
+artifact and no float number rests on it, and it moved so the whole MobileNetV2 cone reads
+one phase. The 2-block generic `mobilenetv2Forward` below has a stride-1 stem and is not
+affected either way.
+
 All new defs/theorems certify to exactly `[propext, Classical.choice,
 Quot.sound]`.
 -/
@@ -641,35 +651,35 @@ theorem mobilenetv2_has_vjp_at_correct
 --   The representative `mobilenetv2Forward` above keeps spatial dims
 --   constant (SAME convs). The *real* MobileNetV2 render downsamples with
 --   a stride-2 depthwise inside the strided blocks (and a stride-2 stem).
---   These mirror the SAME op-level lemmas with `flatConvStride2` /
---   `depthwiseStride2Flat` (input spatial `2h×2w`, output `h×w`); the
+--   These mirror the SAME op-level lemmas with `flatConvStride2Xla` /
+--   `depthwiseStride2FlatXla` (input spatial `2h×2w`, output `h×w`); the
 --   expand/project 1×1s stay SAME (at the input resp. output resolution).
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Stride-2 conv → bn → relu6** (the strided stem). Strided mirror of
-    `convBnRelu6_has_vjp_at` with `flatConvStride2`; input spatial halves
+    `convBnRelu6_has_vjp_at` with `flatConvStride2Xla`; input spatial halves
     (`2h×2w → h×w`). -/
 noncomputable def convBnRelu6Strided_has_vjp_at {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 0 ∧
-                       bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 6)) :
-    HasVJPAt (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v := by
-  have hconv_diff : Differentiable ℝ (flatConvStride2 W b
+    (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
+                       bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
+    HasVJPAt (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v := by
+  have hconv_diff : Differentiable ℝ (flatConvStride2Xla W b
       : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
-    flatConvStride2_differentiable W b
+    flatConvStride2Xla_differentiable W b
   have hbn_diff : Differentiable ℝ (bnForward (oc * h * w) ε γ β) :=
     bnForward_differentiable (oc * h * w) ε γ β hε
-  have step1 : HasVJPAt (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
-    vjp_comp_at (flatConvStride2 W b) (bnForward (oc * h * w) ε γ β) v
+  have step1 : HasVJPAt (bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v :=
+    vjp_comp_at (flatConvStride2Xla W b) (bnForward (oc * h * w) ε γ β) v
       (hconv_diff v) (hbn_diff _)
-      ((flatConvStride2_has_vjp W b).toHasVJPAt v)
+      ((flatConvStride2Xla_has_vjp W b).toHasVJPAt v)
       ((bn_has_vjp (oc * h * w) ε γ β hε).toHasVJPAt _)
   have step1_diff : DifferentiableAt ℝ
-      (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
-    DifferentiableAt.comp v (hbn_diff (flatConvStride2 W b v)) (hconv_diff v)
-  exact vjp_comp_at (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b)
+      (bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v :=
+    DifferentiableAt.comp v (hbn_diff (flatConvStride2Xla W b v)) (hconv_diff v)
+  exact vjp_comp_at (bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b)
     (relu6 (oc * h * w)) v
     step1_diff
     (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
@@ -679,43 +689,43 @@ noncomputable def convBnRelu6Strided_has_vjp_at {ic oc h w kH kW : Nat}
 theorem convBnRelu6Strided_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 0 ∧
-                       bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 6)) :
+    (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
+                       bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
-      (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v := by
-  have hinner : DifferentiableAt ℝ (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
-    ((bnForward_differentiable (oc * h * w) ε γ β hε).comp (flatConvStride2_differentiable W b)) v
+      (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v := by
+  have hinner : DifferentiableAt ℝ (bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v :=
+    ((bnForward_differentiable (oc * h * w) ε γ β hε).comp (flatConvStride2Xla_differentiable W b)) v
   exact (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
 
 /-- The strided depthwise stage as a flat map (`Vec (mid*(2h)*(2w)) → Vec (mid*h*w)`). -/
 @[reducible] noncomputable def ivDepthwiseStrided {mid h w kHd kWd : Nat}
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) :
     Vec (mid * (2 * h) * (2 * w)) → Vec (mid * h * w) :=
-  relu6 (mid * h * w) ∘ bnForward (mid * h * w) εd γd βd ∘ depthwiseStride2Flat Wd bd
+  relu6 (mid * h * w) ∘ bnForward (mid * h * w) εd γd βd ∘ depthwiseStride2FlatXla Wd bd
 
 /-- **Stride-2 depthwise → bn → relu6** (downsampling depthwise stage). Strided
-    mirror of `dwBnRelu6_has_vjp_at` with `depthwiseStride2Flat`. -/
+    mirror of `dwBnRelu6_has_vjp_at` with `depthwiseStride2FlatXla`. -/
 noncomputable def dwBnRelu6Strided_has_vjp_at {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c)
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (c * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseStride2Flat W b v) k ≠ 0 ∧
-                       bnForward (c * h * w) ε γ β (depthwiseStride2Flat W b v) k ≠ 6)) :
-    HasVJPAt (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseStride2Flat W b) v := by
-  have hdw_diff : Differentiable ℝ (depthwiseStride2Flat W b
+    (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 0 ∧
+                       bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
+    HasVJPAt (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v := by
+  have hdw_diff : Differentiable ℝ (depthwiseStride2FlatXla W b
       : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) :=
-    depthwiseStride2Flat_differentiable W b
+    depthwiseStride2FlatXla_differentiable W b
   have hbn_diff : Differentiable ℝ (bnForward (c * h * w) ε γ β) :=
     bnForward_differentiable (c * h * w) ε γ β hε
-  have step1 : HasVJPAt (bnForward (c * h * w) ε γ β ∘ depthwiseStride2Flat W b) v :=
-    vjp_comp_at (depthwiseStride2Flat W b) (bnForward (c * h * w) ε γ β) v
+  have step1 : HasVJPAt (bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v :=
+    vjp_comp_at (depthwiseStride2FlatXla W b) (bnForward (c * h * w) ε γ β) v
       (hdw_diff v) (hbn_diff _)
-      ((depthwiseStride2Flat_has_vjp W b).toHasVJPAt v)
+      ((depthwiseStride2FlatXla_has_vjp W b).toHasVJPAt v)
       ((bn_has_vjp (c * h * w) ε γ β hε).toHasVJPAt _)
   have step1_diff : DifferentiableAt ℝ
-      (bnForward (c * h * w) ε γ β ∘ depthwiseStride2Flat W b) v :=
-    DifferentiableAt.comp v (hbn_diff (depthwiseStride2Flat W b v)) (hdw_diff v)
-  exact vjp_comp_at (bnForward (c * h * w) ε γ β ∘ depthwiseStride2Flat W b)
+      (bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v :=
+    DifferentiableAt.comp v (hbn_diff (depthwiseStride2FlatXla W b v)) (hdw_diff v)
+  exact vjp_comp_at (bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b)
     (relu6 (c * h * w)) v
     step1_diff
     (relu6_differentiableAt_of_smooth (c * h * w) _ h_smooth)
@@ -725,12 +735,12 @@ noncomputable def dwBnRelu6Strided_has_vjp_at {c h w kH kW : Nat}
 theorem dwBnRelu6Strided_differentiableAt {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (c * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseStride2Flat W b v) k ≠ 0 ∧
-                       bnForward (c * h * w) ε γ β (depthwiseStride2Flat W b v) k ≠ 6)) :
+    (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 0 ∧
+                       bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
-      (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseStride2Flat W b) v := by
-  have hinner : DifferentiableAt ℝ (bnForward (c * h * w) ε γ β ∘ depthwiseStride2Flat W b) v :=
-    ((bnForward_differentiable (c * h * w) ε γ β hε).comp (depthwiseStride2Flat_differentiable W b)) v
+      (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v := by
+  have hinner : DifferentiableAt ℝ (bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v :=
+    ((bnForward_differentiable (c * h * w) ε γ β hε).comp (depthwiseStride2FlatXla_differentiable W b)) v
   exact (relu6_differentiableAt_of_smooth (c * h * w) _ h_smooth).comp v hinner
 
 /-- **Strided inverted-residual body** = `project ∘ depthwiseStrided ∘ expand`.
@@ -759,10 +769,10 @@ noncomputable def invresBodyStrided_has_vjp_at
     (h_se : ∀ k, (bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 0 ∧
                    bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 6))
     (h_sd : ∀ k, (bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 0 ∧
                    bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 6)) :
     HasVJPAt (invresBodyStrided (h := h) (w := w)
       We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v := by
@@ -803,10 +813,10 @@ theorem invresBodyStrided_differentiableAt
     (h_se : ∀ k, (bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 0 ∧
                    bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 6))
     (h_sd : ∀ k, (bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 0 ∧
                    bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 6)) :
     DifferentiableAt ℝ (invresBodyStrided (h := h) (w := w)
       We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v := by
@@ -891,7 +901,7 @@ noncomputable def mobilenetv2Forward_full
   invresBodyStrided (h := 56) (w := 56)
     We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 ∘
   (relu6 (16 * 112 * 112) ∘ bnForward (16 * 112 * 112) εs γs βs ∘
-    flatConvStride2 (h := 112) (w := 112) Ws bs)
+    flatConvStride2Xla (h := 112) (w := 112) Ws bs)
 
 -- ════════════════════════════════════════════════════════════════
 -- Concrete whole-network instance: every ReLU6 smoothness hypothesis
