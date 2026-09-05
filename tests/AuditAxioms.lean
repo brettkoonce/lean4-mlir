@@ -2104,20 +2104,30 @@ open Proofs
 -- ⭐⭐ And the TRAINING-mode number those generic block bridges make cheap: the same [3,4,6,3]
 -- net with bnPerChannelTensor3 at all 36 BN sites — the program the repo actually TRAINS with,
 -- and the one Resnet34BackFloatBudget's input-gradient number is taken through. Window
--- 3.176e221 (r34TrainBridge_mag_le) and |float − real| ≤ 6.349e221 per logit
+-- 4.304e145 (r34TrainBridge_mag_le) and |float − real| ≤ 8.605e145 per logit
 -- (r34_train_float_logits_le), tied to the committed resnet34Forward_full_pc and its rendered
 -- graph (r34TrainForward_eq_full_pc, r34TrainGraph_faithful).
 -- ⛔ IT IS THE CAP, NOT THE FOLD, and it must never be tabled beside r34_float_logits_le
 -- without that label: budget/window = 2.00 is the tell. Every one of the 36 BN sites goes
--- through Maps.bnPerChannelTensor3Capped, whose ERROR clause is 2·Ā' ≤ Ē' and mentions neither
+-- through Maps.bnPerChannelTensor3CappedX, whose ERROR clause is 2·Ā' ≤ Ē' and mentions neither
 -- the inherited error nor ε — which is exactly why §0.1's quadratic never becomes a numeral.
 -- What it proves is "the float and the real forward both land in the certified window", the
 -- triangle inequality, not "the rounding error folds to this".
+-- ⭐⭐ 76 of those orders are §0.1's ESCAPE 2, landed 2026-09-05 at the per-channel BatchNorm:
+-- 3.176e221 → 4.304e145 by charging each site's window at |x̂| ≤ √(h·w) (bnXhat_sq_le) instead
+-- of at |x−μ|·|istd| ≤ 2A·S. No new hypothesis, no modelling change, same ε-floor and same
+-- profile; r34's reduction widths are perfect squares so the root is EXACT (ConvNeXt's channel
+-- counts need the ceiling one). ⛔ It does NOT change the kind — uncapped, the same chain is
+-- 3.494e4993, still 4740 orders past norm_num's ceiling.
 -- ⭐ The window half IS an honest fold, and it needs no operating point: the ε-floor
--- |istd| ≤ 317 leaves 32 orders under norm_num's shape-dependent ceiling.
+-- |istd| ≤ 317 now leaves 108 orders under norm_num's shape-dependent ceiling, where the
+-- pre-escape-2 number left 32.
 #print axioms Proofs.FloatBridgesTo.capped
 #print axioms Proofs.FloatBridgesTo.Maps.capped
 #print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelTensor3Capped
+#print axioms Proofs.floatBridgesTo_bnPerChannelFlatX
+#print axioms Proofs.floatBridgesTo_bnPerChannelTensor3X
+#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelTensor3CappedX
 #print axioms Proofs.R34TrainBn.maps
 #print axioms Proofs.R34TrainIdBlk.maps
 #print axioms Proofs.R34TrainDownBlk.maps
@@ -2269,7 +2279,7 @@ open Proofs
 #print axioms Proofs.b0_float_logits_le_committed
 -- ⛔⛔ The FOURTH ImageNet-scale whole-net float statement, and it is NOT the same kind of
 -- statement as the three above. The ConvNeXt-T forward as a CLOSED FloatBridgesTo (cnxBridge),
--- window 4.858e227 (cnxBridge_mag_le) and |float − real| ≤ 9.706e227 per logit on |x| ≤ 1 at the
+-- window 6.609e174 (cnxBridge_mag_le) and |float − real| ≤ 1.321e175 per logit on |x| ≤ 1 at the
 -- measured 300-epoch profile (cnx_float_logits_le). 366 rational inequalities, generated and
 -- re-asserted by scripts/float_budget_envelope.py's verify_cnx before emission.
 -- ⛔ `budget / window = 2.00` is the tell: all 23 LayerNorm sites go through
@@ -2316,6 +2326,12 @@ open Proofs
 #print axioms Proofs.floatClose_bnX
 #print axioms Proofs.floatBridgesTo_bnX
 #print axioms Proofs.FloatBridgesTo.Maps.bnCappedX
+-- ⭐⭐ And the same leaf at the PER-CHANNEL BatchNorm (2026-09-05), which is what r34's
+-- training-mode forward composes: floatClose_bnX through BnPerChannelFloatBridge's rungs 2 and
+-- 3, then capped. Worth 76 orders there — the escape-2 leaf now serves three nets, not two.
+-- ⛔ The affine sits INSIDE this leaf (bnPerChannelTensor3 lifts bnForward ε γ β) and OUTSIDE a
+-- LayerNorm net's, which composes the pure-normalise leaf and then Maps.diagBack/biasAdd; the
+-- two spellings differ by u·Bbnd per site and the probe's chain asserts this one.
 #print axioms Proofs.FloatBridgesTo.Maps.gelu
 -- ════════════════════════════════════════════════════════════════
 -- ViT / ATTENTION Maps kit (FloatBudgetEnvAttn.lean) — chunk 1 of the ViT-Tiny number.
@@ -2465,7 +2481,7 @@ open Proofs
 #print axioms Proofs.cnx_float_logits_le_committed
 -- ════════════════════════════════════════════════════════════════════════════════════════
 -- ViT-Tiny's NUMBER (ViTFloatBudget.lean) — the fifth ImageNet-scale whole-net float statement,
--- window 3.612e218 / budget 7.222e218 on the committed depth-12 vector-LN vitForwardKV @ 224².
+-- window 1.130e161 / budget 2.259e161 on the committed depth-12 vector-LN vitForwardKV @ 224².
 -- ⛔ The CAP, not the fold, and more thoroughly than ConvNeXt: all 25 LayerNorm sites AND all 12
 -- attention sites go through FloatBridgesTo.capped, so no stage inside a block is a fold. The
 -- patch embed is the one honest stage (it does not reduce). budget/window = 2.00 is the tell.

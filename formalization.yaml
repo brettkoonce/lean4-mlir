@@ -195,7 +195,7 @@ status:
       comparator_config: ""
       literature_dependencies: []
     - declaration: "r34_float_logits_le"   # the same at ImageNet scale: the DEPLOYED ResNet-34 inference forward's float logits are within 1.548e209 of the real ones on |x| <= 1, at the measured 79-epoch checkpoint profile (|param| <= 21/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24 -- 4.9e-3 of the certified window, kernel-checked across 90 stages (fidelity.divergences 4d)
-    - declaration: "r34_train_float_logits_le"   # ⛔ the SEVENTH forward number and the FIRST about the program the repo actually TRAINS with: the same [3,4,6,3] ResNet-34 at 224 with bnPerChannelTensor3 at all 36 BN sites, window 3.176e221 / budget 6.349e221 at the same measured 79-epoch profile (|param| <= 21/10), eps >= 1e-5, a device batch MEAN accurate to 1e-2 RELATIVE to the layer window and a device inverse-stddev accurate to 1e-2 absolute, u <= 2^-24, tied to the committed resnet34Forward_full_pc and its rendered graph (r34TrainForward_eq_full_pc / r34TrainGraph_faithful). ⛔⛔ IT IS THE CAP, NOT THE FOLD -- budget/window = 2.00 is the tell, all 36 BN sites go through FloatBridgesTo.Maps.bnPerChannelTensor3Capped whose error clause is 2*A' <= E' and mentions neither the inherited error nor eps, so it proves "the float and the real forward both land in the certified window" (the triangle inequality) and NOT "the rounding error folds to this". Never table it beside r34_float_logits_le, which IS the fold, without that label. ⭐⭐ It exists because "the training-mode fold is 1e7419, so there is no theorem to state" conflated the fold's numeral with the statement: the same measurement puts the WINDOW at 1e221 and capped turns any statable window into a theorem. ⭐ The window half is an honest fold and needs NO operating point -- the eps-floor |istd| <= 317 leaves 32 orders under norm_num's shape-dependent ceiling (fidelity.divergences 4d)
+    - declaration: "r34_train_float_logits_le"   # ⛔ the SEVENTH forward number and the FIRST about the program the repo actually TRAINS with: the same [3,4,6,3] ResNet-34 at 224 with bnPerChannelTensor3 at all 36 BN sites, window 4.304e145 / budget 8.605e145 at the same measured 79-epoch profile (|param| <= 21/10), eps >= 1e-5, a device batch MEAN accurate to 1e-2 RELATIVE to the layer window and a device inverse-stddev accurate to 1e-2 absolute, u <= 2^-24, tied to the committed resnet34Forward_full_pc and its rendered graph (r34TrainForward_eq_full_pc / r34TrainGraph_faithful). ⛔⛔ IT IS THE CAP, NOT THE FOLD -- budget/window = 2.00 is the tell, all 36 BN sites go through FloatBridgesTo.Maps.bnPerChannelTensor3CappedX whose error clause is 2*A' <= E' and mentions neither the inherited error nor eps, so it proves "the float and the real forward both land in the certified window" (the triangle inequality) and NOT "the rounding error folds to this". Never table it beside r34_float_logits_le, which IS the fold, without that label. ⭐⭐ It exists because "the training-mode fold is 1e7419, so there is no theorem to state" conflated the fold's numeral with the statement: the same measurement puts the WINDOW at 1e221 and capped turns any statable window into a theorem. ⭐ The window half is an honest fold and needs NO operating point -- the eps-floor |istd| <= 317 leaves 108 orders under norm_num's shape-dependent ceiling. ⭐⭐ 2026-09-05: 76 of those orders are §0.1's ESCAPE 2 at the per-channel BatchNorm (3.176e221 -> 4.304e145), the same |x-hat| <= sqrt(n) leaf the two LayerNorm nets took the day before, carried through BnPerChannelFloatBridge's three rungs as Maps.bnPerChannelTensor3CappedX -- no new hypothesis, no modelling change, and r34's reduction widths are perfect squares so the root is EXACT. ⛔ Still the cap: uncapped the same chain is 3.494e4993, still 4740 orders past the ceiling. ⚠ Per-example: at batch N > 1 a training-mode BN site reduces over N*h*w and Xh grows with it. (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/Resnet34FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -616,7 +616,7 @@ fidelity:
        days that it did. 1e7419 is the FOLD's numeral; the same measurement puts the
        training-mode WINDOW at 1e221, and `FloatBridgesTo.capped` bounds any modulus by
        `2*mag`, so a statable window is already a statable theorem. That theorem is
-       `r34_train_float_logits_le` below -- 3.176e221 / 6.349e221, a CAP and not a fold,
+       `r34_train_float_logits_le` below -- 4.304e145 / 8.605e145, a CAP and not a fold,
        about the net this repo actually trains. The miss is a recurring shape: `capped`
        was written for LayerNorm, which has the same quadratic and no eval mode, and was
        never tried on BatchNorm, whose problem it describes -- because BatchNorm HAS an
@@ -634,19 +634,19 @@ fidelity:
        input -- at all 36 BN sites, closed, with each BN slot carrying
        `FloatBridgesTo.capped`. `r34TrainBridge_maps` pushes the envelope through the
        same 90 numeric stages (180 rational inequalities, generated AND re-asserted by
-       `scripts/float_budget_envelope.py`'s `r34_train_chain(cap = True)` /
-       `verify_r34_train` before emission). At the same measured 79-epoch profile,
-       `eps >= 1e-5`, unit input window and `u <= 2^-24`:
-           output window  <= 3.176e221     (r34TrainBridge_mag_le)
-           error bound    <= 6.349e221     (r34TrainBridge_fresh_le)
-       and per logit `|float - real| <= 6.349e221` (`r34_train_float_logits_le`), tied
+       `scripts/float_budget_envelope.py`'s `r34_train_chain(lin = True, cap = 'force')` /
+       `verify_r34_train(lin = True)` before emission). At the same measured 79-epoch
+       profile, `eps >= 1e-5`, unit input window and `u <= 2^-24`:
+           output window  <= 4.304e145     (r34TrainBridge_mag_le)
+           error bound    <= 8.605e145     (r34TrainBridge_fresh_le)
+       and per logit `|float - real| <= 8.605e145` (`r34_train_float_logits_le`), tied
        to the committed `resnet34Forward_full_pc` by `r34TrainForward_eq_full_pc` (rfl)
        and to its rendered graph by `r34TrainGraph_faithful`, and restated on that net
        by `r34_train_float_logits_le_committed`.
 
        ⛔⛔ WHAT KIND OF STATEMENT THIS IS, because it is not the same kind as the two
        above it. `budget / window = 2.00` is the tell. Every one of the 36 BN sites goes
-       through `Maps.bnPerChannelTensor3Capped`, whose error clause is `2*A' <= E'` and
+       through `Maps.bnPerChannelTensor3CappedX`, whose error clause is `2*A' <= E'` and
        mentions neither the inherited error nor `eps`, so what is proved is "the float
        and the real forward both land in the certified window" -- the TRIANGLE
        INEQUALITY -- and not "the rounding error folds to this", which is what
@@ -676,11 +676,44 @@ fidelity:
 
        ⭐ NO OPERATING POINT. The number is at the unconditional eps-floor
        `|istd| <= 317`, like the inference number and unlike
-       `Resnet34BackFloatBudget.lean`'s `|istd| <= 16`: the eighteen largest goals the
-       chain asserts close at 1e221 with 32 orders of headroom under `norm_num`'s
-       shape-dependent ceiling, so the hypothesis was measured to be unnecessary rather
-       than assumed to be. `verify_r34_train` separately asserts that the cap is the
-       SMALLER branch at all 36 sites, so "it is the cap" is measured too.
+       `Resnet34BackFloatBudget.lean`'s `|istd| <= 16`: the chain's largest goals closed
+       at 1e221 with 32 orders of headroom under `norm_num`'s shape-dependent ceiling
+       before escape 2 and leave 108 after it, so the hypothesis was measured to be
+       unnecessary rather than assumed to be. `verify_r34_train` separately asserts that
+       the cap is the SMALLER branch at all 36 sites, so "it is the cap" is measured too.
+
+       ⭐⭐ ESCAPE 2 AT THE PER-CHANNEL BATCHNORM (2026-09-05) -- 76 orders, and the
+       largest single number this file has moved: 3.176e221 / 6.349e221 ->
+       4.304e145 / 8.605e145, at NO new hypothesis, no modelling change and no new
+       mathematics. It is the leaf that landed the day before for the two LayerNorm nets
+       (`floatClose_bnX`, |x-hat| <= sqrt(n) from `bnXhat_sq_le`) carried through
+       `BnPerChannelFloatBridge.lean`'s rungs 2 and 3 and then capped:
+       `floatBridgesTo_bnPerChannelFlatX` / `_bnPerChannelTensor3X` /
+       `Maps.bnPerChannelTensor3CappedX` (`BnXhatFloatBridge.lean`). Both rungs are
+       repackages -- `FloatClose.perRowIdx` lifts any per-row `FloatClose` and the two
+       layout gathers are magnitude-stable with modulus `id`, so the composite's mag/mod
+       collapse definitionally, exactly as they do for the shipped leaf.
+       ⭐ r34's reduction widths `h*w` are PERFECT SQUARES (112^2, 56^2, 28^2, 14^2, 7^2),
+       so `Xh` is the EXACT root and nothing is lost -- where ConvNeXt's channel counts
+       96/192/384/768 all need the ceiling one. ⛔ That stops being true at batch `N > 1`,
+       where a training-mode BN site reduces over `N*h*w`: this number is per-example, and
+       `R34TrainBn`'s `hmXh` field is what says so.
+       ⛔ The affine sits INSIDE this leaf and OUTSIDE a LayerNorm net's --
+       `bnPerChannelTensor3` lifts `bnForward eps gamma beta`, where ConvNeXt and ViT
+       compose the pure-normalise leaf and then `Maps.diagBack` + `Maps.biasAdd`. The two
+       spellings differ by `u*Bbnd` per site; the probe's r34 chain was corrected to assert
+       the one the proof asserts.
+       ⛔ IT DOES NOT CHANGE THE KIND, and the measurement says so rather than the
+       argument: uncapped at the new leaf the same chain is 3.494e4993 -- escape 2's window
+       half is worth 2426 orders on the FOLD too (1e7419 -> 1e4993) and leaves it 4740 past
+       `norm_num`'s ceiling anyway. The quadratic shrinks with the window it is quadratic in
+       and still does not fit.
+       ⭐ And the force-the-cap trap that fires on both LayerNorm nets does NOT fire here.
+       There, escape 2 improved the fold enough that `min(mod, 2*mag)` started selecting the
+       fold at shallow sites while `Maps.bnCappedX` asserts `2*A' <= E'` unconditionally.
+       Here only the WINDOW moved, so the modulus is the shipped `bnReluBudget` throughout --
+       1.4e11 at the stem against the cap's 4.6e3 -- and `verify_r34_train` re-asserts that
+       the cap is the smaller branch at all 36 sites under escape 2 as well.
 
        ⭐⭐ A SECOND ONE, AND A NON-VACUOUS WINDOW (2026-09-03):
        `MobileNetV2FloatBudget.lean` closes the mnv2 cone the same way.
@@ -791,8 +824,9 @@ fidelity:
        `u <= 2^-24`:
            output window  <= 6.609e174      (cnxBridge_mag_le)
            fresh budget   <= 1.321e175      (cnxBridge_fresh_le)
-       ⭐⭐ ESCAPE 2, WINDOW HALF (2026-09-05) -- 53 orders on ConvNeXt-T and 57 on
-       ViT-Tiny, at NO new hypothesis and no new mathematics. `floatClose_bn` charged the
+       ⭐⭐ ESCAPE 2, WINDOW HALF (2026-09-05) -- 53 orders on ConvNeXt-T, 57 on
+       ViT-Tiny and (the same day, at the per-channel BatchNorm) 76 on ResNet-34's
+       training-mode forward, all at NO new hypothesis and no new mathematics. `floatClose_bn` charged the
        certified window at `|x-mu| * |istd| <= D * S`, the product of the two factors' own
        bounds; the normalised activation has a bound of its own that mentions neither,
        `x-hat^2 <= n` (`bnXhat_sq_le`), which four whole-net BACKWARD budget files have used
@@ -810,6 +844,11 @@ fidelity:
        track the window.
            ConvNeXt-T  4.858e227 / 9.706e227  ->  6.609e174 / 1.321e175
            ViT-Tiny    3.612e218 / 7.222e218  ->  1.130e161 / 2.259e161
+           r34 @ train 3.176e221 / 6.349e221  ->  4.304e145 / 8.605e145
+       The r34 row is the same leaf at a different conjugation -- lifted per channel by
+       `FloatClose.perRowIdx` and conjugated by the two layout gathers, i.e.
+       `BnPerChannelFloatBridge.lean`'s rungs 2 and 3, both repackages. It is the largest
+       single number escape 2 moved, and unlike the two above it the root is EXACT.
        ⛔ IT DOES NOT CHANGE THE KIND. Both numbers are still `FloatBridgesTo.capped`, still
        `budget/window = 2.00`, still the triangle inequality. Escape 2 has a MODULUS half too
        (`2e*S*(1+Xh)`, free of the window) and it is deliberately NOT taken: it is worth 5006

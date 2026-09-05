@@ -154,24 +154,38 @@ def bn_eval(st, S=R34_S, G=R34_G, Bb=R34_BB, Mb=R34_MB, es=R34_ES, q=U32):
 R34_EMR = F(1, 100)   # deployed batch-MEAN accuracy, RELATIVE to the window (training mode)
 
 
-def bn_train(st, S=R34_S, G=R34_G, Bb=R34_BB, emr=R34_EMR, ei=R34_ES, q=U32, lin=False):
+def bn_train(st, S=R34_S, G=R34_G, Bb=R34_BB, emr=R34_EMR, ei=R34_ES, q=U32, lin=False,
+             nred=None):
     """TRAINING-mode BatchNorm: the statistics are reduced out of this batch, so perturbing the
     input moves mu AND var and the modulus is QUADRATIC in the window (planning §0.1). This is
     `bn()` wired to a caller — the leaf has been in this file, unused, since the 1e7417 figure
     §0.1 quotes was measured.
 
-    `lin=True` is §0.1's ESCAPE 2 (§3.27): `|x̂| <= sqrt(n)` for the window and an
-    input-sensitivity `2e*S*(1+Xh)` free of the window. ⚠ `n` here is the reduction width the
-    BATCH normalises over — `N*h*w` at training, not the channel count a LayerNorm reduces over —
-    so `Xh` is much larger than ConvNeXt's 10..28 and the reset is correspondingly weaker."""
-    if lin:
-        return cnx_ln_leaf_lin(st, 1, S, emr, ei, q)     # placeholder width; see r34_train_chain
+    `lin=True` is §0.1's ESCAPE 2 (§3.27), WINDOW HALF ONLY — `Maps.bnPerChannelTensor3CappedX`,
+    i.e. `floatClose_bnX` lifted per channel and capped. `|x̂| <= sqrt(n)` replaces
+    `|x−mu|*|istd| <= 2A*S`, and the MODULUS is untouched (`floatClose_bnX`'s error clause is
+    `floatClose_bn`'s verbatim, still `bnReluBudget` with §0.1's quadratic) — which costs nothing,
+    because every site is capped. ⚠ `n` is the reduction width the BATCH normalises over — `N*h*w`
+    at training, not the channel count a LayerNorm reduces over — so `Xh` is 7..112 here against
+    ConvNeXt's 10..28, and the reset is correspondingly weaker.
+
+    ⛔ **The affine is INSIDE this leaf and outside ConvNeXt's.** `bnPerChannelTensor3` is
+    `bnForward m eps gamma beta` lifted per channel, so `floatClose_bnX` carries `G`/`Bb` in its
+    own `mag`; ConvNeXt's `cnx_ln_leaf_lin` is the pure-normalise leaf (gamma=1, beta=0) with the
+    affine as two later chain stages. Folding r34 the ConvNeXt way is `u*Bb` too small at every
+    site — immaterial at four significant figures and still the wrong shape: the fold must assert
+    exactly what the proof asserts (planning §3.17)."""
     A, E = st
+    if lin:
+        Xh = F(isqrt_ceil(nred))
+        nb = bn_norm_budget_x(q, Xh, 2 * A, S, G, Bb, emr * A, ei)
+        return (G * Xh + Bb + nb,
+                nb + G * ((E + E) * S + 2 * A * (8 * A * E * (S ** 3 / 2))))
     return bn(st, S, G, Bb, emr, ei, S, S ** 3 / 2, q)
 
 
 def r34_train_chain(S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB, emr=R34_EMR,
-                    ei=R34_ES, q=U32, lin=False, nred=None, cap=False):
+                    ei=R34_ES, q=U32, lin=True, nred=None, cap='force'):
     """⭐⭐ The r34 forward at TRAINING-mode BatchNorm — the mode the repo actually trains in,
     and the one §0.1 says has "no numeral to write down, so no theorem to state".
 
@@ -189,12 +203,7 @@ def r34_train_chain(S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB, emr=R34_EMR,
         A, E = st
         n = nred if nred else hw
         e = emr_derived(n) if emr == 'derived' else emr
-        if lin:
-            mag, mod = cnx_ln_leaf_lin(st, n, S, e, ei, q)
-            mag = G * mag + Bb          # the affine the pure-normalise leaf does not carry
-            mod = G * mod
-        else:
-            mag, mod = bn_train(st, S, G, Bb, e, ei, q)
+        mag, mod = bn_train(st, S, G, Bb, e, ei, q, lin, n)
         mag = r4(mag)
         # ⛔ `cap='force'` takes the cap at EVERY site rather than the smaller branch. Under
         # `lin` the FOLD wins at the shallow sites here exactly as it does on the two LayerNorm
@@ -366,7 +375,7 @@ def verify_r34(rows) -> int:
 
 
 def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
-                     emr=R34_EMR, ei=R34_ES, q=U32, lin=False) -> int:
+                     emr=R34_EMR, ei=R34_ES, q=U32, lin=True) -> int:
     """Re-assert every rounded inequality the TRAINING-mode CAPPED Lean chain closes.
 
     ⚠ The BN rows are a DIFFERENT shape from `verify_r34`'s, and asserting the eval shape here
@@ -402,16 +411,20 @@ def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
         A, E = src
         e = emr_derived(nred) if emr == 'derived' else emr
         if lin:                       # §0.1's escape 2 at the per-channel BN (planning §3.31)
+            # ⚠ `G`/`Bb` sit INSIDE this leaf — `bnPerChannelTensor3` lifts `bnForward eps g b`
+            # per channel, where ConvNeXt's LN leaf is pure-normalise with the affine as separate
+            # chain stages. `Maps.bnPerChannelTensor3CappedX`'s window clause is this line.
             Xh = F(isqrt_ceil(nred))
-            nb = bn_norm_budget_x(q, Xh, 2 * A, S, F(1), F(0), e * A, ei)
-            ck(tag + ".A", G * (Xh + nb) + Bb, dst[0])
+            nb = bn_norm_budget_x(q, Xh, 2 * A, S, G, Bb, e * A, ei)
+            ck(tag + ".A", G * Xh + Bb + nb, dst[0])
         else:
             nb = bnNormBudget(q, 2 * A, S, G, Bb, e * A, ei)
             ck(tag + ".A", G * (2 * A * S) + Bb + nb, dst[0])
         ck(tag + ".cap", 2 * dst[0], dst[1])
-        # not a Lean obligation: the cap is only honest if the fold is worse here.
-        fold = (G * (2 * E * S * (1 + F(isqrt_ceil(nred)))) if lin
-                else nb + G * ((E + E) * S + 2 * A * (8 * A * E * (S ** 3 / 2))))
+        # Not a Lean obligation: the cap is only honest if the fold is worse here. ⚠ Escape 2 is
+        # the WINDOW half only, so the modulus is the shipped `bnReluBudget` in both branches —
+        # `floatClose_bnX`'s error clause is `floatClose_bn`'s verbatim.
+        fold = nb + G * ((E + E) * S + 2 * A * (8 * A * E * (S ** 3 / 2)))
         if 2 * dst[0] <= fold:
             cap_bites += 1
 
@@ -458,12 +471,7 @@ def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
     ck("gap.A", st[0] * ((1 + g50) * (1 + q)), r["gap"][0])
     ck("gap.E", st[0] * (q * (1 + g50) + g50) + st[1], r["gap"][1])
     conv_ck("dense", 512, r["gap"], r["dense"])
-    assert cap_bites == 36 or lin, f"cap selected at {cap_bites} of 36 BN sites, not all"
-    if lin:
-        # ⚠ Under escape 2 the FOLD wins at the shallow sites, exactly as it does on the two
-        # LayerNorm nets (planning §3.30) — so a Lean chain on the capped leaf must FORCE the
-        # cap rather than take the smaller branch, and `cap=True` above already does.
-        pass
+    assert cap_bites == 36, f"cap selected at {cap_bites} of 36 BN sites, not all"
     return n
 
 

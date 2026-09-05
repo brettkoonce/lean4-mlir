@@ -386,4 +386,117 @@ noncomputable def floatBridgesTo_bnX {m : Nat} (M : FloatModel) {ε γ β : ℝ}
        (fun v hv j => bn_centered_le hm v hv j) (fun v _ => hS v) hXh0 hmXh
      ⟨hfc.cod_nonneg hA hm, hfc⟩⟩
 
+-- ════════════════════════════════════════════════════════════════
+-- § The same leaf at the PER-CHANNEL BatchNorm — rungs 2 and 3
+-- ════════════════════════════════════════════════════════════════
+
+/-! ⭐⭐ **Escape 2 at the normalisation whose problem §0.1 was written about.** The bridge above
+is the *flat* leaf, which is what a LayerNorm net composes. ResNet-34's BatchNorm is
+`bnPerChannelTensor3` — that same leaf lifted per channel by `FloatClose.perRowIdx` and
+conjugated by the two layout gathers — so `BnPerChannelFloatBridge.lean`'s rungs 2 and 3 are
+repackages, exactly as they are for the shipped leaf. Every step is definitional: the gathers are
+magnitude-stable with modulus `id`, so the composite's `mag`/`mod` collapse to the BN's own.
+
+⛔ **The affine sits INSIDE this leaf and outside a LayerNorm net's.** `bnPerChannelTensor3` lifts
+`bnForward m ε γ β`, so `G`/`Bbnd` are `floatClose_bnX`'s own arguments; ConvNeXt's and ViT's LN
+chains compose the pure-normalise leaf (`Maps.bnCappedX` at `G = 1`, `Bbnd = 0`) and then a
+separate `Maps.diagBack` and `Maps.biasAdd`. The two spellings differ by `u·Bbnd` per site — the
+fold must assert what the proof asserts, and the probe's r34 chain was corrected to this shape
+(`planning/float_budget_numbers.md` §3.17). -/
+
+/-- **Per-channel BatchNorm (Mat-split layout) float-bridges TO its float map at `|x̂| ≤ Xh`** —
+    `floatBridgesTo_bnPerChannelFlat` with `floatClose_bnX` in each channel's slot. Uniform
+    across channels for the same reason as there: `G`/`Bbnd`/`emean`/`eistd`/`S` are shared, and
+    ⭐ so is `Xh`, which is a constant of the reduction width `m` and not of the channel. -/
+noncomputable def floatBridgesTo_bnPerChannelFlatX {oc m : Nat} (M : FloatModel) {ε : ℝ}
+    (γ β : Vec oc) (fμ fistdv : Fin oc → Vec m → ℝ) (emean eistd : ℝ → ℝ) {G Bbnd S Xh : ℝ}
+    (hoc : 0 < oc) (hm : 0 < m) (hε : 0 < ε)
+    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd)
+    (hmean : ∀ c A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fμ c v - bnMean m v| ≤ emean A)
+    (histd : ∀ c A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fistdv c v - bnIstd m v ε| ≤ eistd A)
+    (hS : ∀ v : Vec m, |bnIstd m v ε| ≤ S) (hXh0 : 0 ≤ Xh) (hmXh : (m : ℝ) ≤ Xh ^ 2) :
+    FloatBridgesTo (bnPerChannelFlat oc m ε γ β) (bnPerChannelFlatFV M γ β fμ fistdv) :=
+  ⟨bnXLeafMag M.u Xh S G Bbnd emean eistd, bnLeafMod M.u ε S G Bbnd emean eistd,
+   fun A hA =>
+     have hg := fun c : Fin oc => floatClose_bnX M (fμ c) (fistdv c) hm hε (hγ c) (hβ c)
+       (fun v hv => hmean c A hA v hv) (fun v hv => histd c A hA v hv)
+       (fun v hv j => bn_centered_le hm v hv j) (fun v _ => hS v) hXh0 hmXh
+     have hpr := FloatClose.perRowIdx (d := m) oc hg
+     ⟨hpr.cod_nonneg hA (Nat.mul_pos hoc hm), hpr⟩⟩
+
+/-- ⭐ **Per-channel BatchNorm (network Tensor3 layout) float-bridges TO its float map at
+    `|x̂| ≤ Xh`** — `floatBridgesTo_bnPerChannelTensor3`'s conjugation over the escape-2 rung.
+    The float map is the SAME `bnPerChannelTensor3FV`: escape 2 changes which bound is proved
+    about the deployed kernel, never the kernel. -/
+noncomputable def floatBridgesTo_bnPerChannelTensor3X {oc h w : Nat} (M : FloatModel) {ε : ℝ}
+    (γ β : Vec oc) (fμ fistdv : Fin oc → Vec (h * w) → ℝ) (emean eistd : ℝ → ℝ)
+    {G Bbnd S Xh : ℝ}
+    (hoc : 0 < oc) (hhw : 0 < h * w) (hε : 0 < ε)
+    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd)
+    (hmean : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fμ c v - bnMean (h * w) v| ≤ emean A)
+    (histd : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fistdv c v - bnIstd (h * w) v ε| ≤ eistd A)
+    (hS : ∀ v : Vec (h * w), |bnIstd (h * w) v ε| ≤ S)
+    (hXh0 : 0 ≤ Xh) (hmXh : ((h * w : ℕ) : ℝ) ≤ Xh ^ 2) :
+    FloatBridgesTo (bnPerChannelTensor3 oc h w ε γ β) (bnPerChannelTensor3FV M γ β fμ fistdv) :=
+  ⟨bnXLeafMag M.u Xh S G Bbnd emean eistd, bnLeafMod M.u ε S G Bbnd emean eistd,
+   ((floatBridgesTo_gather (reassocEquiv oc h w)).comp
+      (floatBridgesTo_bnPerChannelFlatX M γ β fμ fistdv emean eistd hoc hhw hε hγ hβ
+        hmean histd hS hXh0 hmXh)).comp
+     (floatBridgesTo_gather (reassocEquiv oc h w).symm) |>.close⟩
+
+namespace FloatBridgesTo
+
+/-- ⭐⭐ **The CAPPED per-channel training BatchNorm envelope at `|x̂| ≤ Xh`** —
+    `Maps.bnPerChannelTensor3Capped` (`FloatBudgetEnv.lean`) with escape 2's window.
+    **Worth 76 orders on `r34_train_float_logits_le`: 3.176·10²²¹ → 4.304·10¹⁴⁵**, at no new
+    hypothesis and no modelling change — `Xh` is a constant of the reduction width, so it enters
+    no profile and does not track the window.
+
+    ⭐ r34's reduction widths are PERFECT SQUARES (`h·w` = 112², 56², 28², 14², 7²), so
+    `hmXh` holds at the exact root and nothing is lost to rounding; ConvNeXt's channel counts
+    96/192/384/768 all need the ceiling root (`planning/float_budget_numbers.md` §3.16 finding 5).
+    ⛔ That stops being true at batch `N > 1`, where the training-mode width is `N·h·w`.
+
+    ⛔ **Still the CAP.** The error clause is `2·Ā'` and the underlying modulus is
+    `floatClose_bn`'s unchanged `bnReluBudget`, quadratic in the window: escape 2's modulus half
+    is priced and not taken (`BnXhatFloatBridge.lean`'s header), which costs nothing precisely
+    because every site is capped. §9's label travels with any number built on this. ⭐ And unlike
+    the two LayerNorm nets, the cap is still the SMALLER branch at every site here — the fold at
+    r34's stem is `1.4·10¹¹` against the cap's `4.6·10³` — so §3.30's force-the-cap trap does not
+    fire on this net. -/
+theorem Maps.bnPerChannelTensor3CappedX {oc h w : Nat} (M : FloatModel) {ε : ℝ}
+    (γ β : Vec oc) (fμ fistdv : Fin oc → Vec (h * w) → ℝ) (emean eistd : ℝ → ℝ)
+    {G Bbnd S Xh : ℝ}
+    (hoc : 0 < oc) (hhw : 0 < h * w) (hε : 0 < ε)
+    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd)
+    (hmean : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fμ c v - bnMean (h * w) v| ≤ emean A)
+    (histd : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fistdv c v - bnIstd (h * w) v ε| ≤ eistd A)
+    (hSb : ∀ v : Vec (h * w), |bnIstd (h * w) v ε| ≤ S)
+    (hXh0 : 0 ≤ Xh) (hmXh : ((h * w : ℕ) : ℝ) ≤ Xh ^ 2)
+    {q em ei Ā Ē Ā' Ē' : ℝ}
+    (hq : M.u ≤ q) (hG0 : 0 ≤ G) (hB0 : 0 ≤ Bbnd) (hS0 : 0 ≤ S)
+    (hem : ∀ A, 0 ≤ A → A ≤ Ā → emean A ≤ em) (hei : ∀ A, 0 ≤ A → A ≤ Ā → eistd A ≤ ei)
+    (hĀ' : G * Xh + Bbnd + bnNormBudgetX q Xh (2 * Ā) S G Bbnd em ei ≤ Ā')
+    (hĒ' : 2 * Ā' ≤ Ē') :
+    (floatBridgesTo_bnPerChannelTensor3X M γ β fμ fistdv emean eistd hoc hhw hε hγ hβ
+      hmean histd hSb hXh0 hmXh).capped.Maps Ā Ē Ā' Ē' := by
+  refine Maps.capped (Ē := Ē) (fun A h0 hle => ?_) hĒ'
+  have hu := M.u_nonneg
+  have hemn : ∀ A, 0 ≤ A → 0 ≤ emean A := fun A hA =>
+    (abs_nonneg _).trans (hmean ⟨0, hoc⟩ A hA 0 (fun _ => by simpa using hA))
+  have hein : ∀ A, 0 ≤ A → 0 ≤ eistd A := fun A hA =>
+    (abs_nonneg _).trans (histd ⟨0, hoc⟩ A hA 0 (fun _ => by simpa using hA))
+  show bnXLeafMag M.u Xh S G Bbnd emean eistd A ≤ Ā'
+  unfold bnXLeafMag
+  have hnb := bnNormBudgetX_mono (u := M.u) (u' := q) (Xh := Xh) (D := 2 * A) (D' := 2 * Ā)
+    (S := S) (G := G) (Bbnd := Bbnd) hu hq hXh0 (by linarith) (by linarith) hS0 hG0 hB0
+    (hemn A h0) (hem A h0 hle) (hein A h0) (hei A h0 hle)
+  linarith
+
+end FloatBridgesTo
+
 end Proofs
