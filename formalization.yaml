@@ -154,8 +154,8 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
-    - declaration: "Proofs.mobilenetv2_has_vjp_at_correct"
-      file: "LeanMlir/Proofs/Architectures/MobileNetV2.lean"
+    - declaration: "Proofs.mobilenetv2_full_has_vjp_at_correct"   # the 17-block PAPER net, not the 2-block generic
+      file: "LeanMlir/Proofs/Architectures/MobileNetV2FullVJP.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"

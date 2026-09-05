@@ -11,6 +11,8 @@ emits the Lean `have` chain from the same numbers.
 The kernel is the check; this is only the search for the numerals.
 Run: python3 scripts/float_budget_envelope.py
 """
+import os
+import re
 from fractions import Fraction as F
 from math import floor, log10
 
@@ -1883,6 +1885,238 @@ def verify_mnv2_back(rows, wk=MNV2_WK, G=MNV2_GLB, S=MNV2_SB, es=MNV2_ESB, exh=M
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# § MobileNetV2 at the FULL 17-BLOCK PAPER NET (planning/proofs_tier_to_paper_nets.md 3.2b)
+#
+# The reduced 6-block chains above are the ch7 representative. This section folds the net
+# `mobilenetv2ForwardPaper` actually is, and it reads its block table from LEAN rather than
+# carrying a fourth hand-written copy — the "two lists for one net" trap. TWO sources, and
+# the disagreement between them is itself a check:
+#
+#   * kinds and spatial dims  <- `mobilenetv2ForwardPaper` (MobileNetV2FullPaper.lean), the
+#     `ivNoExpW / ivStridedW / ivResidW / ivExpOnlyW  h w  w.bN` applications;
+#   * widths (ic, mid, oc)    <- `paperSig` (MobileNetV2Render.lean), the committed func-arg
+#     signature of `@mobilenetv2_fwd`.
+#
+# `mnv2_paper_plan` asserts the two name the same 17 blocks AND that "has an identity skip"
+# (`ivResidW` in the forward) agrees with `ic == oc` in the signature.
+# ════════════════════════════════════════════════════════════════════════════
+
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _lean(rel: str) -> str:
+    with open(os.path.join(_REPO, rel)) as fh:
+        return fh.read()
+
+
+def mnv2_paper_plan():
+    """(forward plan, backward plan, stem oc, head fan-in, dense fan-in), read from Lean.
+
+    The forward plan is `(tag, kind, expand fan-in, project fan-in)` in forward order, matching
+    `MNV2_PLAN`'s shape; the backward plan is `(tag, kind, ic, mid, oc, h, w)` cotangent-first,
+    matching `MNV2_BACK_PLAN`'s. `kind` is `noexp` (t=1, no expand conv and no skip), `skip`
+    (stride 1 with the identity skip), `strided`, or `noskip` (stride 1, `ic != oc`)."""
+    sig = _lean("LeanMlir/Proofs/Codegen/MobileNetV2Render.lean")
+    sig = sig.split("private def paperSig")[1].split("\n\n")[0]
+    width = {}
+    for tag, ic, oc in re.findall(r'irSigNoExp "(\d+)"\s+(\d+)\s+(\d+)', sig):
+        width["b" + tag] = (int(ic), int(ic), int(oc))     # project fan-in is ic: no expand
+    for tag, ic, mid, oc in re.findall(r'irSig "(\d+)"\s+(\d+)\s+(\d+)\s+(\d+)', sig):
+        width["b" + tag] = (int(ic), int(mid), int(oc))
+    stem_oc = int(re.search(r'\("%Ws", ty \[(\d+),3,3,3\]\)', sig).group(1))
+    head_oc, _head_ic = re.search(r'\("%Wh", ty \[(\d+),(\d+),1,1\]\)', sig).groups()
+    dense_fan = int(re.search(r'\("%Wfc", ty \[(\d+),', sig).group(1))
+
+    fwd = _lean("LeanMlir/Proofs/Architectures/MobileNetV2FullPaper.lean")
+    fwd = fwd.split("noncomputable def mobilenetv2ForwardPaper")[1].split("namespace StableHLO")[0]
+    shape = {tag: (kind, int(h), int(w)) for kind, h, w, tag in
+             re.findall(r'iv(NoExp|Resid|ExpOnly|Strided)W (\d+) (\d+) w\.(b\d+)', fwd)}
+
+    assert set(shape) == set(width), f"block sets differ: {set(shape) ^ set(width)}"
+    kindOf = {"NoExp": "noexp", "Resid": "skip", "Strided": "strided", "ExpOnly": "noskip"}
+    for t, (k, _h, _w) in shape.items():
+        ic, _mid, oc = width[t]
+        assert (k == "Resid") == (ic == oc), f"{t}: forward says {k}, signature says {ic}->{oc}"
+
+    order = sorted(shape, key=lambda t: int(t[1:]))
+    plan = [(t, kindOf[shape[t][0]], width[t][0], width[t][1]) for t in order]
+    back = [(t, kindOf[shape[t][0]], width[t][0], width[t][1], width[t][2],
+             shape[t][1], shape[t][2]) for t in reversed(order)]
+    return plan, back, stem_oc, int(head_oc), dense_fan
+
+
+MNV2_PAPER_PLAN, MNV2_PAPER_BACK_PLAN, MNV2_PAPER_STEM_OC, MNV2_PAPER_HEAD_OC, \
+    MNV2_PAPER_DENSE_FAN = mnv2_paper_plan()
+
+# 52 BN sites: stem + b1's two + 16 blocks x 3 + head, against the reduced net's 20.
+assert 1 + sum(2 if k == "noexp" else 3 for _, k, _, _ in MNV2_PAPER_PLAN) + 1 == 52
+
+
+def mnv2_paper_eval_chain(cap_bn=True, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32,
+                          relu6_clamp=True):
+    """`mnv2_eval_chain` at the 17-block paper net.
+
+    ⭐ `cap_bn` applies `FloatBridgesTo.capped` at every BN site — modulus `min(fold, 2·window)`,
+    the ConvNeXt-T treatment. Uncapped the 52-site fold is 2.104e266, past `norm_num`'s ceiling;
+    capped it is 8.176e16.
+
+    ⛔ Read the label honestly: the `min` selects its RIGHT branch at 40 of the 52 sites, so this
+    is mostly the triangle inequality and not a fold. What the output numeral does say is that
+    from the last cap (`head.bn`) the three remaining stages — relu6, GAP, the classifier — fold
+    that capped error to 8.176e16. `budget/window` is 3.8e12 rather than the pure cap's 2.
+
+    ⚠ The window is ROUNDED before it is doubled. `2 * r4(x)` can exceed `r4(2 * x)` and break
+    `Maps.capped`'s own `2 * Ā' ≤ Ē'`."""
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    def r6(st):
+        return R(relu6(st)) if relu6_clamp else st
+
+    def bnE(st):
+        A, E = R(bn_eval_mnv2(st, S, w, es, q))
+        return (A, min(E, 2 * A)) if cap_bn else (A, E)
+
+    def cv(st, m):
+        return R(conv(st, m, w, w))
+
+    out = []
+    st = (F(1), F(0))
+    st = cv(st, 3 * 3 * 3);  out.append(("stem.conv", st))
+    st = bnE(st);            out.append(("stem.bn", st))
+    st = r6(st);             out.append(("stem.r6", st))
+    for tag, kind, fe, fp in MNV2_PAPER_PLAN:
+        blkin = st
+        s = blkin
+        if kind != "noexp":
+            s = cv(s, fe);   out.append((f"{tag}.econv", s))
+            s = bnE(s);      out.append((f"{tag}.ebn", s))
+            s = r6(s);       out.append((f"{tag}.er6", s))
+        s = cv(s, 9);        out.append((f"{tag}.dw", s))
+        s = bnE(s);          out.append((f"{tag}.dbn", s))
+        s = r6(s);           out.append((f"{tag}.dr6", s))
+        s = cv(s, fp);       out.append((f"{tag}.pconv", s))
+        s = bnE(s);          out.append((f"{tag}.pbn", s))
+        if kind == "skip":
+            s = R(residual(blkin, s, q)); out.append((f"{tag}.out", s))
+        st = s
+    st = cv(st, MNV2_PAPER_HEAD_OC // 4);  out.append(("head.conv", st))
+    st = bnE(st);                          out.append(("head.bn", st))
+    st = r6(st);                           out.append(("head.r6", st))
+    st = R(gap(st, 49, q));                out.append(("gap", st))
+    st = R(dense(st, MNV2_PAPER_DENSE_FAN, w, w)); out.append(("dense", st))
+    return out
+
+
+def verify_mnv2_paper(rows, cap_bn=True, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32) -> int:
+    """Re-assert EVERY rounded inequality the 17-block Lean chain would close, exactly — the
+    peer of `verify_mnv2`. Returns the count checked; raises on the first failure."""
+    G = Bb = Mb = w
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: {float(lhs)} > {float(rhs)}"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2))
+        ck(tag + ".A", (1 + g) * (m * w * A + w), dst[0])
+        ck(tag + ".E", g * (m * w * (A + E) + w) + m * w * E, dst[1])
+
+    def bn_ck(tag, src, dst):
+        A, E = src
+        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+        ck(tag + ".A", G * ((A + Mb) * S) + Bb + nb, dst[0])
+        fold = nb + G * S * E
+        ck(tag + ".E", min(fold, 2 * dst[0]) if cap_bn else fold, dst[1])
+        if cap_bn:                       # Maps.capped's own side condition
+            ck(tag + ".cap", 2 * dst[0], 2 * dst[0])
+
+    def r6_ck(tag, src, dst):
+        ck(tag + ".A", min(src[0], F(6)), dst[0])
+        ck(tag + ".E", src[1], dst[1])
+
+    conv_ck("stem.conv", 3 * 3 * 3, (F(1), F(0)), r["stem.conv"])
+    bn_ck("stem.bn", r["stem.conv"], r["stem.bn"])
+    r6_ck("stem.r6", r["stem.bn"], r["stem.r6"])
+    st = r["stem.r6"]
+    for tag, kind, fe, fp in MNV2_PAPER_PLAN:
+        blkin = st
+        s = blkin
+        if kind != "noexp":
+            conv_ck(f"{tag}.econv", fe, s, r[f"{tag}.econv"])
+            bn_ck(f"{tag}.ebn", r[f"{tag}.econv"], r[f"{tag}.ebn"])
+            r6_ck(f"{tag}.er6", r[f"{tag}.ebn"], r[f"{tag}.er6"])
+            s = r[f"{tag}.er6"]
+        conv_ck(f"{tag}.dw", 9, s, r[f"{tag}.dw"])
+        bn_ck(f"{tag}.dbn", r[f"{tag}.dw"], r[f"{tag}.dbn"])
+        r6_ck(f"{tag}.dr6", r[f"{tag}.dbn"], r[f"{tag}.dr6"])
+        conv_ck(f"{tag}.pconv", fp, r[f"{tag}.dr6"], r[f"{tag}.pconv"])
+        bn_ck(f"{tag}.pbn", r[f"{tag}.pconv"], r[f"{tag}.pbn"])
+        st = r[f"{tag}.pbn"]
+        if kind == "skip":
+            Bd, Ed = st
+            ck(f"{tag}.out.A", Bd + blkin[0] + q * (Bd + blkin[0]), r[f"{tag}.out"][0])
+            ck(f"{tag}.out.E", q * (Bd + Ed + blkin[0] + blkin[1]) + (Ed + blkin[1]),
+               r[f"{tag}.out"][1])
+            st = r[f"{tag}.out"]
+    conv_ck("head.conv", MNV2_PAPER_HEAD_OC // 4, st, r["head.conv"])
+    bn_ck("head.bn", r["head.conv"], r["head.bn"])
+    r6_ck("head.r6", r["head.bn"], r["head.r6"])
+    A, E = r["head.r6"]
+    inv = F(1) / F(49)
+    me = mulErr(q, inv, 49 * A, F(0), F(0))
+    ck("gap.A", inv * (49 * A) + me, r["gap"][0])
+    ck("gap.E", me + inv * (49 * E), r["gap"][1])
+    conv_ck("dense", MNV2_PAPER_DENSE_FAN, r["gap"], r["dense"])
+    return n
+
+
+def mnv2_paper_back_chain(wk=MNV2_WK, G=MNV2_GLB, S=MNV2_SB, es=MNV2_ESB, exh=MNV2_EXH,
+                          q=U32, xhat='sqrt'):
+    """`mnv2_back_chain` at the 17-block paper net. The `noexp` block has no expand stage, so
+    its backward is `bnBp -> cBp -> bnBd -> dwB` and nothing else."""
+    fwd = dict(mnv2_paper_eval_chain())
+
+    def Xh(hw, fwd_tag):
+        return F(isqrt_exact(hw)) if xhat == 'sqrt' else 2 * fwd[fwd_tag][0] * S
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out = []
+    st = (F(1), F(0))
+    st = R(conv_back(st, 10, wk, q));   out.append(("linBack", st))
+    st = R(gap_back(st, 49, q));        out.append(("gapBack", st))
+    st = R(bn_back(st, 49, Xh(49, "head.bn"), G, S, es, exh, q)); out.append(("head.bnB", st))
+    st = R(conv_back(st, MNV2_PAPER_HEAD_OC, wk, q)); out.append(("head.cB", st))
+    for tag, kind, ic, mid, oc, h, w_ in MNV2_PAPER_BACK_PLAN:
+        blkin = st
+        hw = h * w_
+        he = (2 * h) * (2 * w_) if kind == "strided" else hw
+        s = R(bn_back(blkin, hw, Xh(hw, tag + ".pbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBp", s))
+        s = R(conv_back(s, oc, wk, q));  out.append((tag + ".cBp", s))
+        s = R(bn_back(s, hw, Xh(hw, tag + ".dbn"), G, S, es, exh, q))
+        out.append((tag + ".bnBd", s))
+        s = R(conv_back(s, 9, wk, q));   out.append((tag + ".dwB", s))
+        if kind != "noexp":
+            s = R(bn_back(s, he, Xh(he, tag + ".ebn"), G, S, es, exh, q))
+            out.append((tag + ".bnBe", s))
+            s = R(conv_back(s, mid, wk, q)); out.append((tag + ".cBe", s))
+        st = R(residual(blkin, s, q)) if kind == "skip" else s
+        out.append((tag + ".out", st))
+    st = R(bn_back(st, 12544, Xh(12544, "stem.bn"), G, S, es, exh, q))
+    out.append(("stem.bnB", st))
+    st = R(conv_back(st, MNV2_PAPER_STEM_OC * 9, wk, q)); out.append(("stem.cB", st))
+    return out
+
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # EfficientNet-B0 BACKWARD — the squeeze-excite question (§3.8 item 1)
 # ════════════════════════════════════════════════════════════════════════════
 #
@@ -2576,6 +2810,53 @@ if __name__ == "__main__":
     print("  ⛔ relu6's CLAMP — the whole reason the forward window is 2154 — buys the backward")
     print("     NOTHING: `reluMaskBack` is a 0/1 select, envelope-preserving, and a cotangent")
     print("     window has nothing to be clamped to.")
+
+    print("\n── MobileNetV2 at the FULL 17-BLOCK PAPER NET (proofs_tier_to_paper_nets 3.2b) ──")
+    prows = mnv2_paper_eval_chain()
+    pA, pE = prows[-1][1]
+    uA, uE = mnv2_paper_eval_chain(cap_bn=False)[-1][1]
+    ncap = sum(1 for t, (a, e) in prows if t.endswith("bn") and e == 2 * a)
+    print(f"  FORWARD, eval-mode BN, 52 BN sites (the reduced net has 20)")
+    print(f"    window        {sci(pA)}   (2154 at 6 blocks; the growth is the HEAD width,")
+    print(f"                              dense fan-in 1280 vs 128 — relu6 still pins the body)")
+    print(f"    budget        {sci(pE)}   ⭐ CAPPED at the BN sites, {ncap} of 52 selected")
+    print(f"    uncapped      {sci(uE)}   — past norm_num's ~1e253, no theorem to state")
+    print(f"    re-assertions {verify_mnv2_paper(prows)} — every rounded inequality re-checked")
+    print(f"  ⭐⭐ The capped 17-block number is 79 orders SMALLER than the shipped UNCAPPED")
+    print(f"     6-block one (1.444e96): capping the BN sites is worth more than 11 blocks cost.")
+    print(f"\n  {'forward variant':<44} {'window':>12} {'budget':>12}  statable")
+    print("  " + "-" * 76)
+    for name, kw in [
+        ("⭐ shipped leaves, capped at the BN sites", {}),
+        ("uncapped fold, S = 317 (the ε-floor)", dict(cap_bn=False)),
+        ("uncapped, operating point |istd| ≤ 32", dict(cap_bn=False, S=F(32))),
+        ("uncapped, operating point |istd| ≤ 16", dict(cap_bn=False, S=F(16))),
+        ("uncapped, σ² ≈ 1 (S = 1)", dict(cap_bn=False, S=F(1))),
+    ]:
+        a, e = mnv2_paper_eval_chain(**kw)[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'NO'
+        print(f"  {name:<44} {sci(a):>12} {sci(e):>12}  {ok}")
+
+    print(f"\n  BACKWARD — ⛔ THERE IS NO NUMBER AT 17 BLOCKS, and no cap rescues it: a cap's")
+    print(f"  budget is 2·window and the WINDOW itself is past the ceiling. Per block the chain")
+    print(f"  costs 17–21 orders, dominated by the three BN-back sites at ×5.4e3 each.")
+    print(f"\n  {'backward variant':<44} {'window':>12} {'budget':>12}  statable")
+    print("  " + "-" * 76)
+    for name, kw in [
+        ("shipped: |istd| ≤ 16, per-kind profile", {}),
+        ("no operating point: S = 317 (the ε-floor)", dict(S=F(317))),
+        ("|istd| ≤ 4", dict(S=F(4))),
+        ("σ² ≈ 1 (S = 1) — the crudest possible", dict(S=F(1))),
+        ("BN γ bound 1 (measured 1.69) — an ablation", dict(G=F(1))),
+        ("conv kernels 1 (measured 2.72) — an ablation", dict(wk=F(1))),
+        ("all three at once — a net that does not exist", dict(G=F(1), wk=F(1), S=F(1))),
+    ]:
+        a, e = mnv2_paper_back_chain(**kw)[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 253 else 'NO'
+        print(f"  {name:<44} {sci(a):>12} {sci(e):>12}  {ok}")
+    print("  ⛔ No loose leaf: the γ and kernel bounds are MEASURED, not bounds discarded one")
+    print("     lemma down, and only their simultaneous fiction gets under the ceiling. This is")
+    print("     EfficientNet-B0's backward situation (1e431), and the same answer: no number.")
 
     print("\n── EfficientNet-B0 BACKWARD sizing probe: the SQUEEZE-EXCITE question ──")
     erows = b0_back_chain()
