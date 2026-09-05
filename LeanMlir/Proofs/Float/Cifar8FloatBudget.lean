@@ -101,7 +101,7 @@ set_option maxRecDepth 100000 in
     kernel re-checks every inequality. The chain is built bottom-up so each step elaborates
     against a small, fully determined type; the closing `exact` is one structural comparison
     with `cifar8Bridge`'s definition. All four numerals are pinned on every rounding leaf
-    (`planning/float_budget_numbers.md` §3.7(c)) — a `by norm_num` inside a `have` runs
+    (`planning/archive/float_budget_numbers_log.md` §3.7(c)) — a `by norm_num` inside a `have` runs
     before `Maps.comp` unifies anything, so an unpinned output window is a metavariable and
     the failure reads like arithmetic. -/
 theorem cifar8Bridge_maps (M : FloatModel) (hMu : M.u ≤ u32)

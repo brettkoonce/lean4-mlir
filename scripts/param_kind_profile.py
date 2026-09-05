@@ -2,7 +2,7 @@
 """Per-parameter-KIND magnitude profile of a checkpoint.
 
 Provenance for the `w'` / `gl` / `bb` bounds the float-budget folds are stated at
-(`scripts/float_budget_envelope.py`, `planning/float_budget_numbers.md` §3.3(a), §3.7, §3.9).
+(`scripts/float_budget_envelope.py`, `planning/archive/float_budget_numbers_log.md` §3.3(a), §3.7, §3.9).
 A single uniform `|param| ≤ B` is the maximum over every stored f32, and that maximum is
 routinely on a kind the conv fan-in does NOT multiply — ConvNeXt-T's layer scale is 14× its
 conv kernels, and splitting is the difference between a statable number and none.

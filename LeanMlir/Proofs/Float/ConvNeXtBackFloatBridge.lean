@@ -132,7 +132,7 @@ noncomputable def cnxBlockBodyBackF {c cExp h w kHd kWd : Nat} (M : FloatModel)
     `.comp` chain as `floatBridges_cnxBlockBodyBack`, with every float map named. ⛔ The `∃`-tier
     peer was all this file had until 2026-09-04; a budget file cannot use it, because
     `FloatBridges` discards the float map and a `Maps` envelope has to name one
-    (planning/float_budget_numbers.md §3.5.1, the same migration one net over). -/
+    (planning/archive/float_budget_numbers_log.md §3.5.1, the same migration one net over). -/
 noncomputable def floatBridgesTo_cnxBlockBodyBack {c cExp h w kHd kWd : Nat} (M : FloatModel)
     (Wdw : DepthwiseKernel c kHd kWd) (Wex : Kernel4 cExp c 1 1) (Wpr : Kernel4 c cExp 1 1)
     {lnB lsB lnBF lsBF : Vec (c * h * w) → Vec (c * h * w)}
@@ -272,7 +272,7 @@ set_option maxRecDepth 100000 in
     `rowLNVecFlat 1 768 hε hγ hβ` since the head LayerNorm was restored, its forward peer
     `convnextCh_floatBridgesTo` was corrected on 2026-09-03 (23 LN bridges, not 22), and this
     backward was not — so it reversed a net the repo does not train. `imagenet_specs_drift_from_twins`;
-    what forced it was needing the backward's NUMBER (planning/float_budget_numbers.md §3.16).
+    what forced it was needing the backward's NUMBER (planning/archive/float_budget_numbers_log.md §3.16).
 
     The 4 stage backwards and 3 downsample backwards stay supplied, exactly as in the scalar peer;
     they are discharged by folding `floatBridges_cnxBlockBack` / `floatBridges_cnxDownBack`, whose

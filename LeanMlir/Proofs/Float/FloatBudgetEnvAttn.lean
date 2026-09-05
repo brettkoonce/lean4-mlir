@@ -14,7 +14,7 @@ attention**, and the **patch embedding**.
 inherited error `δ`, and at ViT-Tiny's magnitudes the perturbation reaching the attention
 logits is ~10¹⁰ by block 0. `Real.exp` at that argument has no rational bound the kernel will
 check — so the failure is not that the number is large, it is that **there is no number**.
-`planning/float_budget_numbers.md` §3.5 measures this: 48 unwritable stage numerals at an
+`planning/archive/float_budget_numbers_log.md` §3.5 measures this: 48 unwritable stage numerals at an
 otherwise IDENTICAL magnitude, which is a different failure mode from §0.1's quadratic blow-up
 and the first of its kind in this repo.
 
@@ -246,8 +246,8 @@ end FloatModel
     dot of float softmax weights (`≤ 1 + smCap`, `softmaxF_abs_le`) against float `V`
     (`≤ layerAct + layerBudget 0`, `projF_abs_le`).
 
-    ⭐ Strictly better AND rational: `floatClose_seScale`'s fix from `planning/
-    float_budget_numbers.md` §3.4, one net later — *the gate's error never needed to enter the
+    ⭐ Strictly better AND rational: `floatClose_seScale`'s fix from
+    `planning/archive/float_budget_numbers_log.md` §3.4, one net later — *the gate's error never needed to enter the
     window at all.* -/
 noncomputable def mhpBCap (M : FloatModel) (n h dh : Nat) (w' β A eexp : ℝ) : ℝ :=
   (1 + ((1 + M.u) ^ (n + 1) - 1))

@@ -9,7 +9,7 @@ stride-2 stem pool, restored 2026-08-03 — but the whole-net backward used `max
 `resnet34Forward_full_pc`". `MaxPool3s2.lean`'s own header warns that the two have the same TYPE
 and are different functions; nothing had forced the two statements to unify until the whole-net
 CERTIFIED TIE needed them to. (`imagenet_specs_drift_from_twins`; the same failure mode as
-ConvNeXt's stale head-LayerNorm slot, `planning/float_budget_numbers.md` §3.3(b).)
+ConvNeXt's stale head-LayerNorm slot, `planning/archive/float_budget_numbers_log.md` §3.3(b).)
 
 ⭐⭐ **The structural difference, and it is the only one: `maxPool2`'s windows TILE, so its
 backward is a LOOKUP and is exact in float. 3×3/s2 windows OVERLAP, so an input cell can be the
@@ -340,7 +340,7 @@ theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2
     `maxPool3s2Flat_has_vjp_at` is stated at `Tensor3.flatten x`, and a whole-net chain needs it at
     the stem's `Vec` output. ⛔ Transporting with `▸`/`rwa` would work for the TYPE and leave a
     `backward` field behind an `Eq.mpr` that will not reduce — the `FloatBridgesTo.ofEq` trap
-    (`planning/float_budget_numbers.md` §3.5.2 item 5) one tier down. Building the structure
+    (`planning/archive/float_budget_numbers_log.md` §3.5.2 item 5) one tier down. Building the structure
     field-by-field instead keeps `backward` the leaf itself, which is what lets the whole-net tie
     close by `rfl` at this stage rather than by a rewrite. -/
 noncomputable def maxPool3s2Flat_has_vjp_at_vec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))

@@ -135,7 +135,7 @@ theorem sigmoidScalar_sub_abs_le_one (a b : ℝ) : |sigmoidScalar a - sigmoidSca
     ⚠ Why it matters, measured: `(1 + A/4)·e` multiplies the inherited error by the WINDOW at
     every swish site, so an EfficientNet-B0 fold at `|param| ≤ 21/10` reaches `10¹⁷³⁷` — past
     what `norm_num` will evaluate — where the additive form lands at `10¹⁸⁶`
-    (`planning/float_budget_numbers.md` §3.4). The true global Lipschitz constant of `x·σ(x)` is
+    (`planning/archive/float_budget_numbers_log.md` §3.4). The true global Lipschitz constant of `x·σ(x)` is
     ≈ 1.1, so `1 + A/4` is enormously loose for large `A`; proving that needs the decay of `σ'`
     and hence calculus, and this bound is what makes the fold statable without it. -/
 theorem swishScalar_lipschitz_abs' {a b A : ℝ} (ha : |a| ≤ A) :

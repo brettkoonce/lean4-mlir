@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Float.ConvNeXtBackFloatBridge
 
 `FloatBudgetEnvBack.lean` is ResNet-34's backward kit and `FloatBudgetEnvBackMBConv.lean`
 MobileNetV2's; this is ConvNeXt-T's — the third backward net and the first whose normalisation
-reduces over the CHANNEL axis (planning/float_budget_numbers.md §3.16).
+reduces over the CHANNEL axis (planning/archive/float_budget_numbers_log.md §3.16).
 
 ⭐⭐ **The one genuinely new leaf is `Maps.rowLNVecFlatBack`, and its shape is NOT
 `Maps.bnPerChannelBackGain` at a different `n`.** `floatBridgesTo_rowLNVecFlatBack` runs

@@ -138,7 +138,7 @@ theorem gelu_close {n : Nat} (fgelu : ℝ → ℝ) {egelu : ℝ} (v : Vec n)
     `sech²` factor decays faster than the cubic grows (`Architectures/GeluSaturation.lean`).
     The two are incomparable — the polynomial wins below `A ≈ 1/2`, the constant everywhere
     above — so the leaf states their `min` and every fold gets whichever is tighter at its own
-    window. `planning/float_budget_numbers.md` §3.3.0(b). -/
+    window. `planning/archive/float_budget_numbers_log.md` §3.3.0(b). -/
 theorem floatClose_gelu {n : Nat} (fgelu : ℝ → ℝ) {egelu A : ℝ}
     (hegelu : 0 ≤ egelu) (hA : 0 ≤ A) (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu) :
     FloatClose A (A + egelu)

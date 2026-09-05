@@ -43,7 +43,7 @@ bounds any modulus by `2·mag`, so a statable window is already a statable theor
 `Resnet34TrainFloatBudget.lean` is that theorem — `3.176·10²²¹ / 6.349·10²²¹` at the same
 profile, about the net this repo actually trains. ⛔ It is the **cap** and this file's number is
 the **fold**; they are different claims and must carry their labels
-(`planning/float_budget_numbers.md` §9).
+(`planning/archive/float_budget_numbers_log.md` §9).
 
 ⚠ **The one hypothesis this number rests on, named.** The deployed inverse-stddev is a device
 `rsqrt` with no IEEE specification, so it is *modelled*: `DeviceRsqrt ε es` supplies it with an

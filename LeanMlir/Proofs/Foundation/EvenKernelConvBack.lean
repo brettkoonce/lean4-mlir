@@ -28,7 +28,7 @@ was never carried across is the third spelling of the same map — the float bri
 `flatConvStride2Back` / `flatConvStride4Back`, which are `convFlatBack ∘ scatter` at the SYMMETRIC
 pad. ⭐ That is `imagenet_specs_drift_from_twins` in its "a fix landed on one tier and its twin
 kept the old spelling" form, for the third time
-(`planning/float_budget_numbers.md` §3.10's pool and §3.16's head LayerNorm were the first two) —
+(`planning/archive/float_budget_numbers_log.md` §3.10's pool and §3.16's head LayerNorm were the first two) —
 and here the fix landed on TWO tiers and missed the third.
 
 ## The repair: spell the even kernel at an odd size
@@ -175,7 +175,7 @@ theorem flatConv_padOdd_eq {ic oc h w kH kW : Nat}
     `HasVJP.backward_unique` that a respelling needs: the witnesses have different TYPES
     (`HasVJP f` and `HasVJP g`), so the existing form does not apply and `hfg ▸ ·` would give an
     `Eq.mpr`-blocked `backward` — `FloatBridgesTo.ofEq`'s trap, one tier down
-    (`planning/float_budget_numbers.md` §3.5.2 item 5). Going through `.correct` avoids transport
+    (`planning/archive/float_budget_numbers_log.md` §3.5.2 item 5). Going through `.correct` avoids transport
     entirely. -/
 theorem HasVJP.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} (hfg : f = g)
     (h₁ : HasVJP f) (h₂ : HasVJP g) (x : Vec m) (dy : Vec n) :

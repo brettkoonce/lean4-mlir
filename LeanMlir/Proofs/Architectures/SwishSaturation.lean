@@ -20,7 +20,7 @@ shape-dependent `norm_num` ceiling.
 - `|x|·e^{−|x|} ≤ 1` (`abs_mul_exp_neg_abs_le_one`), straight from `Real.add_one_le_exp`.
 
 ⚠ **The true global constant is ≈ 1.1** (`σ′ → 0` at both ends), and
-`planning/float_budget_numbers.md` §3.4 recorded that getting it "needs the decay of `σ′`, i.e.
+`planning/archive/float_budget_numbers_log.md` §3.4 recorded that getting it "needs the decay of `σ′`, i.e.
 calculus" — which is true of the SHARP constant and was the wrong thing to cost. `11/10` puts
 B0's backward at `10¹⁶⁷` and the crude `2` at `10¹⁷⁰`; both are statable, and the only property
 that matters is that **the window does not appear**. No MVT, no derivative analysis, no sup.

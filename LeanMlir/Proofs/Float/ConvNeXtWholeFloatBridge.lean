@@ -194,7 +194,7 @@ bridge (`floatBridges_layerNormVec`), which is why the two bounds `hγn`/`hβn` 
     `0.596` over 28.5 M entries, biases and LN β at `2.95`, LN γ at `4.77`, and the layer scale
     at `8.38`. A single uniform bound is therefore `8.4`, which is 14× loose on exactly the
     entries the conv fan-in multiplies — and the resulting fold lands at `10³⁰¹`, past what
-    `norm_num` will evaluate. Split, it is `10²²⁷`. `planning/float_budget_numbers.md` §3.3. -/
+    `norm_num` will evaluate. Split, it is `10²²⁷`. `planning/archive/float_budget_numbers_log.md` §3.3. -/
 abbrev CnxBlockChBounded {c cExp h w kH kW : Nat} (p : CnxBlockParamsCh c cExp h w kH kW)
     (w' bb gl sl : ℝ) : Prop :=
   (∀ ch kh kw, |p.Wdw ch kh kw| ≤ w') ∧ (∀ ch, |p.bdw ch| ≤ bb) ∧

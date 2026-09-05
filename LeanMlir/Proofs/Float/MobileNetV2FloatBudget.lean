@@ -42,7 +42,7 @@ clamped window removes the window looseness and leaves only the gain looseness.
 its modulus is quadratic in the window and the fold squares at every one of this net's 20 BN
 sites. Inference BN has no reduction — `μ` and `rsqrt(var+ε)` are frozen constants, the map is
 affine in `x` with slope `γ·s`, the modulus is linear. As for ResNet-34, the choice of BN decides
-whether a whole-net number exists at all (`planning/float_budget_numbers.md` §0.1).
+whether a whole-net number exists at all (`planning/archive/float_budget_numbers_log.md` §0.1).
 
 ⚠ **The one hypothesis this number rests on, named.** The deployed inverse-stddev is a device
 `rsqrt` with no IEEE specification, so it is *modelled*: `DeviceRsqrt ε es` (shared with

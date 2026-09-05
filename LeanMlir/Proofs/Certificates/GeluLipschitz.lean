@@ -18,7 +18,7 @@ saturation constant and `floatClose_gelu_sat` is the pinned flat-only form, kept
 is what the adjoint-chain write-up quotes. Before 2026-09-03 the polynomial was the only
 modulus in the fold — ~400 at ConvNeXt's operating magnitudes (A ≈ 20) against a true
 constant of ≈ 1.13 — and that alone put a whole-net ConvNeXt-T budget past what `norm_num`
-will evaluate (`planning/float_budget_numbers.md` §3.3.0).
+will evaluate (`planning/archive/float_budget_numbers_log.md` §3.3.0).
 -/
 
 namespace Proofs

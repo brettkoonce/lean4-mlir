@@ -23,7 +23,7 @@ the two r34 block backwards. MobileNetV2's backward needs exactly three things b
 ⚠ **Why this file and not `FloatBudgetEnvBack.lean`.** A `Maps` lemma names its bridge, and
 `floatBridgesTo_invresBodyBackPC`'s cone is the MobileNet one; putting these there would make
 ResNet-34's backward budget depend on it. The same reason `FloatBudgetEnvMBConv.lean` exists for
-the forward (`planning/float_budget_numbers.md` §0).
+the forward (`planning/archive/float_budget_numbers_log.md` §0).
 
 ⭐ The file closes MobileNetV2's `b6` block backward as a compiled `example` at
 `mnv2_back_chain`'s numerals — six leaves in one chain, and simultaneously the check that the

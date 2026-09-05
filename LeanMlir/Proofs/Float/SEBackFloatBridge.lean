@@ -216,7 +216,7 @@ theorem floatBridges_seBack {n : Nat} (M : FloatModel)
     at `10⁴³¹`; without it, `10¹⁶⁹` (`b0_back_chain(ssw = 2)`).
 
     ⚠ It is an `example` because no EfficientNet-B0 backward BUDGET file exists yet
-    (`planning/float_budget_numbers.md` §3.9, "what to do next" item 3) — and a leaf nothing
+    (`planning/archive/float_budget_numbers_log.md` §3.9, "what to do next" item 3) — and a leaf nothing
     composes is a leaf nobody has checked composes (§5). This is the shape that file will use at
     every swish site: `(Ssw := 2)`, `fun i => swishScalarDeriv_abs_le _`. -/
 example {c h w r : Nat} (M : FloatModel) (W₁ : Mat c r) (W₂ : Mat r c)

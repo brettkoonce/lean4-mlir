@@ -126,7 +126,7 @@ theorem Maps.comp {p : Nat} {g gF : Vec n → Vec p}
     ⛔ **A number that goes through this is a DIFFERENT CLAIM and must be labelled.** Wherever
     the `min` selects its right branch the statement has changed from *"the rounding error folds
     to this"* to *"both maps land in the certified window"* — the triangle inequality, not the
-    fold. The tell is `budget / window ≈ 2`. `planning/float_budget_numbers.md` §9.
+    fold. The tell is `budget / window ≈ 2`. `planning/archive/float_budget_numbers_log.md` §9.
 
     ⭐ Why it exists at all: a reducing normalisation's modulus is QUADRATIC in the window
     (§0.1), so a LayerNorm net's fold squares at every one of its LN sites and reaches no
@@ -517,7 +517,7 @@ theorem Maps.bnPerChannelTensor3 {oc h w : Nat} (M : FloatModel) {ε : ℝ}
     `2·Ā' ≤ Ē'`, so **the quadratic is never turned into a numeral**.
 
     ⛔ **A number built on this is the triangle inequality, not the fold**, and must be labelled
-    wherever it is used (`planning/float_budget_numbers.md` §9): it says "the float and the real
+    wherever it is used (`planning/archive/float_budget_numbers_log.md` §9): it says "the float and the real
     forward both land in the certified window", never "the rounding error folds to this". The
     tell is `budget / window = 2.00`.
 

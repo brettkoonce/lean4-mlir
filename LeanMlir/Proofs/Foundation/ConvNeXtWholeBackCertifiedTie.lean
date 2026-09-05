@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 
 ⭐ **Read `EvenKernelConvBack.lean` first; the finding is the deliverable.** This file was started
 as the ConvNeXt peer of `r34InputGrad_eq_resnet34_vjp` and `mnv2InputGrad_eq_mobilenetv2_vjp` —
-`planning/float_budget_numbers.md` §3.18, done BEFORE the number rather than after it, because
+`planning/archive/float_budget_numbers_log.md` §3.18, done BEFORE the number rather than after it, because
 §3.10's tie found r34 reversing the wrong pool and moved a committed number 4×. It paid out the
 same way at the first leaf it touched.
 
@@ -53,7 +53,7 @@ the work and no new float machinery is needed. On top of it:
    ConvNeXt has no kink anywhere. Its only hypotheses are the 23 LayerNorm positivities, so unlike
    every other whole-net backward tie in this repo it carries no smoothness side-condition.
    ⭐⭐ And ConvNeXt already has the shape check `Resnet34BackCertifiedTie.lean` still lacks
-   (`planning/float_budget_numbers.md` §3.14): `convNextForwardTCh_eq_chain`, the `rfl` saying the
+   (`planning/archive/float_budget_numbers_log.md` §3.14): `convNextForwardTCh_eq_chain`, the `rfl` saying the
    chain the apex instantiates IS the committed forward, written before anyone needed it.
 
 ⭐⭐ **WHAT THE ASSEMBLY COST, AND IT IS ONE RULE:** *never hand the unifier two spellings of the
@@ -76,7 +76,7 @@ free once the spelling is normalised at a definition:
 * The closing step is `simp only [Function.comp_apply, cnxV0]`, not `rfl`: after the eleven peels
   the two sides differ only by `Function.comp`, and `rfl` will not take that route.
 
-⚠ `planning/float_budget_numbers.md` §3.7(d) records this trap in its other guise, where the
+⚠ `planning/archive/float_budget_numbers_log.md` §3.7(d) records this trap in its other guise, where the
 computed dimension meets a metavariable (`2 * ?h = 112`) and the unification is higher-order; there
 the fix is to pin the implicit. Here `h` is given explicitly and it still costs — two CLOSED
 spellings of one numeral are enough. ⛔ And it is invisible in an unapplied position:
@@ -90,7 +90,7 @@ the committed one and is free, because no `x` is in sight to evaluate.
 instead, which costs nothing, and the term-mode peer must be top-level `def`s rather than a `let`
 chain — a `let` used twice per level zeta-expands to `2^11` copies of the prefix.
 
-⚠ ResNet-34 still has no shape check (`planning/float_budget_numbers.md` §4 item 8) and is the
+⚠ ResNet-34 still has no shape check (`planning/archive/float_budget_numbers_log.md` §4 item 8) and is the
 net the hole already bit.
 -/
 
@@ -204,7 +204,7 @@ offending stage, its type ascribed in the chain's spelling, and its `Differentia
 peers ascribed the same way — the twelve chain defs and all eleven links together cost
 **2.9 s**, of which the links are ~0.3 s.
 
-⚠ `planning/float_budget_numbers.md` §3.7(d) records this trap in its other guise, where the
+⚠ `planning/archive/float_budget_numbers_log.md` §3.7(d) records this trap in its other guise, where the
 computed dimension meets a metavariable (`2 * ?h = 112`) and the unification is higher-order.
 There the fix is to pin the implicit. Here `h` is already given explicitly and it still costs:
 two CLOSED spellings of one numeral are enough. ⛔ And it is invisible in an unapplied position —

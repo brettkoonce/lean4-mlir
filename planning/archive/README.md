@@ -16,6 +16,7 @@ Hygiene item H3 of `planning/repo_shape_deletion_audit.md`.
 | `backward_graph_faithfulness_convnext_vit.md` | backward-graph faithfulness for ConvNeXt + ViT |
 | `conv2d.md`, `mat_matrix_phase2.md` | input-VJP elimination; `Proofs.Mat` → Mathlib `Matrix` |
 | `floatbridge_descent_cnn.md`, `floatbridge_descent_pass.md`, `floatbridge_honesty_pass.md`, `forward_wholenet_handoff.md`, `backward_certified_tie_and_vit_fwd_tie.md` | the FloatBridge §3 descent rungs and the whole-net forward/backward ties |
+| `float_budget_numbers_log.md` | the whole-net float-budget NUMBERS thread, 2026-09-02 to 09-05 (seven forwards, four backwards, three certified ties); section numbering preserved because ~40 docstrings cite it. Live doc: `planning/float_budget_numbers.md` |
 
 ## What deliberately stayed in planning/
 

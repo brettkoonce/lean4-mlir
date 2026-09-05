@@ -25,7 +25,7 @@ analysis about `geluScalar`, needing only `LayerNorm.lean`'s `geluScalarDeriv_eq
 `geluScalar_diff`, and BOTH the float bridge (`floatClose_gelu`'s modulus, which states the
 `min` of the polynomial and this constant) and the adjoint chain (`lipOnWindow_gelu`,
 `Certificates/GeluLipschitz.lean`) consume it. It was written for the chain and sat one
-import ABOVE the bridge that needed it most — the `planning/float_budget_numbers.md` §3.3.0
+import ABOVE the bridge that needed it most — the `planning/archive/float_budget_numbers_log.md` §3.3.0
 pattern in its purest form: a bound already proved, thrown away by the leaf.
 -/
 

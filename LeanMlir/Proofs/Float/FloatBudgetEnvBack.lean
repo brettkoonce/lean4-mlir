@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
 /-! # `FloatBridgesTo.Maps` leaves for the BACKWARD (phase 2)
 
 `FloatBudgetEnv.lean` holds the kit and ResNet-34's forward leaves; this file holds the ones a
-whole-net **input-gradient VJP** needs. It is phase 2 of `planning/float_budget_numbers.md`
+whole-net **input-gradient VJP** needs. It is phase 2 of `planning/archive/float_budget_numbers_log.md`
 (§3.7), and the reason it exists as its own kit is the finding that opened phase 2:
 
 ⭐⭐ **The backward is a FOLD, at TRAINING-mode BatchNorm — the mode the forward has no number
@@ -497,7 +497,7 @@ theorem bnGradInputReMag_mono (n : Nat) {G Cdy Cd S Xh : ℝ}
     activations — `σ ≥ 1/16`, §0.1's escape 2 — because at the ε-floor its fold is `10²⁸⁸` and
     §3.7(a)'s `norm_num` ceiling is ~`10²⁵³`. MobileNetV2's is `10¹⁵³` at the floor, so it needs
     none, and this lemma is what discharges the field instead of assuming it
-    (`planning/float_budget_numbers.md` §3.9 finding 2).
+    (`planning/archive/float_budget_numbers_log.md` §3.9 finding 2).
 
     ⚠ Nothing about it is backward-specific — a forward profile's `1/√ε ≤ S` field is the same
     quantity. It lives here because the backward budgets are its only consumers today; move it up

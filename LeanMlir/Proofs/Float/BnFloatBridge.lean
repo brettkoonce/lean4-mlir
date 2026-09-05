@@ -247,7 +247,7 @@ theorem FloatModel.bnForward_close_of {n : Nat} (M : FloatModel)
     summation order satisfies: sequential summation is the worst of them at
     `γ = (1+u)^{n+1} − 1`, and a tree's is `(1+u)^{⌈log₂n⌉+1} − 1`, strictly smaller, so the
     bound holds a fortiori. **The resulting mean accuracy is DERIVED for the kernel actually
-    shipped rather than supplied by analogy** (`planning/float_budget_numbers.md` §3.31 route 3);
+    shipped rather than supplied by analogy** (`planning/archive/float_budget_numbers_log.md` §3.31 route 3);
     it is `bnMean_close`'s proof with one hypothesis substituted.
 
     ⚠ Only the SUM is parameterised. The division by the exact width is `M.div`, one rounding,

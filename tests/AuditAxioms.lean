@@ -1802,7 +1802,7 @@ open Proofs
 -- ERROR (A · Lg 0) to the window; on B0 that is 1e18 per SE site and takes the whole-net
 -- window from 1e49 to 1e417. FloatClose's magnitude clause bounds the FLOAT gate as well as
 -- the real one, so the error never needed to enter — the same shape as relu6's discarded
--- clamp (planning/float_budget_numbers.md §3.4).
+-- clamp (planning/archive/float_budget_numbers_log.md §3.4).
 #print axioms floatClose_seScale
 -- ── planning/floatbridge_enet_vit.md §1a–§1d (EfficientNet float bridge finished) ──
 -- §1a: the additive MBConv/transformer skip (no trailing activation) and a closed
@@ -2299,7 +2299,7 @@ open Proofs
 -- FloatBridgesTo.capped, whose modulus is min(fold, 2·window), and the right branch is what
 -- closes. So this says "the float and real forwards both land in the certified window" — the
 -- TRIANGLE INEQUALITY — where r34 / mnv2 / B0 say "the rounding error folds to this". Do not
--- table it beside them without that label (planning/float_budget_numbers.md §9).
+-- table it beside them without that label (planning/archive/float_budget_numbers_log.md §9).
 -- ⭐⭐ It has to be capped. LayerNorm reduces its mean and variance out of its own input, so its
 -- modulus is quadratic in the window; BatchNorm escapes by freezing the statistics (which is why
 -- the other three numbers are at inference BN) and LayerNorm has no running statistics to freeze
@@ -2537,7 +2537,7 @@ open Proofs
 -- probe (scripts/float_budget_envelope.py, r34_back_chain / verify_r34_back, 90 stages / 180
 -- inequalities) puts the r34 input-gradient at window 1.345e288 / budget 6.473e286, ratio 0.048.
 -- ⛔ Conditional on `es`/`exh` = 1e-2 — SUPPLIED float-activation accuracies the forward's own
--- training-mode fold does not discharge (planning/float_budget_numbers.md §3.7).
+-- training-mode fold does not discharge (planning/archive/float_budget_numbers_log.md §3.7).
 #print axioms Proofs.bnGradInputBudgetG
 #print axioms Proofs.bnGradInputBudget_eq_G
 #print axioms Proofs.bnGradInputBudgetG_mono
@@ -2554,7 +2554,7 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.reluMaskBack
 #print axioms Proofs.FloatBridgesTo.Maps.maxPoolBack
 #print axioms Proofs.FloatBridgesTo.Maps.decimateBack
--- ⭐⭐ The LAYERNORM BACKWARD kit (ConvNeXt-T, planning/float_budget_numbers.md §3.16). The one
+-- ⭐⭐ The LAYERNORM BACKWARD kit (ConvNeXt-T, planning/archive/float_budget_numbers_log.md §3.16). The one
 -- new leaf is Maps.rowLNVecFlatBack: floatBridgesTo_rowLNVecFlatBack runs bn_grad_input at
 -- gamma = 1 with the gamma scale folded in FRONT as a diagBack, so it is NOT
 -- Maps.bnPerChannelBackGain at a different reduction width. Kr/Kb are the per-unit gains at unit

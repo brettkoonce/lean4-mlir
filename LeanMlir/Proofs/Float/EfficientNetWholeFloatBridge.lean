@@ -388,7 +388,7 @@ noncomputable def cbsBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel) (fsig
 
 ⚠ `cbsB`/`stemB`/`dwbsB`/`dwbsSB`/`projB` hard-wire `StableHLO.bnBatchLA` — TRUE batch-norm,
 which reduces μ/var across the batch and whose error modulus is quadratic in the window
-(`planning/float_budget_numbers.md` §0.1). The deployed inference net is the same skeleton at
+(`planning/archive/float_budget_numbers_log.md` §0.1). The deployed inference net is the same skeleton at
 `StableHLO.batchMap N (bnPerChannelEvalTensor3 …)` (`EfficientNetRenderPCEval.lean`), and a
 whole-net float NUMBER exists only there.
 
@@ -1023,7 +1023,7 @@ second proof: `EfficientNetRenderPCEval.lean`'s stages and blocks are those same
 
 ⚠ This is the direction that matters. A whole-net float NUMBER exists only at inference BN — the
 training modulus is quadratic in the window and squares at each of this net's ten BN sites
-(`planning/float_budget_numbers.md` §0.1) — so without these ties the nine bridges would be
+(`planning/archive/float_budget_numbers_log.md` §0.1) — so without these ties the nine bridges would be
 bridges for the one mode that cannot carry a number. -/
 
 theorem cbsBEval_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)

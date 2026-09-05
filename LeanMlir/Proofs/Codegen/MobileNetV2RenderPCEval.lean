@@ -12,7 +12,7 @@ inference forward was rendered from the verified AST but not tied to an ℝ def.
 inference BatchNorm. Training-mode BN reduces its statistics out of its own input, so its error
 modulus is quadratic in the window and the fold squares at every one of this net's 20 BN sites;
 inference BN is affine in `x`, its modulus is linear, and the fold stays statable
-(`planning/float_budget_numbers.md` §0.1). `MobileNetV2FloatBudget.lean` states its number about
+(`planning/archive/float_budget_numbers_log.md` §0.1). `MobileNetV2FloatBudget.lean` states its number about
 exactly the forward defined here, and this file's faithfulness is what carries that number from
 a hand-assembled skeleton to the graph the render emits.
 

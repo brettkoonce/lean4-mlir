@@ -523,7 +523,7 @@ def mnv2_eval_chain(S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32, relu6_clamp=True):
     Yields (tag, (window, budget)) after each numeric step, in exactly the order the Lean
     `Maps` chain composes them. `relu6_clamp=False` reverts to the pre-2026-09-03 leaf
     (`FloatClose A A`, the clamp thrown away) and is kept only to reproduce the "window
-    compounds to 10¹⁰⁰ instead of 10³" comparison in planning/float_budget_numbers.md."""
+    compounds to 10¹⁰⁰ instead of 10³" comparison in planning/archive/float_budget_numbers_log.md."""
     def R(st):
         return (r4(st[0]), r4(st[1]))
 
@@ -668,7 +668,7 @@ def b0_eval_chain(w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32,
     Yields (tag, (window, budget)) in exactly the order the Lean `Maps` chain composes
     them. `swish_min=False` / `se_tight=False` revert to the pre-2026-09-03 leaves and are
     kept only to reproduce the "not statable" comparison in
-    planning/float_budget_numbers.md §3.4 — do not emit numerals from them.
+    planning/archive/float_budget_numbers_log.md §3.4 — do not emit numerals from them.
 
     `swish_lip=<rat>` adds a GLOBAL Lipschitz branch `L*E` to the swish modulus' `min`, the
     forward consequence of `swishScalarDeriv_abs_le` (`Architectures/SwishSaturation.lean`,
@@ -831,7 +831,7 @@ def verify_b0(rows, w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32) -> int:
 # EfficientNet-B0's numbers are. The tell is `budget / window = 2.00`. It has to be that way:
 # LayerNorm reduces its statistics out of its own input, so its modulus is quadratic in the
 # window, and unlike BatchNorm it has no frozen-statistics variant to switch to
-# (planning/float_budget_numbers.md §0.1). Uncapped, this fold is 10^11631.
+# (planning/archive/float_budget_numbers_log.md §0.1). Uncapped, this fold is 10^11631.
 #
 # Profile MEASURED on /home/skoonce/convnext/convnext_t300_4gpu/convnext_tiny_imagenet.bin (the
 # finished 300-epoch 4-GPU run, 28,587,592 f32) — and it does NOT split uniformly:
@@ -975,7 +975,7 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
     composes them (the four layout permutations and the per-row lift are envelope-preserving and
     produce no entry).
 
-    The three flags reproduce planning/float_budget_numbers.md §3.3's ablation table:
+    The three flags reproduce planning/archive/float_budget_numbers_log.md §3.3's ablation table:
     `ln_cap=False` is the LayerNorm leaf as `Maps.bn` would state it (quadratic in the window),
     `gelu_sat=False` is `floatClose_gelu` before the saturation branch was wired in, and
     `head_ln=False` is the net the whole-net bridge described until 2026-09-03, when its head
@@ -1476,7 +1476,7 @@ def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
 # every other device-kernel accuracy. Unlike `DeviceRsqrt`'s, those are quantities the repo's
 # forward fold does speak about, and at training-mode BN it says 1e7417, not 1e-2. So this number
 # is an honest fold GIVEN a forward-accuracy hypothesis its own forward cannot discharge, and it
-# must be said that way (planning/float_budget_numbers.md §3.7, §9).
+# must be said that way (planning/archive/float_budget_numbers_log.md §3.7, §9).
 #
 # ⭐⭐ The load-bearing lemma is `bnXhat_sq_le` — `|x̂| ≤ √n`, the standardisation bound — and it
 # was ALREADY IN THE REPO, proved for the "realistic seal" work in `Foundation/ResNet34.lean` and
@@ -2018,7 +2018,7 @@ def b0_back_chain(wk=B0_WK, G=B0_GLB, S=B0_SB, es=B0_ESB, exh=B0_EXH, esav=B0_ES
     the reduction is live and each BatchNorm site's per-channel width is `N*h*w`, not `h*w`.
     `bnGradInputReMag`'s gain is `S*G*(2 + Xh^2)` with `Xh^2 = n`, so all nine BN sites scale with
     `N` — about 3 orders per doubling: 7.640e169 at N=1, 2.880e194 at N=256, statable throughout.
-    ⚠ `planning/float_budget_numbers.md` §3.9's "`batchMap` never enters a numeral, so the number
+    ⚠ `planning/archive/float_budget_numbers_log.md` §3.9's "`batchMap` never enters a numeral, so the number
     holds at any `N`, like the forward's" is right about `batchMap` and wrong about this net: §3.4
     records the one batch-coupled op two sections earlier, and the two were never read together."""
     fwd = dict(b0_eval_chain())
@@ -2469,7 +2469,7 @@ def sci(x: F) -> str:
 
 
 if __name__ == "__main__":
-    print("\n── ViT-Tiny sizing probe (planning/float_budget_numbers.md §3.5) ──")
+    print("\n── ViT-Tiny sizing probe (planning/archive/float_budget_numbers_log.md §3.5) ──")
     kap = sm_kappa(U32, VIT_EEXP, NTOK_VIT)
     rho = sm_rho(U32, VIT_EEXP, NTOK_VIT)
     print(f"  softmax side condition smRho = {float(rho):.6f} < 1  ✓  (n = {NTOK_VIT} tokens)")
@@ -2510,7 +2510,7 @@ if __name__ == "__main__":
     print("     rational bound — the softmax cap's real justification. The uncapped column is not")
     print("     'a bigger number', it is NO NUMBER: those stages cannot be written down at all.")
 
-    print("\n── ResNet-34 BACKWARD sizing probe (planning/float_budget_numbers.md §3.7) ──")
+    print("\n── ResNet-34 BACKWARD sizing probe (planning/archive/float_budget_numbers_log.md §3.7) ──")
     brows = r34_back_chain(S=F(16))
     bA, bE = brows[-1][1]
     print(f"  SHIPPED SHAPE: {len(brows)} stages, TRAINING-mode BatchNorm, |istd| <= 16")
@@ -2545,7 +2545,7 @@ if __name__ == "__main__":
     for tag, (a, e) in rows[3:25]:
         print(f"    {tag:<12} {sci(a):>12} {sci(e):>12}")
 
-    print("\n── MobileNetV2 BACKWARD sizing probe (planning/float_budget_numbers.md §3.8) ──")
+    print("\n── MobileNetV2 BACKWARD sizing probe (planning/archive/float_budget_numbers_log.md §3.8) ──")
     mrows = mnv2_back_chain()
     mA, mE = mrows[-1][1]
     print(f"  SHIPPED SHAPE: {len(mrows)} stages, TRAINING-mode BatchNorm")

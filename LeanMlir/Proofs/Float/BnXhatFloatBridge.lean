@@ -14,7 +14,7 @@ stem that is `|x̂| ≤ 10` where `D·S` is `2A·317`.
 This file restates the leaf at that bound. Worth **53 orders on ConvNeXt-T's committed window
 and 57 on ViT-Tiny's**, at no new hypothesis and no new mathematics — `bnXhat_sq_le` has been in
 the repo since the realistic-seal work and is the load-bearing lemma on all four whole-net
-BACKWARD numbers (`planning/float_budget_numbers.md` §3.9 finding 4, §3.16 finding 5, §3.22).
+BACKWARD numbers (`planning/archive/float_budget_numbers_log.md` §3.9 finding 4, §3.16 finding 5, §3.22).
 The forward leaf simply threw it away. ⭐ That is §3.3.0(b)'s rule — *before writing a tighter
 leaf bound, grep the whole cone for it* — at its largest instance yet: two committed numbers,
 ~55 orders each, from a lemma the repo already had.
@@ -402,7 +402,7 @@ magnitude-stable with modulus `id`, so the composite's `mag`/`mod` collapse to t
 chains compose the pure-normalise leaf (`Maps.bnCappedX` at `G = 1`, `Bbnd = 0`) and then a
 separate `Maps.diagBack` and `Maps.biasAdd`. The two spellings differ by `u·Bbnd` per site — the
 fold must assert what the proof asserts, and the probe's r34 chain was corrected to this shape
-(`planning/float_budget_numbers.md` §3.17). -/
+(`planning/archive/float_budget_numbers_log.md` §3.17). -/
 
 /-- **Per-channel BatchNorm (Mat-split layout) float-bridges TO its float map at `|x̂| ≤ Xh`** —
     `floatBridgesTo_bnPerChannelFlat` with `floatClose_bnX` in each channel's slot. Uniform
@@ -456,7 +456,7 @@ namespace FloatBridgesTo
 
     ⭐ r34's reduction widths are PERFECT SQUARES (`h·w` = 112², 56², 28², 14², 7²), so
     `hmXh` holds at the exact root and nothing is lost to rounding; ConvNeXt's channel counts
-    96/192/384/768 all need the ceiling root (`planning/float_budget_numbers.md` §3.16 finding 5).
+    96/192/384/768 all need the ceiling root (`planning/archive/float_budget_numbers_log.md` §3.16 finding 5).
     ⛔ That stops being true at batch `N > 1`, where the training-mode width is `N·h·w`.
 
     ⛔ **Still the CAP.** The error clause is `2·Ā'` and the underlying modulus is

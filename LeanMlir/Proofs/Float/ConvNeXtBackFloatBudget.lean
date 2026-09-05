@@ -19,7 +19,7 @@ rational inequalities, generated and re-asserted by `cnx_back_chain` / `verify_c
 ⭐⭐ **This is the repo's first honest whole-net FOLD for a LayerNorm net**, and the point is the
 contrast with the same net's forward: `cnx_float_logits_le` is `budget/window = 2.00`, the triangle
 inequality, because LayerNorm reduces its statistics out of its own input and has no eval mode to
-freeze them in (`planning/float_budget_numbers.md` §0.1). A VJP reads those statistics off the
+freeze them in (`planning/archive/float_budget_numbers_log.md` §0.1). A VJP reads those statistics off the
 SAVED activations, which the cotangent does not perturb, so the quadratic never appears and the
 fold exists. §0.1's list of quadratic sites is a FORWARD-only list.
 

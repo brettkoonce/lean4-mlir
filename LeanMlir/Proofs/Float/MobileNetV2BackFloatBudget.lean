@@ -14,7 +14,7 @@ from `10²⁸⁸` to something `norm_num` will evaluate.
 
 at `|W| ≤ 28/10`, BatchNorm `|γ| ≤ 17/10`, `ε ≥ 10⁻⁵`, `u ≤ 2⁻²⁴`, on loss cotangents of
 magnitude `≤ 1` (`|p − y| ≤ 1` for softmax cross-entropy), at **training-mode BatchNorm** — the
-mode this net's own forward has no statable number for at all (`planning/float_budget_numbers.md`
+mode this net's own forward has no statable number for at all (`planning/archive/float_budget_numbers_log.md`
 §0.1). 48 numeric stages, 136 rational inequalities, generated and re-asserted by
 `mnv2_back_chain` / `verify_mnv2_back`.
 

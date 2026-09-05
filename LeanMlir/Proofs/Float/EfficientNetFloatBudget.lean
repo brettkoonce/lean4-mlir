@@ -19,7 +19,7 @@ and hence, per logit, `|float − real| ≤ 8.408·10²¹⁰` (`b0_float_logits_
 first honest fold came out at window `10¹⁷¹⁷` and budget `10⁴¹⁷⁹` — `norm_num` refuses numerals
 past ~`10³⁰⁰`, so there was nothing to state. Two LEAF bounds did it, and both were the relu6
 pattern: a bound proved one lemma down and discarded by the generic combinator
-(`planning/float_budget_numbers.md` §3.4).
+(`planning/archive/float_budget_numbers_log.md` §3.4).
 
 * `floatClose_swish`'s modulus was `mulErr + (1 + A/4)·e`, multiplying the inherited error by the
   WINDOW at each of this net's nine swish sites. Bounding `|σa − σb|` by the gate's own range

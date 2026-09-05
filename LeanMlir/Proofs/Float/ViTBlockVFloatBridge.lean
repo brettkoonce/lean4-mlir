@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.ViTDepthK
 
 /-! # The vector-LN transformer block, float-bridged and enveloped
 
-Chunk 2 of ViT-Tiny's number (`planning/float_budget_numbers.md` §3.5.2): the
+Chunk 2 of ViT-Tiny's number (`planning/archive/float_budget_numbers_log.md` §3.5.2): the
 `FloatBridgesTo` + `Maps` chain for ONE `blockVFlat` — the block `vitForwardKV` actually
 composes — closed at real weights, with the structural tie to the committed definition proved.
 
@@ -492,7 +492,7 @@ noncomputable def vitForwardKVF {ic H W patchSize N mlpDim heads d_head nClasses
     ⛔ This is `vitForwardKV` — depth-`k`, **distinct per-block parameters, vector-[D] LayerNorm
     affines, multi-head** — and NOT `vit_full`, which shares one parameter tuple across all
     blocks and carries scalar affines. The trained checkpoint has per-block weights and vector
-    affines, so `vit_full` is a different function (`planning/float_budget_numbers.md` §3.5.1).
+    affines, so `vit_full` is a different function (`planning/archive/float_budget_numbers_log.md` §3.5.1).
     `vitFwdGraphKMHV_faithful` denotes this one. -/
 noncomputable def floatBridgesTo_vitForwardKV {ic H W patchSize N mlpDim heads d_head nClasses
     k : Nat} (M : FloatModel) (fgelu fexp : ℝ → ℝ) (ε : ℝ)

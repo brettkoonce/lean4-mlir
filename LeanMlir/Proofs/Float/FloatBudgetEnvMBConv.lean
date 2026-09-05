@@ -23,7 +23,7 @@ lemma, `linarith`. The two that are NOT are the point of the file:
 
 * ⭐ `Maps.relu6` **clamps** — its window step is `min Ā 6`, not `Ā`, because `relu6` is bounded
   by `6` whatever its input. On MobileNetV2 that is 97 orders of certified window
-  (`planning/float_budget_numbers.md` §3.2).
+  (`planning/archive/float_budget_numbers_log.md` §3.2).
 * ⭐ `Maps.swish`'s modulus is the **`min`** of a multiplicative and an additive input
   sensitivity. The multiplicative branch alone multiplies the inherited error by the window at
   every swish site; on EfficientNet-B0 that is the difference between a budget of `10¹⁸⁶` and one
@@ -167,7 +167,7 @@ theorem Maps.swish {n : Nat} (M : FloatModel) (fsig : ℝ → ℝ) {esig : ℝ}
     window times the gate's certified MAGNITUDE, plus one rounding — the gate's ERROR does not
     enter it, because `FloatClose`'s magnitude clause bounds the float gate as well as the real
     one. Deriving the window instead as `|float − real| + |real|` charges `Ā · Eg`, and on
-    EfficientNet-B0 that is 10¹⁸ per SE site (`planning/float_budget_numbers.md` §3.4).
+    EfficientNet-B0 that is 10¹⁸ per SE site (`planning/archive/float_budget_numbers_log.md` §3.4).
 
     ⚠ The MODULUS is a different story and is not slack: `mulErr q Ā Cg Ē Eg` carries `Ā · Eg`,
     the block window times the gate error — and the gate grows that error out of the same window

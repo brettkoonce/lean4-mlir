@@ -271,7 +271,7 @@ noncomputable def floatBridgesTo_relu6 {n : Nat} : FloatBridgesTo (relu6 n) (rel
 
 /-! `ivExpandPC`/`ivDepthwisePC`/`ivDepthwiseStridedPC`/`ivProjectPC` hard-wire
 `bnPerChannelTensor3` — training-mode BatchNorm, whose modulus is quadratic in the window
-(`planning/float_budget_numbers.md` §0.1). The deployed inference net is the same skeleton at
+(`planning/archive/float_budget_numbers_log.md` §0.1). The deployed inference net is the same skeleton at
 `bnPerChannelEvalTensor3`. Rather than a second copy of every stage, bridge and envelope, the
 stages below take the normalisation as an argument, exactly as `rblkGen` does for ResNet-34:
 `*PC_eq_gen` is `rfl` in each direction, so one set of block bridges serves both modes and the

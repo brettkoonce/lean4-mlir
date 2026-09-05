@@ -36,7 +36,7 @@ header), which costs nothing precisely because every site is capped. All 36 Batc
 is *"the float and the real forward both land in the certified window"* — the triangle
 inequality — and **not** *"the rounding error folds to this"*, which is what
 `r34_float_logits_le` says about the inference net. The two numbers must never be tabled
-together without that label (`planning/float_budget_numbers.md` §9), and this one must never be
+together without that label (`planning/archive/float_budget_numbers_log.md` §9), and this one must never be
 quoted as though it were the inference number at a different `ε`.
 
 ⭐⭐ **Why it exists, when `Resnet34FloatBudget.lean` says it cannot.** That file's header
@@ -71,7 +71,7 @@ one by four orders — the residue §3.27 finding 4 is about.
 
 ⚠ **What did NOT move, and it is now the whole story.** With `emr` derived the normalisation
 sites SHRINK and the remaining growth is almost entirely the conv fan-in — `layerBudget`'s uniform
-`m·w'·A` face, which `planning/float_budget_numbers.md` §0 names as one of the two documented gaps
+`m·w'·A` face, which `planning/archive/float_budget_numbers_log.md` §0 names as one of the two documented gaps
 to the adjoint chain and which nothing in the float tier has attacked. That is the next problem,
 and it is shared with every other number in this repo.
 
@@ -98,7 +98,7 @@ inequalities, and it separately asserts that the cap is the smaller branch at al
 the label above is measured rather than assumed) before a line of this file was emitted.
 ⭐ The 242 slot numerals were re-emitted by first reproducing the SHIPPED file's own ordered list
 exactly from the shipped chain — that reproduction is the check that the map from probe rows to
-`Maps` arguments is right (`planning/float_budget_numbers.md` §3.30).
+`Maps` arguments is right (`planning/archive/float_budget_numbers_log.md` §3.30).
 -/
 
 namespace Proofs

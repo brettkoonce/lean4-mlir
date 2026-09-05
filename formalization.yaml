@@ -1,4 +1,4 @@
-# formalization.yaml — see https://github.com/mathlib-initiative/formalization.yaml
+# formalization.yaml -- see https://github.com/mathlib-initiative/formalization.yaml
 # Self-reported. The factual spine (axioms, comparator count, license, source)
 # is verifiable from the repo; the fidelity/review sections are written to state
 # the project's known gaps plainly rather than to pitch.
@@ -37,14 +37,14 @@ sources:
     type: "paper"
     license: ""
     author_contacted: "no"
-    prior_work: ""                         # radius + the Gaussian Neyman–Pearson core formalized end-to-end (SmoothingGaussian.lean)
+    prior_work: ""                         # radius + the Gaussian Neyman-Pearson core formalized end-to-end (SmoothingGaussian.lean)
   - title: "Efficient and Accurate Estimation of Lipschitz Constants for Deep Neural Networks (LipSDP)"
     authors: ["Mahyar Fazlyab", "Alexander Robey", "Hamed Hassani", "Manfred Morari", "George J. Pappas"]
     id: "arXiv:1906.04893"                 # NeurIPS 2019
     type: "paper"
     license: ""
     author_contacted: "no"
-    prior_work: ""                         # one-hidden-layer per-class-pair instance, exact-rational LDLᵀ PSD witnesses (LipschitzCertPairSDP.lean)
+    prior_work: ""                         # one-hidden-layer per-class-pair instance, exact-rational LDL^T PSD witnesses (LipschitzCertPairSDP.lean)
   - title: "Old Optimizer, New Norm: An Anthology"
     authors: ["Jeremy Bernstein", "Laker Newhouse"]
     id: "arXiv:2409.20325"
@@ -64,39 +64,32 @@ status:
     squeeze-excitation, GELU/Swish/sigmoid, layer-norm, layer-scale, and a
     multi-theorem treatment of scaled-dot-product / multi-head self-attention
     through the full transformer tower. On top of the VJP layer, four further
-    proved programs: (1) TRAIN-STEP TIES — every committed train step of all 12
+    proved programs: (1) TRAIN-STEP TIES -- every committed train step of all 12
     nets is tied to its real loss-driven backward cotangent (per-net *TiePoC
     capstones, e.g. the all-200-params vit_net_tied_certified), plus
     committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
-    ERROR — a binary32 rounding model constructed from scratch (rndP, standard
-    model PROVED, no hardware axioms), whole-net forward+backward float-error
-    bridges for all nets (⚠ the legacy FloatBridges statements carry no budget --
-    they close the error modulus existentially, which the triangle inequality
-    discharges from boundedness alone, fidelity.divergences 4d; their FloatBridgesTo
-    peers are Type-valued bridges whose `.mod` IS the budget, as data -- and for the
-    committed CIFAR-8 forward that budget is a kernel-checked NUMBER, 6.37e14 per
-    logit at He magnitudes, cifar8_float_logits_le: the interval fold, honest and
-    vacuous, see 4d), depth-linear adjoint-chain composition
-    bounds certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
-    whole-net float certificate at the committed CIFAR-8 shape
-    (cifar8_chain_argmaxSafeH: given measured tail gains, binary32 rounding cannot
-    flip the prediction; its layer chain is cifar8Verified.layers op for op, tied by
-    rfl to cifarCnn8Forward. ⚠ Its budget takes every stage at its WORST-CASE
-    propagated window, which at He-init magnitudes is >= 1.8e13 against logits of
-    ~10, so the margin hypothesis is satisfiable there only at u = 0 or for
-    contracting weights -- fidelity.divergences 4c "NOT BITING". Its v1 predecessor
-    cifar8_chain_argmaxSafe is depth-generic only) plus SGD-descent theorems at
-    trained weights; (3) ROBUSTNESS
-    CERTIFICATES as theorems — the Tsuzuku Lipschitz-margin radius, per-class-
+    ERROR -- a binary32 rounding model constructed from scratch (rndP, standard
+    model proved, no hardware axioms); Type-valued whole-net float bridges
+    (FloatBridgesTo, with the output window and error modulus carried as data)
+    for every net, forward and backward; kernel-checked numeric budgets for seven
+    forwards and four input-gradient backwards (the *_float_logits_le and
+    *_grad_float_le families), three of those backward chains proven to BE the
+    certified whole-net VJP -- the budgets are interval folds, vacuous as numerical
+    certificates, and three are caps rather than folds (fidelity.divergences 4d);
+    depth-linear adjoint-chain bounds plus a CIFAR-8 argmax-preservation
+    certificate at the committed shape whose budget does not bite at trained
+    magnitudes (fidelity.divergences 4c); an fp8-E4M3 argmax-preservation theorem;
+    SGD-descent theorems at trained weights; (3) ROBUSTNESS
+    CERTIFICATES as theorems -- the Tsuzuku Lipschitz-margin radius, per-class-
     pair LipSDP with exact-rational LDL^T PSD witnesses (mechanized 100-image
     scorecards at trained weights, 69/100 certified vs a 72/100 PGD bracket),
-    and the Cohen randomized-smoothing radius proved END-TO-END — the Gaussian
+    and the Cohen randomized-smoothing radius proved END-TO-END -- the Gaussian
     (1/sigma)-Lipschitz probit (Neyman-Pearson core, Cameron-Martin shift,
     dimension reduction via rotation invariance) is a theorem, not a hypothesis;
-    (4) OPTIMIZER GEOMETRY — SGD/sign/Muon as steepest descent under a norm,
+    (4) OPTIMIZER GEOMETRY -- SGD/sign/Muon as steepest descent under a norm,
     Muon's polar factor as the nuclear-norm argmax, Shampoo = single-step Muon,
     and the Newton-Schulz spectral-step lemma. Each NetSpec also emits StableHLO
-    MLIR (compiled by IREE, cross-checked against a parallel JAX pipeline) —
+    MLIR (compiled by IREE, cross-checked against a parallel JAX pipeline) --
     that codegen/training path is engineered and empirically validated, NOT
     part of the proved theorems (see fidelity.divergences).
   sorry_count: 0
@@ -104,10 +97,13 @@ status:
   axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 1393 declarations; 52 are independently kernel-rechecked
-    # by the comparator (tests/comparator/config.json). All close under exactly
-    # the three core axioms above. comparator_config below points at that config
-    # for results included in the 52-theorem recheck.
+    # `#print axioms` on 2005 declarations (count: grep -c '^#print axioms'
+    # tests/AuditAxioms.lean); 52 are independently kernel-rechecked by the
+    # comparator (tests/comparator/config.json). All close under exactly the
+    # three core axioms above. comparator_config below points at that config for
+    # results included in the 52-theorem recheck.
+    #
+    # --- VJP layer ---
     - declaration: "Proofs.pdiv_comp"          # chain / additive / multiplicative fan-in + finset-sum
       file: "LeanMlir/Proofs/Foundation/Tensor.lean"
       sorry_count: 0
@@ -176,7 +172,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
-    - declaration: "Mnv2Live.mnv2Live_forward_nonconstant"   # non-degeneracy witness (see fidelity)
+    - declaration: "Mnv2Live.mnv2Live_forward_nonconstant"   # non-degeneracy witness (see fidelity 4)
       file: "LeanMlir/Proofs/Architectures/MobileNetV2.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -188,86 +184,109 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "cifar8_float_logits_le"   # a NUMBER for a whole-net float budget: the committed CIFAR-8 forward's float logits are within 6.37e14 of the real ones on |x| <= 1 at |W| <= 2/5, |b| <= 1/100, u <= 2^-24 -- the interval fold at He magnitudes, kernel-checked stage by stage (fidelity.divergences 4d)
+    #
+    # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
+    #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
+    #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.
+    - declaration: "cifar8_float_logits_le"   # CIFAR-8 forward: 6.37e14 / 6.121e18, fold
       file: "LeanMlir/Proofs/Float/Cifar8FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "r34_float_logits_le"   # the same at ImageNet scale: the DEPLOYED ResNet-34 inference forward's float logits are within 1.548e209 of the real ones on |x| <= 1, at the measured 79-epoch checkpoint profile (|param| <= 21/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24 -- 4.9e-3 of the certified window, kernel-checked across 90 stages (fidelity.divergences 4d)
-    - declaration: "r34_train_float_logits_le"   # ⛔ the SEVENTH forward number and the FIRST about the program the repo actually TRAINS with: the same [3,4,6,3] ResNet-34 at 224 with bnPerChannelTensor3 at all 36 BN sites, window 8.748e80 / budget 1.752e81 at the same measured 79-epoch profile (|param| <= 21/10), eps >= 1e-5, a device batch MEAN accurate to 1e-2 RELATIVE to the layer window and a device inverse-stddev accurate to 1e-2 absolute, u <= 2^-24, tied to the committed resnet34Forward_full_pc and its rendered graph (r34TrainForward_eq_full_pc / r34TrainGraph_faithful). ⛔⛔ IT IS THE CAP, NOT THE FOLD -- budget/window = 2.00 is the tell, all 36 BN sites go through FloatBridgesTo.Maps.bnPerChannelTensor3CappedX whose error clause is 2*A' <= E' and mentions neither the inherited error nor eps, so it proves "the float and the real forward both land in the certified window" (the triangle inequality) and NOT "the rounding error folds to this". Never table it beside r34_float_logits_le, which IS the fold, without that label. ⭐⭐ It exists because "the training-mode fold is 1e7419, so there is no theorem to state" conflated the fold's numeral with the statement: the same measurement puts the WINDOW at 1e221 and capped turns any statable window into a theorem. ⭐ The window half is an honest fold and needs NO operating point -- the eps-floor |istd| <= 317 leaves 108 orders under norm_num's shape-dependent ceiling. ⭐⭐ 2026-09-05: 76 of those orders are §0.1's ESCAPE 2 at the per-channel BatchNorm (3.176e221 -> 4.304e145), the same |x-hat| <= sqrt(n) leaf the two LayerNorm nets took the day before, carried through BnPerChannelFloatBridge's three rungs as Maps.bnPerChannelTensor3CappedX -- no new hypothesis, no modelling change, and r34's reduction widths are perfect squares so the root is EXACT. ⛔ Still the cap: uncapped the same chain is 3.494e4993, still 4740 orders past the ceiling. ⚠ Per-example: at batch N > 1 a training-mode BN site reduces over N*h*w and Xh grows with it. ⭐⭐ 2026-09-05 (item D): the device batch MEAN's accuracy is now DERIVED rather than supplied at 1e-2 -- a device rsqrt has no IEEE spec and is why ei stays modelled, but a MEAN is a rounded reduction then a divide and bnMean_close_of bounds it by u*(1+g)+g at the fan-in EVERY summation order meets (FloatModel.sum is a concrete LEFT FOLD and no GPU kernel is one, so the SPEC is parameterised and not the order). PER SITE: r34's five reduction widths give 3.041e-9 at 7x7 up to 7.484e-4 at 112x112, and r34TrainBn_emr_committed proves a rounded reduction achieves each of the five numerals R34TrainWeights pins, so they are computed and not chosen. Worth 65 orders (4.304e145 -> 8.748e80); 140 in total from where this number landed. ⚠ ei is now the loose one, by four orders (fidelity.divergences 4d)
+    - declaration: "r34_float_logits_le"   # ResNet-34 inference-BN forward: 1.548e209 / 3.152e211, fold
       file: "LeanMlir/Proofs/Float/Resnet34FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "b0_float_logits_le"   # the third ImageNet-scale number, and the first for a BATCHED net with squeeze-excite: the DEPLOYED EfficientNet-B0 inference forward's float logits are within 8.408e210 of the real ones on |x| <= 1, at the measured 350-epoch profile (|param| <= 41/10), eps >= 1e-5, device rsqrt and sigmoid accurate to 1e-2, u <= 2^-24, for ANY batch size N > 0. ⛔ Did not exist until two loose leaf bounds were tightened -- swish's modulus and seScale's window (fidelity.divergences 4d)
-      file: "LeanMlir/Proofs/Float/EfficientNetFloatBudget.lean"
+    - declaration: "r34_train_float_logits_le"   # ResNet-34 training-BN forward: 1.752e81 / 8.748e80, CAP, per example
+      file: "LeanMlir/Proofs/Float/Resnet34TrainFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "cnx_float_logits_le"   # ⛔ the fourth ImageNet-scale statement and NOT the same KIND as the other three: the ConvNeXt-T forward's float logits are within 9.738e130 of the real ones on |x| <= 1, at the measured 300-epoch profile (kernels <= 6/10, biases/LN-beta <= 3, LN-gamma <= 48/10, layer scale <= 84/10), eps >= 1e-5, device LN statistics and GELU accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 23 LayerNorm sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold. LayerNorm has no frozen-statistics mode, so no version of this net has a fold. \u2b50\u2b50 2026-09-05: the WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX) instead of at |x-mu|*|istd| <= 2A*S -- \u00a70.1's escape 2, worth 53 orders (was 4.858e227 / 9.706e227), at NO new hypothesis and no new mathematics. ⭐⭐ 2026-09-05 (item D): the device batch MEAN's accuracy is now DERIVED rather than supplied at 1e-2 -- a device rsqrt has no IEEE spec and is why ei stays modelled, but a MEAN is a rounded reduction then a divide and bnMean_close_of bounds it by u*(1+g)+g at the fan-in EVERY summation order meets (FloatModel.sum is a concrete LEFT FOLD and no GPU kernel is one, so the SPEC is parameterised and not the order). At this net's widest LayerNorm (c = 768) that is 4.590e-5, worth 44 more orders (6.609e174 -> 4.871e130); deviceLN_emr_committed discharges it. ⛔ UNIFORM at the widest width rather than per width, which costs 2 more orders (against 1.727e128) -- priced and declined, because per-width makes DeviceLN's emr a Nat -> R that 366 + 324 norm_num goals must reduce. \u26d4 Still the cap: the modulus half of escape 2 is deliberately not taken, and even with \u00a70.1's quadratic gone the honest fold is 82 orders ABOVE the triangle inequality here (fidelity.divergences 4d)
-      file: "LeanMlir/Proofs/Float/ConvNeXtFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "mnv2_float_logits_le"   # the second ImageNet-scale number: the DEPLOYED MobileNetV2 inference forward's float logits are within 1.444e96 of the real ones on |x| <= 1, at the measured 350-epoch profile (|param| <= 28/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24. ⭐ Its certified WINDOW is 2154, not vacuous: relu6 clamps at 6 whatever its input, so every relu6 site resets the window (fidelity.divergences 4d)
+    - declaration: "mnv2_float_logits_le"   # MobileNetV2 inference-BN forward: 1.444e96 / 2154, fold; the one non-vacuous window
       file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "vit_float_logits_le"   # ⛔ the fifth ImageNet-scale statement, ConvNeXt's KIND not r34's: the committed depth-12 vector-LN ViT-Tiny forward's float logits are within 4.794e108 of the real ones on |x| <= 1, at the per-kind measured profile (attention kernels <= 7/10, MLP <= 8/10, patch conv <= 3/10, head <= 4/10, biases <= 9/10, LN-gamma <= 17/10, LN-beta <= 6/10), eps >= 1e-5, device LN statistics / GELU / exp accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 25 LayerNorm sites AND all 12 attention sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold; the patch embed is the one honest stage. ⚠ Also carries the softmax side condition smRho u eexp 197 < 1. ⭐⭐ 2026-09-05: the LayerNorm WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX, Xh = 14 for D = 192) -- §0.1's escape 2, worth 57 orders (was 3.612e218 / 7.222e218), at NO new hypothesis. ⭐⭐ 2026-09-05 (item D): the device batch MEAN's accuracy is now DERIVED rather than supplied at 1e-2 -- a device rsqrt has no IEEE spec and is why ei stays modelled, but a MEAN is a rounded reduction then a divide and bnMean_close_of bounds it by u*(1+g)+g at the fan-in EVERY summation order meets (FloatModel.sum is a concrete LEFT FOLD and no GPU kernel is one, so the SPEC is parameterised and not the order). At D = 192 that is 1.157e-5, worth 53 more orders (1.130e161 -> 2.397e108). ⭐ The uniform-at-widest choice costs this net NOTHING, unlike ConvNeXt-T: all 25 of its LayerNorm sites reduce over the same D = 192. ⚠ It does NOTHING for the twelve ATTENTION caps, which are there for REPRESENTABILITY rather than size: a tighter window cannot reach a Real.exp with no rational bound (fidelity.divergences 4d)
+    - declaration: "b0_float_logits_le"   # EfficientNet-B0 inference-BN forward, any batch size: 8.408e210 / 2.580e55, fold
+      file: "LeanMlir/Proofs/Float/EfficientNetFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "cnx_float_logits_le"   # ConvNeXt-T forward: 9.738e130 / 4.871e130, CAP
+      file: "LeanMlir/Proofs/Float/ConvNeXtFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "vit_float_logits_le"   # ViT-Tiny forward: 4.794e108 / 2.397e108, CAP; also needs smRho u eexp 197 < 1
       file: "LeanMlir/Proofs/Float/ViTFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "mnv2InputGrad_eq_mobilenetv2_vjp"   # ⭐⭐ the whole-net CERTIFIED tie for MobileNetV2's backward: mnv2InputGrad, every slot pinned to the certified per-op backward, IS (mobilenetv2PC_has_vjp_at ...).backward -- so mnv2_grad_float_le is a statement about the certified WHOLE-NET gradient, not only about each of its pieces. ⭐ NO drift found (r34's peer tie moved its number 4x by exposing the wrong stem pool), and this file was FIRST to carry the shape check: mobilenetv2Forward_full_pc_eq_chain, a rfl saying the ten-stage chain the apex is instantiated at IS the committed forward (r34's peer, resnet34Forward_full_pc_eq_chain, followed 2026-09-04). ⚠ smooth-point, as every HasVJPAt in this cone is (fidelity.divergences 4d)
-      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "convnextInputGrad_eq_convNextForwardTCh_vjp"   # ⭐⭐ the whole-net CERTIFIED tie for ConvNeXt-T's backward, and the STRONGEST of the three: convnextInputGrad, every slot pinned to the certified per-op backward at its own saved activation, IS (convNextForwardTCh_has_vjp ...).backward x. ⭐ The apex is HasVJP -- EVERYWHERE -- not the smooth-point HasVJPAt r34's and mnv2's are (GELU, LayerNorm, convolution and the layer scale are all smooth and ConvNeXt has no kink), so its only hypotheses are the 23 LayerNorm positivities and it carries NO smoothness side-condition. ⭐ No drift found; the even-kernel defect this tie's own leaf work exposed (convFlatBack is not the adjoint at an even kernel; ConvNeXt's 4x4/s4 stem and three 2x2/s2 downsamples) was already repaired by padOdd, which this assembly consumes. Shape check present: convNextForwardTCh_eq_chain (fidelity.divergences 4d)
-      file: "LeanMlir/Proofs/Foundation/ConvNeXtWholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "b0_grad_float_le"   # ⭐⭐ the FOURTH whole-net BACKWARD number and the SQUEEZE-EXCITE one: the deployed EfficientNet-B0 input-gradient is within 1.578e182 of the certified one per input pixel, certified window 7.104e182, budget/window = 0.222 -- the interval FOLD, no `capped` anywhere, at TRAINING-mode BatchNorm and through THREE squeeze-excite sites. ⭐⭐ SE is the site §0.1 lists as making a FORWARD quadratic in the window, and its backward folds for a structural reason: seInputGrad g x gateBack = biPathSum (diagBack g) (gateBack . diagBack x), where the gate g and the SE input x are SAVED constants, so both branches are linear in the cotangent. ⭐⭐ |swish′| <= 2 (swishScalarDeriv_abs_le) is what makes it EXIST -- the nine swish diagBack slots take the REAL saved derivative, so the FORWARD's certified window never enters; with the repo's only other bound (1 + A/4 at that window) the same fold is 1e431. ⭐⭐ AND IT NEEDS NO OPERATING POINT, the second such backward after MobileNetV2's: |istd| <= 317 is DERIVED from eps >= 1e-5 (EnetBnBack.hS), and the eps-floor fold lands 70 orders under norm_num's ~1e253 ceiling. At the measured 350-epoch per-kind profile (kernels <= 37/10, BN gamma <= 41/10), eps >= 1e-5, u <= 2^-24, saved-vector accuracies 1e-2, on loss cotangents of magnitude <= 1. ⛔ AT BATCH SIZE N = 1, and that qualifier is NOT cosmetic: bnBatchLA is the one op in this net that is not batchMap N of a per-example op -- it reduces mu/var ACROSS examples -- so every BatchNorm site's width is N*h*w and the number moves with the batch (2.880e194 at N = 256, still a fold and still statable), where the FORWARD's b0_float_logits_le genuinely holds at any N. ⚠ The one remaining forward-window import is the SE's saved input (4.903e40 / 5.451e24 / 7.572e9 for b3/b2/b1); an operating point on it is worth ~71 orders and is deliberately not taken. ⭐ Stated DIRECTLY on the committed efficientnetInputGradB, so B0's whole-net tie -- against efficientnetForwardB_has_vjp, NOT the 16-block efficientnetForwardB_full_has_vjp -- will make it a statement about the certified gradient with nothing in between; that tie is still open (fidelity.divergences 4d)
-      file: "LeanMlir/Proofs/Float/EfficientNetBackFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "cnx_grad_float_le"   # ⭐⭐ the THIRD whole-net BACKWARD number and the repo's FIRST honest whole-net FOLD for a LAYERNORM net: the deployed ConvNeXt-T input-gradient is within 1.563e250 of the certified one per input pixel, certified window 1.023e251, budget/window = 0.153 -- no `capped` anywhere, at the net whose own FORWARD number is a 2.00 CAP. §0.1's quadratic is a FORWARD fact; a VJP reads its statistics off the SAVED activations, which the cotangent does not perturb. At the measured 300-epoch per-kind profile (kernels <= 6/10, LN gamma <= 48/10, layer scale <= 84/10 -- the split is worth 68 orders here, the largest of any net), eps >= 1e-5, u <= 2^-24, saved-activation accuracies 1e-2, operating point |istd| <= 16, on loss cotangents of magnitude <= 1. ⭐ Stated DIRECTLY on the committed convnextInputGrad, so convnextInputGrad_eq_convNextForwardTCh_vjp makes it a statement about the certified whole-net gradient with nothing in between. ⛔ It does NOT compose with the forward and not for r34's reason: this net's forward statement is `capped`, whose modulus is 2*mag by construction, so the activation accuracy it can supply is 2 x window ~ 1e227, and LayerNorm has no eval mode to freeze (fidelity.divergences 4d)
-      file: "LeanMlir/Proofs/Float/ConvNeXtBackFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "mnv2_grad_float_le"   # ⭐⭐ the SECOND whole-net backward number, and the first with NO operating-point hypothesis: the deployed MobileNetV2 whole-net INPUT-GRADIENT VJP is within 1.076e152 of the certified one, per input pixel, on loss cotangents of magnitude <= 1, certified window 4.750e153, budget/window = 0.023 -- the interval FOLD at TRAINING-mode BatchNorm. |istd| <= 317 is DERIVED from eps >= 1e-5 (MnvBnBack.hS), where r34's file assumes |istd| <= 16; affordable because 20 BN sites and a depthwise fan-in of 9 put the fold 135 orders below r34's. ⛔ es/exh (the saved float activations' accuracies, 1e-2) remain supplied and remain the caveat (fidelity.divergences 4d)
-      file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "r34_grad_float_le"   # ⭐⭐ PHASE 2, and the first number in this repo that is a FOLD at TRAINING-mode BatchNorm -- the mode the FORWARD of this same net has no statable number for at all (1e7417): the deployed ResNet-34 whole-net INPUT-GRADIENT VJP is within 6.894e244 of the certified one, per input pixel, on loss cotangents of magnitude <= 1 (|p - y| <= 1 for softmax cross-entropy), certified window 8.857e245, budget/window = 0.078 (NOT the 2.00 cap ConvNeXt-T's and ViT-Tiny's forwards carry). A VJP reads its statistics off the SAVED activations, which the cotangent does not perturb, so the modulus is linear in the inherited error. ⛔ THREE HYPOTHESES: es/exh (the saved float activations' accuracies, 1e-2, which the forward's own training-mode fold cannot discharge) and the OPERATING POINT |istd| <= 16 i.e. sigma >= 1/16 (fidelity.divergences 4d)
+    #
+    # --- Whole-net float budgets: input-gradient backwards, all at training-mode normalisation,
+    #     all folds, per input pixel on loss cotangents <= 1 (fidelity 4d).
+    - declaration: "r34_grad_float_le"   # ResNet-34 backward: 6.894e244 / 8.857e245; operating point |istd| <= 16
       file: "LeanMlir/Proofs/Float/Resnet34BackFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "resnet34Forward_full_pc_eq_chain"   # ⭐⭐ the SHAPE CHECK for r34's whole-net backward tie, and the last of the three nets to get one (2026-09-04): the eleven slots r34InputGrad_eq_resnet34_vjp instantiates resnet34_has_vjp_at at -- stem, the 3x3/s2 pool, the four chainComp stages [a2,a1,a0]/[b2,b1,b0]/[c4..c0]/[e1,e0], the three downsamples, GAP, dense -- ARE resnet34Forward_full_pc. ⛔ A whole-net tie keeps its blocks OPAQUE so the isDefEq compares variables, which means its subject is a chain of VARIABLES and nothing in it says which net they are; that is exactly how the 2x2-vs-3x3/s2 stem-pool drift survived a month and moved a committed number 4x. ⚠ Unlike the MobileNetV2 and ConvNeXt peers this is NOT a bare rfl: this apex groups its [3,4,6,3] runs under chainComp, and a chainComp node handed to the kernel against a Function.comp node is a deterministic timeout -- the peel is proved once between VARIABLES (chainComp2_comp) and then rewritten (fidelity.divergences 4d)
+    - declaration: "mnv2_grad_float_le"   # MobileNetV2 backward: 1.076e152 / 4.750e153; no operating point
+      file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "cnx_grad_float_le"   # ConvNeXt-T backward: 1.563e250 / 1.023e251; first fold for a LayerNorm net; |istd| <= 16
+      file: "LeanMlir/Proofs/Float/ConvNeXtBackFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "b0_grad_float_le"   # EfficientNet-B0 backward at batch size 1: 1.578e182 / 7.104e182; through three squeeze-excite sites; no operating point
+      file: "LeanMlir/Proofs/Float/EfficientNetBackFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
+    # --- Whole-net certified backward ties: the hand-written backward chain IS the certified
+    #     whole-net VJP, with a shape check that the chain is the committed forward (fidelity 4d).
+    - declaration: "r34InputGrad_eq_resnet34_vjp"   # ResNet-34; smooth-point (HasVJPAt); shape check resnet34Forward_full_pc_eq_chain
       file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTie.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "cifar8_chain_argmaxSafeH"   # float capstone at the COMMITTED CIFAR-8 shape: given measured tail gains, binary32 rounding cannot flip the prediction. Chain = cifar8Verified.layers op for op; no window side condition. ⚠ budget >= 1.8e13 at He magnitudes (bᵢ at worst-case propagated windows), so hmargin holds there only at u = 0 -- fidelity.divergences 4c "NOT BITING". (v1 cifar8_chain_argmaxSafe is depth-generic only)
+    - declaration: "mnv2InputGrad_eq_mobilenetv2_vjp"   # MobileNetV2; smooth-point (HasVJPAt); shape check mobilenetv2Forward_full_pc_eq_chain
+      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "convnextInputGrad_eq_convNextForwardTCh_vjp"   # ConvNeXt-T; HasVJP everywhere, no smoothness side-condition; shape check convNextForwardTCh_eq_chain
+      file: "LeanMlir/Proofs/Foundation/ConvNeXtWholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "resnet34Forward_full_pc_eq_chain"   # the shape check for r34's tie: the opaque-block chain IS resnet34Forward_full_pc
+      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
+    # --- Other float-tier results ---
+    - declaration: "cifar8_chain_argmaxSafeH"   # adjoint-chain capstone at the committed CIFAR-8 shape; budget does not bite at He magnitudes (fidelity 4c)
       file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -285,6 +304,8 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    #
+    # --- Certificates and optimizer geometry ---
     - declaration: "Proofs.lipschitz_margin_certified_radius"   # Tsuzuku 2018 certified radius
       file: "LeanMlir/Proofs/Certificates/LipschitzCert.lean"
       sorry_count: 0
@@ -332,13 +353,13 @@ automation:
       cost:
         wall_time: ""        # not precisely tracked; project developed over months
         spend_usd: ""        # not tracked
-        hardware: "three GPU workstations for training + codegen validation across both vendor stacks — 4x RTX 4060 Ti and 4x RTX 3060 (NVIDIA/CUDA), 2x Radeon RX 7900 XTX (AMD/ROCm, gfx1100); API for proof work"
+        hardware: "three GPU workstations for training + codegen validation across both vendor stacks -- 4x RTX 4060 Ti and 4x RTX 3060 (NVIDIA/CUDA), 2x Radeon RX 7900 XTX (AMD/ROCm, gfx1100); API for proof work"
       prompting_notes: >-
         Mixed interactive + agentic. Proof development, codegen, the audit, and
         the empirical training runs were all done with AI assistance.
   spend_usd: ""              # not tracked
   notes: >-
-    Heavily AI-assisted throughout — proof authoring, MLIR/JAX codegen, the
+    Heavily AI-assisted throughout -- proof authoring, MLIR/JAX codegen, the
     self-audit, and training. Not an unattended autonomous run; the author
     drove and reviewed the work.
 
@@ -347,7 +368,7 @@ fidelity:
     The proved theorems form tiers; not everything the prose/abstract describes
     is a theorem. Stated plainly:
 
-    1. STRONGEST — layer VJP correctness. The per-layer backward formulas
+    1. STRONGEST -- layer VJP correctness. The per-layer backward formulas
        (dense, conv, batch-norm, layer-norm, softmax-CE, attention/MHSA, GELU,
        etc.) are derived from Mathlib's `fderiv` and machine-checked. These are
        the core results and are the bulk of the 52 comparator-rechecked theorems.
@@ -363,14 +384,14 @@ fidelity:
 
     3. SMOOTH-INPUT CONDITIONING. The global instances `relu_has_vjp`,
        `mlp_has_vjp`, `maxPool2_has_vjp3` define `backward` as the pdiv-sum RHS
-       and close `correct` by `rfl` — codegen-shaped witnesses whose formal
+       and close `correct` by `rfl` -- codegen-shaped witnesses whose formal
        content is the pdiv expression (which fully characterizes backprop only at
        smooth points). The earlier limitation (global composition needing
        `Differentiable R f`, which blocked ReLU-containing chains) has since been
        addressed: a pointwise `HasVJPAt` API with `vjp_comp_at` (Tensor.lean) plus
        `relu_has_vjp_at` / `mlp_has_vjp_at` (MLP.lean) give real chain-rule proofs
-       — no rfl escape — under an explicit smooth-input hypothesis
-       (`∀ k, preact k ≠ 0`, i.e. no ReLU kink / no pooling tie). The residual
+       -- no rfl escape -- under an explicit smooth-input hypothesis
+       (`forall k, preact k != 0`, i.e. no ReLU kink / no pooling tie). The residual
        honest caveat is therefore that the strongest backprop-correctness results
        are conditioned on smooth inputs; the measure-zero non-smooth points are
        the disclosed codegen trust boundary of (2).
@@ -382,7 +403,7 @@ fidelity:
        `ResNet34LivePC.liveFwd2` each prove a non-constant forward
        (`*_nonconstant`, level 2) AND a nonzero whole-net Jacobian at a witness
        point (`Mnv2Live.mnv2Live_jacobian_nonzero`,
-       `ResNet34LiveSeal.liveFwd2_jacobian_nonzero`, level 3) — so the rendered
+       `ResNet34LiveSeal.liveFwd2_jacobian_nonzero`, level 3) -- so the rendered
        backward is genuinely not the zero map there. All audited 3-axiom-clean.
        The ResNet witness is also carried to the real `[3,4,6,3]` (16-block)
        depth (`ResNet34LiveFull.liveFwd2Full_jacobian_nonzero` /
@@ -398,884 +419,168 @@ fidelity:
 
     4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement):
        the smoothing radius theorems require class probabilities in the OPEN
-       interval (0,1) (`hp` — the true quantile is undefined at the endpoints;
+       interval (0,1) (`hp` -- the true quantile is undefined at the endpoints;
        Monte-Carlo estimates always satisfy it), and the theorems speak about
        TRUE smoothed probabilities while the reporting driver uses
-       Clopper-Pearson ESTIMATES — that estimation gap is not formalized. The
+       Clopper-Pearson ESTIMATES -- that estimation gap is not formalized. The
        adjoint-chain float bounds use a per-op Higham model; the balanced-tree
        reduction refinement carries an explicit (quarantined) order-balanced
        hypothesis. The LipSDP scorecards certify a FIXED 100-image subset at a
-       FIXED epsilon — an honest lower bound, not a dataset-wide claim.
+       FIXED epsilon -- an honest lower bound, not a dataset-wide claim.
 
-    4c. THE ADJOINT-CHAIN TIER IS NOT INSTANTIATED (disclosed 2026-09-02, audit).
+    4c. THE ADJOINT-CHAIN TIER IS NOT BITING (disclosed 2026-09-02, audit).
        `chain_adjointClose` / `chain_argmaxSafe` (AdjointChainBridge.lean) are
-       correct depth-generic theorems, but nothing in the repo applies them to a
-       committed net. Two hypotheses block it. (i) `LayerCert m A` carries ONE
-       window that every layer must map into ITSELF, so `reluDenseTower`'s
-       `hfit : layerAct + layerBudget(0) <= A` unfolds to
-       `(m*w'*A + beta)*(1+u)^(m+2) <= A`, which forces `m*w' <= 1` whenever
-       `A > 0` (and `A = 0` makes the margin hypothesis unsatisfiable). At the
-       committed cifar8Verified profile `m*w'` runs 24..114, so `hfit` is
-       violated by 1-2 orders of magnitude and `cifar8_chain_argmaxSafe` has no
-       CIFAR-8 instance -- it is generic in `(m, w', beta, A, layers)` and the
-       "cifar8" in its name has no referent. `hfit` appears only as a binder, 4
-       times, and is discharged nowhere. (ii) the tail gains arrive as a named
-       `TailGains` hypothesis measured off `scripts/adjoint_chain_probe.py`;
-       the PROVEN discharge (`tailGains_suffixProd`) gives worst-case gain
-       PRODUCTS (~59^11 on that net), which is why measurement is used instead,
-       and `LipOnWindow` wants the gain over the whole window while a measured
-       Jacobian underestimates that supremum (AdjointChainBridge.lean:40).
-       FIXED for (i): `AdjointChainBridgeHet.lean` indexes the chain by
-       (dimension, window) per layer, so `Aout :=` the propagated bound discharges
-       the obligation by construction and the dimension gap closes in the same
-       move. `Cifar8ChainCert.cifar8ChainH` is now the committed cifar8Verified
-       layer list op for op (8 convs [16,16,32,32] SAME 3x3, relu each, a pool
-       after every second conv 32->16->8->4->2, flatten 128, dense 64/64/10),
-       buildable at ANY `0 <= w'/beta/A`, with `cifar8_chain_certH` and
-       `cifar8_chain_argmaxSafeH` over it. The v1 theorems are retained as the
-       depth-generic statements they are. STILL OPEN: (ii) the measured tail
-       gains, unaffected by the window fix; and a `rfl`-style tie from
-       `chainRH (cifar8ChainH ...)` to the committed render -- DONE, see below.
+       correct depth-generic theorems. Their first form could not be instantiated
+       at any committed net: `LayerCert m A` carried ONE window that every layer
+       had to map into itself, which forces `m*w' <= 1`, while the committed
+       cifar8Verified profile runs 24..114; its `hfit` binder was discharged
+       nowhere and `cifar8_chain_argmaxSafe` had no CIFAR-8 referent. FIXED:
+       `AdjointChainBridgeHet.lean` indexes the chain by (dimension, window) per
+       layer, and `Cifar8ChainCert.cifar8ChainH` is the committed cifar8Verified
+       layer list op for op, tied by rfl (`cifar8ChainH_chainRH_eq`) to
+       `cifarCnn8Forward`, the def `StableHLO.cifar8FwdGraph_faithful` certifies
+       the emitted graph denotes; `cifar8_chain_cert_committed` restates the
+       certificate on it. Writing that tie caught a real error (the chain's dense
+       head had three bare denses where the committed layers interleave relu).
+       NOT BITING: the v2 certificate is correct but its budget takes each stage
+       at its WORST-CASE propagated window, which at He magnitudes (w' = 0.39,
+       beta = 0.01, A = 1) grows 1 -> 10.5 -> 592 -> ... -> 4.6e18, so
+       `chainBudgetH >= 1.8e13` against logits of ~10 and `hmargin` is satisfiable
+       there only at u = 0 or for contracting weights (m*w' <~ 1). The
+       "chainBudget ~ 2.6" of scripts/adjoint_chain_probe.py is the same formula
+       with each stage at its MEASURED activation magnitude, which no
+       instantiation of the theorem can supply (`LayerCertH.window` must hold on
+       the whole box). scripts/adjoint_chain_ibp_probe.py measured the sound
+       routes: even an exact tail gain leaves the propagated budget ~1.2e6x above
+       the true drift, so the looseness is `layerBudget` at worst-case windows,
+       not the tail gains. `TailGainsH` has no proven discharge at heterogeneous
+       dimensions (`tailGains_suffixProd` is uniform-dim only), so every v2 `hH`
+       in the repo is supplied by measurement. What v2 adds is the committed
+       SHAPE and the rfl tie, not a certificate that bites at trained weights.
 
-       ⭐ TIED (2026-09-02): `cifar8ChainH_chainRH_eq` proves by `rfl` that the
-       chain's real side IS `cifarCnn8Forward` at the committed config
-       (ic=3, c1=c2=16, c3=c4=32, h=w=2, d1=64, 3x3) -- the same def
-       StableHLO.cifar8FwdGraph_faithful certifies the emitted forward graph denotes.
-       `cifar8_chain_cert_committed` restates the certificate on it. ⚠ Writing that
-       tie CAUGHT A REAL ERROR: the chain's dense head had three BARE denses where
-       cifar8Verified.layers has `.dense 128 64, .relu, .dense 64 64, .relu,
-       .dense 64 10`. The `op for op` claim was asserted, not checked, until the tie
-       made it checkable. Fixed in the same change.
+    4d. WHOLE-NET FLOAT BUDGETS (disclosed 2026-09-02; thread closed 2026-09-05).
+       The standing reference is planning/float_budget_numbers.md; the working
+       record with every ablation is planning/archive/float_budget_numbers_log.md.
 
-       ⚠⚠ NOT BITING (2026-09-02, audit): the v2 certificate is correct but its
-       budget does not reach the logit scale at the committed magnitudes. Each
-       stage's fresh budget `b_i = layerBudget M.u m w' beta Ain 0` is taken at the
-       PROPAGATED window `Ain = windowFold ...` -- the worst case over the whole
-       input box -- which at the He profile (`w' = 0.39`, `beta = 0.01`, `A = 1`)
-       grows 1 -> 10.5 -> 592 -> ... -> 4.6e18. The last stage alone gives
-       `b_11 = 1.8e13`, and `TailGainsH` forces `H_11 >= 1` (it is `LipOnWindow` of
-       `id` on a positive window: `lipOnWindow_id_ge_one`), so `chainBudgetH >= 1.8e13` against logits ~10:
-       `hmargin` asks for a logit margin above 3.6e13. The "chainBudget ~ 2.6" of
-       `scripts/adjoint_chain_probe.py` §3 is a DIFFERENT quantity -- the same
-       formula with `b_i` at the MEASURED per-stage activation magnitude, which no
-       instantiation of the theorem can supply (`LayerCertH.window` has to hold at
-       every point of the box). `scripts/adjoint_chain_ibp_probe.py` measured the
-       sound routes: even an exact tail gain leaves the propagated budget ~1.2e6x
-       above the true drift, so the looseness is `layerBudget` at worst-case
-       windows, not the tail gains. The theorems are non-vacuous at `u = 0` (exact
-       arithmetic) or for contracting weights `m*w' <~ 1` -- the regime v1 could
-       already express. What v2 adds is the committed SHAPE and the `rfl` tie, not
-       a certificate that bites at He weights. Also: `TailGainsH` has NO proven
-       discharge in v2 (`tailGains_suffixProd` has no heterogeneous-dimension peer;
-       `LipOnWindow.comp` is uniform-dim), so every v2 `hH` in the repo is supplied
-       by measurement.
+       THE DEFECT THAT STARTED IT. `FloatBridges f := forall A, 0 <= A -> exists
+       B L fF, 0 <= B /\ FloatClose A B f fF L` bound the float implementation
+       `fF` existentially, so it was provable for ANY `f` bounded on boxes by
+       taking `fF := f` and the constant modulus `2B` -- no FloatModel, no unit
+       roundoff, 3-axiom clean. The ~134 FloatBridges conclusions, every
+       whole-net capstone included, therefore stated only boundedness while their
+       docstrings claimed "the deployed float forward within an explicit budget".
+       The first repair, `FloatBridgesTo f fF`, named the map but still bound the
+       modulus `L` existentially, and an unconstrained modulus is discharged by
+       the triangle inequality from the magnitude clause alone
+       (`FloatBridgesTo (relu n) (fun _ _ => 0)` was a 3-axiom-clean theorem).
+       Both are FIXED: `FloatBridgesTo f fF` is a Type-valued structure with
+       `mag : R -> R` (input window -> output window), `mod : R -> R -> R` (input
+       window, inherited error -> error modulus) and `close : forall A, 0 <= A ->
+       0 <= mag A /\ FloatClose A (mag A) f fF (mod A)`; every combinator composes
+       the bookkeeping explicitly; the twelve whole-net bridges are noncomputable
+       defs whose `.mod` is a closed term over the per-op budgets; and a numeric
+       bound on a whole-net `.mod` is a statement the kernel checks. The `2B`
+       witness is still constructible, but its `.mod` is visibly `2B`. The legacy
+       FloatBridges statements remain (derivable via `toFloatBridges`) and
+       constrain no float implementation; do not cite them as budgets.
 
-    4d. WHOLE-NET FLOAT BRIDGES DO NOT NAME THEIR FLOAT MAP (disclosed
-       2026-09-02, audit). `FloatBridges f := forall A, 0 <= A -> exists B L fF,
-       0 <= B /\ FloatClose A B f fF L` existentially binds `fF` -- the float
-       implementation -- not just the `B`/`L` bookkeeping its docstring says it
-       drops. So `FloatBridges f` is provable for ANY `f` bounded on input boxes
-       by taking `fF := f` and the constant modulus `2B`: no FloatModel, no unit
-       roundoff, 3-axiom clean. The leaf lemmas (`floatClose_flatConv`,
-       `dense_close_mixed`, ...) are honest -- they conclude in `FloatClose`
-       with an explicit `fF` -- but the ~134 `FloatBridges` conclusions,
-       including every whole-net capstone (r34_floatBridges,
-       mnv2Forward_floatBridges, convnext{,Ch}_floatBridges, vit_floatBridges,
-       r34_grad_floatBridges), state strictly less than their docstrings claim
-       ("the deployed float forward ... within an explicit budget"): neither the
-       deployed map nor any budget survives the existential. `FloatBridgesTo f fF`
-       keeps the map and composes it; `toFloatBridges` weakens back, so migration is
-       incremental. MIGRATED (9 of 11 whole-net bridges, each with a named float
-       skeleton -- r34ForwardF / r34InputGradF / mnv2ForwardF / mnv2InputGradF /
-       convnextForwardF / convnextInputGradF / vitForwardFlatF / vitGradFlatF /
-       efficientnetInputGradBF): both r34, both mnv2, both convnext (skeleton),
-       both vit, both efficientnet (its FORWARD needed the whole 11-bridge layered
-       cone migrated first -- stemBF / cbsBF / dwbsBF / dwbsSBF / seBF / projBF and
-       the four block peers -- because unlike every other whole-net theorem it
-       derives its block bridges from leaf data rather than taking them as
-       hypotheses), and both convnextCh (the SHIPPED ConvNeXt-T at its real channel
-       LayerNorm), whose cone -- chanLNTensor3F / layerNormVecF / rowLNVecFlatF /
-       cnxBodyWithF / cnxBlockChWF / convNextStageChKF / cnxDownChWF and the backward
-       chanLNTensor3BackF / rowLNVecFlatBackF -- is migrated with it. That is all
-       TWELVE whole-net bridges. The legacy FloatBridges statements remain (derivable
-       via toFloatBridges); nothing downstream broke.
+       THE NUMBERS. Each is a theorem closed over the real leaves (no bridge
+       hypothesis left), tied to the committed net by rfl and, for the forwards,
+       to the rendered graph by the `*_faithful` theorems. Every numeral is
+       generated in the leaves' own exact-rational arithmetic and re-asserted by
+       scripts/float_budget_envelope.py before the kernel checks it. Window =
+       certified output magnitude; budget = |float - real| per logit (forwards) or
+       per input pixel (backwards, on loss cotangents of magnitude <= 1); unit
+       input box; a per-parameter-kind profile measured on the trained checkpoint;
+       eps >= 1e-5; u <= 2^-24.
 
-       ⚠ The same existential-float-map defect was ALSO found one tier down, in the
-       `floatClose_*` layer this entry had called clean: `floatClose_seGate` and
-       `floatClose_seBlockFull` conclude `exists B L gF, FloatClose A B f gF L`,
-       hiding the float map rather than only the B/L bookkeeping. Those are the only
-       two (`FloatComposeBridge`'s two `exists B L` lemmas write their float map out
-       explicitly, which was taken to be enough -- it is not, see the next entry).
-       Both now have named peers -- `floatClose_seGateF` /
-       `floatClose_seBlockFullF` over `seGateF` / `seBlockFullF` -- which is what
-       unblocked the EfficientNet forward.
+           CIFAR-8 forward                       6.37e14   / 6.121e18   fold   cifar8_float_logits_le
+           ResNet-34 forward, inference BN       1.548e209 / 3.152e211  fold   r34_float_logits_le
+           ResNet-34 forward, training BN        1.752e81  / 8.748e80   CAP    r34_train_float_logits_le  (per example)
+           MobileNetV2 forward, inference BN     1.444e96  / 2.154e3    fold   mnv2_float_logits_le
+           EfficientNet-B0 forward, inference BN 8.408e210 / 2.580e55   fold   b0_float_logits_le         (any batch size)
+           ConvNeXt-T forward                    9.738e130 / 4.871e130  CAP    cnx_float_logits_le
+           ViT-Tiny forward                      4.794e108 / 2.397e108  CAP    vit_float_logits_le
+           ResNet-34 backward, training BN       6.894e244 / 8.857e245  fold   r34_grad_float_le          (|istd| <= 16)
+           MobileNetV2 backward, training BN     1.076e152 / 4.750e153  fold   mnv2_grad_float_le
+           ConvNeXt-T backward                   1.563e250 / 1.023e251  fold   cnx_grad_float_le          (|istd| <= 16)
+           EfficientNet-B0 backward, training BN 1.578e182 / 7.104e182  fold   b0_grad_float_le           (batch size 1)
 
-       ⚠⚠ THE SAME DEFECT SURVIVES ONE BINDER OVER (2026-09-02, audit).
-       `FloatBridgesTo f fF := forall A, 0 <= A -> exists B L, 0 <= B /\
-       FloatClose A B f fF L` names the map but still closes the MODULUS `L`
-       existentially, and an unconstrained modulus is discharged by the triangle
-       inequality from the magnitude clause alone: take `L := fun _ => 2*B`, then
-       `|fF vt i - f va i| <= |fF vt i| + |f va i| <= 2*B`. So `FloatBridgesTo f fF`
-       holds for ANY pair bounded on boxes -- `FloatBridgesTo (relu n) (fun _ _ => 0)`
-       and `FloatBridgesTo (dense W b) (fun _ _ => 0)` are theorems, 3-axiom clean,
-       with no FloatModel in sight; it is falsified only by an UNBOUNDED float map.
-       Every `*_floatBridgesTo` conclusion listed above, and every `FloatBridgesTo`
-       hypothesis the whole-net theorems take, is therefore a boundedness statement,
-       and the "explicit budget" sentence in their docstrings is not carried by the
-       statement (the proof terms do fold real per-op moduli, but a theorem is its
-       statement). The `exists B L, FloatClose` lemmas (`floatClose_seGateF` /
-       `floatClose_seBlockFullF`, and the older `floatClose_cifarStage` /
-       `floatClose_resBlock`) have the same hole at fixed `A`. The fix is not a
-       predicate that rejects degenerate maps -- `2B` is always a valid modulus --
-       but one whose modulus is VISIBLE, so that its value is a claim: a Type-valued
-       bridge carrying `mag`/`mod` fields, the whole-net bridges as defs, and the
-       budget stated as a bound on `.mod`.
+       WHAT KIND OF STATEMENT EACH IS. A "fold" is the interval fold of the
+       per-op rounding moduli: the rounding error composes to the budget. A "CAP"
+       goes through `FloatBridgesTo.capped`, whose modulus is `min(mod, 2*mag)`,
+       and the `2*mag` branch is what closes at every normalisation site, so it
+       states only that the float and the real output both lie in the certified
+       window -- the triangle inequality; budget/window = 2.00 is the tell, and a
+       cap must never be tabled beside a fold without the label. The three caps
+       are caps because a normalisation that reduces its statistics out of its
+       own input has a modulus QUADRATIC in the window (training-mode BatchNorm,
+       LayerNorm; squeeze-excite likewise; attention exponentially), so the
+       uncapped fold runs past what `norm_num` will evaluate (~1e253 for a nested
+       tree) at the eps-floor, and where it exists at an operating point it is 80
+       orders WORSE than the cap (ConvNeXt-T, measured). Inference BatchNorm
+       freezes its statistics and is affine in x, which is why four forwards are
+       folds. Every backward is a fold: a VJP is linear at a fixed point and
+       reads its statistics off the saved activations, which the cotangent does
+       not perturb. Two numbers carry a batch qualifier: B0's backward is at
+       batch size 1 because `bnBatchLA` reduces across examples (2.880e194 at
+       N = 256), and ResNet-34's training forward is per example for the same
+       reason; the six inference forwards hold at any batch size.
 
-       ✅ FIXED (2026-09-02): `FloatBridgesTo f fF` is now a Type-valued STRUCTURE
-       with `mag : R -> R` (input window -> output window), `mod : R -> R -> R`
-       (input window -> error modulus) and
-       `close : forall A, 0 <= A -> 0 <= mag A /\ FloatClose A (mag A) f fF (mod A)`.
-       Every combinator composes the bookkeeping explicitly (`comp`: `mag_g ∘ mag_f`
-       and `mod_g (mag_f A) ∘ mod_f A`; `residual`, `reluResidual`, `seScale`,
-       `perRow`, `batchMap`, and the `FloatBridgesToList` tower fold), every leaf
-       writes its `mag`/`mod` out (`floatBridgesTo_flatConv`: `layerAct +
-       layerBudget(0)` / `layerBudget` at the receptive-field fan-in, ...), and the
-       twelve whole-net bridges are `noncomputable def`s whose `.mod A e` is a closed
-       term over the per-op budgets. `FloatBridgesTo.fresh_le` states the fresh
-       budget as a bound on the deployed map: `|fF v i - f v i| <= b.fresh A` on the
-       window. The `2B` witness is still constructible -- nothing can prevent that --
-       but its `.mod` is visibly `2B`, and a numeric bound on a whole-net `.mod` is
-       now a statement the kernel checks rather than one the proof term hides. The
-       `exists B L` lemmas (`floatClose_seGateF` / `floatClose_seBlockFullF`) are kept
-       as shadows of `floatBridgesTo_seGate` / `floatBridgesTo_seBlockFull`, and the
-       older `floatClose_cifarStage` / `floatClose_resBlock` gained bridge peers
-       `floatBridgesTo_cifarStage` / `floatBridgesTo_resBlock`.
-       `FloatBridgesTo.toFloatBridges` still weakens to the legacy Prop, so nothing
-       downstream broke.
+       WHAT IS SUPPLIED. Device kernels with no IEEE specification carry an
+       accuracy hypothesis of 1e-2, quantified over any device at least that
+       accurate: `rsqrt` on every BatchNorm net (DeviceRsqrt), sigmoid on B0
+       (DeviceSigmoid), GELU on ConvNeXt and ViT (DeviceGelu), `exp` on ViT
+       (DeviceExp, relative, with the softmax side condition `smRho u eexp 197 <
+       1`). The device MEAN is derived rather than supplied:
+       `FloatModel.bnMean_close_of` is parameterised by the reduction's forward
+       error spec so any summation order qualifies, and `r34TrainBn_emr_committed`
+       / `deviceLN_emr_committed` witness the committed numerals. The backwards
+       additionally take the saved activations' accuracies (`es`, `exh`; B0 also
+       `esav`) at 1e-2. NO FORWARD STATEMENT DISCHARGES THOSE: the inference
+       forwards are about a different program, the training-mode forward is a cap
+       and supplies only `2*window`, and LayerNorm has no mode in which a fold
+       exists. So no forward-then-backward composition is claimed anywhere; each
+       backward number is an honest fold of the backward kernel's rounding given
+       saved-activation accuracies its own forward cannot supply.
 
-       ⭐ A NUMBER (2026-09-02): `Cifar8FloatBudget.lean` bounds a whole-net `.mod`
-       for the first time. `floatBridgesTo_cifar8` is the committed 8-conv CIFAR-10
-       forward as a CLOSED bridge (all leaves, no block hypotheses) to its float
-       skeleton `cifarCnn8ForwardF`; `cifar8Bridge` instantiates it at the committed
-       shape over `Cifar8Weights w' beta`; and `cifar8Bridge_maps` pushes a numeric
-       envelope (`FloatBridgesTo.Maps`: output window and output error, both as
-       rationals) through the eleven conv/dense stages with `norm_num`, the gamma-term
-       through `gamma_num`, so at `|W| <= 2/5`, `|b| <= 1/100`, unit input window and
-       `u <= 2^-24`:
-           output window  <= 6.121e18      (cifar8Bridge_mag_le)
-           fresh budget   <= 6.37e14       (cifar8Bridge_fresh_le)
-       and per logit `|float - real| <= 6.37e14` on `|x| <= 1`
-       (`cifar8_float_logits_le`). The size is the interval fold at He magnitudes
-       -- vacuous as a certificate, and consistent with 4c's chain floor (1.8e13)
-       and the probe's worst-case-products figure (3.79e14); relative to the
-       certified window it is ~1e-4, the same as `mnist_mlp_float_budget`. What is
-       new is that the kernel checks it: a wrong `layerBudget`, a dropped stage or a
-       misread fan-in fails here. The twelve ImageNet-scale whole-net bridges take
-       their block bridges as hypotheses, so their `.mod` is a function of the
-       blocks' budgets; a number for them needs the block cones closed the same way.
+       WHAT IS NOT CLAIMED. Numerical accuracy. The budgets are 1e80 to 1e251
+       against logits of order 10. They are interval folds at worst-case windows
+       through 30 or more layers and cannot be made to bite by more work of this
+       kind: on ResNet-34 the conv fan-in face `m*w'` is 14 to 95 times loose
+       per layer against the measured row-L1 norm, and even at that measured
+       face the training forward would land at 1e19 (scripts/param_row_l1.py;
+       priced and not taken). A bound that bites needs the on-trajectory
+       Jacobian, which is 4c's MEASURED tier and not a static hypothesis. The one
+       non-vacuous number is MobileNetV2's WINDOW, 2154, because relu6 clamps at
+       6 whatever its input; its budget is still 1e96. What the numbers DO
+       certify is the float program's shape: every stage present, at the right
+       fan-in, in the right composition, at the right normalisation mode,
+       kernel-checked; a dropped stage, a misread fan-in or a stale slot fails to
+       compile.
 
-       ⭐⭐ AN IMAGENET-SCALE NUMBER (2026-09-02): `Resnet34FloatBudget.lean` closes
-       the first of those cones. `r34EvalBridge` is the DEPLOYED ResNet-34 inference
-       forward -- the `r34Forward` skeleton with `bnPerChannelEvalTensor3` at all 33
-       BN sites, the op `SHlo.bnPerChannelEvalF` denotes and hence the R semantics of
-       every BN line of the committed `@resnet34_fwd_eval` render -- as a CLOSED
-       bridge with no `FloatBridgesTo` hypotheses left. `r34EvalBridge_maps` pushes a
-       numeric envelope through its 90 numeric stages (180 rational inequalities,
-       generated and re-asserted by `scripts/float_budget_envelope.py`, whose CIFAR-8
-       regression case reproduces the fold above), so at the profile measured on the
-       79-epoch ImageNet checkpoint (every stored parameter `|.| <= 21/10`; global max
-       2.0741), `eps >= 1e-5`, unit input window and `u <= 2^-24`:
-           output window  <= 3.152e211     (r34EvalBridge_mag_le)
-           fresh budget   <= 1.548e209     (r34EvalBridge_fresh_le)
-       and per logit `|float - real| <= 1.548e209` (`r34_float_logits_le`). That is
-       4.9e-3 of the certified window -- the CIFAR-8 relative scale at 34 layers --
-       and vacuous against logits of ~3.6 by 209 orders. The adjoint chain's proven-H
-       budget for this net is 6.5e51 (`scripts/adjoint_chain_probe.py` §5, exact
-       data-dependent `dot_close` coefficients at the measured operating profile); the
-       157 orders between them are the documented gaps, the uniform `m*w'*A` face of
-       `layerBudget` and worst-case rather than measured windows.
-
-       ONE hypothesis carries it, named: the deployed inverse-stddev is a device
-       `rsqrt` with no IEEE specification, so `DeviceRsqrt eps es` supplies it with an
-       accuracy (`es = 1e-2` at the headline) exactly as EfficientNet's sigmoid
-       carries `esig`. The TIE is closed at the graph -- `ResNet34RenderPCEval.lean`
-       adds the eval twin of `resnet34FwdGraphFullPC_faithful`, so
-       `den (resnet34FwdGraphFullPCEval ...) = resnet34Forward_full_pc_eval ...`;
-       `r34EvalForward_eq_full_pc_eval` is a rfl onto that net and
-       `r34EvalGraph_faithful` composes the two, so the typed graph every line of
-       `@resnet34_fwd_eval` renders denotes the forward the number bounds
-       (`r34_float_logits_le_committed` states it with that net on the real side).
-       The TRAINING-mode net has the same standing structurally and
-       cannot have this FOLD: `bnReluBudget` carries the mean-and-variance shift
-       `G*2A*(8A*e/(2*eps*sqrt eps))`, QUADRATIC in the window, so the same fold
-       squares at each of the 36 BN sites and lands at ~1e7419 -- past the point where
-       `norm_num` will evaluate the numeral at all. Inference BN has no reduction, is
-       affine in `x`, and its modulus is linear. So the BN mode is not a choice about
-       tightness; it decides whether the FOLD exists.
-       ⛔⛔ It does NOT decide whether a THEOREM exists, and this entry said for two
-       days that it did. 1e7419 is the FOLD's numeral; the same measurement puts the
-       training-mode WINDOW at 1e221, and `FloatBridgesTo.capped` bounds any modulus by
-       `2*mag`, so a statable window is already a statable theorem. That theorem is
-       `r34_train_float_logits_le` below -- 4.304e145 / 8.605e145, a CAP and not a fold,
-       about the net this repo actually trains. The miss is a recurring shape: `capped`
-       was written for LayerNorm, which has the same quadratic and no eval mode, and was
-       never tried on BatchNorm, whose problem it describes -- because BatchNorm HAS an
-       eval mode, which made the cap look unnecessary, and because the sentence above
-       stopped anyone re-checking.
-       (`BnEvalRuntimeFloatBridge.lean` also corrects `BnEvalFloatBridge.lean`'s
-       premise: the renderer does NOT pre-fold the affine, it emits six runtime ops
-       including `stablehlo.rsqrt`, so the pre-folded affine models a kernel we do not
-       ship.)
-
-       ⛔⛔ THE TRAINING-MODE FORWARD, AND IT IS THE CAP (2026-09-05):
-       `Resnet34TrainFloatBudget.lean` states the number the paragraph above said did
-       not exist. `r34TrainBridge` is the same [3,4,6,3] skeleton with
-       `bnPerChannelTensor3` -- training-mode, statistics reduced out of the layer's own
-       input -- at all 36 BN sites, closed, with each BN slot carrying
-       `FloatBridgesTo.capped`. `r34TrainBridge_maps` pushes the envelope through the
-       same 90 numeric stages (180 rational inequalities, generated AND re-asserted by
-       `scripts/float_budget_envelope.py`'s `r34_train_chain(lin = True, cap = 'force')` /
-       `verify_r34_train(lin = True)` before emission). At the same measured 79-epoch
-       profile, `eps >= 1e-5`, unit input window and `u <= 2^-24`:
-           output window  <= 4.304e145     (r34TrainBridge_mag_le)
-           error bound    <= 8.605e145     (r34TrainBridge_fresh_le)
-       and per logit `|float - real| <= 8.605e145` (`r34_train_float_logits_le`), tied
-       to the committed `resnet34Forward_full_pc` by `r34TrainForward_eq_full_pc` (rfl)
-       and to its rendered graph by `r34TrainGraph_faithful`, and restated on that net
-       by `r34_train_float_logits_le_committed`.
-
-       ⛔⛔ WHAT KIND OF STATEMENT THIS IS, because it is not the same kind as the two
-       above it. `budget / window = 2.00` is the tell. Every one of the 36 BN sites goes
-       through `Maps.bnPerChannelTensor3CappedX`, whose error clause is `2*A' <= E'` and
-       mentions neither the inherited error nor `eps`, so what is proved is "the float
-       and the real forward both land in the certified window" -- the TRIANGLE
-       INEQUALITY -- and not "the rounding error folds to this", which is what
-       `r34_float_logits_le` says about the inference net. The two must never be tabled
-       together without that label. This is the same kind of number as
-       `cnx_float_logits_le` and `vit_float_logits_le` and for the same underlying
-       reason (a normalisation that reduces out of its own input), with the difference
-       that BatchNorm also has an eval mode in which the fold DOES exist.
-
-       ⭐⭐ WHY IT IS WORTH HAVING ANYWAY: it is the first statement in this repo about
-       the program the repo actually TRAINS with. The six committed forward numbers are
-       all at inference normalisation -- a program that is run, but not the one the
-       input-gradient numbers of `Resnet34BackFloatBudget.lean` and its three peers are
-       taken through. Those backwards supply the saved activations' accuracies
-       (`es`/`exh` at 1e-2) as HYPOTHESES precisely because the training-mode forward had
-       nothing to say; it now has something, and what it has is a cap.
-
-       ⭐ WHAT IS MODELLED, and it is one more thing than the inference number models.
-       Inference BN freezes `mu` and `v` and supplies only the device `rsqrt`'s accuracy.
-       Training-mode BN reduces BOTH statistics out of its own input, so both are device
-       kernels and both are supplied: the batch mean accurate to `emr*A` -- RELATIVE to
-       the layer's window, which is the shape a rounded mean of `n` terms actually has --
-       and the inverse stddev accurate to `ei` absolutely, the `DeviceRsqrt` standing.
-       ⚠ `emr = 1e-2` is taken by analogy with the other device accuracies in this tier
-       and is loose: the rounded mean of `n` terms is `gamma_n*A`, which at `n = 12544`
-       and `u = 2^-24` is about 7.5e-4.
-
-       ⭐ NO OPERATING POINT. The number is at the unconditional eps-floor
-       `|istd| <= 317`, like the inference number and unlike
-       `Resnet34BackFloatBudget.lean`'s `|istd| <= 16`: the chain's largest goals closed
-       at 1e221 with 32 orders of headroom under `norm_num`'s shape-dependent ceiling
-       before escape 2 and leave 108 after it, so the hypothesis was measured to be
-       unnecessary rather than assumed to be. `verify_r34_train` separately asserts that
-       the cap is the SMALLER branch at all 36 sites, so "it is the cap" is measured too.
-
-       ⭐⭐ ESCAPE 2 AT THE PER-CHANNEL BATCHNORM (2026-09-05) -- 76 orders, and the
-       largest single number this file has moved: 3.176e221 / 6.349e221 ->
-       4.304e145 / 8.605e145, at NO new hypothesis, no modelling change and no new
-       mathematics. It is the leaf that landed the day before for the two LayerNorm nets
-       (`floatClose_bnX`, |x-hat| <= sqrt(n) from `bnXhat_sq_le`) carried through
-       `BnPerChannelFloatBridge.lean`'s rungs 2 and 3 and then capped:
-       `floatBridgesTo_bnPerChannelFlatX` / `_bnPerChannelTensor3X` /
-       `Maps.bnPerChannelTensor3CappedX` (`BnXhatFloatBridge.lean`). Both rungs are
-       repackages -- `FloatClose.perRowIdx` lifts any per-row `FloatClose` and the two
-       layout gathers are magnitude-stable with modulus `id`, so the composite's mag/mod
-       collapse definitionally, exactly as they do for the shipped leaf.
-       ⭐ r34's reduction widths `h*w` are PERFECT SQUARES (112^2, 56^2, 28^2, 14^2, 7^2),
-       so `Xh` is the EXACT root and nothing is lost -- where ConvNeXt's channel counts
-       96/192/384/768 all need the ceiling one. ⛔ That stops being true at batch `N > 1`,
-       where a training-mode BN site reduces over `N*h*w`: this number is per-example, and
-       `R34TrainBn`'s `hmXh` field is what says so.
-       ⛔ The affine sits INSIDE this leaf and OUTSIDE a LayerNorm net's --
-       `bnPerChannelTensor3` lifts `bnForward eps gamma beta`, where ConvNeXt and ViT
-       compose the pure-normalise leaf and then `Maps.diagBack` + `Maps.biasAdd`. The two
-       spellings differ by `u*Bbnd` per site; the probe's r34 chain was corrected to assert
-       the one the proof asserts.
-       ⛔ IT DOES NOT CHANGE THE KIND, and the measurement says so rather than the
-       argument: uncapped at the new leaf the same chain is 3.494e4993 -- escape 2's window
-       half is worth 2426 orders on the FOLD too (1e7419 -> 1e4993) and leaves it 4740 past
-       `norm_num`'s ceiling anyway. The quadratic shrinks with the window it is quadratic in
-       and still does not fit.
-       ⭐ And the force-the-cap trap that fires on both LayerNorm nets does NOT fire here.
-       There, escape 2 improved the fold enough that `min(mod, 2*mag)` started selecting the
-       fold at shallow sites while `Maps.bnCappedX` asserts `2*A' <= E'` unconditionally.
-       Here only the WINDOW moved, so the modulus is the shipped `bnReluBudget` throughout --
-       1.4e11 at the stem against the cap's 4.6e3 -- and `verify_r34_train` re-asserts that
-       the cap is the smaller branch at all 36 sites under escape 2 as well.
-
-       ⭐⭐ A SECOND ONE, AND A NON-VACUOUS WINDOW (2026-09-03):
-       `MobileNetV2FloatBudget.lean` closes the mnv2 cone the same way.
-       `mnv2EvalBridge` is the deployed 6-block inverted-residual forward with
-       `bnPerChannelEvalTensor3` at all 20 BN sites, closed (no `FloatBridgesTo`
-       hypotheses), and `mnv2EvalBridge_maps` pushes the envelope through its 60
-       numeric stages (116 rational inequalities, generated AND re-asserted by
-       `scripts/float_budget_envelope.py`'s `mnv2_eval_chain` / `verify_mnv2` before
-       emission). At the profile measured on the 350-epoch checkpoint (every stored
-       parameter `|.| <= 28/10`; global max 2.7157), `eps >= 1e-5`, unit input window
-       and `u <= 2^-24`:
-           output window  <= 2.154e3       (mnv2EvalBridge_mag_le)
-           fresh budget   <= 1.444e96      (mnv2EvalBridge_fresh_le)
-       and per logit `|float - real| <= 1.444e96` (`mnv2_float_logits_le`), tied to
-       the committed net through `MobileNetV2RenderPCEval.lean`'s
-       `mobilenetv2FwdGraphFullPCEval_faithful` +
-       `mnv2EvalForward_eq_full_pc_eval` (rfl) + `mnv2EvalGraph_faithful`, and
-       restated on it by `mnv2_float_logits_le_committed`. Same one modelled
-       hypothesis (`DeviceRsqrt`, shared with the r34 file -- the same device kernel,
-       so not a second assumption), same 3-axiom closure.
-
-       WHAT IS NEW is the WINDOW. ResNet-34's is 3.152e211 against logits of a few;
-       this one is 2154. The whole difference is one lemma: `relu6 x i =
-       min (max (x i) 0) 6` is bounded by 6 WHATEVER its input, so `floatClose_relu6`
-       states `FloatClose A (min A 6)` (it previously stated `FloatClose A A`, throwing
-       the clamp away) and `Maps.relu6` resets the certified magnitude at each of the
-       net's 13 relu6 sites. Folded without the clamp this net's window is 4.309e100
-       (`mnv2_eval_chain(relu6_clamp := False)`). ResNet-34 cannot have this -- plain
-       `relu` has no upper clamp and `FloatClose A A` is the best it can do. ⚠ AND THE
-       BUDGET BARELY MOVES: 3.072e97 -> 1.444e96, one order. Error gain per stage does
-       not care how small the window is; it is `G*S` per BN site with `S = 1/sqrt eps
-       <= 317` at the eps-floor, and sweeping S over the same fold gives
-       1e96/1e77/1e60/1e48 at S = 317/32/4/1, ~19 orders per decade across the 20 BN
-       sites. So WINDOW AND BUDGET ARE SEPARATE LEVERS: the clamp is worth 97 orders of
-       window and one of budget, and only an operating-point variance floor moves the
-       budget. The adjoint chain's proven-H figure for this net is 2.7e60, so this fold
-       sits ~36 orders above it rather than r34's 157 -- the clamped window removes the
-       window looseness and leaves only the gain looseness. The number is still the
-       interval fold and still vacuous as a certificate; the window half of it is not.
-
-       ⭐⭐ A THIRD, AND THE FIRST WHERE THE BLOCKER WAS NOT THE ARCHITECTURE (2026-09-03):
-       `EfficientNetFloatBudget.lean`. `b0EvalBridge` is the deployed batched EfficientNet-B0
-       inference forward -- stem, MBConv1(no-expand, SE), MBConv6(stride-2, SE),
-       MBConv6(5x5, SE, residual), head -- closed, with `b0EvalBridge_maps` pushing the envelope
-       through 96 rational inequalities (generated AND re-asserted by
-       `scripts/float_budget_envelope.py`'s `b0_eval_chain` / `verify_b0`). At the profile
-       measured on the 350-epoch checkpoint (every stored parameter `|.| <= 41/10`; global max
-       4.0545 over 5,288,548 f32), `eps >= 1e-5`, `u <= 2^-24`:
-           output window  <= 2.580e55       (b0EvalBridge_mag_le)
-           fresh budget   <= 8.408e210      (b0EvalBridge_fresh_le)
-       and per logit `|float - real| <= 8.408e210` (`b0_float_logits_le`) -- for ANY batch size
-       N > 0, because at inference every stage of this net is `batchMap N` of a per-example op
-       (`bnBatchLA` is the only op that reduces across examples, and frozen statistics do not
-       reduce; `den_batchOp_bnEval`). Tied to the committed net through
-       `EfficientNetRenderPCEval.lean`'s `efficientnetFwdGraphBEval_faithful` +
-       `b0EvalForward_eq_forwardBEval` + `b0EvalGraph_faithful`, and restated on it by
-       `b0_float_logits_le_committed`. Two modelled hypotheses, both named: `DeviceRsqrt` (shared
-       with the r34 file) and `DeviceSigmoid` -- neither kernel has an IEEE specification.
-
-       ⛔ WHAT IS DIFFERENT ABOUT THIS ONE: the first honest fold came out at window 1e1717 and
-       budget 1e4179, past what `norm_num` will evaluate, and the cause was NOT the BN mode (the
-       fold was already at inference BN) nor the architecture. Two LEAF bounds did it, and both
-       were bounds proved one lemma down and discarded by a generic combinator -- the same shape
-       as MobileNetV2's unused relu6 clamp:
-         (a) `floatClose_swish`'s modulus was `mulErr + (1 + A/4)*e`, multiplying the inherited
-             error by the WINDOW at each of nine swish sites. Bounding |sigma a - sigma b| by the
-             gate's own range (<= 1) instead of by (1/4)|a-b| gives `A + |a-b|`, additive in the
-             window (`swishScalar_lipschitz_abs'`); the modulus is now the min of the two.
-         (b) `floatClose_seScale`'s window was derived as |float - real| + |real|, charging
-             `A * Lg 0` -- the block window times the GATE'S error -- to the magnitude.
-             `FloatClose`'s magnitude clause bounds the float gate too, so it is `A*Bg*(1+u)`.
-       Ablated at the measured profile: both as they stood 1e1717/1e4179 (not statable), swish
-       fixed only 1e211/1e212, seScale fixed only 1e55/1e799 (not statable), both fixed
-       1e55/1e211. The lesson generalises past this net: when a whole-net fold overshoots, ablate
-       the LEAVES in the generator before concluding anything about the architecture.
-
-       ⭐ AND (a)'s PARENTHESIS WAS THE NEXT BLOCKER (2026-09-04). The note beside it said the
-       true global Lipschitz constant of x*sigma(x) is ~1.1 and "getting THAT needs the decay of
-       sigma', i.e. calculus" -- true of the SHARP constant, and it stopped anyone deriving a
-       CRUDE one for a month. `swishScalarDeriv_abs_le` (Architectures/SwishSaturation.lean)
-       proves |swish'| <= 2 globally in three elementary steps: sigma <= 1, sigma'(x) <=
-       exp(-|x|) by a case split on the sign of x, and |x|exp(-|x|) <= 1 off
-       Real.add_one_le_exp. It is the bound B0's BACKWARD diagBack slots take as their Ssw
-       (the only prior one being (a)'s `1 + A/4` at the forward's certified window, 1.216e51 at
-       the head alone), and it moves efficientnetInputGradB's fold from 1e431 -- past norm_num's
-       ceiling, no theorem statable -- to 7.640e169. ⛔ Its mean-value corollary
-       `swishScalar_lipschitz` (swish is globally 2-Lipschitz) beats BOTH of (a)'s branches and is
-       worth 8 orders on this FORWARD (8.408e210 -> 3.679e202); it is deliberately NOT wired into
-       `floatClose_swish`, because that moves `b0_float_logits_le` and is its own commit.
-
-       ⚠ AND A THIRD QUADRATIC SITE. Squeeze-excite's modulus `mulErr q A Cg E Eg` carries
-       `A * Eg` -- the block window times the gate error -- and the gate grows that error out of
-       the same window through the squeeze's `GAP -> dense`. So SE is quadratic in the window for
-       the same structural reason training-mode BatchNorm and LayerNorm are, and each of B0's
-       three SE sites roughly DOUBLES the budget's exponent (1e25 -> 1e83 -> 1e199). B0 survives
-       three; twenty would end it the way r34's 33 training-BN sites end its training-mode fold.
-       The question to ask of a new architecture is therefore not "does it normalise" but "does
-       any op consume a reduction of its own input and then multiply by that input".
-
-       ⛔⛔ A FOURTH, AND A DIFFERENT KIND OF STATEMENT (2026-09-03):
-       `ConvNeXtFloatBudget.lean`. `cnxBridge` is the committed channel-LayerNorm ConvNeXt-T
-       forward -- 4x4/s4 patchify stem, 18 blocks of depthwise 7x7 / channel-LN / 1x1 expand /
-       GELU / 1x1 project / layer scale / skip, three LN+2x2/s2 downsamples, GAP, head LayerNorm,
-       classifier -- as a CLOSED bridge, and `cnxBridge_maps` pushes the envelope through its 183
-       numeric stages (366 rational inequalities, generated AND re-asserted by
-       `scripts/float_budget_envelope.py`'s `cnx_eval_chain` / `verify_cnx`). At the profile
-       measured on the finished 300-epoch checkpoint, `eps >= 1e-5`, unit input window and
-       `u <= 2^-24`:
-           output window  <= 6.609e174      (cnxBridge_mag_le)
-           fresh budget   <= 1.321e175      (cnxBridge_fresh_le)
-       ⭐⭐ ESCAPE 2, WINDOW HALF (2026-09-05) -- 53 orders on ConvNeXt-T, 57 on
-       ViT-Tiny and (the same day, at the per-channel BatchNorm) 76 on ResNet-34's
-       training-mode forward, all at NO new hypothesis and no new mathematics. `floatClose_bn` charged the
-       certified window at `|x-mu| * |istd| <= D * S`, the product of the two factors' own
-       bounds; the normalised activation has a bound of its own that mentions neither,
-       `x-hat^2 <= n` (`bnXhat_sq_le`), which four whole-net BACKWARD budget files have used
-       since 2026-09-03 and which the FORWARD leaf simply threw away.
-       `BnXhatFloatBridge.lean` restates the leaf at it: `floatClose_bnX` / `Maps.bnCappedX`,
-       with `Xh` the CEILING root of the reduction width (10/14/20/28 for ConvNeXt's channel
-       counts, 14 for ViT's D = 192) since sqrt is irrational at all of them. TWO places
-       charged the window and both are fixed -- the real output's magnitude, and (subtler) the
-       ROUNDING of the float product, which `bnNormBudget` bounds by `(D+ea)*(S+ei)` when that
-       product IS the normalised activation one rounding away. That second one is
-       `floatClose_seScale`'s fix (4d, EfficientNet-B0) and `mhpB`'s (4d, ViT) at a THIRD leaf:
-       when a window contains an error term, ask why. `FloatModel.mul_close_at` is the
-       mechanism -- a rounded product whose ROUNDING is charged at the real product's own
-       bound. `Xh` is a constant of the reduction width, so it enters no profile and does not
-       track the window.
-           ConvNeXt-T  4.858e227 / 9.706e227  ->  6.609e174 / 1.321e175
-           ViT-Tiny    3.612e218 / 7.222e218  ->  1.130e161 / 2.259e161
-           r34 @ train 3.176e221 / 6.349e221  ->  4.304e145 / 8.605e145
-       and then DERIVING the device MEAN's accuracy (below) took all three further still:
-           ConvNeXt-T  6.609e174 / 1.321e175  ->  4.871e130 / 9.738e130   (44 orders)
-           ViT-Tiny    1.130e161 / 2.259e161  ->  2.397e108 / 4.794e108   (53)
-           r34 @ train 4.304e145 / 8.605e145  ->   8.748e80 /  1.752e81   (65)
-       The r34 row is the same leaf at a different conjugation -- lifted per channel by
-       `FloatClose.perRowIdx` and conjugated by the two layout gathers, i.e.
-       `BnPerChannelFloatBridge.lean`'s rungs 2 and 3, both repackages. It is the largest
-       single number escape 2 moved, and unlike the two above it the root is EXACT.
-       ⛔ IT DOES NOT CHANGE THE KIND. Both numbers are still `FloatBridgesTo.capped`, still
-       `budget/window = 2.00`, still the triangle inequality. Escape 2 has a MODULUS half too
-       (`2e*S*(1+Xh)`, free of the window) and it is deliberately NOT taken: it is worth 5006
-       orders on ConvNeXt's UNCAPPED fold and NOTHING to either shipped statement, because both
-       are capped and the fold stays above the cap -- 82 orders above on ConvNeXt-T, 7 on
-       ViT-Tiny. Taking it would need the reverse triangle inequality for the euclidean norm
-       over `Vec n` and `s -> sqrt(s^2+eps)` being 1-Lipschitz, neither of which the float tier
-       uses. Priced, measured, declined.
-       ⭐ And it sharpens 4d's "the cap is the better bound, not a shortcut": uncapped at this
-       leaf ConvNeXt's fold is 2.823e256 (3 orders past norm_num's shape-dependent ~1e253 wall)
-       and 4.710e226 at an operating point |istd| <= 16 -- statable, and 80 orders WORSE than
-       the capped number above. The fold exists and is worse; that is a claim about magnitudes,
-       not about LayerNorm.
-       ⭐⭐ THE DEVICE MEAN'S ACCURACY, DERIVED (2026-09-05) -- 44 orders on ConvNeXt-T, 53 on
-       ViT-Tiny and 65 on ResNet-34's training-mode forward, and it is a MODELLING correction
-       rather than a tighter constant. Every normalisation number in this file supplied
-       `emr = 1e-2`, the device batch/layer MEAN's accuracy relative to the window, by analogy
-       with the device `rsqrt`. The analogy is false: a GPU `rsqrt` genuinely has no IEEE
-       specification, which is why `ei` stays modelled, but a MEAN is a rounded reduction
-       followed by a divide and that plainly has one. `FloatModel.bnMean_close` has proved it
-       since the MNIST work -- §3.3.0(b)'s rule (*before writing a bound, grep the whole cone
-       for it*) for the tenth time.
-       ⛔ THE CATCH, AND IT DECIDES THE SHAPE. `bnMean_close` is stated at `M.sum`, a concrete
-       LEFT FOLD, and no GPU kernel reduces left to right -- so that instance is about a program
-       we do not ship (`BnEvalFloatBridge.lean`'s warning, one tier over).
-       `FloatModel.bnMean_close_of` is the same proof with ONE hypothesis substituted: it takes
-       any `fsum` whose forward error meets a fan-in `gamma`, which EVERY summation order does --
-       sequential is the worst at `(1+u)^{n+1}-1` and a tree is `(1+u)^{ceil(log2 n)+1}-1`, so the
-       bound holds a fortiori. `bnMean_num_le` is its numeral form, through `gamma_num`'s
-       `k*u/(1-k*u)` and one more round-up, because a record has to carry a rational and not an
-       expression in `M.u`.
-       ⭐ The constants are then computed from the width alone: 3.041e-9 at 7x7 up to 7.484e-4 at
-       112x112 for ResNet-34's five BatchNorm widths, 4.590e-5 at ConvNeXt-T's widest LayerNorm
-       (c = 768), 1.157e-5 at ViT-Tiny's D = 192. `r34TrainBn_emr_committed` and
-       `deviceLN_emr_committed` prove a rounded reduction achieves each committed numeral, so
-       they are DERIVED and not chosen. The theorems still QUANTIFY over any device mean at least
-       that accurate, which is the shape `DeviceRsqrt` has always had and is strictly stronger
-       than fixing one kernel.
-       ⛔ PER SITE on ResNet-34, UNIFORM AT THE WIDEST on the two LayerNorm nets. r34's `emr`
-       moved into the record's type beside `Xh` (five numerals), because folding its five widths
-       uniformly at 112x112 throws most of the 65 orders away. `DeviceLN` keeps one `emr`: that
-       costs ConvNeXt-T 2 orders (4.871e130 against a per-width 1.727e128) and ViT-Tiny NOTHING,
-       since all 25 of its LayerNorm sites reduce over the same D = 192 -- and per-width would
-       make `DeviceLN`'s `emr` a `Nat -> R` that two committed budget files elaborate against and
-       that 366 + 324 `norm_num` goals must reduce. Priced, measured, declined.
-       ⚠ `ei` -- the device inverse-stddev, still 1e-2 absolute -- is now the LOOSE one by four
-       orders, and §3.27 finding 4's `emr*S < 1` reset condition is met (0.0019 at the eps-floor)
-       without the window resetting, because `ea*S = emr*A*S` stays proportional to the window
-       however small `emr` gets. A true reset needs `A*S` bounded, which is a new kind of
-       operating point and is not taken.
-       ⭐⭐ AND WHERE THE SIZE GOES AFTERWARDS: with `emr` derived the normalisation sites shrink
-       and the whole remaining growth is the CONV FAN-IN -- `layerBudget`'s uniform `m*w'*A` face,
-       one of the two documented gaps to the adjoint chain (4d's own r34 paragraph), shared with
-       every number in this file including the four backwards, and never attacked.
-       ⭐⭐ MEASURED 2026-09-05 (`scripts/param_row_l1.py`, planning §3.34) and it is the biggest
-       lever left: `layerAct m w beta A = m*w*A + beta` charges the fan-in times the UNIFORM max
-       weight, where the quantity that expression is an upper bound FOR is the output row's L1
-       norm (`|(Wx)_o| <= (sum_i |W[o,i]|)*A`), so substituting the measured `max_o ||W_o||_1` is
-       strictly tighter, still PROVED, and the same KIND of checkpoint fact as `|w| <= 21/10`
-       already is -- no new hypothesis and no modelling change. On ResNet-34's 79-epoch checkpoint
-       the face is 14x loose at the stem and 92-95x at the deepest convs; folded, the TRAINING
-       forward goes 8.748e80 -> 8.409e19 (61 orders) and the INFERENCE forward
-       1.548e209 -> 3.619e146 (63). ⭐ It is the first improvement since the training-mode number
-       landed that moves the INFERENCE numbers -- the four honest FOLDS -- because escape 2 and the
-       derived mean reached only normalisation sites. ⛔ Not taken here: `layerAct`/`layerBudget`
-       are in `FloatBridge.lean` (98 dependent modules), every parameter record gains a row-L1
-       field and eleven committed numbers move, so it is scoped and probed rather than started.
-       ⚠ Only ResNet-34 is measured.
-
-       ⚠ `bnXhat_abs_le_num` moved down from `FloatBudgetEnvBack.lean` (the ResNet-34 BACKWARD
-       kit) into `BnXhatFloatBridge.lean` so a FORWARD leaf need not import the backward cone to
-       reach it -- and so the two tiers cannot drift into two copies, which is the duplicate
-       declaration trap `Cifar8FloatBudget.lean` sat on for two days.
-       ⚠ What survives and is the interesting residue: `D*ei + ea*S`, the DEVICE's two
-       accuracies, stay linear in the window and are what stops a normalisation RESETTING. A
-       site resets iff `emr*S < 1`, which at the eps-floor and `emr = 1e-2` is 3.17, so
-       ConvNeXt's sites still multiply. ⭐ Before buying that with an operating point, question
-       `emr = 1e-2` itself: a rounded mean of n terms is `gamma_n * A`, which at n = 96 and
-       u = 2^-24 is 6e-6. Deriving it rather than supplying it is worth a further 49 orders on
-       ConvNeXt-T and 55 on ViT-Tiny (measured); it costs a `DeviceLN` field changing status,
-       so it is its own commit.
-
-       and per logit `|float - real| <= 1.321e175` (`cnx_float_logits_le`), tied to the committed
-       net by `cnxForward_eq_committed` (= `convNextForwardTCh_eq_skeleton` read backwards) and
-       restated on it by `cnx_float_logits_le_committed`. Three modelled hypotheses, all named:
-       `DeviceLN` (the deployed LayerNorm's mean, relative accuracy `emr`, and its inverse-stddev,
-       absolute accuracy `ei`) and `DeviceGelu` (`egelu`), all at 1e-2.
-
-       ⛔ IT IS NOT A FOLD. `budget / window = 2.00`, and that ratio is the whole caveat: every
-       one of the 23 LayerNorm sites is discharged by `FloatBridgesTo.capped`, whose modulus is
-       `min(fold, 2*mag)`, and the right branch is what closes. So this number says THE FLOAT AND
-       THE REAL FORWARD BOTH LAND IN THE CERTIFIED WINDOW -- the triangle inequality -- where
-       r34's 1.548e209, mnv2's 1.444e96 and B0's 8.408e210 say the rounding error folds to that
-       value. It must not be tabled beside them without the label. It is still worth having: it
-       is a kernel-checked whole-net statement about a LayerNorm net, which nothing else in the
-       repo is, and its WINDOW half is the honest fold.
-
-       ⭐⭐ AND THE CAP IS NOT OPTIONAL. LayerNorm reduces its mean and variance out of its own
-       input, so `bnReluBudget`'s mean-and-variance shift term applies and its modulus is
-       quadratic in the window -- the same structure that makes training-mode BatchNorm
-       unstatable (above). BatchNorm escapes by freezing the statistics, which is exactly why the
-       other three numbers are stated at inference BN. LayerNorm has NO running statistics to
-       freeze: there is no eval-mode variant, no second render to build, and no version of this
-       net whose fold exists. Uncapped, the same chain is 1e11631; `norm_num` refuses numerals
-       past ~1e300. Measured ablation at the committed profile (`cnx_eval_chain`'s three flags):
-       leaves as they stood 1e233/1e11631; saturation-GELU only 1e233/1e5390; LN cap only
-       1e233/1e233; both 1e233/1e233.
-
-       ⭐ TWO THINGS HAD TO BE RIGHT BESIDES THE CAP, and neither was about the architecture.
-         (a) THE PROFILE DOES NOT SPLIT UNIFORMLY. On the 300-epoch checkpoint the conv and dense
-             kernels max at 0.5962 over 28,524,000 entries, the biases and LN beta at 2.9499, the
-             LN gamma at 4.7700 and the layer scale at 8.3766. A single uniform bound is therefore
-             8.4 -- 14x loose on exactly the entries the conv fan-in multiplies -- and that fold
-             lands at 1e301, unstatable. `CnxBlockChBounded` now carries FOUR bounds and the split
-             one lands at 1e227. This is the r34/mnv2/B0 leaf lesson one level up: the looseness
-             was in the INPUT, not in a lemma.
-         (b) THE HEAD LAYERNORM SLOT WAS STALE. `convnextCh_floatBridges{,To}` held `id` there
-             while `convNextForwardTCh_eq_skeleton` had carried `rowLNVecFlat 1 768` since the
-             head LN was restored on 2026-08-30 -- so the whole-net bridges described a net with
-             no head LayerNorm and their docstrings' claim to tie through that lemma was false for
-             four days. Both now take the real head LN and its bridge. Fixing it is also what made
-             the cap sufficient on its own: with `id` in the slot the last block's GELU is never
-             capped again and the fold needs the saturation constant too (1e896 vs 1e230).
-             ⛔ THE BACKWARD PAIR HAD THE SAME SLOT AND WAS NOT FIXED WITH THEM (2026-09-04):
-             `convnextCh_grad_floatBridges{,To}` held `id` in `convnextInputGrad`'s lnBhead, and
-             its docstring JUSTIFIED it -- "the reference's 22 LN sites are 1 stem + 18 block + 3
-             downsample, so there is no head LN to reverse" -- a count that was true before
-             2026-08-30 and that the forward's own docstring already contradicts (23). So the
-             shipped backward reversed a net the repo does not train, for five days, and what
-             forced it out was needing the backward's NUMBER (planning/float_budget_numbers.md
-             3.16). Both backward tiers now take `rowLNVecFlatBack 1 768` / `rowLNVecFlatBackF`,
-             discharged by `floatBridges{,To}_rowLNVecFlatBack`; no new leaves were needed. ⚠ The
-             lesson is not "check slots" but "a COUNT written next to a slot reads as a finding and
-             stops it being re-derived", the twin of the swish cost estimate in 3.9/3.12.
-
-       ⭐ GELU'S MODULUS, tightened on the way (`Architectures/GeluSaturation.lean`, moved out of
-       `Certificates/GeluLipschitz.lean`): `floatClose_gelu` now states the MIN of its magnitude
-       polynomial `(1 + sqrt(2/pi)/2*A*(1+3*0.044715*A^2))*e` -- CUBIC in the window, ~400 at
-       ConvNeXt's magnitudes -- and the global saturation constant `(3/2)*e`, which was already
-       proved in this repo for the adjoint chain and sat one import ABOVE the float bridge that
-       needed it. Same shape as swish's fix, and the same lesson: the bound was already there.
-
-       ⛔⛔ A FIFTH, AND THE CAP AGAIN -- MORE THOROUGHLY (2026-09-03): `ViTFloatBudget.lean`.
-       `vitBridge` is the committed depth-12 vector-LN `vitForwardKV` at 224² -- 16x16/s16 patch
-       embed with CLS token and learned positions, twelve pre-norm blocks of
-       LN / 3-head attention / skip / LN / fc1 / GELU / fc2 / skip, a final per-token LayerNorm,
-       the CLS slice and the classifier -- as a CLOSED bridge, and `vitBridge_maps` pushes the
-       envelope through its 162 numeric stages (324 rational inequalities, generated AND
-       re-asserted by `scripts/float_budget_envelope.py`'s `vit_chain` / `verify_vit`). At the
-       profile measured per parameter KIND on the trained checkpoint, `eps >= 1e-5`, unit input
-       window and `u <= 2^-24`:
-           output window  <= 1.130e161      (vitBridge_mag_le)
-           fresh budget   <= 2.259e161      (vitBridge_fresh_le)
-       and per logit `|float - real| <= 2.259e161` (`vit_float_logits_le`), restated on the
-       committed spec's denotation by `vit_float_logits_le_committed` (`vitVerified_denote_eq`
-       is `rfl`; `vitVerified_fwd_faithful` says the emitted depth-12 multi-head vector-LN graph
-       denotes the same function). FOUR modelled hypotheses, all named: `DeviceLN` (`emr`
-       relative, `ei` absolute), `DeviceGelu` (`egelu`), `DeviceExp` (`eexp` -- ⚠ RELATIVE,
-       because `softmaxF_close` divides one exponential sum by another and only a relative error
-       survives the quotient), all at 1e-2, plus the softmax side condition
-       `smRho u eexp 197 < 1` (= 0.010012, `vit_smRho_lt_one`).
-
-       ⛔ IT IS NOT A FOLD EITHER, and less of one than ConvNeXt-T. `budget / window = 2.00`
-       again, and here BOTH families of site are capped: all 25 LayerNorm sites and all 12
-       attention sites, so there is no stage inside a ViT block at which the fold survives and
-       the two skips per block carry that forward. The ONE honest stage is the patch embed
-       (window 232.3 from a unit image, rounding 5.633e-4): it does not reduce, its modulus is
-       linear in the inherited error, and at the net's input that error is 0.
-
-       ⭐⭐ AND THE SECOND CAP IS A DIFFERENT KIND OF NECESSITY -- REPRESENTABILITY, NOT SIZE.
-       LayerNorm uncapped is the ConvNeXt story at 1e3239 (a magnitude failure). Attention is
-       not: `floatBridges_mhProjAttnFull`'s WINDOW is derived as `|real| + |float - real|`, so it
-       carries `smErr`'s `Real.exp (2*delta)` at `delta ≈ 3.6e10` by block 0 -- an argument with
-       no rational bound -- and 36 stage numerals CANNOT BE WRITTEN AT ALL, at a magnitude
-       SMALLER than the shipped one (8.257e190 vs the 3.612e218 this number was before escape 2). Capping does not reach it, because
-       `capped` replaces the modulus and never the window. `floatClose_mhProjAttnFullCap` does:
-       `FloatClose`'s magnitude clause bounds the FLOAT output directly, and the float output is
-       a rounded dot of float softmax weights (<= 1 + smCap, exp-free) against float V. That is
-       `floatClose_seScale`'s fix one net later, and the same sentence closes both: the error
-       never needed to enter the window. ⚠ A Python fold HIDES this failure mode -- `math.expm1`
-       overflows to a finite float and the chain sails on -- so `vit_chain` returns an
-       `exp_tainted` tag list and "statable" means small enough AND writable.
-
-       ⭐ ATTENTION IS ONE LEAF, AND SO IS THE PATCH EMBED. `FloatBridgesTo` composes
-       single-input maps; attention fans out (X -> Q,K,V) before it rejoins, and
-       `patchEmbed_flat` is a single definition with an `if n.val = 0` branch selecting the CLS
-       token. Neither is the composition the emitted GRAPH spells, and an earlier probe that
-       decomposed both at graph granularity produced a number (1.065e191) for a chain that
-       cannot be written. The graph says what the kernel does; the definition says what the
-       theorem is about, and only the second constrains a `Maps` chain.
-
-       ⚠ THREE THINGS THE PLAN BUDGETED FOR TURNED OUT NOT TO BE LOAD-BEARING, and they are the
-       inverse of ConvNeXt's lessons. (a) The per-kind profile split buys 18 vacuous orders here,
-       not statability: ViT-Tiny's kinds are 2.5x apart where ConvNeXt's are 14x, because
-       ConvNeXt's outlier is the LAYER SCALE (inside every block) and ViT's is the FINAL
-       LayerNorm gamma (after everything, multiplying only the head) -- the uniform bound is
-       statable at 1e237. (b) GELU's saturation constant gives an IDENTICAL number, because the
-       next capped LN resets the error anyway; `Maps.gelu` stays on the 3/2 branch for a
-       RATIONALITY reason (the polynomial carries sqrt(2/pi)), not a size one. (c) The convex
-       attention-times-V bound would buy 27 orders and is NOT proved and NOT needed.
-
-       ⭐⭐ PHASE 2 OPENS, AND IT REVERSES THE PLAN'S OWN PREMISE (2026-09-03):
-       `Resnet34BackFloatBudget.lean`. `r34_grad_float_le` -- the deployed ResNet-34 whole-net
-       INPUT-GRADIENT VJP is within 6.894e244 of the certified one, per input pixel, on loss
-       cotangents of magnitude <= 1 (which is what softmax cross-entropy gives), certified window
-       8.857e245. 91 numeric stages, 254 rational inequalities, generated AND re-asserted by
-       `scripts/float_budget_envelope.py`'s `r34_back_chain` / `verify_r34_back`.
-
-       ⭐ IT IS THE INTERVAL FOLD -- budget/window = 0.078, not the 2.00 cap ConvNeXt-T's and
-       ViT-Tiny's forwards carry -- AND IT IS AT TRAINING-MODE BATCHNORM, the mode this same
-       net's FORWARD has no statable number for at all (1e7417 above). The plan had recorded
-       "a backward's BN-back modulus inherits the same reduction structure"; it does not. §0.1's
-       quadratic came from the statistics MOVING with the input, and a VJP reads its statistics
-       off the SAVED forward activations, which the cotangent does not perturb. So
-       `floatClose_bnBack`'s modulus is `bnGradInputBudget(A) + bnGradInputReMag(e)` with
-       `bnGradInputReMag n G e S Xh = (1/n)*S*G*e*(2 + Xh^2)` -- LINEAR in the inherited error,
-       because a VJP at a fixed point is a linear map and this is its Lipschitz constant.
-
-       ⛔⛔ THE WALL DOES NOT VANISH, IT RELOCATES -- and this statement quarantines it in three
-       named hypotheses. Two are the saved float activations' accuracies (`es` on the
-       inverse-stddev, `exh` on the normalised x-hat, both 1e-2, as `DeviceRsqrt`'s and
-       `DeviceGelu`'s are elsewhere in this cone) -- ⚠ but unlike those, they are quantities the
-       repo's own forward fold speaks about, and at training-mode BN it says 1e7417, not 1e-2.
-       The third is the OPERATING POINT: `R34BnBack.hS` requires |istd| <= 16 at every site, i.e.
-       sigma >= 1/16 at the saved activations. So the theorem is an honest fold GIVEN a
-       forward-accuracy hypothesis its own forward cannot discharge, AND at an operating point.
-
-       ⭐⭐ THE LOAD-BEARING LEMMA WAS ALREADY IN THE REPO. `bnXhat_sq_le` (|x-hat| <= sqrt(n), the
-       standardisation bound, `Foundation/ResNet34.lean`, written for the realistic-seal work),
-       turned into a rational numeral by `bnXhat_abs_le_num`: `Xh` enters the fold as Xh^2, and
-       deriving it from the FORWARD's certified window (2*A*S) instead gives 1e7271, unstatable.
-       Every place the activations enter an input-gradient they enter NORMALISED or through
-       `istd`, so the backward's fold does not inherit the forward's window at all.
-
-       ⭐ AND THE BUDGET IS HOMOGENEOUS OF DEGREE 1 in the cotangent window -- the same linearity
-       -- which is what makes the numerals checkable: factored as `Cdy * budget(1)`, a site is
-       `A*(Kr+Kb) <= A'` against ONE constant per feature-map size, five for a ResNet-34 instead
-       of sixty-eight forty-node trees. The full chain went from 39 minutes / 41 GB (not
-       finishing) to 84 s / 3.8 GB. ⚠ The FORWARD budgets are NOT homogeneous -- a bias breaks
-       it -- which is why the five forward nets never needed this.
-
-       ⚠ AND A CORRECTION TO AN INFRASTRUCTURE FACT: `norm_num` refuses around 1e253 for a nested
-       arithmetic tree, NOT the ~1e300 recorded elsewhere, and the ceiling depends on the
-       operation TREE rather than the value (the same number closes in a flatter shape).
-       ConvNeXt-T's 1e227 and ViT-Tiny's 1e218 sit under it, which is why five nets landed
-       without meeting it. That is why the operating-point S is needed: it is worth ~43 orders
-       across 36 BatchNorm sites.
-
-       ⭐⭐ THE WHOLE-NET CERTIFIED TIE IS CLOSED (2026-09-03):
-       `r34InputGrad_eq_resnet34_vjp` (`Resnet34BackCertifiedTie.lean`) assembles the per-op ties
-       into `r34InputGrad = (resnet34_has_vjp_at ...).backward` at the full 3x224x224 dims, so
-       the reading is no longer "every piece of this chain is the certified gradient" but "the
-       chain IS the certified whole-net gradient". The blocker recorded here previously --
-       "`resnet34_has_vjp_at` is only concretely instantiated at toy dims" -- was a misreading:
-       that theorem is dimension-generic and parametric in its component maps, and every
-       component witness existed except the stem's (`cbrStridedPC_has_vjp_at`, the strided peer
-       of `convBnReluPC_has_vjp_at`). ⚠ It remains a SMOOTH-POINT statement: the pool's
-       MaxPool3s2Smooth, the stem's post-BN no-zero and the per-block ChainData bundles are
-       hypotheses, as every HasVJPAt in this cone is.
-
-       ⛔⛔ AND CLOSING IT FOUND A DRIFT THAT MOVED THE NUMBER. `r34InputGrad` pooled with
-       `maxPoolFlatBack` -- the 2x2 pool's backward -- while the committed forward
-       `resnet34Forward_full_pc` pools with `maxPool3s2Flat`, He et al.'s 3x3/s2 stem pool
-       (restored 2026-08-03). `MaxPool3s2.lean`'s header warns the two share a TYPE and are
-       different functions; nothing forced the statements to unify until a theorem needed them to
-       be about ONE net. The missing leaf is `MaxPool3s2BackFloatBridge.lean`: 3x3/s2 windows
-       OVERLAP, so an input can be the argmax of up to FOUR outputs and the backward ACCUMULATES
-       -- window 4A where the 2x2 peer is envelope-preserving, plus a rounding term. The number
-       moved 1.458e244 -> 6.894e244. ⚠ The 4 is PROVED from `win3Row_mem_le_two`
-       (`maxPool3s2Back_mask_sum_abs_le`), not assumed: the trivial c*h*w fibre bound puts the
-       fold at 1e251, four orders under the ~1e253 shape-dependent norm_num wall above.
-
-       ⭐⭐ THE SECOND WHOLE-NET BACKWARD NUMBER, AND IT NEEDS NO OPERATING POINT (2026-09-04):
-       `MobileNetV2BackFloatBudget.lean`. `mnv2_grad_float_le` -- the deployed MobileNetV2
-       whole-net INPUT-GRADIENT VJP is within 1.076e152 of the certified one, per input pixel, on
-       loss cotangents of magnitude <= 1, certified window 4.750e153, budget/window = 0.023 (the
-       interval FOLD again, no cap anywhere, at TRAINING-mode BatchNorm). 48 numeric stages, 136
-       rational inequalities, generated AND re-asserted by `mnv2_back_chain` / `verify_mnv2_back`.
-
-       ⭐⭐ WHAT IS NEW IS THE HYPOTHESIS THAT IS ABSENT. r34's third hypothesis -- the operating
-       point |istd| <= 16 -- is not here: `MnvBnBack` has NO inverse-stddev field, and
-       `MnvBnBack.hS` DERIVES |istd| <= 317 from eps >= 1e-5 alone (`bnIstd_abs_le_of`, the
-       rational form of `bnIstd_abs_le`'s 1/sqrt(eps)). It is affordable because the fold lands at
-       1e153 where r34's at the same eps-floor is 1e288, past the ~1e253 norm_num wall. Two
-       structural reasons, both measured: 20 BatchNorm sites against 33, and the inverted
-       residual's backward fan-ins are the 1x1s (24..256) and the DEPTHWISE's 9, where r34's are
-       512*9. So this is the first whole-net backward statement in the repo with nothing supplied
-       but `es`/`exh` -- which ARE still supplied at 1e-2, and are still what the forward's own
-       training-mode fold cannot discharge. §0.1's wall is a fact about COMPOSING a backward with
-       the forward that feeds it, not about backwards.
-
-       ⭐⭐ AND THE WHOLE-NET CERTIFIED TIE FOLLOWED THE SAME DAY:
-       `mnv2InputGrad_eq_mobilenetv2_vjp` (`Foundation/MobileNetV2WholeBackCertifiedTie.lean`,
-       ~2 s) — `mnv2InputGrad`, every slot pinned to the certified per-op backward, IS
-       `(mobilenetv2PC_has_vjp_at ...).backward`, so the reading of `mnv2_grad_float_le` is "the
-       chain IS the certified whole-net gradient" and not only "every piece of it is". Two pieces
-       were genuinely missing: the STEM's certified VJP `convStridedBnRelu6PC_has_vjp_at` (the repo
-       had strided-conv-with-relu, r34's, and non-strided relu6, but not the corner) and the
-       stem/head leaf ties; the apex `mobilenetv2PC_has_vjp_at` is nine `vjp_comp_diff_at`s, with
-       no `ChainData` list and no downsample slot, because MobileNetV2's skips live INSIDE the
-       block maps and its stride changes inside the strided bodies.
-
-       ⭐⭐ NO DRIFT WAS FOUND, and that is the result. Closing r34's tie found `r34InputGrad`
-       reversing the 2x2 pool while the committed forward pools 3x3/s2, and moved that number 4x.
-       This one went through against `mnv2InputGrad` exactly as committed, so 4.750e153 / 1.076e152
-       stand unchanged. ⛔ A tie that finds nothing is the only way to know the number was about
-       the net it claimed to be about.
-
-       ⭐⭐ AND THIS FILE WAS FIRST TO CARRY THE SHAPE CHECK:
-       `mobilenetv2Forward_full_pc_eq_chain`, a `rfl` saying the ten-stage chain the apex is
-       instantiated at IS the committed forward, block slot by block slot. Every whole-net tie takes
-       its blocks OPAQUE, so the apex's subject is a chain of VARIABLES and nothing in the tie
-       otherwise says which net those variables are — which is exactly how r34's wrong pool
-       survived a month, with "the same net as the tie" living in a docstring. ✅ All three nets
-       now have one: `convNextForwardTCh_eq_chain` had it before anyone needed it, and
-       `resnet34Forward_full_pc_eq_chain` closed the last hole 2026-09-04.
-
-       ⚠ r34's is the one that is NOT a bare `rfl`, and the reason generalises. `resnet34_has_vjp_at`
-       groups its [3,4,6,3] runs under `chainComp` where the other two apexes chain one block per
-       slot, and handing the kernel `resnet34Forward_full_pc … = … ∘ chainComp [idFwd e1, idFwd e0]
-       ∘ …` is a deterministic timeout: `Function.comp`'s arguments are compared pairwise, so the
-       kernel tries to align `idFwd e1` (whnf `relu ∘ residual F`) against the `chainComp` node,
-       fails structurally, and falls through to eta-expanding two 18-stage nets. `simp only` with
-       `chainComp_cons`/`Function.comp_assoc` reaches the goal but costs 3-5 MINUTES and unfolds the
-       reducible block bodies on the way; peeling `chainComp` once where the slots are VARIABLES
-       (`chainComp2_comp : chainComp [f,g] ∘ k = f ∘ g ∘ k`, one abstract `rfl`) and then rewriting
-       costs nothing. Same rule as the ConvNeXt apex's applied-position blowup: never let a defeq
-       meet two spellings of one chain in a concrete net.
-
-       ⭐ The only new machinery is two `Maps` leaves, both compositions of existing ones
-       (`FloatBudgetEnvBackMBConv.lean`): `Maps.depthwiseBack` is `Maps.depthwise` at the
-       spatially-reversed kernel and zero bias -- fan-in kH*kW = 9, the kernel window ALONE,
-       because a depthwise conv mixes no channels -- and `Maps.depthwiseStride2Back` is that
-       composed with `Maps.decimateBack`. ⭐ And relu6's clamp, the FORWARD's headline lever here
-       (97 orders of window, `min A 6` at 13 sites), buys the backward NOTHING: its backward is
-       `reluMaskBack`, a 0/1 select, exact in float and envelope-preserving. Window and budget are
-       separate levers on a forward; on a backward the clamp is not a lever at all.
-
-       ⭐⭐ AND THE THIRD WHOLE-NET BACKWARD TIE, ConvNeXt-T's, LANDED 2026-09-04:
-       `convnextInputGrad_eq_convNextForwardTCh_vjp` (`Foundation/ConvNeXtWholeBackCertifiedTie.lean`,
-       17 s). It is the STRONGEST of the three, and the reason is architectural rather than
-       effort: `convNextForwardTCh_has_vjp` is `HasVJP` -- everywhere -- not the smooth-point
-       `HasVJPAt` r34's and mnv2's apexes are, because GELU, LayerNorm, convolution and the layer
-       scale are all smooth and ConvNeXt has no kink anywhere. Its only hypotheses are the 23
-       LayerNorm positivities, so unlike every other whole-net backward tie here it carries no
-       smoothness side-condition. The shape check is present (`convNextForwardTCh_eq_chain`), and
-       no drift was found: the even-kernel defect this tie's own leaf work had already exposed --
-       `convFlatBack` is the adjoint only at an ODD kernel, and ConvNeXt's 4x4/s4 patchify stem and
-       three 2x2/s2 downsamples are the repo's only even ones -- was repaired first, by `padOdd`,
-       which this assembly consumes.
-
-       ⚠ What the assembly cost was ELABORATION, not mathematics, and the diagnosis is worth
-       recording because the obvious one was wrong. The eleven single-level `rfl`s that identify
-       the tactic-built apex with a term-mode `vjp_comp` chain appeared to depend on the IMPORT
-       (fast against a small cone, 103 GB against the full one); measured with `diagnostics` and
-       `Elab.async false` the two cones are indistinguishable (166.23 s vs 165.58 s on the same
-       declaration), and the cost is a COMPUTED DIMENSION IN AN APPLIED POSITION: `cnxDownChW h w`
-       is declared over `Vec (cin*(2h)*(2w))` where the chain spells `Vec (96*56*56)`, and rather
-       than reduce `2*28` the unifier descends into the net's semantics
-       (`conv2d_input_grad_formula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`). One `def` per
-       offending stage, its type ascribed in the chain's spelling, takes the whole chain from
-       non-terminating to 2.9 s. An UNAPPLIED comparison of the same twelve-factor composition is
-       free -- which is the test for which of the two situations one is in.
-
-       ⭐⭐ AND THE NUMBER FOLLOWED THE SAME DAY: `cnx_grad_float_le`
-       (`Float/ConvNeXtBackFloatBudget.lean`, 218 s) -- window 1.023e251, budget 1.563e250, ratio
-       0.153, no `capped` anywhere. It is the THIRD whole-net backward number and the repo's FIRST
-       honest whole-net FOLD for a LayerNorm net, at the net whose own FORWARD number is a 2.00 cap:
-       §0.1's quadratic is a forward fact, because a VJP reads its statistics off the SAVED
-       activations and the cotangent does not perturb them. 137 stages, 322 rational inequalities,
-       generated and re-asserted by cnx_back_chain / verify_cnx_back before a line of Lean.
-       ⭐ Unlike r34's and mnv2's budget files, which define their own *GradR skeleton and tie it
-       afterwards, this one fills the COMMITTED convnextInputGrad's eleven slots, so the tie above
-       makes it a statement about the certified gradient with nothing in between -- and it was free,
-       because convnextInputGrad's composition is right-associated and FloatBridgesTo.comp builds
-       right-associated compositions. ⭐ Four leaf facts carry it and all four predate the need:
-       bnXhat_sq_le at the CHANNEL count (1e5147 without it), geluScalarDeriv_abs_le's global 3/2
-       (1e6330 without it -- and this net's own forward ablation had measured that constant as NOT
-       load-bearing), padOdd's even-kernel repair, and the per-kind profile split (68 orders here,
-       against r34's 8 and mnv2's 4, because the outlier kind is the layer scale and it multiplies
-       inside every block). ⛔ Quote it with its caveat: it does not compose with the forward, and
-       not for r34's reason -- this net's forward statement is `capped`, so the activation accuracy
-       it can supply is 2 x window ~ 1e227, and LayerNorm has no eval mode to switch to.
-
-       ⭐⭐ THE FOURTH WHOLE-NET BACKWARD NUMBER, AND THE SQUEEZE-EXCITE ONE: `b0_grad_float_le`
-       (`Float/EfficientNetBackFloatBudget.lean`, 27 s) -- window 7.104e182, budget 1.578e182,
-       ratio 0.222, no `capped` anywhere, at TRAINING-mode BatchNorm. 59 stages, 138 rational
-       inequalities, generated and re-asserted by b0_back_chain / verify_b0_back before a line of
-       Lean. Squeeze-excite was the reason to doubt that a backward folds at all -- §0.1 lists it
-       as the third site whose FORWARD modulus is quadratic in the window, and its backward fans
-       out and rejoins -- and it is not the counterexample:
-       `seInputGrad g x gateBack = biPathSum (diagBack g) (gateBack . diagBack x)`, where the gate
-       and the SE's input are SAVED CONSTANTS, so both branches are `diagBack` scales of the
-       cotangent and nothing multiplies the cotangent by itself.
-       ⭐⭐ What makes the number EXIST is `swishScalarDeriv_abs_le`'s global `|swish'| <= 2`: the
-       nine swish backward slots take the REAL saved derivative, so the FORWARD's certified window
-       enters nowhere. The repo's only other bound is `swishScalar_lipschitz_abs`'s `1 + A/4` AT
-       that window (1.216e51 at the head alone), and with it the same fold is 1e431 -- past
-       norm_num's ~1e253 shape-dependent ceiling, so there is no theorem. 262 orders, and the
-       crude constant costs 2.6 of them against the unproved sharp one.
-       ⭐⭐ It also assumes NO OPERATING POINT -- the second such backward after MobileNetV2's.
-       `EnetBnBack.hS` derives |istd| <= 317 from eps >= 1e-5 alone, and the eps-floor fold lands
-       70 orders under the ceiling, so an operating point is not a property of backwards but what
-       you pay when the eps-floor fold does not fit (ResNet-34's and ConvNeXt-T's both pay it).
-       ⛔ THE NUMBER IS AT BATCH SIZE N = 1, and that qualifier is load-bearing. `b0_float_logits_le`
-       holds at any N because at INFERENCE every stage is `batchMap N` of a per-example op; this
-       fold is at training-mode BatchNorm, and `bnBatchLA` is the one op in this net that is not of
-       that shape -- it reduces mu/var ACROSS examples, so each site's per-channel width is N*h*w.
-       All nine BatchNorm sites therefore scale with N: 7.104e182 at N = 1, 2.880e194 at N = 256,
-       a fold and statable throughout but a different number per batch size. At N = 1 the batched
-       and per-example widths coincide, which is why the chain is `batchMap 1` of per-example maps.
-       ⛔ es/exh/esav remain supplied at 1e-2 and remain the caveat -- but unlike ConvNeXt-T, B0 HAS
-       an inference mode in which its forward statement is an honest fold, so this is r34's and
-       MobileNetV2's quantitative gap and not a gap in KIND.
-       ⚠ The fold's one remaining forward-window import is the SE's saved input (4.903e40 /
-       5.451e24 / 7.572e9 at b3/b2/b1). An operating point on it is worth a further ~71 orders and
-       is deliberately not taken.
-       ⭐ Like ConvNeXt-T's and unlike r34's and mnv2's, it is stated DIRECTLY on the committed
-       `efficientnetInputGradB`. ⚠ B0's whole-net certified TIE is still open, and it is a bigger
-       job than the forward's was: the apex to aim at is `efficientnetForwardB_has_vjp` (HasVJP
-       everywhere, so no smoothness side-condition) and NOT the 16-block
-       `efficientnetForwardB_full_has_vjp`, and the only existing block tie is stated per-example
-       at scalar `bnForward` where the batched net composes `bnBatchLA`.
+       THE TIES. Three backward chains are proven to BE the certified whole-net
+       VJP, each with a shape check that the opaque-block chain the apex is
+       instantiated at IS the committed forward:
+       `r34InputGrad_eq_resnet34_vjp` with `resnet34Forward_full_pc_eq_chain`
+       (HasVJPAt, smooth point), `mnv2InputGrad_eq_mobilenetv2_vjp` with
+       `mobilenetv2Forward_full_pc_eq_chain` (HasVJPAt), and
+       `convnextInputGrad_eq_convNextForwardTCh_vjp` with
+       `convNextForwardTCh_eq_chain` (HasVJP everywhere; no smoothness
+       side-condition). EfficientNet-B0's tie is open; its shape check
+       `efficientnetForwardB_eq_chain` exists. Closing the ties found drift that
+       no review had: `r34InputGrad` reversed the 2x2 pool where the committed
+       forward pools 3x3/s2 (the number moved 4x); both ConvNeXt bridges held
+       `id` in the head-LayerNorm slot, the backward one justified by a stale
+       count in its docstring; ViT's float cone was stated on scalar LayerNorm
+       affines where the net trains vectors; the float tier's `convFlatBack` is
+       not the adjoint at an even kernel, a defect the emitter had already fixed
+       twice (`padOdd` repairs it); and docstring counts were wrong in a dozen
+       places (36 BatchNorm sites, not 33; 23 LayerNorm sites, not 22). Nothing
+       trained was affected; in every case the emitted program was right and a
+       hand-written spelling of the same map had drifted. A `den` stated as the
+       certified VJP cannot drift; a hand-written peer can, and only a theorem
+       naming both catches it.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
@@ -1283,10 +588,10 @@ fidelity:
        namespace by `LeanMlir/Proofs/Codegen/MatBridge.lean` (`Mat.mulVec_eq`,
        `Mat.transpose_eq`, `Mat.outer_eq`, `Mat.mul_eq`), so a downstream
        consumer can apply Mathlib's matrix algebra to the suite's outputs. The
-       bridge is opt-in by design — the core suite does not import it, keeping
+       bridge is opt-in by design -- the core suite does not import it, keeping
        its import surface Matrix-free unless interop is wanted.
 
-    6. NOT PROVED — empirically validated only: that the nets train to good
+    6. NOT PROVED -- empirically validated only: that the nets train to good
        ImageNet accuracy, that StableHLO/IREE compilation is faithful, that the
        JAX pipeline agrees numerically, and that bf16 doesn't change results.
        These are engineering claims backed by runs and cross-checks, not
@@ -1294,7 +599,7 @@ fidelity:
        fp32 kernels (the theorems are about the E4M3 value grid, the hardware
        has no fp8 units). Note the hardware-model direction has since STRENGTHENED:
        the binary32/E4M3 rounding models are now constructed (`rndP`, standard
-       model proved) rather than axiomatized — the earlier TrustedBridge
+       model proved) rather than axiomatized -- the earlier TrustedBridge
        named-axiom quarantine was retired, keeping the project at zero
        non-core axioms.
 
@@ -1304,7 +609,7 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above, plus a full `#print axioms` sweep of 1393
+    fidelity caveats above, plus a full `#print axioms` sweep of 2005
     declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 52
@@ -1352,29 +657,29 @@ alignment:
       lean: "<net>_net_tied_certified family (e.g. vit_net_tied_certified, all 200 ViT params)"
       module: "LeanMlir/Proofs/*TiePoC.lean"
       status: "proved"
-      note: "genuine backward cotangent, not a free ∀-cotangent; committed-spec ties for all 5 ImageNet nets in SpecVJP"
-    - source: "Binary32 rounding model + whole-net float-error composition"
-      lean: "rndP_err; <net>_floatBridges / <net>_grad_floatBridges; chain_adjointClose; cifar8_chain_argmaxSafe"
-      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/*FloatBridge*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
+      note: "genuine backward cotangent, not a free forall-cotangent; committed-spec ties for all 5 ImageNet nets in SpecVJP"
+    - source: "Binary32 rounding model + whole-net float-error budgets + certified backward ties"
+      lean: "rndP_err; <net>_float_logits_le (7 forwards) and <net>_grad_float_le (4 backwards); r34InputGrad_eq_resnet34_vjp / mnv2InputGrad_eq_mobilenetv2_vjp / convnextInputGrad_eq_convNextForwardTCh_vjp; chain_adjointClose; cifar8_chain_argmaxSafeH"
+      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Float/*FloatBudget.lean, LeanMlir/Proofs/Foundation/*CertifiedTie.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       status: "proved"
-      note: "rounding model CONSTRUCTED (former hardware axioms discharged); capstone: binary32 rounding cannot flip the cifar8 prediction"
+      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the budgets are interval folds, vacuous as numerical certificates, three of them caps (fidelity 4d); the CIFAR-8 argmax certificate does not bite at trained magnitudes (fidelity 4c)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
       module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"
       status: "proved"
-      note: "fixed 100-image subset at fixed ε — honest lower bound (69/100 vs 72/100 PGD bracket)"
-    - source: "Cohen 2019 randomized-smoothing certified radius (incl. the Gaussian Neyman–Pearson core)"
+      note: "fixed 100-image subset at fixed epsilon -- honest lower bound (69/100 vs 72/100 PGD bracket)"
+    - source: "Cohen 2019 randomized-smoothing certified radius (incl. the Gaussian Neyman-Pearson core)"
       lean: "smoothing_certified_radius_classifier via smoothing_probit_lipschitz / stdGaussian_np_shift"
       module: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean"
       status: "proved"
-      note: "end-to-end: quantile inversion, Cameron–Martin shift, rotation-invariance dimension reduction all proved; requires class probabilities in (0,1); the driver's Monte-Carlo estimation gap is not formalized"
-    - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton–Schulz)"
+      note: "end-to-end: quantile inversion, Cameron-Martin shift, rotation-invariance dimension reduction all proved; requires class probabilities in (0,1); the driver's Monte-Carlo estimation gap is not formalized"
+    - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton-Schulz)"
       lean: "muon_polar_steepest, shampoo_eq_muon, muon_polar_nearest_orthogonal + spectral-step lemma"
       module: "LeanMlir/Proofs/Foundation/MuonGeometry.lean, LeanMlir/Proofs/Foundation/MuonNewtonSchulz.lean"
       status: "proved"
-      note: "14 theorems; singular-G SVD completion + Newton–Schulz convergence dynamics left open"
+      note: "14 theorems; singular-G SVD completion + Newton-Schulz convergence dynamics left open"
     - source: "StableHLO/IREE codegen faithfulness, JAX numeric agreement, training accuracy"
-      lean: "(none — empirical)"
+      lean: "(none -- empirical)"
       module: ""
       status: "not-formalized"
       note: "validated by runs + cross-checks, not by theorems"

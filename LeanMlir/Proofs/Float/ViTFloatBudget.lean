@@ -21,7 +21,7 @@ a ViT block at which the interval fold survives, and the two skips per block car
 The statement is *the float and the real forward both land in the certified window* — the
 triangle inequality — where ResNet-34's `1.548·10²⁰⁹`, MobileNetV2's `1.444·10⁹⁶` and
 EfficientNet-B0's `8.408·10²¹⁰` say *the rounding error folds to this*. Do not table it beside
-them without saying so (`planning/float_budget_numbers.md` §9).
+them without saying so (`planning/archive/float_budget_numbers_log.md` §9).
 
 ⭐ **Its one honest stage is the patch embed** (`Maps.patchEmbed`, window `232.3` from a unit
 image, rounding `5.633·10⁻⁴`): it does not reduce, its modulus is linear in the inherited error,

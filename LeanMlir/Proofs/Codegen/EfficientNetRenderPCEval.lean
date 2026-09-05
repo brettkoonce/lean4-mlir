@@ -26,7 +26,7 @@ does not yet have, plus a per-example B0 def to be the witness — worth doing, 
 
 ⚠ **And it is the only BN mode a whole-net float NUMBER can be stated at.** Training-mode BN's
 error modulus is quadratic in the window, so the fold squares at each of this net's ten BN sites
-(`planning/float_budget_numbers.md` §0.1). `EfficientNetFloatBudget.lean` states its number about
+(`planning/archive/float_budget_numbers_log.md` §0.1). `EfficientNetFloatBudget.lean` states its number about
 exactly the forward defined here.
 
 Same rungs as the training file, one for one: the batched stage abbreviations at frozen

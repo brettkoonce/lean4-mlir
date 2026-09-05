@@ -20,7 +20,7 @@ LayerNorm sites goes through `FloatBridgesTo.capped`, whose modulus is `min(fold
 and the right branch is what closes. So this number says *the float and the real forward both
 land in the certified window* — the triangle inequality — where ResNet-34's `1.548·10²⁰⁹`,
 MobileNetV2's `1.444·10⁹⁶` and EfficientNet-B0's `8.408·10²¹⁰` say *the rounding error folds to
-this*. Do not table it beside them without saying so (`planning/float_budget_numbers.md` §9).
+this*. Do not table it beside them without saying so (`planning/archive/float_budget_numbers_log.md` §9).
 
 ⭐⭐ **Why the cap is not optional here.** LayerNorm reduces its mean and variance out of its own
 input, so perturbing the input moves the statistics and `bnReluBudget` carries a term quadratic

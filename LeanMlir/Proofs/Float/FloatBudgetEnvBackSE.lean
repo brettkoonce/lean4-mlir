@@ -13,7 +13,7 @@ With it the EfficientNet-B0 backward cone is closed at the `Maps` tier.
 spatial reduce. Everything else the SE backward needs already existed at both tiers —
 `Maps.diagBack` (the two saved-vector scales, and both `diagBack`s of the product rule),
 `Maps.linBack`, `Maps.gapBack`, `Maps.biPathSum`, `Maps.convBack`, `Maps.depthwiseBack`,
-`Maps.depthwiseStride2Back` and `Maps.batchMap` — which is `planning/float_budget_numbers.md`
+`Maps.depthwiseStride2Back` and `Maps.batchMap` — which is `planning/archive/float_budget_numbers_log.md`
 §3.9's costing holding to the leaf, as §3.13's did for MobileNetV2.
 
 ⛔ **What was NOT already there is the TIER.** `SEBackFloatBridge.lean` carried three

@@ -13,7 +13,7 @@ number in the repo after ResNet-34's (`Resnet34BackFloatBudget.lean`), MobileNet
 at `|W| ≤ 37/10`, BatchNorm `|γ| ≤ 41/10`, `ε ≥ 10⁻⁵`, `u ≤ 2⁻²⁴`, on loss cotangents of
 magnitude `≤ 1` (`|p − y| ≤ 1` for softmax cross-entropy), at **training-mode BatchNorm** — the
 mode this net's own forward has no statable number for at all
-(`planning/float_budget_numbers.md` §0.1). 59 numeric stages, 138 rational inequalities,
+(`planning/archive/float_budget_numbers_log.md` §0.1). 59 numeric stages, 138 rational inequalities,
 generated and re-asserted by `b0_back_chain` / `verify_b0_back` before a line of Lean was written.
 
 **⭐⭐ Two things make this net's backward the interesting one.**

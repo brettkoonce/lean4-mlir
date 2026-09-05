@@ -30,7 +30,7 @@ Two of these leaves are the point of the file:
 * ⛔ `Maps.bnCapped` is the **capped** LayerNorm — `FloatBridgesTo.capped` applied to the
   pure-normalise `floatBridgesTo_bn`. It takes only the WINDOW inequality; the modulus is
   `2·Ā'` by the triangle inequality. That is a weaker claim than a fold and every number built
-  through it must say so (`planning/float_budget_numbers.md` §9). It is here because LayerNorm
+  through it must say so (`planning/archive/float_budget_numbers_log.md` §9). It is here because LayerNorm
   reduces its statistics out of its own input and its modulus is therefore quadratic in the
   window, with no eval-mode escape the way inference BatchNorm has one (§0.1).
 * ⭐ `Maps.gelu` closes through the **`3/2` branch** of `floatClose_gelu`'s `min` — the global
@@ -74,7 +74,7 @@ theorem Maps.perRow (n : Nat) {d : Nat} {f fF : Vec d → Vec d} {b : FloatBridg
     bnForward m ε 1 0` definitionally, so the leaf is `floatBridgesTo_bn` — and its modulus is
     `bnReluBudget`, which carries the training-mode mean-and-variance shift `G·2A·(8A·e/(2ε√ε))`
     and is therefore **quadratic in the window**. LayerNorm has no running statistics, so unlike
-    BatchNorm there is no inference variant to switch to (`planning/float_budget_numbers.md`
+    BatchNorm there is no inference variant to switch to (`planning/archive/float_budget_numbers_log.md`
     §0.1), and the fold squares at every LN site.
 
     `FloatBridgesTo.capped` is the escape: only the window inequality is asserted here, and the
