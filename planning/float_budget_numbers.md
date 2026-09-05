@@ -20,10 +20,10 @@ what to do if one of these files is opened again.
 
 Every row is a theorem in `LeanMlir/Proofs/Float/`, closed over the real leaves (no
 `FloatBridgesTo` hypothesis left), tied to the committed net definition and, for the forwards,
-to the rendered graph — with two exceptions, flagged in the table: the seventeen-block MobileNetV2
-row and the sixteen-block EfficientNet-B0 row tie each of their blocks to the committed inference
-block abbreviations by `rfl` but have no whole-net graph tie, because neither paper net's eval
-twin has a typed graph in Lean. Every numeral
+to the rendered graph — with one exception, flagged in the table: the seventeen-block MobileNetV2
+row ties each of its blocks to the committed inference block abbreviation by `rfl` but has no
+whole-net graph tie, because that paper net's eval twin has no typed graph in Lean (the
+sixteen-block EfficientNet-B0 row has one, `EfficientNetFullB0Eval.lean`, since 3.3(e)). Every numeral
 was produced by `scripts/float_budget_envelope.py` in the leaves' own exact-rational arithmetic,
 re-asserted by that script's `verify_*` pass, and then checked again by the kernel. All are
 3-axiom clean and listed in `tests/AuditAxioms.lean` and `formalization.yaml`
@@ -37,7 +37,7 @@ re-asserted by that script's `verify_*` pass, and then checked again by the kern
 | MobileNetV2 forward | inference BN | 2.154e3 | 1.444e96 | fold | `mnv2_float_logits_le` | `MobileNetV2FloatBudget.lean` |
 | MobileNetV2 forward, 17-block paper | inference BN, 52 sites, capped at every one; blocks tied, no graph tie | 2.152e4 | 8.176e16 | cap | `mnv2Paper_float_logits_le` | `MobileNetV2PaperFloatBudget.lean` |
 | EfficientNet-B0 forward | inference BN, any batch size | 2.580e55 | 8.408e210 | fold | `b0_float_logits_le` | `EfficientNetFloatBudget.lean` |
-| EfficientNet-B0 forward, 16-block paper | inference BN, 49 sites; the sigmoid of each of the 16 SE gates capped, nothing else; blocks tied, no graph tie; any batch size, any class count | 1.886e279 | 2.416e287 | cap | `b0Full_float_logits_le` | `EfficientNetFullFloatBudget.lean` |
+| EfficientNet-B0 forward, 16-block paper | inference BN, 49 sites; the sigmoid of each of the 16 SE gates capped, nothing else; tied to the typed eval graph; any batch size, any class count | 1.886e279 | 2.416e287 | cap | `b0Full_float_logits_le` | `EfficientNetFullFloatBudget.lean` |
 | ConvNeXt-T forward | channel LayerNorm | 4.871e130 | 9.738e130 | cap | `cnx_float_logits_le` | `ConvNeXtFloatBudget.lean` |
 | ViT-Tiny forward | vector LayerNorm, depth 12 | 2.397e108 | 4.794e108 | cap | `vit_float_logits_le` | `ViTFloatBudget.lean` |
 | ResNet-34 backward | training BN, `\|istd\| <= 16` | 8.857e245 | 6.894e244 | fold | `r34_grad_float_le` | `Resnet34BackFloatBudget.lean` |

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.EfficientNetFloatBudget
+import LeanMlir.Proofs.Architectures.EfficientNetFullB0Eval
 
 /-! # A NUMBER for the PAPER EfficientNet-B0: sixteen MBConv blocks, and the cap on the gate
 
@@ -75,13 +76,16 @@ skip — `*_eq_eval` below, dimension-polymorphic). The ladder — which block a
 size, with which skip — is `efficientnetForwardB_full`'s, and the widths are `B0Weights`'s; the
 probe reads both from that file and asserts they agree, block for block.
 
-⛔ What is NOT closed is the whole-net step: `efficientnetForwardB_full` is at TRAINING
-BatchNorm (`bnBatchLA`), the world its VJP and its typed graph live in, and the paper net's
-*eval* twin has no ℝ-def and no typed graph in Lean (`EfficientNetRenderPCEval.lean` covers the
-representative only, and has no `mbExp` eval form at all). So there is no whole-net
-graph-faithfulness theorem here and no `_committed` restatement — the rung
-`EfficientNetFloatBudget.lean` has and this file does not, and the same open rung as
-`MobileNetV2PaperFloatBudget.lean`'s (`planning/proofs_tier_to_paper_nets.md` 3.2(e)).
+**The tie is closed at the graph.** `efficientnetForwardB_full` is at TRAINING BatchNorm, the
+world its VJP and its typed graph live in, so the number could not end there; its eval twin,
+`efficientnetForwardB_fullEval` (`Architectures/EfficientNetFullB0Eval.lean`, 49 frozen-statistic
+sites, the typed graph `efficientnetFwdGraphB_fullEval` and its faithfulness), was built for this
+file. `b0FullEvalForward_eq_fullEval` rewrites the record-bundled forward onto it through the
+per-stage `*Eval_eq_gen` lemmas — NOT one `rfl`, the three-block lesson — `b0FullEvalGraph_faithful`
+carries the graph's faithfulness the rest of the way, and `b0Full_float_logits_le_committed` states
+the number with that net on the real side. The typed graph is the `den`-level form of the shipped
+`efficientnet_fwd_eval.mlir` (312 inputs, THIS net); its SSA names are the three-block eval graph's
+and differ from the artifact's cosmetically (that file's header lists the four ways).
 
 Provenance for the numerals: `scripts/float_budget_envelope.py` (`b0_full_eval_chain`), which
 reads the block table from Lean, folds the envelope in exactly these lemmas' semantics with
@@ -1141,6 +1145,76 @@ theorem b0Full_float_logits_le (N : Nat) (hN : 0 < N) (M : FloatModel) (hMu : M.
     (x : Vec (N * (3 * 224 * 224))) (hx : ∀ k, |x k| ≤ 1) (j : Fin (N * nCls)) :
     |b0FullEvalForwardF N M D Rq W x j - b0FullEvalForward N W ε x j| ≤ 2416 * 10 ^ 284 :=
   (b0FullEvalBridge_maps N hN M hMu hε5 D Rq W).budget_le (by norm_num) le_rfl x hx j
+
+-- ════════════════════════════════════════════════════════════════
+-- § The tie: this IS the committed inference forward, and the graph denotes it
+-- ════════════════════════════════════════════════════════════════
+
+/-- The float-tier MBConv1 record's eval-net view: weights, γ/β and the two frozen statistics. -/
+
+noncomputable def EnetNoExpBlk.toEval {ic oc r kHd kWd : Nat}
+    (B : EnetNoExpBlk ic oc r kHd kWd w' β' G Bb Mb) : MBWNoExpEval ic oc r kHd kWd :=
+  { dW := B.dw.W, db := B.dw.b, dγ := B.bnd.γ, dβ := B.bnd.β, dμ := B.bnd.μ, dv := B.bnd.v
+    z1 := B.se.W₁, zb1 := B.se.b₁, z2 := B.se.W₂, zb2 := B.se.b₂
+    pW := B.pr.W, pb := B.pr.b, pγ := B.bnp.γ, pβ := B.bnp.β, pμ := B.bnp.μ, pv := B.bnp.v }
+
+/-- The float-tier MBConv6 record's eval-net view. -/
+noncomputable def EnetMBBlk.toEval {ic mid oc r kHd kWd : Nat}
+    (B : EnetMBBlk ic mid oc r kHd kWd w' β' G Bb Mb) : MBWEval ic mid oc r kHd kWd :=
+  { eW := B.ex.W, eb := B.ex.b, eγ := B.bne.γ, eβ := B.bne.β, eμ := B.bne.μ, ev := B.bne.v
+    dW := B.dw.W, db := B.dw.b, dγ := B.bnd.γ, dβ := B.bnd.β, dμ := B.bnd.μ, dv := B.bnd.v
+    z1 := B.se.W₁, zb1 := B.se.b₁, z2 := B.se.W₂, zb2 := B.se.b₂
+    pW := B.pr.W, pb := B.pr.b, pγ := B.bnp.γ, pβ := B.bnp.β, pμ := B.bnp.μ, pv := B.bnp.v }
+
+/-- **The record-bundled weights as the eval net's weights** — one shared `ε` is the forward's
+    argument in both, so nothing is lost. -/
+noncomputable def EnetFullWeights.toEval (W : EnetFullWeights nCls w' β' G Bb Mb) :
+    B0WeightsEval nCls :=
+  { sW := W.stem.W, sb := W.stem.b, sγ := W.bns.γ, sβ := W.bns.β, sμ := W.bns.μ, sv := W.bns.v
+    b1 := W.b1.toEval, b2 := W.b2.toEval, b3 := W.b3.toEval, b4 := W.b4.toEval
+    b5 := W.b5.toEval, b6 := W.b6.toEval, b7 := W.b7.toEval, b8 := W.b8.toEval
+    b9 := W.b9.toEval, b10 := W.b10.toEval, b11 := W.b11.toEval, b12 := W.b12.toEval
+    b13 := W.b13.toEval, b14 := W.b14.toEval, b15 := W.b15.toEval, b16 := W.b16.toEval
+    hW := W.hd.W, hb := W.hd.b, hγ := W.bnh.γ, hβ := W.bnh.β, hμ := W.bnh.μ, hv := W.bnh.v
+    fcW := W.head.W, fcb := W.head.b }
+
+/-- **The record-bundled forward IS the committed sixteen-block inference net.** ⚠ NOT one `rfl`:
+    at these dims the kernel times out comparing the two whole nets (the three-block lesson).
+    Rewriting with the per-stage `*Eval_eq_gen` lemmas first leaves nothing to compare — the block
+    wrappers on both sides unfold to the same `*Gen` skeleton at
+    `batchMap N (bnPerChannelEvalTensor3 …)`. -/
+theorem b0FullEvalForward_eq_fullEval (N : Nat) (W : EnetFullWeights nCls w' β' G Bb Mb) (ε : ℝ)
+    (x : Vec (N * (3 * 224 * 224))) :
+    b0FullEvalForward N W ε x = efficientnetForwardB_fullEval N ε W.toEval x := by
+  simp only [b0FullEvalForward, EnetNoExpBlk.fwd, EnetMBBlk.stridedFwd, EnetMBBlk.residFwd,
+    EnetMBBlk.expFwd, EnetBn.fwd, efficientnetForwardB_fullEval, EnetFullWeights.toEval,
+    EnetNoExpBlk.toEval, EnetMBBlk.toEval, mbNoExpEvalW, mbStridedEvalW, mbResidEvalW, mbExpEvalW,
+    mbExpFwdBEval, stemBEval_eq_gen, mbNoExpFwdBEval_eq_gen, mbStridedFwdBEval_eq_gen,
+    mbResidFwdBEval_eq_gen, projBEval_eq_gen, dwbsBEval_eq_gen, cbsBEval_eq_gen,
+    headFwdBEval_eq_gen, Function.comp_apply]
+
+/-- ⭐ **The whole loop closes.** The typed `SHlo` inference graph of the sixteen-block net denotes
+    exactly the forward this file states its number about. -/
+theorem b0FullEvalGraph_faithful (N : Nat) (epsStr : String) (ε : ℝ)
+    (W : EnetFullWeights nCls w' β' G Bb Mb) (x : Vec (N * (3 * 224 * 224))) :
+    StableHLO.den (StableHLO.efficientnetFwdGraphB_fullEval N epsStr ε W.toEval x)
+      = b0FullEvalForward N W ε x :=
+  (StableHLO.efficientnetFwdGraphB_fullEval_faithful N epsStr ε W.toEval x).trans
+    (b0FullEvalForward_eq_fullEval N W ε x).symm
+
+/-- ⭐⭐ **The number, stated about the committed sixteen-block inference forward.**
+    `b0Full_float_logits_le` with `efficientnetForwardB_fullEval` on the real side instead of the
+    record-bundled `b0FullEvalForward` — the claim is about the net `efficientnet_fwd_eval` renders,
+    tied through `b0FullEvalGraph_faithful` rather than by inspection. ⛔ CAP at the sixteen gates;
+    see the header. -/
+theorem b0Full_float_logits_le_committed (N : Nat) (hN : 0 < N) (M : FloatModel) (hMu : M.u ≤ u32)
+    {ε : ℝ} (hε5 : 1 / 100000 ≤ ε) (D : DeviceSigmoid (1/100)) (Rq : DeviceRsqrt ε (1/100))
+    (W : EnetFullWeights nCls (41/10) (41/10) (41/10) (41/10) (41/10))
+    (x : Vec (N * (3 * 224 * 224))) (hx : ∀ k, |x k| ≤ 1) (j : Fin (N * nCls)) :
+    |b0FullEvalForwardF N M D Rq W x j - efficientnetForwardB_fullEval N ε W.toEval x j|
+      ≤ 2416 * 10 ^ 284 := by
+  rw [← b0FullEvalForward_eq_fullEval N W ε x]
+  exact b0Full_float_logits_le N hN M hMu hε5 D Rq W x hx j
 
 /-! ### Inhabitation
 

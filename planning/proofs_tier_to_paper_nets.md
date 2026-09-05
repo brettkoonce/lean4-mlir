@@ -41,7 +41,7 @@ shipped config count as paper-net statements.
 | ResNet-34 | `resnet34Forward_full_pc`, [3,4,6,3], 64 to 512 | ✓ | ✓ | ✓ 146 params | ✓ eval and train BN | ✓ | ✓ | full depth at 2 channels; 224 realistic |
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
-| EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train BN (eval: 3.3e) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
+| EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
 | MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train BN (eval: 3.2e) | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
@@ -267,7 +267,7 @@ rendered graph" ends at a typed graph. The paper net's eval forward IS shipped, 
 `formalization.yaml` row and `planning/float_budget_numbers.md` §1's "one exception" note both
 come out, and the four gates are green. The mathematics is nil; the cost is elaboration.
 
-### 3.3 EfficientNet-B0 at 16 blocks (T4, T5, T6) — **(a), (c) DONE 2026-09-05; (b) probed, declined; (e) OPEN**
+### 3.3 EfficientNet-B0 at 16 blocks (T4, T5, T6) — **(a), (c), (e) DONE 2026-09-05; (b) probed, declined**
 
 On the XLA stem, as 3.0 required. Probe first, and the probe changed the plan twice.
 
@@ -323,15 +323,24 @@ depends on the fan-in only), `b0FullEvalForward`, the closed bridge, `b0FullEval
 the raised threshold, and `b0Full_float_logits_le`. The profile is the 3-block file's, and it is
 measured on THIS net (5,288,548 f32 is the 16-block count).
 
-⚠ **One rung is open, and it is 3.2(e)'s twin — call it (e).** The four `*_eq_eval` `rfl`s tie
-each block to the eval-stage abbreviations the committed inference forward is built from
-(`mbNoExpFwdBEval`, `mbStridedFwdBEval`, `mbResidFwdBEval`; the no-skip widening to
-`projBEval ∘ seB ∘ dwbsBEval ∘ cbsBEval`, since the eval render has no `mbExp` form), but the
-whole net is tied to nothing: `efficientnetForwardB_full` is at training BN and the paper net's
-eval twin has no ℝ-def and no typed graph. Closing it is the eval twin of `EfficientNetFullB0.lean`'s
-graph section plus an `mbExpGraphBEval` in `EfficientNetRenderPCEval.lean`, then a `_committed`
-restatement. The shipped artifact it would end at is `efficientnet_fwd_eval.mlir`. Same shape and
-cost as 3.2(e); do them together.
+**(e) DONE — the whole-net eval tie, 3.2(e)'s twin, in the same session.**
+`Architectures/EfficientNetFullB0Eval.lean` (~2 s): `MBWEval`/`MBWNoExpEval`/`B0WeightsEval nCls`
+(γ, β and the two frozen statistics per BN site, one shared `ε` as the forward's argument, as the
+render and the three-block eval both do), the fourth block shape at inference
+(`mbExpFwdBEval`/`mbExpGraphBEval`, which the three-block eval render has no instance of), the
+four block wrappers, `efficientnetForwardB_fullEval` in nested-application form, the graph
+wrappers, `efficientnetFwdGraphB_fullEval` and its `_faithful` (one `rw` per block, then `rfl`).
+In the budget file: `EnetFullWeights.toEval`, `b0FullEvalForward_eq_fullEval` (NOT one `rfl`, the
+three-block lesson — it rewrites with the per-stage `*Eval_eq_gen` lemmas, and closes in seconds
+at sixteen blocks), `b0FullEvalGraph_faithful`, `b0Full_float_logits_le_committed`. The shipped
+artifact it ends at is `efficientnet_fwd_eval.mlir`, which IS this net (312 inputs: `%x`, 213
+parameters with the conv biases folded into their BatchNorms, 98 statistic slots) and its
+1000-class twin `efficientnetin_fwd_eval.mlir`; the head is generic in `nCls`, so one theorem
+covers both. ⚠ The typed graph inherits the three-block eval graph's SSA names, which differ from
+the artifact's in four cosmetic ways (bias slots, `mu`/`nmu`, `zWa`/`zW1`, `Wfc`/`Wd`); none
+enters `den`, and 3.2(e)'s point 2 applies to `EfficientNetRenderPCEval.lean` as a separate
+cosmetic pass. The probe's `b0_full_plan` now reads the eval file as a third source and asserts
+its record and ladder agree with the training file's, block for block.
 
 **(b) PROBED, DECLINED — the backward has no number at 16 blocks, and the reason changed.**
 `b0_full_back_chain` at the shipped leaves (the global `|swish'| ≤ 2`, the ε-floor `S = 317`, the
@@ -508,8 +517,9 @@ New, by package: 3.1 none; 3.2 `MobileNetV2PaperFloatBudget.lean` and
 (⛔ `MobileNetV2PaperBackFloatBudget.lean` is CANCELLED, there is no backward number to state, and
 the VJP was already in `MobileNetV2FullVJP.lean`); 3.3 `EfficientNetFullFloatBudget.lean`,
 `EfficientNetFullWholeBackFloatBridge.lean` and `EfficientNetFullWholeBackCertifiedTie.lean`
-landed (⛔ `EfficientNetFullBackFloatBudget.lean` is DECLINED: statable at 1e2648 since the
-threshold finding, and worth nothing), `EfficientNetFullB0Eval.lean` would be 3.3(e)'s; 3.4
+landed, as did `Architectures/EfficientNetFullB0Eval.lean` for 3.3(e) (⛔
+`EfficientNetFullBackFloatBudget.lean` is DECLINED: statable at 1e2648 since the threshold
+finding, and worth nothing); 3.4
 `ViTWholeBackCertifiedTie.lean`, `ViTBackFloatBudget.lean`; 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for

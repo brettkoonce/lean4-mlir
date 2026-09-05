@@ -43,6 +43,7 @@ import LeanMlir.Proofs.Architectures.EfficientNetClose
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Architectures.EfficientNetChainClose
 import LeanMlir.Proofs.Architectures.EfficientNetFullB0
+import LeanMlir.Proofs.Architectures.EfficientNetFullB0Eval
 import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Foundation.ResNet34ChainClose
@@ -2404,6 +2405,26 @@ open Proofs
 #print axioms Proofs.b0FullEvalBridge_mag_le
 #print axioms Proofs.b0FullEvalBridge_fresh_le
 #print axioms Proofs.b0Full_float_logits_le
+-- ⭐ And the whole-net step the seventeen-block MobileNetV2 file still lacks: the paper net's
+-- EVAL twin (EfficientNetFullB0Eval.lean — efficientnetForwardB_fullEval at 49 frozen-statistic
+-- sites, its typed graph and efficientnetFwdGraphB_fullEval_faithful, plus the fourth block shape
+-- at eval, mbExpFwdBEval/mbExpGraphBEval), so b0Full_float_logits_le_committed states the number
+-- with the rendered net on the real side. b0FullEvalForward_eq_fullEval is NOT one rfl (the
+-- 3-block lesson): it rewrites with the per-stage *Eval_eq_gen lemmas first. ⚠ The typed graph
+-- inherits the 3-block eval graph's SSA names, which differ from efficientnet_fwd_eval.mlir's in
+-- four cosmetic ways (bias slots, `mu`/`nmu`, `zWa`/`zW1`, `Wfc`/`Wd`); none enters den.
+#print axioms Proofs.mbExpFwdBEval
+#print axioms Proofs.StableHLO.mbExpGraphBEval_faithful
+#print axioms Proofs.StableHLO.mbNoExpGraphEvalW_faithful
+#print axioms Proofs.StableHLO.mbStridedGraphEvalW_faithful
+#print axioms Proofs.StableHLO.mbResidGraphEvalW_faithful
+#print axioms Proofs.StableHLO.mbExpGraphEvalW_faithful
+#print axioms Proofs.efficientnetForwardB_fullEval
+#print axioms Proofs.StableHLO.efficientnetFwdGraphB_fullEval_faithful
+#print axioms Proofs.EnetFullWeights.toEval
+#print axioms Proofs.b0FullEvalForward_eq_fullEval
+#print axioms Proofs.b0FullEvalGraph_faithful
+#print axioms Proofs.b0Full_float_logits_le_committed
 -- ⛔⛔ The FOURTH ImageNet-scale whole-net float statement, and it is NOT the same kind of
 -- statement as the three above. The ConvNeXt-T forward as a CLOSED FloatBridgesTo (cnxBridge),
 -- window 4.871e130 (cnxBridge_mag_le) and |float − real| ≤ 9.738e130 per logit on |x| ≤ 1 at the

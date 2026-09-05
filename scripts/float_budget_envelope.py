@@ -2490,6 +2490,27 @@ def b0_full_plan():
         form, ic, _mid, oc, _r, _kd = width[t]
         assert (k == "Resid") == (ic == oc), f"{t}: forward says {k}, record says {ic}->{oc}"
         assert (k == "NoExp") == (form == "noexp"), f"{t}: forward says {k}, record is {form}"
+
+    # ⚠ Three lists for one net: the EVAL twin (`EfficientNetFullB0Eval.lean`, 3.3(e)) spells the
+    # ladder a third time — `B0WeightsEval`'s widths and `efficientnetForwardB_fullEval`'s kinds and
+    # spatial sizes. Pin both to the training file's, block for block.
+    esrc = _lean("LeanMlir/Proofs/Architectures/EfficientNetFullB0Eval.lean")
+    esig = esrc.split("structure B0WeightsEval")[1].split("\n\n")[0]
+    ewidth = {}
+    for tag, ic, oc, r, kh, kw in re.findall(
+            r'(b\d+) : MBWNoExpEval (\d+) (\d+) (\d+) (\d+) (\d+)', esig):
+        ewidth[tag] = ("noexp", int(ic), int(ic), int(oc), int(r), int(kh) * int(kw))
+    for tag, ic, mid, oc, r, kh, kw in re.findall(
+            r'(b\d+) : MBWEval (\d+) (\d+) (\d+) (\d+) (\d+) (\d+)', esig):
+        ewidth[tag] = ("mb", int(ic), int(mid), int(oc), int(r), int(kh) * int(kw))
+    efwd = esrc.split("noncomputable def efficientnetForwardB_fullEval")[1]
+    efwd = efwd.split("namespace StableHLO")[0]
+    eshape = {tag: (kind, int(h), int(w)) for kind, h, w, tag in
+              re.findall(r'mb(NoExp|Strided|Resid|Exp)EvalW N (\d+) (\d+) ε w\.(b\d+)', efwd)}
+    assert ewidth == width, f"eval record differs from B0Weights: {ewidth} vs {width}"
+    assert eshape == shape, f"eval forward differs from efficientnetForwardB_full: {eshape} vs {shape}"
+    assert re.search(r'hW : Kernel4 1280 320 1 1', esig) and re.search(r'sW : Kernel4 32 3 3 3', esig)
+    assert re.search(r'headFwdBEval N \(h := 7\) \(w := 7\)', efwd)
     kindOf = {"NoExp": "noexp", "Resid": "resid", "Strided": "strided", "Exp": "exp"}
     order = sorted(shape, key=lambda t: int(t[1:]))
     plan, back = [], []

@@ -209,6 +209,12 @@ lean_lib «Certs» where
              -- batched forward graph + whole-net VJP. Imports the EfficientNet
              -- RenderPC + ChainClose modules, covering all three.
              `LeanMlir.Proofs.Architectures.EfficientNetFullB0,
+             -- Its INFERENCE twin: the same 16-block ladder at frozen statistics (49 BN sites,
+             -- one shared ε), the fourth block shape at eval (mbExpFwdBEval / mbExpGraphBEval,
+             -- which the 3-block eval render has no instance of), the typed graph and its
+             -- faithfulness. The rung EfficientNetFullFloatBudget's number ends at
+             -- (b0Full_float_logits_le_committed); the typed form of efficientnet_fwd_eval.
+             `LeanMlir.Proofs.Architectures.EfficientNetFullB0Eval,
              -- Full ConvNeXt-T [3,3,9,3]: forward graph + faithfulness + whole-net
              -- VJP. Imports ConvNeXtChainClose, covering both.
              `LeanMlir.Proofs.Architectures.ConvNeXtFullT,

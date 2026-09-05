@@ -224,7 +224,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "b0Full_float_logits_le"   # EfficientNet-B0 at the 16-block PAPER depth, inference BN, 49 BN sites, 16 SE gates, any batch size, any class count: 2.416e287 / 1.886e279, CAP at the SIGMOID of every SE gate only (uncapped 1e1897907); the window is honest; the first number past 1e253 (norm_num's ceiling is exponentiation.threshold, raised to 400); blocks tied to the *BEval abbreviations by rfl, no whole-net graph tie (the paper net's eval twin has none)
+    - declaration: "b0Full_float_logits_le"   # EfficientNet-B0 at the 16-block PAPER depth, inference BN, 49 BN sites, 16 SE gates, any batch size, any class count: 2.416e287 / 1.886e279, CAP at the SIGMOID of every SE gate only (uncapped 1e1897907); the window is honest; the first number past 1e253 (norm_num's ceiling is exponentiation.threshold, raised to 400); tied to the typed eval graph of the paper net (EfficientNetFullB0Eval.lean, b0Full_float_logits_le_committed), the den-level form of efficientnet_fwd_eval
       file: "LeanMlir/Proofs/Float/EfficientNetFullFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -504,11 +504,11 @@ fidelity:
 
        THE NUMBERS. Each is a theorem closed over the real leaves (no bridge
        hypothesis left), tied to the committed net by rfl and, for the forwards,
-       to the rendered graph by the `*_faithful` theorems -- with two exceptions,
-       the 17-block MobileNetV2 forward and the 16-block EfficientNet-B0 forward,
-       whose blocks are tied to the committed inference block abbreviations by rfl
-       but which have no whole-net graph tie, because neither paper net's eval twin
-       has a typed graph in Lean. Every numeral is
+       to the rendered graph by the `*_faithful` theorems -- with one exception,
+       the 17-block MobileNetV2 forward, whose blocks are tied to the committed
+       inference block abbreviations by rfl but which has no whole-net graph tie,
+       because that paper net's eval twin has no typed graph in Lean (the 16-block
+       EfficientNet-B0 forward has one, EfficientNetFullB0Eval.lean). Every numeral is
        generated in the leaves' own exact-rational arithmetic and re-asserted by
        scripts/float_budget_envelope.py before the kernel checks it. Window =
        certified output magnitude; budget = |float - real| per logit (forwards) or
@@ -522,7 +522,7 @@ fidelity:
            MobileNetV2 forward, inference BN     1.444e96  / 2.154e3    fold   mnv2_float_logits_le
            MobileNetV2 forward, 17-block paper   8.176e16  / 2.152e4    CAP    mnv2Paper_float_logits_le  (52 BN sites, all capped)
            EfficientNet-B0 forward, inference BN 8.408e210 / 2.580e55   fold   b0_float_logits_le         (any batch size)
-           EfficientNet-B0 forward, 16-block paper 2.416e287 / 1.886e279 CAP    b0Full_float_logits_le     (16 SE sigmoids capped; the window is honest)
+           EfficientNet-B0 forward, 16-block paper 2.416e287 / 1.886e279 CAP    b0Full_float_logits_le     (16 SE sigmoids capped; the window is honest; tied to the eval graph)
            ConvNeXt-T forward                    9.738e130 / 4.871e130  CAP    cnx_float_logits_le
            ViT-Tiny forward                      4.794e108 / 2.397e108  CAP    vit_float_logits_le
            ResNet-34 backward, training BN       6.894e244 / 8.857e245  fold   r34_grad_float_le          (|istd| <= 16)
