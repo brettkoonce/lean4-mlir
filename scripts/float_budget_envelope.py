@@ -187,13 +187,22 @@ def r34_train_chain(S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB, emr=R34_EMR,
 
     def bnsite(st, hw):
         A, E = st
+        n = nred if nred else hw
+        e = emr_derived(n) if emr == 'derived' else emr
         if lin:
-            mag, mod = cnx_ln_leaf_lin(st, nred if nred else hw, S, emr, ei, q)
+            mag, mod = cnx_ln_leaf_lin(st, n, S, e, ei, q)
             mag = G * mag + Bb          # the affine the pure-normalise leaf does not carry
             mod = G * mod
         else:
-            mag, mod = bn_train(st, S, G, Bb, emr, ei, q)
+            mag, mod = bn_train(st, S, G, Bb, e, ei, q)
         mag = r4(mag)
+        # ⛔ `cap='force'` takes the cap at EVERY site rather than the smaller branch. Under
+        # `lin` the FOLD wins at the shallow sites here exactly as it does on the two LayerNorm
+        # nets (planning §3.30), and `Maps.bnPerChannelTensor3Capped` asserts `2*A' <= E'`
+        # unconditionally — so a Lean chain on that leaf must be folded this way. The whole-net
+        # numbers are identical either way; the window does not depend on the choice.
+        if cap == 'force':
+            return (mag, r4(2 * mag))
         return (mag, min(r4(2 * mag), r4(mod)) if cap else r4(mod))
 
     out = []
@@ -357,7 +366,7 @@ def verify_r34(rows) -> int:
 
 
 def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
-                     emr=R34_EMR, ei=R34_ES, q=U32) -> int:
+                     emr=R34_EMR, ei=R34_ES, q=U32, lin=False) -> int:
     """Re-assert every rounded inequality the TRAINING-mode CAPPED Lean chain closes.
 
     ⚠ The BN rows are a DIFFERENT shape from `verify_r34`'s, and asserting the eval shape here
@@ -387,21 +396,28 @@ def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
         ck(tag + ".A", (1 + g) * (m * w * A + b), dst[0])
         ck(tag + ".E", g * (m * w * (A + E) + b) + m * w * E, dst[1])
 
-    def bn_ck(tag, src, dst):
+    def bn_ck(tag, src, dst, nred):
         """A CAPPED BN site: the window clause, then `2*A' <= E'`."""
         nonlocal cap_bites
         A, E = src
-        nb = bnNormBudget(q, 2 * A, S, G, Bb, emr * A, ei)
-        ck(tag + ".A", G * (2 * A * S) + Bb + nb, dst[0])
+        e = emr_derived(nred) if emr == 'derived' else emr
+        if lin:                       # §0.1's escape 2 at the per-channel BN (planning §3.31)
+            Xh = F(isqrt_ceil(nred))
+            nb = bn_norm_budget_x(q, Xh, 2 * A, S, F(1), F(0), e * A, ei)
+            ck(tag + ".A", G * (Xh + nb) + Bb, dst[0])
+        else:
+            nb = bnNormBudget(q, 2 * A, S, G, Bb, e * A, ei)
+            ck(tag + ".A", G * (2 * A * S) + Bb + nb, dst[0])
         ck(tag + ".cap", 2 * dst[0], dst[1])
         # not a Lean obligation: the cap is only honest if the fold is worse here.
-        fold = nb + G * ((E + E) * S + 2 * A * (8 * A * E * (S ** 3 / 2)))
+        fold = (G * (2 * E * S * (1 + F(isqrt_ceil(nred)))) if lin
+                else nb + G * ((E + E) * S + 2 * A * (8 * A * E * (S ** 3 / 2))))
         if 2 * dst[0] <= fold:
             cap_bites += 1
 
     st = (F(1), F(0))
     conv_ck("stem.conv", 3 * 7 * 7, st, r["stem.conv"])
-    bn_ck("stem.bn", r["stem.conv"], r["stem.bn"])
+    bn_ck("stem.bn", r["stem.conv"], r["stem.bn"], 112 * 112)
     st = r["stem.bn"]
     plan = [("id", 64, 64, "a0"), ("id", 64, 64, "a1"), ("id", 64, 64, "a2"),
             ("down", 64, 128, "d2"),
@@ -411,24 +427,28 @@ def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
             ("id", 256, 256, "c3"), ("id", 256, 256, "c4"),
             ("down", 256, 512, "d4"),
             ("id", 512, 512, "e0"), ("id", 512, 512, "e1")]
+    SPATIAL = {"a0": 56, "a1": 56, "a2": 56, "d2": 28, "b0": 28, "b1": 28, "b2": 28,
+               "d3": 14, "c0": 14, "c1": 14, "c2": 14, "c3": 14, "c4": 14,
+               "d4": 7, "e0": 7, "e1": 7}
     for kind, ic, oc, t in plan:
+        hw = SPATIAL[t] ** 2
         blkin = st
         if kind == "id":
             conv_ck(f"{t}.conv1", oc * 9, blkin, r[f"{t}.conv1"])
-            bn_ck(f"{t}.bn1", r[f"{t}.conv1"], r[f"{t}.bn1"])
+            bn_ck(f"{t}.bn1", r[f"{t}.conv1"], r[f"{t}.bn1"], hw)
             conv_ck(f"{t}.conv2", oc * 9, r[f"{t}.bn1"], r[f"{t}.conv2"])
-            bn_ck(f"{t}.bn2", r[f"{t}.conv2"], r[f"{t}.bn2"])
+            bn_ck(f"{t}.bn2", r[f"{t}.conv2"], r[f"{t}.bn2"], hw)
             A4, E4 = r[f"{t}.bn2"]
             ck(f"{t}.resA", A4 + blkin[0] + q * (A4 + blkin[0]), r[f"{t}.out"][0])
             ck(f"{t}.resE", q * (A4 + E4 + blkin[0] + blkin[1]) + (E4 + blkin[1]),
                r[f"{t}.out"][1])
         else:
             conv_ck(f"{t}.projconv", ic, blkin, r[f"{t}.projconv"])
-            bn_ck(f"{t}.projbn", r[f"{t}.projconv"], r[f"{t}.projbn"])
+            bn_ck(f"{t}.projbn", r[f"{t}.projconv"], r[f"{t}.projbn"], hw)
             conv_ck(f"{t}.conv1", ic * 9, blkin, r[f"{t}.conv1"])
-            bn_ck(f"{t}.bn1", r[f"{t}.conv1"], r[f"{t}.bn1"])
+            bn_ck(f"{t}.bn1", r[f"{t}.conv1"], r[f"{t}.bn1"], hw)
             conv_ck(f"{t}.conv2", oc * 9, r[f"{t}.bn1"], r[f"{t}.conv2"])
-            bn_ck(f"{t}.bn2", r[f"{t}.conv2"], r[f"{t}.bn2"])
+            bn_ck(f"{t}.bn2", r[f"{t}.conv2"], r[f"{t}.bn2"], hw)
             P2, Q2 = r[f"{t}.projbn"]
             A4, E4 = r[f"{t}.bn2"]
             ck(f"{t}.sumA", P2 + A4 + q * (P2 + A4), r[f"{t}.out"][0])
@@ -438,7 +458,12 @@ def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
     ck("gap.A", st[0] * ((1 + g50) * (1 + q)), r["gap"][0])
     ck("gap.E", st[0] * (q * (1 + g50) + g50) + st[1], r["gap"][1])
     conv_ck("dense", 512, r["gap"], r["dense"])
-    assert cap_bites == 36, f"cap selected at {cap_bites} of 36 BN sites, not all"
+    assert cap_bites == 36 or lin, f"cap selected at {cap_bites} of 36 BN sites, not all"
+    if lin:
+        # ⚠ Under escape 2 the FOLD wins at the shallow sites, exactly as it does on the two
+        # LayerNorm nets (planning §3.30) — so a Lean chain on the capped leaf must FORCE the
+        # cap rather than take the smaller branch, and `cap=True` above already does.
+        pass
     return n
 
 
@@ -853,6 +878,25 @@ def bn_norm_budget_x(u, Xh, D, S, G, Bb, em, ei):
     return u * (G * Xh + outer + Bb) + outer
 
 
+def emr_derived(nred, u=U32):
+    """⭐ The device batch/layer MEAN's accuracy DERIVED rather than supplied, relative to the
+    window: `FloatModel.bnMean_close` proves `|fl(sum x / n) - bnMean n x| <= (u*(1+g) + g)*A`
+    with `g = (1+u)^(n+1) - 1`, for a rounded sum then a rounded divide.
+
+    At `n = 96` and `u = 2^-24` that is `5.8e-6`, where every committed LayerNorm number supplies
+    `emr = 1e-2` — four orders looser, by analogy with the device `rsqrt` rather than by any
+    measurement. ⚠ It is `emr*S` that decides whether a normalisation RESETS its window
+    (planning §3.27 finding 4); at the eps-floor the supplied value gives 3.17 and this one
+    gives 0.0019.
+
+    ⛔ Using it is a MODELLING change, not just a tighter constant: `bnMean_close` is about
+    `M.div (M.sum x) n`, and `M.sum` is a concrete LEFT FOLD where a GPU reduces in a tree. The
+    bound holds for a tree too (its gamma is smaller), but the honest form parameterises the
+    reduction by `sum_close`'s spec instead of fixing the order. planning §3.31."""
+    g = (1 + u) ** (nred + 1) - 1
+    return u * (1 + g) + g
+
+
 def cnx_ln_leaf_lin(st, nred, S=CNX_S, emr=CNX_EMR, ei=CNX_EI, q=U32):
     """⭐⭐ §0.1's ESCAPE 2 at the pure-normalise LayerNorm (gamma = 1, beta = 0), as a FOLD.
 
@@ -928,11 +972,12 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
 
     def lnsite(st, tag, nred):
         A, E = st
+        e = emr_derived(nred) if emr == 'derived' else emr
         if ln_lin:            # ⭐⭐ §0.1's escape 2 — the window RESETS and the modulus is linear
-            mag, mod = cnx_ln_leaf_lin(st, nred, S, emr, ei, q)
+            mag, mod = cnx_ln_leaf_lin(st, nred, S, e, ei, q)
         else:
-            mag = cnx_ln_leaf(A, S, emr, ei, q)
-            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
+            mag = cnx_ln_leaf(A, S, e, ei, q)
+            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), e * A, ei)
             mod = nb + ((E + E) * S + 2 * A * (8 * A * E * S ** 3 / 2))
         mag = r4(mag)
         # ⚠ `FloatBridgesTo.capped` is `min(mod, 2*mag)`, so the two branches are COMPARABLE and
@@ -1006,11 +1051,12 @@ def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
 
     def ln_ck(tag, src, nred):
         A, E = src
+        e = emr_derived(nred) if emr == 'derived' else emr
         if ln_lin:
             mag = F(isqrt_ceil(nred)) + bn_norm_budget_x(
-                q, F(isqrt_ceil(nred)), 2 * A, S, F(1), F(0), emr * A, ei)
+                q, F(isqrt_ceil(nred)), 2 * A, S, F(1), F(0), e * A, ei)
         else:
-            mag = cnx_ln_leaf(A, S, emr, ei, q)
+            mag = cnx_ln_leaf(A, S, e, ei, q)
         ck(tag + '.ln.A', mag, r[tag + '.ln'][0])
         ck(tag + '.ln.E', 2 * r[tag + '.ln'][0], r[tag + '.ln'][1])
         A1, E1 = r[tag + '.ln']
@@ -1256,11 +1302,12 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
         WINDOW, resets it. That is why the taint is per-segment and not terminal."""
         nonlocal taint
         A, E = st
+        e = emr_derived(D_VIT) if emr == 'derived' else emr
         if ln_lin:        # ⭐⭐ §0.1's escape 2 — ViT's vector LN reduces over D = 192
-            mag, mod = cnx_ln_leaf_lin(st, D_VIT, S, emr, ei, q)
+            mag, mod = cnx_ln_leaf_lin(st, D_VIT, S, e, ei, q)
         else:
-            mag = vit_ln_leaf(A, S, emr, ei, q)
-            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
+            mag = vit_ln_leaf(A, S, e, ei, q)
+            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), e * A, ei)
             mod = nb + ((E + E) * S + 2 * A * (8 * A * E * S ** 3 / 2))
         mag = r4(mag)
         if ln_cap == 'force':                 # see `cnx_eval_chain`'s note
@@ -1335,11 +1382,12 @@ def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
         A, E = src
         # ⚠ `ln_lin=True` asserts the ESCAPE-2 window (`Maps.bnCappedX`), the default the
         # shipped one (`Maps.bnCapped`). Different programs; asserting the wrong one passes.
+        e = emr_derived(D_VIT) if emr == 'derived' else emr
         if ln_lin:
             Xh = F(isqrt_ceil(D_VIT))
-            mag = Xh + bn_norm_budget_x(q, Xh, 2 * A, S, F(1), F(0), emr * A, ei)
+            mag = Xh + bn_norm_budget_x(q, Xh, 2 * A, S, F(1), F(0), e * A, ei)
         else:
-            mag = vit_ln_leaf(A, S, emr, ei, q)
+            mag = vit_ln_leaf(A, S, e, ei, q)
         ck(tag + '.ln.A', mag, r[tag + '.ln'][0])
         ck(tag + '.ln.E', 2 * r[tag + '.ln'][0], r[tag + '.ln'][1])
         A1, E1 = r[tag + '.ln']

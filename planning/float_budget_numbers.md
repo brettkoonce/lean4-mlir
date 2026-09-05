@@ -124,13 +124,23 @@ product IS the normalised activation one rounding away — `floatClose_seScale`'
 leaf, so *when a window contains an error term, ask why* is now this file's most productive
 question.
 
-⭐⭐ **STARTING A SESSION? GO TO §3.29 AND §3.30, THEN §4.** Both of §3.28's items are done.
-§4 carries the order — **2b** B0's whole-net certified tie (⛔ bigger than §4 costed: the apex is
-`efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched block ties at
-`bnBatchLA` are missing), then **4** ViT's backward, parked. ⭐ The two open levers, both
-measured and neither taken: **`emr` derived rather than supplied** — a further 49 orders on
-ConvNeXt-T and 55 on ViT-Tiny, and unlike escape 2 it changes what the modelled device IS
-(§3.30) — and **MobileNetV2's and B0's TRAINING-mode forwards**, still unmeasured (§3.29).
+⭐⭐ **STARTING A SESSION? GO TO §3.31.** It is a cold-start recipe for the two next items,
+both measured 2026-09-05 and both re-asserted by a `verify_*` pass: **(C)** escape 2 at the
+PER-CHANNEL BatchNorm, which takes r34's training-mode number from 3.176·10²²¹ to
+**4.304·10¹⁴⁵ — 76 orders, the largest single number left, and no modelling decision at all**;
+and **(D)** deriving the device MEAN's accuracy `emr` instead of supplying it at `10⁻²`, worth 47
+more orders on ConvNeXt-T and 53 on ViT-Tiny, with the mathematics already in the repo
+(`FloatModel.bnMean_close`) and one real question attached — `M.sum` is a left fold where a GPU
+reduces in a tree, so the honest form parameterises the reduction by `sum_close`'s spec. ⭐ Do
+(C) first. ⭐⭐ And read §3.31's closing measurement whatever you do next: with `emr` derived the
+normalisation sites SHRINK and the whole remaining growth is the **conv fan-in** — `layerBudget`'s
+uniform `m·w'·A` face, §0's own documented gap to the adjoint chain, which nothing in this file
+has ever attacked.
+
+§4 carries the rest of the order — **2b** B0's whole-net certified tie (⛔ bigger than §4 costed:
+the apex is `efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched
+block ties at `bnBatchLA` are missing), then **4** ViT's backward, parked. ⭐ Still unmeasured:
+MobileNetV2's and B0's TRAINING-mode forwards (§3.29).
 
 §4 carries the rest of the order, and each item's state was measured before it was ranked.
 ✅ **(1) `resnet34Forward_full_pc_eq_chain` is DONE (2026-09-04, §3.23)** — all three whole-net
@@ -3177,6 +3187,145 @@ its own commit and its own decision about what the modelled device is.
 neither can land alone without a dead duplicate pair of the device kernel in between. Splitting
 would buy a smaller diff at the cost of a state nobody wants to bisect through.
 
+### 3.31 ⭐⭐ NEXT SESSION (scoped 2026-09-05): TWO items, both measured — r34's TRAINING number takes escape 2 (76 orders), and `emr` is DERIVABLE (47/53 more)
+
+**Read this section and §3.30; everything below was measured with the probe as committed, and
+every row is re-asserted by a `verify_*` pass. You should not need to re-derive anything.** The
+two items are independent; **(C) goes first** — it is the bigger single number, it needs no
+modelling decision, and it builds the leaf (D) also wants.
+
+| forward | committed | + escape 2 | + `emr` derived |
+|---|---|---|---|
+| **ResNet-34 @ TRAINING BN** (§3.29) | 3.176·10²²¹ / 6.349·10²²¹ | ⭐ **4.304·10¹⁴⁵ / 8.605·10¹⁴⁵** (76 orders) | **8.705·10⁸⁰ / 1.743·10⁸¹** (140 total) |
+| **ConvNeXt-T** (§3.30) | 6.609·10¹⁷⁴ / 1.321·10¹⁷⁵ | — already | **1.727·10¹²⁸ / 3.452·10¹²⁸** (47) |
+| **ViT-Tiny** (§3.30) | 1.130·10¹⁶¹ / 2.259·10¹⁶¹ | — already | **2.390·10¹⁰⁸ / 4.778·10¹⁰⁸** (53) |
+
+⛔ All six stay **CAPS**. Nothing here touches the kind (§9); it moves how big the window inside
+the cap is. ⚠ `emr` alone on r34's *shipped* leaf is worth **nothing** (3.176·10²²¹ →
+2.689·10²²¹): that window's `2A·S` term does not mention `emr`, which is why (C) has to come
+first for (D) to be worth anything there.
+
+---
+
+#### (C) ⭐⭐ ESCAPE 2 AT THE PER-CHANNEL BATCHNORM — r34's training number, 76 orders
+
+§3.28(A) predicted this in as many words — *"if training-mode numbers exist then the escape-2
+leaf serves five nets rather than two"* — and it is the largest single number left on the table.
+**No modelling change at all**: same `emr = 10⁻²`, same `ε`-floor, same profile. It is the same
+lemma §3.30 landed, at a different conjugation.
+
+**What is missing, and it is one leaf.** `Maps.bnCappedX` (`FloatBudgetEnvLN.lean`) is stated at
+the *flat* pure-normalise LayerNorm. r34's BatchNorm is `bnPerChannelTensor3` — the same leaf
+conjugated by `reassocFwd`/`reassocBack` and lifted per channel — so what is needed is
+`floatClose_bnX` carried through `BnPerChannelFloatBridge.lean`'s **three rungs**
+(`floatBridgesTo_bn` → `_bnPerChannelFlat` → `_bnPerChannelTensor3`) and then capped. ⭐ Every
+rung is a repackage: `FloatClose.perRowIdx` lifts any per-row `FloatClose`, and the two gathers
+are magnitude-stable with modulus `id`, so the composite's `mag`/`mod` collapse definitionally
+exactly as they do for the shipped leaf. Then `Maps.bnPerChannelTensor3CappedX`, the peer of the
+`Maps.bnPerChannelTensor3Capped` §3.29 added. Estimate ~40 lines and no new mathematics — ⚠ and
+that is an estimate, so §3.12's rule applies to it: re-derive it, do not quote it.
+
+**⭐ r34's reduction widths are PERFECT SQUARES and ConvNeXt's are not.** `h·w` is `112²`, `56²`,
+`28²`, `14²`, `7²`, so `bnXhat_abs_le_num` takes the EXACT root and loses nothing — where
+ConvNeXt's channel counts 96/192/384/768 all need the ceiling root (§3.16 finding 5). ⛔ **That
+stops being true at batch `N > 1`**: the training-mode BN width is `N·h·w`, so §3.24's batch
+caveat — which so far only affects B0's BACKWARD — reappears on this FORWARD the moment the
+number is stated at general `N`. §3.29's number is per-example; keep it that way or say `N`.
+
+**⛔ The §3.30 trap fires here too, and it is now three-for-three.** Under escape 2 the FOLD
+beats the cap at the shallow sites: at r34's stem the cap is `2499` and the fold `4642`, so
+`min` picks the fold and `Maps.bnPerChannelTensor3Capped`'s own `2·Ā' ≤ Ē'` is then false.
+`r34_train_chain(cap='force')` is the fix and is already in the probe, beside
+`cnx_eval_chain(ln_cap='force')`. ⭐ **Promote it to a rule: any capped leaf whose fold is
+improved needs its chain folded with the cap FORCED, because "take the smaller branch" and "take
+the cap" stop being the same program.** It costs nothing — the whole-net numbers are identical
+either way, since the window is what a capped number reports and the window does not depend on
+the choice.
+
+---
+
+#### (D) ⭐⭐ `emr` DERIVED RATHER THAN SUPPLIED — and the mathematics is already in the repo
+
+Every committed normalisation number supplies the device MEAN's accuracy as `emr = 10⁻²`,
+relative to the window. That number was taken by analogy with the device `rsqrt` and is not
+measured. ⭐⭐ **`FloatModel.bnMean_close` (`BnFloatBridge.lean`) already proves the real one**:
+
+    |M.div (M.sum x) n − bnMean n x| ≤ (u·(1+g) + g)·A        with g = (1+u)^(n+1) − 1
+
+which at `n = 96` and `u = 2⁻²⁴` is **5.84·10⁻⁶** — four orders tighter than what is supplied.
+⭐ §3.3.0(b)'s rule for the **tenth** time (*before writing a bound, grep the whole cone for it*),
+and the second time in two days that the bound was sitting under a name written for another
+purpose. `emr_derived(nred)` in the probe is that constant.
+
+**⛔ THE CATCH, AND IT DECIDES THE SHAPE OF THE WORK.** `bnMean_close` is about
+`M.div (M.sum x) n`, and `M.sum` (`FloatBridge.lean`) is a concrete **LEFT FOLD** — where a GPU
+reduces in a *tree*. Three routes, and they are not equally honest:
+
+1. ⛔ **Set `DeviceLN.fmu := fun c v => M.div (M.sum v) c`** and discharge `specMu` by
+   `bnMean_close`. Removes `emr` entirely — and asserts the device sums left to right, which is
+   false for every kernel this repo ships. Do not.
+2. ⚠ **Keep `fmu` supplied, commit a tighter numeral** (`emr = 10⁻⁴`: ConvNeXt 3.365·10¹³⁴, ViT
+   4.332·10¹¹⁶). Zero new Lean, ~40 orders, and still a hypothesis — but one with a reason
+   behind it instead of an analogy. A defensible fallback if route 3 stalls.
+3. ⭐⭐ **PARAMETERISE THE REDUCTION BY `sum_close`'s SPEC — this is the one.** `bnMean_close`'s
+   proof uses only `M.sum_close x`, `M.err` and `M.div`, so a version taking `(fsum : Vec n → ℝ)`
+   with `|fsum x − Σ x| ≤ γₙ·Σ|x|` is that proof with **one hypothesis substituted**. It covers
+   every summation order — a tree reduction's `γ` is `γ_{⌈log₂n⌉+1}`, strictly smaller, so the
+   bound holds a fortiori — and the resulting `emr` is derived for the kernel actually shipped.
+   ⭐ Barely more work than route 1 and it is the difference between a theorem about a program we
+   run and one about a program we do not (§3.1's `BnEvalFloatBridge` warning, one tier over).
+
+**⚠ IT DOES NOT RESET THE WINDOW, and the residual is the interesting part.** §3.27 finding 4
+says a site resets iff `emr·S < 1`; derived, that is `0.0019` at `n = 96`, so the condition holds
+— and yet the site only *shrinks*, it does not reset. Measured per-site gain at a deep ConvNeXt
+site (`c = 384`, `A = 10⁷⁰`):
+
+| leaf | site gain |
+|---|---|
+| shipped: `emr = 10⁻²`, `ei = 10⁻²` absolute | **3.19** — the site MULTIPLIES |
+| `emr` derived | 2.73·10⁻² |
+| `emr` derived, `ei` **RELATIVE** | 7.40·10⁻³ |
+| `emr` derived, `ei` relative at `10⁻⁴` | 7.33·10⁻³ — and it stops |
+
+⭐ Two findings there. **(i) `ei` should be relative, like `DeviceExp`'s already is.** The term
+that keeps the window is `D·ei` — the centred bound times an ABSOLUTE inverse-stddev error. State
+it relative and `|centred_i|·ei·|istd| = ei·|x̂_i| ≤ ei·Xh`, and the window leaves that term
+outright. Worth a further 3.7× per site; §3.5.2 item 6.1 already noted that the three device
+specs' shapes "are not settled by anything but what each proof needed". **(ii) The floor is
+`ea·S = emr·A·S`**, which is proportional to the window however small `emr` gets. **A true reset
+needs `A·S` bounded** — a hypothesis relating the window to the standard deviation, which is a
+NEW kind of operating point and not `|istd| ≤ 16`. Record it; do not chase it here.
+
+**⭐⭐ AND WHERE THE SIZE GOES AFTERWARDS — measured, and it is a different open problem.** With
+`emr` derived the LN site shrinks (×3.46·10⁻²) and the per-block growth is *entirely the convs*:
+expand ×230, project ×922, layer scale ×8.4, net ×5·10⁵ (stage 1) to ×3.5·10⁷ (stage 4). **So
+`emr` moves the wall off the normalisation and onto the conv fan-in** — `layerBudget`'s uniform
+`m·w'·A` face, which §0 already names as one of the two documented gaps to the adjoint chain
+(the probe's §5 measures 257× per stage). That is the next problem after this one, it is shared
+with every net in the file including the four backwards, and nothing in this file has attacked it.
+
+---
+
+**What the probe already carries, so nothing above needs re-deriving.**
+
+* `emr_derived(nred)` — `bnMean_close`'s constant, with the left-fold caveat in its docstring.
+* `emr='derived'` on `cnx_eval_chain`, `vit_chain` and `r34_train_chain` — **per site**, from
+  that site's own reduction width (uniform at the largest width is 4.871·10¹³⁰ on ConvNeXt
+  against per-site 1.727·10¹²⁸, so do not fold it uniformly).
+* `lin=True` + `cap='force'` on `r34_train_chain` — escape 2 at the per-channel BN, item (C).
+* `ln_lin` / `lin` / `emr` on `verify_cnx`, `verify_vit`, `verify_r34_train`, so **every row in
+  the tables above is re-asserted**: 366 / 324 / 180 inequalities respectively.
+* ⚠ All ten committed passes reproduce byte-for-byte with these added; that is the check that
+  none of it disturbed a landed number.
+
+**Blast radius and commits.** (C) moves ONE committed number (`r34_train_float_logits_le`,
+§3.29) — one commit, one budget file regenerated (746 lines, 38 s), plus the new leaf.
+(D) moves THREE. §7 says one commit per net, but a `DeviceLN` change couples ConvNeXt and ViT the
+way §3.30's did, so realistically **two**: r34's, then the LayerNorm pair's. ⚠ Both items
+regenerate budget files whose generators are session scratch — use §3.30's method (extract the
+shipped file's ordered numerals, reproduce them EXACTLY from the shipped chain, then re-emit at
+the new flags), not a rewrite.
+
 ## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
 
 §3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward has a certified tie
@@ -3248,9 +3397,11 @@ shape — §3.24's last paragraph.
 ⭐⭐ ✅ **BOTH HALVES LANDED 2026-09-05.** **(A)** `r34_train_float_logits_le`,
 3.176·10²²¹ / 6.349·10²²¹ (§3.29) — §0.1's *"there is no theorem to state"* refuted by a theorem.
 **(B)** escape 2's window half on both LayerNorm nets (§3.30): ConvNeXt-T 4.858·10²²⁷ →
-**6.609·10¹⁷⁴**, ViT-Tiny 3.612·10²¹⁸ → **1.130·10¹⁶¹**. ⭐ What is left of this item is the
-`emr` lever §3.30 closes on — worth a further 49 and 55 orders, and unlike escape 2 it changes
-what the modelled device IS.
+**6.609·10¹⁷⁴**, ViT-Tiny 3.612·10²¹⁸ → **1.130·10¹⁶¹**. ⭐ **What is left is §3.31, scoped and
+measured the same day**: **(C)** the same escape at the PER-CHANNEL BatchNorm, which is worth
+**76 orders on r34's training number** and needs no modelling decision, and **(D)** deriving
+`emr` — 47 more on ConvNeXt-T, 53 on ViT-Tiny, 65 more on r34 on top of (C). ⛔ Neither changes
+the KIND; all six numbers stay caps.
 ⛔ It is NOT "the only open item that would change what the numbers MEAN": the fold stays 82 orders
 (ConvNeXt-T) and 7 orders (ViT-Tiny) above the triangle inequality even with §0.1's quadratic gone,
 so both numbers stay CAPS. ⭐⭐ What it changes is what they SAY — **53 orders on ConvNeXt-T's
