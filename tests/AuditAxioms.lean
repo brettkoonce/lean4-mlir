@@ -101,6 +101,7 @@ import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.EfficientNetFloatBudget
+import LeanMlir.Proofs.Float.BnXhatFloatBridge
 import LeanMlir.Proofs.Float.FloatBudgetEnvLN
 import LeanMlir.Proofs.Float.FloatBudgetEnvAttn
 import LeanMlir.Proofs.Float.ViTBlockVFloatBridge
@@ -2292,6 +2293,29 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.capped
 #print axioms Proofs.FloatBridgesTo.Maps.capped
 #print axioms Proofs.FloatBridgesTo.Maps.bnCapped
+-- ⭐⭐ §0.1's ESCAPE 2, WINDOW half (2026-09-05): the same capped LayerNorm site with its
+-- certified window charged at |x̂| <= sqrt(n) (bnXhat_sq_le) instead of at |x-mu|*|istd| <= D*S.
+-- Two places charged the window and both are fixed: the real output's magnitude, and — subtler
+-- — the ROUNDING of the float product, which bnNormBudget bounds by (D+ea)*(S+ei) when that
+-- product IS the normalised activation one rounding away (floatClose_seScale's fix at a third
+-- leaf). mul_close_at is the mechanism; bnNormBudgetX is bnNormBudget with those two
+-- substitutions and nothing else.
+-- ⭐ Worth 53 orders on ConvNeXt-T's committed number and 57 on ViT-Tiny's, at NO new
+-- hypothesis and no new mathematics: bnXhat_sq_le has been in the repo since the realistic-seal
+-- work and is load-bearing on all four whole-net BACKWARD numbers. The FORWARD leaf threw it
+-- away for a month.
+-- ⛔ The MODULUS is deliberately untouched — still bnReluBudget, still quadratic. Escape 2 has
+-- a modulus half worth 5006 orders on ConvNeXt's UNCAPPED fold and NOTHING to either shipped
+-- statement, because both are capped and the fold stays above the cap (82 orders on ConvNeXt-T,
+-- 7 on ViT-Tiny). Priced, measured, not taken.
+#print axioms Proofs.bnXhat_abs_le_num
+#print axioms Proofs.prod_sub_abs_le
+#print axioms Proofs.FloatModel.mul_close_at
+#print axioms Proofs.FloatModel.bnForward_close_of_x
+#print axioms Proofs.bnNormBudgetX_mono
+#print axioms Proofs.floatClose_bnX
+#print axioms Proofs.floatBridgesTo_bnX
+#print axioms Proofs.FloatBridgesTo.Maps.bnCappedX
 #print axioms Proofs.FloatBridgesTo.Maps.gelu
 -- ════════════════════════════════════════════════════════════════
 -- ViT / ATTENTION Maps kit (FloatBudgetEnvAttn.lean) — chunk 1 of the ViT-Tiny number.

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnv
+import LeanMlir.Proofs.Float.BnXhatFloatBridge
 import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.BnPerChannelBackFloatBridge
@@ -478,18 +479,13 @@ theorem bnGradInputReMag_mono (n : Nat) {G Cdy Cd S Xh : ℝ}
 -- § The BatchNorm BACKWARD, migrated to `FloatBridgesTo`
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **`|x̂| ≤ X` from the standardisation bound, at a RATIONAL `X`.** `bnXhat_sq_le` gives
-    `x̂² ≤ n`; this turns it into a numeral wherever `n ≤ X²`, which for the square feature maps
-    a conv net has is exact (`h·w = 56² ⇒ X = 56`). ⛔ It is what makes a whole-net backward
-    number exist at all: `Xh` enters the fold as `Xh²`, and deriving it from the FORWARD's
-    certified window instead is the difference between `10²⁸⁸` and `10⁷²⁷¹` (§3.7). The lemma it
-    rests on was written for the realistic-seal work and sat in `Foundation/ResNet34.lean`. -/
-theorem bnXhat_abs_le_num {n : Nat} {ε X : ℝ} (hε : 0 < ε) (v : Vec n)
-    (hX : 0 ≤ X) (hnX : (n : ℝ) ≤ X ^ 2) (k : Fin n) : |bnXhat n ε v k| ≤ X := by
-  have hsq := bnXhat_sq_le ε hε v k
-  have habs : |bnXhat n ε v k| ^ 2 ≤ X ^ 2 := by
-    rw [sq_abs]; linarith
-  nlinarith [abs_nonneg (bnXhat n ε v k)]
+-- ⭐⭐ `bnXhat_abs_le_num` — `|x̂| ≤ X` at a RATIONAL `X`, which is what makes a whole-net
+-- backward number exist at all (`Xh` enters the fold as `Xh²`, and deriving it from the
+-- FORWARD's certified window instead is the difference between `10²⁸⁸` and `10⁷²⁷¹`, §3.7) —
+-- ⚠ MOVED 2026-09-05 to `BnXhatFloatBridge.lean`, one file lower, when the FORWARD leaf needed
+-- the same bound for §0.1's escape 2. A forward leaf must not import the backward kit to reach
+-- it, and two copies in files that never meet is the `Cifar8FloatBudget` duplicate-declaration
+-- trap (§3.11) waiting on one import edge. Same lemma, same proof, one home.
 
 /-- ⭐ **`|istd| ≤ S` from the `ε`-FLOOR ALONE, at a RATIONAL `S`.** `bnIstd_abs_le` gives
     `|istd| ≤ 1/√ε`, which is irrational and which `norm_num` cannot meet; this turns it into a

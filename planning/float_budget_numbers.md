@@ -112,13 +112,25 @@ not have been enough; all three are corrected in place. ⛔ **And the site count
 them was wrong: r34 has 36 BatchNorm sites, not 33** (1 stem + 13×2 + 3×3) — §3.16 finding 6's
 *when a docstring justifies something with a count, check the count*, for the second time.
 
-⭐⭐ **STARTING A SESSION? GO TO §3.29, THEN §3.28(B).** (A) is done; what is left of §3.28 is
-**(B)** escape 2's WINDOW half — 53 orders on ConvNeXt-T and 57 on ViT-Tiny, no new mathematics
-and no new hypothesis, two commits, and the leaf now serves the training-mode r34 number too.
-§4 carries the rest of the order — **2b** B0's whole-net certified tie (⛔ bigger than §4 costed:
-the apex is `efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched
-block ties at `bnBatchLA` are missing), then **4** ViT's backward, parked. ⭐ Still unmeasured:
-MobileNetV2's and B0's TRAINING-mode forwards (§3.29's closing note).
+⭐⭐ **AND §3.28's OTHER ITEM LANDED THE SAME DAY — §3.30: escape 2's WINDOW half, on both
+LayerNorm nets.** `cnx_float_logits_le` is **6.609·10¹⁷⁴ / 1.321·10¹⁷⁵** (53 orders) and
+`vit_float_logits_le` **1.130·10¹⁶¹ / 2.259·10¹⁶¹** (57), at NO new hypothesis and no new
+mathematics: the pure-normalise leaf restated at `bnXhat_sq_le`'s `|x̂| ≤ √n`, a lemma the repo
+has had for a month and which is load-bearing on all four BACKWARD numbers. ⛔ **Both stay
+CAPS** — the modulus half is priced and declined, and the fold stays 82 / 7 orders above the
+triangle inequality. ⭐⭐ The reusable finding is the second place the window was charged: the
+ROUNDING of the float product, bounded by the product of the two factors' windows when that
+product IS the normalised activation one rounding away — `floatClose_seScale`'s fix at a THIRD
+leaf, so *when a window contains an error term, ask why* is now this file's most productive
+question.
+
+⭐⭐ **STARTING A SESSION? GO TO §3.29 AND §3.30, THEN §4.** Both of §3.28's items are done.
+§4 carries the order — **2b** B0's whole-net certified tie (⛔ bigger than §4 costed: the apex is
+`efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched block ties at
+`bnBatchLA` are missing), then **4** ViT's backward, parked. ⭐ The two open levers, both
+measured and neither taken: **`emr` derived rather than supplied** — a further 49 orders on
+ConvNeXt-T and 55 on ViT-Tiny, and unlike escape 2 it changes what the modelled device IS
+(§3.30) — and **MobileNetV2's and B0's TRAINING-mode forwards**, still unmeasured (§3.29).
 
 §4 carries the rest of the order, and each item's state was measured before it was ranked.
 ✅ **(1) `resnet34Forward_full_pc_eq_chain` is DONE (2026-09-04, §3.23)** — all three whole-net
@@ -166,8 +178,8 @@ window contains an error term, ask why.**
 | ResNet-34 @224², **inference BN** | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 4.9·10⁻³ | fold | `Resnet34FloatBudget.lean` |
 | MobileNetV2 @224², **inference BN** | **2.154·10³** | 1.444·10⁹⁶ | — | fold | `MobileNetV2FloatBudget.lean` |
 | EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | fold | `EfficientNetFloatBudget.lean` |
-| ConvNeXt-T @224², channel LN | 4.858·10²²⁷ | 9.706·10²²⁷ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
-| ViT-Tiny @224², depth 12, vector LN | 3.612·10²¹⁸ | 7.222·10²¹⁸ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
+| ConvNeXt-T @224², channel LN | 6.609·10¹⁷⁴ | 1.321·10¹⁷⁵ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
+| ViT-Tiny @224², depth 12, vector LN | 1.130·10¹⁶¹ | 2.259·10¹⁶¹ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
 | ⛔ **ResNet-34 @224², TRAINING BN** | 3.176·10²²¹ | 6.349·10²²¹ | **2.00** | ⛔ **cap** | `Resnet34TrainFloatBudget.lean` |
 | **ResNet-34 BACKWARD** @224², **training BN** | 8.857·10²⁴⁵ | 6.894·10²⁴⁴ | 7.8·10⁻² | ⭐ fold | `Resnet34BackFloatBudget.lean` |
 | **MobileNetV2 BACKWARD** @224², **training BN**, ⭐ no operating point | 4.750·10¹⁵³ | 1.076·10¹⁵² | 2.3·10⁻² | ⭐ fold | `MobileNetV2BackFloatBudget.lean` |
@@ -466,8 +478,8 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **ResNet-34 fwd @ TRAINING BN** | ⛔ **DONE (2026-09-05), and it is the CAP** — `r34_train_float_logits_le`, 3.176·10²²¹ / 6.349·10²²¹, tied to the graph; §3.29 | — |
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
-| **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
-| **ViT-Tiny fwd** (`vitForwardKV`) | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `vit_float_logits_le`, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸, tied to the committed spec's denotation | — |
+| **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 6.609·10¹⁷⁴ / budget 1.321·10¹⁷⁵ (§3.30's escape 2), tied to the committed net | — |
+| **ViT-Tiny fwd** (`vitForwardKV`) | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `vit_float_logits_le`, window 1.130·10¹⁶¹ / budget 2.259·10¹⁶¹ (§3.30's escape 2), tied to the committed spec's denotation | — |
 | **ResNet-34 BACKWARD** (`r34InputGrad`) | ⭐ **DONE (2026-09-03), the FOLD, and TIED to the certified whole-net VJP** — `r34_grad_float_le`, window 8.857·10²⁴⁵ / budget 6.894·10²⁴⁴, at TRAINING BN; ⛔ three hypotheses, §3.7; the tie is §3.10 | — |
 | **MobileNetV2 BACKWARD** (`mnv2InputGrad`) | ⭐ **DONE (2026-09-04), the FOLD, TIED, and the FIRST with NO operating point** — `mnv2_grad_float_le`, window 4.750·10¹⁵³ / budget 1.076·10¹⁵², at TRAINING BN; §3.13, the tie is §3.14 | — |
 | **ConvNeXt-T BACKWARD** (`convnextInputGrad`) | ⭐⭐ **DONE (2026-09-04), the FOLD at a LAYERNORM net** — `cnx_grad_float_le`, window 1.023·10²⁵¹ / budget 1.563·10²⁵⁰, `\|istd\| ≤ 16`; §3.22, the tie is §3.21 and is `HasVJP` everywhere | — |
@@ -2928,7 +2940,12 @@ mode, which made the cap look unnecessary, and the sentence above stopped anyone
 
 ---
 
-#### (B) ⭐⭐ BANK ESCAPE 2's WINDOW HALF — 53 orders on ConvNeXt-T, 57 on ViT-Tiny
+#### (B) ✅ DONE 2026-09-05 (§3.30) — ⭐⭐ BANK ESCAPE 2's WINDOW HALF
+
+⭐ **The costing below held in every particular** — the two numbers, the two edits, the
+`bnXhat_abs_le_num` reuse, the blast radius and the `2·r4(x)` trap. §3.30 has what landed
+and the two things it did not predict: the probe's `min` disagreeing with the Lean leaf,
+and the numerals being re-emitted by a learned map rather than a regenerated chain.
 
 §3.27 has the mathematics and the ablation. What follows is only what the Lean needs.
 
@@ -3077,6 +3094,89 @@ item 4. Both have fewer BN sites (20 and 9 against 36) so both should be smaller
 FORWARD as well, since `bnBatchLA` reduces across examples at training. `mnv2_train_chain` /
 `b0_train_chain` do not exist.
 
+### 3.30 ✅ ESCAPE 2's WINDOW HALF LANDED (2026-09-05) — §3.28(B), on both LayerNorm nets
+
+`cnx_float_logits_le` is now **6.609·10¹⁷⁴ / 1.321·10¹⁷⁵** (from 4.858·10²²⁷ / 9.706·10²²⁷, **53
+orders**) and `vit_float_logits_le` **1.130·10¹⁶¹ / 2.259·10¹⁶¹** (from 3.612·10²¹⁸ /
+7.222·10²¹⁸, **57 orders**). §3.28(B)'s table reproduced to the digit. Both still `budget /
+window = 2.00`, both still the CAP — §9's label is unchanged and travels with them.
+
+**⭐ It cost no new hypothesis and no new mathematics.** `BnXhatFloatBridge.lean` (330 lines,
+**4.4 s**) restates the pure-normalise leaf at `bnXhat_sq_le`'s `|x̂| ≤ √n` —
+`floatClose_bnX` / `floatBridgesTo_bnX` / `Maps.bnCappedX` — with `Xh` the CEILING root of the
+reduction width. `Xh` is a constant of that width, so it enters no profile and does not track
+the window; and `bnXhat_sq_le` holds at EVERY input, so the leaf takes `0 ≤ Xh` and `m ≤ Xh²`
+and nothing about the activations.
+
+**⭐⭐ TWO places charged the window, and the second is the reusable finding.** The first is the
+real output's magnitude, `|γ·x̂ + β|`. The second is the **rounding** of the float product:
+`bnNormBudget`'s stage-2 term bounds `fl(fl(x−fl(μ))·fistd)` by `(D+ea)·(S+ei)`, the product of
+the two factors' windows — **but that product IS the normalised activation, one rounding away**,
+so the honest bound is `Xh + t` with `t` the exact-arithmetic error the same expression already
+computes. `FloatModel.mul_close_at` is the mechanism, and this is `floatClose_seScale`'s fix
+(§3.4 finding 2) and `mhpB`'s (§3.5) **at a third leaf**. ⭐ §0.1's checklist item — *when a
+window contains an error term, ask why* — for the third time, and it is now the single most
+productive question in this file.
+
+**⛔⛔ THE PROBE'S `min` AND THE LEAN LEAF DISAGREED, and it presented as `⊢ False`.** Under
+escape 2 the FOLD beats the cap at the shallow sites — at ConvNeXt's stem the inherited error is
+`9.5·10⁻⁸`, so `mod` is 102 against the cap's 223 — and `cnx_eval_chain`'s `ln_cap=True` takes
+`min(2·mag, mod)`, which is the honest per-site choice. But `Maps.bnCappedX` asserts `2·Ā' ≤ Ē'`
+**unconditionally**, so a chain folded with the `min` emits an `Ē'` its own closing inequality
+cannot meet. ⭐ `ln_cap='force'` is the fix and it costs NOTHING: the headline numbers are
+identical to four figures either way, because the window is what a capped number reports and the
+window does not depend on the choice. ⚠ **Carry this to any capped leaf whose fold is
+improved**: the moment the fold stops being uniformly worse, "take the smaller branch" and "take
+the cap" are different programs, and only one of them is what the Lean leaf proves.
+
+**⭐ The numerals were re-emitted by a LEARNED map, not a re-derivation.** Both budget files were
+generated by scripts that are gone (§3.26: five for five), and rewriting a 183-stage and a
+162-stage chain from scratch to change one leaf is the wrong shape of work. Instead: extract the
+ordered `(name := numeral)` list from the shipped file, reproduce it EXACTLY from the shipped
+chain — 435 for ConvNeXt, 377 + 26 fold arms for ViT — and only then re-emit the same ordered
+list at the new flags. ⭐ **Reproducing the shipped file is the check that the map is right**,
+and it is stronger than a hand-written map would be: ConvNeXt's was written by hand and was
+wrong at the tail (the gap and dense sites pin only their output pair), which the reproduction
+caught immediately; ViT's was not written at all but LEARNED by matching each numeral against the
+chain's own values, which are large enough to be unique. ⚠ ViT's depth-12 envelope fold passes
+its per-block boundaries as two `fun j => match j with` sequences rather than as named slots
+(§3.5.2 item 5), and a regex over `(name := …)` misses them — it presented as a type mismatch
+naming the whole `Maps.vitBodyKVFlat` application.
+
+**⚠ Two mechanical notes.** (1) `norm_num`'s simp set has to be told the new defs:
+`[bnNormBudgetX, bnXhatErr, bnProdErr, bnCentErr, FloatModel.mulErr, u32]`. Without them the
+goal is left unsolved with the new constant staring out of it, which reads as a failed
+arithmetic and is a missing unfold. (2) `bnXhat_abs_le_num` **moved down** out of
+`FloatBudgetEnvBack.lean` into the new file: a FORWARD leaf must not import the backward kit to
+reach it, and two copies in files that never meet is §3.11's duplicate-declaration trap waiting
+on one import edge.
+
+**⛔ It does NOT change the KIND, exactly as §3.27 finding 3 measured.** Both numbers stay caps.
+Escape 2's MODULUS half is deliberately not taken: 5006 orders on ConvNeXt's uncapped fold and
+**nothing** to either shipped statement, because the fold stays 82 orders (ConvNeXt-T) and 7
+orders (ViT-Tiny) above the triangle inequality. ⭐ And it sharpens §9's row: uncapped at the new
+leaf ConvNeXt's fold is 2.823·10²⁵⁶ — 3 orders past §3.7(a)'s wall — and 4.710·10²²⁶ at
+`|istd| ≤ 16`, which IS statable and 80 orders worse than the capped number. *The fold exists and
+is worse.*
+
+**⚠ ViT's twelve ATTENTION caps are untouched and cannot be.** They are there for
+REPRESENTABILITY, not size (§3.5): a `Real.exp` at an argument with no rational bound is not
+reached by a tighter window. So ViT's 57 orders come entirely from its 25 LayerNorm sites.
+
+**⭐ The next lever is `emr`, and it is bigger than this one was.** §3.27 finding 4: a
+normalisation RESETS its window iff `emr·S < 1`, which at the ε-floor and `emr = 10⁻²` is 3.17 —
+so the sites still multiply and `Xh` is the base rather than the answer. But `emr = 10⁻²` is a
+hypothesis about a reduction the device performs in float, and a rounded mean of `n` terms is
+`γₙ·A`, which at `n = 96` and `u = 2⁻²⁴` is `6·10⁻⁶`. **Measured: deriving `emr` rather than
+supplying it is worth a further 49 orders on ConvNeXt-T (→ 3.195·10¹²⁵) and 55 on ViT-Tiny
+(→ 4.041·10¹⁰⁶).** It costs a `DeviceLN` field changing status from supplied to derived, so it is
+its own commit and its own decision about what the modelled device is.
+
+**⚠ One deviation from §7, stated.** This is ONE commit for TWO nets where §7 says one per net.
+`DeviceLN.bridgeAt`'s signature carries `Xh`, so both budget files break at the same edit and
+neither can land alone without a dead duplicate pair of the device kernel in between. Splitting
+would buy a smaller diff at the cost of a state nobody wants to bisect through.
+
 ## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
 
 §3.8's three items and §3.16's four are all closed; ConvNeXt-T's backward has a certified tie
@@ -3145,10 +3245,12 @@ so all three batched block ties at `bnBatchLA` are missing. ⭐ The batched leaf
 shape — §3.24's last paragraph.
 
 **3. ✅ THE ESCAPE — MEASURED 2026-09-04 (§3.27), and the ranking's own premise was wrong.**
-⭐⭐ **Its cheap half is now item (B) of §3.28's recipe, and a NEW item (A) went in front of it:**
-§0.1's *"there is no theorem to state"* for training-mode normalisation is false. ✅ **(A) LANDED
-2026-09-05 — `r34_train_float_logits_le`, 3.176·10²²¹ / 6.349·10²²¹, §3.29** — so the escape-2 leaf
-now serves the training-mode r34 number too, and (B) is what remains.
+⭐⭐ ✅ **BOTH HALVES LANDED 2026-09-05.** **(A)** `r34_train_float_logits_le`,
+3.176·10²²¹ / 6.349·10²²¹ (§3.29) — §0.1's *"there is no theorem to state"* refuted by a theorem.
+**(B)** escape 2's window half on both LayerNorm nets (§3.30): ConvNeXt-T 4.858·10²²⁷ →
+**6.609·10¹⁷⁴**, ViT-Tiny 3.612·10²¹⁸ → **1.130·10¹⁶¹**. ⭐ What is left of this item is the
+`emr` lever §3.30 closes on — worth a further 49 and 55 orders, and unlike escape 2 it changes
+what the modelled device IS.
 ⛔ It is NOT "the only open item that would change what the numbers MEAN": the fold stays 82 orders
 (ConvNeXt-T) and 7 orders (ViT-Tiny) above the triangle inequality even with §0.1's quadratic gone,
 so both numbers stay CAPS. ⭐⭐ What it changes is what they SAY — **53 orders on ConvNeXt-T's

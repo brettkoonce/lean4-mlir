@@ -304,6 +304,13 @@ lean_lib «Certs» where
              -- the tie the ImageNet-scale float number was missing.
              `LeanMlir.Proofs.Codegen.ResNet34RenderPCEval,
              `LeanMlir.Proofs.Float.FloatBudgetEnv,
+             -- ⭐⭐ §0.1's ESCAPE 2, window half: the pure-normalise leaf restated at
+             -- |x̂| <= sqrt(n) (bnXhat_sq_le) instead of at |x-mu|*|istd| <= D*S, plus
+             -- mul_close_at (a rounded product charged at the REAL product's bound). Worth 53
+             -- orders on ConvNeXt-T's committed window and 57 on ViT-Tiny's, at NO new
+             -- hypothesis. Also the new home of bnXhat_abs_le_num, moved down out of
+             -- FloatBudgetEnvBack so a FORWARD leaf need not import the backward kit.
+             `LeanMlir.Proofs.Float.BnXhatFloatBridge,
              `LeanMlir.Proofs.Float.Cifar8FloatBudget,
              -- ⭐ The first ImageNet-scale whole-net float budget stated as a NUMBER: the
              -- deployed ResNet-34 inference forward, window 3.152e211 / budget 1.547e209 at

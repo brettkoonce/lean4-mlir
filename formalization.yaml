@@ -207,7 +207,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "cnx_float_logits_le"   # ⛔ the fourth ImageNet-scale statement and NOT the same KIND as the other three: the ConvNeXt-T forward's float logits are within 9.706e227 of the real ones on |x| <= 1, at the measured 300-epoch profile (kernels <= 6/10, biases/LN-beta <= 3, LN-gamma <= 48/10, layer scale <= 84/10), eps >= 1e-5, device LN statistics and GELU accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 23 LayerNorm sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold. LayerNorm has no frozen-statistics mode, so no version of this net has a fold (fidelity.divergences 4d)
+    - declaration: "cnx_float_logits_le"   # ⛔ the fourth ImageNet-scale statement and NOT the same KIND as the other three: the ConvNeXt-T forward's float logits are within 1.321e175 of the real ones on |x| <= 1, at the measured 300-epoch profile (kernels <= 6/10, biases/LN-beta <= 3, LN-gamma <= 48/10, layer scale <= 84/10), eps >= 1e-5, device LN statistics and GELU accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 23 LayerNorm sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold. LayerNorm has no frozen-statistics mode, so no version of this net has a fold. \u2b50\u2b50 2026-09-05: the WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX) instead of at |x-mu|*|istd| <= 2A*S -- \u00a70.1's escape 2, worth 53 orders (was 4.858e227 / 9.706e227), at NO new hypothesis and no new mathematics. \u26d4 Still the cap: the modulus half of escape 2 is deliberately not taken, and even with \u00a70.1's quadratic gone the honest fold is 82 orders ABOVE the triangle inequality here (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/ConvNeXtFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -219,7 +219,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "vit_float_logits_le"   # ⛔ the fifth ImageNet-scale statement, ConvNeXt's KIND not r34's: the committed depth-12 vector-LN ViT-Tiny forward's float logits are within 7.222e218 of the real ones on |x| <= 1, at the per-kind measured profile (attention kernels <= 7/10, MLP <= 8/10, patch conv <= 3/10, head <= 4/10, biases <= 9/10, LN-gamma <= 17/10, LN-beta <= 6/10), eps >= 1e-5, device LN statistics / GELU / exp accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 25 LayerNorm sites AND all 12 attention sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold; the patch embed is the one honest stage. ⚠ Also carries the softmax side condition smRho u eexp 197 < 1 (fidelity.divergences 4d)
+    - declaration: "vit_float_logits_le"   # ⛔ the fifth ImageNet-scale statement, ConvNeXt's KIND not r34's: the committed depth-12 vector-LN ViT-Tiny forward's float logits are within 2.259e161 of the real ones on |x| <= 1, at the per-kind measured profile (attention kernels <= 7/10, MLP <= 8/10, patch conv <= 3/10, head <= 4/10, biases <= 9/10, LN-gamma <= 17/10, LN-beta <= 6/10), eps >= 1e-5, device LN statistics / GELU / exp accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 25 LayerNorm sites AND all 12 attention sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold; the patch embed is the one honest stage. ⚠ Also carries the softmax side condition smRho u eexp 197 < 1. ⭐⭐ 2026-09-05: the LayerNorm WINDOW is now charged at |x-hat| <= sqrt(n) (bnXhat_sq_le, Maps.bnCappedX, Xh = 14 for D = 192) -- §0.1's escape 2, worth 57 orders (was 3.612e218 / 7.222e218), at NO new hypothesis. ⚠ It does NOTHING for the twelve ATTENTION caps, which are there for REPRESENTABILITY rather than size: a tighter window cannot reach a Real.exp with no rational bound (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/ViTFloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -789,9 +789,54 @@ fidelity:
        `scripts/float_budget_envelope.py`'s `cnx_eval_chain` / `verify_cnx`). At the profile
        measured on the finished 300-epoch checkpoint, `eps >= 1e-5`, unit input window and
        `u <= 2^-24`:
-           output window  <= 4.858e227      (cnxBridge_mag_le)
-           fresh budget   <= 9.706e227      (cnxBridge_fresh_le)
-       and per logit `|float - real| <= 9.706e227` (`cnx_float_logits_le`), tied to the committed
+           output window  <= 6.609e174      (cnxBridge_mag_le)
+           fresh budget   <= 1.321e175      (cnxBridge_fresh_le)
+       ⭐⭐ ESCAPE 2, WINDOW HALF (2026-09-05) -- 53 orders on ConvNeXt-T and 57 on
+       ViT-Tiny, at NO new hypothesis and no new mathematics. `floatClose_bn` charged the
+       certified window at `|x-mu| * |istd| <= D * S`, the product of the two factors' own
+       bounds; the normalised activation has a bound of its own that mentions neither,
+       `x-hat^2 <= n` (`bnXhat_sq_le`), which four whole-net BACKWARD budget files have used
+       since 2026-09-03 and which the FORWARD leaf simply threw away.
+       `BnXhatFloatBridge.lean` restates the leaf at it: `floatClose_bnX` / `Maps.bnCappedX`,
+       with `Xh` the CEILING root of the reduction width (10/14/20/28 for ConvNeXt's channel
+       counts, 14 for ViT's D = 192) since sqrt is irrational at all of them. TWO places
+       charged the window and both are fixed -- the real output's magnitude, and (subtler) the
+       ROUNDING of the float product, which `bnNormBudget` bounds by `(D+ea)*(S+ei)` when that
+       product IS the normalised activation one rounding away. That second one is
+       `floatClose_seScale`'s fix (4d, EfficientNet-B0) and `mhpB`'s (4d, ViT) at a THIRD leaf:
+       when a window contains an error term, ask why. `FloatModel.mul_close_at` is the
+       mechanism -- a rounded product whose ROUNDING is charged at the real product's own
+       bound. `Xh` is a constant of the reduction width, so it enters no profile and does not
+       track the window.
+           ConvNeXt-T  4.858e227 / 9.706e227  ->  6.609e174 / 1.321e175
+           ViT-Tiny    3.612e218 / 7.222e218  ->  1.130e161 / 2.259e161
+       ⛔ IT DOES NOT CHANGE THE KIND. Both numbers are still `FloatBridgesTo.capped`, still
+       `budget/window = 2.00`, still the triangle inequality. Escape 2 has a MODULUS half too
+       (`2e*S*(1+Xh)`, free of the window) and it is deliberately NOT taken: it is worth 5006
+       orders on ConvNeXt's UNCAPPED fold and NOTHING to either shipped statement, because both
+       are capped and the fold stays above the cap -- 82 orders above on ConvNeXt-T, 7 on
+       ViT-Tiny. Taking it would need the reverse triangle inequality for the euclidean norm
+       over `Vec n` and `s -> sqrt(s^2+eps)` being 1-Lipschitz, neither of which the float tier
+       uses. Priced, measured, declined.
+       ⭐ And it sharpens 4d's "the cap is the better bound, not a shortcut": uncapped at this
+       leaf ConvNeXt's fold is 2.823e256 (3 orders past norm_num's shape-dependent ~1e253 wall)
+       and 4.710e226 at an operating point |istd| <= 16 -- statable, and 80 orders WORSE than
+       the capped number above. The fold exists and is worse; that is a claim about magnitudes,
+       not about LayerNorm.
+       ⚠ `bnXhat_abs_le_num` moved down from `FloatBudgetEnvBack.lean` (the ResNet-34 BACKWARD
+       kit) into `BnXhatFloatBridge.lean` so a FORWARD leaf need not import the backward cone to
+       reach it -- and so the two tiers cannot drift into two copies, which is the duplicate
+       declaration trap `Cifar8FloatBudget.lean` sat on for two days.
+       ⚠ What survives and is the interesting residue: `D*ei + ea*S`, the DEVICE's two
+       accuracies, stay linear in the window and are what stops a normalisation RESETTING. A
+       site resets iff `emr*S < 1`, which at the eps-floor and `emr = 1e-2` is 3.17, so
+       ConvNeXt's sites still multiply. ⭐ Before buying that with an operating point, question
+       `emr = 1e-2` itself: a rounded mean of n terms is `gamma_n * A`, which at n = 96 and
+       u = 2^-24 is 6e-6. Deriving it rather than supplying it is worth a further 49 orders on
+       ConvNeXt-T and 55 on ViT-Tiny (measured); it costs a `DeviceLN` field changing status,
+       so it is its own commit.
+
+       and per logit `|float - real| <= 1.321e175` (`cnx_float_logits_le`), tied to the committed
        net by `cnxForward_eq_committed` (= `convNextForwardTCh_eq_skeleton` read backwards) and
        restated on it by `cnx_float_logits_le_committed`. Three modelled hypotheses, all named:
        `DeviceLN` (the deployed LayerNorm's mean, relative accuracy `emr`, and its inverse-stddev,
@@ -860,9 +905,9 @@ fidelity:
        re-asserted by `scripts/float_budget_envelope.py`'s `vit_chain` / `verify_vit`). At the
        profile measured per parameter KIND on the trained checkpoint, `eps >= 1e-5`, unit input
        window and `u <= 2^-24`:
-           output window  <= 3.612e218      (vitBridge_mag_le)
-           fresh budget   <= 7.222e218      (vitBridge_fresh_le)
-       and per logit `|float - real| <= 7.222e218` (`vit_float_logits_le`), restated on the
+           output window  <= 1.130e161      (vitBridge_mag_le)
+           fresh budget   <= 2.259e161      (vitBridge_fresh_le)
+       and per logit `|float - real| <= 2.259e161` (`vit_float_logits_le`), restated on the
        committed spec's denotation by `vit_float_logits_le_committed` (`vitVerified_denote_eq`
        is `rfl`; `vitVerified_fwd_faithful` says the emitted depth-12 multi-head vector-LN graph
        denotes the same function). FOUR modelled hypotheses, all named: `DeviceLN` (`emr`
@@ -883,7 +928,7 @@ fidelity:
        not: `floatBridges_mhProjAttnFull`'s WINDOW is derived as `|real| + |float - real|`, so it
        carries `smErr`'s `Real.exp (2*delta)` at `delta ≈ 3.6e10` by block 0 -- an argument with
        no rational bound -- and 36 stage numerals CANNOT BE WRITTEN AT ALL, at a magnitude
-       SMALLER than the shipped one (8.257e190 vs 3.612e218). Capping does not reach it, because
+       SMALLER than the shipped one (8.257e190 vs the 3.612e218 this number was before escape 2). Capping does not reach it, because
        `capped` replaces the modulus and never the window. `floatClose_mhProjAttnFullCap` does:
        `FloatClose`'s magnitude clause bounds the FLOAT output directly, and the float output is
        a rounded dot of float softmax weights (<= 1 + smCap, exp-free) against float V. That is

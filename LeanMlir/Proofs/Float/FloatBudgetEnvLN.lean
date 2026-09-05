@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
+import LeanMlir.Proofs.Float.BnXhatFloatBridge
 import LeanMlir.Proofs.Float.ConvNeXtWholeFloatBridge
 
 /-! # `FloatBridgesTo.Maps` leaves for the LayerNorm family (ConvNeXt / ViT)
@@ -107,6 +108,48 @@ theorem Maps.bnCapped {m : Nat} (M : FloatModel) {ε γ β : ℝ}
     (hemn A h0) (hem A h0 hle) (hein A h0) (hei A h0 hle)
   have hmag : G * (2 * A * S) ≤ G * (2 * Ā * S) :=
     mul_le_mul_of_nonneg_left (by nlinarith) hG0
+  linarith
+
+/-- ⭐⭐ **The capped LayerNorm at `|x̂| ≤ Xh` — §0.1's ESCAPE 2, window half.** `Maps.bnCapped`
+    above charges the certified window at `G·(2Ā·S) + β̄`, the product of the two factors' own
+    bounds, and at the `ε`-floor `S = 317` that is what makes a LayerNorm net's window compound.
+    The normalised activation has a bound of its own — `|x̂| ≤ √n`, `bnXhat_sq_le` — which
+    mentions neither factor and which four backward budget files have used since 2026-09-03.
+
+    ⭐ **Worth 53 orders on ConvNeXt-T's committed number and 57 on ViT-Tiny's, at NO new
+    hypothesis**: `Xh` is a constant of the reduction width, so it does not enter the profile
+    and it does not track the window. `BnXhatFloatBridge.lean` has the derivation and the two
+    places the old window was charged.
+
+    ⛔ Still the CAP — the error clause is `2·Ā'` exactly as above, and the underlying modulus
+    is `floatClose_bn`'s unchanged. §9's label applies verbatim; what moves is how big the
+    window inside it is. ⚠ The site still MULTIPLIES rather than resetting, because
+    `bnNormBudgetX` keeps `D·ei + ea·S` — the device accuracies — linear in the window, and
+    at `emr·S = 3.17` that dominates `Xh` (§3.27 finding 4). -/
+theorem Maps.bnCappedX {m : Nat} (M : FloatModel) {ε γ β : ℝ}
+    (fμ fistdv : Vec m → ℝ) (emean eistd : ℝ → ℝ) {G Bbnd S Xh : ℝ}
+    (hm : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
+    (hmean : ∀ A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fμ v - bnMean m v| ≤ emean A)
+    (histd : ∀ A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fistdv v - bnIstd m v ε| ≤ eistd A)
+    (hS : ∀ v : Vec m, |bnIstd m v ε| ≤ S) (hXh0 : 0 ≤ Xh) (hmXh : (m : ℝ) ≤ Xh ^ 2)
+    {q em ei Ā Ē Ā' Ē' : ℝ} (hq : M.u ≤ q)
+    (hG0 : 0 ≤ G) (hB0 : 0 ≤ Bbnd) (hS0 : 0 ≤ S)
+    (hem : ∀ A, 0 ≤ A → A ≤ Ā → emean A ≤ em) (hei : ∀ A, 0 ≤ A → A ≤ Ā → eistd A ≤ ei)
+    (hĀ' : G * Xh + Bbnd + bnNormBudgetX q Xh (2 * Ā) S G Bbnd em ei ≤ Ā')
+    (hĒ' : 2 * Ā' ≤ Ē') :
+    ((floatBridgesTo_bnX M fμ fistdv emean eistd hm hε hγ hβ hmean histd hS
+      hXh0 hmXh).capped).Maps Ā Ē Ā' Ē' := by
+  have hu := M.u_nonneg
+  have hemn : ∀ A, 0 ≤ A → 0 ≤ emean A := fun A hA =>
+    (abs_nonneg _).trans (hmean A hA 0 (fun _ => by simpa using hA))
+  have hein : ∀ A, 0 ≤ A → 0 ≤ eistd A := fun A hA =>
+    (abs_nonneg _).trans (histd A hA 0 (fun _ => by simpa using hA))
+  refine Maps.capped (fun A h0 hle => ?_) hĒ'
+  show bnXLeafMag M.u Xh S G Bbnd emean eistd A ≤ Ā'
+  unfold bnXLeafMag
+  have hnb := bnNormBudgetX_mono (u := M.u) (u' := q) (Xh := Xh) (D := 2 * A) (D' := 2 * Ā)
+    (S := S) (G := G) (Bbnd := Bbnd) hu hq hXh0 (by linarith) (by linarith) hS0 hG0 hB0
+    (hemn A h0) (hem A h0 hle) (hein A h0) (hei A h0 hle)
   linarith
 
 -- ════════════════════════════════════════════════════════════════
@@ -396,34 +439,45 @@ theorem invSqrt_le_of_floor {ε e S : ℝ} (hε : 0 < ε) (he : ε ≤ e) (hS : 
 noncomputable def DeviceLN.lnF {emr ei : ℝ} (R : DeviceLN emr ei) (M : FloatModel) (c : Nat)
     (e : ℝ) : Vec c → Vec c := bnForwardFV M 1 0 (R.fmu c) (R.fistd c e)
 
-/-- ⛔ **One LayerNorm site's bridge, CAPPED.** `layerNormForward c e 1 0 = bnForward c e 1 0`
-    definitionally, so the leaf is `floatBridgesTo_bn` — whose modulus is quadratic in the
-    window (§0.1). `.capped` replaces it by `min(that, 2·window)`. -/
+/-- ⛔ **One LayerNorm site's bridge, CAPPED, at `|x̂| ≤ Xh`.** `layerNormForward c e 1 0 =
+    bnForward c e 1 0` definitionally, so the leaf is `floatBridgesTo_bnX` — whose modulus is
+    still quadratic in the window (§0.1) and whose WINDOW is §0.1's escape 2. `.capped` replaces
+    the modulus by `min(that, 2·window)`.
+
+    ⭐ `Xh` is a constant of the reduction width `c`, supplied with `c ≤ Xh²` and nothing else:
+    `bnXhat_sq_le` holds at every input, so this costs no hypothesis about the activations. The
+    caller passes the CEILING root (10/14/20/28 for ConvNeXt's channel counts, 14 for ViT's
+    `D = 192`) because `√c` is irrational at all of them. -/
 noncomputable def DeviceLN.bridgeAt {emr ei : ℝ} (R : DeviceLN emr ei) (M : FloatModel)
-    {ε S : ℝ} (hε : 0 < ε) (hSε : 1 / Real.sqrt ε ≤ S) (c : Nat) (hc : 0 < c) (e : ℝ)
+    {ε S Xh : ℝ} (hε : 0 < ε) (hSε : 1 / Real.sqrt ε ≤ S) (c : Nat) (hc : 0 < c)
+    (hXh0 : 0 ≤ Xh) (hcXh : (c : ℝ) ≤ Xh ^ 2) (e : ℝ)
     (he : ε ≤ e) : FloatBridgesTo (layerNormForward c e 1 0) (R.lnF M c e) :=
-  (floatBridgesTo_bn (G := 1) (Bbnd := 0) (S := S) M (R.fmu c) (R.fistd c e)
+  (floatBridgesTo_bnX (G := 1) (Bbnd := 0) (S := S) M (R.fmu c) (R.fistd c e)
     (fun A => emr * A) (fun _ => ei) hc (lt_of_lt_of_le hε he) (by norm_num) (by norm_num)
     (fun A hA v hv => R.specMu c A hA v hv)
     (fun A hA v hv => R.specIstd c e (lt_of_lt_of_le hε he) A hA v hv)
     (fun v => (bnIstd_abs_le v (lt_of_lt_of_le hε he)).trans
-      (invSqrt_le_of_floor hε he hSε))).capped
+      (invSqrt_le_of_floor hε he hSε)) hXh0 hcXh).capped
 
 /-- ⛔ **One LayerNorm site's envelope — one honest inequality and one cap.** `nA` is the real
-    window `2Ā·S + bnNormBudget`, which is the fold; `nE` is `2·Ā'`, which is not (§9). -/
+    window `Xh + bnNormBudgetX`, which is the fold; `nE` is `2·Ā'`, which is not (§9).
+    ⭐ Note what `nA` no longer contains: the `2Ā·S` that used to carry the input window into
+    the output magnitude. What remains window-dependent is `bnNormBudgetX`'s `D·ei + ea·S` —
+    the DEVICE's two accuracies (§3.27 finding 4). -/
 theorem DeviceLN.mapsAt {emr ei : ℝ} (R : DeviceLN emr ei) (M : FloatModel)
-    {ε S q : ℝ} (hemr : 0 ≤ emr) (hε : 0 < ε) (hSε : 1 / Real.sqrt ε ≤ S) (hS0 : 0 ≤ S)
-    (hq : M.u ≤ q) (c : Nat) (hc : 0 < c) (e : ℝ) (he : ε ≤ e) {Ā Ē Ā' Ē' : ℝ}
-    (nA : 1 * (2 * Ā * S) + 0 + bnNormBudget q (2 * Ā) S 1 0 (emr * Ā) ei ≤ Ā')
+    {ε S q Xh : ℝ} (hemr : 0 ≤ emr) (hε : 0 < ε) (hSε : 1 / Real.sqrt ε ≤ S) (hS0 : 0 ≤ S)
+    (hq : M.u ≤ q) (c : Nat) (hc : 0 < c) (hXh0 : 0 ≤ Xh) (hcXh : (c : ℝ) ≤ Xh ^ 2)
+    (e : ℝ) (he : ε ≤ e) {Ā Ē Ā' Ē' : ℝ}
+    (nA : 1 * Xh + 0 + bnNormBudgetX q Xh (2 * Ā) S 1 0 (emr * Ā) ei ≤ Ā')
     (nE : 2 * Ā' ≤ Ē') :
-    (R.bridgeAt M hε hSε c hc e he).Maps Ā Ē Ā' Ē' :=
-  FloatBridgesTo.Maps.bnCapped (G := 1) (Bbnd := 0) (S := S) (em := emr * Ā) (ei := ei) M
+    (R.bridgeAt M hε hSε c hc hXh0 hcXh e he).Maps Ā Ē Ā' Ē' :=
+  FloatBridgesTo.Maps.bnCappedX (G := 1) (Bbnd := 0) (S := S) (em := emr * Ā) (ei := ei) M
     (R.fmu c) (R.fistd c e) (fun A => emr * A) (fun _ => ei)
     hc (lt_of_lt_of_le hε he) (by norm_num) (by norm_num)
     (fun A hA v hv => R.specMu c A hA v hv)
     (fun A hA v hv => R.specIstd c e (lt_of_lt_of_le hε he) A hA v hv)
     (fun v => (bnIstd_abs_le v (lt_of_lt_of_le hε he)).trans
-      (invSqrt_le_of_floor hε he hSε))
+      (invSqrt_le_of_floor hε he hSε)) hXh0 hcXh
     hq (by norm_num) (by norm_num) hS0
     (fun A h0 hle => mul_le_mul_of_nonneg_left hle hemr) (fun _ _ _ => le_rfl) nA nE
 

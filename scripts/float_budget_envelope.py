@@ -938,7 +938,18 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
         # ⚠ `FloatBridgesTo.capped` is `min(mod, 2*mag)`, so the two branches are COMPARABLE and
         # the cap only ever helps. Round the window FIRST and double the rounded value (§3.5.2
         # item 2: `2*r4(x)` can exceed `r4(2*x)`, which breaks `Maps.capped`'s own `2*Ā' <= Ē'`).
-        err = min(r4(2 * mag), r4(mod)) if ln_cap else r4(mod)
+        # ⛔ `ln_cap='force'` takes the cap at EVERY site rather than the smaller branch.
+        # Under `ln_lin` the fold WINS at the shallow sites (the stem's inherited error is 1e-7,
+        # so `mod` is 102 against the cap's 223), and `Maps.bnCappedX` asserts `2*A' <= E'`
+        # unconditionally — so a Lean chain built on that leaf must be folded this way or its
+        # own closing inequality is false. Costs nothing at the whole-net level: the WINDOW is
+        # identical either way, and the window is what a capped number reports.
+        if ln_cap == 'force':
+            err = r4(2 * mag)
+        elif ln_cap:
+            err = min(r4(2 * mag), r4(mod))
+        else:
+            err = r4(mod)
         st = (mag, err); out.append((tag + '.ln', st))
         st = R(cnx_diag(st, gl, q)); out.append((tag + '.lng', st))
         st = R(cnx_bias(st, bb, q)); out.append((tag + '.lnb', st))
@@ -970,10 +981,15 @@ def cnx_eval_chain(w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
 
 
 def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
-               emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32) -> int:
+               emr=CNX_EMR, ei=CNX_EI, egelu=CNX_EGELU, q=U32, ln_lin=False) -> int:
     """Re-assert EVERY rounded inequality `ConvNeXtFloatBudget.lean` closes, exactly — each
     stage's emitted numeral must still dominate the exact value computed from the PREVIOUS
-    stage's emitted numerals. Returns the count checked; raises on the first failure."""
+    stage's emitted numerals. Returns the count checked; raises on the first failure.
+
+    ⚠ `ln_lin=True` asserts the ESCAPE-2 window (`Maps.bnCappedX`'s `1*Xh + 0 + bnNormBudgetX`)
+    where the default asserts the shipped one (`Maps.bnCapped`'s `2A*S + bnNormBudget`). The
+    two are different programs and asserting the wrong one passes while describing the other;
+    `Xh` is the CEILING root of the reduction width, as the Lean leaf takes it."""
     r = dict(rows)
     n = 0
 
@@ -988,9 +1004,14 @@ def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
         ck(tag + '.A', (1 + g) * (m * w * A + bb), dst[0])
         ck(tag + '.E', g * (m * w * (A + E) + bb) + m * w * E, dst[1])
 
-    def ln_ck(tag, src):
+    def ln_ck(tag, src, nred):
         A, E = src
-        ck(tag + '.ln.A', cnx_ln_leaf(A, S, emr, ei, q), r[tag + '.ln'][0])
+        if ln_lin:
+            mag = F(isqrt_ceil(nred)) + bn_norm_budget_x(
+                q, F(isqrt_ceil(nred)), 2 * A, S, F(1), F(0), emr * A, ei)
+        else:
+            mag = cnx_ln_leaf(A, S, emr, ei, q)
+        ck(tag + '.ln.A', mag, r[tag + '.ln'][0])
         ck(tag + '.ln.E', 2 * r[tag + '.ln'][0], r[tag + '.ln'][1])
         A1, E1 = r[tag + '.ln']
         me = mulErr(q, gl, A1, F(0), F(0))
@@ -1003,18 +1024,18 @@ def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
 
     st = (F(1), F(0))
     conv_ck('stem.conv', 3 * 4 * 4, st, r['stem.conv'])
-    st = ln_ck('stem', r['stem.conv'])
+    st = ln_ck('stem', r['stem.conv'], 96)
     for si, (c, ce, nblk, _hw) in enumerate(CNX_STAGES):
         if si > 0:
             cin = CNX_STAGES[si - 1][0]
-            st = ln_ck(f'd{si}', st)
+            st = ln_ck(f'd{si}', st, cin)
             conv_ck(f'd{si}.conv', cin * 2 * 2, st, r[f'd{si}.conv'])
             st = r[f'd{si}.conv']
         for b in range(nblk):
             t = f's{si + 1}b{b}'
             blkin = st
             conv_ck(t + '.dw', 7 * 7, blkin, r[t + '.dw'])
-            s = ln_ck(t, r[t + '.dw'])
+            s = ln_ck(t, r[t + '.dw'], c)
             conv_ck(t + '.ex', c, s, r[t + '.ex'])
             A, E = r[t + '.ex']
             ck(t + '.ge.A', A + egelu, r[t + '.ge'][0])
@@ -1032,7 +1053,7 @@ def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
     g50 = r4(gamma_q(49 + 1))
     ck('gap.A', st[0] * ((1 + g50) * (1 + q)), r['gap'][0])
     ck('gap.E', st[0] * (q * (1 + g50) + g50) + st[1], r['gap'][1])
-    st = ln_ck('head', r['gap'])
+    st = ln_ck('head', r['gap'], 768)
     conv_ck('dense', 768, st, r['dense'])
     return n
 
@@ -1242,7 +1263,10 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
             nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
             mod = nb + ((E + E) * S + 2 * A * (8 * A * E * S ** 3 / 2))
         mag = r4(mag)
-        if ln_cap:
+        if ln_cap == 'force':                 # see `cnx_eval_chain`'s note
+            err = r4(2 * mag)
+            taint = False
+        elif ln_cap:
             err = min(r4(2 * mag), r4(mod))
             taint = False                     # the cap discards the inherited error entirely
         else:
@@ -1286,7 +1310,7 @@ def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
 def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
                gl=VIT_GL, bl=VIT_BL, pb=VIT_PB,
                S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
-               k=K_VIT) -> int:
+               k=K_VIT, ln_lin=False) -> int:
     """Re-assert EVERY rounded inequality a `ViTFloatBudget.lean` would close, exactly: each
     stage's emitted numeral must still dominate the exact value computed from the PREVIOUS
     stage's emitted numerals.  Returns the count checked; raises on the first failure.
@@ -1309,7 +1333,14 @@ def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
 
     def ln_ck(tag, src):
         A, E = src
-        ck(tag + '.ln.A', vit_ln_leaf(A, S, emr, ei, q), r[tag + '.ln'][0])
+        # ⚠ `ln_lin=True` asserts the ESCAPE-2 window (`Maps.bnCappedX`), the default the
+        # shipped one (`Maps.bnCapped`). Different programs; asserting the wrong one passes.
+        if ln_lin:
+            Xh = F(isqrt_ceil(D_VIT))
+            mag = Xh + bn_norm_budget_x(q, Xh, 2 * A, S, F(1), F(0), emr * A, ei)
+        else:
+            mag = vit_ln_leaf(A, S, emr, ei, q)
+        ck(tag + '.ln.A', mag, r[tag + '.ln'][0])
         ck(tag + '.ln.E', 2 * r[tag + '.ln'][0], r[tag + '.ln'][1])
         A1, E1 = r[tag + '.ln']
         me = mulErr(q, gl, A1, F(0), F(0))
