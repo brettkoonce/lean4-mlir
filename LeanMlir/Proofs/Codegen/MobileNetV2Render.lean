@@ -13,10 +13,22 @@ node, so the committed bytes ARE the certified render.
 **The depthwise wrinkle (vs ResNet's plain convs).** The inverted-residual body is
 expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6 → project(1×1)→BN (a LINEAR bottleneck — NO relu6
 after project), so the block-output cotangent flows straight into the project-BN backward. The
-depthwise param updates use the new `depthwiseWeightSgd`/`depthwiseStridedWeightSgd` ops (the
+depthwise param updates use the `depthwiseWeightSgd`/`depthwiseStridedXlaWeightSgd` ops (the
 per-channel `batch_group_count = c` transpose-trick) and the depthwise bias ops
-`depthwiseBiasSgd`/`depthwiseStridedBiasSgd` (whose `skel` aliases `convBiasSgd`'s spatial reduce);
+`depthwiseBiasSgd`/`depthwiseStridedXlaBiasSgd` (whose `skel` aliases `convBiasSgd`'s spatial reduce);
 the relu6 kink uses `selectMid` (the two-sided `0 < x < 6` mask) rather than ResNet's `selectPos`.
+
+**Padding: XLA-`SAME` at every stride-2 site, in every artifact this file writes (2026-09-05).**
+The stem (`flatConvStridedXlaF`) and the four strided depthwises (`depthwiseStridedXlaF`) read the
+ODD decimation phase — what `jax.lax.conv_general_dilated(…, 'SAME')` computes at an even input,
+and what the TF-origin reference does — and the SGD backward pairs them with
+`convStridedXla{Weight,Bias}Sgd`, `depthwiseStridedXlaBack` and
+`depthwiseStridedXla{Weight,Bias}Sgd`, whose `den`s are the `…Xla` VJPs. Until 2026-09-05 the
+per-example SGD pair (`mobilenetv2_fwd` / `mobilenetv2_train_step`) was the one symmetric
+MobileNetV2 left standing after the 2026-08-08 switch (`planning/mnv4_verified.md` §3h), kept as a
+self-consistent DIFFERENT net; it now spells the same program as the Adam artifacts, so there is
+ONE MobileNetV2 and `scripts/convention_audit.py` audits `mobilenetv2_fwd` directly. The symmetric
+tokens still exist (ResNet, ConvNeXt, MobileNetV4's UIB blocks use them); nothing here does.
 
 Render is value-independent (`skel` erases values), so the renderer passes placeholder zeros and
 `lr := 0`/`ε := 0`; the emitted `lrStr`/`epsStr` literals carry the real values. The committed
@@ -84,7 +96,7 @@ private def bnSiteP (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName stat
 
 /-- **STRIDED inverted-residual forward** (b1/b3/b5/b6): expand at the input `2hh×2ww`, depthwise
     downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) (xlaPad : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwd := do
+private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -98,12 +110,10 @@ private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName 
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
   let (cEn, nEn) ← bnSiteP B mid (2*hh) (2*ww) mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
-  -- ⚠ `xlaPad` picks the TF-origin asymmetric convention. Both tokens have the same type and the
-  -- same output shape, so the ONLY thing that distinguishes the two nets here is this flag.
-  let (cDc, nDc) ← if xlaPad then
-      pretty B (.depthwiseStridedXlaF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
-    else
-      pretty B (.depthwiseStridedF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
+  -- ⚠ XLA-`SAME` (`depthwiseStridedXlaF`), the TF-origin convention. The symmetric token has the
+  -- same type and output shape, so nothing structural would notice the wrong one here — only
+  -- `scripts/convention_audit.py` (pad profile) and `scripts/mnv2_forward_tie.py` (values) can.
+  let (cDc, nDc) ← pretty B (.depthwiseStridedXlaF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
   let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zdb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zdb))
@@ -142,7 +152,10 @@ private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : Strin
 -- ════════════════════════════════════════════════════════════════
 
 /-- **STRIDED inverted-residual backward + 12 param SGD ops.** depthwise input grad at `2hh×2ww`;
-    NO skip — the dx to the previous block is the body dx (at the `2hh×2ww` grid). -/
+    NO skip — the dx to the previous block is the body dx (at the `2hh×2ww` grid). The depthwise
+    backward and its weight/bias updates are the XLA-`SAME` tokens, pairing the forward's
+    `depthwiseStridedXlaF`: a symmetric backward against that forward type-checks, descends, and
+    computes the gradient of a different net. -/
 private def irBackStrided (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
     (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBBack := do
   let ww := hh
@@ -161,7 +174,7 @@ private def irBackStrided (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
   -- depthwise: relu6 mask (cot at depthwise-BN out) → BN back → strided depthwise back (cot at expand relu6 out, 2hh×2ww)
   let (cDdmask, nDdmask) ← pretty B (.selectMid f.dn zdb (.operand nDdr zdb))
   let (cDdn, nDdn) ← pretty B (.bnPerChannelBack (oc := mid) (h := hh) (w := ww) s!"%gd{p}" f.dc epsStr 0 zmid zdb (.operand nDdmask zdb))
-  let (cDer, nDer) ← pretty B (.depthwiseStridedBack (h := hh) (w := ww) s!"%Wd{p}" zdk zmid zeb (.operand nDdn zdb))
+  let (cDer, nDer) ← pretty B (.depthwiseStridedXlaBack (h := hh) (w := ww) s!"%Wd{p}" zdk zmid zeb (.operand nDdn zdb))
   -- expand: relu6 mask (cot at expand-BN out) → BN back → 1×1 conv back (cot at block input, 2hh×2ww)
   let (cDemask, nDemask) ← pretty B (.selectMid f.en zeb (.operand nDer zeb))
   let (cDen, nDen) ← pretty B (.bnPerChannelBack (oc := mid) (h := 2*hh) (w := 2*ww) s!"%ge{p}" f.ec epsStr 0 zmid zeb (.operand nDemask zeb))
@@ -171,8 +184,8 @@ private def irBackStrided (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
   let (cbe, nbe) ← if convBias then pretty B (.convBiasSgd s!"%be{p}" lrStr zke (fun _ _ _ => 0 : Tensor3 ic (2*hh) (2*ww)) zmid 0 (.operand nDen zeb)) else pure ("", "")
   let (cge, nge) ← pretty B (.bnGammaSgd s!"%ge{p}" f.ec epsStr lrStr 0 zmid zeb 0 (.operand nDemask zeb))
   let (cte, nte) ← pretty B (.bnBetaSgd s!"%bte{p}" lrStr zmid 0 (.operand nDemask zeb))
-  let (cWd, nWd) ← pretty B (.depthwiseStridedWeightSgd f.er s!"%Wd{p}" lrStr zmid zeb zdk 0 (.operand nDdn zdb))
-  let (cbd, nbd) ← if convBias then pretty B (.depthwiseStridedBiasSgd s!"%bd{p}" lrStr zdk zeb zmid 0 (.operand nDdn zdb)) else pure ("", "")
+  let (cWd, nWd) ← pretty B (.depthwiseStridedXlaWeightSgd f.er s!"%Wd{p}" lrStr zmid zeb zdk 0 (.operand nDdn zdb))
+  let (cbd, nbd) ← if convBias then pretty B (.depthwiseStridedXlaBiasSgd s!"%bd{p}" lrStr zdk zeb zmid 0 (.operand nDdn zdb)) else pure ("", "")
   let (cgd, ngd) ← pretty B (.bnGammaSgd s!"%gd{p}" f.dc epsStr lrStr 0 zmid zdb 0 (.operand nDdmask zdb))
   let (ctd, ntd) ← pretty B (.bnBetaSgd s!"%btd{p}" lrStr zmid 0 (.operand nDdmask zdb))
   let (cWp, nWp) ← pretty B (.convWeightSgd f.dr s!"%Wp{p}" lrStr zoc (fun _ _ _ => 0 : Tensor3 mid hh ww) zkp 0 (.operand nDpc zob))
@@ -429,7 +442,7 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias 
     let zSk  : Kernel4 16 3 3 3 := fun _ _ _ _ => 0
     let z16  : Vec 16 := fun _ => 0
     let z112 : Vec (16*112*112) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 16) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 16) zSk z16 (.operand "%x" zx))
+    let (cStc, nStc) ← pretty B (.flatConvStridedXlaF (ic := 3) (oc := 16) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 16) zSk z16 (.operand "%x" zx))
     let (cStn, nStn) ← pretty B (.bnPerChannelF (oc := 16) (h := 112) (w := 112) "%gs" "%bts" epsStr 0 z16 z16 (.operand nStc z112))
     let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
     -- ═══ forward: 6 inverted-residual blocks (ic, mid, oc, outH) ═══
@@ -475,8 +488,8 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias 
     -- ═══ stem backward: relu6 mask → BN-back, then stem param SGD (NO conv-back past %x) ═══
     let (cDsr, nDsr) ← pretty B (.selectMid nStn z112 (.operand b1.dx z112))
     let (cDsn, nDsn) ← pretty B (.bnPerChannelBack (oc := 16) (h := 112) (w := 112) "%gs" nStc epsStr 0 z16 z112 (.operand nDsr z112))
-    let (csW, nsW) ← pretty B (.convStridedWeightSgd "%x" "%Ws" lrStr z16 zx zSk 0 (.operand nDsn z112))
-    let (csb, nsb) ← if convBias then pretty B (.convStridedBiasSgd "%bs" lrStr zSk zx z16 0 (.operand nDsn z112)) else pure ("", "")
+    let (csW, nsW) ← pretty B (.convStridedXlaWeightSgd "%x" "%Ws" lrStr z16 zx zSk 0 (.operand nDsn z112))
+    let (csb, nsb) ← if convBias then pretty B (.convStridedXlaBiasSgd "%bs" lrStr zSk zx z16 0 (.operand nDsn z112)) else pure ("", "")
     let (csg, nsg) ← pretty B (.bnGammaSgd "%gs" nStc epsStr lrStr 0 z16 z112 0 (.operand nDsr z112))
     let (cst, nst) ← pretty B (.bnBetaSgd "%bts" lrStr z16 0 (.operand nDsr z112))
     -- ═══ assemble body + return (params in func-arg order: stem, blocks fwd-order, head, dense) ═══
@@ -540,34 +553,31 @@ set_option maxRecDepth 4000000 in
     through one chain is the fix for a live §2a skew: the committed `mobilenetv2_fwd.mlir` was a
     hand-written BATCH-BN render while this train step normalises PER EXAMPLE, so
     `mobilenetv2-verified` trained one function and evaluated another. -/
-private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
-    (xlaPad : Bool := false) : StateM Proofs.StableHLO.EmitS MNV2Fwd := do
+private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool) :
+    StateM Proofs.StableHLO.EmitS MNV2Fwd := do
     -- stem: 3x3/s2 conv (3->32, 224->112) -> BN -> relu6 (NO maxpool)
     let zx   : Vec (3*224*224) := fun _ => 0
     let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32  : Vec 32 := fun _ => 0
     let z112 : Vec (32*112*112) := fun _ => 0
-    let (cStc, nStc) ← if xlaPad then
-        pretty B (.flatConvStridedXlaF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
-      else
-        pretty B (.flatConvStridedF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
+    let (cStc, nStc) ← pretty B (.flatConvStridedXlaF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
     let (cStn, nStn) ← bnSiteP B 32 112 112 mode epsStr "%gs" "%bts" "stn" nStc
     let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
     -- forward: 17 inverted-residual blocks
     let f1  ← irFwdNoExp   B 32      16 112 mode epsStr "1"  nStr convBias
-    let f2  ← irFwdStrided B 16  96  24  56 mode epsStr "2"  f1.o convBias xlaPad
+    let f2  ← irFwdStrided B 16  96  24  56 mode epsStr "2"  f1.o convBias
     let f3  ← irFwd        B 24 144  24  56 mode epsStr "3"  f2.o convBias
-    let f4  ← irFwdStrided B 24 144  32  28 mode epsStr "4"  f3.o convBias xlaPad
+    let f4  ← irFwdStrided B 24 144  32  28 mode epsStr "4"  f3.o convBias
     let f5  ← irFwd        B 32 192  32  28 mode epsStr "5"  f4.o convBias
     let f6  ← irFwd        B 32 192  32  28 mode epsStr "6"  f5.o convBias
-    let f7  ← irFwdStrided B 32 192  64  14 mode epsStr "7"  f6.o convBias xlaPad
+    let f7  ← irFwdStrided B 32 192  64  14 mode epsStr "7"  f6.o convBias
     let f8  ← irFwd        B 64 384  64  14 mode epsStr "8"  f7.o convBias
     let f9  ← irFwd        B 64 384  64  14 mode epsStr "9"  f8.o convBias
     let f10 ← irFwd        B 64 384  64  14 mode epsStr "10" f9.o convBias
     let f11 ← irFwdNoSkip  B 64 384  96  14 mode epsStr "11" f10.o convBias
     let f12 ← irFwd        B 96 576  96  14 mode epsStr "12" f11.o convBias
     let f13 ← irFwd        B 96 576  96  14 mode epsStr "13" f12.o convBias
-    let f14 ← irFwdStrided B 96 576 160   7 mode epsStr "14" f13.o convBias xlaPad
+    let f14 ← irFwdStrided B 96 576 160   7 mode epsStr "14" f13.o convBias
     let f15 ← irFwd        B 160 960 160   7 mode epsStr "15" f14.o convBias
     let f16 ← irFwd        B 160 960 160   7 mode epsStr "16" f15.o convBias
     let f17 ← irFwdNoSkip  B 160 960 320   7 mode epsStr "17" f16.o convBias
@@ -638,16 +648,14 @@ set_option maxRecDepth 4000000 in
     chain: `bnPerChannelEvalF` performs no reduction, so there is no batch to be honest about. -/
 def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "mobilenetv2") : String :=
-  -- ⭐ `xlaPad := true` — the eval forward must be the SAME NET as the train step that produces
-  -- the running statistics it consumes, and that partner is `mobilenetv2_adam_train_step` in
-  -- `MobileNetV2RenderB`, which is XLA-`SAME` since 2026-08-08 (`planning/mnv4_verified.md` §3h).
-  -- ⚠ Its per-example sibling `@mobilenetv2_fwd` stays SYMMETRIC, because that one is the
-  -- byte-prefix of the SGD `mobilenetv2_train_step` whose backward is still symmetric. The two
-  -- forwards are therefore DIFFERENT NETS on purpose. Consequence to know about:
-  -- `LEAN_MLIR_EVAL_BATCHSTATS=1` scores through `@mobilenetv2_fwd`, so under an Adam run that
-  -- diagnostic now measures the wrong architecture. It was already labelled non-reportable
-  -- (transductive); it is now also cross-net. Do not read it as an upper bound on these weights.
-  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias (xlaPad := true)).run' (0, [])
+  -- ⭐ The eval forward must be the SAME NET as the train step that produces the running
+  -- statistics it consumes, and that partner is `mobilenetv2_adam_train_step` in
+  -- `MobileNetV2RenderB`, XLA-`SAME` since 2026-08-08 (`planning/mnv4_verified.md` §3h). Since
+  -- 2026-09-05 `mnv2FwdChain` is XLA-`SAME` unconditionally, so this and its per-example sibling
+  -- `@mobilenetv2_fwd` are one net at every stride-2 site (they still differ in BN world: frozen
+  -- stats here, per-example there) and `LEAN_MLIR_EVAL_BATCHSTATS=1` — which scores through
+  -- `@mobilenetv2_fwd` — is back to being transductive-only rather than also cross-net.
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval({mnv2FwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // -- MobileNetV2 eval forward (running-stats BN): every line is pretty(verified AST node) --\n" ++
@@ -721,8 +729,8 @@ def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
     -- ═══ stem backward: relu6 mask → BN-back, then stem param SGD (NO conv-back past %x) ═══
     let (cDsr, nDsr) ← pretty B (.selectMid nStn z112 (.operand b1.dx z112))
     let (cDsn, nDsn) ← pretty B (.bnPerChannelBack (oc := 32) (h := 112) (w := 112) "%gs" nStc epsStr 0 z32 z112 (.operand nDsr z112))
-    let (csW, nsW) ← pretty B (.convStridedWeightSgd "%x" "%Ws" lrStr z32 zx zSk 0 (.operand nDsn z112))
-    let (csb, nsb) ← if convBias then pretty B (.convStridedBiasSgd "%bs" lrStr zSk zx z32 0 (.operand nDsn z112)) else pure ("", "")
+    let (csW, nsW) ← pretty B (.convStridedXlaWeightSgd "%x" "%Ws" lrStr z32 zx zSk 0 (.operand nDsn z112))
+    let (csb, nsb) ← if convBias then pretty B (.convStridedXlaBiasSgd "%bs" lrStr zSk zx z32 0 (.operand nDsn z112)) else pure ("", "")
     let (csg, nsg) ← pretty B (.bnGammaSgd "%gs" nStc epsStr lrStr 0 z32 z112 0 (.operand nDsr z112))
     let (cst, nst) ← pretty B (.bnBetaSgd "%bts" lrStr z32 0 (.operand nDsr z112))
     -- ═══ assemble body + return (params in func-arg order: stem, blocks fwd-order, head, dense) ═══

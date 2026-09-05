@@ -6,9 +6,11 @@
 MNv4 tie measured — and at FIVE sites rather than one. Inference is not measurement. This is the
 measurement, and it decides whether the asymmetric-pad descriptor has one consumer or three.
 
-The defect, precisely:
+The defect, precisely (as found; FIXED for the Adam artifacts on 2026-08-08 and for the SGD pair
+`mobilenetv2_fwd` / `mobilenetv2_train_step` on 2026-09-05 — every mnv2 artifact now has all five
+stride-2 sites at `pad = [[0,1],[0,1]]`, so the `as-is` variant is the one that must tie):
   * `VLayer` has zero occurrences of `Padding`, so EVERY verified render emits symmetric padding.
-    `verified_mlir/mobilenetv2_fwd.mlir` has 5 stride-2 convolutions, all `pad = [[1,1],[1,1]]`.
+    `verified_mlir/mobilenetv2_fwd.mlir` had 5 stride-2 convolutions, all `pad = [[1,1],[1,1]]`.
   * The reference's stem is `conv_bn(..., stride=(2,2), padding='SAME')`, and its four strided
     depthwises inherit `depthwise_conv`'s default `padding='SAME'` (`jax/Jax/Codegen.lean:679`).
     XLA 'SAME' on a 3x3/s2 at an EVEN input pads (0,1) — asymmetric.
@@ -44,11 +46,12 @@ import numpy as np
 
 REF_PY = "jax/.lake/build/generated_mobilenet_v2.py"
 CHIP = os.environ.get("IREE_CHIP", "gfx1100")
-IREE_C = ".venv/bin/iree-compile"
-# ⚠ iree-run-module is NOT in this repo's .venv (only iree-compile is). It ships with the
-# lean4-jax venv — the same absolute path the PJRT plugin resolves through.
+# ⚠ Neither binary lives in THIS repo's .venv (memory `iree-still-works`): iree-compile ships in
+# the lean4-jax venv and iree-run-module in the source build. Both paths are env-overridable.
+IREE_C = os.environ.get("IREE_COMPILE",
+    "/home/skoonce/lean/klawd_max_power/lean4-jax/.venv/bin/iree-compile")
 IREE_R = os.environ.get("IREE_RUN_MODULE",
-    "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module")
+    "/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module")
 
 # ── the two reference sites that disagree with the render, patched independently ──
 STEM_SAME = "params[0][2], stride=(2,2), padding='SAME')"
@@ -161,10 +164,10 @@ def main():
     args = ap.parse_args()
 
     # ⭐ EVAL MODE — how the NEW net gets tied without touching stat ordering.
-    # After the 2026-08-08 switch, `@mobilenetv2_fwd` (per-example BN, SYMMETRIC pad) and
-    # `@mobilenetv2_fwd_eval` (frozen-stat BN, XLA-SAME pad) are deliberately different nets: the
-    # first partners the SGD train step, the second the Adam one. Only the second is the net the
-    # 89.35% re-run trains and scores, so only the second is worth tying.
+    # `@mobilenetv2_fwd` (per-example BN) partners the SGD train step and `@mobilenetv2_fwd_eval`
+    # (frozen-stat BN) the Adam one; the second is the net the 89.35% re-run trains and scores.
+    # From 2026-08-08 to 2026-09-05 the two also differed in PADDING (the SGD pair stayed
+    # symmetric); since 2026-09-05 both are XLA-SAME and differ only in BN world.
     # The trick that makes it cheap: feed mu=0, var=1 for all 104 stat slots and patch the
     # reference's BN to the same constants. Both sides then compute one deterministic function and
     # padding is the ONLY thing left that could differ — and no stat SLOT ORDERING is exercised,

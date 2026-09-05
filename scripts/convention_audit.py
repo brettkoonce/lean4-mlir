@@ -86,12 +86,14 @@ def _stubbed_data_deps():
 
 # ── the matched pairs. A net with no 10-class generated reference cannot be audited at all, which
 #    is itself a finding and is reported rather than skipped silently. ──────────────────────────
-#    `pad_src` is the forward that PAIRS WITH TRAINING, which is not always `<slug>_fwd`. On mnv2
-#    it is `fwd_eval`: §3h switched the Adam path and the two eval forwards to XLA `SAME` and left
-#    the SGD pair (`mobilenetv2_fwd`, `mobilenetv2_train_step`) symmetric on purpose, so those two
-#    are a self-consistent DIFFERENT net. Auditing `mobilenetv2_fwd` reports a padding divergence
-#    that is real for the SGD net and irrelevant to the number anyone quotes. Getting this wrong is
-#    how an audit produces true-but-useless failures, so the pairing is explicit per net.
+#    `pad_src` is the forward that PAIRS WITH TRAINING, which need not be `<slug>_fwd` — the
+#    pairing is explicit per net so a true-but-useless failure cannot be produced by auditing the
+#    wrong artifact. (History: from 2026-08-08 to 2026-09-05 mnv2's was `fwd_eval`, because §3h
+#    switched the Adam path and the two eval forwards to XLA `SAME` and left the per-example SGD
+#    pair `mobilenetv2_fwd` / `mobilenetv2_train_step` symmetric as a self-consistent DIFFERENT
+#    net. On 2026-09-05 that pair moved too — `MobileNetV2Render.lean` is XLA-`SAME` at every
+#    stride-2 site in every artifact it writes — so there is one MobileNetV2 again and `_fwd` is
+#    audited directly, like every other net.)
 #    `split` names the two artifacts whose BN worlds must agree with EACH OTHER (§3d(b)).
 NETS = {
     "r34":  dict(pad_src="verified_mlir/resnet34_fwd.mlir",
@@ -99,7 +101,7 @@ NETS = {
                  split=("verified_mlir/resnet34_fwd.mlir",
                         "verified_mlir/resnet34_adam_train_step.mlir"),
                  ref="jax/.lake/build/generated_resnet34.py", shape=(2, 3, 224, 224)),
-    "mnv2": dict(pad_src="verified_mlir/mobilenetv2_fwd_eval.mlir",
+    "mnv2": dict(pad_src="verified_mlir/mobilenetv2_fwd.mlir",
                  train="verified_mlir/mobilenetv2_adam_train_step.mlir",
                  split=("verified_mlir/mobilenetv2_fwd.mlir",
                         "verified_mlir/mobilenetv2_adam_train_step.mlir"),

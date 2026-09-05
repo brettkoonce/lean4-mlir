@@ -28,7 +28,22 @@ Same output size, same fan-in, same rounding; a different function. Depthwise li
 | net | sites at the wrong phase in the Proofs tier | shipped artifact (XLA-SAME sites / convs) |
 |---|---|---|
 | EfficientNet-B0 | stem 3x3/s2, 3 to 32, 224 to 112 | `efficientnet_fwd` 1/49, `efficientnet_fwd_eval` 1/49, `efficientnet_adam_train_step` 1/146 |
-| MobileNetV2 (the shipped 6-block net) | stem 3x3/s2, 3 to 16; strided depthwises in b1, b3, b5, b6 (112 to 56, 56 to 28, 28 to 14, 14 to 7) | `mobilenetv2_fwd_eval` 5/52, `mobilenetv2_adam_train_step` 5/155; `mobilenetv2_fwd` 0/52 and `mobilenetv2_train_step` (SGD) 0, symmetric on purpose per `scripts/convention_audit.py` |
+| MobileNetV2 (the Proofs-tier 6-block reduced net) | stem 3x3/s2, 3 to 16; strided depthwises in b1, b3, b5, b6 (112 to 56, 56 to 28, 28 to 14, 14 to 7) | `mobilenetv2_fwd_eval` 5/52, `mobilenetv2_adam_train_step` 5/155; `mobilenetv2_fwd` 0/52 and `mobilenetv2_train_step` (SGD) 0, symmetric on purpose per `scripts/convention_audit.py` (until step 0) |
+
+**Correction found in step 0 (2026-09-05): the Proofs tier describes neither shipped net.**
+`mobilenetv2Forward_full_pc` (`MobileNetV2RenderPC.lean`) is the 6-block reduced MobileNetV2
+(stem 3 to 16, head 64 to 128, 82 parameters), not the 17-block paper net the trainers run; its
+only artifact is `mobilenetv2_reduced_train_step.mlir`, written by `MobileNetV2Render.lean`,
+exempt from both prefix audits and read by no trainer. `efficientnetForwardB`
+(`EfficientNetRenderPC.lean`) is a three-block representative B0 with no artifact at all. So the
+byte tie step 6 asks for, between `pretty` of a PC graph and `efficientnet_fwd` /
+`mobilenetv2_fwd`, cannot exist: the graphs and the artifacts are different nets. What can exist
+is a tie of `mobilenetv2FwdGraphFullPC`'s `pretty` against the forward prefix of
+`mobilenetv2_reduced_train_step.mlir`, both XLA-SAME after step 0, and nothing for B0. The
+re-spelling stands: the Proofs nets are the representatives of the shipped convention, and (A)
+makes them read the same phase the shipped nets do. `formalization.yaml` 4d's "the B0 chain
+describes a program no shipped artifact has run" should be read the same way: no artifact runs
+that three-block net at either phase.
 
 Not affected, and do not touch: ResNet-34 and ResNet-50 (PyTorch-origin; the 7x7/s2 stem pads 3
 symmetrically and the 3x3/s2 pool pads 1, both correct), ConvNeXt (4x4/s4 and 2x2/s2 at pad 0),
@@ -63,14 +78,21 @@ Does not exist. Any hand-written odd-phase backward (`flatConvStride2XlaBack`,
 
 Each step has an acceptance criterion. Probe before Lean where a number is involved.
 
-0. **Decide the SGD pair.** `mobilenetv2_fwd` and `mobilenetv2_train_step` are the one symmetric
-   pair left, kept "as a self-consistent different net" (`convention_audit.py`, NETS comment).
-   After (A) the PC-rendered `mobilenetv2_fwd` becomes XLA-SAME, so either the SGD train step
-   moves too (MobileNetV2Render.lean:553, the `.flatConvStridedF` branch) or the pair is retired.
-   Recommendation: move it, so there is one MobileNetV2 program. Update `convention_audit.py`'s
-   `NETS["mnv2"]` (`pad_src` can return to `_fwd`, the `split` comment goes) and
-   `scripts/mnv2_forward_tie.py`'s header. Done when `convention_audit.py --selftest` reproduces
-   its ledger and every mnv2 artifact has 5 asymmetric sites.
+0. **Decide the SGD pair. Done 2026-09-05: moved.** `mobilenetv2_fwd` and `mobilenetv2_train_step`
+   were the one symmetric pair left, kept "as a self-consistent different net"
+   (`convention_audit.py`, NETS comment). Moving the forward alone would have paired an XLA-SAME
+   forward with a symmetric backward, which type-checks, descends and computes a different net's
+   gradient, and the per-example SGD render had no XLA-SAME backward tokens to reach for (only
+   the batched ones the Adam render uses existed). So step 0 cost five per-example tokens in
+   `StableHLO.lean` (`convStridedXla{Weight,Bias}Sgd`, `depthwiseStridedXlaBack`,
+   `depthwiseStridedXla{Weight,Bias}Sgd`; constructor, `den`, `rfl` faithfulness, `Raw`, `Tok`,
+   `skel`, `toToks`, emit, parse case and roundtrip proof), two `Den` wrappers in
+   `Depthwise.lean`, and `MobileNetV2Render.lean` losing its `xlaPad` flag so every artifact it
+   writes (`mobilenetv2_fwd`, `_fwd_eval`, `_train_step`, `_reduced_train_step`, the two
+   `mobilenetv2in` forwards) is XLA-SAME at all five sites. The three new backward emit arms are
+   known-answer checked against `jax.vjp` in `scripts/xla_pad_op_check.py` (rows `*_pe`), since
+   they are hand copies of the batched arms and a copy is what drifts. `convention_audit.py`
+   audits `_fwd` directly again; `--selftest` reproduces the ledger.
 
 1. **Foundation: the two hand-written odd-phase backwards and their leaf ties.**
    `flatConvStride2XlaBack W` is `convFlatBack W` after scattering the cotangent to the ODD

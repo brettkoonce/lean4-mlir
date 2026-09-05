@@ -22,9 +22,12 @@ Usage:  .venv/bin/python3 scripts/xla_pad_op_check.py
 import os, re, subprocess, sys, tempfile
 import numpy as np
 
-IREE_C = ".venv/bin/iree-compile"
+# ⚠ Neither binary lives in THIS repo's .venv (memory `iree-still-works`): iree-compile ships in the
+# lean4-jax venv and iree-run-module in the source build. Both paths are env-overridable.
+IREE_C = os.environ.get("IREE_COMPILE",
+    "/home/skoonce/lean/klawd_max_power/lean4-jax/.venv/bin/iree-compile")
 IREE_R = os.environ.get("IREE_RUN_MODULE",
-    "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module")
+    "/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module")
 
 # (module, func, kernel-shape, grouped?, kH) — B=2, 16x16 -> 8x8 throughout.
 PROBES = [
@@ -117,6 +120,12 @@ def main():
         ("dw_sym_back_k3",  ".lake/build/xlapad_dw_sym_back_k3.mlir",  True,  6, 6, 3, "gx", "sym"),
         ("dw_sym_back_k5",  ".lake/build/xlapad_dw_sym_back_k5.mlir",  True,  6, 6, 5, "gx", "sym"),
         ("dw_sym_wgrad_k5", ".lake/build/xlapad_dw_sym_wgrad_k5.mlir", True,  6, 6, 5, "gw", "sym"),
+        # ── the PER-EXAMPLE arms (MobileNetV2's SGD train step, 2026-09-05): separate emit code,
+        #    same pad formulas copied by hand, so they get their own rows. The `*Sgd` ops emit
+        #    `W − lr·g` and are rendered at lr = 1.0, so `g = W − out` (kind "gw_sgd").
+        ("dw_xla_back_pe",  ".lake/build/xlapad_dw_back_pe.mlir",      True,  6, 6, 3, "gx", "same"),
+        ("conv_xla_wsgd_pe", ".lake/build/xlapad_conv_wsgd_pe.mlir",   False, 3, 8, 3, "gw_sgd", "same"),
+        ("dw_xla_wsgd_pe",  ".lake/build/xlapad_dw_wsgd_pe.mlir",      True,  6, 6, 3, "gw_sgd", "same"),
     ]:
         if not os.path.exists(mlir):
             sys.exit(f"missing {mlir} — re-run `lake env lean tests/TestXlaPadOps.lean`")
@@ -142,6 +151,10 @@ def main():
         if kind == "gx":
             got = run_module(mlir, fn, [dy.reshape(B, -1), W], work).reshape(B, c_in, HIN, HIN)
             ref_x, ref_s = gx_x, gx_s
+        elif kind == "gw_sgd":
+            out = run_module(mlir, fn, [dy.reshape(B, -1), x.reshape(B, -1), W], work)
+            got = W.astype(np.float64).reshape(out.shape) - out        # lr = 1.0 ⇒ g = W − W'
+            ref_x, ref_s = gw_x.reshape(got.shape), gw_s.reshape(got.shape)
         else:
             got = run_module(mlir, fn, [dy.reshape(B, -1), x.reshape(B, -1)], work)
             ref_x, ref_s = gw_x.reshape(got.shape), gw_s.reshape(got.shape)

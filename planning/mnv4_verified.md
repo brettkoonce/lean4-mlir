@@ -656,6 +656,9 @@ resume, or the re-run silently continues the old net.
   stride-2 sites now `pad = [[0, 1], [0, 1]]`.
 * The SGD pair (`mobilenetv2_fwd`, `mobilenetv2_train_step`) is deliberately **untouched** and
   still symmetric — self-consistent, and its byte-prefix audit still passes.
+  *(Superseded 2026-09-05: the SGD pair moved to XLA-`SAME` too, via per-example
+  `…Xla…` backward tokens; see `MobileNetV2Render.lean`'s header and
+  `planning/xla_same_respell_and_blueprint_audit.md` step 0.)*
 
 ⚠ **`@mobilenetv2_fwd` and `@mobilenetv2_fwd_eval` are now DIFFERENT NETS on purpose.** Consequence
 worth knowing: `LEAN_MLIR_EVAL_BATCHSTATS=1` scores through `@mobilenetv2_fwd`, so under an Adam run
@@ -789,7 +792,7 @@ measuring. **Fix the probe, get the tie, then launch.**
 ⚠ The per-example SGD pair (`mobilenetv2_fwd`, `mobilenetv2_train_step`) stays symmetric under this
 plan — self-consistent, so its byte-prefix audit still passes, but it is then a *different net* from
 the Adam pair. That is a deliberate, documentable split and it should be written into
-`RESULTS.md`, not left implicit.
+`RESULTS.md`, not left implicit. *(Closed 2026-09-05: the split is gone, the SGD pair is XLA-`SAME`.)*
 
 ---
 

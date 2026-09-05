@@ -176,6 +176,53 @@ def dwSymWGradK5Module : String :=
   s!"  func.func @dw_sym_wgrad_k5(%dy: {ty [B, 6*8*8]}, %x: {ty [B, 6*16*16]}) -> {ty [6,1,5,5]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [6,1,5,5]}\n" ++ "  }\n}\n"
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- § PER-EXAMPLE backward probes — MobileNetV2's SGD train step (2026-09-05)
+-- ══════════════════════════════════════════════════════════════════════════
+-- The batched `…B` / `…Batched` ops above are what the Adam renders emit. `MobileNetV2Render.lean`'s
+-- per-example SGD train step (`mobilenetv2_train_step`) goes through SEPARATE emit arms —
+-- `depthwiseStridedXlaBack`, `convStridedXlaWeightSgd`, `depthwiseStridedXlaWeightSgd` — with the
+-- same pad formulas copied by hand. A copy is exactly what drifts, so each arm gets its own probe.
+-- The `*Sgd` ops emit `W − lr·g`; at `lr = 1.0` the checker recovers `g = W − out`.
+
+/-- `@dw_xla_back_pe` — the per-example `depthwiseStridedXlaBack` (pad `[p+1, p-1]`). -/
+def dwXlaBackPEModule : String :=
+  let B := 2
+  let zdy : Vec (6*8*8) := fun _ => 0
+  let zx : Vec (6*(2*8)*(2*8)) := fun _ => 0
+  let zK : DepthwiseKernel 6 3 3 := fun _ _ _ => 0
+  let z6 : Vec 6 := fun _ => 0
+  renderModule "dw_xla_back_pe" s!"%dy: {ty [B, 6*8*8]}, %W: {ty [6,1,3,3]}" B (6*(2*8)*(2*8))
+    (.depthwiseStridedXlaBack (c := 6) (h := 8) (w := 8) (kH := 3) (kW := 3) "%W" zK z6 zx
+      (.operand "%dy" zdy))
+
+/-- `@conv_xla_wsgd_pe` — the per-example `convStridedXlaWeightSgd` at `lr = 1.0`, so the output is
+    `W − g` and the checker reads `g` back. -/
+def convXlaWSgdPEModule : String :=
+  let B := 2
+  let zdy : Vec (8*8*8) := fun _ => 0
+  let zx : Vec (3*(2*8)*(2*8)) := fun _ => 0
+  let zK : Kernel4 8 3 3 3 := fun _ _ _ _ => 0
+  let z8 : Vec 8 := fun _ => 0
+  let (body, res) := (pretty B (.convStridedXlaWeightSgd (ic := 3) (oc := 8) (h := 8) (w := 8)
+    "%x" "%W" "1.0" z8 zx zK 0 (.operand "%dy" zdy))).run' (0, [])
+  "module @m {\n" ++
+  s!"  func.func @conv_xla_wsgd_pe(%dy: {ty [B, 8*8*8]}, %x: {ty [B, 3*16*16]}, %W: {ty [8,3,3,3]}) -> {ty [8,3,3,3]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {ty [8,3,3,3]}\n" ++ "  }\n}\n"
+
+/-- `@dw_xla_wsgd_pe` — the per-example `depthwiseStridedXlaWeightSgd` at `lr = 1.0`. -/
+def dwXlaWSgdPEModule : String :=
+  let B := 2
+  let zdy : Vec (6*8*8) := fun _ => 0
+  let zx : Vec (6*(2*8)*(2*8)) := fun _ => 0
+  let zK : DepthwiseKernel 6 3 3 := fun _ _ _ => 0
+  let z6 : Vec 6 := fun _ => 0
+  let (body, res) := (pretty B (.depthwiseStridedXlaWeightSgd (c := 6) (h := 8) (w := 8)
+    "%x" "%W" "1.0" z6 zx zK 0 (.operand "%dy" zdy))).run' (0, [])
+  "module @m {\n" ++
+  s!"  func.func @dw_xla_wsgd_pe(%dy: {ty [B, 6*8*8]}, %x: {ty [B, 6*16*16]}, %W: {ty [6,1,3,3]}) -> {ty [6,1,3,3]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {ty [6,1,3,3]}\n" ++ "  }\n}\n"
+
 end Proofs.XlaPadProbe
 
 -- The emitted `pad` is the whole content of these ops, so pin it here too: a `lake env lean` that
@@ -208,4 +255,15 @@ end Proofs.XlaPadProbe
 #eval IO.FS.writeFile ".lake/build/xlapad_dw_sym_back_k3.mlir" Proofs.XlaPadProbe.dwSymBackK3Module
 #eval IO.FS.writeFile ".lake/build/xlapad_dw_sym_back_k5.mlir" Proofs.XlaPadProbe.dwSymBackK5Module
 #eval IO.FS.writeFile ".lake/build/xlapad_dw_sym_wgrad_k5.mlir" Proofs.XlaPadProbe.dwSymWGradK5Module
-#eval IO.println "✓ TestXlaPadOps: 10 probe modules written to .lake/build/xlapad_*.mlir"
+-- The per-example arms: same pins as their batched twins — `[[2, 0]]` on the input-VJP (reversed
+-- kernel), `[[0, 2]]` on both weight grads.
+#guard (Proofs.XlaPadProbe.dwXlaBackPEModule.splitOn "pad = [[2, 0], [2, 0]]").length == 2
+#guard (Proofs.XlaPadProbe.convXlaWSgdPEModule.splitOn "pad = [[0, 2], [0, 2]]").length == 2
+#guard (Proofs.XlaPadProbe.dwXlaWSgdPEModule.splitOn "pad = [[0, 2], [0, 2]]").length == 2
+#guard (Proofs.XlaPadProbe.dwXlaBackPEModule.splitOn "feature_group_count = 6 : i64").length == 2
+#guard (Proofs.XlaPadProbe.dwXlaWSgdPEModule.splitOn "batch_group_count = 6 : i64").length == 2
+
+#eval IO.FS.writeFile ".lake/build/xlapad_dw_back_pe.mlir"   Proofs.XlaPadProbe.dwXlaBackPEModule
+#eval IO.FS.writeFile ".lake/build/xlapad_conv_wsgd_pe.mlir" Proofs.XlaPadProbe.convXlaWSgdPEModule
+#eval IO.FS.writeFile ".lake/build/xlapad_dw_wsgd_pe.mlir"   Proofs.XlaPadProbe.dwXlaWSgdPEModule
+#eval IO.println "✓ TestXlaPadOps: 13 probe modules written to .lake/build/xlapad_*.mlir"

@@ -3974,6 +3974,14 @@ open Proofs
 -- (the stride-2 / depthwise analog of `convStridedBackBatched`). EfficientNet uses
 -- swish (a global VJP), so this stays in the clean global HasVJP/vjp_comp form.
 #print axioms StableHLO.depthwiseStridedBackBatched_faithful
+-- The PER-EXAMPLE XLA-`SAME` backward tokens MobileNetV2's SGD train step emits since
+-- 2026-09-05 (`MobileNetV2Render.lean`): the odd-phase input-VJP and the four weight/bias
+-- descent steps, each `rfl` onto the `…Xla` VJPs of `StridedConv.lean` / `Depthwise.lean`.
+#print axioms StableHLO.depthwiseStridedXlaBack_faithful
+#print axioms StableHLO.depthwiseStridedXlaWeightSgd_faithful
+#print axioms StableHLO.depthwiseStridedXlaBiasSgd_faithful
+#print axioms StableHLO.convStridedXlaWeightSgd_faithful
+#print axioms StableHLO.convStridedXlaBiasSgd_faithful
 -- Batched strided depthwise → bn → swish stage backward graph.
 #print axioms StableHLO.dwbsSBackBatchedGraph_faithful
 -- Capstone: the batched EfficientNet downsample MBConv body backward graph.

@@ -1538,4 +1538,19 @@ noncomputable def depthwiseStridedBiasSgdDen {c h w kH kW : Nat}
     Vec c :=
   fun o => b o - lr * (depthwiseStride2_bias_grad_has_vjp W x).backward b dy o
 
+/-- Stride-2 **XLA-`SAME`** depthwise weight SGD step — `depthwiseStridedWeightSgdDen`'s peer at
+    the odd decimation phase (`depthwiseStride2Xla_weight_grad_has_vjp`). Same non-reducing
+    wrapper, for the same `den`-match-size reason. -/
+noncomputable def depthwiseStridedXlaWeightSgdDen {c h w kH kW : Nat}
+    (b : Vec c) (x : Vec (c*(2*h)*(2*w))) (W : DepthwiseKernel c kH kW) (lr : ℝ) (dy : Vec (c*h*w)) :
+    Vec (c*kH*kW) :=
+  fun idx => Tensor3.flatten W idx
+    - lr * (depthwiseStride2Xla_weight_grad_has_vjp b x).backward (Tensor3.flatten W) dy idx
+
+/-- Stride-2 **XLA-`SAME`** depthwise bias SGD step. -/
+noncomputable def depthwiseStridedXlaBiasSgdDen {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Vec (c*(2*h)*(2*w))) (b : Vec c) (lr : ℝ) (dy : Vec (c*h*w)) :
+    Vec c :=
+  fun o => b o - lr * (depthwiseStride2Xla_bias_grad_has_vjp W x).backward b dy o
+
 end Proofs

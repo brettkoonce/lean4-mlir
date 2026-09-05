@@ -102,6 +102,10 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.depthwiseWeightSgd xN wN lrS c h w' kH kW e :: st)
   | .depthwiseStridedWeightSgd xN wN lrS c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseStridedWeightSgd xN wN lrS c h w' kH kW e :: st)
+  | .convStridedXlaWeightSgd xN wN lrS ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.convStridedXlaWeightSgd xN wN lrS ic oc h w' kH kW e :: st)
+  | .depthwiseStridedXlaWeightSgd xN wN lrS c h w' kH kW :: ts, e :: st =>
+      parseStack ts (.depthwiseStridedXlaWeightSgd xN wN lrS c h w' kH kW e :: st)
   | .flatConvStride4F w b ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.flatConvStride4F w b ic oc h w' kH kW e :: st)
   | .bnPerChannelF g b eps oc h w :: ts, e :: st =>
@@ -147,6 +151,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.depthwiseStridedF w b c h w' kH kW e :: st)
   | .depthwiseStridedBack w c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseStridedBack w c h w' kH kW e :: st)
+  | .depthwiseStridedXlaBack w c h w' kH kW :: ts, e :: st =>
+      parseStack ts (.depthwiseStridedXlaBack w c h w' kH kW e :: st)
   | .swishF n :: ts, e :: st     => parseStack ts (.swishF n e :: st)
   | .swishBack x n :: ts, e :: st => parseStack ts (.swishBack x n e :: st)
   | .sigmoidF n :: ts, e :: st   => parseStack ts (.sigmoidF n e :: st)
@@ -235,6 +241,8 @@ theorem parseStack_toToks (r : Raw) :
   | convStridedWeightSgd xN wN lrS ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseWeightSgd xN wN lrS c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedWeightSgd xN wN lrS c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convStridedXlaWeightSgd xN wN lrS ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | depthwiseStridedXlaWeightSgd xN wN lrS c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | flatConvStride4F w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelF g b eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelBack g x eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
@@ -267,6 +275,7 @@ theorem parseStack_toToks (r : Raw) :
   | depthwiseBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | depthwiseStridedXlaBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | swishF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | swishBack x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | sigmoidF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

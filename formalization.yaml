@@ -562,8 +562,9 @@ fidelity:
        A PADDING-CONVENTION GAP (audit 2026-09-05). The EfficientNet-B0 and MobileNetV2
        renders moved their stride-2 convolutions to XLA-SAME padding on 2026-08-08 to
        match the TF-origin references (B0's stem; MobileNetV2's stem and four strided
-       depthwises; the MobileNetV2 SGD pair `mobilenetv2_fwd` / `_train_step` stays
-       symmetric on purpose, scripts/convention_audit.py). The Proofs tier did not move:
+       depthwises; the MobileNetV2 SGD pair `mobilenetv2_fwd` / `_train_step` followed
+       on 2026-09-05, so every shipped MobileNetV2 artifact is XLA-SAME). The Proofs
+       tier did not move:
        `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, their PC graphs and
        `_faithful` theorems, the hand-written backward chains and all four B0 / MobileNetV2
        numbers above are at the symmetric spelling (`flatConvStride2`, never
