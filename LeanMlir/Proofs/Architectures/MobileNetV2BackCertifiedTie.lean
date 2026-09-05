@@ -210,38 +210,38 @@ theorem invresBodyBackPC_eq_invresBodyPC_vjp {ic mid oc h w kHe kWe kHd kWd kHp 
 -- § The strided (downsample) body — strided depthwise stage + tie
 -- ════════════════════════════════════════════════════════════════
 
-/-- Strided depthwise stage VJP, per-channel BN: `relu6 ∘ bnPC ∘ depthwiseStride2Flat`. -/
+/-- Strided depthwise stage VJP, per-channel BN: `relu6 ∘ bnPC ∘ depthwiseStride2FlatXla`. -/
 noncomputable def dwStridedBnRelu6PC_has_vjp_at {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε)
     (v : Vec (c * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnPerChannelTensor3 c h w ε γ β (depthwiseStride2Flat W b v) k ≠ 0 ∧
-                       bnPerChannelTensor3 c h w ε γ β (depthwiseStride2Flat W b v) k ≠ 6)) :
-    HasVJPAt (relu6 (c * h * w) ∘ bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2Flat W b) v := by
-  have hdw_diff : Differentiable ℝ (depthwiseStride2Flat W b
-      : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := depthwiseStride2Flat_differentiable W b
+    (h_smooth : ∀ k, (bnPerChannelTensor3 c h w ε γ β (depthwiseStride2FlatXla W b v) k ≠ 0 ∧
+                       bnPerChannelTensor3 c h w ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
+    HasVJPAt (relu6 (c * h * w) ∘ bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2FlatXla W b) v := by
+  have hdw_diff : Differentiable ℝ (depthwiseStride2FlatXla W b
+      : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := depthwiseStride2FlatXla_differentiable W b
   have hbn_diff : Differentiable ℝ (bnPerChannelTensor3 c h w ε γ β) :=
     bnPerChannelTensor3_differentiable c h w ε hε γ β
-  have step1 : HasVJPAt (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2Flat W b) v :=
-    vjp_comp_at (depthwiseStride2Flat W b) (bnPerChannelTensor3 c h w ε γ β) v
+  have step1 : HasVJPAt (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2FlatXla W b) v :=
+    vjp_comp_at (depthwiseStride2FlatXla W b) (bnPerChannelTensor3 c h w ε γ β) v
       (hdw_diff v) (hbn_diff _)
-      ((depthwiseStride2Flat_has_vjp W b).toHasVJPAt v)
+      ((depthwiseStride2FlatXla_has_vjp W b).toHasVJPAt v)
       ((bnPerChannelTensor3_has_vjp c h w ε hε γ β).toHasVJPAt _)
-  have step1_diff : DifferentiableAt ℝ (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2Flat W b) v :=
-    DifferentiableAt.comp v (hbn_diff (depthwiseStride2Flat W b v)) (hdw_diff v)
-  exact vjp_comp_at (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2Flat W b) (relu6 (c * h * w)) v
+  have step1_diff : DifferentiableAt ℝ (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2FlatXla W b) v :=
+    DifferentiableAt.comp v (hbn_diff (depthwiseStride2FlatXla W b v)) (hdw_diff v)
+  exact vjp_comp_at (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2FlatXla W b) (relu6 (c * h * w)) v
     step1_diff (relu6_differentiableAt_of_smooth (c * h * w) _ h_smooth) step1
     (relu6_has_vjp_at (c * h * w) _ h_smooth)
 
 theorem dwStridedBnRelu6PC_differentiableAt {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε)
     (v : Vec (c * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnPerChannelTensor3 c h w ε γ β (depthwiseStride2Flat W b v) k ≠ 0 ∧
-                       bnPerChannelTensor3 c h w ε γ β (depthwiseStride2Flat W b v) k ≠ 6)) :
+    (h_smooth : ∀ k, (bnPerChannelTensor3 c h w ε γ β (depthwiseStride2FlatXla W b v) k ≠ 0 ∧
+                       bnPerChannelTensor3 c h w ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
-      (relu6 (c * h * w) ∘ bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2Flat W b) v := by
-  have hinner : DifferentiableAt ℝ (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2Flat W b) v :=
+      (relu6 (c * h * w) ∘ bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2FlatXla W b) v := by
+  have hinner : DifferentiableAt ℝ (bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2FlatXla W b) v :=
     ((bnPerChannelTensor3_differentiable c h w ε hε γ β).comp
-      (depthwiseStride2Flat_differentiable W b)) v
+      (depthwiseStride2FlatXla_differentiable W b)) v
   exact (relu6_differentiableAt_of_smooth (c * h * w) _ h_smooth).comp v hinner
 
 /-- **Certified VJP of the per-channel-BN strided inverted-residual body `invresBodyStridedPC`**
@@ -255,10 +255,10 @@ noncomputable def invresBodyStridedPC_has_vjp_at {ic mid oc h w kHe kWe kHd kWd 
     (h_se : ∀ k, (bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) k ≠ 0 ∧
                    bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) k ≠ 6))
     (h_sd : ∀ k, (bnPerChannelTensor3 mid h w εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) k ≠ 0 ∧
                    bnPerChannelTensor3 mid h w εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) k ≠ 6)) :
     HasVJPAt (invresBodyStridedPC (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v := by
   have hexp_vjp : HasVJPAt (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe) v :=
@@ -286,7 +286,7 @@ noncomputable def invresBodyStridedPC_has_vjp_at {ic mid oc h w kHe kWe kHd kWd 
 /-- **The §B mnv2 strided body tie: float-bridge backward = certified VJP.** The downsample peer of
     `invresBodyBackPC_eq_invresBodyPC_vjp`: `invresBodyStridedBackPC` with its per-channel BN backs and
     relu6 masks pinned to the saved activations equals `(invresBodyStridedPC_has_vjp_at …).backward`.
-    The strided depthwise ties via `depthwiseStride2FlatBack_eq_vjp_backward`; the expand conv at the
+    The strided depthwise ties via `depthwiseStride2FlatXlaBack_eq_vjp_backward`; the expand conv at the
     `2h×2w` grid and the project conv via `convFlatBack_eq_vjp_backward`. 3-axiom-clean. -/
 theorem invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (hkHe : 2 * ((kHe - 1) / 2) + 1 = kHe) (hkWe : 2 * ((kWe - 1) / 2) + 1 = kWe)
@@ -299,25 +299,25 @@ theorem invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp {ic mid oc h w kHe kW
     (h_se : ∀ k, (bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) k ≠ 0 ∧
                    bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) k ≠ 6))
     (h_sd : ∀ k, (bnPerChannelTensor3 mid h w εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) k ≠ 0 ∧
                    bnPerChannelTensor3 mid h w εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) k ≠ 6)) :
     invresBodyStridedBackPC We Wd Wp
       ((bnPerChannelTensor3_has_vjp mid (2 * h) (2 * w) εe hεe γe βe).backward (flatConv We be v))
       ((bnPerChannelTensor3_has_vjp mid h w εd hεd γd βd).backward
-        (depthwiseStride2Flat Wd bd (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)))
+        (depthwiseStride2FlatXla Wd bd (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)))
       ((bnPerChannelTensor3_has_vjp oc h w εp hεp γp βp).backward
         (flatConv Wp bp (ivDepthwiseStridedPC (h := h) (w := w) Wd bd εd γd βd
           (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v))))
       (fun i => 0 < bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) i ∧
                 bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) i < 6)
       (fun i => 0 < bnPerChannelTensor3 mid h w εd γd βd
-                  (depthwiseStride2Flat Wd bd
+                  (depthwiseStride2FlatXla Wd bd
                     (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) i ∧
                 bnPerChannelTensor3 mid h w εd γd βd
-                  (depthwiseStride2Flat Wd bd
+                  (depthwiseStride2FlatXla Wd bd
                     (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) i < 6)
       = (invresBodyStridedPC_has_vjp_at We be εe γe βe hεe Wd bd εd γd βd hεd Wp bp εp γp βp hεp
           v h_se h_sd).backward := by
@@ -326,7 +326,7 @@ theorem invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp {ic mid oc h w kHe kW
   rw [convFlatBack_eq_vjp_backward (W := Wp) (b := bp)
         (x := ivDepthwiseStridedPC (h := h) (w := w) Wd bd εd γd βd
           (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) hkHp hkWp,
-      depthwiseStride2FlatBack_eq_vjp_backward hkHd hkWd Wd bd
+      depthwiseStride2FlatXlaBack_eq_vjp_backward hkHd hkWd Wd bd
         (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v),
       convFlatBack_eq_vjp_backward (W := We) (b := be) (x := v) hkHe hkWe]
   rfl

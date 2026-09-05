@@ -16,10 +16,10 @@ gradient"* but **"the chain IS the certified whole-net gradient"** — the Mobil
 Five pieces, and only the first two are new mathematics:
 
 1. `convStridedBnRelu6PC_has_vjp_at` — the STEM stage's certified VJP, `relu6 ∘ bnPC ∘
-   flatConvStride2`. The repo had the strided-conv-with-**relu** peer (r34's `cbrStridedPC`) and
+   flatConvStride2Xla`. The repo had the strided-conv-with-**relu** peer (r34's `cbrStridedPC`) and
    the **non-strided** relu6 peer (`convBnRelu6PC_has_vjp_at`); this is the missing corner.
 2. `convStridedBnRelu6PCBack_eq_vjp_backward` / `convBnRelu6PCBack_eq_vjp_backward` — the stem and
-   head leaf ties, both closing on one conv-leaf rewrite (`flatConvStride2Back_eq_vjp_backward` /
+   head leaf ties, both closing on one conv-leaf rewrite (`flatConvStride2XlaBack_eq_vjp_backward` /
    `convFlatBack_eq_vjp_backward`) and then `rfl`: relu6's certified backward IS
    `reluMaskBack (0 < · ∧ · < 6)`, and the pinned BN-back is definitionally the certified one.
 3. `residualBack_eq_vjp_backward` — the additive skip, `rfl`. `residual_has_vjp_at`'s backward is
@@ -60,24 +60,24 @@ namespace Proofs
 noncomputable def convStridedBnRelu6PC_has_vjp_at {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0 ∧
-                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 6)) :
+    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
+                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     HasVJPAt (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β
-      ∘ flatConvStride2 (h := h) (w := w) W b) v := by
+      ∘ flatConvStride2Xla (h := h) (w := w) W b) v := by
   have hconv_diff : Differentiable ℝ
-      (flatConvStride2 W b : Vec (ic * (2*h) * (2*w)) → Vec (oc * h * w)) :=
-    flatConvStride2_differentiable W b
+      (flatConvStride2Xla W b : Vec (ic * (2*h) * (2*w)) → Vec (oc * h * w)) :=
+    flatConvStride2Xla_differentiable W b
   have hbn_diff : Differentiable ℝ (bnPerChannelTensor3 oc h w ε γ β) :=
     bnPerChannelTensor3_differentiable oc h w ε hε γ β
-  have step1 : HasVJPAt (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
-    vjp_comp_at (flatConvStride2 W b) (bnPerChannelTensor3 oc h w ε γ β) v
+  have step1 : HasVJPAt (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
+    vjp_comp_at (flatConvStride2Xla W b) (bnPerChannelTensor3 oc h w ε γ β) v
       (hconv_diff v) (hbn_diff _)
-      ((flatConvStride2_has_vjp W b).toHasVJPAt v)
+      ((flatConvStride2Xla_has_vjp W b).toHasVJPAt v)
       ((bnPerChannelTensor3_has_vjp oc h w ε hε γ β).toHasVJPAt _)
   have step1_diff : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
-    DifferentiableAt.comp v (hbn_diff (flatConvStride2 W b v)) (hconv_diff v)
-  exact vjp_comp_at (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b)
+      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
+    DifferentiableAt.comp v (hbn_diff (flatConvStride2Xla W b v)) (hconv_diff v)
+  exact vjp_comp_at (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b)
     (relu6 (oc * h * w)) v step1_diff
     (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
     step1 (relu6_has_vjp_at (oc * h * w) _ h_smooth)
@@ -85,14 +85,14 @@ noncomputable def convStridedBnRelu6PC_has_vjp_at {ic oc h w kH kW : Nat}
 theorem convStridedBnRelu6PC_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0 ∧
-                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 6)) :
+    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
+                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β
-      ∘ flatConvStride2 (h := h) (w := w) W b) v := by
+      ∘ flatConvStride2Xla (h := h) (w := w) W b) v := by
   have hinner : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
+      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
     ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp
-      (flatConvStride2_differentiable W b)) v
+      (flatConvStride2Xla_differentiable W b)) v
   exact (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
 
 /-- **The STEM tie.** -/
@@ -100,15 +100,15 @@ theorem convStridedBnRelu6PCBack_eq_vjp_backward {ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0 ∧
-                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 6)) :
-    flatConvStride2Back (h := h) (w := w) W
-      ∘ (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward (flatConvStride2 W b v)
-      ∘ reluMaskBack (fun i => 0 < bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) i ∧
-          bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) i < 6)
+    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
+                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
+    flatConvStride2XlaBack (h := h) (w := w) W
+      ∘ (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward (flatConvStride2Xla W b v)
+      ∘ reluMaskBack (fun i => 0 < bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) i ∧
+          bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) i < 6)
       = (convStridedBnRelu6PC_has_vjp_at W b ε γ β hε v h_smooth).backward := by
   funext dy
-  rw [flatConvStride2Back_eq_vjp_backward hkH hkW W b v]
+  rw [flatConvStride2XlaBack_eq_vjp_backward hkH hkW W b v]
   rfl
 
 /-- **The HEAD tie.** -/
@@ -196,78 +196,78 @@ theorem mnv2InputGrad_eq_mobilenetv2_vjp
     (x : Vec (3 * 224 * 224))
     (hstem_smooth : ∀ k,
       bnPerChannelTensor3 16 112 112 εs γs βs
-        (flatConvStride2 (h := 112) (w := 112) Ws bs x) k ≠ 0 ∧
+        (flatConvStride2Xla (h := 112) (w := 112) Ws bs x) k ≠ 0 ∧
       bnPerChannelTensor3 16 112 112 εs γs βs
-        (flatConvStride2 (h := 112) (w := 112) Ws bs x) k ≠ 6)
+        (flatConvStride2Xla (h := 112) (w := 112) Ws bs x) k ≠ 6)
     (hb1 : PProd (HasVJPAt b1 ((relu6 (16 * 112 * 112) ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x))
              (DifferentiableAt ℝ b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))
     (hb2 : PProd (HasVJPAt b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))
              (DifferentiableAt ℝ b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x))))
     (hb3 : PProd (HasVJPAt b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x))))
              (DifferentiableAt ℝ b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))
     (hb4 : PProd (HasVJPAt b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))
              (DifferentiableAt ℝ b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x))))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x))))))
     (hb5 : PProd (HasVJPAt b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x))))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x))))))
              (DifferentiableAt ℝ b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))
     (hb6 : PProd (HasVJPAt b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))
              (DifferentiableAt ℝ b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
               ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-              ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x))))))))
+              ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x))))))))
     (hhead_smooth : ∀ k,
       bnPerChannelTensor3 128 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
         (b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
           ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-          ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))) k ≠ 0 ∧
+          ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))) k ≠ 0 ∧
       bnPerChannelTensor3 128 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
         (b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
           ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-          ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))) k ≠ 6) :
+          ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))) k ≠ 6) :
     mnv2InputGrad Ws Wh Wfc
       ((bnPerChannelTensor3_has_vjp 16 112 112 εs hεs γs βs).backward
-        (flatConvStride2 (h := 112) (w := 112) Ws bs x))
+        (flatConvStride2Xla (h := 112) (w := 112) Ws bs x))
       ((bnPerChannelTensor3_has_vjp 128 7 7 εh hεh γh βh).backward
         (flatConv (h := 7) (w := 7) Wh bh
           (b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
             ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-            ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))))
+            ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))))
       hb1.fst.backward hb2.fst.backward hb3.fst.backward
       hb4.fst.backward hb5.fst.backward hb6.fst.backward
       (fun i => 0 < bnPerChannelTensor3 16 112 112 εs γs βs
-                  (flatConvStride2 (h := 112) (w := 112) Ws bs x) i ∧
+                  (flatConvStride2Xla (h := 112) (w := 112) Ws bs x) i ∧
                 bnPerChannelTensor3 16 112 112 εs γs βs
-                  (flatConvStride2 (h := 112) (w := 112) Ws bs x) i < 6)
+                  (flatConvStride2Xla (h := 112) (w := 112) Ws bs x) i < 6)
       (fun i => 0 < bnPerChannelTensor3 128 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
                   (b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
                     ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-                    ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))) i ∧
+                    ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))) i ∧
                 bnPerChannelTensor3 128 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
                   (b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
                     ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-                    ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))) i < 6)
+                    ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))) i < 6)
       = (mobilenetv2PC_has_vjp_at
           (relu6 (16 * 112 * 112) ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-            ∘ flatConvStride2 (h := 112) (w := 112) Ws bs)
+            ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs)
           b1 b2 b3 b4 b5 b6
           (relu6 (128 * 7 * 7) ∘ bnPerChannelTensor3 128 7 7 εh γh βh
             ∘ flatConv (h := 7) (w := 7) Wh bh)
@@ -294,14 +294,14 @@ theorem mnv2InputGrad_eq_mobilenetv2_vjp
           ∘ bnPerChannelTensor3 128 7 7 εh γh βh ∘ flatConv (h := 7) (w := 7) Wh bh)
           (b6 (b5 (b4 (b3 (b2 (b1 ((relu6 (16 * 112 * 112)
             ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-            ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) x)))))))))]
+            ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) x)))))))))]
   rfl
 
 
 /-- ⭐⭐ **THE SHAPE CHECK — the ten-stage chain the tie is about IS the committed forward.**
     `mobilenetv2Forward_full_pc` by `rfl`, with the six block slots read off: `b1/b3/b5/b6` the
     strided inverted-residual bodies, `b2/b4` those bodies under `Proofs.residual`, the stem
-    `relu6 ∘ bnPC ∘ flatConvStride2` and the head `relu6 ∘ bnPC ∘ flatConv`.
+    `relu6 ∘ bnPC ∘ flatConvStride2Xla` and the head `relu6 ∘ bnPC ∘ flatConv`.
 
     ⛔ **This is the theorem that would have caught ResNet-34's wrong pool.** §3.10's drift lived
     a month because *"the same net as the tie"* was prose in a docstring; here it is a `rfl` the
@@ -352,6 +352,6 @@ theorem mobilenetv2Forward_full_pc_eq_chain
         ∘ invresBodyStridedPC (h := 56) (w := 56)
             We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
         ∘ (relu6 (16 * 112 * 112) ∘ bnPerChannelTensor3 16 112 112 εs γs βs
-            ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) := rfl
+            ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) := rfl
 
 end Proofs

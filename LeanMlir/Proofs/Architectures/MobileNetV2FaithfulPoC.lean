@@ -10,14 +10,14 @@ generic in the cotangent `c` the backward chain delivers. The depthwise peers of
 (`MobileNetV2Close.lean`).
 
 * **Stride-2 (downsampling, blocks b1/b3/b5/b6):** `depthwiseStridedW_den` / `depthwiseStridedB_den`
-  are one-line delegations to `mnv2_render_depthwiseW_strided_certified` /
-  `mnv2_render_depthwiseb_strided_certified` (the strided VJP is already flat).
+  are one-line delegations to `mnv2_render_depthwiseW_strided_xla_certified` /
+  `mnv2_render_depthwiseb_strided_xla_certified` (the strided VJP is already flat).
 * **Stride-1 (skip blocks b2/b4):** `depthwiseB_den` likewise delegates to
   `mnv2_render_depthwiseb_certified`. The stride-1 **weight** is the only one needing a bridge: the
   stride-1 depthwise weight VJP is 3-index (`depthwise_weight_grad_has_vjp3`), and the emitted op's
   `den` carries it flat (`Tensor3.flatten (… .backward W (unflatten c))`), so `depthwiseW_den` first
   routes through `mnv2_render_depthwiseW_flat_certified` — the flat pdiv-Jacobian form via
-  `hasVJP3_to_hasVJP.correct` (the same triple→flat reindex `flatConvStride2`'s weight VJP gets for
+  `hasVJP3_to_hasVJP.correct` (the same triple→flat reindex `flatConvStride2Xla`'s weight VJP gets for
   free), modulo the `unflatten ∘ flatten = id` round-trip on `W`.
 
 The expand/project 1×1 convs reuse `CifarPoC.convW_den`/`convB_den`; BN γ/β reuse
@@ -77,25 +77,49 @@ theorem depthwiseB_den {c h w kH kW : Nat}
   exact mnv2_render_depthwiseb_certified W x b cot lr o
 
 /-- **Stride-2 depthwise weight op = certified.** The strided VJP is already flat; one-line
-    delegation to `mnv2_render_depthwiseW_strided_certified`. -/
+    delegation to `mnv2_render_depthwiseW_strided_xla_certified`. -/
 theorem depthwiseStridedW_den {c h w kH kW : Nat}
     (xN wN lrStr cotN : String) (b : Vec c) (x : Vec (c*(2*h)*(2*w)))
     (W : DepthwiseKernel c kH kW) (cot : Vec (c*h*w)) (lr : ℝ) (idx : Fin (c*kH*kW)) :
-    den (SHlo.depthwiseStridedWeightSgd xN wN lrStr b x W lr (.operand cotN cot)) idx
+    den (SHlo.depthwiseStridedXlaWeightSgd xN wN lrStr b x W lr (.operand cotN cot)) idx
       = Tensor3.flatten W idx - lr * ∑ j : Fin (c*h*w),
-          pdiv (fun v' : Vec (c*kH*kW) => depthwiseStride2Flat (Tensor3.unflatten v') b x)
+          pdiv (fun v' : Vec (c*kH*kW) => depthwiseStride2FlatXla (Tensor3.unflatten v') b x)
                (Tensor3.flatten W) idx j * cot j := by
-  show depthwiseStridedWeightSgdDen b x W lr cot idx = _
-  exact mnv2_render_depthwiseW_strided_certified b x (Tensor3.flatten W) cot lr idx
+  show depthwiseStridedXlaWeightSgdDen b x W lr cot idx = _
+  exact mnv2_render_depthwiseW_strided_xla_certified b x (Tensor3.flatten W) cot lr idx
 
-/-- **Stride-2 depthwise bias op = certified.** Delegates to `mnv2_render_depthwiseb_strided_certified`. -/
+/-- **Stride-2 depthwise bias op = certified.** Delegates to `mnv2_render_depthwiseb_strided_xla_certified`. -/
 theorem depthwiseStridedB_den {c h w kH kW : Nat}
     (bN lrStr cotN : String) (W : DepthwiseKernel c kH kW) (x : Vec (c*(2*h)*(2*w)))
     (b : Vec c) (cot : Vec (c*h*w)) (lr : ℝ) (o : Fin c) :
-    den (SHlo.depthwiseStridedBiasSgd bN lrStr W x b lr (.operand cotN cot)) o
+    den (SHlo.depthwiseStridedXlaBiasSgd bN lrStr W x b lr (.operand cotN cot)) o
       = b o - lr * ∑ j : Fin (c*h*w),
-          pdiv (fun b' : Vec c => depthwiseStride2Flat W b' x) b o j * cot j := by
-  show depthwiseStridedBiasSgdDen W x b lr cot o = _
-  exact mnv2_render_depthwiseb_strided_certified W x b cot lr o
+          pdiv (fun b' : Vec c => depthwiseStride2FlatXla W b' x) b o j * cot j := by
+  show depthwiseStridedXlaBiasSgdDen W x b lr cot o = _
+  exact mnv2_render_depthwiseb_strided_xla_certified W x b cot lr o
+
+
+/-- **Any emitted XLA-`SAME` strided-stem conv weight op = certified.** The per-example
+    `convStridedXlaWeightSgd` (MobileNetV2's SGD train step, since 2026-09-05) denotes
+    `W − lr·(certified ∂(flatConvStride2Xla)/∂W · c)`, for any cotangent `c`. The XLA peer of
+    `ResNet34PoC.convStridedW_den`, which stays symmetric for ResNet's own stem. -/
+theorem convStridedXlaW_den {ic oc h w kH kW : Nat}
+    (xN wN lrStr cotN : String) (b : Vec oc) (x : Vec (ic*(2*h)*(2*w)))
+    (W : Kernel4 oc ic kH kW) (c : Vec (oc*h*w)) (lr : ℝ) (idx : Fin (oc*ic*kH*kW)) :
+    den (SHlo.convStridedXlaWeightSgd xN wN lrStr b x W lr (.operand cotN c)) idx
+      = Kernel4.flatten W idx - lr * ∑ j : Fin (oc*h*w),
+          pdiv (fun v' : Vec (oc*ic*kH*kW) => flatConvStride2Xla (Kernel4.unflatten v') b x)
+               (Kernel4.flatten W) idx j * c j :=
+  mnv2_render_stem_convW_xla_certified b x (Kernel4.flatten W) c lr idx
+
+/-- **Any emitted XLA-`SAME` strided-stem conv bias op = certified.** Same `reduce` text as
+    `convBiasSgd`; the `den` is the odd-phase bias VJP. -/
+theorem convStridedXlaB_den {ic oc h w kH kW : Nat}
+    (bN lrStr cotN : String) (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w)))
+    (b : Vec oc) (c : Vec (oc*h*w)) (lr : ℝ) (o : Fin oc) :
+    den (SHlo.convStridedXlaBiasSgd bN lrStr W x b lr (.operand cotN c)) o
+      = b o - lr * ∑ j : Fin (oc*h*w),
+          pdiv (fun b' : Vec oc => flatConvStride2Xla W b' x) b o j * c j :=
+  mnv2_render_stem_convb_xla_certified W x b c lr o
 
 end Proofs.Mnv2PoC

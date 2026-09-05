@@ -459,6 +459,21 @@ theorem depthwiseStridedBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
   simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
   rfl
 
+/-- **Batched XLA-`SAME` STRIDE-2 depthwise input-VJP faithfulness.** The odd-phase peer of
+    `depthwiseStridedBackBatched_faithful`: `depthwiseStridedXlaBackBatched` (pad `[p+1, p-1]`,
+    the token MobileNetV2's Adam render emits at its four strided depthwises) denotes the proven
+    VJP of `batchMap N (depthwiseStride2FlatXla W b)`. Same proof: a scatter onto the odd
+    positions is as linear as one onto the even ones. -/
+theorem depthwiseStridedXlaBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (v : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseStridedXlaBackBatched (N := N) wN W b e)
+      = (batchMap_has_vjp (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXla_has_vjp W b)
+          (depthwiseStride2FlatXla_differentiable W b)).backward v (den e) := by
+  funext idx
+  simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  rfl
+
 /-- **Batched depthwise input-VJP faithfulness.** The depthwise analogue of
     `convBackBatched_faithful`: `depthwiseBackBatched` denotes the proven VJP of
     the batched depthwise `batchMap N (depthwiseFlat W b)`. Depthwise conv is

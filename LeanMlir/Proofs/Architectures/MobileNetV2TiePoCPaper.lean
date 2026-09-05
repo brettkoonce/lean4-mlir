@@ -26,7 +26,7 @@ forward→loss→backward, no free activations, no symbolic cotangent.
 * expand/project 1×1 convs → `CifarPoC.convW_den`/`convB_den`;
 * depthwise (stride-1) → `Mnv2PoC.depthwiseW_den`/`depthwiseB_den`; (stride-2) → `…Strided…`;
 * per-channel BN γ/β → `CifarBnPoC.bnGamma_den`/`bnBeta_den`;
-* stem 3×3/s2 conv → `ResNet34PoC.convStridedW_den`/`convStridedB_den`;
+* stem 3×3/s2 conv → `Mnv2PoC.convStridedXlaW_den`/`convStridedB_den`;
 * final dense → `Cifar8PoC.denseW_den`/`denseB_den`.
 
 ## Honest residual (the boundary every prior fold carries)
@@ -157,7 +157,7 @@ theorem mnv2_ivS1_tied {ic mid oc h w : Nat}
 
 /-! ## Stride-2 downsampling inverted-residual block — all 12 params tied
 
-Same backward as stride-1 EXCEPT the depthwise is strided (`depthwiseStrided{Weight,Bias}Sgd`) so the
+Same backward as stride-1 EXCEPT the depthwise is strided (`depthwiseStridedXla{Weight,Bias}Sgd`) so the
 expand side (conv `We`, BN γe/βe) lives at the block-input grid `2h×2w`; the expand-output cotangent is
 `invresCotEcS2` (the strided depthwise input-VJP zero-upsamples). No skip (spatial+channels change). -/
 
@@ -175,7 +175,7 @@ def ivS2Tied {ic mid oc h w : Nat}
     let cotDr : Vec (mid*h*w) := (hasVJP3_to_hasVJP (conv2d_has_vjp3 Wp bp)).backward dr cotPc
     let dyBnD : Vec (mid*h*w) := fun i => if 0 < dn i ∧ dn i < 6 then cotDr i else 0
     let cotDc : Vec (mid*h*w) := invresCotDc ε γd γp Wp bp dr dn dc pc dyOut
-    let cotEr : Vec (mid*(2*h)*(2*w)) := (depthwiseStride2Flat_has_vjp (h := h) (w := w) Wd bd).backward er cotDc
+    let cotEr : Vec (mid*(2*h)*(2*w)) := (depthwiseStride2FlatXla_has_vjp (h := h) (w := w) Wd bd).backward er cotDc
     let dyBnE : Vec (mid*(2*h)*(2*w)) := fun i => if 0 < en i ∧ en i < 6 then cotEr i else 0
     let cotEc : Vec (mid*(2*h)*(2*w)) := invresCotEcS2 ε γe γd γp Wd bd Wp bp er en ec dr dn dc pc dyOut
     -- expand 1×1 conv (ic → mid) at 2h×2w
@@ -201,14 +201,14 @@ def ivS2Tied {ic mid oc h w : Nat}
                    βe idx j * reassocFwd mid (2*h) (2*w) dyBnE j)
     -- depthwise (STRIDED) W/b  (cot = cotDc at h×w)
   ∧ (∀ idx : Fin (mid*3*3),
-        den (SHlo.depthwiseStridedWeightSgd xN wN lrStr bd er Wd lr (.operand cotN cotDc)) idx
+        den (SHlo.depthwiseStridedXlaWeightSgd xN wN lrStr bd er Wd lr (.operand cotN cotDc)) idx
           = Tensor3.flatten Wd idx - lr * ∑ j : Fin (mid*h*w),
-              pdiv (fun v' : Vec (mid*3*3) => depthwiseStride2Flat (Tensor3.unflatten v') bd er)
+              pdiv (fun v' : Vec (mid*3*3) => depthwiseStride2FlatXla (Tensor3.unflatten v') bd er)
                    (Tensor3.flatten Wd) idx j * cotDc j)
   ∧ (∀ o : Fin mid,
-        den (SHlo.depthwiseStridedBiasSgd bN lrStr Wd er bd lr (.operand cotN cotDc)) o
+        den (SHlo.depthwiseStridedXlaBiasSgd bN lrStr Wd er bd lr (.operand cotN cotDc)) o
           = bd o - lr * ∑ j : Fin (mid*h*w),
-              pdiv (fun b' : Vec mid => depthwiseStride2Flat Wd b' er) bd o j * cotDc j)
+              pdiv (fun b' : Vec mid => depthwiseStride2FlatXla Wd b' er) bd o j * cotDc j)
     -- depthwise BN γ/β  (at h×w)
   ∧ (∀ idx : Fin mid,
         den (SHlo.bnGammaSgd gN vN epsStr lrStr ε γd dc lr (.operand cotN dyBnD)) idx
@@ -362,14 +362,14 @@ def mnv2StemTied {ic oc h w : Nat}
     let dyBnS : Vec (oc*h*w) := fun i => if 0 < stn i ∧ stn i < 6 then dyStem i else 0
     let cotStem : Vec (oc*h*w) := mnv2StemCot ε γs stn stc dyStem
     (∀ idx : Fin (oc*ic*3*3),
-        den (SHlo.convStridedWeightSgd xN wN lrStr bs x Ws lr (.operand cotN cotStem)) idx
+        den (SHlo.convStridedXlaWeightSgd xN wN lrStr bs x Ws lr (.operand cotN cotStem)) idx
           = Kernel4.flatten Ws idx - lr * ∑ j : Fin (oc*h*w),
-              pdiv (fun v' : Vec (oc*ic*3*3) => flatConvStride2 (Kernel4.unflatten v') bs x)
+              pdiv (fun v' : Vec (oc*ic*3*3) => flatConvStride2Xla (Kernel4.unflatten v') bs x)
                    (Kernel4.flatten Ws) idx j * cotStem j)
   ∧ (∀ o : Fin oc,
-        den (SHlo.convStridedBiasSgd bN lrStr Ws x bs lr (.operand cotN cotStem)) o
+        den (SHlo.convStridedXlaBiasSgd bN lrStr Ws x bs lr (.operand cotN cotStem)) o
           = bs o - lr * ∑ j : Fin (oc*h*w),
-              pdiv (fun b' : Vec oc => flatConvStride2 Ws b' x) bs o j * cotStem j)
+              pdiv (fun b' : Vec oc => flatConvStride2Xla Ws b' x) bs o j * cotStem j)
   ∧ (∀ idx : Fin oc,
         den (SHlo.bnGammaSgd gN vN epsStr lrStr ε γs stc lr (.operand cotN dyBnS)) idx
           = γs idx - lr * ∑ j : Fin (oc*(h*w)),
@@ -389,8 +389,8 @@ theorem mnv2_stem_tied {ic oc h w : Nat}
   unfold mnv2StemTied
   intro dyBnS cotStem
   refine ⟨?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoC.convStridedW_den xN wN lrStr cotN bs x Ws cotStem lr idx
-  · intro o;   exact ResNet34PoC.convStridedB_den bN lrStr cotN Ws x bs cotStem lr o
+  · intro idx; exact Mnv2PoC.convStridedXlaW_den xN wN lrStr cotN bs x Ws cotStem lr idx
+  · intro o;   exact Mnv2PoC.convStridedXlaB_den bN lrStr cotN Ws x bs cotStem lr o
   · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε γs βs stc dyBnS lr idx
   · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε γs βs stc dyBnS lr idx
 
@@ -515,7 +515,7 @@ theorem mnv2_ivS1_tiedAt {ic mid oc h w : Nat}
   let ec := flatConv We be xin
   let en := bnPerChannelTensor3 mid (2*h) (2*w) ε γe βe ec
   let er := relu6 (mid*(2*h)*(2*w)) en
-  let dc := depthwiseStride2Flat Wd bd er
+  let dc := depthwiseStride2FlatXla Wd bd er
   let dn := bnPerChannelTensor3 mid h w ε γd βd dc
   let dr := relu6 (mid*h*w) dn
   let pc := flatConv Wp bp dr
@@ -562,7 +562,7 @@ theorem mnv2_ivNoExp_tiedAt {ic oc h w : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String) (ε : ℝ)
     (Ws : Kernel4 oc ic 3 3) (bs γs βs : Vec oc)
     (x : Vec (ic*(2*h)*(2*w))) (dyStem : Vec (oc*h*w)) (lr : ℝ) : Prop :=
-  let stc := flatConvStride2 Ws bs x
+  let stc := flatConvStride2Xla Ws bs x
   let stn := bnPerChannelTensor3 oc h w ε γs βs stc
   mnv2StemTied xN wN bN gN vN epsStr lrStr cotN ε Ws bs γs βs x stn stc dyStem lr
 
@@ -601,7 +601,7 @@ nested composition is opaque during the capstone's dimension inference. -/
 
 @[irreducible] noncomputable def stemFwdO {ic oc h w : Nat} (ε : ℝ)
     (Ws : Kernel4 oc ic 3 3) (bs γs βs : Vec oc) (x : Vec (ic*(2*h)*(2*w))) : Vec (oc*h*w) :=
-  relu6 (oc*h*w) (bnPerChannelTensor3 oc h w ε γs βs (flatConvStride2 Ws bs x))
+  relu6 (oc*h*w) (bnPerChannelTensor3 oc h w ε γs βs (flatConvStride2Xla Ws bs x))
 
 /-- Stride-1 expand block BODY output (no skip). -/
 @[irreducible] noncomputable def ivS1BodyO {ic mid oc h w : Nat} (ε : ℝ)
@@ -627,7 +627,7 @@ nested composition is opaque during the capstone's dimension inference. -/
     (We : Kernel4 mid ic 1 1) (be γe βe : Vec mid) (Wd : DepthwiseKernel mid 3 3) (bd γd βd : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc) (xin : Vec (ic*(2*h)*(2*w))) : Vec (oc*h*w) :=
   bnPerChannelTensor3 oc h w ε γp βp (flatConv Wp bp
-    (relu6 (mid*h*w) (bnPerChannelTensor3 mid h w ε γd βd (depthwiseStride2Flat Wd bd
+    (relu6 (mid*h*w) (bnPerChannelTensor3 mid h w ε γd βd (depthwiseStride2FlatXla Wd bd
       (relu6 (mid*(2*h)*(2*w)) (bnPerChannelTensor3 mid (2*h) (2*w) ε γe βe (flatConv We be xin)))))))
 
 /-! ## Backward cot-in constructors (`@[irreducible]`) — thread block dyOuts (the residual fan-in)
@@ -673,7 +673,7 @@ stride-1 skip blocks, the identity-skip branch (`+ dyOut`). -/
   let ec := flatConv We be xin
   let en := bnPerChannelTensor3 mid (2*h) (2*w) ε γe βe ec
   let er := relu6 (mid*(2*h)*(2*w)) en
-  let dc := depthwiseStride2Flat Wd bd er
+  let dc := depthwiseStride2FlatXla Wd bd er
   let dn := bnPerChannelTensor3 mid h w ε γd βd dc
   let dr := relu6 (mid*h*w) dn
   let pc := flatConv Wp bp dr

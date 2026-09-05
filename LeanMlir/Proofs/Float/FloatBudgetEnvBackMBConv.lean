@@ -133,8 +133,9 @@ noncomputable def floatBridgesTo_invresBodyBackPC {ic mid oc h w kHe kWe kHd kWd
       (floatBridgesTo_convBack (h := h) (w := w) M We hwe hnM hWe))
 
 /-- The float stride-2 inverted-residual body input-gradient — the same shape with the depthwise
-    stage threading the strided backward (zero-upsample scatter then reversed-kernel depthwise)
-    and the expand backward at the `2h × 2w` grid. -/
+    stage threading the strided backward at the XLA-`SAME` (odd) phase the shipped MobileNetV2
+    render uses (zero-upsample scatter then reversed-kernel depthwise) and the expand backward at
+    the `2h × 2w` grid. -/
 noncomputable def invresBodyStridedBackPCF {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (M : FloatModel)
     (We : Kernel4 mid ic kHe kWe) (Wd : DepthwiseKernel mid kHd kWd) (Wp : Kernel4 oc mid kHp kWp)
@@ -147,11 +148,12 @@ noncomputable def invresBodyStridedBackPCF {ic mid oc h w kHe kWe kHd kWd kHp kW
   (M.flatConvF (h := 2 * h) (w := 2 * w) (IR.reverseSwap We) (fun _ => 0)
       ∘ bnBeF ∘ reluMaskBack m_e)
   ∘ ((M.depthwiseFlatF (h := 2 * h) (w := 2 * w) (dwReverse Wd) (fun _ => 0)
-        ∘ decimateBack mid h w) ∘ bnBdF ∘ reluMaskBack m_d)
+        ∘ decimateOddBack mid h w) ∘ bnBdF ∘ reluMaskBack m_d)
   ∘ (M.flatConvF (h := h) (w := w) (IR.reverseSwap Wp) (fun _ => 0) ∘ bnBpF)
 
 /-- **The stride-2 inverted-residual body backward float-bridges TO its float peer** — the
-    downsample blocks `b1`/`b3`/`b5`/`b6`. Same `.comp` shape as the stride-1 body. -/
+    downsample blocks `b1`/`b3`/`b5`/`b6`. Same `.comp` shape as the stride-1 body, with the
+    depthwise stage at the XLA-`SAME` (odd) phase. -/
 noncomputable def floatBridgesTo_invresBodyStridedBackPC
     {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat} (M : FloatModel)
     (We : Kernel4 mid ic kHe kWe) (Wd : DepthwiseKernel mid kHd kWd) (Wp : Kernel4 oc mid kHp kWp)
@@ -170,7 +172,7 @@ noncomputable def floatBridgesTo_invresBodyStridedBackPC
       (invresBodyStridedBackPCF M We Wd Wp bnBeF bnBdF bnBpF m_e m_d) :=
   ((hbnBp.comp (floatBridgesTo_convBack (h := h) (w := w) M Wp hwp hnO hWp)).comp
     (((floatBridgesTo_reluMaskBack m_d).comp hbnBd).comp
-      (floatBridgesTo_depthwiseStride2Back (h := h) (w := w) M Wd hwd hnM2 hWd))).comp
+      (floatBridgesTo_depthwiseStride2XlaBack (h := h) (w := w) M Wd hwd hnM2 hWd))).comp
     (((floatBridgesTo_reluMaskBack m_e).comp hbnBe).comp
       (floatBridgesTo_convBack (h := 2 * h) (w := 2 * w) M We hwe hnM2 hWe))
 
@@ -216,7 +218,7 @@ theorem Maps.invresBodyBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat} (M :
       (Maps.convBack (h := h) (w := w) M We hwe hnM hWe hge ceA ceE))
 
 /-- ⭐ **An envelope through one stride-2 inverted-residual body input-gradient.** The same six
-    stages, with the depthwise threading `Maps.depthwiseStride2Back` and the expand backward at
+    stages, with the depthwise threading `Maps.depthwiseStride2XlaBack` and the expand backward at
     the doubled grid. The downsample blocks `b1`/`b3`/`b5`/`b6` — and note MobileNetV2's
     downsample has NO projection branch to fan in against, unlike ResNet-34's: the stride change
     happens inside the body, so this is a straight line where `Maps.r34DownBlockBack` is a
@@ -255,7 +257,7 @@ theorem Maps.invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Na
       hnM2 hnO hbnBe hbnBd hbnBp).Maps Ā Ē Ā' Ē' :=
   ((mbnp.comp hnO (Maps.convBack (h := h) (w := w) M Wp hwp hnO hWp hgp cpA cpE)).comp hnM
     (((Maps.reluMaskBack m_d).comp hnM mbnd).comp hnM
-      (Maps.depthwiseStride2Back (h := h) (w := w) M Wd hwd hnM2 hWd hgd cdA cdE))).comp hnM2
+      (Maps.depthwiseStride2XlaBack (h := h) (w := w) M Wd hwd hnM2 hWd hgd cdA cdE))).comp hnM2
     (((Maps.reluMaskBack m_e).comp hnM2 mbne).comp hnM2
       (Maps.convBack (h := 2 * h) (w := 2 * w) M We hwe hnM2 hWe hge ceA ceE))
 

@@ -10,7 +10,7 @@ fiddliest piece" (`planning/mobilenetv2_close.md` Item D).
 The chain through an inverted-residual block composes the *rendered* backward denotations — the relu6
 two-sided-kink mask (`selectMid`, `if 0<x<6`), the per-channel BN input-VJP (`bnPerChannelTensor3_grad_input`,
 = `bnPerChannelBack`'s denotation), the 1×1 conv input-VJP (`conv2d_has_vjp3` via the flatten bridge,
-= `convBack`'s denotation), and the depthwise input-VJP (`depthwiseFlat_has_vjp` / `depthwiseStride2Flat_has_vjp`,
+= `convBack`'s denotation), and the depthwise input-VJP (`depthwiseFlat_has_vjp` / `depthwiseStride2FlatXla_has_vjp`,
 = `depthwiseBack` / `depthwiseStridedBack`'s denotation) — back through `project → depthwise → expand`:
 
   block:  o = [ addV( bn(conv₁ₓ₁ₚ( relu6(bn(dwconv( relu6(bn(conv₁ₓ₁ₑ x)) ))) )), x )  if skip ]
@@ -67,7 +67,7 @@ noncomputable def invresCotEcS2 {mid oc h w : Nat} (ε : ℝ) (γe γd : Vec mid
     (er en ec : Vec (mid * (2 * h) * (2 * w))) (dr dn dc : Vec (mid * h * w))
     (pc dyOut : Vec (oc * h * w)) : Vec (mid * (2 * h) * (2 * w)) :=
   let cotDc := invresCotDc ε γd γp Wp bp dr dn dc pc dyOut
-  let cotEr := (depthwiseStride2Flat_has_vjp (h := h) (w := w) Wd bd).backward er cotDc
+  let cotEr := (depthwiseStride2FlatXla_has_vjp (h := h) (w := w) Wd bd).backward er cotDc
   bnPerChannelTensor3_grad_input mid (2 * h) (2 * w) ε γe ec
     (fun i => if 0 < en i ∧ en i < 6 then cotEr i else 0)
 
@@ -139,25 +139,25 @@ theorem invres_render_dwW_s2_chain_certified {mid oc h w : Nat}
     (bd : Vec mid) (er : Vec (mid * (2 * h) * (2 * w))) (γd : Vec mid) (γp : Vec oc)
     (ε : ℝ) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (dr dn dc : Vec (mid * h * w))
     (pc dyOut : Vec (oc * h * w)) (v : Vec (mid * 3 * 3)) (lr : ℝ) (i : Fin (mid * 3 * 3)) :
-    v i - lr * (depthwiseStride2_weight_grad_has_vjp bd er).backward v
+    v i - lr * (depthwiseStride2Xla_weight_grad_has_vjp bd er).backward v
         (invresCotDc ε γd γp Wp bp dr dn dc pc dyOut) i
       = v i - lr * ∑ j : Fin (mid * h * w),
           pdiv (fun v' : Vec (mid * 3 * 3) =>
-                  depthwiseStride2Flat (Tensor3.unflatten v' : DepthwiseKernel mid 3 3) bd er) v i j
+                  depthwiseStride2FlatXla (Tensor3.unflatten v' : DepthwiseKernel mid 3 3) bd er) v i j
             * invresCotDc ε γd γp Wp bp dr dn dc pc dyOut j :=
-  mnv2_render_depthwiseW_strided_certified bd er v (invresCotDc ε γd γp Wp bp dr dn dc pc dyOut) lr i
+  mnv2_render_depthwiseW_strided_xla_certified bd er v (invresCotDc ε γd γp Wp bp dr dn dc pc dyOut) lr i
 
 /-- **Depthwise bias, chain-certified (stride-2 downsampling block).** -/
 theorem invres_render_dwb_s2_chain_certified {mid oc h w : Nat}
     (Wd : DepthwiseKernel mid 3 3) (er : Vec (mid * (2 * h) * (2 * w))) (bd : Vec mid) (γd : Vec mid)
     (γp : Vec oc) (ε : ℝ) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (dr dn dc : Vec (mid * h * w))
     (pc dyOut : Vec (oc * h * w)) (lr : ℝ) (o : Fin mid) :
-    bd o - lr * (depthwiseStride2_bias_grad_has_vjp Wd er).backward bd
+    bd o - lr * (depthwiseStride2Xla_bias_grad_has_vjp Wd er).backward bd
         (invresCotDc ε γd γp Wp bp dr dn dc pc dyOut) o
       = bd o - lr * ∑ j : Fin (mid * h * w),
-          pdiv (fun b' : Vec mid => depthwiseStride2Flat Wd b' er) bd o j
+          pdiv (fun b' : Vec mid => depthwiseStride2FlatXla Wd b' er) bd o j
             * invresCotDc ε γd γp Wp bp dr dn dc pc dyOut j :=
-  mnv2_render_depthwiseb_strided_certified Wd er bd (invresCotDc ε γd γp Wp bp dr dn dc pc dyOut) lr o
+  mnv2_render_depthwiseb_strided_xla_certified Wd er bd (invresCotDc ε γd γp Wp bp dr dn dc pc dyOut) lr o
 
 /-- **Expand 1×1 conv weight, chain-certified (stride-1 block).** `Weⁿ` denotes `We − lr·(certified
     ∂conv/∂We · the deepest in-block cotangent)` — the generic 1×1 bridge at `invresCotEcS1`. -/
@@ -192,15 +192,15 @@ theorem invres_render_expW_s2_chain_certified {ic mid oc h w : Nat}
     (invresCotEcS2 ε γe γd γp Wd bd Wp bp er en ec dr dn dc pc dyOut) lr idx
 
 /-- **Stem 3×3 strided conv weight, chain-certified.** `sWⁿ` denotes `sW − lr·(certified
-    ∂(flatConvStride2)/∂sW · bn-back(relu6'(stn) ⊙ the block-1 input cotangent))`. -/
+    ∂(flatConvStride2Xla)/∂sW · bn-back(relu6'(stn) ⊙ the block-1 input cotangent))`. -/
 theorem mnv2_stem_render_convW_chain_certified {ic oc h w : Nat}
     (bs : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) (ε : ℝ) (γs : Vec oc)
     (stn stc dyStem : Vec (oc * h * w)) (v : Vec (oc * ic * 3 * 3)) (lr : ℝ)
     (i : Fin (oc * ic * 3 * 3)) :
-    v i - lr * (flatConvStride2_weight_grad_has_vjp bs x).backward v (mnv2StemCot ε γs stn stc dyStem) i
+    v i - lr * (flatConvStride2Xla_weight_grad_has_vjp bs x).backward v (mnv2StemCot ε γs stn stc dyStem) i
       = v i - lr * ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * 3 * 3) => flatConvStride2 (Kernel4.unflatten v') bs x) v i j
+          pdiv (fun v' : Vec (oc * ic * 3 * 3) => flatConvStride2Xla (Kernel4.unflatten v') bs x) v i j
             * mnv2StemCot ε γs stn stc dyStem j :=
-  mnv2_render_stem_convW_certified bs x v (mnv2StemCot ε γs stn stc dyStem) lr i
+  mnv2_render_stem_convW_xla_certified bs x v (mnv2StemCot ε γs stn stc dyStem) lr i
 
 end Proofs

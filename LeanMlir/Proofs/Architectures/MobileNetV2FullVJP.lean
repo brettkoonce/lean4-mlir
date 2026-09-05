@@ -48,28 +48,28 @@ open scoped BigOperators
 -- § The two missing per-stage pieces
 -- ════════════════════════════════════════════════════════════════
 
-/-- Strided stem stage VJP, per-channel BN: `relu6 ∘ bnPC ∘ flatConvStride2`. The per-channel
+/-- Strided stem stage VJP, per-channel BN: `relu6 ∘ bnPC ∘ flatConvStride2Xla`. The per-channel
     twin of `MobileNetV2.lean`'s `convBnRelu6Strided_has_vjp_at`, in the `bnPerChannelTensor3`
     vocabulary the paper-spec net renders. -/
 noncomputable def convBnRelu6StridedPC_has_vjp_at {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0 ∧
-                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 6)) :
-    HasVJPAt (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v := by
+    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
+                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
+    HasVJPAt (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v := by
   have hc_diff : Differentiable ℝ
-      (flatConvStride2 W b : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
-    flatConvStride2_differentiable W b
+      (flatConvStride2Xla W b : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+    flatConvStride2Xla_differentiable W b
   have hbn_diff : Differentiable ℝ (bnPerChannelTensor3 oc h w ε γ β) :=
     bnPerChannelTensor3_differentiable oc h w ε hε γ β
-  have step1 : HasVJPAt (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
-    vjp_comp_at (flatConvStride2 W b) (bnPerChannelTensor3 oc h w ε γ β) v
+  have step1 : HasVJPAt (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
+    vjp_comp_at (flatConvStride2Xla W b) (bnPerChannelTensor3 oc h w ε γ β) v
       (hc_diff v) (hbn_diff _)
-      ((flatConvStride2_has_vjp W b).toHasVJPAt v)
+      ((flatConvStride2Xla_has_vjp W b).toHasVJPAt v)
       ((bnPerChannelTensor3_has_vjp oc h w ε hε γ β).toHasVJPAt _)
   have step1_diff : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
-    DifferentiableAt.comp v (hbn_diff (flatConvStride2 W b v)) (hc_diff v)
+      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
+    DifferentiableAt.comp v (hbn_diff (flatConvStride2Xla W b v)) (hc_diff v)
   exact vjp_comp_at _ (relu6 (oc * h * w)) v
     step1_diff (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth) step1
     (relu6_has_vjp_at (oc * h * w) _ h_smooth)
@@ -77,14 +77,14 @@ noncomputable def convBnRelu6StridedPC_has_vjp_at {ic oc h w kH kW : Nat}
 theorem convBnRelu6StridedPC_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0 ∧
-                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 6)) :
+    (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
+                       bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
-      (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v := by
+      (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v := by
   have hinner : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
+      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
     ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp
-      (flatConvStride2_differentiable W b)) v
+      (flatConvStride2Xla_differentiable W b)) v
   exact (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
 
 /-- Differentiability peer of `invresBodyPC_has_vjp_at` (which `MobileNetV2BackCertifiedTie`
@@ -115,10 +115,10 @@ theorem invresBodyStridedPC_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp 
     (h_se : ∀ k, (bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) k ≠ 0 ∧
                    bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe (flatConv We be v) k ≠ 6))
     (h_sd : ∀ k, (bnPerChannelTensor3 mid h w εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) k ≠ 0 ∧
                    bnPerChannelTensor3 mid h w εd γd βd
-                    (depthwiseStride2Flat Wd bd
+                    (depthwiseStride2FlatXla Wd bd
                       (ivExpandPC (h := 2 * h) (w := 2 * w) We be εe γe βe v)) k ≠ 6)) :
     DifferentiableAt ℝ
       (invresBodyStridedPC (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v := by
@@ -161,10 +161,10 @@ structure IVStridedSmoothAt (h w : Nat) {ic mid oc : Nat} (q : IVW ic mid oc)
   he : ∀ k, (bnPerChannelTensor3 mid (2 * h) (2 * w) q.eε q.eγ q.eβ (flatConv q.eW q.eb v) k ≠ 0 ∧
               bnPerChannelTensor3 mid (2 * h) (2 * w) q.eε q.eγ q.eβ (flatConv q.eW q.eb v) k ≠ 6)
   hd : ∀ k, (bnPerChannelTensor3 mid h w q.dε q.dγ q.dβ
-               (depthwiseStride2Flat q.dW q.db
+               (depthwiseStride2FlatXla q.dW q.db
                  (ivExpandPC (h := 2 * h) (w := 2 * w) q.eW q.eb q.eε q.eγ q.eβ v)) k ≠ 0 ∧
               bnPerChannelTensor3 mid h w q.dε q.dγ q.dβ
-               (depthwiseStride2Flat q.dW q.db
+               (depthwiseStride2FlatXla q.dW q.db
                  (ivExpandPC (h := 2 * h) (w := 2 * w) q.eW q.eb q.eε q.eγ q.eβ v)) k ≠ 6)
 
 /-- The single relu6 site of the t=1 bottleneck (depthwise-BN output) is away from the kink. -/
@@ -254,7 +254,7 @@ theorem ivStridedW_differentiableAt (h w : Nat) {ic mid oc : Nat} (p : IVW ic mi
 noncomputable def mnv2StemW (w : MNV2PaperWeights) :
     Vec (3 * 224 * 224) → Vec (32 * 112 * 112) :=
   relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 w.sε w.sγ w.sβ ∘
-    flatConvStride2 (h := 112) (w := 112) w.sW w.sb
+    flatConvStride2Xla (h := 112) (w := 112) w.sW w.sb
 
 /-- The paper-spec head: 1×1 conv 320→1280 → per-channel BN → relu6 → GAP → dense 1280→10. -/
 noncomputable def mnv2HeadW (w : MNV2PaperWeights) : Vec (320 * 7 * 7) → Vec 10 :=
@@ -264,8 +264,8 @@ noncomputable def mnv2HeadW (w : MNV2PaperWeights) : Vec (320 * 7 * 7) → Vec 1
 
 /-- Stem relu6 away from the kink at the input `x`. -/
 def MNV2StemSmoothAt (w : MNV2PaperWeights) (x : Vec (3 * 224 * 224)) : Prop :=
-  ∀ k, (bnPerChannelTensor3 32 112 112 w.sε w.sγ w.sβ (flatConvStride2 w.sW w.sb x) k ≠ 0 ∧
-         bnPerChannelTensor3 32 112 112 w.sε w.sγ w.sβ (flatConvStride2 w.sW w.sb x) k ≠ 6)
+  ∀ k, (bnPerChannelTensor3 32 112 112 w.sε w.sγ w.sβ (flatConvStride2Xla w.sW w.sb x) k ≠ 0 ∧
+         bnPerChannelTensor3 32 112 112 w.sε w.sγ w.sβ (flatConvStride2Xla w.sW w.sb x) k ≠ 6)
 
 /-- Head relu6 away from the kink at the trunk output `v`. -/
 def MNV2HeadSmoothAt (w : MNV2PaperWeights) (v : Vec (320 * 7 * 7)) : Prop :=
@@ -481,7 +481,7 @@ noncomputable def mobilenetv2_full_has_vjp_at (w : MNV2PaperWeights)
 --   Peeling one block off another by `rfl` is instant (both sides have the same opaque block
 --   wrapper at the head, so defeq matches structurally). Peeling block 1 off the STEM by `rfl`
 --   kernel-times-out — measured, ~80 s to fail. The stem is the one layer whose body carries a
---   type ascription: `flatConvStride2 (h := 112) (w := 112)` has natural domain
+--   type ascription: `flatConvStride2Xla (h := 112) (w := 112)` has natural domain
 --   `Vec (3 * (2 * 112) * (2 * 112))` and `mnv2StemW` declares `Vec (3 * 224 * 224)`, so the
 --   kernel stops matching heads and descends into the block body instead. Going through
 --   `rw [<the def>, Function.comp_apply]` never unfolds the inner layer at all: it closes on
@@ -490,7 +490,7 @@ noncomputable def mobilenetv2_full_has_vjp_at (w : MNV2PaperWeights)
 
 theorem mnv2StemW_apply (w : MNV2PaperWeights) (x : Vec (3 * 224 * 224)) :
     mnv2StemW w x = relu6 (32 * 112 * 112) (bnPerChannelTensor3 32 112 112 w.sε w.sγ w.sβ
-      (flatConvStride2 (h := 112) (w := 112) w.sW w.sb x)) := by
+      (flatConvStride2Xla (h := 112) (w := 112) w.sW w.sb x)) := by
   rw [mnv2StemW, Function.comp_apply, Function.comp_apply]
 
 theorem mnv2HeadW_apply (w : MNV2PaperWeights) (v : Vec (320 * 7 * 7)) :

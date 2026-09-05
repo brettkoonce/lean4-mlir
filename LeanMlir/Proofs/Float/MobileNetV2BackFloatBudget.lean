@@ -35,8 +35,8 @@ closing point, that §0.1's wall is a fact about *composing* a backward with the
 feeds it, applies here verbatim. Say it that way.
 
 ⭐ **What was new to build: nothing but two leaves.** `Maps.depthwiseBack` and
-`Maps.depthwiseStride2Back` (`FloatBudgetEnvBackMBConv.lean`) are `Maps.depthwise` at the
-spatially-reversed kernel and that composed with `Maps.decimateBack`; the block envelopes are six
+`Maps.depthwiseStride2XlaBack` (`FloatBudgetEnvBackMBConv.lean`) are `Maps.depthwise` at the
+spatially-reversed kernel and that composed with `Maps.decimateOddBack`; the block envelopes are six
 `Maps.comp`s of leaves that already existed. ⭐ And relu6's clamp — the forward's headline lever,
 worth 97 orders of window there (§3.2) — buys this chain **nothing**: its backward is
 `reluMaskBack`, a 0/1 select, exact in float and envelope-preserving. Window and budget are
@@ -244,7 +244,7 @@ noncomputable def MnvBodyStridedBack.bridge {ic mid oc h w : Nat}
     ⚠ Written with the stem's and head's three stages GROUPED, exactly as `mnv2InputGrad` writes
     them — §3.7's grouping lesson: `.comp` is not associative as a bridge. -/
 noncomputable def mnv2GradR (w : MnvBackWeights ε wk gl es exh) : Vec 10 → Vec (3 * 224 * 224) :=
-  (flatConvStride2Back (h := 112) (w := 112) w.stemK.W ∘ w.stemBn.real ∘ reluMaskBack w.mstem)
+  (flatConvStride2XlaBack (h := 112) (w := 112) w.stemK.W ∘ w.stemBn.real ∘ reluMaskBack w.mstem)
   ∘ w.b1.real ∘ Proofs.residual w.b2.real ∘ w.b3.real ∘ Proofs.residual w.b4.real
     ∘ w.b5.real ∘ w.b6.real
   ∘ (convFlatBack (h := 7) (w := 7) w.headK.W ∘ w.headBn.real ∘ reluMaskBack w.mhead)
@@ -257,7 +257,7 @@ noncomputable def mnv2GradR (w : MnvBackWeights ε wk gl es exh) : Vec 10 → Ve
 noncomputable def mnv2GradF (M : FloatModel) (w : MnvBackWeights ε wk gl es exh) :
     Vec 10 → Vec (3 * 224 * 224) :=
   ((M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap w.stemK.W) (fun _ => 0)
-      ∘ decimateBack 16 112 112) ∘ w.stemBn.float M ∘ reluMaskBack w.mstem)
+      ∘ decimateOddBack 16 112 112) ∘ w.stemBn.float M ∘ reluMaskBack w.mstem)
   ∘ w.b1.float M ∘ (fun v j => M.add (w.b2.float M v j) (v j)) ∘ w.b3.float M
     ∘ (fun v j => M.add (w.b4.float M v j) (v j)) ∘ w.b5.float M ∘ w.b6.float M
   ∘ (M.flatConvF (h := 7) (w := 7) (IR.reverseSwap w.headK.W) (fun _ => 0)
@@ -300,7 +300,7 @@ noncomputable def mnv2GradBridge (M : FloatModel) (P : MnvBackProfile M ε wk gl
     (((floatBridgesTo_reluMaskBack w.mstem).comp
         (w.stemBn.bridge M P (Xh := 112) (by norm_num) (by norm_num) (by norm_num)
           (by norm_num))).comp
-      (floatBridgesTo_flatConvStride2Back (h := 112) (w := 112) M w.stemK.W P.hwk
+      (floatBridgesTo_flatConvStride2XlaBack (h := 112) (w := 112) M w.stemK.W P.hwk
         (by norm_num) w.stemK.hW))
 
 end Net
@@ -670,7 +670,7 @@ theorem mnv2GradBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε
         (by norm_num) (by norm_num)
         (Ā := 1739 * 10 ^ 141) (Ē := 3775 * 10 ^ 139) (Ā' := 1178 * 10 ^ 148) (Ē' := 2666 * 10 ^ 146)
         (by norm_num) (by norm_num))).comp (by norm_num)
-      (FloatBridgesTo.Maps.flatConvStride2Back (h := 112) (w := 112) M w.stemK.W
+      (FloatBridgesTo.Maps.flatConvStride2XlaBack (h := 112) (w := 112) M w.stemK.W
         P.hwk (by norm_num) w.stemK.hW
         (M.gamma_num (k := 16 * 3 * 3 + 2) (q := 8703 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32]))
         (Ā' := 4750 * 10 ^ 150) (Ē' := 1076 * 10 ^ 149) (by norm_num [u32]) (by norm_num [u32])))

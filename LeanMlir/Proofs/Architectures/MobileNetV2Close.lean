@@ -127,6 +127,20 @@ theorem mnv2_render_stem_convW_certified {ic oc h w kH kW : Nat}
             v i j * dy j := by
   rw [flatConvStride2_weight_grad_has_vjp_correct]
 
+/-- **Stem conv weight output, certified — XLA-`SAME` phase.** `mnv2_render_stem_convW_certified`
+    at `flatConvStride2Xla`, the stem MobileNetV2 ships (every artifact since 2026-09-05; the
+    Adam ones since 2026-08-08). ⚠ The symmetric lemma above stays: ResNet-34's PoC reuses it,
+    and ResNet's stem is PyTorch-origin symmetric. -/
+theorem mnv2_render_stem_convW_xla_certified {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
+    (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (lr : ℝ)
+    (i : Fin (oc * ic * kH * kW)) :
+    v i - lr * (flatConvStride2Xla_weight_grad_has_vjp b x).backward v dy i
+      = v i - lr * ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) => flatConvStride2Xla (Kernel4.unflatten v') b x)
+            v i j * dy j := by
+  rw [flatConvStride2Xla_weight_grad_has_vjp_correct]
+
 -- ════════════════════════════════════════════════════════════════
 -- § C. Strided (stride-2) param VJPs — the 4 downsampling blocks + the stem bias
 --
@@ -155,6 +169,15 @@ theorem mnv2_render_stem_convb_certified {ic oc h w kH kW : Nat}
           pdiv (fun b' : Vec oc => flatConvStride2 W b' x) b o j * dy j := by
   rw [(flatConvStride2_bias_grad_has_vjp W x).correct]
 
+/-- **Stem conv bias output, certified — XLA-`SAME` phase.** -/
+theorem mnv2_render_stem_convb_xla_certified {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (x : Vec (ic * (2 * h) * (2 * w)))
+    (b : Vec oc) (dy : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :
+    b o - lr * (flatConvStride2Xla_bias_grad_has_vjp W x).backward b dy o
+      = b o - lr * ∑ j : Fin (oc * h * w),
+          pdiv (fun b' : Vec oc => flatConvStride2Xla W b' x) b o j * dy j := by
+  rw [(flatConvStride2Xla_bias_grad_has_vjp W x).correct]
+
 -- ── C.2 Strided depthwise weight (`dW`, blocks b1,b3,b5,b6) ──
 -- (`depthwiseStride2_weight_grad_has_vjp` RELOCATED to `Depthwise.lean` — see § C header.)
 
@@ -169,6 +192,18 @@ theorem mnv2_render_depthwiseW_strided_certified {c h w kH kW : Nat}
             depthwiseStride2Flat (Tensor3.unflatten v' : DepthwiseKernel c kH kW) b x) v i j * dy j := by
   rw [(depthwiseStride2_weight_grad_has_vjp b x).correct]
 
+/-- **Strided depthwise weight output, certified — XLA-`SAME` phase.** MobileNetV2's four strided
+    depthwises. ⚠ The symmetric lemma above stays: EfficientNet-B0's strided depthwises are
+    symmetric in render and reference alike (`EfficientNetClose.lean` reuses it). -/
+theorem mnv2_render_depthwiseW_strided_xla_certified {c h w kH kW : Nat}
+    (b : Vec c) (x : Vec (c * (2 * h) * (2 * w)))
+    (v : Vec (c * kH * kW)) (dy : Vec (c * h * w)) (lr : ℝ) (i : Fin (c * kH * kW)) :
+    v i - lr * (depthwiseStride2Xla_weight_grad_has_vjp b x).backward v dy i
+      = v i - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun v' : Vec (c * kH * kW) =>
+            depthwiseStride2FlatXla (Tensor3.unflatten v' : DepthwiseKernel c kH kW) b x) v i j * dy j := by
+  rw [(depthwiseStride2Xla_weight_grad_has_vjp b x).correct]
+
 -- ── C.3 Strided depthwise bias (`db`, blocks b1,b3,b5,b6) ──
 -- (`depthwiseStride2_bias_grad_has_vjp` RELOCATED to `Depthwise.lean` — see § C header.)
 
@@ -181,5 +216,14 @@ theorem mnv2_render_depthwiseb_strided_certified {c h w kH kW : Nat}
       = b o - lr * ∑ j : Fin (c * h * w),
           pdiv (fun b' : Vec c => depthwiseStride2Flat W b' x) b o j * dy j := by
   rw [(depthwiseStride2_bias_grad_has_vjp W x).correct]
+
+/-- **Strided depthwise bias output, certified — XLA-`SAME` phase.** -/
+theorem mnv2_render_depthwiseb_strided_xla_certified {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Vec (c * (2 * h) * (2 * w)))
+    (b : Vec c) (dy : Vec (c * h * w)) (lr : ℝ) (o : Fin c) :
+    b o - lr * (depthwiseStride2Xla_bias_grad_has_vjp W x).backward b dy o
+      = b o - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun b' : Vec c => depthwiseStride2FlatXla W b' x) b o j * dy j := by
+  rw [(depthwiseStride2Xla_bias_grad_has_vjp W x).correct]
 
 end Proofs

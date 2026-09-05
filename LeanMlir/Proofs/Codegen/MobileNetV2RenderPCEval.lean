@@ -55,7 +55,7 @@ namespace Proofs
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd μd vd : Vec mid) :
     Vec (mid * (2 * h) * (2 * w)) → Vec (mid * h * w) :=
   relu6 (mid * h * w) ∘ bnPerChannelEvalTensor3 mid h w εd γd βd μd vd ∘
-    depthwiseStride2Flat Wd bd
+    depthwiseStride2FlatXla Wd bd
 
 /-- Project (linear bottleneck) stage at inference — no relu6. -/
 @[reducible] noncomputable def ivProjectPCEval {mid oc h w kHp kWp : Nat}
@@ -126,7 +126,7 @@ noncomputable def mobilenetv2Forward_full_pc_eval (ε : ℝ)
   residual (invresBodyPCEval (h := 56) (w := 56) ε We2 be2 γe2 βe2 μe2 ve2 Wd2 bd2 γd2 βd2 μd2 vd2 Wp2 bp2 γp2 βp2 μp2 vp2) ∘
   invresBodyStridedPCEval (h := 56) (w := 56) ε We1 be1 γe1 βe1 μe1 ve1 Wd1 bd1 γd1 βd1 μd1 vd1 Wp1 bp1 γp1 βp1 μp1 vp1 ∘
   (relu6 (16 * 112 * 112) ∘ bnPerChannelEvalTensor3 16 112 112 ε γs βs μs vs ∘
-    flatConvStride2 (h := 112) (w := 112) Ws bs)
+    flatConvStride2Xla (h := 112) (w := 112) Ws bs)
 
 namespace StableHLO
 
@@ -165,14 +165,14 @@ def mobilenetv2FwdGraphFullPCEval (epsStr : String) (ε : ℝ)
   let stemOut : SHlo (16 * 112 * 112) :=
     .relu6F (.bnPerChannelEvalF (oc := 16) (h := 112) (w := 112) "%gs" "%bts"
       "%mus" "%vars" epsStr ε γs βs μs vs
-      (.flatConvStridedF (h := 112) (w := 112) "%Ws" "%bs" Ws bs (.operand "%x" x)))
+      (.flatConvStridedXlaF (h := 112) (w := 112) "%Ws" "%bs" Ws bs (.operand "%x" x)))
   let b1Out : SHlo (24 * 56 * 56) :=
     .bnPerChannelEvalF (oc := 24) (h := 56) (w := 56) "%gp1" "%btp1"
       "%mup1" "%varp1" epsStr ε γp1 βp1 μp1 vp1
       (.flatConvF (h := 56) (w := 56) "%Wp1" "%bp1" Wp1 bp1
         (.relu6F (.bnPerChannelEvalF (oc := 64) (h := 56) (w := 56) "%gd1" "%btd1"
           "%mud1" "%vard1" epsStr ε γd1 βd1 μd1 vd1
-          (.depthwiseStridedF (h := 56) (w := 56) "%Wd1" "%bd1" Wd1 bd1
+          (.depthwiseStridedXlaF (h := 56) (w := 56) "%Wd1" "%bd1" Wd1 bd1
             (.relu6F (.bnPerChannelEvalF (oc := 64) (h := 112) (w := 112) "%ge1" "%bte1"
               "%mue1" "%vare1" epsStr ε γe1 βe1 μe1 ve1
               (.flatConvF (h := 112) (w := 112) "%We1" "%be1" We1 be1 stemOut)))))))
@@ -192,7 +192,7 @@ def mobilenetv2FwdGraphFullPCEval (epsStr : String) (ε : ℝ)
       (.flatConvF (h := 28) (w := 28) "%Wp3" "%bp3" Wp3 bp3
         (.relu6F (.bnPerChannelEvalF (oc := 96) (h := 28) (w := 28) "%gd3" "%btd3"
           "%mud3" "%vard3" epsStr ε γd3 βd3 μd3 vd3
-          (.depthwiseStridedF (h := 28) (w := 28) "%Wd3" "%bd3" Wd3 bd3
+          (.depthwiseStridedXlaF (h := 28) (w := 28) "%Wd3" "%bd3" Wd3 bd3
             (.relu6F (.bnPerChannelEvalF (oc := 96) (h := 56) (w := 56) "%ge3" "%bte3"
               "%mue3" "%vare3" epsStr ε γe3 βe3 μe3 ve3
               (.flatConvF (h := 56) (w := 56) "%We3" "%be3" We3 be3 b2Out)))))))
@@ -212,7 +212,7 @@ def mobilenetv2FwdGraphFullPCEval (epsStr : String) (ε : ℝ)
       (.flatConvF (h := 14) (w := 14) "%Wp5" "%bp5" Wp5 bp5
         (.relu6F (.bnPerChannelEvalF (oc := 128) (h := 14) (w := 14) "%gd5" "%btd5"
           "%mud5" "%vard5" epsStr ε γd5 βd5 μd5 vd5
-          (.depthwiseStridedF (h := 14) (w := 14) "%Wd5" "%bd5" Wd5 bd5
+          (.depthwiseStridedXlaF (h := 14) (w := 14) "%Wd5" "%bd5" Wd5 bd5
             (.relu6F (.bnPerChannelEvalF (oc := 128) (h := 28) (w := 28) "%ge5" "%bte5"
               "%mue5" "%vare5" epsStr ε γe5 βe5 μe5 ve5
               (.flatConvF (h := 28) (w := 28) "%We5" "%be5" We5 be5 b4Out)))))))
@@ -222,7 +222,7 @@ def mobilenetv2FwdGraphFullPCEval (epsStr : String) (ε : ℝ)
       (.flatConvF (h := 7) (w := 7) "%Wp6" "%bp6" Wp6 bp6
         (.relu6F (.bnPerChannelEvalF (oc := 256) (h := 7) (w := 7) "%gd6" "%btd6"
           "%mud6" "%vard6" epsStr ε γd6 βd6 μd6 vd6
-          (.depthwiseStridedF (h := 7) (w := 7) "%Wd6" "%bd6" Wd6 bd6
+          (.depthwiseStridedXlaF (h := 7) (w := 7) "%Wd6" "%bd6" Wd6 bd6
             (.relu6F (.bnPerChannelEvalF (oc := 256) (h := 14) (w := 14) "%ge6" "%bte6"
               "%mue6" "%vare6" epsStr ε γe6 βe6 μe6 ve6
               (.flatConvF (h := 14) (w := 14) "%We6" "%be6" We6 be6 b5Out)))))))
@@ -266,7 +266,7 @@ theorem mobilenetv2FwdGraphFullPCEval_faithful (epsStr : String) (ε : ℝ)
       = mobilenetv2Forward_full_pc_eval ε Ws bs γs βs μs vs We1 be1 γe1 βe1 μe1 ve1 Wd1 bd1 γd1 βd1 μd1 vd1 Wp1 bp1 γp1 βp1 μp1 vp1 We2 be2 γe2 βe2 μe2 ve2 Wd2 bd2 γd2 βd2 μd2 vd2 Wp2 bp2 γp2 βp2 μp2 vp2 We3 be3 γe3 βe3 μe3 ve3 Wd3 bd3 γd3 βd3 μd3 vd3 Wp3 bp3 γp3 βp3 μp3 vp3 We4 be4 γe4 βe4 μe4 ve4 Wd4 bd4 γd4 βd4 μd4 vd4 Wp4 bp4 γp4 βp4 μp4 vp4 We5 be5 γe5 βe5 μe5 ve5 Wd5 bd5 γd5 βd5 μd5 vd5 Wp5 bp5 γp5 βp5 μp5 vp5 We6 be6 γe6 βe6 μe6 ve6 Wd6 bd6 γd6 βd6 μd6 vd6 Wp6 bp6 γp6 βp6 μp6 vp6 Wh bh γh βh μh vh Wfc bfc x := by
   simp only [mobilenetv2FwdGraphFullPCEval, denseF_faithful, gapF_faithful,
              relu6F_faithful, bnPerChannelEvalF_faithful, flatConvF_faithful,
-             flatConvStridedF_faithful, depthwiseF_faithful, depthwiseStridedF_faithful,
+             flatConvStridedXlaF_faithful, depthwiseF_faithful, depthwiseStridedXlaF_faithful,
              den_addV, den_operand]
   unfold mobilenetv2Forward_full_pc_eval invresBodyStridedPCEval invresBodyPCEval
          ivExpandPCEval ivDepthwiseStridedPCEval ivDepthwisePCEval ivProjectPCEval

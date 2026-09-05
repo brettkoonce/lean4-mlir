@@ -12,7 +12,7 @@ reverse, each op replaced by its backward, threaded through one `FloatBridges.co
 The new piece is the **inverted-residual body backward** (`floatBridges_invresBodyBackPC` /
 `…StridedBackPC`): the reverse of `project ∘ depthwise ∘ expand` is
 `expandBack ∘ depthwiseBack ∘ projectBack`, where the depthwise stage reverses through the §1e
-`depthwiseFlatBack` (stride-1) / `depthwiseStride2FlatBack` (stride-2 downsample) — MobileNetV2 has
+`depthwiseFlatBack` (stride-1) / `depthwiseStride2FlatXlaBack` (stride-2 downsample) — MobileNetV2 has
 **no SE**, so the depthwise input-VJP is the whole novelty. The skip blocks (`b2`/`b4`) reverse to
 `residual (bodyBack)` (the additive skip contributes the cotangent verbatim — `FloatBridges.residual`).
 Each conv/BN/relu6 is already bridged: `convFlatBack`, the supplied per-channel `bnBack`s, and the
@@ -69,7 +69,7 @@ theorem floatBridges_invresBodyBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : N
 /-- The stride-2 (downsample) inverted-residual body input-gradient VJP — the **reverse of
     `invresBodyStridedPC = project ∘ depthwiseStrided ∘ expand(2h×2w)`**:
     `expandBack(2h×2w) ∘ depthwiseStridedBack ∘ projectBack`, where the depthwise reverses through the
-    §1e `depthwiseStride2FlatBack` (zero-upsample scatter then reversed-kernel depthwise). -/
+    §1e `depthwiseStride2FlatXlaBack` (zero-upsample scatter then reversed-kernel depthwise). -/
 noncomputable def invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid ic kHe kWe) (Wd : DepthwiseKernel mid kHd kWd) (Wp : Kernel4 oc mid kHp kWp)
     (bnBe : Vec (mid * (2 * h) * (2 * w)) → Vec (mid * (2 * h) * (2 * w)))
@@ -79,11 +79,11 @@ noncomputable def invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp
     (m_d : Fin (mid * h * w) → Prop) [DecidablePred m_d] :
     Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
   (convFlatBack (h := 2 * h) (w := 2 * w) We ∘ bnBe ∘ reluMaskBack m_e)
-  ∘ (depthwiseStride2FlatBack (h := h) (w := w) Wd ∘ bnBd ∘ reluMaskBack m_d)
+  ∘ (depthwiseStride2FlatXlaBack (h := h) (w := w) Wd ∘ bnBd ∘ reluMaskBack m_d)
   ∘ (convFlatBack (h := h) (w := w) Wp ∘ bnBp)
 
 /-- **The stride-2 inverted-residual body backward float-bridges.** Same `.comp` shape as the
-    stride-1 body, with the depthwise stage threading the §1e `depthwiseStride2FlatBack` and the
+    stride-1 body, with the depthwise stage threading the §1e `depthwiseStride2FlatXlaBack` and the
     expand back at the `2h×2w` grid. Unlocks the MobileNetV2 downsample blocks (`b1/b3/b5/b6`). -/
 theorem floatBridges_invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (M : FloatModel)
@@ -102,7 +102,7 @@ theorem floatBridges_invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp 
   unfold invresBodyStridedBackPC
   exact ((hbnBp.comp (floatBridges_convBack (h := h) (w := w) M Wp hwp (by positivity) hWp)).comp
     (((floatBridges_reluMaskBack m_d).comp hbnBd).comp
-      (floatBridges_depthwiseStride2Back (h := h) (w := w) M Wd hwd (by positivity) hWd))).comp
+      (floatBridges_depthwiseStride2XlaBack (h := h) (w := w) M Wd hwd (by positivity) hWd))).comp
     (((floatBridges_reluMaskBack m_e).comp hbnBe).comp
       (floatBridges_convBack (h := 2 * h) (w := 2 * w) M We hwe (by positivity) hWe))
 
@@ -112,7 +112,7 @@ theorem floatBridges_invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp 
 
 /-- The whole MobileNetV2 input-gradient VJP at a smooth point — the **exact reverse of
     `mobilenetv2Forward_full_pc`**: `dense ∘ GAP ∘ head ∘ b6 ∘ b5 ∘ residual b4 ∘ b3 ∘ residual b2 ∘
-    b1 ∘ stem` reversed. The stem/head/GAP/dense endpoints are concrete (`flatConvStride2Back ∘ bnBs ∘
+    b1 ∘ stem` reversed. The stem/head/GAP/dense endpoints are concrete (`flatConvStride2XlaBack ∘ bnBs ∘
     reluMaskBack` / `convFlatBack ∘ bnBh ∘ reluMaskBack` / `gapBack` / `dense (transposeᵀ) 0`); the 6
     inverted-residual block backwards `b1B..b6B` are supplied (each `floatBridges_invresBody*BackPC`,
     the skip blocks `b2`/`b4` wrapped by `FloatBridges.residual`). Channel/spatial schedule encoded in
@@ -130,7 +130,7 @@ noncomputable def mnv2InputGrad
     (m_stem : Fin (16 * 112 * 112) → Prop) [DecidablePred m_stem]
     (m_head : Fin (128 * 7 * 7) → Prop) [DecidablePred m_head] :
     Vec 10 → Vec (3 * 224 * 224) :=
-  (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
+  (flatConvStride2XlaBack (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
   ∘ b1B ∘ b2B ∘ b3B ∘ b4B ∘ b5B ∘ b6B
   ∘ (convFlatBack (h := 7) (w := 7) Wh ∘ bnBh ∘ reluMaskBack m_head)
   ∘ gapBack 128 7 7
@@ -140,7 +140,7 @@ set_option maxRecDepth 100000 in
 /-- **The whole MobileNetV2 input-gradient VJP float-bridges** — the first whole-net backward to
     consume the §1e depthwise input-VJP. One `.comp` chain over the per-op backward bridges: `linBack`
     (dense), `gapBack`, the head `convFlatBack ∘ bnBh ∘ reluMaskBack`, the 6 supplied inverted-residual
-    block backwards, and the stem `flatConvStride2Back ∘ bnBs ∘ reluMaskBack`. The deployed float
+    block backwards, and the stem `flatConvStride2XlaBack ∘ bnBs ∘ reluMaskBack`. The deployed float
     backward of the whole net is within a budget of the certified `ℝ` backward (⚠ one `FloatBridges`
     does not name — §4d; `mnv2_grad_floatBridgesTo` carries it as `.mod`) — the
     backward peer of `mobilenetv2Forward_full_pc`. Closes under `[propext, Classical.choice,
@@ -166,9 +166,9 @@ theorem mnv2_grad_floatBridges (M : FloatModel)
     FloatBridges (mnv2InputGrad Ws Wh Wfc bnBs bnBh b1B b2B b3B b4B b5B b6B m_stem m_head) := by
   unfold mnv2InputGrad
   have hstem : FloatBridges
-      (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem) :=
+      (flatConvStride2XlaBack (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem) :=
     ((floatBridges_reluMaskBack m_stem).comp hbnBs).comp
-      (floatBridges_flatConvStride2Back (h := 112) (w := 112) M Ws hws (by norm_num) hWs)
+      (floatBridges_flatConvStride2XlaBack (h := 112) (w := 112) M Ws hws (by norm_num) hWs)
   have hhead : FloatBridges
       (convFlatBack (h := 7) (w := 7) Wh ∘ bnBh ∘ reluMaskBack m_head) :=
     ((floatBridges_reluMaskBack m_head).comp hbnBh).comp
@@ -191,7 +191,7 @@ theorem mnv2_grad_floatBridges (M : FloatModel)
 
 /-- **The float MobileNetV2 input-gradient skeleton** — `mnv2InputGrad` with each
     concrete slot replaced by the model's rounded peer and each supplied block
-    backward by its float map. `reluMaskBack`/`decimateBack` are exact in float. -/
+    backward by its float map. `reluMaskBack`/`decimateOddBack` are exact in float. -/
 noncomputable def mnv2InputGradF (M : FloatModel)
     (Ws : Kernel4 16 3 3 3) (Wh : Kernel4 128 64 1 1) (Wfc : Mat 128 10)
     (bnBsF : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
@@ -206,7 +206,7 @@ noncomputable def mnv2InputGradF (M : FloatModel)
     (m_head : Fin (128 * 7 * 7) → Prop) [DecidablePred m_head] :
     Vec 10 → Vec (3 * 224 * 224) :=
   (M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
-      ∘ decimateBack 16 112 112)
+      ∘ decimateOddBack 16 112 112)
   ∘ bnBsF ∘ reluMaskBack m_stem
   ∘ b1BF ∘ b2BF ∘ b3BF ∘ b4BF ∘ b5BF ∘ b6BF
   ∘ (M.flatConvF (h := 7) (w := 7) (IR.reverseSwap Wh) (fun _ => 0))
@@ -244,11 +244,11 @@ noncomputable def mnv2_grad_floatBridgesTo (M : FloatModel)
         m_stem m_head) := by
   unfold mnv2InputGrad mnv2InputGradF
   have hstem : FloatBridgesTo
-      (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
+      (flatConvStride2XlaBack (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
       ((M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
-          ∘ decimateBack 16 112 112) ∘ bnBsF ∘ reluMaskBack m_stem) :=
+          ∘ decimateOddBack 16 112 112) ∘ bnBsF ∘ reluMaskBack m_stem) :=
     ((floatBridgesTo_reluMaskBack m_stem).comp hbnBs).comp
-      (floatBridgesTo_flatConvStride2Back (h := 112) (w := 112) M Ws hws (by norm_num) hWs)
+      (floatBridgesTo_flatConvStride2XlaBack (h := 112) (w := 112) M Ws hws (by norm_num) hWs)
   have hhead : FloatBridgesTo
       (convFlatBack (h := 7) (w := 7) Wh ∘ bnBh ∘ reluMaskBack m_head)
       ((M.flatConvF (h := 7) (w := 7) (IR.reverseSwap Wh) (fun _ => 0))

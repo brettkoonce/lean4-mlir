@@ -54,26 +54,33 @@ private def zM {a b : Nat} : Mat a b := fun _ _ => 0
 private def rs4 (o flatN : String) (C Hh Ww : Nat) : String :=
   s!"    {o} = stablehlo.reshape {flatN} : ({ty [BS, C*Hh*Ww]}) -> {ty [BS,C,Hh,Ww]}\n"
 
-/-- 1×1 / 3×3 conv weight-grad (transpose trick), inputs flat. `kk` = kernel spatial. -/
-private def convWGrad (o inpFlat dyFlat : String) (ic oc Hh Ww kk : Nat) : String :=
+/-- 1×1 / 3×3 conv weight-grad (transpose trick), inputs flat. `kk` = kernel spatial.
+    `xla := true` shifts the correlation pad one position (`[p-1, p+1]`) — the XLA-`SAME`
+    weight-grad of a stride-2 site, copying `StableHLO.convStridedXlaWeightSgd`'s arm. -/
+private def convWGrad (o inpFlat dyFlat : String) (ic oc Hh Ww kk : Nat)
+    (xla : Bool := false) : String :=
   rs4 s!"{o}xi" inpFlat ic Hh Ww ++ rs4 s!"{o}di" dyFlat oc Hh Ww ++
   s!"    {o}xt = stablehlo.transpose {o}xi, dims = [1, 0, 2, 3] : ({ty [BS,ic,Hh,Ww]}) -> {ty [ic,BS,Hh,Ww]}\n" ++
   s!"    {o}dt = stablehlo.transpose {o}di, dims = [1, 0, 2, 3] : ({ty [BS,oc,Hh,Ww]}) -> {ty [oc,BS,Hh,Ww]}\n" ++
   s!"    {o}raw = stablehlo.convolution({o}xt, {o}dt)\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {" ++ s!"stride = [1, 1], pad = [[{(kk-1)/2}, {(kk-1)/2}], [{(kk-1)/2}, {(kk-1)/2}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+  (let p := (kk-1)/2; let lo := if xla then p - 1 else p; let hi := if xla then p + 1 else p
+   "      window = {" ++ s!"stride = [1, 1], pad = [[{lo}, {hi}], [{lo}, {hi}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n") ++
   "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
   s!" : ({ty [ic,BS,Hh,Ww]}, {ty [oc,BS,Hh,Ww]}) -> {ty [ic,oc,kk,kk]}\n" ++
   s!"    {o} = stablehlo.transpose {o}raw, dims = [1, 0, 2, 3] : ({ty [ic,oc,kk,kk]}) -> {ty [oc,ic,kk,kk]}\n"
 
-/-- Depthwise 3×3 weight-grad (batch_group_count=c), inputs flat. -/
-private def dwWGrad (o inpFlat dyFlat : String) (c Hh Ww : Nat) : String :=
+/-- Depthwise 3×3 weight-grad (batch_group_count=c), inputs flat. `xla := true` shifts the
+    per-channel correlation pad to `[0, 2]` — the XLA-`SAME` weight-grad of a stride-2 depthwise,
+    copying `StableHLO.depthwiseStridedXlaWeightSgd`'s arm. -/
+private def dwWGrad (o inpFlat dyFlat : String) (c Hh Ww : Nat) (xla : Bool := false) : String :=
   rs4 s!"{o}xi" inpFlat c Hh Ww ++ rs4 s!"{o}di" dyFlat c Hh Ww ++
   s!"    {o}xt = stablehlo.transpose {o}xi, dims = [1, 0, 2, 3] : ({ty [BS,c,Hh,Ww]}) -> {ty [c,BS,Hh,Ww]}\n" ++
   s!"    {o}dt = stablehlo.transpose {o}di, dims = [1, 0, 2, 3] : ({ty [BS,c,Hh,Ww]}) -> {ty [c,BS,Hh,Ww]}\n" ++
   s!"    {o}raw = stablehlo.convolution({o}xt, {o}dt)\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  (if xla then "      window = {stride = [1, 1], pad = [[0, 2], [0, 2]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n"
+   else "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n") ++
   "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
   s!" : ({ty [c,BS,Hh,Ww]}, {ty [c,BS,Hh,Ww]}) -> {ty [1,c,3,3]}\n" ++
   s!"    {o} = stablehlo.reshape {o}raw : ({ty [1,c,3,3]}) -> {ty [c,1,3,3]}\n"
@@ -179,7 +186,7 @@ private def fwdBlock (p xin : String) (ic mid oc s Hin : Nat) : StateM Proofs.St
       let (c3, er) ← pretty BS (.relu6F (.operand s!"%{p}en" (zV : Vec (mid*Hin*Hin))))
       pure (c1 ++ c2 ++ c3, ec, s!"%{p}en", er)
   let (c4, dc) ←
-    if s == 2 then pretty BS (.depthwiseStridedF (h := Hout) (w := Hout) s!"%{p}dW" s!"%{p}db" (zD : DepthwiseKernel mid 3 3) zV (.operand er zV))
+    if s == 2 then pretty BS (.depthwiseStridedXlaF (h := Hout) (w := Hout) s!"%{p}dW" s!"%{p}db" (zD : DepthwiseKernel mid 3 3) zV (.operand er zV))
     else pretty BS (.depthwiseF (h := Hin) (w := Hin) s!"%{p}dW" s!"%{p}db" (zD : DepthwiseKernel mid 3 3) zV (.operand er zV))
   let c5 := bnB s!"{p}dn" dc s!"%{p}dg" s!"%{p}dbt" mid Hout Hout
   let dn := s!"%{p}dn"
@@ -209,7 +216,7 @@ private def bwdBlock (p dy : String) (b : FNames) (ic mid oc s Hin : Nat) :
   let k4 := bnBackB s!"{p}ddn" s!"{p}dn" cot_dn mid Hout Hout
   let cot_dc := s!"%{p}ddn"
   let (k5, cot_er) ←
-    if s == 2 then pretty BS (.depthwiseStridedBack (h := Hout) (w := Hout) s!"%{p}dW" (zD : DepthwiseKernel mid 3 3) zV zV (.operand cot_dc zV))
+    if s == 2 then pretty BS (.depthwiseStridedXlaBack (h := Hout) (w := Hout) s!"%{p}dW" (zD : DepthwiseKernel mid 3 3) zV zV (.operand cot_dc zV))
     else pretty BS (.depthwiseBack (h := Hin) (w := Hin) s!"%{p}dW" (zD : DepthwiseKernel mid 3 3) zV zV (.operand cot_dc zV))
   -- t=1 (mid=ic): NO expand — the depthwise reads the block input, so `cot_er` IS the block-input
   -- cotangent (b1 has ic≠oc → no skip add); `cot_ec` is unused.
@@ -235,7 +242,7 @@ private def blockParamGrads (p : String) (b : FNames) (cot_pc cot_dc cot_ec : St
   -- project (1×1 @ Hout): W/b
   convWGrad s!"%{p}dpW" b.dr cot_pc mid oc Hout Hout 1 ++ biasGrad s!"%{p}dpb" cot_pc oc Hout Hout ++
   -- depthwise (3×3): strided weight-grad upsamples dy first
-  (if s == 2 then upsampleFlat s!"%{p}ddu" cot_dc mid Hout Hout ++ dwWGrad s!"%{p}ddW" b.er s!"%{p}ddu" mid (2*Hout) (2*Hout)
+  (if s == 2 then upsampleFlat s!"%{p}ddu" cot_dc mid Hout Hout ++ dwWGrad s!"%{p}ddW" b.er s!"%{p}ddu" mid (2*Hout) (2*Hout) true
    else dwWGrad s!"%{p}ddW" b.er cot_dc mid Hin Hin) ++
   biasGrad s!"%{p}ddb" cot_dc mid Hout Hout ++
   -- expand (1×1 @ Hin, ic→mid): W/b — SKIPPED when t=1 (mid=ic, no expand conv)
@@ -261,7 +268,7 @@ private def blockSgd (p : String) (ic mid oc : Nat) : String :=
 private def renderBody (cot : String → String) : String := Id.run do
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered) ═══
-    let (cStemC, stc) ← pretty BS (.flatConvStridedF (h := 112) (w := 112) "%sW" "%sb" (zK : Kernel4 32 3 3 3) zV (.operand "%x" zV))
+    let (cStemC, stc) ← pretty BS (.flatConvStridedXlaF (h := 112) (w := 112) "%sW" "%sb" (zK : Kernel4 32 3 3 3) zV (.operand "%x" zV))
     let cStemB := bnB "stn" stc "%sg" "%sbt" 32 112 112
     let stn := "%stn"
     let (cStemR, str) ← pretty BS (.relu6F (.operand stn (zV : Vec (32*112*112))))
@@ -320,7 +327,7 @@ private def renderBody (cot : String → String) : String := Id.run do
       convWGrad "%dhW" cur cot_hc 320 1280 7 7 1 ++ biasGrad "%dhb" cot_hc 1280 7 7
     -- stem: strided 3×3 conv W (upsample dy) + b  (BN γ/β → %dstndg/%dstndb)
     let stemG :=
-      upsampleFlat "%dsu" cot_stc 32 112 112 ++ convWGrad "%dsW" "%x" "%dsu" 3 32 224 224 3 ++
+      upsampleFlat "%dsu" cot_stc 32 112 112 ++ convWGrad "%dsW" "%x" "%dsu" 3 32 224 224 3 true ++
       biasGrad "%dsb" cot_stc 32 112 112
     -- dense: Wd (gap ⊗ dy), bd (reduce dy)
     let denseG :=

@@ -178,7 +178,7 @@ noncomputable def mobilenetv2ForwardPaper (w : MNV2PaperWeights)
                                           (ivNoExpW 112 112 w.b1
                                             (relu6 (32 * 112 * 112)
                                               (bnPerChannelTensor3 32 112 112 w.sε w.sγ w.sβ
-                                                (flatConvStride2 (h := 112) (w := 112)
+                                                (flatConvStride2Xla (h := 112) (w := 112)
                                                   w.sW w.sb x))))))))))))))))))))))))
 
 namespace StableHLO
@@ -244,7 +244,7 @@ def ivStridedGraphW (pfx epsStr : String) (h w : Nat) {ic mid oc : Nat} (p : IVW
     (.flatConvF (h := h) (w := w) s!"%{pfx}Wp" s!"%{pfx}bp" p.pW p.pb
       (.relu6F (.bnPerChannelF (oc := mid) (h := h) (w := w) s!"%{pfx}gd" s!"%{pfx}btd" epsStr
           p.dε p.dγ p.dβ
-        (.depthwiseStridedF (h := h) (w := w) s!"%{pfx}Wd" s!"%{pfx}bd" p.dW p.db
+        (.depthwiseStridedXlaF (h := h) (w := w) s!"%{pfx}Wd" s!"%{pfx}bd" p.dW p.db
           (.relu6F (.bnPerChannelF (oc := mid) (h := 2 * h) (w := 2 * w) s!"%{pfx}ge"
               s!"%{pfx}bte" epsStr p.eε p.eγ p.eβ
             (.flatConvF (h := 2 * h) (w := 2 * w) s!"%{pfx}We" s!"%{pfx}be" p.eW p.eb e)))))))
@@ -254,7 +254,7 @@ theorem ivStridedGraphW_faithful (pfx epsStr : String) (h w : Nat) {ic mid oc : 
     den (ivStridedGraphW pfx epsStr h w p e) = ivStridedW h w p (den e) := by
   unfold ivStridedGraphW ivStridedW
   simp only [bnPerChannelF_faithful, flatConvF_faithful, relu6F_faithful,
-             depthwiseStridedF_faithful]
+             depthwiseStridedXlaF_faithful]
   simp only [invresBodyStridedPC, ivExpandPC, ivDepthwiseStridedPC, ivProjectPC,
              Function.comp_apply]
 
@@ -292,7 +292,7 @@ def mobilenetv2FwdGraphPaper (epsStr : String) (w : MNV2PaperWeights)
                                           (ivNoExpGraphW "b1" epsStr 112 112 w.b1
                                             (.relu6F (.bnPerChannelF (oc := 32) (h := 112)
                                                 (w := 112) "%gs" "%bts" epsStr w.sε w.sγ w.sβ
-                                              (.flatConvStridedF (h := 112) (w := 112)
+                                              (.flatConvStridedXlaF (h := 112) (w := 112)
                                                 "%Ws" "%bs" w.sW w.sb
                                                 (.operand "%x" x)))))))))))))))))))))))))
 
@@ -304,7 +304,7 @@ theorem mobilenetv2FwdGraphPaper_faithful (epsStr : String) (w : MNV2PaperWeight
     (x : Vec (3 * 224 * 224)) :
     den (mobilenetv2FwdGraphPaper epsStr w x) = mobilenetv2ForwardPaper w x := by
   simp only [mobilenetv2FwdGraphPaper, denseF_faithful, gapF_faithful, relu6F_faithful,
-             bnPerChannelF_faithful, flatConvF_faithful, flatConvStridedF_faithful,
+             bnPerChannelF_faithful, flatConvF_faithful, flatConvStridedXlaF_faithful,
              ivExpOnlyGraphW_faithful, ivResidGraphW_faithful, ivStridedGraphW_faithful,
              ivNoExpGraphW_faithful, den_operand]
   rfl

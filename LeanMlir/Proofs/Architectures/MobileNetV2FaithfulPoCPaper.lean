@@ -20,7 +20,7 @@ already in the 3-axiom closure:
 
 | param op (count)                                   | certified by (generic, dim+cotangent-polymorphic)  |
 |----------------------------------------------------|-----------------------------------------------------|
-| stem `convStrided{Weight,Bias}Sgd` (2)             | `ResNet34PoC.convStrided{W,B}_den`                  |
+| stem `convStridedXla{Weight,Bias}Sgd` (2)             | `Mnv2PoC.convStridedXla{W,B}_den`                  |
 | expand/project/head `conv{Weight,Bias}Sgd` (1×1)   | `CifarPoC.conv{W,B}_den`                             |
 | stride-1 depthwise `depthwise{Weight,Bias}Sgd`     | `Mnv2PoC.depthwise{W,B}_den`                         |
 | stride-2 depthwise `depthwiseStrided{…}Sgd`        | `Mnv2PoC.depthwiseStrided{W,B}_den`                 |
@@ -52,23 +52,23 @@ open scoped BigOperators
 
 /-! ## Stem — 3×3/s2 conv (3→32) → BN.  4 params. -/
 
-/-- **Stem param ops all denote the certified step** (`convStrided{Weight,Bias}Sgd` for the 3×3/s2
+/-- **Stem param ops all denote the certified step** (`convStridedXla{Weight,Bias}Sgd` for the 3×3/s2
     weight+bias, `bn{Gamma,Beta}Sgd` for the BN). Generic in the spatial dims; the paper net
     instantiates at `ic=3, oc=32, 112×112, 3×3`. -/
 theorem mnv2StemParamsCertified {ic oc h w : Nat} :
     -- strided conv weight
     (∀ (xN wN lrStr cotN : String) (b : Vec oc) (x : Vec (ic*(2*h)*(2*w)))
        (W : Kernel4 oc ic 3 3) (c : Vec (oc*h*w)) (lr : ℝ) (idx : Fin (oc*ic*3*3)),
-        den (SHlo.convStridedWeightSgd xN wN lrStr b x W lr (.operand cotN c)) idx
+        den (SHlo.convStridedXlaWeightSgd xN wN lrStr b x W lr (.operand cotN c)) idx
           = Kernel4.flatten W idx - lr * ∑ j : Fin (oc*h*w),
-              pdiv (fun v' : Vec (oc*ic*3*3) => flatConvStride2 (Kernel4.unflatten v') b x)
+              pdiv (fun v' : Vec (oc*ic*3*3) => flatConvStride2Xla (Kernel4.unflatten v') b x)
                    (Kernel4.flatten W) idx j * c j) ∧
     -- strided conv bias
     (∀ (bN lrStr cotN : String) (W : Kernel4 oc ic 3 3) (x : Vec (ic*(2*h)*(2*w)))
        (b : Vec oc) (c : Vec (oc*h*w)) (lr : ℝ) (o : Fin oc),
-        den (SHlo.convStridedBiasSgd bN lrStr W x b lr (.operand cotN c)) o
+        den (SHlo.convStridedXlaBiasSgd bN lrStr W x b lr (.operand cotN c)) o
           = b o - lr * ∑ j : Fin (oc*h*w),
-              pdiv (fun b' : Vec oc => flatConvStride2 W b' x) b o j * c j) ∧
+              pdiv (fun b' : Vec oc => flatConvStride2Xla W b' x) b o j * c j) ∧
     -- BN γ
     (∀ (gN vN epsStr lrStr cotN : String) (ε : ℝ) (γ β : Vec oc) (v c : Vec (oc*h*w))
        (lr : ℝ) (idx : Fin oc),
@@ -83,8 +83,8 @@ theorem mnv2StemParamsCertified {ic oc h w : Nat} :
           = β idx - lr * ∑ j : Fin (oc*(h*w)),
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (h*w) ε γ β' (reassocFwd oc h w v))
                    β idx j * reassocFwd oc h w c j) :=
-  ⟨fun xN wN lrStr cotN b x W c lr idx => ResNet34PoC.convStridedW_den xN wN lrStr cotN b x W c lr idx,
-   fun bN lrStr cotN W x b c lr o => ResNet34PoC.convStridedB_den bN lrStr cotN W x b c lr o,
+  ⟨fun xN wN lrStr cotN b x W c lr idx => Mnv2PoC.convStridedXlaW_den xN wN lrStr cotN b x W c lr idx,
+   fun bN lrStr cotN W x b c lr o => Mnv2PoC.convStridedXlaB_den bN lrStr cotN W x b c lr o,
    fun gN vN epsStr lrStr cotN ε γ β v c lr idx => CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε γ β v c lr idx,
    fun bN lrStr cotN ε γ β v c lr idx => CifarBnPoC.bnBeta_den bN lrStr cotN ε γ β v c lr idx⟩
 
@@ -199,15 +199,15 @@ theorem mnv2Stride2ParamsCertified {ic mid oc h w : Nat} :
     -- depthwise (STRIDED) W/b  (mid channels, 2h×2w → h×w)
     (∀ (xN wN lrStr cotN : String) (b : Vec mid) (x : Vec (mid*(2*h)*(2*w))) (W : DepthwiseKernel mid 3 3)
        (cot : Vec (mid*h*w)) (lr : ℝ) (idx : Fin (mid*3*3)),
-        den (SHlo.depthwiseStridedWeightSgd xN wN lrStr b x W lr (.operand cotN cot)) idx
+        den (SHlo.depthwiseStridedXlaWeightSgd xN wN lrStr b x W lr (.operand cotN cot)) idx
           = Tensor3.flatten W idx - lr * ∑ j : Fin (mid*h*w),
-              pdiv (fun v' : Vec (mid*3*3) => depthwiseStride2Flat (Tensor3.unflatten v') b x)
+              pdiv (fun v' : Vec (mid*3*3) => depthwiseStride2FlatXla (Tensor3.unflatten v') b x)
                    (Tensor3.flatten W) idx j * cot j) ∧
     (∀ (bN lrStr cotN : String) (W : DepthwiseKernel mid 3 3) (x : Vec (mid*(2*h)*(2*w))) (b : Vec mid)
        (cot : Vec (mid*h*w)) (lr : ℝ) (o : Fin mid),
-        den (SHlo.depthwiseStridedBiasSgd bN lrStr W x b lr (.operand cotN cot)) o
+        den (SHlo.depthwiseStridedXlaBiasSgd bN lrStr W x b lr (.operand cotN cot)) o
           = b o - lr * ∑ j : Fin (mid*h*w),
-              pdiv (fun b' : Vec mid => depthwiseStride2Flat W b' x) b o j * cot j) ∧
+              pdiv (fun b' : Vec mid => depthwiseStride2FlatXla W b' x) b o j * cot j) ∧
     -- project 1×1 conv W/b  (mid → oc, at h×w)
     (∀ (xN wN lrStr cotN : String) (b : Vec oc) (x : Tensor3 mid h w) (W : Kernel4 oc mid 1 1)
        (c : Vec (oc*h*w)) (lr : ℝ) (idx : Fin (oc*mid*1*1)),

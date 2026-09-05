@@ -588,6 +588,10 @@ open Proofs
 #print axioms Mnv2PoC.depthwiseB_den
 #print axioms Mnv2PoC.depthwiseStridedW_den
 #print axioms Mnv2PoC.depthwiseStridedB_den
+-- The XLA-SAME per-example stem dens (2026-09-05): MobileNetV2's SGD stem is convStridedXla{Weight,Bias}Sgd;
+-- ResNet34PoC.convStrided{W,B}_den stay symmetric for ResNet's own stem.
+#print axioms Mnv2PoC.convStridedXlaW_den
+#print axioms Mnv2PoC.convStridedXlaB_den
 -- ch7-MobileNetV2 FULL 17-block paper §1 fold (den): all 210 params of the paper train step
 -- (mnv2TrainStepFaithfulVPaper) den-certified, one capstone per block-type param profile. ZERO
 -- new ops/lemmas — every conjunct delegates to the audited generics (cifar8-bn lesson at scale).
@@ -1022,6 +1026,12 @@ open Proofs
 #print axioms mnv2_render_stem_convb_certified
 #print axioms mnv2_render_depthwiseW_strided_certified
 #print axioms mnv2_render_depthwiseb_strided_certified
+-- Their XLA-SAME twins (2026-09-05). The symmetric four stay: ResNet-34 reuses the stem pair and
+-- EfficientNet-B0 the strided-depthwise pair, both symmetric in render and reference.
+#print axioms mnv2_render_stem_convW_xla_certified
+#print axioms mnv2_render_stem_convb_xla_certified
+#print axioms mnv2_render_depthwiseW_strided_xla_certified
+#print axioms mnv2_render_depthwiseb_strided_xla_certified
 -- MobileNetV2 RENDER (planning/mobilenetv2_close.md Item A) — the PER-CHANNEL-BN typed SHlo
 -- forward graph at the full ch7 render dims (3×224² → 7×7×64): strided stem → 6 inverted-residual
 -- blocks (4 stride-2 downsampling via depthwiseStridedF, 2 stride-1 with an addV skip) → conv-bn-
@@ -3989,6 +3999,8 @@ open Proofs
 -- (the stride-2 / depthwise analog of `convStridedBackBatched`). EfficientNet uses
 -- swish (a global VJP), so this stays in the clean global HasVJP/vjp_comp form.
 #print axioms StableHLO.depthwiseStridedBackBatched_faithful
+-- Its XLA-SAME peer, the token MobileNetV2's Adam render emits at its four strided depthwises.
+#print axioms StableHLO.depthwiseStridedXlaBackBatched_faithful
 -- The PER-EXAMPLE XLA-`SAME` backward tokens MobileNetV2's SGD train step emits since
 -- 2026-09-05 (`MobileNetV2Render.lean`): the odd-phase input-VJP and the four weight/bias
 -- descent steps, each `rfl` onto the `…Xla` VJPs of `StridedConv.lean` / `Depthwise.lean`.

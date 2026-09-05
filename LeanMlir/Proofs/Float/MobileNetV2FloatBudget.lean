@@ -67,7 +67,7 @@ namespace Proofs
 open FloatModel
 
 /-! The three `Maps` leaves this net needs and ResNet-34 did not — `relu6` (⭐ it CLAMPS, so its
-window step is `min Ā 6`), `depthwise` and `depthwiseStride2Flat` — live in
+window step is `min Ā 6`), `depthwise` and `depthwiseStride2FlatXla` — live in
 `FloatBudgetEnvMBConv.lean`, shared with EfficientNet-B0. -/
 
 -- ════════════════════════════════════════════════════════════════
@@ -344,7 +344,7 @@ theorem MnvBlock.stridedMaps {ic mid oc h w : Nat} (B : MnvBlock ic mid oc w' β
     P.hw' P.hβ' hni B.ex.hW B.ex.hb hge eA eE
   have s2 := s1.comp hnm2 (B.bne.maps M R P hmid hhw2 hA10 enA enE)
   have s3 := s2.comp hnm2 (FloatBridgesTo.Maps.relu6 (n := mid * (2 * h) * (2 * w)) er le_rfl)
-  have s4 := s3.comp hnm2 (FloatBridgesTo.Maps.depthwiseStride2Flat (h := h) (w := w) M
+  have s4 := s3.comp hnm2 (FloatBridgesTo.Maps.depthwiseStride2FlatXla (h := h) (w := w) M
     B.dw.W B.dw.b P.hw' P.hβ' hnm2 B.dw.hW B.dw.hb hgd dA dE)
   have s5 := s4.comp hnm (B.bnd.maps M R P hmid hhw hA40 dnA dnE)
   have s6 := s5.comp hnm (FloatBridgesTo.Maps.relu6 (n := mid * h * w) dr le_rfl)
@@ -420,7 +420,7 @@ noncomputable def mnv2EvalBridge (M : FloatModel) (R : DeviceRsqrt ε es)
     (P : MnvProfile M ε w' β' G Bb Mb es S q) (W : MnvWeights w' β' G Bb Mb) :
     FloatBridgesTo (mnv2EvalForward W ε) (mnv2EvalForwardF M R W) :=
   ((((((((((((
-    (floatBridgesTo_flatConvStride2 (h := 112) (w := 112) M W.stem.W W.stem.b P.hw' P.hβ'
+    (floatBridgesTo_flatConvStride2Xla (h := 112) (w := 112) M W.stem.W W.stem.b P.hw' P.hβ'
       (by norm_num) W.stem.hW W.stem.hb)
     |>.comp (W.bns.bridge M R P (by norm_num) (by norm_num) (h := 112) (w := 112)))
     |>.comp (floatBridgesTo_relu6 (n := 16 * 112 * 112)))
@@ -483,7 +483,7 @@ theorem mnv2EvalBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
     (mnv2EvalBridge M R (mnv2Profile_committed M hMu hε5) W).Maps 1 0
       (2154) (1444 * 10 ^ 93) := by
   have hP := mnv2Profile_committed M hMu hε5
-  have t1 := FloatBridgesTo.Maps.flatConvStride2 (h := 112) (w := 112) M W.stem.W W.stem.b
+  have t1 := FloatBridgesTo.Maps.flatConvStride2Xla (h := 112) (w := 112) M W.stem.W W.stem.b
     hP.hw' hP.hβ' (by norm_num) W.stem.hW W.stem.hb (M.gamma_num (q := 1729 / 10 ^ 9) hMu (by norm_num [u32]) (by norm_num [u32]))
     (Ā := 1) (Ē := 0) (Ā' := 7841 / 10 ^ 2) (Ē' := 1356 / 10 ^ 7) (by norm_num [bnNormBudget, FloatModel.mulErr, u32]) (by norm_num [bnNormBudget, FloatModel.mulErr, u32])
   have t2 := t1.comp (by norm_num) (W.bns.maps M R hP (by norm_num) (by norm_num) (h := 112) (w := 112)

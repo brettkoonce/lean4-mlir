@@ -16,7 +16,9 @@ each stage a conv/depthwise with per-channel BN and a **relu6** clamp (the proje
 bottleneck, no relu6). So the one new forward op-bridge is `floatBridges_relu6`: relu6 = `min(max(·,0),6)`
 is exact in float (clamp by exact constants, no rounding) and 1-Lipschitz (modulus id) — a clean mirror
 of `floatClose_relu`, via the mathlib clamp lemmas `abs_max_sub_max_le_abs` / `abs_min_sub_min_le_max`.
-The strided depthwise reuses `floatBridges_depthwiseStride2Flat` (built for efficientnet).
+The strided depthwise takes `floatBridges_depthwiseStride2FlatXla`, the odd-phase leaf added
+2026-09-05 beside EfficientNet's symmetric one (which B0 keeps: its strided depthwises pad
+symmetrically in render and reference alike).
 
 `mnv2Forward` is the `∘` skeleton of `mobilenetv2Forward_full_pc` (concrete stem/head/GAP/dense
 endpoints; the stem/head BNs and the 6 inverted-residual blocks supplied as `FloatBridges` — exactly
@@ -117,7 +119,7 @@ theorem floatBridges_ivDepthwiseStridedPC {mid h w kHd kWd : Nat} (M : FloatMode
     (hbnD : FloatBridges (bnPerChannelTensor3 mid h w εd γd βd)) :
     FloatBridges (ivDepthwiseStridedPC (h := h) (w := w) Wd bd εd γd βd) := by
   unfold ivDepthwiseStridedPC
-  exact ((floatBridges_depthwiseStride2Flat (h := h) (w := w) M Wd bd hw' hbb hnm hWd hbd).comp
+  exact ((floatBridges_depthwiseStride2FlatXla (h := h) (w := w) M Wd bd hw' hbb hnm hWd hbd).comp
     hbnD).comp floatBridges_relu6
 
 /-- Project (linear bottleneck) stage `bnPC ∘ flatConv` float-bridges (no relu6). -/
@@ -159,7 +161,7 @@ theorem floatBridges_invresBodyPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat} 
 
 /-- **The mnv2 stride-2 (downsample) inverted-residual body float-bridges** — the forward peer of
     `floatBridges_invresBodyStridedBackPC`. `invresBodyStridedPC = project ∘ depthwiseStrided ∘
-    expand(at 2h×2w)`; the strided depthwise reuses `floatBridges_depthwiseStride2Flat`. The three
+    expand(at 2h×2w)`; the strided depthwise reuses `floatBridges_depthwiseStride2FlatXla`. The three
     per-channel BNs supplied. The `b1`/`b3`/`b5`/`b6` blocks (no skip — channels/spatial change). -/
 theorem floatBridges_invresBodyStridedPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat} (M : FloatModel)
     (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
@@ -206,12 +208,12 @@ noncomputable def mnv2Forward (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (Wh : Kernel
   ∘ globalAvgPoolFlat 128 7 7
   ∘ (relu6 (128 * 7 * 7) ∘ bnH ∘ flatConv (h := 7) (w := 7) Wh bh)
   ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1
-  ∘ (relu6 (16 * 112 * 112) ∘ bnS ∘ flatConvStride2 (h := 112) (w := 112) Ws bs)
+  ∘ (relu6 (16 * 112 * 112) ∘ bnS ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs)
 
 set_option maxRecDepth 100000 in
 /-- **The whole MobileNetV2 forward float-bridges** — the forward peer of `mnv2_grad_floatBridges`.
     One `.comp` chain over the per-op forward bridges: the concrete stem (`relu6 ∘ bn ∘
-    flatConvStride2`), the 6 supplied inverted-residual blocks, the concrete head (`relu6 ∘ bn ∘
+    flatConvStride2Xla`), the 6 supplied inverted-residual blocks, the concrete head (`relu6 ∘ bn ∘
     flatConv`), `globalAvgPoolFlat`, and `dense`. The deployed float forward of the whole net is
     within a budget of the certified `ℝ` forward (⚠ one `FloatBridges` does not name — §4d;
     `mnv2Forward_floatBridgesTo` carries it as `.mod`). Closes under `[propext, Classical.choice,
@@ -238,8 +240,8 @@ theorem mnv2Forward_floatBridges (M : FloatModel)
     FloatBridges (mnv2Forward Ws bs Wh bh Wfc bfc bnS bnH b1 b2 b3 b4 b5 b6) := by
   unfold mnv2Forward
   have hstem : FloatBridges
-      (relu6 (16 * 112 * 112) ∘ bnS ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) :=
-    ((floatBridges_flatConvStride2 (h := 112) (w := 112) M Ws bs hws hbsβ (by norm_num) hWs hbs).comp
+      (relu6 (16 * 112 * 112) ∘ bnS ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) :=
+    ((floatBridges_flatConvStride2Xla (h := 112) (w := 112) M Ws bs hws hbsβ (by norm_num) hWs hbs).comp
       hbnS).comp floatBridges_relu6
   have h1 := hstem.comp hb1
   have h2 := h1.comp hb2
@@ -296,7 +298,7 @@ choice of BN becomes an argument rather than a second proof. -/
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
     (bnd : Vec (mid * h * w) → Vec (mid * h * w)) :
     Vec (mid * (2 * h) * (2 * w)) → Vec (mid * h * w) :=
-  relu6 (mid * h * w) ∘ bnd ∘ depthwiseStride2Flat Wd bd
+  relu6 (mid * h * w) ∘ bnd ∘ depthwiseStride2FlatXla Wd bd
 
 /-- Project (linear bottleneck) stage with its normalisation abstract — no relu6, so this is
     the one stage of the block that does NOT reset the window. -/
@@ -377,7 +379,7 @@ noncomputable def invresBodyStridedGenF {ic mid oc h w kHe kWe kHd kWd kHp kWp :
     (bnpF : Vec (oc * h * w) → Vec (oc * h * w)) :
     Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
   (bnpF ∘ M.flatConvF (h := h) (w := w) Wp bp) ∘
-    ((relu6 (mid * h * w) ∘ bndF ∘ M.depthwiseStride2FlatF (h := h) (w := w) Wd bd) ∘
+    ((relu6 (mid * h * w) ∘ bndF ∘ M.depthwiseStride2FlatXlaF (h := h) (w := w) Wd bd) ∘
       (relu6 (mid * (2 * h) * (2 * w)) ∘ bneF ∘ M.flatConvF (h := 2 * h) (w := 2 * w) We be))
 
 /-- **The stride-1 inverted-residual body float-bridges TO its float body**, generic in the
@@ -427,7 +429,7 @@ noncomputable def floatBridgesTo_invresBodyStridedGen
       (invresBodyStridedGenF M We be bneF Wd bd bndF Wp bp bnpF) :=
   ((((((floatBridgesTo_flatConv (h := 2 * h) (w := 2 * w) M We be hw' hβ' hni hWe hbe).comp
           hbne).comp floatBridgesTo_relu6).comp
-      (floatBridgesTo_depthwiseStride2Flat (h := h) (w := w) M Wd bd hw' hβ' hnm2
+      (floatBridgesTo_depthwiseStride2FlatXla (h := h) (w := w) M Wd bd hw' hβ' hnm2
         hWd hbd)).comp hbnd).comp floatBridgesTo_relu6).comp
     ((floatBridgesTo_flatConv (h := h) (w := w) M Wp bp hw' hβ' hnm hWp hbp).comp hbnp)
 
@@ -450,7 +452,7 @@ noncomputable def mnv2ForwardF (M : FloatModel)
   ∘ M.gapFlatF
   ∘ (relu6 (128 * 7 * 7) ∘ bnHF ∘ M.flatConvF (h := 7) (w := 7) Wh bh)
   ∘ b6F ∘ b5F ∘ b4F ∘ b3F ∘ b2F ∘ b1F
-  ∘ (relu6 (16 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2F (h := 112) (w := 112) Ws bs)
+  ∘ (relu6 (16 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2XlaF (h := 112) (w := 112) Ws bs)
 
 set_option maxRecDepth 100000 in
 /-- **The whole MobileNetV2 forward float-bridges TO its float skeleton.** Same
@@ -482,9 +484,9 @@ noncomputable def mnv2Forward_floatBridgesTo (M : FloatModel)
       (mnv2ForwardF M Ws bs Wh bh Wfc bfc bnSF bnHF b1F b2F b3F b4F b5F b6F) := by
   unfold mnv2Forward mnv2ForwardF
   have hstem : FloatBridgesTo
-      (relu6 (16 * 112 * 112) ∘ bnS ∘ flatConvStride2 (h := 112) (w := 112) Ws bs)
-      (relu6 (16 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2F (h := 112) (w := 112) Ws bs) :=
-    ((floatBridgesTo_flatConvStride2 (h := 112) (w := 112) M Ws bs hws hbsβ (by norm_num)
+      (relu6 (16 * 112 * 112) ∘ bnS ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs)
+      (relu6 (16 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2XlaF (h := 112) (w := 112) Ws bs) :=
+    ((floatBridgesTo_flatConvStride2Xla (h := 112) (w := 112) M Ws bs hws hbsβ (by norm_num)
       hWs hbs).comp hbnS).comp floatBridgesTo_relu6
   have h1 := hstem.comp hb1
   have h2 := h1.comp hb2

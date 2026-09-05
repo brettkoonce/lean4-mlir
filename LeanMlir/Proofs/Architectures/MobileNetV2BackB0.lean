@@ -71,7 +71,7 @@ namespace Proofs.StableHLO
 @[reducible] noncomputable def dwbrBstrided (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c) :
     Vec (N * (c * (2 * h) * (2 * w))) → Vec (N * (c * h * w)) :=
-  relu6 (N * (c * h * w)) ∘ bnBatchLA N c h w ε γ β ∘ batchMap N (depthwiseStride2Flat W b)
+  relu6 (N * (c * h * w)) ∘ bnBatchLA N c h w ε γ β ∘ batchMap N (depthwiseStride2FlatXla W b)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stage `_at`-VJP + differentiability (relu6 smoothness threaded)
@@ -153,24 +153,24 @@ theorem dwbrB_differentiableAt (N : Nat) {c h w kH kW : Nat}
     ε hε γ β x h_smooth
 
 /-- `dwbrBstrided` (STRIDE-2 depthwise-bn-relu6) `_at` VJP at a smooth point. The
-    stride-2 analogue of `dwbrB_has_vjp_at`: lifts `depthwiseStride2Flat_has_vjp`
+    stride-2 analogue of `dwbrB_has_vjp_at`: lifts `depthwiseStride2FlatXla_has_vjp`
     (the strided per-channel conv input-VJP) through the generic relu6-bn stage. -/
 noncomputable def dwbrBstrided_has_vjp_at (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w))))
-    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0 ∧
-                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 6) :
+    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 0 ∧
+                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 6) :
     HasVJPAt (dwbrBstrided N (h := h) (w := w) W b ε γ β) x :=
-  bnRelu6Stage_has_vjp_at N (depthwiseStride2Flat W b) (depthwiseStride2Flat_differentiable W b)
-    (depthwiseStride2Flat_has_vjp W b) ε hε γ β x h_smooth
+  bnRelu6Stage_has_vjp_at N (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXla_differentiable W b)
+    (depthwiseStride2FlatXla_has_vjp W b) ε hε γ β x h_smooth
 
 theorem dwbrBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w))))
-    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0 ∧
-                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 6) :
+    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 0 ∧
+                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 6) :
     DifferentiableAt ℝ (dwbrBstrided N (h := h) (w := w) W b ε γ β) x :=
-  bnRelu6Stage_differentiableAt N (depthwiseStride2Flat W b) (depthwiseStride2Flat_differentiable W b)
+  bnRelu6Stage_differentiableAt N (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXla_differentiable W b)
     ε hε γ β x h_smooth
 
 -- ════════════════════════════════════════════════════════════════
@@ -231,18 +231,18 @@ noncomputable def dwbrBstridedBackBatchedGraph {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
     SHlo (N * (c * (2 * h) * (2 * w))) :=
-  .depthwiseStridedBackBatched (N := N) "%dwsrW" W b
-    (.bnBatchLABack "%dwsrG" "%dwsrX" "dwsrE" ε γ (batchMap N (depthwiseStride2Flat W b) x)
-      (.selectMid "%dwsrR6" (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) e))
+  .depthwiseStridedXlaBackBatched (N := N) "%dwsrW" W b
+    (.bnBatchLABack "%dwsrG" "%dwsrX" "dwsrE" ε γ (batchMap N (depthwiseStride2FlatXla W b) x)
+      (.selectMid "%dwsrR6" (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x)) e))
 
 theorem dwbrBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w)))
-    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0 ∧
-                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 6) :
+    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 0 ∧
+                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 6) :
     den (dwbrBstridedBackBatchedGraph W b ε γ β x e)
       = (dwbrBstrided_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
-  rw [dwbrBstridedBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
+  rw [dwbrBstridedBackBatchedGraph, depthwiseStridedXlaBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
   simp only [dwbrBstrided_has_vjp_at, bnRelu6Stage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
@@ -376,9 +376,9 @@ noncomputable def mnv2DownBodyB_has_vjp_at (N : Nat) {ic mid oc h w kHd kWd : Na
     (h_se : ∀ k, bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
                  bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
     (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
-                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
+                    (batchMap N (depthwiseStride2FlatXla Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
                  bnBatchLA N mid h w εd γd βd
-                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
+                    (batchMap N (depthwiseStride2FlatXla Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
     HasVJPAt (projB N (h := h) (w := w) Wp bp εp γp βp ∘
               dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd ∘
               cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x := by
@@ -418,9 +418,9 @@ theorem mnv2DownBodyB_differentiableAt (N : Nat) {ic mid oc h w kHd kWd : Nat}
     (h_se : ∀ k, bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
                  bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
     (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
-                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
+                    (batchMap N (depthwiseStride2FlatXla Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
                  bnBatchLA N mid h w εd γd βd
-                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
+                    (batchMap N (depthwiseStride2FlatXla Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
     DifferentiableAt ℝ (projB N (h := h) (w := w) Wp bp εp γp βp ∘
               dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd ∘
               cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x := by
@@ -464,9 +464,9 @@ theorem mnv2DownBodyBackBatchedGraph_faithful {N ic mid oc h w kHd kWd : Nat}
     (h_se : ∀ k, bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
                  bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
     (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
-                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
+                    (batchMap N (depthwiseStride2FlatXla Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
                  bnBatchLA N mid h w εd γd βd
-                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
+                    (batchMap N (depthwiseStride2FlatXla Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
     den (mnv2DownBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x e)
       = (mnv2DownBodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd
           Wp bp εp hεp γp βp x h_se h_sd).backward (den e) := by
