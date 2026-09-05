@@ -20,7 +20,7 @@ exactly as `fexp`/`fsig` are).
 ⭐ **Why this leaf and not the training-mode one decides whether a whole-net number exists.**
 Training-mode BN reduces its statistics out of its own input, so perturbing the input moves
 the mean AND the variance, and `bnReluBudget` carries the resulting term
-`G·2A·(8A·e/(2ε√ε))` — **quadratic in the window**. Folded through 33 BN sites the budget
+`G·2A·(8A·e/(2ε√ε))` — **quadratic in the window**. Folded through 36 BN sites the budget
 squares at each one: the ResNet-34 interval fold's modulus comes out at ~10⁷⁴¹⁷, past the
 point where `norm_num` will even evaluate the numeral. Inference BN has no reduction: `μ` and
 `rsqrt(var+ε)` are constants, the map is affine in `x` with slope `γ·s`, and the modulus is

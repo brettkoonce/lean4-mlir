@@ -52,7 +52,7 @@ so it is neither a magnitude nor a digit ceiling: it depends on the operation tr
 `maxHeartbeats` or `maxRecDepth` does not move it, and neither `ring_nf`, `nlinarith`, nor
 `simp only` + `norm_num` closes what `norm_num` alone will not. ConvNeXt-T's `10²²⁷` and
 ViT-Tiny's `10²¹⁸` sit under it, which is why it had never been hit. ⭐ `S` is what buys the room
-— `S` multiplies at all 33 BatchNorm sites, so `317 → 16` is worth ~43 orders — and `S` is
+— `S` multiplies at all 36 BatchNorm sites, so `317 → 16` is worth ~43 orders — and `S` is
 available as a lever precisely because `R34BnBack.hS` is a HYPOTHESIS about the saved
 activations, not a consequence of `ε`. That is §0.1's escape 2, finally used.
 

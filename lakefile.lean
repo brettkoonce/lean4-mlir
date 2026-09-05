@@ -309,6 +309,13 @@ lean_lib «Certs» where
              -- deployed ResNet-34 inference forward, window 3.152e211 / budget 1.547e209 at
              -- the measured checkpoint profile, over a CLOSED FloatBridgesTo (no BN hyps).
              `LeanMlir.Proofs.Float.Resnet34FloatBudget,
+             -- ⛔ The same net at TRAINING-mode BatchNorm — the program the repo actually
+             -- trains with, and the mode Resnet34BackFloatBudget's gradient is taken through:
+             -- window 3.176e221 / budget 6.349e221. IT IS THE CAP, NOT THE FOLD (budget/window
+             -- = 2.00): all 36 BN sites go through FloatBridgesTo.capped, whose modulus is
+             -- 2·mag, because the training-mode fold is 1e7419. Never table it beside the
+             -- inference number without that label.
+             `LeanMlir.Proofs.Float.Resnet34TrainFloatBudget,
              -- The mnv2 INFERENCE forward graph + whole-net faithfulness (the eval twin of
              -- mobilenetv2FwdGraphFullPC_faithful): den (graph) = mobilenetv2Forward_full_pc_eval,
              -- one shared eps, each BN site carrying its frozen mean/variance (102 args -> 123).

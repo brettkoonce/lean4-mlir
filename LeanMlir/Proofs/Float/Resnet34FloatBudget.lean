@@ -28,12 +28,22 @@ windows. The chain is ~10¹⁵⁷ tighter and still vacuous; that is the finding
 
 ⭐⭐ **Why inference BN, and not the training-mode net.** Training-mode BatchNorm reduces its
 statistics out of its own input, so `bnReluBudget` carries the mean-and-variance shift term
-`G·2A·(8A·e/(2ε√ε))` — **quadratic in the window**. Folded through 33 BN sites the budget
-squares at every one: the same fold on `resnet34Forward_full_pc` comes out at ~10⁷⁴¹⁷, past
+`G·2A·(8A·e/(2ε√ε))` — **quadratic in the window**. Folded through 36 BN sites the budget
+squares at every one: the same fold on `resnet34Forward_full_pc` comes out at ~10⁷⁴¹⁹, past
 the point where `norm_num` will evaluate the numeral at all. Inference BN has no reduction —
 `μ` and `rsqrt(var+ε)` are frozen constants, the map is affine in `x` with slope `γ·s`, and its
 modulus is linear (`BnEvalRuntimeFloatBridge.lean`). So the choice of BN is not a detail of
-tightness; it decides whether a whole-net number for a 34-layer net exists.
+tightness; it decides whether the **fold** exists.
+
+⛔⛔ **It does NOT decide whether a THEOREM exists, and this header used to say it did.** The
+paragraph above once ended *"it decides whether a whole-net number for a 34-layer net
+exists"*, and that conflates the fold's numeral with the statement: `10⁷⁴¹⁹` is the **budget**,
+while the same measurement puts the training-mode **window** at `10²²¹`. `FloatBridgesTo.capped`
+bounds any modulus by `2·mag`, so a statable window is already a statable theorem.
+`Resnet34TrainFloatBudget.lean` is that theorem — `3.176·10²²¹ / 6.349·10²²¹` at the same
+profile, about the net this repo actually trains. ⛔ It is the **cap** and this file's number is
+the **fold**; they are different claims and must carry their labels
+(`planning/float_budget_numbers.md` §9).
 
 ⚠ **The one hypothesis this number rests on, named.** The deployed inverse-stddev is a device
 `rsqrt` with no IEEE specification, so it is *modelled*: `DeviceRsqrt ε es` supplies it with an

@@ -356,6 +356,92 @@ def verify_r34(rows) -> int:
     return n
 
 
+def verify_r34_train(rows, S=R34_S, w=R34_W, b=R34_B, G=R34_G, Bb=R34_BB,
+                     emr=R34_EMR, ei=R34_ES, q=U32) -> int:
+    """Re-assert every rounded inequality the TRAINING-mode CAPPED Lean chain closes.
+
+    ⚠ The BN rows are a DIFFERENT shape from `verify_r34`'s, and asserting the eval shape here
+    would pass while describing another program. At a capped site `FloatBridgesTo.capped` proves
+    only two things, and these are exactly they:
+
+      * the WINDOW clause of `Maps.bnPerChannelTensor3` — `G*(2A*S) + Bb + bnNormBudget(...)`,
+        with a RELATIVE mean accuracy `emr*A` where the eval leaf has a frozen `em = 0`;
+      * `2*A' <= E'` — `Maps.capped`'s own closing inequality, which is the WHOLE modulus story.
+
+    §0.1's quadratic (`G*(2A)*(8A*E*Tq)`) is never asserted, because `Maps.capped` never turns it
+    into a numeral — that is the mechanism, not an omission. What IS worth asserting is that the
+    cap is the honest branch to take, i.e. that the fold would have been bigger at every site;
+    `cap_bites` counts that separately and is not part of the Lean obligation."""
+    r = dict(rows)
+    n = 0
+    cap_bites = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: {float(lhs)} > {float(rhs)}"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2))
+        ck(tag + ".A", (1 + g) * (m * w * A + b), dst[0])
+        ck(tag + ".E", g * (m * w * (A + E) + b) + m * w * E, dst[1])
+
+    def bn_ck(tag, src, dst):
+        """A CAPPED BN site: the window clause, then `2*A' <= E'`."""
+        nonlocal cap_bites
+        A, E = src
+        nb = bnNormBudget(q, 2 * A, S, G, Bb, emr * A, ei)
+        ck(tag + ".A", G * (2 * A * S) + Bb + nb, dst[0])
+        ck(tag + ".cap", 2 * dst[0], dst[1])
+        # not a Lean obligation: the cap is only honest if the fold is worse here.
+        fold = nb + G * ((E + E) * S + 2 * A * (8 * A * E * (S ** 3 / 2)))
+        if 2 * dst[0] <= fold:
+            cap_bites += 1
+
+    st = (F(1), F(0))
+    conv_ck("stem.conv", 3 * 7 * 7, st, r["stem.conv"])
+    bn_ck("stem.bn", r["stem.conv"], r["stem.bn"])
+    st = r["stem.bn"]
+    plan = [("id", 64, 64, "a0"), ("id", 64, 64, "a1"), ("id", 64, 64, "a2"),
+            ("down", 64, 128, "d2"),
+            ("id", 128, 128, "b0"), ("id", 128, 128, "b1"), ("id", 128, 128, "b2"),
+            ("down", 128, 256, "d3"),
+            ("id", 256, 256, "c0"), ("id", 256, 256, "c1"), ("id", 256, 256, "c2"),
+            ("id", 256, 256, "c3"), ("id", 256, 256, "c4"),
+            ("down", 256, 512, "d4"),
+            ("id", 512, 512, "e0"), ("id", 512, 512, "e1")]
+    for kind, ic, oc, t in plan:
+        blkin = st
+        if kind == "id":
+            conv_ck(f"{t}.conv1", oc * 9, blkin, r[f"{t}.conv1"])
+            bn_ck(f"{t}.bn1", r[f"{t}.conv1"], r[f"{t}.bn1"])
+            conv_ck(f"{t}.conv2", oc * 9, r[f"{t}.bn1"], r[f"{t}.conv2"])
+            bn_ck(f"{t}.bn2", r[f"{t}.conv2"], r[f"{t}.bn2"])
+            A4, E4 = r[f"{t}.bn2"]
+            ck(f"{t}.resA", A4 + blkin[0] + q * (A4 + blkin[0]), r[f"{t}.out"][0])
+            ck(f"{t}.resE", q * (A4 + E4 + blkin[0] + blkin[1]) + (E4 + blkin[1]),
+               r[f"{t}.out"][1])
+        else:
+            conv_ck(f"{t}.projconv", ic, blkin, r[f"{t}.projconv"])
+            bn_ck(f"{t}.projbn", r[f"{t}.projconv"], r[f"{t}.projbn"])
+            conv_ck(f"{t}.conv1", ic * 9, blkin, r[f"{t}.conv1"])
+            bn_ck(f"{t}.bn1", r[f"{t}.conv1"], r[f"{t}.bn1"])
+            conv_ck(f"{t}.conv2", oc * 9, r[f"{t}.bn1"], r[f"{t}.conv2"])
+            bn_ck(f"{t}.bn2", r[f"{t}.conv2"], r[f"{t}.bn2"])
+            P2, Q2 = r[f"{t}.projbn"]
+            A4, E4 = r[f"{t}.bn2"]
+            ck(f"{t}.sumA", P2 + A4 + q * (P2 + A4), r[f"{t}.out"][0])
+            ck(f"{t}.sumE", q * (P2 + Q2 + A4 + E4) + (Q2 + E4), r[f"{t}.out"][1])
+        st = r[f"{t}.out"]
+    g50 = r4(gamma_q(49 + 1))
+    ck("gap.A", st[0] * ((1 + g50) * (1 + q)), r["gap"][0])
+    ck("gap.E", st[0] * (q * (1 + g50) + g50) + st[1], r["gap"][1])
+    conv_ck("dense", 512, r["gap"], r["dense"])
+    assert cap_bites == 36, f"cap selected at {cap_bites} of 36 BN sites, not all"
+    return n
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # MobileNetV2 @224², INFERENCE BatchNorm (the deployed eval forward)
 # ════════════════════════════════════════════════════════════════════════════

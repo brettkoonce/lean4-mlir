@@ -505,6 +505,58 @@ theorem Maps.bnPerChannelTensor3 {oc h w : Nat} (M : FloatModel) {ε : ℝ}
       mul_le_mul_of_nonneg_left (by linarith) hG0
     linarith
 
+/-- ⭐⭐ **The CAPPED per-channel training BatchNorm envelope** — §0.1's escape 1 applied to the
+    normalisation whose problem it was written to describe.
+
+    `Maps.bnPerChannelTensor3` above carries the training-mode input-sensitivity
+    `G·(2Ē·Sq + 2Ā·(8Ā·Ē·Tq))`, whose second term is QUADRATIC in the window; folded through a
+    34-layer net that squares at every site and reaches `10⁷⁴¹⁹`, past any numeral `norm_num`
+    will evaluate. This states the same bridge under `FloatBridgesTo.capped`, and the whole
+    content is what it does NOT take: no `Sq`, no `Tq`, no bound on the inherited error `Ē`.
+    Only the WINDOW clause survives — identical to the one above — plus `Maps.capped`'s own
+    `2·Ā' ≤ Ē'`, so **the quadratic is never turned into a numeral**.
+
+    ⛔ **A number built on this is the triangle inequality, not the fold**, and must be labelled
+    wherever it is used (`planning/float_budget_numbers.md` §9): it says "the float and the real
+    forward both land in the certified window", never "the rounding error folds to this". The
+    tell is `budget / window = 2.00`.
+
+    ⭐ Why this did not exist until 2026-09-05: `capped` was written for LayerNorm, which has no
+    eval mode, and BatchNorm has one — so the cap looked unnecessary here and
+    `Resnet34FloatBudget.lean`'s *"there is no numeral to write down, so there is no theorem to
+    state"* stopped anyone re-checking. The window was `10²²¹` the whole time. -/
+theorem Maps.bnPerChannelTensor3Capped {oc h w : Nat} (M : FloatModel) {ε : ℝ}
+    (γ β : Vec oc) (fμ fistdv : Fin oc → Vec (h * w) → ℝ) (emean eistd : ℝ → ℝ)
+    {G Bbnd S : ℝ}
+    (hoc : 0 < oc) (hhw : 0 < h * w) (hε : 0 < ε)
+    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd)
+    (hmean : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fμ c v - bnMean (h * w) v| ≤ emean A)
+    (histd : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fistdv c v - bnIstd (h * w) v ε| ≤ eistd A)
+    (hSb : ∀ v : Vec (h * w), |bnIstd (h * w) v ε| ≤ S)
+    {q em ei Ā Ē Ā' Ē' : ℝ}
+    (hq : M.u ≤ q) (hG0 : 0 ≤ G) (hB0 : 0 ≤ Bbnd) (hS0 : 0 ≤ S)
+    (hem : ∀ A, 0 ≤ A → A ≤ Ā → emean A ≤ em) (hei : ∀ A, 0 ≤ A → A ≤ Ā → eistd A ≤ ei)
+    (hĀ' : G * (2 * Ā * S) + Bbnd + bnNormBudget q (2 * Ā) S G Bbnd em ei ≤ Ā')
+    (hĒ' : 2 * Ā' ≤ Ē') :
+    (floatBridgesTo_bnPerChannelTensor3 M γ β fμ fistdv emean eistd hoc hhw hε hγ hβ
+      hmean histd hSb).capped.Maps Ā Ē Ā' Ē' := by
+  refine Maps.capped (Ē := Ē) (fun A h0 hle => ?_) hĒ'
+  have hu := M.u_nonneg
+  have hemn : ∀ A, 0 ≤ A → 0 ≤ emean A := fun A hA =>
+    (abs_nonneg _).trans (hmean ⟨0, hoc⟩ A hA 0 (fun _ => by simpa using hA))
+  have hein : ∀ A, 0 ≤ A → 0 ≤ eistd A := fun A hA =>
+    (abs_nonneg _).trans (histd ⟨0, hoc⟩ A hA 0 (fun _ => by simpa using hA))
+  show bnLeafMag M.u S G Bbnd emean eistd A ≤ Ā'
+  unfold bnLeafMag
+  have hnb := bnNormBudget_mono (u := M.u) (u' := q) (D := 2 * A) (D' := 2 * Ā)
+    (S := S) (G := G) (Bb := Bbnd) hu hq (by linarith) (by linarith) hS0 hG0 hB0
+    (hemn A h0) (hem A h0 hle) (hein A h0) (hei A h0 hle)
+  have hmag : G * (2 * A * S) ≤ G * (2 * Ā * S) :=
+    mul_le_mul_of_nonneg_left (by nlinarith) hG0
+  linarith
+
 end FloatBridgesTo
 
 namespace FloatBridgesTo

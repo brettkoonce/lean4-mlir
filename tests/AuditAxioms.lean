@@ -95,6 +95,7 @@ import LeanMlir.Proofs.Float.Cifar8FloatBridge
 import LeanMlir.Proofs.Float.Cifar8FloatBudget
 import LeanMlir.Proofs.Codegen.ResNet34RenderPCEval
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
+import LeanMlir.Proofs.Float.Resnet34TrainFloatBudget
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
@@ -2060,11 +2061,15 @@ open Proofs
 -- at block granularity (r34EvalBridge_maps, 180 rational inequalities), and the headline:
 -- |float − real| ≤ 1.548e209 per logit on |x| ≤ 1 at the measured checkpoint profile
 -- (r34_float_logits_le). 4.9e-3 of the certified window — the CIFAR-8 relative scale, at 34
--- layers. ⚠ The TRAINING-mode net has no such statement and cannot: bnReluBudget's
--- mean-and-variance shift is quadratic in the window, so the fold squares at each of the 33
--- BN sites and lands at ~1e7417, past what norm_num will evaluate. That is why the eval leaf
+-- layers. ⚠ The TRAINING-mode net has no such FOLD and cannot: bnReluBudget's
+-- mean-and-variance shift is quadratic in the window, so the fold squares at each of the 36
+-- BN sites and lands at ~1e7419, past what norm_num will evaluate. That is why the eval leaf
 -- (BnEvalRuntimeFloatBridge, the six runtime ops the emitter actually writes — NOT
--- BnEvalFloatBridge's pre-folded affine) is the one the number goes through.
+-- BnEvalFloatBridge's pre-folded affine) is the one THIS number goes through.
+-- ⛔⛔ This comment used to say the training-mode net "has no such STATEMENT and cannot", and
+-- that was wrong: 1e7419 is the FOLD's numeral and the same measurement puts the WINDOW at
+-- 1e221, which FloatBridgesTo.capped turns into a theorem. See Resnet34TrainFloatBudget below
+-- — a CAP, not a fold, but a statement about the program the repo actually trains with.
 #print axioms Proofs.floatClose_bnEvalRt
 #print axioms Proofs.floatBridgesTo_bnPerChannelEvalTensor3
 #print axioms Proofs.FloatBridgesTo.Maps.comp
@@ -2095,6 +2100,34 @@ open Proofs
 -- inference net the number is stated for.
 #print axioms Proofs.rblkPC_eq_gen
 #print axioms Proofs.rblkPStridedPC_eq_gen
+-- ⭐⭐ And the TRAINING-mode number those generic block bridges make cheap: the same [3,4,6,3]
+-- net with bnPerChannelTensor3 at all 36 BN sites — the program the repo actually TRAINS with,
+-- and the one Resnet34BackFloatBudget's input-gradient number is taken through. Window
+-- 3.176e221 (r34TrainBridge_mag_le) and |float − real| ≤ 6.349e221 per logit
+-- (r34_train_float_logits_le), tied to the committed resnet34Forward_full_pc and its rendered
+-- graph (r34TrainForward_eq_full_pc, r34TrainGraph_faithful).
+-- ⛔ IT IS THE CAP, NOT THE FOLD, and it must never be tabled beside r34_float_logits_le
+-- without that label: budget/window = 2.00 is the tell. Every one of the 36 BN sites goes
+-- through Maps.bnPerChannelTensor3Capped, whose ERROR clause is 2·Ā' ≤ Ē' and mentions neither
+-- the inherited error nor ε — which is exactly why §0.1's quadratic never becomes a numeral.
+-- What it proves is "the float and the real forward both land in the certified window", the
+-- triangle inequality, not "the rounding error folds to this".
+-- ⭐ The window half IS an honest fold, and it needs no operating point: the ε-floor
+-- |istd| ≤ 317 leaves 32 orders under norm_num's shape-dependent ceiling.
+#print axioms Proofs.FloatBridgesTo.capped
+#print axioms Proofs.FloatBridgesTo.Maps.capped
+#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelTensor3Capped
+#print axioms Proofs.R34TrainBn.maps
+#print axioms Proofs.R34TrainIdBlk.maps
+#print axioms Proofs.R34TrainDownBlk.maps
+#print axioms Proofs.r34TrainBridge
+#print axioms Proofs.r34TrainBridge_maps
+#print axioms Proofs.r34TrainBridge_mag_le
+#print axioms Proofs.r34TrainBridge_fresh_le
+#print axioms Proofs.r34_train_float_logits_le
+#print axioms Proofs.r34TrainForward_eq_full_pc
+#print axioms Proofs.r34TrainGraph_faithful
+#print axioms Proofs.r34_train_float_logits_le_committed
 -- ⭐⭐ The SECOND ImageNet-scale whole-net float number, and the first whose certified WINDOW
 -- is not vacuous: the deployed MobileNetV2 inference forward as a CLOSED FloatBridgesTo
 -- (mnv2EvalBridge), its envelope pushed through 60 numeric stages at block granularity
@@ -2512,7 +2545,7 @@ open Proofs
 -- which the cotangent does not perturb.
 -- ⛔ THREE HYPOTHESES CARRY THE CAVEAT: `es`/`exh` (the saved float activations' accuracies,
 -- 1e-2 — quantities the forward's own training-mode fold cannot discharge) and the OPERATING
--- POINT |istd| <= 16 (sigma >= 1/16), §0.1's escape 2, worth ~43 orders across 33 BN sites and
+-- POINT |istd| <= 16 (sigma >= 1/16), §0.1's escape 2, worth ~43 orders across 36 BN sites and
 -- needed because norm_num's ceiling is ~1e253, not the 1e300 the plan had recorded.
 -- ⭐ Every per-op backward here is already tied to its certified VJP by
 -- Resnet34BackCertifiedTie.lean; only the whole-net FOLD of those ties is open there.
