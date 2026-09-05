@@ -1962,6 +1962,9 @@ open Proofs
 #print axioms Proofs.decimateBack_eq_vjp
 #print axioms Proofs.floatClose_decimateBack
 #print axioms Proofs.floatBridges_flatConvStride2Back
+-- The XLA-SAME (odd-phase) peer, 2026-09-05: flatConvStride2XlaBack = convFlatBack ∘ decimateOddBack,
+-- bridged by floatBridges_decimateOddBack .comp floatBridges_convBack — the TF-origin stems.
+#print axioms Proofs.floatBridges_flatConvStride2XlaBack
 -- stride-4 (ConvNeXt 4×4/s4 patchify) backward: flatConvStride4 = decimateFlat ∘ decimateOddFlat ∘
 -- flatConv, so its input-VJP = convFlatBack ∘ decimateOddBack ∘ decimateBack (zero-upsample TWICE then
 -- reversed-kernel conv). decimateOddBack = the certified decimateOddFlat VJP (decimateOddBack_eq_vjp),
@@ -2762,6 +2765,8 @@ open Proofs
 -- decimateBack rfl); rblkPStridedPC_has_vjp_at = the certified per-channel-BN strided block VJP;
 -- r34DownBlockBack_eq_rblkPStridedPC_vjp = the tie. Completes both r34 block types.
 #print axioms Proofs.flatConvStride2Back_eq_vjp_backward
+-- Its XLA-SAME peer (the TF-origin B0 / MobileNetV2 stems): the same conv leaf + decimateOddBack rfl.
+#print axioms Proofs.flatConvStride2XlaBack_eq_vjp_backward
 #print axioms Proofs.rblkPStridedPC_has_vjp_at
 #print axioms Proofs.r34DownBlockBack_eq_rblkPStridedPC_vjp
 -- §B DEPTHWISE adjoint gate (shared prereq for convnext/mnv2/enet): the depthwise twin of the conv
@@ -2771,6 +2776,8 @@ open Proofs
 #print axioms Proofs.depthwiseConv2d_dwReverse_eq_input_grad_formula
 #print axioms Proofs.depthwiseFlatBack_eq_vjp_backward
 #print axioms Proofs.depthwiseStride2FlatBack_eq_vjp_backward
+-- Its XLA-SAME peer (MobileNetV2's four strided depthwises, B0's downsample depthwise).
+#print axioms Proofs.depthwiseStride2FlatXlaBack_eq_vjp_backward
 -- §B integrity tie (convnext): cnxBlockBodyBack with its LN/gelu/layerScale backs pinned to the
 -- certified layerNorm/gelu/layerScale backwards at the saved activations = convNextBlockBody_has_vjp's
 -- backward (depthwise gate + 1×1 conv leaves + rfl); the residual-wrapped block tie on top. b1-free.
@@ -3025,6 +3032,7 @@ open Proofs
 -- depthwise conv), the depthwise twin of flatConvStride2Back.
 #print axioms Proofs.floatBridges_depthwiseBack
 #print axioms Proofs.floatBridges_depthwiseStride2Back
+#print axioms Proofs.floatBridges_depthwiseStride2XlaBack
 -- A3 §1e Squeeze-Excite backward (the architecturally-distinctive product-rule op). SE = x⊙gate(x),
 -- so the input-VJP is the two-path fan-in seBack(dy) = (g⊙dy) + gateBack(x⊙dy): main path scales dy
 -- by the saved gate g (diagBack g, a stop-gradient multiplier), gate path pre-scales dy by the saved

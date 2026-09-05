@@ -291,4 +291,41 @@ noncomputable def floatBridgesTo_flatConvStride4Back {ic oc h w kH kW : Nat} (M 
     (floatBridgesTo_decimateOddBack oc (2 * h) (2 * w))).comp
     (floatBridgesTo_convBack (h := 2 * (2 * h)) (w := 2 * (2 * w)) M W hw' hn hW)
 
+-- ════════════════════════════════════════════════════════════════
+-- § The XLA-`SAME` stride-2 conv backward: `convFlatBack ∘ decimateOddBack`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **XLA-`SAME` stride-2 conv backward in flat `Vec` space** — the input-VJP of
+    `flatConvStride2Xla W b = decimateOddFlat ∘ flatConv` (`StridedConv.lean`): scatter the
+    cotangent onto the ODD positions (`decimateOddBack`), then run the reversed-kernel conv
+    (`convFlatBack`). `Vec (oc·h·w) → Vec (ic·2h·2w)`. The odd-phase peer of `flatConvStride2Back`
+    and the map the emitted `[p+1, p-1]` transposed-conv pad denotes (`StableHLO.lean`,
+    `depthwiseStridedXlaBack`'s note on the direction); the leaf tie
+    `flatConvStride2XlaBack_eq_vjp_backward` (`Resnet34BackCertifiedTie.lean`) is what says so. -/
+noncomputable def flatConvStride2XlaBack {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) :
+    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
+  convFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateOddBack oc h w
+
+/-- **The XLA-`SAME` stride-2 conv input-VJP float-bridges** — `floatBridges_flatConvStride2Back`
+    with the odd scatter; same envelope, since a scatter is exact. -/
+theorem floatBridges_flatConvStride2XlaBack {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < oc * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') :
+    FloatBridges (flatConvStride2XlaBack (h := h) (w := w) W) := by
+  unfold flatConvStride2XlaBack
+  exact (floatBridges_decimateOddBack oc h w).comp
+    (floatBridges_convBack (h := 2 * h) (w := 2 * w) M W hw' hn hW)
+
+/-- The XLA-`SAME` stride-2 conv input-VJP float-bridges to the rounded reversed-kernel conv
+    after the (exact) odd scatter. -/
+noncomputable def floatBridgesTo_flatConvStride2XlaBack {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < oc * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') :
+    FloatBridgesTo (flatConvStride2XlaBack (h := h) (w := w) W)
+      (M.flatConvF (h := 2 * h) (w := 2 * w) (reverseSwap W) (fun _ => 0)
+        ∘ decimateOddBack oc h w) := by
+  unfold flatConvStride2XlaBack
+  exact (floatBridgesTo_decimateOddBack oc h w).comp
+    (floatBridgesTo_convBack (h := 2 * h) (w := 2 * w) M W hw' hn hW)
+
 end Proofs

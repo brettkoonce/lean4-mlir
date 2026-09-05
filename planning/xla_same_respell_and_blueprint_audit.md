@@ -47,10 +47,24 @@ that three-block net at either phase.
 
 Not affected, and do not touch: ResNet-34 and ResNet-50 (PyTorch-origin; the 7x7/s2 stem pads 3
 symmetrically and the 3x3/s2 pool pads 1, both correct), ConvNeXt (4x4/s4 and 2x2/s2 at pad 0),
-ViT (own patch-embed definition). Same class, out of this thread's scope: MobileNetV4's Proofs
-(`MobileNetV4BackB0.lean`) and the 17-block paper MobileNetV2 (`MobileNetV2FullPaper.lean`,
-`MobileNetV2TiePoCPaper.lean`) are also at the symmetric spelling while the mnv4 render is XLA.
-Note them; fix them in the same pattern only if wanted.
+ViT (own patch-embed definition). MobileNetV4's Proofs (`MobileNetV4BackB0.lean`) are the UIB
+block bodies only, whose depthwises are symmetric in render and reference alike; the XLA stem is
+not in its Proofs tier at all, so nothing there is at the wrong phase.
+
+**Pulled INTO scope by step 0 (2026-09-05): the 17-block paper MobileNetV2 files.**
+`MobileNetV2FullPaper.lean` (forward + graph + faithfulness), `MobileNetV2FaithfulPoCPaper.lean`
+(every param-SGD op `den = certified`) and `MobileNetV2TiePoCPaper.lean` (the §1a tie, 210
+params) describe `mobilenetv2_train_step.mlir` at the symmetric spelling (`flatConvStride2`,
+`depthwiseStridedF`, `convStrided{Weight,Bias}Sgd`, `depthwiseStrided{Weight,Bias}Sgd`). Before
+step 0 that artifact was symmetric, so they were right; step 0 moved it, so they now describe the
+program of 2026-09-04. Step 3 re-spells them with the others: the forward at
+`flatConvStride2Xla` / `depthwiseStride2FlatXla`, the graph at `.flatConvStridedXlaF` /
+`.depthwiseStridedXlaF`, and the PoC `_den` lemmas at the five per-example `…Xla…Sgd` /
+`…XlaBack` tokens (their `rfl` faithfulness lemmas landed in step 0; the `.correct` fields of
+the `…Xla` VJPs give the `pdiv` form). The EfficientNet PoC pair (`EfficientNetTiePoC.lean`,
+`EfficientNetFaithfulPoC.lean`) has the same relation to `efficientnet_train_step.mlir` since
+2026-08-08 (batched `convStridedWeightSgdB` where the artifact emits `convStridedXlaWeightSgdB`)
+and was already in section 4's list.
 
 ## 2. What exists already
 
