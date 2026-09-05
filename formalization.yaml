@@ -907,6 +907,20 @@ fidelity:
        and the whole remaining growth is the CONV FAN-IN -- `layerBudget`'s uniform `m*w'*A` face,
        one of the two documented gaps to the adjoint chain (4d's own r34 paragraph), shared with
        every number in this file including the four backwards, and never attacked.
+       ⭐⭐ MEASURED 2026-09-05 (`scripts/param_row_l1.py`, planning §3.34) and it is the biggest
+       lever left: `layerAct m w beta A = m*w*A + beta` charges the fan-in times the UNIFORM max
+       weight, where the quantity that expression is an upper bound FOR is the output row's L1
+       norm (`|(Wx)_o| <= (sum_i |W[o,i]|)*A`), so substituting the measured `max_o ||W_o||_1` is
+       strictly tighter, still PROVED, and the same KIND of checkpoint fact as `|w| <= 21/10`
+       already is -- no new hypothesis and no modelling change. On ResNet-34's 79-epoch checkpoint
+       the face is 14x loose at the stem and 92-95x at the deepest convs; folded, the TRAINING
+       forward goes 8.748e80 -> 8.409e19 (61 orders) and the INFERENCE forward
+       1.548e209 -> 3.619e146 (63). ⭐ It is the first improvement since the training-mode number
+       landed that moves the INFERENCE numbers -- the four honest FOLDS -- because escape 2 and the
+       derived mean reached only normalisation sites. ⛔ Not taken here: `layerAct`/`layerBudget`
+       are in `FloatBridge.lean` (98 dependent modules), every parameter record gains a row-L1
+       field and eleven committed numbers move, so it is scoped and probed rather than started.
+       ⚠ Only ResNet-34 is measured.
 
        ⚠ `bnXhat_abs_le_num` moved down from `FloatBudgetEnvBack.lean` (the ResNet-34 BACKWARD
        kit) into `BnXhatFloatBridge.lean` so a FORWARD leaf need not import the backward cone to

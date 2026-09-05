@@ -150,14 +150,24 @@ reduction then a divide and `FloatModel.bnMean_close` has bounded it since the M
 **order**, because `M.sum` is a concrete left fold and no GPU kernel is one. ⛔ All three stay
 CAPS.
 
-⭐⭐ **STARTING A SESSION? THE WALL HAS MOVED — go to §3.33's closing finding.** With `emr`
-derived the normalisation sites shrink and the whole remaining growth is the **conv fan-in**:
-`layerBudget`'s uniform `m·w'·A` face, §0's own documented gap to the adjoint chain (257× per
-stage), shared with every number in this file including the four backwards, and never attacked.
-That is the next problem, and it is the first one in a while that is not about a normalisation.
-⭐ Two smaller items are measured and waiting: state the device inverse-stddev `ei` RELATIVE
-rather than absolute (it is now the loose constant, by four orders — §3.33 finding 2), and
-ConvNeXt-T's 2 remaining orders from a per-width `emr` (priced and declined, §3.33).
+⭐⭐ **STARTING A SESSION? GO TO §3.34.** It is a cold-start recipe for the three next items,
+all measured 2026-09-05, and the measurement is committed as `scripts/param_row_l1.py` — one
+command reproduces it. **(E)** run §3.19's standing audit first — it is the only CORRECTNESS item
+on the list, it has never been run, and the drift class it looks for has fired five times and
+twice moved a committed number. **(F)** ⭐⭐ then **the CONV FAN-IN**, which is the biggest lever
+left: `layerBudget`'s face charges `m·w'` where the quantity it is an upper bound FOR is the row
+ℓ1 norm `maxₒ ‖W_o‖₁`, and on ResNet-34 that face is 14× loose at the stem and 92–95× at the
+deepest convs — **61 orders on the training forward (8.748·10⁸⁰ → 8.409·10¹⁹) and 63 on the
+inference one (1.548·10²⁰⁹ → 3.619·10¹⁴⁶)**, at no new hypothesis and no modelling change, because
+a measured row-ℓ1 is the same KIND of checkpoint fact as `|w| ≤ 21/10` already is. ⭐⭐ **And
+unlike everything since §3.29 it moves the INFERENCE numbers too** — escape 2 and the derived `emr`
+touched only normalisation sites, so the four honest FOLDS did not move at all. ⛔ It is also the
+largest single job here: `layerAct`/`layerBudget` live in `FloatBridge.lean` (98 dependents),
+every parameter record gains a field, and eleven committed numbers move — so §3.8 applies with
+force, **probe the other five nets before writing any Lean** (only r34 is measured, and §3.9
+finding 5 says which kind is the outlier is not predictable). **(G)** ⭐ and state the device
+inverse-stddev `ei` RELATIVE while those files are open — after (D) it is the loose constant by
+four orders, it is worth 3.7× per site, and `DeviceExp` already has that shape.
 
 §4 carries the rest of the order — **2b** B0's whole-net certified tie (⛔ bigger than §4 costed:
 the apex is `efficientnetForwardB_has_vjp`, not the 16-block `*_full_*`, and all three batched
@@ -3343,6 +3353,7 @@ expand ×230, project ×922, layer scale ×8.4, net ×5·10⁵ (stage 1) to ×3.
 `m·w'·A` face, which §0 already names as one of the two documented gaps to the adjoint chain
 (the probe's §5 measures 257× per stage). That is the next problem after this one, it is shared
 with every net in the file including the four backwards, and nothing in this file has attacked it.
+✅ **Measured 2026-09-05 — §3.34, and it is 61 orders on r34.**
 
 ---
 
@@ -3531,7 +3542,10 @@ kind of operating point.
 normalisation sites shrink and the whole remaining growth is the **conv fan-in** — `layerBudget`'s
 uniform `m·w'·A` face, §0's own documented gap to the adjoint chain (257× per stage,
 `scripts/adjoint_chain_probe.py` §5). That is shared with every number in this file, the four
-backwards included, and **nothing in the float tier has ever attacked it.** It is the next problem.
+backwards included, and **nothing in the float tier has ever attacked it.** ✅ **MEASURED the same
+day — §3.34: 61 orders on r34's training forward and 63 on its inference one**, from charging that
+face at the row-ℓ1 norm it is an upper bound for. It is the next problem, and the first one in a
+while that is not about a normalisation.
 
 **⭐ The re-emission: §3.30's learned map, and it caught its own trap again.** ConvNeXt's 429
 slots and ViT's 374 were remapped by value against the two folds of the same chain (0 ambiguous,
@@ -3545,6 +3559,119 @@ whole `vitBodyKVFlat` application, exactly as §3.30 says it does.
 declarations on `[propext, Classical.choice, Quot.sound]`; `docstring-checkrefs` 1492 citations;
 `check_audit_coverage` 211 imports. Elaboration: r34 38 s, ViT 33 s, ConvNeXt 2m14s.
 ⚠ `BnFloatBridge.lean` has 85 dependent modules, so develop against it in scratch and edit once.
+
+### 3.34 ⭐⭐ NEXT SESSION (scoped 2026-09-05): THE CONV FAN-IN — measured, and it is 61 orders
+
+**Read this section. The measurement is committed as `scripts/param_row_l1.py` and reproduces in
+one command; you should not need to re-derive anything.** Three items, in this order: a bounded
+CORRECTNESS audit that has never been run, then the conv fan-in, with a cheap third riding along.
+
+---
+
+#### (E) ⛔ FIRST, AND IT IS THE ONLY CORRECTNESS ITEM: run §3.19's standing audit
+
+*When a fix lands on an emitter, grep for every other definition that claims to denote the same
+map.* It has been written down since 2026-09-04 and never run. §3.19 is why: `.convStridedBack`'s
+even-kernel pad was fixed **twice** on the codegen side and never reached the float tier's
+hand-written peer — which is the tier a committed number was folded through, and which moved
+ConvNeXt-T's backward by 1.25 orders once corrected. ⭐ **Note how it was found: not by review, but
+by needing a whole-net tie.** That drift class (`imagenet_specs_drift_from_twins`) has now fired
+FIVE times in this file and twice moved a committed number.
+
+Everything else below makes numbers smaller; this one asks whether they are about the right
+functions. One pass over the emitters' fix history, and the deliverable is a yes/no: *was the
+even-kernel case the only one?* ⭐ A `den` stated as the certified VJP cannot drift; a
+hand-written peer of it can, and did.
+
+---
+
+#### (F) ⭐⭐ THE CONV FAN-IN — `layerBudget`'s `m·w'` face against the ROW-L1 it bounds
+
+**The finding.** `layerAct m w β A = m·w·A + β` charges the fan-in times the UNIFORM maximum
+weight. What that expression is an upper bound **for** is the output row's ℓ1 norm:
+
+    |(Wx)_o| = |Σᵢ W[o,i]·xᵢ| ≤ (Σᵢ |W[o,i]|)·A        and      m·w' ≥ maxₒ ‖W_o‖₁
+
+so replacing `m·w'` by the measured `maxₒ ‖W_o‖₁` is **strictly tighter, still proved, and the
+same KIND of hypothesis** — a measured property of the committed checkpoint, exactly as
+`|w| ≤ 21/10` already is. ⭐⭐ No new hypothesis, no modelling change, no operating point. It is
+§3.3(a)'s per-kind profile split one notch finer, on the same face.
+
+**Measured on ResNet-34's 79-epoch checkpoint** (`scripts/param_row_l1.py`, all 21,797,672 f32
+read, every fan-in either chain walks covered):
+
+| fan-in | row-ℓ1 | `m·w'` | loose by |
+|---|---|---|---|
+| 147 (stem) | 22.046 | 308.7 | 14.0× |
+| 576 | 26.973 | 1209.6 | 44.8× |
+| 1152 | 33.788 | 2419.2 | 71.6× |
+| 2304 | 50.721 | 4838.4 | 95.4× |
+| 4608 | 104.789 | 9676.8 | 92.3× |
+| 512 (head) | 28.814 | 1075.2 | 37.3× |
+
+and folded through both committed r34 chains:
+
+| | committed | at the row-ℓ1 face | orders |
+|---|---|---|---|
+| **ResNet-34 @ TRAINING BN** | 8.748·10⁸⁰ / 1.752·10⁸¹ | **8.409·10¹⁹ / 1.682·10²⁰** | **61** |
+| **ResNet-34 @ INFERENCE BN** | 3.152·10²¹¹ / 1.548·10²⁰⁹ | **7.377·10¹⁴⁸ / 3.619·10¹⁴⁶** | **63** |
+
+**⭐⭐ Three reasons this is the right next number, and the second is the one that matters.**
+1. It is the biggest lever left, by a wide margin, on the net where it is measured.
+2. ⭐⭐ **It hits EVERYTHING — including the numbers escape 2 and the derived `emr` could not
+   touch.** All seven forwards and all four backwards go through `layerBudget` /
+   `Maps.flatConv` / `Maps.convBack`. §3.30–§3.33 moved only the normalisation sites, so the four
+   INFERENCE forwards did not move at all; this moves them, and those are the honest FOLDS rather
+   than the caps.
+3. The repo named it before anyone needed it. §0 lists it as one of the two documented gaps to
+   the adjoint chain, and `scripts/adjoint_chain_probe.py`'s own header says its PROVEN tier is
+   `H_i = ∏ m·max|W_j|` — *"EXACTLY the old FloatClose.comp interval fold"*. ⭐ The row-ℓ1 is the
+   **static, provable half** of what that probe's MEASURED tier gets from the on-trajectory
+   Jacobian, so this closes part of a gap that file has costed for months, with no supplied
+   hypothesis.
+
+**⚠ What is NOT measured, and §3.9 finding 5's rule applies.** Only ResNet-34. Which parameter
+kind is the outlier is not predictable — on MobileNetV2 the maximum IS a kernel where on r34 it is
+a BN γ — so **measure the other five before costing them**, and expect the win to differ. ⚠ Only
+ConvNeXt-B loaders are in `jax/generated/`; ConvNeXt-T's checkpoint has no committed loader, so
+that one needs a layout first.
+
+**⛔ THE COST, and it is the largest single job in this file.** The rounding half of `layerBudget`
+— `(1+u)^(m+2) − 1` — keeps the fan-in `m` and does not change; only the magnitude face moves. But
+that face is in the most-used leaf in the tier:
+* `layerAct` / `layerBudget` in **`FloatBridge.lean` (98 dependent modules)**, whose header note
+  already warns the file off casual edits.
+* the conv/dense `FloatClose` leaves, which take `hW : ∀ i j, |W i j| ≤ w'` and would take (or
+  also take) `hL : ∀ o, Σᵢ |W[o,i]| ≤ L`.
+* every net's parameter record (`R34Conv` and its eight peers) gains a row-ℓ1 field, and
+  **eleven committed numbers move**.
+⚠ `Maps.convBack`'s face needs its own thought: the backward is the reversed kernel with the
+channel roles swapped, so its "rows" are the INPUT channels and the measured quantity is a
+different max over the same tensor. Do not assume the forward's number transfers.
+
+**⭐ The order of work, and §3.8's rule applies with force: probe first, Lean second.**
+1. Extend `scripts/param_row_l1.py` to the other five nets (it takes a loader + checkpoint +
+   `w'` on the command line already) and fold each net's committed chain at the measured face.
+   That is a day and it says whether 61 orders generalises. ⛔ Do not write Lean before it.
+2. Decide the leaf's SHAPE from that: a second `layerAct`/`layerBudget` stated at `L` with the
+   originals as instances at `L := m·w'` (the `bnMean_close_of` treatment, §3.33 — the
+   drift-proof shape), or a parameter added to the existing ones.
+3. Then one commit per net, §7, cheapest net first.
+
+---
+
+#### (G) ⭐ AND RIDING ALONG: state `ei` RELATIVE rather than absolute
+
+§3.33 finding 2 left this measured and unstarted, and after (D) it is **the loose constant, by
+four orders**. The term that keeps a normalisation's window is `D·ei` — the centred bound times an
+ABSOLUTE inverse-stddev error. Stated relative, `|centredᵢ|·ei·|istd| = ei·|x̂ᵢ| ≤ ei·Xh` and the
+window leaves that term outright: worth a further **3.7× per site** (§3.31's table). ⭐ `DeviceExp`
+already has the relative shape and §3.5.2 item 6.1 records that the three device specs' shapes
+"are not settled by anything but what each proof needed" — so this is a shape correction, not a
+new modelling assumption. It lives in the same leaf family as (F) and should be taken while those
+files are open. ⛔ It does NOT reset the window either: the floor is `ea·S = emr·A·S`, proportional
+to the window however small the accuracies get, and a true reset needs `A·S` bounded — a new kind
+of operating point, still not taken.
 
 ## 4. What is open — ⭐ THE ORDER, decided 2026-09-04 after §3.22
 
@@ -3672,12 +3799,30 @@ out, so it is ONE leaf, and the same is true of its backward.
 * ⛔ **The sharp `|swish′| ≈ 1.1`** — 2.6 orders against the proved `2`, and §3.12 says explicitly
   not to prove it.
 
-**Standing audit, from §3.19's lesson and not yet run.** *When a fix lands on an emitter, grep for
-every other definition that claims to denote the same map.* `.convStridedBack`'s even-kernel pad was
-fixed TWICE on the codegen side and never reached the float tier's hand-written peer, which is the
-tier a committed number was folded through. A `den` stated as the certified VJP cannot drift; a
-hand-written peer can, and did. One pass over the emitters' fix history would say whether the
-even-kernel case was the only one.
+**5. ⛔ THE STANDING AUDIT, from §3.19's lesson, still not run — and it is now item (E), the
+FIRST thing to do (§3.34).** *When a fix lands on an emitter, grep for every other definition that
+claims to denote the same map.* `.convStridedBack`'s even-kernel pad was fixed TWICE on the codegen
+side and never reached the float tier's hand-written peer, which is the tier a committed number was
+folded through. A `den` stated as the certified VJP cannot drift; a hand-written peer can, and did.
+One pass over the emitters' fix history would say whether the even-kernel case was the only one.
+⭐ **Everything else on this list makes numbers smaller; this one asks whether they are about the
+right functions**, and the drift class has fired five times.
+
+**6. ⭐⭐ THE CONV FAN-IN — the biggest lever left, measured 2026-09-05, §3.34 item (F).**
+`layerBudget`'s magnitude face charges `m·w'` where the quantity it is an upper bound FOR is the
+output row's ℓ1 norm; substituting the measured `maxₒ ‖W_o‖₁` is strictly tighter, still proved,
+and the same KIND of checkpoint fact as `|w| ≤ 21/10`. On ResNet-34: **61 orders on the training
+forward and 63 on the inference one** (`scripts/param_row_l1.py`). ⭐⭐ It is the first item since
+§3.29 that moves the INFERENCE numbers — the four honest FOLDS — because escape 2 and the derived
+`emr` reached only normalisation sites. ⛔ And the largest single job here: `layerAct`/`layerBudget`
+are in `FloatBridge.lean` (98 dependents), every parameter record gains a field, eleven committed
+numbers move, and `Maps.convBack`'s face needs its own measurement (the reversed kernel's rows are
+the INPUT channels). ⚠ Only r34 is measured; §3.9 finding 5 says probe the other five first.
+
+**7. ⭐ `ei` RELATIVE rather than absolute** — §3.34 item (G), §3.33 finding 2. After (D) it is the
+loose constant by four orders; worth 3.7× per normalisation site, and `DeviceExp` already has the
+relative shape, so it is a shape correction rather than a new assumption. Take it while item 6 has
+those files open.
 
 **Stated as missing, still missing.** `efficientnetForwardBEval N = batchMap N (per-example
 forward)` — the whole-net form of "at inference the batch decouples". Only the per-SITE claim is
