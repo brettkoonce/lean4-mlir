@@ -580,6 +580,12 @@ lean_lib «Certs» where
              -- instantiated at IS the committed forward. That is the shape check §3.10's wrong
              -- pool slipped past. ⭐ No drift found here: the mnv2 backward number is unchanged.
              `LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie,
+             -- ⭐⭐ And for the whole EfficientNet-B0, the fourth net to get one:
+             -- efficientnetInputGradB(pinned) = (efficientnetB_has_vjp ...).backward, at every
+             -- batch size, with efficientnetForwardB_eq_chain as the shape check. It had to wait
+             -- for the XLA-SAME re-spelling — at the symmetric stem it would have certified a
+             -- program no shipped B0 artifact runs. ⭐ The b0 backward number is unchanged.
+             `LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie,
              -- ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel: conv2d pads by pH=(kH-1)/2
              -- and the reversed-kernel forward conv is the adjoint only when kH-1-pH = pH, i.e.
              -- only for odd kH. ConvNeXt's 4x4/s4 patchify stem and three 2x2/s2 downsamples are

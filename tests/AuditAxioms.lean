@@ -127,6 +127,7 @@ import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Float.ConvNeXtBackFloatBudget
@@ -2937,6 +2938,26 @@ open Proofs
 #print axioms Proofs.mobilenetv2PC_has_vjp_at
 #print axioms Proofs.mobilenetv2Forward_full_pc_eq_chain
 #print axioms Proofs.mnv2InputGrad_eq_mobilenetv2_vjp
+-- ⭐⭐ AND FOR THE WHOLE EFFICIENTNET-B0, the fourth net to get one
+-- (EfficientNetWholeBackCertifiedTie.lean, ~2 s): efficientnetInputGradB, with its stem/head
+-- BatchNorm and swish slots pinned to the certified per-op backwards, IS
+-- (efficientnetB_has_vjp ...).backward — at EVERY batch size, not the N = 1 the plan scoped,
+-- because the certified BatchNorm slot is bnBatchLA_has_vjp and that exists for all N.
+-- ⭐ No smooth point: swish and the SE sigmoid are differentiable everywhere, so this is HasVJP
+-- where MobileNetV2's and r34's are HasVJPAt with a smoothness hypothesis.
+-- ⚠ It had to wait for the XLA-SAME re-spelling: at the symmetric stem the tie would have
+-- certified a program no shipped B0 artifact runs.
+-- ⭐ batchMap_has_vjp is built by a ▸ transport, and §5's trap says an Eq.mpr blocks .backward
+-- from reducing. It does not: the equation holds pointwise by rfl and proof irrelevance is
+-- definitional, so the stage ties close by rfl straight through it. ⛔ What DOES bite is size —
+-- the same transport at the WHOLE-NET type (efficientnetForwardB_has_vjp_committed) typechecks
+-- but cannot be reduced through inside the kernel's budget, which is why the blocks stay opaque.
+-- ⭐ NO DRIFT: 7.104e182 / 1.578e182 stand unchanged.
+#print axioms Proofs.efficientnetB_has_vjp
+#print axioms Proofs.stemBBack_eq_vjp_backward
+#print axioms Proofs.headFwdBBack_eq_vjp_backward
+#print axioms Proofs.efficientnetInputGradB_eq_efficientnetForwardB_vjp
+#print axioms Proofs.efficientnetForwardB_has_vjp_committed
 -- ⛔⛔ THE EVEN-KERNEL CONV BACKWARD (EvenKernelConvBack.lean, ~1 s). convFlatBack W is the
 -- reversed-kernel forward conv, and convFlatBack_eq_vjp_backward ties it to the certified input-VJP
 -- for ODD kernels only. That hypothesis is load-bearing and the statement is FALSE without it:

@@ -1,8 +1,8 @@
 # Re-spell the TF-origin nets at XLA-SAME padding, tie B0, then audit the blueprint
 
 **Scoped 2026-09-05; steps 0 to 6 all landed the same day (`ec977de`, `0773e20`, `0584ab8`,
-the B0 commit, `ee81d36`, and the 3c/docs commit). What is left is step 7 (B0's whole-net
-certified tie) and step 8 (the blueprint audit).** Three items in order:
+the B0 commit, `ee81d36`, `55add28`, and the step-7 commit). What is left is step 8, the
+blueprint audit.** Three items in order:
 (A) move EfficientNet-B0's and MobileNetV2's Proofs tier from symmetric stride-2 padding to the
 XLA-SAME forms the shipped renders and the TF-origin references use, (B) EfficientNet-B0's whole-net
 certified backward tie, which must not be built before (A), and (C) an audit of the LaTeX blueprint
@@ -233,12 +233,24 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    MobileNetV2 budget headers gained the sentence B0's got. `convention_audit.py --selftest`
    passes (⚠ it needs `.venv/bin/python` — the system interpreter has a jaxlib-less jax).
 
-7. **EfficientNet-B0's whole-net certified tie**, as scoped in `planning/float_budget_numbers.md`
-   section 5 item 3, now against the XLA stem: apex `efficientnetForwardB_has_vjp`, the three
-   batched block ties at `bnBatchLA`, the batched leaf ties via `hasVJPMat_to_hasVJP
-   (rowwise_has_vjp_mat ..)`, assembly in `MobileNetV2WholeBackCertifiedTie.lean`'s shape with
-   opaque blocks, at `N = 1`. Done when the tie compiles, the shape check is used, and the number
-   in `EfficientNetBackFloatBudget.lean` is unchanged.
+7. **EfficientNet-B0's whole-net certified tie. Done 2026-09-05**
+   (`LeanMlir/Proofs/Foundation/EfficientNetWholeBackCertifiedTie.lean`, ~2 s to compile).
+   `efficientnetInputGradB` with its stem/head BatchNorm and swish slots pinned to the certified
+   per-op backwards and its three MBConv blocks opaque IS `(efficientnetB_has_vjp …).backward`,
+   the generic five-stage apex; the two endpoint stage ties are one `rw` of a per-example leaf
+   tie and then `rfl`; `efficientnetForwardB_has_vjp_committed` carries the apex across
+   `efficientnetForwardB_eq_chain` to the committed forward, which is where the shape check
+   stops being prose. `7.104e182 / 1.578e182` unchanged, no drift found. **At every batch size**,
+   not the `N = 1` scoped: that restriction belongs to the FLOAT chain, whose BatchNorm slot
+   needs a batched float leaf; the certified slot is `bnBatchLA_has_vjp` and exists for all `N`.
+
+   Two things the scoping had wrong, both worth keeping. The `▸` in `batchMap_has_vjp` does NOT
+   block `.backward` from reducing — §5's trap applies to a transport along an equation that is
+   not pointwise `rfl`, and this one is, so proof irrelevance makes it definitional. What bites
+   instead is SIZE: the same transport at the whole-net type typechecks but cannot be reduced
+   through inside the kernel's budget, and instantiating the three block slots at the concrete
+   MBConv blocks runs past nine minutes. Opaque blocks are not a convenience here, they are what
+   makes the statement checkable.
 
 8. **Blueprint audit** (its own commit, after the Lean settles). `blueprint/src/content.tex` is
    15,126 lines with 107 `\lean{}` tags; CI's `blueprint-checkdecls` (`.github/workflows/blueprint.yml`)

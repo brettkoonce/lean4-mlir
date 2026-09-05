@@ -37,14 +37,14 @@ Window is the certified bound on the output's magnitude; budget is the bound on 
 between the float output and the real output, per logit (forwards) or per input pixel
 (backwards, on loss cotangents of magnitude at most 1). Inputs are on the unit box.
 
-The three whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
+The four whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
 
 | net | tie | shape check | apex kind |
 |---|---|---|---|
 | ResNet-34 | `r34InputGrad_eq_resnet34_vjp` | `resnet34Forward_full_pc_eq_chain` | `HasVJPAt` (smooth point) |
 | MobileNetV2 | `mnv2InputGrad_eq_mobilenetv2_vjp` | `mobilenetv2Forward_full_pc_eq_chain` | `HasVJPAt` (smooth point) |
 | ConvNeXt-T | `convnextInputGrad_eq_convNextForwardTCh_vjp` | `convNextForwardTCh_eq_chain` | `HasVJP` (everywhere) |
-| EfficientNet-B0 | open (section 5, item 3) | `efficientnetForwardB_eq_chain` | `HasVJP` (everywhere) |
+| EfficientNet-B0 | `efficientnetInputGradB_eq_efficientnetForwardB_vjp` | `efficientnetForwardB_eq_chain` | `HasVJP` (everywhere) |
 
 The tie says the hand-written backward chain the number is stated on IS the certified whole-net
 VJP, not merely that each of its pieces is. The shape check says the chain of opaque block
@@ -213,10 +213,28 @@ Each has an acceptance criterion. None makes a number smaller.
    and gained `_xla_` twins (`stemB` gained a separate `fusedConvB`). `formalization.yaml` 4d
    now records the item closed. Left open: the blueprint audit, and item 3 below.
 
-3. **EfficientNet-B0's whole-net certified tie.** Unblocked 2026-09-05 by the re-spelling
-   (item 2): a tie of `efficientnetInputGradB` to `efficientnetForwardB_has_vjp` at the
-   symmetric stem would have certified a net no shipped artifact runs; the chain is now at
-   the XLA stem, so the tie can be built. Then aim at `efficientnetForwardB_has_vjp`
+3. **EfficientNet-B0's whole-net certified tie. Done 2026-09-05**
+   (`EfficientNetWholeBackCertifiedTie.lean`), unblocked the same day by the re-spelling
+   (item 2): at the symmetric stem the tie would have certified a net no shipped artifact runs.
+   `efficientnetInputGradB`, with its stem and head BatchNorm and swish slots pinned to the
+   certified per-op backwards and its three MBConv blocks opaque, IS
+   `(efficientnetB_has_vjp …).backward` — **at every batch size**, not the `N = 1` scoped below:
+   that restriction is the FLOAT chain's, and the certified chain's BatchNorm slot is
+   `bnBatchLA_has_vjp`, which exists for all `N`. `7.104e182 / 1.578e182` unchanged; no drift
+   found, as with MobileNetV2 and unlike ResNet-34.
+
+   Two findings worth carrying. **(a) The `▸` in `batchMap_has_vjp` does not block the
+   reduction** — the scoping note below said it would. §5's trap is real for a transport along an
+   equation that is not pointwise `rfl`; `batchMap_eq_rowwiseFlat` holds by `funext … ; rfl`, and
+   proof irrelevance is definitional, so `.backward` reduces straight through it and both stage
+   ties close by `rw` + `rfl`. **(b) What bites instead is size.** The same transport at the
+   WHOLE-NET type (`efficientnetForwardB_has_vjp_committed`, which is where the shape check
+   earns its keep) typechecks but cannot be reduced through inside the kernel's deterministic
+   budget, and neither can instantiating the tie's three block slots at the concrete MBConv
+   blocks. Hence opaque blocks, the MobileNetV2 discipline, and the shape check as the thing
+   that says which net they are.
+
+   The original scoping, kept for the record: aim at `efficientnetForwardB_has_vjp`
    (`Architectures/EfficientNetChainClose.lean`, `HasVJP` everywhere), not the 16-block
    `efficientnetForwardB_full_has_vjp`. Missing: the three batched block ties at `bnBatchLA`
    (`mbNoExpFwdB`, `mbStridedFwdB`, `mbResidFwdB`; the one existing tie is per example at scalar

@@ -578,16 +578,19 @@ fidelity:
        agree — four certs are shared across those net boundaries and kept their
        symmetric statements, gaining `_xla_` twins for MobileNetV2's use.
 
-       THE TIES. Three backward chains are proven to BE the certified whole-net
+       THE TIES. All four backward chains are proven to BE the certified whole-net
        VJP, each with a shape check that the opaque-block chain the apex is
        instantiated at IS the committed forward:
        `r34InputGrad_eq_resnet34_vjp` with `resnet34Forward_full_pc_eq_chain`
        (HasVJPAt, smooth point), `mnv2InputGrad_eq_mobilenetv2_vjp` with
-       `mobilenetv2Forward_full_pc_eq_chain` (HasVJPAt), and
+       `mobilenetv2Forward_full_pc_eq_chain` (HasVJPAt),
        `convnextInputGrad_eq_convNextForwardTCh_vjp` with
        `convNextForwardTCh_eq_chain` (HasVJP everywhere; no smoothness
-       side-condition). EfficientNet-B0's tie is open; its shape check
-       `efficientnetForwardB_eq_chain` exists. Closing the ties found drift that
+       side-condition), and, since 2026-09-05,
+       `efficientnetInputGradB_eq_efficientnetForwardB_vjp` with
+       `efficientnetForwardB_eq_chain` (HasVJP everywhere, at every batch size).
+       B0's had to wait for the padding re-spelling above: at the symmetric stem
+       it would have certified a program no shipped artifact runs. Closing the ties found drift that
        no review had: `r34InputGrad` reversed the 2x2 pool where the committed
        forward pools 3x3/s2 (the number moved 4x); both ConvNeXt bridges held
        `id` in the head-LayerNorm slot, the backward one justified by a stale
