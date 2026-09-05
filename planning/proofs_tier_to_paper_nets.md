@@ -42,7 +42,7 @@ shipped config count as paper-net statements.
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ | ✓ 262 params (stem symmetric) | ✗ 3-block | ✗ 3-block, N=1 | ✗ open at 3-block | none |
-| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), with shape check `mobilenetv2ForwardPaper_eq_chain`; the yaml headline still points at the 2-block generic | ✓ | ✓ 210 params (symmetric) | ✗ 6-block | ✗ 6-block | ✗ 6-block | 17 blocks at toy dims; 2 blocks at 224 |
+| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ | ✓ 210 params | ⚠ probed, CAP 8.176e16, Lean unwritten | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 
@@ -109,40 +109,62 @@ Gates: `lake build Certs` 3956 green, `lake env lean tests/AuditAxioms.lean` 3-a
 `lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`. No renderer or `.mlir`
 change — this is a den-level tie, as r34/mnv2 are.
 
-### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6)
+### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6) — **(a) and (c) DONE 2026-09-05; (b) probed, Lean unwritten**
 
-Everything here lands on the XLA-SAME spelling from 3.0.
+**(a) DONE.** `formalization.yaml`'s headline row now names `mobilenetv2_full_has_vjp_at_correct`
+in `MobileNetV2FullVJP.lean` — the 17-block paper net — where it named the 2-block generic in
+`MobileNetV2.lean`. The blueprint (`content.tex:6249`) already had the right theorem.
 
-**(a) T1 exists; the headline does not point at it.** `MobileNetV2FullVJP.lean` folds the whole
-`[t,c,n,s]` table: `mobilenetv2_full_has_vjp_at` / `_correct` over the `MNV2PaperWeights` bundle,
-pointwise (relu6 is kinked, so `_at` is the form), with the shape check
-`mobilenetv2ForwardPaper_eq_chain` already audited. `formalization.yaml`'s headline
-`mobilenetv2_has_vjp_at_correct` is still the 2-block generic net in `MobileNetV2.lean`. Point
-the yaml row (and the blueprint's `\lean{}` tag) at `mobilenetv2_full_has_vjp_at_correct`. A
-doc change; done when the row's file is `MobileNetV2FullVJP.lean`.
+**(b) PROBED; the forward has a number, the backward does not.** `scripts/float_budget_envelope.py`
+gains `mnv2_paper_{plan,eval_chain,back_chain}` and `verify_mnv2_paper` (354 rounded inequalities
+re-asserted). The block table is read from TWO Lean sources rather than a fourth hand-written
+copy — kinds and spatial dims from `mobilenetv2ForwardPaper`, widths from `paperSig` — and the
+loader asserts they name the same 17 blocks and that "has an identity skip" agrees with
+`ic == oc`. It reproduces the shipped 6-block numbers exactly, which is what makes the extension
+trustworthy.
 
-**(b) T4 and T5, the numbers. Probe first.** Extend `scripts/float_budget_envelope.py`'s
-`mnv2_eval_chain` / `mnv2_back_chain` to the `[t,c,n,s]` table (the block list is
-`MobileNetV2Render.lean`'s `paperSig`; do not hand-copy it a fourth time, read it from one
-place). Expect the eval-BN forward fold to grow about 4.8 orders per BN site (20 sites gave
-1.444e96 with the relu6-clamped window 2154), so 52 sites lands near 1e250 with the window
-unchanged; expect the backward, 1e152 at 6 blocks, to pass 1e300 at 17. `norm_num` refuses
-numerals past ~1e300, so the backward will need `FloatBridgesTo.capped` at the BN sites the way
-the LayerNorm nets do, or an operating-point `S` below the ε-floor stated in the hypothesis.
-Decide from the probe, then write `MobileNetV2PaperFloatBudget.lean` /
-`MobileNetV2PaperBackFloatBudget.lean` beside the 6-block files, not replacing them (the 6-block
-numbers stay as the reduced net's; the yaml gets new rows). Mirror: `MobileNetV2FloatBudget.lean`
-(the `Env` structure + bottom-up `have` chain; the `verify_*` pass; the inhabitation section).
-Done when `verify_mnv2_paper` re-asserts every rounded row and both files compile.
+| | window | budget | statable |
+|---|---|---|---|
+| forward, uncapped fold at the ε-floor | 2.152e4 | 2.104e266 | no |
+| forward, **capped at the 52 BN sites** | 2.152e4 | **8.176e16** | yes |
+| forward, uncapped at `\|istd\| <= 32` | 2.152e4 | 3.228e215 | yes |
+| backward, shipped `\|istd\| <= 16` | 1.246e323 | 1.296e322 | no |
+| backward, sigma^2 ~ 1 (crudest possible) | 4.901e260 | 2.199e260 | no |
 
-**(c) T6, the certified backward tie.** `MobileNetV2WholeBackCertifiedTie.lean` does the 6-block
-net with the blocks opaque; the 17-block tie is the same assembly over 17 opaque block
-backwards. Use twelve-plus top-level `def`s for the chain (the `let`-chain and the whole-net
-`rfl` both failed on ConvNeXt at depth 12, the top-level defs took 2.4 s), state the
-single-level reductions applied, and write the shape check
-`mobilenetv2ForwardPaper_eq_chain` as a `rfl` first. Done when the tie compiles, the shape
-check is used by it, and the numeral in (b)'s backward file is unchanged or the change is
-explained.
+Three things the scoping did not anticipate. The uncapped forward is 16 orders worse than the
+"near 1e250" predicted. The window grows 2154 to 2.152e4, and that is entirely the HEAD width
+(dense fan-in 1280 against the reduced net's 128) — relu6 still pins the body flat, so the
+prediction that the window would not move was right about the part it was about. And **capping is
+worth more than the eleven extra blocks cost**: 8.176e16 is 79 orders SMALLER than the shipped
+uncapped 6-block number (1.444e96).
+
+⛔ **The backward has no number and no cap rescues it**, because a cap's budget is `2·window` and
+the window itself is past the ceiling. There is no loose leaf either — ablated per §5 before
+blaming the depth: the BN γ bound 1.69 → 1 buys 12 orders and the conv kernel bound 2.72 → 1 buys
+24, both MEASURED bounds rather than bounds discarded one lemma down, and only their simultaneous
+fiction gets under. This is EfficientNet-B0's backward situation (1e431) and takes the same
+answer.
+
+**Left in (b):** `MobileNetV2PaperFloatBudget.lean` for the capped forward, and the §1 row plus
+the backward finding in `planning/float_budget_numbers.md`. ⛔ Label it honestly when written: the
+`min` selects the CAP at 40 of the 52 sites, so it is mostly the triangle inequality; what the
+output numeral says is that from the last cap (`head.bn`) the three remaining stages fold that
+capped error to 8.176e16. No `MobileNetV2PaperBackFloatBudget.lean` — there is nothing to state.
+
+**(c) DONE.** `MobileNetV2PaperWholeBackCertifiedTie.lean`:
+`mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp`, the 6-block tie at depth 17. No new mathematics —
+the four endpoint leaf ties are reused verbatim at the paper widths (32-channel stem,
+1280-channel head) and the seventeen blocks stay opaque, so the composition is checked between
+variables and the file elaborates in ~3 s. What depth forced is `mnv2OpaqueA0 … A17`, one prefix
+def per slot, because the 6-block statement spells each hypothesis's running activation as a
+nested application — unreadable by block 5 and quadratic in the writing, the wall
+`MobileNetV2FullVJP.lean` hit and answered the same way.
+
+⛔ **The shape check cannot be a one-step `rfl`.** `mobilenetv2ForwardPaper_eq_slots` goes through
+`mobilenetv2ForwardPaper_eq_chain` and then unfolds the prefixes by name; a bare `rfl` takes a
+kernel deterministic timeout after three minutes, and adding `Function.comp_assoc` to the `simp`
+set reproduces it. Parenthesise the head group the way `mnv2HeadW` associates and the peeled goal
+closes with no associativity step at all.
 
 **(d) T7, optional.** `MobileNetV2JacobianSealFull.lean` seals 17 blocks at 2-channel toy dims
 and `MobileNetV2SealRealistic.lean` seals 2 blocks at 224. The two mechanisms compose (zeroed

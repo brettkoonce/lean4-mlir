@@ -37,7 +37,7 @@ Window is the certified bound on the output's magnitude; budget is the bound on 
 between the float output and the real output, per logit (forwards) or per input pixel
 (backwards, on loss cotangents of magnitude at most 1). Inputs are on the unit box.
 
-The four whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
+The five whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
 
 | net | tie | shape check | apex kind |
 |---|---|---|---|
@@ -45,6 +45,7 @@ The four whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
 | MobileNetV2 | `mnv2InputGrad_eq_mobilenetv2_vjp` | `mobilenetv2Forward_full_pc_eq_chain` | `HasVJPAt` (smooth point) |
 | ConvNeXt-T | `convnextInputGrad_eq_convNextForwardTCh_vjp` | `convNextForwardTCh_eq_chain` | `HasVJP` (everywhere) |
 | EfficientNet-B0 | `efficientnetInputGradB_eq_efficientnetForwardB_vjp` | `efficientnetForwardB_eq_chain` | `HasVJP` (everywhere) |
+| MobileNetV2, 17-block paper | `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | `mobilenetv2ForwardPaper_eq_slots` | `HasVJPAt` (smooth point) |
 
 The tie says the hand-written backward chain the number is stated on IS the certified whole-net
 VJP, not merely that each of its pieces is. The shape check says the chain of opaque block
@@ -142,6 +143,22 @@ vacuous, and a tight bound needs measured Jacobians that are not static.
    a bias breaks that on a forward.** Factoring a BatchNorm-backward site's gain as one constant
    per feature-map size (`Maps.bnPerChannelBackGain`) took ResNet-34's chain from 39 minutes
    and 41 GB, not finishing, to 84 s and 3.8 GB.
+
+7. **A depth a fold cannot reach, ablated rather than assumed.** MobileNetV2's backward exists
+   at six blocks (4.750e153 / 1.076e152, no operating point) and does not exist at seventeen. The
+   shipped operating point `|istd| <= 16` gives a WINDOW of 1.246e323, so a cap cannot rescue it
+   either — a cap's budget is `2·window`. Nothing in the family gets under: `|istd| <= 4` is
+   6.769e291 and sigma^2 ~ 1, the crudest setting there is, is 4.901e260. And the reason is the
+   depth and not a loose leaf: dropping the BN gamma bound from its measured 1.69 to 1 buys 12
+   orders, dropping the conv kernel bound from 2.72 to 1 buys 24, and only their simultaneous
+   fiction gets under the ceiling. Per block the chain costs 17 to 21 orders, dominated by the
+   three BatchNorm-backward sites at x5.4e3 each. Same shape as EfficientNet-B0's backward at 16
+   MBConvs (1e431), and the same answer: report that there is no number, do not shave.
+
+   ⭐ Its FORWARD is the opposite result. Uncapped the 52-site fold is 2.104e266 — no theorem —
+   but capped at the BatchNorm sites it is 8.176e16, which is 79 orders SMALLER than the shipped
+   UNCAPPED six-block number (1.444e96). Capping the normalisation sites is worth more than the
+   eleven extra blocks cost. ⛔ Label it: the `min` selects the cap at 40 of the 52 sites.
 
 ## 4. What the thread found in the repo
 

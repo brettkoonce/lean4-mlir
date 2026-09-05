@@ -580,6 +580,16 @@ lean_lib «Certs» where
              -- instantiated at IS the committed forward. That is the shape check §3.10's wrong
              -- pool slipped past. ⭐ No drift found here: the mnv2 backward number is unchanged.
              `LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie,
+             -- ⭐⭐ And the SAME TIE at MobileNetV2's PAPER depth — all seventeen bottlenecks
+             -- (proofs_tier_to_paper_nets 3.2c). The six-block file above is the ch7
+             -- representative; this is the net `mobilenetv2ForwardPaper` is. The blocks stay
+             -- opaque, so the composition is checked between variables and the file costs ~3 s;
+             -- what depth 17 forced is `mnv2OpaqueA0 … A17`, prefix defs for the running
+             -- activations, because the nested-application hypotheses of the 6-block statement
+             -- are quadratic in the writing. ⛔ `mobilenetv2ForwardPaper_eq_slots` cannot be a
+             -- one-step `rfl` — the kernel times out at 3 min; it peels through
+             -- `mobilenetv2ForwardPaper_eq_chain` and then unfolds the prefixes by name.
+             `LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie,
              -- ⭐⭐ And for the whole EfficientNet-B0, the fourth net to get one:
              -- efficientnetInputGradB(pinned) = (efficientnetB_has_vjp ...).backward, at every
              -- batch size, with efficientnetForwardB_eq_chain as the shape check. It had to wait

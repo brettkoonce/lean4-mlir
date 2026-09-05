@@ -127,6 +127,7 @@ import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
@@ -2958,6 +2959,23 @@ open Proofs
 #print axioms Proofs.mobilenetv2PC_has_vjp_at
 #print axioms Proofs.mobilenetv2Forward_full_pc_eq_chain
 #print axioms Proofs.mnv2InputGrad_eq_mobilenetv2_vjp
+-- ⭐⭐ AND THE SAME TIE AT THE PAPER DEPTH — all SEVENTEEN bottlenecks
+-- (MobileNetV2PaperWholeBackCertifiedTie.lean, ~3 s; proofs_tier_to_paper_nets 3.2c). The file
+-- above is the ch7 representative — the [t,c,n,s] table's shape but not its depth; this one is
+-- the net mobilenetv2ForwardPaper IS. No new mathematics: the four endpoint leaf ties are reused
+-- verbatim at the paper widths (32-channel stem, 1280-channel head) and the seventeen blocks stay
+-- OPAQUE, so the composition is checked between variables.
+-- ⚠ What depth 17 forced is mnv2OpaqueA0 … A17: one prefix def per slot, because the 6-block
+-- statement spells each hypothesis's running activation as a nested application and that is
+-- unreadable by block 5 and quadratic in the writing (the same wall MobileNetV2FullVJP.lean hit
+-- and answered with mnv2Pre1 … mnv2Pre17). They are PLAIN defs — the closing rfl unfolds them.
+-- ⛔ mobilenetv2ForwardPaper_eq_slots is NOT a one-step rfl and cannot be made one: at depth 19
+-- the kernel takes a deterministic timeout after 3 minutes, and adding Function.comp_assoc to the
+-- simp set reproduces it. It goes through mobilenetv2ForwardPaper_eq_chain (which peels one
+-- mnv2Pre layer at a time) and then unfolds the prefixes by name, ~3 s.
+#print axioms Proofs.mobilenetv2PaperPC_has_vjp_at
+#print axioms Proofs.mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp
+#print axioms Proofs.mobilenetv2ForwardPaper_eq_slots
 -- ⭐⭐ AND FOR THE WHOLE EFFICIENTNET-B0, the fourth net to get one
 -- (EfficientNetWholeBackCertifiedTie.lean, ~2 s): efficientnetInputGradB, with its stem/head
 -- BatchNorm and swish slots pinned to the certified per-op backwards, IS
