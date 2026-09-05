@@ -20,10 +20,11 @@ what to do if one of these files is opened again.
 
 Every row is a theorem in `LeanMlir/Proofs/Float/`, closed over the real leaves (no
 `FloatBridgesTo` hypothesis left), tied to the committed net definition and, for the forwards,
-to the rendered graph — with one exception, flagged in the table: the seventeen-block MobileNetV2
-row ties each of its blocks to the committed inference block abbreviation by `rfl` but has no
-whole-net graph tie, because that paper net's eval twin has no typed graph in Lean (the
-sixteen-block EfficientNet-B0 row has one, `EfficientNetFullB0Eval.lean`, since 3.3(e)). Every numeral
+to the rendered graph — with no exceptions left. The two paper-net rows had none when their
+numbers landed, because neither eval twin existed; `MobileNetV2FullPaperEval.lean` and
+`EfficientNetFullB0Eval.lean` (packages 3.2(e) and 3.3(e), both 2026-09-05) are those twins, and
+`mnv2Paper_float_logits_le_committed` / `b0Full_float_logits_le_committed` are the restatements.
+Every numeral
 was produced by `scripts/float_budget_envelope.py` in the leaves' own exact-rational arithmetic,
 re-asserted by that script's `verify_*` pass, and then checked again by the kernel. All are
 3-axiom clean and listed in `tests/AuditAxioms.lean` and `formalization.yaml`
@@ -35,7 +36,7 @@ re-asserted by that script's `verify_*` pass, and then checked again by the kern
 | ResNet-34 forward | inference BN | 3.152e211 | 1.548e209 | fold | `r34_float_logits_le` | `Resnet34FloatBudget.lean` |
 | ResNet-34 forward | training BN, per example | 8.748e80 | 1.752e81 | cap | `r34_train_float_logits_le` | `Resnet34TrainFloatBudget.lean` |
 | MobileNetV2 forward | inference BN | 2.154e3 | 1.444e96 | fold | `mnv2_float_logits_le` | `MobileNetV2FloatBudget.lean` |
-| MobileNetV2 forward, 17-block paper | inference BN, 52 sites, capped at every one; blocks tied, no graph tie | 2.152e4 | 8.176e16 | cap | `mnv2Paper_float_logits_le` | `MobileNetV2PaperFloatBudget.lean` |
+| MobileNetV2 forward, 17-block paper | inference BN, 52 sites, capped at every one; tied to the typed eval graph; any class count | 2.152e4 | 8.176e16 | cap | `mnv2Paper_float_logits_le` | `MobileNetV2PaperFloatBudget.lean` |
 | EfficientNet-B0 forward | inference BN, any batch size | 2.580e55 | 8.408e210 | fold | `b0_float_logits_le` | `EfficientNetFloatBudget.lean` |
 | EfficientNet-B0 forward, 16-block paper | inference BN, 49 sites; the sigmoid of each of the 16 SE gates capped, nothing else; tied to the typed eval graph; any batch size, any class count | 1.886e279 | 2.416e287 | cap | `b0Full_float_logits_le` | `EfficientNetFullFloatBudget.lean` |
 | ConvNeXt-T forward | channel LayerNorm | 4.871e130 | 9.738e130 | cap | `cnx_float_logits_le` | `ConvNeXtFloatBudget.lean` |
@@ -122,6 +123,12 @@ given saved-activation accuracies this net's forward cannot supply.
 `bnBatchLA` reduces across examples and the number grows with the batch (2.880e194 at
 `N = 256`). ResNet-34's training forward is per example for the same reason. The six inference
 forwards hold at any batch size.
+
+**Two paper nets are now stated at any class count.** MobileNetV2's and B0's heads are generic in
+`nCls`, because `Maps.dense`'s envelope depends on the fan-in and never on the output count. That
+closes a real qualification: both `|·| ≤ 28/10` and `|·| ≤ 41/10` were measured on the 1000-class
+checkpoints, while the committed artifacts are 10-class, so the bound had been a measurement on
+the body and an assumption on the head. One theorem now covers both artifacts.
 
 **The sentence for the book.** The fold certifies the shape and composition of the float
 program against the certified real program and is checked by the kernel; its numerical value is

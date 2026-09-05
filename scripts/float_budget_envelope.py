@@ -1938,6 +1938,24 @@ def mnv2_paper_plan():
         ic, _mid, oc = width[t]
         assert (k == "Resid") == (ic == oc), f"{t}: forward says {k}, signature says {ic}->{oc}"
 
+    # ⚠ Three lists for one net: the EVAL twin (`MobileNetV2FullPaperEval.lean`, 3.2(e)) spells
+    # the ladder a third time — `MNV2PaperWeightsEval`'s widths and `mobilenetv2ForwardPaperEval`'s
+    # kinds and spatial sizes. Pin both to the pair above, block for block.
+    esrc = _lean("LeanMlir/Proofs/Architectures/MobileNetV2FullPaperEval.lean")
+    esig = esrc.split("structure MNV2PaperWeightsEval")[1].split("\n\n")[0]
+    ewidth = {}
+    for tag, ic, oc in re.findall(r'(b\d+) : IVWNoExpEval (\d+) (\d+)', esig):
+        ewidth[tag] = (int(ic), int(ic), int(oc))
+    for tag, ic, mid, oc in re.findall(r'(b\d+) : IVWEval (\d+) (\d+) (\d+)', esig):
+        ewidth[tag] = (int(ic), int(mid), int(oc))
+    efwd = esrc.split("noncomputable def mobilenetv2ForwardPaperEval")[1]
+    efwd = efwd.split("namespace StableHLO")[0]
+    ekind = {"NoExp": "NoExp", "Resid": "Resid", "ExpOnly": "ExpOnly", "Strided": "Strided"}
+    eshape = {tag: (ekind[k], int(h), int(w)) for k, h, w, tag in
+              re.findall(r'iv(NoExp|ExpOnly|Resid|Strided)EvalW (\d+) (\d+) ε w\.(b\d+)', efwd)}
+    assert ewidth == width, f"eval record differs from paperSig: {ewidth} vs {width}"
+    assert eshape == shape, f"eval forward differs from mobilenetv2ForwardPaper: {eshape} vs {shape}"
+
     order = sorted(shape, key=lambda t: int(t[1:]))
     plan = [(t, kindOf[shape[t][0]], width[t][0], width[t][1]) for t in order]
     back = [(t, kindOf[shape[t][0]], width[t][0], width[t][1], width[t][2],

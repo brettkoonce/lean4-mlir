@@ -42,7 +42,7 @@ shipped config count as paper-net statements.
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
-| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train BN (eval: 3.2e) | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
+| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 
@@ -113,7 +113,7 @@ Gates: `lake build Certs` 3956 green, `lake env lean tests/AuditAxioms.lean` 3-a
 `lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`. No renderer or `.mlir`
 change — this is a den-level tie, as r34/mnv2 are.
 
-### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6) — **(a)–(c) DONE 2026-09-05; (e) OPEN**
+### 3.2 MobileNetV2 at 17 blocks (T1, T4, T5, T6) — **(a)–(c), (e) DONE 2026-09-05**
 
 **(a) DONE.** `formalization.yaml`'s headline row now names `mobilenetv2_full_has_vjp_at_correct`
 in `MobileNetV2FullVJP.lean` — the 17-block paper net — where it named the 2-block generic in
@@ -200,72 +200,51 @@ skip blocks are the affine shift `a ↦ a + 3`; γ-scaling keeps BN inside `(0,6
 a 17-block 224 seal is their product. Skip unless a witness at the paper net is wanted for the
 blueprint.
 
-**(e) OPEN — the whole-net eval tie, and the artifact it would end at.** One session.
+**(e) DONE 2026-09-05 — the whole-net eval tie, and it ends at bytes.** Written straight after
+3.3(e), whose file it mirrors; ~2 s to elaborate, and the number did not move.
 
-**Gap.** `mnv2Paper_float_logits_le` is about `mnv2PaperEvalForward`, the record-bundled
-composition in `MobileNetV2PaperFloatBudget.lean`. Each of the seventeen blocks is `rfl`-tied to
-the abbreviation the committed inference forward is built from
-(`MnvBlock.{body,strided,res}Fwd_eq_pcEval`, `MnvBlockNoExp.fwd_eq_pcEval`), but the WHOLE net is
-tied to nothing: the paper net's eval twin has no ℝ-def and no typed `SHlo` graph in Lean.
-`MobileNetV2RenderPCEval.lean` covers the six-block net; `MobileNetV2FullPaper.lean` is at
-training BN, the world the VJP and the graph live in. So `MobileNetV2FloatBudget.lean` has a
-`*_committed` restatement and this file does not.
+`Architectures/MobileNetV2FullPaperEval.lean` (318 lines): `IVWEval` / `IVWNoExpEval` /
+`MNV2PaperWeightsEval nCls` (γ, β and the two frozen statistics per site, **one shared ε** as the
+forward's argument — `mobilenetv2Forward_full_pc_eval`'s convention and the render's, where the
+training bundle carries one per site), the four block wrappers over
+`ivProjectPCEval`/`ivDepthwisePCEval`/`ivDepthwiseStridedPCEval`/`invresBodyPCEval`/
+`invresBodyStridedPCEval`, `mobilenetv2ForwardPaperEval` in nested-application form, the four
+block-kind graphs with `bnPerChannelEvalF`, their `_faithful` lemmas, then
+`mobilenetv2FwdGraphPaperEval` + `_faithful` (one `rw` per block kind, then `rfl`).
 
-⭐⭐ **And this rung is worth more here than the one it mirrors.** The six-block eval graph
-denotes a net with NO committed artifact — `verified_mlir/` has
-`mobilenetv2_reduced_train_step.mlir` and no reduced eval forward — so that number's "tie to the
-rendered graph" ends at a typed graph. The paper net's eval forward IS shipped, twice:
-`mobilenetv2_fwd_eval.mlir` (315 inputs — `%x`, `paperSig`'s 210 params, 104 stat slots) and its
-1000-class twin `mobilenetv2in_fwd_eval.mlir`. This tie ends at bytes.
+In `MobileNetV2PaperFloatBudget.lean`: `MnvPaperWeights.toEval`,
+`mnv2PaperEvalForward_eq_paperEval`, `mnv2PaperEvalGraph_faithful`,
+`mnv2Paper_float_logits_le_committed`. ⭐ The scoping's first suggestion — define
+`mnv2PaperEvalForward` AS `mobilenetv2ForwardPaperEval (W.toEval ε)` outright — was not needed and
+not taken: the separate spelling plus the equation is what B0 had just used, and the equation
+closes in ~2 s by rewriting with the four `*_eq_pcEval` lemmas and the four eval wrappers. Those
+four `rfl`s said each BLOCK is the committed abbreviation; this says the whole LADDER is.
 
-**Order.**
+⭐ **Point 2 delivered, and it is the reason to prefer this graph to the two that exist.** The
+SSA names are `bnSiteP`'s and `irSig`'s — `%stnmu`/`%stnvar`, `%b{k}enmu`/`%b{k}dnmu`/`%b{k}pnmu`
+and their `nvar` peers, `%hnmu`/`%hnvar`, around `%We{k}`/`%ge{k}`/`%bte{k}`/`%Wd{k}`/`%gd{k}`/
+`%btd{k}`/`%Wp{k}`/`%gp{k}`/`%btp{k}` — so the typed graph diffs against `mobilenetv2_fwd_eval`
+line for line. The six-block eval graph's `%mue1`/`%vare1` matches no artifact and could not; this
+net's own TRAINING graph writes `%b17gp` where the render emits `%gp17`.
 
-1. `LeanMlir/Proofs/Architectures/MobileNetV2FullPaperEval.lean`, the eval twin of
-   `MobileNetV2FullPaper.lean`: records (`IVW`/`IVWNoExp` plus μ/v per site — ⚠ **one shared ε**,
-   as `mobilenetv2Forward_full_pc_eval` and the render both do, where the training file carries a
-   per-site ε), the four block wrappers in the committed `ivExpandPCEval`/`ivDepthwisePCEval`/
-   `ivDepthwiseStridedPCEval`/`ivProjectPCEval` vocabulary, `mobilenetv2ForwardPaperEval`, the four
-   block graphs with `bnPerChannelEvalF`, their `_faithful` lemmas, then
-   `mobilenetv2FwdGraphPaperEval` + `_faithful`. Two mirrors: that file for the structure,
-   `MobileNetV2RenderPCEval.lean` for the eval nodes.
-2. ⚠ **SSA names: `bnSiteP`'s, not the six-block file's.** The render names the stat slots
-   `%stnmu`/`%stnvar`, `%b{k}{en,dn,pn}{mu,var}`, `%hnmu`/`%hnvar`;
-   `mobilenetv2FwdGraphFullPCEval` uses `%mue1`/`%vare1`, which matches no artifact and could not,
-   since its net has none. Names are pretty-printing metadata and do not enter `den` — matching
-   them is what lets a reader diff the typed graph against the committed text.
-3. In `MobileNetV2PaperFloatBudget.lean`: `MnvPaperWeights.toEval`,
-   `mnv2PaperEvalForward_eq_paperEval` (`rfl`), `mnv2PaperEvalGraph_faithful`,
-   `mnv2Paper_float_logits_le_committed`. ⭐ Try defining `mnv2PaperEvalForward` AS
-   `mobilenetv2ForwardPaperEval (W.toEval ε)` outright — one spelling, no `rfl` needed — and fall
-   back to the separate spelling plus the `rfl` if the `.comp` chain will not typecheck against a
-   17-deep nested def.
-4. ⭐ **Make the head generic in `nCls` while there, and the profile becomes exact.**
-   `Maps.dense`'s envelope depends on the fan-in `1280` and never on the output count, so
-   `MnvHead 1280 nCls` carries the same two numerals verbatim and one theorem covers both shipped
-   eval artifacts. It also closes a real qualification in the header: the 3,504,872-entry
-   checkpoint the profile is measured on is the **1000-class** net, so at 10 classes
-   `|·| ≤ 28/10` is a measurement on all 52 convolutions and 52 BatchNorms and an assumption on
-   the `1280 × 10` head.
+⭐ **Point 4 delivered, and it closed a real qualification rather than a cosmetic one.** The head
+is generic in `nCls` (`MnvPaperWeights nCls w' β' G Bb Mb`), since `Maps.dense`'s envelope depends
+on the fan-in `1280` and never on the output count, so both numerals hold verbatim and one theorem
+covers `mobilenetv2_fwd_eval` and its 1000-class twin `mobilenetv2in_fwd_eval`. The `|·| ≤ 28/10`
+profile was measured on the 1000-class checkpoint, so before this the bound was a measurement on
+52 convolutions and 52 BatchNorms and an ASSUMPTION on the `1280 × 10` head; now it is neither.
 
-**Traps.**
+⛔ **The artifact's input count is 263, not the 315 this section scoped.** `paperSig` at
+`convBias := false` is 158 tensors (the render folds each conv bias into the BatchNorm that
+follows it), plus 104 statistic slots and `%x`. The 210 in the scoping is the TRAIN step's
+SGD-updated parameter count, a different quantity; the graph still carries a bias slot per conv
+(`%bs`, `%bd{k}`, …) that the signature has no argument for, which is the one naming difference
+left and does not enter `den`.
 
-* **Two lists for one net.** This adds a third spelling of the ladder (the eval forward and its
-  graph) and a fourth of the widths. The forward/graph pair is pinned by its own faithfulness
-  theorem and the float file's spelling by the `rfl`; the WIDTHS are pinned only by
-  `scripts/float_budget_envelope.py`'s `mnv2_paper_plan`, which today asserts
-  `mobilenetv2ForwardPaper` and `paperSig` name the same 17 blocks. Extend that loader to read the
-  eval file too, or the new record is the one list nothing checks.
-* **Elaboration.** `mobilenetv2FwdGraphPaper_faithful` is `simp only [...]` then `rfl` at 17
-  blocks; the eval twin adds 52 `bnPerChannelEvalF_faithful` rewrites and needs `maxRecDepth`
-  raised (the six-block eval needed 10000). §5's discipline applies unchanged.
-* **The eval graph must be the same net as the train step whose statistics it consumes** —
-  `mnv2FwdEvalFaithfulV`'s own header comment, and the reason the padding thread mattered. Both
-  are XLA-`SAME` since 2026-09-05, so this is now a check rather than a risk.
-
-**Done when** `den (mobilenetv2FwdGraphPaperEval …) = mobilenetv2ForwardPaperEval …` compiles,
-`mnv2Paper_float_logits_le_committed` states the number with that forward on the real side, the
-`formalization.yaml` row and `planning/float_budget_numbers.md` §1's "one exception" note both
-come out, and the four gates are green. The mathematics is nil; the cost is elaboration.
+⚠ **Three lists for one net, as the trap predicted.** `mnv2_paper_plan` now reads the eval file as
+a third source and asserts `MNV2PaperWeightsEval`'s widths and `mobilenetv2ForwardPaperEval`'s
+kinds and spatial sizes agree with `paperSig` and `mobilenetv2ForwardPaper`, block for block —
+the same extension 3.3(e) made for B0.
 
 ### 3.3 EfficientNet-B0 at 16 blocks (T4, T5, T6) — **(a), (c), (e) DONE 2026-09-05; (b) probed, declined**
 
@@ -512,9 +491,9 @@ either answer should be written into `formalization.yaml` 4d, which today says n
 
 ## 6. Files
 
-New, by package: 3.1 none; 3.2 `MobileNetV2PaperFloatBudget.lean` and
-`MobileNetV2PaperWholeBackCertifiedTie.lean` landed, `MobileNetV2FullPaperEval.lean` is 3.2(e)'s
-(⛔ `MobileNetV2PaperBackFloatBudget.lean` is CANCELLED, there is no backward number to state, and
+New, by package: 3.1 none; 3.2 `MobileNetV2PaperFloatBudget.lean`,
+`MobileNetV2PaperWholeBackCertifiedTie.lean` and `Architectures/MobileNetV2FullPaperEval.lean`
+(3.2(e)) all landed (⛔ `MobileNetV2PaperBackFloatBudget.lean` is CANCELLED, there is no backward number to state, and
 the VJP was already in `MobileNetV2FullVJP.lean`); 3.3 `EfficientNetFullFloatBudget.lean`,
 `EfficientNetFullWholeBackFloatBridge.lean` and `EfficientNetFullWholeBackCertifiedTie.lean`
 landed, as did `Architectures/EfficientNetFullB0Eval.lean` for 3.3(e) (⛔

@@ -99,6 +99,7 @@ import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Float.Resnet34TrainFloatBudget
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
+import LeanMlir.Proofs.Architectures.MobileNetV2FullPaperEval
 import LeanMlir.Proofs.Float.MobileNetV2PaperFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
@@ -2278,6 +2279,28 @@ open Proofs
 #print axioms Proofs.mnv2PaperEvalBridge_mag_le
 #print axioms Proofs.mnv2PaperEvalBridge_fresh_le
 #print axioms Proofs.mnv2Paper_float_logits_le
+-- ⭐ And the whole-net step this file shipped without (3.2(e), 2026-09-05): the paper net's EVAL
+-- twin — MobileNetV2FullPaperEval.lean, mobilenetv2ForwardPaperEval at 52 frozen-statistic sites,
+-- its typed graph and mobilenetv2FwdGraphPaperEval_faithful — so mnv2Paper_float_logits_le_committed
+-- states the number with the rendered net on the real side. The four *_eq_pcEval rfls said each
+-- BLOCK is the committed abbreviation; mnv2PaperEvalForward_eq_paperEval says the whole LADDER is.
+-- ⭐ The graph's SSA names are bnSiteP's and irSig's (%stnmu, %b{k}enmu/%b{k}dnmu/%b{k}pnmu, %hnmu,
+-- around %We{k}/%ge{k}/%bte{k}/…), so it diffs against mobilenetv2_fwd_eval's 263 inputs line for
+-- line — where the SIX-block eval graph's %mue1 matches no artifact (its net has none) and this
+-- net's own TRAINING graph writes %b17gp for the render's %gp17.
+-- ⭐ The head is now generic in nCls: Maps.dense's envelope depends on the fan-in 1280 and never on
+-- the output count, so one theorem covers the committed 10-class artifact and the 1000-class net
+-- the |·| ≤ 28/10 profile was actually measured on — closing a real qualification in the header.
+#print axioms Proofs.mobilenetv2ForwardPaperEval
+#print axioms Proofs.StableHLO.ivNoExpGraphEvalW_faithful
+#print axioms Proofs.StableHLO.ivExpOnlyGraphEvalW_faithful
+#print axioms Proofs.StableHLO.ivResidGraphEvalW_faithful
+#print axioms Proofs.StableHLO.ivStridedGraphEvalW_faithful
+#print axioms Proofs.StableHLO.mobilenetv2FwdGraphPaperEval_faithful
+#print axioms Proofs.MnvPaperWeights.toEval
+#print axioms Proofs.mnv2PaperEvalForward_eq_paperEval
+#print axioms Proofs.mnv2PaperEvalGraph_faithful
+#print axioms Proofs.mnv2Paper_float_logits_le_committed
 -- The EfficientNet-B0 INFERENCE forward and its graph — the eval twin of
 -- efficientnetFwdGraphB_faithful, and the BN mode a whole-net B0 float number can be stated at
 -- (the training one's modulus is quadratic in the window, so its fold squares at each of the ten

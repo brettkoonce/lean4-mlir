@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
+import LeanMlir.Proofs.Architectures.MobileNetV2FullPaperEval
 
 /-! # A NUMBER for the PAPER MobileNetV2: seventeen bottlenecks, and the cap that makes it statable
 
@@ -48,11 +49,11 @@ seventeen-block net — global max `2.7157`, 99.99th percentile `1.5347`, exactl
 checkpoint of the net being bounded — ⚠ with one qualification. Those entries are the
 **1000-class** net (the twin `@mobilenetv2_fwd_eval` renders as `mobilenetv2in_fwd_eval.mlir`),
 and this file's classifier is the committed 10-class one, so the bound is a MEASUREMENT on all 52
-convolutions and 52 BatchNorms and an ASSUMPTION on the `1280 × 10` head. `Maps.dense`'s
-envelope depends on the fan-in `1280` and never on the output count, so both numerals hold
-verbatim at 1000 classes; making the head generic in `nCls` is
-`planning/proofs_tier_to_paper_nets.md` 3.2(e). `ε ≥ 10⁻⁵` puts the inference inverse-stddev
-under `317`.
+convolutions and 52 BatchNorms and an ASSUMPTION on the `1280 × 10` head. ⭐ The head is therefore
+GENERIC in `nCls`: `Maps.dense`'s envelope depends on the fan-in `1280` and never on the output
+count, so the same two numerals hold verbatim at both, and one theorem covers the committed
+10-class artifact and the 1000-class one the profile was measured on. `ε ≥ 10⁻⁵` puts the
+inference inverse-stddev under `317`.
 
 ⚠ **The one hypothesis this number rests on, named.** The deployed inverse-stddev is a device
 `rsqrt` with no IEEE specification, so it is *modelled*: `DeviceRsqrt ε es` (shared with
@@ -74,13 +75,17 @@ dimension-polymorphic, so one proof covers every width in the table). The ladder
 block at which spatial size, with which skip — is `mobilenetv2ForwardPaper`'s, read off the same
 `[t,c,n,s]` table, and the widths are `paperSig`'s.
 
-⛔ What is NOT closed is the whole-net step: `mobilenetv2ForwardPaper` is at TRAINING BatchNorm,
-the world its VJP and its typed graph live in, and the paper net's *eval* twin has no ℝ-def and
-no typed graph in Lean at all (`MobileNetV2RenderPCEval.lean` covers the six-block net only). So
-there is no whole-net graph-faithfulness theorem here, and no restatement of the number with the
-rendered net on the real side — that is the one rung `MobileNetV2FloatBudget.lean` has and this
-file does not. Closing it means the eval twin of `MobileNetV2FullPaper.lean`'s graph section:
-mechanical, and scoped separately in `planning/proofs_tier_to_paper_nets.md` 3.2(b).
+**The tie is closed at the graph.** `mobilenetv2ForwardPaper` is at TRAINING BatchNorm, the world
+its VJP and its typed graph live in, so the number could not end there; the paper net's eval twin,
+`mobilenetv2ForwardPaperEval` (`Architectures/MobileNetV2FullPaperEval.lean`, 52 frozen-statistic
+sites, the typed graph `mobilenetv2FwdGraphPaperEval` and its faithfulness), was built for this
+file. `mnv2PaperEvalForward_eq_paperEval` rewrites the record-bundled forward onto it,
+`mnv2PaperEvalGraph_faithful` carries the graph's faithfulness the rest of the way, and
+`mnv2Paper_float_logits_le_committed` states the number with that net on the real side. ⭐ That
+graph's SSA names are `bnSiteP`'s and `irSig`'s — `%stnmu`, `%b{k}enmu`/`%b{k}dnmu`/`%b{k}pnmu`,
+`%hnmu`, around `%We{k}`/`%ge{k}`/`%bte{k}`/… — so it diffs against `mobilenetv2_fwd_eval`'s 263
+inputs line for line, where the six-block eval graph's `%mue1` matches no artifact and this net's
+TRAINING graph writes `%b17gp` for the render's `%gp17`.
 
 Provenance for the numerals: `scripts/float_budget_envelope.py` (`mnv2_paper_eval_chain`), which
 reads the block table from two Lean sources rather than a fourth hand-written copy, folds the
@@ -360,7 +365,7 @@ theorem MnvBlock.resMapsC {ic mid h w : Nat} (B : MnvBlock ic mid ic w' β' G Bb
     ⭐ The widths are `paperSig`'s (`MobileNetV2Render.lean`), the committed func-arg signature
     of `@mobilenetv2_fwd_eval`, and the kinds are `mobilenetv2ForwardPaper`'s; the probe asserts
     the two agree, block for block, including that "has an identity skip" is `ic = oc`. -/
-structure MnvPaperWeights (w' β' G Bb Mb : ℝ) where
+structure MnvPaperWeights (nCls : Nat) (w' β' G Bb Mb : ℝ) where
   stem : MnvConv 32 3 3 3 w' β'
   bns : MnvBn 32 G Bb Mb
   b1 : MnvBlockNoExp 32 16 w' β' G Bb Mb
@@ -382,7 +387,9 @@ structure MnvPaperWeights (w' β' G Bb Mb : ℝ) where
   b17 : MnvBlock 160 960 320 w' β' G Bb Mb
   hd : MnvConv 1280 320 1 1 w' β'
   bnh : MnvBn 1280 G Bb Mb
-  head : MnvHead 1280 10 w' β'
+  head : MnvHead 1280 nCls w' β'
+
+variable {nCls : Nat}
 
 -- ════════════════════════════════════════════════════════════════
 -- § Every block in the ladder IS the committed inference block
@@ -437,8 +444,8 @@ theorem MnvBlockNoExp.fwd_eq_pcEval {ic oc h w : Nat} (B : MnvBlockNoExp ic oc w
 /-- **The deployed paper-spec MobileNetV2 inference forward** — the `[t,c,n,s]` ladder of
     `mobilenetv2ForwardPaper` with inference BatchNorm at every one of its 52 sites, written in
     the association the bridge below composes. -/
-noncomputable def mnv2PaperEvalForward (W : MnvPaperWeights w' β' G Bb Mb) (ε : ℝ) :
-    Vec (3 * 224 * 224) → Vec 10 :=
+noncomputable def mnv2PaperEvalForward (W : MnvPaperWeights nCls w' β' G Bb Mb) (ε : ℝ) :
+    Vec (3 * 224 * 224) → Vec nCls :=
   dense W.head.W W.head.b ∘
   globalAvgPoolFlat 1280 7 7 ∘
   relu6 (1280 * 7 * 7) ∘
@@ -469,7 +476,7 @@ noncomputable def mnv2PaperEvalForward (W : MnvPaperWeights w' β' G Bb Mb) (ε 
     replaced by the model's rounded peer, every BN by the six rounded ops the emitter writes,
     `relu6` unchanged (clamp-and-select rounds nothing). -/
 noncomputable def mnv2PaperEvalForwardF (M : FloatModel) (R : DeviceRsqrt ε es)
-    (W : MnvPaperWeights w' β' G Bb Mb) : Vec (3 * 224 * 224) → Vec 10 :=
+    (W : MnvPaperWeights nCls w' β' G Bb Mb) : Vec (3 * 224 * 224) → Vec nCls :=
   M.dense W.head.W W.head.b ∘
   M.gapFlatF ∘
   relu6 (1280 * 7 * 7) ∘
@@ -503,7 +510,7 @@ set_option maxRecDepth 1000000 in
     discharged by a leaf. Every BatchNorm enters under `FloatBridgesTo.capped`, so `.mod` is a
     closed term in which each normalisation contributes `min(fold, 2·mag)`. -/
 noncomputable def mnv2PaperEvalBridge (M : FloatModel) (R : DeviceRsqrt ε es)
-    (P : MnvProfile M ε w' β' G Bb Mb es S q) (W : MnvPaperWeights w' β' G Bb Mb) :
+    (P : MnvProfile M ε w' β' G Bb Mb es S q) (W : MnvPaperWeights nCls w' β' G Bb Mb) :
     FloatBridgesTo (mnv2PaperEvalForward W ε) (mnv2PaperEvalForwardF M R W) :=
   ((((((((((((((((((((((((
     (floatBridgesTo_flatConvStride2Xla (h := 112) (w := 112) M W.stem.W W.stem.b P.hw' P.hβ'
@@ -554,7 +561,7 @@ set_option maxHeartbeats 8000000 in
     are numerically the same block. That is a property of the cap, not of the net. -/
 theorem mnv2PaperEvalBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
     (hε5 : 1 / 100000 ≤ ε) (R : DeviceRsqrt ε (1/100))
-    (W : MnvPaperWeights (28/10) (28/10) (28/10) (28/10) (28/10)) :
+    (W : MnvPaperWeights nCls (28/10) (28/10) (28/10) (28/10) (28/10)) :
     (mnv2PaperEvalBridge M R (mnv2Profile_committed M hMu hε5) W).Maps 1 0
       (2152 * 10 ^ 1) (8176 * 10 ^ 13) := by
   have hP := mnv2Profile_committed M hMu hε5
@@ -797,7 +804,7 @@ theorem mnv2PaperEvalBridge_maps (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
     resets the certified magnitude at all 35 activation sites. -/
 theorem mnv2PaperEvalBridge_mag_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
     (hε5 : 1 / 100000 ≤ ε) (R : DeviceRsqrt ε (1/100))
-    (W : MnvPaperWeights (28/10) (28/10) (28/10) (28/10) (28/10)) :
+    (W : MnvPaperWeights nCls (28/10) (28/10) (28/10) (28/10) (28/10)) :
     (mnv2PaperEvalBridge M R (mnv2Profile_committed M hMu hε5) W).mag 1 ≤ 2152 * 10 ^ 1 :=
   (mnv2PaperEvalBridge_maps M hMu hε5 R W).mag_le 1 (by norm_num) le_rfl
 
@@ -806,7 +813,7 @@ theorem mnv2PaperEvalBridge_mag_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : �
     not. It is 79 orders below the six-block net's uncapped `1.444·10⁹⁶`. -/
 theorem mnv2PaperEvalBridge_fresh_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
     (hε5 : 1 / 100000 ≤ ε) (R : DeviceRsqrt ε (1/100))
-    (W : MnvPaperWeights (28/10) (28/10) (28/10) (28/10) (28/10)) :
+    (W : MnvPaperWeights nCls (28/10) (28/10) (28/10) (28/10) (28/10)) :
     (mnv2PaperEvalBridge M R (mnv2Profile_committed M hMu hε5) W).fresh 1 ≤ 8176 * 10 ^ 13 :=
   (mnv2PaperEvalBridge_maps M hMu hε5 R W).mod_le 1 0 (by norm_num) le_rfl le_rfl le_rfl
 
@@ -818,10 +825,80 @@ theorem mnv2PaperEvalBridge_fresh_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : 
     the cap doing the work at every normalisation. ⛔ CAP: see the header. -/
 theorem mnv2Paper_float_logits_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
     (hε5 : 1 / 100000 ≤ ε) (R : DeviceRsqrt ε (1/100))
-    (W : MnvPaperWeights (28/10) (28/10) (28/10) (28/10) (28/10))
-    (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
+    (W : MnvPaperWeights nCls (28/10) (28/10) (28/10) (28/10) (28/10))
+    (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin nCls) :
     |mnv2PaperEvalForwardF M R W x j - mnv2PaperEvalForward W ε x j| ≤ 8176 * 10 ^ 13 :=
   (mnv2PaperEvalBridge_maps M hMu hε5 R W).budget_le (by norm_num) le_rfl x hx j
+
+-- ════════════════════════════════════════════════════════════════
+-- § The tie: this IS the committed inference forward, and the graph denotes it
+-- ════════════════════════════════════════════════════════════════
+
+
+/-- The float-tier t=1 bottleneck record's eval-net view: weights, γ/β and the two frozen
+    statistics per BatchNorm site. -/
+noncomputable def MnvBlockNoExp.toEval {ic oc : Nat} (B : MnvBlockNoExp ic oc w' β' G Bb Mb) :
+    IVWNoExpEval ic oc :=
+  { dW := B.dw.W, db := B.dw.b, dγ := B.bnd.γ, dβ := B.bnd.β, dμ := B.bnd.μ, dv := B.bnd.v
+    pW := B.pr.W, pb := B.pr.b, pγ := B.bnp.γ, pβ := B.bnp.β, pμ := B.bnp.μ, pv := B.bnp.v }
+
+/-- The float-tier bottleneck record's eval-net view. -/
+noncomputable def MnvBlock.toEval {ic mid oc : Nat} (B : MnvBlock ic mid oc w' β' G Bb Mb) :
+    IVWEval ic mid oc :=
+  { eW := B.ex.W, eb := B.ex.b, eγ := B.bne.γ, eβ := B.bne.β, eμ := B.bne.μ, ev := B.bne.v
+    dW := B.dw.W, db := B.dw.b, dγ := B.bnd.γ, dβ := B.bnd.β, dμ := B.bnd.μ, dv := B.bnd.v
+    pW := B.pr.W, pb := B.pr.b, pγ := B.bnp.γ, pβ := B.bnp.β, pμ := B.bnp.μ, pv := B.bnp.v }
+
+/-- **The record-bundled weights as the eval net's weights** — one shared `ε` is the forward's
+    argument in both, so nothing is lost. -/
+noncomputable def MnvPaperWeights.toEval (W : MnvPaperWeights nCls w' β' G Bb Mb) :
+    MNV2PaperWeightsEval nCls :=
+  { sW := W.stem.W, sb := W.stem.b, sγ := W.bns.γ, sβ := W.bns.β, sμ := W.bns.μ, sv := W.bns.v
+    b1 := W.b1.toEval, b2 := W.b2.toEval, b3 := W.b3.toEval, b4 := W.b4.toEval
+    b5 := W.b5.toEval, b6 := W.b6.toEval, b7 := W.b7.toEval, b8 := W.b8.toEval
+    b9 := W.b9.toEval, b10 := W.b10.toEval, b11 := W.b11.toEval, b12 := W.b12.toEval
+    b13 := W.b13.toEval, b14 := W.b14.toEval, b15 := W.b15.toEval, b16 := W.b16.toEval
+    b17 := W.b17.toEval
+    hW := W.hd.W, hb := W.hd.b, hγ := W.bnh.γ, hβ := W.bnh.β, hμ := W.bnh.μ, hv := W.bnh.v
+    fcW := W.head.W, fcb := W.head.b }
+
+set_option maxRecDepth 40000 in
+/-- **The record-bundled forward IS the committed seventeen-block inference net.** The four
+    `*_eq_pcEval` `rfl`s above say each BLOCK is the committed abbreviation; this says the whole
+    LADDER is `mobilenetv2ForwardPaperEval`, which is what the number needed and what this file
+    shipped without. ⚠ Not one `rfl` — it rewrites with those four lemmas and the four eval
+    wrappers first, which leaves nothing to compare; closes in ~2 s at depth seventeen. -/
+theorem mnv2PaperEvalForward_eq_paperEval (W : MnvPaperWeights nCls w' β' G Bb Mb) (ε : ℝ)
+    (x : Vec (3 * 224 * 224)) :
+    mnv2PaperEvalForward W ε x = mobilenetv2ForwardPaperEval ε W.toEval x := by
+  simp only [mnv2PaperEvalForward, mobilenetv2ForwardPaperEval, MnvPaperWeights.toEval,
+    MnvBlock.toEval, MnvBlockNoExp.toEval, ivNoExpEvalW, ivExpOnlyEvalW, ivResidEvalW,
+    ivStridedEvalW, MnvBlock.bodyFwd_eq_pcEval, MnvBlock.stridedFwd_eq_pcEval,
+    MnvBlock.resFwd_eq_pcEval, MnvBlockNoExp.fwd_eq_pcEval, MnvBn.fwd, Function.comp_apply]
+
+/-- ⭐ **The whole loop closes.** The typed `SHlo` inference graph of the seventeen-block net —
+    whose SSA names are the committed artifact's (`MobileNetV2FullPaperEval.lean`) — denotes
+    exactly the forward this file states its number about. -/
+theorem mnv2PaperEvalGraph_faithful (epsStr : String) (ε : ℝ)
+    (W : MnvPaperWeights nCls w' β' G Bb Mb) (x : Vec (3 * 224 * 224)) :
+    StableHLO.den (StableHLO.mobilenetv2FwdGraphPaperEval epsStr ε W.toEval x)
+      = mnv2PaperEvalForward W ε x :=
+  (StableHLO.mobilenetv2FwdGraphPaperEval_faithful epsStr ε W.toEval x).trans
+    (mnv2PaperEvalForward_eq_paperEval W ε x).symm
+
+/-- ⭐⭐ **The number, stated about the committed seventeen-block inference forward.**
+    `mnv2Paper_float_logits_le` with `mobilenetv2ForwardPaperEval` on the real side instead of the
+    record-bundled `mnv2PaperEvalForward` — so the budget is a claim about the net
+    `mobilenetv2_fwd_eval` renders, tied through `mnv2PaperEvalGraph_faithful` rather than by
+    inspection, at any class count. ⛔ CAP at all 52 BatchNorm sites; see the header. -/
+theorem mnv2Paper_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
+    (hε5 : 1 / 100000 ≤ ε) (R : DeviceRsqrt ε (1/100))
+    (W : MnvPaperWeights nCls (28/10) (28/10) (28/10) (28/10) (28/10))
+    (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin nCls) :
+    |mnv2PaperEvalForwardF M R W x j - mobilenetv2ForwardPaperEval ε W.toEval x j|
+      ≤ 8176 * 10 ^ 13 := by
+  rw [← mnv2PaperEvalForward_eq_paperEval W ε x]
+  exact mnv2Paper_float_logits_le M hMu hε5 R W x hx j
 
 /-! ### Inhabitation
 
@@ -836,7 +913,7 @@ noncomputable def MnvBlockNoExp.zero (ic oc : Nat) {w' β' G Bb Mb : ℝ} (hw : 
   bnp := MnvBn.zero _ hG hBb hMb
 
 noncomputable def MnvPaperWeights.zero :
-    MnvPaperWeights (28/10) (28/10) (28/10) (28/10) (28/10) :=
+    MnvPaperWeights 10 (28/10) (28/10) (28/10) (28/10) (28/10) :=
   have h : (0:ℝ) ≤ 28/10 := by norm_num
   { stem := MnvConv.zero _ _ _ _ h h,
     bns := MnvBn.zero _ h h h,

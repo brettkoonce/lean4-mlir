@@ -340,6 +340,14 @@ lean_lib «Certs» where
              -- bridge, and none of these bridges is on FloatBudgetEnv's import path.
              `LeanMlir.Proofs.Float.FloatBudgetEnvMBConv,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval,
+             -- ⭐ The PAPER net's inference twin: the same 17-block [t,c,n,s] ladder at frozen
+             -- statistics (52 BN sites, one shared eps), its typed graph and faithfulness. The
+             -- rung MobileNetV2PaperFloatBudget's number ends at
+             -- (mnv2Paper_float_logits_le_committed). ⭐ Its SSA names are bnSiteP's — %stnmu,
+             -- %b{k}enmu/%b{k}dnmu/%b{k}pnmu, %hnmu — so the typed graph diffs against
+             -- mobilenetv2_fwd_eval line for line, where the six-block eval graph's %mue1 matches
+             -- no artifact and the 17-block TRAINING graph's %b17gp is the render's %gp17.
+             `LeanMlir.Proofs.Architectures.MobileNetV2FullPaperEval,
              -- ⭐ The second ImageNet-scale whole-net float NUMBER, and the first with a
              -- non-vacuous WINDOW: the deployed MobileNetV2 inference forward, window 2154 /
              -- budget 1.444e96. The window is 97 orders below r34's because relu6 CLAMPS at 6
