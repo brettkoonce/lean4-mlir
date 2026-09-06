@@ -676,6 +676,24 @@ lean_lib «Certs» where
              -- (ResNet50FullB.lean, ResNet50FullBVJP.lean).
              `LeanMlir.Proofs.Architectures.ResNet50FullB,
              `LeanMlir.Proofs.Architectures.ResNet50FullBVJP,
+             -- ⭐⭐ §3.5(c): RESNET-50's T3 — the §1 fold and the §1a tie at batch BatchNorm.
+             -- ⭐⭐ ZERO new op-kind lemmas: ResNet34FaithfulPoCB's six are statements about OP
+             -- KINDS at full generality, and the bottleneck's third conv is one more instance of
+             -- the first. The fold file is an ENUMERATION of the artifact's op table by block
+             -- profile. ⛔ ResNet-50 emits NO conv bias gradient at all -- ResNet50RenderB has no
+             -- convBias flag -- so its table is six op kinds where r34's is eight, and every slot
+             -- the tie states is exercised by the bytes (161 of 161).
+             -- ⭐⭐ THE LOSS COTANGENT IS A BINDER, and for this net it HAD to be: R50 ships BOTH
+             -- losses, the label-smoothed softmax chain on bce := false artifacts and BCE's
+             -- three-op chain on bce := true ones (including resnet50in160_lambaccdp8x64bce, where
+             -- the 76.66% comes from). r50_lossCot_is_smoothedCE_grad and r50_lossCot_is_bce_grad
+             -- instantiate it; neither is privileged. That is 4b's "g as a BINDER" made necessary.
+             -- ⭐ The STEM and HEAD tie bundles are ResNet-34's reused verbatim, as the stem and
+             -- head forwards were in T1.
+             -- ⚠ One add_comm per projection form (the render emits addVB(body, projection) where
+             -- residualProj adds proj + body); the identity block needs none.
+             `LeanMlir.Proofs.Foundation.ResNet50FaithfulPoCB,
+             `LeanMlir.Proofs.Foundation.ResNet50TiePoCB,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

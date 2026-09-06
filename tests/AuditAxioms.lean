@@ -131,6 +131,7 @@ import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Architectures.ResNet50FullBVJP
+import LeanMlir.Proofs.Foundation.ResNet50TiePoCB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
@@ -5926,3 +5927,67 @@ open Proofs
 #print axioms Proofs.StableHLO.r50DownGraphB_faithful
 #print axioms Proofs.StableHLO.r50StemGraphB_faithful
 #print axioms Proofs.StableHLO.resnet50FwdGraphB_full_faithful
+
+-- ════════════════════════════════════════════════════════════════
+-- §3.5(c): RESNET-50's T3 -- THE FOLD AND THE TIE (ResNet50{Faithful,Tie}PoCB.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- T1 gave ResNet-50 a forward and a whole-net VJP, T2 the typed graph. This is T3: every parameter
+-- GRADIENT node of the batched train step denotes the certified gradient (the §1 fold), and each
+-- is then pinned to the cotangent the emitted backward chain delivers (the §1a tie). ResNet-50 is
+-- now the THIRD net whose train-step tie is about the artifact its quoted accuracy comes from.
+--
+-- ⭐⭐ ZERO NEW OP-KIND LEMMAS, which is 4b's lesson taken to its end. ResNet34FaithfulPoCB's
+-- convWGradB_den, convStridedWGradB_den, bn{Gamma,Beta}GradB_den and dense{W,B}GradB_den are
+-- statements about OP KINDS at full generality in {N ic oc h w kH kW}, and the bottleneck's third
+-- convolution is one more instance of the first. So the fold file is an ENUMERATION of the
+-- artifact's op table by block profile: 3 + 12x9 + 4x12 + 2 = 161, the render's own census.
+-- ⛔ RESNET-50 EMITS NO CONV BIAS GRADIENT AT ALL. ResNet34FaithfulPoCB and
+-- MobileNetV2FaithfulPoCPaperG both carry bias conjuncts to cover a convBias := true render;
+-- ResNet50RenderB has no such flag (its zb bakes false), so there is nothing to state and every
+-- slot the tie names is exercised by the bytes -- 161 of 161, where r34 states 146 and exercises
+-- 110 and mnv2 states 210 and exercises 158.
+--
+-- ⭐⭐ THE LOSS COTANGENT IS A BINDER, AND FOR THIS NET IT HAD TO BE. ResNet-34's and MobileNetV2's
+-- capstones compute g internally from smoothedLossCotGraph. ResNet-50 ships BOTH losses: the
+-- label-smoothed softmax chain on bce := false artifacts and BCE-with-logits' three-op chain on
+-- bce := true ones, including resnet50in160_lambaccdp8x64bce where the 76.66% comes from. So
+-- r50_net_tiedB takes g as a hypothesis, and r50_lossCot_is_smoothedCE_grad and
+-- r50_lossCot_is_bce_grad instantiate it -- neither privileged. That is 4b's "the head takes g as
+-- a BINDER" made NECESSARY rather than merely tidier.
+-- ⭐ The BCE corollary needs NO hypothesis on the target where the smoothed-CE one needs its mass
+-- to be 1, and its divisor is N*K rather than N (BceLossCot.lean's ⚠⚠).
+--
+-- ⭐ THE STEM AND HEAD TIE BUNDLES ARE RESNET-34's, reused verbatim: r34StemTiedB is generic in
+-- {ic oc} and r34HeadTiedB in {c nCls}, and ResNet-50's stem and head ARE those functions at
+-- different widths (T1 built the net from r34StemB and r34HeadB). ⚠ r34StemTiedB carries a
+-- conv-bias conjunct this net never emits; it costs one delegation and is true at bias = 0.
+--
+-- ⭐⭐ THE BLOCK COTANGENTS ARE NOT DERIVED. r50{Id,Proj,Down}B_has_vjp_at ARE the certified block
+-- backwards and ResNet50BackB0's *BackBatchedGraph_faithful family already proves the emitted
+-- subgraph denotes them, so r50IdCotIn_eq_vjp closes by rfl. ⚠ The two projection forms each need
+-- ONE add_comm: the render emits addVB(body, projection) where residualProj adds proj + body --
+-- the same seam T2's graph faithfulness has, and the identity block needs neither.
+-- ⚠ Each BatchNorm's gamma/beta reads the cotangent at THAT BatchNorm's output (cotN1/cotN2/cotA)
+-- while its conv reads the one at the conv's output (cotC1/cotC2/cotC3). Off by one and the
+-- gradient is silently wrong; the render's own comment records the same trap for stochastic depth.
+-- ⚠⚠ v1.5 in the strided block: conv1/bn1/relu1 run at the INPUT grid 2h x 2w, so r50DownCotN1 and
+-- r50DownCotC1 live there. Writing them at h x w typechecks nowhere.
+-- ⭐ The capstone carries NO smoothness hypothesis and no 0 < eps, and N and q are both binders;
+-- the kink and positivity conditions enter only in the three *CotIn_eq_vjp lemmas.
+-- ⛔ ONE REPLICA -- the all-reduce is emitted text outside the AST, and the 8x accumulation and the
+-- LAMB tail sit downstream of every node named here.
+#print axioms Proofs.ResNet50PoCB.r50BnGradsCertified
+#print axioms Proofs.ResNet50PoCB.r50StemGradsCertified
+#print axioms Proofs.ResNet50PoCB.r50IdGradsCertified
+#print axioms Proofs.ResNet50PoCB.r50ProjGradsCertified
+#print axioms Proofs.ResNet50PoCB.r50DownGradsCertified
+#print axioms Proofs.ResNet50PoCB.r50HeadGradsCertified
+#print axioms Proofs.ResNet50TieB.r50IdCotIn_eq_vjp
+#print axioms Proofs.ResNet50TieB.r50ProjCotIn_eq_vjp
+#print axioms Proofs.ResNet50TieB.r50DownCotIn_eq_vjp
+#print axioms Proofs.ResNet50TieB.r50_idblock_tiedB
+#print axioms Proofs.ResNet50TieB.r50_projblock_tiedB
+#print axioms Proofs.ResNet50TieB.r50_downblock_tiedB
+#print axioms Proofs.ResNet50TieB.r50_net_tiedB
+#print axioms Proofs.ResNet50TieB.r50_lossCot_is_smoothedCE_grad
+#print axioms Proofs.ResNet50TieB.r50_lossCot_is_bce_grad

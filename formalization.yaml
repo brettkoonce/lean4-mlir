@@ -102,7 +102,7 @@ status:
   axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 2296 declarations (count: grep -c '^#print axioms'
+    # `#print axioms` on 2311 declarations (count: grep -c '^#print axioms'
     # tests/AuditAxioms.lean); 52 are independently kernel-rechecked by the
     # comparator (tests/comparator/config.json). All close under exactly the
     # three core axioms above. comparator_config below points at that config for
@@ -345,6 +345,30 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.StableHLO.resnet50FwdGraphB_full_faithful"   # T2: the typed graph at the render's own tokens denotes that forward
       file: "LeanMlir/Proofs/Architectures/ResNet50FullB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.ResNet50PoCB.r50DownGradsCertified"   # T3 §1 fold: the strided bottleneck's four weight gradient nodes, two of them strided
+      file: "LeanMlir/Proofs/Foundation/ResNet50FaithfulPoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.ResNet50TieB.r50IdCotIn_eq_vjp"   # the emitted bottleneck fan-in IS the certified block VJP's backward
+      file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.ResNet50TieB.r50_net_tiedB"   # T3 §1a: all 161 gradient nodes at their chain cotangent; N, q and the LOSS all binders
+      file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.ResNet50TieB.r50_lossCot_is_bce_grad"   # and the BCE arm's cotangent is BCE-with-logits' gradient over the B*K divisor
+      file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -1416,7 +1440,7 @@ fidelity:
        ResNet-50 still has no whole-net forward, graph or tie: these are the two
        pieces §3.5 said to budget INSIDE that package, now paid for in advance.
 
-    4m. RESNET-50's FIRST NET-LEVEL TIERS, T1 AND T2 (2026-09-06). The audit of 2026-09-05
+    4m. RESNET-50's FIRST NET-LEVEL TIERS: T1, T2 AND T3 (2026-09-06). The audit of 2026-09-05
        recorded ResNet-50 as the largest hole in the Proofs tier: "none;
        `r50Trunk_3463` is a backward fold", with T1 through T7 all missing.
        `Architectures/ResNet50FullB.lean` and `ResNet50FullBVJP.lean` are T1 and
@@ -1498,8 +1522,38 @@ fidelity:
        161 parameters with 12 projection slots, exactly the record's census, and
        every SSA name this file writes appears there.
 
-       ⚠ WHAT IS STILL MISSING FOR THIS NET: T3, the two float budgets and the
-       certified backward tie. T1 and T2 are two of seven tiers.
+       ⭐⭐ T3 LANDED IN THE SAME SESSION, AND IT NEEDED ZERO NEW OP-KIND LEMMAS.
+       `ResNet34FaithfulPoCB.lean`'s six are statements about OP KINDS at full
+       generality, and the bottleneck's third convolution is one more instance of
+       the first -- so `Foundation/ResNet50FaithfulPoCB.lean` is an ENUMERATION of
+       the artifact's op table by block profile and `ResNet50TiePoCB.lean` pins
+       each node to the cotangent the emitted backward chain delivers. ResNet-50
+       is now the THIRD net whose train-step tie is about the artifact its quoted
+       accuracy comes from.
+
+       ⛔ RESNET-50 EMITS NO CONV BIAS GRADIENT AT ALL, so unlike ResNet-34's and
+       MobileNetV2's ties every slot this one states is exercised by the bytes:
+       161 of 161, where r34 states 146 and exercises 110 and MobileNetV2 states
+       210 and exercises 158. `ResNet50RenderB` has no `convBias` flag.
+
+       ⭐⭐ THE LOSS COTANGENT IS A BINDER, AND FOR THIS NET IT HAD TO BE.
+       ResNet-34's and MobileNetV2's capstones compute `g` internally from the
+       label-smoothed chain. ResNet-50 ships BOTH losses -- that chain on the
+       `bce := false` artifacts, and BCE-with-logits' three-op chain on the
+       `bce := true` ones including `resnet50in160_lambaccdp8x64bce`, where the
+       76.66% comes from. So `r50_net_tiedB` takes `g` as a hypothesis and
+       `r50_lossCot_is_smoothedCE_grad` / `r50_lossCot_is_bce_grad` instantiate it,
+       neither privileged. That is 4f's "the head takes `g` as a binder" made
+       NECESSARY rather than merely tidier, and it is what the BCE cotangent of 4l
+       was written for.
+
+       ⭐ THE STEM AND HEAD TIE BUNDLES ARE RESNET-34's, reused verbatim, as the
+       stem and head forwards were in T1. ⚠ Two `add_comm`s, one per projection
+       form: the render emits `addVB(body, projection)` where `residualProj`
+       adds `proj + body`. The identity block needs none.
+
+       ⚠ WHAT IS STILL MISSING FOR THIS NET: the two float budgets and the
+       certified backward tie (T4, T5, T6). T1, T2 and T3 are three of seven.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
@@ -1528,7 +1582,7 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above, plus a full `#print axioms` sweep of 2296
+    fidelity caveats above, plus a full `#print axioms` sweep of 2311
     declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 52
