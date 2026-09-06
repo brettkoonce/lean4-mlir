@@ -3,7 +3,8 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # ResNet-34 train step rendered ENTIRELY from the verified AST
 
 The Chapter-5 peer of `cifar8BnTrainStepFaithfulV` (`CnnRender.lean`), scaled to the full
-`[3,4,6,3]` ResNet-34 (146 params): a 7×7/s2 stem, 16 residual blocks (3 downsample, 13 identity),
+`[3,4,6,3]` ResNet-34 (110 params as committed; 146 at `convBias := true`): a 7×7/s2 stem, 16
+residual blocks (3 downsample, 13 identity),
 global-average-pool + final dense. `MainResnet34Verified` trains on
 `verified_mlir/resnet34_train_step.mlir`; this renderer emits that file as `pretty(provenGraph)` —
 every line is `pretty` of a verified `SHlo` node, so the committed bytes ARE the certified render.
@@ -223,9 +224,14 @@ private def downSig (p : String) (cin c : Nat) (convBias : Bool) : List (String 
   [(s!"%{p}W2", ty [c,c,3,3])] ++ b s!"%{p}b2" ++ [(s!"%{p}g2", ty [c]), (s!"%{p}bt2", ty [c])] ++
   [(s!"%{p}Wp", ty [c,cin,1,1])] ++ b s!"%{p}bp" ++ [(s!"%{p}gp", ty [c]), (s!"%{p}btp", ty [c])]
 
-/-- **The 146 ResNet-34 parameters in `net.paramShapes` (= func-arg) order**, names + types.
+/-- **The ResNet-34 parameters in `net.paramShapes` (= func-arg) order**, names + types.
     The forward, the eval forward and the train step all take their signature from here, so the
-    arity/type/order contract the driver relies on cannot drift between renders. -/
+    arity/type/order contract the driver relies on cannot drift between renders.
+
+    ⚠ **110 at the shipped `convBias := false`** — stem 3 + 13 identity blocks × 6 + 3 downsample
+    blocks × 9 + dense 2 — and 146 with the conv biases in. Every writer below omits the argument,
+    so every committed artifact is the 110 one; the biases are `zeroBiasPrelude`'s zero constants.
+    (Corrected 2026-09-06: this docstring and four below said 146 unconditionally.) -/
 def r34SigList (nClasses : Nat) (convBias : Bool := false) : List (String × String) :=
   [("%sW", ty [64,3,7,7])] ++ (if convBias then [("%sbi", ty [64])] else []) ++
   [("%sg", ty [64]), ("%sbt", ty [64])] ++
@@ -240,8 +246,8 @@ def r34SigList (nClasses : Nat) (convBias : Bool := false) : List (String × Str
     stem, then per identity block `n1 n2`, per downsample block `n1 n2 np`. This is exactly the
     order `VerifiedNet.bnChannels` is listed in, which is how the driver packs `runningBnStats`
     (`bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]])`) — μ and var interleaved per layer,
-    NOT all-μ-then-all-var. Appended after the 146 params, so `@resnet34_fwd_eval` takes
-    1 + 146 + 72 = 219 inputs. -/
+    NOT all-μ-then-all-var. Appended after the parameters, so `@resnet34_fwd_eval` takes
+    1 + 110 + 72 = **183** inputs as committed (1 + 146 + 72 = 219 at `convBias := true`). -/
 def r34StatSigList : List (String × String) :=
   let bn (p : String) (oc : Nat) : List (String × String) :=
     [(s!"%{p}mu", ty [oc]), (s!"%{p}var", ty [oc])]
@@ -329,8 +335,9 @@ private def r34FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
 
 set_option maxRecDepth 1000000 in
 /-- **`@resnet34_fwd` rendered ENTIRELY from the verified AST** — the Chapter-5 peer of the
-    train-step render, sharing its forward chain and its 146-parameter signature. Takes `%x` plus
-    the 146 params in `net.paramShapes` order (147 inputs) and returns logits `[B, nClasses]`.
+    train-step render, sharing its forward chain and its parameter signature. Takes `%x` plus the
+    110 committed params in `net.paramShapes` order (**111** inputs) and returns logits
+    `[B, nClasses]`.
 
     This replaces the independent hand-written string emitter in `tests/TestResnet34Fwd.lean`:
     the forward the driver evals is now the same graph the train step differentiates, by
@@ -351,8 +358,9 @@ def resnet34FwdFaithfulV (B nClasses : Nat) (epsStr : String)
 set_option maxRecDepth 1000000 in
 /-- **`@resnet34_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward, with
     every BN site consuming frozen per-channel running stats (`bnPerChannelEvalF`) instead of
-    reducing statistics out of its activation. Same net, same 146 params in the same order, plus
-    the 72 stat inputs of `r34StatSigList`: **219 inputs**, returning logits `[B, nClasses]`.
+    reducing statistics out of its activation. Same net, same parameters in the same order, plus
+    the 72 stat inputs of `r34StatSigList`: **183 inputs** as committed, returning logits
+    `[B, nClasses]`.
 
     This is the eval partner of a **batch**-statistic train step, whose EMA'd batch mean/var are
     exactly these per-channel scalars — i.e. of `resnet34_adam_train_step.mlir`, which is still a
@@ -377,7 +385,8 @@ def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
 -- ════════════════════════════════════════════════════════════════
 
 set_option maxRecDepth 1000000 in
-/-- **Full ResNet-34 `[3,4,6,3]` train step rendered ENTIRELY from the verified AST** (146 params).
+/-- **Full ResNet-34 `[3,4,6,3]` train step rendered ENTIRELY from the verified AST** (110 params
+    as committed; 146 at `convBias := true`).
     `B` batch, `nClasses` outputs (=10 for the committed Imagenette trainer). Every emitted line is
     `pretty` of a verified `SHlo` node; `ResNet34FaithfulPoC` proves each param output `den` =
     certified. Stem 7×7/s2 (3→64, 224→112), maxpool→56, stages 64/128/256/512 at 56/28/14/7. -/
@@ -430,7 +439,7 @@ def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     else pure ("", "")
     let (csg, nsg) ← pretty B (.bnGammaSgd "%sg" F.stc epsStr lrStr 0 z64 zSt112 0 (.operand nDsr zSt112))
     let (cst, nst) ← pretty B (.bnBetaSgd "%sbt" lrStr z64 0 (.operand nDsr zSt112))
-    -- ═══ assemble body + return (146 outputs in func-arg order: stem, blocks fwd-order, dense) ═══
+    -- ═══ assemble body + return (one output per param, func-arg order: stem, blocks, dense) ═══
     let fwdCode := F.code ++ cDy
     let bwdCode := cDg ++ cDgi ++ cWd ++ cbd ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
@@ -446,7 +455,7 @@ def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
       "    // ── ResNet-34 train step: every line is pretty(verified AST node) ──\n" ++
       zeroBiasPrelude convBias [64, 128, 256, 512] ++ fwdCode ++ bwdCode ++
       s!"    return {String.intercalate ", " outNames} : {String.intercalate ", " outTypes}\n"
-  -- func signature: %x, all 146 params, %onehot
+  -- func signature: %x, every param (110 at the shipped convBias := false), %onehot
   let sigList : List (String × String) := r34SigList nClasses convBias
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}")) ++

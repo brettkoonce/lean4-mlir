@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 The Chapter-5 §1a tie: the cnn/cifar tie (`cnn_conv_tied_certified` / `cifar_conv_tied_certified`)
 scaled to the full `[3,4,6,3]` ResNet-34. r34's §1 fold (`ResNet34FaithfulPoC`) already makes every
 param op `den = certified ∀ c`; this file feeds each consumer the **real forward activations** and the
-**loss-driven backward-chain cotangent** the residual net actually delivers — so the WHOLE 146-param
+**loss-driven backward-chain cotangent** the residual net actually delivers — so the WHOLE
 train step is den-composed forward→loss→backward, no free activations, no symbolic cotangent.
 
 **The structural novelty vs cnn/cifar: residual skip-add fan-in sums.** Each block is
@@ -26,6 +26,19 @@ generic `den = certified` lemmas at the `ResNet34ChainClose` chain cotangents:
 
 The block-type tie lemmas (`r34_idblock_tied` etc.) are proven once and applied at each of the 16
 blocks in the whole-net capstone, threading the real `resnet34Forward_full_pc` activations.
+
+⛔ **The census is 110, not 146 (corrected 2026-09-06 from `ResNet34TiePoCB.lean`).**
+`resnet34TrainStepFaithfulV` defaults to `convBias := false` — the conv biases are gone from the
+signature, bound instead to `zeroBiasPrelude`'s zero constants — so `resnet34_train_step.mlir`
+carries **110** SGD-updated tensors: stem 3 + 13 identity blocks × 6 + 3 downsample blocks × 9 +
+dense 2. 146 is the census at `convBias := true`. The bias conjuncts below are true and cover the
+flag; they are about ops the committed bytes do not contain, and `bias = 0` is one of the instances
+every fold here is quantified over.
+
+⭐ **These folds are at the FUSED `θ − lr·g` ops and at PER-EXAMPLE BatchNorm**, which is
+`resnet34_train_step.mlir`'s world and nothing else's. Every batched r34 step — the Adam family,
+`resnet34in_mom*` and the data-parallel peers — is at batch BN and emits the raw gradient;
+`Foundation/ResNet34TiePoCB.lean` is the tie there.
 
 ## Honest residual (the boundary every prior fold carries)
 * The block backward is rendered hand-written, so the cotangent SSA ↔ chain-cot correspondence is the
@@ -471,13 +484,13 @@ theorem r34_stem_tiedAt {h w : Nat} (xN wN bN gN vN epsStr lrStr cotN : String) 
   intro stc stn str
   exact r34_stem_tied xN wN bN gN vN epsStr lrStr cotN ε Ws bs γs βs x str stn stc cotPool lr
 
-/-! ## The whole-net capstone — all 146 params tied through the REAL forward + composed cotangent
+/-! ## The whole-net capstone — every param tied through the REAL forward + composed cotangent
 
 `resnet34Forward_full_pc` threaded: block inputs are the forward prefixes (`idFwd`/`downFwd`/stem),
 and the backward cotangents are composed from the loss `g = softmax(logits) − onehot` down through
 dense (`dense_has_vjp`) + GAP (`globalAvgPoolFlat_has_vjp`) + the residual fan-in sum at every skip
 (`idBlockCotInAt`/`downBlockCotInAt`). Each block's tie then holds at its real input + threaded dyOut.
-This is the full §1a tie: the WHOLE 146-param ResNet-34 train step is den-composed forward→loss→backward,
+This is the full §1a tie: the WHOLE ResNet-34 train step is den-composed forward→loss→backward,
 no free activations, no symbolic cotangent. -/
 
 /-! Irreducible aliases of the (reducible) forward steps. Definitionally equal to `idFwd`/`downFwd`/

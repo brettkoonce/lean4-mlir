@@ -123,6 +123,8 @@ import LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoCG
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
+import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
@@ -5499,3 +5501,68 @@ open Proofs
 #print axioms Proofs.Mnv2PaperPoCG.mnv2Stride1GradsCertified
 #print axioms Proofs.Mnv2PaperPoCG.mnv2Stride2GradsCertified
 #print axioms Proofs.Mnv2PaperPoCG.mnv2HeadDenseGradsCertified
+
+-- ════════════════════════════════════════════════════════════════
+-- 4.2a: THE LABEL-SMOOTHED LOSS COTANGENT, AT A GENERAL TARGET (SmoothedLossCot.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- Every T3 tie in the repo pinned its top-of-chain cotangent to softmax(logits) - oneHot label --
+-- the gradient of PLAIN cross-entropy at a HARD label. ResNet34RenderB, ConvNeXtRenderB and
+-- ViTRenderB all compose theirs from six kit ops instead:
+--   softmaxRow -> subB -> scaleB -> addVB -> shiftB -> divConstB
+-- i.e. dy = (softmax(z) - t + alpha*t - alpha/K)/B, with alpha = 0.1 baked (ls0 variants: 0) and
+-- t arriving as the graph INPUT %onehot -- which under mixup or cutmix is a soft vector drawn on
+-- the host, not a one-hot.
+-- softCE is cross-entropy against a target DISTRIBUTION; softCE_grad is its gradient
+-- (sum t)*softmax(z)_j - t_j, with NO hypothesis on t at all -- softmaxCE_grad under
+-- pdiv_finset_sum, and the familiar softmax - t is the sum t = 1 case.
+-- ⭐ smoothedCE_grad: the emitted expression IS the smoothed loss's gradient, not an approximation
+-- of it -- the smoothing is two extra elementwise ops on the TARGET, and the identity is exact.
+-- ⚠ The /B is the batch mean and is a convention here, not a theorem; a tie against a *dp*
+-- artifact needs the replica mean on top of it (4d).
+#print axioms Proofs.softCE_oneHot
+#print axioms Proofs.softCE_grad
+#print axioms Proofs.smoothTarget_sum
+#print axioms Proofs.smoothedCE_grad
+#print axioms Proofs.smoothedLossCotGraph_den
+#print axioms Proofs.smoothedLossCotGraph_row
+
+-- ════════════════════════════════════════════════════════════════
+-- 4.2a: RESNET-34'S T3 §1a TIE AT BATCH BN, UN-FUSED (ResNet34TiePoCB.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- 4.1e made every parameter GRADIENT node den-faithful for an arbitrary cotangent. This removes
+-- the "arbitrary": each is pinned to the one the emitted backward chain delivers, so the whole
+-- batched train step is den-composed forward -> loss -> backward with no free activation and no
+-- symbolic cotangent. It is the last piece of ResNet-34's T3.
+-- ⭐⭐ The block cotangents are NOT derived here. ResNet34ChainClose spells per-block cotangent
+-- vectors out by hand because no whole-block VJP existed when it was written; 4.1d's
+-- r34IdB_has_vjp_at / r34DownB_has_vjp_at ARE the certified block backwards, and
+-- r34{BasicBlock,DownBlock}BackBatchedGraph_faithful already proves the emitted seven-node fan-in
+-- denotes them. So r34IdCotIn_eq_vjp closes by rfl and r34DownCotIn_eq_vjp by one add_comm (the
+-- render emits addVB(body, projection), the graph builds addV(projection, body)), and the file is
+-- 763 lines against the per-example tie's 615 while carrying three more axes.
+-- ⭐ bnInB is the emitted BN backward written as a den, and bnInB_eq_bnBackB is the ONLY non-rfl
+-- step in the whole cotangent chain -- the relu masks, the conv and strided-conv input-VJPs and
+-- the pool backward all denote their certified backwards definitionally. It takes no beta, which
+-- records that the BatchNorm input-gradient does not depend on the shift.
+-- ⭐ N is a binder and the capstone carries NO smoothness hypothesis: the folds are forall-cot
+-- statements instantiated at explicitly constructed cotangents, so neither 0 < eps nor a relu-kink
+-- condition is needed. Those enter ONLY in the two _eq_vjp lemmas -- the two halves of the tie,
+-- kept apart because they have different hypotheses.
+-- ⭐ The head takes no hypothesis either (GAP and dense are smooth batchMaps), which is the one
+-- place in the net where the global HasVJP suffices.
+-- ⛔ The census is 110 parameters, not the 146 ResNet34TiePoC names: both r34 renders default to
+-- convBias := false, so the 36 conv-bias nodes are not emitted and the biases are
+-- zeroBiasPrelude's zero constants. The bias conjuncts are kept (one delegation each) and cover
+-- the flag; nothing about this weakens a theorem, since every fold is quantified over op instances.
+-- ⛔ ONE REPLICA. In resnet34in_momdp64 every gradient node is followed by all_reduce(add)/4 as
+-- emitted TEXT outside the SHlo AST; the mean across replicas is 4d's business.
+-- ⚠ SYMMETRIC padding at all seven stride-2 sites, and the stem pool is 3x3/s2.
+#print axioms Proofs.ResNet34TieB.bnInB_eq_bnBackB
+#print axioms Proofs.ResNet34TieB.r34IdCotIn_eq_vjp
+#print axioms Proofs.ResNet34TieB.r34DownCotIn_eq_vjp
+#print axioms Proofs.ResNet34TieB.r34_idblock_tiedB
+#print axioms Proofs.ResNet34TieB.r34_downblock_tiedB
+#print axioms Proofs.ResNet34TieB.r34_stem_tiedB
+#print axioms Proofs.ResNet34TieB.r34_head_tiedB
+#print axioms Proofs.ResNet34TieB.r34_net_tiedB
+#print axioms Proofs.ResNet34TieB.r34_lossCot_is_smoothedCE_grad

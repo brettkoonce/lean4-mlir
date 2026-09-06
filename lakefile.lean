@@ -522,6 +522,30 @@ lean_lib «Certs» where
              -- the shipped parameter count is 158, not 210 — 210 is the convBias := true census
              -- and both renders default to false (MobileNetV2FaithfulPoCPaperG.lean).
              `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG,
+             -- ⭐ 4.2a: the SHARED label-smoothed loss cotangent, at a GENERAL target. Every T3 tie
+             -- in the repo pinned its top-of-chain cotangent to softmax - oneHot, the gradient of
+             -- plain CE at a hard label; the batched ImageNet renders compose
+             -- (softmax - t + alpha*t - alpha/K)/B from six kit ops, with t the graph INPUT (a soft
+             -- vector under mixup). softCE is CE against a target DISTRIBUTION (its gradient needs
+             -- no hypothesis on t at all), smoothTarget is label smoothing as a map on targets, and
+             -- smoothedCE_grad says the emitted expression IS that loss's gradient — not an
+             -- approximation of it (SmoothedLossCot.lean).
+             `LeanMlir.Proofs.Foundation.SmoothedLossCot,
+             -- ⭐⭐ 4.2a: ResNet-34's T3 §1a TIE at batch BN, un-fused and batched — the last piece
+             -- of r34's T3. Every parameter gradient node at the cotangent the emitted chain
+             -- delivers, threaded from the smoothed loss through the certified head backward and
+             -- the sixteen certified block backwards over resnet34ForwardB_full's own prefixes.
+             -- ⭐⭐ The block cotangents are NOT derived here: 4.1d's r34IdB_has_vjp_at /
+             -- r34DownB_has_vjp_at ARE the certified block backwards, and
+             -- r34{BasicBlock,DownBlock}BackBatchedGraph_faithful already proves the emitted fan-in
+             -- denotes them — so r34{Id,Down}CotIn_eq_vjp close by rfl and add_comm, and the whole
+             -- file is 763 lines against the per-example tie's 615 with three times the content.
+             -- ⭐ N is a binder and the capstone needs NO smoothness hypothesis: the folds are
+             -- forall-cot statements at explicitly constructed cotangents, and the kink conditions
+             -- enter only in the two _eq_vjp lemmas.
+             -- ⛔ The census is 110 parameters, not the 146 ResNet34TiePoC names: both r34 renders
+             -- run convBias := false and the conv biases are zeroBiasPrelude's zero constants.
+             `LeanMlir.Proofs.Foundation.ResNet34TiePoCB,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

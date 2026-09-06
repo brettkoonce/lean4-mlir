@@ -224,6 +224,26 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- ResNet-34's T3 §1a tie at batch BN, un-fused and batched (status 4g).
+    - declaration: "Proofs.smoothedCE_grad"   # the emitted six-op cotangent IS the label-smoothed loss's gradient, general target
+      file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.ResNet34TieB.r34IdCotIn_eq_vjp"   # the emitted residual fan-in IS the certified block VJP's backward
+      file: "LeanMlir/Proofs/Foundation/ResNet34TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.ResNet34TieB.r34_net_tiedB"   # every r34 gradient node at its chain cotangent; N a binder, no smoothness hypothesis
+      file: "LeanMlir/Proofs/Foundation/ResNet34TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
     #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.
@@ -748,8 +768,10 @@ fidelity:
        carry after padding and activation were closed.
 
        WHY IT MATTERS. Every Proofs tier for those two nets -- the forward and
-       whole-net VJP, the graph faithfulness, the 146- and 210-parameter train-step
-       ties, the forward and backward budgets, the certified backward ties -- is
+       whole-net VJP, the graph faithfulness, the train-step ties (110 and 158
+       parameters as committed -- the 146 and 210 those two files name are the
+       `convBias := true` census, and both renders default to false, folding each
+       conv bias into the BatchNorm after it; corrected 2026-09-06), the forward and backward budgets, the certified backward ties -- is
        stated at PER-EXAMPLE BatchNorm. Each is true and correctly paired with its
        artifact: the Imagenette SGD trainer is real and emits real bytes. But the
        ImageNet accuracies this repo quotes come from the batch-BN Adam and momentum
@@ -877,6 +899,59 @@ fidelity:
        MobileNetV2's stride-2 sites are the XLA-`SAME` `convStridedXla*` /
        `depthwiseStridedXla*` ones, and B0's strided depthwise is symmetric while
        MobileNetV2's is not. Identical types, identical emitted shapes.
+
+    4g. RESNET-34's TRAIN-STEP TIE AT THE NET THAT TRAINS (2026-09-06). 4f
+       closed the optimizer form at the FOLD, where the cotangent is still a free
+       variable. For ResNet-34 the cotangent is now pinned:
+       `Foundation/ResNet34TiePoCB.lean` (763 lines, ~2 s) states every parameter
+       gradient node of the batched, batch-BatchNorm train step at the cotangent
+       the emitted backward chain delivers, threaded from the loss down through
+       the certified head backward and the sixteen certified block backwards over
+       `resnet34ForwardB_full`'s own forward prefixes. With 4.1b-4.1e that is
+       ResNet-34's T3 complete at batch BatchNorm.
+
+       ⭐ THE BLOCK COTANGENTS ARE NOT DERIVED. The per-example tie
+       (`ResNet34ChainClose.lean`) spells per-block cotangent vectors out by hand,
+       because no whole-block VJP existed when it was written. 4.1d's
+       `r34IdB_has_vjp_at` / `r34DownB_has_vjp_at` ARE the certified block
+       backwards, and `r34{BasicBlock,DownBlock}BackBatchedGraph_faithful` already
+       proves the emitted seven-node fan-in denotes them, so `r34IdCotIn_eq_vjp`
+       closes by `rfl` and `r34DownCotIn_eq_vjp` by one `add_comm`. The cross-block
+       chain is a composition of certified VJPs, not a re-derivation.
+
+       ⭐ THE TIE HAS TWO HALVES WITH DIFFERENT HYPOTHESES, AND THEY ARE KEPT
+       APART. The capstone `r34_net_tiedB` carries NO smoothness hypothesis and no
+       `0 < eps`: the folds are `forall cot` statements instantiated at explicitly
+       constructed cotangents. The kink and positivity conditions enter only in the
+       two `_eq_vjp` lemmas, which say those constructed cotangents ARE the
+       certified whole-net backward. `N` is a binder throughout.
+
+       ⭐ THE LOSS COTANGENT IS THE LABEL-SMOOTHED ONE, AT A GENERAL TARGET.
+       Every previous tie pinned its top-of-chain cotangent to
+       `softmax(logits) - oneHot label`. The batched renders compose
+       `(softmax(z) - t + alpha*t - alpha/K)/B` from six kit ops, with `t` the
+       graph input `%onehot` -- a soft vector under mixup or cutmix.
+       `Foundation/SmoothedLossCot.lean` gives cross-entropy against a target
+       DISTRIBUTION (`softCE`), its gradient with no hypothesis on `t` at all, and
+       `smoothedCE_grad`: the emitted expression IS the smoothed loss's gradient,
+       exactly, not an approximation of it. Shared, and what 4f's capstone
+       re-pointing will need for the other four nets.
+
+       ⛔ ONE REPLICA, AND THE CENSUS IS 110. Every gradient node in
+       `resnet34in_momdp64` is followed by `all_reduce(add)/4` as emitted text
+       outside the AST, so the tie is at the per-replica node (4d). And both r34
+       renders default to `convBias := false`, so the committed artifacts carry 110
+       SGD-updated tensors, not the 146 `ResNet34TiePoC.lean` and
+       `ResNet34Render.lean` named; those headers are corrected, and the forward's
+       arities are 111 and 183, not 147 and 219.
+
+       ⚠ ONE STEP SHORT. `bnInB_eq_bnBackB` is the only non-`rfl` step in the
+       cotangent chain (every relu mask, conv and strided-conv input-VJP and the
+       pool backward denotes its certified backward definitionally). The 3x3/s2
+       pool backward is threaded as the emitted `den` and is NOT identified with
+       `batchMap_has_vjp_at`'s backward -- there is no `maxPool3s2BackB_faithful`
+       yet, so the stem's cotangent is the artifact's and not (yet) provably the
+       certified pool VJP's.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
