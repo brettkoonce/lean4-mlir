@@ -102,7 +102,7 @@ status:
   axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 2281 declarations (count: grep -c '^#print axioms'
+    # `#print axioms` on 2291 declarations (count: grep -c '^#print axioms'
     # tests/AuditAxioms.lean); 52 are independently kernel-rechecked by the
     # comparator (tests/comparator/config.json). All close under exactly the
     # three core axioms above. comparator_config below points at that config for
@@ -319,6 +319,26 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.bceLossCotGraph_row_committed"   # each row of the emitted BCE cotangent is that loss's gradient, over the B*K divisor the render bakes
       file: "LeanMlir/Proofs/Foundation/BceLossCot.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
+    # --- ResNet-50's T1 at batch BatchNorm, [3,4,6,3] bottlenecks (status 4m).
+    - declaration: "Proofs.resnet50ForwardB_full"   # the whole-net R forward at the bottleneck ladder; q a binder, so 224 and 160 are instances
+      file: "LeanMlir/Proofs/Architectures/ResNet50FullB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: ["He et al. 2016, Deep Residual Learning (ResNet-50, v1.5 stride placement)"]
+    - declaration: "Proofs.resnet50ForwardB_full_has_vjp_at"   # certified whole-net input-VJP at a smooth point, all 16 bottlenecks
+      file: "LeanMlir/Proofs/Architectures/ResNet50FullBVJP.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct"   # and it is the pdiv-contracted Jacobian of the committed forward itself
+      file: "LeanMlir/Proofs/Architectures/ResNet50FullBVJP.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -1390,6 +1410,69 @@ fidelity:
        ResNet-50 still has no whole-net forward, graph or tie: these are the two
        pieces §3.5 said to budget INSIDE that package, now paid for in advance.
 
+    4m. RESNET-50's FIRST NET-LEVEL TIER (2026-09-06). The audit of 2026-09-05
+       recorded ResNet-50 as the largest hole in the Proofs tier: "none;
+       `r50Trunk_3463` is a backward fold", with T1 through T7 all missing.
+       `Architectures/ResNet50FullB.lean` and `ResNet50FullBVJP.lean` are T1 --
+       an ℝ forward at the [3,4,6,3] bottleneck ladder and a certified whole-net
+       `HasVJPAt` over it, ~2.5 s to elaborate, ten declarations.
+
+       ⭐ THIS IS THE ONE NET WHERE T1 MATCHES THE TRAINED WORLD FROM THE START.
+       ResNet-34's and MobileNetV2's Proofs tiers were written at per-example
+       BatchNorm and had to be ported (4e, 4g, 4i, 4j). `ResNet50RenderB` has
+       always been this net's only renderer, so `bnBatchLA` is the world of
+       `resnet50_fwd` AND of every train step, and there is no BatchNorm-world
+       port to do later. Nor does 4f's optimizer axis or 4h's renderer axis apply:
+       this net is batched-chain-only.
+
+       ⭐⭐ PURE ENUMERATION, AND NOTHING NEW ONE TIER DOWN.
+       `Foundation/ResNet50BackB0.lean` already carries all three batched
+       bottleneck forms with their pointwise VJPs and backward graphs at
+       `bnBatchLA`. And the STEM AND HEAD ARE RESNET-34's -- `r34StemB` is generic
+       in its channel counts and `r34HeadB` in its class count, so
+       `r34StemB_has_vjp_at` and `r34HeadB_has_vjp` apply verbatim at ResNet-50's
+       widths. That is why this file needed no new `Foundation` lemma where
+       ResNet-34's own T1 needed `batchMap_has_vjp_at` (4e) for exactly that stem
+       pool: the lemma is spent, not re-derived.
+
+       ⭐ ONE weight record serves BOTH projection forms. The stride-1 projection
+       (stage 1 block 0, `64 -> 256` -- the block with no ResNet-34 analogue,
+       since R34's stage 1 runs at `ic = oc`) and the strided one (stages 2/3/4
+       block 0) have identical parameter shapes and differ only in which
+       convolutions are strided, which is a property of the forward.
+
+       ⭐⭐ THE SPATIAL SIZE IS A BINDER, AND THAT IS NOT STYLISTIC. ResNet-50 ships
+       at TWO resolutions: `resnet50in_fwd` at 224 = 32x7 and `resnet50in160_fwd`
+       at 160 = 32x5, the second being where the quoted 76.66% comes from. One
+       statement covers both, and the file CHECKS it -- two `example`s at the
+       literal input types, plus `#guard`s on the ladder arithmetic. ⚠ Every
+       resolution is written as an explicit nest of `2 * (...)` rather than as
+       `8 * q`: those are equal naturals and NOT definitionally equal terms at a
+       variable `q`, and each block signature demands its operand at exactly the
+       spelling it names.
+
+       ⛔ THREE kink clauses per bottleneck -- the two interior relus and the
+       post-residual OUTER relu -- where ResNet-34's basic block has two and
+       EfficientNet's MBConv has none. 48 clauses, bundled into 16.
+       ⛔ `0 < q` is a real hypothesis, where ResNet-34 needed none: R34's ladder
+       is at literals so `0 < 56` closes by computation, and ResNet-50's stem pool
+       needs its output grid nonempty at a variable `q`.
+
+       ⚠⚠ v1.5 STRIDE PLACEMENT, invisible to the types: the stride is on the 3x3,
+       not the leading 1x1, so that convolution and its BatchNorm and relu run at
+       the INPUT resolution. The v1 placement compiles, trains and descends and is
+       a different net worth about 0.5 pt of top-1. ⚠ Symmetric padding at all
+       five stride-2 sites.
+
+       ⭐ The census is 161 updated parameters, which is `ResNet50RenderB`'s own
+       docstring: stem 3 + 12 identity blocks x 9 + 4 projection blocks x 12 +
+       head 2. The records' conv-bias slots are the `convBias := true` census and
+       are quantified over, as ResNet-34's and MobileNetV2's are.
+
+       ⚠ WHAT IS STILL MISSING FOR THIS NET: T2 (the typed forward graph, which
+       belongs in the same file and whose tokens are `r50FwdChainB`'s), T3, the
+       budgets and the backward tie. T1 is one of seven tiers.
+
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
        `mulVec/transpose/outer/mul`. This IS bridged to Mathlib's `Matrix`
@@ -1417,7 +1500,7 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above, plus a full `#print axioms` sweep of 2281
+    fidelity caveats above, plus a full `#print axioms` sweep of 2291
     declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 52

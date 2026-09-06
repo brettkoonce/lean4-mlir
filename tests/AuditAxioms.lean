@@ -130,6 +130,7 @@ import LeanMlir.Proofs.Architectures.EfficientNetTiePoCG
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
+import LeanMlir.Proofs.Architectures.ResNet50FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
@@ -5847,3 +5848,55 @@ open Proofs
 #print axioms Proofs.bceLossCotGraph_den
 #print axioms Proofs.bceLossCotGraph_row
 #print axioms Proofs.bceLossCotGraph_row_committed
+
+-- ════════════════════════════════════════════════════════════════
+-- §3.5(a): RESNET-50's T1 AT BATCH BATCHNORM (ResNet50FullB{,VJP}.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- ResNet-50 was the largest hole in the Proofs tier: the audit row read "none; r50Trunk_3463 is a
+-- backward fold" with every tier missing. This is its first NET-LEVEL statement -- an R forward at
+-- the [3,4,6,3] bottleneck ladder and a certified whole-net HasVJPAt over it.
+-- ⭐ THE ONE NET WHERE T1 MATCHES THE TRAINED WORLD FROM THE START. ResNet-34's and MobileNetV2's
+-- Proofs tiers were written at per-example BatchNorm and had to be ported (4e/4g/4i/4j);
+-- ResNet50RenderB has always been this net's only renderer, so bnBatchLA is the world of
+-- resnet50_fwd AND of every train step, and there is no BN-world port to do later. Nor do 4b's
+-- optimizer axis or 4c's renderer axis apply -- this net is batched-chain-only.
+-- ⭐⭐ PURE ENUMERATION, AND NOTHING NEW ONE TIER DOWN. ResNet50BackB0 already carries all three
+-- batched bottleneck forms (r50BottleneckB / r50ProjBlockB / r50DownBlockB) with their _at VJPs and
+-- backward graphs at bnBatchLA. And THE STEM AND HEAD ARE RESNET-34's: r34StemB is generic in
+-- {ic oc} and r34HeadB in {c nCls}, so r34StemB_has_vjp_at and r34HeadB_has_vjp apply verbatim at
+-- R50's widths. That is why this file needed no new Foundation lemma, where r34's own T1 needed
+-- batchMap_has_vjp_at for exactly that stem pool -- the lemma is spent, not re-derived.
+-- ⭐ ONE weight record (R50ProjW) serves BOTH projection forms. The stride-1 projection (stage 1
+-- block 0, 64 -> 256, the block with no ResNet-34 analogue) and the strided one (stages 2/3/4
+-- block 0) have identical parameter shapes and differ only in which convs are strided, which is a
+-- property of the forward. ResNet-34 needed two records for its two block kinds.
+-- ⭐⭐ q IS A BINDER, and that is not stylistic: ResNet-50 ships at TWO resolutions --
+-- resnet50in_fwd at 224 = 32*7 and resnet50in160_fwd at 160 = 32*5, the latter being the net the
+-- quoted 76.66% trains. One statement covers both, and the file CHECKS that with two `example`s at
+-- the literal input types plus #guards on the ladder arithmetic. ⚠ Every resolution is written as
+-- an explicit nest of 2 * (...) rather than 8 * q: those are equal Nats and NOT definitionally
+-- equal terms at a variable q, and each block signature demands its operand at exactly the
+-- spelling it names. The render's own q1..q5 comment records the same trap on the emitter side.
+-- ⛔ THREE kink clauses per bottleneck -- the two interior relus and the post-residual OUTER relu --
+-- where ResNet-34's basic block has two and EfficientNet's MBConv none. 48 clauses in 16 bundles.
+-- ⛔ 0 < q IS A REAL HYPOTHESIS, where ResNet-34 needed none: r34's ladder is at literals so
+-- `0 < 56` closes by norm_num, and R50's stem pool needs its output grid nonempty at a variable q.
+-- ⚠⚠ v1.5 STRIDE PLACEMENT: the stride is on the 3x3, not the leading 1x1, so that conv and its BN
+-- and relu run at the INPUT resolution. The v1 placement compiles, trains and descends and is a
+-- different net (~0.5 pt of top-1). ⚠ SYMMETRIC padding at all five stride-2 sites. Neither
+-- convention is visible to the types.
+-- ⭐ The census is 161 updated parameters, which is ResNet50RenderB's own "161 theta / 161 m /
+-- 161 v": stem 3 + 12 identity blocks x 9 + 4 projection blocks x 12 + head 2. The records' bias
+-- slots are the convBias := true census and are quantified over.
+-- ⚠ T2 (the typed forward graph) is NOT here yet -- §3.5(b). It belongs in ResNet50FullB.lean
+-- beside the forwards, and its tokens are r50FwdChainB's.
+#print axioms Proofs.resnet50ForwardB_full
+#print axioms Proofs.r50IdB_has_vjp_at
+#print axioms Proofs.r50IdB_differentiableAt
+#print axioms Proofs.r50ProjB_has_vjp_at
+#print axioms Proofs.r50ProjB_differentiableAt
+#print axioms Proofs.r50DownB_has_vjp_at
+#print axioms Proofs.r50DownB_differentiableAt
+#print axioms Proofs.resnet50ForwardB_full_has_vjp_at
+#print axioms Proofs.resnet50ForwardB_full_eq_chain
+#print axioms Proofs.resnet50ForwardB_full_has_vjp_at_correct

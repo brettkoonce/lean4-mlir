@@ -653,6 +653,29 @@ lean_lib «Certs» where
              -- not B -- timm's BinaryCrossEntropy is reduction='mean' over B x C, and at K = 1000
              -- the two differ by 1000x on the effective step (BceLossCot.lean).
              `LeanMlir.Proofs.Foundation.BceLossCot,
+             -- ⭐⭐ §3.5(a): RESNET-50's T1 at batch BatchNorm — the first net-level tier this net
+             -- has ever had. ⭐ The one net where T1 matches the trained world from the start:
+             -- ResNet50RenderB has always been the sole renderer, so bnBatchLA is the world of
+             -- resnet50_fwd and of every train step, and there is no BN-world port to do later.
+             -- ⭐⭐ Pure enumeration: ResNet50BackB0 already carries all three batched bottleneck
+             -- forms with their _at VJPs and backward graphs, and the STEM AND HEAD ARE
+             -- RESNET-34's (r34StemB / r34HeadB are generic in their widths), so r34StemB_has_vjp_at
+             -- and r34HeadB_has_vjp apply verbatim and nothing new was needed one tier down --
+             -- unlike r34's own T1, which needed batchMap_has_vjp_at for exactly that stem pool.
+             -- ⭐ ONE weight record (R50ProjW) serves both projection forms; they differ only in
+             -- which convs are strided, which is a property of the forward.
+             -- ⭐⭐ q IS A BINDER: ResNet-50 ships at TWO resolutions (resnet50in_fwd at 224 = 32*7
+             -- and resnet50in160_fwd at 160 = 32*5, the net the quoted 76.66% trains), so one
+             -- statement covers both. ⚠ Every resolution is an explicit nest of 2 * (...), never
+             -- 8 * q: those are equal Nats and NOT definitionally equal terms at a variable q.
+             -- ⛔ THREE kink clauses per bottleneck (two interior relus + the post-residual one),
+             -- where r34's basic block has two; 48 clauses in 16 bundles. ⛔ 0 < q is a real
+             -- hypothesis, where r34's literal ladder needed none (the stem pool's output grid).
+             -- ⚠⚠ v1.5 stride placement (on the 3x3, not the leading 1x1) and SYMMETRIC padding
+             -- at all five stride-2 sites; neither is visible to the types
+             -- (ResNet50FullB.lean, ResNet50FullBVJP.lean).
+             `LeanMlir.Proofs.Architectures.ResNet50FullB,
+             `LeanMlir.Proofs.Architectures.ResNet50FullBVJP,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT
