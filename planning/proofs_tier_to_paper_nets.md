@@ -33,13 +33,14 @@ ConvNeXt-T, ViT-Tiny) are there. 4d's ℝ-level lemma fits any session; its op n
 | target | cost | why now |
 |---|---|---|
 | **4c legs 3–4, ConvNeXt-T and ViT-Tiny** | one session each | ⭐ A different shape: no BatchNorm-world split (LayerNorm, train == eval), and the two chains render the same FORWARD byte-for-byte. The leg is a SWAP of 78 backward lines, not a re-render. ⚠ The licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric A/B. ⭐ The carried `*in_*` PAIRS extension is DONE (2026-09-06, 20 paired / 0 split, plus a completeness assertion), so these legs are instrumented in a way legs 1 and 2 were not. |
-| **4b's capstone re-pointing** | one session | 4b left the FOLD done and the five `*_net_tied_certified` capstones un-re-pointed. Its prerequisite landed with 4.2a (`Foundation/SmoothedLossCot.lean`, general target). B0, ConvNeXt and ViT are the cheap three — their Adam artifacts are already on the renderer they have. |
+| **4b's capstone re-pointing** | ✅ **3 of 5 DONE 2026-09-06** | r34 and mnv2 got theirs as batched ties (4.2a, 4.2c); **EfficientNet-B0's landed as `EfficientNetTiePoCG.lean`** — all 262 parameters at the RAW gradient node AND the shared smoothed loss. ⚠ ConvNeXt-T and ViT-Tiny are NOT the "cheap two" this row assumed: their Adam artifacts come from the PER-EXAMPLE renderers, where the six-op loss chain is emitted at `N := 1` with the batch in `pretty`'s argument rather than inside `den`. A capstone written for them today would be about a chain 4c legs 3–4 will retire — write it twice, or do the legs first. |
 | **4d piece 1** | half a session | `Foundation/DataParallel.lean`: `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)`, plus the lockstep induction. Cheap, certain, and it answers "what function trained" for every `*dp*` artifact — which every tie currently disclaims. |
 | **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and now cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. R50 needs the LAMB tail cert and the BCE cotangent first. |
 
-⭐ **Recommendation: 4b's capstone re-pointing, or 4d piece 1.** The renderer axis is closed for
-both BatchNorm nets and legs 3–4 are a separate shape with an offline gate; the two cheap items
-above buy more per session than starting them.
+⭐ **Recommendation: 4d piece 1, then 4c legs 3–4.** 4b's re-pointing is 3 of 5 done and the
+remaining two are blocked behind their renderer legs (see the row above), so the ordering is now
+forced: `Foundation/DataParallel.lean` is half a session and answers "what function trained" for
+every `*dp*` artifact, and after it the ConvNeXt/ViT legs unblock their own capstones.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds

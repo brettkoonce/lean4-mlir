@@ -592,6 +592,17 @@ lean_lib «Certs» where
              -- ⛔ The census is 158 parameters, not the 210 slots stated: convBias := false, so the
              -- 52 bias nodes are not emitted. ⛔ ONE REPLICA — the all-reduce is text outside the AST.
              `LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB,
+             -- ⭐ 4b's capstone re-pointing, EfficientNet-B0: the 262-parameter §1a tie restated
+             -- at the RAW gradient nodes (*GradB, what every non-SGD-inline step emits) and at the
+             -- SHARED SMOOTHED loss cotangent at a general target. The fused file pins g to
+             -- softmax - oneHot, the gradient of plain CE at a hard label, which no ImageNet
+             -- artifact computes. ⭐ No new mathematics: every cotangent chain, activation and
+             -- Jacobian witness is EfficientNetTiePoC's, and each conjunct is that file's proof
+             -- with the `theta - lr *` peeling dropped — the fusion is rfl. The lr/wN/bN/gN/lrStr
+             -- binders go with the wrapper. ⭐ The head takes `g` as a BINDER where the fused one
+             -- computes it internally; that is the whole of the loss axis, since the per-block
+             -- ties were already forall-cot (EfficientNetTiePoCG.lean).
+             `LeanMlir.Proofs.Architectures.EfficientNetTiePoCG,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

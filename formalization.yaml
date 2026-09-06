@@ -893,10 +893,28 @@ fidelity:
        the bf16 twins all consume the same node. So the artifacts the book names
        (`<net>_adam_train_step.mlir`) and the ImageNet ones whose accuracies are
        quoted are now covered at the fold, where before only the SGD-inline file
-       was. It does NOT re-point the `*_net_tied_certified` capstones: those pin
-       each cotangent to the emitted backward subgraph, and re-pointing needs the
-       shared smoothed-target loss cotangent, which is scoped with ResNet-34's
-       batched tie. Until then a net's T3 at its Adam artifact is the fold only.
+       was.
+
+       THE CAPSTONES ARE BEING RE-POINTED, THREE OF FIVE DONE (2026-09-06).
+       ResNet-34 and MobileNetV2 got theirs as batched ties (4g, 4j).
+       EfficientNet-B0's is `Architectures/EfficientNetTiePoCG.lean`: all 262
+       parameters at the RAW gradient node AND at the shared smoothed-target loss
+       cotangent, where the fused `EfficientNetTiePoC` pins `g` to
+       `softmax - oneHot` -- the gradient of plain cross-entropy at a hard label,
+       which no ImageNet artifact computes. No new mathematics: every cotangent
+       chain, activation and Jacobian witness is the fused file's, and each
+       conjunct is its proof with the `theta - lr *` peeling dropped, since the
+       fusion is `rfl`. The `lr`/`wN`/`bN`/`gN`/`lrStr` binders go with the
+       wrapper. The head takes `g` as a BINDER where the fused one computes it
+       internally, and that is the whole of the loss axis -- the per-block ties
+       are `forall cot` statements and were already loss-agnostic.
+
+       ⚠ CONVNEXT-T AND VIT-TINY ARE NOT THE "CHEAP TWO" THE PLAN ASSUMED. Their
+       Adam artifacts come from the PER-EXAMPLE renderers, where the six-op loss
+       chain is emitted at `N := 1` with the batch in `pretty`'s argument rather
+       than inside `den` (`SmoothedLossCot`'s statement is at the batched index).
+       A capstone written for them today would be about a chain 4c legs 3 and 4
+       will retire, so it would have to be written twice. Their legs come first.
 
        NO NEW MATHEMATICS, AND OP KINDS ARE SHARED MORE THAN THE FILE NAMES
        SUGGEST. The fusion is `rfl` -- the 29 `*Sgd_eq_grad` / `*SgdB_eq_grad`

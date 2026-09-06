@@ -126,6 +126,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
 import LeanMlir.Proofs.Architectures.MobileNetV2FullB
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB
+import LeanMlir.Proofs.Architectures.EfficientNetTiePoCG
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
@@ -5690,3 +5691,36 @@ open Proofs
 #print axioms Proofs.MobileNetV2TieB.mnv2_head_tiedB
 #print axioms Proofs.MobileNetV2TieB.mnv2_net_tiedB
 #print axioms Proofs.MobileNetV2TieB.mnv2_lossCot_is_smoothedCE_grad
+
+-- ════════════════════════════════════════════════════════════════
+-- 4b's CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetTiePoCG.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- EfficientNetTiePoC ties all 262 parameters of the SGD-inline efficientnet_train_step at the FUSED
+-- theta - lr*g ops and at the HARD-LABEL loss cotangent softmax - oneHot. This is that statement
+-- re-pointed along the two axes 4b left open.
+-- ⭐ Axis 1, the OPTIMIZER FORM: every conjunct is at the RAW gradient node (*GradB), which is what
+-- efficientnet_adam_train_step and every ImageNet artifact emit; the fused op appears only in the
+-- SGD-inline file. One statement covers AdamW, RMSProp, EMA, the clipped and drop-path variants and
+-- their DP and bf16 twins, because they all consume this node. 4b.1's EfficientNetFaithfulPoCG is
+-- the fold each conjunct delegates to.
+-- ⭐ Axis 2, the LOSS: the capstone's top-of-chain cotangent is SmoothedLossCot's, at a GENERAL
+-- target -- the six-op chain the batched renders emit, with the target arriving as the graph input.
+-- The fused file pins it to the gradient of plain CE at a hard label, which no ImageNet artifact
+-- computes. unrowB / rowB are ResNet-34's casts between the loss chain's one-row-per-example index
+-- and the dense ops' plain per-example width.
+-- ⭐ NO NEW MATHEMATICS. Every cotangent chain, forward activation and Jacobian witness is the
+-- fused file's, unchanged; the fusion is rfl (*SgdB_eq_grad), so each conjunct's proof is that
+-- file's with the wrapper peeling dropped -- exactly as 4b's folds were. The lr, wN, bN, gN and
+-- lrStr binders disappear with the wrapper.
+-- ⭐ The head takes `g` as a BINDER where the fused one computes it internally. That is the whole
+-- of axis 2: the per-block ties are forall-cot statements and were already loss-agnostic, so only
+-- the head and the capstone had to move.
+-- ⚠ Conventions carried unchanged: batch BatchNorm, XLA-SAME at the 3x3/s2 stem and SYMMETRIC at
+-- the strided depthwises, swish (no kink, so no smoothness hypothesis anywhere), the SE gate fan-in
+-- folded into the block VJPs. ⛔ ONE REPLICA -- the all-reduce is text outside the AST.
+#print axioms Proofs.EnetTiePoCG.enet_exp_tiedG
+#print axioms Proofs.EnetTiePoCG.enet_strided_tiedG
+#print axioms Proofs.EnetTiePoCG.enet_noexp_tiedG
+#print axioms Proofs.EnetTiePoCG.enet_stem_tiedG
+#print axioms Proofs.EnetTiePoCG.enet_head_tiedG
+#print axioms Proofs.EnetTiePoCG.efficientnet_net_tiedG
