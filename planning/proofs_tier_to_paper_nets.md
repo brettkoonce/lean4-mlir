@@ -602,7 +602,7 @@ one until 2026-08-04). `scripts/convention_audit.py` sees the first at the artif
 ⭐ The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
 1000-class `resnet34in` ones.
 
-⛔ **The VJP half of T1 is blocked on one missing lemma, and it is small.** The whole-net
+⛔→✅ **The VJP half of T1 was blocked on one missing lemma; it landed the same day (4.1c).** The whole-net
 `HasVJPAt` needs the stem pool's VJP lifted through `batchMap`, and `batchMap_has_vjp`
 (`EfficientNetChainClose.lean`) is the GLOBAL form only — there is no `batchMap_has_vjp_at`. B0
 never needed one because swish is smooth everywhere and its stem has no pool. The per-example
@@ -613,14 +613,72 @@ r34 assembly is `MobileNetV2FullVJP.lean`'s shape: per-block `Pos`/`SmoothAt` bu
 prefix defs, and the apex. ⚠ r34 carries **two** relu clauses per block (the body's mid-relu and
 the post-residual one) where MobileNetV2 carries two relu6 clauses; same count, same shape.
 
+### 4.1c DONE 2026-09-06 — `batchMap` at a point
+
+`Foundation/BatchMapVJPAt.lean` (~200 lines, ~1.9 s): `pdivMat_rowIndep_at`,
+`batchMap_differentiableAt`, `pdiv_batchMap_at`, `batchMap_has_vjp_at`. All four 3-axiom clean;
+`Certs` 3969.
+
+⭐ **`pdivMat_rowIndep`'s global differentiability was never actually global.** Its docstring
+explains why it asks for `Differentiable ℝ g` — a non-differentiable coordinate makes `fderiv` junk
+and breaks the per-row decomposition — but every *use* of the hypothesis in the proof is at a ROW
+of the matrix the statement is about. So it weakens to `∀ r, DifferentiableAt ℝ g (A r)` with no
+change to the argument at all; the only edit is moving the row-projection equation
+`(rowProj k) (Mat.flatten A) = A k` to the top, so the coordinate differentiability can be stated
+at the projected point. It compiled on the first pass.
+
+⚠ **`batchMap_has_vjp_at` is built field by field, not transported with `▸`.** `batchMap_has_vjp`
+transports along `batchMap_eq_rowwiseFlat`; an `Eq.mpr` blocks `.backward` from reducing, which is
+§5's transport trap and which T6 will need. `maxPool3s2Flat_has_vjp_at_vec` was written for exactly
+this reason one tier down.
+
+✅ **Checked against the case that motivated it.** The batched pool VJP is
+`batchMap_has_vjp_at _ v (fun r => maxPool3s2Flat_has_vjp_at_vec (Mat.unflatten v r) (hs r))
+(fun r => maxPool3s2Flat_differentiableAt_vec (Mat.unflatten v r) (hs r) hc hh hw)` — the two
+per-example pieces plugged straight in with no glue between them, which is the evidence that the
+lemma has the right shape. It is stated in r34's VJP file rather than here, since
+`maxPool3s2Flat_has_vjp_at_vec` is in the `Float` tier and this is a `Foundation` file.
+
+### 4.1d DONE 2026-09-06 — ResNet-34's T1 is complete
+
+`Architectures/ResNet34FullBVJP.lean` (514 lines, **2.8 s**): the four hypothesis bundles
+(`R34IdPos` / `R34DownPos` / `R34IdSmoothAt` / `R34DownSmoothAt`) plus `R34StemSmoothAt` and
+`R34PoolSmoothAt`, the six bundle lemmas, `r34Pre0 … r34Pre16`,
+`resnet34ForwardB_full_has_vjp_at`, `resnet34ForwardB_full_eq_chain`, and
+`resnet34ForwardB_full_has_vjp_at_correct`. Seven declarations 3-axiom clean, `Certs` 3970.
+
+⭐ **Delegation, as scoped.** `r34BasicBlockB_has_vjp_at` and `r34DownBlockB_has_vjp_at`
+(`ResNet34BackB0.lean`) are exactly the two shapes `r34IdB` / `r34DownB` unfold to, so the bundle
+lemmas are one line each. The only piece that did not exist is 4.1c's `batchMap_has_vjp_at`.
+
+⛔ **Two kink clauses per block, not one** — the body's mid-relu AND the post-residual **outer**
+relu. That outer relu is ResNet's structural difference from MobileNetV2/EfficientNet, whose
+residual add IS the block output, and it is why `ResNet34BackB0.lean`'s block VJPs take `h_s1` and
+`h_out` separately. Sixteen blocks give 32 clauses, plus the stem's relu and the pool's no-tie
+condition, bundled into 18 binders.
+
+⚠ **The pool's condition is PER EXAMPLE** (`∀ r : Fin N, MaxPool3s2Smooth …` on that row): a tie
+is a property of one image's 3×3 window, not of the batch. That is exactly the shape
+`batchMap_has_vjp_at` consumes, which is the second check that 4.1c has the right statement.
+
+⭐ **The head takes no hypothesis at all.** GAP and dense are smooth and each is `batchMap` of a
+per-example op, so `batchMap_has_vjp` (the global one) suffices — the one place in this net where
+the pointwise machinery is not needed.
+
+⭐ `_correct` is about `resnet34ForwardB_full` itself — the forward whose typed graph 4.1b
+certifies — not about the layered chain the VJP is assembled on; `resnet34ForwardB_full_eq_chain`
+is the bridge, peeled one `*_apply` layer at a time per `MobileNetV2FullVJP.lean`'s recipe.
+
+**ResNet-34's T1 and T2 at batch BN are done. T3 is next.**
+
 ### 4.2 Still open, per net
 
-For each of ResNet-34 and MobileNetV2, at `bnBatchLA` (r34's T1-forward and T2 landed, 4.1b):
+For each of ResNet-34 and MobileNetV2, at `bnBatchLA` (r34's T1 and T2 landed, 4.1b–4.1d):
 
 | tier | what it needs | mirror |
 |---|---|---|
-| T1 | net-level ℝ forward + whole-net `HasVJPAt` (both nets have relu kinks) | `EfficientNetFullB0.lean` |
-| T2 | typed forward graph, per-block `_faithful` then chained | `ResNet34RenderB` / `MobileNetV2RenderB` tokens |
+| T1 | net-level ℝ forward + whole-net `HasVJPAt` (both nets have relu kinks) — ✅ r34 | `EfficientNetFullB0.lean` |
+| T2 | typed forward graph, per-block `_faithful` then chained — ✅ r34 | `ResNet34RenderB` / `MobileNetV2RenderB` tokens |
 | T3 | FaithfulPoC / TiePoC against the batch-BN train step | the existing per-example pair |
 | T4 | training-BN forward budget — a **CAP**, as `r34_train_float_logits_le` already is | `Maps.bnBatchTensor4Capped` |
 | T5 | backward budget, one theorem per `N` | `Maps.bnBatchBack` |

@@ -472,7 +472,21 @@ lean_lib «Certs» where
              -- ⚠ Symmetric padding at all seven stride-2 sites (.convStrided, NOT .convStridedXla)
              -- and a 3x3/s2 stem pool; both are invisible to the types.
              -- ⚠ N stays a variable — T1/T2 carry no numerals, so the batch is pinned only at T4/T5.
+             -- ⭐ `batchMap` at a POINT — the pointwise peer of batchMap_has_vjp, and the one lemma
+             -- between ResNet34FullB and r34's whole-net VJP. EfficientNet never needed it (swish
+             -- is smooth and B0's stem has no pool); r34's stem is batchMap N (maxPool3s2Flat),
+             -- and a max-pool has no derivative at a tie. ⭐ pdivMat_rowIndep's global
+             -- `Differentiable` weakens to differentiability at each ROW with no change to the
+             -- argument — every use of it in that proof is already at a row.
+             `LeanMlir.Proofs.Foundation.BatchMapVJPAt,
              `LeanMlir.Proofs.Architectures.ResNet34FullB,
+             -- ⭐⭐ …and its whole-net input-VJP (T1's VJP half). Delegation only: the two batched
+             -- block VJPs are ResNet34BackB0's, and the one thing that did not exist is
+             -- batchMap_has_vjp_at, for the stem pool. ⛔ Each block carries TWO relu clauses —
+             -- the body's mid-relu AND the post-residual OUTER relu, ResNet's structural
+             -- difference from MobileNetV2/EfficientNet, whose residual add IS the block output.
+             -- ⭐ The head takes no hypothesis (GAP and dense are smooth batchMaps).
+             `LeanMlir.Proofs.Architectures.ResNet34FullBVJP,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

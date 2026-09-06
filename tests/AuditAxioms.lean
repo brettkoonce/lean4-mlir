@@ -115,7 +115,9 @@ import LeanMlir.Proofs.Float.FloatBudgetEnvBack
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackLN
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackSE
 import LeanMlir.Proofs.Float.BnBatchFloatBridge
+import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Architectures.ResNet34FullB
+import LeanMlir.Proofs.Architectures.ResNet34FullBVJP
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
@@ -5325,3 +5327,50 @@ open Proofs
 #print axioms Proofs.StableHLO.r34StemGraphB_faithful
 #print axioms Proofs.StableHLO.r34HeadGraphB_faithful
 #print axioms Proofs.StableHLO.resnet34FwdGraphB_full_faithful
+
+-- ════════════════════════════════════════════════════════════════
+-- `batchMap` AT A POINT (BatchMapVJPAt.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- The pointwise peer of `batchMap_has_vjp` (EfficientNetChainClose.lean), which is the GLOBAL form
+-- and all EfficientNet ever needed — swish is smooth everywhere and B0's stem has no pooling.
+-- ResNet-34's stem is `batchMap N (maxPool3s2Flat c h w)` and a max-pool has no derivative at a
+-- tie, so without this its whole-net VJP at batch BN cannot be assembled.
+-- ⭐ `pdivMat_rowIndep` asks for `Differentiable R g` and its docstring explains why, but every use
+-- of that hypothesis in its proof is at a ROW of the matrix the statement is about. So it weakens
+-- to `forall r, DifferentiableAt R g (A r)` with no change to the argument — only the row-projection
+-- equation `(rowProj k) (Mat.flatten A) = A k` moves to the top, so the coordinate differentiability
+-- can be stated at the projected point.
+-- ⚠ `batchMap_has_vjp_at` is built field by field, NOT transported along `batchMap_eq_rowwiseFlat`
+-- with the `▸` the global version uses: an `Eq.mpr` blocks `.backward` from reducing, which the
+-- whole-net certified-backward tie (T6) will need.
+#print axioms Proofs.pdivMat_rowIndep_at
+#print axioms Proofs.batchMap_differentiableAt
+#print axioms Proofs.pdiv_batchMap_at
+#print axioms Proofs.batchMap_has_vjp_at
+
+-- ════════════════════════════════════════════════════════════════
+-- RESNET-34 AT TRUE BATCH BN — T1's VJP half (ResNet34FullBVJP.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- The whole-net input-VJP at `bnBatchLA`, at the paper [3,4,6,3] depth: stem, sixteen basic
+-- blocks, head, chained with `vjp_comp_at` over one positivity bundle and one smoothness bundle
+-- per block. Completes T1 for `formalization.yaml` 4e's port; 2.8 s to elaborate.
+-- ⭐ Delegation only. The two batched block VJPs (r34BasicBlockB_has_vjp_at,
+-- r34DownBlockB_has_vjp_at) were already in ResNet34BackB0.lean; the only thing that did not exist
+-- is batchMap_has_vjp_at, for the stem pool, and it is its own file.
+-- ⛔ Pointwise and necessarily so — relu is kinked — and each block contributes TWO clauses: the
+-- body's mid-relu AND the post-residual OUTER relu. That outer relu is ResNet's structural
+-- difference from MobileNetV2/EfficientNet, whose residual add IS the block output. Sixteen blocks
+-- give 32 clauses, plus the stem's relu and the pool's per-example no-tie condition.
+-- ⚠ The pool's condition is PER EXAMPLE: a tie is a property of one image's 3x3 window.
+-- ⭐ The head takes no hypothesis at all (GAP and dense are smooth, and each is batchMap of a
+-- per-example op), and N is a variable — this tier carries no numerals.
+-- ⭐ `_correct` is about `resnet34ForwardB_full` ITSELF, the forward whose typed graph
+-- resnet34FwdGraphB_full_faithful certifies, not about the layered chain the VJP is built on;
+-- resnet34ForwardB_full_eq_chain is the bridge.
+#print axioms Proofs.r34IdB_has_vjp_at
+#print axioms Proofs.r34DownB_has_vjp_at
+#print axioms Proofs.r34StemB_has_vjp_at
+#print axioms Proofs.r34HeadB_has_vjp
+#print axioms Proofs.resnet34ForwardB_full_has_vjp_at
+#print axioms Proofs.resnet34ForwardB_full_eq_chain
+#print axioms Proofs.resnet34ForwardB_full_has_vjp_at_correct
