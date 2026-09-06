@@ -7,9 +7,20 @@ import LeanMlir.Proofs.Architectures.CifarBnFaithfulPoC
 
 The whole-net peer of `MobileNetV2FaithfulPoC` (the reduced 6-block fold), scaled to the real
 `[t,c,n,s]` table. `mnv2TrainStepFaithfulVPaper` (`MobileNetV2Render.lean`) renders the full
-17-block SGD train step (210 params) as `pretty(provenGraph)` and writes
-`verified_mlir/mobilenetv2_paper_train_step.mlir`; this file makes its parameter updates
-`den`-faithful — every emitted param-SGD op denotes the certified loss-descent step.
+17-block SGD train step as `pretty(provenGraph)` and writes
+`verified_mlir/mobilenetv2_train_step.mlir`; this file makes its parameter updates `den`-faithful —
+every emitted param-SGD op denotes the certified loss-descent step.
+
+⛔ **Two corrections to this header, 2026-09-06 (from `MobileNetV2FaithfulPoCPaperG.lean`).** It
+used to name `mobilenetv2_paper_train_step.mlir`, which is `mnv2TrainStepFaithfulVPaper`'s
+`funcName` DEFAULT and no artifact: its one call site (`MobileNetV2Render.lean:788`) passes
+`"mobilenetv2_train_step"`, and the 6-block net is `mobilenetv2_reduced_train_step.mlir`. And the
+SHIPPED parameter count is **158**, not the 210 tabulated below: both this render and
+`MobileNetV2RenderB` default to `convBias := false` — each conv, depthwise and project bias is
+folded into the BatchNorm that follows it — and `mobilenetv2_train_step.mlir` returns exactly 158
+updated tensors. 210 is the census at `convBias := true`, which nothing commits. Neither
+correction touches a theorem here: every fold below is `∀`-quantified over op instances and holds
+at both flag settings; what changes is which conjuncts the artifact exercises.
 
 **Zero new core ops, ZERO new den lemmas — pure reuse, exactly the cifar8-bn lesson.** The 17-block
 net emits the *same twelve* param-SGD op types the reduced 6-block net already exercises, just more
@@ -27,8 +38,10 @@ already in the 3-axiom closure:
 | every BN γ/β `bn{Gamma,Beta}Sgd`                   | `CifarBnPoC.bn{Gamma,Beta}_den`                     |
 | final dense `weightSgd`/`biasSgd`                  | `Cifar8PoC.dense{W,B}_den`                           |
 
-210-param accounting: stem 4 + b1 (no-expand) 8 + b2…b17 (16 inverted-residual × 12) 192 +
-head 4 + dense 2 = **210**.
+Parameter accounting, at `convBias := true` (the census the table above is written at):
+stem 4 + b1 (no-expand) 8 + b2…b17 (16 inverted-residual × 12) 192 + head 4 + dense 2 = **210**.
+⚠ At the shipped `convBias := false` the bias slots are gone and the same decomposition is
+stem 3 + b1 6 + 16 × 9 + head 3 + dense 2 = **158**, which is what the artifact returns.
 
 What this file adds over the bare generics: **one named, machine-checked capstone per distinct
 block-type param profile** — `mnv2Stem/NoExp/Stride1/Stride2/Head/Dense ParamsCertified` — each
@@ -42,6 +55,10 @@ params den-certified" is now a checked statement per block type rather than pros
 * The cotangents are free (∀ c); pinning each to the actual 17-block inverted-residual backward
   chain (the fan-in sum at every stride-1 skip, the relu6 two-kink masks) is the §1a tie
   (`MobileNetV2TiePoCPaper`). Per-op `pretty` lexing + BN `0<ε` + relu6 + ℝ → Float32.
+* These folds are at the FUSED `θ − lr·g` ops, which only this SGD-inline render emits.
+  `mobilenetv2_adam_train_step.mlir` and every ImageNet artifact come from `MobileNetV2RenderB`,
+  which is batched, AdamW-only and un-fused; `MobileNetV2FaithfulPoCPaperG.lean` is the fold
+  there.
 -/
 
 open Proofs Proofs.StableHLO

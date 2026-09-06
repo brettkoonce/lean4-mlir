@@ -66,8 +66,12 @@ status:
     through the full transformer tower. On top of the VJP layer, four further
     proved programs: (1) TRAIN-STEP TIES -- every net's SGD-inline train step,
     all 12 nets, is tied to its real loss-driven backward cotangent (per-net
-    *TiePoC capstones, e.g. the all-200-params vit_net_tied_certified; the Adam
-    and ImageNet steps are the un-fused-gradient re-statement, 4e below), plus
+    *TiePoC capstones, e.g. the all-200-params vit_net_tied_certified). For the
+    Adam, RMSProp and ImageNet steps -- which emit the raw gradient rather than
+    the fused theta - lr*g -- what is proved is the FOLD at every gradient node
+    of all five ImageNet-scale nets (the *FaithfulPoC*G files, 4f below): each
+    node denotes the certified gradient for every cotangent. Pinning those to
+    the backward chain, i.e. re-pointing the capstones, is not done. Plus
     committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
     ERROR -- a binary32 rounding model constructed from scratch (rndP, standard
     model proved, no hardware axioms); Type-valued whole-net float bridges
@@ -181,6 +185,40 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.ViTTiePoC.vit_net_tied_certified"   # train-step tie: all 200 ViT params fed the REAL backward cotangent
       file: "LeanMlir/Proofs/Architectures/ViTTiePoC.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
+    # --- The UN-FUSED gradient folds (status 4f): every parameter gradient node of the Adam /
+    #     RMSProp / ImageNet train steps denotes the certified gradient, for every cotangent.
+    #     One representative per file; 41 declarations in all, 3-axiom clean.
+    - declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den"   # r34, batched + SYMMETRIC pad: the template for the other four
+      file: "LeanMlir/Proofs/Foundation/ResNet34FaithfulPoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.EnetPoCG.convStridedXlaWGradB_den"   # B0's XLA-SAME stem; its other 5 op kinds are r34's
+      file: "LeanMlir/Proofs/Architectures/EfficientNetFaithfulPoCG.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.CnxPoCG.psWGrad_den"   # ConvNeXt's 4x4/s4 patchify stem: the one node that never had a fused peer
+      file: "LeanMlir/Proofs/Architectures/ConvNeXtFaithfulPoCG.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.ViTPoCG.veclnGammaGrad_den"   # ViT's 25 LN gammas at the VECTOR LayerNorm the shipped net runs
+      file: "LeanMlir/Proofs/Architectures/ViTFaithfulPoCG.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.Mnv2PaperPoCG.mnv2Stride2GradsCertified"   # mnv2 stride-2 block profile, batched; XLA-SAME depthwise
+      file: "LeanMlir/Proofs/Architectures/MobileNetV2FaithfulPoCPaperG.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -759,13 +797,15 @@ fidelity:
        THREE MORE AXES THE SAME REVIEW FOUND (2026-09-06, later that day),
        recorded here because "the certified net and the net that produced the
        headline number are different functions" is true for more reasons than
-       BatchNorm. (i) OPTIMIZER FORM. All five *_net_tied_certified capstones
-       are at the fused `theta - lr * g` ops, which only the SGD-inline
-       `<net>_train_step.mlir` emits; every other train step, the ImageNet ones
-       included, emits the raw gradient and hands it to an optimizer tail. The
-       decision is to re-state every fold at the gradient node -- the
-       `*Sgd_eq_grad` family is `rfl` and ResNet34FaithfulPoCB is the template
-       -- which covers every tail at once. The tails are certified
+       BatchNorm. (i) OPTIMIZER FORM -- FOLD DONE 2026-09-06, see 4f. All five
+       *_net_tied_certified capstones are at the fused `theta - lr * g` ops,
+       which only the SGD-inline `<net>_train_step.mlir` emits; every other
+       train step, the ImageNet ones included, emits the raw gradient and hands
+       it to an optimizer tail. The decision was to re-state every fold at the
+       gradient node -- the `*Sgd_eq_grad` family is `rfl` and
+       ResNet34FaithfulPoCB was the template -- which covers every tail at once;
+       that is now done for all five nets, and the capstones are not yet
+       re-pointed. The tails are certified
        (adamW_triple_faithful, mom_pair_faithful, rmsProp_triple_faithful,
        clipGrad_faithful, dropPathB_faithful; EMA and accumulation reuse
        adamMNextF / momVNextF) except LAMB, which has no faithfulness theorem,
@@ -784,6 +824,59 @@ fidelity:
        and lockstep are driver logic and get a page, not a theorem. Batch size
        stays a binder in every tier without a numeral. Work packages: the same
        document, sections 4b, 4c, 4d.
+
+    4f. THE OPTIMIZER FORM, CLOSED AT THE FOLD (2026-09-06). Every parameter
+       GRADIENT node of all five ImageNet-scale nets' non-SGD-inline train steps
+       now has a machine-checked `den(op) = certified gradient`, for every
+       cotangent. Five files: `Foundation/ResNet34FaithfulPoCB.lean` (8 op
+       kinds), `Architectures/EfficientNetFaithfulPoCG.lean` (8),
+       `ConvNeXtFaithfulPoCG.lean` (14), `ViTFaithfulPoCG.lean` (10),
+       `MobileNetV2FaithfulPoCPaperG.lean` (4 new op kinds plus five
+       per-block-profile capstones). 41 declarations, all 3-axiom clean.
+
+       WHAT IT BUYS AND WHAT IT DOES NOT. One lemma per op kind certifies every
+       optimizer tail at once, because AdamW, RMSProp, heavy-ball, EMA, the
+       clipped and weight-decayed variants, gradient accumulation, plain SGD and
+       the bf16 twins all consume the same node. So the artifacts the book names
+       (`<net>_adam_train_step.mlir`) and the ImageNet ones whose accuracies are
+       quoted are now covered at the fold, where before only the SGD-inline file
+       was. It does NOT re-point the `*_net_tied_certified` capstones: those pin
+       each cotangent to the emitted backward subgraph, and re-pointing needs the
+       shared smoothed-target loss cotangent, which is scoped with ResNet-34's
+       batched tie. Until then a net's T3 at its Adam artifact is the fold only.
+
+       NO NEW MATHEMATICS, AND OP KINDS ARE SHARED MORE THAN THE FILE NAMES
+       SUGGEST. The fusion is `rfl` -- the 29 `*Sgd_eq_grad` / `*SgdB_eq_grad`
+       theorems say the fused op IS `theta - lr *` applied to the un-fused one --
+       so each proof is the fused lemma's minus the wrapper peeling. And the
+       folds are statements about OP KINDS, not about nets: five of
+       EfficientNet-B0's eight kinds and eight of MobileNetV2's twelve were
+       already proven in ResNet-34's file at exactly the generality needed, so
+       those conjuncts are delegations. ConvNeXt's patchify-stem weight
+       (`convStride4WeightGrad`) never had a fused peer at all -- a declared
+       carve-out, because its SGD path wraps the gradient in hand-written text --
+       and 4b makes that shape the norm rather than the exception.
+
+       TWO CORRECTIONS THE PACKAGE FOUND. (a) MobileNetV2's two renderers do not
+       overlap the way the other four nets' do: `MobileNetV2Render` is SGD-inline
+       only and `MobileNetV2RenderB` is AdamW-only, so this net's Adam and
+       ImageNet artifacts have no fused op to un-fuse and its fold is at the
+       BATCHED `*GradB` nodes. (b) `MobileNetV2FaithfulPoCPaper.lean`'s header
+       named `mobilenetv2_paper_train_step.mlir`, which is the writer's `funcName`
+       DEFAULT and no artifact (the one call site passes
+       `mobilenetv2_train_step`), and gave the parameter count as 210, which is
+       the `convBias := true` census; both MobileNetV2 renders default to
+       `convBias := false`, folding each conv bias into the BatchNorm after it,
+       and the committed step returns 158 updated tensors. Neither correction
+       touches a theorem -- every fold there is quantified over op instances --
+       and both are now recorded in that file.
+
+       PADDING STILL RIDES ALONG INVISIBLY. The strided folds are the axis where
+       two nets can share a type and not a certificate: r34's and ConvNeXt's are
+       the symmetric `convStrided*Grad*` ops, B0's stem and all five of
+       MobileNetV2's stride-2 sites are the XLA-`SAME` `convStridedXla*` /
+       `depthwiseStridedXla*` ones, and B0's strided depthwise is symmetric while
+       MobileNetV2's is not. Identical types, identical emitted shapes.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

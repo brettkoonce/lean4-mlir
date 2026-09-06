@@ -497,6 +497,31 @@ lean_lib «Certs» where
              -- the *SgdB_eq_grad family already said the fusion is rfl.
              -- ⚠ SYMMETRIC padding: convStridedWeightGradB / flatConvStride2, not B0's Xla peers.
              `LeanMlir.Proofs.Foundation.ResNet34FaithfulPoCB,
+             -- ⭐ 4b: the SAME fold for the other four nets, one file each, so that every net's
+             -- T3 is stated at the node its Adam/RMSProp/LAMB artifact actually emits rather than
+             -- at the SGD-inline fused op the book does not name. All four are delegations plus a
+             -- handful of new op kinds; the arithmetic is the *Sgd_eq_grad rfl read once.
+             -- ⭐ Five of B0's eight op kinds are ResNet-34's at the same generality, so 4b.1 is
+             -- three new lemmas: the XLA-SAME stem and the two depthwise weights
+             -- (EfficientNetFaithfulPoCG.lean).
+             `LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG,
+             -- ⭐ ConvNeXt's twelve gradient nodes. psW (the 4x4/s4 patchify stem) had no fused
+             -- peer to begin with — a declared §5 carve-out — and 4b makes that shape the norm.
+             -- ⚠ SYMMETRIC padding at the three 2x2/s2 downsamples (ConvNeXtFaithfulPoCG.lean).
+             `LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG,
+             -- ⭐ ViT's ten gradient nodes at the VECTOR LayerNorm the shipped vitForwardKV runs.
+             -- rowDenseBiasGrad appears twice against two different certified Jacobians (a dense
+             -- bias and an LN beta are the same reduce), as it does in the fused file
+             -- (ViTFaithfulPoCG.lean).
+             `LeanMlir.Proofs.Architectures.ViTFaithfulPoCG,
+             -- ⭐ MobileNetV2's twelve, at the BATCHED index — this net's two renders do not
+             -- overlap (the per-example one is SGD-inline only, the batched one AdamW-only), so
+             -- its Adam/RMSProp artifacts have no fused op to un-fuse and the fold goes straight
+             -- to *GradB. ⛔ Two header corrections to MobileNetV2FaithfulPoCPaper fall out: the
+             -- artifact it names does not exist (the writer passes mobilenetv2_train_step), and
+             -- the shipped parameter count is 158, not 210 — 210 is the convBias := true census
+             -- and both renders default to false (MobileNetV2FaithfulPoCPaperG.lean).
+             `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

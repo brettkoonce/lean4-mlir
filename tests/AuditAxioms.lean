@@ -119,6 +119,10 @@ import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Architectures.ResNet34FullB
 import LeanMlir.Proofs.Architectures.ResNet34FullBVJP
 import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoCB
+import LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG
+import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG
+import LeanMlir.Proofs.Architectures.ViTFaithfulPoCG
+import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
@@ -5403,3 +5407,95 @@ open Proofs
 #print axioms Proofs.ResNet34PoCB.bnBetaGradB_den
 #print axioms Proofs.ResNet34PoCB.denseWGradB_den
 #print axioms Proofs.ResNet34PoCB.denseBGradB_den
+
+-- ════════════════════════════════════════════════════════════════
+-- 4b: THE SAME FOLD FOR THE OTHER FOUR NETS (2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- ⛔ All five T3 ties were at the fused theta - lr*g ops, which ONLY the SGD-inline
+-- <net>_train_step.mlir emits; every other train step in verified_mlir/ — the _adam_, _mom_,
+-- _rms_, _lamb*, _ema* families and every ImageNet one, which are the artifacts the book names
+-- and the accuracies come from — emits the RAW gradient and hands it to an optimizer tail.
+-- ⭐ One lemma per op kind certifies every tail at once, because they all consume the same node,
+-- and the fusion is rfl (the *Sgd_eq_grad / *SgdB_eq_grad families), so there is no new
+-- mathematics anywhere in the four files: each proof is the fused one minus the wrapper peeling.
+-- ⭐ Op kinds are shared across nets far more than the per-net file names suggest: five of B0's
+-- eight and eight of MobileNetV2's twelve were already proven in ResNet-34's file at exactly the
+-- generality needed, so those conjuncts are delegations that say so rather than copies.
+
+-- 4b.1 EfficientNet-B0 — efficientnet_adam_train_step and the RMSProp/EMA/dp/bf16 family.
+-- New here: the XLA-SAME stem weight and the two depthwise weights (r34 has no depthwise, and its
+-- stem is the SYMMETRIC op — identical types, and only the certificate tells them apart).
+-- ⚠ B0's STRIDED depthwise is the symmetric op too; the XLA phase is its stem only, which is what
+-- EfficientNetRender emits on the forward side (.depthwiseStrided, not .depthwiseStridedXla).
+#print axioms Proofs.EnetPoCG.convWGradB_den
+#print axioms Proofs.EnetPoCG.bnGammaGradB_den
+#print axioms Proofs.EnetPoCG.bnBetaGradB_den
+#print axioms Proofs.EnetPoCG.denseWGradB_den
+#print axioms Proofs.EnetPoCG.denseBGradB_den
+#print axioms Proofs.EnetPoCG.convStridedXlaWGradB_den
+#print axioms Proofs.EnetPoCG.depthwiseWGradB_den
+#print axioms Proofs.EnetPoCG.depthwiseStridedWGradB_den
+
+-- 4b.2 ConvNeXt-T — convnext_adam_train_step and the clip/wd/drop/dp family.
+-- ⭐ psW, the 4x4/s4 patchify stem weight, ALREADY had no fused peer (convStride4WeightGrad is a
+-- gradient op in both renders, because the SGD path wraps it in hand-written text — a declared
+-- §5 carve-out). 4b makes that shape the norm rather than the exception.
+-- ⚠ SYMMETRIC padding at the three 2x2/s2 downsamples; at an even kernel the two phases are
+-- genuinely different functions.
+#print axioms Proofs.CnxPoCG.layerScaleChGammaGrad_den
+#print axioms Proofs.CnxPoCG.convWGrad_den
+#print axioms Proofs.CnxPoCG.convBGrad_den
+#print axioms Proofs.CnxPoCG.depthwiseWGrad_den
+#print axioms Proofs.CnxPoCG.depthwiseBGrad_den
+#print axioms Proofs.CnxPoCG.convStridedWGrad_den
+#print axioms Proofs.CnxPoCG.convStridedBGrad_den
+#print axioms Proofs.CnxPoCG.psWGrad_den
+#print axioms Proofs.CnxPoCG.chanLnGammaGrad_den
+#print axioms Proofs.CnxPoCG.chanLnBetaGrad_den
+#print axioms Proofs.CnxPoCG.headLnGammaGrad_den
+#print axioms Proofs.CnxPoCG.headLnBetaGrad_den
+#print axioms Proofs.CnxPoCG.headWGrad_den
+#print axioms Proofs.CnxPoCG.headBGrad_den
+
+-- 4b.3 ViT-Tiny — vit_adam_train_step and vitin_adamdp128x4wxclipdrop.
+-- ⭐ Stated at the VECTOR LayerNorm (gamma beta : Vec D) the shipped vitForwardKV runs; the scalar
+-- affine spelling this cone was caught on three times is nowhere in the file.
+-- ⭐ rowDenseBiasGrad appears TWICE against two different certified Jacobians — a dense bias and
+-- an LN beta are the same reduce — exactly as in the fused file. The tie is what says which
+-- forward a given SSA name's operand came from.
+-- ⚠ clsGrad_den is at the committed ViT-Tiny dims, not generic: its operand's type is Vec (1*D),
+-- which reduces to Vec D only at a literal D (ViTTiePoC.vit_cls_den's reason too).
+#print axioms Proofs.ViTPoCG.veclnGammaGrad_den
+#print axioms Proofs.ViTPoCG.rowDenseBiasGrad_den_lnbeta
+#print axioms Proofs.ViTPoCG.rowDenseWeightGrad_den
+#print axioms Proofs.ViTPoCG.rowDenseBiasGrad_den
+#print axioms Proofs.ViTPoCG.patchEmbedWeightGrad_den
+#print axioms Proofs.ViTPoCG.patchEmbedBiasGrad_den
+#print axioms Proofs.ViTPoCG.posEmbedGrad_den
+#print axioms Proofs.ViTPoCG.clsGrad_den
+#print axioms Proofs.ViTPoCG.headWGrad_den
+#print axioms Proofs.ViTPoCG.headBGrad_den
+
+-- 4b.4 MobileNetV2 at 17 blocks — mobilenetv2_adam_train_step and every ImageNet artifact.
+-- ⛔ This net's two renders do NOT overlap the way the other four's do: MobileNetV2Render is
+-- SGD-inline only (no adam flag in it at all) and MobileNetV2RenderB is AdamW-only, at the
+-- batched index and at BATCH BatchNorm. So there is no fused op to un-fuse and the fold goes
+-- straight to the *GradB nodes — section 4b.4's "or" branch, and a down-payment on 4c.
+-- ⚠ XLA-SAME at all five stride-2 sites (the stem and the four stride-2 depthwises).
+-- ⚠ The forward these nodes differentiate is batch BN, where every MobileNetV2 statement in
+-- Proofs/ is per-example. Nothing here claims otherwise: a den = certified fold is about one op
+-- and its FREE cotangent, and says nothing about which whole-net forward produced it.
+-- ⛔ Two header corrections to MobileNetV2FaithfulPoCPaper fell out and are applied there: the
+-- artifact it names does not exist (mnv2TrainStepFaithfulVPaper's funcName default is
+-- mobilenetv2_paper_train_step, but its one call site passes mobilenetv2_train_step), and the
+-- shipped parameter count is 158, not 210 — 210 is the convBias := true census and both renders
+-- default to false, with each conv bias folded into the BatchNorm after it.
+#print axioms Proofs.Mnv2PaperPoCG.convStridedXlaBGradB_den
+#print axioms Proofs.Mnv2PaperPoCG.depthwiseBGradB_den
+#print axioms Proofs.Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den
+#print axioms Proofs.Mnv2PaperPoCG.depthwiseStridedXlaBGradB_den
+#print axioms Proofs.Mnv2PaperPoCG.mnv2StemGradsCertified
+#print axioms Proofs.Mnv2PaperPoCG.mnv2NoExpGradsCertified
+#print axioms Proofs.Mnv2PaperPoCG.mnv2Stride1GradsCertified
+#print axioms Proofs.Mnv2PaperPoCG.mnv2Stride2GradsCertified
+#print axioms Proofs.Mnv2PaperPoCG.mnv2HeadDenseGradsCertified

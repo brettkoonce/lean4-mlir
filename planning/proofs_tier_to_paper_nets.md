@@ -18,11 +18,11 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work (2026-09-06 review).** 4b first — the four un-fused gradient folds, one file each,
-mechanical, and they put three nets' T3 on the `_adam_` artifact the book already names. Then 4.2a
-(r34's batched tie) as re-scoped there. Then 4c, the renderer convergence, which is the large one
-and re-runs every Imagenette number for four nets. 4d's ℝ-level lemma fits any session; its op
-node waits for 4c. 3.5 and 3.6 unchanged, on the batched chain from the start.
+**Order of work (2026-09-06 review). ✅ 4b LANDED 2026-09-06 — all four files, 41 declarations,
+`Certs` 3971 → 3975.** Next is 4.2a (r34's batched tie) as re-scoped there. Then 4c, the renderer
+convergence, which is the large one and re-runs every Imagenette number for four nets. 4d's ℝ-level
+lemma fits any session; its op node waits for 4c. 3.5 and 3.6 unchanged, on the batched chain from
+the start.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
@@ -80,6 +80,12 @@ instance.
 the fused `*Sgd` ops, from the per-example renderer where one exists. None is at Adam — and the
 reference recipes are not all Adam either.
 
+⭐ **Since 4b landed (2026-09-06), the first column has two halves.** The §1 FOLD — every parameter
+gradient node `den`s to the certified gradient, `∀ cot` — is now at the un-fused nodes for all five
+nets, so it covers the `_adam_`, `_rms_`, `_ema*`, `_dp*` and bf16 artifacts as well. The §1a TIE,
+which pins each cotangent to the emitted backward subgraph, is still only at the SGD-inline file.
+The table below is the TIE's column; read it that way.
+
 | net | T3 is about | its renderer | quoted ImageNet artifact | its optimizer | layers between them |
 |---|---|---|---|---|---|
 | ResNet-34 | `resnet34_train_step` (SGD fused, per-example BN) | `ResNet34Render` | `resnet34in_momdp64` | heavy-ball | optimizer form, renderer, BN world, DP, smoothed loss |
@@ -112,7 +118,7 @@ Five axes cut across the table and are recorded separately from it:
   at INFERENCE BN, because the training-mode modulus is quadratic in the window, and a net's
   eval-BN graph is a separate artifact from its training one. MobileNetV2 has an eval graph at
   six blocks and none at seventeen, which is why 3.2(b)'s number has no whole-net graph tie.
-* **Optimizer form — DECIDED 2026-09-06: state every T3 at the un-fused gradient.** Section 4b.
+* **Optimizer form — ✅ DONE 2026-09-06 at the FOLD; the ties are not re-pointed.** Section 4b.
 * **Renderer — DECIDED 2026-09-06: one chain per net, the batched one.** Section 4c.
 * **Data parallelism.** The all-reduce is emitted text outside the AST in every `*dp*` artifact;
   what is provable and what stays calling logic is section 4d.
@@ -595,16 +601,18 @@ defect this axis carried.
 | T1 forward + graph faithfulness (T2) | ✅ | ✗ | 4.1b |
 | T1 whole-net `HasVJPAt` | ✅ | ✗ | 4.1d |
 | T3 §1 fold (`den = certified`, un-fused) | ✅ | ✗ | 4.1e |
-| **T3 §1a tie** | **after 4b** | ✗ | 4.2a |
+| **T3 §1a tie** | **NEXT** | ✗ | 4.2a |
 | T4 / T5 / T6 | ✗ | ✗ | 4.2 |
-| T3 at the un-fused gradient (the optimizer axis) | ✅ (4.1e is already that form) | ✗ | 4b.4 |
+| T3 at the un-fused gradient (the optimizer axis) | ✅ (4.1e is already that form) | ✅ | 4b.4 |
 
-**Next session: 4b's four un-fused folds, then the §1a tie for ResNet-34 (4.2a).** 4.2a's inputs
+**Next session: the §1a tie for ResNet-34 (4.2a) — 4b landed 2026-09-06.** 4.2a's inputs
 are all landed and it is the last piece of r34's T3. ⚠ It does NOT tie to the artifact whose
 accuracy is quoted, as the previous text here said: `resnet34in_momdp64` is four replicas with an
 all-reduce the tie cannot see (4d) and a smoothed loss cotangent the current head fold is not at
-(4.2a). It ties to the single-replica batched step, and this document now says so. Read 4b, then
-4.2a, then 4.1d and 4.1e.
+(4.2a). It ties to the single-replica batched step, and this document now says so. Read 4.2a,
+then 4.1d and 4.1e. ⭐ 4b's record (below) carries one thing 4.2a will want: the fold lemmas are
+statements about OP KINDS, so r34's eight already served B0 and MobileNetV2 — check
+`ResNet34FaithfulPoCB` and `EfficientNetFaithfulPoCG` before proving any cotangent primitive.
 
 ⚠ Two standing facts a fresh session should not re-derive. **`N` is the PER-REPLICA batch** — the
 data-parallel artifacts all-reduce gradients and no BatchNorm statistic is all-reduced, so
@@ -875,7 +883,7 @@ world-agnostic**: frozen statistics reduce nothing, so `r34_float_logits_le` and
 the batch the quoted checkpoint trained at, and put it in the theorem name or the file header —
 not in a docstring.
 
-## 4b. The optimizer-form axis — DECIDED 2026-09-06: every T3 at the un-fused gradient
+## 4b. The optimizer-form axis — ✅ DONE 2026-09-06: every T3 fold at the un-fused gradient
 
 **The finding.** All five T3 ties are at the fused `*Sgd` / `*SgdB` ops, which only the SGD-inline
 render emits. Every other train step in `verified_mlir/` — the `_adam_`, `_mom_`, `_sgd_`, `_rms_`,
@@ -906,7 +914,76 @@ faithfulness theorem** — `Lamb.lean` proves properties of the trust ratio (`la
 `lambDir_wd_inside`, `lambScale_not_shared`) and nothing says the emitted text denotes it; that is
 R50-A3's optimizer (3.5). ⛔ **BCE-with-logits has no cotangent `den`**; also R50-A3's.
 
-### 4b.1 – 4b.4 The four folds, one file each
+### 4b.1 – 4b.4 The four folds — ALL LANDED 2026-09-06
+
+| package | file | declarations | elaborates |
+|---|---|---|---|
+| 4b.1 EfficientNet-B0 | `Architectures/EfficientNetFaithfulPoCG.lean` | 8 | 1.5 s |
+| 4b.2 ConvNeXt-T | `Architectures/ConvNeXtFaithfulPoCG.lean` | 14 | 1.6 s |
+| 4b.3 ViT-Tiny | `Architectures/ViTFaithfulPoCG.lean` | 10 | 1.6 s |
+| 4b.4 MobileNetV2, 17 blocks | `Architectures/MobileNetV2FaithfulPoCPaperG.lean` | 4 op kinds + 5 block-profile capstones | 1.6 s |
+
+Gates: `lake build Certs` 3971 → **3975** green, `lake env lean tests/AuditAxioms.lean` 3-axiom
+clean on all 41 declarations, `lake exe docstring-checkrefs` (1585 citations), `python3
+scripts/check_audit_coverage.py`. No renderer or `.mlir` change — these are den-level folds.
+
+⭐⭐ **The single biggest finding: op kinds are shared across nets far more than the per-net file
+names suggest, and r34's file had already proven most of them.** `ResNet34FaithfulPoCB.lean`'s
+eight lemmas are statements about OP KINDS at full generality, not about ResNet-34 — so **five of
+B0's eight** (`convWeightGradB`, `bn{Gamma,Beta}GradB`, `dense{Weight,Bias}GradB`) and **eight of
+MobileNetV2's twelve** are delegations rather than copies. 4b.1 is three new lemmas, not eight;
+4b.4 is four. The per-net files are still the right unit, because each one is the complete op table
+for its artifact — but the scoping's "one file each, mechanical" understated how mechanical.
+
+⭐ **ConvNeXt's `psW` was the shape everything else moved towards.** `convStride4WeightGrad` never
+had a fused peer, because the SGD path wraps its gradient in hand-written text (the §5 carve-out).
+`psWGrad_den` is the one lemma in the four files whose STATEMENT is unchanged from what the SGD
+render already needed. The exception became the rule.
+
+⛔ **Correction to 4b.4 as scoped: MobileNetV2's two renderers do not overlap.** The scoping said
+"per-example `*Sgd_eq_grad` — or go straight to the batched `*GradB` ops if 4c's MobileNetV2 render
+is in hand". The "or" is not optional: `MobileNetV2Render` is SGD-inline only (no `adam` flag
+anywhere in it) and `MobileNetV2RenderB` is AdamW-only, so `mobilenetv2_adam_train_step`,
+`mobilenetv2_rms_train_step` and every ImageNet artifact have **no fused op to un-fuse**. The file
+is at the batched `*GradB` nodes, which makes it also a down-payment on 4c for this net.
+
+⛔ **Two header defects in `MobileNetV2FaithfulPoCPaper.lean`, both fixed there.** The known one:
+it named `verified_mlir/mobilenetv2_paper_train_step.mlir`, which is `mnv2TrainStepFaithfulVPaper`'s
+`funcName` DEFAULT and no artifact — the one call site (`MobileNetV2Render.lean:788`) passes
+`"mobilenetv2_train_step"`. The new one: **the shipped parameter count is 158, not 210.** Both
+MobileNetV2 renders default to `convBias := false` (each conv, depthwise and project bias folded
+into the BatchNorm after it), and `mobilenetv2_train_step.mlir` returns exactly 158 updated
+tensors — stem 3 + b1 6 + 16 × 9 + head 3 + dense 2. 210 is the `convBias := true` census.
+Neither touches a theorem: every fold in that file is `∀`-quantified over op instances.
+
+⚠ **Padding is the axis where two nets share a type and not a certificate, and 4b made that
+concrete.** r34's and ConvNeXt's strided folds are the symmetric `convStrided*Grad*` ops; B0's stem
+and all five of MobileNetV2's stride-2 sites are the XLA-`SAME` `convStridedXla*` /
+`depthwiseStridedXla*` ones; and **B0's strided DEPTHWISE is symmetric while MobileNetV2's is not**
+(`EfficientNetRender` emits `.depthwiseStrided` on the forward side too). Identical types,
+identical emitted shapes, four different certificates.
+
+⚠ **ViT's `clsGrad_den` is at the committed dims, not generic** — the operand's type is
+`Vec (1 * D)`, which reduces to `Vec D` only at a literal `D`. That is `ViTTiePoC.vit_cls_den`'s
+reason as well, and it is the one place in the four files where a statement is not dimension-
+polymorphic.
+
+⚠ **`rowDenseBiasGrad` appears twice in ViT's file against two different certified Jacobians** — a
+dense bias and a LayerNorm β are the same reduce. That is not an ambiguity: the tie is what says
+which forward a given SSA name's operand came from, and the fused file carries the same pair.
+
+⚠ **MobileNetV2's folds are at BATCH BatchNorm, where every other MobileNetV2 statement in
+`Proofs/` is per-example.** Nothing in the file claims otherwise — a `den = certified gradient`
+fold is about one op and its FREE cotangent and says nothing about which whole-net forward produced
+that cotangent — but a reader will expect the caveat and the file header carries it.
+
+**What is NOT done, and is the honest boundary.** The `<net>_net_tied_certified` capstones are NOT
+re-pointed at the gradient nodes: they pin each cotangent to the emitted backward subgraph, and
+re-pointing needs the shared smoothed-target loss cotangent (4.2a). So a net's T3 at its Adam
+artifact is the FOLD only, and the yaml (4f) and every file header say so. The prerequisite
+ordering the scoping gave was right.
+
+**The original scoping, for reference.**
 
 | package | file (mirror `ResNet34FaithfulPoCB.lean`) | ops | `_eq_grad` source |
 |---|---|---|---|
@@ -914,15 +991,6 @@ R50-A3's optimizer (3.5). ⛔ **BCE-with-logits has no cotangent `den`**; also R
 | 4b.2 ConvNeXt-T | `Architectures/ConvNeXtFaithfulPoCG.lean` | `conv{Weight,Bias}Sgd`, `convStrided{Weight,Bias}Sgd`, `depthwise{Weight,Bias}Sgd`, `veclnGammaSgd`, `rowDenseBiasSgd`, `layerScaleChGammaSgd`; `convStride4WeightGrad` is already a gradient (the §5 carve-out becomes the norm) | per-example `*Sgd_eq_grad` |
 | 4b.3 ViT-Tiny | `Architectures/ViTFaithfulPoCG.lean` | `rowDense{Weight,Bias}Sgd`, `veclnGammaSgd`, `patchEmbed{Weight,Bias}Sgd`, `posEmbedSgd`, the cls token | per-example `*Sgd_eq_grad` |
 | 4b.4 MobileNetV2, 17 blocks | `Architectures/MobileNetV2FaithfulPoCPaperG.lean` | the twelve op types `MobileNetV2FaithfulPoCPaper` tabulates | per-example `*Sgd_eq_grad` — or go straight to the batched `*GradB` ops if 4c's MobileNetV2 render is in hand |
-
-Acceptance, per net: every parameter GRADIENT node of `<net>_adam_train_step.mlir` has
-`den = certified gradient`, `∀ cot`; the `<net>_net_tied_certified` capstone is re-pointed (or
-twinned) at the gradient nodes, so the tie is about the Adam artifact the book names; the yaml row
-and the book's tie paragraph name the artifact. ⚠ For r34 and MobileNetV2 the per-example `*Grad`
-fold is a stepping stone only — their Adam artifacts are on the batched chain, and 4.1e / 4c are the
-real target. ⚠ The shared smoothed-target loss cotangent (4.2a) is a prerequisite for the capstone
-re-pointing, not for the folds, which are `∀ cot`. Gates as everywhere: `lake build Certs`,
-`AuditAxioms.lean`, `docstring-checkrefs`, `check_audit_coverage.py`; no `.mlir` changes.
 
 ## 4c. The renderer axis — DECIDED 2026-09-06: one chain per net, and the tiers stated at it
 
@@ -1099,7 +1167,9 @@ BatchNorm leaves, both directions, plus the three layout-free `Maps` cores),
 `Architectures/ResNet34FullBVJP.lean` and `Foundation/ResNet34FaithfulPoCB.lean`; still to
 write there are r34's `ResNet34TiePoCB.lean` (4.2a) and MobileNetV2's five peers; 4b
 `Architectures/EfficientNetFaithfulPoCG.lean`, `ConvNeXtFaithfulPoCG.lean`, `ViTFaithfulPoCG.lean`,
-`MobileNetV2FaithfulPoCPaperG.lean` and the shared `Foundation/SmoothedLossCot.lean`; 4c no new
+`MobileNetV2FaithfulPoCPaperG.lean` ALL LANDED 2026-09-06 (⛔ `Foundation/SmoothedLossCot.lean` is
+NOT part of 4b after all — it is a prerequisite for re-pointing the capstones, not for the folds,
+which are `∀ cot`; it moves to 4.2a); 4c no new
 Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean` — it RETIRES `ResNet34Render.lean`,
 `MobileNetV2Render.lean` and the per-example traversals of `ConvNeXtRender` / `ViTRender`, and
 re-points every T2/T3 file at the batched constructors; 4d `Foundation/DataParallel.lean`, later
