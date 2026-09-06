@@ -118,6 +118,7 @@ import LeanMlir.Proofs.Float.BnBatchFloatBridge
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Architectures.ResNet34FullB
 import LeanMlir.Proofs.Architectures.ResNet34FullBVJP
+import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
@@ -5374,3 +5375,31 @@ open Proofs
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at
 #print axioms Proofs.resnet34ForwardB_full_eq_chain
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at_correct
+
+-- ════════════════════════════════════════════════════════════════
+-- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (ResNet34FaithfulPoCB.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- ⛔ r34's batched render emits `*GradB`, not `*SgdB`. Every batched ResNet-34 train step — the sgd
+-- one, the Adam family, resnet34in_mom256 and its data-parallel peers — emits the RAW gradient and
+-- hands it to an optimizer tail (adamMNextF/adamVNextF, heavy-ball, plain SGD). The fused
+-- theta - lr*dLoss/dtheta op only appears in renders whose optimizer is SGD-inline, which
+-- EfficientNet's is and r34's batched one is not, so no existing den=certified lemma applies.
+-- ⭐ That makes the tier better, not worse: a statement about the GRADIENT covers every optimizer
+-- variant at once (sgd/mom/momdp64/adam/adamdp128 and the bf16 twins all consume the same node).
+-- ⭐ No new mathematics. StableHLO's *SgdB_eq_grad family says each fused op IS `theta - lr *`
+-- applied to the un-fused one, all by rfl, and its own docstring says it exists to unblock exactly
+-- this. These eight are EfficientNetFaithfulPoC's proofs with the `congr 1` / `congrArg (lr * .)`
+-- wrapper peeling dropped — the same per-example VJP bridge under the same sum over n.
+-- ⚠ SYMMETRIC padding: these are convStridedWeightGradB / convStridedBiasGradB, whose den is
+-- flatConvStride2_*; B0's peers are the convStridedXla* ops. Identical types, identical emitted
+-- shapes, and only the certificate tells them apart — r34 is the PyTorch-origin net.
+-- ⚠ The cotangents are free variables; pinning them to the emitted backward subgraph is the §1a
+-- tie and is not in this file.
+#print axioms Proofs.ResNet34PoCB.convWGradB_den
+#print axioms Proofs.ResNet34PoCB.convBGradB_den
+#print axioms Proofs.ResNet34PoCB.convStridedWGradB_den
+#print axioms Proofs.ResNet34PoCB.convStridedBGradB_den
+#print axioms Proofs.ResNet34PoCB.bnGammaGradB_den
+#print axioms Proofs.ResNet34PoCB.bnBetaGradB_den
+#print axioms Proofs.ResNet34PoCB.denseWGradB_den
+#print axioms Proofs.ResNet34PoCB.denseBGradB_den

@@ -487,6 +487,16 @@ lean_lib «Certs» where
              -- difference from MobileNetV2/EfficientNet, whose residual add IS the block output.
              -- ⭐ The head takes no hypothesis (GAP and dense are smooth batchMaps).
              `LeanMlir.Proofs.Architectures.ResNet34FullBVJP,
+             -- ⭐ T3's §1 fold at batch BN, and it is UN-FUSED. Every batched r34 train step —
+             -- sgd, the Adam family, mom256 and the data-parallel peers — emits the RAW gradient
+             -- (*GradB) and hands it to an optimizer tail; the fused theta - lr*grad op only
+             -- appears where the optimizer is SGD-inline, which EfficientNet's is and r34's is
+             -- not. ⛔ Every den=certified lemma in the repo before this one is at the fused form.
+             -- ⭐ The un-fused statement covers every optimizer variant at once, and it is
+             -- EfficientNetFaithfulPoC's proofs minus the `congr 1`/`congrArg (lr * .)` peeling —
+             -- the *SgdB_eq_grad family already said the fusion is rfl.
+             -- ⚠ SYMMETRIC padding: convStridedWeightGradB / flatConvStride2, not B0's Xla peers.
+             `LeanMlir.Proofs.Foundation.ResNet34FaithfulPoCB,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

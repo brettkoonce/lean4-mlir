@@ -523,7 +523,30 @@ BN-world axis (section 4).
 
 **The decision is option 1: port both nets' Proofs tiers to batch BN.** Recorded in
 `formalization.yaml` 4e, which is a new section — 4d named neither world, which was the disclosed
-defect this axis carried. The shared foundation landed the same day; the per-net tiers have not.
+defect this axis carried.
+
+### State of play (end of 2026-09-06) — START HERE
+
+| | r34 | mnv2 | landed in |
+|---|---|---|---|
+| shared BN float leaves, both directions | ✅ | ✅ | 4.1 |
+| `batchMap` at a point | ✅ | ✅ | 4.1c |
+| T1 forward + graph faithfulness (T2) | ✅ | ✗ | 4.1b |
+| T1 whole-net `HasVJPAt` | ✅ | ✗ | 4.1d |
+| T3 §1 fold (`den = certified`, un-fused) | ✅ | ✗ | 4.1e |
+| **T3 §1a tie** | **NEXT** | ✗ | 4.2a |
+| T4 / T5 / T6 | ✗ | ✗ | 4.2 |
+
+**Next session: the §1a tie for ResNet-34 (4.2a).** Everything it consumes is landed; it is the
+last piece of r34's T3, and it is the tier that matters most for 4e, because it is the one that
+ties to the artifact whose accuracy is quoted. Read 4.2a first, then 4.1d and 4.1e.
+
+⚠ Two standing facts a fresh session should not re-derive. **`N` is the PER-REPLICA batch** — the
+data-parallel artifacts all-reduce gradients and no BatchNorm statistic is all-reduced, so
+`bnBatchLA`'s reduction width is the per-card batch (64 on the runs with logs, 256 only on the
+single-device `mom256` peer, which is a different function and says so in its own header). And
+**T1/T2/T3 carry no numerals**, so `N` stays a variable through all of them; it is pinned only at
+T4/T5.
 
 ### 4.0 What the split is, in the artifacts
 
@@ -671,6 +694,82 @@ is the bridge, peeled one `*_apply` layer at a time per `MobileNetV2FullVJP.lean
 
 **ResNet-34's T1 and T2 at batch BN are done. T3 is next.**
 
+### 4.1e DONE 2026-09-06 — T3's §1 fold at batch BN; the §1a tie is scoped, not written
+
+`Foundation/ResNet34FaithfulPoCB.lean` (~190 lines, 2.1 s): eight `den = certified` lemmas,
+all 3-axiom clean, `Certs` 3971.
+
+⛔ **The finding that shaped the file: r34's batched render emits `*GradB`, not `*SgdB`.** Every
+batched ResNet-34 train step — `resnet34_sgd_train_step`, the Adam family, `resnet34in_mom256` and
+its data-parallel peers — emits the RAW gradient and hands it to an optimizer tail
+(`adamMNextF`/`adamVNextF`, heavy-ball, plain SGD). The fused `θ − lr·∂Loss/∂θ` op only appears
+where the optimizer is SGD-inline, which EfficientNet's is and r34's batched one is not. **Every
+`den = certified` lemma in the repo before this file is stated at the fused form**, so none of them
+applied.
+
+⭐ **The un-fused statement is better, not weaker.** One lemma per op kind certifies every optimizer
+variant at once — `sgd`, `mom`, `momdp64`, `adam`, `adamdp128` and the bf16 twins all consume the
+same `*GradB` node. It is also the shape ConvNeXt's `psW` carve-out already had to take, there for
+a different reason (a hand-written SGD wrap).
+
+⭐ **And it cost nothing.** `StableHLO.lean`'s `*SgdB_eq_grad` family says each fused op IS
+`θ − lr·` applied to the un-fused one, all by `rfl`, and its own docstring says it exists to
+*"unblock a batched `resnet34_adam_train_step` rendered from `Proofs/` — the blocker was the fusion,
+never Adam."* The eight lemmas are `EfficientNetFaithfulPoC.lean`'s proofs with the
+`congr 1` / `congrArg (lr * ·)` wrapper peeling dropped.
+
+⚠ **Symmetric padding, and only the certificate says so.** These are `convStridedWeightGradB` /
+`convStridedBiasGradB`, whose `den` is `flatConvStride2_*`; B0's peers are the `convStridedXla*`
+ops. Identical types, identical emitted shapes.
+
+**§1a — the tie — is scoped and NOT written.** Its inventory, so the next session does not re-derive it:
+
+* ⭐ **Do not mirror `ResNet34ChainClose.lean`.** That file derives per-example block cotangents by
+  hand because no whole-block VJP existed when it was written. 4.1d's
+  `r34IdB_has_vjp_at` / `r34DownB_has_vjp_at` ARE the certified block backwards, so the batched
+  block input-cotangent is `(r34IdB_has_vjp_at …).backward dyOut` — a definition, not a derivation.
+  This should make the batched tie materially shorter than the 615-line per-example one.
+* The per-parameter cotangents still need spelling, and `ResNet34BackB0.lean` gives the exact chain:
+  outer-relu mask (`.selectPos` at `residual (projB ∘ cbReluB) x`), then `projBackBatchedGraph`'s
+  BN backward at conv₂'s output, then `cbReluBackBatchedGraph`'s mask + BN backward at conv₁'s.
+* Primitives to reuse from `EfficientNetTiePoC.lean` (`Proofs.EnetTiePoC`): `bnBackB`, `cInB`,
+  `gapInB`. New: a strided conv input-VJP and the batched 3×3/s2 pool backward.
+* Then three tie bundles (identity / downsample / stem), the head's loss fold, and the 146-param
+  capstone with the residual fan-in sums at all 16 skip merges.
+
+### 4.2a NEXT — ResNet-34's T3 §1a tie
+
+The last piece of r34's T3, and the one that ties to the artifact whose accuracy is quoted. What it
+must produce: every parameter op's `den` equal to the certified gradient **at the cotangent the
+real backward chain delivers**, with no free cotangent left — the batched peer of
+`r34_net_tied_certified` (146 params).
+
+**What is already landed and must be reused, not rebuilt.**
+
+* ⭐⭐ **Do not mirror `ResNet34ChainClose.lean`.** It derives per-example block cotangents by hand
+  because no whole-block VJP existed when it was written. 4.1d's `r34IdB_has_vjp_at` /
+  `r34DownB_has_vjp_at` **are** the certified block backwards, so a block's input cotangent is
+  `(r34IdB_has_vjp_at …).backward dyOut` — a definition, not a derivation. This is the single
+  biggest reason the batched tie should come in well under the per-example file's 615 lines.
+* 4.1e's eight `*GradB_den` lemmas are already `∀ cot`; the tie instantiates them.
+* `ResNet34BackB0.lean` gives the exact per-parameter cotangent chain: the outer-relu mask
+  (`.selectPos` at `residual (projB ∘ cbReluB) x`), then `projBackBatchedGraph`'s BN backward at
+  conv₂'s output, then `cbReluBackBatchedGraph`'s mask + BN backward at conv₁'s. Read
+  `r34BodyBackBatchedGraph` and `r34BasicBlockBackBatchedGraph` before writing any cotangent def.
+
+**What is genuinely new.** Primitives: reuse `bnBackB`, `cInB`, `gapInB` from
+`EfficientNetTiePoC.lean` (`Proofs.EnetTiePoC`); write a strided conv input-VJP and the batched
+3×3/s2 pool backward. Then three tie bundles (identity / downsample / stem), the head's loss fold,
+and the capstone with the residual fan-in sums at all sixteen skip merges — the fan-in is the
+structural content the cnn/cifar ties never had, and the per-example file's §-headers explain it.
+
+⚠ **The capstone is where `N` first becomes awkward.** A train step is rendered at a concrete `B`,
+so the tie may want `N` instantiated even though T3 carries no numerals. Decide it at the top of
+the file, not per-lemma; 64 is the batch of the runs with logs.
+
+⛔ `ResNet34FaithfulPoCB.lean`'s honest residual is exactly this file's job: its cotangents are free
+variables. Until 4.2a lands, r34's T3 is the §1 fold ONLY, and should be described that way.
+
 ### 4.2 Still open, per net
 
 For each of ResNet-34 and MobileNetV2, at `bnBatchLA` (r34's T1 and T2 landed, 4.1b–4.1d):
@@ -679,7 +778,7 @@ For each of ResNet-34 and MobileNetV2, at `bnBatchLA` (r34's T1 and T2 landed, 4
 |---|---|---|
 | T1 | net-level ℝ forward + whole-net `HasVJPAt` (both nets have relu kinks) — ✅ r34 | `EfficientNetFullB0.lean` |
 | T2 | typed forward graph, per-block `_faithful` then chained — ✅ r34 | `ResNet34RenderB` / `MobileNetV2RenderB` tokens |
-| T3 | FaithfulPoC / TiePoC against the batch-BN train step | the existing per-example pair |
+| T3 | FaithfulPoC / TiePoC against the batch-BN train step — ✅ r34's §1 fold (4.1e); §1a scoped | the existing per-example pair |
 | T4 | training-BN forward budget — a **CAP**, as `r34_train_float_logits_le` already is | `Maps.bnBatchTensor4Capped` |
 | T5 | backward budget, one theorem per `N` | `Maps.bnBatchBack` |
 | T6 | certified backward tie at `bnBatchTensor4` | `Resnet34BackCertifiedTie.lean` |
@@ -749,8 +848,11 @@ finding, and worth nothing); 3.4
 `Float/ViTWholeBackFloatBridge.lean`, `Architectures/ViTVecLNBackCertifiedTie.lean` and
 `Foundation/ViTWholeBackCertifiedTie.lean` all landed (⛔ `ViTBackFloatBudget.lean` is DECLINED:
 a fold at 5.686e399 / 1.703e399, statable at `exponentiation.threshold 500` and worth nothing,
-and the most expensive of the three declined backwards); §4 `Float/BnBatchFloatBridge.lean` landed 2026-09-06 (the batched BatchNorm leaves, both
-directions, plus the three layout-free `Maps` cores); 3.5 `Resnet50FullB.lean`,
+and the most expensive of the three declined backwards); §4 (the batch-BN port) landed 2026-09-06: `Float/BnBatchFloatBridge.lean` (the batched
+BatchNorm leaves, both directions, plus the three layout-free `Maps` cores),
+`Foundation/BatchMapVJPAt.lean`, `Architectures/ResNet34FullB.lean`,
+`Architectures/ResNet34FullBVJP.lean` and `Foundation/ResNet34FaithfulPoCB.lean`; still to
+write there are r34's `ResNet34TiePoCB.lean` (4.2a) and MobileNetV2's five peers; 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for
 MobileNetV4. Every new file: a `lakefile.lean` `Certs` root or an import of one, an
