@@ -125,6 +125,7 @@ import LeanMlir.Proofs.Architectures.ViTFaithfulPoCG
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
 import LeanMlir.Proofs.Architectures.MobileNetV2FullB
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
+import LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
@@ -5641,3 +5642,51 @@ open Proofs
 #print axioms Proofs.mobilenetv2ForwardB_full_has_vjp_at
 #print axioms Proofs.mobilenetv2ForwardB_full_eq_chain
 #print axioms Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct
+
+-- ════════════════════════════════════════════════════════════════
+-- 4.2c: MOBILENETV2'S T3 §1a TIE AT BATCH BN, UN-FUSED (MobileNetV2TiePoCB.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- 4b.4 made every parameter GRADIENT node of the batched MobileNetV2 train step den-faithful for an
+-- arbitrary cotangent. This removes the "arbitrary": each is pinned to the one the emitted backward
+-- chain delivers, so the whole step is den-composed forward -> loss -> backward with no free
+-- activation and no symbolic cotangent. With 4.2b it is MobileNetV2's T3 complete, and it makes
+-- this the second net whose T3 is at the artifact that trains.
+-- ⭐⭐ The block cotangents are NOT derived here. 4.2b's mnv2{ExpOnly,Resid,Strided,NoExp}B_has_vjp_at
+-- ARE the certified block backwards, and MobileNetV2BackB0's *BackBatchedGraph_faithful family
+-- already proves the emitted subgraphs denote them, so three of the four *CotIn_eq_vjp lemmas close
+-- by rfl. The fourth (residual) needs Eq.trans rather than rw: mnv2ResidB_has_vjp_at unfolds to
+-- residual_has_vjp_at at the abbreviation mnv2ExpOnlyB, where the graph lemma states it at that
+-- abbreviation's own unfolding -- definitionally equal, not syntactically.
+-- ⭐ ONE tie bundle covers twelve of the seventeen blocks. A skip block and a stride-1 widening have
+-- the SAME parameter cotangents; the identity skip changes only the dx handed to the previous block,
+-- which is why MobileNetV2RenderB's irBackStride1GradB is one function with a flag.
+-- ⭐ No add_comm anywhere, unlike ResNet-34's downsample block: the render emits addVB(body, %dy)
+-- and residualBackGraph builds the fan-in in the same order.
+-- ⭐ bnInB / bnInB_eq_bnBackB are ResNet-34's, imported rather than copied -- the batched BatchNorm
+-- input-cotangent as a den, and its identity with the certified bnBatchLA VJP, both net-agnostic.
+-- What MobileNetV2 adds is the TWO-SIDED relu6 mask (relu6MaskB, where r34 threads the one-sided
+-- reluMaskB) and the XLA-SAME strided depthwise input-VJP.
+-- ⚠ dStridedXlaInB is NOT EnetTiePoC.dStridedInB: B0's strided depthwise is the SYMMETRIC op and
+-- MobileNetV2's is the XLA-SAME one. Identical types, different certificates.
+-- ⭐ N is a binder and the capstone carries NO smoothness hypothesis: the folds are forall-cot
+-- statements instantiated at explicitly constructed cotangents, so neither 0 < eps nor a relu6-kink
+-- condition is needed. Those enter ONLY in the four _eq_vjp lemmas -- the two halves of the tie.
+-- ⛔ The census is 158 parameters against 210 stated slots: MobileNetV2RenderB runs
+-- convBias := false, so the 52 conv/depthwise/project bias nodes are not emitted and each bias is
+-- folded into the BatchNorm after it. The bias conjuncts are kept (one delegation each) and cover
+-- the flag; nothing weakens a theorem, since every fold is quantified over op instances.
+-- ⛔ ONE REPLICA. In mobilenetv2in_rmsdp64 every gradient node is followed by all_reduce(add)/4 as
+-- emitted TEXT outside the SHlo AST; the mean across replicas is 4d's business.
+-- ⚠ XLA-SAME padding at all five stride-2 sites, and batch BatchNorm at all 52.
+#print axioms Proofs.MobileNetV2TieB.mnv2NoExpBackGraph_faithful
+#print axioms Proofs.MobileNetV2TieB.mnv2NoExpCotIn_eq_vjp
+#print axioms Proofs.MobileNetV2TieB.mnv2ExpOnlyCotIn_eq_vjp
+#print axioms Proofs.MobileNetV2TieB.mnv2ResidCotIn_eq_vjp
+#print axioms Proofs.MobileNetV2TieB.mnv2StridedCotIn_eq_vjp
+#print axioms Proofs.MobileNetV2TieB.mnv2_stem_tiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_noexp_tiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_stride1_tiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_stride2_tiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_head_tiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_net_tiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_lossCot_is_smoothedCE_grad

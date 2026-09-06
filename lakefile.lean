@@ -575,6 +575,23 @@ lean_lib «Certs» where
              -- ic/oc there (b11 and b17 are stride-1 bodies with ic ≠ oc, which the residual-only
              -- statement could not express); mnv2DownBodyB already had that shape.
              `LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP,
+             -- ⭐⭐ 4.2c: MobileNetV2's T3 §1a TIE at batch BN, un-fused and batched — the last piece
+             -- of mnv2's T3, and the second net whose train step is tied at the artifact that
+             -- trains. Every parameter gradient node at the cotangent the emitted chain delivers,
+             -- threaded from the smoothed loss through the head's own four nodes and the seventeen
+             -- certified block backwards over mobilenetv2ForwardB_full's own prefixes.
+             -- ⭐⭐ The block cotangents are NOT derived: 4.2b's mnv2{ExpOnly,Resid,Strided,NoExp}B
+             -- _has_vjp_at ARE the certified block backwards and MobileNetV2BackB0's
+             -- *BackBatchedGraph_faithful family already proves the emitted subgraphs denote them,
+             -- so three of the four _eq_vjp lemmas close by rfl (the residual one needs Eq.trans,
+             -- since mnv2ResidB unfolds to residual_has_vjp_at at an abbreviation).
+             -- ⭐ ONE tie bundle covers twelve of the seventeen blocks: a skip changes only the dx
+             -- handed to the previous block, never a parameter cotangent.
+             -- ⭐ N is a binder and the capstone needs NO smoothness hypothesis; the kink and
+             -- positivity conditions enter only in the four _eq_vjp lemmas.
+             -- ⛔ The census is 158 parameters, not the 210 slots stated: convBias := false, so the
+             -- 52 bias nodes are not emitted. ⛔ ONE REPLICA — the all-reduce is text outside the AST.
+             `LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

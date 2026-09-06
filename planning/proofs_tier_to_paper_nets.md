@@ -18,10 +18,11 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work. ✅ 4b, 4.2a, 4c LEG 1 AND 4.2b ALL LANDED 2026-09-06** — 4b's four files (41
-declarations), r34's batched §1a tie plus the shared smoothed loss cotangent (`Certs` 3971 → 3977,
-**ResNet-34's T3 complete at batch BatchNorm**), the renderer convergence's first net, and
-**MobileNetV2's T1 and T2 at batch BN** (`Certs` → 3978). MobileNetV2's §1a tie (4.2c) is next.
+**Order of work. ✅ 4b, 4.2a, 4c LEG 1, 4.2b AND 4.2c ALL LANDED 2026-09-06** — 4b's four files
+(41 declarations), r34's batched §1a tie plus the shared smoothed loss cotangent (`Certs`
+3971 → 3977, **ResNet-34's T3 complete at batch BatchNorm**), the renderer convergence's first net,
+and **MobileNetV2's T1, T2 and T3 §1a tie at batch BN** (`Certs` → 3979, **MobileNetV2's T3
+complete**). Both BN nets are now tied at the artifact that trains; 4c leg 2 is unblocked.
 **4c now has its own thread and log: `planning/renderer_convergence.md`.** Legs 2–4 (MobileNetV2,
 ConvNeXt-T, ViT-Tiny) are there. 4d's ℝ-level lemma fits any session; its op node waits for 4c.
 3.5 and 3.6 unchanged, on the batched chain from the start.
@@ -30,15 +31,14 @@ ConvNeXt-T, ViT-Tiny) are there. 4d's ℝ-level lemma fits any session; its op n
 
 | target | cost | why now |
 |---|---|---|
-| **§4.2c MobileNetV2's T3 §1a tie** | one session | The last piece of MobileNetV2's T3, and its prerequisites all landed 2026-09-06: 4.2b's `mnv2{ExpOnly,Resid,Strided,NoExp}B_has_vjp_at` ARE the certified block backwards, `MobileNetV2BackB0.lean` already proves the emitted fan-in denotes them, 4b.4 is the §1 fold at the same `*GradB` nodes, and `SmoothedLossCot.lean` is shared. This is 4.2a replayed. |
-| **4c leg 2, MobileNetV2** | one session | It is the LAST `KNOWN_SPLIT` entry, so the ratchet empties and the renderer axis closes for the two BN nets. ⚠ Its prerequisite — "the batched tier must exist first" — is now HALF met: 4.2b gives T1/T2 and 4b.4 the §1 fold, but the §1a tie (4.2c) does not exist, so a retirement today would orphan `MobileNetV2TiePoCPaper.lean` the way r34's briefly threatened to. Do 4.2c first. |
+| **4c leg 2, MobileNetV2** | one session | ⭐ It is the LAST `KNOWN_SPLIT` entry, so the ratchet empties and the renderer axis closes for the two BN nets. Its prerequisite — "the batched tier must exist first" — is now FULLY met by 4.2b + 4b.4 + 4.2c, exactly as r34's was by 4.1e + 4.2a before leg 1. |
 | **4b's capstone re-pointing** | one session | 4b left the FOLD done and the five `*_net_tied_certified` capstones un-re-pointed. Its prerequisite landed with 4.2a (`Foundation/SmoothedLossCot.lean`, general target). B0, ConvNeXt and ViT are the cheap three — their Adam artifacts are already on the renderer they have. |
 | **4d piece 1** | half a session | `Foundation/DataParallel.lean`: `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)`, plus the lockstep induction. Cheap, certain, and it answers "what function trained" for every `*dp*` artifact — which every tie currently disclaims. |
 | **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and now cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. R50 needs the LAMB tail cert and the BCE cotangent first. |
 
-⭐ **Recommendation: §4.2c, then 4c leg 2.** That is r34's sequence replayed on the one net that has
-the same shape, in the order r34 proved is the right one — and it closes the last `KNOWN_SPLIT`
-entry with the proofs already in place rather than orphaning them.
+⭐ **Recommendation: 4c leg 2.** r34's sequence is now fully replayed on MobileNetV2, so the
+retirement can happen with the batched proofs already in place rather than orphaning them — which
+is the ordering rule leg 1 established.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
@@ -633,14 +633,13 @@ defect this axis carried.
 | T1 forward + graph faithfulness (T2) | ✅ | ✅ | 4.1b / **4.2b** |
 | T1 whole-net `HasVJPAt` | ✅ | ✅ | 4.1d / **4.2b** |
 | T3 §1 fold (`den = certified`, un-fused) | ✅ | ✅ | 4.1e / 4b.4 |
-| **T3 §1a tie** | ✅ | ✗ | 4.2a / **4.2c, next** |
+| **T3 §1a tie** | ✅ | ✅ | 4.2a / **4.2c** |
 | T4 / T5 / T6 | ✗ | ✗ | 4.2 |
 | T3 at the un-fused gradient (the optimizer axis) | ✅ (4.1e is already that form) | ✅ | 4b.4 |
 | renderer converged (4c) | ✅ leg 1 | ✗ leg 2 | `planning/renderer_convergence.md` |
 
-**ResNet-34's T3 at batch BatchNorm is COMPLETE (4.1b–4.1e + 4.2a, all 2026-09-06), and
-MobileNetV2's T1 and T2 landed the same day (4.2b).** What is left on this axis is MobileNetV2's
-§1a tie (4.2c) and both nets' T4/T5/T6. ⚠ The tie is at the SINGLE-REPLICA batched step, not at `resnet34in_momdp64`: that
+**BOTH nets' T3 at batch BatchNorm are COMPLETE (r34: 4.1b–4.1e + 4.2a; MobileNetV2: 4.2b +
+4b.4 + 4.2c, all 2026-09-06).** What is left on this axis is T4/T5/T6 for both. ⚠ The tie is at the SINGLE-REPLICA batched step, not at `resnet34in_momdp64`: that
 artifact is four replicas with an all-reduce outside the AST (4d). ⭐ The one thing a MobileNetV2
 session should read first from 4.2a: the cotangent chain is built from the CERTIFIED block VJPs
 (4.1d's `_has_vjp_at` bundles), not derived by hand — `MobileNetV2BackB0.lean` has the same
@@ -975,24 +974,53 @@ this file's `mnv2ResidGraphB` uses that token. ⛔ `ResNet34FullB.lean`'s `r34Id
 `fun j => den a j + den b j`, both by `rfl`) so T2 is unaffected, but the two differ under `skel`
 and so in the emitted shape annotation. Left alone rather than fixed in this package.
 
-### 4.2c NEXT — MobileNetV2's T3 §1a tie
+### 4.2c DONE 2026-09-06 — MobileNetV2's T3 §1a tie; **MobileNetV2's T3 is COMPLETE**
 
-The one piece of MobileNetV2's T3 that is missing, and 4.2a is the file to mirror. The inventory,
-so the next session does not re-derive it:
+`Foundation/MobileNetV2TiePoCB.lean` (1037 lines, ~2.7 s), `Certs` 3978 → **3979**, all twelve
+declarations 3-axiom clean. The scoping above was right on every point, and the four bullets it
+listed are what the file is.
 
-* ⭐ **Do not derive the block cotangents.** 4.2b's `mnv2ExpOnlyB_has_vjp_at` /
-  `mnv2ResidB_has_vjp_at` / `mnv2StridedB_has_vjp_at` / `mnv2NoExpB_has_vjp_at` ARE the certified
-  block backwards, and `mnv2{Body,DownBody,ResidBlock}BackBatchedGraph_faithful`
-  (`MobileNetV2BackB0.lean`) already prove the emitted fan-ins denote them. That is exactly the
-  `rfl` route `r34IdCotIn_eq_vjp` took.
-* The §1 fold is already done and at the right nodes: `MobileNetV2FaithfulPoCPaperG.lean` (4b.4) is
-  at the batched `*GradB` family, `∀ cot`. This package supplies the cotangents.
-* `Foundation/SmoothedLossCot.lean` is shared and general in the target — no loss work.
-* New relative to r34: the `.selectMid` relu6 mask (two-sided) where r34 threads `.selectPos`, the
-  depthwise input-VJP and its XLA-`SAME` strided peer, and b1's no-expand profile. There is no
-  pool backward, which is the one loose end 4.2a left open on r34's side.
-* ⚠ The tie is at the SINGLE-REPLICA batched step, not at `mobilenetv2in_rmsdp64`: that artifact is
-  four replicas with an all-reduce outside the AST (4d).
+⭐⭐ **Three of the four `_eq_vjp` lemmas close by `rfl`**, as 4.2a's did — the block cotangents are
+`.backward` applications of 4.2b's certified block VJPs, and `MobileNetV2BackB0.lean` already
+proves the emitted subgraphs denote them. ⚠ The fourth, the residual one, needs `Eq.trans` rather
+than `rw [← h]`: `mnv2ResidB_has_vjp_at` unfolds to `residual_has_vjp_at` at the abbreviation
+`mnv2ExpOnlyB`, where `mnv2ResidBlockBackBatchedGraph_faithful` states it at that abbreviation's own
+unfolding. Definitionally equal, not syntactically — `refine Eq.trans ?_ h; rfl` is the escape.
+
+⭐⭐ **One tie bundle covers TWELVE of the seventeen blocks**, which the scoping did not predict. A
+skip block and a stride-1 widening have the SAME parameter cotangents: the identity skip changes
+only the `dx` handed to the previous block, never a parameter's. That is why
+`MobileNetV2RenderB.irBackStride1GradB` is one function with a `skip` flag rather than two
+near-copies, and `mnv2Stride1TiedB` inherits it — b3, b5, b6, b8–b13, b15, b16 (skip) and b11, b17
+(widen). ResNet-34 needed two bundles for sixteen blocks; MobileNetV2 needs three for seventeen.
+
+⭐ **No `add_comm` anywhere.** r34's `r34DownCotIn_eq_vjp` needed one because the render emits
+`addVB(body, projection)` and the graph builds `addV(projection, body)`. MobileNetV2's skip emits
+`addVB(body, %dy)` and `residualBackGraph` builds the fan-in in the same order.
+
+⭐ **Two helpers are ResNet-34's, imported rather than copied.** `bnInB` (the batched BatchNorm
+input-cotangent written as a `den`) and `bnInB_eq_bnBackB` are net-agnostic and live in the file
+that first needed them. What this net adds is the TWO-SIDED `relu6MaskB` (r34 threads the
+one-sided `reluMaskB`) and `dStridedXlaInB`. ⚠ That last is NOT `EnetTiePoC.dStridedInB`: B0's
+strided depthwise is the SYMMETRIC op and MobileNetV2's is the XLA-`SAME` one — identical types,
+different certificates, and this is the only place the distinction is recorded on the backward side.
+
+⭐ **The capstone carries no smoothness hypothesis and no `0 < ε`**, exactly as r34's does not: the
+folds are `∀ cot` statements at explicitly constructed cotangents. The kink and positivity
+conditions live only in the four `*CotIn_eq_vjp` lemmas. `N` is a binder.
+
+⭐ **`Foundation/SmoothedLossCot.lean` applied verbatim** — no loss work at all, which is the return
+on having written it at a general target in 4.2a.
+
+⛔ **210 slots, 158 exercised, one replica.** `MobileNetV2RenderB` runs `convBias := false`, so the
+52 conv/depthwise/project bias nodes are not emitted; the bias conjuncts are kept because they cost
+one delegation each and cover the flag. And every gradient node in `mobilenetv2in_rmsdp64` is
+followed by `all_reduce(add)/4` as emitted text outside the AST, so the tie is at the per-replica
+node (4d).
+
+⭐ **One thing r34 left open that this net does not have.** 4.2a's residual is the 3×3/s2 pool
+backward, threaded as the emitted `den` but not identified with `batchMap_has_vjp_at`'s. MobileNetV2
+has no pool, so its stem chain ends at the BatchNorm backward and there is nothing left over.
 
 ### 4.2 Still open, per net
 

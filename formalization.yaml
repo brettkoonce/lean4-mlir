@@ -258,6 +258,20 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- MobileNetV2's T3 §1a tie at batch BN, un-fused and batched (status 4j).
+    - declaration: "Proofs.MobileNetV2TieB.mnv2ResidCotIn_eq_vjp"   # the emitted residual fan-in IS the certified block VJP's backward
+      file: "LeanMlir/Proofs/Foundation/MobileNetV2TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.MobileNetV2TieB.mnv2_net_tiedB"   # every mnv2 gradient node at its chain cotangent; N a binder, no smoothness hypothesis
+      file: "LeanMlir/Proofs/Foundation/MobileNetV2TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
     #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.
@@ -818,16 +832,15 @@ fidelity:
        leaf rather than at the net, and it will apply to r34's and MobileNetV2's
        batched budgets too.
 
-       WHERE THE PORT STANDS (2026-09-06). ResNet-34 is done through T3: T1's
-       forward and graph (4.1b), its whole-net VJP (4.1c-4.1d), the un-fused §1
-       fold (4f) and the §1a tie (4g). MobileNetV2 has T1 and T2 (4i) and its §1
-       fold rides on 4f's `MobileNetV2FaithfulPoCPaperG.lean`, which is already at
-       the batched `*GradB` nodes.
+       WHERE THE PORT STANDS (2026-09-06). BOTH nets are done through T3.
+       ResNet-34: T1's forward and graph (4.1b), its whole-net VJP (4.1c-4.1d),
+       the un-fused §1 fold (4f) and the §1a tie (4g). MobileNetV2: T1 and T2
+       (4i), the §1 fold riding on 4f's `MobileNetV2FaithfulPoCPaperG.lean`
+       (already at the batched `*GradB` nodes), and the §1a tie (4j).
 
-       STILL OPEN, per net: MobileNetV2's §1a tie, and for BOTH nets the
-       training-mode forward budget (a CAP, as `r34_train_float_logits_le` already
-       is), the backward budget, and the certified backward tie at
-       `bnBatchTensor4`. The block-level batched VJPs and backward-graph
+       STILL OPEN, for both nets: the training-mode forward budget (a CAP, as
+       `r34_train_float_logits_le` already is), the backward budget, and the
+       certified backward tie at `bnBatchTensor4`. The block-level batched VJPs and backward-graph
        faithfulness already exist for both nets (`ResNet34BackB0.lean`,
        `MobileNetV2BackB0.lean`, folded by `BackNetFolds.lean`), and the eval-mode
        forward budgets are world-agnostic -- frozen statistics reduce nothing, so
@@ -1074,6 +1087,71 @@ fidelity:
        covered.
 
        `N` is a variable throughout: T1 and T2 carry no numerals.
+
+    4j. MOBILENETV2'S TRAIN-STEP TIE AT THE NET THAT TRAINS (2026-09-06). 4i
+       gave this net T1 and T2 at `bnBatchLA`; 4f's fold already covered its
+       parameter gradient nodes for an arbitrary cotangent. This pins the
+       cotangent: `Foundation/MobileNetV2TiePoCB.lean` (1037 lines, ~2.7 s)
+       states every parameter gradient node of the batched, batch-BatchNorm train
+       step at the cotangent the emitted backward chain delivers, threaded from
+       the label-smoothed loss through the head's own four nodes and the seventeen
+       certified block backwards over `mobilenetv2ForwardB_full`'s own forward
+       prefixes. That is MobileNetV2's T3 complete, and it makes this the SECOND
+       net whose train-step tie is about the artifact whose accuracy the book
+       quotes.
+
+       ⭐ THE BLOCK COTANGENTS ARE NOT DERIVED, as ResNet-34's were not. 4i's
+       `mnv2{ExpOnly,Resid,Strided,NoExp}B_has_vjp_at` ARE the certified block
+       backwards, and `MobileNetV2BackB0.lean`'s `*BackBatchedGraph_faithful`
+       family already proves the emitted subgraphs denote them, so three of the
+       four `*CotIn_eq_vjp` lemmas close by `rfl`. The fourth, the residual one,
+       needs `Eq.trans` instead of `rw`: `mnv2ResidB_has_vjp_at` unfolds to
+       `residual_has_vjp_at` at the abbreviation `mnv2ExpOnlyB`, where the graph
+       lemma states it at that abbreviation's own unfolding -- definitionally
+       equal, not syntactically. No `add_comm` is needed anywhere, unlike
+       ResNet-34's downsample block: the render emits `addVB(body, %dy)` and
+       `residualBackGraph` builds the fan-in in the same order.
+
+       ⭐ ONE TIE BUNDLE COVERS TWELVE OF THE SEVENTEEN BLOCKS. A skip block and a
+       stride-1 widening have the SAME parameter cotangents -- the identity skip
+       changes only the `dx` handed to the previous block -- which is why
+       `MobileNetV2RenderB`'s `irBackStride1GradB` is one function with a `skip`
+       flag rather than two near-copies, and why `mnv2Stride1TiedB` is stated once
+       and instantiated at b3, b5, b6, b8-b13, b15, b16 and at the widenings b11
+       and b17.
+
+       ⭐ TWO HELPERS ARE RESNET-34's, IMPORTED RATHER THAN COPIED. `bnInB` is the
+       batched BatchNorm input-cotangent written as the `den` of the emitted
+       backward op, and `bnInB_eq_bnBackB` is its identity with the certified
+       `bnBatchLA` VJP; both are net-agnostic and happen to live in the file that
+       first needed them. What MobileNetV2 adds is the TWO-SIDED relu6 mask
+       (`relu6MaskB`, where ResNet-34 threads the one-sided `reluMaskB`) and the
+       XLA-`SAME` strided depthwise input-VJP. ⚠ That last one is NOT
+       `EnetTiePoC.dStridedInB`: EfficientNet-B0's strided depthwise is the
+       SYMMETRIC op and MobileNetV2's is the XLA-`SAME` one, identical types and
+       different certificates, and this is the one place that distinction is
+       recorded on the backward side.
+
+       ⭐ THE TIE HAS TWO HALVES WITH DIFFERENT HYPOTHESES, as ResNet-34's does.
+       The capstone `mnv2_net_tiedB` carries NO smoothness hypothesis and no
+       `0 < eps`: the folds are `forall cot` statements instantiated at explicitly
+       constructed cotangents. The relu6-kink and positivity conditions enter only
+       in the four `*CotIn_eq_vjp` lemmas, which say those cotangents ARE the
+       certified whole-net backward. `N` is a binder throughout.
+
+       ⭐ THE LOSS COTANGENT IS SHARED. `Foundation/SmoothedLossCot.lean`, written
+       for ResNet-34 at a general target, applies verbatim: `MobileNetV2RenderB`
+       composes the same six kit ops with the target arriving as the graph input.
+       `mnv2_lossCot_is_smoothedCE_grad` reads the result row by row.
+
+       ⛔ THE CENSUS IS 158 AGAINST 210 SLOTS, AND ONE REPLICA. `MobileNetV2RenderB`
+       runs `convBias := false`, so the 52 conv, depthwise and project bias nodes
+       are not emitted -- each bias is folded into the BatchNorm after it and bound
+       to `zeroBiasPrelude`'s zero constant. The bias conjuncts are kept (one
+       delegation each) and cover the flag; nothing weakens a theorem, since every
+       fold is quantified over op instances. And every gradient node in
+       `mobilenetv2in_rmsdp64` is followed by `all_reduce(add)/4` as emitted text
+       outside the AST, so the tie is at the per-replica node (4d).
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
