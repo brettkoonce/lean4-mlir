@@ -1,12 +1,28 @@
 # Bringing every net's Proofs tier to its paper-faithful net
 
-**Scoped 2026-09-05 from the Proofs-tier audit run during the XLA-SAME re-spelling. Nothing
-below is started except where a row says so; 3.1, 3.2(a)–(c), (e), 3.3 and 3.4 have since
-landed, and section 4's decision was taken 2026-09-06 with its shared foundation.** The target is the
-level ConvNeXt-T sits at: every certification tier stated at the net the artifact runs, the column
-"tiers only at a reduced or representative net" empty for every architecture. ConvNeXt-T had one
-hole of its own when this was scoped — its train-step tie was at the retired scalar LN — and
-3.1 closed it, so it is now the clean reference the other six are measured against.
+**Scoped 2026-09-05 from the Proofs-tier audit run during the XLA-SAME re-spelling. 3.1, 3.2(a)–(c),
+(e), 3.3 and 3.4 have landed; section 4's decision was taken 2026-09-06 with its shared foundation;
+and the review of 2026-09-06 (evening) added three axes the audit had not named — optimizer form
+(4b), renderer (4c) and data parallelism (4d) — with a decision on each. START at "Order of work"
+below.** The target is every certification tier stated at the net the artifact runs, the column
+"tiers only at a reduced or representative net" empty for every architecture — and, since the
+review, at the ARTIFACT the quoted number came from, not only the architecture. ConvNeXt-T was the
+reference when this was scoped (3.1 closed its scalar-LN hole); the review found it carries the
+optimizer and renderer gaps like the rest (2b, 4c), so no net is the clean reference today.
+
+**Why the three new axes exist at all.** The suite grew organically: one net at a time, each with
+the renderer, optimizer form and batch index that was convenient when it landed. The end state the
+user wants (2026-09-06) is homogeneous — every ImageNet-scale net is ONE batched chain, whose
+gradient nodes are un-fused and feed one shared optimizer-tail fold, whose loss cotangent is one
+shared lemma at a general target, and whose data-parallel mean is one AST node — with the Proofs
+tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
+pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
+
+**Order of work (2026-09-06 review).** 4b first — the four un-fused gradient folds, one file each,
+mechanical, and they put three nets' T3 on the `_adam_` artifact the book already names. Then 4.2a
+(r34's batched tie) as re-scoped there. Then 4c, the renderer convergence, which is the large one
+and re-runs every Imagenette number for four nets. 4d's ℝ-level lemma fits any session; its op
+node waits for 4c. 3.5 and 3.6 unchanged, on the batched chain from the start.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
@@ -35,6 +51,18 @@ forward, `HasVJPAt`, backward graph, `den graph = vjp.backward`). They are not T
 graph) and not T6 (no float-tier chain), and only the ones whose block list is pinned to the
 shipped config count as paper-net statements.
 
+**Since the 2026-09-06 review, "the net the artifact runs" includes three things the types do not
+see and the audit did not name.** (i) The OPTIMIZER FORM: a T3 row is green only when its `den`
+lemmas are at the un-fused gradient node every optimizer tail consumes, not at the fused
+`θ − lr·g` op that only the SGD-inline render emits (4b). (ii) The RENDERER: the Imagenette and
+ImageNet artifacts of a net come from one chain, and the tiers are stated at that chain (4c).
+(iii) The BATCH: `N` is a binder in every tier that carries no numeral (T1, T2, T3, T6) — the
+batched capstones already take `(N : Nat)`, and the per-example ties never see the batch at all
+because it is `pretty`'s argument, outside the AST. It is pinned only where a numeral depends on
+the BatchNorm width `N·h·w` (the training-BN cap and the backward budget), and never in a tie.
+The user's rule, 2026-09-06: batch size is an INPUT to the proofs; the artifact at 32 or 64 is an
+instance.
+
 ## 2. Where each net stands (audit of 2026-09-05)
 
 | net | paper net in Proofs | T1 | T2 | T3 | T4 | T5 | T6 | T7 |
@@ -47,7 +75,28 @@ shipped config count as paper-net statements.
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 
-Two axes cut across the table and are recorded separately from it:
+**2b. What each T3 tie is about, against the artifact whose accuracy is quoted (review of
+2026-09-06).** Every tie is at the SGD-inline `<net>_train_step.mlir`, rendered at batch 32 with
+the fused `*Sgd` ops, from the per-example renderer where one exists. None is at Adam — and the
+reference recipes are not all Adam either.
+
+| net | T3 is about | its renderer | quoted ImageNet artifact | its optimizer | layers between them |
+|---|---|---|---|---|---|
+| ResNet-34 | `resnet34_train_step` (SGD fused, per-example BN) | `ResNet34Render` | `resnet34in_momdp64` | heavy-ball | optimizer form, renderer, BN world, DP, smoothed loss |
+| MobileNetV2 | `mobilenetv2_train_step` (SGD fused, per-example BN, 17 blocks) | `MobileNetV2Render` | `mobilenetv2in_rmsdp64` | RMSProp | the same five |
+| EfficientNet-B0 | `efficientnet_train_step` (SGD fused `*SgdB`, batch BN) | `EfficientNetRender`, which writes the Adam one too | `efficientnetin_emarmsdp64dropdo` | RMSProp + EMA | optimizer form, DP, smoothed loss; drop/dropout are certified inputs |
+| ConvNeXt-T | `convnext_train_step` (SGD fused, per-example index) | `ConvNeXtRender` | `convnextin_adamdpwxclipdrop` | AdamW | optimizer form, renderer (`ConvNeXtRenderB`, "tied but not swapped", 78 lines), DP, smoothed loss; clip/wx/drop certified |
+| ViT-Tiny | `vit_train_step` (SGD fused, per-example index) | `ViTRender` | `vitin_adamdp128x4wxclipdrop` | AdamW, 4× accumulation | as ConvNeXt |
+| ResNet-50 | none | `ResNet50RenderB` only | `resnet50in160_lambaccdp8x64bce` | LAMB, 8× accumulation, BCE, 160 px | no tie; LAMB has no `_faithful`; BCE has no cotangent `den` |
+| MobileNetV4-Conv-M | none | `MobileNetV4RenderB` only | `mnv4in_adamdp64` | AdamW | no tie |
+
+The book names `<net>_adam_train_step.mlir` in every ImageNet chapter and describes the tie
+generically (`blueprint/src/content.tex` ≈14579), so nothing it says is false — but the theorems
+and the named bytes do not meet. `formalization.yaml`'s headline "every committed train step of
+all 12 nets is tied" was an overclaim against ~230 train-step files (corrected 2026-09-06 to "every
+net's SGD-inline train step"; 4e carries the disclosure).
+
+Five axes cut across the table and are recorded separately from it:
 
 * **Padding phase.** B0's stem and MobileNetV2's five stride-2 sites are XLA-SAME in every
   shipped artifact (MobileNetV2's SGD pair since step 0, 2026-09-05) and symmetric in every
@@ -63,6 +112,10 @@ Two axes cut across the table and are recorded separately from it:
   at INFERENCE BN, because the training-mode modulus is quadratic in the window, and a net's
   eval-BN graph is a separate artifact from its training one. MobileNetV2 has an eval graph at
   six blocks and none at seventeen, which is why 3.2(b)'s number has no whole-net graph tie.
+* **Optimizer form — DECIDED 2026-09-06: state every T3 at the un-fused gradient.** Section 4b.
+* **Renderer — DECIDED 2026-09-06: one chain per net, the batched one.** Section 4c.
+* **Data parallelism.** The all-reduce is emitted text outside the AST in every `*dp*` artifact;
+  what is provable and what stays calling logic is section 4d.
 
 ## 3. Work packages, in order
 
@@ -490,6 +543,14 @@ kind. (d) T4/T5: probe `r50_eval_chain` (53 BN sites at eval BN, plain relu, so 
 Done when the seven yaml rows exist and `scripts/convention_audit.py` still reports r50 clean.
 This is the largest package after MNv4; budget it as the R34 close was, one tier per session.
 
+⚠ Three things the 2026-09-06 review added. The quoted run `resnet50in160_lambaccdp8x64bce` is
+LAMB over 8 accumulated micro-batches with BCE-with-logits at 160 px: LAMB has NO faithfulness
+theorem (4b), BCE has no cotangent `den`, and accumulation is `momVNextF` at `(μ := akeep)`
+(already certified as an op). Budget the LAMB tail cert (`lamb_triple_faithful`: the AdamW triple's
+shape plus the per-tensor trust ratio) and the BCE cotangent lemma inside (c). And run
+`convention_audit.py` under `.venv/bin/python3` — the system interpreter has no jaxlib and the
+script dies importing the reference.
+
 ### 3.6 MobileNetV4-Conv-M: all six tiers
 
 **What exists.** `mnv4Blocks` (`MobileNetV4RenderB.lean`), the 21-row block table verified
@@ -534,12 +595,16 @@ defect this axis carried.
 | T1 forward + graph faithfulness (T2) | ✅ | ✗ | 4.1b |
 | T1 whole-net `HasVJPAt` | ✅ | ✗ | 4.1d |
 | T3 §1 fold (`den = certified`, un-fused) | ✅ | ✗ | 4.1e |
-| **T3 §1a tie** | **NEXT** | ✗ | 4.2a |
+| **T3 §1a tie** | **after 4b** | ✗ | 4.2a |
 | T4 / T5 / T6 | ✗ | ✗ | 4.2 |
+| T3 at the un-fused gradient (the optimizer axis) | ✅ (4.1e is already that form) | ✗ | 4b.4 |
 
-**Next session: the §1a tie for ResNet-34 (4.2a).** Everything it consumes is landed; it is the
-last piece of r34's T3, and it is the tier that matters most for 4e, because it is the one that
-ties to the artifact whose accuracy is quoted. Read 4.2a first, then 4.1d and 4.1e.
+**Next session: 4b's four un-fused folds, then the §1a tie for ResNet-34 (4.2a).** 4.2a's inputs
+are all landed and it is the last piece of r34's T3. ⚠ It does NOT tie to the artifact whose
+accuracy is quoted, as the previous text here said: `resnet34in_momdp64` is four replicas with an
+all-reduce the tie cannot see (4d) and a smoothed loss cotangent the current head fold is not at
+(4.2a). It ties to the single-replica batched step, and this document now says so. Read 4b, then
+4.2a, then 4.1d and 4.1e.
 
 ⚠ Two standing facts a fresh session should not re-derive. **`N` is the PER-REPLICA batch** — the
 data-parallel artifacts all-reduce gradients and no BatchNorm statistic is all-reduced, so
@@ -763,9 +828,25 @@ real backward chain delivers**, with no free cotangent left — the batched peer
 and the capstone with the residual fan-in sums at all sixteen skip merges — the fan-in is the
 structural content the cnn/cifar ties never had, and the per-example file's §-headers explain it.
 
-⚠ **The capstone is where `N` first becomes awkward.** A train step is rendered at a concrete `B`,
-so the tie may want `N` instantiated even though T3 carries no numerals. Decide it at the top of
-the file, not per-lemma; 64 is the batch of the runs with logs.
+⭐ **`N` stays a binder — do NOT pin it (user decision, 2026-09-06).** The batched capstone takes
+`(N : Nat)` exactly as `efficientnet_net_tied` does; the artifact at 32 (`resnet34_sgd/adam`) or 64
+(`resnet34in_momdp64`) is an instance. If a `_committed` corollary at a literal batch is wanted for
+the yaml row, it is one line after the theorem, never a hypothesis inside it. (The earlier text
+here said "decide it at the top of the file; 64" — withdrawn.)
+
+⭐ **State the head fold at a general target, and at the smoothed cotangent.** The batched render
+composes the label-smoothed cotangent from kit ops (`softmaxRow → subB → scaleB → addVB → shiftB →
+divConstB`, α = 0.1 baked, the `ls0` twins turn it off) and the target arrives as the graph input
+`%onehot`, which under mixup/cutmix is a soft vector drawn on the host. So the loss-cotangent `den`
+this tie needs is at a target `t : Vec nCls`, not `oneHot label`, and at the smoothed form; the
+existing `r34LossCot_den` is at plain softmax − one-hot and applies to the SGD-inline artifact
+only. Write it once, shared with 4b's capstone re-pointing (`Foundation/SmoothedLossCot.lean`, or
+beside `lossCot_bridge` in `IR.lean`).
+
+⛔ **What the tie cannot reach: the all-reduce.** In `resnet34in_momdp64` each `*GradB` node is
+followed by `all_reduce(add)/4` as emitted text (`emitGradAllReduce`, a declared carve-out). The
+tie is at the per-replica gradient node; the mean across replicas is 4d's business. State the
+capstone at one replica and say so in the header.
 
 ⛔ `ResNet34FaithfulPoCB.lean`'s honest residual is exactly this file's job: its cotangents are free
 variables. Until 4.2a lands, r34's T3 is the §1 fold ONLY, and should be described that way.
@@ -778,7 +859,7 @@ For each of ResNet-34 and MobileNetV2, at `bnBatchLA` (r34's T1 and T2 landed, 4
 |---|---|---|
 | T1 | net-level ℝ forward + whole-net `HasVJPAt` (both nets have relu kinks) — ✅ r34 | `EfficientNetFullB0.lean` |
 | T2 | typed forward graph, per-block `_faithful` then chained — ✅ r34 | `ResNet34RenderB` / `MobileNetV2RenderB` tokens |
-| T3 | FaithfulPoC / TiePoC against the batch-BN train step — ✅ r34's §1 fold (4.1e); §1a scoped | the existing per-example pair |
+| T3 | FaithfulPoC / TiePoC against the batch-BN train step, at the UN-FUSED gradient (4b's form) — ✅ r34's §1 fold (4.1e); §1a scoped | the existing per-example pair, and `ResNet34FaithfulPoCB.lean` for the gradient form |
 | T4 | training-BN forward budget — a **CAP**, as `r34_train_float_logits_le` already is | `Maps.bnBatchTensor4Capped` |
 | T5 | backward budget, one theorem per `N` | `Maps.bnBatchBack` |
 | T6 | certified backward tie at `bnBatchTensor4` | `Resnet34BackCertifiedTie.lean` |
@@ -793,6 +874,158 @@ world-agnostic**: frozen statistics reduce nothing, so `r34_float_logits_le` and
 ⚠ **Every batched number carries the batch size in its statement.** Decide `N` once per net, at
 the batch the quoted checkpoint trained at, and put it in the theorem name or the file header —
 not in a docstring.
+
+## 4b. The optimizer-form axis — DECIDED 2026-09-06: every T3 at the un-fused gradient
+
+**The finding.** All five T3 ties are at the fused `*Sgd` / `*SgdB` ops, which only the SGD-inline
+render emits. Every other train step in `verified_mlir/` — the `_adam_`, `_mom_`, `_sgd_`, `_rms_`,
+`_lamb*`, `_ema*` families and every ImageNet one — emits the RAW gradient (`*Grad` per-example,
+`*GradB` batched) and hands it to an optimizer tail. 4.1e found this for r34 and took the un-fused
+form; the review found the same fact holds for the other four nets and nobody had re-stated them.
+The per-example Adam renders already emit the un-fused constructors (`convWeightGrad`,
+`depthwiseWeightGrad`, `veclnGammaGrad`, `layerScaleChGammaGrad` in `ConvNeXtRender`;
+`rowDenseWeightGrad`, `patchEmbedWeightGrad`, `posEmbedGrad` in `ViTRender`; the `*GradB` family in
+`EfficientNetRender`), so for B0, ConvNeXt and ViT the fold at the gradient IS the fold at
+`<net>_adam_train_step.mlir`, today, on the renderer they already have.
+
+**Why it is the right form and not a workaround.** One lemma per op kind certifies every optimizer
+variant at once, because they all consume the same gradient node. The fusion is `rfl`: the 29
+`*Sgd_eq_grad` / `*SgdB_eq_grad` theorems in `StableHLO.lean` (`weightSgd_eq_grad` …
+`posEmbedSgd_eq_grad`, `layerScaleChGammaSgd_eq_grad`, the depthwise, patch-embed, vector-LN,
+row-dense and batched conv/BN/dense families) say `den (xSgd …) = θ − lr · den (xGrad …)`
+coordinatewise, so each existing fold lemma becomes its gradient peer by dropping the
+`congr 1` / `congrArg (lr * ·)` peeling. 4.1e's eight lemmas are the template — they are
+`EfficientNetFaithfulPoC.lean`'s proofs with that peeling removed.
+
+**The tails are already certified, with two holes.** `adamW_triple_faithful` (Adam/AdamW),
+`mom_pair_faithful` (heavy-ball), `rmsProp_triple_faithful` (RMSProp), `clipGrad_faithful` /
+`clipShared_faithful` (global-norm clip; `clipGrad_accum` for the accumulated form),
+`dropPathB_faithful` / `dropoutB_faithful`. EMA is `adamMNextF` at its other reading and gradient
+accumulation is `momVNextF` at `(μ := akeep)`, both by the renders' own docstrings. ⛔ **LAMB has no
+faithfulness theorem** — `Lamb.lean` proves properties of the trust ratio (`lambTrust_nonneg`,
+`lambDir_wd_inside`, `lambScale_not_shared`) and nothing says the emitted text denotes it; that is
+R50-A3's optimizer (3.5). ⛔ **BCE-with-logits has no cotangent `den`**; also R50-A3's.
+
+### 4b.1 – 4b.4 The four folds, one file each
+
+| package | file (mirror `ResNet34FaithfulPoCB.lean`) | ops | `_eq_grad` source |
+|---|---|---|---|
+| 4b.1 EfficientNet-B0 | `Architectures/EfficientNetFaithfulPoCG.lean` | the eight `*SgdB` kinds `EnetPoC` is at — `conv{Weight,Bias}SgdB`, `convStridedXla{Weight,Bias}SgdB`, `depthwise{,Strided}{Weight,Bias}SgdB`, `bn{Gamma,Beta}SgdB`, `dense{Weight,Bias}SgdB` — to their `*GradB` peers | batched `*SgdB_eq_grad` |
+| 4b.2 ConvNeXt-T | `Architectures/ConvNeXtFaithfulPoCG.lean` | `conv{Weight,Bias}Sgd`, `convStrided{Weight,Bias}Sgd`, `depthwise{Weight,Bias}Sgd`, `veclnGammaSgd`, `rowDenseBiasSgd`, `layerScaleChGammaSgd`; `convStride4WeightGrad` is already a gradient (the §5 carve-out becomes the norm) | per-example `*Sgd_eq_grad` |
+| 4b.3 ViT-Tiny | `Architectures/ViTFaithfulPoCG.lean` | `rowDense{Weight,Bias}Sgd`, `veclnGammaSgd`, `patchEmbed{Weight,Bias}Sgd`, `posEmbedSgd`, the cls token | per-example `*Sgd_eq_grad` |
+| 4b.4 MobileNetV2, 17 blocks | `Architectures/MobileNetV2FaithfulPoCPaperG.lean` | the twelve op types `MobileNetV2FaithfulPoCPaper` tabulates | per-example `*Sgd_eq_grad` — or go straight to the batched `*GradB` ops if 4c's MobileNetV2 render is in hand |
+
+Acceptance, per net: every parameter GRADIENT node of `<net>_adam_train_step.mlir` has
+`den = certified gradient`, `∀ cot`; the `<net>_net_tied_certified` capstone is re-pointed (or
+twinned) at the gradient nodes, so the tie is about the Adam artifact the book names; the yaml row
+and the book's tie paragraph name the artifact. ⚠ For r34 and MobileNetV2 the per-example `*Grad`
+fold is a stepping stone only — their Adam artifacts are on the batched chain, and 4.1e / 4c are the
+real target. ⚠ The shared smoothed-target loss cotangent (4.2a) is a prerequisite for the capstone
+re-pointing, not for the folds, which are `∀ cot`. Gates as everywhere: `lake build Certs`,
+`AuditAxioms.lean`, `docstring-checkrefs`, `check_audit_coverage.py`; no `.mlir` changes.
+
+## 4c. The renderer axis — DECIDED 2026-09-06: one chain per net, and the tiers stated at it
+
+**The finding.** Four nets have two renderers. `ResNet34Render` / `MobileNetV2Render` /
+`ConvNeXtRender` / `ViTRender` render the per-example-indexed chain (`pretty B` lifts a
+one-example node across the batch; on the `*Grad` ops the batch sum lives in the EMITTER, not in
+`den`, by the constructors' own comment) and write `<net>_train_step` and `<net>_fwd`, plus for
+ConvNeXt and ViT the `_adam_` and the drop-free `*in_adam*` steps. The `*RenderB` files render the
+batched chain (`N := B` inside the AST, `*B` constructors, `den = batchMap N …` with the `Σ_n`
+inside `den`) and write everything that needs a per-example mask or a batch-coupled op: every
+`*dp*`, every `drop`, the r34/mnv2 Adam and momentum steps. The Proofs tiers are all at the
+per-example chain. EfficientNet is the model — one file writes the SGD and the Adam artifacts on
+one chain — and R50/MNv4 only ever had the batched chain.
+
+**The decision (user, 2026-09-06): the Imagenette and ImageNet artifacts of a net come from the
+SAME renderer, the batched one, and the tiers are stated there. The user is aware every Imagenette
+number for the four nets gets re-run on the new artifacts.** This is the unification the header
+describes; it is where the organic growth is paid back.
+
+**What converging means, per net.**
+
+| net | today | after 4c | re-run |
+|---|---|---|---|
+| ResNet-34 | the Imagenette SGD trainer loads `resnet34_train_step` (per-example; `VerifiedTrain.lean:988`) | it loads `resnet34_sgd_train_step` (batched chain, ALREADY rendered by `ResNet34RenderB`: un-fused + `sgdParamF`); `resnet34_fwd` re-rendered from the batched chain at batch BN, which retires the `check_fwd_prefix` exemption "two renderers"; `ResNet34Render.lean` retired | the Imagenette SGD numbers |
+| MobileNetV2 | `mobilenetv2_train_step` (per-example, 17 blocks) and `mobilenetv2_fwd` from `MobileNetV2Render` | `MobileNetV2RenderB` gains the `.sgd` tail (r34's `sgdParamF` shape) and writes `mobilenetv2_sgd_train_step` + `mobilenetv2_fwd`; per-example render retired | the Imagenette SGD numbers |
+| ConvNeXt-T | per-example `convnext_train_step` / `_adam_` / `convnextin_adam*`; the batched chain is "tied but not swapped" — it differs from the committed Adam artifact on 78 lines (conv-VJP `transpose`/`reverse` order), and the gate that licenses the swap (`convnext-adam-tie`) is IREE-linked and does not link on this box | swap under an XLA-side numeric gate (one-batch A/B of the two artifacts' outputs, the shape the `*-dp-check` gates already have); every `convnext*` artifact from `ConvNeXtRenderB`'s traversal; the per-example traversal retired | the Imagenette Adam numbers |
+| ViT-Tiny | as ConvNeXt | as ConvNeXt, from `ViTRenderB` | the Imagenette Adam numbers |
+| EfficientNet-B0, ResNet-50, MNv4 | one renderer already | nothing | nothing |
+
+**What moves in the Proofs tier.** T2 and T3 re-state at the batched chain's constructors; T1 and
+T6 are already batch-generic for B0 and r34 and become so for the others by the `batchMap` lifts
+4.1b–4.1d used. For r34 this IS section 4's port. For ConvNeXt and ViT the forward is byte-identical
+between the two chains (`convnext-fwd-b-tie`, `vit-fwd-b-tie`, `tests/TestBatchedEmitTie.lean`'s
+per-form ties), so T2 moves by the existing `den_batchOp_*` lemmas and the work is the backward and
+the tail. ⚠ Padding, BN world and activation ride along unchanged — 4c changes the INDEX and the
+optimizer form, and every convention the header table names must be re-checked on the converged
+render, not assumed (§5, "conventions are invisible to types").
+
+**Order.** After 4b and 4.2a: 4b is cheap and lands T3-at-Adam for three nets on the chain they
+already have, and 4.2a is r34's batched tie either way. 4c is the large package — every artifact
+of four nets, every Imagenette number, `regen_verified_mlir.sh`'s two PAIRS lists (≈197 and ≈276),
+`proofs.yml`'s diff list, `check_render_coverage.py`, the `VerifiedTrain.lean` load path (the
+un-varianted `<slug>_train_step.mlir` at :988 against the variant-resolved one at :1365), and the
+book's chapter numbers. Budget it as a thread of its own with a planning log, one net per session.
+
+⚠ **Traps already paid for on this axis.** The wrong thing typechecks — a `broadcast_in_dim` mask
+against a per-example node compiles, trains and descends with no `den` behind it
+(`ConvNeXtRenderB` header). On ViT the token axis and the batch axis are both called `N`; pass the
+token count by name. A flag that reaches the emission but not the entry name ships an artifact
+whose `@name` disagrees with its path (three nets, four times). `pretty B` of a per-example node
+and the `*B` constructor of the same op emit the same bytes — that is what the byte ties are — so
+a converged render is checked byte-for-byte against the artifact it replaces on the forward and
+numerically on the backward.
+
+## 4d. Data parallelism — what is provable, what is calling logic (user question, 2026-09-06)
+
+**As shipped.** Every `*dp*` artifact is ONE program run on `R` replicas. Per parameter, after the
+gradient node and before the optimizer tail, `emitGradAllReduce` (`LeanMlir/ViTRender.lean`,
+called from every ImageNet renderer) emits `stablehlo.all_reduce(add)` over
+`replica_groups = [[0..R-1]]` followed by a divide by `R`. It is emitted TEXT outside the `SHlo`
+AST, and `Proofs/Codegen/ViTRender.lean` declares it a trusted carve-out. BatchNorm statistics are
+per replica (nothing all-reduces μ/var), which is why `N` in section 4 is the per-replica batch.
+The host shards the global batch into `R` slices, broadcasts the initial parameters, and
+checkpoints from replica 0 (`VerifiedTrain.lean`, `ffi/pjrt_ffi.c`, `PJRT_REPLICAS`);
+`ffi/test_pjrt_allreduce.c` validates the syntax, and the `*-dp-check` gates validate the semantics
+numerically — a duplicated batch on `R` replicas must reproduce the single-device step bit-exactly
+(ViT's checks all 16.6 M returned floats).
+
+**Provable, in three pieces of increasing cost.**
+
+1. ⭐ **The ℝ-level lemma (cheap, certain, any session).** With `g_r` the certified gradient of
+   the per-replica loss `L_r` at replica `r`'s slice, `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)` —
+   linearity of `pdiv`. For a net with no batch coupling (ConvNeXt, ViT, every inference-BN
+   forward) and a mean loss, that is exactly the gradient of the mean loss over the global batch
+   `R·N`, so the DP step IS the single-device step at batch `R·N`. For a training-BN net it is the
+   gradient of the mean of `R` per-replica batch-BN losses — a different function from the
+   single-device batch-`R·N` step, and the honest statement of what trained. File:
+   `Foundation/DataParallel.lean`: `dpMeanGrad_eq_grad_meanLoss`,
+   `dpMeanGrad_eq_globalBatchGrad_of_perExample`, and the lockstep induction — identical initial
+   parameters and an identical (all-reduced) update on every replica keep the `R` parameter copies
+   equal at every step, a two-line induction over the step function and the property the trainer
+   relies on when it checkpoints from replica 0.
+2. **The op-level node (moderate; with 4c).** An `SHlo` constructor `allReduceMeanF R` whose
+   `den` is stated over `R` graphs of ONE skeleton — the hypothesis `∀ r, skel (g r) = skel (g 0)`
+   IS SPMD, and it is free, because `skel` erases the values the ops carry and `pretty` prints only
+   the skeleton — with `den (allReduceMeanF R g) = (1/R) Σ_r den (g r)`. The `pretty` case is
+   `emitGradAllReduce`'s text verbatim and the round-trip parser gets one case. That turns the
+   carve-out into a faithfulness theorem at the artifact and composes with 4b's gradient folds:
+   `den (tail (allReduceMeanF R (convWeightGradB …))) = adamW ((1/R) Σ_r certifiedGrad_r)`.
+   ⚠ It needs the values on the `R` graphs to be the replica slices of one host batch, which is
+   piece 3.
+3. **The calling logic (a page, not a theorem).** Which examples land on which replica, that every
+   replica sees the same parameters at step 0, that the checkpoint is read from one replica, and
+   that `replica_groups` names all `R` devices — these are `VerifiedTrain.lean` and the FFI, and no
+   theorem here reaches them. The user's "worst case" is the right floor and should be written
+   regardless: one page in the ImageNet-trainer chapter that says what SPMD data parallelism is in
+   this system (one graph, `R` copies, per-replica BN, gradient mean, lockstep), which of that is a
+   theorem (pieces 1 and 2) and which is the driver. The `*-dp-check` gate is the empirical
+   evidence for piece 3 and belongs on that page.
+
+**Recommendation.** Piece 1 now (it also answers "what function trained" for the batch-BN nets in
+one lemma), piece 2 when 4c lands the batched chains, the page with piece 1. Until piece 2 lands,
+every tie against a `*dp*` artifact is at the per-replica gradient node and says so (4.2a).
 
 ## 5. Traps, all previously paid for
 
@@ -834,6 +1067,18 @@ not in a docstring.
 * **A theorem should be about the program we run.** Before each package, write the net's
   convention table in the file header: depth, widths, padding phase per stride-2 site, BN mode
   and world, activation, LN spelling, and which artifact those are read from.
+* ⛔ **A tie's row must name its artifact and its optimizer form.** Five T3 rows said "✓ N params"
+  and every one was at the SGD-inline file while the book named the Adam one; it went unnoticed
+  because the tier table had no artifact column. Section 2b is that column; keep it filled.
+* **A file header can name an artifact that does not exist.** `MobileNetV2FaithfulPoCPaper.lean`
+  says `mobilenetv2_paper_train_step.mlir`; the 17-block artifact is `mobilenetv2_train_step.mlir`
+  (the 6-block one is `mobilenetv2_reduced_train_step.mlir`). Fix it with 4b.4.
+* **Emitted text outside the AST is invisible to every `den` lemma.** The all-reduce is the one
+  such carve-out in the ImageNet artifacts (4d); `psW`'s hand-written SGD wrap was another and 4b
+  makes its un-fused form the norm. Grep a renderer for `s!"    %` literals that are not `pretty`
+  before claiming an artifact is `pretty(provenGraph)` end to end.
+* **Scripts under the pinned venv.** `convention_audit.py` imports the JAX reference; bare
+  `python3` on this box is anaconda's and has no jaxlib.
 
 ## 6. Files
 
@@ -852,7 +1097,14 @@ and the most expensive of the three declined backwards); §4 (the batch-BN port)
 BatchNorm leaves, both directions, plus the three layout-free `Maps` cores),
 `Foundation/BatchMapVJPAt.lean`, `Architectures/ResNet34FullB.lean`,
 `Architectures/ResNet34FullBVJP.lean` and `Foundation/ResNet34FaithfulPoCB.lean`; still to
-write there are r34's `ResNet34TiePoCB.lean` (4.2a) and MobileNetV2's five peers; 3.5 `Resnet50FullB.lean`,
+write there are r34's `ResNet34TiePoCB.lean` (4.2a) and MobileNetV2's five peers; 4b
+`Architectures/EfficientNetFaithfulPoCG.lean`, `ConvNeXtFaithfulPoCG.lean`, `ViTFaithfulPoCG.lean`,
+`MobileNetV2FaithfulPoCPaperG.lean` and the shared `Foundation/SmoothedLossCot.lean`; 4c no new
+Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean` — it RETIRES `ResNet34Render.lean`,
+`MobileNetV2Render.lean` and the per-example traversals of `ConvNeXtRender` / `ViTRender`, and
+re-points every T2/T3 file at the batched constructors; 4d `Foundation/DataParallel.lean`, later
+the `allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases;
+3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for
 MobileNetV4. Every new file: a `lakefile.lean` `Certs` root or an import of one, an

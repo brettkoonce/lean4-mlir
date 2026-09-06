@@ -64,9 +64,10 @@ status:
     squeeze-excitation, GELU/Swish/sigmoid, layer-norm, layer-scale, and a
     multi-theorem treatment of scaled-dot-product / multi-head self-attention
     through the full transformer tower. On top of the VJP layer, four further
-    proved programs: (1) TRAIN-STEP TIES -- every committed train step of all 12
-    nets is tied to its real loss-driven backward cotangent (per-net *TiePoC
-    capstones, e.g. the all-200-params vit_net_tied_certified), plus
+    proved programs: (1) TRAIN-STEP TIES -- every net's SGD-inline train step,
+    all 12 nets, is tied to its real loss-driven backward cotangent (per-net
+    *TiePoC capstones, e.g. the all-200-params vit_net_tied_certified; the Adam
+    and ImageNet steps are the un-fused-gradient re-statement, 4e below), plus
     committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
     ERROR -- a binary32 rounding model constructed from scratch (rndP, standard
     model proved, no hardware axioms); Type-valued whole-net float bridges
@@ -754,6 +755,35 @@ fidelity:
        -- frozen statistics reduce nothing, so `r34_float_logits_le` and
        `mnv2_float_logits_le` already hold in both worlds. Work packages:
        planning/proofs_tier_to_paper_nets.md section 4.
+
+       THREE MORE AXES THE SAME REVIEW FOUND (2026-09-06, later that day),
+       recorded here because "the certified net and the net that produced the
+       headline number are different functions" is true for more reasons than
+       BatchNorm. (i) OPTIMIZER FORM. All five *_net_tied_certified capstones
+       are at the fused `theta - lr * g` ops, which only the SGD-inline
+       `<net>_train_step.mlir` emits; every other train step, the ImageNet ones
+       included, emits the raw gradient and hands it to an optimizer tail. The
+       decision is to re-state every fold at the gradient node -- the
+       `*Sgd_eq_grad` family is `rfl` and ResNet34FaithfulPoCB is the template
+       -- which covers every tail at once. The tails are certified
+       (adamW_triple_faithful, mom_pair_faithful, rmsProp_triple_faithful,
+       clipGrad_faithful, dropPathB_faithful; EMA and accumulation reuse
+       adamMNextF / momVNextF) except LAMB, which has no faithfulness theorem,
+       and BCE-with-logits has no cotangent den; both are ResNet-50-A3's.
+       (ii) RENDERER. ResNet-34, MobileNetV2, ConvNeXt-T and ViT-Tiny each have
+       a per-example renderer (the tied one, batch sum in the emitter) and a
+       batched one (the ImageNet one, batch sum inside den). The decision is one
+       chain per net, the batched one, with the Imagenette numbers re-run.
+       (iii) DATA PARALLELISM. Every `*dp*` artifact's `all_reduce(add)/R` is
+       emitted text outside the AST (a declared carve-out in ViTRender.lean)
+       that no den lemma sees; BatchNorm statistics are per replica. A tie
+       against such an artifact is at the per-replica gradient node. The mean
+       of per-replica gradients is the gradient of the mean of per-replica
+       losses (linearity; for a net without batch coupling that is the
+       global-batch step), which is a lemma to write; the host-side sharding
+       and lockstep are driver logic and get a page, not a theorem. Batch size
+       stays a binder in every tier without a numeral. Work packages: the same
+       document, sections 4b, 4c, 4d.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
