@@ -12,7 +12,8 @@ This file provides that surface:
   * `toSpecs`          — folds `layers` into the `(dims, initKind)` param layout, so the
                          layout is *derived* from the architecture rather than hand-listed
                          a second time. (Kernel-check it against the audited `XLayout.specs`
-                         with `#guard spec.toSpecs == XLayout.specs` — see `MainResnet34Verified`.)
+                         with `#guard spec.toSpecs == XLayout.specs` — see `VerifiedNets.lean`'s
+                         `#guard resnet34Verified.toSpecs == ResNet34Layout.specs`.)
 
 The architecture's *faithfulness* is the audited `<net>_has_vjp` theorem, which is itself a
 hand-unrolled `foldl` of the generic `vjp_comp` chain-rule combinator (`Proofs/Tensor.lean`)

@@ -4,8 +4,10 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 
 The eval twin of `ResNet34RenderPC.lean`'s part 2. That file proves
 `den (resnet34FwdGraphFullPC …) = resnet34Forward_full_pc …` — the whole `[3,4,6,3]` net's
-typed `SHlo` graph denotes the certified ℝ forward — for the **training** BN chain, the one
-`resnet34_train_step.mlir` differentiates. `@resnet34_fwd_eval` renders the other chain (every
+typed `SHlo` graph denotes the certified ℝ forward — for the **training** BN chain, the one the
+retired `resnet34_train_step.mlir` differentiated (4c leg 1, `planning/renderer_convergence.md`;
+the live training chain is `ResNet34FullB.lean`'s, at batch BN). `@resnet34_fwd_eval` renders the
+other chain (every
 BN site reading frozen running statistics through `.bnPerChannelEvalF`) and had no such
 theorem, so the eval forward was rendered from the verified AST but not tied to an ℝ def.
 

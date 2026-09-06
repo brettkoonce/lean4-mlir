@@ -4,10 +4,19 @@ import LeanMlir.Proofs.Architectures.CifarBnFaithfulPoC
 
 /-! # PoC: the ResNet-34 (Chapter 5) train step, proof-tied to the certified SGD step
 
-The Chapter-5 capstone — the full `[3,4,6,3]` ResNet-34 (146 params: a 7×7/s2 stem, 16
-residual blocks, GAP + final dense). `MainResnet34Verified` trains on
-`verified_mlir/resnet34_train_step.mlir`; this file makes its parameter updates
+The Chapter-5 capstone — the full `[3,4,6,3]` ResNet-34 (a 7×7/s2 stem, 16 residual blocks,
+GAP + final dense). This file makes every parameter update of the per-example, SGD-inline train step
 `den`-faithful — each emitted SGD op denotes the certified loss-descent step.
+
+⛔ **RETIRED ARTIFACT (2026-09-06, 4c leg 1).** This fold was about
+`verified_mlir/resnet34_train_step.mlir`, and both that file and its renderer
+(`ResNet34Render.lean`) are gone: it was the last train step in the suite at per-example
+BatchNorm, so `resnet34_fwd` could not be a prefix of both it and the batch-BN Adam step.
+`planning/renderer_convergence.md` carries the decision. **Every theorem below is unchanged and
+still true** — each is a statement about an OP KIND and an arbitrary cotangent, not about bytes —
+and its live peer is `Foundation/ResNet34FaithfulPoCB.lean`, the same fold at the batched,
+un-fused gradient nodes every ResNet-34 artifact now emits. Read this file as the per-example
+ladder it always was; read that one for what ships.
 
 **Two new core ops, ZERO new theorems for 142 of the 146 params.** Like cifar8-bn, the
 overwhelming majority of ResNet-34's parameter outputs fold by *reusing the existing generic

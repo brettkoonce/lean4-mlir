@@ -1,10 +1,11 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Codegen.ResNet34Render
 import LeanMlir.ViTRender
 
 /-! # ResNet-34 AdamW train step rendered from the verified AST, at the BATCHED index
 
-The §2b peer of `ResNet34Render.lean`. Same net, different two things, and both are the point:
+**The sole writer of every ResNet-34 artifact** since 2026-09-06, when 4c leg 1 retired the
+per-example `ResNet34Render.lean` (`planning/renderer_convergence.md`). It was the §2b peer of that
+file, and the two things that made it a peer are the two things that made it the survivor:
 
 * **BatchNorm is `bnBatchF`** — μ/var reduced over `[0,2,3]`, coupling the batch — not
   `bnPerChannelF`'s per-example `[2,3]`. That is the semantics the AdamW trainer has always run
@@ -34,6 +35,267 @@ passed; the emitted literals carry the real values.
 open Proofs.StableHLO
 
 namespace Proofs.StableHLO
+
+-- ════════════════════════════════════════════════════════════════
+-- § Migrated from `ResNet34Render.lean`, RETIRED 2026-09-06 (4c leg 1)
+--
+-- ⭐⭐ `planning/renderer_convergence.md`: one chain per net, the batched one. ResNet-34's
+-- per-example renderer wrote `resnet34_train_step`, `resnet34_fwd` and `resnet34_fwd_eval` (and,
+-- through this file, the two `resnet34in_*` forwards). Its train step was the only artifact in
+-- the suite still at per-example BatchNorm, so `resnet34_fwd` could not be a prefix of BOTH it
+-- and the batch-BN Adam step — the `KNOWN_SPLIT` entry `check_adam_prefix` carried, reading
+-- "two renderers (ResNet34Render vs ResNet34RenderB)", for as long as both existed.
+--
+-- What comes across is exactly what the INFERENCE forward needs, plus the two things other files
+-- read: `bnSite`/`R34Bn` (`ResNet50RenderB` shares the train/eval switch) and the signature lists
+-- (`r34SigList` is the single source for the arg order of every r34 artifact). ⭐ `bnSite` keeps
+-- BOTH modes: `.train` is dead for ResNet-34 now and live for ResNet-50, whose bottleneck forward
+-- is the same switch one net over.
+--
+-- ⚠ The eval forward does NOT move onto the batched chain, and could not meaningfully: frozen
+-- per-channel statistics reduce nothing, so `bnPerChannelEvalF` is BatchNorm-world-agnostic and
+-- `resnet34_fwd_eval` is correct against either. Same call R50 makes (`r50FwdChainB`'s docstring).
+-- ════════════════════════════════════════════════════════════════
+
+/-- Saved forward SSA names a block's backward + SGD passes reference. `xin` is carried by the
+    forward itself so the backward never has to re-derive which block fed which — the wiring the
+    train step reads back is the wiring the forward emitted. -/
+structure BFwd where
+  code : String
+  xin : String       -- block input (the merged dx flows back to this)
+  o  : String        -- block output (post-relu)
+  a  : String        -- pre-output-relu sum (the add result)
+  c1 : String        -- conv1 output (= BN1 input)
+  n1 : String        -- BN1 output (= relu1 pre-activation)
+  r1 : String        -- relu1 output (= conv2 input activation)
+  c2 : String        -- conv2 output (= BN2 input)
+  cp : String        -- projection conv output (downsample only; "" for identity)
+deriving Inhabited
+
+-- ════════════════════════════════════════════════════════════════
+-- § Block forward
+-- ════════════════════════════════════════════════════════════════
+
+/-- Which BatchNorm a forward render emits. Everything else about the two forwards is identical,
+    which is exactly why they share one chain rather than two hand-kept-in-sync copies. -/
+inductive R34Bn where
+  /-- **Training**: statistics reduced out of the activation (`bnPerChannelF` — per channel, per
+      example, over `H·W`). What `resnet34_train_step.mlir` differentiates. -/
+  | train
+  /-- **Inference**: frozen per-channel running stats arriving as graph inputs `%{p}mu`/`%{p}var`
+      (`bnPerChannelEvalF`). The eval partner of a *batch*-statistic train step, whose EMA'd
+      batch mean/var are exactly these per-channel scalars. -/
+  | eval
+deriving DecidableEq, Repr
+
+/-- One BN site. `statP` is the running-stat input prefix (`%{statP}mu` / `%{statP}var`), used
+    only in `.eval` mode; in `.train` mode the stats are reduced out of `xin` and `statP` is
+    ignored. Every R34 BN site is spatially square, so one `hh` suffices. -/
+-- ⚠ PUBLIC (was `private` until 2026-08-05): `ResNet50RenderB.lean`'s forward chain needs the
+-- SAME train/eval BN switch. A second copy there would let R50's eval forward drift from its
+-- train forward — §2g's `mobilenetv2_fwd` defect exactly. Visibility changes no emitted bytes.
+def bnSite (B oc hh : Nat) (mode : R34Bn) (epsStr gName btName statP xin : String) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+  let zc  : Vec oc := fun _ => 0
+  let zin : Vec (oc*hh*hh) := fun _ => 0
+  match mode with
+  | .train => pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := hh)
+                          gName btName epsStr 0 zc zc (.operand xin zin))
+  | .eval  => pretty B (.bnPerChannelEvalF (oc := oc) (h := hh) (w := hh)
+                          gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc
+                          (.operand xin zin))
+
+/-- Identity block forward: `conv1→BN1→relu1→conv2→BN2→(+x)→relu`. `c` channels, `hh×ww` spatial. -/
+private def idFwd (B c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS BFwd := do
+  let ww := hh
+  let zc  : Vec c := fun _ => 0
+  let zk  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
+  let zin : Vec (c*hh*ww) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.flatConvF (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk zc (.operand xName zin))
+  let (cN1, nN1) ← bnSite B c hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zin))
+  let (cC2, nC2) ← pretty B (.flatConvF (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W2" (biasName convBias s!"%{p}b2" c) zk zc (.operand nR1 zin))
+  let (cN2, nN2) ← bnSite B c hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cA,  nA)  ← pretty B (.addV (.operand nN2 zin) (.operand xName zin))
+  let (cO,  nO)  ← pretty B (.reluF (.operand nA zin))
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cA ++ cO, xin := xName,
+         o := nO, a := nA, c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, cp := "" }
+
+/-- Downsample block forward: strided `conv1→BN1→relu1→conv2→BN2` body + strided projection
+    `convp→BNp` skip, `add`, `relu`. `cin→c` channels, input `2hh×2ww`, output `hh×ww`. -/
+private def downFwd (B cin c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS BFwd := do
+  let ww := hh
+  let zc   : Vec c := fun _ => 0
+  let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
+  let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
+  -- §2l step A: He et al.'s option-B shortcut is 1×1. A SEPARATE kernel from `zk1` — sharing that
+  -- binding is how the 3×3 deviation stayed invisible until §2k measured the param counts.
+  let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0
+  let zinS : Vec (cin*(2*hh)*(2*ww)) := fun _ => 0
+  let zout : Vec (c*hh*ww) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.flatConvStridedF (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk1 zc (.operand xName zinS))
+  let (cN1, nN1) ← bnSite B c hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zout))
+  let (cC2, nC2) ← pretty B (.flatConvF (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W2" (biasName convBias s!"%{p}b2" c) zk2 zc (.operand nR1 zout))
+  let (cN2, nN2) ← bnSite B c hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cCp, nCp) ← pretty B (.flatConvStridedF (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" (biasName convBias s!"%{p}bp" c) zkp zc (.operand xName zinS))
+  let (cNp, nNp) ← bnSite B c hh mode epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
+  let (cA,  nA)  ← pretty B (.addV (.operand nN2 zout) (.operand nNp zout))
+  let (cO,  nO)  ← pretty B (.reluF (.operand nA zout))
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cCp ++ cNp ++ cA ++ cO, xin := xName,
+         o := nO, a := nA, c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, cp := nCp }
+
+-- ════════════════════════════════════════════════════════════════
+-- § Param signature lists (func-arg order — names + types, shared by sig + return types)
+-- ════════════════════════════════════════════════════════════════
+
+private def idSig (p : String) (c : Nat) (convBias : Bool) : List (String × String) :=
+  let b (nm : String) : List (String × String) := if convBias then [(nm, ty [c])] else []
+  [(s!"%{p}W1", ty [c,c,3,3])] ++ b s!"%{p}b1" ++ [(s!"%{p}g1", ty [c]), (s!"%{p}bt1", ty [c])] ++
+  [(s!"%{p}W2", ty [c,c,3,3])] ++ b s!"%{p}b2" ++ [(s!"%{p}g2", ty [c]), (s!"%{p}bt2", ty [c])]
+
+private def downSig (p : String) (cin c : Nat) (convBias : Bool) : List (String × String) :=
+  let b (nm : String) : List (String × String) := if convBias then [(nm, ty [c])] else []
+  [(s!"%{p}W1", ty [c,cin,3,3])] ++ b s!"%{p}b1" ++ [(s!"%{p}g1", ty [c]), (s!"%{p}bt1", ty [c])] ++
+  [(s!"%{p}W2", ty [c,c,3,3])] ++ b s!"%{p}b2" ++ [(s!"%{p}g2", ty [c]), (s!"%{p}bt2", ty [c])] ++
+  [(s!"%{p}Wp", ty [c,cin,1,1])] ++ b s!"%{p}bp" ++ [(s!"%{p}gp", ty [c]), (s!"%{p}btp", ty [c])]
+
+/-- **The ResNet-34 parameters in `net.paramShapes` (= func-arg) order**, names + types.
+    The forward, the eval forward and the train step all take their signature from here, so the
+    arity/type/order contract the driver relies on cannot drift between renders.
+
+    ⚠ **110 at the shipped `convBias := false`** — stem 3 + 13 identity blocks × 6 + 3 downsample
+    blocks × 9 + dense 2 — and 146 with the conv biases in. Every writer below omits the argument,
+    so every committed artifact is the 110 one; the biases are `zeroBiasPrelude`'s zero constants.
+    (Corrected 2026-09-06: this docstring and four below said 146 unconditionally.) -/
+def r34SigList (nClasses : Nat) (convBias : Bool := false) : List (String × String) :=
+  [("%sW", ty [64,3,7,7])] ++ (if convBias then [("%sbi", ty [64])] else []) ++
+  [("%sg", ty [64]), ("%sbt", ty [64])] ++
+  idSig "s1b0" 64 convBias ++ idSig "s1b1" 64 convBias ++ idSig "s1b2" 64 convBias ++
+  downSig "d2" 64 128 convBias ++ idSig "s2b0" 128 convBias ++ idSig "s2b1" 128 convBias ++ idSig "s2b2" 128 convBias ++
+  downSig "d3" 128 256 convBias ++ idSig "s3b0" 256 convBias ++ idSig "s3b1" 256 convBias ++ idSig "s3b2" 256 convBias ++
+    idSig "s3b3" 256 convBias ++ idSig "s3b4" 256 convBias ++
+  downSig "d4" 256 512 convBias ++ idSig "s4b0" 512 convBias ++ idSig "s4b1" 512 convBias ++
+  [("%Wd", ty [512, nClasses]), ("%bd", ty [nClasses])]
+
+/-- **The 72 running-stat inputs** — 36 BN layers × (μ, var), each `[oc]`, in BN-forward order:
+    stem, then per identity block `n1 n2`, per downsample block `n1 n2 np`. This is exactly the
+    order `VerifiedNet.bnChannels` is listed in, which is how the driver packs `runningBnStats`
+    (`bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]])`) — μ and var interleaved per layer,
+    NOT all-μ-then-all-var. Appended after the parameters, so `@resnet34_fwd_eval` takes
+    1 + 110 + 72 = **183** inputs as committed (1 + 146 + 72 = 219 at `convBias := true`). -/
+def r34StatSigList : List (String × String) :=
+  let bn (p : String) (oc : Nat) : List (String × String) :=
+    [(s!"%{p}mu", ty [oc]), (s!"%{p}var", ty [oc])]
+  let idB (p : String) (c : Nat) := bn s!"{p}n1" c ++ bn s!"{p}n2" c
+  let downB (p : String) (c : Nat) := bn s!"{p}n1" c ++ bn s!"{p}n2" c ++ bn s!"{p}np" c
+  bn "stn" 64 ++
+  idB "s1b0" 64 ++ idB "s1b1" 64 ++ idB "s1b2" 64 ++
+  downB "d2" 128 ++ idB "s2b0" 128 ++ idB "s2b1" 128 ++ idB "s2b2" 128 ++
+  downB "d3" 256 ++ idB "s3b0" 256 ++ idB "s3b1" 256 ++ idB "s3b2" 256 ++
+    idB "s3b3" 256 ++ idB "s3b4" 256 ++
+  downB "d4" 512 ++ idB "s4b0" 512 ++ idB "s4b1" 512
+
+-- 36 BN layers ⇒ 72 stat inputs, matching resnet34Verified.bnChannels.size.
+#guard r34StatSigList.length == 72
+
+-- ════════════════════════════════════════════════════════════════
+-- § The shared forward chain (all three renders emit this, so they cannot disagree)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Every SSA name the ResNet-34 forward produces. `resnet34FwdFaithfulV` returns just `logits`;
+    the train step additionally consumes the stem and per-block names on the way back. -/
+structure R34Fwd where
+  code   : String        -- stem → 16 blocks → GAP → dense, in emission order
+  stc    : String        -- stem conv output (= stem BN input)
+  stn    : String        -- stem BN output (= stem relu pre-activation)
+  str    : String        -- stem relu output (= maxpool input)
+  stp    : String        -- maxpool output (= block-1 input)
+  blocks : Array BFwd    -- the 16 block forwards, in forward order
+  gap    : String        -- global-average-pool output
+  logits : String        -- dense output
+
+set_option maxRecDepth 1000000 in
+/-- **The full ResNet-34 `[3,4,6,3]` forward as `pretty` of the verified AST.** 7×7/s2 stem
+    (3→64, 224→112) → 2×2 maxpool (→56) → stages 64/128/256/512 at 56/28/14/7 (stages 2–4 open with
+    a strided downsample block) → GAP(7×7) → dense(512→`nClasses`). Every emitted line is `pretty`
+    of a verified `SHlo` node. BN is the **batch-statistic** `bnPerChannelF` — this is the training
+    forward; the running-stats eval forward is a separate render. -/
+private def r34FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS R34Fwd := do
+  -- ═══ stem: 7×7/s2 conv → BN → relu → maxpool ═══
+  let zx   : Vec (3*224*224) := fun _ => 0
+  let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+  let z64  : Vec 64 := fun _ => 0
+  let z112 : Vec (64*112*112) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64 (.operand "%x" zx))
+  let (cStn, nStn) ← bnSite B 64 112 mode epsStr "%sg" "%sbt" "stn" nStc
+  let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
+  -- ⭐ He et al.'s 3×3/s2 stem pool — see the note on `ResNet34RenderB`'s peer. ⚠ This renderer
+  -- writes `resnet34_fwd{,_eval}` as well as the SGD train step, and the ADAMW trainer evals
+  -- through `resnet34_fwd_eval`. So it had to move with `ResNet34RenderB`, not after it: leaving
+  -- it at 2×2 would have trained a 3×3-pool net and scored it with a 2×2-pool forward — §2g's
+  -- `mobilenetv2_fwd` defect (logits rel 1.86) on the very net where it was first found.
+  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := 56) (w := 56) (.operand nStr z112))
+  -- ═══ 16 blocks ═══
+  let f1  ← idFwd   B 64 56 mode epsStr "s1b0" nStp convBias
+  let f2  ← idFwd   B 64 56 mode epsStr "s1b1" f1.o convBias
+  let f3  ← idFwd   B 64 56 mode epsStr "s1b2" f2.o convBias
+  let f4  ← downFwd B 64 128 28 mode epsStr "d2" f3.o convBias
+  let f5  ← idFwd   B 128 28 mode epsStr "s2b0" f4.o convBias
+  let f6  ← idFwd   B 128 28 mode epsStr "s2b1" f5.o convBias
+  let f7  ← idFwd   B 128 28 mode epsStr "s2b2" f6.o convBias
+  let f8  ← downFwd B 128 256 14 mode epsStr "d3" f7.o convBias
+  let f9  ← idFwd   B 256 14 mode epsStr "s3b0" f8.o convBias
+  let f10 ← idFwd   B 256 14 mode epsStr "s3b1" f9.o convBias
+  let f11 ← idFwd   B 256 14 mode epsStr "s3b2" f10.o convBias
+  let f12 ← idFwd   B 256 14 mode epsStr "s3b3" f11.o convBias
+  let f13 ← idFwd   B 256 14 mode epsStr "s3b4" f12.o convBias
+  let f14 ← downFwd B 256 512 7 mode epsStr "d4" f13.o convBias
+  let f15 ← idFwd   B 512 7 mode epsStr "s4b0" f14.o convBias
+  let f16 ← idFwd   B 512 7 mode epsStr "s4b1" f15.o convBias
+  -- ═══ head: GAP(7×7) → dense(512→nClasses) ═══
+  let zL   : Vec (512*7*7) := fun _ => 0
+  let z512 : Vec 512 := fun _ => 0
+  let zWd  : Mat 512 nClasses := fun _ _ => 0
+  let zNC  : Vec nClasses := fun _ => 0
+  let (cGap, nGap) ← pretty B (.gapF (c := 512) (h := 7) (w := 7) (.operand f16.o zL))
+  let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap z512))
+  pure { code := cStc ++ cStn ++ cStr ++ cStp ++
+           f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
+           f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
+           f16.code ++ cGap ++ cLog,
+         stc := nStc, stn := nStn, str := nStr, stp := nStp,
+         blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
+         gap := nGap, logits := nLog }
+
+set_option maxRecDepth 1000000 in
+/-- **`@resnet34_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward, with
+    every BN site consuming frozen per-channel running stats (`bnPerChannelEvalF`) instead of
+    reducing statistics out of its activation. Same net, same parameters in the same order, plus
+    the 72 stat inputs of `r34StatSigList`: **183 inputs** as committed, returning logits
+    `[B, nClasses]`.
+
+    This is the eval partner of a **batch**-statistic train step, whose EMA'd batch mean/var are
+    exactly these per-channel scalars — i.e. of `resnet34_adam_train_step.mlir`, which is still a
+    hand-written render in `tests/TestResnet34Train.lean`. So the eval forward is now certified
+    while the train step it partners is not; that asymmetry is the remaining §2a work, not a
+    property of this render. -/
+def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
+    (slug : String := "resnet34") (convBias : Bool := false) : String :=
+  let sigList := r34SigList nClasses convBias ++ r34StatSigList
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let F : R34Fwd := (r34FwdChain B nClasses .eval epsStr convBias).run' (0, [])
+  "module @m {\n" ++
+  s!"  func.func @{slug}_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── ResNet-34 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
+  zeroBiasPrelude convBias [64, 128, 256, 512] ++ F.code ++
+  s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
 
 /-- A trainable parameter: emitted name (no `%`), gradient SSA name, and shape. The AdamW tail is
     a fold over this list, so the θ/m/v output order cannot drift from the signature order. -/
@@ -1039,10 +1301,116 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
   wdVariantMark opt wdStr ++
   (if bf16 then "bf16" else "")
 
+-- ════════════════════════════════════════════════════════════════
+-- § The forward traversal, factored — ONE chain, two consumers
+-- ════════════════════════════════════════════════════════════════
+
+/-- Everything the whole-net render needs out of ONE forward traversal of ResNet-34 at the BATCHED
+    index: the emitted code, the logits and GAP names, and every saved activation the backward
+    reads.
+
+    ⭐⭐ **This exists so `@resnet34_fwd` and the batch-BN train steps cannot be different nets.**
+    They were: `resnet34FwdFaithfulV` (`ResNet34Render.lean`) builds its forward from the
+    PER-EXAMPLE chain — `bnPerChannelF`, reduce `[2,3]`, divisor `H·W` — while every train step in
+    this file is batch BN, reduce `[0,2,3]`, divisor `B·H·W`. `scripts/regen_verified_mlir.sh`'s
+    `check_adam_prefix` carried the divergence as a `KNOWN_SPLIT` entry reading "two renderers
+    (ResNet34Render vs ResNet34RenderB)" for as long as both existed. This is
+    `ResNet50RenderB.r50FwdChainB`'s shape, for R50's reason (`planning/renderer_convergence.md`).
+
+    ⚠ The EVAL forward is deliberately NOT moved onto this chain, exactly as R50's is not:
+    `bnPerChannelEvalF` reads frozen per-channel statistics and reduces nothing, so
+    `resnet34_fwd_eval.mlir` is BatchNorm-world-agnostic and correct against both chains.
+
+    ⭐ Extracting the traversal is byte-neutral for the train step: `pretty`'s SSA counter follows
+    the call SEQUENCE, and the sequence is unchanged. -/
+structure R34FwdRecB where
+  code : String
+  stc : String            -- stem conv out (the stem BN's input)
+  stn : String            -- stem BN out
+  str : String            -- stem relu out (the pool's input)
+  stp : String            -- stem pool out (block 1's input)
+  gap : String            -- GAP out (= dense input)
+  log : String            -- logits
+  b : Array BFwdB         -- the 16 basic blocks, in forward order
+deriving Inhabited
+
+set_option maxRecDepth 4000000 in
+/-- **The ResNet-34 forward chain at the BATCHED index** — one traversal, consumed by both
+    `@resnet34_fwd` and every train step that differentiates it. -/
+def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS R34FwdRecB := do
+  -- ═══ stem: 7×7/s2 conv → batch BN → relu → 3×3/s2 maxpool ═══
+  let zx    : Vec (B*(3*224*224)) := fun _ => 0
+  let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+  let z64   : Vec 64 := fun _ => 0
+  let z112  : Vec (B*(64*112*112)) := fun _ => 0
+  -- Placeholder rounding, as `zSk`/`z64` are placeholders — see `idFwdB`.
+  let zrnd  : ℝ → ℝ := fun r => r
+  let (cStc, nStc) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sbi" 64) zSk z64 else .convStrided (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64) (.operand "%x" zx))
+  let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
+  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
+  -- ⭐ He et al.'s 3×3/s2 stem pool. ⚠ This read `.maxPool` (2×2, non-overlapping) until
+  -- 2026-08-04 — a different function at the identical 112→56 output shape, so nothing ever
+  -- failed. `planning/rsb_a3_r50_verified.md` §4b.
+  let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
+  -- ═══ 16 blocks ═══
+  let f1  ← idFwdB   B 64 56 epsStr "s1b0" nStp convBias bf16
+  let f2  ← idFwdB   B 64 56 epsStr "s1b1" f1.o convBias bf16
+  let f3  ← idFwdB   B 64 56 epsStr "s1b2" f2.o convBias bf16
+  let f4  ← downFwdB B 64 128 28 epsStr "d2" f3.o convBias bf16
+  let f5  ← idFwdB   B 128 28 epsStr "s2b0" f4.o convBias bf16
+  let f6  ← idFwdB   B 128 28 epsStr "s2b1" f5.o convBias bf16
+  let f7  ← idFwdB   B 128 28 epsStr "s2b2" f6.o convBias bf16
+  let f8  ← downFwdB B 128 256 14 epsStr "d3" f7.o convBias bf16
+  let f9  ← idFwdB   B 256 14 epsStr "s3b0" f8.o convBias bf16
+  let f10 ← idFwdB   B 256 14 epsStr "s3b1" f9.o convBias bf16
+  let f11 ← idFwdB   B 256 14 epsStr "s3b2" f10.o convBias bf16
+  let f12 ← idFwdB   B 256 14 epsStr "s3b3" f11.o convBias bf16
+  let f13 ← idFwdB   B 256 14 epsStr "s3b4" f12.o convBias bf16
+  let f14 ← downFwdB B 256 512 7 epsStr "d4" f13.o convBias bf16
+  let f15 ← idFwdB   B 512 7 epsStr "s4b0" f14.o convBias bf16
+  let f16 ← idFwdB   B 512 7 epsStr "s4b1" f15.o convBias bf16
+  -- ═══ head: GAP(7×7) → dense(512→nClasses) ═══
+  let zL    : Vec (B*(512*7*7)) := fun _ => 0
+  let z512  : Vec (B*512) := fun _ => 0
+  let zWd   : Mat 512 nClasses := fun _ _ => 0
+  let zNC   : Vec nClasses := fun _ => 0
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 512) (h := 7) (w := 7)) (.operand f16.o zL))
+  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z512))
+  pure { code := cStc ++ cStn ++ cStr ++ cStp ++
+           f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
+           f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
+           f16.code ++ cGap ++ cLog,
+         stc := nStc, stn := nStn, str := nStr, stp := nStp, gap := nGap, log := nLog,
+         b := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16] }
+
+set_option maxRecDepth 4000000 in
+/-- **`@resnet34_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN train
+    step in this file differentiates, so the net that scores and the net that trains are one graph
+    by construction. Replaces `ResNet34Render.resnet34FwdFaithfulV` as the writer of
+    `verified_mlir/resnet34_fwd.mlir` (2026-09-06, `planning/renderer_convergence.md` leg 1).
+    Takes `%x` plus the parameters in `r34SigList` order — 111 inputs at the shipped
+    `convBias := false` — and returns logits `[B, nClasses]`. -/
+def resnet34FwdFaithfulB (B nClasses : Nat) (epsStr : String)
+    (slug : String := "resnet34") (convBias : Bool := false) (bf16 : Bool := false) : String :=
+  let sigList := r34SigList nClasses convBias
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let F : R34FwdRecB := (r34FwdChainB B nClasses epsStr convBias bf16).run' (0, [])
+  "module @m {\n" ++
+  s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── ResNet-34 batch-BN forward: every line is pretty(verified AST node) ──\n" ++
+  zeroBiasPrelude convBias [64, 128, 256, 512] ++ F.code ++
+  s!"    return {F.log} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
 set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**
-    515 inputs (`%x`, 146 θ, 146 m, 146 v, `%lr`/`%bc1`/`%bc2`, 72 running-stat slots, `%onehot`)
-    and 513 outputs (146 θ', 146 m', 146 v', `%loss`/`%bc1`/`%bc2`, 72 batch stats) — the interface
+    **407** inputs at the shipped `convBias := false` (`%x`, 110 θ, 110 m, 110 v,
+    `%lr`/`%bc1`/`%bc2`, 72 running-stat slots, `%onehot`) and 408 outputs (110 θ', 110 m', 110 v',
+    `%loss`/`%bc1`/`%bc2`, 72 batch stats). ⛔ This docstring said "515 inputs, 146 θ" until
+    2026-09-06: 146 is the `convBias := true` census and the writers all take the default — the
+    fourth file caught on that in one session. The interface is the one
     `tests/TestResnet34Train.lean`'s hand-written render already presents, so the driver is
     unchanged. Parameter ORDER comes from `r34SigList`, the same single source the per-example
     render and both forwards use, so the arity/order contract cannot drift between them. -/
@@ -1078,7 +1446,10 @@ here first"
 parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
 here first"
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ═══ stem: 7×7/s2 conv → batch BN → relu → 2×2 maxpool ═══
+    -- ═══ forward — the SAME traversal `@resnet34_fwd` renders, so the forward this differentiates
+    --     and the forward the driver scores with are one graph by construction (leg 1 of
+    --     `planning/renderer_convergence.md`) ═══
+    let F : R34FwdRecB ← r34FwdChainB B nClasses epsStr convBias bf16
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
     let z64   : Vec 64 := fun _ => 0
@@ -1087,39 +1458,16 @@ here first"
     let z56   : Vec (B*(64*56*56)) := fun _ => 0
     -- Placeholder rounding, as `zSk`/`z64` are placeholders — see `idFwdB`.
     let zrnd  : ℝ → ℝ := fun r => r
-    let (cStc, nStc) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sbi" 64) zSk z64 else .convStrided (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64) (.operand "%x" zx))
-    let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
-    let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
-    -- ⭐ He et al.'s 3×3/s2 stem pool. ⚠ This read `.maxPool` (2×2, non-overlapping) until
-    -- 2026-08-04 — a different function at the identical 112→56 output shape, so nothing ever
-    -- failed. `planning/rsb_a3_r50_verified.md` §4b.
-    let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
-    -- ═══ 16 blocks ═══
-    let f1  ← idFwdB   B 64 56 epsStr "s1b0" nStp convBias bf16
-    let f2  ← idFwdB   B 64 56 epsStr "s1b1" f1.o convBias bf16
-    let f3  ← idFwdB   B 64 56 epsStr "s1b2" f2.o convBias bf16
-    let f4  ← downFwdB B 64 128 28 epsStr "d2" f3.o convBias bf16
-    let f5  ← idFwdB   B 128 28 epsStr "s2b0" f4.o convBias bf16
-    let f6  ← idFwdB   B 128 28 epsStr "s2b1" f5.o convBias bf16
-    let f7  ← idFwdB   B 128 28 epsStr "s2b2" f6.o convBias bf16
-    let f8  ← downFwdB B 128 256 14 epsStr "d3" f7.o convBias bf16
-    let f9  ← idFwdB   B 256 14 epsStr "s3b0" f8.o convBias bf16
-    let f10 ← idFwdB   B 256 14 epsStr "s3b1" f9.o convBias bf16
-    let f11 ← idFwdB   B 256 14 epsStr "s3b2" f10.o convBias bf16
-    let f12 ← idFwdB   B 256 14 epsStr "s3b3" f11.o convBias bf16
-    let f13 ← idFwdB   B 256 14 epsStr "s3b4" f12.o convBias bf16
-    let f14 ← downFwdB B 256 512 7 epsStr "d4" f13.o convBias bf16
-    let f15 ← idFwdB   B 512 7 epsStr "s4b0" f14.o convBias bf16
-    let f16 ← idFwdB   B 512 7 epsStr "s4b1" f15.o convBias bf16
-    -- ═══ head: GAP(7×7) → dense(512→nClasses) ═══
-    let zL    : Vec (B*(512*7*7)) := fun _ => 0
+    let nStc := F.stc; let nStn := F.stn; let nStr := F.str
+    let f1  := F.b[0]!;  let f2  := F.b[1]!;  let f3  := F.b[2]!;  let f4  := F.b[3]!
+    let f5  := F.b[4]!;  let f6  := F.b[5]!;  let f7  := F.b[6]!;  let f8  := F.b[7]!
+    let f9  := F.b[8]!;  let f10 := F.b[9]!;  let f11 := F.b[10]!; let f12 := F.b[11]!
+    let f13 := F.b[12]!; let f14 := F.b[13]!; let f15 := F.b[14]!; let f16 := F.b[15]!
     let z512  : Vec (B*512) := fun _ => 0
     let zWd   : Mat 512 nClasses := fun _ _ => 0
-    let zNC   : Vec nClasses := fun _ => 0
     let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp  : Vec (B*nClasses) := fun _ => 0
-    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 512) (h := 7) (w := 7)) (.operand f16.o zL))
-    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z512))
+    let nGap := F.gap; let nLog := F.log
     -- ═══ label-smoothed softmax-CE cotangent, COMPOSED from kit ops (α = 0.1, K = nClasses):
     --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. Every line is a verified node;
     --     the hand-written render fuses this into one [B,K] block, so the two graphs differ. ═══
@@ -1246,10 +1594,7 @@ here first"
       s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let body := cStc ++ cStn ++ cStr ++ cStp ++
-      f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
-      f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++ f16.code ++
-      cGap ++ cLog ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
+    let body := F.code ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
       cDgi ++ cWd ++ cbd ++ cDgp ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
       b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
@@ -1321,6 +1666,19 @@ end Proofs.StableHLO
 -- `git show <rev>:verified_mlir/resnet34_adam_train_step.mlir` and pass it as the first argument.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adam_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05")
+
+-- ⭐⭐ The two Imagenette forwards, moved here from the retired `ResNet34Render.lean` (4c leg 1,
+-- `planning/renderer_convergence.md`). `resnet34_fwd` now comes from `r34FwdChainB` — the SAME
+-- traversal every train step above differentiates — so the net that scores and the net that trains
+-- are one graph by construction, and `check_adam_prefix`'s `KNOWN_SPLIT` entry for this net is
+-- gone. ⚠ `resnet34_train_step.mlir` is NOT re-created: the per-example SGD-inline artifact is
+-- retired with its renderer, and the batched SGD step (`resnet34_sgd_train_step.mlir`, rendered
+-- above at `R34Opt.sgd`) is what chapter 5's optimizer ladder runs.
+#eval IO.FS.writeFile "verified_mlir/resnet34_fwd.mlir"
+  (Proofs.StableHLO.resnet34FwdFaithfulB 32 10 "1.0e-05")
+
+#eval IO.FS.writeFile "verified_mlir/resnet34_fwd_eval.mlir"
+  (Proofs.StableHLO.resnet34FwdEvalFaithfulV 32 10 "1.0e-05")
 
 -- ── §5.6's two ABLATION renders. ────────────────────────────────────────────────────────────────
 -- Weight decay and label smoothing are BAKED constants (`optConstsB`'s `%wd`, and the α/K pair in
@@ -1551,8 +1909,13 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 1000 "1.0e-05" 2
     Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
 
+-- ⭐ Both ImageNet forwards, on the batched chain since 2026-09-06 (4c leg 1). `resnet34in_fwd`
+-- used to come from `ResNet34Render.resnet34FwdFaithfulV`, i.e. PER-EXAMPLE BatchNorm, while every
+-- `resnet34in_*` train step above is batch BN — the same split `check_adam_prefix` carried for the
+-- 10-class pair, at a scale that audit never looked at (its PAIRS list has only the Imagenette
+-- names). The eval forward is world-agnostic and stays as it was.
 #eval IO.FS.writeFile "verified_mlir/resnet34in_fwd.mlir"
-  (Proofs.StableHLO.resnet34FwdFaithfulV 256 1000 "1.0e-05" "resnet34in")
+  (Proofs.StableHLO.resnet34FwdFaithfulB 256 1000 "1.0e-05" "resnet34in")
 
 #eval IO.FS.writeFile "verified_mlir/resnet34in_fwd_eval.mlir"
   (Proofs.StableHLO.resnet34FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet34in")

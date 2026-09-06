@@ -211,8 +211,10 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_adam_train_step.mlir"),
 #    a runtime `if`, not an invariant — and `LEAN_MLIR_EVAL_BATCHSTATS=1` routes eval straight
 #    through the divergent artifact, which is then a different ARCHITECTURE, not just different
 #    statistics.
+# ⭐ `resnet34_fwd.mlir` left this dict on 2026-09-06: 4c leg 1 retired `ResNet34Render.lean` and
+#   moved both r34 forwards onto `r34FwdChainB`, the traversal every batch-BN train step
+#   differentiates (`planning/renderer_convergence.md`). MobileNetV2 is leg 2 and is the last one.
 KNOWN_SPLIT = {
-  "resnet34_fwd.mlir":    "per-example BN vs the batch-BN Adam step — two renderers (ResNet34Render vs ResNet34RenderB)",
   "mobilenetv2_fwd.mlir": "per-example BN vs the batch-BN Adam step — same two-renderer split",
 }
 
@@ -273,7 +275,11 @@ import sys
 # until 2026-07-28; mobilenetv2_fwd was the second artifact this check would have caught —
 # it rendered BATCH BN against a PER-EXAMPLE train step (measured: logits rel 1.86).
 # ConvNeXt has no _fwd_eval and must not grow one: LayerNorm ⇒ train == eval.
-PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
+# ⭐ ResNet-34's partner is `resnet34_sgd_train_step` since 2026-09-06 (4c leg 1): the SGD-inline
+# per-example `resnet34_train_step.mlir` is retired with its renderer, and the batched SGD step is
+# what chapter 5's optimizer ladder runs. Both this pairing and `check_adam_prefix`'s now hold,
+# which is exactly what "one chain per net" buys — the same forward is a prefix of BOTH.
+PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          ("convnext_fwd.mlir",     "convnext_train_step.mlir"),
          ("efficientnet_fwd.mlir", "efficientnet_train_step.mlir"),
          ("mobilenetv2_fwd.mlir",  "mobilenetv2_train_step.mlir"),
@@ -450,7 +456,6 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
     LeanMlir.Proofs.Codegen.StableHLO \
     LeanMlir.Proofs.Codegen.MlpRender \
     LeanMlir.Proofs.Codegen.CnnRender \
-    LeanMlir.Proofs.Codegen.ResNet34Render \
     LeanMlir.Proofs.Codegen.ResNet34RenderB \
     LeanMlir.Proofs.Codegen.ResNet50RenderB \
     LeanMlir.Proofs.Codegen.MobileNetV2Render \

@@ -212,14 +212,14 @@ must be on `PATH` (use the `.venv`), the ROCm libraries must be on
 
 ```bash
 # Build a trainer (e.g. the verified-codegen ResNet-34)
-lake build resnet34-verified
+lake build resnet34-verified-adam
 
 # Current run recipe (gfx1100):
 export PATH="$PWD/.venv/bin:$PATH"           # iree-compile (pip wrapper)
 export LD_LIBRARY_PATH=/opt/rocm-7.2.0/lib   # HIP runtime libs
 export IREE_BACKEND=rocm                      # target ROCm...
 export IREE_CHIP=gfx1100                       # ...on the 7900 XTX
-.lake/build/bin/resnet34-verified data         # data dir as argv[0]
+.lake/build/bin/resnet34-verified-adam data    # data dir as argv[0]
 ```
 
 `IREE_BACKEND` routes everything downstream (iree-compile flags,
@@ -235,7 +235,7 @@ The JAX-ROCm multi-GPU `Mesh` hang that once forced single-GPU
 runs data-parallel across cards too (see `jax/README.md`).
 
 The `*-verified` exes (`mnist-{linear,mlp,cnn}-verified`,
-`cifar8{,w}{,-bn}{,-verified,-ablation}`, `resnet34-verified`,
+`cifar8{,w}{,-bn}{,-verified,-ablation}`, `resnet34-verified-adam`,
 `mobilenetv2-verified`, …) train on the proof-rendered StableHLO. Data:
 the MNIST/CIFAR loaders read the dir passed as `argv[0]` (CIFAR under
 `<dir>/cifar-10/`); Imagenette nets read `<dir>/imagenette/`.

@@ -953,6 +953,48 @@ fidelity:
        yet, so the stem's cotangent is the artifact's and not (yet) provably the
        certified pool VJP's.
 
+    4h. ONE CHAIN PER NET — RESNET-34 (2026-09-06). Four nets shipped two
+       renderers: a per-example-indexed one (the tied chain, batch sum in the
+       emitter) and a batched one (the ImageNet chain, batch sum inside `den`).
+       They are not two spellings of one function -- per-example BatchNorm
+       reduces `[2,3]` and batched BatchNorm reduces `[0,2,3]`. So a net's
+       forward artifact could not be a byte-prefix of BOTH its SGD train step and
+       its Adam one, and `scripts/regen_verified_mlir.sh`'s `check_adam_prefix`
+       carried the divergence as a `KNOWN_SPLIT` ratchet.
+
+       The decision (user, 2026-09-06) is one chain per net, the batched one.
+       ResNet-34 is done: `Proofs/Codegen/ResNet34Render.lean`,
+       `verified_mlir/resnet34_train_step.mlir` and the `resnet34-verified`
+       binary are RETIRED, and `ResNet34RenderB` is the sole writer of every
+       ResNet-34 artifact, with both forwards rendered from `r34FwdChainB` -- the
+       traversal every batch-BN train step differentiates.
+       `check_adam_prefix` went 5 paired / 2 known-split to 6 paired / 1, and
+       `resnet34_fwd.mlir` is now a byte-identical 1220-line prefix of BOTH
+       `resnet34_adam_train_step.mlir` and `resnet34_sgd_train_step.mlir`.
+       Remaining: MobileNetV2 (the last `KNOWN_SPLIT` entry), ConvNeXt-T and
+       ViT-Tiny. Thread: planning/renderer_convergence.md.
+
+       ⭐ THE SPLIT WAS WIDER THAN THE AUDIT COULD SEE. `resnet34in_fwd.mlir`,
+       the ImageNet forward at 256x1000, came from the per-example renderer too,
+       while every `resnet34in_*` train step is batch BN. `check_adam_prefix`'s
+       PAIRS list holds only the Imagenette names, so that instance was invisible
+       to the audit built to catch exactly it. Both are on the batched chain now,
+       and extending the list to the `*in_*` artifacts is open work.
+
+       ⚠ WHAT RETIREMENT COSTS, AND THE ORDERING RULE IT IMPLIES.
+       `Foundation/ResNet34FaithfulPoC.lean` (the per-example §1 fold) and
+       `ResNet34TiePoC.lean` (its §1a tie) are now about an artifact that does
+       not exist. Every theorem in them is unchanged and still true -- they are
+       about the per-example ResNet-34 and the SGD-inline op family, both of
+       which exist as mathematics -- but no committed bytes exercise them, and
+       both headers say so. That is only acceptable because their batched peers
+       (4f's `ResNet34FaithfulPoCB`, 4g's `ResNet34TiePoCB`) landed the same day.
+       A leg must not retire a per-example renderer before the batched tier that
+       replaces it exists; that ordering is why 4f and 4g came first.
+       `ResNet34RenderPC.lean` is NOT affected the same way -- its
+       `resnet34Forward_full_pc` is the subject of the float budgets, the T6 tie
+       and the witness, none of which is about a train step's bytes.
+
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
        `mulVec/transpose/outer/mul`. This IS bridged to Mathlib's `Matrix`

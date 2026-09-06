@@ -40,9 +40,10 @@ replicas is section 4d's business.
 
 `resnet34TrainStepFaithfulV` and `ResNet34RenderB` both default to `convBias := false`: the conv
 biases are gone from the signature (BatchNorm subsumes them, and He et al.'s `.convBn` has none),
-bound instead to the zero constants `zeroBiasPrelude` emits. So `resnet34_train_step.mlir` and
-`resnet34_sgd_train_step.mlir` each carry **110** SGD-updated tensors — stem 3 + 13 identity blocks
-× 6 + 3 downsample blocks × 9 + dense 2 — and 146 is the census at `convBias := true`. The bias
+bound instead to the zero constants `zeroBiasPrelude` emits. So `resnet34_sgd_train_step.mlir`
+carries **110** SGD-updated tensors — stem 3 + 13 identity blocks × 6 + 3 downsample blocks × 9 +
+dense 2 — and 146 is the census at `convBias := true`. (The per-example `resnet34_train_step.mlir`
+carried the same 110 and was retired the same day by 4c leg 1.) The bias
 conjuncts below are kept (they are one delegation each and they cover the flag), and they are about
 ops the committed artifacts do not emit. Nothing about this weakens a theorem: every fold is
 `∀`-quantified over op instances, and `bias = 0` is one of them.

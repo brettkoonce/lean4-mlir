@@ -53,7 +53,7 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.StableHLO,
              -- the renderers the verified-render drift guard re-elaborates
              `LeanMlir.Proofs.Codegen.MlpRender, `LeanMlir.Proofs.Codegen.CnnRender,
-             `LeanMlir.Proofs.Codegen.ResNet34Render, `LeanMlir.Proofs.Codegen.ResNet34RenderB,
+             `LeanMlir.Proofs.Codegen.ResNet34RenderB,
              -- R50 phase 2: the bottleneck train-step renderer. SOLE writer of
              -- verified_mlir/resnet50in_*_train_step.mlir, so its olean must exist wherever the
              -- corpus is built (same reason the two RenderB entries below carry).
@@ -132,10 +132,12 @@ lean_lib «Certs» where
              -- CNN render half: the CNN train-step text rendered from `cnnFwdGraph`,
              -- with flat→NCHW reshape glue bridging the conv param-grad tail.
              `LeanMlir.Proofs.Codegen.CnnRender,
-             -- ResNet-34 render half: the full [3,4,6,3] train step (146 params) rendered
-             -- from the verified AST — stem/16 residual blocks/GAP/dense, residual cotangent-
-             -- sums at the skip merges; regenerates verified_mlir/resnet34_train_step.mlir.
-             `LeanMlir.Proofs.Codegen.ResNet34Render,
+             -- ⛔ `LeanMlir.Proofs.Codegen.ResNet34Render` was here until 2026-09-06, when 4c leg 1
+             -- retired it: the per-example renderer was the last writer in the suite emitting a
+             -- train step at per-example BatchNorm, so `resnet34_fwd` could not be a prefix of both
+             -- it and the batch-BN Adam step. Everything the inference forward needs — plus
+             -- `bnSite`/`R34Bn`, which ResNet-50 shares — moved into ResNet34RenderB, which is now
+             -- the sole writer of every ResNet-34 artifact. `planning/renderer_convergence.md`.
              -- CIFAR-BN close: the per-channel BN scale/shift (dγ, dβ) param-grad
              -- bridges — the affine BN analogue of `bias_grad_bridge`.
              `LeanMlir.Proofs.Architectures.CifarBnClose,
@@ -1094,7 +1096,7 @@ lean_lib «Certs» where
              -- ch7-MobileNetV2 §1 CLOSE (render): the reduced 6-block train step rendered ENTIRELY
              -- as pretty(provenGraph) — every line pretty of a verified SHlo node, the depthwise
              -- param updates via the new depthwise SGD ops; writes verified_mlir/mobilenetv2_train_step.mlir
-             -- (MobileNetV2Render.lean, the peer of ResNet34Render.lean).
+             -- (MobileNetV2Render.lean; ResNet-34's peer was retired by 4c leg 1).
              `LeanMlir.Proofs.Codegen.MobileNetV2Render,
              -- ch7-MobileNetV2 FULL 17-block paper §1 fold (den): every one of the 210 params of
              -- mnv2TrainStepFaithfulVPaper denotes the certified step — ZERO new ops/lemmas, the
@@ -1902,14 +1904,13 @@ lean_exe «cifar8wb-bn-ablation» where
   root := `apps.ablation.MainCifar8WideBnBf16Ablation
   moreLinkArgs := lowererLink
 
--- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
--- VERIFIED-rendered StableHLO; 146 params. Train step AND eval forward both come from
--- LeanMlir/Proofs/Codegen/ResNet34Render.lean (pretty(provenGraph)); regenerate with
--- scripts/regen_verified_mlir.sh.
-lean_exe «resnet34-verified» where
-  root := `apps.imagenette.MainResnet34Verified
-  moreLinkArgs := lowererLink
-
+-- ⛔ `resnet34-verified` was here until 2026-09-06 (4c leg 1). It trained ResNet-34 on the
+-- PER-EXAMPLE `resnet34_train_step.mlir`, and both the artifact and its renderer are retired: the
+-- suite is one chain per net now, the batched one. That binary could not produce a number anyway —
+-- its own header measured `390/3925 = 9.936306%`, byte identical every epoch, i.e. chance, because
+-- running-stat threading lives only in `trainAdamSched` — and it said "do not quote its accuracy".
+-- ▶ The batched SGD trainer is `LEAN_MLIR_VARIANT=sgd .lake/build/bin/resnet34-verified-adam`,
+-- which renders from `R34Opt.sgd` and threads running stats. `planning/renderer_convergence.md`.
 
 lean_exe «resnet34-verified-adam» where
   root := `apps.imagenette.MainResnet34VerifiedAdam

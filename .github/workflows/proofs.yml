@@ -139,15 +139,11 @@ jobs:
               verified_mlir/cifar8wb_fwd.mlir \
               verified_mlir/cifar8wb_bn_fwd.mlir \
             || { echo "::error::committed verified_mlir/{cnn,cifar,cifar_bn,cifar8,cifar8_bn,cifar8_bf16*,cifar8b*,cifar8wb*}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/CnnRender.lean)"; exit 1; }
-          # ⭐ The two forwards come from THIS module, not RenderB, and were baselined while the
-          # train step beside them was guarded — so `resnet34_fwd` could drift away from the graph
-          # `resnet34_train_step` differentiates, with CI green. Elaborating already wrote them.
-          lake env lean LeanMlir/Proofs/Codegen/ResNet34Render.lean
-          git diff --exit-code -- \
-              verified_mlir/resnet34_train_step.mlir \
-              verified_mlir/resnet34_fwd.mlir \
-              verified_mlir/resnet34_fwd_eval.mlir \
-            || { echo "::error::committed verified_mlir/resnet34_{train_step,fwd,fwd_eval}.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet34Render.lean)"; exit 1; }
+          # ⭐ Both ResNet-34 forwards used to come from `ResNet34Render.lean`, and were baselined
+          # while the train step beside them was guarded — so `resnet34_fwd` could drift away from
+          # the graph the Adam step differentiates, with CI green. 4c leg 1 (2026-09-06) retired
+          # that module: `ResNet34RenderB` is the sole writer of every ResNet-34 artifact now, and
+          # the step below diffs the forwards along with the optimizer renders.
           # ResNet34RenderB — the OPTIMIZER renders (AdamW at four batches, its DP peers, heavy-ball)
           # and all four ImageNet (`resnet34in`) artifacts. This module was not elaborated here at
           # all, so its whole output sat baselined-and-unguarded; the 2-GPU ImageNet render landing
@@ -157,6 +153,8 @@ jobs:
           # scripts/render_guard_baseline.txt, which is the only direction that file may move.
           lake env lean LeanMlir/Proofs/Codegen/ResNet34RenderB.lean
           git diff --exit-code -- \
+              verified_mlir/resnet34_fwd.mlir \
+              verified_mlir/resnet34_fwd_eval.mlir \
               verified_mlir/resnet34_adam_train_step.mlir \
               verified_mlir/resnet34_adam64_train_step.mlir \
               verified_mlir/resnet34_adam128_train_step.mlir \

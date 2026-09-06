@@ -27,18 +27,21 @@ generic `den = certified` lemmas at the `ResNet34ChainClose` chain cotangents:
 The block-type tie lemmas (`r34_idblock_tied` etc.) are proven once and applied at each of the 16
 blocks in the whole-net capstone, threading the real `resnet34Forward_full_pc` activations.
 
-⛔ **The census is 110, not 146 (corrected 2026-09-06 from `ResNet34TiePoCB.lean`).**
-`resnet34TrainStepFaithfulV` defaults to `convBias := false` — the conv biases are gone from the
-signature, bound instead to `zeroBiasPrelude`'s zero constants — so `resnet34_train_step.mlir`
-carries **110** SGD-updated tensors: stem 3 + 13 identity blocks × 6 + 3 downsample blocks × 9 +
-dense 2. 146 is the census at `convBias := true`. The bias conjuncts below are true and cover the
-flag; they are about ops the committed bytes do not contain, and `bias = 0` is one of the instances
-every fold here is quantified over.
+⛔⛔ **RETIRED ARTIFACT (2026-09-06, 4c leg 1).** This tie was about
+`verified_mlir/resnet34_train_step.mlir`, and both that file and its renderer
+(`ResNet34Render.lean`) are gone: it was the last train step in the suite at per-example
+BatchNorm, so `resnet34_fwd` could not be a prefix of both it and the batch-BN Adam step, and
+`check_adam_prefix` carried the divergence as a `KNOWN_SPLIT` entry for as long as both existed.
+`planning/renderer_convergence.md` carries the decision. **Every theorem below is unchanged and
+still true** — it is about the per-example ResNet-34 and the SGD-inline op family, both of which
+still exist as mathematics — but no committed bytes exercise it. Its live peer is
+`Foundation/ResNet34TiePoCB.lean`: the same tie at batch BatchNorm, at the un-fused gradient nodes,
+and at the label-smoothed general-target loss.
 
-⭐ **These folds are at the FUSED `θ − lr·g` ops and at PER-EXAMPLE BatchNorm**, which is
-`resnet34_train_step.mlir`'s world and nothing else's. Every batched r34 step — the Adam family,
-`resnet34in_mom*` and the data-parallel peers — is at batch BN and emits the raw gradient;
-`Foundation/ResNet34TiePoCB.lean` is the tie there.
+⛔ **The census below is 110, not 146 (corrected 2026-09-06).** `resnet34TrainStepFaithfulV`
+defaulted to `convBias := false` — the conv biases were bound to `zeroBiasPrelude`'s zero constants
+— so the artifact carried **110** SGD-updated tensors: stem 3 + 13 identity blocks × 6 + 3
+downsample blocks × 9 + dense 2. 146 is the census at `convBias := true`.
 
 ## Honest residual (the boundary every prior fold carries)
 * The block backward is rendered hand-written, so the cotangent SSA ↔ chain-cot correspondence is the

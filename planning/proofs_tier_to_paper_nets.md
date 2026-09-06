@@ -18,12 +18,26 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work (2026-09-06 review). ✅ 4b AND 4.2a BOTH LANDED 2026-09-06** — 4b's four files
-(41 declarations) and r34's batched §1a tie plus the shared smoothed loss cotangent; `Certs`
-3971 → 3977, and **ResNet-34's T3 is complete at batch BatchNorm**. Next is 4c, the renderer
-convergence, which is the large one and re-runs every Imagenette number for four nets. 4d's ℝ-level
-lemma fits any session; its op node waits for 4c. 3.5 and 3.6 unchanged, on the batched chain from
-the start.
+**Order of work. ✅ 4b, 4.2a AND 4c LEG 1 ALL LANDED 2026-09-06** — 4b's four files (41
+declarations), r34's batched §1a tie plus the shared smoothed loss cotangent (`Certs` 3971 → 3977,
+**ResNet-34's T3 complete at batch BatchNorm**), and the renderer convergence's first net.
+**4c now has its own thread and log: `planning/renderer_convergence.md`.** Legs 2–4 (MobileNetV2,
+ConvNeXt-T, ViT-Tiny) are there. 4d's ℝ-level lemma fits any session; its op node waits for 4c.
+3.5 and 3.6 unchanged, on the batched chain from the start.
+
+**NEXT SESSION — pick one, they are independent.**
+
+| target | cost | why now |
+|---|---|---|
+| **4c leg 2, MobileNetV2** | one session | It is the LAST `KNOWN_SPLIT` entry, so the ratchet empties and the renderer axis closes for the two BN nets. ⚠ Its prerequisite is the one r34's retirement taught: the batched tier must exist first, and MobileNetV2's does NOT — no batched T1/T2/T3 tie (§4.2's mnv2 column is empty). So either do §4.2's mnv2 half first, or converge the RENDERER only and leave the per-example proofs pointing at a live artifact. |
+| **§4.2 MobileNetV2 at batch BN** | 2–3 sessions | r34's T1/T2/T3 took four packages (4.1b–4.1e + 4.2a) and every one of them delegated to machinery that already existed. mnv2's peers all exist too (`MobileNetV2BackB0.lean` has the same `*BackBatchedGraph_faithful` family, so `_eq_vjp` is the same `rfl` route). This is the highest-value item: it makes MobileNetV2 the second net whose T3 is at the artifact that trains. |
+| **4b's capstone re-pointing** | one session | 4b left the FOLD done and the five `*_net_tied_certified` capstones un-re-pointed. Its prerequisite landed with 4.2a (`Foundation/SmoothedLossCot.lean`, general target). B0, ConvNeXt and ViT are the cheap three — their Adam artifacts are already on the renderer they have. |
+| **4d piece 1** | half a session | `Foundation/DataParallel.lean`: `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)`, plus the lockstep induction. Cheap, certain, and it answers "what function trained" for every `*dp*` artifact — which every tie currently disclaims. |
+| **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and now cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. R50 needs the LAMB tail cert and the BCE cotangent first. |
+
+⭐ **Recommendation: §4.2's MobileNetV2 half, then 4c leg 2.** That is r34's sequence replayed on
+the one net that has the same shape, in the order r34 proved is the right one — and it closes the
+last `KNOWN_SPLIT` entry with the proofs already in place rather than orphaning them.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
@@ -68,13 +82,28 @@ instance.
 
 | net | paper net in Proofs | T1 | T2 | T3 | T4 | T5 | T6 | T7 |
 |---|---|---|---|---|---|---|---|---|
-| ResNet-34 | `resnet34Forward_full_pc`, [3,4,6,3], 64 to 512 | ✓ | ✓ | ✓ 146 params | ✓ eval and train BN | ✓ | ✓ | full depth at 2 channels; 224 realistic |
+| ResNet-34 | `resnet34Forward_full_pc`, [3,4,6,3], 64 to 512 | ✓ | ✓ | ✓ 110 params ⛔ | ✓ eval and train BN | ✓ | ✓ | full depth at 2 channels; 224 realistic |
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ⛔ 1.703e399, priced and declined | ✓ `vitInputGradK_eq_vitForwardKV_vjp` | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
-| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
+| MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 158 params ⛔ | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
+
+⛔ **The T3 counts were the `convBias := true` census and are corrected here (2026-09-06).** Every
+render in the suite takes `convBias := false` by default and no writer passes otherwise — each conv
+bias is folded into the BatchNorm after it and bound to a `zeroBiasPrelude` zero constant — so the
+committed artifacts carry **110** ResNet-34 parameters (not 146) and **158** MobileNetV2 ones (not
+210). Three file headers said the larger number, plus `resnet34AdamTrainStepFaithfulB`'s "515
+inputs". No theorem moved: every fold is `∀`-quantified over op instances and `bias = 0` is one of
+them. ⚠ **Assume any render or tie docstring's census is the `convBias := true` one until the
+artifact is counted.**
+
+⚠ **ResNet-34's row is now TWO nets.** The per-example `resnet34Forward_full_pc` above keeps T1,
+T2, T4, T5, T6 and T7 — but its train step and renderer were retired by 4c leg 1, so its T3 column
+is about bytes that no longer exist. The live ResNet-34 is the batch-BN one
+(`resnet34ForwardB_full`), whose T1/T2/T3 landed 2026-09-06 (4.1b–4.1e, 4.2a) and whose T4/T5/T6
+are §4.2's open half. §4's state-of-play table is the one to read for that net.
 
 **2b. What each T3 tie is about, against the artifact whose accuracy is quoted (review of
 2026-09-06).** Every tie is at the SGD-inline `<net>_train_step.mlir`, rendered at batch 32 with
@@ -120,7 +149,8 @@ Five axes cut across the table and are recorded separately from it:
   eval-BN graph is a separate artifact from its training one. MobileNetV2 has an eval graph at
   six blocks and none at seventeen, which is why 3.2(b)'s number has no whole-net graph tie.
 * **Optimizer form — ✅ DONE 2026-09-06 at the FOLD; the ties are not re-pointed.** Section 4b.
-* **Renderer — DECIDED 2026-09-06: one chain per net, the batched one.** Section 4c.
+* **Renderer — ✅ ResNet-34 DONE 2026-09-06; three nets left.** Section 4c, and its own thread
+  at `planning/renderer_convergence.md`.
 * **Data parallelism.** The all-reduce is emitted text outside the AST in every `*dp*` artifact;
   what is provable and what stays calling logic is section 4d.
 
@@ -605,6 +635,7 @@ defect this axis carried.
 | **T3 §1a tie** | ✅ | ✗ | 4.2a |
 | T4 / T5 / T6 | ✗ | ✗ | 4.2 |
 | T3 at the un-fused gradient (the optimizer axis) | ✅ (4.1e is already that form) | ✅ | 4b.4 |
+| renderer converged (4c) | ✅ leg 1 | ✗ leg 2 | `planning/renderer_convergence.md` |
 
 **ResNet-34's T3 at batch BatchNorm is COMPLETE (4.1b–4.1e + 4.2a, all 2026-09-06).** What is
 left on this axis is MobileNetV2's column — its T1, T2, T3, T4, T5 and T6 at `bnBatchLA` — and r34's
@@ -1011,58 +1042,41 @@ ordering the scoping gave was right.
 | 4b.3 ViT-Tiny | `Architectures/ViTFaithfulPoCG.lean` | `rowDense{Weight,Bias}Sgd`, `veclnGammaSgd`, `patchEmbed{Weight,Bias}Sgd`, `posEmbedSgd`, the cls token | per-example `*Sgd_eq_grad` |
 | 4b.4 MobileNetV2, 17 blocks | `Architectures/MobileNetV2FaithfulPoCPaperG.lean` | the twelve op types `MobileNetV2FaithfulPoCPaper` tabulates | per-example `*Sgd_eq_grad` — or go straight to the batched `*GradB` ops if 4c's MobileNetV2 render is in hand |
 
-## 4c. The renderer axis — DECIDED 2026-09-06: one chain per net, and the tiers stated at it
-
-**The finding.** Four nets have two renderers. `ResNet34Render` / `MobileNetV2Render` /
-`ConvNeXtRender` / `ViTRender` render the per-example-indexed chain (`pretty B` lifts a
-one-example node across the batch; on the `*Grad` ops the batch sum lives in the EMITTER, not in
-`den`, by the constructors' own comment) and write `<net>_train_step` and `<net>_fwd`, plus for
-ConvNeXt and ViT the `_adam_` and the drop-free `*in_adam*` steps. The `*RenderB` files render the
-batched chain (`N := B` inside the AST, `*B` constructors, `den = batchMap N …` with the `Σ_n`
-inside `den`) and write everything that needs a per-example mask or a batch-coupled op: every
-`*dp*`, every `drop`, the r34/mnv2 Adam and momentum steps. The Proofs tiers are all at the
-per-example chain. EfficientNet is the model — one file writes the SGD and the Adam artifacts on
-one chain — and R50/MNv4 only ever had the batched chain.
+## 4c. The renderer axis — ✅ DECIDED and OPENED as its own thread
 
 **The decision (user, 2026-09-06): the Imagenette and ImageNet artifacts of a net come from the
-SAME renderer, the batched one, and the tiers are stated there. The user is aware every Imagenette
-number for the four nets gets re-run on the new artifacts.** This is the unification the header
-describes; it is where the organic growth is paid back.
+SAME renderer, the batched one, and the tiers are stated there.** The work moved to
+**`planning/renderer_convergence.md`** on the day it opened, per this section's own "budget it as a
+thread of its own with a planning log". That log carries the per-net legs, the seams outside Lean
+and the traps; what follows is the summary this document needs.
 
-**What converging means, per net.**
+**The finding that resized it: ResNet-50 already did this, and it is the template.**
+`ResNet50RenderB.r50FwdChainB` exists for exactly this reason — its docstring says *"This exists so
+`@resnet50_fwd` and `@resnet50_adam_train_step` cannot be different nets"* — and the fix was ONE
+forward traversal with two consumers, not a deletion and not a driver change. Each leg is
+"factor the forward out of `<net>RenderB` and render `<net>_fwd` from it", plus the guards.
 
-| net | today | after 4c | re-run |
-|---|---|---|---|
-| ResNet-34 | the Imagenette SGD trainer loads `resnet34_train_step` (per-example; `VerifiedTrain.lean:988`) | it loads `resnet34_sgd_train_step` (batched chain, ALREADY rendered by `ResNet34RenderB`: un-fused + `sgdParamF`); `resnet34_fwd` re-rendered from the batched chain at batch BN, which retires the `check_fwd_prefix` exemption "two renderers"; `ResNet34Render.lean` retired | the Imagenette SGD numbers |
-| MobileNetV2 | `mobilenetv2_train_step` (per-example, 17 blocks) and `mobilenetv2_fwd` from `MobileNetV2Render` | `MobileNetV2RenderB` gains the `.sgd` tail (r34's `sgdParamF` shape) and writes `mobilenetv2_sgd_train_step` + `mobilenetv2_fwd`; per-example render retired | the Imagenette SGD numbers |
-| ConvNeXt-T | per-example `convnext_train_step` / `_adam_` / `convnextin_adam*`; the batched chain is "tied but not swapped" — it differs from the committed Adam artifact on 78 lines (conv-VJP `transpose`/`reverse` order), and the gate that licenses the swap (`convnext-adam-tie`) is IREE-linked and does not link on this box | swap under an XLA-side numeric gate (one-batch A/B of the two artifacts' outputs, the shape the `*-dp-check` gates already have); every `convnext*` artifact from `ConvNeXtRenderB`'s traversal; the per-example traversal retired | the Imagenette Adam numbers |
-| ViT-Tiny | as ConvNeXt | as ConvNeXt, from `ViTRenderB` | the Imagenette Adam numbers |
-| EfficientNet-B0, ResNet-50, MNv4 | one renderer already | nothing | nothing |
+**The acceptance criterion is mechanical.** `scripts/regen_verified_mlir.sh`'s `check_adam_prefix`
+carries a `KNOWN_SPLIT` ratchet that "may shrink, never grow"; a net is done when its entry leaves.
+2026-09-06: **5 paired / 2 known-split → 6 paired / 1 known-split.**
 
-**What moves in the Proofs tier.** T2 and T3 re-state at the batched chain's constructors; T1 and
-T6 are already batch-generic for B0 and r34 and become so for the others by the `batchMap` lifts
-4.1b–4.1d used. For r34 this IS section 4's port. For ConvNeXt and ViT the forward is byte-identical
-between the two chains (`convnext-fwd-b-tie`, `vit-fwd-b-tie`, `tests/TestBatchedEmitTie.lean`'s
-per-form ties), so T2 moves by the existing `den_batchOp_*` lemmas and the work is the backward and
-the tail. ⚠ Padding, BN world and activation ride along unchanged — 4c changes the INDEX and the
-optimizer form, and every convention the header table names must be re-checked on the converged
-render, not assumed (§5, "conventions are invisible to types").
+| net | state |
+|---|---|
+| **ResNet-34** | ✅ leg 1 DONE 2026-09-06 — `ResNet34Render.lean`, `resnet34_train_step.mlir` and the `resnet34-verified` binary all retired; both forwards on `r34FwdChainB`; ⭐ the ImageNet `resnet34in_fwd` was split too, which `check_adam_prefix`'s Imagenette-only PAIRS list could not see |
+| **MobileNetV2** | leg 2 — the last `KNOWN_SPLIT` entry. `MobileNetV2RenderB` already has `OptKind` and an `sgdParamF` tail, so §4c's ".sgd tail" is small |
+| **ConvNeXt-T** | leg 3 — a SWAP, not a re-render: the two chains' forwards are byte-identical (`convnext-fwd-b-tie`) and differ on 78 backward lines; the licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric gate |
+| **ViT-Tiny** | leg 4 — as ConvNeXt |
 
-**Order.** After 4b and 4.2a: 4b is cheap and lands T3-at-Adam for three nets on the chain they
-already have, and 4.2a is r34's batched tie either way. 4c is the large package — every artifact
-of four nets, every Imagenette number, `regen_verified_mlir.sh`'s two PAIRS lists (≈197 and ≈276),
-`proofs.yml`'s diff list, `check_render_coverage.py`, the `VerifiedTrain.lean` load path (the
-un-varianted `<slug>_train_step.mlir` at :988 against the variant-resolved one at :1365), and the
-book's chapter numbers. Budget it as a thread of its own with a planning log, one net per session.
+⚠ **"Every Imagenette number gets re-run" was vacuous for ResNet-34** and must not be assumed for
+the rest. `MainResnet34Verified` printed chance (`390/3925`, byte identical every epoch) and said
+so in its own header, because running-stat threading lives only in `trainAdamSched`; the real
+number came from `resnet34-verified-adam`, already on the batched chain.
 
-⚠ **Traps already paid for on this axis.** The wrong thing typechecks — a `broadcast_in_dim` mask
-against a per-example node compiles, trains and descends with no `den` behind it
-(`ConvNeXtRenderB` header). On ViT the token axis and the batch axis are both called `N`; pass the
-token count by name. A flag that reaches the emission but not the entry name ships an artifact
-whose `@name` disagrees with its path (three nets, four times). `pretty B` of a per-example node
-and the `*B` constructor of the same op emit the same bytes — that is what the byte ties are — so
-a converged render is checked byte-for-byte against the artifact it replaces on the forward and
-numerically on the backward.
+⚠ **What retirement costs, per net.** For ResNet-34 it left `ResNet34FaithfulPoC` and
+`ResNet34TiePoC` about an artifact that no longer exists — every theorem still true, no committed
+bytes exercising it — which is only acceptable because their batched peers (4.1e, 4.2a) landed the
+same day. **A leg should not retire a per-example renderer before the batched tier that replaces it
+exists.** That ordering is why 4b and 4.2a came first.
 
 ## 4d. Data parallelism — what is provable, what is calling logic (user question, 2026-09-06)
 

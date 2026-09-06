@@ -16,7 +16,8 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
 
-The shape `#guard` in `MainResnet34Verified` only checks the *parameter interface*
+The shape `#guard` beside `resnet34Verified` in `VerifiedNets.lean` only checks the
+*parameter interface*
 (typechecking). This file is the first rung of connecting a readable `VerifiedNetSpec`
 to the actual **math** — the proven VJP — on the simplest net, the Chapter-1 linear
 classifier (`dense 784→10`).
