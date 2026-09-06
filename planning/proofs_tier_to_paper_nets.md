@@ -18,29 +18,42 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work. ✅ 4b, 4.2a, 4.2b, 4.2c AND 4c LEGS 1–2 ALL LANDED 2026-09-06** — 4b's four files
-(41 declarations), r34's batched §1a tie plus the shared smoothed loss cotangent (`Certs`
-3971 → 3977, **ResNet-34's T3 complete at batch BatchNorm**), **MobileNetV2's T1, T2 and T3 §1a tie
-at batch BN** (`Certs` → 3979, **MobileNetV2's T3 complete**), and the renderer convergence's first
-TWO nets. ⭐⭐ Both BN nets are tied at the artifact that trains, both per-example renderers are
-retired, and `check_adam_prefix`'s `KNOWN_SPLIT` ratchet is **EMPTY** (7 paired, 0 split).
-**4c now has its own thread and log: `planning/renderer_convergence.md`.** Legs 2–4 (MobileNetV2,
-ConvNeXt-T, ViT-Tiny) are there. 4d's ℝ-level lemma fits any session; its op node waits for 4c.
-3.5 and 3.6 unchanged, on the batched chain from the start.
+**Order of work — where the thread stands after 2026-09-06.** Six packages landed that day:
+4b (four files, 41 declarations), 4.2a, **4.2b + 4.2c** (MobileNetV2's T1/T2/T3 at batch BN),
+**4c legs 1 and 2** (ResNet-34 and MobileNetV2 on one chain, both per-example renderers retired),
+the **ImageNet PAIRS extension**, and **4b's capstone re-pointing for EfficientNet-B0**.
+`Certs` 3966 → **3979**.
+
+⭐⭐ **What that adds up to.** Both BatchNorm nets have T1, T2 and T3 stated at the artifact that
+trains; both per-example renderers are gone; `check_adam_prefix`'s `KNOWN_SPLIT` ratchet is
+**EMPTY** and its coverage now reaches the ImageNet tier (20 paired, 0 split, plus a completeness
+assertion); and three of the five T3 capstones are at the un-fused gradient node and the smoothed
+loss.
+
+⛔ **The one axis that is now ORDER-CONSTRAINED, and it was not before.** ConvNeXt-T's and
+ViT-Tiny's capstones cannot usefully be re-pointed ahead of their renderer legs: their Adam
+artifacts come from the PER-EXAMPLE renderers, where the six-op loss chain is emitted at `N := 1`
+with the batch in `pretty`'s argument rather than inside `den`, while `SmoothedLossCot` is stated at
+the batched index. Writing those capstones today means writing them twice. So 4c legs 3–4 gate 4b's
+last two, where every other item is independent.
+
+**4c has its own thread and log: `planning/renderer_convergence.md`.** 4d's ℝ-level lemma fits any
+session; its op node waits for 4c. 3.5 and 3.6 unchanged, on the batched chain from the start.
 
 **NEXT SESSION — pick one, they are independent.**
 
 | target | cost | why now |
 |---|---|---|
-| **4c legs 3–4, ConvNeXt-T and ViT-Tiny** | one session each | ⭐ A different shape: no BatchNorm-world split (LayerNorm, train == eval), and the two chains render the same FORWARD byte-for-byte. The leg is a SWAP of 78 backward lines, not a re-render. ⚠ The licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric A/B. ⭐ The carried `*in_*` PAIRS extension is DONE (2026-09-06, 20 paired / 0 split, plus a completeness assertion), so these legs are instrumented in a way legs 1 and 2 were not. |
-| **4b's capstone re-pointing** | ✅ **3 of 5 DONE 2026-09-06** | r34 and mnv2 got theirs as batched ties (4.2a, 4.2c); **EfficientNet-B0's landed as `EfficientNetTiePoCG.lean`** — all 262 parameters at the RAW gradient node AND the shared smoothed loss. ⚠ ConvNeXt-T and ViT-Tiny are NOT the "cheap two" this row assumed: their Adam artifacts come from the PER-EXAMPLE renderers, where the six-op loss chain is emitted at `N := 1` with the batch in `pretty`'s argument rather than inside `den`. A capstone written for them today would be about a chain 4c legs 3–4 will retire — write it twice, or do the legs first. |
-| **4d piece 1** | half a session | `Foundation/DataParallel.lean`: `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)`, plus the lockstep induction. Cheap, certain, and it answers "what function trained" for every `*dp*` artifact — which every tie currently disclaims. |
-| **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and now cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. R50 needs the LAMB tail cert and the BCE cotangent first. |
+| **4d piece 1** | half a session | ⭐ `Foundation/DataParallel.lean`: `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)`, plus the lockstep induction. Cheap, certain, unblocked, and it answers "what function trained" for every `*dp*` artifact — which EVERY tie in the repo currently disclaims, the four that landed today included. ⭐ It also decides something the ties cannot: for a net with no batch coupling it says the DP step IS the single-device step at batch `R·N`, and for a batch-BN net it says that is FALSE and names what trained instead. |
+| **4c legs 3–4, ConvNeXt-T and ViT-Tiny** | one session each | A different shape: no BatchNorm-world split (LayerNorm, train == eval), and the two chains render the same FORWARD byte-for-byte. The leg is a SWAP of 78 backward lines, not a re-render. ⚠ The licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric A/B — build that first. ⭐ Instrumented in a way legs 1–2 were not: the `*in_*` PAIRS extension already audits both nets' ImageNet forwards. ⛔ These now GATE 4b's last two capstones. |
+| **4b's capstone re-pointing** | ✅ **3 of 5 DONE**; last two BLOCKED | r34 and mnv2 got theirs as batched ties (4.2a, 4.2c); **EfficientNet-B0's landed as `EfficientNetTiePoCG.lean`** — all 262 parameters at the RAW gradient node AND the shared smoothed loss. ⚠ ConvNeXt-T and ViT-Tiny are NOT the "cheap two" this row assumed — see the order note above. Do their 4c legs first. |
+| **§4.2's T4 / T5 / T6 for r34 and mnv2** | one session per tier | The remaining rows of the BatchNorm-world port. ⚠ Price them honestly: T4/T5 are float BUDGETS, and `planning/float_budget_numbers.md` closed that thread as vacuous — the value here is **T6**, the certified backward tie at `bnBatchTensor4`, which is a real statement. Mirror `Resnet34BackCertifiedTie.lean`. |
+| **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. ⭐ R50 is also the best-instrumented net in the repo now — `resnet50in_fwd` and `resnet50in160_fwd` are both audited against the steps that train them. R50 needs the LAMB tail cert and the BCE cotangent first. |
 
-⭐ **Recommendation: 4d piece 1, then 4c legs 3–4.** 4b's re-pointing is 3 of 5 done and the
-remaining two are blocked behind their renderer legs (see the row above), so the ordering is now
-forced: `Foundation/DataParallel.lean` is half a session and answers "what function trained" for
-every `*dp*` artifact, and after it the ConvNeXt/ViT legs unblock their own capstones.
+⭐ **Recommendation: 4d piece 1, then 4c legs 3–4, then their capstones.** That ordering is now
+forced rather than chosen — 4b's last two sit behind the renderer legs. 4d is the only item that is
+both cheap and unblocked, and it closes a disclaimer that every tie in the repo carries, including
+all four that landed on 2026-09-06.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
