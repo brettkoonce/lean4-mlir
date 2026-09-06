@@ -687,6 +687,74 @@ fidelity:
        certified VJP cannot drift; a hand-written peer can, and only a theorem
        naming both catches it.
 
+    4e. THE BATCHNORM WORLD (disclosed 2026-09-06; decision taken, port in
+       progress). A training-mode BatchNorm reduces mu/var out of the activation,
+       and the axes it reduces over are a real choice the types cannot see:
+       PER-EXAMPLE (spatial only, `[2,3]`, `bnPerChannelTensor3`) normalises each
+       example by its own statistics; BATCH (`[0,2,3]`, `bnBatchTensor4` /
+       `StableHLO.bnBatchLA`) shares one mu/var per channel across the batch and is
+       the one op that couples examples. They are different functions of the same
+       architecture.
+
+       THE SPLIT, AS SHIPPED. ResNet-34 and MobileNetV2 each ship BOTH.
+       `verified_mlir/resnet34_fwd.mlir` and `mobilenetv2_fwd.mlir` are per-example
+       (73 and 105 spatial reductions = 36 and 52 BatchNorm sites x2, plus the head
+       GAP), as is the SGD trainer `resnet34_train_step.mlir` -- whose 72 batch-axis
+       reductions are the gamma/beta PARAMETER gradients, which reduce across the
+       batch because the parameter is shared, not batch statistics. Every Adam and
+       momentum train step (`resnet34_sgd_train_step`, `resnet34in_mom256_...`,
+       `mobilenetv2in_adam64_...`, and the rest) is batch BN. EfficientNet-B0 is
+       batch BN on both sides. `scripts/convention_audit.py` reports this as
+       `bn-split` for exactly r34 and mnv2, and it is the one axis those two still
+       carry after padding and activation were closed.
+
+       WHY IT MATTERS. Every Proofs tier for those two nets -- the forward and
+       whole-net VJP, the graph faithfulness, the 146- and 210-parameter train-step
+       ties, the forward and backward budgets, the certified backward ties -- is
+       stated at PER-EXAMPLE BatchNorm. Each is true and correctly paired with its
+       artifact: the Imagenette SGD trainer is real and emits real bytes. But the
+       ImageNet accuracies this repo quotes come from the batch-BN Adam and momentum
+       artifacts, so the certified net and the net that produced the headline number
+       are different functions. That gap was undisclosed until now.
+
+       THE DECISION (2026-09-06): port both nets' Proofs tiers to batch BN, rather
+       than keep per-example and disclose. Recorded here because the previous text
+       named neither world.
+
+       WHAT HAS LANDED. The shared foundation, both directions:
+       `Float/BnBatchFloatBridge.lean` gives `bnBatchTensor4` its float bridges
+       (`floatBridgesTo_bnBatchTensor4`, `..._eps`, `floatBridgesTo_bnBatchBack`) and
+       the numeral-facing envelopes (`Maps.bnBatchTensor4`, `...Capped`,
+       `Maps.bnBatchBack`). Before it the batched world had NO float leaf in either
+       direction: `EfficientNetWholeFloatBridge.lean` takes twenty-odd
+       `hbn : FloatBridges (StableHLO.bnBatchLA ...)` as hypotheses, and a legacy
+       `FloatBridges` constrains no float implementation (4d above), so nothing named
+       the map and nothing discharged them. B0's own numbers dodge the hole two ways:
+       `b0_float_logits_le` is at inference BN and `b0_grad_float_le` is at N = 1,
+       where the batched reduction width N*h*w coincides with the per-example h*w.
+       The file is short because `bnBatchTensor4` IS `bnPerChannelTensor3` at width
+       N*(h*w) -- both are `bnPerChannelFlat oc m` conjugated by a permutation -- so
+       the content is one new `Equiv` over round-trip lemmas already proven.
+
+       THE BATCH QUALIFIER IS PERMANENT. `bnGradInputReMag`'s gain carries
+       Xh^2 = n = N*h*w, so any number built on these leaves moves with the batch
+       size: one theorem per N, not one theorem for all N the way an inference-BN
+       forward gets. That is `b0_grad_float_le`'s existing qualifier, stated at the
+       leaf rather than at the net, and it will apply to r34's and MobileNetV2's
+       batched budgets too.
+
+       STILL OPEN, per net: the net-level real forward at `bnBatchLA` and its
+       whole-net VJP, the forward graph and faithfulness, the train-step tie pair
+       against the batch-BN artifact, the training-mode forward budget (a CAP, as
+       `r34_train_float_logits_le` already is), the backward budget, and the
+       certified backward tie at `bnBatchTensor4`. The block-level batched VJPs and
+       backward-graph faithfulness already exist for both nets
+       (`ResNet34BackB0.lean`, `MobileNetV2BackB0.lean`, folded by
+       `BackNetFolds.lean`), and the eval-mode forward budgets are world-agnostic
+       -- frozen statistics reduce nothing, so `r34_float_logits_le` and
+       `mnv2_float_logits_le` already hold in both worlds. Work packages:
+       planning/proofs_tier_to_paper_nets.md section 4.
+
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
        `mulVec/transpose/outer/mul`. This IS bridged to Mathlib's `Matrix`

@@ -114,6 +114,8 @@ import LeanMlir.Proofs.Float.ViTFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvBack
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackLN
 import LeanMlir.Proofs.Float.FloatBudgetEnvBackSE
+import LeanMlir.Proofs.Float.BnBatchFloatBridge
+import LeanMlir.Proofs.Architectures.ResNet34FullB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
@@ -5265,3 +5267,61 @@ open Proofs
 -- `DepthwiseMixedFloatBridge.lean` has exactly the two theorems below and both are here.
 #print axioms Proofs.depthwiseConv2d_eq_dw_dot
 #print axioms Proofs.FloatModel.depthwise_close_mixed
+
+-- ════════════════════════════════════════════════════════════════
+-- THE BATCHED WORLD'S BATCHNORM LEAVES (BnBatchFloatBridge.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- ⛔ Before this file `bnBatchTensor4` — TRAINING BatchNorm reducing mu/var over the batch+spatial
+-- axes [0,2,3], the normalisation every Adam and momentum train step in verified_mlir/ emits —
+-- had NO float leaf in EITHER direction. EfficientNetWholeFloatBridge.lean takes twenty-odd
+-- `hbn : FloatBridges (StableHLO.bnBatchLA ...)` as HYPOTHESES, and a legacy FloatBridges
+-- constrains no float implementation at all (formalization.yaml 4d), so nothing named the map and
+-- nothing discharged them. B0's own numbers dodge the hole two ways: b0_float_logits_le is at
+-- INFERENCE BN (frozen statistics, batchMap of a per-example op) and b0_grad_float_le is at N = 1,
+-- where the batched reduction width N*h*w coincides with the per-example h*w.
+-- ⭐⭐ Short because bnBatchTensor4 IS bnPerChannelTensor3 at a different width: both are
+-- bnPerChannelFlat oc m conjugated by a permutation, with m = N*(h*w) rather than h*w. The flat
+-- leaves were already generic in m and floatBridgesTo_gather holds for ANY equiv, so the whole
+-- content is one new Equiv built from two round-trip lemmas that were already proven.
+-- ⚠ The width is not cosmetic: bnGradInputReMag's gain carries Xh² = n = N*h*w, so a number built
+-- on these leaves MOVES WITH THE BATCH SIZE. One theorem per N, which is b0_grad_float_le's
+-- qualifier stated at the leaf instead of at the net.
+#print axioms Proofs.bnchwEquiv
+#print axioms Proofs.floatBridgesTo_bnBatchTensor4
+#print axioms Proofs.floatBridgesTo_bnBatchTensor4_eps
+#print axioms Proofs.floatBridgesTo_bnBatchBack
+-- ⭐ The Maps envelopes, and the three layout-free cores they are corollaries of. Those proofs
+-- never mention oc/h/w — they are statements about bnLeafMag/bnLeafMod (forward) and
+-- bnGradInputReMag/bnGradInputBudgetG (backward), which take a WIDTH and no indices — so R50's
+-- and MobileNetV4's envelopes will not be a fourth and fifth copy of the same linarith chain.
+#print axioms Proofs.FloatBridgesTo.Maps.bnLeafCore
+#print axioms Proofs.FloatBridgesTo.Maps.bnLeafCoreCapped
+#print axioms Proofs.FloatBridgesTo.Maps.bnGradLeafCore
+#print axioms Proofs.FloatBridgesTo.Maps.bnBatchTensor4
+#print axioms Proofs.FloatBridgesTo.Maps.bnBatchTensor4Capped
+#print axioms Proofs.FloatBridgesTo.Maps.bnBatchBack
+
+-- ════════════════════════════════════════════════════════════════
+-- RESNET-34 AT TRUE BATCH BN — T1-forward and T2 (ResNet34FullB.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- The whole-net real forward and typed forward graph at `bnBatchLA` (reduce [0,2,3]), with
+-- `den graph = forward` chained over the eighteen per-kind faithfulness lemmas. The batched peer of
+-- ResNet34RenderPC's `resnet34Forward_full_pc` / `resnet34FwdGraphFullPC`, which are per-example.
+-- ⭐⭐ Nothing about the blocks is new — ResNet34BackB0.lean already carries the batched stages
+-- (cbReluB / cbReluStridedB / projStridedB, and projB from EfficientNetRenderPC), their `_at` VJPs
+-- and their backward-graph faithfulness, all at bnBatchLA, and BackNetFolds folds them to [3,4,6,3].
+-- What was missing is the level above, and this is that enumeration.
+-- ⚠ Padding is SYMMETRIC at all seven stride-2 sites (`.convStrided`, not `.convStridedXla` — B0's
+-- stem is the XLA-SAME one and the two tokens have identical types), and the stem pool is 3x3/s2
+-- (`maxPool3s2Flat`, same type as the 2x2 pool and a different function). Neither is type-visible.
+-- ⭐ The head is generic in nCls, so one statement covers the 10-class Imagenette artifacts and the
+-- 1000-class resnet34in ones.
+-- ⚠ N is a variable: T1 and T2 carry no numerals, so the batch size is pinned only where a Maps
+-- envelope turns a width into a rational (T4/T5). In the data-parallel artifacts that N is the
+-- PER-REPLICA batch (64), because the collectives average gradients and no statistic is all-reduced.
+#print axioms Proofs.resnet34ForwardB_full
+#print axioms Proofs.StableHLO.r34IdGraphB_faithful
+#print axioms Proofs.StableHLO.r34DownGraphB_faithful
+#print axioms Proofs.StableHLO.r34StemGraphB_faithful
+#print axioms Proofs.StableHLO.r34HeadGraphB_faithful
+#print axioms Proofs.StableHLO.resnet34FwdGraphB_full_faithful

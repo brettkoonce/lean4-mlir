@@ -451,6 +451,28 @@ lean_lib «Certs» where
              -- for the realistic-seal work) into a rational numeral — Xh enters as Xh², and
              -- deriving it from the forward's window instead is 1e7271 against 1e288.
              `LeanMlir.Proofs.Float.FloatBudgetEnvBack,
+             -- ⭐⭐ The BATCHED world's BatchNorm leaves, both directions. Before this file
+             -- `bnBatchTensor4` — training BN reducing mu/var over [0,2,3], what every Adam and
+             -- momentum train step in verified_mlir/ emits — had NO float leaf at all, forward
+             -- or backward: EfficientNetWholeFloatBridge takes twenty-odd
+             -- `hbn : FloatBridges (bnBatchLA ...)` as HYPOTHESES, and a legacy FloatBridges
+             -- constrains no float implementation (formalization.yaml 4d). B0's numbers dodge it
+             -- at inference BN and at N = 1, where the batched width N*h*w coincides with h*w.
+             -- ⭐ Short because bnBatchTensor4 IS bnPerChannelTensor3 at width N*(h*w): one new
+             -- Equiv (bnchwEquiv, from round-trip lemmas already proven) and the same two .comps.
+             -- The Maps.*Core lemmas factor out the layout, which those proofs never mention.
+             -- ⚠ Every numeral here MOVES WITH THE BATCH SIZE — one theorem per N.
+             `LeanMlir.Proofs.Float.BnBatchFloatBridge,
+             -- ⭐⭐ ResNet-34's whole-net forward and typed graph at TRUE BATCH BN (T1-forward, T2).
+             -- ResNet34RenderPC states the same ladder at PER-EXAMPLE BN, which is resnet34_fwd's
+             -- world and the Imagenette SGD trainer's, but NOT the Adam/momentum steps' — those
+             -- reduce [0,2,3], and they are where the quoted ImageNet accuracies come from
+             -- (formalization.yaml 4e). Nothing about the blocks is new: ResNet34BackB0 already
+             -- carries the batched stages, their _at VJPs and their backward graphs at bnBatchLA.
+             -- ⚠ Symmetric padding at all seven stride-2 sites (.convStrided, NOT .convStridedXla)
+             -- and a 3x3/s2 stem pool; both are invisible to the types.
+             -- ⚠ N stays a variable — T1/T2 carry no numerals, so the batch is pinned only at T4/T5.
+             `LeanMlir.Proofs.Architectures.ResNet34FullB,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

@@ -2,7 +2,7 @@
 
 **Scoped 2026-09-05 from the Proofs-tier audit run during the XLA-SAME re-spelling. Nothing
 below is started except where a row says so; 3.1, 3.2(a)–(c), (e), 3.3 and 3.4 have since
-landed.** The target is the
+landed, and section 4's decision was taken 2026-09-06 with its shared foundation.** The target is the
 level ConvNeXt-T sits at: every certification tier stated at the net the artifact runs, the column
 "tiers only at a reduced or representative net" empty for every architecture. ConvNeXt-T had one
 hole of its own when this was scoped — its train-step tie was at the retired scalar LN — and
@@ -53,11 +53,12 @@ Two axes cut across the table and are recorded separately from it:
   shipped artifact (MobileNetV2's SGD pair since step 0, 2026-09-05) and symmetric in every
   Proofs definition that names them, including the paper-net T2/T3 files. The re-spelling thread
   fixes this; nothing in section 3 should be built on the symmetric stem.
-* **BatchNorm world.** `resnet34Forward_full_pc` and both MobileNetV2 chains are per-example BN,
-  the SGD trainers' world. The accuracies the repo quotes for those nets come from the Adam
-  trainers at batch BN (`scripts/convention_audit.py` reports `bn-split` for exactly these two).
-  EfficientNet is batch BN on both sides (`bnBatchLA`). Section 4 prices the batched forwards;
-  it is a larger gap than padding, and a decision, not a task.
+* **BatchNorm world — DECIDED 2026-09-06, port in progress.** `resnet34Forward_full_pc` and both
+  MobileNetV2 chains are per-example BN, the SGD trainer's world. The ImageNet accuracies the repo
+  quotes for those nets come from the Adam and momentum trainers at batch BN
+  (`scripts/convention_audit.py` reports `bn-split` for exactly these two). EfficientNet is batch
+  BN on both sides (`bnBatchLA`). Section 4 takes the decision — port both — and its shared
+  foundation has landed; the per-net tiers have not. This is a larger gap than padding.
   ⚠ A third, narrower split sits under T4 specifically: every whole-net forward BUDGET is stated
   at INFERENCE BN, because the training-mode modulus is quadratic in the window, and a net's
   eval-BN graph is a separate artifact from its training one. MobileNetV2 has an eval graph at
@@ -518,22 +519,123 @@ T1 to T6 are at the paper net. The witness is 2 channels wide at the full depth 
 resolution; a full-width witness buys nothing the blueprint needs. What remains for R34 is the
 BN-world axis (section 4).
 
-## 4. The BatchNorm-world axis, priced and left as a decision
+## 4. The BatchNorm-world axis — DECIDED 2026-09-06, port in progress
 
-The R34 and MobileNetV2 Proofs tiers are per-example BN (`bnPerChannelTensor3`); the Adam
-artifacts that produced the quoted numbers are batch BN; EfficientNet is batch BN on both sides
-because its Proofs tier was built at the batched index from the start (`StableHLO.bnBatchLA`,
-`batchMap N`). Making R34's and MobileNetV2's Proofs tiers "the net that trained" means the
-batched form of every tier: the forward at `N·(c·h·w)` with `bnBatchLA`, the graph at the batched
-tokens (`MobileNetV2RenderB` / `ResNet34RenderB` already emit them), the budgets at batch BN
-(the training-mode number is a CAP, as `r34_train_float_logits_le` already is; the eval-mode
-number is the same either way since frozen statistics reduce nothing), and the T6 tie at
-`bnBatchTensor4`, for which no batched BatchNorm backward leaf exists (the reason B0's T6 is
-stated at `N = 1`). That leaf is the real cost: the rest is the EfficientNet recipe applied
-twice. Cost is comparable to package 3.5. Decide whether the SGD-trainer world is the one the
-Proofs tier should describe (it is a real trainer with its own artifacts and prefix audits) or
-whether the batched forms are wanted for the two nets whose numbers are quoted from Adam;
-either answer should be written into `formalization.yaml` 4d, which today says neither.
+**The decision is option 1: port both nets' Proofs tiers to batch BN.** Recorded in
+`formalization.yaml` 4e, which is a new section — 4d named neither world, which was the disclosed
+defect this axis carried. The shared foundation landed the same day; the per-net tiers have not.
+
+### 4.0 What the split is, in the artifacts
+
+`resnet34_fwd.mlir` and `mobilenetv2_fwd.mlir` reduce over `[2,3]` — 73 and 105 spatial
+reductions, i.e. 36 and 52 BN sites ×2 plus the head GAP — so they are per-example. So is the SGD
+trainer `resnet34_train_step.mlir`. ⚠ **Its 72 batch-axis reductions are NOT batch statistics**:
+they are the γ and β parameter gradients (`Σ_{n,h,w} dy·x̂`, `Σ_{n,h,w} dy`), which reduce across
+the batch because the parameter is shared. Every Adam and momentum step — `resnet34_sgd_train_step`
+(468 `[0,2,3]`, 1 `[2,3]` for the GAP), `resnet34in_mom256_*`, `mobilenetv2in_adam64_*` and the
+rest — is batch BN. The Imagenette SGD trainer is a real artifact and the Proofs tier is correctly
+paired with it; the ImageNet accuracies the repo quotes come from the other world.
+
+### 4.1 DONE 2026-09-06 — the shared foundation, both directions
+
+`Float/BnBatchFloatBridge.lean` (≈300 lines, ~4 s to elaborate, `Certs` 3966 → 3967, one new module):
+`bnchwEquiv`, `bnBatchTensor4FV` / `floatBridgesTo_bnBatchTensor4` / `..._eps`,
+`bnBatchTensor4BackFV` / `floatBridgesTo_bnBatchBack`, and the envelopes
+`Maps.bnBatchTensor4`, `Maps.bnBatchTensor4Capped`, `Maps.bnBatchBack`. Ten declarations, all
+3-axiom clean; `lake build Certs`, `lake env lean tests/AuditAxioms.lean`,
+`lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py` all green.
+
+⛔ **Correction 1 to this section as scoped: the FORWARD leaf was missing too.** §4 priced "no
+batched BatchNorm backward leaf exists" as the real cost. In fact `bnBatchTensor4` had no float
+leaf in **either** direction. `EfficientNetWholeFloatBridge.lean` takes twenty-odd
+`hbn : FloatBridges (StableHLO.bnBatchLA …)` as hypotheses, and a legacy `FloatBridges`
+constrains no float implementation at all (4d) — so those hypotheses named nothing and nothing
+discharged them. B0's numbers dodge the hole twice over: `b0_float_logits_le` is at inference BN
+(`batchMap` of a per-example op) and `b0_grad_float_le` is at `N = 1`, where the batched width
+`N·h·w` coincides with `h·w` and the per-example leaf is honest.
+
+⛔ **Correction 2: B0's `N = 1` is T5, not T6.** This section attributed the missing leaf to
+"the reason B0's T6 is stated at `N = 1`". `efficientnetInputGradB_full_correct` takes `(N : Nat)`
+and §3.3(c) says so — every batch size. What is at `N = 1` is the backward *number*
+`b0_grad_float_le`, for the reason its own header gives: `bnGradInputReMag`'s gain carries
+`Xh² = n = N·h·w`, so the numeral moves with the batch (7.104e182 at `N=1`, 2.880e194 at `N=256`).
+A batched leaf does not remove that; it lets the number be stated at the batch actually trained at.
+
+⭐ **Cheaper than priced, and the reason is the same one this document keeps rediscovering.**
+`bnBatchTensor4` IS `bnPerChannelTensor3` at a different width — both are `bnPerChannelFlat oc m`
+conjugated by a permutation, with `m = N·(h·w)` rather than `h·w`. The flat leaves were already
+generic in `m`, `floatBridgesTo_gather` holds for any `Equiv`, and the round-trip lemmas
+(`bnchwFwdIdx_bnchwBackIdx`, `bnchwBackIdx_bnchwFwdIdx`) were already proven. Both bridges
+typechecked on the first pass with no new analysis; §5's *"grep the whole cone for a bound before
+proving one"* paid again.
+
+⭐ **The `Maps` proofs are layout-free, so they were factored rather than copied.**
+`Maps.bnPerChannelTensor3` and `Maps.bnPerChannelBack` never mention `oc`/`h`/`w` except to pick a
+channel index for a nonnegativity side condition: they are statements about `bnLeafMag`/`bnLeafMod`
+and `bnGradInputReMag`/`bnGradInputBudgetG`, which take a **width** and no indices.
+`Maps.bnLeafCore` / `Maps.bnLeafCoreCapped` / `Maps.bnGradLeafCore` extract that, and the three
+batched envelopes are corollaries at `rfl`. R50's and MNv4's will be too — this is §5's "two lists
+for one net" applied to a `linarith` chain. ⚠ The existing per-example envelopes were left alone
+rather than re-based on the cores, to keep the change out of the downstream rebuild.
+
+### 4.1b DONE 2026-09-06 — ResNet-34's T1-forward and T2
+
+`Architectures/ResNet34FullB.lean` (~310 lines, ~1.7 s): the `R34IdW` / `R34DownW` /
+`R34BWeights nCls` records, the four batched block forwards (`r34IdB`, `r34DownB`, `r34StemB`,
+`r34HeadB`), `resnet34ForwardB_full` in nested-application form, the four block-kind graphs at the
+render's own tokens, their `_faithful` lemmas, and `resnet34FwdGraphB_full_faithful` — one `rw` per
+block. `Certs` 3968 green, six declarations 3-axiom clean, all four scripts green.
+
+⭐ **It is an enumeration, as predicted.** `ResNet34BackB0.lean` already carried every batched
+stage (`cbReluB`, `cbReluStridedB`, `projStridedB`, and `projB` from `EfficientNetRenderPC`) with
+its `_at` VJP and backward-graph faithfulness at `bnBatchLA`; `BackNetFolds.lean` already folded
+them to `[3,4,6,3]`. The only thing missing was the level above. Every `den` lemma the graphs need
+(`den_batchOp_conv`, `_convStrided`, `_relu_eq_reluF`, `_maxPool3s2`, `_gap`, `_dense`,
+`den_bnBatchF`, `den_addV`) already existed.
+
+⚠ **Two conventions are stated in the file header because nothing checks them here.** Padding is
+symmetric at all seven stride-2 sites (`.convStrided`, **not** `.convStridedXla` — B0's stem is the
+XLA-`SAME` one and the two tokens have identical types), and the stem pool is 3×3/s2
+(`maxPool3s2Flat`, same type as the 2×2 pool and a different function; the render carried the wrong
+one until 2026-08-04). `scripts/convention_audit.py` sees the first at the artifact tier only.
+
+⭐ The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
+1000-class `resnet34in` ones.
+
+⛔ **The VJP half of T1 is blocked on one missing lemma, and it is small.** The whole-net
+`HasVJPAt` needs the stem pool's VJP lifted through `batchMap`, and `batchMap_has_vjp`
+(`EfficientNetChainClose.lean`) is the GLOBAL form only — there is no `batchMap_has_vjp_at`. B0
+never needed one because swish is smooth everywhere and its stem has no pool. The per-example
+pieces are both there (`maxPool3s2Flat_has_vjp_at_vec`, `MaxPool3s2BackFloatBridge.lean`, is
+already the `Vec`-point form a chain needs), so this is the pointwise peer of an existing
+construction plus its differentiability companion — write it beside `batchMap_has_vjp`, then the
+r34 assembly is `MobileNetV2FullVJP.lean`'s shape: per-block `Pos`/`SmoothAt` bundles, sixteen
+prefix defs, and the apex. ⚠ r34 carries **two** relu clauses per block (the body's mid-relu and
+the post-residual one) where MobileNetV2 carries two relu6 clauses; same count, same shape.
+
+### 4.2 Still open, per net
+
+For each of ResNet-34 and MobileNetV2, at `bnBatchLA` (r34's T1-forward and T2 landed, 4.1b):
+
+| tier | what it needs | mirror |
+|---|---|---|
+| T1 | net-level ℝ forward + whole-net `HasVJPAt` (both nets have relu kinks) | `EfficientNetFullB0.lean` |
+| T2 | typed forward graph, per-block `_faithful` then chained | `ResNet34RenderB` / `MobileNetV2RenderB` tokens |
+| T3 | FaithfulPoC / TiePoC against the batch-BN train step | the existing per-example pair |
+| T4 | training-BN forward budget — a **CAP**, as `r34_train_float_logits_le` already is | `Maps.bnBatchTensor4Capped` |
+| T5 | backward budget, one theorem per `N` | `Maps.bnBatchBack` |
+| T6 | certified backward tie at `bnBatchTensor4` | `Resnet34BackCertifiedTie.lean` |
+
+⭐ **Two tiers are cheaper than the table suggests.** The block-level batched VJPs and
+backward-graph faithfulness already exist for both nets (`ResNet34BackB0.lean`,
+`MobileNetV2BackB0.lean`), folded to the paper depth by `BackNetFolds.lean`'s `r34Trunk_3463` —
+so T1's hard half is done and T6 composes over it. And the **eval-mode forward budgets are
+world-agnostic**: frozen statistics reduce nothing, so `r34_float_logits_le` and
+`mnv2_float_logits_le` already hold in both worlds and need only saying so.
+
+⚠ **Every batched number carries the batch size in its statement.** Decide `N` once per net, at
+the batch the quoted checkpoint trained at, and put it in the theorem name or the file header —
+not in a docstring.
 
 ## 5. Traps, all previously paid for
 
@@ -589,7 +691,8 @@ finding, and worth nothing); 3.4
 `Float/ViTWholeBackFloatBridge.lean`, `Architectures/ViTVecLNBackCertifiedTie.lean` and
 `Foundation/ViTWholeBackCertifiedTie.lean` all landed (⛔ `ViTBackFloatBudget.lean` is DECLINED:
 a fold at 5.686e399 / 1.703e399, statable at `exponentiation.threshold 500` and worth nothing,
-and the most expensive of the three declined backwards); 3.5 `Resnet50FullB.lean`,
+and the most expensive of the three declined backwards); §4 `Float/BnBatchFloatBridge.lean` landed 2026-09-06 (the batched BatchNorm leaves, both
+directions, plus the three layout-free `Maps` cores); 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for
 MobileNetV4. Every new file: a `lakefile.lean` `Certs` root or an import of one, an
