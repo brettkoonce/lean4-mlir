@@ -603,6 +603,28 @@ lean_lib «Certs» where
              -- computes it internally; that is the whole of the loss axis, since the per-block
              -- ties were already forall-cot (EfficientNetTiePoCG.lean).
              `LeanMlir.Proofs.Architectures.EfficientNetTiePoCG,
+             -- ⭐⭐ 4d piece 1: DATA PARALLELISM at the R-level — what function a *dp* run
+             -- actually minimised. Every *dp* artifact all-reduces each parameter gradient and
+             -- divides by R as emitted TEXT outside the SHlo AST, so every tie in the repo
+             -- (r34_net_tiedB, mnv2_net_tiedB, efficientnet_net_tiedG) is stated at the
+             -- per-replica node and disclaims the collective. dpMeanGrad_eq_grad_meanLoss names
+             -- that collective as a gradient: (1/R) sum_r g_r IS grad of (1/R) sum_r L_r, for
+             -- ANY per-replica losses, coupled or not.
+             -- ⭐⭐ And then it SPLITS the two worlds. With no batch coupling (the replica loss is
+             -- a mean over its own slice) meanLoss_shard says the mean of the R replica losses is
+             -- literally the mean over the global R*N batch — so the DP step is the single-device
+             -- step at batch R*N, at ANY sharding (the equiv is a binder; the contiguous cut is
+             -- one instance). ⛔ With batch coupling that is FALSE and dpMeanGrad_ne_globalBatchGrad
+             -- is the two-replica witness: a training-mode BatchNorm reads a NONLINEAR function of
+             -- its own slice's statistics, and no all-reduce repairs it, because nothing
+             -- all-reduces mu/var. That is why N in the batch-BN tiers is the PER-CARD batch.
+             -- ⭐⭐ dpIterate_lockstep + dpIterate_eq_meanLossTrain: n steps of R replicas ARE n
+             -- steps of ordinary single-device training on the mean loss — the property
+             -- VerifiedTrain.lean relies on when it checkpoints from replica 0. The shared start
+             -- is a HYPOTHESIS; the driver establishing it is calling logic (4d piece 3).
+             -- ⚠ pdiv_const_smul belongs in Tensor.lean and is here because that file is the root
+             -- of the corpus and a definition added to it rebuilds all of Certs.
+             `LeanMlir.Proofs.Foundation.DataParallel,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

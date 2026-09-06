@@ -18,17 +18,19 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work — where the thread stands after 2026-09-06.** Six packages landed that day:
+**Order of work — where the thread stands after 2026-09-06.** Seven packages landed that day:
 4b (four files, 41 declarations), 4.2a, **4.2b + 4.2c** (MobileNetV2's T1/T2/T3 at batch BN),
 **4c legs 1 and 2** (ResNet-34 and MobileNetV2 on one chain, both per-example renderers retired),
-the **ImageNet PAIRS extension**, and **4b's capstone re-pointing for EfficientNet-B0**.
-`Certs` 3966 → **3979**.
+the **ImageNet PAIRS extension**, **4b's capstone re-pointing for EfficientNet-B0**, and
+**4d piece 1** (data parallelism at the ℝ level). `Certs` 3966 → **3980**.
 
 ⭐⭐ **What that adds up to.** Both BatchNorm nets have T1, T2 and T3 stated at the artifact that
 trains; both per-example renderers are gone; `check_adam_prefix`'s `KNOWN_SPLIT` ratchet is
 **EMPTY** and its coverage now reaches the ImageNet tier (20 paired, 0 split, plus a completeness
-assertion); and three of the five T3 capstones are at the un-fused gradient node and the smoothed
-loss.
+assertion); three of the five T3 capstones are at the un-fused gradient node and the smoothed
+loss; and the data-parallel disclaimer every one of those ties carries now has a theorem behind
+it — `(1/R) Σ_r g_r` is the gradient of the mean of the per-replica losses, that mean IS the
+global-batch loss for a net with no batch coupling, and for a batch-BN net it provably is NOT.
 
 ⛔ **The one axis that is now ORDER-CONSTRAINED, and it was not before.** ConvNeXt-T's and
 ViT-Tiny's capstones cannot usefully be re-pointed ahead of their renderer legs: their Adam
@@ -37,23 +39,24 @@ with the batch in `pretty`'s argument rather than inside `den`, while `SmoothedL
 the batched index. Writing those capstones today means writing them twice. So 4c legs 3–4 gate 4b's
 last two, where every other item is independent.
 
-**4c has its own thread and log: `planning/renderer_convergence.md`.** 4d's ℝ-level lemma fits any
-session; its op node waits for 4c. 3.5 and 3.6 unchanged, on the batched chain from the start.
+**4c has its own thread and log: `planning/renderer_convergence.md`.** 4d's ℝ-level lemma has
+landed; its op node (`allReduceMeanF`) still waits for 4c. 3.5 and 3.6 unchanged, on the batched
+chain from the start.
 
 **NEXT SESSION — pick one, they are independent.**
 
 | target | cost | why now |
 |---|---|---|
-| **4d piece 1** | half a session | ⭐ `Foundation/DataParallel.lean`: `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)`, plus the lockstep induction. Cheap, certain, unblocked, and it answers "what function trained" for every `*dp*` artifact — which EVERY tie in the repo currently disclaims, the four that landed today included. ⭐ It also decides something the ties cannot: for a net with no batch coupling it says the DP step IS the single-device step at batch `R·N`, and for a batch-BN net it says that is FALSE and names what trained instead. |
+| **4d piece 1** | ✅ **DONE 2026-09-06** | `Foundation/DataParallel.lean`, 15 declarations, ~2 s, `Certs` 3980. Everything the row predicted, plus the negative half as a theorem rather than a remark. See §4d. **4d piece 2** (`allReduceMeanF`'s `den`) is the successor and is gated behind 4c like the capstones. |
 | **4c legs 3–4, ConvNeXt-T and ViT-Tiny** | one session each | A different shape: no BatchNorm-world split (LayerNorm, train == eval), and the two chains render the same FORWARD byte-for-byte. The leg is a SWAP of 78 backward lines, not a re-render. ⚠ The licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric A/B — build that first. ⭐ Instrumented in a way legs 1–2 were not: the `*in_*` PAIRS extension already audits both nets' ImageNet forwards. ⛔ These now GATE 4b's last two capstones. |
 | **4b's capstone re-pointing** | ✅ **3 of 5 DONE**; last two BLOCKED | r34 and mnv2 got theirs as batched ties (4.2a, 4.2c); **EfficientNet-B0's landed as `EfficientNetTiePoCG.lean`** — all 262 parameters at the RAW gradient node AND the shared smoothed loss. ⚠ ConvNeXt-T and ViT-Tiny are NOT the "cheap two" this row assumed — see the order note above. Do their 4c legs first. |
 | **§4.2's T4 / T5 / T6 for r34 and mnv2** | one session per tier | The remaining rows of the BatchNorm-world port. ⚠ Price them honestly: T4/T5 are float BUDGETS, and `planning/float_budget_numbers.md` closed that thread as vacuous — the value here is **T6**, the certified backward tie at `bnBatchTensor4`, which is a real statement. Mirror `Resnet34BackCertifiedTie.lean`. |
 | **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. ⭐ R50 is also the best-instrumented net in the repo now — `resnet50in_fwd` and `resnet50in160_fwd` are both audited against the steps that train them. R50 needs the LAMB tail cert and the BCE cotangent first. |
 
-⭐ **Recommendation: 4d piece 1, then 4c legs 3–4, then their capstones.** That ordering is now
-forced rather than chosen — 4b's last two sit behind the renderer legs. 4d is the only item that is
-both cheap and unblocked, and it closes a disclaimer that every tie in the repo carries, including
-all four that landed on 2026-09-06.
+⭐ **Recommendation: 4c legs 3–4, then their capstones.** 4d piece 1 was the cheap unblocked item
+and it is done, so what is left on the critical path is the renderer: 4b's last two capstones sit
+behind legs 3–4, and so does 4d piece 2. ⚠ Build the XLA-side numeric A/B before starting a leg —
+the licensing gate is IREE-linked and does not link on this box.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
@@ -167,8 +170,10 @@ Five axes cut across the table and are recorded separately from it:
 * **Optimizer form — ✅ DONE 2026-09-06 at the FOLD; the ties are not re-pointed.** Section 4b.
 * **Renderer — ✅ ResNet-34 and MobileNetV2 DONE 2026-09-06; ConvNeXt-T and ViT-Tiny left.**
   Section 4c, and its own thread at `planning/renderer_convergence.md`. `KNOWN_SPLIT` is empty.
-* **Data parallelism.** The all-reduce is emitted text outside the AST in every `*dp*` artifact;
-  what is provable and what stays calling logic is section 4d.
+* **Data parallelism — ✅ piece 1 DONE 2026-09-06; the op node is left.** The all-reduce is still
+  emitted text outside the AST in every `*dp*` artifact, so every tie is still at the per-replica
+  node. What changed is that the function those nodes add up to has a name, and that the
+  no-coupling / batch-coupled split is a theorem in both directions. Section 4d.
 
 ## 3. Work packages, in order
 
@@ -1222,18 +1227,7 @@ numerically — a duplicated batch on `R` replicas must reproduce the single-dev
 
 **Provable, in three pieces of increasing cost.**
 
-1. ⭐ **The ℝ-level lemma (cheap, certain, any session).** With `g_r` the certified gradient of
-   the per-replica loss `L_r` at replica `r`'s slice, `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)` —
-   linearity of `pdiv`. For a net with no batch coupling (ConvNeXt, ViT, every inference-BN
-   forward) and a mean loss, that is exactly the gradient of the mean loss over the global batch
-   `R·N`, so the DP step IS the single-device step at batch `R·N`. For a training-BN net it is the
-   gradient of the mean of `R` per-replica batch-BN losses — a different function from the
-   single-device batch-`R·N` step, and the honest statement of what trained. File:
-   `Foundation/DataParallel.lean`: `dpMeanGrad_eq_grad_meanLoss`,
-   `dpMeanGrad_eq_globalBatchGrad_of_perExample`, and the lockstep induction — identical initial
-   parameters and an identical (all-reduced) update on every replica keep the `R` parameter copies
-   equal at every step, a two-line induction over the step function and the property the trainer
-   relies on when it checkpoints from replica 0.
+1. ✅ **The ℝ-level lemma — DONE 2026-09-06.** See §4d.1 below for what landed.
 2. **The op-level node (moderate; with 4c).** An `SHlo` constructor `allReduceMeanF R` whose
    `den` is stated over `R` graphs of ONE skeleton — the hypothesis `∀ r, skel (g r) = skel (g 0)`
    IS SPMD, and it is free, because `skel` erases the values the ops carry and `pretty` prints only
@@ -1252,9 +1246,77 @@ numerically — a duplicated batch on `R` replicas must reproduce the single-dev
    theorem (pieces 1 and 2) and which is the driver. The `*-dp-check` gate is the empirical
    evidence for piece 3 and belongs on that page.
 
-**Recommendation.** Piece 1 now (it also answers "what function trained" for the batch-BN nets in
-one lemma), piece 2 when 4c lands the batched chains, the page with piece 1. Until piece 2 lands,
-every tie against a `*dp*` artifact is at the per-replica gradient node and says so (4.2a).
+**Recommendation.** ✅ Piece 1 landed 2026-09-06. Piece 2 when 4c lands the batched chains; the
+page can be written any time and is not written yet. Until piece 2 lands, every tie against a
+`*dp*` artifact is still at the per-replica gradient node and says so (4.2a) — what changed is
+that the function the per-replica nodes add up to now has a name.
+
+### 4d.1 DONE 2026-09-06 — the ℝ-level lemma, and the negative half as a theorem
+
+`Foundation/DataParallel.lean` (~340 lines, ~2 s to elaborate, 15 declarations, all 3-axiom clean,
+`Certs` 3979 → **3980**). Gates: `lake build Certs`, `lake env lean tests/AuditAxioms.lean`,
+`lake exe docstring-checkrefs` (1613 citations), `python3 scripts/check_audit_coverage.py`.
+
+What landed, in the order the file reads:
+
+* `lossGrad` / `meanLoss` / `dpMean` — the scalar gradient in the `Vec 1`-lifted spelling `pdiv`
+  reads, a mean of losses, and the all-reduced gradient. ⭐ `meanLoss` is ONE definition used at
+  two index meanings: over replicas it is the function DP minimises, over examples it is the batch
+  mean a single device minimises. That those coincide under no batch coupling is the content.
+* `lossGrad_meanLoss` and `dpMeanGrad_eq_grad_meanLoss` — the gradient of a mean is the mean of the
+  gradients, hence the collective computes `∇((1/R) Σ_r L_r)`. The only analysis in the file.
+* `meanLoss_shard`, `dpMeanGrad_eq_globalBatchGrad_of_perExample`,
+  `dpMeanGrad_eq_globalBatchGrad_contiguous` — the no-coupling half.
+* `bnToyLoss` / `dpToyShard` / `dpToyBatch` / `dpToyShard_eq_batch` / `lossGrad_smul_coord` /
+  `lossGrad_bnToyLoss` / `dpMeanGrad_ne_globalBatchGrad` — the coupled half.
+* `dpStep` / `dpSingleStep` / `dpStep_const` / `dpIterate_lockstep` — the induction.
+* `dpSingleStep_eq_meanLoss_step` / `dpIterate_eq_meanLossTrain` — the two composed: `n` steps of
+  `R` replicas ARE `n` steps of ordinary single-device training on the mean loss.
+
+⭐⭐ **The negative half is a THEOREM, which the scoping only asked for as prose.** The scoping said
+that for a training-BN net the DP step is "a different function from the single-device batch-`R·N`
+step". `dpMeanGrad_ne_globalBatchGrad` proves it: two replicas, one example each, slices `{0}` and
+`{2}` whose union is the global batch `{0,2}`; the DP mean gradient is 2 and the global-batch
+gradient is 1. So the batch-BN nets trained data-parallel provably did not descend the
+batch-`R·N` loss, at any learning rate and however small the gradients.
+
+⭐⭐ **And the witness needs no BatchNorm at all**, which is the finding worth carrying. `bnToyLoss`
+is `(slice mean)² · θ₀` — linear in the parameter so the gradient is a constant, quadratic in the
+batch statistic so the coupling bites. ANY nonlinear read of a per-slice statistic separates the
+two functions. The split is structural, not a property of the normalisation's formula, and no
+all-reduce repairs it because nothing all-reduces μ/var.
+
+⭐ **The no-coupling half is cheaper than scoped, because it needs no derivatives.** `meanLoss_shard`
+is an identity between FUNCTIONS — `(1/R) Σ_r (1/N) Σ_n ℓ_{r,n} = (1/(R·N)) Σ_k ℓ_k` — proved by
+`Equiv.sum_comp` and `Fintype.sum_prod_type` with `div_mul_div_comm` for the constant. The gradient
+statement is that identity under `congrArg`. The scoping put the whole package at "linearity of
+`pdiv`"; only `lossGrad_meanLoss` actually is.
+
+⭐ **The shard is a BINDER, and that is a result in itself.** `dpMeanGrad_eq_globalBatchGrad_of_perExample`
+takes an arbitrary `e : Fin R × Fin N ≃ Fin (R·N)`, so WHICH examples land on which replica does
+not enter — the contiguous cut the DP path makes (`elems / replicas`) and the interleave the
+sharded producers make (`ds.shard`) give the same theorem. That answers, for the no-coupling nets,
+half of what §4d piece 3 was reserving for the driver: the sharding policy is provably irrelevant,
+and only "the union is the batch" matters. ⛔ It does NOT answer it for a batch-BN net, where the
+partition changes the function.
+
+⚠ **`pdiv_const_smul` belongs in `Tensor.lean` and is in this file instead.** `Tensor.lean` carries
+`pdiv_add`, `pdiv_mul` and `pdiv_finset_sum` but not the scalar-multiple rule, because a constant
+is one of `pdiv_mul`'s factors and nobody had needed the specialisation. It is stated in
+`DataParallel.lean` with a note, because `Tensor.lean` is the root of the whole corpus and a
+declaration added to it rebuilds all 3980 `Certs` jobs. ▶ Move it up the next time `Tensor.lean`
+has to change for another reason.
+
+⚠ **`dpIterate_eq_meanLossTrain` asks for differentiability at EVERY point**, not just at the
+starting parameters, because the trajectory passes through states the statement cannot name. For a
+relu net that is stronger than the truth; the honest weakening is differentiability along the
+trajectory and it costs a mutual induction the payoff does not justify. Said in the docstring.
+
+⚠ **What this does NOT do, and every tie still says so.** Nothing here is about the emitted
+`all_reduce`. `den (allReduceMeanF R g) = (1/R) Σ_r den (g r)` is piece 2 — an `SHlo` constructor
+with a `den`, a `pretty` and a parser case — and it is gated behind 4c like 4b's last two
+capstones. Until it lands a tie composes with these lemmas only through the reader. The
+`*-dp-check` gates remain the only evidence for piece 3.
 
 ## 5. Traps, all previously paid for
 
@@ -1306,6 +1368,16 @@ every tie against a `*dp*` artifact is at the per-replica gradient node and says
   such carve-out in the ImageNet artifacts (4d); `psW`'s hand-written SGD wrap was another and 4b
   makes its un-fused form the norm. Grep a renderer for `s!"    %` literals that are not `pretty`
   before claiming an artifact is `pretty(provenGraph)` end to end.
+* ⛔ **A negative witness must prove its two sides are about the same data.**
+  `dpMeanGrad_ne_globalBatchGrad` compares the sharded gradient with the global-batch one; without
+  `dpToyShard_eq_batch` (the two slices ARE the batch, under the split it claims) it would be a
+  true theorem about two unrelated datasets and would establish nothing. Same shape as the
+  ONNX-replica lesson: a comparison against a re-derivation tests the re-derivation.
+* ⚠ **A lemma that belongs in `Tensor.lean` costs the whole corpus.** `pdiv_const_smul` is a
+  `Tensor.lean` lemma by content and lives in `DataParallel.lean` by economics — that file is the
+  root of all 3980 `Certs` jobs. State it in the leaf with a note saying where it belongs, and move
+  it up when that file has to change anyway. The same goes for any `Maps` core or `pdiv` rule
+  discovered late in a package.
 * **Scripts under the pinned venv.** `convention_audit.py` imports the JAX reference; bare
   `python3` on this box is anaconda's and has no jaxlib.
 
@@ -1334,8 +1406,9 @@ which are `∀ cot`; it moved to 4.2a and LANDED there, with
 `Foundation/ResNet34TiePoCB.lean`); 4c no new
 Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean` — it RETIRES `ResNet34Render.lean`,
 `MobileNetV2Render.lean` and the per-example traversals of `ConvNeXtRender` / `ViTRender`, and
-re-points every T2/T3 file at the batched constructors; 4d `Foundation/DataParallel.lean`, later
-the `allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases;
+re-points every T2/T3 file at the batched constructors; 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1); the
+`allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases is
+piece 2 and is gated behind 4c;
 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for

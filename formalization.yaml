@@ -102,7 +102,7 @@ status:
   axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 2005 declarations (count: grep -c '^#print axioms'
+    # `#print axioms` on 2266 declarations (count: grep -c '^#print axioms'
     # tests/AuditAxioms.lean); 52 are independently kernel-rechecked by the
     # comparator (tests/comparator/config.json). All close under exactly the
     # three core axioms above. comparator_config below points at that config for
@@ -267,6 +267,32 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.MobileNetV2TieB.mnv2_net_tiedB"   # every mnv2 gradient node at its chain cotangent; N a binder, no smoothness hypothesis
       file: "LeanMlir/Proofs/Foundation/MobileNetV2TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
+    # --- Data parallelism: what function a *dp* run minimised (status 4k).
+    - declaration: "Proofs.dpMeanGrad_eq_grad_meanLoss"   # the all-reduced mean gradient IS the gradient of the mean of the per-replica losses
+      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.dpMeanGrad_eq_globalBatchGrad_of_perExample"   # no batch coupling: the DP step IS the single-device step at batch R*N, at any sharding
+      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.dpMeanGrad_ne_globalBatchGrad"   # and with batch coupling it is FALSE: the two-replica witness
+      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.dpIterate_eq_meanLossTrain"   # n steps of R replicas ARE n steps of single-device training on the mean loss
+      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -1203,7 +1229,67 @@ fidelity:
        delegation each) and cover the flag; nothing weakens a theorem, since every
        fold is quantified over op instances. And every gradient node in
        `mobilenetv2in_rmsdp64` is followed by `all_reduce(add)/4` as emitted text
-       outside the AST, so the tie is at the per-replica node (4d).
+       outside the AST, so the tie is at the per-replica node (4k).
+
+    4k. DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (2026-09-06).
+       Every `*dp*` artifact is ONE program run on `R` replicas. Per parameter,
+       between the gradient node and the optimizer tail, `emitGradAllReduce`
+       writes `stablehlo.all_reduce(add)` over `replica_groups = [[0..R-1]]` and
+       then a divide by `R` -- as emitted TEXT outside the `SHlo` AST, a declared
+       trusted carve-out. So every train-step tie in this repo (`r34_net_tiedB`,
+       `mnv2_net_tiedB`, `efficientnet_net_tiedG` and the SGD-inline capstones) is
+       stated at the PER-REPLICA gradient node and disclaims the collective in its
+       own header, while the ImageNet accuracies the book quotes all come from
+       four-replica runs. `Foundation/DataParallel.lean` (~340 lines, ~2 s, 15
+       declarations) is the R-level half of closing that.
+
+       ⭐⭐ THE COLLECTIVE IS NAMED AS A GRADIENT. `dpMeanGrad_eq_grad_meanLoss`:
+       `(1/R) sum_r g_r` IS the gradient of `(1/R) sum_r L_r`, with no hypothesis
+       on the losses beyond differentiability -- so it holds for a training-mode
+       BatchNorm net, where each `L_r` genuinely depends on the whole of replica
+       `r`'s slice. That is the point. It says what a data-parallel run minimised
+       without claiming that function is the global-batch loss.
+
+       ⭐⭐ AND IT SPLITS THE TWO WORLDS, WHICH NO TIE CAN DO. `meanLoss_shard`:
+       when the replica loss is the MEAN OVER ITS OWN SLICE of a per-example loss
+       -- no batch coupling, which is ConvNeXt-T, ViT-Tiny and every inference-BN
+       forward -- the mean of the `R` replica losses IS the mean over the global
+       `R*N` batch, as FUNCTIONS, before any derivative is taken. So for those nets
+       the data-parallel step is exactly the single-device step at batch `R*N`
+       (`dpMeanGrad_eq_globalBatchGrad_of_perExample`). ⭐ It is stated at an
+       ARBITRARY shard `e : Fin R x Fin N ~= Fin (R*N)`, so which examples land on
+       which replica does not enter: the contiguous cut the DP path makes and the
+       interleave the sharded producers make give the same theorem. The contiguous
+       one is `dpMeanGrad_eq_globalBatchGrad_contiguous`.
+
+       ⛔⛔ WITH BATCH COUPLING THAT IS FALSE, AND THERE IS A WITNESS.
+       `dpMeanGrad_ne_globalBatchGrad`: two replicas, one example each, slices
+       {0} and {2} whose union is the global batch {0,2} (`dpToyShard_eq_batch`,
+       without which the witness would be comparing two unrelated datasets). The
+       data-parallel mean gradient is 2; the gradient of the global-batch loss is
+       1. `bnToyLoss` is the smallest loss that reads a NONLINEAR function of its
+       own slice's statistic, which is exactly what a training-mode BatchNorm does,
+       and no all-reduce repairs it because nothing all-reduces mu/var. So
+       ResNet-34, MobileNetV2, EfficientNet-B0, ResNet-50 and MobileNetV4 trained
+       data-parallel did NOT descend the batch-`R*N` loss at any learning rate;
+       what they descended is the mean of the `R` per-replica batch-BN losses. This
+       is also why `N` in the batch-BN tiers (4e, 4g, 4i, 4j) is the PER-CARD batch.
+
+       ⭐⭐ THE LOCKSTEP INDUCTION. `dpIterate_lockstep` and
+       `dpIterate_eq_meanLossTrain`: identical initial states and an identical
+       (all-reduced) update keep the `R` state copies equal at every step, so `n`
+       steps of the `R`-replica system ARE `n` steps of ordinary single-device
+       training on the mean loss. That is the property `VerifiedTrain.lean` relies
+       on when it checkpoints from replica 0 -- the checkpoint is not replica 0's
+       answer, it is every replica's. ⚠ The shared start is a HYPOTHESIS; that the
+       driver broadcasts it and that `replica_groups` names all `R` devices is
+       calling logic, and the `*-dp-check` gates are its empirical evidence.
+
+       ⚠ NOTHING HERE IS ABOUT THE EMITTED `all_reduce`. An `SHlo` constructor
+       `allReduceMeanF R` with `den (allReduceMeanF R g) = (1/R) sum_r den (g r)`,
+       plus its `pretty` and parser cases, is the next piece and it waits on the
+       renderer convergence. Until it lands, a train-step tie composes with these
+       lemmas only through the reader, and every tie still says so.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
@@ -1232,7 +1318,7 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above, plus a full `#print axioms` sweep of 2005
+    fidelity caveats above, plus a full `#print axioms` sweep of 2266
     declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 52

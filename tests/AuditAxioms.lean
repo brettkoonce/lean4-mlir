@@ -127,6 +127,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullB
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB
 import LeanMlir.Proofs.Architectures.EfficientNetTiePoCG
+import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
@@ -5724,3 +5725,57 @@ open Proofs
 #print axioms Proofs.EnetTiePoCG.enet_stem_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_head_tiedG
 #print axioms Proofs.EnetTiePoCG.efficientnet_net_tiedG
+
+-- ════════════════════════════════════════════════════════════════
+-- 4d PIECE 1: DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- Every *dp* artifact is ONE program on R replicas, and per parameter emitGradAllReduce writes
+-- stablehlo.all_reduce(add) over replica_groups = [[0..R-1]] then a divide by R -- as emitted TEXT
+-- OUTSIDE the SHlo AST, a declared trusted carve-out. So r34_net_tiedB, mnv2_net_tiedB and
+-- efficientnet_net_tiedG are all stated at the PER-REPLICA gradient node and disclaim the
+-- collective in their own headers. This is the R-level half of closing that disclaimer.
+-- ⭐⭐ dpMeanGrad_eq_grad_meanLoss NAMES THE COLLECTIVE AS A GRADIENT: (1/R) sum_r g_r IS the
+-- gradient of (1/R) sum_r L_r. No hypothesis on the losses beyond differentiability, so it holds
+-- for a training-mode BatchNorm net where each L_r depends on the whole of replica r's slice.
+-- That is the point -- it says what a data-parallel run minimised without claiming that function
+-- is the global-batch loss.
+-- ⭐⭐ AND IT SPLITS THE TWO WORLDS, which no tie can do. meanLoss_shard: when the replica loss is
+-- the MEAN OVER ITS OWN SLICE of a per-example loss (no batch coupling -- ConvNeXt, ViT, every
+-- inference-BN forward), the mean of the R replica losses IS the mean over the global R*N batch,
+-- as FUNCTIONS, before any derivative. So the DP step is the single-device step at batch R*N.
+-- ⭐ Stated at an ARBITRARY shard equiv, so which examples land on which replica does not enter:
+-- the contiguous cut VerifiedTrain.lean's DP path makes and the interleave the sharded producers
+-- make give the same theorem. The contiguous one is dpMeanGrad_eq_globalBatchGrad_contiguous.
+-- ⛔⛔ dpMeanGrad_ne_globalBatchGrad: with batch coupling that is FALSE, at an explicit two-replica
+-- witness -- slices {0} and {2}, global batch {0,2}, DP mean gradient 2 against global-batch
+-- gradient 1. bnToyLoss is the smallest loss that reads a NONLINEAR function of its own slice's
+-- statistic, which is exactly what a training-mode BatchNorm does; no all-reduce repairs it,
+-- because nothing all-reduces mu/var. dpToyShard_eq_batch is what makes it a witness rather than a
+-- comparison of two unrelated datasets. This is why N in the batch-BN tiers is the PER-CARD batch.
+-- ⭐⭐ dpIterate_lockstep / dpIterate_eq_meanLossTrain: identical initial states and an identical
+-- (all-reduced) update keep the R copies equal at every step, so n steps of the R-replica system
+-- ARE n steps of ordinary single-device training on the mean loss. That is the property
+-- VerifiedTrain.lean relies on when it checkpoints from replica 0 -- the checkpoint is not
+-- replica 0's answer, it is every replica's.
+-- ⚠ The shared start is a HYPOTHESIS. That the driver broadcasts it and that replica_groups names
+-- all R devices is calling logic (4d piece 3); the *-dp-check gates are its empirical evidence.
+-- ⚠ NOTHING HERE IS ABOUT THE EMITTED all_reduce. den (allReduceMeanF R g) = (1/R) sum_r den (g r)
+-- is 4d piece 2 -- an SHlo constructor with a den, a pretty and a parser case -- and it waits on
+-- 4c's batched chains. Until it lands, a tie composes with these lemmas only through the reader.
+-- ⚠ pdiv_const_smul belongs in Tensor.lean beside pdiv_add and is here because that file is the
+-- root of the whole corpus and a definition added to it rebuilds all of Certs.
+#print axioms Proofs.pdiv_const_smul
+#print axioms Proofs.meanLoss_differentiableAt
+#print axioms Proofs.lossGrad_meanLoss
+#print axioms Proofs.dpMeanGrad_eq_grad_meanLoss
+#print axioms Proofs.meanLoss_shard
+#print axioms Proofs.dpMeanGrad_eq_globalBatchGrad_of_perExample
+#print axioms Proofs.dpMeanGrad_eq_globalBatchGrad_contiguous
+#print axioms Proofs.dpToyShard_eq_batch
+#print axioms Proofs.lossGrad_smul_coord
+#print axioms Proofs.lossGrad_bnToyLoss
+#print axioms Proofs.dpMeanGrad_ne_globalBatchGrad
+#print axioms Proofs.dpStep_const
+#print axioms Proofs.dpIterate_lockstep
+#print axioms Proofs.dpSingleStep_eq_meanLoss_step
+#print axioms Proofs.dpIterate_eq_meanLossTrain
