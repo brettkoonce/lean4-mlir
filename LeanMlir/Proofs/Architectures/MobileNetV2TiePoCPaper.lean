@@ -5,6 +5,14 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullPaper
 
 /-! # PoC: the FULL 17-block paper MobileNetV2 §1a TIE — the whole net tied through the real forward
 
+⛔⛔ **THE ARTIFACT THIS FILE IS ABOUT NO LONGER EXISTS (2026-09-06).** Leg 2 of
+`planning/renderer_convergence.md` retired `MobileNetV2Render.lean` and
+`verified_mlir/mobilenetv2_train_step.mlir` with it. Every theorem below is unchanged and still
+true — the per-example MobileNetV2 and the fused SGD-inline op family both exist as mathematics —
+but **no committed bytes exercise them**. The live peer is `Foundation/MobileNetV2TiePoCB.lean`:
+the same tie at batch BatchNorm, at the un-fused gradient nodes, against the artifacts whose
+accuracies the book quotes. It landed the same day (§4.2c).
+
 The Chapter-6 §1a tie: r34's whole-net thread (`Proofs.ResNet34PoC.r34_net_tied_certified`) scaled to the
 full `[t,c,n,s]` MobileNetV2. The paper §1 fold (`MobileNetV2FaithfulPoCPaper`) already makes every
 one of the 210 params `den = certified ∀ c`; this file feeds each consumer the **real forward

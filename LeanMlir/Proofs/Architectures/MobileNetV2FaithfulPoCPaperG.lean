@@ -5,18 +5,19 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaper
 
 `MobileNetV2FaithfulPoCPaper.lean` makes every parameter output of the SGD-inline
 `mobilenetv2_train_step.mlir` `den`-faithful at the fused `θ − lr·g` ops of the PER-EXAMPLE render.
-This is its peer for every other train step this net ships.
+This is its peer for every other train step this net ships — and, since 4c leg 2 retired that
+renderer and that artifact on 2026-09-06, for every train step it ships at all.
 
-⛔ **MobileNetV2's two renders do not overlap the way the other four nets' do.** ConvNeXt, ViT and
-EfficientNet each render one traversal with two endings under an `adam : Bool`. MobileNetV2 does
-not: `MobileNetV2Render` is SGD-inline only (no `adam` flag anywhere in it) and
-`MobileNetV2RenderB` is AdamW-only, at the batched index and at batch BatchNorm. So
+⛔ **MobileNetV2's two renders did not overlap the way the other four nets' do.** ConvNeXt, ViT and
+EfficientNet each render one traversal with two endings under an `adam : Bool`. MobileNetV2 did
+not: `MobileNetV2Render` was SGD-inline only (no `adam` flag anywhere in it) and
+`MobileNetV2RenderB` is AdamW/RMSProp-only, at the batched index and at batch BatchNorm. So
 `mobilenetv2_adam_train_step`, `mobilenetv2_rms_train_step`, `mobilenetv2_adamdp_train_step` and
 every ImageNet artifact — including `mobilenetv2in_rmsdp64`, whose accuracy the book quotes — are on
 a chain that has **no fused op to un-fuse**: they emit `*GradB` from the start. This file is
 therefore at the BATCHED gradient nodes, which is the "or" branch section 4b.4 allowed and, since
-these are the artifacts, the right one. It is also a down-payment on 4c: the op table below is the
-one the converged render will keep.
+these are the artifacts, the right one. ⭐ It was also a down-payment on 4c, and it paid: the op
+table below is the one the converged render kept.
 
 ⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, RMSProp, and the
 data-parallel and bf16 twins all consume the same node.
@@ -35,13 +36,14 @@ emits: `convStridedXlaBiasGradB`, `depthwiseBiasGradB`, `depthwiseStridedXlaWeig
 
 1. **The artifact it names does not exist.** That file says it writes
    `verified_mlir/mobilenetv2_paper_train_step.mlir`. `mnv2TrainStepFaithfulVPaper`'s `funcName`
-   DEFAULT is `"mobilenetv2_paper_train_step"`, but the one call site
-   (`MobileNetV2Render.lean:788`) passes `"mobilenetv2_train_step"`, and that is the committed
-   17-block artifact. (`mobilenetv2_reduced_train_step.mlir` is the 6-block one.)
+   DEFAULT was `"mobilenetv2_paper_train_step"`, but its one call site passed
+   `"mobilenetv2_train_step"`, and that was the committed 17-block artifact
+   (`mobilenetv2_reduced_train_step.mlir` was the 6-block one). ⛔ Both, and the writer, are retired
+   as of 2026-09-06 — 4c leg 2.
 2. **The shipped parameter count is 158, not 210.** 210 is the census at `convBias := true`; both
-   `mnv2TrainStepFaithfulVPaper` and `MobileNetV2RenderB` default to `convBias := false` — the
-   conv, depthwise and project biases are folded into the BatchNorm that follows each of them —
-   and `mobilenetv2_train_step.mlir` returns exactly 158 updated tensors, as does the parameter
+   that writer and `MobileNetV2RenderB` default to `convBias := false` — the conv, depthwise and
+   project biases are folded into the BatchNorm that follows each of them — and
+   `mobilenetv2_train_step.mlir` returned exactly 158 updated tensors, as does the parameter
    half of `mobilenetv2_adam_train_step.mlir`. 158 = stem 3 + b1 6 + 16 blocks × 9 + head 3 +
    dense 2. Neither correction touches a theorem: every fold in that file is `∀`-quantified over
    op instances and true at both flag settings.
@@ -69,11 +71,12 @@ them, and MobileNetV2 is the TF-origin net.
 
 ## Honest residual
 * Every lemma is `∀ cot`: each holds at the actual backward-chain cotangent without naming it.
-  Pinning them is the §1a tie, and MobileNetV2's batched tie does not exist yet — the per-example
-  `MobileNetV2TiePoCPaper.lean` is at the fused ops and at per-example BatchNorm, so it does not
-  transfer. That is section 4.2's MobileNetV2 half.
-* ⚠ **The forward these nodes differentiate is batch BatchNorm** (`bnBatchLA`), where every
-  MobileNetV2 statement in `Proofs/` is per-example BN. Nothing in this file claims otherwise: a
+  Pinning them is the §1a tie, and it landed 2026-09-06 as `Foundation/MobileNetV2TiePoCB.lean`
+  (§4.2c). The per-example `MobileNetV2TiePoCPaper.lean` is at the fused ops and at per-example
+  BatchNorm, so it never transferred.
+* ⚠ **The forward these nodes differentiate is batch BatchNorm** (`bnBatchLA`), which every
+  MobileNetV2 statement in `Proofs/` was NOT when this file was written. `MobileNetV2FullB.lean`
+  and `MobileNetV2FullBVJP.lean` (§4.2b) closed that the same day. Either way a
   `den = certified gradient` fold is about one op and its free cotangent, and says nothing about
   which whole-net forward produced that cotangent.
 * `mobilenetv2in_*dp*` is four replicas: the all-reduce is emitted text outside the AST, so these

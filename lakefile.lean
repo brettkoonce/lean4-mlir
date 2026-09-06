@@ -59,7 +59,6 @@ lean_lib «Proofs» where
              -- corpus is built (same reason the two RenderB entries below carry).
              `LeanMlir.Proofs.Codegen.ResNet50RenderB,
              `LeanMlir.Proofs.Codegen.AdamRender,
-             `LeanMlir.Proofs.Codegen.MobileNetV2Render,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderB,
              `LeanMlir.Proofs.Codegen.MobileNetV4RenderB,
              `LeanMlir.Proofs.Codegen.EfficientNetRender,
@@ -520,7 +519,8 @@ lean_lib «Certs» where
              -- overlap (the per-example one is SGD-inline only, the batched one AdamW-only), so
              -- its Adam/RMSProp artifacts have no fused op to un-fuse and the fold goes straight
              -- to *GradB. ⛔ Two header corrections to MobileNetV2FaithfulPoCPaper fall out: the
-             -- artifact it names does not exist (the writer passes mobilenetv2_train_step), and
+             -- artifact it names did not exist even then (the writer passed mobilenetv2_train_step,
+             -- itself retired by 4c leg 2), and
              -- the shipped parameter count is 158, not 210 — 210 is the convBias := true census
              -- and both renders default to false (MobileNetV2FaithfulPoCPaperG.lean).
              `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG,
@@ -1137,11 +1137,10 @@ lean_lib «Certs» where
              -- bridges; expand/project/BN/dense reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics
              -- (MobileNetV2FaithfulPoC.lean).
              `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoC,
-             -- ch7-MobileNetV2 §1 CLOSE (render): the reduced 6-block train step rendered ENTIRELY
-             -- as pretty(provenGraph) — every line pretty of a verified SHlo node, the depthwise
-             -- param updates via the new depthwise SGD ops; writes verified_mlir/mobilenetv2_train_step.mlir
-             -- (MobileNetV2Render.lean; ResNet-34's peer was retired by 4c leg 1).
-             `LeanMlir.Proofs.Codegen.MobileNetV2Render,
+             -- ⛔ MobileNetV2Render.lean is RETIRED (4c leg 2, 2026-09-06), with
+             -- verified_mlir/mobilenetv2_train_step.mlir and mobilenetv2_reduced_train_step.mlir.
+             -- Its per-example forward chain moved into MobileNetV2RenderB, which the EVAL forward
+             -- still needs; everything else it held was about artifacts that no longer exist.
              -- ch7-MobileNetV2 FULL 17-block paper §1 fold (den): every one of the 210 params of
              -- mnv2TrainStepFaithfulVPaper denotes the certified step — ZERO new ops/lemmas, the
              -- cifar8-bn lesson at full scale. Six per-block-type capstones (stem/no-exp/stride-1/
@@ -2767,13 +2766,11 @@ lean_exe «resnet34-adam-bench» where
   root := `tests.TestResnet34AdamBench
   moreLinkArgs := lowererLink
 
--- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
--- per-channel BN) trained on VERIFIED-rendered StableHLO
--- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.
-lean_exe «mobilenetv2-verified» where
-  root := `apps.imagenette.MainMobilenetV2Verified
-  moreLinkArgs := lowererLink
-
+-- ⛔ `mobilenetv2-verified` is RETIRED (4c leg 2, 2026-09-06), with the per-example
+-- `verified_mlir/mobilenetv2_train_step.mlir` it trained on. Its own header said its accuracy was
+-- chance (387/3925, byte identical every epoch) because running-statistic threading lives only in
+-- `trainAdamSched`, and told readers not to quote it. `mobilenetv2-verified-adam` is the trainer
+-- that produces a number, and it was already on the batched chain.
 
 lean_exe «mobilenetv2-verified-adam» where
   root := `apps.imagenette.MainMobilenetV2VerifiedAdam

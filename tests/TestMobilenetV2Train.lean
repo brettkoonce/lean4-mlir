@@ -15,10 +15,10 @@ one under the full one's canonical filename. That failure is at least *loud* (th
 wrong arity), which is exactly why it must not set expectations for convnext/efficientnet/resnet34,
 where the same clobber produces a runnable graph computing something else.
 
-The reduced render has its own home and needs no writer here:
-`Proofs/Codegen/MobileNetV2Render.lean` also emits `verified_mlir/mobilenetv2_reduced_train_step.mlir`
-via `mnv2TrainStepFaithfulV`. Recover the hand-written emitter from
-`git show c992a94:tests/TestMobilenetV2Train.lean` if it is ever wanted.
+⛔ The reduced render is GONE too (2026-09-06): 4c leg 2 retired
+`Proofs/Codegen/MobileNetV2Render.lean`, which was the only writer of
+`verified_mlir/mobilenetv2_reduced_train_step.mlir`. Recover either emitter from git history
+(`git show c992a94:tests/TestMobilenetV2Train.lean` for the hand-written one) if ever wanted.
 
 Retired under §2a-quinquies. The mnv2 **AdamW** render is untouched and lives in a different file,
 `tests/TestMobilenetV2TrainPC.lean`.

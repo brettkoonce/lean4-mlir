@@ -236,7 +236,7 @@ runs data-parallel across cards too (see `jax/README.md`).
 
 The `*-verified` exes (`mnist-{linear,mlp,cnn}-verified`,
 `cifar8{,w}{,-bn}{,-verified,-ablation}`, `resnet34-verified-adam`,
-`mobilenetv2-verified`, …) train on the proof-rendered StableHLO. Data:
+`mobilenetv2-verified-adam`, …) train on the proof-rendered StableHLO. Data:
 the MNIST/CIFAR loaders read the dir passed as `argv[0]` (CIFAR under
 `<dir>/cifar-10/`); Imagenette nets read `<dir>/imagenette/`.
 

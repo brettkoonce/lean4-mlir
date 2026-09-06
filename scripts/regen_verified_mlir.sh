@@ -151,10 +151,11 @@ n = 0
 # Deliberate carve-outs, each a render that is NOT loaded by the variant path and says so:
 #   cifar8_adam256      — a batch-256 render of the cifar8 adam graph, loaded by the DP split
 #                         identity harness by explicit path, never by variant.
-#   mobilenetv2_reduced — the parameter-reduced net used by tests, same story.
 # ⚠ Anything added here must be a render nothing resolves by `{slug}_{variant}`. If in doubt it is
 # not a carve-out — the whole point of this check is that the failure it catches is silent.
-EXEMPT = {"cifar8_adam256_train_step", "mobilenetv2_reduced_train_step"}
+# ⭐ `mobilenetv2_reduced_train_step` left this set on 2026-09-06: 4c leg 2 retired
+#   `MobileNetV2Render.lean` and the demo artifact it wrote.
+EXEMPT = {"cifar8_adam256_train_step"}
 for f in sorted(Path("verified_mlir").glob("*.mlir")):
     base = f.stem
     if base in EXEMPT:
@@ -211,12 +212,12 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_adam_train_step.mlir"),
 #    a runtime `if`, not an invariant — and `LEAN_MLIR_EVAL_BATCHSTATS=1` routes eval straight
 #    through the divergent artifact, which is then a different ARCHITECTURE, not just different
 #    statistics.
-# ⭐ `resnet34_fwd.mlir` left this dict on 2026-09-06: 4c leg 1 retired `ResNet34Render.lean` and
-#   moved both r34 forwards onto `r34FwdChainB`, the traversal every batch-BN train step
-#   differentiates (`planning/renderer_convergence.md`). MobileNetV2 is leg 2 and is the last one.
-KNOWN_SPLIT = {
-  "mobilenetv2_fwd.mlir": "per-example BN vs the batch-BN Adam step — same two-renderer split",
-}
+# ⭐⭐ **THE RATCHET IS EMPTY** as of 2026-09-06. `resnet34_fwd.mlir` left it with 4c leg 1 and
+#   `mobilenetv2_fwd.mlir` with leg 2 (`planning/renderer_convergence.md`): both nets retired their
+#   per-example renderer and now render every forward from the batched traversal their train steps
+#   differentiate. Every one of the seven pairs below holds. Keep the dict — an entry appearing
+#   again is the §3d(b) failure recurring, and it must be argued for, not added.
+KNOWN_SPLIT = {}
 
 def body(lines, what):
     for i, l in enumerate(lines):
@@ -282,7 +283,11 @@ import sys
 PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          ("convnext_fwd.mlir",     "convnext_train_step.mlir"),
          ("efficientnet_fwd.mlir", "efficientnet_train_step.mlir"),
-         ("mobilenetv2_fwd.mlir",  "mobilenetv2_train_step.mlir"),
+         # ⛔ MobileNetV2 has NO entry here since 2026-09-06 (4c leg 2). Its partner was the
+         # per-example `mobilenetv2_train_step.mlir`, retired with its renderer, and unlike
+         # ResNet-34 this net ships no batched SGD step to re-pair with — `OptKind` is
+         # AdamW/RMSProp only. The coverage is not lost: `check_adam_prefix` forms exactly the
+         # pairing this one would, against `mobilenetv2_adam_train_step.mlir`.
          # Stochastic depth (planning/stochastic_depth.md). The SD variant gets its OWN pair
          # rather than reusing efficientnet_fwd, which is the whole point of §3's design: the drop
          # sites are emitted in the forward too (at an all-ones scale, exactly the identity), so
@@ -458,7 +463,6 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
     LeanMlir.Proofs.Codegen.CnnRender \
     LeanMlir.Proofs.Codegen.ResNet34RenderB \
     LeanMlir.Proofs.Codegen.ResNet50RenderB \
-    LeanMlir.Proofs.Codegen.MobileNetV2Render \
     LeanMlir.Proofs.Codegen.MobileNetV2RenderB \
     LeanMlir.Proofs.Codegen.MobileNetV4RenderB \
     LeanMlir.Proofs.Codegen.EfficientNetRender \

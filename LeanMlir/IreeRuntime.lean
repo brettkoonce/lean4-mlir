@@ -403,9 +403,9 @@ namespace MobileNetV2Layout
     forward artifacts BIT-EXACT on all 320 logits.
     Per-channel BN ⇒ γ/β are **rank-1 `[c]`**. Spatial
     224→112(stem)→56→28→14→7 — the real MobileNetV2 /32
-    flow. The `(dims, initKind)` order MUST match `@mobilenetv2_train_step`'s signature
-    (and `@mobilenetv2_fwd`'s) — both rendered from the same `blocks`/`allParams`
-    (tests/TestMobilenetV2*.lean). Strides live only in the renderers (no param-shape
+    flow. The `(dims, initKind)` order MUST match `@mobilenetv2_adam_train_step`'s signature
+    (and `@mobilenetv2_fwd`'s) — both rendered from the same `mnv2FwdChainB` traversal since
+    2026-09-06 (4c leg 2; the per-example `@mobilenetv2_train_step` this line named is retired). Strides live only in the renderers (no param-shape
     effect). `initKind`: 0 = He(fan-in) (depthwise fan-in = 1·3·3 = 9), 1 = ones (γ),
     2 = zeros. -/
 private def irBlk (ic mid oc : Nat) : Array (Array Nat × Nat) :=

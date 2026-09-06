@@ -23,8 +23,7 @@ Two mitigations, and neither is optional:
 ⚠ **It deliberately does NOT check `func.func @<sym>` against the filename stem.** An earlier
 draft of this file did, and claimed to be the only script doing so — that claim was wrong:
 `scripts/regen_verified_mlir.sh` already runs exactly that check, with a documented `EXEMPT` set
-(`cifar8_adam256_train_step`, `mobilenetv2_reduced_train_step` — renders nothing resolves by
-`{slug}_{variant}`). Duplicating it here would have meant two copies of the exempt list, which is
+(`cifar8_adam256_train_step` — a render nothing resolves by `{slug}_{variant}`). Duplicating it here would have meant two copies of the exempt list, which is
 the same rot this file's own ⚠⚠ warns about, and the duplicate immediately produced two false
 reds. **That invariant has an owner; leave it there.**
 

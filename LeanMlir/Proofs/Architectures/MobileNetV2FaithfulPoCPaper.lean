@@ -5,6 +5,16 @@ import LeanMlir.Proofs.Architectures.CifarBnFaithfulPoC
 
 /-! # PoC: the FULL 17-block paper-spec MobileNetV2 train step, proof-tied (the §1 fold, den)
 
+⛔⛔ **THE ARTIFACT THIS FILE IS ABOUT NO LONGER EXISTS (2026-09-06).** Leg 2 of
+`planning/renderer_convergence.md` retired `MobileNetV2Render.lean` and
+`verified_mlir/mobilenetv2_train_step.mlir` with it: MobileNetV2 now renders every artifact from
+the batched chain, as the decision "one chain per net" requires. Every theorem below is unchanged
+and still true — they are about the per-example MobileNetV2 and the SGD-inline op family, both of
+which exist as mathematics — but **no committed bytes exercise them**. The live peers are
+`MobileNetV2FaithfulPoCPaperG.lean` (the §1 fold at the batched `*GradB` nodes) and
+`Foundation/MobileNetV2TiePoCB.lean` (the §1a tie), both landed the same day, which is the ordering
+rule that made the retirement acceptable.
+
 The whole-net peer of `MobileNetV2FaithfulPoC` (the reduced 6-block fold), scaled to the real
 `[t,c,n,s]` table. `mnv2TrainStepFaithfulVPaper` (`MobileNetV2Render.lean`) renders the full
 17-block SGD train step as `pretty(provenGraph)` and writes

@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Codegen.MobileNetV2Render
 import LeanMlir.ViTRender
 
 /-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/mnv4_verified.md` phase 3)

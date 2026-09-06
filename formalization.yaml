@@ -984,7 +984,7 @@ fidelity:
        yet, so the stem's cotangent is the artifact's and not (yet) provably the
        certified pool VJP's.
 
-    4h. ONE CHAIN PER NET — RESNET-34 (2026-09-06). Four nets shipped two
+    4h. ONE CHAIN PER NET — RESNET-34 AND MOBILENETV2 (2026-09-06). Four nets shipped two
        renderers: a per-example-indexed one (the tied chain, batch sum in the
        emitter) and a batched one (the ImageNet chain, batch sum inside `den`).
        They are not two spellings of one function -- per-example BatchNorm
@@ -1002,8 +1002,33 @@ fidelity:
        `check_adam_prefix` went 5 paired / 2 known-split to 6 paired / 1, and
        `resnet34_fwd.mlir` is now a byte-identical 1220-line prefix of BOTH
        `resnet34_adam_train_step.mlir` and `resnet34_sgd_train_step.mlir`.
-       Remaining: MobileNetV2 (the last `KNOWN_SPLIT` entry), ConvNeXt-T and
-       ViT-Tiny. Thread: planning/renderer_convergence.md.
+
+       MobileNetV2 followed the same day (leg 2), and with it the ratchet is
+       EMPTY: `check_adam_prefix` reads 7 paired, 0 known-split, 0 unaccounted.
+       `Proofs/Codegen/MobileNetV2Render.lean`,
+       `verified_mlir/mobilenetv2_train_step.mlir`, its 6-block demo peer
+       `mobilenetv2_reduced_train_step.mlir` and the `mobilenetv2-verified`
+       binary are RETIRED; `mobilenetv2_fwd.mlir` is a byte-identical 1714-line
+       prefix of `mobilenetv2_adam_train_step.mlir`. As with ResNet-34 there was
+       no number to re-run: that driver's own header measured chance
+       (387/3925, byte identical every epoch) and said not to quote it.
+
+       ⛔ TWO THINGS DIFFERED FROM LEG 1, AND BOTH ARE RECORDED. (a) The EVAL
+       forward stays on the migrated per-example chain for a reason ResNet-34 did
+       not have: `mnv2Paper_float_logits_le_committed`'s provenance claim is that
+       its typed graph "diffs against `mobilenetv2_fwd_eval` line for line", at
+       263 inputs and `paperSig`'s names, and the batched chain names parameters
+       differently. Moving it would leave the theorem true and the sentence false.
+       So `MobileNetV2RenderB` now carries two naming conventions for one
+       parameter list, with `#guard`s pinning both arities. (b)
+       `check_fwd_prefix` LOST its MobileNetV2 entry rather than gaining a new
+       partner: unlike ResNet-34 this net ships no batched SGD step to re-pair
+       with (`OptKind` is AdamW/RMSProp only). The coverage is not lost —
+       `check_adam_prefix` forms exactly that pairing.
+
+       Remaining: ConvNeXt-T and ViT-Tiny, which are a different shape (no
+       BatchNorm-world split, identical forwards, a 78-line backward SWAP).
+       Thread: planning/renderer_convergence.md.
 
        ⭐ THE SPLIT WAS WIDER THAN THE AUDIT COULD SEE. `resnet34in_fwd.mlir`,
        the ImageNet forward at 256x1000, came from the per-example renderer too,
@@ -1011,6 +1036,12 @@ fidelity:
        PAIRS list holds only the Imagenette names, so that instance was invisible
        to the audit built to catch exactly it. Both are on the batched chain now,
        and extending the list to the `*in_*` artifacts is open work.
+
+       ⭐ THE ORDERING RULE, HONOURED DELIBERATELY THE SECOND TIME. Leg 1 could
+       retire ResNet-34's per-example renderer only because 4f's and 4g's batched
+       peers landed the same day. MobileNetV2's leg waited for §4.2 (4i and 4j)
+       to land FIRST, which is why the retirement below orphans two files and no
+       tier.
 
        ⚠ WHAT RETIREMENT COSTS, AND THE ORDERING RULE IT IMPLIES.
        `Foundation/ResNet34FaithfulPoC.lean` (the per-example §1 fold) and
@@ -1020,6 +1051,9 @@ fidelity:
        which exist as mathematics -- but no committed bytes exercise them, and
        both headers say so. That is only acceptable because their batched peers
        (4f's `ResNet34FaithfulPoCB`, 4g's `ResNet34TiePoCB`) landed the same day.
+       MobileNetV2's `MobileNetV2FaithfulPoCPaper` / `MobileNetV2TiePoCPaper` pair
+       is in the same position for the same reason, against 4f's
+       `MobileNetV2FaithfulPoCPaperG` and 4j's `MobileNetV2TiePoCB`.
        A leg must not retire a per-example renderer before the batched tier that
        replaces it exists; that ordering is why 4f and 4g came first.
        `ResNet34RenderPC.lean` is NOT affected the same way -- its

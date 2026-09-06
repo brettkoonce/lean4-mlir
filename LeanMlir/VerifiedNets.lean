@@ -834,7 +834,9 @@ def mobilenetv2Verified : VerifiedNetSpec where
     ⚠ **§2g's warning applies to this net by name.** `mobilenetv2_fwd` is the artifact that was
     found to be the WRONG BN WORLD — batch-BN against a per-example-BN train step, so the trainer
     scored a different net than it trained (logits rel 1.86). That is why the forward pair here is
-    rendered from the same chain the train step differentiates, under its own slug.
+    rendered from the same chain the train step differentiates, under its own slug. ⭐ Since 4c
+    leg 2 (2026-09-06) that is literally true for every MobileNetV2 forward: they all come from
+    `mnv2FwdChainB`, and both forwards are batch-BN because both train steps are.
 
     ⚠ **Claim ceiling** (§5): proofs stop at Imagenette. And the recipe does not match — the
     reference uses **RMSProp at LR 0.045**, where this path is AdamW + cosine. -/

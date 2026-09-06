@@ -61,10 +61,14 @@ consistent, and the split there is between the drop-free Imagenette pair and eve
 | net | what is split | leg |
 |---|---|---|
 | **ResNet-34** | — | 1 ✅ **DONE 2026-09-06** |
-| **MobileNetV2** | `mobilenetv2_fwd` (per-example) vs the batched Adam/RMSProp family | 2 |
-| **ConvNeXt-T** | the drop-free Imagenette pair is per-example; every `*drop*` and every `*in*` is batched | 3 |
+| **MobileNetV2** | — | 2 ✅ **DONE 2026-09-06** |
+| **ConvNeXt-T** | the drop-free Imagenette pair is per-example; every `*drop*` and every `*in*` is batched | 3 ← NEXT |
 | **ViT-Tiny** | as ConvNeXt | 4 |
 | EfficientNet-B0, ResNet-50, MNv4 | nothing — one renderer already | — |
+
+⭐⭐ **`KNOWN_SPLIT` IS EMPTY.** `check_adam_prefix` reads **7 paired, 0 known-split, 0
+unaccounted** — the criterion this thread was opened to reach. Legs 3 and 4 are a different shape
+(no BN-world split at all) and are not in that ratchet.
 
 ## Leg 1 — ResNet-34 ✅ DONE 2026-09-06
 
@@ -119,31 +123,68 @@ but no committed bytes exercise them. Their live peers landed the same day:
 `ResNet34RenderPC.lean` is NOT affected the same way: `resnet34Forward_full_pc` is the subject of
 the float budgets, the T6 tie and the witness, none of which is about a train step's bytes.
 
-## Leg 2 — MobileNetV2 ← NEXT
+## Leg 2 — MobileNetV2 ✅ DONE 2026-09-06
 
-The last `KNOWN_SPLIT` entry. Same split, same fix: factor the forward traversal out of
-`MobileNetV2RenderB` and render `mobilenetv2_fwd` from it. That file is AdamW/RMSProp-only and
-already has `OptKind` and an `sgdParamF` tail in the RMSProp arm, so §4c's "gains the `.sgd` tail"
-is small. ⚠ Unlike r34, this net's per-example render is SGD-inline only (no `adam` flag anywhere
-in it), which 4b.4 already recorded — so there is no one-traversal-two-endings structure to
-preserve here.
+**Result:** `check_adam_prefix` goes from `6 paired, 1 known-split` to **`7 paired, 0 known-split,
+0 unaccounted`**, and `mobilenetv2_fwd.mlir` is a byte-identical **1714-line prefix of
+`mobilenetv2_adam_train_step.mlir`**. The ratchet is empty and the last `KNOWN_SPLIT` entry is
+gone.
 
-⛔⛔ **The ordering rule leg 1 established applies, and MobileNetV2 does not satisfy it yet.** A leg
-must not retire a per-example renderer before the batched tier that replaces it exists. ResNet-34
-was safe because 4.1b–4.1e and 4.2a landed the same day; **MobileNetV2's batched column is empty**
-— no batch-BN T1, T2 or T3 (`planning/proofs_tier_to_paper_nets.md` §4.2). So leg 2 is either
+**The pre-flight question the log told leg 2 to ask, answered: no re-runs, same as leg 1.**
+`mobilenetv2-verified`'s own header measured `387/3925 = 9.859873%`, byte identical every epoch —
+chance — because running-statistic threading lives only in `trainAdamSched`, and it said in bold
+*"THIS DRIVER CANNOT PRODUCE A MEANINGFUL ACCURACY ON THIS NET… Do not quote its accuracy."* The
+86.89% in `runs/mobilenetv2_verified_crop_gpu0.log` was already disclaimed by `mnv2FwdFaithfulV`'s
+own docstring as having gone through the wrong forward. The real number comes from
+`mobilenetv2-verified-adam`, which was already on the batched chain. ⚠ **Do not assume this for
+legs 3 and 4 either** — check the driver, as this leg did.
 
-* **§4.2's MobileNetV2 half first, then the full leg** — the recommended order, and r34's sequence
-  replayed. `MobileNetV2BackB0.lean` carries the same `*BackBatchedGraph_faithful` family
-  `ResNet34BackB0.lean` does, so the `_eq_vjp` lemmas take the same `rfl` route 4.2a found; or
-* **the renderer only** — converge `mobilenetv2_fwd` onto the batched chain and leave
-  `mobilenetv2_train_step.mlir` and its per-example renderer alive, so
-  `MobileNetV2FaithfulPoCPaper` / `MobileNetV2TiePoCPaper` keep a live artifact. That empties
-  `KNOWN_SPLIT` without orphaning anything, and defers the retirement.
+**What landed.**
 
-⚠ Check before starting, and do not assume r34's answer: **does MobileNetV2's per-example SGD
-trainer produce a number anyone quotes?** r34's did not (chance, and its header said so), which is
-what made leg 1 free of re-runs. This net's driver has not been looked at.
+1. **The forward traversal, factored.** `MNV2FwdRecB` + `mnv2FwdChainB` extracted from
+   `mobilenetv2AdamTrainStepFaithfulB`'s opening, `r34FwdChainB`'s shape. ⭐ **Every committed
+   artifact re-rendered byte-identically**, as leg 1 predicted: `pretty`'s SSA counter follows the
+   call SEQUENCE and the sequence is unchanged.
+2. **`mobilenetv2FwdFaithfulB`**, and both train forwards (`mobilenetv2_fwd`, `mobilenetv2in_fwd`)
+   moved onto it.
+3. ⛔ **`MobileNetV2Render.lean` deleted**, with `verified_mlir/mobilenetv2_train_step.mlir`,
+   `verified_mlir/mobilenetv2_reduced_train_step.mlir`, `apps/imagenette/MainMobilenetV2Verified.lean`
+   and the `mobilenetv2-verified` exe.
+4. What had to move rather than go: the whole PER-EXAMPLE forward chain (`MBFwd`, `bnSiteP`, the
+   four `irFwd*`, `MNV2Fwd`, `mnv2FwdChain`, `mnv2FwdSig`, `mnv2FwdEvalFaithfulV`) and the
+   `irSig`/`irSigNoExp`/`paperSig` signature lists — because the **eval** forward needs them. All
+   now live in `MobileNetV2RenderB.lean`, the sole writer of every MobileNetV2 artifact.
+5. Guards: `KNOWN_SPLIT` emptied, mnv2's `check_fwd_prefix` pair REMOVED (it had no batched SGD
+   step to re-pair with — see below), `EXEMPT` lost `mobilenetv2_reduced_train_step`, the regen
+   writer list lost a module, `proofs.yml` now diffs all four mnv2 forwards in the
+   `MobileNetV2RenderB` step, and four entries left `scripts/render_guard_baseline.txt`.
+
+**⚠ Two parameter-naming conventions now live in one file, and that is deliberate.** The batched
+chain names parameters `%sW`/`%b2eW`/`%Wd` (`mnv2SigList`); the migrated per-example chain names
+them `%Ws`/`%We2`/`%Wfc` (`paperSig`). Same 210/158 parameters in the same order — the `#guard`s
+pin both arities — but ⛔ **the eval forward must NOT be re-pointed at the batched chain**, and for
+a reason ResNet-34 did not have: `mnv2Paper_float_logits_le_committed`'s provenance claim is that
+the typed graph "diffs against `mobilenetv2_fwd_eval` line for line", at those 263 inputs and
+those names. Moving it would leave the theorem true and the sentence false.
+
+**⚠ `check_fwd_prefix` lost its MobileNetV2 entry rather than gaining a new partner.** ResNet-34
+kept a pair there because `resnet34_sgd_train_step.mlir` already existed on the batched chain.
+MobileNetV2 ships no batched SGD step at all — `OptKind` is AdamW/RMSProp only — so its per-example
+partner had no replacement. ⭐ The coverage is not lost: `check_adam_prefix` now forms exactly the
+pairing that check would have, against `mobilenetv2_adam_train_step.mlir`. ⚠ §4c's note that this
+renderer "already has an `sgdParamF` tail" is **wrong** — `sgdParamF` appears only in
+`ResNet34RenderB` — so adding a `.sgd` variant would have meant a new `OptKind` case shared with
+EfficientNet plus a new artifact and its gates. Declined as scope.
+
+**⚠ What retirement costs, stated plainly.** `MobileNetV2FaithfulPoCPaper.lean` (the per-example §1
+fold) and `MobileNetV2TiePoCPaper.lean` (its §1a tie) are now about an artifact that does not
+exist. Every theorem in them is unchanged and still true; no committed bytes exercise them, and
+both headers say so. That is only acceptable because their batched peers landed first —
+`MobileNetV2FaithfulPoCPaperG.lean` (4b.4) and `Foundation/MobileNetV2TiePoCB.lean` (§4.2c), the
+latter the same day. ⭐ **This is the ordering rule leg 1 wrote down, honoured deliberately for the
+first time**: §4.2 was done before the retirement rather than alongside it.
+`MobileNetV2RenderPC.lean` is NOT affected — its per-example net is the subject of the float
+budgets, the T6 tie and the witness, none of which is about a train step's bytes.
 
 ## Legs 3 and 4 — ConvNeXt-T and ViT-Tiny
 
@@ -156,14 +197,16 @@ commuting order. So the leg is a SWAP, not a re-render, and the gate that licens
 ⭐ Per §4c the swap goes under an XLA-side numeric gate instead — a one-batch A/B of the two
 artifacts' outputs, the shape the `*-dp-check` gates already have.
 
-## Open, carried from leg 1
+## Open, carried from legs 1 and 2
 
 * ⚠ **`check_adam_prefix`'s PAIRS list covers only the Imagenette artifacts.** `resnet34in_fwd` was
-  split the same way and no audit saw it. Add the `*in_*` forwards and their train steps —
-  `resnet34in_fwd`/`resnet34in_mom256`, `mobilenetv2in_fwd`/`mobilenetv2in_adam64`, and the
-  ConvNeXt/ViT/B0/MNv4 peers — before declaring any later leg done.
-* ⚠ `KNOWN_SPLIT` has one entry left. When leg 2 lands it is empty, and the dict itself becomes the
-  thing to delete rather than a list to maintain.
+  split the same way and no audit saw it; `mobilenetv2in_fwd` was too, and leg 2 moved it by hand
+  for the same reason rather than because a guard said so. Add the `*in_*` forwards and their train
+  steps — `resnet34in_fwd`/`resnet34in_mom256`, `mobilenetv2in_fwd`/`mobilenetv2in_adam64`, and the
+  ConvNeXt/ViT/B0/MNv4 peers — before declaring legs 3 and 4 done. **This is now the only carried
+  item, and it is the one that would have caught both instances.**
+* ⭐ `KNOWN_SPLIT` is empty. The dict is kept, not deleted: an entry appearing again is the §3d(b)
+  failure recurring, and it should have to be argued for rather than silently re-added.
 
 ## Seams outside Lean, for every leg
 

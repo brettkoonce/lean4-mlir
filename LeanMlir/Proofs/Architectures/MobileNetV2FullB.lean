@@ -7,17 +7,20 @@ The MobileNetV2 peer of `ResNet34FullB.lean`, and the first half of
 `planning/proofs_tier_to_paper_nets.md` section 4.2's MobileNetV2 column.
 
 `MobileNetV2FullPaper.lean` states this net's whole-net ℝ forward and typed graph at **per-example**
-BatchNorm (`bnPerChannelTensor3`, reduce `[2,3]`). That is the world of `mobilenetv2_fwd.mlir` and
-the Imagenette SGD trainer `mobilenetv2_train_step.mlir`, and every tier built on it is true and
+BatchNorm (`bnPerChannelTensor3`, reduce `[2,3]`). That was the world of `mobilenetv2_fwd.mlir` and
+the Imagenette SGD trainer `mobilenetv2_train_step.mlir`, and every tier built on it is true and was
 correctly paired with those bytes. It is NOT the world of `mobilenetv2_adam_train_step.mlir`,
 `mobilenetv2_rms_train_step.mlir` or any ImageNet artifact — including `mobilenetv2in_rmsdp64`,
 whose accuracy the book quotes — all of which reduce `[0,2,3]`: one mu/var per channel across the
 batch, the one op that couples examples.
 
-⛔ **MobileNetV2's two renderers do not overlap**, so this is not a flag away. `MobileNetV2Render`
-is SGD-inline and per-example only; `MobileNetV2RenderB` is AdamW-only, at the batched index and at
-batch BatchNorm. This file re-states the ladder at `bnBatchLA` (= the proven `bnBatchTensor4` at
-the network's left-assoc index), which is the second renderer's world.
+⛔ **MobileNetV2's two renderers did not overlap**, so this was not a flag away.
+`MobileNetV2Render` was SGD-inline and per-example only; `MobileNetV2RenderB` is AdamW/RMSProp-only,
+at the batched index and at batch BatchNorm. This file re-states the ladder at `bnBatchLA` (= the
+proven `bnBatchTensor4` at the network's left-assoc index), which is that renderer's world. ⭐ Since
+4c leg 2 (2026-09-06) it is the ONLY renderer: the per-example one and its train step are retired
+and `mobilenetv2_fwd.mlir` comes from the batched chain too, so this file's world is now the whole
+net's.
 
 ## What is new here, and what is not
 
@@ -53,7 +56,7 @@ conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMap_has_vj
 | stride-2 padding | XLA-`SAME` at all five sites |
 | stem | 3x3/s2 conv-bn-relu6, 3 to 32, 224 to 112 (NO pool) |
 | head | 1x1 conv-bn-relu6 320 to 1280, then GAP and dense, generic in the class count |
-| artifacts | `mobilenetv2_adam_train_step`, `mobilenetv2_rms_train_step`, `mobilenetv2in_*` |
+| artifacts | `mobilenetv2_fwd` and every train step — this net now has ONE chain (4c leg 2) |
 
 ⭐ The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
 1000-class `mobilenetv2in` ones.

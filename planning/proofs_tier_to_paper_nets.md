@@ -18,11 +18,12 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work. ✅ 4b, 4.2a, 4c LEG 1, 4.2b AND 4.2c ALL LANDED 2026-09-06** — 4b's four files
+**Order of work. ✅ 4b, 4.2a, 4.2b, 4.2c AND 4c LEGS 1–2 ALL LANDED 2026-09-06** — 4b's four files
 (41 declarations), r34's batched §1a tie plus the shared smoothed loss cotangent (`Certs`
-3971 → 3977, **ResNet-34's T3 complete at batch BatchNorm**), the renderer convergence's first net,
-and **MobileNetV2's T1, T2 and T3 §1a tie at batch BN** (`Certs` → 3979, **MobileNetV2's T3
-complete**). Both BN nets are now tied at the artifact that trains; 4c leg 2 is unblocked.
+3971 → 3977, **ResNet-34's T3 complete at batch BatchNorm**), **MobileNetV2's T1, T2 and T3 §1a tie
+at batch BN** (`Certs` → 3979, **MobileNetV2's T3 complete**), and the renderer convergence's first
+TWO nets. ⭐⭐ Both BN nets are tied at the artifact that trains, both per-example renderers are
+retired, and `check_adam_prefix`'s `KNOWN_SPLIT` ratchet is **EMPTY** (7 paired, 0 split).
 **4c now has its own thread and log: `planning/renderer_convergence.md`.** Legs 2–4 (MobileNetV2,
 ConvNeXt-T, ViT-Tiny) are there. 4d's ℝ-level lemma fits any session; its op node waits for 4c.
 3.5 and 3.6 unchanged, on the batched chain from the start.
@@ -31,14 +32,14 @@ ConvNeXt-T, ViT-Tiny) are there. 4d's ℝ-level lemma fits any session; its op n
 
 | target | cost | why now |
 |---|---|---|
-| **4c leg 2, MobileNetV2** | one session | ⭐ It is the LAST `KNOWN_SPLIT` entry, so the ratchet empties and the renderer axis closes for the two BN nets. Its prerequisite — "the batched tier must exist first" — is now FULLY met by 4.2b + 4b.4 + 4.2c, exactly as r34's was by 4.1e + 4.2a before leg 1. |
+| **4c legs 3–4, ConvNeXt-T and ViT-Tiny** | one session each | ⭐ A different shape: no BatchNorm-world split (LayerNorm, train == eval), and the two chains render the same FORWARD byte-for-byte. The leg is a SWAP of 78 backward lines, not a re-render. ⚠ The licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric A/B. ⚠ Do the carried `*in_*` PAIRS extension first — it is what would have caught the two instances legs 1 and 2 moved by hand. |
 | **4b's capstone re-pointing** | one session | 4b left the FOLD done and the five `*_net_tied_certified` capstones un-re-pointed. Its prerequisite landed with 4.2a (`Foundation/SmoothedLossCot.lean`, general target). B0, ConvNeXt and ViT are the cheap three — their Adam artifacts are already on the renderer they have. |
 | **4d piece 1** | half a session | `Foundation/DataParallel.lean`: `(1/R) Σ_r g_r = ∇((1/R) Σ_r L_r)`, plus the lockstep induction. Cheap, certain, and it answers "what function trained" for every `*dp*` artifact — which every tie currently disclaims. |
 | **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and now cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. R50 needs the LAMB tail cert and the BCE cotangent first. |
 
-⭐ **Recommendation: 4c leg 2.** r34's sequence is now fully replayed on MobileNetV2, so the
-retirement can happen with the batched proofs already in place rather than orphaning them — which
-is the ordering rule leg 1 established.
+⭐ **Recommendation: 4b's capstone re-pointing, or 4d piece 1.** The renderer axis is closed for
+both BatchNorm nets and legs 3–4 are a separate shape with an offline gate; the two cheap items
+above buy more per session than starting them.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
 and `planning/float_budget_numbers.md` (the numbers and what they certify). This document adds
@@ -150,8 +151,8 @@ Five axes cut across the table and are recorded separately from it:
   eval-BN graph is a separate artifact from its training one. MobileNetV2 has an eval graph at
   six blocks and none at seventeen, which is why 3.2(b)'s number has no whole-net graph tie.
 * **Optimizer form — ✅ DONE 2026-09-06 at the FOLD; the ties are not re-pointed.** Section 4b.
-* **Renderer — ✅ ResNet-34 DONE 2026-09-06; three nets left.** Section 4c, and its own thread
-  at `planning/renderer_convergence.md`.
+* **Renderer — ✅ ResNet-34 and MobileNetV2 DONE 2026-09-06; ConvNeXt-T and ViT-Tiny left.**
+  Section 4c, and its own thread at `planning/renderer_convergence.md`. `KNOWN_SPLIT` is empty.
 * **Data parallelism.** The all-reduce is emitted text outside the AST in every `*dp*` artifact;
   what is provable and what stays calling logic is section 4d.
 
@@ -1171,12 +1172,12 @@ forward traversal with two consumers, not a deletion and not a driver change. Ea
 
 **The acceptance criterion is mechanical.** `scripts/regen_verified_mlir.sh`'s `check_adam_prefix`
 carries a `KNOWN_SPLIT` ratchet that "may shrink, never grow"; a net is done when its entry leaves.
-2026-09-06: **5 paired / 2 known-split → 6 paired / 1 known-split.**
+2026-09-06: **5 paired / 2 known-split → 7 paired / 0 known-split** — legs 1 and 2 emptied it.
 
 | net | state |
 |---|---|
 | **ResNet-34** | ✅ leg 1 DONE 2026-09-06 — `ResNet34Render.lean`, `resnet34_train_step.mlir` and the `resnet34-verified` binary all retired; both forwards on `r34FwdChainB`; ⭐ the ImageNet `resnet34in_fwd` was split too, which `check_adam_prefix`'s Imagenette-only PAIRS list could not see |
-| **MobileNetV2** | leg 2 — the last `KNOWN_SPLIT` entry. `MobileNetV2RenderB` already has `OptKind` and an `sgdParamF` tail, so §4c's ".sgd tail" is small |
+| **MobileNetV2** | ✅ leg 2 DONE 2026-09-06 — `MobileNetV2Render.lean`, `mobilenetv2_train_step.mlir`, `mobilenetv2_reduced_train_step.mlir` and the `mobilenetv2-verified` binary all retired; both train forwards on `mnv2FwdChainB`; ⛔ the eval pair deliberately stays on the migrated per-example chain, because a float-budget theorem's provenance names its SSA names; ⚠ §4c's "already has an `sgdParamF` tail" was wrong, and `check_fwd_prefix` lost its mnv2 entry rather than gaining a partner |
 | **ConvNeXt-T** | leg 3 — a SWAP, not a re-render: the two chains' forwards are byte-identical (`convnext-fwd-b-tie`) and differ on 78 backward lines; the licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric gate |
 | **ViT-Tiny** | leg 4 — as ConvNeXt |
 
