@@ -201,7 +201,55 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_adam_train_step.mlir"),
          ("efficientnet_fwd.mlir", "efficientnet_adam_train_step.mlir"),
          ("convnext_fwd.mlir",     "convnext_adam_train_step.mlir"),
          ("vit_fwd.mlir",          "vit_adam_train_step.mlir"),
-         ("mnv4_fwd.mlir",         "mnv4_adam_train_step.mlir")]
+         ("mnv4_fwd.mlir",         "mnv4_adam_train_step.mlir"),
+         # ── ⭐ THE IMAGENET TIER, added 2026-09-06 ──────────────────────────────────────────
+         # This list held only the Imagenette names for a year, and that gap was NOT hypothetical:
+         # `resnet34in_fwd` (4c leg 1) and `mobilenetv2in_fwd` (leg 2) were each split exactly as
+         # their Imagenette twins were, and BOTH were moved by hand because no audit could see
+         # them. These are the artifacts the ImageNet accuracies come from, so this is where the
+         # check is most load-bearing.
+         #
+         # Each forward is paired with the DATA-PARALLEL variant wherever one matches, because
+         # that is the artifact the quoted number is trained by; `check_fwd_prefix` already pairs
+         # several of the same forwards with their single-device peers, and the two agreeing is
+         # the point rather than a duplication.
+         ("resnet34in_fwd.mlir",            "resnet34in_mom256_train_step.mlir"),
+         ("resnet50in_fwd.mlir",            "resnet50in_mom256_train_step.mlir"),
+         ("resnet50in160_fwd.mlir",         "resnet50in160_lambaccdp8x64bce_train_step.mlir"),
+         ("mobilenetv2in_fwd.mlir",         "mobilenetv2in_rmsdp64_train_step.mlir"),
+         ("efficientnetin_fwd.mlir",        "efficientnetin_emarmsdp64_train_step.mlir"),
+         # ⚠ `efficientnetin_drop_fwd` has NO data-parallel peer to prefer — `emarms64drop` is the
+         # only match — which is why the completeness check below caught it when this list was
+         # first written from the DP artifacts alone.
+         ("efficientnetin_drop_fwd.mlir",   "efficientnetin_emarms64drop_train_step.mlir"),
+         ("efficientnetin_dropdo_fwd.mlir", "efficientnetin_emarmsdp64dropdo_train_step.mlir"),
+         ("convnextin_fwd.mlir",            "convnextin_adamdp_train_step.mlir"),
+         ("convnextin_drop_fwd.mlir",       "convnextin_adamdpwxclipdrop_train_step.mlir"),
+         ("convnextsin_drop_fwd.mlir",      "convnextsin_adamdpwxclipdrop_train_step.mlir"),
+         ("convnextbin_drop_fwd.mlir",      "convnextbin_adamdpwxclipdrop_train_step.mlir"),
+         ("vitin_drop_fwd.mlir",            "vitin_adamwxclipdrop_train_step.mlir"),
+         ("mnv4in_fwd.mlir",                "mnv4in_adamdp64_train_step.mlir")]
+
+# ── the ImageNet forwards that are deliberately NOT paired, and why ──
+# ⭐ These are NOT splits. Each is a forward rendered at a (batch, drop) configuration for which no
+#   train step exists, so there is nothing to be a prefix OF — measured 2026-09-06, and every one
+#   of the six diverges at a `broadcast_in_dim %dp0` drop site or at the batch dimension of the
+#   first op, never at a BatchNorm or a convolution. Where a net ships both a drop-free and a
+#   drop-bearing forward, the drop-bearing one IS paired above.
+# ⚠ The point of naming them is that the omission stops being silent: `check_completeness` below
+#   fails if an ImageNet forward is in neither this dict nor PAIRS, so a new one cannot be added
+#   without a decision.
+NO_PARTNER = {
+  "convnextsin_fwd.mlir":  "drop-free at B=32; every convnextsin train step carries drop "
+                           "(convnextsin_drop_fwd is the paired one)",
+  "convnextbin_fwd.mlir":  "drop-free at B=32; every convnextbin train step carries drop "
+                           "(convnextbin_drop_fwd is the paired one)",
+  "vitin_fwd.mlir":        "drop-free at B=256; the only B=256 vitin step "
+                           "(adamdp256x2wxclipdrop) carries drop",
+  "vitsin_fwd.mlir":       "B=32 and drop-free; every vitsin train step is drop at B=128",
+  "vitsin_drop_fwd.mlir":  "B=32; every vitsin train step is B=128",
+  "vitbin_fwd.mlir":       "drop-free at B=32; every vitbin train step is drop at B=128",
+}
 
 # ── the ratchet. May SHRINK, never grow: a new entry means a forward and the graph that trains it
 #    drifted apart with this audit green, which is the exact failure §3d(b) is about.
@@ -257,6 +305,32 @@ for fwd, ts in PAIRS:
         print(f"      split is deliberate — add it to KNOWN_SPLIT with the reason.")
         rc = 1
 print(f"  {ok} paired, {known} known-split, {len(PAIRS) - ok - known} unaccounted")
+
+# ── completeness: every ImageNet forward is classified ──
+# The gap this closes is the one that hid `resnet34in_fwd` and `mobilenetv2in_fwd`: a forward that
+# appears in NEITHER list is invisible to both prefix audits, and nothing else in the repo pairs a
+# forward with the graph that trains it.
+import os, re
+seen = {f for f, _ in PAIRS} | set(NO_PARTNER)
+onDisk = {f for f in os.listdir("verified_mlir")
+          if re.match(r"^[a-z0-9]*in[0-9]*_(?:[a-z0-9]+_)?fwd\.mlir$", f)}
+missing = sorted(onDisk - seen)
+stale = sorted(f for f in seen if f.endswith("fwd.mlir")
+               and re.match(r"^[a-z0-9]*in[0-9]*_", f) and f not in onDisk)
+if missing:
+    print(f"  ✗ {len(missing)} ImageNet forward(s) in NEITHER PAIRS nor NO_PARTNER:")
+    for f in missing:
+        print(f"      {f}")
+    print(f"      add each to PAIRS with the train step it is a prefix of, or to NO_PARTNER with")
+    print(f"      the reason no such train step exists. An unclassified forward is not audited.")
+    rc = 1
+if stale:
+    print(f"  ⚠ {len(stale)} classified ImageNet forward(s) no longer on disk: {', '.join(stale)}")
+if not missing:
+    noPartner = len(set(NO_PARTNER) & onDisk)
+    print(f"  OK — all {len(onDisk)} ImageNet forwards classified "
+          f"({len(onDisk) - noPartner} paired, {noPartner} no-partner: "
+          f"no train step exists at their batch/drop configuration)")
 sys.exit(rc)
 PY_INNER
 }

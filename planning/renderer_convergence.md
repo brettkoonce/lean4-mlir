@@ -197,16 +197,41 @@ commuting order. So the leg is a SWAP, not a re-render, and the gate that licens
 ⭐ Per §4c the swap goes under an XLA-side numeric gate instead — a one-batch A/B of the two
 artifacts' outputs, the shape the `*-dp-check` gates already have.
 
-## Open, carried from legs 1 and 2
+## The ImageNet tier of `check_adam_prefix` ✅ DONE 2026-09-06
 
-* ⚠ **`check_adam_prefix`'s PAIRS list covers only the Imagenette artifacts.** `resnet34in_fwd` was
-  split the same way and no audit saw it; `mobilenetv2in_fwd` was too, and leg 2 moved it by hand
-  for the same reason rather than because a guard said so. Add the `*in_*` forwards and their train
-  steps — `resnet34in_fwd`/`resnet34in_mom256`, `mobilenetv2in_fwd`/`mobilenetv2in_adam64`, and the
-  ConvNeXt/ViT/B0/MNv4 peers — before declaring legs 3 and 4 done. **This is now the only carried
-  item, and it is the one that would have caught both instances.**
+The item legs 1 and 2 both carried. `check_adam_prefix`'s PAIRS list held only the seven Imagenette
+names for a year, so `resnet34in_fwd` and `mobilenetv2in_fwd` were each split exactly as their
+Imagenette twins were and **both were moved by hand, not because a guard fired**. The list now
+covers the ImageNet artifacts too: **20 paired, 0 known-split, 0 unaccounted**, up from 7.
+
+⭐ **The result was not what this log predicted, and the difference matters.** The expectation was
+more instances of the r34/mnv2 split — a forward from one renderer against a train step from
+another. There are none. Every ImageNet forward that HAS a train step at its configuration is
+already a byte-identical prefix of it, including ConvNeXt-S/B and ViT-S/B, which legs 3 and 4 have
+not touched. The forwards that do not pair are unpaired for a completely different reason:
+
+⚠ **Six ImageNet forwards have no partner because no train step exists at their `(batch, drop)`
+configuration** — `convnextsin_fwd`, `convnextbin_fwd`, `vitin_fwd`, `vitsin_fwd`,
+`vitsin_drop_fwd`, `vitbin_fwd`. Measured: every one diverges at a `broadcast_in_dim %dp0` drop
+site or at the batch dimension of the first op, **never at a BatchNorm or a convolution**. Three
+are drop-free forwards whose net ships only drop-bearing train steps (the drop-bearing peer IS
+paired); three are rendered at B=32 or B=256 against train steps at B=128. They are listed in a
+`NO_PARTNER` dict with the reason, so the omission is a recorded decision rather than a silent gap.
+
+⭐⭐ **The real deliverable is the completeness assertion, not the twelve new pairs.** The script now
+fails if any `*in*_fwd.mlir` on disk is in NEITHER `PAIRS` nor `NO_PARTNER`, so an ImageNet forward
+can no longer be added without being classified — which is precisely how the two instances legs 1
+and 2 fixed by hand stayed invisible. It earned its keep immediately: writing PAIRS from the
+data-parallel artifacts alone missed `efficientnetin_drop_fwd`, which has no DP peer, and the
+assertion caught it on the first run. Both failure modes carry a negative control (an unclassified
+forward → exit 1; a mis-pointed pair → exit 1 with the diverging line printed).
+
+## Open
+
 * ⭐ `KNOWN_SPLIT` is empty. The dict is kept, not deleted: an entry appearing again is the §3d(b)
   failure recurring, and it should have to be argued for rather than silently re-added.
+* Legs 3 and 4 (ConvNeXt-T, ViT-Tiny) — see below. ⭐ They are now better instrumented than legs 1
+  and 2 were: their ImageNet forwards are audited against the artifacts their numbers come from.
 
 ## Seams outside Lean, for every leg
 
