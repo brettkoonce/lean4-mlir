@@ -3040,6 +3040,345 @@ def verify_cnx_back(rows, wk=CNX_WK, G=CNX_GLB, sl=CNX_SLB, S=CNX_SB, es=CNX_ESB
     return n
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ViT-Tiny BACKWARD — `vitInputGradK`, the whole-net input gradient
+# (planning/proofs_tier_to_paper_nets.md 3.4(b))
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# The chain, cotangent-first, the order the Lean term applies its factors:
+#
+#   patchEmbedBack . towerBack [block backwards] . lnBfinal . clsScatter
+#     . dense (transpose Wcls) 0
+#
+# with the per-block backward (`vitBlockBackV`, the vector-LN peer of `vitBlockBackPR`)
+#
+#   residual (lnB1 . mhsaBackFlat) . residual (lnB2 . linBack Wfc1 . geluB . linBack Wfc2)
+#
+# and `mhsaBackFlat` itself
+#
+#   (linBack Wq . coreQ) + (linBack Wk . coreK) + (linBack Wv . coreV)  ,  after  linBack Wo
+#
+# ⛔ THE ONE SUPPLIED ACCURACY THAT IS NEW HERE IS `ew`. The three sdpa cores need
+# `|fp - sdpa_weights(Q,K)| <= ew`, a DISTANCE from the float attention weights to the real
+# ones. The forward never needs that — `vit_attn`'s cap bounds the float row's MAGNITUDE by
+# `1 + smCap` and stays exp-free — but a backward core contracts against the real weights, so
+# the honest discharge is `smErr` at logit-perturbation `attnScaledErr`, which carries
+# `Real.exp` of a number the size of the forward window. So `ew` is SUPPLIED, exactly as r34's
+# backward supplies `es`/`exh` (§3.7), and the statement must disclose it.
+
+VIT_WKB = VIT_WA        # attention kernels, backward profile (the forward's)
+VIT_WMB = VIT_WM        # MLP kernels
+VIT_GLB = VIT_GL        # LayerNorm gamma
+VIT_SB = F(317)         # |istd| <= 1/sqrt(eps) at eps >= 1e-5 — the eps-FLOOR
+VIT_ESB = F(1, 100)     # supplied float inverse-stddev accuracy
+VIT_EXH = F(1, 100)     # supplied float normalised-activation accuracy
+VIT_ESAV = F(1, 100)    # supplied accuracy on the saved `gelu'(preact)` vector
+VIT_EWB = F(1, 100)     # ⛔ supplied float softmax-weight accuracy (see the note above)
+VIT_SGE = CNX_SGE       # |gelu'| <= 3/2, PROVED (`Architectures/GeluSaturation.lean`)
+VIT_SCALE = F(1, 8)     # |sdpa_scale dh| = 1/sqrt(64), EXACT — dh = 64 is a perfect square
+
+
+def sdpa_dw_mag(d, dA, vA):
+    """`sdpaDwMag d dA vA` — the `dOut . V^T` entry, fan-in the HEAD dim."""
+    return F(d) * dA * vA
+
+
+def sdpa_dscaled_mag(n, d, dA, vA):
+    """`sdpaDScaledMag` — `softmaxBack_abs_le` at `P = 1`: `1*(M + n*(1*M))`."""
+    m = sdpa_dw_mag(d, dA, vA)
+    return 1 * (m + F(n) * (1 * m))
+
+
+def sdpa_dscores_mag(n, d, dA, vA, scaleA):
+    """`sdpaDScoresMag` — the exact `1/sqrt(d)` scale on `sdpaDScaledMag`."""
+    return scaleA * sdpa_dscaled_mag(n, d, dA, vA)
+
+
+def attn_score_err(d, qA, kA, u=U32):
+    """`attnScoreErr d qA kA` — Higham gamma over the head fan-in. ⚠ EXACT power, as the
+    lemma is stated (`(1+u)^(d+1) - 1`), not `gamma_q`."""
+    return ((1 + u) ** (d + 1) - 1) * (F(d) * qA * kA)
+
+
+def softmax_back_budget(c, P, A, ep, u=U32):
+    """`FloatModel.softmaxBackBudget` — the row-Jacobian backward's rounding, verbatim."""
+    gc = (1 + u) ** (c + 1) - 1
+    eq = mulErr(u, P, A, ep, F(0))
+    eS = gc * (F(c) * (P * A + eq)) + F(c) * eq
+    MSf = F(c) * (P * A) + eS
+    eSub = u * (A + MSf) + eS
+    return mulErr(u, P, A + F(c) * (P * A), ep, eSub)
+
+
+def sdpa_dscaled_err(n, d, dA, vA, ew, u=U32):
+    """`FloatModel.sdpaDScaledErr`."""
+    return (softmax_back_budget(n, F(1), F(d) * dA * vA + attn_score_err(d, dA, vA, u), ew, u)
+            + 1 * (attn_score_err(d, dA, vA, u) + F(n) * (1 * attn_score_err(d, dA, vA, u))))
+
+
+def sdpa_dscores_err(n, d, dA, vA, scaleA, ew, u=U32):
+    """`FloatModel.sdpaDScoresErr` — `mulErr` at the exact scale."""
+    return mulErr(u, scaleA, sdpa_dscaled_mag(n, d, dA, vA), F(0),
+                  sdpa_dscaled_err(n, d, dA, vA, ew, u))
+
+
+def sdpa_back_err(n, wMag, eweight, vA, u=U32):
+    """`FloatModel.sdpaBackErr` — the final matmul at perturbed weights. ⚠ EXACT power."""
+    return ((1 + u) ** (n + 1) - 1) * (F(n) * (wMag + eweight) * vA) + F(n) * eweight * vA
+
+
+def core_v(st, n, ew, q=U32):
+    """`floatClose_coreV` — `dV = p^T . dconcat`, weights bounded by 1, fan-in `n` tokens."""
+    A, E = st
+    b = sdpa_back_err(n, F(1), ew, A, q)
+    return (F(n) * A + b, b + F(n) * E)
+
+
+def core_qk(st, n, d, other, vA, scaleA, ew, q=U32):
+    """`floatClose_core{Q,K}` — the score-space core: `sdpaDScoresMag` at the cotangent window,
+    contracted against the saved K (for dQ) or Q (for dK), fan-in `n`.
+
+    ⭐ NOTE THE SHAPE: the magnitude is `n * sdpaDScoresMag(A) * other` and `sdpaDScoresMag` is
+    itself `scaleA*(1+n)*d*A*vA`, so ONE core multiplies the cotangent window by
+    `n*(1+n)*d*scaleA*vA*other` — at ViT-Tiny `197*198*64*(1/8) = 3.12e5` TIMES the product of
+    two saved projection windows. That product is what ends this chain."""
+    A, E = st
+    mag = sdpa_dscores_mag(n, d, A, vA, scaleA)
+    err = sdpa_dscores_err(n, d, A, vA, scaleA, ew, q)
+    b = sdpa_back_err(n, mag, err, other, q)
+    return (F(n) * mag * other + b,
+            b + F(n) * sdpa_dscores_mag(n, d, E, vA, scaleA) * other)
+
+
+def pe_back(st, ic=3, H=224, W=224, P=16, npatch=196, D=D_VIT, wc=VIT_WP, q=U32):
+    """`floatClose_patchEmbedBack` — the transposed patchify. Real magnitude
+    `N*P^2*D*wconv*Z` (`patchEmbed_formula_abs_le`), budget `patchEmbedBackBudget`, and the
+    modulus is that budget plus the real magnitude at the inherited error (LINEAR — the
+    formula is linear in the cotangent)."""
+    A, E = st
+    Mg = F(D) * wc * A
+    dot = ((1 + q) ** (D + 1) - 1) * (F(D) * wc * A)
+    ekw = redErr(q, P, Mg, dot)
+    ekh = redErr(q, P, F(P) * Mg, ekw)
+    bud = redErr(q, npatch, F(P) * (F(P) * Mg), ekh)
+    sens = F(npatch) * (F(P) * (F(P) * (F(D) * wc * E)))
+    return (F(npatch) * (F(P) * (F(P) * (F(D) * wc * A))) + bud, bud + sens)
+
+
+def vit_fwd_saved(k=K_VIT, **kw):
+    """The forward windows the backward's SAVED activations are read at, keyed by block:
+    `qkv[i]` is the real Q/K/V projection window at block `i` (the `dense` of the LN1 output,
+    which is exactly what `vit_attn` calls `vAF`), and `lnin[tag]` is the window ARRIVING at
+    each LN site (the `A` in the window-derived `|x-hat| <= 2*A*S` ablation)."""
+    rows, _ = vit_chain(k=k, **kw)
+    d = dict(rows)
+    prev, lnin = (F(1), F(0)), {}
+    for tag, st in rows:
+        if tag.endswith('.ln'):
+            lnin[tag] = prev
+        prev = st
+    wa = kw.get('wa', VIT_WA)
+    bb = kw.get('bb', VIT_BB)
+    qkv = [conv(d[f'b{i}.a.lnb'], D_VIT, wa, bb)[0] for i in range(k)]
+    return d, lnin, qkv
+
+
+def vit_qkv_xhat(w=VIT_WKB, G=VIT_GLB, bl=VIT_BL, q=U32, b=VIT_BB, D=D_VIT):
+    """⭐⭐ **The saved Q/K/V projection bound, PROVED and depth-independent.**
+
+    `bnXhat_sq_le` puts every normalised activation in `x-hat^2 <= n`, so ViT's per-token
+    vector LayerNorm — `layerNormVec D eps gamma beta x = gamma*layerNormForward(1,0)(x) + beta`,
+    i.e. literally `gamma*x-hat + beta` — has output magnitude at most `G*sqrt(D) + Bl`, whatever
+    arrives at it.  The Q/K/V projections are one `dense` on top: `(1+gamma_{D+2})*(D*w*that + b)`.
+
+    ⛔ This is the same lemma that makes ResNet-34's backward number exist, one reduction axis
+    over, and NOTHING about it is new — what was new is noticing that `floatBridges_mhsaBack`
+    takes `qA`/`kA`/`vA` as free hypotheses and the ViT chain had been discharging them from the
+    forward's certified window (which grows `2*A*S` per LN site and reaches 1e108 at depth 12).
+    The saved activation is a REAL activation of a REAL net; it does not grow."""
+    lnout = G * F(isqrt_ceil(D)) + bl
+    g1 = r4(gamma_q(D + 2, q))
+    return (1 + g1) * (F(D) * w * lnout + b)
+
+
+def vit_back_chain(wa=VIT_WKB, wm=VIT_WMB, wp=VIT_WP, wh=VIT_WH, G=VIT_GLB, S=VIT_SB,
+                   es=VIT_ESB, exh=VIT_EXH, esav=VIT_ESAV, ew=VIT_EWB, sge=VIT_SGE,
+                   scaleA=VIT_SCALE, q=U32, k=K_VIT, xhat='sqrt', attn=True,
+                   saved='xhat', bl=VIT_BL, qkv_bound=None):
+    """Every stage of the ViT-Tiny whole-net input gradient at the granularity a Lean `Maps`
+    chain composes them, folded over the LOSS COTANGENT (`|p - y| <= 1`). `clsScatter` is an
+    exact scatter and produces no entry, as ConvNeXt's four permutations do not.
+
+    `xhat='sqrt'` : `|x-hat| <= sqrt(D)` at the LN reduction width `D = 192` (`bnXhat_sq_le`
+                    through `chanLNRows`, the ConvNeXt reading — `isqrt_ceil(192) = 14`).
+    `xhat='window'`: `|x-hat| <= 2*A*S` from the forward's certified window at that site.
+    `attn=False`  : the three sdpa cores replaced by the identity — the ablation that prices
+                    ATTENTION against everything else in the chain.
+    `saved='xhat'`: ⭐⭐ SHIPPED. The saved Q/K/V projections bounded through `bnXhat_sq_le`:
+                    LN1's output is `gamma*x-hat + beta` with `|x-hat| <= sqrt(D)`, so
+                    `|LN1 out| <= G*sqrt(192) + Bl` and `|Q| = |dense Wq bq (LN1 A)| <=
+                    (1+g)*(D*w*that + b)` — a CONSTANT, the same at every block, PROVED and
+                    already in the repo (it is the same lemma that makes r34's backward number
+                    exist). `qA`/`kA`/`vA` are hypotheses of `floatBridges_mhsaBack`, so nothing
+                    forced them to the forward envelope except that nobody had discharged them.
+    `saved='window'`: the forward's own certified window at that block — what the chain reads
+                    if the Q/K/V hypotheses are discharged from the forward fold. ⛔ 1158 orders
+                    worse, and the per-block multiplier stops being uniform.
+    `qkv_bound=c` : an explicit constant, for the ablation table."""
+    fwd, lnin, qkv = vit_fwd_saved(k=k)
+    if qkv_bound is None and saved == 'xhat':
+        qkv_bound = vit_qkv_xhat(wa, G, bl, q)
+    if qkv_bound is not None:
+        qkv = [qkv_bound] * k
+
+    def Xh(tag):
+        return F(isqrt_ceil(D_VIT)) if xhat == 'sqrt' else 2 * lnin[tag][0] * S
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out = []
+    st = (F(1), F(0))
+    # ── head: linBack Wcls (fan-in nClasses) -> clsScatter (exact) -> the final LN backward ──
+    st = R(conv_back(st, 10, wh, q));                        out.append(("linBack", st))
+    st = R(ln_back(st, D_VIT, Xh('headln.ln'), G, S, es, exh, F(0), q))
+    out.append(("headln.lnB", st))
+    # ── the twelve encoder blocks, deepest first ──
+    for i in reversed(range(k)):
+        t = f"b{i}"
+        # MLP sublayer: residual (lnB2 . linBack Wfc1 . geluB . linBack Wfc2)
+        blkin = st
+        s = R(conv_back(blkin, D_VIT, wm, q));               out.append((t + ".fc2B", s))
+        s = R(diag_back(s, sge, esav, q));                   out.append((t + ".geB", s))
+        s = R(conv_back(s, MLP_VIT, wm, q));                 out.append((t + ".fc1B", s))
+        s = R(ln_back(s, D_VIT, Xh(t + '.m.ln'), G, S, es, exh, F(0), q))
+        out.append((t + ".ln2B", s))
+        st = R(residual(blkin, s, q));                       out.append((t + ".mresB", st))
+        # attention sublayer: residual (lnB1 . mhsaBackFlat)
+        blkin = st
+        s = R(conv_back(blkin, D_VIT, wa, q));               out.append((t + ".woB", s))
+        vA = qkv[i]
+        if attn:
+            sq = R(core_qk(s, NTOK_VIT, DH_VIT, vA, vA, scaleA, ew, q))
+            out.append((t + ".cQ", sq))
+            sk = R(core_qk(s, NTOK_VIT, DH_VIT, vA, vA, scaleA, ew, q))
+            out.append((t + ".cK", sk))
+            sv = R(core_v(s, NTOK_VIT, ew, q))
+            out.append((t + ".cV", sv))
+        else:
+            sq = sk = sv = s
+        pq = R(conv_back(sq, D_VIT, wa, q));                 out.append((t + ".pQ", pq))
+        pk = R(conv_back(sk, D_VIT, wa, q));                 out.append((t + ".pK", pk))
+        pv = R(conv_back(sv, D_VIT, wa, q));                 out.append((t + ".pV", pv))
+        s = R(bipath(pk, pv, q));                            out.append((t + ".fanKV", s))
+        s = R(bipath(pq, s, q));                             out.append((t + ".fanQKV", s))
+        s = R(ln_back(s, D_VIT, Xh(t + '.a.ln'), G, S, es, exh, F(0), q))
+        out.append((t + ".ln1B", s))
+        st = R(residual(blkin, s, q));                       out.append((t + ".aresB", st))
+    # ── the patch-embed backward (the transposed 16x16/s16 patchify) ──
+    st = R(pe_back(st, 3, 224, 224, 16, NTOK_VIT - 1, D_VIT, wp, q))
+    out.append(("peB", st))
+    return out
+
+
+def verify_vit_back(rows, wa=VIT_WKB, wm=VIT_WMB, wp=VIT_WP, wh=VIT_WH, G=VIT_GLB,
+                    S=VIT_SB, es=VIT_ESB, exh=VIT_EXH, esav=VIT_ESAV, ew=VIT_EWB,
+                    sge=VIT_SGE, scaleA=VIT_SCALE, q=U32, k=K_VIT, attn=True,
+                    saved='xhat', bl=VIT_BL, qkv_bound=None) -> int:
+    """Re-assert EVERY rounded inequality a `ViTBackFloatBudget.lean` would close, exactly —
+    the peer of `verify_cnx_back`. Returns the count checked; raises on the first failure."""
+    r = dict(rows)
+    fwd, lnin, qkv = vit_fwd_saved(k=k)
+    if qkv_bound is None and saved == 'xhat':
+        qkv_bound = vit_qkv_xhat(wa, G, bl, q)
+    if qkv_bound is not None:
+        qkv = [qkv_bound] * k
+    Xh = F(isqrt_ceil(D_VIT))
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"vit-back {tag}: {float(lhs)} > {float(rhs)}"
+        n += 1
+
+    def conv_ck(tag, m, w, inp, got):
+        A, E = inp
+        g = r4(gamma_q(m + 2, q))
+        ck(tag + '.A', (1 + g) * (m * w * A + 0), got[0])
+        ck(tag + '.E', g * (m * w * (A + E) + 0) + m * w * E, got[1])
+
+    def ln_ck(tag, inp, got):
+        A, E = inp
+        Kr, Kb = ln_back_gain(D_VIT, Xh, S, es, exh, q)
+        me = mulErr(q, G, A, F(0), F(0))
+        D = G * A + me
+        ck(tag + '.A', D * (Kr + Kb), got[0])
+        ck(tag + '.E', D * Kb + (me + G * E) * Kr, got[1])
+
+    def res_ck(tag, inp, body, got):
+        A, E = inp
+        Bd, Ed = body
+        ck(tag + '.A', Bd + A + q * (Bd + A), got[0])
+        ck(tag + '.E', q * (Bd + Ed + A + E) + (Ed + E), got[1])
+
+    def bip_ck(tag, p, b, got):
+        Pd, Ep = p
+        Bd, Ed = b
+        ck(tag + '.A', Pd + Bd + q * (Pd + Bd), got[0])
+        ck(tag + '.E', q * (Pd + Ep + Bd + Ed) + (Ep + Ed), got[1])
+
+    conv_ck('linBack', 10, wh, (F(1), F(0)), r['linBack'])
+    ln_ck('headln.lnB', r['linBack'], r['headln.lnB'])
+    st = r['headln.lnB']
+    for i in reversed(range(k)):
+        t = f"b{i}"
+        blkin = st
+        conv_ck(t + '.fc2B', D_VIT, wm, blkin, r[t + '.fc2B'])
+        A, E = r[t + '.fc2B']
+        me = mulErr(q, sge, A, esav, F(0))
+        ck(t + '.geB.A', sge * A + me, r[t + '.geB'][0])
+        ck(t + '.geB.E', me + sge * E, r[t + '.geB'][1])
+        conv_ck(t + '.fc1B', MLP_VIT, wm, r[t + '.geB'], r[t + '.fc1B'])
+        ln_ck(t + '.ln2B', r[t + '.fc1B'], r[t + '.ln2B'])
+        res_ck(t + '.mresB', blkin, r[t + '.ln2B'], r[t + '.mresB'])
+        st = r[t + '.mresB']
+        blkin = st
+        conv_ck(t + '.woB', D_VIT, wa, blkin, r[t + '.woB'])
+        A, E = r[t + '.woB']
+        vA = qkv[i]
+        if attn:
+            for tag in ('.cQ', '.cK'):
+                mag = sdpa_dscores_mag(NTOK_VIT, DH_VIT, A, vA, scaleA)
+                err = sdpa_dscores_err(NTOK_VIT, DH_VIT, A, vA, scaleA, ew, q)
+                b = sdpa_back_err(NTOK_VIT, mag, err, vA, q)
+                ck(t + tag + '.A', F(NTOK_VIT) * mag * vA + b, r[t + tag][0])
+                ck(t + tag + '.E',
+                   b + F(NTOK_VIT) * sdpa_dscores_mag(NTOK_VIT, DH_VIT, E, vA, scaleA) * vA,
+                   r[t + tag][1])
+            b = sdpa_back_err(NTOK_VIT, F(1), ew, A, q)
+            ck(t + '.cV.A', F(NTOK_VIT) * A + b, r[t + '.cV'][0])
+            ck(t + '.cV.E', b + F(NTOK_VIT) * E, r[t + '.cV'][1])
+            srcQ, srcK, srcV = r[t + '.cQ'], r[t + '.cK'], r[t + '.cV']
+        else:
+            srcQ = srcK = srcV = r[t + '.woB']
+        conv_ck(t + '.pQ', D_VIT, wa, srcQ, r[t + '.pQ'])
+        conv_ck(t + '.pK', D_VIT, wa, srcK, r[t + '.pK'])
+        conv_ck(t + '.pV', D_VIT, wa, srcV, r[t + '.pV'])
+        bip_ck(t + '.fanKV', r[t + '.pK'], r[t + '.pV'], r[t + '.fanKV'])
+        bip_ck(t + '.fanQKV', r[t + '.pQ'], r[t + '.fanKV'], r[t + '.fanQKV'])
+        ln_ck(t + '.ln1B', r[t + '.fanQKV'], r[t + '.ln1B'])
+        res_ck(t + '.aresB', blkin, r[t + '.ln1B'], r[t + '.aresB'])
+        st = r[t + '.aresB']
+    A, E = st
+    Mg = F(D_VIT) * wp * A
+    dot = ((1 + q) ** (D_VIT + 1) - 1) * (F(D_VIT) * wp * A)
+    bud = redErr(q, NTOK_VIT - 1, F(16) * (F(16) * Mg),
+                 redErr(q, 16, F(16) * Mg, redErr(q, 16, Mg, dot)))
+    ck('peB.A', F(NTOK_VIT - 1) * (F(16) * (F(16) * (F(D_VIT) * wp * A))) + bud, r['peB'][0])
+    ck('peB.E', bud + F(NTOK_VIT - 1) * (F(16) * (F(16) * (F(D_VIT) * wp * E))), r['peB'][1])
+    return n
+
+
 def sci(x: F) -> str:
     """4-significant-figure scientific form for a rational the size of a whole-net window."""
     if x == 0:
@@ -3461,3 +3800,47 @@ if __name__ == "__main__":
     print("     file UNUSED since the 1e7417 figure was measured. It reproduces §0.1's window to")
     print("     the exponent (1e221) and its budget to 2 parts in 7419 (1e7419 vs 1e7417), which")
     print("     is the cross-check that the 90-stage reconstruction is the same net.")
+
+    print("\n── ViT-Tiny BACKWARD sizing probe (proofs_tier_to_paper_nets 3.4b) ──")
+    vrows = vit_back_chain()
+    vA, vE = vrows[-1][1]
+    print(f"  SHIPPED SHAPE: {len(vrows)} stages, depth 12, 3 heads, 197 tokens, vector LN")
+    print(f"    window        {sci(vA)}")
+    print(f"    budget        {sci(vE)}")
+    print(f"    budget/window {float(vE / vA):.4f}   ⭐ a FOLD — a VJP is linear at a fixed point,")
+    print(f"                                and ⛔ the scoping's predicted CAP does not apply: no")
+    print(f"                                backward stage has a window bounded by a constant.")
+    print(f"    re-assertions {verify_vit_back(vrows)} — every rounded inequality re-checked exactly")
+    print(f"    statable      YES at `set_option exponentiation.threshold 500`, NO at the default")
+    print(f"    saved Q/K/V   |Q|,|K|,|V| ≤ {float(vit_qkv_xhat()):.1f} — CONSTANT, from `bnXhat_sq_le`")
+    print(f"\n  {'variant':<50} {'window':>13} {'budget':>13}  per-block")
+    print("  " + "-" * 92)
+    _xw = vit_qkv_xhat()
+    for name, kw in [
+        ("⭐⭐ shipped: saved Q/K/V from `bnXhat_sq_le`", {}),
+        ("⛔ saved Q/K/V from the FORWARD's window", dict(saved='window')),
+        ("the same, |istd| ≤ 16", dict(S=F(16))),
+        ("the same, σ² ≈ 1 (S = 1)", dict(S=F(1))),
+        ("attention cores = id (prices ATTENTION)", dict(attn=False)),
+        ("x̂ from the forward WINDOW at each LN site", dict(xhat='window')),
+        ("LN γ bound 1 (measured 1.7) — an ablation", dict(G=F(1))),
+        ("all kernels 1 (measured .7/.8) — an ablation",
+         dict(wa=F(1), wm=F(1), wp=F(1), wh=F(1))),
+        ("depth 2 (the vitForward2V shape)", dict(k=2)),
+        ("depth 6", dict(k=6)),
+    ]:
+        rr = vit_back_chain(**kw)
+        a, e = rr[-1][1]
+        kk = kw.get('k', K_VIT)
+        d = dict(rr)
+        per = ilog10(d[f'b{kk-1}.aresB'][0] / d['headln.lnB'][0]) if kk else 0
+        print(f"  {name:<50} {sci(a):>13} {sci(e):>13}  10^{per}")
+    print("\n  ⭐⭐ THE SAVED Q/K/V BOUND IS THE WHOLE ANSWER, and the leaf that fixes it was")
+    print("     already in the repo. `floatBridges_mhsaBack` takes `|Q i k| ≤ qA` as a free")
+    print("     hypothesis; discharging it from the forward's certified window costs 1158 orders")
+    print("     and makes the per-block multiplier grow with depth (10^225 at block 11, 10^32 at")
+    print("     block 0). Discharging it from `bnXhat_sq_le` — ViT's LN is `γ·x̂ + β` and")
+    print("     `|x̂| ≤ √192`, so every saved projection is ≤ 3281 whatever arrives — makes the")
+    print("     multiplier UNIFORM at 10^32 and the number 5.686e399 at the ε-floor, with no")
+    print("     operating point at all. §5's 'ablate the leaf before blaming the depth', again.")
+    print("  ⛔ And attention is still the cost: 10^32 per block against 10^11 without the cores.")

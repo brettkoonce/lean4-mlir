@@ -296,6 +296,36 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "vitInputGradK_eq_vitForwardKV_vjp"   # ViT-Tiny at depth 12, 3 heads, VECTOR LayerNorm; the tier the scalar-LN block tie could not reach; via HasVJP.backward_unique against the tactic-built vitForwardKV_has_vjp; shape check vitForwardKV_eq_chain; HasVJP everywhere, no kink, only 0 < eps
+      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "vitTinyInputGrad_eq_vitTiny_vjp"   # the same at the shipped dims: 3x224x224, 16x16 patches, 196+1 tokens, D 192 = 3x64, mlp 768, 12 distinct-param blocks, 10 classes
+      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "vitBlockBackV_eq_transformerBlockV_vjp"   # ViT's encoder-block backward at the vector LN the net runs; the scalar-LN peer vitBlockBackPR_eq_transformerBlock_vjp is about the retired form
+      file: "LeanMlir/Proofs/Architectures/ViTVecLNBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "vitTowerBackK_eq_vjp"   # the depth-k encoder-tower fold, head-first like the forward it reverses; the tail's saved input is block 0's OUTPUT
+      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "vitForwardKV_eq_chain"   # the shape check for ViT's tie: the four-factor composition the apex is stated at IS vitForwardKV
+      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "resnet34Forward_full_pc_eq_chain"   # the shape check for r34's tie: the opaque-block chain IS resnet34Forward_full_pc
       file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTie.lean"
       sorry_count: 0
@@ -612,7 +642,7 @@ fidelity:
        agree — four certs are shared across those net boundaries and kept their
        symmetric statements, gaining `_xla_` twins for MobileNetV2's use.
 
-       THE TIES. All four backward chains are proven to BE the certified whole-net
+       THE TIES. All five backward chains are proven to BE the certified whole-net
        VJP, each with a shape check that the opaque-block chain the apex is
        instantiated at IS the committed forward:
        `r34InputGrad_eq_resnet34_vjp` with `resnet34Forward_full_pc_eq_chain`
@@ -631,7 +661,19 @@ fidelity:
        step further -- through `HasVJP.backward_unique` to the concrete
        `efficientnetForwardB_full_has_vjp` and its `_correct`, so the hand-written
        chain is stated to be the pdiv-contracted Jacobian of the committed
-       nested-application forward itself. Closing the ties found drift that
+       nested-application forward itself. ViT-Tiny joined them the same day:
+       `vitInputGradK_eq_vitForwardKV_vjp` with `vitForwardKV_eq_chain` (depth 12,
+       3 heads, HasVJP everywhere, no operating point and no batch size -- ViT has
+       no kink), instantiated at the shipped dimensions as
+       `vitTinyInputGrad_eq_vitTiny_vjp`, and taking B0's
+       `HasVJP.backward_unique` step because `vitForwardKV_has_vjp` is tactic-built
+       behind an `unfold`. It is stated at the VECTOR LayerNorm the render emits,
+       where the pre-existing block tie
+       `vitBlockBackPR_eq_transformerBlock_vjp` is at the retired scalar affines --
+       the SAME drift the row below records for ViT's forward float cone, caught a
+       second time on the same net by the same kind of theorem. There is no ViT
+       backward NUMBER: the chain folds to 1.703e399, which says nothing, and the
+       tie does not need one. Closing the ties found drift that
        no review had: `r34InputGrad` reversed the 2x2 pool where the committed
        forward pools 3x3/s2 (the number moved 4x); both ConvNeXt bridges held
        `id` in the head-LayerNorm slot, the backward one justified by a stale

@@ -50,7 +50,7 @@ Window is the certified bound on the output's magnitude; budget is the bound on 
 between the float output and the real output, per logit (forwards) or per input pixel
 (backwards, on loss cotangents of magnitude at most 1). Inputs are on the unit box.
 
-The six whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
+The seven whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
 
 | net | tie | shape check | apex kind |
 |---|---|---|---|
@@ -60,6 +60,7 @@ The six whole-net certified ties, all in `LeanMlir/Proofs/Foundation/`:
 | EfficientNet-B0 | `efficientnetInputGradB_eq_efficientnetForwardB_vjp` | `efficientnetForwardB_eq_chain` | `HasVJP` (everywhere) |
 | MobileNetV2, 17-block paper | `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | `mobilenetv2ForwardPaper_eq_slots` | `HasVJPAt` (smooth point) |
 | EfficientNet-B0, 16-block paper | `efficientnetInputGradB_full_correct` | `efficientnetForwardB_full_eq_chain` (inside `efficientnetForwardB_full_has_vjp_correct`) | `HasVJP` (everywhere); through `HasVJP.backward_unique` to the concrete `efficientnetForwardB_full_has_vjp` |
+| ViT-Tiny, depth 12 | `vitInputGradK_eq_vitForwardKV_vjp` (`vitTinyInputGrad_eq_vitTiny_vjp` at the shipped dims) | `vitForwardKV_eq_chain` | `HasVJP` (everywhere); through `HasVJP.backward_unique` to the committed `vitForwardKV_has_vjp` |
 
 The tie says the hand-written backward chain the number is stated on IS the certified whole-net
 VJP, not merely that each of its pieces is. The shape check says the chain of opaque block
@@ -225,6 +226,32 @@ vacuous, and a tight bound needs measured Jacobians that are not static.
    cap is a per-op question: cap the stage whose window is bounded, not the stage whose error is
    large.
 
+8. **A saved-activation bound taken from the forward's certified window is worth 1158 orders,
+   and the proved replacement was already in the repo** (ViT-Tiny's backward probe, 2026-09-05 —
+   finding 3 for the fifth time, in the one place it had not been looked for).
+   `floatBridges_mhsaBack` takes `|Q i k| <= qA`, `|K i k| <= kA`, `|V i k| <= vA` as FREE
+   hypotheses on the saved projections, and each sdpa core multiplies the cotangent window by
+   `n * (1+n) * dh * scaleA * vA * kA`. Discharging those from the forward's own certified window
+   — which grows `2 A S` per LayerNorm site and reaches 1e108 at depth 12 — gives 5.798e1557 and
+   a per-block multiplier that GROWS with depth (10^225 at block 11, 10^32 at block 0).
+   Discharging them from `bnXhat_sq_le` instead gives 5.686e399 and a per-block multiplier that
+   is UNIFORM at 10^32. The bound is `|Q| <= (1 + gamma_{D+2}) * (D * w' * (G * sqrt D + Bl) + b)`
+   = 3281 at ViT-Tiny, whatever arrives: ViT's per-token LayerNorm is literally `gamma * x-hat +
+   beta`, so `|x-hat| <= sqrt D` bounds its OUTPUT by a constant and one dense bounds the
+   projection. Depth-independent, and one line from a lemma the repo already has: `layerNormVec
+   D eps g b x k = g k * bnXhat D eps x k + b k` by unfolding `layerNormForward`/`bnForward`, and
+   `bnXhat_sq_le` is the bound. ⚠ Not written in Lean, because the number was declined.
+
+   ⭐ **The same reading is available to ViT's committed FORWARD number and was not taken.**
+   `vit_ln_leaf` / `Maps.bnCapped` bound the LayerNorm output by `G * (2 A S) + Bb`, growing;
+   `min(2 A S, G * sqrt D + Bl)` is the honest window and is a constant. That is finding 3's
+   sentence — *"the forward LayerNorm leaf had bounded the same quantity by `|x - mu| * |istd| <=
+   2 A S` and thrown the better bound away"* — still true of every LayerNorm and BatchNorm
+   forward in the table, three years of orders from being cashed. ⛔ NOT CHASED (user decision,
+   2026-09-05): the thread is closed, the numbers are vacuous either way, and re-spelling
+   `Maps.bnCapped`'s window moves six committed forward numbers. Recorded so that nobody
+   re-derives it, and so that a future forward number is written with the `min` from the start.
+
 ## 4. What the thread found in the repo
 
 Bringing the float tier, the codegen tier and the certified VJPs into one statement forced
@@ -377,9 +404,18 @@ that is not "the number gets smaller".
   Statable since finding 5's correction (9.112e2648 and 1.246e323 at the shipped leaves; the
   threshold is an option). Declined: a number that says nothing at 1e182 says nothing at 1e2648,
   and the sixteen-block chain has its certified tie without one.
-* **ViT-Tiny's backward.** `MhsaBackFloatBridge.lean` is 8 `floatBridgesTo_` against 46
-  existential-tier `floatBridges_`, so it is a tier migration first, for a fifth number of a
-  kind there are four of.
+* **ViT-Tiny's backward. MEASURED 2026-09-05 and declined; see finding 8.** `vit_back_chain` /
+  `verify_vit_back` put it at window 5.686e399, budget 1.703e399, ratio 0.30 — a FOLD at the
+  eps-floor with NO operating point, 195 stages, 390 rounded inequalities re-asserted. Statable
+  under `set_option exponentiation.threshold 500` (finding 5). Declined on the same ground as
+  B0's and MobileNetV2's backwards: it says nothing, and tier T6 landed without it
+  (`vitInputGradK_eq_vitForwardKV_vjp`). The cost is also the largest of the three — ViT is the
+  one net whose backward needs `Maps` leaves nothing else uses (the three sdpa cores, the
+  patch-embed backward, a per-token `perRowPR` lift), on top of the tier migration
+  `MhsaBackFloatBridge.lean` still wants (8 `floatBridgesTo_` against 46 `floatBridges_`).
+  ⛔ The scoping's predicted CAP is wrong and could not have been right: no backward stage has a
+  window bounded by a constant, so `Maps.capped` has nothing to attach to. Caps are a
+  forward-only instrument, which is finding 2 read the other way.
 * **`efficientnetForwardBEval N = batchMap N (per-example forward)`**, the whole-net form of
   "inference decouples the batch". Only the per-site claim is proved.
 

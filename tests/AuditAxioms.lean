@@ -136,6 +136,7 @@ import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetFullWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTie
 import LeanMlir.Proofs.Float.ConvNeXtBackFloatBudget
 import LeanMlir.Proofs.Float.EfficientNetBackFloatBudget
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
@@ -3171,6 +3172,47 @@ open Proofs
 #print axioms Proofs.cnxSavedA10
 #print axioms Proofs.convNextForwardTCh_vjp_chain
 #print axioms Proofs.convnextInputGrad_eq_convNextForwardTCh_vjp
+-- ⭐⭐ ViT-Tiny's whole-net backward tie — tier T6 at the paper net (proofs_tier_to_paper_nets
+-- 3.4a; ViTWholeBackFloatBridge / ViTVecLNBackCertifiedTie / ViTWholeBackCertifiedTie, ~5 s).
+-- ⛔ THE GAP WAS THE LAYERNORM FORM, NOT THE HEAD COUNT. The audit recorded the existing block
+-- tie as being at heads = 1; it is general in h throughout. What it is at is the retired SCALAR
+-- LayerNorm (gamma beta : R, against transformerBlock_has_vjp_mat), while the shipped
+-- vitForwardKV runs transformerBlockV at vector [D] — package 3.1's ConvNeXt hole exactly.
+-- ⭐ And ConvNeXt had already built ViT's LayerNorm backward: rowLNVecFlatBack is perRowIdxFlat of
+-- bn_grad_input at unit gamma after diagBack gamma, its header says it is "literally ViT's
+-- per-token LN with token read as spatial position", and rowLNVecFlat_has_vjp_backward_eq already
+-- pins it to layerNormVec_per_token_has_vjp_mat. So the vector-LN seam is one lemma
+-- (rowLNVecFlatBack_eq_vecLN_vjp) and everything else — mhsaBackFlat's sdpa tie, the dense input
+-- VJPs, the diagBack GELU derivative, the perRowFlatPR residual seams — is LayerNorm-agnostic and
+-- reused verbatim. Both sublayer decompositions and the block unfold stay rfl.
+-- The tower fold is the one real proof: vitBodyKVFlat's HasVJP is built head-first (block 0 runs
+-- first), so the backward composes the block backwards in the OPPOSITE order and the tail's saved
+-- input is block 0's forward OUTPUT — cnxStageChKBack_eq_vjp's induction, one architecture over.
+-- ⛔ NOT towerBack of a List: towerBack (f :: fs) applies the head FIRST, and the ordering was
+-- never pinned because the only towerBack result in the repo is at List.replicate.
+-- The apex goes through a TERM-mode vjp_comp chain (vitApexVJP) + HasVJP.backward_unique, because
+-- vitForwardKV_has_vjp opens with `unfold vitForwardKV` and its .backward sits behind an Eq.mpr.
+-- ⭐ HasVJP everywhere, not HasVJPAt: ViT has no kink (softmax, GELU and vector LN are smooth), so
+-- like ConvNeXt-T and unlike r34/mnv2/B0 there is no smoothness witness, no operating point and no
+-- batch size — the only hypothesis is 0 < eps.
+#print axioms Proofs.vitBlockBackV
+#print axioms Proofs.vitBlockBackVAt
+#print axioms Proofs.vitTowerBackK
+#print axioms Proofs.vitInputGradK
+#print axioms Proofs.rowLNVecFlatBack_eq_vecLN_vjp
+#print axioms Proofs.attnSubFlatTieV
+#print axioms Proofs.mlpSubFlatTieV
+#print axioms Proofs.vitBlockBackV_eq_transformerBlockV_vjp
+#print axioms Proofs.vitBlockBackVAt_eq_vjp
+#print axioms Proofs.vitHeadBack_eq_classifier_vjp
+#print axioms Proofs.vitFinalLNBack_eq_vjp
+#print axioms Proofs.vitPatchEmbedBack_eq_vjp
+#print axioms Proofs.vitTowerBackK_eq_vjp
+#print axioms Proofs.vitForwardKV_eq_chain
+#print axioms Proofs.vitInputGradK_eq_vitApexVJP
+#print axioms Proofs.vitInputGradK_eq_vitForwardKV_vjp
+#print axioms Proofs.vitInputGradK_correct
+#print axioms Proofs.vitTinyInputGrad_eq_vitTiny_vjp
 -- ⭐⭐ ConvNeXt-T's whole-net BACKWARD NUMBER, the third and the first for a LAYERNORM net:
 -- window 1.023e251 / budget 1.563e250, ratio 0.153 — the interval FOLD, no `capped` anywhere, at
 -- the net whose own FORWARD number is a 2.00 cap. Stated directly on the committed

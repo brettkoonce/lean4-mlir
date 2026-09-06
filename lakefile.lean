@@ -654,6 +654,20 @@ lean_lib «Certs» where
              -- depth-k STAGE FOLD (planning §3.18's "one real proof"), plus the eleven named saved
              -- activations. ⛔ The assembly is not here — see the file header and planning §3.19.
              `LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie,
+             -- ViT-Tiny's whole-net backward, tier T6 (proofs_tier_to_paper_nets 3.4a), in three
+             -- modules. ⛔ The gap it closes is NOT the head count the audit recorded
+             -- (ViTMhsaBackCertifiedTie is general in h) — it is the LayerNorm FORM: the block tie
+             -- was at the retired SCALAR gamma/beta and the shipped vitForwardKV runs
+             -- transformerBlockV at vector [D]. ViTWholeBackFloatBridge names the chain
+             -- (vitBlockBackV / vitTowerBackK / vitInputGradK) with the per-token LN slots as
+             -- ConvNeXt's rowLNVecFlatBack, whose header already said it is "literally ViT's
+             -- per-token LN"; ViTVecLNBackCertifiedTie re-states the block tie there (both sublayer
+             -- decompositions and the block unfold stay rfl); ViTWholeBackCertifiedTie folds the
+             -- depth-k tower head-first and closes the apex through a TERM-mode vjp_comp chain +
+             -- HasVJP.backward_unique, since vitForwardKV_has_vjp opens with `unfold`.
+             `LeanMlir.Proofs.Float.ViTWholeBackFloatBridge,
+             `LeanMlir.Proofs.Architectures.ViTVecLNBackCertifiedTie,
+             `LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTie,
              -- R50 phase 1 (planning/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck
              -- blocks' certified VJPs. bblkPC (identity, 12 blocks), bblkPStridedPC (strided
              -- projection, stages 2/3/4 block 0) and — the one with NO R34 analogue —

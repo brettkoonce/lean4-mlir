@@ -1,7 +1,8 @@
 # Bringing every net's Proofs tier to its paper-faithful net
 
 **Scoped 2026-09-05 from the Proofs-tier audit run during the XLA-SAME re-spelling. Nothing
-below is started except where a row says so; 3.1, 3.2(a)–(c) and 3.3 have since landed.** The target is the
+below is started except where a row says so; 3.1, 3.2(a)–(c), (e), 3.3 and 3.4 have since
+landed.** The target is the
 level ConvNeXt-T sits at: every certification tier stated at the net the artifact runs, the column
 "tiers only at a reduced or representative net" empty for every architecture. ConvNeXt-T had one
 hole of its own when this was scoped — its train-step tie was at the retired scalar LN — and
@@ -40,7 +41,7 @@ shipped config count as paper-net statements.
 |---|---|---|---|---|---|---|---|---|
 | ResNet-34 | `resnet34Forward_full_pc`, [3,4,6,3], 64 to 512 | ✓ | ✓ | ✓ 146 params | ✓ eval and train BN | ✓ | ✓ | full depth at 2 channels; 224 realistic |
 | ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
-| ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ✗ | ✗ block-level only | none |
+| ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ⛔ 1.703e399, priced and declined | ✓ `vitInputGradK_eq_vitForwardKV_vjp` | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
 | MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 210 params | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | none; `r50Trunk_3463` is a backward fold | trunk only | ✗ | ✗ | ✗ | ✗ | ✗ | none |
@@ -355,29 +356,110 @@ Gates: `lake build Certs` green, `lake env lean tests/AuditAxioms.lean` 3-axiom 
 `lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`; the probe end to end
 with every other net's output unchanged.
 
-### 3.4 ViT-Tiny: the backward tiers (T5, T6)
+### 3.4 ViT-Tiny: the backward tiers (T5, T6) — **(a) DONE 2026-09-05; (b) probed, declined**
 
-**Gap.** Forward is complete at depth 12, three heads, vector LN. The backward has the float
-chain (`vitGradFlat`, `MhsaBackFloatBridge.lean`), the block-level tie
-(`vitBlockBackPR_eq_transformerBlock_vjp`, `ViTMhsaBackCertifiedTie.lean`) and the end-to-end
-backward-graph fold (`vitTinyTrunk_is_shipped`), but no whole-net T6 and no number.
+**Gap, as scoped.** Forward complete at depth 12, three heads, vector LN. The backward had the
+float chain (`vitGradFlat`, `MhsaBackFloatBridge.lean`), a block-level tie
+(`vitBlockBackPR_eq_transformerBlock_vjp`) and the end-to-end backward-graph fold
+(`vitTinyTrunk_is_shipped`), but no whole-net T6 and no number.
 
-**(a) T6.** `vitGradFlat_eq_vitBodyKVFlat_vjp`: induction on depth over the block tie, the
-`towerBack` fold reconciled with `vitBodyKVFlat`'s head recursion the way
-`vit_full_eq_vitForwardFlat` (`ViTWholeFloatBridge.lean`) reconciles the forwards. The block tie
-is at heads = 1 per token (`ViTMhsaBackCertifiedTie` says so in its header); the multi-head
-cotangents are in `ViTMultiHeadChain.lean`, so the tie either goes through `mhsa_layer_spelled`
-at 3 heads or is stated at the single-head representative and says so. Prefer the former; the
-forward already is.
+⛔ **The scoping named the wrong gap, twice.** It recorded the block tie as being at `heads = 1`
+and proposed routing it through `mhsa_layer_spelled` at 3 heads. `ViTMhsaBackCertifiedTie.lean` is
+general in `h` throughout — its own header says *"assembled from the block unfold (general heads)"*
+— and `mhsa_backward_collapseMH` is what makes it so. The real gap is the **LayerNorm form**: the
+tie is at `γ1 β1 γ2 β2 : ℝ` against `transformerBlock_has_vjp_mat`, and the shipped `vitForwardKV`
+runs `transformerBlockV` at `γ β : Vec D`. That is package 3.1's ConvNeXt hole exactly — a tie
+true of a net the repo stopped running — and it is the *third* time the ViT float cone has been
+caught at the scalar affines (`planning/float_budget_numbers.md` §4, row 3). ⚠ A second, quieter
+gap: `vitGradFlat`'s final-LN slot is `perRowFlat` of one shared `Vec D → Vec D`, where the
+certified backward is per-token, so the whole-net chain needed the enrichment `vitBlockBackPR`
+already had on the block side.
 
-**(b) T5.** Write `vit_back_chain` in the probe (there is none; the four backward chains are
-r34, mnv2, b0, cnx). All 25 LN sites and 12 attention sites are capped on the forward; the
-backward through a softmax Jacobian is `smRho`-conditioned (`vit_float_logits_le` already
-needs `smRho u eexp 197 < 1`), so expect a CAP with that side-condition. Then
-`ViTBackFloatBudget.lean`, mirror `ConvNeXtBackFloatBudget.lean` (the first LayerNorm-net
-backward, and its `|istd| ≤ 16` operating point).
+**(a) DONE — T6, in three modules and ~660 lines.**
 
-Done when both compile, the yaml gets a `vit_grad_float_le` row, and the tie uses a shape check.
+* `Float/ViTWholeBackFloatBridge.lean` names the chain: `vitBlockBackV` (the vector-LN block
+  backward, LN slots as `rowLNVecFlatBack`), `vitBlockBackVAt` (every saved slot pinned to the
+  real forward at the block's own input), `vitTowerBackK` (the depth-`k` fold), the two saved
+  prefixes `vitSavedPE` / `vitSavedBody`, and `vitInputGradK`. B0's
+  `EfficientNetFullWholeBackFloatBridge.lean` role: the tie is about a named term.
+* `Architectures/ViTVecLNBackCertifiedTie.lean` re-states the block tie there:
+  `vitBlockBackV_eq_transformerBlockV_vjp` and its flat form `vitBlockBackVAt_eq_vjp`.
+* `Foundation/ViTWholeBackCertifiedTie.lean` folds the tower and closes the apex:
+  `vitTowerBackK_eq_vjp`, `vitInputGradK_eq_vitForwardKV_vjp`, `vitInputGradK_correct`, and
+  `vitTinyInputGrad_eq_vitTiny_vjp` at the shipped `3×224×224` / 196+1 tokens / D 192 / 12 blocks
+  / 10 classes.
+
+⭐⭐ **There is no new analysis in any of it, because ConvNeXt already built ViT's LayerNorm
+backward.** `rowLNVecFlatBack` (`ChannelLNFloatBridge.lean`) is `perRowIdxFlat` of
+`bn_grad_input c ε 1 (X r) ∘ diagBack γ`, its header says it is *"literally ViT's per-token LN with
+'token' read as 'spatial position'"*, and `rowLNVecFlat_has_vjp_backward_eq` already pins it to
+`layerNormVec_per_token_has_vjp_mat`. So the vector-LN seam is ONE lemma
+(`rowLNVecFlatBack_eq_vecLN_vjp`, two tactics) and everything else in the block —
+`mhsaBackFlat_eq_mhsa_vjp`, `dense_transpose_eq_mulVec`, `diagBack_eq_gelu_vjp`,
+`transformerMlp_back_flat_eq_perRowFlatPR`, `perRowFlatPR_residual` — is LayerNorm-agnostic and
+reused from the scalar file verbatim. Both sublayer decompositions and the block unfold stay
+`rfl` at the vector LN. §7's *"grep the whole cone for a bound before proving one, not the files
+named after the net"* paid a second time, on the same lemma.
+
+⛔ **The tower is NOT `towerBack` of a `List`.** `towerBack (f :: fs) = towerBack fs ∘ f` applies
+the HEAD first, so a list in block order runs the shallowest block's backward first; the ordering
+was never pinned because the only `towerBack` result in the repo is at `List.replicate`
+(`towerBack_replicate`), where it cannot matter. `vitTowerBackK` is its own recursion, mirroring
+`vitBodyKVFlat`'s head-first fold, which is what makes the saved-activation thread visible — and
+the thread is the content: the tail's saved input is block 0's forward OUTPUT.
+
+⚠ **The apex needs the term-mode escape.** `vitForwardKV_has_vjp` is tactic-built and opens with
+`unfold vitForwardKV`, so its `.backward` sits behind an `Eq.mpr`. `vitApexVJP` is the same
+four-factor `vjp_comp` chain written as a term, and `HasVJP.backward_unique` carries the tie to
+the committed witness — B0 3.3(c)'s escape, and §5's `▸`-transport trap.
+
+⭐ The result is `HasVJP`, not `HasVJPAt`: ViT has no kink anywhere, so like ConvNeXt-T and unlike
+r34/mnv2/B0 there is no smoothness witness, no operating point and no batch size. The only
+hypothesis is `0 < ε`. Three of the four endpoint ties are one tactic each and the patch embed's
+is `rfl` — `patchEmbed_flat_has_vjp`'s `backward` field IS
+`patchEmbed_input_grad_formula`, the one endpoint in the repo that needed no reconciliation.
+
+Gates: `lake build Certs` 3966 green, `lake env lean tests/AuditAxioms.lean` 3-axiom clean on all
+eighteen new declarations, `lake exe docstring-checkrefs`,
+`python3 scripts/check_audit_coverage.py`.
+
+**(b) PROBED, DECLINED — and the scoping's predicted CAP could not have been right.**
+`scripts/float_budget_envelope.py` gains `vit_back_chain` / `verify_vit_back` (195 stages, 390
+rounded inequalities), `vit_qkv_xhat`, and the four sdpa-core / patch-embed-back leaf helpers.
+
+| | window | budget | per block |
+|---|---|---|---|
+| **shipped: saved Q/K/V from `bnXhat_sq_le`** | **5.686e399** | **1.703e399** | 10^32 |
+| saved Q/K/V from the FORWARD's certified window | 5.798e1557 | 1.741e1557 | 10^225 → 10^32 |
+| the same, `\|istd\| ≤ 16` | 2.178e367 | 6.741e366 | 10^29 |
+| attention cores replaced by the identity | 2.827e251 | 3.140e250 | 10^19 |
+| depth 2 / depth 6 | 5.038e76 / 8.399e205 | 2.958e75 / 1.372e205 | 10^32 |
+
+⛔ **It is a FOLD (ratio 0.30), not a cap, and no cap is available.** `Maps.capped` needs a stage
+whose window is bounded by a constant; no backward stage has one, because a VJP is linear in the
+cotangent and every window is proportional to it. That is `planning/float_budget_numbers.md`
+finding 2 read the other way, and it is the same answer MobileNetV2's 17-block backward got.
+
+⭐⭐ **The probe's real product is the leaf, recorded as finding 8.** `floatBridges_mhsaBack` takes
+`|Q i k| ≤ qA` as a FREE hypothesis, and the chain had no reason to discharge it from anything but
+the forward's certified window — which grows `2·A·S` per LayerNorm site to 1e108 at depth 12.
+`bnXhat_sq_le` bounds ViT's LN OUTPUT by the constant `G·√192 + Bl` (ViT's per-token LN is
+literally `γ·x̂ + β`), so every saved projection is ≤ 3281 whatever arrives. 1158 orders, and the
+per-block multiplier stops growing with depth. ⚠ Arithmetic in the probe only — one line from
+`bnXhat_sq_le` (`layerNormVec D ε γ β x k = γ k * bnXhat D ε x k + β k` by delta), but not written
+in Lean, because the number it rescues was declined. ⚠ The same reading is available to ViT's committed
+FORWARD number and to every other LayerNorm/BatchNorm forward in the table; **not chased** (user
+decision, 2026-09-05 — the thread is closed and the numbers are vacuous either way), recorded so
+a future forward number is written with the `min` from the start.
+
+**Declined** on B0 3.3(b)'s ground: a number that says nothing at 1e2648 says nothing at 1e399,
+and T6 landed without one. ViT's cost is also the highest of the three declined backwards — it is
+the one net needing `Maps` leaves nothing else uses (the three sdpa cores, the patch-embed
+backward, a per-token `perRowPR` lift), on top of the `floatBridgesTo_` migration
+`MhsaBackFloatBridge.lean` still wants. Listed in `planning/float_budget_numbers.md` §6.
+
+⛔ `ViTBackFloatBudget.lean` is CANCELLED. §6's file list scoped one new file for 3.4; three
+landed, because the chain needed naming and the block tie needed re-stating before the fold.
 
 ### 3.5 ResNet-50: all six tiers
 
@@ -474,6 +556,11 @@ either answer should be written into `formalization.yaml` 4d, which today says n
   computed dimension in an applied position sends the unifier into the net; give the stage a
   `def` with the type ascribed in the chain's spelling. `Elab.async` makes timings
   order-dependent; measure with it off.
+* ⛔ **An audit's named gap can be the wrong one.** §3.4 as scoped said ViT's block tie was at
+  `heads = 1`; it is general in `h`, and says so in its own header. The real gap was the LayerNorm
+  form, which the audit did not mention — and which the same net had already been caught on twice
+  (`planning/float_budget_numbers.md` §4, row 3). Re-read the file before costing the package, and
+  cost it against the SHIPPED spelling of every convention, not against the one the row names.
 * **Conventions are invisible to types.** Padding phase, BN world and activation all preserve
   shapes and arities; `scripts/convention_audit.py` sees the first and third at the artifact
   tier and nothing sees the Proofs tier. When an emitter fix lands, grep every other definition
@@ -499,7 +586,10 @@ the VJP was already in `MobileNetV2FullVJP.lean`); 3.3 `EfficientNetFullFloatBud
 landed, as did `Architectures/EfficientNetFullB0Eval.lean` for 3.3(e) (⛔
 `EfficientNetFullBackFloatBudget.lean` is DECLINED: statable at 1e2648 since the threshold
 finding, and worth nothing); 3.4
-`ViTWholeBackCertifiedTie.lean`, `ViTBackFloatBudget.lean`; 3.5 `Resnet50FullB.lean`,
+`Float/ViTWholeBackFloatBridge.lean`, `Architectures/ViTVecLNBackCertifiedTie.lean` and
+`Foundation/ViTWholeBackCertifiedTie.lean` all landed (⛔ `ViTBackFloatBudget.lean` is DECLINED:
+a fold at 5.686e399 / 1.703e399, statable at `exponentiation.threshold 500` and worth nothing,
+and the most expensive of the three declined backwards); 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for
 MobileNetV4. Every new file: a `lakefile.lean` `Certs` root or an import of one, an
