@@ -102,7 +102,7 @@ status:
   axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 2291 declarations (count: grep -c '^#print axioms'
+    # `#print axioms` on 2296 declarations (count: grep -c '^#print axioms'
     # tests/AuditAxioms.lean); 52 are independently kernel-rechecked by the
     # comparator (tests/comparator/config.json). All close under exactly the
     # three core axioms above. comparator_config below points at that config for
@@ -339,6 +339,12 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct"   # and it is the pdiv-contracted Jacobian of the committed forward itself
       file: "LeanMlir/Proofs/Architectures/ResNet50FullBVJP.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.StableHLO.resnet50FwdGraphB_full_faithful"   # T2: the typed graph at the render's own tokens denotes that forward
+      file: "LeanMlir/Proofs/Architectures/ResNet50FullB.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -1410,12 +1416,13 @@ fidelity:
        ResNet-50 still has no whole-net forward, graph or tie: these are the two
        pieces §3.5 said to budget INSIDE that package, now paid for in advance.
 
-    4m. RESNET-50's FIRST NET-LEVEL TIER (2026-09-06). The audit of 2026-09-05
+    4m. RESNET-50's FIRST NET-LEVEL TIERS, T1 AND T2 (2026-09-06). The audit of 2026-09-05
        recorded ResNet-50 as the largest hole in the Proofs tier: "none;
        `r50Trunk_3463` is a backward fold", with T1 through T7 all missing.
-       `Architectures/ResNet50FullB.lean` and `ResNet50FullBVJP.lean` are T1 --
-       an ℝ forward at the [3,4,6,3] bottleneck ladder and a certified whole-net
-       `HasVJPAt` over it, ~2.5 s to elaborate, ten declarations.
+       `Architectures/ResNet50FullB.lean` and `ResNet50FullBVJP.lean` are T1 and
+       T2 -- an ℝ forward at the [3,4,6,3] bottleneck ladder, a certified
+       whole-net `HasVJPAt` over it, and the typed `SHlo` graph that denotes that
+       forward. ~3 s to elaborate, fifteen declarations.
 
        ⭐ THIS IS THE ONE NET WHERE T1 MATCHES THE TRAINED WORLD FROM THE START.
        ResNet-34's and MobileNetV2's Proofs tiers were written at per-example
@@ -1469,9 +1476,30 @@ fidelity:
        head 2. The records' conv-bias slots are the `convBias := true` census and
        are quantified over, as ResNet-34's and MobileNetV2's are.
 
-       ⚠ WHAT IS STILL MISSING FOR THIS NET: T2 (the typed forward graph, which
-       belongs in the same file and whose tokens are `r50FwdChainB`'s), T3, the
-       budgets and the backward tie. T1 is one of seven tiers.
+       ⭐ T2 IS FOUR PER-BLOCK-KIND GRAPHS AND ONE `rw` EACH, at
+       `ResNet50RenderB`'s own tokens. ⚠ It uses `.addVB`, the batched add the
+       render emits, where `ResNet34FullB.lean` uses `.addV` (`den` identical,
+       `skel` not -- recorded in 4i and left alone there). ⚠ THE RESIDUAL OPERAND
+       ORDER IS THE RENDER'S, AND THAT COSTS ONE `add_comm`: both projection
+       blocks emit `addVB(body, projection)` while `residualProj proj body` adds
+       `proj + body`, so those two faithfulness proofs close with a commutation
+       step rather than by `simp` alone. Writing the graph in `residualProj`'s
+       order would make `den` close by `rfl` and the emitted operand order wrong.
+       The identity block needs nothing: `addVB(body, x)` IS `residual`'s order.
+       ⚠ The bias operands call `biasName false "" c`, the render's own function,
+       rather than a literal -- `ResNet50RenderB` has no `convBias` flag at all,
+       so `%zb{c}` is the only name this net emits. ⛔ `ResNet34FullB.lean` writes
+       the `convBias := true` names its render does not emit by default: the
+       graph-operand form of the census trap, cosmetic, worth fixing when that
+       file is next touched.
+
+       ✅ CHECKED AGAINST THE COMMITTED BYTES, not asserted:
+       `verified_mlir/resnet50_fwd.mlir`'s signature is 162 arguments = `%x` plus
+       161 parameters with 12 projection slots, exactly the record's census, and
+       every SSA name this file writes appears there.
+
+       ⚠ WHAT IS STILL MISSING FOR THIS NET: T3, the two float budgets and the
+       certified backward tie. T1 and T2 are two of seven tiers.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
@@ -1500,7 +1528,7 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above, plus a full `#print axioms` sweep of 2291
+    fidelity caveats above, plus a full `#print axioms` sweep of 2296
     declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 52

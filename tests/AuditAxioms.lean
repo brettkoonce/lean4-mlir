@@ -5850,11 +5850,12 @@ open Proofs
 #print axioms Proofs.bceLossCotGraph_row_committed
 
 -- ════════════════════════════════════════════════════════════════
--- §3.5(a): RESNET-50's T1 AT BATCH BATCHNORM (ResNet50FullB{,VJP}.lean, 2026-09-06)
+-- §3.5(a)+(b): RESNET-50's T1 AND T2 AT BATCH BATCHNORM (ResNet50FullB{,VJP}.lean, 2026-09-06)
 -- ════════════════════════════════════════════════════════════════
 -- ResNet-50 was the largest hole in the Proofs tier: the audit row read "none; r50Trunk_3463 is a
--- backward fold" with every tier missing. This is its first NET-LEVEL statement -- an R forward at
--- the [3,4,6,3] bottleneck ladder and a certified whole-net HasVJPAt over it.
+-- backward fold" with every tier missing. These are its first two NET-LEVEL tiers -- an R forward
+-- at the [3,4,6,3] bottleneck ladder with a certified whole-net HasVJPAt over it (T1), and the
+-- typed SHlo graph that denotes that forward (T2).
 -- ⭐ THE ONE NET WHERE T1 MATCHES THE TRAINED WORLD FROM THE START. ResNet-34's and MobileNetV2's
 -- Proofs tiers were written at per-example BatchNorm and had to be ported (4e/4g/4i/4j);
 -- ResNet50RenderB has always been this net's only renderer, so bnBatchLA is the world of
@@ -5888,8 +5889,6 @@ open Proofs
 -- ⭐ The census is 161 updated parameters, which is ResNet50RenderB's own "161 theta / 161 m /
 -- 161 v": stem 3 + 12 identity blocks x 9 + 4 projection blocks x 12 + head 2. The records' bias
 -- slots are the convBias := true census and are quantified over.
--- ⚠ T2 (the typed forward graph) is NOT here yet -- §3.5(b). It belongs in ResNet50FullB.lean
--- beside the forwards, and its tokens are r50FwdChainB's.
 #print axioms Proofs.resnet50ForwardB_full
 #print axioms Proofs.r50IdB_has_vjp_at
 #print axioms Proofs.r50IdB_differentiableAt
@@ -5900,3 +5899,30 @@ open Proofs
 #print axioms Proofs.resnet50ForwardB_full_has_vjp_at
 #print axioms Proofs.resnet50ForwardB_full_eq_chain
 #print axioms Proofs.resnet50ForwardB_full_has_vjp_at_correct
+
+-- ── T2, the typed forward graph ──
+-- Four per-block-kind graphs at ResNet50RenderB's own tokens, their _faithful lemmas, then one rw
+-- per block and the stem. resnet50FwdGraphB_full_faithful is the capstone.
+-- ⚠ .addVB, NOT .addV: ResNet50RenderB emits the batched add. den is identical (both are
+-- fun j => den a j + den b j, both rfl) but skel is not, so the emitted shape annotation differs.
+-- ⛔ ResNet34FullB.lean uses .addV where its own render emits .addVB -- recorded in 4i and left
+-- alone there; this file does not repeat it.
+-- ⚠ THE RESIDUAL OPERAND ORDER IS THE RENDER'S, AND THAT COSTS ONE add_comm. Both projection
+-- blocks emit addVB(body, projection) while residualProj proj body adds proj + body, so
+-- r50{Proj,Down}GraphB_faithful close with `congr 1; funext; ring` rather than by simp alone.
+-- Writing the graph in residualProj's order would make den close by rfl and the emitted operand
+-- order wrong; the identity block needs nothing, because addVB(body, x) IS residual's order.
+-- ⚠ The bias operands are `biasName false "" c`, the render's own function rather than a literal.
+-- ResNet50RenderB has NO convBias flag -- its `zb` bakes false -- so %zb{c} is the only name this
+-- net emits. ⛔ ResNet34FullB.lean writes "%sb" / "%{p}b1", the convBias := true names its render
+-- does not emit by default: the graph-operand form of the census trap, cosmetic and worth fixing
+-- when that file is next touched.
+-- ✅ CHECKED AGAINST THE COMMITTED BYTES. verified_mlir/resnet50_fwd.mlir's signature is 162
+-- arguments = %x + 161 parameters with 12 projection slots, which is exactly R50BWeights' census
+-- (stem 3 + 12 identity x 9 + 4 projection x 12 + head 2), and every name this file writes appears
+-- there: %sW %sg %sbt, %zb64..%zb2048, %s1b0W1..%s4b2bt3, %s1b0Wp/gp/btp, %Wd %bd.
+#print axioms Proofs.StableHLO.r50IdGraphB_faithful
+#print axioms Proofs.StableHLO.r50ProjGraphB_faithful
+#print axioms Proofs.StableHLO.r50DownGraphB_faithful
+#print axioms Proofs.StableHLO.r50StemGraphB_faithful
+#print axioms Proofs.StableHLO.resnet50FwdGraphB_full_faithful

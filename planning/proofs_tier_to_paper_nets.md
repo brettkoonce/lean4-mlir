@@ -18,12 +18,12 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work — where the thread stands after 2026-09-06.** Nine packages landed that day:
+**Order of work — where the thread stands after 2026-09-06.** Ten packages landed that day:
 4b (four files, 41 declarations), 4.2a, **4.2b + 4.2c** (MobileNetV2's T1/T2/T3 at batch BN),
 **4c legs 1 and 2** (ResNet-34 and MobileNetV2 on one chain, both per-example renderers retired),
 the **ImageNet PAIRS extension**, **4b's capstone re-pointing for EfficientNet-B0**,
 **4d piece 1** (data parallelism at the ℝ level), **§3.5a** (ResNet-50's LAMB tail and BCE
-cotangent) and **§3.5(a) proper** (ResNet-50's T1). `Certs` 3966 → **3984**.
+cotangent) and **§3.5(a)+(b)** (ResNet-50's T1 and T2). `Certs` 3966 → **3984**.
 
 ⭐⭐ **What that adds up to.** Both BatchNorm nets have T1, T2 and T3 stated at the artifact that
 trains; both per-example renderers are gone; `check_adam_prefix`'s `KNOWN_SPLIT` ratchet is
@@ -52,12 +52,13 @@ chain from the start.
 | **4c legs 3–4, ConvNeXt-T and ViT-Tiny** | one session each | A different shape: no BatchNorm-world split (LayerNorm, train == eval), and the two chains render the same FORWARD byte-for-byte. The leg is a SWAP of 78 backward lines, not a re-render. ⚠ The licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric A/B — build that first. ⭐ Instrumented in a way legs 1–2 were not: the `*in_*` PAIRS extension already audits both nets' ImageNet forwards. ⛔ These now GATE 4b's last two capstones. |
 | **4b's capstone re-pointing** | ✅ **3 of 5 DONE**; last two BLOCKED | r34 and mnv2 got theirs as batched ties (4.2a, 4.2c); **EfficientNet-B0's landed as `EfficientNetTiePoCG.lean`** — all 262 parameters at the RAW gradient node AND the shared smoothed loss. ⚠ ConvNeXt-T and ViT-Tiny are NOT the "cheap two" this row assumed — see the order note above. Do their 4c legs first. |
 | **§4.2's T4 / T5 / T6 for r34 and mnv2** | one session per tier | The remaining rows of the BatchNorm-world port. ⚠ Price them honestly: T4/T5 are float BUDGETS, and `planning/float_budget_numbers.md` closed that thread as vacuous — the value here is **T6**, the certified backward tie at `bnBatchTensor4`, which is a real statement. Mirror `Resnet34BackCertifiedTie.lean`. |
-| **3.5 ResNet-50, (b) onward** | one session per tier | ⭐ **(a) T1 DONE 2026-09-06**, and the prerequisites before it. **(b) T2 is next and is the cheapest tier left in the repo**: the typed graph goes in `ResNet50FullB.lean` beside the forwards, its tokens are `r50FwdChainB`'s, and it is one `rw` per block kind then a chain — r34's took part of one session. Then (c) the tie, (d)/(e) the budgets and T6. |
+| **3.5 ResNet-50, (c) onward** | one session per tier | ⭐ **(a) T1 and (b) T2 both DONE 2026-09-06**, and the LAMB/BCE prerequisites before them. **(c) the PoC/Tie pair is next**: mirror `ResNet34FaithfulPoCB.lean` for the un-fused fold and `ResNet34TiePoCB.lean` for the tie, at the bottleneck's three convs; `ResNet50BackB0.lean`'s `*BackBatchedGraph_faithful` family gives the same `rfl` route to `_eq_vjp` that r34 and mnv2 got. Then (d)/(e) the budgets and T6. |
 | **3.6 MobileNetV4-Conv-M** | many sessions | Unchanged, and the last net with nothing. Batched-chain-only like R50, so it skips 4b and 4c too; the 21-row UIB table and the four-family collapse are what keep it to one block file. |
 
-⭐ **Recommendation: ResNet-50's T2, then 4c legs 3–4.** R50's T2 is now the cheapest tier in the
-repo and it is unblocked; the renderer legs remain the critical path for everything else (4b's last
-two capstones and 4d piece 2 both sit behind them). ⚠ Build the XLA-side numeric A/B before
+⭐ **Recommendation: ResNet-50's T3, then 4c legs 3–4.** R50 now has T1 and T2 and every
+prerequisite its T3 needs, and it is the only net where a tier can be added without touching the
+renderer axis; the legs remain the critical path for everything else (4b's last two capstones and
+4d piece 2 both sit behind them). ⚠ Build the XLA-side numeric A/B before
 starting a leg — the licensing gate is IREE-linked and does not link on this box.
 
 The standing conventions are in `planning/xla_same_respell_and_blueprint_audit.md` (padding)
@@ -108,7 +109,7 @@ instance.
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params | ✓ CAP | ⛔ 1.703e399, priced and declined | ✓ `vitInputGradK_eq_vitForwardKV_vjp` | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
 | MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 158 params ⛔ | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
-| ResNet-50 | `resnet50ForwardB_full`, [3,4,6,3] bottlenecks, batch BN, `q` a binder | ✓ 2026-09-06 | ✗ | ✗ | ✗ | ✗ | ✗ | none |
+| ResNet-50 | `resnet50ForwardB_full`, [3,4,6,3] bottlenecks, batch BN, `q` a binder | ✓ 2026-09-06 | ✓ 2026-09-06 | ✗ | ✗ | ✗ | ✗ | none |
 | MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
 
 ⛔ **The T3 counts were the `convBias := true` census and are corrected here (2026-09-06).** Every
@@ -584,9 +585,7 @@ backward fold `r50Trunk_3463` (`ResNet50BackNet.lean`), the batched render `ResN
 the Adam train step (the pairing R34 lacks). No ℝ-forward of the whole net, no forward graph,
 no PoC, no numbers, no tie.
 
-**Order.** ✅ **(a) T1 DONE 2026-09-06** — see §3.5b below. (b) T2: the typed graph, per-block
-`_faithful` then chained; the tokens are `r50FwdChainB`'s, and it belongs in `ResNet50FullB.lean`
-beside the forwards as r34's does. (c) T3: `ResNet50FaithfulPoC` /
+**Order.** ✅ **(a) T1 and (b) T2 both DONE 2026-09-06** — see §3.5b below. (c) T3: `ResNet50FaithfulPoC` /
 `ResNet50TiePoC` from the R34 pair; the bottleneck adds one conv per block and nothing new in
 kind. (d) T4/T5: probe `r50_eval_chain` (53 BN sites at eval BN, plain relu, so a fold near
 1e250 like r34's 1.548e209 plus 17 sites; the training-BN form is a CAP as r34's is) and
@@ -665,7 +664,7 @@ Third leaf-placed foundation lemma in two sessions; they are accumulating and sh
 **What §3.5 still needs** is unchanged apart from these two: (a) `resnet50ForwardB` at batch BN,
 (b) the typed graph, (c) the PoC/Tie pair — now the tie alone — and (d)/(e) the budgets and T6.
 
-### 3.5b DONE 2026-09-06 — ResNet-50's T1, the net's first net-level tier
+### 3.5b DONE 2026-09-06 — ResNet-50's T1 and T2, the net's first net-level tiers
 
 Two files, ~2.5 s to elaborate together, ten declarations, all 3-axiom clean, `Certs` 3982 →
 **3984**. `Architectures/ResNet50FullB.lean` (the records, the three batched block forwards and
@@ -712,11 +711,42 @@ mnv2's are — the trap §5 lists.
 placement (on the 3×3, not the leading 1×1 — the v1 net compiles, trains, descends and is worth
 ~0.5 pt of top-1) and symmetric padding at all five stride-2 sites.
 
-**What T2 needs**, and it is now the cheapest tier left: the four block-kind graphs at
-`r50FwdChainB`'s tokens (`s1b0` … `s4b2`, `.bnBatchF`, `.conv` / `.convStrided`, `.relu`, `.addVB`,
-`.maxPool3s2`, `.gap`, `.dense`), their `_faithful` lemmas, then one `rw` per block kind and `rfl`.
-It goes in `ResNet50FullB.lean` beside the forwards. ⚠ `ResNet34FullB.lean` uses `.addV` where its
-render emits `.addVB`; `den` is identical but `skel` is not, so use `.addVB` here (4.2b's note).
+✅ **T2 landed in the same session, in the second half of `ResNet50FullB.lean`** — four
+per-block-kind graphs at `r50FwdChainB`'s own tokens, their `_faithful` lemmas, and
+`resnet50FwdGraphB_full_faithful` by one `rw` each. ⭐ The head graph is ResNet-34's unchanged
+(`r34HeadGraphB` is generic in `{c nCls}` and emits the same two tokens).
+
+⚠ **`.addVB`, not `.addV`**, since `ResNet50RenderB` emits the batched add. `den` is identical
+(both `fun j => den a j + den b j`, both `rfl`) and `skel` is not.
+
+⚠ **The residual operand order is the RENDER's, and it costs one `add_comm`.** Both projection
+blocks emit `addVB(body, projection)` while `residualProj proj body` adds `proj + body`, so
+`r50{Proj,Down}GraphB_faithful` close with `congr 1; funext; ring` rather than by `simp` alone —
+the commutation sits INSIDE the outer relu's argument, so a top-level `funext j; ring` does not
+reach it. Writing the graph in `residualProj`'s order would make `den` close by `rfl` and the
+emitted operand order wrong. ⭐ The identity block needs nothing: `addVB(body, x)` IS `residual`'s
+order, which is why r34 needed `add_comm` only on its downsample.
+
+⚠ **The bias operands call `biasName false "" c`, the render's own function, not a literal.**
+`ResNet50RenderB` has no `convBias` flag at all — its `zb` bakes `false` — so `%zb{c}` is the only
+name this net emits, and calling the shared function is what keeps the two from drifting.
+⛔ **A finding on r34's side**: `ResNet34FullB.lean` writes `"%sb"` and `"%{p}b1"`, which are the
+`convBias := true` names its render does NOT emit by default. That is the graph-operand form of the
+census trap — cosmetic (`den` is `∀`-quantified over the bias value) and worth fixing when that
+file is next touched. The stem graph is written out here rather than reused for exactly this one
+string; the ops, their order and their `den` are `r34StemGraphB`'s.
+
+✅ **T2 was checked against the committed bytes, not asserted.** `verified_mlir/resnet50_fwd.mlir`'s
+signature is **162 arguments = `%x` + 161 parameters**, with 12 projection slots — exactly
+`R50BWeights`' census — and every SSA name this file writes appears there: `%sW`/`%sg`/`%sbt`,
+`%zb64` … `%zb2048`, `%s1b0W1` … `%s4b2bt3`, `%s1b0Wp`/`%gp`/`%btp`, `%Wd`/`%bd`.
+
+**What (c) needs.** The PoC/Tie pair: mirror `Foundation/ResNet34FaithfulPoCB.lean` for the un-fused
+`den = certified` fold (the bottleneck adds one conv per block and nothing new in kind — and r34's
+eight lemmas are statements about OP KINDS, so most delegate) and `ResNet34TiePoCB.lean` for the
+§1a tie. `ResNet50BackB0.lean`'s `*BackBatchedGraph_faithful` family gives the same `rfl` route to
+`_eq_vjp` that r34 and MobileNetV2 both got. ⚠ Price the loss side at BCE — `BceLossCot.lean` is
+this net's `SmoothedLossCot`, and the divisor is `B·K`.
 
 ### 3.6 MobileNetV4-Conv-M: all six tiers
 
@@ -1531,9 +1561,9 @@ re-points every T2/T3 file at the batched constructors; 4d `Foundation/DataParal
 `allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases is
 piece 2 and is gated behind 4c;
 3.5a `Codegen/LambTriple.lean` and
-`Foundation/BceLossCot.lean` both LANDED 2026-09-06, as did 3.5(a)'s
-`Architectures/ResNet50FullB.lean` + `ResNet50FullBVJP.lean` (§3.5b); still to write for 3.5 are
-T2 (a section INSIDE `ResNet50FullB.lean`, not a new file),
+`Foundation/BceLossCot.lean` both LANDED 2026-09-06, as did 3.5(a)+(b)'s
+`Architectures/ResNet50FullB.lean` (forward AND graph) + `ResNet50FullBVJP.lean` (§3.5b); still to
+write for 3.5 are
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for
 MobileNetV4. Every new file: a `lakefile.lean` `Certs` root or an import of one, an
