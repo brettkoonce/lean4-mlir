@@ -18,11 +18,12 @@ shared lemma at a general target, and whose data-parallel mean is one AST node �
 tier stated at that shape and the CIFAR chapter keeping its per-example op family as the
 pedagogical ladder. 4b, 4c and 4d are that unification, in the order that pays soonest.
 
-**Order of work — where the thread stands after 2026-09-06.** Seven packages landed that day:
+**Order of work — where the thread stands after 2026-09-06.** Eight packages landed that day:
 4b (four files, 41 declarations), 4.2a, **4.2b + 4.2c** (MobileNetV2's T1/T2/T3 at batch BN),
 **4c legs 1 and 2** (ResNet-34 and MobileNetV2 on one chain, both per-example renderers retired),
-the **ImageNet PAIRS extension**, **4b's capstone re-pointing for EfficientNet-B0**, and
-**4d piece 1** (data parallelism at the ℝ level). `Certs` 3966 → **3980**.
+the **ImageNet PAIRS extension**, **4b's capstone re-pointing for EfficientNet-B0**,
+**4d piece 1** (data parallelism at the ℝ level) and **§3.5a** (ResNet-50's LAMB tail and BCE
+cotangent). `Certs` 3966 → **3982**.
 
 ⭐⭐ **What that adds up to.** Both BatchNorm nets have T1, T2 and T3 stated at the artifact that
 trains; both per-example renderers are gone; `check_adam_prefix`'s `KNOWN_SPLIT` ratchet is
@@ -51,7 +52,7 @@ chain from the start.
 | **4c legs 3–4, ConvNeXt-T and ViT-Tiny** | one session each | A different shape: no BatchNorm-world split (LayerNorm, train == eval), and the two chains render the same FORWARD byte-for-byte. The leg is a SWAP of 78 backward lines, not a re-render. ⚠ The licensing gate is IREE-linked and does not link on this box, so it goes under an XLA-side numeric A/B — build that first. ⭐ Instrumented in a way legs 1–2 were not: the `*in_*` PAIRS extension already audits both nets' ImageNet forwards. ⛔ These now GATE 4b's last two capstones. |
 | **4b's capstone re-pointing** | ✅ **3 of 5 DONE**; last two BLOCKED | r34 and mnv2 got theirs as batched ties (4.2a, 4.2c); **EfficientNet-B0's landed as `EfficientNetTiePoCG.lean`** — all 262 parameters at the RAW gradient node AND the shared smoothed loss. ⚠ ConvNeXt-T and ViT-Tiny are NOT the "cheap two" this row assumed — see the order note above. Do their 4c legs first. |
 | **§4.2's T4 / T5 / T6 for r34 and mnv2** | one session per tier | The remaining rows of the BatchNorm-world port. ⚠ Price them honestly: T4/T5 are float BUDGETS, and `planning/float_budget_numbers.md` closed that thread as vacuous — the value here is **T6**, the certified backward tie at `bnBatchTensor4`, which is a real statement. Mirror `Resnet34BackCertifiedTie.lean`. |
-| **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Unchanged, and cheaper than scoped: both are batched-chain-only nets, so they skip 4b and 4c entirely. ⭐ R50 is also the best-instrumented net in the repo now — `resnet50in_fwd` and `resnet50in160_fwd` are both audited against the steps that train them. R50 needs the LAMB tail cert and the BCE cotangent first. |
+| **3.5 ResNet-50 / 3.6 MNv4** | many sessions each | Cheaper than scoped twice over: both are batched-chain-only nets, so they skip 4b and 4c entirely, and ⭐ **R50's two prerequisites are now PAID** — the LAMB tail cert and the BCE cotangent landed 2026-09-06 (§3.5a), so (c) is the tie alone. R50 is also the best-instrumented net in the repo: `resnet50in_fwd` and `resnet50in160_fwd` are both audited against the steps that train them. |
 
 ⭐ **Recommendation: 4c legs 3–4, then their capstones.** 4d piece 1 was the cheap unblocked item
 and it is done, so what is left on the critical path is the renderer: 4b's last two capstones sit
@@ -142,7 +143,7 @@ The table below is the TIE's column; read it that way.
 | EfficientNet-B0 | `efficientnet_train_step` (SGD fused `*SgdB`, batch BN) | `EfficientNetRender`, which writes the Adam one too | `efficientnetin_emarmsdp64dropdo` | RMSProp + EMA | optimizer form, DP, smoothed loss; drop/dropout are certified inputs |
 | ConvNeXt-T | `convnext_train_step` (SGD fused, per-example index) | `ConvNeXtRender` | `convnextin_adamdpwxclipdrop` | AdamW | optimizer form, renderer (`ConvNeXtRenderB`, "tied but not swapped", 78 lines), DP, smoothed loss; clip/wx/drop certified |
 | ViT-Tiny | `vit_train_step` (SGD fused, per-example index) | `ViTRender` | `vitin_adamdp128x4wxclipdrop` | AdamW, 4× accumulation | as ConvNeXt |
-| ResNet-50 | none | `ResNet50RenderB` only | `resnet50in160_lambaccdp8x64bce` | LAMB, 8× accumulation, BCE, 160 px | no tie; LAMB has no `_faithful`; BCE has no cotangent `den` |
+| ResNet-50 | none | `ResNet50RenderB` only | `resnet50in160_lambaccdp8x64bce` | LAMB, 8× accumulation, BCE, 160 px | no tie. ✅ the LAMB tail and the BCE cotangent both landed 2026-09-06 (§3.5a) |
 | MobileNetV4-Conv-M | none | `MobileNetV4RenderB` only | `mnv4in_adamdp64` | AdamW | no tie |
 
 The book names `<net>_adam_train_step.mlir` in every ImageNet chapter and describes the tie
@@ -602,12 +603,71 @@ Done when the seven yaml rows exist and `scripts/convention_audit.py` still repo
 This is the largest package after MNv4; budget it as the R34 close was, one tier per session.
 
 ⚠ Three things the 2026-09-06 review added. The quoted run `resnet50in160_lambaccdp8x64bce` is
-LAMB over 8 accumulated micro-batches with BCE-with-logits at 160 px: LAMB has NO faithfulness
-theorem (4b), BCE has no cotangent `den`, and accumulation is `momVNextF` at `(μ := akeep)`
-(already certified as an op). Budget the LAMB tail cert (`lamb_triple_faithful`: the AdamW triple's
-shape plus the per-tensor trust ratio) and the BCE cotangent lemma inside (c). And run
-`convention_audit.py` under `.venv/bin/python3` — the system interpreter has no jaxlib and the
-script dies importing the reference.
+LAMB over 8 accumulated micro-batches with BCE-with-logits at 160 px. **The LAMB tail cert and the
+BCE cotangent were scoped inside (c) and were instead paid for in advance — both landed 2026-09-06,
+§3.5a below**, so (c) is now the tie alone. Accumulation is `momVNextF` at `(μ := akeep)`, already
+certified as an op. And run `convention_audit.py` under `.venv/bin/python3` — the system
+interpreter has no jaxlib and the script dies importing the reference.
+
+### 3.5a DONE 2026-09-06 — ResNet-50's two prerequisites, paid before the package
+
+Two files, ~2 s each, 15 declarations, all 3-axiom clean, `Certs` 3980 → **3982**. Both are LEAF
+modules for 4d.1's reason: their natural homes (`Lamb.lean`, `StableHLO.lean`) carry 315+
+downstream modules apiece and a declaration added to either rebuilds the corpus.
+
+**`Codegen/LambTriple.lean` — the LAMB tail.** `lambStep` (the ℝ `(θ', m', v')`, `adamWStep`'s
+peer, reusing Adam's two moment recurrences because LAMB's `m` and `v` ARE Adam's),
+`lamb_triple_faithful` over the four ops the `.lamb` arm emits, and `lambScale_zero_weight`.
+
+⛔ **The audit's row was wrong about the cause, and this is the correction.** `lambDirF_faithful`
+and `lambScaleF_faithful` have said the emitted ops denote `lambDir` and `lambScale` since LAMB
+landed — both `rfl`, both at `adamWParamF_faithful`'s bar. `Lamb.lean` carrying only trust-ratio
+properties was true and was not the reason. Only the assembly was missing, which made the package
+much smaller than §3.5 priced it.
+
+⭐ **The scalar child is a BINDER because the AST makes it one**, and the two shapes the render
+emits are corollaries. `lamb_triple_faithful_committed` is at the shipped seed —
+`gradSumSqAccF` from `%lzero` over `θ` ALONE, one leaf deep, so the scalar is `gradSumSq θ`. That
+single-leaf fold is the entire structural difference from the global-norm clip, whose whole content
+is that ONE scalar is shared (`clipFactor_shared` against `lambScale_not_shared`); the two emit
+nearly the same lines and differ only in the quantifier.
+
+⭐⭐ **`lamb_triple_faithful_excluded` is the one that says something new.** timm reads
+`if weight_decay != 0 or group['always_adapt']:` before computing the trust ratio, so the
+`no_weight_decay` group is NOT layer-adapted; the render implements that by SKIPPING the norm op
+and passing `%lzero` in. The theorem says the emitted step is then exactly `θ − lr·r` at trust 1.
+⚠ `lambTrust_zero_weight` does not already give this at the artifact — it fires at `‖θ‖ = 0`
+exactly, i.e. step one, and from step two `‖θ‖/‖r‖` collapses to ~0.01–0.1 against timm's 1.0, so
+that lemma could hold while the render was wrong. ✅ Both corollaries were read off the committed
+bytes: `resnet50in160_lambaccdp8x64bce_train_step.mlir` has `%v6157 = add %lzero, reduce(sW*sW)`,
+and its `wx` twin has `sqrt %lzero` / `compare GT, %lzero` on the BatchNorm γ.
+
+**`Foundation/BceLossCot.lean` — BCE-with-logits' cotangent.** `SmoothedLossCot.lean`'s twin at
+RSB-A2/A3's loss: `softplus` and `softplus_hasDerivAt`, `bceLogits`, `bceLogits_grad`, the emitted
+three-op graph and its per-row reading.
+
+⭐⭐ **`bceLogits_eq_logSigmoid` is what keeps the gradient theorem from being circular.**
+`softplus(z) − t·z` IS `−[t·log σ(z) + (1−t)·log(1 − σ(z))]`, class by class. Without it the file
+would define the loss as whatever has the derivative the render emits and then prove it has it —
+§5's "a comparison against a re-derivation tests the re-derivation" in its loss-shaped form. The
+stable `softplus` spelling is the renderer's own `%loss` block, `max(z,0) + log(1 + e^−|z|)`.
+
+⭐ **No hypothesis on the target**, where `softCE_grad` needs `Σ t = 1` to collapse
+`(Σ t)·softmax − t`. BCE is per-class and separable, which is the point under mixup — and the a3
+arg string is `ls0.0`, so there is no label smoothing on this path at all, which is why the chain
+is three ops against CE's five.
+
+⚠⚠ **The divisor is `B·K`, not `B`, and `bceLossCotGraph_row_committed` pins it** rather than
+leaving it a binder nobody instantiated. timm's `BinaryCrossEntropy` is `reduction='mean'` over
+`B×C`, not the mean of the per-example sum over classes; at `K = 1000` the two differ by 1000× on
+the effective step. ✅ The artifact divides by `dense<64000.0>` = 64 × 1000.
+
+⚠ `pdiv_coordFun` — a scalar function of ONE coordinate lifted to `Vec 1` — is `pdiv_sigmoid`'s
+proof at a general `f`, and belongs in `Tensor.lean` for the same reason `pdiv_const_smul` does.
+Third leaf-placed foundation lemma in two sessions; they are accumulating and should move together.
+
+**What §3.5 still needs** is unchanged apart from these two: (a) `resnet50ForwardB` at batch BN,
+(b) the typed graph, (c) the PoC/Tie pair — now the tie alone — and (d)/(e) the budgets and T6.
 
 ### 3.6 MobileNetV4-Conv-M: all six tiers
 
@@ -1088,14 +1148,20 @@ coordinatewise, so each existing fold lemma becomes its gradient peer by droppin
 `congr 1` / `congrArg (lr * ·)` peeling. 4.1e's eight lemmas are the template — they are
 `EfficientNetFaithfulPoC.lean`'s proofs with that peeling removed.
 
-**The tails are already certified, with two holes.** `adamW_triple_faithful` (Adam/AdamW),
-`mom_pair_faithful` (heavy-ball), `rmsProp_triple_faithful` (RMSProp), `clipGrad_faithful` /
-`clipShared_faithful` (global-norm clip; `clipGrad_accum` for the accumulated form),
-`dropPathB_faithful` / `dropoutB_faithful`. EMA is `adamMNextF` at its other reading and gradient
-accumulation is `momVNextF` at `(μ := akeep)`, both by the renders' own docstrings. ⛔ **LAMB has no
-faithfulness theorem** — `Lamb.lean` proves properties of the trust ratio (`lambTrust_nonneg`,
-`lambDir_wd_inside`, `lambScale_not_shared`) and nothing says the emitted text denotes it; that is
-R50-A3's optimizer (3.5). ⛔ **BCE-with-logits has no cotangent `den`**; also R50-A3's.
+**The tails are ALL certified as of 2026-09-06 — the two holes are closed.**
+`adamW_triple_faithful` (Adam/AdamW), `mom_pair_faithful` (heavy-ball), `rmsProp_triple_faithful`
+(RMSProp), `clipGrad_faithful` / `clipShared_faithful` (global-norm clip; `clipGrad_accum` for the
+accumulated form), `dropPathB_faithful` / `dropoutB_faithful`, and now `lamb_triple_faithful`
+(§3.5a). EMA is `adamMNextF` at its other reading and gradient accumulation is `momVNextF` at
+`(μ := akeep)`, both by the renders' own docstrings. The loss side is `SmoothedLossCot.lean` and,
+for RSB-A2/A3, `BceLossCot.lean` (§3.5a).
+
+⛔ **This paragraph said "LAMB has NO faithfulness theorem" and the cause it named was wrong.**
+`lambDirF_faithful` and `lambScaleF_faithful` have said the emitted ops denote `lambDir` and
+`lambScale` since LAMB landed, both by `rfl` and both at `adamWParamF_faithful`'s bar; `Lamb.lean`
+carrying only trust-ratio properties was true and was not the reason. What was missing was the
+`(θ', m', v')` ASSEMBLY. ▶ The lesson is §5's own: re-read the file before costing the package. A
+row that says "X has no theorem" should name the theorem it looked for.
 
 ### 4b.1 – 4b.4 The four folds — ALL LANDED 2026-09-06
 
@@ -1339,11 +1405,15 @@ capstones. Until it lands a tie composes with these lemmas only through the read
   computed dimension in an applied position sends the unifier into the net; give the stage a
   `def` with the type ascribed in the chain's spelling. `Elab.async` makes timings
   order-dependent; measure with it off.
-* ⛔ **An audit's named gap can be the wrong one.** §3.4 as scoped said ViT's block tie was at
-  `heads = 1`; it is general in `h`, and says so in its own header. The real gap was the LayerNorm
-  form, which the audit did not mention — and which the same net had already been caught on twice
-  (`planning/float_budget_numbers.md` §4, row 3). Re-read the file before costing the package, and
-  cost it against the SHIPPED spelling of every convention, not against the one the row names.
+* ⛔ **An audit's named gap can be the wrong one, and it happened TWICE.** §3.4 as scoped said
+  ViT's block tie was at `heads = 1`; it is general in `h`, and says so in its own header — the real
+  gap was the LayerNorm form, which the audit did not mention and which the same net had already
+  been caught on twice (`planning/float_budget_numbers.md` §4, row 3). Then §3.5 and 4b both said
+  "LAMB has no faithfulness theorem"; `lambDirF_faithful` and `lambScaleF_faithful` had existed
+  since LAMB landed and only the `(θ', m', v')` assembly was absent, which made the package a
+  fraction of its price. ▶ A row that says "X has no theorem" must NAME the theorem it looked for.
+  Re-read the file before costing the package, and cost it against the SHIPPED spelling of every
+  convention, not against the one the row names.
 * **Conventions are invisible to types.** Padding phase, BN world and activation all preserve
   shapes and arities; `scripts/convention_audit.py` sees the first and third at the artifact
   tier and nothing sees the Proofs tier. When an emitter fix lands, grep every other definition
@@ -1373,11 +1443,13 @@ capstones. Until it lands a tie composes with these lemmas only through the read
   `dpToyShard_eq_batch` (the two slices ARE the batch, under the split it claims) it would be a
   true theorem about two unrelated datasets and would establish nothing. Same shape as the
   ONNX-replica lesson: a comparison against a re-derivation tests the re-derivation.
-* ⚠ **A lemma that belongs in `Tensor.lean` costs the whole corpus.** `pdiv_const_smul` is a
-  `Tensor.lean` lemma by content and lives in `DataParallel.lean` by economics — that file is the
-  root of all 3980 `Certs` jobs. State it in the leaf with a note saying where it belongs, and move
-  it up when that file has to change anyway. The same goes for any `Maps` core or `pdiv` rule
-  discovered late in a package.
+* ⚠ **A lemma that belongs in a ROOT file costs the whole corpus.** `pdiv_const_smul` and
+  `pdiv_coordFun` are `Tensor.lean` lemmas by content, `lambStep` and `lambScale_zero_weight` are
+  `Lamb.lean`'s, and all four live in leaf modules by economics — `Tensor.lean` has 423 downstream
+  modules, `Lamb.lean` and `StableHLO.lean` 315 apiece, and the leaves have none. State them in the
+  leaf with a note saying where they belong, and move them up when that file has to change anyway.
+  ▶ Measure before deciding: the reverse-dependency count is a ten-line script over the `import`
+  graph. Three such lemmas accumulated in two sessions; they should move together.
 * **Scripts under the pinned venv.** `convention_audit.py` imports the JAX reference; bare
   `python3` on this box is anaconda's and has no jaxlib.
 
@@ -1409,7 +1481,8 @@ Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean` — it RETIRES `
 re-points every T2/T3 file at the batched constructors; 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1); the
 `allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases is
 piece 2 and is gated behind 4c;
-3.5 `Resnet50FullB.lean`,
+3.5a `Codegen/LambTriple.lean` and
+`Foundation/BceLossCot.lean` both LANDED 2026-09-06; 3.5 `Resnet50FullB.lean`,
 `Resnet50FaithfulPoC.lean`, `Resnet50TiePoC.lean`, `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for
 MobileNetV4. Every new file: a `lakefile.lean` `Certs` root or an import of one, an

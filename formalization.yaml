@@ -102,7 +102,7 @@ status:
   axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 2266 declarations (count: grep -c '^#print axioms'
+    # `#print axioms` on 2281 declarations (count: grep -c '^#print axioms'
     # tests/AuditAxioms.lean); 52 are independently kernel-rechecked by the
     # comparator (tests/comparator/config.json). All close under exactly the
     # three core axioms above. comparator_config below points at that config for
@@ -293,6 +293,32 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.dpIterate_eq_meanLossTrain"   # n steps of R replicas ARE n steps of single-device training on the mean loss
       file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
+    # --- ResNet-50's two prerequisites: LAMB's tail and BCE's cotangent (status 4l).
+    - declaration: "Proofs.StableHLO.lamb_triple_faithful"   # the emitted four-op LAMB tail denotes the (theta', m', v') triple
+      file: "LeanMlir/Proofs/Codegen/LambTriple.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: ["You et al. 2019, Large Batch Optimization for Deep Learning (LAMB)"]
+    - declaration: "Proofs.StableHLO.lamb_triple_faithful_excluded"   # timm's no_weight_decay group is NOT layer-adapted: the emitted step is theta - lr*r at trust 1
+      file: "LeanMlir/Proofs/Codegen/LambTriple.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.bceLogits_eq_logSigmoid"   # softplus(z) - t*z IS -[t log sigma + (1-t) log(1-sigma)]; what keeps the gradient theorem from being circular
+      file: "LeanMlir/Proofs/Foundation/BceLossCot.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.bceLossCotGraph_row_committed"   # each row of the emitted BCE cotangent is that loss's gradient, over the B*K divisor the render bakes
+      file: "LeanMlir/Proofs/Foundation/BceLossCot.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -1291,6 +1317,79 @@ fidelity:
        renderer convergence. Until it lands, a train-step tie composes with these
        lemmas only through the reader, and every tie still says so.
 
+    4l. RESNET-50's TWO PREREQUISITES: LAMB's TAIL AND BCE's COTANGENT
+       (2026-09-06). ResNet-50 is the largest remaining hole in the Proofs tier
+       (no whole-net forward, no graph, no tie), and its quoted run
+       `resnet50in160_lambaccdp8x64bce` is LAMB over 8 accumulated micro-batches
+       with BCE-with-logits at 160 px. Two of its pieces had no theorem at all;
+       both now do, and both are LEAF files for the reason 4k's is -- their
+       natural homes (`Lamb.lean`, `StableHLO.lean`) carry 315+ downstream
+       modules apiece and a declaration added to either rebuilds the corpus.
+
+       ⛔ THE EARLIER "LAMB HAS NO FAITHFULNESS THEOREM" NAMED THE WRONG CAUSE,
+       and this section corrects it. `lambDirF_faithful` and `lambScaleF_faithful`
+       have said the emitted ops denote `Proofs.lambDir` and `Proofs.lambScale`
+       since LAMB landed, both by `rfl` and both at `adamWParamF_faithful`'s bar.
+       What was missing is the level above: the `(theta', m', v')` triple a train
+       step returns, i.e. `adamW_triple_faithful`'s peer. `lamb_triple_faithful`
+       is that, also by `rfl`, over the four ops the `.lamb` arm emits --
+       `lambDirF`, `gradSumSqAccF`, `lambScaleF`, `sgdParamF` -- plus Adam's two
+       moment recurrences, which LAMB reuses unchanged.
+
+       ⭐ THE SCALAR CHILD IS A BINDER, and the two shapes the render emits are
+       corollaries. `lamb_triple_faithful_committed` is at the shipped seed:
+       `gradSumSqAccF` from `%lzero` over THETA ALONE, one leaf deep, so the
+       scalar is `gradSumSq theta`. That single-leaf fold is the entire structural
+       difference from the global-norm clip, whose whole content is that ONE
+       scalar is shared across every parameter (`clipFactor_shared` against
+       `lambScale_not_shared`); the two features emit nearly the same lines and
+       differ only in the quantifier.
+
+       ⭐⭐ `lamb_triple_faithful_excluded` IS THE ONE THAT SAYS SOMETHING NEW.
+       timm reads `if weight_decay != 0 or group['always_adapt']:` before
+       computing the trust ratio, so the `no_weight_decay` group is NOT
+       layer-adapted; the render implements that by SKIPPING the norm op and
+       passing `%lzero` straight in, and this says the emitted step is then
+       exactly `theta - lr*r` with the ratio at 1. ⚠ The pre-existing
+       `lambTrust_zero_weight` does not already give this at the artifact: it
+       fires at `||theta|| = 0` exactly, i.e. step one, where every BatchNorm beta
+       and dense bias starts, and from step two the parameter is
+       small-but-nonzero and `||theta||/||r||` collapses to ~0.01-0.1 against
+       timm's 1.0. That lemma could hold while the render was still wrong.
+       Both corollaries were read off the committed bytes
+       (`resnet50in160_lambaccdp8x64bce_train_step.mlir` and its `wx` twin).
+
+       ⭐⭐ BCE-WITH-LOGITS, AND THE LEMMA THAT KEEPS IT FROM BEING CIRCULAR.
+       `ResNet50RenderB`'s `bce := true` path emits THREE ops --
+       `sigmoidB -> subB -> divConstB`, i.e. `(sigma(z) - t)/(B*K)` -- where
+       softmax-CE emits five, and nothing said that chain was any loss's gradient.
+       `Foundation/BceLossCot.lean` is `SmoothedLossCot.lean`'s twin at this loss.
+       The load-bearing lemma is `bceLogits_eq_logSigmoid`: `softplus(z) - t*z`
+       IS `-[t*log sigma(z) + (1-t)*log(1 - sigma(z))]`, class by class. Without
+       it, `bceLogits_grad` would define the loss as whatever has the derivative
+       the render emits and then prove it has it. The stable `softplus` spelling
+       is the renderer's own `%loss` form, `max(z,0) + log(1 + exp(-|z|))`.
+
+       ⭐ `bceLogits_grad` TAKES NO HYPOTHESIS ON THE TARGET, where `softCE_grad`
+       needs `sum t = 1` to collapse `(sum t)*softmax - t`. BCE is per-class and
+       separable, which is the point under mixup -- the a3 recipe's only source of
+       soft labels, since its arg string is `ls0.0` and there is no label
+       smoothing on this path at all.
+
+       ⚠⚠ THE DIVISOR IS `B*K`, NOT `B`, and `bceLossCotGraph_row_committed` pins
+       it rather than leaving it a binder nobody instantiated. timm's
+       `BinaryCrossEntropy` is `reduction='mean'` over `B x C`, not the mean of
+       the per-example SUM over classes; at `K = 1000` the two differ by 1000x on
+       the effective step, and RSB-A2's `lr 5e-3` is tuned to this form. The
+       committed artifact divides by `dense<64000.0>` = 64 x 1000.
+
+       ⚠ WHAT THIS IS NOT. Faithfulness and well-definedness only, `Lamb.lean`'s
+       ceiling verbatim -- never that LAMB converges or beats AdamW. `%loss`
+       itself stays a report-only hand-written block (the §5 carve-out); what is
+       proved is about the COTANGENT chain, which is on the gradient path. And
+       ResNet-50 still has no whole-net forward, graph or tie: these are the two
+       pieces §3.5 said to budget INSIDE that package, now paid for in advance.
+
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
        `mulVec/transpose/outer/mul`. This IS bridged to Mathlib's `Matrix`
@@ -1318,7 +1417,7 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above, plus a full `#print axioms` sweep of 2266
+    fidelity caveats above, plus a full `#print axioms` sweep of 2281
     declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 52

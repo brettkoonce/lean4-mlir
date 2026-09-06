@@ -128,6 +128,8 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB
 import LeanMlir.Proofs.Architectures.EfficientNetTiePoCG
 import LeanMlir.Proofs.Foundation.DataParallel
+import LeanMlir.Proofs.Codegen.LambTriple
+import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
@@ -5779,3 +5781,69 @@ open Proofs
 #print axioms Proofs.dpIterate_lockstep
 #print axioms Proofs.dpSingleStep_eq_meanLoss_step
 #print axioms Proofs.dpIterate_eq_meanLossTrain
+
+-- ════════════════════════════════════════════════════════════════
+-- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT (2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- §3.5 lists two holes to close before ResNet-50's T3 can be written at the artifact its 76.66%
+-- comes from, resnet50in160_lambaccdp8x64bce: LAMB's optimizer tail and BCE-with-logits' loss
+-- cotangent. Both are here, and both are LEAF files for the same reason DataParallel is -- their
+-- natural homes (Lamb.lean, StableHLO.lean) carry 315+ downstream modules apiece.
+--
+-- ── LAMB (LambTriple.lean) ──
+-- ⛔ The audit's "LAMB has NO faithfulness theorem" named the wrong cause. lambDirF_faithful and
+-- lambScaleF_faithful have said the emitted ops denote lambDir and lambScale since LAMB landed,
+-- both by rfl and both at adamWParamF_faithful's bar; what was missing is the (theta', m', v')
+-- assembly, i.e. adamW_triple_faithful's peer. lamb_triple_faithful is that, also by rfl.
+-- ⭐ The scalar child carrying ||theta||^2 is a BINDER, because the AST makes it one, and the two
+-- shapes the render actually emits are corollaries:
+--   * lamb_triple_faithful_committed -- gradSumSqAccF seeded at %lzero over THETA ALONE, one leaf
+--     deep. That single-leaf fold is the ENTIRE difference from the global-norm clip, whose whole
+--     content is that ONE scalar is shared (clipFactor_shared against lambScale_not_shared); the
+--     two features emit nearly the same lines and differ only in the quantifier.
+--   * lamb_triple_faithful_excluded -- timm's no_weight_decay group (D2), which is NOT
+--     layer-adapted: timm reads `if weight_decay != 0 or group['always_adapt']:` before computing
+--     the ratio, and the render implements that by SKIPPING the norm op and passing %lzero. The
+--     theorem says the emitted step is then exactly theta - lr*r at trust 1. ⚠ The pre-existing
+--     lambTrust_zero_weight does NOT already give this at the artifact: it fires at ||theta|| = 0
+--     exactly, i.e. step one, and from step two the ratio collapses to ~0.01-0.1 against timm's
+--     1.0 -- so that lemma could hold while the render was still wrong.
+-- ⚠ Faithfulness and well-definedness only, Lamb.lean's ceiling verbatim. ⚠ e is a binder, so the
+-- accumulated (.lambAccum), clipped and data-parallel spellings are covered without restatement.
+--
+-- ── BCE-with-logits (BceLossCot.lean) ──
+-- SmoothedLossCot's twin at RSB-A2/A3's loss. ResNet50RenderB's bce := true path emits THREE ops
+-- (sigmoidB -> subB -> divConstB, i.e. (sigma(z) - t)/(B*K)) where softmax-CE emits five, and
+-- nothing said that chain was any loss's gradient.
+-- ⭐⭐ bceLogits_eq_logSigmoid is what keeps bceLogits_grad from being CIRCULAR: softplus(z) - t*z
+-- IS -[t*log sigma(z) + (1-t)*log(1 - sigma(z))], class by class, so the function is binary
+-- cross-entropy rather than whatever happens to have the derivative the render emits. The stable
+-- softplus spelling is the renderer's own %loss form (max(z,0) + log(1 + exp(-|z|))).
+-- ⭐ bceLogits_grad takes NO hypothesis on the target, where softCE_grad needs sum t = 1 to
+-- collapse (sum t)*softmax - t. BCE is per-class and separable, which is the point under mixup --
+-- the a3 recipe's only source of soft labels, since its arg string is ls0.0 and there is no label
+-- smoothing on this path at all.
+-- ⚠⚠ THE DIVISOR IS B*K, NOT B, and bceLossCotGraph_row_committed pins it. timm's
+-- BinaryCrossEntropy is reduction='mean' over B x C, not the mean of the per-example SUM over
+-- classes; at K = 1000 the two differ by 1000x on the effective step and RSB-A2's lr 5e-3 is tuned
+-- to this form. Checked against resnet50in160_lambaccdp8x64bce_train_step.mlir, whose chain is
+-- logistic -> subtract %onehot -> divide by dense<64000.0> = 64 x 1000.
+-- ⚠ %loss itself is report-only hand-written text (the §5 carve-out); what is proved is about the
+-- COTANGENT chain, which is on the gradient path and is pretty(provenGraph).
+-- ⚠ pdiv_coordFun (a scalar function of ONE coordinate, lifted to Vec 1) is pdiv_sigmoid's proof
+-- at a general f; it belongs in Tensor.lean and is here for the same rebuild reason.
+#print axioms Proofs.lambStep
+#print axioms Proofs.lambScale_zero_weight
+#print axioms Proofs.StableHLO.lamb_triple_faithful
+#print axioms Proofs.StableHLO.lamb_triple_faithful_committed
+#print axioms Proofs.StableHLO.lamb_triple_faithful_excluded
+#print axioms Proofs.softplus_hasDerivAt
+#print axioms Proofs.softplus_neg
+#print axioms Proofs.log_sigmoidScalar
+#print axioms Proofs.one_sub_sigmoidScalar
+#print axioms Proofs.bceLogits_eq_logSigmoid
+#print axioms Proofs.pdiv_coordFun
+#print axioms Proofs.bceLogits_grad
+#print axioms Proofs.bceLossCotGraph_den
+#print axioms Proofs.bceLossCotGraph_row
+#print axioms Proofs.bceLossCotGraph_row_committed

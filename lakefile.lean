@@ -625,6 +625,34 @@ lean_lib «Certs» where
              -- ⚠ pdiv_const_smul belongs in Tensor.lean and is here because that file is the root
              -- of the corpus and a definition added to it rebuilds all of Certs.
              `LeanMlir.Proofs.Foundation.DataParallel,
+             -- ⭐ ResNet-50's two prerequisites (§3.5), both leaf files for the same reason
+             -- DataParallel is one: their natural homes (Lamb.lean, StableHLO.lean) have 315+
+             -- downstream modules apiece and these have none.
+             -- ⭐ THE LAMB TRIPLE, assembled — the peer of adamW_triple_faithful, and the last
+             -- thing between LAMB and a ResNet-50 T3 at resnet50in160_lambaccdp8x64bce.
+             -- ⛔ The audit's "LAMB has NO faithfulness theorem" named the wrong cause:
+             -- lambDirF_faithful and lambScaleF_faithful have said the emitted ops denote lambDir
+             -- and lambScale since LAMB landed, both by rfl; only the (theta', m', v') assembly
+             -- was missing. ⭐ The scalar child is a BINDER, and the two shipped instantiations
+             -- are corollaries: the committed one is gradSumSqAccF seeded at %lzero over theta
+             -- ALONE (that single-leaf fold is the entire difference from the global-norm clip),
+             -- and the excluded one is %lzero itself -- timm's no_weight_decay group, which is NOT
+             -- layer-adapted, and lamb_triple_faithful_excluded says the emitted step is then
+             -- exactly theta - lr*r at trust 1 (LambTriple.lean).
+             `LeanMlir.Proofs.Codegen.LambTriple,
+             -- ⭐ BCE-WITH-LOGITS' COTANGENT — SmoothedLossCot's twin at RSB-A2/A3's loss, and
+             -- the second R50 prerequisite. ResNet50RenderB's bce := true path emits three ops
+             -- (sigmoidB -> subB -> divConstB, i.e. (sigma(z) - t)/(B*K)) where softmax-CE emits
+             -- five, and nothing said that chain was a loss's gradient.
+             -- ⭐⭐ bceLogits_eq_logSigmoid is what keeps bceLogits_grad from being circular:
+             -- softplus(z) - t*z IS -[t log sigma(z) + (1-t) log(1 - sigma(z))], so the function
+             -- is binary cross-entropy rather than whatever has the wanted derivative. The stable
+             -- softplus form is the renderer's own %loss spelling.
+             -- ⭐ NO hypothesis on the target, where softmax-CE's gradient needs sum t = 1: BCE is
+             -- per-class and separable, which is the point under mixup. ⚠⚠ The divisor is B*K,
+             -- not B -- timm's BinaryCrossEntropy is reduction='mean' over B x C, and at K = 1000
+             -- the two differ by 1000x on the effective step (BceLossCot.lean).
+             `LeanMlir.Proofs.Foundation.BceLossCot,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT
