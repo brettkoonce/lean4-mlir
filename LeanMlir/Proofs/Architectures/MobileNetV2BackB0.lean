@@ -34,7 +34,13 @@ through; the bn/conv/depthwise pieces stay activation-independent (linear) or gl
   faithfulness (`cbrBackBatchedGraph` + `…_faithful`).
 * `mnv2BodyB_has_vjp_at` — the SE-less body `projB ∘ dwbrB ∘ cbrB`, composed via
   `vjp_comp_at` over the relu6 smoothness families, with its backward graph
-  `mnv2BodyBackBatchedGraph` + `…_faithful`.
+  `mnv2BodyBackBatchedGraph` + `…_faithful`. ⚠ This family takes `ic` and `oc`
+  SEPARATELY (2026-09-06). It was written for the residual block and pinned them
+  equal, which is right there but wrong one level up: the paper ladder's `b11`
+  (64 → 96) and `b17` (160 → 320) are stride-1 bodies with `ic ≠ oc`, and
+  `MobileNetV2FullB.lean`'s `mnv2ExpOnlyB` is exactly that shape. Generalising
+  changed no proof — `mnv2DownBodyB` already had this shape, and every existing
+  call site (`BackNetFolds.lean`) is at `ic = oc` and infers it.
 * `mnv2ResidBlockBackBatchedGraph_faithful` — the **CAPSTONE**: the whole batched
   MobileNetV2 inverted-residual block backward graph (body + identity skip) denotes
   the proven `residual_has_vjp_at` of the SE-less body. Mirrors the EfficientNet
@@ -261,11 +267,11 @@ theorem dwbrBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
     `h_se` is the expand relu6 smoothness (at the cbrB pre-relu6 activation);
     `h_sd` is the depthwise relu6 smoothness (at the dwbrB pre-relu6 activation,
     fed the cbrB output). -/
-noncomputable def mnv2BodyB_has_vjp_at (N : Nat) {c mid h w kHd kWd : Nat}
-    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+noncomputable def mnv2BodyB_has_vjp_at (N : Nat) {ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
-    (x : Vec (N * (c * h * w)))
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (x : Vec (N * (ic * h * w)))
     (h_se : ∀ k, bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
                  bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
     (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
@@ -300,11 +306,11 @@ noncomputable def mnv2BodyB_has_vjp_at (N : Nat) {c mid h w kHd kWd : Nat}
     hde_vjp
     ((projB_has_vjp N (h := h) (w := w) Wp bp εp hεp γp βp).toHasVJPAt _)
 
-theorem mnv2BodyB_differentiableAt (N : Nat) {c mid h w kHd kWd : Nat}
-    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+theorem mnv2BodyB_differentiableAt (N : Nat) {ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
-    (x : Vec (N * (c * h * w)))
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (x : Vec (N * (ic * h * w)))
     (h_se : ∀ k, bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
                  bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
     (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
@@ -323,22 +329,22 @@ theorem mnv2BodyB_differentiableAt (N : Nat) {c mid h w kHd kWd : Nat}
 
 /-- The batched MobileNetV2 body backward graph: the three stage graphs chained at
     their cumulative forward activations (`cbrB⁻¹ ∘ dwbrB⁻¹ ∘ projB⁻¹`). -/
-noncomputable def mnv2BodyBackBatchedGraph {N c mid h w kHd kWd : Nat}
-    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+noncomputable def mnv2BodyBackBatchedGraph {N ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c)
-    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
   let xE := cbrB N (h := h) (w := w) We be εe γe βe x
   let xD := dwbrB N (h := h) (w := w) Wd bd εd γd βd xE
   cbrBackBatchedGraph We be εe γe βe x
     (dwbrBackBatchedGraph Wd bd εd γd βd xE
       (projBackBatchedGraph Wp bp εp γp βp xD e))
 
-theorem mnv2BodyBackBatchedGraph_faithful {N c mid h w kHd kWd : Nat}
-    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+theorem mnv2BodyBackBatchedGraph_faithful {N ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
-    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w)))
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w)))
     (h_se : ∀ k, bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
                  bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
     (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd

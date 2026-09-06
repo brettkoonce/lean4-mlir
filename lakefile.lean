@@ -548,6 +548,33 @@ lean_lib «Certs» where
              -- ⛔ The census is 110 parameters, not the 146 ResNet34TiePoC names: both r34 renders
              -- run convBias := false and the conv biases are zeroBiasPrelude's zero constants.
              `LeanMlir.Proofs.Foundation.ResNet34TiePoCB,
+             -- ⭐ 4.2 leg 1: MobileNetV2's T1-forward and T2 at batch BN — the second net whose
+             -- Proofs tier is re-stated in the world its Adam/RMSProp artifacts train in. Pure
+             -- enumeration: MobileNetV2BackB0 already carries the batched relu6 stages (cbrB,
+             -- dwbrB, dwbrBstrided) and projB with their _at VJPs and backward graphs at
+             -- bnBatchLA; what was missing is the level above. ⭐ IVW/IVWNoExp are REUSED from
+             -- MobileNetV2FullPaper — a weight bundle knows no BatchNorm world — and only the
+             -- top-level record is new, because it is generic in nCls where MNV2PaperWeights is
+             -- pinned at 10. ⚠ XLA-SAME padding at all five stride-2 sites (the stem conv and the
+             -- four strided depthwises), and NO stem pool, which is why this net needs no
+             -- batchMap_has_vjp_at. ⚠ Bias operands are the render's default convBias := false
+             -- names (%zb{c}); the census is 158 parameters, not 210.
+             `LeanMlir.Proofs.Architectures.MobileNetV2FullB,
+             -- ⭐⭐ …and its whole-net input-VJP (T1's VJP half). Delegation only: mnv2BodyB and
+             -- mnv2DownBodyB ARE the two body shapes, residual_has_vjp_at wraps the first for the
+             -- ten skip blocks, and bnRelu6Stage_has_vjp_at is generic in the inner op so the
+             -- stride-2 stem is the same construction as every stride-1 stage. ⭐ Where r34 needed
+             -- a new Foundation lemma (batchMap_has_vjp_at, for its stem pool) this net needs
+             -- none: MobileNetV2 has no pool and its GAP/dense are smooth. ⛔ Two kink clauses per
+             -- bottleneck, both INSIDE the body (expand relu6, depthwise relu6) — the linear
+             -- bottleneck has no activation after project, so the residual add adds nothing; 35
+             -- relu6 sites in 19 binders. ⚠ Unlike r34's, the head is NOT hypothesis-free.
+             -- ⭐ IVPos / IVNoExpPos are reused from MobileNetV2FullVJP — a BN epsilon's
+             -- positivity does not know which axis the norm reduces; only the smoothness bundles
+             -- need batched peers. ⭐ mnv2BodyB's family was generalised from one channel count to
+             -- ic/oc there (b11 and b17 are stride-1 bodies with ic ≠ oc, which the residual-only
+             -- statement could not express); mnv2DownBodyB already had that shape.
+             `LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP,
              -- ⭐⭐ The `Maps` kit a LAYERNORM net's BACKWARD needs (ConvNeXt-T, the third
              -- backward net and the first whose normalisation reduces over the CHANNEL axis).
              -- Maps.rowLNVecFlatBack is the one genuinely new leaf and is NOT

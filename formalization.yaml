@@ -244,6 +244,20 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- MobileNetV2's T1 and T2 at batch BatchNorm, all 17 bottlenecks (status 4i).
+    - declaration: "Proofs.StableHLO.mobilenetv2FwdGraphB_full_faithful"   # the 17-block typed graph denotes the batch-BN forward
+      file: "LeanMlir/Proofs/Architectures/MobileNetV2FullB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct"   # whole-net input-VJP at bnBatchLA; 19 bundles, 35 relu6 sites, N a binder
+      file: "LeanMlir/Proofs/Architectures/MobileNetV2FullBVJP.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
     #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.
@@ -804,17 +818,21 @@ fidelity:
        leaf rather than at the net, and it will apply to r34's and MobileNetV2's
        batched budgets too.
 
-       STILL OPEN, per net: the net-level real forward at `bnBatchLA` and its
-       whole-net VJP, the forward graph and faithfulness, the train-step tie pair
-       against the batch-BN artifact, the training-mode forward budget (a CAP, as
-       `r34_train_float_logits_le` already is), the backward budget, and the
-       certified backward tie at `bnBatchTensor4`. The block-level batched VJPs and
-       backward-graph faithfulness already exist for both nets
-       (`ResNet34BackB0.lean`, `MobileNetV2BackB0.lean`, folded by
-       `BackNetFolds.lean`), and the eval-mode forward budgets are world-agnostic
-       -- frozen statistics reduce nothing, so `r34_float_logits_le` and
-       `mnv2_float_logits_le` already hold in both worlds. Work packages:
-       planning/proofs_tier_to_paper_nets.md section 4.
+       WHERE THE PORT STANDS (2026-09-06). ResNet-34 is done through T3: T1's
+       forward and graph (4.1b), its whole-net VJP (4.1c-4.1d), the un-fused §1
+       fold (4f) and the §1a tie (4g). MobileNetV2 has T1 and T2 (4i) and its §1
+       fold rides on 4f's `MobileNetV2FaithfulPoCPaperG.lean`, which is already at
+       the batched `*GradB` nodes.
+
+       STILL OPEN, per net: MobileNetV2's §1a tie, and for BOTH nets the
+       training-mode forward budget (a CAP, as `r34_train_float_logits_le` already
+       is), the backward budget, and the certified backward tie at
+       `bnBatchTensor4`. The block-level batched VJPs and backward-graph
+       faithfulness already exist for both nets (`ResNet34BackB0.lean`,
+       `MobileNetV2BackB0.lean`, folded by `BackNetFolds.lean`), and the eval-mode
+       forward budgets are world-agnostic -- frozen statistics reduce nothing, so
+       `r34_float_logits_le` and `mnv2_float_logits_le` already hold in both
+       worlds. Work packages: planning/proofs_tier_to_paper_nets.md section 4.
 
        THREE MORE AXES THE SAME REVIEW FOUND (2026-09-06, later that day),
        recorded here because "the certified net and the net that produced the
@@ -994,6 +1012,68 @@ fidelity:
        `ResNet34RenderPC.lean` is NOT affected the same way -- its
        `resnet34Forward_full_pc` is the subject of the float budgets, the T6 tie
        and the witness, none of which is about a train step's bytes.
+
+    4i. MOBILENETV2 AT THE NET THAT TRAINS — T1 AND T2 (2026-09-06). The second
+       net of 4e's port. `Architectures/MobileNetV2FullB.lean` states the
+       seventeen-bottleneck real forward and its typed forward graph at
+       `bnBatchLA`, with `den graph = forward` chained over six per-block-kind
+       lemmas; `MobileNetV2FullBVJP.lean` gives that forward a certified
+       `HasVJPAt` over 19 hypothesis bundles. Both ~2 s to elaborate, all
+       sixteen declarations 3-axiom clean.
+
+       WHY IT IS NOT A FLAG. This net's two renderers do not overlap:
+       `MobileNetV2Render` is SGD-inline and per-example only,
+       `MobileNetV2RenderB` is AdamW-only and batch-BN, and every artifact whose
+       accuracy the book quotes -- `mobilenetv2in_rmsdp64` among them -- is on the
+       second. `MobileNetV2FullPaper.lean`'s per-example ladder stays where it is;
+       this is its peer in the other world, not a replacement.
+
+       ⭐ IT IS AN ENUMERATION, AND CHEAPER THAN RESNET-34's WAS.
+       `MobileNetV2BackB0.lean` already carried the batched relu6 stages (`cbrB`,
+       `dwbrB`, `dwbrBstrided`) and `projB` with their `_at` VJPs and backward
+       graphs at `bnBatchLA`; `mnv2BodyB_has_vjp_at` and
+       `mnv2DownBodyB_has_vjp_at` ARE the two body shapes, and
+       `residual_has_vjp_at` wraps the first for the ten skip blocks. Where
+       ResNet-34 needed a new Foundation lemma -- `batchMap_has_vjp_at`, because
+       its stem ends in a max-pool with no derivative at a tie -- MobileNetV2
+       needs none: it has no stem pool, and its GAP and dense are smooth. The
+       only composition written from scratch is b1's `projB . dwbrB`, the `t = 1`
+       block, which has no body lemma to delegate to.
+
+       ⭐ THE WEIGHT AND POSITIVITY BUNDLES ARE REUSED, NOT RE-DECLARED. `IVW`,
+       `IVWNoExp`, `IVPos` and `IVNoExpPos` hold kernels and epsilons and know
+       nothing about which axis the norm reduces, so the batched net binds the
+       records the per-example one does. Only the top-level weights record is new
+       (generic in the class count, where `MNV2PaperWeights` is pinned at 10) and
+       only the smoothness bundles need batched peers, because a kink condition
+       names its activation and `bnBatchLA` is a different activation from
+       `bnPerChannelTensor3`.
+
+       ⚠ ONE EXISTING LEMMA FAMILY WAS GENERALISED. `mnv2BodyB_has_vjp_at`,
+       its differentiability peer and its backward graph pinned input and output
+       channels equal, because they were written for the residual block. Blocks
+       b11 (64 to 96) and b17 (160 to 320) are stride-1 bodies with `ic != oc`, so
+       the family now takes both; `mnv2DownBodyB` already had that shape, every
+       existing call site is at `ic = oc`, and no proof changed.
+
+       ⛔ TWO KINK CLAUSES PER BOTTLENECK, AND THEY ARE NOT RESNET-34's. The two
+       relu6 sites are the EXPAND and the DEPTHWISE, both inside the body: the
+       linear bottleneck has no activation after `project`, so the residual add IS
+       the block output. ResNet-34's second clause is a post-residual OUTER relu.
+       35 relu6 sites in all, bundled into 19 binders, and relu6 is kinked on BOTH
+       sides so each carries `!= 0 and != 6`. ⚠ Unlike ResNet-34's, the head is
+       not hypothesis-free -- MobileNetV2 puts a relu6 in front of the pool.
+
+       ⚠ XLA-`SAME` AT ALL FIVE STRIDE-2 SITES, and the census is 158. The stem
+       conv and the four strided depthwises are `flatConvStride2Xla` /
+       `depthwiseStride2FlatXla`, not r34's symmetric peers -- identical types,
+       identical emitted shapes, different certificates. The graph's bias operands
+       are the render's default `convBias := false` names (`%zb{c}`, the shared
+       zero constant), which is why the shipped parameter count is 158 and not
+       210; every graph is quantified over the bias value, so both flags are
+       covered.
+
+       `N` is a variable throughout: T1 and T2 carry no numerals.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

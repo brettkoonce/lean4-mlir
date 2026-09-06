@@ -123,6 +123,8 @@ import LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoCG
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
+import LeanMlir.Proofs.Architectures.MobileNetV2FullB
+import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
@@ -5566,3 +5568,76 @@ open Proofs
 #print axioms Proofs.ResNet34TieB.r34_head_tiedB
 #print axioms Proofs.ResNet34TieB.r34_net_tiedB
 #print axioms Proofs.ResNet34TieB.r34_lossCot_is_smoothedCE_grad
+
+-- ════════════════════════════════════════════════════════════════
+-- 4.2 leg 1: MOBILENETV2 AT TRUE BATCH BN — T1-forward and T2 (MobileNetV2FullB.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- The whole-net real forward and typed forward graph at `bnBatchLA` (reduce [0,2,3]), all seventeen
+-- bottlenecks, with `den graph = forward` chained over the six per-kind faithfulness lemmas. The
+-- batched peer of MobileNetV2FullPaper's `mobilenetv2ForwardPaper` / `mobilenetv2FwdGraphPaper`,
+-- which are per-example.
+-- ⛔ This net's two renderers do not overlap, so batch BN is not a flag away: MobileNetV2Render is
+-- SGD-inline and per-example only, MobileNetV2RenderB is AdamW-only and batch-BN. Every artifact
+-- whose accuracy the book quotes — mobilenetv2in_rmsdp64 among them — is on the second.
+-- ⭐⭐ Nothing about the blocks is new: MobileNetV2BackB0 already carries the batched relu6 stages
+-- (cbrB / dwbrB / dwbrBstrided) and projB, their `_at` VJPs and their backward-graph faithfulness,
+-- all at bnBatchLA. What was missing is the level above, and this is that enumeration.
+-- ⭐ IVW / IVWNoExp are REUSED from MobileNetV2FullPaper rather than re-declared — a weight bundle
+-- holds kernels and epsilons and knows nothing about which axis the norm reduces. Only the
+-- top-level record is new, because it is generic in nCls where MNV2PaperWeights is pinned at 10.
+-- ⚠ Padding is XLA-SAME at all five stride-2 sites — the stem conv and the four strided depthwises
+-- (flatConvStride2Xla / depthwiseStride2FlatXla, NOT r34's symmetric peers). Identical types,
+-- identical emitted shapes, different certificates; MobileNetV2 is the TF-origin net.
+-- ⚠ NO stem pool: the stem is conv-BN-relu6 and downsamples once, which is why this net needs no
+-- batchMap_has_vjp_at where ResNet-34 did.
+-- ⚠ The bias operands are the render's DEFAULT convBias := false names (%zb{c}, the shared zero
+-- constant each bias is folded into its BatchNorm and bound to). The shipped census is 158
+-- parameters, not 210. Every graph is quantified over the bias VALUE, so it covers both flags.
+-- ⚠ N is a variable: T1 and T2 carry no numerals; the batch is pinned only at T4/T5, and there it
+-- is the PER-REPLICA batch (64) because the collectives average gradients and no statistic is
+-- all-reduced.
+#print axioms Proofs.mobilenetv2ForwardB_full
+#print axioms Proofs.StableHLO.mnv2StemGraphB_faithful
+#print axioms Proofs.StableHLO.mnv2NoExpGraphB_faithful
+#print axioms Proofs.StableHLO.mnv2ExpOnlyGraphB_faithful
+#print axioms Proofs.StableHLO.mnv2ResidGraphB_faithful
+#print axioms Proofs.StableHLO.mnv2StridedGraphB_faithful
+#print axioms Proofs.StableHLO.mnv2HeadGraphB_faithful
+#print axioms Proofs.StableHLO.mobilenetv2FwdGraphB_full_faithful
+
+-- ════════════════════════════════════════════════════════════════
+-- 4.2 leg 1: MOBILENETV2 AT TRUE BATCH BN — T1's VJP half (MobileNetV2FullBVJP.lean, 2026-09-06)
+-- ════════════════════════════════════════════════════════════════
+-- The whole-net input-VJP at `bnBatchLA`, at the paper [t,c,n,s] depth: stem, seventeen
+-- bottlenecks, head, chained with `vjp_comp_at` over one positivity bundle and one smoothness
+-- bundle per block. Completes T1 for MobileNetV2 in `formalization.yaml` 4e's port.
+-- ⭐ Delegation only, and unlike r34 it needed NO new Foundation lemma. mnv2BodyB_has_vjp_at and
+-- mnv2DownBodyB_has_vjp_at ARE the two body shapes; residual_has_vjp_at wraps the first for the ten
+-- skip blocks; bnRelu6Stage_has_vjp_at is already generic in its inner op, so the XLA-SAME strided
+-- stem is the same construction as every stride-1 stage. The only composition written from scratch
+-- is the t=1 block projB ∘ dwbrB (b1), which has no mnv2*BodyB peer.
+-- ⭐ mnv2BodyB's family was generalised from a single channel count to ic/oc to state it: b11 and
+-- b17 are stride-1 bodies with ic ≠ oc, and the old statement pinned input and output equal because
+-- it was written for the residual block. mnv2DownBodyB already had the general shape, and every
+-- existing call site is at ic = oc.
+-- ⛔ Pointwise and necessarily so — relu6 is kinked on BOTH sides — and each expand-bearing block
+-- contributes TWO clauses, the expand relu6 and the depthwise relu6, both INSIDE the body. The
+-- linear bottleneck has no activation after project, so the residual add IS the block output and
+-- adds nothing; that is the structural difference from ResNet-34, whose second clause is a
+-- post-residual OUTER relu. 35 relu6 sites in 19 binders.
+-- ⚠ Unlike r34's, the head is NOT hypothesis-free: MobileNetV2 puts a relu6 in front of the pool.
+-- ⭐ IVPos / IVNoExpPos are reused from MobileNetV2FullVJP — a BN epsilon's positivity does not know
+-- which axis the norm reduces. Only the smoothness bundles need batched peers, because a kink
+-- condition names the activation and bnBatchLA is a different activation from bnPerChannelTensor3.
+-- ⭐ `_correct` is about `mobilenetv2ForwardB_full` ITSELF, the forward whose typed graph
+-- mobilenetv2FwdGraphB_full_faithful certifies, not about the layered chain the VJP is built on;
+-- mobilenetv2ForwardB_full_eq_chain is the bridge. N is a variable throughout.
+#print axioms Proofs.mnv2StemB_has_vjp_at
+#print axioms Proofs.mnv2NoExpB_has_vjp_at
+#print axioms Proofs.mnv2ExpOnlyB_has_vjp_at
+#print axioms Proofs.mnv2ResidB_has_vjp_at
+#print axioms Proofs.mnv2StridedB_has_vjp_at
+#print axioms Proofs.mnv2HeadB_has_vjp_at
+#print axioms Proofs.mobilenetv2ForwardB_full_has_vjp_at
+#print axioms Proofs.mobilenetv2ForwardB_full_eq_chain
+#print axioms Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct
