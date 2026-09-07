@@ -52,23 +52,28 @@ KNOWN_SPLIT = {
 
 **4c is done for a net when its entry leaves that dict.** The script already prints
 `✓ RESOLVED — <fwd> is now a N-line prefix of <ts>` and tells you to drop the entry; the list "may
-shrink, never grow". ConvNeXt and ViT are not in it, because their `convnext_fwd`/`vit_fwd` and
-`convnext_adam_train_step`/`vit_adam_train_step` are BOTH from the per-example renderer — internally
-consistent, and the split there is between the drop-free Imagenette pair and everything else.
+shrink, never grow". ConvNeXt and ViT were never in it, because their `convnext_fwd`/`vit_fwd` and
+`convnext_adam_train_step`/`vit_adam_train_step` came BOTH from the per-example renderer —
+internally consistent, and the split there is between the drop-free Imagenette pair and everything
+else. ⚠ So for legs 3 and 4 this ratchet is not the criterion; leg 4's was an empty
+`git diff verified_mlir/` after the swap (ViT's are now all on the batched chain and the ratchet
+never moved).
 
-## State of play (2026-09-06)
+## State of play (2026-09-07)
 
 | net | what is split | leg |
 |---|---|---|
 | **ResNet-34** | — | 1 ✅ **DONE 2026-09-06** |
 | **MobileNetV2** | — | 2 ✅ **DONE 2026-09-06** |
-| **ConvNeXt-T** | the drop-free Imagenette pair is per-example; every `*drop*` and every `*in*` is batched | 3 ← NEXT |
-| **ViT-Tiny** | as ConvNeXt | 4 |
+| **ConvNeXt-T** | the drop-free Imagenette pair is per-example; every `*drop*` and every `*in*` is batched | 3 — a DECISION, see below |
+| **ViT-Tiny** | — (19 of 20 artifacts; the SGD-inline step stays, deliberately) | 4 ✅ **DONE 2026-09-07** |
 | EfficientNet-B0, ResNet-50, MNv4 | nothing — one renderer already | — |
 
-⭐⭐ **`KNOWN_SPLIT` IS EMPTY.** `check_adam_prefix` reads **7 paired, 0 known-split, 0
-unaccounted** — the criterion this thread was opened to reach. Legs 3 and 4 are a different shape
-(no BN-world split at all) and are not in that ratchet.
+⭐⭐ **`KNOWN_SPLIT` IS EMPTY.** `check_adam_prefix` reads **20 paired, 0 known-split, 0
+unaccounted** — the criterion this thread was opened to reach, and at the ImageNet tier since the
+PAIRS extension. ⚠ Legs 3 and 4 are a different shape (no BN-world split at all) and were never in
+that ratchet, so leg 4's acceptance criterion had to be a different one: an EMPTY
+`git diff verified_mlir/` after the swap.
 
 ## Leg 1 — ResNet-34 ✅ DONE 2026-09-06
 
@@ -186,16 +191,110 @@ first time**: §4.2 was done before the retirement rather than alongside it.
 `MobileNetV2RenderPC.lean` is NOT affected — its per-example net is the subject of the float
 budgets, the T6 tie and the witness, none of which is about a train step's bytes.
 
-## Legs 3 and 4 — ConvNeXt-T and ViT-Tiny
+## Leg 3 — ConvNeXt-T ⛔ THE LAST ONE, and it is a DECISION for the user
 
-Different shape: these two do NOT have a BN-world split (LayerNorm, train == eval), and their
-per-example and batched chains render the same FORWARD byte-for-byte (`convnext-fwd-b-tie`,
-`vit-fwd-b-tie`). What differs is the BACKWARD: 78 lines of conv-VJP `transpose`/`reverse` in a
-commuting order. So the leg is a SWAP, not a re-render, and the gate that licenses it
-(`convnext-adam-tie`) is IREE-linked and does not link on this box.
+Different shape from legs 1 and 2: ConvNeXt and ViT have no BN-world split (LayerNorm,
+train == eval), and their per-example and batched chains render the same FORWARD byte-for-byte
+(`convnext-fwd-b-tie`, `vit-fwd-b-tie`). What differs is the BACKWARD: 78 lines of conv-VJP
+`transpose`/`reverse` in a commuting order. So the leg is a SWAP, not a re-render.
 
-⭐ Per §4c the swap goes under an XLA-side numeric gate instead — a one-batch A/B of the two
-artifacts' outputs, the shape the `*-dp-check` gates already have.
+⭐ **ViT turned out to have no such lines at all** (its patch embed is not a `conv2d`), which is why
+leg 4 was a measurement and closed on 2026-09-07 — see the next section. ConvNeXt does have them,
+so the swap MOVES BYTES.
+
+⛔⛔ **CORRECTED 2026-09-07 — the blocker this section named was stale, and so was the work it
+implied.** This read *"the gate that licenses it (`convnext-adam-tie`) is IREE-linked and does not
+link on this box"*, and *"the swap goes under an XLA-side numeric gate instead — a one-batch A/B
+… to build"*. Measured:
+
+* `lake build convnext-adam-tie` links in **2 s**. Its lakefile docstring records that it moved to
+  `lowererLink` on 2026-08-12 and that **`ireeLink` stopped existing on 2026-08-25**.
+  `vit-adam-tie`, `convnext-fwd-b-tie` and `vit-fwd-b-tie` all build too.
+* ⭐⭐ **The A/B already exists and already ran.** `planning/xla_pjrt_handoff.md` §0.10: the keep = 1
+  SD gate compares `convnext_adam` (per-example) against `convnext_adamdrop` (batched, mask ≡ 1.0)
+  and measures **0 of 83,478,846 floats differing after 3 AdamW steps** against a bit-exact floor,
+  over a pair differing by exactly those 78 lines, with `scripts/perturb_conv_vjp.py` firing at
+  0.0343 as the negative control. That file's verdict: *"so the blocker is gone"*.
+
+**Leg 3 is therefore a DECISION, not a build.** §0.10 also records why the swap was declined:
+*"it would move bytes in the artifact behind the 84.41% 80-epoch run for no functional gain."*
+The trade has changed — 4b's last two capstones and 4d piece 2 now sit behind it — so the question
+is whether that gain is now worth the byte movement. ⚠ It also settles `convBack` vs
+`convBackBatched`, two emitters for one VJP that were never tied to each other; whichever side
+moves changes committed artifacts.
+
+▶ **The question to put to the user, in one line:** is re-pointing ConvNeXt-T's committed train
+step at the batched chain worth moving bytes behind the 84.41% run? ⚠ And if it goes ahead, leg 4's
+lesson applies here too — `ConvNeXtFaithfulPoCG.lean`'s fourteen lemmas are at the per-example
+constructors, so a batched peer has to land FIRST (see leg 4's ⛔⛔ below).
+
+## Leg 4 — ViT-Tiny ✅ DONE 2026-09-07
+
+**The leg started with a measurement and the measurement is the licence.** All **19 of 19**
+drop-free ViT artifacts — `vit_fwd`, `vitin_fwd` and the seventeen AdamW/EMA train steps —
+re-render **byte-identically** off the batched traversal (`ViTRenderB.vitBackAllB`), checked
+whole-net before a single writer moved. `git diff verified_mlir/` after the swap is **empty**.
+
+That is the outcome this log predicted, and the prediction's reasoning held: the 78-line
+divergence that makes ConvNeXt's leg a decision is entirely `convBack` vs `convBackBatched`, and
+ViT's 16×16 patch embed is not a `conv2d`, so there is nothing for the two chains to disagree
+about.
+
+**What landed.**
+
+1. **`Architectures/ViTFaithfulPoCGB.lean` FIRST** (10 declarations, ~2 s, 3-axiom clean) — the
+   §1 fold at the batched constructors, the batched peer of 4b.3's `ViTFaithfulPoCG.lean`. ⭐ No new
+   mathematics: each proof is `Finset.sum_congr rfl` over the batch and then the per-example bridge
+   at `batchSlice n`, because every batched `den` arm is literally the per-example one under a
+   batch sum. `ResNet34FaithfulPoCB.denseWGradB_den`'s shape.
+2. **The nineteen writers moved** from `ViTRender.lean` to `ViTRenderB.lean`, calling
+   `vitAdamTrainStepFaithfulB` / `vitFwdRenderB`. ⚠ The two wrappers take the batch in DIFFERENT
+   positions (`fn bStr replicas bs nClasses …` against `fn bStr replicas nClasses … (vbB := …)`),
+   which is the one place a positional slip would have shipped a wrong artifact; the byte diff is
+   what catches it, and it was run per artifact.
+3. `tests/TestViTFwdBTie.lean`'s standing caveat, retired — see below.
+4. Guards: `proofs.yml`'s ViT diff list moved from the `ViTRender` step to the `ViTRenderB` step
+   (one filename left behind), `regen_verified_mlir.sh`'s SD-pair comment corrected, the yaml row
+   and status section 4p.
+
+⭐⭐ **The bytes did not move and one DENOTATION did, and that is the leg's actual product.** The
+CLS token is one shared `[192]` vector, so its gradient is the sum of every example's CLS-row
+cotangent. The per-example render emits `denseBiasGradB (N := 1)` — "sum one thing", correct there
+because `pretty B` performed the batch lift OUTSIDE the AST — where the batched one emits
+`(N := vbB)` and the sum is inside `den`. Same emitted text either way (`biasGrad`'s reduce takes
+the `B` axis regardless), so the byte tie **provably cannot see it**; `den_rowDenseBiasGradB_at_one`
+is the general form of the trap. `vit-fwd-b-tie` had been printing that as a standing ⚠ ever since
+the batched chain landed, and `Proofs.ViTPoCGB.clsGrad_denB` closes it — the gate now says so.
+
+⛔ **One artifact did NOT move, and it is the ordering rule.** `verified_mlir/vit_train_step.mlir`
+is the SGD-inline step; `vitBackAllB` has no fused-SGD arm (`vitBackAll` takes an `adam : Bool` and
+the batched peer only ever emits the raw gradient), and ViT's T3 §1a tie — `ViTTiePoC.lean`, all
+200 parameters — is stated at exactly those bytes. Its batched peer is 4b's last open capstone,
+which this leg unblocks. So `ViTRender.lean` keeps that one writer and its per-example traversal,
+and **nothing is orphaned** — the cost legs 1 and 2 both paid is not paid here.
+
+⛔⛔ **What the audit mispriced, and it is a NEW shape of the "named gap can be the wrong one"
+rule.** `planning/proofs_tier_to_paper_nets.md` said leg 4 would be *"a one-line renderer change
+with no artifact movement and no decision to take"*. Right about the renderer; wrong about the
+tier. **Byte-identity is not tier-identity**: the two traversals emit different CONSTRUCTORS
+(`veclnGammaGradB` against `veclnGammaGrad`, `rowDenseWeightGradB` against `rowDenseWeightGrad`, and
+so on for all ten), and every `den` lemma is about the AST, not about the bytes. Swapping the
+writers without step 1 would have left 4b.3's ten ViT lemmas about an AST that no committed
+artifact is `pretty` of — leg 1's orphaning cost, incurred by a change that moves no bytes at all.
+▶ **A leg whose artifacts are byte-identical still moves the tier, because a tier is stated about
+the graph.** That is the fourth instance of the rule and the first where the gap was invisible to
+every byte-level gate in the repo.
+
+⚠ **No re-runs, and this time the check was cheap.** Legs 1 and 2 each had to establish that the
+per-example driver's Imagenette number was vacuous. Here no number is at risk at all: the bytes are
+unchanged, so every ViT run ever made is a run of exactly the artifacts still committed.
+
+**Gates.** `lake build Certs` 3992 → **3993** green; `lake env lean tests/AuditAxioms.lean` 3-axiom
+clean on all ten new declarations; `lake exe docstring-checkrefs` 1668 citations;
+`python3 scripts/check_audit_coverage.py`; `python3 scripts/check_render_coverage.py` (241 files,
+one writer each); `bash scripts/regen_verified_mlir.sh` — writer audit **252 artifacts, one writer
+each**, `check_fwd_prefix` green, `check_adam_prefix` **20 paired, 0 known-split, 0 unaccounted**,
+`git diff verified_mlir/` empty; `.lake/build/bin/vit-fwd-b-tie` byte-identical on all 14,457 lines.
 
 ## The ImageNet tier of `check_adam_prefix` ✅ DONE 2026-09-06
 
@@ -230,8 +329,12 @@ forward → exit 1; a mis-pointed pair → exit 1 with the diverging line printe
 
 * ⭐ `KNOWN_SPLIT` is empty. The dict is kept, not deleted: an entry appearing again is the §3d(b)
   failure recurring, and it should have to be argued for rather than silently re-added.
-* Legs 3 and 4 (ConvNeXt-T, ViT-Tiny) — see below. ⭐ They are now better instrumented than legs 1
-  and 2 were: their ImageNet forwards are audited against the artifacts their numbers come from.
+* Leg 3 (ConvNeXt-T) — the last one, and it is a DECISION about moving bytes behind the 84.41%
+  run, not a build. ⭐ Better instrumented than legs 1 and 2 were: its ImageNet forwards are already
+  audited against the artifacts their numbers come from.
+* ViT's `vit_train_step.mlir` — the twentieth artifact, still per-example. It moves when either
+  `vitBackAllB` gains a fused-SGD arm or `ViTTiePoC.lean` gains a batched peer (4b's last capstone,
+  which leg 4 unblocked). Neither is scoped here.
 
 ## Seams outside Lean, for every leg
 

@@ -515,6 +515,18 @@ lean_lib «Certs» where
              -- bias and an LN beta are the same reduce), as it does in the fused file
              -- (ViTFaithfulPoCG.lean).
              `LeanMlir.Proofs.Architectures.ViTFaithfulPoCG,
+             -- ⭐ 4c leg 4: the SAME ten nodes at the BATCHED traversal (vitBackAllB), which is
+             -- what every committed ViT artifact renders from after the leg. Measured 2026-09-07:
+             -- all nineteen drop-free artifacts re-render byte-identically off it, so this is a
+             -- statement about the AST the bytes are pretty of and not about different bytes.
+             -- ⭐⭐ clsGrad_denB is the one the per-example fold could not make — the CLS token is
+             -- a shared [192] vector, so its gradient sums over the batch, and the per-example
+             -- render emits denseBiasGradB at N := 1 because pretty B lifted outside the AST.
+             -- Same emitted text, different function; den_rowDenseBiasGradB_at_one is the trap.
+             -- ⚠ headBGradB_den is per-example at batchSlice n: biasGradB is the identity on its
+             -- operand and its batch reduce is emitted text, the per-example carve-out unchanged
+             -- (ViTFaithfulPoCGB.lean).
+             `LeanMlir.Proofs.Architectures.ViTFaithfulPoCGB,
              -- ⭐ MobileNetV2's twelve, at the BATCHED index — this net's two renders do not
              -- overlap (the per-example one is SGD-inline only, the batched one AdamW-only), so
              -- its Adam/RMSProp artifacts have no fused op to un-fuse and the fold goes straight

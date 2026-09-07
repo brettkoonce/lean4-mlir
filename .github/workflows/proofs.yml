@@ -277,11 +277,32 @@ jobs:
               verified_mlir/convnextbin_adamwxclipdropbf16_train_step.mlir \
               verified_mlir/convnextbin_adamdpwxclipdropbf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/{convnext,convnextin,convnextsin,convnextbin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
-          # ViT's SD renders, from ViTRenderB — the batched chain. ⚠ That chain reproduces ViT's
-          # committed drop-free artifacts byte-for-byte (unlike ConvNeXt's, which differs on 78
-          # conv-VJP lines), so these come from the same emitter as vit_fwd/vit_adam_train_step.
+          # ⭐ EVERY ViT artifact but one, from ViTRenderB — the batched chain. 4c leg 4 moved the
+          # nineteen drop-free renders here (2026-09-07) after measuring all nineteen
+          # byte-identical off this traversal; before that they came from the per-example
+          # ViTRender.lean and this net had two live chains. Only vit_train_step.mlir is left
+          # there, and the step below says why.
           lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean
           git diff --exit-code -- verified_mlir/vit_adamdrop_train_step.mlir \
+              verified_mlir/vit_fwd.mlir \
+              verified_mlir/vitin_fwd.mlir \
+              verified_mlir/vit_adam_train_step.mlir \
+              verified_mlir/vit_adamdp_train_step.mlir \
+              verified_mlir/vit_adam64_train_step.mlir \
+              verified_mlir/vit_adamdp64_train_step.mlir \
+              verified_mlir/vit_adamdp32x4_train_step.mlir \
+              verified_mlir/vit_adam128_train_step.mlir \
+              verified_mlir/vit_adamdp128x4_train_step.mlir \
+              verified_mlir/vit_ema_train_step.mlir \
+              verified_mlir/vit_adamwx_train_step.mlir \
+              verified_mlir/vit_adamclip_train_step.mlir \
+              verified_mlir/vitin_adam128_train_step.mlir \
+              verified_mlir/vitin_adamdp128x4_train_step.mlir \
+              verified_mlir/vitin_adam128wx_train_step.mlir \
+              verified_mlir/vitin_adam128wxclip_train_step.mlir \
+              verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir \
+              verified_mlir/vitin_ema128_train_step.mlir \
+              verified_mlir/vitin_emadp128x4_train_step.mlir \
               verified_mlir/vit_adamdpdrop_train_step.mlir \
               verified_mlir/vit_drop_fwd.mlir \
               verified_mlir/vitin_adamwxclipdrop_train_step.mlir \
@@ -301,7 +322,7 @@ jobs:
               verified_mlir/vitbin_adamdp128x4wxclipdropbf16_train_step.mlir \
               verified_mlir/vitbin_adam128wxclipdrop_train_step.mlir \
               verified_mlir/vitbin_adam128wxclipdropbf16_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{vit,vitin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean)"; exit 1; }
+            || { echo "::error::committed verified_mlir/{vit,vitin,vitsin,vitbin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
           # costs nothing extra (the `lake env lean` above already ran every writer) and is why ten
@@ -341,27 +362,13 @@ jobs:
               verified_mlir/efficientnetin_emarmsdp64dropdobf16_train_step.mlir \
               verified_mlir/efficientnet_adambf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/{efficientnet,efficientnetin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean)"; exit 1; }
+          # ⛔ ONE artifact left here since 4c leg 4 (2026-09-07): the SGD-inline train step is the
+          # only ViT render still on the per-example traversal, because `vitBackAllB` has no
+          # fused-SGD arm and `ViTTiePoC.lean`'s 200-parameter tie is stated at these bytes.
+          # Everything else moved to the ViTRenderB step above.
           lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean
-          git diff --exit-code -- verified_mlir/vit_train_step.mlir verified_mlir/vit_fwd.mlir \
-              verified_mlir/vit_adam_train_step.mlir \
-              verified_mlir/vit_adamdp_train_step.mlir \
-              verified_mlir/vit_adam64_train_step.mlir \
-              verified_mlir/vit_adamdp64_train_step.mlir \
-              verified_mlir/vit_adamdp32x4_train_step.mlir \
-              verified_mlir/vit_adam128_train_step.mlir \
-              verified_mlir/vit_adamdp128x4_train_step.mlir \
-              verified_mlir/vit_ema_train_step.mlir \
-              verified_mlir/vit_adamwx_train_step.mlir \
-              verified_mlir/vitin_adam128wx_train_step.mlir \
-              verified_mlir/vit_adamclip_train_step.mlir \
-              verified_mlir/vitin_adam128wxclip_train_step.mlir \
-              verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir \
-              verified_mlir/vitin_fwd.mlir \
-              verified_mlir/vitin_adam128_train_step.mlir \
-              verified_mlir/vitin_adamdp128x4_train_step.mlir \
-              verified_mlir/vitin_ema128_train_step.mlir \
-              verified_mlir/vitin_emadp128x4_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{vit,vitin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean)"; exit 1; }
+          git diff --exit-code -- verified_mlir/vit_train_step.mlir \
+            || { echo "::error::committed verified_mlir/vit_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean)"; exit 1; }
           # ResNet50RenderB is the SOLE writer of all twenty-seven R50 artifacts — both
           # resolutions (`resnet50in` @224 and `resnet50in160` @160, which are different NET
           # SPECS, not a suffix), every optimizer variant (AdamW, LAMB, accumulation, their DP

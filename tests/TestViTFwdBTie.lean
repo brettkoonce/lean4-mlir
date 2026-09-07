@@ -117,10 +117,11 @@ forms diverged from its per-example peer, which this whole-net diff cannot."
   if bad != 0 then
     throw <| IO.userError s!"MISMATCH in the batched ViT BACKWARD ({bad} difference(s))."
   IO.println "  ✅ the batched backward computes and routes what the per-example one does"
-  IO.println "  ⚠ And the den side is still NOT checked: the CLS-token gradient changed from \
-`denseBiasGradB (N := 1)` to `(N := vbB)` — sum-one-thing to sum-the-batch — with the SAME emitted \
-text. That is the batched-index move in one line, and only den_rowDenseBiasGradB_at_one's argument \
-covers it."
+  IO.println "  ⭐ And the den side IS checked now (4c leg 4, 2026-09-07): the CLS-token gradient \
+changed from `denseBiasGradB (N := 1)` to `(N := vbB)` — sum-one-thing to sum-the-batch — with the \
+SAME emitted text, so this byte tie provably cannot see it. Proofs.ViTPoCGB.clsGrad_denB is the \
+theorem at the batched node, beside the other nine in ViTFaithfulPoCGB.lean; ViTPoCG.clsGrad_den \
+is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are two theorems."
 
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   --  The WHOLE TRAIN STEP, against the committed artifact — the bytes the trainer loads.

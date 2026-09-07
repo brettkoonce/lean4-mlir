@@ -224,6 +224,20 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- 4c leg 4: ViT's same ten nodes at the BATCHED traversal, which every committed ViT
+    #     artifact bar the SGD-inline train step renders from as of 2026-09-07. All nineteen
+    #     drop-free artifacts were MEASURED byte-identical off that traversal before the swap.
+    #     clsGrad_denB is the statement the per-example fold could not make: the CLS token is one
+    #     shared [192] vector, so its gradient sums over the batch, where the per-example render
+    #     emits denseBiasGradB at N := 1 because pretty B lifted outside the AST. Same bytes,
+    #     different function — den_rowDenseBiasGradB_at_one is the general form of that trap.
+    - declaration: "Proofs.ViTPoCGB.clsGrad_denB"   # the CLS token's gradient summed over the batch INSIDE den
+      file: "LeanMlir/Proofs/Architectures/ViTFaithfulPoCGB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- ResNet-34's T3 §1a tie at batch BN, un-fused and batched (status 4g).
     - declaration: "Proofs.smoothedCE_grad"   # the emitted six-op cotangent IS the label-smoothed loss's gradient, general target
       file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean"
@@ -1083,6 +1097,9 @@ fidelity:
        `ConvNeXtFaithfulPoCG.lean` (14), `ViTFaithfulPoCG.lean` (10),
        `MobileNetV2FaithfulPoCPaperG.lean` (4 new op kinds plus five
        per-block-profile capstones). 41 declarations, all 3-axiom clean.
+       A sixth landed 2026-09-07 with 4c leg 4: `ViTFaithfulPoCGB.lean` (10)
+       restates ViT's ten at the BATCHED constructors, because that leg moved
+       every ViT artifact but one onto the batched traversal. See 4p.
 
        WHAT IT BUYS AND WHAT IT DOES NOT. One lemma per op kind certifies every
        optimizer tail at once, because AdamW, RMSProp, heavy-ball, EMA, the
@@ -1241,8 +1258,11 @@ fidelity:
        with (`OptKind` is AdamW/RMSProp only). The coverage is not lost —
        `check_adam_prefix` forms exactly that pairing.
 
-       Remaining: ConvNeXt-T and ViT-Tiny, which are a different shape (no
-       BatchNorm-world split, identical forwards, a 78-line backward SWAP).
+       ViT-Tiny followed on 2026-09-07 (leg 4, section 4p) -- a different shape
+       (no BatchNorm-world split) and a different price: its two chains render
+       the same BYTES, so the leg was a measurement rather than a swap.
+       Remaining: ConvNeXt-T alone, whose two chains differ on 78 conv-VJP lines
+       and whose leg is a DECISION about moving bytes behind the 84.41% run.
        Thread: planning/renderer_convergence.md.
 
        ⭐ THE SPLIT WAS WIDER THAN THE AUDIT COULD SEE. `resnet34in_fwd.mlir`,
@@ -1762,6 +1782,61 @@ fidelity:
        are literals the kernel can evaluate and ResNet-50's are `2 * (...)` nests
        at a variable `q` that it cannot. Recorded as an observation. ▶ If that
        file ever has to be fast, this is where to look first.
+
+    4p. ONE CHAIN PER NET — ViT-TINY (2026-09-07). 4h's third leg, and it cost
+       what nothing else in this thread has: a measurement. ViT shipped two
+       renderers like the other three, but unlike ResNet-34's and MobileNetV2's
+       they have no BatchNorm-world split (ViT is LayerNorm, train == eval) and
+       unlike ConvNeXt's they share every emitter -- ViT's 16x16 patch embed is
+       not a `conv2d`, so the 78 conv-VJP lines that separate ConvNeXt's chains
+       have no analogue here. So the question was empirical, and it was answered
+       by rendering rather than by argument: all NINETEEN drop-free ViT
+       artifacts -- `vit_fwd`, `vitin_fwd` and the seventeen AdamW/EMA train
+       steps -- re-render BYTE-IDENTICALLY off the batched traversal
+       (`ViTRenderB.vitBackAllB`). 19 of 19, zero differing lines, checked
+       before a single writer moved.
+
+       The nineteen writers now live in `Proofs/Codegen/ViTRenderB.lean` and
+       call `vitAdamTrainStepFaithfulB` / `vitFwdRenderB`. `git diff
+       verified_mlir/` after the move is EMPTY, which is the acceptance
+       criterion this leg could have and legs 1 and 2 could not.
+
+       ⭐⭐ THE BYTES DID NOT MOVE AND ONE DENOTATION DID, WHICH IS THE POINT.
+       The CLS token is a single shared [192] vector, so its gradient is the sum
+       of every example's CLS-row cotangent. The per-example render emitted
+       `denseBiasGradB (N := 1)` -- "sum one thing", correct there because
+       `pretty B` performed the batch lift OUTSIDE the AST -- where the batched
+       one emits `(N := vbB)` and the sum is inside `den`. The emitted text is
+       identical either way (`biasGrad`'s reduce takes the B axis regardless),
+       so the byte tie provably cannot see the change; `den_rowDenseBiasGradB_at_one`
+       is the general form of that trap and `Proofs.ViTPoCGB.clsGrad_denB` is the
+       theorem now available at the batched node.
+
+       THE BATCHED TIER LANDED FIRST, per 4h's ordering rule.
+       `Architectures/ViTFaithfulPoCGB.lean` (10 declarations, ~2 s, 3-axiom
+       clean) folds the same ten nodes 4f's `ViTFaithfulPoCG.lean` folds, at the
+       batched constructors the moved artifacts emit. No new mathematics: each
+       proof is `Finset.sum_congr rfl` over the batch and then the per-example
+       bridge at `batchSlice n`, because every batched `den` arm is literally
+       the per-example one under a batch sum.
+
+       ⛔ ONE ARTIFACT DID NOT MOVE, AND IT IS THE ORDERING RULE AGAIN.
+       `verified_mlir/vit_train_step.mlir` is the SGD-inline step, and
+       `vitBackAllB` has no fused-SGD arm -- it emits the raw gradient only.
+       ViT's T3 §1a tie (`ViTTiePoC.lean`, all 200 parameters) is stated at
+       exactly those bytes, and its batched peer does not exist yet (it is 4f's
+       last open capstone, which this leg unblocks). So `ViTRender.lean` keeps
+       that one writer and its per-example traversal, and nothing is orphaned.
+       ViT is one chain per net on nineteen of twenty artifacts.
+
+       ⚠ WHAT THE SWAP WOULD HAVE COST WITHOUT THE FOLD, stated because the
+       audit did not price it. Byte-identity is not tier-identity: the two
+       traversals emit different CONSTRUCTORS (`veclnGammaGradB` against
+       `veclnGammaGrad`, and so on), and every `den` lemma is about the AST, not
+       about the bytes. Moving the writers without `ViTFaithfulPoCGB.lean` would
+       have left 4f's ten ViT lemmas about an AST no committed artifact is
+       `pretty` of. The planning row's "one-line renderer change" was right
+       about the renderer and wrong about the tier.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

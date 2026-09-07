@@ -19,10 +19,23 @@ and appears only as `pretty`'s argument and as `(N := vbB)` on the `*B` construc
 the token axis takes `(N+1)*D → D` — it keeps ONE example and drops the rest — and at `N = tk` it
 type-checks *and agrees*. `den_batchOp_clsSlice_per_example` is what pins those apart.
 
-**What this file is NOT (yet).** The forward only. The backward, the optimizer tail and the `#eval`
-writers stay in `ViTRender.lean` until this chain is tied — §2b's order, which ConvNeXt followed and
-which produced a byte tie before anything swapped. Nothing here writes an artifact, so
-`verified_mlir/` is untouched by construction.
+**What this file is, as of 4c leg 4 (2026-09-07): the sole writer of every ViT artifact but one.**
+It began as the forward only — the backward, the optimizer tail and the `#eval` writers stayed in
+`ViTRender.lean` until this chain was tied, §2b's order, which ConvNeXt followed and which produced
+a byte tie before anything swapped. The tie held: all NINETEEN drop-free artifacts re-render
+byte-identically off `vitBackAllB`, measured whole-net before a writer moved, so they now render
+from here and `git diff verified_mlir/` after the move is empty.
+
+⛔ **The one exception is `vit_train_step.mlir`**, the SGD-inline step, which stays in
+`ViTRender.lean`: `vitBackAllB` has no fused-SGD arm (it emits the raw gradient only), and ViT's
+T3 §1a tie — `ViTTiePoC.lean`, all 200 parameters — is stated at exactly those bytes. Retiring it
+before that tie has a batched peer is the ordering mistake `planning/renderer_convergence.md`
+leg 1 wrote down.
+
+⭐⭐ **The bytes did not move and one denotation did.** See the CLS-token emission below: this
+chain's `denseBiasGradB (N := vbB)` sums the batch inside `den` where the per-example one wrote
+`(N := 1)` and let `pretty B` lift outside the AST. `Proofs.ViTPoCGB.clsGrad_denB` is the theorem
+that becomes available, and `ViTFaithfulPoCGB.lean` carries the other nine nodes with it.
 
 **The gate** (`lake build vit-fwd-b-tie`): this chain and the committed `verified_mlir/vit_fwd.mlir`
 must emit **byte-identical** text. That is available *because* every batched form was built to emit
@@ -1021,3 +1034,357 @@ def vitDropFwdBanner : String :=
 #guard Proofs.StableHLO.vitAdamVariant 32 1 false true true true == "adamwxclipdrop"
 -- The marker must not LEAD: the driver keys its 4-region blob off `startsWith "ema"`.
 #guard (Proofs.StableHLO.vitAdamVariant 32 1 true false false true).startsWith "ema"
+
+-- ════════════════════════════════════════════════════════════════
+-- § ▶ 4c LEG 4 (2026-09-07): EVERY DROP-FREE ViT ARTIFACT, MOVED HERE FROM `ViTRender.lean`
+-- ════════════════════════════════════════════════════════════════
+--
+-- ⭐⭐ These nineteen writers used to call `vitAdamTrainStepFaithful` / `vitFwdRenderV`, i.e. the
+-- PER-EXAMPLE traversal, while the drop-bearing artifacts below already came from `vitBackAllB`.
+-- One net, two chains. They now all call the batched wrapper, and the swap was licensed by
+-- MEASUREMENT rather than argument: all nineteen re-render BYTE-IDENTICALLY, which is what
+-- `TestBatchedEmitTie.lean`'s per-form ties predict and what a whole-net diff confirmed before a
+-- single line moved.
+--
+-- ⭐⭐ The bytes did not move and the DENOTATION did, on exactly one parameter. The CLS token is
+-- one shared `[192]` vector, so its gradient is the sum of every example's CLS-row cotangent —
+-- `denseBiasGradB (N := vbB)` here against `(N := 1)` there, where `pretty B` did the batch lift
+-- outside the AST. `Proofs.ViTPoCGB.clsGrad_denB` is the statement that becomes available, and
+-- `ViTPoCG.clsGrad_den` is the same theorem at `N = 1`. See the note on that emission above.
+--
+-- ⚠ The comments below are the originals, unedited except for the call and where a claim moved.
+-- ⛔ `vit_train_step.mlir` did NOT move and stays in `ViTRender.lean`: `vitBackAllB` has no
+-- fused-SGD arm, and `ViTTiePoC.lean`'s 200-parameter tie is stated at those bytes.
+
+-- ⭐ The Imagenette forward, off the BATCHED chain since 4c leg 4 (2026-09-07) — byte-identical
+-- to what `vitFwdRenderV` wrote, which `vit-fwd-b-tie` had been asserting since the chain landed.
+#eval IO.FS.writeFile "verified_mlir/vit_fwd.mlir" (Proofs.StableHLO.vitFwdRenderB "vit_fwd")
+
+-- The **AdamW** train step, `pretty(provenGraph)` — the artifact `vit-verified-adam` trains on, and
+-- from 2026-07-28 this `#eval` is its ONLY writer. It used to be written by the DRIVER
+-- (`apps/imagenette/MainViTVerifiedAdam.lean`) at every startup, from the hand-written
+-- `LeanMlir/ViTRender.vitTrainStepModuleAdamSched` — a writer pattern the artifact audit cannot
+-- see, and one where the committed bytes were never authoritative because each run overwrote them.
+--
+-- The swap was licensed by `lake build vit-adam-tie` (retired render vs this one, one AdamW step,
+-- all 16,579,041 returned floats): gradient norm-rel 1e-6, **%loss bit-exact**, 0/200 parameters
+-- disagreeing, against a bit-exact A-vs-A determinism floor. `%loss` carries real weight here — ViT
+-- has no BN, so it is the only output that reads the forward directly, and it is precisely what §2b
+-- got wrong elsewhere. To re-run the tie, recover the retired render:
+--   git show 2957188:verified_mlir/vit_adam_train_step.mlir > /tmp/retired.mlir
+--   .lake/build/bin/vit-adam-tie /tmp/retired.mlir verified_mlir/vit_adam_train_step.mlir
+-- α = 0.1 and K = nClasses are the knobs; −α/K is DERIVED (2026-07-31), batch 32 —
+-- `vitTinyConfig`'s label smoothing + mean.
+#eval IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adam_train_step" "32.0")
+
+-- The DATA-PARALLEL render, the ViT peer of `resnet34_adamdp_train_step` (§2b-quater): the same
+-- graph plus one `all_reduce(add)/N` per parameter gradient before its AdamW triple. Selected at
+-- run time by `LEAN_MLIR_VARIANT=adamdp`, and `2` must match `PJRT_REPLICAS` because the graph
+-- bakes `replica_groups`. Rendering to its OWN path is what stops the §2a race in which producing
+-- a DP render meant editing a knob and clobbering the single-device artifact the trainer runs.
+--
+-- **NOT RUNNABLE ON THIS BOX, and not gated above 1 replica.** Collectives live on the XLA/PJRT
+-- path, but the ViT graph fails there in the patch-embed weight-grad convolution
+-- (`miopenStatusUnknownError`) — which is why `vit-adam-tie` links IREE — and `vit-verified-adam`
+-- is itself an IREE binary, where the shim refuses the DP entry point rather than silently running
+-- single-device. What IS checked: the `replicas = 1` re-render is byte-identical (so the insertion
+-- is provably inert), the collective count, and the emitted syntax.
+--
+-- ✅ 2026-07-30: the 2-GPU numeric gate now exists and PASSES — `vit-dp-check` reproduces the
+-- single-device step BIT-EXACTLY on all 16,579,041 returned floats on a duplicated batch, against
+-- a sum-not-mean control that fires at 0.996. The paragraph above's "not runnable on this box"
+-- is retired: the graph executes (handoff §2j tail).
+#eval IO.FS.writeFile "verified_mlir/vit_adamdp_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp_train_step" "32.0" 2)
+
+-- ── The LARGER-BATCH pair, added 2026-07-30 (bs 64 per device) ─────────────────────────────────
+-- `bs` is a renderer PARAMETER as of this change; it used to be a private constant `vBS := 32`,
+-- which is the same thing §5 flags for ConvNeXt's `cBS` and the reason no ViT batch other than 32
+-- could be rendered. Threading it is licensed by the strongest gate available: at `bs := 32` all
+-- four artifacts above re-render BYTE-IDENTICAL (`vit_fwd` 626cc192, `vit_train_step` f57aff00,
+-- `vit_adam_train_step` 2d176895, `vit_adamdp_train_step` 02f85184), so the refactor is inert.
+--
+-- The number in a variant name is the PER-DEVICE batch, matching `adam128`/`adamdp128` on
+-- EfficientNet and ResNet-34. So `adamdp64` on two replicas is GLOBAL batch 128.
+--
+-- ⚠ Two things that must move together, because the batch is baked into the graph rather than
+-- being a runtime dimension:
+--   * the cotangent divisor `bStr` — the render means over its OWN device's batch, and the
+--     `all_reduce(add)/N` then averages across devices, so per-device mean × N-average = global
+--     mean. A `bStr` left at "32.0" here would silently double every gradient.
+--   * `LEAN_MLIR_BATCH=64` at run time. A mismatch is a shape error at the first invoke, not a
+--     silent limp — which is the good failure mode.
+--
+-- ⚠⚠ **bs64 REQUIRES `MIOPEN_DEBUG_CONV_GEMM=0`; bs32 does not.** This is the sharpest evidence
+-- yet on the MIOpen im2col fault, because at bs64 it is RELIABLE rather than the once-only
+-- flake seen at bs32. Measured 2026-07-30 — without the variable, `vit_adam64_train_step` dies at
+-- execution with `miopenStatusUnknownError`; with it, `vit-dp-check` on the bs64 pair is BIT-EXACT
+-- on all 16,579,041 floats against a sum-not-mean control that fires at 1.003.
+-- Why the batch matters: XLA requests the patch-embed weight-grad conv (an interior-dilated `pad`
+-- fused in as `rhs_dilation = 16`) with a **zero-byte workspace**, which confines MIOpen to
+-- no-workspace solvers; it lands on `GemmFwdRest`, whose `MIOpenIm2d2Col.cpp` uses the OpenCL
+-- builtins `get_global_id`/`get_global_size` but is JIT-compiled through HIPRTC, where they do not
+-- exist. That im2col workspace is LINEAR IN BATCH — MIOpen asks for 6,422,528 bytes at bs32 and
+-- exactly 2× that, 12,845,056, at bs64 — so the larger batch pushes solver selection onto the
+-- broken kernel deterministically. The variable drops that solver family, at ~7% throughput.
+-- Diagnosis + a 20-line JAX reproducer: `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`.
+-- The eval forwards stay at bs 32 and that is fine: `trainAdamSched` reads the width off the
+-- forward artifact (`evalBs`), so eval runs at 32 while training runs at 64.
+#eval IO.FS.writeFile "verified_mlir/vit_adam64_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adam64_train_step" "64.0" 1 10 (vbB := 64))
+#eval IO.FS.writeFile "verified_mlir/vit_adamdp64_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp64_train_step" "64.0" 2 10 (vbB := 64))
+
+-- ── The FOUR-REPLICA render, added 2026-08-01 ──────────────────────────────────────────────────
+-- Same graph as `vit_adamdp_train_step` at the same per-device batch (32); only `replicas` moves,
+-- so `replica_groups` becomes `[[0,1,2,3]]` and every collective's divisor becomes 4.0. Global
+-- batch 128.
+--
+-- ⚠ **The name encodes BATCH×REPLICAS, deliberately breaking the `adamdp64` convention.** Elsewhere
+-- the number in a variant name is the per-device batch and the replica count is absent —
+-- `r34AdamVariant 64 2` and `r34AdamVariant 64 4` both return `"momdp64"`. That is fine for R34
+-- only because nothing renders the 2-replica bs64 peer; here it is not, because
+-- `vit_adamdp_train_step.mlir` is a COMMITTED 2-replica artifact at bs32, so reusing `adamdp`
+-- would give one path two writers computing different graphs — §2a's exact disease, and the
+-- failure mode is a silent clobber rather than an error. `32x4` cannot collide with anything.
+--
+-- Gated by `vit-dp-check` at `VIT_DP_REPLICAS=4`: on a batch duplicated FOUR ways,
+-- `all_reduce(add)/4` is again the identity, so this must reproduce the single-device bs32 step
+-- output-for-output. Control: the 200 divisors 4.0 → 1.0.
+--
+-- ⚠ The `MIOPEN_DEBUG_CONV_GEMM=0` warnings on the bs64 pair above are **ROCm-only** — MIOpen is
+-- AMD's library and there is no analogue on the CUDA path this render was gated on.
+#eval IO.FS.writeFile "verified_mlir/vit_adamdp32x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp32x4_train_step" "32.0" 4 10 (vbB := 32))
+
+-- ── bs128, single-device and 4-replica ────────────────────────────────────────────────────────
+-- Rendered to answer "do these 16 GB cards hold bs128, i.e. global 512 on four?" — they do, with
+-- room (measured 2026-08-01: 3.2 GiB peak per device at bs128×4, 20% of the card).
+--
+-- The single-device `adam128` is NOT optional scaffolding: `vit-dp-check` gates a DP render against
+-- the single-device render AT THE SAME PER-DEVICE BATCH, so without this the 4-replica one could
+-- not be gated at all. Same pairing as `adam64`/`adamdp64`.
+--
+-- ⚠ `bStr` MUST track the per-device batch (the render means over its own device's batch, and the
+-- `all_reduce(add)/N` then averages across devices ⇒ global mean). Left at "32.0" here every
+-- gradient would be 4× and nothing but a numeric gate would say so.
+--
+-- ⚠⚠ **Global 512 is a THROUGHPUT config, not a training one.** Imagenette is 9,469 images, so
+-- global 512 is **18 steps/epoch** — 1,480 updates over 80 epochs against the 23,600 the 71.31%
+-- run took. §2d.2 measured accuracy tracking step count at ~1 point per halving, accelerating at
+-- the bottom (R34 lost 3.4 points going 295 → 36). Use it to measure scaling; do not read an
+-- accuracy off it and compare.
+#eval IO.FS.writeFile "verified_mlir/vit_adam128_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adam128_train_step" "128.0" 1 10 (vbB := 128))
+#eval IO.FS.writeFile "verified_mlir/vit_adamdp128x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp128x4_train_step" "128.0" 4 10 (vbB := 128))
+
+-- ── ViT-Tiny on FULL 1000-class ImageNet, slug `vitin` — the scale tier, added 2026-08-01 ───────
+-- The ViT peer of `resnet34in_*` (§2k). No renderer change: `nClasses`, `bs` and `replicas` are
+-- all ordinary parameters, so this is three `#eval`s.
+--
+-- ⚠⚠ **THE SLUG IS LOAD-BEARING AND IT IS THE ONE TRAP THAT MATTERS HERE.** Forward artifacts
+-- carry no variant in their path (`<slug>_fwd.mlir`), so rendering a 1000-class ViT forward under
+-- the `vit` slug would silently OVERWRITE `verified_mlir/vit_fwd.mlir` — the 10-class Imagenette
+-- forward that the 71.31% run, the prefix audit and every `fwd-tie vit` invocation depend on.
+-- §2k hit exactly this on R34 and it is why `slug` exists there. Distinct paths, distinct entries.
+--
+-- Batch: **128 per device × 4 replicas = global 512**, which is `jax/MainVitImagenet.lean`'s
+-- `vitTinyImagenetConfig.batchSize` — matching the reference's global batch is what keeps the two
+-- runs a comparable pair rather than two experiments (the §2k argument, and R34's `momdp64` was
+-- chosen the same way). The single-device `adam128` peer exists so `vit-dp-check` has a
+-- same-per-device-batch reference to gate against; it is not scaffolding.
+--
+-- ⚠ Label smoothing at K = 1000: `alphaOverK` derives the cotangent constant from `nClasses`, so
+-- the emitted `-α/K` must be **-0.000100**, not the K=10 literal `-0.010000`. That hardcoding was
+-- a REAL BUG on the R34 ImageNet render (§2k — the first smoke reported loss ≈ 87 where 1000-class
+-- CE at init must be ≈ ln(1000) = 6.9, and it was on the GRADIENT path). Fixed for ViT on
+-- 2026-07-31; `TestVitInSmoke` re-checks the emitted constant rather than trusting that.
+--
+-- ⚠ Not matched to the reference yet, and deliberately: `vitTinyImagenetConfig` also carries
+-- mixup + cutmix (soft labels — this render's cotangent is smoothed-CE over a ONE-HOT and cannot
+-- express them), stochastic depth, EMA and grad clipping. The pipeline-level augs (RandAugment,
+-- random erasing, repeated aug) DO come across for free via the shim. See the handoff §2p.
+-- ⚠⚠ `wdStr := "0.05"` ON BOTH, AND IT IS A FIX, NOT A NEW KNOB. These baked `vitAdamConsts`'
+-- 1e-4 default until 2026-08-02 — which is `vitTinyConfig`'s IMAGENETTE value. **No config
+-- anywhere says "ImageNet ViT at wd 1e-4"**: `vitTinyImagenetConfig.weightDecay := 0.05`, the DeiT
+-- value, so these two were training at 1/500th of their reference's decay. It is the
+-- `RenderCifar8Sgd02` / EfficientNet-16× shape (§2a-quater) — a silently wrong hyperparameter that
+-- compiles, runs and descends — and it was found while gating `wdExcludeNormBias`, i.e. by
+-- building the NEXT feature, not by reading the configs.
+--
+-- ⚠ These two remain SHORT of the reference recipe deliberately (no `wx`, no clip, no EMA, no
+-- stochastic depth, one-hot targets) and that is what the docstring above says. The decay was
+-- never on that list — it was a typo, and 0.05 is now the reference's number with the mask and the
+-- clip legitimately absent, which is an honest ablation point rather than an unlabelled mistake.
+-- The variant that MATCHES the reference is `vitin_adamdp128x4wxclip` below.
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adam128_train_step" "128.0" 1 1000
+    (wdStr := "0.05") (vbB := 128))
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4_train_step" "128.0" 4 1000
+    (wdStr := "0.05") (vbB := 128))
+#eval IO.FS.writeFile "verified_mlir/vitin_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitin_fwd" 1000 (vbB := 256))
+
+-- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
+-- `vitTinyImagenetConfig.wdExcludeNormBias := true`, so the ImageNet pair needs this render, not
+-- the plain `adam128` one; `vitTinyConfig` does NOT set it, which is why the Imagenette artifacts
+-- keep their bytes and this is a variant rather than a flipped default.
+--
+-- 126 of the 200 params take `%wdz` (a zero constant) instead of `%wd`: every 1-D param plus the
+-- positional embedding. **Same arity, same types, same regions** — the only thing that moves is
+-- 126 operand strings, so the driver, the checkpoint layout and every harness are untouched.
+--
+-- `vit_adamwx` is the Imagenette-shaped peer, and it is NOT scaffolding: `vit-wdx-tie` drives it
+-- against `vit_adam` at bs32/K=10, where the two renders differ in EXACTLY the thing being gated
+-- and the compile is seconds rather than a minute.
+#eval IO.FS.writeFile "verified_mlir/vit_adamwx_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamwx_train_step" "32.0" 1 10 0.1
+    (ema := false) (wdExclude := true) (vbB := 32))
+-- ⚠ wd = **0.05**, not the file's 1e-4 default: `vitTinyImagenetConfig.weightDecay := 0.05` (the
+-- DeiT value) where `vitTinyConfig` uses 1e-4. Both halves of the reference's decay recipe — the
+-- MAGNITUDE and the MASK — have to be right for this render to be the pair's, and only the mask
+-- was in scope when this variant was named. See `vitAdamConsts`.
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128wx_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adam128wx_train_step" "128.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (vbB := 128))
+
+-- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) ───────────────────────────
+-- `vitTinyImagenetConfig.gradClipNorm := 1.0` — the DeiT default, and the reference's own comment
+-- calls it *"the unlock for the 5e-4 LR"*. `vitTinyConfig` sets NOTHING, so (like `wx` and `ema`)
+-- the Imagenette artifacts keep their bytes and this is a variant, not a flipped default.
+--
+-- ⚠ The Imagenette `clip` render is therefore a **GATE VEHICLE, NOT A MATCHED PAIR**: no Imagenette
+-- reference run uses clipping, so its accuracy is not comparable to anything. It exists because
+-- `clip-tie` drives it against `vit_adam` at bs32/K=10, where the two renders differ in EXACTLY the
+-- thing being gated and the compile is seconds rather than a minute. Same role `vit_adamwx` plays.
+--
+-- The committed threshold is the reference's 1.0, and that is the CLIPPING regime: the reference
+-- measured the pre-clip global grad norm at init at 14.28 (timm init) / 44.09 (Xavier), i.e. 10x+
+-- over the threshold (`jax/MainVitImagenet.lean:89`), so a real run spends its early steps there.
+--
+-- ⚠⚠ THE BELOW-THRESHOLD RENDER IS **NOT COMMITTED**, AND THAT IS DELIBERATE — it is generated by
+-- `scripts/perturb_clip.py hi`, the `perturb_wd_mask.py` / `misplace_drop_sites.py` pattern.
+-- Two reasons, and the second was found the hard way:
+--   1. an artifact baking a threshold NO CONFIG SETS is a silent-hyperparameter artifact — the
+--      `RenderCifar8Sgd02` / EfficientNet-16× / ViT-500× shape (§2a-quater), and there is no
+--      reference to say whether it is right;
+--   2. ⚠ **A BOOL-DERIVED VARIANT NAME CANNOT DISTINGUISH TWO RENDERS THAT DIFFER ONLY IN A BAKED
+--      CONSTANT.** Rendering a second threshold under `cnxAdamVariant`'s `clip : Bool` produced
+--      `convnext_adamcliphi_train_step.mlir` declaring `@convnext_adamclip_train_step` — an entry
+--      disagreeing with its own path, caught only because the paths were compared. ViT's explicit
+--      `funcName` hid it here; ConvNeXt derives its name and did not. That is §0.4's
+--      derived-vs-explicit finding meeting §2a-quater's silent-hyperparameter one.
+#eval IO.FS.writeFile "verified_mlir/vit_adamclip_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamclip_train_step" "32.0" 1 10 0.1
+    (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0")
+    (vbB := 32))
+-- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`, because
+-- `vitTinyImagenetConfig` sets `wdExcludeNormBias := true` AND `gradClipNorm := 1.0`. ⚠ wd = 0.05
+-- for the same 500× reason `vitin_adam128wx` carries it.
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128wxclip_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adam128wxclip_train_step" "128.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (vbB := 128))
+-- ▶ **THE DATA-PARALLEL PEER, AND IT IS THE ONE AN IMAGENET RUN ACTUALLY LOADS.** 128 per device ×
+-- 4 = the reference's global 512. Until this landed the DP ImageNet renders were THREE features
+-- behind their single-device peers — wrong decay, no `wx`, no clip — so the artifact a real ViT
+-- pair run would have loaded matched none of its reference's optimizer recipe, while the corrected
+-- single-device ones sat beside it unused. ⚠ A feature is not done when its single-device artifact
+-- renders (§0.4 finding 5, one axis over: there it was Imagenette-vs-ImageNet, here it is
+-- single-vs-DP), and the way this was found was by LISTING what each artifact bakes.
+--
+-- ⚠ THE CLIP IS AFTER THE COLLECTIVE, and that is the whole DP question for this feature: the
+-- reference clips the already-combined gradient, so clipping per replica would clip 200 PARTIAL
+-- gradients — a different function that trains and descends. `vitAdamTrainStepFaithful` hoists both
+-- the collective and the clip above the optimizer loop at `clip := true` and passes `preAvg`, so
+-- this render emits **200 all_reduces, not 400**, all of them before the norm fold.
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4wxclip_train_step" "128.0" 4 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (vbB := 128))
+
+-- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ─────────────────
+-- ViT is the last of the three nets whose reference uses EMA (`vitTinyImagenetConfig.emaDecay :=
+-- 0.99996`; ConvNeXt landed first, then EfficientNet's `emarms`), and it is the CHEAPEST of the
+-- three: LayerNorm means there are no BN running buffers, so there is no `ema_bn` peer to carry —
+-- the parameter shadow alone. `hasBn` is false for this net, so the driver's whole `ema_bn` arm is
+-- skipped rather than special-cased.
+--
+-- Same graph plus one `adamMNextF` per parameter on the UPDATED weight — `d·ema + (1−d)·θ'`, which
+-- is `Proofs.adamMNext` at `(β₁ := d, m := ema, g := θ')`. **No new op, no new `den`, no new
+-- faithfulness theorem, no new VJP.** Fourth time enumerating a reference update against existing
+-- ops AT THEIR OTHER READINGS has collapsed a scoped op family to zero (§2k heavy-ball,
+-- recipe_gaps v1.2 RMSProp, ConvNeXt/EfficientNet EMA, here).
+--
+-- ⚠ THE BLOB GAINS A FOURTH REGION: `[θ|m|v|ema]`, 807 in / 805 out, and the scalar tail goes
+-- 3 → 5 (`%emad`, `%oemad`). That is why it renders to its OWN slug — a 4-region graph fed a
+-- 3-region blob is not a subtle numeric wrong answer, it is every parameter misaligned, and
+-- `vit_adam_train_step.mlir` (which the 71.31% 80-epoch run, `vit-adam-tie` and `vit-dp-check` all
+-- depend on) must stay exactly what it is. `trainAdamSched`'s checkpoint SIZE GUARD is the other
+-- half of that: checkpoints carry no header, so a 3-region file read as 4 resumes silent garbage.
+--
+-- ⚠ `%emad`/`%oemad` are ARGS rather than constants because the reference's decay is time-varying,
+-- `d = min(decay, (1+t)/(10+t))` — TF's warmup-corrected `ExponentialMovingAverage`. That
+-- correction is REQUIRED at our scale, not optional: `ema.md` §2 has the reference's own
+-- measurement of dropping it (a shadow still holding 12.8% of the random init at 3.1 τ, scoring
+-- **0.00% top-1** while the live weights scored 70.48%), and an 80-epoch Imagenette run is 23,600
+-- steps = 2.4 τ at decay 0.9999 — squarely inside that regime.
+--
+-- ⚠ Read this net's smoke as a DELTA, never an absolute. ViT's 80-epoch Imagenette result (71.31%)
+-- is the weakest of the five by a wide margin — the expected outcome for a ViT with no pretraining
+-- on 9,469 images, not a defect — so the gate is "the shadow tracks then exceeds the live
+-- weights", which is a comparison within one run.
+#eval IO.FS.writeFile "verified_mlir/vit_ema_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_ema_train_step" "32.0" 1 10 0.1 (ema := true) (vbB := 32))
+
+-- ── The naming contract, pinned (§2d.1) ───────────────────────────────────────────────────────
+-- `vitAdamVariant` is the single description of ViT's variant spelling, and these `#guard`s are
+-- what tie it to the literal `funcName`s above — a rename on either side fails at `lake build`
+-- rather than at run time as an "entry mismatch". (The artifact paths must stay literals: the
+-- writer audit greps for the literal string `IO.FS.writeFile "verified_mlir/`.)
+#guard Proofs.StableHLO.vitAdamVariant 32 1 == "adam"
+#guard Proofs.StableHLO.vitAdamVariant 32 2 == "adamdp"
+#guard Proofs.StableHLO.vitAdamVariant 64 1 == "adam64"
+#guard Proofs.StableHLO.vitAdamVariant 64 2 == "adamdp64"
+#guard Proofs.StableHLO.vitAdamVariant 128 1 == "adam128"
+-- The two that break the "the number is the per-device batch" convention, encoded so the exception
+-- cannot be quietly re-broken: a 4-replica render reusing `adamdp` would give one artifact path two
+-- writers computing different graphs (§2a), and the failure mode is a silent clobber.
+#guard Proofs.StableHLO.vitAdamVariant 32 4 == "adamdp32x4"
+#guard Proofs.StableHLO.vitAdamVariant 128 4 == "adamdp128x4"
+-- The EMA peer. A distinct slug from the AdamW one is the point: the EMA render carries a FOURTH
+-- `[θ|m|v|ema]` region, so it and the AdamW render cannot share an artifact path, a checkpoint or a
+-- driver invocation. ⚠ The marker LEADS — `trainAdamSched` keys its 4-region layout off
+-- `variant.startsWith "ema"`, and on EfficientNet a *prefix* test on a two-axis name (`emarms`)
+-- already misclassified a variant once and would have initialised RMSProp's mean-square to 0.
+#guard Proofs.StableHLO.vitAdamVariant 32 1 true == "ema"
+-- ▶ The `wx` (timm no_weight_decay) spellings. TRAILING, so it composes with every other axis
+-- without displacing one — and every combination below is run through the driver's three
+-- predicates in `tests/TestVariantPredicates.lean`, because with N markers the collisions are
+-- between PAIRS and reading a name at a time cannot find them (§0's `sd`/`rmsdp` finding).
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false true == "adamwx"
+#guard Proofs.StableHLO.vitAdamVariant 128 1 false true == "adam128wx"
+#guard Proofs.StableHLO.vitAdamVariant 128 4 false true == "adamdp128x4wx"
+#guard Proofs.StableHLO.vitAdamVariant 32 1 true true == "emawx"
+-- ▶ the `clip` spellings, and the COMPOSED one is the point: the reference sets `wx` AND `clip`,
+-- so `adamwxclip` is what ships and `adamclip` alone is the gate vehicle.
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false false true == "adamclip"
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false true true == "adamwxclip"
+#guard Proofs.StableHLO.vitAdamVariant 128 1 false true true == "adam128wxclip"
+#guard Proofs.StableHLO.vitAdamVariant 128 4 false true true == "adamdp128x4wxclip"
+#guard Proofs.StableHLO.vitAdamVariant 32 1 true false true == "emaclip"
+
+-- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
+-- `vitTinyImagenetConfig.emaDecay := 0.99996` (the DeiT default), so this is the render an ImageNet
+-- ViT pair actually needs — `vit_ema` is Imagenette-scale and, as `MainViTVerifiedAdam` records, a GATE
+-- VEHICLE rather than a matched pair (`vitTinyConfig` sets no EMA at all). Batch 128 × 4 replicas
+-- = global 512, matching the reference, exactly as the `vitin_adam128` pair does.
+#eval IO.FS.writeFile "verified_mlir/vitin_ema128_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_ema128_train_step" "128.0" 1 1000 0.1
+    (ema := true) (vbB := 128))
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_emadp128x4_train_step" "128.0" 4 1000 0.1
+    (ema := true) (vbB := 128))

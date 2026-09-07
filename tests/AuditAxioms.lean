@@ -122,6 +122,7 @@ import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoCB
 import LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoCG
+import LeanMlir.Proofs.Architectures.ViTFaithfulPoCGB
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
 import LeanMlir.Proofs.Architectures.MobileNetV2FullB
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
@@ -5558,6 +5559,29 @@ open Proofs
 #print axioms Proofs.ViTPoCG.clsGrad_den
 #print axioms Proofs.ViTPoCG.headWGrad_den
 #print axioms Proofs.ViTPoCG.headBGrad_den
+
+-- 4c leg 4 ViT-Tiny — the SAME ten nodes at the BATCHED traversal every committed ViT artifact
+-- now renders from (vitBackAllB). Measured 2026-09-07: all nineteen drop-free artifacts re-render
+-- byte-identically off that traversal, so this file is about the AST the bytes are pretty of,
+-- not about different bytes.
+-- ⭐⭐ clsGrad_denB is the statement the per-example fold could NOT make: the CLS token is one
+-- shared [192] vector, so its gradient sums over the batch. The per-example render emits
+-- denseBiasGradB at N := 1 ("sum one thing", correct there because pretty B lifted outside the
+-- AST); the batched one emits it at N := B and the sum is inside den. Same emitted text, so the
+-- byte tie cannot see it — den_rowDenseBiasGradB_at_one is the general form of that trap.
+-- ⚠ headBGradB_den is stated PER EXAMPLE at batchSlice n: biasGradB is the identity on its
+-- operand and the batch reduce is emitted text outside the AST, the per-example biasGrad
+-- carve-out carried over unchanged rather than a new one.
+#print axioms Proofs.ViTPoCGB.veclnGammaGradB_den
+#print axioms Proofs.ViTPoCGB.rowDenseBiasGradB_den_lnbeta
+#print axioms Proofs.ViTPoCGB.rowDenseWeightGradB_den
+#print axioms Proofs.ViTPoCGB.rowDenseBiasGradB_den
+#print axioms Proofs.ViTPoCGB.patchEmbedWeightGradB_den
+#print axioms Proofs.ViTPoCGB.patchEmbedBiasGradB_den
+#print axioms Proofs.ViTPoCGB.posEmbedGradB_den
+#print axioms Proofs.ViTPoCGB.clsGrad_denB
+#print axioms Proofs.ViTPoCGB.headWGradB_den
+#print axioms Proofs.ViTPoCGB.headBGradB_den
 
 -- 4b.4 MobileNetV2 at 17 blocks — mobilenetv2_adam_train_step and every ImageNet artifact.
 -- ⛔ This net's two renders do NOT overlap the way the other four's do: MobileNetV2Render is

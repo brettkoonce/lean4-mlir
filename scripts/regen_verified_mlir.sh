@@ -390,9 +390,10 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          # emitted train step would then disagree on where the body starts.
          ("convnextsin_drop_fwd.mlir",   "convnextsin_adamwxclipdrop_train_step.mlir"),
          ("convnextbin_drop_fwd.mlir",   "convnextbin_adamwxclipdrop_train_step.mlir"),
-         # ViT's SD pair, on the batched chain (ViTRenderB). ⚠ Unlike ConvNeXt's, ViT's batched
-         # chain reproduces its committed artifacts byte-for-byte, so these are the same emitter
-         # the drop-free vit_fwd/vit_adam_train_step above come from — one renderer, two flags.
+         # ViT's SD pair, on the batched chain (ViTRenderB). ⭐ Since 4c leg 4 (2026-09-07) that is
+         # the ONLY ViT chain that writes an artifact bar the SGD-inline vit_train_step: the
+         # nineteen drop-free renders moved here after measuring all nineteen byte-identical off
+         # this traversal, so these rows and the drop-free ones are one renderer, two flags.
          ("vit_drop_fwd.mlir",   "vit_adamdrop_train_step.mlir"),
          ("vitin_drop_fwd.mlir", "vitin_adamwxclipdrop_train_step.mlir")]
          # ⚠⚠ **`vitsin_drop_fwd` HAS NO ROW AND CANNOT GET ONE**, found 2026-08-14 while adding
