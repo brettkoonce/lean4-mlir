@@ -67,11 +67,15 @@ EfficientNet's stem hole at the same time; the **head** (`mnv4Head`, its GAP and
 tying by `rfl`); the table-driven `k = 0` dispatch; and `UibParams`, the row-typed weight record.
 Nine of these are in `tests/AuditAxioms.lean`, 3-axiom clean.
 
-**NOT built here, and it is the NET level — T1, T2, T3, T6 of the Proofs tier.** There is no
-whole-net forward, no typed forward graph at `mnv4FwdChainB`'s tokens, no fold or tie at the
-emitted gradient nodes, and no certified backward tie. `planning/mnv4_proofs_tier.md` is the plan
-for all four, and ResNet-50 — which was in exactly this position, block-level only with no
-per-example legacy — is the file-by-file precedent, closed over 2026-09-06/07.
+**Not built here — the NET level, which is four other files as of 2026-09-07.** T1 (the whole-net
+forward and its input-VJP) is `Architectures/MobileNetV4FullB.lean` +
+`MobileNetV4FullBVJP.lean`, T2 (the typed forward graph at `mnv4FwdChainB`'s tokens) is in the
+first of those, T3 (the fold and tie at the emitted gradient nodes, all 233) is
+`MobileNetV4FaithfulPoCB.lean` + `MobileNetV4TiePoCB.lean`, and T6 (the certified whole-net
+backward tie) is `MobileNetV4WholeBackCertifiedTieB.lean` + its float chain. Each of them consumes
+what is built here, block by block. `planning/mnv4_proofs_tier.md` is the record; ResNet-50 — which
+was in exactly this position, block-level only with no per-example legacy — was the file-by-file
+precedent, closed over 2026-09-06/07.
 
 ⚠ **Two things this file's certificates do NOT give you.** (i) The head models ONE conv stage;
 Conv-M's render has **two** (`%h1W` 256→960, then `%hW` 960→1280), so a whole-net use composes

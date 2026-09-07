@@ -778,6 +778,28 @@ lean_lib «Certs» where
              -- ConvNeXt's expe-then-softmaxDiv; the two take different lemmas and nothing in the
              -- types tells them apart) (MobileNetV4TiePoCB.lean).
              `LeanMlir.Proofs.Foundation.MobileNetV4TiePoCB,
+             -- ⭐⭐ MOBILENETV4's T6 (mnv4_proofs_tier.md §Session 3, ~3 s) -- the last tier this
+             -- net can have, and with it Conv-M is certified from its R forward through its typed
+             -- graph, its 233-parameter train-step tie and now its whole-net input gradient.
+             -- ⭐ NOT ONE new float leaf: MNv4's stem is EfficientNet-B0's (3x3/s2 at XLA-SAME,
+             -- decimateOddBack scatter), its two head convs are plain 1x1s, and its GAP-and-dense
+             -- tail is ResNet-34's r34HeadB verbatim. What is new is the two stage ties, the
+             -- twenty-six-stage apex and the tie itself.
+             -- ⭐⭐ The chain is stated TO THE IMAGE and its last node is ONE STEP PAST the
+             -- artifact: no render emits a gradient into %x, so MNv4's committed backward ends at
+             -- the stem conv's WEIGHT gradient, whose operand mnv4StemCotN already ties. B0 makes
+             -- the same choice at the identical stem; the file header says which.
+             -- ⚠⚠ MEASURED: peeling ONE CertLayer.comp at MNv4's literal resolutions is a kernel
+             -- deterministic timeout by rfl, by simp only [.., Function.comp_apply], and with
+             -- Mathlib's Function.comp_assoc in the simp set. The same peel through a generic
+             -- rfl-at-variables lemma (certLayer_comp_fwd_apply) is 2 s for all 26 stages.
+             -- ⚠ Twenty-six stages, not eighteen: 21 UIB blocks plus a fused stage, and TWO head
+             -- convs before the pool where MobileNetV2 has one and ResNet-34 none. The blocks stay
+             -- OPAQUE and there is no backward_unique step (§4.2d's measured reason); the shape
+             -- check is what replaces it, and it names every block by its table row -- which is
+             -- what pins rows 4/5/10, 12/18 and 15/19/20 apart
+             -- (MobileNetV4WholeBackCertifiedTieB.lean).
+             `LeanMlir.Proofs.Foundation.MobileNetV4WholeBackCertifiedTieB,
              -- ⭐⭐ §3.5(c): RESNET-50's T3 — the §1 fold and the §1a tie at batch BatchNorm.
              -- ⭐⭐ ZERO new op-kind lemmas: ResNet34FaithfulPoCB's six are statements about OP
              -- KINDS at full generality, and the bottleneck's third conv is one more instance of

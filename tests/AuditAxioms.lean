@@ -207,6 +207,7 @@ import LeanMlir.Proofs.Foundation.MobileNetV4BackB0
 import LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV4FaithfulPoCB
 import LeanMlir.Proofs.Foundation.MobileNetV4TiePoCB
+import LeanMlir.Proofs.Foundation.MobileNetV4WholeBackCertifiedTieB
 import LeanMlir.Proofs.Foundation.EfficientNetBackNet
 import LeanMlir.Proofs.Foundation.LinearFaithfulPoC
 import LeanMlir.Proofs.Float.E4M3FaithfulPoC
@@ -4657,6 +4658,27 @@ open Proofs
 #print axioms Mnv4TieB.mnv4_head_tiedB
 #print axioms Mnv4TieB.mnv4_net_tiedB
 #print axioms Mnv4TieB.mnv4_lossCot_is_smoothedCE_grad
+
+-- ⭐⭐ MNv4's T6 -- the certified whole-net input gradient, and the last tier Conv-M can have.
+-- ⭐ NOT ONE new float leaf: the stem is EfficientNet-B0's XLA-SAME 3x3/s2 (decimateOddBack
+-- scatter), the two head convs are plain 1x1s, and the GAP-and-dense tail is r34HeadB verbatim --
+-- so what is new is the two stage ties, the 26-stage apex and the tie.
+-- ⭐⭐ Stated TO THE IMAGE, one step past the artifact: no render emits a gradient into %x, so the
+-- committed backward ends at the stem conv's WEIGHT gradient, whose operand mnv4StemCotN ties.
+-- ⚠⚠ MEASURED, and it is sessions 1-2's lesson at its sharpest: peeling ONE CertLayer.comp to
+-- reach .fwd at MNv4's literal resolutions is a kernel deterministic timeout by rfl, by
+-- simp only [<def>, comp_fwd, Function.comp_apply], and with Mathlib's Function.comp_assoc in the
+-- simp set -- ~60 s each to give up. Discharged through the generic rfl-at-variables lemma
+-- certLayer_comp_fwd_apply it is 2 s for all twenty-six stages.
+-- ⚠ Blocks stay OPAQUE and there is no backward_unique step; the shape check replaces it, and it
+-- names every block by its TABLE ROW, which is what pins rows 4/5/10, 12/18 and 15/19/20 apart.
+#print axioms Proofs.mnv4_grad_floatBridgesToB
+#print axioms Proofs.mnv4StemBBack_eq_vjp_backward
+#print axioms Proofs.cbReluBBack_eq_vjp_backward
+#print axioms Proofs.mnv4B_full_has_vjp_at
+#print axioms Proofs.mnv4InputGradB_eq_mnv4B_full_vjp
+#print axioms Proofs.mnv4InputGradB_correct
+#print axioms Proofs.mobilenetv4ForwardB_full_eq_slots
 
 -- EfficientNet — §8e's VJP-without-backward-graph holes, closed. ⚠ Of the four the sweep flagged,
 -- only TWO were real: `mbStridedFwdB_has_vjp` and `mbDownBodyB_has_vjp` are definitionally the

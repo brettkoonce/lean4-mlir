@@ -16,8 +16,8 @@ read and the first session must.
 | **0(b)** the owed ties | ✅ DONE (`b9cc8d5`) and **both PASS**. Forward `max \|Δ\| = 3.770e-06`; gradient 0 of 232 live parameters outside the reference's own relu-discontinuity floor, in raw and `--nokink` mode. ⭐ Block ORDER is now pinned by measurement. ⛔ Two setup findings recorded in `mnv4_convm_ties_todo.md`: `--device=local-task` SEGFAULTS on `@mnv4_fwd` (empty stderr, `local-sync` runs the same vmfb in 1 s) and both scripts hard-coded a nonexistent `iree-compile`. |
 | **1** T1 + T2 | ✅ DONE. `Architectures/MobileNetV4FullB.lean` (886 lines) + `MobileNetV4FullBVJP.lean` (188). Both build in ~2 s each. |
 | **2** T3 | ✅ DONE. `Foundation/MobileNetV4FaithfulPoCB.lean` (the §1 fold, 400 lines) + `MobileNetV4TiePoCB.lean` (the §1a tie, 1334). |
-| **3** T6 | open |
-| **4** the number | open — a GPU decision, see §2 |
+| **3** T6 | ✅ DONE. `Float/MobileNetV4WholeBackFloatBridgeB.lean` (268 lines) + `Foundation/MobileNetV4WholeBackCertifiedTieB.lean` (910). Both build in ~3 s each. **The net is now closed on every tier that says anything.** |
+| **4** the number | open — a GPU decision, see §2. Independent of T6; nothing in sessions 1–3 waited on it. |
 
 ### What session 1 actually cost — ⛔ and the ONE finding worth carrying to any future net
 
@@ -114,18 +114,83 @@ declarations 3-axiom clean in `AuditAxioms`, `check_audit_coverage.py` green,
 bytes: all **247** SSA names it writes appear in `mnv4_fwd.mlir`, covering all **233** of its
 declared parameters — nothing missing in either direction.
 
+### Session 3 (T6) — what it cost
+
+⛔⛔⛔ **THE HEADLINE, and it is session 1's lesson at its sharpest: peeling ONE `CertLayer.comp`
+to reach `.fwd` at MNv4's literal resolutions is a kernel deterministic timeout in every
+spelling that does the peel HERE, and 2 seconds in the one that applies a lemma proved between
+VARIABLES.** Measured on the head stage, ~60 s each to give up:
+
+| spelling | verdict |
+|---|---|
+| `rfl` | ⛔ kernel deterministic timeout |
+| `simp only [<the def>, CertLayer.comp_fwd, Function.comp_apply]` | ⛔ timeout — the `comp_apply` step is what does it |
+| `simp only [..., Function.comp_assoc]` (Mathlib's) | ⛔ timeout, at every group of three or more |
+| `simp only [<the def>, CertLayer.comp_fwd]` with the RHS LEFT-nested | ✅ 2 s |
+| `simp only [<the def>, certLayer_comp_fwd_apply]`, the generic `rfl`-at-variables lemma | ✅ 2 s, all 26 stages |
+
+▶ So the shape check is built compositionally out of six generic projection lemmas
+(`certLayer_comp_fwd_apply`, the three layer `_fwd_apply`s, `r34HeadB_apply`, `mnv4Chain_apply`),
+five per-group expansions, and a group-granularity `rfl` — seven `rw`s in the capstone and not one
+peel discharged at a literal width. ⭐ That is the same shape as T2's five group-faithfulness
+proofs, and it is the general answer for this net: **prove it where the terms are variables, then
+apply.**
+
+⭐⭐ **NOT ONE new float leaf.** MNv4's stem is EfficientNet-B0's (XLA-`SAME` 3×3/s2, so
+`floatBridgesTo_flatConvStride2XlaBack` and the `decimateOddBack` scatter), its two head convs are
+plain 1×1s (`floatBridgesTo_convBack`), and its GAP-and-dense tail is ResNet-34's
+(`floatBridgesTo_gapBack`, `floatBridgesTo_linBack`). Every concrete endpoint is `batchMap N` of a
+per-example leaf, so the whole float file is `FloatBridgesTo.batchMap` and `.comp`. What is new is
+the two stage TIES — `mnv4StemBBack_eq_vjp_backward` (relu + XLA, one token from MobileNetV2's
+relu6, ResNet-34's symmetric and B0's swish) and `cbReluBBack_eq_vjp_backward` (the stride-1 peer,
+applied twice at the head) — each `rw` of a conv leaf tie and then `rfl`.
+
+⚠⚠ **Two elaboration traps that cost a 9-minute build each, both of them silent.**
+1. `mnv4B_full_has_vjp_at` is `HasVJPAt`, so its `.backward` takes only the cotangent. Writing
+   `.backward x` (B0's spelling, whose apex is a GLOBAL `HasVJP`) is a type error 700 lines deep.
+2. **A missing `rw` does not fail — it GRINDS.** Omitting `r34HeadBBack_eq_vjp_backward` from the
+   tie's rewrite list left the GAP-and-dense tail untied, and the closing `rfl` spent 2 000 000
+   heartbeats on `isDefEq` before giving up. With it, the whole file is 3 s. ⭐ Read a timeout in
+   a `rfl` that closes a tie as "one endpoint is not rewritten yet", not as "this is too big".
+3. ⚠ And a third, cheaper: `rw [mnv4StemBBack_eq_vjp_backward (by decide) (by decide) … x h_stem]`
+   is a `whnf` timeout because unifying `Vec (N * (3 * 224 * 224))` against
+   `Vec (?N * (?ic * (2 * ?h) * (2 * ?w)))` asks the elaborator to invert a multiplication. Pin
+   `(N := N) (h := 112) (w := 112)`, as B0's tie does and R50's (whose `2 * (…)` nests unify
+   syntactically) does not have to.
+
+⭐ **Twenty-six stages, and the head is why.** stem, the fused stage, b1…b21, the two head convs,
+and ResNet-34's GAP-and-dense tail. R50/B0/MNv2 all sit at eighteen-to-twenty-one; MNv4 needed its
+own apex, and only because Conv-M's ladder is longer — the construction is `r34B_full_has_vjp_at`'s
+line for line.
+
+⭐ **The shape check is where the block TABLE reaches T6.** Every one of the twenty-six slots names
+its row (`mnv4Row4` vs `mnv4Row5` vs `mnv4Row10`), which is the only thing that tells the
+shape-identical rows apart — the same job T2's SSA names do in the graph.
+
+⛔ **Stated TO THE IMAGE**, per §(2) below: the chain's last node is one
+`flatConvStride2Xla_has_vjp.backward` past anything the artifact computes, because no render emits
+a gradient into `%x`. The file header says so in as many words.
+
+✅ **Gates:** `lake build Certs` 4003 green, `git diff verified_mlir/` EMPTY, all seven new
+declarations 3-axiom clean in `AuditAxioms`, `check_audit_coverage.py` and
+`check_render_coverage.py` green, `docstring-checkrefs` 1689 citations resolve. ⚠ And
+`MobileNetV4BackB0.lean`'s `## Scope` — the paragraph §0 caught being stale once — was updated
+again in the same commit, this time to point at the four net-level files that now exist.
+
 ---
 
-**The one-paragraph version.** `Foundation/MobileNetV4BackB0.lean` is complete at the block and
-stage level: every UIB family, the three stride-2 forms, the fused stage and the head are
-`CertLayer`s with backward-graph faithfulness, the dispatch reads the block table, and the
-weights are typed by their table row. What is missing is everything ABOVE that — the net-level
-forward (T1), the typed forward graph (T2), the fold and tie at the gradient nodes (T3), and the
-certified backward tie (T6) — and every one of those has a ResNet-50 file to mirror, from a net
-that was in exactly this position on 2026-09-06 and closed all four in four commits. The op-kind
-fold lemmas MNv4 needs ALL already exist. ⚠ What MNv4 does not have, and no other net lacks, is
-a quoted accuracy: Conv-M has no Imagenette run and no verified ImageNet run, so its tiers will
-be stated at artifacts no number comes from until a GPU run — the user's call — is made.
+**The one-paragraph version, 2026-09-07 — ✅ CLOSED.** `Foundation/MobileNetV4BackB0.lean` was
+complete at the block and stage level and is now consumed by four net-level files: T1 and T2 in
+`Architectures/MobileNetV4FullB.lean` + `MobileNetV4FullBVJP.lean`, T3 in
+`Foundation/MobileNetV4FaithfulPoCB.lean` + `MobileNetV4TiePoCB.lean`, T6 in
+`Foundation/MobileNetV4WholeBackCertifiedTieB.lean` + `Float/MobileNetV4WholeBackFloatBridgeB.lean`.
+T4 and T5 are float budgets and that thread is closed. ⚠ What MNv4 still does not have, and no
+other net lacks, is a quoted accuracy: Conv-M has no Imagenette run and no verified ImageNet run,
+so every tier is stated at artifacts no number comes from until a GPU run — the user's call, §2's
+session 4 — is made. Every new file's header says so.
+
+▶ **Everything below this line is the ORIGINAL SCOPE**, kept as the record of what was predicted.
+Where a session found it wrong, the PROGRESS section above is what happened.
 
 ## 0. What the scoping row got wrong, and the standing facts
 
@@ -232,6 +297,14 @@ recommendation is the second:
 * (i) R50's: explicit per-block forward functions (`uibSkipB`, `uibPreStridedB`) over the record,
   then a hand-written apex for the VJP. R50 went this way because its `CertLayer` trunk
   (`ResNet50BackNet.lean`) predated the tie files' needs.
+⛔⛔ **BOTH ROUTES BELOW ARE SUPERSEDED — read the PROGRESS section at the top of this file
+instead.** Route (ii) is right *per resolution group* and wrong *for the whole trunk*: composing
+the groups into one `mnv4NetLayer` elaborates and then makes every later use unpayable, because
+peeling `CertLayer.comp` to reach `.fwd` at MNv4's literal resolutions costs ten minutes and a
+kernel timeout in all four spellings tried. What shipped is five `CertLayer` groups joined by
+SEVEN NAMED PREFIXES — route (i)'s shape at the top, route (ii)'s inside each group. The text
+below is kept as the record of what was predicted.
+
 * (ii) ⭐ **the `CertLayer` route**: `mnv4NetLayer N w : CertLayer (N*(48*56*56)) (N*nCls)` :=
   `mnv4FusedStage … |>.comp (residual (mnv4BodyOfRow N mnv4Row2 w.b2)) |>.comp … |>.comp
   (mnv4Head …)` — the 18 skip rows as `CertLayer.residual (mnv4BodyOfRow …)` (the `oc = ic` `#guard`
@@ -324,35 +397,79 @@ session 1's, plus the tie's `#print axioms`. **Cost:** R50's T3 was one session 
 tie). MNv4's is the same shape with 21 row-blocks instead of 16; budget one session, possibly a
 long one — the bf16 lemmas are the only new mathematics and they are four lines each.
 
-### Session 3 — T6: the certified backward tie — mirror `Resnet50WholeBackCertifiedTieB.lean` + `Float/Resnet50WholeBackFloatBridgeB.lean` (§3.5d), read `EfficientNetFullWholeBackCertifiedTie.lean` first
+### Session 3 — T6: the certified backward tie ▶ **REWRITTEN 2026-09-07 after sessions 1–2; the original text is corrected in three places**
+
+**Mirror `Resnet50WholeBackCertifiedTieB.lean` + `Float/Resnet50WholeBackFloatBridgeB.lean`
+(§3.5d). Read `EfficientNetFullWholeBackCertifiedTie.lean`'s header first — it answers this
+section's one open question, see (2).**
 
 R50's T6 was four declarations and ~3 s: a float chain naming the input-gradient term
 (`r50InputGradB`, `r50InputGradBF`, `r50_grad_floatBridgesToB`), a tie of that chain to the
 certified whole-net VJP with the blocks OPAQUE (`r50InputGradB_eq_r34B_full_vjp`), its `pdiv`
 reading (`r50InputGradB_correct`) and the `_eq_slots` shape check. MNv4 is the kinked kind (relu),
 so §5's pricing applies: generic tie + `_eq_slots`, and ⛔ do NOT price B0's `backward_unique`
-step. ⚠ MNv4 gets no free ride on the endpoints — R50's four endpoint ties were ResNet-34's
-because its stem and head ARE `r34StemB`/`r34HeadB`; MNv4's stem is conv-bn-relu at XLA-SAME with
-no pool and its head is two convs before GAP, so the stem/head float leaves and their ties are
-MNv4's own (the XLA conv's float leaves exist from the re-spell thread; `bnBatchFloatBridge`'s
-batched BN leaves exist from 4.1).
+step — that lemma is about the global `HasVJP`, and MNv4's whole-net witness is `HasVJPAt`.
 
-⚠⚠ **The bottom of the chain is the open design question, and it is B0's, not R50's.** R50's
-"input gradient" runs through the stem to the image because `r34StemB` has a pool VJP and a
-symmetric conv-back token. MNv4's stem emits NO gradient into `%x` — the artifact's backward ends
-at the stem conv's WEIGHT gradient, whose operand is the stem-BN cotangent. B0 has the same stem
-and closed its T6 (`efficientnetInputGradB_full_correct`, §3.3(c)). ▶ Read that file's header
-before defining `mnv4InputGradB`: whether the float chain is stated to the stem-conv INPUT (the
-mathematical input gradient, one `flatConvStride2Xla_has_vjp.backward` past what any artifact
-computes) or to the stem-BN cotangent (what the artifact has), and follow B0. Either is honest if
-the header says which; the wrong move is to state one and describe the other.
+#### ⛔⛔ (1) What the original said about the apex is WRONG, because T1 did not go that way
 
-If T1 took the `CertLayer` route, the apex is `(mnv4NetLayer …).vjp` composed with the stem's
-VJP, and `r34B_full_has_vjp_at`'s eighteen-stage shape is not needed — which also retires
-§3.6's "needs a wider peer" note and the fourth-consumer argument for a generic apex, for this
-net. `Float/MobileNetV4WholeBackFloatBridgeB.lean` mirrors `Resnet50WholeBackFloatBridgeB.lean`,
-with `EfficientNetFullWholeBackFloatBridge.lean` as the shape for the depthwise-heavy float chain.
-**Cost:** one session; R50's was four declarations, MNv4's own endpoints make it more like B0's.
+It read: *"If T1 took the `CertLayer` route, the apex is `(mnv4NetLayer …).vjp` composed with the
+stem's VJP."* **There is no `mnv4NetLayer`.** Composing the trunk into one `CertLayer` elaborates
+and then makes every later use unpayable — all four spellings of peeling `CertLayer.comp` to reach
+`.fwd` cost ten minutes and a kernel timeout at MNv4's literal resolutions. T1 ships **seven named
+prefixes** instead (`mnv4Pre0 … mnv4Pre6`, one per resolution group), and
+`mobilenetv4ForwardB_full_has_vjp_at` is a bottom-up `have` chain of seven `vjp_comp_at`s over
+them, binding an eight-field `Mnv4SmoothAt`. ▶ **That is the apex T6 composes with** — and it is
+ResNet-50's own shape at seven stages, so §3.6's "needs a wider peer" note and the
+fourth-consumer argument for a generic apex are both retired for this net, just not for the reason
+the original gave.
+
+⚠ T3's tie also ships a FINER chain — `mnv4Blk0 … mnv4Blk21`, one prefix per block
+(`MobileNetV4TiePoCB.lean`). T6 wants the block granularity for its opaque slots, so use those,
+not `mnv4Pre_k`.
+
+#### ⭐ (2) The open design question is ANSWERED: follow B0, state it to the IMAGE
+
+The question was whether MNv4's float chain should end at the stem-conv INPUT (the mathematical
+input gradient) or at the stem-BN cotangent (what the artifact actually has), given that no render
+emits a gradient into `%x`. **B0 has the identical stem and states it to the image**:
+`EfficientNetFullWholeBackCertifiedTie.lean`'s apex is `head ∘ b16 ∘ … ∘ b1 ∘ stem`, so
+`efficientnetInputGradB_full` runs through the stem. ▶ Do the same, and say plainly in the header
+that the last node is **one `flatConvStride2Xla_has_vjp.backward` past anything the artifact
+computes** — the artifact's backward ends at the stem conv's WEIGHT gradient, whose operand is the
+stem-BN cotangent, which `mnv4StemTiedB` already ties. Either choice is honest if the header says
+which; the wrong move is to state one and describe the other.
+
+#### ⚠⚠ (3) Apply session 1 and 2's ONE lesson before writing a line
+
+**A net whose resolutions are LITERALS cannot afford the proof idioms a net with a resolution
+BINDER can.** ResNet-50's `q` keeps `den` and every width-indexed `rfl` stuck; MNv4's
+224/112/56/28/14/7 let them run into terms with hundreds of thousands of elements. That cause
+produced **six** distinct blow-ups across sessions 1–2, each of which looked like a different
+problem. So, for T6:
+
+* state every float leaf and every tie lemma **generic in its widths** (or in the `UibSpec` row),
+  and instantiate at the concrete rows only in the capstone — instantiating a proven lemma is free;
+* prefer `rw` to `simp only` in anything whose goal mentions `den` at concrete widths;
+* never let `CertLayer.comp` be peeled under a `den`; and
+* if a term needs a subtree twice, hide the duplication behind a folded combinator with its own
+  one-step lemma (`mnv4SkipGraphB` / `mnv4SkipCotIn` are the two precedents).
+
+#### What exists for T6 now, and what is genuinely MNv4's own
+
+| piece | state |
+|---|---|
+| whole-net forward + `HasVJPAt` + `pdiv` reading | ✅ `MobileNetV4FullBVJP.lean` |
+| per-block certified VJPs, opaque slots | ✅ `mnv4BodyOfRow` / `mnv4PreStridedBodyOfRow` and their `_faithful`s |
+| per-block forward prefixes | ✅ `mnv4Blk0 … mnv4Blk21` (`MobileNetV4TiePoCB.lean`) |
+| the stem-BN cotangent the artifact's backward really ends at | ✅ `mnv4StemCotN` / `mnv4StemCotC`, tied |
+| XLA strided conv float leaves | ✅ from the re-spell thread |
+| batched BN float leaves | ✅ `bnBatchFloatBridge`, from 4.1 |
+| **MNv4's own endpoints** | ⛔ the stem/head float leaves and their ties. R50 got these free because its stem and head ARE `r34StemB`/`r34HeadB`; MNv4's stem is conv-bn-relu at XLA-SAME with no pool, and its head is TWO convs before GAP. ⚠ But the GAP-and-dense tail IS ResNet-34's — T3 reused `r34HeadCotBlk`/`r34HeadTiedB` verbatim — so only the two 1×1 conv-BN-relu stages in front of it are new. |
+
+**Files:** `Float/MobileNetV4WholeBackFloatBridgeB.lean` mirrors `Resnet50WholeBackFloatBridgeB.lean`,
+with `EfficientNetFullWholeBackFloatBridge.lean` as the shape for the depthwise-heavy float chain;
+`Foundation/MobileNetV4WholeBackCertifiedTieB.lean` is the tie.
+**Cost:** one session. R50's was four declarations; MNv4's own endpoints make it more like B0's.
 
 ### ⛔ T4 / T5 — do not write
 

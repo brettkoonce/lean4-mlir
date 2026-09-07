@@ -65,11 +65,15 @@ extension, 4d piece 1, B0's capstone re-pointing, and §3.5a–§3.5d (ResNet-50
 cotangent, T1, T2, T3, T6). `Certs` 3966 → **3994**. Their write-ups are the numbered sections
 below; nothing in them is open.
 
-**NEXT SESSION — one live target: MobileNetV4 (its own planning doc first), then the cleanup/unification session. Both capstones (§4b.6, §4b.7) and 4d piece 2 (§4d.2) landed 2026-09-07.**
+**NEXT SESSION — the cleanup/unification session is the only thing left. ✅ MobileNetV4 CLOSED
+2026-09-07: T1, T2, T3 and T6 all landed (`planning/mnv4_proofs_tier.md` is the record), so every
+net in §2's table is now done on every statement that says anything. Both capstones (§4b.6, §4b.7)
+and 4d piece 2 (§4d.2) landed the same day.**
 
 | target | cost | what a fresh session needs to know |
 |---|---|---|
-| ⭐ **3.6 MobileNetV4-Conv-M** — the only open item; ✅ its planning doc is `planning/mnv4_proofs_tier.md` (2026-09-07) — START THERE, not at §3.6 | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
+| **the cleanup/unification session** — the only open item | one session | Four things, none of them new mathematics: the four copies of the opaque-prefix chain (`r34OpaqueA*`, `b0OpaqueA*`, `mnv2OpaqueA*`, `mnv4OpaqueA*`) to one `Foundation` leaf; the parked root-file lemmas (`CertLayer.comp_fwd`/`residual_fwd`/`id'_fwd` and `certLayer_comp_fwd_apply` in MNv4's files, `cbReluBBack_eq_vjp_backward` beside `cbReluStridedBBack_eq_vjp_backward`); the bf16 `*GradBBf16` lemmas the r34/B0/mnv2 folds owe (§4c-quater); and this document archived behind a short standing one. |
+| ⭐ **3.6 MobileNetV4-Conv-M** — ✅ **DONE 2026-09-07**, four sessions; `planning/mnv4_proofs_tier.md` is the record and §3.6 below is superseded by it | — | It skipped 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⛔ §3.6's "session one is the three pieces `MobileNetV4BackB0.lean`'s header names as missing" was WRONG — all three already existed; the file's own `## Scope` was stale and the row copied it. ⚠⚠ The one finding worth carrying: a net whose resolutions are LITERALS cannot afford the proof idioms a net with a resolution BINDER can — six blow-ups across the four sessions trace to that single cause. |
 
 ⛔ **Do NOT write, and the reason is a closed thread, not an oversight.** Every remaining row for
 ResNet-34, MobileNetV2 and ResNet-50 is a float BUDGET (T4/T5), and
@@ -142,7 +146,7 @@ wanting only "what is open" should read the NEXT SESSION table at the top instea
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
 | MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 158 params ⛔ | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | `resnet50ForwardB_full`, [3,4,6,3] bottlenecks, batch BN, `q` a binder | ✓ 2026-09-06 | ✓ 2026-09-06 | ✓ 161 params, loss a binder | ✗ | ✗ | ✓ 2026-09-07 | none |
-| MobileNetV4-Conv-M | `mobilenetv4ForwardB_full`, 21-row Conv-M table, batch BN, stem + fused + five resolution groups + head | ✓ 2026-09-07 | ✓ 2026-09-07 `mnv4FwdGraphB_full_faithful` | ✓ 233 params, loss a binder, and the five bf16 nodes stated | ✗ | ✗ | ✗ | none. ⚠⚠ NO ACCURACY IS QUOTED for Conv-M — no Imagenette run, no verified ImageNet run; what pins these tiers to the reference is the 2026-09-07 tie pair (fwd 3.770e-06, grad inside the reference's own fp32 floor) |
+| MobileNetV4-Conv-M | `mobilenetv4ForwardB_full`, 21-row Conv-M table, batch BN, stem + fused + five resolution groups + head | ✓ 2026-09-07 | ✓ 2026-09-07 `mnv4FwdGraphB_full_faithful` | ✓ 233 params, loss a binder, and the five bf16 nodes stated | ✗ declined, thread closed | ✗ declined, thread closed | ✓ 2026-09-07 `mnv4InputGradB_correct`, 26 stages, shape check names every block by its table row | none. ⚠⚠ NO ACCURACY IS QUOTED for Conv-M — no Imagenette run, no verified ImageNet run; what pins these tiers to the reference is the 2026-09-07 tie pair (fwd 3.770e-06, grad inside the reference's own fp32 floor) |
 
 ⛔ **The T3 counts were the `convBias := true` census and are corrected here (2026-09-06).** Every
 render in the suite takes `convBias := false` by default and no writer passes otherwise — each conv

@@ -580,9 +580,11 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
-    # --- MobileNetV4-Conv-M's T1 and T2 at batch BatchNorm, the fused stage + 21 UIB blocks +
-    #     the two-conv head. The whole trunk is one CertLayer, so the apex binds two hypotheses
-    #     (the stem's kink clause, the trunk's .ok) rather than ResNet-50's thirty-three.
+    # --- MobileNetV4-Conv-M's T1, T2 and T6 at batch BatchNorm, the fused stage + 21 UIB blocks
+    #     + the two-conv head. The trunk is FIVE resolution-group CertLayers joined by seven
+    #     named prefixes (composing them into one CertLayer makes every later .fwd peel a kernel
+    #     timeout at MNv4's literal resolutions), so the apex binds eight hypotheses -- the stem's
+    #     kink clause and one .ok per group -- against ResNet-50's thirty-three.
     #     No accuracy is quoted for Conv-M; the ties (forward 3.770e-06, gradient inside the
     #     reference's fp32 floor, both 2026-09-07) are what pin these to the reference's function.
     - declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful"   # T2: the typed graph at mnv4FwdChainB's own tokens denotes the whole-net batch-BN forward; SSA names read off the block table, which is what pins the shape-identical rows apart
@@ -635,6 +637,36 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.Mnv4TieB.mnv4_lossCot_is_smoothedCE_grad"   # and g instantiated: the emitted six-op chain IS (1/B) d/dlogits of soft-target CE against the smoothed target; softmaxRow at m := 1, ResNet's spelling
       file: "LeanMlir/Proofs/Foundation/MobileNetV4TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mnv4_grad_floatBridgesToB"   # the batched MNv4 backward chain float-bridges to its named float skeleton; not one new float leaf -- B0's XLA stem, plain 1x1 head convs, ResNet-34's GAP-and-dense tail
+      file: "LeanMlir/Proofs/Float/MobileNetV4WholeBackFloatBridgeB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mnv4StemBBack_eq_vjp_backward"   # the stem endpoint tie: XLA-SAME strided conv back + BN back + relu mask IS mnv4StemB's certified backward; one token from MobileNetV2's (relu6), ResNet-34's (symmetric) and B0's (swish), and a different certificate from all three
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mnv4InputGradB_eq_mnv4B_full_vjp"   # T6: the MNv4 backward chain IS the certified whole-net VJP, the fused stage and 21 blocks opaque; stated TO THE IMAGE, one step past the artifact (no render emits a gradient into %x)
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mnv4InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the twenty-six-stage net, at every batch size and both shipped class counts
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mobilenetv4ForwardB_full_eq_slots"   # the shape check: those twenty-six stages ARE mobilenetv4ForwardB_full, each block named by its table row -- which is what pins rows 4/5/10, 12/18 and 15/19/20 apart
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
