@@ -41,7 +41,14 @@ import argparse, os, re, subprocess, sys, tempfile
 import numpy as np
 
 CHIP = os.environ.get("IREE_CHIP", "gfx1100")
-IREE_C = ".venv/bin/iree-compile"
+# ⚠ The repo `.venv` has no `iree` package — `.venv/bin/iree-compile` does not exist on this
+# box. Overridable so the pairing that actually works can be supplied without editing:
+#   IREE_COMPILE=/home/skoonce/lean4-mlir/.venv/bin/iree-compile
+#   IREE_RUN_MODULE=/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module
+# ⛔ Do NOT pair that compiler with /home/skoonce/src/iree-build's runtime: the version
+# skew reports "hal.command_buffer.dispatch signature mismatch", which reads like a bad
+# module rather than a bad pairing (`planning/mnv4_convm_ties_todo.md` §2b).
+IREE_C = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
 IREE_R = os.environ.get("IREE_RUN_MODULE",
     "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module")
 ALPHA = 0.1

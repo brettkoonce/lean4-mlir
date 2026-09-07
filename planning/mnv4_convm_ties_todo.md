@@ -1,12 +1,50 @@
 # TODO: the IREE/GPU runs owed after the MNv4 Conv-S → Conv-M conversion (and R50's)
 
-**Status 2026-08-14.** The Conv-M conversion landed source-side and every gate that does not
-need a GPU is green. What is owed is the compute: the two MNv4 ties, plus an R50 run that was
-already outstanding before this work.
+## ✅ BOTH MNv4 TIES RAN AND PASSED, 2026-09-07 — only the R50 item (§3) is left
 
-⚠ **Nothing in the repo currently claims these ties pass.** `VerifiedNets.lean`'s
-`mnv4ImagenetVerified` docstring says the forward tie has not been re-run, and this file is what
-it points at. Do not quote a tie number until one of the commands below has actually produced it.
+| tie | result |
+|---|---|
+| forward (`scripts/mnv4_forward_tie.py`, B = 2, seed 42) | ✅ **max \|Δ\| = 3.770e-06** over the logits, mean 1.269e-06, tol 1e-4. Conv-S's was 1.423e-06 — same order, as this file predicted. |
+| gradient, raw (`scripts/grad_tie.py --net mnv4`) | ✅ 232 of 233 slots carry a non-trivial reference gradient and **0 of 232 are worse than 10×** the reference's own relu-discontinuity floor. Worst render error **1.281e+00 vs a 1.468e+00 floor** — inside the reference's own fp32 noise. |
+| gradient, `--nokink` | ✅ 0 of 212 live parameters over the threshold. |
+
+▶ **What that buys.** Block ORDER is now pinned by measurement, not by types: a pre/post-DW swap
+is invisible to `toSpecs`, to every `#guard`, and (at stride 1) to the types, and these two runs
+are the only things in the repo that can see it. The Lean tiers written on top of this render
+therefore certify the net the reference computes, not merely a net. The two-conv head and the
+strided depthwise placement are covered by the same runs.
+
+⚠ Still NOT established by any of this: an accuracy. Conv-M has no Imagenette run and no verified
+ImageNet run; `RESULTS.md`'s 84.58% belongs to the superseded Conv-S table.
+
+### Two setup facts that cost time, recorded so they do not again
+
+⛔⛔ **`iree-run-module --device=local-task` SEGFAULTS on `@mnv4_fwd`** — exit 245 / −11 with
+**empty stderr**, no output file and no diagnostic, on both the source-built runtime and the pip
+one. `--device=local-sync` runs the IDENTICAL vmfb in **one second**. `scripts/grad_tie.py` has
+carried that fallback since `planning/mnv4_verified.md` §3f hit it on `efficientnet_fwd`;
+`mnv4_forward_tie.py` did not, so the first Conv-M run looked like a broken artifact. Both scripts
+now try `local-task` then `local-sync` and say which one ran.
+
+⭐ **The IREE pairing in §2b is right, but both scripts hard-coded `.venv/bin/iree-compile`.**
+`IREE_C` is now `os.environ.get("IREE_COMPILE", …)` in both, so the run is:
+
+```
+IREE_COMPILE=/home/skoonce/lean4-mlir/.venv/bin/iree-compile \
+IREE_RUN_MODULE=/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module \
+JAX_PLATFORMS=cpu .venv/bin/python scripts/mnv4_forward_tie.py
+```
+
+⚠ The reference side needs the repo's **pinned** `.venv` (jax 0.11.0); the system python has a
+`jax` with no `jaxlib`. ⚠ `jax/.lake/build/generated_mobilenet_v4.py` is CURRENT and Conv-M — this
+file's "it does not exist at all" warning was true on 2026-08-14 and is not now; it reports
+`Parameters: 8447322`, the same number `VLayer.toSpecs` derives.
+
+---
+
+**Status 2026-08-14, kept as the record of what was owed.** The Conv-M conversion landed
+source-side and every gate that does not need a GPU is green. What is owed is the compute: the two
+MNv4 ties, plus an R50 run that was already outstanding before this work.
 
 ---
 
@@ -58,10 +96,9 @@ lake build mnv4-train-smoke && .lake/build/bin/mnv4-train-smoke
 scripts/grad_tie.py --net mnv4 --nokink
 ```
 
-⚠⚠ **`scripts/grad_tie.py`'s `NETS["mnv4"]` still says `nparams=158, nstats=104`.** Those are the
-Conv-S numbers. They must become **233** and **154** or the tie will not even line up its
-arguments. This edit is NOT yet made — it is deliberately left here rather than made blind,
-because the right time to change it is when someone can run the tie and see it pass.
+✅ **DONE 2026-09-07.** `scripts/grad_tie.py`'s `NETS["mnv4"]` read `nparams=158, nstats=104` —
+Conv-S's numbers, at which this gate could not have lined up its arguments at all. Now **233** and
+**154**, counted off `verified_mlir/mnv4_adam_train_step.mlir`'s signature, and the tie passes.
 
 ▶ This is the check that the backward differentiates each family as the family it is. The
 two-conv head is new code (`MobileNetV4RenderB.lean`: a second `convBackBatched` /
@@ -100,8 +137,12 @@ two are scheduled together rather than rediscovered separately.
 - Use `--iree-cuda-target=sm_86` on RTX 40-series; `sm_89` is broken in IREE 3.11 (issue #21122).
 - ⚠ Ask before starting anything long. This box has crashed on long runs before.
 
-## When the ties pass
+## When the ties pass — ✅ all three done 2026-09-07
 
-1. Update `scripts/grad_tie.py`'s `nparams`/`nstats` (above) as part of the same change.
-2. Drop the "has NOT been re-run" sentence from `mnv4ImagenetVerified`'s docstring.
-3. Delete this file, or cut it down to the R50 item if that is still open.
+1. ✅ `scripts/grad_tie.py`'s `nparams`/`nstats` are 233 / 154.
+2. ✅ The "has NOT been re-run" sentence is gone from `mnv4ImagenetVerified`'s docstring, replaced
+   by the numbers and by what the Imagenette-render tie does and does not carry to the 1000-class
+   spec.
+3. This file is kept rather than deleted: §3's R50 item is still open, and the two setup findings
+   at the top (the `local-task` segfault, the env-overridable compiler path) are worth more here
+   than in a commit message.

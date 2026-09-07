@@ -1549,9 +1549,16 @@ def vitBImagenetVerified : VerifiedNetSpec where
     ⚠⚠ **A pre/post-DW swap is invisible to everything in this file.** Same `k`, same channels ⇒
     same `toSpecs`, so the `#guard`s below pass on a spec that swaps them, and at stride 1 both
     positions are shape-preserving so the types pass too. The only thing that pins the ORDER is
-    `scripts/mnv4_forward_tie.py` against the JAX reference on shared weights (1.423e-06), and the
-    only thing that pins the BACKWARD's dispatch is `scripts/grad_tie.py --net mnv4`. Same invisibility
-    class as R50's stride-on-the-3×3. -/
+    `scripts/mnv4_forward_tie.py` against the JAX reference on shared weights, and the only thing
+    that pins the BACKWARD's dispatch is `scripts/grad_tie.py --net mnv4`. Same invisibility class
+    as R50's stride-on-the-3×3.
+
+    ✅ **Both ran at the Conv-M table on 2026-09-07 and both pass.** Forward `max |Δ| = 3.770e-06`
+    over the logits at B = 2 (the Conv-S value was 1.423e-06 — same order); gradient tie 0 of 232
+    live parameters worse than 10× the reference's own relu-discontinuity floor, in BOTH the raw
+    and the `--nokink` mode, with the render's worst error (1.281e+00) INSIDE that floor
+    (1.468e+00). Family dispatch, the strided depthwise placement, the two-conv head and the AdamW
+    slot order are all covered. -/
 def mobilenetv4Verified : VerifiedNetSpec where
   name     := "MobileNetV4-Conv-M"
   slug     := "mnv4"
@@ -1637,8 +1644,11 @@ def mobilenetv4Verified : VerifiedNetSpec where
 
     ⚠ A batch-BN net, so it needs `@mnv4in_fwd_eval` with frozen running stats. Same
     pre/post-DW-swap invisibility as its Imagenette peer: `toSpecs` cannot see the order, so the
-    forward tie is what pins it — and that tie has NOT been re-run since the Conv-M conversion
-    (`planning/mnv4_convm_ties_todo.md`). -/
+    forward tie is what pins it. ✅ That tie was re-run at the Conv-M table on 2026-09-07 and
+    passes (`max |Δ| = 3.770e-06`), as did the gradient tie. ⚠ Both run against the **Imagenette**
+    render (`@mnv4_fwd`, 10 classes); this spec differs from it only in the classifier, which the
+    `#guard`s below pin, so what they establish about block order carries — but no run has scored
+    THIS net: it has no verified ImageNet training run yet. -/
 def mnv4ImagenetVerified : VerifiedNetSpec where
   name     := "MobileNetV4-Conv-M (ImageNet-1k)"
   slug     := "mnv4in"

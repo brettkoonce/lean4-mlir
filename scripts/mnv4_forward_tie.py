@@ -41,7 +41,14 @@ import numpy as np
 
 REF_PY = "jax/.lake/build/generated_mobilenet_v4.py"
 CHIP = os.environ.get("IREE_CHIP", "gfx1100")
-IREE_C = ".venv/bin/iree-compile"
+# ⚠ The repo `.venv` has no `iree` package — `.venv/bin/iree-compile` does not exist on this
+# box. Overridable so the pairing that actually works can be supplied without editing:
+#   IREE_COMPILE=/home/skoonce/lean4-mlir/.venv/bin/iree-compile
+#   IREE_RUN_MODULE=/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module
+# ⛔ Do NOT pair that compiler with /home/skoonce/src/iree-build's runtime: the version
+# skew reports "hal.command_buffer.dispatch signature mismatch", which reads like a bad
+# module rather than a bad pairing (`planning/mnv4_convm_ties_todo.md` §2b).
+IREE_C = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
 # ⚠ iree-run-module is NOT in this repo's .venv (only iree-compile is). It ships with the
 # lean4-jax venv — the same absolute path the PJRT plugin resolves through.
 IREE_R = os.environ.get("IREE_RUN_MODULE",
@@ -119,12 +126,26 @@ def main():
                        capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit(f"iree-compile FAILED:\n{r.stderr[:3000]}")
-    dev = "hip" if args.backend == "rocm" else "local-task"
-    r = subprocess.run([IREE_R, f"--device={dev}", f"--module={work}/m.vmfb",
-                        f"--function={args.fn}", *in_flags,
-                        f"--output=@{work}/out.npy"], capture_output=True, text=True)
+    # ⚠⚠ `--device=local-task` SEGFAULTS on this module — exit 245 / -11 with EMPTY stderr, no
+    # output and no diagnostic — and `local-sync` runs the IDENTICAL vmfb in one second. A silent
+    # 245 is a device/threading problem, NOT a bad render. `scripts/grad_tie.py` has carried this
+    # fallback since `planning/mnv4_verified.md` §3f hit it on `efficientnet_fwd`; this script did
+    # not, so the first Conv-M tie run looked like a broken artifact for as long as it took to
+    # read the other script (2026-09-07).
+    devs = ["hip"] if args.backend == "rocm" else ["local-task", "local-sync"]
+    r = None
+    for dev in devs:
+        r = subprocess.run([IREE_R, f"--device={dev}", f"--module={work}/m.vmfb",
+                            f"--function={args.fn}", *in_flags,
+                            f"--output=@{work}/out.npy"], capture_output=True, text=True)
+        if r.returncode == 0:
+            if dev != devs[0]:
+                print(f"  ran on --device={dev}")
+            break
+        print(f"  --device={dev} failed rc={r.returncode}; trying the next")
     if r.returncode != 0:
-        sys.exit(f"iree-run-module FAILED:\n{r.stderr[:3000]}")
+        sys.exit(f"iree-run-module FAILED rc={r.returncode} on every device tried "
+                 f"({', '.join(devs)}):\nSTDERR {r.stderr[:3000]}\nSTDOUT {r.stdout[:2000]}")
     got = np.load(f"{work}/out.npy").astype(np.float64)
 
     # ── the reference, on the same weights ──
