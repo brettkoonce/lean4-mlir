@@ -744,6 +744,23 @@ lean_lib «Certs» where
              -- (MobileNetV4FullB.lean, MobileNetV4FullBVJP.lean).
              `LeanMlir.Proofs.Architectures.MobileNetV4FullB,
              `LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP,
+             -- ⭐⭐ MOBILENETV4's T3 §1 fold: every parameter GRADIENT node the batched train step
+             -- emits denotes the certified gradient, by block profile. ZERO new fp32 op-kind
+             -- lemmas -- MNv4's nine kinds are ResNet-34's, EfficientNet-B0's and its own dense
+             -- pair, drawn from three files and not one. 3 + 6 + 13x12 + 4x9 + 4x6 + 8 = 233,
+             -- the artifact's signature minus %x, and every slot exercised (bias-free by
+             -- construction, so no convBias census to over-count).
+             -- ⛔⛔ An ABSENT depthwise gets NO conjunct: the ConvNeXt and FFN profiles are not
+             -- ExtraDW with a spare slot -- the render emits no token there, and a conjunct would
+             -- be the den of a node the artifact does not have.
+             -- ⚠⚠ TWO padding phases: the stem is convStridedXlaWeightGradB (XLA-SAME, B0's op)
+             -- and the fused stage is convStridedWeightGradB (symmetric, ResNet's). Identical
+             -- types, identical emitted shapes, different certificates.
+             -- ⭐ bf16: MNv4 emits FIVE *GradBBf16 kinds, each with its own den (operands rounded,
+             -- result rounded ONCE outside the batch sum) -- "the bf16 twins consume the same
+             -- node" is FALSE. Three are ConvNeXt's, and depthwiseStridedWGradBBf16_den and
+             -- convStridedXlaWGradBBf16_den are proven here (MobileNetV4FaithfulPoCB.lean).
+             `LeanMlir.Proofs.Foundation.MobileNetV4FaithfulPoCB,
              -- ⭐⭐ §3.5(c): RESNET-50's T3 — the §1 fold and the §1a tie at batch BatchNorm.
              -- ⭐⭐ ZERO new op-kind lemmas: ResNet34FaithfulPoCB's six are statements about OP
              -- KINDS at full generality, and the bottleneck's third conv is one more instance of

@@ -205,6 +205,7 @@ import LeanMlir.Proofs.Foundation.ResNet50BackNet
 import LeanMlir.Proofs.Foundation.BackNetFolds
 import LeanMlir.Proofs.Foundation.MobileNetV4BackB0
 import LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP
+import LeanMlir.Proofs.Foundation.MobileNetV4FaithfulPoCB
 import LeanMlir.Proofs.Foundation.EfficientNetBackNet
 import LeanMlir.Proofs.Foundation.LinearFaithfulPoC
 import LeanMlir.Proofs.Float.E4M3FaithfulPoC
@@ -4616,6 +4617,28 @@ open Proofs
 #print axioms StableHLO.mnv4ConvNeXtBodyGraphB_faithful
 #print axioms StableHLO.mnv4FfnBodyGraphB_faithful
 #print axioms StableHLO.mnv4PreStridedGraphB_faithful
+
+-- MNv4's T3 §1 fold. ⭐⭐ ZERO new fp32 op-kind lemmas: the nine kinds MNv4 emits are ResNet-34's
+-- six, EfficientNet-B0's three depthwise/XLA ones, and nothing else -- drawn from THREE files,
+-- which is the sharpest instance yet of 4b's "op kinds are shared far more than the file names
+-- suggest". ⛔⛔ An absent depthwise gets NO conjunct: the ConvNeXt and FFN profiles branch
+-- exactly as mnv4PreDWSlot does, because a conjunct for a k = 0 slot would be the `den` of a node
+-- the artifact does not contain. ⚠⚠ Two padding phases in one net -- the stem is XLA-SAME and the
+-- fused stage symmetric -- so the two strided conv certificates are NOT interchangeable.
+-- ⭐ The bf16 half states all FIVE *GradBBf16 kinds MNv4 emits, with their own `den`: operands
+-- rounded going in, result rounded ONCE outside the batch sum. "The bf16 twins consume the same
+-- node" is false, and three other nets' fold headers say it.
+#print axioms Mnv4PoCB.mnv4BnGradsCertified
+#print axioms Mnv4PoCB.mnv4StemGradsCertified
+#print axioms Mnv4PoCB.mnv4FusedGradsCertified
+#print axioms Mnv4PoCB.mnv4ExtraDWGradsCertified
+#print axioms Mnv4PoCB.mnv4ConvNeXtGradsCertified
+#print axioms Mnv4PoCB.mnv4FfnGradsCertified
+#print axioms Mnv4PoCB.mnv4PreStridedGradsCertified
+#print axioms Mnv4PoCB.mnv4HeadGradsCertified
+#print axioms Mnv4PoCB.depthwiseStridedWGradBBf16_den
+#print axioms Mnv4PoCB.convStridedXlaWGradBBf16_den
+#print axioms Mnv4PoCB.mnv4Bf16GradsCertified
 
 -- EfficientNet — §8e's VJP-without-backward-graph holes, closed. ⚠ Of the four the sweep flagged,
 -- only TWO were real: `mbStridedFwdB_has_vjp` and `mbDownBodyB_has_vjp` are definitionally the

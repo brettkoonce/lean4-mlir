@@ -609,6 +609,24 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "Proofs.Mnv4PoCB.mnv4ExtraDWGradsCertified"   # T3 fold: the ExtraDW block's four weight-gradient nodes denote the certified batched gradient; the ConvNeXt and FFN profiles are separate theorems because an absent depthwise emits NO token and would be the den of a node the artifact lacks
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4FaithfulPoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.Mnv4PoCB.mnv4StemGradsCertified"   # the stem is convStridedXlaWeightGradB (XLA-SAME, EfficientNet-B0's op) where the fused stage is symmetric -- two padding phases in one net, identical types, different certificates
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4FaithfulPoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.Mnv4PoCB.mnv4Bf16GradsCertified"   # all five *GradBBf16 kinds the bf16 artifacts emit, each with its own den (operands rounded, result rounded ONCE outside the batch sum); three cited from ConvNeXt, two proven here
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4FaithfulPoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
