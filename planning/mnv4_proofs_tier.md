@@ -15,7 +15,7 @@ read and the first session must.
 | **0(a)** record fixes | ✅ DONE (`015dcec`). The stale `## Scope`, `mnv4Stage14`'s Conv-S family order (with a new `#guard` deriving its argument order from `mnv4Blocks`), and every Conv-S count in the render's docstrings — params, block split, stat slots, all three artifacts' arities — re-derived from the committed artifact. `grad_tie.py` 158/104 → 233/154. Four yaml rows for the block tier. |
 | **0(b)** the owed ties | ✅ DONE (`b9cc8d5`) and **both PASS**. Forward `max \|Δ\| = 3.770e-06`; gradient 0 of 232 live parameters outside the reference's own relu-discontinuity floor, in raw and `--nokink` mode. ⭐ Block ORDER is now pinned by measurement. ⛔ Two setup findings recorded in `mnv4_convm_ties_todo.md`: `--device=local-task` SEGFAULTS on `@mnv4_fwd` (empty stderr, `local-sync` runs the same vmfb in 1 s) and both scripts hard-coded a nonexistent `iree-compile`. |
 | **1** T1 + T2 | ✅ DONE. `Architectures/MobileNetV4FullB.lean` (886 lines) + `MobileNetV4FullBVJP.lean` (188). Both build in ~2 s each. |
-| **2** T3 | open |
+| **2** T3 | ✅ DONE. `Foundation/MobileNetV4FaithfulPoCB.lean` (the §1 fold, 400 lines) + `MobileNetV4TiePoCB.lean` (the §1a tie, 1334). |
 | **3** T6 | open |
 | **4** the number | open — a GPU decision, see §2 |
 
@@ -71,6 +71,37 @@ the same literal there. Both were free.
   concrete row, so what selects a builder is the TABLE. ⛔ A row-generic SKIP builder is impossible
   (`.addVB` needs `s.oc` and `s.ic` to be the same type, which they are not at a variable row), so
   the body builder stops before the add.
+
+### Session 2 (T3) — what it cost
+
+⭐⭐ **The fold needed ZERO new fp32 op-kind lemmas.** MNv4's nine kinds come from THREE files —
+`ResNet34PoCB`'s six, `EnetPoCG`'s three depthwise/XLA ones — which is the sharpest instance yet of
+4b's "op kinds are shared far more than the file names suggest". 3 + 6 + 13×12 + 4×9 + 4×6 + 8 =
+**233**, every slot exercised (bias-free by construction, so no `convBias` census to over-count).
+
+⭐ **bf16 corrected a sentence three other nets carry.** "The bf16 twins consume the same node" is
+FALSE: a bf16 render emits its own `*GradBBf16` whose `den` rounds the operands going in and rounds
+the result ONCE, outside `Σ_n`. MNv4 emits five such kinds; three are ConvNeXt's, and
+`depthwiseStridedWGradBBf16_den` + `convStridedXlaWGradBBf16_den` did not exist anywhere and are
+four lines each here.
+
+⭐⭐ **The tie is SHORTER than ResNet-50's per block, for a structural reason.** The UIB bottleneck
+is LINEAR — no activation after the project BatchNorm and none after the skip add — so `dyOut`
+reaches the project BN's γ/β **unmasked**, where R50's `r50IdCotA` must first pass the
+post-residual relu's mask. And ONE cotangent chain serves all three stride-1 profiles because
+`mnv4CotEn` DISPATCHES on `s.postDWk` exactly as `mnv4PostDWSlot` does, off the same row.
+
+⚠⚠ **Everything is generic in the ROW, and that is the same lesson as session 1**: stating any of
+it at MNv4's literal resolutions lets `den` run and the kernel give up. The capstone instantiates
+at the 21 concrete rows, which is application and is free — `mnv4_net_tiedB` proves in seconds.
+
+⛔ Two structural splits forced by `s.oc` vs `s.ic` at a row binder, both mirroring T2's:
+`mnv4BodyCotIn` stops before the skip add (`mnv4SkipCotIn` applies it at the concrete row), and
+the pre-strided chain is a near-copy rather than an instantiation — the leading depthwise's op and
+the `2h` input run through every type.
+
+⚠ The pre-strided profile needed its own chain but the head did NOT need its own tail:
+`r34HeadCotBlk` and `r34HeadTiedB` are ResNet-34's GAP-and-dense pair, reused verbatim at 1280.
 
 ⚠ `mnv4PreStridedBodyOfRow` (+ `_faithful`) was added to `MobileNetV4BackB0.lean` as
 `mnv4BodyOfRow`'s sibling — the row-typed section's missing third member. There is deliberately no

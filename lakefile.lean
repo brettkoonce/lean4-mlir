@@ -761,6 +761,23 @@ lean_lib «Certs» where
              -- node" is FALSE. Three are ConvNeXt's, and depthwiseStridedWGradBBf16_den and
              -- convStridedXlaWGradBBf16_den are proven here (MobileNetV4FaithfulPoCB.lean).
              `LeanMlir.Proofs.Foundation.MobileNetV4FaithfulPoCB,
+             -- ⭐⭐ MOBILENETV4's T3 §1a TIE: every gradient node at the cotangent the render's own
+             -- backward chain delivers, driven by a loss cotangent g at the logits -- all 233.
+             -- ⭐ The UIB bottleneck is LINEAR (no activation after the project BN, none after the
+             -- skip add), so dyOut reaches the project BN's gamma/beta UNMASKED -- shorter than
+             -- ResNet's chain, whose residual carries a relu mask there.
+             -- ⭐⭐ ONE cotangent chain serves all three stride-1 profiles: mnv4CotEn DISPATCHES on
+             -- s.postDWk exactly as mnv4PostDWSlot does and off the same row, so a ConvNeXt-like
+             -- row's expand BN reads the project conv's input-VJP directly.
+             -- ⚠⚠ Every definition and theorem is GENERIC IN THE ROW (or in its widths): MNv4's
+             -- resolutions are literals, and stating any of this at them lets `den` run and the
+             -- kernel give up -- the same failure MobileNetV4FullB.lean records four times. The
+             -- capstone instantiates at the 21 concrete rows, which is application and is free.
+             -- ⛔ g is a BINDER; mnv4_lossCot_is_smoothedCE_grad instantiates it at the
+             -- label-smoothed softmax chain (softmaxRow at m := 1 -- ResNet's spelling, NOT
+             -- ConvNeXt's expe-then-softmaxDiv; the two take different lemmas and nothing in the
+             -- types tells them apart) (MobileNetV4TiePoCB.lean).
+             `LeanMlir.Proofs.Foundation.MobileNetV4TiePoCB,
              -- ⭐⭐ §3.5(c): RESNET-50's T3 — the §1 fold and the §1a tie at batch BatchNorm.
              -- ⭐⭐ ZERO new op-kind lemmas: ResNet34FaithfulPoCB's six are statements about OP
              -- KINDS at full generality, and the bottleneck's third conv is one more instance of

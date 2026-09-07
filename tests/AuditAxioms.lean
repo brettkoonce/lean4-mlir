@@ -206,6 +206,7 @@ import LeanMlir.Proofs.Foundation.BackNetFolds
 import LeanMlir.Proofs.Foundation.MobileNetV4BackB0
 import LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV4FaithfulPoCB
+import LeanMlir.Proofs.Foundation.MobileNetV4TiePoCB
 import LeanMlir.Proofs.Foundation.EfficientNetBackNet
 import LeanMlir.Proofs.Foundation.LinearFaithfulPoC
 import LeanMlir.Proofs.Float.E4M3FaithfulPoC
@@ -4639,6 +4640,23 @@ open Proofs
 #print axioms Mnv4PoCB.depthwiseStridedWGradBBf16_den
 #print axioms Mnv4PoCB.convStridedXlaWGradBBf16_den
 #print axioms Mnv4PoCB.mnv4Bf16GradsCertified
+
+-- MNv4's T3 §1a tie -- the §1 fold with the cotangent freedom removed. ⭐ The UIB bottleneck is
+-- LINEAR, so dyOut reaches the project BN's gamma/beta unmasked; ResNet's residual carries a relu
+-- mask at the same place. ⭐⭐ ONE chain serves all three stride-1 profiles because mnv4CotEn
+-- dispatches on s.postDWk exactly as mnv4PostDWSlot does, off the same table row.
+-- ⚠⚠ Everything is generic in the ROW: MNv4's resolutions are literals, and stating any of this
+-- at them lets `den` run into the graph and the kernel give up. The capstone instantiates.
+-- ⛔ g is a BINDER, and MNv4 ships one loss -- no BCE twin, where ResNet-50 needed both.
+#print axioms Mnv4TieB.mnv4_extradw_tiedB
+#print axioms Mnv4TieB.mnv4_convnext_tiedB
+#print axioms Mnv4TieB.mnv4_ffn_tiedB
+#print axioms Mnv4TieB.mnv4_prestrided_tiedB
+#print axioms Mnv4TieB.mnv4_stem_tiedB
+#print axioms Mnv4TieB.mnv4_fused_tiedB
+#print axioms Mnv4TieB.mnv4_head_tiedB
+#print axioms Mnv4TieB.mnv4_net_tiedB
+#print axioms Mnv4TieB.mnv4_lossCot_is_smoothedCE_grad
 
 -- EfficientNet — §8e's VJP-without-backward-graph holes, closed. ⚠ Of the four the sweep flagged,
 -- only TWO were real: `mbStridedFwdB_has_vjp` and `mbDownBodyB_has_vjp` are definitionally the

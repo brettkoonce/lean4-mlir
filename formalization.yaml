@@ -627,6 +627,18 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "Proofs.Mnv4TieB.mnv4_net_tiedB"   # T3 tie: all 233 MNv4 gradient nodes at the cotangent the render's backward chain delivers; g a binder, N and nCls binders, no smoothness or epsilon hypothesis
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.Mnv4TieB.mnv4_lossCot_is_smoothedCE_grad"   # and g instantiated: the emitted six-op chain IS (1/B) d/dlogits of soft-target CE against the smoothed target; softmaxRow at m := 1, ResNet's spelling
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4TiePoCB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
