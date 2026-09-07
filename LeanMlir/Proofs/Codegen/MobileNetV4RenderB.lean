@@ -14,8 +14,11 @@ The UIB block, batch-BN, at `N := B`:
 ```
 
 `mid = ic * expand`, every conv BN-followed and therefore **bias-free** — `VLayer.toSpecs` and
-the baseline's `Layer.nParams` both assume that, and `uib-layout-tie` pins them to each other
-(3,737,088 params over the 14-block table, all four families).
+the baseline's `Layer.nParams` both assume that, and `uib-layout-tie` pins them to each other.
+⚠ **8,447,322 scalars in 233 slots at `nClasses = 10`** (9,715,512 at 1000) over Conv-**M**'s
+21-row table — counted off `mnv4_fwd.mlir`'s own signature, not off a docstring. The
+`3,737,088 / 14-block` figure this line carried until 2026-09-07 was Conv-**S**'s, left behind by
+`ed5a797`'s table swap.
 
 ⭐ **`k = 0` omits that depthwise**, which is how one block expresses MNv4's four families:
 ExtraDW (both), IB/MBConv (post only), ConvNeXt-like (pre only), FFN (neither). Those are `if`s
@@ -37,9 +40,14 @@ runs at. Read off the Conv-M table (`jax/MainMobilenetV4.lean`), which lands cle
 
 | | stride | `ic` vs `oc` | function |
 |---|---|---|---|
-| 11 blocks | 1 | `ic = oc` | `uibFwdSkipB` |
-| 2 blocks | 2 | `ic ≠ oc`, `preDWk > 0` | `uibFwdPreStridedB` |
-| 1 block  | 2 | `ic ≠ oc`, `preDWk = 0` | `uibFwdPostStridedB` |
+| **18** blocks | 1 | `ic = oc` | `uibFwdSkipB` |
+| **3** blocks (1, 3, 11) | 2 | `ic ≠ oc`, `preDWk > 0` | `uibFwdPreStridedB` |
+| **0** blocks | 2 | `ic ≠ oc`, `preDWk = 0` | `uibFwdPostStridedB` |
+
+⚠⚠ **Conv-M has NO post-strided block** (Conv-S had one), so that third arm is certified and
+**unexercised** — a green corpus is not coverage of it. The split was 11 / 2 / 1 here until
+2026-09-07; the `#guard`s in `Proofs/Foundation/MobileNetV4BackB0.lean` have said 18 / 3 / 0 since
+2026-08-14.
 
 ⚠⚠ **ACTIVATION IS PLAIN `relu`, NOT `relu6`.** MobileNetV2's blocks use relu6 and this file sits
 next to that renderer, so the wrong one is one keystroke away. Read off the baseline emitter
@@ -178,7 +186,7 @@ private def fusedStatSig (p : String) (ic oc expand : Nat) : List (String × Lis
   let mid := if expand == 1 then oc else ic * expand
   bnStatSig4 s!"f{p}cn" mid ++ (if expand == 1 then [] else bnStatSig4 s!"f{p}pn" oc)
 
-/-- **The 104 BN running-statistic slots** = 52 BN layers × (μ, var), in forward-traversal order:
+/-- **The 154 BN running-statistic slots** = 77 BN layers × (μ, var), in forward-traversal order:
     stem, the fused stage's two, each UIB block's (2–4 depending on family), the head.
 
     ⚠ A misaligned stat slot is **SILENT**: the arities still match and the wrong layer's statistics
@@ -237,9 +245,9 @@ structure UibFwdB where
   pc : String        -- project conv out (= project-BN input)
 deriving Inhabited
 
-/-- **Stride-1 UIB with the identity skip** (`ic = oc = c`) — 11 of the table's 14 blocks, and all
-    four families. Everything runs at `h×h`: both depthwise positions are shape-preserving, so the
-    `k = 0` omissions are plain `if`s. Block output = `addVB (project-BN out) (block input)`; the
+/-- **Stride-1 UIB with the identity skip** (`ic = oc = c`) — 18 of the table's 21 blocks, and
+    three of the four families (Conv-M uses no IB). Everything runs at `h×h`: both depthwise
+    positions are shape-preserving, so the `k = 0` omissions are plain `if`s. Block output = `addVB (project-BN out) (block input)`; the
     bottleneck is LINEAR, no activation after the add. -/
 private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
@@ -450,7 +458,7 @@ structure Mnv4FwdRec where
   stn : String          -- stem BN out   (= stem-relu pre-activation)
   str : String          -- stem relu out
   f0 : UibFwdB          -- the fused stage
-  blocks : List UibFwdB -- the 14 UIB blocks, in table order
+  blocks : List UibFwdB -- the 21 UIB blocks, in table order
   inputs : List String  -- each block's input SSA, same order
   h1c : String          -- head conv 1 out (256→960)  (= its BN input)
   h1n : String          -- head BN 1 out              (= its relu pre-activation)
@@ -471,10 +479,12 @@ deriving Inhabited
       224 --stem s2--> 112 --fused s2--> 56 --uib s2--> 28 --uib s2--> 14 --uib s2--> 7 --GAP--> 1
     ```
 
-    Block dispatch is forced by the table and checked by the types: the three stride-2 blocks are
-    `ic ≠ oc` and split by which depthwise carries the stride; the eleven stride-1 blocks are all
-    `ic = oc`, hence all skip. Families in order: Fused, ExtraDW, ExtraDW, IB, ExtraDW, ExtraDW,
-    ConvNeXt, IB, ConvNeXt, FFN, ExtraDW, ExtraDW, ExtraDW, IB, ConvNeXt.
+    Block dispatch is forced by the table and checked by the types: the three stride-2 blocks
+    (1, 3, 11) are `ic ≠ oc` and split by which depthwise carries the stride — all three are
+    PRE-strided in Conv-M; the eighteen stride-1 blocks are all `ic = oc`, hence all skip.
+    Families in order after the fused stage: ExtraDW ×7, ConvNeXt, FFN, ConvNeXt, ExtraDW ×4, FFN,
+    ConvNeXt, ExtraDW ×2, FFN ×2, ConvNeXt — 13 / 4 / 4 and **no IB at all**.
+    ⚠ This paragraph listed Conv-S's fourteen families until 2026-09-07.
 
     **Activations, and they are not uniform** — each read off the emitter that produced the number,
     not assumed:
@@ -514,7 +524,7 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   -- ═══ stage 0: the fused inverted bottleneck, 112→56 (swish) ═══
   let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 mode epsStr "0" nStr bf16
 
-  -- ═══ the 14 UIB blocks — ONE fold over `mnv4Blocks`, dispatch by the row ═══
+  -- ═══ the 21 UIB blocks — ONE fold over `mnv4Blocks`, dispatch by the row ═══
   let mut cur := f0.o
   let mut bcode := ""
   let mut blocks : List UibFwdB := []
@@ -589,7 +599,8 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
 
 set_option maxRecDepth 4000000 in
 /-- **`@mnv4_fwd_eval`** — the inference forward, every BN site reading frozen running stats.
-    `%x` + 158 params + 104 stat inputs = **263 inputs**. This is what the driver scores through.
+    `%x` + 233 params + 154 stat inputs = **388 inputs** (counted off `mnv4_fwd_eval.mlir`). This
+    is what the driver scores through.
 
     ⭐ It is `mnv4FwdChainB` at `.eval` — the SAME traversal `@mnv4_fwd` and the train step use, so
     its BN order matches `mnv4StatSigList` by construction rather than by a second reading. -/
@@ -1027,14 +1038,16 @@ def mnv4AdamVariant (B replicas : Nat)
 set_option maxRecDepth 4000000 in
 /-- **MobileNetV4-Conv-M AdamW train step, batch BN, rendered from the verified AST at `N := B`.**
 
-    583 inputs (`%x`, 158 θ, 158 m, 158 v, `%lr`/`%bc1`/`%bc2`, 104 running-stat slots, `%onehot`)
-    and 581 outputs (158 θ', 158 m', 158 v', `%loss`/`%bc1`/`%bc2`, 104 batch stats). Parameter
+    **858 inputs** (`%x`, 233 θ, 233 m, 233 v, `%lr`/`%bc1`/`%bc2`, 154 running-stat slots,
+    `%onehot`) and **856 outputs** (233 θ', 233 m', 233 v', `%loss`/`%bc1`/`%bc2`, 154 batch
+    stats) — counted off `mnv4_adam_train_step.mlir`, which is the only reading that cannot go
+    stale (this line said 583 / 581 at Conv-S's 158 slots until 2026-09-07). Parameter
     order comes from `mnv4ShapeList` — through `zipPs`, which builds each block's gradient list from
     the very same `uibSig` slice the signature does — and stat order from `mnv4StatShapeList`.
 
     Forward: stem 3×3/s2 XLA-`SAME` (3→32, 224→112) → fused MBConv (32→48, 112→56, **swish**) →
-    the 14 UIB blocks (three stride-2 downsamples, eleven identity skips, all four families) →
-    1×1 conv-BN-relu head (256→1280) → GAP → dense.
+    the 21 UIB blocks (three stride-2 downsamples, eighteen identity skips; ExtraDW, ConvNeXt and
+    FFN — no IB) → TWO 1×1 conv-BN-relu head stages (256→960, then 960→1280) → GAP → dense.
 
     The cotangent is composed from kit ops (`softmaxRow → subB → scaleB → addVB → shiftB →
     divConstB`, α = 0.1, K = nClasses), and `%loss` is report-only and stays outside the AST — the
@@ -1183,7 +1196,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       qcode := qcode ++ c; qnames := qnames ++ n
     let (cQh1, qh1) ← bnStat 960 7 nH1c
     let (cQh, qh) ← bnStat 1280 7 nHc
-    -- ═══ the 158 parameter gradients in func-arg order ═══
+    -- ═══ the 233 parameter gradients in func-arg order ═══
     let stemPs : List PGradV4 :=
       [⟨"sW", nsW, [32,3,3,3]⟩, ⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
     let headPs : List PGradV4 :=

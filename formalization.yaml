@@ -550,6 +550,36 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- MobileNetV4-Conv-M's BLOCK tier: the four UIB families collapsed into one body, the
+    #     stride-2 forms that deliberately do not collapse, the fused stage and the head. The
+    #     net level (T1/T2/T3/T6) is NOT here -- see planning/mnv4_proofs_tier.md.
+    #     No accuracy is quoted for Conv-M: Conv-S's 87.36% is a superseded table and the
+    #     verified ImageNet port has not run.
+    - declaration: "Proofs.StableHLO.mnv4BodyOfRow_faithful"   # a UIB body built ENTIRELY from its table row -- widths are projections of the row, the k=0 dispatch reads the row, so a family mis-dispatch is a wrong number in mnv4Blocks
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.StableHLO.mnv4UibPreStridedBody_faithful"   # the three stride-2 blocks (1, 3, 11); the strided depthwise changes the TYPE so id' cannot collapse it, and the post-strided arm is certified but unexercised in Conv-M
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.StableHLO.mnv4FusedStage_faithful"   # stage 0, swish and therefore globally certified (ok = True); its stemBackBatchedGraph closed EfficientNet's stem hole at the same time
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.StableHLO.mnv4Head_faithful"   # GAP and dense both tie by rfl; models ONE conv stage, and Conv-M's render has two (%h1W 256->960, %hW 960->1280)
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
     #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.

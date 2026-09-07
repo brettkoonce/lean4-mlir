@@ -63,7 +63,11 @@ NETS = {
         mlir=".lake/build/mnv4_adam_train_step_b2.mlir",
         fn="mnv4_adam2_train_step",
         ref_py="jax/.lake/build/generated_mobilenet_v4.py",
-        nparams=158, nstats=104, nclasses=10, runner="iree",
+        # ⚠⚠ **CONV-M, not Conv-S.** These read 158 / 104 until 2026-09-07 -- Conv-S's counts,
+        # left behind by `ed5a797`'s table swap, so this gate could not have run against the
+        # shipped net. Counted off `verified_mlir/mnv4_adam_train_step.mlir`'s own signature:
+        # 858 inputs = %x + 233 theta + 233 m + 233 v + lr/bc1/bc2 + 154 stat slots + onehot.
+        nparams=233, nstats=154, nclasses=10, runner="iree",
         emit="lake build mnv4-train-smoke && .lake/build/bin/mnv4-train-smoke",
     ),
     # ⚠ R34's `resnet34_fwd` is PER-EXAMPLE BN while this train step is BATCH BN (the §3d(b)

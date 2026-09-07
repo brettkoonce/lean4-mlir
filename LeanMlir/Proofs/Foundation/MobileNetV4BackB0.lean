@@ -37,7 +37,7 @@ the way §3i records it landing on the backward render.
 
 Measured before building: the repo had batched depthwise stages at **relu6** (`dwbrB`, MobileNetV2)
 and at **swish** (`dwbsB`, EfficientNet), and **none at plain relu**. MNv4 is relu throughout its
-14 UIB blocks (⚠ *not* relu6 — `MobileNetV4RenderB` flags this explicitly, and mnv2 sitting one
+21 UIB blocks (⚠ *not* relu6 — `MobileNetV4RenderB` flags this explicitly, and mnv2 sitting one
 file over makes it an easy thing to get wrong).
 
 ⭐ It cost almost nothing, because `bnReluStage_has_vjp_at` (`ResNet34BackB0`) is **generic in the
@@ -48,10 +48,38 @@ mnv2's uses `.selectMid`.
 
 ## Scope
 
-Built here: the two depthwise-relu stages (stride-1 + strided), the four stage `CertLayer`s, the
-family-collapsing body, and the skip block. ⚠ **Not** built: the fused stage (swish, stage 0) and
-the head. The three stride-2 blocks need the strided body assembled from the same pieces — the
-stage is here, the assembly is not.
+⚠⚠ **This paragraph was WRONG from the day it was written, and a planning row copied it.** It
+said the fused stage, the head and the strided body assembly were not built. All three landed on
+**2026-08-10**, the same day, in the three commits that follow the one carrying this header —
+`e25a011` (stride-2 blocks), `61eb512` (fused stage) and `411b1a5`, whose own message reads *"the
+head — MNv4 complete at stage level"*. Nobody came back to the header, so for four weeks the file
+asserted a gap its own commit log had already closed, and `proofs_tier_to_paper_nets.md` §3.6
+priced a session against it (`planning/mnv4_proofs_tier.md` §0 — seventh instance of that
+pattern, and the cheapest: the declaration list was one `grep` away).
+▶ **When a session lands a piece, edit the header that said it was missing, in the same commit.**
+
+**Built here — everything at the BLOCK and STAGE level, which is this file's whole remit:** the two
+depthwise-relu stages (stride-1 + strided) and their backward graphs; the four stage `CertLayer`s;
+the family-collapsing body and the skip block; both stride-2 forms (`mnv4UibPreStridedBody`,
+`mnv4UibPostStridedBody`) with their faithfulness theorems; the **fused stage** (swish, stage 0)
+with `stemBackBatchedGraph` — the symmetric-padding strided conv-bn-swish backward that closed
+EfficientNet's stem hole at the same time; the **head** (`mnv4Head`, its GAP and dense layers both
+tying by `rfl`); the table-driven `k = 0` dispatch; and `UibParams`, the row-typed weight record.
+Nine of these are in `tests/AuditAxioms.lean`, 3-axiom clean.
+
+**NOT built here, and it is the NET level — T1, T2, T3, T6 of the Proofs tier.** There is no
+whole-net forward, no typed forward graph at `mnv4FwdChainB`'s tokens, no fold or tie at the
+emitted gradient nodes, and no certified backward tie. `planning/mnv4_proofs_tier.md` is the plan
+for all four, and ResNet-50 — which was in exactly this position, block-level only with no
+per-example legacy — is the file-by-file precedent, closed over 2026-09-06/07.
+
+⚠ **Two things this file's certificates do NOT give you.** (i) The head models ONE conv stage;
+Conv-M's render has **two** (`%h1W` 256→960, then `%hW` 960→1280), so a whole-net use composes
+`mnv4ExpandLayer` twice. (ii) The **stem** is not here and cannot be a `CertLayer`: no render
+emits a gradient into `%x`, so there is no `convStridedXlaBackBatched` token and hence no backward
+graph to be faithful to. That is B0's situation exactly — `enetTrunk` takes its stem as a
+parameter for the same reason — and a net-level forward must compose the stem's VJP by
+`vjp_comp_at` rather than by `CertLayer.comp`.
 -/
 
 namespace Proofs.StableHLO
@@ -215,7 +243,7 @@ noncomputable def mnv4UibBody (N : Nat) {ic mid oc h w : Nat}
     CertLayer (N * (ic * h * w)) (N * (oc * h * w)) :=
   preDW.comp (expand.comp (postDW.comp project))
 
-/-- ⭐ **The UIB block with its identity skip** — the 11 of MNv4's 14 blocks that have `ic = oc` at
+/-- ⭐ **The UIB block with its identity skip** — the 18 of Conv-M's 21 blocks that have `ic = oc` at
     stride 1. `CertLayer.residual` of the body; the remaining 3 are stride-2 and skipless. -/
 noncomputable def mnv4UibSkipBlock (N : Nat) {c mid h w : Nat}
     (preDW : CertLayer (N * (c * h * w)) (N * (c * h * w)))
@@ -261,13 +289,24 @@ noncomputable def mnv4FamilyFFN (N : Nat) {c mid h w : Nat}
     CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
   mnv4UibSkipBlock N (CertLayer.id' _) expand (CertLayer.id' _) project
 
-/-- **MNv4's stride-1 trunk section, as a type-level check on the block table.** Blocks 4–10 all sit
-    at `160 → 160`, `h = 14`, and cover every family: ExtraDW (4, 5, 10), ConvNeXt (6, 8), IB (7),
-    FFN (9). Chaining them is one `CertLayer.chain`, and its faithfulness is `chain_faithful`. -/
+/-- **MNv4's stride-1 trunk section at 14×14, as a type-level check on the block table.** Conv-M's
+    blocks 4–10 all sit at `160 → 160`, `h = 14`; chaining them is one `CertLayer.chain` and its
+    faithfulness is `chain_faithful`. This fills `mnv4BlockLadder`'s `mid14` slot.
+
+    ⚠⚠ **REWRITTEN FOR CONV-M (2026-09-07).** This read `[extraDW, extraDW, convNeXt, ib,
+    convNeXt, ffn, extraDW]` — Conv-**S**'s order, and it named an `ib` block, of which Conv-M has
+    **none**. The `#guard`s below it were rewritten for Conv-M in 2026-08-14 and this docstring was
+    not, so the file asserted one table in prose and a different one in checks. A `#guard` in the
+    dispatch section below now derives this argument order from `mnv4Blocks`, so the two cannot
+    part again. Conv-M's order is ExtraDW ×4 (blocks 4–7), ConvNeXt (8), FFN (9), ConvNeXt (10). -/
 noncomputable def mnv4Stage14 (N : Nat) {c _mid : Nat}
-    (extraDW convNeXt ib ffn : CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14))) :
+    (extraDW convNeXt ffn : CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14))) :
     CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14)) :=
-  CertLayer.chain [extraDW, extraDW, convNeXt, ib, convNeXt, ffn, extraDW]
+  CertLayer.chain [extraDW, extraDW, extraDW, extraDW, convNeXt, ffn, convNeXt]
+
+-- ⭐ The prose above is CHECKED, but not here: `UibSpec.family` is defined further down (it needs
+-- the `UibFamily` inductive), so the guard sits with the other table guards in the dispatch
+-- section — grep `mnv4Stage14`'s argument order there.
 
 -- ════════════════════════════════════════════════════════════════
 -- § THE STRIDE-2 BLOCKS — and why `id'` CANNOT collapse these
@@ -619,6 +658,12 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 #guard (mnv4Blocks.filter (fun s => s.family == .convNeXtLike)).length = 4
 #guard (mnv4Blocks.filter (fun s => s.family == .ffn)).length = 4
 
+-- ⭐ `mnv4Stage14`'s argument order, pinned. Its docstring named Conv-S's families for four weeks
+-- (an `ib` block, of which Conv-M has none) while the guards above already said Conv-M; this makes
+-- the prose a check. The seven stride-1 rows at `h = 14` are blocks 4–10, and this is their order.
+#guard (mnv4Blocks.filter (fun s => s.h == 14 && !s.stride2)).map (·.family) =
+  [.extraDW, .extraDW, .extraDW, .extraDW, .convNeXtLike, .ffn, .convNeXtLike]
+
 -- The three forward functions' split: skip (ic = oc, stride 1), pre-strided, post-strided.
 -- Recomputed from the table rather than trusted. ⚠ Conv-S was 11 / 2 / 1; Conv-M is 18 / 3 / 0.
 #guard (mnv4Blocks.filter (fun s => s.ic == s.oc && !s.stride2)).length = 18
@@ -700,7 +745,7 @@ structure UibParams (s : UibSpec) where
     here is a free argument: given `s`, the only freedom left is the numeric values.
 
     ⚠ This is the BODY (`ic -> oc`). The identity skip is `CertLayer.residual` on top and needs
-    `oc = ic`, which holds for exactly the eleven non-`stride2` rows (guarded below) — applied by
+    `oc = ic`, which holds for exactly the eighteen non-`stride2` rows (guarded below) — applied by
     the caller at a concrete row, where it is `rfl` and needs no transport. -/
 noncomputable def mnv4BodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
     CertLayer (N * (s.ic * s.h * s.h)) (N * (s.oc * s.h * s.h)) :=
@@ -719,7 +764,7 @@ theorem mnv4BodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams s)
       = ((mnv4BodyOfRow N s p).vjp x hx).backward (den e) :=
   (mnv4BodyOfRow N s p).faithful x hx e
 
--- Every non-`stride2` row has `oc = ic`, so `CertLayer.residual` applies to all eleven of them.
+-- Every non-`stride2` row has `oc = ic`, so `CertLayer.residual` applies to all eighteen of them.
 #guard (mnv4Blocks.filter (fun s => !s.stride2)).all (fun s => s.oc == s.ic)
 
 /-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
