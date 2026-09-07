@@ -12,9 +12,9 @@ module @m {
     //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not
     //    an implementation detail, since this optimizer is not bias-corrected.
     // ── MobileNetV2 batch-BN AdamW train step, DATA-PARALLEL over 2 replicas ──
-    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`
-    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted
-    // text outside the faithfulness theorems. Each replica evaluates the same tied graph
+    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
+    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
+    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph
     // at the batch it was rendered for; the collective averages that function's gradients
     // over disjoint equal batches. NOTE this does NOT equal a single-device step at the
     // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).

@@ -5,9 +5,9 @@ module @m {
     %sc = stablehlo.constant dense<0.0> : tensor<f32>
     %ximg = stablehlo.reshape %x : (tensor<128x150528xf32>) -> tensor<128x3x224x224xf32>
     // ── ViT-Tiny depth-12 AdamW train step, DATA-PARALLEL over 4 replicas ──
-    // The gradients and the AdamW triple are pretty(verified AST). The per-parameter
-    // all_reduce(add)/N between them is NOT — it is a TRUSTED CARVE-OUT, emitted text
-    // outside every faithfulness theorem, exactly like the lowerer (handoff §5).
+    // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW
+    // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is
+    // the replica MEAN of the per-replica gradient nodes (4d piece 2).
     // ── EMA WEIGHT SHADOW (planning/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF
     // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)
     // like the rest of the optimizer — NOT a carve-out. EVAL AND CHECKPOINTS SCORE IT.

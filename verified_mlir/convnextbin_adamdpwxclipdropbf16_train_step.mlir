@@ -7,9 +7,9 @@ module @m {
     %one = stablehlo.constant dense<1.0> : tensor<f32>
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
     // ── ConvNeXt-B AdamW train step, DATA-PARALLEL over 4 replicas ──
-    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`
-    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted
-    // text outside the faithfulness theorems. Each replica evaluates the same tied graph
+    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
+    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
+    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph
     // at the batch it was rendered for; the collective averages that function's gradients
     // over disjoint equal batches. Unlike the BN nets, ConvNeXt normalises with LayerNorm
     // — within one example, never across the batch — so N x b IS 1 x (N.b) here and the

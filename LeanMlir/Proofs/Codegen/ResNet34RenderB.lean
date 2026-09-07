@@ -590,15 +590,16 @@ def wdNameExcludes (wdName : String) : Bool := wdName != "%wd"
     `m` becomes a passthrough so the packed signature does not move.
 
     At `replicas > 1` the gradient is first averaged across devices by
-    `ViTRender.emitGradAllReduce`. **That collective is a TRUSTED CARVE-OUT** — it is emitted text,
-    not `pretty` of an AST node, so it is outside every faithfulness theorem here. What the proofs
-    still cover is unchanged and is the whole rest of the graph: the optimizer tail consumes the
-    averaged gradient as an `.operand`, exactly as it consumed the raw one, so the `den` side does
-    not shift. What is trusted is that `all_reduce(add)/N` computes the mean — handoff §5:
-    *"the gradient averaging is a proven identity; the collective implementing it is trusted,
-    exactly like the lowerer."* §2b's `%loss` bug is the standing reminder that a carve-out needs
-    its own numeric check; here that is the cifar8 exact decomposition gate (no BN ⇒ the identity
-    holds exactly), because at R34 scale BN makes N×b ≠ 1×(N·b) BY DESIGN and no exact tie exists.
+    `prettyAllReduceMean` — `pretty` of the `allReduceMeanF` node (4d piece 2, 2026-09-07), whose
+    `den` is the replica MEAN of the per-replica gradient nodes (`den_allReduceMeanF`,
+    `DataParallelNode.lean`). ⭐ Until then this was `ViTRender.emitGradAllReduce`, emitted text
+    outside every faithfulness theorem and a declared TRUSTED CARVE-OUT; the node's emit is that
+    text verbatim, so the committed `*dp*` artifacts did not move. The optimizer tail consumes the
+    averaged gradient as an `.operand`, exactly as it consumed the raw one. What stays trusted is
+    the lowerer's `all_reduce`, as every op's lowering is — and §2b's `%loss` bug is the standing
+    reminder that a collective needs its own numeric check; here that is the cifar8 exact
+    decomposition gate (no BN ⇒ the identity holds exactly), because at R34 scale BN makes
+    N×b ≠ 1×(N·b) BY DESIGN and no exact tie exists.
 
     At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
     render stays byte-identical — which is the cheap self-check that this insertion is inert. -/
@@ -663,7 +664,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let replicas := if preAvg then 1 else replicas
-  let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
   -- ⚠ Emitted by every arm below rather than once here, because it consumes each arm's OWN `nT`.
   -- Hoisting it would need the updated-parameter name before the arm that produces it has run.
@@ -1029,7 +1030,7 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     -- through, so the single-device clip render carries no collective at all.
     let mut avg : List (String × String) := []
     for g in ps do
-      let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+      let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
       clipCode := clipCode ++ arS
       avg := avg ++ [(g.nm, gAvg)]
     -- ② accumulate, when the optimizer accumulates. `Gt = akeep·G + g`, the SAME `momVNextF`
@@ -1610,9 +1611,9 @@ here first"
         s!"    // ── ResNet-34 batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
        else
         s!"    // ── ResNet-34 batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
-        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
-        "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
+        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
+        "    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++

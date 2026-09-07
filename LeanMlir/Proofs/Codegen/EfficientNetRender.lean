@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.ViTRender      -- `emitGradAllReduce`, the data-parallel collective (a carve-out)
+import LeanMlir.ViTRender      -- the hand-written emitter's helpers; the collective is `allReduceMeanF` since 4d piece 2
 
 /-! # EfficientNet-B0 train step rendered ENTIRELY from the verified AST (batched)
 
@@ -1083,12 +1083,13 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     `tensor<f32>` args, so one render serves the whole cosine+warmup schedule.
 
     At `replicas > 1` the gradient is first averaged across devices by
-    `ViTRender.emitGradAllReduce`. **That collective is a TRUSTED CARVE-OUT** — it is emitted text,
-    not `pretty` of an AST node, so it sits outside every faithfulness theorem here. What the proofs
-    still cover is the whole rest of the graph: the AdamW triple consumes the averaged gradient as
-    an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. What is
-    trusted is that `all_reduce(add)/N` computes the mean — handoff §5, *"the gradient averaging is
-    a proven identity; the collective implementing it is trusted, exactly like the lowerer."*
+    `prettyAllReduceMean` — `pretty` of the `allReduceMeanF` node (4d piece 2, 2026-09-07), whose
+    `den` is the replica mean of the per-replica gradient nodes (`DataParallelNode.lean`). Until
+    then it was `ViTRender.emitGradAllReduce`, emitted text outside every faithfulness theorem and
+    a declared TRUSTED CARVE-OUT; the node re-emits that text verbatim, so the committed `*dp*`
+    artifacts did not move. The AdamW triple consumes the averaged gradient as an `.operand`
+    exactly as it consumed the raw one. What stays trusted is the lowerer's `all_reduce`, as every
+    op's lowering is.
 
     At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
     render stays byte-identical — the cheap self-check that the insertion is inert.
@@ -1098,7 +1099,7 @@ private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
     (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
   let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty B (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty B (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
@@ -1130,7 +1131,7 @@ private def enetRmsOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String
     (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
   let (cW, nW) ← pretty B (.momVNextF s!"%{nm}" "%wd" ds 0 z (.operand gAvg z))
   let gr : SHlo n := .operand nW z
   let (cS, nS) ← pretty B (.adamVNextF s!"%{nm}v" "%rho" "%orho" ds 0 z gr)
@@ -1365,9 +1366,9 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n"
        else
         s!"    // ── EfficientNet-B0 AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
-        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
-        "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
+        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
+        "    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++

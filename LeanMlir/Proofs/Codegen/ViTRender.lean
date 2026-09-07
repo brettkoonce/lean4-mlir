@@ -608,14 +608,15 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
   -- gradient at once, and this op is per parameter, so at `clip := true` the caller hoists both the
   -- collective and the clip above the loop and passes the result here.
   let replicas := if preAvg then 1 else replicas
-  -- At `replicas > 1` the gradient is averaged across devices first. **That collective is a TRUSTED
-  -- CARVE-OUT** — emitted text, not `pretty` of an AST node, so it sits outside every faithfulness
-  -- theorem here, exactly as in §2b-quater. The `den` side does not shift: the AdamW triple consumes
-  -- the averaged gradient as an `.operand` just as it consumed the raw one. Claim ceiling is §5's —
-  -- *the gradient averaging is a proven identity; the collective implementing it is trusted, exactly
-  -- like the lowerer.* At `replicas ≤ 1` this emits NOTHING, which is the cheap self-check that the
+  -- At `replicas > 1` the gradient is averaged across devices first, by `prettyAllReduceMean` —
+  -- `pretty` of the `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean
+  -- of the per-replica gradient nodes. Until then this was `ViTRender.emitGradAllReduce`, emitted
+  -- text and a declared TRUSTED CARVE-OUT outside every faithfulness theorem; the node re-emits
+  -- that text verbatim. The `den` side does not shift: the AdamW triple consumes the averaged
+  -- gradient as an `.operand` just as it consumed the raw one. What stays trusted is the lowerer's
+  -- `all_reduce`, as every op's lowering is. At `replicas ≤ 1` this emits NOTHING, which is the cheap self-check that the
   -- insertion is inert (the single-device render re-renders byte-identical).
-  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
   let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty bs (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty bs (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
@@ -801,7 +802,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       let mut avg : List String := []
       for i in [0:(vitParamSig nClasses V).length] do
         let (nm, ds) := (vitParamSig nClasses V)[i]!
-        let (arS, gAvg) := ViTRender.emitGradAllReduce (gradNames[i]!) ds nm replicas
+        let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean (gradNames[i]!) ds nm replicas
         clipCode := clipCode ++ arS
         avg := avg ++ [gAvg]
       avgNames := avg
@@ -892,9 +893,9 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
        else
         "    // ── ViT-Tiny depth-12 AdamW train step, DATA-PARALLEL over " ++ toString replicas ++
         " replicas ──\n" ++
-        "    // The gradients and the AdamW triple are pretty(verified AST). The per-parameter\n" ++
-        "    // all_reduce(add)/N between them is NOT — it is a TRUSTED CARVE-OUT, emitted text\n" ++
-        "    // outside every faithfulness theorem, exactly like the lowerer (handoff §5).\n") ++
+        "    // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW\n" ++
+        "    // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is\n" ++
+        "    // the replica MEAN of the per-replica gradient nodes (4d piece 2).\n") ++
       -- The shadow is NOT a carve-out and the banner says which it is, because §2h-quater found a
       -- committed artifact under-describing its own certification level and that is still a wrong
       -- statement in the one place a reader trusts.

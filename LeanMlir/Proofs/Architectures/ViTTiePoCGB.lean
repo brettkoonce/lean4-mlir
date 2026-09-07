@@ -47,8 +47,9 @@ argument, as it was for ConvNeXt.
 ⛔ **Conventions carried unchanged from the fused file:** the VECTOR LayerNorm (`γ β : Vec D`) at
 all 25 sites, 3 heads × d_head 64, depth 12, D 192, MLP 768, 16×16 patches, GELU (no kink — no
 smoothness hypothesis anywhere). Stated at ViT-Tiny's literal dims; S and B are other nets.
-⛔ ONE REPLICA: in `vitin_adamdp128x4*` every gradient node is followed by `all_reduce(add)/4` as
-emitted text outside the AST (4d), and the 4× accumulation is `momVNextF` at its other reading on
+⛔ ONE REPLICA: in `vitin_adamdp128x4*` every gradient node feeds `allReduceMeanF`, the collective
+as an AST node since 4d piece 2 (2026-09-07; `DataParallelNode.lean` composes the per-replica
+statement with the replica mean), and the 4× accumulation is `momVNextF` at its other reading on
 top. ⛔ Stated at the drop-free chain.
 -/
 

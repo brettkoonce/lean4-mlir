@@ -57,9 +57,10 @@ fan-in is `addVB(%dc1, %dcp)` — both branches nontrivial.
 `residualProj proj body` adds `proj + body`, so `r50{Proj,Down}CotIn_eq_vjp` carry a commutation.
 The identity block needs none. Same seam T2's graph faithfulness has, for the same reason.
 
-⛔ **ONE REPLICA.** In `resnet50in160_lambaccdp8x64bce` every gradient node is followed by
-`all_reduce(add)/4` as emitted text outside the AST, so every statement here is at the per-replica
-gradient node (`Foundation/DataParallel.lean`, §4d). The 8× accumulation sits between the gradient
+⛔ **ONE REPLICA.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
+`allReduceMeanF` — the collective as an AST node since 4d piece 2 (2026-09-07), until then emitted
+text outside the AST — so every statement here is at the per-replica gradient node and
+`Foundation/DataParallelNode.lean` composes it with the replica mean (§4d). The 8× accumulation sits between the gradient
 and the optimizer as `momVNextF` at `(μ := akeep)`, and the LAMB tail is `lamb_triple_faithful` —
 both certified, neither part of this file.
 
@@ -787,8 +788,8 @@ set_option maxHeartbeats 1600000 in
     whole-net backward — the two halves of the tie, kept apart because they have different
     hypotheses.
 
-    ⛔ **One replica.** In `resnet50in160_lambaccdp8x64bce` every gradient node is followed by
-    `all_reduce(add)/4` as emitted text outside the AST (`DataParallel.lean`, §4d), and the 8×
+    ⛔ **One replica.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
+    `allReduceMeanF`, an AST node since 4d piece 2 (`DataParallelNode.lean`, §4d), and the 8×
     accumulation and the LAMB tail sit downstream of every node named here. -/
 theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (g : Vec (N * nCls)) :

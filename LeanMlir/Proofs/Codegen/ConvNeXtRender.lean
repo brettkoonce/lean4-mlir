@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
-import LeanMlir.ViTRender      -- `emitGradAllReduce`, the data-parallel collective (a carve-out)
+import LeanMlir.ViTRender      -- the hand-written emitter's helpers; the collective is `allReduceMeanF` since 4d piece 2
 
 /-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)
 
@@ -820,10 +820,11 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     runtime `tensor<f32>` args, so one render serves the whole schedule. Mirrors
     `ResNet34RenderB.adamOne` / `MobileNetV2RenderB.adamOneM`.
 
-    At `replicas > 1` the gradient is first averaged by `ViTRender.emitGradAllReduce`. **That
-    collective is a TRUSTED CARVE-OUT** (handoff §5) — emitted text, not `pretty` of an AST node,
-    so outside every faithfulness theorem here. The AdamW triple consumes the averaged gradient as
-    an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
+    At `replicas > 1` the gradient is first averaged by `prettyAllReduceMean` — `pretty` of the
+    `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean of the
+    per-replica gradient nodes; until then `ViTRender.emitGradAllReduce`, emitted text and a
+    declared carve-out, which the node re-emits verbatim. The AdamW triple consumes the averaged
+    gradient as an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
     `replicas ≤ 1` this emits nothing and threads the raw gradient, so the single-device render
     stays byte-identical — the cheap self-check that the insertion is inert.
 
@@ -844,7 +845,7 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
   -- that trains and descends), and the clip needs every gradient at once while this op is per
   -- parameter — so at `clip := true` the caller hoists both. `planning/grad_clip.md` §4.
   let replicas := if preAvg then 1 else replicas
-  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
   let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty cBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty cBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
@@ -1033,7 +1034,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       let mut avg : List (String × String) := []
       for (nm, ds) in allParams nClasses V do
         let g := (gradMap.lookup nm).getD s!"%d{nm}"
-        let (arS, gAvg) := ViTRender.emitGradAllReduce g ds nm replicas
+        let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g ds nm replicas
         clipCode := clipCode ++ arS
         avg := avg ++ [(nm, gAvg)]
       let mut total : SHlo 1 := .operand "%zero" zero1
@@ -1126,9 +1127,9 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
         "    // flatConvStride4_weight_grad_has_vjp; emit-side odd/even split sWGradGeom).\n"
        else
         s!"    // ── {cnxModelName V} AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
-        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
-        "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
+        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
+        "    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. Unlike the BN nets, ConvNeXt normalises with LayerNorm\n" ++
         "    // — within one example, never across the batch — so N x b IS 1 x (N.b) here and the\n" ++

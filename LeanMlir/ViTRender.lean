@@ -558,6 +558,12 @@ def emitAdamV (θ g m v : String) (ds : List Nat) (t : String) : String × Strin
     every replica applies an identical update and the parameter copies stay in
     lockstep with no host round trip.
 
+    ⭐ Since 4d piece 2 (2026-09-07) every `Proofs/Codegen` render calls
+    `Proofs.StableHLO.prettyAllReduceMean` instead — `pretty` of the `allReduceMeanF` AST
+    node, whose token emit (`allReduceMeanText`) is this body verbatim, so the artifacts did
+    not move and the collective is inside the faithfulness theorems. This function stays for
+    the hand-written `emitAdamV` path below.
+
     At `replicas = 1` this emits **nothing** and returns the gradient unchanged, so
     single-device renders stay byte-identical.
 

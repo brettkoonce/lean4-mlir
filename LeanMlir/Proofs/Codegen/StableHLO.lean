@@ -1209,6 +1209,22 @@ inductive SHlo : Nat → Type where
   | scaleB    {N n : Nat} (sStr : String) (s : ℝ)         : SHlo (N*n) → SHlo (N*n)
   | shiftB    {N n : Nat} (sStr : String) (s : ℝ)         : SHlo (N*n) → SHlo (N*n)
   | divConstB {N n : Nat} (sStr : String) (s : ℝ)         : SHlo (N*n) → SHlo (N*n)
+  -- ⭐⭐ **4d piece 2 — the cross-replica gradient MEAN as an AST node.** `R` graphs of ONE
+  --    skeleton — the same program on `R` replicas, each with its own values, which is what SPMD
+  --    data parallelism IS — reduced by `all_reduce(add)` and divided by `R`. `den` is
+  --    `(1/R) Σ_r den (g r)` (`DataParallel.dpMean` of the per-replica denotations); `skel` and
+  --    therefore `pretty` read replica 0, which is honest because `skel` erases the values the ops
+  --    carry (`DataParallel.skel_allReduceMeanF_of_spmd`). Until 2026-09-07 this was
+  --    `ViTRender.emitGradAllReduce`, emitted TEXT outside the AST and a declared carve-out in
+  --    every train-step tie; the token's emit is that function's text verbatim, and the
+  --    `%arsum{t}` / `%armean{t}` names come from `t` rather than `fresh`, so every committed
+  --    `*dp*` artifact re-renders byte-identically off the node. `ds` is the parameter's shape,
+  --    which is what the text types the tensor as (the optimizer-tail ops carry `ds` the same way,
+  --    unlinked to the index). ⚠ `hR`: `skel` needs replica 0 to exist, and a mean over zero
+  --    replicas is not a thing. At `R = 1` the emit is empty and the operand's name is threaded
+  --    through, exactly as the text function did.
+  | allReduceMeanF {n : Nat} (R : Nat) (hR : 0 < R) (t : String) (ds : List Nat)
+      (g : Fin R → SHlo n) : SHlo n
   -- ViT per-token (rowwise) dense W/b SGD — the `denseRowF` partners. SAME `den` as
   -- `denseWeightSgdB`/`denseBiasSgdB` (Σ over the N rows), but a 3D `[B,N,·]` token-matrix EMIT
   -- (the weight grad contracts batch×tokens `[0,1]x[0,1]`; the bias reduces `[0,1]`), vs the enet
@@ -1979,6 +1995,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .scaleB _ s e    => fun i => den e i * s
   | _, .shiftB _ s e    => fun i => den e i + s
   | _, .divConstB _ s e => fun i => den e i / s
+  | _, .allReduceMeanF R _ _ _ g => fun i => (1 / (R : ℝ)) * ∑ r : Fin R, den (g r) i
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) _ _ _ x W lr e =>
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .rowDenseBiasSgd (N := N) (c := c) _ _ b lr e =>
@@ -2588,6 +2605,12 @@ theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
     den (.shiftB sS s e) = fun i => den e i + s := rfl
 @[simp] theorem den_divConstB {N n : Nat} (sS : String) (s : ℝ) (e : SHlo (N*n)) :
     den (.divConstB sS s e) = fun i => den e i / s := rfl
+
+/-- **The all-reduce node denotes the replica mean of its operands.** The `DataParallel.dpMean`
+    spelling, stated here so a tie can read it without importing that file. -/
+@[simp] theorem den_allReduceMeanF {n : Nat} (R : Nat) (hR : 0 < R) (t : String) (ds : List Nat)
+    (g : Fin R → SHlo n) :
+    den (.allReduceMeanF R hR t ds g) = fun i => (1 / (R : ℝ)) * ∑ r : Fin R, den (g r) i := rfl
 @[simp] theorem den_bnBatchMeanB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w)))) :
     den (.bnBatchMeanB e)
       = fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) := rfl
@@ -4736,6 +4759,9 @@ inductive Raw where
   -- descriptor-less tokens read the emit width off the SHlo index, so they cannot
   -- sit at `N·n`. `info` is `[N, n]`; the emit uses `n`, like every batched tag.
   | batched2   (tag : String) (names : List String) (info : List Nat) : Raw → Raw → Raw
+  -- 4d piece 2: the cross-replica mean over `R` replicas, at the parameter shape `ds`, with the
+  -- SSA tag `t` the emit names its lines by. Replica 0's skeleton is the operand.
+  | allReduceMean (R : Nat) (t : String) (ds : List Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- The `(tag, names, info)` skeleton descriptor of a batched per-example op — the
@@ -5156,6 +5182,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .scaleB (N := N) (n := n) sS _ e    => .batched "scale" [sS] [N, n] (skel e)
   | _, .shiftB (N := N) (n := n) sS _ e    => .batched "shift" [sS] [N, n] (skel e)
   | _, .divConstB (N := N) (n := n) sS _ e => .batched "divConst" [sS] [N, n] (skel e)
+  | _, .allReduceMeanF R hR t ds g => .allReduceMean R t ds (skel (g ⟨0, hR⟩))
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) xN wN lrS _ _ _ e =>
       .batched "rowDenseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
   | _, .rowDenseBiasSgd (N := N) (c := c) bN lrS _ _ e =>
@@ -5329,6 +5356,7 @@ inductive Tok where
   | rowBiasF   (b : String) (m n : Nat)    : Tok
   | batched    (tag : String) (names : List String) (info : List Nat) : Tok
   | batched2   (tag : String) (names : List String) (info : List Nat) : Tok
+  | allReduceMean (R : Nat) (t : String) (ds : List Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -5435,6 +5463,7 @@ def toToks : Raw → List Tok
   | .rowBiasF b m n e     => toToks e ++ [.rowBiasF b m n]
   | .batched tag names info e   => toToks e ++ [.batched tag names info]
   | .batched2 tag names info a b => toToks a ++ toToks b ++ [.batched2 tag names info]
+  | .allReduceMean R t ds e => toToks e ++ [.allReduceMean R t ds]
 
 /-- **Stride-2 weight-gradient window geometry — odd AND even kernels.** Returns
     `(up, ext, lo, hi)` for one spatial axis: `up` is the trailing zero row of the
@@ -5705,6 +5734,27 @@ def liftPointwise2 (B n : Nat) (r s : String)
               s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
       else k r s [B, n]
   | none => k r s [B, n]
+
+/-- **The text of the cross-replica mean** — `ViTRender.emitGradAllReduce`'s body, verbatim, so
+    that the `allReduceMean` token re-renders every committed `*dp*` artifact byte-identically.
+    `all_reduce(add)` over `replica_groups = [[0..R-1]]`, then a divide by `R`; the names are
+    `%arsum{t}` … `%armean{t}` from the tag rather than `fresh`. At `R ≤ 1` there is no text and
+    the operand's name is the result, exactly as the text function did. -/
+def allReduceMeanText (g : String) (ds : List Nat) (t : String) (R : Nat) : String × String :=
+  if R ≤ 1 then ("", g) else
+  let T := ty ds
+  let grp := String.intercalate ", " ((List.range R).map toString)
+  let lbrace := "{"
+  let rbrace := "}"
+  let s :=
+    s!"    %arsum{t} = \"stablehlo.all_reduce\"({g}) ({lbrace}\n" ++
+    s!"    ^bb0(%ara{t}: tensor<f32>, %arb{t}: tensor<f32>):\n" ++
+    s!"      %aradd{t} = stablehlo.add %ara{t}, %arb{t} : tensor<f32>\n" ++
+    s!"      stablehlo.return %aradd{t} : tensor<f32>\n" ++
+    s!"    {rbrace}) {lbrace} replica_groups = dense<[[{grp}]]> : tensor<1x{R}xi64> {rbrace} : ({T}) -> {T}\n" ++
+    s!"    %arn{t} = stablehlo.constant dense<{R}.0> : {T}\n" ++
+    s!"    %armean{t} = stablehlo.divide %arsum{t}, %arn{t} : {T}\n"
+  (s, s!"%armean{t}")
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -9164,6 +9214,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {mf} = stablehlo.convert {mm} : ({tyBf16 [B,m,n]}) -> {ty [B,m,n]}\n" ++
             s!"    {o} = stablehlo.reshape {mf} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
       | _, _ => pure (s!"    // MALFORMED batched2 {tag} {info}\n", a :: st)
+  | .allReduceMean R t ds, r :: st =>
+      let (txt, o) := allReduceMeanText r ds t R
+      pure (txt, o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
@@ -9340,6 +9393,18 @@ def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM EmitS (String × String) :=
   match st with
   | [r] => pure (code, r)
   | _   => pure (code, "%MALFORMED")
+
+/-- **The cross-replica gradient mean as `pretty` of the `allReduceMeanF` node** — the drop-in
+    for `ViTRender.emitGradAllReduce` in every batched render (4d piece 2, 2026-09-07), measured
+    byte-identical on every committed `*dp*` artifact. At `replicas ≤ 1` it emits nothing and
+    threads the gradient's name, exactly as the text function did. The `R` operand graphs are
+    all `.operand grad` at a zero placeholder, because a render is value-independent — `skel`
+    erases values — while the family is what `den` sums over in the tie. -/
+def prettyAllReduceMean (grad : String) (ds : List Nat) (t : String) (replicas : Nat) :
+    StateM EmitS (String × String) :=
+  if h : replicas ≤ 1 then pure ("", grad)
+  else pretty 1 (.allReduceMeanF (n := ds.foldl (· * ·) 1) replicas (by omega) t ds
+        (fun _ => .operand grad (fun _ => 0)))
 
 /-- Wrap a rendered single-result graph as a `func.func` module. -/
 def renderModule (name argSig : String) (B retLen : Nat) (g : SHlo retLen) : String :=

@@ -38,8 +38,10 @@ already loss-agnostic, so only the head and the capstone had to move.
 ⛔ **Conventions carried unchanged from the fused file**: batch BatchNorm (`bnBatchLA`), XLA-`SAME`
 at the 3x3/s2 stem and SYMMETRIC at the strided depthwises, swish (no kink, so no smoothness
 hypothesis anywhere), and the SE gate's fan-in folded into the block VJPs. ⛔ ONE REPLICA: in
-`efficientnetin_emarmsdp64dropdo` every gradient node is followed by `all_reduce(add)/4` as emitted
-text outside the AST (4d).
+`efficientnetin_emarmsdp64dropdo` every gradient node feeds `allReduceMeanF` — the collective as an
+AST node since 4d piece 2 (2026-09-07), until then emitted text and a declared carve-out. Every
+statement here is at the per-replica node; `DataParallelNode.lean` composes it with the replica
+mean and the tail (`adamW_at_allReduceMeanF`).
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

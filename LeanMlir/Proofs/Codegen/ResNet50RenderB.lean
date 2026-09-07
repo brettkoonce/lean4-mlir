@@ -962,8 +962,9 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
        else
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
-        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5).\n") ++
+        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN\n" ++
+        "    // of the per-replica gradient nodes (4d piece 2).\n") ++
       zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt wdStr ++
       wdzConst wdExclude ++ clipZeroConst gradClip ++ adamCode ++
       (if bce then lossCodeBce else lossCode) ++

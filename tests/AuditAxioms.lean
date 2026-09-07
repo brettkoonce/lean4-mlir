@@ -132,6 +132,7 @@ import LeanMlir.Proofs.Architectures.EfficientNetTiePoCG
 import LeanMlir.Proofs.Architectures.ConvNeXtTiePoCGB
 import LeanMlir.Proofs.Architectures.ViTTiePoCGB
 import LeanMlir.Proofs.Foundation.DataParallel
+import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Architectures.ResNet50FullBVJP
@@ -5958,6 +5959,28 @@ open Proofs
 #print axioms Proofs.dpIterate_lockstep
 #print axioms Proofs.dpSingleStep_eq_meanLoss_step
 #print axioms Proofs.dpIterate_eq_meanLossTrain
+
+-- ════════════════════════════════════════════════════════════════
+-- 4d PIECE 2: THE COLLECTIVE AS AN AST NODE (StableHLO.allReduceMeanF, DataParallelNode.lean, 2026-09-07)
+-- ════════════════════════════════════════════════════════════════
+-- Until 2026-09-07 the cross-replica gradient mean was ViTRender.emitGradAllReduce — emitted
+-- TEXT outside the SHlo AST, a declared carve-out every train-step tie disclaimed. It is now
+-- SHlo.allReduceMeanF: R graphs of ONE skeleton (SPMD), den = (1/R) Σ_r den (g r), skel reads
+-- replica 0, the token's emit is the old text verbatim (every committed *dp* artifact
+-- re-rendered byte-identically), and StableHLOParse.parseStack has its case so `roundtrip`
+-- still covers every skeleton. ⭐ What the node buys, stated once: den = dpMean of the operands
+-- (piece 1's definition); under SPMD the skeleton is each replica's; piece 1 composed — the
+-- all-reduced node denotes the gradient of the MEAN loss; 4b's fold composed (convWeightGradB
+-- shown, every *GradB the same way); and the AdamW tail at the node is adamWStep at dpMean —
+-- §4d piece 2's target statement. ⚠ Piece 3 (the driver: one host batch sharded, same initial
+-- parameters, replica_groups) is untouched and stays the *-dp-check gates'.
+#print axioms Proofs.StableHLO.den_allReduceMeanF
+#print axioms Proofs.StableHLO.roundtrip
+#print axioms Proofs.den_allReduceMeanF_eq_dpMean
+#print axioms Proofs.skel_allReduceMeanF_of_spmd
+#print axioms Proofs.den_allReduceMeanF_eq_lossGrad_meanLoss
+#print axioms Proofs.den_allReduceMeanF_convWeightGradB
+#print axioms Proofs.adamW_at_allReduceMeanF
 
 -- ════════════════════════════════════════════════════════════════
 -- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT (2026-09-06)

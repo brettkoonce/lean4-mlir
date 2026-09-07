@@ -979,16 +979,17 @@ private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
     into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked; `%lr`/`%bc1`/`%bc2` are runtime
     `tensor<f32>` args, so one render serves a whole LR schedule.
 
-    At `replicas > 1` the gradient is first averaged by `ViTRender.emitGradAllReduce`. **That
-    collective is a TRUSTED CARVE-OUT** — emitted text, not `pretty` of an AST node, so outside
-    every faithfulness theorem here; the AdamW triple consumes the averaged gradient as an
+    At `replicas > 1` the gradient is first averaged by `prettyAllReduceMean` — `pretty` of the
+    `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean of the
+    per-replica gradient nodes; until then `ViTRender.emitGradAllReduce`, emitted text and a
+    declared carve-out, re-emitted verbatim; the AdamW triple consumes the averaged gradient as an
     `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
     `replicas ≤ 1` it emits nothing and the single-device render stays byte-identical. -/
 private def adamOne4 (B : Nat) (replicas : Nat) (g : PGradV4) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
   let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
@@ -1240,9 +1241,9 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // ── MobileNetV4-Conv-M batch-BN AdamW train step: every line is pretty(AST node) ──\n"
        else
         s!"    // ── MobileNetV4-Conv-M batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
-        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT, emitted text outside\n" ++
-        "    // the faithfulness theorems. NOTE this does NOT equal a single-device step at the\n" ++
+        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
+        "    // the per-replica gradient nodes (4d piece 2). NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design.\n") ++
       zeroBiasPrelude false mnv4ZbWidths ++ body ++ adamConsts4 ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"

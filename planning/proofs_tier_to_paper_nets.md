@@ -12,8 +12,8 @@ taken 2026-09-06 and its port is complete on every statement that says something
 2026-09-06 added three axes the audit had not named — optimizer form (4b), renderer (4c) and data
 parallelism (4d) — and 4b is done at the fold, 4c is done for all four nets, 4d for its first
 piece. **ResNet-34, MobileNetV2 and ResNet-50 are finished** on every tier that is not a float
-budget, and ConvNeXt-T was the reference when this was scoped. What is genuinely open is small: 4d's op
-node and one large net — every capstone is landed.
+budget, and ConvNeXt-T was the reference when this was scoped. What is genuinely open is one large net —
+every capstone is landed and 4d's op node too.
 
 **Why the three new axes exist at all.** The suite grew organically: one net at a time, each with
 the renderer, optimizer form and batch index that was convenient when it landed. The end state the
@@ -65,19 +65,18 @@ extension, 4d piece 1, B0's capstone re-pointing, and §3.5a–§3.5d (ResNet-50
 cotangent, T1, T2, T3, T6). `Certs` 3966 → **3994**. Their write-ups are the numbered sections
 below; nothing in them is open.
 
-**NEXT SESSION — two live targets, in the order the user set on 2026-09-07: 4d piece 2, then MobileNetV4. Both capstones landed (§4b.6, §4b.7).**
+**NEXT SESSION — one live target: MobileNetV4 (its own planning doc first), then the cleanup/unification session. Both capstones (§4b.6, §4b.7) and 4d piece 2 (§4d.2) landed 2026-09-07.**
 
 | target | cost | what a fresh session needs to know |
 |---|---|---|
-| ⭐ **4d piece 2, `allReduceMeanF`** — first | one session | Ungated now that 4c is closed. One `SHlo` constructor with `den (allReduceMeanF R g) = (1/R) Σ_r den (g r)` under `∀ r, skel (g r) = skel (g 0)`, a `pretty` case that is `emitGradAllReduce`'s text verbatim, and a round-trip parser case. It turns the "per-replica node, all-reduce outside the AST" disclaimer every ImageNet tie carries into a faithfulness theorem at the artifact — all seven nets at once — and composes with 4b's folds and 4d.1's `dpMeanGrad_eq_grad_meanLoss`. §4d has the scoping. |
-| **3.6 MobileNetV4-Conv-M** — second, and a planning doc of its own is the first deliverable | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
+| ⭐ **3.6 MobileNetV4-Conv-M** — the only open item, and a planning doc of its own is the first deliverable | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
 
 ⛔ **Do NOT write, and the reason is a closed thread, not an oversight.** Every remaining row for
 ResNet-34, MobileNetV2 and ResNet-50 is a float BUDGET (T4/T5), and
 `planning/float_budget_numbers.md` closed that thread as vacuous by user decision on 2026-09-05.
 On the statements that say something, §4's port and §3.5 are COMPLETE for all three.
 
-⭐ **Order, set by the user 2026-09-07: the capstones (both done, §4b.6–§4b.7), then 4d piece 2, then MobileNetV4 (which
+⭐ **Order, set by the user 2026-09-07: the capstones (both done, §4b.6–§4b.7), then 4d piece 2 (done, §4d.2), then MobileNetV4 (which
 gets its own planning doc first), then a cleanup/unification session** — the generic constructions
 to a `Foundation` leaf, the root-file lemmas, the bf16 `*GradBBf16` lemmas for the other three
 folds (§4c-quater), and this document archived behind a short standing one.
@@ -208,10 +207,10 @@ Five axes cut across the table and are recorded separately from it:
 * **Renderer — ✅ DONE for all four nets (ResNet-34, MobileNetV2 2026-09-06; ViT-Tiny, ConvNeXt-T
   2026-09-07).** Section 4c, §4c-ter, §4c-quater, and its own thread at
   `planning/renderer_convergence.md`. `KNOWN_SPLIT` is empty; every net is one chain.
-* **Data parallelism — ✅ piece 1 DONE 2026-09-06; the op node is left.** The all-reduce is still
-  emitted text outside the AST in every `*dp*` artifact, so every tie is still at the per-replica
-  node. What changed is that the function those nodes add up to has a name, and that the
-  no-coupling / batch-coupled split is a theorem in both directions. Section 4d.
+* **Data parallelism — ✅ pieces 1 and 2 DONE (2026-09-06, 2026-09-07).** The all-reduce is the
+  AST node `allReduceMeanF` in every `*dp*` artifact (byte-identical swap), its `den` is piece 1's
+  `dpMean`, and every tie's per-replica statement composes with it (`adamW_at_allReduceMeanF`).
+  Piece 3 — the driver — stays prose plus the `*-dp-check` gates. Section 4d.
 
 ## 3. Work packages, in order
 
@@ -1861,10 +1860,9 @@ numerically — a duplicated batch on `R` replicas must reproduce the single-dev
    theorem (pieces 1 and 2) and which is the driver. The `*-dp-check` gate is the empirical
    evidence for piece 3 and belongs on that page.
 
-**Recommendation.** ✅ Piece 1 landed 2026-09-06. Piece 2 when 4c lands the batched chains; the
-page can be written any time and is not written yet. Until piece 2 lands, every tie against a
-`*dp*` artifact is still at the per-replica gradient node and says so (4.2a) — what changed is
-that the function the per-replica nodes add up to now has a name.
+**Recommendation.** ✅ Piece 1 landed 2026-09-06, piece 2 on 2026-09-07 (§4d.2); the page (piece
+3) can be written any time and is not written yet. Every tie against a `*dp*` artifact is still
+STATED at the per-replica gradient node, and now composes with the node one `rw` away.
 
 ### 4d.1 DONE 2026-09-06 — the ℝ-level lemma, and the negative half as a theorem
 
@@ -1932,6 +1930,58 @@ trajectory and it costs a mutual induction the payoff does not justify. Said in 
 with a `den`, a `pretty` and a parser case — and it is gated behind 4c like 4b's last two
 capstones. Until it lands a tie composes with these lemmas only through the reader. The
 `*-dp-check` gates remain the only evidence for piece 3.
+
+### 4d.2 DONE 2026-09-07 — the collective as an AST node; the per-replica disclaimer is composable
+
+`SHlo.allReduceMeanF R hR t ds g` in `Codegen/StableHLO.lean` (constructor, `den` arm,
+`den_allReduceMeanF`, `skel` arm, `Raw`/`Tok` cases, `toToks`, `emitTok` via `allReduceMeanText`,
+`prettyAllReduceMean`), one `parseStack` case + one induction case in `StableHLOParse.lean`, and
+`Foundation/DataParallelNode.lean` (five declarations, ~2 s, 3-axiom clean). `Certs` 3996 →
+**3997**.
+
+⭐⭐ **The design, and why `R` graphs of one skeleton is the honest encoding.** Every `SHlo` node
+carries its operands' VALUES (`.operand name v`, the saved activations in `convWeightGradB`'s
+arguments, …), so "the same program on `R` replicas with each replica's own data" IS a family
+`g : Fin R → SHlo n` whose members share a skeleton and differ in values. `den` sums that family
+— `(1/R) Σ_r den (g r)`, piece 1's `dpMean` — while `skel` (and hence `pretty`) reads `g 0`,
+which is exactly SPMD: `skel` erases values, so any member prints the same program
+(`skel_allReduceMeanF_of_spmd`). In a render the family is `.operand grad` at every `r` (renders
+are value-independent), so the hypothesis is free there and the sum is what the tie sees.
+
+⭐ **Byte-identity, by carrying the names.** `emitGradAllReduce` named its lines `%arsum{t}` …
+`%armean{t}` from the parameter's tag, not from `pretty`'s `%v{k}` counter. The node carries `t`
+and its `emitTok` arm is the old body verbatim, so `prettyAllReduceMean` re-renders every committed
+`*dp*` artifact byte-identically — MEASURED on all 68 of them before the banners moved. The one
+deliberate movement is the banner comment each DP artifact opens with, which used to say the
+collective was "a TRUSTED CARVE-OUT, emitted text outside the faithfulness theorems" and now says
+it is `pretty(allReduceMeanF)`: comment lines only (measured: every changed line begins `//`), and
+`check_fwd_prefix` / `check_adam_prefix` are unaffected.
+
+⭐ **What it composes to.** `adamW_at_allReduceMeanF`: `den (adamW tail (allReduceMeanF R g))` is
+`adamWStep` at `dpMean (fun r => den (g r))` — one `rw` of `adamW_triple_faithful`, and the same
+line closes the heavy-ball, RMSProp and LAMB tails. `den_allReduceMeanF_convWeightGradB`: the
+all-reduced node over `R` replicas' `convWeightGradB` is the replica mean of the certified `Σ_n`
+gradients (every other `*GradB` composes by `Finset.sum_congr` and its own fold lemma).
+`den_allReduceMeanF_eq_lossGrad_meanLoss`: piece 1 composed — if each replica's node denotes its
+loss gradient, the node denotes the gradient of the MEAN loss, the function a DP run minimises.
+
+⚠ **What changed in the trusted surface.** The collective's TEXT moved from a hand-written
+function into `emitTok`, i.e. into the same audited per-op `Tok ↔ text` boundary every other op
+sits behind; its STRUCTURE is now inside `roundtrip`. What is still trusted is the lowerer's
+`all_reduce`, as every op's lowering is. ⚠ Piece 3 (one host batch sharded, same initial
+parameters, `replica_groups` names all devices) is the driver's and the `*-dp-check` gates'.
+
+⚠ **Cost.** `StableHLO.lean` is the root of the Codegen cone: the edit rebuilt it (~6 min alone)
+and every module below it — the whole corpus, which is why this piece was sequenced after the
+capstones rather than interleaved. ⚠ One binder-placement trap: a helper inserted between a
+declaration's docstring and its `def` reads as two docstrings and the parser reports "expected
+'lemma'" at the second `/--`, a message that names neither.
+
+**Gates.** `lake build Certs` 3997; `lake env lean tests/AuditAxioms.lean` 3-axiom clean on all
+seven new prints (`den_allReduceMeanF`, `roundtrip`, the five in `DataParallelNode`);
+`lake exe docstring-checkrefs`; `check_audit_coverage.py`; `check_render_coverage.py`;
+`regen_verified_mlir.sh check` (20 paired / 0 known-split / 0 unaccounted); `git diff
+verified_mlir/` empty before the banner change and comment-only after.
 
 ## 5. Traps, all previously paid for
 
@@ -2071,9 +2121,9 @@ no new Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean`; it RETIR
 nor `ConvNeXtRender.lean` is retired — each still writes its SGD-inline `*_train_step.mlir`), and
 re-points every T2/T3 file at the batched constructors; §4.2d's T6 LANDED 2026-09-07 for both nets: `Float/Resnet34WholeBackFloatBridgeB.lean` + `Foundation/Resnet34BackCertifiedTieB.lean` and `Float/MobileNetV2WholeBackFloatBridgeB.lean` + `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (⛔ no `*BackFloatBudget` peer for either — T4/T5 are the vacuous half); 4b.6 `Architectures/ConvNeXtTiePoCGB.lean` LANDED 2026-09-07 with `smoothedLossCotGraphDiv` in
 `Foundation/SmoothedLossCot.lean`, and 4b.7 `Architectures/ViTTiePoCGB.lean` LANDED the same day on
-both shapes — the five capstones are all re-pointed; 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1); the
-`allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases is
-piece 2 and is gated behind 4c;
+both shapes — the five capstones are all re-pointed; 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1) and the
+`allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases plus
+`Foundation/DataParallelNode.lean` LANDED 2026-09-07 (piece 2, §4d.2);
 3.5a `Codegen/LambTriple.lean` and
 `Foundation/BceLossCot.lean` both LANDED 2026-09-06, as did 3.5(a)+(b)'s
 `Architectures/ResNet50FullB.lean` (forward AND graph) + `ResNet50FullBVJP.lean` (§3.5b); still to

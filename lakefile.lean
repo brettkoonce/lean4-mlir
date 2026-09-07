@@ -663,6 +663,14 @@ lean_lib «Certs» where
              -- ⚠ pdiv_const_smul belongs in Tensor.lean and is here because that file is the root
              -- of the corpus and a definition added to it rebuilds all of Certs.
              `LeanMlir.Proofs.Foundation.DataParallel,
+             -- ⭐⭐ 4d piece 2: the collective as an AST node. allReduceMeanF's den is dpMean of
+             -- the per-replica gradient nodes, its skel reads replica 0 (SPMD), its emit is the
+             -- old text verbatim so no *dp* artifact moved, and the parser round-trip has its
+             -- case. This leaf composes it with piece 1 (the gradient of the MEAN loss), with
+             -- 4b's fold (convWeightGradB shown) and with the AdamW tail — the "den (tail
+             -- (allReduceMeanF …)) = adamW (dpMean …)" statement §4d asked for
+             -- (DataParallelNode.lean).
+             `LeanMlir.Proofs.Foundation.DataParallelNode,
              -- ⭐ ResNet-50's two prerequisites (§3.5), both leaf files for the same reason
              -- DataParallel is one: their natural homes (Lamb.lean, StableHLO.lean) have 315+
              -- downstream modules apiece and these have none.

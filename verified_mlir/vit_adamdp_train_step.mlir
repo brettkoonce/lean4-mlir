@@ -5,9 +5,9 @@ module @m {
     %sc = stablehlo.constant dense<0.0> : tensor<f32>
     %ximg = stablehlo.reshape %x : (tensor<32x150528xf32>) -> tensor<32x3x224x224xf32>
     // ── ViT-Tiny depth-12 AdamW train step, DATA-PARALLEL over 2 replicas ──
-    // The gradients and the AdamW triple are pretty(verified AST). The per-parameter
-    // all_reduce(add)/N between them is NOT — it is a TRUSTED CARVE-OUT, emitted text
-    // outside every faithfulness theorem, exactly like the lowerer (handoff §5).
+    // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW
+    // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is
+    // the replica MEAN of the per-replica gradient nodes (4d piece 2).
     %v0 = stablehlo.reshape %x : (tensor<32x150528xf32>) -> tensor<32x3x224x224xf32>
     %v1 = stablehlo.convolution(%v0, %wConv)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],

@@ -31,10 +31,11 @@ is that cotangent's lemma; the head fold below is stated at it, not at `softmax 
 the artifacts at 32 (`resnet34_sgd/adam_train_step`) or 64 (`resnet34in_momdp64`) are instances.
 T3 carries no numerals, so nothing here pins the batch.
 
-⛔ **What the tie cannot reach: the all-reduce.** In `resnet34in_momdp64` each `*GradB` node is
-followed by `all_reduce(add)/4` as emitted TEXT (`emitGradAllReduce`, a declared carve-out outside
-the `SHlo` AST). Every statement below is at the PER-REPLICA gradient node; the mean across
-replicas is section 4d's business.
+⛔ **The all-reduce, since 4d piece 2 (2026-09-07).** In `resnet34in_momdp64` each `*GradB` node
+feeds `allReduceMeanF` — the collective as an AST node whose `den` is the replica MEAN of the
+per-replica gradient nodes; until then `emitGradAllReduce`, emitted text and a declared carve-out
+outside the `SHlo` AST. Every statement below is at the PER-REPLICA gradient node;
+`DataParallelNode.lean` composes it with the mean and the tail.
 
 ## ⛔ The parameter census is 110, not the 146 `ResNet34TiePoC.lean` names
 
@@ -674,8 +675,8 @@ set_option maxHeartbeats 1600000 in
     `convBias := false`, so the 36 conv-bias nodes are not emitted (the biases are
     `zeroBiasPrelude`'s zero constants).
 
-    ⛔ One replica. In `resnet34in_momdp64` every gradient node is followed by
-    `all_reduce(add)/4` as emitted text outside the AST. -/
+    ⛔ One replica. In `resnet34in_momdp64` every gradient node feeds `allReduceMeanF`, an AST
+    node since 4d piece 2; `DataParallelNode.lean` composes the per-replica statement with it. -/
 theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (t : Vec (N * (1 * nCls))) :

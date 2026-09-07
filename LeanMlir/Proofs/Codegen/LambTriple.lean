@@ -50,8 +50,10 @@ these four ops character-for-character against `Gt` (the `momVNextF`-at-`μ := a
 rather than against `g`, so `lamb_triple_faithful` covers it at `e := ` that node — the theorem is
 `∀ e`. Likewise the clip, which sits between the two.
 
-⚠ **One replica.** Under `*dp*` the gradient node is followed by `all_reduce(add)/R` as emitted
-text outside the AST, so `den e` is the per-replica gradient (`DataParallel.lean`, §4d).
+⚠ **One replica.** Under `*dp*` the gradient node feeds `allReduceMeanF` — the collective as an
+AST node since 4d piece 2 (2026-09-07), until then emitted text outside the AST — so `den e` is
+the per-replica gradient here and `DataParallelNode.lean`'s `adamW_at_allReduceMeanF` is the
+shape that composes a tail with the replica mean (`DataParallel.lean`, §4d).
 
 ⚠ `lambStep` and `lambScale_zero_weight` belong in `Lamb.lean` and are here because that file has
 315 downstream modules and this one has none; the same trade `pdiv_const_smul` took. Move them

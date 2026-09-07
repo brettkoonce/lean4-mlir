@@ -31,10 +31,11 @@ as the graph input `%onehot` — a soft vector under mixup or cutmix.
 ⭐ **`N` is a binder.** The artifacts at 32 (`mobilenetv2_adam_train_step`) or 64
 (`mobilenetv2in_rmsdp64`) are instances. T3 carries no numerals.
 
-⛔ **What the tie cannot reach: the all-reduce.** In `mobilenetv2in_rmsdp64` each `*GradB` node is
-followed by `all_reduce(add)/4` as emitted TEXT (`emitGradAllReduce`, a declared carve-out outside
-the `SHlo` AST). Every statement below is at the PER-REPLICA gradient node; the mean across
-replicas is section 4d's business.
+⛔ **The all-reduce, since 4d piece 2 (2026-09-07).** In `mobilenetv2in_rmsdp64` each `*GradB`
+node feeds `allReduceMeanF` — the collective as an AST node whose `den` is the replica MEAN of the
+per-replica gradient nodes; until then `emitGradAllReduce`, emitted text and a declared carve-out
+outside the `SHlo` AST. Every statement below is at the PER-REPLICA gradient node;
+`DataParallelNode.lean` composes it with the mean and the tail.
 
 ⚠ **`bnInB` and `bnInB_eq_bnBackB` are ResNet-34's, imported rather than copied.** They are the
 batched BatchNorm input-cotangent written as the `den` of the emitted backward op, and its identity
@@ -941,8 +942,8 @@ set_option maxHeartbeats 1600000 in
     runs `convBias := false`, so the 52 bias nodes are not emitted (each bias is folded into the
     BatchNorm after it and bound to `zeroBiasPrelude`'s zero constant).
 
-    ⛔ One replica. In `mobilenetv2in_rmsdp64` every gradient node is followed by
-    `all_reduce(add)/4` as emitted text outside the AST. -/
+    ⛔ One replica. In `mobilenetv2in_rmsdp64` every gradient node feeds `allReduceMeanF`, an AST
+    node since 4d piece 2; `DataParallelNode.lean` composes the per-replica statement with it. -/
 theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (t : Vec (N * (1 * nCls))) :

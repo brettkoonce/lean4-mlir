@@ -46,7 +46,8 @@ axis 2 at the block level; the per-block ties were already loss-agnostic.
 on one row, per-channel layer scale, GELU (no kink — no smoothness hypothesis anywhere),
 SYMMETRIC padding at the 4×4/s4 stem and the three 2×2/s2 downsamples. Stated at the literal
 widths of ConvNeXt-T; S and B are other nets. ⛔ ONE REPLICA: in `convnextin_adamdp*` every
-gradient node is followed by `all_reduce(add)/4` as emitted text outside the AST (4d).
+gradient node feeds `allReduceMeanF`, the collective as an AST node since 4d piece 2 (2026-09-07);
+`DataParallelNode.lean` composes the per-replica statement with the replica mean.
 ⛔ The `%dgi…%dgapf` GAP backward is hand-written text on both chains (a declared carve-out); its
 value here is `globalAvgPoolFlat_has_vjp.backward`, as in the fused file.
 -/
@@ -466,8 +467,9 @@ set_option maxRecDepth 400000 in
     ⭐ **`N` and `nC` are binders and there is no smoothness hypothesis**: the folds are `∀ cot`
     statements instantiated at explicitly constructed cotangents, and ConvNeXt has no kink. The
     batch enters only through `batchMap`/`batchMapAux`, which is honest because no ConvNeXt op
-    couples examples. ⛔ ONE REPLICA: in `convnextin_adamdp*` every gradient node is followed by
-    `all_reduce(add)/4` as emitted text outside the AST (4d). ⛔ Stated at the drop-free chain;
+    couples examples. ⛔ ONE REPLICA: in `convnextin_adamdp*` every gradient node feeds
+    `allReduceMeanF` (an AST node since 4d piece 2; `DataParallelNode.lean` composes the
+    per-replica statement with the replica mean). ⛔ Stated at the drop-free chain;
     the `*drop*` artifacts' parameter nodes are the same `*GradB` constructors (the folds are
     `∀ cot`) but their cotangent chain carries the `dropPathB` sites, which this thread does not
     name. -/

@@ -367,6 +367,8 @@ forward → exit 1; a mis-pointed pair → exit 1 with the diverging line printe
   per-example. Each moves when its batched traversal gains a fused-SGD arm or its `*TiePoC.lean`
   gains a batched peer (4b's last two capstones, which legs 3 and 4 unblocked). Neither is scoped
   here.
+* ✅ 4d piece 2 (2026-09-07): the all-reduce is an AST node in every `*dp*` artifact, swapped in
+  byte-identically the way leg 4 was — see `proofs_tier_to_paper_nets.md` §4d.2.
 * `convBack` and `convBackBatched` — two emitters for one VJP — are still not tied to each other in
   Lean. The byte tie records the pair and the numeric gate the equivalence; a `den`-level lemma
   that the two constructors denote the same function would make the 78-line allowance a theorem.

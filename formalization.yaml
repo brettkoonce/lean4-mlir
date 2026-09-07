@@ -351,6 +351,34 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    # --- 4d piece 2 (2026-09-07): the collective as an AST node. allReduceMeanF's den is dpMean of
+    #     the per-replica gradient nodes, its emit is the old text verbatim (every *dp* artifact
+    #     byte-identical), and the parser round-trip has its case. DataParallelNode.lean composes
+    #     it with piece 1, with 4b's fold and with the AdamW tail.
+    - declaration: "Proofs.StableHLO.den_allReduceMeanF"   # the node denotes (1/R) sum_r den (g r); rfl
+      file: "LeanMlir/Proofs/Codegen/StableHLO.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.skel_allReduceMeanF_of_spmd"   # under SPMD (every replica's skeleton is replica 0's) the node's skeleton is each replica's
+      file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.den_allReduceMeanF_eq_lossGrad_meanLoss"   # piece 1 composed: the all-reduced node denotes the gradient of the MEAN loss
+      file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.adamW_at_allReduceMeanF"   # den (adamW tail (allReduceMeanF R g)) = adamWStep at dpMean of the per-replica nodes; 4d piece 2's target
+      file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     #
     # --- ResNet-50's two prerequisites: LAMB's tail and BCE's cotangent (status 4l).
     - declaration: "Proofs.StableHLO.lamb_triple_faithful"   # the emitted four-op LAMB tail denotes the (theta', m', v') triple
@@ -1463,8 +1491,8 @@ fidelity:
        to `zeroBiasPrelude`'s zero constant. The bias conjuncts are kept (one
        delegation each) and cover the flag; nothing weakens a theorem, since every
        fold is quantified over op instances. And every gradient node in
-       `mobilenetv2in_rmsdp64` is followed by `all_reduce(add)/4` as emitted text
-       outside the AST, so the tie is at the per-replica node (4k).
+       `mobilenetv2in_rmsdp64` is followed by `all_reduce(add)/4`, so the tie is
+       at the per-replica node (4k; an AST node since 4t, and composable).
 
     4k. DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (2026-09-06).
        Every `*dp*` artifact is ONE program run on `R` replicas. Per parameter,
@@ -1474,7 +1502,9 @@ fidelity:
        trusted carve-out. So every train-step tie in this repo (`r34_net_tiedB`,
        `mnv2_net_tiedB`, `efficientnet_net_tiedG` and the SGD-inline capstones) is
        stated at the PER-REPLICA gradient node and disclaims the collective in its
-       own header, while the ImageNet accuracies the book quotes all come from
+       own header (until 4t, 2026-09-07: since then the collective is the AST
+       node `allReduceMeanF` and the disclaimer composes), while the ImageNet
+       accuracies the book quotes all come from
        four-replica runs. `Foundation/DataParallel.lean` (~340 lines, ~2 s, 15
        declarations) is the R-level half of closing that.
 
@@ -2020,6 +2050,53 @@ fidelity:
        batched index -- the artifact each quoted accuracy comes from, up to one
        replica (4d), which is the next item. One replica; the 4x accumulation is
        `momVNextF`'s other reading; drop-free chain; ViT-Tiny's literal dims.
+
+    4t. DATA PARALLELISM, PIECE 2 -- THE COLLECTIVE AS AN AST NODE (2026-09-07).
+       Until this landed the cross-replica gradient mean in every `*dp*`
+       artifact was `ViTRender.emitGradAllReduce`: `stablehlo.all_reduce(add)`
+       over `replica_groups = [[0..R-1]]` and a divide by `R`, emitted as TEXT
+       outside the `SHlo` AST, a declared trusted carve-out that every
+       train-step tie disclaimed in its own header (4d, 4g, 4k, 4r, 4s and the
+       ResNet-50 tie). It is now `SHlo.allReduceMeanF R hR t ds g`: `R` graphs
+       of ONE skeleton -- the same program on `R` replicas, each with its own
+       values, which is what SPMD data parallelism IS -- with
+       `den = (1/R) sum_r den (g r)` (piece 1's `dpMean` of the per-replica
+       denotations), `skel` reading replica 0, a `Raw`/`Tok` case whose emit is
+       the old text verbatim, and a `parseStack` case so `roundtrip` still
+       covers every skeleton. Every batched render now calls
+       `prettyAllReduceMean` where it called the text function (twelve sites in
+       seven files, cifar8's included). MEASURED: all 68 committed `*dp*`
+       artifacts re-render byte-identically off the node, because the
+       `%arsum{t}`/`%armean{t}` names are carried by the tag rather than drawn
+       from `fresh`. The one deliberate byte movement is the artifacts' own
+       banner comment, which said the collective was outside the theorems and
+       now says it is a node -- comment lines only, and the forward-prefix
+       audits are unaffected.
+
+       WHAT THE NODE BUYS, stated once in `Foundation/DataParallelNode.lean`
+       (five declarations, 3-axiom clean): `den_allReduceMeanF_eq_dpMean`
+       (the node denotes piece 1's mean); `skel_allReduceMeanF_of_spmd` (under
+       `forall r, skel (g r) = skel (g 0)` -- free in every render, whose operand
+       family is `.operand grad` at every `r` -- the node's skeleton is each
+       replica's, so `pretty` prints one program); 
+       `den_allReduceMeanF_eq_lossGrad_meanLoss` (piece 1 composed: if each
+       replica's node denotes its loss gradient, the all-reduced node denotes
+       the gradient of the MEAN loss); `den_allReduceMeanF_convWeightGradB`
+       (4b's fold composed, one op kind shown, every `*GradB` the same way); and
+       `adamW_at_allReduceMeanF` -- `den (adamW tail (allReduceMeanF R g))` is
+       `adamWStep` at `dpMean` of the per-replica gradient nodes, the target
+       statement 4d's scoping wrote down. The same one line closes it for the
+       heavy-ball, RMSProp and LAMB tails.
+
+       WHAT IT DOES NOT SAY. Piece 3 is untouched: that the `R` graphs' values
+       are the replica slices of ONE host batch, that every replica starts from
+       the same parameters and that `replica_groups` names all `R` devices are
+       the driver's (`VerifiedTrain.lean`, `ffi/pjrt_ffi.c`) and the
+       `*-dp-check` gates'. The per-replica gradient node's operand values
+       differ per replica by construction; nothing here says what they are.
+       The lowerer's `all_reduce` is trusted exactly as every other op's
+       lowering is. Every tie header now says "feeds `allReduceMeanF`" where
+       it said "emitted text outside the AST".
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

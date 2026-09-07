@@ -541,17 +541,18 @@ def mnv2StatSigList : List (String × String) :=
     into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked; `%lr`/`%bc1`/`%bc2` are runtime
     `tensor<f32>` args, so one render serves a whole LR schedule.
 
-    At `replicas > 1` the gradient is first averaged by `ViTRender.emitGradAllReduce`. **That
-    collective is a TRUSTED CARVE-OUT** (handoff §5) — emitted text, not `pretty` of an AST node,
-    so outside every faithfulness theorem here. The AdamW triple consumes the averaged gradient as
-    an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
+    At `replicas > 1` the gradient is first averaged by `prettyAllReduceMean` — `pretty` of the
+    `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean of the
+    per-replica gradient nodes; until then `ViTRender.emitGradAllReduce`, emitted text and a
+    declared carve-out, which the node re-emits verbatim. The AdamW triple consumes the averaged
+    gradient as an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
     `replicas ≤ 1` this emits nothing and threads the raw gradient, so the single-device render
     stays byte-identical — the cheap self-check that the insertion is inert. -/
 private def adamOneM (B : Nat) (replicas : Nat) (g : PGradM) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
   let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
@@ -582,7 +583,7 @@ private def rmsOneM (B : Nat) (replicas : Nat) (g : PGradM) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
   let (cW, nW) ← pretty B (.momVNextF s!"%{g.nm}" "%wd" g.ds 0 z (.operand gAvg z))
   let gr : SHlo n := .operand nW z
   let (cS, nS) ← pretty B (.adamVNextF s!"%{g.nm}v" "%rho" "%orho" g.ds 0 z gr)
@@ -1004,9 +1005,9 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // ── MobileNetV2 batch-BN AdamW train step: every line is pretty(verified AST node) ──\n"
        else
         s!"    // ── MobileNetV2 batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
-        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
-        "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
+        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
+        "    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
