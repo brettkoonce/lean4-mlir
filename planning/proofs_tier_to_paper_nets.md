@@ -69,7 +69,7 @@ below; nothing in them is open.
 
 | target | cost | what a fresh session needs to know |
 |---|---|---|
-| ⭐ **3.6 MobileNetV4-Conv-M** — the only open item, and a planning doc of its own is the first deliverable | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
+| ⭐ **3.6 MobileNetV4-Conv-M** — the only open item; ✅ its planning doc is `planning/mnv4_proofs_tier.md` (2026-09-07) — START THERE, not at §3.6 | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
 
 ⛔ **Do NOT write, and the reason is a closed thread, not an oversight.** Every remaining row for
 ResNet-34, MobileNetV2 and ResNet-50 is a float BUDGET (T4/T5), and
@@ -877,6 +877,18 @@ difference is that ResNet-34's dimensions are LITERALS the kernel can evaluate a
 at the artifact its 76.66% comes from.
 
 ### 3.6 MobileNetV4-Conv-M: all six tiers
+
+⛔⛔ **SUPERSEDED 2026-09-07 by `planning/mnv4_proofs_tier.md`, and the "(0) FIRST" row below was
+WRONG.** It said the first session must build "the three pieces `MobileNetV4BackB0.lean`'s header
+names as missing — the fused stage, the head, the strided body". All three exist in that file
+(`mnv4FusedStage_faithful`, `mnv4Head_faithful`, `mnv4UibPreStridedBody_faithful`, all in
+`AuditAxioms`); what was stale was the file's OWN `## Scope` paragraph, which this row copied.
+Seventh instance of §5's "an audit's named gap can be the wrong one", and the cheapest — the
+declaration list was one `grep` away. The rest of this section is kept as the record; the plan,
+the order and the traps are in the new doc. ⚠ Two facts the new doc adds that this section did
+not know: Conv-M has NO quoted accuracy (Conv-S's 87.36% is a superseded spec; the ImageNet port
+has not run), and the Conv-M empirical ties are still OWED (`planning/mnv4_convm_ties_todo.md`).
+
 
 **What exists — re-read 2026-09-07, and it is more than this row said.** `mnv4Blocks`
 (`MobileNetV4RenderB.lean`), the 21-row `UibSpec` table transcribed once from
