@@ -580,6 +580,36 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- MobileNetV4-Conv-M's T1 and T2 at batch BatchNorm, the fused stage + 21 UIB blocks +
+    #     the two-conv head. The whole trunk is one CertLayer, so the apex binds two hypotheses
+    #     (the stem's kink clause, the trunk's .ok) rather than ResNet-50's thirty-three.
+    #     No accuracy is quoted for Conv-M; the ties (forward 3.770e-06, gradient inside the
+    #     reference's fp32 floor, both 2026-09-07) are what pin these to the reference's function.
+    - declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful"   # T2: the typed graph at mnv4FwdChainB's own tokens denotes the whole-net batch-BN forward; SSA names read off the block table, which is what pins the shape-identical rows apart
+      file: "LeanMlir/Proofs/Architectures/MobileNetV4FullB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.StableHLO.mobilenetv4ForwardB_full_has_vjp_at"   # T1: whole-net input-VJP at bnBatchLA; stem composed by vjp_comp_at because no render emits a gradient into %x, trunk from CertLayer; N and nCls binders, no epsilon hypotheses
+      file: "LeanMlir/Proofs/Architectures/MobileNetV4FullBVJP.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.StableHLO.mobilenetv4ForwardB_full_has_vjp_at_correct"   # and it is the pdiv-contracted Jacobian of the whole net, at every batch size and both shipped class counts
+      file: "LeanMlir/Proofs/Architectures/MobileNetV4FullBVJP.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.StableHLO.mnv4PreStridedBodyOfRow_faithful"   # the three stride-2 rows, row-typed like mnv4BodyOfRow; Conv-M has no post-strided row so that arm stays certified and unexercised
+      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
     #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.

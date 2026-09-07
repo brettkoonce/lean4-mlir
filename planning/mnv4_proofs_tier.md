@@ -6,6 +6,85 @@ package on that thread. ▶ START at §0 — it corrects the row that scoped thi
 work. Every claim below names the file it was read from; where it says "check", nothing was
 read and the first session must.
 
+---
+
+## ✅ PROGRESS, 2026-09-07
+
+| session | state |
+|---|---|
+| **0(a)** record fixes | ✅ DONE (`015dcec`). The stale `## Scope`, `mnv4Stage14`'s Conv-S family order (with a new `#guard` deriving its argument order from `mnv4Blocks`), and every Conv-S count in the render's docstrings — params, block split, stat slots, all three artifacts' arities — re-derived from the committed artifact. `grad_tie.py` 158/104 → 233/154. Four yaml rows for the block tier. |
+| **0(b)** the owed ties | ✅ DONE (`b9cc8d5`) and **both PASS**. Forward `max \|Δ\| = 3.770e-06`; gradient 0 of 232 live parameters outside the reference's own relu-discontinuity floor, in raw and `--nokink` mode. ⭐ Block ORDER is now pinned by measurement. ⛔ Two setup findings recorded in `mnv4_convm_ties_todo.md`: `--device=local-task` SEGFAULTS on `@mnv4_fwd` (empty stderr, `local-sync` runs the same vmfb in 1 s) and both scripts hard-coded a nonexistent `iree-compile`. |
+| **1** T1 + T2 | ✅ DONE. `Architectures/MobileNetV4FullB.lean` (886 lines) + `MobileNetV4FullBVJP.lean` (188). Both build in ~2 s each. |
+| **2** T3 | open |
+| **3** T6 | open |
+| **4** the number | open — a GPU decision, see §2 |
+
+### What session 1 actually cost — ⛔ and the ONE finding worth carrying to any future net
+
+⛔⛔⛔ **THE HEADLINE, and it contradicts what §2 below recommends: a net whose resolutions are
+LITERALS cannot afford the proof idioms a net with a resolution BINDER can.** ResNet-50's `q` keeps
+`den` and every width-indexed `rfl` STUCK; MNv4's 224/112/56/28/14/7 let them RUN, into terms with
+hundreds of thousands of elements. **Four separate blow-ups in this session trace to exactly that
+one cause**, and each looked like a different problem:
+
+1. **A graph builder pinned to literal widths kernel-times-out.** `mnv4StemGraphB` at
+   `ic := 3, oc := 32, h := 112` makes `den_batchOp_convStridedXla`'s `rfl` a claim about
+   150528-element tensors and the kernel tries to REDUCE it — 67 seconds, then failure. Stated at
+   binders it is 2 seconds, and instantiating at the net's literals is free (applying a proven
+   lemma, not proving one). ▶ `mnv2StemGraphB` and `r50StemGraphB` are generic for this reason;
+   it reads as a stylistic habit and is not.
+2. **`simp only [CertLayer.comp]` rewrites to the full structure literal** — `fwd`, `ok`, `diff`,
+   `vjp`, `graph` AND `faithful` — and only then projects `.fwd`. Three `rfl` projection lemmas
+   (`comp_fwd`, `residual_fwd`, `id'_fwd`) fix it; they belong in `Foundation/CertifiedChain.lean`
+   and are parked in this leaf with a note, per the root-file rule.
+3. ⛔⛔ **The whole trunk CANNOT be one `CertLayer`, and this is the expensive one.**
+   `fused.comp (res28.comp (… .comp head))` elaborates fine and reads beautifully. But every later
+   statement must peel `CertLayer.comp` to reach `.fwd`, and at literal resolutions **all four
+   spellings of that peel fail**: `rfl`, `simp only [CertLayer.comp_fwd]`, inside the T2 capstone,
+   and as a standalone `mnv4NetLayer_fwd_apply` lemma — each ~10 minutes of elaboration followed
+   by a `(kernel) deterministic timeout`. ⚠ The groups' OWN five-stage `comp` chains are fine; it
+   is composing the compositions, under something that can start unfolding, that is not.
+   ▶ **The fix is seven named prefixes** (`mnv4Pre0` … `mnv4Pre6`) — R50's shape at seven stages
+   instead of eighteen.
+4. **The T2 capstone must be `rw`, not `simp only`.** The identical seven rewrites: `simp only`
+   elaborates ~9 minutes and dies in the kernel, `rw` takes seconds, because `simp only` rebuilds
+   the whole term at each step and `rw` works outside-in.
+
+⭐ **What the `CertLayer` route still bought, which is a lot.** `Mnv4SmoothAt` binds **eight**
+hypotheses — the stem's kink clause and one `.ok` per group — where ResNet-50's apex binds **33**,
+and MNv4 binds **no `0 < ε` hypothesis at all** because those live inside `UibParams` and
+`Mnv4BWeights`. The ~60 relu clauses are still assembled by `comp` at each stage's own input and
+never written down. ⚠ But the plan's "the apex takes two hypotheses" was optimistic: it is eight.
+
+⭐ `2 * 28` and `56` unify across every stride join with no transport, and `CertLayer.residual`
+applies at each of the eighteen skip rows without one either, because `s.oc` and `s.ic` reduce to
+the same literal there. Both were free.
+
+⚠ **Two more, smaller:**
+
+* **A `let` chain does not stop a term from doubling.** Eighteen skips each need their input
+  subtree twice; `let`-threading looks like it fixes that and does not, because
+  `simp only [<the def>]` ZETA-EXPANDS the lets. What works is a folded combinator
+  (`mnv4SkipGraphB`) with its own one-step faithfulness lemma, so `den e` occurs once.
+* **The graph builders are row-generic and so are their faithfulness lemmas** — one theorem serves
+  all thirteen ExtraDW rows, with `s.preDWk ≠ 0` / `s.postDWk ≠ 0` discharged by `decide` at each
+  concrete row, so what selects a builder is the TABLE. ⛔ A row-generic SKIP builder is impossible
+  (`.addVB` needs `s.oc` and `s.ic` to be the same type, which they are not at a variable row), so
+  the body builder stops before the add.
+
+⚠ `mnv4PreStridedBodyOfRow` (+ `_faithful`) was added to `MobileNetV4BackB0.lean` as
+`mnv4BodyOfRow`'s sibling — the row-typed section's missing third member. There is deliberately no
+post-strided twin: Conv-M has no such row, so a row-typed wrapper for that arm would have no
+possible argument.
+
+✅ **Gates:** `lake build Certs` 3999 green, `git diff verified_mlir/` EMPTY, all twelve MNv4
+declarations 3-axiom clean in `AuditAxioms`, `check_audit_coverage.py` green,
+`docstring-checkrefs` 1681 citations resolve. ⭐ And the T2 graph was checked against the committed
+bytes: all **247** SSA names it writes appear in `mnv4_fwd.mlir`, covering all **233** of its
+declared parameters — nothing missing in either direction.
+
+---
+
 **The one-paragraph version.** `Foundation/MobileNetV4BackB0.lean` is complete at the block and
 stage level: every UIB family, the three stride-2 forms, the fused stage and the head are
 `CertLayer`s with backward-graph faithfulness, the dispatch reads the block table, and the

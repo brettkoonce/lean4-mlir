@@ -204,6 +204,7 @@ import LeanMlir.Proofs.Foundation.ViTBackNet
 import LeanMlir.Proofs.Foundation.ResNet50BackNet
 import LeanMlir.Proofs.Foundation.BackNetFolds
 import LeanMlir.Proofs.Foundation.MobileNetV4BackB0
+import LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Foundation.EfficientNetBackNet
 import LeanMlir.Proofs.Foundation.LinearFaithfulPoC
 import LeanMlir.Proofs.Float.E4M3FaithfulPoC
@@ -4592,6 +4593,29 @@ open Proofs
 #print axioms StableHLO.mnv4FusedStage_faithful
 #print axioms StableHLO.mnv4Head_faithful
 #print axioms StableHLO.mnv4BodyOfRow_faithful
+#print axioms StableHLO.mnv4PreStridedBodyOfRow_faithful
+
+-- MNv4's NET level (T1, T2) -- the last net in proofs_tier_to_paper_nets.md §2 with nothing here.
+-- ⭐⭐ The whole trunk is ONE `CertLayer`: 24 stages composed with `comp`/`residual`, so the apex
+-- takes TWO hypotheses (the stem's kink clause and the trunk's `.ok`) where ResNet-50's takes 33
+-- and needs sixteen hand-written prefix definitions. `.ok` is ~60 relu clauses that `comp`
+-- assembled stage by stage, each stated at the activation its own stage sees.
+-- ⚠⚠ The STEM is OUTSIDE that chain and must be: no render emits a gradient into `%x`, so there
+-- is no `convStridedXlaBackBatched` token and no backward graph for a `CertLayer` to be faithful
+-- to. B0's `enetTrunk` takes its stem as a parameter for the same reason, and the apex is one
+-- `vjp_comp_at` over the two halves.
+-- ⚠ T2's SSA names are read off the block table (`s.p`), never passed in. That is what pins
+-- identity between rows 4/5/10, 12/18 and 15/19/20, which are shape-identical and therefore have
+-- the same `UibParams` type -- typing pins shape, names pin identity.
+-- ⚠⚠ No accuracy is quoted for Conv-M. What pins these tiers to the reference's function is the
+-- 2026-09-07 tie pair: forward max |Δ| = 3.770e-06, gradient inside the reference's own fp32 floor.
+#print axioms StableHLO.mobilenetv4ForwardB_full_has_vjp_at
+#print axioms StableHLO.mobilenetv4ForwardB_full_has_vjp_at_correct
+#print axioms StableHLO.mnv4FwdGraphB_full_faithful
+#print axioms StableHLO.mnv4ExtraDWBodyGraphB_faithful
+#print axioms StableHLO.mnv4ConvNeXtBodyGraphB_faithful
+#print axioms StableHLO.mnv4FfnBodyGraphB_faithful
+#print axioms StableHLO.mnv4PreStridedGraphB_faithful
 
 -- EfficientNet — §8e's VJP-without-backward-graph holes, closed. ⚠ Of the four the sweep flagged,
 -- only TWO were real: `mbStridedFwdB_has_vjp` and `mbDownBodyB_has_vjp` are definitionally the

@@ -767,6 +767,35 @@ theorem mnv4BodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams s)
 -- Every non-`stride2` row has `oc = ic`, so `CertLayer.residual` applies to all eighteen of them.
 #guard (mnv4Blocks.filter (fun s => !s.stride2)).all (fun s => s.oc == s.ic)
 
+/-- ⭐ **A PRE-STRIDED body built entirely from its table row** — `mnv4BodyOfRow`'s sibling for the
+    three stride-2 rows (1, 3, 11), and the row-typed section's third member.
+
+    ⚠ The pre-DW is NOT a slot here: it carries the stride, so it maps `(2h, 2w) ↦ (h, w)` and
+    cannot be `id'` — that is the whole reason the collapse stops at stride 2. The POST-DW still is
+    a slot, dispatched on `s.postDWk` off the same table row, even though all three Conv-M rows
+    happen to fill it.
+
+    ⛔ There is deliberately no `mnv4PostStridedBodyOfRow`: Conv-M has **no** post-strided row
+    (Conv-S had one), so a row-typed wrapper for that arm would have no possible argument. The
+    un-typed `mnv4UibPostStridedBody` above stays, certified and unexercised. -/
+noncomputable def mnv4PreStridedBodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
+    CertLayer (N * (s.ic * (2 * s.h) * (2 * s.h))) (N * (s.oc * s.h * s.h)) :=
+  mnv4UibPreStridedBody N
+    (mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2)
+    (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
+    (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2)
+    (mnv4ProjectLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
+
+/-- ⭐ **The row-built pre-strided body's backward graph denotes its VJP.** As for
+    `mnv4BodyOfRow_faithful`, the content is not the proof but that its subject is determined by
+    `s` alone. -/
+theorem mnv4PreStridedBodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams s)
+    (x : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))))
+    (hx : (mnv4PreStridedBodyOfRow N s p).ok x) (e : SHlo (N * (s.oc * s.h * s.h))) :
+    den ((mnv4PreStridedBodyOfRow N s p).graph x e)
+      = ((mnv4PreStridedBodyOfRow N s p).vjp x hx).backward (den e) :=
+  (mnv4PreStridedBodyOfRow N s p).faithful x hx e
+
 /-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
 
     The spatial ladder is 56 → 28 → 14 → 7 with the reductions at blocks 1, 3 and 11, and the

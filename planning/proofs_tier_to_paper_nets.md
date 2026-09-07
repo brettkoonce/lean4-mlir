@@ -142,7 +142,7 @@ wanting only "what is open" should read the NEXT SESSION table at the top instea
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
 | MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 158 params ⛔ | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
 | ResNet-50 | `resnet50ForwardB_full`, [3,4,6,3] bottlenecks, batch BN, `q` a binder | ✓ 2026-09-06 | ✓ 2026-09-06 | ✓ 161 params, loss a binder | ✗ | ✗ | ✓ 2026-09-07 | none |
-| MobileNetV4-Conv-M | none; UIB bodies as `CertLayer` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | none |
+| MobileNetV4-Conv-M | `mobilenetv4ForwardB_full`, 21-row Conv-M table, batch BN, stem + fused + five resolution groups + head | ✓ 2026-09-07 | ✓ 2026-09-07 `mnv4FwdGraphB_full_faithful` | ✗ | ✗ | ✗ | ✗ | none. ⚠⚠ NO ACCURACY IS QUOTED for Conv-M — no Imagenette run, no verified ImageNet run; what pins these tiers to the reference is the 2026-09-07 tie pair (fwd 3.770e-06, grad inside the reference's own fp32 floor) |
 
 ⛔ **The T3 counts were the `convBias := true` census and are corrected here (2026-09-06).** Every
 render in the suite takes `convBias := false` by default and no writer passes otherwise — each conv

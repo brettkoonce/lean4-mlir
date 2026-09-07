@@ -722,6 +722,28 @@ lean_lib «Certs» where
              -- (ResNet50FullB.lean, ResNet50FullBVJP.lean).
              `LeanMlir.Proofs.Architectures.ResNet50FullB,
              `LeanMlir.Proofs.Architectures.ResNet50FullBVJP,
+             -- ⭐⭐ MOBILENETV4-CONV-M's T1 and T2 at batch BatchNorm -- the last net in
+             -- planning/proofs_tier_to_paper_nets.md §2's table with nothing at the net level.
+             -- ⭐⭐ The whole trunk is ONE CertLayer: 24 stages composed with CertLayer.comp and
+             -- CertLayer.residual, so .fwd IS the forward, .ok IS the ~60-clause smoothness
+             -- hypothesis (assembled stage by stage rather than written down), .vjp IS the
+             -- whole-trunk HasVJPAt and .faithful IS the whole-trunk BACKWARD-graph faithfulness.
+             -- The apex therefore takes TWO hypotheses where ResNet-50's takes 33, and needs no
+             -- r50Pre_k prefix chain at all.
+             -- ⚠⚠ The STEM sits outside that chain and cannot be inside it: no render emits a
+             -- gradient into %x, so there is no convStridedXlaBackBatched token and hence no
+             -- backward graph for a CertLayer to be faithful to. EfficientNet-B0's enetTrunk takes
+             -- its stem as a parameter for exactly this reason.
+             -- ⚠ The 21 block rows are NAMED constants pinned to mnv4Blocks by #guard, not list
+             -- indices: UibParams (mnv4Blocks[3]!) in a type forces whnf through List.get! at
+             -- every use. ⚠ Rows 4/5/10, 12/18 and 15/19/20 are shape-identical, so what pins
+             -- their identity is the SSA NAMES the T2 graph reads off the row, not the types.
+             -- ⚠ TWO padding phases in one net: XLA-SAME at the stem, symmetric everywhere else.
+             -- ⚠⚠ No accuracy is quoted for Conv-M -- no Imagenette run, no verified ImageNet
+             -- run; what pins these tiers to the reference is the 2026-09-07 tie pair
+             -- (MobileNetV4FullB.lean, MobileNetV4FullBVJP.lean).
+             `LeanMlir.Proofs.Architectures.MobileNetV4FullB,
+             `LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP,
              -- ⭐⭐ §3.5(c): RESNET-50's T3 — the §1 fold and the §1a tie at batch BatchNorm.
              -- ⭐⭐ ZERO new op-kind lemmas: ResNet34FaithfulPoCB's six are statements about OP
              -- KINDS at full generality, and the bottleneck's third conv is one more instance of
