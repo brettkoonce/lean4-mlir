@@ -623,6 +623,15 @@ lean_lib «Certs» where
              -- computes it internally; that is the whole of the loss axis, since the per-block
              -- ties were already forall-cot (EfficientNetTiePoCG.lean).
              `LeanMlir.Proofs.Architectures.EfficientNetTiePoCG,
+             -- ⭐⭐ 4b's capstone for ConvNeXt-T, THREE axes at once: the un-fused *GradB nodes,
+             -- the smoothed loss at a general target, and the BATCHED index (the per-example
+             -- ConvNeXtTiePoC was at a single image with the batch outside the AST). Every
+             -- activation is batchMap N of the fused file's prefix and every cotangent is
+             -- batchMapAux N of its chain — honest for this net because no ConvNeXt op couples
+             -- examples. N and nC are binders; no smoothness hypothesis (GELU). The loss chain is
+             -- smoothedLossCotGraphDiv, the softmaxDiv∘expe spelling at the plain N·K width that
+             -- ConvNeXtRenderB and ViTRenderB emit (SmoothedLossCot.lean) (ConvNeXtTiePoCGB.lean).
+             `LeanMlir.Proofs.Architectures.ConvNeXtTiePoCGB,
              -- ⭐⭐ 4d piece 1: DATA PARALLELISM at the R-level — what function a *dp* run
              -- actually minimised. Every *dp* artifact all-reduces each parameter gradient and
              -- divides by R as emitted TEXT outside the SHlo AST, so every tie in the repo

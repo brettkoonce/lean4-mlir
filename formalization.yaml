@@ -303,6 +303,22 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    # --- 4b's capstone for ConvNeXt-T (2026-09-07), THREE axes: the *GradB nodes, the smoothed
+    #     loss at a general target, and the BATCHED index (its per-example capstone was at a single
+    #     image). N and nC are binders; no smoothness hypothesis (GELU). The loss chain is the
+    #     expe-then-softmaxDiv spelling at the plain N.K width ConvNeXt and ViT emit.
+    - declaration: "Proofs.CnxTiePoCGB.cnx_net_tiedGB"   # all 182 ConvNeXt-T gradient nodes at their batched chain cotangent and the smoothed loss; N, nC binders
+      file: "LeanMlir/Proofs/Architectures/ConvNeXtTiePoCGB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.smoothedLossCotGraphDiv_row"   # the six-op chain at the expe/softmaxDiv spelling, per example, IS the smoothed loss's gradient / B
+      file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     #
     # --- Data parallelism: what function a *dp* run minimised (status 4k).
     - declaration: "Proofs.dpMeanGrad_eq_grad_meanLoss"   # the all-reduced mean gradient IS the gradient of the mean of the per-replica losses
@@ -1086,8 +1102,10 @@ fidelity:
        it to an optimizer tail. The decision was to re-state every fold at the
        gradient node -- the `*Sgd_eq_grad` family is `rfl` and
        ResNet34FaithfulPoCB was the template -- which covers every tail at once;
-       that is now done for all five nets, and the capstones are not yet
-       re-pointed. The tails are certified
+       that is now done for all five nets, and the capstones are re-pointed for
+       four of them (ResNet-34, MobileNetV2, ResNet-50 at batch BN; B0 and
+       ConvNeXt-T at their batched chains, 4f/4r) -- ViT-Tiny's is the one
+       left. The tails are certified
        (adamW_triple_faithful, mom_pair_faithful, rmsProp_triple_faithful,
        clipGrad_faithful, dropPathB_faithful; EMA and accumulation reuse
        adamMNextF / momVNextF) except LAMB, which has no faithfulness theorem,
@@ -1147,6 +1165,8 @@ fidelity:
        than inside `den` (`SmoothedLossCot`'s statement is at the batched index).
        A capstone written for them today would be about a chain 4c legs 3 and 4
        will retire, so it would have to be written twice. Their legs come first.
+       -- Both legs landed 2026-09-07 (4p, 4q), and ConvNeXt-T's capstone
+       followed the same day (4r); ViT-Tiny's is the one still open.
 
        NO NEW MATHEMATICS, AND OP KINDS ARE SHARED MORE THAN THE FILE NAMES
        SUGGEST. The fusion is `rfl` -- the 29 `*Sgd_eq_grad` / `*SgdB_eq_grad`
@@ -1917,6 +1937,48 @@ fidelity:
        each other in Lean: the byte tie records the pair and the numeric gate
        the equivalence. 4f's ConvNeXt and ViT capstones and 4d piece 2 are
        no longer gated on anything.
+
+    4r. 4b's CAPSTONE RE-POINTING, CONVNEXT-T (2026-09-07). `ConvNeXtTiePoC.lean`
+       ties all 182 parameters of the SGD-inline `convnext_train_step.mlir` at
+       the fused `theta - lr * g` ops, at a hard label, PER EXAMPLE -- the batch
+       sat outside the AST in `pretty`'s argument. `ConvNeXtTiePoCGB.lean` is
+       that statement re-pointed along THREE axes, one more than B0's (4f):
+       (1) the OPTIMIZER FORM -- every conjunct is at the raw `*GradB` node that
+       `convnext_adam_train_step.mlir` and every `convnextin_*` artifact emit,
+       and `ConvNeXtFaithfulPoCGB.lean` (4q) is the fold each delegates to;
+       (2) the LOSS -- `g` is a binder, instantiated at the smoothed chain at a
+       general target; (3) the INDEX -- `N` is a binder, every activation is
+       `batchMap N` of the fused file's per-example prefix and every cotangent
+       `batchMapAux N` of its chain. `nC` is a binder too (10 on Imagenette,
+       1000 on ImageNet). Thirteen declarations plus the three loss-chain ones,
+       all 3-axiom clean; the file elaborates in ~3 s against the fused one's
+       16M-heartbeat budget, because every lift is of an irreducible prefix.
+
+       THE LIFT IS HONEST FOR THIS NET AND FOR NO BATCHNORM NET. LayerNorm,
+       GELU, the convolutions, layer scale and the residual add are all
+       batch-separable, so the batched op IS the per-example op under
+       `batchMap` -- which is what the `*B` constructors' `den` arms say. That is
+       why the transformation is mechanical here where ResNet-34's and
+       MobileNetV2's ties (4g, 4k) needed a batch-BN foundation first.
+
+       THE LOSS CHAIN NEEDED ITS OWN SPELLING. `smoothedLossCotGraph` (4g) is
+       the six-op chain as ResNet-34, MobileNetV2, B0 and R50 emit it --
+       `softmaxRow` at one row per example, width `N.(1.K)`, hence the
+       `rowB`/`unrowB` casts. ConvNeXt and ViT spell the row softmax as
+       `batchOp expe` then `batchOp softmaxDiv` and run the chain at the plain
+       width `N.K`. `smoothedLossCotGraphDiv` is that AST;
+       `smoothedLossCotGraphDiv_row` is the same statement as
+       `smoothedLossCotGraph_row` at it (each example's row is the smoothed
+       loss's gradient over B, under `sum t = 1` only), with no cast anywhere.
+       It serves ViT's capstone unchanged.
+
+       WHAT IT DOES NOT SAY. One replica (4d). Stated at the drop-free chain:
+       the `*drop*` artifacts' parameter nodes are the same constructors and
+       the folds are `forall cot`, but their cotangent chain carries the
+       `dropPathB` sites this thread does not name. ConvNeXt-T's literal widths;
+       S and B are other nets. The `%dgi..%dgapf` GAP backward is hand-written
+       text on both chains (a declared carve-out); its value here is
+       `globalAvgPoolFlat_has_vjp.backward`, as in the fused file.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

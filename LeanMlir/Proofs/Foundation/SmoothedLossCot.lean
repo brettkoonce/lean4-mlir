@@ -193,4 +193,55 @@ theorem smoothedLossCotGraph_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
   rw [smoothedLossCotGraph_den, smoothedCE_grad K hK α _ _ ht j, hsm, hti]
   ring
 
+-- ════════════════════════════════════════════════════════════════
+-- § The same chain at the `softmaxDiv ∘ expe` spelling ConvNeXt and ViT emit
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The six-op chain as `ConvNeXtRenderB` and `ViTRenderB` emit it.** Those two renders spell the
+    row softmax as `batchOp expe` then `batchOp softmaxDiv` — the per-example
+    `softmaxDiv (expe ·)` pair the SGD-inline files tie (`cnxLossCot_den`), lifted — and run the
+    whole chain at the plain width `N·K` rather than `N·(1·K)`, so there is no row index and no
+    `rowB`/`unrowB` cast at the head. Same six functions, different AST;
+    `smoothedLossCotGraphDiv_den` says the denotation is `smoothedLossCotGraph`'s, and
+    `smoothedLossCotGraphDiv_row` is the per-example statement at `batchSlice`. -/
+noncomputable def smoothedLossCotGraphDiv (N K : Nat) (α B : ℝ)
+    (aStr negAK bStr logN ohN : String) (logits t : Vec (N * K)) : SHlo (N * K) :=
+  .divConstB bStr B
+    (.shiftB negAK (-(α / K))
+      (.addVB
+        (.subB (.batchOp (N := N) (.softmaxDiv (n := K))
+                  (.batchOp (N := N) (.expe (n := K)) (.operand logN logits)))
+               (.operand ohN t))
+        (.scaleB aStr α (.operand ohN t))))
+
+/-- **What the chain denotes**, coordinatewise: `(softmax(logits_n) − t + α·t − α/K) / B`, the
+    per-example softmax lifted by `batchMap` — the same function `smoothedLossCotGraph_den` reads
+    off the `softmaxRow` spelling. -/
+theorem smoothedLossCotGraphDiv_den (N K : Nat) (α B : ℝ) (aStr negAK bStr logN ohN : String)
+    (logits t : Vec (N * K)) (i : Fin (N * K)) :
+    den (smoothedLossCotGraphDiv N K α B aStr negAK bStr logN ohN logits t) i
+      = (StableHLO.batchMap N (softmax K) logits i - t i + t i * α + -(α / K)) / B := by
+  simp only [smoothedLossCotGraphDiv, den, denOp, StableHLO.batchMap, softmax,
+    Equiv.symm_apply_apply]
+
+/-- ⭐ **Each example's row of the emitted cotangent is the smoothed loss's gradient at that
+    example's logits, divided by the batch** — `smoothedLossCotGraph_row` at the `softmaxDiv`
+    spelling and the plain `N·K` index, where the example is `batchSlice N K · n` with no
+    `Mat.unflatten`. The hypothesis is only that the example's target sums to 1. -/
+theorem smoothedLossCotGraphDiv_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
+    (aStr negAK bStr logN ohN : String) (logits t : Vec (N * K)) (n : Fin N) (j : Fin K)
+    (ht : ∑ k : Fin K, StableHLO.batchSlice N K t n k = 1) :
+    den (smoothedLossCotGraphDiv N K α B aStr negAK bStr logN ohN logits t)
+        (finProdFinEquiv (n, j))
+      = (pdiv (fun z' : Vec K => fun _ : Fin 1 =>
+              softCE K (smoothTarget K α (StableHLO.batchSlice N K t n)) z')
+            (StableHLO.batchSlice N K logits n) j 0) / B := by
+  have hsm : StableHLO.batchMap N (softmax K) logits (finProdFinEquiv (n, j))
+      = softmax K (StableHLO.batchSlice N K logits n) j := by
+    simp only [StableHLO.batchMap, Equiv.symm_apply_apply]
+    rfl
+  have hti : t (finProdFinEquiv (n, j)) = StableHLO.batchSlice N K t n j := rfl
+  rw [smoothedLossCotGraphDiv_den, smoothedCE_grad K hK α _ _ ht j, hsm, hti]
+  ring
+
 end Proofs

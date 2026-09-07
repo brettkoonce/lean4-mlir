@@ -129,6 +129,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullB
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB
 import LeanMlir.Proofs.Architectures.EfficientNetTiePoCG
+import LeanMlir.Proofs.Architectures.ConvNeXtTiePoCGB
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
@@ -5857,6 +5858,29 @@ open Proofs
 #print axioms Proofs.EnetTiePoCG.enet_stem_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_head_tiedG
 #print axioms Proofs.EnetTiePoCG.efficientnet_net_tiedG
+
+-- ════════════════════════════════════════════════════════════════
+-- 4b's CAPSTONE RE-POINTING, CONVNEXT-T (ConvNeXtTiePoCGB.lean, 2026-09-07)
+-- ════════════════════════════════════════════════════════════════
+-- ConvNeXtTiePoC ties all 182 parameters of the SGD-inline convnext_train_step at the FUSED ops,
+-- at a hard label, PER EXAMPLE with the batch outside the AST. This is that statement re-pointed
+-- along THREE axes — one more than B0's, because this net's per-example capstone was at a single
+-- image: (1) the RAW *GradB nodes convnext_adam_train_step and every convnextin_* artifact emit
+-- (ConvNeXtFaithfulPoCGB is the fold each conjunct delegates to); (2) the SMOOTHED loss at a
+-- general target, via smoothedLossCotGraphDiv — the softmaxDiv∘expe spelling at the plain N·K
+-- width ConvNeXt and ViT emit, so no rowB/unrowB cast; (3) the BATCHED index: every activation is
+-- batchMap N of the fused file's prefix and every cotangent batchMapAux N of its chain, honest
+-- because no ConvNeXt op couples examples (LayerNorm, GELU, conv, layer scale, the residual add
+-- are all batch-separable and the *B constructors' den arms say so).
+-- ⭐ N and nC are binders; no smoothness hypothesis anywhere (GELU has no kink). The head takes g
+-- as a BINDER. ⛔ ONE REPLICA (4d); stated at the drop-free chain; ConvNeXt-T's literal widths.
+#print axioms Proofs.smoothedLossCotGraphDiv_den
+#print axioms Proofs.smoothedLossCotGraphDiv_row
+#print axioms Proofs.CnxTiePoCGB.cnx_block_ch_tiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_down_ch_tiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_stem_ch_tiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_head_ch_tiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_net_tiedGB
 
 -- ════════════════════════════════════════════════════════════════
 -- 4d PIECE 1: DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel.lean, 2026-09-06)

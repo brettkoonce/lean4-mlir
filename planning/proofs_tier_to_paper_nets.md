@@ -12,8 +12,8 @@ taken 2026-09-06 and its port is complete on every statement that says something
 2026-09-06 added three axes the audit had not named — optimizer form (4b), renderer (4c) and data
 parallelism (4d) — and 4b is done at the fold, 4c is done for all four nets, 4d for its first
 piece. **ResNet-34, MobileNetV2 and ResNet-50 are finished** on every tier that is not a float
-budget, and ConvNeXt-T was the reference when this was scoped. What is genuinely open is small: two
-capstones, 4d's op node, and one large net.
+budget, and ConvNeXt-T was the reference when this was scoped. What is genuinely open is small: one
+capstone (ViT's), 4d's op node, and one large net.
 
 **Why the three new axes exist at all.** The suite grew organically: one net at a time, each with
 the renderer, optimizer form and batch index that was convenient when it landed. The end state the
@@ -65,11 +65,11 @@ extension, 4d piece 1, B0's capstone re-pointing, and §3.5a–§3.5d (ResNet-50
 cotangent, T1, T2, T3, T6). `Certs` 3966 → **3994**. Their write-ups are the numbered sections
 below; nothing in them is open.
 
-**NEXT SESSION — three live targets, in the order the user set on 2026-09-07: the two capstones, then 4d piece 2, then MobileNetV4.**
+**NEXT SESSION — three live targets, in the order the user set on 2026-09-07: ViT's capstone (ConvNeXt's landed, §4b.6), then 4d piece 2, then MobileNetV4.**
 
 | target | cost | what a fresh session needs to know |
 |---|---|---|
-| ⭐ **4b's capstones for ViT-Tiny AND ConvNeXt-T** — first | one session each; the per-node half is paid for both | **BOTH UNBLOCKED 2026-09-07 by 4c legs 3 and 4.** Each net's Adam artifacts now render from its batched traversal, so the six-op loss chain is at the batched index `SmoothedLossCot` is stated at and each capstone can be written ONCE. ✅ The §1 folds at those nodes exist: `ViTFaithfulPoCGB.lean` (ten theorems) and `ConvNeXtFaithfulPoCGB.lean` (eighteen, §4c-quater), both 3-axiom clean. ⭐ **ConvNeXt's is the cheaper of the two**: it is a `HasVJP` net like ViT (GELU, no kink), its capstone `ConvNeXtTiePoC.lean` is per-example at a single image so it is the same THREE-axis transformation — but ConvNeXt HAS a `*BackBatchedGraph_faithful` family (`ConvNeXtBackB0.lean`), so its `*CotIn_eq_vjp` conjuncts can close by `rfl` where ViT's cotangent chain must be re-derived. Write ConvNeXt's first and use it as ViT's template. ▶ For ViT: ⭐ **Mirror `EfficientNetTiePoCG.lean` (801 lines), not r34's or mnv2's** — ViT has no kink anywhere, so it is a `HasVJP` net like B0 and carries no smoothness hypothesis and no operating point. ⛔⛔ **But B0's file was a TWO-axis transformation and ViT's is THREE.** `EfficientNetTiePoC.lean` was already batched (B0 is batch BN), so B0 moved only the optimizer form and the loss. `ViTTiePoC.lean` is at the per-example fused ops AND at a single image — its capstone takes `(img : Vec (3*224*224)) (label : Fin 10)` with no batch at all, because `pretty B` lifted outside the AST. So the third axis, the INDEX, is new work: `N` becomes a binder and every activation becomes `Vec (N*…)`. ⛔ **And ViT has no `*BackBatchedGraph_faithful` family** — that is the name I looked for and did not find; ConvNeXt, B0, MobileNetV2, MNv4 and r34 all have one, and it is what let 4.2a's and 4.2c's `*CotIn_eq_vjp` close by `rfl`. ViT's cotangent chain is hand-derived in `ViTTiePoC.lean` (`vitBlockCotInAtMHV`, `vitCotB2outV`, `vitCotFl`), so the batched peer must be re-derived at the batched constructors rather than delegated. ▶ Price this as the cotangent chain, not as the folds. |
+| ⭐ **4b's capstone for ViT-Tiny** — first; ✅ ConvNeXt-T's LANDED 2026-09-07 (§4b.6) | one session; the per-node half is paid | **BOTH UNBLOCKED 2026-09-07 by 4c legs 3 and 4.** Each net's Adam artifacts now render from its batched traversal, so the six-op loss chain is at the batched index `SmoothedLossCot` is stated at and each capstone can be written ONCE. ✅ The §1 folds at those nodes exist: `ViTFaithfulPoCGB.lean` (ten theorems) and `ConvNeXtFaithfulPoCGB.lean` (eighteen, §4c-quater), both 3-axiom clean. ⭐ **ConvNeXt's landed first and IS the template** (`ConvNeXtTiePoCGB.lean`, §4b.6): the three-axis transformation is mechanical for a no-coupling net — every activation `batchMap N` of the per-example prefix, every cotangent `batchMapAux N` of the per-example chain, conjuncts delegating to the GB fold, `N`/`nC` binders, `g := den (smoothedLossCotGraphDiv …)`. ⚠ The §4b.6 correction to this row: ConvNeXt's `ConvNeXtBackB0` family is per-example backward-GRAPH faithfulness, not batched, and the capstone did not need it — the lift itself is the honesty argument, so ViT needs no `*BackBatchedGraph_faithful` either. ▶ For ViT: ⭐ **Mirror `EfficientNetTiePoCG.lean` (801 lines), not r34's or mnv2's** — ViT has no kink anywhere, so it is a `HasVJP` net like B0 and carries no smoothness hypothesis and no operating point. ⛔⛔ **But B0's file was a TWO-axis transformation and ViT's is THREE.** `EfficientNetTiePoC.lean` was already batched (B0 is batch BN), so B0 moved only the optimizer form and the loss. `ViTTiePoC.lean` is at the per-example fused ops AND at a single image — its capstone takes `(img : Vec (3*224*224)) (label : Fin 10)` with no batch at all, because `pretty B` lifted outside the AST. So the third axis, the INDEX, is new work: `N` becomes a binder and every activation becomes `Vec (N*…)`. ⛔ **And ViT has no `*BackBatchedGraph_faithful` family** — that is the name I looked for and did not find; ConvNeXt, B0, MobileNetV2, MNv4 and r34 all have one, and it is what let 4.2a's and 4.2c's `*CotIn_eq_vjp` close by `rfl`. ViT's cotangent chain is hand-derived in `ViTTiePoC.lean` (`vitBlockCotInAtMHV`, `vitCotB2outV`, `vitCotFl`), so the batched peer must be re-derived at the batched constructors rather than delegated. ▶ Price this as the cotangent chain, not as the folds. |
 | **4d piece 2, `allReduceMeanF`** — second | one session | Ungated now that 4c is closed. One `SHlo` constructor with `den (allReduceMeanF R g) = (1/R) Σ_r den (g r)` under `∀ r, skel (g r) = skel (g 0)`, a `pretty` case that is `emitGradAllReduce`'s text verbatim, and a round-trip parser case. It turns the "per-replica node, all-reduce outside the AST" disclaimer every ImageNet tie carries into a faithfulness theorem at the artifact — all seven nets at once — and composes with 4b's folds and 4d.1's `dpMeanGrad_eq_grad_meanLoss`. §4d has the scoping. |
 | ⭐ **3.6 MobileNetV4-Conv-M** — third, and a planning doc of its own is the first deliverable | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
 
@@ -78,7 +78,7 @@ ResNet-34, MobileNetV2 and ResNet-50 is a float BUDGET (T4/T5), and
 `planning/float_budget_numbers.md` closed that thread as vacuous by user decision on 2026-09-05.
 On the statements that say something, §4's port and §3.5 are COMPLETE for all three.
 
-⭐ **Order, set by the user 2026-09-07: the two capstones, then 4d piece 2, then MobileNetV4 (which
+⭐ **Order, set by the user 2026-09-07: the capstones (ConvNeXt's done), then 4d piece 2, then MobileNetV4 (which
 gets its own planning doc first), then a cleanup/unification session** — the generic constructions
 to a `Foundation` leaf, the root-file lemmas, the bf16 `*GradBBf16` lemmas for the other three
 folds (§4c-quater), and this document archived behind a short standing one.
@@ -1556,11 +1556,53 @@ which forward a given SSA name's operand came from, and the fused file carries t
 fold is about one op and its FREE cotangent and says nothing about which whole-net forward produced
 that cotangent — but a reader will expect the caveat and the file header carries it.
 
-**What is NOT done, and is the honest boundary.** The `<net>_net_tied_certified` capstones are NOT
-re-pointed at the gradient nodes: they pin each cotangent to the emitted backward subgraph, and
-re-pointing needs the shared smoothed-target loss cotangent (4.2a). So a net's T3 at its Adam
-artifact is the FOLD only, and the yaml (4f) and every file header say so. The prerequisite
-ordering the scoping gave was right.
+**What was NOT done when this landed, and where it stands now (2026-09-07).** The
+`<net>_net_tied_certified` capstones were NOT re-pointed at the gradient nodes when the folds
+landed: re-pointing needs the shared smoothed-target loss cotangent (4.2a). Since then: ResNet-34
+(4.2a), MobileNetV2 (4.2c) and ResNet-50 (§3.5c) at batch BN, EfficientNet-B0 (4b.5, 2026-09-06)
+and **ConvNeXt-T (4b.6, 2026-09-07)** at their batched chains. ViT-Tiny's is the one left; its
+template is §4b.6.
+
+### 4b.6 DONE 2026-09-07 — ConvNeXt-T's capstone, three axes at once
+
+`Architectures/ConvNeXtTiePoCGB.lean` (~610 lines, **~3 s**, 13 declarations) plus
+`smoothedLossCotGraphDiv` / `_den` / `_row` in `Foundation/SmoothedLossCot.lean`; `Certs` 3994 →
+**3995**, all 3-axiom clean. `cnx_net_tiedGB (N) {nC} …`: all 182 ConvNeXt-T parameters at the
+`*GradB` nodes `convnext_adam_train_step` and every `convnextin_*` artifact emit, at the smoothed
+loss at a general target, at the batched index.
+
+⭐ **Three axes, and the third was free.** B0's re-pointing (4b.5) moved two axes because
+`EfficientNetTiePoC` was already batched. `ConvNeXtTiePoC` is per-example at a single image, so
+the INDEX had to move too — and it cost nothing: every activation is `batchMap N` of the fused
+file's per-example prefix (`cnxStemFwdO`, `cnxBlockFwdChO`, `cnxDownFwdChO`, reused verbatim) and
+every cotangent is `batchMapAux N` of its chain (`cnxBlockCotInChAt`, `cnxDownCotInChAt`, reused;
+three small per-example internal-cotangent helpers added so `batchMapAux` has a function of the
+block INPUT to lift). Each conjunct is one `CnxPoCGB.*_den` lemma. ▶ **The lift is the honesty
+argument, and it holds for this net and for no BatchNorm net**: every ConvNeXt op is
+batch-separable, so the batched op IS the per-example op under `batchMap`, which is what the `*B`
+constructors' `den` arms say.
+
+⛔ **The NEXT SESSION row's "ConvNeXt has `*BackBatchedGraph_faithful`, so its `*CotIn_eq_vjp`
+closes by `rfl`" was wrong on both counts.** `ConvNeXtBackB0.lean`'s family is per-example
+backward-graph faithfulness, and the capstone needed no `_eq_vjp` at all — B0's shape (4b.5)
+composes the cotangent chain directly and so does this. Sixth instance of §5's rule, caught by
+reading the file rather than by paying for it. ▶ ViT's capstone needs no such family either.
+
+⭐ **The loss chain needed its own spelling.** `smoothedLossCotGraph` is `softmaxRow` at one row per
+example, width `N·(1·K)` — hence `rowB`/`unrowB`. ConvNeXt and ViT spell the row softmax as
+`batchOp expe` then `batchOp softmaxDiv` at the plain width `N·K`. `smoothedLossCotGraphDiv` is
+that AST, `_den` says it denotes the same function, `_row` is `smoothedLossCotGraph_row` at it with
+no cast anywhere. Serves ViT unchanged.
+
+⚠ **~3 s against the fused file's 16M-heartbeat budget.** Same 182-parameter thread, same 22-deep
+`let` chain; the difference is that every `let` here is a `batchMap`/`batchMapAux` of an
+`@[irreducible]` per-example def, so nothing unfolds. Recorded as an observation.
+
+⛔ Stated at the drop-free chain and at ConvNeXt-T's literal widths; one replica (4d).
+
+**Gates.** `lake build Certs` 3995; `lake env lean tests/AuditAxioms.lean` 3-axiom clean on all
+seven new prints; `lake exe docstring-checkrefs` 1669; `python3 scripts/check_audit_coverage.py`.
+No artifact moved, so no render gate.
 
 **The original scoping, for reference.**
 
@@ -1994,7 +2036,8 @@ no new Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean`; it RETIR
 `ResNet34Render.lean` and `MobileNetV2Render.lean`, moved ViT's nineteen writers onto
 `ViTRenderB.lean` and ConvNeXt's seventeen onto `ConvNeXtRenderB.lean` (⛔ neither `ViTRender.lean`
 nor `ConvNeXtRender.lean` is retired — each still writes its SGD-inline `*_train_step.mlir`), and
-re-points every T2/T3 file at the batched constructors; §4.2d's T6 LANDED 2026-09-07 for both nets: `Float/Resnet34WholeBackFloatBridgeB.lean` + `Foundation/Resnet34BackCertifiedTieB.lean` and `Float/MobileNetV2WholeBackFloatBridgeB.lean` + `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (⛔ no `*BackFloatBudget` peer for either — T4/T5 are the vacuous half); 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1); the
+re-points every T2/T3 file at the batched constructors; §4.2d's T6 LANDED 2026-09-07 for both nets: `Float/Resnet34WholeBackFloatBridgeB.lean` + `Foundation/Resnet34BackCertifiedTieB.lean` and `Float/MobileNetV2WholeBackFloatBridgeB.lean` + `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (⛔ no `*BackFloatBudget` peer for either — T4/T5 are the vacuous half); 4b.6 `Architectures/ConvNeXtTiePoCGB.lean` LANDED 2026-09-07 with `smoothedLossCotGraphDiv` in
+`Foundation/SmoothedLossCot.lean` (ViT's capstone reuses both shapes); 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1); the
 `allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases is
 piece 2 and is gated behind 4c;
 3.5a `Codegen/LambTriple.lean` and
