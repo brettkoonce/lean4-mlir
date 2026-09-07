@@ -442,6 +442,32 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- ResNet-50's T6, the last statement that net was missing (status 4o).
+    - declaration: "Proofs.r50_grad_floatBridgesToB"   # the batched R50 backward chain float-bridges to its named float skeleton; q a binder, so both shipped resolutions
+      file: "LeanMlir/Proofs/Float/Resnet50WholeBackFloatBridgeB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.r50InputGradB_eq_r34B_full_vjp"   # T6: the R50 backward chain IS the certified whole-net VJP, sixteen bottlenecks opaque; the apex is ResNet-34's, reused
+      file: "LeanMlir/Proofs/Foundation/Resnet50WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.r50InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the eighteen-stage net, at every batch size AND both resolutions
+      file: "LeanMlir/Proofs/Foundation/Resnet50WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.resnet50ForwardB_full_eq_slots"   # the shape check: those eighteen stages ARE resnet50ForwardB_full
+      file: "LeanMlir/Proofs/Foundation/Resnet50WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
     #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.
@@ -1011,7 +1037,7 @@ fidelity:
        STILL OPEN, for both nets: the training-mode forward budget (a CAP, as
        `r34_train_float_logits_le` already is) and the backward budget -- T4 and
        T5, both vacuous by 4d. The certified backward tie at `bnBatchTensor4` (T6)
-       LANDED 2026-09-06 for both nets; see 4n. The block-level batched VJPs and backward-graph
+       LANDED 2026-09-07 for both nets; see 4n. The block-level batched VJPs and backward-graph
        faithfulness already exist for both nets (`ResNet34BackB0.lean`,
        `MobileNetV2BackB0.lean`, folded by `BackNetFolds.lean`), and the eval-mode
        forward budgets are world-agnostic -- frozen statistics reduce nothing, so
@@ -1621,10 +1647,11 @@ fidelity:
        form: the render emits `addVB(body, projection)` where `residualProj`
        adds `proj + body`. The identity block needs none.
 
-       ⚠ WHAT IS STILL MISSING FOR THIS NET: the two float budgets and the
-       certified backward tie (T4, T5, T6). T1, T2 and T3 are three of seven.
+       ⚠ WHAT IS STILL MISSING FOR THIS NET after T1/T2/T3: the certified
+       backward tie (T6) landed 2026-09-07, see 4o. Only T4 and T5 -- the two
+       float budgets, vacuous by 4d -- are open.
 
-    4n. T6 AT BATCH BATCHNORM FOR RESNET-34 AND MOBILENETV2 (2026-09-06). The
+    4n. T6 AT BATCH BATCHNORM FOR RESNET-34 AND MOBILENETV2 (2026-09-07). The
        last statement 4e's port was missing, for both nets. The two whole-net
        certified backward ties in the corpus for these architectures --
        `Resnet34BackCertifiedTie.lean` and
@@ -1694,6 +1721,47 @@ fidelity:
 
        ⚠ WHAT 4e STILL HAS OPEN after this: T4 and T5 for both nets, and nothing
        else. Both are vacuous by 4d's finding.
+
+    4o. RESNET-50's T6, AND WHAT RESNET-34 PAID FOR IT (2026-09-07). The last
+       statement ResNet-50 was missing that says anything -- (d)'s two float
+       budgets are the vacuous half. `Float/Resnet50WholeBackFloatBridgeB.lean`
+       names `r50InputGradB` and threads its `FloatBridgesTo`;
+       `Foundation/Resnet50WholeBackCertifiedTieB.lean` states the tie, its
+       `pdiv` reading and the shape check `resnet50ForwardB_full_eq_slots`. Four
+       declarations, ~3 s, all 3-axiom clean.
+
+       ⭐⭐ ALMOST ALL OF IT IS RESNET-34's, REUSED RATHER THAN REWRITTEN.
+       `resnet50ForwardB_full` is `r34HeadB ∘ [3,4,6,3] bottlenecks ∘ r34StemB` --
+       the stem and head are literally ResNet-34's functions at R50's widths -- so
+       4n supplies the two endpoint ties, the batched 3x3/s2 pool tie, the
+       `FloatClose.batchMapAux` lift that pool needed, AND `r34B_full_has_vjp_at`
+       itself: [3,4,6,3] is sixteen blocks for both nets, so the generic
+       eighteen-stage apex is the same construction and a second copy would have
+       been two writers for one fact. This file adds the sixteen bottleneck slots
+       and nothing else. That is the same economy T1 got from `r34StemB_has_vjp_at`
+       (4m) -- spend the lemma, do not re-derive it -- collected a second time.
+
+       ⚠ `q` IS A BINDER HERE TOO, so one statement covers `resnet50in_fwd`
+       (q = 7, 224 px) and `resnet50in160_fwd` (q = 5, 160 px, the net the quoted
+       76.66% trains). ⛔ Every dimension is an explicit `2 * (...)` nest and not
+       `8 * q`: equal Nats, NOT definitionally equal terms at a variable `q`. And
+       `0 < q` is a real hypothesis where ResNet-34 needed none -- the stem pool's
+       output grid must be nonempty, and at a literal 56 that closed by `norm_num`.
+
+       ⛔ THREE relu clauses per bottleneck (the two interior ones and the
+       post-residual outer one), where ResNet-34's basic block has two and
+       EfficientNet's MBConv none: the heaviest kink budget in the suite. The
+       blocks stay opaque and there is no `backward_unique` step, for 4n's
+       measured reason.
+
+       ⚠ ~3 s HERE AGAINST ~60 s FOR RESNET-34's PEER, AND THE 57 s IS MEASURED
+       RATHER THAN DIAGNOSED. `Resnet34BackCertifiedTieB.lean` up to its apex is
+       2.2 s and its tie's STATEMENT elaborates in 2.5 s, so the whole 57 s is
+       that file's tie `rfl`. The two statements are the same shape against the
+       same apex; the only structural difference is that ResNet-34's dimensions
+       are literals the kernel can evaluate and ResNet-50's are `2 * (...)` nests
+       at a variable `q` that it cannot. Recorded as an observation. ▶ If that
+       file ever has to be fast, this is where to look first.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

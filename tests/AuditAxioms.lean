@@ -156,6 +156,7 @@ import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetFullWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTieB
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTieB
+import LeanMlir.Proofs.Foundation.Resnet50WholeBackCertifiedTieB
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTie
@@ -3201,6 +3202,30 @@ open Proofs
 #print axioms Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp
 #print axioms Proofs.mnv2InputGradB_correct
 #print axioms Proofs.mobilenetv2ForwardB_full_eq_slots
+-- ⭐⭐ AND RESNET-50's T6 (Resnet50WholeBackCertifiedTieB.lean, ~3 s;
+-- proofs_tier_to_paper_nets §3.5(e)) — the last statement that net was missing which says
+-- anything, (d)'s two float budgets being the vacuous half. With it R50 is certified from its R
+-- forward through its typed graph, its 161-parameter train-step tie and now its input gradient.
+-- ⭐⭐ Almost all of it is ResNet-34's, reused rather than rewritten. resnet50ForwardB_full is
+-- r34HeadB ∘ [3,4,6,3] bottlenecks ∘ r34StemB, so the two endpoint ties, the batched 3x3/s2 pool
+-- tie, the batchMapAux float lift AND r34B_full_has_vjp_at itself — the generic 18-stage apex,
+-- since [3,4,6,3] is sixteen blocks for both nets — all apply at R50's widths. A second copy of
+-- the apex would have been two writers for one fact.
+-- ⚠ q is a BINDER: one statement covers resnet50in_fwd (q = 7, 224 px) and resnet50in160_fwd
+-- (q = 5, 160 px, the net the quoted 76.66% trains). ⛔ So every dimension is an explicit
+-- 2 * (…) nest and not 8 * q — equal Nats, not definitionally equal terms at a variable q — and
+-- 0 < q is a real hypothesis where ResNet-34 needed none (the stem pool's output grid).
+-- ⛔ THREE relu clauses per bottleneck (the two interior and the post-residual outer), where
+-- ResNet-34's basic block has two and EfficientNet's MBConv none: the heaviest kink budget in the
+-- suite. Blocks stay opaque and there is no backward_unique step, for §4.2d's measured reason.
+-- ⚠ ~3 s here against ~60 s for ResNet-34's peer, and MEASURED rather than diagnosed: r34's apex
+-- alone is 2.2 s and its statement elaborates in 2.5 s, so all 57 s is that file's tie rfl. The
+-- statements are the same shape; the only structural difference is that r34's dimensions are
+-- literals the kernel can evaluate and R50's are 2 * (…) nests at a variable q that it cannot.
+#print axioms Proofs.r50_grad_floatBridgesToB
+#print axioms Proofs.r50InputGradB_eq_r34B_full_vjp
+#print axioms Proofs.r50InputGradB_correct
+#print axioms Proofs.resnet50ForwardB_full_eq_slots
 -- ⛔⛔ THE EVEN-KERNEL CONV BACKWARD (EvenKernelConvBack.lean, ~1 s). convFlatBack W is the
 -- reversed-kernel forward conv, and convFlatBack_eq_vjp_backward ties it to the certified input-VJP
 -- for ODD kernels only. That hypothesis is load-bearing and the statement is FALSE without it:

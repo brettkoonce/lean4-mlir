@@ -903,6 +903,20 @@ lean_lib «Certs» where
              -- HasVJPAt at prefixes spelled two different ways.
              `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTieB,
              `LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTieB,
+             -- ⭐⭐ AND RESNET-50's T6 (proofs_tier_to_paper_nets §3.5(e)) — the last statement
+             -- that net was missing which says anything; (d)'s two float budgets are the vacuous
+             -- half. ⭐⭐ Almost all of it is ResNet-34's, reused rather than rewritten:
+             -- resnet50ForwardB_full is r34HeadB ∘ [3,4,6,3] bottlenecks ∘ r34StemB, so §4.2d's
+             -- two endpoint ties, its batched 3x3/s2 pool tie, its batchMapAux float lift AND
+             -- r34B_full_has_vjp_at itself (the generic 18-stage apex — [3,4,6,3] is sixteen
+             -- blocks for both nets) all apply at R50's widths. This file adds the sixteen
+             -- bottleneck slots, the tie, its pdiv reading and the shape check.
+             -- ⚠ q is a BINDER, so one statement covers resnet50in_fwd (224 px) and
+             -- resnet50in160_fwd (160 px, the net the quoted 76.66% trains), every dimension is
+             -- an explicit 2 * (…) nest rather than 8 * q, and 0 < q is a real hypothesis where
+             -- ResNet-34 needed none (the stem pool's grid).
+             -- ⭐ ~3 s, against ResNet-34's ~60 s for the same shape against the same apex.
+             `LeanMlir.Proofs.Foundation.Resnet50WholeBackCertifiedTieB,
              -- ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel: conv2d pads by pH=(kH-1)/2
              -- and the reversed-kernel forward conv is the adjoint only when kH-1-pH = pH, i.e.
              -- only for odd kH. ConvNeXt's 4x4/s4 patchify stem and three 2x2/s2 downsamples are
