@@ -883,6 +883,26 @@ lean_lib «Certs» where
              -- efficientnetForwardB_full_eq_chain: the chain IS the Jacobian-transpose of the
              -- committed nested-application forward. Every batch size; no smooth point.
              `LeanMlir.Proofs.Foundation.EfficientNetFullWholeBackCertifiedTie,
+             -- ⭐⭐ T6 AT BATCH BATCH-NORM, for the two nets whose Proofs tier was per-example
+             -- (proofs_tier_to_paper_nets §4.2, the last real statement in that section's port —
+             -- T4/T5 there are float budgets and that thread is closed). r34InputGradB and
+             -- mnv2InputGradB are the reverses of resnet34ForwardB_full and
+             -- mobilenetv2ForwardB_full, the forwards the shipped trainers run; each is tied to
+             -- its net's certified whole-net VJP with the blocks OPAQUE, plus a *_eq_slots shape
+             -- check saying those stages ARE the committed forward.
+             -- ⭐ ResNet-34's pool tie is `rfl` — it closes the one seam §4.2a left open (the
+             -- 3x3/s2 pool backward was threaded as the emitted den and not identified with the
+             -- certified VJP) — and it is rfl only because 4.1c built batchMap_has_vjp_at field
+             -- by field and maxPool3s2Flat_has_vjp_at_vec did the same one tier down.
+             -- ⭐⭐ MobileNetV2 defines NO apex and NO prefix defs: mobilenetv2PaperPC_has_vjp_at
+             -- is generic in every dimension and every stage, so the batched net instantiates the
+             -- per-example file's own 21-stage chain.
+             -- ⛔ Neither goes B0's extra step (concrete blocks, then backward_unique): that is a
+             -- KERNEL deterministic timeout at six minutes here, and the reason is the KINK, not
+             -- the depth — B0's witnesses are global HasVJP and carry no point, where these are
+             -- HasVJPAt at prefixes spelled two different ways.
+             `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTieB,
+             `LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTieB,
              -- ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel: conv2d pads by pH=(kH-1)/2
              -- and the reversed-kernel forward conv is the adjoint only when kH-1-pH = pH, i.e.
              -- only for odd kH. ConvNeXt's 4x4/s4 patchify stem and three 2x2/s2 downsamples are

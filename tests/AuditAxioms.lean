@@ -154,6 +154,8 @@ import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetFullWholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTieB
+import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTieB
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTie
@@ -3154,6 +3156,51 @@ open Proofs
 #print axioms Proofs.efficientnetInputGradB_full_eq_efficientnetB_full_vjp
 #print axioms Proofs.efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp
 #print axioms Proofs.efficientnetInputGradB_full_correct
+-- ⭐⭐ AND AT BATCH BATCH-NORM, for the two nets whose whole-net tier was per-example
+-- (Resnet34BackCertifiedTieB.lean ~60 s, MobileNetV2WholeBackCertifiedTieB.lean ~3 s;
+-- proofs_tier_to_paper_nets §4.2's T6). The two files above are about resnet34Forward_full_pc and
+-- mobilenetv2ForwardPaper — the forwards the RETIRED per-example renders emitted (4c legs 1-2);
+-- these are about resnet34ForwardB_full and mobilenetv2ForwardB_full, the nets the shipped
+-- trainers run, at bnBatchLA and a variable batch N.
+-- ⭐ The r34 pool tie is `rfl`, and it closes the one seam §4.2a left open: that file could
+-- thread the 3x3/s2 pool backward only as the emitted den, for want of a maxPool3s2BackB_faithful.
+-- It is rfl only because 4.1c built batchMap_has_vjp_at field by field rather than transporting it
+-- with ▸, and maxPool3s2Flat_has_vjp_at_vec did the same one tier down (§5's transport trap, paid
+-- forward twice). ⛔ The batched pool backward is batchMapAux and NOT batchMap: a pool backward is
+-- indexed by the saved forward activation and each example has its own.
+-- ⭐⭐ MobileNetV2 defines no apex and no prefix defs at all — mobilenetv2PaperPC_has_vjp_at is
+-- generic in every dimension and every stage, so the batched net instantiates the per-example
+-- file's own twenty-one-stage chain, mnv2OpaqueA0 … A17 included.
+-- ⛔ Neither file takes B0's extra step (instantiate at the concrete blocks, then backward_unique).
+-- That is a KERNEL deterministic timeout at six minutes, and the cause is the KINK rather than the
+-- depth: B0's block witnesses are GLOBAL HasVJP and carry no point, where these are HasVJPAt at
+-- r34OpaqueA{k-1} … x against a caller's r34Pre{k-1} N w x — sixteen defeq checks between
+-- sixteen-deep nested applications spelled through different definition chains. HasVJPAt's own
+-- backward_unique is stated anyway; no HasVJPAt net in the repo had it.
+-- ⛔ And a rfl straight at 4.1d's tactic-built apex is a five-minute isDefEq timeout — §5's
+-- elaboration trap, and the reason the generic apex exists.
+-- ⛔ NO NUMBER is stated about either chain: §4.2's T5 is a float budget and
+-- planning/float_budget_numbers.md closed that thread. The chains exist for the ties.
+#print axioms Proofs.batchMapAux_apply
+#print axioms Proofs.FloatClose.batchMapAux
+#print axioms Proofs.FloatBridgesTo.batchMapAux
+#print axioms Proofs.floatBridgesTo_maxPool3s2BackB
+#print axioms Proofs.r34_grad_floatBridgesToB
+#print axioms Proofs.HasVJPAt.backward_unique
+#print axioms Proofs.maxPool3s2FlatBackB_eq_vjp_backward
+#print axioms Proofs.cbReluStridedBBack_eq_vjp_backward
+#print axioms Proofs.r34StemBBack_eq_vjp_backward
+#print axioms Proofs.r34HeadBBack_eq_vjp_backward
+#print axioms Proofs.r34B_full_has_vjp_at
+#print axioms Proofs.r34InputGradB_eq_r34B_full_vjp
+#print axioms Proofs.r34InputGradB_correct
+#print axioms Proofs.resnet34ForwardB_full_eq_slots
+#print axioms Proofs.mnv2_grad_floatBridgesToB
+#print axioms Proofs.mnv2StemBBack_eq_vjp_backward
+#print axioms Proofs.cbrBBack_eq_vjp_backward
+#print axioms Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp
+#print axioms Proofs.mnv2InputGradB_correct
+#print axioms Proofs.mobilenetv2ForwardB_full_eq_slots
 -- ⛔⛔ THE EVEN-KERNEL CONV BACKWARD (EvenKernelConvBack.lean, ~1 s). convFlatBack W is the
 -- reversed-kernel forward conv, and convFlatBack_eq_vjp_backward ties it to the certified input-VJP
 -- for ODD kernels only. That hypothesis is load-bearing and the statement is FALSE without it:

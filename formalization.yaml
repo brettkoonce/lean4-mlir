@@ -374,6 +374,74 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- T6 at batch BatchNorm for ResNet-34 and MobileNetV2 (status 4n).
+    - declaration: "Proofs.FloatBridgesTo.batchMapAux"   # the row-indexed batched lift: a backward whose saved activation is per example is batchMapAux, not batchMap
+      file: "LeanMlir/Proofs/Float/Resnet34WholeBackFloatBridgeB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.r34_grad_floatBridgesToB"   # the batched r34 backward chain float-bridges to its named float skeleton; no number is stated about it
+      file: "LeanMlir/Proofs/Float/Resnet34WholeBackFloatBridgeB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.HasVJPAt.backward_unique"   # two pointwise VJP witnesses for one map at one point have one backward; HasVJP.backward_unique's missing peer
+      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.maxPool3s2FlatBackB_eq_vjp_backward"   # rfl: the batched 3x3/s2 pool backward IS batchMap_has_vjp_at's; closes the one seam 4g left open
+      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp"   # T6: the batched r34 backward chain IS the certified whole-net VJP, sixteen blocks opaque
+      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.r34InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the eighteen-stage net, at every batch size
+      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.resnet34ForwardB_full_eq_slots"   # the shape check: those eighteen stages ARE resnet34ForwardB_full, the forward the typed graph denotes
+      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mnv2_grad_floatBridgesToB"   # the batched MobileNetV2 backward chain float-bridges to its named float skeleton; XLA-SAME stem scatter
+      file: "LeanMlir/Proofs/Float/MobileNetV2WholeBackFloatBridgeB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp"   # T6: the batched MobileNetV2 backward chain IS the certified whole-net VJP, seventeen bottlenecks opaque
+      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mnv2InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the twenty-one-stage net, at every batch size
+      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.mobilenetv2ForwardB_full_eq_slots"   # the shape check: those twenty-one stages ARE mobilenetv2ForwardB_full
+      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTieB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
     #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
     #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.
@@ -941,8 +1009,9 @@ fidelity:
        (already at the batched `*GradB` nodes), and the §1a tie (4j).
 
        STILL OPEN, for both nets: the training-mode forward budget (a CAP, as
-       `r34_train_float_logits_le` already is), the backward budget, and the
-       certified backward tie at `bnBatchTensor4`. The block-level batched VJPs and backward-graph
+       `r34_train_float_logits_le` already is) and the backward budget -- T4 and
+       T5, both vacuous by 4d. The certified backward tie at `bnBatchTensor4` (T6)
+       LANDED 2026-09-06 for both nets; see 4n. The block-level batched VJPs and backward-graph
        faithfulness already exist for both nets (`ResNet34BackB0.lean`,
        `MobileNetV2BackB0.lean`, folded by `BackNetFolds.lean`), and the eval-mode
        forward budgets are world-agnostic -- frozen statistics reduce nothing, so
@@ -1554,6 +1623,77 @@ fidelity:
 
        ⚠ WHAT IS STILL MISSING FOR THIS NET: the two float budgets and the
        certified backward tie (T4, T5, T6). T1, T2 and T3 are three of seven.
+
+    4n. T6 AT BATCH BATCHNORM FOR RESNET-34 AND MOBILENETV2 (2026-09-06). The
+       last statement 4e's port was missing, for both nets. The two whole-net
+       certified backward ties in the corpus for these architectures --
+       `Resnet34BackCertifiedTie.lean` and
+       `MobileNetV2PaperWholeBackCertifiedTie.lean` -- are about
+       `resnet34Forward_full_pc` and `mobilenetv2ForwardPaper`, the forwards the
+       RETIRED per-example renders emitted (4h). These two new files are about
+       `resnet34ForwardB_full` and `mobilenetv2ForwardB_full`, the nets the
+       shipped trainers run, at `bnBatchLA` and a variable batch `N`:
+       `Float/Resnet34WholeBackFloatBridgeB.lean` +
+       `Foundation/Resnet34BackCertifiedTieB.lean` (~60 s) and
+       `Float/MobileNetV2WholeBackFloatBridgeB.lean` +
+       `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (~3 s).
+
+       Each net gets three statements: the TIE (the hand-written backward chain,
+       with its BatchNorm and activation-mask slots pinned to the certified
+       per-op backwards, IS the certified whole-net VJP, with the blocks opaque),
+       its reading as `sum pdiv * dy`, and a `*_eq_slots` SHAPE CHECK saying those
+       stages ARE the committed nested-application forward -- the forward
+       `resnet34FwdGraphB_full_faithful` / `mobilenetv2FwdGraphB_full_faithful`
+       proves the typed graph denotes. The shape check is not decoration: the tie
+       keeps its blocks opaque, so without it the tie is a statement about
+       variables, and that is exactly how a wrong stem pool survived a month in
+       the per-example file.
+
+       ⭐ THE BATCHED POOL TIE IS `rfl`, AND IT CLOSES THE SEAM 4g LEFT OPEN.
+       That file could thread ResNet-34's 3x3/s2 pool backward only as the
+       emitted `den`; here `maxPool3s2FlatBackB_eq_vjp_backward` identifies it
+       with `batchMap_has_vjp_at`'s backward directly. It is `rfl` only because
+       two earlier files refused a `▸` transport that would have blocked
+       `.backward` from reducing -- `batchMap_has_vjp_at` is built field by field,
+       and so is `maxPool3s2Flat_has_vjp_at_vec` one tier down.
+       ⛔ THE BATCHED POOL BACKWARD IS `batchMapAux`, NOT `batchMap`: a pool
+       backward is indexed by the saved forward activation and each example has
+       its own, so a `batchMap` would hand example 0's argmax pattern to the whole
+       batch. `FloatClose.batchMapAux` / `FloatBridgesTo.batchMapAux` are that
+       lift; they belong beside their `batchMap` peers and are stated in the leaf
+       for the rebuild cost.
+
+       ⭐⭐ MOBILENETV2 DEFINES NO APEX AND NO PREFIX DEFS AT ALL.
+       `mobilenetv2PaperPC_has_vjp_at` -- the per-example file's twenty-one-stage
+       chain -- is generic in every dimension and every stage, so the batched net
+       instantiates it directly, `mnv2OpaqueA0 ... A17` included. ResNet-34 had to
+       write both, because its committed apex bundles the stem's pool into `stem`
+       and its head into one stage.
+
+       ⛔ NEITHER FILE TAKES B0's EXTRA STEP (instantiate the tie at the concrete
+       blocks, then `backward_unique`), AND THE REASON IS THE KINK RATHER THAN THE
+       DEPTH. B0's block witnesses are GLOBAL `HasVJP` and carry no point at all,
+       so instantiating them is free. These are `HasVJPAt` at
+       `r34OpaqueA{k-1} ... x` while a caller's witnesses are at
+       `r34Pre{k-1} N w x` -- sixteen defeq checks between sixteen-deep nested
+       applications spelled through different definition chains, and it is a
+       KERNEL deterministic timeout at six minutes. Measured, not guessed; the
+       shape check is what replaces it, and it is the same answer the per-example
+       MobileNetV2 file gave. `HasVJPAt.backward_unique` is stated anyway -- no
+       `HasVJPAt` net in the repo had `HasVJP.backward_unique`'s pointwise peer.
+       ⛔ And a `rfl` straight at the tactic-built whole-net apex is a five-minute
+       `isDefEq` timeout at four million heartbeats, which is why the generic apex
+       exists at all.
+
+       ⛔ NO NUMBER IS STATED ABOUT EITHER CHAIN. 4e's remaining rows for these
+       two nets are T4 and T5, both float BUDGETS, and 4d closed that thread: the
+       per-example r34 backward is 8.857e245 and the batched one is larger,
+       because `bnGradInputReMag`'s gain carries `Xh^2 = N*h*w`. The chains are
+       named so the ties are about a term, which is
+       `EfficientNetFullWholeBackFloatBridge.lean`'s role for B0.
+
+       ⚠ WHAT 4e STILL HAS OPEN after this: T4 and T5 for both nets, and nothing
+       else. Both are vacuous by 4d's finding.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
