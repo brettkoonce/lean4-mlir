@@ -632,6 +632,15 @@ lean_lib «Certs» where
              -- smoothedLossCotGraphDiv, the softmaxDiv∘expe spelling at the plain N·K width that
              -- ConvNeXtRenderB and ViTRenderB emit (SmoothedLossCot.lean) (ConvNeXtTiePoCGB.lean).
              `LeanMlir.Proofs.Architectures.ConvNeXtTiePoCGB,
+             -- ⭐⭐ 4b's capstone for ViT-Tiny — the set closes at FIVE OF FIVE. ConvNeXtTiePoCGB's
+             -- three-axis transformation applied to ViTTiePoC: the *GradB nodes every vitin_*
+             -- artifact emits, the smoothed loss at a general target (smoothedLossCotGraphDiv,
+             -- reused), and N a binder via batchMap/batchMapAux of the per-example prefixes and
+             -- chain. ⭐ The CLS token's gradient is tied with the batch sum INSIDE den
+             -- (ViTPoCGB.clsGrad_denB at the real embed cotangent), which the per-example
+             -- capstone could state only at N = 1. No *BackBatchedGraph_faithful family needed
+             -- (ViTTiePoCGB.lean).
+             `LeanMlir.Proofs.Architectures.ViTTiePoCGB,
              -- ⭐⭐ 4d piece 1: DATA PARALLELISM at the R-level — what function a *dp* run
              -- actually minimised. Every *dp* artifact all-reduces each parameter gradient and
              -- divides by R as emitted TEXT outside the SHlo AST, so every tie in the repo

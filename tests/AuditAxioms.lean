@@ -130,6 +130,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB
 import LeanMlir.Proofs.Architectures.EfficientNetTiePoCG
 import LeanMlir.Proofs.Architectures.ConvNeXtTiePoCGB
+import LeanMlir.Proofs.Architectures.ViTTiePoCGB
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
@@ -5881,6 +5882,28 @@ open Proofs
 #print axioms Proofs.CnxTiePoCGB.cnx_stem_ch_tiedGB
 #print axioms Proofs.CnxTiePoCGB.cnx_head_ch_tiedGB
 #print axioms Proofs.CnxTiePoCGB.cnx_net_tiedGB
+
+-- ════════════════════════════════════════════════════════════════
+-- 4b's CAPSTONE RE-POINTING, ViT-TINY (ViTTiePoCGB.lean, 2026-09-07) — FIVE OF FIVE
+-- ════════════════════════════════════════════════════════════════
+-- ViTTiePoC ties all 200 parameters of the SGD-inline vit_train_step at the FUSED ops, at a hard
+-- label, PER EXAMPLE at a single image. This is ConvNeXtTiePoCGB's three-axis transformation
+-- applied to it: (1) the RAW *GradB nodes vit_adam_train_step and every vitin_* artifact emit
+-- since 4c leg 4 (ViTFaithfulPoCGB is the fold each conjunct delegates to); (2) g a BINDER at
+-- smoothedLossCotGraphDiv, the expe→softmaxDiv spelling at the plain N·K width; (3) N a binder,
+-- every save batchMap N of the fused file's prefix and every cotangent batchMapAux N of its
+-- chain — the per-example saves and the eight internal cotangents repackaged as functions of the
+-- block INPUT (blkSaves, cAtt..cM1) so batchMapAux has something to lift.
+-- ⭐⭐ vit_embed_tiedGB's third conjunct is ViTPoCGB.clsGrad_denB at the real embed-output
+-- cotangent: the CLS token's gradient with the batch sum INSIDE den, which the per-example
+-- capstone (vit_cls_den, denseBiasSgdB at N := 1) could not state.
+-- ⭐ N and nC binders; no smoothness hypothesis (GELU). ⛔ ONE REPLICA (4d); the 4× accumulation
+-- is momVNextF's other reading on top; drop-free chain; ViT-Tiny's literal dims.
+#print axioms Proofs.ViTTiePoCGB.vit_block_tiedGB
+#print axioms Proofs.ViTTiePoCGB.vit_finalLN_tiedGB
+#print axioms Proofs.ViTTiePoCGB.vit_head_tiedGB
+#print axioms Proofs.ViTTiePoCGB.vit_embed_tiedGB
+#print axioms Proofs.ViTTiePoCGB.vit_net_tiedGB
 
 -- ════════════════════════════════════════════════════════════════
 -- 4d PIECE 1: DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel.lean, 2026-09-06)

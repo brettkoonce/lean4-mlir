@@ -313,6 +313,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "Proofs.ViTTiePoCGB.vit_net_tiedGB"   # all 200 ViT-Tiny gradient nodes at their batched chain cotangent and the smoothed loss; N, nC binders; CLS summed over the batch inside den
+      file: "LeanMlir/Proofs/Architectures/ViTTiePoCGB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "Proofs.smoothedLossCotGraphDiv_row"   # the six-op chain at the expe/softmaxDiv spelling, per example, IS the smoothed loss's gradient / B
       file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean"
       sorry_count: 0
@@ -1103,9 +1109,8 @@ fidelity:
        gradient node -- the `*Sgd_eq_grad` family is `rfl` and
        ResNet34FaithfulPoCB was the template -- which covers every tail at once;
        that is now done for all five nets, and the capstones are re-pointed for
-       four of them (ResNet-34, MobileNetV2, ResNet-50 at batch BN; B0 and
-       ConvNeXt-T at their batched chains, 4f/4r) -- ViT-Tiny's is the one
-       left. The tails are certified
+       all five (ResNet-34, MobileNetV2, ResNet-50 at batch BN; B0, ConvNeXt-T
+       and ViT-Tiny at their batched chains, 4f/4r/4s). The tails are certified
        (adamW_triple_faithful, mom_pair_faithful, rmsProp_triple_faithful,
        clipGrad_faithful, dropPathB_faithful; EMA and accumulation reuse
        adamMNextF / momVNextF) except LAMB, which has no faithfulness theorem,
@@ -1165,8 +1170,8 @@ fidelity:
        than inside `den` (`SmoothedLossCot`'s statement is at the batched index).
        A capstone written for them today would be about a chain 4c legs 3 and 4
        will retire, so it would have to be written twice. Their legs come first.
-       -- Both legs landed 2026-09-07 (4p, 4q), and ConvNeXt-T's capstone
-       followed the same day (4r); ViT-Tiny's is the one still open.
+       -- Both legs landed 2026-09-07 (4p, 4q), and both capstones followed
+       the same day (4r, 4s). The set is closed at five of five.
 
        NO NEW MATHEMATICS, AND OP KINDS ARE SHARED MORE THAN THE FILE NAMES
        SUGGEST. The fusion is `rfl` -- the 29 `*Sgd_eq_grad` / `*SgdB_eq_grad`
@@ -1979,6 +1984,42 @@ fidelity:
        S and B are other nets. The `%dgi..%dgapf` GAP backward is hand-written
        text on both chains (a declared carve-out); its value here is
        `globalAvgPoolFlat_has_vjp.backward`, as in the fused file.
+
+    4s. 4b's CAPSTONE RE-POINTING, ViT-TINY (2026-09-07) -- THE SET CLOSES AT
+       FIVE OF FIVE. `ViTTiePoC.lean` ties all 200 parameters of the SGD-inline
+       `vit_train_step.mlir` at the fused ops, at a hard label, PER EXAMPLE at a
+       single image. `ViTTiePoCGB.lean` is 4r's transformation applied to it:
+       (1) every conjunct at the raw `*GradB` node `vit_adam_train_step` and
+       every `vitin_*` artifact emit since 4p, with `ViTFaithfulPoCGB.lean` the
+       fold each delegates to; (2) `g` a binder at `smoothedLossCotGraphDiv`
+       (4r's spelling, reused unchanged -- ViT emits the same chain); (3) `N` a
+       binder, every save `batchMap N` of the fused file's prefix and every
+       cotangent `batchMapAux N` of its chain. `nC` a binder. Nine declarations
+       plus the `BlkSaves` packaging, all 3-axiom clean, ~3 s.
+
+       THE CONJUNCT THE PER-EXAMPLE CAPSTONE COULD NOT STATE IS HERE. 4p
+       recorded that the CLS token's gradient sums over the batch INSIDE `den`
+       at the batched node, where the fused file's `vit_cls_den` is at
+       `denseBiasSgdB (N := 1)`. `vitEmbedTiedGB`'s third conjunct is
+       `ViTPoCGB.clsGrad_denB` at the real embed-output cotangent -- the
+       batched thread's one genuinely new statement, now tied rather than only
+       folded.
+
+       WHAT IT MEANT TO WRITE. ViT's per-example block tie takes its nine saved
+       activations as arguments; `batchMapAux` lifts a function of one saved
+       value and one input, so the saves and the eight internal cotangents are
+       repackaged as functions of the block INPUT (`blkSaves`, `cAtt`..`cM1` --
+       `vitBlockTiedAtMHV`'s and `vitBlockCotInAtMHV`'s `let` chains, verbatim).
+       No `*BackBatchedGraph_faithful` family exists for ViT and none was
+       needed: the lift is the honesty argument, as it was for ConvNeXt.
+
+       WHERE THE FIVE STAND. ResNet-34 (4g), MobileNetV2 (4k) and ResNet-50 at
+       batch BN; EfficientNet-B0 (4f), ConvNeXt-T (4r) and ViT-Tiny (here) at
+       their batched chains. Every net's T3 section 1a tie is now at the
+       un-fused gradient node, the smoothed loss at a general target and the
+       batched index -- the artifact each quoted accuracy comes from, up to one
+       replica (4d), which is the next item. One replica; the 4x accumulation is
+       `momVNextF`'s other reading; drop-free chain; ViT-Tiny's literal dims.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
