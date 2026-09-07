@@ -11,6 +11,13 @@ expressible at all (handoff §0.2 ▶2); the claim this file gates is that it ch
 
 > the batched chain emits `verified_mlir/convnext_fwd.mlir` byte for byte.
 
+⭐ **Since 4c leg 3 (2026-09-07) the committed artifacts ARE the batched chain's**, so the roles
+here are flipped: this file renders the PER-EXAMPLE chain (`ConvNeXtRender.lean`, which still writes
+the SGD-inline `convnext_train_step.mlir`) and checks it against the committed batched bytes. Same
+statement — the two chains agree on the forward byte for byte and on the backward up to the
+conv-VJP `transpose`/`reverse` pair — read from the other side, and it stays load-bearing exactly as
+long as both chains exist.
+
 ⚠⚠ **Why a BYTE tie is available here, where §2b's R34 move needed a numeric one.** Every batched
 form was built to emit its per-example peer's text byte-for-byte, and
 `tests/TestBatchedEmitTie.lean` pins all 31 of them individually. So the whole-net statement is the
@@ -34,10 +41,10 @@ open Proofs.StableHLO
     `exit` discards every diagnostic (§4). -/
 def main : IO Unit := do
   let want ← IO.FS.readFile "verified_mlir/convnext_fwd.mlir"
-  let got := convNextFwdRenderB "convnext_fwd" 10 cnxFwdPerExampleBanner
-  IO.println "── ConvNeXt: the batched-index forward vs the committed per-example artifact ──"
+  let got := convNextFwdFaithfulV "convnext_fwd"
+  IO.println "── ConvNeXt: the per-example forward vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {want.length} chars, {(want.splitOn "\n").length} lines"
-  IO.println s!"  batched   : {got.length} chars, {(got.splitOn "\n").length} lines"
+  IO.println s!"  per-ex    : {got.length} chars, {(got.splitOn "\n").length} lines"
   if got == want then
     IO.println "  ✅ BYTE-IDENTICAL — the batched index changed the denotation, not the render"
   else
@@ -47,11 +54,11 @@ def main : IO Unit := do
     for i in [0:min gl.size wl.size] do
       if gl[i]! != wl[i]! then
         if diffs < 8 then
-          IO.println s!"  L{i+1} batched  : {(gl[i]!).take 160}"
+          IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
           IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
         diffs := diffs + 1
     IO.println s!"  ✗ {diffs} differing line(s); lengths {gl.size} vs {wl.size}"
-    throw <| IO.userError "MISMATCH: the batched ConvNeXt forward does not emit the committed \
+    throw <| IO.userError "MISMATCH: the per-example ConvNeXt forward does not emit the committed (batched-chain) \
 artifact. Run `lake env lean tests/TestBatchedEmitTie.lean` FIRST — it localises which of the 34 \
 batched forms diverged from its per-example peer, which this whole-net diff cannot."
 
@@ -137,16 +144,18 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   --  The WHOLE TRAIN STEP, against the committed artifact — the bytes the trainer loads.
   --
-  --  ⚠ Same allowance, same reason, and it must stay THIS narrow: the AdamW tail is
+  --  ⚠ Same allowance, same reason, and it must stay THIS narrow (since leg 3 it is the
+  --  per-example render that carries the "other" order, and the committed bytes the batched one —
+  --  the allowance is symmetric): the AdamW tail is
   --  parameter-space (adamMNextF / clipScaleF / gradSumSqAccF are indexed by the param's own size
   --  and never see the batch), so it is rendered by the SAME function on both sides. Any
   --  difference here that is not the conv-VJP swap is therefore in the traversal, and is a defect.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let wantTS ← IO.FS.readFile "verified_mlir/convnext_adam_train_step.mlir"
-  let gotTS := convNextAdamTrainStepFaithfulB "0.100000" "-0.010000" "32.0"
-  IO.println "── ConvNeXt: the batched AdamW train step vs the committed artifact ──"
+  let gotTS := convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0"
+  IO.println "── ConvNeXt: the per-example AdamW train step vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
-  IO.println s!"  batched   : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"
+  IO.println s!"  per-ex    : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"
   if gotTS == wantTS then
     IO.println "  ✅ BYTE-IDENTICAL"
   else
@@ -167,16 +176,17 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
         else
           otherTS := otherTS + 1
           if shown < 6 then
-            IO.println s!"  L{i+1} batched  : {(gl[i]!).take 160}"
+            IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
             IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
             shown := shown + 1
     IO.println s!"  ◐ {pairSwap} line(s) are the conv-VJP transpose/reverse ORDER swap — allowed"
     if otherTS != 0 then
       IO.println s!"  ✗ {otherTS} differing line(s) are NOT that swap"
-      throw <| IO.userError s!"MISMATCH in the batched ConvNeXt TRAIN STEP ({otherTS} unexplained \
+      throw <| IO.userError s!"MISMATCH between the per-example ConvNeXt TRAIN STEP and the committed batched one ({otherTS} unexplained \
 difference(s)). The gradMap check above passed, so the routing is right — look at the emitted ops."
     IO.println s!"  ✅ train step identical apart from that swap; {gl.size} lines, SSA unmoved"
-    IO.println "  ⚠ THE SWAP IS A REAL BYTE CHANGE. Swapping the writer to the batched renderer \
-would move those lines in a COMMITTED artifact, so it needs `convnext-adam-tie` (numeric, GPU) to \
-license it — a byte tie cannot, and §5's rule is that every swap is licensed by a numeric tie that \
-was verified to fail."
+    IO.println "  ⭐ THE SWAP HAPPENED (4c leg 3, 2026-09-07): the committed artifact is the batched \
+chain's, and those lines are exactly what moved — licensed by the keep = 1 numeric gate \
+(planning/xla_pjrt_handoff.md §0.10) and re-run as `convnext-adam-tie` on the swapped bytes. This \
+check now pins that the per-example chain, which still writes convnext_train_step.mlir, differs \
+from the committed bytes by that pair and nothing else."

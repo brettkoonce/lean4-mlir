@@ -238,6 +238,24 @@ status:
       comparator_config: ""
       literature_dependencies: []
     #
+    # --- 4c leg 3: ConvNeXt's fourteen nodes at the BATCHED traversal, plus the four bf16
+    #     weight-gradient nodes. Owed BEFORE the swap: every convnextin_* and *drop* artifact had
+    #     rendered from that traversal since it existed, with a fold only at the per-example
+    #     constructors no committed byte of it is pretty of. The bf16 lemmas are the first in any
+    #     fold file: den is one rounding outside the batch sum of the VJP at rounded operands.
+    - declaration: "Proofs.CnxPoCGB.chanLnGammaGradB_den"   # the 22 channel-LN gammas, batched: batchMap N chanLNRows peeled per example
+      file: "LeanMlir/Proofs/Architectures/ConvNeXtFaithfulPoCGB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.CnxPoCGB.convWGradBBf16_den"   # bf16 conv wgrad: rnd outside the batch sum of the certified VJP at rnd-ed operands
+      file: "LeanMlir/Proofs/Architectures/ConvNeXtFaithfulPoCGB.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    #
     # --- ResNet-34's T3 §1a tie at batch BN, un-fused and batched (status 4g).
     - declaration: "Proofs.smoothedCE_grad"   # the emitted six-op cotangent IS the label-smoothed loss's gradient, general target
       file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean"
@@ -1261,8 +1279,9 @@ fidelity:
        ViT-Tiny followed on 2026-09-07 (leg 4, section 4p) -- a different shape
        (no BatchNorm-world split) and a different price: its two chains render
        the same BYTES, so the leg was a measurement rather than a swap.
-       Remaining: ConvNeXt-T alone, whose two chains differ on 78 conv-VJP lines
-       and whose leg is a DECISION about moving bytes behind the 84.41% run.
+       ConvNeXt-T closed the same day (leg 3, section 4q), the only leg that
+       MOVED bytes: 78 conv-VJP lines in each of thirteen train steps, by user
+       decision, under the keep = 1 numeric licence. Every net is one chain.
        Thread: planning/renderer_convergence.md.
 
        ⭐ THE SPLIT WAS WIDER THAN THE AUDIT COULD SEE. `resnet34in_fwd.mlir`,
@@ -1837,6 +1856,67 @@ fidelity:
        have left 4f's ten ViT lemmas about an AST no committed artifact is
        `pretty` of. The planning row's "one-line renderer change" was right
        about the renderer and wrong about the tier.
+
+    4q. ONE CHAIN PER NET — ConvNeXt-T (2026-09-07). 4h's last leg, and the only
+       one that MOVED BYTES. ConvNeXt's two chains render the same forward and
+       differ on the backward: the conv input-VJP prepares its kernel with a
+       `transpose` and a `reverse` on disjoint axes, and `convBack` (per-example)
+       emits them in one order where `convBackBatched` emits the other.
+       Commuting ops, one kernel, 78 lines. Measured before a writer moved: the
+       four drop-free forwards (`convnext_fwd`, `convnextin_fwd`,
+       `convnextsin_fwd`, `convnextbin_fwd`) re-render byte-identically off the
+       batched traversal, and each of the thirteen AdamW/EMA train steps
+       differs on exactly those 78 lines and no other. The decision to move
+       them was the user's (2026-09-07): the artifact behind the 84.41%
+       Imagenette run changes on those lines, and the numeric licence is the
+       keep = 1 stochastic-depth gate (planning/xla_pjrt_handoff.md section
+       0.10 -- 0 of 83,478,846 floats differing after three AdamW steps, with
+       `scripts/perturb_conv_vjp.py` as the negative control), re-run as
+       `convnext-adam-tie` on the swapped bytes.
+
+       Seventeen writers now live in `Proofs/Codegen/ConvNeXtRenderB.lean`;
+       `ConvNeXtRender.lean` writes `convnext_train_step.mlir` alone, for the
+       reason 4p gives for ViT: the batched traversal has no fused-SGD arm and
+       `ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at those bytes.
+       `check_fwd_prefix` still pairs `convnext_fwd` with that SGD step -- a
+       cross-chain pairing now -- and it holds because the forward bytes did
+       not move. `convnext-fwd-b-tie` runs the other way: it renders the
+       per-example chain and compares it against the committed batched bytes,
+       the same statement from the other side.
+
+       THE BATCHED TIER LANDED FIRST, and for this net it was OWED before the
+       swap. `Architectures/ConvNeXtFaithfulPoCGB.lean` (18 declarations, ~2 s,
+       3-axiom clean) folds every `*GradB` node the batched traversal emits.
+       Every `convnextin_*` train step, every `*drop*` variant and the S/B
+       artifacts had rendered from that traversal since they existed, so the
+       artifact behind this net's quoted ImageNet accuracy
+       (`convnextin_adamdpwxclipdrop`) had a fold only at the per-example
+       constructors no committed byte of it is `pretty` of. 4f's "one lemma
+       per op kind certifies every optimizer tail" was, for ConvNeXt, a
+       statement about the Imagenette pair. No new mathematics: each proof is
+       `Finset.sum_congr rfl` over the batch and the per-example bridge at
+       `batchSlice n`; the 22 channel-LN sites add one `batchSlice_batchMap`
+       step, because the render hands the LN ops the per-example `[h.w, c]`
+       view lifted over the batch.
+
+       THE FOUR bf16 WEIGHT-GRADIENT NODES ARE STATED, for the first time in
+       any fold file. The bf16 artifacts emit `convWeightGradBBf16` and its
+       three siblings, not the f32 nodes; their `den` is one rounding outside
+       the batch sum of the certified VJP at rounded operands (the emitted
+       convolution contracts the batch inside one op and stores its bf16
+       result once), and the four `*Bf16_den` lemmas say exactly that. The
+       ResNet-34, EfficientNet-B0 and MobileNetV2 fold files' headers say
+       their bf16 twins "consume the same node"; those renders emit the
+       `*Bf16` constructors too, so the sentence is loose there in the same
+       way and their folds should gain the same four-line lemmas.
+
+       WHAT IT LEAVES. `KNOWN_SPLIT` was already empty; every net is now ONE
+       chain, with ViT and ConvNeXt each keeping the per-example SGD-inline
+       step as their T3 section 1a tie's subject. `convBack` and
+       `convBackBatched` -- two emitters for one VJP -- are still not tied to
+       each other in Lean: the byte tie records the pair and the numeric gate
+       the equivalence. 4f's ConvNeXt and ViT capstones and 4d piece 2 are
+       no longer gated on anything.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

@@ -4,6 +4,15 @@ import LeanMlir.ViTRender      -- `emitGradAllReduce`, the data-parallel collect
 
 /-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)
 
+⭐ **Since 4c leg 3 (2026-09-07) this file writes ONE artifact: the SGD-inline
+`verified_mlir/convnext_train_step.mlir`.** The thirteen AdamW/EMA train steps and the four
+drop-free forwards render from the batched chain in `ConvNeXtRenderB.lean`
+(`planning/renderer_convergence.md`, leg 3), whose Proofs tier is `ConvNeXtFaithfulPoCGB.lean`.
+This chain stays for two reasons: the batched traversal has no fused-SGD arm, and
+`ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at exactly these bytes.
+`tests/TestConvNeXtFwdBTie.lean` pins the two chains against each other — identical forwards,
+backwards differing on the conv-VJP `transpose`/`reverse` pair (78 lines) and nothing else.
+
 The ConvNeXt peer of `MobileNetV2Render`/`EfficientNetRender`: the FULL [3,3,9,3] ConvNeXt-T train
 step (BS=32, 3×224²→10) rendered as `pretty` of verified `SHlo` nodes — forward, backward-cotangent
 chain, AND the param-SGD tail (the new `ConvNeXtFaithfulPoC` ops + the existing conv/depthwise/dense
@@ -659,7 +668,7 @@ def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat :
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [cBS,nClasses]} " ++ "{\n" ++
     -- ⚠ The size comes from `cnxModelName V`, not from a literal: at `V = cnxTiny` this is the
     -- byte-identical "ConvNeXt-T" every committed artifact carries, and at ConvNeXt-S the banner
-    -- cannot go on claiming T. `cnxFwdPerExampleBanner` restates this line for the batched tie, so
+    -- cannot go on claiming T. `cnxFwdBanner` restates this line for the batched chain, so
     -- the two must agree — which they do at the default, and the tie is a T-only gate.
     s!"    // ── {cnxModelName V} forward: every line is pretty(verified AST node) ──\n" ++
     chLnPrelude ++ F.code ++
@@ -1176,181 +1185,18 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
 end Proofs.StableHLO
 
 -- Regenerate verified_mlir/convnext_train_step.mlir from the faithful renderer (BS=32, ε=1e-6, lr=0.1).
+-- ⭐ THE ONLY WRITER LEFT IN THIS FILE (4c leg 3, 2026-09-07). Every other ConvNeXt artifact renders
+-- from `ConvNeXtRenderB.lean`; this one stays because the batched traversal emits no fused `*Sgd`
+-- op and `ConvNeXtTiePoC.lean` ties all 182 parameters at exactly these bytes. `check_fwd_prefix`
+-- still pairs `convnext_fwd` (now the batched chain's) with it, and the pairing holds because the
+-- two chains' forwards are byte-identical.
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"
   (Proofs.StableHLO.convNextTrainStepFaithfulV "convnext_train_step")
 
--- Regenerate `verified_mlir/convnext_fwd.mlir` — what `convnext-smooth` certifies through, and the
--- eval forward for the ConvNeXt trainers — from the SAME `convNextFwdChain` the train steps
--- differentiate. This replaces the independent hand-written emitter in `tests/TestConvNeXtFwd.lean`;
--- that copy is retired to an `iree-compile` smoke over the committed bytes.
---
--- **ConvNeXt needs no `_fwd_eval` peer and must not grow one.** LayerNorm reduces within one
--- example, never over the batch, so this forward is already class-batch-independent — the very
--- property `@resnet34_fwd_eval` / `@efficientnet_fwd_eval` exist to recover for the BN nets.
-#eval IO.FS.writeFile "verified_mlir/convnext_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdFaithfulV "convnext_fwd")
-
--- The **AdamW** train step — **the artifact `convnext-verified-adam` trains on**, and from
--- 2026-07-28 this `#eval` is its ONLY writer. The hand-written emitter in
--- `tests/TestConvNeXtTrain.lean` is retired; that file now only iree-compiles the committed bytes.
--- Literals: α = 0.1, −α/K = −0.01 (K = 10), batch 32.
---
--- The swap was licensed by `lake build convnext-adam-tie` (one AdamW step, all 83,434,629 returned
--- floats): `%loss` BIT-EXACT, 179 of 180 parameter gradients bit-exact, and the one that differs —
--- `s3b2lg`, the last block's layer-scale γ — agrees BETTER than this render does with itself under
--- a semantics-preserving batch reversal. That γ gradient is a cancelling reduce (|Σ|/Σ|·| ≈ 0.09)
--- and does not reproduce to 1e-4 against ANY reordering, so the gate is calibrated against that
--- control rather than an absolute bound, and gates the SPREAD as well as the magnitude — a
--- cotangent perturbation clears the magnitude gate while disturbing 178/180 params. To re-run:
---
---   git show b94e8e9:verified_mlir/convnext_adam_train_step.mlir > /tmp/retired.mlir
---   IREE_BACKEND=rocm .lake/build/bin/convnext-adam-tie /tmp/retired.mlir \
---     verified_mlir/convnext_adam_train_step.mlir
-#eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0")
-
--- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ────────────────
--- Same graph plus one `adamMNextF` per parameter on the UPDATED weight — `d·ema + (1−d)·θ'`, which
--- is `Proofs.adamMNext` at `(β₁ := d, m := ema, g := θ')`, so this costs **no new op, no new `den`,
--- no new faithfulness theorem and no new VJP**. It is the third time enumerating the reference's
--- update against existing ops AT THEIR OTHER READINGS has collapsed a scoped op family to zero
--- (§2k heavy-ball, recipe_gaps v1.2 RMSProp, here).
---
--- ⚠ THE BLOB GAINS A FOURTH REGION: `[θ|m|v|ema]`, and the scalar tail goes 3 → 5 (`%emad`,
--- `%oemad`). That is why it renders to its OWN slug — a 4-region graph fed a 3-region blob is not a
--- subtle numeric wrong answer, it is every parameter misaligned, and the AdamW artifact must stay
--- exactly what it is. The driver's checkpoint SIZE GUARD is the other half of that (`ema.md` §5b):
--- checkpoints carry no header, so a 3-region file read as 4 resumes silent garbage.
---
--- ⚠ `%emad`/`%oemad` are ARGS rather than constants because the reference's decay is time-varying,
--- `d = min(decay, (1+t)/(10+t))` — TF's warmup-corrected `ExponentialMovingAverage`. `ema.md` §2
--- has the reference's own measurement of what dropping that correction costs: a shadow still
--- holding 12.8% of the random init at epoch 66, scoring **0.00% top-1** while the live weights
--- scored 70.48%. An 80-epoch Imagenette run is 2.4 τ, i.e. inside that regime.
-#eval IO.FS.writeFile "verified_mlir/convnext_ema_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0"
-    (ema := true))
-
--- The **DATA-PARALLEL** render (handoff §2h-quater), selected at run time by
--- `LEAN_MLIR_VARIANT=adamdp`. ConvNeXt was the last large net with no DP path at all — its renderer
--- took no `replicas` and emitted no collective, so unlike mnv2's (§2h-bis, one `#eval`) this needed
--- the parameter threaded through `convnextAdamOne` first.
---
--- Same graph, plus one `all_reduce(add)/N` per parameter gradient between the certified gradient
--- and the certified AdamW triple: *certified gradient → trusted collective → certified AdamW*. The
--- collective is a DECLARED carve-out and the render says so in its own output banner at
--- `replicas > 1`, per the §5/§2b `%loss` lesson that an undeclared carve-out is how wrong things
--- ship. Claim ceiling is unchanged (§5): the gradient averaging is a proven identity; the collective
--- implementing it is trusted, exactly like the lowerer.
---
--- ⚠ §2h-quater's headline — *"44 of the 180 collectives are RANK-0"* — WAS this net's scalar
--- LayerNorm and is retired by §2m: per-channel γ/β makes them `tensor<{c}xf32>`, so no collective
--- here is rank-0 any more. Nothing in the repo exercises a rank-0 `all_reduce` now.
---
--- It renders to its OWN path, which is what stops the §2a race where producing a DP render meant
--- editing a knob and clobbering the artifact the trainer runs. `2` is the replica count these are
--- rendered at and it must match `PJRT_REPLICAS` at run time, because the graph bakes
--- `replica_groups`. Re-render here to change it.
---
--- It needs the XLA build (`convnext-verified-adam`, §2h): collectives exist only on the PJRT
--- path, and the IREE shim refuses a DP entry point outright rather than silently running
--- single-device.
-#eval IO.FS.writeFile "verified_mlir/convnext_adamdp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2)
-
--- The DATA-PARALLEL peer of the EMA render. One `#eval`: `replicas` and `ema` are both already
--- renderer parameters, so this is the cheap half exactly as `mobilenetv2in_rmsdp64` was (§2h-bis).
---
--- ⚠ The collective and the shadow do not interact, and that is worth stating because it is what
--- makes the gate meaningful rather than circular: `all_reduce` sits on the GRADIENT, upstream of
--- the AdamW triple, while the EMA reads θ' — the triple's OUTPUT. So the shadow inherits whatever
--- the collective produced and adds no new cross-replica coupling. What the duplicated-batch gate
--- then checks is that the 4th region is threaded identically on both paths, which an arity check
--- cannot see (both renders have the region; the question is whether it carries the same values).
-#eval IO.FS.writeFile "verified_mlir/convnext_emadp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2
-    (ema := true))
-
--- ── ConvNeXt-T on FULL 1000-class ImageNet, slug `convnextin` — 2026-08-01 ──────────────────────────
--- The ConvNeXt peer of `resnet34in_*` (§2k) and `vitin_*` (§2p). `nClasses` is a renderer
--- parameter as of this change; `cBS` is NOT, so these render at the committed batch of 32 and the
--- four-replica variant is global batch 128.
---
--- That is a deliberate scope cut, not an oversight. `cBS` is a private constant in 96 places and
--- threading it is a separate refactor; global 128 is meanwhile a perfectly good ImageNet config —
--- §2d.2 measured accuracy tracking STEP COUNT, and at 1,281,167 images global 128 gives 10,009
--- steps/epoch against the reference's 5,004 at batch 256. Fewer images per step, more steps.
---
--- ⚠ `-α/K` is DERIVED here (empty string ⇒ `alphaOverK nClasses`), so the emitted constant is
--- -0.000100 at K=1000 rather than the K=10 literal the Imagenette renders carry. That hardcoding
--- was a REAL BUG on R34's first ImageNet render, on the gradient path, caught only because the
--- loss was implausible (§2k). Gated below by the artifact check, not assumed.
--- ⚠⚠ `wdStr := "0.05"` ON BOTH, AND IT IS A FIX. These baked the 1e-4 default until 2026-08-02 —
--- `convnextTinyConfig`'s IMAGENETTE value — where `convnextTinyImagenetConfig.weightDecay := 0.05`.
--- **No config says "ImageNet ConvNeXt at wd 1e-4"**, so these were at 1/500th of their reference's
--- decay: §2a-quater's silently-wrong-hyperparameter shape, found while gating `wdExcludeNormBias`
--- rather than by reading the configs. They stay short of the reference in the ways the docstring
--- above lists (no `wx`, no clip, one-hot targets); the decay was never one of those ways.
--- The variant that MATCHES the reference is `convnextin_adamdpwxclip` below.
-#eval IO.FS.writeFile "verified_mlir/convnextin_adam_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin"
-    (wdStr := "0.05"))
-#eval IO.FS.writeFile "verified_mlir/convnextin_adamdp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "convnextin"
-    (wdStr := "0.05"))
-#eval IO.FS.writeFile "verified_mlir/convnextin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdFaithfulV "convnextin_fwd" 1000)
-
--- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
--- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 121 of the 180 params take `%wdz`: every
--- LN γ/β, every conv bias, and LayerScale γ — all 1-D, so the PLAIN RANK TEST covers them and
--- ConvNeXt needs no name carve-out (ViT's `pos` has no analogue here; the generated reference sets
--- `_WD_POS_SHAPE = None`). Same arity, same types, same regions.
---
--- ⚠ The ImageNet render also takes wd = **0.05**, not the file's 1e-4 default: BOTH halves of the
--- reference's decay recipe — the magnitude and the mask — have to be right for the pair, and only
--- the mask was in scope when this variant was named. `convnext_adamwx` is the Imagenette-shaped
--- peer that `wdx-tie convnext` drives, where the compile is seconds.
-#eval IO.FS.writeFile "verified_mlir/convnext_adamwx_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 1 10 "convnext"
-    (ema := false) (wdExclude := true))
-#eval IO.FS.writeFile "verified_mlir/convnextin_adamwx_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin"
-    (ema := false) (wdExclude := true) (wdStr := "0.05"))
-
--- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) ───────────────────────────
--- `convnextTinyImagenetConfig.gradClipNorm := 1.0`. `convnextTinyConfig` sets nothing, so the
--- Imagenette artifacts keep their bytes and this is a variant, not a flipped default.
---
--- ⚠ The Imagenette `clip` render is a GATE VEHICLE, not a matched pair — no Imagenette reference
--- run clips, so its accuracy is comparable to nothing. It exists so `clip-tie` can drive it at
--- bs32/K=10, where the compile is seconds.
---
--- ⚠⚠ THE BELOW-THRESHOLD RENDER IS NOT COMMITTED — `scripts/perturb_clip.py hi` generates it, and
--- the reason is a defect this file produced and then had reverted: `cnxAdamVariant`'s `clip` is a
--- **Bool**, so a second render at a different threshold spelled the SAME variant, and
--- `convnext_adamcliphi_train_step.mlir` came out declaring `@convnext_adamclip_train_step` — an
--- entry disagreeing with its own path. **A Bool-derived name cannot distinguish two renders that
--- differ only in a baked constant, and those two ARE different functions.** ViT's explicit
--- `funcName` hides this class of mistake; this net derives its name and does not.
-#eval IO.FS.writeFile "verified_mlir/convnext_adamclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 1 10 "convnext"
-    (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0"))
--- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`.
-#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin"
-    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
--- ▶ **THE DATA-PARALLEL PEER — the artifact an ImageNet run actually loads.** Until this landed the
--- DP ImageNet render was three features behind its single-device peer (wrong decay, no `wx`, no
--- clip), so the shipping recipe existed only in the variant nothing would run. ⚠ The clip sits
--- AFTER the collective: 180 all_reduces, not 360, all before the norm fold.
-#eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "convnextin"
-    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
-
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
--- call ("entry mismatch"). These pin the literal paths above against `cnxAdamVariant`, so a rename
--- fails at `lake build` rather than at run time. (The audit greps for the LITERAL string
+-- call ("entry mismatch"). These pin the literal paths the AdamW/EMA writers use — which live in
+-- `ConvNeXtRenderB.lean` since 4c leg 3 (2026-09-07), beside `cnxAdamVariant`'s other guards —
+-- so a rename fails at `lake build` rather than at run time. (The audit greps for the LITERAL string
 -- `IO.FS.writeFile "verified_mlir/`, so those paths must stay literals — do not interpolate them.)
 #guard Proofs.StableHLO.cnxAdamVariant 1 == "adam"
 #guard Proofs.StableHLO.cnxAdamVariant 2 == "adamdp"
@@ -1372,46 +1218,3 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.cnxAdamVariant 1 false true true == "adamwxclip"
 #guard Proofs.StableHLO.cnxAdamVariant 4 false true true == "adamdpwxclip"
 #guard Proofs.StableHLO.cnxAdamVariant 1 true false true == "emaclip"
-
--- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
--- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so
--- without this render the `convnextin` pair is not comparable at all, whatever else it carries. The EMA
--- work landed on `convnext_ema` (Imagenette) and stopped there; found by listing artifacts.
-#eval IO.FS.writeFile "verified_mlir/convnextin_ema_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin" (ema := true))
-#eval IO.FS.writeFile "verified_mlir/convnextin_emadp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "convnextin" (ema := true))
-
--- ════════════════════════════════════════════════════════════════
--- § ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` (`planning/vit_convnext_sb_scaleup.md`)
--- ════════════════════════════════════════════════════════════════
---
--- **The eval forward, and it is the ONLY thing this file renders for S.** The train steps are in
--- `ConvNeXtRenderB.lean`, because the `drop` variants are batched-only — the per-example render
--- cannot express a per-EXAMPLE mask at all (that is the whole reason that file exists).
---
--- ⚠⚠ IT IS LOAD-BEARING AND IT IS EASY TO OMIT. `VerifiedTrain` resolves the eval forward as
--- `<slug>_<variant>_fwd.mlir` if present else **`<slug>_fwd.mlir`**, BY NAME — so a net whose only
--- forward is `convnextsin_drop_fwd.mlir` trains fine and then dies at the first eval on a missing
--- file. That is ViT-S trap 2 (`vit_convnext_sb_scaleup.md` §Traps), which no build-time check
--- covers because no build-time check reads a filename.
---
--- ⚠ ConvNeXt needs no `_fwd_eval` peer and must not grow one, for S exactly as for T: LayerNorm
--- reduces within one example and never across the batch, so this forward is already
--- class-batch-independent.
-#eval IO.FS.writeFile "verified_mlir/convnextsin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdFaithfulV "convnextsin_fwd" 1000 Proofs.StableHLO.cnxSmall)
-
--- ── ▶ ConvNeXt-**B**, slug `convnextbin` — the eval forward ─────────────────────────────────────
--- B is S's depth at `[128,256,512,1024]`. Unlike S, it moves the STEM (96 → 128) and the HEAD
--- (768 → 1024), which is every dimension literal this file used to hardcode — see `CnxDims`.
---
--- ⚠⚠ **The `%dgi`/`%dgb`/`%dgn`/`%dgd`/`%dgapf` GAP backward is HAND-WRITTEN TEXT** (a declared §5
--- carve-out on both renderers), so its width is threaded by hand and NOTHING type-checks it. At T
--- and S it read `768` correctly by accident of the dims not moving; at B a missed `768` there
--- would emit a graph whose GAP cotangent is 768-wide against a 1024-wide stage — which the lowerer
--- WOULD reject, but only after the artifact was written and committed. The byte-identity gate at T
--- and S is what says the threading did not disturb the sizes that were already right; the shape
--- audit of the emitted B artifact is what says the new one is.
-#eval IO.FS.writeFile "verified_mlir/convnextbin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdFaithfulV "convnextbin_fwd" 1000 Proofs.StableHLO.cnxBase)

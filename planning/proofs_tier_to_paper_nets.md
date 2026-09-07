@@ -10,10 +10,10 @@ architecture.
 ⭐ **Where it stands.** Sections 3.1–3.4 landed 2026-09-05; section 4's BatchNorm-world decision was
 taken 2026-09-06 and its port is complete on every statement that says something; the review of
 2026-09-06 added three axes the audit had not named — optimizer form (4b), renderer (4c) and data
-parallelism (4d) — and 4b is done at the fold, 4c is done for three of four nets, 4d for its first
+parallelism (4d) — and 4b is done at the fold, 4c is done for all four nets, 4d for its first
 piece. **ResNet-34, MobileNetV2 and ResNet-50 are finished** on every tier that is not a float
-budget, and ConvNeXt-T was the reference when this was scoped. What is genuinely open is small: one
-capstone, one large net, and one question for the user.
+budget, and ConvNeXt-T was the reference when this was scoped. What is genuinely open is small: two
+capstones, 4d's op node, and one large net.
 
 **Why the three new axes exist at all.** The suite grew organically: one net at a time, each with
 the renderer, optimizer form and batch index that was convenient when it landed. The end state the
@@ -34,52 +34,54 @@ cotangent) and **§3.5(a)+(b)+(c)** (ResNet-50's T1, T2 and T3). `Certs` 3966 �
 **2026-09-07** to match its commit; `Certs` 3986 → **3990**. **§3.5d** — ResNet-50's T6 — followed
 the same day on §4.2d's machinery and cost four declarations; `Certs` 3990 → **3992**. **§4c-ter**
 — 4c leg 4, ViT-Tiny's nineteen artifacts onto the batched chain with zero bytes moved — closed the
-same day; `Certs` 3992 → **3993**.
+same day; `Certs` 3992 → **3993**. **§4c-quater** — 4c leg 3, ConvNeXt-T's seventeen writers onto
+the batched chain, thirteen train steps moving exactly 78 lines each by user decision, with the
+batched fold landed FIRST — closed the same day; `Certs` 3993 → **3994**.
 
 ⭐⭐ **What that adds up to.** Both BatchNorm nets have T1, T2, T3 **and T6** stated at the
 artifact that trains, and ResNet-50 now has the same four — for all three nets every remaining row
 is a float budget, i.e. §4's port and §3.5 are complete on every statement that says something; both per-example renderers are gone; `check_adam_prefix`'s `KNOWN_SPLIT` ratchet is
 **EMPTY** and its coverage now reaches the ImageNet tier (20 paired, 0 split, plus a completeness
-assertion); ⭐ ViT-Tiny is on ONE chain too (4c leg 4, nineteen artifacts, zero bytes moved, no file
-orphaned), leaving ConvNeXt-T as the only net with two; three of the five T3 capstones are at the
+assertion); ⭐ ViT-Tiny (4c leg 4, nineteen artifacts, zero bytes moved) and ConvNeXt-T (4c leg 3, seventeen
+writers, 78 lines moved in each of thirteen train steps) are on ONE chain too — every net is; three of the five T3 capstones are at the
 un-fused gradient node and the smoothed loss; and the data-parallel disclaimer every one of those ties carries now has a theorem behind
 it — `(1/R) Σ_r g_r` is the gradient of the mean of the per-replica losses, that mean IS the
 global-batch loss for a net with no batch coupling, and for a batch-BN net it provably is NOT.
 
-⛔ **The one axis that is ORDER-CONSTRAINED — and half of it is now released.** ConvNeXt-T's and
+✅ **The one axis that was ORDER-CONSTRAINED is released on both halves.** ConvNeXt-T's and
 ViT-Tiny's capstones could not usefully be re-pointed ahead of their renderer legs: their Adam
 artifacts came from the PER-EXAMPLE renderers, where the six-op loss chain is emitted at `N := 1`
 with the batch in `pretty`'s argument rather than inside `den`, while `SmoothedLossCot` is stated at
-the batched index. Writing those capstones then meant writing them twice. ✅ **ViT's leg landed
-2026-09-07** (§4c-ter), so ViT-Tiny's capstone is now writable once, at the batched index. ConvNeXt-T's
-still waits on leg 3, which is a decision rather than a build.
+the batched index. Writing those capstones then meant writing them twice. ✅ **Both legs landed 2026-09-07**
+(§4c-ter, §4c-quater), so both capstones are writable once, at the batched index.
 
-**4c has its own thread and log: `planning/renderer_convergence.md`.** Legs 1, 2 and 4 are done;
-leg 3 is a decision. 4d's ℝ-level lemma has landed; its op node (`allReduceMeanF`) still waits for
-4c. 3.5 and 3.6 unchanged, on the batched
-chain from the start.
+**4c has its own thread and log: `planning/renderer_convergence.md`, and it is CLOSED.** All four
+legs are done. 4d's ℝ-level lemma has landed; its op node (`allReduceMeanF`) is no longer gated on
+anything. 3.5 and 3.6 unchanged, on the batched chain from the start.
 
 **WHAT HAS LANDED, so a fresh session does not re-read the rows.** 4b (four files, 41 decls),
-4.2a–4.2d (r34 + MobileNetV2's T1/T2/T3/T6 at batch BN), 4c legs 1, 2 and **4**, the ImageNet PAIRS
+4.2a–4.2d (r34 + MobileNetV2's T1/T2/T3/T6 at batch BN), 4c legs **1–4**, the ImageNet PAIRS
 extension, 4d piece 1, B0's capstone re-pointing, and §3.5a–§3.5d (ResNet-50's LAMB tail, BCE
-cotangent, T1, T2, T3, T6). `Certs` 3966 → **3993**. Their write-ups are the numbered sections
+cotangent, T1, T2, T3, T6). `Certs` 3966 → **3994**. Their write-ups are the numbered sections
 below; nothing in them is open.
 
-**NEXT SESSION — three live targets, and only the first two are tasks.**
+**NEXT SESSION — three live targets, in the order the user set on 2026-09-07: the two capstones, then 4d piece 2, then MobileNetV4.**
 
 | target | cost | what a fresh session needs to know |
 |---|---|---|
-| ⭐ **4b's capstone for ViT-Tiny** — the recommendation | one session; the per-node half is already paid | **UNBLOCKED 2026-09-07 by 4c leg 4.** ViT's Adam artifacts now render from `vitBackAllB`, so the six-op loss chain is at the batched index `SmoothedLossCot` is stated at and the capstone can be written ONCE. ✅ The §1 fold at those nodes exists: `Architectures/ViTFaithfulPoCGB.lean`, ten theorems, 3-axiom clean. ⭐ **Mirror `EfficientNetTiePoCG.lean` (801 lines), not r34's or mnv2's** — ViT has no kink anywhere, so it is a `HasVJP` net like B0 and carries no smoothness hypothesis and no operating point. ⛔⛔ **But B0's file was a TWO-axis transformation and ViT's is THREE.** `EfficientNetTiePoC.lean` was already batched (B0 is batch BN), so B0 moved only the optimizer form and the loss. `ViTTiePoC.lean` is at the per-example fused ops AND at a single image — its capstone takes `(img : Vec (3*224*224)) (label : Fin 10)` with no batch at all, because `pretty B` lifted outside the AST. So the third axis, the INDEX, is new work: `N` becomes a binder and every activation becomes `Vec (N*…)`. ⛔ **And ViT has no `*BackBatchedGraph_faithful` family** — that is the name I looked for and did not find; ConvNeXt, B0, MobileNetV2, MNv4 and r34 all have one, and it is what let 4.2a's and 4.2c's `*CotIn_eq_vjp` close by `rfl`. ViT's cotangent chain is hand-derived in `ViTTiePoC.lean` (`vitBlockCotInAtMHV`, `vitCotB2outV`, `vitCotFl`), so the batched peer must be re-derived at the batched constructors rather than delegated. ▶ Price this as the cotangent chain, not as the folds. |
-| ⭐ **3.6 MobileNetV4-Conv-M** — the only large build left | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
-| **4c leg 3, ConvNeXt-T** — ⛔ a QUESTION for the user, not a task | — | The last net with two chains. Its two forwards are byte-identical and 78 backward lines differ (`convBack` vs `convBackBatched`), so the swap MOVES BYTES in the artifact behind the 84.41% 80-epoch run. ⛔⛔ The blocker this document used to state was stale (§4c-bis): the gate links in 2 s and the numeric A/B already ran with a negative control. So the only open content is the trade, and it is the user's: **is re-pointing ConvNeXt-T's committed train step at the batched chain worth moving those bytes?** ⚠ Whichever way it goes, it also settles `convBack` vs `convBackBatched` — two emitters for one VJP, never tied to each other. It GATES 4b's ConvNeXt capstone and 4d piece 2. |
+| ⭐ **4b's capstones for ViT-Tiny AND ConvNeXt-T** — first | one session each; the per-node half is paid for both | **BOTH UNBLOCKED 2026-09-07 by 4c legs 3 and 4.** Each net's Adam artifacts now render from its batched traversal, so the six-op loss chain is at the batched index `SmoothedLossCot` is stated at and each capstone can be written ONCE. ✅ The §1 folds at those nodes exist: `ViTFaithfulPoCGB.lean` (ten theorems) and `ConvNeXtFaithfulPoCGB.lean` (eighteen, §4c-quater), both 3-axiom clean. ⭐ **ConvNeXt's is the cheaper of the two**: it is a `HasVJP` net like ViT (GELU, no kink), its capstone `ConvNeXtTiePoC.lean` is per-example at a single image so it is the same THREE-axis transformation — but ConvNeXt HAS a `*BackBatchedGraph_faithful` family (`ConvNeXtBackB0.lean`), so its `*CotIn_eq_vjp` conjuncts can close by `rfl` where ViT's cotangent chain must be re-derived. Write ConvNeXt's first and use it as ViT's template. ▶ For ViT: ⭐ **Mirror `EfficientNetTiePoCG.lean` (801 lines), not r34's or mnv2's** — ViT has no kink anywhere, so it is a `HasVJP` net like B0 and carries no smoothness hypothesis and no operating point. ⛔⛔ **But B0's file was a TWO-axis transformation and ViT's is THREE.** `EfficientNetTiePoC.lean` was already batched (B0 is batch BN), so B0 moved only the optimizer form and the loss. `ViTTiePoC.lean` is at the per-example fused ops AND at a single image — its capstone takes `(img : Vec (3*224*224)) (label : Fin 10)` with no batch at all, because `pretty B` lifted outside the AST. So the third axis, the INDEX, is new work: `N` becomes a binder and every activation becomes `Vec (N*…)`. ⛔ **And ViT has no `*BackBatchedGraph_faithful` family** — that is the name I looked for and did not find; ConvNeXt, B0, MobileNetV2, MNv4 and r34 all have one, and it is what let 4.2a's and 4.2c's `*CotIn_eq_vjp` close by `rfl`. ViT's cotangent chain is hand-derived in `ViTTiePoC.lean` (`vitBlockCotInAtMHV`, `vitCotB2outV`, `vitCotFl`), so the batched peer must be re-derived at the batched constructors rather than delegated. ▶ Price this as the cotangent chain, not as the folds. |
+| **4d piece 2, `allReduceMeanF`** — second | one session | Ungated now that 4c is closed. One `SHlo` constructor with `den (allReduceMeanF R g) = (1/R) Σ_r den (g r)` under `∀ r, skel (g r) = skel (g 0)`, a `pretty` case that is `emitGradAllReduce`'s text verbatim, and a round-trip parser case. It turns the "per-replica node, all-reduce outside the AST" disclaimer every ImageNet tie carries into a faithfulness theorem at the artifact — all seven nets at once — and composes with 4b's folds and 4d.1's `dpMeanGrad_eq_grad_meanLoss`. §4d has the scoping. |
+| ⭐ **3.6 MobileNetV4-Conv-M** — third, and a planning doc of its own is the first deliverable | many sessions; §3.6 says what the FIRST one is | The last net with nothing at the net level, and it skips 4b and 4c entirely (`mnv4FwdChainB` is already the one traversal `@mnv4_fwd`, its eval twin and the train step all use). ⭐ **Session one is NOT T1**: it is the three pieces `MobileNetV4BackB0.lean`'s own header names as missing — the fused stage's VJP and backward graph, the head's, and the strided UIB body assembled from the stages already there. Everything after that is enumeration. ⭐ The four-family collapse, the hard half, is DONE. |
 
 ⛔ **Do NOT write, and the reason is a closed thread, not an oversight.** Every remaining row for
 ResNet-34, MobileNetV2 and ResNet-50 is a float BUDGET (T4/T5), and
 `planning/float_budget_numbers.md` closed that thread as vacuous by user decision on 2026-09-05.
 On the statements that say something, §4's port and §3.5 are COMPLETE for all three.
 
-⭐ **Recommendation, 2026-09-07: the table's first row, then its second.** ViT's capstone is the
-cheapest remaining item that says something, and leg 4 was what made it writable once.
+⭐ **Order, set by the user 2026-09-07: the two capstones, then 4d piece 2, then MobileNetV4 (which
+gets its own planning doc first), then a cleanup/unification session** — the generic constructions
+to a `Foundation` leaf, the root-file lemmas, the bf16 `*GradBBf16` lemmas for the other three
+folds (§4c-quater), and this document archived behind a short standing one.
 
 ⭐ **What §4.2d + §3.5d hand the next kinked net** (which is MNv4, not ViT — ViT has no kink). `r34B_full_has_vjp_at` is a net-agnostic
 eighteen-stage apex with two consumers already; `maxPool3s2FlatBackB`, its `rfl` tie and the
@@ -137,7 +139,7 @@ wanting only "what is open" should read the NEXT SESSION table at the top instea
 | net | paper net in Proofs | T1 | T2 | T3 | T4 | T5 | T6 | T7 |
 |---|---|---|---|---|---|---|---|---|
 | ResNet-34 | `resnet34Forward_full_pc`, [3,4,6,3], 64 to 512 | ✓ | ✓ | ✓ 110 params ⛔ | ✓ eval and train BN | ✓ | ✓ | full depth at 2 channels; 224 realistic |
-| ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params | ✓ CAP | ✓ | ✓ | none |
+| ConvNeXt-T | `convNextForwardTCh`, [3,3,9,3], 96 to 768 | ✓ | ✓ | ✓ 182 params, at the per-example SGD-inline file; ⭐ the FOLD is at the batched nodes too (`ConvNeXtFaithfulPoCGB`, 2026-09-07) and the capstone is the open item | ✓ CAP | ✓ | ✓ | none |
 | ViT-Tiny | `vitForwardKV` / `vitBodyKVFlat`, depth 12, D 192, 3 heads | ✓ | ✓ `vitFwdGraphKMHV_faithful` | ✓ 200 params, at the per-example SGD-inline file; ⭐ the FOLD is at the batched nodes too (`ViTFaithfulPoCGB`, 2026-09-07) and the capstone is the open item | ✓ CAP | ⛔ 1.703e399, priced and declined | ✓ `vitInputGradK_eq_vitForwardKV_vjp` | none |
 | EfficientNet-B0 | `EfficientNetFullB0.lean`, 16 MBConv | ✓ | ✓ train and eval BN (`EfficientNetFullB0Eval.lean`) | ✓ 262 params | ✓ CAP 2.416e287 at the 16 SE sigmoids, window 1.886e279 honest | ⛔ no number at 16 blocks (9.112e2648; statable, declined) | ✓ `efficientnetInputGradB_full_correct`, through `backward_unique` to the concrete witness | none |
 | MobileNetV2 | `MobileNetV2FullPaper.lean`, 17 blocks | ✓ `mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), shape check `mobilenetv2ForwardPaper_eq_chain` | ✓ train and eval BN (`MobileNetV2FullPaperEval.lean`) | ✓ 158 params ⛔ | ✓ CAP 8.176e16, all 52 BN sites | ⛔ no number at 17 blocks | ✓ `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` | 17 blocks at toy dims; 2 blocks at 224 |
@@ -176,7 +178,7 @@ The table below is the TIE's column; read it that way.
 | ResNet-34 | `resnet34_train_step` (SGD fused, per-example BN) | `ResNet34Render` | `resnet34in_momdp64` | heavy-ball | optimizer form, renderer, BN world, DP, smoothed loss |
 | MobileNetV2 | `mobilenetv2_train_step` (SGD fused, per-example BN, 17 blocks) | `MobileNetV2Render` | `mobilenetv2in_rmsdp64` | RMSProp | the same five |
 | EfficientNet-B0 | `efficientnet_train_step` (SGD fused `*SgdB`, batch BN) | `EfficientNetRender`, which writes the Adam one too | `efficientnetin_emarmsdp64dropdo` | RMSProp + EMA | optimizer form, DP, smoothed loss; drop/dropout are certified inputs |
-| ConvNeXt-T | `convnext_train_step` (SGD fused, per-example index) | `ConvNeXtRender` | `convnextin_adamdpwxclipdrop` | AdamW | optimizer form, renderer (`ConvNeXtRenderB`, "tied but not swapped", 78 lines), DP, smoothed loss; clip/wx/drop certified |
+| ConvNeXt-T | `convnext_train_step` (SGD fused, per-example index) | ⭐ `ConvNeXtRenderB` for all 35 other artifacts (4c leg 3, 2026-09-07); `ConvNeXtRender` writes this one and nothing else | `convnextin_adamdpwxclipdrop` | AdamW | optimizer form, DP, smoothed loss — the RENDERER axis is closed; clip/wx/drop certified |
 | ViT-Tiny | `vit_train_step` (SGD fused, per-example index) | ⭐ `ViTRenderB` for all nineteen other artifacts (4c leg 4, 2026-09-07); `ViTRender` writes this one and nothing else | `vitin_adamdp128x4wxclipdrop` | AdamW, 4× accumulation | optimizer form, DP, smoothed loss — the RENDERER axis is closed |
 | ResNet-50 | ✅ `r50_net_tiedB`, all 161 params, `g` a BINDER (§3.5c) | `ResNet50RenderB` only | `resnet50in160_lambaccdp8x64bce` | LAMB, 8× accumulation, BCE, 160 px | DP only — the optimizer, renderer, BN world and loss all met 2026-09-06 |
 | MobileNetV4-Conv-M | none | `MobileNetV4RenderB` only | `mnv4in_adamdp64` | AdamW | no tie |
@@ -204,9 +206,9 @@ Five axes cut across the table and are recorded separately from it:
   eval-BN graph is a separate artifact from its training one. MobileNetV2 has an eval graph at
   six blocks and none at seventeen, which is why 3.2(b)'s number has no whole-net graph tie.
 * **Optimizer form — ✅ DONE 2026-09-06 at the FOLD; the ties are not re-pointed.** Section 4b.
-* **Renderer — ✅ ResNet-34, MobileNetV2 (2026-09-06) and ViT-Tiny (2026-09-07) DONE; ConvNeXt-T
-  left, and it is a decision rather than a build.** Section 4c, §4c-ter, and its own thread at
-  `planning/renderer_convergence.md`. `KNOWN_SPLIT` is empty.
+* **Renderer — ✅ DONE for all four nets (ResNet-34, MobileNetV2 2026-09-06; ViT-Tiny, ConvNeXt-T
+  2026-09-07).** Section 4c, §4c-ter, §4c-quater, and its own thread at
+  `planning/renderer_convergence.md`. `KNOWN_SPLIT` is empty; every net is one chain.
 * **Data parallelism — ✅ piece 1 DONE 2026-09-06; the op node is left.** The all-reduce is still
   emitted text outside the AST in every `*dp*` artifact, so every tie is still at the per-replica
   node. What changed is that the function those nodes add up to has a name, and that the
@@ -1591,7 +1593,7 @@ carries a `KNOWN_SPLIT` ratchet that "may shrink, never grow"; a net is done whe
 |---|---|
 | **ResNet-34** | ✅ leg 1 DONE 2026-09-06 — `ResNet34Render.lean`, `resnet34_train_step.mlir` and the `resnet34-verified` binary all retired; both forwards on `r34FwdChainB`; ⭐ the ImageNet `resnet34in_fwd` was split too, which `check_adam_prefix`'s Imagenette-only PAIRS list could not see |
 | **MobileNetV2** | ✅ leg 2 DONE 2026-09-06 — `MobileNetV2Render.lean`, `mobilenetv2_train_step.mlir`, `mobilenetv2_reduced_train_step.mlir` and the `mobilenetv2-verified` binary all retired; both train forwards on `mnv2FwdChainB`; ⛔ the eval pair deliberately stays on the migrated per-example chain, because a float-budget theorem's provenance names its SSA names; ⚠ §4c's "already has an `sgdParamF` tail" was wrong, and `check_fwd_prefix` lost its mnv2 entry rather than gaining a partner |
-| **ConvNeXt-T** | leg 3 — a SWAP, not a re-render: the two chains' forwards are byte-identical (`convnext-fwd-b-tie`) and differ on 78 backward lines. ⛔ The gate story in this row was stale; see §4c-bis. The license exists, and the leg is a DECISION about moving committed bytes |
+| **ConvNeXt-T** | ✅ leg 3 DONE 2026-09-07 — seventeen writers moved to `ConvNeXtRenderB`; four forwards byte-identical, thirteen train steps each moved exactly the 78 conv-VJP lines, by user decision under the keep = 1 numeric licence; `ConvNeXtFaithfulPoCGB` (18 decls, incl. the first bf16-node lemmas) landed FIRST; `convnext_train_step.mlir` stays per-example on purpose, as ViT's does — see §4c-quater |
 | **ViT-Tiny** | ✅ leg 4 DONE 2026-09-07 — 19 of 19 drop-free artifacts byte-identical off the batched chain, nineteen writers moved to `ViTRenderB`, ZERO bytes moved and NO file orphaned; ⛔ `vit_train_step.mlir` stays per-example on purpose (no fused-SGD arm, and `ViTTiePoC`'s 200-param tie is at those bytes); ⛔⛔ "a one-line renderer change" was half the price — see §4c-ter |
 
 ⚠ **"Every Imagenette number gets re-run" was vacuous for ResNet-34** and must not be assumed for
@@ -1605,7 +1607,7 @@ bytes exercising it — which is only acceptable because their batched peers (4.
 same day. **A leg should not retire a per-example renderer before the batched tier that replaces it
 exists.** That ordering is why 4b and 4.2a came first.
 
-### 4c-bis DECISION NEEDED — legs 3 and 4 are not blocked, and one of them may be free (2026-09-07)
+### 4c-bis DECIDED 2026-09-07 (leg 4 measured, §4c-ter; leg 3 swapped, §4c-quater) — legs 3 and 4 were not blocked
 
 ⛔⛔ **Three statements in this document and one in `planning/renderer_convergence.md` said legs 3–4
 were blocked because "the licensing gate is IREE-linked and does not link on this box". All four
@@ -1705,6 +1707,49 @@ Gates: `lake build Certs` 3993, `lake env lean tests/AuditAxioms.lean` 3-axiom c
 writer each; `check_adam_prefix` 20 paired / 0 known-split / 0 unaccounted; empty artifact diff),
 and `.lake/build/bin/vit-fwd-b-tie` byte-identical on all 14,457 lines.
 
+
+### 4c-quater DONE 2026-09-07 — leg 3, ConvNeXt-T: thirteen artifacts, 78 lines each, by decision
+
+One new Lean file, `Certs` 3993 → **3994**, eighteen declarations, all 3-axiom clean.
+`Architectures/ConvNeXtFaithfulPoCGB.lean` (~2 s) is the §1 fold at the batched constructors;
+seventeen writers moved from `ConvNeXtRender.lean` into `ConvNeXtRenderB.lean`. Full write-up in
+`planning/renderer_convergence.md` (leg 3); what this document needs is below.
+
+⭐ **The measurement, then the decision.** Rendered off the batched chain before a writer moved: the
+four drop-free forwards byte-identical, each of the thirteen AdamW/EMA train steps differing on
+exactly 78 lines, all the conv-VJP `transpose`/`reverse` pair, line counts equal. The user took the
+swap (2026-09-07). After it, `git diff --stat verified_mlir/` is thirteen files at 1014/1014 and
+zero non-pair lines. `convnext-adam-tie` on the pre-swap artifact against the committed one: gradient
+norm-rel 0.000000 against a 0.000002 reorder control, `%loss` and `v` bit-exact, 0/182 parameters
+disagreeing. ⛔ The 84.41% run was not re-run; the function did not move, the bytes did.
+
+⭐⭐ **For this net the fold was OWED before the swap, which §4c's framing missed.** Leg 3 was scoped
+as "a decision about the Imagenette pair". But every `convnextin_*` train step, every `*drop*`
+variant and the S/B artifacts had rendered from the batched chain since they existed — with a fold
+(`ConvNeXtFaithfulPoCG`) at the per-example `convWeightGrad` constructors, where `ConvNeXtRenderB`
+emits `convWeightGradB`. So 4b's "one lemma per op kind certifies every optimizer tail" was, for
+ConvNeXt, a statement about the Imagenette pair only, and the artifact behind the quoted ImageNet
+accuracy had no `den` lemma at its constructors at all. Leg 4's lesson ("byte-identity is not
+tier-identity") arrived here as its converse: an artifact that never moved was never covered.
+▶ **Fifth instance of §5's rule, and the one where the gap was on the artifact nobody was
+looking at.**
+
+⭐ **The bf16 nodes are stated, for the first time.** `convWeightGradBBf16` and its three siblings
+are what the bf16 artifacts emit; their `den` is `rnd (Σ_n VJP(rnd x_n, rnd cot_n))`, one rounding
+outside the sum. Four lemmas, four lines each. ⚠ The r34, B0 and MobileNetV2 fold headers say their
+bf16 twins "consume the same node"; those renders emit the `*Bf16` constructors too, so that
+sentence is loose in the same way — batch the same lemmas into the cleanup pass.
+
+⛔ **`convnext_train_step.mlir` stays per-example, for ViT's reason**: the batched traversal has no
+fused-SGD arm and `ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at those bytes. Its batched
+peer is 4b's ConvNeXt capstone, which this leg unblocks and which is cheaper than ViT's
+(`ConvNeXtBackB0.lean` has the `*BackBatchedGraph_faithful` family; ViT does not).
+
+**Gates.** `lake build Certs` 3994; `lake env lean tests/AuditAxioms.lean` 3-axiom clean on all
+eighteen; `lake exe docstring-checkrefs` 1668; `check_audit_coverage.py`, `check_render_coverage.py`
+(241 files, one writer each); `regen_verified_mlir.sh check` 20 paired / 0 known-split / 0
+unaccounted; `convnext-fwd-b-tie` (now per-example against the committed batched bytes) green;
+`convnext-adam-tie` old vs new as above.
 
 ## 4d. Data parallelism — what is provable, what is calling logic (user question, 2026-09-06)
 
@@ -1857,6 +1902,12 @@ capstones. Until it lands a tie composes with these lemmas only through the read
   ten ViT lemmas. ▶ **Byte-identity is not tier-identity: a leg whose artifacts do not move still
   moves the tier.** Before pricing a renderer swap, ask which constructors the new traversal emits,
   not only which bytes.
+* ⛔ **A fold header's coverage claim must name the CONSTRUCTOR each variant emits.** Three fold
+  headers say "the bf16 twins consume the same node"; the bf16 renders emit `*GradBBf16`
+  constructors, whose `den` is `rnd ∘ Σ_n ∘ (VJP at rnd-ed operands)`. ConvNeXt's batched fold is
+  the first to state them (§4c-quater, four lemmas); r34's, B0's and MobileNetV2's should gain the
+  same. Found by listing what `ConvNeXtRenderB` emits rather than reading what the header claimed —
+  the same move that found the ImageNet artifacts had no batched fold at all.
 * ⛔⛔ **A KINKED net's whole-net tie stops at opaque blocks, and the reason is the kink.** B0's
   T6 goes one step further than MobileNetV2's — instantiate the generic tie at the concrete blocks,
   then `HasVJP.backward_unique` — and §3.3(c) read that as a lemma B0 had and the others lacked.
@@ -1936,12 +1987,14 @@ write there are r34's `ResNet34TiePoCB.lean` (4.2a) and MobileNetV2's five peers
 NOT part of 4b after all — it is a prerequisite for re-pointing the capstones, not for the folds,
 which are `∀ cot`; it moved to 4.2a and LANDED there, with
 `Foundation/ResNet34TiePoCB.lean`); 4c: `Architectures/ViTFaithfulPoCGB.lean` LANDED 2026-09-07 for leg 4 (⛔ the module §4c
-originally said the legs needed none — byte-identity is not tier-identity, §4c-ter), and otherwise
+originally said the legs needed none — byte-identity is not tier-identity, §4c-ter) and
+`Architectures/ConvNeXtFaithfulPoCGB.lean` LANDED 2026-09-07 for leg 3 (§4c-quater; eighteen
+declarations, the four bf16 node lemmas the first anywhere), and otherwise
 no new Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean`; it RETIRED
 `ResNet34Render.lean` and `MobileNetV2Render.lean`, moved ViT's nineteen writers onto
-`ViTRenderB.lean` (⛔ `ViTRender.lean` is NOT retired — it still writes `vit_train_step.mlir`), and
-re-points every T2/T3 file at the batched constructors; ConvNeXt's per-example traversal is leg 3
-and untouched; §4.2d's T6 LANDED 2026-09-07 for both nets: `Float/Resnet34WholeBackFloatBridgeB.lean` + `Foundation/Resnet34BackCertifiedTieB.lean` and `Float/MobileNetV2WholeBackFloatBridgeB.lean` + `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (⛔ no `*BackFloatBudget` peer for either — T4/T5 are the vacuous half); 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1); the
+`ViTRenderB.lean` and ConvNeXt's seventeen onto `ConvNeXtRenderB.lean` (⛔ neither `ViTRender.lean`
+nor `ConvNeXtRender.lean` is retired — each still writes its SGD-inline `*_train_step.mlir`), and
+re-points every T2/T3 file at the batched constructors; §4.2d's T6 LANDED 2026-09-07 for both nets: `Float/Resnet34WholeBackFloatBridgeB.lean` + `Foundation/Resnet34BackCertifiedTieB.lean` and `Float/MobileNetV2WholeBackFloatBridgeB.lean` + `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (⛔ no `*BackFloatBudget` peer for either — T4/T5 are the vacuous half); 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1); the
 `allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases is
 piece 2 and is gated behind 4c;
 3.5a `Codegen/LambTriple.lean` and

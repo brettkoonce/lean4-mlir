@@ -527,6 +527,14 @@ lean_lib «Certs» where
              -- operand and its batch reduce is emitted text, the per-example carve-out unchanged
              -- (ViTFaithfulPoCGB.lean).
              `LeanMlir.Proofs.Architectures.ViTFaithfulPoCGB,
+             -- ⭐ 4c leg 3: ConvNeXt's fourteen nodes at the BATCHED traversal, plus the four bf16
+             -- weight-gradient nodes (the first fold file to state them: den is one rounding
+             -- outside the batch sum of the VJP at rounded operands). Owed BEFORE the swap: every
+             -- convnextin_* and *drop* artifact had rendered from that traversal since it existed,
+             -- with a fold only at the per-example constructors. The 22 channel-LN sites take
+             -- batchMap N (chanLNRows …) and batchSlice_batchMap peels the lift per example
+             -- (ConvNeXtFaithfulPoCGB.lean).
+             `LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCGB,
              -- ⭐ MobileNetV2's twelve, at the BATCHED index — this net's two renders do not
              -- overlap (the per-example one is SGD-inline only, the batched one AdamW-only), so
              -- its Adam/RMSProp artifacts have no fused op to un-fuse and the fold goes straight
@@ -2330,7 +2338,10 @@ lean_exe «fwd-tie» where
 
 /-- §0.2 ▶2, the batched-index move: the ConvNeXt forward rendered at `N := B` must emit the
     committed `verified_mlir/convnext_fwd.mlir` BYTE FOR BYTE. No GPU — it is a string compare, so
-    it belongs in every pre-commit sweep rather than behind a device.
+    it belongs in every pre-commit sweep rather than behind a device. ⭐ Since 4c leg 3 (2026-09-07)
+    the committed bytes ARE the batched chain's, so the gate renders the PER-EXAMPLE chain and
+    compares it — the same statement from the other side, load-bearing as long as both chains exist
+    (the per-example one still writes the SGD-inline `convnext_train_step.mlir`).
 
     ⚠ Pair it with `lake env lean tests/TestBatchedEmitTie.lean`: that file pins each of the 31
     batched forms against its per-example peer individually, so it localises a failure this

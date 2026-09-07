@@ -1,6 +1,7 @@
 # 4c — one chain per net: the renderer convergence
 
-**Opened 2026-09-06 as its own thread, out of `planning/proofs_tier_to_paper_nets.md` §4c.** The
+**Opened 2026-09-06 as its own thread, out of `planning/proofs_tier_to_paper_nets.md` §4c; ✅ CLOSED
+2026-09-07 — all four legs done, every net one chain.** The
 decision it executes was taken by the user that day: *the Imagenette and ImageNet artifacts of a net
 come from the SAME renderer, the batched one, and the Proofs tiers are stated at that chain.* This
 log carries the per-net legs, the seams outside Lean, and what each leg costs. START at "State of
@@ -65,15 +66,17 @@ never moved).
 |---|---|---|
 | **ResNet-34** | — | 1 ✅ **DONE 2026-09-06** |
 | **MobileNetV2** | — | 2 ✅ **DONE 2026-09-06** |
-| **ConvNeXt-T** | the drop-free Imagenette pair is per-example; every `*drop*` and every `*in*` is batched | 3 — a DECISION, see below |
+| **ConvNeXt-T** | — (35 of 36 artifacts; the SGD-inline step stays, deliberately) | 3 ✅ **DONE 2026-09-07** |
 | **ViT-Tiny** | — (19 of 20 artifacts; the SGD-inline step stays, deliberately) | 4 ✅ **DONE 2026-09-07** |
 | EfficientNet-B0, ResNet-50, MNv4 | nothing — one renderer already | — |
 
-⭐⭐ **`KNOWN_SPLIT` IS EMPTY.** `check_adam_prefix` reads **20 paired, 0 known-split, 0
-unaccounted** — the criterion this thread was opened to reach, and at the ImageNet tier since the
-PAIRS extension. ⚠ Legs 3 and 4 are a different shape (no BN-world split at all) and were never in
-that ratchet, so leg 4's acceptance criterion had to be a different one: an EMPTY
-`git diff verified_mlir/` after the swap.
+⭐⭐ **`KNOWN_SPLIT` IS EMPTY, AND EVERY NET IS ONE CHAIN.** `check_adam_prefix` reads **20 paired,
+0 known-split, 0 unaccounted** — the criterion this thread was opened to reach, and at the ImageNet
+tier since the PAIRS extension. ⚠ Legs 3 and 4 were a different shape (no BN-world split at all)
+and were never in that ratchet, so each needed its own acceptance criterion: leg 4's was an EMPTY
+`git diff verified_mlir/` after the swap; leg 3's was a diff of EXACTLY thirteen files × 78 lines,
+every changed line a conv-VJP `transpose`/`reverse`, and the four forwards untouched — measured
+before a writer moved and again after.
 
 ## Leg 1 — ResNet-34 ✅ DONE 2026-09-06
 
@@ -191,42 +194,72 @@ first time**: §4.2 was done before the retirement rather than alongside it.
 `MobileNetV2RenderPC.lean` is NOT affected — its per-example net is the subject of the float
 budgets, the T6 tie and the witness, none of which is about a train step's bytes.
 
-## Leg 3 — ConvNeXt-T ⛔ THE LAST ONE, and it is a DECISION for the user
+## Leg 3 — ConvNeXt-T ✅ DONE 2026-09-07 — the only leg that moved bytes
 
-Different shape from legs 1 and 2: ConvNeXt and ViT have no BN-world split (LayerNorm,
-train == eval), and their per-example and batched chains render the same FORWARD byte-for-byte
-(`convnext-fwd-b-tie`, `vit-fwd-b-tie`). What differs is the BACKWARD: 78 lines of conv-VJP
-`transpose`/`reverse` in a commuting order. So the leg is a SWAP, not a re-render.
+**The decision was the user's (2026-09-07), and the measurement came first.** Different shape from
+legs 1 and 2: ConvNeXt has no BN-world split (LayerNorm, train == eval) and its two chains render
+the same FORWARD byte-for-byte; what differs is the BACKWARD, 78 lines of the conv input-VJP's
+`transpose`/`reverse` in a commuting order (`convBack` per-example, `convBackBatched` batched —
+disjoint axes, one kernel). Rendered off the batched chain before a writer moved: the four
+drop-free forwards (`convnext_fwd`, `convnextin_fwd`, `convnextsin_fwd`, `convnextbin_fwd`)
+**byte-identical**, and each of the thirteen AdamW/EMA train steps differing on **exactly 78 lines,
+all that pair, line counts equal**. After the move, `git diff --stat verified_mlir/` is thirteen
+files, 1014 insertions / 1014 deletions, zero non-pair lines.
 
-⭐ **ViT turned out to have no such lines at all** (its patch embed is not a `conv2d`), which is why
-leg 4 was a measurement and closed on 2026-09-07 — see the next section. ConvNeXt does have them,
-so the swap MOVES BYTES.
+**The licence.** `planning/xla_pjrt_handoff.md` §0.10's keep = 1 gate had already compared the two
+chains (0 of 83,478,846 floats differing after three AdamW steps, `scripts/perturb_conv_vjp.py`
+firing at 0.0343 as the negative control); `convnext-adam-tie` re-run on the swapped bytes — the
+pre-swap `convnext_adam_train_step.mlir` against the committed one, on XLA — ties at gradient
+norm-rel 0.000000 against a 0.000002 reorder control, `%loss` bit-exact, `v` bit-exact on all
+27,827,818 coordinates, 0/182 parameters disagreeing. ⛔ Not re-run: the 84.41% 80-epoch Imagenette
+run. Its artifact's bytes moved on those 78 lines and nothing else, and the numeric gate says the
+function did not.
 
-⛔⛔ **CORRECTED 2026-09-07 — the blocker this section named was stale, and so was the work it
-implied.** This read *"the gate that licenses it (`convnext-adam-tie`) is IREE-linked and does not
-link on this box"*, and *"the swap goes under an XLA-side numeric gate instead — a one-batch A/B
-… to build"*. Measured:
+**What landed.**
 
-* `lake build convnext-adam-tie` links in **2 s**. Its lakefile docstring records that it moved to
-  `lowererLink` on 2026-08-12 and that **`ireeLink` stopped existing on 2026-08-25**.
-  `vit-adam-tie`, `convnext-fwd-b-tie` and `vit-fwd-b-tie` all build too.
-* ⭐⭐ **The A/B already exists and already ran.** `planning/xla_pjrt_handoff.md` §0.10: the keep = 1
-  SD gate compares `convnext_adam` (per-example) against `convnext_adamdrop` (batched, mask ≡ 1.0)
-  and measures **0 of 83,478,846 floats differing after 3 AdamW steps** against a bit-exact floor,
-  over a pair differing by exactly those 78 lines, with `scripts/perturb_conv_vjp.py` firing at
-  0.0343 as the negative control. That file's verdict: *"so the blocker is gone"*.
+1. **`Architectures/ConvNeXtFaithfulPoCGB.lean` FIRST** (18 declarations, ~2 s, 3-axiom clean) —
+   the §1 fold at the batched constructors, the peer of 4b.2's `ConvNeXtFaithfulPoCG.lean`. ⭐⭐
+   **For this net the fold was OWED before the swap**: every `convnextin_*` train step, every
+   `*drop*` variant and the S/B artifacts had rendered from the batched chain since they existed,
+   so the artifact behind the quoted ImageNet accuracy (`convnextin_adamdpwxclipdrop`) had a fold
+   only at the per-example constructors no committed byte of it is `pretty` of. 4b's "one lemma per
+   op kind certifies every optimizer tail" was, for ConvNeXt, a statement about the Imagenette
+   pair. No new mathematics — `Finset.sum_congr rfl` over the batch, then the per-example bridge at
+   `batchSlice n`; the 22 channel-LN sites add one `batchSlice_batchMap` step because the render
+   hands the LN ops the per-example `[h·w, c]` view lifted over the batch.
+2. ⭐ **The four bf16 weight-gradient nodes are stated, for the first time in any fold file.** The
+   bf16 artifacts emit `convWeightGradBBf16`, `depthwiseWeightGradBBf16`,
+   `convStridedWeightGradBBf16` and `convStride4WeightGradBBf16` — not the f32 nodes — and their
+   `den` is ONE rounding outside the batch sum of the certified VJP at rounded operands. ⚠ The r34,
+   B0 and MobileNetV2 fold headers say their bf16 twins "consume the same node"; those renders emit
+   the `*Bf16` constructors too (`ResNet34RenderB.lean:409`, `EfficientNetRender.lean:158`), so the
+   sentence is loose there in the same way and their folds should gain the same four-line lemmas.
+3. **The seventeen writers moved** from `ConvNeXtRender.lean` to `ConvNeXtRenderB.lean`, each with
+   its own comment record, calling `convNextAdamTrainStepFaithfulB` / `convNextFwdRenderB`. ⭐ The
+   two wrappers take their arguments in the SAME positions (the batched one delegates to the
+   per-example one with `traversal :=`), so unlike ViT's leg there was no positional trap; the
+   per-artifact byte diff was run anyway. `cnxFwdPerExampleBanner` became `cnxFwdBanner V`, derived
+   from the size table exactly as the per-example line is, so S and B carry their own names.
+4. **`tests/TestConvNeXtFwdBTie.lean` flipped**: the committed bytes are now the batched chain's,
+   so the gate renders the PER-EXAMPLE chain and compares it — forward byte-identical, train step
+   identical apart from the pair. Same statement, other side; load-bearing as long as both chains
+   exist.
+5. Guards: `proofs.yml`'s ConvNeXt diff list moved from the `ConvNeXtRender` step (now one file)
+   to the `ConvNeXtRenderB` step; `regen_verified_mlir.sh`'s SD-pair comment corrected (the
+   `convnext_fwd`/`convnext_train_step` pair in `check_fwd_prefix` is CROSS-chain now, and holds
+   because the forwards are byte-identical); the yaml rows and status section 4q.
 
-**Leg 3 is therefore a DECISION, not a build.** §0.10 also records why the swap was declined:
-*"it would move bytes in the artifact behind the 84.41% 80-epoch run for no functional gain."*
-The trade has changed — 4b's last two capstones and 4d piece 2 now sit behind it — so the question
-is whether that gain is now worth the byte movement. ⚠ It also settles `convBack` vs
-`convBackBatched`, two emitters for one VJP that were never tied to each other; whichever side
-moves changes committed artifacts.
+⛔ **One artifact did NOT move, and it is the ordering rule again.** `convnext_train_step.mlir` is
+the SGD-inline step; `convNextBackAllB` has no fused-SGD arm, and ConvNeXt's T3 §1a tie —
+`ConvNeXtTiePoC.lean`, all 182 parameters — is stated at exactly those bytes. Its batched peer is
+4b's ConvNeXt capstone, which this leg unblocks. So `ConvNeXtRender.lean` keeps that one writer and
+its traversal, and nothing is orphaned. ⭐ ConvNeXt is one chain per net on 35 of 36 artifacts.
 
-▶ **The question to put to the user, in one line:** is re-pointing ConvNeXt-T's committed train
-step at the batched chain worth moving bytes behind the 84.41% run? ⚠ And if it goes ahead, leg 4's
-lesson applies here too — `ConvNeXtFaithfulPoCG.lean`'s fourteen lemmas are at the per-example
-constructors, so a batched peer has to land FIRST (see leg 4's ⛔⛔ below).
+**Gates.** `lake build Certs` 3993 → **3994**; `lake env lean tests/AuditAxioms.lean` 3-axiom clean
+on all eighteen; `lake exe docstring-checkrefs` 1668; `check_audit_coverage.py`,
+`check_render_coverage.py` (241 files, one writer each); `regen_verified_mlir.sh check` (20 paired /
+0 known-split / 0 unaccounted); `convnext-fwd-b-tie` (flipped) green; `convnext-adam-tie` old vs new
+as above.
 
 ## Leg 4 — ViT-Tiny ✅ DONE 2026-09-07
 
@@ -329,12 +362,16 @@ forward → exit 1; a mis-pointed pair → exit 1 with the diverging line printe
 
 * ⭐ `KNOWN_SPLIT` is empty. The dict is kept, not deleted: an entry appearing again is the §3d(b)
   failure recurring, and it should have to be argued for rather than silently re-added.
-* Leg 3 (ConvNeXt-T) — the last one, and it is a DECISION about moving bytes behind the 84.41%
-  run, not a build. ⭐ Better instrumented than legs 1 and 2 were: its ImageNet forwards are already
-  audited against the artifacts their numbers come from.
-* ViT's `vit_train_step.mlir` — the twentieth artifact, still per-example. It moves when either
-  `vitBackAllB` gains a fused-SGD arm or `ViTTiePoC.lean` gains a batched peer (4b's last capstone,
-  which leg 4 unblocked). Neither is scoped here.
+* ⭐ All four legs are done (2026-09-07). Every net is one chain.
+* ViT's `vit_train_step.mlir` and ConvNeXt's `convnext_train_step.mlir` — one artifact each, still
+  per-example. Each moves when its batched traversal gains a fused-SGD arm or its `*TiePoC.lean`
+  gains a batched peer (4b's last two capstones, which legs 3 and 4 unblocked). Neither is scoped
+  here.
+* `convBack` and `convBackBatched` — two emitters for one VJP — are still not tied to each other in
+  Lean. The byte tie records the pair and the numeric gate the equivalence; a `den`-level lemma
+  that the two constructors denote the same function would make the 78-line allowance a theorem.
+* ⚠ The bf16 `*GradBBf16` nodes: stated in ConvNeXt's batched fold, not yet in r34's, B0's or
+  MobileNetV2's (leg 3, item 2). Four lines each; batch them into the cleanup pass.
 
 ## Seams outside Lean, for every leg
 

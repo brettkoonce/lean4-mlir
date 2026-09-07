@@ -123,6 +123,7 @@ import LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoCGB
+import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCGB
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
 import LeanMlir.Proofs.Architectures.MobileNetV2FullB
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
@@ -5582,6 +5583,37 @@ open Proofs
 #print axioms Proofs.ViTPoCGB.clsGrad_denB
 #print axioms Proofs.ViTPoCGB.headWGradB_den
 #print axioms Proofs.ViTPoCGB.headBGradB_den
+
+-- 4c leg 3 ConvNeXt-T — the fourteen gradient nodes at the BATCHED traversal (convNextBackAllB),
+-- which every ConvNeXt artifact but the SGD-inline convnext_train_step renders from since
+-- 2026-09-07, plus the four bf16 weight-gradient nodes. Owed BEFORE the swap: every convnextin_*
+-- train step, every *drop* variant and the S/B artifacts had rendered from that traversal since
+-- they existed, so the artifact behind the quoted ImageNet accuracy had a fold only at the
+-- per-example constructors no committed byte of it is pretty of.
+-- ⭐ The bf16 lemmas are the first in any fold file: den is ONE rounding outside the batch sum of
+-- the certified VJP at rounded operands (the emitted convolution contracts the batch inside one
+-- op and stores its bf16 result once). The r34/B0/mnv2 fold headers' "bf16 twins consume the same
+-- node" is loose the same way — those renders emit the *Bf16 constructors too.
+-- ⚠ The 22 channel-LN sites take batchMap N (chanLNRows c h w) of the saved input and cotangent;
+-- batchSlice_batchMap peels the lift so ConvNeXtChannelLN's permutation argument applies per slice.
+#print axioms Proofs.CnxPoCGB.layerScaleChGammaGradB_den
+#print axioms Proofs.CnxPoCGB.convWGradB_den
+#print axioms Proofs.CnxPoCGB.convBGradB_den
+#print axioms Proofs.CnxPoCGB.depthwiseWGradB_den
+#print axioms Proofs.CnxPoCGB.depthwiseBGradB_den
+#print axioms Proofs.CnxPoCGB.convStridedWGradB_den
+#print axioms Proofs.CnxPoCGB.convStridedBGradB_den
+#print axioms Proofs.CnxPoCGB.psWGradB_den
+#print axioms Proofs.CnxPoCGB.chanLnGammaGradB_den
+#print axioms Proofs.CnxPoCGB.chanLnBetaGradB_den
+#print axioms Proofs.CnxPoCGB.headLnGammaGradB_den
+#print axioms Proofs.CnxPoCGB.headLnBetaGradB_den
+#print axioms Proofs.CnxPoCGB.headWGradB_den
+#print axioms Proofs.CnxPoCGB.headBGradB_den
+#print axioms Proofs.CnxPoCGB.convWGradBBf16_den
+#print axioms Proofs.CnxPoCGB.depthwiseWGradBBf16_den
+#print axioms Proofs.CnxPoCGB.convStridedWGradBBf16_den
+#print axioms Proofs.CnxPoCGB.psWGradBBf16_den
 
 -- 4b.4 MobileNetV2 at 17 blocks — mobilenetv2_adam_train_step and every ImageNet artifact.
 -- ⛔ This net's two renders do NOT overlap the way the other four's do: MobileNetV2Render is

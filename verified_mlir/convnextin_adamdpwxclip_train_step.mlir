@@ -1758,8 +1758,8 @@ module @m {
     %v1562 = stablehlo.multiply %v1560, %v1561 : tensor<32x768x7x7xf32>
     %v1563 = stablehlo.reshape %v1562 : (tensor<32x768x7x7xf32>) -> tensor<32x37632xf32>
     %v1564 = stablehlo.reshape %v1563 : (tensor<32x37632xf32>) -> tensor<32x768x7x7xf32>
-    %v1565 = stablehlo.transpose %s3b2pW, dims = [1, 0, 2, 3] : (tensor<768x3072x1x1xf32>) -> tensor<3072x768x1x1xf32>
-    %v1566 = stablehlo.reverse %v1565, dims = [2, 3] : tensor<3072x768x1x1xf32>
+    %v1565 = stablehlo.reverse %s3b2pW, dims = [2, 3] : tensor<768x3072x1x1xf32>
+    %v1566 = stablehlo.transpose %v1565, dims = [1, 0, 2, 3] : (tensor<768x3072x1x1xf32>) -> tensor<3072x768x1x1xf32>
     %v1567 = stablehlo.convolution(%v1564, %v1566)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -1792,8 +1792,8 @@ module @m {
     %v1593 = stablehlo.multiply %v1569, %v1592 : tensor<32x3072x7x7xf32>
     %v1594 = stablehlo.reshape %v1593 : (tensor<32x3072x7x7xf32>) -> tensor<32x150528xf32>
     %v1595 = stablehlo.reshape %v1594 : (tensor<32x150528xf32>) -> tensor<32x3072x7x7xf32>
-    %v1596 = stablehlo.transpose %s3b2eW, dims = [1, 0, 2, 3] : (tensor<3072x768x1x1xf32>) -> tensor<768x3072x1x1xf32>
-    %v1597 = stablehlo.reverse %v1596, dims = [2, 3] : tensor<768x3072x1x1xf32>
+    %v1596 = stablehlo.reverse %s3b2eW, dims = [2, 3] : tensor<3072x768x1x1xf32>
+    %v1597 = stablehlo.transpose %v1596, dims = [1, 0, 2, 3] : (tensor<3072x768x1x1xf32>) -> tensor<768x3072x1x1xf32>
     %v1598 = stablehlo.convolution(%v1595, %v1597)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -1929,8 +1929,8 @@ module @m {
     %v1715 = stablehlo.multiply %v1713, %v1714 : tensor<32x768x7x7xf32>
     %v1716 = stablehlo.reshape %v1715 : (tensor<32x768x7x7xf32>) -> tensor<32x37632xf32>
     %v1717 = stablehlo.reshape %v1716 : (tensor<32x37632xf32>) -> tensor<32x768x7x7xf32>
-    %v1718 = stablehlo.transpose %s3b1pW, dims = [1, 0, 2, 3] : (tensor<768x3072x1x1xf32>) -> tensor<3072x768x1x1xf32>
-    %v1719 = stablehlo.reverse %v1718, dims = [2, 3] : tensor<3072x768x1x1xf32>
+    %v1718 = stablehlo.reverse %s3b1pW, dims = [2, 3] : tensor<768x3072x1x1xf32>
+    %v1719 = stablehlo.transpose %v1718, dims = [1, 0, 2, 3] : (tensor<768x3072x1x1xf32>) -> tensor<3072x768x1x1xf32>
     %v1720 = stablehlo.convolution(%v1717, %v1719)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -1963,8 +1963,8 @@ module @m {
     %v1746 = stablehlo.multiply %v1722, %v1745 : tensor<32x3072x7x7xf32>
     %v1747 = stablehlo.reshape %v1746 : (tensor<32x3072x7x7xf32>) -> tensor<32x150528xf32>
     %v1748 = stablehlo.reshape %v1747 : (tensor<32x150528xf32>) -> tensor<32x3072x7x7xf32>
-    %v1749 = stablehlo.transpose %s3b1eW, dims = [1, 0, 2, 3] : (tensor<3072x768x1x1xf32>) -> tensor<768x3072x1x1xf32>
-    %v1750 = stablehlo.reverse %v1749, dims = [2, 3] : tensor<768x3072x1x1xf32>
+    %v1749 = stablehlo.reverse %s3b1eW, dims = [2, 3] : tensor<3072x768x1x1xf32>
+    %v1750 = stablehlo.transpose %v1749, dims = [1, 0, 2, 3] : (tensor<3072x768x1x1xf32>) -> tensor<768x3072x1x1xf32>
     %v1751 = stablehlo.convolution(%v1748, %v1750)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2100,8 +2100,8 @@ module @m {
     %v1868 = stablehlo.multiply %v1866, %v1867 : tensor<32x768x7x7xf32>
     %v1869 = stablehlo.reshape %v1868 : (tensor<32x768x7x7xf32>) -> tensor<32x37632xf32>
     %v1870 = stablehlo.reshape %v1869 : (tensor<32x37632xf32>) -> tensor<32x768x7x7xf32>
-    %v1871 = stablehlo.transpose %s3b0pW, dims = [1, 0, 2, 3] : (tensor<768x3072x1x1xf32>) -> tensor<3072x768x1x1xf32>
-    %v1872 = stablehlo.reverse %v1871, dims = [2, 3] : tensor<3072x768x1x1xf32>
+    %v1871 = stablehlo.reverse %s3b0pW, dims = [2, 3] : tensor<768x3072x1x1xf32>
+    %v1872 = stablehlo.transpose %v1871, dims = [1, 0, 2, 3] : (tensor<768x3072x1x1xf32>) -> tensor<3072x768x1x1xf32>
     %v1873 = stablehlo.convolution(%v1870, %v1872)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2134,8 +2134,8 @@ module @m {
     %v1899 = stablehlo.multiply %v1875, %v1898 : tensor<32x3072x7x7xf32>
     %v1900 = stablehlo.reshape %v1899 : (tensor<32x3072x7x7xf32>) -> tensor<32x150528xf32>
     %v1901 = stablehlo.reshape %v1900 : (tensor<32x150528xf32>) -> tensor<32x3072x7x7xf32>
-    %v1902 = stablehlo.transpose %s3b0eW, dims = [1, 0, 2, 3] : (tensor<3072x768x1x1xf32>) -> tensor<768x3072x1x1xf32>
-    %v1903 = stablehlo.reverse %v1902, dims = [2, 3] : tensor<768x3072x1x1xf32>
+    %v1902 = stablehlo.reverse %s3b0eW, dims = [2, 3] : tensor<3072x768x1x1xf32>
+    %v1903 = stablehlo.transpose %v1902, dims = [1, 0, 2, 3] : (tensor<3072x768x1x1xf32>) -> tensor<768x3072x1x1xf32>
     %v1904 = stablehlo.convolution(%v1901, %v1903)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2269,8 +2269,8 @@ module @m {
     %v2019 = stablehlo.reshape %v1956 : (tensor<32x37632xf32>) -> tensor<32x768x7x7xf32>
     %v2020 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2021 = stablehlo.pad %v2019, %v2020, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : (tensor<32x768x7x7xf32>, tensor<f32>) -> tensor<32x768x14x14xf32>
-    %v2022 = stablehlo.transpose %d2W, dims = [1, 0, 2, 3] : (tensor<768x384x2x2xf32>) -> tensor<384x768x2x2xf32>
-    %v2023 = stablehlo.reverse %v2022, dims = [2, 3] : tensor<384x768x2x2xf32>
+    %v2022 = stablehlo.reverse %d2W, dims = [2, 3] : tensor<768x384x2x2xf32>
+    %v2023 = stablehlo.transpose %v2022, dims = [1, 0, 2, 3] : (tensor<768x384x2x2xf32>) -> tensor<384x768x2x2xf32>
     %v2024 = stablehlo.convolution(%v2021, %v2023)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 0], [1, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2368,8 +2368,8 @@ module @m {
     %v2112 = stablehlo.multiply %v2110, %v2111 : tensor<32x384x14x14xf32>
     %v2113 = stablehlo.reshape %v2112 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v2114 = stablehlo.reshape %v2113 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v2115 = stablehlo.transpose %s2b8pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v2116 = stablehlo.reverse %v2115, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2115 = stablehlo.reverse %s2b8pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2116 = stablehlo.transpose %v2115, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v2117 = stablehlo.convolution(%v2114, %v2116)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2402,8 +2402,8 @@ module @m {
     %v2143 = stablehlo.multiply %v2119, %v2142 : tensor<32x1536x14x14xf32>
     %v2144 = stablehlo.reshape %v2143 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v2145 = stablehlo.reshape %v2144 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v2146 = stablehlo.transpose %s2b8eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v2147 = stablehlo.reverse %v2146, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2146 = stablehlo.reverse %s2b8eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2147 = stablehlo.transpose %v2146, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v2148 = stablehlo.convolution(%v2145, %v2147)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2539,8 +2539,8 @@ module @m {
     %v2265 = stablehlo.multiply %v2263, %v2264 : tensor<32x384x14x14xf32>
     %v2266 = stablehlo.reshape %v2265 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v2267 = stablehlo.reshape %v2266 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v2268 = stablehlo.transpose %s2b7pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v2269 = stablehlo.reverse %v2268, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2268 = stablehlo.reverse %s2b7pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2269 = stablehlo.transpose %v2268, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v2270 = stablehlo.convolution(%v2267, %v2269)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2573,8 +2573,8 @@ module @m {
     %v2296 = stablehlo.multiply %v2272, %v2295 : tensor<32x1536x14x14xf32>
     %v2297 = stablehlo.reshape %v2296 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v2298 = stablehlo.reshape %v2297 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v2299 = stablehlo.transpose %s2b7eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v2300 = stablehlo.reverse %v2299, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2299 = stablehlo.reverse %s2b7eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2300 = stablehlo.transpose %v2299, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v2301 = stablehlo.convolution(%v2298, %v2300)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2710,8 +2710,8 @@ module @m {
     %v2418 = stablehlo.multiply %v2416, %v2417 : tensor<32x384x14x14xf32>
     %v2419 = stablehlo.reshape %v2418 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v2420 = stablehlo.reshape %v2419 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v2421 = stablehlo.transpose %s2b6pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v2422 = stablehlo.reverse %v2421, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2421 = stablehlo.reverse %s2b6pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2422 = stablehlo.transpose %v2421, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v2423 = stablehlo.convolution(%v2420, %v2422)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2744,8 +2744,8 @@ module @m {
     %v2449 = stablehlo.multiply %v2425, %v2448 : tensor<32x1536x14x14xf32>
     %v2450 = stablehlo.reshape %v2449 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v2451 = stablehlo.reshape %v2450 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v2452 = stablehlo.transpose %s2b6eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v2453 = stablehlo.reverse %v2452, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2452 = stablehlo.reverse %s2b6eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2453 = stablehlo.transpose %v2452, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v2454 = stablehlo.convolution(%v2451, %v2453)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2881,8 +2881,8 @@ module @m {
     %v2571 = stablehlo.multiply %v2569, %v2570 : tensor<32x384x14x14xf32>
     %v2572 = stablehlo.reshape %v2571 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v2573 = stablehlo.reshape %v2572 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v2574 = stablehlo.transpose %s2b5pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v2575 = stablehlo.reverse %v2574, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2574 = stablehlo.reverse %s2b5pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2575 = stablehlo.transpose %v2574, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v2576 = stablehlo.convolution(%v2573, %v2575)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -2915,8 +2915,8 @@ module @m {
     %v2602 = stablehlo.multiply %v2578, %v2601 : tensor<32x1536x14x14xf32>
     %v2603 = stablehlo.reshape %v2602 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v2604 = stablehlo.reshape %v2603 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v2605 = stablehlo.transpose %s2b5eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v2606 = stablehlo.reverse %v2605, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2605 = stablehlo.reverse %s2b5eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2606 = stablehlo.transpose %v2605, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v2607 = stablehlo.convolution(%v2604, %v2606)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3052,8 +3052,8 @@ module @m {
     %v2724 = stablehlo.multiply %v2722, %v2723 : tensor<32x384x14x14xf32>
     %v2725 = stablehlo.reshape %v2724 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v2726 = stablehlo.reshape %v2725 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v2727 = stablehlo.transpose %s2b4pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v2728 = stablehlo.reverse %v2727, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2727 = stablehlo.reverse %s2b4pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2728 = stablehlo.transpose %v2727, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v2729 = stablehlo.convolution(%v2726, %v2728)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3086,8 +3086,8 @@ module @m {
     %v2755 = stablehlo.multiply %v2731, %v2754 : tensor<32x1536x14x14xf32>
     %v2756 = stablehlo.reshape %v2755 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v2757 = stablehlo.reshape %v2756 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v2758 = stablehlo.transpose %s2b4eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v2759 = stablehlo.reverse %v2758, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2758 = stablehlo.reverse %s2b4eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2759 = stablehlo.transpose %v2758, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v2760 = stablehlo.convolution(%v2757, %v2759)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3223,8 +3223,8 @@ module @m {
     %v2877 = stablehlo.multiply %v2875, %v2876 : tensor<32x384x14x14xf32>
     %v2878 = stablehlo.reshape %v2877 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v2879 = stablehlo.reshape %v2878 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v2880 = stablehlo.transpose %s2b3pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v2881 = stablehlo.reverse %v2880, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2880 = stablehlo.reverse %s2b3pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2881 = stablehlo.transpose %v2880, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v2882 = stablehlo.convolution(%v2879, %v2881)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3257,8 +3257,8 @@ module @m {
     %v2908 = stablehlo.multiply %v2884, %v2907 : tensor<32x1536x14x14xf32>
     %v2909 = stablehlo.reshape %v2908 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v2910 = stablehlo.reshape %v2909 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v2911 = stablehlo.transpose %s2b3eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v2912 = stablehlo.reverse %v2911, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v2911 = stablehlo.reverse %s2b3eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v2912 = stablehlo.transpose %v2911, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v2913 = stablehlo.convolution(%v2910, %v2912)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3394,8 +3394,8 @@ module @m {
     %v3030 = stablehlo.multiply %v3028, %v3029 : tensor<32x384x14x14xf32>
     %v3031 = stablehlo.reshape %v3030 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v3032 = stablehlo.reshape %v3031 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v3033 = stablehlo.transpose %s2b2pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v3034 = stablehlo.reverse %v3033, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v3033 = stablehlo.reverse %s2b2pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v3034 = stablehlo.transpose %v3033, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v3035 = stablehlo.convolution(%v3032, %v3034)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3428,8 +3428,8 @@ module @m {
     %v3061 = stablehlo.multiply %v3037, %v3060 : tensor<32x1536x14x14xf32>
     %v3062 = stablehlo.reshape %v3061 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v3063 = stablehlo.reshape %v3062 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v3064 = stablehlo.transpose %s2b2eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v3065 = stablehlo.reverse %v3064, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v3064 = stablehlo.reverse %s2b2eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v3065 = stablehlo.transpose %v3064, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v3066 = stablehlo.convolution(%v3063, %v3065)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3565,8 +3565,8 @@ module @m {
     %v3183 = stablehlo.multiply %v3181, %v3182 : tensor<32x384x14x14xf32>
     %v3184 = stablehlo.reshape %v3183 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v3185 = stablehlo.reshape %v3184 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v3186 = stablehlo.transpose %s2b1pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v3187 = stablehlo.reverse %v3186, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v3186 = stablehlo.reverse %s2b1pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v3187 = stablehlo.transpose %v3186, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v3188 = stablehlo.convolution(%v3185, %v3187)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3599,8 +3599,8 @@ module @m {
     %v3214 = stablehlo.multiply %v3190, %v3213 : tensor<32x1536x14x14xf32>
     %v3215 = stablehlo.reshape %v3214 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v3216 = stablehlo.reshape %v3215 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v3217 = stablehlo.transpose %s2b1eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v3218 = stablehlo.reverse %v3217, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v3217 = stablehlo.reverse %s2b1eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v3218 = stablehlo.transpose %v3217, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v3219 = stablehlo.convolution(%v3216, %v3218)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3736,8 +3736,8 @@ module @m {
     %v3336 = stablehlo.multiply %v3334, %v3335 : tensor<32x384x14x14xf32>
     %v3337 = stablehlo.reshape %v3336 : (tensor<32x384x14x14xf32>) -> tensor<32x75264xf32>
     %v3338 = stablehlo.reshape %v3337 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
-    %v3339 = stablehlo.transpose %s2b0pW, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
-    %v3340 = stablehlo.reverse %v3339, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v3339 = stablehlo.reverse %s2b0pW, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v3340 = stablehlo.transpose %v3339, dims = [1, 0, 2, 3] : (tensor<384x1536x1x1xf32>) -> tensor<1536x384x1x1xf32>
     %v3341 = stablehlo.convolution(%v3338, %v3340)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3770,8 +3770,8 @@ module @m {
     %v3367 = stablehlo.multiply %v3343, %v3366 : tensor<32x1536x14x14xf32>
     %v3368 = stablehlo.reshape %v3367 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
     %v3369 = stablehlo.reshape %v3368 : (tensor<32x301056xf32>) -> tensor<32x1536x14x14xf32>
-    %v3370 = stablehlo.transpose %s2b0eW, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
-    %v3371 = stablehlo.reverse %v3370, dims = [2, 3] : tensor<384x1536x1x1xf32>
+    %v3370 = stablehlo.reverse %s2b0eW, dims = [2, 3] : tensor<1536x384x1x1xf32>
+    %v3371 = stablehlo.transpose %v3370, dims = [1, 0, 2, 3] : (tensor<1536x384x1x1xf32>) -> tensor<384x1536x1x1xf32>
     %v3372 = stablehlo.convolution(%v3369, %v3371)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -3905,8 +3905,8 @@ module @m {
     %v3487 = stablehlo.reshape %v3424 : (tensor<32x75264xf32>) -> tensor<32x384x14x14xf32>
     %v3488 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3489 = stablehlo.pad %v3487, %v3488, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : (tensor<32x384x14x14xf32>, tensor<f32>) -> tensor<32x384x28x28xf32>
-    %v3490 = stablehlo.transpose %d1W, dims = [1, 0, 2, 3] : (tensor<384x192x2x2xf32>) -> tensor<192x384x2x2xf32>
-    %v3491 = stablehlo.reverse %v3490, dims = [2, 3] : tensor<192x384x2x2xf32>
+    %v3490 = stablehlo.reverse %d1W, dims = [2, 3] : tensor<384x192x2x2xf32>
+    %v3491 = stablehlo.transpose %v3490, dims = [1, 0, 2, 3] : (tensor<384x192x2x2xf32>) -> tensor<192x384x2x2xf32>
     %v3492 = stablehlo.convolution(%v3489, %v3491)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 0], [1, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4004,8 +4004,8 @@ module @m {
     %v3580 = stablehlo.multiply %v3578, %v3579 : tensor<32x192x28x28xf32>
     %v3581 = stablehlo.reshape %v3580 : (tensor<32x192x28x28xf32>) -> tensor<32x150528xf32>
     %v3582 = stablehlo.reshape %v3581 : (tensor<32x150528xf32>) -> tensor<32x192x28x28xf32>
-    %v3583 = stablehlo.transpose %s1b2pW, dims = [1, 0, 2, 3] : (tensor<192x768x1x1xf32>) -> tensor<768x192x1x1xf32>
-    %v3584 = stablehlo.reverse %v3583, dims = [2, 3] : tensor<768x192x1x1xf32>
+    %v3583 = stablehlo.reverse %s1b2pW, dims = [2, 3] : tensor<192x768x1x1xf32>
+    %v3584 = stablehlo.transpose %v3583, dims = [1, 0, 2, 3] : (tensor<192x768x1x1xf32>) -> tensor<768x192x1x1xf32>
     %v3585 = stablehlo.convolution(%v3582, %v3584)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4038,8 +4038,8 @@ module @m {
     %v3611 = stablehlo.multiply %v3587, %v3610 : tensor<32x768x28x28xf32>
     %v3612 = stablehlo.reshape %v3611 : (tensor<32x768x28x28xf32>) -> tensor<32x602112xf32>
     %v3613 = stablehlo.reshape %v3612 : (tensor<32x602112xf32>) -> tensor<32x768x28x28xf32>
-    %v3614 = stablehlo.transpose %s1b2eW, dims = [1, 0, 2, 3] : (tensor<768x192x1x1xf32>) -> tensor<192x768x1x1xf32>
-    %v3615 = stablehlo.reverse %v3614, dims = [2, 3] : tensor<192x768x1x1xf32>
+    %v3614 = stablehlo.reverse %s1b2eW, dims = [2, 3] : tensor<768x192x1x1xf32>
+    %v3615 = stablehlo.transpose %v3614, dims = [1, 0, 2, 3] : (tensor<768x192x1x1xf32>) -> tensor<192x768x1x1xf32>
     %v3616 = stablehlo.convolution(%v3613, %v3615)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4175,8 +4175,8 @@ module @m {
     %v3733 = stablehlo.multiply %v3731, %v3732 : tensor<32x192x28x28xf32>
     %v3734 = stablehlo.reshape %v3733 : (tensor<32x192x28x28xf32>) -> tensor<32x150528xf32>
     %v3735 = stablehlo.reshape %v3734 : (tensor<32x150528xf32>) -> tensor<32x192x28x28xf32>
-    %v3736 = stablehlo.transpose %s1b1pW, dims = [1, 0, 2, 3] : (tensor<192x768x1x1xf32>) -> tensor<768x192x1x1xf32>
-    %v3737 = stablehlo.reverse %v3736, dims = [2, 3] : tensor<768x192x1x1xf32>
+    %v3736 = stablehlo.reverse %s1b1pW, dims = [2, 3] : tensor<192x768x1x1xf32>
+    %v3737 = stablehlo.transpose %v3736, dims = [1, 0, 2, 3] : (tensor<192x768x1x1xf32>) -> tensor<768x192x1x1xf32>
     %v3738 = stablehlo.convolution(%v3735, %v3737)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4209,8 +4209,8 @@ module @m {
     %v3764 = stablehlo.multiply %v3740, %v3763 : tensor<32x768x28x28xf32>
     %v3765 = stablehlo.reshape %v3764 : (tensor<32x768x28x28xf32>) -> tensor<32x602112xf32>
     %v3766 = stablehlo.reshape %v3765 : (tensor<32x602112xf32>) -> tensor<32x768x28x28xf32>
-    %v3767 = stablehlo.transpose %s1b1eW, dims = [1, 0, 2, 3] : (tensor<768x192x1x1xf32>) -> tensor<192x768x1x1xf32>
-    %v3768 = stablehlo.reverse %v3767, dims = [2, 3] : tensor<192x768x1x1xf32>
+    %v3767 = stablehlo.reverse %s1b1eW, dims = [2, 3] : tensor<768x192x1x1xf32>
+    %v3768 = stablehlo.transpose %v3767, dims = [1, 0, 2, 3] : (tensor<768x192x1x1xf32>) -> tensor<192x768x1x1xf32>
     %v3769 = stablehlo.convolution(%v3766, %v3768)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4346,8 +4346,8 @@ module @m {
     %v3886 = stablehlo.multiply %v3884, %v3885 : tensor<32x192x28x28xf32>
     %v3887 = stablehlo.reshape %v3886 : (tensor<32x192x28x28xf32>) -> tensor<32x150528xf32>
     %v3888 = stablehlo.reshape %v3887 : (tensor<32x150528xf32>) -> tensor<32x192x28x28xf32>
-    %v3889 = stablehlo.transpose %s1b0pW, dims = [1, 0, 2, 3] : (tensor<192x768x1x1xf32>) -> tensor<768x192x1x1xf32>
-    %v3890 = stablehlo.reverse %v3889, dims = [2, 3] : tensor<768x192x1x1xf32>
+    %v3889 = stablehlo.reverse %s1b0pW, dims = [2, 3] : tensor<192x768x1x1xf32>
+    %v3890 = stablehlo.transpose %v3889, dims = [1, 0, 2, 3] : (tensor<192x768x1x1xf32>) -> tensor<768x192x1x1xf32>
     %v3891 = stablehlo.convolution(%v3888, %v3890)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4380,8 +4380,8 @@ module @m {
     %v3917 = stablehlo.multiply %v3893, %v3916 : tensor<32x768x28x28xf32>
     %v3918 = stablehlo.reshape %v3917 : (tensor<32x768x28x28xf32>) -> tensor<32x602112xf32>
     %v3919 = stablehlo.reshape %v3918 : (tensor<32x602112xf32>) -> tensor<32x768x28x28xf32>
-    %v3920 = stablehlo.transpose %s1b0eW, dims = [1, 0, 2, 3] : (tensor<768x192x1x1xf32>) -> tensor<192x768x1x1xf32>
-    %v3921 = stablehlo.reverse %v3920, dims = [2, 3] : tensor<192x768x1x1xf32>
+    %v3920 = stablehlo.reverse %s1b0eW, dims = [2, 3] : tensor<768x192x1x1xf32>
+    %v3921 = stablehlo.transpose %v3920, dims = [1, 0, 2, 3] : (tensor<768x192x1x1xf32>) -> tensor<192x768x1x1xf32>
     %v3922 = stablehlo.convolution(%v3919, %v3921)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4515,8 +4515,8 @@ module @m {
     %v4037 = stablehlo.reshape %v3974 : (tensor<32x150528xf32>) -> tensor<32x192x28x28xf32>
     %v4038 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4039 = stablehlo.pad %v4037, %v4038, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : (tensor<32x192x28x28xf32>, tensor<f32>) -> tensor<32x192x56x56xf32>
-    %v4040 = stablehlo.transpose %d0W, dims = [1, 0, 2, 3] : (tensor<192x96x2x2xf32>) -> tensor<96x192x2x2xf32>
-    %v4041 = stablehlo.reverse %v4040, dims = [2, 3] : tensor<96x192x2x2xf32>
+    %v4040 = stablehlo.reverse %d0W, dims = [2, 3] : tensor<192x96x2x2xf32>
+    %v4041 = stablehlo.transpose %v4040, dims = [1, 0, 2, 3] : (tensor<192x96x2x2xf32>) -> tensor<96x192x2x2xf32>
     %v4042 = stablehlo.convolution(%v4039, %v4041)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 0], [1, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4614,8 +4614,8 @@ module @m {
     %v4130 = stablehlo.multiply %v4128, %v4129 : tensor<32x96x56x56xf32>
     %v4131 = stablehlo.reshape %v4130 : (tensor<32x96x56x56xf32>) -> tensor<32x301056xf32>
     %v4132 = stablehlo.reshape %v4131 : (tensor<32x301056xf32>) -> tensor<32x96x56x56xf32>
-    %v4133 = stablehlo.transpose %s0b2pW, dims = [1, 0, 2, 3] : (tensor<96x384x1x1xf32>) -> tensor<384x96x1x1xf32>
-    %v4134 = stablehlo.reverse %v4133, dims = [2, 3] : tensor<384x96x1x1xf32>
+    %v4133 = stablehlo.reverse %s0b2pW, dims = [2, 3] : tensor<96x384x1x1xf32>
+    %v4134 = stablehlo.transpose %v4133, dims = [1, 0, 2, 3] : (tensor<96x384x1x1xf32>) -> tensor<384x96x1x1xf32>
     %v4135 = stablehlo.convolution(%v4132, %v4134)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4648,8 +4648,8 @@ module @m {
     %v4161 = stablehlo.multiply %v4137, %v4160 : tensor<32x384x56x56xf32>
     %v4162 = stablehlo.reshape %v4161 : (tensor<32x384x56x56xf32>) -> tensor<32x1204224xf32>
     %v4163 = stablehlo.reshape %v4162 : (tensor<32x1204224xf32>) -> tensor<32x384x56x56xf32>
-    %v4164 = stablehlo.transpose %s0b2eW, dims = [1, 0, 2, 3] : (tensor<384x96x1x1xf32>) -> tensor<96x384x1x1xf32>
-    %v4165 = stablehlo.reverse %v4164, dims = [2, 3] : tensor<96x384x1x1xf32>
+    %v4164 = stablehlo.reverse %s0b2eW, dims = [2, 3] : tensor<384x96x1x1xf32>
+    %v4165 = stablehlo.transpose %v4164, dims = [1, 0, 2, 3] : (tensor<384x96x1x1xf32>) -> tensor<96x384x1x1xf32>
     %v4166 = stablehlo.convolution(%v4163, %v4165)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4785,8 +4785,8 @@ module @m {
     %v4283 = stablehlo.multiply %v4281, %v4282 : tensor<32x96x56x56xf32>
     %v4284 = stablehlo.reshape %v4283 : (tensor<32x96x56x56xf32>) -> tensor<32x301056xf32>
     %v4285 = stablehlo.reshape %v4284 : (tensor<32x301056xf32>) -> tensor<32x96x56x56xf32>
-    %v4286 = stablehlo.transpose %s0b1pW, dims = [1, 0, 2, 3] : (tensor<96x384x1x1xf32>) -> tensor<384x96x1x1xf32>
-    %v4287 = stablehlo.reverse %v4286, dims = [2, 3] : tensor<384x96x1x1xf32>
+    %v4286 = stablehlo.reverse %s0b1pW, dims = [2, 3] : tensor<96x384x1x1xf32>
+    %v4287 = stablehlo.transpose %v4286, dims = [1, 0, 2, 3] : (tensor<96x384x1x1xf32>) -> tensor<384x96x1x1xf32>
     %v4288 = stablehlo.convolution(%v4285, %v4287)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4819,8 +4819,8 @@ module @m {
     %v4314 = stablehlo.multiply %v4290, %v4313 : tensor<32x384x56x56xf32>
     %v4315 = stablehlo.reshape %v4314 : (tensor<32x384x56x56xf32>) -> tensor<32x1204224xf32>
     %v4316 = stablehlo.reshape %v4315 : (tensor<32x1204224xf32>) -> tensor<32x384x56x56xf32>
-    %v4317 = stablehlo.transpose %s0b1eW, dims = [1, 0, 2, 3] : (tensor<384x96x1x1xf32>) -> tensor<96x384x1x1xf32>
-    %v4318 = stablehlo.reverse %v4317, dims = [2, 3] : tensor<96x384x1x1xf32>
+    %v4317 = stablehlo.reverse %s0b1eW, dims = [2, 3] : tensor<384x96x1x1xf32>
+    %v4318 = stablehlo.transpose %v4317, dims = [1, 0, 2, 3] : (tensor<384x96x1x1xf32>) -> tensor<96x384x1x1xf32>
     %v4319 = stablehlo.convolution(%v4316, %v4318)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4956,8 +4956,8 @@ module @m {
     %v4436 = stablehlo.multiply %v4434, %v4435 : tensor<32x96x56x56xf32>
     %v4437 = stablehlo.reshape %v4436 : (tensor<32x96x56x56xf32>) -> tensor<32x301056xf32>
     %v4438 = stablehlo.reshape %v4437 : (tensor<32x301056xf32>) -> tensor<32x96x56x56xf32>
-    %v4439 = stablehlo.transpose %s0b0pW, dims = [1, 0, 2, 3] : (tensor<96x384x1x1xf32>) -> tensor<384x96x1x1xf32>
-    %v4440 = stablehlo.reverse %v4439, dims = [2, 3] : tensor<384x96x1x1xf32>
+    %v4439 = stablehlo.reverse %s0b0pW, dims = [2, 3] : tensor<96x384x1x1xf32>
+    %v4440 = stablehlo.transpose %v4439, dims = [1, 0, 2, 3] : (tensor<96x384x1x1xf32>) -> tensor<384x96x1x1xf32>
     %v4441 = stablehlo.convolution(%v4438, %v4440)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
@@ -4990,8 +4990,8 @@ module @m {
     %v4467 = stablehlo.multiply %v4443, %v4466 : tensor<32x384x56x56xf32>
     %v4468 = stablehlo.reshape %v4467 : (tensor<32x384x56x56xf32>) -> tensor<32x1204224xf32>
     %v4469 = stablehlo.reshape %v4468 : (tensor<32x1204224xf32>) -> tensor<32x384x56x56xf32>
-    %v4470 = stablehlo.transpose %s0b0eW, dims = [1, 0, 2, 3] : (tensor<384x96x1x1xf32>) -> tensor<96x384x1x1xf32>
-    %v4471 = stablehlo.reverse %v4470, dims = [2, 3] : tensor<96x384x1x1xf32>
+    %v4470 = stablehlo.reverse %s0b0eW, dims = [2, 3] : tensor<384x96x1x1xf32>
+    %v4471 = stablehlo.transpose %v4470, dims = [1, 0, 2, 3] : (tensor<384x96x1x1xf32>) -> tensor<96x384x1x1xf32>
     %v4472 = stablehlo.convolution(%v4469, %v4471)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}

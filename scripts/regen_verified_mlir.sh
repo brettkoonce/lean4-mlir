@@ -376,11 +376,11 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          ("efficientnet_do_fwd.mlir", "efficientnet_adamdo_train_step.mlir"),
          ("efficientnetin_dropdo_fwd.mlir",   "efficientnetin_emarms64dropdo_train_step.mlir"),
          # ConvNeXt's SD pair, on the BATCHED chain (ConvNeXtRenderB) — where a per-example mask is
-         # expressible at all. ⚠ These are the only ConvNeXt artifacts from that chain: the drop-free
-         # batched render is tied but NOT swapped, so `convnext_fwd`/`convnext_train_step` above are
-         # still the per-example renderer's. The two chains differ on 78 conv-VJP lines (commuting
-         # transpose/reverse), all in the BACKWARD — so each pair is internally consistent and the
-         # prefix property is unaffected by which chain produced it.
+         # expressible at all. ⭐ Since 4c leg 3 (2026-09-07) that chain writes EVERY ConvNeXt
+         # artifact but `convnext_train_step` (the SGD-inline step, still per-example because the
+         # batched traversal has no fused-SGD arm). So the `convnext_fwd`/`convnext_train_step` pair
+         # above is now CROSS-chain, and it holds because the two chains' forwards are byte-identical;
+         # they differ on 78 conv-VJP lines (commuting transpose/reverse), all in the BACKWARD.
          ("convnext_drop_fwd.mlir", "convnext_adamdrop_train_step.mlir"),
          ("convnextin_drop_fwd.mlir",    "convnextin_adamwxclipdrop_train_step.mlir"),
          # ConvNeXt-S (planning/vit_convnext_sb_scaleup.md). ⚠ A NEW SIZE NEEDS ITS OWN ROW: this

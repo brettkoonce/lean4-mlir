@@ -228,13 +228,19 @@ jobs:
               verified_mlir/mnv4in_adamdp64_train_step.mlir \
               verified_mlir/mnv4in_adamdp64bf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/mnv4*_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean)"; exit 1; }
-          # Elaborating this module writes all EIGHT ConvNeXt artifacts, so diffing only the SGD
-          # train step left seven of them unguarded-but-baselined — the same gap the EfficientNet
-          # step below had until 2026-08-02. The `lake env lean` above already ran every writer, so
-          # diffing the full set costs nothing and shrinks the baseline, which is the only direction
-          # scripts/render_guard_baseline.txt is allowed to move.
+          # ⭐ Since 4c leg 3 (2026-09-07) this module writes ONE artifact: the SGD-inline train
+          # step, at which ConvNeXtTiePoC.lean's 182-parameter tie is stated. Every other ConvNeXt
+          # artifact moved to the ConvNeXtRenderB step below (the batched chain has no fused-SGD arm).
           lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean
           git diff --exit-code -- verified_mlir/convnext_train_step.mlir \
+            || { echo "::error::committed verified_mlir/convnext_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
+          # ⭐ EVERY ConvNeXt artifact but one, from ConvNeXtRenderB — the chain at the batched index
+          # N := B. It began as the STOCHASTIC-DEPTH module (the only chain where a per-EXAMPLE drop
+          # mask is expressible at all, handoff §0.10); 4c leg 3 moved the seventeen drop-free
+          # writers here on 2026-09-07 after measuring the four forwards byte-identical and the
+          # thirteen train steps differing on exactly the 78 conv-VJP transpose/reverse lines.
+          lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean
+          git diff --exit-code -- verified_mlir/convnext_adamdrop_train_step.mlir \
               verified_mlir/convnext_fwd.mlir \
               verified_mlir/convnext_adam_train_step.mlir \
               verified_mlir/convnext_adamdp_train_step.mlir \
@@ -252,13 +258,6 @@ jobs:
               verified_mlir/convnextin_adamdpwxclip_train_step.mlir \
               verified_mlir/convnextsin_fwd.mlir \
               verified_mlir/convnextbin_fwd.mlir \
-            || { echo "::error::committed verified_mlir/{convnext,convnextin,convnextsin,convnextbin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
-          # The STOCHASTIC-DEPTH renders come from a DIFFERENT module — ConvNeXtRenderB, the chain at
-          # the batched index N := B, which is the only one where a per-EXAMPLE drop mask is
-          # expressible at all (handoff §0.10). It is a separate `lake env lean` because it is a
-          # separate file, not because the artifacts are less guarded: all five are diffed.
-          lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean
-          git diff --exit-code -- verified_mlir/convnext_adamdrop_train_step.mlir \
               verified_mlir/convnext_adamdpdrop_train_step.mlir \
               verified_mlir/convnext_drop_fwd.mlir \
               verified_mlir/convnextin_adamwxclipdrop_train_step.mlir \
