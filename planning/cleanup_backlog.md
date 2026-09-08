@@ -110,6 +110,18 @@ past is not mentioned); the yaml is an index and should read the same way. ⚠ T
 4d numbering is load-bearing for cross-references in docstrings and the book — renumber nothing,
 empty 4c to one line if a section must remain.
 
+**DONE 2026-09-08.** 4c is one line, a present-tense disclosure (no theorem bounds a whole-net
+float error against a margin); 4d's dated title, its "what was deleted" paragraph and the twin
+note are gone, and its model paragraph names the two closeness forms the surviving tier is
+stated on (`FloatClose` for the `floatClose_*` lemmas, the r34 stage fold and the bf16-mixed
+bounds; `FloatBridgesTo` for the per-op instances, the combinators and the CIFAR chains -- the
+old text put the bf16 bounds and the descent chain on `FloatBridgesTo`, which nothing is). The
+status block's "whole-net float bridges carrying window and modulus" (none exist) and the
+alignment note's deletion sentence are rewritten the same way. Numbering untouched: 4c is cited
+only by the yaml's own alignment note, 4d by `FloatComposeBridge.lean` twice. 399 → 391 lines,
+parses. Left as they were: the dated closure notes in 4e-4g and the padding paragraph, which are
+records of what is, not of what was deleted.
+
 ## 5. Two small Lean tidies
 
 * `perRowIdxFlat` and `perRowFlatPR` (`Foundation/BackwardMaps.lean`) are the same map,

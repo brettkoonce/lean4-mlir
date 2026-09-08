@@ -64,9 +64,9 @@ status:
     optimizer tail consumes and the label-smoothed loss at a general target, with the batch
     size a binder and the data-parallel mean an AST node (fidelity 4e-4g); the SGD-inline
     steps of the ten nets that ship one are tied too. (2) FLOAT ERROR -- a binary32 rounding
-    model constructed from scratch, whole-net float bridges carrying window and modulus as
-    data, and every net's hand-written backward chain proven to BE the certified whole-net VJP
-    (the whole-net numeric budgets were deleted 2026-09-08 as vacuous, fidelity 4d). (3) ROBUSTNESS CERTIFICATES as theorems: the Tsuzuku
+    model constructed from scratch, per-operator and per-block float closeness carrying window
+    and modulus as data, and every net's hand-written backward chain proven to BE the certified
+    whole-net VJP (fidelity 4d). (3) ROBUSTNESS CERTIFICATES as theorems: the Tsuzuku
     Lipschitz-margin radius, per-class-pair LipSDP at trained weights, the Cohen smoothing
     radius end to end. (4) OPTIMIZER GEOMETRY: SGD/sign/Muon as steepest descent under a norm,
     Shampoo = single-step Muon. The StableHLO codegen and the training runs are engineered and
@@ -203,33 +203,26 @@ fidelity:
        formalized. The LipSDP scorecards certify a FIXED 100-image subset
        at a FIXED epsilon -- an honest lower bound, not a dataset-wide claim.
 
-    4c. THE ADJOINT-CHAIN TIER -- DELETED 2026-09-08. `chain_adjointClose` / `chain_argmaxSafe`
-       and the CIFAR-8 instance `cifar8_chain_argmaxSafeH` were correct depth-generic theorems
-       whose budget, at He magnitudes, exceeded 1e13 against logits of ~10; the "2.6" of the probe
-       was the same formula at MEASURED magnitudes, which no instantiation of the theorem could
-       supply. Disclosed as NOT BITING on 2026-09-02 and removed with the whole-net budgets.
+    4c. NO ADJOINT-CHAIN TIER: no theorem bounds a whole-net float error against a logit margin
+       (4d states no whole-net budget).
 
-    4d. THE FLOAT TIER: the rounding model and the certified backward ties (the whole-net
-       BUDGETS were deleted 2026-09-08). planning/archive/float_budget_numbers.md and
-       planning/archive/float_budget_numbers_log.md are the historical record.
+    4d. THE FLOAT TIER: the rounding model, per-operator closeness, and the certified backward
+       ties. No whole-net numeric error budget is stated; planning/archive/float_budget_numbers.md
+       records why.
 
        THE MODEL. `FloatModel` is any rounding operator with relative error `u`; `binary32`
        (`u = 2^-24`) and `fp8E4M3` (`u = 2^-4`) are CONSTRUCTED as round-to-nearest on a p-bit
        grid with the standard model proved (`rndP_err`, `Binary32Instance.lean`) -- no hardware
-       axiom. `FloatBridgesTo f fF` is a Type-valued structure carrying the output window and the
-       error modulus as data (its predecessor `FloatBridges` bound both existentially and was
-       provable for ANY bounded `f`; the legacy statements remain and constrain nothing -- do not
-       cite them as budgets). The per-operator closeness lemmas, the bf16-mixed two-roundoff
-       bounds and the MNIST/CNN descent chain are stated on it.
-
-       WHAT WAS DELETED, AND WHY. Thirteen kernel-checked whole-net numbers (nine forwards, four
-       input-gradient backwards) with their `Maps.*` envelopes and forward float chains: interval
-       folds at worst-case windows through 30+ layers, 1e16 to 1e287 against logits of order 10,
-       with training-mode BatchNorm / LayerNorm / squeeze-excite quadratic in the window so that
-       four of them were caps (triangle inequality, budget/window = 2). A number that certifies
-       nothing is not worth 21k lines and 44% of the corpus build; the thread had been closed as
-       vacuous on 2026-09-05. What those files also certified -- the float program's shape, every
-       stage at the right fan-in and normalisation mode -- the ties below still do.
+       axiom. Two composable closeness forms sit on the model. `FloatClose A B f fF L` is a
+       magnitude window `A -> B` with an input-error -> output-error modulus `L`, composing by
+       `FloatClose.comp`; the per-operator `floatClose_*` lemmas, the ResNet-34 stage fold and
+       the bf16-mixed two-roundoff bounds are stated on it. `FloatBridgesTo f fF` is a Type-valued
+       structure carrying window and modulus as data; the per-operator `floatBridgesTo_*`
+       instances, the `comp` / `residual` combinators and the CIFAR block chains are stated on
+       it. `FloatBridges f`, the existential form, is also defined: it is provable for ANY
+       bounded `f` and constrains nothing -- not a budget. The MNIST/CNN descent chain
+       (`Training/SgdDescent*.lean`) takes the model and `FloatBridge.lean`'s per-layer `*_close`
+       lemmas directly.
 
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
        VJP, with a shape check that the opaque-block chain IS the committed forward: the
@@ -243,8 +236,7 @@ fidelity:
        case the emitted program was right and a hand-written spelling of the same map had drifted.
        A `den` stated as the certified VJP cannot drift; only a theorem naming both catches it.
        The ℝ chains those ties are about live beside them, in `Foundation/BackwardMaps.lean` (the
-       per-op maps), `Architectures/ChannelLNBack.lean` and the five `Foundation/*BackChains.lean`;
-       the float twins that once sat next to them were deleted 2026-09-08 (second pass).
+       per-op maps), `Architectures/ChannelLNBack.lean` and the five `Foundation/*BackChains.lean`.
 
        THE PADDING CONVENTION (closed 2026-09-05): EfficientNet-B0's stem and MobileNetV2's five
        stride-2 sites are XLA-SAME in every shipped artifact and in every Proofs-tier statement;
@@ -369,7 +361,7 @@ alignment:
       lean: "rndP_err; the *InputGrad_eq_*_vjp / *InputGradB_eq_*_vjp ties with their *_eq_slots shape checks"
       module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Foundation/*CertifiedTie*.lean"
       status: "proved"
-      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the whole-net numeric budgets and the adjoint-chain tier were deleted 2026-09-08 as vacuous (fidelity 4c, 4d)"
+      note: "rounding model CONSTRUCTED (former hardware axioms discharged); no whole-net numeric budget and no adjoint-chain tier are stated (fidelity 4c, 4d)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
       module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"
