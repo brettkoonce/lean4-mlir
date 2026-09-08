@@ -943,7 +943,7 @@ end Proofs.StableHLO
 -- 2026-09-07).** Every other committed ViT artifact — `vit_fwd`, `vitin_fwd` and the seventeen
 -- AdamW/EMA train steps — now renders from `ViTRenderB.vitBackAllB`, measured byte-identical over
 -- all nineteen. This one cannot follow yet: `vitBackAllB` has no fused-SGD arm (it emits the raw
--- gradient only), and ViT's T3 §1a tie — `ViTTiePoC.lean`, all 200 parameters — is stated at
+-- gradient only), and ViT's T3 §1a tie — `ViTStepTie.lean`, all 200 parameters — is stated at
 -- exactly these bytes. Retiring it before that tie has a batched peer is the ordering mistake
 -- `planning/archive/renderer_convergence.md` leg 1 wrote down and leg 2 honoured. See §4b's last item.
 #eval IO.FS.writeFile "verified_mlir/vit_train_step.mlir"

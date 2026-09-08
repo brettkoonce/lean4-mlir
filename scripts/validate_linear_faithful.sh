@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validation gate for the mnist-linear verified trainer's committed render.
-# Companion to LeanMlir/Proofs/Nets/Small/LinearFaithfulPoC.lean and
+# Companion to LeanMlir/Proofs/Nets/Small/LinearFold.lean and
 # planning/archive/verified_faithful_sweep.md. Runs on the GPU box (needs iree-compile;
 # CI's ubuntu runner can't, so this is local, not in proofs.yml).
 #
@@ -8,7 +8,7 @@
 #       (linearTrainStepModuleV / linearFwdModuleV in StableHLO.lean), and
 #   (b) validity: those bytes iree-compile cleanly for the target backend.
 #
-# (a)+(b) + the LinearFaithfulPoC `den = certified` capstones = the chain
+# (a)+(b) + the LinearFold `den = certified` capstones = the chain
 # "trainer bytes == proven renderer == certified loss-descent step, and iree
 # accepts them". Usage: IREE_COMPILE=/path/to/iree-compile ./scripts/validate_linear_faithful.sh
 set -euo pipefail

@@ -85,7 +85,7 @@ jobs:
       - name: Verified-render drift guard (committed .mlir == proven renderer)
         # Re-elaborate the renderer files (re-runs their #eval writers) so the
         # committed verified_mlir/<net>_* equal the proven renderer the net's
-        # FaithfulPoC/TiePoC certifies and Main<Net>Verified trains on. If they
+        # Fold/StepTie certifies and Main<Net>Verified trains on. If they
         # drift, fail (regenerate with the `lake env lean …` shown). Covers the
         # full proof-rendered set — every committed forward + SGD train-step the
         # §1a ties certify. NOT covered (exe-generated, not pure-Lean renders):
@@ -229,7 +229,7 @@ jobs:
               verified_mlir/mnv4in_adamdp64bf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/mnv4*_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean)"; exit 1; }
           # ⭐ Since 4c leg 3 (2026-09-07) this module writes ONE artifact: the SGD-inline train
-          # step, at which ConvNeXtTiePoC.lean's 182-parameter tie is stated. Every other ConvNeXt
+          # step, at which ConvNeXtStepTie.lean's 182-parameter tie is stated. Every other ConvNeXt
           # artifact moved to the ConvNeXtRenderB step below (the batched chain has no fused-SGD arm).
           lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean
           git diff --exit-code -- verified_mlir/convnext_train_step.mlir \
@@ -363,7 +363,7 @@ jobs:
             || { echo "::error::committed verified_mlir/{efficientnet,efficientnetin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean)"; exit 1; }
           # ⛔ ONE artifact left here since 4c leg 4 (2026-09-07): the SGD-inline train step is the
           # only ViT render still on the per-example traversal, because `vitBackAllB` has no
-          # fused-SGD arm and `ViTTiePoC.lean`'s 200-parameter tie is stated at these bytes.
+          # fused-SGD arm and `ViTStepTie.lean`'s 200-parameter tie is stated at these bytes.
           # Everything else moved to the ViTRenderB step above.
           lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean
           git diff --exit-code -- verified_mlir/vit_train_step.mlir \

@@ -728,7 +728,7 @@ excerpt when you ELIDE a run, which catches fabrication. It does not catch stale
 because a stale line was genuine when pasted and nothing about eliding draws the eye to it.
 **Re-capturing a run silently invalidates every quoted line, not just the ones you edited.**
 ⚠ The ch2/ch3 tell was that the *prose* already had the right answer: ch2 says
-`MlpFaithfulPoC` proves "each of the six parameter outputs" plus a trailing report-only
+`MlpFold` proves "each of the six parameter outputs" plus a trailing report-only
 `%loss`, i.e. 7 total — the prose had been updated and the pasted log had not, and the two
 sat contradicting each other in the same section.
 

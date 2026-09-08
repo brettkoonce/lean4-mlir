@@ -163,7 +163,7 @@ missing full-dim concrete certified whole-net VJP (`resnet34Concrete` is toy-onl
 
 ### §B-identity-block DONE (2026-06-26) — float backward = CERTIFIED VJP, b1-free, 3-axiom-clean
 
-`LeanMlir/Proofs/Resnet34BackCertifiedTie.lean` (new module; in lib `roots` + `AuditAxioms`):
+`LeanMlir/Proofs/ResNet34BackCertifiedTie.lean` (new module; in lib `roots` + `AuditAxioms`):
 the r34 **identity block** float-bridge backward is now tied to the certified gradient.
 
 **The b1 dodge (the key move).** b1 (batched↔non-batched) is *avoided*, not reconciled: the
@@ -199,12 +199,12 @@ Same module, same recipe, b1-free. The down block `rblkPStridedPC = relu ∘ res
   ReLU masks pinned = `(rblkPStridedPC_has_vjp_at).backward`. Both sides `fun dy ↦ projBack(mask dy) +
   bodyBack(mask dy)`; closes by rewriting the 2 strided-conv leaves + 1 conv leaf, rest definitional.
 
-All 3-axiom-clean, in `Resnet34BackCertifiedTie.lean` + `AuditAxioms`. **So both r34 block types
+All 3-axiom-clean, in `ResNet34BackCertifiedTie.lean` + `AuditAxioms`. **So both r34 block types
 (identity + downsample) now have float-backward = certified-VJP.**
 
 ### §B-endpoints DONE (2026-06-26) — every per-op backward of r34InputGrad is now certified-tied
 
-The endpoint leaf ties (in `Resnet34BackCertifiedTie.lean`, 3-axiom-clean + `AuditAxioms`):
+The endpoint leaf ties (in `ResNet34BackCertifiedTie.lean`, 3-axiom-clean + `AuditAxioms`):
 - `dense_transpose_eq_vjp_backward` — the dense head: `dense (Wᵀ) 0` (= `Wᵀ·dy`) = certified
   `(dense_has_vjp W b).backward x` (= `Mat.mulVec W dy`). One `mul_comm` per term.
 - `gapBack_eq_vjp_backward` — GAP: `gapBack` (broadcast `dy(channel)/(h·w)`) = certified

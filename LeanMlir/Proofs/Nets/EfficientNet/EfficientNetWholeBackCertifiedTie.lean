@@ -1,10 +1,10 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
-import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains
 
 /-! # ⭐⭐ `efficientnetInputGradB` IS the certified whole-net EfficientNet-B0 gradient
 
-The fourth whole-net backward tie, after ResNet-34 (`Resnet34BackCertifiedTie.lean`),
+The fourth whole-net backward tie, after ResNet-34 (`ResNet34BackCertifiedTie.lean`),
 MobileNetV2 (`MobileNetV2WholeBackCertifiedTie.lean`) and ConvNeXt-T. With it the chain IS the
 certified whole-net gradient, not merely a chain every piece of which is. (The whole-net float
 budget once stated on this chain was deleted 2026-09-08 as vacuous; the tie stays.)

@@ -4,7 +4,7 @@
 
 ## ▶▶ 2026-08-10 — R50 IS ONE STEP FROM THE MAIN LINE (see `planning/archive/mnv4_verified.md` §8)
 
-`Nets/ResNet/Resnet50BlocksCertified.lean` already discharges step 1 of 3 — all three bottleneck
+`Nets/ResNet/ResNet50BlocksCertified.lean` already discharges step 1 of 3 — all three bottleneck
 forms have `_has_vjp_at` (including `bblkPProjPC`, the stride-1 projection that only R50 stage-1
 block 0 needs). **Missing: the `BackBatchedGraph` + `_faithful` pair** that makes the rendered
 backward the certified one. `ResNet34BackB0.lean` is the template, and R50's blocks were written to

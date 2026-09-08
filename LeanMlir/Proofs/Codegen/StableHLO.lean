@@ -425,7 +425,7 @@ inductive SHlo : Nat → Type where
   -- weight/bias SGD step. `weightSgd`: `W − lr·(x⊗dy)` (`dot_general` batch-
   -- contract → const → multiply → subtract), `den` = the certified `sgdW` step
   -- at B=1. `biasSgd`: `b − lr·(Σ_batch dy)` (`reduce` → const → mul → sub).
-  -- LinearFaithfulPoC proves both `den`s = the certified loss-descent step.
+  -- LinearFold proves both `den`s = the certified loss-descent step.
   | weightSgd  {m n : Nat} (xName wName lrStr : String) (x : Vec m) (W : Mat m n) (lr : ℝ) : SHlo n → SHlo (m*n)
   | biasSgd    {n : Nat} (bName lrStr : String) (b : Vec n) (lr : ℝ)                        : SHlo n → SHlo n
   -- Chapter 2 (MLP): ReLU forward (`maximum(·,0)`) and its backward mask
@@ -440,7 +440,7 @@ inductive SHlo : Nat → Type where
   -- Mixed precision (planning/archive/bf16_renderer.md): the in-graph ROUND node. `den` is
   -- literally `rnd ∘ den e`, so it is `den`-faithful for ANY rounding — bf16
   -- round-to-nearest being the instance we emit. This is the op
-  -- `Proofs/Float/Bf16FaithfulPoC.lean` names as the depth > 1 ingredient
+  -- `Proofs/Float/Bf16Fold.lean` names as the depth > 1 ingredient
   -- (`den (convertF rnd e) = rnd ∘ den e`), and it is ALSO what depth 1 needs on the
   -- emitter side: the PoC folds the leaf cast into the operand *value*, which is
   -- right for the proof but would leave the emitted graph pure `f32` and therefore
@@ -500,7 +500,7 @@ inductive SHlo : Nat → Type where
   -- (transpose→transpose→convolution→transpose, then const→multiply→subtract), `den`
   -- = `cnn_render_convW_certified`. `convBiasSgd`: `b − lr·(conv2d_bias_grad(W,x)·dy)`
   -- (reduce over batch+spatial [0,2,3], then SGD). `xName`/`wName`/`bName` are the saved
-  -- activation/kernel/bias SSA names; `W,x,b,lr` carry the den. CnnFaithfulPoC proves
+  -- activation/kernel/bias SSA names; `W,x,b,lr` carry the den. CnnFold proves
   -- both `den`s = the certified loss-descent step (via the conv VJP bridges).
   | convWeightSgd {ic oc h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec oc) (x : Tensor3 ic h w) (W : Kernel4 oc ic kH kW) (lr : ℝ)
@@ -513,7 +513,7 @@ inductive SHlo : Nat → Type where
   -- `dγ_c = Σ_{b,h,w} dy·x̂` (x̂ recomputed from the saved BN input `v` = conv output,
   -- `den` = `cifar_bn_render_gamma_certified` via `reassocFwd`); `bnBetaSgd`: `β − lr·dβ`,
   -- `dβ_c = Σ_{b,h,w} dy`. `gName`/`bName`/`vName` are the γ/β/conv-output SSA names;
-  -- `epsStr` the ε literal. CifarBnFaithfulPoC proves both `den`s = the certified step.
+  -- `epsStr` the ε literal. CifarBnFold proves both `den`s = the certified step.
   | bnGammaSgd {oc h w : Nat} (gName vName epsStr lrStr : String) (ε : ℝ) (γ : Vec oc)
       (v : Vec (oc*h*w)) (lr : ℝ)                          : SHlo (oc*h*w) → SHlo oc
   | bnBetaSgd  {oc h w : Nat} (bName lrStr : String) (β : Vec oc) (lr : ℝ)
@@ -562,7 +562,7 @@ inductive SHlo : Nat → Type where
   -- downsample/projection AND the 7×7 stem, kH/kW-generic). `convStridedBiasSgd`: the bias
   -- grad is stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so it emits the SAME `reduce` text
   -- as `convBiasSgd` (its `skel` aliases that op's Raw); only its `den` differs (the strided
-  -- VJP). ResNet34FaithfulPoC proves both `den`s = the certified loss-descent step.
+  -- VJP). ResNet34Fold proves both `den`s = the certified loss-descent step.
   | convStridedWeightSgd {ic oc h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
                                                            : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
@@ -589,7 +589,7 @@ inductive SHlo : Nat → Type where
   -- zero-upsample dy (interior=1 → 2h×2w) then the SAME per-channel weight-grad on the 2h×2w grid;
   -- `den` = `mnv2_render_depthwiseW_strided_certified`. The depthwise bias grad is stride-INDEPENDENT
   -- (`Σ_{batch,spatial} dy`), so both bias ops emit the SAME `reduce` text as `convBiasSgd` (their
-  -- `skel` aliases that op's Raw); only their `den` differs. MobileNetV2FaithfulPoC proves all four
+  -- `skel` aliases that op's Raw); only their `den` differs. MobileNetV2Fold proves all four
   -- `den`s = the certified loss-descent step.
   | depthwiseWeightSgd {c h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW) (lr : ℝ)
@@ -616,7 +616,7 @@ inductive SHlo : Nat → Type where
   -- Chapter 8 (ConvNeXt-T) param-SGD tail. `layerScaleChGammaSgd`: the PER-CHANNEL layer-scale γ
   -- update `γ_c − lr·dγ_c`, `dγ_c = Σ_{b,h,w} x⊙dy` (the saved layer input `x` ⊙ the cotangent,
   -- reduced over batch+spatial per channel — `lsGradCh`). `γ : Vec c`, broadcast over spatial via
-  -- `chanIdx` by the `layerScaleChF` forward; `den` = ConvNeXtFaithfulPoC's `cnx_render_lsgammaCh`.
+  -- `chanIdx` by the `layerScaleChF` forward; `den` = ConvNeXtFold's `cnx_render_lsgammaCh`.
   | layerScaleChGammaSgd {c h w : Nat} (gName xName lrStr : String)
       (x : Vec (c*h*w)) (γ : Vec c) (lr : ℝ)               : SHlo (c*h*w) → SHlo c
   -- `lnGammaSgd`/`lnBetaSgd`: the SCALAR LayerNorm γ/β updates (the `bnF` sites — scalar LN over the
@@ -2386,7 +2386,7 @@ theorem dotInBf16_eq_dotIn_rounded {m n : Nat} (rnd : ℝ → ℝ) (s : String) 
 @[simp] theorem den_selectPos {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
     den (.selectPos s x e) = fun i => if x i > 0 then den e i else 0 := rfl
 /-- **The round node is `den`-faithful for any rounding.** This is the equation
-    `Proofs/Float/Bf16FaithfulPoC.lean` asks for by name to lift its depth-1 tie to
+    `Proofs/Float/Bf16Fold.lean` asks for by name to lift its depth-1 tie to
     depth > 1: rounding an *intermediate* activation is now an in-graph op whose
     denotation is exactly post-composition with `rnd`. No bf16 specifics appear here —
     bf16 round-to-nearest is one instance, and the accuracy half is supplied separately
@@ -9466,7 +9466,7 @@ def linearTrainStepModuleV (B d₀ d₁ : Nat) (lr : String)
     *whole* module is `pretty` of denoted nodes: the cotangent (`lossCotGraph`,
     rendered once → shared `%dy`), then the two fused SGD ops `weightSgd`/`biasSgd`
     that consume `%dy`. So every emitted line is `pretty(provenNode)` and
-    `LinearFaithfulPoC` proves the two outputs' `den` = the certified loss-descent
+    `LinearFold` proves the two outputs' `den` = the certified loss-descent
     SGD step. The `lr` ℝ / operand values are `skel`-erased (render is
     value-independent), so placeholders here render identically to the live graph
     the `den` theorems use. -/
@@ -10788,7 +10788,7 @@ end Proofs
   IO.FS.writeFile "verified_mlir/linear_fwd.mlir"
     (Proofs.StableHLO.linearFwdModuleV 128 784 10 (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
   -- Whole train step rendered from the verified AST (cotangent + weightSgd/biasSgd
-  -- nodes), the den-certified renderer LinearFaithfulPoC proves; see that file +
+  -- nodes), the den-certified renderer LinearFold proves; see that file +
   -- planning/archive/verified_faithful_sweep.md. (linearTrainStepModuleV — forward-AST +
   -- hand-written tail — is its structural predecessor, kept for reference.)
   IO.FS.writeFile "verified_mlir/linear_train_step.mlir"
@@ -10800,7 +10800,7 @@ end Proofs
        (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
        (fun _ => 0))
   -- mlp_train_step.mlir is now generated by the faithful renderer in MlpRender.lean
-  -- (mlpTrainStepFaithfulV, den-certified in MlpFaithfulPoC.lean), not mlpTrainStepText.
+  -- (mlpTrainStepFaithfulV, den-certified in MlpFold.lean), not mlpTrainStepText.
   -- Chapter 3 CNN forward (1→32→32 conv, 28×28→14×14 maxpool, 6272→512→512→10).
   IO.FS.writeFile "verified_mlir/cnn_fwd.mlir"
     (Proofs.StableHLO.cnnFwdModuleV 128 1 32 14 14 512 10 3 3
@@ -10808,7 +10808,7 @@ end Proofs
        (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
        (fun _ => 0))
   -- cnn_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
-  -- (cnnTrainStepFaithfulV, den-certified in CnnFaithfulPoC.lean), not cnnTrainStepText.
+  -- (cnnTrainStepFaithfulV, den-certified in CnnFold.lean), not cnnTrainStepText.
   -- Chapter 4 CIFAR forward (3→32→32 conv, 32×32→16×16 pool, 32→64→64 conv,
   -- 16×16→8×8 pool, flatten 4096→512→512→10). h=w=8 ⇒ input 3·32·32 = 3072.
   IO.FS.writeFile "verified_mlir/cifar_fwd.mlir"
@@ -10818,14 +10818,14 @@ end Proofs
        (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
        (fun _ => 0))
   -- cifar_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
-  -- (cifarTrainStepFaithfulV, den-certified in CifarFaithfulPoC.lean), not cifarTrainStepText.
+  -- (cifarTrainStepFaithfulV, den-certified in CifarFold.lean), not cifarTrainStepText.
   -- Chapter 4 CIFAR **per-channel BatchNorm** forward (per-example per-channel BN
   -- after each conv; ε=1e-5; H=W=32 full input spatial). String renderer (peer of
   -- the train-step) until the typed cifarBnFwdGraph is reconciled to per-channel.
   IO.FS.writeFile "verified_mlir/cifar_bn_fwd.mlir"
     (Proofs.StableHLO.cifarBnFwdTextPC 128 3 32 64 32 32 3 3 512 10 "1.0e-05")
   -- cifar_bn_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
-  -- (cifarBnTrainStepFaithfulV, den-certified in CifarBnFaithfulPoC.lean), not cifarBnTrainStepText.
+  -- (cifarBnTrainStepFaithfulV, den-certified in CifarBnFold.lean), not cifarBnTrainStepText.
   -- Deeper 8-conv CIFAR (no BN): 4 conv→conv→pool stages, channels [16,16,32,32],
   -- 32→16→8→4→2 spatial, flat 32·2·2 = 128 → 64 → 64 → 10. lr = 0.1/128.
   -- cifar8_fwd.mlir is now rendered from the verified cifar8FwdGraph (cifar8FwdGraph_faithful),
@@ -10839,7 +10839,7 @@ end Proofs
       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
       (fun _ => 0))
   -- cifar8_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
-  -- (cifar8TrainStepFaithfulV, den-certified in Cifar8FaithfulPoC.lean), not cifar8TrainStepText.
+  -- (cifar8TrainStepFaithfulV, den-certified in Cifar8Fold.lean), not cifar8TrainStepText.
   -- Deeper 8-conv CIFAR **per-channel BatchNorm** (ε=1e-5; lr = 0.1/128).
   -- cifar8_bn_fwd.mlir is now rendered from the verified cifar8BnFwdGraph (cifar8BnFwdGraph_faithful),
   -- not the hand-written cifar8BnFwdTextPC. Per conv layer: W b ε γ β (ε render-erased; epsStr carries it).

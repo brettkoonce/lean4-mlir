@@ -104,13 +104,13 @@ status:
     #
     # --- Train-step ties (T3): the fold at every gradient node, then the cotangent pinned ---
     # the fold, stated per op kind at the un-fused *GradB node all optimizer tails consume (r34's file is the template)
-    - {declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34FaithfulPoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34FoldB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # the emitted six-op cotangent IS the label-smoothed loss's gradient at a general target (mixup/cutmix)
     - {declaration: "Proofs.smoothedCE_grad", file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a batched capstone: ResNet-50's 161 nodes at their chain cotangent; N, q and the LOSS (CE or BCE) binders; one replica
-    - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50TiePoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
-    - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTTiePoC.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
@@ -121,7 +121,7 @@ status:
     # --- Certified backward ties (T6): the float tier's hand-written backward chain IS the
     #     certified whole-net VJP (fidelity 4d) ---
     # a kinked net: blocks opaque plus the shape check resnet34ForwardB_full_eq_slots
-    - {declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp", file: "LeanMlir/Proofs/Nets/ResNet/Resnet34BackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34BackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a smooth net one step further: the chain IS the pdiv-contracted Jacobian of the committed forward, via backward_unique
     - {declaration: "efficientnetInputGradB_full_correct", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
@@ -278,7 +278,7 @@ fidelity:
        (the all-reduced mean is the gradient of the mean loss, provably NOT the global-batch
        loss under batch BN) and as the AST node `allReduceMeanF`. STILL OPEN, and disclosed:
        no accuracy is quoted for MobileNetV4-Conv-M;
-       ConvNeXt's and ViT's SGD-inline `*_train_step.mlir` stay per-example and their `*TiePoC`
+       ConvNeXt's and ViT's SGD-inline `*_train_step.mlir` stay per-example and their `*StepTie`
        ties are at those bytes; `convBack` and `convBackBatched` -- two emitters for one VJP --
        are not tied to each other in Lean; the host-side sharding and lockstep (DP piece 3) are
        driver logic checked by the `*-dp-check` gates, not theorems.
@@ -352,7 +352,7 @@ alignment:
       note: "2-channel live ResNet-34, real [3,4,6,3] depth; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes; identity blocks wash out through BN)"
     - source: "Committed train step = real loss-driven backward (per-net ties: the seven ImageNet-scale nets at their batched steps, the ten SGD-inline steps)"
       lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied_certified family (SGD-inline)"
-      module: "LeanMlir/Proofs/Foundation/*TiePoCB.lean, LeanMlir/Proofs/Architectures/*TiePoCG*.lean, LeanMlir/Proofs/Architectures/*TiePoC.lean"
+      module: "LeanMlir/Proofs/Nets/*/*StepTieB.lean, LeanMlir/Proofs/Nets/*/*StepTieG*.lean, LeanMlir/Proofs/Nets/*/*StepTie.lean"
       status: "proved"
       note: "genuine backward cotangent, not a free forall-cotangent; one replica, composing with allReduceMeanF (fidelity 4g); committed-spec ties for the 5 ImageNet nets in SpecVJP"
     - source: "Binary32 rounding model + certified backward ties"

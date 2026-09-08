@@ -33,7 +33,7 @@ interval transformer + a one-line containment lemma `Contains l u x → Contains
 - **ReLU (any monotone activation).** `[l,u] → [relu l, relu u]`; soundness is *just monotonicity*
   (`l ≤ x ≤ u ⟹ relu l ≤ relu x ≤ relu u`). Tight, trivial.
 - **Conv** = affine over the receptive field (`|W|·r` summed over the window) — same lemma as affine,
-  tie to the verified conv (`CifarFaithfulPoC.convW_den` / `CNN.lean`).
+  tie to the verified conv (`CifarFold.convW_den` / `CNN.lean`).
 - **BN-eval** = per-channel affine — tie to `bnEvalAffine` (`BnEvalFloatBridge.lean`); same lemma.
 - **Residual add** `l' = l_a + l_b`, `u' = u_a + u_b`. **Avg-pool** = affine; **max-pool** = monotone.
 

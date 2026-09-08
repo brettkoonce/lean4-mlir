@@ -4432,7 +4432,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     E4M3`, `u_acc = fp32`), and applies the recovered gradient delta to the fp32
     master via `addDelta` (`master += Wout − Wq = master − lr·∇`). The MLIR and
     FFI are **unchanged**: fp8 here is host-side operand byte-prep, exactly the
-    §3b render-tie model (`Proofs/E4M3FaithfulPoC.lean`). Eval runs the fp32
+    §3b render-tie model (`Proofs/E4M3Fold.lean`). Eval runs the fp32
     master through `@<slug>_fwd` (the "fp32-infer" accuracy of the fp8-trained
     model, mirroring `scripts/mnist_e4m3_demo.py`).
 

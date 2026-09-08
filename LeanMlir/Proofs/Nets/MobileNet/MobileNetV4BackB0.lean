@@ -71,7 +71,7 @@ Nine of these are in `tests/AuditAxioms.lean`, 3-axiom clean.
 forward and its input-VJP) is `Nets/MobileNet/MobileNetV4FullB.lean` +
 `MobileNetV4FullBVJP.lean`, T2 (the typed forward graph at `mnv4FwdChainB`'s tokens) is in the
 first of those, T3 (the fold and tie at the emitted gradient nodes, all 233) is
-`MobileNetV4FaithfulPoCB.lean` + `MobileNetV4TiePoCB.lean`, and T6 (the certified whole-net
+`MobileNetV4FoldB.lean` + `MobileNetV4StepTieB.lean`, and T6 (the certified whole-net
 backward tie) is `MobileNetV4WholeBackCertifiedTieB.lean` + its float chain. Each of them consumes
 what is built here, block by block. `planning/archive/mnv4_proofs_tier.md` is the record; ResNet-50 — which
 was in exactly this position, block-level only with no per-example legacy — was the file-by-file

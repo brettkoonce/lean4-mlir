@@ -7,7 +7,7 @@ concrete, and r34/mnv2/convnext forward skeletons are tied to their real net def
 (`WholeNetForwardTies.lean`). This doc is the **two remaining un-tied directions**:
 
 1. **(Item 2) Backward §B certified-VJP ties for mnv2 / efficientnet / convnext / vit** — do for the
-   other four what `Resnet34BackCertifiedTie.lean` did for r34.
+   other four what `ResNet34BackCertifiedTie.lean` did for r34.
 2. **(Item 3) The vit-forward tie** — ✅ **DONE 2026-06-26.** `vit_full_eq_vitForwardFlat`
    (`ViTWholeFloatBridge.lean`), 3-axiom-clean — see PART B below for the closed-out record. The
    forward tie sweep now covers **all 5 nets**.
@@ -92,7 +92,7 @@ backward unfolds definitionally to the nested op-backwards; `set`-built certifie
 
 ### The r34 §B blueprint (the pattern to replicate)
 
-`Resnet34BackCertifiedTie.lean` closed the §B integrity question for the r34 blocks. The backward
+`ResNet34BackCertifiedTie.lean` closed the §B integrity question for the r34 blocks. The backward
 float bridges prove *deployed-float ≈ a hand-assembled reverse-mode transcription* (`r34IdBlockBack`);
 §B proves *that transcription IS the certified input-gradient VJP*. **Three pieces per block type:**
 

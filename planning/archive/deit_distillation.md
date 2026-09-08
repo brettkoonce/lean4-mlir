@@ -64,7 +64,7 @@ architecture (conv-ness):      R50 → EfficientNet-B0 → ConvNeXt-T
 
 ## 0. What DeiT adds to a vanilla ViT
 
-Vanilla ViT (have it: `ViTRender.vitFwd`, `vit_net_tied_certified` in `ViTTiePoC.lean`,
+Vanilla ViT (have it: `ViTRender.vitFwd`, `vit_net_tied_certified` in `ViTStepTie.lean`,
 `MainViTVerified`/`MainViTVerifiedAdam`): prepend a `[class]` token (`clsPosFwd`, row 0), run blocks,
 slice the class row and run one head (`headFwd`: `[b,n,d]` row 0 → `[b,d]` → `Wc[d,nc]` → logits) →
 CE vs the true label.
@@ -136,7 +136,7 @@ At inference, fuse the two heads (average the softmaxes).
 
 `ViTRender.lean` (D1: token + 2nd head fwd/back), `Train.lean` (D2: two-CE loss), a new
 `apps/imagenette/MainDeiTVerified.lean` (D3 + the trainer, cloning `MainViTVerified` + teacher-label
-feed), `ViTTiePoC.lean` (D4: extend `vit_net_tied_certified` → `deit_net_tied_certified`), and
+feed), `ViTStepTie.lean` (D4: extend `vit_net_tied_certified` → `deit_net_tied_certified`), and
 `tests/AuditAxioms.lean` for the new capstone. Reference: Touvron et al. 2021 (DeiT), and
 [[vit-tie-scope]] / [[section1a-tie-sweep]] for the existing ViT tie recipe + gotchas.
 
@@ -146,6 +146,6 @@ feed), `ViTTiePoC.lean` (D4: extend `vit_net_tied_certified` → `deit_net_tied_
    variant) and parameterize `headFwd`/`headBack` by the slice row; validate the new render in a
    `tests/TestViT*` smoke test (shape `[b, n0+2, d]`, two `[b,nc]` heads).
 2. `Train.lean` + `MainDeiTVerified`: the two-CE loss + teacher-label feed; smoke-train one epoch.
-3. `ViTTiePoC.lean`: extend the tie to `deit_net_tied_certified` (the per-token fold already covers
+3. `ViTStepTie.lean`: extend the tie to `deit_net_tied_certified` (the per-token fold already covers
    the extra row; the new content is the second head's fwd/back tie + the summed cotangent). Keep
    3-axiom clean; add the `#print axioms` line. Soft distillation (D5) only if wanted.

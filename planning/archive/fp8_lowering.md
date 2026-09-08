@@ -34,7 +34,7 @@ untouched and becomes the **validation target**.
   StableHLO (fp32 matmul, fp32 accumulate, fp32 master). The GPU never sees an 8-bit
   number. The accuracy numbers are the *true fp8 numerics*; only the speed is missing.
 - **The proofs are grid-agnostic and already cover the deployed kernel.** §3b
-  (`LeanMlir/Proofs/E4M3FaithfulPoC.lean`, `e4m3_render_faithful`) proves the emitted
+  (`LeanMlir/Proofs/E4M3Fold.lean`, `e4m3_render_faithful`) proves the emitted
   block-scaled-E4M3 graph denotes "dequant each operand, then matmul (fp32 accumulate)",
   for **any** quantizer `q`. §3c (`FloatBridge.lean`, `linear_e4m3_argmax_preserved`) is
   the accuracy bound.
@@ -158,7 +158,7 @@ PATH, `IREE_BACKEND=cuda` (the `lake run` demo auto-detects cuda via `nvidia-smi
 
 - Quantizer: `LeanMlir/E4M3Quant.lean`
 - Drivers: `LeanMlir/VerifiedTrain.lean` (`trainLinearE4M3` / `trainE4M3` / `trainAdamSchedE4M3`)
-- Proof — render-tie (§3b): `LeanMlir/Proofs/E4M3FaithfulPoC.lean` (`e4m3_render_faithful`)
+- Proof — render-tie (§3b): `LeanMlir/Proofs/E4M3Fold.lean` (`e4m3_render_faithful`)
 - Proof — accuracy (§3c) + bf16 §1c: `LeanMlir/Proofs/FloatBridge.lean`
 - Numpy oracle (the grid + the optimizer dynamics): `scripts/mnist_e4m3_demo.py`,
   `scripts/mnist_e4m3_train_demo.py`

@@ -2382,7 +2382,7 @@ print. That scalar is also the one line of
 a comment of its own: \texttt{\%loss below is REPORT-ONLY (logging), NOT
 pretty(AST node)}. Nothing reads it but the printer and no theorem
 depends on it. The six \emph{parameter} outputs are the proved ones ---
-\texttt{MlpFaithfulPoC} shows each denotes the certified gradient-descent
+\texttt{MlpFold} shows each denotes the certified gradient-descent
 step derived from the Mathlib \(\fderiv\) math.
 
 \paragraph{What \texttt{.relu} contributes.} Nothing:
@@ -3223,7 +3223,7 @@ which is the one line of \texttt{verified\_mlir/cnn\_train\_step.mlir} that
 is not \texttt{pretty} of a proven graph node --- the render labels it as
 such in a comment of its own. Everything else in the file is:
 \texttt{Proofs.StableHLO.cnnTrainStepFaithfulV} emits it, and
-\texttt{CnnFaithfulPoC} proves that each of the ten parameter updates
+\texttt{CnnFold} proves that each of the ten parameter updates
 denotes the certified softmax cross-entropy loss-descent step derived from
 the Mathlib \(\fderiv\) math. Both convolutions, the max pool, the three
 dense layers and the SGD update are proof-backed operations.
@@ -13958,7 +13958,7 @@ lake build Proofs            # the whole suite
 \end{verbatim}
 
 \texttt{ProofsMinimal} is the smallest thing that is still a real result:
-\texttt{LinearFaithfulPoC} (the rendered linear layer denotes the Mathlib
+\texttt{LinearFold} (the rendered linear layer denotes the Mathlib
 \texttt{fderiv} math) and \texttt{SgdDescentLinear} (the step decreases the
 loss). Start there if you want to see one theorem land before committing to
 the full build.
@@ -14901,7 +14901,7 @@ convolution in \texttt{ConvMixedFloatBridge.lean},
 \texttt{DepthwiseMixedFloatBridge.lean} and
 \texttt{ConvMixedComposeBridge.lean}, with the emitted low-precision
 graphs tied back to the intended algorithm in
-\texttt{Bf16FaithfulPoC.lean} and \texttt{E4M3FaithfulPoC.lean}.
+\texttt{Bf16Fold.lean} and \texttt{E4M3Fold.lean}.
 
 \medskip\noindent So the honest summary is three sentences, not one. The
 theorems are over \(\mathbb{R}\). The budgets are over an arbitrary

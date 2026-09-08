@@ -46,11 +46,11 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Close
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FaithfulPoC
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FaithfulPoC
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FaithfulPoCPaper
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFaithfulPoC
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetTiePoC
+import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FoldPaper
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
@@ -70,9 +70,9 @@ import LeanMlir.Proofs.Training.SgdDescentLinear
 import LeanMlir.Proofs.Training.SgdDescentCnn
 import LeanMlir.Proofs.Training.SgdDescentCifar
 import LeanMlir.Proofs.Float.BnFloatBridge
-import LeanMlir.Proofs.Float.Resnet34FloatBridge
+import LeanMlir.Proofs.Float.ResNet34FloatBridge
 import LeanMlir.Proofs.Float.BnInputBridge
-import LeanMlir.Proofs.Float.Resnet34BlockBridge
+import LeanMlir.Proofs.Float.ResNet34BlockBridge
 import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
@@ -83,28 +83,28 @@ import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FaithfulPoCB
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFaithfulPoCG
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFaithfulPoCG
-import LeanMlir.Proofs.Nets.ViT.ViTFaithfulPoCG
-import LeanMlir.Proofs.Nets.ViT.ViTFaithfulPoCGB
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFaithfulPoCGB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldG
+import LeanMlir.Proofs.Nets.ViT.ViTFoldG
+import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Foundation.Bf16GradNodes
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FaithfulPoCPaperG
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FoldPaperG
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2TiePoCB
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetTiePoCG
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtTiePoCGB
-import LeanMlir.Proofs.Nets.ViT.ViTTiePoCGB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTieG
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
+import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
-import LeanMlir.Proofs.Nets.ResNet.ResNet50TiePoCB
+import LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
-import LeanMlir.Proofs.Nets.ResNet.ResNet34TiePoCB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
@@ -112,14 +112,14 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackChains
 import LeanMlir.Proofs.Nets.ViT.ViTBackChains
-import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2PaperWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie
-import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTieB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTieB
-import LeanMlir.Proofs.Nets.ResNet.Resnet50WholeBackCertifiedTieB
+import LeanMlir.Proofs.Nets.ResNet.ResNet50WholeBackCertifiedTieB
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
@@ -136,30 +136,30 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackB0
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFaithfulPoC
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtTiePoC
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTie
 import LeanMlir.Proofs.Nets.ViT.ViTBackB0
 import LeanMlir.Proofs.Nets.ViT.ViTBackNet
 import LeanMlir.Proofs.Nets.ResNet.ResNet50BackNet
 import LeanMlir.Proofs.Foundation.BackNetFolds
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FaithfulPoCB
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4TiePoCB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FoldB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4WholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
-import LeanMlir.Proofs.Nets.Small.LinearFaithfulPoC
-import LeanMlir.Proofs.Float.E4M3FaithfulPoC
-import LeanMlir.Proofs.Nets.Small.MlpFaithfulPoC
-import LeanMlir.Proofs.Nets.Small.CnnFaithfulPoC
-import LeanMlir.Proofs.Nets.Small.CifarFaithfulPoC
-import LeanMlir.Proofs.Nets.Small.CifarBnFaithfulPoC
-import LeanMlir.Proofs.Nets.Small.CifarBnTiePoC
-import LeanMlir.Proofs.Nets.Small.Cifar8FaithfulPoC
-import LeanMlir.Proofs.Nets.Small.Cifar8TiePoC
-import LeanMlir.Proofs.Nets.Small.Cifar8BnTiePoC
-import LeanMlir.Proofs.Nets.ViT.ViTFaithfulPoC
-import LeanMlir.Proofs.Nets.ViT.ViTTiePoC
+import LeanMlir.Proofs.Nets.Small.LinearFold
+import LeanMlir.Proofs.Float.E4M3Fold
+import LeanMlir.Proofs.Nets.Small.MlpFold
+import LeanMlir.Proofs.Nets.Small.CnnFold
+import LeanMlir.Proofs.Nets.Small.CifarFold
+import LeanMlir.Proofs.Nets.Small.CifarBnFold
+import LeanMlir.Proofs.Nets.Small.CifarBnStepTie
+import LeanMlir.Proofs.Nets.Small.Cifar8Fold
+import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
+import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
+import LeanMlir.Proofs.Nets.ViT.ViTFold
+import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Certificates.LipschitzCert
 import LeanMlir.Proofs.Certificates.SmoothingGaussian
 import LeanMlir.Proofs.Certificates.LipschitzCertInstance
@@ -407,7 +407,7 @@ open Proofs
 -- M1 rendering half
 #print axioms StableHLO.linWeightDen_is_loss_descent
 #print axioms StableHLO.linBiasDen_is_certified
--- PoC capstones (LinearFaithfulPoC.lean)
+-- PoC capstones (LinearFold.lean)
 #print axioms LinPoC.poc_fwd_faithful
 #print axioms LinPoC.poc_fwd_is_render
 #print axioms LinPoC.poc_train_step_certified
@@ -998,7 +998,7 @@ open Proofs
 #print axioms FloatModel.bnVar_close
 #print axioms FloatModel.bnForward_close_of
 #print axioms FloatModel.bnForward_close
--- ResNet-34 structural float ops (Resnet34FloatBridge.lean)
+-- ResNet-34 structural float ops (ResNet34FloatBridge.lean)
 #print axioms FloatModel.add_close
 #print axioms FloatModel.reluAdd_close
 #print axioms FloatModel.flatConvStride2F_close
@@ -1009,7 +1009,7 @@ open Proofs
 #print axioms bnVar_input_close
 #print axioms bnIstd_input_close
 #print axioms bnForward_input_close
--- First assembled ResNet block step (Resnet34BlockBridge.lean)
+-- First assembled ResNet block step (ResNet34BlockBridge.lean)
 #print axioms FloatModel.bnRelu_close
 -- Whole-net certificate backbone (FloatComposeBridge.lean)
 #print axioms FloatClose.comp
@@ -1164,7 +1164,7 @@ open Proofs
 #print axioms Proofs.efficientnetInputGradB_full_eq_efficientnetB_full_vjp
 #print axioms Proofs.efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp
 #print axioms Proofs.efficientnetInputGradB_full_correct
--- AND AT BATCH BATCH-NORM (Resnet34BackCertifiedTieB.lean, MobileNetV2WholeBackCertifiedTieB.lean)
+-- AND AT BATCH BATCH-NORM (ResNet34BackCertifiedTieB.lean, MobileNetV2WholeBackCertifiedTieB.lean)
 #print axioms Proofs.HasVJPAt.backward_unique
 #print axioms Proofs.maxPool3s2FlatBackB_eq_vjp_backward
 #print axioms Proofs.cbReluStridedBBack_eq_vjp_backward
@@ -1179,7 +1179,7 @@ open Proofs
 #print axioms Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp
 #print axioms Proofs.mnv2InputGradB_correct
 #print axioms Proofs.mobilenetv2ForwardB_full_eq_slots
--- AND RESNET-50's T6 (Resnet50WholeBackCertifiedTieB.lean)
+-- AND RESNET-50's T6 (ResNet50WholeBackCertifiedTieB.lean)
 #print axioms Proofs.r50InputGradB_eq_r34B_full_vjp
 #print axioms Proofs.r50InputGradB_correct
 #print axioms Proofs.resnet50ForwardB_full_eq_slots
@@ -1703,7 +1703,7 @@ open Proofs
 #print axioms StableHLO.mbNoExpBackBatchedGraph_faithful
 #print axioms StableHLO.headBackBatchedGraph_faithful
 #print axioms StableHLO.enetTrunk
--- ViT-Tiny §1 FOLD (ViTFaithfulPoC)
+-- ViT-Tiny §1 FOLD (ViTFold)
 #print axioms Proofs.ViTPoC.veclnGammaSgd_den
 #print axioms Proofs.ViTPoC.rowDenseWeightSgd_den
 #print axioms Proofs.ViTPoC.rowDenseBiasSgd_den
@@ -1713,12 +1713,12 @@ open Proofs
 #print axioms Proofs.ViTPoC.posEmbedSgd_den
 #print axioms Proofs.ViTPoC.headW_den
 #print axioms Proofs.ViTPoC.headB_den
--- ViT-Tiny §1a TIE — per-block (ViTTiePoC)
+-- ViT-Tiny §1a TIE — per-block (ViTStepTie)
 #print axioms Proofs.ViTTiePoC.vit_block_tiedV
 -- ViT-Tiny §1a TIE — whole-net thread (2-block vector-LN representative)
 #print axioms Proofs.ViTTiePoC.vit_block_tiedAtV
 #print axioms Proofs.ViTTiePoC.vit_net_tiedV
--- ViT-Tiny §1a TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTTiePoC)
+-- ViT-Tiny §1a TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTStepTie)
 #print axioms Proofs.vitCotDQmh_eq
 #print axioms Proofs.vitCotDKmh_eq
 #print axioms Proofs.vitCotDVmh_eq
@@ -2163,7 +2163,7 @@ open Proofs
 #print axioms Proofs.resnet34ForwardB_full_eq_chain
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at_correct
 
--- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (ResNet34FaithfulPoCB.lean, 2026-09-06)
+-- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (ResNet34FoldB.lean, 2026-09-06)
 #print axioms Proofs.ResNet34PoCB.convWGradB_den
 #print axioms Proofs.ResNet34PoCB.convBGradB_den
 #print axioms Proofs.ResNet34PoCB.convStridedWGradB_den
@@ -2268,7 +2268,7 @@ open Proofs
 #print axioms Proofs.smoothedLossCotGraph_den
 #print axioms Proofs.smoothedLossCotGraph_row
 
--- 4.2a: RESNET-34'S T3 §1a TIE AT BATCH BN, UN-FUSED (ResNet34TiePoCB.lean, 2026-09-06)
+-- 4.2a: RESNET-34'S T3 §1a TIE AT BATCH BN, UN-FUSED (ResNet34StepTieB.lean, 2026-09-06)
 #print axioms Proofs.ResNet34TieB.bnInB_eq_bnBackB
 #print axioms Proofs.ResNet34TieB.r34IdCotIn_eq_vjp
 #print axioms Proofs.ResNet34TieB.r34DownCotIn_eq_vjp
@@ -2300,7 +2300,7 @@ open Proofs
 #print axioms Proofs.mobilenetv2ForwardB_full_eq_chain
 #print axioms Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct
 
--- 4.2c: MOBILENETV2'S T3 §1a TIE AT BATCH BN, UN-FUSED (MobileNetV2TiePoCB.lean, 2026-09-06)
+-- 4.2c: MOBILENETV2'S T3 §1a TIE AT BATCH BN, UN-FUSED (MobileNetV2StepTieB.lean, 2026-09-06)
 #print axioms Proofs.MobileNetV2TieB.mnv2NoExpBackGraph_faithful
 #print axioms Proofs.MobileNetV2TieB.mnv2NoExpCotIn_eq_vjp
 #print axioms Proofs.MobileNetV2TieB.mnv2ExpOnlyCotIn_eq_vjp
@@ -2314,7 +2314,7 @@ open Proofs
 #print axioms Proofs.MobileNetV2TieB.mnv2_net_tiedB
 #print axioms Proofs.MobileNetV2TieB.mnv2_lossCot_is_smoothedCE_grad
 
--- 4b's CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetTiePoCG.lean, 2026-09-06)
+-- 4b's CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetStepTieG.lean, 2026-09-06)
 #print axioms Proofs.EnetTiePoCG.enet_exp_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_strided_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_noexp_tiedG
@@ -2322,7 +2322,7 @@ open Proofs
 #print axioms Proofs.EnetTiePoCG.enet_head_tiedG
 #print axioms Proofs.EnetTiePoCG.efficientnet_net_tiedG
 
--- 4b's CAPSTONE RE-POINTING, CONVNEXT-T (ConvNeXtTiePoCGB.lean, 2026-09-07)
+-- 4b's CAPSTONE RE-POINTING, CONVNEXT-T (ConvNeXtStepTieGB.lean, 2026-09-07)
 #print axioms Proofs.smoothedLossCotGraphDiv_den
 #print axioms Proofs.smoothedLossCotGraphDiv_row
 #print axioms Proofs.CnxTiePoCGB.cnx_block_ch_tiedGB
@@ -2331,7 +2331,7 @@ open Proofs
 #print axioms Proofs.CnxTiePoCGB.cnx_head_ch_tiedGB
 #print axioms Proofs.CnxTiePoCGB.cnx_net_tiedGB
 
--- 4b's CAPSTONE RE-POINTING, ViT-TINY (ViTTiePoCGB.lean, 2026-09-07) — FIVE OF FIVE
+-- 4b's CAPSTONE RE-POINTING, ViT-TINY (ViTStepTieGB.lean, 2026-09-07) — FIVE OF FIVE
 #print axioms Proofs.ViTTiePoCGB.vit_block_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_finalLN_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_head_tiedGB

@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 net — the reverse of `mobilenetv2ForwardPaper`, the forward the retired `MobileNetV2Render`
 emitted. This file closes it for the net the shipped trainers run: `mobilenetv2ForwardB_full`, the
 same `[t,c,n,s]` ladder at **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
-`planning/archive/proofs_tier_to_paper_nets.md` §4.2, alongside `Resnet34BackCertifiedTieB.lean`.
+`planning/archive/proofs_tier_to_paper_nets.md` §4.2, alongside `ResNet34BackCertifiedTieB.lean`.
 
 ## ⭐⭐ The whole apex is reused, not rewritten
 
@@ -47,7 +47,7 @@ Those are 4.2b's bundles, reused verbatim; this file adds no hypothesis of its o
 
 ⛔ **What this does NOT reach.** Every gradient node in `mobilenetv2in_rmsdp64` is followed by an
 all-reduce emitted as text outside the AST, so this is at the per-replica gradient (§4d). And it
-is about the INPUT gradient; the parameter gradients are `MobileNetV2TiePoCB.lean`'s tie (§4.2c).
+is about the INPUT gradient; the parameter gradients are `MobileNetV2StepTieB.lean`'s tie (§4.2c).
 -/
 
 namespace Proofs
@@ -345,7 +345,7 @@ theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
     They are definitionally equal — and ⛔ letting the kernel discover that on the CONCRETE
     twenty-one-stage net is a deterministic timeout, because whnf unfolds the `@[reducible]`
     block abbreviations to get there. Between variables it is `rfl` and costs nothing.
-    `Resnet34BackCertifiedTie.lean`'s `chainComp₂_comp` is the same trick: prove the reduction
+    `ResNet34BackCertifiedTie.lean`'s `chainComp₂_comp` is the same trick: prove the reduction
     where the terms are variables, then REWRITE. -/
 private theorem comp3_assoc {m a b c n : Nat} (f : Vec c → Vec n) (g : Vec b → Vec c)
     (h : Vec a → Vec b) (k : Vec m → Vec a) : (f ∘ g ∘ h) ∘ k = f ∘ g ∘ h ∘ k := rfl

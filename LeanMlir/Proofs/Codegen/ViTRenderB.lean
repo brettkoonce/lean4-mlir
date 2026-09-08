@@ -28,14 +28,14 @@ from here and `git diff verified_mlir/` after the move is empty.
 
 ⛔ **The one exception is `vit_train_step.mlir`**, the SGD-inline step, which stays in
 `ViTRender.lean`: `vitBackAllB` has no fused-SGD arm (it emits the raw gradient only), and ViT's
-T3 §1a tie — `ViTTiePoC.lean`, all 200 parameters — is stated at exactly those bytes. Retiring it
+T3 §1a tie — `ViTStepTie.lean`, all 200 parameters — is stated at exactly those bytes. Retiring it
 before that tie has a batched peer is the ordering mistake `planning/archive/renderer_convergence.md`
 leg 1 wrote down.
 
 ⭐⭐ **The bytes did not move and one denotation did.** See the CLS-token emission below: this
 chain's `denseBiasGradB (N := vbB)` sums the batch inside `den` where the per-example one wrote
 `(N := 1)` and let `pretty B` lift outside the AST. `Proofs.ViTPoCGB.clsGrad_denB` is the theorem
-that becomes available, and `ViTFaithfulPoCGB.lean` carries the other nine nodes with it.
+that becomes available, and `ViTFoldGB.lean` carries the other nine nodes with it.
 
 **The gate** (`lake build vit-fwd-b-tie`): this chain and the committed `verified_mlir/vit_fwd.mlir`
 must emit **byte-identical** text. That is available *because* every batched form was built to emit
@@ -1054,7 +1054,7 @@ def vitDropFwdBanner : String :=
 --
 -- ⚠ The comments below are the originals, unedited except for the call and where a claim moved.
 -- ⛔ `vit_train_step.mlir` did NOT move and stays in `ViTRender.lean`: `vitBackAllB` has no
--- fused-SGD arm, and `ViTTiePoC.lean`'s 200-parameter tie is stated at those bytes.
+-- fused-SGD arm, and `ViTStepTie.lean`'s 200-parameter tie is stated at those bytes.
 
 -- ⭐ The Imagenette forward, off the BATCHED chain since 4c leg 4 (2026-09-07) — byte-identical
 -- to what `vitFwdRenderV` wrote, which `vit-fwd-b-tie` had been asserting since the chain landed.

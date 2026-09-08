@@ -1478,7 +1478,7 @@ orders on B0 (10⁹⁵ → 10⁸⁹) and cheap to fix, but it is not what blocks
 
 ### 3.10 ⭐⭐ The whole-net CERTIFIED TIE for r34's backward (2026-09-03) — and the drift it found
 
-`r34InputGrad_eq_resnet34_vjp` (`Nets/ResNet/Resnet34BackCertifiedTie.lean`, ~57 s):
+`r34InputGrad_eq_resnet34_vjp` (`Nets/ResNet/ResNet34BackCertifiedTie.lean`, ~57 s):
 
     r34InputGrad <every slot pinned to the certified per-op backward>
       = (resnet34_has_vjp_at <the committed components at 3×224²> …).backward
@@ -1721,7 +1721,7 @@ exactly as committed, so **4.750·10¹⁵³ / 1.076·10¹⁵² stand unchanged**
 is not a wasted tie — it is the only way to know the previous section's number was about the net it
 claimed to be about.
 
-**⭐⭐ And this file carries the piece `Resnet34BackCertifiedTie.lean` does NOT have.**
+**⭐⭐ And this file carries the piece `ResNet34BackCertifiedTie.lean` does NOT have.**
 `mobilenetv2Forward_full_pc_eq_chain` states by `rfl` that the ten-stage chain the apex is
 instantiated at IS the committed forward — `b1/b3/b5/b6` the strided inverted-residual bodies,
 `b2/b4` those bodies under `Proofs.residual`, the stem and head spelled as the render spells them.
@@ -2237,7 +2237,7 @@ rather than at the composition.
 are each one iota-step on a `vjp_comp` structure literal. In a file importing
 **`ConvNeXtFullT` alone** they compile in **2m43s** and the twelve chain links in **2.4 s**. In
 `ConvNeXtWholeBackCertifiedTie.lean`, whose cone is `EvenKernelConvBack` (→
-`Resnet34BackCertifiedTie`) plus `ConvNeXtBackCertifiedTie`, the *same eleven* reach **103 GB
+`ResNet34BackCertifiedTie`) plus `ConvNeXtBackCertifiedTie`, the *same eleven* reach **103 GB
 without terminating**. Ruled out already: `open Classical` (removed, no change) and the `let`-vs-
 `def` binding (that one is separately worth 200× — a `let` used twice per level zeta-expands to
 `2^11` copies — and the shipped shape is already twelve top-level `def`s).
@@ -2249,7 +2249,7 @@ second number. Only then start removing imports.
 
 **Then bisect the import, from both ends** (§3.7's method, one level up):
 * From the fast end: start at `import ConvNeXtFullT`, add `ConvNeXtBackCertifiedTie`, then
-  `EvenKernelConvBack`, then `Resnet34BackCertifiedTie`'s own cone, timing one tie each step.
+  `EvenKernelConvBack`, then `ResNet34BackCertifiedTie`'s own cone, timing one tie each step.
 * From the slow end: take the real file and drop imports until it is fast. ⚠ Only
   `cnxBlockChBack_eq_vjp` (from `ConvNeXtBackCertifiedTie`) and the `padOdd` ties (from
   `EvenKernelConvBack`) are actually needed by the parts that landed — the ties themselves need
@@ -2472,7 +2472,7 @@ given saved-activation accuracies this net's forward cannot supply in any mode.*
 
 ### 3.23 ✅ ResNet-34's SHAPE CHECK (2026-09-04) — §4 item 1, and it is not a `rfl`
 
-`resnet34Forward_full_pc_eq_chain` (`Nets/ResNet/Resnet34BackCertifiedTie.lean`): the eleven slots
+`resnet34Forward_full_pc_eq_chain` (`Nets/ResNet/ResNet34BackCertifiedTie.lean`): the eleven slots
 `r34InputGrad_eq_resnet34_vjp` instantiates `resnet34_has_vjp_at` at — the stem `cbrStridedPC`, He
 et al.'s 3×3/s2 pool, the four `chainComp` stages `[a2,a1,a0]` / `[b2,b1,b0]` / `[c4,c3,c2,c1,c0]` /
 `[e1,e0]`, the three `downFwd` downsamples, GAP and the dense head — ARE `resnet34Forward_full_pc`.

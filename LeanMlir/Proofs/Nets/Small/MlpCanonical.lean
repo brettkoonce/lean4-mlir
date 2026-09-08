@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Training.SgdDescentMlp
-import LeanMlir.Proofs.Nets.Small.MlpFaithfulPoC
+import LeanMlir.Proofs.Nets.Small.MlpFold
 
 /-! # The CANONICAL MNIST MLP — 784→512→512→10 (ReLU, biased)
 

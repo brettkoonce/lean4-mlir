@@ -272,7 +272,7 @@ deriving Repr, DecidableEq
 
 /-- **One bottleneck's parameters, typed by its row.** `kq`/`kd`/`kz`/`kp` are the four kernel
     extents (1×1, 3×3, 1×1, and the projection's), left as binders exactly as
-    `Resnet50BlocksCertified` argues they should be — 1×1-vs-3×3 is an argument, not a literal. -/
+    `ResNet50BlocksCertified` argues they should be — 1×1-vs-3×3 is an argument, not a literal. -/
 structure BottleneckParams (s : BottleneckSpec) (kq kd kz kp : Nat) where
   W1 : Kernel4 s.mid s.ic kq kq
   b1 : Vec s.mid

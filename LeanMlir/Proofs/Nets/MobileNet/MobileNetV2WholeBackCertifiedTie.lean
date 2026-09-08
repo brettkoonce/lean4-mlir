@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie
-import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 
@@ -10,7 +10,7 @@ BODIES: each hand-assembled reverse-mode transcription IS the certified input-gr
 body it reverses, in the deployed non-batched per-channel-BN vocabulary. This file closes the
 same question for the WHOLE NET: the chain IS the certified whole-net gradient, not merely a
 chain every piece of which is — the MobileNetV2 peer of `r34InputGrad_eq_resnet34_vjp`
-(`Resnet34BackCertifiedTie.lean`). (The whole-net float budget once stated on this chain was
+(`ResNet34BackCertifiedTie.lean`). (The whole-net float budget once stated on this chain was
 deleted 2026-09-08 as vacuous; the tie stays.)
 
 Five pieces, and only the first two are new mathematics:
@@ -35,7 +35,7 @@ Five pieces, and only the first two are new mathematics:
    only the four concrete endpoints — stem, head, GAP, dense — are rewritten, and the proof is
    `unfold`, three `rw`s, `rfl`. The whole file elaborates in ~2 s.
 
-⭐⭐ **And `mobilenetv2Forward_full_pc_eq_chain` was the piece `Resnet34BackCertifiedTie.lean` did
+⭐⭐ **And `mobilenetv2Forward_full_pc_eq_chain` was the piece `ResNet34BackCertifiedTie.lean` did
 NOT have** (r34 got its own, `resnet34Forward_full_pc_eq_chain`, on 2026-09-04 — ⚠ not a bare
 `rfl` there: `resnet34_has_vjp_at` groups its `[3,4,6,3]` runs under `chainComp`, which has to be
 peeled at the abstract level first). It states, by `rfl`, that the ten-stage chain the apex is

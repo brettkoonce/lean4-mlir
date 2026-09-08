@@ -38,7 +38,7 @@ the lakefile's libs encode (rationale: `planning/archive/repo_shape_deletion_aud
   story.
 * **The certificate corpus — `lake build Certs`** (201 roots reaching 235 modules, ~153k lines):
   research results *about* the engine that no demo imports — the float model (`FloatClose`),
-  the §1a tie certificates (`*PoC`/`*TiePoC`), trained-net seals, SGD-descent
+  the §1a tie certificates (`*Fold`/`*StepTie`), trained-net seals, SGD-descent
   capstones, the Lipschitz/LipSDP robustness scorecards, Muon geometry, the
   binary32/E4M3 hardware models, the lexer/SSA syntactic line. Built and
   three-axiom-audited by `.github/workflows/certs.yml` (proof-path pushes +
@@ -56,7 +56,7 @@ proved for each net, and the **Linear classifier** shows both in ~650 lines tota
 Read these three, in order:
 
 1. [`LinearTrainStep.lean`](Nets/Small/LinearTrainStep.lean) (~250 L) — the linear train-step spec + ops.
-2. [`LinearFaithfulPoC.lean`](Nets/Small/LinearFaithfulPoC.lean) (~145 L) — **capstone**: emitted step = certified math.
+2. [`LinearFold.lean`](Nets/Small/LinearFold.lean) (~145 L) — **capstone**: emitted step = certified math.
 3. [`SgdDescentLinear.lean`](Training/SgdDescentLinear.lean) (~255 L) — **capstone**: that step decreases the loss.
 
 Build *just* this slice (Linear + the shared foundation it needs, nothing else):
@@ -72,7 +72,7 @@ lake build ProofsMinimal
 **Per-net chapters** repeat the Linear pattern in small files (MLP → CIFAR-CNN → ResNet34
 → MobileNetV2 → EfficientNet → ConvNeXt → ViT), each following a fixed stage vocabulary:
 `*BackB0` (block backward) → `*ChainClose` (pin through depth) → `*Render`/`*RenderPC`
-(forward = math) → `*Close` (param grads) → `*FaithfulPoC` / `*TiePoC` (whole train step)
+(forward = math) → `*Close` (param grads) → `*Fold` / `*StepTie` (whole train step)
 → `*Live`/`*Seal` (nonzero-Jacobian witness).
 
 **Don't start with the big files:** `SgdDescentCnn.lean` (~6.8k), `Attention.lean` (~3.8k),
@@ -311,7 +311,7 @@ formula at the kinks.
 the headline accuracy numbers use. The `*-verified` trainers instead consume the
 StableHLO-subset render (the `SHlo` AST + its `den : SHlo n → Vec n` denotation),
 and there the proof↔emitted link is a **theorem**, not just a numerical check:
-for all 12 chapter nets the §1a whole-net ties (`LinearFaithfulPoC`'s
+for all 12 chapter nets the §1a whole-net ties (`LinearFold`'s
 `poc_train_step_tail_certified` up through `r34_net_tied_certified`,
 `mnv2_net_tied_certified`, `cnx_net_tied_certified`, `efficientnet_net_tied`,
 `vit_net_tied_certified`) prove every emitted parameter-SGD node's `den` equals

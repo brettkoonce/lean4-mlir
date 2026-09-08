@@ -8,7 +8,7 @@ forward + gradient-step + numeric. **E4M3 demo §3a DONE** (`scripts/mnist_e4m3_
 E4M3 92.30%, 92.89% margin>2B verified-region). **§3c DONE** (`FloatBridge.lean`:
 `argmax_preserved` + `dense_close_mixed_uniform_budget` + `linear_e4m3_logit_budget` (worst-case `B ≤ 61`)
 + the capstone `linear_e4m3_argmax_preserved` — margin > 2B ⟹ provably same prediction; all 3-axiom clean,
-audited). **§3b DONE** (`E4M3FaithfulPoC.lean`: `e4m3_render_faithful` — the emitted block-scaled
+audited). **§3b DONE** (`E4M3Fold.lean`: `e4m3_render_faithful` — the emitted block-scaled
 int-matmul graph denotes the intended dequant-first algorithm, `dequant_factors` the scale-factors-out
 heart; zero new SHlo constructors, 3-axiom clean, audited). **All of §3 (3a/3b/3c) now landed.**
 Two threads that share one foundation
@@ -237,7 +237,7 @@ increasing in ambition:
   the test set has margin > 2B, and a built-in check confirms 100% of those keep their prediction.
 
 ### 3b. Structural faithfulness (the verified part that's *complete*) — ✅ DONE (2026-06-20)
-**Landed** in `E4M3FaithfulPoC.lean` (3-axiom clean, audited):
+**Landed** in `E4M3Fold.lean` (3-axiom clean, audited):
 - `actCode`/`weightCode` — the stored integer-grid codes: activation `q(xᵢ/sx)` (per-tensor `sx`),
   weight `q(Wᵢⱼ/sWⱼ)` (per-output-column block scale `sWⱼ`). `q : ℝ → ℝ` is the quantizer, left
   **abstract** (E4M3 round-to-nearest is one instance) — the scheme is faithful for any grid.

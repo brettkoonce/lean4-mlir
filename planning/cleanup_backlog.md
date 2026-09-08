@@ -134,7 +134,7 @@ records of what is, not of what was deleted.
 **DONE 2026-09-08.** `perRowIdxFlat` and its `_apply` lemma are gone; `perRowFlatPR`'s docstring
 carries the block-diagonal reading, and the four sites (`rowLNVecFlatBack`'s body, one `unfold`
 in `ConvNeXtBackB0`, two docstrings) spell `perRowFlatPR`. `BnInputBridge.lean` and
-`Resnet34BlockBridge.lean` are `Float/` modules (15 files there now); their two imports, the
+`ResNet34BlockBridge.lean` are `Float/` modules (15 files there now); their two imports, the
 two lakefile roots and the two audit imports followed. Nothing else named either module.
 
 ## 6. `lakefile.lean`
@@ -159,7 +159,7 @@ banners, the doc-gen4 note) are not root essays and stay.
 a batch. Every other net has a batched whole-net certified backward tie (`*InputGradB_eq_*_vjp`).
 ViT has no BatchNorm, so the batched chain is the `StableHLO.batchMap N` lift of what exists and
 the tie should close the way ResNet-34's batched pool did — field by field, `rfl` at the leaves.
-The batched T3 tie (`ViTTiePoCGB`) already spells the batched forward this reverses. Not cleanup,
+The batched T3 tie (`ViTStepTieGB`) already spells the batched forward this reverses. Not cleanup,
 but it is the last "every net, every tier" claim the yaml cannot yet make.
 
 **DONE 2026-09-08.** `vitInputGradKB` (`ViTBackChains.lean`): the five stages of `vitInputGradK`
@@ -278,6 +278,31 @@ generic files import from `Nets/` (`SpecVJP` ten nets' forwards, `IR` the Effici
 `BackwardMaps` the ResNet-34 forward, `BatchMapVJPAt` the B0 chain close, …) — the dependency
 direction was inverted before the move too; the buckets are by content, not by import order.
 
+**Steps 2 and 3 DONE 2026-09-08.** 42 files renamed in place: the six `Resnet*` → `ResNet*`
+(four in `Nets/ResNet/`, two in `Float/`) and the 36 `*FaithfulPoC*` → `*Fold*` /
+`*TiePoC*` → `*StepTie*` (34 under `Nets/`, plus `Float/Bf16Fold` and `Float/E4M3Fold`). Every
+mention was classified by context before the rewrite: 327 path, 191 module and 153 bare-basename
+mentions moved (671 in 105 files), plus nine file-qualified prose cites of the form
+`ConvNeXtFaithfulPoC.layerScaleChGammaSgd_den` (the namespace there is `CnxPoC`, so the prefix is
+the file); the 56 uses of the `*PoC*` NAMESPACES stayed — 51 qualifiers and five `namespace` /
+`open` / `end` lines, all of them `Proofs.ViTTiePoC` / `Proofs.ViTTiePoCGB`, the two namespaces
+whose token was also a file name. Fixed by hand because no token rewrite could see them: the
+yaml's `module:` glob for the step ties spelled BOTH the old directories and the old suffixes
+(`Foundation/*TiePoCB.lean, Architectures/*TiePoCG*.lean, …`, now `Nets/*/*StepTie*.lean`), two
+`Proofs/README.md` lines and one `proofs.yml` comment naming the families, one `Depthwise`
+comment, and `MobileNetV2Fold`'s cite of a `MobileNetV2TiePoC` that never existed under that
+name (now `MobileNetV2StepTieB`). Adjacent, found while auditing the table it sits in:
+`certs.yml`'s step-summary rows for r34 and mnv2 cited the per-example ties deleted on
+2026-09-08 (`r34_net_tied_certified`, `mnv2_net_tied_certified`) and have printed ⚠️ since; they
+cite `ResNet34TieB.r34_net_tiedB` and `MobileNetV2TieB.mnv2_net_tiedB` now. Kept: the files' own
+`/-! # PoC:` header lines (prose, not names), the "deleted 2026-09-08" notes that name deleted
+files by their then-names, and `historical/Resnet34.md`. Surface: 114 files — 107 imports, 43
+lakefile roots, 39 audit imports, 175 prose lines in Lean, 301 lines in 26 archive docs. Gates as
+for step 1 (Certs 3932, audit 1754/1754, docstring 1538 across 500, both coverages,
+`verified_mlir/` untouched, `blueprint-checkdecls` clean). The optional fourth step, the 30
+`*PoC*` namespaces, is still open and still optional. ⚠ Those two `certs.yml` labels still say
+146 / 210 params; the census is 110 / 158 (`convBias := false`) — not touched here.
+
 ## 9. Not on the list, deliberately
 
 The 15 `Float/` files (13 plus the two §5 moved in) are the model core (the rounding model, `Binary32Instance`, the
@@ -292,7 +317,7 @@ certificate is ever wanted.
 
 The one `*InputGradB` gap left after §7. `convnextInputGrad` (`Nets/ConvNeXt/ConvNeXtBackChains.lean`)
 is per-example and `convnextInputGrad_eq_convNextForwardTCh_vjp` ties it at one image; the batched
-T3 tie (`ConvNeXtTiePoCGB`) already lifts every activation and cotangent with `batchMap` /
+T3 tie (`ConvNeXtStepTieGB`) already lifts every activation and cotangent with `batchMap` /
 `batchMapAux`, on the same argument as ViT's — LayerNorm is per-example and nothing couples
 examples. Close it exactly as §7 did: a stage-wise batched chain beside the per-example one, a
 tie file with one leaf tie per factor (stem, four stages, three downsamples, head LN, GAP, dense —

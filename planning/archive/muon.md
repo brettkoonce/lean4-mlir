@@ -242,7 +242,7 @@ band, tractable but not a 3-liner. Put it in a "going deeper" box, optional.
 - Orthogonal Procrustes / Kabsch; polar decomposition in co-rotational FEM, shape matching,
   ARAP (the graphics intuition bridge).
 - In-repo: `LeanMlir/Proofs/SgdDescent*.lean` (the descent proofs Muon does *not* fit),
-  `ViTRender.lean` (AdamW tail precedent), `ViTTiePoC.lean` (`vit_net_tied_certified`, the
+  `ViTRender.lean` (AdamW tail precedent), `ViTStepTie.lean` (`vit_net_tied_certified`, the
   render-tie template), `E4M3Quant.lean` (host-quant precedent — contrast: NS stays on-device).
 
 ## 8. Math (chapter appendix)

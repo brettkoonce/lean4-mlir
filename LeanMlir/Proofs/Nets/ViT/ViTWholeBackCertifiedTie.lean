@@ -139,7 +139,7 @@ noncomputable def vitApexVJP
     (classifier_flat_has_vjp N (heads * d_head) nClasses Wcls bcls)
 
 /-- The four-factor composition the apex is stated at IS the committed `vitForwardKV`. The shape
-    check `Resnet34BackCertifiedTie.lean` lacked and ConvNeXt wrote before anyone needed it. -/
+    check `ResNet34BackCertifiedTie.lean` lacked and ConvNeXt wrote before anyone needed it. -/
 theorem vitForwardKV_eq_chain
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)

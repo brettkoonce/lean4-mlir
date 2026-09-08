@@ -54,7 +54,7 @@ block bodies only, whose depthwises are symmetric in render and reference alike;
 not in its Proofs tier at all, so nothing there is at the wrong phase.
 
 **Pulled INTO scope by step 0 (2026-09-05): the 17-block paper MobileNetV2 files.**
-`MobileNetV2FullPaper.lean` (forward + graph + faithfulness), `MobileNetV2FaithfulPoCPaper.lean`
+`MobileNetV2FullPaper.lean` (forward + graph + faithfulness), `MobileNetV2FoldPaper.lean`
 (every param-SGD op `den = certified`) and `MobileNetV2TiePoCPaper.lean` (the §1a tie, 210
 params) describe `mobilenetv2_train_step.mlir` at the symmetric spelling (`flatConvStride2`,
 `depthwiseStridedF`, `convStrided{Weight,Bias}Sgd`, `depthwiseStrided{Weight,Bias}Sgd`). Before
@@ -63,8 +63,8 @@ program of 2026-09-04. Step 3 re-spells them with the others: the forward at
 `flatConvStride2Xla` / `depthwiseStride2FlatXla`, the graph at `.flatConvStridedXlaF` /
 `.depthwiseStridedXlaF`, and the PoC `_den` lemmas at the five per-example `…Xla…Sgd` /
 `…XlaBack` tokens (their `rfl` faithfulness lemmas landed in step 0; the `.correct` fields of
-the `…Xla` VJPs give the `pdiv` form). The EfficientNet PoC pair (`EfficientNetTiePoC.lean`,
-`EfficientNetFaithfulPoC.lean`) has the same relation to `efficientnet_train_step.mlir` since
+the `…Xla` VJPs give the `pdiv` form). The EfficientNet PoC pair (`EfficientNetStepTie.lean`,
+`EfficientNetFold.lean`) has the same relation to `efficientnet_train_step.mlir` since
 2026-08-08 (batched `convStridedWeightSgdB` where the artifact emits `convStridedXlaWeightSgdB`)
 and was already in section 4's list.
 
@@ -165,7 +165,7 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    MobileNetV2 files (the two PC graphs, ChainClose, FaithfulPoC, FaithfulPoCPaper, TiePoCPaper,
    FullPaper, FullVJP, BackB0, BackCertifiedTie, WholeBackCertifiedTie, the four Float files,
    and `tests/TestMobilenetV2TrainPC.lean`), adds the four XLA twins of the shared certs to
-   `MobileNetV2Close.lean`, the two per-example XLA stem dens to `MobileNetV2FaithfulPoC.lean`,
+   `MobileNetV2Close.lean`, the two per-example XLA stem dens to `MobileNetV2Fold.lean`,
    `depthwiseStridedXlaBackBatched_faithful` to `EfficientNetBackB0.lean`, and the seven
    `#print axioms` lines to `tests/AuditAxioms.lean`. It refuses to run twice. Then
    `lake build LeanMlir.Proofs.Architectures.MobileNetV2TiePoCPaper
@@ -184,7 +184,7 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
 
    ⛔ **The trap the script is built around: shared lemmas.** `mnv2_render_stem_conv{W,b}_certified`
    are reused by ResNet-34 (`ResNet34Close.lean`, `ResNet34ChainClose.lean`,
-   `ResNet34FaithfulPoC.lean`) and `mnv2_render_depthwise{W,b}_strided_certified` by
+   `ResNet34Fold.lean`) and `mnv2_render_depthwise{W,b}_strided_certified` by
    EfficientNet-B0 (`EfficientNetClose.lean`), both at symmetric padding, correctly. They must
    NOT flip; the script adds `_xla_` twins and repoints only the MobileNetV2 consumers.
    `ResNet34PoC.convStrided{W,B}_den` likewise stays; MobileNetV2's paper PoC gets
@@ -291,8 +291,8 @@ definitions and gain Xla peers; the rest change their spelling.
   `MobileNetV2RenderPCEval.lean`, `StableHLO.lean` (leaf; tokens exist), `EfficientNetRender.lean`
   and `MobileNetV2Render.lean` (already Xla; step 0 touches the SGD branch only).
 * Architectures / Foundation: `EfficientNetChainClose.lean`, `EfficientNetClose.lean`,
-  `EfficientNetFaithfulPoC.lean`, `EfficientNetTiePoC.lean`, `MobileNetV2ChainClose.lean`,
-  `MobileNetV2Close.lean`, `MobileNetV2FaithfulPoC.lean`, `MobileNetV2.lean`,
+  `EfficientNetFold.lean`, `EfficientNetStepTie.lean`, `MobileNetV2ChainClose.lean`,
+  `MobileNetV2Close.lean`, `MobileNetV2Fold.lean`, `MobileNetV2.lean`,
   `MobileNetV2FullVJP.lean`, `WholeNetForwardTies.lean`, `StridedConv.lean` (leaf),
   `Depthwise.lean` (leaf), `Nets/MobileNet/MobileNetV2WholeBackCertifiedTie.lean`.
 * Float: `EfficientNetWholeFloatBridge.lean`, `EfficientNetWholeBackFloatBridge.lean`,
@@ -304,7 +304,7 @@ definitions and gain Xla peers; the rest change their spelling.
   `FloatBudgetEnv.lean`, `FloatBudgetEnvMBConv.lean`, `FloatBudgetEnvBack.lean`,
   `FloatBudgetEnvBackMBConv.lean`, `FloatBudgetEnvBackSE.lean` (leaves).
 * Out of scope, same class: `MobileNetV4BackB0.lean`, `MobileNetV2FullPaper.lean`,
-  `MobileNetV2TiePoCPaper.lean`, `MobileNetV2FaithfulPoCPaper.lean`.
+  `MobileNetV2TiePoCPaper.lean`, `MobileNetV2FoldPaper.lean`.
 * Do not touch: every `Resnet34*` and ConvNeXt file the grep lists.
 
 ## 5. Traps this touches

@@ -10,8 +10,8 @@ chain `r34InputGrad` (the reverse of `resnet34Forward_full_pc`), and the batched
 `resnet50ForwardB_full`, at a variable batch `N`, R50 also at a variable resolution `q`). Each
 chain keeps its sixteen block backwards and its BatchNorm backwards as *supplied* maps and spells
 only the endpoints — the stem's strided conv-back, the 3×3/s2 pool-back, the GAP-back and the
-dense-back — so that the certified tie (`Resnet34BackCertifiedTie`, `Resnet34BackCertifiedTieB`,
-`Resnet50WholeBackCertifiedTieB`) is a statement about a NAMED chain of the forward's shape.
+dense-back — so that the certified tie (`ResNet34BackCertifiedTie`, `ResNet34BackCertifiedTieB`,
+`ResNet50WholeBackCertifiedTieB`) is a statement about a NAMED chain of the forward's shape.
 
 ⛔ `maxPool3s2FlatBackB`, the batched pool backward, is `StableHLO.batchMapAux` and not
 `batchMap`: the pool's backward is indexed by the saved forward activation and every example
@@ -109,7 +109,7 @@ noncomputable def r34InputGrad (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
     OWN saved stem activation. ⛔ It is `batchMapAux` and not `batchMap`: a `batchMap` would hand
     example 0's argmax pattern to every example (`StableHLO.batchMapAux`'s own header records the
     same trap on the emitter side). This is `den (.maxPool3s2BackB …)` up to the two spellings of
-    the scatter (`ResNet34TiePoCB.mpInB` is the `maxPool3s2BackFlat` one). -/
+    the scatter (`ResNet34StepTieB.mpInB` is the `maxPool3s2BackFlat` one). -/
 noncomputable def maxPool3s2FlatBackB (N c h w : Nat) (v : Vec (N * (c * (2*h) * (2*w)))) :
     Vec (N * (c * h * w)) → Vec (N * (c * (2*h) * (2*w))) :=
   StableHLO.batchMapAux N

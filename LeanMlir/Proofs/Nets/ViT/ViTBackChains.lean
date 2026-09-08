@@ -30,7 +30,7 @@ CLS), `16×16/s16` patchify (no `conv2d`, so no padding phase and none of the ev
 `EvenKernelConvBack.lean` found for ConvNeXt), vector-`[D]` LayerNorm at all 25 sites, GELU,
 `ε = 1e-5`. No BatchNorm anywhere. ⚠ `N` throughout is the TOKEN count, not a batch; the batch is
 `B`, the binder of `vitInputGradKB` below — the per-example chain lifted stage by stage over `B`
-examples, the way the batched T3 tie (`ViTTiePoCGB`) lifts every activation and cotangent — tied
+examples, the way the batched T3 tie (`ViTStepTieGB`) lifts every activation and cotangent — tied
 by `vitInputGradKB_eq_batchMap_vitForwardKV_vjp` (`ViTWholeBackCertifiedTieB.lean`).
 
 Moved here from the three float bridges that defined them beside their float twins on 2026-09-08
@@ -301,7 +301,7 @@ noncomputable def vitSavedBodyB (B ic H W patchSize N mlpDim heads d_head k : Na
     tower backwards are `StableHLO.batchMapAux B` of their per-example maps, each at the batched
     saved activation (`vitSavedBodyB`, `vitSavedPEB`); the patch-embed backward is `batchMap B` of
     the linear formula. Every slot is a lift because no ViT op couples examples — the same
-    honesty argument `ViTTiePoCGB` makes for the batched T3 tie. `B` is a variable: this chain
+    honesty argument `ViTStepTieGB` makes for the batched T3 tie. `B` is a variable: this chain
     carries no batch numeral. `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`
     (`ViTWholeBackCertifiedTieB.lean`) says it IS the certified gradient of
     `batchMap B vitForwardKV`. -/

@@ -1507,7 +1507,7 @@ noncomputable def depthwiseStride2Xla_bias_grad_has_vjp {c h w kH kW : Nat}
 --   in `den`) so the `den` match stays small: `depthwise_weight_grad_has_vjp3` /
 --   `depthwise_bias_grad_has_vjp` are STRUCTURE LITERALS whose `.backward`
 --   reduces to a big sum, so inlining them in `den` would bloat the match and
---   blow the heartbeat limit of every `simp only [den]` proof. The FaithfulPoC
+--   blow the heartbeat limit of every `simp only [den]` proof. The `*Fold`
 --   `den = certified` lemmas unfold these first, then close via the
 --   `mnv2_render_depthwise*_certified` bridges.
 -- ════════════════════════════════════════════════════════════════

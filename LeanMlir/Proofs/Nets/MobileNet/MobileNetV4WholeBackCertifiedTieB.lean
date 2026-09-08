@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Foundation.OpaquePrefix
-import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTieB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 
 /-! # ⭐⭐ `mnv4InputGradB` IS the certified whole-net MobileNetV4-Conv-M gradient
@@ -49,7 +49,7 @@ its head has TWO convs before the pool where MobileNetV2's has one and ResNet-34
 resolution-group `CertLayer`s, because `Mnv4SmoothAt` wants one `.ok` per group. T6 wants the
 finer chain — a tie whose opaque slots are groups would say nothing about which block is which —
 so the stages here are the twenty-one blocks themselves, `mnv4Blk0 … mnv4Blk21`'s
-(`MobileNetV4TiePoCB.lean`) stage functions. ⭐ Peeling `CertLayer.comp` to reach `.fwd` INSIDE a
+(`MobileNetV4StepTieB.lean`) stage functions. ⭐ Peeling `CertLayer.comp` to reach `.fwd` INSIDE a
 group is cheap (`comp_fwd` is a generic `rfl` lemma and T2's five group-faithfulness proofs each
 do it); what is not payable at MobileNetV4's literal resolutions is composing the compositions,
 which is why there is no `mnv4NetLayer` and why the shape check below stops at the block.
@@ -70,7 +70,7 @@ are bound here; the ~60 inside the blocks are `CertLayer.comp`'s and are never w
 
 ⛔ **What this does NOT reach.** Under `mnv4in_adamdp64*` every gradient is all-reduced by
 `allReduceMeanF` (`DataParallelNode.lean`, §4d), so this is at the per-replica gradient. And it is
-about the INPUT gradient; the 233 parameter gradients are `MobileNetV4TiePoCB.lean`'s tie (T3).
+about the INPUT gradient; the 233 parameter gradients are `MobileNetV4StepTieB.lean`'s tie (T3).
 -/
 
 open Proofs.StableHLO
@@ -83,7 +83,7 @@ open scoped BigOperators
 -- § The stem's concrete conv-BN-relu endpoint tie
 --
 --   The head's stage tie, `cbReluBBack_eq_vjp_backward` (stride-1, applied twice at `%h1W` and
---   `%hW`), is `Resnet34BackCertifiedTieB.lean`'s — net-agnostic, beside its strided peer.
+--   `%hW`), is `ResNet34BackCertifiedTieB.lean`'s — net-agnostic, beside its strided peer.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The STEM tie.** `batchMap (flatConvStride2XlaBack) ∘ bnBack ∘ reluMaskBack` IS `mnv4StemB`'s

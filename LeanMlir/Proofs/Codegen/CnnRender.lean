@@ -161,7 +161,7 @@ def cnnTrainStepStructured (B ic c h w d1 nClasses kH kW : Nat) (lr : String)
     and ALL ten parameter SGD updates are now `pretty` of denoted `SHlo` nodes too —
     the dense head via `weightSgd`/`biasSgd`, the conv layers via the new
     `convWeightSgd`/`convBiasSgd` ops. So every emitted line is `pretty(provenNode)`,
-    and `CnnFaithfulPoC` proves each output's `den` = the certified loss-descent step.
+    and `CnnFold` proves each output's `den` = the certified loss-descent step.
     Cotangents (`%dy`/`dy4`/`dy3`/`dac2`/`dhc2`/`dac1`/`dhc1`) are rendered once and
     shared as operand leaves; operand/`lr`/weight VALUES are `skel`-erased, so these
     placeholders print identically to the live graphs the `den` theorems use. Dim
@@ -220,7 +220,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
   -- ConvNeXt/EfficientNet/R50 already do. Hand-written text, not `pretty` of a `den`
   -- node. APPENDED, never woven in: it reads only the logits and `%onehot` and adds
   -- only `%l*` names, so the ten proven parameter outputs are byte-identical and
-  -- `CnnFaithfulPoC` is untouched. `%lslot` is the unused input that keeps the C
+  -- `CnnFold` is untouched. `%lslot` is the unused input that keeps the C
   -- entry's single shape list symmetric (see `MlpRender` for the full argument).
   let lossCode :=
     "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
@@ -396,7 +396,7 @@ def cifarTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lr : Stri
     SGD updates are now `pretty` of denoted `SHlo` nodes — the dense head via
     `weightSgd`/`biasSgd`, the four conv layers via the `convWeightSgd`/`convBiasSgd`
     ops (reused from cnn, NO new ops). Every emitted line is `pretty(provenNode)`, and
-    `CifarFaithfulPoC` proves each output's `den` = the certified loss-descent step.
+    `CifarFold` proves each output's `den` = the certified loss-descent step.
     Dim convention matches `cifarTrainStepStructured` (`h,w` final pooled; image `4h×4w`,
     stage-2 spatial `2h×2w`). -/
 def cifarTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : String)
@@ -675,7 +675,7 @@ def cifarBnTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr 
     (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`/`bnPerChannelBack`) AND all 22 param SGD
     updates are `pretty` of denoted nodes — conv via `convWeightSgd`/`convBiasSgd`, dense via
     `weightSgd`/`biasSgd`, and the per-channel BN γ/β via the new `bnGammaSgd`/`bnBetaSgd`
-    ops. `CifarBnFaithfulPoC` proves each output's `den` = certified. The whole module is
+    ops. `CifarBnFold` proves each output's `den` = certified. The whole module is
     built inside the `StateM` (so the fresh param-result names are in scope for the `return`).
     Dim convention matches `cifarBnTrainStepStructured`. -/
 def cifarBnTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr lrStr : String)
@@ -784,7 +784,7 @@ set_option maxRecDepth 4000 in
     AST.** The 4-stage peer of `cifarTrainStepFaithfulV` (`(conv→relu)×2→pool` ×4, 3 dense;
     22 params). Backward chain (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`, four stages)
     and all 22 param SGD ops are `pretty` of denoted nodes — conv via `convWeightSgd`/
-    `convBiasSgd`, dense via `weightSgd`/`biasSgd` (NO new ops). `Cifar8FaithfulPoC` proves
+    `convBiasSgd`, dense via `weightSgd`/`biasSgd` (NO new ops). `Cifar8Fold` proves
     each output's `den` = certified. `h,w` are the final pooled sizes; stage spatials build
     up ×2 per pool (`s4=2h, s3=4h, s2=8h, s1=16h`; image `16h×16w`). -/
 def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrStr : String)
@@ -2201,7 +2201,7 @@ def cifar8MomTrainStepFaithful : String :=
 end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/cnn_train_step.mlir` (what MainMnistCnnVerified trains on)
--- from the faithful renderer; the den-certified proofs live in CnnFaithfulPoC.lean.
+-- from the faithful renderer; the den-certified proofs live in CnnFold.lean.
 -- (cnnTrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
 -- reference.) Dims `128 1 32 14 14 512 10 3 3`: B=128, ic=1, c=32, h=w=14 (post-pool,
 -- image 28×28), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128 (mean-loss equiv).
@@ -2212,7 +2212,7 @@ end Proofs.StableHLO
     (fun _ => 0))
 
 -- Regenerate `verified_mlir/cifar_train_step.mlir` (what MainCifarVerified trains on)
--- from the faithful renderer; the den-certified proofs live in CifarFaithfulPoC.lean.
+-- from the faithful renderer; the den-certified proofs live in CifarFold.lean.
 -- (cifarTrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
 -- reference.) Dims `128 3 32 64 8 8 512 10 3 3`: B=128, ic=3, c1=32, c2=64, h=w=8
 -- (final pooled, image 32×32), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128.
@@ -2224,7 +2224,7 @@ end Proofs.StableHLO
     (fun _ => 0))
 
 -- Regenerate `verified_mlir/cifar_bn_train_step.mlir` (what MainCifarBnVerified trains on)
--- from the faithful renderer; the den-certified proofs live in CifarBnFaithfulPoC.lean.
+-- from the faithful renderer; the den-certified proofs live in CifarBnFold.lean.
 -- (cifarBnTrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
 -- reference.) Dims `128 3 32 64 8 8 512 10 3 3`, ε=1e-5, lr = 0.1/128.
 #eval IO.FS.writeFile "verified_mlir/cifar_bn_train_step.mlir"
@@ -2235,7 +2235,7 @@ end Proofs.StableHLO
     (fun _ => 0))
 
 -- Regenerate `verified_mlir/cifar8_train_step.mlir` (what MainCifar8Verified trains on)
--- from the faithful renderer; the den-certified proofs live in Cifar8FaithfulPoC.lean.
+-- from the faithful renderer; the den-certified proofs live in Cifar8Fold.lean.
 -- (cifar8TrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
 -- reference.) Dims `128 3 16 16 32 32 2 2 64 10 3 3`: h=w=2 (final pooled, image 32×32).
 -- Regenerate `verified_mlir/cifar8_adam_train_step.mlir` — the AdamW peer, same forward/backward

@@ -122,12 +122,12 @@ only in `trainAdamSched`, and it said *"do not quote its accuracy"*. The batched
 "re-run the Imagenette SGD numbers" was vacuous for this net. ⚠ **Do not assume that for legs 2–4**:
 MobileNetV2's per-example SGD trainer is a different case and has not been checked.
 
-**⚠ What the retirement costs, stated plainly.** `ResNet34FaithfulPoC.lean` (the §1 fold) and
+**⚠ What the retirement costs, stated plainly.** `ResNet34Fold.lean` (the §1 fold) and
 `ResNet34TiePoC.lean` (the §1a tie, every parameter at its chain cotangent) are now about an
 artifact that does not exist. Every theorem in them is unchanged and still true — they are about
 the per-example ResNet-34 and the SGD-inline op family, both of which still exist as mathematics —
 but no committed bytes exercise them. Their live peers landed the same day:
-`ResNet34FaithfulPoCB.lean` (4.1e) and `ResNet34TiePoCB.lean` (4.2a). Both file headers now say so.
+`ResNet34FoldB.lean` (4.1e) and `ResNet34StepTieB.lean` (4.2a). Both file headers now say so.
 `ResNet34RenderPC.lean` is NOT affected the same way: `resnet34Forward_full_pc` is the subject of
 the float budgets, the T6 tie and the witness, none of which is about a train step's bytes.
 
@@ -184,11 +184,11 @@ renderer "already has an `sgdParamF` tail" is **wrong** — `sgdParamF` appears 
 `ResNet34RenderB` — so adding a `.sgd` variant would have meant a new `OptKind` case shared with
 EfficientNet plus a new artifact and its gates. Declined as scope.
 
-**⚠ What retirement costs, stated plainly.** `MobileNetV2FaithfulPoCPaper.lean` (the per-example §1
+**⚠ What retirement costs, stated plainly.** `MobileNetV2FoldPaper.lean` (the per-example §1
 fold) and `MobileNetV2TiePoCPaper.lean` (its §1a tie) are now about an artifact that does not
 exist. Every theorem in them is unchanged and still true; no committed bytes exercise them, and
 both headers say so. That is only acceptable because their batched peers landed first —
-`MobileNetV2FaithfulPoCPaperG.lean` (4b.4) and `Nets/MobileNet/MobileNetV2TiePoCB.lean` (§4.2c), the
+`MobileNetV2FoldPaperG.lean` (4b.4) and `Nets/MobileNet/MobileNetV2StepTieB.lean` (§4.2c), the
 latter the same day. ⭐ **This is the ordering rule leg 1 wrote down, honoured deliberately for the
 first time**: §4.2 was done before the retirement rather than alongside it.
 `MobileNetV2RenderPC.lean` is NOT affected — its per-example net is the subject of the float
@@ -217,8 +217,8 @@ function did not.
 
 **What landed.**
 
-1. **`Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean` FIRST** (18 declarations, ~2 s, 3-axiom clean) —
-   the §1 fold at the batched constructors, the peer of 4b.2's `ConvNeXtFaithfulPoCG.lean`. ⭐⭐
+1. **`Nets/ConvNeXt/ConvNeXtFoldGB.lean` FIRST** (18 declarations, ~2 s, 3-axiom clean) —
+   the §1 fold at the batched constructors, the peer of 4b.2's `ConvNeXtFoldG.lean`. ⭐⭐
    **For this net the fold was OWED before the swap**: every `convnextin_*` train step, every
    `*drop*` variant and the S/B artifacts had rendered from the batched chain since they existed,
    so the artifact behind the quoted ImageNet accuracy (`convnextin_adamdpwxclipdrop`) had a fold
@@ -251,7 +251,7 @@ function did not.
 
 ⛔ **One artifact did NOT move, and it is the ordering rule again.** `convnext_train_step.mlir` is
 the SGD-inline step; `convNextBackAllB` has no fused-SGD arm, and ConvNeXt's T3 §1a tie —
-`ConvNeXtTiePoC.lean`, all 182 parameters — is stated at exactly those bytes. Its batched peer is
+`ConvNeXtStepTie.lean`, all 182 parameters — is stated at exactly those bytes. Its batched peer is
 4b's ConvNeXt capstone, which this leg unblocks. So `ConvNeXtRender.lean` keeps that one writer and
 its traversal, and nothing is orphaned. ⭐ ConvNeXt is one chain per net on 35 of 36 artifacts.
 
@@ -275,11 +275,11 @@ about.
 
 **What landed.**
 
-1. **`Nets/ViT/ViTFaithfulPoCGB.lean` FIRST** (10 declarations, ~2 s, 3-axiom clean) — the
-   §1 fold at the batched constructors, the batched peer of 4b.3's `ViTFaithfulPoCG.lean`. ⭐ No new
+1. **`Nets/ViT/ViTFoldGB.lean` FIRST** (10 declarations, ~2 s, 3-axiom clean) — the
+   §1 fold at the batched constructors, the batched peer of 4b.3's `ViTFoldG.lean`. ⭐ No new
    mathematics: each proof is `Finset.sum_congr rfl` over the batch and then the per-example bridge
    at `batchSlice n`, because every batched `den` arm is literally the per-example one under a
-   batch sum. `ResNet34FaithfulPoCB.denseWGradB_den`'s shape.
+   batch sum. `ResNet34FoldB.denseWGradB_den`'s shape.
 2. **The nineteen writers moved** from `ViTRender.lean` to `ViTRenderB.lean`, calling
    `vitAdamTrainStepFaithfulB` / `vitFwdRenderB`. ⚠ The two wrappers take the batch in DIFFERENT
    positions (`fn bStr replicas bs nClasses …` against `fn bStr replicas nClasses … (vbB := …)`),
@@ -301,7 +301,7 @@ the batched chain landed, and `Proofs.ViTPoCGB.clsGrad_denB` closes it — the g
 
 ⛔ **One artifact did NOT move, and it is the ordering rule.** `verified_mlir/vit_train_step.mlir`
 is the SGD-inline step; `vitBackAllB` has no fused-SGD arm (`vitBackAll` takes an `adam : Bool` and
-the batched peer only ever emits the raw gradient), and ViT's T3 §1a tie — `ViTTiePoC.lean`, all
+the batched peer only ever emits the raw gradient), and ViT's T3 §1a tie — `ViTStepTie.lean`, all
 200 parameters — is stated at exactly those bytes. Its batched peer is 4b's last open capstone,
 which this leg unblocks. So `ViTRender.lean` keeps that one writer and its per-example traversal,
 and **nothing is orphaned** — the cost legs 1 and 2 both paid is not paid here.
@@ -401,6 +401,6 @@ forward → exit 1; a mis-pointed pair → exit 1 with the diverging line printe
   follows the call sequence and the sequence is unchanged. That is what makes the R50 refactor a
   byte-identical one for the train step.
 * ⛔ **Assume any render docstring's parameter census is the `convBias := true` one** until the
-  artifact is counted. Three files were caught on this on 2026-09-06 (`MobileNetV2FaithfulPoCPaper`
+  artifact is counted. Three files were caught on this on 2026-09-06 (`MobileNetV2FoldPaper`
   said 210 against 158; `ResNet34TiePoC` and `ResNet34Render` said 146 against 110);
   `resnet34AdamTrainStepFaithfulB`'s own "515 inputs, 146 θ" is the fourth, against a measured 407.

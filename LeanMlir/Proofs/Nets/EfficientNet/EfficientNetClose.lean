@@ -11,7 +11,7 @@ bridge** — even the two genuinely-new structures (squeeze-excite, true batch-n
 | family (render SSA)                              | forward fn            | certified by                                   |
 |--------------------------------------------------|-----------------------|------------------------------------------------|
 | 1×1 conv W/b (expand `eW`, project `pW`, head `hW`) | `conv2d`           | `cnn_render_conv{W,b}_certified` (M3, **reuse**) |
-| stem 3×3 stride-2 conv W/b (`sW`)                | `flatConvStride2Xla`  | `EnetPoC.convStridedWB_den` (XLA-`SAME` phase, `EfficientNetFaithfulPoC.lean`) |
+| stem 3×3 stride-2 conv W/b (`sW`)                | `flatConvStride2Xla`  | `EnetPoC.convStridedWB_den` (XLA-`SAME` phase, `EfficientNetFold.lean`) |
 | depthwise **3×3** W/b (`dW`, stride 1/2)         | `depthwiseConv2d` / `depthwiseStride2Flat` | `mnv2_render_depthwise{W,b}[_strided]_certified` (**reuse**) |
 | depthwise **5×5** W/b (`dW`, stride 1/2)         | same, `kH=kW=5`       | the same depthwise bridges (kernel-general) — pinned below |
 | **SE** squeeze/excite dense `zW1/zb1/zW2/zb2`    | `dense` (`dot_general`) | `weight_grad_bridge` / `bias_grad_bridge` (M2, **reuse**) |

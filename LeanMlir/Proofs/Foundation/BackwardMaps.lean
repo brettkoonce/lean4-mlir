@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # The per-op ℝ backward maps — what the certified backward ties are stated about
 
-Every whole-net certified backward tie (`Resnet34BackCertifiedTie`, `MobileNetV2BackCertifiedTie`,
+Every whole-net certified backward tie (`ResNet34BackCertifiedTie`, `MobileNetV2BackCertifiedTie`,
 `ConvNeXtBackCertifiedTie`, …) says that a hand-composed chain of per-op backward maps on the
 cotangent equals the certified VJP `.backward` of the committed forward. This file is the
 per-op vocabulary those chains are written in: the ReLU sign mask, the diagonal scale of a smooth
@@ -303,7 +303,7 @@ theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2
     the stem's `Vec` output. ⛔ Transporting with `▸`/`rwa` would work for the TYPE and leave a
     `backward` field behind an `Eq.mpr` that will not reduce. Building the structure field-by-field
     instead keeps `backward` the leaf itself, which is what lets the whole-net ties
-    (`Resnet34BackCertifiedTie`, `ResNet34FullBVJP`'s batched pool) close by `rfl` at this stage
+    (`ResNet34BackCertifiedTie`, `ResNet34FullBVJP`'s batched pool) close by `rfl` at this stage
     rather than by a rewrite. -/
 noncomputable def maxPool3s2Flat_has_vjp_at_vec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))
     (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :

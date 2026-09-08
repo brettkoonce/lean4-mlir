@@ -15,7 +15,7 @@ read and the first session must.
 | **0(a)** record fixes | ✅ DONE (`015dcec`). The stale `## Scope`, `mnv4Stage14`'s Conv-S family order (with a new `#guard` deriving its argument order from `mnv4Blocks`), and every Conv-S count in the render's docstrings — params, block split, stat slots, all three artifacts' arities — re-derived from the committed artifact. `grad_tie.py` 158/104 → 233/154. Four yaml rows for the block tier. |
 | **0(b)** the owed ties | ✅ DONE (`b9cc8d5`) and **both PASS**. Forward `max \|Δ\| = 3.770e-06`; gradient 0 of 232 live parameters outside the reference's own relu-discontinuity floor, in raw and `--nokink` mode. ⭐ Block ORDER is now pinned by measurement. ⛔ Two setup findings recorded in `mnv4_convm_ties_todo.md`: `--device=local-task` SEGFAULTS on `@mnv4_fwd` (empty stderr, `local-sync` runs the same vmfb in 1 s) and both scripts hard-coded a nonexistent `iree-compile`. |
 | **1** T1 + T2 | ✅ DONE. `Nets/MobileNet/MobileNetV4FullB.lean` (886 lines) + `MobileNetV4FullBVJP.lean` (188). Both build in ~2 s each. |
-| **2** T3 | ✅ DONE. `Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` (the §1 fold, 400 lines) + `MobileNetV4TiePoCB.lean` (the §1a tie, 1334). |
+| **2** T3 | ✅ DONE. `Nets/MobileNet/MobileNetV4FoldB.lean` (the §1 fold, 400 lines) + `MobileNetV4StepTieB.lean` (the §1a tie, 1334). |
 | **3** T6 | ✅ DONE. `Float/MobileNetV4WholeBackFloatBridgeB.lean` (268 lines) + `Nets/MobileNet/MobileNetV4WholeBackCertifiedTieB.lean` (910). Both build in ~3 s each. **The net is now closed on every tier that says anything.** |
 | **4** the number | open — a GPU decision, see §2. Independent of T6; nothing in sessions 1–3 waited on it. |
 
@@ -182,7 +182,7 @@ again in the same commit, this time to point at the four net-level files that no
 **The one-paragraph version, 2026-09-07 — ✅ CLOSED.** `Nets/MobileNet/MobileNetV4BackB0.lean` was
 complete at the block and stage level and is now consumed by four net-level files: T1 and T2 in
 `Nets/MobileNet/MobileNetV4FullB.lean` + `MobileNetV4FullBVJP.lean`, T3 in
-`Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` + `MobileNetV4TiePoCB.lean`, T6 in
+`Nets/MobileNet/MobileNetV4FoldB.lean` + `MobileNetV4StepTieB.lean`, T6 in
 `Nets/MobileNet/MobileNetV4WholeBackCertifiedTieB.lean` + `Float/MobileNetV4WholeBackFloatBridgeB.lean`.
 T4 and T5 are float budgets and that thread is closed. ⚠ What MNv4 still does not have, and no
 other net lacks, is a quoted accuracy: Conv-M has no Imagenette run and no verified ImageNet run,
@@ -352,14 +352,14 @@ same); yaml rows; `git diff verified_mlir/` EMPTY (this is proof work; no artifa
 **Cost:** R50's T1 + T2 was one session (465 + 482 lines) with a hand-written apex; the `CertLayer`
 route removes the apex and the sixteen `r50Pre_k` names but adds the stem composition. One session.
 
-### Session 2 — T3: the fold at the gradient nodes, then the tie — mirror `ResNet50FaithfulPoCB.lean` + `ResNet50TiePoCB.lean` (§3.5c)
+### Session 2 — T3: the fold at the gradient nodes, then the tie — mirror `ResNet50FoldB.lean` + `ResNet50StepTieB.lean` (§3.5c)
 
 **The fold — no new op lemma.** Every gradient kind the backward emits has its batched `den`
 lemma already: `ResNet34PoCB.convWGradB_den`, `bnGammaGradB_den`, `bnBetaGradB_den`,
 `denseWGradB_den`, `denseBGradB_den`, `convStridedWGradB_den` (the fused stage, symmetric);
 `EnetPoCG.depthwiseWGradB_den`, `depthwiseStridedWGradB_den` (symmetric strided depthwise — B0's
 op, and MNv4's UIB strides are symmetric too), `convStridedXlaWGradB_den` (the stem — B0's XLA
-stem op, identical). So `Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` is per-block-PROFILE capstones
+stem op, identical). So `Nets/MobileNet/MobileNetV4FoldB.lean` is per-block-PROFILE capstones
 in R50's shape (`r50IdGradsCertified` …): `mnv4UibGradsCertified` for the skip row at its two
 `k`s (the conjunct list must dispatch on `k = 0` — no conjunct for an absent depthwise, exactly as
 the render emits none), `mnv4UibPreStridedGradsCertified`, `mnv4FusedGradsCertified`,
@@ -368,7 +368,7 @@ the render emits none), `mnv4UibPreStridedGradsCertified`, `mnv4FusedGradsCertif
 ⭐ **And the bf16 nodes, stated — this is where the "bring bf16 in line" item lands for MNv4.**
 `mnv4in_adam64bf16` / `adamdp64bf16` emit `convWeightGradBBf16`, `depthwiseWeightGradBBf16`,
 `depthwiseStridedWeightGradBBf16`, `convStridedWeightGradBBf16` and `convStridedXlaWeightGradBBf16`.
-Three of those lemmas exist in `ConvNeXtFaithfulPoCGB.lean` (`convWGradBBf16_den`,
+Three of those lemmas exist in `ConvNeXtFoldGB.lean` (`convWGradBBf16_den`,
 `depthwiseWGradBBf16_den`, `convStridedWGradBBf16_den`) and are generic — cite them. Two are new
 and four lines each on the same template: `depthwiseStridedWGradBBf16_den` and
 `convStridedXlaWGradBBf16_den` (`simp only [den]; congr 1; apply Finset.sum_congr rfl; intro n _;
@@ -377,7 +377,7 @@ exact <the strided/Xla VJP>.correct …` at rounded slices — read the two `den
 shaped like `EnetPoCG.depthwiseWGradB_den`'s). ⛔ Do not write "the bf16 twins consume the same
 node" anywhere; that sentence is what §4c-quater found loose in three other folds.
 
-**The tie.** `Nets/MobileNet/MobileNetV4TiePoCB.lean`: per-block tie defs with the cotangent chain
+**The tie.** `Nets/MobileNet/MobileNetV4StepTieB.lean`: per-block tie defs with the cotangent chain
 built from the CERTIFIED block VJPs — `mnv4BodyOfRow_faithful` IS the `den graph = vjp.backward`
 fact the `*CotIn_eq_vjp` lemmas of 4.2a/4.2c/§3.5c re-state, so the cross-block chain composes
 certified VJPs rather than re-deriving. ⭐ `g` is a BINDER (4b's rule); `N` and `nCls` are binders;
@@ -399,7 +399,7 @@ long one — the bf16 lemmas are the only new mathematics and they are four line
 
 ### Session 3 — T6: the certified backward tie ▶ **REWRITTEN 2026-09-07 after sessions 1–2; the original text is corrected in three places**
 
-**Mirror `Resnet50WholeBackCertifiedTieB.lean` + `Float/Resnet50WholeBackFloatBridgeB.lean`
+**Mirror `ResNet50WholeBackCertifiedTieB.lean` + `Float/Resnet50WholeBackFloatBridgeB.lean`
 (§3.5d). Read `EfficientNetFullWholeBackCertifiedTie.lean`'s header first — it answers this
 section's one open question, see (2).**
 
@@ -424,7 +424,7 @@ fourth-consumer argument for a generic apex are both retired for this net, just 
 the original gave.
 
 ⚠ T3's tie also ships a FINER chain — `mnv4Blk0 … mnv4Blk21`, one prefix per block
-(`MobileNetV4TiePoCB.lean`). T6 wants the block granularity for its opaque slots, so use those,
+(`MobileNetV4StepTieB.lean`). T6 wants the block granularity for its opaque slots, so use those,
 not `mnv4Pre_k`.
 
 #### ⭐ (2) The open design question is ANSWERED: follow B0, state it to the IMAGE
@@ -460,7 +460,7 @@ problem. So, for T6:
 |---|---|
 | whole-net forward + `HasVJPAt` + `pdiv` reading | ✅ `MobileNetV4FullBVJP.lean` |
 | per-block certified VJPs, opaque slots | ✅ `mnv4BodyOfRow` / `mnv4PreStridedBodyOfRow` and their `_faithful`s |
-| per-block forward prefixes | ✅ `mnv4Blk0 … mnv4Blk21` (`MobileNetV4TiePoCB.lean`) |
+| per-block forward prefixes | ✅ `mnv4Blk0 … mnv4Blk21` (`MobileNetV4StepTieB.lean`) |
 | the stem-BN cotangent the artifact's backward really ends at | ✅ `mnv4StemCotN` / `mnv4StemCotC`, tied |
 | XLA strided conv float leaves | ✅ from the re-spell thread |
 | batched BN float leaves | ✅ `bnBatchFloatBridge`, from 4.1 |
@@ -541,7 +541,7 @@ MNv4's own:
 |---|---|---|
 | 0 | — | `Nets/MobileNet/MobileNetV4BackB0.lean` (header, `mnv4Stage14`), `formalization.yaml` (three rows), `planning/archive/proofs_tier_to_paper_nets.md` §3.6, `scripts/grad_tie.py` (233/154) with the tie runs |
 | 1 | `Nets/MobileNet/MobileNetV4FullB.lean` (rows, record, forward, `mnv4NetLayer`, graph, `_faithful`), `Nets/MobileNet/MobileNetV4FullBVJP.lean` (stem VJP, `Mnv4SmoothAt`, `mobilenetv4ForwardB_full_has_vjp_at`) | `lakefile.lean`, `tests/AuditAxioms.lean`, `formalization.yaml` (rows + a status section), this doc |
-| 2 | `Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` (profiles + the two new bf16 lemmas), `Nets/MobileNet/MobileNetV4TiePoCB.lean` (`mnv4_net_tiedB`, the loss corollary) | same |
+| 2 | `Nets/MobileNet/MobileNetV4FoldB.lean` (profiles + the two new bf16 lemmas), `Nets/MobileNet/MobileNetV4StepTieB.lean` (`mnv4_net_tiedB`, the loss corollary) | same |
 | 3 | `Float/MobileNetV4WholeBackFloatBridgeB.lean`, `Nets/MobileNet/MobileNetV4WholeBackCertifiedTieB.lean` | same; `MobileNetV4RenderB.lean`'s `#eval` block comment ("do not train off these") if the DP tie README has not already retired it |
 
 Done when `proofs_tier_to_paper_nets.md` §2's MobileNetV4 row reads ✓ ✓ ✓ ✗ ✗ ✓ with T4/T5

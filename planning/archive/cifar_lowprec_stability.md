@@ -423,7 +423,7 @@ even the f32 absolute bound is vacuous. **Only the ratios mean anything.**
 * `planning/archive/fp8_lowering.md` — the design (§3's table is still correct), the emulated numbers (§2),
   and the step order this document supersedes at step 1.
 * `planning/archive/floatbridge_quantization.md` — §3a MNIST E4M3 demo, §3c the accuracy bound, the `u` table.
-* `LeanMlir/Proofs/Float/E4M3FaithfulPoC.lean` — `e4m3_render_faithful`, for any `q`/`sx`/`sW`.
+* `LeanMlir/Proofs/Float/E4M3Fold.lean` — `e4m3_render_faithful`, for any `q`/`sx`/`sW`.
 * `LeanMlir/Proofs/Float/Binary32Instance.lean` — `fp8E4M3 : FloatModel` at `u_e4m3 = 2⁻⁴`.
 * `LeanMlir/E4M3Quant.lean` — the host-side rounding used by the emulated trainers.
 * `upstream-issues/2026-06-iree-cuda-fp8-nvptx-lowering/` — ⚠ still an open IREE bug; no longer a

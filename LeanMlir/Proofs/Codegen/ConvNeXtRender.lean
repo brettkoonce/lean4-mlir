@@ -7,15 +7,15 @@ import LeanMlir.ViTRender      -- the hand-written emitter's helpers; the collec
 ⭐ **Since 4c leg 3 (2026-09-07) this file writes ONE artifact: the SGD-inline
 `verified_mlir/convnext_train_step.mlir`.** The thirteen AdamW/EMA train steps and the four
 drop-free forwards render from the batched chain in `ConvNeXtRenderB.lean`
-(`planning/archive/renderer_convergence.md`, leg 3), whose Proofs tier is `ConvNeXtFaithfulPoCGB.lean`.
+(`planning/archive/renderer_convergence.md`, leg 3), whose Proofs tier is `ConvNeXtFoldGB.lean`.
 This chain stays for two reasons: the batched traversal has no fused-SGD arm, and
-`ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at exactly these bytes.
+`ConvNeXtStepTie.lean`'s 182-parameter tie is stated at exactly these bytes.
 `tests/TestConvNeXtFwdBTie.lean` pins the two chains against each other — identical forwards,
 backwards differing on the conv-VJP `transpose`/`reverse` pair (78 lines) and nothing else.
 
 The ConvNeXt peer of `MobileNetV2Render`/`EfficientNetRender`: the FULL [3,3,9,3] ConvNeXt-T train
 step (BS=32, 3×224²→10) rendered as `pretty` of verified `SHlo` nodes — forward, backward-cotangent
-chain, AND the param-SGD tail (the new `ConvNeXtFaithfulPoC` ops + the existing conv/depthwise/dense
+chain, AND the param-SGD tail (the new `ConvNeXtFold` ops + the existing conv/depthwise/dense
 ops). Adapted from the committed emitter `tests/TestConvNeXtTTrainPC.lean`: its forward + backward
 cotangent chain were already `pretty(SHlo)`; here the hand-written param-GRAD strings are replaced by
 the SHlo param-SGD ops, which BUNDLE the gradient + SGD wrap into one op (producing the updated param).
@@ -39,7 +39,7 @@ artifact.** `ty [] = "tensor<f32>"`, and `grep -c 'tensor<1xf32>'` is **0** in b
 on both sides. Handoff §0b repeats the stale claim.)*
 
 Every other param (depthwise-7×7 W/b, 1×1 expand/project W/b, per-channel layer-scale γ, scalar-LN
-γ/β, downsample 2×2 W/b, dense W/b) denotes the certified loss-descent step (`ConvNeXtFaithfulPoC` +
+γ/β, downsample 2×2 W/b, dense W/b) denotes the certified loss-descent step (`ConvNeXtFold` +
 `ConvNeXtClose`/M2/M3). Render is value-independent (`skel` erases values), so placeholders + `lr:=0`
 are passed; the emitted `lrStr`/`epsStr` literals carry the real values. -/
 
@@ -275,7 +275,7 @@ def chLnPrelude : String :=
 
     §2n deleted the `chLN : Bool` flag this used to carry. Its `false` branch emitted the RETIRED
     scalar-global `.bnF` with rank-0 γ/β, and it had no caller: both `#eval` writers took the
-    default, and `ConvNeXtTiePoC` — which ties that spelling — does not import this file, it works
+    default, and `ConvNeXtStepTie` — which ties that spelling — does not import this file, it works
     over its own math mirrors. It corresponded to the ch9 §1a tie; it was never used by it. -/
 private def lnFwdSite (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
@@ -1188,7 +1188,7 @@ end Proofs.StableHLO
 -- Regenerate verified_mlir/convnext_train_step.mlir from the faithful renderer (BS=32, ε=1e-6, lr=0.1).
 -- ⭐ THE ONLY WRITER LEFT IN THIS FILE (4c leg 3, 2026-09-07). Every other ConvNeXt artifact renders
 -- from `ConvNeXtRenderB.lean`; this one stays because the batched traversal emits no fused `*Sgd`
--- op and `ConvNeXtTiePoC.lean` ties all 182 parameters at exactly these bytes. `check_fwd_prefix`
+-- op and `ConvNeXtStepTie.lean` ties all 182 parameters at exactly these bytes. `check_fwd_prefix`
 -- still pairs `convnext_fwd` (now the batched chain's) with it, and the pairing holds because the
 -- two chains' forwards are byte-identical.
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"

@@ -1959,7 +1959,7 @@ now one theorem over `cnxBodyWith` and the ch9 net instantiates it as a *term*.
 `chanLNTensor3Back_eq_chanLN_vjp` + the body/block peers, so the channel-LN net's §B coverage now
 matches the scalar net's and the float backward is tied to the CERTIFIED gradient (it is also
 **β-free**, proved not assumed). And the **third stale-scope file** the §2n table missed —
-`ConvNeXtTiePoC.lean`'s §1a whole-net tie, which is scalar-LN *with a head LN*, i.e. `chLN := false`
+`ConvNeXtStepTie.lean`'s §1a whole-net tie, which is scalar-LN *with a head LN*, i.e. `chLN := false`
 — now carries an explicit scope label; porting it was measured as chapter-sized, so it is labelled,
 not ported. `ConvNeXtRender.lean`'s matching stale docstring (*"`chLN := false` is the committed …"*)
 is fixed.
@@ -5207,7 +5207,7 @@ the backward.
 * ~~`ConvNeXtWholeFloatBridge` / `ConvNeXtBackB0` / `WholeNetForwardTies` still ride the SCALAR
   chain~~ — `ConvNeXtWholeFloatBridge` was discharged by §2n and **`ConvNeXtBackB0` by §2o Part A**,
   which added the channel-LN backward capstones alongside the scalar ones (the file now carries both
-  worlds, explicitly labelled). `WholeNetForwardTies` is the remainder, and `ConvNeXtTiePoC`'s §1a
+  worlds, explicitly labelled). `WholeNetForwardTies` is the remainder, and `ConvNeXtStepTie`'s §1a
   tie carries a scope label rather than a port (§2n measured the port as chapter-sized).
 * ~~the §1a tie (176/180)~~ — the **render capstone** (`tests/TestConvNeXtTTrainPC.lean`) is
   ✅ **RE-ALIGNED 2026-07-31 and back at PARITY: 180 of 180 outputs BIT-IDENTICAL** against the
@@ -5799,7 +5799,7 @@ Re-pointing the ch7 §1a tie at the channel LN is *not* a relabel: the 22 LN sit
 vector-γ/β param certs (ViT has that shape — `vit_render_vecln{gamma,beta}_certified` — ConvNeXt
 has only the `Vec 1` scalar embedding, `ConvNeXtClose` §C), the head-LN tie would be deleted rather
 than ported, and the whole forward thread would have to be re-derived through the transpose/reassoc
-conjugation. That is chapter-sized. So `ConvNeXtTiePoC.lean` now opens with a ⚠ that says exactly
+conjugation. That is chapter-sized. So `ConvNeXtStepTie.lean` now opens with a ⚠ that says exactly
 what it ties (`chLN := false`, plus a head LN), that every theorem in it is still TRUE, and that it
 should be read as the ch9-representative §1a tie — the same status
 `Nets/ConvNeXt/ConvNeXt.lean` has as the ch9-representative forward. Its two other "the committed
@@ -5808,12 +5808,12 @@ render" claims are corrected in place.
 ⚠ **`ConvNeXtRender.lean:113` was stale in the same direction and is fixed**: it called
 `chLN := false` *"the committed scalar-global `.bnF`"* while the flag has defaulted to `true` since
 §2m. A reader auditing the LN world from the renderer down would have been told the wrong mode is
-the shipped one. Nothing in `ConvNeXtFaithfulPoC`/`ConvNeXtClose` needed touching — their
+the shipped one. Nothing in `ConvNeXtFold`/`ConvNeXtClose` needed touching — their
 "scalar-LN γ/β" lines describe the *ops*, which still exist and are still certified, not the net.
 
 The original finding, for the record:
 
-**`LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtTiePoC.lean` — the ch7 §1a whole-net tie
+**`LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTie.lean` — the ch7 §1a whole-net tie
 (`CnxTiePoC.cnx_net_tied_certified`, 6 audit lines) is written against the SCALAR LN, and it still
 has a HEAD LN** (`hng`/`hnbt` at the GAP output, line ~219) — the site §2m deleted. Its own
 docstring says it feeds "the **real forward activations** of the committed

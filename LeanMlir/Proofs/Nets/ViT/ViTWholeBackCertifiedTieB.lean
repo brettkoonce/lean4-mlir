@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 `ViTWholeBackCertifiedTie.lean` closed T6 for ONE image: `vitInputGradK`, the reverse of
 `vitForwardKV` over that image's `N + 1` tokens, IS the certified gradient. Every shipped ViT
 artifact runs a batch — `vit_adam_train_step` and the `vitin_*` family at 128 or 512 per
-device — and its batched T3 tie (`ViTTiePoCGB.lean`) states every activation as
+device — and its batched T3 tie (`ViTStepTieGB.lean`) states every activation as
 `StableHLO.batchMap B` of the per-example prefix and every cotangent as `batchMapAux B` of the
 per-example chain, because no ViT op couples examples. This file closes T6 at that index: the
 five-stage batched chain `vitInputGradKB` (`ViTBackChains.lean`) IS the certified gradient of

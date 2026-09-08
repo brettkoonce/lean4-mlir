@@ -21,9 +21,9 @@ binary32), instantiated at the repo's reference ℝ ops. Status by file:
   `bnIstd_close` + the operating-point `bnIstd_close_at`, `bnMean_close`,
   `bnVar_close`, `bnForward_close_of`, `bnForward_close`.
 - **BN input-sensitivity** (`BnInputBridge.lean`): `bnMean/Var/Istd/Forward_input_close`.
-- **ResNet-34 structural ops** (`Resnet34FloatBridge.lean`): `add_close`,
+- **ResNet-34 structural ops** (`ResNet34FloatBridge.lean`): `add_close`,
   `reluAdd_close`, `flatConvStride2F_close`, `bnPerChannelFlat_close_of`, `gapFlat_close`.
-- **Block step** (`Resnet34BlockBridge.lean`): `bnRelu_close`, `bnReluBudget`.
+- **Block step** (`ResNet34BlockBridge.lean`): `bnRelu_close`, `bnReluBudget`.
 - **Composition backbone** (`FloatComposeBridge.lean`): `FloatClose`,
   `FloatClose.comp`, instances `floatClose_relu/_flatConv/_maxPool/_bnRelu`,
   combinators `floatClose_residualBlock`, folded units `floatClose_reluConv/_cifarStage/_resBlock`,
@@ -36,7 +36,7 @@ binary32), instantiated at the repo's reference ℝ ops. Status by file:
 **§1 (EfficientNet) — DONE 2026-06-25** (all 3-axiom-clean, audited):
 - §1a `floatClose_addResidual` (FloatComposeBridge, the no-relu skip) + `floatClose_smoothResBlock`
   (EnetFloatBridge, conv→swish→conv + skip).
-- §1b `floatClose_bn` (BN alone, via the extracted relu-free `bnStep_close` in Resnet34BlockBridge),
+- §1b `floatClose_bn` (BN alone, via the extracted relu-free `bnStep_close` in ResNet34BlockBridge),
   `floatClose_dense`, `floatClose_gap` (via new `globalAvgPoolFlat_eq_bnMean` helper +
   `bnMean_abs_le`/`bnMean_input_close`), `floatClose_broadcast`, `floatClose_sigmoid`.
 - §1c `DepthwiseFloatBridge.lean` — the one new conv lemma: depthwise read IS `convPad`, so
@@ -274,8 +274,8 @@ number" questions.
 **Landed (all 3-axiom-clean, audited in `tests/AuditAxioms.lean`):**
 `FloatComposeBridge.lean` — `floatClose_addResidual`/`_dense`/`_bn`/`_gap`/`_residual`,
 the `FloatBridges` abstraction (`.comp`, `.residual`, `cod_nonneg`, `modulus_zero_nonneg`)
-+ `floatBridges_relu`/`_maxPool`/`_flatConv`/`_dense`. `Resnet34BlockBridge.lean` —
-`bnStep_close` (relu-free, extracted from `bnRelu_close`). `Resnet34FloatBridge.lean` —
++ `floatBridges_relu`/`_maxPool`/`_flatConv`/`_dense`. `ResNet34BlockBridge.lean` —
+`bnStep_close` (relu-free, extracted from `bnRelu_close`). `ResNet34FloatBridge.lean` —
 `globalAvgPoolFlat_eq_bnMean`. `DepthwiseFloatBridge.lean` (new) — `depthwiseConv2d_eq_dense`,
 `depthwiseFlatF_close`, `floatClose_depthwise`, `floatBridges_depthwise`.
 `EnetFloatBridge.lean` — `floatClose_smoothResBlock`/`_broadcast`/`_sigmoid`/`_seGate`/

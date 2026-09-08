@@ -257,7 +257,7 @@ table mean anything — `bf16_renderer.md` §11.3 shows even the f32 absolute bo
 * `planning/archive/cifar_lowprec_stability.md` — §2 the lowering gate, §5.2 the measured 3×3 sweep,
   §5.3 why bf16 buys no speed at these shapes, §4.1 the batched-family unification.
 * `planning/archive/a3_paper_fidelity.md` — R34's 77.43 %, and the 49,920-vs-50,000 caveat.
-* `LeanMlir/Proofs/Float/E4M3FaithfulPoC.lean` — `e4m3_render_faithful`, any `q`/`sx`/`sW`.
+* `LeanMlir/Proofs/Float/E4M3Fold.lean` — `e4m3_render_faithful`, any `q`/`sx`/`sW`.
 * `LeanMlir/Proofs/Float/Binary32Instance.lean` — `fp8E4M3 : FloatModel` at `u = 2⁻⁴`.
 * `LeanMlir/E4M3Quant.lean` — the host-side rounding the emulated arms use, i.e. the oracle.
 * `LeanMlir/Proofs/Codegen/StableHLO.lean` — `tyBf16` (l.4385) is the template for `tyF8`;

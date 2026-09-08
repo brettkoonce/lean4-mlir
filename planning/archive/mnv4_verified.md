@@ -1111,12 +1111,12 @@ the main line. **Measured 2026-08-10, not recalled:**
 
 | net | block-level certified VJP | whole-net composed backward | fwd tie vs JAX ref | grad tie vs JAX ref |
 |---|---|---|---|---|
-| r34 | ✓ | ✓ `ResNet34BackB0` + `Resnet34BackCertifiedTie` | — | 17/18 blocks (§below) |
+| r34 | ✓ | ✓ `ResNet34BackB0` + `ResNet34BackCertifiedTie` | — | 17/18 blocks (§below) |
 | mnv2 | ✓ | ✓ `MobileNetV2BackB0` + CertifiedTie | ✓ 6.08e-06 | — |
 | enet | ✓ | ✓ `EfficientNetBackB0` + CertifiedTie | ✓ 1.13e-06 | — |
 | convnext | ✓ | ✓ `ConvNeXtBackB0` + CertifiedTie | — | — |
 | vit | ✓ | ⭐ `ViTBackB0` — **the only genuinely whole-net one**: patchEmbed→tower→LN→classifier at every depth (§8g) | — | — |
-| **r50** | ✓ `Nets/ResNet/Resnet50BlocksCertified.lean` | ✅ **DONE 2026-08-10 — `ResNet50BackB0`, all 3 forms** | ⛔ no 10-class reference exists | ⛔ |
+| **r50** | ✓ `Nets/ResNet/ResNet50BlocksCertified.lean` | ✅ **DONE 2026-08-10 — `ResNet50BackB0`, all 3 forms** | ⛔ no 10-class reference exists | ⛔ |
 | **mnv4** | ⛔ **missing** | ⛔ **missing** | ✅ 1.423e-06 | ✅ 0/147 |
 
 ## 8a. ✅ R50's WHOLE-NET COMPOSED BACKWARD IS BUILT (2026-08-10)
@@ -1135,7 +1135,7 @@ the main line. **Measured 2026-08-10, not recalled:**
 ### ⚠⚠ §8 WAS WRONG ABOUT WHICH PHASE 1 WAS DISCHARGED
 
 §8 said *"R50 first. It is one step from done: phase 1 is discharged, so the job is (2) + (3)."*
-`Resnet50BlocksCertified.lean` is real, but it certifies the **per-channel, non-batched** forms —
+`ResNet50BlocksCertified.lean` is real, but it certifies the **per-channel, non-batched** forms —
 `bnPerChannelTensor3`, plain `flatConv`, no `N`. The backward-graph vocabulary is **batched**
 (`bnBatchLA`, `batchMap`, `convBackBatched`), which is what the render emits. Grepped before
 starting: **no batched R50 block VJP existed anywhere.** So R50 needed (1) + (2) + (3) — the same
@@ -1556,7 +1556,7 @@ Per block form, the peers prove **three** things, and only the first exists for 
 
 1. `<blk>_has_vjp_at` — the block's VJP as a proven object. R50 has all three forms already:
    `bblkPC_has_vjp_at`, `bblkPStridedPC_has_vjp_at`, `bblkPProjPC_has_vjp_at`
-   (`Resnet50BlocksCertified.lean` — note the third, the **stride-1 projection**, exists only in R50
+   (`ResNet50BlocksCertified.lean` — note the third, the **stride-1 projection**, exists only in R50
    stage-1 block 0 and has no R34 analogue).
 2. `<blk>BackBatchedGraph` — a *backward StableHLO graph* built from the emitted tokens.
 3. `<blk>BackBatchedGraph_faithful` — that graph **denotes** the proven VJP. This is the theorem
@@ -1572,7 +1572,7 @@ it got it later.
 block forms, mirroring `ResNet34BackB0` — which R50's blocks were explicitly written to mirror.
 
 **MNv4 second, and it needs phase 1 first** — a `MobileNetV4BlocksCertified.lean` in the
-`Resnet50BlocksCertified` shape, then (2) + (3).
+`ResNet50BlocksCertified` shape, then (2) + (3).
 
 ### ⚠ Design notes that will save a cycle
 

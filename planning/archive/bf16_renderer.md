@@ -172,7 +172,7 @@ a default.
 
 ## What already exists — more than you would guess
 
-* **The structural render-tie, for MNIST-linear, at depth 1.** `LeanMlir/Proofs/Float/Bf16FaithfulPoC.lean`
+* **The structural render-tie, for MNIST-linear, at depth 1.** `LeanMlir/Proofs/Float/Bf16Fold.lean`
   (75 lines) proves `bf16LinearGraph` **denotes** the exact-ℝ linear on the rounded operands, for
   *any* rounding `rnd`. Built only from `den`-faithful `SHlo` ops (`operand` → `dotIn` → `addBcast`).
 * **The accuracy bound.** `FloatBridge.dense_close_mixed` (line 356), with `u_leaf = 2⁻⁸` for the
@@ -187,7 +187,7 @@ mostly plumbing, not proof.
 
 ## ▶ The trap that would waste the whole exercise
 
-`Bf16FaithfulPoC` says depth-1 needs **no new `SHlo` op**, because the leaf cast is folded into the
+`Bf16Fold` says depth-1 needs **no new `SHlo` op**, because the leaf cast is folded into the
 operand value `rnd ∘ x`. That is true *of the proof* and false *of the emitter*.
 
 If the emitted MLIR still carries `tensor<…xf32>` operands, XLA does fp32 math and **the speedup is
@@ -242,7 +242,7 @@ renderer". Options, cheapest first:
 
 Option 1 is strongly preferred to start. It also keeps the `den` story trivial: `den (dotInBf16 W e)
 = dense (rnd∘W) (rnd∘den e)`, which is `bf16_render_faithful` with the rounding moved inside — the
-tie already proven in `Bf16FaithfulPoC`.
+tie already proven in `Bf16Fold`.
 
 **And this is why gate 2 is non-negotiable.** A numerical check alone would have passed: the
 denotation says "rounded", the proof says "rounded", and the hardware quietly says "not rounded".
@@ -313,7 +313,7 @@ template: `mnist-linear-e4m3-verified` → `mnist-mlp-e4m3-verified` → `mnist-
 
 | rung | net | new proof needed | new emitter needed |
 |---|---|---|---|
-| **0** | mnist-linear | **none** — `Bf16FaithfulPoC` is exactly this graph | `convertF` + bf16 types + f32-accum `dot_general` |
+| **0** | mnist-linear | **none** — `Bf16Fold` is exactly this graph | `convertF` + bf16 types + f32-accum `dot_general` |
 | **1** | mnist-mlp | depth > 1 tie: `den (convertF rnd e) = rnd ∘ den e` on intermediate activations | reuse rung 0 |
 | **2** | mnist-cnn / cifar | **`conv_close_mixed`** — the big one | conv path emits bf16 operands, f32 accumulate |
 | **3** | cifar8 / R34 | compose rung 2 over the block structure | reuse |

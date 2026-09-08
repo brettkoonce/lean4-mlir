@@ -27,7 +27,7 @@ A surviving `Float/` module is one of three things:
 * **model core — keep as is.** `FloatBridge` (2197: `FloatModel`, the per-op `*_close` lemmas,
   `mlp_float_close_uniform`, the MNIST/CNN step bounds), `Binary32Instance` (313), the bf16-mixed
   and fp8 files (`ConvMixedFloatBridge`, `ConvMixedComposeBridge`, `DepthwiseFloatBridge`,
-  `DepthwiseMixedFloatBridge`, `Bf16FaithfulPoC`, `E4M3FaithfulPoC`), `FloatSubnormalBridge`.
+  `DepthwiseMixedFloatBridge`, `Bf16Fold`, `E4M3Fold`), `FloatSubnormalBridge`.
   Consumers: `Training/SgdDescentLinear`, `Training/TrainedLinearDescent`,
   `Certificates/LipschitzCertFloat`, `Foundation/MlpCanonical`; the book's "Finite precision"
   section argues from exactly these. ⚠ `FloatComposeBridge` (776) is in this bucket by import
@@ -57,7 +57,7 @@ module in its transitive import closure. "ℝ" = real-side names (move), "float"
 | `DepthwiseBackFloatBridge` | 156 | `depthwiseFlatBack`, `depthwiseStride2FlatBack`, `depthwiseStride2FlatXlaBack`, `dwReverse` | — |
 | `MaxPool3s2BackFloatBridge` | 366 | `maxPool3s2Flat_has_vjp_at_vec`, `maxPool3s2Flat_differentiableAt_vec` — ⚠ VJP lemmas, used by **`ResNet34FullBVJP`** (T1); belong in `Architectures/MaxPool3s2.lean` | — |
 | `LinBackFloatBridge` | 198 | `diagBack`, `reluMaskBack` | `mlpInputGrad_floatBridges` ← `MlpCanonical` (tier-1 MNIST float — keep that half) |
-| `ChannelLNFloatBridge` | 406 | `chanLNTensor3Back`, `rowLNVecFlatBack` (← `ConvNeXtTiePoC`, `ViTVecLNBackCertifiedTie`) | `floatBridges_chanLNTensor3Back` (check who) |
+| `ChannelLNFloatBridge` | 406 | `chanLNTensor3Back`, `rowLNVecFlatBack` (← `ConvNeXtStepTie`, `ViTVecLNBackCertifiedTie`) | `floatBridges_chanLNTensor3Back` (check who) |
 | `MhsaBackFloatBridge` | 649 | `mhsaBackFlat`, `coreQFlat`/`coreKFlat`/`coreVFlat`, `clsScatter`, `vitBlockBack`, `vitBlockBackPR` | `floatBridges_mhsaBack`, `floatBridges_vitBlockBackPR` (check who) |
 | `SdpaBackFloatBridge` | 649 | `mhSlab`, `mhsaSdpaBackQ`/`K`/`V` | — |
 | `ViTBlockFloatBridge` | 1116 | `perRowFlat`, `perRowFlat_apply`, `perRowFlatPR`, `perRowFlatPR_apply`, `perRowFlatPR_comp`, `perRowIdxFlat` | — |
@@ -73,7 +73,7 @@ module in its transitive import closure. "ℝ" = real-side names (move), "float"
 | `MobileNetV2WholeBackFloatBridgeB` / `MobileNetV4WholeBackFloatBridgeB` / `Resnet50WholeBackFloatBridgeB` | 192 / 268 / 180 | `mnv2InputGradB` / `mnv4InputGradB` / `r50InputGradB` | — |
 | `BnBackFloatBridge` | 348 | `bnGradInputBudget` (a bound, float-side by content) | `bnGradInputF`, `bnGradInput_close` ← `Codegen/BnBackComposeBridge` |
 | `BnFloatBridge` | 496 | `bnForward_close_of`, `bnNormBudget`, `bnVar_nonneg`, `rsqrt_lipschitz` | `bnForwardF`, `bnForward_close`, `bnIstd_close` ← `Codegen/BnInputBridge` |
-| `Resnet34FloatBridge` | 201 | — | `reluAdd_close` ← `Codegen/Resnet34BlockBridge` |
+| `ResNet34FloatBridge` | 201 | — | `reluAdd_close` ← `Codegen/ResNet34BlockBridge` |
 | `ViTFloatBridge` | 233 | — | `floatClose_gelu` ← `Certificates/GeluLipschitz` |
 | `EnetFloatBridge` | 591 | — | `floatBridges_mbconvBody` (check who — a block tie citing it?) |
 | `FloatBudgetEnv` / `FloatBudgetEnvBack` | 630 / 1130 | none of their own (the matches are `Maps.*` twins of real names) | — → **delete outright** |
@@ -88,7 +88,7 @@ chains above compose (`seBack*`, `softmaxRowBack*`, `patchEmbedBack*`, the BN in
 formulas) — §3.
 
 Three Codegen files are float-side and only Float files consume them: `BnInputBridge`,
-`Resnet34BlockBridge` (imported by `FloatComposeBridge`), `BnBackComposeBridge`. They go with the
+`ResNet34BlockBridge` (imported by `FloatComposeBridge`), `BnBackComposeBridge`. They go with the
 float side unless the model core needs them.
 
 ## 2b. Progress
@@ -106,7 +106,7 @@ float side unless the model core needs them.
   `rowLNVecFlatBack` needs `perRowIdxFlat`. The `FloatClose` ingredients (`reluMaskBack_abs_le`,
   `decimateBack_eq_filter`, the 3×3/s2 fibre count `maxPool3s2Back_mask_sum_abs_le`, …) stayed with
   the float side and die with it at step 7. Re-pointed: `DepthwiseBackCertifiedTie`, `ResNet34FullBVJP`,
-  `ConvNeXtTiePoC`, `Resnet34BackCertifiedTie` (its strided import only).
+  `ConvNeXtStepTie`, `ResNet34BackCertifiedTie` (its strided import only).
 * **Step 2 DONE 2026-09-08.** `Nets/ResNet/ResNetBackChains.lean` holds `r34IdBlockBack`,
   `r34DownBlockBack`, `r34InputGrad`, `maxPool3s2FlatBackB`, `r34InputGradB`, `r50InputGradB`; `gapBack`
   went into `BackwardMaps.lean` (every conv net's head endpoint; `flatChannel` was already in that
@@ -155,8 +155,8 @@ float side unless the model core needs them.
   `scripts/respell_mnv2_xla.py` (a one-off that named itself deletable). `Float/` is 13 files, 5.6k lines:
   the model core plus the r34 forward chain the bf16-mixed compose bridge builds on —
   `FloatComposeBridge` (its `floatClose_r34_stages` / `floatClose_bn` / … are what
-  `ConvMixedComposeBridge` composes) and, through it, `Resnet34FloatBridge`, `BnFloatBridge`,
-  `Codegen/Resnet34BlockBridge`, `Codegen/BnInputBridge`; and `LinBackFloatBridge` for
+  `ConvMixedComposeBridge` composes) and, through it, `ResNet34FloatBridge`, `BnFloatBridge`,
+  `Codegen/ResNet34BlockBridge`, `Codegen/BnInputBridge`; and `LinBackFloatBridge` for
   `MlpCanonical`'s tier-1 MNIST backward. Audit 2007 → 1758 prints (161 by name, 88 more the checker
   found under bare / `Maps.` spellings), lakefile −177 lines of roots and their comments, yaml 4d and
   the book's "Finite precision" sentence rewritten, the docstring gate green.
@@ -181,7 +181,7 @@ Net by net, each a commit, each with `git diff verified_mlir/` empty (no artifac
    the same leaf. This is the step that decides how much of bucket three dies.
 2. **ResNet-34 / ResNet-50** (per-example and batched chains, `r34IdBlockBack`,
    `r34DownBlockBack`, `gapBack`, `r34InputGrad{,B}`, `maxPool3s2FlatBackB`, `batchMapAux` lifts,
-   `r50InputGradB`) → beside `Resnet34BackCertifiedTie{,B}`.
+   `r50InputGradB`) → beside `ResNet34BackCertifiedTie{,B}`.
 3. **MobileNetV2 / MobileNetV4** (`invresBody*BackPC`, `mnv2InputGrad{,B}`, `mnv4InputGradB`).
 4. **EfficientNet-B0** (`mbconvBodyBack`, `efficientnetInputGradB{,_full}`).
 5. **ConvNeXt-T** (`cnxBlockBodyBack`, `cnxDownBack`, `convnextInputGrad`).

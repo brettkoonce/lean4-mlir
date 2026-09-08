@@ -9,7 +9,7 @@ certified renderer with no whole-net backward at all; this file is that gap.
 
 ## ⚠⚠ WHAT §8 GOT WRONG — "R50 is one step from done" was measured against the WRONG phase 1
 
-§8 records R50's block-level VJP as ✓ (`Nets/ResNet/Resnet50BlocksCertified.lean`) and concludes the
+§8 records R50's block-level VJP as ✓ (`Nets/ResNet/ResNet50BlocksCertified.lean`) and concludes the
 job is only (2) + (3). That certificate is real, but it is for the **per-channel, non-batched**
 forms — `bblkPC` / `bblkPProjPC` / `bblkPStridedPC` are built from `bnPerChannelTensor3` and plain
 `flatConv`, with no `N`. The backward-graph vocabulary is **batched**: `bnBatchLA`, `batchMap`,

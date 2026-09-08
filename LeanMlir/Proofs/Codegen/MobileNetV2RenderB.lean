@@ -42,9 +42,9 @@ exactly as `resnet34`/`cifar8`'s does (§5).
 
 ⭐ **The Proofs tier this file's train steps are tied at** is the batch-BN one:
 `MobileNetV2FullB.lean` (T1 forward, T2), `MobileNetV2FullBVJP.lean` (T1's VJP),
-`MobileNetV2FaithfulPoCPaperG.lean` (T3 §1 fold, un-fused) and `MobileNetV2TiePoCB.lean` (T3 §1a
+`MobileNetV2FoldPaperG.lean` (T3 §1 fold, un-fused) and `MobileNetV2StepTieB.lean` (T3 §1a
 tie) — §4.2 of `planning/archive/proofs_tier_to_paper_nets.md`, all 2026-09-06. The per-example
-`MobileNetV2FaithfulPoCPaper` fold still supplies the op-kind lemmas the batched fold delegates
+`MobileNetV2FoldPaper` fold still supplies the op-kind lemmas the batched fold delegates
 to; the per-example tie (`MobileNetV2TiePoCPaper.lean`) was deleted 2026-09-08, since no committed
 bytes exercised it.
 

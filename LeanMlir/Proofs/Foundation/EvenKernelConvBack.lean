@@ -1,9 +1,9 @@
-import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 
 /-! # ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel — and the one-line repair
 
 `convFlatBack W = flatConv (reverseSwap W) 0` is the reversed-kernel forward conv every backward
-in this repo runs, and `convFlatBack_eq_vjp_backward` (`Resnet34BackCertifiedTie.lean`) ties it to
+in this repo runs, and `convFlatBack_eq_vjp_backward` (`ResNet34BackCertifiedTie.lean`) ties it to
 the certified conv input-VJP **for ODD kernels only**. That hypothesis is not a convenience: it is
 load-bearing, and the statement is FALSE without it.
 

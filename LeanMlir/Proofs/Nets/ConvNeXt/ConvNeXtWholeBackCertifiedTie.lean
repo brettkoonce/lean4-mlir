@@ -89,7 +89,7 @@ the committed one and is free, because no `x` is in sight to evaluate.
 instead, which costs nothing, and the term-mode peer must be top-level `def`s rather than a `let`
 chain — a `let` used twice per level zeta-expands to `2^11` copies of the prefix.
 
-⚠ ResNet-34's shape check is `resnet34Forward_full_pc_eq_chain` (`Resnet34BackCertifiedTie.lean`),
+⚠ ResNet-34's shape check is `resnet34Forward_full_pc_eq_chain` (`ResNet34BackCertifiedTie.lean`),
 and it is the net the hole first bit.
 -/
 

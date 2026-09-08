@@ -82,7 +82,7 @@ def mlpTrainStepStructured (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
     `mlpTrainStepStructured` for the forward, but the backward chain
     (`dotOut`/`selectPos`) and the six parameter SGD updates (`weightSgd`/`biasSgd`)
     are now `pretty` of denoted `SHlo` nodes too — so every emitted line is
-    `pretty(provenNode)`, and `MlpFaithfulPoC` proves each output's `den` = the
+    `pretty(provenNode)`, and `MlpFold` proves each output's `den` = the
     certified loss-descent step. Cotangents `%dy`/`nc1`/`nc0` are rendered once and
     shared (operand leaves); operand/`lr`/weight VALUES are `skel`-erased, so these
     placeholders print identically to the live graphs the `den` theorems use. -/
@@ -122,7 +122,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   -- ⭐ It is APPENDED, never woven in. It reads only the logits and `%onehot` and
   -- introduces only `%l*` names, so the six proven parameter outputs are
   -- byte-identical to what this renderer emitted before it existed and
-  -- `MlpFaithfulPoC` is untouched. Verified by diffing the render.
+  -- `MlpFold` is untouched. Verified by diffing the render.
   -- ⚠ It must stay the LAST output: the driver keeps the leading parameter tensors
   -- device-resident and reads only the tail (`VerifiedTrain.lean`, handoff §2d.3).
   let lossCode :=
@@ -155,7 +155,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   "  }\n}\n"
 
 -- Regenerate `verified_mlir/mlp_train_step.mlir` (what MainMnistMlpVerified trains on)
--- from the faithful renderer; the den-certified proofs live in MlpFaithfulPoC.lean.
+-- from the faithful renderer; the den-certified proofs live in MlpFold.lean.
 #eval IO.FS.writeFile "verified_mlir/mlp_train_step.mlir"
   (mlpTrainStepFaithfulV 128 784 512 512 10 "0.00078125"
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ => 0))

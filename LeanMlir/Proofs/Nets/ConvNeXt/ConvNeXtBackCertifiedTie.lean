@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackChains
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
-import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 
 /-! # §B: the ConvNeXt block-body backward chain IS the certified VJP
 

@@ -18,8 +18,8 @@ index is the batch.
 the backward, the AdamW/EMA tail and, since leg 3, the seventeen drop-free writers that used to sit
 in `ConvNeXtRender.lean`, beside the stochastic-depth, ImageNet, S/B and bf16 ones that were always
 here. Only the SGD-inline `convnext_train_step.mlir` is still written there: this traversal has no
-fused-SGD arm, and `ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at those bytes. The Proofs
-tier for this chain is `Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean`, which landed before the writers
+fused-SGD arm, and `ConvNeXtStepTie.lean`'s 182-parameter tie is stated at those bytes. The Proofs
+tier for this chain is `Nets/ConvNeXt/ConvNeXtFoldGB.lean`, which landed before the writers
 moved (leg 1's ordering rule).
 
 **The gate** (`lake build convnext-fwd-b-tie`): the per-example chain and this one must emit
@@ -414,7 +414,7 @@ private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) (bf16 : Bool := fals
     the per-example gradient on `batchSlice n`. AdamW only: the SGD-inline tail stays in the
     per-example renderer (it did not move with 4c leg 3 either), since `%lr` is a runtime operand on
     the AdamW path and a baked literal on the SGD one (§2a-quater's silent-hyperparameter hazard) —
-    and `ConvNeXtTiePoC.lean` is stated at those bytes. -/
+    and `ConvNeXtStepTie.lean` is stated at those bytes. -/
 private def blockParamGradB (pfx : String) (b : FNames)
     (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat)
     -- ⚠ `bf16` reaches the WEIGHT grads only. Every BIAS grad below stays f32 in every net:
@@ -931,12 +931,12 @@ end Proofs.StableHLO
 -- 83,478,846 floats differing after three AdamW steps with `scripts/perturb_conv_vjp.py` as the
 -- negative control — re-run as `convnext-adam-tie` on the swapped bytes.
 --
--- ⛔ The batched tier landed FIRST: `Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean` folds every `*GradB`
+-- ⛔ The batched tier landed FIRST: `Nets/ConvNeXt/ConvNeXtFoldGB.lean` folds every `*GradB`
 -- node this traversal emits, so no committed artifact is `pretty` of an AST without a fold (leg 4's
 -- lesson — byte-identity is not tier-identity — applied here on bytes that DO move).
 --
 -- ⛔ `convnext_train_step.mlir` (the SGD-inline step) stays in `ConvNeXtRender.lean`: this traversal
--- has no fused-SGD arm, and `ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at those bytes.
+-- has no fused-SGD arm, and `ConvNeXtStepTie.lean`'s 182-parameter tie is stated at those bytes.
 -- Each comment below is the writer's own record and moved with it unchanged.
 
 -- Regenerate `verified_mlir/convnext_fwd.mlir` — what `convnext-smooth` certifies through, and the

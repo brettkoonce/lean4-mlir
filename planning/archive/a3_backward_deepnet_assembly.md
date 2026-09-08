@@ -116,7 +116,7 @@ stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*Back
   `flatConvStride2 = decimateFlat ∘ flatConv`, so its `FloatClose` is `floatClose_flatConv` on the
   `2h×2w` grid read at `decimateIdx`, same conv-fan-in `layerBudget`) + `floatBridges_gap` (wraps the
   existing `floatClose_gap`). The repo previously had the r34 forward float story only at the per-op
-  `_close` level (`Resnet34FloatBridge.lean`) while the backward folded the whole net; this closes
+  `_close` level (`ResNet34FloatBridge.lean`) while the backward folded the whole net; this closes
   that asymmetry. **Both directions now fold at whole-net scale on the same blueprint.**
   - **Named per-block forward bridges DONE too** (same file): `floatBridges_r34IdBlock` (`rblkPC`) +
     `floatBridges_r34DownBlock` (`rblkPStridedPC`) — the forward peers of

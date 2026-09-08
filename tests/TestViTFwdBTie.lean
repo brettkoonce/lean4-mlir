@@ -120,7 +120,7 @@ forms diverged from its per-example peer, which this whole-net diff cannot."
   IO.println "  ⭐ And the den side IS checked now (4c leg 4, 2026-09-07): the CLS-token gradient \
 changed from `denseBiasGradB (N := 1)` to `(N := vbB)` — sum-one-thing to sum-the-batch — with the \
 SAME emitted text, so this byte tie provably cannot see it. Proofs.ViTPoCGB.clsGrad_denB is the \
-theorem at the batched node, beside the other nine in ViTFaithfulPoCGB.lean; ViTPoCG.clsGrad_den \
+theorem at the batched node, beside the other nine in ViTFoldGB.lean; ViTPoCG.clsGrad_den \
 is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are two theorems."
 
   -- ══════════════════════════════════════════════════════════════════════════════════════════
