@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Float.FloatComposeBridge
 
 /-! # ℝ→Float32 bridge for the BACKWARD: linear input-VJP + ReLU-back → whole-net fold
@@ -23,6 +24,9 @@ Capstone `mlpInputGrad_floatBridges`: the whole 3-layer MLP input-gradient VJP
 within an explicit budget of the certified real backward map." The backward peer of
 `cifar8_floatBridges`, assembled in one `.comp` chain. Pair with the BatchNorm backward
 (`BnBackFloatBridge`) for the BN nets.
+⚠ Since 2026-09-08 the ℝ maps themselves (`reluMaskBack`, `diagBack`) are defined in
+`Foundation/BackwardMaps.lean`, beside the other per-op backward maps the certified ties are
+stated about; this file is their float side only (`planning/float_second_pass.md`).
 -/
 
 namespace Proofs
@@ -32,13 +36,6 @@ open FloatModel
 -- ════════════════════════════════════════════════════════════════
 -- § ReLU backward: the exact `selectPos` mask
 -- ════════════════════════════════════════════════════════════════
-
-/-- ReLU backward (the rendered `selectPos`): keep `dy i` where the saved pre-activation was
-    positive (`cond i`), else 0. A select — exact in float. The mask `cond` is fixed (the
-    smooth-point common sign pattern of the real and float pre-activations). -/
-noncomputable def reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePred cond]
-    (dy : Vec n) : Vec n :=
-  fun i => if cond i then dy i else 0
 
 /-- The select never increases magnitude: `|reluMaskBack cond v i| ≤ |v i|`. -/
 theorem reluMaskBack_abs_le {n : Nat} (cond : Fin n → Prop) [DecidablePred cond]
@@ -72,12 +69,6 @@ noncomputable def floatBridgesTo_reluMaskBack {n : Nat} (cond : Fin n → Prop) 
 -- ════════════════════════════════════════════════════════════════
 -- § Smooth-activation backward: the diagonal `dy ⊙ act'(saved)` scale
 -- ════════════════════════════════════════════════════════════════
-
-/-- Smooth-activation backward (the rendered `emitActBack`/`scale`): multiply the cotangent
-    pointwise by the **saved derivative** `s = act'(preact)`. GELU, Swish/SiLU and sigmoid all have
-    a diagonal Jacobian, so their backward is this single `multiply`. A fixed vector `s` (the
-    smooth-point saved derivative). -/
-noncomputable def diagBack {n : Nat} (s : Vec n) (dy : Vec n) : Vec n := fun i => s i * dy i
 
 /-- Float smooth-activation backward at a supplied float derivative `fs` (within `es` of `s` — the
     transcendental budgets `esig`/`egelu`, since the activation derivatives have no IEEE spec). -/

@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Float.ViTFloatBridge
 import LeanMlir.Proofs.Float.ViTAttentionFloatBridge
 
@@ -26,6 +27,9 @@ that hypothesis: its *fresh-input rounding* is `sdpa_close` (§2c, proved); its 
 sensitivity* modulus (how `sdpa` responds to a perturbed `X` — softmax-through-`QKᵀ`
 Lipschitz) is the remaining open analysis. So `floatBridges_vitBlock` is the whole block
 *modulo* the one attention input-sensitivity constant, with everything else proved.
+⚠ Since 2026-09-08 the per-row lifts themselves (`perRowFlat`, `perRowFlatPR`, `perRowIdxFlat`)
+are defined in `Foundation/BackwardMaps.lean`; this file keeps their `FloatClose`/`FloatBridges`
+seams.
 -/
 
 namespace Proofs
@@ -35,17 +39,6 @@ open FloatModel
 -- ════════════════════════════════════════════════════════════════
 -- § The per-row seam: lift a per-token bridge to the whole sequence
 -- ════════════════════════════════════════════════════════════════
-
-/-- Apply a per-token map `f : Vec d → Vec d` to every row, on the flattened `Vec (n·d)`
-    (`Mat.unflatten` → per-row `f` → `Mat.flatten`). The whole-sequence form of a per-token
-    op (LayerNorm, the MLP sub-block), so it can `.comp` the cross-token attention. -/
-noncomputable def perRowFlat (n d : Nat) (f : Vec d → Vec d) : Vec (n * d) → Vec (n * d) :=
-  fun v => Mat.flatten (fun i => f (Mat.unflatten v i))
-
-/-- `perRowFlat` reads coordinatewise as the per-row map at `(row, col) = finProdFinEquiv.symm idx`. -/
-theorem perRowFlat_apply {n d : Nat} (f : Vec d → Vec d) (v : Vec (n * d)) (idx : Fin (n * d)) :
-    perRowFlat n d f v idx
-      = f (Mat.unflatten v (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2 := rfl
 
 /-- **The seam — `FloatClose.perRow`.** A per-token `FloatClose A B f fF L` lifts to the
     whole sequence `FloatClose A B (perRowFlat n d f) (perRowFlat n d fF) L` with the SAME
@@ -91,36 +84,6 @@ noncomputable def FloatBridgesTo.perRow (n : Nat) {d : Nat} {f fF : Vec d → Ve
 -- ════════════════════════════════════════════════════════════════
 -- § The per-token-input-aware seam (the BACKWARD peer of `perRowFlat`)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Per-token-input-aware flat lift.** Each row `r` gets its OWN per-token map `g r`,
-    rather than the single shared `f` of `perRowFlat`. The flat analogue of `rowwise`
-    (`Tensor.lean`): the seam the BACKWARD needs, because a per-token op's input-VJP
-    Jacobian depends on that token's saved activation (LayerNorm-back threads the saved
-    input `A r`, GELU-back threads the saved pre-activation), so one shared map cannot
-    carry it. The forward `perRowFlat f` is the special case `g = fun _ => f`. -/
-noncomputable def perRowFlatPR (n d : Nat) (g : Fin n → (Vec d → Vec d)) :
-    Vec (n * d) → Vec (n * d) :=
-  fun v => Mat.flatten (fun i => g i (Mat.unflatten v i))
-
-/-- `perRowFlatPR` reads coordinatewise as row `r`'s own map at `(row, col)`. -/
-theorem perRowFlatPR_apply {n d : Nat} (g : Fin n → (Vec d → Vec d))
-    (v : Vec (n * d)) (idx : Fin (n * d)) :
-    perRowFlatPR n d g v idx
-      = g (finProdFinEquiv.symm idx).1 (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-          (finProdFinEquiv.symm idx).2 := rfl
-
-/-- A `perRowFlatPR` over `g = fun _ => f` is the plain `perRowFlat f`. -/
-theorem perRowFlatPR_const {n d : Nat} (f : Vec d → Vec d) :
-    perRowFlatPR n d (fun _ => f) = perRowFlat n d f := rfl
-
-/-- **Composition of per-row families fuses** — `(perRowFlatPR g) ∘ (perRowFlatPR g')`
-    is `perRowFlatPR (fun r => g r ∘ g' r)` (each row is independent, so the two
-    per-row maps just compose row-by-row). The flat reflection of `rowwise`'s
-    `vjpMat_comp`. -/
-theorem perRowFlatPR_comp {n d : Nat} (g g' : Fin n → (Vec d → Vec d)) :
-    perRowFlatPR n d g ∘ perRowFlatPR n d g' = perRowFlatPR n d (fun r => g r ∘ g' r) := by
-  funext v
-  simp only [Function.comp, perRowFlatPR, Mat.unflatten_flatten]
 
 /-- **`FloatBridges.perRowPR`** — the per-row-family seam in bridge form. Each row's map
     `g r` float-bridges; so does the whole sequence, with the uniform magnitude `⊔ᵣ Bᵣ`
@@ -720,17 +683,6 @@ theorem floatBridges_vitBlockMH {h n dh dff : Nat} (M : FloatModel)
 -- reshape. Uniform budget across heads (the bound depends on w'/β/A, not the specific weights),
 -- exactly what `FloatClose.perRowIdx` needs.
 -- ════════════════════════════════════════════════════════════════
-
-/-- `perRow` with a per-block function `g : Fin n → (Vec d → Vec d)` (block hd gets `g hd`). -/
-noncomputable def perRowIdxFlat (n d : Nat) (g : Fin n → (Vec d → Vec d)) :
-    Vec (n * d) → Vec (n * d) :=
-  fun v => Mat.flatten (fun i => g i (Mat.unflatten v i))
-
-theorem perRowIdxFlat_apply {n d : Nat} (g : Fin n → (Vec d → Vec d)) (v : Vec (n * d))
-    (idx : Fin (n * d)) :
-    perRowIdxFlat n d g v idx
-      = g (finProdFinEquiv.symm idx).1 (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-          (finProdFinEquiv.symm idx).2 := rfl
 
 /-- **Indexed per-row seam.** If every block's map is `FloatClose A B (g i) (gF i) L` with the
     SAME `A`/`B`/`L`, the indexed per-row map is `FloatClose A B` with that same budget (blocks

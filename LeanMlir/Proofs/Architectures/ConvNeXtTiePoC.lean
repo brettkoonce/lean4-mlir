@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoC
 import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC
 import LeanMlir.Proofs.Foundation.MlpTrainStep
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoC
-import LeanMlir.Proofs.Float.ChannelLNFloatBridge
+import LeanMlir.Proofs.Architectures.ChannelLNBack
 
 /-! # PoC: the FULL [3,3,9,3] ConvNeXt-T §1a TIE — the whole net tied through the real forward
 

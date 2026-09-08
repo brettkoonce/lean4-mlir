@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Architectures.CifarCNN
 import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
 import LeanMlir.Proofs.Architectures.EfficientNetChainClose
-import LeanMlir.Proofs.Float.StridedConvBackFloatBridge
+import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Foundation.IR

@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
 
 /-! # ℝ→Float32 bridge for the 3×3/s2 MAX-POOL BACKWARD — the accumulating scatter
@@ -29,6 +30,9 @@ The float peer is the masked reduction `fl(Σ_k [σ(k) = idx] · dy k)` — the 
 `FloatModel.broadcastBackFlatF` makes for the squeeze-excite gate's spatial reduce, and the same
 `M.sum_close` Higham factor, at `n = c·h·w` (the length the kernel reduces over) but with the
 sum-of-magnitudes bounded by the fibre count rather than by the length.
+⚠ Since 2026-09-08 the ℝ map `maxPool3s2FlatBack`, its tie `maxPool3s2FlatBack_eq_vjp_backward`
+and the `Vec`-point VJP `maxPool3s2Flat_has_vjp_at_vec` are defined in
+`Foundation/BackwardMaps.lean`; this file keeps the `4` and the float side.
 -/
 
 namespace Proofs
@@ -93,18 +97,6 @@ theorem sum_ite_win3Row_le_two {h : Nat} (hi : Fin (2 * h)) :
 theorem sum_ite_win3Col_le_two {w : Nat} (wi : Fin (2 * w)) :
     ∑ wo : Fin w, (if ∃ b : Fin 3, win3ColInv wo b = wi then (1:ℝ) else 0) ≤ 2 :=
   sum_ite_win3Row_le_two wi
-
-/-- Row-major re-indexing of a `Fin (c*h*w)` sum as a triple sum — the shape every
-    `maxPool3s2` statement is written in. -/
-theorem sum_flat3 {c h w : Nat} (g : Fin (c*h*w) → ℝ) :
-    ∑ k : Fin (c*h*w), g k
-      = ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
-          g (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) := by
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin (c*h) × Fin w ≃ Fin (c*h*w)) g,
-      Fintype.sum_prod_type,
-      ← Equiv.sum_comp (finProdFinEquiv : Fin c × Fin h ≃ Fin (c*h))
-        (fun a => ∑ b : Fin w, g (finProdFinEquiv (a, b))),
-      Fintype.sum_prod_type]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The fibre bound: at most FOUR live terms
@@ -200,15 +192,6 @@ theorem maxPool3s2Back_mask_sum_abs_le {c h w : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § The leaf: definition, float peer, `FloatClose`, and the bridges
 -- ════════════════════════════════════════════════════════════════
-
-/-- **3×3/s2 max-pool backward in flat `Vec` space** — the accumulating scatter: each input cell
-    collects `dy` from every output whose 3×3 window selects it (at most four,
-    `maxPool3s2Back_mask_sum_abs_le`). Spelled as the masked reduction the kernel performs, which
-    is `maxPool3s2_has_vjp_at3`'s backward reindexed (`maxPool3s2FlatBack_eq_vjp_backward`). ⛔ The
-    2×2 peer `maxPoolFlatBack` is a LOOKUP and is not this function. -/
-noncomputable def maxPool3s2FlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
-    Vec (c*h*w) → Vec (c*(2*h)*(2*w)) :=
-  fun dy idx => ∑ k : Fin (c*h*w), (if maxPool3s2LocalReindex x k = idx then dy k else 0)
 
 /-- **The float 3×3/s2 pool backward** — the rounded masked reduction `fl(Σ [σ(k) = idx]·dy k)`.
     The peer of `FloatModel.broadcastBackFlatF`; `maxPoolFlatBack`'s float peer is ITSELF (a
@@ -309,58 +292,5 @@ noncomputable def floatBridgesTo_maxPool3s2Back {c h w : Nat} (M : FloatModel)
    fun A e => ((1 + M.u) ^ (c*h*w + 1) - 1) * (4 * A) + 4 * e,
    fun A hA => ⟨(floatClose_maxPool3s2Back M x A).cod_nonneg hA (by positivity),
      floatClose_maxPool3s2Back M x A⟩⟩
-
--- ════════════════════════════════════════════════════════════════
--- § The certified tie
--- ════════════════════════════════════════════════════════════════
-
-/-- **3×3/s2 pool input-VJP leaf tie (smooth point).** `maxPool3s2FlatBack x` IS the certified
-    pool input-VJP `(maxPool3s2Flat_has_vjp_at x h_smooth).backward`: the certified backward is the
-    triple sum `∑_{co,ho,wo} [σ(co,ho,wo) = idx]·dy(co,ho,wo)`, and this is that sum re-indexed
-    row-major (`sum_flat3`). The 3×3/s2 peer of `maxPoolFlatBack_eq_vjp_backward`. -/
-theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
-    (h_smooth : MaxPool3s2Smooth x) :
-    maxPool3s2FlatBack x = (maxPool3s2Flat_has_vjp_at x h_smooth).backward := by
-  funext dy idx
-  show (∑ k : Fin (c*h*w), (if maxPool3s2LocalReindex x k = idx then dy k else 0)) = _
-  rw [sum_flat3 (fun k => if maxPool3s2LocalReindex x k = idx then dy k else 0)]
-  have hidx : finProdFinEquiv
-      (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1,
-        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
-        (finProdFinEquiv.symm idx).2) = idx := by
-    rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
-  simp only [maxPool3s2Flat_has_vjp_at, hasVJPAt3_to_hasVJPAt, maxPool3s2_has_vjp_at3,
-    Tensor3.unflatten]
-  refine Finset.sum_congr rfl fun co _ => Finset.sum_congr rfl fun ho _ =>
-    Finset.sum_congr rfl fun wo _ => ?_
-  rw [hidx]
-  split <;> simp
-
-/-- ⭐ **The pool VJP at a `Vec` point, with its backward DEFINITIONALLY `maxPool3s2FlatBack`.**
-    `maxPool3s2Flat_has_vjp_at` is stated at `Tensor3.flatten x`, and a whole-net chain needs it at
-    the stem's `Vec` output. ⛔ Transporting with `▸`/`rwa` would work for the TYPE and leave a
-    `backward` field behind an `Eq.mpr` that will not reduce — the `FloatBridgesTo.ofEq` trap
-    (`planning/archive/float_budget_numbers_log.md` §3.5.2 item 5) one tier down. Building the structure
-    field-by-field instead keeps `backward` the leaf itself, which is what lets the whole-net tie
-    close by `rfl` at this stage rather than by a rewrite. -/
-noncomputable def maxPool3s2Flat_has_vjp_at_vec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))
-    (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
-    HasVJPAt (maxPool3s2Flat c h w) v where
-  backward := maxPool3s2FlatBack (Tensor3.unflatten v)
-  correct := by
-    intro dy i
-    have hc := (maxPool3s2Flat_has_vjp_at (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))
-      h_smooth).correct dy i
-    rw [← maxPool3s2FlatBack_eq_vjp_backward _ h_smooth] at hc
-    rwa [Tensor3.flatten_unflatten] at hc
-
-/-- The `Vec`-point differentiability companion of `maxPool3s2Flat_has_vjp_at_vec`. -/
-theorem maxPool3s2Flat_differentiableAt_vec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))
-    (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w)))
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
-    DifferentiableAt ℝ (maxPool3s2Flat c h w) v := by
-  have h := maxPool3s2Flat_differentiableAt (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))
-    h_smooth hc hh hw
-  rwa [Tensor3.flatten_unflatten] at h
 
 end Proofs

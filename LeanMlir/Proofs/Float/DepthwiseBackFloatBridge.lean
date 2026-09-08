@@ -23,6 +23,9 @@ The **strided** depthwise backward (mnv2's stride-2 inverted-residual downsample
 `depthwiseFlatBack ∘ decimateBack` — the zero-upsample scatter (`StridedConvBackFloatBridge`,
 exact, modulus `id`) then the reversed-kernel depthwise conv — the depthwise twin of
 `floatBridges_flatConvStride2Back`. Both `.comp` over already-bridged pieces.
+⚠ Since 2026-09-08 the ℝ maps (`dwReverse`, `depthwiseFlatBack`, `depthwiseStride2FlatBack`,
+`depthwiseStride2FlatXlaBack`) are defined in `Foundation/BackwardMaps.lean`; this file is their
+float side only.
 -/
 
 namespace Proofs
@@ -30,14 +33,6 @@ namespace Proofs
 -- ════════════════════════════════════════════════════════════════
 -- § The spatially-reversed depthwise kernel
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Spatial reversal of a depthwise kernel** — reverse both spatial axes (`kRev k = kH−1−k`),
-    keeping the channel axis (depthwise has no cross-channel mixing, so no transpose, unlike the
-    regular conv's `reverseSwap`). The kernel the codegen feeds to the backward depthwise
-    `stablehlo.convolution` (`reverse [2,3]`, `feature_group_count = c`). -/
-noncomputable def dwReverse {c kH kW : Nat} (W : DepthwiseKernel c kH kW) :
-    DepthwiseKernel c kH kW :=
-  fun ch kh kw => W ch (Proofs.IR.kRev kh) (Proofs.IR.kRev kw)
 
 /-- Reversing the spatial axes leaves the uniform kernel-magnitude bound unchanged. -/
 theorem dwReverse_abs_le {c kH kW : Nat} {W : DepthwiseKernel c kH kW} {w' : ℝ}
@@ -47,14 +42,6 @@ theorem dwReverse_abs_le {c kH kW : Nat} {W : DepthwiseKernel c kH kW} {w' : ℝ
 -- ════════════════════════════════════════════════════════════════
 -- § Depthwise input-VJP: a reversed-kernel forward depthwise conv (FREE)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Depthwise conv backward in flat `Vec` space** — `dx = depthwise_has_vjp3.backward W dy`. The
-    emitted reversed-kernel depthwise convolution denotes a forward `depthwiseConv2d (dwReverse W) 0`,
-    which in flat space is `depthwiseFlat (dwReverse W) 0`. The backward of `depthwiseFlat W b`
-    (`Vec (c·h·w) → Vec (c·h·w)`, channels preserved). -/
-noncomputable def depthwiseFlatBack {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) :
-    Vec (c * h * w) → Vec (c * h * w) :=
-  depthwiseFlat (h := h) (w := w) (dwReverse W) (fun _ => 0)
 
 /-- **The depthwise conv input-VJP float-bridges** — `depthwiseFlatBack W = depthwiseFlat
     (dwReverse W) 0`, so this is `floatBridges_depthwise` at the spatially-reversed kernel
@@ -85,15 +72,6 @@ noncomputable def floatBridgesTo_depthwiseBack {c h w kH kW : Nat} (M : FloatMod
 -- § The strided depthwise backward: `depthwiseFlatBack ∘ decimateBack`
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Strided (stride-2) depthwise conv backward in flat `Vec` space** — the input-VJP of
-    `depthwiseStride2Flat W b = decimateFlat ∘ depthwiseFlat`: zero-upsample the cotangent
-    (`decimateBack`, channels preserved), then run the reversed-kernel depthwise conv
-    (`depthwiseFlatBack`). `Vec (c·h·w) → Vec (c·2h·2w)`. The depthwise twin of
-    `flatConvStride2Back`. -/
-noncomputable def depthwiseStride2FlatBack {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) :
-    Vec (c * h * w) → Vec (c * (2 * h) * (2 * w)) :=
-  depthwiseFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateBack c h w
-
 /-- **The strided depthwise input-VJP float-bridges.** One `.comp`: the decimation scatter
     (`floatBridges_decimateBack`, exact, modulus `id`) then the reversed-kernel depthwise conv
     (`floatBridges_depthwiseBack`). The strided sibling of `floatBridges_depthwiseBack`; unlocks the
@@ -122,15 +100,6 @@ noncomputable def floatBridgesTo_depthwiseStride2Back {c h w kH kW : Nat} (M : F
 -- ════════════════════════════════════════════════════════════════
 -- § The XLA-`SAME` strided depthwise backward: `depthwiseFlatBack ∘ decimateOddBack`
 -- ════════════════════════════════════════════════════════════════
-
-/-- **XLA-`SAME` stride-2 depthwise conv backward in flat `Vec` space** — the input-VJP of
-    `depthwiseStride2FlatXla W b = decimateOddFlat ∘ depthwiseFlat` (`Depthwise.lean`): scatter the
-    cotangent onto the ODD positions, then the reversed-kernel depthwise conv. The odd-phase peer
-    of `depthwiseStride2FlatBack`; tied to the certified VJP by
-    `depthwiseStride2FlatXlaBack_eq_vjp_backward` (`DepthwiseBackCertifiedTie.lean`). -/
-noncomputable def depthwiseStride2FlatXlaBack {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) :
-    Vec (c * h * w) → Vec (c * (2 * h) * (2 * w)) :=
-  depthwiseFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateOddBack c h w
 
 /-- **The XLA-`SAME` strided depthwise input-VJP float-bridges.** -/
 theorem floatBridges_depthwiseStride2XlaBack {c h w kH kW : Nat} (M : FloatModel)

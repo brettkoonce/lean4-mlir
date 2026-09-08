@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
-import LeanMlir.Proofs.Foundation.ResNet34
+import LeanMlir.Proofs.Foundation.BackwardMaps
 
 /-! # ℝ→Float32 bridge for the STRIDED-conv backward (r34 down-blocks + stem)
 
@@ -19,6 +19,9 @@ float (pure data movement, like `gather`/`reluMaskBack`/`maxPoolBack`), magnitud
 
 This unlocks the r34 **down-blocks** (strided body + projection) and the **stem** (7×7 stride-2),
 the pieces `Resnet34BackFloatBridge`'s identity-block left open.
+⚠ Since 2026-09-08 the ℝ maps (`decimateBack`, `decimateOddBack`, `flatConvStride2Back`,
+`flatConvStride2XlaBack`, `flatConvStride4Back`) and their `_eq_vjp` leaf ties are defined in
+`Foundation/BackwardMaps.lean`; this file is their float side only.
 -/
 
 namespace Proofs
@@ -29,18 +32,6 @@ open Proofs.IR
 -- § The decimation VJP: the zero-upsampling scatter
 --   (`decimateIdx_injective` is reused from `ResNet34`)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Decimation backward (zero-upsampling scatter)** — the certified `decimateFlat` VJP: route
-    `dy k` to the even position `decimateIdx k`, 0 elsewhere. `Vec (oc·h·w) → Vec (oc·2h·2w)`. -/
-noncomputable def decimateBack (oc h w : Nat) (dy : Vec (oc * h * w)) :
-    Vec (oc * (2 * h) * (2 * w)) :=
-  fun idx => ∑ k : Fin (oc * h * w), (if idx = decimateIdx oc h w k then (1 : ℝ) else 0) * dy k
-
-/-- `decimateBack` is exactly the certified `decimateFlat` VJP backward (faithful by definition —
-    the VJP backward ignores its primal argument). -/
-theorem decimateBack_eq_vjp (oc h w : Nat) (v : Vec (oc * (2 * h) * (2 * w)))
-    (dy : Vec (oc * h * w)) :
-    decimateBack oc h w dy = (decimateFlat_has_vjp oc h w).backward v dy := rfl
 
 /-- The scatter as a filtered sum: `decimateBack dy idx = Σ_{k : idx = decimateIdx k} dy k`. -/
 theorem decimateBack_eq_filter (oc h w : Nat) (dy : Vec (oc * h * w))
@@ -116,13 +107,6 @@ noncomputable def floatBridgesTo_decimateBack (oc h w : Nat) :
 -- § The strided-conv backward: `convFlatBack ∘ decimateBack`
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Strided (stride-2) conv backward in flat `Vec` space** — the rendered input-VJP of
-    `flatConvStride2 W b = decimateFlat ∘ flatConv`: zero-upsample the cotangent (`decimateBack`),
-    then run the reversed-kernel conv (`convFlatBack`). `Vec (oc·h·w) → Vec (ic·2h·2w)`. -/
-noncomputable def flatConvStride2Back {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) :
-    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
-  convFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateBack oc h w
-
 /-- **The strided-conv input-VJP float-bridges.** One `.comp`: the decimation scatter
     (`floatBridges_decimateBack`, exact, modulus `id`) then the reversed-kernel conv
     (`floatBridges_convBack`). The strided sibling of `floatBridges_convBack`; unlocks the r34
@@ -150,43 +134,6 @@ noncomputable def floatBridgesTo_flatConvStride2Back {ic oc h w kH kW : Nat} (M 
 -- ════════════════════════════════════════════════════════════════
 -- § The odd-decimation VJP (the second scatter in the stride-4 stem)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **`decimateOddIdx` is injective** — distinct output cells land at distinct ODD spatial
-    positions. Same proof as `decimateIdx_injective` (`ResNet34`): the `2·v+1` doublings are
-    injective (`omega`), then peel the `finProdFinEquiv`s. -/
-theorem decimateOddIdx_injective (oc h w : Nat) :
-    Function.Injective (decimateOddIdx oc h w) := by
-  intro k₁ k₂ heq
-  simp only [decimateOddIdx] at heq
-  obtain ⟨hA, hB⟩ := Prod.mk.inj (finProdFinEquiv.injective heq)
-  have hp2 : (finProdFinEquiv.symm k₁).2 = (finProdFinEquiv.symm k₂).2 := by
-    have : 2 * (finProdFinEquiv.symm k₁).2.val + 1 = 2 * (finProdFinEquiv.symm k₂).2.val + 1 :=
-      Fin.mk.inj_iff.mp hB
-    exact Fin.ext (by omega)
-  obtain ⟨hA1, hA2⟩ := Prod.mk.inj (finProdFinEquiv.injective hA)
-  have hq2 : (finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1).2
-           = (finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1).2 := by
-    have : 2 * (finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1).2.val + 1
-         = 2 * (finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1).2.val + 1 :=
-      Fin.mk.inj_iff.mp hA2
-    exact Fin.ext (by omega)
-  have hq : finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1
-          = finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1 := Prod.ext hA1 hq2
-  have hp1 : (finProdFinEquiv.symm k₁).1 = (finProdFinEquiv.symm k₂).1 :=
-    finProdFinEquiv.symm.injective hq
-  exact finProdFinEquiv.symm.injective (Prod.ext hp1 hp2)
-
-/-- **Odd-decimation backward (zero-upsampling scatter at the odd positions)** — the certified
-    `decimateOddFlat` VJP: route `dy k` to the odd position `decimateOddIdx k`, 0 elsewhere.
-    `Vec (oc·h·w) → Vec (oc·2h·2w)`. The odd-position sibling of `decimateBack`. -/
-noncomputable def decimateOddBack (oc h w : Nat) (dy : Vec (oc * h * w)) :
-    Vec (oc * (2 * h) * (2 * w)) :=
-  fun idx => ∑ k : Fin (oc * h * w), (if idx = decimateOddIdx oc h w k then (1 : ℝ) else 0) * dy k
-
-/-- `decimateOddBack` is exactly the certified `decimateOddFlat` VJP backward (by definition). -/
-theorem decimateOddBack_eq_vjp (oc h w : Nat) (v : Vec (oc * (2 * h) * (2 * w)))
-    (dy : Vec (oc * h * w)) :
-    decimateOddBack oc h w dy = (decimateOddFlat_has_vjp oc h w).backward v dy := rfl
 
 /-- The odd scatter as a filtered sum. -/
 theorem decimateOddBack_eq_filter (oc h w : Nat) (dy : Vec (oc * h * w))
@@ -255,16 +202,6 @@ noncomputable def floatBridgesTo_decimateOddBack (oc h w : Nat) :
 -- § The stride-4 (patchify) conv backward: `convFlatBack ∘ decimateOddBack ∘ decimateBack`
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Stride-4 patchify conv backward in flat `Vec` space** — the input-VJP of
-    `flatConvStride4 W b = decimateFlat ∘ decimateOddFlat ∘ flatConv`: zero-upsample the cotangent
-    twice (`decimateBack` then `decimateOddBack`), then run the reversed-kernel conv (`convFlatBack`).
-    `Vec (oc·h·w) → Vec (ic·4h·4w)`. The ConvNeXt 4×4/s4 stem's backward. -/
-noncomputable def flatConvStride4Back {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) :
-    Vec (oc * h * w) → Vec (ic * (2 * (2 * h)) * (2 * (2 * w))) :=
-  convFlatBack (h := 2 * (2 * h)) (w := 2 * (2 * w)) W
-    ∘ decimateOddBack oc (2 * h) (2 * w)
-    ∘ decimateBack oc h w
-
 /-- **The stride-4 conv input-VJP float-bridges.** Two decimation scatters (`floatBridges_decimateBack`
     then `floatBridges_decimateOddBack`, both exact / modulus `id`) then the reversed-kernel conv
     (`floatBridges_convBack`). The patchify sibling of `floatBridges_flatConvStride2Back`; unlocks the
@@ -294,17 +231,6 @@ noncomputable def floatBridgesTo_flatConvStride4Back {ic oc h w kH kW : Nat} (M 
 -- ════════════════════════════════════════════════════════════════
 -- § The XLA-`SAME` stride-2 conv backward: `convFlatBack ∘ decimateOddBack`
 -- ════════════════════════════════════════════════════════════════
-
-/-- **XLA-`SAME` stride-2 conv backward in flat `Vec` space** — the input-VJP of
-    `flatConvStride2Xla W b = decimateOddFlat ∘ flatConv` (`StridedConv.lean`): scatter the
-    cotangent onto the ODD positions (`decimateOddBack`), then run the reversed-kernel conv
-    (`convFlatBack`). `Vec (oc·h·w) → Vec (ic·2h·2w)`. The odd-phase peer of `flatConvStride2Back`
-    and the map the emitted `[p+1, p-1]` transposed-conv pad denotes (`StableHLO.lean`,
-    `depthwiseStridedXlaBack`'s note on the direction); the leaf tie
-    `flatConvStride2XlaBack_eq_vjp_backward` (`Resnet34BackCertifiedTie.lean`) is what says so. -/
-noncomputable def flatConvStride2XlaBack {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) :
-    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
-  convFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateOddBack oc h w
 
 /-- **The XLA-`SAME` stride-2 conv input-VJP float-bridges** — `floatBridges_flatConvStride2Back`
     with the odd scatter; same envelope, since a scatter is exact. -/

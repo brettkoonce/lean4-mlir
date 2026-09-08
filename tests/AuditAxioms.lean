@@ -115,6 +115,8 @@ import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
+import LeanMlir.Proofs.Foundation.BackwardMaps
+import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
 import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge

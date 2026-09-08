@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.ResNet34FullB
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
-import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
+import LeanMlir.Proofs.Foundation.BackwardMaps
 
 /-! # ResNet-34's whole-net input-VJP at TRUE BATCH-NORM (T1, the VJP half)
 

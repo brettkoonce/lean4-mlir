@@ -90,6 +90,28 @@ Three Codegen files are float-side and only Float files consume them: `BnInputBr
 `Resnet34BlockBridge` (imported by `FloatComposeBridge`), `BnBackComposeBridge`. They go with the
 float side unless the model core needs them.
 
+## 2b. Progress
+
+* **Step 1 DONE 2026-09-08** (staged on `cleanup/2026-09-08-unify-and-float-chop`). Two leaves, not
+  one: `Foundation/BackwardMaps.lean` (the generic per-op maps — `reluMaskBack`, `diagBack`, the
+  `perRow*` lifts, `maxPoolFlatBack`, `convFlatBack`, `decimateBack`/`decimateOddBack` with their
+  `_eq_vjp` ties and `decimateOddIdx_injective`, the three strided-conv and three depthwise backwards,
+  `maxPool3s2FlatBack` + `sum_flat3` + its tie + the `Vec`-point VJP pair) and
+  `Architectures/ChannelLNBack.lean` (`rowLNVecFlatBack`, `chanLNTensor3Back`). The split is import
+  hygiene: one leaf would have pulled seven ConvNeXt/ViT modules into every ResNet tie's closure.
+  ⚠ The doc's "put the pool VJP lemmas in `Architectures/MaxPool3s2.lean`" was dropped — that file
+  has 172 downstream modules and the addition would have rebuilt them all; the leaf rebuilds nothing.
+  The `perRow*` lifts came out of `ViTBlockFloatBridge` now (not at step 6) because
+  `rowLNVecFlatBack` needs `perRowIdxFlat`. The `FloatClose` ingredients (`reluMaskBack_abs_le`,
+  `decimateBack_eq_filter`, the 3×3/s2 fibre count `maxPool3s2Back_mask_sum_abs_le`, …) stayed with
+  the float side and die with it at step 7. Re-pointed: `DepthwiseBackCertifiedTie`, `ResNet34FullBVJP`,
+  `ConvNeXtTiePoC`, `Resnet34BackCertifiedTie` (its strided import only).
+* **Bucket three, checked at step 1:** no kept non-test file uses any ℝ name from `SEBackFloatBridge`,
+  `SoftmaxBackFloatBridge`, `PatchEmbedBackFloatBridge`, the five `Bn*FloatBridge` or
+  `Resnet34WholeFloatBridge` — `seBack*`, `softmaxRowBack*`, `patchEmbedBack*` are consumed only by the
+  Float net chains, so they move with their nets (SE at step 4, softmax/patch-embed at step 6), not
+  into the generic leaf.
+
 ## 3. Order of work
 
 Net by net, each a commit, each with `git diff verified_mlir/` empty (no artifact can move):

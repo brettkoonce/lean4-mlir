@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Architectures.ConvNeXtChannelLN
 import LeanMlir.Proofs.Float.BnPerChannelBackFloatBridge
 import LeanMlir.Proofs.Float.LinBackFloatBridge
@@ -44,6 +45,8 @@ equals `(chanLNTensor3_has_vjp …).backward`, so this file's closeness is close
 **certified** gradient. The §B block ties (`cnxBodyWithChanLNBack_eq_vjp`, `cnxBlockChBack_eq_vjp`)
 sit on top of it, and note where the LN slot's tie had to come from: the scalar block tie could pin
 an abstract `lnB` to whatever it liked, while the channel-LN one had to earn it.
+⚠ Since 2026-09-08 the ℝ backward maps `rowLNVecFlatBack` and `chanLNTensor3Back` are defined in
+`Architectures/ChannelLNBack.lean`; this file is their float side only.
 -/
 
 namespace Proofs
@@ -190,14 +193,6 @@ theorem floatBridges_chanLNTensor3 {c h w : Nat} (M : FloatModel) {ε : ℝ} (γ
 -- § The BACKWARD peer (same conjugation, the row backward in the middle)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The rowwise vector-LN input-VJP.** Per spatial row: scale the cotangent by the per-channel
-    `γ` (`layerScale`'s adjoint is `diagBack γ`), then the consolidated three-term `bn_grad_input`
-    at `γ = 1` over that row's `c` channels (LN's adjoint = BN's, `layerNormForward = bnForward`).
-    The `+β` translation contributes the identity, so it does not appear. -/
-noncomputable def rowLNVecFlatBack (s c : Nat) (ε : ℝ) (γ : Vec c) (X : Vec (s * c)) :
-    Vec (s * c) → Vec (s * c) :=
-  perRowIdxFlat s c (fun r => bn_grad_input c ε 1 (Mat.unflatten X r) ∘ diagBack γ)
-
 /-- **The rowwise vector-LN backward float-bridges.** `FloatClose.perRowIdx` of the per-row
     composite `floatClose_diagBack` (the `γ` scale, at a supplied float `fγ` within `egam`) then
     `floatClose_bnBack` (the three-term input gradient at that row's saved activation, supplied
@@ -223,23 +218,6 @@ theorem floatBridges_rowLNVecFlatBack {s c : Nat} (M : FloatModel) {ε : ℝ} (�
 
 -- `chanLNRows` (the `[h·w, c]` row view) moved to `ConvNeXtChannelLN.lean` when the channel-LN
 -- γ/β parameter certs landed there: it is the layout both the certs and this file read from.
-
-/-- **The channel-LN input-VJP** (as a function of the cotangent, at a saved input `x`) — the exact
-    reverse of `chanLNTensor3`'s five factors. A permutation's adjoint is its inverse permutation,
-    so the conjugation comes back unchanged and only the middle flips to `rowLNVecFlatBack`, read
-    at the TRANSPOSED saved input (the row backward needs its own row's activation).
-
-    Hand-composed in the sense of `cnxBlockBodyBack`, but **tied**: it equals
-    `(chanLNTensor3_has_vjp …).backward` by `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`
-    (§B). Note it takes no `β` — the `+β` translation's VJP is the identity, and the tie proves the
-    certified backward is β-free too. -/
-noncomputable def chanLNTensor3Back (c h w : Nat) (ε : ℝ) (γ : Vec c) (x : Vec (c * h * w)) :
-    Vec (c * h * w) → Vec (c * h * w) :=
-  reassocBack c h w ∘
-    transposeFlat (h * w) c ∘
-    rowLNVecFlatBack (h * w) c ε γ (chanLNRows c h w x) ∘
-    transposeFlat c (h * w) ∘
-    reassocFwd c h w
 
 /-- **The channel-LN backward float-bridges** — the forward chain's shape with
     `floatBridges_rowLNVecFlatBack` in the middle. This is what discharges the abstract

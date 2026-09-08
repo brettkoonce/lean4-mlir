@@ -705,6 +705,15 @@ lean_lib «Certs» where
              -- reduction_close / sub_close' helpers. The shared backward op every deep
              -- net's gradient folds (r34/mnv2/enet/convnext LN/vit LN).
              `LeanMlir.Proofs.Float.BnBackFloatBridge,
+             -- The per-op ℝ backward maps the certified backward ties are stated about
+             -- (reluMaskBack, diagBack, the perRow* lifts, convFlatBack, maxPoolFlatBack, the
+             -- decimateBack/decimateOddBack scatters and the strided/depthwise backwards built
+             -- on them, maxPool3s2FlatBack with its VJP at a Vec point). One leaf, no float
+             -- content; moved out of the *FloatBridge files 2026-09-08 (float_second_pass.md).
+             `LeanMlir.Proofs.Foundation.BackwardMaps,
+             -- The channel-LayerNorm backward (rowLNVecFlatBack, chanLNTensor3Back) — ConvNeXt's
+             -- and ViT's LN input-VJP, the ℝ map chanLNTensor3Back_eq_chanLN_vjp is about.
+             `LeanMlir.Proofs.Architectures.ChannelLNBack,
              -- A3 backward fold: the linear input-VJP (dx = Wᵀ·dy = bias-free dense over the
              -- transpose, reuses floatBridges_dense) + the exact ReLU-back selectPos mask
              -- (floatBridges_reluMaskBack) compose via FloatBridges.comp into a whole-net

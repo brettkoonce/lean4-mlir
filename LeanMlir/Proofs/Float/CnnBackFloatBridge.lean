@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Foundation.CnnChainClose
 
@@ -27,6 +28,8 @@ Capstone `cifar8_grad_floatBridges`: the whole 8-conv CIFAR input-gradient VJP a
 float-bridges in one `.comp` chain over `convFlatBack` ×8 / `maxPoolFlatBack` ×4 /
 `reluMaskBack` ×10 / `dense (transpose ·) 0` ×3 — the exact reverse of `cifarCnn8Forward`, each
 op replaced by its backward. Closes under `[propext, Classical.choice, Quot.sound]`.
+⚠ Since 2026-09-08 the ℝ maps `maxPoolFlatBack` and `convFlatBack` are defined in
+`Foundation/BackwardMaps.lean`; this file is their float side only.
 -/
 
 namespace Proofs
@@ -36,14 +39,6 @@ open Proofs.IR
 -- ════════════════════════════════════════════════════════════════
 -- § 1a. MaxPool backward: the exact `select_and_scatter` (masked gather)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **MaxPool backward in flat `Vec` space** — `maxPoolBackDenote x` crossing the flatten
-    boundary (`Vec (c·h·w) → Vec (c·(2h)·(2w))`): scatter the pooled cotangent back to each
-    window's arg-max input cell, 0 elsewhere. The saved input `x` fixes the arg-max map (the
-    smooth-point assumption). The backward of `maxPoolFlat c h w`. -/
-noncomputable def maxPoolFlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
-    Vec (c * h * w) → Vec (c * (2*h) * (2*w)) :=
-  fun dy => Tensor3.flatten (maxPoolBackDenote x (Tensor3.unflatten dy))
 
 /-- The scatter never increases magnitude: each output cell is some `dy` entry or 0. -/
 theorem maxPoolBackDenote_abs_le {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
@@ -96,14 +91,6 @@ noncomputable def floatBridgesTo_maxPoolBack {c h w : Nat} (x : Tensor3 c (2*h) 
 -- ════════════════════════════════════════════════════════════════
 -- § 1b. Conv input-VJP: a reversed-kernel forward conv = `flatConv (reverseSwap W) 0`
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Conv backward in flat `Vec` space** — `dx = convBackDenote W dy`. The emitted
-    `convolution(dy, reverse(transpose(W)))` denotes a forward `conv2d (reverseSwap W) 0`, which
-    in flat space is `flatConv (reverseSwap W) 0`. The backward of `flatConv W b`
-    (`Vec (oc·h·w) → Vec (ic·h·w)`). -/
-noncomputable def convFlatBack {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) :
-    Vec (oc * h * w) → Vec (ic * h * w) :=
-  flatConv (h := h) (w := w) (reverseSwap W) (fun _ => 0)
 
 /-- **The conv input-VJP float-bridges** — `convFlatBack W = flatConv (reverseSwap W) 0`, so this
     is `floatBridges_flatConv` at the reversed kernel (`|reverseSwap W o c kh kw| =
