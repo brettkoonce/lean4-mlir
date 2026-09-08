@@ -18,9 +18,10 @@ smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
 `batchMap_has_vjp_at` (4.1c's field-by-field lift, `BatchMapVJPAt.lean`) over
 `HasVJP.toHasVJPAt` at each row — no smooth-point hypothesis anywhere, only `0 < ε`.
 
-1. `batchMap_comp` — `batchMap B (g ∘ f) = batchMap B g ∘ batchMap B f`, the lemma the shape
-   check needs and the reason the chain saves its activations stage by stage: the two spellings
-   agree only up to `finProdFinEquiv.symm_apply_apply`, which is not `rfl`.
+1. `batchMap_comp` (`BatchMapVJPAt.lean`, shared with ConvNeXt's batched tie) — `batchMap B
+   (g ∘ f) = batchMap B g ∘ batchMap B f`, the lemma the shape check needs and the reason the
+   chain saves its activations stage by stage: the two spellings agree only up to
+   `finProdFinEquiv.symm_apply_apply`, which is not `rfl`.
 2. The four batched leaf ties, one per stage. The patch-embed one is `rfl` (its per-example tie
    is); the other three are `funext` to one example, one rewrite of the per-example tie at that
    example's row (`vitTowerBackK_eq_vjp`, `vitFinalLNBack_eq_vjp`,
@@ -32,38 +33,15 @@ smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
    `batchMap B vitForwardKV`, by `vitForwardKV_eq_chain` and three `batchMap_comp`s — and
    `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`, the tie carried to the committed GLOBAL
    witness `batchMap_has_vjp (vitForwardKV …)` through `HasVJPAt.backward_unique_of_eq`
-   (`batchMap_has_vjp` is `▸`-transported, so its `.backward` does not reduce; uniqueness is the
-   escape every whole-net tie in this repo takes), plus the `∑ pdiv` reading.
+   (`BatchMapVJPAt.lean`; `batchMap_has_vjp` is `▸`-transported, so its `.backward` does not
+   reduce; uniqueness is the escape every whole-net tie in this repo takes), plus the `∑ pdiv`
+   reading.
 5. `vitTinyInputGradB_eq_vitTiny_vjp` — the capstone at ViT-Tiny's literal dims, `B` a binder.
 -/
 
 namespace Proofs
 
 open scoped BigOperators
-
--- ═════════════════════════════════════════════════
--- § `batchMap` distributes over composition
--- ═════════════════════════════════════════════════
-
-/-- **`batchMap B (g ∘ f) = batchMap B g ∘ batchMap B f`.** Both sides read example `p.1`'s slice
-    of the input and run `g ∘ f` on it; peeling the inner lift off at one example is
-    `batchSlice_batchMap`. -/
-theorem batchMap_comp (B : Nat) {a b c : Nat} (f : Vec a → Vec b) (g : Vec b → Vec c) :
-    StableHLO.batchMap B (g ∘ f) = StableHLO.batchMap B g ∘ StableHLO.batchMap B f := by
-  funext x idx
-  show g (f (StableHLO.batchSlice B a x (finProdFinEquiv.symm idx).1)) (finProdFinEquiv.symm idx).2
-    = g (StableHLO.batchSlice B b (StableHLO.batchMap B f x) (finProdFinEquiv.symm idx).1)
-        (finProdFinEquiv.symm idx).2
-  rw [StableHLO.batchSlice_batchMap]
-
-/-- Two `HasVJPAt` witnesses for EQUAL maps at one point have the same backward — the pointwise
-    peer of `HasVJP.backward_unique_of_eq`, through `.correct` rather than a transport. -/
-theorem HasVJPAt.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} {x : Vec m}
-    (hfg : f = g) (h₁ : HasVJPAt f x) (h₂ : HasVJPAt g x) (dy : Vec n) :
-    h₁.backward dy = h₂.backward dy := by
-  subst hfg
-  funext i
-  rw [h₁.correct, h₂.correct]
 
 -- ═════════════════════════════════════════════════
 -- § The four batched stage witnesses, and their leaf ties

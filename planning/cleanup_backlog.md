@@ -329,3 +329,33 @@ first; both nets then share them. ⚠ `convNextForwardTCh` is stated at Imagenet
 and literal 224² dims, so its batched tie would be too; generalise the forward and its VJP in the
 class count in the same session, before the lift, so the tie covers the 1000-class artifacts.
 About 300 lines and one corpus rebuild.
+
+**DONE 2026-09-08.** `ConvNeXtWholeBackCertifiedTieB.lean` (≈560 lines): the eleven batched saved
+activations `cnxSavedB0 … cnxSavedB10` (stage by stage), twelve batched stage witnesses, the leaf
+ties, the apex `convNextForwardTChB_has_vjp_at` (eleven `vjp_comp_diff_at`s), the tie, the shape
+check `convNextForwardTChB_eq_chain` (`simp only [batchMap_comp]` then `rfl`), the transfer
+`convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp` through `HasVJPAt.backward_unique_of_eq`,
+the `∑ pdiv` reading on `convNextForwardTCh` itself, and `convnextImagenetInputGradB_eq_vjp` at
+`nC = 1000` with `B` a binder — every one on the three axioms, only the 23 LN positivities. The
+chain `convnextInputGradB` sits beside the per-example one in `ConvNeXtBackChains.lean` in SLOT
+form (each saved-activation slot a `saved ↦ backward` family plus its batched saved activation),
+because a concrete chain would need the tie file's wrappers and the import goes the other way.
+Prerequisites landed as planned: `batchMap_comp` and `HasVJPAt.backward_unique_of_eq` moved into
+`BatchMapVJPAt.lean` (three importers, ViT's file keeps using them); `CnxTWeightsCh` is
+`CnxTWeightsCh (nC : Nat)` and `convNextForwardTCh`, its VJP, chain, graph and faithfulness are
+generic in the class count (`SpecVJP` pins `CnxTWeightsCh 10` at the committed spec; nothing
+else named the structure), plus the new `convNextForwardTCh_differentiable` beside the VJP; the
+per-example tie's `cnxDn1 … cnxDn3` / `cnxLNh` wrappers, `cnxD0` / `cnxV0` and the four normalised
+leaf ties went public because the batched file lifts exactly those spellings.
+⚠ Two things the ViT template did NOT predict, both the "two spellings of one numeral" rule one
+batch index over: (i) a batched leaf tie whose `rfl` runs at a LITERAL `96·56·56` or `192·28·28`
+recurses past `maxRecDepth 100000` (the `384·14·14` one squeaks through), so the channel-LN and
+downsample leaves are proven at variable dims (`cnxChanLNBackB_eq_vjp`, `cnxDownBackB_eq_vjp`)
+and instantiated by term; (ii) the twelve-level closing `rfl` times out at 10⁶ heartbeats
+(the unifier looks for the unfolding through the concrete witnesses first), so the apex is peeled
+by the one-step `vjp_comp_diff_at_fst_backward` under `simp only`. Registered: lakefile `Certs`
+root (202 roots, 236 modules), audit import + 19 prints (the two hoisted lemmas' prints moved to
+the `BatchMapVJPAt` section; 1773 prints), the yaml's T6 row and paragraph. Gates: Certs 3933,
+audit 1773/1773, docstring 1548 across 501, coverage 192/236, `verified_mlir/` untouched,
+`blueprint-checkdecls` clean. With this every one of the seven nets has a batched T6, and the
+backlog's proof items are closed; the `certs.yml` label counts (§10) are the one loose thread.

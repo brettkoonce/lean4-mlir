@@ -821,7 +821,7 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
     scalar function, which would typecheck by `rfl` and assert that the channel-LN layer list
     denotes the scalar-LN one (§2k's own sin, one level down) — is no longer expressible. Keeping
     the note because the SHAPE of that mistake is what §2k was about, not the specific symbol. -/
-noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh) :
+noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh 10) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
   | [.conv 3 96 4 4, .layerNorm 96,
@@ -840,13 +840,13 @@ noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh) :
 /-- **Spec ≡ the full proven net.** `convnextVerified`'s denotation is exactly
     `convNextForwardTCh` ([3,3,9,3] @ [96,192,384,768], channel LN + head LN, 28,589,128 params at
     K = 1000 — the JAX reference's own count) — by `rfl`. -/
-theorem convnextVerified_denote_eq (w : CnxTWeightsCh) :
+theorem convnextVerified_denote_eq (w : CnxTWeightsCh 10) :
     denoteConvnextT convnextVerified.layers w = convNextForwardTCh w := rfl
 
 /-- **The committed spec carries the math** — canonical `pdiv` witness; the REAL
     whole-net VJP exists at full depth (`convNextForwardTCh_has_vjp_correct`,
     all-smooth, the 22 LN positivities only) on the ∘-chain form. -/
-noncomputable def convnextVerified_has_vjp (w : CnxTWeightsCh) :
+noncomputable def convnextVerified_has_vjp (w : CnxTWeightsCh 10) :
     HasVJP (denoteConvnextT convnextVerified.layers w) where
   backward x dy i :=
     ∑ j : Fin 10, pdiv (denoteConvnextT convnextVerified.layers w) x i j * dy j
@@ -855,7 +855,7 @@ noncomputable def convnextVerified_has_vjp (w : CnxTWeightsCh) :
 open Proofs.StableHLO in
 /-- **Rung E at the committed spec.** The committed-config [3,3,9,3] channel-LN graph denotes
     the committed spec's function: `convNextFwdGraphTCh_faithful` ∘ the tie. -/
-theorem convnextVerified_fwd_faithful (epsStr : String) (w : CnxTWeightsCh)
+theorem convnextVerified_fwd_faithful (epsStr : String) (w : CnxTWeightsCh 10)
     (x : Vec (3 * 224 * 224)) :
     den (convNextFwdGraphTCh epsStr w x)
       = denoteConvnextT convnextVerified.layers w x :=

@@ -246,7 +246,7 @@ noncomputable def cnxDownChW_has_vjp (h w : Nat) {cin cout : Nat} (p : CnxDownPa
     wrong that the count could not catch it: the residue IS the missing layer, exactly.
     ⚠ The lesson is §7.2's one net over — we converged on the JAX reference, and the reference was
     the thing that was wrong. `planning/archive/next_session_execution_and_parity.md` §7.1. -/
-structure CnxTWeightsCh where
+structure CnxTWeightsCh (nC : Nat) where
   sW : Kernel4 96 3 4 4
   sb : Vec 96
   sε : ℝ
@@ -268,12 +268,15 @@ structure CnxTWeightsCh where
   hε : ℝ
   hγ : Vec 768
   hβ : Vec 768
-  Wd : Mat 768 10
-  bd : Vec 10
+  Wd : Mat 768 nC
+  bd : Vec nC
 
-/-- **The channel-LN ConvNeXt-T forward** (3×224² → 10). Nested-application form, as the scalar
-    peers, so the graph faithfulness closes by a structural `rfl`. -/
-noncomputable def convNextForwardTCh (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224)) : Vec 10 :=
+/-- **The channel-LN ConvNeXt-T forward** (3×224² → `nC`). Nested-application form, as the scalar
+    peers, so the graph faithfulness closes by a structural `rfl`. `nC` is a binder: the Imagenette
+    artifacts run it at 10 and the `convnextin_*` ImageNet artifacts at 1000, and every theorem
+    about this forward covers both. -/
+noncomputable def convNextForwardTCh {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
+    Vec nC :=
   dense w.Wd w.bd
    (rowLNVecFlat 1 768 w.hε w.hγ w.hβ
     (globalAvgPoolFlat 768 7 7
@@ -296,7 +299,7 @@ noncomputable def convNextForwardTCh (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224
     the third place that stale number had been copied to, each copy citing the last as its
     justification. ⛔ `docstring-checkrefs` cannot catch this: it
     resolves cited identifiers, and a stale COUNT cites nothing. -/
-noncomputable def convNextForwardTCh_has_vjp (w : CnxTWeightsCh)
+noncomputable def convNextForwardTCh_has_vjp {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
@@ -353,9 +356,45 @@ noncomputable def convNextForwardTCh_has_vjp (w : CnxTWeightsCh)
   have f10 := hln_diff.comp f9
   exact vjp_comp _ _ f10 (dense_differentiable w.Wd w.bd) e10 (dense_has_vjp w.Wd w.bd)
 
+/-- **The chain is differentiable everywhere** (the 23 LayerNorm positivities only) — the
+    `Differentiable` peer of `convNextForwardTCh_has_vjp`, on the same twelve-factor chain, which
+    `batchMap_has_vjp` asks for beside the `HasVJP` when the net is lifted over a batch
+    (`ConvNeXtWholeBackCertifiedTieB.lean`). -/
+theorem convNextForwardTCh_differentiable {nC : Nat} (w : CnxTWeightsCh nC)
+    (hsε : 0 < w.sε)
+    (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
+    (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
+    (h3 : ∀ i, 0 < (w.s3 i).εn) (hd3 : 0 < w.d3.ε)
+    (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) :
+    Differentiable ℝ
+      (dense w.Wd w.bd ∘
+        rowLNVecFlat 1 768 w.hε w.hγ w.hβ ∘
+        globalAvgPoolFlat 768 7 7 ∘
+        convNextStageChK 3 w.s4 ∘
+        cnxDownChW 7 7 w.d3 ∘
+        convNextStageChK 9 w.s3 ∘
+        cnxDownChW 14 14 w.d2 ∘
+        convNextStageChK 3 w.s2 ∘
+        cnxDownChW 28 28 w.d1 ∘
+        convNextStageChK 3 w.s1 ∘
+        chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
+        flatConvStride4 (h := 56) (w := 56) w.sW w.sb) :=
+  (dense_differentiable w.Wd w.bd).comp
+    ((rowLNVecFlat_diff 1 768 w.hε w.hγ w.hβ hhε).comp
+      ((globalAvgPoolFlat_differentiable 768 7 7).comp
+        ((convNextStageChK_diff 3 w.s4 h4).comp
+          ((cnxDownChW_diff 7 7 w.d3 hd3).comp
+            ((convNextStageChK_diff 9 w.s3 h3).comp
+              ((cnxDownChW_diff 14 14 w.d2 hd2).comp
+                ((convNextStageChK_diff 3 w.s2 h2).comp
+                  ((cnxDownChW_diff 28 28 w.d1 hd1).comp
+                    ((convNextStageChK_diff 3 w.s1 h1).comp
+                      ((chanLNTensor3_diff 96 56 56 w.sε w.sγ w.sβ hsε).comp
+                        (flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb)))))))))))
+
 /-- The nested↔chain bridge (see `convNextForwardTCh_eq_chain` for why the proof shape matters —
     a `simp`/`rfl` proof of this statement dies in the kernel on the recursive stage folds). -/
-theorem convNextForwardTCh_eq_chain (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224)) :
+theorem convNextForwardTCh_eq_chain {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
     convNextForwardTCh w x =
       (dense w.Wd w.bd ∘
         rowLNVecFlat 1 768 w.hε w.hγ w.hβ ∘
@@ -375,15 +414,15 @@ theorem convNextForwardTCh_eq_chain (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224)
       Function.comp_apply, Function.comp_apply, Function.comp_apply]
 
 /-- Correctness on `convNextForwardTCh` itself (via the bridge). -/
-theorem convNextForwardTCh_has_vjp_correct (w : CnxTWeightsCh)
+theorem convNextForwardTCh_has_vjp_correct {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
     (h3 : ∀ i, 0 < (w.s3 i).εn) (hd3 : 0 < w.d3.ε)
     (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε)
-    (x : Vec (3 * 224 * 224)) (dy : Vec 10) (i : Fin (3 * 224 * 224)) :
+    (x : Vec (3 * 224 * 224)) (dy : Vec nC) (i : Fin (3 * 224 * 224)) :
     (convNextForwardTCh_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy i =
-      ∑ j : Fin 10, pdiv (convNextForwardTCh w) x i j * dy j := by
+      ∑ j : Fin nC, pdiv (convNextForwardTCh w) x i j * dy j := by
   have h := (convNextForwardTCh_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
   rwa [show convNextForwardTCh w =
         (dense w.Wd w.bd ∘
@@ -507,13 +546,13 @@ theorem cnxDownChGraphW_faithful (pfx epsStr : String) (h w : Nat) {cin cout : N
   unfold cnxDownChGraphW cnxDownChW
   simp only [flatConvStridedF_faithful, chanLNGraph_faithful, Function.comp_apply]
 
-/-- The **channel-LN ConvNeXt-T forward graph** (3×224² → 10): patchify stem → **stem
+/-- The **channel-LN ConvNeXt-T forward graph** (3×224² → `nC`): patchify stem → **stem
     channel-LN** → the `[3,3,9,3]` stages with 3 channel-LN + 2×2/s2 downsample boundaries →
     GAP → **head LN** → dense. ⚠ 23 LN sites, not 22: 1 stem + 18 block + 3 downsample + the head
     one restored 2026-08-30 (the retired scalar graph had a head LN and no stem LN; §2m/§2n swapped
     which one was missing rather than fixing it — the paper has both). -/
-def convNextFwdGraphTCh (epsStr : String) (w : CnxTWeightsCh)
-    (x : Vec (3 * 224 * 224)) : SHlo 10 :=
+def convNextFwdGraphTCh (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
+    (x : Vec (3 * 224 * 224)) : SHlo nC :=
   denseF "%Wd" "%bd" w.Wd w.bd
    (headLNGraph "%hng" "%hnbt" epsStr w.hε w.hγ w.hβ
     (.gapF (c := 768) (h := 7) (w := 7)
@@ -531,7 +570,7 @@ def convNextFwdGraphTCh (epsStr : String) (w : CnxTWeightsCh)
 /-- **Channel-LN forward faithfulness** — the `[3,3,9,3]` channel-LN graph denotes
     `convNextForwardTCh`. Same `rw` chain as the scalar apex, with `chanLNGraph_faithful` where
     the `bnF`s were. The full-architecture apex for the net §2m makes ConvNeXt actually be. -/
-theorem convNextFwdGraphTCh_faithful (epsStr : String) (w : CnxTWeightsCh)
+theorem convNextFwdGraphTCh_faithful (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (3 * 224 * 224)) :
     den (convNextFwdGraphTCh epsStr w x) = convNextForwardTCh w x := by
   rw [convNextFwdGraphTCh, denseF_faithful, headLNGraph_faithful, gapF_faithful,

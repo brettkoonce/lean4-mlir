@@ -124,6 +124,8 @@ status:
     - {declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34BackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a smooth net one step further: the chain IS the pdiv-contracted Jacobian of the committed forward, via backward_unique
     - {declaration: "efficientnetInputGradB_full_correct", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # the last batched T6: ConvNeXt-T at a variable batch B and the ImageNet head, every slot a batchMapAux lift of the per-example slot
+    - {declaration: "Proofs.convnextImagenetInputGradB_eq_vjp", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtWholeBackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Other float-tier results ---
     # fp8-E4M3 quantization argmax preservation
@@ -225,9 +227,12 @@ fidelity:
        per-example `r34InputGrad_eq_resnet34_vjp`, `mnv2InputGrad_eq_mobilenetv2_vjp`,
        `convnextInputGrad_eq_convNextForwardTCh_vjp`, `efficientnetInputGradB_full_correct` (16
        blocks, through `HasVJP.backward_unique`) and `vitInputGradK_eq_vitForwardKV_vjp` (depth
-       12, 3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g, ViT's at a
-       variable batch `B` as the stage-wise `batchMap` lift of its per-example chain
-       (`vitInputGradKB_eq_batchMap_vitForwardKV_vjp`), since no ViT op couples examples. Closing them
+       12, 3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g — ViT's and
+       ConvNeXt's at a variable batch `B` as the stage-wise `batchMap` lift of the per-example chain
+       (`vitInputGradKB_eq_batchMap_vitForwardKV_vjp`,
+       `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp`, the latter at any class count and
+       so at the 1000-class `convnextin_*` artifacts), since no op of either couples examples; every
+       one of the seven nets now has one. Closing them
        found drift no review had: a reversed 2x2 pool where the forward pools 3x3/s2, `id` in
        ConvNeXt's head-LN slot, ViT's float cone at scalar affines, an even-kernel adjoint that
        was not one, and a dozen wrong docstring counts. Nothing trained was affected; in every

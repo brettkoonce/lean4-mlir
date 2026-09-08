@@ -122,6 +122,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50WholeBackCertifiedTieB
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
@@ -939,6 +940,7 @@ open Proofs
 #print axioms convNextForwardTCh_has_vjp
 -- The nested↔∘-chain bridge
 #print axioms convNextForwardTCh_eq_chain
+#print axioms convNextForwardTCh_differentiable
 #print axioms convNextForwardTCh_has_vjp_correct
 -- The channel-LN GRAPH + faithfulness (rung E's apex)
 #print axioms StableHLO.chanLNGraph_faithful
@@ -1201,6 +1203,25 @@ open Proofs
 #print axioms Proofs.cnxSavedA10
 #print axioms Proofs.convNextForwardTCh_vjp_chain
 #print axioms Proofs.convnextInputGrad_eq_convNextForwardTCh_vjp
+-- ConvNeXt WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index and the ImageNet head (ConvNeXtWholeBackCertifiedTieB.lean, 2026-09-08)
+#print axioms Proofs.convnextInputGradB
+#print axioms Proofs.cnxSavedB10
+#print axioms Proofs.cnxChanLNB_at
+#print axioms Proofs.cnxDownB_at
+#print axioms Proofs.cnxStemBackB_eq_vjp
+#print axioms Proofs.cnxChanLNBackB_eq_vjp
+#print axioms Proofs.cnxStageBackB_eq_vjp
+#print axioms Proofs.cnxDownBackB_eq_vjp
+#print axioms Proofs.cnxGapBackB_eq_vjp
+#print axioms Proofs.cnxLNhBackB_eq_vjp
+#print axioms Proofs.cnxDenseBackB_eq_vjp
+#print axioms Proofs.vjp_comp_diff_at_fst_backward
+#print axioms Proofs.convNextForwardTChB_has_vjp_at
+#print axioms Proofs.convnextInputGradB_eq_convNextForwardTChB_vjp
+#print axioms Proofs.convNextForwardTChB_eq_chain
+#print axioms Proofs.convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp
+#print axioms Proofs.convnextInputGradB_correct
+#print axioms Proofs.convnextImagenetInputGradB_eq_vjp
 -- ViT-Tiny's whole-net backward tie
 #print axioms Proofs.vitBlockBackV
 #print axioms Proofs.vitBlockBackVAt
@@ -1221,8 +1242,6 @@ open Proofs
 #print axioms Proofs.vitInputGradK_correct
 #print axioms Proofs.vitTinyInputGrad_eq_vitTiny_vjp
 -- ViT WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index (ViTWholeBackCertifiedTieB.lean, 2026-09-08)
-#print axioms Proofs.batchMap_comp
-#print axioms Proofs.HasVJPAt.backward_unique_of_eq
 #print axioms Proofs.vitEmbedBackB_eq_vjp
 #print axioms Proofs.vitTowerBackB_eq_vjp
 #print axioms Proofs.vitLNBackB_eq_vjp
@@ -2153,6 +2172,8 @@ open Proofs
 #print axioms Proofs.batchMap_differentiableAt
 #print axioms Proofs.pdiv_batchMap_at
 #print axioms Proofs.batchMap_has_vjp_at
+#print axioms Proofs.batchMap_comp
+#print axioms Proofs.HasVJPAt.backward_unique_of_eq
 
 -- RESNET-34 AT TRUE BATCH BN — T1's VJP half (ResNet34FullBVJP.lean, 2026-09-06)
 #print axioms Proofs.r34IdB_has_vjp_at

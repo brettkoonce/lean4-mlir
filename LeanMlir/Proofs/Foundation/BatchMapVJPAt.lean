@@ -213,4 +213,33 @@ noncomputable def batchMap_has_vjp_at {N a b : Nat} (f : Vec a → Vec b) (v : V
     simp only [Finset.mem_univ, ite_true]
     exact (hf i.1).correct (fun c => dy (finProdFinEquiv (i.1, c))) i.2
 
+-- ════════════════════════════════════════════════════════════════
+-- § `batchMap` distributes over composition; two pointwise witnesses of one map agree
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`batchMap B (g ∘ f) = batchMap B g ∘ batchMap B f`.** Both sides read example `p.1`'s slice
+    of the input and run `g ∘ f` on it; peeling the inner lift off at one example is
+    `batchSlice_batchMap`. The two spellings are NOT `rfl` — they agree only up to
+    `finProdFinEquiv.symm_apply_apply` — which is why every batched whole-net chain saves its
+    activations stage by stage (`vitSavedBodyB`, `cnxSavedB1 … cnxSavedB10`) and its shape check
+    goes through this lemma. Shared by the ViT and ConvNeXt batched ties. -/
+theorem batchMap_comp (B : Nat) {a b c : Nat} (f : Vec a → Vec b) (g : Vec b → Vec c) :
+    StableHLO.batchMap B (g ∘ f) = StableHLO.batchMap B g ∘ StableHLO.batchMap B f := by
+  funext x idx
+  show g (f (StableHLO.batchSlice B a x (finProdFinEquiv.symm idx).1)) (finProdFinEquiv.symm idx).2
+    = g (StableHLO.batchSlice B b (StableHLO.batchMap B f x) (finProdFinEquiv.symm idx).1)
+        (finProdFinEquiv.symm idx).2
+  rw [StableHLO.batchSlice_batchMap]
+
+/-- Two `HasVJPAt` witnesses for EQUAL maps at one point have the same backward — the pointwise
+    peer of `HasVJP.backward_unique_of_eq`, through `.correct` rather than a transport. The escape
+    every batched whole-net tie takes to reach the committed `batchMap_has_vjp` witness, whose
+    `▸`-transported `.backward` does not reduce. -/
+theorem HasVJPAt.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} {x : Vec m}
+    (hfg : f = g) (h₁ : HasVJPAt f x) (h₂ : HasVJPAt g x) (dy : Vec n) :
+    h₁.backward dy = h₂.backward dy := by
+  subst hfg
+  funext i
+  rw [h₁.correct, h₂.correct]
+
 end Proofs
