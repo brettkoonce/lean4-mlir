@@ -149,14 +149,23 @@ def _main():
     # you a component's CAPACITY, not what limits the pipeline. Capacity is irrelevant when the
     # consumer pulls one batch and walks away.
     #
-    # ▶ So the default STAYS ON, for two reasons that survive the measurement: it costs nothing
-    # end-to-end, and `tests/prefetch_tie.sh`'s A1-vs-A2 control needs a REPLAYABLE producer
-    # stream — turning this off makes that control fail and every verdict downstream unreadable.
-    # What determinism buys is replay, not fidelity: the ops, magnitudes, probabilities and policy
-    # are identical either way and only the ORDER of random draws moves. SHIM_DETERMINISM=0 opts
-    # out (for a producer-bound net, should one ever be measured); =1 forces it on.
+    # ▶▶ THE DEFAULT IS NOW OFF (2026-09-08), AND A MEASUREMENT IS WHY. The paragraph above ends
+    # "for a producer-bound net, should one ever be measured" — that net has now been measured.
+    # Verified ViT-Ti / ImageNet on the 4x3060 box: compute-only floor 153 ms/step (the probe's
+    # synth arm) against a fed 300, with 12 producers drawing ~1630% of a 24-thread box while the
+    # trainer took 108%. Producer-bound — and unlike 2026-08-11 the CONSUMER is not the
+    # constraint, because depth-n prefetch has since landed. Turning determinism off took the
+    # 300-epoch job from 69 h to 48 h against a 38.5 h floor.
+    # ⚠ FEWER workers once it is off: a producer wants ~4.3-4.7 cores instead of ~1.2, so 4 beat
+    # 6 and 8 on that box. Raising workers and dropping determinism are not independent knobs.
+    # What determinism buys is REPLAY, not fidelity: the ops, magnitudes, probabilities and the
+    # policy are identical either way and only the ORDER of random draws moves. ⭐ The JAX
+    # reference trainer this shim mirrors has never paid it, so ON was an ASYMMETRY in the pair.
+    # ⛔ EVERY GATE THAT REPLAYS A STREAM MUST NOW ASK FOR IT. SHIM_DETERMINISM=1 is pinned in
+    # tests/prefetch_tie.sh, scripts/residency_gate.sh, scripts/mixup_gate.py and
+    # scripts/shim_wiring_gate.py. A NEW byte-identity gate MUST set it or its control is noise.
     _det_env = os.environ.get('SHIM_DETERMINISM')
-    _det = True if _det_env is None else (_det_env == '1')
+    _det = (_det_env == '1')
     if _det:
         tf.config.experimental.enable_op_determinism()
     tf.random.set_seed(seed)

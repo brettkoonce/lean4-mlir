@@ -84,6 +84,10 @@ run () {
   rm -f "$CKPT" "$CKPT.epoch"
   # ⚠ NO `LEAN_MLIR_BENCH_SYNTH` here, deliberately: it skips the shim spawn, so there would be no
   # read to prefetch and the gate would compare a path against itself and pass forever.
+  # ⚠⚠ `SHIM_DETERMINISM=1` pinned — the shim's default flipped to OFF on 2026-09-08 (the
+  # verified ViT turned out to be producer-bound; jax/Jax/Codegen.lean). Without this the
+  # A1-vs-A2 CONTROL below compares two DIFFERENT augmentation draw orders and reports a
+  # huge floor, which reads exactly like a broken prefetch. The control is the whole gate.
   # ⚠ `LEAN_MLIR_SEED` pinned — it seeds both the shim's shuffle and its augmentation, and the
   # control run is what proves that pinning is enough.
   env \
@@ -98,6 +102,7 @@ run () {
     LEAN_MLIR_BASE_LR_U=100000 \
     PJRT_FFI_RESIDENT=1 \
     LEAN_MLIR_SEED=1 \
+    SHIM_DETERMINISM=1 \
     LEAN_MLIR_PREFETCH="$pf" \
     LEAN_MLIR_SKIP_EVAL=1 \
     LEAN_MLIR_MAX_EPOCHS="$EPOCHS" \

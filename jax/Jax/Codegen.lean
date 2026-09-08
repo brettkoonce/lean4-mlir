@@ -3503,14 +3503,23 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    # you a component's CAPACITY, not what limits the pipeline. Capacity is irrelevant when the\n" ++
   "    # consumer pulls one batch and walks away.\n" ++
   "    #\n" ++
-  "    # ▶ So the default STAYS ON, for two reasons that survive the measurement: it costs nothing\n" ++
-  "    # end-to-end, and `tests/prefetch_tie.sh`'s A1-vs-A2 control needs a REPLAYABLE producer\n" ++
-  "    # stream — turning this off makes that control fail and every verdict downstream unreadable.\n" ++
-  "    # What determinism buys is replay, not fidelity: the ops, magnitudes, probabilities and policy\n" ++
-  "    # are identical either way and only the ORDER of random draws moves. SHIM_DETERMINISM=0 opts\n" ++
-  "    # out (for a producer-bound net, should one ever be measured); =1 forces it on.\n" ++
+  "    # ▶▶ THE DEFAULT IS NOW OFF (2026-09-08), AND A MEASUREMENT IS WHY. The paragraph above ends\n" ++
+  "    # \"for a producer-bound net, should one ever be measured\" — that net has now been measured.\n" ++
+  "    # Verified ViT-Ti / ImageNet on the 4x3060 box: compute-only floor 153 ms/step (the probe's\n" ++
+  "    # synth arm) against a fed 300, with 12 producers drawing ~1630% of a 24-thread box while the\n" ++
+  "    # trainer took 108%. Producer-bound — and unlike 2026-08-11 the CONSUMER is not the\n" ++
+  "    # constraint, because depth-n prefetch has since landed. Turning determinism off took the\n" ++
+  "    # 300-epoch job from 69 h to 48 h against a 38.5 h floor.\n" ++
+  "    # ⚠ FEWER workers once it is off: a producer wants ~4.3-4.7 cores instead of ~1.2, so 4 beat\n" ++
+  "    # 6 and 8 on that box. Raising workers and dropping determinism are not independent knobs.\n" ++
+  "    # What determinism buys is REPLAY, not fidelity: the ops, magnitudes, probabilities and the\n" ++
+  "    # policy are identical either way and only the ORDER of random draws moves. ⭐ The JAX\n" ++
+  "    # reference trainer this shim mirrors has never paid it, so ON was an ASYMMETRY in the pair.\n" ++
+  "    # ⛔ EVERY GATE THAT REPLAYS A STREAM MUST NOW ASK FOR IT. SHIM_DETERMINISM=1 is pinned in\n" ++
+  "    # tests/prefetch_tie.sh, scripts/residency_gate.sh, scripts/mixup_gate.py and\n" ++
+  "    # scripts/shim_wiring_gate.py. A NEW byte-identity gate MUST set it or its control is noise.\n" ++
   "    _det_env = os.environ.get('SHIM_DETERMINISM')\n" ++
-  "    _det = True if _det_env is None else (_det_env == '1')\n" ++
+  "    _det = (_det_env == '1')\n" ++
   "    if _det:\n" ++
   "        tf.config.experimental.enable_op_determinism()\n" ++
   "    tf.random.set_seed(seed)\n" ++

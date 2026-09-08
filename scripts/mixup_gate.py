@@ -59,6 +59,8 @@ FAILURES = []
 
 def run_env(**kw):
     e = dict(os.environ)
+    # SHIM_DETERMINISM=1: the shim's default went OFF 2026-09-08 (producer-bound ViT); this gate replays a stream, so it must ASK.
+    e['SHIM_DETERMINISM'] = '1'
     e.update({k: str(v) for k, v in kw.items() if v is not None})
     return e
 

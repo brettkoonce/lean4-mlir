@@ -361,7 +361,8 @@ def shim_hash(path, split, batch, nbatches, seed, mix="off"):
     ViT's and ConvNeXt's shims bake `both` as their default and a mixed target cannot ride int32
     labels. Hashing without it measures a stream the trainer never sees (and on those two nets it
     does not measure anything at all: the shim exits). C2b below is that failure, on purpose."""
-    env = dict(os.environ, SHIM_BATCH=str(batch), SHIM_SPLIT=split,
+    # SHIM_DETERMINISM=1: the shim's default went OFF 2026-09-08 (producer-bound ViT); this gate replays a stream, so it must ASK.
+    env = dict(os.environ, SHIM_BATCH=str(batch), SHIM_SPLIT=split, SHIM_DETERMINISM="1",
                SHIM_SEED=str(seed), SHIM_HASH=str(nbatches), SHIM_MIX=mix)
     py = os.environ.get("SHIM_PYTHON", os.path.join(ROOT, ".venv", "bin", "python3"))
     r = subprocess.run([py, path], env=env, capture_output=True, text=True, cwd=ROOT)
@@ -411,7 +412,8 @@ if "--stream" in sys.argv:
     # argued. ViT's shim, left to its own baked default on a wire-v1 TRAIN stream, exits before
     # emitting anything; through the driver the symptom would be the useless "shim closed the pipe
     # after 0 of 16 bytes", since the child's stderr is not captured.
-    env = dict(os.environ, SHIM_BATCH="8", SHIM_SPLIT="train", SHIM_SEED="7", SHIM_HASH="1")
+    env = dict(os.environ, SHIM_BATCH="8", SHIM_SPLIT="train", SHIM_SEED="7", SHIM_HASH="1",
+               SHIM_DETERMINISM="1")
     env.pop("SHIM_MIX", None)
     py = os.environ.get("SHIM_PYTHON", os.path.join(ROOT, ".venv", "bin", "python3"))
     r = subprocess.run([py, os.path.join(BUILD, recipes["vitin"][2])],

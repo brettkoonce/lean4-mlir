@@ -111,6 +111,7 @@ run () {
   # every single-device row is byte-for-byte the run it was before this knob existed.
   # ⚠ It must list at least as many devices as the render's replica count.
   env "$@" \
+    SHIM_DETERMINISM=1 \
     HIP_VISIBLE_DEVICES="$GATE_DEVICES" \
     CUDA_VISIBLE_DEVICES="$GATE_DEVICES" \
     LEAN_MLIR_VARIANT="$VARIANT" \

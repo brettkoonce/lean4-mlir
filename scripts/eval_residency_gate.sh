@@ -66,7 +66,7 @@ for bin in "${BINS[@]}"; do
     # shellcheck disable=SC2086
     [ -n "$GATE_CKPTS" ] && rm -f $GATE_CKPTS
     # shellcheck disable=SC2086
-    env $extra LD_LIBRARY_PATH="$DET" CUDA_VISIBLE_DEVICES="$DEV" HIP_VISIBLE_DEVICES="$DEV" \
+    env $extra SHIM_DETERMINISM=1 LD_LIBRARY_PATH="$DET" CUDA_VISIBLE_DEVICES="$DEV" HIP_VISIBLE_DEVICES="$DEV" \
       LEAN_MLIR_MAX_EPOCHS="$EPOCHS" \
       ".lake/build/bin/$bin" data > "$OUT/${bin}_$tag.log" 2>&1
     grep -q "resuming from checkpoint" "$OUT/${bin}_$tag.log" && resumed=1
