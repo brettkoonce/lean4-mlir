@@ -410,8 +410,7 @@ noncomputable def efficientnetForwardB_has_vjp
     committed number 4×. The peers are `mobilenetv2Forward_full_pc_eq_chain`,
     `convNextForwardTCh_eq_chain`, `resnet34Forward_full_pc_eq_chain` and, for the 16-block net,
     `efficientnetForwardB_full_eq_chain` — this is the same theorem for the 3-block batched
-    representative, which is the net `efficientnetInputGradB` reverses and `b0_float_logits_le` is
-    about.
+    representative, which is the net `efficientnetInputGradB` reverses.
 
     ⚠ PROOF SHAPE MATTERS, and `efficientnetForwardB_full_eq_chain` records why: the equation-lemma
     `rw` plus one `Function.comp_apply` per stage closes syntactically, where a `simp`/`rfl` of the

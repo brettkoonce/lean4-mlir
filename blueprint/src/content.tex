@@ -14834,10 +14834,7 @@ The \emph{closeness} half
 (\(|\,\text{float op} - \text{real op}\,| \le\) budget) is
 architecture-complete: \texttt{FloatBridge.lean} and the per-net
 \texttt{*FloatBridge} files budget every operator of every network, forward
-and backward, from the MNIST linear classifier to ViT-Tiny, and (by the
-composition theorem below) these per-operator budgets fold into a
-\emph{depth-linear whole-network} certificate that stays below the logit scale
-on eight of the nine committed renders. The
+and backward, from the MNIST linear classifier to ViT-Tiny. The
 \emph{descent} half (a rounded step provably \emph{decreases the loss})
 closes only for the shallow nets
 (\texttt{SgdDescent\{Linear,Mlp,Cnn,Cifar\}.lean}). The way the chain avoids
@@ -14959,65 +14956,6 @@ the accumulated rounding error must not flip a sign
 (\texttt{reluMask\_close}). A qualitative side condition became a
 checkable margin.
 
-\paragraph{The naive whole-network bound is vacuous.}
-Budgeting each operator is one thing. Combining those budgets into a bound on
-the \emph{whole} network is another. The obvious way (\texttt{FloatClose.comp})
-assumes every layer amplifies the error it inherits by that layer's
-\emph{worst possible} factor, then multiplies those factors down the depth. So
-the bound grows like \((\text{gain})^{\text{depth}}\) and blows up to
-\(2.7\cdot 10^{60}\) on MobileNetV2 and \(\sim\!10^{364}\) on ViT-Tiny, while
-the drift the GPU actually produces stays near \(10^{-5}\). Past a handful of
-layers, that bound says nothing at all.
-
-\paragraph{The adjoint chain: add, don't multiply.}
-The real error behaves differently. Each layer's \emph{own} rounding is
-amplified just once, by how much the \emph{rest} of the network magnifies a
-small change made at that point, and those contributions \emph{add} instead
-of multiplying. \texttt{chain\_adjointClose} (\texttt{AdjointChainBridge.lean})
-proves exactly this: the whole-network error is at most \(\sum_i H_i\,b_i\),
-where \(b_i\) is layer \(i\)'s fresh rounding budget (its per-operator bound,
-before anything is inherited) and \(H_i\) is its \emph{tail gain}, meaning how
-much a perturbation at layer \(i\) is stretched by all the layers after it. The proof
-is a single induction, exact (nothing is linearized), and because each \(b_i\)
-is amplified only once, the total grows roughly \emph{linearly} with depth
-rather than exponentially. It can never lose to the naive bound: plug in
-worst-case tail gains and you recover the old bound exactly, so any honest
-estimate of \(H_i\) only helps. And an honest estimate is cheap, since one
-backward pass reads the \(H_i\) off the network's own trajectory. They enter the theorem
-as named hypotheses carrying their measured values, on the same footing as the
-\(\exp\) constant (\S~\ref{sec:jax_pipeline}), never an axiom.
-
-\paragraph{A certificate below the logit scale.}
-Two refinements make the bound small in practice. Cut the chain at \emph{every}
-operator, giving each convolution, normalization and dense its own link, with
-residual connections carried alongside (\texttt{chain2\_adjointClose}), and
-no worst-case products survive anywhere. And note that a sum of \(n\) terms
-costs a factor \((1{+}u)^{n}\) only if the hardware adds them in the worst
-order. IREE adds them in a balanced tree, which costs
-\((1{+}u)^{\lceil\log_2 n\rceil}\) instead (\texttt{tree\_close},
-\texttt{TreeReduceBridge.lean}), a factor we name and check empirically
-rather than assume, and the one that finally tames the widest reductions
-(fan-in \(6272\), or \(n = 301056\) in ConvNeXt's LayerNorm). The result is the
-first whole-network float certificate that means something on networks this
-deep: the bound lands \emph{below the logit scale} on eight of the nine
-committed renders, quoted here as budget against that net's own logit scale
---- MNIST-MLP \(0.8/21\), MNIST-CNN \(0.015/0.64\), CIFAR-8 \(2.6/4.6\),
-MobileNetV2 \(0.30/0.99\), ResNet-34 \(0.17/3.40\), ViT-Tiny \(0.57/4.33\),
-EfficientNet-B0 \(0.096/0.94\), ConvNeXt-T \(0.80/2.94\). The ninth,
-CIFAR-8-BN, is the one that does not close: \(3.4\) against a logit scale of
-\(3.2\), or \(1.1\times\) over. It is quoted rather than dropped because it is
-the honest edge of the method --- a per-example per-channel BatchNorm at
-fan-in \(1024\) is the widest reduction in the set, and the residual is a
-single tail gain of \(1313\) through \texttt{bn1}. Every other net clears by
-between \(3\times\) and \(26\times\). These are the theorem's formula evaluated
-at the \emph{measured} per-stage magnitudes and tail gains; the theorem's own
-budget takes every stage at its worst-case propagated window, which at He-init
-magnitudes exceeds \(10^{13}\) on CIFAR-8, so the numbers are a-posteriori
-measurements rather than values the kernel has checked. The decision statement
-is still a theorem: \texttt{cifar8\_chain\_argmaxSafeH}, at the committed CIFAR-8
-shape, proves that whenever the exact network's margin beats twice the budget,
-binary32 rounding cannot change which class it predicts.
-
 \paragraph{Measured against proven.}
 The numeric capstones are instantiated at the \emph{trained} magnitudes
 of a real 12-epoch, 97.8\% GPU run (\(|W| \le 3/5\), covering the
@@ -15039,17 +14977,7 @@ ReLU mask flips & \(0\) under margins & \(\mathbf{0}\,/\,29.5\mathrm{M}\) \\
 
 The worst-case bounds hold
 with up to \(10^{8}\) to spare because worst-case composition
-compounds magnitude bounds the way no real activation pattern does,
-and that gap is exactly what the adjoint chain closes: its measured tail
-gains are the a-posteriori certificate past toy depth, now a theorem
-(\texttt{chain\_adjointClose}) rather than an asserted argument. The
-whole-net budget was re-measured at the \emph{trained} weights of five real
-checkpoints (ResNet-34, MobileNetV2, EfficientNet-B0, ViT-Tiny and
-ConvNeXt-T), and it holds on every one, with the telling twist that it
-\emph{tightens} where training removes a pathological initialization (ViT's
-zero-init class token, MobileNetV2's He-init stem gain) and only loosens
-slightly on clean-init nets: the certificate is demonstrably a property of
-the deployed network, not an artifact of the initialization. And the
+compounds magnitude bounds the way no real activation pattern does. And the
 flip count is zero across 29.5 million measured pre-activations. The
 margin hypotheses are not a technicality the proofs hide behind. They
 are what training actually looks like.

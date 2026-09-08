@@ -6,10 +6,10 @@ The eval twin of `EfficientNetFullB0.lean`. That file states the sixteen-block `
 TRAINING BatchNorm (`bnBatchLA`), the world its VJP and its typed graph live in; this file states
 the same ladder at INFERENCE BatchNorm — frozen running statistics at all **49** sites, one shared
 `ε`, as `efficientnetForwardBEval` and the shipped `efficientnet_fwd_eval` both do — and proves
-its typed `SHlo` graph denotes it. It exists so that `EfficientNetFullFloatBudget.lean`'s number
-can be restated with the rendered net on the real side (`b0Full_float_logits_le_committed`),
-which is the rung the three-block file has (`b0EvalGraph_faithful`) and the sixteen-block file
-lacked (`planning/proofs_tier_to_paper_nets.md` 3.3(e)).
+its typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, the graph of
+`efficientnet_fwd_eval.mlir` and its 1000-class twin. (Built 2026-09-05 so the whole-net float
+budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —
+`planning/proofs_tier_to_paper_nets.md` 3.3(e).)
 
 Pure enumeration and chaining of `EfficientNetRenderPCEval.lean`'s per-block machinery, at the
 batched index `N·(c·h·w)` and generic in the class count. The one genuinely new piece is the

@@ -67,8 +67,8 @@ forward `resnet34Forward_full_pc` pools with `maxPool3s2Flat`, He et al.'s 3×3/
 `MaxPool3s2.lean`'s header warns the two share a TYPE and are different functions; nothing forced
 the two statements to unify until a theorem needed them to be about ONE net. The missing leaf is
 `MaxPool3s2BackFloatBridge.lean` (the ACCUMULATING scatter — 3×3/s2 windows overlap, so an input
-can be the argmax of up to four outputs, window `4A` not `A`), and `r34_grad_float_le` moved
-`1.458·10²⁴⁴ → 6.894·10²⁴⁴`. ⚠ This is `imagenet_specs_drift_from_twins` for the fourth time and
+can be the argmax of up to four outputs, window `4A` not `A`), and the whole-net number then
+stated on this chain moved 4× (that budget was deleted 2026-09-08). ⚠ This is `imagenet_specs_drift_from_twins` for the fourth time and
 ConvNeXt's stale head-LayerNorm slot for the second: *"the same net as the tie" is an unchecked
 claim until something forces the two statements to unify, and what forces it is needing the tie.*
 
@@ -415,9 +415,9 @@ set_option maxHeartbeats 2000000 in
     certified per-op backward, IS `(resnet34_has_vjp_at …).backward` — the certified
     input-gradient VJP of `dense ∘ GAP ∘ [3,4,6,3] ∘ maxPool3s2 ∘ stem` at `x`.
 
-    ⭐ This is the statement the per-op ties above could not make. Until it existed the honest
-    reading of `r34_grad_float_le` was *"every piece of this chain is the certified gradient"*;
-    with it, the chain IS the certified whole-net gradient.
+    ⭐ This is the statement the per-op ties above could not make: with it the chain IS the
+    certified whole-net gradient, where before it only every piece of it was. (The whole-net
+    float budget once stated on this chain was deleted 2026-09-08 as vacuous; the tie stays.)
 
     ⛔⛔ **And closing it is what found the drift.** `r34InputGrad` used `maxPoolFlatBack` — the
     **2×2** pool's backward — while the committed forward `resnet34Forward_full_pc` pools with

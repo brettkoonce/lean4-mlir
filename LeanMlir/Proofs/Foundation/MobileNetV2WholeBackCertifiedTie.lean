@@ -8,10 +8,10 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 `MobileNetV2BackCertifiedTie.lean` (`Architectures/`) closed §B for the inverted-residual
 BODIES: each hand-assembled reverse-mode transcription IS the certified input-gradient VJP of the
 body it reverses, in the deployed non-batched per-channel-BN vocabulary. This file closes the
-same question for the WHOLE NET, so the reading of `mnv2_grad_float_le`
-(`MobileNetV2BackFloatBudget.lean`) is no longer *"every piece of this chain is the certified
-gradient"* but **"the chain IS the certified whole-net gradient"** — the MobileNetV2 peer of
-`r34InputGrad_eq_resnet34_vjp` (`Resnet34BackCertifiedTie.lean`).
+same question for the WHOLE NET: the chain IS the certified whole-net gradient, not merely a
+chain every piece of which is — the MobileNetV2 peer of `r34InputGrad_eq_resnet34_vjp`
+(`Resnet34BackCertifiedTie.lean`). (The whole-net float budget once stated on this chain was
+deleted 2026-09-08 as vacuous; the tie stays.)
 
 Five pieces, and only the first two are new mathematics:
 
@@ -46,8 +46,7 @@ the 2×2 pool while the committed forward pools 3×3/s2 — survived a month bec
 the tie"* was prose in a docstring. Here it is a `rfl` the kernel checks.
 
 ⭐ **No drift was found on this net**, and that is a result rather than a non-event: the tie went
-through against `mnv2InputGrad` exactly as committed, so `mnv2_grad_float_le`'s
-4.750·10¹⁵³ / 1.076·10¹⁵² stand unchanged, where closing r34's moved its number 4×.
+through against `mnv2InputGrad` exactly as committed, where closing r34's found a wrong pool.
 
 ⚠ It stays a SMOOTH-POINT statement, as every `HasVJPAt` in this cone is: the stem's and head's
 post-BN clamp windows (`≠ 0 ∧ ≠ 6`) and the six blocks' own VJP witnesses are hypotheses.

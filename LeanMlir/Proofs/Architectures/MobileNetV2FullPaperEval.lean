@@ -6,10 +6,10 @@ The eval twin of `MobileNetV2FullPaper.lean`. That file states the seventeen-blo
 at TRAINING BatchNorm, the world its VJP and its typed graph live in; this file states the same
 ladder at INFERENCE BatchNorm — frozen running statistics at all **52** sites, one shared `ε`, as
 `mobilenetv2Forward_full_pc_eval` and the shipped `mobilenetv2_fwd_eval` both do — and proves its
-typed `SHlo` graph denotes it. It exists so that `MobileNetV2PaperFloatBudget.lean`'s number can
-be restated with the rendered net on the real side (`mnv2Paper_float_logits_le_committed`), which
-is the rung `MobileNetV2FloatBudget.lean` has at six blocks and the seventeen-block file lacked
-(`planning/proofs_tier_to_paper_nets.md` 3.2(e)).
+typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, the graph of
+`mobilenetv2_fwd_eval.mlir` and its 1000-class twin. (Built 2026-09-05 so the whole-net float
+budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —
+`planning/proofs_tier_to_paper_nets.md` 3.2(e).)
 
 Pure enumeration and chaining of `MobileNetV2RenderPCEval.lean`'s four inference stage
 abbreviations (`ivExpandPCEval` / `ivDepthwisePCEval` / `ivDepthwiseStridedPCEval` /

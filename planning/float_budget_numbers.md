@@ -1,3 +1,6 @@
+> ⛔ **DELETED 2026-09-08.** Everything below describes the whole-net float budgets, their envelopes and forward float chains, removed from the repo as vacuous
+> (user decision; `formalization.yaml` fidelity 4c/4d records why). Historical record only.
+
 # Whole-net float budgets
 
 **Status, 2026-09-05: the research thread is closed.** Nine forwards and four input-gradient

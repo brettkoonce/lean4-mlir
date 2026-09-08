@@ -658,9 +658,9 @@ set_option maxRecDepth 4000000 in
     ⚠ The EVAL forward is deliberately NOT moved onto this chain, exactly as ResNet-34's and
     ResNet-50's are not: `bnPerChannelEvalF` reads frozen per-channel statistics and reduces
     nothing, so `mobilenetv2_fwd_eval.mlir` is BatchNorm-world-agnostic and correct against both
-    chains. ⛔ There is a second reason here that ResNet-34 did not have: that artifact's SSA names
-    are the subject of `mnv2Paper_float_logits_le_committed`'s provenance claim (263 inputs,
-    "diffs line for line"), and this chain names its parameters differently.
+    chains. (Until 2026-09-08 there was a second reason: a whole-net float budget's provenance
+    claim named that artifact's SSA names line for line; the budget is deleted, and the eval
+    forward stays where it is only because moving it buys nothing.)
 
     ⭐ Extracting the traversal is byte-neutral for the train step: `pretty`'s SSA counter follows
     the call SEQUENCE, and the sequence is unchanged. -/
@@ -1041,10 +1041,9 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
 --   `planning/renderer_convergence.md`). `bnPerChannelEvalF` reads frozen per-channel statistics
 --   and reduces nothing, so `@mobilenetv2_fwd_eval` is BatchNorm-world-agnostic and correct
 --   against either chain — the same call ResNet-34 and ResNet-50 make.
---   ⛔ Do NOT re-point it at `mnv2FwdChainB`: that artifact's 263 inputs and their SSA names are
---   the subject of `mnv2Paper_float_logits_le_committed`'s provenance claim ("diffs against
---   `mobilenetv2_fwd_eval` line for line"), and the batched chain names its parameters
---   differently. Moving it would leave the theorem true and the sentence false.
+--   It is not re-pointed at `mnv2FwdChainB` because nothing needs it to move. (Until 2026-09-08
+--   a whole-net float budget's provenance claim named that artifact's 263 SSA names line for
+--   line; that budget is deleted.)
 --   ⚠ `paperSig` and `mnv2SigList` are the SAME 210/158 parameters in the SAME order under two
 --   naming conventions — `%Ws`/`%We2`/`%Wfc` here, `%sW`/`%b2eW`/`%Wd` there. The `#guard`s at
 --   the bottom of this file pin both arities, which is what keeps the two lists one contract.

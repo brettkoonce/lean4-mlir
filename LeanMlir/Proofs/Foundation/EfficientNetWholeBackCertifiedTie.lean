@@ -5,9 +5,9 @@ import LeanMlir.Proofs.Float.EfficientNetWholeBackFloatBridge
 /-! # ⭐⭐ `efficientnetInputGradB` IS the certified whole-net EfficientNet-B0 gradient
 
 The fourth whole-net backward tie, after ResNet-34 (`Resnet34BackCertifiedTie.lean`),
-MobileNetV2 (`MobileNetV2WholeBackCertifiedTie.lean`) and ConvNeXt-T. With it, the reading of
-`b0_grad_float_le` (`EfficientNetBackFloatBudget.lean`) stops being *"every piece of this chain
-is the certified gradient"* and becomes **"the chain IS the certified whole-net gradient"**.
+MobileNetV2 (`MobileNetV2WholeBackCertifiedTie.lean`) and ConvNeXt-T. With it the chain IS the
+certified whole-net gradient, not merely a chain every piece of which is. (The whole-net float
+budget once stated on this chain was deleted 2026-09-08 as vacuous; the tie stays.)
 
 ⚠ **It had to wait for the padding re-spelling.** Until 2026-09-05 the chain reversed a
 `flatConvStride2` stem while every shipped B0 artifact emits the XLA-`SAME` phase, so this tie

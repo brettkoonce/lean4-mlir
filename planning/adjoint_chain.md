@@ -1,3 +1,6 @@
+> ⛔ **DELETED 2026-09-08.** Everything below describes the adjoint-chain tier (`AdjointChainBridge*`, `Cifar8ChainCert`, `TreeReduceBridge`), removed from the repo as vacuous
+> (user decision; `formalization.yaml` fidelity 4c/4d records why). Historical record only.
+
 # Adjoint chain: depth-linear float composition (option-2 of the scaling question)
 
 Status 2026-07-04 end-of-session: **through P2 committed** (`1cc69d8`..`a586497`:

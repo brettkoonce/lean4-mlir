@@ -65,9 +65,8 @@ status:
     size a binder and the data-parallel mean an AST node (fidelity 4e-4g); the SGD-inline
     steps of the ten nets that ship one are tied too. (2) FLOAT ERROR -- a binary32 rounding
     model constructed from scratch, whole-net float bridges carrying window and modulus as
-    data, kernel-checked budgets for nine forwards and four backwards (interval folds, vacuous
-    as numerical certificates, fidelity 4d), and every net's hand-written backward chain proven
-    to BE the certified whole-net VJP. (3) ROBUSTNESS CERTIFICATES as theorems: the Tsuzuku
+    data, and every net's hand-written backward chain proven to BE the certified whole-net VJP
+    (the whole-net numeric budgets were deleted 2026-09-08 as vacuous, fidelity 4d). (3) ROBUSTNESS CERTIFICATES as theorems: the Tsuzuku
     Lipschitz-margin radius, per-class-pair LipSDP at trained weights, the Cohen smoothing
     radius end to end. (4) OPTIMIZER GEOMETRY: SGD/sign/Muon as steepest descent under a norm,
     Shampoo = single-step Muon. The StableHLO codegen and the training runs are engineered and
@@ -126,17 +125,7 @@ status:
     # a smooth net one step further: the chain IS the pdiv-contracted Jacobian of the committed forward, via backward_unique
     - {declaration: "efficientnetInputGradB_full_correct", file: "LeanMlir/Proofs/Foundation/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
-    # --- Whole-net float budgets (fidelity 4d has the full table) ---
-    # a fold: MobileNetV2 inference-BN forward, 1.444e96 / window 2154 -- the one non-vacuous window (relu6 clamps)
-    - {declaration: "mnv2_float_logits_le", file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
-    # a CAP: EfficientNet-B0 16-block paper net, 2.416e287 / 1.886e279 at the 16 SE sigmoids, past norm_num's default threshold
-    - {declaration: "b0Full_float_logits_le", file: "LeanMlir/Proofs/Float/EfficientNetFullFloatBudget.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
-    # a backward: ResNet-34 training BN, 6.894e244 / 8.857e245, operating point |istd| <= 16
-    - {declaration: "r34_grad_float_le", file: "LeanMlir/Proofs/Float/Resnet34BackFloatBudget.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
-    #
     # --- Other float-tier results ---
-    # adjoint-chain capstone at the committed CIFAR-8 shape; does not bite at He magnitudes (fidelity 4c)
-    - {declaration: "cifar8_chain_argmaxSafeH", file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # fp8-E4M3 quantization argmax preservation
     - {declaration: "FloatModel.linear_e4m3_argmax_preserved", file: "LeanMlir/Proofs/Float/FloatBridge.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a binary32 SGD step provably decreases CE at TRAINED weights
@@ -211,96 +200,55 @@ fidelity:
     4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement): the smoothing
        radius theorems require class probabilities in the OPEN interval (0,1) and speak about TRUE
        smoothed probabilities where the driver uses Clopper-Pearson ESTIMATES -- that gap is not
-       formalized. The adjoint-chain float bounds use a per-op Higham model with a quarantined
-       order-balanced reduction hypothesis. The LipSDP scorecards certify a FIXED 100-image subset
+       formalized. The LipSDP scorecards certify a FIXED 100-image subset
        at a FIXED epsilon -- an honest lower bound, not a dataset-wide claim.
 
-    4c. THE ADJOINT-CHAIN TIER IS NOT BITING (disclosed 2026-09-02). `chain_adjointClose` /
-       `chain_argmaxSafe` are correct depth-generic theorems, and `Cifar8ChainCert.cifar8ChainH` is
-       the committed cifar8Verified layer list op for op, tied by rfl to the forward the emitted
-       graph denotes. NOT BITING: the certificate's budget takes each stage at its WORST-CASE
-       propagated window, which at He magnitudes grows 1 -> 10.5 -> 592 -> ... -> 4.6e18, so
-       `chainBudgetH >= 1.8e13` against logits of ~10; the "chainBudget ~ 2.6" of
-       scripts/adjoint_chain_probe.py is the same formula at MEASURED activation magnitudes, which
-       no instantiation of the theorem can supply. What the tier adds is the committed SHAPE and
-       the rfl tie, not a certificate that bites at trained weights.
+    4c. THE ADJOINT-CHAIN TIER -- DELETED 2026-09-08. `chain_adjointClose` / `chain_argmaxSafe`
+       and the CIFAR-8 instance `cifar8_chain_argmaxSafeH` were correct depth-generic theorems
+       whose budget, at He magnitudes, exceeded 1e13 against logits of ~10; the "2.6" of the probe
+       was the same formula at MEASURED magnitudes, which no instantiation of the theorem could
+       supply. Disclosed as NOT BITING on 2026-09-02 and removed with the whole-net budgets.
 
-    4d. WHOLE-NET FLOAT BUDGETS (disclosed 2026-09-02; thread closed 2026-09-05 as vacuous).
-       Standing reference planning/float_budget_numbers.md; the ablation log is
-       planning/archive/float_budget_numbers_log.md.
+    4d. THE FLOAT TIER: the rounding model and the certified backward ties (the whole-net
+       BUDGETS were deleted 2026-09-08). planning/float_budget_numbers.md and
+       planning/archive/float_budget_numbers_log.md are the historical record.
 
-       THE DEFECT THAT STARTED IT. `FloatBridges f` bound the float implementation and its
-       modulus existentially, so it was provable for ANY bounded `f` with the constant modulus
-       `2B` and stated only boundedness while docstrings claimed a budget. FIXED:
-       `FloatBridgesTo f fF` is a Type-valued structure carrying `mag` (output window) and `mod`
-       (error modulus) as data, every combinator composes them explicitly, and a numeric bound on
-       a whole-net `.mod` is a statement the kernel checks. The legacy `FloatBridges` statements
-       remain and constrain no float implementation; do not cite them as budgets.
+       THE MODEL. `FloatModel` is any rounding operator with relative error `u`; `binary32`
+       (`u = 2^-24`) and `fp8E4M3` (`u = 2^-4`) are CONSTRUCTED as round-to-nearest on a p-bit
+       grid with the standard model proved (`rndP_err`, `Binary32Instance.lean`) -- no hardware
+       axiom. `FloatBridgesTo f fF` is a Type-valued structure carrying the output window and the
+       error modulus as data (its predecessor `FloatBridges` bound both existentially and was
+       provable for ANY bounded `f`; the legacy statements remain and constrain nothing -- do not
+       cite them as budgets). The per-operator closeness lemmas, the bf16-mixed two-roundoff
+       bounds and the MNIST/CNN descent chain are stated on it.
 
-       THE NUMBERS. Each is closed over the real leaves, tied to the committed net by rfl and, for
-       the forwards, to the rendered graph by the `*_faithful` theorems; every numeral is generated
-       by scripts/float_budget_envelope.py and re-asserted by the kernel. Window = certified output
-       magnitude; budget = |float - real| per logit (forwards) or per input pixel (backwards, on
-       loss cotangents <= 1); unit input box; a profile measured on the trained checkpoint;
-       eps >= 1e-5; u <= 2^-24.
-
-           CIFAR-8 forward                         6.37e14   / 6.121e18   fold   cifar8_float_logits_le
-           ResNet-34 forward, inference BN         1.548e209 / 3.152e211  fold   r34_float_logits_le
-           ResNet-34 forward, training BN          1.752e81  / 8.748e80   CAP    r34_train_float_logits_le  (per example)
-           MobileNetV2 forward, inference BN       1.444e96  / 2.154e3    fold   mnv2_float_logits_le
-           MobileNetV2 forward, 17-block paper     8.176e16  / 2.152e4    CAP    mnv2Paper_float_logits_le  (52 BN sites capped; any class count)
-           EfficientNet-B0 forward, inference BN   8.408e210 / 2.580e55   fold   b0_float_logits_le         (any batch size)
-           EfficientNet-B0 forward, 16-block paper 2.416e287 / 1.886e279  CAP    b0Full_float_logits_le     (16 SE sigmoids capped; the window is honest)
-           ConvNeXt-T forward                      9.738e130 / 4.871e130  CAP    cnx_float_logits_le
-           ViT-Tiny forward                        4.794e108 / 2.397e108  CAP    vit_float_logits_le
-           ResNet-34 backward, training BN         6.894e244 / 8.857e245  fold   r34_grad_float_le          (|istd| <= 16)
-           MobileNetV2 backward, training BN       1.076e152 / 4.750e153  fold   mnv2_grad_float_le
-           ConvNeXt-T backward                     1.563e250 / 1.023e251  fold   cnx_grad_float_le          (|istd| <= 16)
-           EfficientNet-B0 backward, training BN   1.578e182 / 7.104e182  fold   b0_grad_float_le           (batch size 1)
-
-       WHAT KIND OF STATEMENT EACH IS. A "fold" composes the per-op rounding moduli. A "CAP" goes
-       through `FloatBridgesTo.capped`, whose modulus is `min(mod, 2*mag)`, and the `2*mag` branch
-       closes at every normalisation site: it states only that the float and the real output both
-       lie in the certified window (the triangle inequality; budget/window = 2.00 is the tell,
-       except where later stages collapse the window). A normalisation that reduces its statistics
-       out of its own input has a modulus QUADRATIC in the window (training-mode BatchNorm,
-       LayerNorm, squeeze-excite; attention exponentially), which is why those forwards are caps;
-       inference BatchNorm is affine in x, so those are folds; every backward is a fold (a VJP is
-       linear at a fixed point). The two batch qualifiers are structural: `bnGradInputReMag`'s
-       gain carries N*h*w, so a batch-BN number is one theorem per N. The `norm_num` "ceiling" at
-       ~1e253 is Lean's `exponentiation.threshold` option (default 256), not a wall.
-
-       WHAT IS SUPPLIED. Device kernels with no IEEE specification carry an accuracy hypothesis of
-       1e-2 (`DeviceRsqrt`, `DeviceSigmoid`, `DeviceGelu`, `DeviceExp` with the softmax side
-       condition); the device MEAN is derived (`FloatModel.bnMean_close_of`). The backwards also
-       take saved-activation accuracies at 1e-2 which NO forward statement discharges, so no
-       forward-then-backward composition is claimed anywhere.
-
-       WHAT IS NOT CLAIMED. Numerical accuracy. The budgets are 1e16 to 1e287 against logits of
-       order 10 -- interval folds at worst-case windows through 30 or more layers, which cannot be
-       made to bite by more work of this kind (on ResNet-34 the conv fan-in face is 14 to 95 times
-       loose per layer, and even at the measured face the training forward lands at 1e19). The one
-       non-vacuous number is MobileNetV2's WINDOW, 2154, because relu6 clamps at 6. What the
-       numbers DO certify is the float program's shape: every stage present, at the right fan-in,
-       in the right composition, at the right normalisation mode, kernel-checked.
-
-       THE PADDING CONVENTION, CLOSED (2026-09-05). EfficientNet-B0's stem and MobileNetV2's five
-       stride-2 sites are XLA-SAME in every shipped artifact (TF-origin references); the Proofs
-       tier was re-spelled to `flatConvStride2Xla` / `depthwiseStride2FlatXla` and all four numbers
-       reproduced to the digit (a decimation picks coordinates). ResNet-34/50, ConvNeXt, ViT,
-       MobileNetV4's UIB bodies and B0's own strided depthwises are symmetric, correctly.
+       WHAT WAS DELETED, AND WHY. Thirteen kernel-checked whole-net numbers (nine forwards, four
+       input-gradient backwards) with their `Maps.*` envelopes and forward float chains: interval
+       folds at worst-case windows through 30+ layers, 1e16 to 1e287 against logits of order 10,
+       with training-mode BatchNorm / LayerNorm / squeeze-excite quadratic in the window so that
+       four of them were caps (triangle inequality, budget/window = 2). A number that certifies
+       nothing is not worth 21k lines and 44% of the corpus build; the thread had been closed as
+       vacuous on 2026-09-05. What those files also certified -- the float program's shape, every
+       stage at the right fan-in and normalisation mode -- the ties below still do.
 
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
        VJP, with a shape check that the opaque-block chain IS the committed forward: the
        per-example `r34InputGrad_eq_resnet34_vjp`, `mnv2InputGrad_eq_mobilenetv2_vjp`,
        `convnextInputGrad_eq_convNextForwardTCh_vjp`, `efficientnetInputGradB_full_correct` (16
-       blocks, through `HasVJP.backward_unique`) and `vitInputGradK_eq_vitForwardKV_vjp` (depth 12,
-       3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g. Closing them
+       blocks, through `HasVJP.backward_unique`) and `vitInputGradK_eq_vitForwardKV_vjp` (depth
+       12, 3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g. Closing them
        found drift no review had: a reversed 2x2 pool where the forward pools 3x3/s2, `id` in
        ConvNeXt's head-LN slot, ViT's float cone at scalar affines, an even-kernel adjoint that
        was not one, and a dozen wrong docstring counts. Nothing trained was affected; in every
        case the emitted program was right and a hand-written spelling of the same map had drifted.
        A `den` stated as the certified VJP cannot drift; only a theorem naming both catches it.
+       The ℝ chains those ties are about are still DEFINED inside the `*FloatBridge` files, next
+       to float twins nothing consumes; moving them out and dropping the twins is the second pass.
+
+       THE PADDING CONVENTION (closed 2026-09-05): EfficientNet-B0's stem and MobileNetV2's five
+       stride-2 sites are XLA-SAME in every shipped artifact and in every Proofs-tier statement;
+       ResNet-34/50, ConvNeXt, ViT, MobileNetV4's UIB bodies and B0's own strided depthwises are
+       symmetric, correctly.
 
     4e. THE BATCHNORM WORLD (disclosed 2026-09-06; port complete 2026-09-07). Training-mode
        BatchNorm reduces mu/var out of the activation, and PER-EXAMPLE (`[2,3]`,
@@ -338,7 +286,7 @@ fidelity:
        seven nets, ResNet-50 and MobileNetV4-Conv-M from nothing; data parallelism as a theorem
        (the all-reduced mean is the gradient of the mean loss, provably NOT the global-batch
        loss under batch BN) and as the AST node `allReduceMeanF`. STILL OPEN, and disclosed:
-       T4/T5 beyond 4d's table (declined, vacuous); no accuracy is quoted for MobileNetV4-Conv-M;
+       no accuracy is quoted for MobileNetV4-Conv-M;
        ConvNeXt's and ViT's SGD-inline `*_train_step.mlir` stay per-example and their `*TiePoC`
        ties are at those bytes; `convBack` and `convBackBatched` -- two emitters for one VJP --
        are not tied to each other in Lean; the host-side sharding and lockstep (DP piece 3) are
@@ -416,11 +364,11 @@ alignment:
       module: "LeanMlir/Proofs/Foundation/*TiePoCB.lean, LeanMlir/Proofs/Architectures/*TiePoCG*.lean, LeanMlir/Proofs/Architectures/*TiePoC.lean"
       status: "proved"
       note: "genuine backward cotangent, not a free forall-cotangent; one replica, composing with allReduceMeanF (fidelity 4g); committed-spec ties for the 5 ImageNet nets in SpecVJP"
-    - source: "Binary32 rounding model + whole-net float-error budgets + certified backward ties"
-      lean: "rndP_err; <net>_float_logits_le (9 forwards) and <net>_grad_float_le (4 backwards); the *InputGrad_eq_*_vjp / *InputGradB_eq_*_vjp ties with their *_eq_slots shape checks; chain_adjointClose; cifar8_chain_argmaxSafeH"
-      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Float/*FloatBudget.lean, LeanMlir/Proofs/Foundation/*CertifiedTie*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
+    - source: "Binary32 rounding model + certified backward ties"
+      lean: "rndP_err; the *InputGrad_eq_*_vjp / *InputGradB_eq_*_vjp ties with their *_eq_slots shape checks"
+      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Foundation/*CertifiedTie*.lean"
       status: "proved"
-      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the budgets are interval folds, vacuous as numerical certificates, five of them caps (fidelity 4d); the CIFAR-8 argmax certificate does not bite at trained magnitudes (fidelity 4c)"
+      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the whole-net numeric budgets and the adjoint-chain tier were deleted 2026-09-08 as vacuous (fidelity 4c, 4d)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
       module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"

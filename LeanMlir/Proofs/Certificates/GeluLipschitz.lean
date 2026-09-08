@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Float.ViTFloatBridge
-import LeanMlir.Proofs.Codegen.AdjointChainBridge
 
 /-! # The GELU saturation constant, in the two shapes its consumers want
 
@@ -22,6 +21,15 @@ will evaluate (`planning/archive/float_budget_numbers_log.md` §3.3.0).
 -/
 
 namespace Proofs
+
+/-- Windowed Lipschitz gain of a real map: on inputs within magnitude `A`, a
+    per-coordinate input spread `e` is amplified to at most `H·e` per
+    coordinate. This is the tail-gain currency of the adjoint chain — the
+    quantity the backward/VJP pass measures along a trajectory. -/
+def LipOnWindow {m n : Nat} (A H : ℝ) (f : Vec m → Vec n) : Prop :=
+  ∀ (u v : Vec m) (e : ℝ), 0 ≤ e → (∀ k, |u k| ≤ A) → (∀ k, |v k| ≤ A) →
+    (∀ k, |u k - v k| ≤ e) → ∀ j, |f u j - f v j| ≤ H * e
+
 
 /-- **GELU has windowed gain `3/2`** — the adjoint-chain instance (in fact the
     gain is global: no window needed). -/
