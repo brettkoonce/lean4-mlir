@@ -393,100 +393,11 @@ extern_lib libireeffi pkg := do
     dependency. `ensurePjrtShim` builds the PJRT one on demand. -/
 private def lowererLink : Array String := #["-ldl"]
 
-lean_exe «resnet34-train» where
-  root := `apps.baselines.MainResnetTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «resnet50-train» where
-  root := `apps.baselines.MainResnet50Train
-  moreLinkArgs := lowererLink
-
-lean_exe «mobilenet-v2-train» where
-  root := `apps.baselines.MainMobilenetV2Train
-  moreLinkArgs := lowererLink
-
-lean_exe «mobilenet-v3-train» where
-  root := `apps.baselines.MainMobilenetV3Train
-  moreLinkArgs := lowererLink
-
-lean_exe «efficientnet-train» where
-  root := `apps.baselines.MainEfficientNetTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «efficientnet-v2-train» where
-  root := `apps.baselines.MainEfficientNetV2Train
-  moreLinkArgs := lowererLink
-
-lean_exe «convnext-tiny-train» where
-  root := `apps.baselines.MainConvNeXtTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «vit-tiny-train» where
-  root := `apps.baselines.MainVitTrain
-  moreLinkArgs := lowererLink
-
--- Muon (Newton–Schulz polar projection) on the 2D weights, AdamW on the rest.
--- Same ViT-Tiny + recipe as vit-tiny-train → a compute-matched A/B. See planning/archive/muon.md.
-lean_exe «vit-tiny-muon-train» where
-  root := `apps.baselines.MainVitMuonTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «vit-tiny-shampoo-train» where
-  root := `apps.baselines.MainVitShampooTrain
-  moreLinkArgs := lowererLink
-
-/-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware
-    blueprint declaration check (checkdecls minus the `CertsHeavy` lib, whose
-    oleans the blueprint workflow deliberately does not build). -/
-lean_exe «blueprint-checkdecls» where
-  root := `tests.BlueprintCheckDecls
-  supportInterpreter := true
-
-/-- `docstring-checkrefs` — the docstring peer of `blueprint-checkdecls`. That gate resolves
-    every `\lean{}` the blueprint cites; this one resolves every `` `Ident` `` a DOCSTRING
-    cites, against the same environment. The blueprint came through five rewrites intact and
-    the docstrings did not, and the difference was never style: the blueprint had a gate.
-    ⚠ Resolution is `Environment.find?`, not a regex — see the file header for why the regex
-    version was abandoned at an 8.7% false-positive floor. -/
-lean_exe «docstring-checkrefs» where
-  root := `tests.DocstringCheckRefs
-  supportInterpreter := true
-
-lean_exe «ablation» where
-  root := `apps.ablation.MainAblation
-  moreLinkArgs := lowererLink
-
-lean_exe «vgg-train» where
-  root := `apps.baselines.MainVggTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-cnn-train» where
-  root := `apps.baselines.MainMnistCnnTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-bn-train» where
-  root := `apps.baselines.MainCifarCnnBnTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-mlp-train» where
-  root := `apps.baselines.MainMnistMlpTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-mlp-shampoo-train» where
-  root := `apps.baselines.MainMnistMlpShampooTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-linear-train» where
-  root := `apps.baselines.MainMnistLinearTrain
-  moreLinkArgs := lowererLink
-
--- Trains MNIST-linear on the VERIFIED-rendered StableHLO
--- (`verified_mlir/`, = Proofs.StableHLO.linearTrainStepModuleV) through the
--- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
-
-lean_exe «mnist-linear-verified» where
-  root := `apps.mnist.MainMnistLinearVerified
-  moreLinkArgs := lowererLink
+-- ═══════════════════════════════════════════════════════════════════════
+-- THE TOUR — the canonical set (planning/tour_realignment.md, 2026-09-08): the four
+-- `lake run` tiers, the nine demos and the two gates. New readers are pointed here and
+-- nowhere else; every number the README and the book quote comes from one of these.
+-- ═══════════════════════════════════════════════════════════════════════
 
 -- ═══════════════════════════════════════════════════════════════════
 -- XLA/PJRT backend (planning/archive/xla_pjrt_ladder.md)
@@ -503,87 +414,20 @@ lean_exe «mnist-linear-verified» where
 -- `ensurePjrtShim` (below) is what keeps that from biting on a fresh clone.
 -- ═══════════════════════════════════════════════════════════════════
 
+-- ─── Tier 1 — `lake run mnist`: MNIST linear / MLP / CNN on the verified renders (Chapters 1–3) ───
+
+-- Trains MNIST-linear on the VERIFIED-rendered StableHLO
+-- (`verified_mlir/`, = Proofs.StableHLO.linearTrainStepModuleV) through the
+-- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
+
+lean_exe «mnist-linear-verified» where
+  root := `apps.mnist.MainMnistLinearVerified
+  moreLinkArgs := lowererLink
+
 -- Rung 0 of the XLA ladder is now a RUN-TIME choice, not a second executable:
 -- `mnist-linear-verified` serves both lowerers via $LEAN_MLIR_LOWERER, so its
 -- `-xla` peer and their shared-body file are both gone. G2 is now the SAME
 -- binary run twice, which is a stronger comparison than two binaries.
-
--- Phase-3 PGD adversarial attack on the verified linear net (planning/archive/robustness.md):
--- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
-lean_exe «mnist-linear-pgd» where
-  root := `apps.mnist.MainMnistLinearPgd
-  moreLinkArgs := lowererLink
-
--- Phase-3 PGD attack on the verified MLP (planning/archive/robustness.md): input gradient =
--- the proven mlpInputGrad VJP; certificate = the loose product of layer spectral norms.
-lean_exe «mnist-mlp-pgd» where
-  root := `apps.mnist.MainMnistMlpPgd
-  moreLinkArgs := lowererLink
-
--- Phase-3 PGD attack on the verified CNN (planning/archive/robustness_ladder.md, the conv rung):
--- input gradient = the proven conv/maxpool input-VJP; certificate = the conv-aware product.
-lean_exe «mnist-cnn-pgd» where
-  root := `apps.mnist.MainMnistCnnPgd
-  moreLinkArgs := lowererLink
-
--- Spectral-norm-constrained MLP training (planning/archive/robustness_ladder.md, the gap-shrinking
--- lever): projected SGD onto ‖Wᵢ‖₂ ≤ c shrinks the global L = ∏‖Wᵢ‖₂, turning the vacuous
--- product certificate non-vacuous — the empirical face of lipschitz_margin_certified_radius.
-lean_exe «mnist-mlp-spectral» where
-  root := `apps.mnist.MainMnistMlpSpectral
-  moreLinkArgs := lowererLink
-
--- Spectral-norm-constrained CNN training (planning/archive/robustness_ladder.md): the conv sibling —
--- caps the dense ‖Wᵢ‖₂ and the conv tap-sum bound; a 5-layer product + loose conv-norm make
--- certifying the conv net harder than the MLP (tighter c, more clean cost).
-lean_exe «mnist-cnn-spectral» where
-  root := `apps.mnist.MainMnistCnnSpectral
-  moreLinkArgs := lowererLink
-
--- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/archive/robustness_ladder.md, the deeper
--- conv rung): input gradient = the proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the
--- 7-layer conv-aware product. Reuses the generic attackPgdConvNet driver.
-lean_exe «cifar-pgd» where
-  root := `apps.cifar.MainCifarPgd
-  moreLinkArgs := lowererLink
-
--- Spectral-norm-constrained CIFAR-10 CNN training (planning/archive/robustness_ladder.md): the 7-layer
--- product compounds the loose conv bound harder still — tightest caps, smallest certified radii.
-lean_exe «cifar-spectral» where
-  root := `apps.cifar.MainCifarSpectral
-  moreLinkArgs := lowererLink
-
--- Phase-3 PGD attack on the verified CIFAR-10 CNN + (instance) BatchNorm: genCifarBnPgdStep runs
--- the proven input-VJP through 4 instance-norm layers (the BN grad-input 3-term formula). Cert
--- N/A (instance-norm Lipschitz is data-dependent) — the attack rung only.
-lean_exe «cifar-bn-pgd» where
-  root := `apps.cifar.MainCifarBnPgd
-  moreLinkArgs := lowererLink
-
--- Randomized-smoothing certificate (planning/archive/robustness_ladder.md §3, Cohen 2019): the
--- DEPTH-INDEPENDENT cert. Forward-only Monte-Carlo over the proof-rendered fwd (no kernel, no
--- input-VJP) — sample noisy copies, Clopper-Pearson lower-bound p_A, radius = σ·Φ⁻¹(p_A). Base
--- net trained with matched Gaussian augmentation. Non-vacuous where the spectral product is hopeless.
-lean_exe «mnist-mlp-smooth» where
-  root := `apps.mnist.MainMnistMlpSmooth
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-cnn-smooth» where
-  root := `apps.mnist.MainMnistCnnSmooth
-  moreLinkArgs := lowererLink
-
--- The deep-net payoff: smoothing certifies a non-vacuous L2 radius on the 7-layer CIFAR CNN where
--- the conv-aware spectral product was 942K-loose (cert 0%). Same forward-only procedure, any depth.
-lean_exe «cifar-smooth» where
-  root := `apps.cifar.MainCifarSmooth
-  moreLinkArgs := lowererLink
-
--- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
--- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
--- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).
-lean_exe «mnist-linear-e4m3-verified» where
-  root := `apps.mnist.MainMnistLinearE4M3Verified
-  moreLinkArgs := lowererLink
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
 -- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
@@ -592,38 +436,12 @@ lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
   moreLinkArgs := lowererLink
 
-/-- Rung 1 of the XLA ladder (`planning/archive/xla_pjrt_ladder.md`): depth + multiple
-    param tensors via the packed-params path, and the first rung with He init.
-    Compare against `mnist-mlp-verified` for gate G2. -/
+-- Rung 1 of the XLA ladder (`planning/archive/xla_pjrt_ladder.md`): depth + multiple
+-- param tensors via the packed-params path, and the first rung with He init.
+-- Compare against `mnist-mlp-verified` for gate G2.
 -- Rung 1 of the XLA ladder (depth + multiple parameter tensors) is now a
 -- RUN-TIME choice: `mnist-mlp-verified` serves both lowerers via
 -- $LEAN_MLIR_LOWERER, so its `-xla` peer and their shared-body file are gone.
-
--- Width-parametric MNIST MLP: `mnist-mlp-grid <d₁> <d₂> [epochs]` renders + trains
--- the 784→d₁→d₂→10 MLP on the faithful verified StableHLO (the size-sweep demo).
-lean_exe «mnist-mlp-grid» where
-  root := `apps.mnist.MainMnistMlpGrid
-  moreLinkArgs := lowererLink
-
--- FC-width-parametric MNIST CNN: `mnist-cnn-grid <fc-width> [epochs]` holds the conv
--- stack at 32 channels and sweeps the dense head (…→d→d→10) on the faithful StableHLO.
-lean_exe «mnist-cnn-grid» where
-  root := `apps.mnist.MainMnistCnnGrid
-  moreLinkArgs := lowererLink
-
--- FC-head-parametric cifar8-BN (AdamW): `cifar8-bn-grid <fc-width> [epochs]` holds the
--- 8-conv [16,16,32,32] backbone and sweeps the dense head (128→d→d→10) on the verified
--- renders (tests/TestCifar8AdamTrain.lean), trained via trainAdamSched "adam".
-lean_exe «cifar8-bn-grid» where
-  root := `apps.cifar.MainCifar8BnGrid
-  moreLinkArgs := lowererLink
-
--- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
--- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
--- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.
-lean_exe «mnist-mlp-e4m3-verified» where
-  root := `apps.mnist.MainMnistMlpE4M3Verified
-  moreLinkArgs := lowererLink
 
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
@@ -634,161 +452,25 @@ lean_exe «mnist-cnn-verified» where
   root := `apps.mnist.MainMnistCnnVerified
   moreLinkArgs := lowererLink
 
-/-- The first CONVOLUTIONAL graph on the XLA ladder — where IREE's ~1%-of-peak
-    conv codegen actually bites, unlike the dense-only rungs 0-1. -/
+-- The first CONVOLUTIONAL graph on the XLA ladder — where IREE's ~1%-of-peak
+-- conv codegen actually bites, unlike the dense-only rungs 0-1.
 -- The conv rung of the XLA ladder is now a RUN-TIME choice:
 -- `mnist-cnn-verified` serves both lowerers via $LEAN_MLIR_LOWERER, so its
 -- `-xla` peer and their shared-body file are gone.
 
--- Chapter 4 (low precision): fp8 (E4M3) CNN training on the SAME verified StableHLO.
--- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
--- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainMnistCnnE4M3Verified.lean.
-lean_exe «mnist-cnn-e4m3-verified» where
-  root := `apps.mnist.MainMnistCnnE4M3Verified
-  moreLinkArgs := lowererLink
-
--- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
--- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepText).
-lean_exe «cifar-verified» where
-  root := `apps.cifar.MainCifarVerified
-  moreLinkArgs := lowererLink
-
--- Chapter 5 (low precision): fp8 (E4M3) CIFAR-10 training on the SAME verified StableHLO.
--- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
--- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainCifarE4M3Verified.lean.
-lean_exe «cifar-e4m3-verified» where
-  root := `apps.cifar.MainCifarE4M3Verified
-  moreLinkArgs := lowererLink
-
--- Chapter 5 (BatchNorm): trains the CIFAR-10 CNN + per-example BN on the
--- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
-lean_exe «cifar-bn-verified» where
-  root := `apps.cifar.MainCifarBnVerified
-  moreLinkArgs := lowererLink
-
--- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
--- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepText).
-lean_exe «cifar8-verified» where
-  root := `apps.cifar.MainCifar8Verified
-  moreLinkArgs := lowererLink
-
-
-lean_exe «cifar8-bn-verified» where
-  root := `apps.cifar.MainCifar8BnVerified
-  moreLinkArgs := lowererLink
-
-
-
-lean_exe «cifar8-verified-adam» where
-  root := `apps.cifar.MainCifar8VerifiedAdam
-  moreLinkArgs := lowererLink
-
-
-
-lean_exe «cifar8-bn-verified-adam» where
-  root := `apps.cifar.MainCifar8BnVerifiedAdam
-  moreLinkArgs := lowererLink
-
-
-
-lean_exe «cifar8-verified-momentum» where
-  root := `apps.cifar.MainCifar8VerifiedMomentum
-  moreLinkArgs := lowererLink
-
-
--- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
--- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
--- fp32 master). Same verified train-step MLIR as their fp32 peers.
--- ── bf16 arm of the §5.2 optimizer sweep (planning/archive/cifar_lowprec_stability.md) ──
--- Same net, same init, same hyperparameters as the fp32 arms; `cifar8Bf16Verified`'s slug
--- points at the bf16-rendered artifacts. ⚠ FORWARD-only bf16, and NO speedup by design
--- (§5.3: 0.87× at cifar8's shapes) — these exist to show the optimizer ORDERING is invariant
--- under precision, which is the CIFAR chapter's whole claim.
--- The batched-render GATE: same net/hyperparameters/init as cifar8-verified-adam, on the
--- `…FaithfulB` artifact. The two renders denote the same function, so the curves must agree.
--- ── §4.3 "Lever 3: precision": the wide-head (d1=512) 3×3 sweep ──
--- One net (the one Levers 1-2 measure), three optimizers, three precisions. f32 and bf16 come
--- from ONE renderer differing only in the emit; fp8 is host-side and rides the f32 graph.
-lean_exe «cifar8wb-ablation» where
-  root := `apps.ablation.MainCifar8WideBatchedAblation
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8wb-bf16-ablation» where
-  root := `apps.ablation.MainCifar8WideBf16Ablation
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8w-fp8-ablation» where
-  root := `apps.ablation.MainCifar8WideFp8Ablation
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8b-verified-adam» where
-  root := `apps.cifar.MainCifar8bVerifiedAdam
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bf16-verified» where
-  root := `apps.cifar.MainCifar8Bf16Verified
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bf16-verified-momentum» where
-  root := `apps.cifar.MainCifar8Bf16VerifiedMomentum
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bf16-verified-adam» where
-  root := `apps.cifar.MainCifar8Bf16VerifiedAdam
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-e4m3-verified» where
-  root := `apps.cifar.MainCifar8E4M3Verified
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-e4m3-verified-momentum» where
-  root := `apps.cifar.MainCifar8E4M3VerifiedMomentum
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-e4m3-verified-adam» where
-  root := `apps.cifar.MainCifar8E4M3VerifiedAdam
-  moreLinkArgs := lowererLink
-
-
-lean_exe «cifar8-bn-verified-momentum» where
-  root := `apps.cifar.MainCifar8BnVerifiedMomentum
-  moreLinkArgs := lowererLink
-
-
-
-lean_exe «cifar8-verified-sgdsched» where
-  root := `apps.cifar.MainCifar8VerifiedSgdSched
-  moreLinkArgs := lowererLink
-
-
-
-lean_exe «cifar8-bn-verified-sgdsched» where
-  root := `apps.cifar.MainCifar8BnVerifiedSgdSched
-  moreLinkArgs := lowererLink
-
+-- ─── Tier 2 — `lake run cifar`: the wide 8-conv CIFAR net, SGD / momentum / AdamW × no-BN / BN (Chapter 4) ───
 
 -- Wide-head (MNIST-style 2×512 dense, d1=512) cifar8 optimizer ablation: each exe runs SGD /
 -- momentum / AdamW in sequence on the controlled pipeline. Render: tests/TestCifar8WideTrain.lean.
 lean_exe «cifar8w-ablation» where
-  root := `apps.ablation.MainCifar8WideAblation
+  root := `apps.cifar.MainCifar8WideAblation
   moreLinkArgs := lowererLink
 
 lean_exe «cifar8w-bn-ablation» where
-  root := `apps.ablation.MainCifar8WideBnAblation
+  root := `apps.cifar.MainCifar8WideBnAblation
   moreLinkArgs := lowererLink
 
-/-- Chapter 5 §5.6's recipe ablation on ResNet-34 / Imagenette, ONE ARM PER INVOCATION
-    (`resnet34-ablation data <arm>`) so the eight arms can run across four cards in under
-    three hours instead of ten in series. Arms: full nowarm nocos noaug nowd nols noadam bare. -/
-lean_exe «resnet34-ablation» where
-  root := `apps.ablation.MainResnet34Ablation
-  moreLinkArgs := lowererLink
-
-/-- Chapter 4 Lever 3 on the NORMALIZED net: the BN net on the batched op family, f32 and bf16,
-    three optimizers each. See planning/archive/bf16_batchnorm.md. -/
-lean_exe «cifar8wb-bn-ablation» where
-  root := `apps.ablation.MainCifar8WideBnBf16Ablation
-  moreLinkArgs := lowererLink
+-- ─── Tier 3 — `lake run imagenette`: the seven Part-1 nets at 224², book order (Chapters 5–9) ───
 
 -- ⛔ `resnet34-verified` was here until 2026-09-06 (4c leg 1). It trained ResNet-34 on the
 -- PER-EXAMPLE `resnet34_train_step.mlir`, and both the artifact and its renderer are retired: the
@@ -802,40 +484,19 @@ lean_exe «resnet34-verified-adam» where
   root := `apps.imagenette.MainResnet34VerifiedAdam
   moreLinkArgs := lowererLink
 
+lean_exe «resnet50-verified-adam» where
+  root := `apps.imagenette.MainResnet50VerifiedAdam
+  moreLinkArgs := lowererLink
 
-/-- `uib` layout tie (`planning/archive/mnv4_verified.md` phase 1): `VLayer.toSpecs` vs the baseline
-    `Layer.nParams`, over all four UIB families. Pins the LAYOUT; the ORDER needs a forward tie. -/
-lean_exe «uib-layout-tie» where
-  root := `tests.TestUibLayoutTie
+-- ⛔ `mobilenetv2-verified` is RETIRED (4c leg 2, 2026-09-06), with the per-example
+-- `verified_mlir/mobilenetv2_train_step.mlir` it trained on. Its own header said its accuracy was
+-- chance (387/3925, byte identical every epoch) because running-statistic threading lives only in
+-- `trainAdamSched`, and told readers not to quote it. `mobilenetv2-verified-adam` is the trainer
+-- that produces a number, and it was already on the batched chain.
 
-/-- MNv4 forward-chain structural smoke — op counts against the Conv-S block table. -/
-lean_exe «mnv4-fwd-smoke» where
-  root := `tests.TestMnv4FwdSmoke
-
-/-- MNv4 AdamW train-step smoke (`planning/archive/mnv4_verified.md` phase 2): arity, entry point, the
-    eval forward's stat binding, and — the one no other net has — that the train step's forward
-    region is `@mnv4_fwd`'s body VERBATIM. §3d(b)'s two-worlds split cannot hide behind this.
-    Also emits the batch-2 train step `scripts/grad_tie.py --net mnv4` runs. -/
-lean_exe «mnv4-train-smoke» where
-  root := `tests.TestMnv4TrainSmoke
-
-/-- Emits the **batch-2** ResNet-34 AdamW train step that `scripts/grad_tie.py --net r34` runs, and
-    pins the §3d(b) two-worlds split it lives with: `resnet34_fwd` is per-example BN while the Adam
-    train step is batch BN, so unlike MNv4 there is no forward-prefix property to assert. Sole
-    writer of `.lake/build/resnet34_adam_train_step_b2.mlir`. -/
-lean_exe «r34-train-b2» where
-  root := `tests.TestR34TrainB2
-
-/-- Emits the **optimizer stage alone** — one step as a function of `(θ, g, m, v, G)` — for each of
-    seven variants, which is what `scripts/opt_step_tie.py` diffs against the reference optimizer.
-    `planning/archive/verified_optimizer_parity.md` §5's gate: `vjp_oracle` ties the two implementations at
-    the GRADIENT, and nothing tied them at the UPDATE until this.
-
-    ⚠ The body is `optAllParams`, the same call `resnet50TrainStepFaithfulB` makes — so this gates
-    the shipped emission and not a copy of it. Sole writer of `.lake/build/opt_step_*.mlir`. -/
-lean_exe «opt-step-fixtures» where
-  root := `tests.TestOptStepFixtures
-
+lean_exe «mobilenetv2-verified-adam» where
+  root := `apps.imagenette.MainMobilenetV2VerifiedAdam
+  moreLinkArgs := lowererLink
 
 /-- Phase 4 of `planning/archive/mnv4_verified.md`: 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
     IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/
@@ -843,11 +504,19 @@ lean_exe «mobilenetv4-verified-adam» where
   root := `apps.imagenette.MainMobilenetV4VerifiedAdam
   moreLinkArgs := lowererLink
 
-
-lean_exe «resnet50-verified-adam» where
-  root := `apps.imagenette.MainResnet50VerifiedAdam
+lean_exe «efficientnet-verified-adam» where
+  root := `apps.imagenette.MainEfficientNetVerifiedAdam
   moreLinkArgs := lowererLink
 
+lean_exe «convnext-verified-adam» where
+  root := `apps.imagenette.MainConvNeXtVerifiedAdam
+  moreLinkArgs := lowererLink
+
+lean_exe «vit-verified-adam» where
+  root := `apps.imagenette.MainViTVerifiedAdam
+  moreLinkArgs := lowererLink
+
+-- ─── Tier 4 — `lake run imagenet`: the ImageNet-1k runners; a row is scripts/jobs/<job>.conf + scripts/supervise.sh ───
 
 /-- **ResNet-34 on full 1000-class ImageNet** — the scale/reference tier. Same certified renderer at
     `nClasses := 1000, B := 256`, heavy-ball + coupled L2 (the `jax/MainResnetImagenet.lean` recipe),
@@ -861,7 +530,6 @@ lean_exe «resnet34-imagenet-verified» where
   root := `apps.imagenette.MainResnet34Imagenet
   moreLinkArgs := lowererLink
 
-
 /-- **ResNet-50 on full 1000-class ImageNet** — R50 phase 3. The bottleneck renderer
     (`ResNet50RenderB`) at `nClasses := 1000`, AdamW, 4-replica by default.
     ⚠ NOT RSB-A3 — no LAMB, no bs2048, no gradient accumulation. ⚠ And no incumbent render to tie
@@ -870,39 +538,42 @@ lean_exe «resnet50-imagenet-verified» where
   root := `apps.imagenette.MainResnet50Imagenet
   moreLinkArgs := lowererLink
 
+/-- **MobileNetV2 on full 1000-class ImageNet** — the fifth scale-tier trainer. `nClasses := 1000,
+    B := 64`; four replicas is global 256, the reference's batch. Batch-BN, so it has a `_fwd_eval`
+    peer and a running-stat region.
 
-/-- **ViT-Tiny on full 1000-class ImageNet** — the ViT peer of the R34 scale tier. Same certified
-    renderer at `nClasses := 1000, bs := 128`; at four replicas that is global batch 512, the
-    reference's (`jax/MainVitImagenet.lean`). Fed by the generated tfds shim.
+    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
+lean_exe «mobilenetv2-imagenet-verified» where
+  root := `apps.imagenette.MainMobileNetV2Imagenet
+  moreLinkArgs := lowererLink
+
+/-- **MobileNetV4-Conv-M on full 1000-class ImageNet** — the sixth scale-tier trainer (2026-08-12).
+    `nClasses := 1000, B := 64`; four replicas would be global 256. Batch-BN, so it has a
+    `_fwd_eval` peer and a running-stat region.
+
+    ⭐ **Conv-M as of a 2026-08-26 audit — this docstring said Conv-S, and it was true when
+    written.** `mnv4ImagenetVerified` (`VerifiedNets.lean`) now carries the Conv-M block table and
+    names itself "MobileNetV4-Conv-M (ImageNet-1k)", so the chapter's 75.51% IS this network's
+    target. It is not this network's RESULT: nothing here has been trained to convergence.
+
+    ⚠ Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there,
+    AdamW @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet
+    — see `planning/archive/chapter_makeover.md`'s MNv4 phase-4 gap list. -/
+lean_exe «mobilenetv4-imagenet-verified» where
+  root := `apps.imagenette.MainMobilenetV4Imagenet
+  moreLinkArgs := lowererLink
+
+/-- **EfficientNet-B0 on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000,
+    B := 64`; four replicas is global 256, the reference's batch. The first ImageNet net here with
+    BatchNorm, so it has a `_fwd_eval` peer and a running-stat region.
 
     Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
     say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
     how every net came to stream R34's augmentation.
-    ⚠ Set `SHIM_WORKERS=2` — one producer cannot feed a 4×128 ViT step (§2p).
-    ⚠ Does NOT move the verification tier, and is NOT the DeiT recipe (§2p). -/
-lean_exe «vit-imagenet-verified» where
-  root := `apps.imagenette.MainViTImagenet
+    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
+lean_exe «efficientnet-imagenet-verified» where
+  root := `apps.imagenette.MainEfficientNetImagenet
   moreLinkArgs := lowererLink
-
-/-- **ViT-Small on ImageNet-1k** — ViT-Tiny widened (D 384 = 6 heads × 64, MLP 1536, same depth
-    12), 22,050,664 parameters. The first net added by widening rather than by a new chain: the
-    proof side needed nothing, since `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k`
-    and global (GELU/softmax/LayerNorm carry no kink).
-    ⚠ FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
-    `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer. At 128 per
-    device that is DeiT's global 512, so the recipe's LR is the rate this batch was set for.
-    ⭐ `scripts/supervise.sh vits-default-g512-4gpu` is the job: 528 → 319 ms/step measured,
-    113 → 71 h for 300 epochs. ⚠ Renders, ties and STEPS; NOTHING has been trained on it. -/
-lean_exe «vit-s-imagenet-verified» where
-  root := `apps.imagenette.MainViTSImagenet
-  moreLinkArgs := lowererLink
-
-/-- **ViT-Base (DeiT-B) on ImageNet-1k** — 86,567,656 parameters. ⚠ Per-device batch 32 (global
-    128, NOT the DeiT 512) because ViT-B OOMs at 4×128 on 16 GB cards. Renders; unmeasured. -/
-lean_exe «vit-b-imagenet-verified» where
-  root := `apps.imagenette.MainViTBImagenet
-  moreLinkArgs := lowererLink
-
 
 /-- **ConvNeXt-T on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000`;
     batch stays 32 per device (`cBS` is still private), so four replicas is global 128 and 10,009
@@ -951,44 +622,413 @@ lean_exe «convnext-b-imagenet-verified» where
   root := `apps.imagenette.MainConvNeXtBImagenet
   moreLinkArgs := lowererLink
 
-
-/-- **EfficientNet-B0 on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000,
-    B := 64`; four replicas is global 256, the reference's batch. The first ImageNet net here with
-    BatchNorm, so it has a `_fwd_eval` peer and a running-stat region.
+/-- **ViT-Tiny on full 1000-class ImageNet** — the ViT peer of the R34 scale tier. Same certified
+    renderer at `nClasses := 1000, bs := 128`; at four replicas that is global batch 512, the
+    reference's (`jax/MainVitImagenet.lean`). Fed by the generated tfds shim.
 
     Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
     say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
     how every net came to stream R34's augmentation.
-    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
-lean_exe «efficientnet-imagenet-verified» where
-  root := `apps.imagenette.MainEfficientNetImagenet
+    ⚠ Set `SHIM_WORKERS=2` — one producer cannot feed a 4×128 ViT step (§2p).
+    ⚠ Does NOT move the verification tier, and is NOT the DeiT recipe (§2p). -/
+lean_exe «vit-imagenet-verified» where
+  root := `apps.imagenette.MainViTImagenet
   moreLinkArgs := lowererLink
 
-
-/-- **MobileNetV2 on full 1000-class ImageNet** — the fifth scale-tier trainer. `nClasses := 1000,
-    B := 64`; four replicas is global 256, the reference's batch. Batch-BN, so it has a `_fwd_eval`
-    peer and a running-stat region.
-
-    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
-lean_exe «mobilenetv2-imagenet-verified» where
-  root := `apps.imagenette.MainMobileNetV2Imagenet
+/-- **ViT-Small on ImageNet-1k** — ViT-Tiny widened (D 384 = 6 heads × 64, MLP 1536, same depth
+    12), 22,050,664 parameters. The first net added by widening rather than by a new chain: the
+    proof side needed nothing, since `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k`
+    and global (GELU/softmax/LayerNorm carry no kink).
+    ⚠ FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
+    `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer. At 128 per
+    device that is DeiT's global 512, so the recipe's LR is the rate this batch was set for.
+    ⭐ `scripts/supervise.sh vits-default-g512-4gpu` is the job: 528 → 319 ms/step measured,
+    113 → 71 h for 300 epochs. ⚠ Renders, ties and STEPS; NOTHING has been trained on it. -/
+lean_exe «vit-s-imagenet-verified» where
+  root := `apps.imagenette.MainViTSImagenet
   moreLinkArgs := lowererLink
 
-/-- **MobileNetV4-Conv-M on full 1000-class ImageNet** — the sixth scale-tier trainer (2026-08-12).
-    `nClasses := 1000, B := 64`; four replicas would be global 256. Batch-BN, so it has a
-    `_fwd_eval` peer and a running-stat region.
-
-    ⭐ **Conv-M as of a 2026-08-26 audit — this docstring said Conv-S, and it was true when
-    written.** `mnv4ImagenetVerified` (`VerifiedNets.lean`) now carries the Conv-M block table and
-    names itself "MobileNetV4-Conv-M (ImageNet-1k)", so the chapter's 75.51% IS this network's
-    target. It is not this network's RESULT: nothing here has been trained to convergence.
-
-    ⚠ Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there,
-    AdamW @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet
-    — see `planning/archive/chapter_makeover.md`'s MNv4 phase-4 gap list. -/
-lean_exe «mobilenetv4-imagenet-verified» where
-  root := `apps.imagenette.MainMobilenetV4Imagenet
+/-- **ViT-Base (DeiT-B) on ImageNet-1k** — 86,567,656 parameters. ⚠ Per-device batch 32 (global
+    128, NOT the DeiT 512) because ViT-B OOMs at 4×128 on 16 GB cards. Renders; unmeasured. -/
+lean_exe «vit-b-imagenet-verified» where
+  root := `apps.imagenette.MainViTBImagenet
   moreLinkArgs := lowererLink
+
+-- ─── Demos — `lake exe <name>`: segmentation, detection, diffusion, language (demos/README.md) ───
+
+lean_exe «unet-brats-train» where
+  root := `demos.MainUnetBratsTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «unet-brats-r34» where
+  root := `demos.MainUnetBratsR34
+  moreLinkArgs := lowererLink
+
+lean_exe «brats-predict» where
+  root := `demos.MainBratsPredict
+  moreLinkArgs := lowererLink
+
+lean_exe «bigram-shakespeare» where
+  root := `demos.MainBigramShakespeare
+  moreLinkArgs := lowererLink
+
+lean_exe «yolov1-visdrone-fpn» where
+  root := `demos.MainYolov1VisdroneFpn
+  moreLinkArgs := lowererLink
+
+lean_exe «tinygpt-shakespeare» where
+  root := `demos.MainTinyGptShakespeare
+  moreLinkArgs := lowererLink
+
+lean_exe «tinystories» where
+  root := `demos.MainTinyStories
+  moreLinkArgs := lowererLink
+
+lean_exe «mnist-ddpm-train» where
+  root := `demos.MainMnistDdpmTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «mnist-ddpm-sample» where
+  root := `demos.MainMnistDdpmSample
+  moreLinkArgs := lowererLink
+
+-- ─── Gates — the two checkers CI and every doc commit run ───
+
+/-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware
+    blueprint declaration check (checkdecls minus the `CertsHeavy` lib, whose
+    oleans the blueprint workflow deliberately does not build). -/
+lean_exe «blueprint-checkdecls» where
+  root := `tests.BlueprintCheckDecls
+  supportInterpreter := true
+
+/-- `docstring-checkrefs` — the docstring peer of `blueprint-checkdecls`. That gate resolves
+    every `\lean{}` the blueprint cites; this one resolves every `` `Ident` `` a DOCSTRING
+    cites, against the same environment. The blueprint came through five rewrites intact and
+    the docstrings did not, and the difference was never style: the blueprint had a gate.
+    ⚠ Resolution is `Environment.find?`, not a regex — see the file header for why the regex
+    version was abandoned at an 8.7% false-positive floor. -/
+lean_exe «docstring-checkrefs» where
+  root := `tests.DocstringCheckRefs
+  supportInterpreter := true
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- THE LAB — everything else: the evidence behind the tour's numbers and the book's
+-- ablations. Nothing here is a headline runner. historical/RESULTS.md and the book cite
+-- these names, so nothing is renamed; groups are by home directory.
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ─── apps/baselines/ — the unverified full-recipe `*-train` trainers, the pre-verified path ───
+
+lean_exe «resnet34-train» where
+  root := `apps.baselines.MainResnetTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «resnet50-train» where
+  root := `apps.baselines.MainResnet50Train
+  moreLinkArgs := lowererLink
+
+lean_exe «mobilenet-v2-train» where
+  root := `apps.baselines.MainMobilenetV2Train
+  moreLinkArgs := lowererLink
+
+lean_exe «mobilenet-v3-train» where
+  root := `apps.baselines.MainMobilenetV3Train
+  moreLinkArgs := lowererLink
+
+lean_exe «efficientnet-train» where
+  root := `apps.baselines.MainEfficientNetTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «efficientnet-v2-train» where
+  root := `apps.baselines.MainEfficientNetV2Train
+  moreLinkArgs := lowererLink
+
+lean_exe «convnext-tiny-train» where
+  root := `apps.baselines.MainConvNeXtTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «vit-tiny-train» where
+  root := `apps.baselines.MainVitTrain
+  moreLinkArgs := lowererLink
+
+-- Muon (Newton–Schulz polar projection) on the 2D weights, AdamW on the rest.
+-- Same ViT-Tiny + recipe as vit-tiny-train → a compute-matched A/B. See planning/archive/muon.md.
+lean_exe «vit-tiny-muon-train» where
+  root := `apps.baselines.MainVitMuonTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «vit-tiny-shampoo-train» where
+  root := `apps.baselines.MainVitShampooTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «vgg-train» where
+  root := `apps.baselines.MainVggTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «mnist-cnn-train» where
+  root := `apps.baselines.MainMnistCnnTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-bn-train» where
+  root := `apps.baselines.MainCifarCnnBnTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «mnist-mlp-train» where
+  root := `apps.baselines.MainMnistMlpTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «mnist-mlp-shampoo-train» where
+  root := `apps.baselines.MainMnistMlpShampooTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «mnist-linear-train» where
+  root := `apps.baselines.MainMnistLinearTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-cnn-train» where
+  root := `apps.baselines.MainCifarCnnTrain
+  moreLinkArgs := lowererLink
+
+-- ─── apps/ablation/ — Chapter 4 and 5 ablation binaries: constant-lr optimizer arms, precision, the R34 recipe ───
+
+lean_exe «ablation» where
+  root := `apps.ablation.MainAblation
+  moreLinkArgs := lowererLink
+
+-- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
+-- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
+-- fp32 master). Same verified train-step MLIR as their fp32 peers.
+-- ── bf16 arm of the §5.2 optimizer sweep (planning/archive/cifar_lowprec_stability.md) ──
+-- Same net, same init, same hyperparameters as the fp32 arms; `cifar8Bf16Verified`'s slug
+-- points at the bf16-rendered artifacts. ⚠ FORWARD-only bf16, and NO speedup by design
+-- (§5.3: 0.87× at cifar8's shapes) — these exist to show the optimizer ORDERING is invariant
+-- under precision, which is the CIFAR chapter's whole claim.
+-- The batched-render GATE: same net/hyperparameters/init as cifar8-verified-adam, on the
+-- `…FaithfulB` artifact. The two renders denote the same function, so the curves must agree.
+-- ── §4.3 "Lever 3: precision": the wide-head (d1=512) 3×3 sweep ──
+-- One net (the one Levers 1-2 measure), three optimizers, three precisions. f32 and bf16 come
+-- from ONE renderer differing only in the emit; fp8 is host-side and rides the f32 graph.
+lean_exe «cifar8wb-ablation» where
+  root := `apps.ablation.MainCifar8WideBatchedAblation
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8wb-bf16-ablation» where
+  root := `apps.ablation.MainCifar8WideBf16Ablation
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8w-fp8-ablation» where
+  root := `apps.ablation.MainCifar8WideFp8Ablation
+  moreLinkArgs := lowererLink
+
+/-- Chapter 5 §5.6's recipe ablation on ResNet-34 / Imagenette, ONE ARM PER INVOCATION
+    (`resnet34-ablation data <arm>`) so the eight arms can run across four cards in under
+    three hours instead of ten in series. Arms: full nowarm nocos noaug nowd nols noadam bare. -/
+lean_exe «resnet34-ablation» where
+  root := `apps.ablation.MainResnet34Ablation
+  moreLinkArgs := lowererLink
+
+/-- Chapter 4 Lever 3 on the NORMALIZED net: the BN net on the batched op family, f32 and bf16,
+    three optimizers each. See planning/archive/bf16_batchnorm.md. -/
+lean_exe «cifar8wb-bn-ablation» where
+  root := `apps.ablation.MainCifar8WideBnBf16Ablation
+  moreLinkArgs := lowererLink
+
+-- ─── apps/mnist/ — MNIST robustness (PGD / spectral / smoothing), grids and low precision ───
+
+-- Phase-3 PGD adversarial attack on the verified linear net (planning/archive/robustness.md):
+-- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
+lean_exe «mnist-linear-pgd» where
+  root := `apps.mnist.MainMnistLinearPgd
+  moreLinkArgs := lowererLink
+
+-- Phase-3 PGD attack on the verified MLP (planning/archive/robustness.md): input gradient =
+-- the proven mlpInputGrad VJP; certificate = the loose product of layer spectral norms.
+lean_exe «mnist-mlp-pgd» where
+  root := `apps.mnist.MainMnistMlpPgd
+  moreLinkArgs := lowererLink
+
+-- Phase-3 PGD attack on the verified CNN (planning/archive/robustness_ladder.md, the conv rung):
+-- input gradient = the proven conv/maxpool input-VJP; certificate = the conv-aware product.
+lean_exe «mnist-cnn-pgd» where
+  root := `apps.mnist.MainMnistCnnPgd
+  moreLinkArgs := lowererLink
+
+-- Spectral-norm-constrained MLP training (planning/archive/robustness_ladder.md, the gap-shrinking
+-- lever): projected SGD onto ‖Wᵢ‖₂ ≤ c shrinks the global L = ∏‖Wᵢ‖₂, turning the vacuous
+-- product certificate non-vacuous — the empirical face of lipschitz_margin_certified_radius.
+lean_exe «mnist-mlp-spectral» where
+  root := `apps.mnist.MainMnistMlpSpectral
+  moreLinkArgs := lowererLink
+
+-- Spectral-norm-constrained CNN training (planning/archive/robustness_ladder.md): the conv sibling —
+-- caps the dense ‖Wᵢ‖₂ and the conv tap-sum bound; a 5-layer product + loose conv-norm make
+-- certifying the conv net harder than the MLP (tighter c, more clean cost).
+lean_exe «mnist-cnn-spectral» where
+  root := `apps.mnist.MainMnistCnnSpectral
+  moreLinkArgs := lowererLink
+
+-- Randomized-smoothing certificate (planning/archive/robustness_ladder.md §3, Cohen 2019): the
+-- DEPTH-INDEPENDENT cert. Forward-only Monte-Carlo over the proof-rendered fwd (no kernel, no
+-- input-VJP) — sample noisy copies, Clopper-Pearson lower-bound p_A, radius = σ·Φ⁻¹(p_A). Base
+-- net trained with matched Gaussian augmentation. Non-vacuous where the spectral product is hopeless.
+lean_exe «mnist-mlp-smooth» where
+  root := `apps.mnist.MainMnistMlpSmooth
+  moreLinkArgs := lowererLink
+
+lean_exe «mnist-cnn-smooth» where
+  root := `apps.mnist.MainMnistCnnSmooth
+  moreLinkArgs := lowererLink
+
+-- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
+-- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
+-- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).
+lean_exe «mnist-linear-e4m3-verified» where
+  root := `apps.mnist.MainMnistLinearE4M3Verified
+  moreLinkArgs := lowererLink
+
+-- Width-parametric MNIST MLP: `mnist-mlp-grid <d₁> <d₂> [epochs]` renders + trains
+-- the 784→d₁→d₂→10 MLP on the faithful verified StableHLO (the size-sweep demo).
+lean_exe «mnist-mlp-grid» where
+  root := `apps.mnist.MainMnistMlpGrid
+  moreLinkArgs := lowererLink
+
+-- FC-width-parametric MNIST CNN: `mnist-cnn-grid <fc-width> [epochs]` holds the conv
+-- stack at 32 channels and sweeps the dense head (…→d→d→10) on the faithful StableHLO.
+lean_exe «mnist-cnn-grid» where
+  root := `apps.mnist.MainMnistCnnGrid
+  moreLinkArgs := lowererLink
+
+-- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
+-- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
+-- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.
+lean_exe «mnist-mlp-e4m3-verified» where
+  root := `apps.mnist.MainMnistMlpE4M3Verified
+  moreLinkArgs := lowererLink
+
+-- Chapter 4 (low precision): fp8 (E4M3) CNN training on the SAME verified StableHLO.
+-- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
+-- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainMnistCnnE4M3Verified.lean.
+lean_exe «mnist-cnn-e4m3-verified» where
+  root := `apps.mnist.MainMnistCnnE4M3Verified
+  moreLinkArgs := lowererLink
+
+-- ─── apps/cifar/ — the CIFAR trainers behind Chapter 4: narrow and wide heads, BN, bf16 / fp8, schedules ───
+
+-- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/archive/robustness_ladder.md, the deeper
+-- conv rung): input gradient = the proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the
+-- 7-layer conv-aware product. Reuses the generic attackPgdConvNet driver.
+lean_exe «cifar-pgd» where
+  root := `apps.cifar.MainCifarPgd
+  moreLinkArgs := lowererLink
+
+-- Spectral-norm-constrained CIFAR-10 CNN training (planning/archive/robustness_ladder.md): the 7-layer
+-- product compounds the loose conv bound harder still — tightest caps, smallest certified radii.
+lean_exe «cifar-spectral» where
+  root := `apps.cifar.MainCifarSpectral
+  moreLinkArgs := lowererLink
+
+-- Phase-3 PGD attack on the verified CIFAR-10 CNN + (instance) BatchNorm: genCifarBnPgdStep runs
+-- the proven input-VJP through 4 instance-norm layers (the BN grad-input 3-term formula). Cert
+-- N/A (instance-norm Lipschitz is data-dependent) — the attack rung only.
+lean_exe «cifar-bn-pgd» where
+  root := `apps.cifar.MainCifarBnPgd
+  moreLinkArgs := lowererLink
+
+-- The deep-net payoff: smoothing certifies a non-vacuous L2 radius on the 7-layer CIFAR CNN where
+-- the conv-aware spectral product was 942K-loose (cert 0%). Same forward-only procedure, any depth.
+lean_exe «cifar-smooth» where
+  root := `apps.cifar.MainCifarSmooth
+  moreLinkArgs := lowererLink
+
+-- FC-head-parametric cifar8-BN (AdamW): `cifar8-bn-grid <fc-width> [epochs]` holds the
+-- 8-conv [16,16,32,32] backbone and sweeps the dense head (128→d→d→10) on the verified
+-- renders (tests/TestCifar8AdamTrain.lean), trained via trainAdamSched "adam".
+lean_exe «cifar8-bn-grid» where
+  root := `apps.cifar.MainCifar8BnGrid
+  moreLinkArgs := lowererLink
+
+-- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
+-- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepText).
+lean_exe «cifar-verified» where
+  root := `apps.cifar.MainCifarVerified
+  moreLinkArgs := lowererLink
+
+-- Chapter 5 (low precision): fp8 (E4M3) CIFAR-10 training on the SAME verified StableHLO.
+-- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
+-- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainCifarE4M3Verified.lean.
+lean_exe «cifar-e4m3-verified» where
+  root := `apps.cifar.MainCifarE4M3Verified
+  moreLinkArgs := lowererLink
+
+-- Chapter 5 (BatchNorm): trains the CIFAR-10 CNN + per-example BN on the
+-- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
+lean_exe «cifar-bn-verified» where
+  root := `apps.cifar.MainCifarBnVerified
+  moreLinkArgs := lowererLink
+
+-- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
+-- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepText).
+lean_exe «cifar8-verified» where
+  root := `apps.cifar.MainCifar8Verified
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bn-verified» where
+  root := `apps.cifar.MainCifar8BnVerified
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-verified-adam» where
+  root := `apps.cifar.MainCifar8VerifiedAdam
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bn-verified-adam» where
+  root := `apps.cifar.MainCifar8BnVerifiedAdam
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-verified-momentum» where
+  root := `apps.cifar.MainCifar8VerifiedMomentum
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8b-verified-adam» where
+  root := `apps.cifar.MainCifar8bVerifiedAdam
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bf16-verified» where
+  root := `apps.cifar.MainCifar8Bf16Verified
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bf16-verified-momentum» where
+  root := `apps.cifar.MainCifar8Bf16VerifiedMomentum
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bf16-verified-adam» where
+  root := `apps.cifar.MainCifar8Bf16VerifiedAdam
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-e4m3-verified» where
+  root := `apps.cifar.MainCifar8E4M3Verified
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-e4m3-verified-momentum» where
+  root := `apps.cifar.MainCifar8E4M3VerifiedMomentum
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-e4m3-verified-adam» where
+  root := `apps.cifar.MainCifar8E4M3VerifiedAdam
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bn-verified-momentum» where
+  root := `apps.cifar.MainCifar8BnVerifiedMomentum
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-verified-sgdsched» where
+  root := `apps.cifar.MainCifar8VerifiedSgdSched
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bn-verified-sgdsched» where
+  root := `apps.cifar.MainCifar8BnVerifiedSgdSched
+  moreLinkArgs := lowererLink
+
+-- ─── apps/imagenette/ extras and apps/tools/ — non-tier Imagenette drivers and the checkpoint scorer ───
 
 /-- **Score a finished checkpoint, standalone** — `planning/archive/next_session_verified_trainer_code.md`
     §2, the verified peer of the JAX side's six `eval_*_full50k.py`.
@@ -1006,6 +1046,201 @@ lean_exe «mobilenetv4-imagenet-verified» where
 lean_exe «score-checkpoint» where
   root := `apps.tools.MainScoreCheckpoint
   moreLinkArgs := lowererLink
+
+-- ch8 E4/E5/E6: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
+-- inverted-residual + squeeze-excite + swish + BATCH norm, 3×3/5×5 depthwise) trained
+-- on VERIFIED-rendered StableHLO (tests/TestEfficientNet{Train,Fwd}.lean); 262 params.
+lean_exe «efficientnet-verified» where
+  root := `apps.imagenette.MainEfficientNetVerified
+  moreLinkArgs := lowererLink
+
+-- Chapter 9: ConvNeXt-T (Liu et al. 2022 — patchify stem + [3,3,9,3] depthwise-7×7
+-- blocks with LN + GELU + layerScale + 3 between-stage downsamples) trained on
+-- VERIFIED-rendered StableHLO (tests/TestConvNeXt{Train,Fwd}.lean); 180 params.
+lean_exe «convnext-verified» where
+  root := `apps.imagenette.MainConvNeXtVerified
+  moreLinkArgs := lowererLink
+
+-- Randomized-smoothing certificate on the verified ConvNeXt-T (Imagenette 224²): the deep / real-
+-- resolution rung of the depth-INDEPENDENT cert (Cohen 2019). LayerNorm ⇒ per-sample fwd, so the
+-- generic smoothCertify driver applies unchanged. σ via SMOOTH_SIGMA_MILLI (split across 2 GPUs).
+lean_exe «convnext-smooth» where
+  root := `apps.imagenette.MainConvNeXtSmooth
+  moreLinkArgs := lowererLink
+
+lean_exe «vit-verified» where
+  root := `apps.imagenette.MainViTVerified
+  moreLinkArgs := lowererLink
+
+-- ─── demos/archive/ — earlier demo generations (Pets, CIFAR DDPM, VisDrone v1) ───
+
+lean_exe «autoencoder-pets-train» where
+  root := `demos.archive.MainAutoencoderPetsTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «unet-pets-train» where
+  root := `demos.archive.MainUnetPetsTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «pets-predict» where
+  root := `demos.archive.MainPetsPredict
+  moreLinkArgs := lowererLink
+
+lean_exe «diffusion-2d» where
+  root := `demos.archive.MainDiffusion2d
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-ddpm-train» where
+  root := `demos.archive.MainCifarDdpmTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-ddpm-sample» where
+  root := `demos.archive.MainCifarDdpmSample
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-ddpm-attn-train» where
+  root := `demos.archive.MainCifarDdpmAttnTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-ddpm-attn-sample» where
+  root := `demos.archive.MainCifarDdpmAttnSample
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-ddpm-sincos-train» where
+  root := `demos.archive.MainCifarDdpmSincosTrain
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar-ddpm-sincos-sample» where
+  root := `demos.archive.MainCifarDdpmSincosSample
+  moreLinkArgs := lowererLink
+
+-- YOLOv1 cat/dog head detector on Oxford-IIIT Pets (2×2 mosaic, R34 backbone
+-- bootstrap, focal objectness). See planning/archive/yolo_final.md.
+lean_exe «yolov1-pets-train-bootstrap» where
+  root := `demos.archive.MainYolov1PetsTrainBootstrap
+  moreLinkArgs := lowererLink
+
+-- Inference dump (logits + images + IDs) for scripts/yolo_render.py.
+lean_exe «yolov1-pets-infer» where
+  root := `demos.archive.MainYolov1PetsInfer
+  moreLinkArgs := lowererLink
+
+-- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
+-- The resolution rung above the 224/7×7 WS-A baseline; planning/archive/yolo_drone.md.
+lean_exe «yolov1-visdrone448» where
+  root := `demos.archive.MainYolov1VisDrone448
+  moreLinkArgs := lowererLink
+
+-- Stride-16 "finer grid" variant: 448 input / 28×28 grid (the different-head hedge).
+lean_exe «yolov1-visdrone448s16» where
+  root := `demos.archive.MainYolov1VisDrone448S16
+  moreLinkArgs := lowererLink
+
+-- Anchor-based detector: 448 / 14×14 grid, A=6 anchors (brick #2, emitAnchorYoloLoss).
+lean_exe «yolov1-visdrone-anchor» where
+  root := `demos.archive.MainYolov1VisDroneAnchor
+  moreLinkArgs := lowererLink
+
+-- ─── demos/probes/ — the loss / neck / emit probes behind the detector ───
+
+lean_exe «grad-fd-probe» where
+  root := `demos.probes.MainGradFdProbe
+  moreLinkArgs := lowererLink
+
+lean_exe «gradcam» where
+  root := `demos.probes.MainGradCAM
+  moreLinkArgs := lowererLink
+
+lean_exe «flash-probe» where
+  root := `demos.probes.MainFlashProbe
+  moreLinkArgs := lowererLink
+
+lean_exe «seg-loss-probe» where
+  root := `demos.probes.MainSegLossProbe
+  moreLinkArgs := lowererLink
+
+-- DIoU box-loss forward probe (detection infra brick #1); FD-checked by
+-- scripts/diou_probe_check.py against scripts/diou_grad_check.py.
+lean_exe «diou-loss-probe» where
+  root := `demos.probes.MainDiouLossProbe
+  moreLinkArgs := lowererLink
+
+-- Anchor-YOLO-loss probe (brick #2, A anchors); FD-checked by
+-- scripts/anchor_loss_probe_check.py.
+lean_exe «anchor-loss-probe» where
+  root := `demos.probes.MainAnchorLossProbe
+  moreLinkArgs := lowererLink
+
+-- FPN-neck (top-down multi-scale merge) probe (brick #3); FD-checked by
+-- scripts/fpn_neck_probe_check.py against scripts/fpn_neck_check.py's oracle.
+lean_exe «fpn-neck-probe» where
+  root := `demos.probes.MainFpnNeckProbe
+  moreLinkArgs := lowererLink
+
+-- FPN multi-scale-loss probe (brick #3, bites 4+6); FD-checked by
+-- scripts/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
+lean_exe «fpn-loss-probe» where
+  root := `demos.probes.MainFpnLossProbe
+  moreLinkArgs := lowererLink
+
+-- Whole-FPN-detector probe (bite 7 de-risk): neck+heads+concat+loss+DAG backward,
+-- γ=0 so every grad is FD-checkable; validated by scripts/fpn_detect_probe_check.py.
+lean_exe «fpn-detect-probe» where
+  root := `demos.probes.MainFpnDetectProbe
+  moreLinkArgs := lowererLink
+
+-- Emit-only: dump the r34FpnDet train-step MLIR for eyeball / iree-compile
+-- --compile-to=input parse check (planning/archive/yolo_fpn.md bite 7 wiring).
+lean_exe «fpn-train-emit» where
+  root := `demos.probes.MainFpnTrainEmit
+  moreLinkArgs := lowererLink
+
+-- Scores the unconditional MNIST DDPM with Chapter 3's VERIFIED CNN — the
+-- 2-D demo's metric suite (coverage, per-class mass, energy distance) moved onto
+-- images, using a classifier whose math VJP is proven. See the driver's header
+-- and planning/archive/diffusion_2d_demo.md §7.
+lean_exe «mnist-ddpm-score» where
+  root := `demos.probes.MainMnistDdpmScore
+  moreLinkArgs := lowererLink
+
+lean_exe «inspect-convnext» where
+  root := `demos.probes.MainInspectConvNeXt
+  moreLinkArgs := lowererLink
+
+-- ─── tests/ — ties, checks, smokes and benches: the gates behind the verified renders ───
+
+/-- `uib` layout tie (`planning/archive/mnv4_verified.md` phase 1): `VLayer.toSpecs` vs the baseline
+    `Layer.nParams`, over all four UIB families. Pins the LAYOUT; the ORDER needs a forward tie. -/
+lean_exe «uib-layout-tie» where
+  root := `tests.TestUibLayoutTie
+
+/-- MNv4 forward-chain structural smoke — op counts against the Conv-S block table. -/
+lean_exe «mnv4-fwd-smoke» where
+  root := `tests.TestMnv4FwdSmoke
+
+/-- MNv4 AdamW train-step smoke (`planning/archive/mnv4_verified.md` phase 2): arity, entry point, the
+    eval forward's stat binding, and — the one no other net has — that the train step's forward
+    region is `@mnv4_fwd`'s body VERBATIM. §3d(b)'s two-worlds split cannot hide behind this.
+    Also emits the batch-2 train step `scripts/grad_tie.py --net mnv4` runs. -/
+lean_exe «mnv4-train-smoke» where
+  root := `tests.TestMnv4TrainSmoke
+
+/-- Emits the **batch-2** ResNet-34 AdamW train step that `scripts/grad_tie.py --net r34` runs, and
+    pins the §3d(b) two-worlds split it lives with: `resnet34_fwd` is per-example BN while the Adam
+    train step is batch BN, so unlike MNv4 there is no forward-prefix property to assert. Sole
+    writer of `.lake/build/resnet34_adam_train_step_b2.mlir`. -/
+lean_exe «r34-train-b2» where
+  root := `tests.TestR34TrainB2
+
+/-- Emits the **optimizer stage alone** — one step as a function of `(θ, g, m, v, G)` — for each of
+    seven variants, which is what `scripts/opt_step_tie.py` diffs against the reference optimizer.
+    `planning/archive/verified_optimizer_parity.md` §5's gate: `vjp_oracle` ties the two implementations at
+    the GRADIENT, and nothing tied them at the UPDATE until this.
+
+    ⚠ The body is `optAllParams`, the same call `resnet50TrainStepFaithfulB` makes — so this gates
+    the shipped emission and not a copy of it. Sole writer of `.lake/build/opt_step_*.mlir`. -/
+lean_exe «opt-step-fixtures» where
+  root := `tests.TestOptStepFixtures
 
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
@@ -1612,234 +1847,51 @@ lean_exe «resnet34-adam-bench» where
   root := `tests.TestResnet34AdamBench
   moreLinkArgs := lowererLink
 
--- ⛔ `mobilenetv2-verified` is RETIRED (4c leg 2, 2026-09-06), with the per-example
--- `verified_mlir/mobilenetv2_train_step.mlir` it trained on. Its own header said its accuracy was
--- chance (387/3925, byte identical every epoch) because running-statistic threading lives only in
--- `trainAdamSched`, and told readers not to quote it. `mobilenetv2-verified-adam` is the trainer
--- that produces a number, and it was already on the batched chain.
-
-lean_exe «mobilenetv2-verified-adam» where
-  root := `apps.imagenette.MainMobilenetV2VerifiedAdam
+-- Pins the image/label pairing invariant of `F32.shuffle` on a synthetic
+-- dataset where label k is derivable from image k. The FFI used to swap a
+-- hardcoded 4 bytes of label per record, which silently mispaired every
+-- detection and segmentation batch (mAP@0.5 0.0001 vs 0.1167 after the fix).
+-- Hermetic — no data files, no GPU. See planning/archive/post_shuffle_fix.md §3.
+lean_exe «test-shuffle-pairing» where
+  root := `tests.TestShufflePairing
   moreLinkArgs := lowererLink
 
-
--- ch8 E4/E5/E6: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
--- inverted-residual + squeeze-excite + swish + BATCH norm, 3×3/5×5 depthwise) trained
--- on VERIFIED-rendered StableHLO (tests/TestEfficientNet{Train,Fwd}.lean); 262 params.
-lean_exe «efficientnet-verified» where
-  root := `apps.imagenette.MainEfficientNetVerified
+-- `Ddpm.sampleNoise` seeded its xorshift by XOR alone and read the first
+-- uniform from the TOP of the word, so nearby seeds shared a Box-Muller radius:
+-- the 2-D demo's 2048 starting points sat on a circle instead of filling a
+-- Gaussian. Per-axis mean and variance are correct under the defect, so this
+-- asserts the RADIUS is Rayleigh. Hermetic — no data files, no GPU.
+lean_exe «test-sample-noise-seeding» where
+  root := `tests.TestSampleNoiseSeeding
   moreLinkArgs := lowererLink
 
-
-lean_exe «efficientnet-verified-adam» where
-  root := `apps.imagenette.MainEfficientNetVerifiedAdam
+-- Checks every DatasetIO's declared `trainPixels` / `labelBytesPerRecord`
+-- against what its C loader actually allocates. Skips absent datasets, so it
+-- is a pre-flight check rather than a CI job — run it whenever a dataset or
+-- its preprocessing script changes.
+lean_exe «test-dataset-record-sizes» where
+  root := `tests.TestDatasetRecordSizes
   moreLinkArgs := lowererLink
 
+lean_exe «test-unet-forward» where
+  root := `tests.TestUnetForward
 
--- Chapter 9: ConvNeXt-T (Liu et al. 2022 — patchify stem + [3,3,9,3] depthwise-7×7
--- blocks with LN + GELU + layerScale + 3 between-stage downsamples) trained on
--- VERIFIED-rendered StableHLO (tests/TestConvNeXt{Train,Fwd}.lean); 180 params.
-lean_exe «convnext-verified» where
-  root := `apps.imagenette.MainConvNeXtVerified
+lean_exe «test-yolov1-mutex» where
+  root := `tests.TestYolov1Mutex
   moreLinkArgs := lowererLink
 
--- Randomized-smoothing certificate on the verified ConvNeXt-T (Imagenette 224²): the deep / real-
--- resolution rung of the depth-INDEPENDENT cert (Cohen 2019). LayerNorm ⇒ per-sample fwd, so the
--- generic smoothCertify driver applies unchanged. σ via SMOOTH_SIGMA_MILLI (split across 2 GPUs).
-lean_exe «convnext-smooth» where
-  root := `apps.imagenette.MainConvNeXtSmooth
-  moreLinkArgs := lowererLink
+lean_exe «test-resnet-residual» where
+  root := `tests.TestResnetResidual
 
+-- Dischargeability sanity check: 11 examples confirming every
+-- Differentiable hypothesis the proofs propagate is satisfiable for
+-- the architecture functions (dense, softmax, layerNorm, the flat
+-- transformer pieces, mhsa_layer_flat). If any goes vacuous on a
+-- refactor, this will fail at build time.
+lean_exe «test-diff-sanity» where
+  root := `tests.TestDifferentiableSanity
 
-lean_exe «convnext-verified-adam» where
-  root := `apps.imagenette.MainConvNeXtVerifiedAdam
-  moreLinkArgs := lowererLink
-
-
-lean_exe «vit-verified» where
-  root := `apps.imagenette.MainViTVerified
-  moreLinkArgs := lowererLink
-
-
-lean_exe «vit-verified-adam» where
-  root := `apps.imagenette.MainViTVerifiedAdam
-  moreLinkArgs := lowererLink
-
-
-lean_exe «cifar-cnn-train» where
-  root := `apps.baselines.MainCifarCnnTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «autoencoder-pets-train» where
-  root := `demos.archive.MainAutoencoderPetsTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «unet-pets-train» where
-  root := `demos.archive.MainUnetPetsTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «unet-brats-train» where
-  root := `demos.MainUnetBratsTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «unet-brats-r34» where
-  root := `demos.MainUnetBratsR34
-  moreLinkArgs := lowererLink
-
-lean_exe «grad-fd-probe» where
-  root := `demos.probes.MainGradFdProbe
-  moreLinkArgs := lowererLink
-
-lean_exe «pets-predict» where
-  root := `demos.archive.MainPetsPredict
-  moreLinkArgs := lowererLink
-
-lean_exe «brats-predict» where
-  root := `demos.MainBratsPredict
-  moreLinkArgs := lowererLink
-
-lean_exe «gradcam» where
-  root := `demos.probes.MainGradCAM
-  moreLinkArgs := lowererLink
-
-lean_exe «bigram-shakespeare» where
-  root := `demos.MainBigramShakespeare
-  moreLinkArgs := lowererLink
-
-lean_exe «flash-probe» where
-  root := `demos.probes.MainFlashProbe
-  moreLinkArgs := lowererLink
-
-lean_exe «seg-loss-probe» where
-  root := `demos.probes.MainSegLossProbe
-  moreLinkArgs := lowererLink
-
--- DIoU box-loss forward probe (detection infra brick #1); FD-checked by
--- scripts/diou_probe_check.py against scripts/diou_grad_check.py.
-lean_exe «diou-loss-probe» where
-  root := `demos.probes.MainDiouLossProbe
-  moreLinkArgs := lowererLink
-
--- Anchor-YOLO-loss probe (brick #2, A anchors); FD-checked by
--- scripts/anchor_loss_probe_check.py.
-lean_exe «anchor-loss-probe» where
-  root := `demos.probes.MainAnchorLossProbe
-  moreLinkArgs := lowererLink
-
--- FPN-neck (top-down multi-scale merge) probe (brick #3); FD-checked by
--- scripts/fpn_neck_probe_check.py against scripts/fpn_neck_check.py's oracle.
-lean_exe «fpn-neck-probe» where
-  root := `demos.probes.MainFpnNeckProbe
-  moreLinkArgs := lowererLink
-
--- FPN multi-scale-loss probe (brick #3, bites 4+6); FD-checked by
--- scripts/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
-lean_exe «fpn-loss-probe» where
-  root := `demos.probes.MainFpnLossProbe
-  moreLinkArgs := lowererLink
-
--- Whole-FPN-detector probe (bite 7 de-risk): neck+heads+concat+loss+DAG backward,
--- γ=0 so every grad is FD-checkable; validated by scripts/fpn_detect_probe_check.py.
-lean_exe «fpn-detect-probe» where
-  root := `demos.probes.MainFpnDetectProbe
-  moreLinkArgs := lowererLink
-
--- Emit-only: dump the r34FpnDet train-step MLIR for eyeball / iree-compile
--- --compile-to=input parse check (planning/archive/yolo_fpn.md bite 7 wiring).
-lean_exe «fpn-train-emit» where
-  root := `demos.probes.MainFpnTrainEmit
-  moreLinkArgs := lowererLink
-
-
-lean_exe «yolov1-visdrone-fpn» where
-  root := `demos.MainYolov1VisdroneFpn
-  moreLinkArgs := lowererLink
-
-
-lean_exe «tinygpt-shakespeare» where
-  root := `demos.MainTinyGptShakespeare
-  moreLinkArgs := lowererLink
-
-lean_exe «tinystories» where
-  root := `demos.MainTinyStories
-  moreLinkArgs := lowererLink
-
-lean_exe «diffusion-2d» where
-  root := `demos.archive.MainDiffusion2d
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-ddpm-train» where
-  root := `demos.MainMnistDdpmTrain
-  moreLinkArgs := lowererLink
-
--- Scores the unconditional MNIST DDPM with Chapter 3's VERIFIED CNN — the
--- 2-D demo's metric suite (coverage, per-class mass, energy distance) moved onto
--- images, using a classifier whose math VJP is proven. See the driver's header
--- and planning/archive/diffusion_2d_demo.md §7.
-lean_exe «mnist-ddpm-score» where
-  root := `demos.probes.MainMnistDdpmScore
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-ddpm-sample» where
-  root := `demos.MainMnistDdpmSample
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-train» where
-  root := `demos.archive.MainCifarDdpmTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-sample» where
-  root := `demos.archive.MainCifarDdpmSample
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-attn-train» where
-  root := `demos.archive.MainCifarDdpmAttnTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-attn-sample» where
-  root := `demos.archive.MainCifarDdpmAttnSample
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-sincos-train» where
-  root := `demos.archive.MainCifarDdpmSincosTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-sincos-sample» where
-  root := `demos.archive.MainCifarDdpmSincosSample
-  moreLinkArgs := lowererLink
-
--- YOLOv1 cat/dog head detector on Oxford-IIIT Pets (2×2 mosaic, R34 backbone
--- bootstrap, focal objectness). See planning/archive/yolo_final.md.
-lean_exe «yolov1-pets-train-bootstrap» where
-  root := `demos.archive.MainYolov1PetsTrainBootstrap
-  moreLinkArgs := lowererLink
-
--- Inference dump (logits + images + IDs) for scripts/yolo_render.py.
-lean_exe «yolov1-pets-infer» where
-  root := `demos.archive.MainYolov1PetsInfer
-  moreLinkArgs := lowererLink
-
--- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
--- The resolution rung above the 224/7×7 WS-A baseline; planning/archive/yolo_drone.md.
-lean_exe «yolov1-visdrone448» where
-  root := `demos.archive.MainYolov1VisDrone448
-  moreLinkArgs := lowererLink
-
--- Stride-16 "finer grid" variant: 448 input / 28×28 grid (the different-head hedge).
-lean_exe «yolov1-visdrone448s16» where
-  root := `demos.archive.MainYolov1VisDrone448S16
-  moreLinkArgs := lowererLink
-
--- Anchor-based detector: 448 / 14×14 grid, A=6 anchors (brick #2, emitAnchorYoloLoss).
-lean_exe «yolov1-visdrone-anchor» where
-  root := `demos.archive.MainYolov1VisDroneAnchor
-  moreLinkArgs := lowererLink
-
--- ═══════════════════════════════════════════════════════════════════
--- VJP oracle — one binary per axiom under test.
--- Trainers live in tests/vjp_oracle/phase3/ so the root isn't crowded
--- with test-only files. See tests/vjp_oracle/README.md.
--- ═══════════════════════════════════════════════════════════════════
+-- ─── tests/vjp_oracle/ — one binary per axiom under test (tests/vjp_oracle/README.md) ───
 
 lean_exe «vjp-oracle-dense» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleDense
@@ -1897,61 +1949,7 @@ lean_exe «vjp-oracle-uib» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleUib
   moreLinkArgs := lowererLink
 
--- ═══════════════════════════════════════════════════════════════════
--- Tests + benchmarks
--- ═══════════════════════════════════════════════════════════════════
-
--- Pins the image/label pairing invariant of `F32.shuffle` on a synthetic
--- dataset where label k is derivable from image k. The FFI used to swap a
--- hardcoded 4 bytes of label per record, which silently mispaired every
--- detection and segmentation batch (mAP@0.5 0.0001 vs 0.1167 after the fix).
--- Hermetic — no data files, no GPU. See planning/archive/post_shuffle_fix.md §3.
-lean_exe «test-shuffle-pairing» where
-  root := `tests.TestShufflePairing
-  moreLinkArgs := lowererLink
-
--- `Ddpm.sampleNoise` seeded its xorshift by XOR alone and read the first
--- uniform from the TOP of the word, so nearby seeds shared a Box-Muller radius:
--- the 2-D demo's 2048 starting points sat on a circle instead of filling a
--- Gaussian. Per-axis mean and variance are correct under the defect, so this
--- asserts the RADIUS is Rayleigh. Hermetic — no data files, no GPU.
-lean_exe «test-sample-noise-seeding» where
-  root := `tests.TestSampleNoiseSeeding
-  moreLinkArgs := lowererLink
-
--- Checks every DatasetIO's declared `trainPixels` / `labelBytesPerRecord`
--- against what its C loader actually allocates. Skips absent datasets, so it
--- is a pre-flight check rather than a CI job — run it whenever a dataset or
--- its preprocessing script changes.
-lean_exe «test-dataset-record-sizes» where
-  root := `tests.TestDatasetRecordSizes
-  moreLinkArgs := lowererLink
-
-lean_exe «test-unet-forward» where
-  root := `tests.TestUnetForward
-
-lean_exe «test-yolov1-mutex» where
-  root := `tests.TestYolov1Mutex
-  moreLinkArgs := lowererLink
-
-lean_exe «inspect-convnext» where
-  root := `demos.probes.MainInspectConvNeXt
-  moreLinkArgs := lowererLink
-
-lean_exe «test-resnet-residual» where
-  root := `tests.TestResnetResidual
-
--- Dischargeability sanity check: 11 examples confirming every
--- Differentiable hypothesis the proofs propagate is satisfiable for
--- the architecture functions (dense, softmax, layerNorm, the flat
--- transformer pieces, mhsa_layer_flat). If any goes vacuous on a
--- refactor, this will fail at build time.
-lean_exe «test-diff-sanity» where
-  root := `tests.TestDifferentiableSanity
-
--- ════════════════════════════════════════════════════════════════
--- Bestiary: architecture-only NetSpec examples (print, no training)
--- ════════════════════════════════════════════════════════════════
+-- ─── Bestiary/ — architecture-only NetSpec examples: print, no training ───
 
 lean_exe «bestiary-alphazero» where
   root := `Bestiary.AlphaZero
@@ -2084,7 +2082,7 @@ require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"
 -- anything bigger is a deliberate single-model run (see run.sh). Backend
 -- auto-detects (cuda if `nvidia-smi` is present, else rocm) but `IREE_BACKEND`
 -- overrides; GPU honors `LEAN_DEMO_GPU` (default 0). Each trainer streams live
--- and tees to `<name>.log` via run.sh.
+-- and tees to `runs/<date>-<name>/<name>.log` via run.sh.
 -- ═══════════════════════════════════════════════════════════════════════
 
 /-- cuda when an NVIDIA GPU is visible (`nvidia-smi -L` succeeds), else rocm. -/
