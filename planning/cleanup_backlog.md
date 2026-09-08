@@ -192,6 +192,18 @@ so it would close the same way, and it is the last `*InputGradB` gap.
   `kernel_faithfulness_probe.py`, `margin_probe.py`, …) point at `FloatBridge.lean` and the fp8
   files, which stay. Leave them.
 
+**DONE 2026-09-08.** `FloatComposeBridge.lean` 775 → 496 lines: the `FloatBridges` predicate,
+the `FloatBridgesTo` structure, their nine instances, the `comp` / `fresh_comp` / `residual` /
+`reluResidual` / `toFloatBridges` combinators and the two `FloatClose.*_nonneg` helpers are gone;
+`floatClose_residual`, the additive-skip combinator the bf16-mixed bridge composes, moved up under
+its own banner and every `floatClose_*` result stays. `DepthwiseFloatBridge.lean` lost its two
+`FloatBridges` instances (225 → 200). `LinBackFloatBridge.lean` is deleted with
+`mlpInputGrad_floatBridges` and MlpCanonical's instance of it — except `mlpInputGrad`, the ℝ chain
+the trainer and the two MNIST PGD apps describe, which the backlog missed: it lives in
+`BackwardMaps.lean` now. Nineteen audit prints went with the declarations (1773 → 1754); the yaml's
+4d and status paragraphs, `README.md`, the `DropPath` table row and the Certs docstring
+(201 roots, 235 modules) say what exists. `Float/` is 14 files. The probe scripts were left alone.
+
 ## 10. The `Proofs/` layout — the buckets hold, the per-net scatter does not
 
 Asked 2026-09-08: touch the layout again, or does it make sense? Measured:

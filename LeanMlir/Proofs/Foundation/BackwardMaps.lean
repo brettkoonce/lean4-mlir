@@ -325,4 +325,18 @@ theorem maxPool3s2Flat_differentiableAt_vec {c h w : Nat} (v : Vec (c * (2*h) * 
     h_smooth hc hh hw
   rwa [Tensor3.flatten_unflatten] at h
 
+-- ═════════════════════════════════════════════════
+-- § The MLP chain — the three-layer input-gradient backward the PGD apps run
+-- ═════════════════════════════════════════════════
+
+/-- The 3-layer MLP input-gradient VJP at a smooth point: `dy ↦ Wᵀ₀·(mask₁ ⊙ Wᵀ₁·(mask₂ ⊙
+    Wᵀ₂·dy))`. The certified backward of `dense W₂ ∘ relu ∘ dense W₁ ∘ relu ∘ dense W₀`
+    (input gradient), the ReLU kinks read off the fixed sign masks `c₁`/`c₂`. -/
+noncomputable def mlpInputGrad {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (W₁ : Mat d₁ d₂) (W₂ : Mat d₂ d₃)
+    (c₁ : Fin d₁ → Prop) [DecidablePred c₁] (c₂ : Fin d₂ → Prop) [DecidablePred c₂] :
+    Vec d₃ → Vec d₀ :=
+  dense (Mat.transpose W₀) 0 ∘ reluMaskBack c₁ ∘ dense (Mat.transpose W₁) 0
+    ∘ reluMaskBack c₂ ∘ dense (Mat.transpose W₂) 0
+
 end Proofs

@@ -64,9 +64,9 @@ status:
     optimizer tail consumes and the label-smoothed loss at a general target, with the batch
     size a binder and the data-parallel mean an AST node (fidelity 4e-4g); the SGD-inline
     steps of the ten nets that ship one are tied too. (2) FLOAT ERROR -- a binary32 rounding
-    model constructed from scratch, per-operator and per-block float closeness carrying window
-    and modulus as data, and every net's hand-written backward chain proven to BE the certified
-    whole-net VJP (fidelity 4d). (3) ROBUSTNESS CERTIFICATES as theorems: the Tsuzuku
+    model constructed from scratch, per-operator and per-block float closeness (a magnitude
+    window and an error modulus that compose), and every net's hand-written backward chain
+    proven to BE the certified whole-net VJP (fidelity 4d). (3) ROBUSTNESS CERTIFICATES as theorems: the Tsuzuku
     Lipschitz-margin radius, per-class-pair LipSDP at trained weights, the Cohen smoothing
     radius end to end. (4) OPTIMIZER GEOMETRY: SGD/sign/Muon as steepest descent under a norm,
     Shampoo = single-step Muon. The StableHLO codegen and the training runs are engineered and
@@ -213,16 +213,12 @@ fidelity:
        THE MODEL. `FloatModel` is any rounding operator with relative error `u`; `binary32`
        (`u = 2^-24`) and `fp8E4M3` (`u = 2^-4`) are CONSTRUCTED as round-to-nearest on a p-bit
        grid with the standard model proved (`rndP_err`, `Binary32Instance.lean`) -- no hardware
-       axiom. Two composable closeness forms sit on the model. `FloatClose A B f fF L` is a
-       magnitude window `A -> B` with an input-error -> output-error modulus `L`, composing by
-       `FloatClose.comp`; the per-operator `floatClose_*` lemmas, the ResNet-34 stage fold and
-       the bf16-mixed two-roundoff bounds are stated on it. `FloatBridgesTo f fF` is a Type-valued
-       structure carrying window and modulus as data; the per-operator `floatBridgesTo_*`
-       instances, the `comp` / `residual` combinators and the CIFAR block chains are stated on
-       it. `FloatBridges f`, the existential form, is also defined: it is provable for ANY
-       bounded `f` and constrains nothing -- not a budget. The MNIST/CNN descent chain
-       (`Training/SgdDescent*.lean`) takes the model and `FloatBridge.lean`'s per-layer `*_close`
-       lemmas directly.
+       axiom. `FloatClose A B f fF L` is the one closeness form: a magnitude window `A -> B` with
+       an input-error -> output-error modulus `L`, composing by `FloatClose.comp` and through the
+       additive skip by `floatClose_residual`; the per-operator `floatClose_*` lemmas, the CIFAR
+       block chains, the ResNet-34 stage fold and the bf16-mixed two-roundoff bounds are stated
+       on it. The MNIST/CNN descent chain (`Training/SgdDescent*.lean`) takes the model and
+       `FloatBridge.lean`'s per-layer `*_close` lemmas directly.
 
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
        VJP, with a shape check that the opaque-block chain IS the committed forward: the

@@ -212,8 +212,7 @@ theorem floatClose_gap {c h w : Nat} (M : FloatModel) {A : ℝ}
     `L e` of the real stage at input error `e`. No bespoke proof: the five per-op
     `FloatClose` facts chained. The whole r34 net is this same fold at scale (with
     the BN/skip instances slotted in). ⚠ The `∃ B L` closes the modulus, so on its own
-    this statement says only that both maps are bounded on the box; the budget lives in
-    `floatBridgesTo_cifarStage` (end of file), the same fold with `.mod` as data. -/
+    this statement says only that both maps are bounded on the box. -/
 theorem floatClose_cifarStage {ic c h w : Nat} (M : FloatModel)
     (W₁ : Kernel4 c ic 3 3) (b₁ : Vec c) (W₂ : Kernel4 c c 3 3) (b₂ : Vec c)
     {w' β A : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A)
@@ -315,8 +314,7 @@ theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
     `conv₂ → relu → conv₁` folded via `.comp`, then wrapped by the residual
     combinator into `relu(F(x) + x)` — one certificate for the whole block,
     skip included. The r34 identity block is this with BN inserted (the BN→relu
-    `FloatClose` instance is the remaining wrap). ⚠ Same caveat as `floatClose_cifarStage`:
-    the budget lives in `floatBridgesTo_resBlock` (end of file). -/
+    `FloatClose` instance is the remaining wrap). ⚠ Same caveat as `floatClose_cifarStage`. -/
 theorem floatClose_resBlock {c h w : Nat} (M : FloatModel)
     (W₁ W₂ : Kernel4 c c 3 3) (b₁ b₂ : Vec c) {w' β A : ℝ}
     (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < c * h * w)
@@ -481,213 +479,9 @@ theorem floatClose_r34_stages {m : Nat} {A : ℝ} {blk blkF : Vec m → Vec m} {
   ⟨floatClose_iterate hblk 3, floatClose_iterate hblk 4,
    floatClose_iterate hblk 6, floatClose_iterate hblk 3⟩
 
--- ════════════════════════════════════════════════════════════════
--- § FloatBridges: magnitude-threading-free whole-net assembly
--- ════════════════════════════════════════════════════════════════
-
-/-- **`f` float-bridges** — for *any* nonnegative input magnitude there is a
-    nonnegative output magnitude and a `FloatClose` certificate.
-
-    ⚠⚠ **DEPRECATED — this says nothing about floating point.** The intent was to
-    existentially close the *bookkeeping* (`B`, `L`) so whole-net assembly composes
-    in one line. But the existential also binds **`fF`, the float implementation**,
-    and once that is quantified away the predicate is satisfied by ANY `f` bounded on
-    input boxes — take `fF := f` and the constant modulus `2·B`. No `FloatModel`, no
-    unit roundoff, 3-axiom clean. So `FloatBridges f` does not constrain the deployed
-    float map, and a whole-net `FloatBridges` conclusion cannot carry the sentence its
-    docstring wants ("the deployed float forward is within an explicit budget").
-
-    Use `FloatBridgesTo f fF` below, which keeps `fF` in the statement and is
-    otherwise identical. `FloatBridgesTo.toFloatBridges` weakens to this one, so
-    migration is incremental (see `formalization.yaml` fidelity §4d). -/
-def FloatBridges {m n : Nat} (f : Vec m → Vec n) : Prop :=
-  ∀ A, 0 ≤ A → ∃ B L fF, 0 ≤ B ∧ FloatClose A B f fF L
-
-/-- **Float-bridging composes** — the whole-net assembly backbone, magnitudes threaded
-    automatically (each stage's output magnitude feeds the next). -/
-theorem FloatBridges.comp {m n p : Nat} {f : Vec m → Vec n} {g : Vec n → Vec p}
-    (hf : FloatBridges f) (hg : FloatBridges g) : FloatBridges (g ∘ f) := by
-  intro A hA
-  obtain ⟨B, L, fF, hB, hfc⟩ := hf A hA
-  obtain ⟨C, Lg, gF, hC, hgc⟩ := hg B hB
-  exact ⟨C, Lg ∘ L, gF ∘ fF, hC, hfc.comp hgc⟩
-
-/-- The propagated magnitude of a `FloatClose` is nonnegative (a real output bound at
-    the zero input — valid since `0` is within any nonneg magnitude domain). -/
-theorem FloatClose.cod_nonneg {m n : Nat} {A B : ℝ} {f fF : Vec m → Vec n} {L : ℝ → ℝ}
-    (hfc : FloatClose A B f fF L) (hA : 0 ≤ A) (hn : 0 < n) : 0 ≤ B := by
-  obtain ⟨hm, _⟩ := hfc
-  have hz : ∀ k : Fin m, |(0 : Vec m) k| ≤ A := fun k => by simpa using hA
-  exact (abs_nonneg _).trans (hm 0 hz ⟨0, hn⟩).1
-
-/-- A `FloatClose` error modulus is nonnegative at input error `0` (it bounds an
-    absolute value at the zero input). The piece SE-branch magnitude nonnegativity needs. -/
-theorem FloatClose.modulus_zero_nonneg {m n : Nat} {A B : ℝ} {f fF : Vec m → Vec n}
-    {L : ℝ → ℝ} (hfc : FloatClose A B f fF L) (hA : 0 ≤ A) (hn : 0 < n) : 0 ≤ L 0 := by
-  obtain ⟨_, he⟩ := hfc
-  have hz : ∀ k : Fin m, |(0 : Vec m) k| ≤ A := fun k => by simpa using hA
-  exact (abs_nonneg _).trans (he 0 0 0 hz hz (fun k => by simp) ⟨0, hn⟩)
-
-/-- ReLU float-bridges (magnitude-stable). -/
-theorem floatBridges_relu {n : Nat} : FloatBridges (relu n) :=
-  fun A hA => ⟨A, _, _, hA, floatClose_relu A⟩
-
-/-- MaxPool float-bridges (magnitude-stable). -/
-theorem floatBridges_maxPool {c h w : Nat} : FloatBridges (maxPoolFlat c h w) :=
-  fun A hA => ⟨A, _, _, hA, floatClose_maxPool A⟩
-
-/-- 3×3/s2 stem-pool float-bridges — `floatBridges_maxPool`'s peer, same one-liner. -/
-theorem floatBridges_maxPool3s2 {c h w : Nat} : FloatBridges (maxPool3s2Flat c h w) :=
-  fun A hA => ⟨A, _, _, hA, floatClose_maxPool3s2 A⟩
-
-/-- Convolution float-bridges (output magnitude `layerAct + layerBudget`). -/
-theorem floatBridges_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * h * w)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
-    FloatBridges (flatConv (h := h) (w := w) W b) :=
-  fun _A hA => ⟨_, _, _,
-    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
-    floatClose_flatConv M W b hw' hβ hA hn hW hb⟩
-
-/-- Dense float-bridges (output magnitude `layerAct + layerBudget`). -/
-theorem floatBridges_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n)
-    {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hm : 0 < m)
-    (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) :
-    FloatBridges (Proofs.dense W b) :=
-  fun _A hA => ⟨_, _, _,
-    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
-    floatClose_dense M W b hw' hβ hA hm hW hb⟩
-
--- ════════════════════════════════════════════════════════════════
--- § `FloatBridgesTo`: the same assembly, with the float map AND the budget NAMED
--- ════════════════════════════════════════════════════════════════
-
-/-- **`f` float-bridges TO `fF`, with the budget VISIBLE.** A `FloatBridgesTo f fF`
-    carries the propagated output magnitude `mag A` and the error modulus `mod A` as
-    DATA, and certifies `FloatClose A (mag A) f fF (mod A)` at every nonnegative input
-    magnitude `A`. The fresh rounding budget at input magnitude `A` is `mod A 0`
-    (`FloatBridgesTo.fresh`) — the quantity the adjoint chain consumes — and
-    `FloatBridgesTo.fresh_le` states it as a bound on the deployed map.
-
-    ⚠ Why data and not `∃`: the previous form `∀ A, 0 ≤ A → ∃ B L, 0 ≤ B ∧
-    FloatClose A B f fF L` named the float map but bound the modulus existentially,
-    and an unconstrained modulus is discharged by the triangle inequality from
-    boundedness alone (`L := fun _ => 2·B`), so `FloatBridgesTo (relu n) (fun _ _ => 0)`
-    was a theorem. No predicate can reject that witness — `2·B` IS a valid modulus —
-    but a statement can make the modulus visible, so that its VALUE is the claim
-    (`formalization.yaml` fidelity §4d). Every combinator below (`comp`, `residual`,
-    `perRow`, `batchMap`, …) composes `mag`/`mod` explicitly, so a whole-net bridge's
-    `.mod A e` is a closed term built from the per-op budgets, and a numeric bound on
-    it is a falsifiable statement about the deployed net. -/
-structure FloatBridgesTo {m n : Nat} (f fF : Vec m → Vec n) where
-  /-- The propagated output magnitude, as a function of the input magnitude. -/
-  mag : ℝ → ℝ
-  /-- The error modulus at input magnitude `A`: input error `e` ↦ output error. -/
-  mod : ℝ → ℝ → ℝ
-  /-- The certificate at every nonnegative input magnitude, with THESE `mag`/`mod`. -/
-  close : ∀ A, 0 ≤ A → 0 ≤ mag A ∧ FloatClose A (mag A) f fF (mod A)
-
-namespace FloatBridgesTo
-
-variable {m n : Nat} {f fF : Vec m → Vec n}
-
-/-- The fresh rounding budget at input magnitude `A`: the modulus at input error `0`. -/
-noncomputable def fresh (b : FloatBridgesTo f fF) (A : ℝ) : ℝ := b.mod A 0
-
-/-- The output magnitude is nonnegative at every nonnegative input magnitude. -/
-theorem mag_nonneg (b : FloatBridgesTo f fF) {A : ℝ} (hA : 0 ≤ A) : 0 ≤ b.mag A :=
-  (b.close A hA).1
-
-/-- The certificate at one input magnitude. -/
-theorem floatClose (b : FloatBridgesTo f fF) {A : ℝ} (hA : 0 ≤ A) :
-    FloatClose A (b.mag A) f fF (b.mod A) := (b.close A hA).2
-
-/-- **The budget is a claim about the deployed map**: on inputs of magnitude `≤ A`, the
-    float map is within `b.fresh A` of the real map, per coordinate. -/
-theorem fresh_le (b : FloatBridgesTo f fF) {A : ℝ} (hA : 0 ≤ A)
-    (v : Vec m) (hv : ∀ k, |v k| ≤ A) (i : Fin n) : |fF v i - f v i| ≤ b.fresh A :=
-  (b.close A hA).2.2 v v 0 hv hv (fun k => by simp) i
-
-/-- **Float-bridging composes, and so do the float maps AND the budgets**: the composed
-    magnitude is `mag_g ∘ mag_f`, the composed modulus at `A` is
-    `mod_g (mag_f A) ∘ mod_f A` — `FloatClose.comp` with the bookkeeping kept. -/
-noncomputable def comp {p : Nat} {g gF : Vec n → Vec p}
-    (hf : FloatBridgesTo f fF) (hg : FloatBridgesTo g gF) :
-    FloatBridgesTo (g ∘ f) (gF ∘ fF) where
-  mag := fun A => hg.mag (hf.mag A)
-  mod := fun A => hg.mod (hf.mag A) ∘ hf.mod A
-  close := fun A hA =>
-    have hf' := hf.close A hA
-    have hg' := hg.close (hf.mag A) hf'.1
-    ⟨hg'.1, hf'.2.comp hg'.2⟩
-
-/-- Forget the float map and the budget — the migration bridge, so a `FloatBridgesTo`
-    still discharges a legacy `FloatBridges` hypothesis. -/
-theorem toFloatBridges (h : FloatBridgesTo f fF) : FloatBridges f :=
-  fun A hA => ⟨h.mag A, h.mod A, fF, (h.close A hA).1, (h.close A hA).2⟩
-
-end FloatBridgesTo
-
-/-- ReLU float-bridges to itself (exact in float): magnitude `A ↦ A`, modulus `e ↦ e`. -/
-noncomputable def floatBridgesTo_relu {n : Nat} : FloatBridgesTo (relu n) (relu n) :=
-  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_relu A⟩⟩
-
-/-- MaxPool float-bridges to itself (exact in float). -/
-noncomputable def floatBridgesTo_maxPool {c h w : Nat} :
-    FloatBridgesTo (maxPoolFlat c h w) (maxPoolFlat c h w) :=
-  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_maxPool A⟩⟩
-
-/-- The 3×3/s2 stem pool float-bridges to itself (exact in float). -/
-noncomputable def floatBridgesTo_maxPool3s2 {c h w : Nat} :
-    FloatBridgesTo (maxPool3s2Flat c h w) (maxPool3s2Flat c h w) :=
-  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_maxPool3s2 A⟩⟩
-
-/-- Convolution float-bridges to the model's rounded convolution: magnitude
-    `layerAct + layerBudget(0)`, modulus `layerBudget` at the receptive-field fan-in. -/
-noncomputable def floatBridgesTo_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * h * w)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
-    FloatBridgesTo (flatConv (h := h) (w := w) W b) (M.flatConvF (h := h) (w := w) W b) :=
-  ⟨fun A => layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0,
-   fun A e => layerBudget M.u (ic * kH * kW) w' β A e,
-   fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hβ hA)
-      (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
-    floatClose_flatConv M W b hw' hβ hA hn hW hb⟩⟩
-
-/-- Dense float-bridges to the model's rounded dense layer: magnitude
-    `layerAct + layerBudget(0)`, modulus `layerBudget` at fan-in `m`. -/
-noncomputable def floatBridgesTo_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n)
-    {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hm : 0 < m)
-    (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) :
-    FloatBridgesTo (Proofs.dense W b) (M.dense W b) :=
-  ⟨fun A => layerAct m w' β A + layerBudget M.u m w' β A 0,
-   fun A e => layerBudget M.u m w' β A e,
-   fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hβ hA)
-      (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
-    floatClose_dense M W b hw' hβ hA hm hW hb⟩⟩
-
-/-- The fresh budget of a composite: the second stage's modulus, at the first stage's
-    output window, applied to the first stage's fresh budget — by `rfl`. The budget is a
-    closed term, not an existential. -/
-theorem FloatBridgesTo.fresh_comp {m n p : Nat} {f fF : Vec m → Vec n} {g gF : Vec n → Vec p}
-    (hf : FloatBridgesTo f fF) (hg : FloatBridgesTo g gF) (A : ℝ) :
-    (hf.comp hg).fresh A = hg.mod (hf.mag A) (hf.fresh A) := rfl
-
-/-- The dense bridge's fresh budget IS the proven `layerBudget` at input error `0`, by `rfl`. -/
-example {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hm : 0 < m)
-    (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) (A : ℝ) :
-    (floatBridgesTo_dense M W b hw' hβ hm hW hb).fresh A = layerBudget M.u m w' β A 0 := rfl
-
-/-- GAP float-bridges TO the model's rounded GAP (`floatClose_gap`'s bookkeeping as data;
-    lives here rather than in the ResNet-34 file so the SE gate can use it). -/
-noncomputable def floatBridgesTo_gap {c h w : Nat} (M : FloatModel) (hc : 0 < c) (hhw : 0 < h * w) :
-    FloatBridgesTo (globalAvgPoolFlat c h w) M.gapFlatF :=
-  ⟨fun A => A + (M.u * ((1 + M.u) ^ (h * w + 1) * A) + ((1 + M.u) ^ (h * w + 1) - 1) * A),
-   fun A e => (M.u * ((1 + M.u) ^ (h * w + 1) * A) + ((1 + M.u) ^ (h * w + 1) - 1) * A) + e,
-   fun _A hA => ⟨(floatClose_gap M hA hhw).cod_nonneg hA hc, floatClose_gap M hA hhw⟩⟩
+-- ═════════════════════════════════════════════════
+-- § The additive skip
+-- ═════════════════════════════════════════════════
 
 /-- **Additive residual `residual f = f(x) + x` is `FloatClose`** — the MBConv /
     transformer skip in the `Residual.lean` API (`residual = biPath f id`, defeq to
@@ -698,78 +492,5 @@ theorem floatClose_residual {m : Nat} (M : FloatModel) {A B : ℝ}
       (residual F) (fun v j => M.add (FF v j) (v j))
       (fun e => M.u * (B + LF e + A + e) + (LF e + e)) :=
   floatClose_addResidual M hF
-
-/-- **Float-bridging survives the residual skip** — if a dim-preserving block
-    float-bridges, so does `residual block`. The MBConv / ResNet / transformer skip
-    in bridge form. -/
-theorem FloatBridges.residual {m : Nat} (M : FloatModel) {f : Vec m → Vec m}
-    (hf : FloatBridges f) : FloatBridges (Proofs.residual f) := by
-  intro A hA
-  obtain ⟨B, L, fF, hB, hfc⟩ := hf A hA
-  refine ⟨B + A + M.u * (B + A), _, _, ?_, floatClose_residual M hfc⟩
-  have hBA : 0 ≤ B + A := add_nonneg hB hA
-  have := M.u_nonneg; nlinarith [mul_nonneg this hBA]
-
-/-- **`FloatBridgesTo.residual`** — the additive skip with the float map named and the
-    budget composed: magnitude `(1+u)(mag A + A)`, modulus `floatClose_residual`'s. -/
-noncomputable def FloatBridgesTo.residual {m : Nat} (M : FloatModel) {f fF : Vec m → Vec m}
-    (hf : FloatBridgesTo f fF) :
-    FloatBridgesTo (Proofs.residual f) (fun v j => M.add (fF v j) (v j)) where
-  mag := fun A => hf.mag A + A + M.u * (hf.mag A + A)
-  mod := fun A e => M.u * (hf.mag A + hf.mod A e + A + e) + (hf.mod A e + e)
-  close := fun A hA =>
-    have hBA : 0 ≤ hf.mag A + A := add_nonneg (hf.mag_nonneg hA) hA
-    have hu := M.u_nonneg
-    ⟨by nlinarith [mul_nonneg hu hBA], floatClose_residual M (hf.floatClose hA)⟩
-
-/-- **`FloatBridgesTo.reluResidual`** — the ResNet skip `relu(F(x) + x)` in bridge form,
-    `floatClose_residualBlock`'s bookkeeping as data. -/
-noncomputable def FloatBridgesTo.reluResidual {m : Nat} (M : FloatModel) {F FF : Vec m → Vec m}
-    (hF : FloatBridgesTo F FF) :
-    FloatBridgesTo (fun v => relu m (fun j => F v j + v j))
-      (fun v => relu m (fun j => M.add (FF v j) (v j))) where
-  mag := fun A => hF.mag A + A + M.u * (hF.mag A + A)
-  mod := fun A e => M.u * (hF.mag A + hF.mod A e + A + e) + (hF.mod A e + e)
-  close := fun A hA =>
-    have hBA : 0 ≤ hF.mag A + A := add_nonneg (hF.mag_nonneg hA) hA
-    have hu := M.u_nonneg
-    ⟨by nlinarith [mul_nonneg hu hBA], floatClose_residualBlock M (hF.floatClose hA)⟩
-
-/-- **`floatClose_cifarStage` with the budget visible**: the five per-op bridges composed,
-    so `.mod` is the two conv `layerBudget`s threaded through the three exact ops. -/
-noncomputable def floatBridgesTo_cifarStage {ic c h w : Nat} (M : FloatModel)
-    (W₁ : Kernel4 c ic 3 3) (b₁ : Vec c) (W₂ : Kernel4 c c 3 3) (b₂ : Vec c)
-    {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β)
-    (hn1 : 0 < ic * (2*h) * (2*w)) (hn2 : 0 < c * (2*h) * (2*w))
-    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β)
-    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β) :
-    FloatBridgesTo
-      (maxPoolFlat c h w ∘ relu (c*(2*h)*(2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂
-        ∘ relu (c*(2*h)*(2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)
-      (maxPoolFlat c h w ∘ relu (c*(2*h)*(2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₂ b₂
-        ∘ relu (c*(2*h)*(2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₁ b₁) :=
-  ((((floatBridgesTo_flatConv (h := 2*h) (w := 2*w) M W₁ b₁ hw' hβ hn1 hW₁ hb₁).comp
-      floatBridgesTo_relu).comp
-      (floatBridgesTo_flatConv (h := 2*h) (w := 2*w) M W₂ b₂ hw' hβ hn2 hW₂ hb₂)).comp
-      floatBridgesTo_relu).comp
-      floatBridgesTo_maxPool
-
-/-- **`floatClose_resBlock` with the budget visible**: body `conv₂ ∘ relu ∘ conv₁` composed,
-    then the ReLU-residual combinator. -/
-noncomputable def floatBridgesTo_resBlock {c h w : Nat} (M : FloatModel)
-    (W₁ W₂ : Kernel4 c c 3 3) (b₁ b₂ : Vec c) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < c * h * w)
-    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β)
-    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β) :
-    FloatBridgesTo
-      (fun v => relu (c*h*w)
-        (fun j => (flatConv W₂ b₂ ∘ relu (c*h*w) ∘ flatConv W₁ b₁) v j + v j))
-      (fun v => relu (c*h*w)
-        (fun j => M.add ((M.flatConvF W₂ b₂ ∘ relu (c*h*w) ∘ M.flatConvF W₁ b₁) v j) (v j))) :=
-  FloatBridgesTo.reluResidual M
-    (((floatBridgesTo_flatConv (h := h) (w := w) M W₁ b₁ hw' hβ hn hW₁ hb₁).comp
-      floatBridgesTo_relu).comp
-      (floatBridgesTo_flatConv (h := h) (w := w) M W₂ b₂ hw' hβ hn hW₂ hb₂))
-
 
 end Proofs

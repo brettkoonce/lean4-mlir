@@ -112,7 +112,6 @@ import LeanMlir.Proofs.Foundation.MobileNetBackChains
 import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 import LeanMlir.Proofs.Foundation.ConvNeXtBackChains
 import LeanMlir.Proofs.Foundation.ViTBackChains
-import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie
@@ -588,9 +587,8 @@ open Proofs
 #print axioms maxPool3s2Flat_has_vjp_at
 -- the DISCHARGE lemma for the smoothness hypothesis
 #print axioms maxPool3s2Smooth_of_injective
--- and the float side (`floatBridges_maxPool`'s peer)
+-- and the float side (`floatClose_maxPool`'s peer)
 #print axioms floatClose_maxPool3s2
-#print axioms floatBridges_maxPool3s2
 -- and the codegen that denotes it
 #print axioms StableHLO.maxPool3s2F_faithful
 #print axioms StableHLO.maxPool3s2Back_faithful
@@ -1042,32 +1040,12 @@ open Proofs
 #print axioms FloatModel.depthwiseConv2dF_close
 #print axioms FloatModel.depthwiseFlatF_close
 #print axioms floatClose_depthwise
--- §1d: the SE gate net + MBConv fold (pure assembly)
-#print axioms FloatClose.cod_nonneg
-#print axioms FloatClose.modulus_zero_nonneg
-#print axioms FloatBridges.comp
+-- §1d: the additive skip's closeness (FloatComposeBridge.lean)
 #print axioms floatClose_residual
-#print axioms FloatBridges.residual
-#print axioms floatBridges_flatConv
-#print axioms floatBridges_dense
-#print axioms floatBridges_depthwise
--- The backward whole-net FOLD
-#print axioms Proofs.floatClose_reluMaskBack
-#print axioms Proofs.floatBridges_linBack
-#print axioms Proofs.mlpInputGrad_floatBridges
--- 1d smooth-activation backward (diagonal Jacobian)
-#print axioms Proofs.floatClose_diagBack
-#print axioms Proofs.floatBridges_diagBack
 -- Strided-conv backward (r34 down-blocks + stem)
 #print axioms Proofs.decimateBack_eq_vjp
 -- stride-4 (ConvNeXt 4×4/s4 patchify)
 #print axioms Proofs.decimateOddIdx_injective
--- FloatBridges binds the float map existentially (constrains nothing); r34_floatBridgesTo names the net and carries the budget
-#print axioms Proofs.FloatBridgesTo.comp
-#print axioms Proofs.FloatBridgesTo.fresh_le
-#print axioms Proofs.FloatBridgesTo.residual
-#print axioms Proofs.floatBridgesTo_cifarStage
-#print axioms Proofs.floatBridgesTo_resBlock
 -- The CIFAR-8 chain tie
 #print axioms Proofs.FloatModel.bnMean_close_of
 #print axioms Proofs.FloatModel.bnMean_num_le
@@ -2143,7 +2121,6 @@ open Proofs
 #print axioms Proofs.MlpCanonical.input_float_sgd_descends
 #print axioms Proofs.MlpCanonical.w1_grad_close
 #print axioms Proofs.MlpCanonical.w0_grad_close
-#print axioms Proofs.MlpCanonical.inputGrad_floatBridges
 #print axioms Proofs.MlpCanonical.train_step_tied_certified
 
 -- The bf16-MIXED conv, composed (ConvMixedComposeBridge.lean, 2026-08-24)

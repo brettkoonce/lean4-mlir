@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Training.SgdDescentMlp
-import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Foundation.MlpFaithfulPoC
 
 /-! # The CANONICAL MNIST MLP — 784→512→512→10 (ReLU, biased)
@@ -10,8 +9,8 @@ Every runnable MNIST MLP path uses it (verified/e4m3/pgd/spectral/smooth trainer
 committed `verified_mlir/mlp_train_step.mlir` render, the baselines, `margin_probe.py`).
 
 This file makes the canonical claim a CHECKABLE LEAN SURFACE: the generic MLP proof
-chain (whole-net VJP, float-gradient closeness, float-SGD descent, the input-VJP
-FloatBridges, the emitted-train-step tie) instantiated at the literal canonical dims.
+chain (whole-net VJP, float-gradient closeness, float-SGD descent, the emitted-train-step
+tie) instantiated at the literal canonical dims.
 Each declaration below IS the corresponding generic theorem at `(784, 512, 512, 10)` —
 `#check` shows the specialized statement; the 3-axiom audit covers them all. The
 spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerified_has_vjp*`
@@ -66,11 +65,6 @@ noncomputable def w1_grad_close :=
 /-- Canonical W₀ float-gradient closeness. -/
 noncomputable def w0_grad_close :=
   mlp_w0_grad_close (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
-
-/-- Canonical whole-MLP backward float bridge (`mlpInputGrad_floatBridges` at
-    the canonical dims): the float-evaluated input-VJP chain is FloatBridges. -/
-noncomputable def inputGrad_floatBridges :=
-  mlpInputGrad_floatBridges (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
 
 /-- Canonical emitted-train-step tie (`MlpPoC.mlp_train_step_tied_certified` at
     the canonical dims): every SGD op of the emitted graph denotes the certified

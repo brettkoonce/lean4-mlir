@@ -69,7 +69,7 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ViTRender,
              `LeanMlir.Proofs.Codegen.ViTRenderB]
 
-/-- **`lake build Certs`** — the certificate corpus (202 roots reaching 236 modules,
+/-- **`lake build Certs`** — the certificate corpus (201 roots reaching 235 modules,
     ~153k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
     Muon, the float model, …): the VJP proof suite's apex modules; their transitive
     imports cover every proof file (they subsume the `Proofs` roots above, so
@@ -176,7 +176,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.MobileNetBackChains,
              `LeanMlir.Proofs.Foundation.EfficientNetBackChains,
              `LeanMlir.Proofs.Foundation.ConvNeXtBackChains,
-             `LeanMlir.Proofs.Float.LinBackFloatBridge,
              `LeanMlir.Proofs.Float.ConvMixedComposeBridge,
              `LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge,
              `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie,
