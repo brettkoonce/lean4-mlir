@@ -106,6 +106,17 @@ float side unless the model core needs them.
   `decimateBack_eq_filter`, the 3×3/s2 fibre count `maxPool3s2Back_mask_sum_abs_le`, …) stayed with
   the float side and die with it at step 7. Re-pointed: `DepthwiseBackCertifiedTie`, `ResNet34FullBVJP`,
   `ConvNeXtTiePoC`, `Resnet34BackCertifiedTie` (its strided import only).
+* **Step 2 DONE 2026-09-08.** `Foundation/ResNetBackChains.lean` holds `r34IdBlockBack`,
+  `r34DownBlockBack`, `r34InputGrad`, `maxPool3s2FlatBackB`, `r34InputGradB`, `r50InputGradB`; `gapBack`
+  went into `BackwardMaps.lean` (every conv net's head endpoint; `flatChannel` was already in that
+  closure). The batched pool backward sits with the chains rather than in `BackwardMaps` because it
+  needs `StableHLO.batchMapAux`, and the generic leaf does not import `StableHLO.lean`. The three
+  ResNet ties compiled against the leaf with no proof change. ⚠ `Resnet34WholeBackFloatBridgeB` and
+  `Resnet50WholeBackFloatBridgeB` were never Certs roots — they reached the build only through the
+  two ties — so re-pointing the ties orphaned them (the audit's six prints of their float twins
+  went unknown). Deleted on the spot, prints removed: −538 lines net for the step. The three
+  per-example ResNet bridge files stay for now; they are roots and MobileNetV2/B0/SE's bridges
+  still import `Resnet34WholeBackFloatBridge` for the float side of `gapBack`.
 * **Bucket three, checked at step 1:** no kept non-test file uses any ℝ name from `SEBackFloatBridge`,
   `SoftmaxBackFloatBridge`, `PatchEmbedBackFloatBridge`, the five `Bn*FloatBridge` or
   `Resnet34WholeFloatBridge` — `seBack*`, `softmaxRowBack*`, `patchEmbedBack*` are consumed only by the

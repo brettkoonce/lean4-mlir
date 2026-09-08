@@ -117,6 +117,7 @@ import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
 import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Architectures.ChannelLNBack
+import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
 import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
@@ -2807,12 +2808,9 @@ open Proofs
 -- ⛔ And a rfl straight at 4.1d's tactic-built apex is a five-minute isDefEq timeout — §5's
 -- elaboration trap, and the reason the generic apex exists.
 -- ⛔ NO NUMBER is stated about either chain: §4.2's T5 is a float budget and
--- planning/float_budget_numbers.md closed that thread. The chains exist for the ties.
-#print axioms Proofs.batchMapAux_apply
-#print axioms Proofs.FloatClose.batchMapAux
-#print axioms Proofs.FloatBridgesTo.batchMapAux
-#print axioms Proofs.floatBridgesTo_maxPool3s2BackB
-#print axioms Proofs.r34_grad_floatBridgesToB
+-- planning/float_budget_numbers.md closed that thread. The chains exist for the ties, and since
+-- 2026-09-08 they are defined beside them (Foundation/ResNetBackChains.lean); the float twins
+-- (r34_grad_floatBridgesToB, the batchMapAux float lifts) were deleted with their files.
 #print axioms Proofs.HasVJPAt.backward_unique
 #print axioms Proofs.maxPool3s2FlatBackB_eq_vjp_backward
 #print axioms Proofs.cbReluStridedBBack_eq_vjp_backward
@@ -2848,7 +2846,6 @@ open Proofs
 -- alone is 2.2 s and its statement elaborates in 2.5 s, so all 57 s is that file's tie rfl. The
 -- statements are the same shape; the only structural difference is that r34's dimensions are
 -- literals the kernel can evaluate and R50's are 2 * (…) nests at a variable q that it cannot.
-#print axioms Proofs.r50_grad_floatBridgesToB
 #print axioms Proofs.r50InputGradB_eq_r34B_full_vjp
 #print axioms Proofs.r50InputGradB_correct
 #print axioms Proofs.resnet50ForwardB_full_eq_slots

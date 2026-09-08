@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Float.StridedConvBackFloatBridge
 
 /-! # ℝ→Float32 bridge for the ResNet-34 DOWNSAMPLE-block backward
@@ -20,6 +21,9 @@ BN-backs:
 * `bBody = flatConvStride2Back W₁ ∘ bnB₁ ∘ reluMaskBack ∘ convFlatBack W₂ ∘ bnB₂`
 
 With this, every r34 block type (identity + downsample) and the stem op are float-bridged.
+
+⚠ Since 2026-09-08 the ℝ chain `r34DownBlockBack` is defined in `Foundation/ResNetBackChains.lean`;
+this file keeps `FloatBridges.biPathSum` and the float side only.
 -/
 
 namespace Proofs
@@ -84,22 +88,6 @@ theorem FloatBridges.biPathSum {m n : Nat} (M : FloatModel) {f g : Vec m → Vec
 -- ════════════════════════════════════════════════════════════════
 -- § The downsample-block input-VJP
 -- ════════════════════════════════════════════════════════════════
-
-/-- The r34 downsample basic-block input-gradient VJP at a smooth point — the **reverse of
-    `rblkPStridedPC`**. `relu(proj(x) + body(x))` backward = the ReLU mask, then the two-branch
-    fan-in `bProj(dy') + bBody(dy')` (both branches non-trivial, summed). The strided convs reverse
-    via `flatConvStride2Back`; the BN-backs `bnB₁`/`bnB₂`/`bnBp` are the per-channel BatchNorm
-    backwards (supplied). -/
-noncomputable def r34DownBlockBack {ic oc h w kHp kWp : Nat}
-    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic kHp kWp)
-    (bnB1 bnB2 bnBp : Vec (oc * h * w) → Vec (oc * h * w))
-    (m_out m_mid : Fin (oc * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid] :
-    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
-  (fun dy j =>
-      (flatConvStride2Back (h := h) (w := w) Wp ∘ bnBp) dy j
-      + (flatConvStride2Back (h := h) (w := w) W₁ ∘ bnB1 ∘ reluMaskBack m_mid
-          ∘ convFlatBack (h := h) (w := w) W₂ ∘ bnB2) dy j)
-    ∘ reluMaskBack m_out
 
 /-- **The r34 downsample-block input-gradient VJP float-bridges.** One `.comp` chain: the outer ReLU
     mask, then the two-branch fan-in (`FloatBridges.biPathSum`) of the projection backward

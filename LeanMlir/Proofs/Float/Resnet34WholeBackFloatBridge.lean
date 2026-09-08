@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
 
@@ -18,6 +19,9 @@ the block maps' dimensions (the down-blocks change channels×spatial; the identi
 `gapBack` (the one new op): the certified GAP VJP is `dy(channel)/(h·w)` — broadcast the cotangent
 to every spatial cell, divide by `h·w`. A scaled broadcast: magnitude-nonincreasing (`h·w ≥ 1`),
 one rounding (the reciprocal multiply), modulus `mulErr(A) + (1/(h·w))·e`.
+
+⚠ Since 2026-09-08 `gapBack` is defined in `Foundation/BackwardMaps.lean` and `r34InputGrad` in
+`Foundation/ResNetBackChains.lean`; this file is their float side only.
 -/
 
 namespace Proofs
@@ -27,11 +31,6 @@ open scoped Real
 -- ════════════════════════════════════════════════════════════════
 -- § GAP backward (broadcast ÷ h·w)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Global-average-pool backward** — the certified GAP VJP: route `dy(channel)` to every spatial
-    cell of that channel, divided by `h·w`. `Vec c → Vec (c·h·w)`. -/
-noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
-  fun idx => dy (flatChannel c h w idx) / ((h : ℝ) * (w : ℝ))
 
 /-- Float GAP backward: broadcast then multiply by the precomputed reciprocal `1/(h·w)`. -/
 noncomputable def gapBackF (M : FloatModel) (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
@@ -106,36 +105,6 @@ theorem floatBridges_gapBack (M : FloatModel) (c h w : Nat) (hc : 0 < c) (hh : 0
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net input-gradient VJP (the [3,4,6,3] fold)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The whole ResNet-34 input-gradient VJP at a smooth point — the **exact reverse of
-    `resnet34Forward_full_pc`**: `dense ∘ GAP ∘ [3,4,6,3] blocks ∘ maxpool ∘ stem` reversed. The
-    stem/GAP/maxpool/dense endpoints are concrete (`flatConvStride2Back`/`gapBack`/`maxPool3s2FlatBack`/
-    `dense (transposeᵀ) 0`); the 16 block backwards `a0B..e1B` are supplied (each
-    `floatBridges_r34IdBlockBack`/`floatBridges_r34DownBlockBack`). The `[3,4,6,3]` stage structure
-    is in the block maps' dims (down-blocks change channels×spatial; identity blocks preserve). -/
-noncomputable def r34InputGrad (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
-    (bnBs : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
-    (e1B e0B : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))
-    (d4B : Vec (512 * 7 * 7) → Vec (256 * 14 * 14))
-    (c4B c3B c2B c1B c0B : Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
-    (d3B : Vec (256 * 14 * 14) → Vec (128 * 28 * 28))
-    (b2B b1B b0B : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
-    (d2B : Vec (128 * 28 * 28) → Vec (64 * 56 * 56))
-    (a2B a1B a0B : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
-    (xmp : Tensor3 64 112 112)
-    (m_stem : Fin (64 * 112 * 112) → Prop) [DecidablePred m_stem] :
-    Vec 10 → Vec (3 * 224 * 224) :=
-  (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
-  ∘ maxPool3s2FlatBack xmp
-  ∘ a0B ∘ a1B ∘ a2B
-  ∘ d2B
-  ∘ b0B ∘ b1B ∘ b2B
-  ∘ d3B
-  ∘ c0B ∘ c1B ∘ c2B ∘ c3B ∘ c4B
-  ∘ d4B
-  ∘ e0B ∘ e1B
-  ∘ gapBack 512 7 7
-  ∘ dense (Mat.transpose Wd) (0 : Vec 512)
 
 set_option maxRecDepth 100000 in
 /-- **The whole ResNet-34 input-gradient VJP float-bridges** — the first Imagenette whole-net

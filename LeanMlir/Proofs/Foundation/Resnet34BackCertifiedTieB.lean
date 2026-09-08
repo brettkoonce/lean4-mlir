@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Architectures.ResNet34FullBVJP
 import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
-import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridgeB
+import LeanMlir.Proofs.Foundation.ResNetBackChains
 
 /-! # ⭐⭐ `r34InputGradB` IS the certified whole-net ResNet-34 gradient AT BATCH BATCH-NORM
 

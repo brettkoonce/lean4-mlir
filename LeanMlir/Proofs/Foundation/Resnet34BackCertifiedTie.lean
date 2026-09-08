@@ -1,10 +1,8 @@
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Architectures.CifarCNN
-import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
 import LeanMlir.Proofs.Architectures.EfficientNetChainClose
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge
-import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
+import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Foundation.IR
 
 /-! # §B: the r34 identity-block backward float bridge targets the CERTIFIED VJP
@@ -66,7 +64,7 @@ existed except the stem's (`cbrStridedPC_has_vjp_at`, added below — the stride
 forward `resnet34Forward_full_pc` pools with `maxPool3s2Flat`, He et al.'s 3×3/s2 stem pool.
 `MaxPool3s2.lean`'s header warns the two share a TYPE and are different functions; nothing forced
 the two statements to unify until a theorem needed them to be about ONE net. The missing leaf is
-`MaxPool3s2BackFloatBridge.lean` (the ACCUMULATING scatter — 3×3/s2 windows overlap, so an input
+`maxPool3s2FlatBack` (`BackwardMaps.lean` — the ACCUMULATING scatter: 3×3/s2 windows overlap, so an input
 can be the argmax of up to four outputs, window `4A` not `A`), and the whole-net number then
 stated on this chain moved 4× (that budget was deleted 2026-09-08). ⚠ This is `imagenet_specs_drift_from_twins` for the fourth time and
 ConvNeXt's stale head-LayerNorm slot for the second: *"the same net as the tie" is an unchecked
@@ -423,7 +421,7 @@ set_option maxHeartbeats 2000000 in
     **2×2** pool's backward — while the committed forward `resnet34Forward_full_pc` pools with
     `maxPool3s2Flat`, He et al.'s 3×3/s2 stem pool. `MaxPool3s2.lean` warns that the two share a
     TYPE and are different functions; nothing forced them to unify until this theorem needed the
-    two statements to be about one net. The fix is `MaxPool3s2BackFloatBridge.lean` (the
+    two statements to be about one net. The fix is `maxPool3s2FlatBack` (`BackwardMaps.lean`, the
     accumulating scatter, window `4A` not `A`), and the r34 backward number moved
     `2.188·10²⁴⁵ → 8.857·10²⁴⁵`.
 

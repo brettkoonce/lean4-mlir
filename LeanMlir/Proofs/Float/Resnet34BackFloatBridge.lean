@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
 
 /-! # ℝ→Float32 bridge for the ResNet-34 BACKWARD: the residual basic-block input-VJP
@@ -24,24 +25,12 @@ per-channel BN-backs `bnB₁`/`bnB₂` are supplied as `FloatBridges` facts (dis
 Remaining for the r34 whole net: the **down**-block (needs a strided-conv backward + the two-branch
 `residualProj` backward) and the stem (strided conv) + GAP backward — a forward/backward-shared gap
 (the forward r34 whole-net float bridge is itself only block-level so far).
+
+⚠ Since 2026-09-08 the ℝ chain `r34IdBlockBack` is defined in `Foundation/ResNetBackChains.lean`,
+beside the tie; this file is its float side only (`planning/float_second_pass.md`).
 -/
 
 namespace Proofs
-
-/-- The r34 identity basic-block input-gradient VJP at a smooth point — the **reverse of `rblkPC`**.
-    `relu(F(x)+x)` backward = the ReLU mask, then the residual split (cotangent to both the body and
-    the skip, added): `residual bF ∘ reluMaskBack`, with `bF` the reverse of `F = bn₂∘conv₂ ∘
-    relu∘bn₁∘conv₁`. The ReLU kinks read the fixed sign masks `m_out`/`m_mid`; the BN-backs `bnB₁`/
-    `bnB₂` are the per-channel BatchNorm backwards. -/
-noncomputable def r34IdBlockBack {c h w : Nat}
-    (W₁ W₂ : Kernel4 c c 3 3)
-    (bnB1 bnB2 : Vec (c * h * w) → Vec (c * h * w))
-    (m_out m_mid : Fin (c * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid] :
-    Vec (c * h * w) → Vec (c * h * w) :=
-  Proofs.residual
-      (convFlatBack (h := h) (w := w) W₁ ∘ bnB1 ∘ reluMaskBack m_mid
-        ∘ convFlatBack (h := h) (w := w) W₂ ∘ bnB2)
-    ∘ reluMaskBack m_out
 
 /-- **The r34 identity-block input-gradient VJP float-bridges.** Assembled in one `.comp` chain:
     the inner body backward `bF` (a `convFlatBack`/`reluMaskBack`/BN-back chain) is wrapped by

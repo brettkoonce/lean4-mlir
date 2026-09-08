@@ -31,7 +31,7 @@ MobileNetV4's stem is EfficientNet-B0's (3×3/s2 at the XLA-`SAME` phase, so
 1×1 plain convolutions (`floatBridgesTo_convBack`), and its GAP-and-dense tail is ResNet-34's
 (`floatBridgesTo_gapBack`, `floatBridgesTo_linBack`). Every concrete endpoint here is
 `batchMap N` of a per-example leaf, so the whole file is `FloatBridgesTo.batchMap` and `.comp` —
-none of `Resnet34WholeBackFloatBridgeB.lean`'s row-indexed `batchMapAux` machinery, for the reason
+none of ResNet-34's row-indexed `batchMapAux` machinery (its float side was deleted 2026-09-08), for the reason
 4.2b found on MobileNetV2: **no stem pool.**
 
 ⚠ **Two padding phases in one chain.** The stem scatters with `decimateOddBack` (XLA-`SAME`); the

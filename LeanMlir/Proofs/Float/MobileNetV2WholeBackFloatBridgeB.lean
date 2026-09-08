@@ -15,7 +15,7 @@ at **`bnBatchLA`**, at a variable batch `N`, and it exists so that the batch-BN 
 ⭐ **Cheaper than ResNet-34's batched chain, and for the same structural reason 4.2b found:
 MobileNetV2 has no stem pool.** Every concrete endpoint here is `batchMap N` of a per-example
 leaf — a convolution, a GAP and a dense are batch-separable and their float peers lift by
-`FloatBridgesTo.batchMap` — so this file needs none of `Resnet34WholeBackFloatBridgeB.lean`'s
+`FloatBridgesTo.batchMap` — so this file needs none of ResNet-34's
 row-indexed `batchMapAux` machinery.
 
 ⚠ Padding is XLA-`SAME` at the stem (`flatConvStride2XlaBack`, whose float peer scatters with

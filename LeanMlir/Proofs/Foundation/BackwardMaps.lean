@@ -251,6 +251,17 @@ noncomputable def depthwiseStride2FlatXlaBack {c h w kH kW : Nat} (W : Depthwise
   depthwiseFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateOddBack c h w
 
 -- ════════════════════════════════════════════════════════════════
+-- § The global-average-pool backward (broadcast ÷ h·w)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Global-average-pool backward** — the certified GAP VJP: route `dy(channel)` to every spatial
+    cell of that channel, divided by `h·w`. `Vec c → Vec (c·h·w)`. The head endpoint of every conv
+    net's backward chain (`r34InputGrad`, `mnv2InputGrad`, `efficientnetInputGradB`, …); the
+    emitted `SHlo.gapBack` denotes `globalAvgPoolFlat_has_vjp`'s backward, which is this map. -/
+noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
+  fun idx => dy (flatChannel c h w idx) / ((h : ℝ) * (w : ℝ))
+
+-- ════════════════════════════════════════════════════════════════
 -- § The 3×3/s2 stem-pool backward: an ACCUMULATING scatter, and its VJP at a `Vec` point
 -- ════════════════════════════════════════════════════════════════
 
