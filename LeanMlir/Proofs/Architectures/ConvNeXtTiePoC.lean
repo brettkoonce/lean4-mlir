@@ -8,7 +8,8 @@ import LeanMlir.Proofs.Float.ChannelLNFloatBridge
 
 /-! # PoC: the FULL [3,3,9,3] ConvNeXt-T §1a TIE — the whole net tied through the real forward
 
-The Chapter-7 §1a tie: mnv2's whole-net thread (`Mnv2TiePoC.mnv2_net_tied_certified`) for the
+The Chapter-7 §1a tie: mnv2's whole-net thread (now `MobileNetV2TieB.mnv2_net_tiedB`; the
+per-example original was deleted 2026-09-08) for the
 ConvNeXt-T schedule. The §1 fold (`ConvNeXtFaithfulPoC` + `ConvNeXtClose`/M2/M3/ViT) already makes
 every rendered param op `den = certified ∀ cotangent`; this file feeds each consumer the **real
 forward activations** of the `convNextTrainStepFaithfulV` render and the **loss-driven

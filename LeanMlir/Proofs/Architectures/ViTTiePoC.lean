@@ -3,27 +3,29 @@ import LeanMlir.Proofs.Architectures.ViTVecLN
 import LeanMlir.Proofs.Architectures.ViTChainClose
 import LeanMlir.Proofs.Architectures.ViTMultiHeadChain
 
-/-! # ViT-Tiny §1a tie — the transformer block tied through the real backward cotangent chain
+/-! # ViT-Tiny §1a tie — the SGD-inline train step, all 200 parameters at the real backward chain
 
-The ViT peer of `ConvNeXtTiePoC`/`MobileNetV2TiePoCPaper`: thread the §1-fold param-SGD `den`otations
-(`ViTPoC.*_den`, generic in the cotangent) at the **actual** cotangents the block backward chain
-delivers (`ViTVecLN`/`ViTChainClose`'s `vitCot*` family), so every block param's `den = θ − lr·(certified
-∂/∂θ · the real-chain cotangent)` — one composed fact, the real loss-driven backward, not a free `∀ c`.
+**What this file is.** The T3 §1a tie of `verified_mlir/vit_train_step.mlir` — the per-example
+SGD-inline step `ViTRender.lean` still writes — at the fused `θ − lr·g` ops:
+`vit_net_tied_certified` (the last theorem) threads all 200 ViT-Tiny parameters through the
+committed multi-head (3 heads, d_head 64), depth-12, vector-LayerNorm forward and the loss-driven
+backward cotangent chain. Its batched peer at the un-fused gradient node, the smoothed loss and a
+batch binder — the chain every `vitin_*` accuracy comes from — is `ViTTiePoCGB.vit_net_tiedGB`,
+built from this file's block ties by `batchMap` / `batchMapAux`.
 
-The new structural content vs every prior net: **two residual fan-ins per block** (the MLP residual
-`vitCotHV = dyOut + LN₂-back(…)` and the attention residual `vitCotXinV = cotH + LN₁-back(…)`), and the
-**three-way fan-in at LN₁'s output** (the Q/K/V dense-backs all read `LN₁ x`, so their cotangents SUM in
-`vitCotLn1`). The per-head SDPA backward is pinned to the audited `sdpa_back_{Q,K,V}` suite
-(`ViTChainClose.vitCotD{Q,K,V}`). Pure thread + fan-in — ZERO new core ops, ZERO new bridges; each
-conjunct is a delegation to a §1-fold generic at the chain cotangent.
+The file is layered the way it was built, and the first two layers are the ladder, not the result:
+* `vit_block_tiedV` — one vector-LN block at a single head, generic in the cotangent: the two
+  residual fan-ins (`vitCotHV`, `vitCotXinV`), the three-way fan-in at LN₁ (`vitCotLn1`), the
+  SDPA backward pinned to the audited `sdpa_back_{Q,K,V}` (`ViTChainClose.vitCotD{Q,K,V}`).
+* `vit_net_tiedV` — the 2-block single-head whole-net thread, the ConvNeXt pattern.
+* `vit_block_tiedMHV` / `vit_net_tiedMHV` — the same at 3 heads via `ViTMultiHeadChain`'s
+  `vitCotD{Q,K,V}mh`, threaded to depth 12 (`vit_net_tiedMHV2` is the depth-2 smoke test).
+* `vit_net_tied_certified` — the 200-parameter capstone: the 192 block parameters, the final LN,
+  the classifier and the patch embed (`vit_cls_den` covers the CLS token at `N = 1`).
 
-**Scope (honest, the mnv2 reduced-net situation).** The vector-LN chain infrastructure
-(`vitForward2V`, the `*V` cots, the `vecln*_chain_certified` certs) is **single-head** (`heads = 1`);
-the committed `vitTrainStepRenderV` render is **multi-head (3 heads), depth-12**. So this ties the
-per-block **vector-LN representative**; promoting to the multi-head/depth-12 committed render needs
-multi-head chain cotangents (the per-head `headSlice`/`headPad` backs summed over heads) — the analogue
-of mnv2's reduced→full and the next vit step. The vector-LN granularity (the `[D]` LN that SHIPS) IS
-modeled here (NOT the scalar-LN `vitNetBackGraph` parallel universe). -/
+Every conjunct delegates to a `ViTPoC.*_den` fold lemma at the chain cotangent — zero new ops,
+zero new bridges. The vector-LN granularity that ships (`[192]` γ/β) is what is modelled; the
+scalar-LN `vitNetBackGraph` is a parallel universe this file never touches. -/
 
 namespace Proofs.ViTTiePoC
 

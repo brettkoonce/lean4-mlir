@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.EfficientNetFullB0
 
 /-! # PoC: the full-16 EfficientNet-B0 train step §1a TIE (whole-net thread) — DONE (capstone `efficientnet_net_tied`, all 262 params, 3-axiom clean; only the optional dense-head fold below remains)
 
-The EfficientNet peer of `MobileNetV2TiePoCPaper` (the §1a tie). The §1 fold
+The EfficientNet-B0 §1a tie (its batched, un-fused peer is `EnetTiePoCG.efficientnet_net_tiedG`). The §1 fold
 (`EfficientNetFaithfulPoC`) gives every batched param-SGD op `den = certified ∀ cotangent`; this
 file pins each cotangent to the **actual loss-driven backward chain** of the rendered net — threading
 the real forward activations through every param op and composing the backward cotangent from the

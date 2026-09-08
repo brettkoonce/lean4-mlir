@@ -44,8 +44,9 @@ exactly as `resnet34`/`cifar8`'s does (§5).
 `MobileNetV2FullB.lean` (T1 forward, T2), `MobileNetV2FullBVJP.lean` (T1's VJP),
 `MobileNetV2FaithfulPoCPaperG.lean` (T3 §1 fold, un-fused) and `MobileNetV2TiePoCB.lean` (T3 §1a
 tie) — §4.2 of `planning/proofs_tier_to_paper_nets.md`, all 2026-09-06. The per-example
-`MobileNetV2FaithfulPoCPaper` / `MobileNetV2TiePoCPaper` pair is now about bytes that no longer
-exist, and both headers say so.
+`MobileNetV2FaithfulPoCPaper` fold still supplies the op-kind lemmas the batched fold delegates
+to; the per-example tie (`MobileNetV2TiePoCPaper.lean`) was deleted 2026-09-08, since no committed
+bytes exercised it.
 
 Render is value-independent (`skel` erases values), so placeholder zeros and `ε := 0` are passed;
 the emitted literals carry the real values.

@@ -565,7 +565,7 @@ lean_lib «Certs» where
              -- ⭐ N is a binder and the capstone needs NO smoothness hypothesis: the folds are
              -- forall-cot statements at explicitly constructed cotangents, and the kink conditions
              -- enter only in the two _eq_vjp lemmas.
-             -- ⛔ The census is 110 parameters, not the 146 ResNet34TiePoC names: both r34 renders
+             -- ⛔ The census is 110 parameters, not the 146 the retired per-example tie named: both r34 renders
              -- run convBias := false and the conv biases are zeroBiasPrelude's zero constants.
              `LeanMlir.Proofs.Foundation.ResNet34TiePoCB,
              -- ⭐ 4.2 leg 1: MobileNetV2's T1-forward and T2 at batch BN — the second net whose
@@ -1388,10 +1388,6 @@ lean_lib «Certs» where
              -- convs den-certified via mnv2_render_stem_conv{W,b}_certified; the 142 other
              -- params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics (ResNet34FaithfulPoC.lean).
              `LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC,
-             -- ch6-ResNet-34 §1a TIE: per-block-type tie lemmas (identity/downsample/stem) at the
-             -- real forward + ResNet34ChainClose cotangents, the residual fan-in SUM constructors
-             -- (idBlockCotIn/downBlockCotIn), loss-cot + dense fold (ResNet34TiePoC.lean).
-             `LeanMlir.Proofs.Foundation.ResNet34TiePoC,
              -- ch7-MobileNetV2 §1 fold (depthwise half): the 4 new depthwise SGD ops
              -- (depthwise{,Strided}{Weight,Bias}Sgd) den-certified via the mnv2_render_depthwise*
              -- bridges; expand/project/BN/dense reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics
@@ -1407,12 +1403,6 @@ lean_lib «Certs» where
              -- stride-2/head/dense), each delegating to the audited CifarPoC/CifarBnPoC/Cifar8PoC/
              -- Mnv2PoC/ResNet34PoC generics (MobileNetV2FaithfulPoCPaper.lean).
              `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaper,
-             -- ch7-MobileNetV2 FULL 17-block paper §1a TIE: the whole 210-param train step tied
-             -- through the REAL mobilenetv2ForwardPaper + the loss-driven backward chain (relu6
-             -- two-kink masks, residual fan-in at every stride-1 skip). Per-block-type tie lemmas
-             -- (no-exp/stride-1/stride-2/stem/head) applied across all 17 blocks via @[irreducible]
-             -- FwdO/CotInAt/TiedAt wrappers (the r34 heartbeat lesson) (MobileNetV2TiePoCPaper.lean).
-             `LeanMlir.Proofs.Architectures.MobileNetV2TiePoCPaper,
              -- ch8-EfficientNet-B0 full-16 (262-param) train step rendered as pretty(provenGraph)
              -- at the batched index (N=1, emit B = batch); un-fused SE for the SE param grads
              -- (EfficientNetRender.lean); writes verified_mlir/efficientnet_train_step.mlir.

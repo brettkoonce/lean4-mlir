@@ -65,7 +65,7 @@ status:
     multi-theorem treatment of scaled-dot-product / multi-head self-attention
     through the full transformer tower. On top of the VJP layer, four further
     proved programs: (1) TRAIN-STEP TIES -- every net's SGD-inline train step,
-    all 12 nets, is tied to its real loss-driven backward cotangent (per-net
+    all ten that ship one, is tied to its real loss-driven backward cotangent (per-net
     *TiePoC capstones, e.g. the all-200-params vit_net_tied_certified). For the
     Adam, RMSProp and ImageNet steps -- which emit the raw gradient rather than
     the fused theta - lr*g -- what is proved is the FOLD at every gradient node
@@ -1472,19 +1472,15 @@ fidelity:
        to land FIRST, which is why the retirement below orphans two files and no
        tier.
 
-       ⚠ WHAT RETIREMENT COSTS, AND THE ORDERING RULE IT IMPLIES.
-       `Foundation/ResNet34FaithfulPoC.lean` (the per-example §1 fold) and
-       `ResNet34TiePoC.lean` (its §1a tie) are now about an artifact that does
-       not exist. Every theorem in them is unchanged and still true -- they are
-       about the per-example ResNet-34 and the SGD-inline op family, both of
-       which exist as mathematics -- but no committed bytes exercise them, and
-       both headers say so. That is only acceptable because their batched peers
-       (4f's `ResNet34FaithfulPoCB`, 4g's `ResNet34TiePoCB`) landed the same day.
-       MobileNetV2's `MobileNetV2FaithfulPoCPaper` / `MobileNetV2TiePoCPaper` pair
-       is in the same position for the same reason, against 4f's
-       `MobileNetV2FaithfulPoCPaperG` and 4j's `MobileNetV2TiePoCB`.
-       A leg must not retire a per-example renderer before the batched tier that
-       replaces it exists; that ordering is why 4f and 4g came first.
+       ⚠ WHAT RETIREMENT COSTS, AND THE ORDERING RULE IT IMPLIES. The
+       per-example ties `ResNet34TiePoC.lean` and `MobileNetV2TiePoCPaper.lean`
+       were about an artifact that no longer existed; both were DELETED on
+       2026-09-08 (their batched peers `ResNet34TiePoCB` / `MobileNetV2TiePoCB`
+       had landed first). The per-example folds `ResNet34FaithfulPoC` /
+       `MobileNetV2FaithfulPoCPaper` stay: they hold the op-kind lemmas the
+       batched folds delegate to. A leg must not retire a per-example renderer
+       before the batched tier that replaces it exists; that ordering is why 4f
+       and 4g came first.
        `ResNet34RenderPC.lean` is NOT affected the same way -- its
        `resnet34Forward_full_pc` is the subject of the float budgets, the T6 tie
        and the witness, none of which is about a train step's bytes.
@@ -2291,7 +2287,7 @@ alignment:
       module: "LeanMlir/Proofs/Foundation/ResNet34LivePC.lean, LeanMlir/Proofs/Training/ResNet34LiveSeal.lean, LeanMlir/Proofs/Foundation/ResNet34LiveFull.lean"
       status: "proved"
       note: "2-channel live ResNet-34, real [3,4,6,3] depth; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes; identity blocks wash out through BN)"
-    - source: "Committed train step = real loss-driven backward (per-net ties, all 12 nets)"
+    - source: "Committed train step = real loss-driven backward (per-net ties: the ten SGD-inline steps, and the seven ImageNet-scale nets at their batched steps)"
       lean: "<net>_net_tied_certified family (e.g. vit_net_tied_certified, all 200 ViT params)"
       module: "LeanMlir/Proofs/*TiePoC.lean"
       status: "proved"

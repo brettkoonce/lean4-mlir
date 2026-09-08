@@ -48,10 +48,8 @@ import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Foundation.ResNet34ChainClose
 import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC
-import LeanMlir.Proofs.Foundation.ResNet34TiePoC
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoC
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaper
-import LeanMlir.Proofs.Architectures.MobileNetV2TiePoCPaper
 import LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoC
 import LeanMlir.Proofs.Architectures.EfficientNetTiePoC
 import LeanMlir.Proofs.Architectures.ConvNeXtClose
@@ -665,15 +663,6 @@ open Proofs
 #print axioms EnetTiePoC.enet_stem_tied
 #print axioms EnetTiePoC.enet_head_tied
 #print axioms EnetTiePoC.efficientnet_net_tied
--- ch7-MobileNetV2 FULL 17-block paper §1a TIE: the whole 210-param train step den-composed
--- forward→loss→backward through the REAL mobilenetv2ForwardPaper + the residual-fan-in cotangent
--- chain. Per-block-type tie lemmas applied across all 17 blocks + stem + conv-bn-relu6 head + dense.
-#print axioms Mnv2TiePoC.mnv2_ivS1_tied
-#print axioms Mnv2TiePoC.mnv2_ivS2_tied
-#print axioms Mnv2TiePoC.mnv2_ivNoExp_tied
-#print axioms Mnv2TiePoC.mnv2_stem_tied
-#print axioms Mnv2TiePoC.mnv2_head_tied
-#print axioms Mnv2TiePoC.mnv2_net_tied_certified
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge
@@ -1165,21 +1154,6 @@ open Proofs
 #print axioms downBlock_render_convbp_chain_certified
 #print axioms stem_render_convW_chain_certified
 #print axioms stem_render_convb_chain_certified
--- ch6-ResNet-34 §1a TIE — the train-step ops tied to the REAL forward + the loss-driven backward
--- chain. Per-block-type tie lemmas (all params of an identity/downsample/stem block den = certified
--- at the ResNet34ChainClose cotangents); the residual fan-in SUM constructors (idBlockCotIn/
--- downBlockCotIn — r34's structural novelty, the skip+body cotangent add at each merge); the loss-cot
--- pin + the dense head total-loss fold. The cnn/cifar tie scaled to the residual net.
-#print axioms ResNet34PoC.r34_idblock_tied
-#print axioms ResNet34PoC.r34_downblock_tied
-#print axioms ResNet34PoC.r34_stem_tied
-#print axioms ResNet34PoC.r34LossCot_den
-#print axioms ResNet34PoC.r34_dense_tied_totalloss
-#print axioms ResNet34PoC.r34_dense_bias_den
--- THE WHOLE-NET CAPSTONE: resnet34Forward_full_pc threaded through all 16 residual blocks + stem +
--- dense, backward cotangents composed from the loss (dense/GAP-back + the residual fan-in sums at
--- every skip), every block tied at its real input + threaded cotangent. The full §1a ✅ TIED.
-#print axioms ResNet34PoC.r34_net_tied_certified
 -- EfficientNet-B0 RENDER (Item A) — the BATCHED typed SHlo forward graph matching the render.
 -- EfficientNet's render emits TRUE batch-norm (reduce [0,2,3], batch-coupled), so unlike MNV2/r34
 -- the graph lives at the batched index N·(c·h·w): every batch-separable op is `batchMap N` of the
@@ -5777,7 +5751,7 @@ open Proofs
 -- kept apart because they have different hypotheses.
 -- ⭐ The head takes no hypothesis either (GAP and dense are smooth batchMaps), which is the one
 -- place in the net where the global HasVJP suffices.
--- ⛔ The census is 110 parameters, not the 146 ResNet34TiePoC names: both r34 renders default to
+-- ⛔ The census is 110 parameters, not the 146 the retired per-example tie named: both r34 renders default to
 -- convBias := false, so the 36 conv-bias nodes are not emitted and the biases are
 -- zeroBiasPrelude's zero constants. The bias conjuncts are kept (one delegation each) and cover
 -- the flag; nothing about this weakens a theorem, since every fold is quantified over op instances.

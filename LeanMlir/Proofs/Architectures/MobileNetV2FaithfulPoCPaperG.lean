@@ -72,8 +72,8 @@ them, and MobileNetV2 is the TF-origin net.
 ## Honest residual
 * Every lemma is `∀ cot`: each holds at the actual backward-chain cotangent without naming it.
   Pinning them is the §1a tie, and it landed 2026-09-06 as `Foundation/MobileNetV2TiePoCB.lean`
-  (§4.2c). The per-example `MobileNetV2TiePoCPaper.lean` is at the fused ops and at per-example
-  BatchNorm, so it never transferred.
+  (§4.2c). The per-example tie (`MobileNetV2TiePoCPaper.lean`, deleted 2026-09-08) was at the fused
+  ops and at per-example BatchNorm, so nothing transferred.
 * ⚠ **The forward these nodes differentiate is batch BatchNorm** (`bnBatchLA`), which every
   MobileNetV2 statement in `Proofs/` was NOT when this file was written. `MobileNetV2FullB.lean`
   and `MobileNetV2FullBVJP.lean` (§4.2b) closed that the same day. Either way a

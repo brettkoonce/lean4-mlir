@@ -64,7 +64,9 @@ params den-certified" is now a checked statement per block type rather than pros
 ## Honest residual (same boundary as every prior fold)
 * The cotangents are free (∀ c); pinning each to the actual 17-block inverted-residual backward
   chain (the fan-in sum at every stride-1 skip, the relu6 two-kink masks) is the §1a tie
-  (`MobileNetV2TiePoCPaper`). Per-op `pretty` lexing + BN `0<ε` + relu6 + ℝ → Float32.
+  the §1a tie; the per-example one (`MobileNetV2TiePoCPaper.lean`) was deleted 2026-09-08 because no
+  committed artifact exercised it, and the live tie is `MobileNetV2TieB.mnv2_net_tiedB`. Per-op
+  `pretty` lexing + BN `0<ε` + relu6 + ℝ → Float32.
 * These folds are at the FUSED `θ − lr·g` ops, which only this SGD-inline render emits.
   `mobilenetv2_adam_train_step.mlir` and every ImageNet artifact come from `MobileNetV2RenderB`,
   which is batched, AdamW-only and un-fused; `MobileNetV2FaithfulPoCPaperG.lean` is the fold

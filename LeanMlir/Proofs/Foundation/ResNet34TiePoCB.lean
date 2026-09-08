@@ -11,7 +11,8 @@ train step `den`-faithful for an arbitrary cotangent. This file removes the "arb
 cotangent is pinned to the one the emitted backward chain delivers, so the whole train step is
 `den`-composed forward → loss → backward with no free activation and no symbolic cotangent.
 
-It is the batched peer of `ResNet34TiePoC.lean`, and four things about it are different in kind.
+It replaced the per-example `ResNet34TiePoC.lean` (deleted 2026-09-08: no committed artifact
+exercised it once `resnet34_train_step.mlir` was retired), and four things about it are different in kind.
 
 ⭐⭐ **The block cotangents are NOT derived here.** `ResNet34ChainClose.lean` spells out per-block
 cotangent vectors by hand, because no whole-block VJP existed when it was written. 4.1d's
@@ -37,7 +38,7 @@ per-replica gradient nodes; until then `emitGradAllReduce`, emitted text and a d
 outside the `SHlo` AST. Every statement below is at the PER-REPLICA gradient node;
 `DataParallelNode.lean` composes it with the mean and the tail.
 
-## ⛔ The parameter census is 110, not the 146 `ResNet34TiePoC.lean` names
+## ⛔ The parameter census is 110, not the 146 the per-example tie named
 
 `resnet34TrainStepFaithfulV` and `ResNet34RenderB` both default to `convBias := false`: the conv
 biases are gone from the signature (BatchNorm subsumes them, and He et al.'s `.convBn` has none),
