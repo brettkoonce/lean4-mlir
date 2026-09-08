@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Carve a tiny tumour-rich BraTS subset for the overfit gate.
 
-The overfit smoke (planning/r34_brats_retrain.md §4 step 2) exists to catch a
+The overfit smoke (planning/archive/r34_brats_retrain.md §4 step 2) exists to catch a
 broken train path in minutes instead of at the end of a real epoch. For that to
 mean anything the slices must actually contain tumour: a net that predicts
 "background everywhere" already scores ~97% pixel accuracy on an average slice,

@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Training.JacobianSeal
 
 `ResNet34Live.lean` (Stage 1) banked `liveDown` — a signal-carrying strided
 downsample — but found `liveFwd` is still **constant-output**: a 1-channel net
-with BN-before-GAP is necessarily constant (`planning/whole_network_backward.md`
+with BN-before-GAP is necessarily constant (`planning/archive/whole_network_backward.md`
 Item A). The escape requires ≥2 channels.
 
 This file banks the **non-vacuity mechanism** for the 2-channel rebuild (Item A2).

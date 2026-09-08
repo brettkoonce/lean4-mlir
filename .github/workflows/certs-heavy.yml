@@ -15,7 +15,7 @@ name: Certify Heavy Corpus
 # RE-ENABLED 2026-07-26, after the scorecard trim + the conv-module split.
 # It was manual-only from 2026-07-12 because measured peaks (ImgsA 39.5 GB,
 # IBP 20.2 GB, conv ~38 GB) fit no free 16 GB runner in any configuration —
-# 5 failed attempts, documented in planning/certs_heavy_psd_memory.md.
+# 5 failed attempts, documented in planning/archive/certs_heavy_psd_memory.md.
 # Every module in CertsHeavy now fits. Verified by running THIS loop cold at
 # LEAN_NUM_THREADS=1 on mars: 1260 s wall, max peak 10.91 GB, and the closing
 # `lake build CertsHeavy` a 2.9 s no-op — per-module numbers in the build step
@@ -118,7 +118,7 @@ jobs:
           # NB the per-pair LipSDP modules are still DISABLED (removed from
           # CertsHeavy): their PSD witnesses are ~16 GB for a SINGLE `hS*`
           # goal, which no per-image cap can reduce — see
-          # planning/certs_heavy_psd_memory.md. They stay kernel-verified locally.
+          # planning/archive/certs_heavy_psd_memory.md. They stay kernel-verified locally.
           for m in LipschitzCertScorecardFullNets \
                    LipschitzCertScorecardFullImgsA \
                    LipschitzCertScorecardFullImgsB \
@@ -195,4 +195,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **All ${total} heavy-corpus theorems closed under [\`propext\`, \`Classical.choice\`, \`Quot.sound\`]**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Full-input scorecard (L2 Tsuzuku + IBP L∞): capped σ≤2 92/100 @ L2 ε=0.1; IBP 92/88/69/24 per 100 @ L∞ ε=1/2/4/8 per 255. (Per-pair LipSDP instances kernel-verified locally but CI-disabled — memory; see planning/certs_heavy_psd_memory.md.)" >> $GITHUB_STEP_SUMMARY
+          echo "Full-input scorecard (L2 Tsuzuku + IBP L∞): capped σ≤2 92/100 @ L2 ε=0.1; IBP 92/88/69/24 per 100 @ L∞ ε=1/2/4/8 per 255. (Per-pair LipSDP instances kernel-verified locally but CI-disabled — memory; see planning/archive/certs_heavy_psd_memory.md.)" >> $GITHUB_STEP_SUMMARY

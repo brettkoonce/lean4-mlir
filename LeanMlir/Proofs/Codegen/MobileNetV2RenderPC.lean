@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Item A — the PER-CHANNEL-BN MobileNetV2 forward graph (matches the render)
 
-`planning/mobilenetv2_close.md` Item A. `StableHLO.lean` already has the full strided MobileNetV2
+`planning/archive/mobilenetv2_close.md` Item A. `StableHLO.lean` already has the full strided MobileNetV2
 forward graph `mobilenetv2FwdGraphFull` + `mobilenetv2FwdGraphFull_faithful` — but those use **scalar**
 `bnF` (one γ/β over the whole `c·h·w`), tied to the scalar ℝ-forward `mobilenetv2Forward_full`. The
 **operational render** (`tests/TestMobilenetV2Train.lean`, the `bnPC` block) emits **per-channel** BN

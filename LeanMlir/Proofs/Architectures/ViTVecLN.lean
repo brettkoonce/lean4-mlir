@@ -6,7 +6,7 @@ The representative ViT close (Items A–D) used the proof's *scalar* LN γ/β. T
 committed production render (`ViTRender.lean`, the GPU-trained ViT-Tiny) is MORE
 faithful: vector `γ, β : [D]` per LN site, decomposed as
 `scalar-LN(1,0) ∘ per-channel scale γ ∘ + β`. This file brings the close to that
-form — `planning/vit_close.md`'s top scaling-pass item:
+form — `planning/archive/vit_close.md`'s top scaling-pass item:
 
 * **`layerNormVec`** — per-token normalize (scalar-LN at γ=1, β=0) then the
   per-channel affine `γ ⊙ · + β`, with `HasVJP` composed from `layerNorm_has_vjp`

@@ -50,7 +50,7 @@ open scoped BigOperators
     (`flatConvStride2Xla` = `decimateOddFlat ∘ flatConv`): the TF-origin B0 pads its stem `(0,1)`,
     and the shipped render has emitted `convStridedXla` there since 2026-08-08. The symmetric
     `flatConvStride2` has the same type and output shape; nothing structural would notice the
-    wrong one (re-spelled 2026-09-05, `planning/xla_same_respell_and_blueprint_audit.md`). -/
+    wrong one (re-spelled 2026-09-05, `planning/archive/xla_same_respell_and_blueprint_audit.md`). -/
 noncomputable def stemB (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) :
     Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=

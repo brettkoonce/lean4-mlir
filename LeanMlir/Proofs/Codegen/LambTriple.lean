@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 gives each emitted op its own `den` (`lambDirF_faithful`, `lambScaleF_faithful`,
 `gradSumSqAccF_faithful`). What was missing is the level above: the `(θ', m', v')` a train step
 returns per parameter, which is what `adamW_triple_faithful` states for AdamW and what
-`planning/proofs_tier_to_paper_nets.md` §3.5 needs before ResNet-50's T3 can be written at
+`planning/archive/proofs_tier_to_paper_nets.md` §3.5 needs before ResNet-50's T3 can be written at
 `resnet50in160_lambaccdp8x64bce`.
 
 ⛔ **The audit's "LAMB has NO faithfulness theorem" was wrong in the part that named a cause.**

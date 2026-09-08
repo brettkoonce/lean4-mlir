@@ -4,7 +4,7 @@ import LeanMlir.Types
 
 /-! # §2l step 1 — can the emitter spell a **1×1 strided** conv, and does it compute the right one?
 
-The check `planning/xla_pjrt_handoff.md` §2l puts before everything else. The paper's ResNet-34
+The check `planning/archive/xla_pjrt_handoff.md` §2l puts before everything else. The paper's ResNet-34
 option-B shortcut is a **1×1** stride-2 projection; this repo's `downFwdB` builds it from
 `Kernel4 c cin 3 3`, the same kernel as the block's first conv (§2k). Before re-instantiating the
 render at `kHp = kWp = 1`, settle what the four strided-conv ops do there.

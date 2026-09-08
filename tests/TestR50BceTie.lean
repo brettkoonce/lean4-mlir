@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # BCE-with-logits, numerically certified — at a point where it has a CLOSED FORM
 
-`planning/next_session_pipeline_then_r50.md` §4's BCE row, built and gated. RSB-A2/A3 do not train
+`planning/archive/next_session_pipeline_then_r50.md` §4's BCE row, built and gated. RSB-A2/A3 do not train
 with softmax cross-entropy: every class is an independent sigmoid, and the loss is
 `BinaryCrossEntropy` with **`reduction='mean'` over B×K**.
 

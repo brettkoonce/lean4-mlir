@@ -1,6 +1,6 @@
 # 2026-08-27 — RSB-A2/A1 get the model-EMA shadow: the fifth blob region
 
-**What this closes.** `planning/verified_side_quest_counterparts.md` §4a found that the eight A2/A1
+**What this closes.** `planning/archive/verified_side_quest_counterparts.md` §4a found that the eight A2/A1
 renders it had just landed were **not faithful A2/A1**, because two of A2's regularisers had no
 expression on the verified path. This run closes the first of the two:
 
@@ -62,7 +62,7 @@ a bf16 A2 run is scheduled.
 ⭐⭐ **The decay scalars come out of the reference too, not out of a formula written here.**
 `ema_update` at `(ema := 1, params := 0)` returns `d·1 + (1−d)·0 = d` exactly, so `%emad`/`%oemad`
 are tied to the reference as well as the op that consumes them. This repo has shipped the
-warmup-corrected decay wrong once already (`planning/ema.md`: a shadow holding 12.8% of its init at
+warmup-corrected decay wrong once already (`planning/archive/ema.md`: a shadow holding 12.8% of its init at
 3.1 tau, scoring 0.00% top-1 beside live weights at 70.48%).
 
 ## `ema_control.log` — and it goes RED on both defects it claims to catch

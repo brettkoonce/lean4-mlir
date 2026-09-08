@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `cifar-smooth` — randomized-smoothing certificate on the verified CIFAR-10 CNN
 
-The deep-net payoff (`planning/robustness_ladder.md` §3, Cohen–Rosenfeld–Kolter 2019): the
+The deep-net payoff (`planning/archive/robustness_ladder.md` §3, Cohen–Rosenfeld–Kolter 2019): the
 7-layer conv-aware spectral-norm product was astronomically loose (global L = 942K, cert 0% at
 every radius). Randomized smoothing is **depth-independent** — the exact same forward-only
 procedure that ran on the MLP/CNN certifies a *non-vacuous* L2 radius here, where the Lipschitz

@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-! # R50 phase 1 — the THREE bottleneck blocks, forward + certified VJP
 
-`planning/next_session_pipeline_then_r50.md` §3.1. ResNet-50's residual unit is the **bottleneck**:
+`planning/archive/next_session_pipeline_then_r50.md` §3.1. ResNet-50's residual unit is the **bottleneck**:
 `1×1 (ic→mid) → 3×3 (mid→mid) → 1×1 (mid→oc)`, three convs and two interior ReLUs, against the
 basic block's two convs and one. `ResNet34RenderPC.lean`'s `rblkPC` / `rblkPStridedPC` are the
 peers this file mirrors.

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2Close
 
 /-! # Closing the EfficientNet-B0 render — the parameter-gradient close (another FREE close)
 
-`planning/mobilenetv2_close.md` Item C, applied to EfficientNet-B0 (`tests/TestEfficientNetTrain.lean`,
+`planning/archive/mobilenetv2_close.md` Item C, applied to EfficientNet-B0 (`tests/TestEfficientNetTrain.lean`,
 262 params, the real `[t,c,n,s,k]` B0 spec — 16 MBConv layers with squeeze-excite + swish + batch
 norm, 3×3/5×5 depthwise). Like ResNet-34, **every parameter family is already certified by an existing
 bridge** — even the two genuinely-new structures (squeeze-excite, true batch-norm) introduce no new

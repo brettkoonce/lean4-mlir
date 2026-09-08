@@ -8,7 +8,7 @@ UNCHANGED. This is the WS-A baseline: the single-grid YOLOv1 detector run on
 VisDrone, where it is expected to collapse — 70 tiny objects per image cannot
 be resolved by a 7x7 grid at 224x224 (a median 20x25 px box shrinks to ~2x5 px
 after the resize, far below one 32 px cell). That collapse is the motivating
-result for the multi-scale build; see planning/yolo_drone.md.
+result for the multi-scale build; see planning/archive/yolo_drone.md.
 
 VisDrone annotation lines are:
   bbox_left, bbox_top, width, height, score, category, truncation, occlusion
@@ -147,7 +147,7 @@ def encode_targets_anchor(img_w, img_h, boxes, anchors):
     return target, mask, len(filled)
 
 
-# ── FPN multi-scale target encoding (planning/yolo_fpn.md bite 5) ─────────────
+# ── FPN multi-scale target encoding (planning/archive/yolo_fpn.md bite 5) ─────────────
 # Each GT is routed to ONE scale by size (max(w,h)·input px), then to that scale's
 # best-shape anchor. Three target blocks (P3 56×56, P4 28×28, P5 14×14 at 448px,
 # strides 8/16/32), each A_s·(5+C) channels + a per-anchor mask. Coverage — the

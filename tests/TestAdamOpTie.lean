@@ -4,7 +4,7 @@ import LeanMlir.ViTRender
 /-! # The AdamW `SHlo` ops emit exactly what the trusted string emitter emitted
 
 `ViTRender.emitAdamV` is a hand-written String emitter whose docstring *claims* to be op-for-op
-`Proofs.adamWParam`. Nothing checked that claim — it is why `planning/xla_pjrt_handoff.md` §2a
+`Proofs.adamWParam`. Nothing checked that claim — it is why `planning/archive/xla_pjrt_handoff.md` §2a
 found the repo split along Adam: every `_adam_train_step.mlir` was rendered from `tests/`, outside
 the proven kit.
 

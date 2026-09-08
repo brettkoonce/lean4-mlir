@@ -4,7 +4,7 @@
 Encoding is supposed to round-trip exactly: cj=int(cx*g), tx=cx*g-cj, and
 decoding does cx=(cj+tx)/g. So EVERY encoded box must reproduce some annotation
 box to float32 precision. Any systematic residual is an image/target alignment
-bug and invalidates every measurement in planning/yolo_assignment.md.
+bug and invalidates every measurement in planning/archive/yolo_assignment.md.
 
 Eyeballing a 53-object drone scene cannot distinguish "shifted box" from
 "different truck", so match numerically and report the residual distribution.
@@ -83,7 +83,7 @@ def main():
         print("  is NOT the bug -- the geometry the trainer is taught is correct.")
     else:
         print("\n  VERDICT: SYSTEMATIC MISMATCH. Investigate before trusting any")
-        print("  number in planning/yolo_assignment.md.")
+        print("  number in planning/archive/yolo_assignment.md.")
 
 
 if __name__ == "__main__":

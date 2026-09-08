@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Known-answer guard for `convStridedXla` / `depthwiseStridedXla` (`planning/mnv4_verified.md` §3e).
+"""Known-answer guard for `convStridedXla` / `depthwiseStridedXla` (`planning/archive/mnv4_verified.md` §3e).
 
 ⭐ WHY AT THE OP LEVEL. These tokens are byte-identical to their symmetric siblings apart from four
 numbers in the emitted `pad`. Types, output shapes, op counts and feature-group widths all agree,

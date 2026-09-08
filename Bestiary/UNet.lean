@@ -60,7 +60,7 @@ prose explains the pairing; the NetSpec stays readable.
   Stable-Diffusion-style denoiser backbone (without the attention
   blocks; those'd need additional primitives).
 - `unetPets` — depth 4, base 32, 224×224 RGB → 3-class trimap.
-  The Pets demo target (`planning/unet_demo.md`); sits between
+  The Pets demo target (`planning/archive/unet_demo.md`); sits between
   `unetSmall` and the original `unet` in size.
 - `tinyUnet` — depth 2, base 16 — bestiary fixture.
 -/
@@ -140,7 +140,7 @@ def unetSmall : NetSpec where
     (foreground / background / boundary, after trimap remap 1/2/3 →
     0/1/2). Depth 4 with base 32 channels — between `unetSmall`
     (depth 3) and `unet` (depth 4 base 64). Bottleneck doubles to
-    512. See `planning/unet_demo.md`. Currently shape-only — depends
+    512. See `planning/archive/unet_demo.md`. Currently shape-only — depends
     on `.unetDown` / `.unetUp` codegen, which depends on the new
     `.bilinearUpsample` primitive (registered, no codegen yet). -/
 def unetPets : NetSpec where

@@ -68,7 +68,7 @@ private def runIree (mlirPath outPath : String) : IO Bool := do
   return true
 
 /-- Path of the runnable artifact for one emitted graph, on whichever backend is
-    ACTIVE AT RUN TIME (`planning/detector_pjrt_port.md`).
+    ACTIVE AT RUN TIME (`planning/archive/detector_pjrt_port.md`).
 
     ⚠ This said "whichever backend this binary was linked against" until 2026-08-25, and as of
     that date nothing is linked against a backend at all: `ireeLink`/`xlaLink` are retired and
@@ -133,7 +133,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
   IO.eprintln "Generating train step MLIR..."
   -- Mixup / CutMix / KNN-Mixup produce fractional labels; switch to the soft-label codegen.
   let useSoftLabels := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
-  -- ── Resolve effective LossKind (planning/yolo_final.md R1) ──
+  -- ── Resolve effective LossKind (planning/archive/yolo_final.md R1) ──
   -- If `cfg.lossKind` is at its default `.classCE`, derive from the
   -- legacy booleans for back-compat with every existing trainer.
   let lossKind : LossKind :=
@@ -213,7 +213,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError "yolov1Masked is incompatible with useMixup/useCutmix/useKnnMixup — YOLOv1 targets are per-cell float tensors, not class-mixable"
     -- useFocal IS allowed here: for YOLOv1 it selects the sigmoid focal-BCE
     -- objectness path (T3/T4/T5) instead of raw-MSE — the fg/bg imbalance fix
-    -- (planning/yolo_final.md §3). The class term (T6) stays softmax-CE either way.
+    -- (planning/archive/yolo_final.md §3). The class term (T6) stays softmax-CE either way.
     if useSeg then
       throw <| IO.userError "yolov1Masked is incompatible with segmentation — different target shape ([B,30,7,7] float vs [B,H,W] int32)"
     if cfg.labelSmoothing != 0.0 then
@@ -291,7 +291,7 @@ private structure DatasetIO where
       BraTS is the exception this exists for: the literature scores nested
       unions (WT/TC/ET), not the raw labels, and because the unions are
       nested they cannot be recovered from per-class IoU after the fact.
-      See planning/brats_demo.md Workstream F. -/
+      See planning/archive/brats_demo.md Workstream F. -/
   segRegions : List (String × List Nat) := []
   loadTrain : String → IO (ByteArray × ByteArray × Nat)
   loadVal   : String → IO (ByteArray × ByteArray × Nat)
@@ -462,7 +462,7 @@ private def bratsIO : DatasetIO where
     7×7 float32 per-cell objectness mask (6076 bytes per record). The
     `runTraining` dispatch splits this into target + mask before calling
     `trainStepAdamF32Yolov1`. See `preprocess_pets_mosaic.py` for the on-disk
-    format and `planning/yolo_final.md` for the recipe. -/
+    format and `planning/archive/yolo_final.md` for the recipe. -/
 private def petsDetIO : DatasetIO where
   trainPixels := 3 * 224 * 224
   valPixels   := 3 * 224 * 224
@@ -565,7 +565,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         loadTrain := fun d => F32.loadDetBinDims (d ++ "/train.bin") imgSz gHu gWu
         loadVal   := fun d => F32.loadDetBinDims (d ++ "/val.bin") imgSz gHu gWu }
     else dio0
-  -- Derive effective LossKind (planning/yolo_final.md R1). Existing
+  -- Derive effective LossKind (planning/archive/yolo_final.md R1). Existing
   -- callers leave cfg.lossKind at the default .classCE and we infer from
   -- the older booleans + the dataset kind:
   --   * petsDet + useYolov1   → yolov1Masked (target+mask f32 batch dispatch)
@@ -624,7 +624,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         let init ← spec.heInitParams
         let patched ← NetSpec.patchInitWithPretrainedRange init path
                         (dstOff * 4) (srcOff * 4) (count * 4)
-        -- GUARD (planning/r34_brats_retrain.md §5, "backbone actually loaded?").
+        -- GUARD (planning/archive/r34_brats_retrain.md §5, "backbone actually loaded?").
         -- The whole demo is a lie if the bootstrap silently no-ops, and a
         -- no-op is invisible downstream: a He-init net trains fine and just
         -- scores worse, which reads as "transfer didn't help" rather than
@@ -1039,7 +1039,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         swagDeviations := swagDeviations.push dev
       swaCount := swaCount + 1
 
-    -- Per-N-epoch checkpoint (planning/yolo_final.md Phase 4
+    -- Per-N-epoch checkpoint (planning/archive/yolo_final.md Phase 4
     -- infrastructure). Writes params + BN stats with the epoch number
     -- in the filename so a killed training run can pick up from the
     -- last save, OR downstream tasks (e.g. YOLOv1 bootstrap) can borrow
@@ -1056,7 +1056,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         || epoch + 1 == epochs
     if evalNow then
      if useSeg then
-       -- Per-class IoU + mIoU over the val set (planning/unet_demo_v2.md
+       -- Per-class IoU + mIoU over the val set (planning/archive/unet_demo_v2.md
        -- Workstream A). Eval-forward → argmax over the NC channels →
        -- confusion matrix accumulated in exact Nat across batches →
        -- IoU_c = conf[c][c] / (row_c + col_c − conf[c][c]).
@@ -1103,7 +1103,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          let miou := (ious.foldl (· + ·) 0.0) / NC.toFloat
          let iouStr := String.intercalate " " (ious.toList.mapIdx fun i v => s!"c{i}={v}")
          IO.eprintln s!"  val mIoU: {miou}  (per-class: {iouStr})"
-         -- Dice on named class-unions (planning/brats_demo.md Workstream F).
+         -- Dice on named class-unions (planning/archive/brats_demo.md Workstream F).
          -- Falls straight out of the confusion matrix already accumulated
          -- above — no new kernel, no second pass over val. For a region
          -- R ⊆ classes, reading C[gt][pred]:

@@ -1,6 +1,6 @@
 # Float bridge §3 — the descent pass (handoff for a clean session)
 
-The last open item of `planning/floatbridge_certificate_gaps.md`: push "a rounded
+The last open item of `planning/archive/floatbridge_certificate_gaps.md`: push "a rounded
 training step still **decreases the loss**" past the linear net. Everything else
 in the bridge is *closeness* (`|float − real| ≤ budget`); descent says "it provably
 trains." This doc is the cold-start plan — current state, the exact next rung, and
@@ -129,7 +129,7 @@ existing `MaxPool2MarginQ.isArgmax_iff` under a rounding margin) **and** a ReLU 
 before the conv-weight correlation. The single **largest** rung; scoped into
 independently-audited increments (pool-back primitive + bridge → grad-close → wiring
 → conv1 → biases) in **`planning/archive/floatbridge_descent_cnn.md`** — the abstract-η
-descent side is already done (`planning/sgd_descent_cnn.md`). Effort: **high**; its
+descent side is already done (`planning/archive/sgd_descent_cnn.md`). Effort: **high**; its
 own focused session, after Steps 1–2 (done).
 
 ## The honest stop line (do NOT cross)

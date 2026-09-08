@@ -110,7 +110,7 @@ structure VerifiedNet where
       `<slug>_fwd_eval.mlir` (affine BN with the running stats) instead of `<slug>_fwd.mlir`. -/
   bnChannels : Array Nat := #[]
   /-- **Stochastic-depth keep probabilities**, one per drop site, in the render's signature order
-      (`planning/stochastic_depth.md`). Empty = the net has no drop sites, which is every net today
+      (`planning/archive/stochastic_depth.md`). Empty = the net has no drop sites, which is every net today
       except EfficientNet's `*sd` variants.
 
       ⚠ THE DRIVER OWNS THE RAMP, and that is deliberate rather than a shortcut: the emitted op is a
@@ -280,12 +280,12 @@ def emaOn (v : String) : Bool := v.startsWith "ema"
 
 /-- RMSProp — the mean-square slot initialises to **1.0**, not 0.
     ⚠ SUBSTRING, not prefix: the RMSProp+EMA spelling is `emarms`, which does not start with
-    "rms" (`planning/ema.md`'s defect). -/
+    "rms" (`planning/archive/ema.md`'s defect). -/
 def rmsOn (v : String) : Bool := (v.splitOn "rms").length > 1
 
 /-- Stochastic depth — N extra `tensor<Bxf32>` scale inputs.
     ⚠ The marker is `drop` and not `sd` because `rms` ++ `dp` spells `rmsdp`, which contains
-    "sd" (`planning/stochastic_depth.md`'s defect). -/
+    "sd" (`planning/archive/stochastic_depth.md`'s defect). -/
 def sdOn (v : String) : Bool := (v.splitOn "drop").length > 1
 
 /-- Classifier dropout — ONE extra `tensor<B×wxf32>` mask input.
@@ -326,7 +326,7 @@ def accK (v : String) : Nat :=
     ⭐⭐ **THIS USED TO BE `if emaOn || accOn then 4 else 3`, and the two features were mutually
     exclusive because of it** — `trainAdamSched` threw on the pairing, and RSB-A2/A1 could not be
     rendered faithfully (their recipe sets BOTH `gradAccumSteps := 4` and `useEMA := true`;
-    `planning/verified_side_quest_counterparts.md` §4a). The fifth region is what lifts that.
+    `planning/archive/verified_side_quest_counterparts.md` §4a). The fifth region is what lifts that.
 
     ⚠⚠ **`G` COMES BEFORE `E`, and that ordering is not free**: at `acc` alone `G` is region 3 and
     at `ema` alone `E` is region 3, so every checkpoint written before this change still reads at
@@ -373,7 +373,7 @@ private def compileVmfb (mlirPath outPath : String) : IO Unit := do
     throw (IO.userError s!"iree-compile failed:\n{r.stderr.take 2000}")
 
 /-- Open a session for one Lean-emitted graph, on whichever backend this binary
-    dlopened (`planning/xla_pjrt_ladder.md`).
+    dlopened (`planning/archive/xla_pjrt_ladder.md`).
 
     * **XLA** — hand the `.mlir` straight to PJRT, which compiles it in-process.
       Nothing is written to disk.
@@ -397,7 +397,7 @@ def mkSession (mlirPath : String) : IO LowererSession := do
     -- is newer than the .mlir, so an unscoped path lets an `IREE_BACKEND=rocm`
     -- artifact be picked up by an `IREE_BACKEND=llvm-cpu` run (and vice versa).
     -- That matters now that llvm-cpu is used as an independent numerical
-    -- reference — see planning/xla_pjrt_ladder.md §8, rung 3.
+    -- reference — see planning/archive/xla_pjrt_ladder.md §8, rung 3.
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     let base := (mlirPath.splitOn "/").getLastD mlirPath
     let stem := if base.endsWith ".mlir" then (base.dropEnd 5).toString else base
@@ -950,9 +950,9 @@ private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
 
     Scoped by BACKEND: without the suffix an XLA run would happily resume from an IREE checkpoint
     and vice versa, silently fusing two trajectories into one while looking completely normal on
-    screen (`planning/xla_pjrt_ladder.md` §3). `$LEAN_MLIR_CKPT_TAG` appends a run-scoped suffix —
+    screen (`planning/archive/xla_pjrt_ladder.md` §3). `$LEAN_MLIR_CKPT_TAG` appends a run-scoped suffix —
     without it every pass of the same (net, variant, backend) shares ONE path, so the parallel
-    sweeps `planning/chapter_makeover.md` §3c mandates cannot be run: concurrent passes clobber
+    sweeps `planning/archive/chapter_makeover.md` §3c mandates cannot be run: concurrent passes clobber
     each other's blob, and a later pass resumes from an earlier one's finished epoch 40.
 
     ⚠ **A function because `scoreCheckpoint` has to land on the SAME path the trainer wrote**, and
@@ -996,7 +996,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   -- LEAN_MLIR_MAX_STEPS caps batches per epoch. Needed to run gate G2 at small
   -- N: over a full run, ReLU branch flips amplify f32 noise, so a large final
   -- divergence is ambiguous between chaos and a plumbing bug. Diffing at 1 / 10
-  -- / 100 steps separates them — see planning/xla_pjrt_ladder.md §8.
+  -- / 100 steps separates them — see planning/archive/xla_pjrt_ladder.md §8.
   let nbFull := nTrain / bs
   let nb := match (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
@@ -1111,7 +1111,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     -- `trainAdamSched`'s) carries a trailing `(Nms)`; the statistic and its interval stay adjacent.
     IO.println s!"  epoch {ep + 1}: {lossField}{evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
     (← IO.getStdout).flush
-  -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the packed params so the IREE
+  -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3): dump the packed params so the IREE
   -- and XLA builds can be diffed tensor-for-tensor. He init runs in Lean from a
   -- fixed seed, so both backends start byte-identical without extra work.
   match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
@@ -1273,7 +1273,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- much-larger-first-step defect the RMSProp driver work exists to fix, reintroduced by a naming
   -- interaction. The variant strings are pinned by `#guard`s beside each renderer's `#eval`s.
   let rmsprop := VerifiedVariant.rmsOn variant
-  -- "ema"/"emadp" = the EMA-shadow render (`planning/ema.md`), whose blob carries a FOURTH region:
+  -- "ema"/"emadp" = the EMA-shadow render (`planning/archive/ema.md`), whose blob carries a FOURTH region:
   -- `[θ|m|v|ema]`, with the scalar tail 3 → 5 (`%emad`, `%oemad`). Everything below that indexes the
   -- blob is written against `nRegions`/`nScalars` rather than a literal 3, because a 4-region graph
   -- fed a 3-region blob is not a subtle numeric error — it is every parameter misaligned.
@@ -1281,7 +1281,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- ⚠ Keyed off the variant PREFIX, the same reverse-of-`cnxAdamVariant` reading `rmsprop` uses,
   -- and pinned upstream by the `#guard`s beside that renderer's `#eval`s.
   let emaOn := VerifiedVariant.emaOn variant
-  -- ⭐⭐ GRADIENT ACCUMULATION (`planning/next_session_pipeline_then_r50.md` §4). "acc<k>x<B>" /
+  -- ⭐⭐ GRADIENT ACCUMULATION (`planning/archive/next_session_pipeline_then_r50.md` §4). "acc<k>x<B>" /
   -- "accdp<k>x<B>" is the `.adamwAccum` render: a FOURTH region `G` holding the running gradient
   -- sum, and two extra scalars `%aup`/`%akeep` deciding, per micro-batch, whether this invoke
   -- accumulates or applies. Same blob SHAPE as the EMA render, so `nRegions`/`nScalars` carry it.
@@ -1326,7 +1326,7 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   -- deleted, not after.
   let nRegions := VerifiedVariant.nRegions variant
   let nScalars := VerifiedVariant.nScalars variant
-  -- "…drop" = the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the graph takes one
+  -- "…drop" = the STOCHASTIC-DEPTH render (`planning/archive/stochastic_depth.md`): the graph takes one
   -- extra `tensor<Bxf32>` per drop site, carrying `bernoulli(keep_i)/keep_i` per example.
   --
   -- ⚠⚠ THE MARKER IS `"drop"` BECAUSE `"sd"` COLLIDES, and the collision is between two OTHER
@@ -1335,7 +1335,7 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   -- the committed and gated `efficientnetin_rmsdp64` — and would have appended 9 drop scales to a graph
   -- that takes none. Caught by running the predicate table (`tests/TestVariantPredicates.lean`)
   -- rather than reading names one at a time; with three markers the collisions are between PAIRS.
-  -- This is `planning/ema.md`'s `emarms` defect a second time, one axis further on.
+  -- This is `planning/archive/ema.md`'s `emarms` defect a second time, one axis further on.
   let sdOn := VerifiedVariant.sdOn variant && !net.dropKeeps.isEmpty
   let nDrop := if sdOn then net.dropKeeps.size else 0
   -- ▶ CLASSIFIER DROPOUT. ⚠⚠ The marker is `"do"` and NOT `"dropout"`, and that is forced by the
@@ -1363,7 +1363,7 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
-  -- ⭐ PER-VARIANT forward resolution (`planning/mnv4_verified.md` §3d(b)).
+  -- ⭐ PER-VARIANT forward resolution (`planning/archive/mnv4_verified.md` §3d(b)).
   --
   -- The train step above is variant-resolved and this was NOT: every variant of a slug loaded the
   -- one `<slug>_fwd.mlir`. But a slug's variants do not all live in the same BN world — the SGD
@@ -1448,11 +1448,11 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- LEAN_MLIR_G2_STEPS caps batches per epoch for gate G2. Deliberately NOT
   -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
   -- in this driver (the benchmark's `attn` anchor), and it returns before the
-  -- param dump. See planning/xla_pjrt_ladder.md §3.
+  -- param dump. See planning/archive/xla_pjrt_ladder.md §3.
   -- LEAN_MLIR_REPLICAS: data-parallel device count. The graph is rendered at the
   -- PER-REPLICA batch (cfg.batchSize), so one step consumes `bs * replicas`
   -- images and the shim splits them. Eval stays single-device at `bs`, because
-  -- the forward graph is rendered at that batch. See planning/xla_pjrt_ladder.md §10.
+  -- the forward graph is rendered at that batch. See planning/archive/xla_pjrt_ladder.md §10.
   -- LEAN_MLIR_SKIP_EVAL: skip the per-epoch eval pass. It used to be REQUIRED whenever the train
   -- batch differed from the forward's baked one (bs256, bs128-DP); `evalBs` below removes that,
   -- so it is now just "don't spend the time".
@@ -1523,7 +1523,7 @@ micro-batches."
 and loss at this batch."
     else
       IO.println s!"     ⚠ This is AdamW at that batch, NOT rsb-faithful — \
-{String.intercalate " and " missing} still absent (planning/rsb_a3_r50_verified.md §2.3)."
+{String.intercalate " and " missing} still absent (planning/archive/rsb_a3_r50_verified.md §2.3)."
     -- ⚠⚠ A cycle that straddles the epoch boundary applies with fewer than `k` micro-batches while
     -- the graph still divides by `k`, i.e. a short step at a wrong scale — once per epoch, invisible
     -- in the loss curve. Refuse rather than round.
@@ -1608,7 +1608,7 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
     seed := seed + 1
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit
   -- vector of exact L2 norm r, before any training. This is the CONDITIONING
-  -- probe for gate G2 (planning/xla_pjrt_ladder.md §8, rung 3): if an r that is
+  -- probe for gate G2 (planning/archive/xla_pjrt_ladder.md §8, rung 3): if an r that is
   -- f32-epsilon-sized relative to ||theta|| moves the resulting gradient about as
   -- much as the IREE/XLA disagreement does, then that disagreement is what
   -- ill-conditioning predicts, not evidence of a wrong backend.
@@ -1641,7 +1641,7 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- that stops even THIS init from poisoning the average early — see the `emaD` note.
   -- ⚠ The FOURTH region, when there is one, and the two features that use it seed it DIFFERENTLY.
   -- The EMA shadow starts AT the weights (starting it at the random init is the defect
-  -- `planning/ema.md` records: a shadow evaluated at chance on short runs). The gradient
+  -- `planning/archive/ema.md` records: a shadow evaluated at chance on short runs). The gradient
   -- ACCUMULATOR starts at ZERO — and it would be harmless at any value, because `%akeep = 0` on
   -- the first micro-batch of every cycle discards whatever is there. Zero anyway, so a checkpoint
   -- written mid-cycle resumes from something meaningful rather than from a stale partial sum.
@@ -1754,7 +1754,7 @@ it and its .epoch marker aside and start fresh."
   --
   -- ▶ This is what splits `t_read` from `t_rest`: the same binary at the same step count, real vs
   -- synth, differs by exactly the shim read. That difference is the ceiling on what a prefetch can
-  -- hide (planning/next_session_pipeline_then_r50.md §2).
+  -- hide (planning/archive/next_session_pipeline_then_r50.md §2).
   --
   -- ⚠ It changes what `scripts/residency_gate.sh` feeds an ImageNet net — from a seeded real
   -- stream to one constant batch. Both are deterministic, which is all that gate's bit-identity
@@ -1818,7 +1818,7 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   let scalarSlots ← F32.const nScalars.toUSize 0.0
   -- The drop-scale slots are reserved here and refilled per step, exactly like the scalar and BN
   -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys (the mistake
-  -- `planning/xla_pjrt_ladder.md` §8 measured at 272 MB/step on R34).
+  -- `planning/archive/xla_pjrt_ladder.md` §8 measured at 272 MB/step on R34).
   -- ⚠ Sized for BOTH families. The `1.0` fill is load-bearing and not a placeholder: a mask slot
   -- that is never refilled must be the exact identity, which `1.0` is and `0.0` emphatically is not
   -- (it would zero the classifier's input and train nothing).
@@ -1826,7 +1826,7 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   pbuf := if hasBn
           then F32.concat #[thetamv, scalarSlots, runningBnStats, dropSlots]
           else F32.concat #[thetamv, scalarSlots, dropSlots]
-  -- ▶▶ DEPTH-1 PREFETCH of the shim read — planning/next_session_pipeline_then_r50.md §2.
+  -- ▶▶ DEPTH-1 PREFETCH of the shim read — planning/archive/next_session_pipeline_then_r50.md §2.
   --
   -- The step was two blocking calls back to back: `readShimBatchRR` (154 MB off a pipe) and then
   -- the invoke, with NOTHING draining the pipe during compute. A batch is 154 MB and a pipe's
@@ -1958,7 +1958,7 @@ gate's control, not a configuration.")
       -- exact layout, so the previous output IS the next input once the 3
       -- scalars and the BN region are refreshed. Rebuilding it with F32.concat
       -- (and slicing [theta|m|v] back out afterwards) cost two 272 MB host
-      -- memcpys per step at R34 scale — see planning/xla_pjrt_ladder.md §8.
+      -- memcpys per step at R34 scale — see planning/archive/xla_pjrt_ladder.md §8.
       -- ⚠ `lr = 0` ON AN ACCUMULATE MICRO-BATCH IS WHAT FREEZES θ, and it freezes it COMPLETELY:
       -- AdamW's decay is DECOUPLED (`θ' = θ − lr·m̂/(√v̂+ε) − lr·wd·θ`), so both terms vanish. A
       -- COUPLED-L2 optimizer would keep decaying k times per update and this would be wrong.
@@ -2137,7 +2137,7 @@ gate's control, not a configuration.")
         -- replica r must get mask rows [r*bs, (r+1)*bs) — the same split `x` gets — not a copy of
         -- replica 0's. They ride in the parameter blob (`dropShapes` above), which is exactly why
         -- they were being replicated: the DP shim's rule was "x and the labels shard, everything
-        -- between them replicates". `planning/stochastic_depth.md` §5b predicted this; it was true
+        -- between them replicates". `planning/archive/stochastic_depth.md` §5b predicted this; it was true
         -- of the shim before any DP drop render existed to expose it. At `nDrop = 0` the argument
         -- is inert and every non-SD DP run is byte-identical to before.
         then LowererSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
@@ -2338,7 +2338,7 @@ gate's control, not a configuration.")
     (← IO.getStdout).flush
     IO.FS.writeBinFile ckptPath thetamv
     IO.FS.writeFile epPath (toString (ep + 1))
-  -- Gate G2 (`planning/xla_pjrt_ladder.md` §3). Dumps the whole [θ|m|v] blob, so
+  -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3). Dumps the whole [θ|m|v] blob, so
   -- the Adam moments are compared too, not just the weights — a moment buffer
   -- that silently failed to thread would still let θ look plausible.
   match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
@@ -2353,7 +2353,7 @@ gate's control, not a configuration.")
   IO.println s!"done (trained {net.name} {variant} + {doneSched} via packed threading)."
 
 /-- **Score a checkpoint, standalone** — the eval half of `trainAdamSched` with no training in
-    front of it (`planning/next_session_verified_trainer_code.md` §2).
+    front of it (`planning/archive/next_session_verified_trainer_code.md` §2).
 
     Until this existed a verified accuracy could only be produced *in training*, and only for the
     weights that happened to be live at that moment. The JAX side has six `eval_*_full50k.py`; this
@@ -2404,7 +2404,7 @@ def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant 
 ({nBnStats} running-stat floats) and the checkpoint does not contain them — it is exactly \
 [θ|m|v{if emaOn then "|ema" else ""}]. A fresh process would normalise @{net.slug}_fwd_eval by \
 ZEROS and print a plausible-looking percentage off garbage.\n\
-  Two exits, neither of them retroactive on its own (planning/next_session_verified_trainer_code.md \
+  Two exits, neither of them retroactive on its own (planning/archive/next_session_verified_trainer_code.md \
 §2b): (a) append the {nBnStats} stat floats to the checkpoint format — clean going forward, but A3's \
 finished checkpoint does not contain them; (b) --recalibrate, ~100-200 training batches forward to \
 re-accumulate the statistics, which DOES reach an existing checkpoint and is a different estimate \
@@ -2596,7 +2596,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     -- the percentage, because this print carries a trailing `(Nms)`.
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
     (← IO.getStdout).flush
-  -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the final parameters so the
+  -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3): dump the final parameters so the
   -- IREE and XLA builds can be diffed tensor-for-tensor. Equal accuracy is a
   -- summary statistic, not a tie — this is the actual comparison.
   match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
@@ -2609,7 +2609,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   | none => pure ()
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 
-/-- Phase-3 PGD-step kernel for the linear classifier (`planning/robustness.md`).
+/-- Phase-3 PGD-step kernel for the linear classifier (`planning/archive/robustness.md`).
     `forward → softmax-CE input gradient dx = (softmax(xW+b) − onehot)·Wᵀ` (the proven
     linear input-VJP, `Proofs.mlpInputGrad`'s 1-layer case) → L∞ sign-step → project to the
     `eps`-ball around `x0` → clip to [0,1]. Returns the advanced adversarial input `x_adv`.
@@ -3475,7 +3475,7 @@ private def genCifarBnPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : Str
   s!"    return %clB : {bxd0}\n" ++
   "  }\n}\n"
 
-/-- **Phase-3 PGD attack on the verified MNIST MLP** (`planning/robustness.md`). Trains the
+/-- **Phase-3 PGD attack on the verified MNIST MLP** (`planning/archive/robustness.md`). Trains the
     784→512→512→10 ReLU MLP on the proof-rendered SGD step, then attacks through IREE with the
     proven `mlpInputGrad` VJP kernel. The Lipschitz certificate is the **product** of the three
     layers' spectral norms — where the bound (and so the cert) goes loose. -/
@@ -3581,7 +3581,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   runSweep false [0.5, 1.0, 1.5]
   IO.println "done (phase-3 MLP PGD: input gradient = the proven mlpInputGrad VJP via IREE)."
 
-/-- **Spectral-norm-constrained training of the verified MNIST MLP** (`planning/robustness_ladder.md`,
+/-- **Spectral-norm-constrained training of the verified MNIST MLP** (`planning/archive/robustness_ladder.md`,
     the research lever). Trains the 784→512→512→10 net with **projected SGD onto the spectral ball**
     — after every `K` proof-rendered steps (and once at the end) each weight `Wᵢ` is rescaled to
     `‖Wᵢ‖₂ ≤ c` (`projectSpectral`) — then runs the *same* `cert ≤ TRUE ≤ PGD` sandwich. Sweeps a
@@ -3699,7 +3699,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println "\ndone (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert"
   IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
-/-- **Generic conv-net PGD attack** (`planning/robustness_ladder.md`). Trains any packed conv
+/-- **Generic conv-net PGD attack** (`planning/archive/robustness_ladder.md`). Trains any packed conv
     net on its proof-rendered SGD step, then attacks through IREE with `genKernel` — the full
     proven backward (conv input-VJPs + maxpool `select_and_scatter`-backs, mirroring the net's
     `<slug>_train_step.mlir`) run to `dx`. Certificate = the conv-aware spectral-norm **product**
@@ -3848,7 +3848,7 @@ def VerifiedNet.attackPgdCifar (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
 def VerifiedNet.attackPgdCifarBn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   net.attackPgdConvNet cfg dataDir genCifarBnPgdStep (withCert := false)
 
-/-- **Spectral-norm-constrained training of the verified MNIST CNN** (`planning/robustness_ladder.md`,
+/-- **Spectral-norm-constrained training of the verified MNIST CNN** (`planning/archive/robustness_ladder.md`,
     the gap-shrinking lever applied to the conv net). The CNN sibling of `attackPgdSpectralMlp`:
     projected SGD onto the spectral ball — every `K` proof-rendered steps (and once at the end)
     `projectSpectral` caps **both** the dense `‖Wᵢ‖₂` and the conv tap-sum bound at `c` — then the
@@ -4099,7 +4099,7 @@ private def clopperPearsonLower (k n : Nat) (alpha : Float) : Float := Id.run do
     if betaiF a b mid < alpha then lo := mid else hi := mid
   return 0.5 * (lo + hi)
 
-/-- **Randomized-smoothing certificate** (Cohen–Rosenfeld–Kolter 2019, `planning/robustness_ladder.md`
+/-- **Randomized-smoothing certificate** (Cohen–Rosenfeld–Kolter 2019, `planning/archive/robustness_ladder.md`
     §3) — the depth-INDEPENDENT cert, and the answer where the Lipschitz product is hopeless.
     The smoothed classifier `ĝ(x) = argmax_c P[f(x+η)=c]`, `η ~ N(0,σ²I)`, is certified robust at
     L2 radius `σ·Φ⁻¹(p_A)` where `p_A` is a lower bound on the top class's noise probability. It's
@@ -4312,7 +4312,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   IO.println "      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless)."
 
 /-- **Phase-3 PGD adversarial attack** on the verified linear classifier
-    (`planning/robustness.md`). Trains via the proof-rendered train step, then attacks
+    (`planning/archive/robustness.md`). Trains via the proof-rendered train step, then attacks
     through the real IREE pipeline: each PGD step's input gradient is computed by the
     `genLinearPgdStep` StableHLO kernel (the proven `dx = (softmax−onehot)·Wᵀ` VJP) on the
     GPU. Reports clean vs L∞-PGD adversarial accuracy over an eps sweep. -/
@@ -4517,7 +4517,7 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   -- ⭐ `mkSession`, not `compileVmfb` + `LowererSession.create`. The fp8 arms were the last
   -- trainers still hardcoding a `.vmfb`, which made them IREE-ONLY: on XLA they printed the
   -- "XLA/PJRT" banner and then died in `iree-compile`. Nothing about that was fp8-specific —
-  -- it is the same hardcoded-artifact bug class `planning/demo_xla_port.md` §3 catalogues for
+  -- it is the same hardcoded-artifact bug class `planning/archive/demo_xla_port.md` §3 catalogues for
   -- the demos. `mkSession` hands the `.mlir` straight to PJRT and keeps the IREE compile path
   -- byte-identical, so both backends now serve the fp8 numerics.
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"

@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! Emit-only harness for the FPN multi-scale detector train step
-    (planning/yolo_fpn.md bite 7 wiring). Constructs the `r34FpnDet` spec
+    (planning/archive/yolo_fpn.md bite 7 wiring). Constructs the `r34FpnDet` spec
     (R34-ImageNet backbone tapped at C3/C4/C5 → `.fpnDetect` → flat [B,Ntot])
     and dumps the generated train-step MLIR so it can be eyeballed / parse-checked
     with `iree-compile --compile-to=input` BEFORE the ~15-min ROCm compile.

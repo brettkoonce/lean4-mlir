@@ -44,7 +44,7 @@ private def total (ls : List (List Nat)) : Nat := ls.foldl (fun a d => a + d.fol
 #guard renderShapes.length == 161
 #guard specShapes.length == 161
 
--- 2. ⭐ The published parameter count. `planning/rsb_a3_r50_verified.md` §1 measured this exact on
+-- 2. ⭐ The published parameter count. `planning/archive/rsb_a3_r50_verified.md` §1 measured this exact on
 --    the first try from the layout spec alone; this pins the RENDER to it too.
 #guard total renderShapes == 25557032
 #guard total specShapes == 25557032

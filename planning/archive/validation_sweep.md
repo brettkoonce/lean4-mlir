@@ -14,7 +14,7 @@ the rest of the book — the generative / detection / sequence demos and the
 deeper formal frontiers (see "Extending verified codegen to the rest of the
 book").
 
-Predecessor doc: `planning/verified_codegen.md` (the design + results of the
+Predecessor doc: `planning/archive/verified_codegen.md` (the design + results of the
 codegen pipeline itself).
 
 ---
@@ -266,7 +266,7 @@ check — the same ~½-day-per-op shape as the ch 7–9 blocks. No research risk
 
 The ch 3–10 sweep is done. To **verify the current state**:
 
-1. Read this doc + `planning/verified_codegen.md`.
+1. Read this doc + `planning/archive/verified_codegen.md`.
 2. `lake env lean LeanMlir/Proofs/IRPrint.lean` (writes all `/tmp/*.mlir`);
    `.venv/bin/python LeanMlir/Proofs/check_ir_codegen.py` (confirm all 52 green,
    CPU + GPU); `lake env lean tests/AuditAxioms.lean` (114 decls, 3-axiom).

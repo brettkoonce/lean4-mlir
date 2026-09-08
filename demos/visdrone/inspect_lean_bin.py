@@ -6,7 +6,7 @@ single image. This does the check that was missing: decode a record straight out
 of data/visdrone_fpn/train.bin, draw the ENCODED targets on the image the network
 is fed, and draw the raw annotations (pushed through the same squash-resize) on
 top as a control. If the two sets of boxes do not coincide, the image/target
-correspondence is broken and every number in planning/yolo_assignment.md is
+correspondence is broken and every number in planning/archive/yolo_assignment.md is
 measured against noise.
 
 Also reports the object-size distribution in fed pixels, which is what makes the

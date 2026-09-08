@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Architectures.CifarBnFaithfulPoC
 /-! # PoC: the FULL 17-block paper-spec MobileNetV2 train step, proof-tied (the §1 fold, den)
 
 ⛔⛔ **THE ARTIFACT THIS FILE IS ABOUT NO LONGER EXISTS (2026-09-06).** Leg 2 of
-`planning/renderer_convergence.md` retired `MobileNetV2Render.lean` and
+`planning/archive/renderer_convergence.md` retired `MobileNetV2Render.lean` and
 `verified_mlir/mobilenetv2_train_step.mlir` with it: MobileNetV2 now renders every artifact from
 the batched chain, as the decision "one chain per net" requires. Every theorem below is unchanged
 and still true — they are about the per-example MobileNetV2 and the SGD-inline op family, both of

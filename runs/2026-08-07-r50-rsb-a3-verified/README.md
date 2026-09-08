@@ -48,7 +48,7 @@ the anneal, and the gap then stabilised at +0.2–0.4 through the last twenty ep
 It finished ahead of the phase-2 reference **while missing** ingredients that reference has —
 `wdExcludeNormBias`, a 512-image BN group (ours is 64), and accumulation-compensated BN
 running-stat momentum. Full ledger, with evidence and remediation cost per item, in
-**`planning/a3_paper_fidelity.md` §2**. Quote a number against that list.
+**`planning/archive/a3_paper_fidelity.md` §2**. Quote a number against that list.
 
 ## Files
 

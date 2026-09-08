@@ -47,7 +47,7 @@ CHIP = os.environ.get("IREE_CHIP", "gfx1100")
 #   IREE_RUN_MODULE=/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module
 # ⛔ Do NOT pair that compiler with /home/skoonce/src/iree-build's runtime: the version
 # skew reports "hal.command_buffer.dispatch signature mismatch", which reads like a bad
-# module rather than a bad pairing (`planning/mnv4_convm_ties_todo.md` §2b).
+# module rather than a bad pairing (`planning/archive/mnv4_convm_ties_todo.md` §2b).
 IREE_C = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
 # ⚠ iree-run-module is NOT in this repo's .venv (only iree-compile is). It ships with the
 # lean4-jax venv — the same absolute path the PJRT plugin resolves through.
@@ -129,7 +129,7 @@ def main():
     # ⚠⚠ `--device=local-task` SEGFAULTS on this module — exit 245 / -11 with EMPTY stderr, no
     # output and no diagnostic — and `local-sync` runs the IDENTICAL vmfb in one second. A silent
     # 245 is a device/threading problem, NOT a bad render. `scripts/grad_tie.py` has carried this
-    # fallback since `planning/mnv4_verified.md` §3f hit it on `efficientnet_fwd`; this script did
+    # fallback since `planning/archive/mnv4_verified.md` §3f hit it on `efficientnet_fwd`; this script did
     # not, so the first Conv-M tie run looked like a broken artifact for as long as it took to
     # read the other script (2026-09-07).
     devs = ["hip"] if args.backend == "rocm" else ["local-task", "local-sync"]

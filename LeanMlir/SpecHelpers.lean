@@ -552,7 +552,7 @@ def heInitParams (spec : NetSpec) : IO ByteArray := do
     at a uniform softmax: every class at `1/NC`, background included. The net's
     first job is therefore to discover the class prior, and on BraTS it does
     that by walking straight into the trivial predictor — the collapse is
-    decided in the first ~100 steps (`planning/brats_demo.md` Workstream A). A
+    decided in the first ~100 steps (`planning/archive/brats_demo.md` Workstream A). A
     `log π_c` bias hands it the prior at step 0 instead, so the first gradient
     step is spent on the actual task.
 
@@ -603,7 +603,7 @@ def applyHeadPriorBias (spec : NetSpec) (params : ByteArray)
     biasParts := biasParts.push (← F32.const (1 : USize) (Float.log pi))
   return (params.extract 0 ((total - nc) * 4)).append (F32.concat biasParts)
 
-/-- RetinaNet prior-bias init for the **FPN detector head** (planning/yolo_fpn.md
+/-- RetinaNet prior-bias init for the **FPN detector head** (planning/archive/yolo_fpn.md
     Tier 2). Sets every objectness logit's bias to `−log((1−π)/π)` so the head
     starts predicting `sigmoid = π` (π ≈ 0.01) on every cell; box and class biases
     stay at zero.

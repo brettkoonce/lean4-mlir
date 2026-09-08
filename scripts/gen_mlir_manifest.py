@@ -13,7 +13,7 @@ directory listing:
     `tests/TestVariantPredicates.lean`; twice in production, once caught first).
 
 ⚠⚠ **This decoder is a SECOND statement of the variant convention, and second statements rot** —
-that is how `grad_tie.py`'s reference patch list died (§4c(c) of `planning/mnv4_verified.md`).
+that is how `grad_tie.py`'s reference patch list died (§4c(c) of `planning/archive/mnv4_verified.md`).
 Two mitigations, and neither is optional:
   1. `tests/TestVariantPredicates.lean` is the AUTHORITY. If it and this file disagree, it wins
      and this file is the bug.

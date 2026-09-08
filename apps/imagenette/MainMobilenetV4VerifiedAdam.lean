@@ -4,7 +4,7 @@ import LeanMlir.VerifiedNets
 
 Shared body in `apps/imagenette/MobilenetV4AdamCommon.lean`, linked against `ffi/libpjrt_ffi.so`.
 
-Phase 4 of `planning/mnv4_verified.md`: 80 epochs, bs32, AdamW, target **84.58%** — the JAX-baseline
+Phase 4 of `planning/archive/mnv4_verified.md`: 80 epochs, bs32, AdamW, target **84.58%** — the JAX-baseline
 path's number for this block table. The forward and the gradient are both tied against that
 reference (§3e, §3i), so the two paths are the same net and the number is a reproduction rather than
 a fresh measurement.
@@ -38,7 +38,7 @@ gone from the target name because it no longer distinguishes anything.
     ⚠ The target is `RESULTS.md`'s **84.58%**, which is the JAX-baseline path's number for this
     exact block table. Unlike MobileNetV2's, that number does **not** move when this render changes:
     the stem was built as `convStridedXla` precisely so the verified render and the baseline are the
-    same net (`planning/mnv4_verified.md` §3e). -/
+    same net (`planning/archive/mnv4_verified.md` §3e). -/
 def mobilenetv4AdamConfig : VerifiedConfig where
   epochs    := 80
   batchSize := 32
@@ -61,7 +61,7 @@ def mobilenetv4AdamConfig : VerifiedConfig where
     ⚠⚠ **Delete the checkpoint when the render changes.** `.lake/build/mnv4_adam_ckpt_xla.bin` is
     size-guarded but NOT architecture-guarded, so a stale blob with the same parameter count resumes
     silently and the run prints `done` having trained nothing. That is not hypothetical: it is
-    exactly what happened on the MobileNetV2 re-run (`planning/mnv4_verified.md` §3h trap 2), where
+    exactly what happened on the MobileNetV2 re-run (`planning/archive/mnv4_verified.md` §3h trap 2), where
     an epoch-80 checkpoint from the OLD net made the new run "succeed" instantly and exit zero. -/
 def runMobilenetV4Adam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"

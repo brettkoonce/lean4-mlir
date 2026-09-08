@@ -1,6 +1,6 @@
 import LeanMlir
 
-/-! BPE-tokenized GPT trained on TinyStories (planning/tinygpt_demo_v2.md
+/-! BPE-tokenized GPT trained on TinyStories (planning/archive/tinygpt_demo_v2.md
     Part II).
 
     ~8.5M-param decoder-only transformer, vocab 4096, T=256:

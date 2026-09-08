@@ -131,7 +131,7 @@ def conv2d(x, w, b, padding=None, stride=(1,1)):
     # Changed 2026-08-04 for paper-faithfulness. ⚠ Scoped to the ResNet-family helpers
     # ON PURPOSE: MobileNetV2/EfficientNet emit their own conv_general_dilated with
     # 'SAME' and are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not
-    # 'fix' those. See planning/rsb_a3_r50_verified.md §4b.
+    # 'fix' those. See planning/archive/rsb_a3_r50_verified.md §4b.
     if padding is None:
         padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)
     x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,
@@ -150,7 +150,7 @@ def max_pool2d(x, size=2, stride=2):
     # n=12: 'SAME' window maxima [2,4,6,8,10,11] vs symmetric [1,3,5,7,9,11]).
     # Output shape is unchanged (112 -> 56) either way.
     #
-    # Changed 2026-08-03 for paper-faithfulness; see planning/rsb_a3_r50_verified.md.
+    # Changed 2026-08-03 for paper-faithfulness; see planning/archive/rsb_a3_r50_verified.md.
     # This MOVES the ResNet stem pool, so it voids R34-ImageNet's and R50's numbers.
     p = (size - 1) // 2
     return jax.lax.reduce_window(x, -jnp.inf, jax.lax.max,

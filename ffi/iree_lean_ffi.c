@@ -19,7 +19,7 @@
 // defines `pjrt_ffi_marker`. It is now NULL-or-not by dlsym rather than by weak
 // linkage, which keeps the property this check was written for: it reports what
 // ACTUALLY loaded, so it still cannot disagree with the running program the way
-// a bare env var could. See planning/xla_pjrt_ladder.md.
+// a bare env var could. See planning/archive/xla_pjrt_ladder.md.
 
 LEAN_EXPORT lean_obj_res lean_iree_backend_name(lean_obj_arg world) {
   (void)world;
@@ -659,7 +659,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
 // YOLOv1 variant. y_yolo is f32 [batch, perCell, gridH, gridW] (target);
 // m_yolo is f32 [batch, gridH, gridW] (per-cell objectness mask). Routes
 // to the codegen produced with `useYolov1 := true`. See
-// planning/yolo_demo_v2.md Phase 1 decisions D3 + D6.
+// planning/archive/yolo_demo_v2.md Phase 1 decisions D3 + D6.
 LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_yolov1(
     b_lean_obj_arg sess_obj,
     b_lean_obj_arg fn_name_obj,
@@ -1056,7 +1056,7 @@ LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
 // that is exactly the stochastic-depth drop masks (`VerifiedTrain`'s `dropShapes`, `tensor<Bxf32>`
 // each), which ride in the parameter blob and so were swept up by "everything between x and the
 // labels is replicated". Every replica received replica 0's mask and applied it to its OWN rows —
-// `planning/stochastic_depth.md` §5b's predicted defect, sitting in the shim before any DP drop
+// `planning/archive/stochastic_depth.md` §5b's predicted defect, sitting in the shim before any DP drop
 // render existed to expose it.
 //
 // ⚠ `PJRT_DP_NO_MASK_SHARD=1` forces the OLD behaviour. It is a deliberate fault-injection knob in

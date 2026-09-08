@@ -21,16 +21,16 @@ import LeanMlir.Proofs.Codegen.SgdMomentumStep
 -- RmsPropStep imports only the two above, so this adds no cycle either.
 import LeanMlir.Proofs.Codegen.RmsPropStep
 -- DropPath imports only Architectures.ConvNeXt (for `layerScale`, which this file already has in
--- scope), so it adds no cycle either. `planning/stochastic_depth.md`.
+-- scope), so it adds no cycle either. `planning/archive/stochastic_depth.md`.
 import LeanMlir.Proofs.Codegen.DropPath
 -- He et al.'s 3×3/s2 stem pool (`maxPool3s2Flat` + its VJP witness), so the stem-pool ops can
 -- denote it. MaxPool3s2 imports only Architectures.CNN, which this file already has in scope
--- transitively, so it adds no cycle. `planning/rsb_a3_r50_verified.md` §4b.
+-- transitively, so it adds no cycle. `planning/archive/rsb_a3_r50_verified.md` §4b.
 import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
 
-The seed of `planning/validated_codegen_book.md`'s `Proofs/Hlo/{Syntax,Denote}`.
+The seed of `planning/archive/validated_codegen_book.md`'s `Proofs/Hlo/{Syntax,Denote}`.
 
 `IR.lean` gives the backward/forward IR a denotation in `ℝ` and proves it equals
 the Mathlib-`fderiv` math. The remaining trusted link — **R4** — is that the
@@ -167,7 +167,7 @@ inductive BatchableOp : Nat → Nat → Type where
   | convBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
   -- ⭐ **fp8 (E4M3) peer of `convBf16`** — identical shape, identical denotation, one different
-  -- type string. Measured 2026-08-25 (`planning/fp8_in_graph.md` §1) to lower at cifar8's own
+  -- type string. Measured 2026-08-25 (`planning/archive/fp8_in_graph.md` §1) to lower at cifar8's own
   -- conv shapes: every layer reaches `__cudnn$convForwardGraph` with f8 values surviving into
   -- the optimized HLO. ⚠ f8 operands, **f8-TYPED result**, convert back — an f32 result is
   -- 1.17× where the f8 result is 3.43× (§2.3), the same result-type rule as bf16 at a third
@@ -186,7 +186,7 @@ inductive BatchableOp : Nat → Nat → Type where
   --
   -- ⚠⚠ **Both produce the same output size, so nothing structural can tell them apart.** Shapes,
   -- arity, op counts and every `#guard` in the repo pass either way; only a forward tie against
-  -- the reference on shared weights separates them (`planning/mnv4_verified.md` §3b/§3d measured
+  -- the reference on shared weights separates them (`planning/archive/mnv4_verified.md` §3b/§3d measured
   -- 6.16e-2 on mnv4's stem and 2.9e-1 across mnv2's five sites). Pick by which reference the net
   -- has: TF-origin → this one; torchvision-origin → `convStrided`.
   --
@@ -262,7 +262,7 @@ inductive BatchableOp : Nat → Nat → Type where
   -- Its BACKWARD is `maxPoolBackB`, not a descriptor — it routes `dy` to the saved input's
   -- window argmax, which is per-example data.
   | maxPool {c h w : Nat}                                  : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
-  -- ⭐ **3×3/s2 max-pool FORWARD** — He et al.'s ResNet stem pool (`planning/rsb_a3_r50_verified.md`
+  -- ⭐ **3×3/s2 max-pool FORWARD** — He et al.'s ResNet stem pool (`planning/archive/rsb_a3_r50_verified.md`
   -- §4b). Same TYPE as `.maxPool` above (112→56 either way, since symmetric `(3−1)/2 = 1` padding
   -- makes the output width `h`), and a **different function**: the windows OVERLAP. That the two
   -- share a type is exactly why the deviation survived undocumented on every ResNet here — nothing
@@ -286,7 +286,7 @@ inductive BatchableOp : Nat → Nat → Type where
   | denseRowBack {rows a c : Nat} (wName : String) (W : Mat a c) : BatchableOp (rows*c) (rows*a)
   -- ⭐ bf16 peer of `denseRowBack` — ViT's input-VJP through Q/K/V/O/fc1/fc2.
   -- ⚠⚠ **bf16 operands, bf16-TYPED RESULT, convert back — the CONV shape, and this is a CHANGE.**
-  -- `planning/bf16_renderer.md` §9.2 measured that `dot_general` reaches the tensor cores with
+  -- `planning/archive/bf16_renderer.md` §9.2 measured that `dot_general` reaches the tensor cores with
   -- EITHER result type and concluded the result type was "inert" for dot. That is true of
   -- CORRECTNESS and **false of SPEED**, which nobody had measured: on ViT's own MLP chain the
   -- f32-result shape is 1.18× over f32 and the bf16-result shape is **1.60×** (§20.1). The f32
@@ -397,7 +397,7 @@ inductive BatchableOp : Nat → Nat → Type where
 inductive SHlo : Nat → Type where
   | operand    {n : Nat} (name : String) (v : Vec n)            : SHlo n
   | dotIn      {m n : Nat} (wName : String) (W : Mat m n)       : SHlo m → SHlo n
-  -- Mixed-precision matmul (planning/bf16_renderer.md): BOTH operands rounded by `rnd`,
+  -- Mixed-precision matmul (planning/archive/bf16_renderer.md): BOTH operands rounded by `rnd`,
   -- accumulate exact. This is `dotIn` with the leaf casts pulled INSIDE the op, and it
   -- exists because the casts cannot live outside it: a separate round node emits a
   -- convert PAIR, which XLA deletes (`xla_allow_excess_precision`, measured — see the
@@ -437,7 +437,7 @@ inductive SHlo : Nat → Type where
   -- `x≠0 ∧ x≠6`). `selectMid`'s `xName`/`x` is the saved pre-activation.
   | relu6F     {n : Nat}                                        : SHlo n → SHlo n
   | selectMid  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
-  -- Mixed precision (planning/bf16_renderer.md): the in-graph ROUND node. `den` is
+  -- Mixed precision (planning/archive/bf16_renderer.md): the in-graph ROUND node. `den` is
   -- literally `rnd ∘ den e`, so it is `den`-faithful for ANY rounding — bf16
   -- round-to-nearest being the instance we emit. This is the op
   -- `Proofs/Float/Bf16FaithfulPoC.lean` names as the depth > 1 ingredient
@@ -548,7 +548,7 @@ inductive SHlo : Nat → Type where
   -- conv). `den` via the proven `flatConvStride2` / `flatConvStride2_has_vjp`.
   | flatConvStridedF {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
-  -- The XLA-`SAME` peer, for the TF-origin nets' per-example chains (`planning/mnv4_verified.md`
+  -- The XLA-`SAME` peer, for the TF-origin nets' per-example chains (`planning/archive/mnv4_verified.md`
   -- §3h). Same type, `pad` differs by one — see `BatchableOp.convStridedXla` for the full note.
   | flatConvStridedXlaF {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
@@ -737,7 +737,7 @@ inductive SHlo : Nat → Type where
   -- descriptor. What differs from the 2×2 peer is only inside `maxPool3s2BackFlat`: the windows
   -- overlap, so the backward SUMS over every output that selected this input rather than looking
   -- one up. The emitted `select_and_scatter` needed no change for that — it already reduces with
-  -- `add`. `planning/rsb_a3_r50_verified.md` §4b.
+  -- `add`. `planning/archive/rsb_a3_r50_verified.md` §4b.
   | maxPool3s2BackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
       SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
   -- Batched conv BIAS param-SGD, the peers of `conv{,Strided}WeightSgdB`: `b − lr·Σ_n dβ_n`,
@@ -757,7 +757,7 @@ inductive SHlo : Nat → Type where
   -- WHOLE-BATCH `x`, not a `BatchableOp` descriptor beside `relu6`. A descriptor here would
   -- denote "every example shares example 0's mask", which is not what the emit computes.
   | selectMidB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
-  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`): `branch * keep / keep_prob`, the
+  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`): `branch * keep / keep_prob`, the
   -- per-SAMPLE branch scale. `mName` is a graph INPUT of type `tensor<Nxf32>` — the mask is drawn
   -- on the HOST, never by `stablehlo.rng`, because every numeric gate in this repo is a
   -- bit-exactness or known-answer argument over a deterministic graph (§2, that doc).
@@ -837,7 +837,7 @@ inductive SHlo : Nat → Type where
   --    denotes `Proofs.sigmoid` and already carries a global hypothesis-free `sigmoid_has_vjp`, but
   --    it is indexed PER EXAMPLE and emits at `ty [B, n]`; the loss cotangent lives at `SHlo (N*n)`
   --    with the `*B` family (`subB`, `divConstB`). So this is the same function at the batched
-  --    index — one constructor, and `planning/next_session_pipeline_then_r50.md` §4 estimated
+  --    index — one constructor, and `planning/archive/next_session_pipeline_then_r50.md` §4 estimated
   --    "~1 descriptor" for exactly this.
   -- ⚠ It needs NO new `Raw`/`Tok`/parse constructor: `skel` maps it onto the generic
   --    `.batched "sigmoidP"` node the whole batched-pointwise family shares.
@@ -1051,7 +1051,7 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * (2 * h) * (2 * w)))
   -- ⭐ The **bf16** input-VJP peers. These are where the money is: the backward is ~60% of the
-  -- conv step (measured on R34's own layer shapes, `planning/bf16_renderer.md`), and unlike JAX
+  -- conv step (measured on R34's own layer shapes, `planning/archive/bf16_renderer.md`), and unlike JAX
   -- — which autodiffs the backward FROM the cast forward and so inherits bf16 for free — every
   -- hand-written VJP here needs its own bf16 twin. dgrad is itself a convolution, so it takes
   -- the same emit shape and the same `den` discipline as the forward.
@@ -1088,7 +1088,7 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedBackBatchedBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * (2 * h) * (2 * w)))
-  -- The XLA-`SAME` peer (`planning/mnv4_verified.md` §3e/§3g). ⚠ The backward must place the SAME
+  -- The XLA-`SAME` peer (`planning/archive/mnv4_verified.md` §3e/§3g). ⚠ The backward must place the SAME
   -- asymmetry the forward did — its `den` scatters onto the ODD positions, so the emitted
   -- transposed-conv padding shifts by one. Pairing an `Xla` forward with the SYMMETRIC backward
   -- above type-checks, trains and descends, and computes a gradient for a different net.
@@ -1409,7 +1409,7 @@ inductive SHlo : Nat → Type where
   --    theorem). `sqName`/`bufName` ride as name+value like every other optimizer op here.
   | rmsBufNextF {n : Nat} (sqName bufName rhoName orhoName muName epsName : String)
       (ds : List Nat) (ρ μ ε : ℝ) (sq buf : Vec n)              : SHlo n → SHlo n
-  -- ── ▶ GLOBAL-NORM GRADIENT CLIPPING (`GradClip.lean`, `planning/grad_clip.md`), the ViT /
+  -- ── ▶ GLOBAL-NORM GRADIENT CLIPPING (`GradClip.lean`, `planning/archive/grad_clip.md`), the ViT /
   --    ConvNeXt recipe's `gradClipNorm`. FOUR ops, all in this `ds : List Nat` parameter-shape
   --    family rather than the `n : Nat` batched-activation one — the distinction matters, because
   --    `addV` at `n = 1` emits `tensor<Bx1xf32>` and cannot fold a rank-0 scalar.
@@ -1435,7 +1435,7 @@ inductive SHlo : Nat → Type where
   --    proofs elsewhere in this file die with a `whnf` timeout — `den` is a ~200-case dependent
   --    match, and fully-index-fixed arms make unfolding it markedly more expensive. **4× the
   --    heartbeat budget did not fix it.** Both ops below are parametric in `n`, like every other
-  --    constructor here. See `planning/grad_clip.md` §3.
+  --    constructor here. See `planning/archive/grad_clip.md` §3.
   | gradSumSqAccF {n : Nat} (ds : List Nat)                     : SHlo 1 → SHlo n → SHlo 1
   | clipScaleF   {n : Nat} (clipStr epsStr : String) (c ε : ℝ)
       (ds : List Nat)                                           : SHlo 1 → SHlo n → SHlo n
@@ -1638,7 +1638,7 @@ noncomputable def patchEmbedWeightGradFlat
     * the **outer** `rnd` on the patch sum is the **bf16 STORE**: the convolution is emitted with a
       `bf16`-TYPED result, so the hardware accumulates the MAC in f32 and rounds on the way out.
       Dropping it would claim more precision than the hardware delivers — the unsound direction,
-      and the trap `planning/bf16_renderer.md` §9.2 exists to name.
+      and the trap `planning/archive/bf16_renderer.md` §9.2 exists to name.
     * `b_conv`, `cls_token` and `pos_embed` are added **outside** every rounding, because the emit
       adds them after the convert-back, in f32. They are f32 parameters that never reach a tensor
       core.
@@ -3086,7 +3086,7 @@ theorem maxPoolF_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
 
 /-- ⭐ **3×3/s2 max-pool forward faithfulness.** The (flattened) `reduce_window(max)` op at window
     3, stride 2, symmetric padding 1 denotes the proven `maxPool3s2Flat` — He et al.'s stem pool.
-    `planning/rsb_a3_r50_verified.md` §4b. -/
+    `planning/archive/rsb_a3_r50_verified.md` §4b. -/
 theorem maxPool3s2F_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
     den (.maxPool3s2F e) = maxPool3s2Flat c h w (den e) := rfl
 
@@ -3549,7 +3549,7 @@ theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
   exact rmsBufNext_mu_zero ρ ε sq buf (den e)
 
 -- ════════════════════════════════════════════════════════════════
--- § Global-norm gradient clipping — faithfulness (`GradClip.lean`, `planning/grad_clip.md`)
+-- § Global-norm gradient clipping — faithfulness (`GradClip.lean`, `planning/archive/grad_clip.md`)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The scalar fold is `Proofs.gradSumSq` accumulated** — `acc + ∑ᵢ gᵢ²` for one parameter,
@@ -4530,13 +4530,13 @@ def ty (dims : List Nat) : String :=
 def tyI1 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["i1"]) ++ ">"
 
-/-- bf16 tensor-type string, for the `convertF` round node (planning/bf16_renderer.md).
+/-- bf16 tensor-type string, for the `convertF` round node (planning/archive/bf16_renderer.md).
     Only the round trip uses it today; when a bf16-operand `dot_general` lands (rung 2+)
     this is the type its operands carry. -/
 def tyBf16 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["bf16"]) ++ ">"
 
-/-- fp8 peer of `tyBf16`. **E4M3 only** — `planning/cifar_lowprec_stability.md` §2.3 measured
+/-- fp8 peer of `tyBf16`. **E4M3 only** — `planning/archive/cifar_lowprec_stability.md` §2.3 measured
     that `f8E5M2` compiles, lowers to a plain `__cublas$lt$matmul`, and leaves ZERO `f8e5m2`
     values in the optimized HLO: the type is silently widened away. Only E4M3 reaches the fp8
     units on sm_89, so there is deliberately no E5M2 spelling here. -/
@@ -6024,7 +6024,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- bf16 ACROSS an operation, i.e. a `dot_general` whose operands are bf16-typed with
       -- `preferred_element_type = f32`. That changes the value's type and so cannot be a
       -- `SHlo n → SHlo n` node; it is the rung-2 emitter change in
-      -- planning/bf16_renderer.md. Keep this node — it is the proof-side round and the
+      -- planning/archive/bf16_renderer.md. Keep this node — it is the proof-side round and the
       -- depth > 1 ingredient — but do NOT read a graph containing it as running bf16.
       pure (txt4, res4 :: st)
   | .convertF n, r :: st => do
@@ -7643,7 +7643,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       | "dropPathP", [mN], [_N, n] => do
           let (txt4, res4) ← liftPointwise B n r fun r d => do
             -- ▶ STOCHASTIC DEPTH: the per-SAMPLE residual-branch scale
-            -- (`planning/stochastic_depth.md`). `mN` is a graph INPUT of type `tensor<Bxf32>` — one
+            -- (`planning/archive/stochastic_depth.md`). `mN` is a graph INPUT of type `tensor<Bxf32>` — one
             -- value per EXAMPLE, computed on the host — and `dims = [0]` is what makes it the
             -- reference's `(B, 1, …, 1)` mask: every position within an example is scaled
             -- identically, every example independently. Emitting a `tensor<B×n>` scale instead
@@ -9334,7 +9334,7 @@ def oneMinusRho (rho : Float) : String := fmt6 (1.0 - rho)
 
 /-- Which optimizer tail a whole-net render emits. `.adamw` is every net's committed default and
     reproduces the existing artifacts byte-identically; `.rmsprop` is what the MobileNetV2 and
-    EfficientNet ImageNet references actually use (`planning/recipe_gaps.md` v1.2).
+    EfficientNet ImageNet references actually use (`planning/archive/recipe_gaps.md` v1.2).
 
     Lives here rather than in either renderer because **both** need it: a per-net copy of a
     two-constructor choice is the double-writer disease one level down, in code — the same argument
@@ -10789,7 +10789,7 @@ end Proofs
     (Proofs.StableHLO.linearFwdModuleV 128 784 10 (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
   -- Whole train step rendered from the verified AST (cotangent + weightSgd/biasSgd
   -- nodes), the den-certified renderer LinearFaithfulPoC proves; see that file +
-  -- planning/verified_faithful_sweep.md. (linearTrainStepModuleV — forward-AST +
+  -- planning/archive/verified_faithful_sweep.md. (linearTrainStepModuleV — forward-AST +
   -- hand-written tail — is its structural predecessor, kept for reference.)
   IO.FS.writeFile "verified_mlir/linear_train_step.mlir"
     (Proofs.StableHLO.linTrainStepFaithfulV 128 784 10 "0.00078125"

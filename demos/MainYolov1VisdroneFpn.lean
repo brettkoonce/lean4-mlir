@@ -43,7 +43,7 @@ def fpnDetScales : List (Nat × List (Float × Float)) :=
 def fpnNtot : Nat :=
   (fpnDetScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
 
-/-- T1b class weights (planning/yolo_fpn.md): sqrt-inverse encoded-target class
+/-- T1b class weights (planning/archive/yolo_fpn.md): sqrt-inverse encoded-target class
     frequency, normalized so `Σ_c f_c·w_c = 1` — a pure redistribution that leaves
     the class term's total magnitude (and so its balance against box/objectness)
     unchanged. Counts from `scripts/fpn_class_freq.py` over data/visdrone_fpn:
@@ -298,7 +298,7 @@ def clipFromEnv (dflt : Float) : IO Float := do
 /-- Name suffix (`FPN_TAG`). The name IS the on-disk checkpoint prefix, so a probe
     run without a distinct tag silently overwrites the live arm's e2..e12
     checkpoints — which are the artifacts every measurement in
-    planning/yolo_assignment.md is computed from. Empty by default. -/
+    planning/archive/yolo_assignment.md is computed from. Empty by default. -/
 def tagFromEnv : IO String := do
   match (← IO.getEnv "FPN_TAG") with
   | none => return ""

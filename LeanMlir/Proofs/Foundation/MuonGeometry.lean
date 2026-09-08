@@ -7,7 +7,7 @@ import Mathlib.Analysis.Matrix.Order
 
 /-! # Muon geometry: the optimizer as steepest descent under a norm
 
-The geometric motivation for Muon (`planning/muon_geometry.md`), in the unifying frame **every
+The geometric motivation for Muon (`planning/archive/muon_geometry.md`), in the unifying frame **every
 optimizer is steepest descent under a choice of norm**: the update direction is the dual-norm
 maximizer `d⋆ = argmax_{‖d‖≤1} ⟨g,d⟩`, with optimal value the dual norm `‖g‖_*`.
 

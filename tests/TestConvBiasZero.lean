@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # §2l step B — are the conv biases really inert?
 
-`planning/xla_pjrt_handoff.md` §2l wants the conv biases dropped so the verified R34's parameter
+`planning/archive/xla_pjrt_handoff.md` §2l wants the conv biases dropped so the verified R34's parameter
 layout lines up with the JAX `.convBn` reference (−8,512 params). Its argument that this is
 **layout-only, not functional** is:
 

@@ -1,6 +1,6 @@
 import LeanMlir
 
-/-! T7 from planning/yolo_demo_v2.md Phase 1 — useYolov1 mutex checks.
+/-! T7 from planning/archive/yolo_demo_v2.md Phase 1 — useYolov1 mutex checks.
 
     Verifies that compileVmfbs throws `IO.userError` for every forbidden
     combination of `useYolov1` with other loss-path flags. Also verifies
@@ -65,7 +65,7 @@ def main : IO Unit := do
   | none => IO.println "OK [C3]: useYolov1 + useKnnMixup → throws"
 
   -- C4: useYolov1 + useFocal → COMPILES. Focal now selects the sigmoid
-  -- focal-BCE objectness path (planning/yolo_final.md), so this combo is
+  -- focal-BCE objectness path (planning/archive/yolo_final.md), so this combo is
   -- valid and the train step should compile cleanly (was: forbidden → throw).
   let c4 := { baseConfig with useFocal := true, focalGamma := 2.0 }
   let c4_ok ← try

@@ -1,6 +1,6 @@
 import LeanMlir
 
-/-! Diffusion on a 2-D toy distribution — `planning/diffusion_2d_demo.md`.
+/-! Diffusion on a 2-D toy distribution — `planning/archive/diffusion_2d_demo.md`.
 
     The diffusion demo you can be *wrong* about. Every image DDPM here
     succeeds or fails by "does that look like a digit to you"; on a 2-D

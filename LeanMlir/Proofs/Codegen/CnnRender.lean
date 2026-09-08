@@ -22,7 +22,7 @@ The forward pieces (`flatConvF`/`reluF`/`maxPoolF`/`denseF`, loss cotangent) are
 and proven faithful (`flatConvF_faithful`/`reluF_faithful`/`maxPoolF_faithful`/
 `denseF_faithful`/`lossCotGraph`-style); the denotation-side close (each conv/dense SGD
 output denotes `θ − lr·certified`) is `cnn_render_conv{W,b}_certified` + the M2 dense
-bridges (`CnnTrainStep.lean`). See `planning/render_close_handoff.md` §1.
+bridges (`CnnTrainStep.lean`). See `planning/archive/render_close_handoff.md` §1.
 -/
 
 namespace Proofs.StableHLO
@@ -254,7 +254,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     pooled spatial sizes, so the image is `4h × 4w` (`H := 4h`, stage-2 `H2 := 2h`,
     flattened map `flat := c2·h·w`). The close is `cnn_render_conv{W,b}_certified`
     (generic in dims — covers all four conv layers) + the M2 dense bridges. See
-    `planning/render_close_handoff.md` §2a. -/
+    `planning/archive/render_close_handoff.md` §2a. -/
 def cifarTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -489,7 +489,7 @@ def cifarTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : St
     (the proven tokens use a `[B,oc,h,w]` reduce-`[2,3]` recompute layout vs the committed
     `[B,C,S]` save-x̂ layout), so it trains EQUIVALENTLY (not bit-identically). The close adds
     the BN dγ/dβ bridges (the BN analogue of `bias_grad_bridge`, under `0<ε`); the conv/dense
-    closes and the BN input-grad are already proven. See `planning/render_close_handoff.md` §2b. -/
+    closes and the BN input-grad are already proven. See `planning/archive/render_close_handoff.md` §2b. -/
 def cifarBnTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr lr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -980,7 +980,7 @@ private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds :
 
 set_option maxRecDepth 8000 in
 /-- **cifar8 AdamW train step rendered ENTIRELY from the verified AST** — the optimizer half of
-    `planning/xla_pjrt_handoff.md` §2a. Identical forward/backward to
+    `planning/archive/xla_pjrt_handoff.md` §2a. Identical forward/backward to
     `cifar8TrainStepFaithfulV`; the 22 fused SGD ops are replaced by 22 un-fused param
     gradients (`convWeightGrad`/`convBiasGrad`/`weightGrad`/`biasGrad`) each feeding the three
     proven AdamW ops (`adamWParamF`/`adamMNextF`/`adamVNextF`, denoting `Proofs.adamWStep`).
@@ -1220,7 +1220,7 @@ set_option maxRecDepth 8000 in
     CIFAR-only ops (`convBackBf16`, `dotOutBf16`) that ImageNet would never run, this moves CIFAR
     onto the ops ImageNet already uses. bf16 then drops in for the whole step, forward AND
     backward, with **zero new verified ops** — and CIFAR becomes a real rehearsal for ImageNet
-    instead of a parallel dialect. See planning/cifar_lowprec_stability.md §4.1.
+    instead of a parallel dialect. See planning/archive/cifar_lowprec_stability.md §4.1.
 
     ⭐ **The migration is semantically free, not a re-derivation.** Both families denote the SAME
     proven VJP — `StableHLO.lean` l.2016 vs l.2200 are `(conv2d_has_vjp3 W b).backward v …` and
@@ -2240,7 +2240,7 @@ end Proofs.StableHLO
 -- reference.) Dims `128 3 16 16 32 32 2 2 64 10 3 3`: h=w=2 (final pooled, image 32×32).
 -- Regenerate `verified_mlir/cifar8_adam_train_step.mlir` — the AdamW peer, same forward/backward
 -- with the fused SGD tail replaced by un-fused gradients + the proven AdamW ops
--- (planning/xla_pjrt_handoff.md §2a-ter). Hyperparameters match the retired tests render:
+-- (planning/archive/xla_pjrt_handoff.md §2a-ter). Hyperparameters match the retired tests render:
 -- β₁ 0.9, β₂ 0.999, ε 1e-8, wd 1e-4; 1/B = 1/128 = 0.0078125 (exact in binary32).
 #eval IO.FS.writeFile "verified_mlir/cifar8_adam_train_step.mlir"
   (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
@@ -2322,7 +2322,7 @@ end Proofs.StableHLO
 --
 -- ⚠ FORWARD ONLY: cifar8's backward is on the PER-EXAMPLE `convBack`/`dotOut` and the 27 bf16
 -- ops were built for ImageNet's BATCHED family, so `convBackBf16`/`dotOutBf16` do not exist.
--- planning/cifar_lowprec_stability.md §4.1 has why the fix is unification, not two new ops.
+-- planning/archive/cifar_lowprec_stability.md §4.1 has why the fix is unification, not two new ops.
 -- ⚠⚠ NO SPEEDUP, by design — §5.3 measured bf16 at 0.87× across cifar8's conv stack. These
 -- artifacts demonstrate that the MATH scales across precision, never the throughput.
 #eval IO.FS.writeFile "verified_mlir/cifar8_bf16_train_step.mlir"
@@ -2350,7 +2350,7 @@ end Proofs.StableHLO
 -- well — `convBackBatchedBf16` + `convWeightGradBBf16` — because those twins exist for the
 -- batched family and not for the per-example one. Zero new verified ops; see §4.1.
 -- ⭐ THE FIRST ARTIFACT IN THIS REPO CONTAINING AN f8 TYPE. Forward convs only for now
--- (`convBackBatchedF8` / `convWeightGradBF8` do not exist yet — planning/fp8_in_graph.md §6
+-- (`convBackBatchedF8` / `convWeightGradBF8` do not exist yet — planning/archive/fp8_in_graph.md §6
 -- step 1), and UNSCALED, so this is a lowering probe rather than a trainable arm: E4M3 maxes
 -- at 448 and XLA synthesises scale = 1.0 when given no scale operand (§4).
 #eval IO.FS.writeFile "verified_mlir/cifar8b_fp8_adam_train_step.mlir"
@@ -2547,7 +2547,7 @@ private def c8wBnPacked (opt : Proofs.StableHLO.CifarOpt) (from_ entry : String)
 
 -- ── the cifar8-WIDE BN family on the BATCHED op family, with the bf16 switch ────────────────
 -- The peer of `c8wbPacked` for the NORMALIZED net, and what Chapter 4's precision lever
--- (planning/bf16_batchnorm.md) trains on. Six artifacts from ONE renderer: three optimizers ×
+-- (planning/archive/bf16_batchnorm.md) trains on. Six artifacts from ONE renderer: three optimizers ×
 -- {f32, bf16}, so precision is the only thing that moves inside a pair and the comparison is
 -- controlled by construction rather than by two nets agreeing to be similar.
 --

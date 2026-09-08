@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! MNIST MLP with the **Shampoo** optimizer (UNVERIFIED perf path) — the
-    fast smoke test for the Shampoo codegen (`planning/shampoo.md`).
+    fast smoke test for the Shampoo codegen (`planning/archive/shampoo.md`).
 
     Same architecture + recipe as `MainMnistMlpTrain` (the AdamW baseline), so
     the two are a compute-matched A/B. The middle `dense 512 512` weight is

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Watch for T2a (RetinaNet head tower, depth 4) checkpoints and eval each
-# on GPU 1 while training continues on GPU 0. planning/yolo_fpn.md train->eval
+# on GPU 1 while training continues on GPU 0. planning/archive/yolo_fpn.md train->eval
 # recipe. The A/B reference is the T1b arm (runs/yolo_fpn_wcls_e*), which is
 # the correct control: a zero-init bias reproduces the biasless head exactly, so
 # the ONLY difference here is that objectness starts at logit(0.01).

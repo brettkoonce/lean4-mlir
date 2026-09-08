@@ -5,10 +5,10 @@ import LeanMlir.Proofs.Foundation.MobileNetBackChains
 
 /-! # ⭐⭐ `mnv4InputGradB` IS the certified whole-net MobileNetV4-Conv-M gradient
 
-Tier **T6** of `planning/mnv4_proofs_tier.md` §Session 3 — the last tier this net can have, and
+Tier **T6** of `planning/archive/mnv4_proofs_tier.md` §Session 3 — the last tier this net can have, and
 with it MobileNetV4-Conv-M is certified from its ℝ forward (T1) through its typed graph (T2), its
 233-parameter train-step tie (T3) and now its whole-net input gradient. T4 and T5 are float
-budgets and `planning/float_budget_numbers.md` closed that thread by user decision on 2026-09-05.
+budgets and `planning/archive/float_budget_numbers.md` closed that thread by user decision on 2026-09-05.
 
 ⚠⚠ **No accuracy is quoted for this net.** Conv-M has no Imagenette run and no verified ImageNet
 run; what pins the artifact to the reference's function is the 2026-09-07 tie pair (forward

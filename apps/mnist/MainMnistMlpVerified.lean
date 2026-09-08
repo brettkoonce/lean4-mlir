@@ -30,7 +30,7 @@ lake build mnist-mlp-verified
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/mnist-mlp-verified data          # XLA
 LEAN_MLIR_LOWERER=iree IREE_BACKEND=rocm ... mnist-mlp-verified data   # IREE
 ```
-See `planning/xla_pjrt_ladder.md` (rung 1, G2).
+See `planning/archive/xla_pjrt_ladder.md` (rung 1, G2).
 -/
 
 /-- 12 epochs at batch 128. `lr` is display-only — the real rate is baked into

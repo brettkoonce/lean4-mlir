@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 
 `EfficientNetWholeBackCertifiedTie.lean` closed this for the three-block representative. This
 file closes it for the net `efficientnetForwardB_full` actually is: **all sixteen MBConv
-blocks**, the T6 row of `planning/proofs_tier_to_paper_nets.md` §3.3(c) — and closes it one
+blocks**, the T6 row of `planning/archive/proofs_tier_to_paper_nets.md` §3.3(c) — and closes it one
 step further than the representative's, against the concrete `efficientnetForwardB_full_has_vjp`
 and, through `efficientnetForwardB_full_has_vjp_correct`, against the Jacobian of the committed
 nested-application forward itself.

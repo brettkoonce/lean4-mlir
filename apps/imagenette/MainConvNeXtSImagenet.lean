@@ -22,7 +22,7 @@ theorems that were never indexed by depth. Depth was not a hypothesis.
 
 ⚠ **ConvNeXt-B is NOT one line away from here**, and the shape of this file should not suggest
 otherwise. B is depth AND width (`[128,256,512,1024]`), which moves every dimension literal the S
-work was able to leave alone — `planning/vit_convnext_sb_scaleup.md` counts them: the literals
+work was able to leave alone — `planning/archive/vit_convnext_sb_scaleup.md` counts them: the literals
 outnumber the symbolic table uses in both renderers. That is a dims-threading pass with its own
 byte-identity gate at T, not an instance.
 
@@ -47,7 +47,7 @@ parameter count is `#guard`ed against the published 50.22M and against the indep
 and the drop ramp is tied to the renderer's own `cnxBlockIdx`. No accuracy has been measured and
 none is claimed.
 
-Run (4 GPUs — BOTH replica knobs are required, see `planning/mnv4_convm_ties_todo.md`):
+Run (4 GPUs — BOTH replica knobs are required, see `planning/archive/mnv4_convm_ties_todo.md`):
 ```
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdpwxclipdrop LEAN_MLIR_BATCH=32 \

@@ -30,7 +30,7 @@ open Proofs Proofs.StableHLO
 -- Data-parallel replica count for the Adam renders. 1 = single device and the
 -- emitted text is byte-identical to before; N > 1 inserts a cross-replica
 -- all_reduce(add)/N on every parameter gradient before the AdamW update
--- (ViTRender.emitAdamVDP, planning/xla_pjrt_ladder.md §10-11).
+-- (ViTRender.emitAdamVDP, planning/archive/xla_pjrt_ladder.md §10-11).
 private def REPLICAS : Nat := 1
 
 private def B : Nat := 128
@@ -600,7 +600,7 @@ def main : IO Unit := do
   -- NOTE: `verified_mlir/cifar8_adam_train_step.mlir` is no longer written here. It renders from
   -- `LeanMlir/Proofs/Codegen/CnnRender.lean` as pretty(provenGraph), with the optimizer now the
   -- proven `adamWParamF`/`adamMNextF`/`adamVNextF` rather than `ViTRender.emitAdamV`
-  -- (planning/xla_pjrt_handoff.md §2a-ter). The two renders tie EXACTLY — all 158577 returned
+  -- (planning/archive/xla_pjrt_handoff.md §2a-ter). The two renders tie EXACTLY — all 158577 returned
   -- floats bit-identical, `.lake/build/bin/cifar8-adam-tie`. `cifar8AdamTrainStep` below is kept
   -- as the reference the tie was measured against; adding a second writer back would re-open the
   -- silent last-writer-wins clobber §2a is about.

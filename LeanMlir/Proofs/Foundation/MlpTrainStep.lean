@@ -21,7 +21,7 @@ assembly is choosing the right cotangent subgraph per layer:
 
 This file supplies the only missing piece, `mlpCotOut0`, and its weight/bias
 bridges — completing the three-layer assembly. This is Crux A of
-`planning/verified_train_step.md`: the multi-layer param-grad assembly, the step
+`planning/archive/verified_train_step.md`: the multi-layer param-grad assembly, the step
 `linear` couldn't show (one layer, no chain). The SGD wrapping `θ − lr·∇` on top is
 identical to the linear case (`StableHLO.sgdW`).
 -/

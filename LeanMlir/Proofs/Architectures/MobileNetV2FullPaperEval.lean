@@ -9,7 +9,7 @@ ladder at INFERENCE BatchNorm — frozen running statistics at all **52** sites,
 typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, the graph of
 `mobilenetv2_fwd_eval.mlir` and its 1000-class twin. (Built 2026-09-05 so the whole-net float
 budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —
-`planning/proofs_tier_to_paper_nets.md` 3.2(e).)
+`planning/archive/proofs_tier_to_paper_nets.md` 3.2(e).)
 
 Pure enumeration and chaining of `MobileNetV2RenderPCEval.lean`'s four inference stage
 abbreviations (`ivExpandPCEval` / `ivDepthwisePCEval` / `ivDepthwiseStridedPCEval` /

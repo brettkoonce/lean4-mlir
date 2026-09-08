@@ -4,7 +4,7 @@ import LeanMlir.VerifiedNets
 /-! # `mnist-ddpm-score` — the image DDPM's first real number
 
     ⭐ **The 2-D demo's argument, moved onto images.** On a spiral the ground
-    truth is a second point cloud, so `planning/diffusion_2d_demo.md` §4 can
+    truth is a second point cloud, so `planning/archive/diffusion_2d_demo.md` §4 can
     report cell recall and an energy distance instead of "does that look right
     to you". On MNIST the ground truth is a **classifier that already knows what
     a digit looks like** — and this repo has one whose math VJP is proven:
@@ -29,7 +29,7 @@ import LeanMlir.VerifiedNets
     embedding in the denoiser and is a separate piece of work.
 
     ⚠⚠ **Coverage and confidence are not enough on their own**, for exactly the
-    reason `planning/diffusion_2d_demo.md` §5.7 records: a classifier scores
+    reason `planning/archive/diffusion_2d_demo.md` §5.7 records: a classifier scores
     confidently on things that are not from the data distribution, so a model
     emitting one canonical seven would post perfect confidence. That is the
     checkerboard mistake — 8/8 recall and a passing energy distance while a

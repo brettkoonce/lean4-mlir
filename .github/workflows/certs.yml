@@ -3,7 +3,7 @@ name: Certify Corpus
 # The certificate corpus (`lake build Certs`: FloatBridges, ties, seals,
 # descent, Lipschitz/LipSDP, Muon — 155 files / ~87k lines) + the three-axiom
 # closure audit, split out of the per-push proofs workflow
-# (planning/repo_shape_deletion_audit.md §4). Runs when a push actually
+# (planning/archive/repo_shape_deletion_audit.md §4). Runs when a push actually
 # touches proof surface, plus nightly (catches toolchain/Mathlib drift and
 # anything the path filter misses) and on demand. Everything else — demo,
 # book, engine, docs pushes — no longer pays the corpus tail; they get the

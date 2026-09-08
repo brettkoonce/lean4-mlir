@@ -2,12 +2,12 @@ import LeanMlir.Proofs.Foundation.MobileNetV4BackB0
 
 /-! # MobileNetV4-Conv-M at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
 
-MobileNetV4 was the last net in `planning/proofs_tier_to_paper_nets.md` §2's table with nothing at
+MobileNetV4 was the last net in `planning/archive/proofs_tier_to_paper_nets.md` §2's table with nothing at
 the net level. `MobileNetV4BackB0.lean` is complete at the BLOCK and STAGE level — every UIB
 family, both stride-2 forms, the fused stage, the head, the table-driven `k = 0` dispatch and the
 row-typed `UibParams` — and this file is the tier above: a net-level ℝ forward at the 21-row
 Conv-M table, and the typed StableHLO graph over it at `mnv4FwdChainB`'s own tokens.
-`planning/mnv4_proofs_tier.md` is the plan; ResNet-50 closed the same two tiers on 2026-09-06 and
+`planning/archive/mnv4_proofs_tier.md` is the plan; ResNet-50 closed the same two tiers on 2026-09-06 and
 `ResNet50FullB.lean` is the file this one mirrors.
 
 ⚠⚠ **NO ACCURACY IS QUOTED FOR THIS NET.** Conv-M has no Imagenette run and no verified ImageNet
@@ -15,7 +15,7 @@ run; `RESULTS.md`'s 84.58% belongs to the SUPERSEDED Conv-S table. What the arti
 tier *are* pinned to is the reference's function: the forward tie measures `max |Δ| = 3.770e-06`
 against `jax/.lake/build/generated_mobilenet_v4.py` on shared weights and the gradient tie puts 0
 of 232 live parameters outside the reference's own fp32 noise floor (both re-run at the Conv-M
-table on 2026-09-07, `planning/mnv4_convm_ties_todo.md`). That is what makes the tiers below
+table on 2026-09-07, `planning/archive/mnv4_convm_ties_todo.md`). That is what makes the tiers below
 statements about MobileNetV4 rather than about a net.
 
 ## ⭐⭐ The trunk is FIVE `CertLayer` groups — and the reason it is not ONE is the finding here
@@ -263,7 +263,7 @@ structure Mnv4BWeights (nCls : Nat) where
     XLA `'SAME'` on a 3×3/s2 at 224 pads **(0,1)**, not (1,1). Both give 112×112, so no shape
     check, `#guard`, op count or arity audit can see the difference — the forward tie is the only
     thing that can, and it measured 6.16e-2 with the symmetric token against 1.79e-6 with the
-    reference patched to match (`planning/mnv4_verified.md` §3b). Every OTHER stride-2 site in this
+    reference patched to match (`planning/archive/mnv4_verified.md` §3b). Every OTHER stride-2 site in this
     net is genuinely symmetric.
 
     ⚠ Plain relu, and it is `relu6` one file over in `MobileNetV2FullB.lean` at the same XLA

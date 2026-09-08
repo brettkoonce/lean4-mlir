@@ -3,7 +3,7 @@ import LeanMlir
 /-! Tiny DDPM trainer on CIFAR-10 — DDPM demo, v2 Phase 0.
 
     Same base80 T-conditioned UNet as before, now with the three
-    Phase-0 recipe levers from planning/ddpm_demo_v2.md (Workstream B),
+    Phase-0 recipe levers from planning/archive/ddpm_demo_v2.md (Workstream B),
     none of which need new codegen:
 
       * EMA of weights (decay 0.9999) — the plan's single cheapest
@@ -277,7 +277,7 @@ def main (args : List String) : IO Unit := do
     -- the BN running stats are accumulated under the raw weights, and
     -- EMA-weights + raw-weight BN stats is a normalization mismatch that
     -- the DDIM chain amplifies into confetti (Gate-A verdict,
-    -- planning/ddpm_demo_v2.md). EMA weights are still checkpointed; using
+    -- planning/archive/ddpm_demo_v2.md). EMA weights are still checkpointed; using
     -- them needs a BN-stat recalibration pass first.
     if (epoch + 1) % sampleEvery == 0 || epoch + 1 == cfg.epochs then
       let evalParams := p.append runningBnStats

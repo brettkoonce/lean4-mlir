@@ -7,7 +7,7 @@ import LeanMlir.ViTRender      -- the hand-written emitter's helpers; the collec
 ⭐ **Since 4c leg 3 (2026-09-07) this file writes ONE artifact: the SGD-inline
 `verified_mlir/convnext_train_step.mlir`.** The thirteen AdamW/EMA train steps and the four
 drop-free forwards render from the batched chain in `ConvNeXtRenderB.lean`
-(`planning/renderer_convergence.md`, leg 3), whose Proofs tier is `ConvNeXtFaithfulPoCGB.lean`.
+(`planning/archive/renderer_convergence.md`, leg 3), whose Proofs tier is `ConvNeXtFaithfulPoCGB.lean`.
 This chain stays for two reasons: the batched traversal has no fused-SGD arm, and
 `ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at exactly these bytes.
 `tests/TestConvNeXtFwdBTie.lean` pins the two chains against each other — identical forwards,
@@ -96,7 +96,7 @@ private def zM {a b : Nat} : Mat a b := fun _ _ => 0
 private def zT {c h w : Nat} : Tensor3 c h w := fun _ _ _ => 0
 
 -- ════════════════════════════════════════════════════════════════
--- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`, handoff §0.10) ────────────────────────
+-- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`, handoff §0.10) ────────────────────────
 -- ConvNeXt-T is the easy shape of this feature and that is why it is the net that gets it: ONE
 -- site per block, on the residual branch, and **every** block carries one — no EfficientNet skip
 -- guard, no ViT branch split. `convnext_block` in the reference (`jax/Jax/Codegen.lean:1079`) ends
@@ -843,7 +843,7 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
   -- not be emitted twice. Under DP the clip must come AFTER the `all_reduce` (the reference clips
   -- the combined gradient; clipping per replica clips 180 PARTIAL gradients, a different function
   -- that trains and descends), and the clip needs every gradient at once while this op is per
-  -- parameter — so at `clip := true` the caller hoists both. `planning/grad_clip.md` §4.
+  -- parameter — so at `clip := true` the caller hoists both. `planning/archive/grad_clip.md` §4.
   let replicas := if preAvg then 1 else replicas
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
   let gr : SHlo n := .operand gAvg z
@@ -860,7 +860,7 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
   -- ⚠ It consumes `nT`, the UPDATED parameter, not the gradient — the shadow averages weights.
   -- ⚠ `%emad`/`%oemad` are function ARGS, not constants, because the reference's decay is
   -- TIME-VARYING: `d = min(decay, (1+t)/(10+t))`, TF's warmup-corrected form. That correction is
-  -- required at our scale rather than optional — see `planning/ema.md` §2, where the reference's
+  -- required at our scale rather than optional — see `planning/archive/ema.md` §2, where the reference's
   -- own measurement has a shadow holding 12.8% of the random init and scoring 0.00% top-1.
   --
   -- At `ema := false` NO `pretty` call happens, so the fresh-name counter does not move and every
@@ -896,7 +896,7 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
     -- It needs no driver predicate: excluding a param changes no arity, type or region.
     ++ (if wdExclude then "wx" else "")
-    -- ▶ `clip` = global-norm gradient clipping (`planning/grad_clip.md`), AFTER `wx` because
+    -- ▶ `clip` = global-norm gradient clipping (`planning/archive/grad_clip.md`), AFTER `wx` because
     -- `convnextTinyImagenetConfig` sets BOTH — `wx` ++ `clip` is the shipping spelling.
     --
     -- ⚠⚠ THIS FUNCTION IS WHERE ConvNeXt DIFFERS FROM ViT AND WHERE THE `wx` THREAD SHIPPED A
@@ -905,7 +905,7 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- renderer but not this function produces an artifact whose declared entry disagrees with its
     -- own path — caught only because the shim refuses the call. The `#guard`s below pin it.
     ++ (if clip then "clip" else "")
-    -- ▶ `drop` = stochastic depth (`planning/stochastic_depth.md`), the 18 per-block residual-branch
+    -- ▶ `drop` = stochastic depth (`planning/archive/stochastic_depth.md`), the 18 per-block residual-branch
     -- masks. TRAILING, and it is the marker's NAME that matters rather than its position: `"sd"`
     -- collides, because `rms` ++ `dp` spells `rmsdp` which CONTAINS "sd" — a collision between two
     -- OTHER markers meeting, which no placement avoids (`ema.md`'s `emarms` defect one axis on).
@@ -1018,7 +1018,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   let trav := traversal.getD (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses V)
   let (body, gradMap, nSm) := trav.run' (0, [])
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) — ConvNeXt's half. Structurally the
+    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/archive/grad_clip.md`) — ConvNeXt's half. Structurally the
     -- ViT block, and it has to be a second copy only because the two renderers thread their
     -- gradients differently (a `gradMap` lookup here, an indexed list there).
     --
@@ -1170,7 +1170,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- the wrong graph, which is §2b-quater's guard earning its keep a second time; the `#guard`s
   -- below are what stop it recurring silently.
   -- ⚠ `clip` MUST reach the variant here for the SAME reason `wdExclude` must, and this is the
-  -- second time that exact hazard has been live on this line. `planning/grad_clip.md` §6.
+  -- second time that exact hazard has been live on this line. `planning/archive/grad_clip.md` §6.
   -- ⚠ `sd` is the THIRD flag that must reach it, and unlike the other two it also changes the
   -- ARITY — so a variant name that dropped it would put an 18-input-wider graph behind the plain
   -- `adam` path's artifact name and checkpoint. `#guard`s below pin every spelling.

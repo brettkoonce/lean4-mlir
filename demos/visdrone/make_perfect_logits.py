@@ -5,7 +5,7 @@ The overfit probe converged at train loss 215 on 32 images. That reads as "the
 trainer cannot descend" ONLY if the achievable loss is ~0 -- which nobody has
 checked. If a perfect prediction also scores ~215, the model has already
 converged and the defect is a mis-specified loss, not a broken optimizer, and
-every "converged equilibrium" reading in planning/yolo_assignment.md was
+every "converged equilibrium" reading in planning/archive/yolo_assignment.md was
 measuring the floor rather than the model.
 
 Emits a logits.bin that `scripts/fpn_loss_breakdown.py` can consume unchanged --

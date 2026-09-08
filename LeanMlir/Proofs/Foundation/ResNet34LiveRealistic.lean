@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Foundation.ResNet34LivePC
 
 /-!
-# Realistic-dimension live ResNet-34 witness (`planning/whole_network_backward.md` Item D)
+# Realistic-dimension live ResNet-34 witness (`planning/archive/whole_network_backward.md` Item D)
 
 `ResNet34LivePC` builds the 2-channel non-degenerate ResNet-34 whole-net backward
 witness at a **32×32** toy input. This file lifts it to the real **ImageNet spatial

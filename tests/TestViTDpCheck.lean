@@ -208,7 +208,7 @@ backend {← LowererSession.backendName}"
     IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size}"; IO.Process.exit 1
   let n := o1.size / 4
   let nP := net.nParams
-  -- ⚠ The EMA shadow is REPORTED, never GATED — `planning/ema.md`: it is θ's low-pass filter, so
+  -- ⚠ The EMA shadow is REPORTED, never GATED — `planning/archive/ema.md`: it is θ's low-pass filter, so
   -- gating it is §3's "gate the gradient, never θ" one step WORSE. Measured on EfficientNet's peer
   -- the same day: a sum-not-mean control moved `m` by 2.39 and the shadow by 5.4e-4, a 4,400×
   -- difference in sensitivity. It is here so a mis-threaded 4th region is VISIBLE, not so it decides.

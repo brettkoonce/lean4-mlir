@@ -12,7 +12,7 @@ the composite** — no per-depth proof, and nothing re-derived.
 
 Measured 2026-08-10: **no net in the repo folded its blocks.** `ResNet34BackB0`,
 `MobileNetV2BackB0`, `EfficientNetBackB0` and `ConvNeXtBackB0` all stop at a block capstone, so
-§8's ✓ column in `planning/mnv4_verified.md` means *block* capstones for all five of the nets it
+§8's ✓ column in `planning/archive/mnv4_verified.md` means *block* capstones for all five of the nets it
 credits. R50 was already at parity when `ResNet50BackB0` landed; this file is the step past it, and
 the machinery is deliberately net-agnostic so the other five can follow.
 

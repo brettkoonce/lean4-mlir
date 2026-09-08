@@ -4,7 +4,7 @@
     .venv/bin/python scripts/bf16_peak_memory.py verified_mlir/<a>.mlir [<b>.mlir ...]
 
 ⚠⚠ WHY THIS EXISTS, AND WHY `nvidia-smi` IS THE WRONG TOOL. XLA's BFC allocator PREALLOCATES most
-of the card (~73 %, i.e. ~11.68 GiB of a 16,380 MiB 4060 Ti — `planning/vit_convnext_sb_scaleup.md`).
+of the card (~73 %, i.e. ~11.68 GiB of a 16,380 MiB 4060 Ti — `planning/archive/vit_convnext_sb_scaleup.md`).
 So `nvidia-smi --query-gpu=memory.used` reports the POOL, not the graph, and two artifacts with very
 different appetites read nearly the same. That mistake was made once in this repo: ConvNeXt-T was
 reported at "12.2 GB f32 / 12.4 GB bf16" when its actual peaks are ~4.9 GiB and the 200 MiB

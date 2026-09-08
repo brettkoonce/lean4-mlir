@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # LAMB, numerically certified — the closed form, against three plausible wrong neighbours
 
-`planning/rsb_a3_r50_verified.md` §2.3's LAMB row was the ONE line that file flags as an estimate
+`planning/archive/rsb_a3_r50_verified.md` §2.3's LAMB row was the ONE line that file flags as an estimate
 rather than a measurement ("2–3 ops"). It is now built — measured at **two** new `SHlo`
 constructors, because `gradSumSqAccF` was already present for the global-norm clip and `sgdParamF`
 for heavy-ball — and this is the run that says the render computes LAMB.

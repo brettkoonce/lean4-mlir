@@ -249,7 +249,7 @@ def cifar8Verified : VerifiedNetSpec where
 
     ⚠ The eval forward (`cifar8_bf16_fwd.mlir`) is the f32 `cifar8_fwd` renamed — you train in
     bf16 and evaluate in f32. ⚠ The bf16 is FORWARD-ONLY (cifar8's backward is on the per-example
-    `convBack`/`dotOut`, which have no bf16 twin); see planning/cifar_lowprec_stability.md §4.1. -/
+    `convBack`/`dotOut`, which have no bf16 twin); see planning/archive/cifar_lowprec_stability.md §4.1. -/
 def cifar8Bf16Verified : VerifiedNetSpec :=
   { cifar8Verified with
     name  := "CIFAR-CNN8-bf16"
@@ -509,7 +509,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
 #guard resnet34ImagenetVerified.toSpecs.pop.pop == resnet34Verified.toSpecs.pop.pop
 #guard resnet34ImagenetVerified.toSpecs.back! == (#[1000], 2)
 
-/-! ### ResNet-50 — the bottleneck pair (`planning/rsb_a3_r50_verified.md`)
+/-! ### ResNet-50 — the bottleneck pair (`planning/archive/rsb_a3_r50_verified.md`)
 
     ⚠⚠ **SKELETON, 2026-08-03. These two specs are the LAYOUT only.** There is no
     `Proofs/Architectures/ResNet50*.lean`, no `ResNet50RenderB.lean`, no artifact and no rung E —
@@ -530,7 +530,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
     survived because the output shape is identical (112→56), so every structural check in the repo
     was blind to it and nothing ever failed. Kept in the record because *that* is the reusable
     part: a deviation at an unchanged type is invisible to arity, op counts and the prefix audit
-    alike, and only the emitted window separates the two. `planning/rsb_a3_r50_verified.md` §4b. -/
+    alike, and only the emitted window separates the two. `planning/archive/rsb_a3_r50_verified.md` §4b. -/
 def resnet50Verified : VerifiedNetSpec where
   name     := "ResNet-50 (Imagenette)"
   slug     := "resnet50"
@@ -568,7 +568,7 @@ def resnet50Verified : VerifiedNetSpec where
     ⚠ The reference number is at **effective batch 2048** (512 micro × 4 grad-accum), and the
     verified driver has **no gradient accumulation**. At bs512 the same recipe gives **40.8%**, not
     78.1% — LAMB is a large-batch optimizer. So a pair run is not comparable until that is settled;
-    `planning/rsb_a3_r50_verified.md` §3 is the decision. -/
+    `planning/archive/rsb_a3_r50_verified.md` §3 is the decision. -/
 def resnet50ImagenetVerified : VerifiedNetSpec where
   name     := "ResNet-50 (ImageNet-1k)"
   slug     := "resnet50in"
@@ -637,7 +637,7 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
 #guard resnet50ImagenetVerified.toSpecs.back! == (#[1000], 2)
 
 /-- **ResNet-50 on ImageNet-1k at RSB-A3's TRAIN resolution, 160²** — the same net as
-    `resnet50ImagenetVerified`, fed 160² crops. `planning/next_session_rsb_a3.md` §2.1.
+    `resnet50ImagenetVerified`, fed 160² crops. `planning/archive/next_session_rsb_a3.md` §2.1.
 
     ⭐ **WHY THIS EXISTS AT ALL IS A WALL-CLOCK ARGUMENT, not a modelling one.** §4's probes measured
     R50 at **376 ms/step** (4×bs64, resident, `SHIM_WORKERS=8`), which puts 100 epochs at **52.3 h**
@@ -925,7 +925,7 @@ def efficientnetVerified : VerifiedNetSpec where
   bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
     480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
     1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
-  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*sd` variants.
+  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), used only by the `*sd` variants.
   -- `keep_i = 1 − 0.2·i/(16−1)` at the NINE block indices that carry a skip: 2,4,6,7,9,10,12,13,14.
   --
   -- ⚠⚠ THE INDEX IS THE BLOCK INDEX, NOT THE SITE ORDINAL. The reference advances its ramp counter
@@ -952,7 +952,7 @@ def efficientnetVerified : VerifiedNetSpec where
   -- itself set dropout — this carries the ImageNet reference's value so the `adamdo` render has a
   -- gate vehicle at the cheap scale, exactly as `dropKeeps` carries ImageNet's ramp. ⚠ So do NOT
   -- quote an Imagenette `adamdo` run as a reference comparison; it is a gate vehicle
-  -- (`planning/ema.md`'s finding 3, same shape).
+  -- (`planning/archive/ema.md`'s finding 3, same shape).
   dropoutKeep := some (0.8, 1280)
 
 /-- **EfficientNet-B0 on full 1000-class ImageNet** — the EfficientNet peer of the R34, ViT and
@@ -1063,7 +1063,7 @@ def convnextVerified : VerifiedNetSpec where
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,  -- stage 4 (3) @7
     .globalAvgPool, .layerNorm 768, .dense 768 10 ]                    -- head: GAP → LN → dense
   blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 of those sites (§2m), plus a 23rd over the [768] GAP output — the paper's head LN, restored 2026-08-30; the count matches timm at 28,589,128 for K=1000"
-  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*drop` variants.
+  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), used only by the `*drop` variants.
   -- `keep_i = 1 − 0.1·i/(18−1)` at EVERY block — ConvNeXt has one site per block and every block
   -- carries a residual, so unlike EfficientNet there is no skip guard and the site list is
   -- `0 … 17` entire.
@@ -1169,7 +1169,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
     the Tiny ramp with more entries — it is a steeper ramp over 36 sites. That is exactly why the
     ramp lives in the SPEC and not in the renderer: the render is `sd : Bool` and reads its scales
     from the driver's blob, so a rate change costs no artifact. ▶ The 80-epoch tier wants 0.2, not
-    0.4 (`planning/vit_convnext_sb_scaleup.md`: the paper values underfit at 80 epochs) — set it
+    0.4 (`planning/archive/vit_convnext_sb_scaleup.md`: the paper values underfit at 80 epochs) — set it
     with the driver's `LEAN_MLIR_DROP_RATE_U` (micro-units: `200000` = 0.2) rather than by editing
     this line — the rate is data the driver supplies per step, so changing it costs no artifact.
 
@@ -1333,7 +1333,7 @@ def vitVerified : VerifiedNetSpec where
     .layerNorm 192,               -- final LayerNorm (per-channel [192])
     .dense 192 10 ]               -- CLS-head 192→10
   blurb := "ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → %LOWERER% → GPU"
-  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*drop` variants.
+  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), used only by the `*drop` variants.
   -- ⚠⚠ **24 ENTRIES FOR 12 KEEPS, AND THE PAIRING IS THE CONTENT.** ViT drops each block's TWO
   -- residual branches INDEPENDENTLY (`ka, km = jax.random.split(drop_key)`) but at the SAME keep
   -- probability, so site `2i` and site `2i+1` share `keep_i = 1 - 0.1*i/11`. The driver needs one
@@ -1516,7 +1516,7 @@ def vitBImagenetVerified : VerifiedNetSpec where
 
 -- 86,567,656 parameters, DeiT-B's published 86.57M, in the SAME 200 tensors as Ti and S. Three
 -- widths, one renderer, one theorem. `jax/MainVitBImagenet.lean` emits the same count from an
--- independent implementation (`planning/vit_convnext_sb_scaleup.md`).
+-- independent implementation (`planning/archive/vit_convnext_sb_scaleup.md`).
 #guard vitBImagenetVerified.toSpecs.size == vitImagenetVerified.toSpecs.size
 #guard (vitBImagenetVerified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 86567656
@@ -1529,7 +1529,7 @@ def vitBImagenetVerified : VerifiedNetSpec where
 #guard vitImagenetVerified.toSpecs.pop.pop == vitVerified.toSpecs.pop.pop
 #guard vitImagenetVerified.toSpecs.back! == (#[1000], 2)
 
-/-! ### MobileNetV4-Conv-M — the Universal Inverted Bottleneck (`planning/mnv4_verified.md`) -/
+/-! ### MobileNetV4-Conv-M — the Universal Inverted Bottleneck (`planning/archive/mnv4_verified.md`) -/
 
 /-- **MobileNetV4-Conv-M on Imagenette 224²** — the sixth Imagenette net, and the one that makes a
     point the others cannot: its whole trunk is **one parameterised block**. `uib`'s `k = 0` omits a
@@ -1722,7 +1722,7 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
 --
 -- ⚠⚠ IF YOU ADD AN `.imagenet` NET AT A NON-224 TRAIN RESOLUTION, ONE OF THESE FIRES — and that is
 -- the point, not an obstacle. It means the val drain is still 224 while your train stream is not,
--- so `evalD0` (`planning/next_session_rsb_a3.md` §2.3) must land before the eval loop can be
+-- so `evalD0` (`planning/archive/next_session_rsb_a3.md` §2.3) must land before the eval loop can be
 -- trusted. Do NOT relax the guard to make it pass; add the net to the exempt list below it only
 -- once the eval path reads its own width.
 #guard resnet34ImagenetVerified.d0     == 3*224*224

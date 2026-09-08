@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Foundation.ResNet34BackB0
 
 /-! # Backward-graph faithfulness for the VERIFIED ResNet-50 bottleneck block
 
-The R50 peer of `ResNet34BackB0.lean`, and the step `planning/mnv4_verified.md` §8 calls
+The R50 peer of `ResNet34BackB0.lean`, and the step `planning/archive/mnv4_verified.md` §8 calls
 `<blk>BackBatchedGraph` + `<blk>BackBatchedGraph_faithful` — the two theorems that make the
 render's backward *the certified one*. R50 shipped a trained number (89.86%, Imagenette) off a
 certified renderer with no whole-net backward at all; this file is that gap.

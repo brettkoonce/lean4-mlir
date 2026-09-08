@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""perturb_clip.py — candidate renders for `clip-tie` (planning/grad_clip.md §7).
+"""perturb_clip.py — candidate renders for `clip-tie` (planning/archive/grad_clip.md §7).
 
     python3 scripts/perturb_clip.py <in.mlir> <out.mlir> <mode>
 

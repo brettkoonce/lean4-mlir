@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@<slug>_fwd` render tie — do two renders compute the same function?
 
-Migration guard for `planning/xla_pjrt_handoff.md` §2a, the **forward** half. The five forward
+Migration guard for `planning/archive/xla_pjrt_handoff.md` §2a, the **forward** half. The five forward
 artifacts `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}` and `convnext_fwd` used to be
 written by hand-written string emitters in `tests/Test*Fwd.lean`, independent of the proven graph;
 they are now `pretty(provenGraph)` out of `LeanMlir/Proofs/Codegen/*Render.lean`, sharing their

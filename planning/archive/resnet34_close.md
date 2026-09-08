@@ -1,6 +1,6 @@
 # Planning — closing ResNet-34 (ch6) both ways
 
-The r34 analogue of `planning/mobilenetv2_close.md`. Goal: bring ResNet-34 to the "closed both ways"
+The r34 analogue of `planning/archive/mobilenetv2_close.md`. Goal: bring ResNet-34 to the "closed both ways"
 bar — **(a)** the train-step text rendered as a name-threaded `pretty` of a *proven* per-channel-BN
 `SHlo` forward graph, and **(b)** every parameter output certified `θ − lr·certified-gradient`,
 3-axiom-clean.

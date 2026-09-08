@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Foundation.ResNetBackChains
 
 /-! # ⭐⭐ `r50InputGradB` IS the certified whole-net ResNet-50 gradient
 
-Tier **T6** of `planning/proofs_tier_to_paper_nets.md` §3.5(e) — the last of the four statements
+Tier **T6** of `planning/archive/proofs_tier_to_paper_nets.md` §3.5(e) — the last of the four statements
 ResNet-50 was missing that says anything ((d)'s two float budgets are the vacuous half). T1, T2 and
 T3 landed 2026-09-06; with this the net is certified from its ℝ forward through its typed graph,
 its 161-parameter train-step tie and now its whole-net input gradient.

@@ -4,7 +4,7 @@
 # Until now nothing rebuilt verified_mlir/; two lakefile.lean comments described it in prose, and
 # you had to know which `lake env lean tests/Test*.lean` to run. That is how the committed
 # resnet34_train_step.mlir got silently clobbered by a second writer
-# (planning/xla_pjrt_handoff.md §2a).
+# (planning/archive/xla_pjrt_handoff.md §2a).
 #
 # Two classes of writer, and the difference matters:
 #
@@ -181,7 +181,7 @@ PY
 # reports OK. It never pairs a forward with the **Adam** train step, which is the artifact every
 # quoted verified number is actually trained by. So the audit went green for a year while
 # `mobilenetv2_fwd` (per-example BN) sat next to `mobilenetv2_adam_train_step` (batch BN) —
-# different functions, same net name (planning/mnv4_verified.md §3d(b)).
+# different functions, same net name (planning/archive/mnv4_verified.md §3d(b)).
 #
 # ⚠ The check is not FALSE. It is just not about the artifact anyone trains on. That is the lesson
 # worth keeping: when a guard goes green, check WHAT PAIRING IT FORMED.
@@ -261,7 +261,7 @@ NO_PARTNER = {
 #    through the divergent artifact, which is then a different ARCHITECTURE, not just different
 #    statistics.
 # ⭐⭐ **THE RATCHET IS EMPTY** as of 2026-09-06. `resnet34_fwd.mlir` left it with 4c leg 1 and
-#   `mobilenetv2_fwd.mlir` with leg 2 (`planning/renderer_convergence.md`): both nets retired their
+#   `mobilenetv2_fwd.mlir` with leg 2 (`planning/archive/renderer_convergence.md`): both nets retired their
 #   per-example renderer and now render every forward from the batched traversal their train steps
 #   differentiate. Every one of the seven pairs below holds. Keep the dict — an entry appearing
 #   again is the §3d(b) failure recurring, and it must be argued for, not added.
@@ -362,7 +362,7 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          # ResNet-34 this net ships no batched SGD step to re-pair with — `OptKind` is
          # AdamW/RMSProp only. The coverage is not lost: `check_adam_prefix` forms exactly the
          # pairing this one would, against `mobilenetv2_adam_train_step.mlir`.
-         # Stochastic depth (planning/stochastic_depth.md). The SD variant gets its OWN pair
+         # Stochastic depth (planning/archive/stochastic_depth.md). The SD variant gets its OWN pair
          # rather than reusing efficientnet_fwd, which is the whole point of §3's design: the drop
          # sites are emitted in the forward too (at an all-ones scale, exactly the identity), so
          # the SD train step keeps a prefix partner instead of the audit quietly not covering it.
@@ -383,7 +383,7 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          # they differ on 78 conv-VJP lines (commuting transpose/reverse), all in the BACKWARD.
          ("convnext_drop_fwd.mlir", "convnext_adamdrop_train_step.mlir"),
          ("convnextin_drop_fwd.mlir",    "convnextin_adamwxclipdrop_train_step.mlir"),
-         # ConvNeXt-S (planning/vit_convnext_sb_scaleup.md). ⚠ A NEW SIZE NEEDS ITS OWN ROW: this
+         # ConvNeXt-S (planning/archive/vit_convnext_sb_scaleup.md). ⚠ A NEW SIZE NEEDS ITS OWN ROW: this
          # list is by artifact NAME, so a net added by widening/deepening a parameterised renderer
          # gets no coverage from its Tiny peer's row. The S pair is what would catch a depth
          # parameter reaching the traversal but not the signature — the emitted forward and the

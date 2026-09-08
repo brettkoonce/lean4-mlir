@@ -1,6 +1,6 @@
 // test_pjrt_guards.c — negative tests for the pjrt_ffi.c guards.
 //
-// `planning/xla_pjrt_ladder.md` §3 exists because a driver that silently dropped
+// `planning/archive/xla_pjrt_ladder.md` §3 exists because a driver that silently dropped
 // 295 of 513 outputs ran at full speed and looked exactly like success. A guard
 // that has never been observed to fire is not known to work, so each guard here
 // is deliberately violated and must be rejected.

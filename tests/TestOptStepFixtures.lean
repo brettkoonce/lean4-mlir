@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
 /-! # The OPTIMIZER STAGE alone, as a runnable module — `scripts/opt_step_tie.py`'s input
 
-`planning/verified_optimizer_parity.md` §5: *the reference and the verified path share a data
+`planning/archive/verified_optimizer_parity.md` §5: *the reference and the verified path share a data
 pipeline by construction and share an optimizer by nobody's construction.* `tests/vjp_oracle` diffs
 them at the **gradient**; until now nothing diffed them at the **update**. This file emits the half
 that gate needs — one optimizer step, as a function of `(θ, g, m, v, G)` — for each variant.
@@ -151,7 +151,7 @@ private def variants : List (String × R34Opt × Bool × Bool × String × Bool)
   , ("emalambacc8wxclip", .lambAccum 8, true, true, "", true) ]
 
 def main : IO Unit := do
-  IO.println "── optimizer-step fixtures (planning/verified_optimizer_parity.md §5) ──"
+  IO.println "── optimizer-step fixtures (planning/archive/verified_optimizer_parity.md §5) ──"
   for (slug, opt, wx, clip, wd, ema) in variants do
     let fname := s!"opt_step_{slug}"
     let m := optStepModule fname opt wx clip 1.0 wd ema

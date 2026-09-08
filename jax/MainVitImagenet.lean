@@ -82,7 +82,7 @@ def vitTinyImagenetConfig : TrainConfig where
     real contributor to the documented LR-5e-4 collapse, but does NOT show
     `gradClipNorm := 1.0` becomes unnecessary: both norms still exceed the
     threshold by 10x+. Settling that needs a clip-off training arm.
-    See planning/vit_imagenet.md item 0. -/
+    See planning/archive/vit_imagenet.md item 0. -/
 def vitTinyImagenetConfigDeitInit : TrainConfig :=
   { vitTinyImagenetConfig with vitInit := true }
 

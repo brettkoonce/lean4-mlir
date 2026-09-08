@@ -25,11 +25,11 @@ artifact had ever used. They are generic in `c`/`e`/`h`; neither depth nor width
 T's 0.1. Third distinct rate across three sizes, and still DATA (the spec's `dropKeeps`, supplied
 per step), so `LEAN_MLIR_DROP_RATE_U` retunes it without touching an artifact. ▶ On the 80-epoch
 tier use `LEAN_MLIR_DROP_RATE_U=300000` (0.3): the paper's per-size values underfit on the short
-schedule (`planning/vit_convnext_sb_scaleup.md`, measured on the JAX side).
+schedule (`planning/archive/vit_convnext_sb_scaleup.md`, measured on the JAX side).
 
 ⚠ **Batch is 32 per device** — `cBS` is still a private constant. At four replicas that is global
 128, half the paper's 256. ▶ For B this is the binding constraint rather than a scope note: see
-the wall-clock and memory rows in `planning/vit_convnext_sb_scaleup.md` before proposing a run.
+the wall-clock and memory rows in `planning/archive/vit_convnext_sb_scaleup.md` before proposing a run.
 
 ⚠ ConvNeXt has no BatchNorm, so there is no running-stats eval forward. `convnextbin_fwd.mlir`
 plus the train step is the complete artifact set; `convnextbin_drop_fwd.mlir` is the SD render's

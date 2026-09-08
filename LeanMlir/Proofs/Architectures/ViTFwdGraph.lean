@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.Attention
 
 /-!
-# ViT forward graph — ch10 close Item A (planning/vit_close.md)
+# ViT forward graph — ch10 close Item A (planning/archive/vit_close.md)
 
 Two halves, both living here because `StableHLO.lean` cannot import
 `Attention.lean` (Attention is the proof capstone; StableHLO is the token

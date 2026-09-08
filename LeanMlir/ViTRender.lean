@@ -569,7 +569,7 @@ def emitAdamV (θ g m v : String) (ds : List Nat) (t : String) : String × Strin
 
     Syntax validated end to end by `ffi/test_pjrt_allreduce.c`. Note the absence of
     `use_global_device_ids`: setting it requires a positive `channel_id`, and for a
-    plain cross-replica reduce it is not wanted (planning/xla_pjrt_ladder.md §11). -/
+    plain cross-replica reduce it is not wanted (planning/archive/xla_pjrt_ladder.md §11). -/
 def emitGradAllReduce (g : String) (ds : List Nat) (t : String) (replicas : Nat) : String × String :=
   if replicas ≤ 1 then ("", g) else
   let T := ty ds
@@ -591,7 +591,7 @@ def emitGradAllReduce (g : String) (ds : List Nat) (t : String) (replicas : Nat)
 
     The proofs are untouched: each replica evaluates the *same* tied graph at the
     batch size it was rendered for, and the collective averages gradients of that
-    function over disjoint equal batches (planning/xla_pjrt_ladder.md §10.4).
+    function over disjoint equal batches (planning/archive/xla_pjrt_ladder.md §10.4).
     Prefer SCALING the global batch over splitting it — that keeps BatchNorm's
     group size, and therefore the tie, unchanged. -/
 def emitAdamVDP (θ g m v : String) (ds : List Nat) (t : String)

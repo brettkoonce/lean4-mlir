@@ -1,6 +1,6 @@
 # 2026-08-27 — does the per-example drop-path fix move the A2/A1 step cost?
 
-**The question.** `planning/verified_side_quest_counterparts.md` §6b left one thing open: the
+**The question.** `planning/archive/verified_side_quest_counterparts.md` §6b left one thing open: the
 book's phase-2 A2/A1 figures (**1,368 ms/step**, `runs/2026-08-27-jax-sb-tier-step-probe/`) were
 measured against a reference whose stochastic depth drew a per-BLOCK scalar bernoulli. The fix
 (`49ef99a`) makes it per-example — a `(512,1,1,1)` mask per block instead of a scalar. That was

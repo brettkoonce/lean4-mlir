@@ -14,7 +14,7 @@ The forward pieces (`denseF`/`reluF`, `lossCotGraph`) are denotable and proven f
 SGD ops mirror the GPU-validated emitter (the same op text as `mlpTrainStepText`), now
 assembled around proof-rendered forward SSA. The result is a valid MLP train-step module
 generated from the proven forward graphs — the multi-intermediate generalization of the
-linear render half (cf. `planning/verified_train_step.md`, Crux B).
+linear render half (cf. `planning/archive/verified_train_step.md`, Crux B).
 -/
 
 namespace Proofs.StableHLO

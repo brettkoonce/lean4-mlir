@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 Every **conv** net's `*BackB0` file stops at a **block** capstone: `r34DownBlockBackBatchedGraph_-
 faithful`, `mnv2ResidBlockBackBatchedGraph_faithful`, `mbResidBlockBackBatchedGraph_faithful`,
 `cnxDownChBackGraph_faithful`, and (2026-08-10) R50's three. So "the whole-net composed backward"
-as §8 of `planning/mnv4_verified.md` uses the phrase means *block* capstones — which is real, and
+as §8 of `planning/archive/mnv4_verified.md` uses the phrase means *block* capstones — which is real, and
 is not a net.
 
 ⛔ **CORRECTION (2026-08-10).** An earlier version of this paragraph said *"Measured before

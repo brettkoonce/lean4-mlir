@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compile + numerically validate the Lean-emitted FPN-neck forward + backward
-(detection-infra brick #3, planning/yolo_fpn.md bite 2).
+(detection-infra brick #3, planning/archive/yolo_fpn.md bite 2).
 
   1. lake build fpn-neck-probe
   2. .lake/build/bin/fpn-neck-probe B oc c3 c4 c5 g5 <out.mlir>

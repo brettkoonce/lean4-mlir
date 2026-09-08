@@ -76,7 +76,7 @@ def convnextAdamConfig : VerifiedConfig where
       PJRT path, and the IREE shim refuses a DP entry point outright rather than silently running
       single-device.
 
-    * **`adamdrop`** / **`adamdpdrop`** — STOCHASTIC DEPTH (`planning/stochastic_depth.md`): the same
+    * **`adamdrop`** / **`adamdpdrop`** — STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`): the same
       AdamW graph plus 18 per-block residual-branch drop sites, taking 18 extra `tensor<32xf32>`
       inputs (and returning them unread, so the blob layout mirrors). `LEAN_MLIR_DROP_RATE_U` sets
       the rate; **`0` is the gate** — every keep is 1.0, every scale is exactly 1.0, and this must
@@ -90,7 +90,7 @@ def convnextAdamConfig : VerifiedConfig where
     the only ConvNeXt render that exists, so the knob could only ever produce a shape error. -/
 def runConvNeXtAdam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
-  -- ▶ `ema`/`emadp` select the EMA-shadow render (`planning/ema.md`): same AdamW graph plus a 4th
+  -- ▶ `ema`/`emadp` select the EMA-shadow render (`planning/archive/ema.md`): same AdamW graph plus a 4th
   -- `[θ|m|v|ema]` blob region updated by `adamMNextF` at `(β₁ := d)`, with EVAL AND THE CHECKPOINT
   -- scoring the shadow. ConvNeXt is the right first net for it — LayerNorm means there is no
   -- `ema_bn` peer to carry, so it is the parameter shadow alone.
@@ -103,7 +103,7 @@ def runConvNeXtAdam (argv : List String) : IO Unit := do
   let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.9999
-  -- ▶ `drop*` variants select the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the
+  -- ▶ `drop*` variants select the STOCHASTIC-DEPTH render (`planning/archive/stochastic_depth.md`): the
   -- graph takes 18 extra `tensor<32xf32>` inputs, one per block, carrying `bernoulli(keep_i)/keep_i`
   -- per example, drawn on the host and seeded from the global step. ⚠ It is the ONE ConvNeXt render
   -- built on the BATCHED chain (`ConvNeXtRenderB`) — a per-example mask is not expressible at the

@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `cifar8wb-ablation` — wide head, BATCHED render, f32
 
-One arm of the §4.3 "Lever 3: precision" sweep (`planning/cifar_lowprec_stability.md` §5.2).
+One arm of the §4.3 "Lever 3: precision" sweep (`planning/archive/cifar_lowprec_stability.md` §5.2).
 Runs SGD / Nesterov / AdamW in sequence on the wide-head (d1=512) net that Levers 1–2 already
 measure, so the new lever is read against the existing table rather than a different network.
 

@@ -31,7 +31,7 @@ CLS), `16×16/s16` patchify (no `conv2d`, so no padding phase and none of the ev
 batched whole-net tie (the batched T3 tie is `ViTTiePoCGB`, a `batchMap` of the per-example chain).
 
 Moved here from the three float bridges that defined them beside their float twins on 2026-09-08
-(`planning/float_second_pass.md`); no number is stated about any of these chains. -/
+(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
 
 namespace Proofs
 

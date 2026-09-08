@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Carve a tiny subset out of data/visdrone_fpn for the overfit probe.
 
-The decisive question left by planning/yolo_scoring.md bite 0: can the Lean
+The decisive question left by planning/archive/yolo_scoring.md bite 0: can the Lean
 trainer fit ANYTHING? Three signatures say it is not fitting its own training
 data (train loss 315->300.9 and flat; +7.08M params did not lower the TRAIN
 loss; objectness emits the base rate everywhere). If it cannot drive the loss

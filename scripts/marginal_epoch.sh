@@ -7,7 +7,7 @@
 # epoch (T₃ − T₁)/2 — which cancels compile, the one-time dataset load and process startup exactly.
 #
 # Why this exists: wall-clock-minus-compile produced a WRONG ratio twice in the XLA thread
-# (planning/xla_pjrt_handoff.md §2e-ter — a 1.43× that was really 1.67×, and a "21%/34% loader
+# (planning/archive/xla_pjrt_handoff.md §2e-ter — a 1.43× that was really 1.67×, and a "21%/34% loader
 # overhead" that was really 4.3 s and constant). Imagenette is read from disk once and expanded to
 # ~7.45 GiB of f32 in host RAM, ~7–12 s, and that lands entirely in epoch 1. Subtracting only the
 # compile leaves it in the measurement.

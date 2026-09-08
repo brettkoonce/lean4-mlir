@@ -32,7 +32,7 @@
 # deliberately running a different, slower program.
 #
 # ⚠ NOT a throughput check. It says the bytes are the same, never that the overlap happened. The
-# speed claim is the real-vs-synth split (planning/next_session_pipeline_then_r50.md §2.2).
+# speed claim is the real-vs-synth split (planning/archive/next_session_pipeline_then_r50.md §2.2).
 set -u
 
 STEPS=${STEPS:-12}

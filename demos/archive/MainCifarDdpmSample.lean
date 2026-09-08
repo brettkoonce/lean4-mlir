@@ -64,7 +64,7 @@ def main (args : List String) : IO Unit := do
   --   "tc"   → timeCondAdd spec variant
   --   "ema"  → sample from `_params_ema.bin` (diagnostic — EMA weights with
   --            raw-weight BN running stats are known-mismatched, see
-  --            planning/ddpm_demo_v2.md Gate-A verdict)
+  --            planning/archive/ddpm_demo_v2.md Gate-A verdict)
   --   "ddpm" → η=1 ancestral (stochastic) sampling, default 1000 steps
   --   <nat>  → number of sampler steps (default: 50 DDIM / 1000 ddpm)
   --   "ckpt=<path>" → read <path>_params.bin / <path>_bn_stats.bin instead

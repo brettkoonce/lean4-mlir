@@ -128,7 +128,7 @@ def conv2d(x, w, b, padding=None, stride=(1,1)):
     # Changed 2026-08-04 for paper-faithfulness. ⚠ Scoped to the ResNet-family helpers
     # ON PURPOSE: MobileNetV2/EfficientNet emit their own conv_general_dilated with
     # 'SAME' and are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not
-    # 'fix' those. See planning/rsb_a3_r50_verified.md §4b.
+    # 'fix' those. See planning/archive/rsb_a3_r50_verified.md §4b.
     if padding is None:
         padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)
     x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,

@@ -39,7 +39,7 @@ N_IMG = 100                 # images the COUNTS are measured over (exact rationa
 # Shared by every downstream tier (SDP, IBP) via `base.N_EMIT`. Override with
 # SCORECARD_N_EMIT=100 to regenerate the corpus UNCAPPED — the pre-cap output,
 # for the diff that proves a generator edit introduced no other drift
-# (planning/scorecard_trim.md §2.2). Byte-identical for the kernel-dotZ tiers;
+# (planning/archive/scorecard_trim.md §2.2). Byte-identical for the kernel-dotZ tiers;
 # the LipSDP tier only matches structurally, since its rationals come from an
 # off-line float solve that moves with the numeric stack (§2.6). Committed
 # output is always the default.

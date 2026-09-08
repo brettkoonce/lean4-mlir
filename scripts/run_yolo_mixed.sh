@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Crash-safe wrapper for the YOLOv1 Pets MIXED single+mosaic run (Workstream B,
-# planning/yolo_demo_v2.md). Checkpoints every 2 epochs (cfg.checkpointEveryN);
+# planning/archive/yolo_demo_v2.md). Checkpoints every 2 epochs (cfg.checkpointEveryN);
 # on any non-zero exit it resumes from the newest checkpoint written THIS session
 # via LEAN_MLIR_INIT_LOAD / LEAN_MLIR_START_STEP (the ROCm-segfault survival path).
 #

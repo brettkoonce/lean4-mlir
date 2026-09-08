@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the smoothing CP scorecard corpus (planning/gaussian_smoothing_next.md 3c-data).
+"""Generate the smoothing CP scorecard corpus (planning/archive/gaussian_smoothing_next.md 3c-data).
 
 Reads the fixed-protocol driver CSVs (runs/smooth_<slug>_scorecard.csv, columns
 sigma,img_idx,label,pred,abstain,radius,count,n) and emits per-image kernel tail

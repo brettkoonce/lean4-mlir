@@ -3,7 +3,7 @@ import LeanMlir.VerifiedTrain
 
 /-! # §2m ConvNeXt — can the existing ops spell a **channel** LayerNorm, and do they?
 
-The check `planning/xla_pjrt_handoff.md` §2m puts before any of the ConvNeXt LN work, in the shape
+The check `planning/archive/xla_pjrt_handoff.md` §2m puts before any of the ConvNeXt LN work, in the shape
 §2l's `strided-1x1` used: settle the primitive on device before re-instantiating 21 sites around it.
 
 **The defect being fixed.** ConvNeXt's render normalises with `.bnF` ⇒ `bnForward n ε γ β x`, one

@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # EfficientNet-B0 data-parallel step-time bench — 1 GPU vs 2 GPUs on XLA/PJRT
 
-`planning/xla_pjrt_handoff.md` §2e-bis. The first DP number for this net came from two short
+`planning/archive/xla_pjrt_handoff.md` §2e-bis. The first DP number for this net came from two short
 end-to-end training runs (wall clock minus the shim's reported compile time) and was quoted as
 "~1.2×, one run each" — good enough to state a direction, not good enough to quote. This is the
 §2b-bis methodology applied to the data-parallel path.

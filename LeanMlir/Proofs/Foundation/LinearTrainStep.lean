@@ -17,7 +17,7 @@ trusted optimizer step. This is the *denotation* half of milestone M1 for `linea
 (what the emitted train step computes).
 
 Two things are deliberately NOT done here, and are tracked in
-`planning/verified_train_step.md`:
+`planning/archive/verified_train_step.md`:
 
 * **The chain-rule fold.** The two-factor sum below is, by `pdiv_comp`, the single
   gradient `∂/∂θ (crossEntropy ∘ mnistLinear)` — i.e. literally one step of gradient

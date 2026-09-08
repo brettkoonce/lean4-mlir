@@ -18,7 +18,7 @@ In-training val (49,664 imgs, tfds drop_remainder) at epoch 80: top-1 65.68%, to
 - Throughput: ~185 ms/step steady (~7.7 min/epoch); full 80 epochs in ~11 wall-clock hr.
 
 ## Stability note (the point of the run)
-The DeiT recipe at LR 5e-4 **collapses to chance without gradient clipping** (train loss pins at ln(1000)≈6.9) — documented in `planning/vit_imagenet.md`. With grad-clip 1.0 it trains cleanly: warmup ramped LR through the collapse threshold (~1.6e-4) by epoch 5 and the model kept learning. Confirmed the fix holds on CUDA.
+The DeiT recipe at LR 5e-4 **collapses to chance without gradient clipping** (train loss pins at ln(1000)≈6.9) — documented in `planning/archive/vit_imagenet.md`. With grad-clip 1.0 it trains cleanly: warmup ramped LR through the collapse threshold (~1.6e-4) by epoch 5 and the model kept learning. Confirmed the fix holds on CUDA.
 
 ## Reliability
 5 AER auto-resumes over the run (epochs 12, 28, 29, 77, 79) — the box's PCIe BadTLP-under-load issue (see memory `reference_ares_pcie_aer`). Each was caught by the watchdog before a host reset and resumed from the latest per-epoch checkpoint; no host reset, no lost accuracy. Supervisor: `jax/scripts/supervise_vit_80ep.sh`.

@@ -1,14 +1,14 @@
 import LeanMlir
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
-/-! # MNv4 AdamW train-step structural smoke (`planning/mnv4_verified.md` phase 2)
+/-! # MNv4 AdamW train-step structural smoke (`planning/archive/mnv4_verified.md` phase 2)
 
 The backward peer of `TestMnv4FwdSmoke`. It checks three things and emits a **batch-2** copy of
 the train step for `scripts/grad_tie.py --net mnv4` to run — the committed artifact is B=32, which is
 more than a CPU gradient check wants to carry.
 
 ⭐⭐ **The load-bearing check here is the FORWARD-PREFIX one**, and it is the one the rest of the
-repo does not have. `planning/mnv4_verified.md` §3d(b) measured `mobilenetv2_fwd.mlir` sitting in a
+repo does not have. `planning/archive/mnv4_verified.md` §3d(b) measured `mobilenetv2_fwd.mlir` sitting in a
 *different BN world* from the Adam train step that trains it, and `scripts/regen_verified_mlir.sh
 check` reported **green** anyway — because it only ever pairs a forward with the **SGD** train step,
 never the Adam one, and those two happen to share a world. The forward that scores every quoted

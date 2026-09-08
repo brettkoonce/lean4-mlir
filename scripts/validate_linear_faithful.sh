@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Validation gate for the mnist-linear verified trainer's committed render.
 # Companion to LeanMlir/Proofs/Foundation/LinearFaithfulPoC.lean and
-# planning/verified_faithful_sweep.md. Runs on the GPU box (needs iree-compile;
+# planning/archive/verified_faithful_sweep.md. Runs on the GPU box (needs iree-compile;
 # CI's ubuntu runner can't, so this is local, not in proofs.yml).
 #
 #   (a) drift: the committed verified_mlir/linear_*.mlir == the proven renderer

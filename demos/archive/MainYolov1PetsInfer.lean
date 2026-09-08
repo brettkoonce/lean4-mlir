@@ -5,7 +5,7 @@ import LeanMlir
     `[N, 1470]` logits + the val image bytes + per-image IDs to a directory
     so `scripts/yolo_render.py` can draw the predicted boxes.
 
-    See `planning/yolo_final.md`. Usage:
+    See `planning/archive/yolo_final.md`. Usage:
       lake build yolov1-pets-infer
       .lake/build/bin/yolov1-pets-infer [n] [data_dir] [out_dir]
 

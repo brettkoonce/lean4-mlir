@@ -43,6 +43,18 @@ Mechanics, one commit:
 * Non-`.md` residue at the top level: `conv3d_spike.mlir` and `mathlib_upstream_drafts/` —
   decide each (the drafts are a thread of their own; the spike is an artifact of a closed one).
 
+**DONE 2026-09-08.** 142 docs and `conv3d_spike.mlir` moved; `mathlib_upstream_drafts/` stays
+(its thread, `UpstreamDraft.lean` and the in-flight PRs, is open). The citation surface was 535
+files, not the 490 lines above: `apps/`, `demos/`, `ffi/`, `jax/` (108 lines of it in
+`jax/generated/`), `scripts/`, the five workflows, the `runs/` READMEs, and 292 cross-references
+inside the docs themselves. Three emitters bake the path into committed artifacts (`ViTRender.lean`
+into four `verified_mlir/vit*ema*` renders, `jax/Jax/Codegen.lean` into `jax/generated/`), so
+source and artifact moved together and both drift guards were re-run. Four line-wrapped cites and
+two bare `archive/x.md` links were fixed by hand; six raw `runs/*.log` files keep the old path.
+`yolo_demo_v3.md`'s five cites were already dead (deleted at `a0a33a3`, folded into
+`yolo_final.md`) and now say so. The blueprint cites no planning path, and there is no
+`CLAUDE.md`. The memory index still names `planning/<doc>.md` in 37 notes, per the rule above.
+
 ## 2. `tests/AuditAxioms.lean` as a log
 
 4997 lines: 1760 `#print axioms` and 2937 comment lines, and the comments are the debugging

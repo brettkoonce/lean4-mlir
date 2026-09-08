@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `cifar8wb-bn-ablation` — wide head, BATCHED render, BatchNorm, f32 and bf16
 
-Chapter 4's **Lever 3 on the normalized net** (`planning/bf16_batchnorm.md`). The existing bf16
+Chapter 4's **Lever 3 on the normalized net** (`planning/archive/bf16_batchnorm.md`). The existing bf16
 lever could only be measured on the un-normalized net, because the 27 bf16 ops are batched-only
 and the BN train step was rendered per-example. `cifar8BnTrainStepFaithfulB` moves the BN net onto
 the batched family, so bf16 reaches all 23 convolutions — forward, input-VJP and weight gradients.

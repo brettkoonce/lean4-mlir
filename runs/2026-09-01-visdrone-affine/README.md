@@ -1,6 +1,6 @@
 # 2026-09-01 — box-aware affine: the schedule was the confound
 
-Analysis in `planning/visdrone_detector.md` §13a / §13a-bis / §13a-ter. This is the
+Analysis in `planning/archive/visdrone_detector.md` §13a / §13a-bis / §13a-ter. This is the
 workings. Companion: `runs/2026-09-01-visdrone-decode-sweep/README.md` (the decode
 sweep, and why `--topk 3000` is part of the scoring command).
 

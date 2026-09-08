@@ -1,6 +1,6 @@
 """§6 validation: prove the twin reproduces Lean's numbers BEFORE trusting a diff.
 
-Three checks, in the order planning/jax_gradient_oracle.md §6 specifies:
+Three checks, in the order planning/archive/jax_gradient_oracle.md §6 specifies:
   1. loss on Lean's OWN logits dump must hit the golden breakdown
   2. the twin's forward at the same weights vs that dump
   3. the gradient AT THE LOGITS vs alpha*w_foc*(p-t)/B

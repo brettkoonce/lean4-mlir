@@ -1,6 +1,6 @@
 # 2026-08-27 — ViT-B reaches DeiT's global 512, and §4d's accumulation loop is not needed
 
-**What this closes.** `planning/verified_side_quest_counterparts.md` §4d called ViT-B gradient
+**What this closes.** `planning/archive/verified_side_quest_counterparts.md` §4d called ViT-B gradient
 accumulation *"the one real feature"* on the side-quest list — the only item that was not a flag —
 and §6a wrote out a four-step test for whether 2026-08-27's allocator fix deleted it. The test ran.
 It did.

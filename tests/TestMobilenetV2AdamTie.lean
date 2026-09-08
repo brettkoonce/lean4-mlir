@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@mobilenetv2_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md` §2f, step 4 — the last net on the AdamW scorecard.
+`planning/archive/xla_pjrt_handoff.md` §2f, step 4 — the last net on the AdamW scorecard.
 `Proofs/Codegen/MobileNetV2RenderB.lean`'s `mobilenetv2AdamTrainStepFaithfulB` renders the same
 train step the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean` does — the one
 `mobilenetv2-verified-adam` trains on. This harness is what licenses swapping them; run it BEFORE

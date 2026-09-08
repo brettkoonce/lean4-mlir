@@ -40,7 +40,7 @@ lean_lib «LeanMlir» where
     certificate corpus lives in `Certs` below and is checked by its own
     workflow (.github/workflows/certs.yml: proof-path pushes + nightly cron),
     so demo/book/engine pushes stop paying the multi-hour corpus tail.
-    Split per planning/repo_shape_deletion_audit.md §4 (2026-07-06). -/
+    Split per planning/archive/repo_shape_deletion_audit.md §4 (2026-07-06). -/
 @[default_target]
 lean_lib «Proofs» where
   srcDir := "."
@@ -83,7 +83,7 @@ lean_lib «Certs» where
              -- Chapter-4 MNIST 2D CNN (no BN): conditional whole-net VJP
              -- + a concrete instance with every smoothness hyp discharged.
              `LeanMlir.Proofs.Architectures.MnistCNN,
-             -- Nonzero-Jacobian seal (planning/whole_network_backward.md Item B): the
+             -- Nonzero-Jacobian seal (planning/archive/whole_network_backward.md Item B): the
              -- generic "one nonzero Jacobian entry ⇒ non-trivial backward" bridge.
              `LeanMlir.Proofs.Training.JacobianSeal,
              -- Item B2: the seal discharged at the live MobileNetV2 witness —
@@ -118,7 +118,7 @@ lean_lib «Certs» where
              -- round-trip (parseNat (toString n) = n), the load-bearing
              -- first rung of text→token faithfulness.
              `LeanMlir.Proofs.Codegen.StableHLOLex,
-             -- M1 (planning/verified_train_step.md): the linear train step bundled
+             -- M1 (planning/archive/verified_train_step.md): the linear train step bundled
              -- into one SGD-on-certified-softmax-CE-gradient theorem.
              `LeanMlir.Proofs.Foundation.LinearTrainStep,
              -- M2: the MLP per-layer parameter-gradient assembly (Crux A).
@@ -136,7 +136,7 @@ lean_lib «Certs» where
              -- train step at per-example BatchNorm, so `resnet34_fwd` could not be a prefix of both
              -- it and the batch-BN Adam step. Everything the inference forward needs — plus
              -- `bnSite`/`R34Bn`, which ResNet-50 shares — moved into ResNet34RenderB, which is now
-             -- the sole writer of every ResNet-34 artifact. `planning/renderer_convergence.md`.
+             -- the sole writer of every ResNet-34 artifact. `planning/archive/renderer_convergence.md`.
              -- CIFAR-BN close: the per-channel BN scale/shift (dγ, dβ) param-grad
              -- bridges — the affine BN analogue of `bias_grad_bridge`.
              `LeanMlir.Proofs.Architectures.CifarBnClose,
@@ -552,7 +552,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Architectures.ResNet50FullB,
              `LeanMlir.Proofs.Architectures.ResNet50FullBVJP,
              -- ⭐⭐ MOBILENETV4-CONV-M's T1 and T2 at batch BatchNorm -- the last net in
-             -- planning/proofs_tier_to_paper_nets.md §2's table with nothing at the net level.
+             -- planning/archive/proofs_tier_to_paper_nets.md §2's table with nothing at the net level.
              -- ⭐⭐ The whole trunk is ONE CertLayer: 24 stages composed with CertLayer.comp and
              -- CertLayer.residual, so .fwd IS the forward, .ok IS the ~60-clause smoothness
              -- hypothesis (assembled stage by stage rather than written down), .vjp IS the
@@ -675,7 +675,7 @@ lean_lib «Certs» where
              -- backward gradient bridge (mlpInputGrad_floatBridges) — the backward peer of
              -- cifar8_floatBridges.
              `LeanMlir.Proofs.Float.LinBackFloatBridge,
-             -- ⭐⭐ The bf16-MIXED float bridges (`planning/bf16_renderer.md` §9.3, §11, §12.3), and
+             -- ⭐⭐ The bf16-MIXED float bridges (`planning/archive/bf16_renderer.md` §9.3, §11, §12.3), and
              -- both are APEXES: `ConvMixedComposeBridge` transitively imports `ConvMixedFloatBridge`
              -- and `DepthwiseMixedFloatBridge` imports `DepthwiseFloatBridge`, so these two lines
              -- cover all four. `conv_close_mixed` is `dot_close_mixed_uniform` instantiated at
@@ -790,7 +790,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.ViTBackChains,
              `LeanMlir.Proofs.Architectures.ViTVecLNBackCertifiedTie,
              `LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTie,
-             -- R50 phase 1 (planning/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck
+             -- R50 phase 1 (planning/archive/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck
              -- blocks' certified VJPs. bblkPC (identity, 12 blocks), bblkPStridedPC (strided
              -- projection, stages 2/3/4 block 0) and — the one with NO R34 analogue —
              -- bblkPProjPC, the STRIDE-1 projection that R50's stage 1 block 0 needs because it
@@ -952,7 +952,7 @@ lean_lib «Certs» where
              -- loss-descent SGD step (the renderer `MainMnistLinearVerified`
              -- trains on), incl. the param-grad/SGD "tail fold". Template for
              -- making each chapter's verified trainer faithful — see
-             -- planning/verified_faithful_sweep.md.
+             -- planning/archive/verified_faithful_sweep.md.
              `LeanMlir.Proofs.Foundation.LinearFaithfulPoC,
              -- E4M3 (fp8) render-tie (planning §3b): the emitted block-scaled
              -- int-matmul graph denotes the intended dequant-first algorithm
@@ -1065,7 +1065,7 @@ lean_lib «Certs» where
              -- three-way LN₁ fan-in + the SDPA backs), den=certified. Single-head representative; the
              -- multi-head/depth-12 thread is the remaining step (mnv2 reduced→full) (ViTTiePoC.lean).
              `LeanMlir.Proofs.Architectures.ViTTiePoC,
-             -- Robustness certificate (planning/robustness_ladder.md): the Lipschitz-margin
+             -- Robustness certificate (planning/archive/robustness_ladder.md): the Lipschitz-margin
              -- certified radius (Tsuzuku et al. 2018) — if the logit map is L-Lipschitz in L2
              -- and the margin is m, every ‖δ‖₂ < m/(√2·L) leaves the argmax fixed (proof, vs
              -- the PGD attack's one-attack upper bound). The cert side of cert ≤ TRUE ≤ PGD.
@@ -1076,7 +1076,7 @@ lean_lib «Certs» where
              -- gaussianReal instantiations (+ symmetry, mean-shift), kept
              -- compiling on the pin while the Mathlib PRs are in flight.
              `LeanMlir.Proofs.Foundation.UpstreamDraft,
-             -- The real Gaussian probit (planning/smoothing_gaussian_lemma.md, G1): the
+             -- The real Gaussian probit (planning/archive/smoothing_gaussian_lemma.md, G1): the
              -- smoothing radius instantiated at the TRUE standard-normal quantile —
              -- stdNormalCDF strict-mono + symmetry, quantile MonotoneOn (0,1) + odd-about-½,
              -- capstone smoothing_certified_radius_gaussian with only the Neyman–Pearson
@@ -1126,11 +1126,11 @@ lean_lib «Certs» where
              -- strict-argmax witnesses discharge hp; capstone
              -- smoothing_cp_certified_mlpT + deployed-scale demo.
              `LeanMlir.Proofs.Certificates.SmoothingNetWitness,
-             -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
+             -- Muon geometry (planning/archive/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
              `LeanMlir.Proofs.Foundation.MuonGeometry,
-             -- Newton–Schulz convergence (planning/muon_ns_convergence.md): the Muon matmul iteration
+             -- Newton–Schulz convergence (planning/archive/muon_ns_convergence.md): the Muon matmul iteration
              -- aX + b(XXᵀ)X + c(XXᵀ)²X actually COMPUTES the polar factor UVᵀ. P1 = the spectral-step
              -- lemma: a step is the scalar map φ(t)=at+bt³+ct⁵ applied per singular value (U,V carried
              -- through), so matrix convergence to UVᵀ reduces to scalar convergence φ^[k](σᵢ)→1.
@@ -1188,7 +1188,7 @@ lean_lib «Certs» where
              -- discards exactly the correlation this buys. The upper envelope
              -- takes any `s` with `u ≤ s*(u-l)`, so the slope may be ROUNDED to a
              -- /2^k grid — measured k=8 costs zero images, which is what keeps
-             -- the rationals at weight scale (planning/crown_ibp.md §5.5).
+             -- the rationals at weight scale (planning/archive/crown_ibp.md §5.5).
              -- Engine only (no generated data).
              `LeanMlir.Proofs.Foundation.CrownBound,
              -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
@@ -1275,7 +1275,7 @@ lean_lib «CertsHeavy» where
              -- ~230-digit LDLᵀ fractions and OOM every free-tier runner config
              -- (4 attempts, incl. 1-thread + 10G swap). They remain in the repo,
              -- kernel-verified locally (93/100 @ ε=0.1 = PGD, sandwich closed);
-             -- re-enable path: planning/certs_heavy_psd_memory.md (small-
+             -- re-enable path: planning/archive/certs_heavy_psd_memory.md (small-
              -- coefficient DD-split witnesses, or a self-hosted runner).
              -- 2026-07-25: capping the per-image exhibits (30,884 → 7,241 lines)
              -- did NOT change this — re-measured 16.0/16.6 GB at 1 thread, i.e.
@@ -1427,7 +1427,7 @@ lean_exe «vit-tiny-train» where
   moreLinkArgs := lowererLink
 
 -- Muon (Newton–Schulz polar projection) on the 2D weights, AdamW on the rest.
--- Same ViT-Tiny + recipe as vit-tiny-train → a compute-matched A/B. See planning/muon.md.
+-- Same ViT-Tiny + recipe as vit-tiny-train → a compute-matched A/B. See planning/archive/muon.md.
 lean_exe «vit-tiny-muon-train» where
   root := `apps.baselines.MainVitMuonTrain
   moreLinkArgs := lowererLink
@@ -1490,7 +1490,7 @@ lean_exe «mnist-linear-verified» where
   moreLinkArgs := lowererLink
 
 -- ═══════════════════════════════════════════════════════════════════
--- XLA/PJRT backend (planning/xla_pjrt_ladder.md)
+-- XLA/PJRT backend (planning/archive/xla_pjrt_ladder.md)
 --
 -- Same Lean root, same verified_mlir/*.mlir, same §1a ties — the ONLY change is
 -- which trusted lowerer consumes the emitted StableHLO. `libpjrt_ffi.so` exports
@@ -1509,46 +1509,46 @@ lean_exe «mnist-linear-verified» where
 -- `-xla` peer and their shared-body file are both gone. G2 is now the SAME
 -- binary run twice, which is a stronger comparison than two binaries.
 
--- Phase-3 PGD adversarial attack on the verified linear net (planning/robustness.md):
+-- Phase-3 PGD adversarial attack on the verified linear net (planning/archive/robustness.md):
 -- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
 lean_exe «mnist-linear-pgd» where
   root := `apps.mnist.MainMnistLinearPgd
   moreLinkArgs := lowererLink
 
--- Phase-3 PGD attack on the verified MLP (planning/robustness.md): input gradient =
+-- Phase-3 PGD attack on the verified MLP (planning/archive/robustness.md): input gradient =
 -- the proven mlpInputGrad VJP; certificate = the loose product of layer spectral norms.
 lean_exe «mnist-mlp-pgd» where
   root := `apps.mnist.MainMnistMlpPgd
   moreLinkArgs := lowererLink
 
--- Phase-3 PGD attack on the verified CNN (planning/robustness_ladder.md, the conv rung):
+-- Phase-3 PGD attack on the verified CNN (planning/archive/robustness_ladder.md, the conv rung):
 -- input gradient = the proven conv/maxpool input-VJP; certificate = the conv-aware product.
 lean_exe «mnist-cnn-pgd» where
   root := `apps.mnist.MainMnistCnnPgd
   moreLinkArgs := lowererLink
 
--- Spectral-norm-constrained MLP training (planning/robustness_ladder.md, the gap-shrinking
+-- Spectral-norm-constrained MLP training (planning/archive/robustness_ladder.md, the gap-shrinking
 -- lever): projected SGD onto ‖Wᵢ‖₂ ≤ c shrinks the global L = ∏‖Wᵢ‖₂, turning the vacuous
 -- product certificate non-vacuous — the empirical face of lipschitz_margin_certified_radius.
 lean_exe «mnist-mlp-spectral» where
   root := `apps.mnist.MainMnistMlpSpectral
   moreLinkArgs := lowererLink
 
--- Spectral-norm-constrained CNN training (planning/robustness_ladder.md): the conv sibling —
+-- Spectral-norm-constrained CNN training (planning/archive/robustness_ladder.md): the conv sibling —
 -- caps the dense ‖Wᵢ‖₂ and the conv tap-sum bound; a 5-layer product + loose conv-norm make
 -- certifying the conv net harder than the MLP (tighter c, more clean cost).
 lean_exe «mnist-cnn-spectral» where
   root := `apps.mnist.MainMnistCnnSpectral
   moreLinkArgs := lowererLink
 
--- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/robustness_ladder.md, the deeper
+-- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/archive/robustness_ladder.md, the deeper
 -- conv rung): input gradient = the proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the
 -- 7-layer conv-aware product. Reuses the generic attackPgdConvNet driver.
 lean_exe «cifar-pgd» where
   root := `apps.cifar.MainCifarPgd
   moreLinkArgs := lowererLink
 
--- Spectral-norm-constrained CIFAR-10 CNN training (planning/robustness_ladder.md): the 7-layer
+-- Spectral-norm-constrained CIFAR-10 CNN training (planning/archive/robustness_ladder.md): the 7-layer
 -- product compounds the loose conv bound harder still — tightest caps, smallest certified radii.
 lean_exe «cifar-spectral» where
   root := `apps.cifar.MainCifarSpectral
@@ -1561,7 +1561,7 @@ lean_exe «cifar-bn-pgd» where
   root := `apps.cifar.MainCifarBnPgd
   moreLinkArgs := lowererLink
 
--- Randomized-smoothing certificate (planning/robustness_ladder.md §3, Cohen 2019): the
+-- Randomized-smoothing certificate (planning/archive/robustness_ladder.md §3, Cohen 2019): the
 -- DEPTH-INDEPENDENT cert. Forward-only Monte-Carlo over the proof-rendered fwd (no kernel, no
 -- input-VJP) — sample noisy copies, Clopper-Pearson lower-bound p_A, radius = σ·Φ⁻¹(p_A). Base
 -- net trained with matched Gaussian augmentation. Non-vacuous where the spectral product is hopeless.
@@ -1593,7 +1593,7 @@ lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
   moreLinkArgs := lowererLink
 
-/-- Rung 1 of the XLA ladder (`planning/xla_pjrt_ladder.md`): depth + multiple
+/-- Rung 1 of the XLA ladder (`planning/archive/xla_pjrt_ladder.md`): depth + multiple
     param tensors via the packed-params path, and the first rung with He init.
     Compare against `mnist-mlp-verified` for gate G2. -/
 -- Rung 1 of the XLA ladder (depth + multiple parameter tensors) is now a
@@ -1700,7 +1700,7 @@ lean_exe «cifar8-verified-momentum» where
 -- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
 -- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
 -- fp32 master). Same verified train-step MLIR as their fp32 peers.
--- ── bf16 arm of the §5.2 optimizer sweep (planning/cifar_lowprec_stability.md) ──
+-- ── bf16 arm of the §5.2 optimizer sweep (planning/archive/cifar_lowprec_stability.md) ──
 -- Same net, same init, same hyperparameters as the fp32 arms; `cifar8Bf16Verified`'s slug
 -- points at the bf16-rendered artifacts. ⚠ FORWARD-only bf16, and NO speedup by design
 -- (§5.3: 0.87× at cifar8's shapes) — these exist to show the optimizer ORDERING is invariant
@@ -1786,7 +1786,7 @@ lean_exe «resnet34-ablation» where
   moreLinkArgs := lowererLink
 
 /-- Chapter 4 Lever 3 on the NORMALIZED net: the BN net on the batched op family, f32 and bf16,
-    three optimizers each. See planning/bf16_batchnorm.md. -/
+    three optimizers each. See planning/archive/bf16_batchnorm.md. -/
 lean_exe «cifar8wb-bn-ablation» where
   root := `apps.ablation.MainCifar8WideBnBf16Ablation
   moreLinkArgs := lowererLink
@@ -1797,14 +1797,14 @@ lean_exe «cifar8wb-bn-ablation» where
 -- its own header measured `390/3925 = 9.936306%`, byte identical every epoch, i.e. chance, because
 -- running-stat threading lives only in `trainAdamSched` — and it said "do not quote its accuracy".
 -- ▶ The batched SGD trainer is `LEAN_MLIR_VARIANT=sgd .lake/build/bin/resnet34-verified-adam`,
--- which renders from `R34Opt.sgd` and threads running stats. `planning/renderer_convergence.md`.
+-- which renders from `R34Opt.sgd` and threads running stats. `planning/archive/renderer_convergence.md`.
 
 lean_exe «resnet34-verified-adam» where
   root := `apps.imagenette.MainResnet34VerifiedAdam
   moreLinkArgs := lowererLink
 
 
-/-- `uib` layout tie (`planning/mnv4_verified.md` phase 1): `VLayer.toSpecs` vs the baseline
+/-- `uib` layout tie (`planning/archive/mnv4_verified.md` phase 1): `VLayer.toSpecs` vs the baseline
     `Layer.nParams`, over all four UIB families. Pins the LAYOUT; the ORDER needs a forward tie. -/
 lean_exe «uib-layout-tie» where
   root := `tests.TestUibLayoutTie
@@ -1813,7 +1813,7 @@ lean_exe «uib-layout-tie» where
 lean_exe «mnv4-fwd-smoke» where
   root := `tests.TestMnv4FwdSmoke
 
-/-- MNv4 AdamW train-step smoke (`planning/mnv4_verified.md` phase 2): arity, entry point, the
+/-- MNv4 AdamW train-step smoke (`planning/archive/mnv4_verified.md` phase 2): arity, entry point, the
     eval forward's stat binding, and — the one no other net has — that the train step's forward
     region is `@mnv4_fwd`'s body VERBATIM. §3d(b)'s two-worlds split cannot hide behind this.
     Also emits the batch-2 train step `scripts/grad_tie.py --net mnv4` runs. -/
@@ -1829,7 +1829,7 @@ lean_exe «r34-train-b2» where
 
 /-- Emits the **optimizer stage alone** — one step as a function of `(θ, g, m, v, G)` — for each of
     seven variants, which is what `scripts/opt_step_tie.py` diffs against the reference optimizer.
-    `planning/verified_optimizer_parity.md` §5's gate: `vjp_oracle` ties the two implementations at
+    `planning/archive/verified_optimizer_parity.md` §5's gate: `vjp_oracle` ties the two implementations at
     the GRADIENT, and nothing tied them at the UPDATE until this.
 
     ⚠ The body is `optAllParams`, the same call `resnet50TrainStepFaithfulB` makes — so this gates
@@ -1838,7 +1838,7 @@ lean_exe «opt-step-fixtures» where
   root := `tests.TestOptStepFixtures
 
 
-/-- Phase 4 of `planning/mnv4_verified.md`: 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
+/-- Phase 4 of `planning/archive/mnv4_verified.md`: 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
     IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/
 lean_exe «mobilenetv4-verified-adam» where
   root := `apps.imagenette.MainMobilenetV4VerifiedAdam
@@ -1986,12 +1986,12 @@ lean_exe «mobilenetv2-imagenet-verified» where
 
     ⚠ Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there,
     AdamW @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet
-    — see `planning/chapter_makeover.md`'s MNv4 phase-4 gap list. -/
+    — see `planning/archive/chapter_makeover.md`'s MNv4 phase-4 gap list. -/
 lean_exe «mobilenetv4-imagenet-verified» where
   root := `apps.imagenette.MainMobilenetV4Imagenet
   moreLinkArgs := lowererLink
 
-/-- **Score a finished checkpoint, standalone** — `planning/next_session_verified_trainer_code.md`
+/-- **Score a finished checkpoint, standalone** — `planning/archive/next_session_verified_trainer_code.md`
     §2, the verified peer of the JAX side's six `eval_*_full50k.py`.
 
         LEAN_MLIR_VARIANT=<v> .lake/build/bin/score-checkpoint <net> [dataDir]
@@ -2045,7 +2045,7 @@ lean_exe «convnext-fwd-b-tie» where
     what those predicates make the driver pack — regions, scalar tail, drop-mask count, and the
     arity identity that closes only if every region is a full `nP` wide.
 
-    ⚠ The failure it exists for is silent: `planning/ema.md` records that a wrongly-packed region
+    ⚠ The failure it exists for is silent: `planning/archive/ema.md` records that a wrongly-packed region
     **trains and reports a loss**. No crash, no NaN — just a run optimising a misaligned view of
     its own parameters. No GPU; a parse and three counts. -/
 lean_exe «vit-ema-drop-render» where
@@ -2478,7 +2478,7 @@ lean_exe «r34-dp-shard» where
   moreLinkArgs := lowererLink
 
 /-- `r50-gradcheck` — **the gate R50's backward never had**
-    (`planning/next_session_pipeline_then_r50.md` §3.2). Phases 1–3 shipped a net that renders,
+    (`planning/archive/next_session_pipeline_then_r50.md` §3.2). Phases 1–3 shipped a net that renders,
     trains and descends behind a LAYOUT gate (`TestR50Contract`) with nothing on the gradient, and
     R50 is the one net with no incumbent hand-written artifact to tie against.
 
@@ -2508,7 +2508,7 @@ lean_exe «r50-gradcheck» where
   moreLinkArgs := lowererLink
 
 /-- `r50-accum-tie` — **gradient accumulation, numerically certified**
-    (`planning/next_session_pipeline_then_r50.md` §4's blocker). The `.adamwAccum` render carries a
+    (`planning/archive/next_session_pipeline_then_r50.md` §4's blocker). The `.adamwAccum` render carries a
     FOURTH parameter region `G` and two runtime scalars deciding, per micro-batch, whether the
     invoke accumulates or applies.
 
@@ -2552,7 +2552,7 @@ lean_exe «r50-accum-shard-tie» where
   root := `tests.TestR50AccumShardTie
   moreLinkArgs := lowererLink
 
-/-- `r50-lamb-tie` — **LAMB, numerically certified.** `planning/rsb_a3_r50_verified.md` §2.3's LAMB
+/-- `r50-lamb-tie` — **LAMB, numerically certified.** `planning/archive/rsb_a3_r50_verified.md` §2.3's LAMB
     row is the ONE line that file flags as an estimate rather than a measurement ("2–3 ops"). Built,
     and measured at **two** new `SHlo` constructors — `gradSumSqAccF` was already there for the
     global-norm clip and `sgdParamF` for heavy-ball.
@@ -2746,7 +2746,7 @@ lean_exe «fpn-detect-probe» where
   moreLinkArgs := lowererLink
 
 -- Emit-only: dump the r34FpnDet train-step MLIR for eyeball / iree-compile
--- --compile-to=input parse check (planning/yolo_fpn.md bite 7 wiring).
+-- --compile-to=input parse check (planning/archive/yolo_fpn.md bite 7 wiring).
 lean_exe «fpn-train-emit» where
   root := `demos.probes.MainFpnTrainEmit
   moreLinkArgs := lowererLink
@@ -2776,7 +2776,7 @@ lean_exe «mnist-ddpm-train» where
 -- Scores the unconditional MNIST DDPM with Chapter 3's VERIFIED CNN — the
 -- 2-D demo's metric suite (coverage, per-class mass, energy distance) moved onto
 -- images, using a classifier whose math VJP is proven. See the driver's header
--- and planning/diffusion_2d_demo.md §7.
+-- and planning/archive/diffusion_2d_demo.md §7.
 lean_exe «mnist-ddpm-score» where
   root := `demos.probes.MainMnistDdpmScore
   moreLinkArgs := lowererLink
@@ -2810,7 +2810,7 @@ lean_exe «cifar-ddpm-sincos-sample» where
   moreLinkArgs := lowererLink
 
 -- YOLOv1 cat/dog head detector on Oxford-IIIT Pets (2×2 mosaic, R34 backbone
--- bootstrap, focal objectness). See planning/yolo_final.md.
+-- bootstrap, focal objectness). See planning/archive/yolo_final.md.
 lean_exe «yolov1-pets-train-bootstrap» where
   root := `demos.archive.MainYolov1PetsTrainBootstrap
   moreLinkArgs := lowererLink
@@ -2821,7 +2821,7 @@ lean_exe «yolov1-pets-infer» where
   moreLinkArgs := lowererLink
 
 -- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
--- The resolution rung above the 224/7×7 WS-A baseline; planning/yolo_drone.md.
+-- The resolution rung above the 224/7×7 WS-A baseline; planning/archive/yolo_drone.md.
 lean_exe «yolov1-visdrone448» where
   root := `demos.archive.MainYolov1VisDrone448
   moreLinkArgs := lowererLink
@@ -2906,7 +2906,7 @@ lean_exe «vjp-oracle-uib» where
 -- dataset where label k is derivable from image k. The FFI used to swap a
 -- hardcoded 4 bytes of label per record, which silently mispaired every
 -- detection and segmentation batch (mAP@0.5 0.0001 vs 0.1167 after the fix).
--- Hermetic — no data files, no GPU. See planning/post_shuffle_fix.md §3.
+-- Hermetic — no data files, no GPU. See planning/archive/post_shuffle_fix.md §3.
 lean_exe «test-shuffle-pairing» where
   root := `tests.TestShufflePairing
   moreLinkArgs := lowererLink
@@ -3100,7 +3100,7 @@ private def detectBackend : IO String := do
     `lake run <group>-xla` works from a fresh clone instead of failing at startup (⚠ at STARTUP
     since `xlaLink` was retired — the shim is dlopen'd, not linked, so its absence is no longer
     caught at build time), and so an edited shim cannot be silently run stale (the `.vmfb`-cache
-    hazard's cousin — see planning/xla_pjrt_handoff.md §4). -/
+    hazard's cousin — see planning/archive/xla_pjrt_handoff.md §4). -/
 private def ensurePjrtShim : IO Bool := do
   let src : System.FilePath := "ffi/pjrt_ffi.c"
   let so  : System.FilePath := "ffi/libpjrt_ffi.so"
@@ -3216,7 +3216,7 @@ script «imagenette-iree» do
 --
 -- Same nets, same certified artifacts, same schedules and seeds as the `-iree` group — the
 -- ONLY difference is which trusted lowerer consumes the emitted StableHLO, which is the whole
--- point of the second backend (planning/xla_pjrt_handoff.md §1).
+-- point of the second backend (planning/archive/xla_pjrt_handoff.md §1).
 --
 -- Why you'd reach for these: XLA is **4.6× IREE** on EfficientNet — 80 epochs in
 -- 1 h 35 m against 7 h 50 m (§2e-quinquies) — and multi-GPU is reachable ONLY
@@ -3366,7 +3366,7 @@ script download do
 -- and reports a training estimate several times too fast with no warning. That is
 -- why `BenchItem` carries `refSecXla` and why there are `probe*RefMsXla` constants:
 -- a `BenchRef` bundles one lowerer's anchors so a probe can only ever be divided by
--- a reference measured on the same path. See planning/xla_pjrt_handoff.md §2j.
+-- a reference measured on the same path. See planning/archive/xla_pjrt_handoff.md §2j.
 --
 -- REFERENCE NUMBERS below are per-chapter *training* wall-clock on a single AMD
 -- 7900 XTX (gfx1100, ROCm 7.2). The MNIST/CIFAR rows and all three IREE probe

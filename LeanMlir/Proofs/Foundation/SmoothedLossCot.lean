@@ -40,7 +40,7 @@ is the cotangent lemma those ties need: at a general target and at the smoothed 
 ⚠ **The `/ B` is the batch mean, and it is a convention, not a theorem here.** `smoothedLossCotGraph_row`
 states the row IS `(1/B)·∂softCE/∂z` at that example's logits; that the sum of `B` such rows is the
 gradient of the mean loss is the linearity step, and a tie against a `*dp*` artifact needs the
-replica mean on top of it (`planning/proofs_tier_to_paper_nets.md` 4d).
+replica mean on top of it (`planning/archive/proofs_tier_to_paper_nets.md` 4d).
 
 ⚠ **`α` is a free real.** The committed renders bake `0.1`, and the `ls0` twins bake `0`; both are
 instances. ⚠ Nothing here says `t` is a probability vector — only `Σ t = 1` is ever used, which is

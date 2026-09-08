@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.CNN
 /-! # Strided convolution (stride-2 SAME) — Chapter 5 Milestone B, the hard new op
 
 Real ResNet-34 downsamples with **stride-2 convolutions**, the one genuinely-new
-operator the Chapter-5 handoff (`planning/verified_r34.md` §3.6) flags as gating
+operator the Chapter-5 handoff (`planning/archive/verified_r34.md` §3.6) flags as gating
 the jump from the ch6-A ResNet-*style* net to a true 34-layer ResNet.
 
 **The key identity that makes this tractable.** A stride-2 SAME convolution is
@@ -321,7 +321,7 @@ theorem flatConvStride4_weight_grad_has_vjp_correct {ic oc h w kH kW : Nat}
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 conv at XLA `SAME` = decimateODD ∘ (stride-1 SAME conv)
---   (`planning/mnv4_verified.md` §3b/§3d — the TF-origin padding convention)
+--   (`planning/archive/mnv4_verified.md` §3b/§3d — the TF-origin padding convention)
 -- ════════════════════════════════════════════════════════════════
 
 /-! **Why a second stride-2 convolution exists, and why it is not a fix to the first.**
@@ -355,7 +355,7 @@ only compositions of results already closed under the three standard axioms.
 would be wrong. The type enforces it: the input index is `ic*(2*h)*(2*w)`, structurally even.
 Verified against `jax.lax.conv_general_dilated(…, 'SAME')` over
 `H ∈ {224,112,56,28,14,32,16,9,7,15,33} × k ∈ {3,5,7}` — 33 configs, all agreeing with this rule
-(`planning/mnv4_verified.md` §3e). -/
+(`planning/archive/mnv4_verified.md` §3e). -/
 
 /-- **Stride-2 XLA-`SAME` convolution**, flattened: `Vec (ic·2h·2w) → Vec (oc·h·w)`.
     `decimateOddFlat ∘ flatConv` — the stride-1 symmetric-SAME conv on the `2h×2w` grid, then keep
@@ -379,7 +379,7 @@ theorem flatConvStride2Xla_differentiable {ic oc h w kH kW : Nat}
     cotangent **onto the odd positions** and then runs the reversed-kernel conv — i.e. StableHLO's
     `lhs_dilation = [2,2]` with the transposed padding shifted by one, which is exactly the
     asymmetry the forward introduced. ⚠ A symmetric backward against this forward is a silent
-    wrong-gradient (`planning/mnv4_verified.md` §3b), and it is this composition that rules it out:
+    wrong-gradient (`planning/archive/mnv4_verified.md` §3b), and it is this composition that rules it out:
     the offset lives in one place and both directions read it. -/
 noncomputable def flatConvStride2Xla_has_vjp {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :

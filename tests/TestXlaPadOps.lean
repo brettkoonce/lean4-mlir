@@ -1,12 +1,12 @@
 import LeanMlir
 
-/-! # Known-answer guard for the XLA-`SAME` strided ops (`planning/mnv4_verified.md` §3e)
+/-! # Known-answer guard for the XLA-`SAME` strided ops (`planning/archive/mnv4_verified.md` §3e)
 
 `convStridedXla` and `depthwiseStridedXla` are the asymmetric-pad peers of `convStrided` and
 `depthwiseStrided`. **They have identical types, identical output shapes, identical op counts and
 identical feature-group widths** — the entire difference is four numbers in the emitted `pad`. So
 nothing structural can distinguish a correct render from one that picked the wrong token, and
-`#guard`s on shapes or arity are worthless here by construction (`planning/mnv4_verified.md` §3,
+`#guard`s on shapes or arity are worthless here by construction (`planning/archive/mnv4_verified.md` §3,
 the same invisibility class as R50's stride-on-the-3×3).
 
 What this emits is therefore deliberately *small*: two one-op modules, at the two kernel sizes the
@@ -144,7 +144,7 @@ def dwXlaWGradModule : String :=
     ⚠⚠ **This op ships in EfficientNet's train step and has never had a known-answer check.**
     `xla_pad_op_check.py` grew probes for the `…Xla…` peers when those were built (§3g) and stopped
     there, so the older symmetric backward was covered by nothing but the assumption that it was
-    already right. `planning/mnv4_verified.md`'s MNv4 gradient tie localised a ~2% cotangent error
+    already right. `planning/archive/mnv4_verified.md`'s MNv4 gradient tie localised a ~2% cotangent error
     to exactly the block whose dx this op produces, which is what these two probes are here to
     convict or clear. **k=3 AND k=5**, because the tie's evidence points at k=5 specifically: the
     k=3 strided block in the middle of the net added no visible jump. -/

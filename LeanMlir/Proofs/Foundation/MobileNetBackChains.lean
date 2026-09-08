@@ -32,7 +32,7 @@ identical stem. ⚠ Conv-M has no quoted accuracy; what pins its artifact to the
 pair of ties re-run 2026-09-07.
 
 Moved here from the float bridges that defined them beside their float twins on 2026-09-08
-(`planning/float_second_pass.md`); no number is stated about any of these chains. -/
+(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
 
 namespace Proofs
 

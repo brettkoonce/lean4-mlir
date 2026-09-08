@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullVJP
 `MobileNetV2WholeBackCertifiedTie.lean` closed this for the reduced ch7 net — six blocks, the
 `[t,c,n,s]` table's shape but not its depth. This file closes it for the net
 `mobilenetv2ForwardPaper` actually is: **all seventeen bottlenecks**, the T6 row of
-`planning/proofs_tier_to_paper_nets.md` §3.2(c).
+`planning/archive/proofs_tier_to_paper_nets.md` §3.2(c).
 
 Nothing here is new mathematics. The four endpoint leaf ties (stem, head, GAP, dense) are the
 ones the 6-block file proved, reused verbatim at the paper widths; the seventeen blocks stay

@@ -16,7 +16,7 @@ by a channel-gather, plus a constant. Its Jacobian therefore collapses through
 cotangent `dy` gives exactly the rendered per-channel reduces
 `dγ_c = Σ_s dy·x̂`, `dβ_c = Σ_s dy` (the `bnParamGradPC` block in
 `cifarBnTrainStepStructured`). Unlike the BN input grad these need no `0<ε` (affine in the
-params; ε only enters the constant x̂). See `planning/render_close_handoff.md` §2b.
+params; ε only enters the constant x̂). See `planning/archive/render_close_handoff.md` §2b.
 -/
 
 namespace Proofs

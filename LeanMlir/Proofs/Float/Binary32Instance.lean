@@ -27,7 +27,7 @@ With the named models in hand, the 2026-06 audit's gaps 2 and 3 stay realized:
 
 WHAT THE DISCHARGE DOES **NOT** BUY (kept honest): the kernel↔model boundary — FMA
 contraction, reduction reassociation, "the GPU behaves like round-to-nearest on this
-grid" — remains trusted exactly as before (`planning/floatbridge_certificate_gaps.md`);
+grid" — remains trusted exactly as before (`planning/archive/floatbridge_certificate_gaps.md`);
 true binary32 also has overflow and a subnormal floor `rndP` idealizes away
 (`FloatSubnormalBridge` models the latter hypothesis-style). The trust moves from "an
 operator with this bound exists" (mathematically mild — `id` satisfies it at any `u ≥ 0`)

@@ -33,7 +33,7 @@ scripts/supervise.sh vits-default-g512-4gpu
 DRY_RUN=1 scripts/supervise.sh vits-default-g512-4gpu   # print the plan, run nothing
 ```
 
-By hand (4 GPUs — BOTH replica knobs are required, see `planning/mnv4_convm_ties_todo.md`):
+By hand (4 GPUs — BOTH replica knobs are required, see `planning/archive/mnv4_convm_ties_todo.md`):
 ```
 CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdp128x4wxclipdrop LEAN_MLIR_BATCH=128 \

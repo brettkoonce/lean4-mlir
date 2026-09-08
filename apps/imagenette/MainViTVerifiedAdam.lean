@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `vit-verified-adam` — train ViT-Tiny with the VERIFIED-rendered **AdamW** step
 
-Phase 3c of `planning/vit_train_to_vit_verified.md`: the SGD `vit-verified` with its optimizer
+Phase 3c of `planning/archive/vit_train_to_vit_verified.md`: the SGD `vit-verified` with its optimizer
 swapped for AdamW. The packed train step `@vit_adam_train_step` is `pretty(provenGraph)` out of
 `LeanMlir/Proofs/Codegen/ViTRender.lean`'s `vitAdamTrainStepFaithful` — gradients un-fused and
 handed to the proven `adamMNextF`/`adamVNextF`/`adamWParamF` triple — then driven by
@@ -60,7 +60,7 @@ def vitAdamConfig : VerifiedConfig where
       that fires at 0.996. (An earlier version of this docstring said the graph does not execute on
       this box; §2j retired that.) Pair it with `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and
       `HIP_VISIBLE_DEVICES` unset.
-    * **`ema`** — the EMA weight-shadow render (`planning/ema.md`). ⚠ Its blob has **four** regions
+    * **`ema`** — the EMA weight-shadow render (`planning/archive/ema.md`). ⚠ Its blob has **four** regions
       where every other variant has three, so it cannot share a checkpoint with them; the driver's
       size guard makes a crossed one throw rather than resume misaligned garbage.
 
@@ -81,7 +81,7 @@ LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.
   -- `adam64`/`adamdp64` at 64. Eval needs no flag: `trainAdamSched` reads the eval width off the
   -- forward artifact (`evalBs`), so it scores at 32 whatever the train batch is.
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD vitAdamConfig.batchSize
-  -- ▶ `ema` selects the EMA-shadow render (`planning/ema.md`): the same AdamW graph plus a 4th
+  -- ▶ `ema` selects the EMA-shadow render (`planning/archive/ema.md`): the same AdamW graph plus a 4th
   -- `[θ|m|v|ema]` blob region updated by `adamMNextF` at `(β₁ := d)`, with EVAL AND THE CHECKPOINT
   -- scoring the shadow. ViT is the cheapest of the three EMA nets — LayerNorm means there is no
   -- `ema_bn` peer to carry, so it is the parameter shadow alone.
@@ -118,7 +118,7 @@ LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.0003
-  -- ▶ `drop*` variants select the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the
+  -- ▶ `drop*` variants select the STOCHASTIC-DEPTH render (`planning/archive/stochastic_depth.md`): the
   -- graph takes 24 extra `tensor<Bxf32>` inputs — TWO per block, the attention and MLP residual
   -- branches dropping independently at one shared keep — carrying `bernoulli(keep_i)/keep_i` per
   -- example, drawn on the host and seeded from the global step. ⚠ It is the ONE ViT render built on

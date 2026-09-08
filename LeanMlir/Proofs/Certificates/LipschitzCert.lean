@@ -4,7 +4,7 @@ import Mathlib.Analysis.InnerProductSpace.PiL2
 /-! # Lipschitz-margin certified robustness radius (Tsuzuku–Sato–Sugiyama 2018)
 
 The verification payoff behind the `mnist-{linear,mlp,cnn}-pgd` demos
-(`planning/robustness.md`, `planning/robustness_ladder.md`): the *certificate* — the lower
+(`planning/archive/robustness.md`, `planning/archive/robustness_ladder.md`): the *certificate* — the lower
 bound of the `cert ≤ TRUE ≤ PGD` sandwich — turned from a number into a **theorem**.
 
 The classifier's logit map `f : ℝ^d → ℝ^k` is `L`-Lipschitz in L2. At an input `x`, the

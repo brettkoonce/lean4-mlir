@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compile + numerically validate the Lean-emitted DIoU box-loss FORWARD block
-(brick #1, planning/yolo_drone.md WS-D — chunk 2a).
+(brick #1, planning/archive/yolo_drone.md WS-D — chunk 2a).
 
   1. lake build diou-loss-probe
   2. .lake/build/bin/diou-loss-probe B gH gW <out.mlir>

@@ -104,4 +104,4 @@ We render verified StableHLO (Lean → IREE → GPU). The fp8 numerics + proofs 
 done and emulated (host-side E4M3 rounding into the same fp32 graph); the open
 work was lowering to real Ada fp8 tensor cores. This spike was the gate — and it
 says IREE's CUDA f8 path is the blocker. Pivoting to bf16 (which *does* lower on
-CUDA) in the meantime. See `planning/fp8_lowering.md`.
+CUDA) in the meantime. See `planning/archive/fp8_lowering.md`.

@@ -23,7 +23,7 @@ opaque create (path : @& String) : IO LowererSession
 
 /-- `"iree"` or `"xla"` — which shim this binary was linked against. Detected by
     probing for a symbol only `libpjrt_ffi.so` defines, so it cannot disagree
-    with the linked library. See `planning/xla_pjrt_ladder.md`. -/
+    with the linked library. See `planning/archive/xla_pjrt_ladder.md`. -/
 @[extern "lean_iree_backend_name"]
 opaque backendName : IO String
 
@@ -129,7 +129,7 @@ opaque trainStepAdamF32Ddpm
     per-cell objectness mask (1.0 where a GT box's center falls in
     the cell, 0.0 otherwise). Routes to the codegen produced with
     `useYolov1 := true`. Loss is the 5-term masked MSE described in
-    `planning/yolo_demo_v2.md` Phase 1.
+    `planning/archive/yolo_demo_v2.md` Phase 1.
 
     `perCell = numBoxes * 5 + numClasses`. For VOC this is
     `2*5 + 20 = 30`; `gridH = gridW = 7`. -/

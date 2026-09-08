@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Score the unconditional MNIST DDPM with Chapter 3's verified CNN.
 
-⭐ The image demos' metric problem, fixed the way planning/diffusion_2d_demo.md
+⭐ The image demos' metric problem, fixed the way planning/archive/diffusion_2d_demo.md
 §4 fixed it for 2-D: stop asking whether the grid looks like digits and push the
 samples through a classifier whose math VJP is proven. `cnnVerified` maps an
 image to ten numbers, and in THAT space every statistic the 2-D demo uses works

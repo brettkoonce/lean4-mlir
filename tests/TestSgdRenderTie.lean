@@ -3,7 +3,7 @@ import LeanMlir.GradcheckHelpers
 
 /-! # SGD `@<slug>_train_step` render tie — the `tests/` emitter vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md` §2a-quinquies. Four artifacts still have two writers, and for
+`planning/archive/xla_pjrt_handoff.md` §2a-quinquies. Four artifacts still have two writers, and for
 `convnext_train_step` / `efficientnet_train_step` the two emitters have **positionally identical
 interfaces** (182/180 and 264/262), so the R34 move applies: run both renders on one shared input
 and compare every returned float, *before* deleting either emitter. Once the `tests/` writer is

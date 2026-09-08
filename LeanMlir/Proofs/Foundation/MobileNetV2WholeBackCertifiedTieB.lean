@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Foundation.MobileNetBackChains
 net — the reverse of `mobilenetv2ForwardPaper`, the forward the retired `MobileNetV2Render`
 emitted. This file closes it for the net the shipped trainers run: `mobilenetv2ForwardB_full`, the
 same `[t,c,n,s]` ladder at **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
-`planning/proofs_tier_to_paper_nets.md` §4.2, alongside `Resnet34BackCertifiedTieB.lean`.
+`planning/archive/proofs_tier_to_paper_nets.md` §4.2, alongside `Resnet34BackCertifiedTieB.lean`.
 
 ## ⭐⭐ The whole apex is reused, not rewritten
 

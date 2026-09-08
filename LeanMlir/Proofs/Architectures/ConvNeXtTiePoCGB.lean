@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Foundation.SmoothedLossCot
 `ConvNeXtTiePoC.lean` ties all 182 parameters of the SGD-inline `convnext_train_step.mlir`: each
 fused `θ − lr·g` op `den`s to the certified step at the cotangent the emitted backward chain
 delivers, per example, at a hard label. This file is that statement re-pointed along the THREE
-axes 4b and 4c left open (`planning/proofs_tier_to_paper_nets.md` §4b, §4c-quater) — and unlike
+axes 4b and 4c left open (`planning/archive/proofs_tier_to_paper_nets.md` §4b, §4c-quater) — and unlike
 EfficientNet-B0's (`EfficientNetTiePoCG.lean`, two axes), ConvNeXt's per-example capstone was at
 a single image with the batch outside the AST, so the index is the third.
 

@@ -19,7 +19,7 @@ patchify (`flatConvStride4Back`: two scatters, then the reversed-kernel conv); t
 is odd, but `EvenKernelConvBack.lean` is where the 4×4 and 2×2 kernels' even-kernel ties live.
 
 Moved here from the float bridge that defined them beside their float twins on 2026-09-08
-(`planning/float_second_pass.md`); no number is stated about any of these chains. -/
+(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
 
 namespace Proofs
 

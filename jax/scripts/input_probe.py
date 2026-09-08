@@ -1,7 +1,7 @@
 """Input-pipeline throughput probe: images/sec out of build_imagenet_iter.
 
 Settles whether repeated augmentation costs throughput. The deferral rationale
-in planning/vit_imagenet.md assumed "3x CPU decode+RandAug". But flat_map sits
+in planning/archive/vit_imagenet.md assumed "3x CPU decode+RandAug". But flat_map sits
 BEFORE .map(_pp) and steps_per_epoch is unchanged, so per epoch the trainer
 pulls the same number of images through _pp -- just from 1/3 as many unique
 records. Prediction: throughput is unchanged.

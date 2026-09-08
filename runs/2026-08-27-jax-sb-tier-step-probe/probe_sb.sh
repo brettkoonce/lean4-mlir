@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compute-only ms/step probe for the ConvNeXt-T/S/B and ViT-Ti/S/B phase-2 JAX
 # trainers, 4× RTX 4060 Ti, bf16 as generated. Peer of the 2026-07-25 table in
-# planning/vit_convnext_sb_scaleup.md, re-run on jax 0.11.0 with fresh emits.
+# planning/archive/vit_convnext_sb_scaleup.md, re-run on jax 0.11.0 with fresh emits.
 set -u
 cd /home/skoonce/lean/klawd_max_power/lean4-jax-mlir
 PY=.venv/bin/python

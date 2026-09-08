@@ -6,7 +6,7 @@ deliverable; it is the missing rung on the validation ladder.
 
 ## Why this exists
 
-`planning/yolo_assignment.md` records four trained arms and eight numpy probes,
+`planning/archive/yolo_assignment.md` records four trained arms and eight numpy probes,
 all reporting mAP@0.5 = 0.0001, and a chain of four mutually-overturning
 explanations for why. Every one of those probes was conditioned on "the pipeline
 is correct and the detector is merely mediocre" — a condition that was never
@@ -83,7 +83,7 @@ recalls 11.8% of objects and the from-scratch YOLOv8s recalls 16.4% — the same
 ballpark. Their mAP differs by three orders of magnitude. So the Lean detector
 is finding roughly the objects a working detector finds and is unable to rank
 them above background. That independently corroborates the last probe in
-`planning/yolo_assignment.md` (objectness AUC 0.741, ranking is the binding
+`planning/archive/yolo_assignment.md` (objectness AUC 0.741, ranking is the binding
 constraint) and supplies the calibration that probe was missing: a detector at
 this recall *should* score 0.114, so 0.741 is not "mediocre", it is broken.
 
@@ -106,7 +106,7 @@ resize.
 
 **Squashing is 23% BETTER, at every epoch.** The aspect distortion is real —
 0.750 for 4:3 sources, 0.562 for 16:9, and the measured width-vs-height error
-asymmetry in `planning/yolo_assignment.md` is consistent with it — but it is
+asymmetry in `planning/archive/yolo_assignment.md` is consistent with it — but it is
 swamped by the pixel budget. Letterboxing a 16:9 frame into a 448 square spends
 ~44% of the canvas on grey padding, shrinking objects that are already only a
 few pixels across. On this dataset that costs far more than the distortion.
@@ -136,7 +136,7 @@ The production score never exceeds 0.1121. A working detector routinely emits
 **And 0.14 is the base rate.** Positives are 11.06% of slots. A head emitting
 ≈0.14 everywhere is predicting the marginal P(object) and almost nothing
 conditional on the pixels. That reframes the "converged objectness equilibrium
-at p≈0.14" in `planning/yolo_assignment.md`: it is not a fixed point of the loss
+at p≈0.14" in `planning/archive/yolo_assignment.md`: it is not a fixed point of the loss
 to be respected, it is a head that did not learn.
 
 Three further readings:

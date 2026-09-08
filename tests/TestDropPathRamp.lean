@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.ViTRenderB
 
 /-! # The stochastic-depth ramp, pinned across the driver/renderer seam
 
-`planning/stochastic_depth.md`'s keep ramp is described **twice**, and it has to be:
+`planning/archive/stochastic_depth.md`'s keep ramp is described **twice**, and it has to be:
 
 * the RENDERER (`Proofs/Codegen/EfficientNetRender.lean`) owns `enetDropIdxs` / `enetDropTotal` —
   which blocks carry a drop site, and the ramp denominator;

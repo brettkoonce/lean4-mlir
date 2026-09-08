@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Compile + numerically validate the Lean-emitted FlashAttention forward
-against dense attention (planning/flash_attention.md rung 2-3).
+against dense attention (planning/archive/flash_attention.md rung 2-3).
 
   1. lake build flash-probe
   2. .lake/build/bin/flash-probe <b heads n dh bk> [causal] <out.mlir>

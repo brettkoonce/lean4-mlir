@@ -4,7 +4,7 @@ import Mathlib.Analysis.SpecialFunctions.Sqrt
 /-! # The Adam / AdamW optimizer step over ℝ — the verified core (Phase 3a)
 
 The ℝ reference for `vit-train`'s optimizer, the load-bearing rung of
-`planning/vit_train_to_vit_verified.md`. Coordinatewise over `Vec`, mirroring the
+`planning/archive/vit_train_to_vit_verified.md`. Coordinatewise over `Vec`, mirroring the
 emitted StableHLO update (`MlirCodegen.emitAdamUpdate`) op-for-op so the later
 faithfulness theorem (`den (adamGraph) = adamWStep …`) is a structural match.
 

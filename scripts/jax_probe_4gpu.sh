@@ -13,7 +13,7 @@
 #    printed figure includes compile and is ~50% high at step 200. Every number here is
 #    DIFFERENCED over steps 200->600. Reading the trainer's own line directly is the mistake.
 # ⚠ Regenerate first (`lake exe <net>-imagenet default` in jax/). These are build products and
-#   `planning/imagenet_rerun_sweep.md` §3.3 records them going stale silently, twice.
+#   `planning/archive/imagenet_rerun_sweep.md` §3.3 records them going stale silently, twice.
 # ⚠ Box-specific: DEVS and TFDS_DATA_DIR below are this box's. The verified peer hardcodes ares'.
 # ⛔ mnv4 carries §21.2's caveat unchanged: nothing has tied its collectives. Cost it, don't train it.
 set -u

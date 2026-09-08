@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execution-side check for the denoted-IR bridge (planning/verified_codegen.md, Loop A).
+"""Execution-side check for the denoted-IR bridge (planning/archive/verified_codegen.md, Loop A).
 
 Lean side (proven): ⟦emitMlpBack⟧ = mlp_has_vjp_at.backward  (IR.mlp_whole_bridge),
 the per-op bridges (dense_at_bridge, relu_at_bridge, …), and the parameter

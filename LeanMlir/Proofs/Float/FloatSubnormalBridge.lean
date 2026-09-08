@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Float.FloatBridge
 `FloatBridge.lean`'s `FloatModel` carries the **unconditional** relative-error
 axiom `|rnd x − x| ≤ u·|x|`, true for IEEE-754 binary32 round-to-nearest only
 **on the normal range** (its docstring flags the subnormal absolute-error term
-as future work; `planning/floatbridge_certificate_gaps.md` §2). Near `0` the real
+as future work; `planning/archive/floatbridge_certificate_gaps.md` §2). Near `0` the real
 bound is `|rnd x − x| ≤ u·|x| + η`, a gradual-underflow floor `η ≈ 2⁻¹⁵⁰` (½ ULP
 at the smallest subnormal). Deep activations *can* underflow, so the clean
 relative model is, strictly, a TRUSTED simplification.

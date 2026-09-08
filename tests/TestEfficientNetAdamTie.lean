@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@efficientnet_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md`, the EfficientNet AdamW thread, step 3.
+`planning/archive/xla_pjrt_handoff.md`, the EfficientNet AdamW thread, step 3.
 `Proofs/Codegen/EfficientNetRender.lean`'s `efficientnetAdamTrainStepFaithful` renders the same
 train step the hand-written emitter in `tests/TestEfficientNetTrain.lean` does — the one
 `efficientnet-verified-adam` trains on. This harness is what licenses swapping them; run it BEFORE

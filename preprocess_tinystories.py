@@ -5,7 +5,7 @@ Trains a small BPE vocab on a slice of the corpus, then encodes a
 (subset of the) corpus to the same flat int32-LE token-stream format
 the Shakespeare loader already reads — so the Lean side reuses
 `F32.loadTokenStream` / `F32.sampleChunks` unchanged
-(planning/tinygpt_demo_v2.md Part II, Workstream D).
+(planning/archive/tinygpt_demo_v2.md Part II, Workstream D).
 
 Produces in data/tinystories/:
   vocab.json / merges.txt   — the trained BPE tokenizer (HF format)

@@ -2,7 +2,7 @@ import LeanMlir
 
 /-! Char-level tinyGPT trained on tinyshakespeare.
 
-Two model rungs (planning/tinygpt_demo_v2.md Part I):
+Two model rungs (planning/archive/tinygpt_demo_v2.md Part I):
 
   nano (212K params): tokenPositionEmbed (V=65, T=64,  D=64)
                       → transformerEncoder (D=64,  h=2, mlp=256, blocks=4, causal)
@@ -48,14 +48,14 @@ structure GptCfg where
   /-- Feed `[B, T]` f32 token ids and build the one-hot in-graph
       (tokenPositionEmbed idsInput) instead of uploading a host-built
       `[B, V·T]` one-hot. Mathematically identical; see
-      planning/tinygpt_demo_v2.md Part II Option 1. -/
+      planning/archive/tinygpt_demo_v2.md Part II Option 1. -/
   ids       : Bool := false
   /-- Use the true gather/scatter embedding path (Part II Option 2)
       instead of the one-hot matmul. Requires `ids`. -/
   gather    : Bool := false
   /-- Emit attention via FlashAttention (tiled online-softmax) instead of
       dense [B,H,T,T]. Same math; long-context memory. See
-      planning/flash_attention.md. -/
+      planning/archive/flash_attention.md. -/
   flashAttn : Bool := false
   /-- Rotary position embedding on Q/K (relative position; generalizes past
       the trained length). See jax/demos/rope_ref.py. -/

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Kernel-faithfulness probe — does the *kernel IREE actually runs* stay inside
-the *proven `FloatModel` budget*?  (planning/floatbridge_certificate_gaps.md §1.)
+the *proven `FloatModel` budget*?  (planning/archive/floatbridge_certificate_gaps.md §1.)
 
 The float bridge proves `|float_op − real_op| ≤ budget` over the abstract
 `FloatModel` (`|rnd x − x| ≤ u·|x|`, `u = u32 = 2⁻²⁴`).  That bounds the *model*.

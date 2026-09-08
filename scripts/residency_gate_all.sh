@@ -62,7 +62,7 @@ NETS=(
   # ⚠ The EMA row gates a FOUR-region blob, `[θ|m|v|ema]`, where every other row here is three.
   # That is the whole reason it is worth a row of its own: `nResident` goes 3·P → 4·P, so this is
   # the only check that the shim's "n tensors in, n out, counts agree tensor for tensor" contract
-  # actually holds at the wider layout rather than merely being argued to (`planning/ema.md` §4).
+  # actually holds at the wider layout rather than merely being argued to (`planning/archive/ema.md` §4).
   # Mode 2 for the same reason the plain `vit` row is: ViT+AdamW is CONTRACTIVE and absorbs a 1-ULP
   # fault to ~1 byte of 66M, so mode 1 would pass only because 1 > 0 and could rot into a false
   # green. ⚠ It also cannot see the SHADOW's own correctness — eval-only state is structurally

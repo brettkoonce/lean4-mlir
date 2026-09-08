@@ -2,7 +2,7 @@ import LeanMlir
 
 /-! # `uib` layout tie — `VLayer.toSpecs` against the baseline `Layer.nParams`
 
-Phase 1's gate (`planning/mnv4_verified.md`). `VLayer.toSpecs` (the verified parameter
+Phase 1's gate (`planning/archive/mnv4_verified.md`). `VLayer.toSpecs` (the verified parameter
 layout, which is what the driver allocates and threads) and `Layer.nParams` (the baseline
 count, which the JAX reference's shim was built against) are **two independent readings of
 the same block**. They are written in different files by different means — shapes versus

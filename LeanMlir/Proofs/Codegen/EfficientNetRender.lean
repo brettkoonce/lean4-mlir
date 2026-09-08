@@ -279,7 +279,7 @@ private def seBack (adam : Bool) (B c hh r : Nat)
   pure (cDx ++ cDg ++ cE2c ++ cW2 ++ cb2 ++ cDz ++ cE1c ++ cW1 ++ cb1, nDx, [nW1, nb1, nW2, nb2])
 
 -- ════════════════════════════════════════════════════════════════
--- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`) ───────────────────────────────────────
+-- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`) ───────────────────────────────────────
 -- EfficientNet-B0 has 16 MBConv blocks, and the drop fires on the 9 that carry a skip.
 --
 -- ⚠⚠ THE RAMP INDEX IS THE BLOCK INDEX, NOT THE SITE ORDINAL — and getting that wrong is the
@@ -1182,7 +1182,7 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
   -- committed and gated `efficientnetin_rmsdp64`. No placement of an `sd` marker avoids that; the collision
   -- is between two OTHER markers meeting. Only renaming fixes it, and `drop` collides with nothing.
   --
-  -- This is the `emarms` defect (`planning/ema.md`) a second time, one axis further on, and it is
+  -- This is the `emarms` defect (`planning/archive/ema.md`) a second time, one axis further on, and it is
   -- why the predicate table in `tests/TestVariantPredicates.lean` is now run rather than reasoned
   -- about: with three markers the collisions are between PAIRS, which is not something you see by
   -- reading one name at a time.
@@ -1203,7 +1203,7 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
   -- The obvious spelling is `"dropout"`, and it is unusable: it CONTAINS `"drop"`, so the driver's
   -- `variant.splitOn "drop"` test — which is how stochastic depth is detected — would fire on a
   -- dropout-only render and try to pack nine mask slots that graph does not have. That is the
-  -- `emarms`/`rmsdp` collision (`planning/ema.md`, and §2f-bis's rename of `"sd"` → `"drop"`) for
+  -- `emarms`/`rmsdp` collision (`planning/archive/ema.md`, and §2f-bis's rename of `"sd"` → `"drop"`) for
   -- the THIRD time, and the third time is what makes it a rule rather than an anecdote:
   -- **with N markers the collisions are between PAIRS, so a new marker must be checked against
   -- every existing one, not read on its own.** `tests/TestVariantPredicates.lean` runs that check
@@ -1254,7 +1254,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     -- ⭐⭐ **bf16**, TRAILING and defaulted so every existing render is byte-identical (gate 1).
     -- ⭐ EfficientNet needed **ZERO new ops** — every conv and depthwise kind it uses on the
     -- AdamW/RMSProp path already had a bf16 twin from the MobileNetV2 and MobileNetV4 work.
-    -- ⚠ The **squeeze-excitation** stays f32 ON PURPOSE (`planning/bf16_renderer.md` §10.2): its
+    -- ⚠ The **squeeze-excitation** stays f32 ON PURPOSE (`planning/archive/bf16_renderer.md` §10.2): its
     -- 1×1s act on 1×1-spatial pooled tensors, where there is no bf16 win to have. `seBlock` /
     -- `seReduceB` / `seBackBatched` are bundled ops and are simply not rewritten.
     -- ⚠ The classifier dense, every BN, the loss and the optimizer stay f32 too.
@@ -1300,7 +1300,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         | .rmsprop => enetRmsOne  B nm ds (gradNames[i]!) replicas
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
-      -- ▶ THE EMA SHADOW (`planning/ema.md`), emitted HERE rather than inside the two `*One`
+      -- ▶ THE EMA SHADOW (`planning/archive/ema.md`), emitted HERE rather than inside the two `*One`
       -- helpers, because it reads `nT` — the UPDATED parameter — and both tails produce one. A copy
       -- in each helper would be the double-writer disease one level down, in code (§2a-quater), and
       -- it would have to be kept in step across an optimizer axis that already exists.
@@ -1550,7 +1550,7 @@ end Proofs.StableHLO
     "0.100000" "" "64.0" 4 false "efficientnetin")
 
 -- ── ▶ RMSProp: the optimizer the EfficientNet reference ACTUALLY USES ─────────────────────────
--- `planning/recipe_gaps.md` §2: RMSProp is one of TWO gaps between this net and the reference's
+-- `planning/archive/recipe_gaps.md` §2: RMSProp is one of TWO gaps between this net and the reference's
 -- **72.31%** (the other being dropPath + EMA, both driver/architectural). ρ = μ = 0.9,
 -- **ε = 1e-3**, wd = 1e-5 — `Proofs.StableHLO.enetRmsHyper`.
 --
@@ -1567,7 +1567,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" 1 false "efficientnet" .rmsprop)
 
--- ── ▶ RMSProp **+ EMA** — this net's ACTUAL reference recipe (`planning/ema.md`) ────────────────
+-- ── ▶ RMSProp **+ EMA** — this net's ACTUAL reference recipe (`planning/archive/ema.md`) ────────────────
 -- `efficientNetB0ImagenetConfig` is RMSProp + exp-decay + **EMA (decay 0.9999)** + dropPath, and
 -- its 72.31% is the EMA shadow's number. RMSProp and its schedule landed in recipe_gaps v1.2 and
 -- its driver half; this is the third of the four, leaving only stochastic depth.
@@ -1598,7 +1598,7 @@ end Proofs.StableHLO
     "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop)
 
 -- ⭐⭐ **The bf16 peer** — `rms64bf16`. RMSProp is EfficientNet's own optimizer, and this is the
--- SINGLE-DEVICE render, deliberately: `planning/bf16_renderer.md` §13.2 measured that a 4-replica
+-- SINGLE-DEVICE render, deliberately: `planning/archive/bf16_renderer.md` §13.2 measured that a 4-replica
 -- bf16 number on this box is a SYSTEM result (shim feed + f32 all-reduce), not a statement about
 -- the emit — MobileNetV2 is 1.92× on one GPU and 1.37× on four, same graph. A 1-GPU pair is the
 -- measurement that isolates the renderer.
@@ -1664,7 +1664,7 @@ end Proofs.StableHLO
 #guard (Proofs.StableHLO.enetSig 10 true).length == 262
 #guard (Proofs.StableHLO.enetSig 10 false).length == 213
 
--- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), selected by `LEAN_MLIR_VARIANT=adamsd` ──
+-- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), selected by `LEAN_MLIR_VARIANT=adamsd` ──
 -- EfficientNet-B0 is the net this landed on FIRST, and the reason inverts the spec's own
 -- recommendation. `stochastic_depth.md` §8 recommends ConvNeXt as "the cheapest"; measured, it is
 -- not, and the axis it was scoped on was the wrong one:
@@ -1730,7 +1730,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5" false "efficientnet_drop" (sd := true))
 
 -- ── ▶ v1.2c: THE IMAGENET PEERS of the EMA and stochastic-depth renders ────────────────────────
--- `planning/recipe_gaps.md` v1.2c. Found 2026-08-02 by LISTING the artifacts rather than reasoning
+-- `planning/archive/recipe_gaps.md` v1.2c. Found 2026-08-02 by LISTING the artifacts rather than reasoning
 -- about them: RMSProp was carried to both scales (`efficientnetin_rms64`), **EMA and stochastic depth were
 -- not** — so `efficientnetin`'s trainer had neither, and EfficientNet's 72.31% reference pair was not
 -- reachable through it at all. The features existed only at Imagenette scale.
@@ -1852,7 +1852,7 @@ end Proofs.StableHLO
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
 
 -- ⭐ The **bf16 twin of the production job's artifact** (`scripts/jobs/enet-default-4gpu.conf`),
--- which `planning/next_session_execution_and_parity.md` §4 listed as the missing render. Same
+-- which `planning/archive/next_session_execution_and_parity.md` §4 listed as the missing render. Same
 -- geometry and the same three regularisers as the f32 row above — only the cast differs — so the
 -- two are a like-for-like pair the job can be flipped between.
 -- ⚠ Worth far more than the ladder assumed: B0's bf16 ratio was 1.10× while the flat-activation

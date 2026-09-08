@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Supervised 100-epoch MobileNetV4-Conv-M ImageNet run on the 4 clean GPUs (0,2,3,4),
 # Tier-2 reduced-reg recipe (LR 0.004 AdamW, eff-batch 4096 via grad-accum 8×micro-512,
-# RandAug m9, LS 0.1, dropout 0.1, EMA). See planning/mnv4_imagenet.md.
+# RandAug m9, LS 0.1, dropout 0.1, EMA). See planning/archive/mnv4_imagenet.md.
 #
 # Derived from supervise_convnext_t_80ep_4gpu_duty.sh. MNv4-specific differences:
 # - PY = generated_mobilenet_v4_imagenet.py ; SPE = 312 (1281167 // 4096, batch 4096).

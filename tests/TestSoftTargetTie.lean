@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # Soft-target gate — the committed renders are AFFINE in the target, so mixup needs no new render
 
-**The claim this settles.** `planning/xla_pjrt_handoff.md` §2p asserted that mixup/cutmix need a
+**The claim this settles.** `planning/archive/xla_pjrt_handoff.md` §2p asserted that mixup/cutmix need a
 new `softLabelCE` cotangent on the verified path. That is **wrong**, and this harness is what
 proves it. Every render already takes the target as a `[batch, nClasses]` FLOAT tensor `%onehot`,
 and the emitted cotangent is

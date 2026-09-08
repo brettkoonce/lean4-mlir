@@ -15,7 +15,7 @@ stem pool. Each is a plain `noncomputable def` on `Vec`, so a tie's closing `rfl
 
 Until 2026-09-08 these lived inside the `Proofs/Float/*FloatBridge` files, next to their float
 twins and the `FloatClose` budgets — the tier whose numbers were found vacuous and deleted
-(`planning/float_second_pass.md`). The definitions that survived are the ones the ties consume;
+(`planning/archive/float_second_pass.md`). The definitions that survived are the ones the ties consume;
 the leaf ties that are one `rfl` from a certified VJP (`decimateBack_eq_vjp`,
 `maxPool3s2FlatBack_eq_vjp_backward`) moved with them. The composite leaf ties that need a proof
 (`convFlatBack_eq_vjp_backward`, `depthwiseFlatBack_eq_vjp_backward`, …) stay in the per-op tie

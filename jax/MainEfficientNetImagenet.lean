@@ -19,7 +19,7 @@ def efficientNetB0Imagenet : NetSpec where
   -- defaults to `.relu` (`LeanMlir/Types.lean:378`), so without this line the two `.convBn` layers
   -- below — the stem and the 1×1 head — emitted `jax.nn.relu` while every MBConv interior emitted
   -- `swish`. EfficientNet-B0 is SiLU/swish THROUGHOUT, stem and head included.
-  -- ▶ The Imagenette twin has carried this line since `planning/mnv4_verified.md` §3f measured the
+  -- ▶ The Imagenette twin has carried this line since `planning/archive/mnv4_verified.md` §3f measured the
   -- deviation at 51% of logit range — five times the padding deviation — and this spec, written as
   -- "same MBConv body as MainEfficientNet.lean", never received it. The fix was made once and
   -- applied to one of the two files.

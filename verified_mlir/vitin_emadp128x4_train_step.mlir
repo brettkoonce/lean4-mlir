@@ -8,7 +8,7 @@ module @m {
     // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW
     // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is
     // the replica MEAN of the per-replica gradient nodes (4d piece 2).
-    // ── EMA WEIGHT SHADOW (planning/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF
+    // ── EMA WEIGHT SHADOW (planning/archive/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF
     // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)
     // like the rest of the optimizer — NOT a carve-out. EVAL AND CHECKPOINTS SCORE IT.
     %v0 = stablehlo.reshape %x : (tensor<128x150528xf32>) -> tensor<128x3x224x224xf32>

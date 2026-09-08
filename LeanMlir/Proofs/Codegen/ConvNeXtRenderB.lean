@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Codegen.ConvNeXtRender
 /-! # ConvNeXt-T at the BATCHED index `N := B` — the forward (handoff §0.2 ▶2)
 
 The ConvNeXt peer of `ResNet34RenderB` / `MobileNetV2RenderB`, and the reason it exists is
-`planning/stochastic_depth.md`: **the drop mask is per-EXAMPLE**, and in the per-example-indexed
+`planning/archive/stochastic_depth.md`: **the drop mask is per-EXAMPLE**, and in the per-example-indexed
 render (`ConvNeXtRender.lean`) a node denotes ONE example — `pretty B` lifts it across the batch, so
 the node cannot see `j`. `dropPathB` needs its operand at index `B·n`, which is what this file's
 chain produces.
@@ -681,7 +681,7 @@ def cnxDropFwdBanner (V : CnxDims := bTiny) : String :=
 end Proofs.StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § ▶ THE STOCHASTIC-DEPTH ARTIFACTS (`planning/stochastic_depth.md`, handoff §0.10)
+-- § ▶ THE STOCHASTIC-DEPTH ARTIFACTS (`planning/archive/stochastic_depth.md`, handoff §0.10)
 -- ════════════════════════════════════════════════════════════════
 --
 -- ⚠ These were the only artifacts this file wrote until 4c leg 3 (2026-09-07). Until then the
@@ -758,7 +758,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextFwdRenderB "convnextin_drop_fwd" 1000
     Proofs.StableHLO.cnxDropFwdBanner (sd := true))
 
--- ── ⭐⭐ THE bf16 PEERS — `adamwxclipdropbf16` (`planning/bf16_renderer.md` §15) ─────────────────
+-- ── ⭐⭐ THE bf16 PEERS — `adamwxclipdropbf16` (`planning/archive/bf16_renderer.md` §15) ─────────────────
 -- ConvNeXt is the sixth net on the bf16 render path and it needed **exactly two new ops**:
 -- `convStride4Bf16` (the 4×4/s4 patchify stem) and `convStride4WeightGradBBf16` (its weight grad).
 -- Everything else — the 7×7 depthwise, the block 1×1s, the 2×2/s2 downsamples, and every dgrad and
@@ -801,7 +801,7 @@ end Proofs.StableHLO
     (sd := true) (bf16 := true))
 
 -- ── ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` ────────────────────────────────────────────
--- `planning/vit_convnext_sb_scaleup.md`. The second net here added by RESHAPING an existing
+-- `planning/archive/vit_convnext_sb_scaleup.md`. The second net here added by RESHAPING an existing
 -- renderer rather than writing a chain, and the cheapest of the three so far: ViT-S needed six
 -- width constants become a record, while ConvNeXt-S is **pure depth** — `[3,3,9,3] → [3,3,27,3]`
 -- with the dims unchanged — so one `Array Nat` threaded as a trailing defaulted parameter covers
@@ -832,7 +832,7 @@ end Proofs.StableHLO
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall))
 
--- ⭐⭐ **The bf16 peers of S** (`planning/verified_side_quest_counterparts.md` §4c). ConvNeXt-T and
+-- ⭐⭐ **The bf16 peers of S** (`planning/archive/verified_side_quest_counterparts.md` §4c). ConvNeXt-T and
 -- ConvNeXt-B each carry the full (precision × replicas) square and S carried only the fp32 half —
 -- **an accident of ordering, not a decision**: B landed after S and brought bf16 with it, so the
 -- gap read as a choice about the middle size and was really about the calendar. That is the exact
@@ -895,7 +895,7 @@ end Proofs.StableHLO
 
 -- ⭐⭐ **The bf16 peer of B** — rendered to answer the memory question the docstring above calls
 -- "a real question rather than a formality" at this size, and to give the B row of
--- `planning/bf16_renderer.md` §21.6 a measured `peak_memory_in_bytes` rather than an extrapolation
+-- `planning/archive/bf16_renderer.md` §21.6 a measured `peak_memory_in_bytes` rather than an extrapolation
 -- from T. ⚠⚠ Read that section before assuming bf16 helps: on ConvNeXt-**T** it moves peak memory
 -- by a few per cent, because this emit converts back to f32 after every op and so keeps the f32
 -- activation alive anyway. bf16 here is a SPEED change, not a memory one.
@@ -921,13 +921,13 @@ end Proofs.StableHLO
 -- ════════════════════════════════════════════════════════════════
 --
 -- ⭐ Seventeen writers moved here from `ConvNeXtRender.lean` on 2026-09-07, so that every ConvNeXt
--- artifact but one renders from the batched traversal (`planning/renderer_convergence.md`, leg 3).
+-- artifact but one renders from the batched traversal (`planning/archive/renderer_convergence.md`, leg 3).
 -- MEASURED before a writer moved: the four forwards (`convnext_fwd`, `convnextin_fwd`,
 -- `convnextsin_fwd`, `convnextbin_fwd`) re-render BYTE-IDENTICALLY off this chain, and each of the
 -- thirteen AdamW/EMA train steps differs from its per-example render on exactly 78 lines, every one
 -- the conv input-VJP's `transpose`/`reverse` pair in the other order (commuting ops on disjoint
 -- axes; `tests/TestConvNeXtFwdBTie.lean` allows that pair and nothing else). The numeric licence is
--- `planning/xla_pjrt_handoff.md` §0.10 — the keep = 1 gate, per-example against batched, 0 of
+-- `planning/archive/xla_pjrt_handoff.md` §0.10 — the keep = 1 gate, per-example against batched, 0 of
 -- 83,478,846 floats differing after three AdamW steps with `scripts/perturb_conv_vjp.py` as the
 -- negative control — re-run as `convnext-adam-tie` on the swapped bytes.
 --
@@ -969,7 +969,7 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "-0.010000" "32.0")
 
--- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ────────────────
+-- ── ▶ THE EMA VARIANT (`planning/archive/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ────────────────
 -- Same graph plus one `adamMNextF` per parameter on the UPDATED weight — `d·ema + (1−d)·θ'`, which
 -- is `Proofs.adamMNext` at `(β₁ := d, m := ema, g := θ')`, so this costs **no new op, no new `den`,
 -- no new faithfulness theorem and no new VJP**. It is the third time enumerating the reference's
@@ -1078,7 +1078,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05"))
 
--- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) ───────────────────────────
+-- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/archive/grad_clip.md`) ───────────────────────────
 -- `convnextTinyImagenetConfig.gradClipNorm := 1.0`. `convnextTinyConfig` sets nothing, so the
 -- Imagenette artifacts keep their bytes and this is a variant, not a flipped default.
 --
@@ -1108,7 +1108,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
 
--- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
+-- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/archive/recipe_gaps.md` v1.2c) ──────────────────────────
 -- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so
 -- without this render the `convnextin` pair is not comparable at all, whatever else it carries. The EMA
 -- work landed on `convnext_ema` (Imagenette) and stopped there; found by listing artifacts.
@@ -1118,7 +1118,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin" (ema := true))
 
 -- ════════════════════════════════════════════════════════════════
--- § ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` (`planning/vit_convnext_sb_scaleup.md`)
+-- § ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` (`planning/archive/vit_convnext_sb_scaleup.md`)
 -- ════════════════════════════════════════════════════════════════
 --
 -- **The eval forward, and it is the ONLY thing this file renders for S.** The train steps are in

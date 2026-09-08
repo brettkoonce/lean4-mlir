@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.ViTRender
 
-/-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/mnv4_verified.md` phase 3)
+/-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/archive/mnv4_verified.md` phase 3)
 
 The UIB block, batch-BN, at `N := B`:
 
@@ -24,7 +24,7 @@ the baseline's `Layer.nParams` both assume that, and `uib-layout-tie` pins them 
 ExtraDW (both), IB/MBConv (post only), ConvNeXt-like (pre only), FFN (neither). Those are `if`s
 here, not separate functions, because omitting a shape-preserving op does not change any type.
 
-**Phase 0 found this needs no new op and no new position** (`planning/mnv4_verified.md` §2): the
+**Phase 0 found this needs no new op and no new position** (`planning/archive/mnv4_verified.md` §2): the
 depthwise VJP is kernel-general (`cnx_render_dw7*_certified`; the descriptor carries `kH kW`), and
 a leading depthwise already exists — `MobileNetV2RenderB.lean:196`'s `t = 1` inverted residual
 emits `.depthwise (c := ic)` straight onto the block input. What is new is the **composition**:
@@ -212,7 +212,7 @@ def mnv4StatSigList : List (String × String) :=
     re-renders byte-identical after this threading — the cheap self-check that it is inert.
 
     ⚠⚠ **This exists so `@mnv4_fwd` and `@mnv4_fwd_eval` cannot be different nets.** That is not a
-    hypothetical: `planning/mnv4_verified.md` §3d(b) measured `mobilenetv2_fwd` in a *different BN
+    hypothetical: `planning/archive/mnv4_verified.md` §3d(b) measured `mobilenetv2_fwd` in a *different BN
     world* from the Adam train step that trains it, and `regen_verified_mlir.sh check` went green
     anyway because it only ever pairs a forward with the SGD step. One traversal, one switch, per
     the `ResNet50RenderB` rule — the divergence has nowhere to live. -/
@@ -508,7 +508,7 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   -- at 224 pads **(0,1)**, not (1,1). Both give 112×112, so no shape check, `#guard`, op count or
   -- arity audit can see the difference — the forward tie is the only thing that can, and it
   -- measured **6.16e-2** with the symmetric token against **1.79e-6** with the reference patched
-  -- to match (`planning/mnv4_verified.md` §3b). Every OTHER stride-2 site in this net is genuinely
+  -- to match (`planning/archive/mnv4_verified.md` §3b). Every OTHER stride-2 site in this net is genuinely
   -- symmetric: `uib_block` and `fused_mbconv_block` pass an explicit `(pad,pad)` tuple, which is
   -- why patching this one line alone closed the whole tie.
   let zx    : Vec (B*(3*224*224)) := fun _ => 0
@@ -1326,7 +1326,7 @@ end Proofs.StableHLO
 
 -- **This is the artifact the MNv4 Imagenette trainer runs**, and this `#eval` is its only writer.
 -- Target: `RESULTS.md`'s 84.58%, the baseline path's number for this block table
--- (`planning/mnv4_verified.md` phase 4). ⚠ Unlike MobileNetV2's, that number belongs to the JAX
+-- (`planning/archive/mnv4_verified.md` phase 4). ⚠ Unlike MobileNetV2's, that number belongs to the JAX
 -- baseline and does NOT move when this render changes — the stem's `convStridedXla` was chosen so
 -- the two are the same net (§3e), and the forward tie measured 1.423e-06 against it unpatched.
 #eval IO.FS.writeFile "verified_mlir/mnv4_adam_train_step.mlir"

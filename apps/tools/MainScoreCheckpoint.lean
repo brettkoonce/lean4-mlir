@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `score-checkpoint` — score a finished checkpoint, standalone
 
-`planning/next_session_verified_trainer_code.md` §2. The JAX side has six `eval_*_full50k.py`;
+`planning/archive/next_session_verified_trainer_code.md` §2. The JAX side has six `eval_*_full50k.py`;
 the verified side had none, so a verified number could only be produced *in training*, and only
 for the weights that happened to be live at that moment. This is the peer:
 

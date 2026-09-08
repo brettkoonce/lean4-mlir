@@ -71,7 +71,7 @@ def _aa_transform(img, vec):
     # over BILINEAR/BICUBIC -- which is also not what we do.) Measured against timm 1.0.28.
     # ▶ NOT changed here, because it is a behaviour change for every net rather than a
     # transcription bug: the magnitude mappings beside it WERE transcription bugs and are fixed.
-    # `planning/a3_paper_fidelity.md` §4b carries the evidence and the decision.
+    # `planning/archive/a3_paper_fidelity.md` §4b carries the evidence and the decision.
     H = tf.shape(img)[0]; W = tf.shape(img)[1]
     images = tf.expand_dims(tf.cast(img, tf.float32), 0)
     transforms = tf.reshape(tf.cast(vec, tf.float32), [1, 8])

@@ -5,13 +5,13 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # The FULL ConvNeXt-T — `[3,3,9,3]`, forward + whole-net VJP + graph + faithfulness
 
 Scales the ch9 representative (1×1 stem + 2 blocks at one scale) to the real ConvNeXt-T
-spec, closing the "full-architecture" gap in `planning/convnext_close.md`:
+spec, closing the "full-architecture" gap in `planning/archive/convnext_close.md`:
 
   4×4/s4 patchify stem (3→96, 224→56) → stem-LN → stage1 (3 blocks @96/56²) →
   downsample (LN + 2×2/s2 conv 96→192) → stage2 (3 @192/28²) → ds (192→384) →
   stage3 (9 @384/14²) → ds (384→768) → stage4 (3 @768/7²) → GAP → dense.
 
-Per the handoff recipe (`planning/convnext_close.md` §"Scaling handoff"):
+Per the handoff recipe (`planning/archive/convnext_close.md` §"Scaling handoff"):
 1. **Depth-k within a stage** — `CnxBlockParamsCh` bundles the block 10-tuple;
    `convNextStageChK (k) (ps : Fin k → CnxBlockParamsCh …)` folds blocks head-first with
    VJP by induction — the ViT depth-k recipe, simpler here (same-shape blocks within a stage).
@@ -31,7 +31,7 @@ scalar γ/β — which is what the repo shipped before §2m flipped ConvNeXt to 
 LayerNorm. `CnxBlockParams`, `cnxBlockW`, `convNextStageK`, `CnxDownParams`, `cnxDownW`,
 `CnxTWeights`, `convNextForwardT`/`TC` and their graph section were deleted once the float
 bridges (their last live consumers) had `…Ch` peers. If you are chasing a dangling reference to
-one of those names, it was retired, not moved. `planning/xla_pjrt_handoff.md` §2n has the
+one of those names, it was retired, not moved. `planning/archive/xla_pjrt_handoff.md` §2n has the
 checklist and what the drop did and did not touch.
 -/
 
@@ -245,7 +245,7 @@ noncomputable def cnxDownChW_has_vjp (h w : Nat) {cin cout : Nat} (p : CnxDownPa
     count … which is why the count alone never caught it"* was right that they nearly cancel and
     wrong that the count could not catch it: the residue IS the missing layer, exactly.
     ⚠ The lesson is §7.2's one net over — we converged on the JAX reference, and the reference was
-    the thing that was wrong. `planning/next_session_execution_and_parity.md` §7.1. -/
+    the thing that was wrong. `planning/archive/next_session_execution_and_parity.md` §7.1. -/
 structure CnxTWeightsCh where
   sW : Kernel4 96 3 4 4
   sb : Vec 96

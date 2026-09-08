@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bites 0b + 0c of planning/yolo_assignment.md, on the existing e12 logits.
+"""bites 0b + 0c of planning/archive/yolo_assignment.md, on the existing e12 logits.
 
 0b -- THE NMS QUESTION. Center sampling only helps if the boxes emitted by the
 newly-positive ring cells MERGE with the centre cell's box under NMS. At 2-5px

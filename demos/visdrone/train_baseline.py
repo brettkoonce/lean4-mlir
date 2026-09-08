@@ -8,7 +8,7 @@ instead of being argued about in the dark. Everything here is ultralytics
 defaults on purpose; the interesting work is the ablations that come after.
 
 Deliberately different from the Lean arm in the four ways identified in
-planning/yolo_assignment.md, which is exactly what makes the diff informative:
+planning/archive/yolo_assignment.md, which is exactly what makes the diff informative:
   augmentation   mosaic + flip + HSV + scale   vs the Lean arm's `augment := false`
   schedule       100 epochs                    vs 12
   resolution     640                           vs 448

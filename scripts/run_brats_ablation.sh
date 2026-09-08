@@ -7,7 +7,7 @@
 # predicts nothing, one that paints the whole brain, and one that segments.
 #
 # This script trains the three arms that tell that story and renders them into
-# one figure. Full write-up: planning/brats_demo.md (read "State of play" first).
+# one figure. Full write-up: planning/archive/brats_demo.md (read "State of play" first).
 #
 # Prerequisites:
 #   ./download_brats.sh                 # MSD Task01, ~7.6 GB, no account needed
@@ -47,7 +47,7 @@ run ce
 run wce
 
 # ── Arm 3: the fix — sqrt-freq weights + prior-bias init + cosine LR ──────────
-# All three levers, and all three are needed (planning/brats_demo.md B'):
+# All three levers, and all three are needed (planning/archive/brats_demo.md B'):
 #   * sqrt-frequency weights (β=0.5): amplify 14x, not 196x — the exchange rate
 #     that finds the tumour instead of painting the brain. The usable band is a
 #     narrow cliff near β=0.5.

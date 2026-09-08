@@ -122,7 +122,7 @@ appear in `tests/AuditAxioms.lean` (for the `#print axioms` check)
 and nowhere else in the codebase — not in `MlirCodegen.lean`, not
 in `tests/comparator/`, not in any other proof file or trainer.
 
-This is consistent with the framing in `planning/audit.md` ("kills
+This is consistent with the framing in `planning/archive/audit.md` ("kills
 rfl escape at kinks") — the value of the pointwise framework is that
 it *exists* and discharges the contract without `rfl` at smooth
 inputs. But it also means the pointwise instances are pure proof

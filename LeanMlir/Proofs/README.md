@@ -10,7 +10,7 @@ succeeds, every theorem is correct.
 ## Directory layout
 
 The 199 proof files are filed into six buckets
-(split rationale: `planning/proofs_directory_refactor.md`). The Lean
+(split rationale: `planning/archive/proofs_directory_refactor.md`). The Lean
 namespace is `Proofs.*` throughout — only module paths carry the bucket:
 
 | directory | what lives there |
@@ -25,7 +25,7 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 ## Two populations, two build targets
 
 The files here are not one homogeneous suite; they split along the seam
-the lakefile's libs encode (rationale: `planning/repo_shape_deletion_audit.md`):
+the lakefile's libs encode (rationale: `planning/archive/repo_shape_deletion_audit.md`):
 
 * **The engine slice — `lake build Proofs`** (~19 files, the default target):
   the IR/render layer every demo exe's import cone actually reaches —
@@ -101,8 +101,8 @@ deferred" Jacobian: `pdivMat_rowIndep`, `pdiv_softmax`,
 inverse-stddev smoothness, the row-wise softmax smoothness, and all
 seven transformer-level composition chains.
 
-The progression: **30 → 0 project axioms.** See `planning/VJP.md` (foundation
-flip and per-chapter migration) and `planning/pdiv.md` (final 4-axiom retirement)
+The progression: **30 → 0 project axioms.** See `planning/archive/VJP.md` (foundation
+flip and per-chapter migration) and `planning/archive/pdiv.md` (final 4-axiom retirement)
 for the full elimination history.
 
 ## Dependency graph

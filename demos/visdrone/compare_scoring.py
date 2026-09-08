@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Put the Lean detector and a working detector on ONE identical metric.
 
-planning/yolo_assignment.md measured the Lean arm's objectness AUC at 0.741 and
+planning/archive/yolo_assignment.md measured the Lean arm's objectness AUC at 0.741 and
 could not tell whether that was mediocre or catastrophic, because there was no
 working detector to compare against. This computes the same quantity for both.
 

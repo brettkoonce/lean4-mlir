@@ -2,12 +2,12 @@ import LeanMlir
 
 /-! ViT-Tiny on Imagenette with the **Muon** optimizer (UNVERIFIED perf path).
 
-    Step-1 demo from `planning/muon.md`: Muon (Newton–Schulz polar projection) on
+    Step-1 demo from `planning/archive/muon.md`: Muon (Newton–Schulz polar projection) on
     every 2D weight matrix — the Q/K/V/O projections and the two MLP layers of all
     12 transformer blocks — with AdamW on the edges (patch-embed conv, CLS token,
     positional embedding, every LayerNorm γ/β, biases, and the small classifier head).
     Identical architecture + recipe to `MainVitTrain` (the AdamW baseline) so the two
-    are a compute-matched A/B on the same net — the comparison `planning/muon.md`'s
+    are a compute-matched A/B on the same net — the comparison `planning/archive/muon.md`'s
     ViT section cashes out.
 
     Patch 16×16 → 192-dim, 12 blocks, 3 heads, MLP 768. ~5.5M params, 224×224, 10 classes.

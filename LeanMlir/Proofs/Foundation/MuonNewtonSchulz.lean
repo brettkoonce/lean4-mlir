@@ -5,8 +5,8 @@ import Mathlib.Dynamics.FixedPoints.Topology
 
 /-! # Newton–Schulz convergence, P1: the iteration is a *scalar* map in disguise
 
-The capstone of the Muon-geometry ladder (`planning/muon_ns_convergence.md`,
-`planning/muon_geometry.md`, `LeanMlir/Proofs/Foundation/MuonGeometry.lean`). L1–L6 proved that the polar factor
+The capstone of the Muon-geometry ladder (`planning/archive/muon_ns_convergence.md`,
+`planning/archive/muon_geometry.md`, `LeanMlir/Proofs/Foundation/MuonGeometry.lean`). L1–L6 proved that the polar factor
 `UVᵀ` is the *right object* — operator-norm steepest descent (L3, von Neumann), the nuclear norm's
 argmax, Shampoo's single step (L5), the nearest orthogonal matrix to `G` (L6). **What remains is that
 the implementation actually computes it:** Muon's matmul iteration
@@ -304,7 +304,7 @@ theorem nsStep_q5_iterate_tendsto_polar
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Muon's actual tuned Newton–Schulz quintic** `φ(t) = 3.4445 t − 4.7750 t³ + 2.0315 t⁵`
-    (Jordan 2024 — `planning/muon.md`). This is *not* a statement about quintics in general — the
+    (Jordan 2024 — `planning/archive/muon.md`). This is *not* a statement about quintics in general — the
     *principled* quintic `q5Scalar` `(15/8, −5/4, 3/8)` converges (`q5Scalar_iterate_tendsto_one`,
     faster than the cubic even). Convergence is the **coefficient choice**: Jordan tuned *these*
     coefficients for *speed to a band near 1 in ~5 steps*, deliberately giving up asymptotic
@@ -337,7 +337,7 @@ theorem qScalar_not_le_one : ¬ ∀ t : ℝ, 0 ≤ t → t ≤ 1 → qScalar t �
     Five steps of Muon's tuned quintic from `σ = 1/2` land within `0.3` of `1`:
     `|qScalar^[5] (1/2) − 1| ≤ 3/10` (the orbit `0.5 → 1.19 → 0.90 → 0.83 → 0.94 → 0.77` oscillates in a
     band around `1`, never reaching it). This matches the implementation's fixed-5-step, "rough is
-    fine — we recompute next optimizer step anyway" design (`planning/muon.md`): not convergence, a
+    fine — we recompute next optimizer step anyway" design (`planning/archive/muon.md`): not convergence, a
     *band*. The universal interval version `∀ σ ∈ [σ_min, 1], |φ^[5](σ) − 1| ≤ δ` is a degree-5⁵
     polynomial bound over an interval (genuine interval arithmetic) and is left open by hand. -/
 theorem qScalar_iterate_band_half : |qScalar^[5] (1 / 2) - 1| ≤ 3 / 10 := by

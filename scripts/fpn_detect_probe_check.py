@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compile + f64-FD-validate the Lean-emitted WHOLE FPN detector (neck + 1x1 heads
-+ concat + multi-scale loss + full DAG backward) — the bite-7 de-risk (planning/
++ concat + multi-scale loss + full DAG backward) — the bite-7 de-risk (planning/archive/
 yolo_fpn.md). This is the one part of bite 7 that can't be FD-checked once the conv
 backbone is attached (conv doesn't CPU-compile), so we pin it in isolation here.
 

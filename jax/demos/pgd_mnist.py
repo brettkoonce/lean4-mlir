@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""PGD adversarial attack vs Lipschitz certificate on an MNIST MLP (planning/robustness.md).
+"""PGD adversarial attack vs Lipschitz certificate on an MNIST MLP (planning/archive/robustness.md).
 
 The two sides of adversarial robustness, bracketing the truth:
     certified robust acc  <=  TRUE robust acc  <=  PGD-empirical robust acc

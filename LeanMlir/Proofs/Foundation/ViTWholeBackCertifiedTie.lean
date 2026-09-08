@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Architectures.ViTVecLNBackCertifiedTie
 The ViT peer of `r34InputGrad_eq_resnet34_vjp`, `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp`,
 `convnextInputGrad_eq_convNextForwardTCh_vjp` and
 `efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp` — tier T6 of
-`planning/proofs_tier_to_paper_nets.md`, at ViT-Tiny's shipped configuration: depth 12 with
+`planning/archive/proofs_tier_to_paper_nets.md`, at ViT-Tiny's shipped configuration: depth 12 with
 distinct per-block parameters, `D = 192 = 3 × 64`, 197 tokens, vector-`[D]` LayerNorm.
 
 Four things assemble it, and only the second is a proof rather than an enumeration:

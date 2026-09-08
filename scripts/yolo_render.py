@@ -26,7 +26,7 @@ Decoding (per cell at grid (i, j) in [0, 7)):
 
 Per-class greedy NMS with IoU > 0.5 dropped; drops detections with score < 0.1.
 
-See planning/yolo_final.md Phase 5.
+See planning/archive/yolo_final.md Phase 5.
 """
 import argparse
 import math

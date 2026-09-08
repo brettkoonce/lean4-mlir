@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""E4M3 (fp8) MNIST-linear demo — planning/floatbridge_quantization.md §3a.
+"""E4M3 (fp8) MNIST-linear demo — planning/archive/floatbridge_quantization.md §3a.
 
 MNIST-linear (784->10) is DEPTH-1: a single matmul, so the per-matmul fp8
 leaf bound IS a non-vacuous end-to-end accuracy bound. This is the one

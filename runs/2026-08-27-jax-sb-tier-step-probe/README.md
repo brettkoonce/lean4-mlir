@@ -64,7 +64,7 @@ it names.
   allocator's 11.68 GiB, `RESOURCE_EXHAUSTED` on a 9.08 GiB request
   (`sb_probe.vit-b-oneshot512.log`). Same figure the 2026-07-25 probe got.
 
-Reproduces the 2026-07-25 table in `planning/vit_convnext_sb_scaleup.md` closely
+Reproduces the 2026-07-25 table in `planning/archive/vit_convnext_sb_scaleup.md` closely
 (ConvNeXt-B 399 vs 395 then, same 9.56 GiB; ViT-B 701 vs 712) on a newer JAX, so
 the 0.10.2 → 0.11.0 move did not shift these. ViT-S came in 7% faster (290 vs
 313).

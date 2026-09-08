@@ -44,7 +44,7 @@ opaque perturbUnit (base : @& ByteArray) (off d0 : USize) (r : Float) (seed : US
 /-- Write three consecutive f32 values starting at float index `idx`, **in place**
     when the array is unshared (it copies otherwise, so the result never depends
     on a refcount). Used to patch the `lr`/`bc₁`/`bc₂` slots of the Adam step
-    buffer without rebuilding it — see `planning/xla_pjrt_ladder.md` §8. -/
+    buffer without rebuilding it — see `planning/archive/xla_pjrt_ladder.md` §8. -/
 @[extern "lean_f32_write3"]
 opaque write3 (ba : ByteArray) (idx : USize) (a b c : Float) : IO ByteArray
 
@@ -377,7 +377,7 @@ opaque detSplitBatch (interleaved : @& ByteArray) (batch : USize)
     x_cell channel with `1 - x_cell` on cells where mask=1 (since the
     cell itself mirrors). Returns the augmented (images, target, mask)
     triple as fresh ByteArrays; inputs are not modified.
-    See `planning/yolo_final.md` Phase 3. LEGACY — superseded by
+    See `planning/archive/yolo_final.md` Phase 3. LEGACY — superseded by
     `yoloAugment` (Phase 3b) which operates on raw bboxes. -/
 @[extern "lean_f32_yolo_hflip"]
 opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& ByteArray)
@@ -401,7 +401,7 @@ opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& Byte
     * `seed`: xorshift seed.
 
     Returns `(new_image, new_target, new_mask)` as fresh ByteArrays.
-    See `planning/yolo_final.md` Phase 3. -/
+    See `planning/archive/yolo_final.md` Phase 3. -/
 @[extern "lean_f32_yolo_augment"]
 opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
     (batch : USize) (channels : USize) (imgH : USize) (imgW : USize)
@@ -477,7 +477,7 @@ opaque segHflipPair (img mask : @& ByteArray)
 /-- Per-batch segmentation confusion matrix. `logits` is f32 `[B,NC,H,W]`,
     `masks` is u8 `[B,H,W]` (per-pixel class). Returns int64 LE `[NC*NC]`
     counts `conf[true*NC + pred]` (argmax over channels), for mIoU
-    accumulation across batches. planning/unet_demo_v2.md Workstream A. -/
+    accumulation across batches. planning/archive/unet_demo_v2.md Workstream A. -/
 @[extern "lean_f32_seg_confusion"]
 opaque segConfusion (logits masks : @& ByteArray)
     (B NC H W : USize) : IO ByteArray
@@ -515,7 +515,7 @@ opaque ema (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) : 
 
 /-- Per-image horizontal flip of an NCHW f32 batch (independent p=0.5
     coin per image). Plain image aug for unconditional DDPM —
-    planning/ddpm_demo_v2.md Workstream B3. -/
+    planning/archive/ddpm_demo_v2.md Workstream B3. -/
 @[extern "lean_f32_hflip_nchw"]
 opaque hflipNCHW (images : @& ByteArray) (batch : USize) (channels : USize)
     (H : USize) (W : USize) (seed : USize) : IO ByteArray

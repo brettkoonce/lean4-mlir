@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mAP@0.5 scorer for the VisDrone single-grid YOLOv1 baseline (WS-A, planning/yolo_drone.md).
+"""mAP@0.5 scorer for the VisDrone single-grid YOLOv1 baseline (WS-A, planning/archive/yolo_drone.md).
 
 Reads a whole-val-set logits dump (from `yolov1-pets-infer 0 data/visdrone <out>`)
 plus the matching VisDrone detection-record `val.bin` (produced by
@@ -253,7 +253,7 @@ def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
 
 def decode_fpn(pred_flat, scales, conf_thresh, nms_iou, topk=1000):
     """Decode the flat FPN head [Ntot] = [P3|P4|P5]: per-scale anchor decode, then
-    MERGE all scales' dets and run one class-wise NMS (planning/yolo_fpn.md bite 8).
+    MERGE all scales' dets and run one class-wise NMS (planning/archive/yolo_fpn.md bite 8).
     `scales` = [(grid, anchors), ...] in P3,P4,P5 order. Keeps only the top-`topk`
     dets by confidence before NMS — bounds the O(n²) NMS at diffuse early-model
     density (VisDrone has ~70 GT/img, so 1000 is ample headroom)."""

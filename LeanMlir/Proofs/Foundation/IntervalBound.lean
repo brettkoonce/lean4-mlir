@@ -22,7 +22,7 @@ and one `absSumZ` kernel fact per row for `‖w‖₁` (`ListDot.lean`).
 The certificate itself is stated on a *bracket*, not on interval arithmetic:
 `certified_of_boxSound` takes any `BoxSoundE f Flo Fhi` — "`Flo`/`Fhi` trap `f`
 on the box" — and `ibp2_certified_at_eps` is its corollary at the interval
-bracket `mlp2_boxSound`. A tighter bracket (CROWN, `planning/crown_ibp.md`)
+bracket `mlp2_boxSound`. A tighter bracket (CROWN, `planning/archive/crown_ibp.md`)
 therefore plugs into this tier rather than forking it.
 
 Everything is elementary and 3-axiom clean; instance files:

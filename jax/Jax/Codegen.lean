@@ -56,7 +56,7 @@ def _aa_transform(img, vec):
     # over BILINEAR/BICUBIC -- which is also not what we do.) Measured against timm 1.0.28.
     # ▶ NOT changed here, because it is a behaviour change for every net rather than a
     # transcription bug: the magnitude mappings beside it WERE transcription bugs and are fixed.
-    # `planning/a3_paper_fidelity.md` §4b carries the evidence and the decision.
+    # `planning/archive/a3_paper_fidelity.md` §4b carries the evidence and the decision.
     H = tf.shape(img)[0]; W = tf.shape(img)[1]
     images = tf.expand_dims(tf.cast(img, tf.float32), 0)
     transforms = tf.reshape(tf.cast(vec, tf.float32), [1, 8])
@@ -317,7 +317,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     -- branch is unreachable at runtime; keep it stubbed for exhaustivity.
     "# Pets segmentation is phase-3-only; phase 2 emits nothing for .pets.\n\n"
   | .petsDet =>
-    -- YOLOv1/detection is phase-3-only (see planning/yolo_final.md).
+    -- YOLOv1/detection is phase-3-only (see planning/archive/yolo_final.md).
     -- JAX codegen has no detection emit; stub for exhaustivity.
     "# detection is phase-3-only; phase 2 emits nothing for .petsDet.\n\n"
   | .imagenet =>
@@ -551,7 +551,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    # Changed 2026-08-04 for paper-faithfulness. ⚠ Scoped to the ResNet-family helpers\n" ++
       "    # ON PURPOSE: MobileNetV2/EfficientNet emit their own conv_general_dilated with\n" ++
       "    # 'SAME' and are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not\n" ++
-      "    # 'fix' those. See planning/rsb_a3_r50_verified.md §4b.\n" ++
+      "    # 'fix' those. See planning/archive/rsb_a3_r50_verified.md §4b.\n" ++
       "    if padding is None:\n" ++
       "        padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)\n" ++
       "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
@@ -571,7 +571,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    # n=12: 'SAME' window maxima [2,4,6,8,10,11] vs symmetric [1,3,5,7,9,11]).\n" ++
       "    # Output shape is unchanged (112 -> 56) either way.\n" ++
       "    #\n" ++
-      "    # Changed 2026-08-03 for paper-faithfulness; see planning/rsb_a3_r50_verified.md.\n" ++
+      "    # Changed 2026-08-03 for paper-faithfulness; see planning/archive/rsb_a3_r50_verified.md.\n" ++
       "    # This MOVES the ResNet stem pool, so it voids R34-ImageNet's and R50's numbers.\n" ++
       "    p = (size - 1) // 2\n" ++
       "    return jax.lax.reduce_window(x, -jnp.inf, jax.lax.max,\n" ++
@@ -692,11 +692,11 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   --
   -- ⚠ It went unnoticed because it is invisible to everything except a run: the graph type-checks,
   -- the expectation is right, eval is identity either way, and no gate compares two Bernoulli
-  -- streams. `planning/stochastic_depth.md` quotes the per-example form as *the* reference and
+  -- streams. `planning/archive/stochastic_depth.md` quotes the per-example form as *the* reference and
   -- builds `dropPathB` / `F32.dropScales` / the per-example shard rule around it, so **every
   -- verified `*drop*` render in the tree was already right and it was this side that was wrong** —
   -- 26 committed `convnext*`/`efficientnet*` artifacts with no correct oracle
-  -- (`planning/verified_side_quest_counterparts.md` §6b).
+  -- (`planning/archive/verified_side_quest_counterparts.md` §6b).
   --
   -- ⭐ Nothing MEASURED changes: `dropPath > 0` appears in ImageNet-tier configs only, every
   -- Imagenette config sets none, R50's A3 reference sets 0.0, and MNv4-Conv-M's 75.51% ran
@@ -1921,7 +1921,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
 -- `params` list, and writes the constituent tensors as float32 bytes. The
 -- on-disk byte order matches LeanMlir.SpecHelpers.paramShapes exactly, so a
 -- file written here drops into the phase-3 Lean trainer's `bootstrapBackbone`
--- prefix-loader without conversion. See planning/yolo_final.md Phase 4.
+-- prefix-loader without conversion. See planning/archive/yolo_final.md Phase 4.
 private def emitParamsToFile (spec : NetSpec) : String := Id.run do
   let mut code := "def params_to_file(params, path):\n"
   code := code ++ "    \"\"\"Mirror of init_params_from_file. Walks the JAX `params`\n"
@@ -2381,9 +2381,9 @@ private def effOpt (cfg : TrainConfig) : OptimizerKind :=
   match cfg.optimizer with
   | .sgd => if cfg.useAdam then .adam else .sgd
   | .muon => .adam  -- JAX backend has no Newton–Schulz kernel; Muon degrades to its
-                    -- AdamW fallback here. Muon proper is the IREE/MLIR path (planning/muon.md).
+                    -- AdamW fallback here. Muon proper is the IREE/MLIR path (planning/archive/muon.md).
   | .shampoo => .adam  -- Same story: no preconditioner kernels in the JAX backend;
-                       -- Shampoo proper is the IREE/MLIR path (planning/shampoo.md).
+                       -- Shampoo proper is the IREE/MLIR path (planning/archive/shampoo.md).
   | k    => k
 
 private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=

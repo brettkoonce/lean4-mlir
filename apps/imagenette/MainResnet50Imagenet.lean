@@ -82,7 +82,7 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD resnet50ImagenetConfig.epochs
   -- ▶ `LEAN_MLIR_RES` picks the TRAIN resolution, which is not a knob but a choice of NET SPEC:
   -- it selects the slug (`resnet50in` vs `resnet50in160`), hence the artifact family, `d0`, and
-  -- the shim. `planning/next_session_rsb_a3.md` §2. ⚠ REFUSES on any other value rather than
+  -- the shim. `planning/archive/next_session_rsb_a3.md` §2. ⚠ REFUSES on any other value rather than
   -- falling back to 224 — a silent fallback here is a run that looks correct and trains the wrong
   -- resolution, which is the §0.9 shim-fallback failure one layer up.
   -- ▶ `LEAN_MLIR_RECIPE` picks the AUGMENTATION. Like `LEAN_MLIR_RES` it is not a knob but a

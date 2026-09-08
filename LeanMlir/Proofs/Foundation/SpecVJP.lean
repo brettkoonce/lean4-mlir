@@ -811,7 +811,7 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
     at one spatial position with a per-channel `[c]` affine and the head one over the `[768]` GAP
     output (which is the same function at one spatial position — `rowLNVecFlat 1 768`).
 
-    ⚠ The head LN was RESTORED 2026-08-30 (`planning/next_session_execution_and_parity.md` §7.1).
+    ⚠ The head LN was RESTORED 2026-08-30 (`planning/archive/next_session_execution_and_parity.md` §7.1).
     §2m/§2n had deleted it to match the JAX reference, which was itself missing it against both
     the paper and timm; the parameter count was short by exactly 2×768.
 

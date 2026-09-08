@@ -4,7 +4,7 @@ parameter round trip. This is what separates "the renderer" from "the system".
 
     .venv/bin/python scripts/bf16_device_step.py verified_mlir/<f32>.mlir verified_mlir/<bf16>.mlir
 
-⚠⚠ WHY THIS EXISTS. `planning/bf16_renderer.md` has now recorded THREE ways a trainer's ms/step
+⚠⚠ WHY THIS EXISTS. `planning/archive/bf16_renderer.md` has now recorded THREE ways a trainer's ms/step
 can be a system result rather than a statement about the emitted graph:
 
   1. the shim feed          (§13.2 — MobileNetV2 is 1.92x on one GPU and 1.37x on four)

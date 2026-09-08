@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """EfficientNet-B0 forward tie — the verified render against the JAX reference, on SHARED weights.
 
-The third and last net in the padding sweep (`planning/mnv4_verified.md` §3d(d) listed it as
+The third and last net in the padding sweep (`planning/archive/mnv4_verified.md` §3d(d) listed it as
 "structurally exposed, NOT measured" — this is the measurement, and it CORRECTS that entry).
 
 ⭐ WHAT READING THE GENERATOR ALREADY SETTLED. §3c/§3d inferred EfficientNet was exposed at all

@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-! # CIFAR-8 last-conv SGD descent — the first non-MNIST provable descent (A2 probe)
 
-`planning/tier23_float_and_syntactic_faithfulness.md` A2 asked the genuinely-uncertain question: does
+`planning/archive/tier23_float_and_syntactic_faithfulness.md` A2 asked the genuinely-uncertain question: does
 the segment-Lipschitz SGD-descent argument (proven for the MNIST CNN, `SgdDescentCnn.lean`) reach a
 CIFAR net? This file answers it.
 

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # PoC: the E4M3 (fp8) quantized MNIST-linear render-tie (planning §3b)
 
-`planning/floatbridge_quantization.md` §3b: the **structural faithfulness** of the
+`planning/archive/floatbridge_quantization.md` §3b: the **structural faithfulness** of the
 low-precision scheme. Where §3c bounds the *accuracy* of E4M3-mixed inference, this
 file proves the *correctness of the implementation*: the emitted block-scaled-E4M3
 matmul graph **denotes** the intended algorithm, with **no accuracy claim**.

@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! Anchor-based YOLO detector on VisDrone at 448 / 14×14 grid, A=6 anchors
-    (brick #2, planning/yolo_drone.md WS-C). Each cell predicts 6 anchor slots
+    (brick #2, planning/archive/yolo_drone.md WS-C). Each cell predicts 6 anchor slots
     of [tx,ty,tw,th, obj, cls(10)] (head 256→90 = A·15); box_a = anchor_a·exp(pred),
     FD-verified DIoU box loss + focal objectness + softmax class (emitAnchorYoloLoss).
     Anchors are the k-means priors from scripts/visdrone_anchors.py (recall@0.5

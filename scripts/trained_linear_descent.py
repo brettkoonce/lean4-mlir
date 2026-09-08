@@ -1,4 +1,4 @@
-"""Descent at TRAINED weights (planning/post_audit_roadmap.md §3).
+"""Descent at TRAINED weights (planning/archive/post_audit_roadmap.md §3).
 
 Emits LeanMlir/Proofs/Training/TrainedLinearDescent.lean: one binary32 SGD step on a
 TRAINED, /128-rationalized bias-free 49->10 pooled-MNIST linear classifier

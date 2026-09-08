@@ -25,7 +25,7 @@ are equal Nats and NOT definitionally equal terms, and each stage demands its op
 the spelling it names.
 
 Moved here from the float bridges that defined them beside their float twins on 2026-09-08
-(`planning/float_second_pass.md`); no number is stated about any of these chains. -/
+(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
 
 namespace Proofs
 

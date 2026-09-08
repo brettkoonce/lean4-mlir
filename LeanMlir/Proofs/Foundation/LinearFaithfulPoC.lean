@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Foundation.LinearTrainStep
 
 /-! # PoC: the MNIST-linear train step, proof-tied to the certified SGD step
 
-Companion to `planning/verified_faithful_sweep.md`. `MainMnistLinearVerified`
+Companion to `planning/archive/verified_faithful_sweep.md`. `MainMnistLinearVerified`
 trains on `verified_mlir/linear_train_step.mlir`, which is written by
 `Proofs.StableHLO.linearTrainStepModuleV` (`StableHLO.lean:4167`). This file
 certifies *that* renderer: every value the emitted module produces is the

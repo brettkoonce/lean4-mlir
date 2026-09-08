@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@vit_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md`, the ViT AdamW thread, step 3. `Proofs/Codegen/ViTRender.lean`'s
+`planning/archive/xla_pjrt_handoff.md`, the ViT AdamW thread, step 3. `Proofs/Codegen/ViTRender.lean`'s
 `vitAdamTrainStepFaithful` renders the same train step the hand-written
 `LeanMlir/ViTRender.vitTrainStepModuleAdamSched` does — the one
 `apps/imagenette/MainViTVerifiedAdam.lean` writes at startup and trains on. This harness is what

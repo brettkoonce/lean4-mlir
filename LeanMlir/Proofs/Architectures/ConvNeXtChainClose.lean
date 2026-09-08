@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXtClose
 
 `ConvNeXtClose.lean` (Item C) certifies each ConvNeXt param output for *any* cotangent `dy` at that
 layer's output. This file pins `dy` to the cotangent the **actual backward chain delivers** — the
-ConvNeXt analogue of `MobileNetV2ChainClose` (`planning/convnext_close.md`
+ConvNeXt analogue of `MobileNetV2ChainClose` (`planning/archive/convnext_close.md`
 Item D). Pure-Lean, batch-1 — LayerNorm is per-example separable, so none of EfficientNet's
 batched-VJP machinery (`batchMap_has_vjp`) is needed.
 

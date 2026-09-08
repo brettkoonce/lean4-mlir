@@ -8,7 +8,7 @@ epoch-by-epoch curve for both arms and an epochs-to-target row, not a pair of
 final scores.
 
 Two guards run before anything is reported, both from
-planning/r34_brats_retrain.md §5, and both earned by real bugs:
+planning/archive/r34_brats_retrain.md §5, and both earned by real bugs:
 
   * **Identical consecutive eval rows.** The VisDrone `long30` eval ran without
     its arm tag and silently scored the same checkpoint six times, printing six

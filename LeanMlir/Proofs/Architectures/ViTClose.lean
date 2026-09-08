@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Architectures.ViTFwdGraph
 
 /-! # Closing the ViT render — the parameter-gradient close (ch10 Item C)
 
-`planning/vit_close.md` Item C, applied to the representative 2-block / 1-head ViT
+`planning/archive/vit_close.md` Item C, applied to the representative 2-block / 1-head ViT
 (`vitForward2`, the proven whole-net VJP `vitForward2_has_vjp`; graph `vitFwdGraph`).
 Generic in the cotangent `dy` the backward chain delivers at each site's output
 (pinning that cotangent to the actual attention chain is the optional Item D), batch-1 —

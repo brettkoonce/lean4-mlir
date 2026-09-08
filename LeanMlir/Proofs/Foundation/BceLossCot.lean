@@ -11,7 +11,7 @@ instead, and `ResNet50RenderB`'s `bce := true` path swaps the loss cotangent for
 ```
 
 so `dy = (σ(z) − t)/(B·K)`, against softmax-CE's five ops and `/B`. Nothing said that chain is a
-loss's gradient — `planning/proofs_tier_to_paper_nets.md` §3.5 lists "BCE has no cotangent `den`"
+loss's gradient — `planning/archive/proofs_tier_to_paper_nets.md` §3.5 lists "BCE has no cotangent `den`"
 as one of the two items ResNet-50's T3 needs first. This is that item.
 
 ## What is proved

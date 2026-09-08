@@ -13,7 +13,7 @@ import LeanMlir
     loader falls back to zeros (fresh BN) — fine for fine-tuning, which retrains
     them. (One-off size-mismatch WARN as it tries the companion path; harmless.)
 
-    See `planning/yolo_final.md`. Usage:
+    See `planning/archive/yolo_final.md`. Usage:
       lake build yolov1-pets-train-bootstrap
       ./download_pets.sh && python3 preprocess_pets_mosaic.py data/pets data/pets_mosaic_bal
       IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
@@ -29,7 +29,7 @@ def r34Yolov1 : NetSpec where
   -- weights). A 3×3 conv 512→256 + ReLU (nonlinear capacity + spatial context)
   -- then 1×1 → 30 gives it the read it needs. Backbone prefix (21,284,672)
   -- unchanged (the two head convs are He-init, after the prefix). See
-  -- planning/yolo_final.md for why localization is really a data problem (mosaic).
+  -- planning/archive/yolo_final.md for why localization is really a data problem (mosaic).
   name := "ResNet-34 + YOLOv1 deep-head (Pets)"
   imageH := 224
   imageW := 224
@@ -68,7 +68,7 @@ def r34Yolov1BootstrapConfig : TrainConfig where
   checkpointEveryNEpochs := 2  -- frequent ckpts: mars segfaults ~ep4-11; auto-resume needs recent state
   augment      := true        -- Phase 3: bbox-aware hflip + random crop
   lossKind     := LossKind.yolov1Masked
-  -- Focal-BCE objectness (planning/yolo_final.md §3): sigmoid + focal-BCE on the
+  -- Focal-BCE objectness (planning/archive/yolo_final.md §3): sigmoid + focal-BCE on the
   -- conf channel instead of raw-MSE, so the ~1-2 foreground cells aren't drowned
   -- by ~47 background cells. This is the fix for the objectness collapse-to-
   -- center-prior the conv head otherwise decays into by ~ep20. γ=2 (RetinaNet).

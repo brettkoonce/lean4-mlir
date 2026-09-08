@@ -73,7 +73,7 @@ def loss_floors(f):
     the best constant predictor, which looks like evidence of learning and is
     not -- the net got under the floor purely by being confident on
     trivially-separable background while its argmax never fired a tumour class
-    (planning/brats_demo.md Workstream A). The floors are what make a loss
+    (planning/archive/brats_demo.md Workstream A). The floors are what make a loss
     number mean something.
     """
     NC = len(f)

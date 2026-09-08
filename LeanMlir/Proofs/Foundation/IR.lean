@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Architectures.SE
 
 /-! # A denoted StableHLO-subset IR — Phase 0a/0b spike
 
-Spike for `planning/typed_ir.md`: give the *emitted backward graph* a
+Spike for `planning/archive/typed_ir.md`: give the *emitted backward graph* a
 denotational semantics `⟦·⟧` landing in the proofs' own `Vec` type, then
 prove the emitted graph denotes the proven `HasVJP.backward`. This turns
 the per-op proof↔codegen correspondence from a comment into a theorem.
@@ -24,7 +24,7 @@ This file is the **scaffolding probe**, not the full ladder:
   `relu_codegen_matches_canonical`, exactly matching the codegen trust
   boundary.
 
-Design notes (see `planning/typed_ir.md`): the backward is modelled as an
+Design notes (see `planning/archive/typed_ir.md`): the backward is modelled as an
 expression tree rooted at the cotangent — SSA/sharing is a
 semantics-preserving printer concern (D2), so the correctness proof never
 touches it. The spike uses `Vec`/`Mat` directly (D1 shortcut) rather than

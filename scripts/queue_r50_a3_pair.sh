@@ -7,7 +7,7 @@
 #   leg 1                    R50 RSB-A3, JAX reference     — ~17 h
 #   leg 2                    R50 RSB-A3, VERIFIED wx+clip  — ~31–34 h
 #
-# ⭐ WHY THE ORDER IS NOT NEGOTIABLE. `planning/imagenet_rerun_sweep.md` §5: "Do not start (2)
+# ⭐ WHY THE ORDER IS NOT NEGOTIABLE. `planning/archive/imagenet_rerun_sweep.md` §5: "Do not start (2)
 # before (3)'s reference is scheduled. The whole value of the verified number is that it sits
 # beside a reference measured under the same rules." The 77.43% verified result has no live peer —
 # the 77.22% JAX reference it was quoted against predates C2/C3/C4/C6 and re-scores to 74.62%
@@ -86,4 +86,4 @@ sleep 10
 wait_for /tmp/supervise_r50-a3-wxclip-4gpu/master.log "COMPLETE —" "leg 2 (R50 A3, verified)"
 
 say "✅ queue drained — both A3 legs complete."
-say "next: score both, then update planning/imagenet_rerun_sweep.md §5 items 2 and 3."
+say "next: score both, then update planning/archive/imagenet_rerun_sweep.md §5 items 2 and 3."

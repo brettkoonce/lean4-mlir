@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `mnist-cnn-pgd` — phase-3 PGD attack on the verified MNIST CNN
 
-The first **conv rung** of the robustness ladder (`planning/robustness_ladder.md`). Trains the
+The first **conv rung** of the robustness ladder (`planning/archive/robustness_ladder.md`). Trains the
 `conv 1→32 → relu → conv 32→32 → relu → maxpool → flatten → 6272→512 → relu → 512→512 → relu →
 512→10` net on the proof-rendered SGD step, then runs an L∞ / L2 PGD attack through the real IREE
 pipeline. Each step's input gradient is the **full proven backward** run to `dx`: the conv

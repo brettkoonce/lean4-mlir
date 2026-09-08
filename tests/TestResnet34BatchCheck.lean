@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # bs256 re-render gate — the duplicated-batch exact check
 
-`planning/xla_pjrt_handoff.md` §2d.1. `verified_mlir/resnet34_adam256_train_step.mlir` is the same
+`planning/archive/xla_pjrt_handoff.md` §2d.1. `verified_mlir/resnet34_adam256_train_step.mlir` is the same
 `pretty(provenGraph)` as the bs32 artifact with `B := 256`; the two are structurally identical
 (10014 ops, 9838 lines, same op profile) and differ only in tensor dimensions and one constant. That
 is *exactly* the kind of change that looks obviously right and can still be silently wrong — the

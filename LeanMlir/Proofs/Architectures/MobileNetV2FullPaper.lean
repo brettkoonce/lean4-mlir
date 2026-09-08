@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 
 Scales `MobileNetV2RenderPC.lean`'s reduced ch7 net (strided stem + 6 inverted-residual
 blocks + 1×1 head) to the real MobileNetV2 `[t,c,n,s]` table — 17 bottleneck blocks at
-224² — closing the "honest caveat on full" in `planning/mobilenetv2_close.md`. Pure
+224² — closing the "honest caveat on full" in `planning/archive/mobilenetv2_close.md`. Pure
 enumeration + chaining of the per-channel stage machinery (`ivExpandPC`/`ivDepthwisePC`/
 `ivDepthwiseStridedPC`/`ivProjectPC`), the `EfficientNetFullB0` recipe; the only
 genuinely-new block shape is the **t=1 first bottleneck** (no expand conv — depthwise →

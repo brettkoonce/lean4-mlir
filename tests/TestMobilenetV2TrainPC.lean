@@ -11,7 +11,7 @@ of `mobilenetv2FwdGraphFullPC` (Item A) — forward (`flatConvStridedF`/`flatCon
 `depthwiseBack`/`depthwiseStridedBack`, `addV` residual fan-in).
 
 **BatchNorm is hand-emitted (`bnB`/`bnBackB`), NOT a proof token** — the exact-parity change (matches
-r34/enet, see `planning/mnv2_verified.md`). The reference uses TRUE batch-norm (reduce μ/var over
+r34/enet, see `planning/archive/mnv2_verified.md`). The reference uses TRUE batch-norm (reduce μ/var over
 `[0,2,3]`), but the SHlo `.bnBatchF` token has no `pretty`/emit case, so giving mnv2 batch-norm trades
 away its proof-rendered-BN property: BN forward+backward become hand-emitted flat↔NCHW fragments
 (reshape is a buffer no-op), like the existing hand-emitted gap-backward and conv/depthwise grads.

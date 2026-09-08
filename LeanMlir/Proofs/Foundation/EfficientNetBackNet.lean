@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.EfficientNetFullB0
 
 /-! # EfficientNet's four remaining holes, closed — and they were all one shape
 
-`planning/mnv4_verified.md` §8e swept the repo for **certified batched forwards with no BACKWARD
+`planning/archive/mnv4_verified.md` §8e swept the repo for **certified batched forwards with no BACKWARD
 graph** and found five. One (`efficientnetForwardB`) is the whole-net forward, which no net has and
 which is the artifact-tie item. The other four are EfficientNet's:
 

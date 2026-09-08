@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@resnet34_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md` §2b step 5. The committed
+`planning/archive/xla_pjrt_handoff.md` §2b step 5. The committed
 `verified_mlir/resnet34_adam_train_step.mlir` **now** renders from
 `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` as `pretty(provenGraph)` at the batched index
 `N := B`, with the un-fused `*GradB` gradients feeding the proven AdamW ops. It used to come from

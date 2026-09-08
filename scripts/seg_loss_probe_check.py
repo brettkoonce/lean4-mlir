@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Compile + numerically validate the Lean-emitted segmentation loss blocks
-(planning/brats_demo.md Workstream B).
+(planning/archive/brats_demo.md Workstream B).
 
   1. lake build seg-loss-probe
   2. .lake/build/bin/seg-loss-probe <kind> <B NC H W> <out.mlir>
@@ -210,7 +210,7 @@ def main():
 
     # Label smoothing. The emitter has had it since Phase 0
     # (emitPerPixelCEBlock's smoothOn/smoothOff) but Train.lean throws on the
-    # combination, and planning/brats_demo.md has been calling that a "free win
+    # combination, and planning/archive/brats_demo.md has been calling that a "free win
     # — only the guard needs lifting". It wasn't free: NOTHING here ever ran at
     # ls > 0, so lifting the guard would have shipped an unverified path. Verify
     # first, then lift.

@@ -91,7 +91,7 @@ theorem max4_sub_abs_le_sum {a b c d a' b' c' d' : ℝ} :
 
 /-- Flat index of a `Tensor3` coordinate (the suite's row-major layout).
 
-    ⚠ `@[reducible]` is load-bearing on Lean ≥ 4.33 (see planning/lean_434_and_cleanup.md):
+    ⚠ `@[reducible]` is load-bearing on Lean ≥ 4.33 (see planning/archive/lean_434_and_cleanup.md):
     `t3Idx_def` folds the raw encoding into the `ite` CONDITION below, but simp does not rewrite
     inside the `Decidable` INSTANCE argument, so the goal carries a folded condition over an
     unfolded instance and every `if_pos`/`if_neg` here fails to match. `basisVec`, which produces

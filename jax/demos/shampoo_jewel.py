@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Shampoo numerical jewel demo (planning/shampoo.md §4 step 1).
+"""Shampoo numerical jewel demo (planning/archive/shampoo.md §4 step 1).
 
 Three parts, all tiny (CPU is fine):
 

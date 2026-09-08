@@ -24,7 +24,7 @@ the defect — the mass is merely on a shell instead of filling the ball — so 
 summary statistic on the coordinates agrees with a healthy Gaussian. The radius
 is what separates them, which is what this file asserts.
 
-▶ Found by the reverse-process strip of `planning/diffusion_2d_demo.md` §5: the
+▶ Found by the reverse-process strip of `planning/archive/diffusion_2d_demo.md` §5: the
 `t = T` panel is meant to be an isotropic blob and it was a ring. That is the
 figure earning its place — no number in the demo's metric suite moved.
 

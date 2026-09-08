@@ -1,6 +1,6 @@
 #!/bin/bash
 # Compute-matched A/B: ViT-Tiny on Imagenette — Muon (GPU0) vs AdamW baseline (GPU1).
-# Same architecture + recipe; only the optimizer differs. See planning/muon.md.
+# Same architecture + recipe; only the optimizer differs. See planning/archive/muon.md.
 #   Muon : 2D weight matrices (Q/K/V/O + MLP, ×12 blocks) via Newton-Schulz polar
 #          projection; AdamW on the edges (patch conv, LN, biases, head).
 #   AdamW: the existing vit-tiny-train baseline.

@@ -40,7 +40,7 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/mnist-linear-verified data          # XLA
 LEAN_MLIR_LOWERER=iree IREE_BACKEND=rocm ... mnist-linear-verified data   # IREE
 ```
 Both produce an identical 12-epoch trajectory (final 9210/10000); XLA is ~2.3×
-faster per epoch on a 7900 XTX. See `planning/xla_pjrt_ladder.md` (rung 0, G2).
+faster per epoch on a 7900 XTX. See `planning/archive/xla_pjrt_ladder.md` (rung 0, G2).
 -/
 
 /-- 12 epochs at batch 128. `lr` is display-only — the real rate is baked into

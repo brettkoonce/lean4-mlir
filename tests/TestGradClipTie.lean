@@ -165,7 +165,7 @@ the signature list says {ds}")
   -- ⚠ `variant` names the ENTRY as well as the path, and the two must agree — the shim refuses a
   -- mismatch outright rather than running the wrong graph. That check earned its keep on this very
   -- feature: a second clip render at a different threshold spelled the same Bool-derived ConvNeXt
-  -- variant and came out declaring another artifact's entry (`planning/grad_clip.md` §6).
+  -- variant and came out declaring another artifact's entry (`planning/archive/grad_clip.md` §6).
   let run (variant : String) (path : Option String := none) : IO ByteArray := do
     let vmfb := s!".lake/build/clip_tie_{cn.slug}_{variant}.vmfb"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"

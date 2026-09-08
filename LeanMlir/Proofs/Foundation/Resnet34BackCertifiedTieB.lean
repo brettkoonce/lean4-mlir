@@ -9,8 +9,8 @@ import LeanMlir.Proofs.Foundation.ResNetBackChains
 `resnet34Forward_full_pc`, the forward the retired `ResNet34Render` emitted. This file closes it
 for the net the shipped trainers run: `resnet34ForwardB_full`, the [3,4,6,3] ladder at
 **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
-`planning/proofs_tier_to_paper_nets.md` §4.2, the last real statement in that section's port
-(T4/T5 there are float budgets, and `planning/float_budget_numbers.md` closed that thread).
+`planning/archive/proofs_tier_to_paper_nets.md` §4.2, the last real statement in that section's port
+(T4/T5 there are float budgets, and `planning/archive/float_budget_numbers.md` closed that thread).
 
 Nothing here is new mathematics. Two endpoint stage ties (stem and head) and one pool tie, then
 the sixteen basic blocks stay **opaque** — they enter as the `_at` VJP witnesses 4.1d's apex

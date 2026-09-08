@@ -12,7 +12,7 @@ one op that couples examples. Those are the artifacts the quoted ImageNet accura
 
 This file re-states the ladder at `bnBatchLA` (= the proven `bnBatchTensor4` at the network's
 left-assoc index). `formalization.yaml` 4e records the decision and
-`planning/proofs_tier_to_paper_nets.md` section 4 the work packages.
+`planning/archive/proofs_tier_to_paper_nets.md` section 4 the work packages.
 
 ## What is new here, and what is not
 

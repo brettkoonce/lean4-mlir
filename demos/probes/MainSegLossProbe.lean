@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! Emit the standalone segmentation-loss module for FD validation
-    (planning/brats_demo.md Workstream B). Writes `seg_loss_gen.mlir` for a
+    (planning/archive/brats_demo.md Workstream B). Writes `seg_loss_gen.mlir` for a
     concrete (B, NC, H, W) and loss kind; `scripts/seg_loss_probe_check.py`
     compiles it with IREE and checks `d_logits` against central finite
     differences of `loss`.

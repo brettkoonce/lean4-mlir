@@ -3,7 +3,7 @@
 `Proofs.StableHLO` (`BatchableOp.convBf16`, `flatConvFBf16`, and the dgrad/wgrad twins).
 
 `FloatBridge` stops at dense: it has `dot_close_mixed` / `dense_close_mixed` and no conv peer,
-and `planning/bf16_renderer.md` calls that gap "the single biggest item in this document",
+and `planning/archive/bf16_renderer.md` calls that gap "the single biggest item in this document",
 because every net where bf16 pays is conv-dominated.
 
 ▶ It turns out not to be a new hard theorem. A convolution output **is** a dot product over its

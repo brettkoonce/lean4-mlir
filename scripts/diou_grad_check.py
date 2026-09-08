@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Standalone DIoU box-loss forward + analytic gradient, central-FD verified.
 
-Brick #1 of the detection-infra build (planning/yolo_drone.md WS-D). The single
+Brick #1 of the detection-infra build (planning/archive/yolo_drone.md WS-D). The single
 biggest weakness of the current YOLOv1 head is its box regression: √-MSE on
 (x,y,w,h) with an ε-floor that has no positive constraint (w/h can go negative
 and recover only slowly) and no notion of overlap. This is the reference for the

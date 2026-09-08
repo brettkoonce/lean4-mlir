@@ -179,7 +179,7 @@ def unetBratsConfig : TrainConfig where
 
     1. It was already refuted in July by `focal g=8`, whose ratio (1.30×) is
        indistinguishable from `wcesqrt`'s (1.35×) while landing on the opposite
-       outcome. `planning/brats_demo.md` recorded that refutation; this comment
+       outcome. `planning/archive/brats_demo.md` recorded that refutation; this comment
        was never updated, and went on asserting the claim for a month.
     2. Its four "measured outcomes" are void anyway — all four arms trained on
        mismatched image/mask pairs. On correct data every arm segments and the
@@ -243,8 +243,8 @@ def main (args : List String) : IO Unit := do
   -- image/mask pairs: `lean_f32_shuffle` permuted images by a full record but
   -- labels by a hardcoded 4 bytes, and a BraTS label is 240². Fixed in
   -- `430ba2c`/`ca83835`. Every collapse this demo was built to exhibit was an
-  -- artifact of that bug — see the STOP banner in planning/brats_demo.md and
-  -- planning/post_shuffle_fix.md §1a.
+  -- artifact of that bug — see the STOP banner in planning/archive/brats_demo.md and
+  -- planning/archive/post_shuffle_fix.md §1a.
   --
   -- `dicece` is the default: joint-best WT Dice (0.903), best endpoint mIoU,
   -- the most monotone trajectory, and Dice+CE is the standard compound loss in

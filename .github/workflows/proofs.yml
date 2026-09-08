@@ -72,7 +72,7 @@ jobs:
       - name: Build proofs (per-push slice)
         run: |
           # `Proofs` is the fast per-push slice since the Certs split
-          # (planning/repo_shape_deletion_audit.md §4): the IR/render layer the
+          # (planning/archive/repo_shape_deletion_audit.md §4): the IR/render layer the
           # demo cone reaches + every renderer the drift guard re-elaborates.
           # The certificate corpus + the three-axiom closure audit moved to
           # .github/workflows/certs.yml (proof-path pushes, nightly cron,
@@ -110,7 +110,7 @@ jobs:
           # ⭐ The low-precision + batched cifar8 artifacts are guarded HERE, unlike the legacy
           # exe-generated `cifar8w_*`: they are pure-Lean `#eval` renders from this module, so
           # elaborating it rewrites them and any drift shows up in the diff. `cifar8b*` is the
-          # BATCHED op family (planning/cifar_lowprec_stability.md §4.1) and `cifar8wb*` is that
+          # BATCHED op family (planning/archive/cifar_lowprec_stability.md §4.1) and `cifar8wb*` is that
           # family at the wide head, which is what the book's §4.3 "Lever 3" trains on.
           git diff --exit-code -- \
               verified_mlir/cnn_train_step.mlir \
@@ -207,7 +207,7 @@ jobs:
               verified_mlir/mobilenetv2in_adamdp64bf16_train_step.mlir \
               verified_mlir/mobilenetv2in_rmsdp64bf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/{mobilenetv2,mobilenetv2in}_{fwd,*_train_step}.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean)"; exit 1; }
-          # MobileNetV4-Conv-S (planning/mnv4_verified.md §3i). Elaborating this module writes
+          # MobileNetV4-Conv-S (planning/archive/mnv4_verified.md §3i). Elaborating this module writes
           # ALL THREE artifacts, so all three are diffed — the fwd/fwd_eval/train_step set comes
           # from ONE traversal (`mnv4FwdChainB` switched by `BnMode`), and guarding only the train
           # step would leave the two forwards free to drift away from the graph that trains them.

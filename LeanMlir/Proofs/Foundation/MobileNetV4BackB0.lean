@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
 /-! # MobileNetV4 — the batched UIB backward, and the four families as ONE chain
 
-MNv4 was the last net with **no backward of any kind** (`planning/mnv4_verified.md` §8): the
+MNv4 was the last net with **no backward of any kind** (`planning/archive/mnv4_verified.md` §8): the
 strongest empirical evidence in the repo — forward tied at 1.423e-06, gradient at 0/147 — and
 nothing in Lean beyond the render. This file is its phase 1–3, and the fold falls out with it.
 
@@ -54,7 +54,7 @@ said the fused stage, the head and the strided body assembly were not built. All
 `e25a011` (stride-2 blocks), `61eb512` (fused stage) and `411b1a5`, whose own message reads *"the
 head — MNv4 complete at stage level"*. Nobody came back to the header, so for four weeks the file
 asserted a gap its own commit log had already closed, and `proofs_tier_to_paper_nets.md` §3.6
-priced a session against it (`planning/mnv4_proofs_tier.md` §0 — seventh instance of that
+priced a session against it (`planning/archive/mnv4_proofs_tier.md` §0 — seventh instance of that
 pattern, and the cheapest: the declaration list was one `grep` away).
 ▶ **When a session lands a piece, edit the header that said it was missing, in the same commit.**
 
@@ -73,7 +73,7 @@ forward and its input-VJP) is `Architectures/MobileNetV4FullB.lean` +
 first of those, T3 (the fold and tie at the emitted gradient nodes, all 233) is
 `MobileNetV4FaithfulPoCB.lean` + `MobileNetV4TiePoCB.lean`, and T6 (the certified whole-net
 backward tie) is `MobileNetV4WholeBackCertifiedTieB.lean` + its float chain. Each of them consumes
-what is built here, block by block. `planning/mnv4_proofs_tier.md` is the record; ResNet-50 — which
+what is built here, block by block. `planning/archive/mnv4_proofs_tier.md` is the record; ResNet-50 — which
 was in exactly this position, block-level only with no per-example legacy — was the file-by-file
 precedent, closed over 2026-09-06/07.
 
@@ -433,7 +433,7 @@ stage gets its own name with the same `bnSwishStage_*` lemmas. What was missing 
 **backward graph**: `stemBackBatchedGraph` below, at the symmetric `convStridedBackBatched`. ⚠ It
 serves MNv4's fused stage only; B0's XLA stem has no batched input-VJP token (no render emits a
 gradient into the image), so `enetTrunk` takes its stem layer as a parameter and B0's stem stays
-un-graph-certified — recorded in `planning/proofs_tier_to_paper_nets.md`. -/
+un-graph-certified — recorded in `planning/archive/proofs_tier_to_paper_nets.md`. -/
 
 /-- MNv4's fused stage forward: **symmetric** strided k×k conv → bn → swish. -/
 noncomputable def fusedConvB (N : Nat) {ic oc h w kH kW : Nat}

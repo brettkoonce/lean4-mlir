@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fixed-protocol smoothing SCORECARD runs (planning/gaussian_smoothing_next.md 3c-data):
+# Fixed-protocol smoothing SCORECARD runs (planning/archive/gaussian_smoothing_next.md 3c-data):
 # first-100 test images (SMOOTH_STRIDE=1), sigma=0.5 only, n=10112 (default SMOOTH_N
 # rounds up to 79*128), alpha=0.001. The per-image (count, n) columns land in the CSV
 # and feed scripts/smooth_scorecard_gen.py -> kernel tail-check corpus.

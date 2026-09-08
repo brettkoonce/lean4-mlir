@@ -15,7 +15,7 @@
 #   * Lean toolchain + `lake build tinystories` (builds the FFI .so + exe).
 #   * iree-compile on PATH (or .venv/bin) — the CUDA target.
 #   * data/tinystories/{train,val}.bin  ← preprocess_tinystories.py
-#     (byte-level BPE, 4096 vocab; ~50M train tokens — see planning/tinygpt_demo_v2.md).
+#     (byte-level BPE, 4096 vocab; ~50M train tokens — see planning/archive/tinygpt_demo_v2.md).
 #
 # Memory (fp32): ~params 0.35 GB + ~2.5 GB per batch item at T=8192.
 #   A100-40GB : batch 8-12         A100-80GB : batch 16-24

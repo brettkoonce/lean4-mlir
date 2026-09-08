@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Which certified forwards have NO backward-graph faithfulness theorem?
 
-§8e of `planning/mnv4_verified.md` ran this sweep by hand and **took four passes, three of
+§8e of `planning/archive/mnv4_verified.md` ran this sweep by hand and **took four passes, three of
 which were wrong**, because Lean naming does not support mechanical auditing:
 
   pass 1 "151 holes"  — matched `<X>_has_vjp` against `<X>Back*Graph_faithful`; swept up

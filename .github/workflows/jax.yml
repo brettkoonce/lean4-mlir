@@ -384,7 +384,7 @@ jobs:
     # ⭐⭐ Does the VERIFIED rendered optimizer take the same step as its JAX reference?
     #
     # `oracle` and `grad_tie.py` tie the two implementations at the GRADIENT; nothing tied them at
-    # the UPDATE until 2026-08-14. planning/verified_optimizer_parity.md §5: the two paths share a
+    # the UPDATE until 2026-08-14. planning/archive/verified_optimizer_parity.md §5: the two paths share a
     # data pipeline BY CONSTRUCTION and share an optimizer BY NOBODY'S CONSTRUCTION — two hand-
     # maintained implementations that happen to agree. D1 (timm's `Lamb.max_grad_norm`, which every
     # LAMB artifact rendered before that date ignored) is what a drift between them looks like.

@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! Emit the standalone FlashAttention-forward module for validation
-    (planning/flash_attention.md rung 2–3). Writes `flash_gen.mlir` for a
+    (planning/archive/flash_attention.md rung 2–3). Writes `flash_gen.mlir` for a
     concrete (b, heads, n, dh, bk); a companion Python harness compiles it
     with IREE and checks the output against dense attention.
 

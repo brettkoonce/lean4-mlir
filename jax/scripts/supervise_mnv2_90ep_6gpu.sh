@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Supervised 90-epoch MobileNetV2-ImageNet bf16 run on all 6 GPUs (0,1,2,3,4,5).
 # Paper-faithful recipe: RMSProp + crop/flip only (AutoAugment OFF). See
-# planning/jax_imagenet_sweep.md — re-run #1 (the old SGD+AA 68.3% number is stale).
+# planning/archive/jax_imagenet_sweep.md — re-run #1 (the old SGD+AA 68.3% number is stale).
 # - Checkpoints every epoch (LEAN_MLIR_CKPT_EVERY=1) to $CKPT_base_e{N}.bin
 # - AER watchdog: kills training the instant a PCIe BadTLP/Hardware Error
 #   appears, before it can cascade into a host reset (the box hit AER 5x

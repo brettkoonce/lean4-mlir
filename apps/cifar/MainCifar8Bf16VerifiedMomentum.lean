@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `cifar8-bf16-verified-momentum` — 8-conv CIFAR-10 CNN, **bf16 forward convs**, Nesterov-momentum SGD
 
-The bf16 arm of the §5.2 optimizer sweep (`planning/cifar_lowprec_stability.md`). Identical
+The bf16 arm of the §5.2 optimizer sweep (`planning/archive/cifar_lowprec_stability.md`). Identical
 net, identical init, identical hyperparameters to its fp32 peer `cifar8-verified-momentum` — the ONLY
 difference is that `cifar8Bf16Verified`'s slug points `mkSession` at
 `verified_mlir/cifar8_bf16_mom_train_step.mlir`, emitted by the SAME renderer with `bf16 := true`.

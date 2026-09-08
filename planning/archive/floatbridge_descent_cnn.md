@@ -9,7 +9,7 @@ CNN's two conv kernels**, then (optionally) the conv biases.
 The whole pattern is unchanged: **one abstract-η descent theorem + a per-rung float
 grad-close as the proven η source.** The descent side is *already done* — the abstract-η
 `cnn_conv{1,2}_sgd_descends` (+ bias variants) are proven (`SgdDescentCnn.lean`,
-`planning/sgd_descent_cnn.md`). What's missing is the **float fusion**: feeding a *proven*
+`planning/archive/sgd_descent_cnn.md`). What's missing is the **float fusion**: feeding a *proven*
 float gradient budget into the η-slot those theorems already accept abstractly.
 
 This is the single **largest** rung — the float backward runs through the dense head **and**
@@ -278,7 +278,7 @@ step, and the whole §3 descent program is closed except the honest stop line be
 - `mlp_input_float_sgd_descends` — the wiring: `set η`, `0 ≤ η` by hand, off-kink from margins,
   `hgh` via grad-close+bridge, `exact …_sgd_descends`.
 
-## Gotchas (don't rediscover — from the MLP rungs + `planning/sgd_descent_cnn.md`)
+## Gotchas (don't rediscover — from the MLP rungs + `planning/archive/sgd_descent_cnn.md`)
 
 - **Paren-fragile giant budgets.** Each `η`→`mulErr`/`layerBudget` substitution in `hsmall`/`h1`/
   `h2`/margins needs the budget's internal closes **plus** the original post-`η` closes. Verify

@@ -27,7 +27,7 @@ were hit) lives in [`IREE.md`](IREE.md). The ROCm-specific variant is in
 > `iree-compile --version`). A skew of even a few days can silently link a
 > runtime with a CUDA bug the compiler assumes is fixed — this is exactly what
 > caused the big-model "step 3 hang" (runtime `32b074edda` Apr-20 vs compiler
-> `af030e43` Apr-28; see `planning/iree_cuda_bigmodel_reduction_hang.md`). It
+> `af030e43` Apr-28; see `planning/archive/iree_cuda_bigmodel_reduction_hang.md`). It
 > can also fail loudly as a HAL ABI mismatch (`hal.command_buffer.dispatch
 > signature mismatch … expected rriiii… but got rrIiii…`) — same root cause,
 > just caught at module-load instead of at runtime. `git checkout <wheel-commit>`

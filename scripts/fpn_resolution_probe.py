@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolution probe -- the pre-measurement for planning/yolo_assignment.md's
+"""Resolution probe -- the pre-measurement for planning/archive/yolo_assignment.md's
 "suggested next lever 1" (input resolution / P2 scale).
 
 Bite 0 of the assignment thread ended by REFRAMING the constraint: the detector

@@ -1,6 +1,6 @@
 # 2026-08-28 — the image DDPM gets its first real number, and then the number gets fixed
 
-`planning/diffusion_2d_demo.md` §7's proposal, built and then acted on: score the MNIST diffusion
+`planning/archive/diffusion_2d_demo.md` §7's proposal, built and then acted on: score the MNIST diffusion
 demo with Chapter 3's **verified** CNN instead of by looking at the grid. Three results.
 
 1. ✅ **The metric works and is bracketed at both ends.** Real MNIST scored as if generated sits at
@@ -70,7 +70,7 @@ doubling the energy distance** (33× against 15×). Its pixel moments are also f
 data's (0.1635/0.3360 against 0.1381/0.3142 for real's 0.1325/0.3105).
 
 ▶ So the metric that reads most like "sample quality" is the one that ranks these two backwards.
-This is the concrete instance of what `planning/diffusion_2d_demo.md` §5.7 argued from the
+This is the concrete instance of what `planning/archive/diffusion_2d_demo.md` §5.7 argued from the
 checkerboard target: a scorer with one number passes models that a scorer with a coverage term and
 a distribution term catches.
 

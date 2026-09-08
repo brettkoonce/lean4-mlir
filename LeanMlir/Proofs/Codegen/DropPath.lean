@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXt
 
 /-! # Stochastic depth (drop-path) over ℝ — the per-example branch scale
 
-The ℝ reference for `planning/stochastic_depth.md`. The JAX reference emits, verbatim
+The ℝ reference for `planning/archive/stochastic_depth.md`. The JAX reference emits, verbatim
 (`jax/Jax/Codegen.lean:1037`):
 
 ```python
@@ -48,7 +48,7 @@ namespace Proofs
 
 /-! ### ⚠⚠ WHERE `1/keep_prob` LIVES — a tension in the spec, settled here
 
-`planning/stochastic_depth.md` asks for two things that **cannot both hold**, and neither §1 nor §3
+`planning/archive/stochastic_depth.md` asks for two things that **cannot both hold**, and neither §1 nor §3
 noticed:
 
 * **§1 fact 3** — the keep probability is *"emitted as a constant, exactly like every other
@@ -104,7 +104,7 @@ theorem dropPath_eq_reference (N n : Nat) (keep : Vec N) (kp : ℝ) (x : Vec (N 
 
 /-- ⭐ **EVAL IS THE IDENTITY, EXACTLY — and this is a theorem about ONE graph, not two.**
 
-    `planning/stochastic_depth.md` §3's design turns the train/eval divergence into a *data*
+    `planning/archive/stochastic_depth.md` §3's design turns the train/eval divergence into a *data*
     difference: the forward render emits the drop sites too, and the driver supplies an all-ones
     scale there. So the emitted text is identical in train and eval, the `forward ⊂ train-step`
     prefix audit survives untouched (it is one of the two load-bearing structural gates in the repo
@@ -280,7 +280,7 @@ noncomputable def dropout_has_vjp (N n : Nat) {m : Nat} (mask : Vec m) :
     input is the DROPPED activation, not the pooled one. `∂L/∂W = Σ_b dy_b ⊗ (mask_b ⊙ x_b)`.
     Feeding it the undropped activation type-checks, trains and descends, and is invisible at
     `mask ≡ 1`, which is where every identity gate for this feature sits. It is
-    `planning/xla_pjrt_handoff.md` §0.10's LayerScale-γ defect in the same shape: *when an op is
+    `planning/archive/xla_pjrt_handoff.md` §0.10's LayerScale-γ defect in the same shape: *when an op is
     spliced into a chain, list every CONSUMER of the value it displaced.* -/
 theorem dropout_vjp_is_self (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m) :
     (dropout_has_vjp N n mask).backward x dy = dropout N n mask dy := rfl

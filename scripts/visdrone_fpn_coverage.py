@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Multi-scale (FPN) target-encoding COVERAGE analysis — the load-bearing test of
-the whole FPN build (planning/yolo_fpn.md bite 5, the thesis gate).
+the whole FPN build (planning/archive/yolo_fpn.md bite 5, the thesis gate).
 
 The anchor A=6 detector plateaus at ~5% recall because only ~61% of GT boxes get
 a unique (cell, anchor) slot at a single 14x14 grid — the rest are lost to
@@ -139,7 +139,7 @@ def singlescale_coverage(per_image, anchors, grid):
     return total, slots
 
 
-# ── center-sampling oracle (planning/yolo_assignment.md bite 0a) ──────────────
+# ── center-sampling oracle (planning/archive/yolo_assignment.md bite 0a) ──────────────
 #
 # Two DIFFERENT ceilings, and the gap between them is the whole point:
 #

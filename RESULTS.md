@@ -55,7 +55,7 @@ better; uniform-random = 6.02, bigram baseline = 3.55.
 
 The 10K-step tiny run is the metric's first catch: by train loss it
 "beats" nano by 0.7 bits while being worse on held-out text. v1 of
-this demo tracked train loss only (`planning/tinygpt_demo_v2.md`).
+this demo tracked train loss only (`planning/archive/tinygpt_demo_v2.md`).
 
 ## TinyStories (BPE language modeling, vocab 4096)
 
@@ -87,7 +87,7 @@ to validate the harness + the skip-connection ablation direction.
 ⛔ **VOID (2026-08-26) — both rows below trained on mispaired image/mask
 data.** `lean_f32_shuffle` permuted images by a full record but labels by a
 hardcoded 4 bytes; a Pets trimap label is 224². Fixed 2026-07-22
-(`430ba2c`/`ca83835`); see `planning/post_shuffle_fix.md` §1 ledger item #3.
+(`430ba2c`/`ca83835`); see `planning/archive/post_shuffle_fix.md` §1 ledger item #3.
 Re-run of the UNet arm, same 3-epoch config, on correct data:
 
 | Model | Params | mIoU | boundary IoU |
@@ -122,7 +122,7 @@ Two honest reads at this 3-epoch budget:
    UNet's extra 2.3M params haven't paid off). Gate B — "do skips
    help, especially on boundary?" — needs the real 60–80-ep run the
    epochs arg now enables: `unet-pets-train data/pets 70`. See
-   `planning/unet_demo_v2.md`.
+   `planning/archive/unet_demo_v2.md`.
 
 ## VisDrone-DET detection (10 classes, R34+FPN multi-scale, mAP@0.5)
 
@@ -247,7 +247,7 @@ localization, not IoU-based.
 | mosaic (trained regime) | 0.028 | 0.053 | **0.041** | 0.227 |
 | single-frame (transfer) | 0.000 | 0.000 | **0.0002** | 0.005 |
 
-Three honest reads (Gate A baseline, `planning/yolo_demo_v2.md`):
+Three honest reads (Gate A baseline, `planning/archive/yolo_demo_v2.md`):
 1. **Single-frame ≈ 0** quantifies v1's "trained on mosaics → 2/16 on
    full frames" caveat: the model does not transfer to centered
    single pets (mosaic mAP@0.5 is ~200× higher). Moving this is

@@ -2,7 +2,7 @@
 
 Two results from one session, both on the `cfoc2` arm
 (`FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12`, R34 backbone, tower 0).
-Full analysis in `planning/visdrone_detector.md` §13a / §13b; this file is the workings.
+Full analysis in `planning/archive/visdrone_detector.md` §13a / §13b; this file is the workings.
 
 ## Provenance
 

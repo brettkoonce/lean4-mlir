@@ -2,7 +2,7 @@ import LeanMlir
 
 /-! YOLOv1 single-scale detector on VisDrone at 448 input / 14×14 grid.
 
-    The validation-ladder rung above the 224/7×7 baseline (planning/yolo_drone.md
+    The validation-ladder rung above the 224/7×7 baseline (planning/archive/yolo_drone.md
     WS-A, which collapsed to mAP 0.0000): change ONE thing — input resolution —
     and see whether it alone lifts detection off zero, before committing to the
     multi-scale build. Same ResNet-34 backbone + deep conv head as the Pets
@@ -40,7 +40,7 @@ def r34Yolov1_448 : NetSpec where
   ]
 
 def r34Yolov1_448Config : TrainConfig where
-  -- Same recipe as the 224 baseline (planning/yolo_final.md), shorter run: this
+  -- Same recipe as the 224 baseline (planning/archive/yolo_final.md), shorter run: this
   -- rung only needs to answer "does resolution move mAP off zero", read from
   -- early checkpoints. Same LR/clip/focal so the ONLY change vs WS-A is the input.
   learningRate := 7.0e-4

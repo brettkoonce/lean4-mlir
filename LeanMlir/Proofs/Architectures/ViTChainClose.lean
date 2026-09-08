@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Architectures.ViTClose
 
 `ViTClose.lean` (Item C) certifies each ViT param output for *any* cotangent `dy` at that
 site's output. This file pins `dy` to the cotangent the **actual backward chain delivers**
-— the ViT analogue of `ConvNeXtChainClose` (`planning/vit_close.md` Item D). Pure-Lean,
+— the ViT analogue of `ConvNeXtChainClose` (`planning/archive/vit_close.md` Item D). Pure-Lean,
 batch-1 — everything in a ViT is per-example separable.
 
 The chain composes the *rendered* backward denotations — exactly the Item B render's

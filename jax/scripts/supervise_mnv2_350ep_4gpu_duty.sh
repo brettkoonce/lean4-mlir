@@ -3,9 +3,9 @@
 # PAPER-FAITHFUL recipe (`full`): RMSProp ρ0.9 / μ0.9 / ε1.0, lr 0.045 @ batch 256,
 # exp-LR-decay ×0.98/epoch (NOT cosine), wd 4e-5, dropout 0.2, crop+flip only,
 # label smoothing 0, running-BN eval, bf16 + bf16Conv. Paper target ≈ 72.0% top-1.
-# See planning/jax_imagenet_sweep.md and blueprint §7.3 (this run is that [TODO]).
+# See planning/archive/jax_imagenet_sweep.md and blueprint §7.3 (this run is that [TODO]).
 #
-# This is the gap-closer for the −3.23 pt in planning/paper_faithfulness.md. The
+# This is the gap-closer for the −3.23 pt in planning/archive/paper_faithfulness.md. The
 # standing 68.77% number is the 90ep *validation* tier and predates three of the
 # rows here: it ran cosine (not exp-decay), label smoothing 0.1 (not 0), and 90
 # epochs (not 350). So this is not merely a longer run of the same recipe.
@@ -27,7 +27,7 @@
 # train_step — `CUDNN_STATUS_EXECUTION_FAILED` from the bf16 1x1
 # __cudnn$convBackwardFilter in the inverted-residual blocks, with XLA reporting
 # "Results mismatch between different convolution algorithms". It also ran ~2x
-# slower where it ran at all. planning/jax_imagenet_sweep.md called this exact
+# slower where it ran at all. planning/archive/jax_imagenet_sweep.md called this exact
 # risk: "a silent jax/cuDNN bump could shift bf16 conv kernel selection and move
 # the published numbers." Rebuild with `pip install -r requirements-cuda-lock.txt`.
 # Quick fingerprint: the right stack reprs devices as `CudaDevice(id=0)`.

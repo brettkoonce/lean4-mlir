@@ -1,4 +1,4 @@
-/-! # Phase 0 of `planning/verified_codegen.md` — `Back → StableHLO` printer
+/-! # Phase 0 of `planning/archive/verified_codegen.md` — `Back → StableHLO` printer
 
 A small **computable** codegen AST (`Hlo`) + printer that renders a backward
 graph to StableHLO text, in the exact form `MlirCodegen.lean` emits

@@ -31,7 +31,7 @@ is **nine of nine**, drawn from three files and not one:
 XLA-`SAME` (`flatConvStride2Xla`, EfficientNet-B0's op) and the fused stage is SYMMETRIC
 (`flatConvStride2`, ResNet's). Identical types, identical emitted shapes, different certificates —
 `scripts/convention_audit.py` is what reads them apart, and swapping one for the other is the
-6.16e-2-vs-1.79e-6 forward-tie defect `planning/mnv4_verified.md` §3b measured.
+6.16e-2-vs-1.79e-6 forward-tie defect `planning/archive/mnv4_verified.md` §3b measured.
 
 ⛔ **MNv4 emits no conv BIAS gradient at all.** `MobileNetV4RenderB` has no `convBias` flag — every
 bias is folded into its BatchNorm and bound to `%zb{c}` — so `convBiasGradB` and its strided peers

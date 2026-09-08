@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the reverse-process strip — planning/diffusion_2d_demo.md §5.
+"""Render the reverse-process strip — planning/archive/diffusion_2d_demo.md §5.
 
 ⭐ This is the figure images cannot carry. On a 28x28 MNIST DDPM the states
 between noise and sample are grey mush; here every panel is legible, and the

@@ -61,7 +61,7 @@ against the renderer, so the practical risk is caught; and a finished lexer woul
 close only the lexical edge, leaving the spec/IREE/`float32≈ℝ` edges trusted
 anyway. This file is kept as a small proven down-payment **and** as the record of
 *why Part B is a poor target* (the three findings above), so the scoping is not
-re-discovered from scratch. See `planning/tier23_float_and_syntactic_faithfulness.md`
+re-discovered from scratch. See `planning/archive/tier23_float_and_syntactic_faithfulness.md`
 (Part B VERDICT block).
 
 ## Residue (unchanged, state wherever cited)

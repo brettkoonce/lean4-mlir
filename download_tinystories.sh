@@ -4,7 +4,7 @@ mkdir -p data/tinystories
 cd data/tinystories
 
 # TinyStories (Eldan & Li 2023) — ~2.1M GPT-3.5/4-generated children's
-# stories. train ~1.9GB, valid ~19MB. See planning/tinygpt_demo_v2.md
+# stories. train ~1.9GB, valid ~19MB. See planning/archive/tinygpt_demo_v2.md
 # Part II.
 BASE=https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main
 

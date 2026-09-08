@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bite 0 of planning/yolo_scoring.md: CRIPPLE THE DETECTOR THAT WORKS.
+"""Bite 0 of planning/archive/yolo_scoring.md: CRIPPLE THE DETECTOR THAT WORKS.
 
 The thread's four training arms each tried to fix the broken detector and got no
 signal until 4.5 h later. This goes the other way: start from a measured working
@@ -32,7 +32,7 @@ a one-line patch to the loss -- no architecture surgery, so nothing else moves:
       consistently -- binarizing inside the BCE alone would silently rescale the
       cls gain and confound the result.
 
-PREDICTION, recorded before running (planning/yolo_scoring.md):
+PREDICTION, recorded before running (planning/archive/yolo_scoring.md):
     nobg       craters to < 0.03   <-- the load-bearing ingredient
     hardtarget costs something, but far less
 

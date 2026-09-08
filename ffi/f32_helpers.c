@@ -403,7 +403,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img
 // ylabels_concat lays out target ++ mask ++ numBoxes ++ raw_boxes per
 // record (7,200 bytes/record). The Lean dispatcher splits this at
 // training time. Image is ImageNet-normalized as in load_imagenette/
-// load_pets. See planning/yolo_demo_v2.md Phase 1 + planning/yolo_demo_v3.md
+// load_pets. See planning/archive/yolo_demo_v2.md Phase 1 + yolo_demo_v3.md (folded into planning/archive/yolo_final.md at a0a33a3)
 // Phase 2-3.
 LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg w) {
     (void)w;
@@ -781,7 +781,7 @@ static int yolo_transform_box(
 //   `seed`     : xorshift seed
 //
 // Returns (new_image, new_target, new_mask) triple of fresh ByteArrays.
-// See planning/yolo_demo_v3.md Phase 3.
+// See yolo_demo_v3.md (folded into planning/archive/yolo_final.md at a0a33a3) Phase 3.
 LEAN_EXPORT lean_obj_res lean_f32_yolo_augment(
     b_lean_obj_arg img_ba, b_lean_obj_arg box_ba,
     size_t batch, size_t channels, size_t imgH, size_t imgW,
@@ -902,7 +902,7 @@ LEAN_EXPORT lean_obj_res lean_f32_yolo_augment(
 //   * mask   [B, gH, gW]: reverse the gW axis for every gH row
 //
 // Returns (images, target, mask) as a 3-tuple of fresh ByteArrays.
-// Inputs are not modified. See planning/yolo_demo_v3.md Phase 3.
+// Inputs are not modified. See yolo_demo_v3.md (folded into planning/archive/yolo_final.md at a0a33a3) Phase 3.
 //
 // LEGACY: superseded by lean_f32_yolo_augment (Phase 3b) which operates
 // on raw bboxes and re-encodes target+mask from scratch. Kept for the
@@ -1347,7 +1347,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_
     // from N(0, I). Callers that draw one long vector per call never saw it,
     // because only the FIRST pair of a call is correlated across seeds; the 2-D
     // demo draws n = 2 per point and so saw nothing else.
-    // Found by planning/diffusion_2d_demo.md §5's reverse-process strip: the
+    // Found by planning/archive/diffusion_2d_demo.md §5's reverse-process strip: the
     // t = T panel is meant to be an isotropic blob and it was a ring.
     uint64_t z = (uint64_t)seed + 0x9E3779B97F4A7C15ULL;
     z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
@@ -1372,7 +1372,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_
 // class in 0..NC-1).  Returns int64 LE [NC*NC] confusion counts,
 // conf[true*NC + pred], accumulated over the batch. The caller sums
 // these across batches in exact Nat and derives per-class IoU =
-// conf[c][c] / (row_c + col_c - conf[c][c]). planning/unet_demo_v2.md A.
+// conf[c][c] / (row_c + col_c - conf[c][c]). planning/archive/unet_demo_v2.md A.
 LEAN_EXPORT lean_obj_res lean_f32_seg_confusion(
     b_lean_obj_arg logits, b_lean_obj_arg masks,
     size_t B, size_t NC, size_t H, size_t W, lean_obj_arg w_) {
@@ -1406,7 +1406,7 @@ LEAN_EXPORT lean_obj_res lean_f32_seg_confusion(
 // Each image gets an independent p=0.5 coin (xorshift64 seeded by `seed`);
 // when it comes up, the W axis is reversed for every channel/row. Plain
 // image aug for unconditional DDPM (no boxes/masks to co-transform) —
-// planning/ddpm_demo_v2.md Workstream B3.
+// planning/archive/ddpm_demo_v2.md Workstream B3.
 LEAN_EXPORT lean_obj_res lean_f32_hflip_nchw(
     b_lean_obj_arg images, size_t batch, size_t channels,
     size_t H, size_t W, size_t seed, lean_obj_arg w) {
@@ -2988,7 +2988,7 @@ LEAN_EXPORT lean_obj_res lean_f32_fpn_affine(
 }
 
 // ============================================================
-// In-place step-buffer patching (planning/xla_pjrt_ladder.md §8).
+// In-place step-buffer patching (planning/archive/xla_pjrt_ladder.md §8).
 //
 // The Adam driver's step buffer is laid out [theta|m|v | lr,bc1,bc2 | bn stats],
 // and the train step RETURNS the same layout ([theta'|m'|v' | loss,_,_ | bn']).

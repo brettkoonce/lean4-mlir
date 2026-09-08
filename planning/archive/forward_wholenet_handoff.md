@@ -6,7 +6,7 @@ does for all five. ✅ **SWEEP COMPLETE — all 5 nets DONE** (r34, efficientnet
 forward — peer of `vit_grad_floatBridges_concrete`). Nothing architectural remains; only the cosmetic
 skeleton↔real-def ties (item #5, pure polish, same gap on the backward). This doc is the record.
 
-Parent context: `planning/a3_backward_deepnet_assembly.md` (the backward, which is the blueprint).
+Parent context: `planning/archive/a3_backward_deepnet_assembly.md` (the backward, which is the blueprint).
 Memory: `[[float-tier23-and-lexer-gap]]` (A1/A3 state).
 
 ---

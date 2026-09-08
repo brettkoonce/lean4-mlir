@@ -187,6 +187,6 @@ difference(s)). The gradMap check above passed, so the routing is right — look
     IO.println s!"  ✅ train step identical apart from that swap; {gl.size} lines, SSA unmoved"
     IO.println "  ⭐ THE SWAP HAPPENED (4c leg 3, 2026-09-07): the committed artifact is the batched \
 chain's, and those lines are exactly what moved — licensed by the keep = 1 numeric gate \
-(planning/xla_pjrt_handoff.md §0.10) and re-run as `convnext-adam-tie` on the swapped bytes. This \
+(planning/archive/xla_pjrt_handoff.md §0.10) and re-run as `convnext-adam-tie` on the swapped bytes. This \
 check now pins that the per-example chain, which still writes convnext_train_step.mlir, differs \
 from the committed bytes by that pair and nothing else."

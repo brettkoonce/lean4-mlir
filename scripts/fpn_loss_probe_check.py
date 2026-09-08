@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compile + numerically validate the Lean-emitted FPN multi-scale-loss block
-(detection-infra brick #3, planning/yolo_fpn.md bites 4+6).
+(detection-infra brick #3, planning/archive/yolo_fpn.md bites 4+6).
 
   1. lake build fpn-loss-probe
   2. .lake/build/bin/fpn-loss-probe B A g3 g4 g5 <out.mlir>

@@ -12,7 +12,7 @@ budget once stated on this chain was deleted 2026-09-08 as vacuous; the tie stay
 ⚠ **It had to wait for the padding re-spelling.** Until 2026-09-05 the chain reversed a
 `flatConvStride2` stem while every shipped B0 artifact emits the XLA-`SAME` phase, so this tie
 would have certified a program no artifact runs
-(`planning/xla_same_respell_and_blueprint_audit.md`, step 7 waits on step 3a).
+(`planning/archive/xla_same_respell_and_blueprint_audit.md`, step 7 waits on step 3a).
 
 ## The four pieces
 
@@ -48,7 +48,7 @@ MobileNetV2 discipline — and `efficientnetForwardB_eq_chain` is what says the 
 committed net. Without that `rfl` the tie would be a statement about five variables, which is how
 ResNet-34's tie reversed the wrong pool for a month (§3.10).
 
-⭐ **General `N`.** `planning/float_budget_numbers.md` section 5 item 3 scoped this tie at
+⭐ **General `N`.** `planning/archive/float_budget_numbers.md` section 5 item 3 scoped this tie at
 `N = 1`, because the FLOAT chain's BatchNorm slot needs a batched float leaf that does not exist.
 The certified chain's BatchNorm slot is `bnBatchLA_has_vjp`, which exists at every `N`, so the
 tie is stated for every batch size. The float number is a separate statement and is unmoved.

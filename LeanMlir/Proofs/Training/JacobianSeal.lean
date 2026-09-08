@@ -10,7 +10,7 @@ zero, so the backward map is the zero map and says nothing about a real gradient
 non-vacuity facts that exist today (`Mnv2Live.mnv2Live_forward_nonconstant`) only rule out
 a *constant forward* — strictly weaker than a non-trivial backward at the witness.
 
-This file supplies the missing **level-3 seal** (see `planning/whole_network_backward.md`,
+This file supplies the missing **level-3 seal** (see `planning/archive/whole_network_backward.md`,
 Item B): the reusable bridge from a single nonzero Jacobian entry to a provably non-trivial
 backward, and the equivalence with `fderiv ℝ f x ≠ 0`. A witness then upgrades from
 "forward ≠ const" to "the rendered backward at this point is not the zero map" by exhibiting

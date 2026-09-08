@@ -4,7 +4,7 @@ import LeanMlir.ViTRender
 /-! # ResNet-34 AdamW train step rendered from the verified AST, at the BATCHED index
 
 **The sole writer of every ResNet-34 artifact** since 2026-09-06, when 4c leg 1 retired the
-per-example `ResNet34Render.lean` (`planning/renderer_convergence.md`). It was the §2b peer of that
+per-example `ResNet34Render.lean` (`planning/archive/renderer_convergence.md`). It was the §2b peer of that
 file, and the two things that made it a peer are the two things that made it the survivor:
 
 * **BatchNorm is `bnBatchF`** — μ/var reduced over `[0,2,3]`, coupling the batch — not
@@ -39,7 +39,7 @@ namespace Proofs.StableHLO
 -- ════════════════════════════════════════════════════════════════
 -- § Migrated from `ResNet34Render.lean`, RETIRED 2026-09-06 (4c leg 1)
 --
--- ⭐⭐ `planning/renderer_convergence.md`: one chain per net, the batched one. ResNet-34's
+-- ⭐⭐ `planning/archive/renderer_convergence.md`: one chain per net, the batched one. ResNet-34's
 -- per-example renderer wrote `resnet34_train_step`, `resnet34_fwd` and `resnet34_fwd_eval` (and,
 -- through this file, the two `resnet34in_*` forwards). Its train step was the only artifact in
 -- the suite still at per-example BatchNorm, so `resnet34_fwd` could not be a prefix of BOTH it
@@ -505,17 +505,17 @@ inductive R34Opt
       remove. This case is the honest bottom of the ladder.
       ⚠ It is `.heavyBall` MINUS step ②, which is why it needs no new `SHlo` op either. -/
   | sgd
-  /-- ⭐⭐ **LAMB** (You et al. 2019) — RSB-A3's optimizer, `planning/rsb_a3_r50_verified.md` §2.3's
+  /-- ⭐⭐ **LAMB** (You et al. 2019) — RSB-A3's optimizer, `planning/archive/rsb_a3_r50_verified.md` §2.3's
       one ESTIMATED line, now measured at **two new ops**. Adam moments give a direction
       `r = m̂/(√v̂+ε) + wd·θ`, then a PER-PARAMETER-TENSOR trust ratio `‖θ‖/‖r‖` rescales the step.
       `Proofs.Lamb` is the ℝ reference; see `optOne`. -/
   | lamb
-  /-- ⭐ **AdamW over `k` accumulated micro-batches** — `planning/next_session_pipeline_then_r50.md`
+  /-- ⭐ **AdamW over `k` accumulated micro-batches** — `planning/archive/next_session_pipeline_then_r50.md`
       §4's blocker. A FOURTH parameter region `G` holds the running gradient sum, and the graph is
       one function for both phases with two runtime scalars deciding which it is. See `optOne`. -/
   | adamwAccum (k : Nat)
   /-- ⭐⭐ **LAMB over `k` accumulated micro-batches — RSB-A3's ACTUAL optimizer**, and the
-      composition `planning/next_session_rsb_a3.md` §1 exists to make expressible.
+      composition `planning/archive/next_session_rsb_a3.md` §1 exists to make expressible.
 
       ▶ **The observation that makes this one constructor rather than a redesign:** the accumulator
       `Gt = akeep·G + g` sits UPSTREAM of the optimizer and does not care who consumes it. So the
@@ -540,7 +540,7 @@ deriving DecidableEq, Repr
 
     ⭐⭐ **ONE WRITER, shared by `.adamwAccum` and `.lambAccum`.** These eight lines are the whole
     accumulate/apply mechanism, and duplicating them per optimizer is exactly the double-writer
-    failure `planning/next_session_rsb_a3.md` §1.1 wanted the type restructured to avoid — the
+    failure `planning/archive/next_session_rsb_a3.md` §1.1 wanted the type restructured to avoid — the
     restructure's real purpose was to stop this block existing twice, and factoring it out buys that
     without the ~8 match sites and 13-artifact re-render the restructure costs.
 
@@ -621,7 +621,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- `all_reduce` (the reference clips the combined gradient; clipping per replica clips 161
     -- PARTIAL gradients — a different function that still trains and still descends). So at
     -- `gradClip := true` the caller hoists both and sets this. `ConvNeXtRender.convnextAdamOne`
-    -- carries the identical flag for the identical reason; `planning/grad_clip.md` §4.
+    -- carries the identical flag for the identical reason; `planning/archive/grad_clip.md` §4.
     -- ⭐ It needs no interface change beyond the flag: `emitGradAllReduce` at `replicas ≤ 1` emits
     -- NOTHING and threads its input name straight through, so forcing 1 here is exactly "skip it".
     (preAvg : Bool := false)
@@ -640,7 +640,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- here would compound the clip across the k micro-batches of every cycle — a contraction that
     -- trains and descends and is not the recipe.
     (accIn : Option String := none)
-    -- ▶▶ **`ema` — the MODEL-EMA shadow, a region of its own** (`planning/ema.md`, lifted onto the
+    -- ▶▶ **`ema` — the MODEL-EMA shadow, a region of its own** (`planning/archive/ema.md`, lifted onto the
     -- residual family 2026-08-27 for RSB-A2/A1). One extra op per parameter, emitted AFTER the
     -- optimizer's own tail because the shadow tracks the UPDATED weight: `e' = %emad·e + %oemad·θ'`.
     --
@@ -691,7 +691,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     let (cE, nE) ← emaTail nT
     pure (arS ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, none, nE)
   | .lamb =>
-    -- ⭐⭐ LAMB, in four ops per parameter, TWO of which are new (`planning/rsb_a3_r50_verified.md`
+    -- ⭐⭐ LAMB, in four ops per parameter, TWO of which are new (`planning/archive/rsb_a3_r50_verified.md`
     -- §2.3 estimated "2–3"; measured at 2, because `gradSumSqAccF` was already here for the clip
     -- and `sgdParamF` for heavy-ball). `Proofs.Lamb` carries the ℝ reference and the clauses.
     let z1 : Vec 1 := fun _ => 0
@@ -945,7 +945,7 @@ def optWdDefault : R34Opt → String
     render passing `0.05`), copied rather than re-invented.
 
     ▶ Why it exists: RSB-**A1** uses wd = 0.01 where A3 uses 0.02
-    (`planning/verified_optimizer_parity.md` §3), so A1 costs a re-render rather than a new op. -/
+    (`planning/archive/verified_optimizer_parity.md` §3), so A1 costs a re-render rather than a new op. -/
 def optWdStr (opt : R34Opt) (wdStr : String := "") : String :=
   if wdStr.isEmpty then optWdDefault opt else wdStr
 
@@ -985,7 +985,7 @@ def lsVariantMark (alpha : Float := 0.1) : String :=
     ⚠⚠ **THIS IS A FUNCTION SO THAT THE ONE-STEP GATE CAN DRIVE THE SHIPPED PATH.** It was inline in
     `ResNet50RenderB.resnet50TrainStepFaithfulB` until 2026-08-14, which meant the only way to
     exercise the clip numerically was to render a whole 161-parameter train step and run a forward.
-    `planning/verified_optimizer_parity.md` §5's gate — one step of each optimizer on the same
+    `planning/archive/verified_optimizer_parity.md` §5's gate — one step of each optimizer on the same
     `(θ, g, state)` — needs the optimizer stage ALONE, and a second copy of it written for the gate
     would gate a transcription rather than the emission (§5's own point, one level down: *a gate on
     a copy is not a gate on the thing copied*). `tests/TestOptStepFixtures.lean` calls exactly this.
@@ -1250,7 +1250,7 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     -- (`…[wx][clip][drop][do][bce][wd<d>][bf16]`) and `cnxAdamVariant`'s `wxclipdrop` order, rather
     -- than appended like the newer axes — one rule for both nets, so a reader need not know which
     -- net a slug came from. ⚠ The marker is `"drop"` and not `"sd"`: `rms` ++ `dp` spells `rmsdp`,
-    -- which CONTAINS "sd" (`planning/stochastic_depth.md`'s defect).
+    -- which CONTAINS "sd" (`planning/archive/stochastic_depth.md`'s defect).
     -- ⚠ Parameter position is trailing (§2m, so no call site moves); STRING position is N3's.
     (sd : Bool := false)
     -- ▶▶ **`ls<α>` — LABEL SMOOTHING**, §5.6's ablation axis. Same rule as `wd<d>` one marker over:
@@ -1316,7 +1316,7 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     this file is batch BN, reduce `[0,2,3]`, divisor `B·H·W`. `scripts/regen_verified_mlir.sh`'s
     `check_adam_prefix` carried the divergence as a `KNOWN_SPLIT` entry reading "two renderers
     (ResNet34Render vs ResNet34RenderB)" for as long as both existed. This is
-    `ResNet50RenderB.r50FwdChainB`'s shape, for R50's reason (`planning/renderer_convergence.md`).
+    `ResNet50RenderB.r50FwdChainB`'s shape, for R50's reason (`planning/archive/renderer_convergence.md`).
 
     ⚠ The EVAL forward is deliberately NOT moved onto this chain, exactly as R50's is not:
     `bnPerChannelEvalF` reads frozen per-channel statistics and reduces nothing, so
@@ -1352,7 +1352,7 @@ def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
   -- ⭐ He et al.'s 3×3/s2 stem pool. ⚠ This read `.maxPool` (2×2, non-overlapping) until
   -- 2026-08-04 — a different function at the identical 112→56 output shape, so nothing ever
-  -- failed. `planning/rsb_a3_r50_verified.md` §4b.
+  -- failed. `planning/archive/rsb_a3_r50_verified.md` §4b.
   let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
   -- ═══ 16 blocks ═══
   let f1  ← idFwdB   B 64 56 epsStr "s1b0" nStp convBias bf16
@@ -1389,7 +1389,7 @@ set_option maxRecDepth 4000000 in
 /-- **`@resnet34_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN train
     step in this file differentiates, so the net that scores and the net that trains are one graph
     by construction. Replaces `ResNet34Render.resnet34FwdFaithfulV` as the writer of
-    `verified_mlir/resnet34_fwd.mlir` (2026-09-06, `planning/renderer_convergence.md` leg 1).
+    `verified_mlir/resnet34_fwd.mlir` (2026-09-06, `planning/archive/renderer_convergence.md` leg 1).
     Takes `%x` plus the parameters in `r34SigList` order — 111 inputs at the shipped
     `convBias := false` — and returns logits `[B, nClasses]`. -/
 def resnet34FwdFaithfulB (B nClasses : Nat) (epsStr : String)
@@ -1449,7 +1449,7 @@ here first"
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — the SAME traversal `@resnet34_fwd` renders, so the forward this differentiates
     --     and the forward the driver scores with are one graph by construction (leg 1 of
-    --     `planning/renderer_convergence.md`) ═══
+    --     `planning/archive/renderer_convergence.md`) ═══
     let F : R34FwdRecB ← r34FwdChainB B nClasses epsStr convBias bf16
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
@@ -1669,7 +1669,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05")
 
 -- ⭐⭐ The two Imagenette forwards, moved here from the retired `ResNet34Render.lean` (4c leg 1,
--- `planning/renderer_convergence.md`). `resnet34_fwd` now comes from `r34FwdChainB` — the SAME
+-- `planning/archive/renderer_convergence.md`). `resnet34_fwd` now comes from `r34FwdChainB` — the SAME
 -- traversal every train step above differentiates — so the net that scores and the net that trains
 -- are one graph by construction, and `check_adam_prefix`'s `KNOWN_SPLIT` entry for this net is
 -- gone. ⚠ `resnet34_train_step.mlir` is NOT re-created: the per-example SGD-inline artifact is

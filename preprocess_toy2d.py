@@ -3,7 +3,7 @@
 
 Writes flat float32-LE [N, 2] point clouds that the Lean side reads with a
 plain `IO.FS.readBinFile` (no header, no loader needed — the bytes ARE the
-array). See planning/diffusion_2d_demo.md §2.
+array). See planning/archive/diffusion_2d_demo.md §2.
 
 Targets are scaled to roughly unit radius so the data sits in the range a
 cosine-schedule DDPM expects (x0 ~ N(0,1)-ish); an 8-gaussians ring at the

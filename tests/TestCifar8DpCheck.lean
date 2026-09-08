@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # cifar8 data-parallel EXACT check — 2×128 + all_reduce vs 1×256
 
-`planning/xla_pjrt_handoff.md` §2b-quater. This is the gate that pins the **semantics** of the
+`planning/archive/xla_pjrt_handoff.md` §2b-quater. This is the gate that pins the **semantics** of the
 collective carve-out, and it is the only one that can: cifar8 has **no BatchNorm**, so the loss is a
 plain mean over examples and the batch decomposition is an identity,
 

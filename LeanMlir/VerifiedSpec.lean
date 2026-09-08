@@ -93,7 +93,7 @@ inductive VLayer where
       +21,008 gap close exactly (§2m) — the audit's rule was "a rank-1 kind-2 param immediately
       after a **rank-4** kernel", and SE's params are rank-2. -/
   | mbConvSENB (ic mid oc r k : Nat)
-  /-- **MobileNetV4 Universal Inverted Bottleneck** (`planning/mnv4_verified.md`):
+  /-- **MobileNetV4 Universal Inverted Bottleneck** (`planning/archive/mnv4_verified.md`):
       `optional pre-DW (preDWk) → 1×1 expand ic→mid → optional post-DW (postDWk) → 1×1 project
       mid→oc`, every conv BN-followed and therefore **bias-free** (`convBnNB`'s argument, and what
       `Spec.lean`'s baseline count already assumes). `mid = ic * expand`.
@@ -266,7 +266,7 @@ structure VerifiedNetSpec where
       BN threading in `trainAdamSched` — see `VerifiedNet.bnChannels`. -/
   bnChannels : Array Nat := #[]
   /-- **Stochastic-depth keep probabilities**, one per drop site, in the render's signature order
-      (`planning/stochastic_depth.md`). Empty on every net without a `*sd` render.
+      (`planning/archive/stochastic_depth.md`). Empty on every net without a `*sd` render.
 
       ⚠ A SECOND hand-list against the renderer's `enetDropIdxs`/`enetDropTotal` — the same
       two-lists shape as `toSpecs == XLayout.specs`, and for the same structural reason: this file

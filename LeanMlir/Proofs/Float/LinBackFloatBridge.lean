@@ -25,7 +25,7 @@ within an explicit budget of the certified real backward map." The backward peer
 `cifar8_floatBridges`, assembled in one `.comp` chain.
 ⚠ Since 2026-09-08 the ℝ maps themselves (`reluMaskBack`, `diagBack`) are defined in
 `Foundation/BackwardMaps.lean`, beside the other per-op backward maps the certified ties are
-stated about; this file is their float side only (`planning/float_second_pass.md`).
+stated about; this file is their float side only (`planning/archive/float_second_pass.md`).
 -/
 
 namespace Proofs

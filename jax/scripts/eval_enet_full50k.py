@@ -34,7 +34,7 @@ import tensorflow_datasets as tfds
 # The artifact that TRAINED the checkpoint. `_full` and the 80-epoch variant
 # differ only in the baked EPOCHS constant, but point this at the wrong net and
 # the checkpoint is being run in a graph it was never trained in — see
-# planning/imagenet_rerun_sweep.md C6.
+# planning/archive/imagenet_rerun_sweep.md C6.
 GEN   = os.environ.get("GEN", ".lake/build/generated_efficientnet_b0_imagenet_full.py")
 CKPT  = os.environ.get("CKPT", "/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.state.npz")
 BATCH = int(os.environ.get("BATCH", "200"))   # 50000 % 200 == 0 (not relied on)

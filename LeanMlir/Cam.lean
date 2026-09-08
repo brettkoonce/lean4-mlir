@@ -14,7 +14,7 @@ are in `F32Array.lean` via FFI. This file provides:
 No autodiff is needed — for any network ending in
 `... → globalAvgPool → dense ic oc act` GradCAM collapses to the
 closed form Zhou et al. computed three years before Selvaraju et al.
-generalized it. See `planning/gradcam.md`. -/
+generalized it. See `planning/archive/gradcam.md`. -/
 
 namespace Cam
 

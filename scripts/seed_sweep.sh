@@ -11,7 +11,7 @@
 # SUITE=small — the book's chapter 1-4 trainers: MNIST at 12 epochs, CIFAR at 40 (the ladder
 #   12 -> 40 -> 80 standardised 2026-08-31).
 # SUITE=bnprec — Chapter 4's Lever 3 on the normalized net: `cifar8wb-bn-ablation`, six arms
-#   (SGD/Nesterov/AdamW x f32/bf16) at 40 epochs. planning/bf16_batchnorm.md.
+#   (SGD/Nesterov/AdamW x f32/bf16) at 40 epochs. planning/archive/bf16_batchnorm.md.
 #
 # ⭐ CIFAR is the WIDE head (`cifar8w-{,bn-}ablation`, d1=512), not the narrow `cifar-{,bn-}verified`
 #   this suite first pointed at. Chapter 4 quotes the wide net — §4.1's 77.48% and §4.2's
@@ -29,7 +29,7 @@
 #   which is §4.2's published finding. Its SGD and AdamW arms finish ~72-73%. That is a RESULT,
 #   not a runner failure, so a job containing a diverged arm still counts as done.
 #
-# `planning/imagenette_error_intervals.md` §2. Seven trainers x 3 seeds = 21 runs, LPT-packed
+# `planning/archive/imagenette_error_intervals.md` §2. Seven trainers x 3 seeds = 21 runs, LPT-packed
 # one-per-GPU (XLA preallocates ~75% of a card, so two will not share one). ~19.4 GPU-h, so
 # ~3.3 h on six cards (19.7 GPU-h).
 #
@@ -83,7 +83,7 @@ case "$SUITE" in
           [mnist_mlp]=mnist-mlp-verified [mnist_linear]=mnist-linear-verified )
     EPOCHS=( [cifar8w_bn]=40 [cifar8w]=40 [mnist_cnn]=12 [mnist_mlp]=12 [mnist_linear]=12 ) ;;
   bnprec)
-    # Chapter 4's Lever 3 on the NORMALIZED net (planning/bf16_batchnorm.md). ONE binary, SIX arms:
+    # Chapter 4's Lever 3 on the NORMALIZED net (planning/archive/bf16_batchnorm.md). ONE binary, SIX arms:
     # three optimizers x {f32, bf16} on the BN net rendered from the batched op family, so
     # precision is the only thing that moves inside a pair. ~20 min/seed (6 arms x 40 ep).
     # ⚠ Six final-epoch lines per log, not three — the OK line's awk already collects all of them.

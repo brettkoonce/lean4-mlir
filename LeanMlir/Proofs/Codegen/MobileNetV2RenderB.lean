@@ -4,7 +4,7 @@ import LeanMlir.ViTRender
 /-! # MobileNetV2 rendered from the verified AST, at the BATCHED index — the SOLE renderer
 
 ⭐⭐ **This file writes every MobileNetV2 artifact** as of 2026-09-06, when leg 2 of
-`planning/renderer_convergence.md` retired `MobileNetV2Render.lean`. Before that the net had two
+`planning/archive/renderer_convergence.md` retired `MobileNetV2Render.lean`. Before that the net had two
 renderers and they were two different functions:
 
 * **`MobileNetV2Render.lean` rendered PER-EXAMPLE BN** (`bnPerChannelF`, reduce `[2,3]`) and wrote
@@ -43,7 +43,7 @@ exactly as `resnet34`/`cifar8`'s does (§5).
 ⭐ **The Proofs tier this file's train steps are tied at** is the batch-BN one:
 `MobileNetV2FullB.lean` (T1 forward, T2), `MobileNetV2FullBVJP.lean` (T1's VJP),
 `MobileNetV2FaithfulPoCPaperG.lean` (T3 §1 fold, un-fused) and `MobileNetV2TiePoCB.lean` (T3 §1a
-tie) — §4.2 of `planning/proofs_tier_to_paper_nets.md`, all 2026-09-06. The per-example
+tie) — §4.2 of `planning/archive/proofs_tier_to_paper_nets.md`, all 2026-09-06. The per-example
 `MobileNetV2FaithfulPoCPaper` fold still supplies the op-kind lemmas the batched fold delegates
 to; the per-example tie (`MobileNetV2TiePoCPaper.lean`) was deleted 2026-09-08, since no committed
 bytes exercised it.
@@ -653,7 +653,7 @@ set_option maxRecDepth 4000000 in
     BN, reduce `[0,2,3]`, divisor `B·H·W`. `scripts/regen_verified_mlir.sh`'s `check_adam_prefix`
     carried the divergence as the LAST `KNOWN_SPLIT` entry for as long as both existed. This is
     `ResNet34RenderB.r34FwdChainB`'s shape, for `ResNet50RenderB.r50FwdChainB`'s reason
-    (`planning/renderer_convergence.md`, leg 2).
+    (`planning/archive/renderer_convergence.md`, leg 2).
 
     ⚠ The EVAL forward is deliberately NOT moved onto this chain, exactly as ResNet-34's and
     ResNet-50's are not: `bnPerChannelEvalF` reads frozen per-channel statistics and reduces
@@ -726,7 +726,7 @@ set_option maxRecDepth 4000000 in
 /-- **`@mobilenetv2_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN
     train step in this file differentiates, so the net that scores and the net that trains are one
     graph by construction. Replaces `MobileNetV2Render.mnv2FwdFaithfulV` as the writer of
-    `verified_mlir/mobilenetv2_fwd.mlir` (2026-09-06, `planning/renderer_convergence.md` leg 2).
+    `verified_mlir/mobilenetv2_fwd.mlir` (2026-09-06, `planning/archive/renderer_convergence.md` leg 2).
     Takes `%x` plus the parameters in `mnv2SigList` order — 159 inputs at the shipped
     `convBias := false` — and returns logits `[B, nClasses]`.
 
@@ -787,7 +787,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let zrnd : ℝ → ℝ := fun r => r
     -- ═══ forward — the SAME traversal `@mobilenetv2_fwd` renders, so the forward this
     --     differentiates and the forward the driver scores with are one graph by construction
-    --     (leg 2 of `planning/renderer_convergence.md`) ═══
+    --     (leg 2 of `planning/archive/renderer_convergence.md`) ═══
     let F : MNV2FwdRecB ← mnv2FwdChainB B nClasses epsStr convBias bf16
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
@@ -1038,7 +1038,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
 -- ════════════════════════════════════════════════════════════════
 -- § The PER-EXAMPLE forward chain, kept for the EVAL forward only
 --   Migrated here 2026-09-06 when `MobileNetV2Render.lean` was retired (leg 2 of
---   `planning/renderer_convergence.md`). `bnPerChannelEvalF` reads frozen per-channel statistics
+--   `planning/archive/renderer_convergence.md`). `bnPerChannelEvalF` reads frozen per-channel statistics
 --   and reduces nothing, so `@mobilenetv2_fwd_eval` is BatchNorm-world-agnostic and correct
 --   against either chain — the same call ResNet-34 and ResNet-50 make.
 --   It is not re-pointed at `mnv2FwdChainB` because nothing needs it to move. (Until 2026-09-08
@@ -1355,7 +1355,7 @@ def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool :
     (slug : String := "mobilenetv2") : String :=
   -- ⭐ The eval forward must be the SAME NET as the train step that produces the running
   -- statistics it consumes, and that partner is `mobilenetv2_adam_train_step` in
-  -- `MobileNetV2RenderB`, XLA-`SAME` since 2026-08-08 (`planning/mnv4_verified.md` §3h). Since
+  -- `MobileNetV2RenderB`, XLA-`SAME` since 2026-08-08 (`planning/archive/mnv4_verified.md` §3h). Since
   -- 2026-09-05 `mnv2FwdChain` is XLA-`SAME` unconditionally, so this and its per-example sibling
   -- `@mobilenetv2_fwd` are one net at every stride-2 site (they still differ in BN world: frozen
   -- stats here, per-example there) and `LEAN_MLIR_EVAL_BATCHSTATS=1` — which scores through
@@ -1394,7 +1394,7 @@ end Proofs.StableHLO
 -- canonical name IS the swap. `…_b.mlir` is deleted; the bytes now at this path are byte-identical
 -- to the `_b.mlir` render that passed the tie (checked before deleting).
 -- ⭐⭐ **`@mobilenetv2_fwd`, moved onto THIS chain 2026-09-06** (leg 2 of
--- `planning/renderer_convergence.md`). It came from `MobileNetV2Render.mnv2FwdFaithfulV`, the
+-- `planning/archive/renderer_convergence.md`). It came from `MobileNetV2Render.mnv2FwdFaithfulV`, the
 -- PER-EXAMPLE render, while every train step below is batch BN — so the artifact the driver scores
 -- with and the artifact it trains on were different functions of the same architecture. That was
 -- the last `KNOWN_SPLIT` entry in `scripts/regen_verified_mlir.sh`. It is now a byte-identical
@@ -1486,7 +1486,7 @@ end Proofs.StableHLO
 -- ⚠ The depthwise convs are ~13% of MNv2's step and bf16 is a mild LOSS on them in isolation
 -- (0.86× at MNv2's own layers — cuDNN has a better f32 depthwise kernel on Ada). The win comes
 -- from the 1×1 expand/project convs, which is why the reference sets `bf16Conv := true` here.
--- ▶ `planning/bf16_renderer.md` §9.1: the doc's "depthwise nets won't pay" was REFUTED.
+-- ▶ `planning/archive/bf16_renderer.md` §9.1: the doc's "depthwise nets won't pay" was REFUTED.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adamdp64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in"
     Proofs.StableHLO.OptKind.adamw true)
@@ -1503,7 +1503,7 @@ end Proofs.StableHLO
 #guard !"adamdp64bf16".startsWith "ema"
 
 -- ── ▶ RMSProp: the optimizer the MobileNetV2 reference ACTUALLY USES ──────────────────────────
--- `planning/recipe_gaps.md` §2: RMSProp is the ONLY gap between this net and the JAX reference's
+-- `planning/archive/recipe_gaps.md` §2: RMSProp is the ONLY gap between this net and the JAX reference's
 -- **68.33%** (everything else — batch 256, 90 epochs, 5-epoch warmup, no label smoothing — already
 -- matches). recipe_gaps files this as Tier D, "a new proven `SHlo` op family, ten sites each";
 -- measured, it is **one** op: `momVNextF` already spells the coupled L2 and `adamVNextF` at

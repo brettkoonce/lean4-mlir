@@ -2,7 +2,7 @@ import LeanMlir
 
 /-! YOLOv1 detector on VisDrone at 448 input / **28×28 grid** (stride-16 tap).
 
-    The "different head" hedge (planning/yolo_drone.md): the WS-A collapse and the
+    The "different head" hedge (planning/archive/yolo_drone.md): the WS-A collapse and the
     448/14 rung both point at the grid being too coarse for VisDrone's density
     (~70 objects/image). This drops the ResNet-34 backbone's last downsample
     (last residual block stride 2 → 1) so the detection feature map is 448/16 = 28

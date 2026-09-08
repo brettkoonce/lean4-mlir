@@ -29,7 +29,7 @@ from here and `git diff verified_mlir/` after the move is empty.
 ⛔ **The one exception is `vit_train_step.mlir`**, the SGD-inline step, which stays in
 `ViTRender.lean`: `vitBackAllB` has no fused-SGD arm (it emits the raw gradient only), and ViT's
 T3 §1a tie — `ViTTiePoC.lean`, all 200 parameters — is stated at exactly those bytes. Retiring it
-before that tie has a batched peer is the ordering mistake `planning/renderer_convergence.md`
+before that tie has a batched peer is the ordering mistake `planning/archive/renderer_convergence.md`
 leg 1 wrote down.
 
 ⭐⭐ **The bytes did not move and one denotation did.** See the CLS-token emission below: this
@@ -571,7 +571,7 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     (bf16Conv : Bool := false)
     -- ⚠ And the stem's FORWARD is split from its WEIGHT GRADIENT, because the two do not behave the
     -- same and lumping them would have hidden which one costs. See the probe numbers in
-    -- `planning/bf16_renderer.md` §18.
+    -- `planning/archive/bf16_renderer.md` §18.
     (bf16ConvW : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × List String × String) := do
     let vbTk := V.tk
@@ -673,7 +673,7 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
     -- artifact; `vitAdamTrainStepFaithful` takes `funcName` EXPLICITLY, so here the risk is route
     -- (c) — the artifact PATH and the `#eval`'s `funcName` disagreeing. The `#guard`s under the
     -- bf16 `#eval` pin the two spellings against each other, which is the check that fits this
-    -- route. `planning/bf16_renderer.md` §15.2 enumerates all three.
+    -- route. `planning/archive/bf16_renderer.md` §15.2 enumerates all three.
     (bf16 : Bool := false)
     -- ⭐ `bf16Conv`, defaulted `false`. ⚠ It adds NO variant marker: it is not a recipe choice, it
     -- is a measured statement that this net's two convolutions have no usable bf16 kernel, and a
@@ -700,7 +700,7 @@ def vitDropFwdBanner : String :=
   "    // ── ViT-Tiny forward at the BATCHED index N := B, with STOCHASTIC DEPTH ──\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § ▶ THE STOCHASTIC-DEPTH ARTIFACTS (`planning/stochastic_depth.md`, handoff §0.2 ▶3)
+-- § ▶ THE STOCHASTIC-DEPTH ARTIFACTS (`planning/archive/stochastic_depth.md`, handoff §0.2 ▶3)
 -- ════════════════════════════════════════════════════════════════
 --
 -- ⚠ These are the only artifacts this file writes, and they are all NEW. Unlike ConvNeXt, ViT's
@@ -733,7 +733,7 @@ def vitDropFwdBanner : String :=
     (sd := true))
 
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE bf16 ARM — `planning/bf16_renderer.md` §17, and read §17.3 before quoting a number
+-- § ⭐⭐ THE bf16 ARM — `planning/archive/bf16_renderer.md` §17, and read §17.3 before quoting a number
 -- ════════════════════════════════════════════════════════════════════════════════════════
 --
 -- ⚠⚠ **THIS RENDER WAS MEASURED BEFORE IT WAS BUILT AND THE MEASUREMENT SAID 1.03×.** §17.3 timed
@@ -745,7 +745,7 @@ def vitDropFwdBanner : String :=
 -- because a convolution reuses each loaded input across many output positions.
 --
 -- ▶ So this arm exists to CONFIRM the predicted 1.03× on a real artifact and to give the successor
--- project (`planning/bf16_dtype_ir.md`) a wired net to flip. It is not a shipping recipe, and the
+-- project (`planning/archive/bf16_dtype_ir.md`) a wired net to flip. It is not a shipping recipe, and the
 -- honest reading of its ms/step is "the six ops are correct", not "ViT is faster now".
 --
 -- ⚠ **SINGLE-DEVICE ONLY, deliberately** — §13.2: a 1-GPU pair is what isolates the RENDERER, and
@@ -841,7 +841,7 @@ def vitDropFwdBanner : String :=
 -- ⚠⚠ **EMA + dropPath had never been rendered together before this line.** EMA adds a FOURTH blob
 -- region and takes the scalar tail 3 → 5; dropPath adds 24 mask operands (12 blocks × 2 branches).
 -- Each is exercised alone. `tests/TestVitEmaDropRender.lean` is where that composition gets gated —
--- a wrongly-packed region TRAINS and REPORTS A LOSS, which is `planning/ema.md`'s own defect.
+-- a wrongly-packed region TRAINS and REPORTS A LOSS, which is `planning/archive/ema.md`'s own defect.
 --
 -- ⭐ bf16 because the phase-2 reference run this pairs against is bf16 (§9.6): an f32 verified run
 -- would differ from it in PRECISION as well as in lowerer, and the comparison is about the lowerer.
@@ -938,7 +938,7 @@ def vitDropFwdBanner : String :=
 
 -- ════════════════════════════════════════════════════════════════════════════════════════
 -- § ▶ ViT-Base at **128 per device** — the probe that asks whether §4d's accumulation loop
---     is needed at all (`planning/verified_side_quest_counterparts.md` §6a, step 1)
+--     is needed at all (`planning/archive/verified_side_quest_counterparts.md` §6a, step 1)
 -- ════════════════════════════════════════════════════════════════════════════════════════
 --
 -- ⭐⭐ **The `32`-per-device pin above is a memory verdict, and the budget it was taken against
@@ -1251,7 +1251,7 @@ def vitDropFwdBanner : String :=
   (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adam128wx_train_step" "128.0" 1 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (vbB := 128))
 
--- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) ───────────────────────────
+-- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/archive/grad_clip.md`) ───────────────────────────
 -- `vitTinyImagenetConfig.gradClipNorm := 1.0` — the DeiT default, and the reference's own comment
 -- calls it *"the unlock for the 5e-4 LR"*. `vitTinyConfig` sets NOTHING, so (like `wx` and `ema`)
 -- the Imagenette artifacts keep their bytes and this is a variant, not a flipped default.
@@ -1306,7 +1306,7 @@ def vitDropFwdBanner : String :=
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (vbB := 128))
 
--- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ─────────────────
+-- ── ▶ THE EMA VARIANT (`planning/archive/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ─────────────────
 -- ViT is the last of the three nets whose reference uses EMA (`vitTinyImagenetConfig.emaDecay :=
 -- 0.99996`; ConvNeXt landed first, then EfficientNet's `emarms`), and it is the CHEAPEST of the
 -- three: LayerNorm means there are no BN running buffers, so there is no `ema_bn` peer to carry —
@@ -1377,7 +1377,7 @@ def vitDropFwdBanner : String :=
 #guard Proofs.StableHLO.vitAdamVariant 128 4 false true true == "adamdp128x4wxclip"
 #guard Proofs.StableHLO.vitAdamVariant 32 1 true false true == "emaclip"
 
--- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
+-- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/archive/recipe_gaps.md` v1.2c) ──────────────────────────
 -- `vitTinyImagenetConfig.emaDecay := 0.99996` (the DeiT default), so this is the render an ImageNet
 -- ViT pair actually needs — `vit_ema` is Imagenette-scale and, as `MainViTVerifiedAdam` records, a GATE
 -- VEHICLE rather than a matched pair (`vitTinyConfig` sets no EMA at all). Batch 128 × 4 replicas

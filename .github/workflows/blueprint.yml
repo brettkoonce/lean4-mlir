@@ -120,7 +120,7 @@ jobs:
           # (Since the 2026-07-06 Proofs/Certs split, `Proofs` is only the slim
           # demo-cone slice; the blueprint cites corpus theorems — JacobianSeal,
           # the seals, FloatBridges, … — so it needs `Certs`, whose roots
-          # subsume the slice. See planning/repo_shape_deletion_audit.md §4.)
+          # subsume the slice. See planning/archive/repo_shape_deletion_audit.md §4.)
           lake build LeanMlir Certs
 
       - name: Install graphviz (libcgraph for leanblueprint's dep-graph plugin)

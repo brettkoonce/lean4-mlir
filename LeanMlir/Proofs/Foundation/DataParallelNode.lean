@@ -31,7 +31,7 @@ This file is what the node BUYS, stated once:
   `*GradB` composes the same way, by `Finset.sum_congr` over the replicas and its own fold lemma.
 * `adamW_at_allReduceMeanF` — the tail composed: `den (adamW tail (allReduceMeanF …))` is
   `adamWStep` at `dpMean` of the per-replica gradient nodes. That is
-  `planning/proofs_tier_to_paper_nets.md` §4d piece 2's target statement.
+  `planning/archive/proofs_tier_to_paper_nets.md` §4d piece 2's target statement.
 
 ## What is NOT claimed
 ⚠ Piece 3 is untouched: that the `R` graphs' values are the replica slices of ONE host batch,

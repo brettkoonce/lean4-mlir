@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.AdamStep
 
 /-! # Global-norm gradient clipping over ℝ — the ViT / ConvNeXt recipe's last v1.4 piece
 
-The ℝ reference for `planning/grad_clip.md` (`recipe_gaps.md` v1.4b). Coordinatewise over `Vec`
+The ℝ reference for `planning/archive/grad_clip.md` (`recipe_gaps.md` v1.4b). Coordinatewise over `Vec`
 where it can be, mirroring the emitted StableHLO op-for-op so the faithfulness theorems in
 `StableHLO.lean` are structural matches (`rfl`), exactly as `AdamStep` is for the AdamW triple and
 `RmsPropStep` for RMSProp's buffer.
@@ -20,7 +20,7 @@ entire semantic content of the feature, and it is the thing a per-parameter chec
 per-parameter clip compiles, renders, trains and descends, and differs only in that the factor stops
 being shared. `clipFactor_shared` below is the statement the numeric gate drives, and it is why that
 gate measures the ratio's CONSTANCY across parameters rather than the presence of scaling
-(`planning/grad_clip.md` §7 — `wdx-tie`'s *gate the partition, not the count*, one feature over).
+(`planning/archive/grad_clip.md` §7 — `wdx-tie`'s *gate the partition, not the count*, one feature over).
 
 **Who uses it**: ViT 1.0 (`jax/MainVitImagenet.lean:45`, *"DeiT default; the unlock for the 5e-4
 LR"*) and ConvNeXt 1.0 (`jax/MainConvNeXtImagenet.lean:74`). **EfficientNet sets it to 0.0
@@ -110,7 +110,7 @@ theorem clipFactor_nonneg (c ε s : ℝ) (hc : 0 ≤ c) (hε : 0 < ε) : 0 ≤ c
     `1` — not "approximately 1", *the literal constant 1* — so the clipped render must return its
     input unchanged.
 
-    ⚠ This is what makes `planning/grad_clip.md`'s gate 3 a **bit-exactness** claim rather than a
+    ⚠ This is what makes `planning/archive/grad_clip.md`'s gate 3 a **bit-exactness** claim rather than a
     tolerance: `x * 1.0` is exact in IEEE-754 binary32, so a clip-on render at a large `c` must
     agree with the clip-off render on every byte. `dropPath_ones_id` licensed the stochastic-depth
     gate the same way, and the same warning applies here twice over — an identity gate CANNOT see

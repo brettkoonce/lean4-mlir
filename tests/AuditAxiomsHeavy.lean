@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFull
 -- (LipschitzCertScorecardSDPFull{,Uncon} imports DISABLED with their lib
 -- membership — the linarith PSD witnesses OOM the free-tier runners; see
--- planning/certs_heavy_psd_memory.md. Their prints below are commented out
+-- planning/archive/certs_heavy_psd_memory.md. Their prints below are commented out
 -- with them; re-enable both together.)
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon
@@ -76,7 +76,7 @@ the MAIN audit. -/
 -- exact-LDL fractions hurt 512 separate norm_num goals far more than one
 -- linarith call). Those counts are exact-rational MEASUREMENTS; the first 8
 -- certifying images per radius carry the `CertifiedAt` theorems, and the
--- `scorecard_sdp_full*` aggregates state only those (planning/scorecard_trim.md).
+-- `scorecard_sdp_full*` aggregates state only those (planning/archive/scorecard_trim.md).
 -- Spot-check: one pair chain (slack + squared bound), a reverse-order wrapper,
 -- first/middle/last per-image certs at both radii, and the aggregates.
 -- #print axioms Proofs.LipschitzCertDemo.hS01SF  -- CI-disabled with the SDP lib membership

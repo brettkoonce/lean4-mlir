@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `cifar-pgd` — phase-3 PGD attack on the verified CIFAR-10 CNN
 
-The deeper conv rung of the robustness ladder (`planning/robustness_ladder.md`). Trains the
+The deeper conv rung of the robustness ladder (`planning/archive/robustness_ladder.md`). Trains the
 verified `conv 3→32 → conv 32→32 → pool → conv 32→64 → conv 64→64 → pool → 4096→512→512→10`
 net on the proof-rendered SGD step, then runs L∞/L2 PGD through IREE with `genCifarPgdStep` —
 the full proven input-VJP to `dx` (4 conv input-VJPs + 2 maxpool `select_and_scatter`-backs +

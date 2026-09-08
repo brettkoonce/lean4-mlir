@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sampler x NFE scaling on the 2-D toy — planning/diffusion_2d_demo.md.
+# Sampler x NFE scaling on the 2-D toy — planning/archive/diffusion_2d_demo.md.
 #
 # ⭐ The question: at a fixed budget of network evaluations, which reverse-process
 # solver gets closest to the data? All arms run on the SAME weights (`reuse`), so

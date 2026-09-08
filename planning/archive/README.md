@@ -1,46 +1,28 @@
-# planning/archive — closed threads
+# planning/archive — the lab notebook
 
-Planning docs whose work has landed. Nothing here is deleted or wrong;
-it is the lab notebook for finished threads, moved out of `planning/`
-so what remains there is what is still open.
+Every planning doc lives here. Since 2026-09-08 (`planning/cleanup_backlog.md` §1) the top
+level of `planning/` holds only the standing backlog and `mathlib_upstream_drafts/` (the
+Mathlib upstreaming sources that `LeanMlir/Proofs/Foundation/UpstreamDraft.lean` mirrors while
+those PRs are in flight). Everything else — the ImageNet runs, the detector, the diffusion
+demos, the proofs-tier campaigns, the float tier, and the closed-thread logs archived before
+that date — sits here, flat, under its original name. Nothing here is deleted or wrong; a doc
+reads as history because it is history.
 
-Hygiene item H3 of `planning/repo_shape_deletion_audit.md`.
+## The rule
 
-## What's in here
+* A session that reopens a thread pulls its doc back up (`git mv planning/archive/x.md
+  planning/`) and repoints every citation in the same commit; when the thread closes it comes
+  back the same way.
+* Citations spell the full `planning/archive/<doc>.md` path — from Lean docstrings, the
+  workflows, `lakefile.lean`, `tests/AuditAxioms.lean`, the scripts, and the docs in here.
+  Three emitters bake the path into committed artifacts (`ViTRender.lean` into the four
+  `verified_mlir/vit*ema*` renders, `jax/Jax/Codegen.lean` into `jax/generated/`), so a repoint
+  of those regenerates the artifact too. Raw `runs/*.log` files keep whatever path the trainer
+  printed at the time.
+* Section numbering inside a doc is load-bearing (`§3d(b)`, `§4c(c)`, …): docstrings cite
+  sections, so an archived doc's numbering is never rewritten.
 
-| doc | thread, and where the work lives now |
-|---|---|
-| `verified_mnv2.md`, `verified_enet.md`, `verified_convnext.md`, `verified_vit.md` | Ch 7–10 verified-net handoffs — all four nets ship |
-| `resnet34_close.md`, `efficientnet_close.md` | "close it both ways" plans for ch 6 and ch 8 |
-| `cifar_handoff.md`, `validation_sweep.md` | Ch 5 verified codegen + the sweep that put it in the book |
-| `backward_graph_faithfulness_convnext_vit.md` | backward-graph faithfulness for ConvNeXt + ViT |
-| `conv2d.md`, `mat_matrix_phase2.md` | input-VJP elimination; `Proofs.Mat` → Mathlib `Matrix` |
-| `floatbridge_descent_cnn.md`, `floatbridge_descent_pass.md`, `floatbridge_honesty_pass.md`, `forward_wholenet_handoff.md`, `backward_certified_tie_and_vit_fwd_tie.md` | the FloatBridge §3 descent rungs and the whole-net forward/backward ties |
-| `float_budget_numbers_log.md` | the whole-net float-budget NUMBERS thread, 2026-09-02 to 09-05 (seven forwards, four backwards, three certified ties); section numbering preserved because ~40 docstrings cite it. Live doc: `planning/float_budget_numbers.md` |
+## Non-md residue
 
-## What deliberately stayed in planning/
-
-Two kinds of doc did **not** move:
-
-**Standing references, not threads** — `upgrade.md` (release procedure),
-`SIDE_QUESTS.md` (backlog), `codegen_scope.md` (what earns a real emit),
-`math_threads.md`, `paper_faithfulness.md` (the fidelity ledger),
-`post_audit_roadmap.md`, `repo_shape_deletion_audit.md`. These are old but
-live; age is not the criterion, openness is.
-
-**Docs cited from code** — 25 otherwise-closed threads are referenced by
-name from Lean proof docstrings, the three CI workflows, `lakefile.lean`
-and `AuditAxioms.lean` (`audit.md`, `VJP.md`, `pdiv.md`, `yolo_final.md`,
-`whole_network_backward.md`, `a3_backward_deepnet_assembly.md`, the
-`*_close.md` set, …). Those citations are not uniform — some carry the
-`planning/` prefix, some are bare filenames mid-sentence — so moving them
-would leave half-rewritten pointers inside the proof suite. They are
-archivable, but only as a deliberate pass that rewrites the citations
-too, with a proof rebuild behind it.
-
-## Adding to this directory
-
-Move a doc here when its thread is closed and nothing outside `planning/`
-cites it. If something does cite it, repoint the citation in the same
-commit or leave the doc where it is. Cross-references from docs that stay
-behind get an `archive/` prefix.
+`conv3d_spike.mlir` — the hand-written 3-D conv spike behind the "IREE compiles conv3d" claim
+in `brats_demo.md` and `unet3d.md`; the re-run command in those docs points here.

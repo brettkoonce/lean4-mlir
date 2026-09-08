@@ -21,7 +21,7 @@ maxpool/conv steps are exactly the `Back3` subgraphs `flatDenote` denotes. Insta
 generic conv bridges at these cotangents gives: each conv `θ` output denotes `θ − lr·(certified
 ∂conv/∂θ · the-actual-chain-cotangent)`. (This pins the cotangent — the further "= ∂loss/∂θ" fold
 is the separate `pdiv G = Back.denote` step, as in the MLP `mlp_*_total_loss_grad`.)
-See `planning/render_close_handoff.md` §1 "Optional polish".
+See `planning/archive/render_close_handoff.md` §1 "Optional polish".
 -/
 
 namespace Proofs

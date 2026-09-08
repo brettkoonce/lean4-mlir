@@ -2,14 +2,14 @@ import LeanMlir
 
 /-! ViT-Tiny on Imagenette with the **Shampoo** optimizer (UNVERIFIED perf path).
 
-    Step-2 demo from `planning/shampoo.md`: Shampoo (Kronecker `L^{-1/4}·G·R^{-1/4}`)
+    Step-2 demo from `planning/archive/shampoo.md`: Shampoo (Kronecker `L^{-1/4}·G·R^{-1/4}`)
     on every SQUARE 2D weight matrix — the Q/K/V/O projections (`[192,192]`) of all
     12 transformer blocks — with AdamW on everything else (patch-embed conv, CLS
     token, positional embedding, LayerNorm γ/β, biases, the two non-square MLP
     weights `[192,768]`/`[768,192]`, and the small classifier head). Identical
     architecture + recipe to `MainVitTrain` (AdamW) and `MainVitMuonTrain` (Muon),
     so the three are a compute-matched 3-way A/B on the same net — the ladder point
-    `planning/shampoo.md` cashes out: AdamW (diagonal) vs Muon (one-step polar =
+    `planning/archive/shampoo.md` cashes out: AdamW (diagonal) vs Muon (one-step polar =
     single-step Shampoo) vs Shampoo (polar WITH accumulated memory).
 
     Patch 16×16 → 192-dim, 12 blocks, 3 heads, MLP 768. ~5.5M params, 224×224, 10 classes.
@@ -21,7 +21,7 @@ import LeanMlir
 
     Shampoo's effective step scale differs from Adam's; the LR here (`3e-4`, same as
     the Muon/AdamW baselines) is the A/B's *matched* starting point — sweep it per
-    `planning/shampoo.md §3` if the matched run underperforms. -/
+    `planning/archive/shampoo.md §3` if the matched run underperforms. -/
 
 def vitTiny : NetSpec where
   name := "ViT-Tiny-Shampoo"

@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@convnext_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md` §2f, step 3. `Proofs/Codegen/ConvNeXtRender.lean`'s
+`planning/archive/xla_pjrt_handoff.md` §2f, step 3. `Proofs/Codegen/ConvNeXtRender.lean`'s
 `convNextAdamTrainStepFaithful` renders the same train step the hand-written emitter in
 `tests/TestConvNeXtTrain.lean` does — the one `convnext-verified-adam` trains on. This harness is
 what licenses swapping them; run it BEFORE retiring the hand-written emitter, because afterwards the

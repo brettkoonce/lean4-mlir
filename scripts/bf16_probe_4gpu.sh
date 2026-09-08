@@ -3,7 +3,7 @@
 #
 #     scripts/bf16_probe_4gpu.sh /tmp/out.tsv
 #
-# Produces the table in `planning/bf16_renderer.md` §21 — per-net ms/step at 4x, from which the
+# Produces the table in `planning/archive/bf16_renderer.md` §21 — per-net ms/step at 4x, from which the
 # end-to-end cost of a full run is `steps/epoch * epochs * ms/step + 37.5 s/epoch` (eval+ckpt,
 # measured on R34; the 30 GB val drain is ONE-TIME, not per-epoch).
 #

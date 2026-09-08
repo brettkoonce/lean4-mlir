@@ -6,7 +6,7 @@ import LeanMlir
     the deliverable rather than a garnish: a medical student evaluates a
     segmentation by *looking* at it. A collapsed model and a working one
     produce the same respectable-looking mIoU (0.243 vs the 0.243 of the
-    trivial background-only predictor — planning/brats_demo.md Workstream A);
+    trivial background-only predictor — planning/archive/brats_demo.md Workstream A);
     they do not produce the same picture.
 
     For each of N chosen val slices, writes a PPM strip:

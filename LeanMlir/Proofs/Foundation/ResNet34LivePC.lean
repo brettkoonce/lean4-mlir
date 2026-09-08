@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Foundation.ResNet34Live2
 
 Stage 2 (`ResNet34Live2.lean`) banked the channel-order invariant kit (the A2
 non-vacuity crux). This file does the **mechanical 2-channel re-instantiation**
-(`planning/whole_network_backward.md` Item A1): the layers `liveDown`/`stem`/…
+(`planning/archive/whole_network_backward.md` Item A1): the layers `liveDown`/`stem`/…
 that Stage 1 hardcoded at `1 * h * w` rebuilt at `c = 2`, reusing the
 channel-generic VJP/differentiability machinery (`rblkPStrided_has_vjp_at`,
 `convBnStrided_differentiable`, …) at `oc = ic = 2`.

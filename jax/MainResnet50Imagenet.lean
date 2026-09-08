@@ -11,7 +11,7 @@ import Jax
     canonical modern ResNet-50 baseline → 79.8% top-1. All four ingredients
     (LAMB, BCE, repeated-aug, the DeiT-style aug stack) landed across phases 1-4
     and are wired together here. The phase-1 SGD skeleton lives in git history.
-    See `planning/rsb_a2_resnet50.md`. -/
+    See `planning/archive/rsb_a2_resnet50.md`. -/
 
 def resnet50Imagenet : NetSpec where
   name := "ResNet-50 (ImageNet)"
@@ -203,7 +203,7 @@ def resnet50ImagenetConfigAdamProbe : TrainConfig :=
     (**Ghost-BN**, Hoffer et al. 2017 — benign at micro=512). LR is restored to the
     paper's **8e-3 @ bs2048** (NOT the 512-scaled 2e-3), and the timm no_weight_decay
     skip-list (BN γ/β + biases) — the other faithful-reproduction lever — is on.
-    Grad-accum mechanics are GPU-validated (see `planning/grad_accum.md` §Status);
+    Grad-accum mechanics are GPU-validated (see `planning/archive/grad_accum.md` §Status);
     this config is the accuracy run. The `rsb-faithful` recipe arg; writes a
     separate `_rsbfaithful.py`. -/
 def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
@@ -256,7 +256,7 @@ def resnet50ImagenetConfigA2True2048 : TrainConfig :=
     A2 above is bs512 with a linearly-scaled LR, which is precisely the regime that
     gave A3 **40.8%** instead of 78.1%: LAMB is a large-batch optimizer and bs512
     starves it. Giving A3 its design batch through accumulation recovered
-    **76.66%** (see `planning/rsb_a2_resnet50.md`), so A2 should be run the same way.
+    **76.66%** (see `planning/archive/rsb_a2_resnet50.md`), so A2 should be run the same way.
 
     Deltas vs `default`: 512 micro × 4 = effective 2048, LR restored to the paper's
     **5e-3 @ bs2048** (not the 512-scaled 1.25e-3), and the timm no_weight_decay

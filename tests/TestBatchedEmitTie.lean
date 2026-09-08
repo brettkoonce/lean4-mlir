@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The batched pointwise/row forms emit exactly what their per-example peers emit
 
-`planning/xla_pjrt_handoff.md` §2b moved the batched renderers off the `N := 1` batch-unit
+`planning/archive/xla_pjrt_handoff.md` §2b moved the batched renderers off the `N := 1` batch-unit
 convention onto the honest batched index `N := B`. That required batched peers for every op whose
 emitter reads its width off the SHlo index — the pointwise ops and the two row ops — because at
 index `N·n` those emitted `tensor<B×(N·n)>`, a type that does not match their own operand.
@@ -357,7 +357,7 @@ private def cases : List (String × String × String) :=
       render (pretty BS (.maxPoolBack (c := pc) (h := ph) (w := ph) "%s" zp (.operand "%x" zq))),
       render (pretty BS (.maxPoolBackB (c := pc) (h := ph) (w := ph) "%s" zpb
                            (.operand "%x" zqb))))
-   -- ⭐ He et al.'s 3×3/s2 stem pool (`planning/rsb_a3_r50_verified.md` §4b). These two rows tie
+   -- ⭐ He et al.'s 3×3/s2 stem pool (`planning/archive/rsb_a3_r50_verified.md` §4b). These two rows tie
    --   the per-example and batched forms; the block at the end of `main` is what says the 3×3 op
    --   is a DIFFERENT op from the 2×2 one above, which is the check the deviation needed and
    --   never had.
@@ -554,7 +554,7 @@ private def gradPrefixCases : List (String × String × String) :=
                           (fun _ => 0 : Vec (oc*ch*ch)) (fun _ => 0 : Vec oc) 0
                           (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch)))))) ]
 
-/-- **Stochastic depth's emit guard** (`planning/stochastic_depth.md`). `dropPathB` has **no
+/-- **Stochastic depth's emit guard** (`planning/archive/stochastic_depth.md`). `dropPathB` has **no
     per-example peer** — the mask is per-example by construction, so there is nothing to tie it
     against in either section above. What it needs pinning instead is the one structural property
     that could plausibly be wrong and that no numeric gate can see:
@@ -715,7 +715,7 @@ transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBack
     --    `[[1,1],[1,1]]`, window `i` = `[2i−1, 2i+1]`. The two grids are offset by ONE input
     --    position and are different functions everywhere; measured on device at n = 12, `SAME`
     --    peaks at [2,4,6,8,10,11] against symmetric's [1,3,5,7,9,11]. Both compile, both train,
-    --    both have the right output shape. `planning/rsb_a3_r50_verified.md` §4b.
+    --    both have the right output shape. `planning/archive/rsb_a3_r50_verified.md` §4b.
     if (txt.splitOn "padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>").length != 2 then
       die s!"{nm}'s padding is not SYMMETRIC 1 — XLA 'SAME' would offset the pooling grid by one \
 input position, which is a different function at the same output shape:\n{txt}"

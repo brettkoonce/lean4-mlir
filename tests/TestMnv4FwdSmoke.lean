@@ -1,7 +1,7 @@
 import LeanMlir
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
-/-! # MNv4 forward-chain structural smoke (`planning/mnv4_verified.md` phase 3)
+/-! # MNv4 forward-chain structural smoke (`planning/archive/mnv4_verified.md` phase 3)
 
 Renders `mnv4FwdChainB` and counts the ops it emitted against what the Conv-M block table
 says it should have. This catches a **family dispatch** error — an FFN block that emitted

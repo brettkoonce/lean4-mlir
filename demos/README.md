@@ -20,7 +20,7 @@ verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
 → 4 tumour classes. 24.5M params, plain per-pixel CE, 10 epochs.
 
 `MainUnetBratsR34.lean`, `MainBratsPredict.lean`. See
-`planning/r34_brats_retrain.md`.
+`planning/archive/r34_brats_retrain.md`.
 
 ```bash
 ./download_brats.sh
@@ -79,7 +79,7 @@ VisDrone is the point: a median image holds **70 objects** and many are 2–5 px
 after the resize, which is the regime where a single coarse grid structurally
 cannot work and multi-scale detection stops being decoration.
 
-`MainYolov1VisdroneFpn.lean`. See `planning/visdrone_detector.md`.
+`MainYolov1VisdroneFpn.lean`. See `planning/archive/visdrone_detector.md`.
 
 ```bash
 ./download_visdrone.sh
@@ -172,7 +172,7 @@ conditioning via a tiled `t/T_max` channel — which needs no new codegen
 primitive, the UNet just sees one extra input channel.
 
 `MainMnistDdpmTrain.lean` + `Sample`. Tiny UNet, base 16, 50 epochs.
-See `planning/ddpm_demo.md`.
+See `planning/archive/ddpm_demo.md`.
 
 ```bash
 lake exe mnist-ddpm-train data 50
@@ -225,7 +225,7 @@ codegen primitives shipped to support it:
 - `causalMask` flag on `transformerEncoder`
 
 212K params (T=64, D=64, 4 layers, 2 heads). Trains in ~11 min on
-gfx1100 for 10K Adam steps. See `planning/tinygpt_demo.md`.
+gfx1100 for 10K Adam steps. See `planning/archive/tinygpt_demo.md`.
 
 ```bash
 ./download_shakespeare.sh             # downloads tinyshakespeare.txt
@@ -319,4 +319,4 @@ demos/
     └── MainDiffusion2d.lean               #   2-D toy diffusion
 ```
 
-Per-demo planning docs live in `planning/` at the repo root.
+Per-demo planning docs live in `planning/archive/` at the repo root.

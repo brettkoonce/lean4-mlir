@@ -71,7 +71,7 @@ private def zMm {a b : Nat} : Mat a b := fun _ _ => 0
 private def zKk {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 
 -- ════════════════════════════════════════════════════════════════
--- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`, handoff §0.2 ▶3) ───────────────────────
+-- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`, handoff §0.2 ▶3) ───────────────────────
 -- ViT is the LAST net to get this, and it is the awkward shape of the three. `transformer_block`
 -- in the reference (`jax/Jax/Codegen.lean`) opens with
 --
@@ -604,7 +604,7 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
   -- must not be emitted a second time. It exists because **under data parallelism the clip has to
   -- come AFTER the `all_reduce`**: the reference clips the whole, already-combined gradient, so
   -- clipping per replica clips 200 PARTIAL gradients — a different function that compiles, trains,
-  -- descends, and that no structural check sees (`planning/grad_clip.md` §4). The clip needs every
+  -- descends, and that no structural check sees (`planning/archive/grad_clip.md` §4). The clip needs every
   -- gradient at once, and this op is per parameter, so at `clip := true` the caller hoists both the
   -- collective and the clip above the loop and passes the result here.
   let replicas := if preAvg then 1 else replicas
@@ -635,7 +635,7 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
   -- therefore sits downstream of the whole AdamW triple, and (at `replicas > 1`) downstream of the
   -- collective, which is why the shadow and the all_reduce cannot interact.
   -- ⚠ `%emad`/`%oemad` are function ARGS, not constants, because the reference's decay is
-  -- TIME-VARYING: `d = min(decay, (1+t)/(10+t))`, TF's warmup-corrected form. `planning/ema.md` §2
+  -- TIME-VARYING: `d = min(decay, (1+t)/(10+t))`, TF's warmup-corrected form. `planning/archive/ema.md` §2
   -- has the reference's own measurement of dropping it — a shadow holding 12.8% of the random init
   -- and scoring 0.00% top-1 while the live weights scored 70.48%.
   --
@@ -685,14 +685,14 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
     -- region. It is a pure render variant. The name exists so the artifact says which recipe it is,
     -- not so anything switches on it.
     --
-    -- ▶ `clip` = global-norm gradient clipping (`planning/grad_clip.md`), TRAILING and AFTER `wx`,
+    -- ▶ `clip` = global-norm gradient clipping (`planning/archive/grad_clip.md`), TRAILING and AFTER `wx`,
     -- because the ViT/ConvNeXt reference sets BOTH (`gradClipNorm := 1.0` and
     -- `wdExcludeNormBias := true`) — so `wx` ++ `clip` is the shipping spelling, not either alone,
     -- and a feature that is fine alone and wrong composed is the `emarms` failure. Like `wx` it
     -- needs no driver predicate: the clip changes no arity, no type and no region.
     ++ (if wdExclude then "wx" else "")
     ++ (if clip then "clip" else "")
-    -- ▶ `drop` = stochastic depth (`planning/stochastic_depth.md`), the 24 per-branch masks.
+    -- ▶ `drop` = stochastic depth (`planning/archive/stochastic_depth.md`), the 24 per-branch masks.
     -- TRAILING, and it is the marker's NAME that matters rather than its position: `"sd"` collides
     -- (`rms` ++ `dp` spells `rmsdp` ⊇ "sd"), a collision no placement avoids. ⚠ It must not LEAD
     -- either — the driver keys its 4-region `[θ|m|v|ema]` blob off `variant.startsWith "ema"`.
@@ -741,7 +741,7 @@ private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001
     (200 θ', 200 m', 200 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
     render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged.
 
-    At `ema := true` (`planning/ema.md`) the blob gains a **fourth region** and the scalar tail goes
+    At `ema := true` (`planning/archive/ema.md`) the blob gains a **fourth region** and the scalar tail goes
     3 → 5, so the interface becomes **807 in / 805 out** = 605/603 + 200 (the shadow) + 2
     (`%emad`/`%oemad`). ⚠ `ema` is LAST in this signature on purpose: inserted mid-list it would
     capture an existing positional argument at every call site, which is the mnv2/enet `convBias`
@@ -776,7 +776,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
   let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, gradNames, nSm) ←
       traversal.getD (vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr)))
-    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`, `recipe_gaps.md` v1.4b) — the
+    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/archive/grad_clip.md`, `recipe_gaps.md` v1.4b) — the
     -- reference's `gn = sqrt(sum(jnp.sum(g*g) for g in tree.leaves(grads)))` then
     -- `g * min(1, CLIP/(gn + 1e-6))`, applied to ALL 200 gradients before the optimizer sees them.
     --
@@ -900,7 +900,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       -- committed artifact under-describing its own certification level and that is still a wrong
       -- statement in the one place a reader trusts.
       (if ema then
-        "    // ── EMA WEIGHT SHADOW (planning/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF\n" ++
+        "    // ── EMA WEIGHT SHADOW (planning/archive/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF\n" ++
         "    // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)\n" ++
         "    // like the rest of the optimizer — NOT a carve-out. EVAL AND CHECKPOINTS SCORE IT.\n"
        else "") ++
@@ -945,6 +945,6 @@ end Proofs.StableHLO
 -- all nineteen. This one cannot follow yet: `vitBackAllB` has no fused-SGD arm (it emits the raw
 -- gradient only), and ViT's T3 §1a tie — `ViTTiePoC.lean`, all 200 parameters — is stated at
 -- exactly these bytes. Retiring it before that tie has a batched peer is the ordering mistake
--- `planning/renderer_convergence.md` leg 1 wrote down and leg 2 honoured. See §4b's last item.
+-- `planning/archive/renderer_convergence.md` leg 1 wrote down and leg 2 honoured. See §4b's last item.
 #eval IO.FS.writeFile "verified_mlir/vit_train_step.mlir"
   (Proofs.StableHLO.vitTrainStepRenderV "vit_train_step" "0.003125")

@@ -3,7 +3,7 @@
 
     .venv/bin/python scripts/bf16_boundary_probe.py
 
-⛔⛔ **THIS SCRIPT CANCELLED A SCOPED PROJECT.** `planning/bf16_dtype_ir.md` proposed threading a
+⛔⛔ **THIS SCRIPT CANCELLED A SCOPED PROJECT.** `planning/archive/bf16_dtype_ir.md` proposed threading a
 dtype through the emit stack so activations could stay bf16 between ops, and wrote its own
 refutation test into its §8 step 3: hand-build the bf16-through block first, and if it does not beat
 the bf16-with-boundary block at the nets' real shapes, do not build the project. This is that test.

@@ -4,7 +4,7 @@ import Mathlib.Analysis.Calculus.Deriv.Prod
 /-!
 # `ResNet34LivePC` nonzero-Jacobian seal — Item A level 3
 
-`planning/whole_network_backward.md` Item A: take the live 2-channel ResNet-34
+`planning/archive/whole_network_backward.md` Item A: take the live 2-channel ResNet-34
 witness (`ResNet34LivePC.liveFwd2`) from **level 2**
 (`liveFwd2_nonconstant : forward X2 ≠ forward 0`) up to **level 3**, the
 *nonzero-Jacobian seal*: the proven whole-net backward is genuinely non-trivial

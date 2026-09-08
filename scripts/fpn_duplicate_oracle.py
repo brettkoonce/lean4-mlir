@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bite 0c of planning/yolo_assignment.md -- duplicate accounting.
+"""bite 0c of planning/archive/yolo_assignment.md -- duplicate accounting.
 
 How much of the pinned mAP is actually lost to near-miss DUPLICATES rather than
 to assignment? Re-score the existing logits with progressively stronger oracles

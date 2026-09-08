@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MNv2 forward tie — the verified render against the JAX reference, on SHARED weights.
 
-⭐ WHY THIS EXISTS. `planning/mnv4_verified.md` §3c inferred, by READING `sep_conv` and
+⭐ WHY THIS EXISTS. `planning/archive/mnv4_verified.md` §3c inferred, by READING `sep_conv` and
 `depthwise_conv`, that MobileNetV2's verified render is exposed to the same padding defect the
 MNv4 tie measured — and at FIVE sites rather than one. Inference is not measurement. This is the
 measurement, and it decides whether the asymmetric-pad descriptor has one consumer or three.
@@ -77,7 +77,7 @@ BN_PEREX   = "axis=(2, 3)"
 # `.convBn` layer emitter appends `jax.nn.relu(x)` unconditionally and has no activation parameter
 # (`jax/Jax/Codegen.lean`, the `.convBn` case). MobileNetV2 as published is ReLU6 throughout, so
 # here the RENDER is the paper-faithful side and the REFERENCE deviates — exactly the same defect
-# EfficientNet has with swish (`planning/mnv4_verified.md` §3f), from the same emitter.
+# EfficientNet has with swish (`planning/archive/mnv4_verified.md` §3f), from the same emitter.
 #
 # ⭐ Why the original --diag tie still passed at 6.08e-06 without this: at `--scale 0.1` the
 # activations never reach 6, so relu6 and relu AGREE pointwise. The deviation only becomes visible

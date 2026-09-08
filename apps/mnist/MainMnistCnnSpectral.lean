@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `mnist-cnn-spectral` — spectral-norm-constrained CNN training (the lever, conv net)
 
-The CNN sibling of `mnist-mlp-spectral` (`planning/robustness_ladder.md`). Trains the verified
+The CNN sibling of `mnist-mlp-spectral` (`planning/archive/robustness_ladder.md`). Trains the verified
 `conv→conv→pool→512→512→10` net with **projected SGD onto the spectral ball** — after every few
 proof-rendered steps each weight is rescaled so the dense `‖Wᵢ‖₂` and the conv tap-sum bound stay
 `≤ c` — then runs the `cert ≤ TRUE ≤ PGD` sandwich (`genCnnPgdStep` attack, conv-aware product cert)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Does the Dice gradient vanish at a collapsed softmax? (planning/brats_demo.md)
+"""Does the Dice gradient vanish at a collapsed softmax? (planning/archive/brats_demo.md)
 
 MEASURED 2026-07-15: yes, exactly linearly in p_i. This is why the matched
 1-epoch BraTS ablation gave dicece == ce to four decimals — see Gate B.

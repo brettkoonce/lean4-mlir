@@ -1,6 +1,6 @@
 # Float bridge — honesty pass: aligning headline claims to the tiers
 
-`planning/floatbridge_certificate_gaps.md` §5. A cross-cutting read of the
+`planning/archive/floatbridge_certificate_gaps.md` §5. A cross-cutting read of the
 float-bridge *headline* claims against the three tiers, flagging anything that
 reads as **descent where only closeness holds**, **kernel where only the model is
 proven**, or a **vacuous/degenerate budget quoted as tight**. This is an audit +

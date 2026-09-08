@@ -3,7 +3,7 @@ the `lake run benchmark` pattern for the JAX path.
 
 Feed it steady-state seconds/epoch from the imagenette probes (epoch 2+, NOT epoch 1
 which is XLA compile) and it scales the rental program's reference workloads
-(planning/mi300x_rental_program.md) by the measured hardware factors:
+(planning/archive/mi300x_rental_program.md) by the measured hardware factors:
 
   python jax/probe/estimate.py --r50-sec-epoch 12.4 --vit-sec-epoch 5.1 --rate 1.39
 

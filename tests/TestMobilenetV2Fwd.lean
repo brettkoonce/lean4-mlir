@@ -17,7 +17,7 @@ said so) while the `mobilenetv2_train_step.mlir` it partners normalises **per ex
 (reduce `[2, 3]`, n = H·W). So `mobilenetv2-verified` trained a per-example-BN net and **scored it
 with batch statistics**: two different functions under one artifact name.
 
-This is precisely the ResNet-34 defect of `planning/xla_pjrt_handoff.md` §2a, fixed there on
+This is precisely the ResNet-34 defect of `planning/archive/xla_pjrt_handoff.md` §2a, fixed there on
 2026-07-27 and still live here. Measured on one shared (θ, x) with the real He init, via
 `lake build fwd-tie`:
 

@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Architectures.ResNet34FullBVJP
 
 `ResNet50FullB.lean` states the batch-BN forward at the [3,4,6,3] bottleneck ladder. This file
 gives that forward a certified `HasVJPAt` — the last piece of T1 for the largest hole in the
-Proofs tier (`planning/proofs_tier_to_paper_nets.md` §3.5(a)).
+Proofs tier (`planning/archive/proofs_tier_to_paper_nets.md` §3.5(a)).
 
 ## No new mathematics, and nothing new one tier down
 

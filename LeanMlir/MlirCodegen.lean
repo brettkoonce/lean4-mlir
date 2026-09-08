@@ -1142,7 +1142,7 @@ private def emitDense3D (tag : String) (xSSA : String) (shape : List Nat)
     returns `(code, oSSA [b,h,n,dh], lseSSA [b,h,n])`. `lse = m + log(l)` is the
     per-row logsumexp the backward needs. Requires `n % bk == 0`. Validated
     end-to-end against dense attention (jax/demos/flash_attention_ref.py +
-    an IREE compile+run probe, ~1e-7 fp32). See planning/flash_attention.md. -/
+    an IREE compile+run probe, ~1e-7 fp32). See planning/archive/flash_attention.md. -/
 private def emitFlashAttnSdpa (tag : String) (qSSA kSSA vSSA : String)
     (b heads n dh bk : Nat) (causal : Bool) : String × String × String := Id.run do
   let hTy := tensorTy [b, heads, n, dh]
@@ -1970,7 +1970,7 @@ private def emitTowerConvBwd (pfx dOutSSA xSSA preActSSA wSSA : String)
 
 /-- RetinaNet head tower for ONE pyramid level: `depth` × (3×3 conv → +bias →
     ReLU), channel-preserving. Towers are **per-scale, not shared** across
-    P3/P4/P5 — that is what `planning/yolo_fpn.md` bite 4 specified, and it
+    P3/P4/P5 — that is what `planning/archive/yolo_fpn.md` bite 4 specified, and it
     sidesteps the shared-weight gradient accumulation (and, if norm is ever
     added, the per-level-statistics problem) that sharing would introduce.
 
@@ -2054,7 +2054,7 @@ private def fpnNumParams (depth : Nat) : Nat := 9 + 6 * depth
     The bias is what carries the RetinaNet prior init (`applyDetPriorBias`). A
     biasless 1×1 conv has to manufacture the constant background offset out of
     its weights, which is measurably what it spends them on: every objectness
-    logit in the e12 val set sits in [−2.7, −1.2] (planning/yolo_fpn.md, the T1a
+    logit in the e12 val set sits in [−2.7, −1.2] (planning/archive/yolo_fpn.md, the T1a
     refutation). Zero-init biases reproduce the biasless net exactly. -/
 private def emitFpnDetectForward
     (c3SSA c4SSA c5SSA wn3 wn4 wn5 wh3 wh4 wh5 bh3 bh4 bh5 : String)
@@ -3715,7 +3715,7 @@ private structure FwdRec where
   lmhV            : Nat := 0
   lmhT            : Nat := 0
   lmhBtvSSA       : String := ""
-  -- ═════════ FPN multi-scale detector (planning/yolo_fpn.md bite 7) ═════════
+  -- ═════════ FPN multi-scale detector (planning/archive/yolo_fpn.md bite 7) ═════════
   -- One record per `.fpnDetect` layer (isFpnDetect := true, pidx := base of its
   -- 9 params — 6 weights + 3 head biases). Stores the 3 backbone taps C3/C4/C5 and the 3 neck
   -- outputs P3/P4/P5 (the pyramid feature SSAs) so the backward can call
@@ -4539,7 +4539,7 @@ private def emitMomentumUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : Li
     `X·Xᵀ` is built with `dot_general contracting_dims = [1] x [1]` (no transpose op);
     the whole iteration is pure `dot_general` + scalar ops — same matmul vocabulary the
     forward/attention path already emits, which is exactly why it renders cleanly (and,
-    per `planning/muon.md`, why a `den=` render-faithful tie is reachable). The momentum
+    per `planning/archive/muon.md`, why a `den=` render-faithful tie is reachable). The momentum
     buffer lives in the m-slot and the v-slot is an unused passthrough (like
     `emitMomentumUpdate`), so the train-step signature/arity is unchanged. The NS
     constants `%ns_a/%ns_b/%ns_c/%ns_eps` and `%mu` are emitted once in the optimizer
@@ -4698,7 +4698,7 @@ private def emitInvFourthRootNS (tag mSSA identSSA : String) (n iters : Nat)
     conditions the ill-posed first few steps), form `W ← W − lr·L^{-1/4}·G·R^{-1/4}`
     via the matmul-only inverse-4th-root, and return `(code, W', L', R')` with
     `L'`/`R'` going back to the m/v slots. Single-step (β=0) Shampoo = Muon's
-    `UVᵀ` — the jewel; accumulation is the memory knob. See `planning/shampoo.md`. -/
+    `UVᵀ` — the jewel; accumulation is the memory knob. See `planning/archive/shampoo.md`. -/
 private def emitShampooUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String)
     (applyWeightDecay : Bool := false) (clipScale : Option String := none) (lrSSA : String := "%lr")
     (nsIters : Nat := 15) : String × String × String × String := Id.run do
@@ -5158,7 +5158,7 @@ private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
     s := s ++ s!"    %d_logits_seg = stablehlo.add %dlog_ce, %dlog_dc : {bnhwfTy}\n"
     s
 
-/-- DIoU box-loss FORWARD block (brick #1, planning/yolo_drone.md WS-D — the
+/-- DIoU box-loss FORWARD block (brick #1, planning/archive/yolo_drone.md WS-D — the
     IoU-family replacement for the fragile √-MSE box regression). `pred`/`tgt`
     are `[B,4,gH,gW]`: pred channels are the raw head outputs (tx,ty,tw,th), tgt
     channels are the YOLOv1 target layout (cell-offset x,y then w_rel,h_rel).
@@ -7061,7 +7061,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       code := code ++ s!"    // fpnDetect loss: curShape not [B, N] flat: {curShape}\n"
   else if useYolov1 then
     -- ═══════════════ YOLOv1: 5-term masked MSE ═══════════════
-    -- See planning/yolo_demo_v2.md Phase 1 decisions D1-D11. Predictions
+    -- See planning/archive/yolo_demo_v2.md Phase 1 decisions D1-D11. Predictions
     -- arrive as flat [B, totalCh]; we reshape to [B, perCell, gH, gW]
     -- (NCHW), slice per-term, compute masked MSE for each, then concat
     -- gradient slabs back to [B, perCell, gH, gW] and reshape flat for
@@ -7163,7 +7163,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           --   Non-focal (default): raw-MSE on raw conf — YOLOv1 as published.
           --   Focal (useFocal):    sigmoid + focal-BCE on the conf *logit*, with a
           --     DETACHED focal weight (1-p_t)^γ. This is the fix for the fg/bg
-          --     objectness collapse (planning/yolo_final.md): ~1-2 object cells vs
+          --     objectness collapse (planning/archive/yolo_final.md): ~1-2 object cells vs
           --     ~47 background cells make "predict 0 everywhere" an MSE minimum, so
           --     the conv head localizes early then decays to a center-prior. Focal
           --     down-weights easy (well-classified) cells so the rare foreground keeps
@@ -7265,7 +7265,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %y1_cls_ce_sum = stablehlo.reduce(%y1_cls_nll_m init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
           code := code ++ s!"           : ({shapeClassTy}, tensor<f32>) -> tensor<f32>\n"
           code := code ++ s!"    %y1_t6 = stablehlo.negate %y1_cls_ce_sum : tensor<f32>\n"
-          -- DIoU box loss (brick #1, planning/yolo_drone.md WS-D): when enabled,
+          -- DIoU box loss (brick #1, planning/archive/yolo_drone.md WS-D): when enabled,
           -- replaces the √-MSE coord terms T1+T2 with an IoU-family loss on box0,
           -- using a positive box parameterization (cx=(j+σ(tx))/gW, w=exp(tw)).
           -- Emits %dio_loss (Σ mask·(1-DIoU)) and %dio_dpred [B,4,gH,gW]; both
@@ -7290,7 +7290,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %y1_total = stablehlo.add %y1_s1234, %y1_s56 : tensor<f32>\n"
           code := code ++ s!"    %loss = stablehlo.divide %y1_total, %y1_Bf : tensor<f32>\n"
           -- ─── BACKWARD ───
-          code := code ++ s!"    // ─── YOLOv1 backward (5+1 term, planning/yolo_demo_v2.md D4) ───\n"
+          code := code ++ s!"    // ─── YOLOv1 backward (5+1 term, planning/archive/yolo_demo_v2.md D4) ───\n"
           code := code ++ s!"    %y1_lcoord_xy = stablehlo.constant dense<{lambdaCoord}> : {shapeXYTy}\n"
           code := code ++ s!"    %y1_lnoobj_c1 = stablehlo.constant dense<{lambdaNoobj}> : {shapeC1Ty}\n"
           code := code ++ s!"    %y1_two_xy = stablehlo.constant dense<2.0> : {shapeXYTy}\n"
@@ -7400,7 +7400,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       gradSSA := "%d_logits_ddpm"
       gradShape := curShape
     | [b2, n2] =>
-      -- ═══════════ DDPM on a RANK-2 output — `planning/diffusion_2d_demo.md`
+      -- ═══════════ DDPM on a RANK-2 output — `planning/archive/diffusion_2d_demo.md`
       -- Identical math to the 4-D case above; only the shape differs. A dense
       -- denoiser (2-D toy distributions: the model is an MLP, not a UNet) ends
       -- in `.dense`, so its output is [B, N] and the 4-D match fell through to
@@ -8669,7 +8669,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       else pure ()
 
     | .fpnDetect oc c3 c4 c5 g5 A tower =>
-      -- FPN detector DAG backward (planning/yolo_fpn.md bite 7). gradSSA is the
+      -- FPN detector DAG backward (planning/archive/yolo_fpn.md bite 7). gradSSA is the
       -- loss grad w.r.t. the [B, Ntot] concat (%fpn_grad). emitFpnDetectBackward
       -- un-concats → head VJP → tower VJP → neck VJP, returning (dc3,dc4,dc5) +
       -- the 9 + 6·tower param grads. dc5 seeds the backbone backward here;
@@ -10046,7 +10046,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     params := params ++ s!"      %x_flat: {tensorTy [B, inDim]}, %y_ddpm: {yTy},\n"
   else if useYolov1 then
     -- YOLOv1: float target [B, perCell, gridH, gridW] + per-cell float mask
-    -- [B, gridH, gridW]. See planning/yolo_demo_v2.md "Phase 1 decisions" D3
+    -- [B, gridH, gridW]. See planning/archive/yolo_demo_v2.md "Phase 1 decisions" D3
     -- (separate ByteArray arg for mask). Channel layout within perCell:
     --   [0..2)   box 0 (x, y)
     --   [2..4)   box 0 (w, h)
@@ -10305,7 +10305,7 @@ def fpnDetectProbeModule (B oc c3 c4 c5 g5 A : Nat) (tower : Nat := 0) : String 
 
 /-- Standalone FlashAttention forward module — exercises `emitFlashAttnSdpa` in
     isolation for validation against dense attention: `@main(Q,K,V : [b,h,n,dh])
-    -> O`. Compiled + run in the flash-attn probe (planning/flash_attention.md
+    -> O`. Compiled + run in the flash-attn probe (planning/archive/flash_attention.md
     rung 2-3). -/
 def flashProbeModule (b heads n dh bk : Nat) (causal : Bool) : String := Id.run do
   let hTy := tensorTy [b, heads, n, dh]

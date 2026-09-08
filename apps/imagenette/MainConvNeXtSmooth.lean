@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `convnext-smooth` — randomized-smoothing certificate on the verified ConvNeXt-T (Imagenette 224²)
 
-The deep-net / real-resolution rung of the smoothing certificate (`planning/robustness_ladder.md` §3,
+The deep-net / real-resolution rung of the smoothing certificate (`planning/archive/robustness_ladder.md` §3,
 Cohen–Rosenfeld–Kolter 2019). Same forward-only Monte-Carlo procedure as the MNIST/CIFAR `*-smooth`
 demos, now on a 224² ConvNeXt-T — the depth-independence claim taken to a real ImageNet-scale net,
 where the Lipschitz product is hopeless. ConvNeXt uses **LayerNorm** (per-sample, no BN running

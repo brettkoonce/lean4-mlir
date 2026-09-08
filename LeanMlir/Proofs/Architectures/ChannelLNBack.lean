@@ -14,7 +14,7 @@ the certified `chanLNTensor3_has_vjp` backward, and `rowLNVecFlatBack_eq_vecLN_v
 backward turned out to be ViT's as well.
 
 Moved here from the float bridge that defined it beside its float twin on 2026-09-08
-(`planning/float_second_pass.md`). -/
+(`planning/archive/float_second_pass.md`). -/
 
 namespace Proofs
 

@@ -18,7 +18,7 @@ for ViT-Ti: without it the model collapses to chance the moment warmup ramps pas
 pins the five axis predicates against the variant *name*. That is necessary and not sufficient. The
 predicates decide how many regions the driver packs into the blob and how long the scalar tail is;
 whether the **artifact** agrees is a different proposition, and it is the one that fails silently.
-`planning/ema.md` records the failure mode directly: a wrongly-packed region **trains and reports a
+`planning/archive/ema.md` records the failure mode directly: a wrongly-packed region **trains and reports a
 loss**. There is no crash and no NaN to notice — the run simply optimises a misaligned view of its
 own parameters and produces a number that looks like an answer.
 

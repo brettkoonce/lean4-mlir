@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # ResNet-50's GRADIENT, gated — on the committed artifact, in two tiers
 
-`planning/next_session_pipeline_then_r50.md` §3.2's debt, paid. R50 phases 1–3 shipped a net that
+`planning/archive/next_session_pipeline_then_r50.md` §3.2's debt, paid. R50 phases 1–3 shipped a net that
 renders, compiles, trains and descends behind a **layout** gate (`tests/TestR50Contract.lean`) and
 nothing at all on the backward. §3.2's own words: *"The gradient is ungated. Say which one licensed
 the swap. Neither has been run."*

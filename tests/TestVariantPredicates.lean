@@ -25,10 +25,10 @@ as true, which is the part a count alone does not give you.
 **This file exists because the naming has now broken TWICE, and the second time was not visible by
 reading names one at a time. The THIRD collision was caught before it shipped, by this file.**
 
-1. `planning/ema.md` — the RMSProp test was `startsWith "rms"`, and the RMSProp+EMA variant is
+1. `planning/archive/ema.md` — the RMSProp test was `startsWith "rms"`, and the RMSProp+EMA variant is
    **`emarms`**, which does not start with "rms". A prefix test on a two-axis name fails quietly;
    the mean-square would have initialised to 0, which is the exact defect that thread existed to fix.
-2. `planning/stochastic_depth.md` — the drop marker was `"sd"`, and **`rms` ++ `dp` spells `rmsdp`,
+2. `planning/archive/stochastic_depth.md` — the drop marker was `"sd"`, and **`rms` ++ `dp` spells `rmsdp`,
    which CONTAINS "sd"**. So the test fired on `rmsdp64` and `emarmsdp64` — every RMSProp
    data-parallel variant, including the committed and gated `efficientnetin_rmsdp64`. ⚠ The collision was
    between two OTHER markers meeting, not between the new marker and an old one, which is precisely
@@ -108,7 +108,7 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- and `wx` composed with each of the three axes, since that is where a collision would be
   , ("emarmswx", true, true, false), ("adamdropwx", false, false, true)
   , ("emarmsdrop64wx", true, true, true)
-    -- ▶ v1.4b `clip` = global-norm gradient clipping (`planning/grad_clip.md`). Like `wx` it needs
+    -- ▶ v1.4b `clip` = global-norm gradient clipping (`planning/archive/grad_clip.md`). Like `wx` it needs
     -- NO driver predicate — the clip changes no arity, no type and no region — so it is here to
     -- prove it disturbs none of the three, in every CONCATENATION it can appear in. It TRAILS `wx`
     -- because the ViT/ConvNeXt reference sets both, so `wxclip` is the shipping spelling.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """OPTIMIZER tie — one step of the verified rendered optimizer against the reference's own.
 
-⭐⭐ `planning/verified_optimizer_parity.md` §5's gate, and the gap it closes is stated there:
+⭐⭐ `planning/archive/verified_optimizer_parity.md` §5's gate, and the gap it closes is stated there:
 *the reference and the verified path share a data pipeline BY CONSTRUCTION and share an optimizer
 BY NOBODY'S CONSTRUCTION.* `tests/vjp_oracle` and `scripts/grad_tie.py` diff the two at the
 GRADIENT; until this file nothing diffed them at the UPDATE. D1 is what a drift between them looks
@@ -256,7 +256,7 @@ def run_ref_ema(path, ema0, theta_prime, step):
     ⚠⚠ **THE FORMULA IS NOT TRANSCRIBED HERE, AND THAT IS THE POINT.** `d = min(EMA_DECAY,
     (1+t)/(10+t))` is TF's warmup-corrected decay, and this repo has already shipped the defect of
     getting its warmup wrong once — a shadow still holding 12.8% of its init at 3.1 tau, scoring
-    0.00% top-1 while the live weights scored 70.48% (`planning/ema.md`). A copy of the formula in
+    0.00% top-1 while the live weights scored 70.48% (`planning/archive/ema.md`). A copy of the formula in
     this file would gate a transcription of it, which is `grad_tie.py`'s standing rule inverted.
 
     ⭐ `d` comes back out of the same function rather than being recomputed: `ema_update` at
@@ -338,7 +338,7 @@ def main():
     dg = [f32(*s) * 5.0 for s in SHAPES]
 
     assert_references_fresh(sorted({ref for _, ref, _, _, _ in VARIANTS}))
-    print("── one-step optimizer tie (planning/verified_optimizer_parity.md §5) ──")
+    print("── one-step optimizer tie (planning/archive/verified_optimizer_parity.md §5) ──")
     gnorm = np.sqrt(sum(float(np.sum((a + b) ** 2)) for a, b in zip(G0, dg)))
     print(f"  ‖Gt‖ = {gnorm:.3f}   (clip threshold k·C; the clip is ACTIVE in every clip row)")
     worst, failures = [], 0

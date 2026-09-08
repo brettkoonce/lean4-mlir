@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score the 2-D diffusion demo — planning/diffusion_2d_demo.md §4.
+"""Score the 2-D diffusion demo — planning/archive/diffusion_2d_demo.md §4.
 
 The point of the 2-D demo: unlike every image DDPM in this repo, correctness
 here is a NUMBER, not a judgement. Three of them, on all four targets:

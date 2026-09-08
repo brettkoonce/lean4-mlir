@@ -153,7 +153,7 @@ MIOpen's kernel source, which both consumers share.
 
 Blocks the ViT-Tiny AdamW graph on XLA/PJRT entirely (IREE runs the identical graph fine),
 which leaves the project's data-parallel gate unrunnable on this box. See
-`planning/xla_pjrt_handoff.md`.
+`planning/archive/xla_pjrt_handoff.md`.
 
 ### Where to file
 

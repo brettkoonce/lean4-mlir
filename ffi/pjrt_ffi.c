@@ -14,7 +14,7 @@
 // The plugin is loaded with dlopen at run time — no link-time dependency on XLA,
 // JAX, or Python. Override the path with $PJRT_PLUGIN.
 //
-// See planning/xla_pjrt_ladder.md for the ladder this is rung 0 of, and §3 there
+// See planning/archive/xla_pjrt_ladder.md for the ladder this is rung 0 of, and §3 there
 // for the four gates. The G4 ("no dropped state") assertion that doc asks for is
 // implemented in `iree_ffi_invoke_f32` below.
 
@@ -1750,13 +1750,13 @@ int pjrt_ffi_resident_read(iree_ffi_session_t* sess, int64_t n_floats, float* ds
 
 // ─── not yet ported ────────────────────────────────────────────────────────
 // The packed-params / Adam / segmentation / DDPM / YOLO entry points are rungs
-// 1-4 of planning/xla_pjrt_ladder.md. They are declared in iree_ffi.h, so they
+// 1-4 of planning/archive/xla_pjrt_ladder.md. They are declared in iree_ffi.h, so they
 // must exist for linking; each fails loudly rather than returning garbage.
 
 static int not_ported(const char* who) {
   fprintf(stderr,
           "[pjrt_ffi] %s is not implemented on the XLA backend yet "
-          "(see planning/xla_pjrt_ladder.md §2) — use the IREE build for this net\n",
+          "(see planning/archive/xla_pjrt_ladder.md §2) — use the IREE build for this net\n",
           who);
   return 99;
 }
@@ -2003,7 +2003,7 @@ int iree_ffi_train_step_adam_softlabel(
 }
 
 // ─── rung 4: the single-target Adam train step (the FPN detector) ──────────
-// planning/xla_pjrt_ladder.md rung 4, planning/detector_pjrt_port.md.
+// planning/archive/xla_pjrt_ladder.md rung 4, planning/archive/detector_pjrt_port.md.
 //
 // This is pure MARSHALLING over `iree_ffi_invoke_f32`. It unpacks the caller's
 // packed-parameter layout into the (ranks, dims, pointers) form the generic

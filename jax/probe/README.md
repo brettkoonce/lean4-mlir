@@ -45,7 +45,7 @@ python jax/probe/probe_vit_tiny_imagenette.py
 - If OOM: halve batch by editing the `BATCH_SIZE` line in the script copy, note it.
 
 The full probe plan (A3-shaped R50 + ViT-S DeiT-shaped configs, ImageNet-scale
-extrapolations) is `planning/mi300x_rental_program.md` §Run-0a — this directory is
+extrapolations) is `planning/archive/mi300x_rental_program.md` §Run-0a — this directory is
 its v0 so pod-side patterns can be tested before that coding session happens.
 
 ## `benchmark.py` — the one-command `lake run benchmark` for the JAX path

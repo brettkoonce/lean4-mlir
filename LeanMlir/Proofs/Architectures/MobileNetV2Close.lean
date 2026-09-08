@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Architectures.CifarBnClose
 
 /-! # Closing the MobileNetV2 render — the depthwise / strided parameter-gradient bridges
 
-`planning/mobilenetv2_close.md` Item C — the "free close" (generic in the cotangent the
+`planning/archive/mobilenetv2_close.md` Item C — the "free close" (generic in the cotangent the
 backward chain delivers at each layer's output, the CIFAR-non-BN-style close): every
 MobileNetV2 train-step parameter output denotes `θ − lr·(certified Jacobian · cotangent)`.
 

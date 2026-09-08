@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.ViTRenderB
 
 /-! # Stochastic depth — the two gates that cover the op's INTERIOR
 
-`planning/stochastic_depth.md` §7 lists eight gates. Six were run when the feature landed
+`planning/archive/stochastic_depth.md` §7 lists eight gates. Six were run when the feature landed
 (2026-08-02) and they all pin **endpoints**: `dropPath = 0` re-renders every artifact
 byte-identically, the keep = 1 train step is bit-identical to AdamW (0 of 4,020,358 against a 0
 floor, real recipe firing at 1.89), and `tests/TestDropPathRamp.lean` pins the keep ramp across the
@@ -470,7 +470,7 @@ def main (args : List String) : IO Unit := do
   let doOp   := args.contains "--op" || !(args.contains "--net")
   let doNet  := args.contains "--net" || !(args.contains "--op")
   let isEval := args.contains "--eval"
-  IO.println "stochastic depth — the interior gates (planning/stochastic_depth.md §7)"
+  IO.println "stochastic depth — the interior gates (planning/archive/stochastic_depth.md §7)"
   let ldPath := (← IO.getEnv "LD_LIBRARY_PATH").getD ""
   if (ldPath.splitOn "detshim").length == 1 then
     IO.println "  ⚠ no `detshim` on LD_LIBRARY_PATH — gate B compares two HLO programs and the \

@@ -602,7 +602,7 @@ int iree_ffi_train_step_adam_ddpm(
 // target tensor (shape [batch, perCell, gridH, gridW]). Used by the
 // codegen produced with `useYolov1 := true`. perCell = numBoxes*5 +
 // numClasses (30 for VOC: 2 boxes × 5 + 20 classes).
-// See planning/yolo_demo_v2.md Phase 1 decisions D3 + D6.
+// See planning/archive/yolo_demo_v2.md Phase 1 decisions D3 + D6.
 // ============================================================
 int iree_ffi_train_step_adam_yolov1(
     iree_ffi_session_t* sess, const char* fn_name, int batch,

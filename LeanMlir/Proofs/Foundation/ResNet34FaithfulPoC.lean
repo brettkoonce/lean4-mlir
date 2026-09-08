@@ -12,7 +12,7 @@ GAP + final dense). This file makes every parameter update of the per-example, S
 `verified_mlir/resnet34_train_step.mlir`, and both that file and its renderer
 (`ResNet34Render.lean`) are gone: it was the last train step in the suite at per-example
 BatchNorm, so `resnet34_fwd` could not be a prefix of both it and the batch-BN Adam step.
-`planning/renderer_convergence.md` carries the decision. **Every theorem below is unchanged and
+`planning/archive/renderer_convergence.md` carries the decision. **Every theorem below is unchanged and
 still true** — each is a statement about an OP KIND and an arbitrary cotangent, not about bytes —
 and its live peer is `Foundation/ResNet34FaithfulPoCB.lean`, the same fold at the batched,
 un-fused gradient nodes every ResNet-34 artifact now emits. Read this file as the per-example

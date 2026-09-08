@@ -1,6 +1,6 @@
 """Dump the twin's parameter gradients at a Lean checkpoint, in Lean's flat order.
 
-This is the reference side of the sign probe (planning/jax_gradient_oracle.md §8a).
+This is the reference side of the sign probe (planning/archive/jax_gradient_oracle.md §8a).
 Adam's first step from m=v=0 is w -= lr*sign(g)*|g|/(|g|+eps), so a Lean run
 resumed from W0 for exactly ONE step encodes sign(g_lean) in sign(W0-W1) --
 readable with no codegen change. This script produces sign(g_reference).

@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullPaper
 /-! # MobileNetV2 at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
 
 The MobileNetV2 peer of `ResNet34FullB.lean`, and the first half of
-`planning/proofs_tier_to_paper_nets.md` section 4.2's MobileNetV2 column.
+`planning/archive/proofs_tier_to_paper_nets.md` section 4.2's MobileNetV2 column.
 
 `MobileNetV2FullPaper.lean` states this net's whole-net ℝ forward and typed graph at **per-example**
 BatchNorm (`bnPerChannelTensor3`, reduce `[2,3]`). That was the world of `mobilenetv2_fwd.mlir` and

@@ -64,7 +64,7 @@ DRY_RUN=1 scripts/supervise.sh vitb-default-g512-4gpu   # print the plan, run no
 ```
 
 By hand, at DeiT's global 512 (4 GPUs — and BOTH replica knobs are required, see
-`planning/mnv4_convm_ties_todo.md`):
+`planning/archive/mnv4_convm_ties_todo.md`):
 ```
 CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_MEM_FRACTION=0.97 \

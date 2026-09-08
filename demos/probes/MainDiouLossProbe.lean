@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! Emit the standalone DIoU box-loss forward module for numeric validation
-    (brick #1, planning/yolo_drone.md WS-D). Writes `diou_loss_gen.mlir` for a
+    (brick #1, planning/archive/yolo_drone.md WS-D). Writes `diou_loss_gen.mlir` for a
     concrete (B, gH, gW); `scripts/diou_probe_check.py` compiles it with IREE
     (CPU) and checks the emitted `loss` against the numpy reference in
     `scripts/diou_grad_check.py`. Chunk 2a — forward only; the backward VJP is

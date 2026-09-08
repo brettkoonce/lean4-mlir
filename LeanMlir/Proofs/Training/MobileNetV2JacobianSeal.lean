@@ -5,7 +5,7 @@ import Mathlib.Analysis.Calculus.Deriv.Prod
 /-!
 # `Mnv2Live` nonzero-Jacobian seal — Item B2 discharged at a deep kinked witness
 
-`planning/whole_network_backward.md` Item B2: take the live MobileNetV2 witness
+`planning/archive/whole_network_backward.md` Item B2: take the live MobileNetV2 witness
 (`Mnv2Live`, the only non-degenerate kinked witness) from **level 2**
 (`mnv2Live_forward_nonconstant : forward X ≠ forward 0`) up to **level 3**, the
 *nonzero-Jacobian seal*: the proven whole-net backward is genuinely non-trivial

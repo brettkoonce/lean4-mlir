@@ -33,7 +33,7 @@ closed for all 5 nets, the remaining provable faithfulness axis is *syntactic*: 
 `lexTok` inverse of `emitTok` (a finite case-split) lifted by `foldl` induction →
 `parse (lex (pretty g)) = some (skel g)`. SSA names are already nameless/positional (no symbol table —
 the scary part is dissolved). Self-contained, no dependency on the float work. Plan:
-`planning/tier23_float_and_syntactic_faithfulness.md` Part B (B1/B2). Effort medium, risk low. Honest
+`planning/archive/tier23_float_and_syntactic_faithfulness.md` Part B (B1/B2). Effort medium, risk low. Honest
 residue (state wherever cited): it closes the LEXER, NOT StableHLO spec conformance / IREE lowering /
 `float32 ≈ ℝ` (those stay validated by `iree-compile` + GPU runs).
 
@@ -282,7 +282,7 @@ vit needed genuinely new work (the qkv-merge MHSA reconciliation + the per-token
 
 Once the ties are finalized, the next pillar is the **other faithfulness axis**: the emitted MLIR
 *text* parses back to the exact proven graph (`parse (lex (pretty g)) = some (skel g)`). Plan:
-`planning/tier23_float_and_syntactic_faithfulness.md`. **Much smaller than it looks** — `pretty =
+`planning/archive/tier23_float_and_syntactic_faithfulness.md`. **Much smaller than it looks** — `pretty =
 serializeToks ∘ toToks ∘ skel` already factors through the ordered token stream, and the structural
 roundtrip `parse (toToks (skel a)) = some (skel a)` is already proven (`StableHLOParse.lean:239`).
 Remaining = a per-op `lexTok` inverse of `emitTok` (finite case-split) lifted by `foldl` induction;

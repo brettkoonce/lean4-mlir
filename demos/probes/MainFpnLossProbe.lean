@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! Emit the standalone FPN multi-scale-loss module for numeric validation
-    (detection-infra brick #3, planning/yolo_fpn.md bites 4+6). Writes
+    (detection-infra brick #3, planning/archive/yolo_fpn.md bites 4+6). Writes
     `fpn_loss_gen.mlir` for concrete (B, A, 3 grids); `scripts/fpn_loss_probe_check.py`
     compiles it with IREE (CPU) and checks the emitted forward+backward against an
     independent numpy multi-scale reference (Σ of per-scale anchor losses) and its

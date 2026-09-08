@@ -6,7 +6,7 @@ import Mathlib.Analysis.InnerProductSpace.Projection.Reflection
 
 /-! # The real Gaussian probit: Φ, Φ⁻¹, and the Cohen radius as a THEOREM
 
-The complete G1–G4 ladder of `planning/smoothing_gaussian_lemma.md`. Endpoint:
+The complete G1–G4 ladder of `planning/archive/smoothing_gaussian_lemma.md`. Endpoint:
 `smoothing_certified_radius_classifier` — for a measurable classifier under `N(0,σ²I)`
 smoothing, every `‖δ‖ < σ·Φ⁻¹(p_A(x))` provably cannot flip the smoothed argmax, with
 `Φ⁻¹` the genuine standard-normal quantile and NO smoothing-side hypotheses left: the
@@ -42,7 +42,7 @@ Capstone: `smoothing_certified_radius_gaussian` — `smoothing_certified_radius_
 `Phiinv := stdNormalQuantile`, its `hmono`/`hanti` DISCHARGED. The quantile is total on ℝ
 (junk `sSup` outside `(0,1)`) but every use here is guarded by `hp : p c y ∈ Ioo 0 1` — the
 realistic regime, since Monte-Carlo/Clopper–Pearson class-probability estimates are never
-exactly 0 or 1. See `planning/smoothing_gaussian_lemma.md` for why the ORIGINAL abstract
+exactly 0 or 1. See `planning/archive/smoothing_gaussian_lemma.md` for why the ORIGINAL abstract
 theorem's global `Monotone Phiinv` can never be met by the true (unbounded) quantile.
 
 All results are `propext / Classical.choice / Quot.sound`-clean (`tests/AuditAxioms.lean`). -/
@@ -360,7 +360,7 @@ theorem gaussian_np_shift {f : ℝ → ℝ} (hfm : Measurable f)
 /-- **Randomized-smoothing certified radius at the true Gaussian probit.** With class
     probabilities honestly inside `(0,1)` (`hp`), per-class probit scores
     `Φ⁻¹ ∘ p c` each `(1/σ)`-Lipschitz (`hg` — the Neyman–Pearson core, the ONE remaining
-    smoothing-side hypothesis, G2–G4 of `planning/smoothing_gaussian_lemma.md`), and the
+    smoothing-side hypothesis, G2–G4 of `planning/archive/smoothing_gaussian_lemma.md`), and the
     runner-up bound, every `‖δ‖₂ < σ·Φ⁻¹(p_A(x))` keeps class `i` the strict argmax —
     where `Φ⁻¹` is now the genuine standard-normal quantile, not an abstract stand-in.
     Exactly the `σ·Φ⁻¹(p_A)` radius the `*-smooth` drivers report. -/

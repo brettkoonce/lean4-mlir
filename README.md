@@ -320,7 +320,7 @@ rewrite — up to where the model's assumptions break.
   **fp8** is per-matmul-provable, end-to-end only a-posteriori past depth-1;
   **fp4** is structural-faithfulness + statistical robustness (the relative
   `|rnd x−x| ≤ u|x|` model gives way to block-scaled quantization). All the
-  above is 3-axiom-clean and audited; see `planning/floatbridge_quantization.md`.
+  above is 3-axiom-clean and audited; see `planning/archive/floatbridge_quantization.md`.
 
 #### Certified robustness (Tsuzuku + LipSDP, instantiated at trained weights)
 
@@ -386,7 +386,7 @@ relative-error-only), the joint all-layers descent step and bias columns
 the new ingredients are proven — quantitative max-pool selection margins
 that freeze the argmax routing, pool `ℓ1`-contraction, conv-kernel drift
 with the weight-sharing factor — but the conv-layer capstone assembly is
-open, `planning/sgd_descent_cnn.md`; so is every-parameter-at-once, where
+open, `planning/archive/sgd_descent_cnn.md`; so is every-parameter-at-once, where
 the logits are no longer affine in the moving parameters), and any link
 from the Lean-side `FloatModel` to IREE's actual kernels beyond the
 empirical probe.

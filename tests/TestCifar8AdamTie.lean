@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@cifar8_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md` §2a-ter. The artifact used to come from the hand-written emitter in
+`planning/archive/xla_pjrt_handoff.md` §2a-ter. The artifact used to come from the hand-written emitter in
 `tests/TestCifar8AdamTrain.lean` (whose optimizer was `ViTRender.emitAdamV`); it now renders from
 `LeanMlir/Proofs/Codegen/CnnRender.lean` as `pretty(provenGraph)`, with the fused SGD tail replaced
 by un-fused param gradients feeding the proven AdamW ops.

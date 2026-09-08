@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mAP@0.5 scorer for the YOLOv1 Pets detector (Workstream A, planning/yolo_demo_v2.md).
+"""mAP@0.5 scorer for the YOLOv1 Pets detector (Workstream A, planning/archive/yolo_demo_v2.md).
 
 Reads a whole-val-set logits dump (from `yolov1-pets-infer 0 <data> <out>`) plus
 the matching detection-record `val.bin`, and reports per-class AP@0.5 + mAP over

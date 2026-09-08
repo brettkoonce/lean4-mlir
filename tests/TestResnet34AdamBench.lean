@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `@resnet34_adam_train_step` step-time bench — hand-written vs `pretty(provenGraph)`
 
-`planning/xla_pjrt_handoff.md` §2b-bis. The batched render (then `…_b.mlir`, now the committed
+`planning/archive/xla_pjrt_handoff.md` §2b-bis. The batched render (then `…_b.mlir`, now the committed
 `verified_mlir/resnet34_adam_train_step.mlir`) is **1.68× the ops** of the hand-written render it
 replaced (10014 vs 5971): `pretty` has no CSE, the batched
 backward ops are self-contained recomputes (`bnBatchF`, `bnBatchBack`, `bnGammaGradB` each rebuild

@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2Close
 `MobileNetV2Close.lean` (Item C) certifies each MobileNetV2 conv/depthwise param output for *any*
 cotangent `c` at that layer's output. This file pins `c` to the cotangent the **actual backward chain
 delivers** — the MobileNetV2 analogue of `CnnChainClose` (and of ResNet-34's, deleted 2026-09-08), "the genuinely-new,
-fiddliest piece" (`planning/mobilenetv2_close.md` Item D).
+fiddliest piece" (`planning/archive/mobilenetv2_close.md` Item D).
 
 The chain through an inverted-residual block composes the *rendered* backward denotations — the relu6
 two-sided-kink mask (`selectMid`, `if 0<x<6`), the per-channel BN input-VJP (`bnPerChannelTensor3_grad_input`,

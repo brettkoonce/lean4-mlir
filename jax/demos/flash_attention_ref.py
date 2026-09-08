@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""FlashAttention numeric reference (planning/flash_attention.md).
+"""FlashAttention numeric reference (planning/archive/flash_attention.md).
 
 De-risks the algorithm BEFORE any MLIR: the exact block recurrence the
 StableHLO `while`-loop codegen will emit, validated against dense

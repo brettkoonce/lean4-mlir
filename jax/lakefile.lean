@@ -60,7 +60,7 @@ lean_exe «resnet34-imagenet» where
   root := `MainResnetImagenet
 
 -- ResNet-50 (bottleneck) on 1000-class ImageNet — RSB-A2 build host (phase 1
--- skeleton; see planning/rsb_a2_resnet50.md). runningBN + bottleneck SD threaded.
+-- skeleton; see planning/archive/rsb_a2_resnet50.md). runningBN + bottleneck SD threaded.
 lean_exe «resnet50-imagenet» where
   root := `MainResnet50Imagenet
 
@@ -82,7 +82,7 @@ lean_exe «mobilenet-v2-imagenet» where
   root := `MainMobilenetV2Imagenet
 
 -- MobileNetV4-Conv-M on 1000-class ImageNet. Faithful Conv-M block table
--- (~9.7M params) vs the Conv-S-sized Imagenette demo. See planning/mnv4_imagenet.md.
+-- (~9.7M params) vs the Conv-S-sized Imagenette demo. See planning/archive/mnv4_imagenet.md.
 lean_exe «mobilenet-v4-imagenet» where
   root := `MainMobilenetV4Imagenet
 

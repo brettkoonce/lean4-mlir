@@ -8,7 +8,7 @@ after the gradient node and before the optimizer tail, `emitGradAllReduce` emits
 That text is emitted OUTSIDE the `SHlo` AST and is a declared trusted carve-out, so every tie
 in the repo — `r34_net_tiedB`, `mnv2_net_tiedB`, `efficientnet_net_tiedG` — is stated at the
 PER-REPLICA gradient node and says so in its own header. This file is the ℝ-level half of
-closing that disclaimer: piece 1 of `planning/proofs_tier_to_paper_nets.md` §4d.
+closing that disclaimer: piece 1 of `planning/archive/proofs_tier_to_paper_nets.md` §4d.
 
 ## What is proved
 

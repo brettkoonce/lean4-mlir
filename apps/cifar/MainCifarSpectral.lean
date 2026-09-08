@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # `cifar-spectral` — spectral-norm-constrained CIFAR-10 CNN training
 
-The CIFAR rung of the gap-shrinking lever (`planning/robustness_ladder.md`). Trains the verified
+The CIFAR rung of the gap-shrinking lever (`planning/archive/robustness_ladder.md`). Trains the verified
 CIFAR-10 CNN with **projected SGD onto the spectral ball** — every few proof-rendered steps each
 weight is rescaled so the dense `‖Wᵢ‖₂` and the conv tap-sum bound stay `≤ c` — then runs the
 `cert ≤ TRUE ≤ PGD` sandwich (`genCifarPgdStep` attack, conv-aware product cert) across a cap sweep.

@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # Gradient accumulation, numerically certified — k micro-steps ARE one step
 
-`planning/next_session_pipeline_then_r50.md` §4's blocker, gated. `verified_mlir/`'s new
+`planning/archive/next_session_pipeline_then_r50.md` §4's blocker, gated. `verified_mlir/`'s new
 `resnet50in_acc4x64_train_step.mlir` renders AdamW over **k accumulated micro-batches**: a fourth
 parameter region `G`, and two runtime scalars deciding per invoke whether this is an accumulate or
 an apply. This is the numeric argument that the mechanism computes what it claims.

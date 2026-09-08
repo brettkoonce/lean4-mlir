@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
 /-! # ResNet-50 train step rendered from the verified AST, at the BATCHED index
 
-R50 phase 2 (`planning/next_session_pipeline_then_r50.md` §3.2). The bottleneck peer of
+R50 phase 2 (`planning/archive/next_session_pipeline_then_r50.md` §3.2). The bottleneck peer of
 `ResNet34RenderB.lean`, block for block: batch BN (`bnBatchF`, reduced over `[0,2,3]`), the whole
 graph at `N := B`, the un-fused `*GradB` parameter gradients, and the proven AdamW /
 heavy-ball tail — `optOne`/`optConstsB` are **imported, not copied**, so the optimizer has one
@@ -514,7 +514,7 @@ set_option maxRecDepth 4000000 in
     train step is batch BN (reduce `[0,2,3]`, divisor `B·H·W`). Its own docstring claimed "the same
     forward the train step differentiates", which was the invariant that did not hold.
     `scripts/regen_verified_mlir.sh check` could not see it: it only ever paired a forward with the
-    SGD train step, and R50 has none (`planning/mnv4_verified.md` §3d(b)).
+    SGD train step, and R50 has none (`planning/archive/mnv4_verified.md` §3d(b)).
 
     ⚠ The eval forward is deliberately NOT moved onto this chain. `bnEval` reads frozen per-channel
     statistics as graph inputs, so it is the same arithmetic in either vocabulary and has no
@@ -622,7 +622,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- would notice. `r34AdamVariant` now derives the marker from this flag; read its `bce` note for
     -- the measurement that licensed the removal (12 sites, 12 suffixes, no other value ever).
     (bce : Bool := false)
-    -- ▶▶ **A NON-DEFAULT WEIGHT DECAY** (`planning/verified_optimizer_parity.md` §3, the `wdStr`
+    -- ▶▶ **A NON-DEFAULT WEIGHT DECAY** (`planning/archive/verified_optimizer_parity.md` §3, the `wdStr`
     -- item): empty means this optimizer's own value — `optWdDefault`, 1e-4 for the AdamW family and
     -- 0.02 for LAMB's — so every committed artifact keeps its bytes. RSB-**A1** wants 0.01 where A3
     -- wants 0.02, and this is what makes that a re-render rather than a new op.
@@ -657,8 +657,8 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- variant, so a flag that reaches the renderer but not the name produces an artifact whose
     -- declared entry disagrees with its own path.
     (wdExclude : Bool := false)
-    -- ▶▶ **`gradClip` — timm's `Lamb.max_grad_norm`, D1** (`planning/recipe_fidelity_diffs.md`,
-    -- `planning/verified_optimizer_parity.md` §2). `timm.optim.lamb.Lamb.__init__` DEFAULTS it to
+    -- ▶▶ **`gradClip` — timm's `Lamb.max_grad_norm`, D1** (`planning/archive/recipe_fidelity_diffs.md`,
+    -- `planning/archive/verified_optimizer_parity.md` §2). `timm.optim.lamb.Lamb.__init__` DEFAULTS it to
     -- `1.0` and clips the global gradient norm inside the optimizer on every step, so a LAMB render
     -- without it is not the optimizer the recipe names — read from source, not assumed:
     --
@@ -877,7 +877,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- parameter. ⚠ `optAllParams` is IMPORTED from `ResNet34RenderB`, not written here — read its
     -- docstring for the two orderings the clip has to respect (after the all_reduce AND after the
     -- accumulation), and for why it is a function at all: `tests/TestOptStepFixtures.lean` drives
-    -- the SAME call for `planning/verified_optimizer_parity.md` §5's one-step update gate, so the
+    -- the SAME call for `planning/archive/verified_optimizer_parity.md` §5's one-step update gate, so the
     -- gate exercises this emission rather than a second copy of it. ═══
     let (adamCode, thetaN, mNames, vNames, aNames, eNames) ←
       optAllParams opt B replicas allPs wdExclude gradClip clipNorm ema
@@ -1263,7 +1263,7 @@ end Proofs.StableHLO
 #guard ("momdp64bf16".splitOn "acc").length == 1
 #guard !"momdp64bf16".startsWith "ema"
 
--- ⭐⭐ GRADIENT ACCUMULATION — `planning/next_session_pipeline_then_r50.md` §4's blocker.
+-- ⭐⭐ GRADIENT ACCUMULATION — `planning/archive/next_session_pipeline_then_r50.md` §4's blocker.
 --
 -- A FOURTH parameter region `G` and two runtime scalars, so one graph is both phases. `k` is in the
 -- artifact name because the driver must agree with the `1/k` baked into `%ob1`/`%ob2`, and a
@@ -1274,7 +1274,7 @@ end Proofs.StableHLO
 --     `lake build r50-accum-tie` gates, because the tie needs a SINGLE-DEVICE peer to compare
 --     against and the DP render's `%loss` is replica-local (`tests/r50_dp_render_tie.py`).
 --   * `accdp8x64` — 4 replicas, micro-batch 64, k = 8 ⇒ effective **2048**, which is RSB-A3's
---     design batch and LAMB's. ⚠ It is the batch, NOT the recipe: `planning/rsb_a3_r50_verified.md`
+--     design batch and LAMB's. ⚠ It is the batch, NOT the recipe: `planning/archive/rsb_a3_r50_verified.md`
 --     §2.3's LAMB and BCE-with-logits are still absent, so this is AdamW at bs2048 and must not be
 --     described as `rsb-faithful`.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_acc4x64_train_step.mlir"
@@ -1292,7 +1292,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
     (Proofs.StableHLO.R34Opt.adamwAccum 8) "resnet50in")
 
--- ⭐⭐ BCE-WITH-LOGITS — RSB-A2/A3's loss (`planning/next_session_pipeline_then_r50.md` §4).
+-- ⭐⭐ BCE-WITH-LOGITS — RSB-A2/A3's loss (`planning/archive/next_session_pipeline_then_r50.md` §4).
 --
 -- Same three regions and the same signature as the CE renders: the loss is not state, so nothing
 -- in the driver moves. ⚠ `adam64bce` exists so `lake build r50-bce-tie` can recover the cotangent
@@ -1307,13 +1307,13 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
     Proofs.StableHLO.R34Opt.lamb "resnet50in" (bce := true))
 
--- ⭐⭐ LAMB — RSB-A3's optimizer (`planning/rsb_a3_r50_verified.md` §2.3). THREE regions, same
+-- ⭐⭐ LAMB — RSB-A3's optimizer (`planning/archive/rsb_a3_r50_verified.md` §2.3). THREE regions, same
 -- `[θ|m|v]` signature as `adam64`, because the trust ratio is computed inside the graph from θ and
 -- the direction and needs no extra state. So the driver is byte-identical across `adam64` and
 -- `lamb64` — the only per-net fact is which file it opens.
 --
 -- ⚠⚠ THIS IS LAMB, NOT `rsb-faithful`. That recipe is LAMB **at effective batch 2048** with
--- BCE-with-logits and a 160/224 resolution split; `planning/rsb_a2_resnet50.md` records LAMB at
+-- BCE-with-logits and a 160/224 resolution split; `planning/archive/rsb_a2_resnet50.md` records LAMB at
 -- bs512 giving 40.8% against 78.1%, so the batch is not a detail. Composing this with the
 -- accumulation render (`.lambAccum`) is not built — see the handoff.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lamb64_train_step.mlir"
@@ -1370,11 +1370,11 @@ end Proofs.StableHLO
 
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- ⭐⭐⭐ **RSB-A3 ITSELF — LAMB × BCE × ACCUMULATION × 4 REPLICAS, AT 160.** The composition
--- `planning/next_session_rsb_a3.md` was written to reach, rendered 2026-08-06.
+-- `planning/archive/next_session_rsb_a3.md` was written to reach, rendered 2026-08-06.
 --
 -- `lambaccdp8x64bce` = LAMB, BCE-with-logits, k = 8 accumulated micro-batches, 4 replicas × bs64
 -- ⇒ effective batch **2048** — RSB-A3's design batch and the one LAMB was built for
--- (`planning/rsb_a2_resnet50.md` records LAMB at bs512 giving **40.8% against 78.1%**, so the batch
+-- (`planning/archive/rsb_a2_resnet50.md` records LAMB at bs512 giving **40.8% against 78.1%**, so the batch
 -- is not a detail). At `q = 5`, i.e. A3's 160² train resolution, scoring through
 -- `resnet50in160_fwd_eval` at 224².
 --
@@ -1599,7 +1599,7 @@ end Proofs.StableHLO
 -- already took every parameter needed.
 --
 -- ⚠⚠⚠ **AND THEY ARE NOT FAITHFUL A2/A1. READ THIS BEFORE QUOTING A NUMBER OFF THEM.**
--- `planning/verified_side_quest_counterparts.md` §4a called this "four `#eval` lines … it closes a
+-- `planning/archive/verified_side_quest_counterparts.md` §4a called this "four `#eval` lines … it closes a
 -- whole book section". The `#eval`s were four lines; the section does not close, because A2's
 -- reference carries two regularisers this path cannot express. Checked against
 -- `jax/MainResnet50Imagenet.lean`'s `resnet50ImagenetConfigA2Accum`, field by field:
@@ -1661,7 +1661,7 @@ end Proofs.StableHLO
 -- measurement here, not a code-reading claim.
 
 -- ── RSB-A1 @ 224, bf16. Rendered now rather than later for the reason ConvNeXt-S's MISSING bf16
--- twin is a `planning/verified_side_quest_counterparts.md` §4c item: a size or tier that ships
+-- twin is a `planning/archive/verified_side_quest_counterparts.md` §4c item: a size or tier that ships
 -- without its precision peer leaves a gap that reads as a decision and is really an accident of
 -- ordering. Both tiers get the full (precision × replicas) square in one pass. ────────────────
 
@@ -1720,7 +1720,7 @@ end Proofs.StableHLO
 -- Measured, because the two forms have the SAME EXPECTATION: at batch 64 and keep 0.95 the old form
 -- dropped all 64 or none on **200/200** steps and the new one drops a mean of 3.23.
 -- See `runs/2026-08-27-r50-a2-a1-ema-fifth-region/droppath_shape.log` and
--- `planning/verified_side_quest_counterparts.md` §6b.
+-- `planning/archive/verified_side_quest_counterparts.md` §6b.
 --
 -- ⚠ **WHAT IS STILL NOT A2**: ghost-BN group. These render 8×64, i.e. 64-image ghosts, against the
 -- reference's 4 × 512-global (128 per device on four cards). Immaterial to a wall clock; a

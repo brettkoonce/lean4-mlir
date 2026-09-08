@@ -25,7 +25,7 @@ which were all measured at 4× on this box. Run the job, not the bare binary, fo
 ⚠ Optimizer does NOT match the MNv4 reference: AdamW at 1e-3 here, where the paper is
 AdamW at 0.004 on effective batch 4096 with drop-path, EMA and RandAugment m15. Those live in the
 reference `TrainConfig`, and the ones that are not yet expressible on this path are listed in
-`planning/chapter_makeover.md` under the MNv4 phase-4 gaps.
+`planning/archive/chapter_makeover.md` under the MNv4 phase-4 gaps.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever trusted lowerer
 `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with `=iree` -- resolved by dlopen at

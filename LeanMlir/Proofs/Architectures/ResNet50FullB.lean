@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Foundation.ResNet50BackB0
 
 /-! # ResNet-50 at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
 
-ResNet-50 is the largest hole in the Proofs tier: `planning/proofs_tier_to_paper_nets.md` §2's
+ResNet-50 is the largest hole in the Proofs tier: `planning/archive/proofs_tier_to_paper_nets.md` §2's
 audit row reads "none; `r50Trunk_3463` is a backward fold" with every tier ✗. §3.5(a) is this file
 — a net-level ℝ forward at the [3,4,6,3] bottleneck ladder, in the world the artifacts run —
 and §3.5(b) is the typed graph over it, in the second half of this file.

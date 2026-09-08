@@ -24,7 +24,7 @@ So: drop axis 3 from the first 2x2 reverse. The type is unchanged (reverse is sh
 it compiles; the kernel flip is now half-done, so it is a different function.
 
 ▶ THE OUTPUT IS NOT COMMITTED. It renders under a variant name no config sets, which is the rule
-`planning/grad_clip.md` §11 arrived at the hard way: an artifact baking a value nothing asks for IS
+`planning/archive/grad_clip.md` §11 arrived at the hard way: an artifact baking a value nothing asks for IS
 a silent-hyperparameter artifact. Generate it, run it, delete it.
 """
 import re, sys

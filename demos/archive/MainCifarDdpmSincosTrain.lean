@@ -8,7 +8,7 @@ import LeanMlir
     convention). Net delta: input goes from 4 → 11 channels, no
     other changes. Tests whether the sincos primitive helps on the
     proven baseline architecture, isolated from the attention recipe
-    that didn't pan out (see planning/ddpm_demo.md "Phase 3 partial").
+    that didn't pan out (see planning/archive/ddpm_demo.md "Phase 3 partial").
 
     Usage: lake exe cifar-ddpm-sincos-train [data] [epochs]
 -/

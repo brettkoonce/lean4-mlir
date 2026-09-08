@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
 `EfficientNetTiePoC.lean` ties all 262 parameters of the SGD-inline `efficientnet_train_step.mlir`:
 each fused `theta - lr * g` op `den`s to the certified step at the cotangent the emitted backward
 chain delivers. This file is that statement re-pointed along the two axes 4b left open
-(`planning/proofs_tier_to_paper_nets.md`, "What is NOT done, and is the honest boundary").
+(`planning/archive/proofs_tier_to_paper_nets.md`, "What is NOT done, and is the honest boundary").
 
 ⭐ **Axis 1 — the OPTIMIZER FORM.** Every conjunct is at the RAW gradient node (`*GradB`), which is
 what `efficientnet_adam_train_step.mlir` and every ImageNet artifact emit; the fused op appears only

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Architectures.CNN
 
 /-! # `maxPool3s2` — the 3×3 stride-2 max pool of He et al.'s ResNet stem
 
-**Written 2026-08-03.** `planning/rsb_a3_r50_verified.md` / the stem-pool finding.
+**Written 2026-08-03.** `planning/archive/rsb_a3_r50_verified.md` / the stem-pool finding.
 
 The verified path's only pooling op is `maxPool2` — 2×2, stride 2, **non-overlapping**. Every
 ResNet in He et al. (18/34/50/101/152) specifies a **3×3 stride-2** pool after the stem conv, so

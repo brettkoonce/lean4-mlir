@@ -1,7 +1,7 @@
 """Host input-pipeline throughput bench — is the trainer input-bound, and does the
 pipeline scale with CPU?
 
-Every cloud-rental cost estimate (planning/mi300x_rental_program.md) rides on the
+Every cloud-rental cost estimate (planning/archive/mi300x_rental_program.md) rides on the
 assumption that the tfds/tf.data host pipeline sustains ~4-6k img/s. This measures it:
 imports `build_imagenet_iter` from a generated trainer (nothing else runs — jax is
 pinned to CPU so no GPU is touched), drains batches, and reports img/s plus how much

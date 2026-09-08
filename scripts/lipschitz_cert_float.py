@@ -24,7 +24,7 @@ from fractions import Fraction
 # How many of the float-certified images carry a per-image THEOREM. Soundness is
 # in the engine below (certified_at_eps_close + certifiedFloat_of_margin), proved
 # once; the count stays MEASURED over all 34 R-certified images. See
-# planning/scorecard_trim.md. SCORECARD_N_EMIT=100 regenerates uncapped.
+# planning/archive/scorecard_trim.md. SCORECARD_N_EMIT=100 regenerates uncapped.
 N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 
 SRC = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean"
@@ -53,7 +53,7 @@ assert len(W1s) == 8 * 49 and len(W2s) == 10 * 8
 # The MEASURED population comes from the base scorecard's `certMarginC` data
 # table, NOT from its marginC<k> theorems: the base caps how many images carry
 # theorems, and this tier's headline ("N of 34 survive the float widening") is a
-# measurement that must not shrink with it. See planning/scorecard_trim.md.
+# measurement that must not shrink with it. See planning/archive/scorecard_trim.md.
 certified, margins, labels, imgs = [], {}, {}, {}
 for mm in re.finditer(r"^-- certMarginC (\d+) (\d+) (-?\d+)/(\d+)$", src, re.M):
     k = int(mm.group(1))

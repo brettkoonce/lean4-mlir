@@ -170,8 +170,8 @@ fidelity:
     The proved theorems form tiers; not everything the prose describes is a theorem. Sections
     1-6 are the standing disclosures, 4b-4f the axes the 2026-09 audits added, and 4g the label
     table for the per-package records that used to be written out here (their write-ups are
-    planning/proofs_tier_to_paper_nets.md, planning/renderer_convergence.md and
-    planning/mnv4_proofs_tier.md).
+    planning/archive/proofs_tier_to_paper_nets.md, planning/archive/renderer_convergence.md and
+    planning/archive/mnv4_proofs_tier.md).
 
     1. STRONGEST -- layer VJP correctness. The per-layer backward formulas (dense, conv,
        batch-norm, layer-norm, softmax-CE, attention/MHSA, GELU, ...) are derived from Mathlib's
@@ -210,7 +210,7 @@ fidelity:
        supply. Disclosed as NOT BITING on 2026-09-02 and removed with the whole-net budgets.
 
     4d. THE FLOAT TIER: the rounding model and the certified backward ties (the whole-net
-       BUDGETS were deleted 2026-09-08). planning/float_budget_numbers.md and
+       BUDGETS were deleted 2026-09-08). planning/archive/float_budget_numbers.md and
        planning/archive/float_budget_numbers_log.md are the historical record.
 
        THE MODEL. `FloatModel` is any rounding operator with relative error `u`; `binary32`
@@ -279,8 +279,8 @@ fidelity:
        and the result once outside the batch sum, and those carry their own lemmas.
 
     4g. THE PROOFS-TIER PORT (2026-09-06 to 09-07), the record the labels 4g-4t used to carry
-       here in full; the write-ups are planning/proofs_tier_to_paper_nets.md,
-       planning/renderer_convergence.md and planning/mnv4_proofs_tier.md. What landed: every
+       here in full; the write-ups are planning/archive/proofs_tier_to_paper_nets.md,
+       planning/archive/renderer_convergence.md and planning/archive/mnv4_proofs_tier.md. What landed: every
        ImageNet-scale net is ONE batched chain (the per-example renderers of ResNet-34 and
        MobileNetV2 retired, ConvNeXt's thirteen train steps moved 78 conv-VJP lines by
        decision, ViT's nineteen artifacts byte-identical); T1/T2/T3/T6 at that chain for all

@@ -218,7 +218,7 @@ open Proofs
 #print axioms relu_has_vjp_correct
 #print axioms mlp_has_vjp_correct
 
--- Nonzero-Jacobian seal (JacobianSeal.lean, planning/whole_network_backward.md Item B):
+-- Nonzero-Jacobian seal (JacobianSeal.lean, planning/archive/whole_network_backward.md Item B):
 -- the generic level-3 bridge. backward_ne_zero_of_pdiv_ne — one nonzero Jacobian entry
 -- ⇒ the proven backward is not the zero map (the basis cotangent collapses the correctness
 -- sum). fderiv_eq_zero_of_pdiv_all_zero / exists_pdiv_ne_of_fderiv_ne — the fderiv form
@@ -365,7 +365,7 @@ open Proofs
 -- capstone instantiated.
 #print axioms CnnConcrete.cnnConcrete_has_vjp_correct
 
--- Denoted StableHLO-subset IR (Phase 0a/0b spike, planning/typed_ir.md):
+-- Denoted StableHLO-subset IR (Phase 0a/0b spike, planning/archive/typed_ir.md):
 -- the emitted backward graph denotes the proven HasVJP.backward.
 #print axioms IR.dense_back_bridge
 #print axioms IR.relu_back_bridge
@@ -462,7 +462,7 @@ open Proofs
 -- PoC capstones (LinearFaithfulPoC.lean): the mnist-linear trainer's render is
 -- the certified loss-descent step — forward end-to-end tied, train step certified,
 -- and the param-grad/SGD tail given a structural denotation proven certified.
--- See planning/verified_faithful_sweep.md; the byte tie (committed .mlir == render)
+-- See planning/archive/verified_faithful_sweep.md; the byte tie (committed .mlir == render)
 -- is the CI "Verified-render drift guard" step in proofs.yml.
 #print axioms LinPoC.poc_fwd_faithful
 #print axioms LinPoC.poc_fwd_is_render
@@ -699,7 +699,7 @@ open Proofs
 #print axioms StableHLO.cnnFwdGraph_faithful
 #print axioms StableHLO.convBack_faithful
 #print axioms StableHLO.maxPoolBack_faithful
--- ⭐ He et al.'s 3×3/s2 STEM POOL (`planning/rsb_a3_r50_verified.md` §4b) — the op every ResNet
+-- ⭐ He et al.'s 3×3/s2 STEM POOL (`planning/archive/rsb_a3_r50_verified.md` §4b) — the op every ResNet
 -- here now uses, and the whole witness chain behind it. ⚠ The witness landed 2026-08-04 and was
 -- **never audited**; it is added here with the codegen that consumes it, which is §2n finding 2's
 -- own rule applied on time for once (*when you replace X with Y, diff the audit coverage of X
@@ -978,7 +978,7 @@ open Proofs
 #print axioms cifar8_render_bn8beta_chain_certified
 #print axioms cifar8_render_convW7_chain_certified
 #print axioms cifar8_render_convb7_chain_certified
--- MobileNetV2 CLOSE (planning/mobilenetv2_close.md Item C) — the "free close" generic in the
+-- MobileNetV2 CLOSE (planning/archive/mobilenetv2_close.md Item C) — the "free close" generic in the
 -- cotangent: every MobileNetV2 train-step parameter output denotes θ − lr·(certified Jacobian ·
 -- cotangent). Three genuinely-new bridge families (the 1×1 conv W/b, BN γ/β, and dense W/b
 -- families reuse the M3/CIFAR-BN/M2 bridges verbatim at the MobileNetV2 shapes, so are covered by
@@ -1003,7 +1003,7 @@ open Proofs
 #print axioms mnv2_render_stem_convb_xla_certified
 #print axioms mnv2_render_depthwiseW_strided_xla_certified
 #print axioms mnv2_render_depthwiseb_strided_xla_certified
--- MobileNetV2 RENDER (planning/mobilenetv2_close.md Item A) — the PER-CHANNEL-BN typed SHlo
+-- MobileNetV2 RENDER (planning/archive/mobilenetv2_close.md Item A) — the PER-CHANNEL-BN typed SHlo
 -- forward graph at the full ch7 render dims (3×224² → 7×7×64): strided stem → 6 inverted-residual
 -- blocks (4 stride-2 downsampling via depthwiseStridedF, 2 stride-1 with an addV skip) → conv-bn-
 -- relu6 head → GAP → dense. Per-channel BN (bnPerChannelF, γ/β : Vec c) at every BN site, so it
@@ -1132,7 +1132,7 @@ open Proofs
 -- kernel reduce the block bodies and time out).
 #print axioms efficientnetForwardB_full_eq_chain
 #print axioms efficientnetForwardB_full_has_vjp_correct
--- ConvNeXt RENDER (planning/convnext_close.md Item A) — the representative 2-block forward graph.
+-- ConvNeXt RENDER (planning/archive/convnext_close.md Item A) — the representative 2-block forward graph.
 -- The DELIBERATE CONTRAST to EfficientNet: ConvNeXt's normalization is LayerNorm, which is per-example
 -- separable, so the graph lives at a plain batch-1 index (no batched token layer, no `batchMap`/`bnBatchF`).
 -- The representative `convNextFwdGraph` (stem 1×1 patchify → scalar-LN → block×2 → GAP → head-LN → dense;
@@ -1141,7 +1141,7 @@ open Proofs
 -- Scalar LN matches the operational render reducing dim `[1]` per example — faithful at batch-1, as for
 -- MNV2/r34. The "text = render of a proven forward graph" forward half (Item A) for ConvNeXt.
 #print axioms StableHLO.convNextFwdGraph_faithful
--- ConvNeXt CLOSE (planning/convnext_close.md Item C) — mostly reuse, two genuinely-new param families.
+-- ConvNeXt CLOSE (planning/archive/convnext_close.md Item C) — mostly reuse, two genuinely-new param families.
 -- The 1×1 convs (stem/expand/project) and dense head reuse M3/M2 verbatim; the 7×7 depthwise (the kernel
 -- size no prior net used; stride-1 — ConvNeXt blocks keep resolution) pins the generic depthwise bridges.
 -- New: layer-scale γ — layerScale is symmetric in (γ,x), so the param Jacobian is the diagonal x_iδ_ij
@@ -1191,7 +1191,7 @@ open Proofs
 #print axioms Proofs.cnx_render_chlnbeta_certified
 #print axioms Proofs.CnxPoC.chanLnGammaSgd_den
 #print axioms Proofs.CnxPoC.chanLnBetaSgd_den
--- ConvNeXt cotangent-chain CLOSE (planning/convnext_close.md Item D) — the MobileNetV2ChainClose/
+-- ConvNeXt cotangent-chain CLOSE (planning/archive/convnext_close.md Item D) — the MobileNetV2ChainClose/
 -- ResNet34ChainClose (since deleted) analogue: the Item C bridges pinned to the cotangent the ACTUAL backward chain
 -- delivers through a ConvNeXt block. The chain composes the rendered backward denotations —
 -- layer-scale back (= layerScale γls on the cotangent, the symmetric-diagonal trick the Item B render
@@ -1229,7 +1229,7 @@ open Proofs
 #print axioms Proofs.CnxTiePoC.cnx_head_ch_tied
 #print axioms Proofs.CnxTiePoC.cnxLossCot_den
 #print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
--- ViT RENDER (planning/vit_close.md Item A) — the representative distinct-param 2-block ViT.
+-- ViT RENDER (planning/archive/vit_close.md Item A) — the representative distinct-param 2-block ViT.
 -- The proven transformerTower/vit_full share ONE param tuple across blocks; the close needs distinct
 -- per-block params, so `vitForward2` (patchEmbed → block₁ → block₂ → final per-token LN → CLS slice →
 -- dense head) composes `transformerBlock_has_vjp_mat` twice with the patch-embed/final-LN/classifier
@@ -1244,7 +1244,7 @@ open Proofs
 #print axioms vitForward2_has_vjp_correct
 #print axioms mhsa_layer_one_head
 #print axioms StableHLO.vitFwdGraph_faithful
--- ViT CLOSE (planning/vit_close.md Item C) — the param close, two genuinely-new bridge families.
+-- ViT CLOSE (planning/archive/vit_close.md Item C) — the param close, two genuinely-new bridge families.
 -- Per-token dense W/b (the M2 outer-product bridge row-lifted): every row of [N,a] through the same
 -- W:[a,c], so dW = Σ_tokens xᵣ⊗dyᵣ (one dot_general contracting the token axis) and db = Σ_tokens dyᵣ
 -- are the certified Jacobian contractions — covers Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases at every block.
@@ -1278,7 +1278,7 @@ open Proofs
 #print axioms pdiv_patchEmbed_b
 #print axioms vit_patchb_grad_bridge
 #print axioms vit_render_patchb_certified
--- ViT cotangent-chain CLOSE (planning/vit_close.md Item D) — the ConvNeXtChainClose analogue: the
+-- ViT cotangent-chain CLOSE (planning/archive/vit_close.md Item D) — the ConvNeXtChainClose analogue: the
 -- Item C bridges pinned to the cotangent the ACTUAL backward chain delivers through the attention
 -- block. The chain composes the rendered backward denotations — per-token dense input-VJPs
 -- (rowDenseBackFlat), the GELU mask, the rowwise scalar-LN input-VJP (rowLNBackFlat = rowwise
@@ -1313,7 +1313,7 @@ open Proofs
 #print axioms vit_render_cls_chain_certified
 #print axioms vit_render_patchW_chain_certified
 #print axioms vit_render_patchb_chain_certified
--- ViT SCALING PASS: vector-[D] LayerNorm (planning/vit_close.md scaling item 1) — the close lifted
+-- ViT SCALING PASS: vector-[D] LayerNorm (planning/archive/vit_close.md scaling item 1) — the close lifted
 -- from the proof's scalar LN gamma/beta to the committed production render's per-channel vector
 -- form (ViTRender: scalar-LN(1,0) followed by per-channel scale + bias). layerNormVec's VJP
 -- composes layerNorm_has_vjp(1,0) + layerScale_has_vjp + the bias translation; the vector-LN
@@ -1464,7 +1464,7 @@ open Proofs
 -- pass-through, and the linear/MLP forward-extraction capstones.
 #print axioms FloatModel.dot_close
 #print axioms FloatModel.dot_close_linear
--- P2 (TreeReduceBridge.lean, planning/adjoint_chain.md): the balanced-tree
+-- P2 (TreeReduceBridge.lean, planning/archive/adjoint_chain.md): the balanced-tree
 -- reduction bound. dot_close/sum_close pay the association-independent Higham
 -- factor (1+u)^(n+1) — sound for every order but worst-case n·u. IREE lowers a
 -- reduce / dot_general contraction as a BALANCED tree, so each summand sees only
@@ -1474,7 +1474,7 @@ open Proofs
 -- the quarantine form: the "deployed reduce is a tree of depth ≤ ⌈log₂n⌉" is a
 -- NAMED hypothesis at the site (esig/egelu-style, validated by
 -- kernel_faithfulness_probe), never an axiom — so these stay 3-axiom clean.
--- P5 (Cifar8ChainCert.lean, planning/adjoint_chain.md): the whole-net float
+-- P5 (Cifar8ChainCert.lean, planning/archive/adjoint_chain.md): the whole-net float
 -- certificate as a THEOREM. chain_adjointClose instantiated at the CIFAR-8
 -- relu∘dense tower (fresh budgets = the proven layerBudget per stage; measured
 -- tail gains supplied as a NAMED TailGains hypothesis, esig/egelu-quarantined).
@@ -1494,7 +1494,7 @@ open Proofs
 -- magnitudes its budget is ≥ 1.8e13 against logits ≈ 10 (the bᵢ sit at worst-case
 -- propagated windows), so hmargin is satisfiable there only at u = 0 —
 -- formalization.yaml §4c "NOT BITING".
--- §1c (planning/floatbridge_quantization.md): the two-roundoff generalization
+-- §1c (planning/archive/floatbridge_quantization.md): the two-roundoff generalization
 -- of the dot budget — a leaf precision u_leaf (FloatModel L, e.g. bf16 2⁻⁸ /
 -- fp8-E4M3 2⁻⁴ on the matmul inputs) and an accumulate precision u_acc (M.u,
 -- fp32 2⁻²⁴). dot_close_mixed: the leaf contributes only a FLAT per-leaf term
@@ -1680,7 +1680,7 @@ open Proofs
 #print axioms floatClose_id
 #print axioms floatClose_iterate
 #print axioms floatClose_r34_stages
--- ── planning/floatbridge_enet_vit.md §1a–§1d (EfficientNet float bridge finished) ──
+-- ── planning/archive/floatbridge_enet_vit.md §1a–§1d (EfficientNet float bridge finished) ──
 -- §1a: the additive MBConv/transformer skip (no trailing activation) and a closed
 -- smooth residual block conv→swish→conv + skip. floatClose_addResidual is the no-relu
 -- cousin of floatClose_residualBlock; floatClose_smoothResBlock folds the body through
@@ -2310,7 +2310,7 @@ open Proofs
 -- ⛔ And a rfl straight at 4.1d's tactic-built apex is a five-minute isDefEq timeout — §5's
 -- elaboration trap, and the reason the generic apex exists.
 -- ⛔ NO NUMBER is stated about either chain: §4.2's T5 is a float budget and
--- planning/float_budget_numbers.md closed that thread. The chains exist for the ties, and since
+-- planning/archive/float_budget_numbers.md closed that thread. The chains exist for the ties, and since
 -- 2026-09-08 they are defined beside them (Foundation/ResNetBackChains.lean); the float twins
 -- (r34_grad_floatBridgesToB, the batchMapAux float lifts) were deleted with their files.
 #print axioms Proofs.HasVJPAt.backward_unique
@@ -2446,7 +2446,7 @@ open Proofs
 -- transformerTower: the LN rides a perRowFlat/unflatten_flatten reindex; the Nat.rec tower fold ties to
 -- the towerBack/List.replicate fold via transformerTower_flatten_eq_iterate + towerBack_replicate (both
 -- through Function.iterate). Completes the 5-net forward tie sweep. 3-axiom clean.
--- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
+-- ── planning/archive/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
 -- point bnIstd_close_at port verbatim, no new math. §2b GELU (the one new transcendental):
@@ -2456,7 +2456,7 @@ open Proofs
 -- gelu_close is the rounding half (egelu, the eexp/esig pattern); floatClose_gelu the wrap.
 -- §2d the per-token MLP residual sub-block LN→dense→GELU→dense + skip folds via FloatBridges
 -- (LN enters as the operating-point hypothesis, like the MBConv BNs).
--- ── planning/floatbridge_enet_vit.md §2c (ViT float bridge: ATTENTION, Mat-space) ──
+-- ── planning/archive/floatbridge_enet_vit.md §2c (ViT float bridge: ATTENTION, Mat-space) ──
 -- Attention mixes across tokens, so it lives in Mat n d space (not the Vec-space FloatClose
 -- framework) and the per-row softmax couples a whole row of logits. The capstone sdpa_close
 -- (ViTAttentionFloatBridge.lean) bounds each output entry of the float attention sdpaF against
@@ -2468,7 +2468,7 @@ open Proofs
 #print axioms FloatModel.softmaxF_close_at
 #print axioms FloatModel.smErr_nonneg
 #print axioms FloatModel.softmax_abs_le_one
--- ── planning/floatbridge_enet_vit.md §2 (ViT TRANSFORMER-BLOCK FOLD: the Mat↔Vec seam) ──
+-- ── planning/archive/floatbridge_enet_vit.md §2 (ViT TRANSFORMER-BLOCK FOLD: the Mat↔Vec seam) ──
 -- The block LN→MHSA→+→LN→MLP→+ mixes per-token ops (Vec d) with cross-token attention
 -- (Mat n d). The seam perRowFlat + FloatClose.perRow/FloatBridges.perRow lifts a per-token
 -- bridge to the flattened whole-sequence Vec (n·d) with the SAME magnitude and SAME modulus
@@ -2476,7 +2476,7 @@ open Proofs
 -- the MLP+LN₂ sublayer fully (floatBridges_vitMlpResidual.perRow), the attention sublayer
 -- supplied (rounding = sdpa_close, input-sensitivity the one open piece) — the BN/LN-as-
 -- hypothesis pattern. The whole block proved modulo that single attention constant.
--- ── planning/floatbridge_enet_vit.md §2c-capstone (ATTENTION INPUT-SENSITIVITY → UNCONDITIONAL block) ──
+-- ── planning/archive/floatbridge_enet_vit.md §2c-capstone (ATTENTION INPUT-SENSITIVITY → UNCONDITIONAL block) ──
 -- The one piece sdpa_close was missing: how the real sdpa output moves under a perturbed
 -- input. sdpa_input_close (the attention Lipschitz bound) — score sensitivity → 1/√d scale →
 -- per-row softmax_perturb (the e^(2δ)−1 bound, the only nonlinear step, NO derivatives) →
@@ -2617,7 +2617,7 @@ open Proofs
 #print axioms FloatModel.softmaxF_close
 #print axioms FloatModel.softmax_ce_cot_close
 #print axioms FloatModel.mnist_cot_budget
--- §3c (planning/floatbridge_quantization.md): the E4M3 (fp8) argmax-preservation
+-- §3c (planning/archive/floatbridge_quantization.md): the E4M3 (fp8) argmax-preservation
 -- statement — the honest end-to-end accuracy claim that exists ONLY because
 -- MNIST-linear is depth-1 (the single-matmul leaf bound IS the end-to-end bound,
 -- no vacuous depth compounding). argmax_preserved: a B-accurate logit
@@ -2639,7 +2639,7 @@ open Proofs
 #print axioms u_e4m3
 #print axioms FloatModel.linear_e4m3_logit_budget
 #print axioms FloatModel.linear_e4m3_argmax_preserved
--- §3b (planning/floatbridge_quantization.md): the E4M3 (fp8) STRUCTURAL render-tie
+-- §3b (planning/archive/floatbridge_quantization.md): the E4M3 (fp8) STRUCTURAL render-tie
 -- (E4M3FaithfulPoC.lean) — correctness-of-implementation, NO accuracy claim. The
 -- deployed fp8 kernel is block-scaled with fp32 accumulate: int weight code (per-output
 -- column scale sWⱼ), int activation code (per-tensor sx), fp32 accumulate, one per-output
@@ -3526,7 +3526,7 @@ open Proofs
 #print axioms Proofs.ViTTiePoC.vit_embed_tied
 #print axioms Proofs.ViTTiePoC.vit_net_tied_certified
 
--- Robustness certificate (planning/robustness_ladder.md, the cert side of cert ≤ TRUE ≤ PGD):
+-- Robustness certificate (planning/archive/robustness_ladder.md, the cert side of cert ≤ TRUE ≤ PGD):
 -- the Lipschitz-margin certified radius (Tsuzuku et al. 2018). lipschitz_margin_certified_radius —
 -- if the logit map is L-Lipschitz in L2 and class i leads by margin m, every ‖δ‖₂ < m/(√2·L) keeps
 -- i the argmax (provable safe radius vs all attacks). logit_gap_stable = the √2·L pairwise-gap
@@ -3549,7 +3549,7 @@ open Proofs
 #print axioms Proofs.smoothed_margin_certified_radius
 
 -- The smoothing radius at the REAL Gaussian quantile (SmoothingGaussian.lean, G1 of
--- planning/smoothing_gaussian_lemma.md): the abstract theorem's global `Monotone Phiinv` can
+-- planning/archive/smoothing_gaussian_lemma.md): the abstract theorem's global `Monotone Phiinv` can
 -- never be met by the true (unbounded-on-(0,1)) quantile, so the Ioo VARIANT
 -- smoothing_certified_radius_probit adds hp : p c y ∈ Ioo 0 1 (Monte-Carlo estimates are never
 -- exactly 0/1) and weakens hmono/hanti to Ioo — then SmoothingGaussian DISCHARGES both at
@@ -3731,7 +3731,7 @@ open Proofs
 -- Φ⁻¹ STRICTLY monotone on (0,1) (strictness reflected through Φ via the two-sided
 -- inverse), Φ⁻¹ maps (0,1) ONTO ℝ (every s is Φ⁻¹(Φ s)), and Φ⁻¹ continuous at every
 -- p ∈ (0,1) (strict mono + full image ⇒ no extra measure theory). The interface the
--- Clopper–Pearson upgrade (planning/gaussian_smoothing_next.md §2) will consume.
+-- Clopper–Pearson upgrade (planning/archive/gaussian_smoothing_next.md §2) will consume.
 #print axioms Proofs.stdNormalQuantile_strictMonoOn
 #print axioms Proofs.stdNormalQuantile_surjOn
 #print axioms Proofs.stdNormalQuantile_continuousAt
@@ -3809,7 +3809,7 @@ open Proofs
 -- irrationals in-kernel); the capped net's Schatten-8 chain (G/H eq + product L = 19.76); then
 -- 34/100 capped vs 1/100 unconstrained per-image certificates. Those counts are exact-rational
 -- MEASUREMENTS (the `certMargin*` data table in that file); the first 8 certified images per net
--- carry the per-image theorems and `scorecard` states only those (planning/scorecard_trim.md).
+-- carry the per-image theorems and `scorecard` states only those (planning/archive/scorecard_trim.md).
 -- Spot-check first/middle/last of the emitted capped set + the unconstrained survivor #82
 -- + the aggregate.
 #print axioms Proofs.LipschitzCertDemo.sqrt_two_le_rat
@@ -3849,7 +3849,7 @@ open Proofs
 -- images, same ε as the scorecard above: 34→69/100 capped, 1→63/100 uncon.
 -- Those are exact-rational MEASUREMENTS; the first 8 certifying images per net
 -- carry the `CertifiedAt` theorems and `scorecard_sdp*` states only those
--- (planning/scorecard_trim.md). Spot-check the core lemmas, one pair certificate
+-- (planning/archive/scorecard_trim.md). Spot-check the core lemmas, one pair certificate
 -- per net (data identities + assembled squared bound + a reverse-order wrapper),
 -- first/middle/last of the emitted per-image certs, and the mechanized aggregates.
 #print axioms Proofs.LipschitzCertDemo.relu_slope_restricted
@@ -3904,7 +3904,7 @@ open Proofs
 -- The dense tier's certificate is stated on a BRACKET, not on interval
 -- arithmetic: `certified_of_boxSound` consumes any `BoxSoundE f Flo Fhi` and
 -- `ibp2_certified_at_eps` is its corollary at the interval bracket
--- `mlp2_boxSound`. A tighter bracket plugs in here (planning/crown_ibp.md).
+-- `mlp2_boxSound`. A tighter bracket plugs in here (planning/archive/crown_ibp.md).
 #print axioms Proofs.LipschitzCertDemo.BoxSoundE.comp
 #print axioms Proofs.LipschitzCertDemo.denseE_boxSound
 #print axioms Proofs.LipschitzCertDemo.reluE_boxSound
@@ -3976,7 +3976,7 @@ open Proofs
 -- one concrete binary32 SGD descent step — now sit in THIS ordinary zero-axiom closure (the separate
 -- tests/AuditTrustedBridge.lean + CI footprint step are gone; the repo has zero axiom declarations).
 -- Still trusted, unchanged: the kernel↔model boundary (FMA, reassociation, "the GPU rounds like
--- this grid") per planning/floatbridge_certificate_gaps.md — the discharge is hygiene, not a
+-- this grid") per planning/archive/floatbridge_certificate_gaps.md — the discharge is hygiene, not a
 -- smaller hardware trust base.
 #print axioms Proofs.rndP_err
 #print axioms Proofs.binary32_e4m3_argmax_preserved
@@ -4050,7 +4050,7 @@ open Proofs
 #print axioms Proofs.TrainedCnn.trainedCnn_jacobian_nonzero
 #print axioms Proofs.TrainedCnn.trainedCnn_not_constant
 
--- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
+-- Muon geometry (planning/archive/muon_geometry.md): every optimizer = steepest descent under a norm,
 -- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,
 -- d⋆=g/‖g‖); steepest_linf_* = sign/Adam (L∞→L¹, d⋆=sign g); muon_polar_achieves_nuclear = Muon's
 -- polar factor UVᵀ realizes the nuclear norm Σσᵢ given an SVD (the achievability half). L4:
@@ -4079,7 +4079,7 @@ open Proofs
 -- (muon_polar_nearest_orthogonal, ‖G−UVᵀ‖_F ≤ ‖G−Q‖_F ∀ orthogonal Q) — reuses the von Neumann bound.
 #print axioms Proofs.MuonGeometry.muon_polar_orthogonal
 #print axioms Proofs.MuonGeometry.muon_polar_nearest_orthogonal
--- Newton–Schulz P1 (planning/muon_ns_convergence.md): the Muon iteration aX+b(XXᵀ)X+c(XXᵀ)²X
+-- Newton–Schulz P1 (planning/archive/muon_ns_convergence.md): the Muon iteration aX+b(XXᵀ)X+c(XXᵀ)²X
 -- COMPUTES the polar factor. nsStep_spectral = one step is the scalar φ(t)=at+bt³+ct⁵ (nsScalar)
 -- applied per singular value (U,V carried through, the conj_diag_pow motif); nsStep_iterate_spectral
 -- = k steps are φ^[k] per singular value, so matrix convergence to UVᵀ reduces to scalar φ^[k](σᵢ)→1.

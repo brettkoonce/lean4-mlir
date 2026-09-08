@@ -1,6 +1,6 @@
 # 2026-08-28 — the 2-D diffusion demo gets its four targets and its reverse-process strip
 
-Two phases of `planning/diffusion_2d_demo.md` close, and the second of them found a bug in
+Two phases of `planning/archive/diffusion_2d_demo.md` close, and the second of them found a bug in
 `Ddpm.sampleNoise` that nothing else in the repo could see.
 
 1. **Phase 0 is finished.** `preprocess_toy2d.py` wrote two of the plan's four targets and the

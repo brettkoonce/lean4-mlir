@@ -6,7 +6,7 @@ import Jax
     block table is Conv-S-sized (~4.1M params). This spec is the *faithful*
     MobileNetV4-Conv-Medium (~9.7M params, paper 79.9% top-1 non-distilled),
     transcribed 1:1 from timm `mobilenetv4_conv_medium` (`_gen_mobilenet_v4`,
-    `timm/models/mobilenetv3.py`). See planning/mnv4_imagenet.md for the decode
+    `timm/models/mobilenetv3.py`). See planning/archive/mnv4_imagenet.md for the decode
     of timm's `uir_rN_aA_kK_sS_eE_cC` encoding into `.uib ic oc expand stride
     preDWk postDWk` (a=pre/start-DW kernel, k=post/mid-DW kernel).
 
@@ -65,7 +65,7 @@ def mobilenetV4ConvMImagenet : NetSpec where
     dropout 0.2) is tuned for the long schedule and UNDERFITS short. This tier
     dials regularization down for a real go/no-go signal in ~1–1.5 days.
     Expect low-to-mid 70s (paper 79.9 needs the full 500ep). See
-    planning/mnv4_imagenet.md "Recipe tiers". -/
+    planning/archive/mnv4_imagenet.md "Recipe tiers". -/
 def mobilenetV4ConvMImagenetConfig : TrainConfig where
   learningRate         := 0.004    -- paper peak @ bs4096; here targets the effective batch
   batchSize            := 512

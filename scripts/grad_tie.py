@@ -4,7 +4,7 @@
 Started life as `grad_tie.py`; generalised to a NETS registry the moment a second net wanted
 it, because everything except the parameter mapping and a few constants is net-agnostic.
 
-⭐ THIS IS PHASE 2'S GATE (`planning/mnv4_verified.md` §4). The forward tie pinned the block
+⭐ THIS IS PHASE 2'S GATE (`planning/archive/mnv4_verified.md` §4). The forward tie pinned the block
 ORDER at 1.423e-06; nothing so far has looked at the backward at all. Op counts, arities and the
 forward-prefix check (`mnv4-train-smoke`) are all blind to a backward that differentiates an
 ExtraDW block as an FFN, masks the swish site with `selectPos`, or contracts a weight gradient
@@ -47,7 +47,7 @@ CHIP = os.environ.get("IREE_CHIP", "gfx1100")
 #   IREE_RUN_MODULE=/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module
 # ⛔ Do NOT pair that compiler with /home/skoonce/src/iree-build's runtime: the version
 # skew reports "hal.command_buffer.dispatch signature mismatch", which reads like a bad
-# module rather than a bad pairing (`planning/mnv4_convm_ties_todo.md` §2b).
+# module rather than a bad pairing (`planning/archive/mnv4_convm_ties_todo.md` §2b).
 IREE_C = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
 IREE_R = os.environ.get("IREE_RUN_MODULE",
     "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module")
@@ -223,7 +223,7 @@ def run_iree(mlir_path, fn, arrays, work, backend, n_out):
         sys.exit(f"iree-compile FAILED:\n{r.stderr[:3000]}")
     outs = [f"--output=@{work}/o{j}.npy" for j in range(n_out)]
     # ⚠ `--device=local-task` dies on big modules with **exit 245 and EMPTY stderr** — no output,
-    # no diagnostic. `planning/mnv4_verified.md` §3f hit this on `efficientnet_fwd` and `local-sync`
+    # no diagnostic. `planning/archive/mnv4_verified.md` §3f hit this on `efficientnet_fwd` and `local-sync`
     # ran the identical vmfb fine. A silent 245 is a device/threading problem, NOT a bad render.
     devs = ["hip"] if backend == "rocm" else ["local-task", "local-sync"]
     rr = None
@@ -282,7 +282,7 @@ def main():
     cfg = NETS[args.net]
     # ⚠ an EXPLICIT argument must win over the registry default, never the other way round. A
     # `--eval` flag that silently overwrote `--mlir` is what made a control re-run the artifact it
-    # was supposed to be controlling AGAINST, and "confirm" it (`planning/mnv4_verified.md` §3h).
+    # was supposed to be controlling AGAINST, and "confirm" it (`planning/archive/mnv4_verified.md` §3h).
     args.mlir = args.mlir or cfg["mlir"]
     args.fn = args.fn or cfg["fn"]
     args.nclasses = args.nclasses if args.nclasses is not None else cfg["nclasses"]

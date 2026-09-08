@@ -1,4 +1,4 @@
-"""Certified-accuracy scorecard generator (planning/post_audit_roadmap.md §1).
+"""Certified-accuracy scorecard generator (planning/archive/post_audit_roadmap.md §1).
 
 Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean: over the first 100 MNIST
 test images (4x4-pooled, exact pixel-sum rationals), the images whose prediction
@@ -33,7 +33,7 @@ N_IMG = 100
 # downstream measurement passes (scripts/lipschitz_cert_float.py) read — so
 # capping here cannot silently shrink a reported number. All `img<i>` defs are
 # kept regardless: they are cheap and `lipschitz_cert_pair_sdp.py` hardcodes
-# that set as EXISTING_IMGS. See planning/scorecard_trim.md.
+# that set as EXISTING_IMGS. See planning/archive/scorecard_trim.md.
 N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 EPS = Fraction(1, 10)
 SQRT2_UB = Fraction(14143, 10000)   # >= sqrt 2; the factor the Lean proof uses
@@ -199,7 +199,7 @@ A("")
 A("/-! # Certified-accuracy scorecard (post_audit_roadmap §1)")
 A("")
 # Scope disclaimer — hand-added to the committed file and formerly NOT emitted
-# here, so any regeneration silently deleted it (planning/scorecard_trim.md §2.7).
+# here, so any regeneration silently deleted it (planning/archive/scorecard_trim.md §2.7).
 A("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
 A("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
 A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")

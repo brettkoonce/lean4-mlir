@@ -2,7 +2,7 @@
 > float-budget thread (2026-09-02 to 2026-09-05), frozen with its section numbering intact
 > because about forty Lean docstrings, two scripts, `tests/AuditAxioms.lean` and
 > `formalization.yaml` cite it by section (`§0.1`, `§3.16`, `§9`, ...). The live document is
-> `planning/float_budget_numbers.md`: the table, the six findings worth keeping, the closing
+> `planning/archive/float_budget_numbers.md`: the table, the six findings worth keeping, the closing
 > items and the priced-and-declined list. Nothing below was edited when it was archived; where
 > a section says "next session", the live document's decision supersedes it.
 
@@ -1291,7 +1291,7 @@ blocks themselves are only at the `∃`-tier. In order:
    nor `simp only` + `norm_num` closes what `norm_num` alone will not. ⚠ ConvNeXt-T's `10²²⁷` and
    ViT-Tiny's `10²¹⁸` sit under it, which is why five nets landed without meeting it.
 
-   **[Corrected 2026-09-05, `planning/float_budget_numbers.md` §3 finding 5.]** The ceiling is
+   **[Corrected 2026-09-05, `planning/archive/float_budget_numbers.md` §3 finding 5.]** The ceiling is
    Lean's `exponentiation.threshold` option (default 256): a `10 ^ e` literal with `e > 256` is
    left unevaluated. Every row above is that and nothing else — row 2 carries `10²⁶⁰`, row 3's
    "same value" fails on its right-hand side's `10²⁵⁷`, and row 4 closes because `simp` cancels

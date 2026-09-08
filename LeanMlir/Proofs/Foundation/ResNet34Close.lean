@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2Close
 
 /-! # Closing the ResNet-34 render — the parameter-gradient close (a FREE close)
 
-`planning/mobilenetv2_close.md` Item C, applied to ResNet-34 (`tests/TestResnet34Train.lean`,
+`planning/archive/mobilenetv2_close.md` Item C, applied to ResNet-34 (`tests/TestResnet34Train.lean`,
 146 params). Unlike MobileNetV2 — whose close needed a genuinely-new depthwise bridge family —
 **every ResNet-34 parameter family is already certified by an existing generic bridge**. ResNet-34
 uses only regular convolutions (3×3 and the 7×7 stem), per-channel BN, plain relu, maxpool, residual
@@ -24,7 +24,7 @@ theorem is the generic certified denotation specialized to the kernel size; `#pr
 `[propext, Classical.choice, Quot.sound]` by inheritance. The strided-conv W/b bridges this reuses
 are exactly the ones built for MobileNetV2's stem (`MobileNetV2Close.lean`); the per-channel BN γ/β
 and the dense bridges are verbatim reuse (no kernel to pin), documented above. See
-`planning/render_close_handoff.md` §"Validation recipe".
+`planning/archive/render_close_handoff.md` §"Validation recipe".
 -/
 
 namespace Proofs

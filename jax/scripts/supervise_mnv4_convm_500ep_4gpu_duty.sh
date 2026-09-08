@@ -3,7 +3,7 @@
 # Tier-3 PAPER-FAITHFUL recipe (`full`): LR 0.004 AdamW, eff-batch 4096 (grad-accum
 # 8×micro-512), RandAug m15, LS 0.1, dropout 0.2, wd 0.1, EMA 0.9999, dropPath 0.075,
 # running-BN eval. Paper Conv-M non-distilled target ≈ 79.9% top-1. See
-# planning/mnv4_imagenet.md.
+# planning/archive/mnv4_imagenet.md.
 #
 # Same machinery as supervise_mnv4_convm_100ep_4gpu_duty.sh; differences:
 # - PY = generated_mobilenet_v4_imagenet_full.py (500ep, full regularization).

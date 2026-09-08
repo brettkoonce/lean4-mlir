@@ -17,7 +17,7 @@ for every j != y:  Lp_{y,j} * eps <= logit_y - logit_j, with rho <= Lp^2.
 No sqrt2, no global product constant. Result (eps = 1/10, first 100 test
 images): capped 34 -> 69/100, unconstrained 1 -> 63/100 (PGD bracket:
 72 / 69). Those counts are MEASURED in exact rationals over all 100 images;
-only the first N_EMIT certifying images carry a Lean theorem (planning/
+only the first N_EMIT certifying images carry a Lean theorem (planning/archive/
 scorecard_trim.md). Run from repo root: python3 scripts/lipschitz_cert_pair_sdp.py
 """
 import numpy as np, struct
@@ -37,7 +37,7 @@ N_IMG = 100
 # Soundness is in the engine (LipschitzCertPairSDP.lean), proved once — the
 # counts stay MEASURED over all N_IMG by exact rational arithmetic; the emitted
 # set only witnesses non-vacuity at real trained weights. Matches the other
-# tiers' default (see planning/scorecard_trim.md); SCORECARD_N_EMIT=100
+# tiers' default (see planning/archive/scorecard_trim.md); SCORECARD_N_EMIT=100
 # regenerates the pre-cap corpus for a structural diff.
 N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 EPS = Fraction(1, 10)
@@ -49,7 +49,7 @@ H, K, DIM = 8, 10, 49
 # than hardcoded: that file caps how many images carry hpre/margin theorems
 # (SCORECARD_N_EMIT) while keeping every `img<i>` def, so a hardcoded copy of
 # these sets silently desynchronizes the moment it is regenerated — exactly the
-# trap flagged in planning/scorecard_trim.md.
+# trap flagged in planning/archive/scorecard_trim.md.
 _BASE_SRC = open(os.path.join(
     ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")).read()
 EXISTING_IMGS = {int(m.group(1))

@@ -139,7 +139,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
     IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size}"; IO.Process.exit 1
   let n := o1.size / 4
   let nP := net.nParams
-  -- ⚠ The EMA shadow is REPORTED, never GATED. `planning/ema.md`: the shadow is θ's low-pass
+  -- ⚠ The EMA shadow is REPORTED, never GATED. `planning/archive/ema.md`: the shadow is θ's low-pass
   -- filter, so gating it is §3's "gate the gradient, never θ" one step WORSE — measured, a
   -- sum-not-mean control moved `m` by 0.94, θ by 1.95e-4 and the shadow by 1.00e-4, i.e. exactly
   -- ON a 1e-4 gate. It is here so a mis-threaded 4th region is visible, not so it decides anything.

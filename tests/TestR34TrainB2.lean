@@ -21,7 +21,7 @@ resnet34_fwd              reduce[0,2,3] = 0     reduce[2,3] = 73    <- PER-EXAMP
 resnet34_adam_train_step  reduce[0,2,3] = 468   reduce[2,3] = 1     <- BATCH BN
 ```
 
-They are different functions. That is the §3d(b) two-worlds split (`planning/mnv4_verified.md`),
+They are different functions. That is the §3d(b) two-worlds split (`planning/archive/mnv4_verified.md`),
 live on R34, and `scripts/regen_verified_mlir.sh check` goes green anyway because it only ever
 pairs a forward with the **SGD** train step — which shares the per-example world. So the artifact
 that trains every quoted R34 number has never been audited against the forward that scores it.

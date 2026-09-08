@@ -11,7 +11,7 @@ f32-typed result (`xla_allow_excess_precision`, and `=false` does not rescue it)
 was made twice in one session before this script existed. So: compile, then resolve each
 convolution's OPERAND SSA names to their dtypes in the OPTIMIZED HLO.
 
-▶ `planning/bf16_renderer.md` §9.2 has the measurement; `BatchableOp.convBf16` has the note.
+▶ `planning/archive/bf16_renderer.md` §9.2 has the measurement; `BatchableOp.convBf16` has the note.
 """
 import argparse, re, sys, time
 
@@ -84,7 +84,7 @@ def dot_operand_dtypes(exe):
 
     ⚠⚠ SAME REASON THIS FILE DOES NOT GREP. A `dot` line carries only its RESULT type, and for a
     `dot_general` the result type is f32 BY DESIGN in this repo's emit shape (bf16 operands, f32
-    accumulate — `planning/bf16_renderer.md` §9.2). So on a matmul-bound net, grepping result types
+    accumulate — `planning/archive/bf16_renderer.md` §9.2). So on a matmul-bound net, grepping result types
     reports "no bf16 anywhere" for a perfectly good bf16 graph, which is the mirror image of the
     convolution mistake above. Only the OPERANDS answer the question.
     """

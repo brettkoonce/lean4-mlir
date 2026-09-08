@@ -39,7 +39,7 @@ deriving Repr, BEq
     convention independently of the render and had no way to say anything but `'SAME'`, so the
     ResNet references silently used XLA padding at their 7×7/s2 stem while the verified render
     used torchvision's symmetric pad. Neither shape nor op count nor arity can see the difference
-    (`planning/mnv4_verified.md` §3c/§4b).
+    (`planning/archive/mnv4_verified.md` §3c/§4b).
 
     ⚠ The Python helpers `conv2d`/`conv_bn` already DEFAULT to symmetric — that was fixed
     2026-08-04 — but the top-level layer emitter passed an explicit `padding='SAME'` that
@@ -86,10 +86,10 @@ inductive Layer where
   -- softmax `stablehlo.while` (FlashAttention) instead of the dense
   -- `[B,H,T,T]` scores — O(T·blk) not O(T²) memory, for long context. Same
   -- math (validated ~1e-6 vs dense). Currently wired into the TRAIN fwd+bwd
-  -- (the eval @forward stays dense). See planning/flash_attention.md.
+  -- (the eval @forward stays dense). See planning/archive/flash_attention.md.
   -- `rope` (default false) applies Rotary Position Embedding to Q/K inside
   -- attention (fwd rotation + VJP in bwd) — relative position, generalizes
-  -- past the trained length. Validated ~1e-6 vs numpy. See planning/flash_attention.md
+  -- past the trained length. Validated ~1e-6 vs numpy. See planning/archive/flash_attention.md
   -- / jax/demos/rope_ref.py. (Pair with dropping the absolute position table
   -- for true length-generalization.)
   | transformerEncoder (dim heads mlpDim nBlocks : Nat)
@@ -122,7 +122,7 @@ inductive Layer where
   -- (scale·H, scale·W). The "gateway op" for UNet decoders, FPN,
   -- BiFPN, DeepLab, diffusion U-Nets, and super-resolution.
   -- Currently shape-only — no codegen yet, so any NetSpec referencing
-  -- it cannot compile to MLIR. See `planning/unet_demo.md`.
+  -- it cannot compile to MLIR. See `planning/archive/unet_demo.md`.
   | bilinearUpsample (scale : Nat)
   -- Transformer decoder stack (DETR-style): N blocks of self-attention
   -- on `nQueries` learned object queries + cross-attention with the
@@ -256,7 +256,7 @@ inductive Layer where
   -- segmentation feature backbone in Mask R-CNN, RetinaNet, and most
   -- 2-stage detection families.
   | fpnModule (c2 c3 c4 c5 target : Nat)
-  -- FPN multi-scale detector head (planning/yolo_fpn.md). Taps the 3 preceding
+  -- FPN multi-scale detector head (planning/archive/yolo_fpn.md). Taps the 3 preceding
   -- backbone stage outputs C3/C4/C5 (channels `c3`/`c4`/`c5`, strides 8/16/32),
   -- runs a top-down neck (all → `oc` channels), an optional RetinaNet tower of
   -- `tower` 3×3 convs (+bias, ReLU, channel-preserving, PER-LEVEL not shared),
@@ -308,7 +308,7 @@ inductive Layer where
   -- token ids with the one-hot built in-graph (iota + compare +
   -- select). Same params, same math, same backward — kills the
   -- O(V·T) host upload at BPE vocab sizes
-  -- (planning/tinygpt_demo_v2.md Part II, Option 1).
+  -- (planning/archive/tinygpt_demo_v2.md Part II, Option 1).
   -- `gather := true` (Part II Option 2): forward is a true `stablehlo.gather`
   -- of the `[V, D]` table by the `[B, T]` ids, backward a `stablehlo.scatter`-add
   -- — NO `[B, T, V]` one-hot ever materialized. Implies ids-shaped input.
@@ -318,7 +318,7 @@ inductive Layer where
   -- table (one fewer param) — for RoPE models, whose relative positions make the
   -- absolute table redundant AND length-fixed. With posEmb off, every weight is
   -- seqLen-independent, so a model trained at one length runs at any length
-  -- (train-short / eval-long extrapolation). See planning/flash_attention.md.
+  -- (train-short / eval-long extrapolation). See planning/archive/flash_attention.md.
   | tokenPositionEmbed (vocabSize seqLen dModel : Nat) (idsInput : Bool := false)
       (gather : Bool := false) (posEmb : Bool := true)
   -- Language-modeling head: per-position logits. Input `[B, seqLen,
@@ -374,7 +374,7 @@ structure NetSpec where
 
       In both cases the *verified render* was already paper-faithful and the *reference* was
       wrong, so this moves the reference onto the render rather than the other way round
-      (`planning/mnv4_verified.md` §3f/§3h).
+      (`planning/archive/mnv4_verified.md` §3f/§3h).
 
       ⚠ The MNv2 deviation is **inert on small activations** — relu6 ≡ relu below 6 — which is
       exactly why every forward tie at `--scale 0.1` passed with it present. It only appears
@@ -414,7 +414,7 @@ deriving Repr
     (`useYolov1`, `useSeg`, `useMixup`/`useCutmix`/`useKnnMixup`) so
     callers don't have to update.
 
-    See `planning/yolo_final.md` Refactor R1 for the motivation. -/
+    See `planning/archive/yolo_final.md` Refactor R1 for the motivation. -/
 inductive LossKind where
   /-- Default: int32 `[B]` class label, softmax cross-entropy. Compatible
       with `useFocal` (focal modifier) and `labelSmoothing`. -/
@@ -423,7 +423,7 @@ inductive LossKind where
       Compatible with `labelSmoothing` (already baked in by the caller). -/
   | softLabelCE
   /-- Int32 `[B, H, W]` per-pixel label tensor (segmentation). Phase 0
-      of the UNet demo — see `planning/unet_demo.md`. -/
+      of the UNet demo — see `planning/archive/unet_demo.md`. -/
   | perPixelCE
   /-- Soft Dice over the softmax probabilities, int32 `[B, H, W]` labels —
       same ABI as `perPixelCE`, different loss block. Dice is computed
@@ -434,7 +434,7 @@ inductive LossKind where
       occupying 0.5% of pixels contributes 0.5% of the loss and the cheapest
       descent direction is to predict it away. Dice is a *ratio per class*,
       so every class carries equal weight no matter how few pixels it owns.
-      See `planning/brats_demo.md` — on BraTS, CE collapses all three tumour
+      See `planning/archive/brats_demo.md` — on BraTS, CE collapses all three tumour
       classes to IoU 0 (mIoU 0.243 ≈ the trivial background-only predictor).
 
       Batch-Dice (reducing over B as well as H,W) rather than per-sample:
@@ -458,7 +458,7 @@ inductive LossKind where
       which is `-1/N` at `p = 0`: **flat, and wholly indifferent to the
       collapse.** Scaling that by `w_c` therefore keeps a live signal all the
       way down, which is precisely what Dice cannot do. See
-      `planning/brats_demo.md` Workstream B'.
+      `planning/archive/brats_demo.md` Workstream B'.
 
       Reduction is the weighted mean `Σ_k w_{y_k}·CE_k / Σ_k w_{y_k}` (torch's
       `CrossEntropyLoss(weight=…, reduction='mean')` semantics), not `/N`. Two
@@ -505,14 +505,14 @@ inductive LossKind where
   | floatTargetMse
   /-- YOLOv1: float `[B, perCell, gridH, gridW]` target + float
       `[B, gridH, gridW]` per-cell mask. 5-term masked MSE with √ ε-floor
-      on the box-dim terms (see `planning/yolo_final.md` Phase 1). -/
+      on the box-dim terms (see `planning/archive/yolo_final.md` Phase 1). -/
   | yolov1Masked
   /-- Binary cross-entropy with logits over multi-hot `[B, NC]` targets —
       timm "ResNet Strikes Back" RSB-A2's loss. Each class is an independent
       sigmoid; the mixup/cutmix soft-label path produces the `[B,NC]` target
       directly (hard labels are one-hot'd, with optional label smoothing).
       JAX-only (the IREE/MLIR backend does not implement it). Reduction is
-      timm's `mean` over B×C. See `planning/rsb_a2_resnet50.md`. -/
+      timm's `mean` over B×C. See `planning/archive/rsb_a2_resnet50.md`. -/
   | bce
 deriving Repr, BEq
 
@@ -582,7 +582,7 @@ inductive OptimizerKind where
       (pure matmul, no SVD), so every singular direction gets an equal-size
       step. Applies ONLY to 2D weight matrices; non-2D params (biases, norms,
       embeddings, small heads) fall back to AdamW. IREE/MLIR perf path reads
-      `TrainConfig.useMuon`. UNVERIFIED. See `planning/muon.md`. -/
+      `TrainConfig.useMuon`. UNVERIFIED. See `planning/archive/muon.md`. -/
   | muon
   /-- Shampoo (Gupta–Koren–Singer 2018) — Kronecker-factored full-matrix
       preconditioner. For a 2D weight `W∈ℝ^{m×n}` it accumulates `L=Σ GGᵀ`
@@ -597,7 +597,7 @@ inductive OptimizerKind where
       params fall back to AdamW. `L`/`R` use EMA accumulation and are εI-
       regularized at inversion time (state slots init to 0, so no host change).
       IREE/MLIR perf path reads `TrainConfig.useShampoo`. UNVERIFIED.
-      See `planning/shampoo.md`. -/
+      See `planning/archive/shampoo.md`. -/
   | shampoo
 deriving Repr, BEq, DecidableEq
 
@@ -616,14 +616,14 @@ structure TrainConfig where
   /-- Muon selector for the IREE/MLIR perf path (additive over `useAdam`, like
       `optimizer` is for JAX). When true, every 2D weight matrix is updated by
       Muon (Newton–Schulz polar projection); all non-2D params use AdamW. Left
-      false by default so no existing config changes behavior. See `planning/muon.md`. -/
+      false by default so no existing config changes behavior. See `planning/archive/muon.md`. -/
   useMuon      : Bool := false
   /-- Shampoo selector for the IREE/MLIR perf path (additive over `useAdam`,
       like `useMuon`). When true, every **square** 2D weight matrix (`m==n`,
       both dims ≥ 16) is updated by Shampoo (Kronecker `L^{-1/4}·G·R^{-1/4}`);
       non-square 2D weights and all non-2D params use AdamW. The L/R state reuses
       the m/v slots (square ⇒ same shape), so the module stays Adam-signature-
-      identical. Left false by default. See `planning/shampoo.md`. -/
+      identical. Left false by default. See `planning/archive/shampoo.md`. -/
   useShampoo   : Bool := false
   /-- RMSprop running-mean-square decay ρ (only used when `optimizer = .rmsprop`). -/
   rmspropDecay : Float := 0.9
@@ -644,7 +644,7 @@ structure TrainConfig where
   focalGamma   : Float := 2.0
   /-- YOLOv1 box loss: `false` = the published √-MSE coord terms; `true` = a
       DIoU box loss on box0 with a positive box parameterization (cx=(j+σ(tx))/gW,
-      w=exp(tw)), the detection-infra brick #1 (planning/yolo_drone.md WS-D). Only
+      w=exp(tw)), the detection-infra brick #1 (planning/archive/yolo_drone.md WS-D). Only
       consulted on the `.yolov1Masked` path. NB: a DIoU-trained model must be
       decoded with the same σ/exp (scripts/yolo_map_visdrone.py --box-param diou). -/
   useDiouBox   : Bool  := false
@@ -653,7 +653,7 @@ structure TrainConfig where
       A-anchor path (perCell = A·15, box_a = anchor_a·exp(pred)); the target/head
       must use the matching `A·15`-channel layout (preprocess_visdrone --anchors). -/
   anchors      : List (Float × Float) := []
-  /-- FPN multi-scale detector (planning/yolo_fpn.md bite 7). Per-scale
+  /-- FPN multi-scale detector (planning/archive/yolo_fpn.md bite 7). Per-scale
       `(grid, anchors)` for P3/P4/P5 (e.g. `[(56, a3), (28, a4), (14, a5)]`).
       Empty = not an FPN detector. When non-empty AND the spec ends in a
       `.fpnDetect` layer, the loss routes to `emitMultiScaleYoloLoss` over the
@@ -682,7 +682,7 @@ structure TrainConfig where
       threshold would silently delete the classes the detector is worst at. -/
   fpnAffineWhThrPx   : Float := 1.0
   fpnAffineAreaThr   : Float := 0.1
-  /-- Per-class weights for the detector's classification term (planning/
+  /-- Per-class weights for the detector's classification term (planning/archive/
       yolo_fpn.md T1b). `weights.length` must equal the detector class count
       (10 for VisDrone). Empty (the default) is the unweighted path and emits
       byte-identical MLIR.
@@ -859,8 +859,8 @@ structure TrainConfig where
       cost, M× eval cost. -/
   useTTA         : Bool  := false
   ttaSamples     : Nat   := 5
-  /-- YOLOv1 5-term masked-MSE loss. See `planning/yolo_final.md`
-      Phase 1 + `planning/yolo_final.md` for integration scope.
+  /-- YOLOv1 5-term masked-MSE loss. See `planning/archive/yolo_final.md`
+      Phase 1 + `planning/archive/yolo_final.md` for integration scope.
       Equivalent to `lossKind := .yolov1Masked`; the bool form predates
       LossKind and is retained for back-compat. -/
   useYolov1      : Bool  := false
@@ -878,7 +878,7 @@ structure TrainConfig where
       match the spec's BN layer count + sizes — true for YOLOv1 loading
       R34 weights since both have identical backbone layers).
 
-      Phase 4 of `planning/yolo_final.md`. Example for YOLOv1+R34:
+      Phase 4 of `planning/archive/yolo_final.md`. Example for YOLOv1+R34:
       `bootstrapBackbone := some (".lake/build/resnet_34_params.bin", 21284672)`. -/
   bootstrapBackbone : Option (String × Nat) := none
   /-- Offset-aware bootstrap, as `some (paramsPath, dstOffFloats, srcOffFloats,
@@ -911,7 +911,7 @@ structure TrainConfig where
       gets exactly ONE eval, at the very end, so a 7-hour run yields no signal
       until it is over. On the seg path the eval is the *only* instrument that
       can see a collapsed class — no scalar in the training log can
-      (`planning/brats_demo.md` Workstream A) — so flying blind is worse here
+      (`planning/archive/brats_demo.md` Workstream A) — so flying blind is worse here
       than anywhere else. Set it to 1-2 for ablation arms; the eval is a
       forward pass over val and costs minutes against 40 min/epoch. -/
   evalEveryNEpochs : Nat := 10
@@ -938,7 +938,7 @@ structure TrainConfig where
       batch-stats-at-eval path, so every existing net is byte-identical.
       Currently wired for the convBn + invertedResidual path (MobileNetV2);
       extend the BN-threading to mbconv/basic/bottleneck blocks for the other
-      convnets. See planning/jax_imagenet_sweep.md "Gap A". -/
+      convnets. See planning/archive/jax_imagenet_sweep.md "Gap A". -/
   runningBN : Bool := false
   /-- BatchNorm running-statistic **decay**, i.e. the weight on the OLD estimate:
       `running = bnMomentum·running + (1−bnMomentum)·batch`. Only consulted when
@@ -990,7 +990,7 @@ structure TrainConfig where
       the generic path is 1.8× too wide at ViT-B, 2.6× at ViT-S and 3.6× at
       ViT-Ti, while the patch embed is ~6× too NARROW (it divides by the
       output fan `dim·p·p` rather than the input fan `ic·p·p`).
-      See planning/vit_imagenet.md item 0. -/
+      See planning/archive/vit_imagenet.md item 0. -/
   vitInit : Bool := false
   /-- ConvNeXt paper weight init, replacing the generic Xavier-uniform for the
       ConvNeXt-shaped nets. Off by default; turn it on per-recipe.
@@ -1018,7 +1018,7 @@ structure TrainConfig where
       Why it matters: the generic `emitConvBiasInit` is Xavier over
       `ic·kh·kw + oc`, so ConvNeXt-T's stem lands at std 0.118 against the
       paper's 0.02 — **5.9× too wide**, the same failure `vitInit` fixes for
-      ViT and slightly worse. See planning/vit_imagenet.md item 0 for the ViT
+      ViT and slightly worse. See planning/archive/vit_imagenet.md item 0 for the ViT
       half of the story. -/
   cnxInit : Bool := false
   /-- Exponential LR decay (gap B), the EfficientNet/MobileNet schedule: after
@@ -1036,7 +1036,7 @@ structure TrainConfig where
   /-- Clip gradients by global L2 norm before the optimizer step. 0 = off.
       DeiT default 1.0 — essential for stable ViT-from-scratch training: it
       lets you use the proper ~1e-3 LR without the collapse-to-chance seen at
-      higher LR with no clipping. See planning/vit_imagenet.md. -/
+      higher LR with no clipping. See planning/archive/vit_imagenet.md. -/
   gradClipNorm : Float := 0.0
   /-- Per-group LR multiplier for the (from-scratch) dense head, relative to
       the base LR used by the pretrained conv backbone. 1.0 = uniform LR. Used
@@ -1057,7 +1057,7 @@ inductive DatasetKind where
       2×2 mosaics). Images are 224×224×3 (resized at preprocess time,
       ImageNet-normalized on Lean read). Labels carry the YOLOv1 target tensor +
       per-cell mask concatenated as 6076 bytes/image. See
-      `planning/yolo_final.md` and `preprocess_pets_mosaic.py` for the on-disk
+      `planning/archive/yolo_final.md` and `preprocess_pets_mosaic.py` for the on-disk
       format. Only valid with `lossKind := .yolov1Masked` (or `useYolov1 := true`). -/
   | petsDet
   /-- Brain-tumour segmentation on the Medical Segmentation Decathlon
@@ -1067,7 +1067,7 @@ inductive DatasetKind where
       uint8 per-pixel classes (0=background, 1=edema, 2=non-enhancing tumour,
       3=enhancing tumour). Segmentation kind: `labelBytesPerRecord = 240*240`
       selects `.perPixelCE` automatically. See `preprocess_brats.py` for the
-      on-disk format and `planning/brats_demo.md` for the demo plan. -/
+      on-disk format and `planning/archive/brats_demo.md` for the demo plan. -/
   | brats
   /-- The same BraTS data at 224×224, produced by
       `preprocess_brats.py --size 224` (a **center crop**, not a resize — see
@@ -1107,7 +1107,7 @@ def ireeCompileArgs (mlirPath outPath : String) : IO (Array String) := do
   else #[]
   -- IREE_EXTRA_FLAGS: space-split extra iree-compile args from the env, appended
   -- last (they win). Probe affordance for rebuild-free flag sweeps — see
-  -- planning/iree_trainstep_memory_scaling.md (2026-07-08 A100 session).
+  -- planning/archive/iree_trainstep_memory_scaling.md (2026-07-08 A100 session).
   let userArgs ← (IO.getEnv "IREE_EXTRA_FLAGS").map fun s =>
     ((s.getD "").splitOn " ").filter (· ≠ "") |>.toArray
   return baseArgs ++ chipArgs ++ extraArgs ++ userArgs ++ #["-o", outPath]

@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
 -- He et al.'s 3×3/s2 stem pool, for `floatClose_maxPool3s2` below. It imports only
 -- `Architectures.CNN`, which this file already has transitively (it uses `maxPoolFlat_abs_le`),
--- so this adds no cycle. `planning/rsb_a3_r50_verified.md` §4b.
+-- so this adds no cycle. `planning/archive/rsb_a3_r50_verified.md` §4b.
 import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-!
@@ -144,7 +144,7 @@ theorem floatClose_maxPool {c h w : Nat} (A : ℝ) :
     identical in shape: a max is EXACT (it selects an existing cell, so the modulus is `id` and the
     magnitude is unchanged) whatever the window size. The overlap that makes the *backward*
     accumulate is invisible here, because the forward at one output still reads one cell.
-    `planning/rsb_a3_r50_verified.md` §4b. -/
+    `planning/archive/rsb_a3_r50_verified.md` §4b. -/
 theorem floatClose_maxPool3s2 {c h w : Nat} (A : ℝ) :
     FloatClose A A (maxPool3s2Flat c h w) (maxPool3s2Flat c h w) (fun e => e) :=
   ⟨fun _v hv i => ⟨maxPool3s2Flat_abs_le hv i, maxPool3s2Flat_abs_le hv i⟩,
