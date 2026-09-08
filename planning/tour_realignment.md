@@ -41,7 +41,7 @@ on, and §7 reconciles them. Times are XLA wall-clocks on the box the source nam
 | Ch. 1–3 | `lake run mnist` | `mnist-linear-verified`, `mnist-mlp-verified`, `mnist-cnn-verified` | MNIST | ~1 min | CNN 99.50% (`RESULTS.md`) |
 | Ch. 4 | `lake run cifar` | `cifar8w-ablation`, `cifar8w-bn-ablation` (SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr) | CIFAR-10 | ~19 min | no-BN 68.8 · 72.2 · 72.8, BN 74.5 · **76.3** · 74.3 (SGD · momentum · AdamW — Chapter 4's Lever-2 table, medians of five seeds from `runs/2026-09-01-cifar8w-6arm-constlr/`); ⚠ `RESULTS.md`'s 83.50% is a different net (§7 e) |
 | Ch. 5–9 | `lake run imagenette` | `resnet34-`, `resnet50-`, `mobilenetv2-`, `mobilenetv4-`, `efficientnet-`, `convnext-`, `vit-verified-adam`, in book order | Imagenette | ~7 h for the five chapter nets, plus ~1 h 50 min for r50 (75 min) and mnv4 (35 min), one 4060 Ti per run | R34 89.50 · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 (the chapters' single runs; R50 and MNv4 are medians of five seeds from `runs/2026-08-31-imagenette-n3/`, §1); ⚠ R34 is also 89.71 elsewhere in the book (§7 d) |
-| ImageNet-1k | `lake run imagenet` ⚠ does not exist yet (§2) | the book's Track 4 rows: `resnet34-`, `resnet50-` (two recipes), `mobilenetv2-`, `efficientnet-`, `convnext-`, `vit-imagenet-verified`; four more exes exist (`mobilenetv4-`, `convnext-s-`, `convnext-b-`, `vit-s-`, `vit-b-`) | ImageNet-1k | days, 4× 4060 Ti; per-job in `scripts/jobs/` and `runs/` | R34 74.16 · R50-A3 78.26 · MNv2 71.90 · MNv4-Conv-M 75.48 · B0 77.15 · ConvNeXt-T 81.53 · ViT-Tiny 72.31 |
+| ImageNet-1k | `lake run imagenet` (plan-only bare, `start` runs) and one `lake run <job>` per row | twelve rows in chapter order: the book's seven Track-4 (net, recipe) pairs — `r34-default-4gpu`, `r50-2018-bf16-4gpu`, `r50-a3-wxclip-4gpu`, `mnv2-`, `enet-`, `cnx-`, `vit-default-4gpu` — and the five side quests with job configs (`mnv4-`, `cnxs-`, `cnxb-`, `vits-`, `vitb-`) | ImageNet-1k | weeks, 4× 4060 Ti, strictly sequential; each row prints the wall-clock on file (`ETA` in its conf) | R34 74.16 · R50-A3 78.26 · MNv2 71.90 · MNv4-Conv-M 75.48 · B0 77.15 · ConvNeXt-T 81.53 · ViT-Tiny 72.31 |
 | demo: segmentation | `lake exe unet-brats-r34` → `brats-predict` | BraTS, R34 encoder + UNet | ~hours, 2 GPUs | mIoU 0.742 (`demos/README.md`) |
 | demo: detection | `lake exe yolov1-visdrone-fpn` | VisDrone, R34+FPN at 448 | ~2 h | mAP@0.5 0.2363 (`demos/README.md`); ⚠ `RESULTS.md`'s table stops at 0.1961 |
 | demo: diffusion | `lake exe mnist-ddpm-train` → `mnist-ddpm-sample` | MNIST | 50 epochs | the sample grid (no scalar) |
@@ -87,14 +87,50 @@ README quotes them — a note, not yet scheduled; which stops, how many seeds an
 
 ## 2. `lake run imagenet`
 
-The fourth tier does not exist as a command; the book's Track 4 lists its rows as separate `lake
-exe` targets. Add `script imagenet` beside the other three in `lakefile.lean`, driving the seven
-Track-4 rows through `runDemoGroup` in chapter order, so the README's tour is four symmetric
-lines. ⚠ Unlike the other tiers this one is days of 4-GPU time and the box has crashed under it —
-the script should print the plan and the per-job estimate first and require a confirmation flag
-(the `benchmark` script already knows how to estimate), never start on a bare invocation. Decide
-whether the S/B sizes and MNv4 ride in the tier (they are side quests in the book's sense) or
-stay `lake exe` only. Gates: `lake build`, the coverage script, the book's Track 4 text (§8).
+**Done 2026-09-08.** The tier is `script imagenet` in `lakefile.lean`, and it does not go
+through `runDemoGroup`: an ImageNet row is a *job* (`scripts/jobs/<job>.conf` — device list,
+both replica knobs, variant, per-replica batch, feed setting) run by `scripts/supervise.sh`
+(checkpoint resume, AER / thermal / stall restarts), so the tier composes the supervisor. What
+landed:
+
+* **One `lake run <job>` per row**, the job's own name as the command — `lake run
+  r34-default-4gpu` replaces the seven-variable incantation the book printed. Modes: bare =
+  supervised run; `plan` = `DRY_RUN=1` (name check, PRECHECK, the wall-clock on file, no launch);
+  `once` = a new `ONCE=1` in the supervisor, one foreground run with the job's env and no restart
+  policy, for probes. The rows and their exes are one table, `imagenetRows`.
+* **`lake run imagenet`** walks the twelve rows in chapter order (§9 item 4 settled: the seven
+  Track-4 pairs plus the five side quests with job configs, each after its chapter; the axis
+  siblings stay supervisor-only). ⚠ Bare it only plans — every row's precheck and estimate,
+  nothing launched; `start` is the confirmation, `start cnx vit` a subset. A completed row exits 0
+  at once, so re-invoking resumes. Rows are sequential by construction (every conf claims all
+  four cards).
+* **The estimate, v1:** each conf carries `ETA="…"`, the number already on file and the box it
+  was measured on (`~37 h on 4x 4060 Ti (386 ms/step resident, 90 ep)`), printed by the
+  supervisor's plan line. Nothing is computed or summed; the `benchmark` machinery knows only
+  chapters 1–9. ⚠ ViT-Tiny's f32 figure on file (665 ms/step, ~139 h) is marked STALE in its
+  own conf; the bf16 twin reads ~32 h and f32 was never re-probed.
+* **The box lost two cards the same day.** The two PCIe-AER cards (old idx 1 and 5) were pulled;
+  `nvidia-smi` shows four 4060 Ti at 0–3 and zero AER lines this boot. Every live device list
+  moved from `0,2,3,4` to `0,1,2,3`: 13 job confs, `supervise.sh`'s note, `seed_sweep.sh`
+  (default GPUs, timings), `bf16_probe_4gpu.sh`, `queue_r50_a3_pair.sh`, `tests/prefetch_tie.sh`,
+  21 `jax/scripts/supervise_*.sh`, `CUDA.md`, `jax/README.md`, three trainer docstrings and the
+  shard-tie test's. The AER watchdogs stay as insurance. ⚠ Bus 62 is still in the box and the
+  old notes named bus 02 + bus 62 as the bad pair — worth knowing which two came out. The
+  `*_6gpu.sh` JAX supervisors (`DEVS=0,1,2,3,4,5`) cannot run on this box any more and were
+  left as they are.
+* **Drift found, §7 (h):** the book's Track-4 table names `r50-2018-bf16-4gpu` as the job behind
+  the ResNet-50 2018 row, but that conf is the 4× 3060 box's (cuda13 plugin, `DEVS=0,1,2,3` all
+  along); on this box its PRECHECK refuses, which the tier's plan shows honestly.
+
+Book edits (the §8 ones this item owns): Chapter 5's "It runs with" block is `lake run
+r34-default-4gpu`; Track 4's "Running one for a day and a half" lists the five commands and
+names the tier; the side-quest paragraph says they ride in the tier; "How this book is organized"
+names the four tiers as the runnable spine. Gates: `lake build`, the coverage script,
+`blueprint-checkdecls`, `docstring-checkrefs`, a `0,2,3,4` residue grep (only history remains),
+`lake run imagenet` itself as the functional test: **10 of 12 rows ready**, refused
+`r34-default-4gpu` (its own mtime rule — the Aug-30 binary is older than the render regenerated
+today; a `run` rebuilds the exe first and clears it) and `r50-2018-bf16-4gpu` (§7 h: the other
+box's plugin path and `SHIM_PYTHON`).
 
 ## 3. `README.md` becomes the front door
 
@@ -192,6 +228,10 @@ else by pointer:
   one Chapter 4 wants (cosine enters with ResNet in Chapter 5); the cite, the PJRT version, one
   compile time and the elision range now match that log, every epoch line already did.
   `scripts/seed_sweep.sh`'s header said the same stale things and was fixed with it;
+* (h) **The book's Track-4 table cites a conf from the other box.** `r50-2018-bf16-4gpu` is the
+  4× 3060 box's config (cuda13 plugin) and the row's 76.95% is quoted as 4× 4060 Ti; either the
+  ares run's conf is missing from `scripts/jobs/` or the table's job column is wrong for that row.
+  Found by §2's plan run;
 * (g) **Done 2026-09-08.** `apps/ablation/MainCifar8WideAblation.lean`'s docstring said
   "cosine-warmup" for code that has run a constant lr since `1682bef5`; it now says so, like its BN
   twin. ⚠ One residue is left for §6, where the lakefile gate runs anyway: `script cifar-iree`'s
@@ -211,7 +251,9 @@ Gate: `blueprint-checkdecls`.
 2. `mnist-lean4/` and `mlir_poc/`: move to `historical/`, or delete (the book's introduction and
    `historical/*.md` already tell the story; `git log` keeps the code).
 3. Which ablation exes `apps/baselines/` absorbs, and where the `cifar` tier's two exes live.
-4. Whether the `imagenet` tier is the book's seven Track-4 rows or all eleven ImageNet exes.
+4. Whether the `imagenet` tier is the book's seven Track-4 rows or all eleven ImageNet exes —
+   settled by §2 (2026-09-08): twelve rows, the seven pairs plus the five side quests with job
+   configs, in chapter order.
 5. The two empty cells in §0 — settled by §1 (2026-09-08), and the form of the number is settled
    too: mean ± 95% CI over seeds (§1's decision).
 6. Re-run the seed sweeps before the README quotes mean ± CI: which stops (Imagenette's seven,

@@ -2296,6 +2296,133 @@ script imagenette do
                 "efficientnet-verified-adam", "convnext-verified-adam",
                 "vit-verified-adam"] (xla := true)
 
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- `lake run imagenet` — the fourth tier — and one `lake run <job>` per ImageNet job.
+--
+-- A job is `scripts/jobs/<job>.conf`: the device list, both replica knobs, the variant, the
+-- per-replica batch and the per-net feed setting all live THERE, and `scripts/supervise.sh` is
+-- the engine that runs it with the restart policy a multi-day run on this box needs. These
+-- scripts add nothing to that. They make the job's own name the command, so the seven-variable
+-- incantation the book used to print is `lake run r34-default-4gpu`.
+--
+-- Modes, the first argument to a job script:
+--   (none)   supervised run — resumes from the job's checkpoint, restarts on AER / heat / stall
+--   plan     DRY_RUN=1: the name check, the job's PRECHECK and the wall-clock on file; no launch
+--   once     ONCE=1: one foreground run with the job's env and no restart policy (probes)
+-- The job's knobs are edited in its conf, never passed here.
+-- ═══════════════════════════════════════════════════════════════════════
+
+/-- The ImageNet tier's rows in chapter order, each chapter's side quest right after it (the
+    `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
+    rows are the ones with chapter numbers; the five side quests have job configs and no number
+    yet. Axis siblings — `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-bf16-4gpu`,
+    `vit-default-emabf16-4gpu`, `selftest` — stay `scripts/supervise.sh`-only.
+    ⚠ `r50-2018-bf16-4gpu` is the 4× 3060 box's conf (cuda13 plugin), named by the book's Track-4
+    table as the job behind its row; on this box its PRECHECK refuses, which is the honest answer. -/
+private def imagenetRows : List (String × String × String) :=
+  [ ("r34-default-4gpu",       "resnet34-imagenet-verified",     "Ch. 5  ResNet-34, the 2018 recipe"),
+    ("r50-2018-bf16-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, 2018"),
+    ("r50-a3-wxclip-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, RSB-A3 (train@160)"),
+    ("mnv2-default-4gpu",      "mobilenetv2-imagenet-verified",  "Ch. 6  MobileNetV2"),
+    ("mnv4-default-4gpu",      "mobilenetv4-imagenet-verified",  "Ch. 6  MobileNetV4-Conv-M (side quest)"),
+    ("enet-default-4gpu",      "efficientnet-imagenet-verified", "Ch. 7  EfficientNet-B0"),
+    ("cnx-default-4gpu",       "convnext-imagenet-verified",     "Ch. 8  ConvNeXt-T"),
+    ("cnxs-default-4gpu",      "convnext-s-imagenet-verified",   "Ch. 8  ConvNeXt-S (side quest)"),
+    ("cnxb-default-4gpu",      "convnext-b-imagenet-verified",   "Ch. 8  ConvNeXt-B (side quest)"),
+    ("vit-default-4gpu",       "vit-imagenet-verified",          "Ch. 9  ViT-Tiny (DeiT-Ti)"),
+    ("vits-default-g512-4gpu", "vit-s-imagenet-verified",        "Ch. 9  ViT-S at DeiT's global 512 (side quest)"),
+    ("vitb-default-g512-4gpu", "vit-b-imagenet-verified",        "Ch. 9  ViT-B at DeiT's global 512 (side quest)") ]
+
+/-- One job in one mode. `plan` skips the build and says whether the binary exists; the other
+    two build the exe first (the `runDemoGroup` convention) and then hand the job to the engine,
+    which owns everything else — devices, env, checkpoint resume, restart policy. -/
+private def runJob (job exe mode : String) : IO UInt32 := do
+  let bin : System.FilePath := ".lake" / "build" / "bin" / exe
+  if mode == "plan" then
+    IO.println (if ← bin.pathExists then s!"  ✓ {bin}" else s!"  ▸ {bin} not built yet — a run builds it")
+  else
+    IO.println s!"━━━ {job}: build {exe} ━━━"
+    let bp ← IO.Process.spawn { cmd := "lake", args := #["build", exe] }
+    if (← bp.wait) != 0 then
+      IO.eprintln s!"build failed: {exe}"
+      return 1
+  let env : Array (String × Option String) :=
+    if mode == "plan" then #[("DRY_RUN", some "1")]
+    else if mode == "once" then #[("ONCE", some "1")]
+    else #[]
+  IO.println s!"━━━ {job}: scripts/supervise.sh {job}{if mode == "run" then "" else s!"  ({mode})"} ━━━"
+  let p ← IO.Process.spawn { cmd := "scripts/supervise.sh", args := #[job], env := env }
+  pure (← p.wait)
+
+/-- The body of every per-job script: parse the mode, check the shim once, run the row. -/
+private def runJobScript (job : String) (args : List String) : IO UInt32 := do
+  let mode := args.head?.getD "run"
+  if !["run", "plan", "once"].contains mode then
+    IO.eprintln s!"unknown mode `{mode}` — one of: (none) | plan | once"
+    return 1
+  match imagenetRows.find? (·.1 == job) with
+  | none => IO.eprintln s!"{job} is not an imagenetRows entry"; return 1
+  | some (_, exe, row) =>
+    IO.println s!"━━━ {row} ━━━"
+    if mode != "plan" then
+      IO.println "━━━ XLA/PJRT backend ━━━"
+      if !(← ensurePjrtShim) then return 1
+    runJob job exe mode
+
+script «r34-default-4gpu»       (args) do runJobScript "r34-default-4gpu" args
+script «r50-2018-bf16-4gpu»     (args) do runJobScript "r50-2018-bf16-4gpu" args
+script «r50-a3-wxclip-4gpu»     (args) do runJobScript "r50-a3-wxclip-4gpu" args
+script «mnv2-default-4gpu»      (args) do runJobScript "mnv2-default-4gpu" args
+script «mnv4-default-4gpu»      (args) do runJobScript "mnv4-default-4gpu" args
+script «enet-default-4gpu»      (args) do runJobScript "enet-default-4gpu" args
+script «cnx-default-4gpu»       (args) do runJobScript "cnx-default-4gpu" args
+script «cnxs-default-4gpu»      (args) do runJobScript "cnxs-default-4gpu" args
+script «cnxb-default-4gpu»      (args) do runJobScript "cnxb-default-4gpu" args
+script «vit-default-4gpu»       (args) do runJobScript "vit-default-4gpu" args
+script «vits-default-g512-4gpu» (args) do runJobScript "vits-default-g512-4gpu" args
+script «vitb-default-g512-4gpu» (args) do runJobScript "vitb-default-g512-4gpu" args
+
+/-- `lake run imagenet` — the fourth tier: the twelve ImageNet rows, in chapter order.
+
+    ⚠ PLAN-ONLY unless the first argument is `start`. Bare, it runs every row's `plan` — the name
+    check, the PRECHECK, the wall-clock on file — and launches nothing, because the tier is weeks
+    of four-card time and this box has crashed under it. `lake run imagenet start` runs the rows
+    through `scripts/supervise.sh` in order and stops at the first failure; a row whose checkpoint
+    is complete exits 0 at once, so re-invoking resumes where it left off. `lake run imagenet
+    start cnx vit` (job-name prefixes) runs a subset. Rows are sequential by construction: every
+    job claims all four cards. -/
+script imagenet (args) do
+  let (go, only) := match args with
+    | "start" :: rest => (true, rest)
+    | rest            => (false, rest)
+  let rows := imagenetRows.filter fun (j, _, _) => only.isEmpty || only.any (j.startsWith ·)
+  if rows.isEmpty then
+    IO.eprintln s!"no ImageNet row matches {only}"
+    return 1
+  IO.println s!"━━━ lake run imagenet: {rows.length} row(s) in chapter order — plan first ━━━"
+  let mut refused : List String := []
+  for (j, exe, row) in rows do
+    IO.println s!"\n▸ {row}"
+    if (← runJob j exe "plan") != 0 then refused := refused ++ [j]
+  IO.println s!"\n━━━ plan: {rows.length - refused.length} of {rows.length} row(s) ready\
+              {if refused.isEmpty then "" else s!" — refused: {refused}"} ━━━"
+  if !go then
+    IO.println "plan only, nothing launched. `lake run imagenet start [job-prefix …]` runs these rows in\n\
+                order through scripts/supervise.sh, each resuming from its own checkpoint."
+    return (if refused.isEmpty then 0 else 1)
+  if !refused.isEmpty then
+    IO.eprintln "⛔ not starting: fix the refused rows first, or name a subset that excludes them"
+    return 1
+  IO.println "━━━ XLA/PJRT backend ━━━"
+  if !(← ensurePjrtShim) then return 1
+  for (j, exe, row) in rows do
+    IO.println s!"\n▸ {row}"
+    if (← runJob j exe "run") != 0 then
+      IO.eprintln s!"⛔ {j} did not complete — the tier stops here; re-run to resume"
+      return 1
+  return 0
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- `lake run download` — fetch the core datasets the verified trainers + the
 -- benchmark need. Each entry pairs a download script with a sentinel file that

@@ -8,10 +8,16 @@
 #
 #     scripts/supervise.sh <job>            # scripts/jobs/<job>.conf
 #     DRY_RUN=1 scripts/supervise.sh <job>  # print the plan and exit, run nothing
+#     ONCE=1 scripts/supervise.sh <job>     # one foreground run with the job's env, no restarts
+#
+# `lake run <job>` (and `lake run <job> plan|once`) is the same thing from the lakefile, and
+# `lake run imagenet` walks the whole tier — see the ImageNet section of lakefile.lean.
 #
 # WHY A SUPERVISOR AT ALL, on this box specifically:
-#   * PCIe AER. ares logs BadTLP-under-load; one 80-epoch ViT run took 5 hits. A run
-#     without a watchdog dies on the first one, hours in, silently.
+#   * PCIe AER. ares logged BadTLP-under-load on two of its six cards; one 80-epoch ViT run
+#     took 5 hits, and a run without a watchdog dies on the first one, hours in, silently.
+#     Those two cards were pulled 2026-09-08 (the box is 4x 4060 Ti, DEVS=0,1,2,3 everywhere);
+#     the watchdog stays as insurance.
 #   * Heat. The box runs hot without fans, so long runs need a duty cycle.
 #   * Neither is a correctness problem, so neither belongs in the trainer.
 #
@@ -35,6 +41,9 @@
 #   STALL_SECS   — kill+restart if the log is silent this long (default 1800, 0 = off)
 #   MAX_ATTEMPTS — default 60
 #   PRECHECK     — a function; non-zero exit aborts before the first launch
+#   ETA          — free text: the wall-clock on file for this job and the box it was measured
+#                  on. Printed in the plan, never computed — v1 reports what the conf's own
+#                  header measured, so `lake run imagenet` can say what it is about to cost.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -142,7 +151,16 @@ fi
 say "START job=$JOB devs=$DEVS epochs=$EPOCHS rest_after=[${REST_EPOCHS:-none}] \
 temp_max=${TEMP_MAX:-off} stall=${STALL_SECS}s logs=$RUNDIR"
 say "cmd: ${CMD[*]}"
+say "eta: ${ETA:-not on file}"
 if [ "${DRY_RUN:-0}" != "0" ]; then say "DRY_RUN — nothing launched"; exit 0; fi
+
+# ONCE: the job's env and command, once, in the foreground — the incantation the book used to
+# print, minus the typing. No attempts loop, no AER/thermal/stall policy, no log tee; Ctrl-C ends
+# it, and the trainer still writes its checkpoint each epoch. For probes and single epochs.
+if [ "${ONCE:-0}" != "0" ]; then
+  say "ONCE — one foreground run, no restart policy"
+  exec env CUDA_VISIBLE_DEVICES="$DEVS" "${ENV_EXTRA[@]}" "${CMD[@]}"
+fi
 
 # Take the run down with us. `setsid` gives the run its own SESSION, which is what makes
 # the process-group kill precise — but it also means the run does NOT die when this script

@@ -312,6 +312,10 @@ Let's find out.
 chapter, proved correct as we go. The first half pins down the
 composition rules (chain, additive fan-in, product) on dense layers,
 convolution, and normalization. The second half climbs the ladder to ViT.
+The chapters are also the book's runnable spine: \texttt{lake run mnist},
+\texttt{lake run cifar}, \texttt{lake run imagenette} and \texttt{lake run
+imagenet} train them in this order, one tier per scale, and ``Getting
+started'' is where those commands live.
 
 \begin{itemize}
   \item \textbf{Chapter 1: MNIST: linear classifier.} Chain rule, sum
@@ -5493,11 +5497,14 @@ makes the two a matched pair rather than two separate stories.
 \medskip\noindent It runs with:
 
 \begin{verbatim}
-CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
-  SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
-  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 \
-  .lake/build/bin/resnet34-imagenet-verified data
+lake run r34-default-4gpu
 \end{verbatim}
+
+\noindent The job config behind that name,
+\texttt{scripts/jobs/r34-default-4gpu.conf}, carries what used to be a
+seven-variable command line --- the device list, both replica knobs, the
+variant, the per-replica batch and the feed setting --- and
+\S\ref{sec:getting_started_track4} says what the supervisor behind it does.
 
 \begin{center}
 \begin{tabular}{l l r r r r r}
@@ -14147,13 +14154,21 @@ render rather than a wrong knob.
 
 \prosesection{Running one for a day and a half}
 
-These are multi-day runs, so they go through a supervisor that owns the device
-list, the epoch budget and the restart policy:
+These are multi-day runs, so they go through a supervisor
+(\texttt{scripts/supervise.sh}) that owns the device list, the epoch budget and
+the restart policy, and the job's own name is the command:
 
 \begin{verbatim}
-scripts/supervise.sh r34-default-4gpu
-DRY_RUN=1 scripts/supervise.sh r34-default-4gpu   # print the plan, run nothing
+lake run r34-default-4gpu        # supervised: resumes, restarts on AER / heat / stall
+lake run r34-default-4gpu plan   # the precheck and the wall-clock on file; runs nothing
+lake run r34-default-4gpu once   # one foreground run with the job's env, no restarts
+lake run imagenet                # every row's plan, in chapter order; runs nothing
+lake run imagenet start          # the rows in order, each resuming from its checkpoint
 \end{verbatim}
+
+\noindent \texttt{lake run imagenet} is the tier itself, the fourth of the four.
+Bare, it only plans, because its twelve rows --- the table above and the side
+quests below --- are weeks of four-card time; \texttt{start} is the confirmation.
 
 Data parallelism needs both replica knobs, and setting only one fails with a
 confusing ``compiled for N replicas'' error. \texttt{PJRT\_REPLICAS} configures
@@ -14169,8 +14184,9 @@ and the section heading says which of three kinds it is: a second recipe, a
 wider or deeper size, or an architecture the book reaches for once. They are
 collected here rather than in the table above because \emph{none of them has
 been trained} --- not because they cannot start. Five of the seven have job
-configs and launch like any Track-4 row; only the two ResNet-50 recipes have
-none. The status column says what each one is missing.
+configs, launch like any Track-4 row and ride in \texttt{lake run imagenet}
+right after their chapter's row; only the two ResNet-50 recipes have none. The
+status column says what each one is missing.
 
 \begin{center}
 \small
