@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the MobileNetV2 inverted-residual body backward targets the CERTIFIED VJP
 
-The A3 backward float bridge `invresBodyBackPC` (`MobileNetV2BackFloatBridge.lean`) proves
+`invresBodyBackPC` (`MobileNetBackChains.lean`; until 2026-09-08 a float bridge that also budgeted it) proves
 **deployed-float ≈ a hand-assembled reverse-mode transcription** of the inverted-residual body. This
 file closes §B for that body: the transcription IS the certified input-gradient VJP, in the SAME
 **non-batched per-channel-BN** vocabulary the deployed net renders (`invresBodyPC`, `MobileNetV2RenderPC`).

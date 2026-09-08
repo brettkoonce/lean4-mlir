@@ -101,7 +101,7 @@ theorem cnxBlockBack_eq_convNextBlock_vjp {c cExp h w kHd kWd : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-! The two ties above pin the block body's ABSTRACT `lnB` slot to a certified backward, which is
-why they never had to look inside a LayerNorm. `chanLNTensor3Back` (`ChannelLNFloatBridge.lean`)
+why they never had to look inside a LayerNorm. `chanLNTensor3Back` (`ChannelLNBack.lean`)
 is not abstract — it is a concrete five-factor chain, written so `floatBridges_chanLNTensor3Back`
 can run `floatClose_bnBack` in its middle. So it owes the tie the block ties did not: that the
 chain IS `chanLNTensor3_has_vjp`'s backward. That is what this section proves.
@@ -195,7 +195,7 @@ noncomputable def chanLNTensor3_vjp_chain (c h w : Nat) (ε : ℝ) (γ β : Vec 
     the hand-composed reverse chain `floatBridges_chanLNTensor3Back` bridges — equals
     `(chanLNTensor3_has_vjp …).backward` at every saved input and cotangent. So the float bridge's
     closeness is closeness to **the certified gradient**, and the ⚠ in
-    `ChannelLNFloatBridge.lean`'s docstring is discharged.
+    `ChannelLNBack.lean`'s docstring is discharged.
 
     Proof: compute the term-mode chain's backward by rewriting its five factors (two reassoc
     collapses, two transposes by `rfl`, the row map through `bn_grad_input`), then transfer to the

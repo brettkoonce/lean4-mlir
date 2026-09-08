@@ -22,8 +22,7 @@ forward uses. The two op bridges needed:
 Capstone `mlpInputGrad_floatBridges`: the whole 3-layer MLP input-gradient VJP
 `Wᵀ₀·(mask₁ ⊙ Wᵀ₁·(mask₂ ⊙ Wᵀ₂·dy))` float-bridges — "the deployed float backward map is
 within an explicit budget of the certified real backward map." The backward peer of
-`cifar8_floatBridges`, assembled in one `.comp` chain. Pair with the BatchNorm backward
-(`BnBackFloatBridge`) for the BN nets.
+`cifar8_floatBridges`, assembled in one `.comp` chain.
 ⚠ Since 2026-09-08 the ℝ maps themselves (`reluMaskBack`, `diagBack`) are defined in
 `Foundation/BackwardMaps.lean`, beside the other per-op backward maps the certified ties are
 stated about; this file is their float side only (`planning/float_second_pass.md`).

@@ -12,7 +12,7 @@ there, so the whole-net fold in `ViTWholeBackCertifiedTie.lean` is about the blo
 contains. It is package 3.1's move for ConvNeXt-T, one architecture over.
 
 ⭐ **There is no new analysis, and the reason is that ConvNeXt already built ViT's LayerNorm
-backward.** `rowLNVecFlatBack` (`ChannelLNFloatBridge.lean`) is `perRowIdxFlat` of
+backward.** `rowLNVecFlatBack` (`ChannelLNBack.lean`) is `perRowIdxFlat` of
 `bn_grad_input c ε 1 (X r) ∘ diagBack γ` — the γ scale in front of the unit-γ input gradient at
 each row's own saved activation — and its own header says it is *"literally ViT's per-token LN
 with 'token' read as 'spatial position'"*. `rowLNVecFlat_has_vjp_backward_eq` already pins it to

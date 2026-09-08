@@ -1,8 +1,9 @@
 # The float tier, second pass — the ℝ chains out of `Float/`, the float twins deleted
 
-**Temp handoff, opened 2026-09-08 at the end of the cleanup session that landed step 1
-(`0de261e`, branch `cleanup/2026-09-08-unify-and-float-chop`). ▶ START at §2 — it is the
-inventory this pass exists to act on, computed from the import graph, not guessed.**
+**Opened 2026-09-08 at the end of the cleanup session that landed step 1 (`0de261e`, branch
+`cleanup/2026-09-08-unify-and-float-chop`); ✅ COMPLETED the same day in seven commits — see §2b for
+what each step did and where it deviated from §3. §2 is the inventory it acted on, computed from the
+import graph, not guessed.**
 
 ## 0. What step 1 did, and what it left
 
@@ -147,7 +148,20 @@ float side unless the model core needs them.
   fold only the float story used — `vitTowerBackK` is its own recursion), `vitGradFlat` (the pre-vector-LN
   skeleton) and everything in `SoftmaxBackFloatBridge` / `PatchEmbedBackFloatBridge` (the ties denote
   softmax and patch-embed straight from `Attention.lean`'s VJPs).
-* **All six moves are done; only step 7 (the deletions) is open.**
+* **Step 7 DONE 2026-09-08 — the deletions.** Dead-by-closure, computed from the import graph with
+  the lakefile roots and the audit's imports set aside: 31 `Float/` files, `Codegen/BnBackComposeBridge`,
+  and the three saturation files (`Certificates/GeluLipschitz`, `Architectures/GeluSaturation`,
+  `Architectures/SwishSaturation` — their only consumers were the budgets; git has them). Also
+  `scripts/respell_mnv2_xla.py` (a one-off that named itself deletable). `Float/` is 13 files, 5.6k lines:
+  the model core plus the r34 forward chain the bf16-mixed compose bridge builds on —
+  `FloatComposeBridge` (its `floatClose_r34_stages` / `floatClose_bn` / … are what
+  `ConvMixedComposeBridge` composes) and, through it, `Resnet34FloatBridge`, `BnFloatBridge`,
+  `Codegen/Resnet34BlockBridge`, `Codegen/BnInputBridge`; and `LinBackFloatBridge` for
+  `MlpCanonical`'s tier-1 MNIST backward. Audit 2007 → 1758 prints (161 by name, 88 more the checker
+  found under bare / `Maps.` spellings), lakefile −177 lines of roots and their comments, yaml 4d and
+  the book's "Finite precision" sentence rewritten, the docstring gate green.
+* **THE PASS IS COMPLETE.** Remaining prose that names a deleted file is historical narrative inside
+  `tests/AuditAxioms.lean` comment blocks that also describe live theorems, and `planning/`.
 * **Bucket three, checked at step 1:** no kept non-test file uses any ℝ name from `SEBackFloatBridge`,
   `SoftmaxBackFloatBridge`, `PatchEmbedBackFloatBridge`, the five `Bn*FloatBridge` or
   `Resnet34WholeFloatBridge` — `seBack*`, `softmaxRowBack*`, `patchEmbedBack*` are consumed only by the

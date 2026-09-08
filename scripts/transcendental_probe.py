@@ -5,8 +5,12 @@ against REAL ROCm silicon (gfx1100), via IREE — the deployed-kernel path.
 The float bridge supplies, as hypotheses, the per-coordinate accuracy of the
 GPU's transcendental activations:
 
-    sigmoid:  |fsig t  - sigmoidScalar t| ≤ esig           (EnetFloatBridge.sigmoid_close)
-    gelu   :  |fgelu t - geluScalar  t| ≤ egelu            (ViTFloatBridge.gelu_close)
+    sigmoid:  |fsig t  - sigmoidScalar t| ≤ esig
+    gelu   :  |fgelu t - geluScalar  t| ≤ egelu
+
+(the Lean hypotheses that carried these, `EnetFloatBridge.sigmoid_close` and
+`ViTFloatBridge.gelu_close`, went with the float budgets on 2026-09-08; the
+measurement stands on its own)
 
 where `sigmoidScalar t = 1/(1+e^-t)` and `geluScalar t = ½t(1 + tanh(√(2/π)(t+0.044715 t³)))`.
 `eexp` was pinned at ~1–2 ULP by `margin_probe.py` (f32/f64 twin) and `ers` (rsqrt) by

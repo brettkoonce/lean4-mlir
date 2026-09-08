@@ -14832,9 +14832,9 @@ part --- as is keeping the layer's \emph{generality} apart from its
 \emph{usefulness}, which \S~\ref{par:precision_reach} below returns to.
 The \emph{closeness} half
 (\(|\,\text{float op} - \text{real op}\,| \le\) budget) is
-architecture-complete: \texttt{FloatBridge.lean} and the per-net
-\texttt{*FloatBridge} files budget every operator of every network, forward
-and backward, from the MNIST linear classifier to ViT-Tiny. The
+per-operator: \texttt{FloatBridge.lean} budgets every operator the
+networks are built from, and the certified backward ties say each net's
+hand-written gradient chain is the certified one. The
 \emph{descent} half (a rounded step provably \emph{decreases the loss})
 closes only for the shallow nets
 (\texttt{SgdDescent\{Linear,Mlp,Cnn,Cifar\}.lean}). The way the chain avoids

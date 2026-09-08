@@ -76,18 +76,10 @@ import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
 import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
-import LeanMlir.Proofs.Certificates.GeluLipschitz
-import LeanMlir.Proofs.Float.EnetFloatBridge
 import LeanMlir.Proofs.Float.DepthwiseFloatBridge
-import LeanMlir.Proofs.Float.ViTFloatBridge
-import LeanMlir.Proofs.Float.ViTAttentionFloatBridge
-import LeanMlir.Proofs.Float.ViTBlockFloatBridge
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 import LeanMlir.Proofs.Architectures.MobileNetV2FullPaperEval
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
-import LeanMlir.Proofs.Float.BnXhatFloatBridge
-import LeanMlir.Proofs.Float.FloatBudgetEnvBack
-import LeanMlir.Proofs.Float.BnBatchFloatBridge
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Architectures.ResNet34FullB
 import LeanMlir.Proofs.Architectures.ResNet34FullBVJP
@@ -113,8 +105,6 @@ import LeanMlir.Proofs.Architectures.ResNet50FullBVJP
 import LeanMlir.Proofs.Foundation.ResNet50TiePoCB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.ResNet34TiePoCB
-import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
-import LeanMlir.Proofs.Float.BnBackFloatBridge
 import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Foundation.ResNetBackChains
@@ -123,15 +113,6 @@ import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 import LeanMlir.Proofs.Foundation.ConvNeXtBackChains
 import LeanMlir.Proofs.Foundation.ViTBackChains
 import LeanMlir.Proofs.Float.LinBackFloatBridge
-import LeanMlir.Proofs.Float.CnnBackFloatBridge
-import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
-import LeanMlir.Proofs.Codegen.BnBackComposeBridge
-import LeanMlir.Proofs.Float.BnPerChannelBackFloatBridge
-import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
-import LeanMlir.Proofs.Float.StridedConvBackFloatBridge
-import LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge
-import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
-import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie
@@ -148,17 +129,6 @@ import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie
 import LeanMlir.Proofs.Architectures.EfficientNetBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ViTMhsaBackCertifiedTie
-import LeanMlir.Proofs.Float.DepthwiseBackFloatBridge
-import LeanMlir.Proofs.Float.SEBackFloatBridge
-import LeanMlir.Proofs.Float.MobileNetV2BackFloatBridge
-import LeanMlir.Proofs.Float.EfficientNetBackFloatBridge
-import LeanMlir.Proofs.Float.EfficientNetWholeBackFloatBridge
-import LeanMlir.Proofs.Float.EfficientNetFullWholeBackFloatBridge
-import LeanMlir.Proofs.Float.ConvNeXtBackFloatBridge
-import LeanMlir.Proofs.Float.SoftmaxBackFloatBridge
-import LeanMlir.Proofs.Float.SdpaBackFloatBridge
-import LeanMlir.Proofs.Float.MhsaBackFloatBridge
-import LeanMlir.Proofs.Float.PatchEmbedBackFloatBridge
 import LeanMlir.Proofs.Training.SgdDescentMlp
 import LeanMlir.Proofs.Codegen.AdamStep
 import LeanMlir.Proofs.Codegen.AdamRender
@@ -1672,31 +1642,6 @@ open Proofs
 #print axioms floatClose_relu
 #print axioms floatClose_flatConv
 #print axioms floatClose_reluConv
--- Depth-LINEAR composition (AdjointChainBridge.lean): the telescoping/hybrid
--- alternative to the .comp interval fold, proven ONCE by induction on the layer
--- list — |chainF x − chainR x| ≤ Σᵢ Hᵢ·bᵢ with bᵢ the per-layer FRESH budget
--- (the FloatClose modulus at e=0) and Hᵢ a windowed Lipschitz gain of the REAL
--- tail after layer i. Exact (no linearization); the Hᵢ are ordinary hypotheses,
--- dischargeable by worst-case suffix products (tailGains_suffixProd — recovers
--- the old interval bound, so this SUBSUMES the .comp fold) or supplied from the
--- measured adjoint/VJP tail gains (the esig/egelu-style MEASURED tier; the
--- interval fold is ~10⁴⁰× loose at depth 24 on gfx1100, the measured-gain chain
--- budget is depth-linear). Gain instances: dense = fan-in row sum m·w', relu = 1,
--- softmax = (e^{4A}−1)/(2A) — the nonlinear e^{2δ}−1 modulus IS linear on a window
--- (convexity of exp through the origin), so the "softmax doesn't fit a local
--- contract" objection dissolves; LayerCert.of_floatClose slots every existing
--- FloatClose instance into the chain.
--- GELU is globally 3/2-Lipschitz (GeluLipschitz.lean): the saturation-aware gain.
--- floatClose_gelu's magnitude-poly modulus reaches ~400 at ConvNeXt's operating
--- magnitudes (adjoint-chain probe §7); the true constant is ≈1.13. Proven here:
--- |gelu′| ≤ 3/2 pointwise (sech²u ≤ 4e^{−2|u|} beats the cubic growth; the core
--- is (cs−½)² ≥ 0 + π ≤ 4 + the cubic exp Taylor bound), MVT ⟹ global Lipschitz,
--- lipOnWindow_gelu (the adjoint-chain gain, window-free), and floatClose_gelu_sat
--- (drop-in floatClose_gelu with flat modulus egelu + 3/2·e).
-#print axioms Proofs.geluScalarDeriv_abs_le
-#print axioms Proofs.geluScalar_lipschitz
-#print axioms Proofs.lipOnWindow_gelu
-#print axioms Proofs.floatClose_gelu_sat
 -- The residual combinator (AdjointChainResidual.lean): partitioned budgets — the
 -- fix for the SE (probe §6) and attention (probe §8) within-block walls. Stage
 -- outputs split by a coordinate predicate P (computed branch vs carried residual
@@ -1735,51 +1680,12 @@ open Proofs
 #print axioms floatClose_id
 #print axioms floatClose_iterate
 #print axioms floatClose_r34_stages
--- EfficientNet float bridge, step 1 (EnetFloatBridge.lean): the smooth activations.
--- enet is all-smooth (Swish + sigmoid SE gate, no kinks) → clean float story. The shared
--- transcendental is sigmoid (modeled by supplied fsig, accuracy esig, like eexp/ers):
--- sigmoidScalar_pos/_lt_one (bounded (0,1)), sigmoid_close/swish_close (rounding budget,
--- the SE-gate/Swish piece), and sigmoidScalar_lipschitz_abs (σ is ¼-Lipschitz — the
--- input-sensitivity, the bnForward_input_close analogue). Conv/BN/GAP/residual reuse r34.
-#print axioms sigmoidScalar_pos
-#print axioms sigmoid_close
-#print axioms swish_close
-#print axioms sigmoidScalar_lipschitz_abs
--- Swish closed as a composable FloatClose: swishScalar_lipschitz_abs (Swish is
--- (1+A/4)-Lipschitz on |·|≤A — pure algebra from σ's ¼-Lipschitz, no MVT) and
--- floatClose_swish (rounding via swish_close + that input-shift). The smooth-world
--- floatClose_relu — so enet's conv→BN→Swish backbone folds through .comp. (SE block
--- + depthwise conv are the remaining MBConv-specific FloatClose wraps.)
-#print axioms swishScalar_lipschitz_abs
--- ⭐ …and its ADDITIVE partner. (1+A/4)·e multiplies the inherited error by the WINDOW at
--- every swish site; swishScalar_lipschitz_abs' bounds |σa−σb| by the gate's own range (1)
--- instead of by ¼|a−b| and gives A + |a−b|. The two are incomparable, floatClose_swish now
--- states their min, and that is what makes an EfficientNet-B0 whole-net fold statable at all:
--- 1e1737 (multiplicative only) vs 1e186 (with the min) — norm_num refuses past ~1e300.
--- The true global Lipschitz constant of x·σ(x) is ≈1.1; getting THAT needs σ' decay, i.e.
--- calculus, and this bound is what avoids needing it.
-#print axioms sigmoidScalar_sub_abs_le_one
-#print axioms swishScalar_lipschitz_abs'
-#print axioms floatClose_swish
--- SE block (the architecturally-distinctive enet op): floatClose_seScale — the
--- multiplicative-branch combinator x ⊙ gate(x) (residual's cousin), FloatClose via
--- mul_close given the gate is FloatClose (Bg=1 for a sigmoid gate). The squeeze→excite
--- gate net (GAP→dense→swish→dense→sigmoid, broadcast) is the .comp feeding it;
--- depthwise conv is the remaining standard-but-new conv-family wrap.
--- ⭐ Its window is now A·Bg·(1+u) — the gate's certified MAGNITUDE, one rounding above the
--- real product. It used to be derived as |float − real| + |real|, which charges the gate's
--- ERROR (A · Lg 0) to the window; on B0 that is 1e18 per SE site and takes the whole-net
--- window from 1e49 to 1e417. FloatClose's magnitude clause bounds the FLOAT gate as well as
--- the real one, so the error never needed to enter — the same shape as relu6's discarded
--- clamp (planning/archive/float_budget_numbers_log.md §3.4).
-#print axioms floatClose_seScale
 -- ── planning/floatbridge_enet_vit.md §1a–§1d (EfficientNet float bridge finished) ──
 -- §1a: the additive MBConv/transformer skip (no trailing activation) and a closed
 -- smooth residual block conv→swish→conv + skip. floatClose_addResidual is the no-relu
 -- cousin of floatClose_residualBlock; floatClose_smoothResBlock folds the body through
 -- .comp and wraps it. The smooth-world floatClose_resBlock (no sign margins).
 #print axioms floatClose_addResidual
-#print axioms floatClose_smoothResBlock
 -- §1b: the remaining FloatClose instances, all wraps of existing closeness. floatClose_bn
 -- (BN alone, error from the relu-free bnStep_close = bnForward_close_of + bnForward_input_close,
 -- same bnReluBudget modulus); floatClose_dense (dense layerBudget, the dense peer of
@@ -1792,8 +1698,6 @@ open Proofs
 #print axioms floatClose_dense
 #print axioms globalAvgPoolFlat_eq_bnMean
 #print axioms floatClose_gap
-#print axioms floatClose_broadcast
-#print axioms floatClose_sigmoid
 -- §1c: depthwise conv — the one genuinely-new conv lemma. The depthwise read IS convPad
 -- (same SAME-padding), so each output channel is a single-output dense over the kH·kW
 -- window (depthwiseConv2d_eq_dense), fan-in kH·kW (no channel sum — the depthwise advantage
@@ -1810,8 +1714,6 @@ open Proofs
 -- FloatBridges.comp chains stages, and floatBridges_mbconvBody folds the entire MBConv body
 -- project∘BN∘SE∘(swish∘BN∘depthwise)∘(swish∘BN∘expand) — the three BNs entering as the
 -- operating-point FloatBridges hypotheses (discharged by floatClose_bn + bnIstd_close_at, §3).
-#print axioms floatClose_seGate
-#print axioms floatClose_seBlockFull
 #print axioms FloatClose.cod_nonneg
 #print axioms FloatClose.modulus_zero_nonneg
 #print axioms FloatBridges.comp
@@ -1819,48 +1721,7 @@ open Proofs
 #print axioms FloatBridges.residual
 #print axioms floatBridges_flatConv
 #print axioms floatBridges_dense
-#print axioms floatBridges_swish
 #print axioms floatBridges_depthwise
-#print axioms floatBridges_seBlockFull
-#print axioms floatBridges_mbconvBody
--- ── planning/tier23_float_and_syntactic_faithfulness.md A1 (per-net FORWARD float
--- capstones via the FloatBridges.comp existential path) ──
--- cifar8_floatBridges: the deeper 8-conv no-BN CIFAR forward as a 25-op .comp chain over
--- floatBridges_{flatConv,relu,maxPool,dense} — validates the existential assembly path the
--- deep nets reuse (no hand-written float-forward F, no per-net budget term).
--- The BatchNorm FloatBridges keystone. floatBridges_bn packages floatClose_bn into the
--- ∃-closure form, discharging the two generic operating-point facts: the centered-deviation
--- bound D=2A (bn_centered_le, via bnMean_abs_le) and the inverse-stddev bound S=1/√ε
--- (bnIstd_abs_le, via bnVar≥0) — the supplied obligations are just the float-stat accuracy
--- moduli emean/eistd (rsqrt has no IEEE spec, so the float stats are modelled, like fexp/fsig).
--- It directly discharges the EfficientNet MBConv hbnE/D/P (those are flat/global bnForward).
--- floatBridges_bnPerChannelFlat lifts it block-diagonally via FloatClose.perRowIdx
--- (bnPerChannelFlat = perRowIdxFlat oc m (fun c => bnForward …) definitionally), uniform
--- budget from uniform G/Bbnd. floatBridges_bnPerChannelTensor3 conjugates to the network's
--- Tensor3 activation layout by the reassoc permutations (= gather E / gather E.symm,
--- floatBridges_gather) — the BatchNorm op the CIFAR-BN / ResNet-34 forwards actually contain.
-#print axioms Proofs.bn_centered_le
-#print axioms Proofs.floatBridges_bn
-#print axioms Proofs.floatBridges_bnPerChannelFlat
-#print axioms Proofs.floatBridges_bnPerChannelTensor3
--- cifarBn_floatBridges: the whole BatchNorm CIFAR forward float-bridges — the .comp assembly
--- over conv / per-channel BN / ReLU / maxpool / dense, the four per-channel BNs supplied as
--- FloatBridges (each discharged by floatBridges_bnPerChannelTensor3). The BN-net peer of
--- cifar8_floatBridges; closes the A1 CIFAR family (no-BN 4-conv/8-conv + BN-CIFAR).
--- ── planning/tier23_float_and_syntactic_faithfulness.md A3 (the BACKWARD "other side") ──
--- The BatchNorm backward float closeness — the shared backward keystone every deep net's
--- gradient folds (the §1a ties denote bn_grad_{gamma,beta,input} over ℝ; this bridges them to
--- float). Parameter grads are the easy reductions: bnBetaGrad_close (Σ dy, pure sum_close) and
--- bnGammaGrad_close (Σ dy·x̂, sum_close + mul_close at the supplied float x̂). The genuinely-new
--- op is the three-term input gradient bnGradInput_close — dx = (1/n)·s·(n·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))
--- bridged by threading mul_close/sum_close/M.err (reduction_close + sub_close'/sub_mag helpers)
--- through the assembly, the float istd/x̂ supplied close (es/exh, discharged by the forward
--- bnIstd_close + centered closeness at instantiation). All 3-axiom-clean.
-#print axioms Proofs.reduction_close
-#print axioms Proofs.sub_close'
-#print axioms Proofs.bnBetaGrad_close
-#print axioms Proofs.bnGammaGrad_close
-#print axioms Proofs.bnGradInput_close
 -- The backward whole-net FOLD: at a smooth point the input-gradient VJP is a forward
 -- composition of maps on the cotangent, so it folds through the SAME FloatBridges.comp backbone.
 -- floatBridges_linBack: the linear input-VJP dx = Wᵀ·dy is dense (Mat.transpose W) 0, so it
@@ -1878,48 +1739,6 @@ open Proofs
 -- of dy ↦ sᵢ·dyᵢ; linear in dy, one mul_close per coord. The smooth peer of floatClose_reluMaskBack.
 #print axioms Proofs.floatClose_diagBack
 #print axioms Proofs.floatBridges_diagBack
--- ── planning/a3_backward_deepnet_assembly.md (1a/1b + the first conv backward witness) ──
--- The CNN backward float story. floatBridges_maxPoolBack: the rendered select_and_scatter
--- (maxPoolFlatBack, maxpool-back through the flatten boundary) routes each saved-input cell's
--- cotangent to its window's arg-max position — a masked gather, EXACT in float, modulus id (the
--- pooling peer of floatClose_reluMaskBack). floatBridges_convBack: the conv input-VJP dx =
--- convBackDenote W dy is a forward conv2d (reverseSwap W) 0 = flatConv (reverseSwap W) 0 in flat
--- space, so it reuses floatBridges_flatConv at the reversed kernel (|reverseSwap W| = |W|) — no
--- new proof, the conv analogue of floatBridges_linBack. cifar8_grad_floatBridges: the whole
--- 8-conv CIFAR input-gradient VJP (the exact reverse of cifarCnn8Forward) float-bridges in one
--- .comp chain over convBack ×8 / maxPoolBack ×4 / reluMaskBack ×10 / linBack ×3 — the backward
--- peer of cifar8_floatBridges.
-#print axioms Proofs.floatBridges_maxPoolBack
-#print axioms Proofs.floatBridges_convBack
-#print axioms Proofs.cifar8_grad_floatBridges
--- ── planning/a3_backward_deepnet_assembly.md 1c (BN backward as a composable FloatClose map) ──
--- floatClose_bnBack / floatBridges_bnBack: the BN-backward keystone bnGradInput_close bounds the
--- float input-gradient per-entry at a FIXED cotangent; this wraps it into a FloatClose over the
--- cotangent dy. The real BN-back map is LINEAR in dy (bn_grad_input_diff_abs_le), so its modulus
--- is the magnitude bound (bn_grad_input_abs_le) at Cdy := e; output magnitude is ReMag(A)+budget(A),
--- modulus budget(A)+ReMag(e). The shared BN/LN backward op every BN/LN net's gradient folds.
-#print axioms Proofs.bn_grad_input_diff_abs_le
-#print axioms Proofs.floatClose_bnBack
-#print axioms Proofs.floatBridges_bnBack
--- cifarBn_grad_floatBridges: the BatchNorm CIFAR input-gradient VJP (the exact reverse of
--- cifarCnnBnForward — each conv→BN→ReLU block reverses to convFlatBack ∘ bnBack ∘ reluMaskBack)
--- float-bridges in one .comp chain, the four BN-backward maps supplied as FloatBridges facts
--- (discharged by floatBridges_bnBack / the per-channel lift, exactly as cifarBn_floatBridges
--- supplies the forward BNs). The backward peer of cifarBn_floatBridges.
-#print axioms Proofs.cifarBn_grad_floatBridges
--- floatBridges_bnPerChannelBack: the per-channel BatchNorm BACKWARD on the network Tensor3 layout
--- float-bridges — the block-diagonal FloatClose.perRowIdx lift of floatClose_bnBack (uniform budget
--- across channels) conjugated by the reassoc layout gathers, bridging the certified
--- bnPerChannelTensor3_grad_input. The backward peer of floatBridges_bnPerChannelTensor3; discharges
--- the abstract FloatBridges bnB… hypotheses of cifarBn_grad_floatBridges (and r34/convnext/vit LN).
-#print axioms Proofs.floatBridges_bnPerChannelFlatBack
-#print axioms Proofs.floatBridges_bnPerChannelBack
--- floatBridges_r34IdBlockBack: the ResNet-34 identity basic-block input-gradient VJP (the reverse of
--- rblkPC = relu(F(x)+x)) float-bridges. The KEY r34 element — the residual-skip backward = residual bF
--- ∘ reluMaskBack reuses FloatBridges.residual (NO new combinator; the rounded skip-add is the backward's
--- too), bF = convFlatBack∘bnBack∘reluMaskBack∘convFlatBack∘bnBack. BN-backs supplied (floatBridges_
--- bnPerChannelBack). The dominant r34 block (13 of 16). Down-block/stem need a strided-conv backward.
-#print axioms Proofs.floatBridges_r34IdBlockBack
 -- Strided-conv backward (r34 down-blocks + stem). flatConvStride2 = decimateFlat ∘ flatConv, so the
 -- input-VJP = convFlatBack ∘ decimateBack (zero-upsample scatter, then reversed-kernel conv).
 -- decimateIdx_injective ⇒ each output cell receives from ≤1 input cell ⇒ decimateBack (= the certified
@@ -1927,41 +1746,11 @@ open Proofs
 -- floatBridges_flatConvStride2Back = floatBridges_decimateBack .comp floatBridges_convBack
 -- (decimateIdx_injective reused from ResNet34).
 #print axioms Proofs.decimateBack_eq_vjp
-#print axioms Proofs.floatClose_decimateBack
-#print axioms Proofs.floatBridges_flatConvStride2Back
--- The XLA-SAME (odd-phase) peer, 2026-09-05: flatConvStride2XlaBack = convFlatBack ∘ decimateOddBack,
--- bridged by floatBridges_decimateOddBack .comp floatBridges_convBack — the TF-origin stems.
-#print axioms Proofs.floatBridges_flatConvStride2XlaBack
 -- stride-4 (ConvNeXt 4×4/s4 patchify) backward: flatConvStride4 = decimateFlat ∘ decimateOddFlat ∘
 -- flatConv, so its input-VJP = convFlatBack ∘ decimateOddBack ∘ decimateBack (zero-upsample TWICE then
 -- reversed-kernel conv). decimateOddBack = the certified decimateOddFlat VJP (decimateOddBack_eq_vjp),
 -- exact/modulus-id (decimateOddIdx_injective ⇒ card ≤ 1, same proof as decimateIdx_injective).
 #print axioms Proofs.decimateOddIdx_injective
-#print axioms Proofs.floatBridges_decimateOddBack
-#print axioms Proofs.floatBridges_flatConvStride4Back
--- r34 downsample-block backward: relu(proj(x)+body(x)) reversed = ReLU mask, then the two-branch
--- fan-in bProj(dy)+bBody(dy). floatClose_biPathSum/FloatBridges.biPathSum: the general f(x)+g(x)
--- rounded-sum combinator (floatClose_addResidual's f(x)+x is the g=id case). Branch backwards reuse
--- flatConvStride2Back + convFlatBack + supplied BN-backs. Completes the r34 block set (id + down).
-#print axioms Proofs.floatClose_biPathSum
-#print axioms Proofs.floatBridges_r34DownBlockBack
--- r34 WHOLE-NET backward (the first Imagenette whole-net backward): r34_grad_floatBridges = the exact
--- reverse of resnet34Forward_full_pc (dense ∘ GAP ∘ [3,4,6,3] blocks ∘ maxpool ∘ stem), one .comp fold
--- over linBack/gapBack/16 block-backs/maxPoolFlatBack/stem(flatConvStride2Back∘bnBack∘reluMaskBack).
--- gapBack (the one new op): the certified GAP VJP dy(channel)/(h·w), a scaled broadcast (magnitude-
--- nonincreasing, one rounding). Stem/GAP/maxpool/dense concrete; the 16 blocks supplied as FloatBridges.
-#print axioms Proofs.floatClose_gapBack
-#print axioms Proofs.r34_grad_floatBridges
--- r34 WHOLE-NET FORWARD (the forward peer of r34_grad_floatBridges): r34_floatBridges = the [3,4,6,3]
--- .comp fold of resnet34Forward_full_pc's skeleton (dense ∘ GAP ∘ blocks ∘ maxpool ∘ stem). The two
--- missing forward op-bridges: floatBridges_flatConvStride2 (stem stride-2 conv = floatClose_flatConv on
--- the 2h×2w grid read at decimateIdx) + floatBridges_gap (wraps floatClose_gap). Stem/maxpool/GAP/dense
--- concrete; the stem BN + 16 blocks supplied as FloatBridges. Closes the forward/backward asymmetry.
-#print axioms Proofs.floatBridges_flatConvStride2
--- Its XLA-SAME peer (2026-09-05): floatClose_flatConv read at decimateOddIdx, same envelope.
-#print axioms Proofs.floatBridges_flatConvStride2Xla
-#print axioms Proofs.floatBridges_gap
-#print axioms Proofs.r34_floatBridges
 -- ⚠ FloatBridges existentially binds the FLOAT MAP, so the line above constrains
 -- no float implementation (formalization.yaml §4d). r34_floatBridgesTo is the same
 -- fold with the float net named AND the budget carried as data: FloatBridgesTo is a
@@ -1973,34 +1762,8 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.comp
 #print axioms Proofs.FloatBridgesTo.fresh_le
 #print axioms Proofs.FloatBridgesTo.residual
-#print axioms Proofs.floatBridgesTo_towerBack
 #print axioms Proofs.floatBridgesTo_cifarStage
 #print axioms Proofs.floatBridgesTo_resBlock
-#print axioms Proofs.r34_floatBridgesTo
--- The rest of the migration — every whole-net bridge names its float net and carries
--- its budget (the EfficientNet forward and the convnextCh_* pair follow below).
-#print axioms Proofs.r34_grad_floatBridgesTo
-#print axioms Proofs.mnv2_grad_floatBridgesTo
-#print axioms Proofs.convnext_grad_floatBridgesTo
-#print axioms Proofs.vit_grad_floatBridgesTo
-#print axioms Proofs.efficientnet_grad_floatBridgesTo
--- The EfficientNet FORWARD cone, migrated: its 11 layered stage/block bridges each
--- name their float peer, so the capstone can too. Reaching it also required naming
--- the float map inside floatClose_seGate / floatClose_seBlockFull, which bound it
--- existentially exactly like FloatBridges did (formalization.yaml 4d). The SE gate is
--- now built compositionally as a bridge (floatBridgesTo_seGate, then the seScale
--- combinator); floatClose_seGateF is its ∃ B L shadow.
-#print axioms Proofs.floatBridgesTo_seGate
-#print axioms Proofs.FloatBridgesTo.seScale
-#print axioms Proofs.floatClose_seGateF
-#print axioms Proofs.floatBridgesTo_seBlockFull
--- The last pair: the SHIPPED ConvNeXt-T at its real channel LayerNorm, forward and
--- backward. With these, all TWELVE whole-net float bridges name the float net they
--- certify. Their cone (chanLNTensor3F / layerNormVecF / cnxBodyWithF / cnxBlockChWF /
--- convNextStageChKF / cnxDownChWF, and the backward chanLNTensor3BackF) is migrated too.
-#print axioms Proofs.floatBridgesTo_chanLNTensor3
-#print axioms Proofs.floatBridgesTo_chanLNTensor3Back
-#print axioms Proofs.convnextCh_grad_floatBridgesTo
 -- ⭐ The CIFAR-8 chain tie: chainRH of cifar8ChainH IS cifarCnn8Forward at the
 -- committed config, by rfl. Writing it caught the chain's dense head being three
 -- BARE denses where cifar8Verified.layers has relu after the first two.
@@ -2015,7 +1778,6 @@ open Proofs
 -- and the chain is Maps.flatConv / .dense / .relu / .maxPool threaded by the generic
 -- Maps.comp. Same numerals — the per-stage inequalities were identical — and a strictly
 -- stronger statement, since Maps quantifies over every input window A ≤ 1.
-#print axioms Proofs.FloatBridgesTo.Maps.flatConv
 -- ⭐⭐ The same, at ImageNet scale: the DEPLOYED ResNet-34 inference forward (frozen
 -- running statistics — the forward @resnet34_fwd_eval renders) as a CLOSED FloatBridgesTo
 -- with no BN hypotheses left (r34EvalBridge), its envelope pushed through 90 numeric stages
@@ -2031,23 +1793,6 @@ open Proofs
 -- that was wrong: 1e7419 is the FOLD's numeral and the same measurement puts the WINDOW at
 -- 1e221, which FloatBridgesTo.capped turns into a theorem. See Resnet34TrainFloatBudget below
 -- — a CAP, not a fold, but a statement about the program the repo actually trains with.
-#print axioms Proofs.floatClose_bnEvalRt
-#print axioms Proofs.floatBridgesTo_bnPerChannelEvalTensor3
-#print axioms Proofs.FloatBridgesTo.Maps.comp
-#print axioms Proofs.FloatBridgesTo.Maps.residual
-#print axioms Proofs.FloatBridgesTo.Maps.bnEvalPC
--- ⭐ The eval twin of resnet34FwdGraphFullPC_faithful, and the tie it closes. The typed SHlo
--- inference graph (every line of which @resnet34_fwd_eval renders) DENOTES the R forward the
--- number above bounds: resnet34FwdGraphFullPCEval_faithful is the whole-net half,
--- r34EvalForward_eq_full_pc_eval the rfl from the record-bundled forward onto the committed
--- resnet34Forward_full_pc_eval, r34EvalGraph_faithful their composite, and
--- r34_float_logits_le_committed the number restated with that net on the real side. Before
--- this the eval forward was rendered from the verified AST but tied to no R def.
--- The block bridges are now generic in the NORMALISATION (rblkGen / rblkStridedGen), so one
--- pair serves the training-mode net (rblkPC_eq_gen / rblkPStridedPC_eq_gen, both rfl) and the
--- inference net the number is stated for.
-#print axioms Proofs.rblkPC_eq_gen
-#print axioms Proofs.rblkPStridedPC_eq_gen
 -- ⭐⭐ And the TRAINING-mode number those generic block bridges make cheap: the same [3,4,6,3]
 -- net with bnPerChannelTensor3 at all 36 BN sites — the program the repo actually TRAINS with,
 -- and the one Resnet34BackFloatBudget's input-gradient number is taken through. Window
@@ -2078,12 +1823,6 @@ open Proofs
 -- the widest throws most of it away; r34TrainBn_emr_committed is the proof that a rounded
 -- reduction achieves each of the five numerals R34TrainWeights pins, so they are computed and
 -- not chosen. ⚠ ei is now the loose one, by four orders.
-#print axioms Proofs.FloatBridgesTo.capped
-#print axioms Proofs.FloatBridgesTo.Maps.capped
-#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelTensor3Capped
-#print axioms Proofs.floatBridgesTo_bnPerChannelFlatX
-#print axioms Proofs.floatBridgesTo_bnPerChannelTensor3X
-#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelTensor3CappedX
 #print axioms Proofs.FloatModel.bnMean_close_of
 #print axioms Proofs.FloatModel.bnMean_num_le
 -- ⭐⭐ The SECOND ImageNet-scale whole-net float number, and the first whose certified WINDOW
@@ -2098,7 +1837,6 @@ open Proofs
 -- BUDGET moves one order (3.072e97 -> 1.444e96): error gain per BN site is G*S and does not care
 -- how small the window is, so window and budget are separate levers and only the eps-floor
 -- S = 1/sqrt(eps) touches the budget.
-#print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2Xla
 -- …and the rest of the MBConv-family Maps kit (FloatBudgetEnvMBConv.lean), which EfficientNet-B0
 -- needs: swish (⭐ its modulus is the MIN of a multiplicative and an additive input sensitivity —
 -- the multiplicative branch alone multiplies the inherited error by the window at every swish
@@ -2254,8 +1992,6 @@ open Proofs
 -- bridged a net the tie did not describe (the head LN came back 2026-08-30). Fixing the slot is
 -- also what made the cap sufficient on its own — with `id` there the last GELU's cubic modulus is
 -- never capped again, and the fold then also needs the 3/2 saturation constant.
-#print axioms Proofs.FloatBridgesTo.capped
-#print axioms Proofs.FloatBridgesTo.Maps.capped
 -- ⭐⭐ §0.1's ESCAPE 2, WINDOW half (2026-09-05): the same capped LayerNorm site with its
 -- certified window charged at |x̂| <= sqrt(n) (bnXhat_sq_le) instead of at |x-mu|*|istd| <= D*S.
 -- Two places charged the window and both are fixed: the real output's magnitude, and — subtler
@@ -2282,138 +2018,9 @@ open Proofs
 -- ⛔ UNIFORM at the widest width rather than per width: costs ConvNeXt-T 2 orders (against a
 -- per-width 1.727e128) and ViT-Tiny NOTHING, since all 25 of its LN sites reduce over D = 192.
 -- Per-width would make DeviceLN's emr a Nat -> ℝ that 366 + 324 norm_num goals must reduce.
-#print axioms Proofs.bnXhat_abs_le_num
-#print axioms Proofs.prod_sub_abs_le
-#print axioms Proofs.FloatModel.mul_close_at
-#print axioms Proofs.FloatModel.bnForward_close_of_x
-#print axioms Proofs.bnNormBudgetX_mono
-#print axioms Proofs.floatClose_bnX
-#print axioms Proofs.floatBridgesTo_bnX
--- ⭐⭐ And the same leaf at the PER-CHANNEL BatchNorm (2026-09-05), which is what r34's
--- training-mode forward composes: floatClose_bnX through BnPerChannelFloatBridge's rungs 2 and
--- 3, then capped. Worth 76 orders there — the escape-2 leaf now serves three nets, not two.
--- ⛔ The affine sits INSIDE this leaf (bnPerChannelTensor3 lifts bnForward ε γ β) and OUTSIDE a
--- LayerNorm net's, which composes the pure-normalise leaf and then Maps.diagBack/biasAdd; the
--- two spellings differ by u·Bbnd per site and the probe's chain asserts this one.
--- ════════════════════════════════════════════════════════════════
--- ViT / ATTENTION Maps kit (FloatBudgetEnvAttn.lean) — chunk 1 of the ViT-Tiny number.
--- ⛔ These exist because `Real.exp` must never reach a stage numeral. `smErr u eexp δ n` is
--- EXPONENTIAL in the inherited error δ, and δ reaching ViT-Tiny's attention logits is ~3.6e10 by
--- block 0 — past `exp_sub_one_le`'s x < 1, so it has no rational bound. That is a REPRESENTABILITY
--- failure, not a size one: `scripts/float_budget_envelope.py` measures the uncapped variant at an
--- IDENTICAL magnitude with 36 stage numerals that cannot be written down at all. New failure mode
--- for this repo; §0.1's quadratic blow-up is the other one.
--- ⭐ smCap = u(1+κ) + κ is `smErr` with the exp term absent — the float softmax row's distance
--- from the real one at the SAME logits. softmax_abs_le_one + softmaxF_close then bound the float
--- row by 1 + smCap at ANY logits, so the softmax leaf's window is CONSTANT and it RESETS the fold.
--- ⛔ mhpB (ViTBlockFloatBridge) derives attention's WINDOW as |real| + |float − real|, dragging
--- smErr — and therefore Real.exp — into the window, where `capped` cannot reach it (capped bounds
--- the modulus by 2·mag; it never touches mag). So floatBridges_mhProjAttnFull CANNOT carry this
--- number. mhpBCap bounds the float output directly instead: a rounded dot of float softmax weights
--- (≤ 1 + smCap) against float V. That is floatClose_seScale's fix from EfficientNet-B0, one net
--- later, and it is both exp-free AND tighter.
--- ⚠ The `n` in that window is the generic fan-in bound; sdpa_abs_le proves the REAL side is a
--- convex combination (no n). The float peer is deliberately NOT proved — worth 27 orders, and the
--- fold is statable without it (3.612e218 vs 1.055e191).
--- ⚠ smRho u eexp n < 1 is a standing side condition the whole-net statement must carry and
--- disclose, like DeviceRsqrt/DeviceSigmoid: 0.0100120 < 1 at n = 197, eexp = 1e-2.
--- ⭐ The patch embedding, the third ViT leaf and the odd one out: floatClose_patchEmbed already
--- carried both clauses against a NAMED float peer (FloatModel.patchEmbedF), so
--- floatBridgesTo_patchEmbed is a repackage and needed no new mathematics.
--- ⛔ It must stay ONE leaf: patchEmbed_flat is a single definition with an `if n.val = 0` branch
--- selecting the CLS token, NOT a composition concatCls . convStride16 — so the Maps.concatCls /
--- Maps.flatConvStride16 the plan plotted are the wrong decomposition and do not exist. The same
--- granularity trap attention set, and the probe had modelled it as three stages too.
--- ⭐ What the envelope needs instead is MONOTONICITY of the budget, in the input window AND in
--- the rounding unit: `Maps` quantifies over every A ≤ Ā, and the hypotheses mention M.u, which no
--- norm_num can evaluate. peRoundErrQ is the same expression over a plain rational; a caller bounds
--- M.u ≤ q once with patchEmbedRoundErr_le and everything downstream is a numeral.
--- ⭐ No gamma_num detour is needed here, uniquely: the reductions are ic = 3 and patchSize = 16,
--- so norm_num takes the exact (1+u)^4 and (1+u)^17 directly.
--- ⛔ And it is NOT capped — the patch embed does not reduce, its modulus is linear in the
--- inherited error, and at the net's input that error is 0. It is the one honest fold in ViT.
--- ⭐ FloatBudgetEnvAttn.lean also carries ViT-Tiny's block-0 attention site and its softmax leaf
--- as compiled `example`s at the numerals vit_chain emits — §5's rule (an unexercised Maps leaf is
--- the stale-gates failure mode in proof form), and simultaneously the check that the generator's
--- arithmetic IS these lemmas'.
--- ════════════════════════════════════════════════════════════════
--- THE VECTOR-LN TRANSFORMER BLOCK (ViTBlockVFloatBridge.lean) — chunk 2 of the ViT-Tiny number.
--- ⛔ blockVFlat is a DIFFERENT block from the one the float tier already carried:
--- floatBridges_vitBlockMHFull is stated about transformerBlock's SCALAR LayerNorm affines
--- (γ β : ℝ), while vitForwardKV composes transformerBlockV, whose affines are VECTORS — and the
--- trained checkpoint has vectors. Same imagenet_specs_drift_from_twins shape as ConvNeXt's stale
--- head-LN slot; what forced the two statements to unify was needing the tie for a number.
--- ⭐ Most of the "tier migration" §3.5.1 costed was already done: floatBridgesTo_rowLNVecFlat and
--- Maps.rowLNVecFlat exist (ChannelLNFloatBridge / FloatBudgetEnvLN, written for ConvNeXt's head
--- LayerNorm), and rowLNVecFlat N D ε γ β IS ViT's per-token vector LN — rfl. Likewise
--- floatBridgesTo_gelu and floatBridgesTo_dense. This file is the ASSEMBLY, not the leaves.
--- ⚠ Of the three structural ties only flat_mhsaLayer_eq needed a proof: mhProjAttnFullFlat ends
--- in Mat.flatten where perRowFlat opens with Mat.unflatten, so the roundtrip needs rewriting. The
--- LN and MLP ties are rfl.
--- ⚠ biPathMat (fun X => X) G puts the IDENTITY first (M r s + G M r s) where Proofs.residual puts
--- the BODY first (f v i + v i). Equal by add_comm, not rfl — flat_biPathMat_id discharges it, and
--- it matters because FloatBridgesTo.residual names the float map body-first.
--- ⛔ Every stage of this block is capped (attention by Maps.mhProjAttnFullCap, both LayerNorms by
--- Maps.rowLNVecFlat's bnCapped), so there is no stage at which the fold survives, and the two
--- skips carry that forward: every ViT number downstream is the triangle inequality (§9).
--- THE DEPTH-k FOLD AND THE WHOLE NET (same file).
--- ⚠ The recursion is HEAD-FIRST — vitBodyKVFlat (k+1) ps = body k (ps . succ) . blockVFlat (ps 0),
--- so block 0 is applied FIRST and the .comp puts it on the left. That is the opposite association
--- from floatBridgesTo_convNextStageChK, which §3.3's lesson 2 records; the DEFINITION decides, so
--- read it before writing the chain.
--- ⭐ FloatBridgesTo.ofEq transports a bridge along an equation of the REAL map while keeping
--- mag/mod DEFINITIONALLY equal. A `blockVFlat_eq ▸ b` would not: the Eq.mpr blocks .mag from
--- reducing, and a bridge whose .mag does not reduce cannot carry a Maps (§2's unifier trap). That
--- is why Maps.ofEq is ⟨hM.mag_le, hM.mod_le⟩ and not a re-proof.
--- ⭐ Maps.vitBodyKVFlat is the ENVELOPE fold, which ConvNeXt does not have — its budget file
--- spells every stage out. At ViT's depth 12 that would be 12 nested .comps written by hand; here
--- the caller passes window/error SEQUENCES W/Er and one Maps per block.
--- ⛔ floatBridgesTo_vitForwardKV is the whole net at REAL weights with no FloatBridgesTo
--- hypothesis left except the device LayerNorm (whose statistics have no IEEE spec) and the device
--- exp/gelu accuracies. It is vitForwardKV — depth-k, DISTINCT per-block parameters, vector-[D] LN
--- affines, multi-head — and NOT vit_full, which shares one parameter tuple across all blocks and
--- carries SCALAR affines. The trained checkpoint has per-block weights and vector affines, so
--- vit_full is a different function; vitFwdGraphKMHV_faithful denotes this one.
--- ⭐ ViTBlockVFloatBridge.lean closes ViT-Tiny's BLOCK 0 as a compiled `example` at the numerals
--- vit_chain emits: thirteen stages, two skips, twenty-six inequalities, in (23.23, 1.064e-2) ->
--- out (9.365e19, 2.811e20). One block costs ~1e18 of window; twelve put the net at 1e218.
--- The tie: the bridged skeleton IS the committed convNextForwardTCh, head LayerNorm included.
--- ════════════════════════════════════════════════════════════════════════════════════════
--- ViT-Tiny's NUMBER (ViTFloatBudget.lean) — the fifth ImageNet-scale whole-net float statement,
--- window 2.397e108 / budget 4.794e108 on the committed depth-12 vector-LN vitForwardKV @ 224².
--- ⛔ The CAP, not the fold, and more thoroughly than ConvNeXt: all 25 LayerNorm sites AND all 12
--- attention sites go through FloatBridgesTo.capped, so no stage inside a block is a fold. The
--- patch embed is the one honest stage (it does not reduce). budget/window = 2.00 is the tell.
--- ⭐ DeviceLN/DeviceGelu moved to the kit and DeviceExp joined them — its spec is RELATIVE,
--- because softmaxF_close divides one exponential sum by another and only a relative error
--- survives the quotient.
--- The tie: the committed spec's denotation (vitVerified_denote_eq, rfl) — the same function
--- vitVerified_fwd_faithful says the emitted depth-12 multi-head vector-LN graph denotes.
--- ════════════════════════════════════════════════════════════════════════════════════════
--- PHASE 2 (FloatBudgetEnvBack.lean) — the `Maps` kit for a whole-net INPUT-GRADIENT VJP.
--- ⭐⭐ The backward is a FOLD at TRAINING-mode BatchNorm, the mode the forward has no number for
--- (1e7417): a VJP reads its statistics off the SAVED activations, which the cotangent does not
--- perturb, so floatClose_bnBack's modulus is budget(A) + ReMag(e) with ReMag LINEAR in e. The
--- probe (scripts/float_budget_envelope.py, r34_back_chain / verify_r34_back, 90 stages / 180
--- inequalities) puts the r34 input-gradient at window 1.345e288 / budget 6.473e286, ratio 0.048.
--- ⛔ Conditional on `es`/`exh` = 1e-2 — SUPPLIED float-activation accuracies the forward's own
--- training-mode fold does not discharge (planning/archive/float_budget_numbers_log.md §3.7).
-#print axioms Proofs.bnGradInputBudgetG
-#print axioms Proofs.bnGradInputBudget_eq_G
-#print axioms Proofs.bnGradInputBudgetG_mono
-#print axioms Proofs.bnGradInputBudget_le
-#print axioms Proofs.bnGradInputReMag_mono
 -- ⭐ The standardisation bound as a NUMERAL: |x̂| ≤ X wherever n ≤ X², off bnXhat_sq_le. It is
 -- what makes a whole-net backward number exist (Xh enters the fold as Xh²), and it was already
 -- in the repo — Foundation/ResNet34.lean, written for the realistic-seal work.
-#print axioms Proofs.bnXhat_abs_le_num
-#print axioms Proofs.floatBridgesTo_bnBack
-#print axioms Proofs.floatBridgesTo_bnPerChannelFlatBack
-#print axioms Proofs.floatBridgesTo_bnPerChannelBack
-#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelBack
-#print axioms Proofs.FloatBridgesTo.Maps.reluMaskBack
-#print axioms Proofs.FloatBridgesTo.Maps.maxPoolBack
-#print axioms Proofs.FloatBridgesTo.Maps.decimateBack
 -- ⭐⭐ The LAYERNORM BACKWARD kit (ConvNeXt-T, planning/archive/float_budget_numbers_log.md §3.16). The one
 -- new leaf is Maps.rowLNVecFlatBack: floatBridgesTo_rowLNVecFlatBack runs bn_grad_input at
 -- gamma = 1 with the gamma scale folded in FRONT as a diagBack, so it is NOT
@@ -2421,85 +2028,20 @@ open Proofs
 -- gamma; ConvNeXt-T has 23 LN sites but only FOUR distinct reduction widths, so four pairs serve
 -- the net. The rest is composition: the channel-LN conjugation by four exact permutations, the
 -- patchify backward (Maps.convBack after two exact scatters) and the block/downsample envelopes.
-#print axioms Proofs.FloatBridgesTo.Maps.decimateOddBack
 -- The FloatBridgesTo peers of the three ConvNeXt backward block defs — the §3.5.1 migration one
 -- net over. Until 2026-09-04 these existed only at the exists-tier (floatBridges_*), which a
 -- budget file cannot use: FloatBridges discards the float map and a Maps envelope must name one.
-#print axioms Proofs.floatBridgesTo_cnxBlockBodyBack
-#print axioms Proofs.floatBridgesTo_cnxBlockBack
-#print axioms Proofs.floatBridgesTo_cnxDownBack
-#print axioms Proofs.FloatBridgesTo.Maps.gapBack
-#print axioms Proofs.FloatBridgesTo.Maps.convBack
-#print axioms Proofs.FloatBridgesTo.Maps.linBack
-#print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2Back
-#print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2XlaBack
 -- ⭐ The two r34 BLOCK backwards at real weights, and NEITHER needs a new combinator: the
 -- identity block's residual-skip backward is a FORWARD `Proofs.residual` (the skip routes the
 -- cotangent to both branches and adds), and the downsample's two-branch fan-in is `biPathSum` —
 -- the same pair the forward uses. The three per-channel BN-backs are supplied as bridges and
 -- discharged by floatBridgesTo_bnPerChannelBack.
-#print axioms Proofs.r34IdBlockBackF
-#print axioms Proofs.floatBridgesTo_r34IdBlockBack
-#print axioms Proofs.FloatBridgesTo.Maps.r34IdBlockBack
-#print axioms Proofs.r34DownBlockBackF
-#print axioms Proofs.floatBridgesTo_r34DownBlockBack
-#print axioms Proofs.FloatBridgesTo.Maps.r34DownBlockBack
 -- ⭐⭐ The BatchNorm backward's budget is HOMOGENEOUS of degree 1 in the cotangent window — the
 -- same linearity that makes a backward fold exist at all. Stated directly, a site's inequality is
 -- a forty-node tree at the chain's full magnitude; factored as `Cdy * budget(1)` it is
 -- `Ā * (Kr+Kb) ≤ Ā'` against ONE constant per feature-map size, so the expensive evaluation
 -- happens five times for a ResNet-34 instead of sixty-eight. ⚠ The FORWARD budgets have no such
 -- form: a bias makes their leaves affine rather than linear.
-#print axioms Proofs.bnGradInputBudgetG_homog
-#print axioms Proofs.bnGradInputReMag_homog
-#print axioms Proofs.FloatBridgesTo.bnGradInputReMag_nonneg
-#print axioms Proofs.FloatBridgesTo.bnGradInputBudgetG_nonneg
-#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelBackGain
--- ════════════════════════════════════════════════════════════════════════════════════════
--- THE r34 BACKWARD'S NUMBER (Resnet34BackFloatBudget.lean) — the whole-net INPUT-GRADIENT VJP,
--- window 8.857e245 / budget 6.894e244 on loss cotangents of magnitude <= 1 (|p − y| <= 1 for
--- softmax cross-entropy). ⚠ Those are 4x the numbers first committed here (2.188e245 /
--- 1.458e244): closing the whole-net certified tie found the chain missing the 3x3/s2 stem pool's
--- backward entirely (Resnet34BackCertifiedTie.lean, planning §3.10).
--- ⭐ budget/window = 0.078: the interval FOLD, not the cap ConvNeXt-T's
--- and ViT-Tiny's 2.00 are — and at TRAINING-mode BatchNorm, where the FORWARD of this same net
--- has no statable number at all (1e7417). A VJP reads its statistics off the SAVED activations,
--- which the cotangent does not perturb.
--- ⛔ THREE HYPOTHESES CARRY THE CAVEAT: `es`/`exh` (the saved float activations' accuracies,
--- 1e-2 — quantities the forward's own training-mode fold cannot discharge) and the OPERATING
--- POINT |istd| <= 16 (sigma >= 1/16), §0.1's escape 2, worth ~43 orders across 36 BN sites and
--- needed because norm_num's ceiling is ~1e253, not the 1e300 the plan had recorded.
--- ⭐ Every per-op backward here is already tied to its certified VJP by
--- Resnet34BackCertifiedTie.lean; only the whole-net FOLD of those ties is open there.
--- ⭐ Block `e1` (identity, 512x7x7) is closed as a compiled `example` at r34_back_chain's
--- numerals with BOTH BatchNorm sites the real floatBridgesTo_bnPerChannelBack (Xh := 7 from
--- bnXhat_abs_le_num): in (2.452e-4, 1.898e-10), out (8.702e12, 5.299e10). One block costs ~1e16
--- of cotangent window; sixteen of them put the net at 1e288.
--- ⭐ FloatBudgetEnvBack.lean closes the HEAD of r34's input-gradient chain as a compiled
--- `example` at r34_back_chain's numerals: loss cotangent (1, 0) -> classifier input-gradient ->
--- GAP backward -> block e1's second BN backward at 512x7x7, out (8348, 2.317e-2). Note the shape
--- of a backward chain: fan-in 10 at the head and a division by 49 at the GAP, so the first two
--- stages SHRINK and the growth only starts at the first normalisation.
--- ⭐⭐ THE SECOND WHOLE-NET BACKWARD NUMBER, MobileNetV2's (MobileNetV2BackFloatBudget.lean):
--- window 4.750e153 / budget 1.076e152, ratio 0.023 — the interval FOLD again, no cap anywhere,
--- at TRAINING-mode BatchNorm. 48 numeric stages, 136 rational inequalities.
--- ⭐⭐ AND IT ASSUMES NO OPERATING POINT. r34's needs |istd| <= 16 to come down from 1e288 to
--- something norm_num will evaluate; MobileNetV2's is 1e153 at the eps-FLOOR, so |istd| <= 317
--- follows from eps >= 1e-5 alone and MnvBnBack.hS is a THEOREM where R34BnBack.hS is a field
--- (bnIstd_abs_le_of, FloatBudgetEnvBack.lean). Two structural reasons, both measured: 20 BN
--- sites against 33, and the inverted residual's backward fan-ins are 1x1 (24..256) and the
--- DEPTHWISE's 9, where r34's are 512*9. So this is the first whole-net backward number in the
--- repo with nothing supplied but the two saved-activation accuracies.
--- ⛔ es/exh ARE still supplied (1e-2) and are still the caveat: they are what the forward's own
--- training-mode fold cannot discharge. §0.1's wall is a fact about COMPOSING a backward with the
--- forward that feeds it, not about backwards.
--- ⭐ relu6's clamp — the FORWARD's headline lever, 97 orders of window (§3.2) — buys this chain
--- nothing: its backward is reluMaskBack, a 0/1 select, exact in float and envelope-preserving.
--- ⭐ The two leaves it needed, and both are compositions of ones that existed
--- (FloatBudgetEnvBackMBConv.lean): Maps.depthwiseBack is Maps.depthwise at the spatially-reversed
--- kernel and zero bias — ⭐ fan-in kH*kW = 9, the kernel window ALONE, because a depthwise conv
--- mixes no channels — and Maps.depthwiseStride2Back is that composed with Maps.decimateBack.
-#print axioms Proofs.bnIstd_abs_le_of
 -- ⭐ THE SQUEEZE-EXCITE BACKWARD KIT (FloatBudgetEnvBackSE.lean), EfficientNet-B0's.
 -- Maps.broadcastBack is the one leaf new in kind: the SE gate's spatial reduce, Vec (c*h*w) -> Vec c,
 -- one rounded reduction of fan-in c*h*w. ⚠ Its window charges all c*h*w terms because that is what
@@ -2527,42 +2069,6 @@ open Proofs
 -- efficientnetInputGradB reverses the 3-block batched representative. Same trap as
 -- mobilenetv2_full_has_vjp_at, one net over.
 #print axioms Proofs.efficientnetForwardB_eq_chain
--- ⭐ GELU is globally 3/2-Lipschitz (Architectures/GeluSaturation.lean), and floatClose_gelu now
--- states the min of that and its magnitude polynomial. The polynomial is CUBIC in the window and
--- reaches ~400 at ConvNeXt's magnitudes against a true constant of ≈1.13; the saturation bound was
--- already proved in the repo (for the adjoint chain) and sat one import ABOVE the float bridge
--- that needed it — the §3.3.0 pattern in its purest form.
-#print axioms Proofs.geluScalar_lipschitz
-#print axioms Proofs.geluScalarDeriv_abs_le
--- ⭐ SWISH's derivative is globally bounded: |swish'| <= 2 at every x
--- (Architectures/SwishSaturation.lean, 2026-09-04). The bound EfficientNet-B0's BACKWARD
--- diagBack slots take as their Ssw, where the repo's only prior one was
--- swishScalar_lipschitz_abs's `1 + A/4` at the FORWARD's certified window — 1.216e51 at the head
--- alone. That single window import is what put efficientnetInputGradB's fold at 1e431, past
--- norm_num's ~1e253 shape-dependent ceiling; with the global constant it is 7.640e169 and
--- statable (b0_back_chain(ssw = 2), scripts/float_budget_envelope.py).
--- ⭐ The proof is three elementary steps, against §3.4's estimate that a global constant "needs
--- the decay of sigma', i.e. calculus": sigma <= 1, sigma'(x) <= exp(-|x|) by a two-line case
--- split on the sign of x, and |x|exp(-|x|) <= 1 off Real.add_one_le_exp. That estimate was true
--- of the SHARP constant (≈1.1, worth 2.6 orders here) and is exactly why nobody re-derived it.
--- ⛔ swishScalar_lipschitz — the mean-value corollary, swish is globally 2-Lipschitz — is NOT
--- wired into floatClose_swish. It would beat both of that modulus's window-dependent branches
--- and is worth 8 orders on B0's FORWARD (8.408e210 -> 3.679e202), which moves a committed
--- number; §7 says one commit per net.
-#print axioms Proofs.swishScalarDeriv_eq
-#print axioms Proofs.swishScalarDeriv_abs_le
-#print axioms Proofs.swishScalar_lipschitz
-#print axioms Proofs.floatBridgesTo_r34IdBlock
-#print axioms Proofs.floatBridgesTo_r34DownBlock
-#print axioms Proofs.FloatBridgesTo.biPathSum
--- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
--- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
--- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +
--- floatBridges_r34DownBlock (rblkPStridedPC = relu∘residualProj(proj)(body); FloatBridges.biPathSum
--- two-branch fan-in). Convs/relu concrete; the per-channel BNs supplied as FloatBridges (discharge
--- with floatBridges_bnPerChannelTensor3) — the exact mirror of the backward's abstract-BN-back shape.
-#print axioms Proofs.floatBridges_r34IdBlock
-#print axioms Proofs.floatBridges_r34DownBlock
 -- §B integrity tie (the r34 identity block): the float-bridge backward `r34IdBlockBack` (per-channel
 -- BN, non-batched) IS the certified VJP. convFlatBack_eq_vjp_backward = the conv-leaf tie (via the
 -- general IR.convBackDenote_eq_input_grad_formula); rblkPC_has_vjp_at = the certified per-channel-BN
@@ -2652,8 +2158,6 @@ open Proofs
 -- MLP body L2 (transformerMlp backward = perRowFlatPR of dense Wᵀ₁ 0 ∘ diagBack(act') ∘ dense Wᵀ₂ 0),
 -- and the per-token LN-back seam (perRowFlatPR_LN_back). So the deployed float ViT-BLOCK backward is
 -- within an explicit budget of THE certified block gradient — both directions of the block tie closed.
-#print axioms Proofs.FloatBridges.perRowPR
-#print axioms Proofs.floatBridges_vitBlockBackPR
 #print axioms Proofs.perRowFlatPR_LN_back
 #print axioms Proofs.transformerMlp_back_flat_eq_perRowFlatPR
 #print axioms Proofs.transformerMlpSublayer_backward_decomp
@@ -2675,14 +2179,8 @@ open Proofs
 -- six orders on the r34 backward number. maxPool3s2FlatBack_eq_vjp_backward ties it to the
 -- certified maxPool3s2Flat_has_vjp_at; maxPool3s2Flat_has_vjp_at_vec restates that witness at a
 -- Vec point with its backward DEFINITIONALLY the leaf (an `Eq.mpr` transport would not reduce).
-#print axioms Proofs.sum_ite_win3Row_le_two
-#print axioms Proofs.maxPool3s2Back_mask_sum_abs_le
-#print axioms Proofs.floatClose_maxPool3s2Back
-#print axioms Proofs.floatBridges_maxPool3s2Back
-#print axioms Proofs.floatBridgesTo_maxPool3s2Back
 #print axioms Proofs.maxPool3s2FlatBack_eq_vjp_backward
 #print axioms Proofs.maxPool3s2Flat_has_vjp_at_vec
-#print axioms Proofs.FloatBridgesTo.Maps.maxPool3s2Back
 -- ⭐⭐ THE WHOLE-NET CERTIFIED TIE. cbrStridedPC_has_vjp_at is the stem's VJP (the strided peer of
 -- convBnReluPC_has_vjp_at, the one component witness resnet34_has_vjp_at was missing at full
 -- dims); r34InputGrad_eq_resnet34_vjp assembles every per-op tie into
@@ -2931,231 +2429,6 @@ open Proofs
 #print axioms Proofs.vitInputGradK_eq_vitForwardKV_vjp
 #print axioms Proofs.vitInputGradK_correct
 #print axioms Proofs.vitTinyInputGrad_eq_vitTiny_vjp
--- ⭐⭐ ConvNeXt-T's whole-net BACKWARD NUMBER, the third and the first for a LAYERNORM net:
--- window 1.023e251 / budget 1.563e250, ratio 0.153 — the interval FOLD, no `capped` anywhere, at
--- the net whose own FORWARD number is a 2.00 cap. Stated directly on the committed
--- convnextInputGrad (r34's and mnv2's budget files define their own skeleton), so the tie above
--- makes it a statement about the certified gradient. At |istd| <= 16, the measured per-kind
--- profile (kernels 0.60, LN gamma 4.80, layer scale 8.38 — the split is worth 68 orders here) and
--- padOdd fan-ins. ⛔ Does NOT compose with the forward: that statement is `capped`, so the
--- activation accuracy it supplies is 2 x window ~ 1e227 and LayerNorm has no eval mode.
--- ⭐⭐ THE FOURTH WHOLE-NET BACKWARD NUMBER, EfficientNet-B0's
--- (EfficientNetBackFloatBudget.lean, 2026-09-04): window 7.104e182 / budget 1.578e182, ratio
--- 0.222 — the interval FOLD, no cap anywhere, at TRAINING-mode BatchNorm. 59 numeric stages,
--- 138 rational inequalities (b0_back_chain(ssw = 2, S = 317, N = 1) / verify_b0_back).
--- ⭐⭐ AND IT IS THE SQUEEZE-EXCITE FOLD — three SE sites, and squeeze-excite is the site §0.1
--- lists as making a FORWARD quadratic in the window. seInputGrad g x gateBack =
--- biPathSum (diagBack g) (gateBack . diagBack x): g and x are SAVED constants, both branches are
--- linear in the cotangent, nothing multiplies the cotangent by itself. §0.1's closing sentence,
--- as a theorem.
--- ⭐⭐ |swish'| <= 2 is what makes it EXIST: the nine swish diagBack slots take the REAL saved
--- derivative (fun i => swishScalarDeriv (xpre i)) at Ssw = 2, discharged by
--- swishScalarDeriv_abs_le, so the FORWARD's certified window never enters. With the repo's other
--- bound (swishScalar_lipschitz_abs's 1 + A/4 at that window) the same fold is 1e431. 262 orders.
--- ⭐⭐ AND IT ASSUMES NO OPERATING POINT — the second such backward after MobileNetV2's.
--- EnetBnBack.hS derives |istd| <= 317 from eps >= 1e-5 alone (bnIstd_abs_le_of), and the eps-floor
--- fold lands 70 orders under §3.7(a)'s ~1e253 ceiling, so §3.13's rule is APPLIED rather than
--- inherited: an operating-point hypothesis is what you pay when the eps-floor fold does not fit.
--- b0_back_chain's S = 16 default is ResNet-34's; §3.12's 7.640e169 is that stronger hypothesis.
--- ⛔ THE NUMBER IS AT N = 1 AND IS NOT BATCH-FREE, unlike b0_float_logits_le. bnBatchLA is the one
--- op in this net that is not batchMap N of a per-example op — it reduces mu/var ACROSS examples —
--- so every BatchNorm site's width is N*h*w and the number moves with the batch: 7.104e182 at N=1,
--- 2.880e194 at N=256 (a fold and statable throughout). At N = 1 the two widths coincide, which is
--- why the per-example floatBridgesTo_bnPerChannelBack at width h*w is the right leaf here.
--- ⛔ es/exh/esav ARE supplied at 1e-2 and are what this net's own TRAINING-mode forward fold
--- cannot discharge — ⭐ but unlike ConvNeXt-T, B0 has an INFERENCE mode where its forward IS a
--- fold (b0_float_logits_le), so the gap is quantitative and not a gap in kind (§3.16 finding 1).
--- ⚠ The one remaining window import is the SE's saved input: Sx = 4.903e40 / 5.451e24 / 7.572e9
--- for b3/b2/b1, the forward's certified pre-swish window. An operating point on it is worth ~71
--- orders and is deliberately NOT taken.
--- ⭐ Stated DIRECTLY on the committed efficientnetInputGradB (§3.22's shape, as ConvNeXt-T's is on
--- convnextInputGrad), so B0's whole-net tie — against efficientnetForwardB_has_vjp, NOT the
--- 16-block efficientnetForwardB_full_has_vjp — will make it a statement about the certified
--- gradient with nothing in between. ⚠ That tie is still open.
--- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
--- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
--- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0
--- float-bridges FREE via floatBridges_depthwise (the depthwise twin of convBack). Strided variant
--- depthwiseStride2FlatBack = depthwiseFlatBack ∘ decimateBack (zero-upsample scatter then reversed
--- depthwise conv), the depthwise twin of flatConvStride2Back.
-#print axioms Proofs.floatBridges_depthwiseBack
-#print axioms Proofs.floatBridges_depthwiseStride2Back
-#print axioms Proofs.floatBridges_depthwiseStride2XlaBack
--- A3 §1e Squeeze-Excite backward (the architecturally-distinctive product-rule op). SE = x⊙gate(x),
--- so the input-VJP is the two-path fan-in seBack(dy) = (g⊙dy) + gateBack(x⊙dy): main path scales dy
--- by the saved gate g (diagBack g, a stop-gradient multiplier), gate path pre-scales dy by the saved
--- input x (diagBack x) then threads gateBack, the two ADD (FloatBridges.biPathSum — the multiplicative
--- cousin of the residual fan-in). gateBack fully assembled = gapBack ∘ linBack W₁ ∘ swishBack ∘
--- linBack W₂ ∘ sigmoidBack ∘ broadcastBack (every op already bridged except broadcastBack — the gate's
--- broadcast adjoint = sum-over-spatial of each channel's h·w cells, bridged via reduction_close).
-#print axioms Proofs.broadcastBackFlat_eq_vjp
-#print axioms Proofs.floatBridges_broadcastBack
-#print axioms Proofs.floatBridges_seGateBack
-#print axioms Proofs.floatBridges_seBack
--- ── A3 Part 2: per-net backward assembly (consumes §1e depthwise + SE backward) ──
--- MobileNetV2 (no SE): the inverted-residual body backward = expandBack ∘ depthwiseBack ∘ projectBack
--- (the §1e depthwiseFlatBack / depthwiseStride2FlatBack concrete, conv/BN/relu6-mask reused); the skip
--- blocks reverse to residual(bodyBack). mnv2_grad_floatBridges = the WHOLE-NET fold (exact reverse of
--- mobilenetv2Forward_full_pc: dense∘GAP∘head∘b6∘b5∘res b4∘b3∘res b2∘b1∘stem), concrete stem/head/GAP/
--- dense endpoints, the 6 inverted-residual block backwards supplied as FloatBridges (à la r34's blocks).
-#print axioms Proofs.floatBridges_invresBodyBackPC
-#print axioms Proofs.floatBridges_invresBodyStridedBackPC
-#print axioms Proofs.mnv2_grad_floatBridges
--- MobileNetV2 WHOLE-NET FORWARD (forward peer of mnv2_grad_floatBridges, ch7 6-block per-channel
--- render): new op-bridge floatBridges_relu6 (relu6 exact in float + 1-Lipschitz, mirror of
--- floatClose_relu); the 4 inverted-residual stage bridges + the 2 named block bridges
--- floatBridges_invresBody{,Strided}PC (forward peers of the *BackPC blocks, no SE); mnv2Forward_
--- floatBridges = the ∘ skeleton fold (concrete stem/head/GAP/dense, stem/head BNs + 6 blocks supplied).
--- EfficientNet: whole-net forward is batched, so (peer of floatBridges_mbconvBody) the per-example
--- MBConv body backward = expandBack ∘ depthwiseBack ∘ seBack ∘ projectBack — the first block where BOTH
--- §1e ops land (depthwiseFlatBack concrete + the SE product-rule seB supplied, dischargeable by
--- floatBridges_seBack). + the additive-skip residual variant.
-#print axioms Proofs.floatBridges_mbconvBodyBack
-#print axioms Proofs.floatBridges_mbconvResidBack
--- The BATCHED-EMIT lift (the forward's Item-B, for the backward): efficientnetForwardB is batched
--- (batchMap N (per-example net); BNs eval-mode flat ⇒ no cross-batch coupling), so the batched whole-net
--- backward is batchMap N (per-example net back). FloatClose/FloatBridges.batchMap = the Vec(N·a)→Vec(N·b)
--- generalization of FloatClose.perRow (a backward swaps cin↔cout). floatBridges_mbconvBatched{Body,Resid}Back
--- = batchMap N of the per-example MBConv backs — the repeating unit of the batched whole-net backward.
-#print axioms Proofs.FloatClose.batchMap
-#print axioms Proofs.FloatBridges.batchMap
-#print axioms Proofs.floatBridges_mbconvBatchedBodyBack
-#print axioms Proofs.floatBridges_mbconvBatchedResidBack
--- EfficientNet WHOLE-NET FORWARD (forward peer of efficientnetForwardB_has_vjp, stated identically on
--- the ∘-composition that IS efficientnetForwardB). New op-bridge floatBridges_depthwiseStride2Flat
--- (mbStrided downsample = depthwise read at decimateIdx, peer of floatBridges_flatConvStride2); the
--- batched stage/block bridges (each batch-separable op FloatBridges.batchMap-lifted, swish block-
--- diagonal, the 10 true-batch-norms bnBatchLA supplied); efficientnetForwardB_floatBridges = the
--- stem→MBConv1→MBConv6-strided→MBConv6-resid→head .comp fold.
--- EfficientNet WHOLE-NET BACKWARD (the LAST whole-net float bridge — completes the 5-net × {fwd,bwd}
--- matrix). efficientnet_grad_floatBridges = the batched .comp fold (reverse of head∘mbResid∘mbStrided∘
--- mbNoExp∘stem): concrete batchMap-lifted classifier (linBack)/GAP (gapBack)/head-conv/stem-conv
--- (convFlatBack/flatConvStride2Back) endpoints, with the stem/head BN+swish backs and the three MBConv
--- block backs supplied (the mnv2_grad_floatBridges discipline). The two non-residual block backs are
--- dischargeable too: mbNoExpBodyBack (b1B, expand arm dropped) + mbStridedBodyBack (b2B, stride-2
--- depthwise back), so — with mbconvBatchedResidBack for the residual b3B — every supplied hypothesis is
--- instantiable (mnv2 parity). A3 = gradient closeness at a smooth point.
-#print axioms Proofs.efficientnet_grad_floatBridges
-#print axioms Proofs.floatBridges_mbNoExpBodyBack
-#print axioms Proofs.floatBridges_mbStridedBodyBack
--- ConvNeXt-T (per-example): block body backward = depthwiseBack ∘ lnBack ∘ convBack ∘ geluBack ∘
--- convBack ∘ layerScaleBack (depthwiseFlatBack concrete; LN/GELU/layer-scale diagBacks supplied); full
--- block = residual(body); the stage downsample = lnBack ∘ flatConvStride2Back. convnext_grad_floatBridges
--- = the WHOLE-NET [3,3,9,3] fold (reverse of convNextForwardTCh), concrete GAP/dense, stem/4 stages/3
--- downsamples/head-LN supplied as FloatBridges.
-#print axioms Proofs.floatBridges_cnxBlockBodyBack
-#print axioms Proofs.floatBridges_cnxBlockBack
-#print axioms Proofs.floatBridges_cnxDownBack
-#print axioms Proofs.convnext_grad_floatBridges
--- ConvNeXt-T WHOLE-NET FORWARD (forward peer of convnext_grad_floatBridges, the [3,3,9,3] fold of
--- convNextForwardTCh). New op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ, γ exact ⇒ es=0) +
--- floatBridges_flatConvStride4 (4×4/s4 patchify stem = flatConv read at decimateOddIdx∘decimateIdx).
--- Named bridge floatBridges_cnxBlockWith (LN-abstract residual body; floatBridges_convNextBlock is
--- its ch9 instantiation, and §2n deleted the three scalar-LN packaged peers); convnext_
--- floatBridges = the ∘-skeleton fold (stem-conv/GAP/dense concrete, stem/head LN + 4 stages + 3
--- downsamples supplied). COMPLETES the 5-net forward whole-net sweep.
--- §2n — the SAME story at ConvNeXt's REAL channel LayerNorm (the §2m flip), forward AND backward.
--- Route A's conjugation is four permutations around one row map, so floatBridges_chanLNTensor3 is
--- floatBridges_bnPerChannelTensor3's blueprint with a transpose inserted; the row map is ViT's
--- vector-LN = (+β) ∘ layerScale γ ∘ LN(1,0) (rfl), i.e. the SAME rsqrt keystone at a different
--- reduction width — the channel flip added no transcendental. Three new op-bridges: the transpose
--- IS a gather (transposeFlat_eq_gather, rfl), the +β translation, the vector-LN. The block bridge
--- is now stated once over cnxBodyWith (the LN-abstract body §2m built for the VJP) and the scalar
--- ch9 net instantiates it for free — convNextBlockBody = cnxBodyWith (layerNormForward …) by rfl.
--- Backward: everything in ConvNeXtBackFloatBridge was already lnB-abstract, so the flip costs the
--- whole-net gradient exactly one op (chanLNTensor3Back) + id in the head slot (no head LN).
-#print axioms Proofs.floatBridges_transposeFlat
-#print axioms Proofs.floatBridges_biasAdd
-#print axioms Proofs.floatBridges_layerNormVec
-#print axioms Proofs.floatBridges_chanLNTensor3
-#print axioms Proofs.floatBridges_chanLNTensor3Back
-#print axioms Proofs.convnextCh_grad_floatBridges
--- The skeleton↔real-net forward ties (item #5, cosmetic): each whole-net forward skeleton, with the
--- concrete blocks plugged into its abstract slots, IS the committed real ℝ-forward def (rfl, modulo
--- convNextForwardTCh's nested-app going through its _eq_chain). So the forward bridges provably apply
--- to the actual nets, not just look-alike skeletons. (efficientnet already ties via its ∘-form.)
--- ConvNeXt ties at chanLNTensor3 in the stem slot and `id` in the head slot (no head LN); its
--- scalar-LN predecessor convNextForwardT_eq_skeleton went with the §2n drop.
--- A3 §1g loss-head cotangent seed ("from the loss"): floatClose_lossSeed wraps the per-entry
--- softmax_ce_cot_close (|M.softmaxCECotF − (softmax−onehot)| ≤ cotErr) into a FloatClose/FloatBridges
--- (real z↦softmax(z)−onehot, bounded by 1 since softmax∈[0,1], modulus cotErr(e)); floatBridges_gradFromLoss
--- = the seed .comp any <net>_grad ⇒ the whole "logits → input-gradient" backward float-bridges from the loss.
--- A3 §1f softmax-Jacobian backward (the vit/attention crux): the certified row VJP softmaxBack p dy i =
--- pᵢ·(dyᵢ − ⟨p,dy⟩) = (diag(p) − p·pᵀ)·dy. Unlike diagBack it couples a whole row (the ⟨p,dy⟩ reduction),
--- so softmaxBack_close threads mul_close/reduction_close/sub_close' exactly like bnGradInput_close, with
--- the float softmax weights fp supplied within ep (= smErr). LINEAR in dy ⇒ FloatClose modulus IS the
--- magnitude bound at Cdy:=e (softmaxBack_sub_abs_le). The heart of sdpaBack; P-general (P=1 for softmax).
-#print axioms Proofs.softmaxBack_close
-#print axioms Proofs.floatClose_softmaxBack
-#print axioms Proofs.floatBridges_softmaxBack
--- A3 §1f Mat-space SDPA BACKWARD assembly (the vit-crux capstone): the backward peer of sdpa_close.
--- The certified sdpa_back_{Q,K,V} (Attention.lean) = dw = dOut·Vᵀ (matmul) → dScaled = softmaxBack(p,dw)
--- per row (the §1f row VJP) → dScores = (1/√d)·dScaled (scale) → dQ = dScores·K, dK = dScoresᵀ·Q,
--- dV = pᵀ·dOut (matmuls). No new analysis: dw reuses attnScore_close, dQ/dK/dV reuse attnDot_close (a
--- rounded dot at PERTURBED softmax weights fp, within ew=attnWeightErr of p), the row VJP reuses
--- softmaxBack_close (rounding) + softmaxBack_sub_abs_le (the dw-perturbation Lipschitz half), the scale
--- reuses mul_close. sdpaBack{V,Q,K}_close: each float backward entry within sdpaBackErr of the certified.
-#print axioms Proofs.sdpaDwF_close
-#print axioms Proofs.sdpaDScaledF_close
-#print axioms Proofs.sdpaDScoresF_close
-#print axioms Proofs.sdpaBackV_close
-#print axioms Proofs.sdpaBackQ_close
-#print axioms Proofs.sdpaBackK_close
--- Multi-head wrap: per-head sdpa-core backward over the head axis. Column j of a Mat N (h·dh)
--- decodes (finProdFinEquiv.symm j) to (head hd, within c), matching mhsa_layer's concat. The
--- multi-head backward is the per-head concatenation of the single-head sdpa_back_{V,Q,K} on the
--- mhSlab head slabs; each output entry reduces to its head's sdpaBack*_close, budget head-independent
--- (every head dim dh, scale 1/√dh). The attention-CORE backward; the Q/K/V/O projections are linBack
--- and the X fan-in is biPathSum (existing combinators). mhsaSdpaBack{V,Q,K}_close.
-#print axioms Proofs.mhsaSdpaBackV_close
-#print axioms Proofs.mhsaSdpaBackQ_close
-#print axioms Proofs.mhsaSdpaBackK_close
--- FULL multi-head self-attention input-gradient backward (the backward peer of mhProjAttnFull).
--- dY ↦ dX = WoBack (linBack Wo, per token) → the 3 flattened sdpa cores (floatBridges_core{V,Q,K},
--- each the FloatClose lift of mhsaSdpaBack* — linear in the cotangent, so modulus = rounding budget +
--- real magnitude at e) → Q/K/V projBacks (free per-token linBacks) + the 3-way fan-in at X (biPathSum
--- twice). floatBridges_mhsaBack assembles it with comp/biPathSum/perRow — budgets thread automatically.
-#print axioms Proofs.floatClose_coreV
-#print axioms Proofs.floatClose_coreQ
-#print axioms Proofs.floatClose_coreK
-#print axioms Proofs.floatBridges_coreV
-#print axioms Proofs.floatBridges_coreQ
-#print axioms Proofs.floatBridges_coreK
-#print axioms Proofs.floatBridges_mhsaBack
--- THE TRANSFORMER-BLOCK BACKWARD (reverse of LN→MHSA→+x→LN→MLP→+x): one FloatBridges.comp of the
--- MLP-residual backward (residual of LN₂-back ∘ linBack W₁ ∘ geluBack ∘ linBack W₂, per token) and the
--- attention-sublayer backward (residual of LN₁-back ∘ mhsaBack). Pure assembly — comp/residual/perRow
--- over floatBridges_mhsaBack, the free linBacks, geluBack diagBack, supplied LN backs. The backward
--- peer of floatBridges_vitBlock; a 12-layer encoder backward is .comp of this (the whole-net fold).
-#print axioms Proofs.floatBridges_vitBlockBack
--- THE ENCODER-TOWER BACKWARD — the whole k-layer encoder backward is the .comp fold of the per-block
--- backwards (floatBridges_vitBlockBack). Distinct-param blocks ⇒ explicit list fold (the depth thread,
--- not a uniform iterate), generic in depth; floatBridges_id is the base case (cotangent passes through).
-#print axioms Proofs.floatBridges_id
-#print axioms Proofs.floatBridges_towerBack
--- The ViT endpoints + the WHOLE-NET fold. clsScatter = the cls-slice backward (scatter the head
--- cotangent to row 0 of the (N+1)×D sequence, zero on patch rows; exact, modulus id). vitHeadBack =
--- classifier backward (clsScatter ∘ linBack Wcls). vit_grad_floatBridges = the whole-net .comp thread
--- over the concrete head/cls-slice + the encoder tower + the supplied final-LN and patch-embed
--- backwards (each separately dischargeable) — the r34_grad_floatBridges blueprint for ViT.
-#print axioms Proofs.floatBridges_clsScatter
-#print axioms Proofs.floatBridges_vitHeadBack
-#print axioms Proofs.vit_grad_floatBridges
--- The PATCH-EMBED backward — the last whole-net endpoint, now CONCRETE. The certified
--- patchEmbed_input_grad_formula (the transposed conv: a guarded triple-sum ∑p∑kh∑kw (if patch covers
--- pixel then ∑d W_conv·dy else 0), linear in the cotangent) float-bridges via dot_close (inner ∑d,
--- fan-in D) folded through nested reduction_close (the kw/kh/p sums); the guard is a fixed index
--- predicate (identical float/real). floatBridges_patchEmbedBack discharges vit_grad_floatBridges's
--- hPatch ⇒ the whole ViT input-gradient backward is fully concrete (head/cls-slice/patch-embed).
-#print axioms Proofs.patchEmbed_formula_abs_le
-#print axioms Proofs.patchEmbedBack_round_close
-#print axioms Proofs.floatClose_patchEmbedBack
-#print axioms Proofs.floatBridges_patchEmbedBack
--- THE FULLY-CONCRETE ViT WHOLE-NET BACKWARD: vit_grad_floatBridges with the patch-embed discharged by
--- floatBridges_patchEmbedBack — EVERY endpoint (patch-embed/cls-slice/head) concrete, only per-block
--- backs + final LN supplied (dischargeable by floatBridges_vitBlockBack / bnBack). The deployed float
--- ViT input-gradient backward ≈ the certified ℝ gradient, end to end (closeness at a smooth point).
-#print axioms Proofs.vit_grad_floatBridges_concrete
 -- ViT WHOLE-NET FORWARD (forward peer of vit_grad_floatBridges): vit_full reversed = classifier ∘
 -- perRowFlat finalLN ∘ tower blocks ∘ patchEmbed. New op-bridge floatBridges_clsSlice (the cls-slice
 -- gather = read row 0, exact + magnitude-stable, peer of clsScatter); floatBridges_vitHead = the
@@ -3183,13 +2456,6 @@ open Proofs
 -- gelu_close is the rounding half (egelu, the eexp/esig pattern); floatClose_gelu the wrap.
 -- §2d the per-token MLP residual sub-block LN→dense→GELU→dense + skip folds via FloatBridges
 -- (LN enters as the operating-point hypothesis, like the MBConv BNs).
-#print axioms floatClose_layerNorm
-#print axioms Real.tanh_lipschitz_abs
-#print axioms geluScalar_lipschitz_abs
-#print axioms gelu_close
-#print axioms floatClose_gelu
-#print axioms floatBridges_gelu
-#print axioms floatBridges_vitMlpResidual
 -- ── planning/floatbridge_enet_vit.md §2c (ViT float bridge: ATTENTION, Mat-space) ──
 -- Attention mixes across tokens, so it lives in Mat n d space (not the Vec-space FloatClose
 -- framework) and the per-row softmax couples a whole row of logits. The capstone sdpa_close
@@ -3202,11 +2468,6 @@ open Proofs
 #print axioms FloatModel.softmaxF_close_at
 #print axioms FloatModel.smErr_nonneg
 #print axioms FloatModel.softmax_abs_le_one
-#print axioms FloatModel.attnScore_close
-#print axioms FloatModel.attnScaled_close
-#print axioms FloatModel.attnDot_close
-#print axioms FloatModel.rowSoftmaxF_close
-#print axioms FloatModel.sdpa_close
 -- ── planning/floatbridge_enet_vit.md §2 (ViT TRANSFORMER-BLOCK FOLD: the Mat↔Vec seam) ──
 -- The block LN→MHSA→+→LN→MLP→+ mixes per-token ops (Vec d) with cross-token attention
 -- (Mat n d). The seam perRowFlat + FloatClose.perRow/FloatBridges.perRow lifts a per-token
@@ -3215,9 +2476,6 @@ open Proofs
 -- the MLP+LN₂ sublayer fully (floatBridges_vitMlpResidual.perRow), the attention sublayer
 -- supplied (rounding = sdpa_close, input-sensitivity the one open piece) — the BN/LN-as-
 -- hypothesis pattern. The whole block proved modulo that single attention constant.
-#print axioms FloatClose.perRow
-#print axioms FloatBridges.perRow
-#print axioms floatBridges_vitBlock
 -- ── planning/floatbridge_enet_vit.md §2c-capstone (ATTENTION INPUT-SENSITIVITY → UNCONDITIONAL block) ──
 -- The one piece sdpa_close was missing: how the real sdpa output moves under a perturbed
 -- input. sdpa_input_close (the attention Lipschitz bound) — score sensitivity → 1/√d scale →
@@ -3227,12 +2485,6 @@ open Proofs
 -- (rounding sdpa_close + sensitivity sdpa_input_close); floatBridges_sdpaSelf its bridge form.
 -- floatBridges_vitBlockSelf: the UNCONDITIONAL ViT encoder block — hattn discharged, nothing
 -- supplied, every piece proved in rounding (a-posteriori in the activation magnitude).
-#print axioms FloatModel.sdpa_input_close
-#print axioms FloatModel.sdpa_abs_le
-#print axioms FloatModel.softmax_sum_one
-#print axioms floatClose_sdpaSelf
-#print axioms floatBridges_sdpaSelf
-#print axioms floatBridges_vitBlockSelf
 -- ── §2c-projections (genuine Wq/Wk/Wv/Wo — the deployed MHSA, single head) ──
 -- Q=XWq, K=XWk, V=XWv are per-token denses of the SAME X (the three-way fan-in); each
 -- projection's float drift threads into sdpa's slots (dense_close → layerBudget rounding,
@@ -3241,12 +2493,6 @@ open Proofs
 -- adds the output projection Wo (perRowFlat dense, the post-sdpa per-token dense).
 -- floatBridges_vitBlockProj: the FULLY-PROJECTED ViT block, unconditional (hattn discharged);
 -- floatBridges_vitBlockSelf is its Wq=Wk=Wv=Wo=I special case.
-#print axioms projF_abs_le
-#print axioms projFR_close
-#print axioms floatClose_projAttn
-#print axioms floatBridges_projAttn
-#print axioms floatBridges_mhsaProj
-#print axioms floatBridges_vitBlockProj
 -- ── §2c-multihead (the reshape: h parallel single-heads) ──
 -- Multi-head attention is h independent single-head attentions over feature slabs. In a
 -- head-major layout that is exactly perRowFlat (heads = blocks); the token-major↔head-major
@@ -3254,19 +2500,12 @@ open Proofs
 -- magnitude-stable, modulus id), so it preserves FloatClose. mhSdpaSelfFlat = gather(reshape⁻¹)
 -- ∘ perRow(sdpaSelfFlat n dh) ∘ gather(reshape); floatBridges_mhSdpaSelf is one FloatBridges.comp
 -- chain. floatBridges_vitBlockMH: the multi-head ViT block, unconditional (h=1 = vitBlockSelf).
-#print axioms floatClose_gather
-#print axioms floatBridges_gather
-#print axioms floatBridges_mhSdpaSelf
-#print axioms floatBridges_vitBlockMH
 -- ── §2c-projected-multihead (per-head Wq/Wk/Wv, block-diagonal) ──
 -- The indexed perRow seam (FloatClose.perRowIdx): each block gets its OWN per-token map, so
 -- each head can carry its own projections (uniform budget across heads — depends on w'/β/A,
 -- not the weights). mhProjAttnFlat = reshape ∘ perRowIdx (per-head floatClose_projAttn at dim dh)
 -- ∘ reshape; floatBridges_vitBlockMHProj = the projected-multi-head ViT block (all three
 -- extensions — projections + multi-head reshape + unconditional block — combined).
-#print axioms FloatClose.perRowIdx
-#print axioms floatBridges_mhProjAttn
-#print axioms floatBridges_vitBlockMHProj
 -- ── §2c-full-d-multihead (STANDARD MHA: each head reads all h·dh features) ──
 -- Wq/Wk/Wv : Mat (h·dh) (h·dh) project the FULL input; head hd runs sdpa over the column
 -- slab (headSlab) of the projected Q/K/V (dim dh, scale 1/√dh). The per-entry bounds are the
@@ -3274,9 +2513,6 @@ open Proofs
 -- only the output index carries the (head, within-head) split. floatClose_mhProjAttnFull is
 -- floatClose_projAttn per head; floatBridges_vitBlockMHFull is the standard-MHA ViT block —
 -- the deployed encoder layer in full generality.
-#print axioms floatClose_mhProjAttnFull
-#print axioms floatBridges_mhProjAttnFull
-#print axioms floatBridges_vitBlockMHFull
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
@@ -4731,7 +3967,6 @@ open Proofs
 #print axioms Proofs.IBP.CertifiedAtLinfV.mono
 
 
-
 -- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean, post_audit_roadmap §2): the repo's only two
 -- axioms (ieeeRnd/ieeeRnd_err — "a rounding operator satisfying the standard model exists") are
 -- replaced by a CONSTRUCTION: rndP p = round-to-nearest on the unbounded-exponent p-bit-significand
@@ -4978,38 +4213,6 @@ open Proofs
 #print axioms Proofs.depthwiseConv2d_eq_dw_dot
 #print axioms Proofs.FloatModel.depthwise_close_mixed
 
--- ════════════════════════════════════════════════════════════════
--- THE BATCHED WORLD'S BATCHNORM LEAVES (BnBatchFloatBridge.lean, 2026-09-06)
--- ════════════════════════════════════════════════════════════════
--- ⛔ Before this file `bnBatchTensor4` — TRAINING BatchNorm reducing mu/var over the batch+spatial
--- axes [0,2,3], the normalisation every Adam and momentum train step in verified_mlir/ emits —
--- had NO float leaf in EITHER direction. EfficientNetWholeFloatBridge.lean takes twenty-odd
--- `hbn : FloatBridges (StableHLO.bnBatchLA ...)` as HYPOTHESES, and a legacy FloatBridges
--- constrains no float implementation at all (formalization.yaml 4d), so nothing named the map and
--- nothing discharged them. B0's own numbers dodge the hole two ways: b0_float_logits_le is at
--- INFERENCE BN (frozen statistics, batchMap of a per-example op) and b0_grad_float_le is at N = 1,
--- where the batched reduction width N*h*w coincides with the per-example h*w.
--- ⭐⭐ Short because bnBatchTensor4 IS bnPerChannelTensor3 at a different width: both are
--- bnPerChannelFlat oc m conjugated by a permutation, with m = N*(h*w) rather than h*w. The flat
--- leaves were already generic in m and floatBridgesTo_gather holds for ANY equiv, so the whole
--- content is one new Equiv built from two round-trip lemmas that were already proven.
--- ⚠ The width is not cosmetic: bnGradInputReMag's gain carries Xh² = n = N*h*w, so a number built
--- on these leaves MOVES WITH THE BATCH SIZE. One theorem per N, which is b0_grad_float_le's
--- qualifier stated at the leaf instead of at the net.
-#print axioms Proofs.bnchwEquiv
-#print axioms Proofs.floatBridgesTo_bnBatchTensor4
-#print axioms Proofs.floatBridgesTo_bnBatchTensor4_eps
-#print axioms Proofs.floatBridgesTo_bnBatchBack
--- ⭐ The Maps envelopes, and the three layout-free cores they are corollaries of. Those proofs
--- never mention oc/h/w — they are statements about bnLeafMag/bnLeafMod (forward) and
--- bnGradInputReMag/bnGradInputBudgetG (backward), which take a WIDTH and no indices — so R50's
--- and MobileNetV4's envelopes will not be a fourth and fifth copy of the same linarith chain.
-#print axioms Proofs.FloatBridgesTo.Maps.bnLeafCore
-#print axioms Proofs.FloatBridgesTo.Maps.bnLeafCoreCapped
-#print axioms Proofs.FloatBridgesTo.Maps.bnGradLeafCore
-#print axioms Proofs.FloatBridgesTo.Maps.bnBatchTensor4
-#print axioms Proofs.FloatBridgesTo.Maps.bnBatchTensor4Capped
-#print axioms Proofs.FloatBridgesTo.Maps.bnBatchBack
 
 -- ════════════════════════════════════════════════════════════════
 -- RESNET-34 AT TRUE BATCH BN — T1-forward and T2 (ResNet34FullB.lean, 2026-09-06)

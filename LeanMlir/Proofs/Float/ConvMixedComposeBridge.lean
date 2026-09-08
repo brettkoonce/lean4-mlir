@@ -13,8 +13,8 @@ is `FloatComposeBridge.FloatClose`, and this file supplies its mixed-precision c
 small.** `FloatClose A B f fF L` says nothing about how `fF` rounds — only that it stays within
 `L e` of `f`. So `floatClose_relu`, `floatClose_bn`, `floatClose_maxPool3s2`, `floatClose_gap`,
 `floatClose_residualBlock`, `floatClose_iterate` and `FloatClose.comp` apply to a bf16 conv
-UNCHANGED. One new instance buys the entire existing fold — the `[3,4,6,3]` assembly in
-`Resnet34WholeFloatBridge` included.
+UNCHANGED. One new instance buys the entire existing fold (the `[3,4,6,3]` assembly it once
+fed, `Resnet34WholeFloatBridge`, was deleted with the whole-net budgets on 2026-09-08).
 
 What genuinely had to be proved here, none of which the `e = 0` bound gives:
 
@@ -371,8 +371,8 @@ theorem layerBudget_affine (u : ℝ) (m : ℕ) (w β A E : ℝ) :
     otherwise.** The shared `n·w` factor is ≫ 1 at any real layer (n = 4608, w' ≈ 0.05 gives
     ~230), so `gain^53` is astronomical for the f32 bound and the bf16 one alike. That is a
     property of worst-case forward-error analysis composed depth-first — every term assumes the
-    adversarial sign — not a property of bf16, and the repo's existing f32 whole-net bridges
-    (`Resnet34WholeFloatBridge`) carry exactly the same factor. ▶ What is meaningful here is the
+    adversarial sign — not a property of bf16, and the f32 whole-net bridges the repo carried
+    until 2026-09-08 had exactly the same factor. ▶ What is meaningful here is the
     RATIO: bf16's certificate is ~2× the f32 certificate, not exponentially worse. Anyone
     wanting a non-vacuous absolute number needs a different analysis (probabilistic rounding,
     or a bound that exploits BN's renormalisation at each layer), not a tighter conv lemma. -/

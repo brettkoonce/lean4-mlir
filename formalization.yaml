@@ -242,8 +242,9 @@ fidelity:
        was not one, and a dozen wrong docstring counts. Nothing trained was affected; in every
        case the emitted program was right and a hand-written spelling of the same map had drifted.
        A `den` stated as the certified VJP cannot drift; only a theorem naming both catches it.
-       The ℝ chains those ties are about are still DEFINED inside the `*FloatBridge` files, next
-       to float twins nothing consumes; moving them out and dropping the twins is the second pass.
+       The ℝ chains those ties are about live beside them, in `Foundation/BackwardMaps.lean` (the
+       per-op maps), `Architectures/ChannelLNBack.lean` and the five `Foundation/*BackChains.lean`;
+       the float twins that once sat next to them were deleted 2026-09-08 (second pass).
 
        THE PADDING CONVENTION (closed 2026-09-05): EfficientNet-B0's stem and MobileNetV2's five
        stride-2 sites are XLA-SAME in every shipped artifact and in every Proofs-tier statement;
