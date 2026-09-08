@@ -292,10 +292,9 @@ noncomputable def convNextForwardTCh (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224
     which this statement composes as `rowLNVecFlat 1 768 w.hε w.hγ w.hβ` and takes `hhε` for.
     Chain-stated to keep the blocks opaque.
 
-    ⚠ The count read `22 … no head LN` until 2026-09-04 — the pre-2026-08-30 net, in the third
-    place that number was written down. The other two were the FORWARD float bridge's head slot
-    (fixed 2026-09-03) and the BACKWARD bridge's, which held `id` and cited this same stale count
-    as its justification (fixed 2026-09-04). ⛔ `docstring-checkrefs` cannot catch this: it
+    ⚠ The count read `22 … no head LN` until 2026-09-04 — the pre-2026-08-30 net — and it was
+    the third place that stale number had been copied to, each copy citing the last as its
+    justification. ⛔ `docstring-checkrefs` cannot catch this: it
     resolves cited identifiers, and a stale COUNT cites nothing. -/
 noncomputable def convNextForwardTCh_has_vjp (w : CnxTWeightsCh)
     (hsε : 0 < w.sε)

@@ -5,19 +5,19 @@ import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the MobileNetV2 inverted-residual body backward targets the CERTIFIED VJP
 
-`invresBodyBackPC` (`MobileNetBackChains.lean`; until 2026-09-08 a float bridge that also budgeted it) proves
-**deployed-float ≈ a hand-assembled reverse-mode transcription** of the inverted-residual body. This
-file closes §B for that body: the transcription IS the certified input-gradient VJP, in the SAME
+`invresBodyBackPC` (`MobileNetBackChains.lean`) is the hand-composed reverse of the inverted-residual
+body, written in the per-op backward maps of `BackwardMaps.lean`. This file closes §B for that
+body: the chain IS the certified input-gradient VJP, in the SAME
 **non-batched per-channel-BN** vocabulary the deployed net renders (`invresBodyPC`, `MobileNetV2RenderPC`).
 
 The repo's `invresBody_has_vjp_at` (`MobileNetV2.lean`) is for the *global*-`bnForward` body, NOT the
 deployed per-channel one — so (exactly as r34 built `rblkPC_has_vjp_at` fresh) we build the certified
 per-channel body VJP `invresBodyPC_has_vjp_at` here (per-channel stage VJPs via `bnPerChannelTensor3`),
-then tie. b1-free: the per-example per-channel body is the non-batched object the float reverses, no
+then tie. b1-free: the per-example per-channel body is the non-batched object the chain reverses, no
 `batchMap` reconciliation.
 
 The forward body is `invresBodyPC = project ∘ depthwise ∘ expand`, each stage `(relu6) ∘ bnPC ∘ conv`,
-so the certified VJP applies `projectBack → depthwiseBack → expandBack`. The float `invresBodyBackPC`
+so the certified VJP applies `projectBack → depthwiseBack → expandBack`. `invresBodyBackPC`
 is the peer chain `(convFlatBack We ∘ bnBe ∘ reluMaskBack m_e) ∘ (depthwiseFlatBack Wd ∘ bnBd ∘
 reluMaskBack m_d) ∘ (convFlatBack Wp ∘ bnBp)`. The tie pins the per-channel BN backs (`bnBe/bnBd/bnBp`)
 to `bnPerChannelTensor3_has_vjp.backward` at the saved activations and the relu6 masks (`m_e/m_d`) to
@@ -120,7 +120,7 @@ theorem convBnPC'_differentiable {ic oc h w kH kW : Nat}
 
 /-- **Certified VJP of the per-channel-BN inverted-residual body `invresBodyPC`** (stride-1,
     non-batched). `project ∘ depthwise ∘ expand`, mirroring the global `invresBody_has_vjp_at` with
-    `bnPerChannelTensor3`. The same-vocabulary certified target for the float-bridge `invresBodyBackPC`
+    `bnPerChannelTensor3`. The same-vocabulary certified target for `invresBodyBackPC`
     — no batched/`batchMap` reconciliation. -/
 noncomputable def invresBodyPC_has_vjp_at {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid) (hεe : 0 < εe)
@@ -160,7 +160,7 @@ noncomputable def invresBodyPC_has_vjp_at {ic mid oc h w kHe kWe kHd kWd kHp kWp
 -- § The §B tie (stride-1 body)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The §B mnv2 body tie: float-bridge backward = certified VJP.** `invresBodyBackPC`, with its
+/-- **The §B mnv2 body tie: hand-composed backward = certified VJP.** `invresBodyBackPC`, with its
     abstract per-channel BN backs pinned to `bnPerChannelTensor3_has_vjp.backward` at the saved
     activations and its relu6 masks pinned to the actual `0 < preact < 6` clamp-window signs (relu6's
     certified backward), equals `(invresBodyPC_has_vjp_at …).backward`. The two 1×1 convs tie via
@@ -283,7 +283,7 @@ noncomputable def invresBodyStridedPC_has_vjp_at {ic mid oc h w kHe kWe kHd kWd 
     hde_diff ((convBnPC'_differentiable Wp bp εp γp βp hεp) _) hde_vjp
     ((convBnPC'_has_vjp Wp bp εp γp βp hεp).toHasVJPAt _)
 
-/-- **The §B mnv2 strided body tie: float-bridge backward = certified VJP.** The downsample peer of
+/-- **The §B mnv2 strided body tie: hand-composed backward = certified VJP.** The downsample peer of
     `invresBodyBackPC_eq_invresBodyPC_vjp`: `invresBodyStridedBackPC` with its per-channel BN backs and
     relu6 masks pinned to the saved activations equals `(invresBodyStridedPC_has_vjp_at …).backward`.
     The strided depthwise ties via `depthwiseStride2FlatXlaBack_eq_vjp_backward`; the expand conv at the

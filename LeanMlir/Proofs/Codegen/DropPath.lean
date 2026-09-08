@@ -26,7 +26,7 @@ graph INPUT), not here.
 | forward | `layerScale (dropScale …)` — `rfl` |
 | VJP | **`layerScale_has_vjp`, verbatim.** The map is diagonal, so its own transpose |
 | the backward emitter | **none needed** — `dropPath_vjp_is_self` says the backward IS the forward at the same mask |
-| float story | `floatBridges_diagBack` already covers the shape (`LinBackFloatBridge.lean:75`) |
+| float story | `floatBridges_diagBack` already covers the shape (`LinBackFloatBridge.lean`) |
 
 That is the fourth time enumerating a reference feature against existing ops *at their other
 readings* has collapsed a scoped op family (§2k heavy-ball, recipe_gaps v1.2 RMSProp, the EMA

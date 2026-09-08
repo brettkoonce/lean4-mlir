@@ -85,6 +85,22 @@ Prose-only, one commit; grep `-il 'float bridge\|FloatBridges\b\|floatBridges_'`
 tie headers that begin "The A3 backward float bridge `X` (…FloatBridge.lean) proves…" are the
 worst offenders; three were rewritten during the second pass and read as the template.
 
+**DONE 2026-09-08.** 64 passages in 14 files (the six §B tie files, `EvenKernelConvBack`,
+`ConvNeXtWholeBackCertifiedTie`, `ConvNeXtFullT`, `MaxPool3s2`, `DropPath`,
+`EfficientNetRenderPCEval`, the two `SgdDescent*`): every "float-bridge `X`" is "the backward
+map `X`" or "the chain", every "deployed-float ≈ transcription" is "the chain IS the certified
+VJP", and eleven cites of deleted objects (`floatBridges_mbconvBody`, `floatBridges_convBack`,
+`floatBridges_mhsaBack`, `floatBridges_vitBlockBackPR`, `floatBridges_chanLNTensor3Back`,
+`floatClose_bnBack`, `r34_floatBridges`, `r34Forward`, `resnet34Forward_full_pc_eq_skeleton`,
+`floatBridgesTo_convNextStageChK`, `FloatBridgesTo.ofEq`) now name what exists. Two stale
+non-float claims in the same paragraphs went with them (ResNet-34 has its shape check,
+`resnet34Forward_full_pc_eq_chain`). Kept: the ℝ leaves' one-line provenance notes, the
+Training/Certificates prose about `FloatBridge.lean` (live), `MlpCanonical`'s existential
+statement (§8). ⚠ The premise above was wrong: the gate was green because it never LOOKED —
+`docstring-checkrefs` resolves only names carrying a `projectMarkers` substring, and no float
+name did. The markers now include `floatBridges_` / `floatClose_` / `FloatBridges` /
+`FloatClose`; that admitted 96 more citations and three more dead ones in `Float/`, fixed here.
+
 ## 4. `formalization.yaml`
 
 Deferred by user decision during the second pass. Two things: 4c is a stub whose only content is

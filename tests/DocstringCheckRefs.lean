@@ -135,7 +135,10 @@ def backtickRefs (body : String) : Array String := Id.run do
     look at what it admits. -/
 def projectMarkers : List String :=
   ["_has_vjp", "_correct", "_bridge", "_close", "_tied", "_faithful", "_denote_eq",
-   "_descends", "_adjointClose", "_argmaxSafe", "_fwd_faithful", "_eq_chain", "_rowIndep"]
+   "_descends", "_adjointClose", "_argmaxSafe", "_fwd_faithful", "_eq_chain", "_rowIndep",
+   -- the float tier's names (2026-09-08): nine `floatBridges_*` citations of theorems deleted
+   -- in the float second pass sat under a green gate because none carried a marker above.
+   "floatBridges_", "floatClose_", "FloatBridges", "FloatClose"]
 
 /-- Substring test written by hand rather than via `splitOn`, because this toolchain is
     mid-migration from `String` to `String.Slice` and the return type of the string helpers

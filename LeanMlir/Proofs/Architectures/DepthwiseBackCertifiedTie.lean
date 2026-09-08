@@ -13,7 +13,7 @@ The §B certified-VJP ties for the three CNNs (convnext / mnv2 / efficientnet) a
   analogue of the conv gate — same `(kh,kw) ↦ (kh+hi-pH, kw+wi-pW)` partial bijection on the pad
   supports, MINUS the `Σ co` channel sum (depthwise has no cross-channel mixing, so the input channel
   reads only from its own kernel/gradient channel `ch`).
-* `depthwiseFlatBack_eq_vjp_backward` — the stride-1 leaf tie: the float-bridge `depthwiseFlatBack W`
+* `depthwiseFlatBack_eq_vjp_backward` — the stride-1 leaf tie: the backward map `depthwiseFlatBack W`
   (= `depthwiseFlat (dwReverse W) 0`) IS the certified depthwise input-VJP
   `(depthwiseFlat_has_vjp W b).backward x` (depthwise conv is linear ⇒ the saved activation `x` is
   ignored). The depthwise peer of `convFlatBack_eq_vjp_backward`.
@@ -96,7 +96,7 @@ theorem depthwiseConv2d_dwReverse_eq_input_grad_formula {c h w kH kW : Nat}
     have eb : kW - 1 - p.2.val = wi.val + (kW - 1) / 2 - (p.2.val + wi.val - (kW - 1) / 2) := by omega
     simp only [ea, eb]
 
-/-- **Depthwise conv input-VJP leaf tie.** The float-bridge `depthwiseFlatBack W` (= reversed-kernel
+/-- **Depthwise conv input-VJP leaf tie.** The backward map `depthwiseFlatBack W` (= reversed-kernel
     forward depthwise conv) IS the certified depthwise input-VJP `(depthwiseFlat_has_vjp W b).backward
     x` (depthwise conv is linear, so the saved activation `x` is ignored), for odd kernels. Routes
     through `depthwiseConv2d_dwReverse_eq_input_grad_formula`; the depthwise peer of

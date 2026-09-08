@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 an **exactly-represented input**. That is not enough to compose: a net feeds each layer the
 *previous* layer's already-perturbed output, so what a fold needs is an error **modulus** — a map
 from inherited input error to output error — plus a magnitude bound to thread forward. That pair
-is `FloatComposeBridge.FloatClose`, and this file supplies its mixed-precision conv instance.
+is `FloatClose` (`FloatComposeBridge.lean`), and this file supplies its mixed-precision conv instance.
 
 ⭐⭐ **The composition backbone is PRECISION-AGNOSTIC, and that is the whole reason this is
 small.** `FloatClose A B f fF L` says nothing about how `fF` rounds — only that it stays within

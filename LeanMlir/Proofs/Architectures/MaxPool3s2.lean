@@ -122,14 +122,14 @@ theorem maxPool3s2_attained {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
   exact ⟨ab, hab⟩
 
 -- ════════════════════════════════════════════════════════════════
--- § Magnitude and closeness — what the FLOAT bridge needs
+-- § Magnitude and closeness — what the float tier needs
 -- ════════════════════════════════════════════════════════════════
 --
--- ⚠⚠ These exist because `r34Forward` — the skeleton `r34_floatBridges` is stated over — supplies
--- its pool CONCRETELY (`floatBridges_maxPool`) where it supplies all 16 blocks abstractly. So
--- moving the net's pool moved a `rfl` that had nothing to do with the codegen, and it surfaced as
--- a **`(deterministic) timeout at whnf`** on `resnet34Forward_full_pc_eq_skeleton` rather than as
--- a type error. ⚠ Raising the heartbeat budget — the recorded fix for the superficially identical
+-- ⚠⚠ These exist because the r34 forward float chain (`floatClose_r34_stages` composed with
+-- `floatClose_maxPool3s2`, `FloatComposeBridge.lean`) supplies its pool CONCRETELY where it supplies
+-- all 16 blocks abstractly. So moving the net's pool moved a `rfl` that had nothing to do with the
+-- codegen, and it surfaced as a **`(deterministic) timeout at whnf`** on the forward's shape check
+-- (today `resnet34Forward_full_pc_eq_chain`) rather than as a type error. ⚠ Raising the heartbeat budget — the recorded fix for the superficially identical
 -- symptom in `xla_pjrt_handoff.md` §0.2 increment 2 — would have spent unbounded compute on a
 -- proposition that was FALSE. *A `whnf` timeout on an `rfl` is not evidence about the budget; the
 -- first question is whether the two sides should be equal at all.*
@@ -504,8 +504,8 @@ noncomputable def maxPool3s2Flat_has_vjp_at {c h w : Nat}
     HasVJPAt (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
   hasVJPAt3_to_hasVJPAt (maxPool3s2_has_vjp_at3 x h_smooth)
 
-/-- Flattened magnitude bound — the form the R34 forward float bridge threads
-    (`maxPoolFlat_abs_le`'s peer). -/
+/-- Flattened magnitude bound — the form `floatClose_maxPool3s2` (`FloatComposeBridge.lean`)
+    threads (`maxPoolFlat_abs_le`'s peer). -/
 theorem maxPool3s2Flat_abs_le {c h w : Nat} {v : Vec (c * (2 * h) * (2 * w))} {A : ℝ}
     (hv : ∀ k, |v k| ≤ A) (k : Fin (c * h * w)) :
     |maxPool3s2Flat c h w v k| ≤ A := by

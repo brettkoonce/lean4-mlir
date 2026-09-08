@@ -24,7 +24,7 @@ and the batched one says so in as many words — *"The symmetric `[[p,p],[p,p]]`
 at every odd kernel and is WRONG at even ones (kH=2 ⇒ `[[0,0]]` where the VJP needs `[[1,0]]`) …
 Found by the whole-net backward tie"*. Its `den` is `(flatConvStride2_has_vjp W b).backward`, the
 certified VJP, so the EMITTED ConvNeXt backward is correct and nothing trained is affected. What
-was never carried across is the third spelling of the same map — the float bridge's
+was never carried across is the third spelling of the same map — `BackwardMaps.lean`'s
 `flatConvStride2Back` / `flatConvStride4Back`, which are `convFlatBack ∘ scatter` at the SYMMETRIC
 pad. ⭐ That is `imagenet_specs_drift_from_twins` in its "a fix landed on one tier and its twin
 kept the old spelling" form, for the third time
@@ -37,15 +37,12 @@ An even-kernel conv IS an odd-kernel conv on the kernel zero-extended at offset 
 `conv2d (padOdd W) b = conv2d W b` (`conv2d_padOdd_eq`). The padding bookkeeping is exactly the
 emitter's: for even `kH`, a SYMMETRIC pad `[[pH', pH']]` at `kH+1` (where `pH' = kH/2 = pH+1`) on a
 kernel whose leading tap is zero is the same program as the ASYMMETRIC `[[kH-1-pH, pH]]` at `kH`.
-So this is not a third convention — it is the emitter's convention, expressed in the vocabulary the
-float tier already has.
+So this is not a third convention — it is the emitter's convention, expressed in the vocabulary
+`BackwardMaps.lean` already has.
 
 ⭐ **The consequence is that no new conv machinery is needed anywhere.** The odd-kernel leaf tie
-does all the work at `kH+1`; `|padOdd W| ≤ w'` is free (the new entries are `0`), so every
-`floatBridges_convBack` / `Maps.convBack` transfers unchanged. ⚠ What DOES move is the fan-in a
-budget numeral charges: `2×2 → 3×3` is 4 taps → 9, `4×4 → 5×5` is 16 → 25, at four sites. The extra
-taps are identically zero, so the bound stays an upper bound for the emitted 4- and 16-tap program;
-it is simply not tight there.
+`convFlatBack_eq_vjp_backward` does all the work at `kH+1`, and `|padOdd W| ≤ w'` is free (the new
+entries are `0`), so every magnitude hypothesis transfers unchanged.
 -/
 
 namespace Proofs
@@ -79,7 +76,7 @@ noncomputable def padOdd {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW) :
     padOdd W o c kh.succ kw.succ = W o c kh kw := rfl
 
 /-- `padOdd` never exceeds the original's magnitude bound — the new entries are `0`. This is why
-    the fix costs no float work: every `|W| ≤ w'` hypothesis transfers verbatim. -/
+    the fix costs no new lemma: every `|W| ≤ w'` hypothesis transfers verbatim. -/
 theorem padOdd_abs_le {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w')
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') :
     ∀ o c kh kw, |padOdd W o c kh kw| ≤ w' := by
@@ -174,8 +171,8 @@ theorem flatConv_padOdd_eq {ic oc h w kH kW : Nat}
 /-- **Two VJP witnesses for EQUAL maps have the same backward.** The generalisation of
     `HasVJP.backward_unique` that a respelling needs: the witnesses have different TYPES
     (`HasVJP f` and `HasVJP g`), so the existing form does not apply and `hfg ▸ ·` would give an
-    `Eq.mpr`-blocked `backward` — `FloatBridgesTo.ofEq`'s trap, one tier down
-    (`planning/archive/float_budget_numbers_log.md` §3.5.2 item 5). Going through `.correct` avoids transport
+    `Eq.mpr`-blocked `backward` — the transport trap `planning/archive/float_budget_numbers_log.md`
+    §3.5.2 item 5 records. Going through `.correct` avoids transport
     entirely. -/
 theorem HasVJP.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} (hfg : f = g)
     (h₁ : HasVJP f) (h₂ : HasVJP g) (x : Vec m) (dy : Vec n) :

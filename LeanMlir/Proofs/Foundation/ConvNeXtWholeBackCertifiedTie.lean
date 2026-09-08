@@ -22,16 +22,15 @@ embed never routes through `conv2d` at all.
 batched (:8248) arms, and its `den` is the certified VJP; the batched comment names the same
 quantity — *"the symmetric `[[p,p],[p,p]]` … AGREES at every odd kernel and is WRONG at even ones
 (kH=2 ⇒ `[[0,0]]` where the VJP needs `[[1,0]]`)"*. The fix landed on TWO tiers and never reached
-the third: the float bridge's `flatConvStride2Back` / `flatConvStride4Back`, which are
+the third: `BackwardMaps.lean`'s `flatConvStride2Back` / `flatConvStride4Back`, which are
 `convFlatBack ∘ scatter` at the SYMMETRIC pad. ⭐ That is `imagenet_specs_drift_from_twins` in its
 *"a fix landed on one tier and its twin kept the old spelling"* form, for the third time (§3.10's
-pool and §3.16's head LayerNorm were the first two), and the first time the stale tier is the one
-a committed NUMBER was folded through: §3.16's 5.766·10²⁴⁹ is stale at 4 of its 137 stages.
+pool and §3.16's head LayerNorm were the first two).
 
 **What is here.** The repair is `padOdd` (`EvenKernelConvBack.lean`): an even-kernel conv is an
 odd-kernel conv on the kernel zero-extended at `(+1,+1)`, which is the emitter's asymmetric pad
-written in the vocabulary the float tier already has, so the existing odd-kernel leaf tie does all
-the work and no new float machinery is needed. On top of it:
+written in the vocabulary `BackwardMaps.lean` already has, so the existing odd-kernel leaf tie does
+all the work and no new conv machinery is needed. On top of it:
 
 1. `cnxDownChBack_eq_vjp` — the stage-boundary downsample tie, `lnB ∘ flatConvStride2Back
    (padOdd W)` against `(cnxDownChW_has_vjp …).backward`. ⛔ `padOdd` is load-bearing: `p.W` is
@@ -52,7 +51,7 @@ the work and no new float machinery is needed. On top of it:
    those two are, because GELU, LayerNorm, convolution and the layer scale are all smooth and
    ConvNeXt has no kink anywhere. Its only hypotheses are the 23 LayerNorm positivities, so unlike
    every other whole-net backward tie in this repo it carries no smoothness side-condition.
-   ⭐⭐ And ConvNeXt already has the shape check `Resnet34BackCertifiedTie.lean` still lacks
+   ⭐⭐ And ConvNeXt has its shape check too
    (`planning/archive/float_budget_numbers_log.md` §3.14): `convNextForwardTCh_eq_chain`, the `rfl` saying the
    chain the apex instantiates IS the committed forward, written before anyone needed it.
 
@@ -90,8 +89,8 @@ the committed one and is free, because no `x` is in sight to evaluate.
 instead, which costs nothing, and the term-mode peer must be top-level `def`s rather than a `let`
 chain — a `let` used twice per level zeta-expands to `2^11` copies of the prefix.
 
-⚠ ResNet-34 still has no shape check (`planning/archive/float_budget_numbers_log.md` §4 item 8) and is the
-net the hole already bit.
+⚠ ResNet-34's shape check is `resnet34Forward_full_pc_eq_chain` (`Resnet34BackCertifiedTie.lean`),
+and it is the net the hole first bit.
 -/
 
 namespace Proofs
@@ -148,7 +147,7 @@ noncomputable def cnxBlockChBackAt {c cExp h w kHd kWd : Nat}
     applies block `0`'s reverse LAST — `cnxBlockChBackAt (ps 0) v ∘ (the rest)`. And the saved
     activation threads forward through the recursion: the tail's saved input is
     `cnxBlockChW (ps 0) v`, block `0`'s OUTPUT. Getting either of those backwards is the
-    §3.3-lesson-2 trap (`floatBridgesTo_convNextStageChK` associates the other way), and it is the
+    §3.3-lesson-2 trap (the stage fold once associated the other way), and it is the
     DEFINITION that decides, never the analogy. -/
 noncomputable def cnxStageChKBack {c cExp h w kH kW : Nat} :
     (k : Nat) → (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW) → Vec (c * h * w) →

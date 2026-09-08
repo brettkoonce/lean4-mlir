@@ -1,22 +1,22 @@
 import LeanMlir.Proofs.Foundation.ViTBackChains
 import LeanMlir.Proofs.Architectures.ViTBackB0
 
-/-! # §B: the ViT MHSA backward float bridge targets the CERTIFIED VJP (the sdpa adjoint)
+/-! # §B: the ViT MHSA backward chain IS the certified VJP (the sdpa adjoint)
 
-The substantive vit-specific §B leaf: the hand-assembled multi-head self-attention backward `mhsaBackFlat`
+The substantive vit-specific §B leaf: the hand-composed multi-head self-attention backward `mhsaBackFlat`
 (`ViTBackChains.lean`) IS the certified MHSA input-gradient VJP `mhsa_has_vjp_mat` (`Attention.lean`),
 flattened — the attention analogue of the depthwise/conv adjoint gates.
 
 Unlike the CNN `convFlatBack` (a free reversed-kernel conv that needed a gate), the ViT sdpa cores are
 ALREADY certified-`sdpa_back`-grounded by construction (`coreQFlat = flatten ∘ mhsaSdpaBackQ ∘ unflatten`,
 `mhsaSdpaBackQ = sdpa_back_Q` per `mhSlab` head). What this file closes is the **assembly reconciliation**:
-the float `mhsaBackFlat` is a flat per-head fan-in with SEPARATE `dense Wᵀq/Wᵀk/Wᵀv` projection-backwards
+`mhsaBackFlat` is a flat per-head fan-in with SEPARATE `dense Wᵀq/Wᵀk/Wᵀv` projection-backwards
 (`perRowFlat`), while the certified `mhsa_has_vjp_mat.backward` is a Mat-space VJP over the qkv-MERGED
 projection. ViTBackB0's `mhsa_backward_collapseMH` already collapses the certified Mat backward to the clean
 per-head merged sum `mhsaBackCollapsedMH = ∑ₕ (Σⱼ Wq c (h,j)·dQ + Σⱼ Wk·dK + Σⱼ Wv·dV)`; this file shows
 `mhsaBackFlat` (Q/K/V pinned to the actual projections `dense W· bq (X·)`) equals that, coordinatewise:
-`dense Wᵀ 0 = Mat.mulVec W`, the `Σ k` over `h·dh` reindexes to `Σₕ Σⱼ`, and the float's separate projBack
-sums regroup into the certified `∑ₕ(Q+K+V)` by `Finset.sum_add_distrib`. So `mhsaBackFlat` provably bounds the
+`dense Wᵀ 0 = Mat.mulVec W`, the `Σ k` over `h·dh` reindexes to `Σₕ Σⱼ`, and the chain's separate projBack
+sums regroup into the certified `∑ₕ(Q+K+V)` by `Finset.sum_add_distrib`. So `mhsaBackFlat` IS the
 certified attention gradient — the genuinely-new (sdpa) half of the ViT block §B tie.
 
 The remaining ViT block tie = wrapping this in the per-token LN/dense/gelu sublayer reconciliations + the
@@ -55,11 +55,11 @@ theorem woback_unflatten (Wo : Mat (h * dh) (h * dh)) (dconcat : Vec (N * (h * d
   simp only [Equiv.symm_apply_apply, Proofs.dense, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
   exact Finset.sum_congr rfl (fun k _ => mul_comm _ _)
 
-/-- **THE ViT MHSA BACKWARD §B TIE.** The float-bridge MHSA backward `mhsaBackFlat`, with its saved Q/K/V
+/-- **THE ViT MHSA BACKWARD §B TIE.** The MHSA backward chain `mhsaBackFlat`, with its saved Q/K/V
     projections pinned to the actual `dense W· b· (X·)` projections at the saved block input `X`, IS the
-    certified MHSA input-gradient VJP `(mhsa_has_vjp_mat …).backward X`, flattened. So the deployed-float
-    attention backward is within an explicit budget (via `floatBridges_mhsaBack`) of THE certified
-    attention gradient, not a look-alike. Closes under `[propext, Classical.choice, Quot.sound]`. -/
+    certified MHSA input-gradient VJP `(mhsa_has_vjp_mat …).backward X`, flattened. So the attention
+    backward the ViT chain is spelled in IS the certified attention gradient, not a look-alike.
+    Closes under `[propext, Classical.choice, Quot.sound]`. -/
 theorem mhsaBackFlat_eq_mhsa_vjp
     (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh)) (X : Mat N (h * dh)) :
     mhsaBackFlat Wq Wk Wv Wo
@@ -136,10 +136,11 @@ theorem transformerAttnSublayer_backward_decomp (ε γ1 β1 : ℝ) (hε : 0 < ε
 
     Note the LayerNorm-back is `layerNorm_per_token_has_vjp_mat.backward A` — `rowwise` of the
     single-token LN VJP, which threads each token's saved input `A r` (its Jacobian differs per token).
-    This is precisely why the float bridge's single-`lnB₁` `perRowFlat` lift (one cotangent→grad map for
-    every token) is the remaining piece for a full `vitBlockBack` tie: the forward LN rides one pure
-    function per token, but the backward needs the per-token saved input. The sdpa half ties; the LN-back
-    half wants a per-token-input-aware lift. 3-axiom-clean. -/
+    This is precisely why a single-`lnB₁` `perRowFlat` lift (one cotangent→grad map for every token)
+    cannot close a full block tie: the forward LN rides one pure function per token, but the backward
+    needs the per-token saved input. The sdpa half ties here; the LN-back half needs the
+    per-token-input-aware lift `perRowFlatPR`, which `vitBlockBackPR_eq_transformerBlock_vjp` below
+    uses. 3-axiom-clean. -/
 theorem transformerAttnSublayerBack_flat_decomp (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh))
     (A : Mat N (h * dh)) (v : Vec (N * (h * dh))) :
@@ -172,7 +173,7 @@ theorem transformerAttnSublayerBack_flat_decomp (ε γ1 β1 : ℝ) (hε : 0 < ε
 -- § The MLP-sublayer reconciliation — the per-token-aware leaves
 -- ════════════════════════════════════════════════════════════════
 
-/-- The float-bridge dense input-VJP `dense (Wᵀ) 0` IS the certified contraction `Mat.mulVec W`
+/-- The chain's dense input-VJP `dense (Wᵀ) 0` IS the certified contraction `Mat.mulVec W`
     (the certified `dense_has_vjp.backward`, which ignores its affine activation); `mul_comm` per
     term. The function-level form (no `x` arg) the `simp` matches against. -/
 theorem dense_transpose_eq_mulVec {m n : Nat} (W : Mat m n) :
@@ -181,7 +182,7 @@ theorem dense_transpose_eq_mulVec {m n : Nat} (W : Mat m n) :
   simp only [Proofs.dense, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
   exact Finset.sum_congr rfl fun j _ => mul_comm _ _
 
-/-- The float-bridge GELU backward `diagBack (act'(s))` IS the certified `gelu_has_vjp.backward`
+/-- The chain's GELU backward `diagBack (act'(s))` IS the certified `gelu_has_vjp.backward`
     at the saved pre-activation `s` (the elementwise derivative scaling — `gelu_has_vjp.backward s
     dy i = dy i · geluScalarDeriv (s i)`, `diagBack` is the same scaling, `mul_comm`). -/
 theorem diagBack_eq_gelu_vjp {n : Nat} (s : Vec n) :
@@ -227,9 +228,9 @@ theorem perRowFlatPR_residual {n d : Nat} (g : Fin n → (Vec d → Vec d)) (v :
   show v (finProdFinEquiv ((finProdFinEquiv.symm idx).1, (finProdFinEquiv.symm idx).2)) = v idx
   rw [Prod.mk.eta, Equiv.apply_symm_apply]
 
-/-- **L2 — the `transformerMlp` backward, flattened, IS `perRowFlatPR` of the float chain.**
+/-- **L2 — the `transformerMlp` backward, flattened, IS `perRowFlatPR` of the flat chain.**
     The certified per-token MLP-body backward (`mulVec Wfc1 ∘ gelu-back ∘ mulVec Wfc2`) equals the
-    float bridge's `dense Wᵀ₁ 0 ∘ diagBack(act'(dense₁ Y)) ∘ dense Wᵀ₂ 0`, row by row. -/
+    chain's `dense Wᵀ₁ 0 ∘ diagBack(act'(dense₁ Y)) ∘ dense Wᵀ₂ 0`, row by row. -/
 theorem transformerMlp_back_flat_eq_perRowFlatPR (N D dff : Nat)
     (Wfc1 : Mat D dff) (bfc1 : Vec dff) (Wfc2 : Mat dff D) (bfc2 : Vec D)
     (Y : Mat N D) (v : Vec (N * D)) :
@@ -271,8 +272,8 @@ theorem transformerBlock_backward_unfold_gen (dff : Nat)
           ((transformerMlpSublayer_has_vjp_mat N h dh dff ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).backward
             (transformerAttnSublayer N h dh ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A) dz) := rfl
 
-/-- **The attention-sublayer backward float-half IS the certified attn-sublayer VJP, flat.**
-    The float bridge `residual (perRowFlatPR lnB₁ ∘ mhsaBackFlat)` (with `lnB₁ r =` the single-token
+/-- **The attention-sublayer backward chain IS the certified attn-sublayer VJP, flat.**
+    The chain `residual (perRowFlatPR lnB₁ ∘ mhsaBackFlat)` (with `lnB₁ r =` the single-token
     LN₁ backward at `A r` and Q/K/V pinned at `LN₁(A)`) equals `flatten ∘ attnSublayer.backward A ∘
     unflatten`. The standalone packaging of `transformerAttnSublayerBack_flat_decomp`. -/
 theorem attnSubFlatTie (ε γ1 β1 : ℝ) (hε : 0 < ε)
@@ -297,8 +298,8 @@ theorem attnSubFlatTie (ε γ1 β1 : ℝ) (hε : 0 < ε)
   rw [perRowFlatPR_LN_back]
   exact add_comm _ _
 
-/-- **The MLP-sublayer backward float-half IS the certified MLP-sublayer VJP, flat.** The float
-    bridge `perRowFlatPR (fun r => residual (lnB₂ r ∘ dense Wᵀ₁ 0 ∘ diagBack(sgelu r) ∘ dense Wᵀ₂ 0))`
+/-- **The MLP-sublayer backward chain IS the certified MLP-sublayer VJP, flat.** The chain
+    `perRowFlatPR (fun r => residual (lnB₂ r ∘ dense Wᵀ₁ 0 ∘ diagBack(sgelu r) ∘ dense Wᵀ₂ 0))`
     (LN₂-back at `hM r`, `sgelu r =` the GELU derivative at `dense₁(LN₂ hM r)`) equals `flatten ∘
     mlpSublayer.backward hM ∘ unflatten`. The MLP peer of `attnSubFlatTie`. -/
 theorem mlpSubFlatTie (dff : Nat) (ε γ2 β2 : ℝ) (hε : 0 < ε)
@@ -352,12 +353,12 @@ theorem mlpSubFlatTie (dff : Nat) (ε γ2 β2 : ℝ) (hε : 0 < ε)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **THE FULL `vitBlockBackPR` §B TIE.** The per-token-input-aware ViT encoder-block backward
-    float bridge `vitBlockBackPR`, with every saved activation pinned to the real forward
+    chain `vitBlockBackPR`, with every saved activation pinned to the real forward
     (Q/K/V projections at `LN₁ A`; the LN₁/LN₂ backwards at each token's own saved input `A r` /
     `(attn A) r`; the GELU derivative at `dense₁(LN₂(attn A))`), IS the certified transformer-block
-    input-gradient VJP `transformerBlock_has_vjp_mat`, flattened. So the deployed float ViT-block
-    backward is within an explicit budget (via `floatBridges_vitBlockBackPR`) of THE certified block
-    gradient — the per-token-LN enrichment closes the structural gap the attn-sublayer tie left open.
+    input-gradient VJP `transformerBlock_has_vjp_mat`, flattened. So the block backward the ViT chain
+    is spelled in IS the certified block gradient — the per-token-LN enrichment closes the structural
+    gap the attn-sublayer tie left open.
     Assembled from the block unfold (general heads) + the attn/MLP sublayer flat ties.
     Closes under `[propext, Classical.choice, Quot.sound]`. -/
 theorem vitBlockBackPR_eq_transformerBlock_vjp (dff : Nat)

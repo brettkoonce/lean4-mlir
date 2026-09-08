@@ -9,8 +9,8 @@ the gradient of `v ↦ crossEntropy(dense(unflatten v, b, x), label)` is
 segment-Lipschitz with the **explicit** constant `2a²/(1 − 2aD)` (pixels
 bounded by `a`, step `ℓ1`-radius `D`, small-step condition `2aD < 1`).
 
-No Hessian appears. The route is the same elementary ratio argument as the
-float bridge: the loss gradient is `xᵢ·(softmax(z)ⱼ − onehotⱼ)`
+No Hessian appears. The route is the same elementary ratio argument as
+`FloatBridge.lean`'s: the loss gradient is `xᵢ·(softmax(z)ⱼ − onehotⱼ)`
 (`linear_loss_gradAt`, assembled from the suite's certified
 `lossWeightGrad_eq_sum` + `pdiv_dense_W`), the logits move linearly in the
 parameters (`dense_unflatten_drift`), and `FloatModel.softmax_perturb` +

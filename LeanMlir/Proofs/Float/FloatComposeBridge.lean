@@ -278,8 +278,7 @@ theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
 /-- **Additive residual `F(x) + x` (no trailing activation) is `FloatClose`** — the
     MBConv / transformer skip, the no-ReLU cousin of `floatClose_residualBlock`. The
     rounded skip-add `fl(FF(x) ⊕ x)` is within `add_close`'s budget of the real
-    `F(x) + x`; output magnitude `(1+u)(B+A)`. Reused by EfficientNet's MBConv skip
-    (`floatClose_smoothResBlock`) and by the ViT block's two additive skips. -/
+    `F(x) + x`; output magnitude `(1+u)(B+A)`. -/
 theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
     {F FF : Vec m → Vec m} {LF : ℝ → ℝ} (hF : FloatClose A B F FF LF) :
     FloatClose A (B + A + M.u * (B + A))
@@ -399,7 +398,7 @@ theorem floatClose_bnRelu {m : Nat} (M : FloatModel)
     + input-shift `bnForward_input_close`), same `bnReluBudget` modulus (ReLU only
     shrinks, so removing it leaves the budget unchanged). The BN-before-swish steps
     in EfficientNet's MBConv (and BN-before-GELU positions generally) are this
-    instance; pair with `floatClose_swish` via `.comp`. -/
+    instance. -/
 theorem floatClose_bn {m : Nat} (M : FloatModel)
     {ε γ β emean eistd D S G Bbnd A : ℝ} (fμ fistdv : Vec m → ℝ)
     (hn : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)

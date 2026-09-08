@@ -4,17 +4,16 @@ import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
-/-! # §B: the ConvNeXt block-body backward float bridge targets the CERTIFIED VJP
+/-! # §B: the ConvNeXt block-body backward chain IS the certified VJP
 
-`cnxBlockBodyBack` (`ConvNeXtBackChains.lean`) is a hand-assembled reverse-mode transcription of the
-ConvNeXt block body (until 2026-09-08 it lived in a float bridge that also budgeted it). This file
-closes §B for that body: the transcription IS the certified input-gradient VJP
-`convNextBlockBody_has_vjp` (`ConvNeXt.lean`), in the SAME non-batched vocabulary — so the float
-bridge's closeness is now closeness to **the certified gradient**.
+`cnxBlockBodyBack` (`ConvNeXtBackChains.lean`) is the hand-composed reverse of the ConvNeXt block
+body, written in the per-op backward maps of `BackwardMaps.lean`. This file closes §B for that
+body: the chain IS the certified input-gradient VJP `convNextBlockBody_has_vjp` (`ConvNeXt.lean`),
+in the SAME non-batched vocabulary.
 
 The ConvNeXt block body is `convNextBlockBody = layerScale ∘ project ∘ GELU ∘ expand ∘ LN ∘ depthwise`,
 whose certified VJP backward applies the reverses in order
-`LS.back → PR.back → GE.back → EX.back → LN.back → D.back`. The float `cnxBlockBodyBack` is the exact
+`LS.back → PR.back → GE.back → EX.back → LN.back → D.back`. `cnxBlockBodyBack` is the exact
 peer chain `depthwiseFlatBack ∘ lnB ∘ convFlatBack Wex ∘ geluB ∘ convFlatBack Wpr ∘ lsB`. The tie pins
 the three smooth/diagonal/norm backs (`lsB`/`geluB`/`lnB`) to the certified `layerScale`/`gelu`/`LN`
 backwards at the exact saved activations, and ties the two 1×1 convs + the depthwise to their certified
@@ -23,7 +22,7 @@ The conv/depthwise backwards ignore their primal (linear), the pinned backs matc
 activations definitionally, so the whole tie closes by rewriting the three convolution leaves + `rfl`.
 
 This is the convnext analogue of `r34IdBlockBack_eq_rblkPC_vjp`; b1-free (the per-example body is the
-non-batched object the float bridge reverses, no `batchMap` reconciliation). The certified
+non-batched object the chain reverses, no `batchMap` reconciliation). The certified
 `convNextBlockBody_has_vjp` already existed, so the work is the depthwise leaf gate (shared, in
 `DepthwiseBackCertifiedTie`) + this per-block tie. 3-axiom-clean.
 -/
@@ -32,7 +31,7 @@ namespace Proofs
 
 open Classical
 
-/-- **The §B ConvNeXt body tie: float-bridge backward = certified VJP.** `cnxBlockBodyBack`, with its
+/-- **The §B ConvNeXt body tie: hand-composed backward = certified VJP.** `cnxBlockBodyBack`, with its
     abstract layer-scale / GELU / LayerNorm backs pinned to the certified `layerScale` / `gelu` /
     `layerNorm` backwards at the exact saved forward activations (`depthwiseFlat … v` for LN, the deeper
     forward partials for GELU/LS), equals `(convNextBlockBody_has_vjp_at …).backward`.
@@ -102,8 +101,8 @@ theorem cnxBlockBack_eq_convNextBlock_vjp {c cExp h w kHd kWd : Nat}
 
 /-! The two ties above pin the block body's ABSTRACT `lnB` slot to a certified backward, which is
 why they never had to look inside a LayerNorm. `chanLNTensor3Back` (`ChannelLNBack.lean`)
-is not abstract — it is a concrete five-factor chain, written so `floatBridges_chanLNTensor3Back`
-can run `floatClose_bnBack` in its middle. So it owes the tie the block ties did not: that the
+is not abstract — it is a concrete five-factor chain, the row map conjugated by the forward's four
+layout permutations. So it owes the tie the block ties did not: that the
 chain IS `chanLNTensor3_has_vjp`'s backward. That is what this section proves.
 
 The proof is piecewise, and every piece is already in the repo:
@@ -118,7 +117,7 @@ The proof is piecewise, and every piece is already in the repo:
   built through a `rw [bnForward_eq_compose]` cast — the trap `bnBack_faithful_fn` documents).
 
 Two things worth reading off the statement. **The tie is β-free**: the certified backward does not
-depend on the LN bias, and neither does the float chain — the `+β` translation's VJP is the
+depend on the LN bias, and neither does the chain — the `+β` translation's VJP is the
 identity, which is why `chanLNTensor3Back` never took a `β` in the first place. And the transfer
 to the committed witness goes through `HasVJP.backward_unique`, so it does not matter that
 `chanLNTensor3_has_vjp` is tactic-built: any two witnesses for one map have one backward. -/
@@ -191,11 +190,9 @@ noncomputable def chanLNTensor3_vjp_chain (c h w : Nat) (ε : ℝ) (γ β : Vec 
       (transposeFlat_has_vjp (h * w) c))
     (reassocBack_has_vjp c h w)
 
-/-- **THE §2n §B TIE: the channel-LN float backward IS the certified VJP.** `chanLNTensor3Back` —
-    the hand-composed reverse chain `floatBridges_chanLNTensor3Back` bridges — equals
-    `(chanLNTensor3_has_vjp …).backward` at every saved input and cotangent. So the float bridge's
-    closeness is closeness to **the certified gradient**, and the ⚠ in
-    `ChannelLNBack.lean`'s docstring is discharged.
+/-- **THE §2n §B TIE: the channel-LN backward chain IS the certified VJP.** `chanLNTensor3Back` —
+    the hand-composed reverse of `chanLNTensor3` — equals `(chanLNTensor3_has_vjp …).backward` at
+    every saved input and cotangent, so the chain is **the certified gradient**.
 
     Proof: compute the term-mode chain's backward by rewriting its five factors (two reassoc
     collapses, two transposes by `rfl`, the row map through `bn_grad_input`), then transfer to the
@@ -213,14 +210,14 @@ theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) 
       transposeFlat_has_vjp_backward_eq, reassocFwd_has_vjp_backward_eq]
   rfl
 
-/-- **The §B channel-LN BODY tie: the float block-body backward = the certified VJP.** The peer of
+/-- **The §B channel-LN BODY tie: the block-body backward chain = the certified VJP.** The peer of
     `cnxBlockBodyBack_eq_convNextBlockBody_vjp` for the net the repo ships. `cnxBlockBodyBack` with
-    its LayerNorm slot filled by the CONCRETE `chanLNTensor3Back` (the chain
-    `floatBridges_chanLNTensor3Back` bridges, at the saved post-depthwise activation) and its
+    its LayerNorm slot filled by the CONCRETE `chanLNTensor3Back` (at the saved post-depthwise
+    activation) and its
     layer-scale / GELU slots pinned to the certified backwards equals
     `(cnxBodyWith_has_vjp (chanLNTensor3 …) …).backward`.
 
-    Note what fills the LN slot here: not a certified object but the float bridge's own five-factor
+    Note what fills the LN slot here: not a certified object but the concrete five-factor
     chain. That is the point — the scalar tie could pin an abstract `lnB` to whatever it liked,
     while this one has to go through `chanLNTensor3Back_eq_chanLN_vjp` to earn it. Otherwise the
     proof is the scalar one: rewrite the two 1×1 conv leaves and the depthwise leaf through their
@@ -260,7 +257,7 @@ theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
   rfl
 
 /-- **The §B channel-LN BLOCK tie (residual-wrapped).** `cnxBlockChW` is `residual` of the body, so
-    the float block backward is `residual (cnxBlockBodyBack …)` and equals
+    the block backward chain is `residual (cnxBlockBodyBack …)` and equals
     `(cnxBlockChW_has_vjp …).backward` — the additive skip's backward being `dy`. Immediate from the
     body tie. With this, the channel-LN net's §B coverage matches the scalar net's: body, block, and
     (new, because the LN slot is no longer abstract) the LayerNorm op itself. -/

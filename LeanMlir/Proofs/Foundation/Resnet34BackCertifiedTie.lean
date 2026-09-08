@@ -5,21 +5,21 @@ import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Foundation.IR
 
-/-! # §B: the r34 identity-block backward float bridge targets the CERTIFIED VJP
+/-! # §B: the r34 identity-block backward chain IS the certified VJP
 
-The A3 backward float bridges prove **deployed-float ≈ a hand-assembled reverse-mode
-transcription** (`r34IdBlockBack`). This file closes the §B integrity question for the r34
-**identity block**: that transcription IS the certified input-gradient VJP.
+`r34IdBlockBack` (`ResNetBackChains.lean`) is the hand-composed reverse of the r34 identity
+block, written in the per-op backward maps of `BackwardMaps.lean`. This file closes the §B
+integrity question for that block: the chain IS the certified input-gradient VJP.
 
 The key design choice that makes this `b1`-free (no batched↔non-batched `batchMap`
-reconciliation): the float-bridge `r34IdBlockBack` is the reverse of `rblkPC` — the
+reconciliation): `r34IdBlockBack` is the reverse of `rblkPC` — the
 **per-channel-BN, non-batched** identity block (`ResNet34RenderPC`). So the right
 certified target is a VJP of `rblkPC` in the *same vocabulary*, NOT the batched true-BN
 `r34BasicBlockB_has_vjp_at` (`ResNet34BackB0`). That certified object did not exist, so we
 build it here (`rblkPC_has_vjp_at`), then tie.
 
 Three pieces:
-1. `convFlatBack_eq_vjp_backward` — the conv **leaf** tie: the float-bridge `convFlatBack`
+1. `convFlatBack_eq_vjp_backward` — the conv **leaf** tie: the backward map `convFlatBack`
    (reversed-kernel conv) IS the certified conv input-VJP, via the general odd-kernel
    `IR.convBackDenote_eq_input_grad_formula`.
 2. `rblkPC_has_vjp_at` — the certified per-channel-BN identity-block VJP, assembled from the
@@ -31,8 +31,8 @@ Three pieces:
    conv leaves; everything else (residual fan-in, the `∘`-reversal, the relu masks, the pinned
    BN-backs) matches definitionally.
 
-The honest upgrade: for the r34 identity block, the float bridge's closeness is now closeness
-to **the certified gradient**, not merely to a hand-map.
+What the tie buys: the hand-composed chain — the spelling a reader can check against the
+emitted backward — IS **the certified gradient**, not merely a map that looks like one.
 
 The **downsample block** is closed the same way (`§ The DOWNSAMPLE block` below): a strided-conv
 leaf tie (`flatConvStride2Back_eq_vjp_backward` = conv leaf + the `decimateBack` `rfl`), the
@@ -79,7 +79,7 @@ namespace Proofs
 
 open Classical
 
-/-- **Conv input-VJP leaf tie.** The float-bridge `convFlatBack W` (= reversed-kernel forward
+/-- **Conv input-VJP leaf tie.** The backward map `convFlatBack W` (= reversed-kernel forward
     conv) IS the certified conv input-VJP `(flatConv_has_vjp W b).backward x` (conv is linear,
     so the saved activation `x` is ignored), for odd kernels. Routes through the general
     `IR.convBackDenote_eq_input_grad_formula`; the leaf the §B block tie reuses (×2). -/
@@ -94,7 +94,7 @@ theorem convFlatBack_eq_vjp_backward {ic oc h w kH kW : Nat}
 
 /-- **Certified VJP of the per-channel-BN identity basic block `rblkPC`** (non-batched).
     `relu ∘ residual(F)` with `F = (bnPC₂∘conv₂) ∘ (relu∘bnPC₁∘conv₁)`. The same-vocabulary
-    certified target for the float-bridge `r34IdBlockBack` — no batched/`batchMap`
+    certified target for `r34IdBlockBack` — no batched/`batchMap`
     reconciliation. Mirrors `resblock_has_vjp_at` (scalar BN) with `bnPerChannelTensor3` for
     `bnForward`, reusing `convBnReluPC_has_vjp_at` for stage 1. -/
 noncomputable def rblkPC_has_vjp_at {c h w : Nat}
@@ -134,7 +134,7 @@ noncomputable def rblkPC_has_vjp_at {c h w : Nat}
     (relu_differentiableAt_of_smooth (c * h * w) _ h_smooth_res) hres_vjp
     (relu_has_vjp_at (c * h * w) _ h_smooth_res)
 
-/-- **The §B identity-block tie: float-bridge backward = certified VJP.** `r34IdBlockBack`,
+/-- **The §B identity-block tie: hand-composed backward = certified VJP.** `r34IdBlockBack`,
     with its abstract BN-backs pinned to the certified per-channel-BN backwards
     (`bnPerChannelTensor3_has_vjp.backward` at the respective conv outputs) and its ReLU masks
     pinned to the actual pre-activation signs, equals `(rblkPC_has_vjp_at …).backward`.
@@ -269,7 +269,7 @@ noncomputable def rblkPStridedPC_has_vjp_at {ic oc h w kHp kWp : Nat}
     (relu_differentiableAt_of_smooth (oc*h*w) _ h_smooth_res) hres_vjp
     (relu_has_vjp_at (oc*h*w) _ h_smooth_res)
 
-/-- **The §B downsample-block tie: float-bridge backward = certified VJP.** `r34DownBlockBack`,
+/-- **The §B downsample-block tie: hand-composed backward = certified VJP.** `r34DownBlockBack`,
     with BN-backs pinned to the certified per-channel backwards and ReLU masks pinned to the pre-
     activation signs, equals `(rblkPStridedPC_has_vjp_at …).backward`. Both sides are
     `fun dy ↦ projBack(mask dy) + bodyBack(mask dy)` (the `residualProj` two-branch fan-in over the
@@ -313,7 +313,7 @@ theorem r34DownBlockBack_eq_rblkPStridedPC_vjp {ic oc h w kHp kWp : Nat}
 --   (the stem's strided conv is `flatConvStride2Back_eq_vjp_backward` above)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Dense head input-VJP leaf tie.** The float-bridge dense backward `dense (Wᵀ) 0` (= `Wᵀ·dy`)
+/-- **Dense head input-VJP leaf tie.** The chain's dense backward `dense (Wᵀ) 0` (= `Wᵀ·dy`)
     IS the certified dense input-VJP `(dense_has_vjp W b).backward x` (= `Mat.mulVec W dy`), conv is
     linear so the activation `x` is ignored. One `mul_comm` per term. -/
 theorem dense_transpose_eq_vjp_backward {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) :
@@ -322,13 +322,13 @@ theorem dense_transpose_eq_vjp_backward {m n : Nat} (W : Mat m n) (b : Vec n) (x
   simp only [dense, dense_has_vjp, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
   exact Finset.sum_congr rfl fun j _ => mul_comm _ _
 
-/-- **GAP input-VJP leaf tie.** The float-bridge `gapBack c h w` (broadcast `dy(channel)/(h·w)`)
+/-- **GAP input-VJP leaf tie.** The backward map `gapBack c h w` (broadcast `dy(channel)/(h·w)`)
     IS the certified GAP input-VJP `(globalAvgPoolFlat_has_vjp c h w).backward x` — definitionally
     the same broadcast-÷ map (the VJP ignores its primal argument). -/
 theorem gapBack_eq_vjp_backward (c h w : Nat) (x : Vec (c * h * w)) :
     gapBack c h w = (globalAvgPoolFlat_has_vjp c h w).backward x := rfl
 
-/-- **Maxpool input-VJP leaf tie (smooth point).** The float-bridge `maxPoolFlatBack x` (scatter
+/-- **Maxpool input-VJP leaf tie (smooth point).** The backward map `maxPoolFlatBack x` (scatter
     `dy` to the arg-max cell, 0 elsewhere) IS the certified maxpool input-VJP
     `(maxPoolFlat_has_vjp_at x h_smooth).backward` at a smooth point (unique arg-max per window).
     Both denote `if MaxPool2IsArgmax then dy(winRow,winCol) else 0` (`IR.maxPoolBackDenote` =

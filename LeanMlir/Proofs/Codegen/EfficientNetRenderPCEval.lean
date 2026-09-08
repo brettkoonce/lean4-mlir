@@ -15,8 +15,8 @@ constants, so the eval BN *is* per-example — `batchMap N (bnPerChannelEvalTens
 — and `den_batchOp_bnEval` proves the `bnEval` descriptor denotes exactly that, by `rfl`. With that
 one site replaced, **every stage below is `batchMap N` of a per-example op or a pointwise map**
 (read the five stage defs: conv, depthwise, SE and GAP/dense are `batchMap`, swish is pointwise,
-the residual is a coordinatewise add). So every leaf the float budget needs is a per-example leaf
-it already has.
+the residual is a coordinatewise add). So every leaf a per-example fold needs is one the net
+already has.
 
 ⚠ That last paragraph is a statement about the SHAPE of these definitions, checkable by reading
 them; the whole-net factorisation `efficientnetForwardBEval N = batchMap N (per-example forward)`

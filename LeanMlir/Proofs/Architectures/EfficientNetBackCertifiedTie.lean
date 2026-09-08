@@ -4,16 +4,16 @@ import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the EfficientNet MBConv body backward targets the CERTIFIED VJP
 
-`mbconvBodyBack` (`EfficientNetBackChains.lean`) is a hand-assembled reverse-mode transcription of the
-per-example MBConv body (until 2026-09-08 it lived in a float bridge that also budgeted it). This
-file closes §B for that body: the transcription IS the certified input-gradient VJP `mbconvBody_has_vjp`
-(`EfficientNet.lean`). Unlike mnv2/convnext, the certified per-example body VJP already exists in the
-right (global-`bnForward`, non-batched) vocabulary — the per-example body is exactly what the forward
-bridge `floatBridges_mbconvBody` stops at, and the batched whole-net is the separate batched-emit lift —
-so no fresh certified VJP is built; b1-free.
+`mbconvBodyBack` (`EfficientNetBackChains.lean`) is the hand-composed reverse of the per-example
+MBConv body, written in the per-op backward maps of `BackwardMaps.lean`. This file closes §B for
+that body: the chain IS the certified input-gradient VJP `mbconvBody_has_vjp` (`EfficientNet.lean`).
+Unlike mnv2/convnext, the certified per-example body VJP already exists in the right
+(global-`bnForward`, non-batched) vocabulary — the per-example body is where the chain stops, and
+the batched whole-net is the separate batched-emit lift — so no fresh certified VJP is built;
+b1-free.
 
 The MBConv body is `mbconvBody = (BN∘conv Wp) ∘ SE ∘ (swish∘BN∘depthwise Wd) ∘ (swish∘BN∘conv We)`, whose
-certified VJP applies `project.back → SE.back → depthwise.back → expand.back`. The float `mbconvBodyBack`
+certified VJP applies `project.back → SE.back → depthwise.back → expand.back`. `mbconvBodyBack`
 is the peer chain `(convFlatBack We ∘ bnBe ∘ swBe) ∘ (depthwiseFlatBack Wd ∘ bnBd ∘ swBd) ∘ seB ∘
 (convFlatBack Wp ∘ bnBp)`. The tie pins the abstract BN backs (`bnBe/bnBd/bnBp`) to `bn_has_vjp.backward`,
 the swish backs (`swBe/swBd`) to `swish_has_vjp.backward`, and the squeeze-excite back (`seB`) to the
@@ -27,7 +27,7 @@ namespace Proofs
 
 open Classical
 
-/-- **The §B EfficientNet MBConv body tie: float-bridge backward = certified VJP.** `mbconvBodyBack`,
+/-- **The §B EfficientNet MBConv body tie: hand-composed backward = certified VJP.** `mbconvBodyBack`,
     with its abstract BN backs, swish backs, and squeeze-excite back pinned to the certified
     `bn_has_vjp` / `swish_has_vjp` / `seBlockFull_has_vjp` backwards at the exact saved activations,
     equals `(mbconvBody_has_vjp …).backward v`.

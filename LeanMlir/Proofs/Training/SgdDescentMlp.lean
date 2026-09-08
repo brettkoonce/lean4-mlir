@@ -48,7 +48,7 @@ open StableHLO
 -- § Helpers: ReLU is 1-Lipschitz; margins freeze signs; ℓ1 column mass
 -- ════════════════════════════════════════════════════════════════
 
-/-- ReLU is entrywise 1-Lipschitz. The float bridge proved the same fact for
+/-- ReLU is entrywise 1-Lipschitz. `FloatBridge.lean` proves the same fact for
     the rounded net (`relu` exact-in-float); this is the ℝ-side workhorse
     that lets forward drift pass through a kinked layer unamplified. -/
 theorem relu_entry_lipschitz (n : Nat) (u v : Vec n) (k : Fin n) :
