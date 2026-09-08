@@ -5128,7 +5128,7 @@ They are the same map. `reassocFwdIdx_val` proves it: row-major `finProdFinEquiv
 `chanLNGraph_faithful` close. **Ask this question of any layout bridge that gets spelled two
 ways** — it is §4's one-tensor-layout rule in the type system rather than in a reduce-dim census.
 
-**▶ What was built** (`LeanMlir/Proofs/Architectures/ConvNeXtChannelLN.lean`, new, + additions to
+**▶ What was built** (`LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtChannelLN.lean`, new, + additions to
 `ConvNeXtFullT.lean`):
 
 * `chanLNTensor3 c h w ε γ β` + `_diff` + `_has_vjp` — channel LN at the conv activation layout;
@@ -5594,7 +5594,7 @@ Deleted: the `[3,3,9,3]` scalar-LN chain and its graph section from `ConvNeXtFul
 
 **1. `ConvNeXtBackB0` — the §2n plan said "port to Ch"; measured, the answer was "delete".** Three
 facts decided it: the capstone had no consumer but an audit line; the ch9 representative
-(`Architectures/ConvNeXt.lean`) is a **2-block net with NO downsample**, so `CnxDownParams`/`cnxDownW`
+(`Nets/ConvNeXt/ConvNeXt.lean`) is a **2-block net with NO downsample**, so `CnxDownParams`/`cnxDownW`
 were full-T scalar scope rather than shared; and porting needs a *graph-side* channel-LN backward
 faithfulness that does not exist (§2m built the render and the math VJP; today's
 `chanLNTensor3Back_eq_chanLN_vjp` is the MATH-side tie). ⚠ **So the channel-LN downsample now has
@@ -5748,7 +5748,7 @@ Do that first; it is what makes the rest mechanical.
 / `convNextFwdGraphT` / `convNextFwdGraphTC` + their faithfulness.
 
 ⛔ **IT DOES NOT MEAN the ch9 representative** — `convNextForward`, `convNextBlock`,
-`convNextBlockBody`, `convnext_has_vjp` in `Architectures/ConvNeXt.lean`. Those are used by
+`convNextBlockBody`, `convnext_has_vjp` in `Nets/ConvNeXt/ConvNeXt.lean`. Those are used by
 `tests/comparator/{Challenge,Solution}.lean` (**the Project Diderot FV model**),
 `apps/imagenette/MainConvNeXtVerified.lean`, `ConvNeXtClose`, `StableHLO`, `EfficientNet.lean`
 and `ViTFwdGraph.lean`. **Deleting them would void a book chapter and the comparator.** This is
@@ -5802,7 +5802,7 @@ than ported, and the whole forward thread would have to be re-derived through th
 conjugation. That is chapter-sized. So `ConvNeXtTiePoC.lean` now opens with a ⚠ that says exactly
 what it ties (`chLN := false`, plus a head LN), that every theorem in it is still TRUE, and that it
 should be read as the ch9-representative §1a tie — the same status
-`Architectures/ConvNeXt.lean` has as the ch9-representative forward. Its two other "the committed
+`Nets/ConvNeXt/ConvNeXt.lean` has as the ch9-representative forward. Its two other "the committed
 render" claims are corrected in place.
 
 ⚠ **`ConvNeXtRender.lean:113` was stale in the same direction and is fixed**: it called
@@ -5813,7 +5813,7 @@ the shipped one. Nothing in `ConvNeXtFaithfulPoC`/`ConvNeXtClose` needed touchin
 
 The original finding, for the record:
 
-**`LeanMlir/Proofs/Architectures/ConvNeXtTiePoC.lean` — the ch7 §1a whole-net tie
+**`LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtTiePoC.lean` — the ch7 §1a whole-net tie
 (`CnxTiePoC.cnx_net_tied_certified`, 6 audit lines) is written against the SCALAR LN, and it still
 has a HEAD LN** (`hng`/`hnbt` at the GAP output, line ~219) — the site §2m deleted. Its own
 docstring says it feeds "the **real forward activations** of the committed
@@ -5822,7 +5822,7 @@ docstring says it feeds "the **real forward activations** of the committed
 stopped shipping.** The theorem is still TRUE (it is stated over its own local forward defs) and
 `grep` says it references **none** of the dying symbols, so *the drop cannot break it* — which is
 exactly why it will be missed. Decide before the drop lands: re-point it at the Ch chain, or label
-it explicitly as a ch9-representative tie the way §2n's ⛔ labels `Architectures/ConvNeXt.lean`.
+it explicitly as a ch9-representative tie the way §2n's ⛔ labels `Nets/ConvNeXt/ConvNeXt.lean`.
 This is §2a's lesson again — a thing that still elaborates is not a thing that still describes what
 ships.
 

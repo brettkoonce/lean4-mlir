@@ -155,7 +155,7 @@ banners, the doc-gen4 note) are not root essays and stay.
 
 ## 7. The one real gap: a batched ViT T6
 
-`vitInputGradK` (`Foundation/ViTBackChains.lean`) is per-example; its `N` is the token count, not
+`vitInputGradK` (`Nets/ViT/ViTBackChains.lean`) is per-example; its `N` is the token count, not
 a batch. Every other net has a batched whole-net certified backward tie (`*InputGradB_eq_*_vjp`).
 ViT has no BatchNorm, so the batched chain is the `StableHLO.batchMap N` lift of what exists and
 the tie should close the way ResNet-34's batched pool did — field by field, `rfl` at the leaves.
@@ -184,7 +184,7 @@ so it would close the same way, and it is the last `*InputGradB` gap.
   `DepthwiseFloatBridge` and `FloatSubnormalBridge` use is the `.comp` / `.residual` combinators;
   the rest can go. Measure with the same script the second pass used (declaration names of the
   file grepped against every other kept file).
-* `Foundation/MlpCanonical.lean`'s backward float statement is `mlpInputGrad_floatBridges`, on the
+* `Nets/Small/MlpCanonical.lean`'s backward float statement is `mlpInputGrad_floatBridges`, on the
   existential `FloatBridges` predicate the yaml itself says "constrains nothing — do not cite as
   budgets". Either restate it on `FloatBridgesTo` or drop it, and `Float/LinBackFloatBridge.lean`
   goes with it (its only kept consumer).
@@ -234,8 +234,17 @@ The fix that captures nearly all the value without re-inventing the buckets:
    infrastructure and `Architectures/` = generic ops. The `*BackChains` leaves written on
    2026-09-08 went to `Foundation/` only because the whole-net ties were there.
 2. **Normalize `Resnet` → `ResNet`.** Six files.
-3. **Drop `PoC` from production names**, with a suffix that says what the file is (`Faithful`,
-   `Tie`, `TieB`, `TieGB`). 36 files; every tie docstring and the book cite these names.
+3. **Drop `PoC` from production names**, with a suffix that says what the file is. Decided
+   2026-09-08: `FaithfulPoC` → `Fold`, `TiePoC` → `StepTie` (a bare `Tie` would collide with the
+   T6 `*BackCertifiedTie*` family), the `G` / `B` / `GB` suffixes kept — `ViTTiePoCGB` →
+   `ViTStepTieGB`, `ResNet34FaithfulPoCB` → `ResNet34FoldB`. 36 files; 376 basename mentions
+   across Lean, tests, the yaml, the book, the workflows and the scripts move by one sed. The 14
+   `*PoC*` NAMESPACES inside the files are declaration names and stay (an optional fourth step;
+   the book cites none of them). Measured 2026-09-08: step 1 moves 114 files and touches 827
+   imports, 231 lakefile roots, 191 audit imports, 38 workflow lines, 23 script refs, 12 yaml
+   fields and 155 dir-qualified prose paths; basename mentions (~1400) and the book's 88
+   `\texttt{}`s stay true. `verified_mlir/` names no module, so `Codegen/` could move too; leave
+   it. Two commits: the move (mechanical), then the two renames (prose).
 
 All three are `git mv` + citation updates — no proof changes — but the citation surface is the
 whole point of doing it as ONE session with the same `sed` machinery as §1: 490 `planning/` path
@@ -247,6 +256,28 @@ baked into `verified_mlir/` provenance comments? — check `scripts/check_render
 drift guard before moving anything under `Codegen/`; the safe version of this item leaves
 `Codegen/` alone.
 
+**Step 1 DONE 2026-09-08** (the move; steps 2 and 3 are the next commit). 114 files are
+`Nets/<family>/`: `Small/` 18 (MNIST linear, MLP and CNN, the CIFAR nets), `ResNet/` 24,
+`MobileNet/` 24, `EfficientNet/` 15, `ConvNeXt/` 14, `ViT/` 19. `Foundation/` keeps 25 files and
+`Architectures/` 10, all generic by content; `BackNetFolds` and `ConvLossFold` are cross-net and
+stay beside `CertifiedChain`. Surface actually touched: 357 imports, 114 lakefile roots, 106 audit
+imports, 20 umbrella imports, 10 yaml fields, one book cite, two scripts, two comparator tests,
+12 prose paths in Lean and 205 lines in 17 archive docs — 170 files, no proof text changed.
+Beyond the sed: the stats step in `certs.yml` / `proofs.yml` globbed `Proofs/*/*.lean` at fixed
+depth and would have dropped every `Nets/` file from CI's theorem table, now a `find`, and its
+bucket loop gained `Nets`; `Proofs/README.md`'s layout table has the seventh row. Gates: Certs
+3932 jobs, 1754/1754 audit verdicts (1752 on the three axioms, two axiom-free), docstring gate
+1538 citations across 500 files, audit coverage 191/235, render coverage, `verified_mlir/`
+untouched, `blueprint-checkdecls` clean on a fresh `lean_decls`. ⚠ The docstring gate failed
+ONCE against the pre-move `.lake/build` ("environment already contains `Proofs.Mnv2Live.Ws`
+from `…Nets.MobileNet.MobileNetV2`"), was clean after the 1005 stale build products of the old
+module names were removed, and did NOT reproduce when one was planted back; `blueprint.yml`
+restores `.lake` from a cache keyed only on the manifest and toolchain, so if its checkdecls or
+docstring step goes red once after this lands, bump `lake-v2`. Known and unchanged: eleven
+generic files import from `Nets/` (`SpecVJP` ten nets' forwards, `IR` the EfficientNet forward,
+`BackwardMaps` the ResNet-34 forward, `BatchMapVJPAt` the B0 chain close, …) — the dependency
+direction was inverted before the move too; the buckets are by content, not by import order.
+
 ## 9. Not on the list, deliberately
 
 The 15 `Float/` files (13 plus the two §5 moved in) are the model core (the rounding model, `Binary32Instance`, the
@@ -256,3 +287,20 @@ saturation constants for GELU and Swish (`geluScalar_lipschitz`, `swishScalarDer
 deleted with the budgets; no smoothing or Lipschitz certificate ever used them, and they are one
 `git show 55b0630:LeanMlir/Proofs/Architectures/GeluSaturation.lean` away if a GELU Lipschitz
 certificate is ever wanted.
+
+## 11. Follow-up: the ConvNeXt batched T6
+
+The one `*InputGradB` gap left after §7. `convnextInputGrad` (`Nets/ConvNeXt/ConvNeXtBackChains.lean`)
+is per-example and `convnextInputGrad_eq_convNextForwardTCh_vjp` ties it at one image; the batched
+T3 tie (`ConvNeXtTiePoCGB`) already lifts every activation and cotangent with `batchMap` /
+`batchMapAux`, on the same argument as ViT's — LayerNorm is per-example and nothing couples
+examples. Close it exactly as §7 did: a stage-wise batched chain beside the per-example one, a
+tie file with one leaf tie per factor (stem, four stages, three downsamples, head LN, GAP, dense —
+about twelve, each one rewrite of the per-example leaf tie at one example's row then `rfl`), the
+`vjp_comp_diff_at` apex over `batchMap_has_vjp_at`, the shape check through `batchMap_comp`, and
+the transfer through `HasVJPAt.backward_unique_of_eq`. Move `batchMap_comp` and
+`HasVJPAt.backward_unique_of_eq` from `ViTWholeBackCertifiedTieB.lean` into `BatchMapVJPAt.lean`
+first; both nets then share them. ⚠ `convNextForwardTCh` is stated at Imagenette's `Vec 10` head
+and literal 224² dims, so its batched tie would be too; generalise the forward and its VJP in the
+class count in the same session, before the lift, so the tie covers the 1000-class artifacts.
+About 300 lines and one corpus rebuild.

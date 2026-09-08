@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.EfficientNetChainClose
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 
 /-! # `batchMap` at a POINT — the pointwise peer of `batchMap_has_vjp`
 

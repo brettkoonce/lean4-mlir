@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.MobileNetV2
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
 import LeanMlir.Proofs.Training.JacobianSeal
 import Mathlib.Analysis.Calculus.Deriv.Prod
 

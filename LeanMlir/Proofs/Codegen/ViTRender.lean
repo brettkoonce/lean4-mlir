@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.ViTMultiHead
+import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.ViTRender
 
 /-! # ViT-Tiny train step rendered from the verified AST (the §1 render) — FORWARD portion

@@ -141,7 +141,7 @@ new.
 
 **Result: no new SHlo op, and no new block position either.** Two readings settled it:
 
-1. **The depthwise VJP is kernel-general, not per-`k`.** `Proofs/Architectures/ConvNeXtClose.lean:15`
+1. **The depthwise VJP is kernel-general, not per-`k`.** `Proofs/Nets/ConvNeXt/ConvNeXtClose.lean:15`
    certifies `depthwiseConv2d` via `cnx_render_dw7{W,b}_certified`, annotated *"kernel-general —
    pinned below"*, and the descriptor carries `kH kW` explicitly (`StableHLOParse.lean:257`,
    `depthwiseF w b c h w' kH kW e`). Rendered in anger at 3×3 (MNv2), 5×5 (EfficientNet `mbConvSE`)
@@ -1116,12 +1116,12 @@ the main line. **Measured 2026-08-10, not recalled:**
 | enet | ✓ | ✓ `EfficientNetBackB0` + CertifiedTie | ✓ 1.13e-06 | — |
 | convnext | ✓ | ✓ `ConvNeXtBackB0` + CertifiedTie | — | — |
 | vit | ✓ | ⭐ `ViTBackB0` — **the only genuinely whole-net one**: patchEmbed→tower→LN→classifier at every depth (§8g) | — | — |
-| **r50** | ✓ `Foundation/Resnet50BlocksCertified.lean` | ✅ **DONE 2026-08-10 — `ResNet50BackB0`, all 3 forms** | ⛔ no 10-class reference exists | ⛔ |
+| **r50** | ✓ `Nets/ResNet/Resnet50BlocksCertified.lean` | ✅ **DONE 2026-08-10 — `ResNet50BackB0`, all 3 forms** | ⛔ no 10-class reference exists | ⛔ |
 | **mnv4** | ⛔ **missing** | ⛔ **missing** | ✅ 1.423e-06 | ✅ 0/147 |
 
 ## 8a. ✅ R50's WHOLE-NET COMPOSED BACKWARD IS BUILT (2026-08-10)
 
-`LeanMlir/Proofs/Foundation/ResNet50BackB0.lean` — five theorems, **all 3-axiom clean
+`LeanMlir/Proofs/Nets/ResNet/ResNet50BackB0.lean` — five theorems, **all 3-axiom clean
 `[propext, Classical.choice, Quot.sound]`, zero `sorry`**, registered in the `Certs` lib:
 
 | theorem | what it closes |
@@ -1183,7 +1183,7 @@ re-run:
 
 ## 8d. ✅ MNv4's UIB BACKWARD (2026-08-10) — and §8's open question is ANSWERED: the families COLLAPSE
 
-`Foundation/MobileNetV4BackB0.lean`. 3-axiom clean, zero `sorry`.
+`Nets/MobileNet/MobileNetV4BackB0.lean`. 3-axiom clean, zero `sorry`.
 
 ### ⭐⭐ THE FOUR FAMILIES COLLAPSE — via `CertLayer.id'`
 
@@ -1350,7 +1350,7 @@ the other way, the previous commit would have overclaimed.
 
 ## 8f. ✅ THE HOLES ARE CLOSED — 30/31 (2026-08-10), and the sweep caught my first attempt failing
 
-`Foundation/EfficientNetBackNet.lean`. The sweep now reports **31 batched certified forwards, 30
+`Nets/EfficientNet/EfficientNetBackNet.lean`. The sweep now reports **31 batched certified forwards, 30
 tied**; the one remaining is `efficientnetForwardB`, the whole-net forward, which is the artifact-tie
 item rather than a stage hole.
 
@@ -1424,7 +1424,7 @@ generated rather than typed. `(r50Trunk …).ok x` is not a formality: it is the
 that the certificate holds where the net is differentiable, and it deepens correctly instead of
 being assumed away.
 
-### `Foundation/ResNet50BackNet.lean` — R50 as blocks → stages → trunk
+### `Nets/ResNet/ResNet50BackNet.lean` — R50 as blocks → stages → trunk
 
 Three `CertLayer` instances (identity / stride-1 projection / strided projection), `r50StageFirst`
 and `r50StageDown` (a projection block then **any number** of identity blocks), `r50Trunk` (four
@@ -1623,7 +1623,7 @@ comparing like with like.
 
 ## 8g. ✅ ViT IS FOLDED (2026-08-10) — and it was never the net that was behind
 
-`Foundation/ViTBackNet.lean`. 3-axiom clean, zero `sorry`, `lake build Certs` green (3919 jobs),
+`Nets/ViT/ViTBackNet.lean`. 3-axiom clean, zero `sorry`, `lake build Certs` green (3919 jobs),
 in `tests/AuditAxioms.lean`. **All seven nets are now on `CertLayer`, and ViT's fold is the only
 one that runs image → logits** (stem + trunk + final LN + head — see the stem/head section below).
 

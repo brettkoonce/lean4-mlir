@@ -19,7 +19,7 @@ the backward, the AdamW/EMA tail and, since leg 3, the seventeen drop-free write
 in `ConvNeXtRender.lean`, beside the stochastic-depth, ImageNet, S/B and bf16 ones that were always
 here. Only the SGD-inline `convnext_train_step.mlir` is still written there: this traversal has no
 fused-SGD arm, and `ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at those bytes. The Proofs
-tier for this chain is `Architectures/ConvNeXtFaithfulPoCGB.lean`, which landed before the writers
+tier for this chain is `Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean`, which landed before the writers
 moved (leg 1's ordering rule).
 
 **The gate** (`lake build convnext-fwd-b-tie`): the per-example chain and this one must emit
@@ -931,7 +931,7 @@ end Proofs.StableHLO
 -- 83,478,846 floats differing after three AdamW steps with `scripts/perturb_conv_vjp.py` as the
 -- negative control — re-run as `convnext-adam-tie` on the swapped bytes.
 --
--- ⛔ The batched tier landed FIRST: `Architectures/ConvNeXtFaithfulPoCGB.lean` folds every `*GradB`
+-- ⛔ The batched tier landed FIRST: `Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean` folds every `*GradB`
 -- node this traversal emits, so no committed artifact is `pretty` of an AST without a fold (leg 4's
 -- lesson — byte-identity is not tier-identity — applied here on bytes that DO move).
 --

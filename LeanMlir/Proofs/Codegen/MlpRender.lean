@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.LinearTrainStep
+import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 
 /-! # MLP render half — the train-step text as a name-threaded render of proven graphs
 

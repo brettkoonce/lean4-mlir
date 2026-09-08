@@ -9,15 +9,17 @@ succeeds, every theorem is correct.
 
 ## Directory layout
 
-The 199 proof files are filed into six buckets
-(split rationale: `planning/archive/proofs_directory_refactor.md`). The Lean
+The 242 proof files are filed into seven buckets
+(split rationale: `planning/archive/proofs_directory_refactor.md`; the per-net
+tree dates from 2026-09-08, `planning/cleanup_backlog.md` §10). The Lean
 namespace is `Proofs.*` throughout — only module paths carry the bucket:
 
 | directory | what lives there |
 |---|---|
-| [`Foundation/`](Foundation/) | pdiv/HasVJP kit, `Tensor`, `MLP`, `IR`, ResNet34 chain machinery + live canonical instantiations |
-| [`Architectures/`](Architectures/) | `Attention`, `CNN`, `BatchNorm`, `MobileNetV2`, `ConvNeXt`, `EfficientNet`, ViT — per-net op/VJP + tie files |
-| [`Float/`](Float/) | `FloatBridge`, `Binary32Instance`, bf16/E4M3, per-net float bridges |
+| [`Foundation/`](Foundation/) | generic infrastructure: pdiv/HasVJP kit, `Tensor`, `MLP`, `IR`, `SpecVJP`, `CertifiedChain`, `OpaquePrefix`, `BackwardMaps`, the batched-VJP and data-parallel calculus, interval/CROWN bounds |
+| [`Architectures/`](Architectures/) | generic ops: `Attention`, `CNN`, `BatchNorm`, `LayerNorm`, `Depthwise`, `SE`, `Residual`, `MaxPool3s2`, the channel-LN and depthwise backward ties |
+| [`Nets/`](Nets/) | one directory per net family — `Small/` (MNIST linear/MLP/CNN, CIFAR), `ResNet/`, `MobileNet/`, `EfficientNet/`, `ConvNeXt/`, `ViT/`: each net's forward, VJP, folds, step ties and whole-net backward ties |
+| [`Float/`](Float/) | the rounding model: `FloatBridge`, `Binary32Instance`, bf16/E4M3, the ResNet-34 float chain |
 | [`Codegen/`](Codegen/) | proof↔IR bridges, `*Render`, `IRPrint`, `StableHLO` |
 | [`Certificates/`](Certificates/) | Lipschitz + smoothing scorecards — **machine-emitted**, see its README |
 | [`Training/`](Training/) | `SgdDescent*`, Jacobian seals, trained witnesses |
@@ -53,8 +55,8 @@ proved for each net, and the **Linear classifier** shows both in ~650 lines tota
 
 Read these three, in order:
 
-1. [`LinearTrainStep.lean`](Foundation/LinearTrainStep.lean) (~250 L) — the linear train-step spec + ops.
-2. [`LinearFaithfulPoC.lean`](Foundation/LinearFaithfulPoC.lean) (~145 L) — **capstone**: emitted step = certified math.
+1. [`LinearTrainStep.lean`](Nets/Small/LinearTrainStep.lean) (~250 L) — the linear train-step spec + ops.
+2. [`LinearFaithfulPoC.lean`](Nets/Small/LinearFaithfulPoC.lean) (~145 L) — **capstone**: emitted step = certified math.
 3. [`SgdDescentLinear.lean`](Training/SgdDescentLinear.lean) (~255 L) — **capstone**: that step decreases the loss.
 
 Build *just* this slice (Linear + the shared foundation it needs, nothing else):

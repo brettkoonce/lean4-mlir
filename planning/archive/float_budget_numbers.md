@@ -347,7 +347,7 @@ Each has an acceptance criterion. None makes a number smaller.
    that says which net they are.
 
    The original scoping, kept for the record: aim at `efficientnetForwardB_has_vjp`
-   (`Architectures/EfficientNetChainClose.lean`, `HasVJP` everywhere), not the 16-block
+   (`Nets/EfficientNet/EfficientNetChainClose.lean`, `HasVJP` everywhere), not the 16-block
    `efficientnetForwardB_full_has_vjp`. Missing: the three batched block ties at `bnBatchLA`
    (`mbNoExpFwdB`, `mbStridedFwdB`, `mbResidFwdB`; the one existing tie is per example at scalar
    `bnForward`), the batched leaf ties (`batchMap_has_vjp` is built by transport so its

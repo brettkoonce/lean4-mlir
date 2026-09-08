@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.IR
-import LeanMlir.Proofs.Foundation.ResNet34
+import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Architectures.MaxPool3s2
 

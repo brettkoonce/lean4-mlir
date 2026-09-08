@@ -1,10 +1,10 @@
 import LeanMlir.Proofs.Foundation.CertifiedChain
-import LeanMlir.Proofs.Foundation.ResNet50BackNet
-import LeanMlir.Proofs.Foundation.ResNet34BackB0
-import LeanMlir.Proofs.Architectures.EfficientNetBackB0
-import LeanMlir.Proofs.Architectures.ConvNeXtBackB0
-import LeanMlir.Proofs.Architectures.ConvNeXtFullT
-import LeanMlir.Proofs.Architectures.EfficientNetChainClose
+import LeanMlir.Proofs.Nets.ResNet.ResNet50BackNet
+import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackB0
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 
 /-! # The remaining four nets, folded — `CertLayer` instances for r34, mnv2, enet, convnext
 
@@ -43,7 +43,7 @@ here: its blocks are per-token `Mat`-shaped with a different backward vocabulary
 (`transformerBlockBackGraph` and three MH variants), and `ViTBackB0` is the heaviest module in the
 repo (~11 min, ~14 GB — memory `vit-backb0-ci-cost`). It is a separate sitting.
 
-✅ **That sitting happened — `Foundation/ViTBackNet.lean` (2026-08-10).** Two corrections it
+✅ **That sitting happened — `Nets/ViT/ViTBackNet.lean` (2026-08-10).** Two corrections it
 forced, both worth reading before trusting this file's framing:
 * ViT was never the *least*-folded net; it was the only one with a concrete whole-net backward
   graph (stem and head included, at every depth). See `CertifiedChain.lean`'s correction block.

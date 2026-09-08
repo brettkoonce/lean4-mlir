@@ -7,9 +7,9 @@ import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Architectures.SE
 import LeanMlir.Proofs.Architectures.LayerNorm
 import LeanMlir.Proofs.Architectures.Attention
-import LeanMlir.Proofs.Architectures.MobileNetV2
-import LeanMlir.Proofs.Architectures.ConvNeXt
-import LeanMlir.Proofs.Architectures.EfficientNet
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 
 open Proofs
 open scoped Real

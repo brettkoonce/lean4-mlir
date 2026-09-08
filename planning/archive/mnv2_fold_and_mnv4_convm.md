@@ -18,7 +18,7 @@ Both jobs are **DONE** (2026-08-14), source-side. Job 2 owes two GPU ties, track
 
 ## Job 1 — prove `mobilenetv2_full_has_vjp_at` at all seventeen blocks — ✅ DONE 2026-08-14
 
-Landed as `LeanMlir/Proofs/Architectures/MobileNetV2FullVJP.lean` (611 lines, 0 sorries,
+Landed as `LeanMlir/Proofs/Nets/MobileNet/MobileNetV2FullVJP.lean` (611 lines, 0 sorries,
 3-axiom-clean, builds in ~2.5 s). `mobilenetv2_full_has_vjp_at` folds stem + 17 bottlenecks +
 head; `mobilenetv2_full_has_vjp_at_correct` ties the backward to the `pdiv`-contracted Jacobian
 of `mobilenetv2ForwardPaper` itself through `mobilenetv2ForwardPaper_eq_chain`. ch6 §6.1 and
@@ -83,7 +83,7 @@ post-mortem above; the two disagree, and the post-mortem is the measured one.
 
 #### What it is
 
-`mobilenetv2_has_vjp_at` (`Proofs/Architectures/MobileNetV2.lean:489`) folds **stem +
+`mobilenetv2_has_vjp_at` (`Proofs/Nets/MobileNet/MobileNetV2.lean:489`) folds **stem +
 two inverted-residual blocks + head**. The network has seventeen. The book says so out
 loud in two places, so closing this edits prose as well as proofs:
 
@@ -121,13 +121,13 @@ faithfulness for all 17 and stops.
 
 ### What exists
 
-- `Proofs/Architectures/MobileNetV2FullPaper.lean` (323 lines): all four block shapes
+- `Proofs/Nets/MobileNet/MobileNetV2FullPaper.lean` (323 lines): all four block shapes
   over **packaged** weights — `ivNoExpW` (:136), `ivExpOnlyW` (:143), `ivResidW` (:149),
   `ivStridedW` (:155) — plus the full 17-block chain `mobilenetv2ForwardPaper`, 0 sorries.
 - `vjp_comp_at` (`Proofs/Foundation/Tensor.lean:342`).
 - The per-operation VJPs to compose, all proved: `depthwiseFlat_has_vjp`,
   `relu6_has_vjp_at`, `residual_has_vjp`, `flatConv_has_vjp`.
-- `Proofs/Architectures/EfficientNetFullB0.lean` (531 lines) — the destination, complete.
+- `Proofs/Nets/EfficientNet/EfficientNetFullB0.lean` (531 lines) — the destination, complete.
 
 ### What is missing, and the honest cost
 

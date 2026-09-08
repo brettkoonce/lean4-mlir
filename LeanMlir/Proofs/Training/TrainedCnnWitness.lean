@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.MnistCNN
+import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 /-! # Trained-weight whole-network VJP witness — CNN rung
 

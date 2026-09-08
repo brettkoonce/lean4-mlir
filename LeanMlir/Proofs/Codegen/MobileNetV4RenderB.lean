@@ -46,7 +46,7 @@ runs at. Read off the Conv-M table (`jax/MainMobilenetV4.lean`), which lands cle
 
 ⚠⚠ **Conv-M has NO post-strided block** (Conv-S had one), so that third arm is certified and
 **unexercised** — a green corpus is not coverage of it. The split was 11 / 2 / 1 here until
-2026-09-07; the `#guard`s in `Proofs/Foundation/MobileNetV4BackB0.lean` have said 18 / 3 / 0 since
+2026-09-07; the `#guard`s in `Proofs/Nets/MobileNet/MobileNetV4BackB0.lean` have said 18 / 3 / 0 since
 2026-08-14.
 
 ⚠⚠ **ACTIVATION IS PLAIN `relu`, NOT `relu6`.** MobileNetV2's blocks use relu6 and this file sits
@@ -122,7 +122,7 @@ deriving Inhabited, DecidableEq
 
     ⚠ Verified against **timm 1.0.28** (`mobilenetv4_conv_medium`, walking `model.blocks[1:4]`):
     all 21 rows agree on `(ic, oc, expand, preDWk, postDWk, h, stride2)`. The `#guard`s in
-    `Proofs/Foundation/MobileNetV4BackB0.lean` pin that reading; they are derived from timm rather
+    `Proofs/Nets/MobileNet/MobileNetV4BackB0.lean` pin that reading; they are derived from timm rather
     than re-read off this table, or they would gate nothing. -/
 def mnv4Blocks : List UibSpec :=
   [ ⟨"1",   48,  80, 4, 3, 5, 28, true⟩,   -- ExtraDW  56→28

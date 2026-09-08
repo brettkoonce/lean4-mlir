@@ -27,7 +27,7 @@ depth artifacts its `#eval`s write — ever get built (scripts/check_render_cove
 
 ## `lean_lib «Certs»`
 
-### `LeanMlir.Proofs.Architectures.MnistCNN`
+### `LeanMlir.Proofs.Nets.Small.MnistCNN`
 
 Chapter-4 MNIST 2D CNN (no BN): conditional whole-net VJP
 + a concrete instance with every smoothness hyp discharged.
@@ -47,7 +47,7 @@ Item B2: the seal discharged at the live MobileNetV2 witness —
 Chapter-6 ResNet Milestone B: stride-2 SAME convolution (the hard
 new downsampling op) = decimate ∘ stride-1 conv, with its input-VJP.
 
-### `LeanMlir.Proofs.Foundation.ResNet34`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34`
 
 Chapter-6 ResNet Milestone B: the deep-block chain (a list of
 same-type residual blocks composes to one VJP) — 16-block depth.
@@ -57,7 +57,7 @@ same-type residual blocks composes to one VJP) — 16-block depth.
 Chapter-6 ResNet Milestone B8: per-channel BatchNorm (block-diagonal
 VJP via a per-row generalization of `rowwise_has_vjp_mat`).
 
-### `LeanMlir.Proofs.Foundation.ResNet34LiveGeneric`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34LiveGeneric`
 
 Limit-D strengthening: the 224×224 live ResNet-34 whole-net VJP with
 the three downsample projection convs generalized to ARBITRARY kernels
@@ -89,16 +89,16 @@ R4 syntactic LEXER numeric keystone: decimal Nat⟷String
 round-trip (parseNat (toString n) = n), the load-bearing
 first rung of text→token faithfulness.
 
-### `LeanMlir.Proofs.Foundation.LinearTrainStep`
+### `LeanMlir.Proofs.Nets.Small.LinearTrainStep`
 
 M1 (planning/archive/verified_train_step.md): the linear train step bundled
 into one SGD-on-certified-softmax-CE-gradient theorem.
 
-### `LeanMlir.Proofs.Foundation.MlpTrainStep`
+### `LeanMlir.Proofs.Nets.Small.MlpTrainStep`
 
 M2: the MLP per-layer parameter-gradient assembly (Crux A).
 
-### `LeanMlir.Proofs.Foundation.CnnTrainStep`
+### `LeanMlir.Proofs.Nets.Small.CnnTrainStep`
 
 M3: the CNN convolution parameter-gradient bridges.
 
@@ -112,7 +112,7 @@ proven forward graphs (multi-intermediate generalization).
 CNN render half: the CNN train-step text rendered from `cnnFwdGraph`,
 with flat→NCHW reshape glue bridging the conv param-grad tail.
 
-### `LeanMlir.Proofs.Architectures.CifarBnClose`
+### `LeanMlir.Proofs.Nets.Small.CifarBnClose`
 
 ⛔ `LeanMlir.Proofs.Codegen.ResNet34Render` was here until 2026-09-06, when 4c leg 1
 retired it: the per-example renderer was the last writer in the suite emitting a
@@ -123,18 +123,18 @@ the sole writer of every ResNet-34 artifact. `planning/archive/renderer_converge
 CIFAR-BN close: the per-channel BN scale/shift (dγ, dβ) param-grad
 bridges — the affine BN analogue of `bias_grad_bridge`.
 
-### `LeanMlir.Proofs.Foundation.CnnChainClose`
+### `LeanMlir.Proofs.Nets.Small.CnnChainClose`
 
 CNN conv-close upgrade: the conv param closes pinned to the actual
 backward-chain cotangent (Back3 maxpool/conv via flatDenote + relu masks).
 
-### `LeanMlir.Proofs.Architectures.Cifar8Close`
+### `LeanMlir.Proofs.Nets.Small.Cifar8Close`
 
 Deeper (8-conv) CIFAR-CNN close: cifar8{,Bn}FwdGraph_faithful's backward
 peer — each conv W/b, BN γ/β, dense W/b output pinned to the actual 4-stage
 backward-chain cotangent (the CnnChainClose recipe + BN, two more pool stages).
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2Close`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close`
 
 MobileNetV2 close (Item C): the depthwise (stride-1/2) + strided-conv
 parameter-gradient bridges — every MobileNetV2 train-step param output
@@ -146,7 +146,7 @@ MobileNetV2 render (Item A): the PER-CHANNEL-BN typed SHlo forward graph
 (matches the operational render's BN flavor) + faithfulness to the
 per-channel ℝ-forward. Prerequisite for the structured render (Item B).
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2ChainClose`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ChainClose`
 
 MobileNetV2 cotangent-chain close (Item D): the Item C conv/depthwise bridges
 pinned to the inverted-residual backward chain (relu6 kink + depthwise + stride-2).
@@ -157,13 +157,13 @@ The cotangent pass / = ∂loss/∂θ fold: the certified per-layer conv/depthwis
 Jacobian contracted with ∂loss/∂(layer output) IS the total loss gradient (pdiv_comp
 at a smooth point). The conv analogue of mlp_hidden_total_loss_grad; program-wide.
 
-### `LeanMlir.Proofs.Architectures.EfficientNetClose`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetClose`
 
 EfficientNet-B0 close (Item C): a FREE close — every param family reuses an
 existing bridge (5×5 depthwise pinned; batch-norm γ/β = per-channel BN at m=N·h·w;
 SE squeeze/excite are dense → M2). No new VJP.
 
-### `LeanMlir.Proofs.Foundation.ResNet34Close`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34Close`
 
 ResNet-34 close (Item C): a FREE close — every r34 param family certified
 by an existing bridge (the 7×7 stem + 3×3 strided projection pinned to the
@@ -174,57 +174,57 @@ generic strided conv W/b bridges; no new VJP).
 ResNet-34 render (Item A): the PER-CHANNEL-BN typed SHlo forward graph (full
 16-block [3,4,6,3] net, 7×7 stem, maxpool) + per-block + whole-net faithfulness.
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtClose`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose`
 
 ConvNeXt close (Item C): mostly reuse (7×7 depthwise pinned to the generic
 bridges) + the two genuinely-new families — layer-scale γ (dγ = x⊙dy) and
 scalar-LN γ/β (the Vec-1 embedding bridging bn_grad_gamma/beta).
 
-### `LeanMlir.Proofs.Architectures.ViTFwdGraph`
+### `LeanMlir.Proofs.Nets.ViT.ViTFwdGraph`
 
 ViT close (Item A): the distinct-param 2-block ViT forward (vitForward2 +
 whole-net VJP) and the heads=1 token forward graph + faithfulness
 (den vitFwdGraph = vitForward2 via mhsa_layer_one_head).
 
-### `LeanMlir.Proofs.Architectures.ViTClose`
+### `LeanMlir.Proofs.Nets.ViT.ViTClose`
 
 ViT close (Item C): the per-token dense W/b family (row-lifted M2
 outer product), row-lifted scalar-LN γ/β, pos-embed identity, CLS
 masked-gather — every representative-ViT param family except the
 patch conv certified.
 
-### `LeanMlir.Proofs.Architectures.ViTChainClose`
+### `LeanMlir.Proofs.Nets.ViT.ViTChainClose`
 
 ViT cotangent-chain close (Item D): the Item C bridges pinned to the
 attention-block backward chain (SDPA matmul chain = the proven
 sdpa_back_{Q,K,V} closed forms; the Q/K/V three-way fan-in at LN1).
 
-### `LeanMlir.Proofs.Architectures.ViTVecLN`
+### `LeanMlir.Proofs.Nets.ViT.ViTVecLN`
 
 ViT scaling pass (vector-[D] LN): layerNormVec block + vitForward2V
 whole-net VJP + the rowScaleF/rowBiasF token graph + faithfulness +
 the per-channel gamma/beta param bridges.
 
-### `LeanMlir.Proofs.Architectures.ViTDepthK`
+### `LeanMlir.Proofs.Nets.ViT.ViTDepthK`
 
 ViT scaling pass (multi-head + depth-k): headSliceF/headPadF tokens,
 mhsa at general heads, then the distinct-param depth-k tower
 (vitForwardKV). ViTDepthK imports ViTMultiHead, covering both.
 
-### `LeanMlir.Proofs.Architectures.ViTMultiHeadChain`
+### `LeanMlir.Proofs.Nets.ViT.ViTMultiHeadChain`
 
 ViT multi-head backward cotangents: the per-head SDPA backward the real
 chain delivers at the Q/K/V dense outputs (Σ_h pad ∘ vitCotD{Q,K,V}(d_head)
 ∘ slice), pinned to the audited sdpa_back_{Q,K,V} (vitCotD{Q,K,V}mh_eq).
 The multi-head/depth-12 tie's substantive build (mnv2 reduced→full).
 
-### `LeanMlir.Proofs.Architectures.EfficientNetFullB0`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0`
 
 EfficientNet-B0 at full depth (16 distinct MBConv blocks, true BN+SE):
 batched forward graph + whole-net VJP. Imports the EfficientNet
 RenderPC + ChainClose modules, covering all three.
 
-### `LeanMlir.Proofs.Architectures.EfficientNetFullB0Eval`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval`
 
 Its INFERENCE twin: the same 16-block ladder at frozen statistics (49 BN sites,
 one shared ε), the fourth block shape at eval (mbExpFwdBEval / mbExpGraphBEval,
@@ -232,17 +232,17 @@ which the 3-block eval render has no instance of), the typed graph and its
 faithfulness. The rung EfficientNetFullFloatBudget's number ends at
 (b0Full_float_logits_le_committed); the typed form of efficientnet_fwd_eval.
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtFullT`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT`
 
 Full ConvNeXt-T [3,3,9,3]: forward graph + faithfulness + whole-net
 VJP. Imports ConvNeXtChainClose, covering both.
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FullPaper`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper`
 
 Paper-spec full MobileNetV2 (all 17 [t,c,n,s] bottlenecks): forward
 graph + faithfulness.
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FullVJP`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP`
 
 ...and its whole-net input-VJP at all 17, folded over the same weight
 bundles. Pointwise (`_at`) — relu6 is kinked, so unlike EfficientNet-B0's
@@ -324,7 +324,7 @@ input = rounding (bnForward_close_of) + input-shift (bnForward_input_close).
 whole-net certificate backbone: FloatClose composes (moduli ∘, magnitudes
 thread) — the whole net is the fold of per-op budgets.
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FullPaperEval`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval`
 
 ⭐ The PAPER net's inference twin: the same 17-block [t,c,n,s] ladder at frozen
 statistics (52 BN sites, one shared eps), its typed graph and faithfulness. The
@@ -361,7 +361,7 @@ and a max-pool has no derivative at a tie. ⭐ pdivMat_rowIndep's global
 `Differentiable` weakens to differentiability at each ROW with no change to the
 argument — every use of it in that proof is already at a row.
 
-### `LeanMlir.Proofs.Architectures.ResNet34FullBVJP`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP`
 
 ⭐⭐ …and its whole-net input-VJP (T1's VJP half). Delegation only: the two batched
 block VJPs are ResNet34BackB0's, and the one thing that did not exist is
@@ -370,7 +370,7 @@ the body's mid-relu AND the post-residual OUTER relu, ResNet's structural
 difference from MobileNetV2/EfficientNet, whose residual add IS the block output.
 ⭐ The head takes no hypothesis (GAP and dense are smooth batchMaps).
 
-### `LeanMlir.Proofs.Foundation.ResNet34FaithfulPoCB`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34FaithfulPoCB`
 
 ⭐ T3's §1 fold at batch BN, and it is UN-FUSED. Every batched r34 train step —
 sgd, the Adam family, mom256 and the data-parallel peers — emits the RAW gradient
@@ -382,7 +382,7 @@ EfficientNetFaithfulPoC's proofs minus the `congr 1`/`congrArg (lr * .)` peeling
 the *SgdB_eq_grad family already said the fusion is rfl.
 ⚠ SYMMETRIC padding: convStridedWeightGradB / flatConvStride2, not B0's Xla peers.
 
-### `LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFaithfulPoCG`
 
 ⭐ 4b: the SAME fold for the other four nets, one file each, so that every net's
 T3 is stated at the node its Adam/RMSProp/LAMB artifact actually emits rather than
@@ -392,20 +392,20 @@ handful of new op kinds; the arithmetic is the *Sgd_eq_grad rfl read once.
 three new lemmas: the XLA-SAME stem and the two depthwise weights
 (EfficientNetFaithfulPoCG.lean).
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFaithfulPoCG`
 
 ⭐ ConvNeXt's twelve gradient nodes. psW (the 4x4/s4 patchify stem) had no fused
 peer to begin with — a declared §5 carve-out — and 4b makes that shape the norm.
 ⚠ SYMMETRIC padding at the three 2x2/s2 downsamples (ConvNeXtFaithfulPoCG.lean).
 
-### `LeanMlir.Proofs.Architectures.ViTFaithfulPoCG`
+### `LeanMlir.Proofs.Nets.ViT.ViTFaithfulPoCG`
 
 ⭐ ViT's ten gradient nodes at the VECTOR LayerNorm the shipped vitForwardKV runs.
 rowDenseBiasGrad appears twice against two different certified Jacobians (a dense
 bias and an LN beta are the same reduce), as it does in the fused file
 (ViTFaithfulPoCG.lean).
 
-### `LeanMlir.Proofs.Architectures.ViTFaithfulPoCGB`
+### `LeanMlir.Proofs.Nets.ViT.ViTFaithfulPoCGB`
 
 ⭐ 4c leg 4: the SAME ten nodes at the BATCHED traversal (vitBackAllB), which is
 what every committed ViT artifact renders from after the leg. Measured 2026-09-07:
@@ -419,7 +419,7 @@ Same emitted text, different function; den_rowDenseBiasGradB_at_one is the trap.
 operand and its batch reduce is emitted text, the per-example carve-out unchanged
 (ViTFaithfulPoCGB.lean).
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCGB`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFaithfulPoCGB`
 
 ⭐ 4c leg 3: ConvNeXt's fourteen nodes at the BATCHED traversal. Owed BEFORE the swap: every
 convnextin_* and *drop* artifact had rendered from that traversal since it existed,
@@ -433,7 +433,7 @@ The bf16 gradient nodes, folded once for every net: nine *GradBBf16 kinds, den =
 rnd outside the batch sum of the certified VJP at rounded operands (rowDense keeps
 its f32-typed result and has no outer rounding). (Bf16GradNodes.lean)
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FaithfulPoCPaperG`
 
 ⭐ MobileNetV2's twelve, at the BATCHED index — this net's two renders do not
 overlap (the per-example one is SGD-inline only, the batched one AdamW-only), so
@@ -455,7 +455,7 @@ no hypothesis on t at all), smoothTarget is label smoothing as a map on targets,
 smoothedCE_grad says the emitted expression IS that loss's gradient — not an
 approximation of it (SmoothedLossCot.lean).
 
-### `LeanMlir.Proofs.Foundation.ResNet34TiePoCB`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34TiePoCB`
 
 ⭐⭐ 4.2a: ResNet-34's T3 §1a TIE at batch BN, un-fused and batched — the last piece
 of r34's T3. Every parameter gradient node at the cotangent the emitted chain
@@ -472,7 +472,7 @@ enter only in the two _eq_vjp lemmas.
 ⛔ The census is 110 parameters, not the 146 the retired per-example tie named: both r34 renders
 run convBias := false and the conv biases are zeroBiasPrelude's zero constants.
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FullB`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB`
 
 ⭐ 4.2 leg 1: MobileNetV2's T1-forward and T2 at batch BN — the second net whose
 Proofs tier is re-stated in the world its Adam/RMSProp artifacts train in. Pure
@@ -486,7 +486,7 @@ four strided depthwises), and NO stem pool, which is why this net needs no
 batchMap_has_vjp_at. ⚠ Bias operands are the render's default convBias := false
 names (%zb{c}); the census is 158 parameters, not 210.
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP`
 
 ⭐⭐ …and its whole-net input-VJP (T1's VJP half). Delegation only: mnv2BodyB and
 mnv2DownBodyB ARE the two body shapes, residual_has_vjp_at wraps the first for the
@@ -503,7 +503,7 @@ need batched peers. ⭐ mnv2BodyB's family was generalised from one channel coun
 ic/oc there (b11 and b17 are stride-1 bodies with ic ≠ oc, which the residual-only
 statement could not express); mnv2DownBodyB already had that shape.
 
-### `LeanMlir.Proofs.Foundation.MobileNetV2TiePoCB`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2TiePoCB`
 
 ⭐⭐ 4.2c: MobileNetV2's T3 §1a TIE at batch BN, un-fused and batched — the last piece
 of mnv2's T3, and the second net whose train step is tied at the artifact that
@@ -522,7 +522,7 @@ positivity conditions enter only in the four _eq_vjp lemmas.
 ⛔ The census is 158 parameters, not the 210 slots stated: convBias := false, so the
 52 bias nodes are not emitted. ⛔ ONE REPLICA — the all-reduce is text outside the AST.
 
-### `LeanMlir.Proofs.Architectures.EfficientNetTiePoCG`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetTiePoCG`
 
 ⭐ 4b's capstone re-pointing, EfficientNet-B0: the 262-parameter §1a tie restated
 at the RAW gradient nodes (*GradB, what every non-SGD-inline step emits) and at the
@@ -535,7 +535,7 @@ binders go with the wrapper. ⭐ The head takes `g` as a BINDER where the fused 
 computes it internally; that is the whole of the loss axis, since the per-block
 ties were already forall-cot (EfficientNetTiePoCG.lean).
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtTiePoCGB`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtTiePoCGB`
 
 ⭐⭐ 4b's capstone for ConvNeXt-T, THREE axes at once: the un-fused *GradB nodes,
 the smoothed loss at a general target, and the BATCHED index (the per-example
@@ -546,7 +546,7 @@ examples. N and nC are binders; no smoothness hypothesis (GELU). The loss chain 
 smoothedLossCotGraphDiv, the softmaxDiv∘expe spelling at the plain N·K width that
 ConvNeXtRenderB and ViTRenderB emit (SmoothedLossCot.lean) (ConvNeXtTiePoCGB.lean).
 
-### `LeanMlir.Proofs.Architectures.ViTTiePoCGB`
+### `LeanMlir.Proofs.Nets.ViT.ViTTiePoCGB`
 
 ⭐⭐ 4b's capstone for ViT-Tiny — the set closes at FIVE OF FIVE. ConvNeXtTiePoCGB's
 three-axis transformation applied to ViTTiePoC: the *GradB nodes every vitin_*
@@ -623,7 +623,7 @@ per-class and separable, which is the point under mixup. ⚠⚠ The divisor is B
 not B -- timm's BinaryCrossEntropy is reduction='mean' over B x C, and at K = 1000
 the two differ by 1000x on the effective step (BceLossCot.lean).
 
-### `LeanMlir.Proofs.Architectures.ResNet50FullB`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet50FullB`
 
 ⭐⭐ §3.5(a): RESNET-50's T1 at batch BatchNorm — the first net-level tier this net
 has ever had. ⭐ The one net where T1 matches the trained world from the start:
@@ -647,7 +647,7 @@ hypothesis, where r34's literal ladder needed none (the stem pool's output grid)
 at all five stride-2 sites; neither is visible to the types
 (ResNet50FullB.lean, ResNet50FullBVJP.lean).
 
-### `LeanMlir.Proofs.Architectures.MobileNetV4FullB`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB`
 
 ⭐⭐ MOBILENETV4-CONV-M's T1 and T2 at batch BatchNorm -- the last net in
 planning/archive/proofs_tier_to_paper_nets.md §2's table with nothing at the net level.
@@ -670,7 +670,7 @@ their identity is the SSA NAMES the T2 graph reads off the row, not the types.
 run; what pins these tiers to the reference is the 2026-09-07 tie pair
 (MobileNetV4FullB.lean, MobileNetV4FullBVJP.lean).
 
-### `LeanMlir.Proofs.Foundation.MobileNetV4FaithfulPoCB`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FaithfulPoCB`
 
 ⭐⭐ MOBILENETV4's T3 §1 fold: every parameter GRADIENT node the batched train step
 emits denotes the certified gradient, by block profile. ZERO new fp32 op-kind
@@ -687,7 +687,7 @@ types, identical emitted shapes, different certificates.
 bf16: the five *GradBBf16 kinds MNv4 emits are folded in Bf16GradNodes.lean.
 (MobileNetV4FaithfulPoCB.lean)
 
-### `LeanMlir.Proofs.Foundation.MobileNetV4TiePoCB`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4TiePoCB`
 
 ⭐⭐ MOBILENETV4's T3 §1a TIE: every gradient node at the cotangent the render's own
 backward chain delivers, driven by a loss cotangent g at the logits -- all 233.
@@ -706,7 +706,7 @@ label-smoothed softmax chain (softmaxRow at m := 1 -- ResNet's spelling, NOT
 ConvNeXt's expe-then-softmaxDiv; the two take different lemmas and nothing in the
 types tells them apart) (MobileNetV4TiePoCB.lean).
 
-### `LeanMlir.Proofs.Foundation.MobileNetV4WholeBackCertifiedTieB`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4WholeBackCertifiedTieB`
 
 ⭐⭐ MOBILENETV4's T6 (mnv4_proofs_tier.md §Session 3, ~3 s) -- the last tier this
 net can have, and with it Conv-M is certified from its R forward through its typed
@@ -730,7 +730,7 @@ check is what replaces it, and it names every block by its table row -- which is
 what pins rows 4/5/10, 12/18 and 15/19/20 apart
 (MobileNetV4WholeBackCertifiedTieB.lean).
 
-### `LeanMlir.Proofs.Foundation.ResNet50FaithfulPoCB`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet50FaithfulPoCB`
 
 ⭐⭐ §3.5(c): RESNET-50's T3 — the §1 fold and the §1a tie at batch BatchNorm.
 ⭐⭐ ZERO new op-kind lemmas: ResNet34FaithfulPoCB's six are statements about OP
@@ -762,25 +762,25 @@ content; moved out of the *FloatBridge files 2026-09-08 (float_second_pass.md).
 The channel-LayerNorm backward (rowLNVecFlatBack, chanLNTensor3Back) — ConvNeXt's
 and ViT's LN input-VJP, the ℝ map chanLNTensor3Back_eq_chanLN_vjp is about.
 
-### `LeanMlir.Proofs.Foundation.ResNetBackChains`
+### `LeanMlir.Proofs.Nets.ResNet.ResNetBackChains`
 
 The ResNet-34/50 backward chains (r34IdBlockBack, r34DownBlockBack, r34InputGrad,
 r34InputGradB, r50InputGradB) and the batched 3×3/s2 pool backward maxPool3s2FlatBackB
 — the ℝ maps the three ResNet certified ties are stated about (no float content).
 
-### `LeanMlir.Proofs.Foundation.MobileNetBackChains`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains`
 
 The MobileNetV2/V4 backward chains (invresBodyBackPC, invresBodyStridedBackPC,
 mnv2InputGrad, mnv2InputGradB, mnv4InputGradB) — the ℝ maps the four MobileNet
 certified ties are stated about (no float content).
 
-### `LeanMlir.Proofs.Foundation.EfficientNetBackChains`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains`
 
 The EfficientNet-B0 backward chains (mbconvBodyBack, efficientnetInputGradB,
 efficientnetInputGradB_full) — the ℝ maps the three B0 certified ties are stated
 about (no float content).
 
-### `LeanMlir.Proofs.Foundation.ConvNeXtBackChains`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackChains`
 
 The ConvNeXt-T backward chains (cnxBlockBodyBack, cnxDownBack, convnextInputGrad) —
 the ℝ maps the two ConvNeXt certified ties are stated about (no float content).
@@ -808,7 +808,7 @@ which is precisely the gap `scripts/check_audit_coverage.py` exists to catch: lo
 it hides behind stale dev `.olean`s and the axiom gate looks green, while a fresh CI
 runner never builds the object at all. It bit at `5f27766^` and it bit again here.
 
-### `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie`
+### `LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTie`
 
 §B integrity tie: the r34 IDENTITY-BLOCK backward float bridge targets the CERTIFIED
 VJP. Same-vocabulary (per-channel BN, non-batched) target rblkPC_has_vjp_at — built
@@ -816,7 +816,7 @@ here, mirrors resblock_has_vjp_at — + the conv-leaf tie (convFlatBack_eq_vjp_b
 via IR.convBackDenote_eq_input_grad_formula) ⇒ r34IdBlockBack(pinned) = its .backward.
 b1-free (no batched↔non-batched reconciliation).
 
-### `LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie`
 
 ⭐⭐ The same tie for the WHOLE MobileNetV2: mnv2InputGrad(pinned) =
 (mobilenetv2PC_has_vjp_at ...).backward, plus the piece r34's file does NOT have —
@@ -824,7 +824,7 @@ mobilenetv2Forward_full_pc_eq_chain, a rfl saying the ten-stage chain the apex i
 instantiated at IS the committed forward. That is the shape check §3.10's wrong
 pool slipped past. ⭐ No drift found here: the mnv2 backward number is unchanged.
 
-### `LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2PaperWholeBackCertifiedTie`
 
 ⭐⭐ And the SAME TIE at MobileNetV2's PAPER depth — all seventeen bottlenecks
 (proofs_tier_to_paper_nets 3.2c). The six-block file above is the ch7
@@ -836,7 +836,7 @@ are quadratic in the writing. ⛔ `mobilenetv2ForwardPaper_eq_slots` cannot be a
 one-step `rfl` — the kernel times out at 3 min; it peels through
 `mobilenetv2ForwardPaper_eq_chain` and then unfolds the prefixes by name.
 
-### `LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie`
 
 ⭐⭐ And for the whole EfficientNet-B0, the fourth net to get one:
 efficientnetInputGradB(pinned) = (efficientnetB_has_vjp ...).backward, at every
@@ -844,7 +844,7 @@ batch size, with efficientnetForwardB_eq_chain as the shape check. It had to wai
 for the XLA-SAME re-spelling — at the symmetric stem it would have certified a
 program no shipped B0 artifact runs. ⭐ The b0 backward number is unchanged.
 
-### `LeanMlir.Proofs.Foundation.EfficientNetFullWholeBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie`
 
 ⭐⭐ And at the PAPER depth, all 16 MBConv blocks, one step further than the
 representative's: efficientnetInputGradB_full(pinned) = the generic 18-stage
@@ -857,7 +857,7 @@ efficientnetForwardB_full_has_vjp_correct, whose proof is the shape check
 efficientnetForwardB_full_eq_chain: the chain IS the Jacobian-transpose of the
 committed nested-application forward. Every batch size; no smooth point.
 
-### `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTieB`
+### `LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTieB`
 
 ⭐⭐ T6 AT BATCH BATCH-NORM, for the two nets whose Proofs tier was per-example
 (proofs_tier_to_paper_nets §4.2, the last real statement in that section's port —
@@ -878,7 +878,7 @@ KERNEL deterministic timeout at six minutes here, and the reason is the KINK, no
 the depth — B0's witnesses are global HasVJP and carry no point, where these are
 HasVJPAt at prefixes spelled two different ways.
 
-### `LeanMlir.Proofs.Foundation.Resnet50WholeBackCertifiedTieB`
+### `LeanMlir.Proofs.Nets.ResNet.Resnet50WholeBackCertifiedTieB`
 
 ⭐⭐ AND RESNET-50's T6 (proofs_tier_to_paper_nets §3.5(e)) — the last statement
 that net was missing which says anything; (d)'s two float budgets are the vacuous
@@ -906,13 +906,13 @@ the third spelling of that map and never got the fix. padOdd is the repair: an
 even-kernel conv IS an odd-kernel conv on the kernel zero-extended at (+1,+1), so
 the existing odd leaf tie does all the work and no new float machinery is needed.
 
-### `LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie`
 
 ConvNeXt-T's whole-net backward tie: the stage-boundary downsample tie and the
 depth-k STAGE FOLD (planning §3.18's "one real proof"), plus the eleven named saved
 activations. ⛔ The assembly is not here — see the file header and planning §3.19.
 
-### `LeanMlir.Proofs.Foundation.ViTBackChains`
+### `LeanMlir.Proofs.Nets.ViT.ViTBackChains`
 
 ViT-Tiny's whole-net backward, tier T6 (proofs_tier_to_paper_nets 3.4a), in three
 modules. ⛔ The gap it closes is NOT the head count the audit recorded
@@ -926,7 +926,7 @@ decompositions and the block unfold stay rfl); ViTWholeBackCertifiedTie folds th
 depth-k tower head-first and closes the apex through a TERM-mode vjp_comp chain +
 HasVJP.backward_unique, since vitForwardKV_has_vjp opens with `unfold`.
 
-### `LeanMlir.Proofs.Foundation.Resnet50BlocksCertified`
+### `LeanMlir.Proofs.Nets.ResNet.Resnet50BlocksCertified`
 
 R50 phase 1 (planning/archive/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck
 blocks' certified VJPs. bblkPC (identity, 12 blocks), bblkPStridedPC (strided
@@ -945,26 +945,26 @@ depthwiseConv2d_input_grad_formula W, all dims/odd kernels, via Finset.sum_bij' 
 pad supports (no Σ co) — plus the flat + strided depthwise leaf ties (depthwiseFlatBack
 = certified depthwise input-VJP). Unblocks the convnext/mnv2/enet §B ties.
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie`
 
 §B integrity tie (convnext): cnxBlockBodyBack(pinned LN/gelu/layerScale backs) = the
 certified convNextBlockBody_has_vjp.backward — depthwise gate + 1×1 conv leaves + rfl;
 plus the residual-wrapped block tie. b1-free.
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie`
 
 §B integrity tie (mnv2): build the per-channel-BN certified body VJP invresBodyPC_has_vjp_at
 (fresh, like r34's rblkPC) then tie invresBodyBackPC (+ strided) — relu6 masks pinned to the
 0<preact<6 clamp-window signs, BN backs to bnPerChannelTensor3_has_vjp, depthwise via the
 gate. b1-free.
 
-### `LeanMlir.Proofs.Architectures.EfficientNetBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackCertifiedTie`
 
 §B integrity tie (efficientnet): mbconvBodyBack(pinned bn/swish/SE backs) = the certified
 mbconvBody_has_vjp.backward — SE back pinned to seBlockFull_has_vjp, swish to swish_has_vjp,
 depthwise via the gate. Certified per-example body VJP already exists (global bnForward).
 
-### `LeanMlir.Proofs.Architectures.ViTMhsaBackCertifiedTie`
+### `LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie`
 
 §B integrity tie (vit MHSA — the sdpa adjoint): mhsaBackFlat (Q/K/V pinned to the actual
 dense projections at the saved input X) = the certified mhsa_has_vjp_mat.backward,
@@ -990,14 +990,14 @@ Phase 3b: the AdamW render-close — emitted weight/bias update =
 adamWScalar of the certified gradient (sgdW_isCertifiedGradStep
 analogue, optimizer swapped for AdamW).
 
-### `LeanMlir.Proofs.Foundation.ResNet34Live2`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34Live2`
 
 Stage 2 of the live ResNet-34 (Item A2): the channel-order invariant
 kit (maxpool/BN/ReLU preserve strict pointwise channel domination —
 the non-vacuity carrier). Build-checked; not yet a live witness, so
 also NOT in the AuditAxioms headline set.
 
-### `LeanMlir.Proofs.Foundation.ResNet34LivePC`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34LivePC`
 
 Item A: the first NON-DEGENERATE ResNet-34 whole-net backward witness
 (level 2) — 2-channel stem + maxpool + 3 strided downsamples + GAP +
@@ -1012,7 +1012,7 @@ at a channel-symmetric base Y via the BN channel-difference identity
 (carrier vanishes ⇒ no BN-variance derivative needed). The ResNet peer
 of MobileNetV2JacobianSeal. In the AuditAxioms headline set.
 
-### `LeanMlir.Proofs.Foundation.ResNet34LiveFull`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34LiveFull`
 
 Item A FULL DEPTH: the real [3,4,6,3] (16-block) live ResNet-34, level-3
 sealed. The 13 identity blocks (zeroed body ⇒ relu(x+1)=x+1) wash out
@@ -1027,7 +1027,7 @@ linear bottleneck) shift by +45; GAP + identity head pass it, so the
 full net = the 2-block witness + 45 and the seal reduces to
 MobileNetV2JacobianSeal's Qq / g_hasDerivAt. VJP composed through all 17.
 
-### `LeanMlir.Proofs.Foundation.ResNet34LiveRealistic`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34LiveRealistic`
 
 Item D (realistic dims): the live ResNet-34 whole-net backward at real
 ImageNet 224×224 spatial resolution (the genuine 5-halving pyramid
@@ -1052,21 +1052,21 @@ dimension-independent and reused. Uniform-perturbation UDiff seal: the
 asymmetric stem turns input t into channel-diff −t, each BN ×γ·istd, so the
 output diff is −t·Rr (4 positive γ·istds), g'(0)=−Rr 0 ≠ 0.
 
-### `LeanMlir.Proofs.Architectures.EfficientNetBackB0`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0`
 
 Backward-graph faithfulness (den-level): fan-in bricks
 (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
 batched conv+depthwise), the whole per-example MBConv block, and
 the batched-stage backward primitives.
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2BackB0`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0`
 
 MobileNetV2 backward-graph faithfulness (den-level): the batched
 relu6 conv/depthwise stages (selectMid kink), the SE-less inverted-
 residual body, and the whole-block capstone — the relu6 (_at)
 peer of EfficientNetBackB0.
 
-### `LeanMlir.Proofs.Foundation.ResNet34BackB0`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0`
 
 ResNet-34 backward-graph faithfulness (den-level): the batched
 conv-bn-relu stage (selectPos one-sided kink), the basic-block
@@ -1074,7 +1074,7 @@ body (conv-bn ∘ conv-bn-relu), and the identity-block capstone —
 relu (_at) with an OUTER post-residual relu (the extra factor
 vs the MBConv/inverted-residual blocks).
 
-### `LeanMlir.Proofs.Foundation.ResNet50BackB0`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0`
 
 ResNet-50 backward-graph faithfulness (den-level): the 3-conv
 bottleneck body and all THREE block capstones — identity, the
@@ -1092,7 +1092,7 @@ its backward graph and the proof that the graph denotes the VJP, and
 faithfulness lemma writes out by hand. Smoothness preconditions conjoin at
 the right activations, so an `_at` (relu) chain threads its own hypotheses.
 
-### `LeanMlir.Proofs.Foundation.ResNet50BackNet`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet50BackNet`
 
 R50's blocks as CertLayers + stages + the four-stage trunk. The first
 net-level backward fold in the repo; every other *BackB0 stops at a block.
@@ -1103,20 +1103,20 @@ The other four conv nets folded: CertLayer instances for r34, mnv2,
 enet and convnext. enet/convnext are globally smooth (ok = True);
 r34/mnv2 are `_at` (relu / relu6 kinks). No new proof per net.
 
-### `LeanMlir.Proofs.Foundation.MobileNetV4BackB0`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0`
 
 MobileNetV4's batched UIB backward: the depthwise-bn-RELU stage (the
 one stage the repo lacked — it had relu6 and swish), the four stage
 CertLayers, and ⭐ the FOUR FAMILIES COLLAPSED into one body via
 CertLayer.id' in the absent-depthwise slots. No case split.
 
-### `LeanMlir.Proofs.Foundation.EfficientNetBackNet`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet`
 
 EfficientNet's four §8e holes closed: mbExp / mbNoExp / mbStrided /
 head as CertLayer comp-chains. Every stage was already certified with a
 backward graph; what was missing was the COMPOSITION.
 
-### `LeanMlir.Proofs.Foundation.ViTBackNet`
+### `LeanMlir.Proofs.Nets.ViT.ViTBackNet`
 
 ViT folded onto the same machinery — the LAST net onto `CertLayer` and the
 only one whose fold covers stem-to-head. ⭐ `vitTrunkV_graph` proves the
@@ -1124,7 +1124,7 @@ generic chain reproduces ViTBackB0's hand-written depth-k tower TERM FOR
 TERM, so that bespoke induction is derived rather than kept in parallel.
 GELU/LayerNorm are smooth ⇒ `ok = True` at every depth (enet/convnext tier).
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtBackB0`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackB0`
 
 ConvNeXt backward-graph faithfulness (den-level): the per-example
 (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
@@ -1133,7 +1133,7 @@ separable, so no batched machinery — the block-body backward graph
 residual capstone, plus the LN+2×2/s2 downsample capstone. GELU is a
 global VJP, so everything stays in the clean global HasVJP form.
 
-### `LeanMlir.Proofs.Architectures.ViTBackB0`
+### `LeanMlir.Proofs.Nets.ViT.ViTBackB0`
 
 ViT whole-block backward-graph faithfulness (den-level, heads = 1):
 the per-token Mat-VJP peer of the conv nets' *BackB0 capstones. MLP +
@@ -1142,7 +1142,7 @@ the MHSA backward collapsed at heads = 1 to the plain three-way dense
 fan-in over the proven sdpa_back_{Q,K,V} (tied to mhsa_has_vjp_mat by
 VJP determinism), assembled into the whole transformerBlock VJP.
 
-### `LeanMlir.Proofs.Foundation.LinearFaithfulPoC`
+### `LeanMlir.Proofs.Nets.Small.LinearFaithfulPoC`
 
 PoC: the mnist-linear train step proof-tied to the certified
 loss-descent SGD step (the renderer `MainMnistLinearVerified`
@@ -1164,67 +1164,67 @@ bf16-leaf/fp32-accumulate linear graph denotes the rounded-operand
 linear (no scale to factor — simpler than the E4M3 twin). Unlike fp8,
 this graph lowers on CUDA. Bf16FaithfulPoC.lean.
 
-### `LeanMlir.Proofs.Foundation.MlpFaithfulPoC`
+### `LeanMlir.Proofs.Nets.Small.MlpFaithfulPoC`
 
 mnist-MLP peer: the whole 3-layer MLP train step folded into the
 verified AST (forward + backward chain + 6 weightSgd/biasSgd), each
 output's den proven = certified via mlp_render_*_certified.
 
-### `LeanMlir.Proofs.Foundation.CnnFaithfulPoC`
+### `LeanMlir.Proofs.Nets.Small.CnnFaithfulPoC`
 
 mnist-CNN peer: the conv train step folded into the verified AST via
 the new convWeightSgd/convBiasSgd ops (conv layers) + weightSgd/biasSgd
 (dense head); each of the 10 outputs' den proven = certified via the
 conv chain bridges + the M2 dense bridges (CnnFaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.CifarFaithfulPoC`
+### `LeanMlir.Proofs.Nets.Small.CifarFaithfulPoC`
 
 ch5-CIFAR peer (no-BN, deeper 2-scale net): reuses the cnn conv ops +
 dense bridges (NO new core ops) — generic convW/convB_den cover all 4
 conv layers, the 3-dense head via the M2 bridges (CifarFaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.CifarBnFaithfulPoC`
+### `LeanMlir.Proofs.Nets.Small.CifarBnFaithfulPoC`
 
 ch5-CIFAR-BN peer (per-channel BatchNorm): reuses the cnn conv ops + the
 cifar dense head; the new bnGammaSgd/bnBetaSgd ops carry the per-channel
 γ/β grads, den-certified via cifar_bn_render_{gamma,beta}_certified
 (CifarBnFaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.CifarBnTiePoC`
+### `LeanMlir.Proofs.Nets.Small.CifarBnTiePoC`
 
 ch5-CIFAR-BN §1a TIE: conv+BN tied through the real forward + the BN backward chain
 (BN-output cots relu-masked for γ/β, conv cots via BN-back) — CifarBnTiePoC.lean.
 
-### `LeanMlir.Proofs.Architectures.Cifar8FaithfulPoC`
+### `LeanMlir.Proofs.Nets.Small.Cifar8FaithfulPoC`
 
 deeper 8-conv cifar8 (no-BN): pure reuse — conv via CifarPoC generics,
 dense via the new generic denseW/denseB_den (Cifar8FaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.Cifar8TiePoC`
+### `LeanMlir.Proofs.Nets.Small.Cifar8TiePoC`
 
 ch5-cifar8 §1a TIE: 8-conv chain tied through the real forward — cifar's chain
 repeated over 4 stages, all reused constructors (Cifar8TiePoC.lean).
 
-### `LeanMlir.Proofs.Architectures.Cifar8BnTiePoC`
+### `LeanMlir.Proofs.Nets.Small.Cifar8BnTiePoC`
 
 ch5-cifar8-bn §1a TIE: cifar8's chain + a BN-back at every conv; all 32 conv+BN
 params tied (Cifar8BnTiePoC.lean).
 
-### `LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC`
+### `LeanMlir.Proofs.Nets.ResNet.ResNet34FaithfulPoC`
 
 ch6-ResNet-34 (full [3,4,6,3], 146 params): the 2 new strided-conv SGD ops
 (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection
 convs den-certified via mnv2_render_stem_conv{W,b}_certified; the 142 other
 params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics (ResNet34FaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoC`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FaithfulPoC`
 
 ch7-MobileNetV2 §1 fold (depthwise half): the 4 new depthwise SGD ops
 (depthwise{,Strided}{Weight,Bias}Sgd) den-certified via the mnv2_render_depthwise*
 bridges; expand/project/BN/dense reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics
 (MobileNetV2FaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaper`
+### `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FaithfulPoCPaper`
 
 ⛔ MobileNetV2Render.lean is RETIRED (4c leg 2, 2026-09-06), with
 verified_mlir/mobilenetv2_train_step.mlir and mobilenetv2_reduced_train_step.mlir.
@@ -1242,21 +1242,21 @@ ch8-EfficientNet-B0 full-16 (262-param) train step rendered as pretty(provenGrap
 at the batched index (N=1, emit B = batch); un-fused SE for the SE param grads
 (EfficientNetRender.lean); writes verified_mlir/efficientnet_train_step.mlir.
 
-### `LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoC`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFaithfulPoC`
 
 ch8-EfficientNet-B0 §1 fold (den): every batched param-SGD op type denotes the
 certified Σ_n batched gradient — conv/strided-stem/dense W,b + BN γ/β + depthwise
 (the Σ_n batch-sum bridge = Finset.sum_congr of the per-example .correct)
 (EfficientNetFaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.EfficientNetTiePoC`
+### `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetTiePoC`
 
 ch8-EfficientNet-B0 §1a TIE (IN PROGRESS): pins each param cotangent to the actual
 loss-driven backward chain. Landed: the loss-cotangent den (batched softmaxRowF − onehot);
 the whole-net thread (swish/SE-gate/true-BN chain-cot constructors) is the remaining
 dedicated effort (EfficientNetTiePoC.lean).
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoC`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFaithfulPoC`
 
 ch9-ConvNeXt-T §1 fold (started): the per-channel layer-scale γ gradient cert —
 the one genuinely-new proof obligation (Vec c via the chanIdx broadcast, vs the
@@ -1277,7 +1277,7 @@ renders (18 per-block residual-branch masks) — the only ConvNeXt artifacts fro
 that chain, since the drop-free batched render is tied but not swapped
 (ConvNeXtRenderB.lean).
 
-### `LeanMlir.Proofs.Architectures.ConvNeXtTiePoC`
+### `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtTiePoC`
 
 ch9-ConvNeXt-T §1a TIE: the whole [3,3,9,3] train step tied through the REAL forward —
 18 blocks + 3 downsamples + GAP→LN→dense head + stem bias den-composed
@@ -1296,13 +1296,13 @@ ch10-ViT-Tiny §1b BATCHED: the same forward at N := B — the last net to make 
 move, and the only one where a per-EXAMPLE stochastic-depth mask is not yet
 expressible. Writes no artifact; `vit-fwd-b-tie` gates it (ViTRenderB.lean).
 
-### `LeanMlir.Proofs.Architectures.ViTFaithfulPoC`
+### `LeanMlir.Proofs.Nets.ViT.ViTFaithfulPoC`
 
 ch10-ViT-Tiny §1 FOLD: each emitted param-SGD op den=certified — vecln γ/β, rowwise
 dense W/b, patch conv W/b, pos (one-line delegations to ViTVecLN/ViTClose certs); the
 head reuses Cifar8PoC.dense{W,B}_den, cls reuses denseBiasSgdB (ViTFaithfulPoC.lean).
 
-### `LeanMlir.Proofs.Architectures.ViTTiePoC`
+### `LeanMlir.Proofs.Nets.ViT.ViTTiePoC`
 
 ch10-ViT-Tiny §1a TIE (per-block): every one of a vector-LN transformer block's 16 params,
 fed the cotangent the REAL backward chain delivers (vitCot* — two residual fan-ins + the
@@ -1528,7 +1528,7 @@ representative 6-block rung AND gains the full-paper 17-block
 B/C/E tie, denoteMobilenetPaper) — a root here so CI
 re-elaborates it.
 
-### `LeanMlir.Proofs.Foundation.MlpCanonical`
+### `LeanMlir.Proofs.Nets.Small.MlpCanonical`
 
 The canonical-MLP surface (784→512→512→10): the generic MLP chain
 instantiated at the ch2 reference dims (see MlpCanonical.lean).

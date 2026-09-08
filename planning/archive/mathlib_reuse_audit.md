@@ -85,7 +85,7 @@ delete the Wide file's duplicated body (`convFwd`, `convBack`, `convWGrad`, `sca
 **Deletes:** ~570 lines.
 **Confidence:** verified
 
-### 5. `LeanMlir/Proofs/Architectures/MnistCNN.lean:628-767` — `Spatial` re-proves `Mini`
+### 5. `LeanMlir/Proofs/Nets/Small/MnistCNN.lean:628-767` — `Spatial` re-proves `Mini`
 
 **Replace with:** a `Mini`/`Spatial`-shared core parameterized on the conv closed forms
 **Why it matches:** the only proof-tree finding. `Mini` (458–613, 1×1 kernels) and `Spatial`

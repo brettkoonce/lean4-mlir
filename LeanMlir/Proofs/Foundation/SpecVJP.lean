@@ -1,16 +1,16 @@
 import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.Foundation.MLP
-import LeanMlir.Proofs.Architectures.MnistCNN
-import LeanMlir.Proofs.Architectures.CifarCNN
-import LeanMlir.Proofs.Architectures.MobileNetV2
-import LeanMlir.Proofs.Architectures.MobileNetV2FullPaper
-import LeanMlir.Proofs.Architectures.EfficientNet
-import LeanMlir.Proofs.Architectures.EfficientNetFullB0
-import LeanMlir.Proofs.Architectures.ConvNeXt
-import LeanMlir.Proofs.Architectures.ConvNeXtFullT
+import LeanMlir.Proofs.Nets.Small.MnistCNN
+import LeanMlir.Proofs.Nets.Small.CifarCNN
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Architectures.Attention
-import LeanMlir.Proofs.Architectures.ViTDepthK
-import LeanMlir.Proofs.Foundation.ResNet34
+import LeanMlir.Proofs.Nets.ViT.ViTDepthK
+import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Codegen.StableHLO
 

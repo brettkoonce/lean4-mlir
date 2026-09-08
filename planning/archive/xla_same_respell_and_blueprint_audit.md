@@ -170,8 +170,8 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    `#print axioms` lines to `tests/AuditAxioms.lean`. It refuses to run twice. Then
    `lake build LeanMlir.Proofs.Architectures.MobileNetV2TiePoCPaper
    LeanMlir.Proofs.Float.MobileNetV2FloatBudget LeanMlir.Proofs.Float.MobileNetV2BackFloatBudget
-   LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
-   LeanMlir.Proofs.Architectures.MobileNetV2FullVJP LeanMlir.Proofs.Foundation.BackNetFolds` for
+   LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie
+   LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP LeanMlir.Proofs.Foundation.BackNetFolds` for
    the fast signal, then the section-6 gates. Expect to hand-fix: (i) any `rfl` that fails
    because a term still spells the even phase (grep the failing file for `decimateBack` and
    `flatConvStride2 `; the B0 float backward net needed exactly this), (ii) prose in the
@@ -234,7 +234,7 @@ Each step has an acceptance criterion. Probe before Lean where a number is invol
    passes (⚠ it needs `.venv/bin/python` — the system interpreter has a jaxlib-less jax).
 
 7. **EfficientNet-B0's whole-net certified tie. Done 2026-09-05**
-   (`LeanMlir/Proofs/Foundation/EfficientNetWholeBackCertifiedTie.lean`, ~2 s to compile).
+   (`LeanMlir/Proofs/Nets/EfficientNet/EfficientNetWholeBackCertifiedTie.lean`, ~2 s to compile).
    `efficientnetInputGradB` with its stem/head BatchNorm and swish slots pinned to the certified
    per-op backwards and its three MBConv blocks opaque IS `(efficientnetB_has_vjp …).backward`,
    the generic five-stage apex; the two endpoint stage ties are one `rw` of a per-example leaf
@@ -294,7 +294,7 @@ definitions and gain Xla peers; the rest change their spelling.
   `EfficientNetFaithfulPoC.lean`, `EfficientNetTiePoC.lean`, `MobileNetV2ChainClose.lean`,
   `MobileNetV2Close.lean`, `MobileNetV2FaithfulPoC.lean`, `MobileNetV2.lean`,
   `MobileNetV2FullVJP.lean`, `WholeNetForwardTies.lean`, `StridedConv.lean` (leaf),
-  `Depthwise.lean` (leaf), `Foundation/MobileNetV2WholeBackCertifiedTie.lean`.
+  `Depthwise.lean` (leaf), `Nets/MobileNet/MobileNetV2WholeBackCertifiedTie.lean`.
 * Float: `EfficientNetWholeFloatBridge.lean`, `EfficientNetWholeBackFloatBridge.lean`,
   `EfficientNetFloatBudget.lean`, `EfficientNetBackFloatBudget.lean`, `EfficientNetBackB0.lean`,
   `MobileNetV2WholeFloatBridge.lean`, `MobileNetV2BackFloatBridge.lean`,

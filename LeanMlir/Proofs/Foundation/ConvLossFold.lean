@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.MobileNetV2Close
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 
 /-! # The cotangent pass — folding the certified per-layer Jacobian to `∂loss/∂θ`
 

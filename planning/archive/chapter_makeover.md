@@ -756,7 +756,7 @@ artifact exists for their net yet: `MainMobileNetV2Imagenet.lean:52` and
 This doc told ch7 it owed ch6's "representative scale" apology because
 `efficientnet_has_vjp` is flagged representative. That is true of *that* theorem, but
 there is another one: **`efficientnetForwardB_full_has_vjp`**
-(`Proofs/Architectures/EfficientNetFullB0.lean:381`) chains stem → **all 16 MBConv blocks**
+(`Proofs/Nets/EfficientNet/EfficientNetFullB0.lean:381`) chains stem → **all 16 MBConv blocks**
 → head through `vjp_comp`, batched over N, closing on `exact vjp_comp _ _ f16 dH e16 vH`.
 Zero `sorry` in all three ENet proof files. §7.1 now makes the strong claim.
 
@@ -812,7 +812,7 @@ whole estimate turns on writing ONE lemma first. That doc also carries the MNv4
 Conv-S → Conv-M conversion.
 
 Raised by brett 2026-08-12, reading ch7's §7.1 contrast paragraph. `mobilenetv2_has_vjp_at`
-(`Proofs/Architectures/MobileNetV2.lean:489`) binds stem + `We₁/Wd₁/Wp₁` + `We₂/Wd₂/Wp₂` +
+(`Proofs/Nets/MobileNet/MobileNetV2.lean:489`) binds stem + `We₁/Wd₁/Wp₁` + `We₂/Wd₂/Wp₂` +
 head. **Two** inverted-residual blocks; the net has seventeen. ch6's §6.1 states this out
 loud and ch7's §7.1 now contrasts against it, so closing it edits the book in two places.
 
@@ -1214,7 +1214,7 @@ lakefile bench comments have now been checked against reality and **four were wr
 
 ### 2. ⭐⭐ ch9 CAN make ch7/ch8's strong full-depth claim — checked, not assumed
 
-**`vitForward2_has_vjp` (`Proofs/Architectures/ViTFwdGraph.lean:91`) with
+**`vitForward2_has_vjp` (`Proofs/Nets/ViT/ViTFwdGraph.lean:91`) with
 `vitForward2_has_vjp_correct` at :174** is the whole-net VJP by `vjp_comp`, and
 **`vitForwardKV_has_vjp`** (`ViTDepthK.lean`) generalises it to depth `k`.
 **0 real sorries** in `Attention.lean`, `ViTFwdGraph.lean` and `ViTDepthK.lean`.
@@ -1358,7 +1358,7 @@ ConvNeXt is the heaviest per-epoch net in the book.
 
 ### 2. ⭐⭐ DO NOT repeat ch6's "representative scale" caveat — ConvNeXt has the full fold
 
-**`convNextForwardTCh_has_vjp` (`Proofs/Architectures/ConvNeXtFullT.lean:270`), with
+**`convNextForwardTCh_has_vjp` (`Proofs/Nets/ConvNeXt/ConvNeXtFullT.lean:270`), with
 `convNextForwardTCh_has_vjp_correct` at :341. 0 sorries in the file.** It has the full
 per-block ladder underneath it too: `cnxBodyWith_has_vjp`, `cnxBlockChW_has_vjp`,
 `convNextStageChK_has_vjp`, `cnxDownChW_has_vjp`.

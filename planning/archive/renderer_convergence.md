@@ -188,7 +188,7 @@ EfficientNet plus a new artifact and its gates. Declined as scope.
 fold) and `MobileNetV2TiePoCPaper.lean` (its §1a tie) are now about an artifact that does not
 exist. Every theorem in them is unchanged and still true; no committed bytes exercise them, and
 both headers say so. That is only acceptable because their batched peers landed first —
-`MobileNetV2FaithfulPoCPaperG.lean` (4b.4) and `Foundation/MobileNetV2TiePoCB.lean` (§4.2c), the
+`MobileNetV2FaithfulPoCPaperG.lean` (4b.4) and `Nets/MobileNet/MobileNetV2TiePoCB.lean` (§4.2c), the
 latter the same day. ⭐ **This is the ordering rule leg 1 wrote down, honoured deliberately for the
 first time**: §4.2 was done before the retirement rather than alongside it.
 `MobileNetV2RenderPC.lean` is NOT affected — its per-example net is the subject of the float
@@ -217,7 +217,7 @@ function did not.
 
 **What landed.**
 
-1. **`Architectures/ConvNeXtFaithfulPoCGB.lean` FIRST** (18 declarations, ~2 s, 3-axiom clean) —
+1. **`Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean` FIRST** (18 declarations, ~2 s, 3-axiom clean) —
    the §1 fold at the batched constructors, the peer of 4b.2's `ConvNeXtFaithfulPoCG.lean`. ⭐⭐
    **For this net the fold was OWED before the swap**: every `convnextin_*` train step, every
    `*drop*` variant and the S/B artifacts had rendered from the batched chain since they existed,
@@ -275,7 +275,7 @@ about.
 
 **What landed.**
 
-1. **`Architectures/ViTFaithfulPoCGB.lean` FIRST** (10 declarations, ~2 s, 3-axiom clean) — the
+1. **`Nets/ViT/ViTFaithfulPoCGB.lean` FIRST** (10 declarations, ~2 s, 3-axiom clean) — the
    §1 fold at the batched constructors, the batched peer of 4b.3's `ViTFaithfulPoCG.lean`. ⭐ No new
    mathematics: each proof is `Finset.sum_congr rfl` over the batch and then the per-example bridge
    at `batchSlice n`, because every batched `den` arm is literally the per-example one under a

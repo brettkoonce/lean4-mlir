@@ -107,7 +107,7 @@ float side unless the model core needs them.
   `decimateBack_eq_filter`, the 3×3/s2 fibre count `maxPool3s2Back_mask_sum_abs_le`, …) stayed with
   the float side and die with it at step 7. Re-pointed: `DepthwiseBackCertifiedTie`, `ResNet34FullBVJP`,
   `ConvNeXtTiePoC`, `Resnet34BackCertifiedTie` (its strided import only).
-* **Step 2 DONE 2026-09-08.** `Foundation/ResNetBackChains.lean` holds `r34IdBlockBack`,
+* **Step 2 DONE 2026-09-08.** `Nets/ResNet/ResNetBackChains.lean` holds `r34IdBlockBack`,
   `r34DownBlockBack`, `r34InputGrad`, `maxPool3s2FlatBackB`, `r34InputGradB`, `r50InputGradB`; `gapBack`
   went into `BackwardMaps.lean` (every conv net's head endpoint; `flatChannel` was already in that
   closure). The batched pool backward sits with the chains rather than in `BackwardMaps` because it
@@ -118,12 +118,12 @@ float side unless the model core needs them.
   went unknown). Deleted on the spot, prints removed: −538 lines net for the step. The three
   per-example ResNet bridge files stay for now; they are roots and MobileNetV2/B0/SE's bridges
   still import `Resnet34WholeBackFloatBridge` for the float side of `gapBack`.
-* **Step 3 DONE 2026-09-08.** `Foundation/MobileNetBackChains.lean` holds `invresBodyBackPC`,
+* **Step 3 DONE 2026-09-08.** `Nets/MobileNet/MobileNetBackChains.lean` holds `invresBodyBackPC`,
   `invresBodyStridedBackPC`, `mnv2InputGrad`, `mnv2InputGradB`, `mnv4InputGradB`; the four MobileNet
   ties re-pointed with no proof change. Same orphaning as step 2: `MobileNetV2WholeBackFloatBridgeB`
   and `MobileNetV4WholeBackFloatBridgeB` were reachable only through their ties, so both are deleted
   with their two audit prints. `MobileNetV2BackFloatBridge` (a root) keeps its float side until step 7.
-* **Step 4 DONE 2026-09-08.** `Foundation/EfficientNetBackChains.lean` holds `mbconvBodyBack`,
+* **Step 4 DONE 2026-09-08.** `Nets/EfficientNet/EfficientNetBackChains.lean` holds `mbconvBodyBack`,
   `efficientnetInputGradB`, `efficientnetInputGradB_full`; the three B0 ties re-pointed with no proof
   change. All four B0/SE bridge files are Certs roots, so none was orphaned; they keep their float side
   until step 7. Left float-side on purpose: `mbNoExpBodyBack` / `mbStridedBodyBack` (the b1/b2
@@ -132,12 +132,12 @@ float side unless the model core needs them.
   backward as a supplied slot pinned to `seBlockFull_has_vjp`, and `EfficientNetBackB0` denotes the
   emitted `broadcastBack` straight from `broadcastFlat_has_vjp`, so nothing kept names them. Their
   audit prints (`broadcastBackFlat_eq_vjp` included) go with the file at step 7.
-* **Step 5 DONE 2026-09-08.** `Foundation/ConvNeXtBackChains.lean` holds `cnxBlockBodyBack`,
+* **Step 5 DONE 2026-09-08.** `Nets/ConvNeXt/ConvNeXtBackChains.lean` holds `cnxBlockBodyBack`,
   `cnxDownBack`, `convnextInputGrad` (BackwardMaps names only — the LN slots are supplied, and the ties
   fill them with `chanLNTensor3Back` from `ChannelLNBack.lean`, which the block tie now imports
   directly). Both ConvNeXt ties re-pointed with no proof change; `ConvNeXtBackFloatBridge` is a root and
   keeps its float side (both the scalar-LN and the channel-LN folds) until step 7.
-* **Step 6 DONE 2026-09-08.** `Foundation/ViTBackChains.lean` holds the multi-head sdpa wrap
+* **Step 6 DONE 2026-09-08.** `Nets/ViT/ViTBackChains.lean` holds the multi-head sdpa wrap
   (`mhSlab`, `mhsaSdpaBackQ`/`K`/`V` — on `Attention.lean`'s certified `sdpa_back_*`, no Float
   dependency), the flattened cores, `mhsaBackFlat`, the block backward in its three spellings
   (`vitBlockBack`, `vitBlockBackPR`, `vitBlockBackV`), `vitBlockBackVAt`, `vitTowerBackK`, `clsScatter`,

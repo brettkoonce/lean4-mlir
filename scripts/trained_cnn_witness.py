@@ -420,7 +420,7 @@ pool_bullets = "\n".join(
     try norm_num"""
     for k in range(18))
 
-hdr = f'''import LeanMlir.Proofs.Architectures.MnistCNN
+hdr = f'''import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 /-! # Trained-weight whole-network VJP witness — CNN rung
 

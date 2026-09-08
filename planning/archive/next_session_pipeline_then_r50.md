@@ -597,7 +597,7 @@ first try** (25,557,032). Still true. What exists: `VLayer.bottleneckStage`, the
 `maxPool3s2` witness + codegen, and (new) the shim. What does not: the block VJPs, the renderer,
 any artifact.
 
-### 3.1 ✅ Phase 1 DONE — `LeanMlir/Proofs/Foundation/Resnet50BlocksCertified.lean`
+### 3.1 ✅ Phase 1 DONE — `LeanMlir/Proofs/Nets/ResNet/Resnet50BlocksCertified.lean`
 
 All three forms, forward + certified VJP, **3-axiom clean** (`propext, Classical.choice,
 Quot.sound`). Compiled first pass.

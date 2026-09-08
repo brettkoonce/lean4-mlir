@@ -1419,7 +1419,7 @@ Prints: `StableHLO.chanLNGraph_faithful`, `StableHLO.cnxBlockChGraphW_faithful`,
 §2n: the SCALAR-LN twin of this chain (convNextStageK / cnxDownW / convNextForwardT / TC and
 their graph section — 13 audit lines) was DELETED once the float bridges, its last live
 consumers, had …Ch peers. The channel-LN chain above is what ships; the ch9 representative in
-Architectures/ConvNeXt.lean is a different thing and survived. Handoff §2n has the checklist.
+Nets/ConvNeXt/ConvNeXt.lean is a different thing and survived. Handoff §2n has the checklist.
 
 ### ℝ→Float32 bridge, Tier 1 (FloatBridge.lean)
 
@@ -2032,7 +2032,7 @@ per-width 1.727e128) and ViT-Tiny NOTHING, since all 25 of its LN sites reduce o
 Per-width would make DeviceLN's emr a Nat -> ℝ that 366 + 324 norm_num goals must reduce.
 ⭐ The standardisation bound as a NUMERAL: |x̂| ≤ X wherever n ≤ X², off bnXhat_sq_le. It is
 what makes a whole-net backward number exist (Xh enters the fold as Xh²), and it was already
-in the repo — Foundation/ResNet34.lean, written for the realistic-seal work.
+in the repo — Nets/ResNet/ResNet34.lean, written for the realistic-seal work.
 ⭐⭐ The LAYERNORM BACKWARD kit (ConvNeXt-T, planning/archive/float_budget_numbers_log.md §3.16). The one
 new leaf is Maps.rowLNVecFlatBack: floatBridgesTo_rowLNVecFlatBack runs bn_grad_input at
 gamma = 1 with the gamma scale folded in FRONT as a diagBack, so it is NOT
@@ -2356,7 +2356,7 @@ backward_unique is stated anyway; no HasVJPAt net in the repo had it.
 elaboration trap, and the reason the generic apex exists.
 ⛔ NO NUMBER is stated about either chain: §4.2's T5 is a float budget and
 planning/archive/float_budget_numbers.md closed that thread. The chains exist for the ties, and since
-2026-09-08 they are defined beside them (Foundation/ResNetBackChains.lean); the float twins
+2026-09-08 they are defined beside them (Nets/ResNet/ResNetBackChains.lean); the float twins
 (r34_grad_floatBridgesToB, the batchMapAux float lifts) were deleted with their files.
 
 Prints: `Proofs.HasVJPAt.backward_unique`, `Proofs.maxPool3s2FlatBackB_eq_vjp_backward`, `Proofs.cbReluStridedBBack_eq_vjp_backward`, `Proofs.r34StemBBack_eq_vjp_backward`, `Proofs.r34HeadBBack_eq_vjp_backward`, `Proofs.r34B_full_has_vjp_at`, `Proofs.r34InputGradB_eq_r34B_full_vjp`, `Proofs.r34InputGradB_correct`, `Proofs.resnet34ForwardB_full_eq_slots`, `Proofs.mnv2StemBBack_eq_vjp_backward`, `Proofs.cbrBBack_eq_vjp_backward`, `Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp`, `Proofs.mnv2InputGradB_correct`, `Proofs.mobilenetv2ForwardB_full_eq_slots`

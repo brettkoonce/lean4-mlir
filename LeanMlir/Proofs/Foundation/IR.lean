@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.Architectures.CNN
 import LeanMlir.Proofs.Architectures.LayerNorm
-import LeanMlir.Proofs.Architectures.EfficientNet
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Architectures.SE
 

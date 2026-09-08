@@ -4,7 +4,7 @@
 
 ## ▶▶ 2026-08-10 — R50 IS ONE STEP FROM THE MAIN LINE (see `planning/archive/mnv4_verified.md` §8)
 
-`Foundation/Resnet50BlocksCertified.lean` already discharges step 1 of 3 — all three bottleneck
+`Nets/ResNet/Resnet50BlocksCertified.lean` already discharges step 1 of 3 — all three bottleneck
 forms have `_has_vjp_at` (including `bblkPProjPC`, the stride-1 projection that only R50 stage-1
 block 0 needs). **Missing: the `BackBatchedGraph` + `_faithful` pair** that makes the rendered
 backward the certified one. `ResNet34BackB0.lean` is the template, and R50's blocks were written to
@@ -434,7 +434,7 @@ a nested 4-way `abs_max_le` that would be 9-way at 3×3; the `sup'` version is `
 * ⛔ **But the 5 live/seal witnesses are NOT ported** — they still pool 2×2.
   `ResNet34Live{PC,Realistic}`, `ResNet34.lean`, `ResNet34LiveSeal`, `ResNet34LiveRealisticSeal`.
   They stay TRUE (stated over their own local defs) and they are 2-channel *representatives*, the
-  same status `Architectures/ConvNeXt.lean`'s ch9 net has — but they describe a pool the repo does
+  same status `Nets/ConvNeXt/ConvNeXt.lean`'s ch9 net has — but they describe a pool the repo does
   not ship. ⭐ **The port cost is now MEASURED, not estimated**: a throwaway probe re-proved the
   real realistic-dims site (`stem224_maxpool_smooth`, at 2×112²→2×56²) with the tactic body
   **verbatim unchanged** and only the two names swapped, and the `HasVJPAt` / `DifferentiableAt`

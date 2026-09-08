@@ -14,9 +14,9 @@ read and the first session must.
 |---|---|
 | **0(a)** record fixes | ✅ DONE (`015dcec`). The stale `## Scope`, `mnv4Stage14`'s Conv-S family order (with a new `#guard` deriving its argument order from `mnv4Blocks`), and every Conv-S count in the render's docstrings — params, block split, stat slots, all three artifacts' arities — re-derived from the committed artifact. `grad_tie.py` 158/104 → 233/154. Four yaml rows for the block tier. |
 | **0(b)** the owed ties | ✅ DONE (`b9cc8d5`) and **both PASS**. Forward `max \|Δ\| = 3.770e-06`; gradient 0 of 232 live parameters outside the reference's own relu-discontinuity floor, in raw and `--nokink` mode. ⭐ Block ORDER is now pinned by measurement. ⛔ Two setup findings recorded in `mnv4_convm_ties_todo.md`: `--device=local-task` SEGFAULTS on `@mnv4_fwd` (empty stderr, `local-sync` runs the same vmfb in 1 s) and both scripts hard-coded a nonexistent `iree-compile`. |
-| **1** T1 + T2 | ✅ DONE. `Architectures/MobileNetV4FullB.lean` (886 lines) + `MobileNetV4FullBVJP.lean` (188). Both build in ~2 s each. |
-| **2** T3 | ✅ DONE. `Foundation/MobileNetV4FaithfulPoCB.lean` (the §1 fold, 400 lines) + `MobileNetV4TiePoCB.lean` (the §1a tie, 1334). |
-| **3** T6 | ✅ DONE. `Float/MobileNetV4WholeBackFloatBridgeB.lean` (268 lines) + `Foundation/MobileNetV4WholeBackCertifiedTieB.lean` (910). Both build in ~3 s each. **The net is now closed on every tier that says anything.** |
+| **1** T1 + T2 | ✅ DONE. `Nets/MobileNet/MobileNetV4FullB.lean` (886 lines) + `MobileNetV4FullBVJP.lean` (188). Both build in ~2 s each. |
+| **2** T3 | ✅ DONE. `Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` (the §1 fold, 400 lines) + `MobileNetV4TiePoCB.lean` (the §1a tie, 1334). |
+| **3** T6 | ✅ DONE. `Float/MobileNetV4WholeBackFloatBridgeB.lean` (268 lines) + `Nets/MobileNet/MobileNetV4WholeBackCertifiedTieB.lean` (910). Both build in ~3 s each. **The net is now closed on every tier that says anything.** |
 | **4** the number | open — a GPU decision, see §2. Independent of T6; nothing in sessions 1–3 waited on it. |
 
 ### What session 1 actually cost — ⛔ and the ONE finding worth carrying to any future net
@@ -179,11 +179,11 @@ again in the same commit, this time to point at the four net-level files that no
 
 ---
 
-**The one-paragraph version, 2026-09-07 — ✅ CLOSED.** `Foundation/MobileNetV4BackB0.lean` was
+**The one-paragraph version, 2026-09-07 — ✅ CLOSED.** `Nets/MobileNet/MobileNetV4BackB0.lean` was
 complete at the block and stage level and is now consumed by four net-level files: T1 and T2 in
-`Architectures/MobileNetV4FullB.lean` + `MobileNetV4FullBVJP.lean`, T3 in
-`Foundation/MobileNetV4FaithfulPoCB.lean` + `MobileNetV4TiePoCB.lean`, T6 in
-`Foundation/MobileNetV4WholeBackCertifiedTieB.lean` + `Float/MobileNetV4WholeBackFloatBridgeB.lean`.
+`Nets/MobileNet/MobileNetV4FullB.lean` + `MobileNetV4FullBVJP.lean`, T3 in
+`Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` + `MobileNetV4TiePoCB.lean`, T6 in
+`Nets/MobileNet/MobileNetV4WholeBackCertifiedTieB.lean` + `Float/MobileNetV4WholeBackFloatBridgeB.lean`.
 T4 and T5 are float budgets and that thread is closed. ⚠ What MNv4 still does not have, and no
 other net lacks, is a quoted accuracy: Conv-M has no Imagenette run and no verified ImageNet run,
 so every tier is stated at artifacts no number comes from until a GPU run — the user's call, §2's
@@ -279,7 +279,7 @@ as "at the paper net"; it does not block writing them.
 
 ### Session 1 — T1 (forward + whole-net VJP) and T2 (typed forward graph) — mirror `ResNet50FullB.lean` + `ResNet50FullBVJP.lean` (§3.5b)
 
-**The forward.** `Architectures/MobileNetV4FullB.lean`: a weights record `Mnv4BWeights nCls` —
+**The forward.** `Nets/MobileNet/MobileNetV4FullB.lean`: a weights record `Mnv4BWeights nCls` —
 stem (`sW : Kernel4 32 3 3 3`, `sγ sβ : Vec 32`, `sε`), fused (`fW : Kernel4 128 32 3 3` + BN,
 `fpW : Kernel4 48 128 1 1` + BN), twenty-one row-typed fields `b1 : UibParams mnv4Row1` …
 `b21 : UibParams mnv4Row21`, head (`h1W : Kernel4 960 256 1 1` + BN, `hW : Kernel4 1280 960 1 1` +
@@ -359,7 +359,7 @@ lemma already: `ResNet34PoCB.convWGradB_den`, `bnGammaGradB_den`, `bnBetaGradB_d
 `denseWGradB_den`, `denseBGradB_den`, `convStridedWGradB_den` (the fused stage, symmetric);
 `EnetPoCG.depthwiseWGradB_den`, `depthwiseStridedWGradB_den` (symmetric strided depthwise — B0's
 op, and MNv4's UIB strides are symmetric too), `convStridedXlaWGradB_den` (the stem — B0's XLA
-stem op, identical). So `Foundation/MobileNetV4FaithfulPoCB.lean` is per-block-PROFILE capstones
+stem op, identical). So `Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` is per-block-PROFILE capstones
 in R50's shape (`r50IdGradsCertified` …): `mnv4UibGradsCertified` for the skip row at its two
 `k`s (the conjunct list must dispatch on `k = 0` — no conjunct for an absent depthwise, exactly as
 the render emits none), `mnv4UibPreStridedGradsCertified`, `mnv4FusedGradsCertified`,
@@ -377,7 +377,7 @@ exact <the strided/Xla VJP>.correct …` at rounded slices — read the two `den
 shaped like `EnetPoCG.depthwiseWGradB_den`'s). ⛔ Do not write "the bf16 twins consume the same
 node" anywhere; that sentence is what §4c-quater found loose in three other folds.
 
-**The tie.** `Foundation/MobileNetV4TiePoCB.lean`: per-block tie defs with the cotangent chain
+**The tie.** `Nets/MobileNet/MobileNetV4TiePoCB.lean`: per-block tie defs with the cotangent chain
 built from the CERTIFIED block VJPs — `mnv4BodyOfRow_faithful` IS the `den graph = vjp.backward`
 fact the `*CotIn_eq_vjp` lemmas of 4.2a/4.2c/§3.5c re-state, so the cross-block chain composes
 certified VJPs rather than re-deriving. ⭐ `g` is a BINDER (4b's rule); `N` and `nCls` are binders;
@@ -468,7 +468,7 @@ problem. So, for T6:
 
 **Files:** `Float/MobileNetV4WholeBackFloatBridgeB.lean` mirrors `Resnet50WholeBackFloatBridgeB.lean`,
 with `EfficientNetFullWholeBackFloatBridge.lean` as the shape for the depthwise-heavy float chain;
-`Foundation/MobileNetV4WholeBackCertifiedTieB.lean` is the tie.
+`Nets/MobileNet/MobileNetV4WholeBackCertifiedTieB.lean` is the tie.
 **Cost:** one session. R50's was four declarations; MNv4's own endpoints make it more like B0's.
 
 ### ⛔ T4 / T5 — do not write
@@ -539,10 +539,10 @@ MNv4's own:
 
 | session | new | edited |
 |---|---|---|
-| 0 | — | `Foundation/MobileNetV4BackB0.lean` (header, `mnv4Stage14`), `formalization.yaml` (three rows), `planning/archive/proofs_tier_to_paper_nets.md` §3.6, `scripts/grad_tie.py` (233/154) with the tie runs |
-| 1 | `Architectures/MobileNetV4FullB.lean` (rows, record, forward, `mnv4NetLayer`, graph, `_faithful`), `Architectures/MobileNetV4FullBVJP.lean` (stem VJP, `Mnv4SmoothAt`, `mobilenetv4ForwardB_full_has_vjp_at`) | `lakefile.lean`, `tests/AuditAxioms.lean`, `formalization.yaml` (rows + a status section), this doc |
-| 2 | `Foundation/MobileNetV4FaithfulPoCB.lean` (profiles + the two new bf16 lemmas), `Foundation/MobileNetV4TiePoCB.lean` (`mnv4_net_tiedB`, the loss corollary) | same |
-| 3 | `Float/MobileNetV4WholeBackFloatBridgeB.lean`, `Foundation/MobileNetV4WholeBackCertifiedTieB.lean` | same; `MobileNetV4RenderB.lean`'s `#eval` block comment ("do not train off these") if the DP tie README has not already retired it |
+| 0 | — | `Nets/MobileNet/MobileNetV4BackB0.lean` (header, `mnv4Stage14`), `formalization.yaml` (three rows), `planning/archive/proofs_tier_to_paper_nets.md` §3.6, `scripts/grad_tie.py` (233/154) with the tie runs |
+| 1 | `Nets/MobileNet/MobileNetV4FullB.lean` (rows, record, forward, `mnv4NetLayer`, graph, `_faithful`), `Nets/MobileNet/MobileNetV4FullBVJP.lean` (stem VJP, `Mnv4SmoothAt`, `mobilenetv4ForwardB_full_has_vjp_at`) | `lakefile.lean`, `tests/AuditAxioms.lean`, `formalization.yaml` (rows + a status section), this doc |
+| 2 | `Nets/MobileNet/MobileNetV4FaithfulPoCB.lean` (profiles + the two new bf16 lemmas), `Nets/MobileNet/MobileNetV4TiePoCB.lean` (`mnv4_net_tiedB`, the loss corollary) | same |
+| 3 | `Float/MobileNetV4WholeBackFloatBridgeB.lean`, `Nets/MobileNet/MobileNetV4WholeBackCertifiedTieB.lean` | same; `MobileNetV4RenderB.lean`'s `#eval` block comment ("do not train off these") if the DP tie README has not already retired it |
 
 Done when `proofs_tier_to_paper_nets.md` §2's MobileNetV4 row reads ✓ ✓ ✓ ✗ ✗ ✓ with T4/T5
 marked "declined, thread closed" like the other nets' — and the header of every new file says

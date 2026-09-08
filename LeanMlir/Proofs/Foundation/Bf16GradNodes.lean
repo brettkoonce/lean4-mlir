@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCGB
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFaithfulPoCGB
 
 /-! # The bf16 gradient nodes — every `*GradBBf16` kind the suite emits, folded once
 

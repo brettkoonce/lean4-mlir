@@ -94,23 +94,23 @@ status:
     #
     # --- Whole nets: forward + VJP at the net the artifact runs (T1), the typed graph (T2) ---
     # a kinked net at batch BN: ResNet-50's [3,4,6,3] bottlenecks, 48 relu clauses, q a binder (224 and 160 px)
-    - {declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct", file: "LeanMlir/Proofs/Architectures/ResNet50FullBVJP.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50FullBVJP.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a smooth net: ViT-Tiny's full body at depth 12, 3 heads, vector LayerNorm -- HasVJP everywhere
     - {declaration: "Proofs.vit_full_has_vjp_correct", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a typed SHlo graph at the render's own tokens denotes the whole-net forward (MobileNetV4, 26 stages; every net has one)
-    - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Architectures/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
-    - {declaration: "Mnv2Live.mnv2Live_forward_nonconstant", file: "LeanMlir/Proofs/Architectures/MobileNetV2.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Mnv2Live.mnv2Live_forward_nonconstant", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Train-step ties (T3): the fold at every gradient node, then the cotangent pinned ---
     # the fold, stated per op kind at the un-fused *GradB node all optimizer tails consume (r34's file is the template)
-    - {declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den", file: "LeanMlir/Proofs/Foundation/ResNet34FaithfulPoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34FaithfulPoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # the emitted six-op cotangent IS the label-smoothed loss's gradient at a general target (mixup/cutmix)
     - {declaration: "Proofs.smoothedCE_grad", file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a batched capstone: ResNet-50's 161 nodes at their chain cotangent; N, q and the LOSS (CE or BCE) binders; one replica
-    - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50TiePoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
-    - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Architectures/ViTTiePoC.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTTiePoC.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
@@ -121,9 +121,9 @@ status:
     # --- Certified backward ties (T6): the float tier's hand-written backward chain IS the
     #     certified whole-net VJP (fidelity 4d) ---
     # a kinked net: blocks opaque plus the shape check resnet34ForwardB_full_eq_slots
-    - {declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp", file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp", file: "LeanMlir/Proofs/Nets/ResNet/Resnet34BackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a smooth net one step further: the chain IS the pdiv-contracted Jacobian of the committed forward, via backward_unique
-    - {declaration: "efficientnetInputGradB_full_correct", file: "LeanMlir/Proofs/Foundation/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    - {declaration: "efficientnetInputGradB_full_correct", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Other float-tier results ---
     # fp8-E4M3 quantization argmax preservation
@@ -347,7 +347,7 @@ alignment:
       note: "smooth-point bridge only; non-smooth points are a disclosed trust boundary"
     - source: "Live-network non-degeneracy + nonzero-Jacobian seal (ResNet-34, incl. full [3,4,6,3] depth)"
       lean: "liveFwd2_nonconstant / liveFwd2_jacobian_nonzero (empty chains); liveFwd2Full_nonconstant / liveFwd2Full_jacobian_nonzero + liveFwd2Full_backward_nontrivial (full 16-block depth)"
-      module: "LeanMlir/Proofs/Foundation/ResNet34LivePC.lean, LeanMlir/Proofs/Training/ResNet34LiveSeal.lean, LeanMlir/Proofs/Foundation/ResNet34LiveFull.lean"
+      module: "LeanMlir/Proofs/Nets/ResNet/ResNet34LivePC.lean, LeanMlir/Proofs/Training/ResNet34LiveSeal.lean, LeanMlir/Proofs/Nets/ResNet/ResNet34LiveFull.lean"
       status: "proved"
       note: "2-channel live ResNet-34, real [3,4,6,3] depth; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes; identity blocks wash out through BN)"
     - source: "Committed train step = real loss-driven backward (per-net ties: the seven ImageNet-scale nets at their batched steps, the ten SGD-inline steps)"

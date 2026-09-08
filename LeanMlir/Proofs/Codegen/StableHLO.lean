@@ -1,12 +1,12 @@
 import LeanMlir.Proofs.Foundation.IR
-import LeanMlir.Proofs.Architectures.CifarCNN
+import LeanMlir.Proofs.Nets.Small.CifarCNN
 import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Foundation.PerChannelBN
 import LeanMlir.Proofs.Architectures.Depthwise
-import LeanMlir.Proofs.Architectures.MobileNetV2
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
 import LeanMlir.Proofs.Architectures.LayerNorm
-import LeanMlir.Proofs.Architectures.EfficientNet
-import LeanMlir.Proofs.Architectures.ConvNeXt
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 -- The ℝ AdamW spec (`adamMNext`/`adamVNext`/`adamWParam`), so the optimizer ops can denote it.
 -- AdamStep only imports Foundation.Tensor + Mathlib, so this adds no cycle.
 import LeanMlir.Proofs.Codegen.AdamStep
@@ -20,7 +20,7 @@ import LeanMlir.Proofs.Codegen.Lamb
 import LeanMlir.Proofs.Codegen.SgdMomentumStep
 -- RmsPropStep imports only the two above, so this adds no cycle either.
 import LeanMlir.Proofs.Codegen.RmsPropStep
--- DropPath imports only Architectures.ConvNeXt (for `layerScale`, which this file already has in
+-- DropPath imports only Nets.ConvNeXt.ConvNeXt (for `layerScale`, which this file already has in
 -- scope), so it adds no cycle either. `planning/archive/stochastic_depth.md`.
 import LeanMlir.Proofs.Codegen.DropPath
 -- He et al.'s 3×3/s2 stem pool (`maxPool3s2Flat` + its VJP witness), so the stem-pool ops can

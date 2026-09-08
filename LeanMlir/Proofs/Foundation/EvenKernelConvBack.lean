@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Nets.ResNet.Resnet34BackCertifiedTie
 
 /-! # ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel — and the one-line repair
 

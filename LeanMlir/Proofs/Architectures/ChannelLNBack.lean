@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Architectures.ConvNeXtChannelLN
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 
 /-! # The channel-LayerNorm backward — the rowwise vector-LN input-VJP and its conjugation
 

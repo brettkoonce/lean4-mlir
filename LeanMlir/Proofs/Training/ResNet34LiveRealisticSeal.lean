@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.ResNet34LiveRealistic
+import LeanMlir.Proofs.Nets.ResNet.ResNet34LiveRealistic
 import LeanMlir.Proofs.Training.ResNet34LiveSeal
 import Mathlib.Analysis.Calculus.Deriv.Prod
 

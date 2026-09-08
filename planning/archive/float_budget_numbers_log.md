@@ -974,7 +974,7 @@ and because the leaf is the clearest statement of the trick. ⚠ That makes it a
 **1. WHICH NET: `vitForwardKV`, not `vit_full`. The plan's dichotomy is stale — the
 generalisation already landed.** §3.5 said to choose between stating the number on the
 weight-shared `vit_full` or "generalising the committed def to per-block params first (the
-`CnxBlockParamsCh` treatment)". That work exists: `Architectures/ViTDepthK.lean` has
+`CnxBlockParamsCh` treatment)". That work exists: `Nets/ViT/ViTDepthK.lean` has
 `BlockParamsV` (the 16-field per-block record), `vitBodyKVFlat` (the depth-`k` fold),
 `vitForwardKV` (whole net, **vector-[D] LN, multi-head, distinct per-block params**),
 `vitForwardKV_has_vjp` — and `vitFwdGraphKMHV_faithful` ties the depth-`k` graph to it.
@@ -1189,7 +1189,7 @@ Say it that way (§9). ⭐ The interesting consequence: §0.1's wall is not a fa
 it is a fact about *composing* a backward with the forward that feeds it.
 
 ⭐⭐ **The load-bearing lemma is `bnXhat_sq_le` — `|x̂| ≤ √n` — AND IT WAS ALREADY IN THE REPO.**
-It sits in `Foundation/ResNet34.lean` (and again in `Training/MobileNetV2SealRealistic.lean`),
+It sits in `Nets/ResNet/ResNet34.lean` (and again in `Training/MobileNetV2SealRealistic.lean`),
 proved for the *realistic-seal* work, named after neither the float tier nor the backward. The
 ablation is decisive:
 
@@ -1478,7 +1478,7 @@ orders on B0 (10⁹⁵ → 10⁸⁹) and cheap to fix, but it is not what blocks
 
 ### 3.10 ⭐⭐ The whole-net CERTIFIED TIE for r34's backward (2026-09-03) — and the drift it found
 
-`r34InputGrad_eq_resnet34_vjp` (`Foundation/Resnet34BackCertifiedTie.lean`, ~57 s):
+`r34InputGrad_eq_resnet34_vjp` (`Nets/ResNet/Resnet34BackCertifiedTie.lean`, ~57 s):
 
     r34InputGrad <every slot pinned to the certified per-op backward>
       = (resnet34_has_vjp_at <the committed components at 3×224²> …).backward
@@ -1708,7 +1708,7 @@ That scoping was right, and the apex turned out to be nine `vjp_comp_diff_at`s.
 
 ### 3.14 ✅ The whole-net CERTIFIED TIE for MobileNetV2 (2026-09-04) — and the shape check r34 lacks
 
-`mnv2InputGrad_eq_mobilenetv2_vjp` (`Foundation/MobileNetV2WholeBackCertifiedTie.lean`, 355 lines,
+`mnv2InputGrad_eq_mobilenetv2_vjp` (`Nets/MobileNet/MobileNetV2WholeBackCertifiedTie.lean`, 355 lines,
 **~2 s**): `mnv2InputGrad`, with every slot pinned to the certified per-op backward, IS
 `(mobilenetv2PC_has_vjp_at …).backward`. So §1's criterion (ii) is met for MobileNetV2's backward
 in the same form r34's has since §3.10 — the reading of `mnv2_grad_float_le` is now *"the chain IS
@@ -2058,7 +2058,7 @@ twice. ⭐ **Tie first, then fold.**
 
 **⛔ The blocker one would write down — "the apex is missing" — is a misreading, for the second
 time in this file** (§3.8 item 2 was the first, on r34). `convNextForwardTCh_has_vjp`
-(`Architectures/ConvNeXtFullT.lean`) is the whole committed net: `[3,3,9,3]`, channel LayerNorm,
+(`Nets/ConvNeXt/ConvNeXtFullT.lean`) is the whole committed net: `[3,3,9,3]`, channel LayerNorm,
 vector affines, layer scale, three downsamples, the 4×4/s4 patchify stem, GAP, **the head
 `rowLNVecFlat 1 768`**, dense — chain-stated with the blocks opaque, exactly the shape §3.14 says a
 whole-net tie wants. It is `HasVJP` (everywhere) rather than `HasVJPAt`, which is *stronger* than
@@ -2376,7 +2376,7 @@ nowhere else.
    at the closing step, where the fix is a syntactic rewrite rather than a defeq.
 
 **⭐⭐ THE APEX LANDED: `convnextInputGrad_eq_convNextForwardTCh_vjp`**
-(`Foundation/ConvNeXtWholeBackCertifiedTie.lean`, 519 lines, **17 s**). `convnextInputGrad`, with
+(`Nets/ConvNeXt/ConvNeXtWholeBackCertifiedTie.lean`, 519 lines, **17 s**). `convnextInputGrad`, with
 every slot pinned to the certified per-op backward at its own saved activation, IS
 `(convNextForwardTCh_has_vjp …).backward x`. §1's criterion (ii) is met for a third whole-net
 backward, and **this one is stronger than r34's and MobileNetV2's**: the apex is `HasVJP` —
@@ -2472,7 +2472,7 @@ given saved-activation accuracies this net's forward cannot supply in any mode.*
 
 ### 3.23 ✅ ResNet-34's SHAPE CHECK (2026-09-04) — §4 item 1, and it is not a `rfl`
 
-`resnet34Forward_full_pc_eq_chain` (`Foundation/Resnet34BackCertifiedTie.lean`): the eleven slots
+`resnet34Forward_full_pc_eq_chain` (`Nets/ResNet/Resnet34BackCertifiedTie.lean`): the eleven slots
 `r34InputGrad_eq_resnet34_vjp` instantiates `resnet34_has_vjp_at` at — the stem `cbrStridedPC`, He
 et al.'s 3×3/s2 pool, the four `chainComp` stages `[a2,a1,a0]` / `[b2,b1,b0]` / `[c4,c3,c2,c1,c0]` /
 `[e1,e0]`, the three `downFwd` downsamples, GAP and the dense head — ARE `resnet34Forward_full_pc`.
@@ -2521,7 +2521,7 @@ That is what made the two `simp only` rows above both slow AND unable to close. 
 traverses, which is the whole reason it costs nothing here.
 
 ⭐ The three peels are `private` to the tie file rather than added beside `chainComp_cons` in
-`Foundation/ResNet34.lean`: they are two lines each, and that file is 2000 modules of rebuild
+`Nets/ResNet/ResNet34.lean`: they are two lines each, and that file is 2000 modules of rebuild
 (§8's `layerBudget_le_of` note, same reasoning).
 
 ### 3.24 ⭐⭐ EfficientNet-B0's backward: the KIT, the shape check, and ⛔ the number is NOT batch-free (2026-09-04)
@@ -2546,7 +2546,7 @@ says *"An apex exists to aim at: `efficientnetForwardB_full_has_vjp`"*. That is 
 `B0Weights`** net; the committed backward `efficientnetInputGradB` reverses `efficientnetForwardB`,
 the **3-block batched representative** — which is also the net `b0_float_logits_le` and
 `b0_back_chain` are about. The right apex is `efficientnetForwardB_has_vjp`
-(`Architectures/EfficientNetChainClose.lean`), and ⭐ it is the BETTER one: `HasVJP`, everywhere,
+(`Nets/EfficientNet/EfficientNetChainClose.lean`), and ⭐ it is the BETTER one: `HasVJP`, everywhere,
 so like ConvNeXt's it carries no smoothness side-condition where r34's and mnv2's are
 `HasVJPAt`. ⚠ Precisely §3.14's closing warning about `mobilenetv2_full_has_vjp_at` — *"that one
 is over `MNV2PaperWeights`, the 17-block paper net, where `mnv2InputGrad` reverses the ch7 6-block
@@ -3750,7 +3750,7 @@ B0's FORWARD — ⚠ that one moves a committed number, so it is its own commit.
 WRONG APEX and §3.24 corrects it**: `efficientnetForwardB_full_has_vjp` is the 16-block `B0Weights`
 net, where `efficientnetInputGradB` reverses the 3-block batched `efficientnetForwardB` — §3.14's
 `mobilenetv2_full_has_vjp_at` trap, written down and then not applied to the next net. Aim at
-`efficientnetForwardB_has_vjp` (`Architectures/EfficientNetChainClose.lean`), which is ⭐ `HasVJP`
+`efficientnetForwardB_has_vjp` (`Nets/EfficientNet/EfficientNetChainClose.lean`), which is ⭐ `HasVJP`
 everywhere, so B0's tie will carry no smoothness side-condition. ✅ The shape `rfl` is already
 there (`efficientnetForwardB_eq_chain`, §3.24). ⛔ And the job is BIGGER than this item costed: the
 only existing block tie, `mbconvBodyBack_eq_mbconvBody_vjp`, is per-example at scalar `bnForward`,

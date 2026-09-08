@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.ResNet34LivePC
+import LeanMlir.Proofs.Nets.ResNet.ResNet34LivePC
 import Mathlib.Analysis.Calculus.Deriv.Prod
 
 /-!

@@ -357,7 +357,7 @@ blueprint.
 **(e) DONE 2026-09-05 — the whole-net eval tie, and it ends at bytes.** Written straight after
 3.3(e), whose file it mirrors; ~2 s to elaborate, and the number did not move.
 
-`Architectures/MobileNetV2FullPaperEval.lean` (318 lines): `IVWEval` / `IVWNoExpEval` /
+`Nets/MobileNet/MobileNetV2FullPaperEval.lean` (318 lines): `IVWEval` / `IVWNoExpEval` /
 `MNV2PaperWeightsEval nCls` (γ, β and the two frozen statistics per site, **one shared ε** as the
 forward's argument — `mobilenetv2Forward_full_pc_eval`'s convention and the render's, where the
 training bundle carries one per site), the four block wrappers over
@@ -457,7 +457,7 @@ the raised threshold, and `b0Full_float_logits_le`. The profile is the 3-block f
 measured on THIS net (5,288,548 f32 is the 16-block count).
 
 **(e) DONE — the whole-net eval tie, 3.2(e)'s twin, in the same session.**
-`Architectures/EfficientNetFullB0Eval.lean` (~2 s): `MBWEval`/`MBWNoExpEval`/`B0WeightsEval nCls`
+`Nets/EfficientNet/EfficientNetFullB0Eval.lean` (~2 s): `MBWEval`/`MBWNoExpEval`/`B0WeightsEval nCls`
 (γ, β and the two frozen statistics per BN site, one shared `ε` as the forward's argument, as the
 render and the three-block eval both do), the fourth block shape at inference
 (`mbExpFwdBEval`/`mbExpGraphBEval`, which the three-block eval render has no instance of), the
@@ -535,9 +535,9 @@ already had on the block side.
   real forward at the block's own input), `vitTowerBackK` (the depth-`k` fold), the two saved
   prefixes `vitSavedPE` / `vitSavedBody`, and `vitInputGradK`. B0's
   `EfficientNetFullWholeBackFloatBridge.lean` role: the tie is about a named term.
-* `Architectures/ViTVecLNBackCertifiedTie.lean` re-states the block tie there:
+* `Nets/ViT/ViTVecLNBackCertifiedTie.lean` re-states the block tie there:
   `vitBlockBackV_eq_transformerBlockV_vjp` and its flat form `vitBlockBackVAt_eq_vjp`.
-* `Foundation/ViTWholeBackCertifiedTie.lean` folds the tower and closes the apex:
+* `Nets/ViT/ViTWholeBackCertifiedTie.lean` folds the tower and closes the apex:
   `vitTowerBackK_eq_vjp`, `vitInputGradK_eq_vitForwardKV_vjp`, `vitInputGradK_correct`, and
   `vitTinyInputGrad_eq_vitTiny_vjp` at the shipped `3×224×224` / 196+1 tokens / D 192 / 12 blocks
   / 10 classes.
@@ -722,7 +722,7 @@ Third leaf-placed foundation lemma in two sessions; they are accumulating and sh
 ### 3.5b DONE 2026-09-06 — ResNet-50's T1 and T2, the net's first net-level tiers
 
 Two files, ~2.5 s to elaborate together, ten declarations, all 3-axiom clean, `Certs` 3982 →
-**3984**. `Architectures/ResNet50FullB.lean` (the records, the three batched block forwards and
+**3984**. `Nets/ResNet/ResNet50FullB.lean` (the records, the three batched block forwards and
 `resnet50ForwardB_full` in nested-application form) and `ResNet50FullBVJP.lean` (the hypothesis
 bundles, the six delegation lemmas, `r50Pre0 … r50Pre16`, `resnet50ForwardB_full_has_vjp_at`,
 `_eq_chain` and `_correct`).
@@ -798,7 +798,7 @@ signature is **162 arguments = `%x` + 161 parameters**, with 12 projection slots
 
 ### 3.5c DONE 2026-09-06 — ResNet-50's T3, the fold and the tie
 
-`Foundation/ResNet50FaithfulPoCB.lean` (the §1 fold, 6 declarations) and `ResNet50TiePoCB.lean`
+`Nets/ResNet/ResNet50FaithfulPoCB.lean` (the §1 fold, 6 declarations) and `ResNet50TiePoCB.lean`
 (the §1a tie, 894 lines, ~2.6 s), `Certs` 3984 → **3986**, all 3-axiom clean. **ResNet-50 is the
 third net whose train-step tie is about the artifact its quoted accuracy comes from.**
 
@@ -841,7 +841,7 @@ wrong. ⚠⚠ And v1.5 puts `r50DownCotN1`/`r50DownCotC1` at the INPUT grid `2h 
 
 Two files, `Certs` 3990 → **3992**, four declarations, all 3-axiom clean.
 `Float/Resnet50WholeBackFloatBridgeB.lean` (~2 s) names `r50InputGradB` / `r50InputGradBF` and
-threads `r50_grad_floatBridgesToB`; `Foundation/Resnet50WholeBackCertifiedTieB.lean` (**~3 s**)
+threads `r50_grad_floatBridgesToB`; `Nets/ResNet/Resnet50WholeBackCertifiedTieB.lean` (**~3 s**)
 states `r50InputGradB_eq_r34B_full_vjp`, `r50InputGradB_correct` and the shape check
 `resnet50ForwardB_full_eq_slots`. Gates as §4.2d's, plus `docstring-checkrefs` at 1668.
 
@@ -1054,7 +1054,7 @@ rather than re-based on the cores, to keep the change out of the downstream rebu
 
 ### 4.1b DONE 2026-09-06 — ResNet-34's T1-forward and T2
 
-`Architectures/ResNet34FullB.lean` (~310 lines, ~1.7 s): the `R34IdW` / `R34DownW` /
+`Nets/ResNet/ResNet34FullB.lean` (~310 lines, ~1.7 s): the `R34IdW` / `R34DownW` /
 `R34BWeights nCls` records, the four batched block forwards (`r34IdB`, `r34DownB`, `r34StemB`,
 `r34HeadB`), `resnet34ForwardB_full` in nested-application form, the four block-kind graphs at the
 render's own tokens, their `_faithful` lemmas, and `resnet34FwdGraphB_full_faithful` — one `rw` per
@@ -1115,7 +1115,7 @@ lemma has the right shape. It is stated in r34's VJP file rather than here, sinc
 
 ### 4.1d DONE 2026-09-06 — ResNet-34's T1 is complete
 
-`Architectures/ResNet34FullBVJP.lean` (514 lines, **2.8 s**): the four hypothesis bundles
+`Nets/ResNet/ResNet34FullBVJP.lean` (514 lines, **2.8 s**): the four hypothesis bundles
 (`R34IdPos` / `R34DownPos` / `R34IdSmoothAt` / `R34DownSmoothAt`) plus `R34StemSmoothAt` and
 `R34PoolSmoothAt`, the six bundle lemmas, `r34Pre0 … r34Pre16`,
 `resnet34ForwardB_full_has_vjp_at`, `resnet34ForwardB_full_eq_chain`, and
@@ -1147,7 +1147,7 @@ is the bridge, peeled one `*_apply` layer at a time per `MobileNetV2FullVJP.lean
 
 ### 4.1e DONE 2026-09-06 — T3's §1 fold at batch BN; the §1a tie is scoped, not written
 
-`Foundation/ResNet34FaithfulPoCB.lean` (~190 lines, 2.1 s): eight `den = certified` lemmas,
+`Nets/ResNet/ResNet34FaithfulPoCB.lean` (~190 lines, 2.1 s): eight `den = certified` lemmas,
 all 3-axiom clean, `Certs` 3971.
 
 ⛔ **The finding that shaped the file: r34's batched render emits `*GradB`, not `*SgdB`.** Every
@@ -1197,7 +1197,7 @@ Two files, `Certs` 3975 → **3977**, both ~2 s to elaborate, all fifteen declar
   cotangent: `softCE` (cross-entropy against a target DISTRIBUTION), `softCE_grad`,
   `smoothTarget` / `smoothTarget_sum`, `smoothedCE_grad`, and the emitted six-op chain with its
   `den` and its per-row reading.
-* `Foundation/ResNet34TiePoCB.lean` (763 lines) — the tie: the render's cotangent chain node for
+* `Nets/ResNet/ResNet34TiePoCB.lean` (763 lines) — the tie: the render's cotangent chain node for
   node, the two `_eq_vjp` lemmas, three per-block-type bundles, the head, the capstone
   `r34_net_tiedB`, and the corollary that the threaded loss cotangent is the smoothed CE's gradient.
 
@@ -1260,12 +1260,12 @@ MobileNetV2's batched tie is the same construction — `MobileNetV2BackB0.lean` 
 
 Two files, `Certs` 3977 → **3978**, both ~2 s to elaborate, all sixteen declarations 3-axiom clean.
 
-* `Architectures/MobileNetV2FullB.lean` (362 lines): `MNV2BWeights nCls`, the six batched block
+* `Nets/MobileNet/MobileNetV2FullB.lean` (362 lines): `MNV2BWeights nCls`, the six batched block
   forwards (`mnv2StemB`, `mnv2NoExpB`, `mnv2ExpOnlyB`, `mnv2ResidB`, `mnv2StridedB`, `mnv2HeadB`),
   `mobilenetv2ForwardB_full` in nested-application form, the six block-kind graphs at the render's
   own tokens, their `_faithful` lemmas, and `mobilenetv2FwdGraphB_full_faithful` — one `rw` per
   block.
-* `Architectures/MobileNetV2FullBVJP.lean` (581 lines): the three batched smoothness bundles plus
+* `Nets/MobileNet/MobileNetV2FullBVJP.lean` (581 lines): the three batched smoothness bundles plus
   the stem's and the head's, the six bundle lemmas, `mnv2PreB0 … mnv2PreB17`,
   `mobilenetv2ForwardB_full_has_vjp_at`, `mobilenetv2ForwardB_full_eq_chain`, and
   `mobilenetv2ForwardB_full_has_vjp_at_correct`.
@@ -1323,7 +1323,7 @@ and so in the emitted shape annotation. Left alone rather than fixed in this pac
 
 ### 4.2c DONE 2026-09-06 — MobileNetV2's T3 §1a tie; **MobileNetV2's T3 is COMPLETE**
 
-`Foundation/MobileNetV2TiePoCB.lean` (1037 lines, ~2.7 s), `Certs` 3978 → **3979**, all twelve
+`Nets/MobileNet/MobileNetV2TiePoCB.lean` (1037 lines, ~2.7 s), `Certs` 3978 → **3979**, all twelve
 declarations 3-axiom clean. The scoping above was right on every point, and the four bullets it
 listed are what the file is.
 
@@ -1377,11 +1377,11 @@ Certs`, `lake env lean tests/AuditAxioms.lean`, `lake exe docstring-checkrefs` (
 
 * `Float/Resnet34WholeBackFloatBridgeB.lean` (~1 s) — `r34InputGradB`, `r34InputGradBF` and
   `r34_grad_floatBridgesToB`, plus the two general lifts the batched pool forced.
-* `Foundation/Resnet34BackCertifiedTieB.lean` (**~60 s**) — `HasVJPAt.backward_unique`, the four
+* `Nets/ResNet/Resnet34BackCertifiedTieB.lean` (**~60 s**) — `HasVJPAt.backward_unique`, the four
   endpoint ties, `r34OpaqueA0 … A16` and the generic eighteen-stage apex `r34B_full_has_vjp_at`,
   the tie, its `pdiv` reading, and the shape check `resnet34ForwardB_full_eq_slots`.
 * `Float/MobileNetV2WholeBackFloatBridgeB.lean` (~2 s) — the same three for MobileNetV2.
-* `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (~3 s) — two endpoint ties, the tie, its
+* `Nets/MobileNet/MobileNetV2WholeBackCertifiedTieB.lean` (~3 s) — two endpoint ties, the tie, its
   `pdiv` reading, and `mobilenetv2ForwardB_full_eq_slots`.
 
 ⭐⭐ **MobileNetV2's file defines no apex and no prefix defs at all.**
@@ -1511,10 +1511,10 @@ row that says "X has no theorem" should name the theorem it looked for.
 
 | package | file | declarations | elaborates |
 |---|---|---|---|
-| 4b.1 EfficientNet-B0 | `Architectures/EfficientNetFaithfulPoCG.lean` | 8 | 1.5 s |
-| 4b.2 ConvNeXt-T | `Architectures/ConvNeXtFaithfulPoCG.lean` | 14 | 1.6 s |
-| 4b.3 ViT-Tiny | `Architectures/ViTFaithfulPoCG.lean` | 10 | 1.6 s |
-| 4b.4 MobileNetV2, 17 blocks | `Architectures/MobileNetV2FaithfulPoCPaperG.lean` | 4 op kinds + 5 block-profile capstones | 1.6 s |
+| 4b.1 EfficientNet-B0 | `Nets/EfficientNet/EfficientNetFaithfulPoCG.lean` | 8 | 1.5 s |
+| 4b.2 ConvNeXt-T | `Nets/ConvNeXt/ConvNeXtFaithfulPoCG.lean` | 14 | 1.6 s |
+| 4b.3 ViT-Tiny | `Nets/ViT/ViTFaithfulPoCG.lean` | 10 | 1.6 s |
+| 4b.4 MobileNetV2, 17 blocks | `Nets/MobileNet/MobileNetV2FaithfulPoCPaperG.lean` | 4 op kinds + 5 block-profile capstones | 1.6 s |
 
 Gates: `lake build Certs` 3971 → **3975** green, `lake env lean tests/AuditAxioms.lean` 3-axiom
 clean on all 41 declarations, `lake exe docstring-checkrefs` (1585 citations), `python3
@@ -1580,7 +1580,7 @@ target and the batched index — the artifact each quoted accuracy comes from, u
 
 ### 4b.6 DONE 2026-09-07 — ConvNeXt-T's capstone, three axes at once
 
-`Architectures/ConvNeXtTiePoCGB.lean` (~610 lines, **~3 s**, 13 declarations) plus
+`Nets/ConvNeXt/ConvNeXtTiePoCGB.lean` (~610 lines, **~3 s**, 13 declarations) plus
 `smoothedLossCotGraphDiv` / `_den` / `_row` in `Foundation/SmoothedLossCot.lean`; `Certs` 3994 →
 **3995**, all 3-axiom clean. `cnx_net_tiedGB (N) {nC} …`: all 182 ConvNeXt-T parameters at the
 `*GradB` nodes `convnext_adam_train_step` and every `convnextin_*` artifact emit, at the smoothed
@@ -1623,14 +1623,14 @@ No artifact moved, so no render gate.
 
 | package | file (mirror `ResNet34FaithfulPoCB.lean`) | ops | `_eq_grad` source |
 |---|---|---|---|
-| 4b.1 EfficientNet-B0 | `Architectures/EfficientNetFaithfulPoCG.lean` | the eight `*SgdB` kinds `EnetPoC` is at — `conv{Weight,Bias}SgdB`, `convStridedXla{Weight,Bias}SgdB`, `depthwise{,Strided}{Weight,Bias}SgdB`, `bn{Gamma,Beta}SgdB`, `dense{Weight,Bias}SgdB` — to their `*GradB` peers | batched `*SgdB_eq_grad` |
-| 4b.2 ConvNeXt-T | `Architectures/ConvNeXtFaithfulPoCG.lean` | `conv{Weight,Bias}Sgd`, `convStrided{Weight,Bias}Sgd`, `depthwise{Weight,Bias}Sgd`, `veclnGammaSgd`, `rowDenseBiasSgd`, `layerScaleChGammaSgd`; `convStride4WeightGrad` is already a gradient (the §5 carve-out becomes the norm) | per-example `*Sgd_eq_grad` |
-| 4b.3 ViT-Tiny | `Architectures/ViTFaithfulPoCG.lean` | `rowDense{Weight,Bias}Sgd`, `veclnGammaSgd`, `patchEmbed{Weight,Bias}Sgd`, `posEmbedSgd`, the cls token | per-example `*Sgd_eq_grad` |
-| 4b.4 MobileNetV2, 17 blocks | `Architectures/MobileNetV2FaithfulPoCPaperG.lean` | the twelve op types `MobileNetV2FaithfulPoCPaper` tabulates | per-example `*Sgd_eq_grad` — or go straight to the batched `*GradB` ops if 4c's MobileNetV2 render is in hand |
+| 4b.1 EfficientNet-B0 | `Nets/EfficientNet/EfficientNetFaithfulPoCG.lean` | the eight `*SgdB` kinds `EnetPoC` is at — `conv{Weight,Bias}SgdB`, `convStridedXla{Weight,Bias}SgdB`, `depthwise{,Strided}{Weight,Bias}SgdB`, `bn{Gamma,Beta}SgdB`, `dense{Weight,Bias}SgdB` — to their `*GradB` peers | batched `*SgdB_eq_grad` |
+| 4b.2 ConvNeXt-T | `Nets/ConvNeXt/ConvNeXtFaithfulPoCG.lean` | `conv{Weight,Bias}Sgd`, `convStrided{Weight,Bias}Sgd`, `depthwise{Weight,Bias}Sgd`, `veclnGammaSgd`, `rowDenseBiasSgd`, `layerScaleChGammaSgd`; `convStride4WeightGrad` is already a gradient (the §5 carve-out becomes the norm) | per-example `*Sgd_eq_grad` |
+| 4b.3 ViT-Tiny | `Nets/ViT/ViTFaithfulPoCG.lean` | `rowDense{Weight,Bias}Sgd`, `veclnGammaSgd`, `patchEmbed{Weight,Bias}Sgd`, `posEmbedSgd`, the cls token | per-example `*Sgd_eq_grad` |
+| 4b.4 MobileNetV2, 17 blocks | `Nets/MobileNet/MobileNetV2FaithfulPoCPaperG.lean` | the twelve op types `MobileNetV2FaithfulPoCPaper` tabulates | per-example `*Sgd_eq_grad` — or go straight to the batched `*GradB` ops if 4c's MobileNetV2 render is in hand |
 
 ### 4b.7 DONE 2026-09-07 — ViT-Tiny's capstone; the set closes at five of five
 
-`Architectures/ViTTiePoCGB.lean` (~615 lines, **~3 s**, 9 declarations + the `BlkSaves`
+`Nets/ViT/ViTTiePoCGB.lean` (~615 lines, **~3 s**, 9 declarations + the `BlkSaves`
 packaging); `Certs` 3995 → **3996**, all 3-axiom clean. `vit_net_tiedGB (N) {nC} …`: all 200
 ViT-Tiny parameters at the `*GradB` nodes `vit_adam_train_step` and every `vitin_*` artifact emit,
 at the smoothed loss at a general target, at the batched index. §4b.6's transformation applied
@@ -1742,7 +1742,7 @@ artifact movement and no decision to take — and it unblocks ViT-Tiny's 4b caps
 ### 4c-ter DONE 2026-09-07 — leg 4, ViT-Tiny: nineteen artifacts, zero bytes moved
 
 Two files, `Certs` 3992 → **3993**, ten declarations, all 3-axiom clean.
-`Architectures/ViTFaithfulPoCGB.lean` (~2 s) is the §1 fold at the batched constructors; the
+`Nets/ViT/ViTFaithfulPoCGB.lean` (~2 s) is the §1 fold at the batched constructors; the
 nineteen writers moved from `ViTRender.lean` into `ViTRenderB.lean`. Full write-up in
 `planning/archive/renderer_convergence.md`; what this document needs is below.
 
@@ -1801,7 +1801,7 @@ and `.lake/build/bin/vit-fwd-b-tie` byte-identical on all 14,457 lines.
 ### 4c-quater DONE 2026-09-07 — leg 3, ConvNeXt-T: thirteen artifacts, 78 lines each, by decision
 
 One new Lean file, `Certs` 3993 → **3994**, eighteen declarations, all 3-axiom clean.
-`Architectures/ConvNeXtFaithfulPoCGB.lean` (~2 s) is the §1 fold at the batched constructors;
+`Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean` (~2 s) is the §1 fold at the batched constructors;
 seventeen writers moved from `ConvNeXtRender.lean` into `ConvNeXtRenderB.lean`. Full write-up in
 `planning/archive/renderer_convergence.md` (leg 3); what this document needs is below.
 
@@ -2108,41 +2108,41 @@ verified_mlir/` empty before the banner change and comment-only after.
 ## 6. Files
 
 New, by package: 3.1 none; 3.2 `MobileNetV2PaperFloatBudget.lean`,
-`MobileNetV2PaperWholeBackCertifiedTie.lean` and `Architectures/MobileNetV2FullPaperEval.lean`
+`MobileNetV2PaperWholeBackCertifiedTie.lean` and `Nets/MobileNet/MobileNetV2FullPaperEval.lean`
 (3.2(e)) all landed (⛔ `MobileNetV2PaperBackFloatBudget.lean` is CANCELLED, there is no backward number to state, and
 the VJP was already in `MobileNetV2FullVJP.lean`); 3.3 `EfficientNetFullFloatBudget.lean`,
 `EfficientNetFullWholeBackFloatBridge.lean` and `EfficientNetFullWholeBackCertifiedTie.lean`
-landed, as did `Architectures/EfficientNetFullB0Eval.lean` for 3.3(e) (⛔
+landed, as did `Nets/EfficientNet/EfficientNetFullB0Eval.lean` for 3.3(e) (⛔
 `EfficientNetFullBackFloatBudget.lean` is DECLINED: statable at 1e2648 since the threshold
 finding, and worth nothing); 3.4
-`Float/ViTWholeBackFloatBridge.lean`, `Architectures/ViTVecLNBackCertifiedTie.lean` and
-`Foundation/ViTWholeBackCertifiedTie.lean` all landed (⛔ `ViTBackFloatBudget.lean` is DECLINED:
+`Float/ViTWholeBackFloatBridge.lean`, `Nets/ViT/ViTVecLNBackCertifiedTie.lean` and
+`Nets/ViT/ViTWholeBackCertifiedTie.lean` all landed (⛔ `ViTBackFloatBudget.lean` is DECLINED:
 a fold at 5.686e399 / 1.703e399, statable at `exponentiation.threshold 500` and worth nothing,
 and the most expensive of the three declined backwards); §4 (the batch-BN port) landed 2026-09-06: `Float/BnBatchFloatBridge.lean` (the batched
 BatchNorm leaves, both directions, plus the three layout-free `Maps` cores),
-`Foundation/BatchMapVJPAt.lean`, `Architectures/ResNet34FullB.lean`,
-`Architectures/ResNet34FullBVJP.lean` and `Foundation/ResNet34FaithfulPoCB.lean`; still to
+`Foundation/BatchMapVJPAt.lean`, `Nets/ResNet/ResNet34FullB.lean`,
+`Nets/ResNet/ResNet34FullBVJP.lean` and `Nets/ResNet/ResNet34FaithfulPoCB.lean`; still to
 write there are r34's `ResNet34TiePoCB.lean` (4.2a) and MobileNetV2's five peers; 4b
-`Architectures/EfficientNetFaithfulPoCG.lean`, `ConvNeXtFaithfulPoCG.lean`, `ViTFaithfulPoCG.lean`,
+`Nets/EfficientNet/EfficientNetFaithfulPoCG.lean`, `ConvNeXtFaithfulPoCG.lean`, `ViTFaithfulPoCG.lean`,
 `MobileNetV2FaithfulPoCPaperG.lean` ALL LANDED 2026-09-06 (⛔ `Foundation/SmoothedLossCot.lean` is
 NOT part of 4b after all — it is a prerequisite for re-pointing the capstones, not for the folds,
 which are `∀ cot`; it moved to 4.2a and LANDED there, with
-`Foundation/ResNet34TiePoCB.lean`); 4c: `Architectures/ViTFaithfulPoCGB.lean` LANDED 2026-09-07 for leg 4 (⛔ the module §4c
+`Nets/ResNet/ResNet34TiePoCB.lean`); 4c: `Nets/ViT/ViTFaithfulPoCGB.lean` LANDED 2026-09-07 for leg 4 (⛔ the module §4c
 originally said the legs needed none — byte-identity is not tier-identity, §4c-ter) and
-`Architectures/ConvNeXtFaithfulPoCGB.lean` LANDED 2026-09-07 for leg 3 (§4c-quater; eighteen
+`Nets/ConvNeXt/ConvNeXtFaithfulPoCGB.lean` LANDED 2026-09-07 for leg 3 (§4c-quater; eighteen
 declarations, the four bf16 node lemmas the first anywhere), and otherwise
 no new Lean module beyond the `.sgd` tail in `MobileNetV2RenderB.lean`; it RETIRED
 `ResNet34Render.lean` and `MobileNetV2Render.lean`, moved ViT's nineteen writers onto
 `ViTRenderB.lean` and ConvNeXt's seventeen onto `ConvNeXtRenderB.lean` (⛔ neither `ViTRender.lean`
 nor `ConvNeXtRender.lean` is retired — each still writes its SGD-inline `*_train_step.mlir`), and
-re-points every T2/T3 file at the batched constructors; §4.2d's T6 LANDED 2026-09-07 for both nets: `Float/Resnet34WholeBackFloatBridgeB.lean` + `Foundation/Resnet34BackCertifiedTieB.lean` and `Float/MobileNetV2WholeBackFloatBridgeB.lean` + `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (⛔ no `*BackFloatBudget` peer for either — T4/T5 are the vacuous half); 4b.6 `Architectures/ConvNeXtTiePoCGB.lean` LANDED 2026-09-07 with `smoothedLossCotGraphDiv` in
-`Foundation/SmoothedLossCot.lean`, and 4b.7 `Architectures/ViTTiePoCGB.lean` LANDED the same day on
+re-points every T2/T3 file at the batched constructors; §4.2d's T6 LANDED 2026-09-07 for both nets: `Float/Resnet34WholeBackFloatBridgeB.lean` + `Nets/ResNet/Resnet34BackCertifiedTieB.lean` and `Float/MobileNetV2WholeBackFloatBridgeB.lean` + `Nets/MobileNet/MobileNetV2WholeBackCertifiedTieB.lean` (⛔ no `*BackFloatBudget` peer for either — T4/T5 are the vacuous half); 4b.6 `Nets/ConvNeXt/ConvNeXtTiePoCGB.lean` LANDED 2026-09-07 with `smoothedLossCotGraphDiv` in
+`Foundation/SmoothedLossCot.lean`, and 4b.7 `Nets/ViT/ViTTiePoCGB.lean` LANDED the same day on
 both shapes — the five capstones are all re-pointed; 4d `Foundation/DataParallel.lean` LANDED 2026-09-06 (piece 1) and the
 `allReduceMeanF` constructor in `StableHLO.lean` with its `den`, `pretty` and parser cases plus
 `Foundation/DataParallelNode.lean` LANDED 2026-09-07 (piece 2, §4d.2);
 3.5a `Codegen/LambTriple.lean` and
 `Foundation/BceLossCot.lean` both LANDED 2026-09-06, as did 3.5(a)+(b)'s
-`Architectures/ResNet50FullB.lean` (forward AND graph) + `ResNet50FullBVJP.lean` (§3.5b); still to
+`Nets/ResNet/ResNet50FullB.lean` (forward AND graph) + `ResNet50FullBVJP.lean` (§3.5b); still to
 write for 3.5 are `Resnet50FloatBudget.lean`,
 `Resnet50BackFloatBudget.lean`, `Resnet50WholeBackCertifiedTie.lean`; 3.6 the same six for
 MobileNetV4. Every new file: a `lakefile.lean` `Certs` root or an import of one, an

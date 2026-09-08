@@ -500,7 +500,7 @@ jobs:
           THM_PAT='^(theorem|noncomputable def|def) '
           TOTAL_THMS=0
           TOTAL_AXMS=0
-          for f in LeanMlir/Proofs/*/*.lean; do
+          for f in $(find LeanMlir/Proofs -name "*.lean" -not -path "*/.lake/*" | sort); do
             name=${f#LeanMlir/Proofs/}
             thms=$(grep -cE "$THM_PAT" "$f" || true)
             axms=$(grep -c "^axiom " "$f" || true)
@@ -509,7 +509,7 @@ jobs:
             TOTAL_THMS=$((TOTAL_THMS + thms))
             TOTAL_AXMS=$((TOTAL_AXMS + axms))
           done
-          TOTAL_LINES=$(cat LeanMlir/Proofs/*/*.lean | wc -l)
+          TOTAL_LINES=$(find LeanMlir/Proofs -name "*.lean" -not -path "*/.lake/*" -print0 | xargs -0 cat | wc -l)
           echo "| **Total** | **${TOTAL_THMS}** | **${TOTAL_AXMS}** | **${TOTAL_LINES}** |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -562,8 +562,8 @@ jobs:
           # Core Library = LeanMlir/ minus the Proofs/ subtree, plus the root umbrella.
           core() { find LeanMlir -name "*.lean" -not -path "LeanMlir/Proofs/*" -not -path "*/.lake/*"; ls LeanMlir.lean 2>/dev/null; }
           echo "| Proofs | $(lf LeanMlir/Proofs) | $(ll LeanMlir/Proofs) |" >> $GITHUB_STEP_SUMMARY
-          # Per-bucket breakdown of the Proofs row (the six subdirectories).
-          for d in Foundation Architectures Float Codegen Certificates Training; do
+          # Per-bucket breakdown of the Proofs row (the seven subdirectories; Nets/ holds one directory per net family).
+          for d in Foundation Architectures Nets Float Codegen Certificates Training; do
             echo "| — $d | $(lf LeanMlir/Proofs/$d) | $(ll LeanMlir/Proofs/$d) |" >> $GITHUB_STEP_SUMMARY
           done
           echo "| Core Library | $(core | wc -l) | $(core | xargs cat 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY

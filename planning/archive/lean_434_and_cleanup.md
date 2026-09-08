@@ -333,7 +333,7 @@ itself 3-axiom clean. Every Mathlib name below was grep-verified in `.lake/packa
 
 1. **`le_of_sq_le_sq`** — `Mathlib/Algebra/Order/Ring/Abs.lean:134`. The repo open-codes the
    `Real.sqrt_sq`/`sqrt_le_sqrt`/`sqrt_sq` sandwich in **12 sites / 8 files**, densest in
-   `Certificates/LipschitzCertInstance.lean` (5×). Bonus: `Foundation/ResNet34.lean:493` and
+   `Certificates/LipschitzCertInstance.lean` (5×). Bonus: `Nets/ResNet/ResNet34.lean:493` and
    `Training/MobileNetV2SealRealistic.lean:46` are character-for-character Mathlib's own proof of
    `Real.abs_le_sqrt`.
 2. **`euclid_norm_sq`** (`Certificates/LipschitzCert.lean:76`, 15 uses) is verbatim
