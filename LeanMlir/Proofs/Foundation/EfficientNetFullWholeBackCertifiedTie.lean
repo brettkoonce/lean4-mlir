@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Architectures.EfficientNetFullB0
+import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Float.EfficientNetFullWholeBackFloatBridge
@@ -22,7 +23,7 @@ there is no smooth point: swish and the SE sigmoid are differentiable everywhere
 ## The three pieces
 
 1. `efficientnetB_full_has_vjp` — the generic eighteen-stage apex `head ∘ b16 ∘ … ∘ b1 ∘ stem`,
-   seventeen `vjp_comp`s and nothing else, and `b0OpaqueA0 … A16`, one prefix `def` per running
+   seventeen `vjp_comp`s and nothing else, and `opaqueA0 … A16`, one prefix `def` per running
    activation (the MobileNetV2 paper file's answer to the quadratic writing of nested
    applications; plain `def`s so the closing `rfl` sees through them).
 2. `efficientnetInputGradB_full_eq_efficientnetB_full_vjp` — the tie with the stem and head
@@ -49,93 +50,7 @@ shipped leaves is `9.112·10²⁶⁴⁸`; the float file this imports says why i
 
 namespace Proofs
 
--- ════════════════════════════════════════════════════════════════
--- § The opaque running activations — one `def` per slot
--- ════════════════════════════════════════════════════════════════
-
-/-- The stem's output. -/
-noncomputable def b0OpaqueA0 {s0 s1 : Nat} (stem : Vec s0 → Vec s1) (x : Vec s0) : Vec s1 :=
-  stem x
-
-/-- The activation after block 1. -/
-noncomputable def b0OpaqueA1 {s0 s1 s2 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2)
-    (x : Vec s0) : Vec s2 := b1 (b0OpaqueA0 stem  x)
-
-/-- The activation after block 2. -/
-noncomputable def b0OpaqueA2 {s0 s1 s2 s3 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3)
-    (x : Vec s0) : Vec s3 := b2 (b0OpaqueA1 stem b1 x)
-
-/-- The activation after block 3. -/
-noncomputable def b0OpaqueA3 {s0 s1 s2 s3 s4 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4)
-    (x : Vec s0) : Vec s4 := b3 (b0OpaqueA2 stem b1 b2 x)
-
-/-- The activation after block 4. -/
-noncomputable def b0OpaqueA4 {s0 s1 s2 s3 s4 s5 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5)
-    (x : Vec s0) : Vec s5 := b4 (b0OpaqueA3 stem b1 b2 b3 x)
-
-/-- The activation after block 5. -/
-noncomputable def b0OpaqueA5 {s0 s1 s2 s3 s4 s5 s6 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6)
-    (x : Vec s0) : Vec s6 := b5 (b0OpaqueA4 stem b1 b2 b3 b4 x)
-
-/-- The activation after block 6. -/
-noncomputable def b0OpaqueA6 {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7)
-    (x : Vec s0) : Vec s7 := b6 (b0OpaqueA5 stem b1 b2 b3 b4 b5 x)
-
-/-- The activation after block 7. -/
-noncomputable def b0OpaqueA7 {s0 s1 s2 s3 s4 s5 s6 s7 s8 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8)
-    (x : Vec s0) : Vec s8 := b7 (b0OpaqueA6 stem b1 b2 b3 b4 b5 b6 x)
-
-/-- The activation after block 8. -/
-noncomputable def b0OpaqueA8 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9)
-    (x : Vec s0) : Vec s9 := b8 (b0OpaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)
-
-/-- The activation after block 9. -/
-noncomputable def b0OpaqueA9 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10)
-    (x : Vec s0) : Vec s10 := b9 (b0OpaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)
-
-/-- The activation after block 10. -/
-noncomputable def b0OpaqueA10 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11)
-    (x : Vec s0) : Vec s11 := b10 (b0OpaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)
-
-/-- The activation after block 11. -/
-noncomputable def b0OpaqueA11 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12)
-    (x : Vec s0) : Vec s12 := b11 (b0OpaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)
-
-/-- The activation after block 12. -/
-noncomputable def b0OpaqueA12 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13)
-    (x : Vec s0) : Vec s13 := b12 (b0OpaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)
-
-/-- The activation after block 13. -/
-noncomputable def b0OpaqueA13 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14)
-    (x : Vec s0) : Vec s14 := b13 (b0OpaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)
-
-/-- The activation after block 14. -/
-noncomputable def b0OpaqueA14 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15)
-    (x : Vec s0) : Vec s15 := b14 (b0OpaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)
-
-/-- The activation after block 15. -/
-noncomputable def b0OpaqueA15 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16)
-    (x : Vec s0) : Vec s16 := b15 (b0OpaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)
-
-/-- The activation after block 16. -/
-noncomputable def b0OpaqueA16 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16) (b16 : Vec s16 → Vec s17)
-    (x : Vec s0) : Vec s17 := b16 (b0OpaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)
+-- The opaque running activations `opaqueA0 … opaqueA16` are `Foundation/OpaquePrefix.lean`'s.
 
 -- ════════════════════════════════════════════════════════════════
 -- § The generic eighteen-stage apex
@@ -228,26 +143,26 @@ theorem efficientnetInputGradB_full_eq_efficientnetB_full_vjp
         (StableHLO.bnBatchLA N 32 112 112 εs γs βs
           (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x)))
       ((bnBatchLA_has_vjp N 1280 7 7 εh hεh γh βh).backward
-        (StableHLO.batchMap N (flatConv Wh bh) (b0OpaqueA16 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
+        (StableHLO.batchMap N (flatConv Wh bh) (opaqueA16 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
       ((swish_has_vjp (N * (1280 * 7 * 7))).backward
         (StableHLO.bnBatchLA N 1280 7 7 εh γh βh
-          (StableHLO.batchMap N (flatConv Wh bh) (b0OpaqueA16 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))))
-      (hb1.backward (b0OpaqueA0 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) x))
-      (hb2.backward (b0OpaqueA1 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 x))
-      (hb3.backward (b0OpaqueA2 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 x))
-      (hb4.backward (b0OpaqueA3 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 x))
-      (hb5.backward (b0OpaqueA4 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 x))
-      (hb6.backward (b0OpaqueA5 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
-      (hb7.backward (b0OpaqueA6 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
-      (hb8.backward (b0OpaqueA7 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
-      (hb9.backward (b0OpaqueA8 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
-      (hb10.backward (b0OpaqueA9 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-      (hb11.backward (b0OpaqueA10 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-      (hb12.backward (b0OpaqueA11 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-      (hb13.backward (b0OpaqueA12 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-      (hb14.backward (b0OpaqueA13 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-      (hb15.backward (b0OpaqueA14 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-      (hb16.backward (b0OpaqueA15 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+          (StableHLO.batchMap N (flatConv Wh bh) (opaqueA16 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))))
+      (hb1.backward (opaqueA0 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) x))
+      (hb2.backward (opaqueA1 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 x))
+      (hb3.backward (opaqueA2 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 x))
+      (hb4.backward (opaqueA3 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 x))
+      (hb5.backward (opaqueA4 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 x))
+      (hb6.backward (opaqueA5 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
+      (hb7.backward (opaqueA6 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
+      (hb8.backward (opaqueA7 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
+      (hb9.backward (opaqueA8 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
+      (hb10.backward (opaqueA9 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+      (hb11.backward (opaqueA10 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+      (hb12.backward (opaqueA11 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+      (hb13.backward (opaqueA12 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+      (hb14.backward (opaqueA13 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+      (hb15.backward (opaqueA14 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+      (hb16.backward (opaqueA15 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
       = (efficientnetB_full_has_vjp
           (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16
           (headFwdB N (h := 7) (w := 7) Wh bh εh γh βh Wfc bfc)
@@ -261,7 +176,7 @@ theorem efficientnetInputGradB_full_eq_efficientnetB_full_vjp
   rw [stemBBack_eq_vjp_backward (N := N) (h := 112) (w := 112) (by decide) (by decide)
         Ws bs εs hεs γs βs x,
       headFwdBBack_eq_vjp_backward (N := N) (h := 7) (w := 7) Wh bh εh hεh γh βh Wfc bfc
-        (b0OpaqueA16 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
+        (opaqueA16 (stemB N (h := 112) (w := 112) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
   rfl
 
 -- ════════════════════════════════════════════════════════════════
@@ -302,26 +217,26 @@ theorem efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp (N : Nat) (
         (StableHLO.bnBatchLA N 32 112 112 w.sε w.sγ w.sβ
           (StableHLO.batchMap N (flatConvStride2Xla w.sW w.sb) x)))
       ((bnBatchLA_has_vjp N 1280 7 7 w.hε hhε w.hγ w.hβ).backward
-        (StableHLO.batchMap N (flatConv w.hW w.hb) (b0OpaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x)))
+        (StableHLO.batchMap N (flatConv w.hW w.hb) (opaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x)))
       ((swish_has_vjp (N * (1280 * 7 * 7))).backward
         (StableHLO.bnBatchLA N 1280 7 7 w.hε w.hγ w.hβ
-          (StableHLO.batchMap N (flatConv w.hW w.hb) (b0OpaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x))))
-      ((mbNoExpW_has_vjp N 112 112 w.b1 hb1d hb1p).backward (b0OpaqueA0 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) x))
-      ((mbStridedW_has_vjp N 56 56 w.b2 hb2e hb2d hb2p).backward (b0OpaqueA1 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) x))
-      ((mbResidW_has_vjp N 56 56 w.b3 hb3e hb3d hb3p).backward (b0OpaqueA2 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) x))
-      ((mbStridedW_has_vjp N 28 28 w.b4 hb4e hb4d hb4p).backward (b0OpaqueA3 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) x))
-      ((mbResidW_has_vjp N 28 28 w.b5 hb5e hb5d hb5p).backward (b0OpaqueA4 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) x))
-      ((mbStridedW_has_vjp N 14 14 w.b6 hb6e hb6d hb6p).backward (b0OpaqueA5 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) x))
-      ((mbResidW_has_vjp N 14 14 w.b7 hb7e hb7d hb7p).backward (b0OpaqueA6 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) x))
-      ((mbResidW_has_vjp N 14 14 w.b8 hb8e hb8d hb8p).backward (b0OpaqueA7 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) x))
-      ((mbExpW_has_vjp N 14 14 w.b9 hb9e hb9d hb9p).backward (b0OpaqueA8 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) x))
-      ((mbResidW_has_vjp N 14 14 w.b10 hb10e hb10d hb10p).backward (b0OpaqueA9 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) x))
-      ((mbResidW_has_vjp N 14 14 w.b11 hb11e hb11d hb11p).backward (b0OpaqueA10 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) x))
-      ((mbStridedW_has_vjp N 7 7 w.b12 hb12e hb12d hb12p).backward (b0OpaqueA11 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) x))
-      ((mbResidW_has_vjp N 7 7 w.b13 hb13e hb13d hb13p).backward (b0OpaqueA12 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) x))
-      ((mbResidW_has_vjp N 7 7 w.b14 hb14e hb14d hb14p).backward (b0OpaqueA13 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) x))
-      ((mbResidW_has_vjp N 7 7 w.b15 hb15e hb15d hb15p).backward (b0OpaqueA14 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) x))
-      ((mbExpW_has_vjp N 7 7 w.b16 hb16e hb16d hb16p).backward (b0OpaqueA15 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) x))
+          (StableHLO.batchMap N (flatConv w.hW w.hb) (opaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x))))
+      ((mbNoExpW_has_vjp N 112 112 w.b1 hb1d hb1p).backward (opaqueA0 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) x))
+      ((mbStridedW_has_vjp N 56 56 w.b2 hb2e hb2d hb2p).backward (opaqueA1 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) x))
+      ((mbResidW_has_vjp N 56 56 w.b3 hb3e hb3d hb3p).backward (opaqueA2 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) x))
+      ((mbStridedW_has_vjp N 28 28 w.b4 hb4e hb4d hb4p).backward (opaqueA3 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) x))
+      ((mbResidW_has_vjp N 28 28 w.b5 hb5e hb5d hb5p).backward (opaqueA4 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) x))
+      ((mbStridedW_has_vjp N 14 14 w.b6 hb6e hb6d hb6p).backward (opaqueA5 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) x))
+      ((mbResidW_has_vjp N 14 14 w.b7 hb7e hb7d hb7p).backward (opaqueA6 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) x))
+      ((mbResidW_has_vjp N 14 14 w.b8 hb8e hb8d hb8p).backward (opaqueA7 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) x))
+      ((mbExpW_has_vjp N 14 14 w.b9 hb9e hb9d hb9p).backward (opaqueA8 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) x))
+      ((mbResidW_has_vjp N 14 14 w.b10 hb10e hb10d hb10p).backward (opaqueA9 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) x))
+      ((mbResidW_has_vjp N 14 14 w.b11 hb11e hb11d hb11p).backward (opaqueA10 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) x))
+      ((mbStridedW_has_vjp N 7 7 w.b12 hb12e hb12d hb12p).backward (opaqueA11 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) x))
+      ((mbResidW_has_vjp N 7 7 w.b13 hb13e hb13d hb13p).backward (opaqueA12 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) x))
+      ((mbResidW_has_vjp N 7 7 w.b14 hb14e hb14d hb14p).backward (opaqueA13 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) x))
+      ((mbResidW_has_vjp N 7 7 w.b15 hb15e hb15d hb15p).backward (opaqueA14 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) x))
+      ((mbExpW_has_vjp N 7 7 w.b16 hb16e hb16d hb16p).backward (opaqueA15 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) x))
       = (efficientnetForwardB_full_has_vjp N w hsε hb1d hb1p hb2e hb2d hb2p hb3e hb3d hb3p hb4e hb4d hb4p hb5e hb5d hb5p hb6e hb6d hb6p hb7e hb7d hb7p hb8e hb8d hb8p hb9e hb9d hb9p hb10e hb10d hb10p hb11e hb11d hb11p hb12e hb12d hb12p hb13e hb13d hb13p hb14e hb14d hb14p hb15e hb15d hb15p hb16e hb16d hb16p hhε).backward x :=
   (efficientnetInputGradB_full_eq_efficientnetB_full_vjp N w.sW w.sb w.sε hsε w.sγ w.sβ
       w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb
@@ -362,26 +277,26 @@ theorem efficientnetInputGradB_full_correct (N : Nat) (w : B0Weights)
         (StableHLO.bnBatchLA N 32 112 112 w.sε w.sγ w.sβ
           (StableHLO.batchMap N (flatConvStride2Xla w.sW w.sb) x)))
       ((bnBatchLA_has_vjp N 1280 7 7 w.hε hhε w.hγ w.hβ).backward
-        (StableHLO.batchMap N (flatConv w.hW w.hb) (b0OpaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x)))
+        (StableHLO.batchMap N (flatConv w.hW w.hb) (opaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x)))
       ((swish_has_vjp (N * (1280 * 7 * 7))).backward
         (StableHLO.bnBatchLA N 1280 7 7 w.hε w.hγ w.hβ
-          (StableHLO.batchMap N (flatConv w.hW w.hb) (b0OpaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x))))
-      ((mbNoExpW_has_vjp N 112 112 w.b1 hb1d hb1p).backward (b0OpaqueA0 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) x))
-      ((mbStridedW_has_vjp N 56 56 w.b2 hb2e hb2d hb2p).backward (b0OpaqueA1 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) x))
-      ((mbResidW_has_vjp N 56 56 w.b3 hb3e hb3d hb3p).backward (b0OpaqueA2 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) x))
-      ((mbStridedW_has_vjp N 28 28 w.b4 hb4e hb4d hb4p).backward (b0OpaqueA3 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) x))
-      ((mbResidW_has_vjp N 28 28 w.b5 hb5e hb5d hb5p).backward (b0OpaqueA4 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) x))
-      ((mbStridedW_has_vjp N 14 14 w.b6 hb6e hb6d hb6p).backward (b0OpaqueA5 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) x))
-      ((mbResidW_has_vjp N 14 14 w.b7 hb7e hb7d hb7p).backward (b0OpaqueA6 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) x))
-      ((mbResidW_has_vjp N 14 14 w.b8 hb8e hb8d hb8p).backward (b0OpaqueA7 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) x))
-      ((mbExpW_has_vjp N 14 14 w.b9 hb9e hb9d hb9p).backward (b0OpaqueA8 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) x))
-      ((mbResidW_has_vjp N 14 14 w.b10 hb10e hb10d hb10p).backward (b0OpaqueA9 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) x))
-      ((mbResidW_has_vjp N 14 14 w.b11 hb11e hb11d hb11p).backward (b0OpaqueA10 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) x))
-      ((mbStridedW_has_vjp N 7 7 w.b12 hb12e hb12d hb12p).backward (b0OpaqueA11 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) x))
-      ((mbResidW_has_vjp N 7 7 w.b13 hb13e hb13d hb13p).backward (b0OpaqueA12 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) x))
-      ((mbResidW_has_vjp N 7 7 w.b14 hb14e hb14d hb14p).backward (b0OpaqueA13 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) x))
-      ((mbResidW_has_vjp N 7 7 w.b15 hb15e hb15d hb15p).backward (b0OpaqueA14 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) x))
-      ((mbExpW_has_vjp N 7 7 w.b16 hb16e hb16d hb16p).backward (b0OpaqueA15 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) x))
+          (StableHLO.batchMap N (flatConv w.hW w.hb) (opaqueA16 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) (mbExpW N 7 7 w.b16) x))))
+      ((mbNoExpW_has_vjp N 112 112 w.b1 hb1d hb1p).backward (opaqueA0 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) x))
+      ((mbStridedW_has_vjp N 56 56 w.b2 hb2e hb2d hb2p).backward (opaqueA1 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) x))
+      ((mbResidW_has_vjp N 56 56 w.b3 hb3e hb3d hb3p).backward (opaqueA2 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) x))
+      ((mbStridedW_has_vjp N 28 28 w.b4 hb4e hb4d hb4p).backward (opaqueA3 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) x))
+      ((mbResidW_has_vjp N 28 28 w.b5 hb5e hb5d hb5p).backward (opaqueA4 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) x))
+      ((mbStridedW_has_vjp N 14 14 w.b6 hb6e hb6d hb6p).backward (opaqueA5 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) x))
+      ((mbResidW_has_vjp N 14 14 w.b7 hb7e hb7d hb7p).backward (opaqueA6 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) x))
+      ((mbResidW_has_vjp N 14 14 w.b8 hb8e hb8d hb8p).backward (opaqueA7 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) x))
+      ((mbExpW_has_vjp N 14 14 w.b9 hb9e hb9d hb9p).backward (opaqueA8 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) x))
+      ((mbResidW_has_vjp N 14 14 w.b10 hb10e hb10d hb10p).backward (opaqueA9 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) x))
+      ((mbResidW_has_vjp N 14 14 w.b11 hb11e hb11d hb11p).backward (opaqueA10 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) x))
+      ((mbStridedW_has_vjp N 7 7 w.b12 hb12e hb12d hb12p).backward (opaqueA11 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) x))
+      ((mbResidW_has_vjp N 7 7 w.b13 hb13e hb13d hb13p).backward (opaqueA12 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) x))
+      ((mbResidW_has_vjp N 7 7 w.b14 hb14e hb14d hb14p).backward (opaqueA13 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) x))
+      ((mbResidW_has_vjp N 7 7 w.b15 hb15e hb15d hb15p).backward (opaqueA14 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) x))
+      ((mbExpW_has_vjp N 7 7 w.b16 hb16e hb16d hb16p).backward (opaqueA15 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) x))
       dy i
       = ∑ j : Fin (N * 10), pdiv (efficientnetForwardB_full N w) x i j * dy j := by
   rw [congrFun (efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp N w

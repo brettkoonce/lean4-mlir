@@ -214,6 +214,13 @@ noncomputable def mnv4ExpandLayer (N : Nat) {ic mid h w kH kW : Nat}
   graph := fun x e => cbReluBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => cbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
 
+
+/-- The UIB/head **expand** layer's forward is `cbReluB`. -/
+theorem mnv4ExpandLayer_fwd_apply (N : Nat) {ic mid h w kH kW : Nat}
+    (W : Kernel4 mid ic kH kW) (b : Vec mid) (ε : ℝ) (hε : 0 < ε) (γ β : Vec mid)
+    (v : Vec (N * (ic * h * w))) :
+    (mnv4ExpandLayer (h := h) (w := w) N W b ε hε γ β).fwd v
+      = cbReluB N (h := h) (w := w) W b ε γ β v := rfl
 /-- The UIB **project** (1×1 conv → bn, NO activation) as a `CertLayer` — `projB`, reused verbatim.
     ⚠ Globally certified (`ok = True`): with no activation there is no kink, which is why a UIB
     block has three smoothness families and not four. -/
@@ -527,6 +534,11 @@ noncomputable def mnv4GapLayer (N : Nat) {c h w : Nat} :
   graph := fun _ e => .gapBackBatched (N := N) (c := c) (h := h) (w := w) e
   faithful := fun _ _ _ => rfl
 
+
+/-- The GAP layer's forward is the batched global average pool. -/
+theorem mnv4GapLayer_fwd_apply (N : Nat) {c h w : Nat} (v : Vec (N * (c * h * w))) :
+    (mnv4GapLayer N (c := c) (h := h) (w := w)).fwd v
+      = StableHLO.batchMap N (globalAvgPoolFlat c h w) v := rfl
 /-- Batched **dense classifier** as a `CertLayer`. Globally certified — dense is affine. -/
 noncomputable def mnv4DenseLayer (N : Nat) {a nC : Nat} (W : Mat a nC) (b : Vec nC) :
     CertLayer (N * a) (N * nC) where
@@ -538,6 +550,11 @@ noncomputable def mnv4DenseLayer (N : Nat) {a nC : Nat} (W : Mat a nC) (b : Vec 
   graph := fun _ e => .denseRowBack (N := N) (a := a) (c := nC) "%Wd" W e
   faithful := fun _ _ _ => rfl
 
+
+/-- The classifier layer's forward is the batched dense. -/
+theorem mnv4DenseLayer_fwd_apply (N : Nat) {a nC : Nat} (W : Mat a nC) (b : Vec nC)
+    (v : Vec (N * a)) :
+    (mnv4DenseLayer N W b).fwd v = StableHLO.batchMap N (Proofs.dense W b) v := rfl
 /-- ⭐ **MNv4's head**: the 1×1 conv-bn-relu, then GAP, then the classifier.
 
     ⚠ Only the conv stage carries a smoothness condition (its relu); GAP and dense are global. So

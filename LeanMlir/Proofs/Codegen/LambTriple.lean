@@ -55,36 +55,10 @@ AST node since 4d piece 2 (2026-09-07), until then emitted text outside the AST 
 the per-replica gradient here and `DataParallelNode.lean`'s `adamW_at_allReduceMeanF` is the
 shape that composes a tail with the replica mean (`DataParallel.lean`, §4d).
 
-⚠ `lambStep` and `lambScale_zero_weight` belong in `Lamb.lean` and are here because that file has
-315 downstream modules and this one has none; the same trade `pdiv_const_smul` took. Move them
-when `Lamb.lean` has to change anyway.
+`lambStep` and `lambScale_zero_weight` are `Lamb.lean`'s (moved 2026-09-08).
 -/
 
 namespace Proofs
-
-variable {n : Nat}
-
-/-- **LAMB's per-parameter triple over ℝ**: the updated parameter, first moment and second
-    moment a train step returns. `AdamStep.adamWStep`'s peer, and it reuses Adam's two moment
-    recurrences unchanged, because LAMB's `m` and `v` ARE Adam's — the optimizer's whole
-    difference lives in `lambDir`'s `ε` placement and decay, and in `lambScale`'s per-tensor
-    trust ratio.
-
-    `wn2` is `‖θ‖²`, supplied rather than computed, exactly as `lambScale` takes it: it is a
-    graph operand, and at the `no_weight_decay` group the render supplies `0` instead of the
-    parameter's own norm (`lamb_triple_faithful_excluded`). -/
-noncomputable def lambStep (β₁ β₂ ε lr wd bc₁ bc₂ wn2 : ℝ) (θ m v g : Vec n) :
-    Vec n × Vec n × Vec n :=
-  (sgdParam lr θ (lambScale wn2 (lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v g)),
-   adamMNext β₁ m g,
-   adamVNext β₂ v g)
-
-/-- ⭐ **At a zero weight norm the trust scaling is the IDENTITY.** `lambTrust_zero_weight` says
-    the ratio is 1 there; this says what that does to the direction, which is what the emitted
-    graph needs. Belongs beside `lambTrust_zero_weight` in `Lamb.lean`. -/
-@[simp] theorem lambScale_zero_weight (r : Vec n) : lambScale 0 r = r := by
-  funext i
-  simp only [lambScale, lambTrust_zero_weight, one_mul]
 
 namespace StableHLO
 

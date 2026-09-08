@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.MobileNetV2WholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Architectures.MobileNetV2FullVJP
 
 /-! # ⭐⭐ `mnv2PaperInputGrad` IS the certified whole-net PAPER MobileNetV2 gradient
@@ -20,7 +21,7 @@ concrete 17-block `rfl` would not survive at all.
 The 6-block statement spells each hypothesis's running activation as a nested application —
 `HasVJPAt b5 (b4 (b3 (b2 (b1 (stem x)))))`. At seventeen blocks that is unreadable by block 5 and
 quadratic in the writing, the same wall `MobileNetV2FullVJP.lean` hit and answered with its
-`mnv2Pre1 … mnv2Pre17` prefix defs. The opaque peer of that answer is `mnv2OpaqueA0 … A17` below:
+`mnv2Pre1 … mnv2Pre17` prefix defs. The opaque peer of that answer is `opaqueA0 … A17` below:
 one top-level `def` per slot, each the previous one with one more block applied. They are plain
 `def`s, NOT `@[irreducible]` — the closing `rfl` has to see through them.
 
@@ -46,101 +47,7 @@ witnesses are hypotheses.
 
 namespace Proofs
 
--- ════════════════════════════════════════════════════════════════
--- § The opaque running activations — one `def` per slot
---
---   `mnv2OpaqueA k` is the activation after the k-th block, with every stage still a variable.
---   Plain defs: the tie's closing `rfl` unfolds them.
--- ════════════════════════════════════════════════════════════════
-
-/-- The stem's output. -/
-noncomputable def mnv2OpaqueA0 {s0 s1 : Nat} (stem : Vec s0 → Vec s1)
-    (x : Vec s0) : Vec s1 := stem x
-
-/-- The activation after block 1. -/
-noncomputable def mnv2OpaqueA1 {s0 s1 s2 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2)
-    (x : Vec s0) : Vec s2 := b1 (mnv2OpaqueA0 stem x)
-
-/-- The activation after block 2. -/
-noncomputable def mnv2OpaqueA2 {s0 s1 s2 s3 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3)
-    (x : Vec s0) : Vec s3 := b2 (mnv2OpaqueA1 stem b1 x)
-
-/-- The activation after block 3. -/
-noncomputable def mnv2OpaqueA3 {s0 s1 s2 s3 s4 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4)
-    (x : Vec s0) : Vec s4 := b3 (mnv2OpaqueA2 stem b1 b2 x)
-
-/-- The activation after block 4. -/
-noncomputable def mnv2OpaqueA4 {s0 s1 s2 s3 s4 s5 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5)
-    (x : Vec s0) : Vec s5 := b4 (mnv2OpaqueA3 stem b1 b2 b3 x)
-
-/-- The activation after block 5. -/
-noncomputable def mnv2OpaqueA5 {s0 s1 s2 s3 s4 s5 s6 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6)
-    (x : Vec s0) : Vec s6 := b5 (mnv2OpaqueA4 stem b1 b2 b3 b4 x)
-
-/-- The activation after block 6. -/
-noncomputable def mnv2OpaqueA6 {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7)
-    (x : Vec s0) : Vec s7 := b6 (mnv2OpaqueA5 stem b1 b2 b3 b4 b5 x)
-
-/-- The activation after block 7. -/
-noncomputable def mnv2OpaqueA7 {s0 s1 s2 s3 s4 s5 s6 s7 s8 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8)
-    (x : Vec s0) : Vec s8 := b7 (mnv2OpaqueA6 stem b1 b2 b3 b4 b5 b6 x)
-
-/-- The activation after block 8. -/
-noncomputable def mnv2OpaqueA8 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9)
-    (x : Vec s0) : Vec s9 := b8 (mnv2OpaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)
-
-/-- The activation after block 9. -/
-noncomputable def mnv2OpaqueA9 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10)
-    (x : Vec s0) : Vec s10 := b9 (mnv2OpaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)
-
-/-- The activation after block 10. -/
-noncomputable def mnv2OpaqueA10 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11)
-    (x : Vec s0) : Vec s11 := b10 (mnv2OpaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)
-
-/-- The activation after block 11. -/
-noncomputable def mnv2OpaqueA11 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12)
-    (x : Vec s0) : Vec s12 := b11 (mnv2OpaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)
-
-/-- The activation after block 12. -/
-noncomputable def mnv2OpaqueA12 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13)
-    (x : Vec s0) : Vec s13 := b12 (mnv2OpaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)
-
-/-- The activation after block 13. -/
-noncomputable def mnv2OpaqueA13 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14)
-    (x : Vec s0) : Vec s14 := b13 (mnv2OpaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)
-
-/-- The activation after block 14. -/
-noncomputable def mnv2OpaqueA14 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15)
-    (x : Vec s0) : Vec s15 := b14 (mnv2OpaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)
-
-/-- The activation after block 15. -/
-noncomputable def mnv2OpaqueA15 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16)
-    (x : Vec s0) : Vec s16 := b15 (mnv2OpaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)
-
-/-- The activation after block 16. -/
-noncomputable def mnv2OpaqueA16 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16) (b16 : Vec s16 → Vec s17)
-    (x : Vec s0) : Vec s17 := b16 (mnv2OpaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)
-
-/-- The activation after block 17. -/
-noncomputable def mnv2OpaqueA17 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16) (b16 : Vec s16 → Vec s17) (b17 : Vec s17 → Vec s18)
-    (x : Vec s0) : Vec s18 := b17 (mnv2OpaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)
+-- The opaque running activations `opaqueA0 … opaqueA17` are `Foundation/OpaquePrefix.lean`'s.
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -175,46 +82,46 @@ noncomputable def mobilenetv2PaperPC_has_vjp_at
     (head : Vec s18 → Vec s19) (gap : Vec s19 → Vec s20) (dns : Vec s20 → Vec s21)
     (x : Vec s0)
     (hstem : PProd (HasVJPAt stem x) (DifferentiableAt ℝ stem x))
-    (hb1 : PProd (HasVJPAt b1 (mnv2OpaqueA0 stem x))
-                 (DifferentiableAt ℝ b1 (mnv2OpaqueA0 stem x)))
-    (hb2 : PProd (HasVJPAt b2 (mnv2OpaqueA1 stem b1 x))
-                 (DifferentiableAt ℝ b2 (mnv2OpaqueA1 stem b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (mnv2OpaqueA2 stem b1 b2 x))
-                 (DifferentiableAt ℝ b3 (mnv2OpaqueA2 stem b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (mnv2OpaqueA3 stem b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (mnv2OpaqueA3 stem b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (mnv2OpaqueA4 stem b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (mnv2OpaqueA4 stem b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (mnv2OpaqueA5 stem b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (mnv2OpaqueA5 stem b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (mnv2OpaqueA6 stem b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (mnv2OpaqueA6 stem b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (mnv2OpaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (mnv2OpaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (mnv2OpaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (mnv2OpaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (mnv2OpaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (mnv2OpaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (mnv2OpaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (mnv2OpaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (mnv2OpaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (mnv2OpaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (mnv2OpaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (mnv2OpaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (mnv2OpaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (mnv2OpaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (mnv2OpaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (mnv2OpaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (mnv2OpaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (mnv2OpaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
-    (hb17 : PProd (HasVJPAt b17 (mnv2OpaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
-                 (DifferentiableAt ℝ b17 (mnv2OpaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
-    (hhead : PProd (HasVJPAt head (mnv2OpaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
-                   (DifferentiableAt ℝ head (mnv2OpaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
-    (hgap : PProd (HasVJPAt gap (head (mnv2OpaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
-                  (DifferentiableAt ℝ gap (head (mnv2OpaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
-    (hdns : PProd (HasVJPAt dns (gap (head (mnv2OpaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
-                  (DifferentiableAt ℝ dns (gap (head (mnv2OpaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))))
+    (hb1 : PProd (HasVJPAt b1 (opaqueA0 stem x))
+                 (DifferentiableAt ℝ b1 (opaqueA0 stem x)))
+    (hb2 : PProd (HasVJPAt b2 (opaqueA1 stem b1 x))
+                 (DifferentiableAt ℝ b2 (opaqueA1 stem b1 x)))
+    (hb3 : PProd (HasVJPAt b3 (opaqueA2 stem b1 b2 x))
+                 (DifferentiableAt ℝ b3 (opaqueA2 stem b1 b2 x)))
+    (hb4 : PProd (HasVJPAt b4 (opaqueA3 stem b1 b2 b3 x))
+                 (DifferentiableAt ℝ b4 (opaqueA3 stem b1 b2 b3 x)))
+    (hb5 : PProd (HasVJPAt b5 (opaqueA4 stem b1 b2 b3 b4 x))
+                 (DifferentiableAt ℝ b5 (opaqueA4 stem b1 b2 b3 b4 x)))
+    (hb6 : PProd (HasVJPAt b6 (opaqueA5 stem b1 b2 b3 b4 b5 x))
+                 (DifferentiableAt ℝ b6 (opaqueA5 stem b1 b2 b3 b4 b5 x)))
+    (hb7 : PProd (HasVJPAt b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x))
+                 (DifferentiableAt ℝ b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x)))
+    (hb8 : PProd (HasVJPAt b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
+                 (DifferentiableAt ℝ b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)))
+    (hb9 : PProd (HasVJPAt b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
+                 (DifferentiableAt ℝ b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)))
+    (hb10 : PProd (HasVJPAt b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+                 (DifferentiableAt ℝ b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
+    (hb11 : PProd (HasVJPAt b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+                 (DifferentiableAt ℝ b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
+    (hb12 : PProd (HasVJPAt b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+                 (DifferentiableAt ℝ b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
+    (hb13 : PProd (HasVJPAt b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+                 (DifferentiableAt ℝ b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
+    (hb14 : PProd (HasVJPAt b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+                 (DifferentiableAt ℝ b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
+    (hb15 : PProd (HasVJPAt b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+                 (DifferentiableAt ℝ b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
+    (hb16 : PProd (HasVJPAt b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+                 (DifferentiableAt ℝ b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
+    (hb17 : PProd (HasVJPAt b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
+                 (DifferentiableAt ℝ b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
+    (hhead : PProd (HasVJPAt head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
+                   (DifferentiableAt ℝ head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
+    (hgap : PProd (HasVJPAt gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
+                  (DifferentiableAt ℝ gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
+    (hdns : PProd (HasVJPAt dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
+                  (DifferentiableAt ℝ dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))))
     : HasVJPAt (dns ∘ gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) x :=
   let p1 := vjp_comp_diff_at stem b1 x hstem hb1
   let p2 := vjp_comp_diff_at (b1 ∘ stem) b2 x p1 hb2
@@ -311,86 +218,86 @@ theorem mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp
         (flatConvStride2Xla (h := 112) (w := 112) Ws bs x) k ≠ 0 ∧
       bnPerChannelTensor3 32 112 112 εs γs βs
         (flatConvStride2Xla (h := 112) (w := 112) Ws bs x) k ≠ 6)
-    (hb1 : PProd (HasVJPAt b1 (mnv2OpaqueA0 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb1 : PProd (HasVJPAt b1 (opaqueA0 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs)  x))
-                 (DifferentiableAt ℝ b1 (mnv2OpaqueA0 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b1 (opaqueA0 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs)  x)))
-    (hb2 : PProd (HasVJPAt b2 (mnv2OpaqueA1 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb2 : PProd (HasVJPAt b2 (opaqueA1 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 x))
-                 (DifferentiableAt ℝ b2 (mnv2OpaqueA1 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b2 (opaqueA1 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (mnv2OpaqueA2 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb3 : PProd (HasVJPAt b3 (opaqueA2 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 x))
-                 (DifferentiableAt ℝ b3 (mnv2OpaqueA2 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b3 (opaqueA2 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (mnv2OpaqueA3 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb4 : PProd (HasVJPAt b4 (opaqueA3 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (mnv2OpaqueA3 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b4 (opaqueA3 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (mnv2OpaqueA4 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb5 : PProd (HasVJPAt b5 (opaqueA4 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (mnv2OpaqueA4 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b5 (opaqueA4 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (mnv2OpaqueA5 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb6 : PProd (HasVJPAt b6 (opaqueA5 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (mnv2OpaqueA5 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b6 (opaqueA5 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (mnv2OpaqueA6 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb7 : PProd (HasVJPAt b7 (opaqueA6 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (mnv2OpaqueA6 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b7 (opaqueA6 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (mnv2OpaqueA7 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb8 : PProd (HasVJPAt b8 (opaqueA7 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (mnv2OpaqueA7 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b8 (opaqueA7 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (mnv2OpaqueA8 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb9 : PProd (HasVJPAt b9 (opaqueA8 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (mnv2OpaqueA8 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b9 (opaqueA8 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (mnv2OpaqueA9 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb10 : PProd (HasVJPAt b10 (opaqueA9 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (mnv2OpaqueA9 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b10 (opaqueA9 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (mnv2OpaqueA10 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb11 : PProd (HasVJPAt b11 (opaqueA10 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (mnv2OpaqueA10 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b11 (opaqueA10 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (mnv2OpaqueA11 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb12 : PProd (HasVJPAt b12 (opaqueA11 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (mnv2OpaqueA11 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b12 (opaqueA11 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (mnv2OpaqueA12 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb13 : PProd (HasVJPAt b13 (opaqueA12 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (mnv2OpaqueA12 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b13 (opaqueA12 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (mnv2OpaqueA13 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb14 : PProd (HasVJPAt b14 (opaqueA13 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (mnv2OpaqueA13 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b14 (opaqueA13 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (mnv2OpaqueA14 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb15 : PProd (HasVJPAt b15 (opaqueA14 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (mnv2OpaqueA14 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b15 (opaqueA14 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (mnv2OpaqueA15 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb16 : PProd (HasVJPAt b16 (opaqueA15 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (mnv2OpaqueA15 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b16 (opaqueA15 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
-    (hb17 : PProd (HasVJPAt b17 (mnv2OpaqueA16 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+    (hb17 : PProd (HasVJPAt b17 (opaqueA16 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
-                 (DifferentiableAt ℝ b17 (mnv2OpaqueA16 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                 (DifferentiableAt ℝ b17 (opaqueA16 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
     (hhead_smooth : ∀ k,
       bnPerChannelTensor3 1280 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
-        (mnv2OpaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+        (opaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) k ≠ 0 ∧
       bnPerChannelTensor3 1280 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
-        (mnv2OpaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+        (opaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) k ≠ 6) :
     mnv2PaperInputGrad Ws Wh Wfc
       ((bnPerChannelTensor3_has_vjp 32 112 112 εs hεs γs βs).backward
         (flatConvStride2Xla (h := 112) (w := 112) Ws bs x))
       ((bnPerChannelTensor3_has_vjp 1280 7 7 εh hεh γh βh).backward
-        (flatConv (h := 7) (w := 7) Wh bh (mnv2OpaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+        (flatConv (h := 7) (w := 7) Wh bh (opaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
       hb1.fst.backward hb2.fst.backward hb3.fst.backward hb4.fst.backward hb5.fst.backward hb6.fst.backward hb7.fst.backward hb8.fst.backward hb9.fst.backward hb10.fst.backward hb11.fst.backward hb12.fst.backward hb13.fst.backward hb14.fst.backward hb15.fst.backward hb16.fst.backward hb17.fst.backward
       (fun i => 0 < bnPerChannelTensor3 32 112 112 εs γs βs
@@ -398,10 +305,10 @@ theorem mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp
                 bnPerChannelTensor3 32 112 112 εs γs βs
                   (flatConvStride2Xla (h := 112) (w := 112) Ws bs x) i < 6)
       (fun i => 0 < bnPerChannelTensor3 1280 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
-                  (mnv2OpaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                  (opaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) i ∧
                 bnPerChannelTensor3 1280 7 7 εh γh βh (flatConv (h := 7) (w := 7) Wh bh
-                  (mnv2OpaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+                  (opaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) i < 6)
       = (mobilenetv2PaperPC_has_vjp_at
           (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
@@ -430,7 +337,7 @@ theorem mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp
       dense_transpose_eq_vjp_backward Wfc bfc
         (globalAvgPoolFlat 1280 7 7 ((relu6 (1280 * 7 * 7) ∘ bnPerChannelTensor3 1280 7 7 εh γh βh
             ∘ flatConv (h := 7) (w := 7) Wh bh)
-          (mnv2OpaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
+          (opaqueA17 (relu6 (32 * 112 * 112) ∘ bnPerChannelTensor3 32 112 112 εs γs βs
             ∘ flatConvStride2Xla (h := 112) (w := 112) Ws bs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))]
   rfl
 

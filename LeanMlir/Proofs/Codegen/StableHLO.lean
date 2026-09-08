@@ -113,6 +113,17 @@ noncomputable def batchMap (N : Nat) {a b : Nat} (f : Vec a → Vec b) :
 def batchSlice (N a : Nat) (v : Vec (N * a)) (n : Fin N) : Vec a :=
   fun i => v (finProdFinEquiv (n, i))
 
+/-- `batchSlice` of a `batchMap` is the lifted function at the slice — the lemma that peels a
+    per-example lift back off at one example. -/
+theorem batchSlice_batchMap {N a b : Nat} (f : Vec a → Vec b) (x : Vec (N * a))
+    (n : Fin N) :
+    batchSlice N b (batchMap N f x) n = f (batchSlice N a x n) := by
+  funext i
+  show f (fun j : Fin a => x (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv (n, i))).1, j)))
+        (finProdFinEquiv.symm (finProdFinEquiv (n, i))).2 = _
+  rw [Equiv.symm_apply_apply]
+  rfl
+
 /-- **Per-example block-apply with per-example AUXILIARY data.** `batchMap` lifts one *fixed*
     function across the batch; this lifts a family indexed by each example's own saved value —
     example `n` is handed `batchSlice n aux`, not the whole `aux` and not example 0's.

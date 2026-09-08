@@ -154,6 +154,26 @@ theorem chain_faithful {n : Nat} (Ls : List (CertLayer n n))
     den ((chain Ls).graph x e) = ((chain Ls).vjp x hx).backward (den e) :=
   (chain Ls).faithful x hx e
 
+/-! ⚠⚠ **Projecting `.fwd` out of a composed `CertLayer` — the four lemmas below, and why they exist.**
+`simp only [CertLayer.comp]` rewrites `L₁.comp L₂` to the full structure literal — `fwd`, `ok`,
+`diff`, `vjp`, `graph` AND `faithful` — and only then projects `.fwd` out of it; over a 24-stage
+chain that builds an enormous intermediate term whose bulk is PROOFS the goal never mentions
+(MobileNetV4's T2 took three minutes without these, seconds with them). And at LITERAL widths the
+peel itself is a kernel deterministic timeout by `rfl` / `Function.comp_apply` / `Function.comp_assoc`
+— proved once here between variables, `comp_fwd_apply` is applied there in 2 s. -/
+
+@[simp] theorem comp_fwd {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n p) :
+    (L₁.comp L₂).fwd = L₂.fwd ∘ L₁.fwd := rfl
+
+@[simp] theorem residual_fwd {n : Nat} (L : CertLayer n n) :
+    (residual L).fwd = Proofs.residual L.fwd := rfl
+
+@[simp] theorem id'_fwd (n : Nat) : (id' n).fwd = fun y => y := rfl
+
+/-- `comp`'s forward, APPLIED — the one lemma a whole-net shape check at literal widths rests on. -/
+theorem comp_fwd_apply {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n p) (v : Vec m) :
+    (L₁.comp L₂).fwd v = L₂.fwd (L₁.fwd v) := rfl
+
 end CertLayer
 
 end Proofs.StableHLO

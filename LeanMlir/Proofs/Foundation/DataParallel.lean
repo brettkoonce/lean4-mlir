@@ -57,8 +57,7 @@ no batch coupling the partition is provably irrelevant and all the driver has to
 the slices cover the batch. ⛔ For a batch-BN net the partition changes the function, and nothing
 here recovers it.
 
-⚠ `pdiv_const_smul` belongs in `Tensor.lean` beside `pdiv_add` and lives here instead, because
-that file is the root of the whole corpus and a definition added to it rebuilds all of `Certs`.
+`pdiv_const_smul`, the scalar-multiple rule this file needed, is `Tensor.lean`'s (moved 2026-09-08).
 -/
 
 open Finset BigOperators
@@ -79,19 +78,6 @@ noncomputable def lossGrad {P : Nat} (L : Vec P → ℝ) (θ : Vec P) : Vec P :=
 abbrev LossDifferentiableAt {P : Nat} (L : Vec P → ℝ) (θ : Vec P) : Prop :=
   DifferentiableAt ℝ (fun θ' : Vec P => fun _ : Fin 1 => L θ') θ
 
-/-- **Scalar multiple rule** for `pdiv` — the one linearity case `Tensor.lean` does not carry,
-    since `pdiv_mul` is the product rule and a constant is one of its factors. -/
-theorem pdiv_const_smul {m n : Nat} (c : ℝ) (f : Vec m → Vec n) (x : Vec m)
-    (hf : DifferentiableAt ℝ f x) (i : Fin m) (j : Fin n) :
-    pdiv (fun y k => c * f y k) x i j = c * pdiv f x i j := by
-  have h := pdiv_mul (fun _ : Vec m => fun _ : Fin n => c) f x
-    (differentiableAt_const _) hf i j
-  rw [h, pdiv_const (fun _ : Fin n => c) x i j]
-  ring
-
--- ════════════════════════════════════════════════════════════════
--- § The mean the collective computes
--- ════════════════════════════════════════════════════════════════
 
 /-- **The all-reduced gradient**: `(1/R) Σ_r g_r`. `emitGradAllReduce`'s `all_reduce(add)`
     followed by its divide by `R`, read as a function of the `R` per-replica gradients. -/

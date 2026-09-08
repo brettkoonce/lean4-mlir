@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Architectures.ResNet34FullBVJP
+import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridgeB
 
@@ -28,7 +29,7 @@ whose `PProd` projections do not share.
    the lift's `.backward` are the same term. It also closes the one seam §4.2a left open — that
    file could thread the pool backward only as the emitted `den`.
 2. `r34B_full_has_vjp_at` — the generic eighteen-stage apex `head ∘ b16 ∘ … ∘ b1 ∘ stem`,
-   seventeen `vjp_comp_diff_at`s and nothing else, over `r34OpaqueA0 … A16`, one prefix `def` per
+   seventeen `vjp_comp_diff_at`s and nothing else, over `opaqueA0 … A16`, one prefix `def` per
    running activation.
 3. `r34InputGradB_eq_r34B_full_vjp` and `r34InputGradB_correct` — the tie, and its reading as
    `∑ pdiv … * dy`: the chain IS the Jacobian-transpose of the eighteen-stage composition.
@@ -48,7 +49,7 @@ it. So this file stops where MobileNetV2's per-example T6 stops (opaque blocks p
 check) rather than where B0's goes (concrete blocks, then `backward_unique`). ⭐ **The difference
 is not depth and not the net: it is the KINK.** B0's generic tie takes GLOBAL `HasVJP` witnesses,
 which carry no point, so instantiating them is free. r34's are `HasVJPAt` at
-`r34OpaqueA{k-1} … x`, and the witnesses a caller has are at `r34Pre{k-1} N w x` — sixteen defeq
+`opaqueA{k-1} … x`, and the witnesses a caller has are at `r34Pre{k-1} N w x` — sixteen defeq
 checks between two sixteen-deep nested applications spelled through different definition chains.
 `HasVJPAt.backward_unique` is stated below anyway: it is the pointwise peer no `HasVJPAt` net in
 the repo had, and a reader instantiating one block at a time needs it.
@@ -128,6 +129,27 @@ theorem cbReluStridedBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
   rw [flatConvStride2Back_eq_vjp_backward hkH hkW Ws bs (fun _ => 0)]
   rfl
 
+/-- **The HEAD CONV tie.** `batchMap (convFlatBack) ∘ bnBack ∘ reluMaskBack` IS `cbReluB`'s
+    certified backward at a smooth point — the stride-1, plain-convolution peer of the stem's.
+
+    ⭐ The kernel extent is a binder, so a 1×1 conv-BN-relu is one instance of this stage and not
+    a new one: MobileNetV4's two head convs (`%h1W` 256 → 960, `%hW` 960 → 1280) tie by applying
+    this twice, and its head is therefore not hypothesis-free the way ResNet-34's is. -/
+theorem cbReluBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (v : Vec (N * (ic * h * w)))
+    (hs : ∀ k, StableHLO.bnBatchLA N oc h w ε γ β
+           (StableHLO.batchMap N (flatConv W b) v) k ≠ 0) :
+    (StableHLO.batchMap N (convFlatBack (h := h) (w := w) W)
+        ∘ (bnBatchLA_has_vjp N oc h w ε hε γ β).backward
+            (StableHLO.batchMap N (flatConv W b) v)
+        ∘ reluMaskBack (fun i => StableHLO.bnBatchLA N oc h w ε γ β
+            (StableHLO.batchMap N (flatConv W b) v) i > 0))
+      = (StableHLO.cbReluB_has_vjp_at N W b ε hε γ β v hs).backward := by
+  rw [convFlatBack_eq_vjp_backward hkH hkW W b (fun _ => 0)]
+  rfl
+
 /-- **The whole STEM tie** — the stage above, then the batched 3×3/s2 pool backward, IS
     `r34StemB`'s certified backward. `r34StemB_has_vjp_at` is one `vjp_comp_at` of the two, so
     this is the two ties composed and nothing else. -/
@@ -162,101 +184,7 @@ theorem r34HeadBBack_eq_vjp_backward {N c nCls h w : Nat}
   rw [dense_transpose_eq_vjp_backward Wd bd (fun _ => 0)]
   rfl
 
--- ════════════════════════════════════════════════════════════════
--- § The opaque running activations — one `def` per slot
---
---   `r34OpaqueAk` is the activation after the k-th basic block, every stage still a variable.
---   Plain `def`s: the tie's closing `rfl` unfolds them.
---   ⚠ Generic in every dimension and net-agnostic — `b0OpaqueA*`
---   (`EfficientNetFullWholeBackCertifiedTie.lean`) and `mnv2OpaqueA*`
---   (`MobileNetV2PaperWholeBackCertifiedTie.lean`) are the same seventeen definitions under
---   other names. Three copies is two too many; they should move to one Foundation leaf the next
---   time any of the three files has to change.
--- ════════════════════════════════════════════════════════════════
-
-/-- The stem's output. -/
-noncomputable def r34OpaqueA0 {s0 s1 : Nat} (stem : Vec s0 → Vec s1) (x : Vec s0) : Vec s1 :=
-  stem x
-
-/-- The activation after basic block 1. -/
-noncomputable def r34OpaqueA1 {s0 s1 s2 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2)
-    (x : Vec s0) : Vec s2 := b1 (r34OpaqueA0 stem  x)
-
-/-- The activation after basic block 2. -/
-noncomputable def r34OpaqueA2 {s0 s1 s2 s3 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3)
-    (x : Vec s0) : Vec s3 := b2 (r34OpaqueA1 stem b1 x)
-
-/-- The activation after basic block 3. -/
-noncomputable def r34OpaqueA3 {s0 s1 s2 s3 s4 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4)
-    (x : Vec s0) : Vec s4 := b3 (r34OpaqueA2 stem b1 b2 x)
-
-/-- The activation after basic block 4. -/
-noncomputable def r34OpaqueA4 {s0 s1 s2 s3 s4 s5 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5)
-    (x : Vec s0) : Vec s5 := b4 (r34OpaqueA3 stem b1 b2 b3 x)
-
-/-- The activation after basic block 5. -/
-noncomputable def r34OpaqueA5 {s0 s1 s2 s3 s4 s5 s6 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6)
-    (x : Vec s0) : Vec s6 := b5 (r34OpaqueA4 stem b1 b2 b3 b4 x)
-
-/-- The activation after basic block 6. -/
-noncomputable def r34OpaqueA6 {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7)
-    (x : Vec s0) : Vec s7 := b6 (r34OpaqueA5 stem b1 b2 b3 b4 b5 x)
-
-/-- The activation after basic block 7. -/
-noncomputable def r34OpaqueA7 {s0 s1 s2 s3 s4 s5 s6 s7 s8 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8)
-    (x : Vec s0) : Vec s8 := b7 (r34OpaqueA6 stem b1 b2 b3 b4 b5 b6 x)
-
-/-- The activation after basic block 8. -/
-noncomputable def r34OpaqueA8 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9)
-    (x : Vec s0) : Vec s9 := b8 (r34OpaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)
-
-/-- The activation after basic block 9. -/
-noncomputable def r34OpaqueA9 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10)
-    (x : Vec s0) : Vec s10 := b9 (r34OpaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)
-
-/-- The activation after basic block 10. -/
-noncomputable def r34OpaqueA10 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11)
-    (x : Vec s0) : Vec s11 := b10 (r34OpaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)
-
-/-- The activation after basic block 11. -/
-noncomputable def r34OpaqueA11 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12)
-    (x : Vec s0) : Vec s12 := b11 (r34OpaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)
-
-/-- The activation after basic block 12. -/
-noncomputable def r34OpaqueA12 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13)
-    (x : Vec s0) : Vec s13 := b12 (r34OpaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)
-
-/-- The activation after basic block 13. -/
-noncomputable def r34OpaqueA13 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14)
-    (x : Vec s0) : Vec s14 := b13 (r34OpaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)
-
-/-- The activation after basic block 14. -/
-noncomputable def r34OpaqueA14 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15)
-    (x : Vec s0) : Vec s15 := b14 (r34OpaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)
-
-/-- The activation after basic block 15. -/
-noncomputable def r34OpaqueA15 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16)
-    (x : Vec s0) : Vec s16 := b15 (r34OpaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)
-
-/-- The activation after basic block 16. -/
-noncomputable def r34OpaqueA16 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 : Nat}
-    (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16) (b16 : Vec s16 → Vec s17)
-    (x : Vec s0) : Vec s17 := b16 (r34OpaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)
+-- The opaque running activations `opaqueA0 … opaqueA16` are `Foundation/OpaquePrefix.lean`'s.
 
 -- ════════════════════════════════════════════════════════════════
 -- § The apex — a straight 18-stage chain, every stage opaque
@@ -291,40 +219,40 @@ noncomputable def r34B_full_has_vjp_at {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s1
     (head : Vec s17 → Vec s18)
     (x : Vec s0)
     (hstem : PProd (HasVJPAt stem x) (DifferentiableAt ℝ stem x))
-    (hb1 : PProd (HasVJPAt b1 (r34OpaqueA0 stem x))
-                 (DifferentiableAt ℝ b1 (r34OpaqueA0 stem x)))
-    (hb2 : PProd (HasVJPAt b2 (r34OpaqueA1 stem b1 x))
-                 (DifferentiableAt ℝ b2 (r34OpaqueA1 stem b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (r34OpaqueA2 stem b1 b2 x))
-                 (DifferentiableAt ℝ b3 (r34OpaqueA2 stem b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (r34OpaqueA3 stem b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (r34OpaqueA3 stem b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (r34OpaqueA4 stem b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (r34OpaqueA4 stem b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (r34OpaqueA5 stem b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (r34OpaqueA5 stem b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (r34OpaqueA6 stem b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (r34OpaqueA6 stem b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (r34OpaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (r34OpaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (r34OpaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (r34OpaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (r34OpaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (r34OpaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (r34OpaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (r34OpaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (r34OpaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (r34OpaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (r34OpaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (r34OpaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (r34OpaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (r34OpaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (r34OpaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (r34OpaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (r34OpaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (r34OpaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
-    (hhead : PProd (HasVJPAt head (r34OpaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
-                   (DifferentiableAt ℝ head (r34OpaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
+    (hb1 : PProd (HasVJPAt b1 (opaqueA0 stem x))
+                 (DifferentiableAt ℝ b1 (opaqueA0 stem x)))
+    (hb2 : PProd (HasVJPAt b2 (opaqueA1 stem b1 x))
+                 (DifferentiableAt ℝ b2 (opaqueA1 stem b1 x)))
+    (hb3 : PProd (HasVJPAt b3 (opaqueA2 stem b1 b2 x))
+                 (DifferentiableAt ℝ b3 (opaqueA2 stem b1 b2 x)))
+    (hb4 : PProd (HasVJPAt b4 (opaqueA3 stem b1 b2 b3 x))
+                 (DifferentiableAt ℝ b4 (opaqueA3 stem b1 b2 b3 x)))
+    (hb5 : PProd (HasVJPAt b5 (opaqueA4 stem b1 b2 b3 b4 x))
+                 (DifferentiableAt ℝ b5 (opaqueA4 stem b1 b2 b3 b4 x)))
+    (hb6 : PProd (HasVJPAt b6 (opaqueA5 stem b1 b2 b3 b4 b5 x))
+                 (DifferentiableAt ℝ b6 (opaqueA5 stem b1 b2 b3 b4 b5 x)))
+    (hb7 : PProd (HasVJPAt b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x))
+                 (DifferentiableAt ℝ b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x)))
+    (hb8 : PProd (HasVJPAt b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
+                 (DifferentiableAt ℝ b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)))
+    (hb9 : PProd (HasVJPAt b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
+                 (DifferentiableAt ℝ b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)))
+    (hb10 : PProd (HasVJPAt b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+                 (DifferentiableAt ℝ b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
+    (hb11 : PProd (HasVJPAt b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+                 (DifferentiableAt ℝ b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
+    (hb12 : PProd (HasVJPAt b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+                 (DifferentiableAt ℝ b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
+    (hb13 : PProd (HasVJPAt b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+                 (DifferentiableAt ℝ b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
+    (hb14 : PProd (HasVJPAt b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+                 (DifferentiableAt ℝ b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
+    (hb15 : PProd (HasVJPAt b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+                 (DifferentiableAt ℝ b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
+    (hb16 : PProd (HasVJPAt b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+                 (DifferentiableAt ℝ b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
+    (hhead : PProd (HasVJPAt head (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
+                   (DifferentiableAt ℝ head (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
     : HasVJPAt (head ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) x :=
   let p1 := vjp_comp_diff_at (stem) b1 x hstem hb1
   let p2 := vjp_comp_diff_at (b1 ∘ stem) b2 x p1 hb2
@@ -380,38 +308,38 @@ theorem r34InputGradB_eq_r34B_full_vjp (N : Nat) {nCls : Nat}
     (h_stem : R34StemSmoothAt N 56 56 Ws bs εs γs βs x)
     (h_pool : R34PoolSmoothAt N 56 56
       (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) Ws bs εs γs βs x))
-    (hb1 : PProd (HasVJPAt b1 (r34OpaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x))
-                 (DifferentiableAt ℝ b1 (r34OpaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x)))
-    (hb2 : PProd (HasVJPAt b2 (r34OpaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x))
-                 (DifferentiableAt ℝ b2 (r34OpaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (r34OpaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x))
-                 (DifferentiableAt ℝ b3 (r34OpaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (r34OpaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (r34OpaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (r34OpaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (r34OpaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (r34OpaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (r34OpaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (r34OpaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (r34OpaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (r34OpaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (r34OpaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (r34OpaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (r34OpaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (r34OpaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (r34OpaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (r34OpaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (r34OpaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (r34OpaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (r34OpaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (r34OpaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (r34OpaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (r34OpaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (r34OpaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (r34OpaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (r34OpaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (r34OpaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (r34OpaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))) :
+    (hb1 : PProd (HasVJPAt b1 (opaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x))
+                 (DifferentiableAt ℝ b1 (opaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x)))
+    (hb2 : PProd (HasVJPAt b2 (opaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x))
+                 (DifferentiableAt ℝ b2 (opaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x)))
+    (hb3 : PProd (HasVJPAt b3 (opaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x))
+                 (DifferentiableAt ℝ b3 (opaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x)))
+    (hb4 : PProd (HasVJPAt b4 (opaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x))
+                 (DifferentiableAt ℝ b4 (opaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x)))
+    (hb5 : PProd (HasVJPAt b5 (opaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x))
+                 (DifferentiableAt ℝ b5 (opaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x)))
+    (hb6 : PProd (HasVJPAt b6 (opaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
+                 (DifferentiableAt ℝ b6 (opaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x)))
+    (hb7 : PProd (HasVJPAt b7 (opaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
+                 (DifferentiableAt ℝ b7 (opaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x)))
+    (hb8 : PProd (HasVJPAt b8 (opaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
+                 (DifferentiableAt ℝ b8 (opaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x)))
+    (hb9 : PProd (HasVJPAt b9 (opaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
+                 (DifferentiableAt ℝ b9 (opaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x)))
+    (hb10 : PProd (HasVJPAt b10 (opaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+                 (DifferentiableAt ℝ b10 (opaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
+    (hb11 : PProd (HasVJPAt b11 (opaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+                 (DifferentiableAt ℝ b11 (opaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
+    (hb12 : PProd (HasVJPAt b12 (opaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+                 (DifferentiableAt ℝ b12 (opaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
+    (hb13 : PProd (HasVJPAt b13 (opaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+                 (DifferentiableAt ℝ b13 (opaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
+    (hb14 : PProd (HasVJPAt b14 (opaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+                 (DifferentiableAt ℝ b14 (opaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
+    (hb15 : PProd (HasVJPAt b15 (opaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+                 (DifferentiableAt ℝ b15 (opaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
+    (hb16 : PProd (HasVJPAt b16 (opaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+                 (DifferentiableAt ℝ b16 (opaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))) :
     r34InputGradB N Ws Wd
       ((bnBatchLA_has_vjp N 64 (2 * 56) (2 * 56) εs hεs γs βs).backward
         (StableHLO.batchMap N (flatConvStride2 Ws bs) x))
@@ -445,7 +373,7 @@ theorem r34InputGradB_eq_r34B_full_vjp (N : Nat) {nCls : Nat}
             (r34HeadB_differentiable N 7 7 Wd bd) _⟩).backward := by
   unfold r34InputGradB
   rw [cbReluStridedBBack_eq_vjp_backward (by decide) (by decide) Ws bs εs hεs γs βs x h_stem,
-      r34HeadBBack_eq_vjp_backward Wd bd (r34OpaqueA16 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
+      r34HeadBBack_eq_vjp_backward Wd bd (opaqueA16 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
   rfl
 
 
@@ -478,38 +406,38 @@ theorem r34InputGradB_correct (N : Nat) {nCls : Nat}
     (h_stem : R34StemSmoothAt N 56 56 Ws bs εs γs βs x)
     (h_pool : R34PoolSmoothAt N 56 56
       (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) Ws bs εs γs βs x))
-    (hb1 : PProd (HasVJPAt b1 (r34OpaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x))
-                 (DifferentiableAt ℝ b1 (r34OpaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x)))
-    (hb2 : PProd (HasVJPAt b2 (r34OpaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x))
-                 (DifferentiableAt ℝ b2 (r34OpaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (r34OpaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x))
-                 (DifferentiableAt ℝ b3 (r34OpaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (r34OpaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (r34OpaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (r34OpaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (r34OpaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (r34OpaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (r34OpaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (r34OpaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (r34OpaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (r34OpaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (r34OpaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (r34OpaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (r34OpaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (r34OpaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (r34OpaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (r34OpaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (r34OpaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (r34OpaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (r34OpaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (r34OpaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (r34OpaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (r34OpaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (r34OpaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (r34OpaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (r34OpaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (r34OpaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (r34OpaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
+    (hb1 : PProd (HasVJPAt b1 (opaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x))
+                 (DifferentiableAt ℝ b1 (opaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x)))
+    (hb2 : PProd (HasVJPAt b2 (opaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x))
+                 (DifferentiableAt ℝ b2 (opaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x)))
+    (hb3 : PProd (HasVJPAt b3 (opaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x))
+                 (DifferentiableAt ℝ b3 (opaqueA2 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 x)))
+    (hb4 : PProd (HasVJPAt b4 (opaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x))
+                 (DifferentiableAt ℝ b4 (opaqueA3 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 x)))
+    (hb5 : PProd (HasVJPAt b5 (opaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x))
+                 (DifferentiableAt ℝ b5 (opaqueA4 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 x)))
+    (hb6 : PProd (HasVJPAt b6 (opaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
+                 (DifferentiableAt ℝ b6 (opaqueA5 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 x)))
+    (hb7 : PProd (HasVJPAt b7 (opaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
+                 (DifferentiableAt ℝ b7 (opaqueA6 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x)))
+    (hb8 : PProd (HasVJPAt b8 (opaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
+                 (DifferentiableAt ℝ b8 (opaqueA7 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x)))
+    (hb9 : PProd (HasVJPAt b9 (opaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
+                 (DifferentiableAt ℝ b9 (opaqueA8 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x)))
+    (hb10 : PProd (HasVJPAt b10 (opaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+                 (DifferentiableAt ℝ b10 (opaqueA9 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
+    (hb11 : PProd (HasVJPAt b11 (opaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+                 (DifferentiableAt ℝ b11 (opaqueA10 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
+    (hb12 : PProd (HasVJPAt b12 (opaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+                 (DifferentiableAt ℝ b12 (opaqueA11 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
+    (hb13 : PProd (HasVJPAt b13 (opaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+                 (DifferentiableAt ℝ b13 (opaqueA12 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
+    (hb14 : PProd (HasVJPAt b14 (opaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+                 (DifferentiableAt ℝ b14 (opaqueA13 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
+    (hb15 : PProd (HasVJPAt b15 (opaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+                 (DifferentiableAt ℝ b15 (opaqueA14 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
+    (hb16 : PProd (HasVJPAt b16 (opaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+                 (DifferentiableAt ℝ b16 (opaqueA15 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
     r34InputGradB N Ws Wd
       ((bnBatchLA_has_vjp N 64 (2 * 56) (2 * 56) εs hεs γs βs).backward

@@ -72,19 +72,6 @@ namespace Proofs.CnxPoCGB
 
 open scoped BigOperators
 
-/-- `batchSlice` of a `batchMap` is the lifted function at the slice. ⚠ Belongs beside `batchMap`
-    in `StableHLO.lean` and is here instead: that file has 315 downstream modules and this lemma
-    has one consumer (`ViTPoCGB.clsGrad_denB` inlines the same `funext; simp`). Move it up when
-    `StableHLO.lean` changes for another reason. -/
-private theorem batchSlice_batchMap {N a b : Nat} (f : Vec a → Vec b) (x : Vec (N * a))
-    (n : Fin N) :
-    batchSlice N b (batchMap N f x) n = f (batchSlice N a x n) := by
-  funext i
-  show f (fun j : Fin a => x (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv (n, i))).1, j)))
-        (finProdFinEquiv.symm (finProdFinEquiv (n, i))).2 = _
-  rw [Equiv.symm_apply_apply]
-  rfl
-
 -- ════════════════════════════════════════════════════════════════
 -- § Per-channel layer scale — the one op kind unique to this net
 -- ════════════════════════════════════════════════════════════════

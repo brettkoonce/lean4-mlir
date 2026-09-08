@@ -154,6 +154,13 @@ structure R34BWeights (nCls : Nat) where
     (Wd : Mat c nCls) (bd : Vec nCls) : Vec (N * (c * h * w)) → Vec (N * nCls) :=
   StableHLO.batchMap N (dense Wd bd) ∘ StableHLO.batchMap N (globalAvgPoolFlat c h w)
 
+/-- ResNet-34's GAP-and-dense tail, APPLIED. -/
+theorem r34HeadB_apply (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
+    (v : Vec (N * (c * h * w))) :
+    r34HeadB N h w Wd bd v
+      = StableHLO.batchMap N (Proofs.dense Wd bd)
+          (StableHLO.batchMap N (globalAvgPoolFlat c h w) v) := rfl
+
 -- ════════════════════════════════════════════════════════════════
 -- § The whole net, nested-application form
 --   stem(224 -> 112 -> 56) -> a0,a1,a2@56 -> d2(56->28) -> b0,b1,b2@28
@@ -197,43 +204,43 @@ namespace StableHLO
 def r34IdGraphB (p epsStr : String) (N h w : Nat) {c : Nat} (pw : R34IdW c)
     (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   .batchOp (N := N) (.relu (n := c * h * w))
-    (.addV
+    (.addVB
       (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
-        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W2" s!"%{p}b2" pw.W₂ pw.b₂)
+        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" c) pw.W₂ pw.b₂)
           (.batchOp (N := N) (.relu (n := c * h * w))
             (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
-              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W1" s!"%{p}b1" pw.W₁ pw.b₁) e)))))
+              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" c) pw.W₁ pw.b₁) e)))))
       e)
 
 theorem r34IdGraphB_faithful (p epsStr : String) (N h w : Nat) {c : Nat} (pw : R34IdW c)
     (e : SHlo (N * (c * h * w))) :
     den (r34IdGraphB p epsStr N h w pw e) = r34IdB N h w pw (den e) := by
   unfold r34IdGraphB r34IdB projB cbReluB residual biPath
-  simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv, den_bnBatchF, den_addV,
+  simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv, den_bnBatchF, den_addVB,
     Function.comp_apply]
 
-/-- Downsample basic-block graph: `relu(addV(projection, body))` — projection first, matching
+/-- Downsample basic-block graph: `relu(addVB(projection, body))` — projection first, matching
     `residualProj proj body`. Both branches read the block-input subtree `e`; both stride-2 convs
     are `.convStrided` (symmetric padding). -/
 def r34DownGraphB (p epsStr : String) (N h w : Nat) {ic oc : Nat} (pw : R34DownW ic oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu (n := oc * h * w))
-    (.addV
+    (.addVB
       (.bnBatchF s!"%{p}gp" s!"%{p}btp" epsStr pw.εp pw.γp pw.βp
-        (.batchOp (N := N) (.convStrided (h := h) (w := w) s!"%{p}Wp" s!"%{p}bp" pw.Wp pw.bp) e))
+        (.batchOp (N := N) (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e))
       (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
-        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W2" s!"%{p}b2" pw.W₂ pw.b₂)
+        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" oc) pw.W₂ pw.b₂)
           (.batchOp (N := N) (.relu (n := oc * h * w))
             (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
               (.batchOp (N := N)
-                (.convStrided (h := h) (w := w) s!"%{p}W1" s!"%{p}b1" pw.W₁ pw.b₁) e))))))
+                (.convStrided (h := h) (w := w) s!"%{p}W1" (biasName false "" oc) pw.W₁ pw.b₁) e))))))
 
 theorem r34DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic oc : Nat}
     (pw : R34DownW ic oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (r34DownGraphB p epsStr N h w pw e) = r34DownB N h w pw (den e) := by
   unfold r34DownGraphB r34DownB projB projStridedB cbReluStridedB residualProj biPath
   simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv, den_batchOp_convStrided,
-    den_bnBatchF, den_addV, Function.comp_apply]
+    den_bnBatchF, den_addVB, Function.comp_apply]
 
 /-- Stem graph: 7x7/s2 conv -> bn -> relu -> 3x3/s2 max-pool. -/
 def r34StemGraphB (epsStr : String) (N h w : Nat) {ic oc : Nat}
@@ -242,7 +249,7 @@ def r34StemGraphB (epsStr : String) (N h w : Nat) {ic oc : Nat}
   .batchOp (N := N) (.maxPool3s2 (c := oc) (h := h) (w := w))
     (.batchOp (N := N) (.relu (n := oc * (2 * h) * (2 * w)))
       (.bnBatchF "%sg" "%sbt" epsStr εs γs βs
-        (.batchOp (N := N) (.convStrided (h := 2 * h) (w := 2 * w) "%sW" "%sb" Ws bs) e)))
+        (.batchOp (N := N) (.convStrided (h := 2 * h) (w := 2 * w) "%sW" (biasName false "" oc) Ws bs) e)))
 
 theorem r34StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)

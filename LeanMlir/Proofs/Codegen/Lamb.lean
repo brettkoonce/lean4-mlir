@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Codegen.GradClip
+import LeanMlir.Proofs.Codegen.SgdMomentumStep
 
 /-! # LAMB over ℝ — RSB-A3's optimizer, and the one item `rsb_a3_r50_verified.md` §2.3 ESTIMATED
 
@@ -129,6 +130,28 @@ theorem lambTrust_nonneg (wn2 rn2 : ℝ) : 0 ≤ lambTrust wn2 rn2 := by
 /-- The same at a zero direction, the other half of the reference's nested `where`. -/
 @[simp] theorem lambTrust_zero_dir (wn2 : ℝ) : lambTrust wn2 0 = 1 := by
   unfold lambTrust; simp
+
+/-- **LAMB's per-parameter triple over ℝ**: the updated parameter, first moment and second
+    moment a train step returns. `AdamStep.adamWStep`'s peer, and it reuses Adam's two moment
+    recurrences unchanged, because LAMB's `m` and `v` ARE Adam's — the optimizer's whole
+    difference lives in `lambDir`'s `ε` placement and decay, and in `lambScale`'s per-tensor
+    trust ratio.
+
+    `wn2` is `‖θ‖²`, supplied rather than computed, exactly as `lambScale` takes it: it is a
+    graph operand, and at the `no_weight_decay` group the render supplies `0` instead of the
+    parameter's own norm (`lamb_triple_faithful_excluded`). -/
+noncomputable def lambStep (β₁ β₂ ε lr wd bc₁ bc₂ wn2 : ℝ) (θ m v g : Vec n) :
+    Vec n × Vec n × Vec n :=
+  (sgdParam lr θ (lambScale wn2 (lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v g)),
+   adamMNext β₁ m g,
+   adamVNext β₂ v g)
+
+/-- ⭐ **At a zero weight norm the trust scaling is the IDENTITY.** `lambTrust_zero_weight` says
+    the ratio is 1 there; this says what that does to the direction, which is what the emitted
+    graph needs. -/
+@[simp] theorem lambScale_zero_weight (r : Vec n) : lambScale 0 r = r := by
+  funext i
+  simp only [lambScale, lambTrust_zero_weight, one_mul]
 
 /-- ⭐⭐ **LAMB is NOT AdamW: the trust ratio is per-tensor, so it does not factor out.**
 

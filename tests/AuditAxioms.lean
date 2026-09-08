@@ -3092,7 +3092,7 @@ open Proofs
 -- the net mobilenetv2ForwardPaper IS. No new mathematics: the four endpoint leaf ties are reused
 -- verbatim at the paper widths (32-channel stem, 1280-channel head) and the seventeen blocks stay
 -- OPAQUE, so the composition is checked between variables.
--- ⚠ What depth 17 forced is mnv2OpaqueA0 … A17: one prefix def per slot, because the 6-block
+-- ⚠ What depth 17 forced is opaqueA0 … A17: one prefix def per slot, because the 6-block
 -- statement spells each hypothesis's running activation as a nested application and that is
 -- unreadable by block 5 and quadratic in the writing (the same wall MobileNetV2FullVJP.lean hit
 -- and answered with mnv2Pre1 … mnv2Pre17). They are PLAIN defs — the closing rfl unfolds them.
@@ -3126,7 +3126,7 @@ open Proofs
 -- ⭐⭐ AND AT THE PAPER DEPTH — all 16 MBConv blocks (EfficientNetFullWholeBackCertifiedTie.lean,
 -- ~3 s): efficientnetInputGradB_full, with its stem/head BatchNorm and swish slots pinned to the
 -- certified per-op backwards and its sixteen blocks opaque, IS the generic 18-stage apex's
--- backward (unfold, two rw, rfl; b0OpaqueA0 … A16 are the prefix defs for the running
+-- backward (unfold, two rw, rfl; opaqueA0 … A16 are the prefix defs for the running
 -- activations, MobileNetV2's answer to the quadratic writing). ⭐ Then ONE STEP FURTHER than the
 -- representative: instantiated at the concrete mbNoExpW/mbStridedW/mbResidW/mbExpW blocks and
 -- carried to efficientnetForwardB_full_has_vjp by HasVJP.backward_unique — two witnesses for one
@@ -3155,11 +3155,11 @@ open Proofs
 -- indexed by the saved forward activation and each example has its own.
 -- ⭐⭐ MobileNetV2 defines no apex and no prefix defs at all — mobilenetv2PaperPC_has_vjp_at is
 -- generic in every dimension and every stage, so the batched net instantiates the per-example
--- file's own twenty-one-stage chain, mnv2OpaqueA0 … A17 included.
+-- file's own twenty-one-stage chain, opaqueA0 … A17 included.
 -- ⛔ Neither file takes B0's extra step (instantiate at the concrete blocks, then backward_unique).
 -- That is a KERNEL deterministic timeout at six minutes, and the cause is the KINK rather than the
 -- depth: B0's block witnesses are GLOBAL HasVJP and carry no point, where these are HasVJPAt at
--- r34OpaqueA{k-1} … x against a caller's r34Pre{k-1} N w x — sixteen defeq checks between
+-- opaqueA{k-1} … x against a caller's r34Pre{k-1} N w x — sixteen defeq checks between
 -- sixteen-deep nested applications spelled through different definition chains. HasVJPAt's own
 -- backward_unique is stated anyway; no HasVJPAt net in the repo had it.
 -- ⛔ And a rfl straight at 4.1d's tactic-built apex is a five-minute isDefEq timeout — §5's
@@ -4638,7 +4638,7 @@ open Proofs
 -- reach .fwd at MNv4's literal resolutions is a kernel deterministic timeout by rfl, by
 -- simp only [<def>, comp_fwd, Function.comp_apply], and with Mathlib's Function.comp_assoc in the
 -- simp set -- ~60 s each to give up. Discharged through the generic rfl-at-variables lemma
--- certLayer_comp_fwd_apply it is 2 s for all twenty-six stages.
+-- CertLayer.comp_fwd_apply it is 2 s for all twenty-six stages.
 -- ⚠ Blocks stay OPAQUE and there is no backward_unique step; the shape check replaces it, and it
 -- names every block by its TABLE ROW, which is what pins rows 4/5/10, 12/18 and 15/19/20 apart.
 #print axioms Proofs.mnv4_grad_floatBridgesToB
@@ -6004,8 +6004,6 @@ open Proofs
 -- ⚠ NOTHING HERE IS ABOUT THE EMITTED all_reduce. den (allReduceMeanF R g) = (1/R) sum_r den (g r)
 -- is 4d piece 2 -- an SHlo constructor with a den, a pretty and a parser case -- and it waits on
 -- 4c's batched chains. Until it lands, a tie composes with these lemmas only through the reader.
--- ⚠ pdiv_const_smul belongs in Tensor.lean beside pdiv_add and is here because that file is the
--- root of the whole corpus and a definition added to it rebuilds all of Certs.
 #print axioms Proofs.pdiv_const_smul
 #print axioms Proofs.meanLoss_differentiableAt
 #print axioms Proofs.lossGrad_meanLoss
@@ -6092,8 +6090,6 @@ open Proofs
 -- logistic -> subtract %onehot -> divide by dense<64000.0> = 64 x 1000.
 -- ⚠ %loss itself is report-only hand-written text (the §5 carve-out); what is proved is about the
 -- COTANGENT chain, which is on the gradient path and is pretty(provenGraph).
--- ⚠ pdiv_coordFun (a scalar function of ONE coordinate, lifted to Vec 1) is pdiv_sigmoid's proof
--- at a general f; it belongs in Tensor.lean and is here for the same rebuild reason.
 #print axioms Proofs.lambStep
 #print axioms Proofs.lambScale_zero_weight
 #print axioms Proofs.StableHLO.lamb_triple_faithful

@@ -98,30 +98,6 @@ set_option maxHeartbeats 2000000
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § `CertLayer`'s forward projections, as `simp` lemmas
--- ════════════════════════════════════════════════════════════════
-
-/-! ⚠⚠ **Without these this file takes THREE MINUTES to elaborate; with them, seconds.** The
-reason is worth recording. `simp only [CertLayer.comp]` rewrites `L₁.comp L₂` to the full
-structure literal — `fwd`, `ok`, `diff`, `vjp`, `graph` AND `faithful` — and only then projects
-`.fwd` out of it. Over a 24-stage chain that builds an enormous intermediate term whose bulk is
-PROOFS the goal never mentions. Projecting `.fwd` in one step never forms it.
-
-⛔ These are `CertLayer` API lemmas and belong in `Foundation/CertifiedChain.lean`, not here. They
-are parked in this leaf deliberately: `CertifiedChain.lean` is imported by `BackNetFolds.lean`,
-which most of the corpus sits downstream of, and the root-file-lemma rule says to park in the leaf
-with a note and move such lemmas as a BATCH. ▶ Move them when `CertifiedChain.lean` is next
-touched for another reason. -/
-
-@[simp] theorem CertLayer.comp_fwd {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n p) :
-    (L₁.comp L₂).fwd = L₂.fwd ∘ L₁.fwd := rfl
-
-@[simp] theorem CertLayer.residual_fwd {n : Nat} (L : CertLayer n n) :
-    (CertLayer.residual L).fwd = Proofs.residual L.fwd := rfl
-
-@[simp] theorem CertLayer.id'_fwd (n : Nat) : (CertLayer.id' n).fwd = fun y => y := rfl
-
--- ════════════════════════════════════════════════════════════════
 -- § The block table, one row per constant
 -- ════════════════════════════════════════════════════════════════
 
@@ -880,6 +856,68 @@ theorem mnv4FwdGraphB_full_faithful (N : Nat) (epsStr : String) {nCls : Nat}
   rw [mnv4HeadStack_graph_faithful, mnv4Res7bGraphB_faithful, mnv4Res7aGraphB_faithful,
       mnv4Res14bGraphB_faithful, mnv4Res14aGraphB_faithful, mnv4Res28GraphB_faithful,
       mnv4FusedStack_graph_faithful, mnv4StemB_graph_faithful]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Each resolution group, expanded into its own table rows — proved WHERE THE TERMS ARE
+--   VARIABLES (`CertLayer.comp_fwd_apply`), which is what makes the whole-net shape check in
+--   `MobileNetV4WholeBackCertifiedTieB.lean` a 2-second `rw` chain rather than a kernel timeout.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Trunk group **Res28** — rows 1–2, at 56 → 28 — as its own blocks, each at its table row (`mnv4Row1`, `mnv4Row2`). -/
+theorem mnv4Res28Layer_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (v : Vec (N * (48 * 56 * 56))) :
+    (mnv4Res28Layer N w).fwd v
+      = (CertLayer.residual (mnv4BodyOfRow N mnv4Row2 w.b2)).fwd
+          ((mnv4PreStridedBodyOfRow N mnv4Row1 w.b1).fwd
+          (v)) := by
+  simp only [mnv4Res28Layer, CertLayer.comp_fwd_apply]
+
+/-- Trunk group **Res14a** — rows 3–6, at 28 → 14 — as its own blocks, each at its table row (`mnv4Row3`, `mnv4Row4`, `mnv4Row5`, `mnv4Row6`). -/
+theorem mnv4Res14aLayer_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (v : Vec (N * (80 * 28 * 28))) :
+    (mnv4Res14aLayer N w).fwd v
+      = (CertLayer.residual (mnv4BodyOfRow N mnv4Row6 w.b6)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row5 w.b5)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row4 w.b4)).fwd
+          ((mnv4PreStridedBodyOfRow N mnv4Row3 w.b3).fwd
+          (v)))) := by
+  simp only [mnv4Res14aLayer, CertLayer.comp_fwd_apply]
+
+/-- Trunk group **Res14b** — rows 7–10, at 14×14 — as its own blocks, each at its table row (`mnv4Row7`, `mnv4Row8`, `mnv4Row9`, `mnv4Row10`). -/
+theorem mnv4Res14bLayer_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (v : Vec (N * (160 * 14 * 14))) :
+    (mnv4Res14bLayer N w).fwd v
+      = (CertLayer.residual (mnv4BodyOfRow N mnv4Row10 w.b10)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row9 w.b9)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row8 w.b8)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row7 w.b7)).fwd
+          (v)))) := by
+  simp only [mnv4Res14bLayer, CertLayer.comp_fwd_apply]
+
+/-- Trunk group **Res7a** — rows 11–15, at 14 → 7 — as its own blocks, each at its table row (`mnv4Row11`, `mnv4Row12`, `mnv4Row13`, `mnv4Row14`, `mnv4Row15`). -/
+theorem mnv4Res7aLayer_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (v : Vec (N * (160 * 14 * 14))) :
+    (mnv4Res7aLayer N w).fwd v
+      = (CertLayer.residual (mnv4BodyOfRow N mnv4Row15 w.b15)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row14 w.b14)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row13 w.b13)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row12 w.b12)).fwd
+          ((mnv4PreStridedBodyOfRow N mnv4Row11 w.b11).fwd
+          (v))))) := by
+  simp only [mnv4Res7aLayer, CertLayer.comp_fwd_apply]
+
+/-- Trunk group **Res7b** — rows 16–21, at 7×7 — as its own blocks, each at its table row (`mnv4Row16`, `mnv4Row17`, `mnv4Row18`, `mnv4Row19`, `mnv4Row20`, `mnv4Row21`). -/
+theorem mnv4Res7bLayer_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (v : Vec (N * (256 * 7 * 7))) :
+    (mnv4Res7bLayer N w).fwd v
+      = (CertLayer.residual (mnv4BodyOfRow N mnv4Row21 w.b21)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row20 w.b20)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row19 w.b19)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row18 w.b18)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row17 w.b17)).fwd
+          ((CertLayer.residual (mnv4BodyOfRow N mnv4Row16 w.b16)).fwd
+          (v)))))) := by
+  simp only [mnv4Res7bLayer, CertLayer.comp_fwd_apply]
 
 end StableHLO
 

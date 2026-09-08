@@ -137,34 +137,6 @@ theorem bceLogits_eq_logSigmoid (K : Nat) (t z : Vec K) :
 -- § The gradient
 -- ════════════════════════════════════════════════════════════════
 
-/-- **A scalar function of ONE coordinate, lifted to `Vec K → Vec 1`, and its `pdiv`.** The shape
-    every summand of `bceLogits` has; `pdiv_sigmoid`'s proof at one coordinate and a general `f`. -/
-theorem pdiv_coordFun {K : Nat} (f : ℝ → ℝ) (f' : ℝ) (k : Fin K) (z : Vec K)
-    (hf : HasDerivAt f f' (z k)) (j : Fin K) :
-    pdiv (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z j 0 = if j = k then f' else 0 := by
-  have hproj := (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).differentiableAt (x := z)
-  have hdiff : DifferentiableAt ℝ (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z := by
-    rw [differentiableAt_pi]
-    intro _
-    exact hf.differentiableAt.comp z hproj
-  unfold pdiv
-  have h_swap : fderiv ℝ (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z (basisVec j) 0
-              = fderiv ℝ (fun y : Vec K => f (y k)) z (basisVec j) := by
-    rw [fderiv_apply hdiff (0 : Fin 1)]
-    rfl
-  rw [h_swap]
-  have h_decomp : (fun y : Vec K => f (y k))
-                = f ∘ (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ) := by
-    funext y; rfl
-  rw [h_decomp, fderiv_comp z hf.differentiableAt hproj,
-      (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).fderiv]
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  rw [fderiv_eq_smul_deriv, hf.deriv]
-  show basisVec j k * f' = _
-  rw [basisVec_apply]
-  by_cases h : j = k
-  · rw [if_pos h, if_pos h.symm, one_mul]
-  · rw [if_neg h, if_neg (fun h' : k = j => h h'.symm), zero_mul]
 
 /-- ⭐ **The emitted cotangent's numerator is this loss's gradient**:
     `∂/∂z_j Σ_k (softplus(z_k) − t_k·z_k) = σ(z_j) − t_j`.

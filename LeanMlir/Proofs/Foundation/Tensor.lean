@@ -10,6 +10,7 @@ import Mathlib.Analysis.Calculus.FDeriv.Mul
 import Mathlib.Analysis.Calculus.FDeriv.Comp
 import Mathlib.Analysis.Calculus.FDeriv.Pi
 import Mathlib.Analysis.Calculus.FDeriv.Linear
+import Mathlib.Analysis.Calculus.Deriv.Basic
 
 /-!
 # Tensor Algebra for VJP Proofs
@@ -195,6 +196,48 @@ theorem pdiv_comp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
   rw [(fderiv ℝ g (f x)).map_smul]
   show v j * fderiv ℝ g (f x) (basisVec j) k = _
   rfl
+
+/-- **Scalar multiple rule** for `pdiv` — `pdiv_mul` at a constant factor. -/
+theorem pdiv_const_smul {m n : Nat} (c : ℝ) (f : Vec m → Vec n) (x : Vec m)
+    (hf : DifferentiableAt ℝ f x) (i : Fin m) (j : Fin n) :
+    pdiv (fun y k => c * f y k) x i j = c * pdiv f x i j := by
+  have h := pdiv_mul (fun _ : Vec m => fun _ : Fin n => c) f x
+    (differentiableAt_const _) hf i j
+  rw [h, pdiv_const (fun _ : Fin n => c) x i j]
+  ring
+
+-- ════════════════════════════════════════════════════════════════
+-- § The mean the collective computes
+-- ════════════════════════════════════════════════════════════════
+
+/-- **A scalar function of ONE coordinate, lifted to `Vec K → Vec 1`, and its `pdiv`.** `pdiv_sigmoid`'s
+    proof at one coordinate and a general `f`; the shape every summand of a per-class loss has. -/
+theorem pdiv_coordFun {K : Nat} (f : ℝ → ℝ) (f' : ℝ) (k : Fin K) (z : Vec K)
+    (hf : HasDerivAt f f' (z k)) (j : Fin K) :
+    pdiv (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z j 0 = if j = k then f' else 0 := by
+  have hproj := (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).differentiableAt (x := z)
+  have hdiff : DifferentiableAt ℝ (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z := by
+    rw [differentiableAt_pi]
+    intro _
+    exact hf.differentiableAt.comp z hproj
+  unfold pdiv
+  have h_swap : fderiv ℝ (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z (basisVec j) 0
+              = fderiv ℝ (fun y : Vec K => f (y k)) z (basisVec j) := by
+    rw [fderiv_apply hdiff (0 : Fin 1)]
+    rfl
+  rw [h_swap]
+  have h_decomp : (fun y : Vec K => f (y k))
+                = f ∘ (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ) := by
+    funext y; rfl
+  rw [h_decomp, fderiv_comp z hf.differentiableAt hproj,
+      (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).fderiv]
+  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
+  rw [fderiv_eq_smul_deriv, hf.deriv]
+  show basisVec j k * f' = _
+  rw [basisVec_apply]
+  by_cases h : j = k
+  · rw [if_pos h, if_pos h.symm, one_mul]
+  · rw [if_neg h, if_neg (fun h' : k = j => h h'.symm), zero_mul]
 
 /-- **Finset-sum rule** — derived from `pdiv_add` and `pdiv_const` by
     induction on the Finset. Linearity of the derivative extended to
