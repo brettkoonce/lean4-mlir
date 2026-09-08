@@ -55,824 +55,102 @@ sources:
 
 status:
   scope: >-
-    Machine-checked vector-Jacobian-product (backward-pass) correctness for the
-    layer primitives of eight architectures and their full-network compositions:
-    MLP, 2D CNN, BatchNorm-CNN, ResNet-34, MobileNetV2, EfficientNet-B0,
-    ConvNeXt-T, and ViT-Tiny. Covers dense, ReLU/ReLU6, softmax cross-entropy,
-    2D / strided / depthwise convolution, max-pool, global-average-pool,
-    batch-norm's three-term backward, residual + projection blocks,
-    squeeze-excitation, GELU/Swish/sigmoid, layer-norm, layer-scale, and a
-    multi-theorem treatment of scaled-dot-product / multi-head self-attention
-    through the full transformer tower. On top of the VJP layer, four further
-    proved programs: (1) TRAIN-STEP TIES -- every net's SGD-inline train step,
-    all ten that ship one, is tied to its real loss-driven backward cotangent (per-net
-    *TiePoC capstones, e.g. the all-200-params vit_net_tied_certified). For the
-    Adam, RMSProp and ImageNet steps -- which emit the raw gradient rather than
-    the fused theta - lr*g -- what is proved is the FOLD at every gradient node
-    of all five ImageNet-scale nets (the *FaithfulPoC*G files, 4f below): each
-    node denotes the certified gradient for every cotangent. Pinning those to
-    the backward chain, i.e. re-pointing the capstones, is not done. Plus
-    committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
-    ERROR -- a binary32 rounding model constructed from scratch (rndP, standard
-    model proved, no hardware axioms); Type-valued whole-net float bridges
-    (FloatBridgesTo, with the output window and error modulus carried as data)
-    for every net, forward and backward; kernel-checked numeric budgets for eight
-    forwards and four input-gradient backwards (the *_float_logits_le and
-    *_grad_float_le families), three of those backward chains proven to BE the
-    certified whole-net VJP -- the budgets are interval folds, vacuous as numerical
-    certificates, and four are caps rather than folds (fidelity.divergences 4d);
-    depth-linear adjoint-chain bounds plus a CIFAR-8 argmax-preservation
-    certificate at the committed shape whose budget does not bite at trained
-    magnitudes (fidelity.divergences 4c); an fp8-E4M3 argmax-preservation theorem;
-    SGD-descent theorems at trained weights; (3) ROBUSTNESS
-    CERTIFICATES as theorems -- the Tsuzuku Lipschitz-margin radius, per-class-
-    pair LipSDP with exact-rational LDL^T PSD witnesses (mechanized 100-image
-    scorecards at trained weights, 69/100 certified vs a 72/100 PGD bracket),
-    and the Cohen randomized-smoothing radius proved END-TO-END -- the Gaussian
-    (1/sigma)-Lipschitz probit (Neyman-Pearson core, Cameron-Martin shift,
-    dimension reduction via rotation invariance) is a theorem, not a hypothesis;
-    (4) OPTIMIZER GEOMETRY -- SGD/sign/Muon as steepest descent under a norm,
-    Muon's polar factor as the nuclear-norm argmax, Shampoo = single-step Muon,
-    and the Newton-Schulz spectral-step lemma. Each NetSpec also emits StableHLO
-    MLIR (compiled by IREE, cross-checked against a parallel JAX pipeline) --
-    that codegen/training path is engineered and empirically validated, NOT
-    part of the proved theorems (see fidelity.divergences).
+    Machine-checked vector-Jacobian-product (backward-pass) correctness for the layer
+    primitives of ten architectures and their whole-network compositions -- MLP, 2D CNN,
+    BatchNorm-CNN, ResNet-34, ResNet-50, MobileNetV2, MobileNetV4-Conv-M, EfficientNet-B0,
+    ConvNeXt-T and ViT-Tiny. On top of the VJP layer: (1) TRAIN-STEP TIES -- for each of the
+    seven ImageNet-scale nets, every parameter gradient node of the batched train step is tied
+    to the cotangent the emitted backward chain delivers, at the un-fused gradient node every
+    optimizer tail consumes and the label-smoothed loss at a general target, with the batch
+    size a binder and the data-parallel mean an AST node (fidelity 4e-4g); the SGD-inline
+    steps of the ten nets that ship one are tied too. (2) FLOAT ERROR -- a binary32 rounding
+    model constructed from scratch, whole-net float bridges carrying window and modulus as
+    data, kernel-checked budgets for nine forwards and four backwards (interval folds, vacuous
+    as numerical certificates, fidelity 4d), and every net's hand-written backward chain proven
+    to BE the certified whole-net VJP. (3) ROBUSTNESS CERTIFICATES as theorems: the Tsuzuku
+    Lipschitz-margin radius, per-class-pair LipSDP at trained weights, the Cohen smoothing
+    radius end to end. (4) OPTIMIZER GEOMETRY: SGD/sign/Muon as steepest descent under a norm,
+    Shampoo = single-step Muon. The StableHLO codegen and the training runs are engineered and
+    empirically validated, not theorems (fidelity 2, 6).
   sorry_count: 0
   sorry_in_definitions: 0
-  axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
+  axioms: &core ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
-    # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 2311 declarations (count: grep -c '^#print axioms'
-    # tests/AuditAxioms.lean); 52 are independently kernel-rechecked by the
-    # comparator (tests/comparator/config.json). All close under exactly the
-    # three core axioms above. comparator_config below points at that config for
-    # results included in the 52-theorem recheck.
+    # A REPRESENTATIVE set, one row per kind of claim. The full audit is tests/AuditAxioms.lean
+    # (`#print axioms` on every declaration that says something, run in CI); 52 are
+    # independently kernel-rechecked by the comparator (tests/comparator/config.json). Every
+    # row: 0 sorries, the three core axioms. The per-net numbers table is fidelity 4d.
     #
     # --- VJP layer ---
-    - declaration: "Proofs.pdiv_comp"          # chain / additive / multiplicative fan-in + finset-sum
-      file: "LeanMlir/Proofs/Foundation/Tensor.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies:
-        - statement: "fderiv chain rule, fderiv of sum, Differentiable composition"
-          source: "Mathlib.Analysis.Calculus.FDeriv"
-    - declaration: "Proofs.dense_weight_grad_correct"
-      file: "LeanMlir/Proofs/Foundation/MLP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.conv2d_has_vjp3_correct"
-      file: "LeanMlir/Proofs/Architectures/CNN.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.bn_input_grad_correct"   # batch-norm three-term backward
-      file: "LeanMlir/Proofs/Architectures/BatchNorm.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""    # audited; not in the 52-theorem comparator subset
-      literature_dependencies: []
-    - declaration: "Proofs.layerNorm_has_vjp_correct"
-      file: "LeanMlir/Proofs/Architectures/LayerNorm.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.softmaxCE_grad"
-      file: "LeanMlir/Proofs/Architectures/Attention.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.mhsa_has_vjp_mat_correct"   # multi-head self-attention
-      file: "LeanMlir/Proofs/Architectures/Attention.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.vit_full_has_vjp_correct"   # full ViT-Tiny body composes + has a VJP
-      file: "LeanMlir/Proofs/Architectures/Attention.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.mobilenetv2_full_has_vjp_at_correct"   # the 17-block PAPER net, not the 2-block generic
-      file: "LeanMlir/Proofs/Architectures/MobileNetV2FullVJP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.convnext_has_vjp_correct"
-      file: "LeanMlir/Proofs/Architectures/ConvNeXt.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Proofs.efficientnet_has_vjp_correct"
-      file: "LeanMlir/Proofs/Architectures/EfficientNet.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: "tests/comparator/config.json"
-      literature_dependencies: []
-    - declaration: "Mnv2Live.mnv2Live_forward_nonconstant"   # non-degeneracy witness (see fidelity 4)
-      file: "LeanMlir/Proofs/Architectures/MobileNetV2.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ViTTiePoC.vit_net_tied_certified"   # train-step tie: all 200 ViT params fed the REAL backward cotangent
-      file: "LeanMlir/Proofs/Architectures/ViTTiePoC.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
+    # the chain rule for pdiv: composition, additive and multiplicative fan-in, finset sums
+    - {declaration: "Proofs.pdiv_comp", file: "LeanMlir/Proofs/Foundation/Tensor.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # 2D convolution (the strided, depthwise and stride-4 forms are its siblings)
+    - {declaration: "Proofs.conv2d_has_vjp3_correct", file: "LeanMlir/Proofs/Architectures/CNN.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # batch-norm's three-term backward (layer-norm is the same lemma at one row)
+    - {declaration: "Proofs.bn_input_grad_correct", file: "LeanMlir/Proofs/Architectures/BatchNorm.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # softmax cross-entropy
+    - {declaration: "Proofs.softmaxCE_grad", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # multi-head self-attention
+    - {declaration: "Proofs.mhsa_has_vjp_mat_correct", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
-    # --- The UN-FUSED gradient folds (status 4f): every parameter gradient node of the Adam /
-    #     RMSProp / ImageNet train steps denotes the certified gradient, for every cotangent.
-    #     One representative per file; 41 declarations in all, 3-axiom clean.
-    - declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den"   # r34, batched + SYMMETRIC pad: the template for the other four
-      file: "LeanMlir/Proofs/Foundation/ResNet34FaithfulPoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.EnetPoCG.convStridedXlaWGradB_den"   # B0's XLA-SAME stem; its other 5 op kinds are r34's
-      file: "LeanMlir/Proofs/Architectures/EfficientNetFaithfulPoCG.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.CnxPoCG.psWGrad_den"   # ConvNeXt's 4x4/s4 patchify stem: the one node that never had a fused peer
-      file: "LeanMlir/Proofs/Architectures/ConvNeXtFaithfulPoCG.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ViTPoCG.veclnGammaGrad_den"   # ViT's 25 LN gammas at the VECTOR LayerNorm the shipped net runs
-      file: "LeanMlir/Proofs/Architectures/ViTFaithfulPoCG.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.Mnv2PaperPoCG.mnv2Stride2GradsCertified"   # mnv2 stride-2 block profile, batched; XLA-SAME depthwise
-      file: "LeanMlir/Proofs/Architectures/MobileNetV2FaithfulPoCPaperG.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
+    # --- Whole nets: forward + VJP at the net the artifact runs (T1), the typed graph (T2) ---
+    # a kinked net at batch BN: ResNet-50's [3,4,6,3] bottlenecks, 48 relu clauses, q a binder (224 and 160 px)
+    - {declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct", file: "LeanMlir/Proofs/Architectures/ResNet50FullBVJP.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a smooth net: ViT-Tiny's full body at depth 12, 3 heads, vector LayerNorm -- HasVJP everywhere
+    - {declaration: "Proofs.vit_full_has_vjp_correct", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a typed SHlo graph at the render's own tokens denotes the whole-net forward (MobileNetV4, 26 stages; every net has one)
+    - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Architectures/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
+    - {declaration: "Mnv2Live.mnv2Live_forward_nonconstant", file: "LeanMlir/Proofs/Architectures/MobileNetV2.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
-    # --- 4c leg 4: ViT's same ten nodes at the BATCHED traversal, which every committed ViT
-    #     artifact bar the SGD-inline train step renders from as of 2026-09-07. All nineteen
-    #     drop-free artifacts were MEASURED byte-identical off that traversal before the swap.
-    #     clsGrad_denB is the statement the per-example fold could not make: the CLS token is one
-    #     shared [192] vector, so its gradient sums over the batch, where the per-example render
-    #     emits denseBiasGradB at N := 1 because pretty B lifted outside the AST. Same bytes,
-    #     different function — den_rowDenseBiasGradB_at_one is the general form of that trap.
-    - declaration: "Proofs.ViTPoCGB.clsGrad_denB"   # the CLS token's gradient summed over the batch INSIDE den
-      file: "LeanMlir/Proofs/Architectures/ViTFaithfulPoCGB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
+    # --- Train-step ties (T3): the fold at every gradient node, then the cotangent pinned ---
+    # the fold, stated per op kind at the un-fused *GradB node all optimizer tails consume (r34's file is the template)
+    - {declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den", file: "LeanMlir/Proofs/Foundation/ResNet34FaithfulPoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # the emitted six-op cotangent IS the label-smoothed loss's gradient at a general target (mixup/cutmix)
+    - {declaration: "Proofs.smoothedCE_grad", file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a batched capstone: ResNet-50's 161 nodes at their chain cotangent; N, q and the LOSS (CE or BCE) binders; one replica
+    - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
+    - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Architectures/ViTTiePoC.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
-    # --- 4c leg 3: ConvNeXt's fourteen nodes at the BATCHED traversal, plus the four bf16
-    #     weight-gradient nodes. Owed BEFORE the swap: every convnextin_* and *drop* artifact had
-    #     rendered from that traversal since it existed, with a fold only at the per-example
-    #     constructors no committed byte of it is pretty of. The bf16 lemmas are the first in any
-    #     fold file: den is one rounding outside the batch sum of the VJP at rounded operands.
-    - declaration: "Proofs.CnxPoCGB.chanLnGammaGradB_den"   # the 22 channel-LN gammas, batched: batchMap N chanLNRows peeled per example
-      file: "LeanMlir/Proofs/Architectures/ConvNeXtFaithfulPoCGB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.CnxPoCGB.convWGradBBf16_den"   # bf16 conv wgrad: rnd outside the batch sum of the certified VJP at rnd-ed operands
-      file: "LeanMlir/Proofs/Architectures/ConvNeXtFaithfulPoCGB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
+    # --- Data parallelism ---
+    # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
+    - {declaration: "Proofs.dpMeanGrad_ne_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # the collective as an AST node: den (adamW tail (allReduceMeanF R g)) = adamWStep at the replica mean
+    - {declaration: "Proofs.adamW_at_allReduceMeanF", file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
-    # --- ResNet-34's T3 §1a tie at batch BN, un-fused and batched (status 4g).
-    - declaration: "Proofs.smoothedCE_grad"   # the emitted six-op cotangent IS the label-smoothed loss's gradient, general target
-      file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ResNet34TieB.r34IdCotIn_eq_vjp"   # the emitted residual fan-in IS the certified block VJP's backward
-      file: "LeanMlir/Proofs/Foundation/ResNet34TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ResNet34TieB.r34_net_tiedB"   # every r34 gradient node at its chain cotangent; N a binder, no smoothness hypothesis
-      file: "LeanMlir/Proofs/Foundation/ResNet34TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
+    # --- Certified backward ties (T6): the float tier's hand-written backward chain IS the
+    #     certified whole-net VJP (fidelity 4d) ---
+    # a kinked net: blocks opaque plus the shape check resnet34ForwardB_full_eq_slots
+    - {declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp", file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a smooth net one step further: the chain IS the pdiv-contracted Jacobian of the committed forward, via backward_unique
+    - {declaration: "efficientnetInputGradB_full_correct", file: "LeanMlir/Proofs/Foundation/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
-    # --- MobileNetV2's T1 and T2 at batch BatchNorm, all 17 bottlenecks (status 4i).
-    - declaration: "Proofs.StableHLO.mobilenetv2FwdGraphB_full_faithful"   # the 17-block typed graph denotes the batch-BN forward
-      file: "LeanMlir/Proofs/Architectures/MobileNetV2FullB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct"   # whole-net input-VJP at bnBatchLA; 19 bundles, 35 relu6 sites, N a binder
-      file: "LeanMlir/Proofs/Architectures/MobileNetV2FullBVJP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- MobileNetV2's T3 §1a tie at batch BN, un-fused and batched (status 4j).
-    - declaration: "Proofs.MobileNetV2TieB.mnv2ResidCotIn_eq_vjp"   # the emitted residual fan-in IS the certified block VJP's backward
-      file: "LeanMlir/Proofs/Foundation/MobileNetV2TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.MobileNetV2TieB.mnv2_net_tiedB"   # every mnv2 gradient node at its chain cotangent; N a binder, no smoothness hypothesis
-      file: "LeanMlir/Proofs/Foundation/MobileNetV2TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    # --- 4b's capstone for ConvNeXt-T (2026-09-07), THREE axes: the *GradB nodes, the smoothed
-    #     loss at a general target, and the BATCHED index (its per-example capstone was at a single
-    #     image). N and nC are binders; no smoothness hypothesis (GELU). The loss chain is the
-    #     expe-then-softmaxDiv spelling at the plain N.K width ConvNeXt and ViT emit.
-    - declaration: "Proofs.CnxTiePoCGB.cnx_net_tiedGB"   # all 182 ConvNeXt-T gradient nodes at their batched chain cotangent and the smoothed loss; N, nC binders
-      file: "LeanMlir/Proofs/Architectures/ConvNeXtTiePoCGB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ViTTiePoCGB.vit_net_tiedGB"   # all 200 ViT-Tiny gradient nodes at their batched chain cotangent and the smoothed loss; N, nC binders; CLS summed over the batch inside den
-      file: "LeanMlir/Proofs/Architectures/ViTTiePoCGB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.smoothedLossCotGraphDiv_row"   # the six-op chain at the expe/softmaxDiv spelling, per example, IS the smoothed loss's gradient / B
-      file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- Data parallelism: what function a *dp* run minimised (status 4k).
-    - declaration: "Proofs.dpMeanGrad_eq_grad_meanLoss"   # the all-reduced mean gradient IS the gradient of the mean of the per-replica losses
-      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.dpMeanGrad_eq_globalBatchGrad_of_perExample"   # no batch coupling: the DP step IS the single-device step at batch R*N, at any sharding
-      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.dpMeanGrad_ne_globalBatchGrad"   # and with batch coupling it is FALSE: the two-replica witness
-      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.dpIterate_eq_meanLossTrain"   # n steps of R replicas ARE n steps of single-device training on the mean loss
-      file: "LeanMlir/Proofs/Foundation/DataParallel.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    # --- 4d piece 2 (2026-09-07): the collective as an AST node. allReduceMeanF's den is dpMean of
-    #     the per-replica gradient nodes, its emit is the old text verbatim (every *dp* artifact
-    #     byte-identical), and the parser round-trip has its case. DataParallelNode.lean composes
-    #     it with piece 1, with 4b's fold and with the AdamW tail.
-    - declaration: "Proofs.StableHLO.den_allReduceMeanF"   # the node denotes (1/R) sum_r den (g r); rfl
-      file: "LeanMlir/Proofs/Codegen/StableHLO.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.skel_allReduceMeanF_of_spmd"   # under SPMD (every replica's skeleton is replica 0's) the node's skeleton is each replica's
-      file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.den_allReduceMeanF_eq_lossGrad_meanLoss"   # piece 1 composed: the all-reduced node denotes the gradient of the MEAN loss
-      file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.adamW_at_allReduceMeanF"   # den (adamW tail (allReduceMeanF R g)) = adamWStep at dpMean of the per-replica nodes; 4d piece 2's target
-      file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- ResNet-50's two prerequisites: LAMB's tail and BCE's cotangent (status 4l).
-    - declaration: "Proofs.StableHLO.lamb_triple_faithful"   # the emitted four-op LAMB tail denotes the (theta', m', v') triple
-      file: "LeanMlir/Proofs/Codegen/LambTriple.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: ["You et al. 2019, Large Batch Optimization for Deep Learning (LAMB)"]
-    - declaration: "Proofs.StableHLO.lamb_triple_faithful_excluded"   # timm's no_weight_decay group is NOT layer-adapted: the emitted step is theta - lr*r at trust 1
-      file: "LeanMlir/Proofs/Codegen/LambTriple.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.bceLogits_eq_logSigmoid"   # softplus(z) - t*z IS -[t log sigma + (1-t) log(1-sigma)]; what keeps the gradient theorem from being circular
-      file: "LeanMlir/Proofs/Foundation/BceLossCot.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.bceLossCotGraph_row_committed"   # each row of the emitted BCE cotangent is that loss's gradient, over the B*K divisor the render bakes
-      file: "LeanMlir/Proofs/Foundation/BceLossCot.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- ResNet-50's T1 at batch BatchNorm, [3,4,6,3] bottlenecks (status 4m).
-    - declaration: "Proofs.resnet50ForwardB_full"   # the whole-net R forward at the bottleneck ladder; q a binder, so 224 and 160 are instances
-      file: "LeanMlir/Proofs/Architectures/ResNet50FullB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: ["He et al. 2016, Deep Residual Learning (ResNet-50, v1.5 stride placement)"]
-    - declaration: "Proofs.resnet50ForwardB_full_has_vjp_at"   # certified whole-net input-VJP at a smooth point, all 16 bottlenecks
-      file: "LeanMlir/Proofs/Architectures/ResNet50FullBVJP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct"   # and it is the pdiv-contracted Jacobian of the committed forward itself
-      file: "LeanMlir/Proofs/Architectures/ResNet50FullBVJP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.StableHLO.resnet50FwdGraphB_full_faithful"   # T2: the typed graph at the render's own tokens denotes that forward
-      file: "LeanMlir/Proofs/Architectures/ResNet50FullB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ResNet50PoCB.r50DownGradsCertified"   # T3 §1 fold: the strided bottleneck's four weight gradient nodes, two of them strided
-      file: "LeanMlir/Proofs/Foundation/ResNet50FaithfulPoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ResNet50TieB.r50IdCotIn_eq_vjp"   # the emitted bottleneck fan-in IS the certified block VJP's backward
-      file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ResNet50TieB.r50_net_tiedB"   # T3 §1a: all 161 gradient nodes at their chain cotangent; N, q and the LOSS all binders
-      file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.ResNet50TieB.r50_lossCot_is_bce_grad"   # and the BCE arm's cotangent is BCE-with-logits' gradient over the B*K divisor
-      file: "LeanMlir/Proofs/Foundation/ResNet50TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- T6 at batch BatchNorm for ResNet-34 and MobileNetV2 (status 4n).
-    - declaration: "Proofs.FloatBridgesTo.batchMapAux"   # the row-indexed batched lift: a backward whose saved activation is per example is batchMapAux, not batchMap
-      file: "LeanMlir/Proofs/Float/Resnet34WholeBackFloatBridgeB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.r34_grad_floatBridgesToB"   # the batched r34 backward chain float-bridges to its named float skeleton; no number is stated about it
-      file: "LeanMlir/Proofs/Float/Resnet34WholeBackFloatBridgeB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.HasVJPAt.backward_unique"   # two pointwise VJP witnesses for one map at one point have one backward; HasVJP.backward_unique's missing peer
-      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.maxPool3s2FlatBackB_eq_vjp_backward"   # rfl: the batched 3x3/s2 pool backward IS batchMap_has_vjp_at's; closes the one seam 4g left open
-      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp"   # T6: the batched r34 backward chain IS the certified whole-net VJP, sixteen blocks opaque
-      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.r34InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the eighteen-stage net, at every batch size
-      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.resnet34ForwardB_full_eq_slots"   # the shape check: those eighteen stages ARE resnet34ForwardB_full, the forward the typed graph denotes
-      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mnv2_grad_floatBridgesToB"   # the batched MobileNetV2 backward chain float-bridges to its named float skeleton; XLA-SAME stem scatter
-      file: "LeanMlir/Proofs/Float/MobileNetV2WholeBackFloatBridgeB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp"   # T6: the batched MobileNetV2 backward chain IS the certified whole-net VJP, seventeen bottlenecks opaque
-      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mnv2InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the twenty-one-stage net, at every batch size
-      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mobilenetv2ForwardB_full_eq_slots"   # the shape check: those twenty-one stages ARE mobilenetv2ForwardB_full
-      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- ResNet-50's T6, the last statement that net was missing (status 4o).
-    - declaration: "Proofs.r50_grad_floatBridgesToB"   # the batched R50 backward chain float-bridges to its named float skeleton; q a binder, so both shipped resolutions
-      file: "LeanMlir/Proofs/Float/Resnet50WholeBackFloatBridgeB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.r50InputGradB_eq_r34B_full_vjp"   # T6: the R50 backward chain IS the certified whole-net VJP, sixteen bottlenecks opaque; the apex is ResNet-34's, reused
-      file: "LeanMlir/Proofs/Foundation/Resnet50WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.r50InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the eighteen-stage net, at every batch size AND both resolutions
-      file: "LeanMlir/Proofs/Foundation/Resnet50WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.resnet50ForwardB_full_eq_slots"   # the shape check: those eighteen stages ARE resnet50ForwardB_full
-      file: "LeanMlir/Proofs/Foundation/Resnet50WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- MobileNetV4-Conv-M's BLOCK tier: the four UIB families collapsed into one body, the
-    #     stride-2 forms that deliberately do not collapse, the fused stage and the head. The
-    #     net level (T1/T2/T3/T6) is NOT here -- see planning/mnv4_proofs_tier.md.
-    #     No accuracy is quoted for Conv-M: Conv-S's 87.36% is a superseded table and the
-    #     verified ImageNet port has not run.
-    - declaration: "Proofs.StableHLO.mnv4BodyOfRow_faithful"   # a UIB body built ENTIRELY from its table row -- widths are projections of the row, the k=0 dispatch reads the row, so a family mis-dispatch is a wrong number in mnv4Blocks
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.StableHLO.mnv4UibPreStridedBody_faithful"   # the three stride-2 blocks (1, 3, 11); the strided depthwise changes the TYPE so id' cannot collapse it, and the post-strided arm is certified but unexercised in Conv-M
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.StableHLO.mnv4FusedStage_faithful"   # stage 0, swish and therefore globally certified (ok = True); its stemBackBatchedGraph closed EfficientNet's stem hole at the same time
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.StableHLO.mnv4Head_faithful"   # GAP and dense both tie by rfl; models ONE conv stage, and Conv-M's render has two (%h1W 256->960, %hW 960->1280)
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- MobileNetV4-Conv-M's T1, T2 and T6 at batch BatchNorm, the fused stage + 21 UIB blocks
-    #     + the two-conv head. The trunk is FIVE resolution-group CertLayers joined by seven
-    #     named prefixes (composing them into one CertLayer makes every later .fwd peel a kernel
-    #     timeout at MNv4's literal resolutions), so the apex binds eight hypotheses -- the stem's
-    #     kink clause and one .ok per group -- against ResNet-50's thirty-three.
-    #     No accuracy is quoted for Conv-M; the ties (forward 3.770e-06, gradient inside the
-    #     reference's fp32 floor, both 2026-09-07) are what pin these to the reference's function.
-    - declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful"   # T2: the typed graph at mnv4FwdChainB's own tokens denotes the whole-net batch-BN forward; SSA names read off the block table, which is what pins the shape-identical rows apart
-      file: "LeanMlir/Proofs/Architectures/MobileNetV4FullB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.StableHLO.mobilenetv4ForwardB_full_has_vjp_at"   # T1: whole-net input-VJP at bnBatchLA; stem composed by vjp_comp_at because no render emits a gradient into %x, trunk from CertLayer; N and nCls binders, no epsilon hypotheses
-      file: "LeanMlir/Proofs/Architectures/MobileNetV4FullBVJP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.StableHLO.mobilenetv4ForwardB_full_has_vjp_at_correct"   # and it is the pdiv-contracted Jacobian of the whole net, at every batch size and both shipped class counts
-      file: "LeanMlir/Proofs/Architectures/MobileNetV4FullBVJP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.StableHLO.mnv4PreStridedBodyOfRow_faithful"   # the three stride-2 rows, row-typed like mnv4BodyOfRow; Conv-M has no post-strided row so that arm stays certified and unexercised
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4BackB0.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.Mnv4PoCB.mnv4ExtraDWGradsCertified"   # T3 fold: the ExtraDW block's four weight-gradient nodes denote the certified batched gradient; the ConvNeXt and FFN profiles are separate theorems because an absent depthwise emits NO token and would be the den of a node the artifact lacks
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4FaithfulPoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.Mnv4PoCB.mnv4StemGradsCertified"   # the stem is convStridedXlaWeightGradB (XLA-SAME, EfficientNet-B0's op) where the fused stage is symmetric -- two padding phases in one net, identical types, different certificates
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4FaithfulPoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.Mnv4PoCB.mnv4Bf16GradsCertified"   # all five *GradBBf16 kinds the bf16 artifacts emit, each with its own den (operands rounded, result rounded ONCE outside the batch sum); three cited from ConvNeXt, two proven here
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4FaithfulPoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.Mnv4TieB.mnv4_net_tiedB"   # T3 tie: all 233 MNv4 gradient nodes at the cotangent the render's backward chain delivers; g a binder, N and nCls binders, no smoothness or epsilon hypothesis
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.Mnv4TieB.mnv4_lossCot_is_smoothedCE_grad"   # and g instantiated: the emitted six-op chain IS (1/B) d/dlogits of soft-target CE against the smoothed target; softmaxRow at m := 1, ResNet's spelling
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4TiePoCB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mnv4_grad_floatBridgesToB"   # the batched MNv4 backward chain float-bridges to its named float skeleton; not one new float leaf -- B0's XLA stem, plain 1x1 head convs, ResNet-34's GAP-and-dense tail
-      file: "LeanMlir/Proofs/Float/MobileNetV4WholeBackFloatBridgeB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mnv4StemBBack_eq_vjp_backward"   # the stem endpoint tie: XLA-SAME strided conv back + BN back + relu mask IS mnv4StemB's certified backward; one token from MobileNetV2's (relu6), ResNet-34's (symmetric) and B0's (swish), and a different certificate from all three
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mnv4InputGradB_eq_mnv4B_full_vjp"   # T6: the MNv4 backward chain IS the certified whole-net VJP, the fused stage and 21 blocks opaque; stated TO THE IMAGE, one step past the artifact (no render emits a gradient into %x)
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mnv4InputGradB_correct"   # and it is the pdiv-contracted Jacobian of the twenty-six-stage net, at every batch size and both shipped class counts
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.mobilenetv4ForwardB_full_eq_slots"   # the shape check: those twenty-six stages ARE mobilenetv4ForwardB_full, each block named by its table row -- which is what pins rows 4/5/10, 12/18 and 15/19/20 apart
-      file: "LeanMlir/Proofs/Foundation/MobileNetV4WholeBackCertifiedTieB.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- Whole-net float budgets: forwards (fidelity 4d). "fold" = the rounding error composes
-    #     to the budget; "CAP" = the float and real outputs both lie in the window (triangle
-    #     inequality, budget/window = 2.00). Budget / window, per logit, unit input box.
-    - declaration: "cifar8_float_logits_le"   # CIFAR-8 forward: 6.37e14 / 6.121e18, fold
-      file: "LeanMlir/Proofs/Float/Cifar8FloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "r34_float_logits_le"   # ResNet-34 inference-BN forward: 1.548e209 / 3.152e211, fold
-      file: "LeanMlir/Proofs/Float/Resnet34FloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "r34_train_float_logits_le"   # ResNet-34 training-BN forward: 1.752e81 / 8.748e80, CAP, per example
-      file: "LeanMlir/Proofs/Float/Resnet34TrainFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "mnv2_float_logits_le"   # MobileNetV2 inference-BN forward: 1.444e96 / 2154, fold; the one non-vacuous window; XLA-SAME stem and four strided depthwises, as the shipped render (re-spelled 2026-09-05)
-      file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "mnv2Paper_float_logits_le"   # MobileNetV2 at the 17-block PAPER depth, inference BN, 52 sites, any class count: 8.176e16 / 2.152e4, CAP at every BN site (uncapped 2.104e266); 79 orders below the six-block UNCAPPED number; tied to the typed eval graph of the paper net (MobileNetV2FullPaperEval.lean, mnv2Paper_float_logits_le_committed), whose SSA names are the committed artifact's
-      file: "LeanMlir/Proofs/Float/MobileNetV2PaperFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "b0_float_logits_le"   # EfficientNet-B0 inference-BN forward, any batch size: 8.408e210 / 2.580e55, fold; XLA-SAME stem, as the shipped render (re-spelled 2026-09-05)
-      file: "LeanMlir/Proofs/Float/EfficientNetFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "b0Full_float_logits_le"   # EfficientNet-B0 at the 16-block PAPER depth, inference BN, 49 BN sites, 16 SE gates, any batch size, any class count: 2.416e287 / 1.886e279, CAP at the SIGMOID of every SE gate only (uncapped 1e1897907); the window is honest; the first number past 1e253 (norm_num's ceiling is exponentiation.threshold, raised to 400); tied to the typed eval graph of the paper net (EfficientNetFullB0Eval.lean, b0Full_float_logits_le_committed), the den-level form of efficientnet_fwd_eval
-      file: "LeanMlir/Proofs/Float/EfficientNetFullFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "cnx_float_logits_le"   # ConvNeXt-T forward: 9.738e130 / 4.871e130, CAP
-      file: "LeanMlir/Proofs/Float/ConvNeXtFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "vit_float_logits_le"   # ViT-Tiny forward: 4.794e108 / 2.397e108, CAP; also needs smRho u eexp 197 < 1
-      file: "LeanMlir/Proofs/Float/ViTFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- Whole-net float budgets: input-gradient backwards, all at training-mode normalisation,
-    #     all folds, per input pixel on loss cotangents <= 1 (fidelity 4d).
-    - declaration: "r34_grad_float_le"   # ResNet-34 backward: 6.894e244 / 8.857e245; operating point |istd| <= 16
-      file: "LeanMlir/Proofs/Float/Resnet34BackFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "mnv2_grad_float_le"   # MobileNetV2 backward: 1.076e152 / 4.750e153; no operating point; XLA-SAME at the five stride-2 sites (re-spelled 2026-09-05)
-      file: "LeanMlir/Proofs/Float/MobileNetV2BackFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "cnx_grad_float_le"   # ConvNeXt-T backward: 1.563e250 / 1.023e251; first fold for a LayerNorm net; |istd| <= 16
-      file: "LeanMlir/Proofs/Float/ConvNeXtBackFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "b0_grad_float_le"   # EfficientNet-B0 backward at batch size 1: 1.578e182 / 7.104e182; through three squeeze-excite sites; no operating point; XLA-SAME stem (re-spelled 2026-09-05)
-      file: "LeanMlir/Proofs/Float/EfficientNetBackFloatBudget.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    #
-    # --- Whole-net certified backward ties: the hand-written backward chain IS the certified
-    #     whole-net VJP, with a shape check that the chain is the committed forward (fidelity 4d).
-    - declaration: "r34InputGrad_eq_resnet34_vjp"   # ResNet-34; smooth-point (HasVJPAt); shape check resnet34Forward_full_pc_eq_chain
-      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "mnv2InputGrad_eq_mobilenetv2_vjp"   # MobileNetV2; smooth-point (HasVJPAt); shape check mobilenetv2Forward_full_pc_eq_chain
-      file: "LeanMlir/Proofs/Foundation/MobileNetV2WholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "convnextInputGrad_eq_convNextForwardTCh_vjp"   # ConvNeXt-T; HasVJP everywhere, no smoothness side-condition; shape check convNextForwardTCh_eq_chain
-      file: "LeanMlir/Proofs/Foundation/ConvNeXtWholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "efficientnetInputGradB_full_correct"   # EfficientNet-B0 at the 16-block PAPER depth; the hand-written chain IS the pdiv-contracted Jacobian of efficientnetForwardB_full, via HasVJP.backward_unique against efficientnetForwardB_full_has_vjp; shape check efficientnetForwardB_full_eq_chain (inside _has_vjp_correct); HasVJP everywhere, every batch size
-      file: "LeanMlir/Proofs/Foundation/EfficientNetFullWholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "vitInputGradK_eq_vitForwardKV_vjp"   # ViT-Tiny at depth 12, 3 heads, VECTOR LayerNorm; the tier the scalar-LN block tie could not reach; via HasVJP.backward_unique against the tactic-built vitForwardKV_has_vjp; shape check vitForwardKV_eq_chain; HasVJP everywhere, no kink, only 0 < eps
-      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "vitTinyInputGrad_eq_vitTiny_vjp"   # the same at the shipped dims: 3x224x224, 16x16 patches, 196+1 tokens, D 192 = 3x64, mlp 768, 12 distinct-param blocks, 10 classes
-      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "vitBlockBackV_eq_transformerBlockV_vjp"   # ViT's encoder-block backward at the vector LN the net runs; the scalar-LN peer vitBlockBackPR_eq_transformerBlock_vjp is about the retired form
-      file: "LeanMlir/Proofs/Architectures/ViTVecLNBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "vitTowerBackK_eq_vjp"   # the depth-k encoder-tower fold, head-first like the forward it reverses; the tail's saved input is block 0's OUTPUT
-      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "vitForwardKV_eq_chain"   # the shape check for ViT's tie: the four-factor composition the apex is stated at IS vitForwardKV
-      file: "LeanMlir/Proofs/Foundation/ViTWholeBackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "resnet34Forward_full_pc_eq_chain"   # the shape check for r34's tie: the opaque-block chain IS resnet34Forward_full_pc
-      file: "LeanMlir/Proofs/Foundation/Resnet34BackCertifiedTie.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
+    # --- Whole-net float budgets (fidelity 4d has the full table) ---
+    # a fold: MobileNetV2 inference-BN forward, 1.444e96 / window 2154 -- the one non-vacuous window (relu6 clamps)
+    - {declaration: "mnv2_float_logits_le", file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a CAP: EfficientNet-B0 16-block paper net, 2.416e287 / 1.886e279 at the 16 SE sigmoids, past norm_num's default threshold
+    - {declaration: "b0Full_float_logits_le", file: "LeanMlir/Proofs/Float/EfficientNetFullFloatBudget.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a backward: ResNet-34 training BN, 6.894e244 / 8.857e245, operating point |istd| <= 16
+    - {declaration: "r34_grad_float_le", file: "LeanMlir/Proofs/Float/Resnet34BackFloatBudget.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Other float-tier results ---
-    - declaration: "cifar8_chain_argmaxSafeH"   # adjoint-chain capstone at the committed CIFAR-8 shape; budget does not bite at He magnitudes (fidelity 4c)
-      file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "FloatModel.linear_e4m3_argmax_preserved"   # fp8-E4M3 quantization argmax preservation
-      file: "LeanMlir/Proofs/Float/FloatBridge.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
-    - declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends"   # binary32 SGD step provably decreases CE at TRAINED weights
-      file: "LeanMlir/Proofs/Training/TrainedLinearDescent.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies: []
+    # adjoint-chain capstone at the committed CIFAR-8 shape; does not bite at He magnitudes (fidelity 4c)
+    - {declaration: "cifar8_chain_argmaxSafeH", file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # fp8-E4M3 quantization argmax preservation
+    - {declaration: "FloatModel.linear_e4m3_argmax_preserved", file: "LeanMlir/Proofs/Float/FloatBridge.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a binary32 SGD step provably decreases CE at TRAINED weights
+    - {declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends", file: "LeanMlir/Proofs/Training/TrainedLinearDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Certificates and optimizer geometry ---
-    - declaration: "Proofs.lipschitz_margin_certified_radius"   # Tsuzuku 2018 certified radius
-      file: "LeanMlir/Proofs/Certificates/LipschitzCert.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies:
-        - statement: "Lipschitz-margin certified radius"
-          source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"
-    - declaration: "Proofs.LipschitzCertDemo.scorecard_sdp"   # mechanized 100-image LipSDP scorecard at trained weights (69/100)
-      file: "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies:
-        - statement: "LipSDP-Neuron one-hidden-layer SDP bound"
-          source: "Fazlyab et al. 2019 (arXiv:1906.04893)"
-    - declaration: "Proofs.smoothing_certified_radius_classifier"   # Cohen 2019 smoothing radius END-TO-END (Gaussian NP core proved)
-      file: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies:
-        - statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)"
-          source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"
-    - declaration: "Proofs.MuonGeometry.shampoo_eq_muon"   # optimizer geometry: Shampoo's single-step preconditioner = Muon's polar factor
-      file: "LeanMlir/Proofs/Foundation/MuonGeometry.lean"
-      sorry_count: 0
-      axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""
-      literature_dependencies:
-        - statement: "optimizer = steepest descent under a norm; Muon polar factor realizes the nuclear-norm dual"
-          source: "Bernstein, Newhouse 2024 (arXiv:2409.20325)"
+    # Tsuzuku 2018 certified radius
+    - {declaration: "Proofs.lipschitz_margin_certified_radius", file: "LeanMlir/Proofs/Certificates/LipschitzCert.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: [{statement: "Lipschitz-margin certified radius", source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"}]}
+    # mechanized 100-image LipSDP scorecard at trained weights (69/100)
+    - {declaration: "Proofs.LipschitzCertDemo.scorecard_sdp", file: "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: [{statement: "LipSDP-Neuron one-hidden-layer SDP bound", source: "Fazlyab et al. 2019 (arXiv:1906.04893)"}]}
+    # Cohen 2019 smoothing radius END-TO-END (the Gaussian Neyman-Pearson core is proved)
+    - {declaration: "Proofs.smoothing_certified_radius_classifier", file: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: [{statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)", source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"}]}
+    # optimizer geometry: Shampoo's single-step preconditioner = Muon's polar factor
+    - {declaration: "Proofs.MuonGeometry.shampoo_eq_muon", file: "LeanMlir/Proofs/Foundation/MuonGeometry.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: [{statement: "optimizer = steepest descent under a norm; Muon polar factor realizes the nuclear-norm dual", source: "Bernstein, Newhouse 2024 (arXiv:2409.20325)"}]}
 
 automation:
   methods:
@@ -881,10 +159,10 @@ automation:
       framework: "OpenCode + Claude Code"
       tool_setup: >-
         Lean 4 + Lake + Mathlib for the proofs; an independent kernel re-check via
-        leanprover/comparator with the nanoda kernel; IREE for StableHLO->binary
-        compilation; a parallel JAX (Lean->Python codegen) pipeline for empirical
-        cross-checking on GPU/CPU. The audit report (tests/AUDIT_REPORT*.md) and
-        mutation tests were themselves agent-assisted.
+        leanprover/comparator with the nanoda kernel; XLA/PJRT for StableHLO->binary
+        compilation (IREE as the differential compiler); a parallel JAX (Lean->Python
+        codegen) pipeline for empirical cross-checking on GPU/CPU. The audit report
+        (tests/AUDIT_REPORT*.md) and mutation tests were themselves agent-assisted.
       cost:
         wall_time: ""        # not precisely tracked; project developed over months
         spend_usd: ""        # not tracked
@@ -900,1342 +178,188 @@ automation:
 
 fidelity:
   divergences: |
-    The proved theorems form tiers; not everything the prose/abstract describes
-    is a theorem. Stated plainly:
+    The proved theorems form tiers; not everything the prose describes is a theorem. Sections
+    1-6 are the standing disclosures, 4b-4f the axes the 2026-09 audits added, and 4g the label
+    table for the per-package records that used to be written out here (their write-ups are
+    planning/proofs_tier_to_paper_nets.md, planning/renderer_convergence.md and
+    planning/mnv4_proofs_tier.md).
 
-    1. STRONGEST -- layer VJP correctness. The per-layer backward formulas
-       (dense, conv, batch-norm, layer-norm, softmax-CE, attention/MHSA, GELU,
-       etc.) are derived from Mathlib's `fderiv` and machine-checked. These are
-       the core results and are the bulk of the 52 comparator-rechecked theorems.
+    1. STRONGEST -- layer VJP correctness. The per-layer backward formulas (dense, conv,
+       batch-norm, layer-norm, softmax-CE, attention/MHSA, GELU, ...) are derived from Mathlib's
+       `fderiv` and machine-checked; they are the bulk of the 52 comparator-rechecked theorems.
 
-    2. CODEGEN TRUST BOUNDARY (disclosed gap). The canonical backward is the
-       `fderiv`/`pdiv` expression, which at NON-smooth points (a ReLU input
-       exactly 0, a pooling argmax tie) returns Mathlib's junk default of 0,
-       whereas the emitted codegen uses the standard subgradient/argmax
-       convention (`if x>0 then dy else 0`, select-and-scatter). They agree only
-       at smooth points. This is documented in LeanMlir/Proofs/README.md
-       ("Codegen trust boundary"); smooth-point bridge theorems were added
-       (`relu_codegen_matches_canonical`, `maxPool2_codegen_matches_canonical`).
+    2. CODEGEN TRUST BOUNDARY (disclosed gap). The canonical backward is the `fderiv`/`pdiv`
+       expression, which at NON-smooth points (a ReLU input exactly 0, a pooling argmax tie)
+       returns Mathlib's junk default of 0, where the emitted code uses the subgradient/argmax
+       convention. They agree only at smooth points (`relu_codegen_matches_canonical`,
+       `maxPool2_codegen_matches_canonical`); see LeanMlir/Proofs/README.md.
 
-    3. SMOOTH-INPUT CONDITIONING. The global instances `relu_has_vjp`,
-       `mlp_has_vjp`, `maxPool2_has_vjp3` define `backward` as the pdiv-sum RHS
-       and close `correct` by `rfl` -- codegen-shaped witnesses whose formal
-       content is the pdiv expression (which fully characterizes backprop only at
-       smooth points). The earlier limitation (global composition needing
-       `Differentiable R f`, which blocked ReLU-containing chains) has since been
-       addressed: a pointwise `HasVJPAt` API with `vjp_comp_at` (Tensor.lean) plus
-       `relu_has_vjp_at` / `mlp_has_vjp_at` (MLP.lean) give real chain-rule proofs
-       -- no rfl escape -- under an explicit smooth-input hypothesis
-       (`forall k, preact k != 0`, i.e. no ReLU kink / no pooling tie). The residual
-       honest caveat is therefore that the strongest backprop-correctness results
-       are conditioned on smooth inputs; the measure-zero non-smooth points are
-       the disclosed codegen trust boundary of (2).
+    3. SMOOTH-INPUT CONDITIONING. The strongest backprop-correctness results are pointwise
+       (`HasVJPAt`, `vjp_comp_at`) under an explicit smooth-input hypothesis -- no ReLU kink, no
+       pooling tie -- so every kinked net's whole-net VJP carries those clauses in its statement
+       (32 for ResNet-34, 48 for ResNet-50, 35 relu6 for MobileNetV2, ~60 for MobileNetV4). The
+       global instances (`relu_has_vjp`, `mlp_has_vjp`, `maxPool2_has_vjp3`) are codegen-shaped
+       witnesses whose `correct` closes by `rfl`; the measure-zero non-smooth points are (2).
 
-    4. FULL-NET RESULTS are "the network composes and has a VJP at a witness
-       point". To rule out a vacuous (e.g. all-zero-weight) witness, separate
-       non-degeneracy proofs exist, now at the strongest level for both deep
-       kinked nets: `Mnv2Live` and the 2-channel live ResNet-34
-       `ResNet34LivePC.liveFwd2` each prove a non-constant forward
-       (`*_nonconstant`, level 2) AND a nonzero whole-net Jacobian at a witness
-       point (`Mnv2Live.mnv2Live_jacobian_nonzero`,
-       `ResNet34LiveSeal.liveFwd2_jacobian_nonzero`, level 3) -- so the rendered
-       backward is genuinely not the zero map there. All audited 3-axiom-clean.
-       The ResNet witness is also carried to the real `[3,4,6,3]` (16-block)
-       depth (`ResNet34LiveFull.liveFwd2Full_jacobian_nonzero` /
-       `liveFwd2Full_backward_nontrivial`, level 3), and BOTH nets are sealed at
-       the realistic 224x224 input geometry (ResNet via weight-independent
-       beta-positivity, MobileNetV2 via gamma-scaling into the ReLU6 window).
-       Beyond synthetic witnesses, TRAINED-weight results exist: whole-net VJP
-       witnesses + level-3 Jacobian seals at real trained checkpoints and real
-       test inputs for the MLP and CNN rungs (TrainedMlpWitness,
-       TrainedCnnWitness/TrainedCnnSeal), and a provable strict CE-descent step
-       at trained weights (TrainedLinearDescent). A BN-CNN live witness remains
-       the last follow-up.
+    4. FULL-NET RESULTS are "the network composes and has a VJP at a witness point". Separate
+       non-degeneracy proofs rule out a vacuous witness: a non-constant forward and a nonzero
+       whole-net Jacobian for MobileNetV2 (`Mnv2Live`) and the 2-channel live ResNet-34 at the
+       real [3,4,6,3] depth (`ResNet34LiveSeal`, `ResNet34LiveFull`), both sealed at 224x224, plus
+       trained-weight witnesses and a provable strict CE-descent step for the MLP/CNN/linear
+       rungs (`TrainedMlpWitness`, `TrainedCnnSeal`, `TrainedLinearDescent`).
 
-    4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement):
-       the smoothing radius theorems require class probabilities in the OPEN
-       interval (0,1) (`hp` -- the true quantile is undefined at the endpoints;
-       Monte-Carlo estimates always satisfy it), and the theorems speak about
-       TRUE smoothed probabilities while the reporting driver uses
-       Clopper-Pearson ESTIMATES -- that estimation gap is not formalized. The
-       adjoint-chain float bounds use a per-op Higham model; the balanced-tree
-       reduction refinement carries an explicit (quarantined) order-balanced
-       hypothesis. The LipSDP scorecards certify a FIXED 100-image subset at a
-       FIXED epsilon -- an honest lower bound, not a dataset-wide claim.
+    4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement): the smoothing
+       radius theorems require class probabilities in the OPEN interval (0,1) and speak about TRUE
+       smoothed probabilities where the driver uses Clopper-Pearson ESTIMATES -- that gap is not
+       formalized. The adjoint-chain float bounds use a per-op Higham model with a quarantined
+       order-balanced reduction hypothesis. The LipSDP scorecards certify a FIXED 100-image subset
+       at a FIXED epsilon -- an honest lower bound, not a dataset-wide claim.
 
-    4c. THE ADJOINT-CHAIN TIER IS NOT BITING (disclosed 2026-09-02, audit).
-       `chain_adjointClose` / `chain_argmaxSafe` (AdjointChainBridge.lean) are
-       correct depth-generic theorems. Their first form could not be instantiated
-       at any committed net: `LayerCert m A` carried ONE window that every layer
-       had to map into itself, which forces `m*w' <= 1`, while the committed
-       cifar8Verified profile runs 24..114; its `hfit` binder was discharged
-       nowhere and `cifar8_chain_argmaxSafe` had no CIFAR-8 referent. FIXED:
-       `AdjointChainBridgeHet.lean` indexes the chain by (dimension, window) per
-       layer, and `Cifar8ChainCert.cifar8ChainH` is the committed cifar8Verified
-       layer list op for op, tied by rfl (`cifar8ChainH_chainRH_eq`) to
-       `cifarCnn8Forward`, the def `StableHLO.cifar8FwdGraph_faithful` certifies
-       the emitted graph denotes; `cifar8_chain_cert_committed` restates the
-       certificate on it. Writing that tie caught a real error (the chain's dense
-       head had three bare denses where the committed layers interleave relu).
-       NOT BITING: the v2 certificate is correct but its budget takes each stage
-       at its WORST-CASE propagated window, which at He magnitudes (w' = 0.39,
-       beta = 0.01, A = 1) grows 1 -> 10.5 -> 592 -> ... -> 4.6e18, so
-       `chainBudgetH >= 1.8e13` against logits of ~10 and `hmargin` is satisfiable
-       there only at u = 0 or for contracting weights (m*w' <~ 1). The
-       "chainBudget ~ 2.6" of scripts/adjoint_chain_probe.py is the same formula
-       with each stage at its MEASURED activation magnitude, which no
-       instantiation of the theorem can supply (`LayerCertH.window` must hold on
-       the whole box). scripts/adjoint_chain_ibp_probe.py measured the sound
-       routes: even an exact tail gain leaves the propagated budget ~1.2e6x above
-       the true drift, so the looseness is `layerBudget` at worst-case windows,
-       not the tail gains. `TailGainsH` has no proven discharge at heterogeneous
-       dimensions (`tailGains_suffixProd` is uniform-dim only), so every v2 `hH`
-       in the repo is supplied by measurement. What v2 adds is the committed
-       SHAPE and the rfl tie, not a certificate that bites at trained weights.
+    4c. THE ADJOINT-CHAIN TIER IS NOT BITING (disclosed 2026-09-02). `chain_adjointClose` /
+       `chain_argmaxSafe` are correct depth-generic theorems, and `Cifar8ChainCert.cifar8ChainH` is
+       the committed cifar8Verified layer list op for op, tied by rfl to the forward the emitted
+       graph denotes. NOT BITING: the certificate's budget takes each stage at its WORST-CASE
+       propagated window, which at He magnitudes grows 1 -> 10.5 -> 592 -> ... -> 4.6e18, so
+       `chainBudgetH >= 1.8e13` against logits of ~10; the "chainBudget ~ 2.6" of
+       scripts/adjoint_chain_probe.py is the same formula at MEASURED activation magnitudes, which
+       no instantiation of the theorem can supply. What the tier adds is the committed SHAPE and
+       the rfl tie, not a certificate that bites at trained weights.
 
-    4d. WHOLE-NET FLOAT BUDGETS (disclosed 2026-09-02; thread closed 2026-09-05).
-       The standing reference is planning/float_budget_numbers.md; the working
-       record with every ablation is planning/archive/float_budget_numbers_log.md.
+    4d. WHOLE-NET FLOAT BUDGETS (disclosed 2026-09-02; thread closed 2026-09-05 as vacuous).
+       Standing reference planning/float_budget_numbers.md; the ablation log is
+       planning/archive/float_budget_numbers_log.md.
 
-       THE DEFECT THAT STARTED IT. `FloatBridges f := forall A, 0 <= A -> exists
-       B L fF, 0 <= B /\ FloatClose A B f fF L` bound the float implementation
-       `fF` existentially, so it was provable for ANY `f` bounded on boxes by
-       taking `fF := f` and the constant modulus `2B` -- no FloatModel, no unit
-       roundoff, 3-axiom clean. The ~134 FloatBridges conclusions, every
-       whole-net capstone included, therefore stated only boundedness while their
-       docstrings claimed "the deployed float forward within an explicit budget".
-       The first repair, `FloatBridgesTo f fF`, named the map but still bound the
-       modulus `L` existentially, and an unconstrained modulus is discharged by
-       the triangle inequality from the magnitude clause alone
-       (`FloatBridgesTo (relu n) (fun _ _ => 0)` was a 3-axiom-clean theorem).
-       Both are FIXED: `FloatBridgesTo f fF` is a Type-valued structure with
-       `mag : R -> R` (input window -> output window), `mod : R -> R -> R` (input
-       window, inherited error -> error modulus) and `close : forall A, 0 <= A ->
-       0 <= mag A /\ FloatClose A (mag A) f fF (mod A)`; every combinator composes
-       the bookkeeping explicitly; the thirteen whole-net bridges are noncomputable
-       defs whose `.mod` is a closed term over the per-op budgets; and a numeric
-       bound on a whole-net `.mod` is a statement the kernel checks. The `2B`
-       witness is still constructible, but its `.mod` is visibly `2B`. The legacy
-       FloatBridges statements remain (derivable via `toFloatBridges`) and
-       constrain no float implementation; do not cite them as budgets.
+       THE DEFECT THAT STARTED IT. `FloatBridges f` bound the float implementation and its
+       modulus existentially, so it was provable for ANY bounded `f` with the constant modulus
+       `2B` and stated only boundedness while docstrings claimed a budget. FIXED:
+       `FloatBridgesTo f fF` is a Type-valued structure carrying `mag` (output window) and `mod`
+       (error modulus) as data, every combinator composes them explicitly, and a numeric bound on
+       a whole-net `.mod` is a statement the kernel checks. The legacy `FloatBridges` statements
+       remain and constrain no float implementation; do not cite them as budgets.
 
-       THE NUMBERS. Each is a theorem closed over the real leaves (no bridge
-       hypothesis left), tied to the committed net by rfl and, for the forwards,
-       to the rendered graph by the `*_faithful` theorems -- with no exceptions
-       left: the two paper nets' eval twins (MobileNetV2FullPaperEval.lean,
-       EfficientNetFullB0Eval.lean) were built in the same session so that their
-       numbers end at a typed graph rather than at a block-by-block rfl. Every numeral is
-       generated in the leaves' own exact-rational arithmetic and re-asserted by
-       scripts/float_budget_envelope.py before the kernel checks it. Window =
-       certified output magnitude; budget = |float - real| per logit (forwards) or
-       per input pixel (backwards, on loss cotangents of magnitude <= 1); unit
-       input box; a per-parameter-kind profile measured on the trained checkpoint;
+       THE NUMBERS. Each is closed over the real leaves, tied to the committed net by rfl and, for
+       the forwards, to the rendered graph by the `*_faithful` theorems; every numeral is generated
+       by scripts/float_budget_envelope.py and re-asserted by the kernel. Window = certified output
+       magnitude; budget = |float - real| per logit (forwards) or per input pixel (backwards, on
+       loss cotangents <= 1); unit input box; a profile measured on the trained checkpoint;
        eps >= 1e-5; u <= 2^-24.
 
-           CIFAR-8 forward                       6.37e14   / 6.121e18   fold   cifar8_float_logits_le
-           ResNet-34 forward, inference BN       1.548e209 / 3.152e211  fold   r34_float_logits_le
-           ResNet-34 forward, training BN        1.752e81  / 8.748e80   CAP    r34_train_float_logits_le  (per example)
-           MobileNetV2 forward, inference BN     1.444e96  / 2.154e3    fold   mnv2_float_logits_le
-           MobileNetV2 forward, 17-block paper   8.176e16  / 2.152e4    CAP    mnv2Paper_float_logits_le  (52 BN sites, all capped; any class count)
-           EfficientNet-B0 forward, inference BN 8.408e210 / 2.580e55   fold   b0_float_logits_le         (any batch size)
-           EfficientNet-B0 forward, 16-block paper 2.416e287 / 1.886e279 CAP    b0Full_float_logits_le     (16 SE sigmoids capped; the window is honest; tied to the eval graph)
-           ConvNeXt-T forward                    9.738e130 / 4.871e130  CAP    cnx_float_logits_le
-           ViT-Tiny forward                      4.794e108 / 2.397e108  CAP    vit_float_logits_le
-           ResNet-34 backward, training BN       6.894e244 / 8.857e245  fold   r34_grad_float_le          (|istd| <= 16)
-           MobileNetV2 backward, training BN     1.076e152 / 4.750e153  fold   mnv2_grad_float_le
-           ConvNeXt-T backward                   1.563e250 / 1.023e251  fold   cnx_grad_float_le          (|istd| <= 16)
-           EfficientNet-B0 backward, training BN 1.578e182 / 7.104e182  fold   b0_grad_float_le           (batch size 1)
-
-       WHAT KIND OF STATEMENT EACH IS. A "fold" is the interval fold of the
-       per-op rounding moduli: the rounding error composes to the budget. A "CAP"
-       goes through `FloatBridgesTo.capped`, whose modulus is `min(mod, 2*mag)`,
-       and the `2*mag` branch is what closes at every normalisation site, so it
-       states only that the float and the real output both lie in the certified
-       window -- the triangle inequality; budget/window = 2.00 is the tell, and a
-       cap must never be tabled beside a fold without the label. Read the tell
-       carefully on the 17-block MobileNetV2 forward: it caps at every BatchNorm
-       and then runs three more stages (relu6, GAP, the classifier) which collapse
-       the window and carry the error forward, so its ratio is 3.8e12 and the
-       label has to be read off the file rather than off the ratio; and on the
-       16-block EfficientNet-B0 forward, which caps only the SIGMOID of each of
-       its sixteen squeeze-excite gates (the one stage whose window is a constant,
-       1 + esig) and folds everything else, so its ratio is 1.3e8 -- sixteen gate
-       caps compounding as E -> 2A + 3E -- and its window is honest and uncapped.
-       That number is also the first past 1e253: norm_num's "ceiling" is Lean's
-       `exponentiation.threshold` option (default 256), not a wall, and the file
-       raises it. The first
-       three caps are caps because a normalisation that reduces its statistics out of its
-       own input has a modulus QUADRATIC in the window (training-mode BatchNorm,
-       LayerNorm; squeeze-excite likewise; attention exponentially), so the
-       uncapped fold runs past what `norm_num` will evaluate (~1e253 for a nested
-       tree) at the eps-floor, and where it exists at an operating point it is 80
-       orders WORSE than the cap (ConvNeXt-T, measured). Inference BatchNorm
-       freezes its statistics and is affine in x, which is why four forwards are
-       folds. Every backward is a fold: a VJP is linear at a fixed point and
-       reads its statistics off the saved activations, which the cotangent does
-       not perturb. Two numbers carry a batch qualifier: B0's backward is at
-       batch size 1 because `bnBatchLA` reduces across examples (2.880e194 at
-       N = 256), and ResNet-34's training forward is per example for the same
-       reason; the seven inference forwards hold at any batch size.
-
-       WHAT IS SUPPLIED. Device kernels with no IEEE specification carry an
-       accuracy hypothesis of 1e-2, quantified over any device at least that
-       accurate: `rsqrt` on every BatchNorm net (DeviceRsqrt), sigmoid on B0
-       (DeviceSigmoid), GELU on ConvNeXt and ViT (DeviceGelu), `exp` on ViT
-       (DeviceExp, relative, with the softmax side condition `smRho u eexp 197 <
-       1`). The device MEAN is derived rather than supplied:
-       `FloatModel.bnMean_close_of` is parameterised by the reduction's forward
-       error spec so any summation order qualifies, and `r34TrainBn_emr_committed`
-       / `deviceLN_emr_committed` witness the committed numerals. The backwards
-       additionally take the saved activations' accuracies (`es`, `exh`; B0 also
-       `esav`) at 1e-2. NO FORWARD STATEMENT DISCHARGES THOSE: the inference
-       forwards are about a different program, the training-mode forward is a cap
-       and supplies only `2*window`, and LayerNorm has no mode in which a fold
-       exists. So no forward-then-backward composition is claimed anywhere; each
-       backward number is an honest fold of the backward kernel's rounding given
-       saved-activation accuracies its own forward cannot supply.
-
-       WHAT IS NOT CLAIMED. Numerical accuracy. The budgets are 1e80 to 1e251
-       against logits of order 10. They are interval folds at worst-case windows
-       through 30 or more layers and cannot be made to bite by more work of this
-       kind: on ResNet-34 the conv fan-in face `m*w'` is 14 to 95 times loose
-       per layer against the measured row-L1 norm, and even at that measured
-       face the training forward would land at 1e19 (scripts/param_row_l1.py;
-       priced and not taken). A bound that bites needs the on-trajectory
-       Jacobian, which is 4c's MEASURED tier and not a static hypothesis. The one
-       non-vacuous number is MobileNetV2's WINDOW, 2154, because relu6 clamps at
-       6 whatever its input; its budget is still 1e96. What the numbers DO
-       certify is the float program's shape: every stage present, at the right
-       fan-in, in the right composition, at the right normalisation mode,
-       kernel-checked; a dropped stage, a misread fan-in or a stale slot fails to
-       compile.
-
-       THE PADDING CONVENTION, CLOSED (found and closed 2026-09-05). The
-       EfficientNet-B0 and MobileNetV2 renders moved their stride-2 convolutions to
-       XLA-SAME padding on 2026-08-08 to match the TF-origin references, and the one
-       symmetric pair left (`mobilenetv2_fwd` / `_train_step`, SGD) followed on
-       2026-09-05, so every shipped artifact of both nets is XLA-SAME. The Proofs tier
-       had not moved: `efficientnetForwardB`, `mobilenetv2Forward_full_pc`, their PC
-       graphs and `_faithful` theorems, the hand-written backward chains and all four
-       numbers above were at the symmetric spelling, so they described a program one
-       padding phase off at 1 (B0) or 5 (MobileNetV2) sites. They were re-spelled on
-       2026-09-05 at `flatConvStride2Xla` / `depthwiseStride2FlatXla` and the matching
-       emitted tokens, down to the scalar-BN stepping stones. All four numbers
-       reproduced to the digit, as expected: a decimation picks coordinates, so the
-       odd-phase leaves carry the same fan-in and the same rounding as the even-phase
-       ones. What moved is what the theorems are about. Not affected, and correctly
-       symmetric: ResNet-34/50 (PyTorch-origin), ConvNeXt, ViT, MobileNetV4's UIB
-       bodies, and EfficientNet-B0's own strided depthwises, whose render and reference
-       agree — four certs are shared across those net boundaries and kept their
-       symmetric statements, gaining `_xla_` twins for MobileNetV2's use.
-
-       THE TIES. All five backward chains are proven to BE the certified whole-net
-       VJP, each with a shape check that the opaque-block chain the apex is
-       instantiated at IS the committed forward:
-       `r34InputGrad_eq_resnet34_vjp` with `resnet34Forward_full_pc_eq_chain`
-       (HasVJPAt, smooth point), `mnv2InputGrad_eq_mobilenetv2_vjp` with
-       `mobilenetv2Forward_full_pc_eq_chain` (HasVJPAt),
-       `convnextInputGrad_eq_convNextForwardTCh_vjp` with
-       `convNextForwardTCh_eq_chain` (HasVJP everywhere; no smoothness
-       side-condition), and, since 2026-09-05,
-       `efficientnetInputGradB_eq_efficientnetForwardB_vjp` with
-       `efficientnetForwardB_eq_chain` (HasVJP everywhere, at every batch size).
-       B0's had to wait for the padding re-spelling above: at the symmetric stem
-       it would have certified a program no shipped artifact runs. The two paper
-       nets have theirs too: `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp` with
-       `mobilenetv2ForwardPaper_eq_slots` (17 blocks, HasVJPAt), and
-       `efficientnetInputGradB_full_correct` (16 blocks, HasVJP), which goes one
-       step further -- through `HasVJP.backward_unique` to the concrete
-       `efficientnetForwardB_full_has_vjp` and its `_correct`, so the hand-written
-       chain is stated to be the pdiv-contracted Jacobian of the committed
-       nested-application forward itself. ViT-Tiny joined them the same day:
-       `vitInputGradK_eq_vitForwardKV_vjp` with `vitForwardKV_eq_chain` (depth 12,
-       3 heads, HasVJP everywhere, no operating point and no batch size -- ViT has
-       no kink), instantiated at the shipped dimensions as
-       `vitTinyInputGrad_eq_vitTiny_vjp`, and taking B0's
-       `HasVJP.backward_unique` step because `vitForwardKV_has_vjp` is tactic-built
-       behind an `unfold`. It is stated at the VECTOR LayerNorm the render emits,
-       where the pre-existing block tie
-       `vitBlockBackPR_eq_transformerBlock_vjp` is at the retired scalar affines --
-       the SAME drift the row below records for ViT's forward float cone, caught a
-       second time on the same net by the same kind of theorem. There is no ViT
-       backward NUMBER: the chain folds to 1.703e399, which says nothing, and the
-       tie does not need one. Closing the ties found drift that
-       no review had: `r34InputGrad` reversed the 2x2 pool where the committed
-       forward pools 3x3/s2 (the number moved 4x); both ConvNeXt bridges held
-       `id` in the head-LayerNorm slot, the backward one justified by a stale
-       count in its docstring; ViT's float cone was stated on scalar LayerNorm
-       affines where the net trains vectors; the float tier's `convFlatBack` is
-       not the adjoint at an even kernel, a defect the emitter had already fixed
-       twice (`padOdd` repairs it); and docstring counts were wrong in a dozen
-       places (36 BatchNorm sites, not 33; 23 LayerNorm sites, not 22). Nothing
-       trained was affected; in every case the emitted program was right and a
-       hand-written spelling of the same map had drifted. A `den` stated as the
-       certified VJP cannot drift; a hand-written peer can, and only a theorem
-       naming both catches it.
-
-    4e. THE BATCHNORM WORLD (disclosed 2026-09-06; decision taken, port in
-       progress). A training-mode BatchNorm reduces mu/var out of the activation,
-       and the axes it reduces over are a real choice the types cannot see:
-       PER-EXAMPLE (spatial only, `[2,3]`, `bnPerChannelTensor3`) normalises each
-       example by its own statistics; BATCH (`[0,2,3]`, `bnBatchTensor4` /
-       `StableHLO.bnBatchLA`) shares one mu/var per channel across the batch and is
-       the one op that couples examples. They are different functions of the same
-       architecture.
-
-       THE SPLIT, AS SHIPPED. ResNet-34 and MobileNetV2 each ship BOTH.
-       `verified_mlir/resnet34_fwd.mlir` and `mobilenetv2_fwd.mlir` are per-example
-       (73 and 105 spatial reductions = 36 and 52 BatchNorm sites x2, plus the head
-       GAP), as is the SGD trainer `resnet34_train_step.mlir` -- whose 72 batch-axis
-       reductions are the gamma/beta PARAMETER gradients, which reduce across the
-       batch because the parameter is shared, not batch statistics. Every Adam and
-       momentum train step (`resnet34_sgd_train_step`, `resnet34in_mom256_...`,
-       `mobilenetv2in_adam64_...`, and the rest) is batch BN. EfficientNet-B0 is
-       batch BN on both sides. `scripts/convention_audit.py` reports this as
-       `bn-split` for exactly r34 and mnv2, and it is the one axis those two still
-       carry after padding and activation were closed.
-
-       WHY IT MATTERS. Every Proofs tier for those two nets -- the forward and
-       whole-net VJP, the graph faithfulness, the train-step ties (110 and 158
-       parameters as committed -- the 146 and 210 those two files name are the
-       `convBias := true` census, and both renders default to false, folding each
-       conv bias into the BatchNorm after it; corrected 2026-09-06), the forward and backward budgets, the certified backward ties -- is
-       stated at PER-EXAMPLE BatchNorm. Each is true and correctly paired with its
-       artifact: the Imagenette SGD trainer is real and emits real bytes. But the
-       ImageNet accuracies this repo quotes come from the batch-BN Adam and momentum
-       artifacts, so the certified net and the net that produced the headline number
-       are different functions. That gap was undisclosed until now.
-
-       THE DECISION (2026-09-06): port both nets' Proofs tiers to batch BN, rather
-       than keep per-example and disclose. Recorded here because the previous text
-       named neither world.
-
-       WHAT HAS LANDED. The shared foundation, both directions:
-       `Float/BnBatchFloatBridge.lean` gives `bnBatchTensor4` its float bridges
-       (`floatBridgesTo_bnBatchTensor4`, `..._eps`, `floatBridgesTo_bnBatchBack`) and
-       the numeral-facing envelopes (`Maps.bnBatchTensor4`, `...Capped`,
-       `Maps.bnBatchBack`). Before it the batched world had NO float leaf in either
-       direction: `EfficientNetWholeFloatBridge.lean` takes twenty-odd
-       `hbn : FloatBridges (StableHLO.bnBatchLA ...)` as hypotheses, and a legacy
-       `FloatBridges` constrains no float implementation (4d above), so nothing named
-       the map and nothing discharged them. B0's own numbers dodge the hole two ways:
-       `b0_float_logits_le` is at inference BN and `b0_grad_float_le` is at N = 1,
-       where the batched reduction width N*h*w coincides with the per-example h*w.
-       The file is short because `bnBatchTensor4` IS `bnPerChannelTensor3` at width
-       N*(h*w) -- both are `bnPerChannelFlat oc m` conjugated by a permutation -- so
-       the content is one new `Equiv` over round-trip lemmas already proven.
-
-       THE BATCH QUALIFIER IS PERMANENT. `bnGradInputReMag`'s gain carries
-       Xh^2 = n = N*h*w, so any number built on these leaves moves with the batch
-       size: one theorem per N, not one theorem for all N the way an inference-BN
-       forward gets. That is `b0_grad_float_le`'s existing qualifier, stated at the
-       leaf rather than at the net, and it will apply to r34's and MobileNetV2's
-       batched budgets too.
-
-       WHERE THE PORT STANDS (2026-09-06). BOTH nets are done through T3.
-       ResNet-34: T1's forward and graph (4.1b), its whole-net VJP (4.1c-4.1d),
-       the un-fused §1 fold (4f) and the §1a tie (4g). MobileNetV2: T1 and T2
-       (4i), the §1 fold riding on 4f's `MobileNetV2FaithfulPoCPaperG.lean`
-       (already at the batched `*GradB` nodes), and the §1a tie (4j).
-
-       STILL OPEN, for both nets: the training-mode forward budget (a CAP, as
-       `r34_train_float_logits_le` already is) and the backward budget -- T4 and
-       T5, both vacuous by 4d. The certified backward tie at `bnBatchTensor4` (T6)
-       LANDED 2026-09-07 for both nets; see 4n. The block-level batched VJPs and backward-graph
-       faithfulness already exist for both nets (`ResNet34BackB0.lean`,
-       `MobileNetV2BackB0.lean`, folded by `BackNetFolds.lean`), and the eval-mode
-       forward budgets are world-agnostic -- frozen statistics reduce nothing, so
-       `r34_float_logits_le` and `mnv2_float_logits_le` already hold in both
-       worlds. Work packages: planning/proofs_tier_to_paper_nets.md section 4.
-
-       THREE MORE AXES THE SAME REVIEW FOUND (2026-09-06, later that day),
-       recorded here because "the certified net and the net that produced the
-       headline number are different functions" is true for more reasons than
-       BatchNorm. (i) OPTIMIZER FORM -- FOLD DONE 2026-09-06, see 4f. All five
-       *_net_tied_certified capstones are at the fused `theta - lr * g` ops,
-       which only the SGD-inline `<net>_train_step.mlir` emits; every other
-       train step, the ImageNet ones included, emits the raw gradient and hands
-       it to an optimizer tail. The decision was to re-state every fold at the
-       gradient node -- the `*Sgd_eq_grad` family is `rfl` and
-       ResNet34FaithfulPoCB was the template -- which covers every tail at once;
-       that is now done for all five nets, and the capstones are re-pointed for
-       all five (ResNet-34, MobileNetV2, ResNet-50 at batch BN; B0, ConvNeXt-T
-       and ViT-Tiny at their batched chains, 4f/4r/4s). The tails are certified
-       (adamW_triple_faithful, mom_pair_faithful, rmsProp_triple_faithful,
-       clipGrad_faithful, dropPathB_faithful; EMA and accumulation reuse
-       adamMNextF / momVNextF) except LAMB, which has no faithfulness theorem,
-       and BCE-with-logits has no cotangent den; both are ResNet-50-A3's.
-       (ii) RENDERER. ResNet-34, MobileNetV2, ConvNeXt-T and ViT-Tiny each have
-       a per-example renderer (the tied one, batch sum in the emitter) and a
-       batched one (the ImageNet one, batch sum inside den). The decision is one
-       chain per net, the batched one, with the Imagenette numbers re-run.
-       (iii) DATA PARALLELISM. Every `*dp*` artifact's `all_reduce(add)/R` is
-       emitted text outside the AST (a declared carve-out in ViTRender.lean)
-       that no den lemma sees; BatchNorm statistics are per replica. A tie
-       against such an artifact is at the per-replica gradient node. The mean
-       of per-replica gradients is the gradient of the mean of per-replica
-       losses (linearity; for a net without batch coupling that is the
-       global-batch step), which is a lemma to write; the host-side sharding
-       and lockstep are driver logic and get a page, not a theorem. Batch size
-       stays a binder in every tier without a numeral. Work packages: the same
-       document, sections 4b, 4c, 4d.
-
-    4f. THE OPTIMIZER FORM, CLOSED AT THE FOLD (2026-09-06). Every parameter
-       GRADIENT node of all five ImageNet-scale nets' non-SGD-inline train steps
-       now has a machine-checked `den(op) = certified gradient`, for every
-       cotangent. Five files: `Foundation/ResNet34FaithfulPoCB.lean` (8 op
-       kinds), `Architectures/EfficientNetFaithfulPoCG.lean` (8),
-       `ConvNeXtFaithfulPoCG.lean` (14), `ViTFaithfulPoCG.lean` (10),
-       `MobileNetV2FaithfulPoCPaperG.lean` (4 new op kinds plus five
-       per-block-profile capstones). 41 declarations, all 3-axiom clean.
-       A sixth landed 2026-09-07 with 4c leg 4: `ViTFaithfulPoCGB.lean` (10)
-       restates ViT's ten at the BATCHED constructors, because that leg moved
-       every ViT artifact but one onto the batched traversal. See 4p.
-
-       WHAT IT BUYS AND WHAT IT DOES NOT. One lemma per op kind certifies every
-       optimizer tail at once, because AdamW, RMSProp, heavy-ball, EMA, the
-       clipped and weight-decayed variants, gradient accumulation, plain SGD and
-       the bf16 twins all consume the same node. So the artifacts the book names
-       (`<net>_adam_train_step.mlir`) and the ImageNet ones whose accuracies are
-       quoted are now covered at the fold, where before only the SGD-inline file
-       was.
-
-       THE CAPSTONES ARE BEING RE-POINTED, THREE OF FIVE DONE (2026-09-06).
-       ResNet-34 and MobileNetV2 got theirs as batched ties (4g, 4j).
-       EfficientNet-B0's is `Architectures/EfficientNetTiePoCG.lean`: all 262
-       parameters at the RAW gradient node AND at the shared smoothed-target loss
-       cotangent, where the fused `EfficientNetTiePoC` pins `g` to
-       `softmax - oneHot` -- the gradient of plain cross-entropy at a hard label,
-       which no ImageNet artifact computes. No new mathematics: every cotangent
-       chain, activation and Jacobian witness is the fused file's, and each
-       conjunct is its proof with the `theta - lr *` peeling dropped, since the
-       fusion is `rfl`. The `lr`/`wN`/`bN`/`gN`/`lrStr` binders go with the
-       wrapper. The head takes `g` as a BINDER where the fused one computes it
-       internally, and that is the whole of the loss axis -- the per-block ties
-       are `forall cot` statements and were already loss-agnostic.
-
-       ⚠ CONVNEXT-T AND VIT-TINY ARE NOT THE "CHEAP TWO" THE PLAN ASSUMED. Their
-       Adam artifacts come from the PER-EXAMPLE renderers, where the six-op loss
-       chain is emitted at `N := 1` with the batch in `pretty`'s argument rather
-       than inside `den` (`SmoothedLossCot`'s statement is at the batched index).
-       A capstone written for them today would be about a chain 4c legs 3 and 4
-       will retire, so it would have to be written twice. Their legs come first.
-       -- Both legs landed 2026-09-07 (4p, 4q), and both capstones followed
-       the same day (4r, 4s). The set is closed at five of five.
-
-       NO NEW MATHEMATICS, AND OP KINDS ARE SHARED MORE THAN THE FILE NAMES
-       SUGGEST. The fusion is `rfl` -- the 29 `*Sgd_eq_grad` / `*SgdB_eq_grad`
-       theorems say the fused op IS `theta - lr *` applied to the un-fused one --
-       so each proof is the fused lemma's minus the wrapper peeling. And the
-       folds are statements about OP KINDS, not about nets: five of
-       EfficientNet-B0's eight kinds and eight of MobileNetV2's twelve were
-       already proven in ResNet-34's file at exactly the generality needed, so
-       those conjuncts are delegations. ConvNeXt's patchify-stem weight
-       (`convStride4WeightGrad`) never had a fused peer at all -- a declared
-       carve-out, because its SGD path wraps the gradient in hand-written text --
-       and 4b makes that shape the norm rather than the exception.
-
-       TWO CORRECTIONS THE PACKAGE FOUND. (a) MobileNetV2's two renderers do not
-       overlap the way the other four nets' do: `MobileNetV2Render` is SGD-inline
-       only and `MobileNetV2RenderB` is AdamW-only, so this net's Adam and
-       ImageNet artifacts have no fused op to un-fuse and its fold is at the
-       BATCHED `*GradB` nodes. (b) `MobileNetV2FaithfulPoCPaper.lean`'s header
-       named `mobilenetv2_paper_train_step.mlir`, which is the writer's `funcName`
-       DEFAULT and no artifact (the one call site passes
-       `mobilenetv2_train_step`), and gave the parameter count as 210, which is
-       the `convBias := true` census; both MobileNetV2 renders default to
-       `convBias := false`, folding each conv bias into the BatchNorm after it,
-       and the committed step returns 158 updated tensors. Neither correction
-       touches a theorem -- every fold there is quantified over op instances --
-       and both are now recorded in that file.
-
-       PADDING STILL RIDES ALONG INVISIBLY. The strided folds are the axis where
-       two nets can share a type and not a certificate: r34's and ConvNeXt's are
-       the symmetric `convStrided*Grad*` ops, B0's stem and all five of
-       MobileNetV2's stride-2 sites are the XLA-`SAME` `convStridedXla*` /
-       `depthwiseStridedXla*` ones, and B0's strided depthwise is symmetric while
-       MobileNetV2's is not. Identical types, identical emitted shapes.
-
-    4g. RESNET-34's TRAIN-STEP TIE AT THE NET THAT TRAINS (2026-09-06). 4f
-       closed the optimizer form at the FOLD, where the cotangent is still a free
-       variable. For ResNet-34 the cotangent is now pinned:
-       `Foundation/ResNet34TiePoCB.lean` (763 lines, ~2 s) states every parameter
-       gradient node of the batched, batch-BatchNorm train step at the cotangent
-       the emitted backward chain delivers, threaded from the loss down through
-       the certified head backward and the sixteen certified block backwards over
-       `resnet34ForwardB_full`'s own forward prefixes. With 4.1b-4.1e that is
-       ResNet-34's T3 complete at batch BatchNorm.
-
-       ⭐ THE BLOCK COTANGENTS ARE NOT DERIVED. The per-example tie
-       (`ResNet34ChainClose.lean`) spells per-block cotangent vectors out by hand,
-       because no whole-block VJP existed when it was written. 4.1d's
-       `r34IdB_has_vjp_at` / `r34DownB_has_vjp_at` ARE the certified block
-       backwards, and `r34{BasicBlock,DownBlock}BackBatchedGraph_faithful` already
-       proves the emitted seven-node fan-in denotes them, so `r34IdCotIn_eq_vjp`
-       closes by `rfl` and `r34DownCotIn_eq_vjp` by one `add_comm`. The cross-block
-       chain is a composition of certified VJPs, not a re-derivation.
-
-       ⭐ THE TIE HAS TWO HALVES WITH DIFFERENT HYPOTHESES, AND THEY ARE KEPT
-       APART. The capstone `r34_net_tiedB` carries NO smoothness hypothesis and no
-       `0 < eps`: the folds are `forall cot` statements instantiated at explicitly
-       constructed cotangents. The kink and positivity conditions enter only in the
-       two `_eq_vjp` lemmas, which say those constructed cotangents ARE the
-       certified whole-net backward. `N` is a binder throughout.
-
-       ⭐ THE LOSS COTANGENT IS THE LABEL-SMOOTHED ONE, AT A GENERAL TARGET.
-       Every previous tie pinned its top-of-chain cotangent to
-       `softmax(logits) - oneHot label`. The batched renders compose
-       `(softmax(z) - t + alpha*t - alpha/K)/B` from six kit ops, with `t` the
-       graph input `%onehot` -- a soft vector under mixup or cutmix.
-       `Foundation/SmoothedLossCot.lean` gives cross-entropy against a target
-       DISTRIBUTION (`softCE`), its gradient with no hypothesis on `t` at all, and
-       `smoothedCE_grad`: the emitted expression IS the smoothed loss's gradient,
-       exactly, not an approximation of it. Shared, and what 4f's capstone
-       re-pointing will need for the other four nets.
-
-       ⛔ ONE REPLICA, AND THE CENSUS IS 110. Every gradient node in
-       `resnet34in_momdp64` is followed by `all_reduce(add)/4` as emitted text
-       outside the AST, so the tie is at the per-replica node (4d). And both r34
-       renders default to `convBias := false`, so the committed artifacts carry 110
-       SGD-updated tensors, not the 146 `ResNet34TiePoC.lean` and
-       `ResNet34Render.lean` named; those headers are corrected, and the forward's
-       arities are 111 and 183, not 147 and 219.
-
-       ⚠ ONE STEP SHORT. `bnInB_eq_bnBackB` is the only non-`rfl` step in the
-       cotangent chain (every relu mask, conv and strided-conv input-VJP and the
-       pool backward denotes its certified backward definitionally). The 3x3/s2
-       pool backward is threaded as the emitted `den` and is NOT identified with
-       `batchMap_has_vjp_at`'s backward -- there is no `maxPool3s2BackB_faithful`
-       yet, so the stem's cotangent is the artifact's and not (yet) provably the
-       certified pool VJP's.
-
-    4h. ONE CHAIN PER NET — RESNET-34 AND MOBILENETV2 (2026-09-06). Four nets shipped two
-       renderers: a per-example-indexed one (the tied chain, batch sum in the
-       emitter) and a batched one (the ImageNet chain, batch sum inside `den`).
-       They are not two spellings of one function -- per-example BatchNorm
-       reduces `[2,3]` and batched BatchNorm reduces `[0,2,3]`. So a net's
-       forward artifact could not be a byte-prefix of BOTH its SGD train step and
-       its Adam one, and `scripts/regen_verified_mlir.sh`'s `check_adam_prefix`
-       carried the divergence as a `KNOWN_SPLIT` ratchet.
-
-       The decision (user, 2026-09-06) is one chain per net, the batched one.
-       ResNet-34 is done: `Proofs/Codegen/ResNet34Render.lean`,
-       `verified_mlir/resnet34_train_step.mlir` and the `resnet34-verified`
-       binary are RETIRED, and `ResNet34RenderB` is the sole writer of every
-       ResNet-34 artifact, with both forwards rendered from `r34FwdChainB` -- the
-       traversal every batch-BN train step differentiates.
-       `check_adam_prefix` went 5 paired / 2 known-split to 6 paired / 1, and
-       `resnet34_fwd.mlir` is now a byte-identical 1220-line prefix of BOTH
-       `resnet34_adam_train_step.mlir` and `resnet34_sgd_train_step.mlir`.
-
-       MobileNetV2 followed the same day (leg 2), and with it the ratchet is
-       EMPTY: `check_adam_prefix` reads 7 paired, 0 known-split, 0 unaccounted.
-       `Proofs/Codegen/MobileNetV2Render.lean`,
-       `verified_mlir/mobilenetv2_train_step.mlir`, its 6-block demo peer
-       `mobilenetv2_reduced_train_step.mlir` and the `mobilenetv2-verified`
-       binary are RETIRED; `mobilenetv2_fwd.mlir` is a byte-identical 1714-line
-       prefix of `mobilenetv2_adam_train_step.mlir`. As with ResNet-34 there was
-       no number to re-run: that driver's own header measured chance
-       (387/3925, byte identical every epoch) and said not to quote it.
-
-       ⛔ TWO THINGS DIFFERED FROM LEG 1, AND BOTH ARE RECORDED. (a) The EVAL
-       forward stays on the migrated per-example chain for a reason ResNet-34 did
-       not have: `mnv2Paper_float_logits_le_committed`'s provenance claim is that
-       its typed graph "diffs against `mobilenetv2_fwd_eval` line for line", at
-       263 inputs and `paperSig`'s names, and the batched chain names parameters
-       differently. Moving it would leave the theorem true and the sentence false.
-       So `MobileNetV2RenderB` now carries two naming conventions for one
-       parameter list, with `#guard`s pinning both arities. (b)
-       `check_fwd_prefix` LOST its MobileNetV2 entry rather than gaining a new
-       partner: unlike ResNet-34 this net ships no batched SGD step to re-pair
-       with (`OptKind` is AdamW/RMSProp only). The coverage is not lost —
-       `check_adam_prefix` forms exactly that pairing.
-
-       ViT-Tiny followed on 2026-09-07 (leg 4, section 4p) -- a different shape
-       (no BatchNorm-world split) and a different price: its two chains render
-       the same BYTES, so the leg was a measurement rather than a swap.
-       ConvNeXt-T closed the same day (leg 3, section 4q), the only leg that
-       MOVED bytes: 78 conv-VJP lines in each of thirteen train steps, by user
-       decision, under the keep = 1 numeric licence. Every net is one chain.
-       Thread: planning/renderer_convergence.md.
-
-       ⭐ THE SPLIT WAS WIDER THAN THE AUDIT COULD SEE. `resnet34in_fwd.mlir`,
-       the ImageNet forward at 256x1000, came from the per-example renderer too,
-       while every `resnet34in_*` train step is batch BN. `check_adam_prefix`'s
-       PAIRS list holds only the Imagenette names, so that instance was invisible
-       to the audit built to catch exactly it. Both are on the batched chain now,
-       and extending the list to the `*in_*` artifacts is open work.
-
-       ⭐ THE ORDERING RULE, HONOURED DELIBERATELY THE SECOND TIME. Leg 1 could
-       retire ResNet-34's per-example renderer only because 4f's and 4g's batched
-       peers landed the same day. MobileNetV2's leg waited for §4.2 (4i and 4j)
-       to land FIRST, which is why the retirement below orphans two files and no
-       tier.
-
-       ⚠ WHAT RETIREMENT COSTS, AND THE ORDERING RULE IT IMPLIES. The
-       per-example ties `ResNet34TiePoC.lean` and `MobileNetV2TiePoCPaper.lean`
-       were about an artifact that no longer existed; both were DELETED on
-       2026-09-08 (their batched peers `ResNet34TiePoCB` / `MobileNetV2TiePoCB`
-       had landed first). The per-example folds `ResNet34FaithfulPoC` /
-       `MobileNetV2FaithfulPoCPaper` stay: they hold the op-kind lemmas the
-       batched folds delegate to. A leg must not retire a per-example renderer
-       before the batched tier that replaces it exists; that ordering is why 4f
-       and 4g came first.
-       `ResNet34RenderPC.lean` is NOT affected the same way -- its
-       `resnet34Forward_full_pc` is the subject of the float budgets, the T6 tie
-       and the witness, none of which is about a train step's bytes.
-
-    4i. MOBILENETV2 AT THE NET THAT TRAINS — T1 AND T2 (2026-09-06). The second
-       net of 4e's port. `Architectures/MobileNetV2FullB.lean` states the
-       seventeen-bottleneck real forward and its typed forward graph at
-       `bnBatchLA`, with `den graph = forward` chained over six per-block-kind
-       lemmas; `MobileNetV2FullBVJP.lean` gives that forward a certified
-       `HasVJPAt` over 19 hypothesis bundles. Both ~2 s to elaborate, all
-       sixteen declarations 3-axiom clean.
-
-       WHY IT IS NOT A FLAG. This net's two renderers do not overlap:
-       `MobileNetV2Render` is SGD-inline and per-example only,
-       `MobileNetV2RenderB` is AdamW-only and batch-BN, and every artifact whose
-       accuracy the book quotes -- `mobilenetv2in_rmsdp64` among them -- is on the
-       second. `MobileNetV2FullPaper.lean`'s per-example ladder stays where it is;
-       this is its peer in the other world, not a replacement.
-
-       ⭐ IT IS AN ENUMERATION, AND CHEAPER THAN RESNET-34's WAS.
-       `MobileNetV2BackB0.lean` already carried the batched relu6 stages (`cbrB`,
-       `dwbrB`, `dwbrBstrided`) and `projB` with their `_at` VJPs and backward
-       graphs at `bnBatchLA`; `mnv2BodyB_has_vjp_at` and
-       `mnv2DownBodyB_has_vjp_at` ARE the two body shapes, and
-       `residual_has_vjp_at` wraps the first for the ten skip blocks. Where
-       ResNet-34 needed a new Foundation lemma -- `batchMap_has_vjp_at`, because
-       its stem ends in a max-pool with no derivative at a tie -- MobileNetV2
-       needs none: it has no stem pool, and its GAP and dense are smooth. The
-       only composition written from scratch is b1's `projB . dwbrB`, the `t = 1`
-       block, which has no body lemma to delegate to.
-
-       ⭐ THE WEIGHT AND POSITIVITY BUNDLES ARE REUSED, NOT RE-DECLARED. `IVW`,
-       `IVWNoExp`, `IVPos` and `IVNoExpPos` hold kernels and epsilons and know
-       nothing about which axis the norm reduces, so the batched net binds the
-       records the per-example one does. Only the top-level weights record is new
-       (generic in the class count, where `MNV2PaperWeights` is pinned at 10) and
-       only the smoothness bundles need batched peers, because a kink condition
-       names its activation and `bnBatchLA` is a different activation from
-       `bnPerChannelTensor3`.
-
-       ⚠ ONE EXISTING LEMMA FAMILY WAS GENERALISED. `mnv2BodyB_has_vjp_at`,
-       its differentiability peer and its backward graph pinned input and output
-       channels equal, because they were written for the residual block. Blocks
-       b11 (64 to 96) and b17 (160 to 320) are stride-1 bodies with `ic != oc`, so
-       the family now takes both; `mnv2DownBodyB` already had that shape, every
-       existing call site is at `ic = oc`, and no proof changed.
-
-       ⛔ TWO KINK CLAUSES PER BOTTLENECK, AND THEY ARE NOT RESNET-34's. The two
-       relu6 sites are the EXPAND and the DEPTHWISE, both inside the body: the
-       linear bottleneck has no activation after `project`, so the residual add IS
-       the block output. ResNet-34's second clause is a post-residual OUTER relu.
-       35 relu6 sites in all, bundled into 19 binders, and relu6 is kinked on BOTH
-       sides so each carries `!= 0 and != 6`. ⚠ Unlike ResNet-34's, the head is
-       not hypothesis-free -- MobileNetV2 puts a relu6 in front of the pool.
-
-       ⚠ XLA-`SAME` AT ALL FIVE STRIDE-2 SITES, and the census is 158. The stem
-       conv and the four strided depthwises are `flatConvStride2Xla` /
-       `depthwiseStride2FlatXla`, not r34's symmetric peers -- identical types,
-       identical emitted shapes, different certificates. The graph's bias operands
-       are the render's default `convBias := false` names (`%zb{c}`, the shared
-       zero constant), which is why the shipped parameter count is 158 and not
-       210; every graph is quantified over the bias value, so both flags are
-       covered.
-
-       `N` is a variable throughout: T1 and T2 carry no numerals.
-
-    4j. MOBILENETV2'S TRAIN-STEP TIE AT THE NET THAT TRAINS (2026-09-06). 4i
-       gave this net T1 and T2 at `bnBatchLA`; 4f's fold already covered its
-       parameter gradient nodes for an arbitrary cotangent. This pins the
-       cotangent: `Foundation/MobileNetV2TiePoCB.lean` (1037 lines, ~2.7 s)
-       states every parameter gradient node of the batched, batch-BatchNorm train
-       step at the cotangent the emitted backward chain delivers, threaded from
-       the label-smoothed loss through the head's own four nodes and the seventeen
-       certified block backwards over `mobilenetv2ForwardB_full`'s own forward
-       prefixes. That is MobileNetV2's T3 complete, and it makes this the SECOND
-       net whose train-step tie is about the artifact whose accuracy the book
-       quotes.
-
-       ⭐ THE BLOCK COTANGENTS ARE NOT DERIVED, as ResNet-34's were not. 4i's
-       `mnv2{ExpOnly,Resid,Strided,NoExp}B_has_vjp_at` ARE the certified block
-       backwards, and `MobileNetV2BackB0.lean`'s `*BackBatchedGraph_faithful`
-       family already proves the emitted subgraphs denote them, so three of the
-       four `*CotIn_eq_vjp` lemmas close by `rfl`. The fourth, the residual one,
-       needs `Eq.trans` instead of `rw`: `mnv2ResidB_has_vjp_at` unfolds to
-       `residual_has_vjp_at` at the abbreviation `mnv2ExpOnlyB`, where the graph
-       lemma states it at that abbreviation's own unfolding -- definitionally
-       equal, not syntactically. No `add_comm` is needed anywhere, unlike
-       ResNet-34's downsample block: the render emits `addVB(body, %dy)` and
-       `residualBackGraph` builds the fan-in in the same order.
-
-       ⭐ ONE TIE BUNDLE COVERS TWELVE OF THE SEVENTEEN BLOCKS. A skip block and a
-       stride-1 widening have the SAME parameter cotangents -- the identity skip
-       changes only the `dx` handed to the previous block -- which is why
-       `MobileNetV2RenderB`'s `irBackStride1GradB` is one function with a `skip`
-       flag rather than two near-copies, and why `mnv2Stride1TiedB` is stated once
-       and instantiated at b3, b5, b6, b8-b13, b15, b16 and at the widenings b11
-       and b17.
-
-       ⭐ TWO HELPERS ARE RESNET-34's, IMPORTED RATHER THAN COPIED. `bnInB` is the
-       batched BatchNorm input-cotangent written as the `den` of the emitted
-       backward op, and `bnInB_eq_bnBackB` is its identity with the certified
-       `bnBatchLA` VJP; both are net-agnostic and happen to live in the file that
-       first needed them. What MobileNetV2 adds is the TWO-SIDED relu6 mask
-       (`relu6MaskB`, where ResNet-34 threads the one-sided `reluMaskB`) and the
-       XLA-`SAME` strided depthwise input-VJP. ⚠ That last one is NOT
-       `EnetTiePoC.dStridedInB`: EfficientNet-B0's strided depthwise is the
-       SYMMETRIC op and MobileNetV2's is the XLA-`SAME` one, identical types and
-       different certificates, and this is the one place that distinction is
-       recorded on the backward side.
-
-       ⭐ THE TIE HAS TWO HALVES WITH DIFFERENT HYPOTHESES, as ResNet-34's does.
-       The capstone `mnv2_net_tiedB` carries NO smoothness hypothesis and no
-       `0 < eps`: the folds are `forall cot` statements instantiated at explicitly
-       constructed cotangents. The relu6-kink and positivity conditions enter only
-       in the four `*CotIn_eq_vjp` lemmas, which say those cotangents ARE the
-       certified whole-net backward. `N` is a binder throughout.
-
-       ⭐ THE LOSS COTANGENT IS SHARED. `Foundation/SmoothedLossCot.lean`, written
-       for ResNet-34 at a general target, applies verbatim: `MobileNetV2RenderB`
-       composes the same six kit ops with the target arriving as the graph input.
-       `mnv2_lossCot_is_smoothedCE_grad` reads the result row by row.
-
-       ⛔ THE CENSUS IS 158 AGAINST 210 SLOTS, AND ONE REPLICA. `MobileNetV2RenderB`
-       runs `convBias := false`, so the 52 conv, depthwise and project bias nodes
-       are not emitted -- each bias is folded into the BatchNorm after it and bound
-       to `zeroBiasPrelude`'s zero constant. The bias conjuncts are kept (one
-       delegation each) and cover the flag; nothing weakens a theorem, since every
-       fold is quantified over op instances. And every gradient node in
-       `mobilenetv2in_rmsdp64` is followed by `all_reduce(add)/4`, so the tie is
-       at the per-replica node (4k; an AST node since 4t, and composable).
-
-    4k. DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (2026-09-06).
-       Every `*dp*` artifact is ONE program run on `R` replicas. Per parameter,
-       between the gradient node and the optimizer tail, `emitGradAllReduce`
-       writes `stablehlo.all_reduce(add)` over `replica_groups = [[0..R-1]]` and
-       then a divide by `R` -- as emitted TEXT outside the `SHlo` AST, a declared
-       trusted carve-out. So every train-step tie in this repo (`r34_net_tiedB`,
-       `mnv2_net_tiedB`, `efficientnet_net_tiedG` and the SGD-inline capstones) is
-       stated at the PER-REPLICA gradient node and disclaims the collective in its
-       own header (until 4t, 2026-09-07: since then the collective is the AST
-       node `allReduceMeanF` and the disclaimer composes), while the ImageNet
-       accuracies the book quotes all come from
-       four-replica runs. `Foundation/DataParallel.lean` (~340 lines, ~2 s, 15
-       declarations) is the R-level half of closing that.
-
-       ⭐⭐ THE COLLECTIVE IS NAMED AS A GRADIENT. `dpMeanGrad_eq_grad_meanLoss`:
-       `(1/R) sum_r g_r` IS the gradient of `(1/R) sum_r L_r`, with no hypothesis
-       on the losses beyond differentiability -- so it holds for a training-mode
-       BatchNorm net, where each `L_r` genuinely depends on the whole of replica
-       `r`'s slice. That is the point. It says what a data-parallel run minimised
-       without claiming that function is the global-batch loss.
-
-       ⭐⭐ AND IT SPLITS THE TWO WORLDS, WHICH NO TIE CAN DO. `meanLoss_shard`:
-       when the replica loss is the MEAN OVER ITS OWN SLICE of a per-example loss
-       -- no batch coupling, which is ConvNeXt-T, ViT-Tiny and every inference-BN
-       forward -- the mean of the `R` replica losses IS the mean over the global
-       `R*N` batch, as FUNCTIONS, before any derivative is taken. So for those nets
-       the data-parallel step is exactly the single-device step at batch `R*N`
-       (`dpMeanGrad_eq_globalBatchGrad_of_perExample`). ⭐ It is stated at an
-       ARBITRARY shard `e : Fin R x Fin N ~= Fin (R*N)`, so which examples land on
-       which replica does not enter: the contiguous cut the DP path makes and the
-       interleave the sharded producers make give the same theorem. The contiguous
-       one is `dpMeanGrad_eq_globalBatchGrad_contiguous`.
-
-       ⛔⛔ WITH BATCH COUPLING THAT IS FALSE, AND THERE IS A WITNESS.
-       `dpMeanGrad_ne_globalBatchGrad`: two replicas, one example each, slices
-       {0} and {2} whose union is the global batch {0,2} (`dpToyShard_eq_batch`,
-       without which the witness would be comparing two unrelated datasets). The
-       data-parallel mean gradient is 2; the gradient of the global-batch loss is
-       1. `bnToyLoss` is the smallest loss that reads a NONLINEAR function of its
-       own slice's statistic, which is exactly what a training-mode BatchNorm does,
-       and no all-reduce repairs it because nothing all-reduces mu/var. So
-       ResNet-34, MobileNetV2, EfficientNet-B0, ResNet-50 and MobileNetV4 trained
-       data-parallel did NOT descend the batch-`R*N` loss at any learning rate;
-       what they descended is the mean of the `R` per-replica batch-BN losses. This
-       is also why `N` in the batch-BN tiers (4e, 4g, 4i, 4j) is the PER-CARD batch.
-
-       ⭐⭐ THE LOCKSTEP INDUCTION. `dpIterate_lockstep` and
-       `dpIterate_eq_meanLossTrain`: identical initial states and an identical
-       (all-reduced) update keep the `R` state copies equal at every step, so `n`
-       steps of the `R`-replica system ARE `n` steps of ordinary single-device
-       training on the mean loss. That is the property `VerifiedTrain.lean` relies
-       on when it checkpoints from replica 0 -- the checkpoint is not replica 0's
-       answer, it is every replica's. ⚠ The shared start is a HYPOTHESIS; that the
-       driver broadcasts it and that `replica_groups` names all `R` devices is
-       calling logic, and the `*-dp-check` gates are its empirical evidence.
-
-       ⚠ NOTHING HERE IS ABOUT THE EMITTED `all_reduce`. An `SHlo` constructor
-       `allReduceMeanF R` with `den (allReduceMeanF R g) = (1/R) sum_r den (g r)`,
-       plus its `pretty` and parser cases, is the next piece and it waits on the
-       renderer convergence. Until it lands, a train-step tie composes with these
-       lemmas only through the reader, and every tie still says so.
-
-    4l. RESNET-50's TWO PREREQUISITES: LAMB's TAIL AND BCE's COTANGENT
-       (2026-09-06). ResNet-50 is the largest remaining hole in the Proofs tier
-       (no whole-net forward, no graph, no tie), and its quoted run
-       `resnet50in160_lambaccdp8x64bce` is LAMB over 8 accumulated micro-batches
-       with BCE-with-logits at 160 px. Two of its pieces had no theorem at all;
-       both now do, and both are LEAF files for the reason 4k's is -- their
-       natural homes (`Lamb.lean`, `StableHLO.lean`) carry 315+ downstream
-       modules apiece and a declaration added to either rebuilds the corpus.
-
-       ⛔ THE EARLIER "LAMB HAS NO FAITHFULNESS THEOREM" NAMED THE WRONG CAUSE,
-       and this section corrects it. `lambDirF_faithful` and `lambScaleF_faithful`
-       have said the emitted ops denote `Proofs.lambDir` and `Proofs.lambScale`
-       since LAMB landed, both by `rfl` and both at `adamWParamF_faithful`'s bar.
-       What was missing is the level above: the `(theta', m', v')` triple a train
-       step returns, i.e. `adamW_triple_faithful`'s peer. `lamb_triple_faithful`
-       is that, also by `rfl`, over the four ops the `.lamb` arm emits --
-       `lambDirF`, `gradSumSqAccF`, `lambScaleF`, `sgdParamF` -- plus Adam's two
-       moment recurrences, which LAMB reuses unchanged.
-
-       ⭐ THE SCALAR CHILD IS A BINDER, and the two shapes the render emits are
-       corollaries. `lamb_triple_faithful_committed` is at the shipped seed:
-       `gradSumSqAccF` from `%lzero` over THETA ALONE, one leaf deep, so the
-       scalar is `gradSumSq theta`. That single-leaf fold is the entire structural
-       difference from the global-norm clip, whose whole content is that ONE
-       scalar is shared across every parameter (`clipFactor_shared` against
-       `lambScale_not_shared`); the two features emit nearly the same lines and
-       differ only in the quantifier.
-
-       ⭐⭐ `lamb_triple_faithful_excluded` IS THE ONE THAT SAYS SOMETHING NEW.
-       timm reads `if weight_decay != 0 or group['always_adapt']:` before
-       computing the trust ratio, so the `no_weight_decay` group is NOT
-       layer-adapted; the render implements that by SKIPPING the norm op and
-       passing `%lzero` straight in, and this says the emitted step is then
-       exactly `theta - lr*r` with the ratio at 1. ⚠ The pre-existing
-       `lambTrust_zero_weight` does not already give this at the artifact: it
-       fires at `||theta|| = 0` exactly, i.e. step one, where every BatchNorm beta
-       and dense bias starts, and from step two the parameter is
-       small-but-nonzero and `||theta||/||r||` collapses to ~0.01-0.1 against
-       timm's 1.0. That lemma could hold while the render was still wrong.
-       Both corollaries were read off the committed bytes
-       (`resnet50in160_lambaccdp8x64bce_train_step.mlir` and its `wx` twin).
-
-       ⭐⭐ BCE-WITH-LOGITS, AND THE LEMMA THAT KEEPS IT FROM BEING CIRCULAR.
-       `ResNet50RenderB`'s `bce := true` path emits THREE ops --
-       `sigmoidB -> subB -> divConstB`, i.e. `(sigma(z) - t)/(B*K)` -- where
-       softmax-CE emits five, and nothing said that chain was any loss's gradient.
-       `Foundation/BceLossCot.lean` is `SmoothedLossCot.lean`'s twin at this loss.
-       The load-bearing lemma is `bceLogits_eq_logSigmoid`: `softplus(z) - t*z`
-       IS `-[t*log sigma(z) + (1-t)*log(1 - sigma(z))]`, class by class. Without
-       it, `bceLogits_grad` would define the loss as whatever has the derivative
-       the render emits and then prove it has it. The stable `softplus` spelling
-       is the renderer's own `%loss` form, `max(z,0) + log(1 + exp(-|z|))`.
-
-       ⭐ `bceLogits_grad` TAKES NO HYPOTHESIS ON THE TARGET, where `softCE_grad`
-       needs `sum t = 1` to collapse `(sum t)*softmax - t`. BCE is per-class and
-       separable, which is the point under mixup -- the a3 recipe's only source of
-       soft labels, since its arg string is `ls0.0` and there is no label
-       smoothing on this path at all.
-
-       ⚠⚠ THE DIVISOR IS `B*K`, NOT `B`, and `bceLossCotGraph_row_committed` pins
-       it rather than leaving it a binder nobody instantiated. timm's
-       `BinaryCrossEntropy` is `reduction='mean'` over `B x C`, not the mean of
-       the per-example SUM over classes; at `K = 1000` the two differ by 1000x on
-       the effective step, and RSB-A2's `lr 5e-3` is tuned to this form. The
-       committed artifact divides by `dense<64000.0>` = 64 x 1000.
-
-       ⚠ WHAT THIS IS NOT. Faithfulness and well-definedness only, `Lamb.lean`'s
-       ceiling verbatim -- never that LAMB converges or beats AdamW. `%loss`
-       itself stays a report-only hand-written block (the §5 carve-out); what is
-       proved is about the COTANGENT chain, which is on the gradient path. And
-       ResNet-50 still has no whole-net forward, graph or tie: these are the two
-       pieces §3.5 said to budget INSIDE that package, now paid for in advance.
-
-    4m. RESNET-50's FIRST NET-LEVEL TIERS: T1, T2 AND T3 (2026-09-06). The audit of 2026-09-05
-       recorded ResNet-50 as the largest hole in the Proofs tier: "none;
-       `r50Trunk_3463` is a backward fold", with T1 through T7 all missing.
-       `Architectures/ResNet50FullB.lean` and `ResNet50FullBVJP.lean` are T1 and
-       T2 -- an ℝ forward at the [3,4,6,3] bottleneck ladder, a certified
-       whole-net `HasVJPAt` over it, and the typed `SHlo` graph that denotes that
-       forward. ~3 s to elaborate, fifteen declarations.
-
-       ⭐ THIS IS THE ONE NET WHERE T1 MATCHES THE TRAINED WORLD FROM THE START.
-       ResNet-34's and MobileNetV2's Proofs tiers were written at per-example
-       BatchNorm and had to be ported (4e, 4g, 4i, 4j). `ResNet50RenderB` has
-       always been this net's only renderer, so `bnBatchLA` is the world of
-       `resnet50_fwd` AND of every train step, and there is no BatchNorm-world
-       port to do later. Nor does 4f's optimizer axis or 4h's renderer axis apply:
-       this net is batched-chain-only.
-
-       ⭐⭐ PURE ENUMERATION, AND NOTHING NEW ONE TIER DOWN.
-       `Foundation/ResNet50BackB0.lean` already carries all three batched
-       bottleneck forms with their pointwise VJPs and backward graphs at
-       `bnBatchLA`. And the STEM AND HEAD ARE RESNET-34's -- `r34StemB` is generic
-       in its channel counts and `r34HeadB` in its class count, so
-       `r34StemB_has_vjp_at` and `r34HeadB_has_vjp` apply verbatim at ResNet-50's
-       widths. That is why this file needed no new `Foundation` lemma where
-       ResNet-34's own T1 needed `batchMap_has_vjp_at` (4e) for exactly that stem
-       pool: the lemma is spent, not re-derived.
-
-       ⭐ ONE weight record serves BOTH projection forms. The stride-1 projection
-       (stage 1 block 0, `64 -> 256` -- the block with no ResNet-34 analogue,
-       since R34's stage 1 runs at `ic = oc`) and the strided one (stages 2/3/4
-       block 0) have identical parameter shapes and differ only in which
-       convolutions are strided, which is a property of the forward.
-
-       ⭐⭐ THE SPATIAL SIZE IS A BINDER, AND THAT IS NOT STYLISTIC. ResNet-50 ships
-       at TWO resolutions: `resnet50in_fwd` at 224 = 32x7 and `resnet50in160_fwd`
-       at 160 = 32x5, the second being where the quoted 76.66% comes from. One
-       statement covers both, and the file CHECKS it -- two `example`s at the
-       literal input types, plus `#guard`s on the ladder arithmetic. ⚠ Every
-       resolution is written as an explicit nest of `2 * (...)` rather than as
-       `8 * q`: those are equal naturals and NOT definitionally equal terms at a
-       variable `q`, and each block signature demands its operand at exactly the
-       spelling it names.
-
-       ⛔ THREE kink clauses per bottleneck -- the two interior relus and the
-       post-residual OUTER relu -- where ResNet-34's basic block has two and
-       EfficientNet's MBConv has none. 48 clauses, bundled into 16.
-       ⛔ `0 < q` is a real hypothesis, where ResNet-34 needed none: R34's ladder
-       is at literals so `0 < 56` closes by computation, and ResNet-50's stem pool
-       needs its output grid nonempty at a variable `q`.
-
-       ⚠⚠ v1.5 STRIDE PLACEMENT, invisible to the types: the stride is on the 3x3,
-       not the leading 1x1, so that convolution and its BatchNorm and relu run at
-       the INPUT resolution. The v1 placement compiles, trains and descends and is
-       a different net worth about 0.5 pt of top-1. ⚠ Symmetric padding at all
-       five stride-2 sites.
-
-       ⭐ The census is 161 updated parameters, which is `ResNet50RenderB`'s own
-       docstring: stem 3 + 12 identity blocks x 9 + 4 projection blocks x 12 +
-       head 2. The records' conv-bias slots are the `convBias := true` census and
-       are quantified over, as ResNet-34's and MobileNetV2's are.
-
-       ⭐ T2 IS FOUR PER-BLOCK-KIND GRAPHS AND ONE `rw` EACH, at
-       `ResNet50RenderB`'s own tokens. ⚠ It uses `.addVB`, the batched add the
-       render emits, where `ResNet34FullB.lean` uses `.addV` (`den` identical,
-       `skel` not -- recorded in 4i and left alone there). ⚠ THE RESIDUAL OPERAND
-       ORDER IS THE RENDER'S, AND THAT COSTS ONE `add_comm`: both projection
-       blocks emit `addVB(body, projection)` while `residualProj proj body` adds
-       `proj + body`, so those two faithfulness proofs close with a commutation
-       step rather than by `simp` alone. Writing the graph in `residualProj`'s
-       order would make `den` close by `rfl` and the emitted operand order wrong.
-       The identity block needs nothing: `addVB(body, x)` IS `residual`'s order.
-       ⚠ The bias operands call `biasName false "" c`, the render's own function,
-       rather than a literal -- `ResNet50RenderB` has no `convBias` flag at all,
-       so `%zb{c}` is the only name this net emits. ⛔ `ResNet34FullB.lean` writes
-       the `convBias := true` names its render does not emit by default: the
-       graph-operand form of the census trap, cosmetic, worth fixing when that
-       file is next touched.
-
-       ✅ CHECKED AGAINST THE COMMITTED BYTES, not asserted:
-       `verified_mlir/resnet50_fwd.mlir`'s signature is 162 arguments = `%x` plus
-       161 parameters with 12 projection slots, exactly the record's census, and
-       every SSA name this file writes appears there.
-
-       ⭐⭐ T3 LANDED IN THE SAME SESSION, AND IT NEEDED ZERO NEW OP-KIND LEMMAS.
-       `ResNet34FaithfulPoCB.lean`'s six are statements about OP KINDS at full
-       generality, and the bottleneck's third convolution is one more instance of
-       the first -- so `Foundation/ResNet50FaithfulPoCB.lean` is an ENUMERATION of
-       the artifact's op table by block profile and `ResNet50TiePoCB.lean` pins
-       each node to the cotangent the emitted backward chain delivers. ResNet-50
-       is now the THIRD net whose train-step tie is about the artifact its quoted
-       accuracy comes from.
-
-       ⛔ RESNET-50 EMITS NO CONV BIAS GRADIENT AT ALL, so unlike ResNet-34's and
-       MobileNetV2's ties every slot this one states is exercised by the bytes:
-       161 of 161, where r34 states 146 and exercises 110 and MobileNetV2 states
-       210 and exercises 158. `ResNet50RenderB` has no `convBias` flag.
-
-       ⭐⭐ THE LOSS COTANGENT IS A BINDER, AND FOR THIS NET IT HAD TO BE.
-       ResNet-34's and MobileNetV2's capstones compute `g` internally from the
-       label-smoothed chain. ResNet-50 ships BOTH losses -- that chain on the
-       `bce := false` artifacts, and BCE-with-logits' three-op chain on the
-       `bce := true` ones including `resnet50in160_lambaccdp8x64bce`, where the
-       76.66% comes from. So `r50_net_tiedB` takes `g` as a hypothesis and
-       `r50_lossCot_is_smoothedCE_grad` / `r50_lossCot_is_bce_grad` instantiate it,
-       neither privileged. That is 4f's "the head takes `g` as a binder" made
-       NECESSARY rather than merely tidier, and it is what the BCE cotangent of 4l
-       was written for.
-
-       ⭐ THE STEM AND HEAD TIE BUNDLES ARE RESNET-34's, reused verbatim, as the
-       stem and head forwards were in T1. ⚠ Two `add_comm`s, one per projection
-       form: the render emits `addVB(body, projection)` where `residualProj`
-       adds `proj + body`. The identity block needs none.
-
-       ⚠ WHAT IS STILL MISSING FOR THIS NET after T1/T2/T3: the certified
-       backward tie (T6) landed 2026-09-07, see 4o. Only T4 and T5 -- the two
-       float budgets, vacuous by 4d -- are open.
-
-    4n. T6 AT BATCH BATCHNORM FOR RESNET-34 AND MOBILENETV2 (2026-09-07). The
-       last statement 4e's port was missing, for both nets. The two whole-net
-       certified backward ties in the corpus for these architectures --
-       `Resnet34BackCertifiedTie.lean` and
-       `MobileNetV2PaperWholeBackCertifiedTie.lean` -- are about
-       `resnet34Forward_full_pc` and `mobilenetv2ForwardPaper`, the forwards the
-       RETIRED per-example renders emitted (4h). These two new files are about
-       `resnet34ForwardB_full` and `mobilenetv2ForwardB_full`, the nets the
-       shipped trainers run, at `bnBatchLA` and a variable batch `N`:
-       `Float/Resnet34WholeBackFloatBridgeB.lean` +
-       `Foundation/Resnet34BackCertifiedTieB.lean` (~60 s) and
-       `Float/MobileNetV2WholeBackFloatBridgeB.lean` +
-       `Foundation/MobileNetV2WholeBackCertifiedTieB.lean` (~3 s).
-
-       Each net gets three statements: the TIE (the hand-written backward chain,
-       with its BatchNorm and activation-mask slots pinned to the certified
-       per-op backwards, IS the certified whole-net VJP, with the blocks opaque),
-       its reading as `sum pdiv * dy`, and a `*_eq_slots` SHAPE CHECK saying those
-       stages ARE the committed nested-application forward -- the forward
-       `resnet34FwdGraphB_full_faithful` / `mobilenetv2FwdGraphB_full_faithful`
-       proves the typed graph denotes. The shape check is not decoration: the tie
-       keeps its blocks opaque, so without it the tie is a statement about
-       variables, and that is exactly how a wrong stem pool survived a month in
-       the per-example file.
-
-       ⭐ THE BATCHED POOL TIE IS `rfl`, AND IT CLOSES THE SEAM 4g LEFT OPEN.
-       That file could thread ResNet-34's 3x3/s2 pool backward only as the
-       emitted `den`; here `maxPool3s2FlatBackB_eq_vjp_backward` identifies it
-       with `batchMap_has_vjp_at`'s backward directly. It is `rfl` only because
-       two earlier files refused a `▸` transport that would have blocked
-       `.backward` from reducing -- `batchMap_has_vjp_at` is built field by field,
-       and so is `maxPool3s2Flat_has_vjp_at_vec` one tier down.
-       ⛔ THE BATCHED POOL BACKWARD IS `batchMapAux`, NOT `batchMap`: a pool
-       backward is indexed by the saved forward activation and each example has
-       its own, so a `batchMap` would hand example 0's argmax pattern to the whole
-       batch. `FloatClose.batchMapAux` / `FloatBridgesTo.batchMapAux` are that
-       lift; they belong beside their `batchMap` peers and are stated in the leaf
-       for the rebuild cost.
-
-       ⭐⭐ MOBILENETV2 DEFINES NO APEX AND NO PREFIX DEFS AT ALL.
-       `mobilenetv2PaperPC_has_vjp_at` -- the per-example file's twenty-one-stage
-       chain -- is generic in every dimension and every stage, so the batched net
-       instantiates it directly, `mnv2OpaqueA0 ... A17` included. ResNet-34 had to
-       write both, because its committed apex bundles the stem's pool into `stem`
-       and its head into one stage.
-
-       ⛔ NEITHER FILE TAKES B0's EXTRA STEP (instantiate the tie at the concrete
-       blocks, then `backward_unique`), AND THE REASON IS THE KINK RATHER THAN THE
-       DEPTH. B0's block witnesses are GLOBAL `HasVJP` and carry no point at all,
-       so instantiating them is free. These are `HasVJPAt` at
-       `r34OpaqueA{k-1} ... x` while a caller's witnesses are at
-       `r34Pre{k-1} N w x` -- sixteen defeq checks between sixteen-deep nested
-       applications spelled through different definition chains, and it is a
-       KERNEL deterministic timeout at six minutes. Measured, not guessed; the
-       shape check is what replaces it, and it is the same answer the per-example
-       MobileNetV2 file gave. `HasVJPAt.backward_unique` is stated anyway -- no
-       `HasVJPAt` net in the repo had `HasVJP.backward_unique`'s pointwise peer.
-       ⛔ And a `rfl` straight at the tactic-built whole-net apex is a five-minute
-       `isDefEq` timeout at four million heartbeats, which is why the generic apex
-       exists at all.
-
-       ⛔ NO NUMBER IS STATED ABOUT EITHER CHAIN. 4e's remaining rows for these
-       two nets are T4 and T5, both float BUDGETS, and 4d closed that thread: the
-       per-example r34 backward is 8.857e245 and the batched one is larger,
-       because `bnGradInputReMag`'s gain carries `Xh^2 = N*h*w`. The chains are
-       named so the ties are about a term, which is
-       `EfficientNetFullWholeBackFloatBridge.lean`'s role for B0.
-
-       ⚠ WHAT 4e STILL HAS OPEN after this: T4 and T5 for both nets, and nothing
-       else. Both are vacuous by 4d's finding.
-
-    4o. RESNET-50's T6, AND WHAT RESNET-34 PAID FOR IT (2026-09-07). The last
-       statement ResNet-50 was missing that says anything -- (d)'s two float
-       budgets are the vacuous half. `Float/Resnet50WholeBackFloatBridgeB.lean`
-       names `r50InputGradB` and threads its `FloatBridgesTo`;
-       `Foundation/Resnet50WholeBackCertifiedTieB.lean` states the tie, its
-       `pdiv` reading and the shape check `resnet50ForwardB_full_eq_slots`. Four
-       declarations, ~3 s, all 3-axiom clean.
-
-       ⭐⭐ ALMOST ALL OF IT IS RESNET-34's, REUSED RATHER THAN REWRITTEN.
-       `resnet50ForwardB_full` is `r34HeadB ∘ [3,4,6,3] bottlenecks ∘ r34StemB` --
-       the stem and head are literally ResNet-34's functions at R50's widths -- so
-       4n supplies the two endpoint ties, the batched 3x3/s2 pool tie, the
-       `FloatClose.batchMapAux` lift that pool needed, AND `r34B_full_has_vjp_at`
-       itself: [3,4,6,3] is sixteen blocks for both nets, so the generic
-       eighteen-stage apex is the same construction and a second copy would have
-       been two writers for one fact. This file adds the sixteen bottleneck slots
-       and nothing else. That is the same economy T1 got from `r34StemB_has_vjp_at`
-       (4m) -- spend the lemma, do not re-derive it -- collected a second time.
-
-       ⚠ `q` IS A BINDER HERE TOO, so one statement covers `resnet50in_fwd`
-       (q = 7, 224 px) and `resnet50in160_fwd` (q = 5, 160 px, the net the quoted
-       76.66% trains). ⛔ Every dimension is an explicit `2 * (...)` nest and not
-       `8 * q`: equal Nats, NOT definitionally equal terms at a variable `q`. And
-       `0 < q` is a real hypothesis where ResNet-34 needed none -- the stem pool's
-       output grid must be nonempty, and at a literal 56 that closed by `norm_num`.
-
-       ⛔ THREE relu clauses per bottleneck (the two interior ones and the
-       post-residual outer one), where ResNet-34's basic block has two and
-       EfficientNet's MBConv none: the heaviest kink budget in the suite. The
-       blocks stay opaque and there is no `backward_unique` step, for 4n's
-       measured reason.
-
-       ⚠ ~3 s HERE AGAINST ~60 s FOR RESNET-34's PEER, AND THE 57 s IS MEASURED
-       RATHER THAN DIAGNOSED. `Resnet34BackCertifiedTieB.lean` up to its apex is
-       2.2 s and its tie's STATEMENT elaborates in 2.5 s, so the whole 57 s is
-       that file's tie `rfl`. The two statements are the same shape against the
-       same apex; the only structural difference is that ResNet-34's dimensions
-       are literals the kernel can evaluate and ResNet-50's are `2 * (...)` nests
-       at a variable `q` that it cannot. Recorded as an observation. ▶ If that
-       file ever has to be fast, this is where to look first.
-
-    4p. ONE CHAIN PER NET — ViT-TINY (2026-09-07). 4h's third leg, and it cost
-       what nothing else in this thread has: a measurement. ViT shipped two
-       renderers like the other three, but unlike ResNet-34's and MobileNetV2's
-       they have no BatchNorm-world split (ViT is LayerNorm, train == eval) and
-       unlike ConvNeXt's they share every emitter -- ViT's 16x16 patch embed is
-       not a `conv2d`, so the 78 conv-VJP lines that separate ConvNeXt's chains
-       have no analogue here. So the question was empirical, and it was answered
-       by rendering rather than by argument: all NINETEEN drop-free ViT
-       artifacts -- `vit_fwd`, `vitin_fwd` and the seventeen AdamW/EMA train
-       steps -- re-render BYTE-IDENTICALLY off the batched traversal
-       (`ViTRenderB.vitBackAllB`). 19 of 19, zero differing lines, checked
-       before a single writer moved.
-
-       The nineteen writers now live in `Proofs/Codegen/ViTRenderB.lean` and
-       call `vitAdamTrainStepFaithfulB` / `vitFwdRenderB`. `git diff
-       verified_mlir/` after the move is EMPTY, which is the acceptance
-       criterion this leg could have and legs 1 and 2 could not.
-
-       ⭐⭐ THE BYTES DID NOT MOVE AND ONE DENOTATION DID, WHICH IS THE POINT.
-       The CLS token is a single shared [192] vector, so its gradient is the sum
-       of every example's CLS-row cotangent. The per-example render emitted
-       `denseBiasGradB (N := 1)` -- "sum one thing", correct there because
-       `pretty B` performed the batch lift OUTSIDE the AST -- where the batched
-       one emits `(N := vbB)` and the sum is inside `den`. The emitted text is
-       identical either way (`biasGrad`'s reduce takes the B axis regardless),
-       so the byte tie provably cannot see the change; `den_rowDenseBiasGradB_at_one`
-       is the general form of that trap and `Proofs.ViTPoCGB.clsGrad_denB` is the
-       theorem now available at the batched node.
-
-       THE BATCHED TIER LANDED FIRST, per 4h's ordering rule.
-       `Architectures/ViTFaithfulPoCGB.lean` (10 declarations, ~2 s, 3-axiom
-       clean) folds the same ten nodes 4f's `ViTFaithfulPoCG.lean` folds, at the
-       batched constructors the moved artifacts emit. No new mathematics: each
-       proof is `Finset.sum_congr rfl` over the batch and then the per-example
-       bridge at `batchSlice n`, because every batched `den` arm is literally
-       the per-example one under a batch sum.
-
-       ⛔ ONE ARTIFACT DID NOT MOVE, AND IT IS THE ORDERING RULE AGAIN.
-       `verified_mlir/vit_train_step.mlir` is the SGD-inline step, and
-       `vitBackAllB` has no fused-SGD arm -- it emits the raw gradient only.
-       ViT's T3 §1a tie (`ViTTiePoC.lean`, all 200 parameters) is stated at
-       exactly those bytes, and its batched peer does not exist yet (it is 4f's
-       last open capstone, which this leg unblocks). So `ViTRender.lean` keeps
-       that one writer and its per-example traversal, and nothing is orphaned.
-       ViT is one chain per net on nineteen of twenty artifacts.
-
-       ⚠ WHAT THE SWAP WOULD HAVE COST WITHOUT THE FOLD, stated because the
-       audit did not price it. Byte-identity is not tier-identity: the two
-       traversals emit different CONSTRUCTORS (`veclnGammaGradB` against
-       `veclnGammaGrad`, and so on), and every `den` lemma is about the AST, not
-       about the bytes. Moving the writers without `ViTFaithfulPoCGB.lean` would
-       have left 4f's ten ViT lemmas about an AST no committed artifact is
-       `pretty` of. The planning row's "one-line renderer change" was right
-       about the renderer and wrong about the tier.
-
-    4q. ONE CHAIN PER NET — ConvNeXt-T (2026-09-07). 4h's last leg, and the only
-       one that MOVED BYTES. ConvNeXt's two chains render the same forward and
-       differ on the backward: the conv input-VJP prepares its kernel with a
-       `transpose` and a `reverse` on disjoint axes, and `convBack` (per-example)
-       emits them in one order where `convBackBatched` emits the other.
-       Commuting ops, one kernel, 78 lines. Measured before a writer moved: the
-       four drop-free forwards (`convnext_fwd`, `convnextin_fwd`,
-       `convnextsin_fwd`, `convnextbin_fwd`) re-render byte-identically off the
-       batched traversal, and each of the thirteen AdamW/EMA train steps
-       differs on exactly those 78 lines and no other. The decision to move
-       them was the user's (2026-09-07): the artifact behind the 84.41%
-       Imagenette run changes on those lines, and the numeric licence is the
-       keep = 1 stochastic-depth gate (planning/xla_pjrt_handoff.md section
-       0.10 -- 0 of 83,478,846 floats differing after three AdamW steps, with
-       `scripts/perturb_conv_vjp.py` as the negative control), re-run as
-       `convnext-adam-tie` on the swapped bytes.
-
-       Seventeen writers now live in `Proofs/Codegen/ConvNeXtRenderB.lean`;
-       `ConvNeXtRender.lean` writes `convnext_train_step.mlir` alone, for the
-       reason 4p gives for ViT: the batched traversal has no fused-SGD arm and
-       `ConvNeXtTiePoC.lean`'s 182-parameter tie is stated at those bytes.
-       `check_fwd_prefix` still pairs `convnext_fwd` with that SGD step -- a
-       cross-chain pairing now -- and it holds because the forward bytes did
-       not move. `convnext-fwd-b-tie` runs the other way: it renders the
-       per-example chain and compares it against the committed batched bytes,
-       the same statement from the other side.
-
-       THE BATCHED TIER LANDED FIRST, and for this net it was OWED before the
-       swap. `Architectures/ConvNeXtFaithfulPoCGB.lean` (18 declarations, ~2 s,
-       3-axiom clean) folds every `*GradB` node the batched traversal emits.
-       Every `convnextin_*` train step, every `*drop*` variant and the S/B
-       artifacts had rendered from that traversal since they existed, so the
-       artifact behind this net's quoted ImageNet accuracy
-       (`convnextin_adamdpwxclipdrop`) had a fold only at the per-example
-       constructors no committed byte of it is `pretty` of. 4f's "one lemma
-       per op kind certifies every optimizer tail" was, for ConvNeXt, a
-       statement about the Imagenette pair. No new mathematics: each proof is
-       `Finset.sum_congr rfl` over the batch and the per-example bridge at
-       `batchSlice n`; the 22 channel-LN sites add one `batchSlice_batchMap`
-       step, because the render hands the LN ops the per-example `[h.w, c]`
-       view lifted over the batch.
-
-       THE FOUR bf16 WEIGHT-GRADIENT NODES ARE STATED, for the first time in
-       any fold file. The bf16 artifacts emit `convWeightGradBBf16` and its
-       three siblings, not the f32 nodes; their `den` is one rounding outside
-       the batch sum of the certified VJP at rounded operands (the emitted
-       convolution contracts the batch inside one op and stores its bf16
-       result once), and the four `*Bf16_den` lemmas say exactly that. The
-       ResNet-34, EfficientNet-B0 and MobileNetV2 fold files' headers say
-       their bf16 twins "consume the same node"; those renders emit the
-       `*Bf16` constructors too, so the sentence is loose there in the same
-       way and their folds should gain the same four-line lemmas.
-
-       WHAT IT LEAVES. `KNOWN_SPLIT` was already empty; every net is now ONE
-       chain, with ViT and ConvNeXt each keeping the per-example SGD-inline
-       step as their T3 section 1a tie's subject. `convBack` and
-       `convBackBatched` -- two emitters for one VJP -- are still not tied to
-       each other in Lean: the byte tie records the pair and the numeric gate
-       the equivalence. 4f's ConvNeXt and ViT capstones and 4d piece 2 are
-       no longer gated on anything.
-
-    4r. 4b's CAPSTONE RE-POINTING, CONVNEXT-T (2026-09-07). `ConvNeXtTiePoC.lean`
-       ties all 182 parameters of the SGD-inline `convnext_train_step.mlir` at
-       the fused `theta - lr * g` ops, at a hard label, PER EXAMPLE -- the batch
-       sat outside the AST in `pretty`'s argument. `ConvNeXtTiePoCGB.lean` is
-       that statement re-pointed along THREE axes, one more than B0's (4f):
-       (1) the OPTIMIZER FORM -- every conjunct is at the raw `*GradB` node that
-       `convnext_adam_train_step.mlir` and every `convnextin_*` artifact emit,
-       and `ConvNeXtFaithfulPoCGB.lean` (4q) is the fold each delegates to;
-       (2) the LOSS -- `g` is a binder, instantiated at the smoothed chain at a
-       general target; (3) the INDEX -- `N` is a binder, every activation is
-       `batchMap N` of the fused file's per-example prefix and every cotangent
-       `batchMapAux N` of its chain. `nC` is a binder too (10 on Imagenette,
-       1000 on ImageNet). Thirteen declarations plus the three loss-chain ones,
-       all 3-axiom clean; the file elaborates in ~3 s against the fused one's
-       16M-heartbeat budget, because every lift is of an irreducible prefix.
-
-       THE LIFT IS HONEST FOR THIS NET AND FOR NO BATCHNORM NET. LayerNorm,
-       GELU, the convolutions, layer scale and the residual add are all
-       batch-separable, so the batched op IS the per-example op under
-       `batchMap` -- which is what the `*B` constructors' `den` arms say. That is
-       why the transformation is mechanical here where ResNet-34's and
-       MobileNetV2's ties (4g, 4k) needed a batch-BN foundation first.
-
-       THE LOSS CHAIN NEEDED ITS OWN SPELLING. `smoothedLossCotGraph` (4g) is
-       the six-op chain as ResNet-34, MobileNetV2, B0 and R50 emit it --
-       `softmaxRow` at one row per example, width `N.(1.K)`, hence the
-       `rowB`/`unrowB` casts. ConvNeXt and ViT spell the row softmax as
-       `batchOp expe` then `batchOp softmaxDiv` and run the chain at the plain
-       width `N.K`. `smoothedLossCotGraphDiv` is that AST;
-       `smoothedLossCotGraphDiv_row` is the same statement as
-       `smoothedLossCotGraph_row` at it (each example's row is the smoothed
-       loss's gradient over B, under `sum t = 1` only), with no cast anywhere.
-       It serves ViT's capstone unchanged.
-
-       WHAT IT DOES NOT SAY. One replica (4d). Stated at the drop-free chain:
-       the `*drop*` artifacts' parameter nodes are the same constructors and
-       the folds are `forall cot`, but their cotangent chain carries the
-       `dropPathB` sites this thread does not name. ConvNeXt-T's literal widths;
-       S and B are other nets. The `%dgi..%dgapf` GAP backward is hand-written
-       text on both chains (a declared carve-out); its value here is
-       `globalAvgPoolFlat_has_vjp.backward`, as in the fused file.
-
-    4s. 4b's CAPSTONE RE-POINTING, ViT-TINY (2026-09-07) -- THE SET CLOSES AT
-       FIVE OF FIVE. `ViTTiePoC.lean` ties all 200 parameters of the SGD-inline
-       `vit_train_step.mlir` at the fused ops, at a hard label, PER EXAMPLE at a
-       single image. `ViTTiePoCGB.lean` is 4r's transformation applied to it:
-       (1) every conjunct at the raw `*GradB` node `vit_adam_train_step` and
-       every `vitin_*` artifact emit since 4p, with `ViTFaithfulPoCGB.lean` the
-       fold each delegates to; (2) `g` a binder at `smoothedLossCotGraphDiv`
-       (4r's spelling, reused unchanged -- ViT emits the same chain); (3) `N` a
-       binder, every save `batchMap N` of the fused file's prefix and every
-       cotangent `batchMapAux N` of its chain. `nC` a binder. Nine declarations
-       plus the `BlkSaves` packaging, all 3-axiom clean, ~3 s.
-
-       THE CONJUNCT THE PER-EXAMPLE CAPSTONE COULD NOT STATE IS HERE. 4p
-       recorded that the CLS token's gradient sums over the batch INSIDE `den`
-       at the batched node, where the fused file's `vit_cls_den` is at
-       `denseBiasSgdB (N := 1)`. `vitEmbedTiedGB`'s third conjunct is
-       `ViTPoCGB.clsGrad_denB` at the real embed-output cotangent -- the
-       batched thread's one genuinely new statement, now tied rather than only
-       folded.
-
-       WHAT IT MEANT TO WRITE. ViT's per-example block tie takes its nine saved
-       activations as arguments; `batchMapAux` lifts a function of one saved
-       value and one input, so the saves and the eight internal cotangents are
-       repackaged as functions of the block INPUT (`blkSaves`, `cAtt`..`cM1` --
-       `vitBlockTiedAtMHV`'s and `vitBlockCotInAtMHV`'s `let` chains, verbatim).
-       No `*BackBatchedGraph_faithful` family exists for ViT and none was
-       needed: the lift is the honesty argument, as it was for ConvNeXt.
-
-       WHERE THE FIVE STAND. ResNet-34 (4g), MobileNetV2 (4k) and ResNet-50 at
-       batch BN; EfficientNet-B0 (4f), ConvNeXt-T (4r) and ViT-Tiny (here) at
-       their batched chains. Every net's T3 section 1a tie is now at the
-       un-fused gradient node, the smoothed loss at a general target and the
-       batched index -- the artifact each quoted accuracy comes from, up to one
-       replica (4d), which is the next item. One replica; the 4x accumulation is
-       `momVNextF`'s other reading; drop-free chain; ViT-Tiny's literal dims.
-
-    4t. DATA PARALLELISM, PIECE 2 -- THE COLLECTIVE AS AN AST NODE (2026-09-07).
-       Until this landed the cross-replica gradient mean in every `*dp*`
-       artifact was `ViTRender.emitGradAllReduce`: `stablehlo.all_reduce(add)`
-       over `replica_groups = [[0..R-1]]` and a divide by `R`, emitted as TEXT
-       outside the `SHlo` AST, a declared trusted carve-out that every
-       train-step tie disclaimed in its own header (4d, 4g, 4k, 4r, 4s and the
-       ResNet-50 tie). It is now `SHlo.allReduceMeanF R hR t ds g`: `R` graphs
-       of ONE skeleton -- the same program on `R` replicas, each with its own
-       values, which is what SPMD data parallelism IS -- with
-       `den = (1/R) sum_r den (g r)` (piece 1's `dpMean` of the per-replica
-       denotations), `skel` reading replica 0, a `Raw`/`Tok` case whose emit is
-       the old text verbatim, and a `parseStack` case so `roundtrip` still
-       covers every skeleton. Every batched render now calls
-       `prettyAllReduceMean` where it called the text function (twelve sites in
-       seven files, cifar8's included). MEASURED: all 68 committed `*dp*`
-       artifacts re-render byte-identically off the node, because the
-       `%arsum{t}`/`%armean{t}` names are carried by the tag rather than drawn
-       from `fresh`. The one deliberate byte movement is the artifacts' own
-       banner comment, which said the collective was outside the theorems and
-       now says it is a node -- comment lines only, and the forward-prefix
-       audits are unaffected.
-
-       WHAT THE NODE BUYS, stated once in `Foundation/DataParallelNode.lean`
-       (five declarations, 3-axiom clean): `den_allReduceMeanF_eq_dpMean`
-       (the node denotes piece 1's mean); `skel_allReduceMeanF_of_spmd` (under
-       `forall r, skel (g r) = skel (g 0)` -- free in every render, whose operand
-       family is `.operand grad` at every `r` -- the node's skeleton is each
-       replica's, so `pretty` prints one program); 
-       `den_allReduceMeanF_eq_lossGrad_meanLoss` (piece 1 composed: if each
-       replica's node denotes its loss gradient, the all-reduced node denotes
-       the gradient of the MEAN loss); `den_allReduceMeanF_convWeightGradB`
-       (4b's fold composed, one op kind shown, every `*GradB` the same way); and
-       `adamW_at_allReduceMeanF` -- `den (adamW tail (allReduceMeanF R g))` is
-       `adamWStep` at `dpMean` of the per-replica gradient nodes, the target
-       statement 4d's scoping wrote down. The same one line closes it for the
-       heavy-ball, RMSProp and LAMB tails.
-
-       WHAT IT DOES NOT SAY. Piece 3 is untouched: that the `R` graphs' values
-       are the replica slices of ONE host batch, that every replica starts from
-       the same parameters and that `replica_groups` names all `R` devices are
-       the driver's (`VerifiedTrain.lean`, `ffi/pjrt_ffi.c`) and the
-       `*-dp-check` gates'. The per-replica gradient node's operand values
-       differ per replica by construction; nothing here says what they are.
-       The lowerer's `all_reduce` is trusted exactly as every other op's
-       lowering is. Every tie header now says "feeds `allReduceMeanF`" where
-       it said "emitted text outside the AST".
-
-    5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
-       (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
-       `mulVec/transpose/outer/mul`. This IS bridged to Mathlib's `Matrix`
-       namespace by `LeanMlir/Proofs/Codegen/MatBridge.lean` (`Mat.mulVec_eq`,
-       `Mat.transpose_eq`, `Mat.outer_eq`, `Mat.mul_eq`), so a downstream
-       consumer can apply Mathlib's matrix algebra to the suite's outputs. The
-       bridge is opt-in by design -- the core suite does not import it, keeping
-       its import surface Matrix-free unless interop is wanted.
-
-    6. NOT PROVED -- empirically validated only: that the nets train to good
-       ImageNet accuracy, that StableHLO/IREE compilation is faithful, that the
-       JAX pipeline agrees numerically, and that bf16 doesn't change results.
-       These are engineering claims backed by runs and cross-checks, not
-       theorems. The fp8-E4M3 "trainers" are host-side quantization emulation on
-       fp32 kernels (the theorems are about the E4M3 value grid, the hardware
-       has no fp8 units). Note the hardware-model direction has since STRENGTHENED:
-       the binary32/E4M3 rounding models are now constructed (`rndP`, standard
-       model proved) rather than axiomatized -- the earlier TrustedBridge
-       named-axiom quarantine was retired, keeping the project at zero
-       non-core axioms.
+           CIFAR-8 forward                         6.37e14   / 6.121e18   fold   cifar8_float_logits_le
+           ResNet-34 forward, inference BN         1.548e209 / 3.152e211  fold   r34_float_logits_le
+           ResNet-34 forward, training BN          1.752e81  / 8.748e80   CAP    r34_train_float_logits_le  (per example)
+           MobileNetV2 forward, inference BN       1.444e96  / 2.154e3    fold   mnv2_float_logits_le
+           MobileNetV2 forward, 17-block paper     8.176e16  / 2.152e4    CAP    mnv2Paper_float_logits_le  (52 BN sites capped; any class count)
+           EfficientNet-B0 forward, inference BN   8.408e210 / 2.580e55   fold   b0_float_logits_le         (any batch size)
+           EfficientNet-B0 forward, 16-block paper 2.416e287 / 1.886e279  CAP    b0Full_float_logits_le     (16 SE sigmoids capped; the window is honest)
+           ConvNeXt-T forward                      9.738e130 / 4.871e130  CAP    cnx_float_logits_le
+           ViT-Tiny forward                        4.794e108 / 2.397e108  CAP    vit_float_logits_le
+           ResNet-34 backward, training BN         6.894e244 / 8.857e245  fold   r34_grad_float_le          (|istd| <= 16)
+           MobileNetV2 backward, training BN       1.076e152 / 4.750e153  fold   mnv2_grad_float_le
+           ConvNeXt-T backward                     1.563e250 / 1.023e251  fold   cnx_grad_float_le          (|istd| <= 16)
+           EfficientNet-B0 backward, training BN   1.578e182 / 7.104e182  fold   b0_grad_float_le           (batch size 1)
+
+       WHAT KIND OF STATEMENT EACH IS. A "fold" composes the per-op rounding moduli. A "CAP" goes
+       through `FloatBridgesTo.capped`, whose modulus is `min(mod, 2*mag)`, and the `2*mag` branch
+       closes at every normalisation site: it states only that the float and the real output both
+       lie in the certified window (the triangle inequality; budget/window = 2.00 is the tell,
+       except where later stages collapse the window). A normalisation that reduces its statistics
+       out of its own input has a modulus QUADRATIC in the window (training-mode BatchNorm,
+       LayerNorm, squeeze-excite; attention exponentially), which is why those forwards are caps;
+       inference BatchNorm is affine in x, so those are folds; every backward is a fold (a VJP is
+       linear at a fixed point). The two batch qualifiers are structural: `bnGradInputReMag`'s
+       gain carries N*h*w, so a batch-BN number is one theorem per N. The `norm_num` "ceiling" at
+       ~1e253 is Lean's `exponentiation.threshold` option (default 256), not a wall.
+
+       WHAT IS SUPPLIED. Device kernels with no IEEE specification carry an accuracy hypothesis of
+       1e-2 (`DeviceRsqrt`, `DeviceSigmoid`, `DeviceGelu`, `DeviceExp` with the softmax side
+       condition); the device MEAN is derived (`FloatModel.bnMean_close_of`). The backwards also
+       take saved-activation accuracies at 1e-2 which NO forward statement discharges, so no
+       forward-then-backward composition is claimed anywhere.
+
+       WHAT IS NOT CLAIMED. Numerical accuracy. The budgets are 1e16 to 1e287 against logits of
+       order 10 -- interval folds at worst-case windows through 30 or more layers, which cannot be
+       made to bite by more work of this kind (on ResNet-34 the conv fan-in face is 14 to 95 times
+       loose per layer, and even at the measured face the training forward lands at 1e19). The one
+       non-vacuous number is MobileNetV2's WINDOW, 2154, because relu6 clamps at 6. What the
+       numbers DO certify is the float program's shape: every stage present, at the right fan-in,
+       in the right composition, at the right normalisation mode, kernel-checked.
+
+       THE PADDING CONVENTION, CLOSED (2026-09-05). EfficientNet-B0's stem and MobileNetV2's five
+       stride-2 sites are XLA-SAME in every shipped artifact (TF-origin references); the Proofs
+       tier was re-spelled to `flatConvStride2Xla` / `depthwiseStride2FlatXla` and all four numbers
+       reproduced to the digit (a decimation picks coordinates). ResNet-34/50, ConvNeXt, ViT,
+       MobileNetV4's UIB bodies and B0's own strided depthwises are symmetric, correctly.
+
+       THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
+       VJP, with a shape check that the opaque-block chain IS the committed forward: the
+       per-example `r34InputGrad_eq_resnet34_vjp`, `mnv2InputGrad_eq_mobilenetv2_vjp`,
+       `convnextInputGrad_eq_convNextForwardTCh_vjp`, `efficientnetInputGradB_full_correct` (16
+       blocks, through `HasVJP.backward_unique`) and `vitInputGradK_eq_vitForwardKV_vjp` (depth 12,
+       3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g. Closing them
+       found drift no review had: a reversed 2x2 pool where the forward pools 3x3/s2, `id` in
+       ConvNeXt's head-LN slot, ViT's float cone at scalar affines, an even-kernel adjoint that
+       was not one, and a dozen wrong docstring counts. Nothing trained was affected; in every
+       case the emitted program was right and a hand-written spelling of the same map had drifted.
+       A `den` stated as the certified VJP cannot drift; only a theorem naming both catches it.
+
+    4e. THE BATCHNORM WORLD (disclosed 2026-09-06; port complete 2026-09-07). Training-mode
+       BatchNorm reduces mu/var out of the activation, and PER-EXAMPLE (`[2,3]`,
+       `bnPerChannelTensor3`) and BATCH (`[0,2,3]`, `bnBatchTensor4` / `StableHLO.bnBatchLA`) are
+       different functions of the same architecture -- the one op that couples examples. ResNet-34
+       and MobileNetV2 shipped both: the per-example SGD trainers, and the batch-BN Adam/momentum
+       artifacts every quoted ImageNet accuracy comes from. Every Proofs tier for those two nets
+       was at PER-EXAMPLE BN, so the certified net and the net behind the headline number were
+       different functions; that was undisclosed until 2026-09-06. THE DECISION: port both nets'
+       tiers to batch BN. DONE for every statement that says something -- T1, T2, T3 and T6 at
+       `bnBatchLA` for both (4g rows 4g-4j, 4n); ResNet-50 and MobileNetV4 were batched from the
+       start. T4/T5 (the float budgets) are declined by 4d. `N` is the PER-REPLICA batch
+       throughout: nothing all-reduces BatchNorm statistics.
+
+    4f. THE OPTIMIZER FORM, CLOSED (2026-09-06/07). Every non-SGD-inline train step -- the Adam,
+       momentum, RMSProp, LAMB, EMA, clipped, accumulated, data-parallel and bf16 families, every
+       ImageNet artifact -- emits the RAW gradient (`*Grad` / `*GradB`) and hands it to an
+       optimizer tail; only the SGD-inline `<net>_train_step.mlir` emits the fused `theta - lr*g`.
+       Every fold is now stated at the gradient node (the fusion is `rfl`, `*Sgd_eq_grad`), so one
+       lemma per op kind covers every tail, and every tail is certified (`adamW_triple_faithful`,
+       `mom_pair_faithful`, `rmsProp_triple_faithful`, `lamb_triple_faithful`,
+       `clipGrad_faithful`, `dropPathB_faithful`; EMA and accumulation are `adamMNextF` /
+       `momVNextF` at their other reading). The five capstones are re-pointed at that node, the
+       smoothed loss at a general target (`SmoothedLossCot`, `BceLossCot`) and the batched index
+       (4g rows 4g, 4j, 4m, 4r, 4s; B0's `efficientnet_net_tiedG`). The bf16 twins are NOT the
+       same node: a bf16 render emits `*GradBBf16` constructors whose `den` rounds the operands
+       and the result once outside the batch sum, and those carry their own lemmas.
+
+    4g. THE PROOFS-TIER PORT (2026-09-06 to 09-07), the record the labels 4g-4t used to carry
+       here in full; the write-ups are planning/proofs_tier_to_paper_nets.md,
+       planning/renderer_convergence.md and planning/mnv4_proofs_tier.md. What landed: every
+       ImageNet-scale net is ONE batched chain (the per-example renderers of ResNet-34 and
+       MobileNetV2 retired, ConvNeXt's thirteen train steps moved 78 conv-VJP lines by
+       decision, ViT's nineteen artifacts byte-identical); T1/T2/T3/T6 at that chain for all
+       seven nets, ResNet-50 and MobileNetV4-Conv-M from nothing; data parallelism as a theorem
+       (the all-reduced mean is the gradient of the mean loss, provably NOT the global-batch
+       loss under batch BN) and as the AST node `allReduceMeanF`. STILL OPEN, and disclosed:
+       T4/T5 beyond 4d's table (declined, vacuous); no accuracy is quoted for MobileNetV4-Conv-M;
+       ConvNeXt's and ViT's SGD-inline `*_train_step.mlir` stay per-example and their `*TiePoC`
+       ties are at those bytes; `convBack` and `convBackBatched` -- two emitters for one VJP --
+       are not tied to each other in Lean; the host-side sharding and lockstep (DP piece 3) are
+       driver logic checked by the `*-dp-check` gates, not theorems.
+
+    5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R` (definitionally
+       Mathlib's `Matrix (Fin m) (Fin n) R`), bridged opt-in to Mathlib's `Matrix` namespace by
+       `LeanMlir/Proofs/Codegen/MatBridge.lean`.
+
+    6. NOT PROVED -- empirically validated only: that the nets train to good ImageNet accuracy,
+       that StableHLO/XLA compilation is faithful, that the JAX pipeline agrees numerically, and
+       that bf16 doesn't change results. The fp8-E4M3 "trainers" are host-side quantization
+       emulation on fp32 kernels. The binary32/E4M3 rounding models are constructed (`rndP`,
+       standard model proved) rather than axiomatized; the project carries zero non-core axioms.
+
+       THE ENGINE IS MID-REWRITE. Everything since v0.6.3 (2026-08-03, the PJRT backend) has been
+       rebuilding the execution side in place -- XLA/PJRT replacing IREE as the training engine,
+       bf16 through the emitters, every net onto one batched chain, and the Proofs tier ported
+       to the artifacts that actually train (4e-4g) -- under a deliberate licence to break and
+       rethink rather than preserve. `main` is the integration branch for that work; the next
+       tag collects all of it, and nothing in this file should be read as describing v0.6.3.
 
 review:
   status: "agent-reviewed"   # also self-assessed; NOT externally peer-reviewed
@@ -2243,8 +367,8 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above, plus a full `#print axioms` sweep of 2311
-    declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
+    fidelity caveats above, plus a `#print axioms` sweep of every audited
+    declaration (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 52
     theorems with a hard-coded permitted-axiom allowlist of exactly
@@ -2287,16 +411,16 @@ alignment:
       module: "LeanMlir/Proofs/Foundation/ResNet34LivePC.lean, LeanMlir/Proofs/Training/ResNet34LiveSeal.lean, LeanMlir/Proofs/Foundation/ResNet34LiveFull.lean"
       status: "proved"
       note: "2-channel live ResNet-34, real [3,4,6,3] depth; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes; identity blocks wash out through BN)"
-    - source: "Committed train step = real loss-driven backward (per-net ties: the ten SGD-inline steps, and the seven ImageNet-scale nets at their batched steps)"
-      lean: "<net>_net_tied_certified family (e.g. vit_net_tied_certified, all 200 ViT params)"
-      module: "LeanMlir/Proofs/*TiePoC.lean"
+    - source: "Committed train step = real loss-driven backward (per-net ties: the seven ImageNet-scale nets at their batched steps, the ten SGD-inline steps)"
+      lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied_certified family (SGD-inline)"
+      module: "LeanMlir/Proofs/Foundation/*TiePoCB.lean, LeanMlir/Proofs/Architectures/*TiePoCG*.lean, LeanMlir/Proofs/Architectures/*TiePoC.lean"
       status: "proved"
-      note: "genuine backward cotangent, not a free forall-cotangent; committed-spec ties for all 5 ImageNet nets in SpecVJP"
+      note: "genuine backward cotangent, not a free forall-cotangent; one replica, composing with allReduceMeanF (fidelity 4g); committed-spec ties for the 5 ImageNet nets in SpecVJP"
     - source: "Binary32 rounding model + whole-net float-error budgets + certified backward ties"
-      lean: "rndP_err; <net>_float_logits_le (7 forwards) and <net>_grad_float_le (4 backwards); r34InputGrad_eq_resnet34_vjp / mnv2InputGrad_eq_mobilenetv2_vjp / convnextInputGrad_eq_convNextForwardTCh_vjp; chain_adjointClose; cifar8_chain_argmaxSafeH"
-      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Float/*FloatBudget.lean, LeanMlir/Proofs/Foundation/*CertifiedTie.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
+      lean: "rndP_err; <net>_float_logits_le (9 forwards) and <net>_grad_float_le (4 backwards); the *InputGrad_eq_*_vjp / *InputGradB_eq_*_vjp ties with their *_eq_slots shape checks; chain_adjointClose; cifar8_chain_argmaxSafeH"
+      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Float/*FloatBudget.lean, LeanMlir/Proofs/Foundation/*CertifiedTie*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       status: "proved"
-      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the budgets are interval folds, vacuous as numerical certificates, four of them caps (fidelity 4d); the CIFAR-8 argmax certificate does not bite at trained magnitudes (fidelity 4c)"
+      note: "rounding model CONSTRUCTED (former hardware axioms discharged); the budgets are interval folds, vacuous as numerical certificates, five of them caps (fidelity 4d); the CIFAR-8 argmax certificate does not bite at trained magnitudes (fidelity 4c)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
       module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"
@@ -2312,7 +436,7 @@ alignment:
       module: "LeanMlir/Proofs/Foundation/MuonGeometry.lean, LeanMlir/Proofs/Foundation/MuonNewtonSchulz.lean"
       status: "proved"
       note: "14 theorems; singular-G SVD completion + Newton-Schulz convergence dynamics left open"
-    - source: "StableHLO/IREE codegen faithfulness, JAX numeric agreement, training accuracy"
+    - source: "StableHLO/XLA codegen faithfulness, JAX numeric agreement, training accuracy"
       lean: "(none -- empirical)"
       module: ""
       status: "not-formalized"
@@ -2320,6 +444,7 @@ alignment:
 
 acknowledgements: >-
   Built on Mathlib (foundation: fderiv / Differentiable). Independent kernel
-  re-checking via leanprover/comparator and the nanoda kernel. StableHLO/IREE
-  for compilation; JAX for cross-checking. Architectural coverage follows
-  "Convolutional Neural Networks with Swift for TensorFlow" (Apress, 2021).
+  re-checking via leanprover/comparator and the nanoda kernel. StableHLO/XLA
+  for compilation, IREE as the differential compiler; JAX for cross-checking.
+  Architectural coverage follows "Convolutional Neural Networks with Swift for
+  TensorFlow" (Apress, 2021).
