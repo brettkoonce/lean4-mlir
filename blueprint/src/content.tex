@@ -3591,16 +3591,16 @@ lake build cifar8w-bn-ablation
 
 That one binary runs the same network three times, once per optimizer.
 Here is the second of the three, on one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/cifar8w-bn-p1.log}. XLA's
+\texttt{runs/2026-09-01-cifar8w-bn-xla-cuda/cifar8w-bn.log}. XLA's
 startup banner is removed, the per-step loss lines are dropped, and
-epochs 8 through 34 are elided:
+epochs 6 through 36 are elided:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
 [pjrt_ffi] compiled verified_mlir/cifar8w_bn_mom_train_step.mlir
              (@cifar8w_bn_mom_train_step, 117 outputs, 1 replica) in 1061 ms
 [pjrt_ffi] compiled verified_mlir/cifar8w_bn_fwd.mlir
-             (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 234 ms
+             (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 237 ms
 ════════ cifar8w-BN (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
 Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head
   (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU

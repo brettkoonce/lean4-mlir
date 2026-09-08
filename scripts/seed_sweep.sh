@@ -14,9 +14,10 @@
 #   (SGD/Nesterov/AdamW x f32/bf16) at 40 epochs. planning/archive/bf16_batchnorm.md.
 #
 # ⭐ CIFAR is the WIDE head (`cifar8w-{,bn-}ablation`, d1=512), not the narrow `cifar-{,bn-}verified`
-#   this suite first pointed at. Chapter 4 quotes the wide net — §4.1's 77.48% and §4.2's
-#   `runs/2026-08-12-cifar8w-6arm-xla-cuda/` medians are both `cifar8w-bn-ablation` — so the narrow
-#   pair produced seed statistics for a net the chapter never reports (75.28% vs the quoted 77.48).
+#   this suite first pointed at. Chapter 4 quotes the wide net — §4.1's 75.94% listing
+#   (`runs/2026-09-01-cifar8w-bn-xla-cuda/`) and §4.2's `runs/2026-09-01-cifar8w-6arm-constlr/`
+#   medians are both `cifar8w-bn-ablation`, at the constant lr the binaries have run since
+#   2026-09-01 — so the narrow pair produced seed statistics for a net the chapter never reports.
 #   The wide head is ~1.6x the wall clock per epoch and buys no accuracy (§4.3's head-width sweep is
 #   exactly that finding); it is run anyway because it is the net the chapter bridges MNIST to
 #   ResNet with.
@@ -25,9 +26,11 @@
 #   controlled pipeline, so six arms are two jobs and one job yields three final-epoch numbers.
 #   The OK line reports all of them; `LEAN_MLIR_DUMP_CORRECT` writes one bitmap per arm.
 #
-# ⚠ The no-BN wide net's MOMENTUM arm diverges to exactly 10.00% — 3 of 5 seeds on 2026-08-12,
-#   which is §4.2's published finding. Its SGD and AdamW arms finish ~72-73%. That is a RESULT,
-#   not a runner failure, so a job containing a diverged arm still counts as done.
+# ⚠ Under the cosine schedule the binaries ran until 2026-09-01, the no-BN wide net's MOMENTUM arm
+#   diverged to exactly 10.00% in 3 of 5 seeds (`runs/2026-08-12-cifar8w-6arm-xla-cuda/`). At the
+#   constant lr no arm diverges, but 3 of 5 no-BN AdamW seeds print loss=NaN and still score ~73%
+#   (§4.2's published finding). Either is a RESULT, not a runner failure, so a job containing a
+#   diverged arm still counts as done.
 #
 # `planning/archive/imagenette_error_intervals.md` §2. Seven trainers x 3 seeds = 21 runs, LPT-packed
 # one-per-GPU (XLA preallocates ~75% of a card, so two will not share one). ~19.4 GPU-h, so

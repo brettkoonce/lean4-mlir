@@ -32,11 +32,22 @@ Hardware: AMD Radeon 7900 XTX (gfx1100) via ROCm 7.2 / IREE.
 
 ## CIFAR-10 (10 classes, 32×32 RGB)
 
-50K train / 10K test. Augmentation: random horizontal flip.
+50K train / 10K test. Augmentation: per-epoch shuffle + random horizontal flip. This is the
+Chapter 4 net, the wide-head 8-conv CNN (`cifar8w-ablation` / `cifar8w-bn-ablation`, what
+`lake run cifar` runs): 40 epochs, batch 128, one constant learning rate per optimizer — no
+warmup, no decay. Trained on the verified XLA/PJRT path on one RTX 4060 Ti. Median final test
+accuracy over five seeds, with the lowest-to-highest range in parentheses, from
+`runs/2026-09-01-cifar8w-6arm-constlr/` (the book's §4.2 table):
 
-| Model | Params | Val accuracy | Notes |
+| | SGD (lr 0.1) | Nesterov momentum (μ 0.9, lr 0.02) | AdamW (lr 1e-3) |
 |---|---|---|---|
-| CIFAR-10-BN | 3.7M | **83.50%** | 4× convBn + 3× dense + 2 max pools, batch 128, 30 epochs |
+| no BN | 68.8 (2.7) | 72.2 (3.3) | 72.8 (2.8) |
+| BN | 74.5 (1.1) | **76.3** (1.0) | 74.3 (0.2) |
+
+Momentum with BN is the best on the board; BN is ahead in every column (+5.8 / +4.2 / +1.5).
+Three of the five no-BN AdamW runs sent their training loss to NaN and still scored ~73% at
+epoch 40 — the accuracy column alone would not have shown it. The constant rate is deliberate:
+the optimizer ablation varies one thing, and cosine annealing enters with ResNet in Chapter 5.
 
 ## tinyshakespeare (char-level language modeling, vocab 65)
 
