@@ -145,6 +145,14 @@ is the file every session touches, and `check_audit_coverage.py` parses its root
 regex that the essays' brackets already defeated once (the script strips `--` comments for that
 reason).
 
+**DONE 2026-09-08.** The `Proofs`, `Certs` and `CertsHeavy` root arrays are bare lists, one root
+per line (4041 → 3036 lines); every array is the same ordered list it was. The 187 per-root
+comments (1013 lines, all on modules that carry a `/-!` header of their own) are
+`planning/archive/lakefile_roots_log.md`, verbatim, under the module each preceded; the two lib
+docstrings point there, and the `Certs` one says 201 roots reaching 235 modules (~153k lines)
+instead of "155 files, ~87k lines". The 343 `--` lines outside the arrays (exe notes, section
+banners, the doc-gen4 note) are not root essays and stay.
+
 ## 7. The one real gap: a batched ViT T6
 
 `vitInputGradK` (`Foundation/ViTBackChains.lean`) is per-example; its `N` is the token count, not
