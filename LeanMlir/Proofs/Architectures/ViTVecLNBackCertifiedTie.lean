@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.ViTMhsaBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
-import LeanMlir.Proofs.Float.ViTWholeBackFloatBridge
+import LeanMlir.Proofs.Foundation.ViTBackChains
 
 /-! # §B: the ViT encoder-block backward tie at the VECTOR LayerNorm the net runs
 

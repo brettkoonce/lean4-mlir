@@ -121,6 +121,7 @@ import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Foundation.MobileNetBackChains
 import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 import LeanMlir.Proofs.Foundation.ConvNeXtBackChains
+import LeanMlir.Proofs.Foundation.ViTBackChains
 import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
 import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
@@ -2890,7 +2891,7 @@ open Proofs
 #print axioms Proofs.convNextForwardTCh_vjp_chain
 #print axioms Proofs.convnextInputGrad_eq_convNextForwardTCh_vjp
 -- ⭐⭐ ViT-Tiny's whole-net backward tie — tier T6 at the paper net (proofs_tier_to_paper_nets
--- 3.4a; ViTWholeBackFloatBridge / ViTVecLNBackCertifiedTie / ViTWholeBackCertifiedTie, ~5 s).
+-- 3.4a; ViTBackChains / ViTVecLNBackCertifiedTie / ViTWholeBackCertifiedTie, ~5 s).
 -- ⛔ THE GAP WAS THE LAYERNORM FORM, NOT THE HEAD COUNT. The audit recorded the existing block
 -- tie as being at heads = 1; it is general in h throughout. What it is at is the retired SCALAR
 -- LayerNorm (gamma beta : R, against transformerBlock_has_vjp_mat), while the shipped

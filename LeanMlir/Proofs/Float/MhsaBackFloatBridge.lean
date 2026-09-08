@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.ViTBackChains
 import LeanMlir.Proofs.Float.SdpaBackFloatBridge
 import LeanMlir.Proofs.Float.ViTBlockFloatBridge
 import LeanMlir.Proofs.Float.LinBackFloatBridge
@@ -26,6 +27,10 @@ modulus is the rounding budget (`mhsaSdpaBack*_close`) plus the real magnitude a
 `perRow` — no new analysis, the budgets thread automatically. This is the backward peer of
 `floatBridges_vitBlockMHFull`; pair with LN-back + residual + the Vec-space MLP-half backward for the
 transformer-block / whole-net fold. A3 = gradient *closeness* at a smooth point (NOT descent).
+
+⚠ Since 2026-09-08 the ℝ maps (`coreQFlat`/`coreKFlat`/`coreVFlat`, `mhsaBackFlat`, `vitBlockBack`,
+`vitBlockBackPR`, `clsScatter`) are defined in `Foundation/ViTBackChains.lean`, beside the ties; this
+file is their float side only (`planning/float_second_pass.md`).
 -/
 
 namespace Proofs
@@ -37,18 +42,6 @@ variable {h N dh : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § The flattened multi-head sdpa cores (cotangent ↦ dV / dQ / dK)
 -- ════════════════════════════════════════════════════════════════
-
-/-- Flattened real multi-head sdpa backward w.r.t. V (saved projections `Q K V` fixed). -/
-noncomputable def coreVFlat (Q K V : Mat N (h * dh)) (v : Vec (N * (h * dh))) : Vec (N * (h * dh)) :=
-  Mat.flatten (mhsaSdpaBackV Q K V (Mat.unflatten v))
-
-/-- Flattened real multi-head sdpa backward w.r.t. Q. -/
-noncomputable def coreQFlat (Q K V : Mat N (h * dh)) (v : Vec (N * (h * dh))) : Vec (N * (h * dh)) :=
-  Mat.flatten (mhsaSdpaBackQ Q K V (Mat.unflatten v))
-
-/-- Flattened real multi-head sdpa backward w.r.t. K. -/
-noncomputable def coreKFlat (Q K V : Mat N (h * dh)) (v : Vec (N * (h * dh))) : Vec (N * (h * dh)) :=
-  Mat.flatten (mhsaSdpaBackK Q K V (Mat.unflatten v))
 
 /-- Flattened float multi-head sdpa backward w.r.t. V (saved float weights `fp`). -/
 noncomputable def FloatModel.coreVFlatF (M : FloatModel) (fp : Fin h → Mat N N)
@@ -320,20 +313,6 @@ theorem floatBridges_coreK (M : FloatModel) (Q K V : Mat N (h * dh)) (fp : Fin h
 -- § The full MHSA backward (cotangent dY ↦ input gradient dX)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The full multi-head self-attention input-gradient backward** (cotangent `dY ↦ dX`):
-    output-projection backward (`linBack Wo`, per token) → the three sdpa cores → Q/K/V projection
-    backwards (`linBack Wq/Wk/Wv`, per token), fanning in at `X` (the three paths add). -/
-noncomputable def mhsaBackFlat (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh)) :
-    Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
-  (fun dconcat j =>
-      (perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wq) (0 : Vec (h * dh))) ∘ coreQFlat Q K V)
-        dconcat j
-      + ((perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wk) (0 : Vec (h * dh))) ∘ coreKFlat Q K V)
-          dconcat j
-        + (perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wv) (0 : Vec (h * dh))) ∘ coreVFlat Q K V)
-          dconcat j))
-    ∘ perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wo) (0 : Vec (h * dh)))
-
 /-- **THE FULL MHSA BACKWARD FLOAT-BRIDGES.** One `FloatBridges.comp` of the output-projection
     backward and the three-way fan-in (`biPathSum` twice) of the `projection-back ∘ sdpa-core` paths.
     The projection backwards are the free `linBack`s lifted per token (`FloatBridges.perRow`); the
@@ -364,26 +343,6 @@ theorem floatBridges_mhsaBack (M : FloatModel) (Wq Wk Wv Wo : Mat (h * dh) (h * 
 -- ════════════════════════════════════════════════════════════════
 -- § The transformer-block backward (the reverse of the ViT encoder block)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The ViT encoder-block input-gradient backward** — the reverse of `LN → MHSA → +x → LN → MLP → +x`.
-    The block is `mlpResidual ∘ attnSub` (forward), so the backward is `attnSubBack ∘ mlpResidualBack`:
-
-    * **MLP-residual backward** (per token): `residual (LN₂-back ∘ linBack W₁ ∘ geluBack ∘ linBack W₂)`
-      — the reverse of `dense W₂ ∘ gelu ∘ dense W₁ ∘ LN₂`, lifted over the sequence (`perRow`);
-    * **attention-sublayer backward**: `residual (LN₁-back ∘ mhsaBack)` — the residual skip's cotangent
-      flows both through the MHSA backward (`floatBridges_mhsaBack`) and directly to `x`.
-
-    The LN backwards (`lnB₁`/`lnB₂`) are supplied as `FloatBridges` (= the per-token BatchNorm backward,
-    dischargeable by `floatBridges_bnBack`), exactly as the forward `floatBridges_vitBlock` supplies `hln`;
-    `geluBack` is the saved-derivative `diagBack`. -/
-noncomputable def vitBlockBack {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh))
-    (lnB₁ : Vec (h * dh) → Vec (h * dh)) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
-    (sgelu : Vec dff) (lnB₂ : Vec (h * dh) → Vec (h * dh)) :
-    Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
-  Proofs.residual (perRowFlat N (h * dh) lnB₁ ∘ mhsaBackFlat Wq Wk Wv Wo Q K V)
-    ∘ perRowFlat N (h * dh) (Proofs.residual
-        (lnB₂ ∘ Proofs.dense (Mat.transpose W₁) (0 : Vec (h * dh)) ∘ diagBack sgelu
-          ∘ Proofs.dense (Mat.transpose W₂) (0 : Vec dff)))
 
 /-- **THE TRANSFORMER-BLOCK BACKWARD FLOAT-BRIDGES.** One `FloatBridges.comp` of the MLP-residual
     backward (per token) and the attention-sublayer backward (`residual` of `LN₁-back ∘ mhsaBack`).
@@ -424,26 +383,6 @@ theorem floatBridges_vitBlockBack {dff : Nat} (M : FloatModel)
 -- ════════════════════════════════════════════════════════════════
 -- § The per-token-input-aware transformer-block backward (the tie-able form)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The per-token-input-aware ViT encoder-block backward** — the enrichment of
-    `vitBlockBack` whose LayerNorm and GELU slots thread *each token's* saved activation
-    (`perRowFlatPR` instead of `perRowFlat`). Structurally identical to `vitBlockBack`
-    (residual MLP-sublayer back, then residual attention-sublayer back), but `lnB₁`/`lnB₂`
-    are now per-token *families* `Fin N → (Vec → Vec)` and the GELU derivative `sgelu` is a
-    per-token family `Fin N → Vec dff`. This is the form the certified per-token block VJP
-    actually takes: `layerNorm_per_token_has_vjp_mat.backward A` runs the single-token LN
-    backward at each token's own saved input `A r` (its Jacobian differs per token), which a
-    single shared `lnB₁` cannot carry. `vitBlockBack` is the special case of all rows sharing
-    one map; this is the general one the §B tie equals. -/
-noncomputable def vitBlockBackPR {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh))
-    (Q K V : Mat N (h * dh))
-    (lnB₁ : Fin N → (Vec (h * dh) → Vec (h * dh))) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
-    (sgelu : Fin N → Vec dff) (lnB₂ : Fin N → (Vec (h * dh) → Vec (h * dh))) :
-    Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
-  Proofs.residual (perRowFlatPR N (h * dh) lnB₁ ∘ mhsaBackFlat Wq Wk Wv Wo Q K V)
-    ∘ perRowFlatPR N (h * dh) (fun r => Proofs.residual
-        (lnB₂ r ∘ Proofs.dense (Mat.transpose W₁) (0 : Vec (h * dh)) ∘ diagBack (sgelu r)
-          ∘ Proofs.dense (Mat.transpose W₂) (0 : Vec dff)))
 
 /-- **THE PER-TOKEN-AWARE TRANSFORMER-BLOCK BACKWARD FLOAT-BRIDGES.** Same `comp`/`residual`
     assembly as `floatBridges_vitBlockBack`, with the per-token seams `FloatBridges.perRowPR`
@@ -534,13 +473,6 @@ noncomputable def floatBridgesTo_towerBack {m : Nat} :
 -- ════════════════════════════════════════════════════════════════
 -- § The endpoints — cls-slice scatter + classifier head + the whole-net fold
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The CLS-slice backward** — the adjoint of `cls_slice_flat` (gather row 0 of the `(N+1)×D`
-    sequence): scatter the head cotangent `dy` back to row 0 (the CLS token), zero on the patch rows.
-    The certified `cls_slice_flat_has_vjp.backward`; exact in float (a structural select/zero). -/
-noncomputable def clsScatter (N D : Nat) (dy : Vec D) : Vec ((N + 1) * D) :=
-  fun idx =>
-    if (finProdFinEquiv.symm idx).1 = (0 : Fin (N + 1)) then dy (finProdFinEquiv.symm idx).2 else 0
 
 /-- The CLS-slice scatter is `FloatClose` with modulus `id` — exact (real = float), magnitude-stable
     (`B = A`): row 0 carries `|dy| ≤ A`, every other row is `0 ≤ A`. -/

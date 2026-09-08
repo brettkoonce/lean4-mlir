@@ -136,6 +136,18 @@ float side unless the model core needs them.
   fill them with `chanLNTensor3Back` from `ChannelLNBack.lean`, which the block tie now imports
   directly). Both ConvNeXt ties re-pointed with no proof change; `ConvNeXtBackFloatBridge` is a root and
   keeps its float side (both the scalar-LN and the channel-LN folds) until step 7.
+* **Step 6 DONE 2026-09-08.** `Foundation/ViTBackChains.lean` holds the multi-head sdpa wrap
+  (`mhSlab`, `mhsaSdpaBackQ`/`K`/`V` — on `Attention.lean`'s certified `sdpa_back_*`, no Float
+  dependency), the flattened cores, `mhsaBackFlat`, the block backward in its three spellings
+  (`vitBlockBack`, `vitBlockBackPR`, `vitBlockBackV`), `vitBlockBackVAt`, `vitTowerBackK`, `clsScatter`,
+  the two saved prefixes and `vitInputGradK`. `ViTWholeBackFloatBridge` was ℝ from top to bottom, so it
+  is deleted outright and its Certs root re-pointed at the leaf. `MhsaBackFloatBridge` and
+  `SdpaBackFloatBridge` keep their float side (roots, and `PatchEmbedBackFloatBridge` imports the
+  former). The three ViT ties re-pointed with no proof change. Left float-side: `towerBack` (the list
+  fold only the float story used — `vitTowerBackK` is its own recursion), `vitGradFlat` (the pre-vector-LN
+  skeleton) and everything in `SoftmaxBackFloatBridge` / `PatchEmbedBackFloatBridge` (the ties denote
+  softmax and patch-embed straight from `Attention.lean`'s VJPs).
+* **All six moves are done; only step 7 (the deletions) is open.**
 * **Bucket three, checked at step 1:** no kept non-test file uses any ℝ name from `SEBackFloatBridge`,
   `SoftmaxBackFloatBridge`, `PatchEmbedBackFloatBridge`, the five `Bn*FloatBridge` or
   `Resnet34WholeFloatBridge` — `seBack*`, `softmaxRowBack*`, `patchEmbedBack*` are consumed only by the

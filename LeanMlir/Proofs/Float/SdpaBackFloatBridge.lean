@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.ViTBackChains
 import LeanMlir.Proofs.Float.SoftmaxBackFloatBridge
 import LeanMlir.Proofs.Float.ViTAttentionFloatBridge
 
@@ -28,6 +29,9 @@ Capstones: `sdpaBackV_close`, `sdpaBackQ_close`, `sdpaBackK_close` — each outp
 float backward is within an explicit budget of the certified `sdpa_back_{V,Q,K}`. With these, the
 attention sublayer's backward is `Mat`-space float-bridged; pair with the `Vec`-space MLP-half backward
 for the transformer-block / whole-net fold. A3 = gradient *closeness* at a smooth point (NOT descent).
+
+⚠ Since 2026-09-08 the ℝ multi-head wrap (`mhSlab`, `mhsaSdpaBackQ`/`K`/`V`) is defined in
+`Foundation/ViTBackChains.lean`; this file keeps the single-head budgets and the float side only.
 -/
 
 namespace Proofs
@@ -469,30 +473,6 @@ theorem sdpa_back_K_sub_abs_le {n d : Nat} (Q K V dOutt dOuta : Mat n d) {qA vA 
 -- MHSA backward composes this with the Q/K/V/O projection denses' `linBack` (input/param VJPs) and
 -- the three-way Q+K+V fan-in at X (`biPathSum`/`residual`) — existing combinators, no new op.
 -- ════════════════════════════════════════════════════════════════
-
-/-- The column slab `[hd·dh, (hd+1)·dh)` of a `Mat n (h·dh)` as a `Mat n dh` (head hd's view) — the
-    `finProdFinEquiv (hd, ·)` column restriction, matching `mhsa_layer`'s per-head extraction. -/
-noncomputable def mhSlab {n h dh : Nat} (hd : Fin h) (Q : Mat n (h * dh)) : Mat n dh :=
-  fun i c => Q i (finProdFinEquiv (hd, c))
-
-/-- **Multi-head sdpa backward w.r.t. V** (real) — per head, the certified `sdpa_back_V` on the head
-    slabs; concatenated by the `finProdFinEquiv` column layout. -/
-noncomputable def mhsaSdpaBackV {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
-  fun i j => sdpa_back_V N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
-              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
-              i (finProdFinEquiv.symm j).2
-
-/-- **Multi-head sdpa backward w.r.t. Q** (real). -/
-noncomputable def mhsaSdpaBackQ {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
-  fun i j => sdpa_back_Q N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
-              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
-              i (finProdFinEquiv.symm j).2
-
-/-- **Multi-head sdpa backward w.r.t. K** (real). -/
-noncomputable def mhsaSdpaBackK {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
-  fun i j => sdpa_back_K N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
-              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
-              i (finProdFinEquiv.symm j).2
 
 /-- **Float multi-head sdpa backward w.r.t. V** — per head, `sdpaBackVF` at the saved float weights
     `fp hd` (within `ew` of head hd's softmax weights) and the head-slab of the cotangent. -/

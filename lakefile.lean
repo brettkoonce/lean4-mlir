@@ -891,14 +891,14 @@ lean_lib «Certs» where
              -- modules. ⛔ The gap it closes is NOT the head count the audit recorded
              -- (ViTMhsaBackCertifiedTie is general in h) — it is the LayerNorm FORM: the block tie
              -- was at the retired SCALAR gamma/beta and the shipped vitForwardKV runs
-             -- transformerBlockV at vector [D]. ViTWholeBackFloatBridge names the chain
+             -- transformerBlockV at vector [D]. Foundation/ViTBackChains names the chain
              -- (vitBlockBackV / vitTowerBackK / vitInputGradK) with the per-token LN slots as
              -- ConvNeXt's rowLNVecFlatBack, whose header already said it is "literally ViT's
              -- per-token LN"; ViTVecLNBackCertifiedTie re-states the block tie there (both sublayer
              -- decompositions and the block unfold stay rfl); ViTWholeBackCertifiedTie folds the
              -- depth-k tower head-first and closes the apex through a TERM-mode vjp_comp chain +
              -- HasVJP.backward_unique, since vitForwardKV_has_vjp opens with `unfold`.
-             `LeanMlir.Proofs.Float.ViTWholeBackFloatBridge,
+             `LeanMlir.Proofs.Foundation.ViTBackChains,
              `LeanMlir.Proofs.Architectures.ViTVecLNBackCertifiedTie,
              `LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTie,
              -- R50 phase 1 (planning/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck

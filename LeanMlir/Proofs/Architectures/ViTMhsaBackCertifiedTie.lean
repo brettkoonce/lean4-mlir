@@ -1,10 +1,10 @@
-import LeanMlir.Proofs.Float.MhsaBackFloatBridge
+import LeanMlir.Proofs.Foundation.ViTBackChains
 import LeanMlir.Proofs.Architectures.ViTBackB0
 
 /-! # §B: the ViT MHSA backward float bridge targets the CERTIFIED VJP (the sdpa adjoint)
 
-The substantive vit-specific §B leaf: the float-bridge multi-head self-attention backward `mhsaBackFlat`
-(`MhsaBackFloatBridge.lean`) IS the certified MHSA input-gradient VJP `mhsa_has_vjp_mat` (`Attention.lean`),
+The substantive vit-specific §B leaf: the hand-assembled multi-head self-attention backward `mhsaBackFlat`
+(`ViTBackChains.lean`) IS the certified MHSA input-gradient VJP `mhsa_has_vjp_mat` (`Attention.lean`),
 flattened — the attention analogue of the depthwise/conv adjoint gates.
 
 Unlike the CNN `convFlatBack` (a free reversed-kernel conv that needed a gate), the ViT sdpa cores are
