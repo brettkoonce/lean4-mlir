@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # seed_sweep.sh — every trainer in a SUITE at n seeds, packed across the GPUs.
 #
-#     scripts/seed_sweep.sh                                 # imagenette, 6 GPUs, seeds 1 2 3
-#     SUITE=small scripts/seed_sweep.sh 0,1,2,3,4,5 "1 2 3 4 5"
+#     scripts/seed_sweep.sh                                 # imagenette, 4 GPUs, seeds 1 2 3
+#     SUITE=small scripts/seed_sweep.sh 0,1,2,3 "1 2 3 4 5"
 #     DRY_RUN=1 scripts/seed_sweep.sh                       # print the packing, launch nothing
-#     scripts/seed_sweep.sh 0,2,3,4 "1 2 3"                 # the AER-clean four only
+#     scripts/seed_sweep.sh 0,1 "1 2 3"                     # two cards, leave the rest free
 #     SWEEP_DIR=runs/2026-08-31-imagenette-n3 scripts/...   # pin the dir (resume a crashed sweep)
 #
 # SUITE=imagenette (default) — the seven 80-epoch Imagenette trainers.
@@ -34,7 +34,7 @@
 #
 # `planning/archive/imagenette_error_intervals.md` §2. Seven trainers x 3 seeds = 21 runs, LPT-packed
 # one-per-GPU (XLA preallocates ~75% of a card, so two will not share one). ~19.4 GPU-h, so
-# ~3.3 h on six cards (19.7 GPU-h).
+# ~5 h on the four cards (it was ~3.3 h on six, until two were pulled 2026-09-08).
 #
 # ⚠ Every trap in that document's §3 is handled HERE and nowhere else — do not run these
 # binaries by hand and expect the same numbers:
@@ -51,7 +51,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-GPUS="${1:-0,1,2,3,4,5}"
+GPUS="${1:-0,1,2,3}"
 SEEDS="${2:-1 2 3}"
 # ⚠ Date-stamped, but a crash-and-restart AFTER midnight would otherwise open a fresh directory
 # and lose the done-markers that make this resumable. Reuse the newest existing sweep dir unless
@@ -116,9 +116,9 @@ if [ -z "$(journalctl -k -n 1 2>/dev/null)" ]; then
 fi
 
 # --- AER watchdog --------------------------------------------------------------------------
-# The kernel journal is the only thing that reports PCIe BadTLP under load. GPUs 1 and 5 are
-# excluded from every 4-GPU job here on suspicion; a 1-epoch probe on each ran clean 2026-08-31,
-# which is evidence and not a clearance. If anything fires, stop taking new jobs.
+# The kernel journal is the only thing that reports PCIe BadTLP under load. The two cards that
+# threw it were pulled 2026-09-08; the watchdog stays as insurance. If anything fires, stop
+# taking new jobs.
 # `no action required` is the benign corrected-error chatter (same filter as supervise.sh).
 START_TS="$(date '+%Y-%m-%d %H:%M:%S')"
 aer_since() {

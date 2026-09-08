@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Supervised 90-epoch R34-ImageNet bf16 run on the 4 clean GPUs (0,2,3,4).
+# Supervised 90-epoch R34-ImageNet bf16 run on the 4 clean GPUs (0,1,2,3).
 # - Checkpoints every epoch (LEAN_MLIR_CKPT_EVERY=1) to $CKPT_base_e{N}.bin
 # - AER watchdog: kills training the instant a PCIe BadTLP/Hardware Error
 #   appears, before it can cascade into a host reset.
@@ -10,7 +10,7 @@
 set -u
 cd /home/skoonce/lean/klawd_max_power/lean4-jax/jax
 
-DEVS="0,2,3,4"
+DEVS="0,1,2,3"
 PY=.lake/build/generated_resnet34_imagenet.py
 CKPT_BASE=/home/skoonce/r34_imagenet_bf16          # -> _e{N}.bin per epoch, .bin final
 SPE=5004                                            # steps per epoch (batch 252... actually 256=4x64 -> 5004)

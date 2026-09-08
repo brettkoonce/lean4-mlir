@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Supervised 80-epoch ConvNeXt-T-ImageNet run on the 4 clean GPUs (0,2,3,4)
+# Supervised 80-epoch ConvNeXt-T-ImageNet run on the 4 clean GPUs (0,1,2,3)
 # with a thermal duty cycle: 30-minute rest after epochs 30 and 60.
 # Derived from supervise_convnext_t_80ep_6gpu.sh; differences:
-# - DEVS=0,2,3,4 (batch 256 = 4x64, SPE 5004)
+# - DEVS=0,1,2,3 (batch 256 = 4x64, SPE 5004)
 # - Planned rests: when the epoch-30/-60 full-state checkpoint lands, the
 #   trainer is killed, the box cools REST_SECS, then training resumes
 #   bit-for-bit via LEAN_MLIR_RESUME (params + opt state + EMA + step),
@@ -11,7 +11,7 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
-DEVS="0,2,3,4"
+DEVS="0,1,2,3"
 PY=.lake/build/generated_convnext_tiny_imagenet.py
 CKPT_BASE=/home/skoonce/convnext_t80_4gpu/convnext_tiny_imagenet
 SPE=5004                                   # 4-GPU: 1281167 // 256

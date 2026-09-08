@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Supervised 100-epoch MobileNetV4-Conv-M ImageNet run on the 4 clean GPUs (0,2,3,4),
+# Supervised 100-epoch MobileNetV4-Conv-M ImageNet run on the 4 clean GPUs (0,1,2,3),
 # Tier-2 reduced-reg recipe (LR 0.004 AdamW, eff-batch 4096 via grad-accum 8×micro-512,
 # RandAug m9, LS 0.1, dropout 0.1, EMA). See planning/archive/mnv4_imagenet.md.
 #
@@ -21,7 +21,7 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
-DEVS="0,2,3,4"
+DEVS="0,1,2,3"
 PY=.lake/build/generated_mobilenet_v4_imagenet.py
 CKPT_BASE=/home/skoonce/mnv4_convm_100ep/mobilenet_v4_imagenet   # -> _e{N}.bin + _e{N}.state.npz per epoch, .bin final
 SPE=312                                     # 4-GPU: 1281167 // 4096 (eff-batch 4096)

@@ -24,7 +24,7 @@
 # `wait_for` takes the marker per leg for exactly that reason.
 #
 # ⚠ Both legs want the same four GPUs, so this is strictly sequential. There is no concurrency to
-# recover here: the box has six cards and idx 1 and 5 throw BadTLP under load.
+# recover here: the box has four cards (its two AER-bad cards were pulled 2026-09-08).
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -65,7 +65,7 @@ mkdir -p /home/skoonce/r50_a3_jax_100ep
     TAG=r50_a3_jax_100ep \
     CKPT_BASE=/home/skoonce/r50_a3_jax_100ep/r50_a3_jax \
     VENV_PY=/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/.venv/bin/python \
-    CKPT_EVERY=5 COOLDOWN_AT="25 50 75" COOLDOWN_SECS=1800 CUDA_DEVS=0,2,3,4 \
+    CKPT_EVERY=5 COOLDOWN_AT="25 50 75" COOLDOWN_SECS=1800 CUDA_DEVS=0,1,2,3 \
     setsid nohup bash scripts/supervise_r50_a3_100ep.sh \
       > /home/skoonce/r50_a3_jax_100ep/supervisor.out 2>&1 & )
 sleep 10

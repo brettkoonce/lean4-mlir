@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Supervised 80-epoch ConvNeXt-T-ImageNet bf16 run on the 4 clean GPUs (0,2,3,4).
+# Supervised 80-epoch ConvNeXt-T-ImageNet bf16 run on the 4 clean GPUs (0,1,2,3).
 # This is the *validation* tier — bump EPOCHS to 300 in MainConvNeXtImagenet.lean
 # and re-emit for the real run (then point this at the same PY).
 # - Checkpoints every epoch (LEAN_MLIR_CKPT_EVERY=1) to $CKPT_base_e{N}.bin
@@ -15,7 +15,7 @@ set -u
 # (ares klawd_max_power, mars claude_max, …) without a hardcoded path.
 cd "$(dirname "$0")/.." || exit 1
 
-DEVS="0,2,3,4"
+DEVS="0,1,2,3"
 PY=.lake/build/generated_convnext_tiny_imagenet.py
 CKPT_BASE=/home/skoonce/convnext_tiny_imagenet_bf16          # -> _e{N}.bin per epoch, .bin final
 SPE=5004                                            # steps per epoch (batch 256 = 4x64 -> 5004, same as R34)

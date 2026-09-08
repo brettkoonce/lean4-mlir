@@ -3,7 +3,7 @@
 #
 # Derived from supervise_enet_b0_350ep_4gpu_duty.sh, which is hardcoded to ares.
 # Three differences, each of which is fatal on this box:
-#   - DEVS=0,1,2,3      — ares' "AER-clean four" (0,2,3,4) name a card index this
+#   - DEVS=0,1,2,3      — ares' old "AER-clean four" (0,2,3,4, retired 2026-09-08) named a card index this
 #                         box does not have; CUDA_VISIBLE_DEVICES=4 aborts.
 #   - PY_BIN            — `../.venv/bin/python` DOES NOT EXIST here. The pinned
 #                         env is /home/skoonce/.venv-cuda (jax 0.11.1, xla_cuda13,

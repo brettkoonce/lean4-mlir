@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Supervised 350-epoch MobileNetV2-ImageNet run on the 4 clean GPUs (0,2,3,4),
+# Supervised 350-epoch MobileNetV2-ImageNet run on the 4 clean GPUs (0,1,2,3),
 # PAPER-FAITHFUL recipe (`full`): RMSProp ρ0.9 / μ0.9 / ε1.0, lr 0.045 @ batch 256,
 # exp-LR-decay ×0.98/epoch (NOT cosine), wd 4e-5, dropout 0.2, crop+flip only,
 # label smoothing 0, running-BN eval, bf16 + bf16Conv. Paper target ≈ 72.0% top-1.
@@ -44,7 +44,7 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
-DEVS="${DEVS:-0,2,3,4}"                     # the 4 clean cards; idx1 (bus 02) and
+DEVS="${DEVS:-0,1,2,3}"                     # the 4 clean cards; idx1 (bus 02) and
                                             # idx5 (bus 62) are the BadTLP pair
 PY=.lake/build/generated_mobilenet_v2_imagenet_full.py
 PY_BIN="${PY_BIN:-../.venv/bin/python}"     # pinned stack — see INTERPRETER above

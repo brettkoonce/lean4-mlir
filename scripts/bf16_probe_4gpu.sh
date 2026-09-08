@@ -7,7 +7,7 @@
 # end-to-end cost of a full run is `steps/epoch * epochs * ms/step + 37.5 s/epoch` (eval+ckpt,
 # measured on R34; the 30 GB val drain is ONE-TIME, not per-epoch).
 #
-# DEVS per scripts/jobs/*-4gpu.conf: the AER-clean four (idx 1 and 5 excluded, reference_ares_pcie_aer).
+# DEVS per scripts/jobs/*-4gpu.conf: all four cards (the two AER-bad cards were pulled 2026-09-08).
 #
 # ⚠ `LEAN_MLIR_CKPT_TAG` is NOT optional. Without it a finished run's checkpoint makes the probe
 #   exit instantly at "resuming from checkpoint at epoch 90" and report nothing.
@@ -29,7 +29,7 @@ probe () {  # name exe variant batch extra...
   local name="$1" exe="$2" var="$3" bs="$4"; shift 4
   local log; log="$(mktemp)"
   local t0=$SECONDS
-  env CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_PLUGIN="$PLUG" \
+  env CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_PLUGIN="$PLUG" \
       PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
       LEAN_MLIR_VARIANT="$var" LEAN_MLIR_BATCH="$bs" \
       LEAN_MLIR_MAX_STEPS=40 LEAN_MLIR_CKPT_TAG=probe4gpu "$@" \

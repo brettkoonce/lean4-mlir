@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Supervised 80-epoch ConvNeXt-T-ImageNet bf16 run on the 4 clean GPUs (0,2,3,4).
+# Supervised 80-epoch ConvNeXt-T-ImageNet bf16 run on the 4 clean GPUs (0,1,2,3).
 # This is the *validation* tier — bump EPOCHS to 300 in MainConvNeXtImagenet.lean
 # and re-emit for the real run (then point this at the same PY).
 # - Checkpoints every epoch (LEAN_MLIR_CKPT_EVERY=1) to $CKPT_base_e{N}.bin

@@ -148,13 +148,10 @@ with `nvidia-smi --query-gpu=name,compute_cap --format=csv`.)
 The IREE runtime is single-device. Pin one process per card with
 `CUDA_VISIBLE_DEVICES=0` / `=1` (the CUDA analog of `HIP_VISIBLE_DEVICES`).
 
-**ares-specific:** the 6×4060 Ti box hard-resets under load — PCIe AER
-`BadTLP` storms on the cards at bus02 (idx 1) and bus62 (idx 5); it's a
-link/riser fault, not power. Mask those out:
-
-```bash
-export CUDA_VISIBLE_DEVICES=0,2,3,4    # avoid idx1 (bus02) and idx5 (bus62)
-```
+**ares-specific:** the box is 4×4060 Ti as of 2026-09-08. It was six cards, two of
+which stormed PCIe AER `BadTLP` under load (a link/riser fault, not power) and had to be
+masked out with `CUDA_VISIBLE_DEVICES=0,2,3,4`; those two were pulled, and every device
+list in the repo is the plain `0,1,2,3` now. The supervisors keep their AER watchdog.
 
 ### Data layout
 

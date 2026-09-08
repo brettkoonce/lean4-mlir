@@ -1546,7 +1546,7 @@ lean_exe «r50-accum-tie» where
     `r50-accum-tie` runs — must MISS. Needs FOUR GPUs and the XLA backend.
 
         lake build r50-accum-shard-tie
-        CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 .lake/build/bin/r50-accum-shard-tie -/
+        CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 .lake/build/bin/r50-accum-shard-tie -/
 lean_exe «r50-accum-shard-tie» where
   root := `tests.TestR50AccumShardTie
   moreLinkArgs := lowererLink

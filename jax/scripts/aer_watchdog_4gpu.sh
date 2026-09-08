@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 4-GPU stock-power test with AER watchdog.
-# Runs R34-ImageNet on CUDA devices 0,2,3,4 (excludes the two cards that
+# Runs R34-ImageNet on CUDA devices 0,1,2,3 (excludes the two cards that
 # threw BadTLP: bus 02=idx1, bus 62=idx5). Polls the kernel log every 2s;
 # the instant a new PCIe Hardware Error / BadTLP appears, kills training
 # so it can't cascade into a hard reset.
@@ -13,10 +13,10 @@ WLOG=/tmp/r34_4gpu_watch.log
 START="$(date '+%Y-%m-%d %H:%M:%S')"
 echo "[watch] start marker: $START" | tee -a "$WLOG"
 
-CUDA_VISIBLE_DEVICES=0,2,3,4 ../.venv/bin/python -u \
+CUDA_VISIBLE_DEVICES=0,1,2,3 ../.venv/bin/python -u \
     .lake/build/generated_resnet34_imagenet.py > "$LOG" 2>&1 &
 PYPID=$!
-echo "[watch] training PID=$PYPID on GPUs 0,2,3,4" | tee -a "$WLOG"
+echo "[watch] training PID=$PYPID on GPUs 0,1,2,3" | tee -a "$WLOG"
 
 # Stop conditions: AER detected, training exits, or we reach step 300.
 while kill -0 "$PYPID" 2>/dev/null; do

@@ -42,7 +42,7 @@ cd "$JAX_DIR" || { echo "no jax dir: $JAX_DIR"; exit 1; }
 if [ "$BACKEND" = "rocm" ]; then
   DEV_ENV=(HIP_VISIBLE_DEVICES=0,1 LD_PRELOAD=/opt/rocm/lib/librccl.so.1)
 else
-  DEV_ENV=(CUDA_VISIBLE_DEVICES=0,2,3,4)
+  DEV_ENV=(CUDA_VISIBLE_DEVICES=0,1,2,3)
 fi
 
 echo "[sup] $(date '+%F %T') START R50-RSB-A2 ($BACKEND); ckpt=$CKPT_BASE; jax_dir=$JAX_DIR" | tee -a "$MASTER"

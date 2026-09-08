@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full-epoch run on the 4 clean GPUs (0,2,3,4) with AER watchdog.
+# Full-epoch run on the 4 clean GPUs (0,1,2,3) with AER watchdog.
 # Kills training the instant a new PCIe BadTLP/Hardware Error appears so it
 # can't cascade into a hard reset. Otherwise lets epoch 1 + validation finish
 # (the [Epoch 1] line), then stops before epoch 2 to free the box.
@@ -7,7 +7,7 @@ set -u
 cd /home/skoonce/lean/klawd_max_power/lean4-jax/jax
 
 TAG="${1:-bf16}"
-DEVS="${2:-0,2,3,4}"
+DEVS="${2:-0,1,2,3}"
 LOG=/tmp/r34_${TAG}_epoch.log
 WLOG=/tmp/r34_${TAG}_epoch_watch.log
 : > "$LOG"; : > "$WLOG"

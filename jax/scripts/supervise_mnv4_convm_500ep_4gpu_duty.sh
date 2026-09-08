@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Supervised 500-epoch MobileNetV4-Conv-M ImageNet run on the 4 clean GPUs (0,2,3,4),
+# Supervised 500-epoch MobileNetV4-Conv-M ImageNet run on the 4 clean GPUs (0,1,2,3),
 # Tier-3 PAPER-FAITHFUL recipe (`full`): LR 0.004 AdamW, eff-batch 4096 (grad-accum
 # 8×micro-512), RandAug m15, LS 0.1, dropout 0.2, wd 0.1, EMA 0.9999, dropPath 0.075,
 # running-BN eval. Paper Conv-M non-distilled target ≈ 79.9% top-1. See
@@ -19,7 +19,7 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
-DEVS="0,2,3,4"
+DEVS="0,1,2,3"
 PY=.lake/build/generated_mobilenet_v4_imagenet_full.py
 CKPT_BASE=/home/skoonce/mnv4_convm_500ep/mobilenet_v4_imagenet
 SPE=312                                     # 4-GPU: 1281167 // 4096 (eff-batch 4096)

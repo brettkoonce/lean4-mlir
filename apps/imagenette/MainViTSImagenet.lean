@@ -35,7 +35,7 @@ DRY_RUN=1 scripts/supervise.sh vits-default-g512-4gpu   # print the plan, run no
 
 By hand (4 GPUs — BOTH replica knobs are required, see `planning/archive/mnv4_convm_ties_todo.md`):
 ```
-CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdp128x4wxclipdrop LEAN_MLIR_BATCH=128 \
   PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
   .lake/build/bin/vit-s-imagenet-verified data

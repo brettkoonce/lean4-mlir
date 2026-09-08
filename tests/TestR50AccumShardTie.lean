@@ -47,7 +47,7 @@ closes the hole rather than restating the gate it complements.
 Needs FOUR GPUs and the XLA backend (collectives do not exist on the IREE path).
 
     lake build r50-accum-shard-tie
-    CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 .lake/build/bin/r50-accum-shard-tie
+    CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 .lake/build/bin/r50-accum-shard-tie
 
 ⚠ `PJRT_REPLICAS` is required and is NOT redundant with `CUDA_VISIBLE_DEVICES`: it is what makes
 the shim compile a module for more than one device. It is safe to set here even though half this

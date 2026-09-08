@@ -16,7 +16,7 @@ scripts/gen_shims.sh
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet50-imagenet-verified
 lake env lean tests/TestR50Contract.lean
-CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   PJRT_FFI_RESIDENT=1 SHIM_WORKERS=1 LEAN_MLIR_SKIP_EVAL=1 LEAN_MLIR_G2_STEPS=40 \
   .lake/build/bin/resnet50-imagenet-verified data
 ```

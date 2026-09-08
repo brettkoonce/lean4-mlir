@@ -166,12 +166,11 @@ Unlike the IREE/verified-codegen path (see [`../CUDA.md`](../CUDA.md)),
 the JAX path needs **no `sm_89` target pinning** — XLA targets Ada
 natively, so there's nothing to forward-JIT.
 
-**Multi-GPU on ares:** mask out the two cards that storm PCIe AER
-(`BadTLP`) and hard-reset the box under load — idx 1 (bus02) and idx 5
-(bus62); it's a link/riser fault, not power:
+**Multi-GPU on ares:** the box is 4×4060 Ti (the two cards that stormed PCIe AER
+`BadTLP` under load were pulled 2026-09-08, so there is nothing left to mask):
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,2,3,4 .lake/build/bin/resnet34
+CUDA_VISIBLE_DEVICES=0,1,2,3 .lake/build/bin/resnet34
 ```
 
 `jax.sharding` then builds the mesh over the 4 visible cards
