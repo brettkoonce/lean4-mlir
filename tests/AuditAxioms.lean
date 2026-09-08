@@ -71,8 +71,8 @@ import LeanMlir.Proofs.Training.SgdDescentCnn
 import LeanMlir.Proofs.Training.SgdDescentCifar
 import LeanMlir.Proofs.Float.BnFloatBridge
 import LeanMlir.Proofs.Float.Resnet34FloatBridge
-import LeanMlir.Proofs.Codegen.BnInputBridge
-import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
+import LeanMlir.Proofs.Float.BnInputBridge
+import LeanMlir.Proofs.Float.Resnet34BlockBridge
 import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge

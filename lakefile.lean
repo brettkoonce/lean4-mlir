@@ -268,10 +268,10 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Float.Resnet34FloatBridge,
              -- real-BN input-sensitivity (mean/var/istd/forward Lipschitz) — the
              -- per-block composition enabler (the float BN's input is perturbed).
-             `LeanMlir.Proofs.Codegen.BnInputBridge,
+             `LeanMlir.Proofs.Float.BnInputBridge,
              -- first assembled ResNet block step: relu(BN(·)) at a perturbed BN
              -- input = rounding (bnForward_close_of) + input-shift (bnForward_input_close).
-             `LeanMlir.Proofs.Codegen.Resnet34BlockBridge,
+             `LeanMlir.Proofs.Float.Resnet34BlockBridge,
              -- whole-net certificate backbone: FloatClose composes (moduli ∘, magnitudes
              -- thread) — the whole net is the fold of per-op budgets.
              `LeanMlir.Proofs.Float.FloatComposeBridge,

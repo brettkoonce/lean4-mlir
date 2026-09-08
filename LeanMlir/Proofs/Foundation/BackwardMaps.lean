@@ -65,7 +65,9 @@ theorem perRowFlat_apply {n d : Nat} (f : Vec d → Vec d) (v : Vec (n * d)) (id
     the seam a BACKWARD needs, because a per-token op's input-VJP depends on that token's saved
     activation (LayerNorm-back threads the saved input, GELU-back the saved pre-activation), so
     one shared map cannot carry it. `perRowFlat f` is the special case `g = fun _ => f`
-    (`perRowFlatPR_const`). -/
+    (`perRowFlatPR_const`). Read block-diagonally it is also the per-block lift — block `hd`
+    gets `g hd` — which is the per-head form of `perRowFlat` (multi-head attention: heads =
+    blocks) and the per-channel form the BN / channel-LN backwards use. -/
 noncomputable def perRowFlatPR (n d : Nat) (g : Fin n → (Vec d → Vec d)) :
     Vec (n * d) → Vec (n * d) :=
   fun v => Mat.flatten (fun i => g i (Mat.unflatten v i))
@@ -88,20 +90,6 @@ theorem perRowFlatPR_comp {n d : Nat} (g g' : Fin n → (Vec d → Vec d)) :
     perRowFlatPR n d g ∘ perRowFlatPR n d g' = perRowFlatPR n d (fun r => g r ∘ g' r) := by
   funext v
   simp only [Function.comp, perRowFlatPR, Mat.unflatten_flatten]
-
-/-- The per-block lift under its block-diagonal name: block `hd` gets `g hd`. The per-head form
-    of `perRowFlat` (multi-head attention: heads = blocks) and the per-channel form the BN /
-    channel-LN backwards use. Definitionally the same map as `perRowFlatPR`; both names are kept
-    because the ties are spelled with both. -/
-noncomputable def perRowIdxFlat (n d : Nat) (g : Fin n → (Vec d → Vec d)) :
-    Vec (n * d) → Vec (n * d) :=
-  fun v => Mat.flatten (fun i => g i (Mat.unflatten v i))
-
-theorem perRowIdxFlat_apply {n d : Nat} (g : Fin n → (Vec d → Vec d)) (v : Vec (n * d))
-    (idx : Fin (n * d)) :
-    perRowIdxFlat n d g v idx
-      = g (finProdFinEquiv.symm idx).1 (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-          (finProdFinEquiv.symm idx).2 := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 2×2 max-pool backward (a lookup) and the conv input-VJP

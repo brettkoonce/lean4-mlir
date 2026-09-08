@@ -159,7 +159,7 @@ theorem layerNormVec_has_vjp_backward_eq {D : Nat} (ε : ℝ) (hε : 0 < ε) (γ
 
 /-- **The rowwise vector-LN backward is `rowLNVecFlatBack`.** `rowLNVecFlat_has_vjp` is the
     `rowwise_has_vjp_mat` lift of the row VJP through `hasVJPMat_to_hasVJP`, and
-    `rowLNVecFlatBack` is `perRowIdxFlat` of the row's closed form — the same per-row map at the
+    `rowLNVecFlatBack` is `perRowFlatPR` of the row's closed form — the same per-row map at the
     same row of the saved input, so this is the row lemma read at each `(row, col)`. -/
 theorem rowLNVecFlat_has_vjp_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (X dy : Vec (s * c)) :

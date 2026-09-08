@@ -26,7 +26,7 @@ open Proofs.StableHLO (transposeFlat)
     The `+β` translation contributes the identity, so it does not appear. -/
 noncomputable def rowLNVecFlatBack (s c : Nat) (ε : ℝ) (γ : Vec c) (X : Vec (s * c)) :
     Vec (s * c) → Vec (s * c) :=
-  perRowIdxFlat s c (fun r => bn_grad_input c ε 1 (Mat.unflatten X r) ∘ diagBack γ)
+  perRowFlatPR s c (fun r => bn_grad_input c ε 1 (Mat.unflatten X r) ∘ diagBack γ)
 
 /-- **The channel-LN input-VJP** (as a function of the cotangent, at a saved input `x`) — the exact
     reverse of `chanLNTensor3`'s five factors. A permutation's adjoint is its inverse permutation,

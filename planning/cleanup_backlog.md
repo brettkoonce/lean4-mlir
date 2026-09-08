@@ -131,6 +131,12 @@ records of what is, not of what was deleted.
   whose only consumer is `Float/FloatComposeBridge.lean` (which feeds the bf16-mixed compose
   bridge). Move them to `Float/`. Rename-only; the lakefile roots and the audit imports follow.
 
+**DONE 2026-09-08.** `perRowIdxFlat` and its `_apply` lemma are gone; `perRowFlatPR`'s docstring
+carries the block-diagonal reading, and the four sites (`rowLNVecFlatBack`'s body, one `unfold`
+in `ConvNeXtBackB0`, two docstrings) spell `perRowFlatPR`. `BnInputBridge.lean` and
+`Resnet34BlockBridge.lean` are `Float/` modules (15 files there now); their two imports, the
+two lakefile roots and the two audit imports followed. Nothing else named either module.
+
 ## 6. `lakefile.lean`
 
 4040 lines, 1356 of them comment essays attached to individual roots. A root list should be a
@@ -209,7 +215,7 @@ drift guard before moving anything under `Codegen/`; the safe version of this it
 
 ## 9. Not on the list, deliberately
 
-The 13 remaining `Float/` files are the model core (the rounding model, `Binary32Instance`, the
+The 15 `Float/` files (13 plus the two §5 moved in) are the model core (the rounding model, `Binary32Instance`, the
 subnormal bridge, the bf16-mixed and fp8 results) plus the ResNet-34 forward chain the bf16-mixed
 compose bridge builds on. The book's "Finite precision" section argues from exactly these. The
 saturation constants for GELU and Swish (`geluScalar_lipschitz`, `swishScalarDeriv_abs_le`) were

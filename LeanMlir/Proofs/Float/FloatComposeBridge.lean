@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
+import LeanMlir.Proofs.Float.Resnet34BlockBridge
 -- He et al.'s 3×3/s2 stem pool, for `floatClose_maxPool3s2` below. It imports only
 -- `Architectures.CNN`, which this file already has transitively (it uses `maxPoolFlat_abs_le`),
 -- so this adds no cycle. `planning/archive/rsb_a3_r50_verified.md` §4b.

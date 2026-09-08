@@ -161,7 +161,7 @@ namespace Proofs
 theorem rowLNBack_affine_eq (s c : Nat) (ε : ℝ) (γ : Vec c) (X dy : Vec (s * c)) :
     StableHLO.rowLNBackFlat s c ε 1 X (StableHLO.rowScaleFlat s c γ dy)
       = rowLNVecFlatBack s c ε γ X dy := by
-  unfold StableHLO.rowLNBackFlat StableHLO.rowScaleFlat rowLNVecFlatBack perRowIdxFlat
+  unfold StableHLO.rowLNBackFlat StableHLO.rowScaleFlat rowLNVecFlatBack perRowFlatPR
          layerScale diagBack
   simp only [Mat.unflatten_flatten]
   rfl
