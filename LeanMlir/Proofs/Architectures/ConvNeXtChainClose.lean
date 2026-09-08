@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXtClose
 
 `ConvNeXtClose.lean` (Item C) certifies each ConvNeXt param output for *any* cotangent `dy` at that
 layer's output. This file pins `dy` to the cotangent the **actual backward chain delivers** — the
-ConvNeXt analogue of `MobileNetV2ChainClose` / `ResNet34ChainClose` (`planning/convnext_close.md`
+ConvNeXt analogue of `MobileNetV2ChainClose` (`planning/convnext_close.md`
 Item D). Pure-Lean, batch-1 — LayerNorm is per-example separable, so none of EfficientNet's
 batched-VJP machinery (`batchMap_has_vjp`) is needed.
 
@@ -247,7 +247,7 @@ theorem cnx_stem_render_convb_chain_certified {ic c h w : Nat}
 
 -- The blocks compose by instantiation: block 1's `dyOut` is block 2's `cnxCotXin`, and the stem's
 -- `dyStem` is block 1's `cnxCotXin` — every theorem above is generic in its block-output
--- cotangent, exactly as in `MobileNetV2ChainClose`/`ResNet34ChainClose`. The stem-LN γ/β at
+-- cotangent, exactly as in `MobileNetV2ChainClose`. The stem-LN γ/β at
 -- `dyStem` and the head-LN/dense at the loss cotangent add no chain content beyond Item C (their
 -- cotangents are the generic parameters themselves); the loss-side `= ∂loss/∂θ` fold is the
 -- separate `ConvLossFold` concern.

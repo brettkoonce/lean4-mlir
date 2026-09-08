@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 
 /-! # EfficientNet Item D — the batched backward (cotangent) math, step by step
 
-The batched analogue of `MobileNetV2ChainClose` / `ResNet34ChainClose`. The forward graph (Item A,
+The batched analogue of `MobileNetV2ChainClose` (and of ResNet-34's per-example close, deleted 2026-09-08). The forward graph (Item A,
 `EfficientNetRenderPC.lean`) lives at the batched index `N·(c·h·w)`; here we sort the **backward**
 math at that same index — proving the per-block gradient (`HasVJP`) by composing the proven per-op
 VJPs, lifted to the batch.

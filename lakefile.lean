@@ -173,9 +173,6 @@ lean_lib «Certs» where
              -- ResNet-34 render (Item A): the PER-CHANNEL-BN typed SHlo forward graph (full
              -- 16-block [3,4,6,3] net, 7×7 stem, maxpool) + per-block + whole-net faithfulness.
              `LeanMlir.Proofs.Codegen.ResNet34RenderPC,
-             -- ResNet-34 cotangent-chain close (Item D): the Item C conv bridges pinned to the
-             -- cotangent the backward chain delivers (id/downsample block + maxpool-back stem).
-             `LeanMlir.Proofs.Foundation.ResNet34ChainClose,
              -- ConvNeXt close (Item C): mostly reuse (7×7 depthwise pinned to the generic
              -- bridges) + the two genuinely-new families — layer-scale γ (dγ = x⊙dy) and
              -- scalar-LN γ/β (the Vec-1 embedding bridging bn_grad_gamma/beta).

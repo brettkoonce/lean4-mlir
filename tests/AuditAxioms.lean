@@ -46,7 +46,6 @@ import LeanMlir.Proofs.Architectures.EfficientNetFullB0
 import LeanMlir.Proofs.Architectures.EfficientNetFullB0Eval
 import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
-import LeanMlir.Proofs.Foundation.ResNet34ChainClose
 import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoC
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaper
@@ -1037,7 +1036,7 @@ open Proofs
 -- forward half at the render's per-channel BN; prerequisite for the structured render (Item B).
 #print axioms StableHLO.mobilenetv2FwdGraphFullPC_faithful
 -- MobileNetV2 cotangent-chain CLOSE (Item D) — the inverted-residual analogue of CnnChainClose/
--- ResNet34ChainClose. The Item C conv/depthwise bridges pinned to the cotangent the backward chain
+-- the (since deleted) ResNet34ChainClose. The Item C conv/depthwise bridges pinned to the cotangent the backward chain
 -- delivers: project→depthwise→expand composes the rendered backward denotations — relu6 two-sided-kink
 -- mask (selectMid, if 0<x<6), per-channel BN input-VJP (bnPerChannelTensor3_grad_input), 1×1 conv
 -- input-VJP (conv2d_has_vjp3 via flatten), depthwise input-VJP (depthwiseFlat / depthwiseStride2Flat
@@ -1109,16 +1108,6 @@ open Proofs
 -- stem crosses the maxpool select_and_scatter (maxPoolBackFlat). Each conv θ output then denotes
 -- θ − lr·(certified ∂conv/∂θ · the-actual-chain-cotangent). Pins the cotangent; the further = ∂loss/∂θ
 -- fold (composing through all 16 blocks) stays separate, as for the CNN. 3-axiom clean.
-#print axioms idBlock_render_convW2_chain_certified
-#print axioms idBlock_render_convb2_chain_certified
-#print axioms idBlock_render_convW1_chain_certified
-#print axioms idBlock_render_convb1_chain_certified
-#print axioms downBlock_render_convW1_chain_certified
-#print axioms downBlock_render_convb1_chain_certified
-#print axioms downBlock_render_convWp_chain_certified
-#print axioms downBlock_render_convbp_chain_certified
-#print axioms stem_render_convW_chain_certified
-#print axioms stem_render_convb_chain_certified
 -- EfficientNet-B0 RENDER (Item A) — the BATCHED typed SHlo forward graph matching the render.
 -- EfficientNet's render emits TRUE batch-norm (reduce [0,2,3], batch-coupled), so unlike MNV2/r34
 -- the graph lives at the batched index N·(c·h·w): every batch-separable op is `batchMap N` of the
@@ -1226,7 +1215,7 @@ open Proofs
 #print axioms Proofs.CnxPoC.chanLnGammaSgd_den
 #print axioms Proofs.CnxPoC.chanLnBetaSgd_den
 -- ConvNeXt cotangent-chain CLOSE (planning/convnext_close.md Item D) — the MobileNetV2ChainClose/
--- ResNet34ChainClose analogue: the Item C bridges pinned to the cotangent the ACTUAL backward chain
+-- ResNet34ChainClose (since deleted) analogue: the Item C bridges pinned to the cotangent the ACTUAL backward chain
 -- delivers through a ConvNeXt block. The chain composes the rendered backward denotations —
 -- layer-scale back (= layerScale γls on the cotangent, the symmetric-diagonal trick the Item B render
 -- uses), project/expand 1×1 conv-back (conv2d_has_vjp3), the GELU mask (geluScalarDeriv at the saved
@@ -5290,7 +5279,7 @@ open Proofs
 -- the "arbitrary": each is pinned to the one the emitted backward chain delivers, so the whole
 -- batched train step is den-composed forward -> loss -> backward with no free activation and no
 -- symbolic cotangent. It is the last piece of ResNet-34's T3.
--- ⭐⭐ The block cotangents are NOT derived here. ResNet34ChainClose spells per-block cotangent
+-- ⭐⭐ The block cotangents are NOT derived here. The deleted per-example close spelled per-block cotangent
 -- vectors out by hand because no whole-block VJP existed when it was written; 4.1d's
 -- r34IdB_has_vjp_at / r34DownB_has_vjp_at ARE the certified block backwards, and
 -- r34{BasicBlock,DownBlock}BackBatchedGraph_faithful already proves the emitted seven-node fan-in

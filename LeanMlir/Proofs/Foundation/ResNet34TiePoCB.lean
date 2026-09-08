@@ -14,8 +14,9 @@ cotangent is pinned to the one the emitted backward chain delivers, so the whole
 It replaced the per-example `ResNet34TiePoC.lean` (deleted 2026-09-08: no committed artifact
 exercised it once `resnet34_train_step.mlir` was retired), and four things about it are different in kind.
 
-⭐⭐ **The block cotangents are NOT derived here.** `ResNet34ChainClose.lean` spells out per-block
-cotangent vectors by hand, because no whole-block VJP existed when it was written. 4.1d's
+⭐⭐ **The block cotangents are NOT derived here.** The per-example close (`ResNet34ChainClose.lean`,
+deleted 2026-09-08) spelled per-block cotangent vectors out by hand, because no whole-block VJP
+existed when it was written. 4.1d's
 `r34IdB_has_vjp_at` / `r34DownB_has_vjp_at` ARE the certified block backwards, so a block's input
 cotangent is a `.backward` application — and `r34{BasicBlock,DownBlock}BackBatchedGraph_faithful`
 already proves the emitted backward subgraph denotes exactly it. `r34IdCotIn_eq_vjp` and

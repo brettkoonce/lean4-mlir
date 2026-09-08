@@ -32,7 +32,6 @@ import LeanMlir.Proofs.Architectures.EfficientNetChainClose
 import LeanMlir.Proofs.Architectures.EfficientNetFullB0
 import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
-import LeanMlir.Proofs.Foundation.ResNet34ChainClose
 import LeanMlir.Proofs.Architectures.ConvNeXtClose
 import LeanMlir.Proofs.Architectures.ConvNeXtChainClose
 import LeanMlir.Proofs.Architectures.ViTFwdGraph

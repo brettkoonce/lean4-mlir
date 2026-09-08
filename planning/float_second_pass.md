@@ -1,0 +1,145 @@
+# The float tier, second pass — the ℝ chains out of `Float/`, the float twins deleted
+
+**Temp handoff, opened 2026-09-08 at the end of the cleanup session that landed step 1
+(`0de261e`, branch `cleanup/2026-09-08-unify-and-float-chop`). ▶ START at §2 — it is the
+inventory this pass exists to act on, computed from the import graph, not guessed.**
+
+## 0. What step 1 did, and what it left
+
+Step 1 deleted everything in `Proofs/Float/` that no kept module could reach: the 13 whole-net
+budgets, their `Maps.*` envelopes, the forward float chains, the adjoint-chain tier and the ten
+probe scripts (−31.7k lines, Certs 4003 → 3966). The decision behind it: the numbers were vacuous
+(1e16–1e287 against logits of 10), thread closed 2026-09-05, "less is more".
+
+**49 `Float/` modules survived (18.6k lines), and most of them survived for one reason only:** the
+T6 certified backward ties — the theorems that DID earn their keep, by finding a reversed pool, a
+stale head-LN slot, ViT's scalar affines and an even-kernel non-adjoint — are stated about ℝ chains
+(`r34InputGradB`, `mnv2InputGrad`, `vitInputGradK`, …) that are *defined inside* the `*FloatBridge`
+files, next to their float twins (`r34InputGradBF`) and the `floatClose_*` / `floatBridgesTo_*`
+threads that nothing consumes any more. This pass separates the two: the ℝ definitions move to
+where the ties are, the float side goes.
+
+## 1. The criterion
+
+A surviving `Float/` module is one of three things:
+
+* **model core — keep as is.** `FloatBridge` (2197: `FloatModel`, the per-op `*_close` lemmas,
+  `mlp_float_close_uniform`, the MNIST/CNN step bounds), `Binary32Instance` (313), the bf16-mixed
+  and fp8 files (`ConvMixedFloatBridge`, `ConvMixedComposeBridge`, `DepthwiseFloatBridge`,
+  `DepthwiseMixedFloatBridge`, `Bf16FaithfulPoC`, `E4M3FaithfulPoC`), `FloatSubnormalBridge`.
+  Consumers: `Training/SgdDescentLinear`, `Training/TrainedLinearDescent`,
+  `Certificates/LipschitzCertFloat`, `Foundation/MlpCanonical`; the book's "Finite precision"
+  section argues from exactly these. ⚠ `FloatComposeBridge` (776) is in this bucket by import
+  (the mixed bridges pull it in) but is the `FloatClose.comp` / `FloatBridgesTo` scaffolding —
+  decide whether the mixed bridges need it or only import it.
+* **a bridge file whose ℝ definitions a kept non-Float file uses — surgery.** Move the ℝ names
+  in §2's table to a Foundation (or Architectures) file beside their tie, re-point the imports,
+  delete the rest of the file.
+* **a bridge file reachable only through other Float imports — delete** once the file that
+  imported it stops existing. ⚠ Chase the ℝ dependencies first: a moved chain composes per-op
+  `*Back` maps that may be defined in one of these (§3).
+
+The rule that bit in step 1 and applies again: **a leaf theorem file has no importers by nature**,
+so "no importer" is not "dead". Every file in the third bucket must be checked for theorems that
+are about a shipped artifact (the `*FullB0Eval` / `*FullPaperEval` lesson) before it goes.
+
+## 2. The inventory — what the kept non-Float files actually use, per surviving module
+
+Computed 2026-09-08 by scanning every non-Float module's text for the declarations of every Float
+module in its transitive import closure. "ℝ" = real-side names (move), "float" = float-side names
+(these are the consumers to re-examine).
+
+| module | lines | ℝ names the ties use (MOVE) | float names a kept file uses |
+|---|---|---|---|
+| `StridedConvBackFloatBridge` | 331 | `decimateBack`, `decimateBack_eq_vjp`, `decimateOddBack`, `decimateOddBack_eq_vjp`, `flatConvStride2Back`, `flatConvStride2XlaBack`, `flatConvStride4Back` | — |
+| `CnnBackFloatBridge` | 344 | `convFlatBack`, `maxPoolFlatBack` | `floatBridges_convBack` (check who) |
+| `DepthwiseBackFloatBridge` | 156 | `depthwiseFlatBack`, `depthwiseStride2FlatBack`, `depthwiseStride2FlatXlaBack`, `dwReverse` | — |
+| `MaxPool3s2BackFloatBridge` | 366 | `maxPool3s2Flat_has_vjp_at_vec`, `maxPool3s2Flat_differentiableAt_vec` — ⚠ VJP lemmas, used by **`ResNet34FullBVJP`** (T1); belong in `Architectures/MaxPool3s2.lean` | — |
+| `LinBackFloatBridge` | 198 | `diagBack`, `reluMaskBack` | `mlpInputGrad_floatBridges` ← `MlpCanonical` (tier-1 MNIST float — keep that half) |
+| `ChannelLNFloatBridge` | 406 | `chanLNTensor3Back`, `rowLNVecFlatBack` (← `ConvNeXtTiePoC`, `ViTVecLNBackCertifiedTie`) | `floatBridges_chanLNTensor3Back` (check who) |
+| `MhsaBackFloatBridge` | 649 | `mhsaBackFlat`, `coreQFlat`/`coreKFlat`/`coreVFlat`, `clsScatter`, `vitBlockBack`, `vitBlockBackPR` | `floatBridges_mhsaBack`, `floatBridges_vitBlockBackPR` (check who) |
+| `SdpaBackFloatBridge` | 649 | `mhSlab`, `mhsaSdpaBackQ`/`K`/`V` | — |
+| `ViTBlockFloatBridge` | 1116 | `perRowFlat`, `perRowFlat_apply`, `perRowFlatPR`, `perRowFlatPR_apply`, `perRowFlatPR_comp`, `perRowIdxFlat` | — |
+| `ViTWholeBackFloatBridge` | 175 | `vitBlockBackV`, `vitBlockBackVAt`, `vitTowerBackK`, `vitSavedPE`, `vitSavedBody`, `vitInputGradK` | — |
+| `ConvNeXtBackFloatBridge` | 445 | `cnxBlockBodyBack`, `cnxDownBack`, `convnextInputGrad` | `floatBridges_cnxBlockBack` (check who) |
+| `EfficientNetBackFloatBridge` | 199 | `mbconvBodyBack` | — |
+| `EfficientNetWholeBackFloatBridge` | 227 | `efficientnetInputGradB` | `efficientnet_grad_floatBridges` (check who) |
+| `EfficientNetFullWholeBackFloatBridge` | 170 | `efficientnetInputGradB_full` | — |
+| `MobileNetV2BackFloatBridge` | 269 | `invresBodyBackPC`, `invresBodyStridedBackPC`, `mnv2InputGrad` | — |
+| `Resnet34BackFloatBridge` / `Resnet34DownBackFloatBridge` | 67 / 129 | `r34IdBlockBack` / `r34DownBlockBack` | — |
+| `Resnet34WholeBackFloatBridge` | 290 | `gapBack`, `r34InputGrad` | — |
+| `Resnet34WholeBackFloatBridgeB` | 276 | `r34InputGradB`, `maxPool3s2FlatBackB`, `batchMapAux` (+ its `_apply`) | — |
+| `MobileNetV2WholeBackFloatBridgeB` / `MobileNetV4WholeBackFloatBridgeB` / `Resnet50WholeBackFloatBridgeB` | 192 / 268 / 180 | `mnv2InputGradB` / `mnv4InputGradB` / `r50InputGradB` | — |
+| `BnBackFloatBridge` | 348 | `bnGradInputBudget` (a bound, float-side by content) | `bnGradInputF`, `bnGradInput_close` ← `Codegen/BnBackComposeBridge` |
+| `BnFloatBridge` | 496 | `bnForward_close_of`, `bnNormBudget`, `bnVar_nonneg`, `rsqrt_lipschitz` | `bnForwardF`, `bnForward_close`, `bnIstd_close` ← `Codegen/BnInputBridge` |
+| `Resnet34FloatBridge` | 201 | — | `reluAdd_close` ← `Codegen/Resnet34BlockBridge` |
+| `ViTFloatBridge` | 233 | — | `floatClose_gelu` ← `Certificates/GeluLipschitz` |
+| `EnetFloatBridge` | 591 | — | `floatBridges_mbconvBody` (check who — a block tie citing it?) |
+| `FloatBudgetEnv` / `FloatBudgetEnvBack` | 630 / 1130 | none of their own (the matches are `Maps.*` twins of real names) | — → **delete outright** |
+| `FloatComposeBridge` | 776 | `cod_nonneg`, `residual` (real-side helpers) | `FloatBridges`, `FloatBridgesTo`, `FloatClose`, `floatClose_bn` — the scaffolding; see §1 |
+
+Reachable only through other Float imports (bucket three, 17 files): `BnBatchFloatBridge` (383),
+`BnEvalRuntimeFloatBridge` (221), `BnPerChannelFloatBridge` (259), `BnPerChannelBackFloatBridge`
+(81), `BnXhatFloatBridge` (502), `PatchEmbedBackFloatBridge` (308), `Resnet34WholeFloatBridge`
+(514), `SEBackFloatBridge` (234), `SoftmaxBackFloatBridge` (186), `ViTAttentionFloatBridge` (439),
+and the seven model-core files. ⚠ Several of the first ten define per-op ℝ backward maps the
+chains above compose (`seBack*`, `softmaxRowBack*`, `patchEmbedBack*`, the BN input-gradient
+formulas) — §3.
+
+Three Codegen files are float-side and only Float files consume them: `BnInputBridge`,
+`Resnet34BlockBridge` (imported by `FloatComposeBridge`), `BnBackComposeBridge`. They go with the
+float side unless the model core needs them.
+
+## 3. Order of work
+
+Net by net, each a commit, each with `git diff verified_mlir/` empty (no artifact can move):
+
+1. **The shared per-op ℝ backward maps first**, one Foundation leaf (say
+   `Foundation/BackwardMaps.lean`): the strided/depthwise/conv/pool/LN/dense backward maps and
+   their `_eq_vjp` leaf ties from `StridedConvBackFloatBridge`, `CnnBackFloatBridge`,
+   `DepthwiseBackFloatBridge`, `LinBackFloatBridge`, `ChannelLNFloatBridge`, plus the two
+   `MaxPool3s2` VJP lemmas to `Architectures/MaxPool3s2.lean`. Chase each definition's own
+   dependencies (the BN input-gradient formula, `softmaxRowBack`, `seBack`, `patchEmbedBack`) into
+   the same leaf. This is the step that decides how much of bucket three dies.
+2. **ResNet-34 / ResNet-50** (per-example and batched chains, `r34IdBlockBack`,
+   `r34DownBlockBack`, `gapBack`, `r34InputGrad{,B}`, `maxPool3s2FlatBackB`, `batchMapAux` lifts,
+   `r50InputGradB`) → beside `Resnet34BackCertifiedTie{,B}`.
+3. **MobileNetV2 / MobileNetV4** (`invresBody*BackPC`, `mnv2InputGrad{,B}`, `mnv4InputGradB`).
+4. **EfficientNet-B0** (`mbconvBodyBack`, `efficientnetInputGradB{,_full}`).
+5. **ConvNeXt-T** (`cnxBlockBodyBack`, `cnxDownBack`, `convnextInputGrad`).
+6. **ViT-Tiny** (`mhsaBackFlat` and the cores, `mhSlab`, `perRow*`, `vitBlockBack*`,
+   `vitTowerBackK`, `vitInputGradK`) — the largest, and the one net with no batched T6.
+7. Then delete: every emptied `*FloatBridge` file, `FloatBudgetEnv{,Back}`, the bucket-three
+   files whose ℝ content moved, the three Codegen float bridges if nothing kept needs them, and
+   the `floatBridgesTo_*` / `FloatClose` scaffolding in `FloatComposeBridge` if the mixed bridges
+   do not use it.
+
+Expected: ~14k of the 18.6k lines go; `Float/` ends at roughly a dozen files.
+
+## 4. What else moves with it
+
+* **The book.** `content.tex` "Finite precision" still says *"`FloatBridge.lean` and the per-net
+  `*FloatBridge` files budget every operator of every network, forward and backward, from the
+  MNIST linear classifier to ViT-Tiny"*. After this pass only `FloatBridge.lean`'s per-op bounds
+  exist; rewrite that sentence. No `\lean{}` tag is affected (zero on the float tier).
+* **`formalization.yaml` 4d** already says the ℝ chains are still inside `*FloatBridge` files and
+  names this pass; delete that sentence when it is done. No row names a moved definition.
+* **Docstrings.** ~40 kept files cite `formalization.yaml` §4d or a `*FloatBridge` file by name;
+  `docstring-checkrefs` catches identifiers, not file names — grep `FloatBridge` in
+  `LeanMlir/Proofs/{Foundation,Architectures,Codegen}` afterwards.
+* **Decide, do not assume:** `Certificates/GeluLipschitz` (uses `floatClose_gelu`) →
+  `Architectures/GeluSaturation` → whose consumer was the deleted ViT budget; `SwishSaturation`
+  likewise. Possibly dead now; check importers before keeping.
+* `planning/float_budget_numbers.md` and `planning/archive/float_budget_numbers_log.md` carry the
+  DELETED banner; nothing else in planning/ needs to move for this pass.
+
+## 5. Gates, per commit
+
+`lake build Certs` (no corpus rebuild expected — nothing here touches `Tensor.lean` or
+`StableHLO.lean`; a Foundation leaf that the ties import rebuilds the ties only),
+`lake env lean tests/AuditAxioms.lean` (3-axiom clean; remove the prints of deleted lemmas, keep the
+prints of moved ones under their new names), `lake exe docstring-checkrefs`,
+`python3 scripts/check_audit_coverage.py`, `python3 scripts/check_render_coverage.py`,
+`git diff verified_mlir/` empty. ⚠ `lake build -j N` is not a valid flag in this toolchain, and an
+unbounded rebuild of many heavy modules at once has been memory-killed once on this box; the
+Float-side rebuilds here are small.
