@@ -267,8 +267,8 @@ jobs:
           echo "| Tests | $(lf tests) | $(ll tests) |" >> $GITHUB_STEP_SUMMARY
           echo "| FFI (C) | $(ls ffi/*.c ffi/*.h 2>/dev/null | wc -l) | $(cat ffi/*.c ffi/*.h 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
           # Total Lean: every *.lean except build files (lakefile.lean), any nested .lake tree,
-          # and the jax/ + phase-1 mnist-lean4/ subprojects.
-          total_lean=$(find . -name "*.lean" -not -name "lakefile.lean" -not -path "*/.lake/*" -not -path "./jax/*" -not -path "./mnist-lean4/*" -print0 | xargs -0 cat 2>/dev/null | wc -l)
+          # and the jax/ + phase-1 historical/mnist-lean4/ subprojects.
+          total_lean=$(find . -name "*.lean" -not -name "lakefile.lean" -not -path "*/.lake/*" -not -path "./jax/*" -not -path "./historical/mnist-lean4/*" -print0 | xargs -0 cat 2>/dev/null | wc -l)
           total_c=$(cat ffi/*.c ffi/*.h 2>/dev/null | wc -l)
           echo "| **Total Lean** | | **${total_lean}** |" >> $GITHUB_STEP_SUMMARY
           echo "| **Total C** | | **${total_c}** |" >> $GITHUB_STEP_SUMMARY

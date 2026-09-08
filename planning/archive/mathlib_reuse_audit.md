@@ -157,8 +157,8 @@ independent. Worth doing for the `resnet34`×9 and `tinyCifarDdpm`×6 clusters a
 * **`tests/comparator/{Challenge,Solution}.lean`** — the duplication *is* the artifact.
   `leanprover/comparator` needs the statement twice (once `sorry`'d over Mathlib alone, once
   discharged); the header explains it.
-* **`mnist-lean4/` (4 files), `historical/`** — a preserved lineage, not live code. README:82
-  calls `mnist-lean4/` "Phase 1 — Pure Lean 4". The four snapshots progressively extend each
+* **`historical/mnist-lean4/` (4 files), `historical/`** — a preserved lineage, not live code. README:82
+  calls `historical/mnist-lean4/` "Phase 1 — Pure Lean 4". The four snapshots progressively extend each
   other (`Main_working_1d_s4tf` → `_2d_` → `_cifar_s4tf_working_v1` → `_cifar_v2`); freezing
   them is the point.
 * **Muon** (`Foundation/MuonGeometry.lean`, `MuonNewtonSchulz.lean`) — checked Mathlib for a

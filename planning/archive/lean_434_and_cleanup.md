@@ -304,7 +304,7 @@ to elaborate.
 `String.trimAscii`, and the *return type changes* `String → String.Slice`):
 `Slice` has `toNat?`, `toString`, `startsWith` and a `ToString` instance; it does **not** have
 `isEmpty`, `toLower`, or `splitOn`. So `.trim.toNat?` → `.trimAscii.toNat?` is a drop-in, and
-anywhere a real `String` was produced needs `.trimAscii.toString`. `mnist-lean4/` (4 more sites)
+anywhere a real `String` was produced needs `.trimAscii.toString`. `historical/mnist-lean4/` (4 more sites)
 was left alone — it is not a root-lakefile target.
 
 ### The dead bench-bracket feature — deleted

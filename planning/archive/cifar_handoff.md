@@ -232,7 +232,7 @@ DATA=/home/skoonce/lean/claude_max/lean4-jax/data            # cifar-10/ lives h
 .venv/bin/iree-compile --iree-hal-target-backends=rocm --iree-hip-target=gfx1100 \
   --iree-codegen-llvmgpu-use-reduction-vector-distribution=false  M.mlir -o /tmp/x.vmfb
 ```
-`ffi/libiree_ffi.so` is built (gitignored); rebuild per `IREE_BUILD.md` §4 if missing.
+`ffi/libiree_ffi.so` is built (gitignored); rebuild per `historical/IREE_BUILD.md` §4 if missing.
 `Vec`/`Mat` are `Fin → ℝ` (no runtime rep) → trainers read `verified_mlir/*.mlir`
 (materialized at build time), they can't call the renderers at runtime.
 

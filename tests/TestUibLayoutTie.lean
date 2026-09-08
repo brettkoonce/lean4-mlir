@@ -14,7 +14,7 @@ renderer that swaps them. It pins the *layout*; only a forward tie against the r
 pins the *order*. Said again here because a green gate is exactly when that gets forgotten.
 
 Block table: the 15 UIB blocks of `jax/MainMobilenetV4.lean` (the Conv-S-sized 4.1M
-Imagenette demo — the one `RESULTS.md`'s 84.58% belongs to, NOT faithful Conv-M). All four
+Imagenette demo — the one `historical/RESULTS.md`'s 84.58% belongs to, NOT faithful Conv-M). All four
 families appear: ExtraDW (both DWs), IB (`preDWk = 0`), ConvNext-like (`postDWk = 0`),
 FFN (neither).
 -/

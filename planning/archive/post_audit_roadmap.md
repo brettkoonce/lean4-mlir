@@ -40,7 +40,7 @@ each 1–2 focused sessions; the batched hygiene pass is one short session.
 unconstrained; PGD brackets at 72/69. Aggregate = honest lower bound only
 (an upper-bound L can't prove an image uncertifiable), so only certified
 images carry theorems (35 margin proofs, not 200 — whole module builds in
-~2¼ min wall). AuditAxioms 1250/1250; RESULTS.md + README carry the table.
+~2¼ min wall). AuditAxioms 1250/1250; historical/RESULTS.md + README carry the table.
 
 **Deviations from the plan below, learned the hard way:**
 - Caps c≈1.5–2 were WRONG at this scale: σ≤2 costs 24 points of clean

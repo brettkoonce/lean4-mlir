@@ -26,7 +26,7 @@ Two parts:
       conservative w.r.t. the real kernel" — that contrast is the headline.
 
   (2) WHOLE rendered-net forward — the committed MNIST-CNN render
-      (mlir_poc/mnist_cnn.mlir, MainCnn.lean architecture), emitted with every
+      (historical/mlir_poc/mnist_cnn.mlir, MainCnn.lean architecture), emitted with every
       stage as a result, run once on gfx1100.  Each conv/dense pre-activation
       stage's measured GPU drift is tabled against the proven per-stage
       `layerBudget` (FloatBridge `layerBudget`, same formula as
@@ -154,7 +154,7 @@ def maxpool2(a, dt):                                      # 2×2 stride 2
 def cnn_mlir() -> str:
     """The committed mnist_cnn.mlir forward, emitted with EVERY stage as a result
     so one GPU run yields the full drift profile.  Op sequence verbatim from
-    mlir_poc/mnist_cnn.mlir (MainCnn.lean)."""
+    historical/mlir_poc/mnist_cnn.mlir (MainCnn.lean)."""
     def conv(o, x, W, src_t, w_t, out_t):
         return (f'    {o} = "stablehlo.convolution"({x}, {W}) {{\n'
                 f'        batch_group_count = 1 : i64,\n'

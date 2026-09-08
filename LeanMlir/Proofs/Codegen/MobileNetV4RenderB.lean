@@ -473,7 +473,7 @@ deriving Inhabited
 /-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → 10 classes.
 
     Transcribed 1:1 from `jax/MainMobilenetV4.lean`, which is the faithful Conv-M table as of
-    2026-08-14 (`RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table). Spatial ladder:
+    2026-08-14 (`historical/RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table). Spatial ladder:
 
     ```
       224 --stem s2--> 112 --fused s2--> 56 --uib s2--> 28 --uib s2--> 14 --uib s2--> 7 --GAP--> 1
@@ -1325,7 +1325,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mnv4FwdEvalFaithfulV 32 10 "1.0e-5")
 
 -- **This is the artifact the MNv4 Imagenette trainer runs**, and this `#eval` is its only writer.
--- Target: `RESULTS.md`'s 84.58%, the baseline path's number for this block table
+-- Target: `historical/RESULTS.md`'s 84.58%, the baseline path's number for this block table
 -- (`planning/archive/mnv4_verified.md` phase 4). ⚠ Unlike MobileNetV2's, that number belongs to the JAX
 -- baseline and does NOT move when this render changes — the stem's `convStridedXla` was chosen so
 -- the two are the same net (§3e), and the forward tie measured 1.423e-06 against it unpatched.

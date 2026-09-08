@@ -46,7 +46,7 @@ exported = export.export(jax.jit(train_step))(
     spec_W0, spec_b0, spec_W1, spec_b1, spec_W2, spec_b2, spec_x, spec_y, spec_lr)
 
 mlir = exported.mlir_module()
-open("mlir_poc/train_step.mlir", "w").write(mlir)
+open("historical/mlir_poc/train_step.mlir", "w").write(mlir)
 print(f"Wrote train_step.mlir ({len(mlir)} chars)")
 print(f"  function name: {exported.fun_name}")
 print(f"  input signatures: {[str(x) for x in exported.in_avals]}")

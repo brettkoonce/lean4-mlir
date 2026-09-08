@@ -161,7 +161,7 @@ nohup bash scripts/supervise_<net>_6gpu.sh >/tmp/<net>_driver.log 2>&1 &
 - AER-watchdog + per-epoch-checkpoint auto-resume is in the supervisors. Gen3 makes 6-GPU AER
   rare-not-zero (ENet had 2 resumes, ConvNeXt 0). Watchdog kills before host reset; resumes from latest ckpt.
 - On completion: `CUDA_VISIBLE_DEVICES=0 ../.venv/bin/python -u scripts/eval_<net>_full50k.py`
-  for the canonical full-50k number (uses EMA weights). Then build RESULTS.md + pgfplots curve
+  for the canonical full-50k number (uses EMA weights). Then build historical/RESULTS.md + pgfplots curve
   (copy an existing runs/*/ as template), fill blueprint §, update planning/archive/imagenet_sweep.md.
 - **Thermal**: one run at a time, watch temps (~50°C was fine pre-reshuffle; confirm after cooling work).
 

@@ -23,7 +23,7 @@ The knobs quantified (or being quantified) here:
 - **Scaling out** — 4→6 consumer GPUs over PCIe: the failure mode (Gen4 AER)
   and the fix (Gen3), so multi-GPU-on-a-budget is documented, not folklore.
 
-The per-run `RESULTS.md` files are the raw data; the synthesis layer (the
+The per-run `historical/RESULTS.md` files are the raw data; the synthesis layer (the
 combined sweep chart in the TODO) is the "knob → cost/benefit" payoff. Frame
 additions as *comparisons*, not just more run logs.
 
@@ -79,7 +79,7 @@ across the ViT row because of the batch difference.
 | ConvNeXt-T  | 80     | bf16      | **75.93%**| **92.27%**| `/home/skoonce/convnext_tiny_imagenet_bf16.bin` |
 
 **SWEEP COMPLETE — 5/5 trained to completion.** (All full-50k canonical eval.
-Per-epoch curves + RESULTS.md in `jax/runs/{r34,vit_tiny,mnv2,enet_b0,convnext_tiny}_imagenet_bf16_*/`;
+Per-epoch curves + historical/RESULTS.md in `jax/runs/{r34,vit_tiny,mnv2,enet_b0,convnext_tiny}_imagenet_bf16_*/`;
 all five also in blueprint §6.4/§7.2/§8.2/§9.3/§10.5.)
 
 **ConvNeXt-T is the sweep accuracy leader — 75.93%**, well clear of ENet (72.31%)
@@ -254,7 +254,7 @@ those run the actual paper recipe, not "paper minus the two things that matter."
 - [ ] **Actual accuracy results** for MobileNetV2 (90ep), EfficientNet-B0
       (80ep), ConvNeXt-T (80ep) — fill the completed-runs table with real
       val top-1/top-5 once each is trained to completion (full-50k eval).
-- [ ] Per-epoch validation curves for the three pending nets (RESULTS.md +
+- [ ] Per-epoch validation curves for the three pending nets (historical/RESULTS.md +
       pgfplots, paralleling the R34/ViT `jax/runs/*/` treatment).
 - [ ] **Sweep chart**: once the three pending results land, build a
       combined chart from this doc's numbers — e.g. params-vs-top1 scatter

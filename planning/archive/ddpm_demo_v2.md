@@ -153,7 +153,7 @@ loss printout):
 - **Win** = the tc grid shows visibly more object structure /
   cleaner category shapes at matched epoch than plain base80 (which
   v1 characterized as yellow animal-ish blobs at 50 ep). Log the
-  call + attach both grids to RESULTS.md.
+  call + attach both grids to historical/RESULTS.md.
 - **Loss ≈ same, tc grid better** → conditioning is the lever;
   proceed to Workstream C (attention retry) with t-cond in place.
 - **Loss ≈ same, grids indistinguishable** → per-block conditioning
@@ -377,7 +377,7 @@ to paper FID, but monotone-ish in quality, fully reproducible inside
 the repo, and on-brand ("scored by our own verified classifier").
 Host-side mean/cov + a small matrix-sqrt (2×2 blocks or
 power-series; feature dim can be kept small by projecting). ~1
-session. Report it alongside grids in RESULTS.md; never let it
+session. Report it alongside grids in historical/RESULTS.md; never let it
 replace the fixed-seed grids (the MSE lesson generalizes: trust no
 scalar alone).
 
@@ -494,7 +494,7 @@ open item noted in Workstream B is pointing it at `_params_ema.bin`.
   plain + attn for reproducibility)
 - `MainCifarDdpmCondTrain/Sample` (Phase 4)
 - New reference grids + the w-sweep figure in `demos/figures/`,
-  RESULTS.md row with the Fréchet score
+  historical/RESULTS.md row with the Fréchet score
 - Bestiary: promote the `Diffusion.lean` prose from "our NetSpec
   can't express per-block time injection" to pointing at
   `.timeCondAdd`

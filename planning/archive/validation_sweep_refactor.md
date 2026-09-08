@@ -155,7 +155,7 @@ render is per-channel-`[D]` like the rest.)
   `bnPerChannelFlat`/`bnPerChannelF` in the verified forward + its VJP + its graph faithfulness.
 
 **EVAL-STATS subtlety (decide this first):** the unverified `MainCifarCnnBnTrain` uses EMA running stats
-(true batch-norm, momentum 0.1 per `RESULTS.md`) ⇒ train ≠ eval. The verified scalar `bnForward` is
+(true batch-norm, momentum 0.1 per `historical/RESULTS.md`) ⇒ train ≠ eval. The verified scalar `bnForward` is
 PER-EXAMPLE (instance-norm-like) ⇒ train = eval, no EMA mismatch — **that is *why* the verified nets went
 scalar** (it sidesteps the running-stats machinery the proofs don't model). `bnPerChannelFlat` can be
 either: per-example per-channel (`m = h·w`, instance-norm — simplest, keeps train=eval) OR batch

@@ -653,6 +653,6 @@ module @jit_cifar_train_step {{
 }}
 '''
 
-with open('mlir_poc/hand_cifar_train_step.mlir', 'w') as f:
+with open('historical/mlir_poc/hand_cifar_train_step.mlir', 'w') as f:
     f.write(mlir)
 print(f"Wrote {len(mlir)} chars")

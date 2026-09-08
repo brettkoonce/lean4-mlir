@@ -51,7 +51,7 @@ v1's "what's left" ranking, plus code-audit findings:
    anything is measured against it.
 5. Wider/deeper model, longer context — v1's #1 and #2 levers,
    untouched.
-6. **No RESULTS.md row** — the bits/char table lives only inside
+6. **No historical/RESULTS.md row** — the bits/char table lives only inside
    the planning doc.
 
 # Part I — improve the demo as-is (char-level, no new primitives)
@@ -59,7 +59,7 @@ v1's "what's left" ranking, plus code-audit findings:
 **Status 2026-07-03: Phases 0–2 DONE** (one session, klawd/CUDA).
 Val bits/char + cosine/warmup + pad fix + top-k/top-p/seed + `suite`
 subcommand all shipped in `MainTinyGptShakespeare.lean`; results in
-RESULTS.md §tinyshakespeare. Findings: (a) the cosine schedule alone
+historical/RESULTS.md §tinyshakespeare. Findings: (a) the cosine schedule alone
 improved nano's train loss 1.45 → 1.386 nats at matched steps;
 (b) nano val = **2.27 bits/char** — the demo's first held-out number;
 (c) **Gate B failed informatively**: tiny (1.2M) overfits from
@@ -99,7 +99,7 @@ T=128, mlp 512** (~1.6M params). Expected per v1's estimate:
 ≈1.7–1.8 bits/char and visibly longer coherence (the ~50-char
 cliff is partly the T=64 window). Keep the 212K nano config as the
 second cell — the "more params → better text" pairing v1's cell
-plan wanted. Report both in RESULTS.md with the bigram row.
+plan wanted. Report both in historical/RESULTS.md with the bigram row.
 
 Gate B: val bits/char improves and samples hold coherence past one
 sentence. (If val diverges from train early, revisit weight decay
@@ -290,7 +290,7 @@ run waits).
 
 ## Deliverables
 
-- Val bits/char in the trainer log + RESULTS.md table: bigram /
+- Val bits/char in the trainer log + historical/RESULTS.md table: bigram /
   nano / tiny / tinystories-10m
 - Top-k/top-p + `--seed`, the fixed prompt suite, refreshed
   `tinygpt_sample.txt` (and a `tinystories_sample.txt` beside it)

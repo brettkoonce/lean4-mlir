@@ -257,7 +257,7 @@ see [[bf16-useless-at-cifar-shapes]], not this change.)
 ⛔⛔ **CORRECTION (2026-08-29, same session): the "Imagenette EfficientNet is broken" claim above
 was MY ERROR and is withdrawn.** I ran `efficientnet-verified`, which trains
 `efficientnet_train_step.mlir` through the plain `VerifiedNet.train` driver. The net behind
-`RESULTS.md`'s 87.58% is `efficientnet-verified-**adam**` —
+`historical/RESULTS.md`'s 87.58% is `efficientnet-verified-**adam**` —
 `efficientnet_adam_train_step.mlir` through `trainAdamSched`. Different binary, different artifact.
 ⚠ The tell I should have caught at the time: my "f32" and "bf16" arms returned **byte-identical**
 accuracy *and* identical 30.2 s/epoch. `LEAN_MLIR_VARIANT` never reaches that binary — both arms
@@ -288,7 +288,7 @@ preallocates ~75% of a card, so two per GPU will not fit); every net exits 0.
 
 ⛔ **Damage I did: the `efficientnet_adam` Imagenette checkpoint is gone.** Chasing the phantom bug
 I ran `rm -f .lake/build/efficientnet_adam_ckpt_xla.bin*` and retrained from scratch, so what was
-almost certainly the completed epoch-80 state (`RESULTS.md` 87.58%) is now epoch 4 at 63.69%. It is
+almost certainly the completed epoch-80 state (`historical/RESULTS.md` 87.58%) is now epoch 4 at 63.69%. It is
 rebuildable — ~80 epochs at ~30 s — but it is not what it was. Every other checkpoint was backed up
 before this sweep and is untouched.
 

@@ -39,16 +39,16 @@ ref = np.asarray(forward_jax(x, W0, b0, W1, b1, W2, b2, W3, b3, W4, b4))
 print(f"JAX ref: shape={ref.shape}, row0[:5]={ref[0,:5]}")
 
 # Save all inputs as .npy for iree-run-module
-os.makedirs("mlir_poc/cnn_inputs", exist_ok=True)
+os.makedirs("historical/mlir_poc/cnn_inputs", exist_ok=True)
 for name, arr in [("x",x),("W0",W0),("b0",b0),("W1",W1),("b1",b1),
                   ("W2",W2),("b2",b2),("W3",W3),("b3",b3),("W4",W4),("b4",b4)]:
-    np.save(f"mlir_poc/cnn_inputs/{name}.npy", arr)
+    np.save(f"historical/mlir_poc/cnn_inputs/{name}.npy", arr)
 
 # Run IREE on CUDA
 cmd = [
     "/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module",
     "--module=/tmp/mnist_cnn_cuda.vmfb", "--device=cuda", "--function=forward",
-] + [f"--input=@mlir_poc/cnn_inputs/{n}.npy" for n in
+] + [f"--input=@historical/mlir_poc/cnn_inputs/{n}.npy" for n in
      ["x","W0","b0","W1","b1","W2","b2","W3","b3","W4","b4"]] + [
     "--output=@/tmp/cnn_out.npy",
 ]

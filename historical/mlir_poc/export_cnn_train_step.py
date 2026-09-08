@@ -49,6 +49,6 @@ specs = (
 )
 exported = export.export(jax.jit(train_step))(*specs)
 mlir = exported.mlir_module()
-open("mlir_poc/cnn_train_step.mlir", "w").write(mlir)
+open("historical/mlir_poc/cnn_train_step.mlir", "w").write(mlir)
 print(f"Wrote cnn_train_step.mlir ({len(mlir)} chars)")
 print(f"  function: {exported.fun_name}")

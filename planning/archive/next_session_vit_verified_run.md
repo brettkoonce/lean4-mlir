@@ -99,7 +99,7 @@ The ConvNeXt session settled how to do this and the method is the transferable p
 1. **Keep the master log OFF `/tmp`.** B0's was lost to a power cut mid-run. The ConvNeXt supervisor
    puts both master and full logs under `CKPT_BASE`. Check where `supervise.sh` writes and make the
    persistent copy exist before launching, not after.
-2. **Archive the run in-repo when it lands**: `jax/runs/<run>/` with `RESULTS.md`, the curve `.tex`,
+2. **Archive the run in-repo when it lands**: `jax/runs/<run>/` with `historical/RESULTS.md`, the curve `.tex`,
    and the **full per-epoch log**. ⛔ `/home/skoonce/vit/` (the phase-2 300ep ViT) has **no log at
    all** — its 300 `.bin` files are the only surviving record of that curve, which is why they can
    never be pruned. Do not create a second one of those.

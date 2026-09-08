@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Architectures.Residual
 # CNN VJP Proofs
 
 VJP correctness for the convolutional and pooling layers used in
-`mlir_poc/hand_cnn_train_step.mlir`. The architecture there is:
+`historical/mlir_poc/hand_cnn_train_step.mlir`. The architecture there is:
 
     x(1,28,28) → Conv(1→32) → ReLU → Conv(32→32) → ReLU → MaxPool
               → Flatten → Dense(6272→512) → ReLU → Dense(512→512)

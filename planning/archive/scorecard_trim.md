@@ -29,7 +29,7 @@ soundness was never in the images: once (1) is proved, image #57 certifying tell
 you nothing #56 didn't. So we keep (3) as an exact-rational measurement over the
 full subset and cap how many images carry theorems.
 
-**This is not a weakening of any claim.** Every count in RESULTS.md is identical
+**This is not a weakening of any claim.** Every count in historical/RESULTS.md is identical
 before and after; what changed is that the file says which numbers are theorems
 and which are measurements.
 
@@ -188,7 +188,7 @@ because those two modules are in no lib root. Regenerated capped, which fixes it
 
 * 30,884 → **7,241** lines; 45 → 39 class pairs needing an LDLᵀ PSD witness;
 * measured counts unchanged — SF 93/100 @ ε=0.1 (= the PGD bound) and 91/100
-  @ 0.3, TF 91/77 — so RESULTS.md and README need no edit;
+  @ 0.3, TF 91/77 — so historical/RESULTS.md and README need no edit;
 * the emitted witnesses are images 0–7 for both nets at both radii, and
   `scorecard_sdp_full{,_uncon}` now states those proved counts;
 * only one fallback fact was needed (`hpreTF1`: image 1 is not in the base's

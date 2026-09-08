@@ -51,7 +51,7 @@ IREE runtime). Shape descriptors drive the generic FFI — no per-model C code.
 ### Step 1: Toolchain smoke test
 
 Installed `iree-base-compiler` + `iree-base-runtime` via pip. Hand-wrote a
-tiny `dense→relu` StableHLO module (`mlir_poc/tiny_mlp.mlir`). Compiled with
+tiny `dense→relu` StableHLO module (`historical/mlir_poc/tiny_mlp.mlir`). Compiled with
 `iree-compile`, ran with `iree-run-module`. CPU backend worked first try.
 CUDA backend errored with "missing GPU target in #hal.executable.target."
 
@@ -188,7 +188,7 @@ Per the `Lean_MLIR.md` plan, Option B (bootstrap via `jax.export.export`)
 gives us a known-correct training module while deferring hand-written
 VJPs (Option A) to a pure refactor phase.
 
-`mlir_poc/export_train_step.py` uses JAX to define forward + softmax-CE +
+`historical/mlir_poc/export_train_step.py` uses JAX to define forward + softmax-CE +
 `value_and_grad` + SGD update, then exports via:
 
 ```python
@@ -288,7 +288,7 @@ JAX-bootstrap (Option B) was the initial plan for training, but IREE 3.11
 has a bug in StableHLO→linalg lowering: `jax.grad` of conv layers produces
 non-standard `dim_numbers` like `[f, 0, 1, b]x[i, 0, 1, o]->[0, 1, b, f]`
 which IREE's pipeline miscompiles. Minimal repro: `jax.grad(sum(conv(x,W)**2))`
-fails for any conv model. See `mlir_poc/export_cnn_train_step.py` for the
+fails for any conv model. See `historical/mlir_poc/export_cnn_train_step.py` for the
 repro.
 
 This forced Option A (hand-written VJPs) earlier than planned. Three
@@ -456,7 +456,7 @@ ffi/
   libiree_ffi.so            1.4 MB, static IREE runtime + flatcc inside
   test_ffi.c                C smoke test
 
-mlir_poc/
+historical/mlir_poc/
   hand_train_step.mlir      MLP VJPs (130 lines, verified byte-exact vs JAX)
   hand_cnn_train_step.mlir  MNIST CNN VJPs (322 lines, transpose trick for conv backward)
   hand_cifar_train_step.mlir CIFAR-10 CNN VJPs (463 lines, gen_train_step.py templated)

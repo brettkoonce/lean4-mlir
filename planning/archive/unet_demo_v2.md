@@ -29,7 +29,7 @@ repo has a working seg pipeline, a smoke-test checkpoint, a render
 figure, and **no quantitative segmentation number anywhere**: mIoU
 is still a `TODO` in `Train.lean` ("seg eval skipped — Phase 0"),
 augment is an identity placeholder, the trainer config is 3 epochs
-at lr 1e-3, and RESULTS.md has no UNet row. v2 is: metric, real
+at lr 1e-3, and historical/RESULTS.md has no UNet row. v2 is: metric, real
 training run, augmentation, then the one big quality lever
 (pretrained encoder) that shares codegen with the YOLO v2 plan.
 
@@ -64,7 +64,7 @@ Demos: `MainAutoencoderPetsTrain` (skipless Phase-1 smoke),
 | #3 `unetDown`/`unetUp` skip codegen | ✓ done (reused by DDPM) |
 | #4 Mask-aware augmentation | ✗ `petsIO.augmentBatch` is identity |
 | #5 mIoU eval | ✗ `Train.lean:693` TODO; eval block skips seg |
-| (implicit) a real training run | ✗ 3-epoch smoke config; no runs/, no RESULTS.md row |
+| (implicit) a real training run | ✗ 3-epoch smoke config; no runs/, no historical/RESULTS.md row |
 
 So v2 is not a redesign — it's the last 20% that turns "the
 pipeline works" into a bestiary-grade result. Same governing lesson
@@ -137,7 +137,7 @@ chapters affordable:
    of UNet* ("what do skip connections buy for dense prediction?")
    into a two-row table. This A/B is the demo's money slide and
    costs one extra short run.
-3. RESULTS.md gets its first segmentation rows; refresh
+3. historical/RESULTS.md gets its first segmentation rows; refresh
    `demos/figures/unet_pets.png` from the real checkpoint.
 
 Gate B: UNet beats the skipless autoencoder on mIoU (expected
@@ -238,7 +238,7 @@ plan — sequence whichever demo wants it first.
 
 - mIoU in the seg epoch-eval path (delete the `Train.lean:693`
   TODO) + `scripts/pets_miou.py` if the Python-side route is chosen
-- RESULTS.md segmentation table: autoencoder / UNet / UNet+aug /
+- historical/RESULTS.md segmentation table: autoencoder / UNet / UNet+aug /
   R34-UNet, per-class IoU + mIoU
 - Refreshed `demos/figures/unet_pets.png` from the best checkpoint
   (image | GT | pred strips already render; pick examples showing

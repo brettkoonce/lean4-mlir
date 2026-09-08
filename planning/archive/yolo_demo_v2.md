@@ -71,7 +71,7 @@ number.
 ## Workstream A — mAP harness + flexible eval (do first, no codegen)
 
 **Status 2026-07-10: DONE — Gate A MET.** All four items shipped and
-the e20 checkpoint scored on both val sets (RESULTS.md §Pets detection):
+the e20 checkpoint scored on both val sets (historical/RESULTS.md §Pets detection):
 
 | Val set | mAP@0.5 | mAP@0.3 |
 |---|---|---|
@@ -145,7 +145,7 @@ before/after numbers for everything below.
 items 1+2 (`--single-frac` + box-aware single crop in
 `preprocess_pets_mosaic.py`), R34 bootstrap recovered, full 80-ep run
 on `data/pets_mixed` (50/50, class-balanced) via `run_yolo_mixed.sh`
-(clean, zero crashes). Scored vs both standing val sets (RESULTS.md
+(clean, zero crashes). Scored vs both standing val sets (historical/RESULTS.md
 §Workstream B):
 
 | ckpt | mos@0.5 | mos@0.3 | sng@0.5 | sng@0.3 |
@@ -294,7 +294,7 @@ judged against it.
 
 ## Deliverables
 
-- `scripts/yolo_map.py` + mAP rows in RESULTS.md (mosaic-val AND
+- `scripts/yolo_map.py` + mAP rows in historical/RESULTS.md (mosaic-val AND
   single-frame-val, before/after)
 - `preprocess_pets_mosaic.py` gains `--single-frac` / crop-aug
   flags (or a thin `preprocess_pets_mixed.py` wrapper)

@@ -209,7 +209,7 @@ mismatch note replaced. Both smokes, the writer audit, the drift guard and the a
    `"MobileNet V4-Medium"`**. `scripts/grad_tie.py` and `scripts/mnv4_forward_tie.py` both read
    `generated_mobilenet_v4.py`, which comes from the SECOND one. So converting only the verified
    side would have left phase 2's gate silently comparing two different networks. That file was
-   converted in the same commit, and `RESULTS.md`'s 84.58% retagged as the superseded Conv-S table.
+   converted in the same commit, and `historical/RESULTS.md`'s 84.58% retagged as the superseded Conv-S table.
 
 4. **`mnv4ZbWidths` needed two new entries** (320 = 160·2 and 512 = 256·2, from the expand-2 FFN
    and ConvNeXt blocks Conv-S does not have). Not mentioned; `mnv4-fwd-smoke`'s unbound-`%zb`

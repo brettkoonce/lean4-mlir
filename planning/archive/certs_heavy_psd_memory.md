@@ -69,7 +69,7 @@ trades OOM for a guaranteed timeout on 4 cores. Neither fits.
 3. **Paid larger runner** (8-core/32 GB): smallest diff, costs money.
 4. **Status quo** (what this doc's state implements): SDP instances verified
    locally on every regeneration; CI re-checks the scorecard + IBP tiers
-   weekly. Honest, zero cost — the audit tables in RESULTS.md remain true,
+   weekly. Honest, zero cost — the audit tables in historical/RESULTS.md remain true,
    they're just not cron-re-derived.
 
 ## POST-SCRIPT (same day): it was never just the SDP files

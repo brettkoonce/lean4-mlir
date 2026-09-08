@@ -16,7 +16,9 @@
 #   ./run.sh efficientnet-v2 0 rocm
 #   ./run.sh vit-tiny 0 cuda
 #
-# Output is teed to <trainer>.log in the repo root.
+# Output is teed to runs/<YYYY-MM-DD>-<trainer>/<trainer>.log (RUN_LOG_DIR overrides the
+# directory). It used to land in the repo root as <trainer>.log, which .gitignore hid and
+# every run re-created — 57 of them by 2026-09-08.
 
 set -e
 
@@ -48,7 +50,9 @@ fi
 gpu="${2:-0}"
 backend="${3:-rocm}"
 
-logfile="$(echo "$trainer" | tr '/' '_').log"
+logdir="${RUN_LOG_DIR:-runs/$(date +%F)-$(echo "$trainer" | tr '/' '_')}"
+mkdir -p "$logdir"
+logfile="$logdir/$(echo "$trainer" | tr '/' '_').log"
 
 case "$backend" in
   rocm) export HIP_VISIBLE_DEVICES="$gpu" ;;

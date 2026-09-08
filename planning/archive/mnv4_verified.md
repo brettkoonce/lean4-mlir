@@ -112,7 +112,7 @@ what costs is the proof chain.
 | baseline emitter | ✅ exists | `LeanMlir/MlirCodegen.lean`, `SpecHelpers.lean` |
 | **UIB VJP oracle** | ✅ **passes at 1.13e-05** | `vjp-oracle-uib` (`lakefile.lean:2486`), `tests/vjp_oracle/README.md` |
 | the net, JAX side | ✅ two of them | `jax/MainMobilenetV4.lean` (Conv-S-sized, 10-class Imagenette demo, **4.1M**) and `jax/MainMobilenetV4Imagenet.lean` (faithful Conv-M, ~9.7M, 1000-class) |
-| Imagenette accuracy | ✅ **84.58%** @ 80ep | `RESULTS.md` — and per `MainMobilenetV4Imagenet.lean:4-7` this number belongs to the **Conv-S-sized demo**, not Conv-M |
+| Imagenette accuracy | ✅ **84.58%** @ 80ep | `historical/RESULTS.md` — and per `MainMobilenetV4Imagenet.lean:4-7` this number belongs to the **Conv-S-sized demo**, not Conv-M |
 | `uib` in **`VLayer`** | ⛔ **absent** | `LeanMlir/VerifiedSpec.lean:27-113` — 21 constructors, no `uib` |
 | verified render | ⛔ absent | no `verified_mlir/mnv4*` |
 | verified spec / app | ⛔ absent | no `mobilenetv4Verified` in `VerifiedNets.lean` |
@@ -535,7 +535,7 @@ dominant term — 5× the padding effect. A "fix the render" reflex would make t
 
 * `runs/enet_adam_80ep_aug06.log` — the **verified** path, epoch 80: **90.06%**. Swish stem/head,
   symmetric stem padding.
-* `RESULTS.md` — the **JAX baseline** table: **87.58%**. Relu stem/head, XLA `SAME` stem padding.
+* `historical/RESULTS.md` — the **JAX baseline** table: **87.58%**. Relu stem/head, XLA `SAME` stem padding.
 
 ⚠ **These are different nets, so 90.06% is not a reproduction of 87.58% and must not be presented
 as one** — the verified path is not "the baseline, verified" for EfficientNet; it is a *different
@@ -792,7 +792,7 @@ measuring. **Fix the probe, get the tie, then launch.**
 ⚠ The per-example SGD pair (`mobilenetv2_fwd`, `mobilenetv2_train_step`) stays symmetric under this
 plan — self-consistent, so its byte-prefix audit still passes, but it is then a *different net* from
 the Adam pair. That is a deliberate, documentable split and it should be written into
-`RESULTS.md`, not left implicit. *(Closed 2026-09-05: the split is gone, the SGD pair is XLA-`SAME`.)*
+`historical/RESULTS.md`, not left implicit. *(Closed 2026-09-05: the split is gone, the SGD pair is XLA-`SAME`.)*
 
 ---
 
@@ -912,7 +912,7 @@ typecheck), `fusedMbConvFwdStridedB`, `mnv4FwdChainB`, `mnv4ShapeList`/`mnv4SigL
 *Gates standing*: `uib-layout-tie` (3,737,088 + 43,360, `VLayer.toSpecs` vs baseline
 `Layer.nParams`) · `mnv4-fwd-smoke` (32 regular convs / 20 depthwise / 1 swish / 36 relu, the
 per-block depthwise histogram, `%zb` binding, signature ↔ layout shape-for-shape, 4,124,426 params
-= `RESULTS.md`'s 4.1M) · `iree-compile` accepts the module (204,622-byte vmfb) ·
+= `historical/RESULTS.md`'s 4.1M) · `iree-compile` accepts the module (204,622-byte vmfb) ·
 `scripts/mnv4_forward_tie.py` (§3b).
 
 ### ✅ Phase 2 + most of Phase 3-rest — DONE 2026-08-09 (codegen)
@@ -958,7 +958,7 @@ tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not: the JAX baseli
 `batchSize 192, warmupEpochs 5` (`jax/MainMobilenetV4.lean`) against the tier's `bs32, warmup 3`. Same
 net, different recipe, and 6× batch at a fixed LR plausibly explains most of the +2.78. The
 defensible claim is *"the MNv4-Conv-S block table under the Imagenette tier's recipe scores
-87.36%"*. ▶ It is deliberately NOT in `RESULTS.md` yet, because the caption is the open question,
+87.36%"*. ▶ It is deliberately NOT in `historical/RESULTS.md` yet, because the caption is the open question,
 not the number.
 
 ⚠ Run-to-run spread is real: a 2-epoch benchmark and the full run started from a bit-identical init
@@ -1084,12 +1084,12 @@ their dead `ACT_SITES` by design (guarded 2026-08-08). `grad_tie.py` was the one
 
 ### (d) ⛔ WHAT THIS VOIDS — two JAX baseline numbers, and they were already void
 
-`RESULTS.md`'s Imagenette **ResNet-34 90.29%** and **ResNet-50 89.40%** come off
+`historical/RESULTS.md`'s Imagenette **ResNet-34 90.29%** and **ResNet-50 89.40%** come off
 `generated_resnet34.py` / `generated_resnet50.py`, whose stem just moved. ⚠ They were **already**
 stale before today — the 2026-08-03 pool fix and the 2026-08-04 strided-conv fix moved these same
 two nets, and `max_pool2d`'s own docstring says so in as many words (*"This MOVES the ResNet stem
 pool, so it voids R34-ImageNet's and R50's numbers"*). Today closes the last site rather than
-opening a new hole. **Neither is flagged in `RESULTS.md`; both need a caption or a re-run.**
+opening a new hole. **Neither is flagged in `historical/RESULTS.md`; both need a caption or a re-run.**
 Nothing on the verified path is affected — R50's 89.86% and R34's verified numbers train on renders
 that never moved.
 
@@ -1616,7 +1616,7 @@ block forms, mirroring `ResNet34BackB0` — which R50's blocks were explicitly w
 2026-08-10, see §4c**: one generator field (`NetSpec.convPadStyle`) closed both, and the baseline
 is down to `mnv2:bn-split` + `r34:bn-split`. ⚠ Two consequences for the table above: R34's grad-tie
 row is now **0/110 in both modes** against the *unpatched* reference (the `s3b3` holdout does not
-reproduce), and `RESULTS.md`'s R34 90.29% / R50 89.40% **JAX baseline** numbers are for a net that
+reproduce), and `historical/RESULTS.md`'s R34 90.29% / R50 89.40% **JAX baseline** numbers are for a net that
 no longer exists. And no Imagenette net has a matched **recipe** — every JAX baseline is bs192 where every
 verified trainer is bs32 — so no "verified X% vs baseline Y%" pair in the repo is currently
 comparing like with like.

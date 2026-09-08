@@ -89,9 +89,9 @@ jax_acc = (jax_preds == Yte).mean()
 print(f"JAX final test accuracy: {jax_acc*100:.4f}%")
 
 # ---------- save weights + inputs for IREE ----------
-os.makedirs("mlir_poc/inputs_trained", exist_ok=True)
+os.makedirs("historical/mlir_poc/inputs_trained", exist_ok=True)
 for name, arr in [("W0",W0),("b0",b0),("W1",W1),("b1",b1),("W2",W2),("b2",b2)]:
-    np.save(f"mlir_poc/inputs_trained/{name}.npy", arr.astype(np.float32))
+    np.save(f"historical/mlir_poc/inputs_trained/{name}.npy", arr.astype(np.float32))
 
 # ---------- run IREE forward on test set, batch 128 ----------
 n_test = Xte.shape[0]
@@ -109,12 +109,12 @@ for bi in range(n_batches):
         "--device=cuda",
         "--function=forward",
         "--input=@/tmp/iree_x.npy",
-        "--input=@mlir_poc/inputs_trained/W0.npy",
-        "--input=@mlir_poc/inputs_trained/b0.npy",
-        "--input=@mlir_poc/inputs_trained/W1.npy",
-        "--input=@mlir_poc/inputs_trained/b1.npy",
-        "--input=@mlir_poc/inputs_trained/W2.npy",
-        "--input=@mlir_poc/inputs_trained/b2.npy",
+        "--input=@historical/mlir_poc/inputs_trained/W0.npy",
+        "--input=@historical/mlir_poc/inputs_trained/b0.npy",
+        "--input=@historical/mlir_poc/inputs_trained/W1.npy",
+        "--input=@historical/mlir_poc/inputs_trained/b1.npy",
+        "--input=@historical/mlir_poc/inputs_trained/W2.npy",
+        "--input=@historical/mlir_poc/inputs_trained/b2.npy",
         "--output=@/tmp/iree_logits.npy",
     ]
     r = subprocess.run(cmd, capture_output=True)

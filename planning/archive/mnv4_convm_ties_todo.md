@@ -15,7 +15,7 @@ therefore certify the net the reference computes, not merely a net. The two-conv
 strided depthwise placement are covered by the same runs.
 
 ⚠ Still NOT established by any of this: an accuracy. Conv-M has no Imagenette run and no verified
-ImageNet run; `RESULTS.md`'s 84.58% belongs to the superseded Conv-S table.
+ImageNet run; `historical/RESULTS.md`'s 84.58% belongs to the superseded Conv-S table.
 
 ### Two setup facts that cost time, recorded so they do not again
 

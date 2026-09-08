@@ -101,7 +101,7 @@ forward and host-side loops:
 - Implement as a host loop over k ∈ {1, 5, 10, 20, 50}% × N val
   images, batch the perturbed images through the eval vmfb. One
   script/exe, ~1 session.
-- Report deletion/insertion AUC per model in RESULTS.md, and — the
+- Report deletion/insertion AUC per model in historical/RESULTS.md, and — the
   honest control — the same curves for a **random-ranking
   baseline**. CAM beating random by a wide margin is the
   quantitative version of "the heatmap works."
@@ -182,7 +182,7 @@ the cherry.
   `MainGradCAM.lean`; refreshed strips + the one-image-four-CNNs
   figure in `demos/figures/` and the blueprint
 - Deletion/insertion AUC table (with random baseline) in
-  RESULTS.md; optional Pets mask-energy column
+  historical/RESULTS.md; optional Pets mask-energy column
 - If C lands: `generateGradCamStep`, the α-weight consistency test
   in `tests/`, and a ViT-Tiny panel
 - If D lands: the CAM≡GradCAM lemma in the proof tree + one

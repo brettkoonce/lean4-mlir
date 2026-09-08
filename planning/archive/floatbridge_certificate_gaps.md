@@ -74,7 +74,7 @@ transcendental probe):
 **What this does NOT do:** formally prove kernel = model. It *validates* the trusted boundary
 on real silicon and documents it precisely. That is the honest, runnable, highest-credibility
 deliverable. **Effort: medium, mostly Python + IREE plumbing, no Lean.** Reference style:
-`scripts/transcendental_probe.py`, `scripts/cifar_bn_margin_probe.py`, `mlir_poc/validate_cnn.py`.
+`scripts/transcendental_probe.py`, `scripts/cifar_bn_margin_probe.py`, `historical/mlir_poc/validate_cnn.py`.
 
 ## 2. Subnormals — a genuinely *closeable* proof gap (§3.3)  ✅ DONE (2026-06-25)
 

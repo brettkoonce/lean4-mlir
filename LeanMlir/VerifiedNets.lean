@@ -1539,7 +1539,7 @@ def vitBImagenetVerified : VerifiedNetSpec where
 
     ⚠ **Converted Conv-S → Conv-M on 2026-08-14** (14 UIB blocks → 21, one 1×1 head conv → two,
     4.1M → 8.4M at 10 classes), so that `mnv4ImagenetVerified` below can target the Conv-M number
-    ch6 §6.5 prints. `RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table and is tagged
+    ch6 §6.5 prints. `historical/RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table and is tagged
     there as such; this spec has no Imagenette accuracy run of its own yet.
 
     ⚠ The two specs move together and cannot diverge: `mnv4ImagenetVerified` takes its

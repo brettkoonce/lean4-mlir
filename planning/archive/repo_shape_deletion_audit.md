@@ -147,7 +147,7 @@ lands in the same per-push CI. That default is worth breaking (§4).
   (0.7 MB)** — experiment artifacts. Adopt a retention rule: logs cited by a
   chapter/results table get committed; everything else is gitignored and
   expendable. **PRUNE + policy.**
-* **`historical/`, `mnist-lean4/`, `mlir_poc/` (~400 KB total)** —
+* **`historical/`, `historical/mnist-lean4/`, `historical/mlir_poc/` (~400 KB total)** —
   predecessors; git history preserves them anyway. *keep?* negligible cost,
   occasional archaeology value. **DELETE-SAFE; genuinely optional.**
 * **`upstream-issues/`, `home_page/`, `figures/` (tiny)** — KEEP, noise-level.

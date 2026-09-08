@@ -1859,7 +1859,7 @@ Two failures made it look retired, and both are shallow:
   rejected the whole shim with "not a usable shim". The function has been in
   `ffi/iree_ffi.c:693` the whole time.
 
-▶▶ **THE REBUILD IS TWO COMMANDS** (`IREE_BUILD.md` §4a/4b), takes seconds, and the
+▶▶ **THE REBUILD IS TWO COMMANDS** (`historical/IREE_BUILD.md` §4a/4b), takes seconds, and the
 archives are already built at `/home/skoonce/lean/klawd_max_power/iree-build/`:
 
 ```bash

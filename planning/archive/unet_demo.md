@@ -243,7 +243,7 @@ Seg train-step FFI (commit `8d9dc9d`):
 - `IreeSession.trainStepAdamF32Seg` opaque in `IreeRuntime.lean`.
 - `libiree_ffi.so` rebuilt against the static runtime under
   `/home/skoonce/lean/claude_max/iree-build` (recipe in
-  `IREE_BUILD.md §4`).
+  `historical/IREE_BUILD.md §4`).
 
 **Not yet wired — what's left to actually train Pets:**
 

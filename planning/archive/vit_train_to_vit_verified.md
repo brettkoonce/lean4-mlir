@@ -145,7 +145,7 @@ real, reproducible floor and a regression anchor for the phases below. Expect it
 to underperform 65% substantially — that *is* the result that motivates Adam.
 
 Acceptance: a full multi-epoch run, monotone-ish train loss, a logged val number,
-exit 0. Record it in `RESULTS.md` as "verified, SGD, no-aug" so the recipe deltas
+exit 0. Record it in `historical/RESULTS.md` as "verified, SGD, no-aug" so the recipe deltas
 are legible.
 
 ## Phase 2 — Runtime LR + cosine + warmup
@@ -251,7 +251,7 @@ renderer, and compare the val top-1 to the original `vit-train` number. Stretch
 goal: match it; honest floor: a *fully verified-gradient* ViT that trains to a
 respectable, reported number, with the schedule/aug named as host-side TCB.
 
-Acceptance: `RESULTS.md` row "ViT-Tiny, verified codegen, full recipe" within
+Acceptance: `historical/RESULTS.md` row "ViT-Tiny, verified codegen, full recipe" within
 striking distance of the unverified runner; the delta (if any) attributed.
 
 ---

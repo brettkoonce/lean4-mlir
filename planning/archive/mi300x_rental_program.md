@@ -223,10 +223,10 @@ Interactive session; goal is "does it work + what does it cost", not trained mod
    from the 7900 XTX reference table). Backend auto-detects rocm; set
    `IREE_CHIP=gfx942` (plumbs to `--iree-rocm-target`, `Types.lean` ~597). This is the
    bigger deal than it looks: **first validation of the PRIMARY Lean→StableHLO→IREE
-   path on CDNA**, plus a datacenter column for `BENCHMARK.md` (MI300X vs 7900 XTX vs
+   path on CDNA**, plus a datacenter column for `historical/BENCHMARK.md` (MI300X vs 7900 XTX vs
    4060 Ti). Setup is the tax: elan + `lake build` of the probe trainers on the pod
    (Mathlib via `lake exe cache get`; pod CPUs are beefy) and **rebuild the FFI `.so`
-   against the pip-installed IREE runtime per `IREE_BUILD.md` §4** — the stale-FFI
+   against the pip-installed IREE runtime per `historical/IREE_BUILD.md` §4** — the stale-FFI
    lesson, never skip. MNIST/CIFAR probe data auto-downloads (tiny). Note: the rocm
    reduction-vector-distribution workaround (`Types.lean` ~613) applies to ALL rocm
    chips — fine for the smoke; trying the run WITHOUT it on gfx942 (CDNA may not have

@@ -11,7 +11,7 @@ Conv-M table, and the typed StableHLO graph over it at `mnv4FwdChainB`'s own tok
 `ResNet50FullB.lean` is the file this one mirrors.
 
 ⚠⚠ **NO ACCURACY IS QUOTED FOR THIS NET.** Conv-M has no Imagenette run and no verified ImageNet
-run; `RESULTS.md`'s 84.58% belongs to the SUPERSEDED Conv-S table. What the artifacts under this
+run; `historical/RESULTS.md`'s 84.58% belongs to the SUPERSEDED Conv-S table. What the artifacts under this
 tier *are* pinned to is the reference's function: the forward tie measures `max |Δ| = 3.770e-06`
 against `jax/.lake/build/generated_mobilenet_v4.py` on shared weights and the gradient tie puts 0
 of 232 live parameters outside the reference's own fp32 noise floor (both re-run at the Conv-M

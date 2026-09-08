@@ -4,7 +4,7 @@ Lean 4 as a metaprogramming layer that emits idiomatic JAX Python.
 The generated script gets `value_and_grad` autodiff and XLA JIT for
 free, runs on any JAX-supported device.
 
-This is the working middle ground between [`mnist-lean4/`](../mnist-lean4)
+This is the working middle ground between [`mnist-lean4/`](../historical/mnist-lean4)
 (pure Lean 4 with hand-written gradients, slow) and the phase 3 IREE
 pipeline at the project root (no Python at all, MLIR straight to GPU).
 
@@ -162,7 +162,7 @@ base is unchanged; only jax/jaxlib/jax-cuda12-* (0.9.2→0.10.0), cuDNN
 Note: jax 0.10.0 requires **Python ≥3.11** (ares uses `python3.12`; a fresh
 `python3 -m venv` on a 3.10 box will fail to resolve jax).
 
-Unlike the IREE/verified-codegen path (see [`../CUDA.md`](../CUDA.md)),
+Unlike the IREE/verified-codegen path (see [`../historical/CUDA.md`](../historical/CUDA.md)),
 the JAX path needs **no `sm_89` target pinning** — XLA targets Ada
 natively, so there's nothing to forward-JIT.
 
@@ -200,7 +200,7 @@ LLVM_PATH=/opt/rocm/llvm HIP_VISIBLE_DEVICES=0 \
 
 ## Why this exists, and why we moved on
 
-[`mnist-lean4/`](../mnist-lean4) (phase 1) built neural nets from scratch in Lean 4
+[`mnist-lean4/`](../historical/mnist-lean4) (phase 1) built neural nets from scratch in Lean 4
 with C FFI → OpenBLAS → hipBLAS. That works, but requires hand-written gradients
 and manual BLAS calls for every operation.
 
@@ -238,7 +238,7 @@ in Lean. See the project root README for that path.
 | ResNet-50 | `MainResnet50.lean` | 23.5M | 85.0% | 55 min | Adam |
 | ViT-Tiny | `MainVit.lean` | 5.5M | 65.2% | 45 min | Adam |
 
-All Imagenette models trained from scratch on 6× RTX 4060 Ti, no pretrained weights, random crop augmentation. The phase 3 numbers (which use a different training recipe and proper running BN stats) are in [`../RESULTS.md`](../RESULTS.md) and tend to be 5-10 points higher.
+All Imagenette models trained from scratch on 6× RTX 4060 Ti, no pretrained weights, random crop augmentation. The phase 3 numbers (which use a different training recipe and proper running BN stats) are in [`../historical/RESULTS.md`](../historical/RESULTS.md) and tend to be 5-10 points higher.
 
 ## Differences from the S4TF book
 
@@ -261,7 +261,7 @@ differ due to multi-GPU batching and optimizer discoveries:
 **Other differences:**
 - **Normalization** — book uses batch norm with running stats (per-sample forward).
   This path uses instance norm (spatial stats only) — batch norm diverged with multi-GPU sharding.
-  Phase 3 has proper batch norm with running stats, see [`../RESULTS.md`](../RESULTS.md).
+  Phase 3 has proper batch norm with running stats, see [`../historical/RESULTS.md`](../historical/RESULTS.md).
 - **Book processes one image at a time** with gradient accumulation over the batch.
   We do true batched forward/backward across 6 GPUs.
 - **We add** cosine LR decay, linear warmup, weight decay, random horizontal flip —

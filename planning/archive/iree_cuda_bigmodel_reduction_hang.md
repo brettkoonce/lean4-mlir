@@ -30,7 +30,7 @@ Rebuild the FFI runtime to match the compiler:
 cd ~/src/iree && git checkout af030e43d8343263a6c869eae32f958f229ff7af
 cd ~/src/iree-build
 .venv/bin/ninja iree_runtime_unified flatcc_runtime flatcc_parsing   # ninja = project .venv's
-# then relink ffi/libiree_ffi.so per IREE_BUILD.md §4 (new .so is rriiii, matches wheel vmfbs)
+# then relink ffi/libiree_ffi.so per historical/IREE_BUILD.md §4 (new .so is rriiii, matches wheel vmfbs)
 ```
 After the swap the hang cleared on every big trainer (runtime-level, not model-specific):
 `mobilenetv2` → step 100/295 loss 2.20 (invoke #112), `resnet34` invoke #7, and

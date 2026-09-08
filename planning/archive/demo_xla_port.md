@@ -320,12 +320,12 @@ trajectory". A true reproduction of the table needs the 10-epoch run.
 ### ✅ DONE 2026-08-26: `unet-pets-train` — and it closes ledger #3
 
 Ran on XLA the same day (7.85M params, 224², 3 classes, 3 epochs, 44 s/epoch).
-**mIoU 0.649, per-class 0.712 / 0.832 / 0.404.** Compare `RESULTS.md:90`, which
+**mIoU 0.649, per-class 0.712 / 0.832 / 0.404.** Compare `historical/RESULTS.md:90`, which
 recorded this exact config at mIoU 0.344 with **boundary IoU 0.000**.
 
 ⭐ So the Pets boundary collapse was the shuffle bug too — the same bug, the
 same signature, and it was the collapse `brats_demo.md` originally cited as its
-*motivating evidence*. Flagged in `RESULTS.md`, `planning/archive/unet_demo_v2.md`
+*motivating evidence*. Flagged in `historical/RESULTS.md`, `planning/archive/unet_demo_v2.md`
 (which had zero mention of the bug), and `post_shuffle_fix.md` ledger #3.
 
 ⚠ The skip ablation there is **unresolved, not inconclusive**: the skipless
@@ -464,7 +464,7 @@ now resolved (§4.7).
 | Autoencoder (skipless) | 0.596 | 0.667 | 0.800 | 0.320 |
 | **UNet (skips)** | **0.649** | 0.712 | 0.832 | **0.404** |
 
-`RESULTS.md` concluded from void data that "UNet does **NOT** yet beat the
+`historical/RESULTS.md` concluded from void data that "UNet does **NOT** yet beat the
 skipless autoencoder (0.344 vs 0.360)... inconclusive". On correct data UNet
 wins by **+0.053 mIoU and +0.084 on the boundary class** — Gate B passes.
 
