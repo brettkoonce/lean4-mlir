@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Architectures.ViTDepthK
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The ViT-Tiny backward chains — the ℝ maps the ViT ties are about
 
@@ -27,8 +28,10 @@ from the attention core outwards:
 distinct per-block parameters, `D = 192 = 3 heads × 64`, MLP dim 768, 197 tokens (196 patches +
 CLS), `16×16/s16` patchify (no `conv2d`, so no padding phase and none of the even-kernel question
 `EvenKernelConvBack.lean` found for ConvNeXt), vector-`[D]` LayerNorm at all 25 sites, GELU,
-`ε = 1e-5`. No BatchNorm anywhere. ⚠ `N` throughout is the TOKEN count, not a batch: ViT has no
-batched whole-net tie (the batched T3 tie is `ViTTiePoCGB`, a `batchMap` of the per-example chain).
+`ε = 1e-5`. No BatchNorm anywhere. ⚠ `N` throughout is the TOKEN count, not a batch; the batch is
+`B`, the binder of `vitInputGradKB` below — the per-example chain lifted stage by stage over `B`
+examples, the way the batched T3 tie (`ViTTiePoCGB`) lifts every activation and cotangent — tied
+by `vitInputGradKB_eq_batchMap_vitForwardKV_vjp` (`ViTWholeBackCertifiedTieB.lean`).
 
 Moved here from the three float bridges that defined them beside their float twins on 2026-09-08
 (`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
@@ -267,5 +270,55 @@ noncomputable def vitInputGradK (ic H W patchSize N mlpDim heads d_head nClasses
           W_conv b_conv cls_token pos_embed ε ps x)
     ∘ clsScatter N (heads * d_head)
     ∘ Proofs.dense (Mat.transpose Wcls) (0 : Vec (heads * d_head))
+
+-- ═══════════════════════════════════════════════════════════════
+-- § The batched whole-net chain — a variable batch `B`; `N` stays the token count
+-- ═══════════════════════════════════════════════════════════════
+
+/-- The batched patch embedding: `StableHLO.batchMap B` of `vitSavedPE`, the tower's saved input at
+    every example. -/
+noncomputable def vitSavedPEB (B ic H W patchSize N heads d_head : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (x : Vec (B * (ic * H * W))) : Vec (B * ((N + 1) * (heads * d_head))) :=
+  StableHLO.batchMap B
+    (vitSavedPE ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed) x
+
+/-- The batched tower output: `StableHLO.batchMap B` of the tower at the batched patch embedding —
+    saved stage by stage, not `batchMap B` of the composed per-example prefix (the two agree only
+    up to `batchMap_comp`, `ViTWholeBackCertifiedTieB.lean`). -/
+noncomputable def vitSavedBodyB (B ic H W patchSize N mlpDim heads d_head k : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
+    (x : Vec (B * (ic * H * W))) : Vec (B * ((N + 1) * (heads * d_head))) :=
+  StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)
+    (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
+
+/-- **THE BATCHED WHOLE-NET ViT INPUT GRADIENT** — `vitInputGradK` at each of `B` examples, stage
+    by stage, as the batched render computes it. The head backward and the CLS scatter are
+    `StableHLO.batchMap B` of their per-example leaves (both input-independent); the final-LN and
+    tower backwards are `StableHLO.batchMapAux B` of their per-example maps, each at the batched
+    saved activation (`vitSavedBodyB`, `vitSavedPEB`); the patch-embed backward is `batchMap B` of
+    the linear formula. Every slot is a lift because no ViT op couples examples — the same
+    honesty argument `ViTTiePoCGB` makes for the batched T3 tie. `B` is a variable: this chain
+    carries no batch numeral. `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`
+    (`ViTWholeBackCertifiedTieB.lean`) says it IS the certified gradient of
+    `batchMap B vitForwardKV`. -/
+noncomputable def vitInputGradKB (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
+    (γF : Vec (heads * d_head)) (Wcls : Mat (heads * d_head) nClasses)
+    (x : Vec (B * (ic * H * W))) : Vec (B * nClasses) → Vec (B * (ic * H * W)) :=
+  StableHLO.batchMap B
+      (patchEmbed_input_grad_formula ic H W patchSize N (heads * d_head) W_conv)
+  ∘ StableHLO.batchMapAux B (vitTowerBackK (N + 1) heads d_head mlpDim ε k ps)
+      (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
+  ∘ StableHLO.batchMapAux B (rowLNVecFlatBack (N + 1) (heads * d_head) ε γF)
+      (vitSavedBodyB B ic H W patchSize N mlpDim heads d_head k
+        W_conv b_conv cls_token pos_embed ε ps x)
+  ∘ StableHLO.batchMap B (clsScatter N (heads * d_head))
+  ∘ StableHLO.batchMap B (Proofs.dense (Mat.transpose Wcls) (0 : Vec (heads * d_head)))
 
 end Proofs

@@ -229,7 +229,9 @@ fidelity:
        per-example `r34InputGrad_eq_resnet34_vjp`, `mnv2InputGrad_eq_mobilenetv2_vjp`,
        `convnextInputGrad_eq_convNextForwardTCh_vjp`, `efficientnetInputGradB_full_correct` (16
        blocks, through `HasVJP.backward_unique`) and `vitInputGradK_eq_vitForwardKV_vjp` (depth
-       12, 3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g. Closing them
+       12, 3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g, ViT's at a
+       variable batch `B` as the stage-wise `batchMap` lift of its per-example chain
+       (`vitInputGradKB_eq_batchMap_vitForwardKV_vjp`), since no ViT op couples examples. Closing them
        found drift no review had: a reversed 2x2 pool where the forward pools 3x3/s2, `id` in
        ConvNeXt's head-LN slot, ViT's float cone at scalar affines, an even-kernel adjoint that
        was not one, and a dozen wrong docstring counts. Nothing trained was affected; in every

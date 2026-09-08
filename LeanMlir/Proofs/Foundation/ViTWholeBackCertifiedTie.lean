@@ -243,8 +243,8 @@ theorem vitInputGradK_correct
     MLP dim 768, **12 transformer blocks with DISTINCT per-block parameters**, vector-`[D]`
     LayerNorm at all 25 sites, and Imagenette's 10 classes.
 
-    So the hand-written float-tier input-gradient chain — the one `ViTBackFloatBudget.lean` puts a
-    numeral on — IS the certified gradient of the committed depth-12 forward, at every image.
+    So the hand-written input-gradient chain IS the certified gradient of the committed depth-12
+    forward, at every image.
     The backward peer of `vitTiny_has_vjp_correct`, and ViT's entry in the T6 column beside
     `convnextInputGrad_eq_convNextForwardTCh_vjp` and
     `efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp`. -/

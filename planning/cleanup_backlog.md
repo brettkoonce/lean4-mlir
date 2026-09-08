@@ -162,6 +162,20 @@ the tie should close the way ResNet-34's batched pool did — field by field, `r
 The batched T3 tie (`ViTTiePoCGB`) already spells the batched forward this reverses. Not cleanup,
 but it is the last "every net, every tier" claim the yaml cannot yet make.
 
+**DONE 2026-09-08.** `vitInputGradKB` (`ViTBackChains.lean`): the five stages of `vitInputGradK`
+each lifted over a variable batch `B` — `batchMap B` for the input-independent head, CLS-scatter
+and patch-embed leaves, `batchMapAux B` for the tower and final-LN backwards at the batched saved
+activations, saved stage by stage (`batchMap B (f ∘ g)` and `batchMap B f ∘ batchMap B g` agree
+only up to `batchMap_comp`, not `rfl`). `ViTWholeBackCertifiedTieB.lean`: four leaf ties (the
+patch-embed one `rfl`, the others one rewrite of the per-example tie at one example's row), a
+`vjp_comp_diff_at` apex over `batchMap_has_vjp_at` witnesses, the tie, the shape check
+`vitForwardKVB_eq_chain`, the transfer to the committed `batchMap_has_vjp (vitForwardKV …)`
+through `HasVJPAt.backward_unique_of_eq`, the `∑ pdiv` reading, and the ViT-Tiny capstone with
+`B` a binder. Thirteen declarations, all on the three axioms; no smoothness hypothesis, only
+`0 < ε`. ⚠ The claim above was off by one: ConvNeXt has no batched T6 either (its ImageNet
+artifacts never had a batched fold; `renderer_convergence.md` leg 3). LayerNorm is per-example,
+so it would close the same way, and it is the last `*InputGradB` gap.
+
 ## 8. Lower priority
 
 * `Float/FloatComposeBridge.lean` (776 lines) still carries `FloatBridges` / `FloatBridgesTo`

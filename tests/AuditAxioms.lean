@@ -124,6 +124,7 @@ import LeanMlir.Proofs.Foundation.Resnet50WholeBackCertifiedTieB
 import LeanMlir.Proofs.Foundation.EvenKernelConvBack
 import LeanMlir.Proofs.Foundation.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.ViTWholeBackCertifiedTieB
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie
@@ -1241,6 +1242,20 @@ open Proofs
 #print axioms Proofs.vitInputGradK_eq_vitForwardKV_vjp
 #print axioms Proofs.vitInputGradK_correct
 #print axioms Proofs.vitTinyInputGrad_eq_vitTiny_vjp
+-- ViT WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index (ViTWholeBackCertifiedTieB.lean, 2026-09-08)
+#print axioms Proofs.batchMap_comp
+#print axioms Proofs.HasVJPAt.backward_unique_of_eq
+#print axioms Proofs.vitEmbedBackB_eq_vjp
+#print axioms Proofs.vitTowerBackB_eq_vjp
+#print axioms Proofs.vitLNBackB_eq_vjp
+#print axioms Proofs.vitHeadBackB_eq_vjp
+#print axioms Proofs.vitKVB_has_vjp_at
+#print axioms Proofs.vitInputGradKB_eq_vitKVB_vjp
+#print axioms Proofs.vitForwardKVB_eq_chain
+#print axioms Proofs.vitForwardKV_differentiable
+#print axioms Proofs.vitInputGradKB_eq_batchMap_vitForwardKV_vjp
+#print axioms Proofs.vitInputGradKB_correct
+#print axioms Proofs.vitTinyInputGradB_eq_vitTiny_vjp
 -- ViT WHOLE-NET FORWARD (forward peer of vit_grad_floatBridges)
 #print axioms FloatModel.softmaxF_close_at
 #print axioms FloatModel.smErr_nonneg
