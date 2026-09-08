@@ -718,6 +718,10 @@ lean_lib «Certs» where
              -- r34InputGradB, r50InputGradB) and the batched 3×3/s2 pool backward maxPool3s2FlatBackB
              -- — the ℝ maps the three ResNet certified ties are stated about (no float content).
              `LeanMlir.Proofs.Foundation.ResNetBackChains,
+             -- The MobileNetV2/V4 backward chains (invresBodyBackPC, invresBodyStridedBackPC,
+             -- mnv2InputGrad, mnv2InputGradB, mnv4InputGradB) — the ℝ maps the four MobileNet
+             -- certified ties are stated about (no float content).
+             `LeanMlir.Proofs.Foundation.MobileNetBackChains,
              -- A3 backward fold: the linear input-VJP (dx = Wᵀ·dy = bias-free dense over the
              -- transpose, reuses floatBridges_dense) + the exact ReLU-back selectPos mask
              -- (floatBridges_reluMaskBack) compose via FloatBridges.comp into a whole-net

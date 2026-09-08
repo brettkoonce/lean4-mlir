@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.MobileNetBackChains
 import LeanMlir.Proofs.Float.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge
 
@@ -21,6 +22,10 @@ relu6 kink as a fixed-mask `reluMaskBack` (`0 < preact < 6` at the smooth point)
 The stem/head/GAP/dense **endpoints are concrete**; the 6 inverted-residual block backwards (and the
 stem/head BN-backs) are **supplied as `FloatBridges` facts** — exactly as `r34_grad_floatBridges`
 supplies its 16 blocks — discharged by the per-block bridges here (and `floatBridges_bnPerChannelBack`).
+
+⚠ Since 2026-09-08 the ℝ chains `invresBodyBackPC`, `invresBodyStridedBackPC` and `mnv2InputGrad` are
+defined in `Foundation/MobileNetBackChains.lean`, beside the ties; this file is their float side only
+(`planning/float_second_pass.md`).
 -/
 
 namespace Proofs
@@ -28,21 +33,6 @@ namespace Proofs
 -- ════════════════════════════════════════════════════════════════
 -- § The inverted-residual body backward (where §1e depthwiseBack lands)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The stride-1 inverted-residual body input-gradient VJP at a smooth point — the **reverse of
-    `invresBodyPC = project ∘ depthwise ∘ expand`**: `expandBack ∘ depthwiseBack ∘ projectBack`.
-    `projectBack = convFlatBack Wp ∘ bnBp` (no relu6); `depthwiseBack = depthwiseFlatBack Wd ∘ bnBd ∘
-    reluMaskBack m_d`; `expandBack = convFlatBack We ∘ bnBe ∘ reluMaskBack m_e`. The BN-backs are the
-    per-channel BatchNorm backwards (supplied). -/
-noncomputable def invresBodyBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 mid ic kHe kWe) (Wd : DepthwiseKernel mid kHd kWd) (Wp : Kernel4 oc mid kHp kWp)
-    (bnBe bnBd : Vec (mid * h * w) → Vec (mid * h * w))
-    (bnBp : Vec (oc * h * w) → Vec (oc * h * w))
-    (m_e m_d : Fin (mid * h * w) → Prop) [DecidablePred m_e] [DecidablePred m_d] :
-    Vec (oc * h * w) → Vec (ic * h * w) :=
-  (convFlatBack (h := h) (w := w) We ∘ bnBe ∘ reluMaskBack m_e)
-  ∘ (depthwiseFlatBack (h := h) (w := w) Wd ∘ bnBd ∘ reluMaskBack m_d)
-  ∘ (convFlatBack (h := h) (w := w) Wp ∘ bnBp)
 
 /-- **The stride-1 inverted-residual body backward float-bridges.** One `.comp` chain over
     `convFlatBack` (expand/project 1×1), the §1e `depthwiseFlatBack`, the supplied per-channel
@@ -65,22 +55,6 @@ theorem floatBridges_invresBodyBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : N
       (floatBridges_depthwiseBack (h := h) (w := w) M Wd hwd (by positivity) hWd))).comp
     (((floatBridges_reluMaskBack m_e).comp hbnBe).comp
       (floatBridges_convBack (h := h) (w := w) M We hwe (by positivity) hWe))
-
-/-- The stride-2 (downsample) inverted-residual body input-gradient VJP — the **reverse of
-    `invresBodyStridedPC = project ∘ depthwiseStrided ∘ expand(2h×2w)`**:
-    `expandBack(2h×2w) ∘ depthwiseStridedBack ∘ projectBack`, where the depthwise reverses through the
-    §1e `depthwiseStride2FlatXlaBack` (zero-upsample scatter then reversed-kernel depthwise). -/
-noncomputable def invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 mid ic kHe kWe) (Wd : DepthwiseKernel mid kHd kWd) (Wp : Kernel4 oc mid kHp kWp)
-    (bnBe : Vec (mid * (2 * h) * (2 * w)) → Vec (mid * (2 * h) * (2 * w)))
-    (bnBd : Vec (mid * h * w) → Vec (mid * h * w))
-    (bnBp : Vec (oc * h * w) → Vec (oc * h * w))
-    (m_e : Fin (mid * (2 * h) * (2 * w)) → Prop) [DecidablePred m_e]
-    (m_d : Fin (mid * h * w) → Prop) [DecidablePred m_d] :
-    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
-  (convFlatBack (h := 2 * h) (w := 2 * w) We ∘ bnBe ∘ reluMaskBack m_e)
-  ∘ (depthwiseStride2FlatXlaBack (h := h) (w := w) Wd ∘ bnBd ∘ reluMaskBack m_d)
-  ∘ (convFlatBack (h := h) (w := w) Wp ∘ bnBp)
 
 /-- **The stride-2 inverted-residual body backward float-bridges.** Same `.comp` shape as the
     stride-1 body, with the depthwise stage threading the §1e `depthwiseStride2FlatXlaBack` and the
@@ -109,32 +83,6 @@ theorem floatBridges_invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net input-gradient VJP (the 6-block fold)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The whole MobileNetV2 input-gradient VJP at a smooth point — the **exact reverse of
-    `mobilenetv2Forward_full_pc`**: `dense ∘ GAP ∘ head ∘ b6 ∘ b5 ∘ residual b4 ∘ b3 ∘ residual b2 ∘
-    b1 ∘ stem` reversed. The stem/head/GAP/dense endpoints are concrete (`flatConvStride2XlaBack ∘ bnBs ∘
-    reluMaskBack` / `convFlatBack ∘ bnBh ∘ reluMaskBack` / `gapBack` / `dense (transposeᵀ) 0`); the 6
-    inverted-residual block backwards `b1B..b6B` are supplied (each `floatBridges_invresBody*BackPC`,
-    the skip blocks `b2`/`b4` wrapped by `FloatBridges.residual`). Channel/spatial schedule encoded in
-    the block maps' dims (the strided blocks halve spatial; the skip blocks preserve). -/
-noncomputable def mnv2InputGrad
-    (Ws : Kernel4 16 3 3 3) (Wh : Kernel4 128 64 1 1) (Wfc : Mat 128 10)
-    (bnBs : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
-    (bnBh : Vec (128 * 7 * 7) → Vec (128 * 7 * 7))
-    (b1B : Vec (24 * 56 * 56) → Vec (16 * 112 * 112))
-    (b2B : Vec (24 * 56 * 56) → Vec (24 * 56 * 56))
-    (b3B : Vec (32 * 28 * 28) → Vec (24 * 56 * 56))
-    (b4B : Vec (32 * 28 * 28) → Vec (32 * 28 * 28))
-    (b5B : Vec (64 * 14 * 14) → Vec (32 * 28 * 28))
-    (b6B : Vec (64 * 7 * 7) → Vec (64 * 14 * 14))
-    (m_stem : Fin (16 * 112 * 112) → Prop) [DecidablePred m_stem]
-    (m_head : Fin (128 * 7 * 7) → Prop) [DecidablePred m_head] :
-    Vec 10 → Vec (3 * 224 * 224) :=
-  (flatConvStride2XlaBack (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
-  ∘ b1B ∘ b2B ∘ b3B ∘ b4B ∘ b5B ∘ b6B
-  ∘ (convFlatBack (h := 7) (w := 7) Wh ∘ bnBh ∘ reluMaskBack m_head)
-  ∘ gapBack 128 7 7
-  ∘ dense (Mat.transpose Wfc) (0 : Vec 128)
 
 set_option maxRecDepth 100000 in
 /-- **The whole MobileNetV2 input-gradient VJP float-bridges** — the first whole-net backward to

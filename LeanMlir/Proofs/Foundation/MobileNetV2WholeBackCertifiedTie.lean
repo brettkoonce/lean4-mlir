@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.MobileNetV2BackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
-import LeanMlir.Proofs.Float.MobileNetV2BackFloatBridge
+import LeanMlir.Proofs.Foundation.MobileNetBackChains
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 
 /-! # ⭐⭐ `mnv2InputGrad` IS the certified whole-net MobileNetV2 gradient

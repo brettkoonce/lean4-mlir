@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.MobileNetV2PaperWholeBackCertifiedTie
-import LeanMlir.Proofs.Float.MobileNetV2WholeBackFloatBridgeB
+import LeanMlir.Proofs.Foundation.MobileNetBackChains
 
 /-! # ⭐⭐ `mnv2InputGradB` IS the certified whole-net MobileNetV2 gradient AT BATCH BATCH-NORM
 

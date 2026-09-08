@@ -118,6 +118,7 @@ import LeanMlir.Proofs.Float.BnBackFloatBridge
 import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Foundation.ResNetBackChains
+import LeanMlir.Proofs.Foundation.MobileNetBackChains
 import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
 import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge
@@ -2820,7 +2821,6 @@ open Proofs
 #print axioms Proofs.r34InputGradB_eq_r34B_full_vjp
 #print axioms Proofs.r34InputGradB_correct
 #print axioms Proofs.resnet34ForwardB_full_eq_slots
-#print axioms Proofs.mnv2_grad_floatBridgesToB
 #print axioms Proofs.mnv2StemBBack_eq_vjp_backward
 #print axioms Proofs.cbrBBack_eq_vjp_backward
 #print axioms Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp
@@ -4198,7 +4198,6 @@ open Proofs
 -- CertLayer.comp_fwd_apply it is 2 s for all twenty-six stages.
 -- ⚠ Blocks stay OPAQUE and there is no backward_unique step; the shape check replaces it, and it
 -- names every block by its TABLE ROW, which is what pins rows 4/5/10, 12/18 and 15/19/20 apart.
-#print axioms Proofs.mnv4_grad_floatBridgesToB
 #print axioms Proofs.mnv4StemBBack_eq_vjp_backward
 #print axioms Proofs.cbReluBBack_eq_vjp_backward
 #print axioms Proofs.mnv4B_full_has_vjp_at

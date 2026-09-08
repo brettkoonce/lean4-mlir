@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTieB
-import LeanMlir.Proofs.Float.MobileNetV4WholeBackFloatBridgeB
+import LeanMlir.Proofs.Foundation.MobileNetBackChains
 
 /-! # ⭐⭐ `mnv4InputGradB` IS the certified whole-net MobileNetV4-Conv-M gradient
 

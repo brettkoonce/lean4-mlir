@@ -117,6 +117,11 @@ float side unless the model core needs them.
   went unknown). Deleted on the spot, prints removed: −538 lines net for the step. The three
   per-example ResNet bridge files stay for now; they are roots and MobileNetV2/B0/SE's bridges
   still import `Resnet34WholeBackFloatBridge` for the float side of `gapBack`.
+* **Step 3 DONE 2026-09-08.** `Foundation/MobileNetBackChains.lean` holds `invresBodyBackPC`,
+  `invresBodyStridedBackPC`, `mnv2InputGrad`, `mnv2InputGradB`, `mnv4InputGradB`; the four MobileNet
+  ties re-pointed with no proof change. Same orphaning as step 2: `MobileNetV2WholeBackFloatBridgeB`
+  and `MobileNetV4WholeBackFloatBridgeB` were reachable only through their ties, so both are deleted
+  with their two audit prints. `MobileNetV2BackFloatBridge` (a root) keeps its float side until step 7.
 * **Bucket three, checked at step 1:** no kept non-test file uses any ℝ name from `SEBackFloatBridge`,
   `SoftmaxBackFloatBridge`, `PatchEmbedBackFloatBridge`, the five `Bn*FloatBridge` or
   `Resnet34WholeFloatBridge` — `seBack*`, `softmaxRowBack*`, `patchEmbedBack*` are consumed only by the
