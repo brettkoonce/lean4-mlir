@@ -527,14 +527,16 @@ lean_lib «Certs» where
              -- operand and its batch reduce is emitted text, the per-example carve-out unchanged
              -- (ViTFaithfulPoCGB.lean).
              `LeanMlir.Proofs.Architectures.ViTFaithfulPoCGB,
-             -- ⭐ 4c leg 3: ConvNeXt's fourteen nodes at the BATCHED traversal, plus the four bf16
-             -- weight-gradient nodes (the first fold file to state them: den is one rounding
-             -- outside the batch sum of the VJP at rounded operands). Owed BEFORE the swap: every
+             -- ⭐ 4c leg 3: ConvNeXt's fourteen nodes at the BATCHED traversal. Owed BEFORE the swap: every
              -- convnextin_* and *drop* artifact had rendered from that traversal since it existed,
              -- with a fold only at the per-example constructors. The 22 channel-LN sites take
              -- batchMap N (chanLNRows …) and batchSlice_batchMap peels the lift per example
              -- (ConvNeXtFaithfulPoCGB.lean).
              `LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCGB,
+             -- The bf16 gradient nodes, folded once for every net: nine *GradBBf16 kinds, den =
+             -- rnd outside the batch sum of the certified VJP at rounded operands (rowDense keeps
+             -- its f32-typed result and has no outer rounding). (Bf16GradNodes.lean)
+             `LeanMlir.Proofs.Foundation.Bf16GradNodes,
              -- ⭐ MobileNetV2's twelve, at the BATCHED index — this net's two renders do not
              -- overlap (the per-example one is SGD-inline only, the batched one AdamW-only), so
              -- its Adam/RMSProp artifacts have no fused op to un-fuse and the fold goes straight
@@ -756,10 +758,8 @@ lean_lib «Certs» where
              -- ⚠⚠ TWO padding phases: the stem is convStridedXlaWeightGradB (XLA-SAME, B0's op)
              -- and the fused stage is convStridedWeightGradB (symmetric, ResNet's). Identical
              -- types, identical emitted shapes, different certificates.
-             -- ⭐ bf16: MNv4 emits FIVE *GradBBf16 kinds, each with its own den (operands rounded,
-             -- result rounded ONCE outside the batch sum) -- "the bf16 twins consume the same
-             -- node" is FALSE. Three are ConvNeXt's, and depthwiseStridedWGradBBf16_den and
-             -- convStridedXlaWGradBBf16_den are proven here (MobileNetV4FaithfulPoCB.lean).
+             -- bf16: the five *GradBBf16 kinds MNv4 emits are folded in Bf16GradNodes.lean.
+             -- (MobileNetV4FaithfulPoCB.lean)
              `LeanMlir.Proofs.Foundation.MobileNetV4FaithfulPoCB,
              -- ⭐⭐ MOBILENETV4's T3 §1a TIE: every gradient node at the cotangent the render's own
              -- backward chain delivers, driven by a loss cotangent g at the logits -- all 233.

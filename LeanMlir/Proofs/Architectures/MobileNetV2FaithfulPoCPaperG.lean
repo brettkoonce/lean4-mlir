@@ -19,8 +19,9 @@ therefore at the BATCHED gradient nodes, which is the "or" branch section 4b.4 a
 these are the artifacts, the right one. ⭐ It was also a down-payment on 4c, and it paid: the op
 table below is the one the converged render kept.
 
-⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, RMSProp, and the
-data-parallel and bf16 twins all consume the same node.
+⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, RMSProp and the
+data-parallel twins all consume the same node. ⚠ The bf16 twins do NOT: they emit `*GradBBf16`,
+folded in `Foundation/Bf16GradNodes.lean`.
 
 ## ⭐ Eight of the twelve kinds were already proven, and none of them here
 

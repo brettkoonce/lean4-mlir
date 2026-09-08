@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoCB
 import LeanMlir.Proofs.Architectures.EfficientNetFaithfulPoCG
-import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCGB
 import LeanMlir.Proofs.Architectures.MobileNetV4FullBVJP
 
 /-! # T3 §1 fold for MobileNetV4-Conv-M — every parameter GRADIENT node, by block profile
@@ -68,6 +67,9 @@ arm here — its `CertLayer` remains certified and unexercised one tier down.
 * The cotangents are free variables — every conjunct is `∀ cot`, so each holds at the actual
   backward-chain cotangent without naming it. Pinning them to the emitted backward subgraph is the
   §1a tie (`MobileNetV4TiePoCB.lean`).
+* The five `*GradBBf16` kinds `mnv4in_adam64bf16` / `adamdp64bf16` emit are folded in
+  `Foundation/Bf16GradNodes.lean`, one lemma per kind for every net; a bf16 render does not consume
+  these f32 nodes.
 * ⛔ **One replica.** Under `mnv4in_adamdp64*` each node is followed by the all-reduce mean, which
   `Foundation/DataParallel.lean` handles as its own tier (4d); this statement is at the
   per-replica gradient.
@@ -329,120 +331,5 @@ theorem mnv4HeadGradsCertified {N c mid oc h w nCls : Nat} :
    fun xN cotN b x W cot idx => ResNet34PoCB.convWGradB_den xN cotN b x W cot idx,
    fun xN cotN x Wd bd cot i j => ResNet34PoCB.denseWGradB_den xN cotN x Wd bd cot i j,
    fun cotN Wd x bd cot j => ResNet34PoCB.denseBGradB_den cotN Wd x bd cot j⟩
-
--- ════════════════════════════════════════════════════════════════
--- § bf16 — the five nodes `mnv4in_adam64bf16` / `adamdp64bf16` emit
--- ════════════════════════════════════════════════════════════════
-
-/-! ⛔⛔ **"the bf16 twins consume the same node" is FALSE, and this section exists because three
-other nets' fold headers say it.** A bf16 render emits its OWN `*GradBBf16` constructor with its
-own `den`: the operands are rounded before the contraction and the result is rounded ONCE, outside
-`Σ_n`. That is a different real number from the f32 node's, so it needs its own certificate.
-
-MNv4's bf16 artifacts emit **five** weight-gradient kinds. Three are already proven generically in
-`ConvNeXtFaithfulPoCGB.lean` and are cited; two did not exist and are proven here. ⭐ Both are four
-lines on the same template as the three — the rounding is outside the sum, so `congr 1` peels it
-and the inner equality is the f32 certificate at rounded operands.
-
-⚠ **BatchNorm has no bf16 twin here or anywhere**, by design: every bf16 net in the suite keeps its
-BatchNorm in f32, so all 77 of MNv4's γ/β nodes are `mnv4BnGradsCertified`'s in both worlds. -/
-
-/-- **bf16 STRIDED-DEPTHWISE weight gradient denotes the certified `Σ_n` gradient at the rounded
-    operands, rounded once.** New here: rows 1, 3 and 11's leading depthwise on the bf16 path, and
-    no other net in the suite emits this node. -/
-theorem depthwiseStridedWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
-    (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
-    (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseStridedWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-      = rnd (∑ n : Fin N, ∑ j : Fin (c * h * w),
-          pdiv (fun v' : Vec (c * kH * kW) =>
-                  depthwiseStride2Flat (Tensor3.unflatten v') b
-                    (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j)))
-               (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
-  simp only [den]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
-  exact (depthwiseStride2_weight_grad_has_vjp b
-    (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j))).correct
-    (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx
-
-/-- **bf16 XLA-`SAME` STRIDED-CONV weight gradient denotes the certified `Σ_n` gradient at the
-    rounded operands, rounded once.** New here: MNv4's stem on the bf16 path. ⚠ `flatConvStride2Xla`,
-    not `flatConvStride2` — the same two-phase distinction the f32 stem carries, and equally
-    invisible to every shape check. -/
-theorem convStridedXlaWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
-    (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
-    (cot : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStridedXlaWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-      = rnd (∑ n : Fin N, ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                  flatConvStride2Xla (Kernel4.unflatten v') b
-                    (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
-               (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
-  exact (flatConvStride2Xla_weight_grad_has_vjp b
-    (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j))).correct
-    (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
-
-/-- ⭐⭐ **All five bf16 weight-gradient kinds MNv4's bf16 artifacts emit, certified together.**
-    In render order: the stem (XLA-`SAME` strided conv), the fused stage's 3×3/s2 (symmetric
-    strided conv), every 1×1, every stride-1 depthwise, and rows 1/3/11's strided depthwise.
-
-    ⭐ Three of the five are `CnxPoCGB`'s, generic and reused verbatim; the last two are this
-    file's. ⚠ Every one rounds ONCE, outside `Σ_n` — the operands go in rounded and the batch sum
-    is contracted in the accumulate type. -/
-theorem mnv4Bf16GradsCertified {N ic oc c h w kH kW : Nat} (rnd : ℝ → ℝ) :
-    (∀ (xN cotN : String) (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-       (W : Kernel4 oc ic kH kW) (cot : Vec (N * (oc * h * w)))
-       (idx : Fin (oc * ic * kH * kW)),
-        den (SHlo.convStridedXlaWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-          = rnd (∑ n : Fin N, ∑ j : Fin (oc * h * w),
-              pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                      flatConvStride2Xla (Kernel4.unflatten v') b
-                        (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
-                   (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j))) ∧
-    (∀ (xN cotN : String) (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-       (W : Kernel4 oc ic kH kW) (cot : Vec (N * (oc * h * w)))
-       (idx : Fin (oc * ic * kH * kW)),
-        den (SHlo.convStridedWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-          = rnd (∑ n : Fin N, ∑ j : Fin (oc * h * w),
-              pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                      flatConvStride2 (Kernel4.unflatten v') b
-                        (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
-                   (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j))) ∧
-    (∀ (xN cotN : String) (b : Vec oc) (x : Vec (N * (ic * h * w)))
-       (W : Kernel4 oc ic kH kW) (cot : Vec (N * (oc * h * w)))
-       (idx : Fin (oc * ic * kH * kW)),
-        den (SHlo.convWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-          = rnd (∑ n : Fin N, ∑ j : Fin (oc * h * w),
-              pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                      Tensor3.flatten (conv2d (Kernel4.unflatten v') b
-                        (Tensor3.unflatten (fun j => rnd (batchSlice N (ic * h * w) x n j)))))
-                   (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j))) ∧
-    (∀ (xN cotN : String) (b : Vec c) (x : Vec (N * (c * h * w)))
-       (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)),
-        den (SHlo.depthwiseWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-          = rnd (∑ n : Fin N, ∑ j : Fin (c * h * w),
-              pdiv (fun v' : Vec (c * kH * kW) =>
-                      depthwiseFlat (Tensor3.unflatten v') b
-                        (fun j => rnd (batchSlice N (c * h * w) x n j)))
-                   (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j))) ∧
-    (∀ (xN cotN : String) (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w))))
-       (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)),
-        den (SHlo.depthwiseStridedWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-          = rnd (∑ n : Fin N, ∑ j : Fin (c * h * w),
-              pdiv (fun v' : Vec (c * kH * kW) =>
-                      depthwiseStride2Flat (Tensor3.unflatten v') b
-                        (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j)))
-                   (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j))) :=
-  ⟨fun xN cotN b x W cot idx => convStridedXlaWGradBBf16_den rnd xN cotN b x W cot idx,
-   fun xN cotN b x W cot idx => CnxPoCGB.convStridedWGradBBf16_den rnd xN cotN b x W cot idx,
-   fun xN cotN b x W cot idx => CnxPoCGB.convWGradBBf16_den rnd xN cotN b x W cot idx,
-   fun xN cotN b x W cot idx => CnxPoCGB.depthwiseWGradBBf16_den rnd xN cotN b x W cot idx,
-   fun xN cotN b x W cot idx => depthwiseStridedWGradBBf16_den rnd xN cotN b x W cot idx⟩
 
 end Proofs.Mnv4PoCB

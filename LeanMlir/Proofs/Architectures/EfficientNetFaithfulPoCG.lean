@@ -8,7 +8,8 @@ cotangent)`. Every OTHER train step this net renders — `efficientnet_adam_trai
 `_rms_`/`_emarms_`/`_do_`/`_drop_`/`_dp_`/bf16 families, and the ImageNet
 `efficientnetin_emarmsdp64dropdo_train_step` whose accuracy the book quotes — takes
 `EfficientNetRender`'s `adam := true` branch, which emits the RAW gradient (`*GradB`) and hands it to
-an optimizer tail. This file is the fold at those nodes.
+an optimizer tail. This file is the fold at those nodes. ⚠ The bf16 family's conv and depthwise
+weight nodes are `*GradBBf16`, their own kind, folded in `Foundation/Bf16GradNodes.lean`.
 
 ⭐ **One lemma per op kind certifies every optimizer variant at once**, because RMSProp, AdamW,
 plain SGD, EMA and the data-parallel peers all consume the same gradient node. The fusion itself is

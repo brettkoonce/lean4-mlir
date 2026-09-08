@@ -122,6 +122,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoCG
 import LeanMlir.Proofs.Architectures.ViTFaithfulPoCGB
 import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoCGB
+import LeanMlir.Proofs.Foundation.Bf16GradNodes
 import LeanMlir.Proofs.Architectures.MobileNetV2FaithfulPoCPaperG
 import LeanMlir.Proofs.Architectures.MobileNetV2FullB
 import LeanMlir.Proofs.Architectures.MobileNetV2FullBVJP
@@ -4601,9 +4602,6 @@ open Proofs
 -- exactly as mnv4PreDWSlot does, because a conjunct for a k = 0 slot would be the `den` of a node
 -- the artifact does not contain. ⚠⚠ Two padding phases in one net -- the stem is XLA-SAME and the
 -- fused stage symmetric -- so the two strided conv certificates are NOT interchangeable.
--- ⭐ The bf16 half states all FIVE *GradBBf16 kinds MNv4 emits, with their own `den`: operands
--- rounded going in, result rounded ONCE outside the batch sum. "The bf16 twins consume the same
--- node" is false, and three other nets' fold headers say it.
 #print axioms Mnv4PoCB.mnv4BnGradsCertified
 #print axioms Mnv4PoCB.mnv4StemGradsCertified
 #print axioms Mnv4PoCB.mnv4FusedGradsCertified
@@ -4612,9 +4610,6 @@ open Proofs
 #print axioms Mnv4PoCB.mnv4FfnGradsCertified
 #print axioms Mnv4PoCB.mnv4PreStridedGradsCertified
 #print axioms Mnv4PoCB.mnv4HeadGradsCertified
-#print axioms Mnv4PoCB.depthwiseStridedWGradBBf16_den
-#print axioms Mnv4PoCB.convStridedXlaWGradBBf16_den
-#print axioms Mnv4PoCB.mnv4Bf16GradsCertified
 
 -- MNv4's T3 §1a tie -- the §1 fold with the cotangent freedom removed. ⭐ The UIB bottleneck is
 -- LINEAR, so dyOut reaches the project BN's gamma/beta unmasked; ResNet's residual carries a relu
@@ -5538,7 +5533,8 @@ open Proofs
 -- theta - lr*dLoss/dtheta op only appears in renders whose optimizer is SGD-inline, which
 -- EfficientNet's is and r34's batched one is not, so no existing den=certified lemma applies.
 -- ⭐ That makes the tier better, not worse: a statement about the GRADIENT covers every optimizer
--- variant at once (sgd/mom/momdp64/adam/adamdp128 and the bf16 twins all consume the same node).
+-- variant at once (sgd/mom/momdp64/adam/adamdp128 all consume the same node; the bf16 twins
+-- emit *GradBBf16, their own kind, folded in Bf16GradNodes.lean).
 -- ⭐ No new mathematics. StableHLO's *SgdB_eq_grad family says each fused op IS `theta - lr *`
 -- applied to the un-fused one, all by rfl, and its own docstring says it exists to unblock exactly
 -- this. These eight are EfficientNetFaithfulPoC's proofs with the `congr 1` / `congrArg (lr * .)`
@@ -5564,7 +5560,7 @@ open Proofs
 -- <net>_train_step.mlir emits; every other train step in verified_mlir/ — the _adam_, _mom_,
 -- _rms_, _lamb*, _ema* families and every ImageNet one, which are the artifacts the book names
 -- and the accuracies come from — emits the RAW gradient and hands it to an optimizer tail.
--- ⭐ One lemma per op kind certifies every tail at once, because they all consume the same node,
+-- ⭐ One lemma per op kind certifies every f32 tail at once, because they all consume the same node,
 -- and the fusion is rfl (the *Sgd_eq_grad / *SgdB_eq_grad families), so there is no new
 -- mathematics anywhere in the four files: each proof is the fused one minus the wrapper peeling.
 -- ⭐ Op kinds are shared across nets far more than the per-net file names suggest: five of B0's
@@ -5650,14 +5646,10 @@ open Proofs
 
 -- 4c leg 3 ConvNeXt-T — the fourteen gradient nodes at the BATCHED traversal (convNextBackAllB),
 -- which every ConvNeXt artifact but the SGD-inline convnext_train_step renders from since
--- 2026-09-07, plus the four bf16 weight-gradient nodes. Owed BEFORE the swap: every convnextin_*
+-- 2026-09-07. Owed BEFORE the swap: every convnextin_*
 -- train step, every *drop* variant and the S/B artifacts had rendered from that traversal since
 -- they existed, so the artifact behind the quoted ImageNet accuracy had a fold only at the
 -- per-example constructors no committed byte of it is pretty of.
--- ⭐ The bf16 lemmas are the first in any fold file: den is ONE rounding outside the batch sum of
--- the certified VJP at rounded operands (the emitted convolution contracts the batch inside one
--- op and stores its bf16 result once). The r34/B0/mnv2 fold headers' "bf16 twins consume the same
--- node" is loose the same way — those renders emit the *Bf16 constructors too.
 -- ⚠ The 22 channel-LN sites take batchMap N (chanLNRows c h w) of the saved input and cotangent;
 -- batchSlice_batchMap peels the lift so ConvNeXtChannelLN's permutation argument applies per slice.
 #print axioms Proofs.CnxPoCGB.layerScaleChGammaGradB_den
@@ -5674,10 +5666,19 @@ open Proofs
 #print axioms Proofs.CnxPoCGB.headLnBetaGradB_den
 #print axioms Proofs.CnxPoCGB.headWGradB_den
 #print axioms Proofs.CnxPoCGB.headBGradB_den
-#print axioms Proofs.CnxPoCGB.convWGradBBf16_den
-#print axioms Proofs.CnxPoCGB.depthwiseWGradBBf16_den
-#print axioms Proofs.CnxPoCGB.convStridedWGradBBf16_den
-#print axioms Proofs.CnxPoCGB.psWGradBBf16_den
+-- The bf16 gradient nodes, folded ONCE for every net (Bf16GradNodes.lean): a bf16 render emits
+-- its own *GradBBf16 constructor, whose den rounds the operands and the result once outside the
+-- batch sum -- a different real number from the f32 node's, and its own op kind. Nine kinds;
+-- rowDense keeps its f32-typed result and alone has no outer rounding.
+#print axioms Proofs.Bf16PoC.convWGradBBf16_den
+#print axioms Proofs.Bf16PoC.convStridedWGradBBf16_den
+#print axioms Proofs.Bf16PoC.convStridedXlaWGradBBf16_den
+#print axioms Proofs.Bf16PoC.convStride4WGradBBf16_den
+#print axioms Proofs.Bf16PoC.depthwiseWGradBBf16_den
+#print axioms Proofs.Bf16PoC.depthwiseStridedWGradBBf16_den
+#print axioms Proofs.Bf16PoC.depthwiseStridedXlaWGradBBf16_den
+#print axioms Proofs.Bf16PoC.rowDenseWGradBBf16_den
+#print axioms Proofs.Bf16PoC.patchEmbedWGradBBf16_den
 
 -- 4b.4 MobileNetV2 at 17 blocks — mobilenetv2_adam_train_step and every ImageNet artifact.
 -- ⛔ This net's two renders do NOT overlap the way the other four's do: MobileNetV2Render is

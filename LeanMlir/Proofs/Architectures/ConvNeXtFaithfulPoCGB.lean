@@ -32,7 +32,7 @@ an AST without a fold.
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = h·w` (22 spatial LN sites) | `chanLnGammaGradB_den` / `chanLnBetaGradB_den` | `CnxPoCG.chanLnGammaGrad_den` / `chanLnBetaGrad_den` |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = 1` (the head LN, after GAP) | `headLnGammaGradB_den` / `headLnBetaGradB_den` | `ViTPoCGB`'s two-level LN lemmas |
 | `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` | `ViTPoCGB.headWGradB_den` / `headBGradB_den` |
-| `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` | the four `*Bf16_den` | none — see below |
+| `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` (the bf16 artifacts) | `Bf16PoC.convWGradBBf16_den` and its siblings, `Foundation/Bf16GradNodes.lean` | none — a bf16 node is its own op kind |
 
 ⭐ **No new mathematics.** Every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n` — `ResNet34FaithfulPoCB.denseWGradB_den`'s shape — because
@@ -42,15 +42,10 @@ input and of the cotangent (the `[h·w, c]` transposed views, lifted per example
 `batchSlice_batchMap` peels the lift so `ConvNeXtChannelLN`'s permutation argument applies at each
 slice.
 
-⭐ **The four bf16 weight-gradient nodes are stated here, and this is the first fold file to do
-so.** The bf16 artifacts (`convnextin_adamwxclipdropbf16`, the S/B twins) emit `*GradBBf16`
-constructors, not the f32 nodes, and their `den` is `rnd ∘ Σ_n ∘ (VJP at rnd-ed operands)` — one
-rounding outside the sum because the emitted convolution contracts the batch inside one op and
-stores its bf16 result once (`StableHLO.lean`'s own comment). The `*Bf16_den` lemmas say exactly
-that: the node denotes the certified gradient at the rounded operands, rounded. ⚠ The r34, B0 and
-MobileNetV2 fold files' headers say their bf16 twins "consume the same node"; those renders also
-emit `*GradBBf16` constructors, so that sentence is loose there in the same way and their folds
-should gain the same four-line lemmas.
+⭐ **The bf16 artifacts (`convnextin_adamwxclipdropbf16`, the S/B twins) emit `*GradBBf16`
+constructors, not these nodes**: their `den` rounds the operands and the result once, outside the
+batch sum. Those are their own op kinds, folded once for every net in
+`Foundation/Bf16GradNodes.lean` (first stated in this file, 2026-09-07).
 
 ⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, the `wx`/`clip`
 variants, the EMA shadow, drop-path and the data-parallel twins all consume the same `*GradB`
@@ -313,88 +308,5 @@ theorem headBGradB_den {N D nC : Nat} (cotN : String)
     batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN cot))) n i
       = ∑ j : Fin nC, pdiv (fun b' : Vec nC => dense Wc b' a) bc i j * batchSlice N nC cot n j :=
   Proofs.ViTPoCGB.headBGradB_den cotN Wc a bc cot n i
-
--- ════════════════════════════════════════════════════════════════
--- § The four bf16 weight-gradient nodes
---   `den` is `rnd (Σ_n VJP(rnd x_n, rnd cot_n))`: ONE rounding outside the sum, because the
---   emitted convolution contracts the batch inside one op and stores its bf16 result once.
--- ════════════════════════════════════════════════════════════════
-
-/-- **bf16 conv weight GRADIENT denotes the certified `Σ_n` weight gradient at the ROUNDED
-    operands, rounded once.** The 36 block 1×1s in the `bf16` artifacts. -/
-theorem convWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
-    (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW)
-    (cot : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-      = rnd (∑ n : Fin N, ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                  Tensor3.flatten (conv2d (Kernel4.unflatten v') b
-                    (Tensor3.unflatten (fun j => rnd (batchSlice N (ic * h * w) x n j)))))
-               (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
-  exact conv_weight_grad_bridge b
-    (Tensor3.unflatten (fun j => rnd (batchSlice N (ic * h * w) x n j)))
-    (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
-
-/-- **bf16 depthwise weight GRADIENT denotes the certified `Σ_n` weight gradient at the rounded
-    operands, rounded once.** The 18 7×7 depthwises. -/
-theorem depthwiseWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
-    (b : Vec c) (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW)
-    (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-      = rnd (∑ n : Fin N, ∑ j : Fin (c * h * w),
-          pdiv (fun v' : Vec (c * kH * kW) =>
-                  Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
-                    (Tensor3.unflatten (fun j => rnd (batchSlice N (c * h * w) x n j)))))
-               (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
-  simp only [den]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
-  rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b
-      (Tensor3.unflatten (fun j => rnd (batchSlice N (c * h * w) x n j))))).correct
-      (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx]
-  simp only [hasVJP3_to_hasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
-
-/-- **bf16 strided conv weight GRADIENT denotes the certified `Σ_n` weight gradient at the
-    rounded operands, rounded once.** The three 2×2/s2 downsamples. -/
-theorem convStridedWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
-    (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
-    (cot : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStridedWeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-      = rnd (∑ n : Fin N, ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                  flatConvStride2 (Kernel4.unflatten v') b
-                    (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
-               (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
-  exact (flatConvStride2_weight_grad_has_vjp b
-    (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j))).correct
-    (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
-
-/-- **bf16 patchify-stem weight GRADIENT denotes the certified `Σ_n` weight gradient at the
-    rounded operands, rounded once.** ConvNeXt's second and last bf16-only op. -/
-theorem psWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
-    (b : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (W : Kernel4 oc ic kH kW)
-    (cot : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStride4WeightGradBBf16 rnd xN b x W (.operand cotN cot)) idx
-      = rnd (∑ n : Fin N, ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                  flatConvStride4 (Kernel4.unflatten v') b
-                    (fun j => rnd (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n j)))
-               (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
-  exact (flatConvStride4_weight_grad_has_vjp b
-    (fun j => rnd (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n j))).correct
-    (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
 
 end Proofs.CnxPoCGB

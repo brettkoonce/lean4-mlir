@@ -54,10 +54,11 @@ variants, the EMA shadow and the 4× accumulation all consume the same `*GradB` 
   reduce"*) and it is the per-example `biasGrad` carve-out carried over unchanged, not a new one.
   So `headBGradB_den` is stated PER EXAMPLE, at `batchSlice n`, which is the whole of what the node
   denotes.
-* Every lemma is `∀ cot`. Pinning each to the emitted backward subgraph is the §1a tie; ViT's
-  capstone (`ViTTiePoC.lean`, 200 params) is still at the per-example SGD-inline
-  `vit_train_step.mlir`, and re-pointing it at these nodes with `SmoothedLossCot` is 4b's last item
-  — which this file is the prerequisite for.
+* Every lemma is `∀ cot`. Pinning each to the emitted backward subgraph is the §1a tie:
+  `ViTTiePoCGB.vit_net_tiedGB` at these nodes (4b.7); the per-example `ViTTiePoC.lean` stays at
+  the SGD-inline `vit_train_step.mlir`.
+* The `*bf16` artifacts emit `rowDenseWeightGradBBf16` / `patchEmbedWeightGradBBf16`, their own
+  kinds; `Foundation/Bf16GradNodes.lean` folds them (the row-dense one keeps its f32 result).
 * `vitin_adamdp128x4*` is four replicas: the all-reduce is emitted text outside the AST, so these
   lemmas are about the per-replica gradient node (4d).
 -/
