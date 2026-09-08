@@ -1,0 +1,5 @@
+[sup] 2026-09-04 17:51:20 START ConvNeXt-T ImageNet 300ep · GPUs 0,1,2,3 · bf16 · batch 256 (4x64) · SPE 5004 · rest when any GPU >= 80C
+[sup] 17:51:20 attempt 1: fresh start (no checkpoint)
+[sup] 17:51:20 launched PID=352689
+[sup]   last: [Epoch 300] lr=0.0 loss(train_avg)=2.8517 val_top1=40765/50000 (0.8153) val_top5=0.9551 val_loss=0.843  [898.3s train, 17.7s val]
+[sup] 22:20:38 ✅ TRAINING COMPLETE (300 epochs). final=/home/skoonce/convnext_t300_3060/convnext_tiny_imagenet.bin
