@@ -66,6 +66,14 @@ the only gate that reads it is the three-axiom run. A few historical paragraphs 
 files deleted on 2026-09-08 (`EnetFloatBridge`, `BnEvalRuntimeFloatBridge`, `SEBackFloatBridge`,
 `ViTAttentionFloatBridge`, `FloatBudgetEnvMBConv`); they go with the narrative.
 
+**DONE 2026-09-08.** 4997 → 2426 lines: the 1760 prints and 191 imports byte-identical and in
+the same order; each of the 362 comment blocks is one header line (34 rule lines, 17 banner
+paragraphs and 312 narratives cut; 33 were one line already), plus a three-line pointer under
+`open Proofs`. The narrative is `planning/archive/audit_axioms_log.md` (4641 lines): the same 362
+headers in file order, each block's prose verbatim, then the theorems it heads. Two identical
+"Increment 1 keystone" labels are now told apart by subject. Gates: 1760/1760 verdicts on the three
+axioms, CI's print count, audit coverage, docstring gate.
+
 ## 3. The float prose left in the kept tier
 
 21 files under `Foundation/`, `Architectures/`, `Codegen/`, `Certificates/`, `Training/` still
