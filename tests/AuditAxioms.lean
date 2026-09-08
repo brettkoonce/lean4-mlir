@@ -120,6 +120,7 @@ import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Foundation.ResNetBackChains
 import LeanMlir.Proofs.Foundation.MobileNetBackChains
 import LeanMlir.Proofs.Foundation.EfficientNetBackChains
+import LeanMlir.Proofs.Foundation.ConvNeXtBackChains
 import LeanMlir.Proofs.Float.LinBackFloatBridge
 import LeanMlir.Proofs.Float.CnnBackFloatBridge
 import LeanMlir.Proofs.Float.MaxPool3s2BackFloatBridge

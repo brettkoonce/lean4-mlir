@@ -131,6 +131,11 @@ float side unless the model core needs them.
   backward as a supplied slot pinned to `seBlockFull_has_vjp`, and `EfficientNetBackB0` denotes the
   emitted `broadcastBack` straight from `broadcastFlat_has_vjp`, so nothing kept names them. Their
   audit prints (`broadcastBackFlat_eq_vjp` included) go with the file at step 7.
+* **Step 5 DONE 2026-09-08.** `Foundation/ConvNeXtBackChains.lean` holds `cnxBlockBodyBack`,
+  `cnxDownBack`, `convnextInputGrad` (BackwardMaps names only — the LN slots are supplied, and the ties
+  fill them with `chanLNTensor3Back` from `ChannelLNBack.lean`, which the block tie now imports
+  directly). Both ConvNeXt ties re-pointed with no proof change; `ConvNeXtBackFloatBridge` is a root and
+  keeps its float side (both the scalar-LN and the channel-LN folds) until step 7.
 * **Bucket three, checked at step 1:** no kept non-test file uses any ℝ name from `SEBackFloatBridge`,
   `SoftmaxBackFloatBridge`, `PatchEmbedBackFloatBridge`, the five `Bn*FloatBridge` or
   `Resnet34WholeFloatBridge` — `seBack*`, `softmaxRowBack*`, `patchEmbedBack*` are consumed only by the

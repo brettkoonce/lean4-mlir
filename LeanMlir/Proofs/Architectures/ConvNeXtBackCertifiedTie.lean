@@ -1,12 +1,13 @@
-import LeanMlir.Proofs.Float.ConvNeXtBackFloatBridge
+import LeanMlir.Proofs.Foundation.ConvNeXtBackChains
+import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the ConvNeXt block-body backward float bridge targets the CERTIFIED VJP
 
-The A3 backward float bridge `cnxBlockBodyBack` (`ConvNeXtBackFloatBridge.lean`) proves
-**deployed-float ≈ a hand-assembled reverse-mode transcription** of the ConvNeXt block body. This file
+`cnxBlockBodyBack` (`ConvNeXtBackChains.lean`) is a hand-assembled reverse-mode transcription of the
+ConvNeXt block body (until 2026-09-08 it lived in a float bridge that also budgeted it). This file
 closes §B for that body: the transcription IS the certified input-gradient VJP
 `convNextBlockBody_has_vjp` (`ConvNeXt.lean`), in the SAME non-batched vocabulary — so the float
 bridge's closeness is now closeness to **the certified gradient**.
@@ -71,8 +72,8 @@ theorem cnxBlockBodyBack_eq_convNextBlockBody_vjp {c cExp h w kHd kWd : Nat}
   rfl
 
 /-- **The §B ConvNeXt block tie (residual-wrapped).** The full block is `residual (body)`, so the
-    float block backward `residual (cnxBlockBodyBack …)` (the `dy ↦ bodyBack(dy) + dy` additive skip,
-    as `floatBridges_cnxBlockBack` wraps it) equals `(convNextBlock_has_vjp_at …).backward`. Immediate
+    block backward `residual (cnxBlockBodyBack …)` (the `dy ↦ bodyBack(dy) + dy` additive skip)
+    equals `(convNextBlock_has_vjp_at …).backward`. Immediate
     from the body tie + the residual fan-in (`residual_has_vjp = biPath_has_vjp body id`, the skip's
     backward is `dy`): rewrite the body tie, then `rfl`. 3-axiom-clean. -/
 theorem cnxBlockBack_eq_convNextBlock_vjp {c cExp h w kHd kWd : Nat}

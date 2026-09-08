@@ -726,6 +726,9 @@ lean_lib «Certs» where
              -- efficientnetInputGradB_full) — the ℝ maps the three B0 certified ties are stated
              -- about (no float content).
              `LeanMlir.Proofs.Foundation.EfficientNetBackChains,
+             -- The ConvNeXt-T backward chains (cnxBlockBodyBack, cnxDownBack, convnextInputGrad) —
+             -- the ℝ maps the two ConvNeXt certified ties are stated about (no float content).
+             `LeanMlir.Proofs.Foundation.ConvNeXtBackChains,
              -- A3 backward fold: the linear input-VJP (dx = Wᵀ·dy = bias-free dense over the
              -- transpose, reuses floatBridges_dense) + the exact ReLU-back selectPos mask
              -- (floatBridges_reluMaskBack) compose via FloatBridges.comp into a whole-net

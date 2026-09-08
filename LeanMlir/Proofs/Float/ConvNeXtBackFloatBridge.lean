@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.ConvNeXtBackChains
 import LeanMlir.Proofs.Float.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.Float.SEBackFloatBridge
 import LeanMlir.Proofs.Float.ChannelLNFloatBridge
@@ -24,6 +25,10 @@ The stem (`flatConvStride4Back` — the 4×4/s4 patchify backward, `StridedConvB
 dense endpoints are concrete; the 4 stages, 3 downsamples and the two LN backwards are supplied as
 `FloatBridges` facts — exactly as `r34_grad_floatBridges` supplies its 16 blocks — discharged by the
 per-block bridges here (and `floatBridges_bnBack` for the LN-backs).
+
+⚠ Since 2026-09-08 the ℝ chains `cnxBlockBodyBack`, `cnxDownBack` and `convnextInputGrad` are defined
+in `Foundation/ConvNeXtBackChains.lean`, beside the ties; this file is their float side only
+(`planning/float_second_pass.md`).
 -/
 
 namespace Proofs
@@ -31,26 +36,6 @@ namespace Proofs
 -- ════════════════════════════════════════════════════════════════
 -- § The ConvNeXt block body backward (where §1e depthwiseBack lands)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The ConvNeXt block body input-gradient VJP at a smooth point — the **reverse of
-    `convNextBlockBody = layerScale ∘ project ∘ GELU ∘ expand ∘ LN ∘ depthwise`**:
-
-      `depthwiseFlatBack Wdw ∘ lnB ∘ convFlatBack Wex ∘ geluB ∘ convFlatBack Wpr ∘ lsB`
-
-    `lsB = diagBack γls` (the per-channel layer-scale backward); `convFlatBack Wpr` the project back;
-    `geluB = diagBack (gelu'(saved))`; `convFlatBack Wex` the expand back; `lnB` the LayerNorm back
-    (= BN-back); `depthwiseFlatBack Wdw` the §1e depthwise input-VJP. -/
-noncomputable def cnxBlockBodyBack {c cExp h w kHd kWd : Nat}
-    (Wdw : DepthwiseKernel c kHd kWd) (Wex : Kernel4 cExp c 1 1) (Wpr : Kernel4 c cExp 1 1)
-    (lnB lsB : Vec (c * h * w) → Vec (c * h * w))
-    (geluB : Vec (cExp * h * w) → Vec (cExp * h * w)) :
-    Vec (c * h * w) → Vec (c * h * w) :=
-  depthwiseFlatBack (h := h) (w := w) Wdw
-  ∘ lnB
-  ∘ convFlatBack (h := h) (w := w) Wex
-  ∘ geluB
-  ∘ convFlatBack (h := h) (w := w) Wpr
-  ∘ lsB
 
 /-- **The ConvNeXt block body backward float-bridges.** One `.comp` chain: the layer-scale `lsB`, the
     project `convFlatBack Wpr`, the GELU `geluB`, the expand `convFlatBack Wex`, the LayerNorm `lnB`,
@@ -91,13 +76,6 @@ theorem floatBridges_cnxBlockBack {c cExp h w kHd kWd : Nat} (M : FloatModel)
 -- ════════════════════════════════════════════════════════════════
 -- § The stage-boundary downsample backward
 -- ════════════════════════════════════════════════════════════════
-
-/-- The ConvNeXt downsample input-gradient VJP — the **reverse of `cnxDownChW = flatConvStride2 W ∘ LN`**:
-    `lnB ∘ flatConvStride2Back W` (run the strided-conv backward, then the LayerNorm back). -/
-noncomputable def cnxDownBack {cin cout h w kH kW : Nat} (W : Kernel4 cout cin kH kW)
-    (lnB : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))) :
-    Vec (cout * h * w) → Vec (cin * (2 * h) * (2 * w)) :=
-  lnB ∘ flatConvStride2Back (h := h) (w := w) W
 
 /-- **The ConvNeXt downsample backward float-bridges** — the §A3 strided-conv backward then the
     supplied LayerNorm back. -/
@@ -190,31 +168,6 @@ noncomputable def floatBridgesTo_cnxDownBack {cin cout h w kH kW : Nat} (M : Flo
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net input-gradient VJP (the [3,3,9,3] fold)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The whole ConvNeXt-T input-gradient VJP at a smooth point — the **exact reverse of
-    `convNextForwardTCh`**: `dense ∘ LN ∘ GAP ∘ stage₄ ∘ down₃ ∘ stage₃ ∘ down₂ ∘ stage₂ ∘ down₁ ∘
-    stage₁ ∘ LN ∘ stem` reversed. The stem (`flatConvStride4Back sW ∘ lnBstem`, the 4×4/s4 patchify
-    backward), GAP and dense endpoints are concrete; the head-LN, stem-LN, 4 stage backwards and 3
-    downsample backwards are supplied as `FloatBridges` (the stages discharged by folding
-    `floatBridges_cnxBlockBack`, the downsamples by `floatBridges_cnxDownBack`, the LN-backs by
-    `floatBridges_bnBack`). The `[3,3,9,3]` structure is in the stage maps' depths; the channel/spatial
-    schedule (96→192→384→768, 56→28→14→7) in their dims. -/
-noncomputable def convnextInputGrad {kH kW : Nat} (Wd : Mat 768 10) (sW : Kernel4 96 3 kH kW)
-    (lnBstem : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
-    (lnBhead : Vec 768 → Vec 768)
-    (s1B : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
-    (d1B : Vec (192 * 28 * 28) → Vec (96 * 56 * 56))
-    (s2B : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
-    (d2B : Vec (384 * 14 * 14) → Vec (192 * 28 * 28))
-    (s3B : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
-    (d3B : Vec (768 * 7 * 7) → Vec (384 * 14 * 14))
-    (s4B : Vec (768 * 7 * 7) → Vec (768 * 7 * 7)) :
-    Vec 10 → Vec (3 * 224 * 224) :=
-  (flatConvStride4Back (h := 56) (w := 56) sW ∘ lnBstem)
-  ∘ s1B ∘ d1B ∘ s2B ∘ d2B ∘ s3B ∘ d3B ∘ s4B
-  ∘ gapBack 768 7 7
-  ∘ lnBhead
-  ∘ dense (Mat.transpose Wd) (0 : Vec 768)
 
 set_option maxRecDepth 100000 in
 /-- **The whole ConvNeXt-T input-gradient VJP float-bridges** — the per-example ConvNeXt backward. One
