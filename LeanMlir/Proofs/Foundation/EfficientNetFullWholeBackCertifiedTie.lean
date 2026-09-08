@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Architectures.EfficientNetFullB0
 import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Architectures.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Foundation.EfficientNetWholeBackCertifiedTie
-import LeanMlir.Proofs.Float.EfficientNetFullWholeBackFloatBridge
+import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 
 /-! # ⭐⭐ `efficientnetInputGradB_full` IS the certified whole-net PAPER EfficientNet-B0 gradient
 

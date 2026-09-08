@@ -122,6 +122,15 @@ float side unless the model core needs them.
   ties re-pointed with no proof change. Same orphaning as step 2: `MobileNetV2WholeBackFloatBridgeB`
   and `MobileNetV4WholeBackFloatBridgeB` were reachable only through their ties, so both are deleted
   with their two audit prints. `MobileNetV2BackFloatBridge` (a root) keeps its float side until step 7.
+* **Step 4 DONE 2026-09-08.** `Foundation/EfficientNetBackChains.lean` holds `mbconvBodyBack`,
+  `efficientnetInputGradB`, `efficientnetInputGradB_full`; the three B0 ties re-pointed with no proof
+  change. All four B0/SE bridge files are Certs roots, so none was orphaned; they keep their float side
+  until step 7. Left float-side on purpose: `mbNoExpBodyBack` / `mbStridedBodyBack` (the b1/b2
+  dischargers of the float capstone, tied to nothing) and every SE map in `SEBackFloatBridge`
+  (`broadcastBackFlat` + its `rfl` tie, `seGateInputGrad`, `seInputGrad`) — the B0 ties take the SE
+  backward as a supplied slot pinned to `seBlockFull_has_vjp`, and `EfficientNetBackB0` denotes the
+  emitted `broadcastBack` straight from `broadcastFlat_has_vjp`, so nothing kept names them. Their
+  audit prints (`broadcastBackFlat_eq_vjp` included) go with the file at step 7.
 * **Bucket three, checked at step 1:** no kept non-test file uses any ℝ name from `SEBackFloatBridge`,
   `SoftmaxBackFloatBridge`, `PatchEmbedBackFloatBridge`, the five `Bn*FloatBridge` or
   `Resnet34WholeFloatBridge` — `seBack*`, `softmaxRowBack*`, `patchEmbedBack*` are consumed only by the

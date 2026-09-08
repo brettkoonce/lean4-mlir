@@ -19,6 +19,9 @@ the strided-stem conv (`flatConvStride2XlaBack`, the odd-phase backward of the X
 stem the render ships), the head conv (`convFlatBack`), the GAP scatter
 (`gapBack`), and the classifier (`linBack`). Pure `.comp` assembly — A3 = closeness at a smooth point.
 3-axiom-clean.
+
+⚠ Since 2026-09-08 the ℝ chain `efficientnetInputGradB` is defined in
+`Foundation/EfficientNetBackChains.lean`; this file is its float side only.
 -/
 
 namespace Proofs
@@ -28,26 +31,6 @@ open FloatModel
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net EfficientNet input-gradient backward skeleton
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The batched whole-net EfficientNet input-gradient backward** — the reverse of
-    `efficientnetForwardB = head ∘ mbResid ∘ mbStrided ∘ mbNoExp ∘ stem` (the representative 3-block
-    batched B0): classifier-back → GAP-back → head-conv-bn-swish-back → the three MBConv block backs →
-    stem-conv-bn-swish-back. The block backs `b1B`/`b2B`/`b3B` and the stem/head BN+swish backs are
-    supplied (the `mnv2InputGrad` discipline); the conv/GAP/dense leaves are concrete, `batchMap`-lifted
-    over the `N` examples. -/
-noncomputable def efficientnetInputGradB (N : Nat)
-    (Ws : Kernel4 32 3 3 3) (Wh : Kernel4 1280 24 1 1) (Wfc : Mat 1280 10)
-    (bnBs swBs : Vec (N * (32 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
-    (bnBh swBh : Vec (N * (1280 * 56 * 56)) → Vec (N * (1280 * 56 * 56)))
-    (b1B : Vec (N * (16 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
-    (b2B : Vec (N * (24 * 56 * 56)) → Vec (N * (16 * 112 * 112)))
-    (b3B : Vec (N * (24 * 56 * 56)) → Vec (N * (24 * 56 * 56))) :
-    Vec (N * 10) → Vec (N * (3 * 224 * 224)) :=
-  (StableHLO.batchMap N (flatConvStride2XlaBack (h := 112) (w := 112) Ws) ∘ bnBs ∘ swBs)
-  ∘ b1B ∘ b2B ∘ b3B
-  ∘ (StableHLO.batchMap N (convFlatBack (h := 56) (w := 56) Wh) ∘ bnBh ∘ swBh)
-  ∘ StableHLO.batchMap N (gapBack 1280 56 56)
-  ∘ StableHLO.batchMap N (Proofs.dense (Mat.transpose Wfc) (0 : Vec 1280))
 
 /-- **THE WHOLE-NET EfficientNet BACKWARD FLOAT-BRIDGES** — the final whole-net `FloatBridges` capstone.
     One `.comp` thread over the concrete classifier/GAP/head-conv/stem-conv endpoints (`batchMap`-lifted

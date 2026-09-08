@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.EfficientNetChainClose
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
-import LeanMlir.Proofs.Float.EfficientNetWholeBackFloatBridge
+import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 
 /-! # ⭐⭐ `efficientnetInputGradB` IS the certified whole-net EfficientNet-B0 gradient
 
@@ -134,8 +134,7 @@ set_option maxHeartbeats 2000000 in
     proves the committed forward composes.
 
     Everything the reader has to trust is in the statement: the LHS is the deployed chain
-    (`EfficientNetWholeBackFloatBridge.lean`, the same term `efficientnet_grad_floatBridges` and
-    the budget are about), the RHS is `HasVJP.backward` of a composition of certified VJPs, and
+    (`efficientnetInputGradB`, `EfficientNetBackChains.lean`), the RHS is `HasVJP.backward` of a composition of certified VJPs, and
     `HasVJP.correct` pins that to the true Jacobian-transpose. -/
 theorem efficientnetInputGradB_eq_efficientnetForwardB_vjp
     (N : Nat)

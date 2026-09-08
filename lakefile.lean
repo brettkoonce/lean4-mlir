@@ -722,6 +722,10 @@ lean_lib «Certs» where
              -- mnv2InputGrad, mnv2InputGradB, mnv4InputGradB) — the ℝ maps the four MobileNet
              -- certified ties are stated about (no float content).
              `LeanMlir.Proofs.Foundation.MobileNetBackChains,
+             -- The EfficientNet-B0 backward chains (mbconvBodyBack, efficientnetInputGradB,
+             -- efficientnetInputGradB_full) — the ℝ maps the three B0 certified ties are stated
+             -- about (no float content).
+             `LeanMlir.Proofs.Foundation.EfficientNetBackChains,
              -- A3 backward fold: the linear input-VJP (dx = Wᵀ·dy = bias-free dense over the
              -- transpose, reuses floatBridges_dense) + the exact ReLU-back selectPos mask
              -- (floatBridges_reluMaskBack) compose via FloatBridges.comp into a whole-net

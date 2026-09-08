@@ -1,11 +1,11 @@
-import LeanMlir.Proofs.Float.EfficientNetBackFloatBridge
+import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the EfficientNet MBConv body backward targets the CERTIFIED VJP
 
-The A3 backward float bridge `mbconvBodyBack` (`EfficientNetBackFloatBridge.lean`) proves
-**deployed-float ≈ a hand-assembled reverse-mode transcription** of the per-example MBConv body. This
+`mbconvBodyBack` (`EfficientNetBackChains.lean`) is a hand-assembled reverse-mode transcription of the
+per-example MBConv body (until 2026-09-08 it lived in a float bridge that also budgeted it). This
 file closes §B for that body: the transcription IS the certified input-gradient VJP `mbconvBody_has_vjp`
 (`EfficientNet.lean`). Unlike mnv2/convnext, the certified per-example body VJP already exists in the
 right (global-`bnForward`, non-batched) vocabulary — the per-example body is exactly what the forward

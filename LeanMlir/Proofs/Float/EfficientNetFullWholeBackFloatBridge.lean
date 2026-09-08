@@ -15,6 +15,9 @@ classifier endpoints concrete and `batchMap`-lifted and the sixteen block backwa
 backward's certified WINDOW is `9.112·10²⁶⁴⁸` (`b0_full_back_chain`), which — now that
 `norm_num`'s "ceiling" is known to be the `exponentiation.threshold` option and not a wall —
 is a numeral Lean could carry and nobody should write down. The chain is here for the tie.
+
+⚠ Since 2026-09-08 the ℝ chain `efficientnetInputGradB_full` is defined in
+`Foundation/EfficientNetBackChains.lean`; this file is its float side only.
 -/
 
 namespace Proofs
@@ -22,38 +25,6 @@ namespace Proofs
 open FloatModel
 
 variable {nCls : Nat}
-
-/-- **The batched whole-net input-gradient backward of the sixteen-block EfficientNet-B0** —
-    the reverse of `efficientnetForwardB_full = head ∘ b16 ∘ … ∘ b1 ∘ stem`: classifier-back →
-    GAP-back → head-conv-bn-swish-back → the sixteen MBConv block backs → stem-conv-bn-swish-back.
-    The block backs and the stem/head BN+swish backs are supplied; the conv/GAP/dense leaves are
-    concrete, `batchMap`-lifted over the `N` examples, the stem at the XLA-`SAME` phase. -/
-noncomputable def efficientnetInputGradB_full (N : Nat)
-    (Ws : Kernel4 32 3 3 3) (Wh : Kernel4 1280 320 1 1) (Wfc : Mat 1280 nCls)
-    (bnBs swBs : Vec (N * (32 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
-    (bnBh swBh : Vec (N * (1280 * 7 * 7)) → Vec (N * (1280 * 7 * 7)))
-    (b1B : Vec (N * (16 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
-    (b2B : Vec (N * (24 * 56 * 56)) → Vec (N * (16 * 112 * 112)))
-    (b3B : Vec (N * (24 * 56 * 56)) → Vec (N * (24 * 56 * 56)))
-    (b4B : Vec (N * (40 * 28 * 28)) → Vec (N * (24 * 56 * 56)))
-    (b5B : Vec (N * (40 * 28 * 28)) → Vec (N * (40 * 28 * 28)))
-    (b6B : Vec (N * (80 * 14 * 14)) → Vec (N * (40 * 28 * 28)))
-    (b7B : Vec (N * (80 * 14 * 14)) → Vec (N * (80 * 14 * 14)))
-    (b8B : Vec (N * (80 * 14 * 14)) → Vec (N * (80 * 14 * 14)))
-    (b9B : Vec (N * (112 * 14 * 14)) → Vec (N * (80 * 14 * 14)))
-    (b10B : Vec (N * (112 * 14 * 14)) → Vec (N * (112 * 14 * 14)))
-    (b11B : Vec (N * (112 * 14 * 14)) → Vec (N * (112 * 14 * 14)))
-    (b12B : Vec (N * (192 * 7 * 7)) → Vec (N * (112 * 14 * 14)))
-    (b13B : Vec (N * (192 * 7 * 7)) → Vec (N * (192 * 7 * 7)))
-    (b14B : Vec (N * (192 * 7 * 7)) → Vec (N * (192 * 7 * 7)))
-    (b15B : Vec (N * (192 * 7 * 7)) → Vec (N * (192 * 7 * 7)))
-    (b16B : Vec (N * (320 * 7 * 7)) → Vec (N * (192 * 7 * 7)))
-    : Vec (N * nCls) → Vec (N * (3 * 224 * 224)) :=
-  (StableHLO.batchMap N (flatConvStride2XlaBack (h := 112) (w := 112) Ws) ∘ bnBs ∘ swBs)
-  ∘ b1B ∘ b2B ∘ b3B ∘ b4B ∘ b5B ∘ b6B ∘ b7B ∘ b8B ∘ b9B ∘ b10B ∘ b11B ∘ b12B ∘ b13B ∘ b14B ∘ b15B ∘ b16B
-  ∘ (StableHLO.batchMap N (convFlatBack (h := 7) (w := 7) Wh) ∘ bnBh ∘ swBh)
-  ∘ StableHLO.batchMap N (gapBack 1280 7 7)
-  ∘ StableHLO.batchMap N (Proofs.dense (Mat.transpose Wfc) (0 : Vec 1280))
 
 /-- **The float sixteen-block input-gradient skeleton** — `efficientnetInputGradB_full` with
     each concrete `batchMap`-lifted slot replaced by the model's rounded peer and each supplied

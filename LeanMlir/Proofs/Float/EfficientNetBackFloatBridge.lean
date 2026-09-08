@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.EfficientNetBackChains
 import LeanMlir.Proofs.Float.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.Float.SEBackFloatBridge
 
@@ -20,6 +21,10 @@ discharged by `floatBridges_seBack`). The expand/project convs reverse through `
 swish kink is the saved-derivative `diagBack` (`swBe`/`swBd`, supplied, discharged by
 `floatBridges_diagBack`); the three batch-norms enter as the supplied `bnBack` facts (discharged by
 `floatBridges_bnBack`) — the same modular split the forward `floatBridges_mbconvBody` uses for its BNs.
+
+⚠ Since 2026-09-08 the ℝ chain `mbconvBodyBack` is defined in `Foundation/EfficientNetBackChains.lean`,
+beside the tie; this file keeps the `batchMap` float lifts and the float side only
+(`planning/float_second_pass.md`).
 -/
 
 namespace Proofs
@@ -27,27 +32,6 @@ namespace Proofs
 -- ════════════════════════════════════════════════════════════════
 -- § The MBConv body backward (depthwiseBack + seBack both land here)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The EfficientNet MBConv body input-gradient VJP at a smooth point — the **reverse of
-    `mbconvBody = (BN∘conv Wp) ∘ seBlockFull ∘ (swish∘BN∘depthwise Wd) ∘ (swish∘BN∘conv We)`**:
-
-      `expandBack ∘ depthwiseBack ∘ seBack ∘ projectBack`
-
-    `projectBack = convFlatBack Wp ∘ bnBp`; `seBack = seB` (the SE product-rule backward, supplied);
-    `depthwiseBack = depthwiseFlatBack Wd ∘ bnBd ∘ swBd`; `expandBack = convFlatBack We ∘ bnBe ∘ swBe`.
-    The swish backs `swBe`/`swBd` are the saved-derivative `diagBack`s; the BN-backs and the SE-back
-    are supplied (the smooth/SE pieces). -/
-noncomputable def mbconvBodyBack {cin cmid cout h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 cmid cin kHe kWe) (Wd : DepthwiseKernel cmid kHd kWd)
-    (Wp : Kernel4 cout cmid kHp kWp)
-    (bnBe bnBd swBe swBd : Vec (cmid * h * w) → Vec (cmid * h * w))
-    (seB : Vec (cmid * h * w) → Vec (cmid * h * w))
-    (bnBp : Vec (cout * h * w) → Vec (cout * h * w)) :
-    Vec (cout * h * w) → Vec (cin * h * w) :=
-  (convFlatBack (h := h) (w := w) We ∘ bnBe ∘ swBe)
-  ∘ (depthwiseFlatBack (h := h) (w := w) Wd ∘ bnBd ∘ swBd)
-  ∘ seB
-  ∘ (convFlatBack (h := h) (w := w) Wp ∘ bnBp)
 
 /-- **The EfficientNet MBConv body backward float-bridges.** One `.comp` chain: the project
     `convFlatBack Wp ∘ bnBp`, the supplied SE product-rule backward `seB` (discharge with
