@@ -93,7 +93,17 @@ jobs:
       - name: Cache .lake
         uses: actions/cache@v4
         with:
-          path: .lake/build
+          path: |
+            .lake/build
+            !.lake/build/doc
+            !.lake/build/doc-data
+          # ⚠ This path block must stay BYTE-IDENTICAL across certs.yml, comparator.yml,
+          # certs-heavy.yml and blueprint.yml's rolling step: actions/cache hashes the path list
+          # into a cache "version", and restore only ever matches entries of the same version.
+          # blueprint.yml needs the two exclusions (its doc-gen4 output lives in those dirs);
+          # they are no-ops here, and carrying them is what lets blueprint restore `lake-certs-`.
+          # Learned 2026-09-09: blueprint run 34384974391 missed BOTH its restores for this
+          # reason and built 242 modules cold.
           # Own `lake-heavy-` namespace, RESTORE-ONLY from certs.yml's `lake-certs-`: CertsHeavy's
           # imports subsume the Certs roots, so a certs entry is the warm start this job wants —
           # but the reverse was poison. Until 2026-09-09 this saved as `lake-certs-<hash>-heavy-<id>`;

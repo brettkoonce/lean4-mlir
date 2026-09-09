@@ -88,7 +88,17 @@ jobs:
       - name: Cache .lake
         uses: actions/cache@v4
         with:
-          path: .lake/build
+          path: |
+            .lake/build
+            !.lake/build/doc
+            !.lake/build/doc-data
+          # ⚠ This path block must stay BYTE-IDENTICAL across certs.yml, comparator.yml,
+          # certs-heavy.yml and blueprint.yml's rolling step: actions/cache hashes the path list
+          # into a cache "version", and restore only ever matches entries of the same version.
+          # blueprint.yml needs the two exclusions (its doc-gen4 output lives in those dirs);
+          # they are no-ops here, and carrying them is what lets blueprint restore `lake-certs-`.
+          # Learned 2026-09-09: blueprint run 34384974391 missed BOTH its restores for this
+          # reason and built 242 modules cold.
           # Cache ONLY the project build (Certs oleans/traces), NOT .lake/packages
           # — Mathlib comes from `lake exe cache get` below. Same rolling key as
           # proofs.yml/comparator.yml, but the entry is now a few hundred MB
