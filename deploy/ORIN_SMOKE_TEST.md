@@ -58,7 +58,7 @@ md5sum ~/ckpt/detector_aff30e28*.onnx
 | file | bytes | md5 | input tensor |
 |---|---|---|---|
 | `detector_aff30e28.onnx` | 86,180,752 | `0a5f8b0a0b4b4398b7bc7fbd3424159d` | `image` [1,3,448,448] float32 |
-| `detector_aff30e28_u8.onnx` | 86,183,250 | `ab574e0f67edf33a375e15f0cee73e50` | `image_u8` [1,448,448,3] uint8 |
+| `detector_aff30e28_u8.onnx` | 86,183,250 | `08f6df63e793d09db60965c6c8447620` | `image_u8` [1,448,448,3] uint8 (re-export 2026-09-09, cast-first) |
 
 **GATE:** both match. A ~200 KB file is a weightless stub — re-copy. A different
 md5 is a different export; stop rather than guess. Both are opset 18, batch 1.
@@ -96,10 +96,19 @@ trtexec --onnx=$HOME/ckpt/detector_aff30e28_u8.onnx \
 numbers and look like a successful re-measure. Deleting them is fine.
 
 **GATE:** two engine files. Note each build time and any layer TensorRT says it
-could not run in fp16. If the **u8** build is refused — a UINT8 network input
-is a TensorRT 10 feature — say so and carry on with the plain engine; the
-fallback (`--fold-preprocess f32`, a float [0,1] input with the normalize still
-in the graph) is a training-box export, not something to work around here.
+could not run in fp16. The first u8 export was refused with `legalUINT8:
+TensorRT does not support UINT8 types for intermediate tensors` at node 0 — a
+uint8 Transpose ahead of the Cast; the export now casts first (md5 above is
+the re-export). If a u8 build is refused again, say so and carry on with the
+plain engine; the fix is a training-box export, not something to work around
+here.
+
+⚠ Before any `--bench`: `sudo jetson_clocks` (needs the human's password) and
+record `nvpmodel -q`. Without it the governor drops the GPU to its 306 MHz
+floor during the CPU stages and the forward column roughly triples (measured
+15.5 ms governed against 4.3 ms under trtexec's continuous driving, same
+engine). The bench prints a back-to-back forward number too, so both regimes
+are captured either way.
 
 ## Step 3 — the reference frame, plain engine
 
@@ -135,12 +144,15 @@ python3 orin_detect.py --backend trt --plan build/detector_aff30e28.plan \
 ```
   preprocess  xx.xx ms | forward  xx.xx ms | decode+nms  xx.xx ms | total  xx.xx ms
   forward-only  xxx.x fps | end-to-end  xx.x fps
+  forward back-to-back  xx.xx ms = xxx.x fps (GPU clock not throttled by the CPU stages)
 ```
 
-**All four ms columns and both fps are the deliverable.** Last time:
-11.9 / 6.3 / 10.0 / 28.0 → 35.7 fps end-to-end. Same architecture, so the
-forward column should reproduce; the preprocess column is the one this runner
-has changed (pinned buffer), so it may not.
+**All of it is the deliverable, verbatim.** Measured 2026-09-09 on this arm,
+governor-managed (no `jetson_clocks`): 11.14 / 15.48 / 13.07 / 39.69 ms →
+25.2 fps end-to-end, 64.6 fps forward-only; trtexec on the same engine 4.12 ms
+GPU compute. The ctrl12 figure of 6.3 ms forward was a back-to-back loop, so it
+is not comparable to the interleaved column — compare it to the back-to-back
+line instead.
 
 ## Step 5 — the u8 engine
 
@@ -171,16 +183,15 @@ numpy arithmetic that the u8 graph now does on the GPU. Projected 28 → ~17 ms.
 
 ## Known unverified pieces
 
-- `TrtDetector` was rewritten on the build box, which has no TensorRT. The
-  `--backend ort` path exercises the identical preprocess / forward / decode /
-  bench code on the identical ONNX and is verified there, so what is untested is
-  exactly the `tensorrt` + `pycuda` calls: `get_tensor_mode`, `nptype`,
-  `pagelocked_empty`, `execute_async_v3`. All are TensorRT 10 / pycuda 2022+
-  API; the fallback branch is for TensorRT 8 and untested too.
-- If the python `tensorrt` module or `pycuda` is missing, the last run had
-  both; check `python3 -c "import tensorrt, pycuda.driver"` before installing
-  anything. `pip install onnxruntime` and `--backend ort --onnx ~/ckpt/…` gets
-  detections (slowly, CPU) while that is sorted, and proves the file.
+- `TrtDetector` was rewritten on the build box and verified on the device
+  2026-09-09 (TensorRT 10.3, `execute_async_v3` path). The `execute_async_v2`
+  fallback for TensorRT 8 is still untested.
+- On this Orin `pycuda` is NOT in the system python3: use
+  `~/orinvenv/bin/python`. `trtexec` is `/usr/src/tensorrt/bin/trtexec`, not
+  on PATH. Verified 2026-09-09 on L4T R36.4.7 (JetPack 6.2.x) / TensorRT
+  10.3.0 / pycuda 2026.1: `TrtDetector` ran as written, first try.
+  `pip install onnxruntime` and `--backend ort --onnx ~/ckpt/…` gets detections
+  (slowly, CPU) if TensorRT's binding is ever the problem, and proves the file.
 - Camera capture is still a stub — the GStreamer pipeline shape is in the
   comment in `main()`. Still-image path first; the camera is pointless until
   the frame time is known.

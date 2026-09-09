@@ -351,9 +351,14 @@ def _wrap_preprocess(model, mode):
                   drops 4x (602 KB against 2.4 MB). The permute, the /255 and the
                   normalize all run on the GPU.
 
-    ⚠ `u8` needs a TensorRT that accepts a UINT8 network input (10.x does; older
-    ones may not). If trtexec rejects it, fall back to `f32`, which still removes
-    the 4.0 ms normalize and needs nothing special from the runtime.
+    ⚠ TensorRT (10.3 measured) accepts UINT8 only as a NETWORK I/O tensor, never
+    as an intermediate: the op that consumes `image_u8` must be the Cast. The
+    first u8 export did `permute` THEN `to(float32)`, which is a uint8->uint8
+    Transpose at node 0, and trtexec died parsing it ("legalUINT8: TensorRT does
+    not support UINT8 types for intermediate tensors", 2026-09-09 on the Orin).
+    Cast first; the Transpose then runs on f32 and TensorRT folds it into the
+    convolution's format anyway, so nothing of the u8 win is lost. `f32` is the
+    fallback only for a runtime older than 10 that has no UINT8 I/O at all.
     """
     import torch
     import torch.nn as nn
@@ -371,7 +376,9 @@ def _wrap_preprocess(model, mode):
 
         def forward(self, x):
             if self.mode == "u8":
-                x = x.permute(0, 3, 1, 2).to(torch.float32) / 255.0
+                # cast FIRST — see the docstring; permute-then-cast is a uint8
+                # intermediate and TensorRT refuses the graph at node 0
+                x = x.to(torch.float32).permute(0, 3, 1, 2) / 255.0
             return self.inner((x - self.mean) * self.istd)
 
     return Wrapped(model, mode).eval()
