@@ -1,7 +1,7 @@
 # Lean 4 → MLIR → GPU
 
-**The book: [Verified Deep Learning with Lean 4](https://brettkoonce.github.io/lean4-mlir/blueprint/)**
-([PDF](https://brettkoonce.github.io/lean4-mlir/blueprint.pdf)) — the interactive proof blueprint
+**The book: [Verified Deep Learning with Lean 4](https://lean.brettkoonce.com/blueprint/)**
+([PDF](https://lean.brettkoonce.com/blueprint.pdf)) — the interactive proof blueprint
 *is* the book: every theorem clickable, from the `pdiv` primitives to the whole-network backward
 passes.
 
@@ -25,7 +25,7 @@ Four commands, one per scale, in the order the book meets the nets, then the dem
 are the book's, from the verified XLA path on one RTX 4060 Ti unless the row says otherwise; the
 two Imagenette side quests the book does not quote (ResNet-50, MobileNetV4) are medians of five
 seeds. Setup is the book's
-[Getting started](https://brettkoonce.github.io/lean4-mlir/blueprint/app-getting_started.html),
+[Getting started](https://lean.brettkoonce.com/blueprint/app-getting_started.html),
 one track per tier; the short form is
 
 ```bash
@@ -37,10 +37,10 @@ lake exe cache get && ./download_mnist.sh && lake run mnist                     
 
 | tier | command | trains | the number | chapter |
 |---|---|---|---|---|
-| 1 | `lake run mnist` | linear, MLP and CNN on MNIST, 12 epochs each (~1 min) | 92.10 · 97.81 · 98.77 % | [1](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-tensor.html) · [2](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-mlp.html) · [3](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-cnn.html) |
-| 2 | `lake run cifar` | the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~19 min) | 76.3 % — BN + momentum, median of five | [4](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-bn.html) |
-| 3 | `lake run imagenette` | seven nets on Imagenette at 224², 80 epochs AdamW, book order (~9 h) | R34 89.50 · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 % | [5](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-residual.html) · [6](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-depthwise.html) · [7](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-se.html) · [8](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-layernorm.html) · [9](https://brettkoonce.github.io/lean4-mlir/blueprint/chap-attention.html) |
-| 4 | `lake run imagenet` | the same nets on ImageNet-1k, 4× 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, `start` runs it | R34 74.16 · R50 (RSB-A3) 78.26 · MNv2 71.90 · MNv4-Conv-M 75.48 · B0 77.15 · ConvNeXt-T 81.53 · ViT-Tiny 72.31 % | [Track 4](https://brettkoonce.github.io/lean4-mlir/blueprint/app-getting_started.html) |
+| 1 | `lake run mnist` | linear, MLP and CNN on MNIST, 12 epochs each (~1 min) | 92.10 · 97.81 · 98.77 % | [1](https://lean.brettkoonce.com/blueprint/chap-tensor.html) · [2](https://lean.brettkoonce.com/blueprint/chap-mlp.html) · [3](https://lean.brettkoonce.com/blueprint/chap-cnn.html) |
+| 2 | `lake run cifar` | the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~19 min) | 76.3 % — BN + momentum, median of five | [4](https://lean.brettkoonce.com/blueprint/chap-bn.html) |
+| 3 | `lake run imagenette` | seven nets on Imagenette at 224², 80 epochs AdamW, book order (~9 h) | R34 89.50 · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 % | [5](https://lean.brettkoonce.com/blueprint/chap-residual.html) · [6](https://lean.brettkoonce.com/blueprint/chap-depthwise.html) · [7](https://lean.brettkoonce.com/blueprint/chap-se.html) · [8](https://lean.brettkoonce.com/blueprint/chap-layernorm.html) · [9](https://lean.brettkoonce.com/blueprint/chap-attention.html) |
+| 4 | `lake run imagenet` | the same nets on ImageNet-1k, 4× 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, `start` runs it | R34 74.16 · R50 (RSB-A3) 78.26 · MNv2 71.90 · MNv4-Conv-M 75.48 · B0 77.15 · ConvNeXt-T 81.53 · ViT-Tiny 72.31 % | [Track 4](https://lean.brettkoonce.com/blueprint/app-getting_started.html) |
 
 The demos ride on the chapter nets; [demos/README.md](demos/README.md) has the command, the
 figure and the reasoning for each.
@@ -65,7 +65,7 @@ committed train-step render in `verified_mlir/` is tied to those proofs at the d
 each emitted parameter-update node denotes the certified descent step, and the tiers train on
 exactly those bytes. What stays trusted is the ℝ→Float32 numerics, the per-op text printing, and
 the lowerer with its runtime. The book's
-[On Verification](https://brettkoonce.github.io/lean4-mlir/blueprint/app-verification.html)
+[On Verification](https://lean.brettkoonce.com/blueprint/app-verification.html)
 appendix is the full argument, gap by gap; [LeanMlir/Proofs/README.md](LeanMlir/Proofs/README.md)
 is the file-level map.
 

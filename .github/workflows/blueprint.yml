@@ -409,10 +409,20 @@ jobs:
         # public/docs/ carries a locally rebuilt Mathlib, and pointing crawlers at a
         # duplicate of Mathlib's own docs would both blow the 50k-URL cap and invite a
         # duplicate-content penalty. See scripts/gen_sitemap.py.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Derived from the repo rather than hardcoded, so a rename or a fork still
-          # emits correct <loc>s. Matches `gh api repos/:owner/:repo/pages -q .html_url`.
-          BASE="https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}"
+          # Derived from the Pages SETTING, not hardcoded: the custom domain (lean.brettkoonce.com
+          # since 2026-09-09) when one is set, else the <owner>.github.io/<repo> project URL. Always
+          # https — `.html_url` reports http:// while "Enforce HTTPS" is off, and a sitemap must
+          # name the canonical scheme. With the site at a domain root, robots.txt and the
+          # `Sitemap:` line finally sit where crawlers read them (a project subpath never did).
+          CNAME=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq '.cname // empty' || true)
+          if [ -n "$CNAME" ]; then
+            BASE="https://$CNAME"
+          else
+            BASE="https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}"
+          fi
           echo "base URL: $BASE"
           python3 scripts/gen_sitemap.py public "$BASE"
           echo '--- sitemap.xml (first 20 lines) ---'

@@ -54,7 +54,7 @@
       "scheme": "url"
     },
     {
-      "identifier": "https://brettkoonce.github.io/lean4-mlir/blueprint/",
+      "identifier": "https://lean.brettkoonce.com/blueprint/",
       "relation": "isDocumentedBy",
       "resource_type": "publication-book",
       "scheme": "url"

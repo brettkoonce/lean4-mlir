@@ -5,7 +5,7 @@ Run against the assembled `public/` tree, not the repo: the two big subtrees
 (`blueprint/`, `docs/`) are BUILD PRODUCTS, so a committed static sitemap would be
 stale the moment leanblueprint or doc-gen4 emits a different set of pages.
 
-    python3 scripts/gen_sitemap.py public https://brettkoonce.github.io/lean4-mlir
+    python3 scripts/gen_sitemap.py public https://lean.brettkoonce.com
 
 ⭐ THE ONE DECISION THAT MATTERS: `public/docs/` is a doc-gen4 tree that contains a
 LOCALLY REBUILT MATHLIB (doc-gen4 cannot yet reference hosted Mathlib docs — see the
