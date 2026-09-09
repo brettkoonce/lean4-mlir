@@ -1,0 +1,138 @@
+suite: prompt="ROMEO:\n" seed=1
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:30.871979  803317 service.cc:154] XLA service 0x7fbebc008410 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0909 16:06:30.872020  803317 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0909 16:06:30.873729  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:30.873757  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0909 16:06:30.880620  803317 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0909 16:06:31.682969  803340 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 4 bytes spill stores, 4 bytes spill loads
+
+I0909 16:06:31.798233  803338 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 24 bytes spill stores, 24 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1189 ms
+  prompt encoded: 7 ids (context fill 7/64)
+suite: prompt="ROMEO:\n" seed=2
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:32.689284  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:32.689514  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 312 ms
+  prompt encoded: 7 ids (context fill 7/64)
+suite: prompt="KING HENRY VI:\n" seed=1
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:33.747804  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:33.748053  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 291 ms
+  prompt encoded: 15 ids (context fill 15/64)
+suite: prompt="KING HENRY VI:\n" seed=2
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:34.838616  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:34.838879  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 329 ms
+  prompt encoded: 15 ids (context fill 15/64)
+suite: prompt="First Citizen:\n" seed=1
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:35.955228  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:35.955285  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 317 ms
+  prompt encoded: 15 ids (context fill 15/64)
+suite: prompt="First Citizen:\n" seed=2
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:37.042766  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:37.042854  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 301 ms
+  prompt encoded: 15 ids (context fill 15/64)
+suite: prompt="QUEEN MARGARET:\nMy lord," seed=1
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:38.141361  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:38.141425  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 329 ms
+  prompt encoded: 24 ids (context fill 24/64)
+suite: prompt="QUEEN MARGARET:\nMy lord," seed=2
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:39.252117  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:39.252399  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 309 ms
+  prompt encoded: 24 ids (context fill 24/64)
+suite: prompt="To be, or not to be" seed=1
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:40.334623  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:40.334905  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 325 ms
+  prompt encoded: 19 ids (context fill 19/64)
+suite: prompt="To be, or not to be" seed=2
+Generating train step MLIR...
+  264099 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I0909 16:06:41.448482  803317 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0909 16:06:41.448942  803317 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 312 ms
+  prompt encoded: 19 ids (context fill 19/64)
+wrote blueprint/src/figures/tinygpt/prompt_suite_nano.txt

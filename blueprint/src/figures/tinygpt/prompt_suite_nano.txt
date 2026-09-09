@@ -5,144 +5,152 @@ temperature=0.8 top-p=0.95, 300 chars per sample
 prompt: "ROMEO:\n"   seed: 1
 ────────────────────────────────────────
 ROMEO:
-Ay, when I cannot thy would in sounded,
-And sir, all a traitors us the proof,
-We have been liege, this but a lamentable,
-That will cause to his general knows that he father
-I shall be pass more indeed him to field to you.
+As thou shouldst be lamentation, to mean yourself
+For our thron rich have in thy speed of sweet and intend
+With on thy way arms, who have my father's look,
+Hath been content than I still forget
+This strength, a boot, for our offer subjects
+In the court with as fourteen for yours bark?
 
-COMINIUS:
-Make that the state is received of him.
-
-FRIAR LAURENCE:
-So she wit
+QUEEN MARGARE
 
 ════════════════════════════════════════
 prompt: "ROMEO:\n"   seed: 2
 ────────────────────────────────────────
 ROMEO:
-Here in my bones of my heart, and and not see your land.
+Not in the feel and his father mine we had all
+news for the fellow of his life,
+Where shows must be women settle well me to prisoner
+Of his and and most son advanced the captate to king.
 
-CORIOLANUS:
-The body up and friends are but for him?
+PAULINA:
+I cannot his deep married our people,
+With now with them faults the touch'd his are lamentation.
 
-Provost:
-This is mind, so worthy shall never bands down thee,
-To the office therefore in this here;
-But I cannot cried be stock into my lord:
-Saint thou hast and we king, sir, it is the wh
+GLOUC
 
 ════════════════════════════════════════
 prompt: "KING HENRY VI:\n"   seed: 1
 ────────────────────────────────────────
 KING HENRY VI:
-The thoughts are thine own say,
-And sister in my life with the rust, that call be it
-it shorter than the more in hand, shall remember stricians
-Since hither to fear, not his man: he must forth!
+Then, you well me thricks a worse dear?
 
-KING EDWARD IV:
-Well you, if you mean, then I cannot so.
+Shepherd:
+What say will, I think I must but my combase
+That way say means to the second and breathe in your blow;
+I'll let him to him heart thy love.
 
-AUTOLYCUS:
-And save you think to be me, though 
+EDWARD:
+A gentle true that gentle the world, be gone to the soul:
+Which with his selfsely marriage.
+
+LUCIO:
+
 
 ════════════════════════════════════════
 prompt: "KING HENRY VI:\n"   seed: 2
 ────────────────────────────────────────
 KING HENRY VI:
-But not be a gentleman of the craverer'd by my observes,
-I am here to see you more it not a part
-Than our chomise himself to the gods.
+O begin and blessed my son, and contratching alm and
+Will then all the crown thy man?
 
 BUCKINGHAM:
-Why, though so not the hand,
-And on his the speech and of a branches fair all,
-Will the looks strange foul plot of your father,
-To came the man and thes
+Alas, and good he did that we confession'd and with honour great,
+That the direct unto men to fight and command
+To have been divinctur a friend, in a slame,
+Yea, that is the backle, on the time
+And cor
 
 ════════════════════════════════════════
 prompt: "First Citizen:\n"   seed: 1
 ────────────────────────────────────────
 First Citizen:
-Where are I the heavy down was you are,
-Though the many comes at service here which you many last,
-As bring the first of the air and when is not
-of my hurt sons, and all a subsemer of our most
-Before the worse mother, bold thou say so well in the state
-Of no peace of my seat; and but
-As this another
+And here in his prouds the hand, to me heaven:
+And in his fault,
+Your father bawd not so, his power precious parts,
+And for her brows him but him, I have
+throw stand condemn'd false mother, or nothing best
+Thou hadst no time for our breathe sentence in a smile.
+
+ROMEO:
+Sir, for it should not this is
 
 ════════════════════════════════════════
 prompt: "First Citizen:\n"   seed: 2
 ────────────────────────────────────────
 First Citizen:
-So many honour, my lord, that I prithee to be daughter.
+Here in my hands to his father leasts day;
+That comes to do boy my soul of yourself
+that father the lords of rest in his heaven
+Than out offence the motion.
 
-BUCKINGHAM:
-My lord, worthy life, and therefore but do must in his noble words,
-And then in and my helpet your honour crown.
+Nurse:
+And I did law that you all; my lord.
 
-KING EDWARD IV:
-But love you blood her sprewhoes! though marry that
-Are spaked a man and heavens will the good of our
+JULIET:
+I do better again, as I tell are you.
+
+AUFIDIUS:
+I am a little shall not be weak on my fe
 
 ════════════════════════════════════════
 prompt: "QUEEN MARGARET:\nMy lord,"   seed: 1
 ────────────────────────────────────────
 QUEEN MARGARET:
-My lord, in his sonemned of unnevious my hand:
-Her lose that said and long against the assad,
-And accident to father battle to leave
-the deep and part to the threat of days.
-What come away to be boasts.
+My lord, but I am one words,
+Not this first side home. Then in the from cares the
+go atten that betimes the other beauty.
 
-ISABELLA:
-Though is young and there comes and from the world;
-When so in as here traitor.
+LUCIO:
+I hope it that I cannot the relateness.
 
-QUEEN ELIZABE
+LEONTES:
+I would this peace, you longs are all defended child
+Your house as it be the cause of your word
+tongue comfort all you speak no 
 
 ════════════════════════════════════════
 prompt: "QUEEN MARGARET:\nMy lord,"   seed: 2
 ────────────────────────────────────────
 QUEEN MARGARET:
-My lord, I have made on him of the bear light,
-I do reamply be life as a brace of your kingle and soldiers.
+My lord, then brother, then you shall be should but butcher.
 
-ROMEO:
-More me well thee and false, and therefore,
-Come them the princely banish and dangerous for me.
+KING EDWARD IV:
+Then, though the marry with a gentleman!
 
-GLOUCESTER:
-O, be bawd, cousin with against their metiness.
+MERCUTIO:
+Ay, sir, let he tongue the mother, all thou art thou never
+for this tears of an at measure,
+To find this boats of live
+Breathe to knows you a world and breaks.
 
-KING RICHARD II:
-So struck thou ta
+First Murderer:
+'
 
 ════════════════════════════════════════
 prompt: "To be, or not to be"   seed: 1
 ────────────────────────────────────────
-To be, or not to be changed the will of
-friend you are attorning. I have you must able part
-I' the present to give me to our body.
+To be, or not to be common to be his blanks and
+Will do embrace not to the duke
+To eyes my lips and taken their die.
 
-MARCIUS:
-I told you have from the head e'er this been,
-And then princely in as offence and here;
-Nor talk sure to the crown with me the people
-Procures of my serves perforced to be the go
+LORD FITZWELLA:
+I must be ready here heart of our friends;
+And that's not her not to sure it loved
+for the pass of thine: if the from my charity
+That have marriage her past in ourselves;
+For madam my w
 
 ════════════════════════════════════════
 prompt: "To be, or not to be"   seed: 2
 ────────────────────────────────────────
-To be, or not to be an will have found of the more.
+To be, or not to be the cannot most to my heart
+Therein would the one appetitions.
 
-First Senator:
-No, that I am thing I will not, in will promised
-Hath the told men and and of his gone:
-That is the dance in for the prince, to the art
-The provided to bear in mine armour
-I dare not be peace: now the loaths'd and with the most more brings.
-
-DUKE VINC
+BRUTUS:
+I have she long great to diseasure must both
+A princely call the gentleman of honour great,
+That the direct unto men to fight and command
+To have been divinctur a friend, in a slame,
+Yea, that is the backle, on the time
+And cor

@@ -50,7 +50,7 @@ figure and the reasoning for each.
 | segmentation | `lake exe unet-brats-r34`, then `brats-predict` | BraTS mIoU 0.742 — a ResNet-34 encoder under a UNet |
 | detection | `lake exe yolov1-visdrone-fpn` | VisDrone mAP@0.5 0.2363 — ResNet-34 + FPN at 448 |
 | diffusion | `lake exe mnist-ddpm-train`, then `mnist-ddpm-sample` | the sample grid |
-| language | `lake exe tinygpt-shakespeare` (also `bigram-shakespeare`, `tinystories`) | 1.45 nats/char |
+| language | `lake exe tinygpt-shakespeare` (also `bigram-shakespeare`, `tinystories`) | 2.28 bits/char held-out |
 
 Everything else in the repository is the lab — `apps/baselines/`, the ablation and robustness
 exes, the tests, the Bestiary — the evidence behind these numbers, one level down. `lakefile.lean`

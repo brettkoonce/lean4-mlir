@@ -224,42 +224,47 @@ codegen primitives shipped to support it:
 - `lmHead` (per-position dense + reshape into `useSeg` loss path)
 - `causalMask` flag on `transformerEncoder`
 
-212K params (T=64, D=64, 4 layers, 2 heads). Trains in ~11 min on
-gfx1100 for 10K Adam steps. See `planning/archive/tinygpt_demo.md`.
+212K params (T=64, D=64, 4 layers, 2 heads). 10K Adam steps take ~3 min on
+one RTX 4060 Ti through XLA, compile included, and reach 2.28 bits/char on
+the held-out split (bigram baseline 3.56, uniform 6.02). Workings in
+`runs/2026-09-09-tinygpt-nano-xla/`; plan in `planning/archive/tinygpt_demo_v2.md`.
 
 ```bash
 ./download_shakespeare.sh             # downloads tinyshakespeare.txt
 python3 preprocess_shakespeare.py     # builds train.bin / val.bin / vocab.txt
-lake exe tinygpt-shakespeare train    # trains, saves params
-lake exe tinygpt-shakespeare sample 600 80 "ROMEO:"
+lake exe tinygpt-shakespeare train nano 10000                    # 10K Adam steps, saves params
+lake exe tinygpt-shakespeare sample nano 600 80 0 100 1 "ROMEO:"  # 600 chars, temp 0.8, seed 1
 ```
 
-Sample output after 10K steps (loss 1.45 nats/char ≈ 2.10 bits/char):
+Sample output after 10K steps (val 2.28 bits/char, train 1.99):
 
 ```text
 ROMEO:
-I prately I head.
+O heaven farewell, upon thy hands.
 
-LORD CAY:
-God the goodness hath storn, so given to my love
-To request and of the faces; with sun
-Do not only to witness musrer Claudio.
+NORTHUMBERLAND:
+Then with clearing too forpully of his,
+You are would not we love I have,
+Which of you have I do foeble thy true king with odds
+To desire her furrow'd the victory,
+Hence that speak to be weak the way deal is.
 
-POMPEY:
-Alack, perpeal to amend my heart desires,
-That one you to thine more, would I know,
-And spuress and the seals destaint in heirs;
-is more news, that she now to Lamentio.
-
-KING RICHARD III:
-What all strangthes me not I am not me:
-To hich dost Grey, If thou know me not to such ounts?
+EDWARD:
+What, worse speed have more in himself inger's and thousand.
+God come to Romeo
+A sentence comfort to your throlds,
+I think of thy souls to the merrolk, his life,
+Some no paper brother hands than the tent up never
+'Tis grace, O, blest thy headst jewel denied
+To creass thy breaks wind to live:
+And then to dark the you kin our par
 ```
 
-Real Shakespeare character names (KING RICHARD III, KING HENRY
-VI, ISABELLA, POMPEY, PRINCE, ROMEO), reference to Claudio (from
-*Measure for Measure*), coherent multi-line dialog with proper
-cadence and punctuation. Semantic coherence drops past the 64-char
+Real Shakespeare character names (NORTHUMBERLAND and EDWARD here;
+QUEEN MARGARET, MERCUTIO, JULIET, BRUTUS across the fixed-prompt suite
+in `blueprint/src/figures/tinygpt/prompt_suite_nano.txt`), a Romeo
+named inside another speaker's line, coherent multi-line dialog with
+proper cadence and punctuation. Semantic coherence drops past the 64-char
 context window — exactly what the planning doc predicted.
 
 A `bigram-shakespeare` baseline (single dense V→V predicting next

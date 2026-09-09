@@ -13050,13 +13050,71 @@ kit --- the kit is the same set of primitives Ch~\ref{chap:attention}
 introduced --- it's everything \emph{around} the layers: the data
 pipeline, the loss, and the inference loop.
 
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=0.68cm, y=0.68cm, font=\small,
+  live/.style={fill=blue!25, draw=blue!50!black!40, line width=0.3pt},
+  dead/.style={fill=white, draw=black!25, line width=0.3pt},
+  tok/.style={font=\ttfamily\small},
+  hdr/.style={font=\footnotesize\itshape, text=black!70},
+  arrow/.style={->, >=stealth, thick, gray}]
+  % the sampler's own first line: "ROMEO:\nI" -- eight char tokens, position 0..7
+  \def\toks{R,O,M,E,O,:,{\textbackslash n},I}
+  \def\nexts{O,M,E,O,:,{\textbackslash n},I,?}
+  % grid: row t = query (top to bottom), column s = key (left to right)
+  \foreach \t in {0,...,7} {
+    \foreach \s in {0,...,7} {
+      \pgfmathparse{\s<=\t ? 1 : 0}
+      \ifnum\pgfmathresult=1
+        \fill[live] (\s,-\t) rectangle ++(1,-1);
+      \else
+        \fill[dead] (\s,-\t) rectangle ++(1,-1);
+        \node[font=\tiny, text=black!45] at (\s+0.5,-\t-0.5) {$-\infty$};
+      \fi
+    }
+  }
+  % key tokens across the top, query tokens down the left, targets down the right
+  \foreach \s [count=\i from 0] in \toks {
+    \node[tok, anchor=south] at (\i+0.5, 0.08) {\s};
+    \node[hdr, anchor=south] at (\i+0.5, 0.55) {\i};
+    \node[tok, anchor=east] at (-0.12, -\i-0.5) {\s};
+    \node[hdr, anchor=east] at (-0.95, -\i-0.5) {\i};
+  }
+  \foreach \n [count=\i from 0] in \nexts {
+    \node[tok, anchor=west] at (9.3, -\i-0.5) {\n};
+    \draw[arrow] (8.15, -\i-0.5) -- (9.05, -\i-0.5);
+  }
+  \node[hdr, anchor=south] at (4, 1.05) {keys $s$: positions row $t$ may look at};
+  \node[hdr, rotate=90, anchor=south] at (-1.6, -4) {queries $t$: position being predicted from};
+  \node[hdr, anchor=south, align=center] at (9.7, 0.08) {target\\ (token $t{+}1$)};
+  % the highlighted row: t = 4, the second O of ROMEO
+  \draw[red!70!black, line width=1.1pt] (0,-4) rectangle (8,-5);
+  \draw[red!70!black, line width=1.1pt] (9.0,-4) rectangle (10.0,-5);
+  \node[font=\footnotesize, text=red!70!black, anchor=north west, align=left] at (0, -8.35)
+    {row 4 sees \texttt{R O M E O} and nothing after it; its loss is the cross-entropy against \texttt{:}};
+  \node[font=\footnotesize, text=black!70, anchor=north west, align=left] at (0, -9.0)
+    {white cells: $-\infty$ is added to the score before the softmax, so their weight is exactly $0$};
+\end{tikzpicture}
+\caption{The causal mask on the sampler's own first eight characters. Rows are the
+position being predicted from, columns the positions it may attend to; a score
+survives (blue) only where the key is at or before the query, and $-\infty$ is
+added to every other score before the softmax, so its weight is exactly zero.
+Row 4 is the second O of ROMEO: it sees \texttt{ROMEO} and is scored against the
+colon. At the trainer's $T{=}64$ the same triangle keeps 2080 of the 4096 scores
+per head. The \texttt{causalMask} flag on \texttt{.transformerEncoder} is the
+whole difference between this block and a ViT's.}
+\label{fig:tinygpt_causal_mask}
+\end{figure}
+
 \paragraph{TinyGPT, in passing.} The
 \texttt{demos/MainTinyGptShakespeare.lean} trainer in this repo is a
 working char-level transformer at 212K params ($T{=}64$, $D{=}64$,
-4 layers, 2 heads). It trains in $\sim$11 minutes on gfx1100 for 10K
-Adam steps, hits 1.45 nats/char on Karpathy's tinyshakespeare, and
-sampling after that produces recognizable Shakespeare cadence with
-proper character names (KING RICHARD, ROMEO, POMPEY) and multi-line
+4 layers, 2 heads). Ten thousand Adam steps take three minutes on one
+RTX 4060 Ti through XLA, compile included, and land at 2.28 bits/char
+on tinyshakespeare's held-out split --- against 3.56 for a bigram table
+and 6.02 for guessing uniformly over the 65 characters. Sampling after
+that produces recognizable Shakespeare cadence, real character names
+(NORTHUMBERLAND, QUEEN MARGARET, MERCUTIO, BRUTUS) and multi-line
 dialog. Three things change relative to the image trainers shown
 throughout Part~2, and they capture what NLP training \emph{is}:
 
@@ -13086,8 +13144,10 @@ throughout Part~2, and they capture what NLP training \emph{is}:
     context, and the network runs again for $t{+}2$. Our
     \texttt{tinygpt-shakespeare sample} executable implements exactly
     this loop --- $\sim$30 lines of plain Lean, no proof machinery,
-    calling the same compiled vmfb the trainer used. The architectural
-    cost is the causal mask: during training, attention at position
+    running the same spec's forward graph at batch one through XLA on
+    the parameters the trainer saved. The architectural
+    cost is the causal mask (Figure~\ref{fig:tinygpt_causal_mask}):
+    during training, attention at position
     $t$ must not see positions $t{+}1$ onward, or the model would
     trivially predict the answer it can see. We expose this via the
     \texttt{causalMask} flag on \texttt{.transformerEncoder}; the rest
@@ -13095,7 +13155,7 @@ throughout Part~2, and they capture what NLP training \emph{is}:
 \end{itemize}
 
 That's the entire delta. Same Adam optimizer, same VJP machinery, same
-compile-to-IREE pipeline. The bestiary entries below all reduce to
+StableHLO-through-XLA pipeline. The bestiary entries below all reduce to
 either ``GPT shape'' (decoder-only, causal mask, autoregressive
 sampling) or ``BERT shape'' (encoder-only, bidirectional attention,
 classification head); the architectural differences between them are
@@ -13871,7 +13931,7 @@ and training. For TinyStories,
 slice of the corpus and emits it in HuggingFace format
 (\texttt{vocab.json}/\texttt{merges.txt}) alongside the flat int32-LE
 token streams (\texttt{train.bin}/\texttt{val.bin}), and the small
-vocabulary keeps the in-graph one-hot embedding and head matmuls cheap and
+vocabulary keeps the embedding gather and the head matmul cheap and
 the tokenizer auditable. The two detection sets follow the same pattern:
 \texttt{preprocess\_visdrone.py} and \texttt{preprocess\_coco.py} write
 \emph{the same three record formats} (single-grid, single-scale anchor, and
