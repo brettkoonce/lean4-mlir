@@ -9,7 +9,7 @@ import LeanMlir.Proofs.Nets.Small.CifarBnClose
 backward chain delivers at each layer's output, the CIFAR-non-BN-style close): every
 MobileNetV2 train-step parameter output denotes `θ − lr·(certified Jacobian · cotangent)`.
 
-The MobileNetV2 train step (`tests/TestMobilenetV2Train.lean`) has these parameter families,
+The MobileNetV2 train step ([`tests/TestMobilenetV2Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestMobilenetV2Train.lean)) has these parameter families,
 and each is now certified by the bridge in the right column:
 
 | family (render SSA)                         | forward fn          | certified by                                  |

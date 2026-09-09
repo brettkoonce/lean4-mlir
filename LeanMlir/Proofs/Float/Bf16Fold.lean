@@ -34,7 +34,7 @@ accumulate). Render-tie (here) ∘ accuracy (there) = the tied-and-lowered bf16
 forward — the thing fp8 can prove but not run, and bf16 can now do both.
 
 All theorems kernel-close under `[propext, Classical.choice, Quot.sound]`
-(`tests/AuditAxioms.lean`); names kept short for the audit's per-line grep.
+([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)); names kept short for the audit's per-line grep.
 -/
 
 open Proofs Proofs.StableHLO
@@ -102,7 +102,7 @@ theorem bf16_emit_eq_prerounded (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x
 The header above says depth-1 needs no new op because the leaf cast is baked into the
 operand value, but that rounding *intermediate* activations "needs an in-graph
 `convertF` round node (`den (convertF rnd e) = rnd ∘ den e`)". That op now exists
-(`Proofs/Codegen/StableHLO.lean`), so this section closes the gap the header left open.
+([`Proofs/Codegen/StableHLO.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Codegen/StableHLO.lean)), so this section closes the gap the header left open.
 
 The point is that the tie **composes**: a rounded activation feeding the next layer is
 still exactly `dense` of rounded operands, with no cross-layer error term to track,

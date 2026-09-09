@@ -20,7 +20,7 @@ The conv layers use the **new core ops** `convWeightSgd`/`convBiasSgd`
 `cnn_render_conv{W,b}{1,2}_chain_certified` (CnnChainClose.lean) at the cotangents
 the CNN backward chain actually delivers (`cnnChainCotW1`/`cnnChainCotW2`).
 
-(Namespace/name lengths are kept short on purpose: `tests/AuditAxioms.lean`'s
+(Namespace/name lengths are kept short on purpose: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)'s
 three-axiom closure check greps `#print axioms` output per line, which Lean wraps
 past ~120 cols — long qualified names would split the benign triple across lines
 and false-fail the check.)

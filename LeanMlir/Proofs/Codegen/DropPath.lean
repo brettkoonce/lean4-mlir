@@ -80,7 +80,7 @@ can see a wrong ramp, which is what `keepProb` below and the known-answer gate e
     formal content of "the mask is `(B, 1, …, 1)` and broadcasts": two positions in the same example
     are scaled identically, and two examples are scaled independently. Emitting a per-ELEMENT scale
     instead typechecks and trains — it is per-element dropout, a different regulariser — which is
-    what `tests/TestBatchedEmitTie.lean`'s `dims = [0]` assertion pins. -/
+    what [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean)'s `dims = [0]` assertion pins. -/
 noncomputable def dropScale (N n : Nat) (s : Vec N) : Vec (N * n) :=
   fun idx => s (finProdFinEquiv.symm idx).1
 
@@ -209,7 +209,7 @@ depth draws ONE Bernoulli per example and broadcasts it over the branch; dropout
 ELEMENT. Everything else is identical: inverted (`/ keep`), train-only, a diagonal linear map.
 
 **They are therefore the same op at two different mask ranks, which is exactly why they are
-dangerous to each other.** `StableHLO.lean`'s `dropPathP` emit case, `tests/TestBatchedEmitTie.lean`
+dangerous to each other.** `StableHLO.lean`'s `dropPathP` emit case, [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean)
 and `Proofs.dropScale`'s docstring have each independently written down the warning that emitting a
 `tensor<B×n>` scale where a `tensor<B>` one belongs *"typechecks, compiles, runs, descends, and is
 per-element dropout — a different regulariser"*. That sentence is now a live op rather than a
@@ -308,7 +308,7 @@ theorem dropout_of_dropScale (N n : Nat) (s : Vec N) :
     free to break that, and does — which is precisely the difference the emitted text spells as
     `broadcast_in_dim dims = [0]` versus no broadcast at all.
 
-    So this is the denotation-side peer of `tests/TestBatchedEmitTie.lean`'s two mask assertions.
+    So this is the denotation-side peer of [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean)'s two mask assertions.
     Neither gate can substitute for the other: the emit test says the two ops render different
     bytes, this says they compute different functions, and a render that emitted one where the other
     belongs would be wrong on both counts and caught by whichever ran. -/

@@ -21,7 +21,7 @@ table below is the one the converged render kept.
 
 ⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, RMSProp and the
 data-parallel twins all consume the same node. ⚠ The bf16 twins do NOT: they emit `*GradBBf16`,
-folded in `Foundation/Bf16GradNodes.lean`.
+folded in [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean).
 
 ## ⭐ Eight of the twelve kinds were already proven, and none of them here
 
@@ -72,7 +72,7 @@ them, and MobileNetV2 is the TF-origin net.
 
 ## Honest residual
 * Every lemma is `∀ cot`: each holds at the actual backward-chain cotangent without naming it.
-  Pinning them is the §1a tie, and it landed 2026-09-06 as `Nets/MobileNet/MobileNetV2StepTieB.lean`
+  Pinning them is the §1a tie, and it landed 2026-09-06 as [`Nets/MobileNet/MobileNetV2StepTieB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV2StepTieB.lean)
   (§4.2c). The per-example tie (`MobileNetV2TiePoCPaper.lean`, deleted 2026-09-08) was at the fused
   ops and at per-example BatchNorm, so nothing transferred.
 * ⚠ **The forward these nodes differentiate is batch BatchNorm** (`bnBatchLA`), which every

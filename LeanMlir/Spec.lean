@@ -647,7 +647,7 @@ inductive ParamUnit where
   | millions | thousands | bare
   deriving Repr, DecidableEq
 
-/-- **The shared Bestiary summary block.** Every `Bestiary/*.lean` entry printed its own
+/-- **The shared Bestiary summary block.** Every [`Bestiary/*.lean`](https://github.com/brettkoonce/lean4-mlir/tree/main/Bestiary) entry printed its own
     `private def summarize`; all 41 were the same ten lines varying only in the first line's
     label, the `params` abbreviation and an optional parenthetical on the `validate : OK` line.
 

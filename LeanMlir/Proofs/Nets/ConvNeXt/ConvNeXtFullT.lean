@@ -51,7 +51,7 @@ primitive and for why Route A needs no new op and no new VJP.
 net could not change what the then-committed `convNextForwardTC` denoted (`MobileNetV2RenderB`'s
 reason, §2f). **§2n then DROPPED that scalar chain** — once its last live consumers (the float
 bridges) had channel-LN peers, a retired chain that still elaborates is one more thing to drift
-(§2a's lesson). What is here is what ships. ⛔ The `Nets/ConvNeXt/ConvNeXt.lean` ch9
+(§2a's lesson). What is here is what ships. ⛔ The [`Nets/ConvNeXt/ConvNeXt.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXt.lean) ch9
 representative (`convNextForward`, `convNextBlock`, `convNextBlockBody`) is a different thing and
 SURVIVED the drop: it backs the Diderot comparator and a book chapter.
 
@@ -235,7 +235,7 @@ noncomputable def cnxDownChW_has_vjp (h w : Nat) {cin cout : Nat} (p : CnxDownPa
 
     ⚠⚠ **THE HEAD LN CAME BACK 2026-08-30, and the history is the point.** The pre-§2m net had
     scalar affines, no stem LN and a head LN. §2m/§2n added the stem LN and DELETED the head one,
-    to match `jax/MainConvNeXtImagenet.lean` — which was itself missing it. Both references have
+    to match [`jax/MainConvNeXtImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainConvNeXtImagenet.lean) — which was itself missing it. Both references have
     both: `facebookresearch/ConvNeXt` does `self.norm(x.mean([-2,-1]))` with
     `nn.LayerNorm(dims[-1], eps=1e-6)`, and timm's `convnext_tiny` head is
     `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`.

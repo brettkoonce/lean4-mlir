@@ -19,7 +19,7 @@ definition across both nets.
 | `bnkStridedFwdB` / `bnkStridedBackGradB` | strided projection | stages 2/3/4 block 0 |
 
 ⚠ **The stride is on the 3×3 (`W2`), not the leading 1×1** — v1.5 / torchvision, which is what
-`jax/MainResnet50Imagenet.lean` trains. So in the strided block `conv1`, `bn1` and `relu1` all run
+[`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. So in the strided block `conv1`, `bn1` and `relu1` all run
 at the **input** resolution `2hh`, and only `conv2` decimates. That asymmetry is why the strided
 renderer carries two sets of zero-vectors (`zIn`/`zMidIn` at `2hh`, `zMid`/`zOut` at `hh`) where
 the other two carry one.

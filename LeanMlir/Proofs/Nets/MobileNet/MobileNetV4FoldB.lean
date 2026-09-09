@@ -68,10 +68,10 @@ arm here — its `CertLayer` remains certified and unexercised one tier down.
   backward-chain cotangent without naming it. Pinning them to the emitted backward subgraph is the
   §1a tie (`MobileNetV4StepTieB.lean`).
 * The five `*GradBBf16` kinds `mnv4in_adam64bf16` / `adamdp64bf16` emit are folded in
-  `Foundation/Bf16GradNodes.lean`, one lemma per kind for every net; a bf16 render does not consume
+  [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), one lemma per kind for every net; a bf16 render does not consume
   these f32 nodes.
 * ⛔ **One replica.** Under `mnv4in_adamdp64*` each node is followed by the all-reduce mean, which
-  `Foundation/DataParallel.lean` handles as its own tier (4d); this statement is at the
+  [`Foundation/DataParallel.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallel.lean) handles as its own tier (4d); this statement is at the
   per-replica gradient.
 -/
 

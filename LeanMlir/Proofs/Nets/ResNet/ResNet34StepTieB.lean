@@ -26,7 +26,7 @@ what make the cross-block chain a composition of certified VJPs rather than a re
 ⭐ **The loss cotangent is the LABEL-SMOOTHED one, at a general target.** `ResNet34RenderB` composes
 the head cotangent from six kit ops — `softmaxRow → subB → scaleB → addVB → shiftB → divConstB`, α
 baked at 0.1 and the `ls0` variants at 0 — and the target arrives as the graph input `%onehot`,
-which under mixup or cutmix is a soft vector drawn on the host. `Foundation/SmoothedLossCot.lean`
+which under mixup or cutmix is a soft vector drawn on the host. [`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean)
 is that cotangent's lemma; the head fold below is stated at it, not at `softmax − oneHot`.
 
 ⭐ **`N` is a binder.** The capstone takes `(N : Nat)`, exactly as `efficientnet_net_tied` does;

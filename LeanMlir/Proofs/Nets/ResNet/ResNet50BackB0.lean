@@ -9,7 +9,7 @@ certified renderer with no whole-net backward at all; this file is that gap.
 
 ## ⚠⚠ WHAT §8 GOT WRONG — "R50 is one step from done" was measured against the WRONG phase 1
 
-§8 records R50's block-level VJP as ✓ (`Nets/ResNet/ResNet50BlocksCertified.lean`) and concludes the
+§8 records R50's block-level VJP as ✓ ([`Nets/ResNet/ResNet50BlocksCertified.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ResNet/ResNet50BlocksCertified.lean)) and concludes the
 job is only (2) + (3). That certificate is real, but it is for the **per-channel, non-batched**
 forms — `bblkPC` / `bblkPProjPC` / `bblkPStridedPC` are built from `bnPerChannelTensor3` and plain
 `flatConv`, with no `N`. The backward-graph vocabulary is **batched**: `bnBatchLA`, `batchMap`,
@@ -50,7 +50,7 @@ dangerous one — an identity skip where a projection belongs is well-typed only
 ## ⚠ THE STRIDE IS ON THE 3×3, NOT THE LEADING 1×1
 
 `r50DownBody` puts `cbReluStridedB` on the **second** conv. That is ResNet **v1.5** / torchvision,
-which is what `jax/MainResnet50Imagenet.lean` trains. The v1 placement (stride on the leading 1×1)
+which is what [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. The v1 placement (stride on the leading 1×1)
 compiles, trains and descends — and is a different net (§3's trap, and `VerifiedSpec.lean:46`
 records it costing ~0.5 pt of top-1). The leading 1×1 therefore runs at the INPUT resolution
 `(2*h)×(2*w)` and carries `mid` channels there until `W₂` decimates.

@@ -120,7 +120,7 @@ structure VerifiedNet where
       same place `%lr` lives, for the same reason — one graph, many schedules.
 
       ⚠ It is therefore a SECOND hand-list against the renderer's `enetDropIdxs`, exactly like
-      `toSpecs == XLayout.specs`. `tests/TestDropPathRamp.lean` is the `#guard` that pins the two;
+      `toSpecs == XLayout.specs`. [`tests/TestDropPathRamp.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestDropPathRamp.lean) is the `#guard` that pins the two;
       `VerifiedSpec` sits downstream of this file, so the renderer cannot share the definition by
       import without inverting the dependency. -/
   dropKeeps : Array Float := #[]
@@ -259,7 +259,7 @@ end VerifiedNet
 /-! ## `LEAN_MLIR_VARIANT`'s axis predicates — ONE definition each
 
 `variant` encodes five independent axes and every consumer recovers each with a string test on
-the name. `tests/TestVariantPredicates.lean` is the table of what each must read, and its
+the name. [`tests/TestVariantPredicates.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestVariantPredicates.lean) is the table of what each must read, and its
 docstring is the history: the naming has collided three times, each time between a PAIR of
 markers meeting rather than between a new marker and an old one.
 
@@ -412,7 +412,7 @@ def mkSession (mlirPath : String) : IO LowererSession := do
       * γ = 1 (kind 1), β / bias = 0 (kind 2)
 
     ⚠ **Both weight cases CHANGED 2026-08-04.** This used variance `2/fan_in` for BOTH, where
-    `jax/Jax/Codegen.lean` emits `uniform(±√(6/fan_out))` for convs (variance `2/fan_out` —
+    [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean) emits `uniform(±√(6/fan_out))` for convs (variance `2/fan_out` —
     torchvision's `kaiming_normal_(mode='fan_out', nonlinearity='relu')` convention for ResNet,
     `emitConvBnInit`) and `uniform(±√(6/(fan_in+fan_out)))` for dense (Glorot, `emitDenseInit`).
     **The two paths had therefore never agreed on init, on any net.** It is identical wherever
@@ -3588,7 +3588,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
     few caps `c` (plus an unconstrained baseline) so the table shows the trade: shrinking `c` pulls
     the global `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the **vacuous** product certificate
     **non-vacuous** — at the cost of clean accuracy. The empirical face of
-    `lipschitz_margin_certified_radius` (`LeanMlir/Proofs/Certificates/LipschitzCert.lean`): smaller `L` ⇒ larger
+    `lipschitz_margin_certified_radius` ([`LeanMlir/Proofs/Certificates/LipschitzCert.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Certificates/LipschitzCert.lean)): smaller `L` ⇒ larger
     certified radius `m/(√2·L)`. The verified CE gradient stays in the proven kernel; the projection
     is host-side weight rescaling only. -/
 def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
@@ -4427,12 +4427,12 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
 
     Keeps **fp32 master weights** and, each step, projects the weights
     (per-output-column) and the activations (per-tensor) onto the **E4M3** grid
-    (`LeanMlir/E4M3Quant.lean`), runs the *same* verified `@<slug>_train_step`
+    ([`LeanMlir/E4M3Quant.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/E4M3Quant.lean)), runs the *same* verified `@<slug>_train_step`
     kernel (the matmul accumulates in fp32 — the `dotMixed` model: `u_leaf =
     E4M3`, `u_acc = fp32`), and applies the recovered gradient delta to the fp32
     master via `addDelta` (`master += Wout − Wq = master − lr·∇`). The MLIR and
     FFI are **unchanged**: fp8 here is host-side operand byte-prep, exactly the
-    §3b render-tie model (`Proofs/E4M3Fold.lean`). Eval runs the fp32
+    §3b render-tie model ([`Proofs/E4M3Fold.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Float/E4M3Fold.lean)). Eval runs the fp32
     master through `@<slug>_fwd` (the "fp32-infer" accuracy of the fp8-trained
     model, mirroring `scripts/mnist_e4m3_demo.py`).
 

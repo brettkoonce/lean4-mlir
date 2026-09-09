@@ -24,7 +24,7 @@ from the attention core outwards:
 * `clsScatter`, the CLS-slice adjoint the head backward scatters through.
 
 **Convention table for the net `vitInputGradK` reverses** (`vitForwardKV` at ViT-Tiny, read from
-`apps/baselines/MainVitTrain.lean` and `LeanMlir/Proofs/Codegen/ViTRender.lean`): depth 12 with
+[`apps/baselines/MainVitTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/apps/baselines/MainVitTrain.lean) and [`LeanMlir/Proofs/Codegen/ViTRender.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Codegen/ViTRender.lean)): depth 12 with
 distinct per-block parameters, `D = 192 = 3 heads × 64`, MLP dim 768, 197 tokens (196 patches +
 CLS), `16×16/s16` patchify (no `conv2d`, so no padding phase and none of the even-kernel question
 `EvenKernelConvBack.lean` found for ConvNeXt), vector-`[D]` LayerNorm at all 25 sites, GELU,

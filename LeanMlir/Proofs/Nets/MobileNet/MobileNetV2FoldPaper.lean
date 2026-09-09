@@ -12,7 +12,7 @@ the batched chain, as the decision "one chain per net" requires. Every theorem b
 and still true — they are about the per-example MobileNetV2 and the SGD-inline op family, both of
 which exist as mathematics — but **no committed bytes exercise them**. The live peers are
 `MobileNetV2FoldPaperG.lean` (the §1 fold at the batched `*GradB` nodes) and
-`Nets/MobileNet/MobileNetV2StepTieB.lean` (the §1a tie), both landed the same day, which is the ordering
+[`Nets/MobileNet/MobileNetV2StepTieB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV2StepTieB.lean) (the §1a tie), both landed the same day, which is the ordering
 rule that made the retirement acceptable.
 
 The whole-net peer of `MobileNetV2Fold` (the reduced 6-block fold), scaled to the real

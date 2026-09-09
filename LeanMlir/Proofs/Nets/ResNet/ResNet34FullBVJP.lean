@@ -15,7 +15,7 @@ Every block VJP is already proven at `bnBatchLA`: `r34BasicBlockB_has_vjp_at` an
 `ResNet34FullB.lean`'s `r34IdB` / `r34DownB` unfold to. The eight bundle lemmas below are
 delegations in the `EfficientNetFullB0` style.
 
-⭐ The one thing that did not exist is `batchMap_has_vjp_at` (`Foundation/BatchMapVJPAt.lean`,
+⭐ The one thing that did not exist is `batchMap_has_vjp_at` ([`Foundation/BatchMapVJPAt.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/BatchMapVJPAt.lean),
 written for this): r34's stem ends in `batchMap N (maxPool3s2Flat 64 56 56)` and a max-pool has no
 derivative at a tie, so the GLOBAL `batchMap_has_vjp` cannot lift it. The per-example pool VJP at a
 `Vec` point was already there (`maxPool3s2Flat_has_vjp_at_vec`), so the batched pool is two lines.

@@ -59,7 +59,7 @@ outer map, a printer concern (the doc's "D1 shortcut"). `pretty`'s lexical
 conformance to the StableHLO spec is the audited/validated residue (the doc's
 "4b": cross-checked by `iree-compile` + execution — the verified-rendered train
 step trains MNIST to ~92%), not a verified `parse` round-trip ("4a"). Everything
-here closes under `[propext, Classical.choice, Quot.sound]` (`tests/AuditAxioms.lean`).
+here closes under `[propext, Classical.choice, Quot.sound]` ([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)).
 -/
 
 open Finset BigOperators
@@ -2386,7 +2386,7 @@ theorem dotInBf16_eq_dotIn_rounded {m n : Nat} (rnd : ℝ → ℝ) (s : String) 
 @[simp] theorem den_selectPos {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
     den (.selectPos s x e) = fun i => if x i > 0 then den e i else 0 := rfl
 /-- **The round node is `den`-faithful for any rounding.** This is the equation
-    `Proofs/Float/Bf16Fold.lean` asks for by name to lift its depth-1 tie to
+    [`Proofs/Float/Bf16Fold.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Float/Bf16Fold.lean) asks for by name to lift its depth-1 tie to
     depth > 1: rounding an *intermediate* activation is now an in-graph op whose
     denotation is exactly post-composition with `rnd`. No bf16 specifics appear here —
     bf16 round-to-nearest is one instance, and the accuracy half is supplied separately
@@ -3267,7 +3267,7 @@ per-example index, so there is deliberately no fused `depthwise{,Strided}BiasSgd
 no `*SgdB_eq_grad` statement to make. What pins these two ops instead is that `den` IS the
 shared-parameter batch sum of the proven per-example depthwise bias VJP, which is what the emitted
 `reduce … [0, 2, 3]` computes. The emit side is covered separately by the byte-PREFIX case in
-`tests/TestBatchedEmitTie.lean` against the per-example fused `depthwiseBiasSgd`. -/
+[`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) against the per-example fused `depthwiseBiasSgd`. -/
 
 @[simp] theorem depthwiseBiasGradB_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (x : Vec (N*(c*h*w))) (b : Vec c)
@@ -3288,7 +3288,7 @@ shared-parameter batch sum of the proven per-example depthwise bias VJP, which i
 /-! ## The ConvNeXt five — same statement, the last `*Sgd`/`*Grad` pairs the kit was missing (§2f)
 
 `den (xSgd …) = θ − lr · den (xGrad …)`, all `rfl`. Together with the emit-side byte-PREFIX checks
-in `tests/TestBatchedEmitTie.lean` this is what lets `convnext_adam_train_step` hand its gradients
+in [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) this is what lets `convnext_adam_train_step` hand its gradients
 to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, never Adam (§2a). -/
 
 @[simp] theorem depthwiseWeightSgd_eq_grad {c h w kH kW : Nat} (xN wN lrS : String)
@@ -5542,7 +5542,7 @@ def lookupShape (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat) :=
     pooled tags carry their **output** spatial dims, so the input side is `2h × 2w`.
 
     ⚠⚠ Each batched tag and its per-example peer MUST answer IDENTICALLY. The two renders are tied
-    byte for byte (`tests/TestBatchedEmitTie.lean`, `convnext-fwd-b-tie`), so a shape one path
+    byte for byte ([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean), `convnext-fwd-b-tie`), so a shape one path
     knows and the other does not is a `liftPointwise` that fires on one side only — a tie failure
     with no wrong answer anywhere to point at. Add tags in pairs. -/
 private def tokIO : Tok → Option (Nat × Nat × Nat) × Option (Nat × Nat × Nat)
@@ -9256,7 +9256,7 @@ def serializeToks (B : Nat) : List Tok → (String × List String) → StateM Em
     AdamW's scale-free update that residue still moves θ by ~lr per step. In the 80-epoch run all
     8,512 biases drifted to |θ|max 0.041. They are safe to drop because the FORWARD does not depend
     on them (zeroing all of them moves the trained logits by rel 1e-6, against 0.79 for the same
-    ablation on BN β), not because they stay zero. See `tests/TestConvBiasZero.lean`. -/
+    ablation on BN β), not because they stay zero. See [`tests/TestConvBiasZero.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvBiasZero.lean). -/
 def biasName (convBias : Bool) (nm : String) (c : Nat) : String :=
   if convBias then nm else s!"%zb{c}"
 
@@ -9368,10 +9368,10 @@ def rmsConstsBlock (h : RmsHyper) : String :=
   s!"    %eps = stablehlo.constant dense<{fmt6 h.eps}> : tensor<f32>\n" ++
   s!"    %wd = stablehlo.constant dense<{fmt6 h.wd}> : tensor<f32>\n"
 
-/-- **MobileNetV2's RMSProp knobs** (`jax/MainMobilenetV2Imagenet.lean`): ε = **1.0**. -/
+/-- **MobileNetV2's RMSProp knobs** ([`jax/MainMobilenetV2Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV2Imagenet.lean)): ε = **1.0**. -/
 def mnv2RmsHyper : RmsHyper := { eps := 1.0, wd := 4.0e-5 }
 
-/-- **EfficientNet-B0's RMSProp knobs** (`jax/MainEfficientNetImagenet.lean`): ε = **1e-3**. -/
+/-- **EfficientNet-B0's RMSProp knobs** ([`jax/MainEfficientNetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainEfficientNetImagenet.lean)): ε = **1e-3**. -/
 def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
 
 -- ▶ The DRIVER-side half of the same two recipes — peak LR, exponential decay, warmup — is

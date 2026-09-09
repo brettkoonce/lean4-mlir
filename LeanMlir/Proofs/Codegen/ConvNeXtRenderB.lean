@@ -19,14 +19,14 @@ the backward, the AdamW/EMA tail and, since leg 3, the seventeen drop-free write
 in `ConvNeXtRender.lean`, beside the stochastic-depth, ImageNet, S/B and bf16 ones that were always
 here. Only the SGD-inline `convnext_train_step.mlir` is still written there: this traversal has no
 fused-SGD arm, and `ConvNeXtStepTie.lean`'s 182-parameter tie is stated at those bytes. The Proofs
-tier for this chain is `Nets/ConvNeXt/ConvNeXtFoldGB.lean`, which landed before the writers
+tier for this chain is [`Nets/ConvNeXt/ConvNeXtFoldGB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtFoldGB.lean), which landed before the writers
 moved (leg 1's ordering rule).
 
 **The gate** (`lake build convnext-fwd-b-tie`): the per-example chain and this one must emit
 **byte-identical** forwards, and train steps that differ on the conv-VJP `transpose`/`reverse` pair
 and nothing else (78 lines — commuting ops on disjoint axes). That is a much stronger claim than the
 numeric ties elsewhere in this thread, and it is available *because* every batched form was built to
-emit its per-example peer's text byte-for-byte (`tests/TestBatchedEmitTie.lean`, 31 forms). So the
+emit its per-example peer's text byte-for-byte ([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean), 31 forms). So the
 whole-net statement is the per-form statement composed — and if it ever fails, the tie file
 localises which form did it in one run. ⚠ Since leg 3 the committed bytes are THIS chain's, so the
 gate renders the per-example chain and compares it against them — the same statement read from the
@@ -52,7 +52,7 @@ private def zDB {c kh kw : Nat} : DepthwiseKernel c kh kw := fun _ _ _ => 0
 private def zMB {a b : Nat} : Mat a b := fun _ _ => 0
 /-- The abstract rounding the bf16 ops carry. ⚠ It is `id` in the RENDER for the reason every other
     net's is: `skel`/`pretty` never look at it (the emitted text is decided by the tag), and the
-    accuracy statement is made in `Proofs/Float/*MixedFloatBridge.lean` where `rnd` is instantiated
+    accuracy statement is made in [`Proofs/Float/*MixedFloatBridge.lean`](https://github.com/brettkoonce/lean4-mlir/tree/main/LeanMlir/Proofs/Float) where `rnd` is instantiated
     at bf16 round-to-nearest and fed the `|rnd x − x| ≤ 2⁻⁸|x|` hypothesis. A render that baked a
     concrete rounding here would be claiming the emitter knows about it, which it does not. -/
 private def zrndB : ℝ → ℝ := fun r => r

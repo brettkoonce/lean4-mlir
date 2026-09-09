@@ -8,7 +8,7 @@ trains on `verified_mlir/linear_train_step.mlir`, which is written by
 certifies *that* renderer: every value the emitted module produces is the
 certified (Mathlib-`fderiv`-derived) softmax-CE loss-descent SGD step.
 
-(Namespace/name lengths are kept short on purpose: `tests/AuditAxioms.lean`'s
+(Namespace/name lengths are kept short on purpose: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)'s
 three-axiom closure check greps `#print axioms` output per line, which Lean wraps
 past ~120 cols — long qualified names would split the benign triple across lines
 and false-fail the check. Keep future per-chapter capstone names short.)

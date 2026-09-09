@@ -31,7 +31,7 @@ touches it. The spike uses `Vec`/`Mat` directly (D1 shortcut) rather than
 the general flat-tensor type.
 
 Everything closes under `[propext, Classical.choice, Quot.sound]` (audited
-in `tests/AuditAxioms.lean`); no `native_decide`.
+in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)); no `native_decide`.
 -/
 
 namespace Proofs

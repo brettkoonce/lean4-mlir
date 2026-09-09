@@ -28,7 +28,7 @@ render-tie is the genuine "the bytes implement block-scaled-E4M3 matmul with fp3
 accumulate" claim.
 
 All theorems kernel-close under `[propext, Classical.choice, Quot.sound]`
-(`tests/AuditAxioms.lean`). (Namespace/name kept short for the audit's per-line
+([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)). (Namespace/name kept short for the audit's per-line
 `#print axioms` grep — cf. `LinearFold.lean`.)
 -/
 

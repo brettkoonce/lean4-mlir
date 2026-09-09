@@ -706,7 +706,10 @@ lean_exe «blueprint-checkdecls» where
     cites, against the same environment. The blueprint came through five rewrites intact and
     the docstrings did not, and the difference was never style: the blueprint had a gate.
     ⚠ Resolution is `Environment.find?`, not a regex — see the file header for why the regex
-    version was abandoned at an 8.7% false-positive floor. -/
+    version was abandoned at an 8.7% false-positive floor. Since 2026-09-09 it also checks
+    that every `` `dir/File.lean` `` a `LeanMlir/` docstring cites is a markdown link into the
+    repo with a live target, because doc-gen4 renders the bare form as a module link that
+    404s for anything outside the LeanMlir doc build. -/
 lean_exe «docstring-checkrefs» where
   root := `tests.DocstringCheckRefs
   supportInterpreter := true

@@ -5,7 +5,7 @@ import LeanMlir.ViTRender
 
 The ViT peer of `MobileNetV2Render`/`ConvNeXtRender`: the full depth-12 ViT-Tiny forward rendered as
 `pretty` of the verified multi-head vector-LN graph (`vitBlockGraphMHV` × 12 + patch embed + final
-vector-LN + CLS-slice dense head). The committed `LeanMlir/ViTRender.lean` is a hand-written String
+vector-LN + CLS-slice dense head). The committed [`LeanMlir/ViTRender.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/ViTRender.lean) is a hand-written String
 emitter (faithful per-op, NOT `pretty(provenGraph)`); this renders the SAME forward as `pretty` of the
 proven `SHlo` graph, so `den(graph) = vitForward` (via `vitFwdGraphMHV_faithful`, here at depth-12).
 
@@ -267,7 +267,7 @@ def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
 
 /-- Rowwise-dense **bias** tail: the un-fused gradient in `adam` mode, the fused SGD update
     otherwise. The two ops have the same output shape and the `*Grad` emit is a byte-prefix of the
-    `*Sgd` one (`tests/TestBatchedEmitTie.lean`), so this is the only place the two tails differ —
+    `*Sgd` one ([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean)), so this is the only place the two tails differ —
     one backward traversal, two endings, which is what keeps `vit_train_step.mlir` byte-identical
     while `vit_adam_train_step.mlir` gets its gradients. -/
 private def rdB (bs : Nat) (adam : Bool) (c : Nat) (bN lrS dy : String) : StateM Proofs.StableHLO.EmitS (String × String) :=
@@ -486,7 +486,7 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
 
     `nClasses` is a real parameter as of 2026-07-31: it was the literal 10 here and in ~28 other
     places, which pinned the whole render to Imagenette and blocked the matched pair with
-    `jax/MainVitImagenet.lean` (a 1000-class ViT-Tiny that already exists).
+    [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean) (a 1000-class ViT-Tiny that already exists).
 
     ⚠ `V` is TRAILING and defaulted to ViT-Tiny, for the same reason `vbB` is: every existing
     call site is untouched and every committed artifact re-renders byte-identically. -/

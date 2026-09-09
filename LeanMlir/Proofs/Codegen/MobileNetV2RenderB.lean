@@ -564,7 +564,7 @@ private def adamOneM (B : Nat) (replicas : Nat) (g : PGradM) :
 /-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `adamOneM` peer.
 
     Only ONE of the four ops is new. Reading the reference
-    (`jax/Jax/Codegen.lean`, the `.rmsprop` branch) top to bottom:
+    ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), the `.rmsprop` branch) top to bottom:
 
     | reference line | emitted here |
     |---|---|

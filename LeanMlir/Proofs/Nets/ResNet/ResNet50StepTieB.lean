@@ -60,7 +60,7 @@ The identity block needs none. Same seam T2's graph faithfulness has, for the sa
 ⛔ **ONE REPLICA.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
 `allReduceMeanF` — the collective as an AST node since 4d piece 2 (2026-09-07), until then emitted
 text outside the AST — so every statement here is at the per-replica gradient node and
-`Foundation/DataParallelNode.lean` composes it with the replica mean (§4d). The 8× accumulation sits between the gradient
+[`Foundation/DataParallelNode.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallelNode.lean) composes it with the replica mean (§4d). The 8× accumulation sits between the gradient
 and the optimizer as `momVNextF` at `(μ := akeep)`, and the LAMB tail is `lamb_triple_faithful` —
 both certified, neither part of this file.
 

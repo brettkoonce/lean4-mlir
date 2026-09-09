@@ -13,7 +13,7 @@ For comparison, pushing the L2 Lipschitz certificate through
 
 
 **Theorem vs. measurement.** Soundness is in the ENGINE
-(`Foundation/IntervalBound.lean`), proved once — kernel-checking the 57th
+([`Foundation/IntervalBound.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/IntervalBound.lean)), proved once — kernel-checking the 57th
 image buys nothing the 56th didn't. The counts above are exact-rational
 MEASUREMENTS over the first 100 images; the first 8 certifying images at
 each radius carry a `CertifiedAtLinf` THEOREM, and the aggregate below states

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 
 /-! # Closing the ResNet-34 render — the parameter-gradient close (a FREE close)
 
-`planning/archive/mobilenetv2_close.md` Item C, applied to ResNet-34 (`tests/TestResnet34Train.lean`,
+`planning/archive/mobilenetv2_close.md` Item C, applied to ResNet-34 ([`tests/TestResnet34Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestResnet34Train.lean),
 146 params). Unlike MobileNetV2 — whose close needed a genuinely-new depthwise bridge family —
 **every ResNet-34 parameter family is already certified by an existing generic bridge**. ResNet-34
 uses only regular convolutions (3×3 and the 7×7 stem), per-channel BN, plain relu, maxpool, residual

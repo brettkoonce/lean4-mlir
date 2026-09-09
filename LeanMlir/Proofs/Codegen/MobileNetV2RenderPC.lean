@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 `planning/archive/mobilenetv2_close.md` Item A. `StableHLO.lean` already has the full strided MobileNetV2
 forward graph `mobilenetv2FwdGraphFull` + `mobilenetv2FwdGraphFull_faithful` — but those use **scalar**
 `bnF` (one γ/β over the whole `c·h·w`), tied to the scalar ℝ-forward `mobilenetv2Forward_full`. The
-**operational render** (`tests/TestMobilenetV2Train.lean`, the `bnPC` block) emits **per-channel** BN
+**operational render** ([`tests/TestMobilenetV2Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestMobilenetV2Train.lean), the `bnPC` block) emits **per-channel** BN
 (reduce over spatial `[2,3]`, `γ/β : Vec c`). So neither existing graph is a faithful "render of a
 proven graph": they compute a different function than the render.
 
@@ -22,7 +22,7 @@ This file closes that gap — the per-channel-BN twin of `mobilenetv2FwdGraphFul
 
 This is the prerequisite for the structured render (Item B): now MobileNetV2 has a *proven* per-channel
 forward graph whose `pretty` matches the render's forward text. Everything closes 3-axiom-clean
-(`tests/AuditAxioms.lean`). Stride-2 `flatConvStridedF`/`depthwiseStridedF` (4 downsampling blocks) and
+([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)). Stride-2 `flatConvStridedF`/`depthwiseStridedF` (4 downsampling blocks) and
 the residual `addV` skip (`b2/b4`) are all assembled here, not just exercised at the op level.
 -/
 

@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Certificates.LipschitzCert
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
-arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
 Closes the "certificate machinery, never instantiated" gap: a fixed-weight
 network whose Lipschitz constant is PROVED in Lean (Frobenius bound — no

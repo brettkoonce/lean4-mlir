@@ -24,7 +24,7 @@ previous block, which is why `MobileNetV2RenderB`'s `irBackStride1GradB` is one 
 `b3`, `b5`, `b6`, `b8`–`b13`, `b15`, `b16` (skip) and `b11`, `b17` (no skip).
 
 ⭐ **The loss cotangent is the LABEL-SMOOTHED one, at a general target**, shared with ResNet-34:
-`Foundation/SmoothedLossCot.lean`. `MobileNetV2RenderB` composes it from the same six kit ops
+[`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean). `MobileNetV2RenderB` composes it from the same six kit ops
 (`softmaxRow → subB → scaleB → addVB → shiftB → divConstB`) with α at 0.1 and the target arriving
 as the graph input `%onehot` — a soft vector under mixup or cutmix.
 
@@ -1019,7 +1019,7 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     is that the example's target sums to 1 — a one-hot, or mixup's convex combination of two.
     Together with the capstone this closes the top of the chain: every parameter node denotes the
     certified gradient at the cotangent of the loss the trainer actually minimises. Shared with
-    ResNet-34 through `Foundation/SmoothedLossCot.lean`, at a general target. -/
+    ResNet-34 through [`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean), at a general target. -/
 theorem mnv2_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (t : Vec (N * (1 * nCls)))

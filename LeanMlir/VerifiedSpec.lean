@@ -16,7 +16,7 @@ This file provides that surface:
                          `#guard resnet34Verified.toSpecs == ResNet34Layout.specs`.)
 
 The architecture's *faithfulness* is the audited `<net>_has_vjp` theorem, which is itself a
-hand-unrolled `foldl` of the generic `vjp_comp` chain-rule combinator (`Proofs/Tensor.lean`)
+hand-unrolled `foldl` of the generic `vjp_comp` chain-rule combinator ([`Proofs/Tensor.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Tensor.lean))
 over these same layers — so the spec and the proof describe the same fold. Generating the
 verified StableHLO from `layers` (folding the proven op-emitters) and folding the proof via
 a `netVjp` term are the remaining Tier-2 / Tier-3 steps; for now the slug names the committed,
@@ -31,7 +31,7 @@ inductive VLayer where
   /-- conv → per-channel BN → relu with **no conv bias** — `{W, γ, β}`. BN removes a conv bias
       (`(x+b) − mean(x+b) = x − mean(x)`), so a BN-followed conv carries none in He et al.'s
       `.convBn`; ResNet-34 uses this and the nets that genuinely ship a bias use `convBn`
-      (§2l step B, measured in `tests/TestConvBiasZero.lean`). -/
+      (§2l step B, measured in [`tests/TestConvBiasZero.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvBiasZero.lean)). -/
   | convBnNB (ic oc k stride : Nat)
   /-- max pool `k×k` / `stride`. No params. -/
   | maxPool (k stride : Nat)
@@ -46,7 +46,7 @@ inductive VLayer where
 
       ⚠ **This is ResNet v1.5, not He et al.'s v1**: the stride sits on the **3×3** (and on the
       projection), with the leading 1×1 at stride 1. Measured off the reference
-      (`jax/Jax/Codegen.lean`'s `bottleneck_block_down`), not assumed — putting it on the first
+      ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `bottleneck_block_down`), not assumed — putting it on the first
       1×1 compiles, trains, descends and is a different net (§2k's heavy-ball trap one layer up).
 
       **No conv biases** — every conv here is BN-followed, so a bias cannot reach the output
@@ -271,7 +271,7 @@ structure VerifiedNetSpec where
       ⚠ A SECOND hand-list against the renderer's `enetDropIdxs`/`enetDropTotal` — the same
       two-lists shape as `toSpecs == XLayout.specs`, and for the same structural reason: this file
       sits DOWNSTREAM of `VerifiedTrain`, so the renderer cannot share the definition by import
-      without inverting the dependency. `tests/TestDropPathRamp.lean` is the `#guard` that pins
+      without inverting the dependency. [`tests/TestDropPathRamp.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestDropPathRamp.lean) is the `#guard` that pins
       them, and it is what stops the ramp drifting the way §2k's `α/K` did. -/
   dropKeeps : Array Float := #[]
   /-- Which directory this net's artifacts live in — see `VerifiedNet.mlirDir`. Default

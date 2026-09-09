@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 The ResNet-34 peer of `MobileNetV2RenderPC.lean`. `StableHLO.lean`'s `resnetFwdGraph` is a
 *representative* (stem + 1 identity + 1 projection block + GAP + dense) using **scalar** `bnF`; the
-operational render (`tests/TestResnet34Train.lean`) emits **per-channel** BN, the full 16-block
+operational render ([`tests/TestResnet34Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestResnet34Train.lean)) emits **per-channel** BN, the full 16-block
 `[3,4,6,3]` net, a 7×7 strided stem and a maxpool. This file is the per-channel twin matching the
 render:
 

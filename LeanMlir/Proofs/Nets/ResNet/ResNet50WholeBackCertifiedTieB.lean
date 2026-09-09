@@ -20,7 +20,7 @@ literally ResNet-34's functions at R50's widths (§3.5b) — so §4.2d's file su
 * `opaqueA0 … A16` and **`r34B_full_has_vjp_at` itself** — the generic eighteen-stage apex.
   [3,4,6,3] is sixteen blocks for both nets, so the chain is the same construction and a second
   copy would be two writers for one fact. ⚠ It is ResNet-34's only by where it was written; every
-  dimension in it is a variable. The prefixes themselves are `Foundation/OpaquePrefix.lean`'s.
+  dimension in it is a variable. The prefixes themselves are [`Foundation/OpaquePrefix.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/OpaquePrefix.lean)'s.
 
 What this file adds is the sixteen bottleneck slots, the tie, its `pdiv` reading, and the shape
 check `resnet50ForwardB_full_eq_slots`.

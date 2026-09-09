@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Nets.Small.MlpFold
 
 /-! # The CANONICAL MNIST MLP — 784→512→512→10 (ReLU, biased)
 
-`mlpVerified` (`LeanMlir/VerifiedNets.lean`, Chapter 2) is the repo's canonical MNIST
+`mlpVerified` ([`LeanMlir/VerifiedNets.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/VerifiedNets.lean), Chapter 2) is the repo's canonical MNIST
 reference architecture: `[.dense 784 512, .relu, .dense 512 512, .relu, .dense 512 10]`.
 Every runnable MNIST MLP path uses it (verified/e4m3/pgd/spectral/smooth trainers, the
 committed `verified_mlir/mlp_train_step.mlir` render, the baselines, `margin_probe.py`).

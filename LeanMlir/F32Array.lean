@@ -67,7 +67,7 @@ opaque blit (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)
 
 /-- `dst[dstOff + i] += a · src[srcOff + i]` for `i < count`, **in place** when `dst` is
     unshared. The perturbation primitive of the adjoint gradcheck
-    (`tests/TestR50GradCheck.lean`): parameter tensors are packed in func-arg order, so a
+    ([`tests/TestR50GradCheck.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestR50GradCheck.lean)): parameter tensors are packed in func-arg order, so a
     direction supported on one BLOCK is a contiguous slice and needs no mask. -/
 @[extern "lean_f32_axpy_slice"]
 opaque axpySlice (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)

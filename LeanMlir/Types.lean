@@ -968,7 +968,7 @@ structure TrainConfig where
       reference it is being scored against.
 
       The default 0.99 keeps every net that does not set it byte-identical, on both
-      the JAX emitter (`Jax/Codegen.lean`'s `_bn`) and the verified host-side EMA
+      the JAX emitter ([`Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `_bn`) and the verified host-side EMA
       (`VerifiedTrain.lean`'s `bnMom`). Under gradient accumulation both sides
       compensate to `bnMomentum^(1/K)` per micro-batch. -/
   bnMomentum : Float := 0.99
@@ -1079,7 +1079,7 @@ inductive DatasetKind where
       crop is lossless for this dataset: across 4,000 sampled slices, the
       8-pixel border it removes contains zero tumour voxels and zero brain
       voxels — MSD's volumes are skull-stripped and centered, so the margin is
-      pure background. Used by `demos/MainUnetBratsR34.lean`. -/
+      pure background. Used by [`demos/MainUnetBratsR34.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/demos/MainUnetBratsR34.lean). -/
   | brats224
 deriving Repr, BEq
 

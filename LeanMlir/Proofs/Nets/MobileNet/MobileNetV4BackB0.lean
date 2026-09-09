@@ -65,10 +65,10 @@ the family-collapsing body and the skip block; both stride-2 forms (`mnv4UibPreS
 with `stemBackBatchedGraph` — the symmetric-padding strided conv-bn-swish backward that closed
 EfficientNet's stem hole at the same time; the **head** (`mnv4Head`, its GAP and dense layers both
 tying by `rfl`); the table-driven `k = 0` dispatch; and `UibParams`, the row-typed weight record.
-Nine of these are in `tests/AuditAxioms.lean`, 3-axiom clean.
+Nine of these are in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean), 3-axiom clean.
 
 **Not built here — the NET level, which is four other files as of 2026-09-07.** T1 (the whole-net
-forward and its input-VJP) is `Nets/MobileNet/MobileNetV4FullB.lean` +
+forward and its input-VJP) is [`Nets/MobileNet/MobileNetV4FullB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean) +
 `MobileNetV4FullBVJP.lean`, T2 (the typed forward graph at `mnv4FwdChainB`'s tokens) is in the
 first of those, T3 (the fold and tie at the emitted gradient nodes, all 233) is
 `MobileNetV4FoldB.lean` + `MobileNetV4StepTieB.lean`, and T6 (the certified whole-net

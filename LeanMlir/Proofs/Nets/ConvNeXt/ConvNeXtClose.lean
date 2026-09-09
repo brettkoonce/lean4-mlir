@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 /-! # Closing the ConvNeXt render — the parameter-gradient close (two small new families)
 
 `planning/archive/convnext_close.md` Item C, applied to the representative 2-block ConvNeXt
-(`tests/TestConvNeXtTrain.lean`; `convNextForward`, the proven whole-net VJP `convnext_has_vjp`).
+([`tests/TestConvNeXtTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtTrain.lean); `convNextForward`, the proven whole-net VJP `convnext_has_vjp`).
 The close is generic in the cotangent `dy` the backward chain delivers at each layer's output
 (pinning that cotangent to the actual block chain is the optional Item D), batch-1 — LayerNorm is
 per-example separable, so no batched apparatus (the EfficientNet contrast).

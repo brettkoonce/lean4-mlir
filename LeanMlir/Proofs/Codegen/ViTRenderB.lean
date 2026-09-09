@@ -39,7 +39,7 @@ that becomes available, and `ViTFoldGB.lean` carries the other nine nodes with i
 
 **The gate** (`lake build vit-fwd-b-tie`): this chain and the committed `verified_mlir/vit_fwd.mlir`
 must emit **byte-identical** text. That is available *because* every batched form was built to emit
-its per-example peer's text byte-for-byte and `tests/TestBatchedEmitTie.lean` pins all 47
+its per-example peer's text byte-for-byte and [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) pins all 47
 individually — so the whole-net claim is the per-form claim composed, and when it fails that file
 localises which form did it in one run.
 -/

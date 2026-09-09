@@ -45,7 +45,7 @@ realistic regime, since Monte-Carlo/Clopper–Pearson class-probability estimate
 exactly 0 or 1. See `planning/archive/smoothing_gaussian_lemma.md` for why the ORIGINAL abstract
 theorem's global `Monotone Phiinv` can never be met by the true (unbounded) quantile.
 
-All results are `propext / Classical.choice / Quot.sound`-clean (`tests/AuditAxioms.lean`). -/
+All results are `propext / Classical.choice / Quot.sound`-clean ([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)). -/
 
 namespace Proofs
 

@@ -52,10 +52,10 @@ net, and nothing in the types would notice.
   backward-chain cotangent without naming it. Pinning them to the emitted backward subgraph is the
   §1a tie.
 * The `*bf16` artifacts emit `convWeightGradBBf16` / `convStridedWeightGradBBf16`, their own
-  kinds; `Foundation/Bf16GradNodes.lean` folds them.
+  kinds; [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) folds them.
 * ⛔ **One replica.** Under `*dp*` each of these nodes is followed by `all_reduce(add)/R` as
   emitted text outside the AST, so the statement is at the per-replica gradient
-  (`Foundation/DataParallel.lean`, §4d).
+  ([`Foundation/DataParallel.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallel.lean), §4d).
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

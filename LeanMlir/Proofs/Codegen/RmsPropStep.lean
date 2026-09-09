@@ -9,7 +9,7 @@ Coordinatewise over `Vec`, mirroring the emitted StableHLO op-for-op so the fait
 `SgdMomentumStep` for the SGD/Nesterov pair.
 
 **⚠ THIS IS TENSORFLOW'S RMSPROP, NOT THE TEXTBOOK ONE — and that is the whole point of the file.**
-The JAX reference (`jax/Jax/Codegen.lean`, the `.rmsprop` branch) says so in its own comment: ε goes
+The JAX reference ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), the `.rmsprop` branch) says so in its own comment: ε goes
 **inside** the square root and the running mean-square **initialises to 1.0**. `timm` ships
 `RMSpropTF` for exactly this reason. Reaching for the textbook spelling — `g / (√s + ε)` — would
 compile, render, train, descend, and be **a different optimizer than the one this exists to match**;

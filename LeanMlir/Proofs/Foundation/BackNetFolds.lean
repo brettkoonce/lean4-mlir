@@ -43,7 +43,7 @@ here: its blocks are per-token `Mat`-shaped with a different backward vocabulary
 (`transformerBlockBackGraph` and three MH variants), and `ViTBackB0` is the heaviest module in the
 repo (~11 min, ~14 GB — memory `vit-backb0-ci-cost`). It is a separate sitting.
 
-✅ **That sitting happened — `Nets/ViT/ViTBackNet.lean` (2026-08-10).** Two corrections it
+✅ **That sitting happened — [`Nets/ViT/ViTBackNet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ViT/ViTBackNet.lean) (2026-08-10).** Two corrections it
 forced, both worth reading before trusting this file's framing:
 * ViT was never the *least*-folded net; it was the only one with a concrete whole-net backward
   graph (stem and head included, at every depth). See `CertifiedChain.lean`'s correction block.

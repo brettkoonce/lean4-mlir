@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Float.Binary32Instance
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
-arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
 `binary32_linear_sgd_descends_concrete` (the suite's only concrete descent
 instance) holds at the degenerate `W = 0` net — a satisfiability witness.

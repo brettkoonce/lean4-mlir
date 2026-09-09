@@ -48,7 +48,7 @@ block kinds.
 
 ⚠⚠ **THE STRIDE IS ON THE 3×3.** `r50DownB` puts `cbReluStridedB` on the SECOND convolution, so
 the leading 1×1 runs at the INPUT resolution and carries `mid` channels there until `W₂` decimates.
-That is ResNet **v1.5** / torchvision, which is what `jax/MainResnet50Imagenet.lean` trains. The v1
+That is ResNet **v1.5** / torchvision, which is what [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. The v1
 placement compiles, trains and descends, and is a different net worth ~0.5 pt of top-1
 (`VerifiedSpec.lean:46`). Nothing in the types sees the difference.
 

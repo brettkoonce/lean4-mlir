@@ -37,15 +37,15 @@ structure RmsSchedule where
   /-- `warmupEpochs` — the linear ramp to `lr`. 5 on both. -/
   warmup : Nat := 5
 
-/-- **MobileNetV2**: 0.045 peak, ×0.98 **per epoch** (`jax/MainMobilenetV2Imagenet.lean`). -/
+/-- **MobileNetV2**: 0.045 peak, ×0.98 **per epoch** ([`jax/MainMobilenetV2Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV2Imagenet.lean)). -/
 def mnv2RmsSchedule : RmsSchedule := { lr := 0.045, decayRate := 0.98 }
 
 /-- **EfficientNet-B0**: 0.016 peak, ×0.97 **every 2.4 epochs** — the paper's schedule, and the
-    linear scaling of 0.256@4096 down to batch 256 (`jax/MainEfficientNetImagenet.lean`). -/
+    linear scaling of 0.256@4096 down to batch 256 ([`jax/MainEfficientNetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainEfficientNetImagenet.lean)). -/
 def enetRmsSchedule : RmsSchedule := { lr := 0.016, decayRate := 0.97, decayEpochs := 2.4 }
 
 /-- The Chapter-1 linear classifier: a single dense 784→10. Trained by
-    `MainMnistLinearVerified`; its math VJP is proven in `Proofs/SpecVJP.lean`
+    `MainMnistLinearVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean)
     (`linearVerified_has_vjp`) — both over *this* object. -/
 def linearVerified : VerifiedNetSpec where
   name     := "MNIST-Linear"
@@ -62,7 +62,7 @@ def linearVerified : VerifiedNetSpec where
 #guard linearVerified.toSpecs == #[(#[784, 10], 0), (#[10], 2)]
 
 /-- The Chapter-2 MLP: dense 784→512 → relu → dense 512→512 → relu → dense 512→10.
-    Trained by `MainMnistMlpVerified`; its math VJP is proven in `Proofs/SpecVJP.lean`
+    Trained by `MainMnistMlpVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean)
     (`mlpVerified_has_vjp` / `_at`) — both over *this* object. -/
 def mlpVerified : VerifiedNetSpec where
   name     := "MNIST-MLP"
@@ -118,7 +118,7 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
 
 /-- The Chapter-3 MNIST CNN (no BN): conv 1→32 → relu → conv 32→32 → relu → maxpool
     28→14 → flatten(6272) → dense 6272→512 → relu → dense 512→512 → relu → dense 512→10.
-    Trained by `MainMnistCnnVerified`; its math VJP is proven in `Proofs/SpecVJP.lean`
+    Trained by `MainMnistCnnVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean)
     (`cnnVerified_has_vjp_at`, folded through conv/maxpool/dense). -/
 def cnnVerified : VerifiedNetSpec where
   name     := "MNIST-CNN"
@@ -314,7 +314,7 @@ def cifar8BnVerified : VerifiedNetSpec where
     `cifar8BnVerified` is `cifar8BnG 64`. `cifar8-bn-grid` trains each width via
     `trainAdamSched "adam"` on the width-slugged renders
     `verified_mlir/cifar8_bn_{d}_{adam_train_step,fwd}.mlir` (emitted by
-    `tests/TestCifar8AdamTrain.lean`, D1 parametric). Per-channel BN ⇒ train=eval (no running
+    [`tests/TestCifar8AdamTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestCifar8AdamTrain.lean), D1 parametric). Per-channel BN ⇒ train=eval (no running
     stats, `bnChannels` empty). Slug `cifar8_bn_{d}`. -/
 def cifar8BnG (d : Nat) : VerifiedNetSpec where
   name     := s!"CIFAR-CNN8-BN-fc{d}"
@@ -345,7 +345,7 @@ def cifar8BnG (d : Nat) : VerifiedNetSpec where
 /-- `cifar8Verified` with the MNIST-style **wide 2×512 dense head** (`d1=512`): flatten 128 →
     512 → relu → 512 → relu → 10. Same 8-conv backbone; the head jumps from 13K to 334K floats
     (whole net 52,858 → 373,626). Same parametric VJP `Proofs.cifarCnn8_has_vjp_at` (the dense
-    bridge is generic in width). Slug `cifar8w` (render `tests/TestCifar8WideTrain.lean`). -/
+    bridge is generic in width). Slug `cifar8w` (render [`tests/TestCifar8WideTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestCifar8WideTrain.lean)). -/
 def cifar8wVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN8-wide"
   slug     := "cifar8w"
@@ -425,7 +425,7 @@ def cifar8wbBnVerified : VerifiedNetSpec :=
 
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
     [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
-    stages 2–4) → GAP → dense. **110 params** (§2l step B: no conv biases). Tied at the FULL spec in `Proofs/SpecVJP.lean`
+    stages 2–4) → GAP → dense. **110 params** (§2l step B: no conv biases). Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean)
     (`resnet34Verified_denote_eq` → `resnet34Forward_full_pc`, + rung E
     `resnet34Verified_fwd_faithful`); the honest pointwise VJP is the audited parametric
     skeleton `Proofs.resnet34_has_vjp_at`. -/
@@ -463,7 +463,7 @@ def resnet34Verified : VerifiedNetSpec where
 /-- **ResNet-34 on full 1000-class ImageNet** — the scale/reference tier (handoff §2k).
 
     Identical architecture to `resnet34Verified`; only the head width, the class count and the data
-    source differ. It exists to be run as a **matched pair** with `jax/MainResnetImagenet.lean`
+    source differ. It exists to be run as a **matched pair** with [`jax/MainResnetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnetImagenet.lean)
     (same net, same heavy-ball + coupled-L2 recipe, same tfds augmentation via the generated shim),
     with the JAX side as the external oracle.
 
@@ -512,7 +512,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
 /-! ### ResNet-50 — the bottleneck pair (`planning/archive/rsb_a3_r50_verified.md`)
 
     ⚠⚠ **SKELETON, 2026-08-03. These two specs are the LAYOUT only.** There is no
-    `Proofs/Architectures/ResNet50*.lean`, no `ResNet50RenderB.lean`, no artifact and no rung E —
+    [`Proofs/Architectures/ResNet50*.lean`](https://github.com/brettkoonce/lean4-mlir/tree/main/LeanMlir/Proofs/Architectures), no `ResNet50RenderB.lean`, no artifact and no rung E —
     so nothing renders, trains or is gated off them yet. They exist because the layout is what the
     `#guard`s below can check *today*, and because the derived param count is the §2k precondition
     that decides whether the JAX pair is meaningful at all. Phases 1–3 of the planning doc are what
@@ -561,7 +561,7 @@ def resnet50Verified : VerifiedNetSpec where
     -- stage4 @ mid 512, oc 2048
     512,512,2048,2048,  512,512,2048,  512,512,2048]
 
-/-- **ResNet-50 on full 1000-class ImageNet** — the verified peer of `jax/MainResnet50Imagenet.lean`,
+/-- **ResNet-50 on full 1000-class ImageNet** — the verified peer of [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean),
     whose RSB-A3 `rsb-faithful` recipe has already run: **76.66% top-1 / 93.03% top-5 @ ep100**.
     Same backbone as `resnet50Verified`, head widened to 2048→1000.
 
@@ -651,10 +651,10 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
     that, and are the cheapest possible answer to §2.1's "confirm the 160 spec is the same net".
 
     ⚠ **The shim is the `short` recipe's, NOT `default`'s**, and that is load-bearing twice over:
-      * `short` IS timm's A3 (`jax/MainResnet50Imagenet.lean` — `trainRes := 160`,
+      * `short` IS timm's A3 ([`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) — `trainRes := 160`,
         `testCropRatio := 0.95`, RandAugment m6, mixup 0.1 / cutmix 1.0). `default` is 224 with
         RRC+hflip only, so it cannot feed this net at all.
-      * `Jax/Codegen.lean` applies `trainRes` **only** inside `_imagenet_decode_random_crop_flip`
+      * [`Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean) applies `trainRes` **only** inside `_imagenet_decode_random_crop_flip`
         (the TRAIN path); eval goes through `_imagenet_decode_center_crop` at the hardcoded
         `_IMG_SIZE = 224`. ▶ So this one shim already emits A3's 160/224 SPLIT — 76,800 floats on
         train, 150,528 on val — which is the answer to §2's open question and the reason §2.3's
@@ -733,7 +733,7 @@ def resnet50Imagenet2018Verified : VerifiedNetSpec :=
     the one that exists for a SINGLE emitted constant.
 
     ⛔ **WHY IT EXISTS, and it is a one-line difference that a shared shim would silently erase.**
-    A1 differs from A2 in exactly three fields (`jax/MainResnet50Imagenet.lean`'s
+    A1 differs from A2 in exactly three fields ([`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean)'s
     `resnet50ImagenetConfigA1`): epochs 300 → 600, weight decay 0.02 → 0.01, and **Mixup α
     0.1 → 0.2**. The first is a driver knob and free. The second is a BAKED `stablehlo.constant`,
     so it is a re-render — `resnet50in_lambaccdp8x64wxclipbcewd001_train_step`, which
@@ -780,7 +780,7 @@ def resnet50ImagenetA1Verified : VerifiedNetSpec :=
 /-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
     relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.
-    (Tied at the FULL paper spec in `Proofs/SpecVJP.lean`: `mobilenetv2Verified_denote_eq`
+    (Tied at the FULL paper spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean): `mobilenetv2Verified_denote_eq`
     → `mobilenetv2ForwardPaper`, + rung E `mobilenetv2Verified_fwd_faithful`. The VJP fold
     is at full depth too: `Proofs.mobilenetv2_full_has_vjp_at` covers stem + all 17 blocks +
     head. ⚠ It is POINTWISE, and stays that way — relu6 is kinked, so each of the 35
@@ -886,7 +886,7 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
     BN + swish) → 1×1 head (320→1280) → GAP → dense. 213 param tensors, 4,020,358 scalars (the
     1000-class peer below is 5,288,548, i.e. B0's canonical 5.29M). The 16 `mbConvSE ic mid oc r k`
     args are the B0 generator unrolled (mid=t·ic, r=ic/4, ic threads stage→stage). Tied at the
-    FULL spec in `Proofs/SpecVJP.lean` (`efficientnetVerified_denote_eq` →
+    FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean) (`efficientnetVerified_denote_eq` →
     `efficientnetForwardB_full`, batched ∀N, + rung E `efficientnetVerified_fwd_faithful`);
     the honest pointwise VJP witness is the representative `Proofs.efficientnet_has_vjp`. -/
 def efficientnetVerified : VerifiedNetSpec where
@@ -1031,7 +1031,7 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
     [96,192,384,768] (depthwise 7×7 → channel-LN → 1×1 expand → GELU → 1×1 project → layerScale)
     with 3 between-stage (LN + 2×2-s2) downsamples (56→28→14→7) → GAP → dense.
     **182 param tensors, 27,827,818 scalars** (28,589,128 at K = 1000 — `timm.create_model('convnext_tiny')`'s count exactly, since the head LN was restored 2026-08-30; it was 180/27,826,282/28,587,592 before, short by 2×768).
-    Tied at the FULL spec in `Proofs/SpecVJP.lean` (`convnextVerified_denote_eq` →
+    Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean) (`convnextVerified_denote_eq` →
     `convNextForwardTCh`, the committed channel-LN config, + rung E
     `convnextVerified_fwd_faithful`); the full-depth REAL VJP is
     `Proofs.convNextForwardTCh_has_vjp_correct` (ConvNeXtFullT.lean:341), whose `HasVJP` is
@@ -1159,7 +1159,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
     that were never indexed by depth. Depth was not a hypothesis.
 
     **342 parameter tensors, 50,222,152 scalars** — the published ConvNeXt-S figure, and the count
-    `jax/MainConvNeXtSImagenet.lean` emits from an independent implementation.
+    [`jax/MainConvNeXtSImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainConvNeXtSImagenet.lean) emits from an independent implementation.
 
     ⚠ **ImageNet only, deliberately** — as with ViT-S. There is no ConvNeXt-S Imagenette peer and
     this spec does not imply one.
@@ -1239,7 +1239,7 @@ def convnextSImagenetVerified : VerifiedNetSpec where
     on block count, and every B artifact would have introduced itself as a ConvNeXt-S.
 
     **342 parameter tensors, 88,589,416 scalars** — the same tensor COUNT as S (B widens, it does
-    not add), the published 88.59M, and the count `jax/MainConvNeXtBImagenet.lean` emits from an
+    not add), the published 88.59M, and the count [`jax/MainConvNeXtBImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainConvNeXtBImagenet.lean) emits from an
     independent implementation.
 
     ⭐ **The proof side needed nothing, and B is better evidence of that than S was**: S reused the
@@ -1301,7 +1301,7 @@ def convnextBImagenetVerified : VerifiedNetSpec where
 /-- ch10 **ViT-Tiny** on Imagenette 224² (patch-16): 16×16-s16 conv patch embed (3→192,
     →196 patches), learned CLS token + positional embed (→197 tokens), 12 pre-norm transformer
     blocks (dim 192, 3 heads, MLP 768), final per-channel LayerNorm, CLS-slice dense head 192→10.
-    200 params. Tied at the FULL spec in `Proofs/SpecVJP.lean` (`vitVerified_denote_eq` →
+    200 params. Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean) (`vitVerified_denote_eq` →
     `vitForwardKV` depth-12 distinct-param vector-LN, retiring the old weight-shared
     scalar-LN caveats), with the REAL whole-net VJP `vitVerified_has_vjp`
     (all-smooth, `0 < ε` only) and rung E `vitVerified_fwd_faithful` (the depth-12
@@ -1359,7 +1359,7 @@ def vitVerified : VerifiedNetSpec where
     at Imagenette: `vitVerified_denote_eq` / `vitVerified_has_vjp` / rung E are stated about the
     10-class net. What carries to this one is *provenance* — the artifacts are `pretty(provenGraph)`
     off the same renderer, since `nClasses`, `bs` and `replicas` are ordinary parameters of it —
-    plus whatever a matched-pair comparison against `jax/MainVitImagenet.lean` shows. Say "one
+    plus whatever a matched-pair comparison against [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean) shows. Say "one
     architecture, two independent lowerings, agreeing", never "proven" (§5).
 
     ⚠ It is **not** the DeiT recipe. `vitTinyImagenetConfig` carries mixup, cutmix, stochastic
@@ -1543,7 +1543,7 @@ def vitBImagenetVerified : VerifiedNetSpec where
     there as such; this spec has no Imagenette accuracy run of its own yet.
 
     ⚠ The two specs move together and cannot diverge: `mnv4ImagenetVerified` takes its
-    `bnChannels` from this one and `#guard`s its `toSpecs` against it. `jax/MainMobilenetV4.lean`
+    `bnChannels` from this one and `#guard`s its `toSpecs` against it. [`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean)
     moved in the same commit, because the ties read ITS generated output.
 
     ⚠⚠ **A pre/post-DW swap is invisible to everything in this file.** Same `k`, same channels ⇒
@@ -1634,7 +1634,7 @@ def mobilenetv4Verified : VerifiedNetSpec where
     (1280→1000).
 
     ⭐ **This IS Conv-M as of 2026-08-14, so it is now comparable to the chapter's 75.51%.** That
-    number comes from the 100-epoch JAX reference behind `jax/MainMobilenetV4Imagenet.lean` (the run
+    number comes from the 100-epoch JAX reference behind [`jax/MainMobilenetV4Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4Imagenet.lean) (the run
     lives OUTSIDE the repo, at `/home/skoonce/mnv4_convm_100ep`), and this spec is the 1000-class
     head on the same block table. `#guard`ed at 9,715,512 parameters, the ~9.7M Conv-M is quoted at.
 

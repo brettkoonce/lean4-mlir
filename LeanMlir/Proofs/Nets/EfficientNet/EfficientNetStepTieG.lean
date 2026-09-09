@@ -15,7 +15,7 @@ drop-path variants and their data-parallel and bf16 twins, because they all cons
 4b.1's `EfficientNetFoldG.lean` is the fold each conjunct delegates to.
 
 ⭐ **Axis 2 — the LOSS.** The capstone's top-of-chain cotangent is
-`Foundation/SmoothedLossCot.lean`'s, at a GENERAL target: the six-op chain
+[`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean)'s, at a GENERAL target: the six-op chain
 `softmaxRow → subB → scaleB → addVB → shiftB → divConstB` the batched renders emit, with the target
 arriving as the graph input `%onehot` — a soft vector under mixup or cutmix. The fused file pins it
 to `softmax − oneHot`, the gradient of plain cross-entropy at a hard label, which no ImageNet

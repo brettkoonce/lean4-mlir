@@ -8,8 +8,8 @@ the emitted StableHLO op-for-op, so the faithfulness theorems in `StableHLO.lean
 matches — exactly as `AdamStep` is for the AdamW triple, `RmsPropStep` for RMSProp and `GradClip`
 for the clip.
 
-**The reference**, `jax/Jax/Codegen.lean`'s `.lamb` branch, emitted verbatim into
-`jax/MainResnet50Imagenet.lean`'s `rsb-faithful` recipe (which reached **76.66% top-1 @ ep100**):
+**The reference**, [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `.lamb` branch, emitted verbatim into
+[`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean)'s `rsb-faithful` recipe (which reached **76.66% top-1 @ ep100**):
 
 ```python
 BETA1 = 0.9; BETA2 = 0.999; EPS = 1e-6

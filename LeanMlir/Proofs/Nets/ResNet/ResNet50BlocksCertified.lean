@@ -32,7 +32,7 @@ projection FIRST for exactly that reason.
 ## ⚠ THE STRIDE IS ON THE 3×3, NOT THE LEADING 1×1
 
 `bblkPStridedPC` puts `flatConvStride2` on the **second** conv. That is ResNet **v1.5** /
-torchvision, and it is what `jax/MainResnet50Imagenet.lean`'s reference trains. The v1 placement
+torchvision, and it is what [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean)'s reference trains. The v1 placement
 (stride on the leading 1×1) compiles, trains and descends — and is a different net, worth ~0.5 pt
 of top-1. The projection is strided in both conventions.
 

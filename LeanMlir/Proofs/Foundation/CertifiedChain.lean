@@ -13,7 +13,7 @@ writing this file: nothing in `LeanMlir/Proofs/` folds those blocks into a stage
 **That was wrong, and ViT is the counterexample.** `ViTBackB0.lean` has carried
 `vitBodyBackGraphKMHV_den` (a depth-`k` reverse fold of the block backward graph, by induction on
 `k`) and `vitNetBackGraph_faithful` (patchEmbed → tower → final vec-LN → classifier, at every
-depth) the whole time, both in `tests/AuditAxioms.lean`. The measurement that produced that
+depth) the whole time, both in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean). The measurement that produced that
 sentence swept the conv nets and generalised — the same inference-by-analogy the MNv4 planning doc
 records being wrong three times.
 

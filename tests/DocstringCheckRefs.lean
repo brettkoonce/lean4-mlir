@@ -41,9 +41,22 @@ CLI fragments. It carries the `render_guard_baseline.txt` contract: **it may SHR
 grow.** A new entry means a docstring citation can rot with CI green, which is the exact
 hole this file exists to close.
 
+**Second check — file citations (2026-09-09).** doc-gen4 rewrites any backticked code span
+that ends in `.lean` and contains a `/` into a link to `docs/<path>.html`, with no check that
+such a module was built (`nameToLink?` in its `DocString.lean`). Only the `LeanMlir` lib is
+documented, so `` `tests/AuditAxioms.lean` `` rendered as a 404 — 35 of the 38 such links on the
+live site were dead when the user clicked one. So inside `LeanMlir/`, the tree doc-gen4
+renders, a cited file must be a markdown link into this repo,
+``[`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)``,
+and the target must exist on disk (a `blob/` file or a `tree/` directory). doc-gen4 leaves a
+code span alone when it already sits inside a link, so the monospace survives. Upstream modules
+(`Mathlib/…`) are exempt: their pages are built alongside ours and they are not repo files.
+A `tests/` or lakefile docstring is read as source, where the bare path is the right spelling,
+so the rule stops at `LeanMlir/`. This check has no baseline — every hit is fixable.
+
 ```
-lake exe docstring-checkrefs                    # gate: exit 1 on any unresolved ref
-lake exe docstring-checkrefs --list             # print every unresolved ref and its site
+lake exe docstring-checkrefs                    # gate: exit 1 on any unresolved ref or dead file link
+lake exe docstring-checkrefs --list             # print every miss and its site
 lake exe docstring-checkrefs --update-baseline  # re-record (deliberate + budgeted only)
 ```
 -/
@@ -218,6 +231,58 @@ partial def leanFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
       out := out.push p
   return out
 
+/-- Where a docstring's file citation must point. `blob/` for a file, `tree/` for a directory
+    (the `Bestiary/*.lean`-style glob citations link their directory). -/
+def repoBlob : String := "https://github.com/brettkoonce/lean4-mlir/blob/main/"
+def repoTree : String := "https://github.com/brettkoonce/lean4-mlir/tree/main/"
+
+/-- The backticked `dir/File.lean` spans on one line — exactly the spans doc-gen4 turns into
+    module links — each with the URL when the span is already written as a markdown link
+    (`[`…`](url)`), else `none`. A span whose closing tick is missing is not a span. -/
+def pathCites (line : String) : Array (String × Option String) := Id.run do
+  let parts := line.splitOn "`"
+  let mut out : Array (String × Option String) := #[]
+  let mut k := 1
+  while k + 1 < parts.length do
+    let s := parts[k]!
+    if s.endsWith ".lean" && s.any (· == '/') then
+      let pre := parts[k-1]!
+      let post := parts[k+1]!
+      let url? := if pre.endsWith "[" && post.startsWith "](" then
+          some (((post.splitOn "(").getD 1 "" |>.splitOn ")").headD "")
+        else none
+      out := out.push (s, url?)
+    k := k + 2
+  return out
+
+/-- `Mathlib/Probability/CDF.lean` ↦ `Mathlib.Probability.CDF`, the module doc-gen4 would link. -/
+def pathModule (p : String) : Name :=
+  (((p.splitOn ".lean").headD p).splitOn "/").foldl (fun n c => Name.mkStr n c) Name.anonymous
+
+/-- Why a file citation would render wrong, or `none` if it is a live link. A span such as
+    `` `lake env lean tests/X.lean` `` cites by its last token. -/
+def pathCiteProblem (env : Environment) (s : String) (url? : Option String) :
+    IO (Option String) := do
+  let path := (s.splitOn " ").getLast!
+  match url? with
+  | none =>
+    -- an upstream module in the environment (Mathlib, core) has its page built with ours
+    let m := pathModule path
+    if !(`LeanMlir).isPrefixOf m && env.allImportedModuleNames.contains m then return none
+    return some s!"bare path: doc-gen4 turns it into a module link, dead unless that module is in \
+                   the LeanMlir doc build; write [`{s}`]({repoBlob}{path})"
+  | some url =>
+    if url.startsWith repoBlob then
+      let p := (url.splitOn repoBlob).getD 1 ""
+      if ← (System.FilePath.mk p).pathExists then return none
+      return some s!"link target {p} does not exist in the repo"
+    else if url.startsWith repoTree then
+      let p := (url.splitOn repoTree).getD 1 ""
+      if ← (System.FilePath.mk p).isDir then return none
+      return some s!"link target {p} is not a directory in the repo"
+    else
+      return some s!"link must point into the repo ({repoBlob}…), got {url}"
+
 /-- Directories scanned. `LeanMlir` is the proof + codegen corpus; `lakefile.lean` is
     included because it carries 200+ target docstrings and is where two of the stale
     citations that motivated this gate were found. -/
@@ -276,8 +341,12 @@ unsafe def main (args : List String) : IO UInt32 := do
   let mut checked := 0
   let mut misses : Array (System.FilePath × String) := #[]
   let mut distinct : Std.HashSet String := {}
+  let mut pathsChecked := 0
+  let mut pathMisses : Array (System.FilePath × String × String) := #[]
   for f in files do
     let src ← IO.FS.readFile f
+    -- the file-citation rule applies to the tree doc-gen4 renders and nowhere else
+    let rendered := f.toString.startsWith "LeanMlir/"
     for body in docBodies src do
       for ref in backtickRefs body do
         if skipRef ref || !checkWorthy ref then continue
@@ -285,6 +354,13 @@ unsafe def main (args : List String) : IO UInt32 := do
         unless resolves env idx baseline ref do
           misses := misses.push (f, ref)
           distinct := distinct.insert ref
+      if rendered then
+        for line in body.splitOn "\n" do
+          for (s, url?) in pathCites line do
+            pathsChecked := pathsChecked + 1
+            match ← pathCiteProblem env s url? with
+            | some why => pathMisses := pathMisses.push (f, s, why)
+            | none => pure ()
 
   if update then
     let names := distinct.toArray.qsort (· < ·)
@@ -304,19 +380,28 @@ unsafe def main (args : List String) : IO UInt32 := do
     println! "wrote {baselinePath} with {names.size} entries"
     return 0
 
-  println! "docstring citations checked: {checked} across {files.size} file(s)"
-  if misses.isEmpty then
-    println! "✅ every cited identifier resolves"
+  println! "docstring citations checked: {checked} across {files.size} file(s); \
+            file citations checked: {pathsChecked}"
+  if misses.isEmpty && pathMisses.isEmpty then
+    println! "✅ every cited identifier resolves and every cited file is a live link"
     return 0
-  println! "❌ {misses.size} unresolved citation(s), {distinct.size} distinct name(s)"
-  if listOnly then
-    for (f, ref) in misses do
-      println! "  {f}: `{ref}`"
-  else
-    let shown := misses.toList.take 15
-    for (f, ref) in shown do
-      println! "  {f}: `{ref}`"
-    if misses.size > 15 then println! "  … {misses.size - 15} more (pass --list)"
-  println! "\nfix: correct the citation, or if it is genuinely not a Lean name, re-record with\n  \
-            lake exe docstring-checkrefs --update-baseline"
+  if !misses.isEmpty then
+    println! "❌ {misses.size} unresolved citation(s), {distinct.size} distinct name(s)"
+    if listOnly then
+      for (f, ref) in misses do
+        println! "  {f}: `{ref}`"
+    else
+      let shown := misses.toList.take 15
+      for (f, ref) in shown do
+        println! "  {f}: `{ref}`"
+      if misses.size > 15 then println! "  … {misses.size - 15} more (pass --list)"
+    println! "\nfix: correct the citation, or if it is genuinely not a Lean name, re-record with\n  \
+              lake exe docstring-checkrefs --update-baseline"
+  if !pathMisses.isEmpty then
+    println! "❌ {pathMisses.size} file citation(s) doc-gen4 would render as a dead or wrong link"
+    let shown := if listOnly then pathMisses.toList else pathMisses.toList.take 15
+    for (f, s, why) in shown do
+      println! "  {f}: `{s}` — {why}"
+    if !listOnly && pathMisses.size > 15 then
+      println! "  … {pathMisses.size - 15} more (pass --list)"
   return 1

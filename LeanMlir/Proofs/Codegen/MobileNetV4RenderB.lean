@@ -36,7 +36,7 @@ ExtraDW puts a depthwise on *both* sides of the pointwise expand.
 (c*h*w)` have different INPUT types, so a stride-polymorphic block cannot typecheck — the same
 reason `MobileNetV2RenderB` splits `irFwdStridedB` from `irFwdSkipB`. The stride-2 case splits
 again by **which depthwise consumes the stride**, because that decides the spatial size the expand
-runs at. Read off the Conv-M table (`jax/MainMobilenetV4.lean`), which lands cleanly:
+runs at. Read off the Conv-M table ([`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean)), which lands cleanly:
 
 | | stride | `ic` vs `oc` | function |
 |---|---|---|---|
@@ -46,7 +46,7 @@ runs at. Read off the Conv-M table (`jax/MainMobilenetV4.lean`), which lands cle
 
 ⚠⚠ **Conv-M has NO post-strided block** (Conv-S had one), so that third arm is certified and
 **unexercised** — a green corpus is not coverage of it. The split was 11 / 2 / 1 here until
-2026-09-07; the `#guard`s in `Proofs/Nets/MobileNet/MobileNetV4BackB0.lean` have said 18 / 3 / 0 since
+2026-09-07; the `#guard`s in [`Proofs/Nets/MobileNet/MobileNetV4BackB0.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4BackB0.lean) have said 18 / 3 / 0 since
 2026-08-14.
 
 ⚠⚠ **ACTIVATION IS PLAIN `relu`, NOT `relu6`.** MobileNetV2's blocks use relu6 and this file sits
@@ -107,7 +107,7 @@ structure UibSpec where
   stride2 : Bool
 deriving Inhabited, DecidableEq
 
-/-- **THE BLOCK TABLE — transcribed once, from `jax/MainMobilenetV4.lean`.**
+/-- **THE BLOCK TABLE — transcribed once, from [`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean).**
 
     ⭐⭐ Everything downstream folds over this list: the parameter signature, the BN stat slots, the
     forward chain, the backward chain and the running-statistic recomputes. Before it existed the
@@ -122,7 +122,7 @@ deriving Inhabited, DecidableEq
 
     ⚠ Verified against **timm 1.0.28** (`mobilenetv4_conv_medium`, walking `model.blocks[1:4]`):
     all 21 rows agree on `(ic, oc, expand, preDWk, postDWk, h, stride2)`. The `#guard`s in
-    `Proofs/Nets/MobileNet/MobileNetV4BackB0.lean` pin that reading; they are derived from timm rather
+    [`Proofs/Nets/MobileNet/MobileNetV4BackB0.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4BackB0.lean) pin that reading; they are derived from timm rather
     than re-read off this table, or they would gate nothing. -/
 def mnv4Blocks : List UibSpec :=
   [ ⟨"1",   48,  80, 4, 3, 5, 28, true⟩,   -- ExtraDW  56→28
@@ -472,7 +472,7 @@ deriving Inhabited
 
 /-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → 10 classes.
 
-    Transcribed 1:1 from `jax/MainMobilenetV4.lean`, which is the faithful Conv-M table as of
+    Transcribed 1:1 from [`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean), which is the faithful Conv-M table as of
     2026-08-14 (`historical/RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table). Spatial ladder:
 
     ```

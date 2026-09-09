@@ -14,7 +14,7 @@ GAP + final dense). This file makes every parameter update of the per-example, S
 BatchNorm, so `resnet34_fwd` could not be a prefix of both it and the batch-BN Adam step.
 `planning/archive/renderer_convergence.md` carries the decision. **Every theorem below is unchanged and
 still true** — each is a statement about an OP KIND and an arbitrary cotangent, not about bytes —
-and its live peer is `Nets/ResNet/ResNet34FoldB.lean`, the same fold at the batched,
+and its live peer is [`Nets/ResNet/ResNet34FoldB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ResNet/ResNet34FoldB.lean), the same fold at the batched,
 un-fused gradient nodes every ResNet-34 artifact now emits. Read this file as the per-example
 ladder it always was; read that one for what ships.
 

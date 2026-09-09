@@ -553,7 +553,7 @@ private theorem chainComp₅_comp {m n : Nat} (f g h i j : Vec n → Vec n) (k :
 
     The MobileNetV2 peer is `mobilenetv2Forward_full_pc_eq_chain`
     (`MobileNetV2WholeBackCertifiedTie.lean`), which had this from the day it was written; the
-    ConvNeXt peer is `convNextForwardTCh_eq_chain` (`Nets/ConvNeXt/ConvNeXtFullT.lean`). ⚠ Both of
+    ConvNeXt peer is `convNextForwardTCh_eq_chain` ([`Nets/ConvNeXt/ConvNeXtFullT.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtFullT.lean)). ⚠ Both of
     those are a bare `rfl` and this one CANNOT be: their apexes chain their blocks one slot each,
     where `resnet34_has_vjp_at` groups its `[3,4,6,3]` runs under `chainComp`, and a `chainComp`
     node has to be reduced away BEFORE the defeq — see `chainComp₂_comp` above. -/

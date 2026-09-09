@@ -14,7 +14,7 @@ itself *"the FIRST one in the repo"*. Both are **wrong**, and ViT is the counter
 `ViTBackB0.lean` has carried `vitBodyBackGraphKMHV_den` (a depth-`k` reverse fold of the block
 backward graph, by induction on `k`) and `vitNetBackGraph_faithful` (patchEmbed → tower → final
 vec-LN → classifier, at **every** depth) since before either file existed. Both are in
-`tests/AuditAxioms.lean`.
+[`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean).
 
 So the accurate statement of what the other six nets have is *block capstones plus an
 abstract-layer trunk*; ViT alone had a concrete whole-net backward graph tied to the whole-net VJP,

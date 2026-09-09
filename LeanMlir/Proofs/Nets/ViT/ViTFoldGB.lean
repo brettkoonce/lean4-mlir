@@ -10,7 +10,7 @@ artifact onto that traversal.
 ⭐ **The bytes do not move and the denotation does.** Measured 2026-09-07: all nineteen drop-free
 ViT artifacts — `vit_fwd`, `vitin_fwd` and the seventeen AdamW/EMA train steps — re-render
 **byte-identically** off `vitBackAllB`, because every batched form was built to emit its
-per-example peer's text and `tests/TestBatchedEmitTie.lean` pins each one individually. So this
+per-example peer's text and [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) pins each one individually. So this
 file is not about different bytes; it is about the AST those bytes are `pretty` of.
 
 ⭐⭐ **And on one parameter the AST is genuinely better, which is the whole point of the leg.**
@@ -58,7 +58,7 @@ variants, the EMA shadow and the 4× accumulation all consume the same `*GradB` 
   `ViTTiePoCGB.vit_net_tiedGB` at these nodes (4b.7); the per-example `ViTStepTie.lean` stays at
   the SGD-inline `vit_train_step.mlir`.
 * The `*bf16` artifacts emit `rowDenseWeightGradBBf16` / `patchEmbedWeightGradBBf16`, their own
-  kinds; `Foundation/Bf16GradNodes.lean` folds them (the row-dense one keeps its f32 result).
+  kinds; [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) folds them (the row-dense one keeps its f32 result).
 * `vitin_adamdp128x4*` is four replicas: the all-reduce is emitted text outside the AST, so these
   lemmas are about the per-replica gradient node (4d).
 -/

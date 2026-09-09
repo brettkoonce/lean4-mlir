@@ -15,7 +15,7 @@ certifies every optimizer tail" was, for ConvNeXt, a statement about the Imagene
 
 ⭐ **The bytes are the same on the forward and differ on 78 backward lines.** The batched
 `convBackBatched` emits the conv input-VJP's `transpose`/`reverse` in the other order from the
-per-example `convBack` — commuting ops on disjoint axes, one kernel — and `tests/TestConvNeXtFwdBTie.lean`
+per-example `convBack` — commuting ops on disjoint axes, one kernel — and [`tests/TestConvNeXtFwdBTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtFwdBTie.lean)
 allows exactly that pair and nothing else. 4c leg 3 moves the drop-free writers onto this chain;
 this file lands first, per leg 1's ordering rule, so that no committed artifact is ever `pretty` of
 an AST without a fold.
@@ -32,7 +32,7 @@ an AST without a fold.
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = h·w` (22 spatial LN sites) | `chanLnGammaGradB_den` / `chanLnBetaGradB_den` | `CnxPoCG.chanLnGammaGrad_den` / `chanLnBetaGrad_den` |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = 1` (the head LN, after GAP) | `headLnGammaGradB_den` / `headLnBetaGradB_den` | `ViTPoCGB`'s two-level LN lemmas |
 | `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` | `ViTPoCGB.headWGradB_den` / `headBGradB_den` |
-| `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` (the bf16 artifacts) | `Bf16PoC.convWGradBBf16_den` and its siblings, `Foundation/Bf16GradNodes.lean` | none — a bf16 node is its own op kind |
+| `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` (the bf16 artifacts) | `Bf16PoC.convWGradBBf16_den` and its siblings, [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) | none — a bf16 node is its own op kind |
 
 ⭐ **No new mathematics.** Every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n` — `ResNet34FoldB.denseWGradB_den`'s shape — because
@@ -45,7 +45,7 @@ slice.
 ⭐ **The bf16 artifacts (`convnextin_adamwxclipdropbf16`, the S/B twins) emit `*GradBBf16`
 constructors, not these nodes**: their `den` rounds the operands and the result once, outside the
 batch sum. Those are their own op kinds, folded once for every net in
-`Foundation/Bf16GradNodes.lean` (first stated in this file, 2026-09-07).
+[`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) (first stated in this file, 2026-09-07).
 
 ⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, the `wx`/`clip`
 variants, the EMA shadow, drop-path and the data-parallel twins all consume the same `*GradB`

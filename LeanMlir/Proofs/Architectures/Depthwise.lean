@@ -1412,7 +1412,7 @@ noncomputable def depthwiseStride2_bias_grad_has_vjp {c h w kH kW : Nat}
 --   (`planning/archive/mnv4_verified.md` §3e — the TF-origin padding convention)
 -- ════════════════════════════════════════════════════════════════
 
-/-! **The depthwise peer of `flatConvStride2Xla`** (`Foundation/StridedConv.lean`), and it exists
+/-! **The depthwise peer of `flatConvStride2Xla`** ([`Foundation/StridedConv.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/StridedConv.lean)), and it exists
 for the same reason: `jax/Jax/Codegen.lean:679`'s `depthwise_conv` defaults to `padding='SAME'`,
 so MobileNetV2's four strided depthwises — and EfficientNet's — pad **asymmetrically**, while
 `depthwiseStride2Flat` above pads symmetrically. Both give the same output size, so only a forward

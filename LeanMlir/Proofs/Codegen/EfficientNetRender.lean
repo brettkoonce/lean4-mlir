@@ -108,7 +108,7 @@ structure EBack where
 /-! Every leaf of the backward ends at a parameter, and there are exactly two things it can emit:
 the **un-fused gradient** (`adam := true`) or the **fused SGD update** `θ − lr·g` (`false`). The
 `*SgdB_eq_grad` theorems say `den (xSgdB …) = θ − lr · den (xGradB …)` by `rfl`, and
-`tests/TestBatchedEmitTie.lean` checks the emit side of the same statement: each `*GradB` render is
+[`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) checks the emit side of the same statement: each `*GradB` render is
 a byte-PREFIX of its `*SgdB` peer's, the tail being exactly the const-lr / multiply / subtract.
 
 These six helpers are what let ONE backward traversal serve both renders. The alternative — a second
@@ -851,7 +851,7 @@ set_option maxRecDepth 4000000 in
 /-- **`@efficientnet_fwd` rendered ENTIRELY from the verified AST** — 263 inputs (`%x` plus the 262
     params in `enetSig` order), returning logits `[B, nClasses]`. Shares `enetFwdChain` with the
     train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
-    where the loss begins. Replaces the hand-written emitter in `tests/TestEfficientNetFwd.lean`. -/
+    where the loss begins. Replaces the hand-written emitter in [`tests/TestEfficientNetFwd.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestEfficientNetFwd.lean). -/
 def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd cd).run' (0, [])
@@ -1110,7 +1110,7 @@ private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
 /-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `enetAdamOne` peer, and
     the same four-op composition `MobileNetV2RenderB.rmsOneM` uses:
 
-    | reference (`jax/Jax/Codegen.lean`, `.rmsprop`) | emitted here |
+    | reference ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), `.rmsprop`) | emitted here |
     |---|---|
     | `grads = g + WD * p` | `momVNextF` at `(μ := wd, v := θ)` — `Proofs.momVNext_as_coupled_l2` |
     | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ`** — `Proofs.rmsSqNext_eq_adamVNext` |
@@ -1224,7 +1224,7 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
-    hand-written `tests/TestEfficientNetTrain.lean` render that `efficientnet-verified-adam` has
+    hand-written [`tests/TestEfficientNetTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestEfficientNetTrain.lean) render that `efficientnet-verified-adam` has
     been training on.
 
     Same backward as `efficientnet_train_step` (`enetBackAll`, one traversal) but taking the

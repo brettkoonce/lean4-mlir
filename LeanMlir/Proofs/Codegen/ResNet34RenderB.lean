@@ -9,7 +9,7 @@ file, and the two things that made it a peer are the two things that made it the
 
 * **BatchNorm is `bnBatchF`** — μ/var reduced over `[0,2,3]`, coupling the batch — not
   `bnPerChannelF`'s per-example `[2,3]`. That is the semantics the AdamW trainer has always run
-  (`tests/TestResnet34Train.lean`), and §2b's decision was to keep it rather than move the trainer
+  ([`tests/TestResnet34Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestResnet34Train.lean)), and §2b's decision was to keep it rather than move the trainer
   onto the per-example chain. `ResNet34Render.lean` renders the per-example net; this file renders
   the batch-BN one. **They are different functions** — that is exactly the divergence §2a found
   between the two `resnet34_fwd` writers, and the reason these are two files rather than a flag.
@@ -280,7 +280,7 @@ set_option maxRecDepth 1000000 in
 
     This is the eval partner of a **batch**-statistic train step, whose EMA'd batch mean/var are
     exactly these per-channel scalars — i.e. of `resnet34_adam_train_step.mlir`, which is still a
-    hand-written render in `tests/TestResnet34Train.lean`. So the eval forward is now certified
+    hand-written render in [`tests/TestResnet34Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestResnet34Train.lean). So the eval forward is now certified
     while the train step it partners is not; that asymmetry is the remaining §2a work, not a
     property of this render. -/
 def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
@@ -488,7 +488,7 @@ namespace Proofs.StableHLO
     the `CifarOpt` shape from `CnnRender` (handoff §2i) brought to R34.
 
     * `.adamw` — the committed recipe. Byte-for-byte what this file emitted before the threading.
-    * `.heavyBall` — **the `jax/MainResnetImagenet.lean` reference rule**: coupled L2 decay, then
+    * `.heavyBall` — **the [`jax/MainResnetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnetImagenet.lean) reference rule**: coupled L2 decay, then
       heavy-ball momentum. See `optOne` for why it needs no new `SHlo` op. -/
 inductive R34Opt
   /-- `θ' = θ − lr·(m̂/(√v̂+ε)) − lr·wd·θ`; both moments live. -/
@@ -988,7 +988,7 @@ def lsVariantMark (alpha : Float := 0.1) : String :=
     `planning/archive/verified_optimizer_parity.md` §5's gate — one step of each optimizer on the same
     `(θ, g, state)` — needs the optimizer stage ALONE, and a second copy of it written for the gate
     would gate a transcription rather than the emission (§5's own point, one level down: *a gate on
-    a copy is not a gate on the thing copied*). `tests/TestOptStepFixtures.lean` calls exactly this.
+    a copy is not a gate on the thing copied*). [`tests/TestOptStepFixtures.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestOptStepFixtures.lean) calls exactly this.
     ⭐ Pure refactor: every committed R50 artifact re-renders byte-identically.
 
     ⚠⚠ **THE ORDER IS THE SEMANTICS, and there are two orderings to get right, not one.**
@@ -1412,7 +1412,7 @@ set_option maxRecDepth 4000000 in
     `%loss`/`%bc1`/`%bc2`, 72 batch stats). ⛔ This docstring said "515 inputs, 146 θ" until
     2026-09-06: 146 is the `convBias := true` census and the writers all take the default — the
     fourth file caught on that in one session. The interface is the one
-    `tests/TestResnet34Train.lean`'s hand-written render already presents, so the driver is
+    [`tests/TestResnet34Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestResnet34Train.lean)'s hand-written render already presents, so the driver is
     unchanged. Parameter ORDER comes from `r34SigList`, the same single source the per-example
     render and both forwards use, so the arity/order contract cannot drift between them. -/
 def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)

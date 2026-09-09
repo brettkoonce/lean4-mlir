@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Foundation.CertifiedChain
 /-! # R50's NET-level backward fold — the block capstones chained into stages and a trunk
 
 `ResNet50BackB0.lean` proves the three *block* capstones. This file folds them: each block becomes
-a `CertLayer` (`Foundation/CertifiedChain.lean`), and stages and the trunk are `CertLayer.comp` /
+a `CertLayer` ([`Foundation/CertifiedChain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/CertifiedChain.lean)), and stages and the trunk are `CertLayer.comp` /
 `CertLayer.chain` of those. Faithfulness at every level is then **`CertLayer.faithful` applied to
 the composite** — no per-depth proof, and nothing re-derived.
 

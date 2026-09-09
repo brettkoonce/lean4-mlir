@@ -10,13 +10,13 @@ drop-free forwards render from the batched chain in `ConvNeXtRenderB.lean`
 (`planning/archive/renderer_convergence.md`, leg 3), whose Proofs tier is `ConvNeXtFoldGB.lean`.
 This chain stays for two reasons: the batched traversal has no fused-SGD arm, and
 `ConvNeXtStepTie.lean`'s 182-parameter tie is stated at exactly these bytes.
-`tests/TestConvNeXtFwdBTie.lean` pins the two chains against each other — identical forwards,
+[`tests/TestConvNeXtFwdBTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtFwdBTie.lean) pins the two chains against each other — identical forwards,
 backwards differing on the conv-VJP `transpose`/`reverse` pair (78 lines) and nothing else.
 
 The ConvNeXt peer of `MobileNetV2Render`/`EfficientNetRender`: the FULL [3,3,9,3] ConvNeXt-T train
 step (BS=32, 3×224²→10) rendered as `pretty` of verified `SHlo` nodes — forward, backward-cotangent
 chain, AND the param-SGD tail (the new `ConvNeXtFold` ops + the existing conv/depthwise/dense
-ops). Adapted from the committed emitter `tests/TestConvNeXtTTrainPC.lean`: its forward + backward
+ops). Adapted from the committed emitter [`tests/TestConvNeXtTTrainPC.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtTTrainPC.lean): its forward + backward
 cotangent chain were already `pretty(SHlo)`; here the hand-written param-GRAD strings are replaced by
 the SHlo param-SGD ops, which BUNDLE the gradient + SGD wrap into one op (producing the updated param).
 
@@ -431,7 +431,7 @@ private def bwdDown (pfx dy xin : String) (ci co h2 : Nat) :
 
 /-! Every leaf below is one of the `*Sgd`/`*Grad` pairs whose `den`s differ by exactly `θ − lr · ·`
 (`*Sgd_eq_grad`, all `rfl`) and whose emits differ by exactly the const-lr/multiply/subtract tail
-(`tests/TestBatchedEmitTie.lean`, byte-PREFIX). So one traversal serves both renders.
+([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean), byte-PREFIX). So one traversal serves both renders.
 
 ConvNeXt is the cheapest of the five nets to thread, because its param tails were **already
 factored out** of the cotangent traversal — `bwdBlock` computes cotangents and nothing else, and is
@@ -581,7 +581,7 @@ def cnxWdCounts (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : Nat × Nat :=
 #guard cnxWdDecays "d0W" [192,96,2,2] == true     -- downsample conv
 
 /-- `allParams` is `private` (it is this file's internal signature source); this is the one thing
-    outside it that legitimately needs the list — `tests/TestWdExcludeTie.lean`, which must read
+    outside it that legitimately needs the list — [`tests/TestWdExcludeTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestWdExcludeTie.lean), which must read
     the SAME names and shapes the renderer chose `%wd`/`%wdz` from. Exposing an alias rather than
     dropping `private` keeps the surface one definition wide. -/
 def cnxAllParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : List (String × List Nat) :=
@@ -655,7 +655,7 @@ set_option maxRecDepth 8000 in
     render, sharing its forward chain and its 180-parameter signature. Takes `%x` plus the 180
     params in `allParams` (= func-arg) order (181 inputs) and returns logits `[32, 10]`.
 
-    This replaces the independent hand-written string emitter in `tests/TestConvNeXtFwd.lean`: the
+    This replaces the independent hand-written string emitter in [`tests/TestConvNeXtFwd.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtFwd.lean): the
     forward the driver evals is now the same graph the train step differentiates, **by construction
     rather than by inspection**. Because it shares the chain, the emitted body is a byte-identical
     PREFIX of `convnext_train_step.mlir`'s, ending exactly where the loss begins — which is what
@@ -945,7 +945,7 @@ private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0
 
 set_option maxRecDepth 8000 in
 /-- **ConvNeXt-T AdamW train step rendered from the verified AST.** The certified peer of the
-    hand-written render in `tests/TestConvNeXtTrain.lean` that `convnext-verified-adam` trains on.
+    hand-written render in [`tests/TestConvNeXtTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtTrain.lean) that `convnext-verified-adam` trains on.
 
     Same backward as `convnext_train_step` (`convNextBackAll`, one traversal) but taking the
     **un-fused gradients**, each fed to the proven AdamW triple. The cotangent adds label smoothing

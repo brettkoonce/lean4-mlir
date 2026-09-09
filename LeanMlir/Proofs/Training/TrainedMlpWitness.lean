@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Certificates.LipschitzCertInstance
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
-arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
 The audit's "live witnesses use synthetic weights" gap, closed at the MLP rung:
 the SAME trained, /128-rationalized 49→8→10 pooled-MNIST network certified in

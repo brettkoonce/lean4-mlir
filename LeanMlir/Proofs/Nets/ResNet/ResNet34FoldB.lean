@@ -16,7 +16,7 @@ before this file is stated at the fused form, so none of them applies here.
 ⭐ **That makes this tier better, not worse.** A statement about the gradient covers every
 optimizer variant at once: `sgd`, `mom`, `momdp64`, `adam` and `adamdp128` all consume the same
 `*GradB` node, so one lemma per op kind certifies the whole family. ⚠ The bf16 twins do NOT: a
-bf16 render emits `*GradBBf16`, its own kind, folded in `Foundation/Bf16GradNodes.lean`. It is also the
+bf16 render emits `*GradBBf16`, its own kind, folded in [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean). It is also the
 form ConvNeXt's `psW` carve-out already had to take for a different reason (a hand-written SGD
 wrap).
 

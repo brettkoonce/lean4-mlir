@@ -3,18 +3,18 @@ import Mathlib.Probability.Distributions.Gaussian.Real
 
 /-! # Mathlib upstreaming drafts — CI-guarded copies
 
-Compiles the contents of `planning/mathlib_upstream_drafts/PR1_CDF.lean` (generic cdf
+Compiles the contents of [`planning/mathlib_upstream_drafts/PR1_CDF.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/mathlib_upstream_drafts/PR1_CDF.lean) (generic cdf
 lemmas, target `Mathlib/Probability/CDF.lean`) and
-`planning/mathlib_upstream_drafts/PR2_GaussianReal.lean` (Gaussian cdf facts, target
+[`planning/mathlib_upstream_drafts/PR2_GaussianReal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/mathlib_upstream_drafts/PR2_GaussianReal.lean) (Gaussian cdf facts, target
 `Mathlib/Probability/Distributions/Gaussian/Real.lean`) against this repo's pinned Mathlib,
 inside the namespace `MathlibUpstream` so nothing clashes with Mathlib or with
 `LeanMlir.Proofs`. Keep in sync with those two files.
 
-A `Certs` root (audited in `tests/AuditAxioms.lean`) so the drafts can't rot between
+A `Certs` root (audited in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)) so the drafts can't rot between
 Mathlib pin bumps while the PRs are in flight. Once a PR merges and the pin catches up,
 delete the corresponding section here and cite Mathlib directly.
 
-Fast check: `lake env lean LeanMlir/Proofs/Foundation/UpstreamDraft.lean` -/
+Fast check: [`lake env lean LeanMlir/Proofs/Foundation/UpstreamDraft.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/UpstreamDraft.lean) -/
 
 namespace MathlibUpstream
 
