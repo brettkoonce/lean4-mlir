@@ -1,18 +1,42 @@
 #!/usr/bin/env python3
-"""Run the VisDrone FPN detector on a Jetson Orin (or any IREE target).
+"""Run the VisDrone FPN detector on a Jetson Orin.
 
-Self-contained on purpose: numpy + Pillow + the IREE runtime, nothing from the
-training tree. Copy the `deploy/` directory and the two weight files to the
-device and this runs.
+Self-contained on purpose: numpy + Pillow + one runtime, nothing from the
+training tree. Three backends behind one interface:
 
-    python3 orin_detect.py --vmfb build/detector.vmfb \
-        --params build/params.bin --bn build/bn_stats.bin \
-        --image frame.jpg --out out.png
+    trt   TensorRT engine built on the device by trtexec — the fast one
+    ort   onnxruntime on the same ONNX — no engine, runs anywhere (the training
+          box dry-runs the whole pipeline this way; an Orin without a working
+          TensorRT python binding can too, on CPU)
+    iree  the portable route, ~0.5 fps on an Orin, kept for completeness
 
-Camera mode (skeleton — see CAMERA below):
-    python3 orin_detect.py ... --camera 0 --fps-window 60
+    python3 orin_detect.py --backend trt --plan build/detector_aff30e28.plan \
+        --image testdata/frame.png --out out.png --bench 50
+    python3 orin_detect.py --backend ort --onnx build/detector_aff30e28.onnx \
+        --image testdata/frame.png --bench 10
+    python3 orin_detect.py --gate-decode          # no GPU, no weights
 
-## Calling convention
+`--bench` reports the three stages separately — host preprocess, forward
+(H2D + engine + D2H, synchronized), decode+NMS on the CPU — because on an Orin
+Nano the network is the SMALLEST of the three (6.3 ms against 11.9 + 10.0) and
+a single number hides where the frame time goes.
+
+## The preprocessing contract, which is the easiest thing to get silently wrong
+
+Training normalizes in the C loader, not in the graph (`ffi/f32_helpers.c`):
+resize to 448x448 (SQUASH, not letterbox — measured 23% better on this data),
+uint8 -> /255 -> subtract ImageNet mean -> divide by ImageNet std -> CHW.
+Deviating produces a detector that still runs and quietly gets worse.
+
+Which of that the host still does depends on how the graph was exported
+(`export_onnx.py --fold-preprocess`), and the graph's INPUT TENSOR says which:
+`image` [1,3,448,448] f32 wants the normalized tensor; `image_01` the same
+shape in [0,1] with the normalize inside the graph; `image_u8` [1,448,448,3]
+uint8 wants the resized bytes as they come off the camera. The detectors read
+the name and dtype off the engine/model, so a mismatch is impossible unless
+`--input-mode` overrides it.
+
+## IREE calling convention (backend iree only)
 
 The graph takes 190 tensors: the image first, then 189 weight tensors, in the
 order they appear in the MLIR signature. Their total is exactly
@@ -20,18 +44,9 @@ order they appear in the MLIR signature. Their total is exactly
 concatenated and split by that signature. The signature is PARSED FROM THE MLIR
 rather than hardcoded, so a retrained or re-shaped model cannot silently
 mismatch — pass --mlir to re-derive it.
-
-## The preprocessing contract, which is the easiest thing to get silently wrong
-
-Training normalizes in the C loader, not in the graph (`ffi/f32_helpers.c`):
-resize to 448x448 (SQUASH, not letterbox — measured 23% better on this data),
-uint8 -> /255 -> subtract ImageNet mean -> divide by ImageNet std -> CHW ->
-flatten. Deviating produces a detector that still runs and quietly gets worse.
 """
 import argparse
-import json
 import re
-import sys
 import time
 from pathlib import Path
 
@@ -92,14 +107,39 @@ def load_weights(sig, params_path, bn_path):
 
 # ------------------------------------------------------------ preprocessing
 
-def preprocess(img_rgb_hwc):
-    """HWC uint8 (any size) -> [1, 3*448*448] float32, matching the C loader."""
+INPUT_MODES = ("none", "f32", "u8")
+
+
+def input_mode_of(name, is_uint8):
+    """Preprocessing mode implied by the graph's input tensor. Mirrors
+    `export_onnx.INPUT_NAMES`: uint8 -> u8, `*_01` -> f32, else none."""
+    if is_uint8:
+        return "u8"
+    return "f32" if name.endswith("_01") else "none"
+
+
+def preprocess(img_rgb_hwc, mode="none"):
+    """HWC uint8 (any size) -> the graph's input tensor for `mode`.
+
+      none  [1,3,448,448] float32, normalized here (the C loader's contract)
+      f32   [1,3,448,448] float32 in [0,1]; the graph normalizes
+      u8    [1,448,448,3] uint8, the resized bytes untouched; the graph does the
+            permute, the /255 and the normalize, and the H2D copy is 4x smaller
+
+    Measured on an Orin Nano, mode none costs 11.9 ms of which the resize is
+    0.5 ms — the rest is numpy elementwise work on a CPU that is far worse at it
+    than the GPU sitting idle behind it. That is what u8 removes.
+    """
     from PIL import Image
-    pil = Image.fromarray(img_rgb_hwc).convert("RGB").resize(
-        (IMG_PX, IMG_PX), Image.BILINEAR)          # SQUASH, not letterbox
+    pil = Image.fromarray(img_rgb_hwc).convert("RGB")
+    if pil.size != (IMG_PX, IMG_PX):
+        pil = pil.resize((IMG_PX, IMG_PX), Image.BILINEAR)   # SQUASH, not letterbox
+    if mode == "u8":
+        return np.ascontiguousarray(np.asarray(pil, dtype=np.uint8))[None]
     chw = np.asarray(pil, dtype=np.float32).transpose(2, 0, 1) / 255.0
-    chw = (chw - MEAN) * ISTD
-    return chw.reshape(1, -1).astype(np.float32)
+    if mode == "none":
+        chw = (chw - MEAN) * ISTD
+    return np.ascontiguousarray(chw[None], dtype=np.float32)
 
 
 # ------------------------------------------------------------------ decode
@@ -296,23 +336,50 @@ def _gate_decode(flat, **kw):
 
 # ------------------------------------------------------------------ runtime
 
+def _expected_input_shape(mode):
+    return (1, IMG_PX, IMG_PX, 3) if mode == "u8" else (1, 3, IMG_PX, IMG_PX)
+
+
+def _resolve_mode(name, is_uint8, override):
+    mode = input_mode_of(name, is_uint8)
+    if override not in (None, "auto") and override != mode:
+        if is_uint8 != (override == "u8"):
+            raise SystemExit(f"--input-mode {override} contradicts the input "
+                             f"dtype ({'uint8' if is_uint8 else 'float32'})")
+        print(f"⚠ --input-mode {override} overrides the mode the input name "
+              f"'{name}' implies ({mode}); only right for an ONNX exported "
+              f"before the name carried it")
+        mode = override
+    return mode
+
+
 class TrtDetector:
     """TensorRT backend — the one that actually goes fast on an Orin.
 
     IREE compiles this graph for sm_87 and runs it at ~0.5 fps, because its CUDA
     backend generates its own convolution kernels; TensorRT dispatches to cuDNN
     and tensor cores and does fp16 natively. Weights are baked into the engine at
-    build time, so unlike the IREE path there is nothing to feed but the image.
+    build time, so there is nothing to feed but the image.
 
-    ⚠ UNTESTED FROM HERE — there is no Orin on the build box. The API below is
-    the TensorRT 8.x/10 execute_async_v3 shape; if your JetPack ships an older
-    runtime you may need execute_async_v2 with a bindings list instead.
+    Everything about the I/O comes from the ENGINE, not from assumptions: the
+    input's name, shape and dtype pick the preprocessing mode (a u8-folded
+    engine takes [1,448,448,3] uint8, the plain one [1,3,448,448] float32), the
+    output's size sizes the buffer. Host buffers are page-locked, because an
+    "async" copy from pageable memory silently degrades to a staged synchronous
+    one — that fix was made on the device twice and lost twice; it is in git now.
+
+    ⚠ Written on the build box, where there is no TensorRT to run it. The
+    `--backend ort` path exercises the same preprocess / forward / decode /
+    bench code on the same ONNX, so what is untested here is exactly the
+    TensorRT + pycuda calls. `execute_async_v3` is the TensorRT 10 API (JetPack
+    6.x); a TensorRT 8 runtime falls back to `execute_async_v2` with a bindings
+    list.
 
     Build the engine on the device:
-        trtexec --onnx=detector.onnx --saveEngine=detector.plan --fp16
+        trtexec --onnx=detector_aff30e28.onnx --saveEngine=detector_aff30e28.plan --fp16
     """
 
-    def __init__(self, plan):
+    def __init__(self, plan, input_mode="auto"):
         import tensorrt as trt
         import pycuda.autoinit  # noqa: F401  (creates the CUDA context)
         import pycuda.driver as cuda
@@ -320,28 +387,118 @@ class TrtDetector:
         logger = trt.Logger(trt.Logger.WARNING)
         with open(plan, "rb") as f:
             self.engine = trt.Runtime(logger).deserialize_cuda_engine(f.read())
+        if self.engine is None:
+            raise SystemExit(f"TensorRT refused to deserialize {plan} — built by "
+                             f"a different TensorRT version, or not an engine")
         self.ctx = self.engine.create_execution_context()
         self.stream = cuda.Stream()
-        self.h_out = np.empty(NTOT, dtype=np.float32)
-        self.d_in = cuda.mem_alloc(1 * 3 * IMG_PX * IMG_PX * 4)
-        self.d_out = cuda.mem_alloc(self.h_out.nbytes)
-        self.in_name = self.engine.get_tensor_name(0)
-        self.out_name = self.engine.get_tensor_name(1)
 
-    def __call__(self, img_rgb_hwc):
-        x = preprocess(img_rgb_hwc).reshape(1, 3, IMG_PX, IMG_PX)
-        self.cuda.memcpy_htod_async(self.d_in, np.ascontiguousarray(x), self.stream)
-        self.ctx.set_tensor_address(self.in_name, int(self.d_in))
-        self.ctx.set_tensor_address(self.out_name, int(self.d_out))
-        self.ctx.execute_async_v3(self.stream.handle)
+        e = self.engine
+        if hasattr(e, "num_io_tensors"):                     # TensorRT >= 8.5
+            names = [e.get_tensor_name(i) for i in range(e.num_io_tensors)]
+            is_in = {n: e.get_tensor_mode(n) == trt.TensorIOMode.INPUT for n in names}
+            shape = {n: tuple(e.get_tensor_shape(n)) for n in names}
+            dtype = {n: trt.nptype(e.get_tensor_dtype(n)) for n in names}
+        else:                                                # TensorRT 8.0-8.4
+            names = [e.get_binding_name(i) for i in range(e.num_bindings)]
+            is_in = {n: e.binding_is_input(i) for i, n in enumerate(names)}
+            shape = {n: tuple(e.get_binding_shape(i)) for i, n in enumerate(names)}
+            dtype = {n: trt.nptype(e.get_binding_dtype(i)) for i, n in enumerate(names)}
+        ins = [n for n in names if is_in[n]]
+        outs = [n for n in names if not is_in[n]]
+        if len(ins) != 1 or len(outs) != 1:
+            raise SystemExit(f"expected 1 input + 1 output, engine has {ins} / {outs}")
+        self.in_name, self.out_name = ins[0], outs[0]
+        in_shape, in_dtype = shape[self.in_name], dtype[self.in_name]
+        out_shape, out_dtype = shape[self.out_name], dtype[self.out_name]
+        self.mode = _resolve_mode(self.in_name, in_dtype == np.uint8, input_mode)
+        if in_shape != _expected_input_shape(self.mode):
+            raise SystemExit(f"engine input {self.in_name} is {in_shape} "
+                             f"{in_dtype.__name__}, want "
+                             f"{_expected_input_shape(self.mode)} for mode {self.mode}")
+        n_out = int(np.prod(out_shape))
+        if n_out < NTOT:
+            raise SystemExit(f"engine output {self.out_name} has {n_out} floats, "
+                             f"want at least {NTOT}")
+
+        # Pinned host buffers on both sides of the copy.
+        self.h_in = cuda.pagelocked_empty(in_shape, in_dtype)
+        self.h_out = cuda.pagelocked_empty(n_out, out_dtype)
+        self.d_in = cuda.mem_alloc(self.h_in.nbytes)
+        self.d_out = cuda.mem_alloc(self.h_out.nbytes)
+        self._v3 = hasattr(self.ctx, "set_tensor_address") and \
+            hasattr(self.ctx, "execute_async_v3")
+        if self._v3:
+            self.ctx.set_tensor_address(self.in_name, int(self.d_in))
+            self.ctx.set_tensor_address(self.out_name, int(self.d_out))
+        else:
+            # TensorRT 8: positional bindings in engine binding order.
+            order = [self.engine.get_binding_index(n) for n in (self.in_name, self.out_name)]
+            self._bindings = [0, 0]
+            self._bindings[order[0]] = int(self.d_in)
+            self._bindings[order[1]] = int(self.d_out)
+        print(f"  engine input {self.in_name} {in_shape} {in_dtype.__name__} -> "
+              f"preprocessing mode '{self.mode}'; output {out_shape}; "
+              f"{'execute_async_v3' if self._v3 else 'execute_async_v2'}")
+
+    def forward(self, x):
+        """Graph input (from `preprocess`) -> [NTOT] float32 logits. Blocks."""
+        np.copyto(self.h_in, x.reshape(self.h_in.shape))
+        self.cuda.memcpy_htod_async(self.d_in, self.h_in, self.stream)
+        if self._v3:
+            self.ctx.execute_async_v3(self.stream.handle)
+        else:
+            self.ctx.execute_async_v2(bindings=self._bindings,
+                                      stream_handle=self.stream.handle)
         self.cuda.memcpy_dtoh_async(self.h_out, self.d_out, self.stream)
         self.stream.synchronize()
-        return self.h_out
+        return self.h_out[:NTOT].astype(np.float32, copy=True)
+
+    def __call__(self, img_rgb_hwc):
+        return self.forward(preprocess(img_rgb_hwc, self.mode))
+
+
+class OrtDetector:
+    """onnxruntime backend: the identical pipeline with no engine build.
+
+    This is how the training box dry-runs the whole runner against the very
+    ONNX it ships (`--backend ort --onnx build/detector_aff30e28.onnx`), and how
+    an Orin without a working TensorRT python binding still gets detections —
+    slowly, on the CPU provider, unless onnxruntime-gpu is installed.
+    """
+
+    def __init__(self, onnx_path, input_mode="auto", providers=None):
+        import onnxruntime as ort
+        avail = ort.get_available_providers()
+        providers = providers or [p for p in ("CUDAExecutionProvider",
+                                              "CPUExecutionProvider") if p in avail]
+        self.sess = ort.InferenceSession(onnx_path, providers=providers)
+        ins, outs = self.sess.get_inputs(), self.sess.get_outputs()
+        if len(ins) != 1 or len(outs) != 1:
+            raise SystemExit(f"expected 1 input + 1 output, model has "
+                             f"{[i.name for i in ins]} / {[o.name for o in outs]}")
+        inp = ins[0]
+        self.in_name = inp.name
+        is_u8 = "uint8" in inp.type
+        self.mode = _resolve_mode(inp.name, is_u8, input_mode)
+        if tuple(inp.shape) != _expected_input_shape(self.mode):
+            raise SystemExit(f"model input {inp.name} is {inp.shape} {inp.type}, "
+                             f"want {_expected_input_shape(self.mode)} for mode {self.mode}")
+        print(f"  model input {inp.name} {inp.shape} {inp.type} -> preprocessing "
+              f"mode '{self.mode}'; providers {self.sess.get_providers()}")
+
+    def forward(self, x):
+        return self.sess.run(None, {self.in_name: x})[0].reshape(-1)[:NTOT].astype(np.float32)
+
+    def __call__(self, img_rgb_hwc):
+        return self.forward(preprocess(img_rgb_hwc, self.mode))
 
 
 class Detector:
     """IREE backend. Kept because it is portable and needs no engine build, but
     it is ~0.5 fps on an Orin — use TrtDetector there."""
+
+    mode = "none"
 
     def __init__(self, vmfb, mlir, params, bn, device="cuda"):
         import iree.runtime as ireert
@@ -355,10 +512,12 @@ class Detector:
         self.ctx.add_vm_module(self.vm)
         self.fn = self.ctx.modules.module["forward_eval"]
 
-    def __call__(self, img_rgb_hwc):
-        x = preprocess(img_rgb_hwc)
-        out = self.fn(x, *self.weights)
+    def forward(self, x):
+        out = self.fn(x.reshape(1, -1), *self.weights)     # the graph takes it flat
         return np.asarray(out).reshape(-1)[:NTOT]
+
+    def __call__(self, img_rgb_hwc):
+        return self.forward(preprocess(img_rgb_hwc, self.mode))
 
 
 # ------------------------------------------------------------------- render
@@ -379,6 +538,49 @@ def draw(img_rgb_hwc, dets, out_path):
     pil.save(out_path)
 
 
+def summarize(dets):
+    """Count, top score, per-class table — the acceptance numbers a run reports."""
+    counts = {}
+    for cid, _s, _b in dets:
+        counts[CLASS_NAMES[cid]] = counts.get(CLASS_NAMES[cid], 0) + 1
+    top = max((s for _c, s, _b in dets), default=0.0)
+    print(f"  {len(dets)} detections, top score {top:.4f}")
+    for k, v in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        print(f"  {k:>16}: {v}")
+    return len(dets), top, counts
+
+
+def bench(det, img, n, conf_thresh):
+    """Steady-state timing of the three stages, each on its own clock.
+
+    preprocess = PIL resize + whatever host arithmetic the input mode leaves;
+    forward = H2D + engine + D2H, synchronized; decode = decode() + NMS on the
+    CPU. Three warm-up frames first: the first calls pay kernel load and
+    allocator growth, which is not what a camera sees. Reported as means over n.
+    """
+    for _ in range(3):
+        decode(det(img), conf_thresh=conf_thresh)
+    tp = tf = td = 0.0
+    for _ in range(n):
+        t0 = time.perf_counter()
+        x = preprocess(img, det.mode)
+        t1 = time.perf_counter()
+        flat = det.forward(x)
+        t2 = time.perf_counter()
+        decode(flat, conf_thresh=conf_thresh)
+        t3 = time.perf_counter()
+        tp += t1 - t0
+        tf += t2 - t1
+        td += t3 - t2
+    tp, tf, td = 1e3 * tp / n, 1e3 * tf / n, 1e3 * td / n
+    tot = tp + tf + td
+    print(f"bench: {n} frames, input mode '{det.mode}'")
+    print(f"  preprocess {tp:6.2f} ms | forward {tf:6.2f} ms | decode+nms "
+          f"{td:6.2f} ms | total {tot:6.2f} ms")
+    print(f"  forward-only {1e3 / tf:6.1f} fps | end-to-end {1e3 / tot:6.1f} fps")
+    return tp, tf, td
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vmfb", default="build/detector.vmfb")
@@ -386,16 +588,24 @@ def main():
     ap.add_argument("--params", default="build/params.bin")
     ap.add_argument("--bn", default="build/bn_stats.bin")
     ap.add_argument("--device", default="cuda", help="cuda on Orin, local-task for CPU")
-    ap.add_argument("--backend", default="trt", choices=["trt", "iree"],
-                    help="trt = TensorRT engine (fast on Orin); iree = portable "
-                         "but ~0.5 fps there")
-    ap.add_argument("--plan", default="build/detector.plan",
+    ap.add_argument("--backend", default="trt", choices=["trt", "ort", "iree"],
+                    help="trt = TensorRT engine (fast on Orin); ort = onnxruntime "
+                         "on the ONNX itself (no engine; the dry run); iree = "
+                         "portable but ~0.5 fps there")
+    ap.add_argument("--plan", default="build/detector_aff30e28.plan",
                     help="TensorRT engine, built on device by trtexec")
+    ap.add_argument("--onnx", default="build/detector_aff30e28.onnx",
+                    help="the ONNX, for --backend ort")
+    ap.add_argument("--input-mode", default="auto", choices=("auto",) + INPUT_MODES,
+                    help="host preprocessing mode; auto reads it off the "
+                         "engine/model input (name + dtype). Override only for "
+                         "an ONNX exported before the input name carried it.")
     ap.add_argument("--image", default=None)
     ap.add_argument("--out", default="out.png")
     ap.add_argument("--camera", type=int, default=None, help="camera index (skeleton)")
     ap.add_argument("--conf-thresh", type=float, default=0.05)
-    ap.add_argument("--bench", type=int, default=0, help="time N forward passes")
+    ap.add_argument("--bench", type=int, default=0,
+                    help="time N frames, each stage separately, after warm-up")
     ap.add_argument("--gate-decode", action="store_true",
                     help="assert the fast decode matches decode_reference on "
                          "testdata/frame_logits.bin and exit. Needs no engine, no "
@@ -405,14 +615,20 @@ def main():
 
     if args.gate_decode:
         ref = Path(__file__).resolve().parent / "testdata" / "frame_logits.bin"
-        n = _gate_decode(np.fromfile(ref, dtype=np.float32),
-                         conf_thresh=args.conf_thresh)
+        flat = np.fromfile(ref, dtype=np.float32)
+        n = _gate_decode(flat, conf_thresh=args.conf_thresh)
         print(f"✅ fast decode == decode_reference on {ref.name}: {n} detections")
+        print(f"the Lean stack's own decode of testdata/frame.png "
+              f"(conf >= {args.conf_thresh}):")
+        summarize(decode(flat, conf_thresh=args.conf_thresh))
         return
 
     if args.backend == "trt":
-        det = TrtDetector(args.plan)
+        det = TrtDetector(args.plan, args.input_mode)
         print(f"loaded {args.plan} (TensorRT)")
+    elif args.backend == "ort":
+        det = OrtDetector(args.onnx, args.input_mode)
+        print(f"loaded {args.onnx} (onnxruntime)")
     else:
         det = Detector(args.vmfb, args.mlir, args.params, args.bn, args.device)
         print(f"loaded {args.vmfb} (IREE, {args.device}) — expect ~0.5 fps on Orin")
@@ -442,27 +658,14 @@ def main():
     t1 = time.perf_counter()
     dets = decode(flat, conf_thresh=args.conf_thresh)
     t2 = time.perf_counter()
-    print(f"forward {1e3*(t1-t0):.1f} ms | decode+nms {1e3*(t2-t1):.1f} ms | "
-          f"{len(dets)} detections")
-    counts = {}
-    for cid, _s, _b in dets:
-        counts[CLASS_NAMES[cid]] = counts.get(CLASS_NAMES[cid], 0) + 1
-    for k, v in sorted(counts.items(), key=lambda kv: -kv[1]):
-        print(f"  {k:>16}: {v}")
+    print(f"first frame (cold): forward {1e3*(t1-t0):.1f} ms | decode+nms "
+          f"{1e3*(t2-t1):.1f} ms")
+    summarize(dets)
     draw(img, dets, args.out)
     print(f"wrote {args.out}")
 
     if args.bench:
-        # Warm up first: the first call pays kernel load, which is not the
-        # steady-state number a camera would see.
-        for _ in range(3):
-            det(img)
-        t0 = time.perf_counter()
-        for _ in range(args.bench):
-            det(img)
-        dt = (time.perf_counter() - t0) / args.bench
-        print(f"forward-only: {1e3*dt:.1f} ms/frame = {1.0/dt:.1f} fps "
-              f"(decode+nms adds ~{1e3*(t2-t1):.0f} ms on CPU)")
+        bench(det, img, args.bench, args.conf_thresh)
 
 
 if __name__ == "__main__":

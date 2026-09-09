@@ -1,6 +1,6 @@
 # deploy/ — the VisDrone detector on a Jetson Orin
 
-**Status: skeleton.** Two routes, and the measurement that decides between them.
+Two routes, and the measurement that decided between them.
 
 > ## ⚠ IREE runs at ~0.5 fps on an Orin. Go through TensorRT.
 >
@@ -22,34 +22,50 @@ The camera capture is a deliberate stub in both — on Orin the IMX path is a
 sensor- and JetPack-specific GStreamer pipeline, and guessing it from here would
 be worse than leaving it marked.
 
-## TensorRT route — unblocked 2026-08-28
+## TensorRT route — measured 2026-08-28, re-measure on the trained arm in flight
 
-The toolchain works and hits 229 fps, but it first shipped a **different model**:
-`export_onnx.py` built the PyTorch replica without `pad="lean"`, so it ran
-torchvision's symmetric convolution padding against a Lean spec that emits
-TF-style asymmetric SAME. Max relative difference 1.00, objectness correlation
-falling 0.90 / 0.80 / 0.62 with tap depth, 279 decoded detections against Lean's
-238. Fixed; with `pad="lean"` the replica reproduces the Lean logits to 5.0e-4
-relative and decodes the same 238 at the same top score. Full account in
-`ORIN_SMOKE_TEST.md`.
+Measured on an Orin Nano 8 GB (25 W, JetPack 6.2, TensorRT 10.3, fp16):
+**28.0 ms a frame = 35.7 fps** end-to-end, split 11.9 ms host preprocess +
+6.3 ms forward + 10.0 ms decode+NMS. That was the `ctrl12` weights on purpose
+(throughput does not depend on weights); the export of the trained arm
+`aff30e28` (mAP@0.5 0.2363) is gated on the training box and the device run on
+it is the open item — `ORIN_SMOKE_TEST.md` is that run's brief.
 
-⚠ The 229 fps was measured on that wrong graph. The fix changes only padding, so
-throughput should be unaffected, but it has not been re-measured.
+It first shipped a **different model**: `export_onnx.py` built the PyTorch
+replica without `pad="lean"`, so it ran torchvision's symmetric convolution
+padding against a Lean spec that emits TF-style asymmetric SAME. Max relative
+difference 1.00, objectness correlation falling 0.90 / 0.80 / 0.62 with tap
+depth, 279 decoded detections against Lean's 238. Fixed; the replica now
+reproduces the Lean logits to ~5e-4 relative. The 229 fps forward-only figure
+from that first session was measured on the wrong graph and is not quoted.
 
 ```bash
-# 1. anywhere torch exists. ⚠ On the training box use a THROWAWAY CPU-only venv,
-#    never the pinned .venv — torch drags in its own CUDA wheels over the pinned
-#    cuDNN and kills every JAX/XLA convolution.
-python3 export_onnx.py \
-    --ckpt ../.lake/build/..._ctrl12_params.bin \
-    --bn   ../.lake/build/..._ctrl12_bn_stats.bin \
-    --out  build/detector.onnx \
-    --verify-frame                                    # ⚠ do not skip
+# 1. on the training box, in the CPU-only .venv-timm (torch + onnx +
+#    onnxruntime live there). ⚠ never the pinned .venv — torch drags its own
+#    CUDA wheels over the pinned cuDNN and kills every JAX/XLA convolution.
+P=../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__aff30e28
+../.venv-timm/bin/python export_onnx.py --regen-golden ../runs/<dump>/logits.bin   # once per arm
+../.venv-timm/bin/python export_onnx.py --ckpt ${P}_params.bin --bn ${P}_bn_stats.bin \
+    --out build/detector_aff30e28.onnx --opset 18 --verify-frame        # ⚠ do not skip
+../.venv-timm/bin/python orin_detect.py --backend ort --onnx build/detector_aff30e28.onnx \
+    --image testdata/frame.png --bench 5                               # the whole runner, no engine
 
 # 2. on the device
-trtexec --onnx=detector.onnx --saveEngine=detector.plan --fp16
-python3 orin_detect.py --backend trt --plan detector.plan --image frame.jpg --bench 50
+trtexec --onnx=detector_aff30e28.onnx --saveEngine=detector_aff30e28.plan --fp16
+python3 orin_detect.py --backend trt --plan detector_aff30e28.plan \
+    --image testdata/frame.png --bench 50
 ```
+
+The frame golden `testdata/frame_logits.bin` is the Lean stack's logits for
+val record 374 **under one checkpoint**. Every arm that ships regenerates it
+(`--regen-golden`), or `--verify-frame` rejects a correct export with the same
+signature as a wrong one.
+
+`--fold-preprocess u8` moves the permute, `/255` and normalize into the graph
+and makes the input `[1,448,448,3]` uint8 — what `np.asarray(pil)` already is.
+On the Orin the host preprocess was 11.9 ms of the 28.0, so this is the biggest
+lever left; the input tensor's name and dtype tell `orin_detect.py` which
+contract the graph wants, so the two cannot be mismatched.
 
 ⚠ **Why the gate is not optional.** The ONNX comes from the PyTorch replica in
 `demos/visdrone/bespoke/`, which was only ever a validation oracle. Exporting
@@ -138,7 +154,7 @@ mismatch, so a retrained or reshaped model cannot silently misload.
 |---|---|
 | RTX 4060 Ti, XLA (cuDNN) | **65 fps** end-to-end, 548 images in 8.34 s |
 | Orin, IREE | **~0.5 fps** |
-| Orin, TensorRT fp16 | not yet measured — this is the number to get |
+| Orin Nano, TensorRT fp16 | **35.7 fps** end-to-end (28.0 ms = 11.9 preprocess + 6.3 forward + 10.0 decode), `ctrl12` weights, 2026-08-28 |
 
 The middle row is 130× below the top one on hardware perhaps 4× slower, which is
 the whole argument for TensorRT. An earlier version of this file projected ~16 fps
@@ -148,9 +164,10 @@ scaled across two compilers with completely different convolution strategies.
 
 A Nano would rather have MnV4 than R34 regardless.
 
-Note `decode()` runs on the CPU in numpy and its cost is reported separately by
-`--bench`. At ~70 objects a frame the per-class NMS is the part that will want
-attention first if the pipeline is tight; it is O(n²) per class.
+`--bench` times the three stages separately — host preprocess, forward, and the
+numpy decode+NMS — because on the Orin the network is the smallest of the three.
+The decode was 49 ms before it was vectorized (`decode_reference` is kept as its
+oracle, `--gate-decode` asserts they agree) and is 10 ms now.
 
 ## What to fill in on the device
 
@@ -158,7 +175,8 @@ attention first if the pipeline is tight; it is O(n²) per class.
    start from. A global-shutter IMX at 1456×1088 squashes to 448 at ~3×, which is
    *kinder* than VisDrone's own ~4.5× training squash, so the domain transfers
    without tiling.
-2. **A real `--bench` number**, replacing the projections above.
+2. **The `--bench` split on the trained arm** (`aff30e28`), and the same for
+   the u8-folded engine — the plain-vs-u8 preprocess column is the open question.
 3. Optionally a self-contained artifact — weights baked in as constants rather
    than passed as 189 inputs — if process startup ever matters more than
    flexibility.
