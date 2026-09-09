@@ -13997,6 +13997,7 @@ less than the last.
 lake exe cache get           # Mathlib oleans, ~30 s (vs ~45 min from source)
 lake build ProofsMinimal     # two files: the faithfulness PoC + SGD descent
 lake build Proofs            # the whole suite
+lake build Certs             # every certificate CI checks -- the long one
 \end{verbatim}
 
 \texttt{ProofsMinimal} is the smallest thing that is still a real result:
@@ -14104,11 +14105,12 @@ lake run cifar        # ch.4 cifar8w: SGD/momentum/Adam x bn/no-bn  (~19 min)
 lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~7 h)
 \end{verbatim}
 
-Those are XLA wall-clocks on one 7900 XTX. The Imagenette figure covers the
-five nets with recorded timings; MobileNetV4 and ResNet-50 joined the tier more
-recently and are not in that total, so budget somewhat more. Each tier also has
-an \texttt{-iree} twin --- see \emph{The second lowerer} at the end.
-The tiers bundle these targets, and any one builds on its own:
+Those are XLA wall-clocks on one RTX 4060 Ti. The Imagenette figure is the
+five chapter nets; ResNet-50 (about 75 minutes) and MobileNetV4 (about 35) ride
+in the same tier and add to it. Each trainer's transcript is teed to
+\texttt{runs/<date>-<trainer>/}. Each tier also has an \texttt{-iree} twin ---
+see \emph{The second lowerer} at the end. The tiers bundle these targets, and
+any one builds on its own:
 
 \begin{itemize}
   \item \texttt{mnist}: \texttt{mnist-linear-verified},
@@ -14185,7 +14187,9 @@ shape error at the first invoke.
 (\texttt{100000} = 0.1), integer-encoded because this toolchain has no
 \texttt{String.toFloat?}. The default 0.001 is an AdamW rate and will
 under-step a heavy-ball render by $\sim$100$\times$, which looks like a broken
-render rather than a wrong knob.
+render rather than a wrong knob. That is the one-card shape. The four-card one,
+with every knob taken from the job's own config, is \texttt{lake run
+r34-default-4gpu once} --- the next section.
 
 \prosesection{Running one for a day and a half}
 
@@ -14255,6 +14259,10 @@ status column says what each one is missing.
     oleans download in $\sim$30 seconds.
   \item \textbf{A run refuses to start over a missing shim} (ImageNet tier).
     Run \texttt{scripts/gen\_shims.sh}.
+  \item \textbf{\texttt{lake run <job> plan} refuses with ``OLDER than the render''}
+    (ImageNet tier). The job's precheck compares the binary's timestamp with its
+    render's, and a regenerated render trips it. \texttt{lake build <exe>}
+    clears it; a bare \texttt{lake run <job>} builds first and never sees it.
 \end{itemize}
 
 \section*{The second lowerer}
