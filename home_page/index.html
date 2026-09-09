@@ -2,82 +2,178 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Lean4-MLIR — Verified VJP Proofs for Deep Learning</title>
+  <title>Lean 4 → MLIR → GPU</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Verified Deep Learning with Lean 4: declare the network in Lean, render one StableHLO graph from proofs that the backward is the Jacobian-transpose of the forward, train it on GPU. The book, the proofs, the code.">
+  <link rel="canonical" href="https://lean.brettkoonce.com/">
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      max-width: 760px;
+      max-width: 860px;
       margin: 40px auto;
       padding: 0 20px;
       line-height: 1.6;
       color: #222;
+      background: #fff;
     }
-    h1 { font-size: 1.8em; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-    h2 { font-size: 1.3em; color: #444; margin-top: 2em; }
+    h1 { font-size: 1.9em; margin-bottom: 0.2em; }
+    h2 { font-size: 1.3em; color: #444; margin-top: 2.2em; border-bottom: 1px solid #eee; padding-bottom: 6px; }
     a { color: #0366d6; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    ul.links { list-style: none; padding-left: 0; }
-    ul.links li { margin: 8px 0; padding: 10px 14px; background: #f6f8fa; border-radius: 6px; }
-    ul.links li a { font-weight: 600; }
-    code { font-family: SFMono-Regular, Consolas, "Liberation Mono", monospace;
-           background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
-    table { border-collapse: collapse; margin: 1em 0; }
-    th, td { padding: 6px 14px; text-align: left; border-bottom: 1px solid #eee; }
-    th { background: #f6f8fa; }
-    .subtitle { color: #666; font-style: italic; margin-top: -10px; }
+    .lede { font-size: 1.1em; color: #333; }
+    .lede strong a { font-weight: 700; }
+    nav.doors { display: flex; flex-wrap: wrap; gap: 10px; margin: 1.4em 0; }
+    nav.doors a {
+      flex: 1 1 180px; padding: 12px 14px; background: #f6f8fa; border-radius: 6px;
+      font-weight: 600; border: 1px solid #e5e8eb;
+    }
+    nav.doors a span { display: block; font-weight: 400; color: #555; font-size: 0.9em; margin-top: 2px; }
+    code, pre { font-family: SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: 0.9em; }
+    code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; }
+    pre { background: #f6f8fa; padding: 12px 14px; border-radius: 6px; overflow-x: auto; line-height: 1.45; }
+    pre code { background: none; padding: 0; }
+    .tablewrap { overflow-x: auto; }
+    table { border-collapse: collapse; margin: 1em 0; width: 100%; }
+    th, td { padding: 7px 12px; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { background: #f6f8fa; white-space: nowrap; }
+    td.num { white-space: nowrap; }
+    .meta { color: #666; font-size: 0.95em; }
+    .meta img { vertical-align: middle; }
+    footer { margin-top: 3em; padding-top: 1em; border-top: 1px solid #eee; color: #666; font-size: 0.9em; }
   </style>
 </head>
 <body>
 
-<h1>Lean4-MLIR: Verified VJP Proofs for Deep Learning</h1>
-<p class="subtitle">Machine-checked backprop for every layer up to ViT, rendered to StableHLO and trained on GPU.</p>
+<h1>Lean 4 → MLIR → GPU</h1>
 
-<p>Companion artifact for <em>Verified Deep Learning with Lean&nbsp;4</em>, forthcoming from Apress (Springer Nature).
-Full source: <a href="https://github.com/brettkoonce/lean4-mlir">github.com/brettkoonce/lean4-mlir</a>.</p>
+<p class="lede"><strong>The book: <a href="blueprint/">Verified Deep Learning with Lean 4</a></strong>
+(<a href="blueprint.pdf">PDF</a>) — the interactive proof blueprint <em>is</em> the book: every theorem
+clickable, from the <code>pdiv</code> primitives to the whole-network backward passes.</p>
 
-<h2>Navigate the proofs</h2>
-<ul class="links">
-  <li><a href="blueprint/">Blueprint &mdash; interactive web version</a>
-      <br><span>LaTeX-rendered statements, proof tree, cross-links to Lean source.</span></li>
-  <li><a href="blueprint/dep_graph_document.html">Dependency graph &mdash; clickable DAG</a>
-      <br><span>81 nodes (0 axioms + 72 theorems + 9 definitions), colored and clustered by file.</span></li>
-  <li><a href="blueprint.pdf">Blueprint &mdash; PDF</a>
-      <br><span>Printable version if you prefer paper.</span></li>
-</ul>
+<p>Lean 4 as a specification language for neural networks. Declare the architecture in Lean, render one
+StableHLO graph — forward, loss, backward and optimizer fused — from proofs that the backward is the
+Jacobian-transpose of the forward, hand the graph to a trusted lowerer, train end to end. No Python at
+run time and no autograd library: the gradients are derived at codegen time, in Lean, and machine-checked
+over the reals.</p>
 
-<h2>The big idea</h2>
-<p>Every modern architecture's backward pass decomposes into
-<strong>three structural rules</strong> (chain, fan-in, product) plus
-<strong>five closed-form Jacobian tricks</strong>
-(diagonal, sparse toeplitz, binary selection, rank-1 correction, outer product).
-The proof suite makes this claim concrete: every layer VJP is a <code>HasVJP</code>
-instance, every composition is <code>vjp_comp</code>, every residual is
-<code>biPath_has_vjp</code>, and the whole ViT backbone lands as a single
-<code>HasVJPMat</code> theorem derived from one axiom (<code>mhsa_has_vjp_mat</code>).</p>
+<nav class="doors">
+  <a href="blueprint/">The book<span>web blueprint, every theorem linked to its Lean</span></a>
+  <a href="blueprint.pdf">The PDF<span>the same text, typeset</span></a>
+  <a href="docs/">API docs<span>doc-gen4 for every module</span></a>
+  <a href="https://github.com/brettkoonce/lean4-mlir">The code<span>github.com/brettkoonce/lean4-mlir</span></a>
+</nav>
 
-<p>The resulting trust kernel: zero project axioms, zero <code>sorry</code>s — every theorem reduces to Lean core + Mathlib's <code>fderiv</code>. Hit
-<a href="blueprint/">the blueprint</a> and click <code>vit_body_has_vjp_mat</code>
-to see the whole chain light up back to primitives.</p>
+<p class="meta">Companion code for <em>Verified Deep Learning with Lean 4</em>, forthcoming from Apress (Springer Nature)
+as the follow-up to <a href="https://doi.org/10.1007/978-1-4842-6168-2">Convolutional Neural Networks with Swift for TensorFlow</a> (2021).
+Current version <code>v0.7.0</code> (<a href="https://github.com/brettkoonce/lean4-mlir/blob/main/CHANGELOG.md">release history</a>) ·
+<a href="https://doi.org/10.5281/zenodo.20402133"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg" alt="DOI 10.5281/zenodo.20402133"></a></p>
 
-<h2>Results from the companion code</h2>
-<p>Trained from scratch on Imagenette, 224&times;224, Adam + cosine LR:</p>
+<h2>The tour</h2>
 
+<p>Four commands, one per scale, in the order the book meets the nets, then the demos. The numbers are the
+book's, from the verified XLA path on one RTX 4060 Ti unless the row says otherwise; the two Imagenette
+side quests the book does not quote (ResNet-50, MobileNetV4) are medians of five seeds. Setup is the
+book's <a href="blueprint/app-getting_started.html">Getting started</a>, one track per tier; the short form is</p>
+
+<pre><code>curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh   # Lean 4
+python3 -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install jax-cuda12-pjrt          # the XLA plugin only (jax-rocm7-pjrt on AMD)
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so                        # the shim; needs nothing but libc
+lake exe cache get &amp;&amp; ./download_mnist.sh &amp;&amp; lake run mnist                            # Mathlib oleans, MNIST, tier 1</code></pre>
+
+<div class="tablewrap">
 <table>
-  <tr><th>Model</th><th>Params</th><th>Val accuracy</th></tr>
-  <tr><td>ResNet-34</td>          <td>21.3M</td><td>90.29%</td></tr>
-  <tr><td>ResNet-50</td>          <td>23.5M</td><td>89.40%</td></tr>
-  <tr><td>EfficientNetV2-S</td>   <td>38.2M</td><td>88.50%</td></tr>
-  <tr><td>EfficientNet-B0</td>    <td>7.2M</td> <td>87.58%</td></tr>
-  <tr><td>MobileNetV2</td>        <td>2.2M</td> <td>87.09%</td></tr>
-  <tr><td>MobileNetV3-Large</td>  <td>3.0M</td> <td>86.48%</td></tr>
-  <tr><td>MobileNetV4-Medium</td> <td>4.1M</td> <td>84.58%</td></tr>
-  <tr><td>ViT-Tiny</td>           <td>5.5M</td> <td>71.70%</td></tr>
+  <tr><th>tier</th><th>command</th><th>trains</th><th>the number</th><th>chapter</th></tr>
+  <tr><td>1</td><td><code>lake run mnist</code></td>
+      <td>linear, MLP and CNN on MNIST, 12 epochs each (~1 min)</td>
+      <td class="num">92.10 · 97.81 · 98.77 %</td>
+      <td class="num"><a href="blueprint/chap-tensor.html">1</a> · <a href="blueprint/chap-mlp.html">2</a> · <a href="blueprint/chap-cnn.html">3</a></td></tr>
+  <tr><td>2</td><td><code>lake run cifar</code></td>
+      <td>the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~19 min)</td>
+      <td class="num">76.3 % — BN + momentum, median of five</td>
+      <td class="num"><a href="blueprint/chap-bn.html">4</a></td></tr>
+  <tr><td>3</td><td><code>lake run imagenette</code></td>
+      <td>seven nets on Imagenette at 224², 80 epochs AdamW, book order (~9 h)</td>
+      <td>R34 89.50 · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 %</td>
+      <td class="num"><a href="blueprint/chap-residual.html">5</a> · <a href="blueprint/chap-depthwise.html">6</a> · <a href="blueprint/chap-se.html">7</a> · <a href="blueprint/chap-layernorm.html">8</a> · <a href="blueprint/chap-attention.html">9</a></td></tr>
+  <tr><td>4</td><td><code>lake run imagenet</code></td>
+      <td>the same nets on ImageNet-1k, 4× 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, <code>start</code> runs it</td>
+      <td>R34 74.16 · R50 (RSB-A3) 78.26 · MNv2 71.90 · MNv4-Conv-M 75.48 · B0 77.15 · ConvNeXt-T 81.53 · ViT-Tiny 72.31 %</td>
+      <td class="num"><a href="blueprint/app-getting_started.html">Track 4</a></td></tr>
 </table>
+</div>
 
-<p>All from ~15-line Lean <code>NetSpec</code> declarations, compiled through
-StableHLO MLIR, trained end-to-end via IREE on AMD gfx1100 / NVIDIA CUDA.
-No Python runtime in the loop.</p>
+<p>The demos ride on the chapter nets;
+<a href="https://github.com/brettkoonce/lean4-mlir/blob/main/demos/README.md">demos/README.md</a> has the
+command, the figure and the reasoning for each.</p>
 
+<div class="tablewrap">
+<table>
+  <tr><th>demo</th><th>command</th><th>the number</th></tr>
+  <tr><td>segmentation</td><td><code>lake exe unet-brats-r34</code>, then <code>brats-predict</code></td>
+      <td>BraTS mIoU 0.742 — a ResNet-34 encoder under a UNet</td></tr>
+  <tr><td>detection</td><td><code>lake exe yolov1-visdrone-fpn</code></td>
+      <td>VisDrone mAP@0.5 0.2363 — ResNet-34 + FPN at 448</td></tr>
+  <tr><td>diffusion</td><td><code>lake exe mnist-ddpm-train</code>, then <code>mnist-ddpm-sample</code></td>
+      <td>the sample grid</td></tr>
+  <tr><td>language</td><td><code>lake exe tinygpt-shakespeare</code> (also <code>bigram-shakespeare</code>, <code>tinystories</code>)</td>
+      <td>2.28 bits/char held-out</td></tr>
+</table>
+</div>
+
+<p>Everything else in the repository is the lab — <code>apps/baselines/</code>, the ablation and robustness
+exes, the tests, the Bestiary — the evidence behind these numbers, one level down.</p>
+
+<h2>The proofs</h2>
+
+<p>Every layer's backward is proven to be the Jacobian-transpose of its forward over the exact reals
+(Mathlib's <code>fderiv</code>), composed up to whole-network VJPs for ResNet-34, MobileNetV2,
+EfficientNet-B0, ConvNeXt-T and ViT-Tiny, with zero project axioms. For every chapter net the committed
+train-step render in <code>verified_mlir/</code> is tied to those proofs at the denotational level: each
+emitted parameter-update node denotes the certified descent step, and the tiers train on exactly those
+bytes. What stays trusted is the ℝ→Float32 numerics, the per-op text printing, and the lowerer with its
+runtime. The book's <a href="blueprint/app-verification.html">On Verification</a> appendix is the full
+argument, gap by gap; <a href="blueprint/dep_graph_document.html">the dependency graph</a> is the same
+suite as a clickable DAG, and
+<a href="https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/README.md">LeanMlir/Proofs/README.md</a>
+is the file-level map.</p>
+
+<p>Check them without a GPU:</p>
+
+<pre><code>lake exe cache get           # Mathlib oleans, ~30 s
+lake build ProofsMinimal     # the smallest end-to-end tie, ~1 min
+lake build Certs             # every certificate CI checks (the long one)</code></pre>
+
+<p><code>tests/comparator/run.sh</code> re-runs Lean's kernel typechecker over the headline theorems
+independently, and <code>tests/comparator/Challenge.lean</code> imports Mathlib and nothing else, so those
+can be read and checked without reading a line of this project.</p>
+
+<h2>Two lowerers, one graph</h2>
+
+<p>Training runs through XLA/PJRT, and every number above comes from it. IREE is the second trusted
+lowerer: it is what the differential oracle lowers the Lean side through, so that agreement with the JAX
+reference is evidence from two independent compilers, and each <code>lake run</code> tier has an
+<code>-iree</code> twin.</p>
+
+<footer>
+<pre><code>@software{koonce2026,
+  author  = {Brett Koonce},
+  title   = {Verified Deep Learning with Lean 4: Formal Backpropagation from MLP to Attention, via MLIR},
+  url     = {https://github.com/brettkoonce/lean4-mlir},
+  doi     = {10.5281/zenodo.20402133},
+  version = {0.7.0},
+  year    = {2026},
+}</code></pre>
+</footer>
+
+<script>
+  // Umami — the same site as the blueprint and the API docs (cf. blueprint/src/umami_analytics.js).
+  (function () {
+    var s = document.createElement('script');
+    s.defer = true;
+    s.src = 'https://cloud.umami.is/script.js';
+    s.setAttribute('data-website-id', 'df07a183-ef82-4758-8b6f-1d888ba3ec5b');
+    document.head.appendChild(s);
+  })();
+</script>
 </body>
 </html>
