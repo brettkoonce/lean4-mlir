@@ -1473,21 +1473,6 @@ for epoch = 1 to cfg.epochs:
     eval(fwd, W, b, Xt, yt)
 \end{verbatim}
 
-\paragraph{What is missing from that loop, and where it went.}
-Compare it to the loop any framework tutorial shows you. There is no
-gradient variable. There is no optimizer call. There is no
-learning-rate schedule. Those three lines were not dropped, they moved
-into \texttt{verified\_mlir/linear\_train\_step.mlir}, which is where
-they can be proved. The loop above cannot get the update rule wrong,
-because it does not implement the update rule.
-
-That is the difference between this driver and a conventional one, and
-it is worth being precise about what it buys. A bug in a hand-written
-optimizer is a bug you find by watching the loss curve look strange. A
-bug in the rendered optimizer is a bug that fails a theorem at build
-time. Moving the arithmetic into the graph moves it inside the reach of
-the proofs.
-
 \paragraph{The same loop, in Lean.}
 Here is \texttt{VerifiedNet.trainLinear}, the driver that produced the
 run at the top of this chapter. Three things are left out: the
@@ -5396,7 +5381,7 @@ random-resized-crop (sampling $8$--$100\%$ of the image area at a
 $\frac{3}{4}$--$\frac{4}{3}$ aspect ratio, then resizing to
 $224\times224$) plus a horizontal flip, and $\ell_2$ weight decay
 $10^{-4}$. Every one of those is either the original paper or the ``bag of
-tricks'' polish that became standard after it, and
+tricks'' polish that became standard after 2018, and
 \S\ref{sec:r50_a3_vs_2018} is the table that says which is which.
 
 \prosesection{The PJRT lowerer}
@@ -13782,11 +13767,6 @@ there are answers to the same question. Concretely, four things are
 matched, and each was checked against \texttt{timm} rather than assumed:
 
 \begin{itemize}
-  \item \textbf{The denominator is all 50{,}000 validation images.} This
-    is worth stating because it moved: the loaders previously took
-    \texttt{drop\_remainder=True} on the validation split and scored
-    $49{,}920$, discarding $80$ images. A top-1 over a different
-    denominator is not an error bar, it is a different measurement.
   \item \textbf{The centre-crop ratio is read from \texttt{timm}'s own
     model configuration}, not from a global default.
     \texttt{resnet50.a1\_in1k}, \texttt{a2\_in1k} and \texttt{a3\_in1k}
