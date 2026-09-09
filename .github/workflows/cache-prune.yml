@@ -25,6 +25,11 @@ name: Prune stale Actions caches
 # GitHub's ~10 GB cache budget ... which was evicting everything"); narrowing the cached
 # path helped but did not address the per-run growth, so it came back.
 #
+# ⚠ Correction (2026-09-09): the blueprint bimodality above was NOT eviction. Its whole-`.lake`
+# entry was keyed on manifest+toolchain only, hit exactly every run, and so was never re-saved
+# — a frozen 2026-08-28 snapshot, read daily, that every run rebuilt from. blueprint.yml now
+# splits it into a stable part (packages + doc-gen4 output) and a rolling `lake-blueprint-` part.
+#
 # ▶ This keeps only the NEWEST entry per key-group, where a group is the key with its
 # trailing numeric run-id stripped. That preserves the rolling-cache behaviour exactly —
 # each run still writes a fresh entry and restores from the prefix — while bounding total
@@ -95,11 +100,17 @@ jobs:
           total = sum(c["size_in_bytes"] for c in caches)
           print(f"{len(caches)} caches, {total/1e9:.2f} GB total (cap ~10 GB)\n")
 
-          # Group by key with the trailing run-id stripped: `lake-certs-<hash>-123456789`
-          # and `lake-certs-<hash>-987654321` are the same rolling cache.
+          # Group by key with the trailing run-id AND any 64-hex content hash stripped:
+          # `lake-certs-<hash>-123456789` and `lake-certs-<hash'>-987654321` are the same rolling
+          # cache. Until 2026-09-09 only the run-id was stripped, so every lakefile.lean edit (a
+          # new hash — 124 of the previous 499 commits) left a permanent ~750 MB generation behind:
+          # four `lake-certs-` generations sat side by side and the budget was back at the cap.
+          # The restore side falls back to the bare prefix anyway, so the newest generation is
+          # the only one a job can ever want.
           groups = collections.defaultdict(list)
           for c in caches:
-              groups[re.sub(r"-\d{6,}$", "", c["key"])].append(c)
+              g = re.sub(r"-[0-9a-f]{64}", "", c["key"])
+              groups[re.sub(r"-\d{6,}$", "", g)].append(c)
 
           freed = 0
           for prefix, entries in sorted(groups.items()):

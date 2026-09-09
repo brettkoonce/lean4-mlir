@@ -29,6 +29,13 @@ on:
       # `apps` latent from 2026-07-27, `demos` from `dc5a7db`, both surfaced only when an
       # unrelated push happened to touch a trigger path).
       - 'tests/BlueprintCheckDecls.lean'
+      # Fifth instance of the same bug: the docstring gate's SOURCE and its ratchet decide the
+      # verdict at the `docstring-checkrefs` step below, and until 2026-09-09 a change to either
+      # triggered nothing. The last two emit PUBLISHED content (sitemap, analytics tag).
+      - 'tests/DocstringCheckRefs.lean'
+      - 'scripts/docstring_ref_baseline.txt'
+      - 'scripts/gen_sitemap.py'
+      - 'scripts/inject_umami.sh'
   workflow_dispatch:
     inputs:
       full_site:
@@ -36,9 +43,7 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
+# Concurrency is per JOB below: a superseded build is cancelled, a deploy never is.
 
 permissions:
   contents: read
@@ -49,6 +54,15 @@ jobs:
   build_blueprint:
     runs-on: ubuntu-latest
     name: Build blueprint + deploy to Pages
+    # 89 min was the worst observed run against GitHub's 360-min default; a hung xelatex or
+    # doc-gen4 should not burn six hours.
+    timeout-minutes: 150
+    concurrency:
+      # Cancel a superseded BUILD (a burst of pushes should build the last one), never the deploy
+      # — see deploy_pages. Namespaced by workflow so another workflow copying `${{ github.ref }}`
+      # as its group cannot cross-cancel this one.
+      group: ${{ github.workflow }}-build-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Cleanup to free disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.0
@@ -82,18 +96,45 @@ jobs:
           test -x "$HOME/.elan/bin/elan" || { echo "::error::elan install failed after 3 attempts"; exit 1; }
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Cache .lake (Mathlib oleans + our build products)
+      - name: Cache .lake/packages + doc-gen4 output (stable — moves only on `lake update`)
         uses: actions/cache@v4
         with:
-          path: .lake
-          # Invalidate cache when Mathlib rev changes or lean-toolchain bumps.
-          # The -v2 suffix forces a fresh cache slot after re-enabling doc-gen4
-          # in b31eccc — the pre-existing cache has the same hashFiles key but
-          # is missing .lake/build/doc/, so actions/cache no-ops the save.
-          key: lake-v2-${{ runner.os }}-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}
+          path: |
+            .lake/packages
+            .lake/build/doc
+            .lake/build/doc-data
+          # Keyed on manifest + toolchain because that is exactly when THIS content moves: the
+          # Mathlib checkout + oleans and the locally-rebuilt Mathlib doc-gen4 HTML (gigabytes).
+          # An exact-key hit makes actions/cache skip the save, which is correct for this content
+          # and was WRONG for the build products this step used to carry as well: from 2026-08-28
+          # to 2026-09-09 the old whole-`.lake` entry hit exactly on every run, never re-saved,
+          # and every run rebuilt everything since 08-28 from source (~25 min) before doc-gen4
+          # started. cache-prune.yml's "LRU eviction" theory did not survive `gh cache list`: the
+          # entry was read daily. Our own oleans now live in the rolling cache below.
+          # -v3: new path layout (the -v2 whole-tree entry is a valid warm start, so it stays a
+          # restore fallback until it ages out).
+          key: lake-v3-${{ runner.os }}-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}
           restore-keys: |
+            lake-v3-${{ runner.os }}-
             lake-v2-${{ runner.os }}-
-            lake-${{ runner.os }}-
+
+      - name: Cache .lake/build (rolling — our oleans, warm from the corpus workflows)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            !.lake/build/doc
+            !.lake/build/doc-data
+          # Rolling key (run_id suffix — see cache-prune.yml for why) so every run saves what it
+          # built. Restores its own namespace first, then certs.yml's `lake-certs-`: `lake build
+          # LeanMlir Certs` here is a superset of `lake build Certs` there, so a certs entry is a
+          # warm start, never a wrong corpus. Deliberately NOT `lake-heavy-` or `lake-proofs-`.
+          key: lake-blueprint-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-blueprint-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-blueprint-
+            lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-certs-
 
       # NOTE: we don't run `lake update` on every CI build — that would
       # ratchet Mathlib forward and trigger a toolchain upgrade every time
@@ -299,7 +340,8 @@ jobs:
           mkdir -p public
           # Homepage (index.md etc.) rendered as markdown; ship as-is and let
           # GitHub Pages process it with Jekyll.
-          cp -r home_page/* public/ 2>/dev/null || true
+          # No `|| true`: a site without its homepage must fail the job, not ship.
+          cp -r home_page/* public/
           # Blueprint web
           mkdir -p public/blueprint
           cp -r blueprint/web/* public/blueprint/ 2>/dev/null || true
@@ -417,6 +459,14 @@ jobs:
   deploy_pages:
     needs: build_blueprint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      # Never cancel a deploy. actions/deploy-pages creates the deployment and then polls it;
+      # cancelling between the two leaves a deployment GitHub still considers in flight, which
+      # can block the next one and is how the live site ends up behind main. GitHub's own Pages
+      # starter workflow uses exactly this shape: cancel builds, queue deploys.
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

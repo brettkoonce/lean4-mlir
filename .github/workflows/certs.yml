@@ -24,6 +24,15 @@ on:
       # (mnv2 6→17-block promotion rotted the orphaned SpecVJP for weeks).
       - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedSpec.lean'
+      # The gates this job runs and what they read: a change to any of these flips the verdict
+      # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
+      # diff list as its data source, so that workflow file is an input to THIS one.
+      - 'scripts/check_audit_coverage.py'
+      - 'scripts/check_render_coverage.py'
+      - 'scripts/render_guard_baseline.txt'
+      - '.github/workflows/proofs.yml'
+      - 'tests/bestiary_params.yml'
+      - 'tests/test_bestiary_params.py'
   pull_request:
     paths:
       - 'LeanMlir/Proofs/**'
@@ -34,9 +43,23 @@ on:
       - '.github/workflows/certs.yml'
       - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedSpec.lean'
+      # The gates this job runs and what they read: a change to any of these flips the verdict
+      # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
+      # diff list as its data source, so that workflow file is an input to THIS one.
+      - 'scripts/check_audit_coverage.py'
+      - 'scripts/check_render_coverage.py'
+      - 'scripts/render_guard_baseline.txt'
+      - '.github/workflows/proofs.yml'
+      - 'tests/bestiary_params.yml'
+      - 'tests/test_bestiary_params.py'
   schedule:
     - cron: '17 8 * * *'   # nightly, 08:17 UTC (off the top-of-hour rush)
   workflow_dispatch:
+
+concurrency:
+  # A superseded run of the same ref is cancelled; a push burst builds the last commit only.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   certify:
@@ -74,6 +97,10 @@ jobs:
           # `lake-certs-` namespace is shared with comparator.yml (both run
           # `lake build Certs`); proofs.yml uses a separate `lake-proofs-` so the
           # two never restore each other's build and rebuild the wrong corpus cold.
+          # ⚠ certs-heavy.yml used to save into THIS prefix as `lake-certs-<hash>-heavy-<id>`.
+          # Being the newest match, it was what this job restored — and its module set is
+          # different, so the corpus rebuilt every run (288 modules, zero replays, on an UNCHANGED
+          # commit, 2026-09-09 12:57 nightly). It saves under `lake-heavy-` now.
           key: lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
             lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-

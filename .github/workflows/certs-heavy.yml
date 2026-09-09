@@ -40,6 +40,11 @@ on:
       - 'tests/AuditAxiomsHeavy.lean'
       - 'lakefile.lean'
       - '.github/workflows/certs-heavy.yml'
+      # A Lean/Mathlib bump is what can move the per-module memory peaks this job is tuned
+      # around; until 2026-09-09 only the fortnightly cron would have noticed one.
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
+      - 'scripts/check_audit_coverage.py'
   schedule:
     # Bi-weekly drift guard: the 1st and 15th at 09:47 UTC. Cron has no native
     # fortnightly, so day-of-month is the usual spelling (~14-16 day spacing).
@@ -53,6 +58,11 @@ on:
     # change what `CertsHeavy` builds — but the cost is now written down.
     - cron: '47 9 1,15 * *'
   workflow_dispatch:
+
+concurrency:
+  # A superseded run of the same ref is cancelled; a push burst builds the last commit only.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   certify-heavy:
@@ -84,13 +94,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          # shares the `lake-certs-` namespace with certs.yml/comparator.yml —
-          # CertsHeavy's imports subsume the Certs roots, so restoring their
-          # build products is exactly the warm start this job wants.
-          key: lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-heavy-${{ github.run_id }}
+          # Own `lake-heavy-` namespace, RESTORE-ONLY from certs.yml's `lake-certs-`: CertsHeavy's
+          # imports subsume the Certs roots, so a certs entry is the warm start this job wants —
+          # but the reverse was poison. Until 2026-09-09 this saved as `lake-certs-<hash>-heavy-<id>`;
+          # finishing last, it was the newest `lake-certs-` match and what certs.yml/comparator.yml
+          # restored, and its module set is different, so their corpus rebuilt every run.
+          key: lake-heavy-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
+            lake-heavy-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-heavy-
             lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
             lake-certs-
+
+      - name: Serialization loop covers every CertsHeavy root
+        # The loop in the next step must name EVERY `CertsHeavy` root or the final
+        # `lake build CertsHeavy` co-schedules the unlisted ones. Derived from the lakefile so the
+        # invariant is enforced, not remembered (two roots were missing for two months).
+        run: |
+          set -euo pipefail
+          roots=$(awk '/lean_lib «CertsHeavy»/,/\]/' lakefile.lean | grep -oP 'LeanMlir\.Proofs\.Certificates\.\K[A-Za-z0-9_]+')
+          test -n "$roots"
+          for r in $roots; do
+            grep -qE "(^| )$r( \\\\|; do)\$" .github/workflows/certs-heavy.yml \
+              || { echo "::error::CertsHeavy root $r is not in the serialization loop"; exit 1; }
+          done
+          echo "every CertsHeavy root is in the loop:" $roots
 
       - name: Build heavy certificate corpus
         run: |
@@ -109,6 +137,10 @@ jobs:
           #   FullImgsA 11.42 GB   FullNets 10.14 GB   IBP 9.19 GB
           #   ConvImgsB  8.63 GB   ConvImgsA 8.43 GB   IBPUncon 8.28 GB
           #   FullImgsB  4.39 GB   Full 3.47 GB  ConvNet 3.10 GB  Conv 2.65 GB
+          #   Crown / CrownUncon: UNMEASURED. Both are CertsHeavy roots (lakefile) and were
+          #   missing from this loop until 2026-09-09, so the final `lake build CertsHeavy` was
+          #   free to elaborate them together — the exact class this loop exists to prevent.
+          #   The step above now fails if a root is ever left out again.
           # — max 11.42 GB, ~21 min total, versus ImgsA 39.5 / IBP 20.2 / conv
           # ~38 GB before the trim. IbpConvScorecard was split into
           # Net/ImgsA/ImgsB/aggregate precisely to get it from 14.68 GB (over
@@ -124,7 +156,9 @@ jobs:
                    LipschitzCertScorecardFullImgsB \
                    LipschitzCertScorecardFull \
                    LipschitzCertScorecardIBP \
+                   LipschitzCertScorecardCrown \
                    LipschitzCertScorecardIBPUncon \
+                   LipschitzCertScorecardCrownUncon \
                    IbpConvScorecardNet \
                    IbpConvScorecardImgsA \
                    IbpConvScorecardImgsB \

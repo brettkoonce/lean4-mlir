@@ -29,12 +29,31 @@ name: Comparator (independent kernel re-check)
 on:
   push:
     branches: [main]
+    # Filtered like the PR trigger (it was NOT until 2026-09-09: every push to main, docs and
+    # demos included, paid ~35 min of `lake build Certs` + run.sh here — the corpus tail that
+    # certs.yml's header says those pushes no longer pay). Toolchain/manifest/lakefile: a bump
+    # can change what the kernel re-checks.
+    paths:
+      - 'LeanMlir/Proofs/**'
+      - 'tests/comparator/**'
+      - '.github/workflows/comparator.yml'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
   pull_request:
     paths:
       - 'LeanMlir/Proofs/**'
       - 'tests/comparator/**'
       - '.github/workflows/comparator.yml'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
   workflow_dispatch:
+
+concurrency:
+  # A superseded run of the same ref is cancelled; the 2026-09-09 00:05–00:29 burst ran four of these for three superseded commits.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   comparator:
@@ -98,7 +117,7 @@ jobs:
           # `Certs` since the 2026-07-06 Proofs/Certs split: the comparator
           # re-checks corpus theorems (whole-net VJPs, seals), and `Proofs` is
           # now only the slim demo-cone slice. Certs' roots subsume it.
-          lake exe cache get
+          lake exe cache get || true   # like the other five workflows: a cache blip is not a proof failure
           lake build Certs
 
       - name: Install landrun

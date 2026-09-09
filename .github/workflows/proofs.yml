@@ -3,8 +3,43 @@ name: Verify Proofs
 on:
   push:
     branches: [main]
+    # Filtered since 2026-09-09. Everything this job checks lives under these paths: the Proofs
+    # slice and the renderers (LeanMlir/**), the committed renders the drift guard diffs
+    # (verified_mlir/**), the audits, their ratchets and the scoring gates (scripts/, tests/), and
+    # the build config. A docs/demo/jax-only push used to pay 13–30 min of Lean here for nothing.
+    paths:
+      - 'LeanMlir/**'
+      - 'Bestiary/**'
+      - 'verified_mlir/**'
+      - 'tests/**'
+      - 'scripts/check_audit_coverage.py'
+      - 'scripts/check_render_coverage.py'
+      - 'scripts/render_guard_baseline.txt'
+      - 'scripts/regen_verified_mlir.sh'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
+      - '.github/workflows/proofs.yml'
   pull_request:
+    paths:
+      - 'LeanMlir/**'
+      - 'Bestiary/**'
+      - 'verified_mlir/**'
+      - 'tests/**'
+      - 'scripts/check_audit_coverage.py'
+      - 'scripts/check_render_coverage.py'
+      - 'scripts/render_guard_baseline.txt'
+      - 'scripts/regen_verified_mlir.sh'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
+      - '.github/workflows/proofs.yml'
   workflow_dispatch:
+
+concurrency:
+  # A superseded run of the same ref is cancelled; a push burst builds the last commit only.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check-proofs:

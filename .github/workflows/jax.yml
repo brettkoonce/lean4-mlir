@@ -20,6 +20,9 @@ name: JAX subproject
 
 on:
   push:
+    # main only, like the other five workflows (until 2026-09-09 this fired on every branch AND
+    # again on the PR, so a same-repo PR branch ran everything twice).
+    branches: [main]
     paths:
       - 'jax/**'
       - '.github/workflows/jax.yml'
@@ -45,6 +48,9 @@ on:
       - 'LeanMlir/Proofs/Codegen/GradClip.lean'
       - 'tests/TestOptStepFixtures.lean'
       - 'scripts/opt_step_tie.py'
+      # The two tools the `build`/`convention` jobs run that nothing above watched.
+      - 'scripts/regen_jax_generated.sh'
+      - 'scripts/parse_verified_mlir.py'
   pull_request:
     paths:
       - 'jax/**'
@@ -71,11 +77,20 @@ on:
       - 'LeanMlir/Proofs/Codegen/GradClip.lean'
       - 'tests/TestOptStepFixtures.lean'
       - 'scripts/opt_step_tie.py'
+      # The two tools the `build`/`convention` jobs run that nothing above watched.
+      - 'scripts/regen_jax_generated.sh'
+      - 'scripts/parse_verified_mlir.py'
   workflow_dispatch:
+
+concurrency:
+  # A superseded run of the same ref is cancelled; a push burst builds the last commit only.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -146,6 +161,7 @@ jobs:
     # signature the parent changed in 574b1f9 (2026-04-27), broken for three
     # months with nothing to notice. That is what this job is for.
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -234,6 +250,7 @@ jobs:
     # VJPs agree. That claim still needs tests/vjp_oracle/run.sh on a GPU box.
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -297,6 +314,7 @@ jobs:
     # zero input with jax.lax instrumented and reads the render side out of the committed .mlir.
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -398,6 +416,7 @@ jobs:
     # measure against.
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
