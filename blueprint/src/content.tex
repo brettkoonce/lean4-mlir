@@ -12320,7 +12320,20 @@ YOLOv8s, 100\,ep, 640\,px, full aug & 0.391 & 0.400 & --- \\
 \end{tabular}
 \end{center}
 
-\noindent \textbf{Augmentation and schedule length are one decision, not two,
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/visdrone_fpn.jpg}
+\caption{The detector on four VisDrone validation frames at $448$: ground truth
+above, the R34+FPN's boxes below, at the top row of the table (30 epochs, scale
+augmentation, mAP@0.5 $0.2363$). Box colour is the class, keyed along the bottom
+edge, and each frame's box count sits in its corner. The night market and the
+street market are where the misses live --- the small and the rare, exactly what
+the per-class spread below predicts.}
+\label{fig:visdrone_fpn}
+\end{figure}
+
+\noindent Figure~\ref{fig:visdrone_fpn} is the top row on four validation
+frames. \textbf{Augmentation and schedule length are one decision, not two,
 and the top five rows only mean something together.} Quadrupling the schedule
 with augmentation off \emph{costs} $19\%$ --- ordinary overfitting on $6{,}471$
 images. Photometric augmentation recovers it, but at that strength 12 epochs
@@ -12504,12 +12517,22 @@ ResNet-34 UNet (\texttt{unet-brats-r34}) & 0.740 & 0.910 & 0.869 & 0.856 \\
 \end{tabular}
 \end{center}
 
-\noindent Rendered predictions are in
-\texttt{demos/figures/brats\_r34\_unet.png} --- T1gd backdrop, ground truth,
-prediction, on four held-out patients. This matters more than the table
-for a segmentation demo: a model that has collapsed onto the majority class and
-one that works report similar pixel accuracy, because 97\% of voxels are
-background. They do not produce similar pictures.
+\noindent Rendered predictions are Figure~\ref{fig:brats_unet} --- T1gd
+backdrop, ground truth, prediction, on four held-out patients. This matters more
+than the table for a segmentation demo: a model that has collapsed onto the
+majority class and one that works report similar pixel accuracy, because 97\% of
+voxels are background. They do not produce similar pictures.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.62\textwidth]{demos/brats_r34_unet.png}
+\caption{The ResNet-34 UNet on four held-out BraTS patients, one per row: the
+T1gd slice, the ground truth, the prediction. Green is the edema that bounds the
+whole tumour, red the necrotic and non-enhancing core, yellow the enhancing
+tumour. Background is $97\%$ of the voxels, which is why this picture carries
+more than the pixel accuracy does.}
+\label{fig:brats_unet}
+\end{figure}
 
 The encoder is the ResNet-34 of Ch~\ref{chap:residual}, reused verbatim as the
 contracting path rather than a stack of \texttt{.unetDown}s; the decoder is
@@ -13340,7 +13363,19 @@ probability-flow ODE (Euler)     & $0.3542$ & $0.2053$ & $0.0910$ & $0.0288$ \\
 monotone in $\eta$ at every budget} --- the two intermediate arms, $\eta = 0.25$
 and $\eta = 0.5$, sit in order between the first two rows. Ancestral sampling at
 $50$ evaluations beats the deterministic sampler at $200$ by nearly $3\times$,
-on a quarter of the compute.
+on a quarter of the compute. Figure~\ref{fig:ddpm_mnist} is the process itself,
+forward and reverse.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/ddpm_mnist_trajectory.png}
+\caption{DDPM on MNIST, both directions. Top: the forward process takes a
+training digit to Gaussian noise, one column per step of the schedule. Bottom:
+the trained reverse process, started from fresh noise, arrives at a digit the
+training set never contained --- the sampling the table above scores by function
+evaluations.}
+\label{fig:ddpm_mnist}
+\end{figure}
 
 \medskip\noindent Which makes the third row the instructive one. \emph{The
 reverse SDE and ancestral sampling are the same idea} --- integrate the
