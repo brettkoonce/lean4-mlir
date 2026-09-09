@@ -11,12 +11,13 @@ is the Jacobian-transpose of the forward, hand the graph to a trusted lowerer, t
 No Python at run time and no autograd library: the gradients are derived at codegen time, in
 Lean, and machine-checked over the reals.
 
-Companion code for the upcoming book *Verified Deep Learning with Lean 4* (follow-up to
-[Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2), Apress).
+Companion code for *Verified Deep Learning with Lean 4*, forthcoming from Apress (Springer
+Nature) as the follow-up to
+[Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2) (2021).
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
 
-**Current version: `v0.6.3`.** Release history in [CHANGELOG.md](CHANGELOG.md).
+**Current version: `v0.7.0`.** Release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## The tour
 
@@ -107,12 +108,12 @@ run` tier has an `-iree` twin. Building it is [historical/IREE_BUILD.md](histori
 ## Citing this work
 
 ```bibtex
-@software{koonce2026leanmlir,
+@software{koonce2026,
   author  = {Brett Koonce},
   title   = {Verified Deep Learning with Lean 4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
   doi     = {10.5281/zenodo.20402133},
-  version = {0.6.3},
+  version = {0.7.0},
   year    = {2026},
 }
 ```

@@ -3,6 +3,61 @@
 Release history for *Lean 4 → MLIR → GPU*. The README keeps only the current
 version; older entries live here.
 
+## v0.7.0 — The paper nets, tied at the artifact that trains
+
+The verified path reaches ImageNet-1k at the paper recipes. ResNet-50 arrives
+from nothing — three bottleneck VJPs, a 25,557,032-parameter train-step
+renderer, LAMB, BCE-with-logits, gradient accumulation and the 160/224
+resolution split, each certified — and trains RSB-A3 on the verified path to
+**78.26%**, ahead of its JAX reference. MobileNetV4-Conv-M gets the Universal
+Inverted Bottleneck's backward, its fold, and a 4-GPU job (**75.48%**);
+ConvNeXt-T re-runs 300 epochs on the current artifact at **81.53%**,
+EfficientNet-B0 350 paper-faithful epochs at **77.15%**, and ResNet-34,
+MobileNetV2 and ViT-Tiny land at 74.16, 71.90 and 72.31. ViT-S/B and
+ConvNeXt-S/B exist by widening one renderer each. bf16 goes through the
+verified renderer — 27 ops, all seven nets, **1.3–2.5×** per step on real
+ImageNet once pointwise ops run at their 4-D shape — and fp8 enters the
+graph. `timm` is pinned as the reference environment, its validation protocol
+and resampler adopted, and the sweep it enabled found RandAugment's Solarize
+breaking every ImageNet run. Data parallelism gets its all-reduce as an AST
+node with a proof of which function a data-parallel run minimises, device
+residency and per-net feed tuning, and one supervisor engine whose job
+configs check the recipe their own name claims. Every accuracy carries a
+Wilson interval; Chapter 4's optimizer ablation is re-run at a constant
+learning rate over five seeds, with bf16 as a third lever.
+
+The Proofs tier reaches every net at the BatchNorm its trainers actually
+run. All seven — ResNet-34, MobileNetV2, ResNet-50, EfficientNet-B0,
+ConvNeXt-T, ViT-Tiny, MobileNetV4-Conv-M — carry the typed forward graph, the
+fold of every gradient node, and the §1a tie of every parameter update to the
+certified chain, at batch BatchNorm and at the ImageNet head; the capstones
+are re-pointed to the un-fused gradient and the smoothed loss, and every net
+is one renderer chain (the per-example renderers retired, byte-identically
+where the artifacts allowed and with new folds where they did not). Whole-net
+backward ties land for ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T and
+ViT-Tiny; the nine bf16 gradient kinds fold once for all nets. The float tier
+produced ImageNet-scale numbers — the deployed ResNet-34 inference forward
+within 1.548e209 of its real forward, MobileNetV2 within 1.444e96 — and, those
+being vacuous, was cut back to `FloatClose` and the ℝ chains, 44k lines
+lighter. The proof tree is one home per net (`Proofs/Nets/<family>/`, 114
+files moved) with `Fold` / `StepTie` names.
+
+The demos and the front door. The VisDrone detector is rebuilt — focal loss,
+an FD-verified FPN neck, box-aware scale augmentation — to mAP@0.5
+**0.2363**, 54% over its PyTorch twin, and deploys through TensorRT at 35.7
+fps on an Orin Nano; BraTS's data-pairing bug is found and plain
+cross-entropy wins (mIoU **0.742**); DDPM on MNIST gets the Score-SDE
+samplers and the η sweep where ancestral sampling at 50 evaluations beats the
+deterministic sampler at 200; 2-D diffusion and TinyStories join. The book
+gains the three demo figures, the ImageNet chapters reprinted from the runs,
+and Chapter 5's ablation as a two-precision figure. The repository becomes a
+tour: `lake run imagenet` is the fourth tier (plan-only bare, `start` to run,
+one `lake run <job>` per config), the README is 118 lines with the book's
+numbers, `lakefile.lean` says which of its 233 exes are the tour and which
+the lab, and the two earlier phases and the reference notes live in
+`historical/`. Along the way the box lost its two PCIe-faulting cards and
+every device list followed.
+
 ## v0.6.3 — The PJRT backend
 
 A second trusted lowerer. `ffi/pjrt_ffi.c` implements the same C surface as

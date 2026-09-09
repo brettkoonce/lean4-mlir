@@ -1,6 +1,6 @@
 {
   "title": "Verified Deep Learning with Lean 4",
-  "description": "A formal verification of the math of modern deep learning, written as a Lean 4 blueprint project. Mathlib's fderiv as the foundation; VJPs derived rather than asserted; theorems for dense, ReLU, softmax cross-entropy, 2D convolution backward, max-pool, batch norm's three-term backward, residual blocks, depthwise/inverted residuals, squeeze-excitation, layer norm, and a 30-theorem treatment of multi-head self-attention. Eleven chapters span MLP through Vision Transformer, plus a Bestiary chapter mapping the same primitives across vision classifiers, semantic segmentation, image generation, reinforcement learning, NLP, diffusion, and beyond-vision domains (audio, 3D scene reconstruction, scientific). Each chapter pairs proofs with a worked Lean 4 NetSpec that emits StableHLO MLIR -- compiled by IREE for end-to-end training on GPU and CPU -- and is cross-checked against a parallel JAX pipeline. The proof suite contains zero project axioms; every headline theorem closes under exactly {propext, Quot.sound, Classical.choice}, with 51 of those independently kernel-rechecked by leanprover/comparator. Builds on the architectural coverage of 'Convolutional Neural Networks with Swift for TensorFlow' (Apress, 2021), extending through ConvNeXt and ViT and adding formal proofs throughout.",
+  "description": "A formal verification of the math of modern deep learning, written as a Lean 4 blueprint project and shipped as the code it proves. Mathlib's fderiv is the foundation; every layer's backward is derived as a vector-Jacobian product rather than asserted -- dense, ReLU, softmax cross-entropy, 2D convolution, max-pool, BatchNorm's three-term backward, residual and bottleneck blocks, depthwise and inverted residuals, squeeze-excitation, the Universal Inverted Bottleneck, LayerNorm, and a 30-theorem treatment of multi-head self-attention -- and composed up to whole-network VJPs. Nine chapters climb from a linear classifier on MNIST to the Vision Transformer, and a Bestiary chapter maps the same primitives across vision classifiers, semantic segmentation, image generation, reinforcement learning, NLP, diffusion, and beyond-vision domains (audio, 3D scene reconstruction, scientific). Each chapter's network is a Lean 4 NetSpec whose train step -- forward, loss, backward and optimizer in one StableHLO graph -- is rendered from the proofs, with every parameter update tied to the certified gradient at the denotational level, for all seven networks (ResNet-34, ResNet-50, MobileNetV2, MobileNetV4-Conv-M, EfficientNet-B0, ConvNeXt-T, ViT-Tiny) at the artifact that trains. The rendered graphs train end to end through XLA/PJRT, with IREE as a second, independent lowerer for the differential oracle against a parallel JAX pipeline, in four tiers: MNIST, CIFAR-10, Imagenette and full ImageNet-1k (ResNet-50 at 78.26% top-1 on the RSB-A3 recipe, ConvNeXt-T at 81.53%). Demos extend the same stack to brain-tumour segmentation, drone-view object detection, diffusion and character-level language models. The proof suite contains zero project axioms; every theorem closes under exactly {propext, Quot.sound, Classical.choice}, with 52 headline theorems independently kernel-rechecked by leanprover/comparator. Builds on the architectural coverage of 'Convolutional Neural Networks with Swift for TensorFlow' (Apress, 2021), extending through ConvNeXt and ViT and adding formal proofs throughout.",
   "creators": [
     {
       "name": "Koonce, Brett",
@@ -28,7 +28,14 @@
     "ResNet",
     "MobileNet",
     "EfficientNet",
-    "ConvNeXt"
+    "ConvNeXt",
+    "StableHLO",
+    "XLA",
+    "PJRT",
+    "MobileNetV4",
+    "object detection",
+    "semantic segmentation",
+    "diffusion models"
   ],
   "upload_type": "software",
   "language": "eng",
