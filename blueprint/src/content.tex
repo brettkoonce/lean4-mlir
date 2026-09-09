@@ -13377,7 +13377,8 @@ its own it is the metric most likely to mislead.
 
 \paragraph{The continuous-time view, and which solver to use.} Everything above
 is discrete: a schedule tabulated at $t = 0 \dots T{-}1$ and a fixed reverse
-recipe. Score-SDE (Song et al.\ 2021) reads the same object as a stochastic
+recipe. Score-SDE (Song et al.\ 2021,
+\href{https://arxiv.org/abs/2011.13456}{arXiv:2011.13456}) reads the same object as a stochastic
 differential equation in continuous time, $\mathrm{d}x = f(x,t)\,\mathrm{d}t +
 g(t)\,\mathrm{d}w$, whose reverse is driven by the score
 $\nabla_x \log p_t(x)$. \textbf{That view costs no retraining here}, which is
@@ -13386,7 +13387,8 @@ $-\hat\varepsilon(x,t)/\sigma_t$, so the $\varepsilon$-predicting network the
 trainer above already produces \emph{is} a score model up to a scale factor.
 Sampling is then whatever you choose to integrate, on frozen weights: the
 reverse SDE, its deterministic twin the probability-flow ODE, or the family
-between them that DDIM's $\eta$ interpolates.
+between them that DDIM's $\eta$ (Song, Meng \& Ermon 2020,
+\href{https://arxiv.org/abs/2010.02502}{arXiv:2010.02502}) interpolates.
 
 So it can be measured. Energy distance against real MNIST, budget in network
 evaluations:
