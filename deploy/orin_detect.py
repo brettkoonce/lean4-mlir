@@ -574,11 +574,25 @@ def bench(det, img, n, conf_thresh):
         td += t3 - t2
     tp, tf, td = 1e3 * tp / n, 1e3 * tf / n, 1e3 * td / n
     tot = tp + tf + td
+    # The same forward, back to back with no CPU stage between calls. On a
+    # Jetson the governor drops the GPU clock while the CPU stages run —
+    # measured on the Orin Nano 2026-09-09 with this engine: 918 MHz under
+    # trtexec's continuous driving (4.3 ms), 612 MHz back-to-back (6.8 ms),
+    # 306 MHz interleaved with ~24 ms of CPU work (12.7 ms). So the forward
+    # column above is the pessimistic in-pipeline number and this one is what
+    # a saturated pipeline (or `jetson_clocks`) sees. Both are reported; neither
+    # is "the" forward time on its own.
+    t0 = time.perf_counter()
+    for _ in range(n):
+        det.forward(x)
+    tf_b2b = 1e3 * (time.perf_counter() - t0) / n
     print(f"bench: {n} frames, input mode '{det.mode}'")
     print(f"  preprocess {tp:6.2f} ms | forward {tf:6.2f} ms | decode+nms "
           f"{td:6.2f} ms | total {tot:6.2f} ms")
     print(f"  forward-only {1e3 / tf:6.1f} fps | end-to-end {1e3 / tot:6.1f} fps")
-    return tp, tf, td
+    print(f"  forward back-to-back {tf_b2b:6.2f} ms = {1e3 / tf_b2b:6.1f} fps "
+          f"(GPU clock not throttled by the CPU stages)")
+    return tp, tf, td, tf_b2b
 
 
 def main():

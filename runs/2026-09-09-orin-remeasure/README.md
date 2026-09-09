@@ -16,7 +16,7 @@ Orin Claude's, following `deploy/ORIN_SMOKE_TEST.md`. Plan: `planning/orin_rerun
 | file | bytes | md5 | input |
 |---|---|---|---|
 | `deploy/build/detector_aff30e28.onnx` | 86,180,752 | `0a5f8b0a0b4b4398b7bc7fbd3424159d` | `image` [1,3,448,448] f32, host-normalized |
-| `deploy/build/detector_aff30e28_u8.onnx` | 86,183,250 | `ab574e0f67edf33a375e15f0cee73e50` | `image_u8` [1,448,448,3] uint8, graph does the rest |
+| `deploy/build/detector_aff30e28_u8.onnx` | 86,183,250 | `08f6df63e793d09db60965c6c8447620` | `image_u8` [1,448,448,3] uint8, graph does the rest (cast-first re-export; the first one, `ab574e0f…`, put a uint8 Transpose at node 0 and TensorRT refused it) |
 
 Both: opset 18, batch 1, 4 asymmetric-pad convs, 0 Pad ops (torch 2.13's
 TorchScript exporter leaves the four `F.pad`s as Pad ops with a computed

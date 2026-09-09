@@ -112,8 +112,24 @@ Done on the training box (all of §2's items 1–8, plus 11–12's code):
 - Numbers, md5s, and the device-side blanks: `runs/2026-09-09-orin-remeasure/README.md`.
   Runbook rewritten for aff30e28: `deploy/ORIN_SMOKE_TEST.md`.
 
-Still open, and only doable on the device:
+Device run 2026-09-09 (Orin's commit `d8d238b2`, on the branch once pulled from the device —
+that box has no push credentials):
 
-- §1.2 the host: still `<orin-host>` in the runbook — fill it in before handing over.
-- §2.9–11 and 13: engine build ×2, `--gate-decode`, the reference frame, `--bench 50` on
-  both engines, the diff sent back, the run README's device table.
+- ✅ md5 gate, `--gate-decode` (232 / 0.6175 exactly), plain engine built in 66 s with no fp16
+  fallbacks, reference frame 232 / 0.6180 (fp16 moved one box pedestrian→people).
+- ✅ `TrtDetector` ran as written — NO code change needed on device.
+- Governor-managed bench: 11.14 / 15.48 / 13.07 / 39.69 ms → **25.2 fps end-to-end**;
+  trtexec 4.12 ms GPU compute on the same engine, identical to ctrl12's 4.13. ⚠ The 15.48 ms
+  forward is a CLOCK artifact, not a model one: the interleaved bench lets devfreq drop the GPU
+  to 306 MHz between forwards (918 MHz continuous 4.3 ms / 612 back-to-back 6.8 / 306
+  interleaved 12.7). ctrl12's 6.3 ms was the back-to-back shape. `jetson_clocks` not applied
+  (password). `--bench` now prints a back-to-back forward line as well.
+- ⛔ u8 engine REFUSED: `legalUINT8` — TensorRT 10.3 takes UINT8 only as network I/O, and the
+  export did permute-then-cast (uint8 Transpose at node 0). Fixed 2026-09-09: cast first;
+  re-exported (md5 `08f6df63…`, same size) and re-gated (same numbers); needs re-sending to the
+  device and a second run.
+- Facts: L4T R36.4.7, TRT 10.3.0, pycuda 2026.1 in `~/orinvenv` (not system python),
+  `trtexec` at `/usr/src/tensorrt/bin/`, 25 W, 46–47 °C. Host name still outside the repo.
+
+Still open: the u8 engine run (and, with `jetson_clocks`, a pinned-clock bench of both), then
+land the branch on main by fast-forward.
