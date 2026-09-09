@@ -1,205 +1,197 @@
-# Orin smoke test — brief for a Claude running on the device
+# Orin re-measure — brief for a Claude running on the device
 
-> # ✅ RESOLVED — the export was one missing argument. Fixed 2026-08-28.
->
-> **The ONNX route shipped a different model, and the cause was `pad="lean"`.**
-> `export_onnx.py` built the PyTorch replica without it, so the replica ran
-> torchvision's SYMMETRIC convolution padding against a Lean model that emits
-> `MlirCodegen.samePad` — TF-style ASYMMETRIC SAME, odd pixel on the high side.
->
-> | replica setting | max rel diff vs Lean | objectness r, P3/P4/P5 | decoded |
-> |---|---|---|---|
-> | `pool=lean pad=torchvision` (shipped) | **1.00** | 0.903 / 0.802 / 0.622 | 279 dets, top 0.7656 |
-> | `pool=lean pad=lean` (fixed) | **5.0e-4** | 1.0000 / 1.0000 / 1.0000 | **238 dets, top 0.7108** |
->
-> The Lean stack's own numbers for that frame are **238 dets, top 0.7109**. Both
-> device-side figures in the original report are reproduced exactly on the
-> training box, which is what confirms the diagnosis rather than merely fitting it.
->
-> **Why it hid for so long, and why every "ruled out" was empty.** Output shapes,
-> parameter counts, and `iree-compile` are identical under either convention, so
-> nothing structural can catch it. The sampling grid shifts half an output pixel
-> at each stride-2 convolution, and the shift COMPOUNDS through the 3 / 4 / 5
-> downsampling stages feeding C3 / C4 / C5 — which is exactly why correlation
-> fell with tap depth (0.90 → 0.80 → 0.62) instead of being uniform. And the
-> probes that eliminated BN layout, the BN walk, BN eps, `pool`, and channel
-> grouping all constructed the replica the same wrong way, so each one was
-> comparing two wrong models and finding no improvement.
->
-> ⚠ Note where the omission was: `grad_dump.py`, `validate_oracle.py` and
-> `layout_hunt.py` all take `--pad` and all default it to `lean`. The only two
-> places that hardcoded it away were `export_onnx.py` — which shipped — and
-> `bespoke/diff_lean.py` — which was cited as the validation.
->
-> **The residual 5.0e-4 is TF32, and that is measured, not assumed.** The
-> reference dump runs XLA convolutions with no `precision_config`, so Ada uses
-> TF32. Re-running the identical Lean graph under `NVIDIA_TF32_OVERRIDE=0` moves
-> it to 1.6e-4, and the Lean graph disagrees with ITSELF by 7.8e-3 absolute
-> across that switch — i.e. essentially the whole remaining gap is the reference
-> side's own fp32 rounding.
->
-> **Both gates now run and both reject the old model:**
-> - `export_onnx.py --verify-frame` — self-contained, one committed frame.
-> - `bespoke/diff_lean.py --lean-logits <infer dump> --eval-mode` — elementwise
->   over as many val records as you like. Verified over 64: 1.4e-3 relative,
->   objectness r = 1.0000 at all three scales.
->
-> Tolerances are RELATIVE now. Logit magnitude varies by two orders of magnitude
-> across records — the reference frame spans ±16, val record 40 spans −976 ..
-> +1287 — so an absolute threshold is either flaky or vacuous depending on which
-> record it was tuned on.
->
-> ⚠ **Before anyone tries int8:** those ±1287 values are CLASS logits on
-> background cells, and they are unconstrained by design — the class head is a
-> softmax masked to positives, so it is never trained on background, and the
-> decode discards those cells on objectness anyway. Harmless in fp32 and fp16
-> (max 65504), but that dynamic range will wreck an int8 calibration.
->
-> **What still stands from the device run:** the TensorRT toolchain, fp16 at
-> 2.15×, the pinned-buffer fix, the three-stage timing split, and the finding that
-> CPU decode at 57 ms is 6× the 4.4 ms network. All of it transfers unchanged —
-> **but the 229 fps was measured on the wrong graph and should be re-measured**,
-> even though the fix only changes padding and should not move throughput.
+**Goal: one frames-per-second number, split three ways, for the detector this
+repo actually trained (`aff30e28`, mAP@0.5 0.2363) on the Orin via TensorRT
+fp16 — and the same split for the uint8-input variant, which is the one open
+speed lever.** The previous device number (35.7 fps, 2026-08-28) was measured on
+placeholder weights on purpose; this run replaces it.
 
-**Goal: get one real frames-per-second number for this detector on the Orin via
-TensorRT, and confirm the exported model is still the model we measured.**
-
-Nothing here is expected to work first try. Report what breaks; do not paper over
-a failure by loosening a check.
+Nothing here is expected to work first try. Report what breaks; do not paper
+over a failure by loosening a check.
 
 ## Context you need
 
-A ResNet-34 + FPN multi-scale detector trained on VisDrone. Scores mAP@0.5 =
-0.1526 and runs at 65 fps on an RTX 4060 Ti under XLA.
+ResNet-34 + FPN multi-scale detector on VisDrone, 448×448 input, 185,220 output
+logits over three grids (56/28/14, 3 anchors, 15 slots). Runs at 65 fps on an
+RTX 4060 Ti under XLA. IREE on this Orin was ~0.5 fps (its CUDA backend writes
+its own conv kernels); TensorRT is the route and the toolchain is proven:
+JetPack 6.2 / TensorRT 10.3 / fp16 / `pycuda` worked on 2026-08-28 and gave
+11.9 ms host preprocess + 6.3 ms forward + 10.0 ms decode = 28.0 ms a frame.
 
-**IREE on this Orin was already tried and runs at ~0.5 fps.** It is correct, just
-slow, because its CUDA backend generates its own convolution kernels instead of
-calling cuDNN. That is why this is the TensorRT route. Do not spend time trying
-to make IREE fast.
-
-⚠ **Do not trust throughput projections in any doc here.** An earlier estimate
-scaled the 4060 Ti number by float32 throughput and predicted ~16 fps; reality
-under IREE was 32× worse. The whole point of this exercise is to replace estimates
-with a measurement.
+The device decode is argmax over the class logits; the repo's mAP headlines use
+a multilabel decode. **Quote fps next to the device number, not mAP.**
 
 ## What is in the branch, and what is not
 
-Branch `visdrone-detector-orin`. It has the runner, the decode, and the reference
-frame. **`git pull` before anything else** — the padding fix and the export gate
-landed 2026-08-28 and the model you may already have on the device predates them.
+Branch **`orin/aff30e28-remeasure`**. `git pull` it before anything else — the
+runner was rewritten for this run:
 
-⛔ **The trained weights are NOT in git.** But you no longer export on the device:
-the training box now ships a **verified** ONNX with the weights baked in, so the
-replica-vs-Lean gate has already run somewhere it can run properly.
+- `deploy/orin_detect.py`: `TrtDetector` now reads the input's name / shape /
+  dtype and the output size **off the engine**, page-locks both host buffers,
+  falls back to `execute_async_v2` on a TensorRT 8 runtime, and `--bench` times
+  preprocess / forward / decode+NMS on separate clocks. New `--backend ort`
+  runs the same pipeline on the ONNX through onnxruntime (no engine, slow, for
+  when TensorRT's python binding is the problem).
+- `deploy/testdata/frame_logits.bin` is now **aff30e28's** golden, so
+  `--gate-decode` prints this arm's acceptance numbers.
+- `deploy/export_onnx.py` is training-box only (needs torch). Nothing to run.
 
-```bash
-scp trainingbox:'~/lean/klawd_max_power/lean4-jax-mlir/deploy/build/detector_ctrl12_padfix.onnx' ~/ckpt/
-```
-
-## Step 0 — check the file that arrived
-
-```bash
-ls -l ~/ckpt/detector_ctrl12_padfix.onnx     # expect 86,359,705 bytes
-md5sum ~/ckpt/detector_ctrl12_padfix.onnx    # expect aa80648978a87d1cd18dc0376d994147
-```
-
-**GATE:** both must match. A ~200 KB file means you have the stub from before the
-external-data fold and the weights are missing — re-copy. A different md5 means a
-different arm or a stale export; stop rather than guessing.
-
-This file is `ctrl12` (mAP@0.5 0.1526), deliberately — it is the arm the 229 fps
-was measured on, so throughput stays comparable. Better checkpoints exist; weights
-do not change throughput.
-
-## Step 1 — build the TensorRT engine
+⛔ **The ONNX files are NOT in git** (86 MB each, `deploy/build/` is ignored).
+Fetch them from the training box, where they are already gated against the Lean
+stack (4.7e-4 relative over val records, objectness correlation 1.0000 at every
+scale — `runs/2026-09-09-orin-remeasure/README.md` has the full table):
 
 ```bash
-cd ~/lean4-jax-mlir/deploy     # wherever the checkout lives
-mkdir -p build
-trtexec --onnx=$HOME/ckpt/detector_ctrl12_padfix.onnx \
-        --saveEngine=build/detector_padfix.plan --fp16 2>&1 | tee ~/trt_build.log
+# host/user/checkout of this Orin live outside the repo — fill in before use:
+#   device: <orin-host>      checkout: ~/lean4-jax-mlir      files: ~/ckpt/
+B='~/lean/klawd_max_power/lean4-jax-mlir/deploy/build'
+scp trainingbox:"$B/detector_aff30e28.onnx" trainingbox:"$B/detector_aff30e28_u8.onnx" ~/ckpt/
 ```
 
-⚠ **Write to a NEW engine filename.** The old `detector.plan` is the wrong model;
-if a stale engine gets reused the run will happily reproduce the old numbers and
-look like a successful re-measure. Deleting it outright is fine too.
-
-**GATE:** an engine file appears. Note the build time and any layer TensorRT says
-it could not accelerate. If fp16 fails, retry without `--fp16` and report that,
-since it costs the measured 2.15×.
-
-The model is **opset 18** — torch silently declined to down-convert to 17, and the
-export now reports what is actually in the file rather than what was requested. If
-TensorRT rejects opset 18, say so; re-exporting lower is a training-box job.
-
-## Step 2 — run the reference frame
+## Step 0 — check what arrived
 
 ```bash
-python3 orin_detect.py --backend trt --plan build/detector_padfix.plan \
-  --image testdata/frame.png --out out.png --bench 50
+ls -l ~/ckpt/detector_aff30e28*.onnx
+md5sum ~/ckpt/detector_aff30e28*.onnx
 ```
 
-`testdata/frame.png` is one of the densest VisDrone validation frames. The Lean
-stack decodes it, in float32, to:
+| file | bytes | md5 | input tensor |
+|---|---|---|---|
+| `detector_aff30e28.onnx` | 86,180,752 | `0a5f8b0a0b4b4398b7bc7fbd3424159d` | `image` [1,3,448,448] float32 |
+| `detector_aff30e28_u8.onnx` | 86,183,250 | `ab574e0f67edf33a375e15f0cee73e50` | `image_u8` [1,448,448,3] uint8 |
+
+**GATE:** both match. A ~200 KB file is a weightless stub — re-copy. A different
+md5 is a different export; stop rather than guess. Both are opset 18, batch 1.
+
+## Step 1 — the decode, no GPU needed
+
+```bash
+cd ~/lean4-jax-mlir/deploy
+python3 orin_detect.py --gate-decode
+```
+
+Asserts the fast numpy decode equals the straight-line reference on the golden
+and prints what the Lean stack itself decodes for `testdata/frame.png` under
+these weights:
 
 | quantity | expected |
 |---|---|
-| detections | **238** |
-| top score | **0.7109** |
-| pedestrian / car / people | 138 / 60 / 13 |
-| bus / motor / bicycle / van | 7 / 7 / 6 / 5 |
-| truck / tricycle | 1 / 1 |
+| detections | **232** |
+| top score | **0.6175** |
+| pedestrian / car / people | 133 / 83 / 11 |
+| bus / bicycle / motor / van | 2 / 1 / 1 / 1 |
 
-**GATE, and this is the whole point of the re-measure:**
+## Step 2 — build both engines
 
-- **238 detections, top ≈0.71** ⇒ the padding fix is live and you are finally
-  measuring the model this repo trained.
-- ⛔ **279 detections, top 0.7656** ⇒ that is the OLD, wrong model. Either a stale
-  engine got reused or the old ONNX did. Go back to Step 0.
-- ⛔ Single-digit detections, top near 0.001, or a uniform class spread ⇒ the
-  export is broken in a new way. **Report it; do not tune `--conf-thresh` until
-  the number looks better.** That failure mode has bitten this project repeatedly
-  and always looked like a merely mediocre model.
+```bash
+mkdir -p build
+trtexec --onnx=$HOME/ckpt/detector_aff30e28.onnx \
+        --saveEngine=build/detector_aff30e28.plan --fp16 2>&1 | tee ~/trt_aff30e28.log
+trtexec --onnx=$HOME/ckpt/detector_aff30e28_u8.onnx \
+        --saveEngine=build/detector_aff30e28_u8.plan --fp16 2>&1 | tee ~/trt_aff30e28_u8.log
+```
 
-fp16 will not reproduce 238/0.7109 exactly and does not need to — the previous run
-found fp16 and fp32 gave identical detections, so a small drift is fine and a jump
-to 279 is not.
+⚠ **New engine filenames, every time.** Any `detector*.plan` already in
+`build/` is a ctrl12 engine; a stale one reused will happily reproduce the old
+numbers and look like a successful re-measure. Deleting them is fine.
 
-## Step 3 — the number
+**GATE:** two engine files. Note each build time and any layer TensorRT says it
+could not run in fp16. If the **u8** build is refused — a UINT8 network input
+is a TensorRT 10 feature — say so and carry on with the plain engine; the
+fallback (`--fold-preprocess f32`, a float [0,1] input with the normalize still
+in the graph) is a training-box export, not something to work around here.
 
-`--bench 50` reports steady-state forward milliseconds and fps after a warm-up,
-and reports decode-plus-suppression separately since that runs on the CPU in numpy.
+## Step 3 — the reference frame, plain engine
 
-**Report all three: forward fps, decode ms, total.** Last time: 229 fps forward
-(4.4 ms; trtexec GPU compute 4.16 ms) against **57 ms of CPU decode**, 43 ms of
-which was pure-Python per-class NMS over 300 boxes. The decode is 6× the network,
-so it is the real bottleneck and the next thing worth fixing — but confirm that
-rather than assuming it, since it is a different machine state now.
+```bash
+python3 orin_detect.py --backend trt --plan build/detector_aff30e28.plan \
+    --image testdata/frame.png --out out_aff30e28.png
+```
 
-⚠ **The device's own fixes never came back to this branch.** `git log` on
-`orin_detect.py` shows only the two original commits, so the pinned-buffer fix
-from the last run is not here. If the device still has a locally-patched copy that
-worked, **use that one** and send the diff back this time — the version in git will
-run, but its host-to-device copy is unpinned and slower.
+The loader line prints what it read off the engine — expect
+`input image (1, 3, 448, 448) float32 -> preprocessing mode 'none'` and
+`execute_async_v3`. Then:
+
+- **232 detections, top ≈ 0.6175** ⇒ the right model. fp16 will drift a little
+  (last time fp16 and fp32 gave identical detection sets; a count off by one or
+  two near the 0.05 threshold is fine).
+- ⛔ **238 / 0.7109** ⇒ that is the **ctrl12** model: a stale engine or the old
+  ONNX. Back to Step 0.
+- ⛔ **279 / 0.7656** ⇒ the pre-padding-fix export from the first session.
+  Same remedy.
+- ⛔ Single-digit detections, top near 0.001, or a uniform class spread ⇒
+  broken in a new way. **Report it; do not tune `--conf-thresh`.** That failure
+  mode has bitten this project repeatedly and always looked like a mediocre model.
+
+## Step 4 — the number
+
+```bash
+python3 orin_detect.py --backend trt --plan build/detector_aff30e28.plan \
+    --image testdata/frame.png --bench 50
+```
+
+`--bench` warms up on three frames, then reports means over 50 of
+
+```
+  preprocess  xx.xx ms | forward  xx.xx ms | decode+nms  xx.xx ms | total  xx.xx ms
+  forward-only  xxx.x fps | end-to-end  xx.x fps
+```
+
+**All four ms columns and both fps are the deliverable.** Last time:
+11.9 / 6.3 / 10.0 / 28.0 → 35.7 fps end-to-end. Same architecture, so the
+forward column should reproduce; the preprocess column is the one this runner
+has changed (pinned buffer), so it may not.
+
+## Step 5 — the u8 engine
+
+```bash
+python3 orin_detect.py --backend trt --plan build/detector_aff30e28_u8.plan \
+    --image testdata/frame.png --out out_aff30e28_u8.png --bench 50
+```
+
+Expect the loader to say `input image_u8 (1, 448, 448, 3) uint8 ->
+preprocessing mode 'u8'`. The detections must match Step 3's (the two graphs
+are the same function; on the training box both give 232 / 0.6176 through
+onnxruntime). The **preprocess** column is the question: on the training box it
+went 3.30 → 0.39 ms, and on this Orin the plain path's 11.9 ms was 8.5 ms of
+numpy arithmetic that the u8 graph now does on the GPU. Projected 28 → ~17 ms.
 
 ## What to send back
 
-1. **The detection count and top score first.** 238 / ≈0.71 means the right model;
-   279 / 0.7656 means the old one and the rest of the numbers are void.
-2. fps: forward, decode, total. This is the deliverable.
-3. Whether fp16 worked, and the trtexec build time.
-4. The class spread on the reference frame, against the table.
-5. Anything that needed changing to work, precisely, **as a diff** — the last
-   round's device-side fixes never made it back and are now lost.
+1. **Detection count and top score first**, both engines. 232 / ≈0.6175 means
+   the right model; 238 / 0.7109 means ctrl12 and the rest is void.
+2. The `--bench` split for both engines, verbatim.
+3. Both `trtexec` build times, fp16 fallbacks, whether u8 was accepted.
+4. Anything that needed changing to work, **as a diff, committed to the
+   branch** — the device-side fixes were lost twice before this runner was
+   rewritten; the pinned buffer and the three-stage timing you see are the
+   reconstruction. If the rewrite is wrong, fix it in place and push.
+5. Put 1–3 into the device table at the end of
+   `runs/2026-09-09-orin-remeasure/README.md` and commit that too.
 
 ## Known unverified pieces
 
-- `TrtDetector` in `orin_detect.py` was written blind, with no Orin on the build
-  box. It uses the TensorRT 8.x/10 `execute_async_v3` shape; an older runtime may
-  need `execute_async_v2` with a bindings list. ⚠ It DID run on the device last
-  time, at 229 fps — but whatever was changed to make that happen was never sent
-  back, so the file here is still the blind version. Expect to redo that work, and
-  send the diff this time.
-- Camera capture is a deliberate stub. The pipeline shape to start from is in the
-  comment in `main()`. Do the still-image path first — a camera is pointless until
-  the frames-per-second number is known.
+- `TrtDetector` was rewritten on the build box, which has no TensorRT. The
+  `--backend ort` path exercises the identical preprocess / forward / decode /
+  bench code on the identical ONNX and is verified there, so what is untested is
+  exactly the `tensorrt` + `pycuda` calls: `get_tensor_mode`, `nptype`,
+  `pagelocked_empty`, `execute_async_v3`. All are TensorRT 10 / pycuda 2022+
+  API; the fallback branch is for TensorRT 8 and untested too.
+- If the python `tensorrt` module or `pycuda` is missing, the last run had
+  both; check `python3 -c "import tensorrt, pycuda.driver"` before installing
+  anything. `pip install onnxruntime` and `--backend ort --onnx ~/ckpt/…` gets
+  detections (slowly, CPU) while that is sorted, and proves the file.
+- Camera capture is still a stub — the GStreamer pipeline shape is in the
+  comment in `main()`. Still-image path first; the camera is pointless until
+  the frame time is known.
+
+## Traps
+
+- **Never loosen a tolerance or a threshold to get past a gate.** The
+  falling-correlation diagnostic in `export_onnx.py` and the 232/0.6175
+  acceptance exist because a plausible-looking wrong model shipped twice.
+- **INT8 is off the table** without new work: class logits on background cells
+  are unconstrained (±1287, ±3460 seen) because the class softmax is masked to
+  positives — fine in fp16, fatal to a calibration.
+- The four `deploy/build/*.onnx` on the training box from before today are all
+  ctrl12; only the two named above are this arm.

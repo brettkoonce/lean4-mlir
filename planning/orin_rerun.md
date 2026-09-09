@@ -1,6 +1,8 @@
 # Orin: re-run the TensorRT benchmark on the trained detector
 
-**Opened 2026-09-09.** The 35.7 fps figure was measured on the `ctrl12` weights (mAP 0.1526) on
+**Opened 2026-09-09. Host-side half DONE the same day on branch `orin/aff30e28-remeasure`;
+the device-side half is the Orin Claude's.** See §4 at the end for what landed and what the
+device run has to send back. The 35.7 fps figure was measured on the `ctrl12` weights (mAP 0.1526) on
 purpose — throughput does not depend on weights. The user wants it re-run on the model that was
 actually trained. Companion to `planning/archive/visdrone_detector.md` §13a-ter (deployment) and
 `deploy/ORIN_SMOKE_TEST.md`.
@@ -83,3 +85,35 @@ observed) because the class softmax is masked to positives — fine in fp16, fat
 (`deploy/README.md:73-76`). The padfix (`pad="lean"`) is load-bearing and the correlation-falls
 diagnostic at `export_onnx.py:161-176` must not be "fixed" by loosening. Checkpoints are outside
 git (`.lake/build/`, 86 MB each); `deploy/build/` is gitignored yet holds four ONNX files locally.
+
+## §4 Status 2026-09-09 — the branch the Orin pulls
+
+Done on the training box (all of §2's items 1–8, plus 11–12's code):
+
+- §1.1 golden: `export_onnx.py --regen-golden <logits.bin>` cuts row 374 out of an `infer`
+  dump (and checks the row IS `frame.png` against `val.bin`); `--ref-logits` overrides the
+  path. `testdata/frame_logits.bin` is now aff30e28's.
+- §1.3 device patches: `TrtDetector` reads input name/shape/dtype and output size off the
+  ENGINE, page-locks both host buffers, falls back to `execute_async_v2` on TensorRT 8, and
+  splits `forward()` from `preprocess()`; `--bench` times preprocess / forward / decode+nms
+  on separate clocks and prints forward-only and end-to-end fps.
+- §1.4 `.venv-timm` has onnx 1.22 / onnxruntime 1.23 / onnxscript 0.7 (torch 2.13's
+  exporter imports onnxscript unconditionally). Export pins the TorchScript exporter
+  (`dynamo=False`) and folds the four explicit Pad ops torch 2.13 leaves behind into the
+  convs' `pads`, so the census (4 asymmetric-pad convs, 0 Pad) means what it says.
+- §2.5 `--verify` is RELATIVE now and shares `check_against_lean` with `--verify-frame`.
+- §2.12 runner side of the u8 fold: the input tensor NAME carries the preprocessing contract
+  (`image` / `image_01` / `image_u8`, `INPUT_NAMES` in `export_onnx.py`), the runner derives
+  the mode from name + dtype, `--input-mode` overrides for pre-naming files. Both
+  `detector_aff30e28.onnx` and `detector_aff30e28_u8.onnx` are exported and gated.
+- New `--backend ort`: the whole runner on the ONNX through onnxruntime, so the training box
+  dry-runs preprocess → forward → decode → bench without an engine. Both files decode the
+  reference frame to 232 detections at top 0.6176.
+- Numbers, md5s, and the device-side blanks: `runs/2026-09-09-orin-remeasure/README.md`.
+  Runbook rewritten for aff30e28: `deploy/ORIN_SMOKE_TEST.md`.
+
+Still open, and only doable on the device:
+
+- §1.2 the host: still `<orin-host>` in the runbook — fill it in before handing over.
+- §2.9–11 and 13: engine build ×2, `--gate-decode`, the reference frame, `--bench 50` on
+  both engines, the diff sent back, the run README's device table.

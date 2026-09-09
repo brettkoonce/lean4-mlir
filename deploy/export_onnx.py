@@ -45,20 +45,27 @@ export and shipping a different model twice.
 
 ## Usage
 
-    # Anywhere torch is available. ⚠ On the training box that means a THROWAWAY
-    # CPU-only venv, never the pinned .venv — installing torch there pulls its own
-    # CUDA wheels over the pinned cuDNN and kills every JAX/XLA convolution:
-    #   python3 -m venv /tmp/venv-torch && /tmp/venv-torch/bin/pip install \
-    #       torch torchvision --index-url https://download.pytorch.org/whl/cpu
-    #   /tmp/venv-torch/bin/pip install onnxruntime pillow
-    python3 export_onnx.py \
-        --ckpt ../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__ctrl12_params.bin \
-        --bn   ../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__ctrl12_bn_stats.bin \
-        --out  build/detector.onnx \
-        --verify-frame
+    # Anywhere torch is available. ⚠ On the training box that is the CPU-only
+    # `.venv-timm` (torch + onnx + onnxruntime + onnxscript live there), never the
+    # pinned .venv — installing torch there pulls its own CUDA wheels over the
+    # pinned cuDNN and kills every JAX/XLA convolution.
+    P=../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__aff30e28
+
+    # 0. once per shipped checkpoint: the frame golden is that checkpoint's own
+    #    Lean logits, so cut it out of a fresh `infer` dump first
+    ../.venv-timm/bin/python export_onnx.py --regen-golden ../runs/<dump>/logits.bin
+
+    # 1. export + the self-contained gate
+    ../.venv-timm/bin/python export_onnx.py --ckpt ${P}_params.bin --bn ${P}_bn_stats.bin \
+        --out build/detector_aff30e28.onnx --opset 18 --verify-frame
+
+    # 2. optional, the speed lever: the whole preprocess moves into the graph and
+    #    the input becomes [1,448,448,3] uint8
+    ../.venv-timm/bin/python export_onnx.py --ckpt ${P}_params.bin --bn ${P}_bn_stats.bin \
+        --out build/detector_aff30e28_u8.onnx --opset 18 --fold-preprocess u8 --verify-frame
 
     # then on the Orin
-    trtexec --onnx=detector.onnx --saveEngine=detector.plan --fp16
+    trtexec --onnx=detector_aff30e28.onnx --saveEngine=detector_aff30e28.plan --fp16
 """
 import argparse
 import pathlib
@@ -85,33 +92,213 @@ A, SLOTS = 3, 15
 # scale-free, so unlike an absolute tolerance it cannot be defeated by a model
 # that happens to output small numbers.
 MIN_OBJ_R = 0.999
+# testdata/frame.png is this row of data/visdrone_fpn/val.bin, and the golden
+# next to it is the Lean stack's logits for that row under ONE checkpoint.
+FRAME_VAL_RECORD = 374
+MEAN = np.array([0.485, 0.456, 0.406], np.float32).reshape(3, 1, 1)
+ISTD = (1.0 / np.array([0.229, 0.224, 0.225], np.float32)).reshape(3, 1, 1)
+
+# The input tensor's NAME carries the preprocessing contract. A plain graph and
+# an f32-folded one have the identical [1,3,448,448] float32 signature, and
+# feeding normalized pixels to a graph that normalizes again yields a detector
+# that runs and is quietly wrong. The name survives into the TensorRT engine,
+# so `orin_detect.py` reads the mode back off the engine instead of being told.
+INPUT_NAMES = {"none": "image", "f32": "image_01", "u8": "image_u8"}
+
+
+def input_mode_of(name, is_uint8):
+    """Preprocessing mode implied by an input tensor — the inverse of INPUT_NAMES."""
+    if is_uint8:
+        return "u8"
+    return "f32" if name.endswith("_01") else "none"
+
+
+def host_input(raw_hwc_u8, mode):
+    """What the host hands the graph for `mode`, from a [448,448,3] uint8 frame."""
+    if mode == "u8":
+        return np.ascontiguousarray(raw_hwc_u8.astype(np.uint8))[None]
+    img = raw_hwc_u8.astype(np.float32).transpose(2, 0, 1) / 255.0
+    if mode == "none":
+        img = (img - MEAN) * ISTD
+    return np.ascontiguousarray(img[None])
 
 
 def _per_scale_obj_r(a, b):
-    """Objectness-channel correlation at P3 / P4 / P5.
+    """Objectness-channel correlation at P3 / P4 / P5, worst record of [n, NTOT].
 
     Objectness because it is what detections rank on, and per-scale because a
     geometric misalignment compounds with depth — C3/C4/C5 sit behind 3/4/5
     stride-2 stages, so a padding or resampling difference shows up as a
     correlation that FALLS from P3 to P5 rather than as uniform noise.
     """
+    a, b = a.reshape(-1, NTOT), b.reshape(-1, NTOT)
     out, off = [], 0
     for g in FPN_GRIDS:
         n = A * SLOTS * g * g
-        oa = a[off:off + n].reshape(A, SLOTS, g, g)[:, 4].ravel()
-        ob = b[off:off + n].reshape(A, SLOTS, g, g)[:, 4].ravel()
-        out.append(float(np.corrcoef(oa, ob)[0, 1]))
+        oa = a[:, off:off + n].reshape(-1, A, SLOTS, g, g)[:, :, 4].reshape(len(a), -1)
+        ob = b[:, off:off + n].reshape(-1, A, SLOTS, g, g)[:, :, 4].reshape(len(b), -1)
+        out.append(min(float(np.corrcoef(oa[i], ob[i])[0, 1]) for i in range(len(a))))
         off += n
     return out
 
 
-def verify_frame(onnx_path, tol, fold="none"):
+def check_against_lean(ref, got, tol, what):
+    """The gate both verify paths share: a RELATIVE per-record tolerance plus
+    the per-scale objectness floor. `ref`/`got` are [n, NTOT] (or one flat row).
+    Raises with the diagnosis; returns the worst relative difference."""
+    ref, got = ref.reshape(-1, NTOT), got.reshape(-1, NTOT)
+    d = np.abs(got - ref)
+    scale = np.maximum(np.abs(ref).max(axis=1), 1e-6)
+    per_rec = d.max(axis=1) / scale
+    rel = float(per_rec.max())
+    r3, r4, r5 = _per_scale_obj_r(ref, got)
+    print(f"  {what}: max rel diff {rel:.3e}  (max abs {d.max():.3e}, worst "
+          f"record {int(per_rec.argmax())}, |logit| up to {scale.max():.1f})  "
+          f"(tol {tol})")
+    print(f"  ref  range {ref.min():+.3f} .. {ref.max():+.3f}")
+    print(f"  onnx range {got.min():+.3f} .. {got.max():+.3f}")
+    print(f"  objectness r  P3 {r3:.4f}  P4 {r4:.4f}  P5 {r5:.4f}"
+          f"  (floor {MIN_OBJ_R})")
+    if rel > tol or min(r3, r4, r5) < MIN_OBJ_R:
+        falling = r5 < r4 < r3
+        raise SystemExit(
+            "⛔ THE EXPORT DOES NOT MATCH THE LEAN MODEL.\n"
+            "   Do not deploy, and do not widen the tolerance — report the "
+            "numbers above.\n"
+            + ("   The correlation FALLS from P3 to P5, which is the signature "
+               "of a geometric\n   misalignment compounding through the "
+               "backbone's stride-2 stages. Check\n   `pad=` (Lean is TF-style "
+               "ASYMMETRIC SAME, torchvision is symmetric) and `pool=`\n"
+               "   (Lean is `.maxPool 2 2`, torchvision is a padded 3x3) before "
+               "anything else.\n"
+               if falling else
+               "   The error is spread evenly across scales, so it is NOT a "
+               "geometric shift.\n   Check the BN running statistics, the "
+               "checkpoint parameter order — and whether\n   the golden is for "
+               "THIS checkpoint (--regen-golden), which is the usual cause.\n"))
+    return rel
+
+
+def regen_golden(logits_path, val_bin, out=None):
+    """Cut the reference frame's row out of a Lean `infer` dump.
+
+    The golden is CHECKPOINT-SPECIFIC: it is the Lean stack's logits for val
+    record FRAME_VAL_RECORD under one set of weights. Ship a new arm without
+    regenerating it and --verify-frame fails with the padding-bug signature
+    (rel ≈ 1, objectness r ≪ 0.999) while nothing says why.
+    """
+    out = Path(out) if out else HERE / "testdata" / "frame_logits.bin"
+    lean = np.fromfile(logits_path, dtype=np.float32)
+    if lean.size % NTOT:
+        raise SystemExit(f"{logits_path}: {lean.size} floats is not a multiple of {NTOT}")
+    lean = lean.reshape(-1, NTOT)
+    if lean.shape[0] <= FRAME_VAL_RECORD:
+        raise SystemExit(f"{logits_path}: only {lean.shape[0]} rows, need row "
+                         f"{FRAME_VAL_RECORD} — is this a full val dump?")
+    val_bin = Path(val_bin)
+    if val_bin.exists():
+        from PIL import Image
+        rec = 3 * IMG_PX * IMG_PX + NTOT * 4
+        with open(val_bin, "rb") as f:
+            f.seek(4 + FRAME_VAL_RECORD * rec)
+            raw = np.frombuffer(f.read(3 * IMG_PX * IMG_PX), dtype=np.uint8)
+        png = np.asarray(Image.open(HERE / "testdata" / "frame.png").convert("RGB"))
+        if not np.array_equal(raw.reshape(3, IMG_PX, IMG_PX).transpose(1, 2, 0), png):
+            raise SystemExit(f"val record {FRAME_VAL_RECORD} is not testdata/frame.png "
+                             f"— the dump's row order does not match the frame")
+    else:
+        print(f"  ⚠ {val_bin} not found; cannot confirm row {FRAME_VAL_RECORD} is frame.png")
+    lean[FRAME_VAL_RECORD].tofile(out)
+    print(f"wrote {out} from row {FRAME_VAL_RECORD} of {logits_path}  "
+          f"(range {lean[FRAME_VAL_RECORD].min():+.3f} .. "
+          f"{lean[FRAME_VAL_RECORD].max():+.3f})")
+
+
+def fold_pads_into_convs(m):
+    """Fold every constant zero `Pad` that feeds a `Conv` into that Conv's `pads`.
+
+    The replica spells Lean's asymmetric SAME padding as an explicit `F.pad`
+    ahead of a padding-0 conv (`bespoke.model._pre_pad`). Older torch exporters
+    folded that into the Conv `pads` attribute; torch 2.13's TorchScript
+    exporter leaves the Pad op in place, its `pads` input spelled as a small
+    ConstantOfShape / Concat / Slice subgraph. TensorRT would fold that, but the
+    shipped artifact should not lean on it: fold here, so the graph has the
+    shape that was gated and measured — four asymmetric-pad convs and no Pad
+    ops — and the census in main() keeps meaning what it says.
+    """
+    import onnx
+    import onnxruntime as ort
+    pads = [n for n in m.graph.node if n.op_type == "Pad"]
+    if not pads:
+        return 0
+    # The pads (and constant_value) inputs are constant but COMPUTED; evaluate
+    # them once by asking for them as extra graph outputs.
+    probe = onnx.ModelProto()
+    probe.CopyFrom(m)
+    del probe.graph.output[:]
+    want = {}
+    for n in pads:
+        want[n.input[1]] = onnx.TensorProto.INT64
+        if len(n.input) > 2 and n.input[2]:
+            want[n.input[2]] = onnx.TensorProto.FLOAT
+    for nm, ty in want.items():
+        probe.graph.output.append(onnx.helper.make_tensor_value_info(nm, ty, None))
+    sess = ort.InferenceSession(probe.SerializeToString(),
+                                providers=["CPUExecutionProvider"])
+    inp = sess.get_inputs()[0]
+    x = np.zeros([d if isinstance(d, int) else 1 for d in inp.shape],
+                 np.uint8 if "uint8" in inp.type else np.float32)
+    vals = dict(zip([o.name for o in sess.get_outputs()], sess.run(None, {inp.name: x})))
+
+    consumers = {}
+    for n in m.graph.node:
+        for i in n.input:
+            consumers.setdefault(i, []).append(n)
+    folded = 0
+    for p in pads:
+        mode = next((a.s for a in p.attribute if a.name == "mode"), b"constant")
+        pv = np.asarray(vals[p.input[1]]).astype(np.int64).ravel()
+        cval = (float(np.asarray(vals[p.input[2]]).ravel()[0])
+                if len(p.input) > 2 and p.input[2] else 0.0)
+        users = consumers.get(p.output[0], [])
+        if not (mode == b"constant" and cval == 0.0 and pv.size == 8
+                and not pv[[0, 1, 4, 5]].any() and len(users) == 1
+                and users[0].op_type == "Conv"
+                and not any(a.name == "pads" and any(a.ints) for a in users[0].attribute)):
+            continue
+        conv = users[0]
+        for a in [a for a in conv.attribute if a.name == "pads"]:
+            conv.attribute.remove(a)
+        # ONNX Conv pads: [H_begin, W_begin, H_end, W_end]
+        conv.attribute.append(onnx.helper.make_attribute(
+            "pads", [int(v) for v in pv[[2, 3, 6, 7]]]))
+        conv.input[0] = p.input[0]
+        m.graph.node.remove(p)
+        folded += 1
+    # Sweep the orphaned pads subgraphs and any initializer nothing reads.
+    outputs = {o.name for o in m.graph.output}
+    while True:
+        used = {i for n in m.graph.node for i in n.input} | outputs
+        dead = [n for n in m.graph.node if n.output and not any(o in used for o in n.output)]
+        if not dead:
+            break
+        for n in dead:
+            m.graph.node.remove(n)
+    used = {i for n in m.graph.node for i in n.input}
+    for init in [i for i in m.graph.initializer if i.name not in used]:
+        m.graph.initializer.remove(init)
+    return folded
+
+
+def verify_frame(onnx_path, tol, ref_path=None):
     """Self-contained gate: testdata/frame.png vs testdata/frame_logits.bin.
 
     Both ship in the repo, so this needs nothing from the training box. The
     logits are the Lean stack's own output for that frame under the eval graph
     (BN in inference mode, running stats) — reproducibly val record 374 of an
-    `infer` dump, byte for byte.
+    `infer` dump, byte for byte. ⚠ Under ONE checkpoint: the golden must be
+    regenerated for every arm that ships (--regen-golden), or this gate fails
+    on a correct export with the same signature as a wrong one.
 
     ⚠ The tolerance is RELATIVE (max abs difference over max abs logit) and it
     is not a knob. Relative because logit magnitude varies by two orders of
@@ -131,49 +318,19 @@ def verify_frame(onnx_path, tol, fold="none"):
         raise SystemExit("--verify-frame needs onnxruntime")
     from PIL import Image
 
-    ref = np.fromfile(HERE / "testdata" / "frame_logits.bin", dtype=np.float32)
+    ref_path = Path(ref_path) if ref_path else HERE / "testdata" / "frame_logits.bin"
+    ref = np.fromfile(ref_path, dtype=np.float32)
     if ref.size != NTOT:
         raise SystemExit(f"reference logits are {ref.size} floats, want {NTOT}")
     raw = np.asarray(Image.open(HERE / "testdata" / "frame.png").convert("RGB"))
-    if fold == "u8":
-        # exactly the bytes a camera path would hand over — no host arithmetic
-        x = raw.astype(np.uint8)[None]
-    else:
-        img = raw.astype(np.float32).transpose(2, 0, 1) / 255.0
-        if fold == "f32":
-            x = img[None]                      # the graph normalizes
-        else:
-            mean = np.array([0.485, 0.456, 0.406], np.float32).reshape(3, 1, 1)
-            istd = (1.0 / np.array([0.229, 0.224, 0.225], np.float32)).reshape(3, 1, 1)
-            x = ((img - mean) * istd)[None]
 
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
-    got = sess.run(None, {"image": x})[0].reshape(-1)[:NTOT]
-    d = np.abs(got - ref)
-    rel = float(d.max() / max(float(np.abs(ref).max()), 1e-6))
-    r3, r4, r5 = _per_scale_obj_r(ref, got)
-    print(f"  max rel diff {rel:.3e}  (max abs {d.max():.3e})  (tol {tol})")
-    print(f"  ref  range {ref.min():+.3f} .. {ref.max():+.3f}")
-    print(f"  onnx range {got.min():+.3f} .. {got.max():+.3f}")
-    print(f"  objectness r  P3 {r3:.4f}  P4 {r4:.4f}  P5 {r5:.4f}"
-          f"  (floor {MIN_OBJ_R})")
-    worst_r = min(r3, r4, r5)
-    if rel > tol or worst_r < MIN_OBJ_R:
-        falling = r5 < r4 < r3
-        raise SystemExit(
-            "⛔ THE EXPORT DOES NOT MATCH THE LEAN MODEL.\n"
-            "   Do not deploy, and do not widen the tolerance — report the "
-            "numbers above.\n"
-            + ("   The correlation FALLS from P3 to P5, which is the signature "
-               "of a geometric\n   misalignment compounding through the "
-               "backbone's stride-2 stages. Check\n   `pad=` (Lean is TF-style "
-               "ASYMMETRIC SAME, torchvision is symmetric) and `pool=`\n"
-               "   (Lean is `.maxPool 2 2`, torchvision is a padded 3x3) before "
-               "anything else.\n"
-               if falling else
-               "   The error is spread evenly across scales, so it is NOT a "
-               "geometric shift.\n   Check the BN running statistics and the "
-               "checkpoint parameter order.\n"))
+    inp = sess.get_inputs()[0]
+    mode = input_mode_of(inp.name, "uint8" in inp.type)
+    print(f"  input {inp.name} {inp.type} {inp.shape} -> host preprocessing "
+          f"mode '{mode}'; golden {ref_path.name}")
+    got = sess.run(None, {inp.name: host_input(raw, mode)})[0].reshape(-1)[:NTOT]
+    check_against_lean(ref, got, tol, "testdata/frame.png")
     print("✅ export matches the Lean model on the reference frame")
 
 
@@ -222,8 +379,16 @@ def _wrap_preprocess(model, mode):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ckpt", required=True, help="Lean *_params.bin")
-    ap.add_argument("--bn", required=True, help="Lean *_bn_stats.bin")
+    ap.add_argument("--ckpt", help="Lean *_params.bin")
+    ap.add_argument("--bn", help="Lean *_bn_stats.bin")
+    ap.add_argument("--regen-golden", default=None, metavar="LOGITS_BIN",
+                    help="rewrite testdata/frame_logits.bin from row "
+                         f"{FRAME_VAL_RECORD} of a Lean `infer` dump, then exit. "
+                         "Once per shipped checkpoint, BEFORE --verify-frame: "
+                         "the golden is that checkpoint's own logits.")
+    ap.add_argument("--ref-logits", default=None,
+                    help="golden for --verify-frame (default "
+                         "testdata/frame_logits.bin)")
     ap.add_argument("--out", default="build/detector.onnx")
     ap.add_argument("--opset", type=int, default=17)
     ap.add_argument("--batch", type=int, default=1,
@@ -253,6 +418,12 @@ def main():
                          "export sat at ~1.0. Widening this does not buy a "
                          "marginal case; there isn't one.")
     args = ap.parse_args()
+
+    if args.regen_golden:
+        regen_golden(args.regen_golden, args.val_bin)
+        return
+    if not (args.ckpt and args.bn):
+        ap.error("--ckpt and --bn are required (or --regen-golden)")
 
     try:
         import torch
@@ -288,11 +459,18 @@ def main():
     else:
         dummy = torch.zeros(args.batch, 3, IMG_PX, IMG_PX)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    # torch >= 2.9 defaults to the dynamo exporter, which needs onnxscript and
+    # lays the graph out differently. The artifact that was gated and measured
+    # came from the TorchScript exporter, so pin it where the kwarg exists.
+    import inspect
+    legacy = ({"dynamo": False}
+              if "dynamo" in inspect.signature(torch.onnx.export).parameters else {})
     torch.onnx.export(
         model, dummy, args.out,
-        input_names=["image"], output_names=["logits"],
+        input_names=[INPUT_NAMES[args.fold_preprocess]], output_names=["logits"],
         opset_version=args.opset,
         dynamic_axes=None,          # fixed batch: TensorRT prefers a static shape
+        **legacy,
     )
     # ⚠ `--opset` is a REQUEST, not a guarantee: torch exports at its own opset
     # and then tries to down-convert, and that conversion can fail silently
@@ -320,17 +498,26 @@ def main():
             sidecar.unlink()
             m = onnx.load(args.out)
             print(f"  folded {sidecar.name} back into the model (one file to ship)")
+        n_folded = fold_pads_into_convs(m)
+        if n_folded:
+            onnx.checker.check_model(m)
+            onnx.save(m, args.out)
+            m = onnx.load(args.out)
+            print(f"  folded {n_folded} explicit Pad ops into their convs' `pads`")
         written = next((o.version for o in m.opset_import if o.domain == ""),
                        args.opset)
         n_asym = sum(1 for n in m.graph.node if n.op_type == "Conv"
                      for a in n.attribute if a.name == "pads"
                      and list(a.ints)[:len(a.ints) // 2] != list(a.ints)[len(a.ints) // 2:])
+        n_pad = sum(1 for n in m.graph.node if n.op_type == "Pad")
         print(f"wrote {args.out}  (batch {args.batch}, opset {written}, "
-              f"{n_asym} asymmetric-pad convs)")
-        if n_asym != 4:
+              f"{n_asym} asymmetric-pad convs, {n_pad} Pad ops, "
+              f"input '{m.graph.input[0].name}')")
+        if n_asym != 4 or n_pad:
             print(f"⚠ expected 4 asymmetric-pad convs (stem 7x7/s2 + "
-                  f"layer2/3/4[0].conv1 3x3/s2), found {n_asym} — the lean "
-                  f"padding may not have survived the export")
+                  f"layer2/3/4[0].conv1 3x3/s2) and no Pad ops, found "
+                  f"{n_asym} / {n_pad} — the lean padding may not have "
+                  f"survived the export")
     except ImportError:
         print(f"wrote {args.out}  (batch {args.batch}, opset {args.opset} requested; "
               f"install onnx to read back what was actually written)")
@@ -340,7 +527,7 @@ def main():
               f"accepts {written}; pass --opset {written} to stop being surprised.")
 
     if args.verify_frame:
-        verify_frame(args.out, args.tol, args.fold_preprocess)
+        verify_frame(args.out, args.tol, args.ref_logits)
         return
 
     if not args.verify:
@@ -359,27 +546,18 @@ def main():
     lean = np.fromfile(args.verify, dtype=np.float32).reshape(-1, NTOT)
     n = min(args.verify_n, lean.shape[0])
     rec = 3 * IMG_PX * IMG_PX + NTOT * 4
-    mean = np.array([0.485, 0.456, 0.406], np.float32).reshape(3, 1, 1)
-    istd = (1.0 / np.array([0.229, 0.224, 0.225], np.float32)).reshape(3, 1, 1)
 
     sess = ort.InferenceSession(args.out, providers=["CPUExecutionProvider"])
-    worst = 0.0
+    inp = sess.get_inputs()[0]
+    mode = input_mode_of(inp.name, "uint8" in inp.type)
+    got = np.empty((n, NTOT), np.float32)
     with open(args.val_bin, "rb") as f:
         for i in range(n):
             f.seek(4 + i * rec)
-            img = np.frombuffer(f.read(3 * IMG_PX * IMG_PX), dtype=np.uint8)
-            x = img.reshape(3, IMG_PX, IMG_PX).astype(np.float32) / 255.0
-            x = ((x - mean) * istd)[None]
-            got = sess.run(None, {"image": x})[0].reshape(-1)[:NTOT]
-            d = float(np.abs(got - lean[i]).max())
-            worst = max(worst, d)
-            print(f"  record {i}: max abs diff {d:.3e}")
-    print(f"worst {worst:.3e} over {n} records (tol {args.tol})")
-    if worst > args.tol:
-        raise SystemExit(
-            "⛔ EXPORT DOES NOT MATCH THE LEAN MODEL. Do not deploy this. The "
-            "replica has drifted from the spec, or the checkpoint/pool/pad "
-            "settings are wrong.")
+            raw = np.frombuffer(f.read(3 * IMG_PX * IMG_PX), dtype=np.uint8)
+            raw = raw.reshape(3, IMG_PX, IMG_PX).transpose(1, 2, 0)
+            got[i] = sess.run(None, {inp.name: host_input(raw, mode)})[0].reshape(-1)[:NTOT]
+    check_against_lean(lean[:n], got, args.tol, f"{n} val records")
     print("✅ export matches the Lean model")
 
 
