@@ -146,6 +146,18 @@ one detector frame at a time.
    AMD-only box builds this CUDA plugin fine, which is what makes farming it out possible.
    ⚠ The whole build is emulated (aarch64 under qemu-user), so budget 9-11 h on a 32-thread
    host and expect it to saturate every core it is given.
+
+   ⛔⛔ **`--experimental_worker_for_repo_fetching=off` is mandatory under QEMU**, and without it
+   the build does not fail, it hangs. Bazel 7 hands each repository rule to a worker thread while
+   the SkyFunction thread waits on a semaphore for it to signal back; under aarch64 user-mode
+   emulation the worker never signals. The build then sits forever right after the last redist is
+   fetched. The tell is that it looks *almost* alive: the process tree is intact and the bazel
+   server holds ~40% lifetime CPU, so `ps` looks fine. What gives it away is that nothing is
+   written to the bazel root for ten-plus minutes, instantaneous CPU is ~3%, there are no open
+   sockets, and `kill -3` on the JVM (a thread dump, not a kill) shows **zero RUNNABLE threads**
+   with the evaluator parked at `WorkerSkyKeyComputeState.startOrContinueWork`. Bazel 6.5.0 has
+   no such mode, which is why the 2026-09-09 jax 0.4.38 build never hit it and nothing in §0-§4
+   predicted it. Diagnosed and worked around 2026-09-10; the flag is in the script.
 2. Re-run `planning/orin_xla.md` §3's demos on it and compare — same accuracy, and whether the
    newer XLA moves ms/step.
 3. `cifar8-bn-verified` OOM'd at 5.93 GB anon on the 8 GB board. Re-test: a newer XLA may hold
