@@ -73,6 +73,14 @@ cat > "$WORK/run_build_011.sh" <<INNER
 #   cuDNN redist keys are three-part; redistrib_9.12.0.json IS 9.12.0.46 inside.
 # Both original values abort at fetch, because rules_ml_toolchain fails on an
 # unsupported key rather than falling back.
+#
+# -- experimental_worker_for_repo_fetching=off is REQUIRED under QEMU. Bazel 7 hands
+# each repository rule to a worker thread while the SkyFunction thread waits on a
+# semaphore for it to signal back. Under aarch64 user-mode emulation the worker never
+# signals, so the build deadlocks right after the redists are fetched: zero RUNNABLE
+# JVM threads, ~3% CPU, no disk or network, evaluator parked forever at
+# WorkerSkyKeyComputeState.startOrContinueWork. Bazel 6.5.0 had no such mode, which is
+# why the older jax 0.4.38 build never hit it.
 set -euxo pipefail
 export HOME=/work/home
 cd /work/jax011
@@ -87,6 +95,7 @@ python3 build/build.py build --wheels=jax-cuda-pjrt \\
   --bazel_options=--jobs=${JOBS} \\
   --bazel_options=--local_cpu_resources=${JOBS} \\
   --bazel_options=--spawn_strategy=local \\
+  --bazel_options=--experimental_worker_for_repo_fetching=off \\
   --bazel_options=--verbose_failures \\
   --output_path=/work/dist011 --verbose
 echo BUILD_OK
