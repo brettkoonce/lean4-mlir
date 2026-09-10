@@ -22,14 +22,20 @@ The camera capture is a deliberate stub in both — on Orin the IMX path is a
 sensor- and JetPack-specific GStreamer pipeline, and guessing it from here would
 be worse than leaving it marked.
 
-## TensorRT route — measured 2026-08-28, re-measure on the trained arm in flight
+## TensorRT route — measured 2026-09-09 on the trained arm
 
-Measured on an Orin Nano 8 GB (25 W, JetPack 6.2, TensorRT 10.3, fp16):
-**28.0 ms a frame = 35.7 fps** end-to-end, split 11.9 ms host preprocess +
-6.3 ms forward + 10.0 ms decode+NMS. That was the `ctrl12` weights on purpose
-(throughput does not depend on weights); the export of the trained arm
-`aff30e28` (mAP@0.5 0.2363) is gated on the training box and the device run on
-it is the open item — `ORIN_SMOKE_TEST.md` is that run's brief.
+Orin Nano 8 GB (25 W, JetPack 6.2, TensorRT 10.3, fp16, `jetson_clocks`
+applied), the `aff30e28` weights (mAP@0.5 0.2363), uint8-input engine:
+**17.90 ms a frame = 55.9 fps** end-to-end, split 1.55 ms host preprocess +
+5.10 ms forward + 11.26 ms decode+NMS. The float-input engine on the same
+board is 22.11 ms = 45.2 fps; engine-level GPU compute is 4.1 ms for either.
+Full table, both passes, and the clock analysis:
+`runs/2026-09-09-orin-remeasure/README.md`. `ORIN_SMOKE_TEST.md` is the
+device brief.
+
+⚠ Any Orin number must say whether `jetson_clocks` was applied. Governor-managed,
+the same u8 pipeline reads ~1.8× slower, because the GPU idles through the CPU
+stages between forwards and devfreq drops it to its 306 MHz floor.
 
 It first shipped a **different model**: `export_onnx.py` built the PyTorch
 replica without `pad="lean"`, so it ran torchvision's symmetric convolution
@@ -154,7 +160,9 @@ mismatch, so a retrained or reshaped model cannot silently misload.
 |---|---|
 | RTX 4060 Ti, XLA (cuDNN) | **65 fps** end-to-end, 548 images in 8.34 s |
 | Orin, IREE | **~0.5 fps** |
-| Orin Nano, TensorRT fp16 | **35.7 fps** end-to-end (28.0 ms = 11.9 preprocess + 6.3 forward + 10.0 decode), `ctrl12` weights, 2026-08-28 |
+| Orin Nano, TensorRT fp16, u8 engine, clocks pinned | **55.9 fps** end-to-end (17.9 ms = 1.55 preprocess + 5.10 forward + 11.26 decode), `aff30e28`, 2026-09-09 |
+| Orin Nano, TensorRT fp16, f32 engine, clocks pinned | 45.2 fps end-to-end (22.1 ms = 7.11 + 5.23 + 9.76) |
+| Orin Nano, TensorRT fp16, `ctrl12`, 2026-08-28, governor | 35.7 fps end-to-end (28.0 ms = 11.9 + 6.3 + 10.0) — superseded |
 
 The middle row is 130× below the top one on hardware perhaps 4× slower, which is
 the whole argument for TensorRT. An earlier version of this file projected ~16 fps
@@ -167,7 +175,8 @@ A Nano would rather have MnV4 than R34 regardless.
 `--bench` times the three stages separately — host preprocess, forward, and the
 numpy decode+NMS — because on the Orin the network is the smallest of the three.
 The decode was 49 ms before it was vectorized (`decode_reference` is kept as its
-oracle, `--gate-decode` asserts they agree) and is 10 ms now.
+oracle, `--gate-decode` asserts they agree) and is 10–11 ms now, which makes it
+the largest stage of the u8 pipeline and the next thing worth attention.
 
 ## What to fill in on the device
 
@@ -175,8 +184,7 @@ oracle, `--gate-decode` asserts they agree) and is 10 ms now.
    start from. A global-shutter IMX at 1456×1088 squashes to 448 at ~3×, which is
    *kinder* than VisDrone's own ~4.5× training squash, so the domain transfers
    without tiling.
-2. **The `--bench` split on the trained arm** (`aff30e28`), and the same for
-   the u8-folded engine — the plain-vs-u8 preprocess column is the open question.
+2. **The decode**: at 11 ms of a 17.9 ms frame it is now 63% of the pipeline.
 3. Optionally a self-contained artifact — weights baked in as constants rather
    than passed as 189 inputs — if process startup ever matters more than
    flexibility.

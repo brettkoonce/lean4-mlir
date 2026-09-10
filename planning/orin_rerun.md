@@ -131,5 +131,9 @@ that box has no push credentials):
 - Facts: L4T R36.4.7, TRT 10.3.0, pycuda 2026.1 in `~/orinvenv` (not system python),
   `trtexec` at `/usr/src/tensorrt/bin/`, 25 W, 46–47 °C. Host name still outside the repo.
 
-Still open: the u8 engine run (and, with `jetson_clocks`, a pinned-clock bench of both), then
-land the branch on main by fast-forward.
+Second device pass, same day (commit `01ceae53`): `jetson_clocks` applied, corrected u8 export.
+**u8 + pinned = 1.55 + 5.10 + 11.26 = 17.90 ms = 55.9 fps end-to-end** (plain + pinned 22.11 ms
+= 45.2 fps); both engines 232 / 0.6180, zero fp16 fallbacks, engine-level 4.11 / 4.15 ms. 1.57×
+the ctrl12 number. Preprocess 7.11 → 1.55 ms is the u8 fold's thesis confirmed. Open wart: decode
+is 11.26 ms on the u8 run vs 9.76 on the plain one (same CPU work) — not understood, and decode
+is now 63% of the frame. Thread DONE bar landing the branch on main by fast-forward.
