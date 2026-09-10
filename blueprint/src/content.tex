@@ -5257,7 +5257,7 @@ additive ladder tells.
 \begin{axis}[ablationaxis, title={fp32},
   yticklabels={full,$-$weight decay,$-$warmup,$-$label smoothing,
                $-$AdamW,$-$cosine,$-$augmentation}]
-  \fill[gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
+  \path[fill,gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
        rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
   \draw[black!70]        ({axis cs:0,full}|-{rel axis cs:0,0})
                       -- ({axis cs:0,full}|-{rel axis cs:0,1});
@@ -5268,7 +5268,7 @@ additive ladder tells.
 % ── bf16 ───────────────────────────────────────────────────────────────────
 \begin{axis}[ablationaxis, title={bf16}, yticklabels={{},{},{},{},{},{},{}},
   at={(0.47\linewidth,0)}, anchor=south west]
-  \fill[gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
+  \path[fill,gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
        rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
   \draw[black!70]        ({axis cs:0,full}|-{rel axis cs:0,0})
                       -- ({axis cs:0,full}|-{rel axis cs:0,1});
@@ -5315,7 +5315,7 @@ take the same size step and differ only in whether a velocity carries it.
   tick label style={font=\small}, label style={font=\small},
   title style={font=\small}, title={endpoints},
   grid=major, grid style={gray!14}]
-  \fill[gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
+  \path[fill,gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
       rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
   \draw[black!70] ({axis cs:0,full}|-{rel axis cs:0,0})
                -- ({axis cs:0,full}|-{rel axis cs:0,1});
@@ -11334,8 +11334,7 @@ Formalizing every sub-op of every modern architecture would be an
 asymptote we don't approach.
 
 \begin{center}
-\fitwidth{%
-\begin{tikzpicture}[
+\begin{tikzpicture}[scale=0.9277, transform shape,
   font=\sffamily,
   chip/.style = {draw, rounded corners=2pt, align=center, minimum height=0.46cm, minimum width=2.0cm, font=\sffamily\scriptsize, inner sep=1pt},
   cOr/.style  = {chip, draw=orange!65!black, fill=orange!12},
@@ -11367,7 +11366,7 @@ asymptote we don't approach.
     \pgfmathsetmacro\cx{#2 + \col*2.25}%
     \pgfmathsetmacro\cy{#3 - \rw*0.6}%
     \node[#1] at (\cx,\cy) {\lbl};%
-    \fill[dot\st] ({\cx+0.9},{\cy+0.155}) circle (0.082);%
+    \path[fill,dot\st] ({\cx+0.9},{\cy+0.155}) circle (0.082);%
     \draw[black!45, line width=0.25pt] ({\cx+0.9},{\cy+0.155}) circle (0.082);%
   }%
 }
@@ -11407,14 +11406,13 @@ asymptote we don't approach.
 \node[font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west] at (0,-12.3)
   {box color $=$ op-type (orange weights $\cdot$ gray activation $\cdot$ teal norm/reshape $\cdot$ brown skip $\cdot$ violet multi-branch $\cdot$ red attention) \quad column $=$ Part 1 vs Part 2};
 \node[font=\sffamily\bfseries\scriptsize, anchor=west] at (0,-12.85) {Part-1 dot $=$ first appears by:};
-\fill[dotg] (0.6,-13.45) circle (0.082); \draw[black!45,line width=0.25pt] (0.6,-13.45) circle (0.082);
+\path[fill,dotg] (0.6,-13.45) circle (0.082); \draw[black!45,line width=0.25pt] (0.6,-13.45) circle (0.082);
 \node[font=\sffamily\scriptsize, anchor=west] at (0.77,-13.45) {ResNet-34 (ch 1--5)};
-\fill[doty] (5.3,-13.45) circle (0.082); \draw[black!45,line width=0.25pt] (5.3,-13.45) circle (0.082);
+\path[fill,doty] (5.3,-13.45) circle (0.082); \draw[black!45,line width=0.25pt] (5.3,-13.45) circle (0.082);
 \node[font=\sffamily\scriptsize, anchor=west] at (5.47,-13.45) {MobileNetV2 $\to$ EfficientNet (ch 6--7)};
-\fill[dotr] (10.9,-13.45) circle (0.082); \draw[black!45,line width=0.25pt] (10.9,-13.45) circle (0.082);
+\path[fill,dotr] (10.9,-13.45) circle (0.082); \draw[black!45,line width=0.25pt] (10.9,-13.45) circle (0.082);
 \node[font=\sffamily\scriptsize, anchor=west] at (11.07,-13.45) {ConvNeXt $\to$ ViT (ch 8--9)};
 \end{tikzpicture}%
-}
 \end{center}
 
 \section{Bestiary-only \texttt{Layer} primitives}
@@ -13148,9 +13146,9 @@ pipeline, the loss, and the inference loop.
     \foreach \s in {0,...,7} {
       \pgfmathparse{\s<=\t ? 1 : 0}
       \ifnum\pgfmathresult=1
-        \fill[live] (\s,-\t) rectangle ++(1,-1);
+        \path[fill,live] (\s,-\t) rectangle ++(1,-1);
       \else
-        \fill[dead] (\s,-\t) rectangle ++(1,-1);
+        \path[fill,dead] (\s,-\t) rectangle ++(1,-1);
         \node[font=\tiny, text=black!45] at (\s+0.5,-\t-0.5) {$-\infty$};
       \fi
     }
@@ -14455,8 +14453,7 @@ in the book.
 
 \begin{figure}[ht]
 \centering
-\fitwidth{%
-\begin{tikzpicture}[
+\begin{tikzpicture}[scale=0.7293, transform shape,
   >={Stealth[length=2.5mm]},
   every node/.style={font=\sffamily\footnotesize},
   group/.style={
@@ -14594,7 +14591,7 @@ in the book.
 \draw[arr] (lngelu.south) to[out=-90, in=160] (block.north west);
 \draw[arr] (block) -- (body);
 \draw[arr] (body)  -- (vit);
-\end{tikzpicture}}
+\end{tikzpicture}
 \caption{Three architecture spines, all the way down to Ch~1 foundation. ResNet-34 (left) needs only the foundation calculus and Chs~2--5 primitives. EfficientNet-B0 (middle) adds Ch~6's depthwise conv and Ch~7's SE block, and dashed arrows mark Chs~3 (CNN) and 4 (BN), shared with R34. ViT (right) is the only path that needs the matrix kit, and its longer chain runs through MHSA and the transformer block before bundling into the full ViT VJP. Every node is a Lean theorem.}
 \label{fig:spines}
 \end{figure}
