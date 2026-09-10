@@ -1,4 +1,36 @@
 #!/usr/bin/env bash
+# ⛔⛔ SUPERSEDED 2026-09-10 — DO NOT USE FOR A NUMBER. Kept only so the figures it
+# produced keep their provenance. Two independent defects, either one fatal:
+#
+#   1. THE WINDOW IS BURST, NOT STEADY STATE. `LEAN_MLIR_MAX_STEPS=40` with the probe
+#      clock starting at step 8 times a window the producers pre-filled during compile
+#      and the val drain: `SHIM PREFETCH` holds one read in flight per handle, so the
+#      early steps are served from a queue nobody waited for. ViT reads 159 ms/step
+#      here where its steady state is 375 — 2.4x. `LEAN_MLIR_PROBE_WARM` exists for
+#      exactly this; the correct window is WARM=200, STEPS=600.
+#   2. IT MEASURES GRAPHS THE JOBS DO NOT TRAIN. Its `mnv2` rows are `adamdp64`, but
+#      `scripts/jobs/mnv2-default-4gpu.conf` trains `rmsdp64` (RMSProp is MobileNetV2's
+#      reference optimizer) — different graphs. Its `enet` rows are the LIGHT `rmsdp64`
+#      where the job bakes `emarmsdp64dropdo` (EMA + drop-path + classifier dropout,
+#      nearly double the step). It has no rows at all for r50a3, vitema, ConvNeXt-S/B
+#      or ViT-S/B, all of which have job confs.
+#
+# ▶ USE INSTEAD: `scripts/bf16_probe_3060.sh`, which is box-parameterized despite the
+#   name — it takes PJRT_PLUGIN, SHIM_PYTHON, DEVS, WARM, STEPS, ARMS, NETS and ROWS
+#   from the environment. On ares:
+#
+#     PJRT_PLUGIN="$PWD/.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so" \
+#     SHIM_PYTHON="$PWD/.venv/bin/python3" DEVS=0,1,2,3 WARM=200 STEPS=600 ARMS=fed \
+#     CKPT_TAG=probe4060 bash scripts/bf16_probe_3060.sh runs/<date>/fed.tsv
+#
+#   then `scripts/probe_to_eta.py <tsv> --box "4x 4060 Ti"` writes the conf ETA strings
+#   and refuses any row whose variant is not the one its conf trains.
+#
+# ▶ And read the ms/step as the MEAN, not the median: shim starvation is bursty, so a
+#   median can sit within 5 ms of the compute floor while the p90 is 1906 (commit
+#   4a0a2781). Mean sets wall clock. This script only ever captured the median.
+#
+# ---------------------------------------------------------------------------------
 # 4-GPU steady-state ms/step probe for EVERY ImageNet trainer, f32 and bf16 arm.
 #
 #     scripts/bf16_probe_4gpu.sh /tmp/out.tsv
