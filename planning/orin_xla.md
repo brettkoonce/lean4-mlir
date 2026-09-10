@@ -6,10 +6,18 @@ run through XLA on the Orin Nano's GPU. Convs were dead there until today.
 
 ## §0 Why convs were dead
 
-The stock aarch64 `jax-cuda12-plugin` is built against cuDNN ≥ 9.7 and pulls the SBSA cuDNN wheel,
-which ships sm_50…sm_120 and **skips sm_87**. JetPack 6.2's Tegra cuDNN 9.3.0.75 is the only cuDNN
-with sm_87 conv kernels, and the stock plugin's version check refuses it. Every conv model died at
-`CUDNN_STATUS_EXECUTION_FAILED`; dense models never noticed (cuBLAS was fine).
+The stock aarch64 `jax-cuda12-plugin` pulls the **SBSA** cuDNN wheel, which ships sm_50…sm_120 and
+**skips sm_87**. Every conv model died at `CUDNN_STATUS_EXECUTION_FAILED`; dense models never
+noticed (cuBLAS was fine).
+
+⛔⛔ **CORRECTED 2026-09-10 — see `planning/orin_plugin_rebuild.md`.** This section originally read
+"JetPack 6.2's Tegra cuDNN 9.3.0.75 is the only cuDNN with sm_87 conv kernels", and that is wrong.
+It generalised from SBSA wheels to all of aarch64. NVIDIA ships a separate **Tegra**
+(`linux-aarch64`) cuDNN line reaching **9.20**, with sm_87 throughout — verified on the device at
+9.12.0.46. The distinction is `linux-sbsa` (no sm_87) against `linux-aarch64` (sm_87), NOT a
+version ceiling. Tegra CUDA likewise reaches 12.9.79; the real cap is the DRIVER (12060 here),
+which limits what RUNS, not what builds. Everything measured in §3 below stands — the 9.3 build
+works — but 9.3 was never the only option, and the plugin should be rebuilt on current jax.
 
 ## §1 The plugin (built 2026-09-10 on the training box)
 
