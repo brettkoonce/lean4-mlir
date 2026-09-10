@@ -21,3 +21,8 @@
 % matching the PDF TOC. The printed version (macros/print.tex) keeps it as
 % a normal \section*.
 \newcommand{\prosesection}[1]{\par\bigskip\noindent{\large\bfseries #1}\par\nopagebreak\smallskip}
+
+% \fitwidth: identity here. See macros/print.tex -- plasTeX cannot parse
+% \resizebox and silently degrades the wrapped picture to raw source, so the web
+% build takes the picture at natural size and lets CSS fit it.
+\newcommand{\fitwidth}[1]{#1}
