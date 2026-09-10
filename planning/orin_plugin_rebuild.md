@@ -36,15 +36,36 @@ jax ≥ 0.6 declares cuDNN ≥ 9.8, which is a jax policy and is satisfied by th
 jax 0.11 states "all versions of CUDA 12.1 or newer remain supported", so pin CUDA to the driver
 rather than gambling on minor-version compatibility on Tegra.
 
+⚠ Two of the version strings first written here are not redist keys and would have aborted at
+the fetch phase. `rules_ml_toolchain` keys its `json_dict` on the **toolkit** version, and
+`12.6.77` is the NVCC that ships inside toolkit **12.6.2** (`redistrib_12.6.77.json` is a 404).
+The cuDNN JSONs are three-part: `redistrib_9.12.0.json` carries `"version": "9.12.0.46"` and
+resolves to `cudnn-linux-aarch64-9.12.0.46_cuda12-archive.tar.xz`, the artifact §0 measured. The
+corrected recipe, and the one actually run:
+
 ```bash
-git clone --depth 1 --branch jax-v0.11.1 https://github.com/jax-ml/jax.git
-cd jax
-python build/build.py build --wheels=jax-cuda-plugin \
-    --cuda_version=12.6.77 \
-    --cudnn_version=9.12.0.46 \
+git clone --depth 1 --branch jax-v0.11.1 https://github.com/jax-ml/jax.git jax011
+cd jax011
+python3 build/build.py build --wheels=jax-cuda-pjrt \
+    --cuda_version=12.6.2 \
+    --cudnn_version=9.12.0 \
     --cuda_compute_capabilities=sm_87,compute_87 \
-    --target_cpu=aarch64
+    --clang_path=/usr/lib/llvm-18/bin/clang \
+    --python_version=3.12 \
+    --disable_nccl --disable_mkl_dnn \
+    --bazel_path=/work/bin/bazel-7.7.1
 ```
+
+⭐ The fetch log settles it: toolkit **12.6.2** hands back archives named
+`cuda_nvcc-linux-aarch64-**12.6.77**-archive.tar.xz`, so `12.6.77` was the component version all
+along and the two numbers name the same toolkit. Zero `linux-sbsa` in the log, and cuDNN arrives
+as `cudnn-linux-aarch64-9.12.0.46_cuda12-archive.tar.xz` — the §0 artifact, byte for byte.
+
+Two more things 0.11.1 changed out from under the 0.4.38 recipe. Its `.bazelversion` is **7.7.1**,
+so the 6.5.0 binary at `/work/bin/bazel` will not do; `bazel-7.7.1-linux-arm64` is staged beside
+it. And `setup.py` declares `python_requires>=3.12` while the JetPack container ships 3.10, so
+`--python_version=3.12` is required — without it `build.py` defaults the hermetic Python to
+whatever ran the CLI. `build.py` itself still runs fine on the container's 3.10.
 
 ▶ Same container trick as the 2026-09-09 build, and it is what keeps the hermetic rules on Tegra
 redists: `nvcr.io/nvidia/l4t-jetpack:r36.4.0` under QEMU with `--hostname tegra-build`. XLA's
@@ -52,9 +73,14 @@ redists: `nvcr.io/nvidia/l4t-jetpack:r36.4.0` under QEMU with `--hostname tegra-
 **Confirm `linux-aarch64` and zero `linux-sbsa` in the fetch log** — that check is the one that
 proved the last build was on the right redists.
 
-⚠ `--wheels=jax-cuda-plugin` is the Python kernels wheel; the `.so` this repo dlopens comes from
-`--wheels=jax-cuda-pjrt`. The 2026-09-09 build used the latter. Check which one 0.11.1 puts
-`xla_cuda_plugin.so` in before assuming.
+✅ Settled: `--wheels=jax-cuda-pjrt` is still the one. In 0.11.1 it resolves to
+`//jaxlib/tools:jax_cuda12_pjrt_wheel`, and `jax-cuda-plugin` is the separate Python kernels
+wheel as before.
+
+✅ Also settled: the Tegra selection survived the move of hermetic CUDA out of XLA and into
+`rules_ml_toolchain`. `gpu/nvidia_common_rules.bzl` still shells out to `uname -a` and looks for
+the substring `tegra`, and its `_REDIST_ARCH_DICT` still maps `linux-aarch64` to the Tegra triple
+and `linux-sbsa` to the plain aarch64 one.
 
 Ship gate unchanged, and it is the one that matters:
 
@@ -111,6 +137,15 @@ one detector frame at a time.
 ## §5 Open, in order
 
 1. Build on `jax-v0.11.1` per §1; confirm Tegra redists in the log; run the ship gate.
+   `deploy/build_orin_pjrt_plugin.sh` does all of it from scratch on **any** x86 Linux box with
+   docker: registers the qemu-aarch64 binfmt handler, pulls the JetPack image, installs clang-18
+   and bazel 7.7.1 inside it, clones the source and launches the build detached. It takes a
+   workdir argument and needs roughly 80 GB. ⭐ No GPU of any kind is required — the CUDA
+   toolkit and cuDNN arrive as redist tarballs and the plugin links against CUDA **stubs**
+   (`--config=cuda_libraries_from_stubs`), dlopening the real libraries only on the Orin. An
+   AMD-only box builds this CUDA plugin fine, which is what makes farming it out possible.
+   ⚠ The whole build is emulated (aarch64 under qemu-user), so budget 9-11 h on a 32-thread
+   host and expect it to saturate every core it is given.
 2. Re-run `planning/orin_xla.md` §3's demos on it and compare — same accuracy, and whether the
    newer XLA moves ms/step.
 3. `cifar8-bn-verified` OOM'd at 5.93 GB anon on the 8 GB board. Re-test: a newer XLA may hold
