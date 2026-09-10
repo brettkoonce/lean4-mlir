@@ -147,12 +147,14 @@ python3 orin_detect.py --backend trt --plan build/detector_aff30e28.plan \
   forward back-to-back  xx.xx ms = xxx.x fps (GPU clock not throttled by the CPU stages)
 ```
 
-**All of it is the deliverable, verbatim.** Measured 2026-09-09 on this arm,
-governor-managed (no `jetson_clocks`): 11.14 / 15.48 / 13.07 / 39.69 ms →
-25.2 fps end-to-end, 64.6 fps forward-only; trtexec on the same engine 4.12 ms
-GPU compute. The ctrl12 figure of 6.3 ms forward was a back-to-back loop, so it
-is not comparable to the interleaved column — compare it to the back-to-back
-line instead.
+**All of it is the deliverable, verbatim.** Measured 2026-09-09 on this arm
+with `jetson_clocks`: plain engine 7.11 / 5.23 / 9.76 / 22.11 ms → 45.2 fps
+end-to-end; u8 engine 1.55 / 5.10 / 11.26 / 17.90 ms → **55.9 fps**. Governor-
+managed the plain engine read 11.14 / 15.48 / 13.07 / 39.69 → 25.2 fps, with
+trtexec at 4.12 ms GPU compute on the same engine — the forward column is a
+clock reading, not a model one. The ctrl12 figure of 6.3 ms forward was a
+back-to-back loop; compare it to the back-to-back line, not the interleaved
+column.
 
 ## Step 5 — the u8 engine
 
