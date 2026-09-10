@@ -1,0 +1,8 @@
+  ▶ vit/f32/synth (variant adamdp128x4wxclipdrop, bs 128, workers 8) ...
+    → 217 ms/step (min 205, wait 12 ms, 2502 steps/ep, 154s)
+  ▶ vit/bf16/synth (variant adamdp128x4wxclipdropbf16, bs 128, workers 8) ...
+    → 141 ms/step (min 125, wait 16 ms, 2502 steps/ep, 104s)
+ALL DONE -> runs/2026-09-10-bf16-probe-4060ti/vit_synth.tsv
+net  variant                    prec  arm    bs   workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+vit  adamdp128x4wxclipdrop      f32   synth  128  8        217     205     219     217      12       2502      154        
+vit  adamdp128x4wxclipdropbf16  bf16  synth  128  8        141     125     143     140      16       2502      104        

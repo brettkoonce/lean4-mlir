@@ -1,0 +1,3 @@
+net	variant	prec	arm	bs	workers	med_ms	min_ms	p90_ms	mean_ms	wait_ms	steps_ep	elapsed_s	note
+vit	adamdp128x4wxclipdrop	f32	fed	128	16	251	216	1023	570	35	2502	524	
+vit	adamdp128x4wxclipdropbf16	bf16	fed	128	16	162	144	1867	591	18	2502	549	

@@ -1,0 +1,13 @@
+
+r34|resnet34-imagenet-verified|momdp64|momdp64bf16|64|SHIM_WORKERS=8 LEAN_MLIR_BASE_LR_U=100000
+r50|resnet50-imagenet-verified|momdp64|momdp64bf16|64|SHIM_WORKERS=8
+mnv2|mobilenetv2-imagenet-verified|rmsdp64|rmsdp64bf16|64|SHIM_WORKERS=4
+mnv4|mobilenetv4-imagenet-verified|adamdp64|adamdp64bf16|64|SHIM_WORKERS=4
+enetema|efficientnet-imagenet-verified|emarmsdp64dropdo|emarmsdp64dropdobf16|64|SHIM_WORKERS=8
+cnx|convnext-imagenet-verified|adamdpwxclipdrop|adamdpwxclipdropbf16|32|SHIM_WORKERS=4
+cnxs|convnext-s-imagenet-verified|adamdpwxclipdrop|adamdpwxclipdropbf16|32|SHIM_WORKERS=4
+cnxb|convnext-b-imagenet-verified|adamdpwxclipdrop|adamdpwxclipdropbf16|32|SHIM_WORKERS=4
+vit|vit-imagenet-verified|adamdp128x4wxclipdrop|adamdp128x4wxclipdropbf16|128|SHIM_WORKERS=4
+vits|vit-s-imagenet-verified|adamdp128x4wxclipdrop|adamdp128x4wxclipdropbf16|128|SHIM_WORKERS=8
+vitb|vit-b-imagenet-verified|adamdp128x4wxclipdrop|adamdp128x4wxclipdropbf16|128|SHIM_WORKERS=8 LEAN_MLIR_MEM_FRACTION=0.97
+r50a3|resnet50-imagenet-verified|lambaccdp8x64wxclipbce|lambaccdp8x64wxclipbcebf16|64|SHIM_WORKERS=4 LEAN_MLIR_RES=160 LEAN_MLIR_G2_STEPS=5000

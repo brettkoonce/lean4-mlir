@@ -1,0 +1,2 @@
+
+vit|vit-imagenet-verified|adamdp128x4wxclipdrop|adamdp128x4wxclipdropbf16|128|

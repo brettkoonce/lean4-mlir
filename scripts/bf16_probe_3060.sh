@@ -64,7 +64,13 @@ fi
 # artifact BAKES rather than a number carried forward. A shim verdict read off the light graph is
 # exactly such a carried-forward number.
 # vitema has NO f32 render (vitin_emadp128x4wxclipdrop is absent) -- run its bf16 arm only.
-ROWS="
+# ⚠ `extra` is appended to the env LAST, so it can OVERRIDE anything set above it —
+# `SHIM_WORKERS=4` there beats the global `$WORKERS`. That matters: the job confs do NOT
+# share a worker count (ConvNeXt-S/B and MobileNetV2/V4 and ViT-Ti run 4, ResNet/B0 run 8)
+# and ConvNeXt's own precheck measures 8 as WORSE than 4 (212.5 vs 191 ms/step on -S).
+# A sweep at a uniform worker count is not measuring the jobs.
+# ▶ Override the whole table with $ROWS to probe graphs this list does not carry.
+ROWS="${ROWS:-
 r34|resnet34-imagenet-verified|momdp64|momdp64bf16|64|LEAN_MLIR_BASE_LR_U=100000
 r50|resnet50-imagenet-verified|momdp64|momdp64bf16|64|
 mnv2|mobilenetv2-imagenet-verified|adamdp64|adamdp64bf16|64|
@@ -75,7 +81,7 @@ vit|vit-imagenet-verified|adamdp128x4wxclipdrop|adamdp128x4wxclipdropbf16|128|
 vitema|vit-imagenet-verified|adamdp128x4wxclipdrop|emadp128x4wxclipdropbf16|128|
 enetema|efficientnet-imagenet-verified|emarmsdp64dropdo|emarmsdp64dropdobf16|64|
 r50a3|resnet50-imagenet-verified|lambaccdp8x64wxclipbce|lambaccdp8x64wxclipbcebf16|64|LEAN_MLIR_RES=160 LEAN_MLIR_G2_STEPS=5000
-"
+}"
 
 WANT="${NETS:-$*}"
 
