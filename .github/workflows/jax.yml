@@ -149,8 +149,12 @@ jobs:
             echo "| Probe trainers (Python) | $(lf 'jax/probe/*.py') | $(ll 'jax/probe/*.py') |"
             echo "| Scripts (Python) | $(lf 'jax/scripts/*.py') | $(ll 'jax/scripts/*.py') |"
             echo "| Demos (Python) | $(lf 'jax/demos/*.py') | $(ll 'jax/demos/*.py') |"
+            echo "| VJP oracle (Python) | $(lf 'jax/tests/vjp_oracle/**/*.py' 'jax/tests/vjp_oracle/*.py') | $(ll 'jax/tests/vjp_oracle/**/*.py' 'jax/tests/vjp_oracle/*.py') |"
+            echo "| Generated (emitter output, \`jax/generated/\`) | $(lf 'jax/generated/*.py') | $(ll 'jax/generated/*.py') |"
+            echo "| \`lakefile.lean\` | $(lf 'jax/lakefile.lean') | $(ll 'jax/lakefile.lean') |"
             echo "| **Total Lean** | **$(lf 'jax/**/*.lean' 'jax/*.lean')** | **$(ll 'jax/**/*.lean' 'jax/*.lean')** |"
-            echo "| **Total Python** | **$(lf 'jax/**/*.py' 'jax/*.py')** | **$(ll 'jax/**/*.py' 'jax/*.py')** |"
+            echo "| **Total Python — authored** | **$(( $(lf 'jax/**/*.py' 'jax/*.py') - $(lf 'jax/generated/*.py') ))** | **$(( $(ll 'jax/**/*.py' 'jax/*.py') - $(ll 'jax/generated/*.py') ))** |"
+            echo "| **Total Python — incl. generated** | **$(lf 'jax/**/*.py' 'jax/*.py')** | **$(ll 'jax/**/*.py' 'jax/*.py')** |"
             echo ""
             echo "\`lean_exe\` targets: $(grep -c '^lean_exe' jax/lakefile.lean)"
           } >> $GITHUB_STEP_SUMMARY
