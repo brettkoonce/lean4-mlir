@@ -31,7 +31,14 @@ shims. ⚠ Only `vit-default-emabf16-4gpu.conf` calls the `box` precheck; every 
 happily train on a stale file. The README records the confirmation probe taken with no
 `SHIM_DETERMINISM` in the environment after the sync.
 
-## Step 3 — the 40 ms that is left (optional, but it is 15 % of every ImageNet job)
+## Step 3 — the stall that is left (it is 2× on the mean of seven rows)
+
+⚠ Superseded by `runs/2026-09-11-imagenet-probe-postfix/README.md` §"The stalls that remain":
+the "40 ms" was the short-window view of a periodic ~60 s stall in the PJRT host→device path
+(GPU idle, invoke-side, ~190-step period, immune to every producer-side knob). The two untested
+suspects and their one-flag tests are listed there; run them before anything below.
+
+### (previous text, kept for the record)
 
 Determinism off: median 253–257 against a 205–209 minimum at 4, 6 and 8 producers, all waits 0.
 Contention on the trainer's own step, not the feed. Candidates, cheapest first:
@@ -49,7 +56,9 @@ Whatever is tried, `min` is the floor (205–209) and the target is `med ≈ min
 
 In this order:
 
-1. Re-run the 2026-09-10 probe for all 14 confs and rewrite the `ETA=` strings.
+1. ✅ DONE 2026-09-11 (`runs/2026-09-11-imagenet-probe-postfix/`, 25 rows, ETA lines staged) —
+   with the caveat that seven rows' means carry the Step 3 stall. Re-run those seven once it is
+   fixed. Was: re-run the 2026-09-10 probe for all 14 confs and rewrite the `ETA=` strings.
    `runs/2026-09-10-bf16-probe-4060ti/README.md` has the invocation; `scripts/probe_to_eta.py`
    refuses a variant mismatch. Use the **mean** now — with the leak gone and determinism off, the
    mean is the job again (mean − median was 12–16 ms in every det-off arm here).

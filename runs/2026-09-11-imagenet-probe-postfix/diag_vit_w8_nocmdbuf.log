@@ -1,0 +1,779 @@
+I0911 06:43:51.401515 1777323 service.cc:154] XLA service 0x74f45079b740 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 06:43:51.401597 1777323 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 06:43:51.401604 1777323 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 06:43:51.401607 1777323 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 06:43:51.401610 1777323 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 06:43:51.404756 1777323 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 06:43:51.404786 1777323 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 06:43:51.404829 1777323 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0911 06:43:51.404841 1777323 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0911 06:43:51.404852 1777323 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0911 06:43:51.415086 1777323 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 06:43:57.125155 1777410 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:43:57.253051 1777408 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 06:43:57.266274 1777422 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_216', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 06:43:57.473043 1777395 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 92 bytes spill stores, 56 bytes spill loads
+
+I0911 06:43:57.513790 1777420 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+I0911 06:43:57.956036 1777417 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:43:58.269253 1777406 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_951', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 06:43:58.335076 1777419 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:43:58.485213 1777413 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 06:43:58.697466 1777393 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 06:43:58.701842 1777395 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:43:58.822263 1777396 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+I0911 06:43:59.328924 1777404 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 06:43:59.447257 1777416 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_966', 168 bytes spill stores, 92 bytes spill loads
+
+I0911 06:43:59.487775 1777395 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_964', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 06:43:59.553180 1777401 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 06:43:59.785135 1777407 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 8556 bytes spill stores, 8448 bytes spill loads
+
+I0911 06:44:00.125776 1777422 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 712 bytes spill stores, 712 bytes spill loads
+
+I0911 06:44:00.204328 1777396 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 132 bytes spill stores, 72 bytes spill loads
+
+I0911 06:44:00.227736 1777413 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 06:44:00.300307 1777394 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 32 bytes spill stores, 32 bytes spill loads
+
+I0911 06:44:00.333908 1777418 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_589', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 06:44:00.771026 1777419 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_967', 84 bytes spill stores, 68 bytes spill loads
+
+I0911 06:44:00.914526 1777402 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_965', 96 bytes spill stores, 64 bytes spill loads
+
+I0911 06:44:03.055170 1777418 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1284', 144 bytes spill stores, 144 bytes spill loads
+
+I0911 06:44:03.118893 1777402 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1286', 156 bytes spill stores, 156 bytes spill loads
+
+I0911 06:44:04.310857 1777412 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1328', 180 bytes spill stores, 180 bytes spill loads
+
+I0911 06:44:04.317634 1777413 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1326', 228 bytes spill stores, 228 bytes spill loads
+
+I0911 06:44:07.747187 1777394 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1330', 448 bytes spill stores, 448 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir (@vitin_adamdp128x4wxclipdrop_train_step, 627 outputs, 4 replicas) in 16523 ms
+I0911 06:44:09.085924 1777418 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 88 bytes spill stores, 88 bytes spill loads
+
+I0911 06:44:09.117086 1777416 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 06:44:09.381003 1777422 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 06:44:09.520521 1777404 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 06:44:09.576368 1777400 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:44:09.614934 1777412 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+I0911 06:44:09.652560 1777398 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:44:09.894613 1777405 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:44:09.915192 1777412 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 06:44:10.062128 1777407 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_148', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 06:44:10.120260 1777400 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_fwd.mlir (@vitin_fwd, 1 outputs, 1 replica) in 2767 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109051.072674 1778452 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109053.065302 1778680 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  xla/pjrt verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir
+  xla/pjrt verified_mlir/vitin_fwd.mlir
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 50000 images, 28710 MB
+  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)
+  train 1281167, test 50000; bs 128, ViT-Tiny (ImageNet-1k) adamdp128x4wxclipdrop (cosine+warmup 5ep, baseLR 0.000500), He init
+  ▸ STOCHASTIC DEPTH: 24 drop sites, keeps #[1.000000, 1.000000, 0.991000, 0.991000, 0.982000, 0.982000, 0.973000, 0.973000, 0.964000, 0.964000, 0.955000, 0.955000, 0.945000, 0.945000, 0.936000, 0.936000, 0.927000, 0.927000, 0.918000, 0.918000, 0.909000, 0.909000, 0.900000, 0.900000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+  eval batch 256 (the batch @vitin_fwd was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2502 steps/epoch
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109098.841610 1779470 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109102.656210 1779701 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109104.120555 1779777 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109108.446903 1780019 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109110.206033 1780093 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109114.398508 1780319 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109116.129918 1780394 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109120.269412 1780622 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109121.900281 1780696 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109126.109903 1780928 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109127.741152 1781002 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109131.903024 1781234 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109133.544182 1781308 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109137.668646 1781534 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789109139.141759 1781611 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789109143.398543 1781838 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+READ h=0 step=0 issued=667704721 start=667704721 end=667705272
+READ h=2 step=2 issued=667705272 start=667705272 end=667706298
+READ h=3 step=3 issued=667705272 start=667705272 end=667706322
+READ h=4 step=4 issued=667705272 start=667705273 end=667706327
+READ h=1 step=1 issued=667705272 start=667705272 end=667706397
+[pjrt_ffi] RESIDENT: @vitin_adamdp128x4wxclipdrop_train_step holds 600 parameter tensors (65.4 MB) on 4 devices; they stop crossing PCIe from here
+READ h=6 step=6 issued=667705273 start=667705273 end=667706520
+READ h=5 step=5 issued=667705273 start=667705273 end=667707046
+READ h=0 step=8 issued=667705273 start=667705273 end=667707703
+I0911 06:45:47.090215 1777382 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 06:45:47.090273 1777388 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 06:45:47.091542 1777385 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)
+  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 1), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 2), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 3), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 4), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 5), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 6), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 7), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 8), wire v4 soft targets [512x1000]
+  imagenet shim: 8 sharded producers (round-robin over batches)
+  ▸ SHIM PREFETCH: ON (depth 8 over 8 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+  step 0/2502: loss=6.935017
+  step 1/2502: loss=6.965222
+  step 2/2502: loss=6.920733
+READ h=7 step=7 issued=667705273 start=667705273 end=667709701
+READ h=1 step=9 issued=667709071 start=667709071 end=667709798
+READ h=2 step=10 issued=667709294 start=667709295 end=667710094
+READ h=3 step=11 issued=667709514 start=667709514 end=667710450
+READ h=4 step=12 issued=667709724 start=667709724 end=667710718
+READ h=5 step=13 issued=667709980 start=667709980 end=667710866
+READ h=6 step=14 issued=667710296 start=667710296 end=667711220
+READ h=7 step=15 issued=667710560 start=667710560 end=667711441
+READ h=0 step=16 issued=667710863 start=667710865 end=667711743
+READ h=1 step=17 issued=667711149 start=667711149 end=667711930
+READ h=2 step=18 issued=667711384 start=667711386 end=667712214
+READ h=3 step=19 issued=667711639 start=667711639 end=667712489
+READ h=4 step=20 issued=667712059 start=667712060 end=667712905
+READ h=5 step=21 issued=667712311 start=667712313 end=667713172
+READ h=6 step=22 issued=667712576 start=667712578 end=667713456
+READ h=7 step=23 issued=667712820 start=667712820 end=667713735
+READ h=0 step=24 issued=667713039 start=667713039 end=667713974
+READ h=1 step=25 issued=667713314 start=667713314 end=667714123
+READ h=2 step=26 issued=667713590 start=667713593 end=667714437
+READ h=3 step=27 issued=667713846 start=667713847 end=667714703
+READ h=4 step=28 issued=667714107 start=667714107 end=667714992
+READ h=5 step=29 issued=667714400 start=667714402 end=667715140
+READ h=6 step=30 issued=667714629 start=667714631 end=667715476
+READ h=7 step=31 issued=667714867 start=667714870 end=667715645
+READ h=0 step=32 issued=667715133 start=667715134 end=667715960
+READ h=1 step=33 issued=667715421 start=667715422 end=667716259
+READ h=2 step=34 issued=667715649 start=667715649 end=667716502
+READ h=3 step=35 issued=667715895 start=667715897 end=667716722
+READ h=4 step=36 issued=667716120 start=667716120 end=667716933
+READ h=5 step=37 issued=667716366 start=667716367 end=667717210
+READ h=6 step=38 issued=667716632 start=667716634 end=667717486
+READ h=7 step=39 issued=667716909 start=667716909 end=667717704
+READ h=0 step=40 issued=667717145 start=667717145 end=667717963
+READ h=1 step=41 issued=667717373 start=667717374 end=667718136
+READ h=2 step=42 issued=667717640 start=667717640 end=667718516
+READ h=3 step=43 issued=667717897 start=667717898 end=667718757
+READ h=4 step=44 issued=667718146 start=667718149 end=667719113
+READ h=5 step=45 issued=667718436 start=667718436 end=667719140
+READ h=6 step=46 issued=667718687 start=667718687 end=667719593
+READ h=7 step=47 issued=667718978 start=667718978 end=667719893
+READ h=0 step=48 issued=667719238 start=667719239 end=667720197
+READ h=1 step=49 issued=667719553 start=667719553 end=667720391
+READ h=2 step=50 issued=667719798 start=667719798 end=667720590
+READ h=3 step=51 issued=667720043 start=667720043 end=667720909
+READ h=4 step=52 issued=667720321 start=667720322 end=667721179
+READ h=5 step=53 issued=667720589 start=667720590 end=667721417
+READ h=6 step=54 issued=667720837 start=667720840 end=667721649
+READ h=7 step=55 issued=667721073 start=667721074 end=667721881
+READ h=0 step=56 issued=667721332 start=667721334 end=667722150
+READ h=1 step=57 issued=667721598 start=667721600 end=667722424
+READ h=2 step=58 issued=667721854 start=667721854 end=667722713
+READ h=3 step=59 issued=667722093 start=667722095 end=667722894
+READ h=4 step=60 issued=667722328 start=667722329 end=667723178
+READ h=5 step=61 issued=667722600 start=667722600 end=667723466
+READ h=6 step=62 issued=667722848 start=667722848 end=667723698
+READ h=7 step=63 issued=667723110 start=667723116 end=667723945
+READ h=0 step=64 issued=667723366 start=667723366 end=667724201
+READ h=1 step=65 issued=667723618 start=667723620 end=667724450
+READ h=2 step=66 issued=667723880 start=667723882 end=667724710
+READ h=3 step=67 issued=667724129 start=667724131 end=667724959
+READ h=4 step=68 issued=667724375 start=667724375 end=667725231
+READ h=5 step=69 issued=667724621 start=667724623 end=667725459
+READ h=6 step=70 issued=667724869 start=667724870 end=667725737
+READ h=7 step=71 issued=667725150 start=667725151 end=667725984
+READ h=0 step=72 issued=667725405 start=667725406 end=667726242
+READ h=1 step=73 issued=667725647 start=667725648 end=667726459
+READ h=2 step=74 issued=667725899 start=667725899 end=667726761
+READ h=3 step=75 issued=667726173 start=667726173 end=667727021
+READ h=4 step=76 issued=667726420 start=667726425 end=667727264
+READ h=5 step=77 issued=667726677 start=667726679 end=667727515
+READ h=6 step=78 issued=667726921 start=667726924 end=667727783
+READ h=7 step=79 issued=667727201 start=667727202 end=667728055
+READ h=0 step=80 issued=667727445 start=667727445 end=667728248
+READ h=1 step=81 issued=667727703 start=667727703 end=667728501
+READ h=2 step=82 issued=667727949 start=667727950 end=667728792
+READ h=3 step=83 issued=667728198 start=667728201 end=667729059
+READ h=4 step=84 issued=667728475 start=667728480 end=667729280
+READ h=5 step=85 issued=667728706 start=667728708 end=667729547
+READ h=6 step=86 issued=667728960 start=667728960 end=667729806
+READ h=7 step=87 issued=667729211 start=667729211 end=667730074
+READ h=0 step=88 issued=667729470 start=667729470 end=667730229
+READ h=1 step=89 issued=667729722 start=667729722 end=667730489
+READ h=2 step=90 issued=667729975 start=667729975 end=667730850
+READ h=3 step=91 issued=667730218 start=667730221 end=667731041
+READ h=4 step=92 issued=667730501 start=667730501 end=667731334
+READ h=5 step=93 issued=667730728 start=667730728 end=667731469
+READ h=6 step=94 issued=667730957 start=667730960 end=667731840
+READ h=7 step=95 issued=667731231 start=667731232 end=667732095
+READ h=0 step=96 issued=667731500 start=667731500 end=667732371
+READ h=1 step=97 issued=667731765 start=667731765 end=667732633
+READ h=2 step=98 issued=667732001 start=667732001 end=667732730
+READ h=3 step=99 issued=667732255 start=667732255 end=667733175
+READ h=4 step=100 issued=667732527 start=667732529 end=667733440
+READ h=5 step=101 issued=667732823 start=667732827 end=667733707
+READ h=6 step=102 issued=667733108 start=667733108 end=667733812
+READ h=7 step=103 issued=667733348 start=667733349 end=667734216
+READ h=0 step=104 issued=667733608 start=667733611 end=667734379
+READ h=1 step=105 issued=667733874 start=667733877 end=667734743
+  step 100/2502: loss=6.947217
+READ h=2 step=106 issued=667734142 start=667734142 end=667734907
+READ h=3 step=107 issued=667734394 start=667734396 end=667735270
+READ h=4 step=108 issued=667734646 start=667734646 end=667735498
+READ h=5 step=109 issued=667734869 start=667734871 end=667735748
+READ h=6 step=110 issued=667735120 start=667735122 end=667735963
+READ h=7 step=111 issued=667735387 start=667735390 end=667736229
+READ h=0 step=112 issued=667735662 start=667735663 end=667736512
+READ h=1 step=113 issued=667735923 start=667735925 end=667736777
+READ h=2 step=114 issued=667736170 start=667736176 end=667737012
+READ h=3 step=115 issued=667736406 start=667736409 end=667737155
+READ h=4 step=116 issued=667736655 start=667736655 end=667737464
+READ h=5 step=117 issued=667736938 start=667736941 end=667737772
+READ h=6 step=118 issued=667737204 start=667737204 end=667738080
+READ h=7 step=119 issued=667737465 start=667737465 end=667738173
+READ h=0 step=120 issued=667737696 start=667737696 end=667738559
+READ h=1 step=121 issued=667737923 start=667737924 end=667738739
+READ h=2 step=122 issued=667738196 start=667738197 end=667739051
+READ h=3 step=123 issued=667738498 start=667738498 end=667739347
+READ h=4 step=124 issued=667738724 start=667738724 end=667739608
+READ h=5 step=125 issued=667738991 start=667738991 end=667739749
+READ h=6 step=126 issued=667739228 start=667739230 end=667740047
+READ h=7 step=127 issued=667739487 start=667739488 end=667740371
+READ h=0 step=128 issued=667739755 start=667739757 end=667740649
+READ h=1 step=129 issued=667740039 start=667740039 end=667740863
+READ h=2 step=130 issued=667740286 start=667740286 end=667741103
+READ h=3 step=131 issued=667740517 start=667740519 end=667741360
+READ h=4 step=132 issued=667740788 start=667740788 end=667741673
+READ h=5 step=133 issued=667741056 start=667741056 end=667741876
+READ h=6 step=134 issued=667741300 start=667741301 end=667742137
+READ h=7 step=135 issued=667741547 start=667741549 end=667742361
+READ h=0 step=136 issued=667741799 start=667741801 end=667742678
+READ h=1 step=137 issued=667742073 start=667742073 end=667742916
+READ h=2 step=138 issued=667742336 start=667742338 end=667743167
+READ h=3 step=139 issued=667742571 start=667742573 end=667743454
+READ h=4 step=140 issued=667742812 start=667742812 end=667743623
+READ h=5 step=141 issued=667743111 start=667743112 end=667743924
+READ h=6 step=142 issued=667743358 start=667743358 end=667744221
+READ h=7 step=143 issued=667743605 start=667743607 end=667744480
+READ h=0 step=144 issued=667743862 start=667743864 end=667744690
+READ h=1 step=145 issued=667744113 start=667744113 end=667744926
+READ h=2 step=146 issued=667744355 start=667744355 end=667745177
+READ h=3 step=147 issued=667744615 start=667744618 end=667745519
+READ h=4 step=148 issued=667744880 start=667744880 end=667745670
+READ h=5 step=149 issued=667745128 start=667745128 end=667745957
+READ h=6 step=150 issued=667745367 start=667745367 end=667746240
+READ h=7 step=151 issued=667745622 start=667745623 end=667746530
+READ h=0 step=152 issued=667745907 start=667745907 end=667746793
+READ h=1 step=153 issued=667746169 start=667746169 end=667746990
+READ h=2 step=154 issued=667746415 start=667746415 end=667747264
+READ h=3 step=155 issued=667746678 start=667746679 end=667747493
+READ h=4 step=156 issued=667746964 start=667746966 end=667747774
+READ h=5 step=157 issued=667747229 start=667747234 end=667748064
+READ h=6 step=158 issued=667747474 start=667747476 end=667748334
+READ h=7 step=159 issued=667747721 start=667747722 end=667748523
+READ h=0 step=160 issued=667747974 start=667747975 end=667748818
+READ h=1 step=161 issued=667748214 start=667748216 end=667749082
+READ h=2 step=162 issued=667748479 start=667748480 end=667749370
+READ h=3 step=163 issued=667748739 start=667748739 end=667749518
+READ h=4 step=164 issued=667748993 start=667748994 end=667749751
+READ h=5 step=165 issued=667749247 start=667749248 end=667750173
+READ h=6 step=166 issued=667749511 start=667749513 end=667750295
+READ h=7 step=167 issued=667749802 start=667749802 end=667750620
+READ h=0 step=168 issued=667750041 start=667750041 end=667750902
+READ h=1 step=169 issued=667750273 start=667750274 end=667751156
+READ h=2 step=170 issued=667750572 start=667750575 end=667751391
+READ h=3 step=171 issued=667750811 start=667750811 end=667751652
+READ h=4 step=172 issued=667751057 start=667751057 end=667751877
+READ h=5 step=173 issued=667751325 start=667751326 end=667752199
+READ h=6 step=174 issued=667751576 start=667751578 end=667752366
+READ h=7 step=175 issued=667751842 start=667751845 end=667752710
+READ h=0 step=176 issued=667752103 start=667752104 end=667752953
+READ h=1 step=177 issued=667752333 start=667752334 end=667753226
+READ h=2 step=178 issued=667752626 start=667752626 end=667753463
+READ h=3 step=179 issued=667752858 start=667752861 end=667753712
+READ h=4 step=180 issued=667753131 start=667753133 end=667754016
+READ h=5 step=181 issued=667753402 start=667753403 end=667754230
+READ h=6 step=182 issued=667753669 start=667753669 end=667754520
+READ h=7 step=183 issued=667753923 start=667753925 end=667754767
+READ h=0 step=184 issued=667754168 start=667754168 end=667755011
+READ h=1 step=185 issued=667754433 start=667754434 end=667755241
+READ h=2 step=186 issued=667754687 start=667754687 end=667755518
+READ h=3 step=187 issued=667754947 start=667754947 end=667755798
+READ h=4 step=188 issued=667755211 start=667755212 end=667756027
+READ h=5 step=189 issued=667755451 start=667755451 end=667756278
+READ h=6 step=190 issued=667755686 start=667755686 end=667756527
+READ h=7 step=191 issued=667755941 start=667755942 end=667756819
+READ h=0 step=192 issued=667756212 start=667756214 end=667756981
+READ h=1 step=193 issued=667756464 start=667756466 end=667757225
+READ h=2 step=194 issued=667756707 start=667756708 end=667757543
+READ h=3 step=195 issued=667756966 start=667756967 end=667757851
+READ h=4 step=196 issued=667757237 start=667757237 end=667758082
+READ h=5 step=197 issued=667757473 start=667757473 end=667758317
+READ h=6 step=198 issued=667757712 start=667757714 end=667758578
+READ h=7 step=199 issued=667757959 start=667757960 end=667758868
+READ h=0 step=200 issued=667758249 start=667758250 end=667759050
+READ h=1 step=201 issued=667758514 start=667758514 end=667759329
+READ h=2 step=202 issued=667758755 start=667758756 end=667759581
+READ h=3 step=203 issued=667759004 start=667759007 end=667759894
+READ h=4 step=204 issued=667759298 start=667759298 end=667760158
+READ h=5 step=205 issued=667759523 start=667759524 end=667760315
+  step 200/2502: loss=6.922781
+READ h=6 step=206 issued=667759767 start=667759767 end=667760590
+READ h=7 step=207 issued=667760019 start=667760019 end=667760885
+READ h=0 step=208 issued=667760292 start=667760294 end=667761202
+READ h=1 step=209 issued=667760569 start=667760570 end=667761453
+READ h=2 step=210 issued=667760819 start=667760822 end=667761601
+READ h=3 step=211 issued=667761045 start=667761046 end=667761845
+READ h=4 step=212 issued=667761295 start=667761297 end=667762189
+READ h=5 step=213 issued=667761561 start=667761562 end=667762459
+READ h=6 step=214 issued=667761821 start=667761822 end=667762684
+READ h=7 step=215 issued=667762099 start=667762099 end=667762913
+READ h=0 step=216 issued=667762335 start=667762335 end=667763153
+READ h=1 step=217 issued=667762649 start=667762649 end=667763503
+READ h=2 step=218 issued=667762890 start=667762890 end=667763678
+READ h=3 step=219 issued=667763135 start=667763136 end=667763981
+READ h=4 step=220 issued=667763374 start=667763374 end=667764262
+READ h=5 step=221 issued=667763618 start=667763620 end=667764474
+READ h=6 step=222 issued=667763874 start=667763874 end=667764716
+READ h=7 step=223 issued=667764142 start=667764145 end=667764993
+READ h=0 step=224 issued=667764412 start=667764414 end=667765324
+READ h=1 step=225 issued=667764701 start=667764702 end=667765424
+READ h=2 step=226 issued=667764946 start=667764946 end=667765808
+READ h=3 step=227 issued=667765175 start=667765177 end=667766025
+READ h=4 step=228 issued=667765433 start=667765433 end=667766328
+READ h=5 step=229 issued=667765669 start=667765671 end=667766572
+READ h=6 step=230 issued=667765965 start=667765965 end=667766795
+READ h=7 step=231 issued=667766230 start=667766232 end=667767070
+READ h=0 step=232 issued=667766478 start=667766480 end=667767331
+READ h=1 step=233 issued=667766757 start=667766757 end=667767598
+READ h=2 step=234 issued=667767012 start=667767013 end=667767856
+READ h=3 step=235 issued=667767257 start=667767257 end=667768109
+READ h=4 step=236 issued=667767510 start=667767510 end=667768377
+READ h=5 step=237 issued=667767771 start=667767772 end=667768614
+READ h=6 step=238 issued=667768046 start=667768046 end=667768851
+READ h=7 step=239 issued=667768293 start=667768294 end=667769157
+READ h=0 step=240 issued=667768541 start=667768544 end=667769377
+READ h=1 step=241 issued=667768822 start=667768825 end=667769670
+READ h=2 step=242 issued=667769052 start=667769054 end=667769827
+READ h=3 step=243 issued=667769292 start=667769292 end=667770165
+READ h=4 step=244 issued=667769583 start=667769583 end=667770420
+READ h=5 step=245 issued=667769828 start=667769830 end=667770721
+READ h=6 step=246 issued=667770113 start=667770113 end=667770920
+READ h=7 step=247 issued=667770361 start=667770363 end=667771110
+READ h=0 step=248 issued=667770599 start=667770600 end=667771451
+READ h=1 step=249 issued=667770846 start=667770846 end=667771685
+READ h=2 step=250 issued=667771107 start=667771110 end=667772002
+READ h=3 step=251 issued=667771379 start=667771379 end=667772098
+READ h=4 step=252 issued=667771613 start=667771615 end=667772461
+READ h=5 step=253 issued=667771888 start=667771890 end=667772760
+READ h=6 step=254 issued=667772157 start=667772157 end=667773006
+READ h=7 step=255 issued=667772423 start=667772423 end=667773205
+READ h=0 step=256 issued=667772656 start=667772656 end=667773502
+READ h=1 step=257 issued=667772902 start=667772903 end=667773744
+READ h=2 step=258 issued=667773175 start=667773175 end=667774019
+READ h=3 step=259 issued=667773423 start=667773423 end=667774287
+READ h=4 step=260 issued=667773666 start=667773667 end=667774545
+READ h=5 step=261 issued=667773960 start=667773963 end=667774791
+READ h=6 step=262 issued=667774201 start=667774201 end=667775065
+READ h=7 step=263 issued=667774455 start=667774458 end=667775309
+READ h=0 step=264 issued=667774724 start=667774725 end=667775568
+READ h=1 step=265 issued=667774970 start=667774972 end=667775843
+READ h=2 step=266 issued=667775226 start=667775228 end=667776112
+READ h=3 step=267 issued=667775472 start=667775474 end=667776175
+READ h=4 step=268 issued=667775768 start=667775769 end=667776610
+READ h=5 step=269 issued=667776003 start=667776004 end=667776828
+READ h=6 step=270 issued=667776291 start=667776292 end=667777150
+READ h=7 step=271 issued=667776595 start=667776595 end=667777435
+READ h=0 step=272 issued=667776824 start=667776825 end=667777575
+READ h=1 step=273 issued=667777057 start=667777057 end=667777908
+READ h=2 step=274 issued=667777278 start=667777280 end=667778044
+READ h=3 step=275 issued=667777569 start=667777571 end=667778404
+READ h=4 step=276 issued=667777862 start=667777865 end=667778725
+READ h=5 step=277 issued=667778082 start=667778082 end=667778975
+READ h=6 step=278 issued=667778364 start=667778364 end=667779200
+READ h=7 step=279 issued=667778606 start=667778607 end=667779459
+READ h=0 step=280 issued=667778852 start=667778853 end=667779752
+READ h=1 step=281 issued=667779135 start=667779135 end=667779999
+READ h=2 step=282 issued=667779400 start=667779400 end=667780237
+READ h=3 step=283 issued=667779650 start=667779653 end=667780460
+READ h=4 step=284 issued=667779902 start=667779903 end=667780773
+READ h=5 step=285 issued=667780188 start=667780192 end=667781081
+READ h=6 step=286 issued=667780437 start=667780438 end=667781199
+READ h=7 step=287 issued=667780680 start=667780680 end=667781489
+READ h=0 step=288 issued=667780914 start=667780916 end=667781806
+READ h=1 step=289 issued=667781200 start=667781200 end=667782116
+READ h=2 step=290 issued=667781482 start=667781482 end=667782280
+READ h=3 step=291 issued=667781739 start=667781739 end=667782568
+READ h=4 step=292 issued=667781971 start=667781977 end=667782785
+READ h=5 step=293 issued=667782236 start=667782236 end=667783114
+READ h=6 step=294 issued=667782522 start=667782522 end=667783364
+READ h=7 step=295 issued=667782793 start=667782793 end=667783636
+READ h=0 step=296 issued=667783020 start=667783020 end=667783753
+READ h=1 step=297 issued=667783248 start=667783248 end=667784081
+READ h=2 step=298 issued=667783533 start=667783533 end=667784380
+READ h=3 step=299 issued=667783794 start=667783796 end=667784641
+READ h=4 step=300 issued=667784076 start=667784076 end=667784903
+READ h=5 step=301 issued=667784306 start=667784306 end=667785115
+READ h=6 step=302 issued=667784547 start=667784550 end=667785410
+READ h=7 step=303 issued=667784801 start=667784803 end=667785677
+READ h=0 step=304 issued=667785091 start=667785091 end=667785958
+READ h=1 step=305 issued=667785333 start=667785337 end=667786173
+  step 300/2502: loss=6.911642
+READ h=2 step=306 issued=667785578 start=667785578 end=667786435
+READ h=3 step=307 issued=667785846 start=667785848 end=667786727
+READ h=4 step=308 issued=667786105 start=667786105 end=667786871
+READ h=5 step=309 issued=667786397 start=667786397 end=667787193
+READ h=6 step=310 issued=667786629 start=667786630 end=667787463
+READ h=7 step=311 issued=667786866 start=667786866 end=667787743
+READ h=0 step=312 issued=667787145 start=667787146 end=667787989
+READ h=1 step=313 issued=667787395 start=667787395 end=667788312
+READ h=2 step=314 issued=667787636 start=667787638 end=667788339
+READ h=3 step=315 issued=667787891 start=667787896 end=667788728
+READ h=4 step=316 issued=667788173 start=667788175 end=667789123
+READ h=5 step=317 issued=667788450 start=667788452 end=667789374
+READ h=6 step=318 issued=667788788 start=667788788 end=667789641
+READ h=7 step=319 issued=667789053 start=667789053 end=667789917
+READ h=0 step=320 issued=667789283 start=667789284 end=667790082
+READ h=1 step=321 issued=667789549 start=667789550 end=667790377
+READ h=2 step=322 issued=667789810 start=667789813 end=667790697
+READ h=3 step=323 issued=667790062 start=667790062 end=667790923
+READ h=4 step=324 issued=667790345 start=667790346 end=667791192
+READ h=5 step=325 issued=667790588 start=667790588 end=667791373
+READ h=6 step=326 issued=667790820 start=667790821 end=667791694
+READ h=7 step=327 issued=667791080 start=667791082 end=667791935
+READ h=0 step=328 issued=667791340 start=667791340 end=667792186
+READ h=1 step=329 issued=667791624 start=667791625 end=667792464
+READ h=2 step=330 issued=667791856 start=667791859 end=667792759
+READ h=3 step=331 issued=667792115 start=667792117 end=667792880
+READ h=4 step=332 issued=667792373 start=667792373 end=667805686
+READ h=5 step=333 issued=667792633 start=667792633 end=667816057
+READ h=7 step=335 issued=667799840 start=667799841 end=667824464
+READ h=6 step=334 issued=667792998 start=667793002 end=667824491
+READ h=1 step=337 issued=667805028 start=667805029 end=667827138
+READ h=0 step=336 issued=667803881 start=667803881 end=667833744
+READ h=2 step=338 issued=667806367 start=667806372 end=667853945
+READ h=3 step=339 issued=667809951 start=667809954 end=667854224
+READ h=4 step=340 issued=667814099 start=667814099 end=667854629
+READ h=5 step=341 issued=667816060 start=667816060 end=667854697
+READ h=7 step=343 issued=667829882 start=667829885 end=667854823
+READ h=6 step=342 issued=667824500 start=667824500 end=667854884
+READ h=0 step=344 issued=667845855 start=667845862 end=667855006
+READ h=1 step=345 issued=667853939 start=667853939 end=667855048
+READ h=2 step=346 issued=667854176 start=667854176 end=667855685
+READ h=3 step=347 issued=667854496 start=667854496 end=667856071
+READ h=4 step=348 issued=667854765 start=667854768 end=667856378
+READ h=5 step=349 issued=667855249 start=667855251 end=667856747
+READ h=6 step=350 issued=667855748 start=667855748 end=667856789
+READ h=7 step=351 issued=667856110 start=667856110 end=667857103
+READ h=0 step=352 issued=667856391 start=667856391 end=667857234
+READ h=1 step=353 issued=667856623 start=667856623 end=667857637
+READ h=2 step=354 issued=667856865 start=667856865 end=667857948
+READ h=3 step=355 issued=667857216 start=667857216 end=667858036
+READ h=4 step=356 issued=667857529 start=667857532 end=667858360
+READ h=5 step=357 issued=667857793 start=667857794 end=667858668
+READ h=6 step=358 issued=667858081 start=667858082 end=667858998
+READ h=7 step=359 issued=667858407 start=667858407 end=667859240
+READ h=0 step=360 issued=667858623 start=667858623 end=667859325
+READ h=1 step=361 issued=667858879 start=667858879 end=667859765
+READ h=2 step=362 issued=667859123 start=667859123 end=667859931
+READ h=3 step=363 issued=667859424 start=667859427 end=667860261
+READ h=4 step=364 issued=667859700 start=667859700 end=667860515
+READ h=5 step=365 issued=667859939 start=667859939 end=667860780
+READ h=6 step=366 issued=667860204 start=667860204 end=667861045
+READ h=7 step=367 issued=667860444 start=667860448 end=667861353
+READ h=0 step=368 issued=667860701 start=667860703 end=667861590
+READ h=1 step=369 issued=667860949 start=667860949 end=667861730
+READ h=2 step=370 issued=667861202 start=667861202 end=667862101
+READ h=3 step=371 issued=667861477 start=667861479 end=667862381
+READ h=4 step=372 issued=667861748 start=667861750 end=667862635
+READ h=5 step=373 issued=667862038 start=667862041 end=667862885
+READ h=6 step=374 issued=667862276 start=667862278 end=667863130
+READ h=7 step=375 issued=667862547 start=667862547 end=667863399
+READ h=0 step=376 issued=667862800 start=667862800 end=667863672
+READ h=1 step=377 issued=667863065 start=667863065 end=667863899
+READ h=2 step=378 issued=667863330 start=667863330 end=667864149
+READ h=3 step=379 issued=667863573 start=667863576 end=667864414
+READ h=4 step=380 issued=667863819 start=667863819 end=667864670
+READ h=5 step=381 issued=667864098 start=667864100 end=667864920
+READ h=6 step=382 issued=667864338 start=667864340 end=667865156
+READ h=7 step=383 issued=667864575 start=667864575 end=667865420
+READ h=0 step=384 issued=667864846 start=667864846 end=667865696
+READ h=1 step=385 issued=667865114 start=667865114 end=667865876
+READ h=2 step=386 issued=667865351 start=667865351 end=667866172
+READ h=3 step=387 issued=667865595 start=667865598 end=667866420
+READ h=4 step=388 issued=667865859 start=667865859 end=667866769
+READ h=5 step=389 issued=667866133 start=667866133 end=667866859
+READ h=6 step=390 issued=667866359 start=667866362 end=667867174
+READ h=7 step=391 issued=667866635 start=667866635 end=667867470
+READ h=0 step=392 issued=667866867 start=667866868 end=667867760
+READ h=1 step=393 issued=667867148 start=667867148 end=667868041
+READ h=2 step=394 issued=667867419 start=667867419 end=667868225
+READ h=3 step=395 issued=667867652 start=667867654 end=667868527
+READ h=4 step=396 issued=667867906 start=667867910 end=667868777
+READ h=5 step=397 issued=667868193 start=667868196 end=667869061
+READ h=6 step=398 issued=667868470 start=667868470 end=667869275
+READ h=7 step=399 issued=667868710 start=667868710 end=667869555
+READ h=0 step=400 issued=667868956 start=667868958 end=667869841
+READ h=1 step=401 issued=667869219 start=667869219 end=667870112
+READ h=2 step=402 issued=667869492 start=667869492 end=667870281
+READ h=3 step=403 issued=667869753 start=667869756 end=667870595
+READ h=4 step=404 issued=667869994 start=667869995 end=667870847
+READ h=5 step=405 issued=667870264 start=667870264 end=667871148
+  step 400/2502: loss=6.899930
+READ h=6 step=406 issued=667870545 start=667870545 end=667871308
+READ h=7 step=407 issued=667870775 start=667870775 end=667871617
+READ h=0 step=408 issued=667871027 start=667871027 end=667871910
+READ h=1 step=409 issued=667871295 start=667871295 end=667872171
+READ h=2 step=410 issued=667871571 start=667871571 end=667872432
+READ h=3 step=411 issued=667871801 start=667871801 end=667872595
+READ h=4 step=412 issued=667872055 start=667872058 end=667872934
+READ h=5 step=413 issued=667872346 start=667872349 end=667873217
+READ h=6 step=414 issued=667872600 start=667872600 end=667873454
+READ h=7 step=415 issued=667872870 start=667872870 end=667873718
+READ h=0 step=416 issued=667873091 start=667873094 end=667873971
+READ h=1 step=417 issued=667873369 start=667873369 end=667874245
+READ h=2 step=418 issued=667873638 start=667873641 end=667874500
+READ h=3 step=419 issued=667873899 start=667873899 end=667874765
+READ h=4 step=420 issued=667874177 start=667874177 end=667875040
+READ h=5 step=421 issued=667874410 start=667874412 end=667875326
+READ h=6 step=422 issued=667874684 start=667874686 end=667875598
+READ h=7 step=423 issued=667874938 start=667874938 end=667875708
+READ h=0 step=424 issued=667875213 start=667875216 end=667876043
+READ h=1 step=425 issued=667875473 start=667875473 end=667876352
+READ h=2 step=426 issued=667875737 start=667875738 end=667876636
+READ h=3 step=427 issued=667876032 start=667876033 end=667876795
+READ h=4 step=428 issued=667876259 start=667876259 end=667877083
+READ h=5 step=429 issued=667876500 start=667876501 end=667877360
+READ h=6 step=430 issued=667876777 start=667876778 end=667877663
+READ h=7 step=431 issued=667877064 start=667877064 end=667877814
+READ h=0 step=432 issued=667877316 start=667877316 end=667878112
+READ h=1 step=433 issued=667877548 start=667877550 end=667878365
+READ h=2 step=434 issued=667877801 start=667877801 end=667878696
+READ h=3 step=435 issued=667878098 start=667878098 end=667878944
+READ h=4 step=436 issued=667878335 start=667878335 end=667879074
+READ h=5 step=437 issued=667878583 start=667878584 end=667879427
+READ h=6 step=438 issued=667878819 start=667878821 end=667879718
+READ h=7 step=439 issued=667879094 start=667879094 end=667879952
+READ h=0 step=440 issued=667879393 start=667879393 end=667880202
+READ h=1 step=441 issued=667879639 start=667879642 end=667880389
+READ h=2 step=442 issued=667879868 start=667879869 end=667880788
+READ h=3 step=443 issued=667880142 start=667880144 end=667881051
+READ h=4 step=444 issued=667880400 start=667880400 end=667881295
+READ h=5 step=445 issued=667880654 start=667880654 end=667881355
+READ h=6 step=446 issued=667880892 start=667880893 end=667881793
+READ h=7 step=447 issued=667881166 start=667881166 end=667882160
+READ h=0 step=448 issued=667881441 start=667881441 end=667882323
+READ h=1 step=449 issued=667881778 start=667881778 end=667882537
+READ h=2 step=450 issued=667882006 start=667882007 end=667882834
+READ h=3 step=451 issued=667882250 start=667882250 end=667883159
+READ h=4 step=452 issued=667882529 start=667882532 end=667883417
+READ h=5 step=453 issued=667882815 start=667882816 end=667883657
+READ h=6 step=454 issued=667883050 start=667883050 end=667883879
+READ h=7 step=455 issued=667883278 start=667883280 end=667884172
+READ h=0 step=456 issued=667883551 start=667883551 end=667884434
+READ h=1 step=457 issued=667883842 start=667883845 end=667884723
+READ h=2 step=458 issued=667884094 start=667884095 end=667884841
+READ h=3 step=459 issued=667884361 start=667884361 end=667885117
+READ h=4 step=460 issued=667884596 start=667884597 end=667885419
+READ h=5 step=461 issued=667884860 start=667884862 end=667885760
+READ h=6 step=462 issued=667885160 start=667885160 end=667885960
+READ h=7 step=463 issued=667885388 start=667885388 end=667886216
+READ h=0 step=464 issued=667885616 start=667885616 end=667886484
+READ h=1 step=465 issued=667885865 start=667885867 end=667886801
+READ h=3 step=467 issued=667886420 start=667886420 end=667887109
+READ h=2 step=466 issued=667886178 start=667886179 end=667887118
+READ h=4 step=468 issued=667886661 start=667886661 end=667887404
+READ h=5 step=469 issued=667886922 start=667886922 end=667887810
+READ h=6 step=470 issued=667887196 start=667887196 end=667888157
+READ h=7 step=471 issued=667887568 start=667887568 end=667888382
+READ h=0 step=472 issued=667887847 start=667887847 end=667888668
+READ h=1 step=473 issued=667888083 start=667888083 end=667888961
+READ h=2 step=474 issued=667888307 start=667888307 end=667889240
+READ h=3 step=475 issued=667888567 start=667888569 end=667889276
+READ h=4 step=476 issued=667888845 start=667888845 end=667889743
+READ h=5 step=477 issued=667889113 start=667889114 end=667889992
+READ h=6 step=478 issued=667889408 start=667889410 end=667890321
+READ h=7 step=479 issued=667889714 start=667889714 end=667890526
+READ h=0 step=480 issued=667889951 start=667889951 end=667890792
+READ h=1 step=481 issued=667890197 start=667890199 end=667890946
+READ h=2 step=482 issued=667890434 start=667890434 end=667891257
+READ h=3 step=483 issued=667890735 start=667890738 end=667891573
+READ h=4 step=484 issued=667890992 start=667890992 end=667891837
+READ h=5 step=485 issued=667891267 start=667891267 end=667892079
+READ h=6 step=486 issued=667891485 start=667891485 end=667892319
+READ h=7 step=487 issued=667891711 start=667891711 end=667892584
+READ h=0 step=488 issued=667891982 start=667891984 end=667892873
+READ h=1 step=489 issued=667892258 start=667892258 end=667893072
+READ h=2 step=490 issued=667892523 start=667892523 end=667893355
+READ h=3 step=491 issued=667892794 start=667892794 end=667893645
+READ h=4 step=492 issued=667893024 start=667893024 end=667893837
+READ h=5 step=493 issued=667893309 start=667893309 end=667894180
+READ h=6 step=494 issued=667893540 start=667893540 end=667894442
+READ h=7 step=495 issued=667893793 start=667893795 end=667894584
+READ h=0 step=496 issued=667894077 start=667894080 end=667894955
+READ h=1 step=497 issued=667894323 start=667894323 end=667895177
+READ h=2 step=498 issued=667894608 start=667894609 end=667895482
+READ h=3 step=499 issued=667894897 start=667894897 end=667895731
+READ h=4 step=500 issued=667895136 start=667895136 end=667895993
+READ h=5 step=501 issued=667895389 start=667895389 end=667896247
+READ h=6 step=502 issued=667895633 start=667895635 end=667896480
+READ h=7 step=503 issued=667895904 start=667895906 end=667896742
+READ h=0 step=504 issued=667896158 start=667896158 end=667896995
+READ h=1 step=505 issued=667896419 start=667896420 end=667897278
+  step 500/2502: loss=6.893147
+READ h=2 step=506 issued=667896663 start=667896665 end=667897519
+READ h=3 step=507 issued=667896925 start=667896929 end=667897821
+READ h=4 step=508 issued=667897171 start=667897171 end=667897948
+READ h=5 step=509 issued=667897434 start=667897437 end=667898307
+READ h=6 step=510 issued=667897716 start=667897720 end=667898650
+READ h=7 step=511 issued=667897964 start=667897965 end=667898726
+READ h=0 step=512 issued=667898273 start=667898273 end=667899100
+READ h=1 step=513 issued=667898509 start=667898510 end=667899359
+READ h=2 step=514 issued=667898744 start=667898744 end=667899630
+READ h=3 step=515 issued=667899059 start=667899062 end=667899937
+READ h=4 step=516 issued=667899318 start=667899318 end=667900094
+READ h=5 step=517 issued=667899555 start=667899556 end=667900394
+READ h=6 step=518 issued=667899806 start=667899809 end=667900674
+READ h=7 step=519 issued=667900074 start=667900074 end=667900973
+READ h=0 step=520 issued=667900396 start=667900396 end=667901222
+READ h=1 step=521 issued=667900631 start=667900631 end=667901516
+READ h=2 step=522 issued=667900866 start=667900866 end=667901623
+READ h=3 step=523 issued=667901122 start=667901123 end=667907252
+READ h=4 step=524 issued=667901414 start=667901414 end=667916994
+READ h=5 step=525 issued=667901676 start=667901676 end=667927045
+READ h=7 step=527 issued=667907375 start=667907375 end=667929889
+READ h=6 step=526 issued=667902418 start=667902436 end=667929926
+READ h=0 step=528 issued=667910137 start=667910141 end=667936940
+READ h=1 step=529 issued=667913426 start=667913427 end=667952803
+READ h=2 step=530 issued=667916617 start=667916618 end=667968678
+READ h=3 step=531 issued=667918040 start=667918040 end=667968921
+READ h=4 step=532 issued=667922793 start=667922796 end=667969268
+READ h=5 step=533 issued=667927047 start=667927047 end=667969622
+READ h=6 step=534 issued=667929964 start=667929969 end=667969622
+READ h=0 step=536 issued=667944459 start=667944459 end=667969683
+READ h=7 step=535 issued=667935202 start=667935210 end=667969688
+READ h=1 step=537 issued=667956291 start=667956292 end=667969721
+READ h=2 step=538 issued=667968679 start=667968679 end=667970051
+READ h=3 step=539 issued=667968968 start=667968970 end=667970715
+READ h=4 step=540 issued=667969268 start=667969268 end=667971314
+READ h=6 step=542 issued=667970002 start=667970006 end=667971365
+READ h=5 step=541 issued=667969622 start=667969622 end=667971454
+READ h=0 step=544 issued=667971013 start=667971014 end=667971909
+READ h=7 step=543 issued=667970634 start=667970634 end=667971969
+READ h=1 step=545 issued=667971279 start=667971279 end=667972275
+READ h=2 step=546 issued=667971581 start=667971582 end=667972784
+READ h=3 step=547 issued=667971961 start=667971961 end=667972997
+READ h=4 step=548 issued=667972301 start=667972307 end=667973111
+READ h=5 step=549 issued=667972639 start=667972639 end=667973469
+READ h=6 step=550 issued=667972860 start=667972860 end=667973764
+READ h=7 step=551 issued=667973156 start=667973156 end=667974024
+READ h=0 step=552 issued=667973433 start=667973434 end=667974267
+READ h=1 step=553 issued=667973672 start=667973672 end=667974497
+READ h=2 step=554 issued=667973919 start=667973922 end=667974772
+READ h=3 step=555 issued=667974189 start=667974189 end=667975063
+READ h=4 step=556 issued=667974456 start=667974458 end=667975324
+READ h=5 step=557 issued=667974709 start=667974711 end=667975542
+READ h=6 step=558 issued=667974953 start=667974955 end=667975781
+READ h=7 step=559 issued=667975215 start=667975216 end=667976118
+READ h=0 step=560 issued=667975505 start=667975508 end=667976374
+READ h=1 step=561 issued=667975772 start=667975774 end=667976617
+READ h=2 step=562 issued=667976022 start=667976022 end=667976844
+READ h=3 step=563 issued=667976262 start=667976263 end=667977112
+READ h=4 step=564 issued=667976556 start=667976561 end=667977393
+READ h=5 step=565 issued=667976809 start=667976812 end=667977693
+READ h=6 step=566 issued=667977069 start=667977070 end=667977910
+READ h=7 step=567 issued=667977315 start=667977317 end=667978128
+READ h=0 step=568 issued=667977564 start=667977569 end=667978424
+READ h=1 step=569 issued=667977819 start=667977820 end=667978699
+READ h=2 step=570 issued=667978109 start=667978110 end=667978948
+READ h=3 step=571 issued=667978353 start=667978355 end=667979124
+READ h=4 step=572 issued=667978599 start=667978602 end=667979425
+READ h=5 step=573 issued=667978880 start=667978880 end=667979735
+READ h=6 step=574 issued=667979124 start=667979124 end=667979957
+READ h=7 step=575 issued=667979381 start=667979382 end=667980190
+READ h=0 step=576 issued=667979626 start=667979629 end=667980468
+READ h=1 step=577 issued=667979866 start=667979867 end=667980742
+READ h=2 step=578 issued=667980148 start=667980150 end=667980985
+READ h=3 step=579 issued=667980404 start=667980404 end=667981238
+READ h=4 step=580 issued=667980645 start=667980645 end=667981503
+READ h=5 step=581 issued=667980903 start=667980903 end=667981768
+READ h=6 step=582 issued=667981167 start=667981168 end=667982034
+READ h=7 step=583 issued=667981429 start=667981430 end=667982316
+READ h=0 step=584 issued=667981682 start=667981682 end=667982512
+READ h=1 step=585 issued=667981949 start=667981949 end=667982780
+READ h=2 step=586 issued=667982200 start=667982203 end=667983046
+READ h=3 step=587 issued=667982471 start=667982472 end=667983329
+READ h=4 step=588 issued=667982763 start=667982763 end=667983571
+READ h=5 step=589 issued=667982993 start=667982996 end=667983855
+READ h=6 step=590 issued=667983237 start=667983243 end=667984102
+READ h=7 step=591 issued=667983504 start=667983505 end=667984362
+READ h=0 step=592 issued=667983754 start=667983755 end=667984643
+READ h=1 step=593 issued=667984019 start=667984020 end=667984803
+READ h=2 step=594 issued=667984299 start=667984302 end=667985167
+READ h=3 step=595 issued=667984543 start=667984543 end=667985391
+READ h=4 step=596 issued=667984804 start=667984807 end=667985665
+READ h=5 step=597 issued=667985067 start=667985068 end=667985877
+READ h=6 step=598 issued=667985304 start=667985304 end=667986157
+READ h=7 step=599 issued=667985582 start=667985582 end=667986412
+READ h=0 step=600 issued=667985826 start=667985828 end=667986679
+READ h=1 step=601 issued=667986089 start=667986089 end=667986880
+READ h=2 step=602 issued=667986329 start=667986331 end=667987135
+READ h=3 step=603 issued=667986604 start=667986604 end=667987406
+READ h=4 step=604 issued=667986857 start=667986859 end=667987730
+READ h=5 step=605 issued=667987109 start=667987109 end=667987830
+  step 600/2502: loss=6.901289
+  PROBE: 260 ms/step (median of 400 steps 201..600, ViT-Tiny (ImageNet-1k))
+  PROBE-SPREAD: min=212 med=260 p90=331 mean=569 ms/step (starvation wait = med-min = 48 ms)
+  PROBE-DUMP: 400 steps → runs/2026-09-11-imagenet-probe-postfix/diag_vit_w8_nocmdbuf.steps.tsv
+READ h=6 step=606 issued=667987355 start=667987358 end=667988243
+READ h=7 step=607 issued=667987614 start=667987614 end=667988388
+READ h=0 step=608 issued=667987855 start=667987857 end=667988709

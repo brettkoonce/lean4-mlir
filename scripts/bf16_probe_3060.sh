@@ -99,7 +99,11 @@ probe () {  # net exe variant prec bs arm extra
   local extraenv=()
   [ -n "$extra" ] && read -r -a extraenv <<< "$extra"
 
-  echo "  ▶ $net/$prec/$arm (variant $var, bs $bs, workers $WORKERS) ..."
+  # The row's own SHIM_WORKERS (in `extra`) overrides the uniform one on the env line below, so
+  # record the EFFECTIVE count — the 2026-09-10 table said "8" on rows that ran at 4.
+  local effw; effw="$(grep -oE 'SHIM_WORKERS=[0-9]+' <<< "$extra" | tail -1 | cut -d= -f2)"
+  [ -z "$effw" ] && effw="$WORKERS"
+  echo "  ▶ $net/$prec/$arm (variant $var, bs $bs, workers $effw) ..."
   env CUDA_VISIBLE_DEVICES="$DEVS" PJRT_PLUGIN="$PLUG" SHIM_PYTHON="$PY" \
       PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 PJRT_FFI_RESIDENT=1 SHIM_WORKERS="$WORKERS" \
       LEAN_MLIR_VARIANT="$var" LEAN_MLIR_BATCH="$bs" \
@@ -128,7 +132,7 @@ probe () {  # net exe variant prec bs arm extra
     note=""
   fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$net" "$var" "$prec" "$arm" "$bs" "$WORKERS" \
+    "$net" "$var" "$prec" "$arm" "$bs" "$effw" \
     "$med" "${min:-}" "${p90:-}" "${mean:-}" "${wait:-}" "${spe:-}" "$((SECONDS-t0))" "$note" >> "$OUT"
   echo "    → ${med} ms/step (min ${min:-?}, wait ${wait:-?} ms, ${spe:-?} steps/ep, $((SECONDS-t0))s)"
   rm -f "$log"

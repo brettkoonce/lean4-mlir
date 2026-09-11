@@ -1848,7 +1848,11 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   let probeTrace := (← IO.getEnv "LEAN_MLIR_PROBE_DUMP").isSome
   let mut probeTimes : Array Nat := #[]
   let mut probeWaits : Array Nat := #[]   -- ms spent in `IO.wait` on the prefetched batch, per step
+  let mut probeIssues : Array Nat := #[]  -- ms spent issuing the next reads (buffer alloc + spawn)
+  let mut probeInvokes : Array Nat := #[] -- ms in the train-step invoke itself
   let mut lastWaitMs : Nat := 0
+  let mut lastIssueMs : Nat := 0
+  let mut lastInvokeMs : Nat := 0
   -- LEAN_MLIR_MAX_EPOCHS: same opt-in cap as `VerifiedNet.train` (absent → full run).
   let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
     | some n => min n cfg.epochs
@@ -2157,12 +2161,14 @@ gate's control, not a configuration.")
           -- step rather than needing to know it resumed.
           -- ⚠ The `LEAN_MLIR_MAX_STEPS` probe still `return`s mid-loop with reads outstanding; that
           -- path is a measurement, not a training run, and it exits through the same reap.
+          let is0 ← IO.monoMsNow
           for j in [1:pfDepth+1] do
             let sj := s + j
             if sj < nEpochs * nb then
               let sl := sj % nStr
               if (inflight[sl]!).isNone then
                 inflight := inflight.set! sl (some (← issueRead sj))
+          lastIssueMs := (← IO.monoMsNow) - is0
           -- ⚠ Unwrapped AFTER the next reads are issued, so a mid-epoch read error still leaves the
           -- pipeline in a consistent state — it throws here with at most n orphaned tasks, which
           -- the process exit reaps. Unwrapping first would throw with nothing in flight and make
@@ -2198,6 +2204,7 @@ gate's control, not a configuration.")
                       else F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
           | _ => pure xbRaw
         xb := x; yb := if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs
+      let inv0 ← IO.monoMsNow
       let out ← if replicas > 1
         -- ⚠ `nDrop` is the SHARDED TAIL. The drop masks are per-EXAMPLE, so under data parallelism
         -- replica r must get mask rows [r*bs, (r+1)*bs) — the same split `x` gets — not a copy of
@@ -2210,6 +2217,7 @@ gate's control, not a configuration.")
                gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident nShardTail.toUSize
         else LowererSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
                bs.toUSize d0.toUSize nc.toUSize nResident
+      lastInvokeMs := (← IO.monoMsNow) - inv0
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
       let stepLoss := F32.read out (nRegions * net.nParams).toUSize
       epochLossSum := epochLossSum + stepLoss
@@ -2281,6 +2289,8 @@ gate's control, not a configuration.")
           let t ← IO.monoMsNow
           probeTimes := probeTimes.push (t - probePrev); probePrev := t
           probeWaits := probeWaits.push lastWaitMs
+          probeIssues := probeIssues.push lastIssueMs
+          probeInvokes := probeInvokes.push lastInvokeMs
           if bi == ps then
             -- robust: median per-step time (drops the cold-cache / GC-blip outliers)
             let sorted := probeTimes.qsort Nat.blt
@@ -2296,13 +2306,14 @@ gate's control, not a configuration.")
             IO.println s!"  PROBE: {pmed} ms/step (median of {sorted.size} steps {probeWarm+1}..{ps}, {net.name})"
             IO.println s!"  PROBE-SPREAD: min={pmin} med={pmed} p90={p90} mean={psum / sorted.size} ms/step (starvation wait = med-min = {pmed - pmin} ms)"
             -- ⭐ LEAN_MLIR_PROBE_DUMP=<file>: the per-step series behind those four numbers, one
-            -- `step<TAB>ms<TAB>wait_ms` line each, in step order (`wait_ms` = time blocked on the
-            -- prefetched batch; 0 off the ImageNet path). The summary cannot say WHICH steps are
+            -- `step<TAB>ms<TAB>wait_ms<TAB>issue_ms<TAB>invoke_ms` line each, in step order
+            -- (`wait_ms` = blocked on the prefetched batch, `issue_ms` = allocating + spawning the
+            -- next reads, `invoke_ms` = the train step itself; the first two are 0 off ImageNet). The summary cannot say WHICH steps are
             -- the slow ones, and with a round-robin over n producers "every n-th step" is the tell
             -- for one slow producer that no quantile shows.
             if let some path ← IO.getEnv "LEAN_MLIR_PROBE_DUMP" then
               let lines := probeTimes.mapIdx fun i ms =>
-                s!"{probeWarm + 1 + i}\t{ms}\t{probeWaits[i]?.getD 0}"
+                s!"{probeWarm + 1 + i}\t{ms}\t{probeWaits[i]?.getD 0}\t{probeIssues[i]?.getD 0}\t{probeInvokes[i]?.getD 0}"
               IO.FS.writeFile path (String.intercalate "\n" lines.toList ++ "\n")
               IO.println s!"  PROBE-DUMP: {probeTimes.size} steps → {path}"
             (← IO.getStdout).flush

@@ -46,13 +46,14 @@ from pathlib import Path
 
 PER_EPOCH_OVERHEAD_S = 37.5
 
-# The SHIM_WORKERS each job conf actually sets, so the table reports what a row RAN at
-# rather than the sweep-wide default the TSV records. Kept here because the probe script
-# writes `$WORKERS` into the TSV even when the row's `extra` field overrode it.
+# Fallback worker counts for TSVs written BEFORE 2026-09-11, when `bf16_probe_3060.sh`
+# recorded the sweep-wide `$WORKERS` even on rows whose `extra` field overrode it. Since
+# then the TSV's `workers` column is the count the row actually ran at and is preferred;
+# this map is consulted only when that column is empty.
 ROW_WORKERS = {
-    "r34": 8, "r50": 8, "enetema": 8, "vits": 8, "vitb": 8,
-    "mnv2": 4, "mnv4": 4, "cnx": 4, "cnxs": 4, "cnxb": 4, "vit": 4,
-    "vitema": 4, "r50a3": 4,
+    "r34": 8, "r50": 8, "enetema": 8, "vits": 8, "vitb": 8, "vit": 8,
+    "mnv2": 4, "mnv4": 4, "cnx": 4, "cnxs": 4, "cnxb": 4,
+    "vitema": 4, "r50a3": 4, "r50a3w8": 8,
 }
 
 # probe `net` column -> (conf basename, precision that conf trains)
@@ -62,7 +63,10 @@ NET_CONF = {
     ("r50", "f32"): "r50-2018-4gpu",
     ("r50", "bf16"): "r50-2018-bf16-4gpu",
     ("r50a3", "f32"): "r50-a3-wxclip-4gpu",
-    ("r50a3", "bf16"): "r50-a3-wxclip-bf16-4gpu",
+    # ⚠ the bf16 conf runs SHIM_WORKERS=8 where its f32 twin runs 4, so it is quoted from
+    # the `r50a3w8` row (same graph, the conf's own producer count), not from `r50a3`'s
+    # bf16 row — that one exists so the f32 conf's "bf16 twin" compares like with like.
+    ("r50a3w8", "bf16"): "r50-a3-wxclip-bf16-4gpu",
     ("mnv2", "f32"): "mnv2-default-4gpu",
     ("mnv4", "f32"): "mnv4-default-4gpu",
     ("enetema", "f32"): "enet-default-4gpu",
@@ -74,6 +78,10 @@ NET_CONF = {
     ("vits", "f32"): "vits-default-g512-4gpu",
     ("vitb", "f32"): "vitb-default-g512-4gpu",
 }
+
+# A row whose f32/bf16 twin lives under another net key (the RSB-A3 bf16 conf's 8-producer row
+# pairs with the f32 conf's 4-producer row — same graph, the conf's own producer count each).
+TWIN_ALIAS = {"r50a3w8": "r50a3"}
 
 
 def conf_facts(name, jobs_dir):
@@ -141,9 +149,7 @@ def main():
     for r in sorted(rows, key=lambda r: (r["net"], r["prec"], r["arm"])):
         med, mean = int(r["med_ms"]), int(r["mean_ms"] or r["med_ms"])
         flag = "**starving**" if mean > 1.15 * med else ""
-        # ⚠ the TSV's `workers` column is the sweep-wide default; a row that set
-        # SHIM_WORKERS in its `extra` field really ran at that value instead.
-        w = ROW_WORKERS.get(r["net"], r["workers"])
+        w = r.get("workers") or ROW_WORKERS.get(r["net"], "?")
         if args.markdown:
             print(f"| {r['net']} | `{r['variant']}` | {r['prec']} | {w} | {med} | "
                   f"**{mean}** | {r.get('p90_ms') or '-'} | {r['steps_ep']} | {flag} |")
@@ -178,25 +184,39 @@ def main():
                   f"'{r['variant']}' — DIFFERENT GRAPHS, not writing an ETA")
             continue
         ms, spe = ms_of(r), int(r["steps_ep"])
-        med = int(r["med_ms"])
-        h = hours(spe, ms, ep)
-        s = f'~{fmt(h)} on {args.box} ({ms} ms/step mean, {ep} ep'
-        # ⚠ Only annotate a twin that is genuinely THIS graph in the other precision.
-        # `bf16_probe_3060.sh`'s `vitema` row fills its f32 slot with the non-EMA
-        # `adamdp128x4wxclipdrop` because no EMA f32 render exists, so a naive
-        # same-net lookup pits EMA bf16 against a different graph and calls the
-        # difference a precision speedup.
-        twin = fed.get((net, "bf16" if prec == "f32" else "f32"))
+        med, mean = int(r["med_ms"]), int(r["mean_ms"] or r["med_ms"])
+        label = "median" if args.stat == "med" else "mean"
+        stall_note = "periodic stalls, see runs/2026-09-11-imagenet-probe-postfix"
+        # ⭐ bf16 FIRST, f32 after (the user's call, 2026-09-11): the string reads
+        # "bf16 ~55 h / f32 ~57 h on … (249 / 259 ms/step median, 300 ep)" whichever precision
+        # the conf trains — the conf's own precision is in its variant, the string is the plan.
+        # ⚠ Only a twin that is genuinely THIS graph in the other precision qualifies:
+        # `bf16_probe_3060.sh`'s `vitema` row fills its f32 slot with the non-EMA graph, so a
+        # naive same-net lookup would pit EMA bf16 against a different graph.
+        other = "bf16" if prec == "f32" else "f32"
+        twin = fed.get((net, other)) or fed.get((TWIN_ALIAS.get(net, "∅"), other))
         if twin is not None:
             a, b = (r["variant"], twin["variant"]) if prec == "f32" else (twin["variant"], r["variant"])
-            if b == a + "bf16":
-                th = hours(int(twin["steps_ep"]), ms_of(twin), ep)
-                s += f'; the {"bf16" if prec == "f32" else "f32"} twin ~{fmt(th)}'
-            else:
-                s += f'; no f32/bf16 twin for this graph'
-        s += ")"
-        if ms > 1.15 * med:
-            s += f" ⚠ feed-bound: median is {med}, mean is what schedules"
+            if b != a + "bf16":
+                twin = None
+        if twin is not None:
+            rb, rf = (r, twin) if prec == "bf16" else (twin, r)
+            hb = hours(int(rb["steps_ep"]), ms_of(rb), ep)
+            hf = hours(int(rf["steps_ep"]), ms_of(rf), ep)
+            s = (f'bf16 ~{fmt(hb)} / f32 ~{fmt(hf)} on {args.box} '
+                 f'({ms_of(rb)} / {ms_of(rf)} ms/step {label}, {ep} ep)')
+            mb, mf = int(rb["mean_ms"] or rb["med_ms"]), int(rf["mean_ms"] or rf["med_ms"])
+            stalls = mb > 1.15 * int(rb["med_ms"]) or mf > 1.15 * int(rf["med_ms"])
+            if stalls and args.stat == "med":
+                s += f" ⚠ today's means {mb} / {mf}: {stall_note}"
+            elif stalls:
+                s += f" ⚠ mean ≫ median ({rb['med_ms']} / {rf['med_ms']}): {stall_note}"
+        else:
+            h = hours(spe, ms, ep)
+            s = f'{prec} ~{fmt(h)} on {args.box} ({ms} ms/step {label}, {ep} ep; no {other} twin for this graph)'
+            if mean > 1.15 * med:
+                s += (f" ⚠ today's mean is {mean}: {stall_note}" if args.stat == "med"
+                      else f" ⚠ mean ≫ median ({med}): {stall_note}")
         print(f'  {conf:<26} ETA="{s}"')
 
 

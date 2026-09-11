@@ -1,0 +1,26 @@
+net	variant	prec	arm	bs	workers	med_ms	min_ms	p90_ms	mean_ms	wait_ms	steps_ep	elapsed_s	note
+r34	momdp64	f32	fed	64	8	225	216	236	226	9	5004	232	
+r34	momdp64bf16	bf16	fed	64	8	154	137	164	154	17	5004	197	
+r50	momdp64	f32	fed	64	8	358	351	374	361	7	5004	344	
+r50	momdp64bf16	bf16	fed	64	8	222	219	230	223	3	5004	269	
+mnv2	rmsdp64	f32	fed	64	4	177	159	188	177	18	5004	186	
+mnv2	rmsdp64bf16	bf16	fed	64	4	114	93	128	114	21	5004	174	
+mnv4	adamdp64	f32	fed	64	4	142	140	198	288	2	5004	231	
+mnv4	adamdp64bf16	bf16	fed	64	4	128	88	143	127	40	5004	195	
+enetema	emarmsdp64dropdo	f32	fed	64	8	221	188	232	220	33	5004	253	
+enetema	emarmsdp64dropdobf16	bf16	fed	64	8	149	112	170	279	37	5004	291	
+cnx	adamdpwxclipdrop	f32	fed	32	4	205	197	208	204	8	10009	205	
+cnx	adamdpwxclipdropbf16	bf16	fed	32	4	124	120	126	124	4	10009	172	
+cnxs	adamdpwxclipdrop	f32	fed	32	4	339	332	340	338	7	10009	291	
+cnxs	adamdpwxclipdropbf16	bf16	fed	32	4	187	183	190	187	4	10009	216	
+cnxb	adamdpwxclipdrop	f32	fed	32	4	513	507	514	513	6	10009	399	
+cnxb	adamdpwxclipdropbf16	bf16	fed	32	4	300	292	302	299	8	10009	284	
+vit	adamdp128x4wxclipdrop	f32	fed	128	8	259	215	300	539	44	2502	389	
+vit	adamdp128x4wxclipdropbf16	bf16	fed	128	8	249	136	382	544	113	2502	446	
+vits	adamdp128x4wxclipdrop	f32	fed	128	8	509	494	512	505	15	2502	420	
+vits	adamdp128x4wxclipdropbf16	bf16	fed	128	8	310	281	390	694	29	2502	478	
+vitb	adamdp128x4wxclipdrop	f32	fed	128	8	1359	1344	1360	1358	15	2502	938	
+vitb	adamdp128x4wxclipdropbf16	bf16	fed	128	8	799	785	803	797	14	2502	600	
+r50a3	lambaccdp8x64wxclipbce	f32	fed	64	4	214	206	218	213	8	5000	227	
+r50a3	lambaccdp8x64wxclipbcebf16	bf16	fed	64	4	139	135	145	139	4	5000	190	
+r50a3w8	lambaccdp8x64wxclipbcebf16	bf16	fed	64	8	152	141	159	270	11	5000	268	

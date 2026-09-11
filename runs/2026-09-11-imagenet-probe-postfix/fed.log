@@ -1,0 +1,104 @@
+  ▶ r34/f32/fed (variant momdp64, bs 64, workers 8) ...
+    → 225 ms/step (min 216, wait 9 ms, 5004 steps/ep, 232s)
+  ▶ r34/bf16/fed (variant momdp64bf16, bs 64, workers 8) ...
+    → 154 ms/step (min 137, wait 17 ms, 5004 steps/ep, 197s)
+  ▶ r50/f32/fed (variant momdp64, bs 64, workers 8) ...
+    → 358 ms/step (min 351, wait 7 ms, 5004 steps/ep, 344s)
+  ▶ r50/bf16/fed (variant momdp64bf16, bs 64, workers 8) ...
+    → 222 ms/step (min 219, wait 3 ms, 5004 steps/ep, 269s)
+  ▶ mnv2/f32/fed (variant rmsdp64, bs 64, workers 4) ...
+    → 177 ms/step (min 159, wait 18 ms, 5004 steps/ep, 186s)
+  ▶ mnv2/bf16/fed (variant rmsdp64bf16, bs 64, workers 4) ...
+    → 114 ms/step (min 93, wait 21 ms, 5004 steps/ep, 174s)
+  ▶ mnv4/f32/fed (variant adamdp64, bs 64, workers 4) ...
+    → 142 ms/step (min 140, wait 2 ms, 5004 steps/ep, 231s)
+  ▶ mnv4/bf16/fed (variant adamdp64bf16, bs 64, workers 4) ...
+    → 128 ms/step (min 88, wait 40 ms, 5004 steps/ep, 195s)
+  ▶ enetema/f32/fed (variant emarmsdp64dropdo, bs 64, workers 8) ...
+    → 221 ms/step (min 188, wait 33 ms, 5004 steps/ep, 253s)
+  ▶ enetema/bf16/fed (variant emarmsdp64dropdobf16, bs 64, workers 8) ...
+    → 149 ms/step (min 112, wait 37 ms, 5004 steps/ep, 291s)
+  ▶ cnx/f32/fed (variant adamdpwxclipdrop, bs 32, workers 4) ...
+    → 205 ms/step (min 197, wait 8 ms, 10009 steps/ep, 205s)
+  ▶ cnx/bf16/fed (variant adamdpwxclipdropbf16, bs 32, workers 4) ...
+    → 124 ms/step (min 120, wait 4 ms, 10009 steps/ep, 172s)
+  ▶ cnxs/f32/fed (variant adamdpwxclipdrop, bs 32, workers 4) ...
+    → 339 ms/step (min 332, wait 7 ms, 10009 steps/ep, 291s)
+  ▶ cnxs/bf16/fed (variant adamdpwxclipdropbf16, bs 32, workers 4) ...
+    → 187 ms/step (min 183, wait 4 ms, 10009 steps/ep, 216s)
+  ▶ cnxb/f32/fed (variant adamdpwxclipdrop, bs 32, workers 4) ...
+    → 513 ms/step (min 507, wait 6 ms, 10009 steps/ep, 399s)
+  ▶ cnxb/bf16/fed (variant adamdpwxclipdropbf16, bs 32, workers 4) ...
+    → 300 ms/step (min 292, wait 8 ms, 10009 steps/ep, 284s)
+  ▶ vit/f32/fed (variant adamdp128x4wxclipdrop, bs 128, workers 8) ...
+    → 259 ms/step (min 215, wait 44 ms, 2502 steps/ep, 389s)
+  ▶ vit/bf16/fed (variant adamdp128x4wxclipdropbf16, bs 128, workers 8) ...
+    → 249 ms/step (min 136, wait 113 ms, 2502 steps/ep, 446s)
+  ▶ vits/f32/fed (variant adamdp128x4wxclipdrop, bs 128, workers 8) ...
+    → 509 ms/step (min 494, wait 15 ms, 2502 steps/ep, 420s)
+  ▶ vits/bf16/fed (variant adamdp128x4wxclipdropbf16, bs 128, workers 8) ...
+    → 310 ms/step (min 281, wait 29 ms, 2502 steps/ep, 478s)
+  ▶ vitb/f32/fed (variant adamdp128x4wxclipdrop, bs 128, workers 8) ...
+    → 1359 ms/step (min 1344, wait 15 ms, 2502 steps/ep, 938s)
+  ▶ vitb/bf16/fed (variant adamdp128x4wxclipdropbf16, bs 128, workers 8) ...
+    → 799 ms/step (min 785, wait 14 ms, 2502 steps/ep, 600s)
+  ▶ r50a3/f32/fed (variant lambaccdp8x64wxclipbce, bs 64, workers 4) ...
+    → 214 ms/step (min 206, wait 8 ms, 5000 steps/ep, 227s)
+  ▶ r50a3/bf16/fed (variant lambaccdp8x64wxclipbcebf16, bs 64, workers 4) ...
+    → 139 ms/step (min 135, wait 4 ms, 5000 steps/ep, 190s)
+ALL DONE -> runs/2026-09-11-imagenet-probe-postfix/fed.tsv
+net      variant                     prec  arm  bs   workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+r34      momdp64                     f32   fed  64   8        225     216     236     226      9        5004      232        
+r34      momdp64bf16                 bf16  fed  64   8        154     137     164     154      17       5004      197        
+r50      momdp64                     f32   fed  64   8        358     351     374     361      7        5004      344        
+r50      momdp64bf16                 bf16  fed  64   8        222     219     230     223      3        5004      269        
+mnv2     rmsdp64                     f32   fed  64   4        177     159     188     177      18       5004      186        
+mnv2     rmsdp64bf16                 bf16  fed  64   4        114     93      128     114      21       5004      174        
+mnv4     adamdp64                    f32   fed  64   4        142     140     198     288      2        5004      231        
+mnv4     adamdp64bf16                bf16  fed  64   4        128     88      143     127      40       5004      195        
+enetema  emarmsdp64dropdo            f32   fed  64   8        221     188     232     220      33       5004      253        
+enetema  emarmsdp64dropdobf16        bf16  fed  64   8        149     112     170     279      37       5004      291        
+cnx      adamdpwxclipdrop            f32   fed  32   4        205     197     208     204      8        10009     205        
+cnx      adamdpwxclipdropbf16        bf16  fed  32   4        124     120     126     124      4        10009     172        
+cnxs     adamdpwxclipdrop            f32   fed  32   4        339     332     340     338      7        10009     291        
+cnxs     adamdpwxclipdropbf16        bf16  fed  32   4        187     183     190     187      4        10009     216        
+cnxb     adamdpwxclipdrop            f32   fed  32   4        513     507     514     513      6        10009     399        
+cnxb     adamdpwxclipdropbf16        bf16  fed  32   4        300     292     302     299      8        10009     284        
+vit      adamdp128x4wxclipdrop       f32   fed  128  8        259     215     300     539      44       2502      389        
+vit      adamdp128x4wxclipdropbf16   bf16  fed  128  8        249     136     382     544      113      2502      446        
+vits     adamdp128x4wxclipdrop       f32   fed  128  8        509     494     512     505      15       2502      420        
+vits     adamdp128x4wxclipdropbf16   bf16  fed  128  8        310     281     390     694      29       2502      478        
+vitb     adamdp128x4wxclipdrop       f32   fed  128  8        1359    1344    1360    1358     15       2502      938        
+vitb     adamdp128x4wxclipdropbf16   bf16  fed  128  8        799     785     803     797      14       2502      600        
+r50a3    lambaccdp8x64wxclipbce      f32   fed  64   4        214     206     218     213      8        5000      227        
+r50a3    lambaccdp8x64wxclipbcebf16  bf16  fed  64   4        139     135     145     139      4        5000      190        
+  ▶ r50a3w8/bf16/fed (variant lambaccdp8x64wxclipbcebf16, bs 64, workers 8) ...
+    → 152 ms/step (min 141, wait 11 ms, 5000 steps/ep, 268s)
+ALL DONE -> runs/2026-09-11-imagenet-probe-postfix/fed.tsv
+net      variant                     prec  arm  bs   workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+r34      momdp64                     f32   fed  64   8        225     216     236     226      9        5004      232        
+r34      momdp64bf16                 bf16  fed  64   8        154     137     164     154      17       5004      197        
+r50      momdp64                     f32   fed  64   8        358     351     374     361      7        5004      344        
+r50      momdp64bf16                 bf16  fed  64   8        222     219     230     223      3        5004      269        
+mnv2     rmsdp64                     f32   fed  64   4        177     159     188     177      18       5004      186        
+mnv2     rmsdp64bf16                 bf16  fed  64   4        114     93      128     114      21       5004      174        
+mnv4     adamdp64                    f32   fed  64   4        142     140     198     288      2        5004      231        
+mnv4     adamdp64bf16                bf16  fed  64   4        128     88      143     127      40       5004      195        
+enetema  emarmsdp64dropdo            f32   fed  64   8        221     188     232     220      33       5004      253        
+enetema  emarmsdp64dropdobf16        bf16  fed  64   8        149     112     170     279      37       5004      291        
+cnx      adamdpwxclipdrop            f32   fed  32   4        205     197     208     204      8        10009     205        
+cnx      adamdpwxclipdropbf16        bf16  fed  32   4        124     120     126     124      4        10009     172        
+cnxs     adamdpwxclipdrop            f32   fed  32   4        339     332     340     338      7        10009     291        
+cnxs     adamdpwxclipdropbf16        bf16  fed  32   4        187     183     190     187      4        10009     216        
+cnxb     adamdpwxclipdrop            f32   fed  32   4        513     507     514     513      6        10009     399        
+cnxb     adamdpwxclipdropbf16        bf16  fed  32   4        300     292     302     299      8        10009     284        
+vit      adamdp128x4wxclipdrop       f32   fed  128  8        259     215     300     539      44       2502      389        
+vit      adamdp128x4wxclipdropbf16   bf16  fed  128  8        249     136     382     544      113      2502      446        
+vits     adamdp128x4wxclipdrop       f32   fed  128  8        509     494     512     505      15       2502      420        
+vits     adamdp128x4wxclipdropbf16   bf16  fed  128  8        310     281     390     694      29       2502      478        
+vitb     adamdp128x4wxclipdrop       f32   fed  128  8        1359    1344    1360    1358     15       2502      938        
+vitb     adamdp128x4wxclipdropbf16   bf16  fed  128  8        799     785     803     797      14       2502      600        
+r50a3    lambaccdp8x64wxclipbce      f32   fed  64   4        214     206     218     213      8        5000      227        
+r50a3    lambaccdp8x64wxclipbcebf16  bf16  fed  64   4        139     135     145     139      4        5000      190        
+r50a3w8  lambaccdp8x64wxclipbcebf16  bf16  fed  64   8        152     141     159     270      11       5000      268        
+ALL_DONE 2026-09-11T05:33:43Z

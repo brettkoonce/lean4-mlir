@@ -1,0 +1,3 @@
+watcher: storm 1 at 06:27:41 procs_running=51 -> SIGINT 1749987
+watcher: storm 2 at 06:28:27 procs_running=53 -> SIGINT 1749987
+watcher: storm 3 at 06:29:15 procs_running=48 -> SIGINT 1749987

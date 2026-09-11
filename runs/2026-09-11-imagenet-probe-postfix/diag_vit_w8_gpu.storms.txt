@@ -1,0 +1,50 @@
+=== storm 1 at 06:17:03 procs_running=33
+  tot=204 user=201 sys=3 vit-imagenet-ve syscall= wchan=do_poll.constprop.0 /proc/1713555/task/1713648
+  tot=176 user=174 sys=2 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713642
+  tot=173 user=173 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713640
+  tot=153 user=152 sys=1 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713659
+  tot=145 user=145 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713650
+  tot=145 user=144 sys=1 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713658
+  tot=137 user=137 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713656
+  tot=134 user=134 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713634
+  tot=133 user=132 sys=1 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713636
+  tot=131 user=130 sys=1 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713651
+  tot=127 user=126 sys=1 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713639
+  tot=126 user=126 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713653
+  tot=125 user=125 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713633
+  tot=124 user=124 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713641
+=== storm 2 at 06:17:43 procs_running=57
+  tot=424 user=61 sys=363 vit-imagenet-ve syscall= wchan=0 /proc/1713555/task/1713563
+  tot=403 user=70 sys=333 python3 syscall= wchan=0 /proc/1718220/task/1718220
+  tot=94 user=81 sys=13 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718424
+  tot=88 user=78 sys=10 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718418
+  tot=88 user=76 sys=12 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718420
+  tot=87 user=76 sys=11 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718431
+  tot=87 user=76 sys=11 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718419
+  tot=86 user=77 sys=9 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718430
+  tot=86 user=77 sys=9 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718416
+  tot=86 user=76 sys=10 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718433
+  tot=86 user=76 sys=10 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718422
+  tot=86 user=75 sys=11 python3 syscall= wchan=futex_wait_queue /proc/1718220/task/1718423
+  tot=86 user=74 sys=12 python3 syscall= wchan=0 /proc/1718220/task/1718417
+  tot=85 user=76 sys=9 python3 syscall= wchan=0 /proc/1718220/task/1718438
+=== storm 3 at 06:18:22 procs_running=59
+  tot=200 user=158 sys=42 python3 syscall= wchan=pipe_write /proc/1723811/task/1723811
+  tot=48 user=7 sys=41 bash syscall= wchan=do_wait /proc/1713544/task/1713544
+  tot=43 user=0 sys=43 vit-imagenet-ve syscall= wchan=pipe_read /proc/1713555/task/1713563
+  tot=32 user=31 sys=1 claude syscall= wchan=ep_poll /proc/1441710/task/1441710
+=== storm 4 at 06:18:59 procs_running=70
+  tot=695 user=333 sys=362 python3 syscall= wchan=0 /proc/1723811/task/1723811
+  tot=694 user=326 sys=368 python3 syscall= wchan=0 /proc/1722905/task/1722905
+  tot=692 user=327 sys=365 python3 syscall= wchan=pipe_write /proc/1729668/task/1729668
+  tot=685 user=326 sys=359 python3 syscall= wchan=0 /proc/1726320/task/1726320
+  tot=684 user=337 sys=347 python3 syscall= wchan=pipe_write /proc/1729361/task/1729361
+  tot=679 user=342 sys=337 python3 syscall= wchan=pipe_write /proc/1723500/task/1723500
+  tot=657 user=315 sys=342 python3 syscall= wchan=0 /proc/1723199/task/1723199
+  tot=609 user=294 sys=315 python3 syscall= wchan=pipe_write /proc/1729049/task/1729049
+  tot=173 user=173 sys=0 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1713563
+  tot=162 user=157 sys=5 claude syscall= wchan=ep_poll /proc/1441710/task/1441710
+  tot=150 user=1 sys=149 vit-imagenet-ve syscall= wchan=pipe_read /proc/1713555/task/1729861
+  tot=149 user=2 sys=147 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1729974
+  tot=148 user=25 sys=123 bash syscall= wchan=do_wait /proc/1713544/task/1713544
+  tot=148 user=2 sys=146 vit-imagenet-ve syscall= wchan=futex_wait_queue /proc/1713555/task/1729975

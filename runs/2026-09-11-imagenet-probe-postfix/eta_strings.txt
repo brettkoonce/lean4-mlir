@@ -1,0 +1,43 @@
+net      variant                        prec  arm       med   mean    p90  st/ep  flag
+cnx      adamdpwxclipdropbf16           bf16  fed       124    124    126  10009  
+cnx      adamdpwxclipdrop               f32   fed       205    204    208  10009  
+cnxb     adamdpwxclipdropbf16           bf16  fed       300    299    302  10009  
+cnxb     adamdpwxclipdrop               f32   fed       513    513    514  10009  
+cnxs     adamdpwxclipdropbf16           bf16  fed       187    187    190  10009  
+cnxs     adamdpwxclipdrop               f32   fed       339    338    340  10009  
+enetema  emarmsdp64dropdobf16           bf16  fed       149    279    170   5004  **starving**
+enetema  emarmsdp64dropdo               f32   fed       221    220    232   5004  
+mnv2     rmsdp64bf16                    bf16  fed       114    114    128   5004  
+mnv2     rmsdp64                        f32   fed       177    177    188   5004  
+mnv4     adamdp64bf16                   bf16  fed       128    127    143   5004  
+mnv4     adamdp64                       f32   fed       142    288    198   5004  **starving**
+r34      momdp64bf16                    bf16  fed       154    154    164   5004  
+r34      momdp64                        f32   fed       225    226    236   5004  
+r50      momdp64bf16                    bf16  fed       222    223    230   5004  
+r50      momdp64                        f32   fed       358    361    374   5004  
+r50a3    lambaccdp8x64wxclipbcebf16     bf16  fed       139    139    145   5000  
+r50a3    lambaccdp8x64wxclipbce         f32   fed       214    213    218   5000  
+r50a3w8  lambaccdp8x64wxclipbcebf16     bf16  fed       152    270    159   5000  **starving**
+vit      adamdp128x4wxclipdropbf16      bf16  fed       249    544    382   2502  **starving**
+vit      adamdp128x4wxclipdrop          f32   fed       259    539    300   2502  **starving**
+vitb     adamdp128x4wxclipdropbf16      bf16  fed       799    797    803   2502  
+vitb     adamdp128x4wxclipdrop          f32   fed      1359   1358   1360   2502  
+vits     adamdp128x4wxclipdropbf16      bf16  fed       310    694    390   2502  **starving**
+vits     adamdp128x4wxclipdrop          f32   fed       509    505    512   2502  
+
+--- ETA strings (fed arm) ---
+  cnx-default-4gpu           ETA="bf16 ~107 h (4.4 d) / f32 ~174 h (7.3 d) on 4x 4060 Ti (124 / 205 ms/step median, 300 ep)"
+  cnxb-default-4gpu          ETA="bf16 ~253 h (10.6 d) / f32 ~431 h (18.0 d) on 4x 4060 Ti (300 / 513 ms/step median, 300 ep)"
+  cnxs-default-4gpu          ETA="bf16 ~159 h (6.6 d) / f32 ~286 h (11.9 d) on 4x 4060 Ti (187 / 339 ms/step median, 300 ep)"
+  enet-default-4gpu          ETA="bf16 ~76 h / f32 ~111 h (4.6 d) on 4x 4060 Ti (149 / 221 ms/step median, 350 ep) ⚠ today's means 279 / 220: periodic stalls, see runs/2026-09-11-imagenet-probe-postfix"
+  mnv2-default-4gpu          ETA="bf16 ~59 h / f32 ~90 h on 4x 4060 Ti (114 / 177 ms/step median, 350 ep)"
+  mnv4-default-4gpu          ETA="bf16 ~94 h / f32 ~104 h (4.3 d) on 4x 4060 Ti (128 / 142 ms/step median, 500 ep) ⚠ today's means 127 / 288: periodic stalls, see runs/2026-09-11-imagenet-probe-postfix"
+  r34-default-4gpu           ETA="bf16 ~20 h / f32 ~29 h on 4x 4060 Ti (154 / 225 ms/step median, 90 ep)"
+  r50-2018-4gpu              ETA="bf16 ~29 h / f32 ~46 h on 4x 4060 Ti (222 / 358 ms/step median, 90 ep)"
+  r50-2018-bf16-4gpu         ETA="bf16 ~29 h / f32 ~46 h on 4x 4060 Ti (222 / 358 ms/step median, 90 ep)"
+  r50-a3-wxclip-4gpu         ETA="bf16 ~20 h / f32 ~31 h on 4x 4060 Ti (139 / 214 ms/step median, 100 ep)"
+  r50-a3-wxclip-bf16-4gpu    ETA="bf16 ~22 h / f32 ~31 h on 4x 4060 Ti (152 / 214 ms/step median, 100 ep) ⚠ today's means 270 / 213: periodic stalls, see runs/2026-09-11-imagenet-probe-postfix"
+  vit-default-4gpu           ETA="bf16 ~55 h / f32 ~57 h on 4x 4060 Ti (249 / 259 ms/step median, 300 ep) ⚠ today's means 544 / 539: periodic stalls, see runs/2026-09-11-imagenet-probe-postfix"
+  vit-default-emabf16-4gpu   — no fed bf16 probe row for 'vitema'; ETA left alone
+  vitb-default-g512-4gpu     ETA="bf16 ~170 h (7.1 d) / f32 ~286 h (11.9 d) on 4x 4060 Ti (799 / 1359 ms/step median, 300 ep)"
+  vits-default-g512-4gpu     ETA="bf16 ~68 h / f32 ~109 h (4.6 d) on 4x 4060 Ti (310 / 509 ms/step median, 300 ep) ⚠ today's means 694 / 505: periodic stalls, see runs/2026-09-11-imagenet-probe-postfix"
