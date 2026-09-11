@@ -1,0 +1,175 @@
+I0911 00:33:10.553241 1337829 service.cc:154] XLA service 0x75fa1879be90 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 00:33:10.553321 1337829 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 00:33:10.553334 1337829 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 00:33:10.553337 1337829 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 00:33:10.553340 1337829 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 00:33:10.555923 1337829 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 00:33:10.555953 1337829 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 00:33:10.555998 1337829 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0911 00:33:10.556010 1337829 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0911 00:33:10.556024 1337829 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0911 00:33:10.566002 1337829 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 00:33:16.418453 1337905 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 00:33:16.427029 1337904 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:16.748638 1337885 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 92 bytes spill stores, 56 bytes spill loads
+
+I0911 00:33:16.881033 1337899 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+I0911 00:33:17.174847 1337912 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_216', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 00:33:17.268977 1337907 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:17.432846 1337909 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:17.750185 1337896 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_951', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 00:33:17.794717 1337883 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 00:33:17.928018 1337885 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:18.200173 1337903 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 00:33:18.201725 1337894 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 00:33:18.460016 1337886 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+I0911 00:33:18.691403 1337885 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_964', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 00:33:18.768693 1337906 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_966', 168 bytes spill stores, 92 bytes spill loads
+
+I0911 00:33:18.971781 1337891 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 00:33:18.991225 1337908 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_589', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 00:33:19.083515 1337883 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 00:33:19.297101 1337882 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 32 bytes spill stores, 32 bytes spill loads
+
+I0911 00:33:19.318251 1337897 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 8556 bytes spill stores, 8448 bytes spill loads
+
+I0911 00:33:19.436372 1337892 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 712 bytes spill stores, 712 bytes spill loads
+
+I0911 00:33:19.869546 1337909 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_967', 84 bytes spill stores, 68 bytes spill loads
+
+I0911 00:33:19.900921 1337886 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 132 bytes spill stores, 72 bytes spill loads
+
+I0911 00:33:20.183428 1337889 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_965', 96 bytes spill stores, 64 bytes spill loads
+
+I0911 00:33:22.284120 1337881 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1284', 144 bytes spill stores, 144 bytes spill loads
+
+I0911 00:33:22.331672 1337908 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1286', 156 bytes spill stores, 156 bytes spill loads
+
+I0911 00:33:23.702301 1337892 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1326', 228 bytes spill stores, 228 bytes spill loads
+
+I0911 00:33:23.746113 1337902 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1328', 180 bytes spill stores, 180 bytes spill loads
+
+I0911 00:33:26.737285 1337900 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1330', 448 bytes spill stores, 448 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir (@vitin_adamdp128x4wxclipdrop_train_step, 627 outputs, 4 replicas) in 16368 ms
+I0911 00:33:28.098508 1337910 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 88 bytes spill stores, 88 bytes spill loads
+
+I0911 00:33:28.328979 1337909 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 00:33:28.410388 1337906 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 00:33:28.654552 1337894 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 00:33:28.659669 1337895 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:28.701107 1337890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:28.796350 1337912 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:29.018226 1337897 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 00:33:29.061580 1337887 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_148', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 00:33:29.067706 1337902 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+I0911 00:33:29.069419 1337911 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_fwd.mlir (@vitin_fwd, 1 outputs, 1 replica) in 2895 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086810.206751 1338724 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789086812.154419 1338877 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  xla/pjrt verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir
+  xla/pjrt verified_mlir/vitin_fwd.mlir
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 50000 images, 28710 MB
+  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)
+  train 1281167, test 50000; bs 128, ViT-Tiny (ImageNet-1k) adamdp128x4wxclipdrop (cosine+warmup 5ep, baseLR 0.000500), He init
+  ▸ STOCHASTIC DEPTH: 24 drop sites, keeps #[1.000000, 1.000000, 0.991000, 0.991000, 0.982000, 0.982000, 0.973000, 0.973000, 0.964000, 0.964000, 0.955000, 0.955000, 0.945000, 0.945000, 0.936000, 0.936000, 0.927000, 0.927000, 0.918000, 0.918000, 0.909000, 0.909000, 0.900000, 0.900000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+  eval batch 256 (the batch @vitin_fwd was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2502 steps/epoch
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086857.791971 1339131 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086861.307684 1339131 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086861.570882 1339283 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086862.416890 1339290 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086866.053964 1339290 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086866.334394 1339443 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086867.189902 1339450 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086871.137322 1339450 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086871.414756 1339603 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086872.297022 1339610 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086876.043211 1339610 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086876.354869 1339763 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086877.220920 1339771 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086880.991632 1339771 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086881.256830 1339922 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086882.138962 1339929 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086886.129785 1339929 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086886.474546 1340082 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086887.280637 1340086 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086891.159020 1340086 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086891.417983 1340244 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789086892.344847 1340253 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789086896.131382 1340253 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789086896.401354 1340403 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @vitin_adamdp128x4wxclipdrop_train_step holds 600 parameter tensors (65.4 MB) on 4 devices; they stop crossing PCIe from here
+I0911 00:34:58.158809 1337875 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 00:34:58.158867 1337872 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 00:34:58.158899 1337878 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)
+  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 1), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 2), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 3), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 4), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 5), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 6), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 7), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 8), wire v4 soft targets [512x1000]
+  imagenet shim: 8 sharded producers (round-robin over batches)
+  ▸ SHIM PREFETCH: OFF (LEAN_MLIR_PREFETCH=0) — the read blocks the step. This is the gate's control, not a configuration.
+  step 0/2502: loss=6.935283
+  step 1/2502: loss=6.951714
+  step 2/2502: loss=6.938227
+  step 100/2502: loss=6.950716
+  step 200/2502: loss=6.906810
+  step 300/2502: loss=6.898434
+  step 400/2502: loss=6.898397
+  PROBE: 721 ms/step (median of 350 steps 51..400, ViT-Tiny (ImageNet-1k))
+  PROBE-SPREAD: min=676 med=721 p90=748 mean=721 ms/step (starvation wait = med-min = 45 ms)

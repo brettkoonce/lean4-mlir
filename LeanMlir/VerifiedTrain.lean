@@ -503,18 +503,43 @@ private def loadCifarSplit (paths : List String) : IO (ByteArray × ByteArray ×
 Reads batches from `JaxCodegen.generateShim`'s stdout. The shim owns the whole transform; this side
 only frames bytes, which is why there is no augmentation code here. -/
 
-/-- Read EXACTLY `n` bytes, looping until they arrive. A pipe read returns what is *available*, not
-    what was asked for — at 154 MB per batch a short read is the normal case, not the edge case, and
-    treating one `read` as a batch silently misaligns the stream from then on. -/
-def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
-  let mut acc := ByteArray.empty
-  while acc.size < n do
-    let chunk ← h.read (USize.ofNat (n - acc.size))
-    if chunk.size == 0 then
-      throw <| IO.userError s!"imagenet shim closed the pipe after {acc.size} of {n} bytes \
+/-- Read up to `len` bytes from `h` **into `buf`**, appending at `buf.size` and never touching its
+    capacity — which is the reason it exists. `IO.FS.Handle.read` allocates its result on the
+    CALLING thread, so a batch read on a pool thread and dropped on the main thread is freed by a
+    thread that does not own it. The runtime's allocator (mimalloc) answers a cross-thread free of
+    a huge block with `madvise(MADV_FREE)`, not a release: the pages stay in RSS as `LazyFree`
+    until the kernel is under pressure. On ImageNet that was 79–136 MB/step, the box full inside
+    one epoch, then continuous direct reclaim and a mean step 2.5× the median
+    ([runs/2026-09-11-vit-leak-ab/README.md](https://github.com/brettkoonce/lean4-mlir/blob/main/runs/2026-09-11-vit-leak-ab/README.md)).
+    With this primitive the main thread allocates AND frees every batch buffer; the pool thread
+    only fills it, and the block is recycled in place step after step.
+    ⚠ `buf` must be the ONLY reference (rc 1, or −1 once it has crossed a `Task` boundary). The C
+    side refuses a shared buffer rather than copying it, because a silent copy would put the
+    allocation straight back on the reading thread. Returns the buffer with its size advanced by
+    the bytes read; 0 bytes means end of stream, as for `Handle.read`. -/
+@[extern "lean_mlir_read_into"]
+opaque readInto (h : @& IO.FS.Handle) (buf : ByteArray) (len : USize) : IO ByteArray
+
+/-- Fill `buf` with EXACTLY `n` more bytes, looping until they arrive. A pipe read returns what is
+    *available*, not what was asked for — at 154 MB per batch a short read is the normal case, not
+    the edge case, and treating one `read` as a batch silently misaligns the stream from then on. -/
+def readExactInto (h : IO.FS.Handle) (buf : ByteArray) (n : Nat) : IO ByteArray := do
+  let target := buf.size + n
+  let mut acc := buf
+  while acc.size < target do
+    let before := acc.size
+    let want := USize.ofNat (target - before)
+    acc ← readInto h acc want
+    if acc.size == before then
+      throw <| IO.userError s!"imagenet shim closed the pipe after {acc.size} of {target} bytes \
 (did it crash? its stderr is not captured — run it standalone with SHIM_HASH=1 to see)"
-    acc := acc ++ chunk
   pure acc
+
+/-- Read EXACTLY `n` bytes into a fresh buffer of exactly that capacity, allocated HERE — on the
+    calling thread, which is what `readInto` is about. (This used to grow by `ByteArray.append`,
+    which reallocates at double capacity: a 308 MB batch cost a 616 MB buffer and a full copy.) -/
+def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray :=
+  readExactInto h (ByteArray.emptyWithCapacity n) n
 
 /-- Resolve a net's generated shim to a path on disk, or `none`. The candidate list is
     `spawnShim`'s, factored out so the two callers cannot disagree about WHICH file they are
@@ -672,7 +697,7 @@ the render wants batch={batch} flat={flat} — refusing rather than reading misa
 /-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
     (the shim writes labels first so a partial record is detectable at the smaller read). -/
 def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
-    : IO (ByteArray × ByteArray) := do
+    (imgBuf : Option (IO.Ref ByteArray) := none) : IO (ByteArray × ByteArray) := do
   -- `nclasses = 0` ⇒ v1: `int32[batch]`. Otherwise v2: `float32[batch*nclasses]`. The FFI accepts
   -- either without a flag — `lean_fill_targets` dispatches on the buffer's SIZE — so nothing
   -- downstream of here changes shape.
@@ -687,7 +712,15 @@ def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
 A short batch on a repeating stream is a torn write; use `readShimBatchPartial` for a split that \
 ends (the val drain)."
   let lbl ← readExact h (if nclasses > 0 then 4 * batch * nclasses else 4 * batch)
-  let img ← readExact h (4 * batch * flat)
+  -- ⭐ The image buffer comes from the CALLER when there is one — the prefetch path allocates it on
+  -- the main thread before spawning the task, see `readInto` for why that is the whole point. It
+  -- is taken OUT of the ref (`swap`, not `get`) so this thread holds the only reference; `get`
+  -- would leave a second one behind and `readInto` refuses a shared buffer. The labels stay a
+  -- local allocation: at ≤ 4 MB they are below the size class the leak lives in (measured flat).
+  let buf ← match imgBuf with
+    | some r => r.swap ByteArray.empty
+    | none   => pure (ByteArray.emptyWithCapacity (4 * batch * flat))
+  let img ← readExactInto h buf (4 * batch * flat)
   pure (img, lbl)
 
 /-- Read up to `n` bytes, returning **what actually arrived** instead of throwing at EOF.
@@ -792,9 +825,9 @@ def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n :
 /-- Round-robin read: batch `k` comes from worker `k % n`. `readExact` already blocks until a whole
     record has arrived, so a slow worker throttles rather than corrupting — the framing cannot slip. -/
 def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) (nclasses : Nat := 0)
-    : IO (ByteArray × ByteArray) := do
+    (imgBuf : Option (IO.Ref ByteArray) := none) : IO (ByteArray × ByteArray) := do
   match hs[k % hs.size]? with
-  | some h => readShimBatch h batch flat nclasses
+  | some h => readShimBatch h batch flat nclasses imgBuf
   | none   => throw <| IO.userError "readShimBatchRR: no shim producers were spawned"
 
 
@@ -1808,7 +1841,14 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- steady state is 375 (2.4×). Benchmarks want PROBE_WARM=200 with MAX_STEPS=600.
   let probeWarm := ((← IO.getEnv "LEAN_MLIR_PROBE_WARM").bind (·.toNat?)).getD 8
   let mut probePrev := 0
+  -- LEAN_MLIR_PROBE_DUMP also turns on a per-read trace to stderr (`READ h= step= issued= start=
+  -- end=`), one line per prefetched batch, from the pool thread: issued→start is queueing in the
+  -- task pool, start→end is the transfer off the pipe. Together with the dump's `wait_ms` this
+  -- is enough to say which side a slow handle is slow on.
+  let probeTrace := (← IO.getEnv "LEAN_MLIR_PROBE_DUMP").isSome
   let mut probeTimes : Array Nat := #[]
+  let mut probeWaits : Array Nat := #[]   -- ms spent in `IO.wait` on the prefetched batch, per step
+  let mut lastWaitMs : Nat := 0
   -- LEAN_MLIR_MAX_EPOCHS: same opt-in cap as `VerifiedNet.train` (absent → full run).
   let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
     | some n => min n cfg.epochs
@@ -1900,7 +1940,8 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
       then s!"  ▸ SHIM PREFETCH: ON (depth {pfDepth} over {imgStreams.size} producer handle(s) — \
 each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every \
 producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on \
-R34/ImageNet 4×bs64 for depth 1."
+R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the \
+pool only fills them."
       else "  ▸ SHIM PREFETCH: OFF (LEAN_MLIR_PREFETCH=0) — the read blocks the step. This is the \
 gate's control, not a configuration.")
   -- One in-flight read per producer handle, indexed BY HANDLE (`step % nStreams`), so the slot a
@@ -2057,9 +2098,11 @@ gate's control, not a configuration.")
           -- pool worker and starve other tasks. That reasoning does not apply here and its cost
           -- does: depth 1 means there is **exactly one outstanding task by construction**, so
           -- there is nothing to starve, while `.dedicated` spawns a fresh OS thread **every step**
-          -- — 150,120 of them over a 30-epoch run. Pooled lands 5 ms above the 219 ms synth floor,
-          -- and that residual is the real path allocating a fresh 154 MB `ByteArray` per step
-          -- where synth reuses one buffer.
+          -- — 150,120 of them over a 30-epoch run. Pooled lands 5 ms above the 219 ms synth floor.
+          -- ⚠ Both numbers were taken with the leak below in place. `.dedicated` would also have
+          -- hidden it by accident — a thread that exits abandons its heap, which the next free
+          -- reclaims — at the price of refaulting the whole buffer every step (standalone repro,
+          -- 2026-09-11).
           -- ⚠ The step index runs unbroken across the epoch boundary — `ep * nb + bi + 1` at the
           -- end of epoch e is exactly `ep' * nb + 0` for e+1 — which is what keeps the round-robin
           -- continuous. The train iterator `.repeat()`s inside the shim and never ends, so there
@@ -2067,11 +2110,35 @@ gate's control, not a configuration.")
           let s := ep * nb + bi
           let nStr := inflight.size
           let slot := s % nStr
+          -- ⭐⭐ THE BATCH BUFFER IS ALLOCATED HERE, on the main thread, and handed to the task
+          -- through a ref; the task only fills it (`readInto`). Letting the task allocate it —
+          -- which is what `Handle.read` does — made a pool thread the owner of a 308 MB block the
+          -- main thread then freed, and the runtime's allocator (mimalloc) answers a cross-thread
+          -- free of a huge block with `madvise(MADV_FREE)`, not a release: the pages stay in RSS
+          -- until the kernel is under pressure. 79–136 MB/step, the box full inside one epoch,
+          -- then continuous direct reclaim and a mean step 2.5× the median
+          -- (runs/2026-09-11-vit-leak-ab). Allocated and freed by the same thread, the block is
+          -- recycled in place: no growth, and no fresh page faults after the first step.
+          -- ⚠ None of the allocator's environment knobs reach this: `MALLOC_*` is glibc, which is
+          -- not the allocator, and `MIMALLOC_PURGE_DELAY=0` only helps while the owning thread
+          -- keeps allocating — at a 220 ms step cadence it changes nothing (measured).
+          let issueRead (sj : Nat) : BaseIO (Task (Except IO.Error (ByteArray × ByteArray))) := do
+            let buf ← IO.mkRef (ByteArray.emptyWithCapacity (4 * gbs * flat))
+            let tIssue ← IO.monoMsNow
+            IO.asTask (do
+                let t0 ← IO.monoMsNow
+                let r ← readShimBatchRR imgStreams sj gbs flat shimNC (some buf)
+                if probeTrace then
+                  let t1 ← IO.monoMsNow
+                  IO.eprintln s!"READ h={sj % nStr} step={sj} issued={tIssue} start={t0} end={t1}"
+                pure r)
+              Task.Priority.default
           let t ← match inflight[slot]! with
             | some t => pure t
-            | none   => IO.asTask (readShimBatchRR imgStreams s gbs flat shimNC)
-                          Task.Priority.default
+            | none   => issueRead s
+          let w0 ← IO.monoMsNow
           let r ← IO.wait t
+          lastWaitMs := (← IO.monoMsNow) - w0
           -- The wait FREES this handle's slot. Marking it before the refill loop is what makes
           -- "the slot I just consumed" the slot step `s + n` goes into, without special-casing it.
           inflight := inflight.set! slot none
@@ -2095,8 +2162,7 @@ gate's control, not a configuration.")
             if sj < nEpochs * nb then
               let sl := sj % nStr
               if (inflight[sl]!).isNone then
-                inflight := inflight.set! sl (some (← IO.asTask
-                  (readShimBatchRR imgStreams sj gbs flat shimNC) Task.Priority.default))
+                inflight := inflight.set! sl (some (← issueRead sj))
           -- ⚠ Unwrapped AFTER the next reads are issued, so a mid-epoch read error still leaves the
           -- pipeline in a consistent state — it throws here with at most n orphaned tasks, which
           -- the process exit reaps. Unwrapping first would throw with nothing in flight and make
@@ -2214,6 +2280,7 @@ gate's control, not a configuration.")
         else if bi > probeWarm && bi ≤ ps then
           let t ← IO.monoMsNow
           probeTimes := probeTimes.push (t - probePrev); probePrev := t
+          probeWaits := probeWaits.push lastWaitMs
           if bi == ps then
             -- robust: median per-step time (drops the cold-cache / GC-blip outliers)
             let sorted := probeTimes.qsort Nat.blt
@@ -2228,6 +2295,16 @@ gate's control, not a configuration.")
             let psum := probeTimes.foldl (· + ·) 0
             IO.println s!"  PROBE: {pmed} ms/step (median of {sorted.size} steps {probeWarm+1}..{ps}, {net.name})"
             IO.println s!"  PROBE-SPREAD: min={pmin} med={pmed} p90={p90} mean={psum / sorted.size} ms/step (starvation wait = med-min = {pmed - pmin} ms)"
+            -- ⭐ LEAN_MLIR_PROBE_DUMP=<file>: the per-step series behind those four numbers, one
+            -- `step<TAB>ms<TAB>wait_ms` line each, in step order (`wait_ms` = time blocked on the
+            -- prefetched batch; 0 off the ImageNet path). The summary cannot say WHICH steps are
+            -- the slow ones, and with a round-robin over n producers "every n-th step" is the tell
+            -- for one slow producer that no quantile shows.
+            if let some path ← IO.getEnv "LEAN_MLIR_PROBE_DUMP" then
+              let lines := probeTimes.mapIdx fun i ms =>
+                s!"{probeWarm + 1 + i}\t{ms}\t{probeWaits[i]?.getD 0}"
+              IO.FS.writeFile path (String.intercalate "\n" lines.toList ++ "\n")
+              IO.println s!"  PROBE-DUMP: {probeTimes.size} steps → {path}"
             (← IO.getStdout).flush
             return ()
       | none => pure ()

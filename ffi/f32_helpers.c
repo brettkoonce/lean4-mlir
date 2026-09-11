@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <errno.h>
 
 // ---- Read a float32 at element index from ByteArray ----
 LEAN_EXPORT double lean_f32_read(b_lean_obj_arg ba, size_t idx) {
@@ -3084,4 +3085,44 @@ LEAN_EXPORT double lean_f32_dot_slice(
     double acc = 0.0;
     for (size_t i = 0; i < count; i++) acc += (double)pa[a_off + i] * (double)pb[b_off + i];
     return acc;
+}
+
+// ---- Read from a Handle INTO an existing ByteArray (VerifiedTrain.readInto) ----
+// Appends up to `len` bytes at buf.size and never touches capacity. `buf` must be the ONLY
+// reference: st rc == 1, or mt rc == -1 once it has crossed a Task boundary. Lean's own
+// lean_is_exclusive answers false for EVERY mt object, so the check is by hand, and the size is
+// written directly because lean_sarray_set_size asserts lean_is_exclusive in a debug build.
+// Why this exists: Handle.read allocates on the CALLING thread, and a batch read on a pool thread
+// and dropped on the main thread is freed by a thread that does not own it. Under mimalloc a
+// huge block freed that way is only madvise(MADV_FREE)d and stays in RSS until the box is under
+// pressure (runs/2026-09-11-vit-leak-ab/README.md). With this the main thread allocates AND
+// frees every batch buffer and the pool thread only fills it.
+LEAN_EXPORT lean_obj_res lean_mlir_read_into(b_lean_obj_arg h, lean_obj_arg buf, size_t len,
+                                             lean_obj_arg w) {
+    (void)w;
+    int rc = buf->m_rc;
+    if (!(rc == 1 || rc == -1)) {
+        char msg[192];
+        snprintf(msg, sizeof msg, "readInto: buffer is shared (rc=%d), refusing to fill it in "
+                 "place; a copy here would put the allocation back on the reading thread", rc);
+        lean_dec(buf);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(msg)));
+    }
+    size_t sz = lean_sarray_size(buf), cap = lean_sarray_capacity(buf);
+    if (len > cap - sz) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "readInto: %zu bytes requested at offset %zu of a %zu-byte buffer",
+                 len, sz, cap);
+        lean_dec(buf);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(msg)));
+    }
+    FILE* fp = (FILE*)lean_get_external_data(h);
+    size_t n = fread(lean_sarray_cptr(buf) + sz, 1, len, fp);
+    if (n == 0 && len > 0 && ferror(fp)) {
+        int e = errno; clearerr(fp); lean_dec(buf);
+        return lean_io_result_mk_error(lean_decode_io_error(e, NULL));
+    }
+    if (feof(fp)) clearerr(fp);   // as Handle.read: a later read may retry
+    lean_to_sarray(buf)->m_size = sz + n;
+    return lean_io_result_mk_ok(buf);
 }

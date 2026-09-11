@@ -1,0 +1,3 @@
+A_prefetch_depth8 done:   PROBE-SPREAD: min=210 med=220 p90=1576 mean=561 ms/step (starvation wait = med-min = 10 ms)
+B_prefetch_off done:   PROBE-SPREAD: min=676 med=721 p90=748 mean=721 ms/step (starvation wait = med-min = 45 ms)
+ALL_DONE

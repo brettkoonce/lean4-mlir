@@ -1,0 +1,363 @@
+I0911 03:03:13.484031 1501875 service.cc:154] XLA service 0x742da079bf40 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 03:03:13.484110 1501875 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 03:03:13.484118 1501875 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 03:03:13.484123 1501875 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 03:03:13.484127 1501875 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 03:03:13.486831 1501875 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 03:03:13.486861 1501875 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 03:03:13.486902 1501875 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0911 03:03:13.486917 1501875 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0911 03:03:13.486929 1501875 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0911 03:03:13.497191 1501875 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 03:03:19.303326 1501959 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:19.571625 1501961 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 03:03:19.599866 1501940 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 92 bytes spill stores, 56 bytes spill loads
+
+I0911 03:03:19.734645 1501963 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+I0911 03:03:20.136295 1501938 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 03:03:20.158241 1501964 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:20.345872 1501967 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_216', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 03:03:20.384632 1501962 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:20.638803 1501951 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_951', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 03:03:20.686065 1501958 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 03:03:20.829267 1501940 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:21.270588 1501941 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+I0911 03:03:21.540013 1501940 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_964', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 03:03:21.626056 1501949 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 03:03:21.737191 1501946 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 03:03:22.062467 1501961 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_966', 168 bytes spill stores, 92 bytes spill loads
+
+I0911 03:03:22.172634 1501965 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 03:03:22.275257 1501948 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 32 bytes spill stores, 32 bytes spill loads
+
+I0911 03:03:22.292816 1501952 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 8556 bytes spill stores, 8448 bytes spill loads
+
+I0911 03:03:22.662343 1501945 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 712 bytes spill stores, 712 bytes spill loads
+
+I0911 03:03:22.702303 1501964 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_967', 84 bytes spill stores, 68 bytes spill loads
+
+I0911 03:03:22.714512 1501941 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 132 bytes spill stores, 72 bytes spill loads
+
+I0911 03:03:22.799543 1501963 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_589', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 03:03:23.172334 1501939 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_965', 96 bytes spill stores, 64 bytes spill loads
+
+I0911 03:03:25.347000 1501945 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1284', 144 bytes spill stores, 144 bytes spill loads
+
+I0911 03:03:25.385637 1501957 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1286', 156 bytes spill stores, 156 bytes spill loads
+
+I0911 03:03:26.553440 1501959 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1328', 180 bytes spill stores, 180 bytes spill loads
+
+I0911 03:03:26.606612 1501954 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1326', 228 bytes spill stores, 228 bytes spill loads
+
+I0911 03:03:30.079864 1501940 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1330', 448 bytes spill stores, 448 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir (@vitin_adamdp128x4wxclipdrop_train_step, 627 outputs, 4 replicas) in 16787 ms
+I0911 03:03:31.436752 1501955 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 88 bytes spill stores, 88 bytes spill loads
+
+I0911 03:03:31.658148 1501957 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 03:03:31.699939 1501961 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 03:03:31.707267 1501949 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 03:03:31.902162 1501945 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:32.072671 1501950 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:32.310758 1501963 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+I0911 03:03:32.314471 1501944 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:32.370568 1501967 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 03:03:32.373051 1501964 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_148', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 03:03:32.566079 1501939 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_fwd.mlir (@vitin_fwd, 1 outputs, 1 replica) in 2896 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789095813.579190 1502801 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789095815.588864 1502958 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  xla/pjrt verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir
+  xla/pjrt verified_mlir/vitin_fwd.mlir
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 50000 images, 28710 MB
+  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)
+  train 1281167, test 50000; bs 128, ViT-Tiny (ImageNet-1k) adamdp128x4wxclipdrop (cosine+warmup 5ep, baseLR 0.000500), He init
+  ▸ STOCHASTIC DEPTH: 24 drop sites, keeps #[1.000000, 1.000000, 0.991000, 0.991000, 0.982000, 0.982000, 0.973000, 0.973000, 0.964000, 0.964000, 0.955000, 0.955000, 0.945000, 0.945000, 0.936000, 0.936000, 0.927000, 0.927000, 0.918000, 0.918000, 0.909000, 0.909000, 0.900000, 0.900000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+  eval batch 256 (the batch @vitin_fwd was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2502 steps/epoch
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789095861.761145 1503232 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789095865.591417 1503391 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789095867.141950 1503466 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789095871.244731 1503629 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789095872.825706 1503704 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789095876.966918 1503862 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789095878.758964 1503938 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789095882.726344 1504096 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789095884.345225 1504172 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789095888.411514 1504332 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789095890.091616 1504407 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789095894.055855 1504574 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+READ h=0 step=0 issued=654455361 start=654455361 end=654455871
+READ h=2 step=2 issued=654455872 start=654455873 end=654456762
+READ h=1 step=1 issued=654455872 start=654455872 end=654456768
+READ h=4 step=4 issued=654455874 start=654455874 end=654456830
+READ h=3 step=3 issued=654455873 start=654455873 end=654456950
+[pjrt_ffi] RESIDENT: @vitin_adamdp128x4wxclipdrop_train_step holds 600 parameter tensors (65.4 MB) on 4 devices; they stop crossing PCIe from here
+READ h=0 step=6 issued=654455874 start=654455874 end=654458443
+READ h=5 step=5 issued=654455874 start=654455874 end=654459465
+I0911 03:04:57.829715 1501933 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 03:04:57.829791 1501930 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 03:04:57.829837 1501927 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)
+  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 1), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 2), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 3), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 4), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 5), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 6), wire v4 soft targets [512x1000]
+  imagenet shim: 6 sharded producers (round-robin over batches)
+  ▸ SHIM PREFETCH: ON (depth 6 over 6 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+  step 0/2502: loss=6.962636
+  step 1/2502: loss=6.933998
+  step 2/2502: loss=6.958502
+READ h=1 step=7 issued=654459752 start=654459752 end=654460365
+READ h=2 step=8 issued=654459962 start=654459962 end=654460660
+READ h=3 step=9 issued=654460171 start=654460171 end=654460939
+READ h=4 step=10 issued=654460379 start=654460379 end=654461302
+READ h=5 step=11 issued=654460590 start=654460590 end=654461305
+READ h=0 step=12 issued=654460817 start=654460817 end=654461670
+READ h=1 step=13 issued=654461066 start=654461066 end=654461939
+READ h=2 step=14 issued=654461306 start=654461306 end=654462335
+READ h=3 step=15 issued=654461536 start=654461536 end=654462346
+READ h=4 step=16 issued=654461812 start=654461812 end=654462752
+READ h=5 step=17 issued=654462062 start=654462062 end=654462935
+READ h=0 step=18 issued=654462313 start=654462313 end=654463274
+READ h=1 step=19 issued=654462553 start=654462553 end=654463587
+READ h=2 step=20 issued=654462828 start=654462828 end=654463774
+READ h=3 step=21 issued=654463055 start=654463055 end=654463961
+READ h=4 step=22 issued=654463283 start=654463283 end=654464427
+READ h=0 step=24 issued=654463777 start=654463777 end=654464664
+READ h=5 step=23 issued=654463546 start=654463546 end=654464666
+READ h=1 step=25 issued=654464548 start=654464549 end=654465366
+READ h=2 step=26 issued=654464799 start=654464799 end=654465599
+READ h=3 step=27 issued=654465065 start=654465067 end=654465760
+READ h=4 step=28 issued=654465309 start=654465309 end=654466090
+READ h=5 step=29 issued=654465530 start=654465530 end=654466417
+READ h=0 step=30 issued=654465778 start=654465778 end=654466506
+READ h=1 step=31 issued=654466027 start=654466027 end=654466812
+READ h=2 step=32 issued=654466261 start=654466263 end=654467198
+READ h=3 step=33 issued=654466508 start=654466508 end=654467372
+READ h=4 step=34 issued=654466761 start=654466761 end=654467592
+READ h=5 step=35 issued=654467012 start=654467012 end=654467749
+READ h=0 step=36 issued=654467242 start=654467242 end=654468124
+READ h=1 step=37 issued=654467495 start=654467495 end=654468423
+READ h=2 step=38 issued=654467757 start=654467758 end=654468607
+READ h=3 step=39 issued=654468012 start=654468012 end=654468819
+READ h=4 step=40 issued=654468260 start=654468260 end=654469063
+READ h=5 step=41 issued=654468501 start=654468501 end=654469385
+READ h=0 step=42 issued=654468747 start=654468748 end=654469634
+READ h=1 step=43 issued=654468992 start=654468992 end=654469802
+READ h=2 step=44 issued=654469266 start=654469266 end=654470030
+READ h=3 step=45 issued=654469510 start=654469510 end=654470396
+READ h=4 step=46 issued=654469757 start=654469758 end=654470683
+READ h=5 step=47 issued=654469991 start=654469991 end=654470839
+READ h=0 step=48 issued=654470249 start=654470249 end=654470985
+READ h=1 step=49 issued=654470502 start=654470504 end=654471425
+READ h=2 step=50 issued=654470749 start=654470749 end=654471696
+READ h=3 step=51 issued=654471002 start=654471002 end=654471944
+READ h=4 step=52 issued=654471275 start=654471276 end=654472031
+READ h=5 step=53 issued=654471531 start=654471531 end=654472397
+READ h=0 step=54 issued=654471779 start=654471779 end=654472678
+READ h=1 step=55 issued=654472035 start=654472035 end=654472987
+READ h=2 step=56 issued=654472290 start=654472290 end=654473014
+READ h=3 step=57 issued=654472552 start=654472552 end=654473370
+READ h=4 step=58 issued=654472809 start=654472809 end=654473680
+READ h=5 step=59 issued=654473071 start=654473071 end=654474015
+READ h=0 step=60 issued=654473324 start=654473324 end=654474217
+READ h=1 step=61 issued=654473601 start=654473602 end=654474409
+READ h=2 step=62 issued=654473849 start=654473849 end=654474697
+READ h=3 step=63 issued=654474110 start=654474110 end=654475021
+READ h=4 step=64 issued=654474356 start=654474356 end=654475247
+READ h=5 step=65 issued=654474610 start=654474610 end=654475423
+READ h=0 step=66 issued=654474862 start=654474862 end=654475683
+READ h=1 step=67 issued=654475110 start=654475110 end=654476000
+READ h=2 step=68 issued=654475362 start=654475362 end=654476290
+READ h=3 step=69 issued=654475632 start=654475632 end=654476506
+READ h=4 step=70 issued=654475903 start=654475903 end=654476715
+READ h=5 step=71 issued=654476164 start=654476164 end=654476947
+READ h=0 step=72 issued=654476931 start=654476931 end=654477503
+READ h=1 step=73 issued=654477157 start=654477157 end=654477753
+READ h=2 step=74 issued=654477365 start=654477365 end=654478042
+READ h=3 step=75 issued=654477588 start=654477588 end=654478333
+READ h=4 step=76 issued=654477845 start=654477847 end=654478567
+READ h=5 step=77 issued=654478078 start=654478078 end=654478863
+READ h=0 step=78 issued=654478308 start=654478308 end=654479110
+READ h=1 step=79 issued=654478530 start=654478530 end=654479308
+READ h=2 step=80 issued=654478773 start=654478773 end=654479596
+READ h=3 step=81 issued=654479004 start=654479005 end=654479880
+READ h=4 step=82 issued=654479244 start=654479244 end=654480100
+READ h=5 step=83 issued=654479492 start=654479492 end=654480274
+READ h=0 step=84 issued=654479767 start=654479768 end=654480611
+READ h=1 step=85 issued=654480004 start=654480004 end=654480901
+READ h=2 step=86 issued=654480253 start=654480254 end=654481090
+READ h=3 step=87 issued=654480504 start=654480504 end=654481352
+READ h=4 step=88 issued=654480759 start=654480759 end=654481639
+READ h=5 step=89 issued=654481005 start=654481005 end=654481845
+READ h=0 step=90 issued=654481250 start=654481250 end=654481989
+READ h=1 step=91 issued=654481493 start=654481494 end=654482293
+READ h=2 step=92 issued=654481755 start=654481756 end=654482621
+READ h=3 step=93 issued=654482009 start=654482009 end=654482874
+READ h=4 step=94 issued=654482261 start=654482263 end=654483036
+READ h=5 step=95 issued=654482889 start=654482889 end=654483574
+READ h=0 step=96 issued=654483105 start=654483105 end=654483772
+READ h=1 step=97 issued=654483336 start=654483336 end=654483991
+READ h=2 step=98 issued=654483547 start=654483547 end=654484343
+READ h=3 step=99 issued=654483773 start=654483773 end=654484563
+READ h=4 step=100 issued=654484003 start=654484003 end=654484773
+READ h=5 step=101 issued=654484240 start=654484240 end=654485054
+READ h=0 step=102 issued=654484466 start=654484466 end=654485359
+READ h=1 step=103 issued=654484724 start=654484724 end=654485612
+READ h=2 step=104 issued=654484995 start=654484995 end=654485698
+  step 100/2502: loss=6.923748
+READ h=3 step=105 issued=654485235 start=654485235 end=654485966
+READ h=4 step=106 issued=654485480 start=654485481 end=654486376
+READ h=5 step=107 issued=654485731 start=654485732 end=654486634
+READ h=0 step=108 issued=654485984 start=654485984 end=654486911
+READ h=1 step=109 issued=654486239 start=654486239 end=654486949
+READ h=2 step=110 issued=654486500 start=654486500 end=654487305
+READ h=3 step=111 issued=654486776 start=654486776 end=654487693
+READ h=4 step=112 issued=654487040 start=654487040 end=654487873
+READ h=5 step=113 issued=654487315 start=654487315 end=654488099
+READ h=0 step=114 issued=654487569 start=654487569 end=654488403
+READ h=1 step=115 issued=654487793 start=654487793 end=654488673
+READ h=2 step=116 issued=654488030 start=654488030 end=654488943
+READ h=3 step=117 issued=654488290 start=654488290 end=654489172
+READ h=4 step=118 issued=654488531 start=654488532 end=654489354
+READ h=5 step=119 issued=654488785 start=654488785 end=654489703
+READ h=0 step=120 issued=654489032 start=654489033 end=654489928
+READ h=1 step=121 issued=654489276 start=654489276 end=654490190
+READ h=2 step=122 issued=654489522 start=654489522 end=654490337
+READ h=3 step=123 issued=654489778 start=654489778 end=654490665
+READ h=4 step=124 issued=654490035 start=654490035 end=654490918
+READ h=5 step=125 issued=654490278 start=654490279 end=654491165
+READ h=0 step=126 issued=654490525 start=654490525 end=654491422
+READ h=1 step=127 issued=654490782 start=654490782 end=654491579
+READ h=2 step=128 issued=654491032 start=654491033 end=654491807
+READ h=3 step=129 issued=654491285 start=654491287 end=654492102
+READ h=4 step=130 issued=654491534 start=654491534 end=654492485
+READ h=5 step=131 issued=654491784 start=654491784 end=654492677
+READ h=0 step=132 issued=654492062 start=654492063 end=654492800
+READ h=1 step=133 issued=654492303 start=654492303 end=654493184
+READ h=2 step=134 issued=654492562 start=654492562 end=654493437
+READ h=3 step=135 issued=654492820 start=654492820 end=654493695
+READ h=4 step=136 issued=654493083 start=654493084 end=654493997
+READ h=5 step=137 issued=654493354 start=654493355 end=654494097
+READ h=0 step=138 issued=654493599 start=654493599 end=654494399
+READ h=1 step=139 issued=654493839 start=654493839 end=654494702
+READ h=2 step=140 issued=654494097 start=654494098 end=654495001
+READ h=3 step=141 issued=654494361 start=654494361 end=654495225
+READ h=4 step=142 issued=654494617 start=654494621 end=654495444
+READ h=5 step=143 issued=654494871 start=654494871 end=654495732
+READ h=0 step=144 issued=654495444 start=654495444 end=654496086
+READ h=1 step=145 issued=654495662 start=654495662 end=654496379
+READ h=2 step=146 issued=654495885 start=654495887 end=654496620
+READ h=3 step=147 issued=654496109 start=654496109 end=654496894
+READ h=4 step=148 issued=654496320 start=654496320 end=654497158
+READ h=5 step=149 issued=654496547 start=654496547 end=654497414
+READ h=0 step=150 issued=654496781 start=654496781 end=654497652
+READ h=1 step=151 issued=654497020 start=654497020 end=654497884
+READ h=2 step=152 issued=654497291 start=654497291 end=654498133
+READ h=3 step=153 issued=654497539 start=654497539 end=654498392
+READ h=4 step=154 issued=654497797 start=654497797 end=654498660
+READ h=5 step=155 issued=654498079 start=654498079 end=654498901
+READ h=0 step=156 issued=654498328 start=654498328 end=654499151
+READ h=1 step=157 issued=654498565 start=654498565 end=654499397
+READ h=2 step=158 issued=654498822 start=654498822 end=654499633
+READ h=3 step=159 issued=654499062 start=654499062 end=654499895
+READ h=4 step=160 issued=654499307 start=654499308 end=654500205
+READ h=5 step=161 issued=654499557 start=654499557 end=654500443
+READ h=0 step=162 issued=654499801 start=654499801 end=654500527
+READ h=1 step=163 issued=654500057 start=654500057 end=654500970
+READ h=2 step=164 issued=654500298 start=654500298 end=654501121
+READ h=3 step=165 issued=654500550 start=654500551 end=654501523
+READ h=4 step=166 issued=654500822 start=654500822 end=654501696
+READ h=5 step=167 issued=654501097 start=654501097 end=654501922
+READ h=0 step=168 issued=654501558 start=654501558 end=654502348
+READ h=1 step=169 issued=654501815 start=654501816 end=654502582
+READ h=2 step=170 issued=654502056 start=654502056 end=654502787
+READ h=3 step=171 issued=654502277 start=654502277 end=654503018
+READ h=4 step=172 issued=654502499 start=654502499 end=654503322
+READ h=5 step=173 issued=654502750 start=654502750 end=654503596
+READ h=0 step=174 issued=654503001 start=654503001 end=654503784
+READ h=1 step=175 issued=654503241 start=654503241 end=654504035
+READ h=2 step=176 issued=654503474 start=654503474 end=654504315
+READ h=3 step=177 issued=654503716 start=654503719 end=654504618
+READ h=4 step=178 issued=654503981 start=654503982 end=654504878
+READ h=5 step=179 issued=654504232 start=654504232 end=654505045
+READ h=0 step=180 issued=654504482 start=654504483 end=654505291
+READ h=1 step=181 issued=654504734 start=654504734 end=654505664
+READ h=2 step=182 issued=654504988 start=654504988 end=654505935
+READ h=3 step=183 issued=654505237 start=654505237 end=654506007
+READ h=4 step=184 issued=654505503 start=654505503 end=654506242
+READ h=5 step=185 issued=654505762 start=654505762 end=654506633
+READ h=0 step=186 issued=654506014 start=654506017 end=654506981
+READ h=1 step=187 issued=654506266 start=654506266 end=654507168
+READ h=2 step=188 issued=654506527 start=654506527 end=654507309
+READ h=3 step=189 issued=654506781 start=654506781 end=654507519
+READ h=4 step=190 issued=654507010 start=654507010 end=654508003
+READ h=5 step=191 issued=654507228 start=654507228 end=654508155
+READ h=0 step=192 issued=654507791 start=654507791 end=654508553
+READ h=1 step=193 issued=654508016 start=654508016 end=654508842
+READ h=2 step=194 issued=654508231 start=654508231 end=654508943
+READ h=3 step=195 issued=654508457 start=654508457 end=654509284
+READ h=4 step=196 issued=654508683 start=654508683 end=654509616
+READ h=5 step=197 issued=654508937 start=654508937 end=654509799
+READ h=0 step=198 issued=654509182 start=654509182 end=654510102
+READ h=1 step=199 issued=654509455 start=654509457 end=654510360
+READ h=2 step=200 issued=654509693 start=654509696 end=654510545
+READ h=3 step=201 issued=654509951 start=654509951 end=654510771
+READ h=4 step=202 issued=654510217 start=654510217 end=654511094
+READ h=5 step=203 issued=654510468 start=654510468 end=654511365
+  step 200/2502: loss=6.912663
+  PROBE: 250 ms/step (median of 150 steps 51..200, ViT-Tiny (ImageNet-1k))
+  PROBE-SPREAD: min=208 med=250 p90=272 mean=259 ms/step (starvation wait = med-min = 42 ms)
+  PROBE-DUMP: 150 steps → runs/2026-09-11-vit-leak-ab/A_fix_det0_w6_nice.steps.tsv
+READ h=0 step=204 issued=654510710 start=654510711 end=654511558
+READ h=1 step=205 issued=654510956 start=654510957 end=654511776
+READ h=2 step=206 issued=654511212 start=654511212 end=654512017

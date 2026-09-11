@@ -1,0 +1,31 @@
+fd   6  pipe:[15056747]  pipe_size=65536
+fd   7  pipe:[15056747]  pipe_size=65536
+fd   8  pipe:[15056748]  pipe_size=65536
+fd   9  pipe:[15056748]  pipe_size=65536
+fd  12  pipe:[15048443]  pipe_size=65536
+fd  13  pipe:[15048443]  pipe_size=65536
+fd  14  pipe:[15048444]  pipe_size=65536
+fd  15  pipe:[15048444]  pipe_size=65536
+fd 104  pipe:[15069543]  pipe_size=65536
+fd 105  pipe:[15069543]  pipe_size=65536
+fd 119  pipe:[15078557]  pipe_size=65536
+fd 120  pipe:[15045370]  pipe_size=65536
+fd 121  pipe:[15060842]  pipe_size=65536
+fd 122  pipe:[15045371]  pipe_size=65536
+fd 123  pipe:[15060856]  pipe_size=65536
+fd 124  pipe:[15078582]  pipe_size=65536
+fd 125  pipe:[15051708]  pipe_size=65536
+fd 126  pipe:[15065843]  pipe_size=65536
+fd 135  pipe:[15068843]  pipe_size=65536
+fd 144  pipe:[15068843]  pipe_size=65536
+user pipe census: 36 unique pipes visible (576 pages at 16/pipe; soft limit 16384)
+shim 1465826 SHARD= fd1=/tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/bc4c7d00-789f-4a34-a92f-f0c41ff53b53/tasks/bb8tdm851.output : S/do_wait S/do_wait S/do_wait S/do_wait S/do_wait 
+shim 1467223 SHARD=0/8 fd1=pipe:[15078557] : S/futex_wait_queue S/futex_wait_queue S/0 S/futex_wait_queue R/0 
+shim 1467398 SHARD=1/8 fd1=pipe:[15045370] : R/0 R/0 S/futex_wait_queue S/0 S/futex_wait_queue 
+shim 1467570 SHARD=2/8 fd1=pipe:[15060842] : S/futex_wait_queue S/futex_wait_queue R/0 R/pipe_write S/futex_wait_queue 
+shim 1467739 SHARD=3/8 fd1=pipe:[15045371] : S/0 S/futex_wait_queue S/futex_wait_queue S/futex_wait_queue S/futex_wait_queue 
+shim 1467947 SHARD=4/8 fd1=pipe:[15060856] : S/futex_wait_queue R/0 S/pipe_write S/futex_wait_queue S/futex_wait_queue 
+shim 1468119 SHARD=5/8 fd1=pipe:[15078582] : S/futex_wait_queue S/futex_wait_queue S/futex_wait_queue S/futex_wait_queue R/0 
+shim 1468290 SHARD=6/8 fd1=pipe:[15051708] : R/0 R/pipe_write S/futex_wait_queue S/futex_wait_queue S/futex_wait_queue 
+shim 1468459 SHARD=7/8 fd1=pipe:[15065843] : S/futex_wait_queue S/futex_wait_queue S/futex_wait_queue R/0 R/0 
+shim 1469219 SHARD= fd1=pipe:[15080808] : S/pipe_read S/pipe_read S/pipe_read S/pipe_read S/pipe_read 

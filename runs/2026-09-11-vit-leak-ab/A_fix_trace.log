@@ -1,0 +1,302 @@
+I0911 02:39:02.302872 1469827 service.cc:154] XLA service 0x7ed6e479c0d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 02:39:02.302946 1469827 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 02:39:02.302956 1469827 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 02:39:02.302962 1469827 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 02:39:02.302967 1469827 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 02:39:02.305641 1469827 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 02:39:02.305670 1469827 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 02:39:02.305708 1469827 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0911 02:39:02.305720 1469827 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0911 02:39:02.305734 1469827 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0911 02:39:02.315521 1469827 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 02:39:08.235707 1469891 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:08.414889 1469892 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 92 bytes spill stores, 56 bytes spill loads
+
+I0911 02:39:08.580192 1469919 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_216', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 02:39:08.648781 1469913 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+I0911 02:39:08.892369 1469914 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:08.987829 1469905 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_74', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 02:39:09.006665 1469890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 02:39:09.176510 1469903 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_951', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 02:39:09.610557 1469916 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:09.613609 1469892 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_579', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:09.714947 1469910 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 02:39:10.078981 1469890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 02:39:10.237504 1469893 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+I0911 02:39:10.355837 1469892 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_964', 12 bytes spill stores, 4 bytes spill loads
+
+I0911 02:39:10.434980 1469901 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 72 bytes spill stores, 72 bytes spill loads
+
+I0911 02:39:10.497706 1469890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 02:39:10.968235 1469904 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 8556 bytes spill stores, 8448 bytes spill loads
+
+I0911 02:39:11.182133 1469913 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_966', 168 bytes spill stores, 92 bytes spill loads
+
+I0911 02:39:11.253606 1469915 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_589', 12 bytes spill stores, 12 bytes spill loads
+
+I0911 02:39:11.324477 1469890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 712 bytes spill stores, 712 bytes spill loads
+
+I0911 02:39:11.704970 1469905 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 32 bytes spill stores, 32 bytes spill loads
+
+I0911 02:39:11.712425 1469893 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_72', 132 bytes spill stores, 72 bytes spill loads
+
+I0911 02:39:11.923740 1469915 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_967', 84 bytes spill stores, 68 bytes spill loads
+
+I0911 02:39:11.937021 1469901 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_965', 96 bytes spill stores, 64 bytes spill loads
+
+I0911 02:39:14.239358 1469904 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1286', 156 bytes spill stores, 156 bytes spill loads
+
+I0911 02:39:14.273053 1469907 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1284', 144 bytes spill stores, 144 bytes spill loads
+
+I0911 02:39:15.522034 1469919 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1328', 180 bytes spill stores, 180 bytes spill loads
+
+I0911 02:39:15.572285 1469899 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1326', 228 bytes spill stores, 228 bytes spill loads
+
+I0911 02:39:18.931938 1469889 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1330', 448 bytes spill stores, 448 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir (@vitin_adamdp128x4wxclipdrop_train_step, 627 outputs, 4 replicas) in 16808 ms
+I0911 02:39:20.260721 1469904 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 88 bytes spill stores, 88 bytes spill loads
+
+I0911 02:39:20.306460 1469913 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I0911 02:39:20.497602 1469899 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 02:39:20.743398 1469897 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:20.763420 1469901 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+I0911 02:39:20.820567 1469890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:20.869521 1469902 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:21.037908 1469915 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+I0911 02:39:21.079885 1469910 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_289', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 02:39:21.170249 1469904 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_148', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 02:39:21.345170 1469909 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vitin_fwd.mlir (@vitin_fwd, 1 outputs, 1 replica) in 2810 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094362.333069 1470760 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789094364.350239 1470921 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  xla/pjrt verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir
+  xla/pjrt verified_mlir/vitin_fwd.mlir
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 50000 images, 28710 MB
+  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)
+  train 1281167, test 50000; bs 128, ViT-Tiny (ImageNet-1k) adamdp128x4wxclipdrop (cosine+warmup 5ep, baseLR 0.000500), He init
+  ▸ STOCHASTIC DEPTH: 24 drop sites, keeps #[1.000000, 1.000000, 0.991000, 0.991000, 0.982000, 0.982000, 0.973000, 0.973000, 0.964000, 0.964000, 0.955000, 0.955000, 0.945000, 0.945000, 0.936000, 0.936000, 0.927000, 0.927000, 0.918000, 0.918000, 0.909000, 0.909000, 0.900000, 0.900000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+  eval batch 256 (the batch @vitin_fwd was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2502 steps/epoch
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094409.922611 1471256 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094413.459869 1471256 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094413.725631 1471416 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094414.561237 1471425 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094418.229455 1471425 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094418.493442 1471589 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094419.410006 1471596 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094423.332820 1471596 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094423.596488 1471792 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094424.490355 1471799 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094428.454600 1471799 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094428.745712 1471962 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094429.580083 1471970 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094433.378390 1471970 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094433.640937 1472136 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094434.505450 1472143 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094438.563619 1472143 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094438.836215 1472298 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094439.759944 1472315 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094443.765410 1472315 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094444.050166 1472484 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789094444.901712 1472491 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+E0000 00:00:1789094448.825366 1472491 node_def_util.cc:682] NodeDef mentions attribute use_unbounded_threadpool which is not in the op definition: Op<name=MapDataset; signature=input_dataset:variant, other_arguments: -> handle:variant; attr=f:func; attr=Targuments:list(type),min=0; attr=output_types:list(type),min=1; attr=output_shapes:list(shape),min=1; attr=use_inter_op_parallelism:bool,default=true; attr=preserve_cardinality:bool,default=false; attr=force_synchronous:bool,default=false; attr=metadata:string,default=""> This may be expected if your graph generating binary is newer  than this binary. Unknown attributes will be ignored. NodeDef: {{node ParallelMapDatasetV2/_16}}
+I0000 00:00:1789094449.108968 1472644 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+READ h=0 step=0 issued=653010408 start=653010711 end=653011211
+READ h=3 step=3 issued=653011212 start=653011212 end=653011780
+READ h=2 step=2 issued=653011211 start=653011211 end=653011784
+READ h=4 step=4 issued=653011212 start=653011212 end=653011806
+READ h=1 step=1 issued=653011211 start=653011211 end=653011811
+READ h=5 step=5 issued=653011212 start=653011212 end=653011929
+[pjrt_ffi] RESIDENT: @vitin_adamdp128x4wxclipdrop_train_step holds 600 parameter tensors (65.4 MB) on 4 devices; they stop crossing PCIe from here
+I0911 02:40:51.379963 1469879 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 02:40:51.380017 1469882 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0911 02:40:51.380516 1469885 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)
+  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 1), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 2), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 3), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 4), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 5), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 6), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 7), wire v4 soft targets [512x1000]
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 8), wire v4 soft targets [512x1000]
+  imagenet shim: 8 sharded producers (round-robin over batches)
+  ▸ SHIM PREFETCH: ON (depth 8 over 8 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+  step 0/2502: loss=6.935283
+  step 1/2502: loss=6.951706
+  step 2/2502: loss=6.938221
+READ h=0 step=8 issued=653011212 start=653011212 end=653014476
+READ h=3 step=11 issued=653013750 start=653013750 end=653014921
+READ h=4 step=12 issued=653013964 start=653013964 end=653015012
+READ h=5 step=13 issued=653014183 start=653014183 end=653015031
+READ h=2 step=10 issued=653013534 start=653013534 end=653015046
+READ h=1 step=9 issued=653013320 start=653013320 end=653015148
+READ h=6 step=6 issued=653011212 start=653011212 end=653016195
+READ h=6 step=14 issued=653016195 start=653016195 end=653019459
+READ h=7 step=7 issued=653011212 start=653011212 end=653023237
+READ h=0 step=16 issued=653023458 start=653023458 end=653023926
+READ h=1 step=17 issued=653023664 start=653023664 end=653024150
+READ h=2 step=18 issued=653023868 start=653023868 end=653024377
+READ h=3 step=19 issued=653024073 start=653024073 end=653024595
+READ h=4 step=20 issued=653024388 start=653024388 end=653025085
+READ h=5 step=21 issued=653024598 start=653024598 end=653025277
+READ h=6 step=22 issued=653024808 start=653024808 end=653025500
+READ h=7 step=15 issued=653023237 start=653023237 end=653026506
+READ h=1 step=25 issued=653026936 start=653026936 end=653027437
+READ h=2 step=26 issued=653027148 start=653027148 end=653027653
+READ h=0 step=24 issued=653026719 start=653026719 end=653027712
+READ h=3 step=27 issued=653027702 start=653027702 end=653028220
+READ h=4 step=28 issued=653027912 start=653027912 end=653028482
+READ h=5 step=29 issued=653028121 start=653028121 end=653028680
+READ h=6 step=30 issued=653028331 start=653028331 end=653028865
+READ h=7 step=23 issued=653026506 start=653026506 end=653029552
+READ h=1 step=33 issued=653029972 start=653029972 end=653030570
+READ h=0 step=32 issued=653029761 start=653029761 end=653030684
+READ h=2 step=34 issued=653030188 start=653030188 end=653030758
+READ h=3 step=35 issued=653030400 start=653030400 end=653031223
+READ h=4 step=36 issued=653030613 start=653030614 end=653031647
+READ h=5 step=37 issued=653030829 start=653030829 end=653031739
+READ h=6 step=38 issued=653031040 start=653031040 end=653031883
+READ h=7 step=31 issued=653029552 start=653029552 end=653032499
+READ h=1 step=41 issued=653032918 start=653032918 end=653033735
+READ h=0 step=40 issued=653032709 start=653032709 end=653033780
+READ h=2 step=42 issued=653033131 start=653033131 end=653033883
+READ h=3 step=43 issued=653033342 start=653033342 end=653034311
+READ h=4 step=44 issued=653033555 start=653033555 end=653034747
+READ h=5 step=45 issued=653033771 start=653033771 end=653034751
+READ h=6 step=46 issued=653033981 start=653033981 end=653035000
+READ h=7 step=39 issued=653032499 start=653032499 end=653035526
+READ h=0 step=48 issued=653035739 start=653035739 end=653036867
+READ h=2 step=50 issued=653036162 start=653036162 end=653036871
+READ h=1 step=49 issued=653035949 start=653035949 end=653036890
+READ h=3 step=51 issued=653036379 start=653036379 end=653037353
+READ h=4 step=52 issued=653036591 start=653036591 end=653037759
+READ h=5 step=53 issued=653036802 start=653036802 end=653037847
+READ h=6 step=54 issued=653037017 start=653037017 end=653038049
+READ h=7 step=47 issued=653035526 start=653035526 end=653038599
+READ h=2 step=58 issued=653039243 start=653039243 end=653039952
+READ h=1 step=57 issued=653039029 start=653039029 end=653039992
+READ h=0 step=56 issued=653038809 start=653038809 end=653039996
+READ h=3 step=59 issued=653039465 start=653039465 end=653040415
+READ h=4 step=60 issued=653039675 start=653039675 end=653040701
+READ h=5 step=61 issued=653039887 start=653039887 end=653040915
+READ h=6 step=62 issued=653040104 start=653040104 end=653041148
+READ h=7 step=55 issued=653038599 start=653038599 end=653041676
+READ h=2 step=66 issued=653042315 start=653042315 end=653042919
+READ h=1 step=65 issued=653042102 start=653042102 end=653042961
+READ h=0 step=64 issued=653041888 start=653041888 end=653043067
+READ h=3 step=67 issued=653042531 start=653042531 end=653043472
+READ h=4 step=68 issued=653042741 start=653042741 end=653043686
+READ h=5 step=69 issued=653042950 start=653042950 end=653044034
+READ h=6 step=70 issued=653043167 start=653043167 end=653044207
+READ h=7 step=63 issued=653041676 start=653041676 end=653044766
+READ h=1 step=73 issued=653045189 start=653045189 end=653046008
+READ h=2 step=74 issued=653045398 start=653045398 end=653046029
+READ h=0 step=72 issued=653044977 start=653044977 end=653046155
+READ h=3 step=75 issued=653045612 start=653045612 end=653046622
+READ h=4 step=76 issued=653045828 start=653045828 end=653046805
+READ h=5 step=77 issued=653046045 start=653046045 end=653047004
+READ h=6 step=78 issued=653046257 start=653046257 end=653047269
+READ h=7 step=71 issued=653044766 start=653044766 end=653047789
+READ h=1 step=81 issued=653048208 start=653048208 end=653048963
+READ h=2 step=82 issued=653048418 start=653048418 end=653049092
+READ h=0 step=80 issued=653047998 start=653047998 end=653049170
+READ h=3 step=83 issued=653048636 start=653048636 end=653049689
+READ h=4 step=84 issued=653048846 start=653048846 end=653049876
+READ h=5 step=85 issued=653049059 start=653049059 end=653050060
+READ h=6 step=86 issued=653049283 start=653049283 end=653050323
+READ h=7 step=79 issued=653047789 start=653047789 end=653050834
+READ h=1 step=89 issued=653051255 start=653051255 end=653052070
+READ h=2 step=90 issued=653051468 start=653051468 end=653052206
+READ h=0 step=88 issued=653051044 start=653051044 end=653052262
+READ h=3 step=91 issued=653051682 start=653051682 end=653052726
+READ h=4 step=92 issued=653051897 start=653051897 end=653052889
+READ h=5 step=93 issued=653052110 start=653052111 end=653053058
+READ h=6 step=94 issued=653052328 start=653052328 end=653053352
+READ h=7 step=87 issued=653050834 start=653050834 end=653053888
+READ h=1 step=97 issued=653054309 start=653054309 end=653055125
+READ h=2 step=98 issued=653054518 start=653054518 end=653055205
+READ h=0 step=96 issued=653054100 start=653054100 end=653055338
+READ h=3 step=99 issued=653054728 start=653054728 end=653055821
+READ h=4 step=100 issued=653054940 start=653054940 end=653055881
+READ h=5 step=101 issued=653055151 start=653055152 end=653056128
+READ h=6 step=102 issued=653055373 start=653055373 end=653056461
+READ h=7 step=95 issued=653053888 start=653053888 end=653056979
+READ h=2 step=106 issued=653057614 start=653057614 end=653058246
+  step 100/2502: loss=6.950721
+READ h=1 step=105 issued=653057400 start=653057400 end=653058260
+READ h=0 step=104 issued=653057188 start=653057188 end=653058385
+READ h=3 step=107 issued=653057845 start=653057845 end=653058878
+READ h=4 step=108 issued=653058056 start=653058056 end=653058963
+READ h=5 step=109 issued=653058267 start=653058267 end=653059199
+READ h=6 step=110 issued=653058489 start=653058489 end=653059462
+READ h=7 step=103 issued=653056979 start=653056979 end=653060037
+READ h=1 step=113 issued=653060457 start=653060457 end=653061365
+READ h=2 step=114 issued=653060667 start=653060667 end=653061376
+READ h=0 step=112 issued=653060247 start=653060247 end=653061464
+READ h=3 step=115 issued=653060884 start=653060884 end=653061963
+READ h=4 step=116 issued=653061097 start=653061097 end=653061980
+READ h=5 step=117 issued=653061309 start=653061310 end=653062420
+READ h=6 step=118 issued=653061530 start=653061530 end=653062579
+READ h=7 step=111 issued=653060037 start=653060037 end=653063058
+READ h=2 step=122 issued=653063688 start=653063688 end=653064423
+READ h=1 step=121 issued=653063478 start=653063478 end=653064496
+READ h=0 step=120 issued=653063269 start=653063269 end=653064507
+READ h=4 step=124 issued=653064115 start=653064115 end=653065053
+READ h=3 step=123 issued=653063903 start=653063903 end=653065064
+READ h=5 step=125 issued=653064327 start=653064327 end=653065440
+READ h=6 step=126 issued=653064546 start=653064546 end=653065554
+READ h=7 step=119 issued=653063058 start=653063058 end=653066104
+  PROBE: 214 ms/step (median of 70 steps 51..120, ViT-Tiny (ImageNet-1k))
+  PROBE-SPREAD: min=208 med=214 p90=1545 mean=386 ms/step (starvation wait = med-min = 6 ms)
+  PROBE-DUMP: 70 steps → runs/2026-09-11-vit-leak-ab/A_fix_trace.steps.tsv
+READ h=0 step=128 issued=653066314 start=653066315 end=653067537
+READ h=7 step=127 issued=653066104 start=653066104 end=653069064

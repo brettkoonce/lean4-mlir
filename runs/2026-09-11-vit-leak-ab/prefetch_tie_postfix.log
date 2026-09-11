@@ -1,0 +1,19 @@
+   (stashed an existing .lake/build/resnet34in_momdp64_ckpt_xla.bin — restored on exit)
+── depth-1 shim prefetch: bit-identity gate ──
+   net      resnet34in/momdp64, 4 x bs64 on devices 0,1,2,3
+   window   2 epoch(s) x 12 steps = 24 steps
+   scratch  /tmp/tmp.JOxgehegQj
+   building the deterministic shim in /tmp/residency_detshim ...
+   shim     /tmp/residency_detshim/libpjrt_ffi.so (autotuning OFF — correctness instrument, not a timing one)
+
+── runs ──
+   A1  prefetch=0  261572064 bytes  SHIM PREFETCH: OFF
+   A2  prefetch=0  261572064 bytes  SHIM PREFETCH: OFF
+   B   prefetch=1  261572064 bytes  SHIM PREFETCH: ON
+
+── verdict ──
+   control  A1 vs A2 (both prefetch OFF): 0 differing bytes
+   verdict  A1 vs B  (OFF vs ON)        : 0 differing bytes
+
+✓ PASS — control clean, and the prefetch is bit-identical over 24 steps
+  across an epoch boundary. Only *when* the read happens moved.
