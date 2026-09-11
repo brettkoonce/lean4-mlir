@@ -1,0 +1,1 @@
+flow flow-ot fm-euler NFE 50: kinetic energy ∫E|v|²dt = 1.264791, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.004176

@@ -1,5 +1,26 @@
 # boltzmann_generator_demo.md — flow matching as a Boltzmann generator
 
+Status 2026-09-11: Phases 0–5 done in one session; numbers, gates and every
+artifact in `runs/2026-09-11-boltzmann-generator/README.md`. Gate A 3.2× the
+floor / basins within 0.029; gate B passes on the density-corrected weights
+(0.0 at kT′ = 12, the naive reweighting misses by 3.4 because the model
+inherits the training set's A-bias); NFE 2 fails as §9 predicted (B empties,
+⟨U⟩ off by 16). Phases 3 and 4 landed too: `logp` / `nll` give the KL column
+(0.038 / 0.048 nats), `field` the §6.2 error (0.6–3 % of |v*|² per t), and
+`ot` / `reflow` the coupling table (reflow: a one-step generator at 4.9× the
+floor against 233× independent). ⚠ Two departures from the text below: the
+density is `log|det(I + hJ)|` per Euler step, not the trace form, because the
+trace form biases the KL negative at NFE 50 (§6.3); and gate B is applied to
+the corrected row when a `.logp.bin` exists (§6.1's own caveat). The exe is
+`demos/MainDiffusion2d.lean`, the scorer `scripts/boltzmann_metrics.py`, the
+figure `scripts/boltzmann_figure.py`, the entry `Bestiary/BoltzmannGenerator.lean`.
+⭐ The section is its own category, "Physics — demo: Boltzmann generator on Müller-Brown", a
+`\subsection` beside the other demo categories (on the TOC), with PINN, FNO
+and FourCastNet as bestiary entries beside the generator (user decision
+2026-09-11; §7 said a subsection after the DDPM one). Open: a seed study
+(one checkpoint per arm), and the §7 strip for the flow path is written but
+not rendered.
+
 Goal: a second half for the diffusion demo whose ground truth is a formula.
 Train the 2-D toy demo's MLP as a flow-matching model from `N(0, I)` to
 `exp(-U/kT)` on the Müller-Brown surface, score it by quadrature instead of

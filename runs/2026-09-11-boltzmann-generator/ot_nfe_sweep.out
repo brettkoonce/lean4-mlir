@@ -1,0 +1,4 @@
+flow flow-ot fm-euler NFE 10: kinetic energy ∫E|v|²dt = 1.260717, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.004390
+flow flow-ot fm-euler NFE 5: kinetic energy ∫E|v|²dt = 1.253711, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.005592
+flow flow-ot fm-euler NFE 2: kinetic energy ∫E|v|²dt = 1.248747, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.007601
+flow flow-ot fm-euler NFE 1: kinetic energy ∫E|v|²dt = 1.272384, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.036018

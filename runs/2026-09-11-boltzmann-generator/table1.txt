@@ -1,0 +1,18 @@
+  ----------------------------------------------------------------------------------------------------------------
+  quadrature (exact)           0.806 / 0.129 / 0.065    -113.6    -36.6      1.0x (0.0015)
+  Langevin, 8 chains x 1e5 steps 0.844 / 0.101 / 0.054    -112.6    -42.4      4.1x (0.0060)
+  flow, Euler, NFE 50 (n=2048) 0.834 / 0.103 / 0.063    -112.4    -41.9      3.2x (0.0046)    0.038 /  0.048
+    ^ reweighted by p_20/p_theta 0.805 / 0.129 / 0.066    -112.8    -36.7                       1864
+  flow, Heun, NFE 50 (n=2048)  0.834 / 0.109 / 0.056    -111.2    -40.6      2.4x (0.0035)
+  flow, Euler, NFE 10 (n=2048) 0.840 / 0.086 / 0.073    -117.7    -45.5      8.6x (0.0125)    0.152 /    nan
+    ^ reweighted by p_20/p_theta 0.815 / 0.126 / 0.059    -112.5    -37.3                       1168
+  flow, Euler, NFE 2 (n=2048)  0.891 / 0.006 / 0.103     -97.4    -98.9     90.8x (0.1320)    2.346 /    nan
+    ^ reweighted by p_20/p_theta 0.913 / 0.034 / 0.053    -123.9    -65.8                       32
+  DDPM, DDIM, NFE 50 (n=2048) [1 in the wall] 0.895 / 0.059 / 0.046    -114.7    -54.4     18.0x (0.0261)
+  DDPM, DDIM, NFE 10 (n=2048) [10 in the wall] 0.841 / 0.098 / 0.061     -98.0    -43.0     13.5x (0.0196)
+  DDPM, DDIM, NFE 2 (n=2048) [236 in the wall] 0.742 / 0.144 / 0.115      83.3    -32.8    268.0x (0.3896)
+  DDPM, Euler ODE, NFE 50 (n=2048) [61 in the wall] 0.873 / 0.090 / 0.037     -50.4    -45.4     51.7x (0.0752)
+  N(0, I) prior, no flow [59 in the wall] 0.419 / 0.195 / 0.385      57.2    -15.3    306.1x (0.4451)
+
+  at n = 2048 a population carries about +-0.01 of sampling error; the KL columns are nats, KL(m||e) from the model's samples, KL(e||m) on the exact draw
+  => gate on 'flow, Euler, NFE 50': energy 3.2x floor (need <= 10x) and max basin error 0.029 (need <= 0.03)  [PASS]

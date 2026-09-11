@@ -84,6 +84,28 @@ opaque stepInputs (x0 : @& ByteArray) (alphaBar : @& ByteArray)
     (B : USize) (npixels : USize) (seed : USize)
     : IO (ByteArray × ByteArray × ByteArray)
 
+/-- Flow matching's per-step inputs on the LINEAR interpolant
+    ([planning/boltzmann_generator_demo.md](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/boltzmann_generator_demo.md) §4).
+    The one thing that changes from `stepInputs`: per row `t ~ U(0, 1)`,
+    `x_t = (1-t)·x0 + t·ε` and the target is the velocity `v = ε - x0` instead
+    of `ε`. Returns `(x_t, v, t_idx)` with `t_idx = round(t · Tmax)` as the int32
+    index `prependSinCosT` already takes, so the time channel is untouched.
+    `mode` 0 draws `ε`; 1 takes it from `epsIn` (reflow's fixed pairs); 2 draws
+    it and then pairs rows by a minimum-cost assignment on `|x0_i - ε_j|²`
+    (minibatch OT). The MSE block does not know whether the target is `ε` or
+    `v`, so the train step is `trainStepAdamF32Ddpm` unchanged. -/
+@[extern "lean_ddpm_flow_step_inputs"]
+opaque flowStepInputs (x0 : @& ByteArray) (epsIn : @& ByteArray)
+    (B : USize) (n : USize) (seed : USize) (Tmax : USize) (mode : USize)
+    : IO (ByteArray × ByteArray × ByteArray)
+
+/-- The flow-matching samplers, beside `samplerNfe`: Euler and Heun on
+    `dx/dt = v(x, t)` from `t = 1` to `0` on a uniform grid. Kept as a separate
+    list so the image-side probes that parse `samplerNfe` do not start
+    accepting names their VP-schedule math has no meaning for. -/
+def flowSamplerNfe : List (String × Nat) :=
+  [("fm-euler", 1), ("fm-heun", 2)]
+
 /-! ### The continuous-time (VP-SDE) view of the same schedule
 
     `cosineSchedule` tabulates ᾱ at the integers `t = 0 … T-1`. Score-SDE

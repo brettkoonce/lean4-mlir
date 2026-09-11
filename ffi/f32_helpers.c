@@ -1148,6 +1148,128 @@ LEAN_EXPORT lean_obj_res lean_ddpm_step_inputs(
     return lean_io_result_mk_ok(outer);
 }
 
+// ---- Minimum-cost assignment on a square cost matrix (Hungarian, O(n³)) ----
+// The e-maxx formulation with row/column potentials. `assign[i]` receives the
+// column matched to row i. Used by the minibatch-OT coupling below at n = B.
+static void f32_hungarian(const double* cost, size_t n, size_t* assign) {
+    const double INF = 1e300;
+    double* u    = (double*)calloc(n + 1, sizeof(double));
+    double* v    = (double*)calloc(n + 1, sizeof(double));
+    size_t* p    = (size_t*)calloc(n + 1, sizeof(size_t));
+    size_t* way  = (size_t*)calloc(n + 1, sizeof(size_t));
+    double* minv = (double*)malloc((n + 1) * sizeof(double));
+    char*   used = (char*)malloc(n + 1);
+    for (size_t i = 1; i <= n; i++) {
+        p[0] = i;
+        size_t j0 = 0;
+        for (size_t j = 0; j <= n; j++) { minv[j] = INF; used[j] = 0; }
+        do {
+            used[j0] = 1;
+            size_t i0 = p[j0], j1 = 0;
+            double delta = INF;
+            for (size_t j = 1; j <= n; j++) if (!used[j]) {
+                double cur = cost[(i0 - 1) * n + (j - 1)] - u[i0] - v[j];
+                if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+                if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+            }
+            for (size_t j = 0; j <= n; j++) {
+                if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
+                else minv[j] -= delta;
+            }
+            j0 = j1;
+        } while (p[j0] != 0);
+        do { size_t j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
+    }
+    for (size_t j = 1; j <= n; j++) assign[p[j] - 1] = j - 1;
+    free(u); free(v); free(p); free(way); free(minv); free(used);
+}
+
+// ---- Flow-matching step inputs: the LINEAR interpolant ----
+// planning/boltzmann_generator_demo.md §4. The DDPM trainer's one change: per
+// row, t ~ U(0, 1), x_t = (1-t)·x0 + t·ε and the target is the velocity
+// v = ε - x0 rather than ε. `t_idx = round(t · Tmax)` is the integer the
+// sincos time channel takes (prependSinCosT is untouched; it already encodes a
+// quantised index). Returns (x_t, (v, t_idx)) in the shape of `step_inputs`.
+//
+//   mode 0  draw ε ~ N(0, I)                                (flow matching, independent coupling)
+//   mode 1  ε := eps_in                                      (reflow: the (noise, sample) pairs
+//                                                            of the trained model's own ODE)
+//   mode 2  draw ε, then pair rows by the minimum-cost       (minibatch OT, Tong et al. 2023)
+//           assignment on |x0_i - ε_j|²
+//
+// ⚠ Seeded with SplitMix64 like `lean_ddpm_sample_noise`, NOT by XOR alone —
+// the xorshift-linearity defect of 2026-08-28 (same file, below) would put
+// every row's first draw on one radius.
+LEAN_EXPORT lean_obj_res lean_ddpm_flow_step_inputs(
+    b_lean_obj_arg x0_ba, b_lean_obj_arg eps_in_ba,
+    size_t B, size_t n, size_t seed, size_t Tmax, size_t mode, lean_obj_arg w) {
+    (void)w;
+    size_t total = B * n;
+    size_t nb_total = total * 4;
+    lean_object* xt = lean_alloc_sarray(1, nb_total, nb_total);
+    lean_object* vt = lean_alloc_sarray(1, nb_total, nb_total);
+    lean_object* tba = lean_alloc_sarray(1, B * 4, B * 4);
+    const float* x0 = (const float*)lean_sarray_cptr(x0_ba);
+    float* xtp = (float*)lean_sarray_cptr(xt);
+    float* vp = (float*)lean_sarray_cptr(vt);
+    int32_t* tp = (int32_t*)lean_sarray_cptr(tba);
+    uint64_t z = (uint64_t)seed + 0x9E3779B97F4A7C15ULL;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    uint64_t s = z ^ (z >> 31); if (s == 0) s = 1;
+    // ε for every row first, so the assignment (mode 2) sees the whole batch.
+    float* eps = (float*)malloc(nb_total);
+    if (mode == 1) {
+        memcpy(eps, lean_sarray_cptr(eps_in_ba), nb_total);
+    } else {
+        for (size_t i = 0; i < total; i += 2) {
+            uint64_t r1 = f32_xs64(&s);
+            uint64_t r2 = f32_xs64(&s);
+            double u1 = (double)(r1 >> 11) / (double)(1ULL << 53);
+            double u2 = (double)(r2 >> 11) / (double)(1ULL << 53);
+            if (u1 < 1e-12) u1 = 1e-12;
+            double r = sqrt(-2.0 * log(u1));
+            double ang = 2.0 * 3.14159265358979323846 * u2;
+            eps[i] = (float)(r * cos(ang));
+            if (i + 1 < total) eps[i + 1] = (float)(r * sin(ang));
+        }
+    }
+    size_t* assign = (size_t*)malloc(B * sizeof(size_t));
+    for (size_t i = 0; i < B; i++) assign[i] = i;
+    if (mode == 2) {
+        double* cost = (double*)malloc(B * B * sizeof(double));
+        for (size_t i = 0; i < B; i++)
+            for (size_t j = 0; j < B; j++) {
+                double d = 0.0;
+                for (size_t k = 0; k < n; k++) {
+                    double df = (double)x0[i * n + k] - (double)eps[j * n + k];
+                    d += df * df;
+                }
+                cost[i * B + j] = d;
+            }
+        f32_hungarian(cost, B, assign);
+        free(cost);
+    }
+    for (size_t b = 0; b < B; b++) {
+        double t = (double)(f32_xs64(&s) >> 11) / (double)(1ULL << 53);
+        tp[b] = (int32_t)lround(t * (double)Tmax);
+        const float* e = eps + assign[b] * n;
+        for (size_t k = 0; k < n; k++) {
+            double x = (double)x0[b * n + k];
+            xtp[b * n + k] = (float)((1.0 - t) * x + t * (double)e[k]);
+            vp[b * n + k] = (float)((double)e[k] - x);
+        }
+    }
+    free(eps); free(assign);
+    lean_object* inner = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner, 0, vt);
+    lean_ctor_set(inner, 1, tba);
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, xt);
+    lean_ctor_set(outer, 1, inner);
+    return lean_io_result_mk_ok(outer);
+}
+
 // ---- Affine map of every element: out[i] = scale · in[i] + shift ----
 // One pure-elementwise pass; common uses are centering [0,1] data to
 // [-1,1] (scale=2, shift=-1) and the inverse for rendering (scale=0.5,

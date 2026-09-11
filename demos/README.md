@@ -215,6 +215,55 @@ and the image resolves late.
 
 ---
 
+## Flow matching — a Boltzmann generator on the Müller-Brown surface
+
+The second half of the diffusion demo, and the one whose ground truth is a
+formula. The target is the density exp(−U/kT) on Müller-Brown's three-well
+surface; the training set is what eight overdamped Langevin chains produce at
+kT = 20 in 10⁵ steps each. The network is the 2-D toy demo's 18,178-param MLP
+on the rank-2 DDPM MSE block; `flow` changes the interpolant to
+x_t = (1−t)x₀ + tε with target ε − x₀ and the sampler to Euler on dx/dt = v.
+Every sample carries its exact log-density (the Jacobian's log-determinant
+integrated beside the state), so the model can be reweighted to any
+temperature. Plan: `planning/boltzmann_generator_demo.md`.
+
+`MainDiffusion2d.lean` (the four point-cloud targets of
+`planning/archive/diffusion_2d_demo.md` are still in it).
+
+```bash
+python3 preprocess_boltzmann.py                                      # data + grid, ~1 min CPU
+lake exe diffusion-2d muller_brown flow 20000 50 logp nll            # train 30 s, sample, densities
+lake exe diffusion-2d muller_brown flow reuse 20000 10 logp          # NFE sweep on the checkpoint
+lake exe diffusion-2d muller_brown ot 20000 50 logp                  # minibatch-OT coupling
+lake exe diffusion-2d muller_brown reflow 20000 50 logp              # reflow on the flow's own pairs
+lake exe diffusion-2d muller_brown 20000 50 ddim                     # the DDPM path, same target
+python3 scripts/boltzmann_metrics.py score "flow NFE 50=<samples.bin>" --gate
+python3 scripts/boltzmann_metrics.py transfer <samples.bin> --out=<run>
+python3 scripts/boltzmann_figure.py <run> boltzmann_mb.png           # needs matplotlib
+```
+
+![Boltzmann generator on Müller-Brown](figures/boltzmann_mb.png)
+
+| kT = 20, n = 2048 | p_A / p_B / p_C | ⟨U⟩ | ΔF_AB | energy (× floor) |
+|---|---|---|---|---|
+| quadrature (exact) | 0.806 / 0.129 / 0.065 | −113.6 | −36.6 | 1× |
+| Langevin training set | 0.844 / 0.101 / 0.054 | −112.6 | −42.4 | 4.1× |
+| flow, Euler, NFE 50 | 0.834 / 0.103 / 0.063 | −112.4 | −41.9 | **3.2×** |
+| ↳ reweighted by p₂₀/p_θ | 0.805 / 0.129 / 0.066 | −112.8 | −36.7 | — |
+| DDPM, DDIM, NFE 50 | 0.895 / 0.059 / 0.046 | −114.7 | −54.4 | 18× |
+| N(0, I) prior | 0.419 / 0.195 / 0.385 | 57.2 | −15.3 | 306× |
+
+The model is faithful to its training set, not to the physics (it over-weights
+A because the chains do), and the importance weights p₂₀/p_θ recover the
+quadrature row from its own samples. Reweighted to kT = 8, where a Langevin
+chain started in well B never crosses in 2×10⁵ steps, the model gives
+0.991 / 0.008 / 0.001 against the exact 0.991 / 0.009 / 0.001 and ΔF within
+0.3 units. Reflow makes a one-step generator at 4.9× the floor (independent
+coupling: 233×). Numbers, gates and every artifact in
+`runs/2026-09-11-boltzmann-generator/`.
+
+---
+
 ## TinyGPT — character-level language model
 
 Char-level transformer on Karpathy's tinyshakespeare. Three new
@@ -341,6 +390,7 @@ demos/
 ├── MainYolov1VisdroneFpn.lean             # R34+FPN detector on VisDrone, train + infer
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
+├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator
 ├── MainTinyGptShakespeare.lean            # char-level transformer
 ├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)
 ├── MainTinyStories.lean                   # the same transformer at a larger corpus
@@ -373,8 +423,7 @@ demos/
     ├── MainYolov1VisDroneAnchor.lean      #
     ├── MainCifarDdpmTrain.lean / Sample   #   DDPM on CIFAR-10
     ├── MainCifarDdpmAttnTrain.lean / …    #   bottleneck-attention variant (codegen ✓, recipe ✗)
-    ├── MainCifarDdpmSincosTrain.lean / …  #   sincos t-embed variant (small negative)
-    └── MainDiffusion2d.lean               #   2-D toy diffusion
+    └── MainCifarDdpmSincosTrain.lean / …  #   sincos t-embed variant (small negative)
 ```
 
 Per-demo planning docs live in `planning/archive/` at the repo root.

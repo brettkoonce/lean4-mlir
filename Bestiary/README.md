@@ -112,6 +112,22 @@ procedure, and the bestiary entry exists to make that point.
 | `LLaVA.lean`     | LLaVA / LLaVA-1.5         | ViT-L + projector × 2 + LM 7B/13B + tiny | Frozen CLIP + MLP projector + LLaMA; projector is 0.3% of total |
 | `Evoformer.lean` | AlphaFold 2 Evoformer     | full / mini / tiny | Dual-representation (MSA + pair) via triangle updates |
 
+## Physics
+
+Networks whose target is a physical law rather than a labelled set: a
+Boltzmann density, a PDE residual, a solution operator, the atmosphere six
+hours ahead. The Boltzmann generator is the one this repo trains (the
+Müller-Brown demo in `demos/MainDiffusion2d.lean`); the other three carry
+their physics in a loss or a spectral layer the linear `NetSpec` cannot
+spell, and the entries say exactly what is counted and what is prose.
+
+| File | Architecture | Variants | Notes |
+|------|--------------|----------|-------|
+| `BoltzmannGenerator.lean` | Boltzmann generator (Noé 2019) | flow-matching velocity net / RealNVP conditioner / tiny | An MLP with an exact log-density, reweighted to exp(−U/kT); the flow-matching version is zero new primitives |
+| `PINN.lean`       | Physics-informed NN       | Burgers / Schrödinger / Navier-Stokes inverse / tiny | The loss is the PDE residual via input-derivatives of the net; 3,021 params for Burgers |
+| `FNO.lean`        | Fourier neural operator   | 2-D Navier-Stokes / 1-D Burgers / tiny | Non-spectral skeleton shown; the spectral conv (99.5 % of the params) is prose |
+| `FourCastNet.lean`| FourCastNet (AFNO-ViT)    | 0.25° / 2° lite / tiny | ViT on the weather grid with a Fourier mixer for attention; shown with the encoder it replaces |
+
 ## Adding a new entry
 
 1. Create `Bestiary/YourModel.lean`.

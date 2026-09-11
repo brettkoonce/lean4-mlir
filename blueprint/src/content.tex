@@ -13727,6 +13727,283 @@ def sdUNet15 : NetSpec where
   ]
 \end{verbatim}
 
+\subsection{Physics --- demo: Boltzmann generator on M\"uller--Brown}
+\label{sec:bestiary_boltzmann}
+
+Networks whose target is a physical law rather than a labelled set: a
+Boltzmann density here, a PDE residual, a solution operator and the
+atmosphere six hours ahead in the entries below. The architectural side is
+small --- an MLP, or a ViT with a Fourier mixer where its attention would be
+--- and the novelty lives in what the model is asked to produce and in what
+is done with it afterwards.
+
+\paragraph{A Boltzmann generator.} The target is not a dataset. It is a
+density, $\exp(-U/kT)$ on the three-well surface M\"uller and Brown proposed
+in 1979 as the test case for reaction paths, and the training set is whatever
+overdamped Langevin manages to produce at $kT = 20$ in a fixed budget: eight
+chains of $10^5$ steps, the Euler--Maruyama integrator the diffusion demo's
+table (\S~\ref{sec:bestiary_diffusion}) retired as a sampler, doing its actual
+job. The network is the 2-D toy demo's MLP
+(\texttt{demos/MainDiffusion2d.lean}, $18{,}178$ parameters, the sincos time
+channel at $H = W = 1$), the loss is that demo's rank-2 squared-error block,
+and the \texttt{flow} flag changes one thing in the trainer, the interpolant:
+$x_t = (1-t)\,x_0 + t\,\varepsilon$ with target $\varepsilon - x_0$ (Lipman et
+al.\ 2022, \href{https://arxiv.org/abs/2210.02747}{arXiv:2210.02747}) in place
+of the cosine-schedule $x_t$ with target $\varepsilon$. The sampler is Euler on
+$\mathrm{d}x/\mathrm{d}t = v_\theta(x, t)$ from $t = 1$ to $0$. Three things
+change relative to the MNIST demo:
+
+\begin{itemize}
+  \item \textbf{The ground truth is a formula.} $U$ has a closed form, so the
+    well populations, the mean energy, the free-energy difference between
+    wells and the exact likelihood are all numbers by quadrature on a
+    $360 \times 360$ grid. Every column of the tables below is exact for the
+    first row.
+  \item \textbf{A sample set is a free-energy estimate.} $\Delta F_{AB} =
+    -kT \ln (p_A / p_B)$ is read off the populations, and populations are
+    assigned by gradient descent to a minimum rather than by nearest minimum,
+    because the wells are elongated and Voronoi cells put part of A's basin
+    in C.
+  \item \textbf{Temperature is a knob the trained model can be moved along
+    without retraining.} Every sample carries its own log-density: the
+    Jacobian of each Euler step is two central differences in 2-D, and
+    $\log|\det(I + h\,\partial v/\partial x)|$ integrated beside the state is
+    the continuity equation for the map actually run. With it, the
+    importance weight $\exp(-U/kT') / p_\theta(x)$ is a number, and that is
+    the Boltzmann generator of No\'e et al.\ 2019
+    (\href{https://doi.org/10.1126/science.aaw1147}{Science 365}), on an
+    18k-parameter MLP.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/boltzmann_mb.png}
+\caption{A Boltzmann generator on the M\"uller--Brown surface. (a) The
+potential, three minima and two saddles, with the training set: eight
+overdamped Langevin chains at $kT = 20$. (b) The trained flow from $N(0, I)$
+into the wells in fifty Euler steps, seventy of the $2{,}048$ paths, hollow at
+the noise end, and every sample at $t = 0$. (c) At $kT = 8$ a chain started in
+well B and run for $2 \times 10^5$ steps never crosses the barrier; the model's
+samples, drawn once at $kT = 20$ and reweighted, report the quadrature
+populations to three decimals.}
+\label{fig:boltzmann_mb}
+\end{figure}
+
+\paragraph{Scored by quadrature, not by eye.} $kT = 20$, $2{,}048$ samples per
+row, the energy distance against an independent exact draw as a multiple of
+the exact-against-exact floor. The DDPM row is the same network, loss and
+budget with the cosine-schedule interpolant and DDIM in place of Euler:
+
+\begin{center}
+\small
+\begin{tabular}{@{}l c r r r@{}}
+\hline
+source & $p_A \,/\, p_B \,/\, p_C$ & $\langle U \rangle$ & $\Delta F_{AB}$ & energy ($\times$ floor) \\
+\hline
+quadrature (exact)                        & $0.806 \,/\, 0.129 \,/\, 0.065$ & $-113.6$ & $-36.6$ & $1\times$ \;($0.0015$) \\
+Langevin training set, $8 \times 10^5$ steps & $0.844 \,/\, 0.101 \,/\, 0.054$ & $-112.6$ & $-42.4$ & $4.1\times$ \\
+flow, Euler, NFE 50                       & $0.834 \,/\, 0.103 \,/\, 0.063$ & $-112.4$ & $-41.9$ & $\mathbf{3.2\times}$ \\
+\quad reweighted by $p_{20} / p_\theta$   & $0.805 \,/\, 0.129 \,/\, 0.066$ & $-112.8$ & $-36.7$ & --- \\
+flow, Euler, NFE 10                       & $0.840 \,/\, 0.086 \,/\, 0.073$ & $-117.7$ & $-45.5$ & $8.6\times$ \\
+flow, Euler, NFE 2                        & $0.891 \,/\, 0.006 \,/\, 0.103$ &  $-97.4$ & $-98.9$ & $91\times$ \\
+DDPM, DDIM, NFE 50                        & $0.895 \,/\, 0.059 \,/\, 0.046$ & $-114.7$ & $-54.4$ & $18\times$ \\
+$N(0, I)$ prior, no flow                  & $0.419 \,/\, 0.195 \,/\, 0.385$ &   $57.2$ & $-15.3$ & $306\times$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The model is faithful to its training set, not to the physics: it
+over-weights A because the Langevin chains do. Reweighting its own samples by
+$p_{20} / p_\theta$ recovers the quadrature row to the last digit. At NFE 2
+well B empties while the populations still look plausible, which is why
+$\langle U \rangle$ and $\Delta F$ are columns.
+
+\paragraph{MCMC stalls below the barrier; the generator does not.} The
+$kT = 20$ samples reweighted to $kT' = 12$ and $8$, naively and with the
+model's density in the weight, against a Langevin chain of $2 \times 10^5$
+steps started in well B:
+
+\begin{center}
+\small
+\begin{tabular}{@{}r l c r r r@{}}
+\hline
+$kT'$ & source & $p_A \,/\, p_B \,/\, p_C$ & $\Delta F_{AB}$ & ESS \\
+\hline
+12 & quadrature (exact)                        & $0.949 \,/\, 0.042 \,/\, 0.009$ & $-37.4$ & --- \\
+   & Langevin from B, $2 \times 10^5$ steps    & $0.869 \,/\, 0.103 \,/\, 0.029$ & $-25.6$ & --- \\
+   & flow at $kT = 20$, reweighted             & $0.960 \,/\, 0.032 \,/\, 0.008$ & $-40.8$ & $1435$ \\
+   & \quad with $1/p_\theta$ in the weight     & $0.949 \,/\, 0.042 \,/\, 0.009$ & $\mathbf{-37.4}$ & $1394$ \\
+8  & quadrature (exact)                        & $0.991 \,/\, 0.009 \,/\, 0.001$ & $-38.0$ & --- \\
+   & Langevin from B, $2 \times 10^5$ steps    & $0.000 \,/\, 0.925 \,/\, 0.075$ & ---     & --- \\
+   & flow at $kT = 20$, reweighted             & $0.993 \,/\, 0.006 \,/\, 0.000$ & $-40.7$ & $1001$ \\
+   & \quad with $1/p_\theta$ in the weight     & $0.991 \,/\, 0.008 \,/\, 0.001$ & $\mathbf{-38.3}$ & $958$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The barrier out of B is 36 units; at $kT = 8$ the chain never
+crossed. The naive weights carry the model's bias in full; with $1/p_\theta$
+in them, samples drawn once at $kT = 20$ land within 0.3 of quadrature at both
+temperatures. That is the paper's claim, and it is the density that makes it.
+
+\paragraph{Straightening the paths.} Rectified flow (Liu, Gong \& Liu 2022,
+\href{https://arxiv.org/abs/2209.03003}{arXiv:2209.03003}) retrains on the
+trained flow's own (noise, sample) pairs; minibatch optimal-transport
+coupling (Tong et al.\ 2023,
+\href{https://arxiv.org/abs/2302.00482}{arXiv:2302.00482}) pairs each batch's
+noise to its data by a minimum-cost assignment. Neither changes the network.
+Energy distance as a multiple of the floor, with Liu's straightness at NFE 50:
+
+\begin{center}
+\small
+\begin{tabular}{@{}l r r r r r r@{}}
+\hline
+coupling & NFE 1 & NFE 2 & NFE 5 & NFE 10 & NFE 50 & straightness \\
+\hline
+independent (flow matching) & $233\times$ & $91\times$ & $20\times$ & $8.6\times$ & $\mathbf{3.2\times}$ & $0.52$ \\
+minibatch OT                & $7.2\times$ & $5.4\times$ & $4.7\times$ & $4.9\times$ & $5.1\times$ & $0.004$ \\
+reflow                      & $\mathbf{4.9\times}$ & $\mathbf{4.1\times}$ & $\mathbf{3.7\times}$ & $\mathbf{3.7\times}$ & $3.7\times$ & $0.0003$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent A one-step generator: after reflow one Euler step lands at
+$4.9\times$ the floor where the independent coupling needs ten. The price is
+the ceiling: both straightened arms plateau above it at NFE 50, because their
+training set is the first model's output, biases included.
+
+\subsubsection*{Boltzmann generator (\texttt{Bestiary/BoltzmannGenerator.lean})}
+\emph{Zero} new primitives for the flow-matching version, \emph{one} if the
+original is shown. No\'e et al.'s network is RealNVP (Dinh et al.\ 2017,
+\href{https://arxiv.org/abs/1605.08803}{arXiv:1605.08803}): a stack of affine
+coupling blocks, each splitting the coordinates in half, passing one half
+through and scaling and shifting the other by two small dense nets of the
+first. Its log-density is the sum of the log-scales, exact and cheap, and
+the coupling split is a branch-and-merge the linear \texttt{NetSpec} cannot
+spell, so the entry shows one conditioner as its own dense net and the block
+structure in prose, the way the DCGAN entry stands in for transposed convs.
+The flow-matching version, which is what this book trains, is the demo's
+velocity net verbatim; the exact log-density comes from the continuity
+equation instead of the coupling scales. Variants: the velocity net (18k),
+one RealNVP conditioner at alanine dipeptide's width (25k), tiny fixture.
+The lesson is the one CLIP, NeRF and DDPM taught: the novelty is in what
+the model is asked to produce --- a density, not a picture --- and what is
+done with it afterwards. The architecture is an MLP.
+
+\begin{verbatim}
+def boltzmannVelocityNet : NetSpec where
+  name   := "Boltzmann generator (flow-matching velocity net, Müller-Brown)"
+  imageH := 1
+  imageW := 1
+  layers := [
+    .dense 10 128 .relu,        -- 2 coordinates + 8 sincos time channels
+    .dense 128 128 .relu,
+    .dense 128 2 .identity      -- the velocity ε - x₀, rank-2 MSE block
+  ]
+\end{verbatim}
+
+\subsubsection*{Physics-informed neural network (\texttt{Bestiary/PINN.lean})}
+\emph{Zero} new primitives. Raissi, Perdikaris \& Karniadakis (2019,
+\href{https://doi.org/10.1016/j.jcp.2018.10.045}{J.\ Comput.\ Phys.\ 378};
+\href{https://arxiv.org/abs/1711.10561}{arXiv:1711.10561}): the network is a
+small dense net $u_\theta(x, t)$ and the loss is the differential equation,
+its residual evaluated at collocation points by differentiating the network
+with respect to its own inputs --- Burgers' equation needs $u_t$, $u_x$ and
+$u_{xx}$ of the net, and the gradient of that residual with respect to the
+weights is a third-order object. Nothing in the architecture is new;
+everything in the training signal is. It is an entry and not a demo for that
+reason: Part~1's VJP suite differentiates a parameter loss once, and the
+Boltzmann generator above is the physics this book can train, its physics
+entering through the target density rather than through derivatives of the
+network. Variants: the paper's Burgers net ($3{,}021$ parameters, the number
+every reimplementation quotes), Schr\"odinger ($4 \times 100$, complex output
+as two channels), the Navier--Stokes inverse problem (stream function and
+pressure, two PDE coefficients learned alongside), tiny. $\tanh$ is modelled
+as \texttt{.gelu}: the enum has no $\tanh$, and a ReLU PINN would have
+$u_{xx} = 0$ almost everywhere.
+
+\begin{verbatim}
+def pinnBurgers : NetSpec where
+  name   := "PINN (Burgers, 8 x 20 tanh)"
+  imageH := 1
+  imageW := 1
+  layers := [
+    .dense 2 20 .gelu,        -- (x, t)
+    .dense 20 20 .gelu,
+    .dense 20 20 .gelu,
+    .dense 20 20 .gelu,
+    .dense 20 20 .gelu,
+    .dense 20 20 .gelu,
+    .dense 20 20 .gelu,
+    .dense 20 20 .gelu,
+    .dense 20 1 .identity     -- u(x, t)
+  ]
+\end{verbatim}
+
+\subsubsection*{Fourier neural operator (\texttt{Bestiary/FNO.lean})}
+\emph{One} new primitive, not shown. Li et al.\ (2021,
+\href{https://arxiv.org/abs/2010.08895}{arXiv:2010.08895}) learn the solution
+\emph{operator} of a PDE family rather than one solution: initial condition
+in, solution out, at any resolution. Four blocks of $v \mapsto \sigma(Wv +
+\mathcal{F}^{-1}(R \cdot \mathcal{F} v))$: a pointwise $1 \times 1$ conv $W$
+beside a spectral convolution that FFTs the field, keeps the lowest $k$ modes
+and multiplies each by its own learned complex matrix. The spectral
+convolution is where the parameters and the idea live, and it is an FFT, a
+truncation and a per-mode matmul --- none of which is a Part~1 layer --- so
+the spec is the non-spectral skeleton (lifting, the four $W$ bypasses,
+projection) with the spectral weights counted in prose: the 2-D
+Navier--Stokes config's skeleton is $4{,}577$ parameters and its four $R$
+tensors add $921{,}600$, so the paper's $\sim$926k model is 99.5\,\% a layer
+the linear spec cannot spell. Resolution invariance is that layer's property
+alone; the pointwise parts would have it in any architecture. Variants: 2-D
+Navier--Stokes (width 20, 12 modes), 1-D Burgers (width 64, 16 modes), tiny.
+
+\begin{verbatim}
+def fno2dNavierStokes : NetSpec where
+  name   := "FNO-2d (Navier-Stokes, width 20, 12 modes; non-spectral skeleton)"
+  imageH := 64
+  imageW := 64
+  layers := [
+    .conv2d 3 20 1 .same .identity,     -- P: lift (a, x, y) → width
+    .conv2d 20 20 1 .same .gelu,        -- Fourier layer 1: W bypass (+ R, 230,400 reals)
+    .conv2d 20 20 1 .same .gelu,        -- Fourier layer 2
+    .conv2d 20 20 1 .same .gelu,        -- Fourier layer 3
+    .conv2d 20 20 1 .same .identity,    -- Fourier layer 4
+    .conv2d 20 128 1 .same .gelu,       -- Q: project
+    .conv2d 128 1 1 .same .identity     --    → u(x, y)
+  ]
+\end{verbatim}
+
+\subsubsection*{FourCastNet (\texttt{Bestiary/FourCastNet.lean})}
+\emph{One} new primitive, shown with the primitive it replaces. Pathak et
+al.\ (2022, \href{https://arxiv.org/abs/2202.11214}{arXiv:2202.11214}) put a
+ViT on ERA5's $0.25^\circ$ grid --- $720 \times 1440$ pixels, 20 variables, $8
+\times 8$ patches, $16{,}200$ tokens of dimension 768, 12 blocks --- and train
+it to predict the state six hours ahead; rollouts of that map are the
+forecast. The token mixer is not attention but the adaptive Fourier neural
+operator (Guibas et al.\ 2022,
+\href{https://arxiv.org/abs/2111.13587}{arXiv:2111.13587}): the FNO's
+spectral convolution made data-dependent and block-sparse, $O(N \log N)$ in
+tokens where attention is $O(N^2)$, and at $16{,}200$ tokens that difference
+is the model. The spec keeps the patch embedding, dimension, depth and MLP
+and puts \texttt{.transformerEncoder} where the AFNO block goes, which
+\emph{overcounts}: attention at 768 spends $4 \times 768^2 \approx 2.36$\,M
+parameters a block where AFNO's block-diagonal complex MLP spends $0.30$\,M;
+the MLPs, three quarters of a block either way, are the same. Variants: the
+paper's model, a $2^\circ$ version at a size one card trains, tiny.
+
+\begin{verbatim}
+def fourCastNet : NetSpec where
+  name   := "FourCastNet (AFNO-ViT, 0.25°, attention standing in for AFNO)"
+  imageH := 720
+  imageW := 1440
+  layers := [
+    .patchEmbed 20 768 8 16200,           -- 20 variables, 8×8 patches → 16,200 tokens
+    .transformerEncoder 768 12 3072 12,   -- 12 blocks; the paper's mixer is AFNO
+    .dense 768 1280 .identity             -- back to an 8×8×20 patch
+  ]
+\end{verbatim}
+
 \subsection{Beyond vision}
 
 Architectures where the task domain is neither a 2D image nor a token
@@ -14123,7 +14400,10 @@ VisDrone-DET2019 & VisD & Zhu et al., 2021 &
   \texttt{download\_visdrone.sh} $\to$ \texttt{data/visdrone/} \\[2pt]
 MS-COCO 2017 & COCO & Lin et al., 2014 &
   \href{https://cocodataset.org/}{\nolinkurl{cocodataset.org}} &
-  \texttt{download\_coco.sh} $\to$ \texttt{data/coco/} \\
+  \texttt{download\_coco.sh} $\to$ \texttt{data/coco/} \\[2pt]
+M\"uller-Brown density & MB & M\"uller \& Brown, 1979 &
+  generated by \texttt{preprocess\_boltzmann.py}, no download &
+  \texttt{data/boltzmann/} \\
 \hline
 \end{tabular}
 \end{center}

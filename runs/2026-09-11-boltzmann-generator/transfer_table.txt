@@ -1,0 +1,16 @@
+samples drawn once at kT = 20 (n = 2048), reweighted to kT'
+
+   kT  source                               p_A / p_B / p_C             <U>    dF_AB   ESS
+  ----------------------------------------------------------------------------------------
+   12  quadrature (exact)                   0.949 / 0.042 / 0.009    -131.4    -37.4                    
+       Langevin from B, 2e5 steps           0.869 / 0.103 / 0.029    -126.2    -25.6                    
+       flow at kT = 20, reweighted          0.960 / 0.032 / 0.008    -131.8    -40.8                       1435
+         ^ corrected by 1/p_theta           0.949 / 0.042 / 0.009    -131.8    -37.4                       1394
+    8  quadrature (exact)                   0.991 / 0.009 / 0.001    -137.9    -38.0                    
+       Langevin from B, 2e5 steps           0.000 / 0.925 / 0.075     -96.2       --                    
+       flow at kT = 20, reweighted          0.993 / 0.006 / 0.000    -138.0    -40.7                       1001
+         ^ corrected by 1/p_theta           0.991 / 0.008 / 0.001    -138.3    -38.3                       958
+
+  dF within 2 units of quadrature at kT' = 12 is gate B; the Langevin row is the MCMC control
+  wrote runs/2026-09-11-boltzmann-generator/transfer.json and the resampled clouds
+  => gate B (corrected row): |dF - dF_exact| at kT' = 12 is 0.0 (naive reweighting: 3.4)  [PASS]

@@ -1,0 +1,4 @@
+flow flow-reflow fm-euler NFE 10: kinetic energy ∫E|v|²dt = 1.270167, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.000407
+flow flow-reflow fm-euler NFE 5: kinetic energy ∫E|v|²dt = 1.269760, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.000508
+flow flow-reflow fm-euler NFE 2: kinetic energy ∫E|v|²dt = 1.282908, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.001173
+flow flow-reflow fm-euler NFE 1: kinetic energy ∫E|v|²dt = 1.310029, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.009904

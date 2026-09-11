@@ -692,6 +692,14 @@ lean_exe «mnist-ddpm-sample» where
   root := `demos.MainMnistDdpmSample
   moreLinkArgs := lowererLink
 
+-- The 2-D diffusion demo, back out of archive/ as the second half of the
+-- diffusion section: the same 18k-param MLP on the rank-2 DDPM MSE block,
+-- trained as a DDPM or (with `flow`) as a flow-matching Boltzmann generator
+-- on the Müller-Brown density. planning/boltzmann_generator_demo.md.
+lean_exe «diffusion-2d» where
+  root := `demos.MainDiffusion2d
+  moreLinkArgs := lowererLink
+
 -- The two RL environments of the DQN sidequests (planning/blackjack_dqn_demo.md,
 -- planning/pong_dqn_demo.md): pure Lean, no FFI, no GPU. Each runs its own
 -- Phase-0 gates — the exact DP instrument and the four arms for blackjack, the
@@ -1103,10 +1111,6 @@ lean_exe «unet-pets-train» where
 
 lean_exe «pets-predict» where
   root := `demos.archive.MainPetsPredict
-  moreLinkArgs := lowererLink
-
-lean_exe «diffusion-2d» where
-  root := `demos.archive.MainDiffusion2d
   moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-train» where
@@ -2062,6 +2066,18 @@ lean_exe «bestiary-llava» where
 
 lean_exe «bestiary-stable-diffusion» where
   root := `Bestiary.StableDiffusion
+
+lean_exe «bestiary-boltzmann-generator» where
+  root := `Bestiary.BoltzmannGenerator
+
+lean_exe «bestiary-pinn» where
+  root := `Bestiary.PINN
+
+lean_exe «bestiary-fno» where
+  root := `Bestiary.FNO
+
+lean_exe «bestiary-fourcastnet» where
+  root := `Bestiary.FourCastNet
 
 lean_exe «bestiary-segformer» where
   root := `Bestiary.SegFormer

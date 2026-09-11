@@ -1,0 +1,182 @@
+⚠ [3206/3208] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:611:57: `List.asString` has been deprecated: Use `String.ofList` instead
+
+Note: The updated constant is in a different namespace. Dot notation may need to be changed (e.g., from `x.asString` to `String.ofList x`).
+diffusion 2d denoiser (muller-brown): 18178 params, 20000 steps, sampler=ddim, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17948 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__muller_brown__params.bin — NOT training
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 17:55:48.739477 1917944 service.cc:154] XLA service 0x7b9f940083d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 17:55:48.739517 1917944 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 17:55:48.741109 1917944 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 17:55:48.741137 1917944 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 17:55:48.748078 1917944 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 17:55:49.176326 1917983 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I0911 17:55:49.358394 1917965 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 763 ms
+  sampler=ddim (1 eval/step), NFE=50 => 50 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown_ddim_s20000_n50_e0.bin (2048 points) + .noise.bin
+▶ score it: python3 scripts/boltzmann_metrics.py score " ddim NFE 50=.lake/build/diffusion2d_samples_muller_brown_ddim_s20000_n50_e0.bin" --gate
+⚠ [3206/3208] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:611:57: `List.asString` has been deprecated: Use `String.ofList` instead
+
+Note: The updated constant is in a different namespace. Dot notation may need to be changed (e.g., from `x.asString` to `String.ofList x`).
+diffusion 2d denoiser (muller-brown): 18178 params, 20000 steps, sampler=ddim, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17948 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__muller_brown__params.bin — NOT training
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 17:55:52.495803 1918118 service.cc:154] XLA service 0x7750f40083d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 17:55:52.495842 1918118 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 17:55:52.497752 1918118 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 17:55:52.497780 1918118 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 17:55:52.504483 1918118 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 17:55:52.943646 1918160 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I0911 17:55:53.158173 1918142 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 802 ms
+  sampler=ddim (1 eval/step), NFE=10 => 10 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown_ddim_s20000_n10_e0.bin (2048 points) + .noise.bin
+▶ score it: python3 scripts/boltzmann_metrics.py score " ddim NFE 10=.lake/build/diffusion2d_samples_muller_brown_ddim_s20000_n10_e0.bin" --gate
+⚠ [3206/3208] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:611:57: `List.asString` has been deprecated: Use `String.ofList` instead
+
+Note: The updated constant is in a different namespace. Dot notation may need to be changed (e.g., from `x.asString` to `String.ofList x`).
+diffusion 2d denoiser (muller-brown): 18178 params, 20000 steps, sampler=ddim, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17948 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__muller_brown__params.bin — NOT training
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 17:55:56.056320 1918301 service.cc:154] XLA service 0x78c43c0083d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 17:55:56.056362 1918301 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 17:55:56.057982 1918301 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 17:55:56.058011 1918301 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 17:55:56.064935 1918301 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 17:55:56.496875 1918316 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I0911 17:55:56.664003 1918314 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 792 ms
+  sampler=ddim (1 eval/step), NFE=2 => 2 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown_ddim_s20000_n2_e0.bin (2048 points) + .noise.bin
+▶ score it: python3 scripts/boltzmann_metrics.py score " ddim NFE 2=.lake/build/diffusion2d_samples_muller_brown_ddim_s20000_n2_e0.bin" --gate
+⚠ [3206/3208] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:611:57: `List.asString` has been deprecated: Use `String.ofList` instead
+
+Note: The updated constant is in a different namespace. Dot notation may need to be changed (e.g., from `x.asString` to `String.ofList x`).
+diffusion 2d denoiser (muller-brown): 18178 params, 20000 steps, sampler=euler, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17948 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__muller_brown__params.bin — NOT training
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 17:55:59.646255 1918472 service.cc:154] XLA service 0x77120c008530 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 17:55:59.646306 1918472 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 17:55:59.648451 1918472 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 17:55:59.648503 1918472 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 17:55:59.655284 1918472 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 17:56:00.113542 1918501 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I0911 17:56:00.264887 1918503 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 761 ms
+  sampler=euler (1 eval/step), NFE=10 => 10 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown_euler_s20000_n10_e0.bin (2048 points) + .noise.bin
+▶ score it: python3 scripts/boltzmann_metrics.py score " euler NFE 10=.lake/build/diffusion2d_samples_muller_brown_euler_s20000_n10_e0.bin" --gate
+⚠ [3206/3208] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:611:57: `List.asString` has been deprecated: Use `String.ofList` instead
+
+Note: The updated constant is in a different namespace. Dot notation may need to be changed (e.g., from `x.asString` to `String.ofList x`).
+diffusion 2d denoiser (muller-brown): 18178 params, 20000 steps, sampler=euler, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17948 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__muller_brown__params.bin — NOT training
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 17:56:03.522721 1918650 service.cc:154] XLA service 0x7dfaac008450 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 17:56:03.522764 1918650 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 17:56:03.524311 1918650 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 17:56:03.524339 1918650 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 17:56:03.531203 1918650 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 17:56:03.962177 1918687 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I0911 17:56:04.146508 1918693 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 778 ms
+  sampler=euler (1 eval/step), NFE=2 => 2 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown_euler_s20000_n2_e0.bin (2048 points) + .noise.bin
+▶ score it: python3 scripts/boltzmann_metrics.py score " euler NFE 2=.lake/build/diffusion2d_samples_muller_brown_euler_s20000_n2_e0.bin" --gate
+⚠ [3206/3208] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:611:57: `List.asString` has been deprecated: Use `String.ofList` instead
+
+Note: The updated constant is in a different namespace. Dot notation may need to be changed (e.g., from `x.asString` to `String.ofList x`).
+diffusion 2d denoiser (muller-brown): 18178 params, 20000 steps, sampler=heun, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17948 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__muller_brown__params.bin — NOT training
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 17:56:07.285717 1918850 service.cc:154] XLA service 0x70e050008450 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 17:56:07.285764 1918850 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 17:56:07.287397 1918850 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 17:56:07.287432 1918850 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 17:56:07.294305 1918850 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 17:56:07.720084 1918894 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I0911 17:56:07.966028 1918865 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 801 ms
+  sampler=heun (2 eval/step), NFE=50 => 25 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown_heun_s20000_n50_e0.bin (2048 points) + .noise.bin
+▶ score it: python3 scripts/boltzmann_metrics.py score " heun NFE 50=.lake/build/diffusion2d_samples_muller_brown_heun_s20000_n50_e0.bin" --gate
+⚠ [3206/3208] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:611:57: `List.asString` has been deprecated: Use `String.ofList` instead
+
+Note: The updated constant is in a different namespace. Dot notation may need to be changed (e.g., from `x.asString` to `String.ofList x`).
+diffusion 2d denoiser (muller-brown): 18178 params, 20000 steps, sampler=sde, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17948 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__muller_brown__params.bin — NOT training
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 17:56:10.784283 1919018 service.cc:154] XLA service 0x72f9780083d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 17:56:10.784322 1919018 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 17:56:10.785934 1919018 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 17:56:10.785962 1919018 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 17:56:10.792847 1919018 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 17:56:11.226974 1919056 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I0911 17:56:11.401120 1919050 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 737 ms
+  sampler=sde (1 eval/step), NFE=50 => 50 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown_sde_s20000_n50_e0.bin (2048 points) + .noise.bin
+▶ score it: python3 scripts/boltzmann_metrics.py score " sde NFE 50=.lake/build/diffusion2d_samples_muller_brown_sde_s20000_n50_e0.bin" --gate

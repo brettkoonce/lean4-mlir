@@ -28,6 +28,10 @@ bestiary-bert:
   "RoBERTa-base": 124250880
   "RoBERTa-large": 354833408
   "tiny-BERT": 937984
+bestiary-boltzmann-generator:
+  "Boltzmann generator (flow-matching velocity net, Müller-Brown)": 18178
+  "RealNVP conditioner (one coupling half, alanine dipeptide width)": 25121
+  "tiny-Boltzmann (velocity net, width 32)": 1474
 bestiary-clip:
   "CLIP-RN50 (image encoder)": 25606208
   "CLIP-RN50 (text encoder)": 63652352
@@ -70,6 +74,14 @@ bestiary-evoformer:
   "AlphaFold 2 (Evoformer + StructureModule)": 76394496
   "AlphaFold 2 Mini (16 + 4)": 13965312
   "tiny-Evoformer (4 blocks)": 443392
+bestiary-fno:
+  "FNO-2d (Navier-Stokes, width 20, 12 modes; non-spectral skeleton)": 4577
+  "FNO-1d (Burgers, width 64, 16 modes; non-spectral skeleton)": 25281
+  "tiny-FNO (16x16, width 8; non-spectral skeleton)": 337
+bestiary-fourcastnet:
+  "FourCastNet (AFNO-ViT, 0.25°, attention standing in for AFNO)": 99467264
+  "FourCastNet-lite (2°, 90x180x4, dim 256, 6 blocks)": 4928912
+  "tiny-FourCastNet (16x32x4, dim 32, 2 blocks)": 30752
 bestiary-gpt:
   "GPT-1": 116143872
   "GPT-2 small": 123654144
@@ -131,6 +143,11 @@ bestiary-nystromformer:
   "Nyströmformer base (BERT-base-shaped, O(n) attention)": 108497664
   "Nyströmformer large (BERT-large-shaped)": 333566976
   "tiny-Nyströmformer": 921472
+bestiary-pinn:
+  "PINN (Burgers, 8 x 20 tanh)": 3021
+  "PINN (Schrödinger, 4 x 100 tanh)": 30802
+  "PINN (Navier-Stokes inverse, 8 x 20 tanh)": 3062
+  "tiny-PINN (2 x 8)": 105
 bestiary-pix2pix:
   "Pix2Pix generator (8-level UNet, 256×256 RGB)": 62068099
   "Pix2Pix PatchGAN discriminator (256×256 → N×N grid)": 2765697
