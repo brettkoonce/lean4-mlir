@@ -5266,34 +5266,50 @@ additive ladder tells.
     (-2.29,noadam) (-4.48,nocos) (-7.01,noaug)};
 \end{axis}
 % ── bf16 ───────────────────────────────────────────────────────────────────
-\begin{axis}[ablationaxis, title={bf16}, yticklabels={{},{},{},{},{},{},{}},
+\begin{axis}[ablationaxis, title={bf16, 5 seeds}, yticklabels={{},{},{},{},{},{},{}},
   at={(0.47\linewidth,0)}, anchor=south west]
-  \path[fill,gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
-       rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
   \draw[black!70]        ({axis cs:0,full}|-{rel axis cs:0,0})
                       -- ({axis cs:0,full}|-{rel axis cs:0,1});
-  \addplot[only marks, mark=*, mark size=2.0pt, orange!80!black] coordinates {
-    (0,full) (-0.10,nowd) (-1.15,nowarm) (-0.46,nols)
-    (-2.27,noadam) (-4.94,nocos) (-7.11,noaug)};
+  % Five seeds per arm (runs/2026-09-11-r34-ablation-bf16-seeds/RESULTS.md): the point is the
+  % mean difference from `full`, the bar the 95% t-interval on the PAIRED difference (arms
+  % sharing a seed share init and data order). No band: the bar is the resolution.
+  \addplot[only marks, mark=*, mark size=2.0pt, orange!80!black,
+           error bars/.cd, x dir=both, x explicit,
+           error bar style={orange!80!black, line width=0.6pt},
+           error mark options={rotate=90, orange!80!black, mark size=1.6pt}] coordinates {
+    (0,full) +- (0,0) (0.14,nowd) +- (0.45,0) (-0.82,nowarm) +- (0.62,0)
+    (-0.50,nols) +- (0.62,0) (-2.21,noadam) +- (0.33,0) (-4.78,nocos) +- (2.74,0)
+    (-7.11,noaug) +- (0.38,0)};
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent Each point is one 80-epoch run, plotted as its \emph{difference} from
-the full recipe rather than as an accuracy, so the line at zero is the baseline
-and distance from it is what the ingredient contributes. The shaded band is the
-95\% Wilson half-width at $n = 3{,}925$, $\pm0.92$ points: a point inside it is
-not resolved by a single run, however suggestive its position. Rows are sorted
-by fp32 effect.
+\noindent Each point is plotted as its \emph{difference} from the full recipe
+rather than as an accuracy, so the line at zero is the baseline and distance
+from it is what the ingredient contributes. The two panels do not carry the same
+evidence. On the left each point is \emph{one} 80-epoch run, and the shaded band
+is the 95\% Wilson half-width at $n = 3{,}925$, $\pm0.92$ points: a point inside
+it is not resolved by a single run, however suggestive its position. On the
+right each arm was trained five times from five seeds; the point is the mean
+difference from the full recipe and the bar is the 95\% interval on that
+difference, paired by seed (arms sharing a seed share their initialization and
+data order). The full recipe itself lands at $89.98 \pm 0.15$ over its five
+seeds. Rows are sorted by fp32 effect.
 
 \medskip\noindent The two panels are the same seven arms in the two precisions,
 and the reason to draw them side by side is that \emph{a real effect should not
-move}. Every point outside the band reproduces: augmentation $-7.01$ against
-$-7.11$, cosine $-4.48$ against $-4.94$, the optimizer $-2.29$ against
-$-2.27$, warmup $-1.04$ against $-1.15$. The largest disagreement among them is
-$0.46$ and two of the four are within $0.10$ ---
-this on baselines that themselves differ by $0.28$, which is the argument for
-plotting differences rather than accuracies.
+move}. The four effects the single runs resolve reproduce inside the seeded
+bars: augmentation $-7.01$ against $-7.11 \pm 0.38$, the optimizer $-2.29$
+against $-2.21 \pm 0.33$, warmup $-1.04$ against $-0.82 \pm 0.62$, and cosine
+$-4.48$ against $-4.78 \pm 2.74$. The two rows inside the left panel's band,
+weight decay and label smoothing, are exactly the two whose fp32 run falls
+outside the bf16 interval ($-0.64$ against $+0.14 \pm 0.45$, $-1.50$ against
+$-0.50 \pm 0.62$) --- which says only that one run does not place them, not
+which side they fall on. The cosine bar is the widest by far because the
+constant-rate arm finishes wherever its noisy trajectory happens to be at
+epoch~80: five seeds spread $82.6$--$87.9$ (sd $2.18$), so its single-run
+figure was one draw from a wide distribution and its contribution is ``large
+and imprecise'', not $-4.5$.
 
 \medskip\noindent \textbf{What the optimizer row is really measuring.} Reading
 the $-$AdamW gap as ``what the adaptive optimizer buys'' assumes its replacement
@@ -5353,13 +5369,14 @@ happens to suit it, and an adaptive optimizer's insensitivity to that rate is
 exactly what hides the dependence. The figure above measures the recipe
 \emph{as tuned}, not its ingredients in isolation.
 
-\medskip\noindent \textbf{Augmentation is the largest single contribution} ($-7.01$ points, three
-times the next-largest knob). Imagenette has 9{,}469 training images for a
+\medskip\noindent \textbf{Augmentation is the largest single contribution} ($-7.01$ points on
+the fp32 run, $-7.11 \pm 0.38$ over five bf16 seeds; three times the
+next-largest knob). Imagenette has 9{,}469 training images for a
 21.3M-parameter network, so without the random crop and flip the model overfits
 hard --- training loss falls while validation stalls. Most of what the rest of
 the recipe gets credit for is augmentation.
 
-\textbf{[TODO: more samples.]}
+\textbf{[TODO: more fp32 samples.]}
 
 \section{ImageNet recipe}
 

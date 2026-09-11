@@ -27,35 +27,69 @@ ARMS="${ARMS:-full nowarm nocos noaug nowd nols noadam bare}"
 # one axis over.
 PREC="${PREC:-fp32}"
 [ "$PREC" = "fp32" ] || [ "$PREC" = "bf16" ] || { echo "⛔ PREC must be fp32 or bf16"; exit 1; }
+# SEEDS — planning/r34_ablation_seeds.md: a tour number is mean ± 95% CI over seeds. One seed keeps
+# the 2026-09-01 layout (`<arm>.log`); several write `<arm>_s<seed>.log`, queued seed-major so a
+# sweep stopped early still holds whole seeds. ⚠ Every seed gets its OWN checkpoint tag — the trap
+# `seed_sweep.sh` documents: without it seeds 2.. resume seed 1's checkpoint and report its number.
+SEEDS="${SEEDS:-1}"
+NSEED=$(echo $SEEDS | wc -w)
+# PJRT_FFI_RESIDENT defaults ON here now. It is what made the seed sweep's ResNet-34 runs take 45
+# minutes where these arms took 80 (same net, same recipe); the 2026-09-01 tables ran with it off.
+RESIDENT="${PJRT_FFI_RESIDENT:-1}"
 # ⛔⛔ THE DEFAULT IS RESOLVED **AFTER** PREC, AND THAT ORDER IS THE WHOLE POINT. Setting
 # `OUT="${OUT:-…}"` before this line makes the bf16 branch a no-op — `${OUT:-…}` cannot override a
 # value already set — so both precisions land in ONE directory and the second sweep's
 # `> $OUT/$arm.log` TRUNCATES the first's logs the instant an arm starts. That is not hypothetical:
 # it destroyed three completed fp32 curves on 2026-09-01 before the guard below existed.
-if [ "$PREC" = "bf16" ]; then OUT="${OUT:-runs/2026-09-01-r34-ablation-bf16}"
-else                         OUT="${OUT:-runs/2026-09-01-r34-ablation}"; fi
+if [ "$NSEED" -gt 1 ]; then    OUT="${OUT:-runs/$(date +%F)-r34-ablation-$PREC-seeds}"
+elif [ "$PREC" = "bf16" ]; then OUT="${OUT:-runs/2026-09-01-r34-ablation-bf16}"
+else                            OUT="${OUT:-runs/2026-09-01-r34-ablation}"; fi
+logname () {  # arm seed
+  if [ "$NSEED" -gt 1 ]; then echo "$OUT/$1_s$2.log"; else echo "$OUT/$1.log"; fi
+}
 mkdir -p "$OUT"
 # ⚠⚠ REFUSE TO OVERWRITE ANOTHER RUN'S LOGS. A log already in this directory is either this
 # precision's (a resume the caller must ask for) or another's (the truncation above). Either way
 # the caller decides, not the script. `FORCE=1` to proceed.
 if [ -z "${FORCE:-}" ]; then
-  for a in $ARMS; do
-    if [ -s "$OUT/$a.log" ]; then
-      echo "⛔ $OUT/$a.log already exists and is non-empty."
+  for a in $ARMS; do for sd in $SEEDS; do
+    if [ -s "$(logname $a $sd)" ]; then
+      echo "⛔ $(logname $a $sd) already exists and is non-empty."
       echo "   Starting would TRUNCATE it. Move it aside, pick another OUT, or set FORCE=1."
       exit 1
     fi
-  done
+  done; done
 fi
 # A stamp, so a directory can say which precision produced it without parsing a log.
+# ⚠⚠ REFUSE A LEFTOVER CHECKPOINT TOO. The log guard above does not see `.lake/build/`: on
+# 2026-09-11 a killed launch left `resnet34_*_ckpt_xla_abl-bf16-<arm>-s1.bin` at epoch 3, the run
+# directory was removed, and the relaunch RESUMED four arms from it — the log looked like a
+# finished run, only "resuming from checkpoint at epoch 3" gave it away. `RESUME=1` to proceed.
+if [ -z "${FORCE:-}" ] && [ -z "${RESUME:-}" ]; then
+  for a in $ARMS; do for sd in $SEEDS; do
+    for c in .lake/build/*_ckpt_xla_abl-$PREC-$a-s$sd.bin; do
+      [ -e "$c" ] || continue
+      echo "⛔ $c exists: this arm/seed would RESUME from it, not train from scratch."
+      echo "   Delete it (and its .epoch) for a fresh run, or set RESUME=1 to continue it on purpose."
+      exit 1
+    done
+  done; done
+fi
 echo "$PREC" > "$OUT/.precision"
+echo "$SEEDS" > "$OUT/.seeds"
 PLUG="${PJRT_PLUGIN:-/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so}"
 [ -f "$PLUG" ] || { echo "⛔ plugin not found: $PLUG"; exit 1; }
 [ -x .lake/build/bin/resnet34-ablation ] || { echo "⛔ build resnet34-ablation first"; exit 1; }
 
 IFS=',' read -r -a GPUARR <<< "$GPUS"
 NSLOT=${#GPUARR[@]}
-echo "queue: $(echo $ARMS | wc -w) arm(s) $PREC over ${NSLOT} card(s) [$GPUS] -> $OUT"
+echo "queue: $(echo $ARMS | wc -w) arm(s) x $NSEED seed(s) [$SEEDS] $PREC resident=$RESIDENT over ${NSLOT} card(s) [$GPUS] -> $OUT"
+# DRY_RUN=1 prints the queue and exits before anything waits on a card.
+if [ -n "${DRY_RUN:-}" ]; then
+  for sd in $SEEDS; do for a in $ARMS; do
+    echo "  would run: arm=$a seed=$sd -> $(logname $a $sd)  (ckpt abl-$PREC-$a-s$sd)"; done; done
+  exit 0
+fi
 
 # ⭐ Block until this CARD is actually idle, not merely unclaimed by THIS script. The queue can be
 # started while another job (a chapter re-run, an earlier wave) still holds a GPU; without this the
@@ -71,22 +105,24 @@ wait_for_gpu () {  # gpu
   return 0
 }
 
-run_arm () {  # arm gpu
-  local arm="$1" gpu="$2"
+run_arm () {  # arm seed gpu
+  local arm="$1" seed="$2" gpu="$3"
   wait_for_gpu "$gpu"
   local t0=$SECONDS
   local extra=()
   [ "$arm" = "noaug" ] && extra=(LEAN_MLIR_NO_AUG=1)
-  env CUDA_VISIBLE_DEVICES="$gpu" PJRT_PLUGIN="$PLUG" \
-      LEAN_MLIR_CKPT_TAG="abl-$PREC-$arm" "${extra[@]}" \
+  local log; log="$(logname "$arm" "$seed")"
+  env CUDA_VISIBLE_DEVICES="$gpu" PJRT_PLUGIN="$PLUG" PJRT_FFI_RESIDENT="$RESIDENT" \
+      LEAN_MLIR_SEED="$seed" LEAN_MLIR_CKPT_TAG="abl-$PREC-$arm-s$seed" "${extra[@]}" \
       .lake/build/bin/resnet34-ablation data "$arm" $([ "$PREC" = bf16 ] && echo bf16) \
-      > "$OUT/$arm.log" 2>&1
-  printf '  ✔ %-8s gpu%s %5ss  %s\n' "$arm" "$gpu" "$((SECONDS-t0))" \
-    "$(grep -oE 'val_acc = [0-9]+/[0-9]+ = [0-9.]+%' "$OUT/$arm.log" | tail -1)"
+      > "$log" 2>&1
+  printf '  ✔ %-8s s%-2s gpu%s %5ss  %s\n' "$arm" "$seed" "$gpu" "$((SECONDS-t0))" \
+    "$(grep -oE 'val_acc = [0-9]+/[0-9]+ = [0-9.]+%' "$log" | tail -1)"
 }
 
 declare -A BUSY=()
-for arm in $ARMS; do
+for job in $(for sd in $SEEDS; do for a in $ARMS; do echo "$a:$sd"; done; done); do
+  arm="${job%%:*}"; seed="${job##*:}"
   # find a free card; if none, block until one frees
   slot=""
   while [ -z "$slot" ]; do
@@ -94,12 +130,12 @@ for arm in $ARMS; do
     [ -z "$slot" ] && { wait -n; for g in "${GPUARR[@]}"; do
         [ -n "${BUSY[$g]:-}" ] && ! kill -0 "${BUSY[$g]}" 2>/dev/null && unset 'BUSY[$g]'; done; }
   done
-  run_arm "$arm" "$slot" &
+  run_arm "$arm" "$seed" "$slot" &
   BUSY[$slot]=$!
 done
 wait
 echo "ALL ARMS DONE -> $OUT"
 for f in "$OUT"/*.log; do
-  printf '%-10s %s\n' "$(basename "$f" .log)" \
+  printf '%-14s %s\n' "$(basename "$f" .log)" \
     "$(grep -oE 'val_acc = [0-9]+/[0-9]+ = [0-9.]+%.*' "$f" | tail -1)"
 done

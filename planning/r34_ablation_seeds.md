@@ -1,6 +1,11 @@
 # ResNet-34 recipe ablation: error bars over seeds
 
-**Opened 2026-09-09, estimate only — nothing launched.** `planning/tour_realignment.md` §9 item 6
+**Opened 2026-09-09. 2026-09-11: the bf16 half is DONE** — five fresh seeds × eight arms
+(`runs/2026-09-11-r34-ablation-bf16-seeds/RESULTS.md`, summarizer `scripts/r34_ablation_ci.py`),
+the §5.6 figure's bf16 panel carries the paired 95% bars, and the chapter's TODO now reads
+"more fp32 samples". fp32 seeds are the open half (40 fresh runs, ~7.5 h; the 2026-09-01 fp32
+logs did not survive either). ⚠ `run_r34_ablation.sh` now refuses a leftover checkpoint — four
+seed-1 arms silently resumed one and had to be redone. Originally: `planning/tour_realignment.md` §9 item 6
 already lists this; the decision there (2026-09-08) is that a tour number is **mean ± 95% CI over
 seeds**. This doc costs it. ⚠ Ask before launching.
 
@@ -42,6 +47,25 @@ The existing 16 runs used the default seed (1) and can stand as seed 1.
 
 Residency does not change the arithmetic; keep the existing sixteen unless one-vintage purity is
 wanted for the figure.
+
+## §2b The fp32 half — the handoff (2026-09-11)
+
+One command, the same one the bf16 half ran; ~45–50 min per run resident, 40 runs over four
+cards ≈ 8 h. The driver waits for each card to be idle, refuses to overwrite a log, and refuses
+a leftover `abl-fp32-<arm>-s<seed>` checkpoint (the 2026-09-01 fp32 tags had no seed suffix, so
+they do not collide). `DRY_RUN=1` prints the queue and exits.
+
+    PREC=fp32 SEEDS="1 2 3 4 5" OUT=runs/$(date +%F)-r34-ablation-fp32-seeds \
+      PJRT_PLUGIN=$PWD/.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so \
+      bash scripts/run_r34_ablation.sh
+    python3 scripts/r34_ablation_ci.py runs/<that dir> --write     # RESULTS.md + the pgfplots block
+
+Then in `blueprint/src/content.tex` §5.6: give the fp32 axis the same `error bars` `\addplot`
+the bf16 axis has (the block in RESULTS.md, minus the `bare` row), drop its Wilson band, retitle
+it "fp32, 5 seeds", rewrite the marks paragraph for two seeded panels, and delete the
+`[TODO: more fp32 samples.]` line. `leanblueprint pdf` to check the page (~10 s here).
+⚠ Five FRESH fp32 seeds, not seed 1 + four: the 2026-09-01 fp32 logs did not survive either.
+The question to answer first when it lands: the cosine arm's spread — bf16 gave sd 2.18.
 
 ## §3 Work (~half a day)
 

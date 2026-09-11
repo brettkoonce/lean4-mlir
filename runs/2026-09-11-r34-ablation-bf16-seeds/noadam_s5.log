@@ -1,0 +1,675 @@
+I0911 11:44:51.182611 1866382 service.cc:154] XLA service 0x7de3a4009df0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 11:44:51.182658 1866382 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 11:44:51.184966 1866382 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 11:44:51.185028 1866382 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 11:44:51.196224 1866382 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+E0911 11:44:52.366915 1866443 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0911 11:44:52.854395 1866443 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0911 11:44:55.142340 1866469 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 8 bytes spill stores, 8 bytes spill loads
+
+E0911 11:44:56.139462 1866444 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0911 11:44:57.349167 1866464 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+I0911 11:45:02.291929 1866458 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_11', 28 bytes spill stores, 12 bytes spill loads
+
+I0911 11:45:02.301376 1866468 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_12', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34_mombf16_train_step.mlir (@resnet34_mombf16_train_step, 405 outputs, 1 replica) in 11264 ms
+I0911 11:45:02.701058 1866451 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 11:45:02.732869 1866455 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir (@resnet34_fwd, 1 outputs, 1 replica) in 1534 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir (@resnet34_fwd_eval, 1 outputs, 1 replica) in 245 ms
+════════ resnet34 ablation — arm `noadam` (bf16) ════════
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet34_mombf16_train_step.mlir
+  xla/pjrt verified_mlir/resnet34_fwd.mlir
+  xla/pjrt verified_mlir/resnet34_fwd_eval.mlir
+  train 9469, val 3925; bs 32, ResNet-34 mombf16 (cosine+warmup 3ep, baseLR 0.010000), He init
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @resnet34_mombf16_train_step holds 330 parameter tensors (243.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.117491
+  step 1/295: loss=2.456090
+  step 2/295: loss=2.937948
+  step 100/295: loss=2.255975
+  step 200/295: loss=1.960716
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.114117 lr=0.003333
+  epoch 1: val_acc = 990/3925 = 25.222930%  top5 = 2852/3925 = 72.662420%  [95% CI 23.89–26.61]
+  step 0/295: loss=1.939758
+  step 1/295: loss=1.736292
+  step 2/295: loss=1.563211
+  step 100/295: loss=1.955939
+  step 200/295: loss=1.808434
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.802084 lr=0.006667
+  epoch 2: val_acc = 1357/3925 = 34.573248%  top5 = 3125/3925 = 79.617834%  [95% CI 33.10–36.08]
+  step 0/295: loss=1.515222
+  step 1/295: loss=1.891920
+  step 2/295: loss=1.647874
+  step 100/295: loss=1.501895
+  step 200/295: loss=1.557235
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.603349 lr=0.010000
+  epoch 3: val_acc = 1596/3925 = 40.662420%  top5 = 3450/3925 = 87.898089%  [95% CI 39.14–42.21]
+  step 0/295: loss=1.744947
+  step 1/295: loss=1.247794
+  step 2/295: loss=1.481189
+  step 100/295: loss=1.670886
+  step 200/295: loss=1.528993
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.430282 lr=0.009996
+  epoch 4: val_acc = 1797/3925 = 45.783439%  top5 = 3426/3925 = 87.286624%  [95% CI 44.23–47.35]
+  step 0/295: loss=1.298419
+  step 1/295: loss=1.513626
+  step 2/295: loss=1.238482
+  step 100/295: loss=1.456533
+  step 200/295: loss=1.226104
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.262529 lr=0.009983
+  epoch 5: val_acc = 1810/3925 = 46.114650%  top5 = 3525/3925 = 89.808917%  [95% CI 44.56–47.68]
+  step 0/295: loss=1.259339
+  step 1/295: loss=0.964696
+  step 2/295: loss=1.049066
+  step 100/295: loss=1.153639
+  step 200/295: loss=1.089100
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.147420 lr=0.009963
+  epoch 6: val_acc = 2249/3925 = 57.299363%  top5 = 3550/3925 = 90.445860%  [95% CI 55.75–58.84]
+  step 0/295: loss=1.084844
+  step 1/295: loss=1.173653
+  step 2/295: loss=1.022659
+  step 100/295: loss=1.154178
+  step 200/295: loss=1.116844
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.084853 lr=0.009934
+  epoch 7: val_acc = 2698/3925 = 68.738854%  top5 = 3705/3925 = 94.394904%  [95% CI 67.27–70.17]
+  step 0/295: loss=0.951680
+  step 1/295: loss=1.099690
+  step 2/295: loss=1.283074
+  step 100/295: loss=1.109702
+  step 200/295: loss=1.005908
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.028867 lr=0.009896
+  epoch 8: val_acc = 2758/3925 = 70.267516%  top5 = 3761/3925 = 95.821656%  [95% CI 68.82–71.68]
+  step 0/295: loss=1.021832
+  step 1/295: loss=0.975540
+  step 2/295: loss=1.032277
+  step 100/295: loss=0.967757
+  step 200/295: loss=1.017636
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=0.990214 lr=0.009851
+  epoch 9: val_acc = 2817/3925 = 71.770701%  top5 = 3713/3925 = 94.598726%  [95% CI 70.34–73.16]
+  step 0/295: loss=0.914690
+  step 1/295: loss=0.924282
+  step 2/295: loss=0.832307
+  step 100/295: loss=1.099658
+  step 200/295: loss=0.804953
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=0.946298 lr=0.009797
+  epoch 10: val_acc = 2650/3925 = 67.515924%  top5 = 3557/3925 = 90.624204%  [95% CI 66.03–68.96]
+  step 0/295: loss=0.977467
+  step 1/295: loss=0.801115
+  step 2/295: loss=0.771974
+  step 100/295: loss=1.192820
+  step 200/295: loss=0.955200
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=0.914696 lr=0.009736
+  epoch 11: val_acc = 2596/3925 = 66.140127%  top5 = 3772/3925 = 96.101911%  [95% CI 64.64–67.60]
+  step 0/295: loss=0.927465
+  step 1/295: loss=0.845521
+  step 2/295: loss=0.862003
+  step 100/295: loss=0.843672
+  step 200/295: loss=0.698179
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=0.871409 lr=0.009667
+  epoch 12: val_acc = 2717/3925 = 69.222930%  top5 = 3727/3925 = 94.955414%  [95% CI 67.76–70.65]
+  step 0/295: loss=1.011317
+  step 1/295: loss=0.980189
+  step 2/295: loss=0.821925
+  step 100/295: loss=0.899069
+  step 200/295: loss=0.805175
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.846932 lr=0.009590
+  epoch 13: val_acc = 2929/3925 = 74.624204%  top5 = 3824/3925 = 97.426752%  [95% CI 73.24–75.96]
+  step 0/295: loss=0.715894
+  step 1/295: loss=0.775450
+  step 2/295: loss=0.758083
+  step 100/295: loss=0.722195
+  step 200/295: loss=0.801397
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.821839 lr=0.009505
+  epoch 14: val_acc = 3023/3925 = 77.019108%  top5 = 3781/3925 = 96.331210%  [95% CI 75.68–78.31]
+  step 0/295: loss=0.878931
+  step 1/295: loss=0.861450
+  step 2/295: loss=0.783784
+  step 100/295: loss=0.953421
+  step 200/295: loss=0.702749
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.794002 lr=0.009413
+  epoch 15: val_acc = 3045/3925 = 77.579618%  top5 = 3803/3925 = 96.891720%  [95% CI 76.25–78.86]
+  step 0/295: loss=0.992253
+  step 1/295: loss=0.830192
+  step 2/295: loss=0.628174
+  step 100/295: loss=0.684444
+  step 200/295: loss=0.632110
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.768463 lr=0.009313
+  epoch 16: val_acc = 3168/3925 = 80.713376%  top5 = 3823/3925 = 97.401274%  [95% CI 79.45–81.92]
+  step 0/295: loss=0.722554
+  step 1/295: loss=0.736802
+  step 2/295: loss=0.782230
+  step 100/295: loss=0.650065
+  step 200/295: loss=0.938541
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.757747 lr=0.009206
+  epoch 17: val_acc = 3104/3925 = 79.082803%  top5 = 3830/3925 = 97.579618%  [95% CI 77.78–80.33]
+  step 0/295: loss=0.745351
+  step 1/295: loss=0.631029
+  step 2/295: loss=0.712766
+  step 100/295: loss=0.760024
+  step 200/295: loss=0.606065
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.731643 lr=0.009093
+  epoch 18: val_acc = 3212/3925 = 81.834395%  top5 = 3830/3925 = 97.579618%  [95% CI 80.60–83.01]
+  step 0/295: loss=0.650650
+  step 1/295: loss=0.638329
+  step 2/295: loss=0.762009
+  step 100/295: loss=0.567382
+  step 200/295: loss=0.762412
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.709374 lr=0.008972
+  epoch 19: val_acc = 3212/3925 = 81.834395%  top5 = 3832/3925 = 97.630573%  [95% CI 80.60–83.01]
+  step 0/295: loss=0.677059
+  step 1/295: loss=0.634001
+  step 2/295: loss=0.733992
+  step 100/295: loss=0.670087
+  step 200/295: loss=0.603649
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.690466 lr=0.008845
+  epoch 20: val_acc = 3120/3925 = 79.490446%  top5 = 3801/3925 = 96.840764%  [95% CI 78.20–80.72]
+  step 0/295: loss=0.658760
+  step 1/295: loss=0.583678
+  step 2/295: loss=0.698330
+  step 100/295: loss=0.608822
+  step 200/295: loss=0.651146
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.681205 lr=0.008711
+  epoch 21: val_acc = 3247/3925 = 82.726115%  top5 = 3836/3925 = 97.732484%  [95% CI 81.51–83.88]
+  step 0/295: loss=0.598072
+  step 1/295: loss=0.666027
+  step 2/295: loss=0.676826
+  step 100/295: loss=0.713476
+  step 200/295: loss=0.717965
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.664109 lr=0.008571
+  epoch 22: val_acc = 3253/3925 = 82.878981%  top5 = 3854/3925 = 98.191083%  [95% CI 81.67–84.03]
+  step 0/295: loss=0.721378
+  step 1/295: loss=0.599283
+  step 2/295: loss=0.585258
+  step 100/295: loss=0.694117
+  step 200/295: loss=0.633231
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.638759 lr=0.008426
+  epoch 23: val_acc = 3260/3925 = 83.057325%  top5 = 3839/3925 = 97.808917%  [95% CI 81.85–84.20]
+  step 0/295: loss=0.629356
+  step 1/295: loss=0.598504
+  step 2/295: loss=0.572571
+  step 100/295: loss=0.649191
+  step 200/295: loss=0.633414
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.637128 lr=0.008274
+  epoch 24: val_acc = 3270/3925 = 83.312102%  top5 = 3851/3925 = 98.114650%  [95% CI 82.11–84.45]
+  step 0/295: loss=0.559699
+  step 1/295: loss=0.668861
+  step 2/295: loss=0.626309
+  step 100/295: loss=0.604126
+  step 200/295: loss=0.591676
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.617696 lr=0.008117
+  epoch 25: val_acc = 3197/3925 = 81.452229%  top5 = 3819/3925 = 97.299363%  [95% CI 80.21–82.64]
+  step 0/295: loss=0.611339
+  step 1/295: loss=0.607300
+  step 2/295: loss=0.615537
+  step 100/295: loss=0.563223
+  step 200/295: loss=0.693977
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.600840 lr=0.007955
+  epoch 26: val_acc = 3129/3925 = 79.719745%  top5 = 3794/3925 = 96.662420%  [95% CI 78.43–80.95]
+  step 0/295: loss=0.614166
+  step 1/295: loss=0.594911
+  step 2/295: loss=0.554294
+  step 100/295: loss=0.584098
+  step 200/295: loss=0.636588
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.607177 lr=0.007788
+  epoch 27: val_acc = 3125/3925 = 79.617834%  top5 = 3809/3925 = 97.044586%  [95% CI 78.33–80.85]
+  step 0/295: loss=0.564371
+  step 1/295: loss=0.639806
+  step 2/295: loss=0.580818
+  step 100/295: loss=0.541554
+  step 200/295: loss=0.574526
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.580890 lr=0.007617
+  epoch 28: val_acc = 3291/3925 = 83.847134%  top5 = 3846/3925 = 97.987261%  [95% CI 82.66–84.97]
+  step 0/295: loss=0.597071
+  step 1/295: loss=0.549718
+  step 2/295: loss=0.549027
+  step 100/295: loss=0.558271
+  step 200/295: loss=0.591512
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.573917 lr=0.007441
+  epoch 29: val_acc = 3226/3925 = 82.191083%  top5 = 3805/3925 = 96.942675%  [95% CI 80.96–83.36]
+  step 0/295: loss=0.553650
+  step 1/295: loss=0.645424
+  step 2/295: loss=0.606722
+  step 100/295: loss=0.538289
+  step 200/295: loss=0.600699
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.568952 lr=0.007261
+  epoch 30: val_acc = 3284/3925 = 83.668790%  top5 = 3840/3925 = 97.834395%  [95% CI 82.48–84.79]
+  step 0/295: loss=0.570894
+  step 1/295: loss=0.620833
+  step 2/295: loss=0.550980
+  step 100/295: loss=0.628269
+  step 200/295: loss=0.539174
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.564191 lr=0.007077
+  epoch 31: val_acc = 3384/3925 = 86.216561%  top5 = 3853/3925 = 98.165605%  [95% CI 85.10–87.26]
+  step 0/295: loss=0.536796
+  step 1/295: loss=0.553170
+  step 2/295: loss=0.551494
+  step 100/295: loss=0.545448
+  step 200/295: loss=0.543386
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.555758 lr=0.006890
+  epoch 32: val_acc = 3343/3925 = 85.171975%  top5 = 3856/3925 = 98.242038%  [95% CI 84.03–86.25]
+  step 0/295: loss=0.542718
+  step 1/295: loss=0.591115
+  step 2/295: loss=0.544740
+  step 100/295: loss=0.552578
+  step 200/295: loss=0.615804
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.551110 lr=0.006699
+  epoch 33: val_acc = 3336/3925 = 84.993631%  top5 = 3846/3925 = 97.987261%  [95% CI 83.84–86.08]
+  step 0/295: loss=0.534110
+  step 1/295: loss=0.556383
+  step 2/295: loss=0.528297
+  step 100/295: loss=0.543596
+  step 200/295: loss=0.599933
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.546064 lr=0.006506
+  epoch 34: val_acc = 3363/3925 = 85.681529%  top5 = 3844/3925 = 97.936306%  [95% CI 84.55–86.74]
+  step 0/295: loss=0.533848
+  step 1/295: loss=0.534523
+  step 2/295: loss=0.522136
+  step 100/295: loss=0.546843
+  step 200/295: loss=0.540888
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.544803 lr=0.006311
+  epoch 35: val_acc = 3342/3925 = 85.146497%  top5 = 3822/3925 = 97.375796%  [95% CI 84.00–86.22]
+  step 0/295: loss=0.528087
+  step 1/295: loss=0.529449
+  step 2/295: loss=0.533195
+  step 100/295: loss=0.531872
+  step 200/295: loss=0.542061
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.540486 lr=0.006113
+  epoch 36: val_acc = 3387/3925 = 86.292994%  top5 = 3854/3925 = 98.191083%  [95% CI 85.18–87.33]
+  step 0/295: loss=0.535823
+  step 1/295: loss=0.526422
+  step 2/295: loss=0.529378
+  step 100/295: loss=0.556122
+  step 200/295: loss=0.522963
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.536024 lr=0.005913
+  epoch 37: val_acc = 3380/3925 = 86.114650%  top5 = 3844/3925 = 97.936306%  [95% CI 85.00–87.16]
+  step 0/295: loss=0.543844
+  step 1/295: loss=0.521418
+  step 2/295: loss=0.531123
+  step 100/295: loss=0.526541
+  step 200/295: loss=0.529074
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.536877 lr=0.005712
+  epoch 38: val_acc = 3376/3925 = 86.012739%  top5 = 3856/3925 = 98.242038%  [95% CI 84.89–87.06]
+  step 0/295: loss=0.524732
+  step 1/295: loss=0.531483
+  step 2/295: loss=0.522038
+  step 100/295: loss=0.531733
+  step 200/295: loss=0.555806
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.535360 lr=0.005509
+  epoch 39: val_acc = 3394/3925 = 86.471338%  top5 = 3860/3925 = 98.343949%  [95% CI 85.37–87.51]
+  step 0/295: loss=0.536369
+  step 1/295: loss=0.518592
+  step 2/295: loss=0.521590
+  step 100/295: loss=0.543339
+  step 200/295: loss=0.514518
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.529758 lr=0.005306
+  epoch 40: val_acc = 3412/3925 = 86.929936%  top5 = 3857/3925 = 98.267516%  [95% CI 85.84–87.95]
+  step 0/295: loss=0.525063
+  step 1/295: loss=0.522175
+  step 2/295: loss=0.523738
+  step 100/295: loss=0.517830
+  step 200/295: loss=0.515949
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.526742 lr=0.005102
+  epoch 41: val_acc = 3401/3925 = 86.649682%  top5 = 3849/3925 = 98.063694%  [95% CI 85.55–87.68]
+  step 0/295: loss=0.521610
+  step 1/295: loss=0.518514
+  step 2/295: loss=0.524148
+  step 100/295: loss=0.532569
+  step 200/295: loss=0.519223
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.527536 lr=0.004898
+  epoch 42: val_acc = 3402/3925 = 86.675159%  top5 = 3842/3925 = 97.885350%  [95% CI 85.58–87.70]
+  step 0/295: loss=0.523575
+  step 1/295: loss=0.520537
+  step 2/295: loss=0.514599
+  step 100/295: loss=0.516919
+  step 200/295: loss=0.518541
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.523623 lr=0.004694
+  epoch 43: val_acc = 3412/3925 = 86.929936%  top5 = 3847/3925 = 98.012739%  [95% CI 85.84–87.95]
+  step 0/295: loss=0.515060
+  step 1/295: loss=0.524336
+  step 2/295: loss=0.521320
+  step 100/295: loss=0.517133
+  step 200/295: loss=0.514221
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.523932 lr=0.004491
+  epoch 44: val_acc = 3436/3925 = 87.541401%  top5 = 3862/3925 = 98.394904%  [95% CI 86.47–88.54]
+  step 0/295: loss=0.524922
+  step 1/295: loss=0.514820
+  step 2/295: loss=0.524271
+  step 100/295: loss=0.521536
+  step 200/295: loss=0.521341
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.522885 lr=0.004288
+  epoch 45: val_acc = 3430/3925 = 87.388535%  top5 = 3862/3925 = 98.394904%  [95% CI 86.31–88.39]
+  step 0/295: loss=0.525447
+  step 1/295: loss=0.532516
+  step 2/295: loss=0.514954
+  step 100/295: loss=0.537995
+  step 200/295: loss=0.527177
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.523034 lr=0.004087
+  epoch 46: val_acc = 3443/3925 = 87.719745%  top5 = 3854/3925 = 98.191083%  [95% CI 86.66–88.71]
+  step 0/295: loss=0.516442
+  step 1/295: loss=0.517494
+  step 2/295: loss=0.519135
+  step 100/295: loss=0.514823
+  step 200/295: loss=0.520372
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.519442 lr=0.003887
+  epoch 47: val_acc = 3454/3925 = 88.000000%  top5 = 3866/3925 = 98.496815%  [95% CI 86.95–88.98]
+  step 0/295: loss=0.513306
+  step 1/295: loss=0.519660
+  step 2/295: loss=0.515347
+  step 100/295: loss=0.512649
+  step 200/295: loss=0.539320
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.518948 lr=0.003689
+  epoch 48: val_acc = 3436/3925 = 87.541401%  top5 = 3857/3925 = 98.267516%  [95% CI 86.47–88.54]
+  step 0/295: loss=0.523057
+  step 1/295: loss=0.510631
+  step 2/295: loss=0.517720
+  step 100/295: loss=0.521573
+  step 200/295: loss=0.513666
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.518861 lr=0.003494
+  epoch 49: val_acc = 3458/3925 = 88.101911%  top5 = 3857/3925 = 98.267516%  [95% CI 87.05–89.08]
+  step 0/295: loss=0.519015
+  step 1/295: loss=0.510682
+  step 2/295: loss=0.523595
+  step 100/295: loss=0.509306
+  step 200/295: loss=0.533040
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.518375 lr=0.003301
+  epoch 50: val_acc = 3443/3925 = 87.719745%  top5 = 3857/3925 = 98.267516%  [95% CI 86.66–88.71]
+  step 0/295: loss=0.511986
+  step 1/295: loss=0.511153
+  step 2/295: loss=0.513764
+  step 100/295: loss=0.510148
+  step 200/295: loss=0.521171
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.517589 lr=0.003110
+  epoch 51: val_acc = 3439/3925 = 87.617834%  top5 = 3846/3925 = 97.987261%  [95% CI 86.55–88.61]
+  step 0/295: loss=0.521422
+  step 1/295: loss=0.520968
+  step 2/295: loss=0.513243
+  step 100/295: loss=0.528615
+  step 200/295: loss=0.517216
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.516764 lr=0.002923
+  epoch 52: val_acc = 3443/3925 = 87.719745%  top5 = 3851/3925 = 98.114650%  [95% CI 86.66–88.71]
+  step 0/295: loss=0.518189
+  step 1/295: loss=0.521962
+  step 2/295: loss=0.512778
+  step 100/295: loss=0.516591
+  step 200/295: loss=0.527417
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.516163 lr=0.002739
+  epoch 53: val_acc = 3450/3925 = 87.898089%  top5 = 3856/3925 = 98.242038%  [95% CI 86.84–88.88]
+  step 0/295: loss=0.515608
+  step 1/295: loss=0.514941
+  step 2/295: loss=0.515014
+  step 100/295: loss=0.511248
+  step 200/295: loss=0.518511
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.515133 lr=0.002559
+  epoch 54: val_acc = 3444/3925 = 87.745223%  top5 = 3857/3925 = 98.267516%  [95% CI 86.68–88.73]
+  step 0/295: loss=0.516646
+  step 1/295: loss=0.521274
+  step 2/295: loss=0.512155
+  step 100/295: loss=0.517497
+  step 200/295: loss=0.514815
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.514788 lr=0.002383
+  epoch 55: val_acc = 3446/3925 = 87.796178%  top5 = 3852/3925 = 98.140127%  [95% CI 86.74–88.78]
+  step 0/295: loss=0.513341
+  step 1/295: loss=0.520806
+  step 2/295: loss=0.511771
+  step 100/295: loss=0.511032
+  step 200/295: loss=0.509717
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.514888 lr=0.002212
+  epoch 56: val_acc = 3461/3925 = 88.178344%  top5 = 3852/3925 = 98.140127%  [95% CI 87.13–89.15]
+  step 0/295: loss=0.508373
+  step 1/295: loss=0.512179
+  step 2/295: loss=0.510470
+  step 100/295: loss=0.526684
+  step 200/295: loss=0.509131
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.514832 lr=0.002045
+  epoch 57: val_acc = 3441/3925 = 87.668790%  top5 = 3860/3925 = 98.343949%  [95% CI 86.60–88.66]
+  step 0/295: loss=0.527608
+  step 1/295: loss=0.513989
+  step 2/295: loss=0.511676
+  step 100/295: loss=0.508696
+  step 200/295: loss=0.511444
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.514682 lr=0.001883
+  epoch 58: val_acc = 3454/3925 = 88.000000%  top5 = 3851/3925 = 98.114650%  [95% CI 86.95–88.98]
+  step 0/295: loss=0.512344
+  step 1/295: loss=0.510698
+  step 2/295: loss=0.512871
+  step 100/295: loss=0.510989
+  step 200/295: loss=0.511718
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.513657 lr=0.001726
+  epoch 59: val_acc = 3460/3925 = 88.152866%  top5 = 3857/3925 = 98.267516%  [95% CI 87.10–89.13]
+  step 0/295: loss=0.511693
+  step 1/295: loss=0.517526
+  step 2/295: loss=0.532123
+  step 100/295: loss=0.508855
+  step 200/295: loss=0.524056
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.513795 lr=0.001574
+  epoch 60: val_acc = 3460/3925 = 88.152866%  top5 = 3859/3925 = 98.318471%  [95% CI 87.10–89.13]
+  step 0/295: loss=0.511103
+  step 1/295: loss=0.510465
+  step 2/295: loss=0.511300
+  step 100/295: loss=0.509800
+  step 200/295: loss=0.518021
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.513468 lr=0.001429
+  epoch 61: val_acc = 3444/3925 = 87.745223%  top5 = 3854/3925 = 98.191083%  [95% CI 86.68–88.73]
+  step 0/295: loss=0.516517
+  step 1/295: loss=0.510432
+  step 2/295: loss=0.511979
+  step 100/295: loss=0.511483
+  step 200/295: loss=0.517108
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.513075 lr=0.001289
+  epoch 62: val_acc = 3454/3925 = 88.000000%  top5 = 3859/3925 = 98.318471%  [95% CI 86.95–88.98]
+  step 0/295: loss=0.511456
+  step 1/295: loss=0.508530
+  step 2/295: loss=0.510608
+  step 100/295: loss=0.522528
+  step 200/295: loss=0.509329
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.512956 lr=0.001155
+  epoch 63: val_acc = 3452/3925 = 87.949045%  top5 = 3863/3925 = 98.420382%  [95% CI 86.89–88.93]
+  step 0/295: loss=0.508881
+  step 1/295: loss=0.510807
+  step 2/295: loss=0.512107
+  step 100/295: loss=0.513494
+  step 200/295: loss=0.515503
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.512491 lr=0.001028
+  epoch 64: val_acc = 3461/3925 = 88.178344%  top5 = 3858/3925 = 98.292994%  [95% CI 87.13–89.15]
+  step 0/295: loss=0.513044
+  step 1/295: loss=0.513853
+  step 2/295: loss=0.508603
+  step 100/295: loss=0.513530
+  step 200/295: loss=0.508522
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.512774 lr=0.000907
+  epoch 65: val_acc = 3464/3925 = 88.254777%  top5 = 3863/3925 = 98.420382%  [95% CI 87.21–89.22]
+  step 0/295: loss=0.509270
+  step 1/295: loss=0.510870
+  step 2/295: loss=0.507471
+  step 100/295: loss=0.510521
+  step 200/295: loss=0.512269
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.512830 lr=0.000794
+  epoch 66: val_acc = 3460/3925 = 88.152866%  top5 = 3860/3925 = 98.343949%  [95% CI 87.10–89.13]
+  step 0/295: loss=0.509655
+  step 1/295: loss=0.511421
+  step 2/295: loss=0.515824
+  step 100/295: loss=0.514512
+  step 200/295: loss=0.512993
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.511872 lr=0.000687
+  epoch 67: val_acc = 3457/3925 = 88.076433%  top5 = 3858/3925 = 98.292994%  [95% CI 87.03–89.05]
+  step 0/295: loss=0.509765
+  step 1/295: loss=0.520029
+  step 2/295: loss=0.508545
+  step 100/295: loss=0.515480
+  step 200/295: loss=0.516927
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.512337 lr=0.000587
+  epoch 68: val_acc = 3457/3925 = 88.076433%  top5 = 3858/3925 = 98.292994%  [95% CI 87.03–89.05]
+  step 0/295: loss=0.517582
+  step 1/295: loss=0.516452
+  step 2/295: loss=0.509766
+  step 100/295: loss=0.507586
+  step 200/295: loss=0.508949
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.512051 lr=0.000495
+  epoch 69: val_acc = 3462/3925 = 88.203822%  top5 = 3855/3925 = 98.216561%  [95% CI 87.16–89.18]
+  step 0/295: loss=0.513202
+  step 1/295: loss=0.506761
+  step 2/295: loss=0.508686
+  step 100/295: loss=0.511094
+  step 200/295: loss=0.520893
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.511631 lr=0.000410
+  epoch 70: val_acc = 3466/3925 = 88.305732%  top5 = 3856/3925 = 98.242038%  [95% CI 87.26–89.27]
+  step 0/295: loss=0.505549
+  step 1/295: loss=0.508481
+  step 2/295: loss=0.510671
+  step 100/295: loss=0.516623
+  step 200/295: loss=0.507109
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.511954 lr=0.000333
+  epoch 71: val_acc = 3461/3925 = 88.178344%  top5 = 3858/3925 = 98.292994%  [95% CI 87.13–89.15]
+  step 0/295: loss=0.506478
+  step 1/295: loss=0.516875
+  step 2/295: loss=0.522198
+  step 100/295: loss=0.517741
+  step 200/295: loss=0.519539
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.512097 lr=0.000264
+  epoch 72: val_acc = 3462/3925 = 88.203822%  top5 = 3863/3925 = 98.420382%  [95% CI 87.16–89.18]
+  step 0/295: loss=0.511793
+  step 1/295: loss=0.513276
+  step 2/295: loss=0.511609
+  step 100/295: loss=0.516149
+  step 200/295: loss=0.508364
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.511937 lr=0.000203
+  epoch 73: val_acc = 3461/3925 = 88.178344%  top5 = 3856/3925 = 98.242038%  [95% CI 87.13–89.15]
+  step 0/295: loss=0.516703
+  step 1/295: loss=0.510524
+  step 2/295: loss=0.508273
+  step 100/295: loss=0.509217
+  step 200/295: loss=0.510365
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.511979 lr=0.000149
+  epoch 74: val_acc = 3464/3925 = 88.254777%  top5 = 3860/3925 = 98.343949%  [95% CI 87.21–89.22]
+  step 0/295: loss=0.509927
+  step 1/295: loss=0.509665
+  step 2/295: loss=0.508949
+  step 100/295: loss=0.509116
+  step 200/295: loss=0.511585
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.511892 lr=0.000104
+  epoch 75: val_acc = 3456/3925 = 88.050955%  top5 = 3859/3925 = 98.318471%  [95% CI 87.00–89.03]
+  step 0/295: loss=0.509375
+  step 1/295: loss=0.512263
+  step 2/295: loss=0.510133
+  step 100/295: loss=0.541567
+  step 200/295: loss=0.510500
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.511528 lr=0.000066
+  epoch 76: val_acc = 3459/3925 = 88.127389%  top5 = 3856/3925 = 98.242038%  [95% CI 87.08–89.10]
+  step 0/295: loss=0.507519
+  step 1/295: loss=0.508116
+  step 2/295: loss=0.508542
+  step 100/295: loss=0.523164
+  step 200/295: loss=0.513019
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.511717 lr=0.000037
+  epoch 77: val_acc = 3457/3925 = 88.076433%  top5 = 3856/3925 = 98.242038%  [95% CI 87.03–89.05]
+  step 0/295: loss=0.508134
+  step 1/295: loss=0.514016
+  step 2/295: loss=0.510699
+  step 100/295: loss=0.506755
+  step 200/295: loss=0.510379
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.511999 lr=0.000017
+  epoch 78: val_acc = 3461/3925 = 88.178344%  top5 = 3857/3925 = 98.267516%  [95% CI 87.13–89.15]
+  step 0/295: loss=0.512425
+  step 1/295: loss=0.514878
+  step 2/295: loss=0.509021
+  step 100/295: loss=0.509471
+  step 200/295: loss=0.509361
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.511616 lr=0.000004
+  epoch 79: val_acc = 3460/3925 = 88.152866%  top5 = 3858/3925 = 98.292994%  [95% CI 87.10–89.13]
+  step 0/295: loss=0.511595
+  step 1/295: loss=0.506466
+  step 2/295: loss=0.521989
+  step 100/295: loss=0.510318
+  step 200/295: loss=0.517340
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.511413 lr=0.000000
+  epoch 80: val_acc = 3461/3925 = 88.178344%  top5 = 3857/3925 = 98.267516%  [95% CI 87.13–89.15]
+done (trained ResNet-34 mombf16 + cosine/warmup via packed threading).
