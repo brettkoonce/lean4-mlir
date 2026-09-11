@@ -12967,11 +12967,118 @@ def cycleganGenerator : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Reinforcement learning}
+\subsection{Reinforcement learning --- demo: DQN on blackjack}
+\label{sec:bestiary_rl}
 
-Two-headed (policy + value) networks wrapped in a self-play + MCTS
-outer loop. The architectural side is a stack of residual CNN blocks;
-the complexity lives in the outer loop, not the network.
+Networks that learn from the rewards of their own actions rather than from a
+labelled set. The architectural side is small --- an MLP here, residual CNN
+blocks in the AlphaGo family below --- and the complexity lives in the outer
+loop: how experience is gathered, what the target is, and how you would ever
+know the policy is good.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{demos/blackjack_chart.png}
+\caption{The exact hit/stick policy for blackjack under the Sutton \& Barto
+rules, player total against the dealer's showing card, hard hands and soft.
+Rings mark the twelve cells where the trained DQN disagrees with the theorem,
+dots the eight where tabular Q does. Both learners miss on the knife edges:
+hard 12 against a 4, where hitting and sticking differ by a quarter of a cent
+a hand, and the soft-18 row, where the casino card is wrong too.}
+\label{fig:blackjack_chart}
+\end{figure}
+
+\paragraph{DQN on blackjack.} The \texttt{demos/MainBlackjackDqn.lean} trainer
+is Mnih et al.'s DQN (2015,
+\href{https://www.nature.com/articles/nature14236}{Nature}) on the blackjack of
+Sutton \& Barto's Example~5.1, the game written in Lean
+(\texttt{LeanMlir/Blackjack.lean}) with its RNG threaded through so every hand
+replays from a seed. The Q-function is a three-layer \texttt{.dense} net on a
+29-float one-hot of the observation (player total, dealer's card, usable ace),
+$6{,}210$ parameters. Three things change relative to everything trained so far:
+
+\begin{itemize}
+  \item \textbf{There is no dataset.} Transitions come from playing the game
+    $\varepsilon$-greedily against the current network and are kept in a
+    replay ring of 20k; each gradient step samples 128 of them. The book's
+    other demos read their data from disk; this one manufactures it.
+  \item \textbf{The target is the model's own prediction, one step later.}
+    $y_a = r + \gamma \max_{a'} Q_{\text{target}}(s', a')$, with the target
+    network a copy of the online parameters refreshed every 500 updates. The
+    loss is the squared-error block the DDPM demo trains with
+    (\S~\ref{sec:bestiary_diffusion}): the host runs the eval graph on the
+    batch, writes $y = Q(s,\cdot)$, overwrites the taken action's slot with the
+    Bellman target, and hands $y$ in. The gradient is then zero on the untaken
+    slot and a per-sample TD error on the taken one. Zero new codegen.
+  \item \textbf{The instrument is a solved game.} Blackjack under these rules is
+    a 200-state, two-action MDP with known odds, so value iteration gives the
+    optimal policy and the \emph{exact} mean reward of any policy, in
+    milliseconds. Every thousand updates the greedy policy is read off the
+    network over all 280 observations in one batched forward and scored
+    exactly. The ceiling of the training curve is a theorem about the rules,
+    not a number somebody measured.
+\end{itemize}
+
+\paragraph{Every arm scored against the theorem.} Mean reward per hand; exact
+by value iteration, Monte Carlo over $10^6$ hands with its standard error,
+and agreement with the optimum over the 200 decision states. The two value
+columns agree within two standard errors on every row, which is the check that
+the simulator and the DP describe the same game:
+
+\begin{center}
+\begin{tabular}{@{}l r r r@{}}
+\hline
+policy & exact & Monte Carlo, $10^6$ hands & agrees / 200 \\
+\hline
+random                                   & $-0.3942$ & $-0.3956 \pm 0.0009$ & 110 \\
+threshold heuristic (hit below 18, $p=0.8$) & $-0.2403$ & $-0.2395 \pm 0.0009$ & 164 \\
+published casino table                   & $-0.0967$ & $-0.0962 \pm 0.0010$ & 162 \\
+tabular Q, $10^6$ hands                  & $-0.0440$ & $-0.0425 \pm 0.0010$ & 192 \\
+DQN, Double, 200k updates                & $-0.0476$ & $-0.0471 \pm 0.0010$ & 188 \\
+exact optimum                            & $-0.0431$ & $-0.0419 \pm 0.0010$ & 200 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The published table is the strategy card the first book shipped as
+its ceiling. It sits four cents a hand below the optimum
+because it is for a different game --- doubling, splitting and a dealer who
+plays differently --- and it ignores the usable ace entirely. Tabular Q needs
+a visit-count step size to get past $177/200$; a constant one chases the
+moving bootstrap target forever. Figure~\ref{fig:blackjack_chart} is the
+policy itself, cell by cell.
+
+
+\paragraph{The DQN's own table.} One seed per arm, exact value at the end of
+training; the gate is the DQN within $0.01$ of tabular Q's exact value, which
+every 200k-update arm passes:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r@{}}
+\hline
+arm & updates & hands & exact & agrees / 200 \\
+\hline
+plain                          &  50k &  34k & $-0.0578$ & 175 \\
+plain                          & 200k & 133k & $-0.0503$ & 185 \\
+Double DQN                     & 200k & 132k & $-0.0476$ & 188 \\
+plain, lr $10^{-3} \to 10^{-4}$ & 200k & 132k & $-0.0530$ & 178 \\
+Double, lr $10^{-3} \to 10^{-4}$ & 200k & 132k & $-0.0503$ & 187 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Double DQN (van Hasselt et al.\ 2016,
+\href{https://arxiv.org/abs/1509.06461}{arXiv:1509.06461}: argmax from the
+online net, value from the target) is the best of the four, and the
+learning-rate decay does nothing, because the late-training jitter is not in
+the step size: it is the greedy readout flipping knife-edge cells whose two
+actions are worth the same to three decimals. The 1000-update readouts move by
+$\pm 0.005$ late in every arm, so the gap between the first two 200k rows is
+inside that. Ten minutes on one card at 6\% utilisation, each.
+
+The entries below are the same idea at the scale that made it famous:
+the network is bigger, the outer loop is self-play and tree search, and the
+target is still the model's own later estimate.
 
 \subsubsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
 \emph{Zero} new primitives. The original 2016 Lee Sedol system

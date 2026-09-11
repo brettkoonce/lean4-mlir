@@ -702,6 +702,12 @@ lean_exe «blackjack-env» where
 lean_exe «pong-env» where
   root := `demos.MainPongEnv
 
+-- Rung 2 of the blackjack plan: the DQN on the XLA path, zero new codegen (the
+-- rank-2 DDPM MSE block is the loss). Scores its greedy policy exactly.
+lean_exe «blackjack-dqn» where
+  root := `demos.MainBlackjackDqn
+  moreLinkArgs := lowererLink
+
 -- ─── Gates — the two checkers CI and every doc commit run ───
 
 /-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware

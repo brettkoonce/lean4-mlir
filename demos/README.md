@@ -273,20 +273,23 @@ data pipeline + sampler work end-to-end without the transformer.
 
 ---
 
-## RL environments — the DQN sidequests, Phase 0
+## RL — blackjack from tabular Q to DQN, and the Pong environment
 
-Two games written in Lean, no stack and no GPU, each with its own exact
-instrument. They are rungs 1 and 3 of the reinforcement-learning ladder in
-`planning/blackjack_dqn_demo.md` and `planning/pong_dqn_demo.md`; rung 2, the
-DQN on the rank-2 DDPM MSE block, is what comes next.
+Two games written in Lean, no FFI, each with its own exact instrument. They are
+rungs 1 and 3 of the reinforcement-learning ladder in
+`planning/blackjack_dqn_demo.md` and `planning/pong_dqn_demo.md`; rung 2 is the
+blackjack DQN, trained through the stack on the rank-2 DDPM MSE block.
 
 ```bash
 lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
+lake exe blackjack-env play 7 hs          # replay a hand from a seed with the DP's exact Q-values
+lake exe blackjack-dqn 200000 1 double    # updates, seed; flags: double, lrdecay, tag=<name>
 lake exe pong-env 100                     # games per baseline arm
 ```
 
-`MainBlackjackEnv.lean` follows Gymnasium's Blackjack-v1 with `sab=True` (the
-Sutton & Barto rules). A value iteration over the 200 decision states gives the
+The environment, the DP instrument and tabular Q live in
+`LeanMlir/Blackjack.lean`, shared by both blackjack exes. It follows
+Gymnasium's Blackjack-v1 with `sab=True` (the Sutton & Barto rules). A value iteration over the 200 decision states gives the
 exact optimum, **−0.0431 per hand**, and the exact value of any policy, so
 every arm is scored without sampling error; the Monte Carlo column is the
 cross-check that the environment and the DP describe the same game.
@@ -297,7 +300,17 @@ cross-check that the environment and the DP describe the same game.
 | threshold heuristic | −0.240 | 164 / 200 |
 | the old demo's published table | −0.097 | 162 / 200 |
 | tabular Q, 10⁷ hands, step max(0.001, 1/(1+N)) | −0.044 | 195 / 200 |
+| DQN, Double, 200k updates (`blackjack-dqn`) | −0.048 | 188 / 200 |
 | exact optimum | −0.043 | 200 / 200 |
+
+`MainBlackjackDqn.lean` is the 6,210-parameter dense net on a 29-float one-hot,
+XLA backend, one GPU, about ten minutes for 200k updates. The host writes the
+Bellman target into the taken action's slot of the net's own prediction and
+hands that to the DDPM MSE train step, so the untaken slot's gradient is zero;
+the greedy policy is read off the net every 50 updates for acting and scored
+exactly every 1000. Run logs, curves and the figure script's inputs are in
+`runs/2026-09-11-blackjack-dqn/`; `scripts/blackjack_figure.py` draws the
+book's chart.
 
 The DP's hit/stick chart is Sutton & Barto's Figure 5.2. The published table
 from the old Swift demo is a casino-rules chart whose rows for 10 and 11 are a
@@ -331,7 +344,8 @@ demos/
 ├── MainTinyGptShakespeare.lean            # char-level transformer
 ├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)
 ├── MainTinyStories.lean                   # the same transformer at a larger corpus
-├── MainBlackjackEnv.lean                  # blackjack env + exact DP instrument + tabular Q (RL rung 1)
+├── MainBlackjackEnv.lean                  # blackjack tables, play/dump/curve modes (RL rung 1; env in LeanMlir/Blackjack.lean)
+├── MainBlackjackDqn.lean                  # DQN on blackjack through the DDPM MSE block, scored exactly (RL rung 2)
 ├── MainPongEnv.lean                       # Pong in Lean, 84×84 frames, scripted opponent (RL rung 3, Phase 0)
 │
 ├── probes/                                # gates and tools, not demos — these RUN IN CI

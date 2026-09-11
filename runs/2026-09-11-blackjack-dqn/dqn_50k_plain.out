@@ -1,0 +1,28 @@
+DQN greedy policy after 49001 updates (33645 hands, plain):
+  no usable ace  dealer: A  2  3  4  5  6  7  8  9  10
+  21                          S  S  S  S  S  S  S  S  S  S  
+  20                          S  S  S  S  S  S  S  S  S  S  
+  19                          S  S  S  S  S  S  S  S  S  S  
+  18                          S  S  S  S  S  S  S  S  S  S  
+  17                          H  S  S  S  S  S  S  H  S  S  
+  16                          H  H  S  S  S  S  S  H  H  H  
+  15                          H  H  H  S  S  S  H  H  H  H  
+  14                          H  H  S  S  S  H  H  H  H  H  
+  13                          H  H  H  H  H  H  H  H  H  H  
+  12                          H  H  H  H  S  S  H  H  H  H  
+
+  usable ace     dealer: A  2  3  4  5  6  7  8  9  10
+  21                          S  S  S  S  S  S  S  S  S  S  
+  20                          S  S  S  S  S  S  S  S  S  S  
+  19                          S  S  S  S  H  S  S  S  S  S  
+  18                          S  S  H  H  H  S  S  H  H  H  
+  17                          H  H  H  H  H  H  S  H  H  H  
+  16                          H  H  H  H  H  H  H  H  H  H  
+  15                          H  H  S  H  S  H  H  H  H  H  
+  14                          H  H  H  H  H  H  H  H  H  H  
+  13                          H  H  H  H  S  S  H  H  H  H  
+  12                          H  H  H  H  H  H  H  H  H  H  
+
+arm                     exact value    Monte Carlo (1000000 hands)    agreement /200
+DQN                     -0.0578        -0.0570 ± 0.0010               175
+exact optimum           -0.0431

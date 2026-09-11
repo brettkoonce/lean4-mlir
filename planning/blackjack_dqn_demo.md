@@ -1,5 +1,14 @@
 # blackjack_dqn_demo.md — tabular Q-learning to DQN on blackjack
 
+Status 2026-09-11: Phases 0–2 done; Phase 3's figure and content.tex section
+done; `Bestiary/DQN.lean` and the Gymnasium cross-check (§1) are open. Numbers and files in `runs/2026-09-11-blackjack-dqn/README.md`:
+optimum -0.0431, tabular Q -0.0440 (192/200, 10^6 hands), Double DQN -0.0476
+(188/200, 200k updates) — Gate 2 passes for all four ablation arms. The
+environment moved to `LeanMlir/Blackjack.lean` so both exes share it; the DQN is
+`lake exe blackjack-dqn`. The book's figure is the two charts alone,
+`blueprint/src/figures/demos/blackjack_chart.png` (`scripts/blackjack_figure.py … chart`);
+the curve version stays in the run directory.
+
 Goal: the reinforcement-learning demo, in two rungs on one loop. Rung 1 ports
 the old Swift/gym blackjack demo to pure Lean: the environment, tabular
 Q-learning, and its three comparison arms. Rung 2 replaces the Q table with
@@ -83,9 +92,11 @@ Arms, all `Obs → Action` after training:
    is a casino-rules table (doubling, splitting, dealer rules differ), so it
    will score below the exact optimum for these rules. That is a row, not a
    bug: "the published table is for a different game".
-4. tabular Q — Q[32][11][2][2] as before, ε-greedy, α = 0.1 constant, γ = 1
-   (the hand is short and undiscounted; the old γ = 0.2 discounted the
-   terminal reward through each hit), 10^6 hands.
+4. tabular Q — Q[32][11][2][2] as before, ε-greedy, γ = 1 (the hand is short
+   and undiscounted; the old γ = 0.2 discounted the terminal reward through
+   each hit), 10^6 hands. Step size max(0.001, 1/(1+N)) with N the visit
+   count: a constant α stalls at 177/200 because the bootstrap target keeps
+   moving; the visit-count average reaches 192/200 at 10^6 hands.
    ⛔ The old update was `Q += (1-α)·Q + α·target`, i.e. `Q ← (2-α)Q + α·target`,
    which grows geometrically at α = 0.5. The port writes `Q ← (1-α)Q + α·target`.
 5. the DP optimum — the ceiling.
@@ -163,6 +174,10 @@ Phase 1 (½ session, no GPU):  §3 arms + tabular Q; Gate 1: tabular Q within 0.
                                optimum's exact value and ≥ 190/200 agreement
 Phase 2 (1 session):           §4 DQN trainer on the DDPM path; Gate 2: DQN matches
                                tabular Q's exact value within 0.01
+                               DONE 2026-09-11: 50k updates -0.0578 (misses by 0.014);
+                               200k updates plain -0.0503 / Double -0.0476 / +lr decay
+                               -0.0530, -0.0503 — all pass; Double is Table 2's winner
+                               at one seed, lr decay does not reduce the readout jitter
 Phase 3 (½ session):           §5 figure + tables; §6 section + bestiary entry
 ```
 

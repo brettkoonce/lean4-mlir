@@ -1,0 +1,7 @@
+arm,exact,mc,se,agree
+Random,-0.3942,-0.3956,0.0009,110
+Markov threshold (hit p = 0.8 below 18),-0.2403,-0.2395,0.0009,164
+Published casino table,-0.0967,-0.0962,0.0010,162
+"Tabular Q, 10⁶ hands",-0.0440,-0.0425,0.0010,192
+"DQN, Double, 200k updates",-0.0476,-0.0471,0.0010,188
+Exact optimum,-0.0431,-0.0419,0.0010,200

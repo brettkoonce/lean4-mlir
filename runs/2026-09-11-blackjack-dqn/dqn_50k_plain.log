@@ -1,0 +1,67 @@
+blackjack dqn: 6210 params, 50000 steps, batch 128, plain DQN, seed 1
+I0911 16:41:09.264375 1906454 service.cc:154] XLA service 0x7869f8028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 16:41:09.264415 1906454 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 16:41:09.265978 1906454 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 16:41:09.266006 1906454 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 16:41:09.272848 1906454 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 16:41:09.739765 1906494 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/blackjack_dqn_train_step.mlir (@main, 19 outputs, 1 replica) in 942 ms
+[pjrt_ffi] compiled .lake/build/blackjack_dqn_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 517 ms
+I0911 16:41:10.905355 1906492 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 24 bytes spill stores, 24 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/blackjack_dqn_fwd_eval_all.mlir (@forward_eval, 1 outputs, 1 replica) in 481 ms
+  sessions loaded
+  update 1000  hands 1455  loss 0.1880  exact -0.0846  agree 162/200  (2708 ms)
+  update 2000  hands 2187  loss 0.2121  exact -0.0752  agree 157/200  (5473 ms)
+  update 3000  hands 2898  loss 0.2227  exact -0.0743  agree 159/200  (7941 ms)
+  update 4000  hands 3633  loss 0.2298  exact -0.0895  agree 150/200  (10618 ms)
+  update 5000  hands 4351  loss 0.2312  exact -0.0750  agree 155/200  (13580 ms)
+  update 6000  hands 5063  loss 0.2351  exact -0.0894  agree 156/200  (16567 ms)
+  update 7000  hands 5761  loss 0.2406  exact -0.0801  agree 161/200  (19556 ms)
+  update 8000  hands 6470  loss 0.2385  exact -0.0759  agree 161/200  (22527 ms)
+  update 9000  hands 7156  loss 0.2387  exact -0.0818  agree 163/200  (25543 ms)
+  update 10000  hands 7900  loss 0.2411  exact -0.0789  agree 158/200  (28604 ms)
+  update 11000  hands 8595  loss 0.2402  exact -0.0676  agree 168/200  (31605 ms)
+  update 12000  hands 9287  loss 0.2428  exact -0.0722  agree 167/200  (34541 ms)
+  update 13000  hands 9981  loss 0.2451  exact -0.0700  agree 164/200  (37581 ms)
+  update 14000  hands 10671  loss 0.2387  exact -0.0676  agree 171/200  (40565 ms)
+  update 15000  hands 11351  loss 0.2450  exact -0.0664  agree 170/200  (43292 ms)
+  update 16000  hands 12018  loss 0.2420  exact -0.0619  agree 169/200  (45780 ms)
+  update 17000  hands 12691  loss 0.2422  exact -0.0705  agree 169/200  (48241 ms)
+  update 18000  hands 13372  loss 0.2444  exact -0.0597  agree 173/200  (50810 ms)
+  update 19000  hands 14056  loss 0.2418  exact -0.0622  agree 173/200  (53492 ms)
+  update 20000  hands 14738  loss 0.2408  exact -0.0695  agree 165/200  (56170 ms)
+  update 21000  hands 15385  loss 0.2399  exact -0.0606  agree 175/200  (58698 ms)
+  update 22000  hands 16063  loss 0.2366  exact -0.0661  agree 171/200  (61225 ms)
+  update 23000  hands 16750  loss 0.2438  exact -0.0599  agree 172/200  (63844 ms)
+  update 24000  hands 17434  loss 0.2432  exact -0.0657  agree 175/200  (66377 ms)
+  update 25000  hands 18091  loss 0.2392  exact -0.0627  agree 170/200  (68880 ms)
+  update 26000  hands 18728  loss 0.2393  exact -0.0595  agree 176/200  (71798 ms)
+  update 27000  hands 19390  loss 0.2359  exact -0.0603  agree 176/200  (74805 ms)
+  update 28000  hands 20052  loss 0.2382  exact -0.0626  agree 174/200  (77820 ms)
+  update 29000  hands 20715  loss 0.2372  exact -0.0632  agree 173/200  (80840 ms)
+  update 30000  hands 21366  loss 0.2352  exact -0.0582  agree 174/200  (83837 ms)
+  update 31000  hands 21993  loss 0.2319  exact -0.0618  agree 175/200  (86709 ms)
+  update 32000  hands 22630  loss 0.2362  exact -0.0627  agree 169/200  (89742 ms)
+  update 33000  hands 23265  loss 0.2373  exact -0.0560  agree 174/200  (92785 ms)
+  update 34000  hands 23918  loss 0.2334  exact -0.0592  agree 171/200  (95802 ms)
+  update 35000  hands 24560  loss 0.2395  exact -0.0618  agree 173/200  (98898 ms)
+  update 36000  hands 25215  loss 0.2329  exact -0.0623  agree 175/200  (101907 ms)
+  update 37000  hands 25883  loss 0.2369  exact -0.0654  agree 168/200  (104926 ms)
+  update 38000  hands 26520  loss 0.2363  exact -0.0601  agree 172/200  (107955 ms)
+  update 39000  hands 27172  loss 0.2354  exact -0.0671  agree 163/200  (110984 ms)
+  update 40000  hands 27800  loss 0.2349  exact -0.0535  agree 178/200  (114014 ms)
+  update 41000  hands 28438  loss 0.2332  exact -0.0553  agree 174/200  (117046 ms)
+  update 42000  hands 29095  loss 0.2333  exact -0.0567  agree 172/200  (120037 ms)
+  update 43000  hands 29746  loss 0.2323  exact -0.0549  agree 175/200  (123083 ms)
+  update 44000  hands 30388  loss 0.2300  exact -0.0579  agree 169/200  (126072 ms)
+  update 45000  hands 31042  loss 0.2321  exact -0.0631  agree 169/200  (129076 ms)
+  update 46000  hands 31690  loss 0.2342  exact -0.0622  agree 167/200  (132120 ms)
+  update 47000  hands 32347  loss 0.2339  exact -0.0607  agree 171/200  (135068 ms)
+  update 48000  hands 33008  loss 0.2318  exact -0.0589  agree 173/200  (138037 ms)
+  update 49000  hands 33645  loss 0.2309  exact -0.0578  agree 175/200  (140984 ms)
+trained: 49001 updates, 33645 hands, 141006 ms
+wrote .lake/build/blackjack_dqn_curve.csv, .lake/build/blackjack_dqn_policy.csv, .lake/build/blackjack_dqn_params.bin
