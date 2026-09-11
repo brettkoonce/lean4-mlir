@@ -1,0 +1,93 @@
+{
+  "delay_ms": -7.080078125,
+  "event": "GW150914",
+  "gate_pass": true,
+  "network_snr": 24.200356121032392,
+  "o3a_probe": {
+    "H1": {
+      "clean_seconds": 4096,
+      "dq_names": [
+        "DATA",
+        "CBC_CAT1",
+        "CBC_CAT2",
+        "CBC_CAT3",
+        "BURST_CAT1",
+        "BURST_CAT2",
+        "BURST_CAT3"
+      ],
+      "file": "H-H1_GWOSC_O3a_4KHZ_R1-1238777856-4096.hdf5",
+      "gps_start": 1238777856.0,
+      "inj_names": [
+        "NO_CBC_HW_INJ",
+        "NO_BURST_HW_INJ",
+        "NO_DETCHAR_HW_INJ",
+        "NO_CW_HW_INJ",
+        "NO_STOCH_HW_INJ"
+      ],
+      "nan_samples": 0,
+      "seconds": 4096
+    },
+    "L1": {
+      "clean_seconds": 4096,
+      "dq_names": [
+        "DATA",
+        "CBC_CAT1",
+        "CBC_CAT2",
+        "CBC_CAT3",
+        "BURST_CAT1",
+        "BURST_CAT2",
+        "BURST_CAT3"
+      ],
+      "file": "L-L1_GWOSC_O3a_4KHZ_R1-1238777856-4096.hdf5",
+      "gps_start": 1238777856.0,
+      "inj_names": [
+        "NO_CBC_HW_INJ",
+        "NO_BURST_HW_INJ",
+        "NO_DETCHAR_HW_INJ",
+        "NO_CW_HW_INJ",
+        "NO_STOCH_HW_INJ"
+      ],
+      "nan_samples": 0,
+      "seconds": 4096
+    },
+    "slot": 1238777856
+  },
+  "per_ifo": {
+    "H1": {
+      "file": "H-H1_LOSC_4_V1-1126256640-4096.hdf5",
+      "ifo": "H1",
+      "psd_seg": 4.0,
+      "psd_window": 128.0,
+      "snr": 19.829861241086892,
+      "t_peak": 1126259462.4285645,
+      "t_peak_minus_t0": 0.028564453125,
+      "template": {
+        "approximant": "IMRPhenomD",
+        "f_lower": 20.0,
+        "m1": 39.24,
+        "m2": 31.610000000000003
+      }
+    },
+    "L1": {
+      "file": "L-L1_LOSC_4_V1-1126256640-4096.hdf5",
+      "ifo": "L1",
+      "psd_seg": 4.0,
+      "psd_window": 128.0,
+      "snr": 13.87205246328134,
+      "t_peak": 1126259462.4214845,
+      "t_peak_minus_t0": 0.021484375,
+      "template": {
+        "approximant": "IMRPhenomD",
+        "f_lower": 20.0,
+        "m1": 39.24,
+        "m2": 31.610000000000003
+      }
+    }
+  },
+  "published": {
+    "H1": 20.0,
+    "L1": 13.0,
+    "network": 24.0
+  },
+  "seconds": 7.44329571723938
+}

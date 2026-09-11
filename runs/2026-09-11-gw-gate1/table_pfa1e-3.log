@@ -1,0 +1,41 @@
+sigma(raw) / rho(whitened) H1: 1.0001 +- 0.0009   (1 means the injection SNR and the whitening share the PSD)
+sigma(raw) / rho(whitened) L1: 1.0001 +- 0.0011   (1 means the injection SNR and the whitening share the PSD)
+
+== gauss noise, 4051 injected / 8177 noise-only windows, P_fa = 0.001 per window ==
+rho_net bin                    4     5     6     7     8     9    10    11    12    13    14    15    16    17    18    19   rho50    thr
+theorem matched filter H1  0.018 0.061 0.182 0.297 0.494 0.660 0.764 0.817 0.905 0.936 0.971 0.939 0.978 0.989 0.987 0.981   8.536
+matched filter H1          0.027 0.103 0.213 0.327 0.522 0.673 0.780 0.830 0.908 0.928 0.979 0.945 0.975 0.987 0.989 0.981   8.387   5.38
+theorem known time H1      0.231 0.423 0.619 0.738 0.865 0.927 0.934 0.951 0.975 0.979 0.994 0.979 0.994 0.999 0.995 0.987   5.894
+  known time H1            0.251 0.425 0.683 0.724 0.847 0.931 0.943 0.961 0.982 0.983 0.996 0.966 0.993 0.996 0.996 0.985   5.790   3.80
+theorem matched filter L1  0.045 0.171 0.392 0.674 0.836 0.891 0.962 0.976 0.956 0.983 0.986 0.984 0.994 0.997 0.987 0.990   6.882
+matched filter L1          0.050 0.172 0.470 0.691 0.871 0.895 0.955 0.987 0.952 0.983 0.988 0.992 0.993 1.000 0.982 0.989   6.637   5.40
+theorem known time L1      0.453 0.713 0.854 0.958 0.976 0.971 0.989 0.996 0.980 0.989 0.997 0.991 0.997 1.000 0.998 0.996   4.680
+  known time L1            0.448 0.728 0.861 0.971 0.976 0.976 0.992 1.000 0.982 0.987 1.000 0.996 0.996 1.000 0.993 0.996   4.686   3.68
+theorem matched filter network 0.072 0.308 0.671 0.922 0.991 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000   6.029
+matched filter network     0.127 0.444 0.787 0.938 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000   5.662   6.26
+  known time network       0.687 0.920 0.987 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000     n/a   4.32
+random                     0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001
+n per bin                    259   261   230   272   249   248   245   230   273   237   242   236   282   238   282   267
+N_eff (single-detector max, fit at the median): H1 1277, L1 1285   rho* = sqrt(2 ln(N_eff / P_fa)) would be 5.30, 5.30
+  known time H1            rho50 5.79 vs theorem 5.89 (d 0.10), worst bin excess over 2 sigma -0.000  ok
+  known time L1            rho50 4.69 vs theorem 4.68 (d 0.01), worst bin excess over 2 sigma -0.002  ok
+  known time network       rho50 nan vs theorem nan (d 0.00), worst bin excess over 2 sigma -0.007  ok
+  matched filter H1        rho50 8.39 vs theorem 8.54 (d 0.15), worst bin excess over 2 sigma +0.012  search statistic, on the theorem
+  matched filter L1        rho50 6.64 vs theorem 6.88 (d 0.24), worst bin excess over 2 sigma +0.013  search statistic, on the theorem
+  matched filter network   rho50 5.66 vs theorem 6.03 (d 0.37), worst bin excess over 2 sigma +0.079  search statistic, above it at low SNR
+GATE 1: PASS  (known-time rows: rho50 within 0.25, bins within 2 sigma + 0.02)
+
+== real noise, 4051 injected / 8177 noise-only windows, P_fa = 0.001 per window ==
+rho_net bin                    4     5     6     7     8     9    10    11    12    13    14    15    16    17    18    19   rho50    thr
+matched filter H1          0.000 0.000 0.004 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.007 0.000 0.004 0.000     n/a 337.24
+theorem known time H1      0.051 0.138 0.306 0.446 0.646 0.779 0.846 0.882 0.939 0.956 0.984 0.955 0.986 0.994 0.991 0.983   7.771
+  known time H1            0.039 0.130 0.317 0.449 0.683 0.770 0.816 0.874 0.941 0.958 0.979 0.945 0.982 0.992 0.993 0.981   7.720   4.85
+matched filter L1          0.004 0.000 0.000 0.000 0.004 0.000 0.004 0.004 0.000 0.000 0.000 0.000 0.000 0.004 0.000 0.000     n/a  57.12
+theorem known time L1      0.007 0.047 0.170 0.425 0.644 0.788 0.912 0.955 0.934 0.977 0.979 0.977 0.991 0.992 0.983 0.985   7.842
+  known time L1            0.004 0.065 0.170 0.408 0.639 0.774 0.902 0.952 0.934 0.970 0.979 0.987 0.993 0.987 0.979 0.985   7.899   6.21
+matched filter network     0.004 0.000 0.004 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.007 0.000 0.004 0.000     n/a 417.36
+theorem known time network 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.002 0.027 0.163 0.496 0.827 0.974  17.511
+  known time network       0.000 0.000 0.004 0.000 0.004 0.000 0.000 0.004 0.000 0.000 0.004 0.017 0.174 0.429 0.816 0.981  17.685  17.60
+random                     0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001
+n per bin                    259   261   230   272   249   248   245   230   273   237   242   236   282   238   282   267
+N_eff (single-detector max, fit at the median): H1 1298, L1 1301   rho* = sqrt(2 ln(N_eff / P_fa)) would be 5.31, 5.31

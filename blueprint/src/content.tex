@@ -14004,14 +14004,131 @@ def fourCastNet : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Beyond vision}
+\subsection{Signal processing --- demo: gravitational-wave detection on LIGO strain}
+\label{sec:bestiary_signal}
 
-Architectures where the task domain is neither a 2D image nor a token
-sequence: audio, 3D scene reconstruction, multimodal embedding,
-scientific. Several of these (NeRF, CLIP) have essentially
-\emph{no} architectural novelty --- the interesting work lives in the
-data, loss, or training procedure, and the bestiary entry exists to
-make that point.
+Networks whose input is a waveform: strain from an interferometer, raw
+audio, the spectrogram of a voice. The demo scores a chapter-4 CNN against
+the detector its field already has, whose performance in Gaussian noise is a
+closed form; the two entries after it are the audio architectures that read
+the same kind of input, one sample at a time and one spectrogram frame at a
+time.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/gw_detect.png}
+\caption{A chapter-4 CNN against the matched filter on LIGO strain. (a) A
+whitened $2$\,s H1 window from the validation set with its injected
+$33 + 10\,M_\odot$ chirp at network SNR 15. (b) The two spectrograms the
+network must tell apart. (c) Detection probability against injected SNR in
+Gaussian noise at $10^{-2}$ false alarms per window: the closed form at the
+search's threshold, PyCBC's coherent search on the same windows, and the
+CNN. (d) The same on real O3a strain, where glitches move the filter's
+threshold from $5.9$ to $10.4$ and the CNN's barely at all.}
+\label{fig:gw_detect}
+\end{figure}
+
+\paragraph{A CNN against the matched filter on LIGO strain.} This demo
+has a theorem for a ceiling the way blackjack has value
+iteration and the Boltzmann generator has quadrature. Advanced LIGO's strain
+is a time series at audio rates, and a binary-black-hole merger is a chirp
+that sweeps from 25 to a few hundred Hz in under a second. The Gravitational
+Wave Open Science Center publishes every observing run under CC BY 4.0
+(Abbott et al.\ 2023, \href{https://doi.org/10.3847/1538-4365/acdc9f}{ApJS 267,
+29}); real events are too few to train on, so the training set is real
+detector noise with simulated chirps injected at chosen signal-to-noise
+ratios. The detector to beat is the matched filter: in stationary Gaussian
+noise it is the Neyman--Pearson optimum, and its detection probability at
+threshold $\rho^\ast$ for a signal of optimal SNR $\rho$ is a Marcum
+$Q$-function. Three things change relative to the CIFAR demo:
+
+\begin{itemize}
+  \item \textbf{The data is real detector noise with the signal we chose.}
+    Twenty-six file pairs of O3a strain from H1 and L1, science-mode and free
+    of hardware injections, cut into $2$\,s windows and whitened by each
+    file's own median-Welch PSD over 20--500\,Hz. Half the windows carry an
+    IMRPhenomD chirp from PyCBC, masses uniform in $[10, 50]\,M_\odot$, random
+    sky position, projected onto both detectors and scaled to a network SNR
+    uniform in $[4, 20]$. Two noise sets share every window and every
+    injection: Gaussian noise coloured by the same PSD, the theorem's regime,
+    and the strain itself. $40{,}760$ training and $12{,}228$ validation
+    windows.
+  \item \textbf{The instrument is a closed form, and the filter is checked
+    against it first.} PyCBC's matched filter with the injected template, at
+    the known arrival time, reproduces $Q_1(\rho, \rho^\ast)$ on the Gaussian
+    set to within binomial error in every SNR bin --- the SNR at half
+    detection is $4.68$ against the theorem's $4.75$ for H1 at a false-alarm
+    rate of $10^{-2}$ per window --- so the injection's SNR and the whitening
+    agree on one PSD. The search statistic then maximises over the window
+    and the $\pm 10$\,ms inter-detector delay, exactly as a search must, and
+    the CNN, which sees no time, is compared to that.
+  \item \textbf{The network is Chapter~\ref{chap:bn}'s CIFAR net, unchanged.}
+    \texttt{CIFAR-CNN8-wide-BN} as that chapter spells it: eight
+    convolutions in four conv-conv-pool stages at 16, 16, 32, 32 channels
+    into the $2 \times 512$ head, $0.83$\,M parameters. The two edits are
+    the two-channel stem and the two-way output. The input is a
+    $2 \times 64 \times 128$ image, each channel a constant-Q spectrogram
+    of one detector's whitened window (64 log-spaced bands over
+    20--500\,Hz, 128 frames); the ordinary train step with integer labels,
+    Adam at $10^{-3}$ with one warm-up epoch and cosine decay, batch 64,
+    six epochs, under two minutes on one card. Nothing in the codegen
+    moved.
+\end{itemize}
+
+\paragraph{Scored against the theorem.} Detection probability by injected
+network SNR on the Gaussian set, $12{,}228$ validation windows, every
+threshold set on the $8{,}177$ noise-only windows so that one in a hundred
+exceeds it. The last column is the SNR at which each row crosses one half:
+
+\begin{center}
+\small
+\begin{tabular}{@{}l r r r r r r r r r@{}}
+\hline
+$\rho$ & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 12 & $\rho_{1/2}$ \\
+\hline
+closed form $Q_2(\rho, \rho^\ast)$, $\rho^\ast = 5.86$ & $0.14$ & $0.46$ & $0.80$ & $0.96$ & $1.00$ & $1.00$ & $1.00$ & $1.00$ & $5.63$ \\
+PyCBC coherent search, true template          & $0.26$ & $0.58$ & $0.90$ & $0.97$ & $1.00$ & $1.00$ & $1.00$ & $1.00$ & $\mathbf{5.27}$ \\
+CNN on spectrograms, trained on Gaussian noise & $0.05$ & $0.19$ & $0.43$ & $0.66$ & $0.86$ & $0.95$ & $0.99$ & $1.00$ & $6.80$ \\
+random                                        & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The filter sits on its closed form and the CNN trails it by $1.5$
+units of SNR. Gabbard et al.\ 2018
+(\href{https://doi.org/10.1103/PhysRevLett.120.141103}{PRL 120}) closed that
+gap with a one-dimensional network on the whitened strain and ten times the
+training set; a log-power spectrogram discards the phase the filter
+integrates, and this is the demo's number, not the architecture's ceiling.
+
+\paragraph{Real noise costs the filter, not the network.} LIGO noise is
+neither stationary nor Gaussian, and the production search adds a $\chi^2$
+veto for exactly that reason. The same rows on the strain itself, with each
+model trained on one noise set and scored on both:
+
+\begin{center}
+\small
+\begin{tabular}{@{}l r r r@{}}
+\hline
+ & \multicolumn{2}{c}{$\rho_{1/2}$ at $10^{-2}$} & $10^{-3}$ \\
+trained on & tested on Gaussian & tested on real & tested on real \\
+\hline
+CNN, Gaussian noise         & $6.80$ & $7.17$ & $18.7$ \\
+CNN, real O3a strain        & $6.65$ & $\mathbf{6.91}$ & $\mathbf{7.52}$ \\
+PyCBC coherent search       & $\mathbf{5.27}$ & $10.32$ & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Each network is best on the noise it trained on, by a few tenths.
+The filter loses five units of SNR to glitches at $10^{-2}$, and at
+$10^{-3}$ its threshold is $417$: eight validation windows hold a glitch
+that loud, and without a veto the filter has no row. The network trained on
+Gaussian noise needs an SNR of $19$ there; the one trained on real strain
+still reaches half detection at $7.5$. Training on the real detector is what
+teaches the glitch tail. % TODO Phase 4: the catalogue table (which GWTC
+% events the trained model flags, beside their published SNR) and the
+% Gravity Spy glitch row.
 
 \subsubsection*{WaveNet (\texttt{Bestiary/WaveNet.lean})}
 \emph{One} new primitive (\S~\ref{layer:waveNetBlock}). Dilated causal
@@ -14069,6 +14186,14 @@ def whisperSmall : NetSpec where
     .transformerEncoder 768 12 3072 12
   ]
 \end{verbatim}
+
+\subsection{Beyond vision}
+
+Architectures where the task domain is neither a 2D image nor a token
+sequence: 3D scene reconstruction, multimodal embedding, scientific. Several of these (NeRF, CLIP) have essentially
+\emph{no} architectural novelty --- the interesting work lives in the
+data, loss, or training procedure, and the bestiary entry exists to
+make that point.
 
 \subsubsection*{NeRF (\texttt{Bestiary/NeRF.lean})}
 \emph{Two} new primitives (\S~\ref{layer:positionalEncoding},
@@ -14342,9 +14467,9 @@ matched, and each was checked against \texttt{timm} rather than assumed:
 \end{itemize}
 
 \medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step
-past image classification into the three other task families in the book,
-which are detection, segmentation and language, and each pulls a dataset of
-its own:
+past image classification into the four other task families in the book,
+which are detection, segmentation, language and signal processing, and each
+pulls a dataset of its own:
 
 \begin{itemize}
   \item \textbf{MSD Task01 (BraTS)} is the segmentation dataset. It is
@@ -14368,11 +14493,14 @@ its own:
     of them per image, so a single $7\times7$ grid collapses outright and
     the multi-scale FPN head of Definition~\ref{layer:fpnModule} becomes
     necessary rather than decorative.
-  \item \textbf{MS-COCO 2017} is the standard detection benchmark alongside
-    it, at the opposite end of the same axis (photographic scale, 80
-    classes, 118k training images). The repository ships its loader and the
-    two standard subsets described below, though no trainer in this book
-    consumes it yet.
+  \item \textbf{GWOSC O3a strain} is the signal-processing dataset: the
+    Hanford and Livingston interferometers' strain from the first half of
+    the third observing run, published by the Gravitational Wave Open
+    Science Center under CC BY 4.0. Twenty-six 4096-second file pairs are
+    cut into two-second windows, half of them given an injected
+    binary-black-hole chirp, and the CNN of \S\ref{sec:bestiary_signal}
+    (\texttt{gw-detect}) trains on their spectrograms against the matched
+    filter's closed form.
 \end{itemize}
 
 \noindent Same fetch-and-unpack story as the table above, with one extra
@@ -14398,9 +14526,9 @@ TinyStories & TS & Eldan \& Li, 2023 &
 VisDrone-DET2019 & VisD & Zhu et al., 2021 &
   \href{https://github.com/VisDrone/VisDrone-Dataset}{\nolinkurl{github.com/VisDrone/VisDrone-Dataset}} &
   \texttt{download\_visdrone.sh} $\to$ \texttt{data/visdrone/} \\[2pt]
-MS-COCO 2017 & COCO & Lin et al., 2014 &
-  \href{https://cocodataset.org/}{\nolinkurl{cocodataset.org}} &
-  \texttt{download\_coco.sh} $\to$ \texttt{data/coco/} \\[2pt]
+GWOSC O3a strain & GWOSC & Abbott et al., 2023 &
+  \href{https://gwosc.org/}{\nolinkurl{gwosc.org}} &
+  \texttt{preprocess\_gw.py} $\to$ \texttt{data/gw/} \\[2pt]
 M\"uller-Brown density & MB & M\"uller \& Brown, 1979 &
   generated by \texttt{preprocess\_boltzmann.py}, no download &
   \texttt{data/boltzmann/} \\
@@ -14418,14 +14546,16 @@ slice of the corpus and emits it in HuggingFace format
 (\texttt{vocab.json}/\texttt{merges.txt}) alongside the flat int32-LE
 token streams (\texttt{train.bin}/\texttt{val.bin}), and the small
 vocabulary keeps the embedding gather and the head matmul cheap and
-the tokenizer auditable. The two detection sets follow the same pattern:
-\texttt{preprocess\_visdrone.py} and \texttt{preprocess\_coco.py} write
-\emph{the same three record formats} (single-grid, single-scale anchor, and
-multi-scale FPN), so one set of Lean loaders and one codegen serve
-both. VisDrone's official Google-Drive/Baidu links are large-file-flaky, so
+the tokenizer auditable. \texttt{preprocess\_visdrone.py} writes three
+record formats (single-grid, single-scale anchor, and multi-scale FPN), so
+one set of Lean loaders and one codegen serve every detector head.
+VisDrone's official Google-Drive/Baidu links are large-file-flaky, so
 \texttt{download\_visdrone.sh} pulls the byte-identical Ultralytics
-release-asset mirror over plain HTTPS. COCO's own hosting needs no such
-workaround.
+release-asset mirror over plain HTTPS (\emph{reference:} Zhu et al.,
+\emph{Detection and Tracking Meet Drones Challenge}, IEEE TPAMI~43, 2021).
+The strain has no download script: which files to fetch is part of the
+preprocessing, so \texttt{preprocess\_gw.py} picks them off the GWOSC
+timeline, fetches them and builds the sets in one run.
 \normalsize
 
 \medskip\noindent\textbf{Building the BraTS dataset.}
@@ -14470,20 +14600,30 @@ centred.
 Decathlon}, Nature Communications~13, 4128 (2022), atop the underlying
 BraTS work (Menze et al.\ 2015, Bakas et al.\ 2017).
 
-\medskip\noindent\textbf{Building the COCO dataset.} COCO is fetched from
-its own hosting (plain HTTPS, no account) as three zips: 19\,GB of
-\texttt{train2017} (118{,}287 images), 1\,GB of \texttt{val2017} (5{,}000),
-and 241\,MB of annotations. Budget $\sim$45\,GB to build in one pass. The
-zips and extracted trees can be deleted once the \texttt{.bin} files exist.
-
-\texttt{preprocess\_coco.py} derives its class map from the annotation
-file's own \texttt{categories} list, and skips \texttt{iscrowd} regions as
-COCO's own evaluation does. It reads the list because COCO's ids are not
-contiguous, and the obvious \texttt{id\,-\,1} remap mislabels 69 of the 80
-classes without ever raising an error (id 13 is `stop sign', which
-\texttt{id\,-\,1} calls `parking meter'). \emph{References:} Lin et al.,
-\emph{Microsoft COCO: Common Objects in Context}, ECCV (2014). Zhu et al.,
-\emph{Detection and Tracking Meet Drones Challenge}, IEEE TPAMI~43 (2021).
+\medskip\noindent\textbf{Building the GWOSC dataset.} The strain comes from
+GWOSC's own hosting (plain HTTPS, no account) as 4096-second HDF5 files at
+4\,kHz, 134\,MB each: 26 file pairs from H1 and L1, 6.6\,GB, about 25 minutes
+to fetch. \texttt{preprocess\_gw.py} chooses the pairs from the GWOSC
+timeline, one 4096-second slot a day across O3a that lies wholly inside
+science-mode data at category \texttt{CBC\_CAT3} for both detectors with no
+transient hardware injection; the continuous-wave injections ran for all of
+O3 and are narrow lines the whitening removes, so their flag is deliberately
+not required, and requiring it yields zero clean seconds. Per file and
+detector it estimates a median-Welch PSD, colours a Gaussian twin by it,
+whitens both by one filter, injects the PyCBC chirps in the whitened domain,
+computes the matched-filter statistics of \S\ref{sec:bestiary_signal}, and
+writes the two spectrogram sets as flat f32 \texttt{[N, 2, 64, 128]} with
+int32 labels and a sidecar of every injection's parameters: 7\,GB, eleven
+minutes on eight cores at 1.7\,GB each. The stack (PyCBC, LALSuite, GWpy,
+gwosc) lives in its own \texttt{.venv-gw} from
+\texttt{requirements-gw-lock.txt}; installed into the main environment it
+would replace the pinned numpy and cuDNN the JAX reference needs. Two things
+the GWOSC documentation does not say: the 32-second event snippets stopped
+with GWTC-4, so an event's file is the 4096-second bulk file and can hold NaN
+gaps away from the event, and the \texttt{gwosc} client names the run
+\texttt{O3a}, not the \texttt{O3a\_4KHZ\_R1} the file names carry.
+\emph{Reference:} Abbott et al., \emph{Open Data from the Third Observing Run
+of LIGO, Virgo, KAGRA, and GEO}, ApJS~267, 29 (2023).
 
 \chapter{Getting started}
 \label{app:getting_started}

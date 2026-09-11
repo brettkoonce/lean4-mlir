@@ -1,0 +1,55 @@
+gw efficientnet-b0: 49 BN layers, train on real, 3 epochs, batch 64, lr 0.001000, seed 1
+I0911 20:39:35.439248 1967649 service.cc:154] XLA service 0x780df8028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 20:39:35.439302 1967649 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 20:39:35.441815 1967649 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 20:39:35.441878 1967649 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 20:39:35.449623 1967649 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 20:39:36.241610 1967676 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 4 bytes spill stores, 4 bytes spill loads
+
+I0911 20:39:36.456067 1967664 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 4 bytes spill stores, 4 bytes spill loads
+
+E0911 20:39:36.460649 1967681 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0911 20:39:37.369142 1967672 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 188 bytes spill stores, 108 bytes spill loads
+
+I0911 20:39:37.673420 1967680 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_58', 116 bytes spill stores, 80 bytes spill loads
+
+E0911 20:39:37.834907 1967667 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0911 20:39:38.286290 1967667 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0911 20:39:38.606360 1967683 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_52', 108 bytes spill stores, 56 bytes spill loads
+
+E0911 20:39:38.976928 1967684 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled .lake/build/gw_efficientnet_b0_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 4392 ms
+  7145122 params (4009822 by NetSpec.totalParams), 42016 BN stat floats
+  val: 12228 windows × 2 sets (742 ms)
+  train: 40760 windows of real (2089 ms)
+I0911 20:39:45.870304 1967678 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_153', 64 bytes spill stores, 32 bytes spill loads
+
+I0911 20:39:46.367654 1967682 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_137', 4 bytes spill stores, 4 bytes spill loads
+
+I0911 20:39:46.469126 1967666 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_183', 4 bytes spill stores, 4 bytes spill loads
+
+E0911 20:39:46.887602 1967685 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0911 20:39:47.403051 1967680 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_191', 4 bytes spill stores, 4 bytes spill loads
+
+I0911 20:39:47.584199 1967693 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_12', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 20:39:47.689404 1967662 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_12', 72 bytes spill stores, 40 bytes spill loads
+
+I0911 20:39:47.858646 1967678 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_137', 72 bytes spill stores, 72 bytes spill loads
+
+E0911 20:39:48.583626 1967688 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0911 20:39:48.918078 1967675 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_192', 16 bytes spill stores, 8 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/gw_efficientnet_b0_train_step.mlir (@main, 738 outputs, 1 replica) in 9766 ms
+    step 0: loss 0.800800 (283 ms so far)
+    step 1: loss 0.791800 (407 ms so far)
+    step 2: loss 0.904400 (529 ms so far)
+  epoch 1/3: loss 0.478300  val acc gauss 90.210000%  real 89.540000%  (110576 ms train, 7816 ms eval)
+  epoch 2/3: loss 0.297000  val acc gauss 92.210000%  real 91.730000%  (108558 ms train, 7784 ms eval)
+  epoch 3/3: loss 0.227300  val acc gauss 91.050000%  real 90.280000%  (90844 ms train, 21768 ms eval)
+trained: 1908 steps in 347 s
+score: .venv-gw/bin/python scripts/gw_metrics.py table --logits=gauss:runs/2026-09-11-gw-b0-real-e3/gw_efficientnet_b0_real_logits_gauss_val.bin,real:runs/2026-09-11-gw-b0-real-e3/gw_efficientnet_b0_real_logits_real_val.bin
+gw efficientnet-b0 trained on real, scored on gauss val: accuracy 91.050000%  -> runs/2026-09-11-gw-b0-real-e3/gw_efficientnet_b0_real_logits_gauss_val.bin
+gw efficientnet-b0 trained on real, scored on real val: accuracy 90.280000%  -> runs/2026-09-11-gw-b0-real-e3/gw_efficientnet_b0_real_logits_real_val.bin

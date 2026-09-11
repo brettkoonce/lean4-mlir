@@ -716,6 +716,13 @@ lean_exe «blackjack-dqn» where
   root := `demos.MainBlackjackDqn
   moreLinkArgs := lowererLink
 
+-- The gravitational-wave detection demo (planning/gw_detection_demo.md): a chapter
+-- CNN on H1+L1 spectrograms of real O3a strain with injected chirps, scored by
+-- `scripts/gw_metrics.py` against the matched filter's closed form. Zero new codegen.
+lean_exe «gw-detect» where
+  root := `demos.MainGwDetect
+  moreLinkArgs := lowererLink
+
 -- ─── Gates — the two checkers CI and every doc commit run ───
 
 /-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware

@@ -1,0 +1,42 @@
+gw cifarbn4: 8 BN layers, train on gauss, 6 epochs, batch 64, lr 0.001000, label smoothing 0.000000, seed 1
+I0911 21:16:47.217118 1983356 service.cc:154] XLA service 0x7f20b0028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 21:16:47.217163 1983356 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 21:16:47.219448 1983356 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 21:16:47.219492 1983356 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 21:16:47.226488 1983356 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 21:16:48.088410 1983378 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 64 bytes spill stores, 64 bytes spill loads
+
+I0911 21:16:48.156553 1983369 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 56 bytes spill stores, 56 bytes spill loads
+
+I0911 21:16:48.379877 1983398 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 8416 bytes spill stores, 8424 bytes spill loads
+
+I0911 21:16:48.380834 1983376 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/gw_cifarbn4_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2160 ms
+  5631426 params (5631426 by NetSpec.totalParams), 1920 BN stat floats
+  val: 12228 windows × 2 sets (700 ms)
+  train: 40760 windows of gauss (2145 ms)
+I0911 21:16:53.159236 1983392 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 56 bytes spill stores, 56 bytes spill loads
+
+I0911 21:16:53.254158 1983396 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 32 bytes spill stores, 32 bytes spill loads
+
+I0911 21:16:53.365380 1983382 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 8244 bytes spill stores, 8296 bytes spill loads
+
+I0911 21:16:53.642603 1983395 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 712 bytes spill stores, 712 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/gw_cifarbn4_train_step.mlir (@main, 107 outputs, 1 replica) in 3049 ms
+    step 0: loss 0.834600 (166 ms so far)
+    step 1: loss 0.778600 (255 ms so far)
+    step 2: loss 0.818000 (337 ms so far)
+  epoch 1/6: loss 0.357800  val acc gauss 92.590000%  real 92.030000%  (49575 ms train, 6434 ms eval)
+  epoch 2/6: loss 0.241800  val acc gauss 93.390000%  real 92.880000%  (53665 ms train, 6805 ms eval)
+  epoch 3/6: loss 0.222000  val acc gauss 83.240000%  real 81.070000%  (52046 ms train, 6909 ms eval)
+  epoch 4/6: loss 0.200600  val acc gauss 91.310000%  real 90.270000%  (53622 ms train, 6830 ms eval)
+  epoch 5/6: loss 0.137900  val acc gauss 82.450000%  real 80.810000%  (52198 ms train, 7144 ms eval)
+  epoch 6/6: loss 0.028300  val acc gauss 90.590000%  real 90.060000%  (53141 ms train, 6990 ms eval)
+trained: 3816 steps in 355 s
+score: .venv-gw/bin/python scripts/gw_metrics.py table --logits=gauss:runs/2026-09-11-gw-cifarbn4-gauss/gw_cifarbn4_gauss_logits_gauss_val.bin,real:runs/2026-09-11-gw-cifarbn4-gauss/gw_cifarbn4_gauss_logits_real_val.bin
+gw cifarbn4 trained on gauss, scored on gauss val: accuracy 90.590000%  -> runs/2026-09-11-gw-cifarbn4-gauss/gw_cifarbn4_gauss_logits_gauss_val.bin
+gw cifarbn4 trained on gauss, scored on real val: accuracy 90.060000%  -> runs/2026-09-11-gw-cifarbn4-gauss/gw_cifarbn4_gauss_logits_real_val.bin

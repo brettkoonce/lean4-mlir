@@ -1,0 +1,12 @@
+
+== Table 2: SNR at P_d = 1/2 (P_d in the [8, 9) bin), P_fa = 0.01 per window ==
+                                   tested on gauss        tested on real
+CNN trained on gauss               7.170  (0.835)        7.347  (0.775) 
+CNN trained on real                7.365  (0.855)        7.181  (0.839) 
+matched filter search              5.266  (1.000)       10.321  (0.088) 
+
+== Table 2: SNR at P_d = 1/2 (P_d in the [8, 9) bin), P_fa = 0.001 per window ==
+                                   tested on gauss        tested on real
+CNN trained on gauss               7.959  (0.639)          n/a  (0.028) 
+CNN trained on real                7.921  (0.667)        7.954  (0.651) 
+matched filter search              5.662  (1.000)          n/a  (0.000) 

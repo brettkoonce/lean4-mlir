@@ -1,0 +1,42 @@
+gw mnist cnn: 4 BN layers, train on real, 6 epochs, batch 64, lr 0.001000, seed 1
+I0911 20:58:45.512558 1978534 service.cc:154] XLA service 0x7c58ac0279a0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 20:58:45.512601 1978534 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 20:58:45.514446 1978534 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 20:58:45.514488 1978534 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 20:58:45.521590 1978534 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 20:58:46.156743 1978573 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 56 bytes spill stores, 56 bytes spill loads
+
+I0911 20:58:46.268959 1978566 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 64 bytes spill stores, 64 bytes spill loads
+
+I0911 20:58:46.481686 1978548 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+I0911 20:58:46.570391 1978569 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 8416 bytes spill stores, 8424 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/gw_mnist_cnn_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1592 ms
+  17106882 params (17106882 by NetSpec.totalParams), 384 BN stat floats
+  val: 12228 windows × 2 sets (634 ms)
+  train: 40760 windows of real (1833 ms)
+I0911 20:58:50.331801 1978564 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 56 bytes spill stores, 56 bytes spill loads
+
+I0911 20:58:50.484970 1978551 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 32 bytes spill stores, 32 bytes spill loads
+
+I0911 20:58:50.715796 1978562 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 8244 bytes spill stores, 8296 bytes spill loads
+
+I0911 20:58:50.857785 1978551 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 712 bytes spill stores, 712 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/gw_mnist_cnn_train_step.mlir (@main, 63 outputs, 1 replica) in 2240 ms
+    step 0: loss 0.824300 (366 ms so far)
+    step 1: loss 0.812400 (549 ms so far)
+    step 2: loss 0.811200 (705 ms so far)
+  epoch 1/6: loss 0.495800  val acc gauss 91.260000%  real 90.960000%  (100008 ms train, 16671 ms eval)
+  epoch 2/6: loss 0.313300  val acc gauss 90.280000%  real 90.240000%  (99508 ms train, 16618 ms eval)
+  epoch 3/6: loss 0.268500  val acc gauss 83.740000%  real 82.960000%  (100063 ms train, 16637 ms eval)
+  epoch 4/6: loss 0.241100  val acc gauss 92.720000%  real 92.650000%  (93104 ms train, 15967 ms eval)
+  epoch 5/6: loss 0.208100  val acc gauss 92.770000%  real 92.670000%  (93064 ms train, 15897 ms eval)
+  epoch 6/6: loss 0.170100  val acc gauss 91.600000%  real 91.390000%  (91951 ms train, 15738 ms eval)
+trained: 3816 steps in 675 s
+score: .venv-gw/bin/python scripts/gw_metrics.py table --logits=gauss:runs/2026-09-11-gw-mnist-real/gw_mnist_cnn_real_logits_gauss_val.bin,real:runs/2026-09-11-gw-mnist-real/gw_mnist_cnn_real_logits_real_val.bin
+gw mnist cnn trained on real, scored on gauss val: accuracy 91.600000%  -> runs/2026-09-11-gw-mnist-real/gw_mnist_cnn_real_logits_gauss_val.bin
+gw mnist cnn trained on real, scored on real val: accuracy 91.390000%  -> runs/2026-09-11-gw-mnist-real/gw_mnist_cnn_real_logits_real_val.bin

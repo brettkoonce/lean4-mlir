@@ -1,0 +1,26 @@
+gw cnn: 6 BN layers, train on gauss, 6 epochs, batch 64, lr 0.001000, seed 1
+I0911 20:44:41.044798 1972994 service.cc:154] XLA service 0x75d274028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 20:44:41.044836 1972994 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 20:44:41.046937 1972994 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 20:44:41.046980 1972994 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0911 20:44:41.054622 1972994 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/gw_cnn_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1792 ms
+  287426 params (287426 by NetSpec.totalParams), 896 BN stat floats
+  val: 12228 windows × 2 sets (724 ms)
+  train: 40760 windows of gauss (2316 ms)
+[pjrt_ffi] compiled .lake/build/gw_cnn_train_step.mlir (@main, 73 outputs, 1 replica) in 1961 ms
+    step 0: loss 0.924500 (58 ms so far)
+    step 1: loss 0.904100 (90 ms so far)
+    step 2: loss 1.065200 (121 ms so far)
+  epoch 1/6: loss 0.388900  val acc gauss 87.540000%  real 86.790000%  (57304 ms train, 3296 ms eval)
+  epoch 2/6: loss 0.281200  val acc gauss 92.420000%  real 91.720000%  (19196 ms train, 3189 ms eval)
+  epoch 3/6: loss 0.258500  val acc gauss 92.760000%  real 90.920000%  (19249 ms train, 3202 ms eval)
+  epoch 4/6: loss 0.243400  val acc gauss 92.940000%  real 92.430000%  (19396 ms train, 3251 ms eval)
+  epoch 5/6: loss 0.212700  val acc gauss 88.230000%  real 86.560000%  (19079 ms train, 3272 ms eval)
+  epoch 6/6: loss 0.178000  val acc gauss 91.710000%  real 90.970000%  (19923 ms train, 3219 ms eval)
+trained: 3816 steps in 173 s
+score: .venv-gw/bin/python scripts/gw_metrics.py table --logits=gauss:runs/2026-09-11-gw-cnn-gauss/gw_cnn_gauss_logits_gauss_val.bin,real:runs/2026-09-11-gw-cnn-gauss/gw_cnn_gauss_logits_real_val.bin
+gw cnn trained on gauss, scored on gauss val: accuracy 91.710000%  -> runs/2026-09-11-gw-cnn-gauss/gw_cnn_gauss_logits_gauss_val.bin
+gw cnn trained on gauss, scored on real val: accuracy 90.970000%  -> runs/2026-09-11-gw-cnn-gauss/gw_cnn_gauss_logits_real_val.bin
