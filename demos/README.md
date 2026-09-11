@@ -273,6 +273,43 @@ data pipeline + sampler work end-to-end without the transformer.
 
 ---
 
+## RL environments — the DQN sidequests, Phase 0
+
+Two games written in Lean, no stack and no GPU, each with its own exact
+instrument. They are rungs 1 and 3 of the reinforcement-learning ladder in
+`planning/blackjack_dqn_demo.md` and `planning/pong_dqn_demo.md`; rung 2, the
+DQN on the rank-2 DDPM MSE block, is what comes next.
+
+```bash
+lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
+lake exe pong-env 100                     # games per baseline arm
+```
+
+`MainBlackjackEnv.lean` follows Gymnasium's Blackjack-v1 with `sab=True` (the
+Sutton & Barto rules). A value iteration over the 200 decision states gives the
+exact optimum, **−0.0431 per hand**, and the exact value of any policy, so
+every arm is scored without sampling error; the Monte Carlo column is the
+cross-check that the environment and the DP describe the same game.
+
+| arm | exact value / hand | agrees with optimum |
+|---|---|---|
+| random | −0.394 | 110 / 200 |
+| threshold heuristic | −0.240 | 164 / 200 |
+| the old demo's published table | −0.097 | 162 / 200 |
+| tabular Q, 10⁷ hands, step max(0.001, 1/(1+N)) | −0.044 | 195 / 200 |
+| exact optimum | −0.043 | 200 / 200 |
+
+The DP's hit/stick chart is Sutton & Barto's Figure 5.2. The published table
+from the old Swift demo is a casino-rules chart whose rows for 10 and 11 are a
+doubling table transcribed as "stand"; the instrument found that on its first
+run.
+
+`MainPongEnv.lean` is Pong in ~150 lines: 84×84 render, frame skip 4, a scripted
+opponent with a speed and a reaction-delay knob, deterministic from a seed, five
+million raw frames per second single-threaded. Random scores −17.9 per game, a
+reactive tracker +11.2 against the default opponent; the frame strip the
+network will see is written to `.lake/build/pong_stack.pgm`.
+
 ## Layout
 
 The four demos above are the maintained set. Everything else lives in one of two
@@ -294,6 +331,8 @@ demos/
 ├── MainTinyGptShakespeare.lean            # char-level transformer
 ├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)
 ├── MainTinyStories.lean                   # the same transformer at a larger corpus
+├── MainBlackjackEnv.lean                  # blackjack env + exact DP instrument + tabular Q (RL rung 1)
+├── MainPongEnv.lean                       # Pong in Lean, 84×84 frames, scripted opponent (RL rung 3, Phase 0)
 │
 ├── probes/                                # gates and tools, not demos — these RUN IN CI
 │   ├── MainFpnLossProbe.lean              #   finite-difference gate on the detector loss

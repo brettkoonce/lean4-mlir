@@ -692,6 +692,16 @@ lean_exe «mnist-ddpm-sample» where
   root := `demos.MainMnistDdpmSample
   moreLinkArgs := lowererLink
 
+-- The two RL environments of the DQN sidequests (planning/blackjack_dqn_demo.md,
+-- planning/pong_dqn_demo.md): pure Lean, no FFI, no GPU. Each runs its own
+-- Phase-0 gates — the exact DP instrument and the four arms for blackjack, the
+-- scripted baselines and a rendered frame strip for Pong.
+lean_exe «blackjack-env» where
+  root := `demos.MainBlackjackEnv
+
+lean_exe «pong-env» where
+  root := `demos.MainPongEnv
+
 -- ─── Gates — the two checkers CI and every doc commit run ───
 
 /-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware
