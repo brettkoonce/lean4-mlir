@@ -27,7 +27,7 @@ ARMS="${ARMS:-full nowarm nocos noaug nowd nols noadam bare}"
 # one axis over.
 PREC="${PREC:-fp32}"
 [ "$PREC" = "fp32" ] || [ "$PREC" = "bf16" ] || { echo "⛔ PREC must be fp32 or bf16"; exit 1; }
-# SEEDS — planning/r34_ablation_seeds.md: a tour number is mean ± 95% CI over seeds. One seed keeps
+# SEEDS — planning/archive/r34_ablation_seeds.md: a tour number is mean ± 95% CI over seeds. One seed keeps
 # the 2026-09-01 layout (`<arm>.log`); several write `<arm>_s<seed>.log`, queued seed-major so a
 # sweep stopped early still holds whole seeds. ⚠ Every seed gets its OWN checkpoint tag — the trap
 # `seed_sweep.sh` documents: without it seeds 2.. resume seed 1's checkpoint and report its number.

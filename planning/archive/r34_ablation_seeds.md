@@ -1,13 +1,38 @@
 # ResNet-34 recipe ablation: error bars over seeds
 
-**Opened 2026-09-09. 2026-09-11: the bf16 half is DONE** — five fresh seeds × eight arms
-(`runs/2026-09-11-r34-ablation-bf16-seeds/RESULTS.md`, summarizer `scripts/r34_ablation_ci.py`),
-the §5.6 figure's bf16 panel carries the paired 95% bars, and the chapter's TODO now reads
-"more fp32 samples". fp32 seeds are the open half (40 fresh runs, ~7.5 h; the 2026-09-01 fp32
-logs did not survive either). ⚠ `run_r34_ablation.sh` now refuses a leftover checkpoint — four
-seed-1 arms silently resumed one and had to be redone. Originally: `planning/tour_realignment.md` §9 item 6
-already lists this; the decision there (2026-09-08) is that a tour number is **mean ± 95% CI over
-seeds**. This doc costs it. ⚠ Ask before launching.
+**Opened 2026-09-09. ✅ CLOSED 2026-09-12** — both precisions seeded, and both §5.6 figures
+carry paired 95% bars. Driver `scripts/run_r34_ablation.sh`, summarizer
+`scripts/r34_ablation_ci.py`.
+
+| half | runs | results |
+|---|---|---|
+| bf16 | 8 arms × 5 seeds | `runs/2026-09-11-r34-ablation-bf16-seeds/RESULTS.md` |
+| fp32 | 8 arms × 5 seeds | `runs/2026-09-12-r34-ablation-fp32-seeds/RESULTS.md` |
+| step-matched SGD | `sgd10` × 5 seeds | same directory, as a ninth arm |
+
+**What the seeds settled.**
+
+* §1 predicted n = 5 would resolve `nowd`, `nowarm`, `nols`. Two of the three: `nowarm`
+  (−0.55 ± 0.46) and `nols` (−0.69 ± 0.42) resolve, **`nowd` does not** (−0.02 ± 0.61) — and its
+  effect collapsed from the single run's −0.64 to −0.02. Unresolved in bf16 too (+0.14 ± 0.45),
+  so the chapter no longer claims weight decay earns anything on this recipe.
+* §2b's opening question — the cosine arm's spread — is answered: fp32 sd **1.93** against
+  bf16's 2.18, so the width belongs to the arm and is not a bf16 artifact.
+* Every fp32 Δ falls inside its bf16 interval and every bf16 Δ inside the fp32 one.
+* ⭐ The endpoints ladder REVERSED. Step-matched SGD finishes **ahead** of momentum, paired
+  **+0.403 ± 0.162**, all five seeds agreeing in sign, where single runs had put it 0.31 behind
+  and called the pair indistinguishable. `sgd10` was the only new configuration: the ladder's
+  other two rungs are the `full` and `noadam` arms reused, not re-run.
+
+⚠ `run_r34_ablation.sh` refuses a leftover checkpoint — four seed-1 arms silently resumed one on
+2026-09-11 and had to be redone. ⚠ Its built-in `PJRT_PLUGIN` default
+(`~/.venv-cuda/…/xla_cuda13/`) does not exist on this box; pass the path §2b names. ⚠⚠ The driver
+blocks on GPU occupancy but **not** on host load, so it will launch happily into a CPU-saturated
+box: with an emulated build running alongside, arms took 7,061 s against a clean 2,800 s. The
+trainers draw only ~0.5 core each, so the penalty is run-queue latency, not CPU share.
+
+Originally: `planning/tour_realignment.md` §9 item 6 already lists this; the decision there
+(2026-09-08) is that a tour number is **mean ± 95% CI over seeds**. This doc costed it.
 
 ## §0 What exists
 
@@ -48,7 +73,7 @@ The existing 16 runs used the default seed (1) and can stand as seed 1.
 Residency does not change the arithmetic; keep the existing sixteen unless one-vintage purity is
 wanted for the figure.
 
-## §2b The fp32 half — the handoff (2026-09-11)
+## §2b The fp32 half — the handoff (2026-09-11) — ✅ RAN 2026-09-12, 7.7 h, 40/40 clean
 
 One command, the same one the bf16 half ran; ~45–50 min per run resident, 40 runs over four
 cards ≈ 8 h. The driver waits for each card to be idle, refuses to overwrite a log, and refuses

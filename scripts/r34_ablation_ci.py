@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Error bars over seeds for the ResNet-34 recipe ablation (planning/r34_ablation_seeds.md §3.2).
+"""Error bars over seeds for the ResNet-34 recipe ablation (planning/archive/r34_ablation_seeds.md §3.2).
 
     scripts/r34_ablation_ci.py runs/<date>-r34-ablation-bf16-seeds            # table to stdout
     scripts/r34_ablation_ci.py <dir> --write                                   # + <dir>/RESULTS.md

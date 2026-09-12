@@ -5254,16 +5254,21 @@ additive ladder tells.
   }
 }
 % ── fp32 ───────────────────────────────────────────────────────────────────
-\begin{axis}[ablationaxis, title={fp32},
+\begin{axis}[ablationaxis, title={fp32, 5 seeds},
   yticklabels={full,$-$weight decay,$-$warmup,$-$label smoothing,
                $-$AdamW,$-$cosine,$-$augmentation}]
-  \path[fill,gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
-       rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
   \draw[black!70]        ({axis cs:0,full}|-{rel axis cs:0,0})
                       -- ({axis cs:0,full}|-{rel axis cs:0,1});
-  \addplot[only marks, mark=*, mark size=2.0pt, blue!70!black] coordinates {
-    (0,full) (-0.64,nowd) (-1.04,nowarm) (-1.50,nols)
-    (-2.29,noadam) (-4.48,nocos) (-7.01,noaug)};
+  % Five seeds per arm (runs/2026-09-12-r34-ablation-fp32-seeds/RESULTS.md): the point is the
+  % mean difference from `full`, the bar the 95% t-interval on the PAIRED difference (arms
+  % sharing a seed share init and data order). No band: the bar is the resolution.
+  \addplot[only marks, mark=*, mark size=2.0pt, blue!70!black,
+           error bars/.cd, x dir=both, x explicit,
+           error bar style={blue!70!black, line width=0.6pt},
+           error mark options={rotate=90, blue!70!black, mark size=1.6pt}] coordinates {
+    (0,full) +- (0,0) (-0.02,nowd) +- (0.61,0) (-0.55,nowarm) +- (0.46,0)
+    (-0.69,nols) +- (0.42,0) (-2.27,noadam) +- (0.59,0) (-5.00,nocos) +- (2.60,0)
+    (-7.33,noaug) +- (0.49,0)};
 \end{axis}
 % ── bf16 ───────────────────────────────────────────────────────────────────
 \begin{axis}[ablationaxis, title={bf16, 5 seeds}, yticklabels={{},{},{},{},{},{},{}},
@@ -5286,57 +5291,72 @@ additive ladder tells.
 
 \noindent Each point is plotted as its \emph{difference} from the full recipe
 rather than as an accuracy, so the line at zero is the baseline and distance
-from it is what the ingredient contributes. The two panels do not carry the same
-evidence. On the left each point is \emph{one} 80-epoch run, and the shaded band
-is the 95\% Wilson half-width at $n = 3{,}925$, $\pm0.92$ points: a point inside
-it is not resolved by a single run, however suggestive its position. On the
-right each arm was trained five times from five seeds; the point is the mean
-difference from the full recipe and the bar is the 95\% interval on that
-difference, paired by seed (arms sharing a seed share their initialization and
-data order). The full recipe itself lands at $89.98 \pm 0.15$ over its five
-seeds. Rows are sorted by fp32 effect.
+from it is what the ingredient contributes. Each arm was trained five times from
+five seeds; the point is the mean difference and the bar its 95\% interval,
+paired by seed, since arms sharing a seed share initialization and data order. An
+arm whose bar crosses zero is not placed, however suggestive its mean. The full
+recipe lands at $89.99 \pm 0.32$ (fp32) and $89.98 \pm 0.15$ (bf16). Rows are
+sorted by fp32 effect.
 
 \medskip\noindent The two panels are the same seven arms in the two precisions,
 and the reason to draw them side by side is that \emph{a real effect should not
-move}. The four effects the single runs resolve reproduce inside the seeded
-bars: augmentation $-7.01$ against $-7.11 \pm 0.38$, the optimizer $-2.29$
-against $-2.21 \pm 0.33$, warmup $-1.04$ against $-0.82 \pm 0.62$, and cosine
-$-4.48$ against $-4.78 \pm 2.74$. The two rows inside the left panel's band,
-weight decay and label smoothing, are exactly the two whose fp32 run falls
-outside the bf16 interval ($-0.64$ against $+0.14 \pm 0.45$, $-1.50$ against
-$-0.50 \pm 0.62$) --- which says only that one run does not place them, not
-which side they fall on. The cosine bar is the widest by far because the
+move}. None does: every arm's fp32 mean falls inside the bf16 interval and every
+bf16 mean inside the fp32 one. Four arms are resolved in both. Label smoothing is
+resolved in fp32 ($-0.69 \pm 0.42$) but not bf16 ($-0.50 \pm 0.62$), where the
+means agree and only the interval is wider. Weight decay is resolved in neither
+($-0.02 \pm 0.61$, $+0.14 \pm 0.45$): ten runs do not place it, and the honest
+reading is that here it earns nothing measurable.
+
+\medskip\noindent The cosine bar is the widest in both precisions because the
 constant-rate arm finishes wherever its noisy trajectory happens to be at
-epoch~80: five seeds spread $82.6$--$87.9$ (sd $2.18$), so its single-run
-figure was one draw from a wide distribution and its contribution is ``large
-and imprecise'', not $-4.5$.
+epoch~80: fp32 seeds spread $82.0$--$86.8$ (sd $1.93$), bf16 $82.6$--$87.9$
+(sd $2.18$). Its contribution is large and imprecise, and both precisions
+agreeing on \emph{how} imprecise says the width belongs to the arm, not to
+either number format.
 
 \medskip\noindent \textbf{What the optimizer row is really measuring.} Reading
 the $-$AdamW gap as ``what the adaptive optimizer buys'' assumes its replacement
-was given a rate that suits it. Heavy-ball at $\mu = 0.9$ multiplies the
-effective step by $1/(1-\mu) = 10$, so the comparison that isolates momentum is
-against plain SGD at ten times the rate --- $0.1$, not $0.01$ --- where the two
-take the same size step and differ only in whether a velocity carries it.
+got a rate that suits it. Heavy-ball at $\mu = 0.9$ multiplies the effective step
+by $1/(1-\mu) = 10$, so the comparison that isolates momentum is against plain
+SGD at ten times the rate --- $0.1$, not $0.01$ --- where both take the same size
+step and differ only in whether a velocity carries it.
 
 \begin{center}
 \begin{tikzpicture}
 % ── left: the ladder ───────────────────────────────────────────────────────
 \begin{axis}[
   width=0.42\linewidth, height=4.6cm,
-  xmin=-8.4, xmax=1.2,
+  % ⚠ Deliberately a TIGHTER x range than the two ablation panels above. Those span
+  % -8.4 to +1.4 because augmentation reaches -7.3; here the whole ladder lives inside
+  % three points, and at the wider scale the 0.40 that separates the two lower rungs is
+  % 2% of the axis width -- i.e. invisible, which is the one thing this figure exists to show.
+  xmin=-3.4, xmax=0.8,
   symbolic y coords={full,mom,sgd10}, ytick={full,mom,sgd10},
   y dir=reverse,
   yticklabels={AdamW lr .001,momentum lr .01,SGD lr .1},
   xlabel={$\Delta$ top-1 vs full (points)},
   tick label style={font=\small}, label style={font=\small},
-  title style={font=\small}, title={endpoints},
+  title style={font=\small}, title={endpoints, 5 seeds},
   grid=major, grid style={gray!14}]
-  \path[fill,gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
-      rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
   \draw[black!70] ({axis cs:0,full}|-{rel axis cs:0,0})
                -- ({axis cs:0,full}|-{rel axis cs:0,1});
-  \addplot[only marks,mark=*,mark size=2.2pt,blue!70!black]
-    coordinates {(0,full) (-2.29,mom) (-2.60,sgd10)};
+  % Five seeds per rung, runs/2026-09-12-r34-ablation-fp32-seeds/RESULTS.md. `mom` IS the
+  % ablation's `noadam` arm -- the same artifact, not a re-run -- so only `sgd10` was new work.
+  % Bars are the paired 95% interval on the difference from `full`.
+  % ⚠⚠ These two lower bars OVERLAP while the PAIRED difference between the two rungs,
+  % +0.403 ± 0.162, EXCLUDES zero. That is not a contradiction and the prose says so: the
+  % arms share seeds, so their difference is far better determined than either one's
+  % distance from `full`. Do not "fix" this by widening the bars or dropping the claim.
+  % ⚠ `full` carries +- (0,0) because this axis is a DIFFERENCE from `full`: per seed that
+  % difference is identically zero, so its interval is exactly zero. It is not an unmeasured
+  % point. `full`'s own spread is 89.99 ± 0.32 (sd 0.26, five seeds) and it is already
+  % INSIDE every other bar, since each paired difference subtracts that seed's own `full`.
+  % Plotting ±0.32 here would be an absolute CI on a difference axis, and would double-count.
+  \addplot[only marks,mark=*,mark size=2.2pt,blue!70!black,
+           error bars/.cd, x dir=both, x explicit,
+           error bar style={blue!70!black, line width=0.6pt},
+           error mark options={rotate=90, blue!70!black, mark size=1.6pt}]
+    coordinates {(0,full) +- (0,0) (-2.27,mom) +- (0.59,0) (-1.86,sgd10) +- (0.57,0)};
 \end{axis}
 % ── right: the trajectories ────────────────────────────────────────────────
 \begin{axis}[
@@ -5344,7 +5364,9 @@ take the same size step and differ only in whether a velocity carries it.
   xlabel={Epoch}, ylabel={Val top-1 (\%)},
   xmin=0,xmax=81,ymin=10,ymax=95, xtick={0,20,40,60,80},
   tick label style={font=\small}, label style={font=\small},
-  title style={font=\small}, title={trajectories},
+  % One run per optimizer -- these are the original curves, not per-seed means. The claim
+  % they carry is about SHAPE (the two lower curves never separate), which one run shows.
+  title style={font=\small}, title={trajectories, one run each},
   legend style={font=\scriptsize,at={(0.98,0.03)},anchor=south east,draw=gray!40},
   legend cell align={left}, grid=major, grid style={gray!14},
   every axis plot/.append style={line width=0.7pt, mark=none}]
@@ -5355,28 +5377,31 @@ take the same size step and differ only in whether a velocity carries it.
 \end{tikzpicture}
 \end{center}
 
-\noindent At a matched step, plain SGD lands $0.31$ points from momentum ---
-inside the band, indistinguishable on one run each --- and the trajectories are
-the stronger statement: the two are inseparable for the whole eighty epochs, not
-merely at the end. Momentum is not doing something a velocity-free step cannot;
-it is taking a bigger one. So the $-2.29$ charged to ``removing AdamW'' is
-mostly the $10\times$ that momentum supplies for free, and only a fraction of it
-survives once that is held fixed.
+\noindent At a matched step, plain SGD does not merely keep up with momentum ---
+it finishes slightly ahead, by a paired $+0.403 \pm 0.162$ with all five seeds
+agreeing in sign. The two lower bars overlap while that difference is resolved,
+which is no contradiction: the arms share seeds, so their difference is better
+determined than either rung's distance from the baseline. The baseline carries no
+bar for the same reason --- its difference from itself is zero on every seed, and
+its own spread sits inside the other two bars. The trajectories say the same
+about shape: the two never separate across the eighty epochs.
 
-\medskip\noindent That is this ablation's own limit, stated plainly. Every
-non-adaptive row's difference is partly a claim about how well its learning rate
-happens to suit it, and an adaptive optimizer's insensitivity to that rate is
-exactly what hides the dependence. The figure above measures the recipe
-\emph{as tuned}, not its ingredients in isolation.
+\medskip\noindent Momentum is therefore not doing something a velocity-free step
+cannot; it is taking a bigger one, slightly less well. The $-2.27 \pm 0.59$
+charged to ``removing AdamW'' is almost entirely the $10\times$ momentum supplies
+for free: hold the effective step fixed and the gap closes to $-1.86 \pm 0.57$,
+the remainder running the other way.
 
-\medskip\noindent \textbf{Augmentation is the largest single contribution} ($-7.01$ points on
-the fp32 run, $-7.11 \pm 0.38$ over five bf16 seeds; three times the
-next-largest knob). Imagenette has 9{,}469 training images for a
-21.3M-parameter network, so without the random crop and flip the model overfits
-hard --- training loss falls while validation stalls. Most of what the rest of
-the recipe gets credit for is augmentation.
+\medskip\noindent That is this ablation's own limit: every non-adaptive row's
+difference is partly a claim about how well its learning rate suits it, and an
+adaptive optimizer's insensitivity to that rate hides the dependence. The figure
+measures the recipe \emph{as tuned}, not its ingredients in isolation.
 
-\textbf{[TODO: more fp32 samples.]}
+\medskip\noindent \textbf{Augmentation is the largest single contribution}
+($-7.33 \pm 0.49$ fp32, $-7.11 \pm 0.38$ bf16; three times the next-largest
+knob). Imagenette has 9{,}469 training images for a 21.3M-parameter network, so
+without the random crop and flip the model overfits hard. Most of what the rest
+of the recipe gets credit for is augmentation.
 
 \section{ImageNet recipe}
 
