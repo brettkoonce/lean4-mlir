@@ -7106,32 +7106,113 @@ carry different values. At \texttt{adam64} it is AdamW at $10^{-3}$
 instead, which is the default because it matches the other four
 ImageNet drivers.
 
-\medskip\noindent\textbf{What it has not done is run.} No phase-4
-ImageNet result exists for this network, which is why every accuracy
-above comes from phase 2. What is measured is the throughput, and the
-schedule follows from it:
+\medskip\noindent\textbf{And now it has run.} The phase-4 trainer
+completed the full 350-epoch schedule, scoring
+$\mathbf{71.912\%}$ top-1 and $\mathbf{90.520\%}$ top-5 over the
+same $50{,}000$ validation images the phase-2 reference was scored on.
+
+\prosesection{The two paths, side by side}
 
 \begin{center}
-\begin{tabular}{l r r r r}
+\begin{tabular}{@{}l l l@{}}
 \hline
-Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
+ & verified lowerer (PJRT) & JAX lowerer \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & $166 \to 140$ & $13.8 \to 11.7$ & $\sim$84 $\to$ $\sim$72 h \;($3.5 \to 3.0$ d) & TBD \\
-4$\times$ 3060 (CUDA)     & ---           & ---             & ---                                          & TBD \\
+lowering             & \texttt{pretty(provenGraph)} $\to$ XLA & JAX $\to$ XLA \\
+Python in the step   & none                     & yes \\
+ms/step              & 97                       & 79 \\
+per epoch            & 8.8 min                  & 6.6 min \\
+total                & 51.2 hr                  & 38.4 hr \\
+BN statistic group   & 64 (per replica)         & 256 (global) \\
+\hline
+precision            & bf16                     & bf16 \\
+global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
+steps/epoch          & 5{,}004                  & 5{,}004 \\
+optimizer            & RMSProp, $\varepsilon=1.0$ & RMSProp, $\varepsilon=1.0$ \\
+\hline
+\textbf{val top-1}   & $\mathbf{71.912\%}$      & $\mathbf{71.90\%}$ \\
+\textbf{val top-5}   & $\mathbf{90.520\%}$      & $\mathbf{90.41\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The columns are the two arms of \texttt{rmsdp64} --- RMSProp with exponential
-decay, the recipe \texttt{mnv2-\allowbreak default-\allowbreak 4gpu} names. fp32 is the
-default; the run will be bf16, so read the right-hand column. Exactly half of that
-$140$\,ms step is no longer the graph, which times as $69.6$\,ms on its own, so this net
-is now as much data pipeline as compute --- and that is also why the fp32 arm is the
-least repeatable number in this book, spanning
-$159$--$196$\,ms across three consecutive runs on an idle box where the bf16 arm held
-$140 \pm 1$. A step that is half producer inherits the producer's variance.
+\noindent Both columns are MobileNetV2 on the paper-faithful RMSProp recipe,
+350 epochs, on the same four RTX 3060 cards. Rows above the first rule differ;
+rows between the rules are held equal by construction.
 
-\medskip\noindent\textbf{[TODO: run \texttt{mobilenetv2-imagenet-verified}.]}
+\medskip\noindent\textbf{On BN statistic group differences:}
+MobileNetV2 has BatchNorm in every block. The
+verified path runs four replicas of $64$ with no collective touching the
+batch statistics, so it normalizes over groups of $64$; the JAX reference
+under a \texttt{NamedSharding} mesh reduces globally, so it normalizes over
+$256$. Section~\ref{sec:r34_pjrt} measured that same fourfold
+difference as worth $0.02$ points on ResNet-34 at convergence. The $+0.012$
+here is the same order. So the honest claim is that the two paths agree to
+within the BatchNorm-group effect --- not that the lowerer has been shown
+neutral. Separating those would take a verified render that all-reduces the
+batch statistics, which no committed artifact does --- and which is not a patch
+but a new AST node, a new specification and a re-proof of the tie chain, because
+the only node in the graph language that sees across replicas is the gradient
+collective and every BatchNorm node consumes a single expression.
+
+\medskip\noindent\textbf{[TODO: global bn]}
+
+\medskip\noindent\textbf{The curves converge; they do not merely end together.}
+The verified path runs ahead through warmup, is level by epoch~20, and from
+epoch~100 every sampled point sits within a third of a point. The $+2.11$ at
+epoch~50 is the reference's own slow stretch rather than a verified lead --- it
+gains $1.18$ points over epochs $40$--$50$ and then $2.57$ over $50$--$60$:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r r r r@{}}
+\hline
+epoch & 10 & 50 & 100 & 150 & 200 & 300 & 350 \\
+\hline
+phase-2 reference & 46.69 & 61.71 & 67.40 & 69.78 & 71.23 & 71.85 & 71.90 \\
+phase-4 verified  & 51.36 & 63.82 & 67.74 & 69.97 & 70.95 & 71.84 & 71.91 \\
+$\Delta$          & $+4.67$ & $+2.11$ & $+0.34$ & $+0.19$ & $-0.28$ & $-0.01$ & $+0.01$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation top-1 (\%)},
+    xmin=0, xmax=351, ymin=0, ymax=80,
+    xtick={0,50,100,150,200,250,300,350},
+    ytick={20,40,60,80},
+    legend pos=south east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=0.8pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(1,2.75) (10,46.69) (20,56.27) (30,59.36) (40,60.53) (50,61.71) (60,64.28) (70,64.93) (80,65.86) (90,66.14) (100,67.40) (110,68.37) (120,68.76) (130,69.48) (140,69.94) (150,69.78) (160,69.93) (170,70.36) (180,70.31) (190,70.85) (200,71.23) (210,71.31) (220,71.46) (230,71.52) (240,71.69) (250,71.63) (260,71.75) (270,71.74) (280,71.80) (290,71.81) (300,71.85) (310,71.84) (320,71.85) (330,71.92) (340,71.91) (350,71.90)
+};
+\addlegendentry{phase-2 reference (JAX)}
+\addplot[red, dashed, mark=o] coordinates {
+(1,3.16) (10,51.36) (20,56.47) (30,60.30) (40,61.43) (50,63.82) (60,64.51) (70,65.18) (80,66.37) (90,66.85) (100,67.74) (110,68.19) (120,68.53) (130,69.40) (140,69.74) (150,69.97) (160,70.44) (170,70.40) (180,70.48) (190,70.80) (200,70.95) (210,71.33) (220,71.43) (230,71.38) (240,71.67) (250,71.70) (260,71.67) (270,71.75) (280,71.77) (290,71.89) (300,71.84) (310,71.93) (320,71.94) (330,71.87) (340,71.93) (350,71.91)
+};
+\addlegendentry{phase-4 verified (PJRT)}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent Two independent lowerings of one recipe, sampled every 10 epochs and
+scored over all $50{,}000$ validation images.
+
+\medskip\noindent\textbf{The remaining $51.2$ against $38.4$ hours is the data
+feed, not the renderer.} With the shim removed the verified step is $78$\,ms
+--- a $38$-hour schedule, level with the reference --- and the fed step is
+$97$. The gap is the tfds shim streaming $602$\,KB per image of fp32 through a
+subprocess pipe, $154$\,MB per step at global $256$, which is host work the
+JAX trainer does in-process. This is the net where that shows most plainly:
+the compute floor is already at the reference's wall clock, so every hour of
+the difference is pipeline.
 
 \subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
 
@@ -7271,10 +7352,10 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \noindent The 100-epoch tier lands at $\mathbf{75.48\%}$ top-1 and
 $\mathbf{92.37\%}$ top-5 on the full 50{,}000-image validation split
 (EMA weights). Set against this chapter's other half that is the
-whole six-year argument in two rows: $\mathbf{+4.04}$ points over
-MobileNetV2's paper-faithful $71.44\%$, from $2.8\times$ the
+whole six-year argument in two rows: $\mathbf{+3.58}$ points over
+MobileNetV2's paper-faithful $71.90\%$, from $2.8\times$ the
 parameters and \emph{less than half} the epochs, $100$ against
-$350$ and $16$ wall-clock hours against $45$.
+$350$ and $16$ wall-clock hours against $38.4$.
 By 2024 the mobile line is not trading accuracy for size so
 much as reaching the same accuracy with a block that happens to be
 cheap.

@@ -19,12 +19,19 @@ gone from the target name because it no longer distinguishes anything.
     `batchSize` is PER DEVICE and must match the batch the variant was rendered at.
 
     ⭐ 350, not 300, because **this trainer's job is to match the phase-2 run**, and the phase-2
-    number this net is measured against (71.44% / 90.34%) is the paper-faithful **350-epoch**
+    number this net is measured against (**71.90% / 90.41%**, §6.5, `85daffbc`) is the
+    paper-faithful **350-epoch**
     exponential-decay tier — `blueprint`'s "The paper-faithful tier: 350 epochs". A 300-epoch
     phase-4 run would not be comparable to it: `totalSteps := cfg.epochs * nb / accK` is what the
     schedule anneals over, so 300 vs 350 is a different LR curve end to end, not a shorter version
     of the same one. ⚠ It was 300 until 2026-08-12, which made the driver and the section it is
-    supposed to reproduce quietly disagree. -/
+    supposed to reproduce quietly disagree.
+
+    ⚠ The reference figure above read `71.44% / 90.34%` until 2026-09-10. That was the SUPERSEDED
+    number: it came from a run trained on a Jun-22 artifact whose source had said
+    `labelSmoothing 0.0` for three weeks (see `scripts/regen_jax_generated.sh`), and §6.5 was
+    re-run to 71.90 / 90.41 after the stale-emit fix. A driver that names the wrong reference is a
+    run that gets paired against the wrong number. -/
 def mobilenetv2ImagenetConfig : VerifiedConfig where
   epochs    := 350
   batchSize := 64
