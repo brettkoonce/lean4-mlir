@@ -1,5 +1,29 @@
 # transformer_wavefunction_demo.md — structure first, the transformer models the rest
 
+**Status 2026-09-12: phases 0–3 DONE** — `demos/MainNqsIsing.lean`,
+`scripts/nqs_metrics.py`, `scripts/nqs_figure.py`, results and every gate in
+`runs/2026-09-11-nqs-ising/` (README there has the tables). What the plan got
+right: zero new codegen, the DDPM-MSE target trick carries the energy gradient
+exactly, R1 at f_θ = 0 prints the mean-field row, the TinyGPT sampler batched over
+chains passes the §8 sampler gate, and Table 2 reads "structure buys three orders
+at h = 0.2, two at 0.4, none at h = J". What it got wrong: the uniform start does
+not *stall* for these networks (Adam from the uniform state reaches 1e-5), so the
+Table 2 sentence is about the reference being nearly right at small field, not
+about avoiding a stall. What it did not foresee: the product-state reference is
+symmetry-broken and the finite-N ground state is not; the ViT at N = 12, h = 0.8
+converges to the broken half of the cat state (excess energy = Δ/2 to three
+digits) and no amount of network fixes it — a Z2-symmetrised reference (`symref`,
+one host-side logaddexp) does. **Phase 4 DONE 2026-09-12** (`model=j1j2`,
+`runs/2026-09-11-nqs-ising/j1j2/`, Table 3 there): the two-slot head trains through
+the real MSE block with two weights per configuration; the Marshall signs are learned
+from scratch at J2 = 0; every arm hits the Majumdar-Ghosh dimer state to 3e-6 with
+fidelity 1; past the MG point, where the Marshall rule breaks, every arm stalls at
+1e-2 with fidelity < 0.5 — the frustrated sign structure is the open problem of the
+rung, and the GPT variant is out of reach (a second head is not in the spec
+language). Phase 5 (section, bestiary, proof item) is not started; phase 6 (SR) was not
+needed at N = 12 and is the obvious next lever for the N = 64 ViT, whose Metropolis
+rows sit at 1e-3 where the GPT's exact sampling sits at 1e-4.
+
 Goal: the science demo. Ground states of spin chains as networks trained
 through the stack, with one design rule: the ansatz is a reference state
 physics already knows times a learned residual, and the residual model is a

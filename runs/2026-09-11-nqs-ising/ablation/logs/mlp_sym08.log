@@ -1,0 +1,23 @@
+nqs-ising-mlp-n12-sym: 5057 params, N = 12, h = 0.800000, J = 1.000000, 4000 steps, enumeration of 4096 configurations, Z2-symmetrised mean-field reference, seed 1
+  mean field: φ = 0.4115, E_MF = -13.920000
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 23:51:51.214918 2038014 service.cc:154] XLA service 0x7ac124028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 23:51:51.214937 2038014 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 23:51:51.216363 2038014 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 23:51:51.216389 2038014 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 23:51:51.228595 2038014 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 23:51:51.827613 2038158 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_ising_mlp_n12_sym_train_step.mlir (@main, 19 outputs, 1 replica) in 1055 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_mlp_n12_sym_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2861 ms
+  sessions loaded
+  step 0  E = -13.920169  E/N = -1.160014  Var(E_loc) = 3.08e-1  (96 ms)
+  step 1000  E = -14.020755  E/N = -1.168396  Var(E_loc) = 4.95e-3  (16304 ms)
+  step 2000  E = -14.020948  E/N = -1.168412  Var(E_loc) = 2.74e-3  (30189 ms)
+  step 3000  E = -14.020999  E/N = -1.168417  Var(E_loc) = 2.12e-3  (44071 ms)
+  step 4000  E = -14.021015  E/N = -1.168418  Var(E_loc) = 1.92e-3  (57442 ms)
+trained: 4000 steps, 57443 ms
+wrote .lake/build/nqs_ising_mlp_n12_sym_h80_symref_metrics.json, _curve.csv, _samples.bin, _params.bin
+mlp N=12 h=0.800000: E = -14.021015  E/N = -1.168418  Var(E_loc) = 1.92e-3  <sx> = 0.45219  C(N/2) = 0.76223  (4096 samples, 5057 params, 57 s)

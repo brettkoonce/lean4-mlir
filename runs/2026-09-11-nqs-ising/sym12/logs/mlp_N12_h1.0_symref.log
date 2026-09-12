@@ -1,0 +1,59 @@
+nqs-ising-mlp-n12-sm: 5057 params, N = 12, h = 1.000000, J = 1.000000, 4000 steps, enumeration of 4096 configurations, Z2-symmetrised mean-field reference, seed 1
+  mean field: φ = 0.5236, E_MF = -15.000000
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.150
+I0912 00:40:23.803756 2081069 service.cc:154] XLA service 0x7b1538028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0912 00:40:23.803792 2081069 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0912 00:40:23.805462 2081069 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0912 00:40:23.805494 2081069 gpu_helpers.cc:162] XLA backend allocating 2.34GiB (2510290944 bytes) on device 0 for BFCAllocator.
+I0912 00:40:23.813104 2081069 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0912 00:40:24.414908 2081086 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_ising_mlp_n12_sm_train_step.mlir (@main, 19 outputs, 1 replica) in 1054 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_mlp_n12_sm_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 638 ms
+  sessions loaded
+  step 0  E = -15.002197  E/N = -1.250183  Var(E_loc) = 7.64e-1  (13 ms)
+  step 100  E = -15.303854  E/N = -1.275321  Var(E_loc) = 2.24e-1  (1489 ms)
+  step 200  E = -15.318065  E/N = -1.276505  Var(E_loc) = 6.41e-2  (3023 ms)
+  step 300  E = -15.319982  E/N = -1.276665  Var(E_loc) = 3.85e-2  (4519 ms)
+  step 400  E = -15.320769  E/N = -1.276731  Var(E_loc) = 2.84e-2  (6023 ms)
+  step 500  E = -15.321180  E/N = -1.276765  Var(E_loc) = 2.20e-2  (7529 ms)
+  step 600  E = -15.321398  E/N = -1.276783  Var(E_loc) = 1.85e-2  (9072 ms)
+  step 700  E = -15.321626  E/N = -1.276802  Var(E_loc) = 1.56e-2  (10599 ms)
+  step 800  E = -15.321755  E/N = -1.276813  Var(E_loc) = 1.37e-2  (12165 ms)
+  step 900  E = -15.321835  E/N = -1.276820  Var(E_loc) = 1.25e-2  (13670 ms)
+  step 1000  E = -15.321917  E/N = -1.276826  Var(E_loc) = 1.13e-2  (15221 ms)
+  step 1100  E = -15.321917  E/N = -1.276826  Var(E_loc) = 1.04e-2  (16744 ms)
+  step 1200  E = -15.321996  E/N = -1.276833  Var(E_loc) = 9.56e-3  (18335 ms)
+  step 1300  E = -15.322065  E/N = -1.276839  Var(E_loc) = 8.95e-3  (19844 ms)
+  step 1400  E = -15.322046  E/N = -1.276837  Var(E_loc) = 8.68e-3  (21358 ms)
+  step 1500  E = -15.322130  E/N = -1.276844  Var(E_loc) = 7.84e-3  (22898 ms)
+  step 1600  E = -15.322140  E/N = -1.276845  Var(E_loc) = 7.46e-3  (24436 ms)
+  step 1700  E = -15.322190  E/N = -1.276849  Var(E_loc) = 6.97e-3  (25906 ms)
+  step 1800  E = -15.322208  E/N = -1.276851  Var(E_loc) = 6.58e-3  (27419 ms)
+  step 1900  E = -15.322224  E/N = -1.276852  Var(E_loc) = 6.24e-3  (28949 ms)
+  step 2000  E = -15.322226  E/N = -1.276852  Var(E_loc) = 6.01e-3  (30465 ms)
+  step 2100  E = -15.322263  E/N = -1.276855  Var(E_loc) = 5.70e-3  (31949 ms)
+  step 2200  E = -15.322282  E/N = -1.276857  Var(E_loc) = 5.44e-3  (33447 ms)
+  step 2300  E = -15.322287  E/N = -1.276857  Var(E_loc) = 5.25e-3  (34953 ms)
+  step 2400  E = -15.322303  E/N = -1.276859  Var(E_loc) = 5.06e-3  (36517 ms)
+  step 2500  E = -15.322314  E/N = -1.276860  Var(E_loc) = 4.91e-3  (38021 ms)
+  step 2600  E = -15.322324  E/N = -1.276860  Var(E_loc) = 4.76e-3  (39585 ms)
+  step 2700  E = -15.322327  E/N = -1.276861  Var(E_loc) = 4.65e-3  (41118 ms)
+  step 2800  E = -15.322331  E/N = -1.276861  Var(E_loc) = 4.58e-3  (42608 ms)
+  step 2900  E = -15.322338  E/N = -1.276861  Var(E_loc) = 4.45e-3  (44143 ms)
+  step 3000  E = -15.322346  E/N = -1.276862  Var(E_loc) = 4.37e-3  (45634 ms)
+  step 3100  E = -15.322352  E/N = -1.276863  Var(E_loc) = 4.29e-3  (47115 ms)
+  step 3200  E = -15.322355  E/N = -1.276863  Var(E_loc) = 4.23e-3  (48628 ms)
+  step 3300  E = -15.322359  E/N = -1.276863  Var(E_loc) = 4.16e-3  (50170 ms)
+  step 3400  E = -15.322363  E/N = -1.276864  Var(E_loc) = 4.11e-3  (51636 ms)
+  step 3500  E = -15.322365  E/N = -1.276864  Var(E_loc) = 4.07e-3  (53168 ms)
+  step 3600  E = -15.322367  E/N = -1.276864  Var(E_loc) = 4.02e-3  (54711 ms)
+  step 3700  E = -15.322369  E/N = -1.276864  Var(E_loc) = 3.99e-3  (56214 ms)
+  step 3800  E = -15.322371  E/N = -1.276864  Var(E_loc) = 3.96e-3  (57738 ms)
+  step 3900  E = -15.322373  E/N = -1.276864  Var(E_loc) = 3.93e-3  (59300 ms)
+  step 4000  E = -15.322375  E/N = -1.276865  Var(E_loc) = 3.91e-3  (60796 ms)
+trained: 4000 steps, 60797 ms
+wrote .lake/build/nqs_ising_mlp_n12_sm_h100_symref_metrics.json, _curve.csv, _samples.bin, _params.bin
+mlp N=12 h=1.000000: E = -15.322375  E/N = -1.276865  Var(E_loc) = 3.91e-3  <sx> = 0.63847  C(N/2) = 0.46096  (4096 samples, 5057 params, 61 s)

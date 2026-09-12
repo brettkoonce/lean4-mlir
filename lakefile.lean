@@ -746,6 +746,14 @@ lean_exe «gw-detect» where
   root := `demos.MainGwDetect
   moreLinkArgs := lowererLink
 
+-- Neural quantum states (planning/transformer_wavefunction_demo.md): the ground
+-- state of the transverse-field Ising chain as an MLP / ViT / GPT wavefunction
+-- times the mean-field reference, energy gradient through the rank-2 DDPM MSE
+-- block, exact at N ≤ 14 by enumeration and bracketed by Jordan-Wigner above.
+lean_exe «nqs-ising» where
+  root := `demos.MainNqsIsing
+  moreLinkArgs := lowererLink
+
 -- The people-watching demo (planning/arasl_people_watching_demo.md): chapter 4's CNN on
 -- Arabic sign-language letters under a random and a capture-order-blocked split of the
 -- same burst frames, scored by `scripts/arasl_score.py` with a leak audit. Zero new codegen.

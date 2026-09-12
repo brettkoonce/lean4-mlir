@@ -1,0 +1,33 @@
+nqs-ising-vit-n12-s2: 25825 params, N = 12, h = 0.800000, J = 1.000000, 4000 steps, enumeration of 4096 configurations, mean-field reference, seed 2
+  mean field: φ = 0.4115, E_MF = -13.920000
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 23:39:18.505486 2031568 service.cc:154] XLA service 0x7eff58028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 23:39:18.505518 2031568 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 23:39:18.507245 2031568 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 23:39:18.507281 2031568 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 23:39:18.517640 2031568 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 23:39:19.905025 2031613 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_128', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 23:39:20.738606 2031633 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_130', 4 bytes spill stores, 4 bytes spill loads
+
+I0911 23:39:24.674162 2031623 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_250', 312 bytes spill stores, 324 bytes spill loads
+
+I0911 23:39:24.702303 2031606 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_249', 356 bytes spill stores, 360 bytes spill loads
+
+I0911 23:39:25.216892 2031607 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_247', 300 bytes spill stores, 384 bytes spill loads
+
+I0911 23:39:25.532280 2031615 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_248', 384 bytes spill stores, 460 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_ising_vit_n12_s2_train_step.mlir (@main, 115 outputs, 1 replica) in 7036 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_vit_n12_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 418 ms
+  sessions loaded
+  step 0  E = -13.920000  E/N = -1.160000  Var(E_loc) = 3.07e-1  (14 ms)
+  step 1000  E = -14.012850  E/N = -1.167737  Var(E_loc) = 5.15e-3  (19774 ms)
+  step 2000  E = -14.013369  E/N = -1.167781  Var(E_loc) = 2.25e-3  (39508 ms)
+  step 3000  E = -14.013496  E/N = -1.167791  Var(E_loc) = 1.48e-3  (59264 ms)
+  step 4000  E = -14.013526  E/N = -1.167794  Var(E_loc) = 1.29e-3  (79099 ms)
+trained: 4000 steps, 79105 ms
+wrote .lake/build/nqs_ising_vit_n12_s2_h80_metrics.json, _curve.csv, _samples.bin, _params.bin
+vit N=12 h=0.800000: E = -14.013526  E/N = -1.167794  Var(E_loc) = 1.29e-3  <sx> = 0.44371  C(N/2) = 0.77622  (4096 samples, 25825 params, 79 s)

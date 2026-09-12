@@ -1,0 +1,42 @@
+nqs-j1j2-mlp-n16-w2: 70658 params, J1-J2 chain N = 16, J1 = 1.000000, J2 = 0.000000, S_z = 0 sector of 12870 configurations, 8000 steps, Marshall sign prior, seed 1
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.150
+I0912 02:38:13.981002 2112581 service.cc:154] XLA service 0x7696a8028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0912 02:38:13.981034 2112581 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0912 02:38:13.982906 2112581 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0912 02:38:13.982946 2112581 gpu_helpers.cc:162] XLA backend allocating 2.34GiB (2510290944 bytes) on device 0 for BFCAllocator.
+I0912 02:38:13.991476 2112581 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0912 02:38:14.532653 2112626 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 140 bytes spill stores, 76 bytes spill loads
+
+I0912 02:38:14.809445 2112633 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 132 bytes spill stores, 92 bytes spill loads
+
+I0912 02:38:15.148813 2112623 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 24 bytes spill stores, 20 bytes spill loads
+
+I0912 02:38:15.173168 2112626 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 112 bytes spill stores, 80 bytes spill loads
+
+I0912 02:38:15.288013 2112627 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 84 bytes spill stores, 68 bytes spill loads
+
+I0912 02:38:15.323755 2112612 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 10240 bytes spill stores, 9088 bytes spill loads
+
+I0912 02:38:15.360366 2112628 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 9204 bytes spill stores, 9508 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_j1j2_mlp_n16_w2_train_step.mlir (@main, 19 outputs, 1 replica) in 1671 ms
+I0912 02:38:16.441872 2112619 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 112 bytes spill stores, 64 bytes spill loads
+
+I0912 02:38:16.932577 2112623 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 10300 bytes spill stores, 9616 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_j1j2_mlp_n16_w2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2018 ms
+  sessions loaded
+  step 0  E = -4.533333  E/N = -0.283333  Im E = -3.29e-25  Var(E_loc) = 3.98e+0  (16 ms)
+  step 1000  E = -7.141179  E/N = -0.446324  Im E = 2.12e-13  Var(E_loc) = 3.46e-3  (12046 ms)
+  step 2000  E = -7.141837  E/N = -0.446365  Im E = 1.15e-12  Var(E_loc) = 1.49e-3  (23916 ms)
+  step 3000  E = -7.142086  E/N = -0.446380  Im E = 1.89e-13  Var(E_loc) = 7.96e-4  (35691 ms)
+  step 4000  E = -7.142185  E/N = -0.446387  Im E = -5.48e-13  Var(E_loc) = 5.06e-4  (47606 ms)
+  step 5000  E = -7.142223  E/N = -0.446389  Im E = -7.48e-15  Var(E_loc) = 3.58e-4  (59577 ms)
+  step 6000  E = -7.142254  E/N = -0.446391  Im E = -2.10e-19  Var(E_loc) = 2.61e-4  (71527 ms)
+  step 7000  E = -7.142262  E/N = -0.446391  Im E = -5.07e-20  Var(E_loc) = 2.22e-4  (83590 ms)
+  step 8000  E = -7.142265  E/N = -0.446392  Im E = 6.25e-20  Var(E_loc) = 2.01e-4  (95640 ms)
+trained: 8000 steps, 95641 ms
+wrote .lake/build/nqs_j1j2_mlp_n16_w2_j20_metrics.json, _curve.csv, _psi.bin, _samples.bin, _params.bin
+mlp j1j2 N=16 J2=0.000000: E = -7.142265  E/N = -0.446392  Im E = 6.25e-20  Var(E_loc) = 2.01e-4  Marshall weight = 1.00000  C(N/2) = 0.11171  (12870 configurations, 70658 params, 95 s)

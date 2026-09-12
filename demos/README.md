@@ -482,6 +482,106 @@ coupling: 233×). Numbers, gates and every artifact in
 
 ---
 
+## Neural quantum states — the transverse-field Ising chain
+
+The science demo. The network *is* the wavefunction: ψ_θ(σ) maps a spin
+configuration to a log-amplitude, the loss is the energy ⟨ψ|H|ψ⟩/⟨ψ|ψ⟩ of the
+transverse-field Ising chain (H = −J Σ σᶻᵢσᶻᵢ₊₁ − h Σ σˣᵢ, periodic, a phase
+transition at h = J), and there is no dataset: the training signal is the model's
+own local energies. One design rule throughout: **structure first, the network
+models the rest.** ψ_θ = ψ_ref · exp f_θ, where ψ_ref is the mean-field product
+state at the optimal angle — a closed form the host adds to the network's output —
+so f_θ = 0 is the floor row of every table and the network only learns what mean
+field gets wrong. Three residuals climb the ladder: an MLP on ±1 spins, a ViT on
+patches of p spins as token ids, and a GPT whose conditionals *are* the
+wavefunction (|ψ|² = Π_k p(patch_k | <k)), sampled exactly by the TinyGPT loop.
+Every rung is scored against a closed form: enumeration of all 4096 configurations
+at N = 12, the Jordan-Wigner free-fermion solution at N = 64.
+
+`MainNqsIsing.lean`, `scripts/nqs_metrics.py`, `scripts/nqs_figure.py`. Plan:
+`planning/transformer_wavefunction_demo.md`. Zero new codegen: the energy
+gradient ∂E/∂θ = 2 Σ_s p_s (E_loc(s) − E) ∂_θ log ψ(s) is one host weight per
+configuration, handed to the rank-2 DDPM MSE block as the target y = out − M·w/2
+(the blackjack DQN's trick with a physical target).
+
+```bash
+python3 scripts/nqs_metrics.py gate                              # enumeration vs Jordan-Wigner, 7e-15
+export LEAN_MLIR_MEM_FRACTION=0.1
+lake exe nqs-ising mlp N=12 h=1.0 steps=4000 lr=0.003 cosine     # 50 s, exact gradient
+lake exe nqs-ising vit N=12 h=1.0 steps=4000 lr=0.001 cosine     # 82 s
+lake exe nqs-ising gpt N=12 h=1.0 steps=4000 lr=0.003 cosine check   # 330 s, + the sampler gate
+lake exe nqs-ising gpt N=64 h=1.0 p=4 steps=2000 lr=0.003 cosine  # ~20 min, 1024 chains
+lake exe nqs-ising mlp model=j1j2 N=16 J2=0.5 steps=4000 lr=0.003 cosine   # rung 4, 45 s
+python3 scripts/nqs_metrics.py score GPT=.lake/build/nqs_ising_gpt_n12_h100_metrics.json --gate
+python3 scripts/nqs_figure.py runs/2026-09-11-nqs-ising nqs_ising.png
+```
+
+![Neural quantum states on the Ising chain](figures/nqs_ising.png)
+
+| N = 12, h = J | params | (E − E0)/\|E0\| | Var(E_loc) | ⟨σˣ⟩ | ⟨σᶻ₁σᶻ₇⟩ |
+|---|---:|---:|---:|---:|---:|
+| mean field (floor) | 0 | 2.1e-02 | 0 | 0.5000 | 0.7500 |
+| MLP residual | 5,057 | 1.6e-05 | 4.3e-03 | 0.6383 | 0.4613 |
+| ViT residual | 25,825 | 1.5e-05 | 2.5e-03 | 0.6381 | 0.4618 |
+| GPT | 25,956 | 3.3e-06 | 5.2e-04 | 0.6384 | 0.4611 |
+| exact (enumeration) | — | 0 | 0 | 0.6384 | 0.4610 |
+
+| N = 64, h = J | params | (E − E0)/\|E0\| | Var(E_loc) | ⟨σˣ⟩ | ⟨σᶻ₁σᶻ₃₃⟩ |
+|---|---:|---:|---:|---:|---:|
+| mean field (floor) | 0 | 1.8e-02 | 0 | 0.5000 | 0.7500 |
+| MLP residual, Metropolis | 8,385 | 5.9e-03 | 3.7 | 0.5660 | 0.6256 |
+| ViT residual, Metropolis | 26,529 | 2.1e-03 | 4.8e-01 | 0.5921 | 0.5616 |
+| GPT, exact sampling, 2000 steps | 27,056 | 1.7e-04 | 2.0e-02 | 0.6341 | 0.3498 |
+| GPT, exact sampling, 4000 steps, lr 1e-3 | 27,056 | 1.5e-04 | 1.9e-02 | 0.6323 | 0.3374 |
+| exact (Jordan-Wigner) | — | 0 | 0 | 0.6367 | 0.3036 |
+
+At N = 12 every rung is four to six orders below the floor and the GPT, whose
+conditionals are the wavefunction, is the best of them at every field. At N = 64 the
+ceiling is the free-fermion solution and the ladder separates: the GPT's exact,
+independent samples keep it at 1e-5 to 1e-4 across the whole sweep, while the ViT
+on Metropolis chains is ten to a thousand times worse at the same parameter count
+and step budget — the gap the plan's stochastic-reconfiguration rung was written
+for.
+
+⭐ **The reference decides the small-field rows, and the table says by how much.**
+Same ViT, same steps, from the uniform state and from the mean-field state: at
+h = 0.2 the reference is worth three orders of magnitude (3.0e-5 → 1.6e-8), at
+h = 0.4 about two, and at h = J nothing at all (1.5e-5 either way) — there the
+reference is as wrong as the uniform state and the network does all the work.
+
+⚠ **Low variance plus a wrong energy means the wrong state, and here it means the
+wrong symmetry.** The ViT at N = 12, h = 0.8 converges to a relative error of
+5.4e-4 with a variance three times *lower* than its neighbours, and its excess
+energy is Δ/2 to three digits (Δ the even–odd splitting): it sits in the
+symmetry-broken half of the finite-N cat state that the product-state reference
+imprints, and neither seeds, doubled steps, width, depth nor patch size move it.
+The MLP restores the Z2 symmetry by itself; the GPT never breaks it. The fix is
+more structure, not more network: `symref`, the symmetrised reference
+ψ_MF(σ) + ψ_MF(−σ), is one `logaddexp` on the host and takes the point to 2.0e-5.
+
+**Rung 4, the sign-structure chain.** `model=j1j2` swaps in the J1-J2 Heisenberg
+chain, whose frustrated ground state has signs, and gives the head two slots,
+(log|ψ|, φ), with the Marshall sign rule as the reference phase; the complex
+gradient is two host weights per configuration through the same MSE block. At
+N = 16 in the S_z = 0 sector (Lanczos ceiling; −3/8 per site exactly at the
+Majumdar-Ghosh point) the phase head learns the Marshall signs from scratch at
+J2 = 0, every arm finds the dimer state at J2 = J1/2 to 3e-6 with fidelity 1.000,
+and past that point, where the sign rule breaks, every arm stalls at 1e-2 with a
+fidelity below 0.5 — the row this rung exists for. A wider pass (hidden 256 / d 64,
+8000 steps) takes the unfrustrated rows to 1e-5 and the frustrated one only to 6e-3
+at fidelity 0.55, so the sign structure past the Majumdar-Ghosh point is the open
+problem, not capacity. Table 3 and the figure are in the run folder.
+
+![The J1-J2 rung](figures/nqs_j1j2.png)
+
+⚠ A sampler check on a *trained* state scatters wider than N(0, 1) because the
+local energy is heavy-tailed; the gate is the pooled test over draw seeds (eight
+seeds: offset −1.3e-4 ± 3.4e-4), and the `check` output labels a single z as one
+draw. Numbers, gates, every arm's log and the h = 0.8 investigation are in
+`runs/2026-09-11-nqs-ising/`.
+
+---
+
 ## TinyGPT — character-level language model
 
 Char-level transformer on Karpathy's tinyshakespeare. Three new
@@ -613,6 +713,7 @@ demos/
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator
+├── MainNqsIsing.lean                      # neural quantum states: MLP/ViT/GPT wavefunctions on the Ising chain
 ├── MainTinyGptShakespeare.lean            # char-level transformer
 ├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)
 ├── MainTinyStories.lean                   # the same transformer at a larger corpus

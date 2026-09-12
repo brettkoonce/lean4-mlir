@@ -1,0 +1,43 @@
+nqs-ising-vit-n64-q2: 26529 params, N = 64, h = 1.200000, J = 1.000000, 2000 steps, 1024 chains, mean-field reference, seed 1
+  mean field: φ = 0.6435, E_MF = -87.040000
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.150
+I0912 00:50:40.986897 2087773 service.cc:154] XLA service 0x79bf44028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0912 00:50:40.986928 2087773 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0912 00:50:40.988671 2087773 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0912 00:50:40.988707 2087773 gpu_helpers.cc:162] XLA backend allocating 2.34GiB (2510290944 bytes) on device 0 for BFCAllocator.
+I0912 00:50:40.997002 2087773 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0912 00:50:42.498819 2087801 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_130', 4 bytes spill stores, 4 bytes spill loads
+
+I0912 00:50:43.337347 2087786 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_128', 8 bytes spill stores, 8 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_ising_vit_n64_q2_train_step.mlir (@main, 115 outputs, 1 replica) in 3195 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_vit_n64_q2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 499 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_vit_n64_q2_fwd_flip.mlir (@forward_eval, 1 outputs, 1 replica) in 2019 ms
+  sessions loaded
+  burn-in: 20 sweeps, acceptance 0.216
+  step 0  E = -87.150000  E/N = -1.361719  Var(E_loc) = 8.69e+0  (510 ms)
+  step 100  E = -88.571035  E/N = -1.383922  Var(E_loc) = 3.69e+0  (48193 ms)
+  step 200  E = -88.724200  E/N = -1.386316  Var(E_loc) = 4.43e+0  (96295 ms)
+  step 300  E = -88.745468  E/N = -1.386648  Var(E_loc) = 4.25e+0  (143777 ms)
+  step 400  E = -88.811145  E/N = -1.387674  Var(E_loc) = 3.91e+0  (191608 ms)
+  step 500  E = -88.885971  E/N = -1.388843  Var(E_loc) = 5.33e+0  (239585 ms)
+  step 600  E = -88.858390  E/N = -1.388412  Var(E_loc) = 4.86e+0  (287570 ms)
+  step 700  E = -88.951463  E/N = -1.389867  Var(E_loc) = 4.07e+0  (335561 ms)
+  step 800  E = -89.224227  E/N = -1.394129  Var(E_loc) = 4.70e+0  (383551 ms)
+  step 900  E = -89.481907  E/N = -1.398155  Var(E_loc) = 3.46e+0  (431403 ms)
+  step 1000  E = -89.648047  E/N = -1.400751  Var(E_loc) = 3.41e+0  (479113 ms)
+  step 1100  E = -89.892846  E/N = -1.404576  Var(E_loc) = 2.39e+0  (523041 ms)
+  step 1200  E = -89.969981  E/N = -1.405781  Var(E_loc) = 1.74e+0  (566226 ms)
+  step 1300  E = -90.070078  E/N = -1.407345  Var(E_loc) = 1.70e+0  (609310 ms)
+  step 1400  E = -90.118101  E/N = -1.408095  Var(E_loc) = 1.44e+0  (652295 ms)
+  step 1500  E = -90.289983  E/N = -1.410781  Var(E_loc) = 1.54e+0  (695413 ms)
+  step 1600  E = -90.222168  E/N = -1.409721  Var(E_loc) = 1.41e+0  (738474 ms)
+  step 1700  E = -90.278895  E/N = -1.410608  Var(E_loc) = 1.34e+0  (781625 ms)
+  step 1800  E = -90.339399  E/N = -1.411553  Var(E_loc) = 1.59e+0  (824649 ms)
+  step 1900  E = -90.271652  E/N = -1.410495  Var(E_loc) = 1.38e+0  (867269 ms)
+  step 2000  E = -90.298526  E/N = -1.410914  Var(E_loc) = 1.51e+0  (909478 ms)
+trained: 2000 steps, 909485 ms
+wrote .lake/build/nqs_ising_vit_n64_q2_h120_metrics.json, _curve.csv, _samples.bin, _params.bin
+vit N=64 h=1.200000: E = -90.308403  E/N = -1.411069  Var(E_loc) = 1.45e+0  <sx> = 0.77109  C(N/2) = 0.13507  (8192 samples, 26529 params, 926 s)

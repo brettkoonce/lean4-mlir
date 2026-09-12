@@ -1,0 +1,43 @@
+⚠ [3206/3208] Replayed demos.MainNqsIsing
+warning: demos/MainNqsIsing.lean:470:6: Variable name `nOut` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: demos/MainNqsIsing.lean:525:8: Variable name `s` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: demos/MainNqsIsing.lean:547:12: Variable name `out` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+nqs-ising-mlp-n12-g0: 5057 params, N = 12, h = 1.200000, J = 1.000000, 4000 steps, enumeration of 4096 configurations, mean-field reference, seed 1
+  mean field: φ = 0.6435, E_MF = -16.320000
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 23:21:48.951667 2015833 service.cc:154] XLA service 0x77fcc0008520 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 23:21:48.951698 2015833 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 23:21:48.953475 2015833 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 23:21:48.953507 2015833 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 23:21:48.964153 2015833 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 23:21:50.063009 2015859 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_ising_mlp_n12_g0_train_step.mlir (@main, 19 outputs, 1 replica) in 1977 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_mlp_n12_g0_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1170 ms
+  sessions loaded
+  step 0  E = -16.320000  E/N = -1.360000  Var(E_loc) = 1.56e+0  (32 ms)
+  step 500  E = -17.046529  E/N = -1.420544  Var(E_loc) = 4.23e-2  (9670 ms)
+  step 1000  E = -17.047883  E/N = -1.420657  Var(E_loc) = 1.95e-2  (15410 ms)
+  step 1500  E = -17.048260  E/N = -1.420688  Var(E_loc) = 1.28e-2  (21248 ms)
+  step 2000  E = -17.048454  E/N = -1.420704  Var(E_loc) = 9.60e-3  (27078 ms)
+  step 2500  E = -17.048547  E/N = -1.420712  Var(E_loc) = 7.96e-3  (32863 ms)
+  step 3000  E = -17.048601  E/N = -1.420717  Var(E_loc) = 7.01e-3  (38552 ms)
+  step 3500  E = -17.048628  E/N = -1.420719  Var(E_loc) = 6.53e-3  (44237 ms)
+  step 4000  E = -17.048642  E/N = -1.420720  Var(E_loc) = 6.27e-3  (50396 ms)
+trained: 4000 steps, 50397 ms
+wrote .lake/build/nqs_ising_mlp_n12_g0_h120_metrics.json, _curve.csv, _samples.bin, _params.bin
+mlp N=12 h=1.200000: E = -17.048642  E/N = -1.420720  Var(E_loc) = 6.27e-3  <sx> = 0.78410  C(N/2) = 0.17865  (4096 samples, 5057 params, 50 s)

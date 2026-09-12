@@ -3295,3 +3295,202 @@ LEAN_EXPORT lean_obj_res lean_mlir_read_into(b_lean_obj_arg h, lean_obj_arg buf,
     lean_to_sarray(buf)->m_size = sz + n;
     return lean_io_result_mk_ok(buf);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Neural quantum states (demos/MainNqsIsing.lean, planning/transformer_wavefunction_demo.md)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// log ψ of the autoregressive (GPT) wavefunction from the eval graph's logits.
+// `out` is [rows, T·V] f32 in (t, v) order as the eval graph returns it;
+// `ids` is [rows, T] u8, the patch id at each position; `bias` is [V] f32, the
+// reference product state's per-patch log-probability (the fixed logit bias of
+// §1). Returns [rows] f32 of
+//     ½ Σ_k ( l[k][id_k] + bias[id_k] − log Σ_v exp(l[k][v] + bias[v]) ),
+// accumulated in double. The Lean loop this replaces read every logit twice
+// through `F32.read`; at N = 64 (rows = B·N = 65536, T·V = 256) that was the
+// whole step.
+LEAN_EXPORT lean_obj_res lean_nqs_gpt_logpsi(
+    b_lean_obj_arg out_ba, b_lean_obj_arg ids_ba, b_lean_obj_arg bias_ba,
+    size_t rows, size_t T, size_t V, lean_obj_arg w) {
+    (void)w;
+    const float* out = (const float*)lean_sarray_cptr(out_ba);
+    const uint8_t* ids = (const uint8_t*)lean_sarray_cptr(ids_ba);
+    const float* bias = (const float*)lean_sarray_cptr(bias_ba);
+    lean_object* res = lean_alloc_sarray(1, rows * 4, rows * 4);
+    float* r = (float*)lean_sarray_cptr(res);
+    for (size_t s = 0; s < rows; s++) {
+        double acc = 0.0;
+        for (size_t k = 0; k < T; k++) {
+            const float* l = out + (s * T + k) * V;
+            double mx = -1e300;
+            for (size_t v = 0; v < V; v++) {
+                double z = (double)l[v] + (double)bias[v];
+                if (z > mx) mx = z;
+            }
+            double se = 0.0;
+            for (size_t v = 0; v < V; v++)
+                se += exp((double)l[v] + (double)bias[v] - mx);
+            size_t id = ids[s * T + k];
+            acc += (double)l[id] + (double)bias[id] - mx - log(se);
+        }
+        r[s] = (float)(0.5 * acc);
+    }
+    return lean_io_result_mk_ok(res);
+}
+
+// The configuration-to-input plumbing of the same demo. A configuration is a
+// u64 bit string (bit i set = spin i up), `cfgs` is [rows] of them, little-endian.
+// `flipMode` 0: the rows as given; 1: row r with site sites[r] flipped (a
+// Metropolis proposal per chain); 2: every row expanded into N rows, row r·N+i
+// being config r with site i flipped (the E_loc batch). In Lean this was ~1.5 µs
+// per pushed float — 11 s per step for the MLP at N = 64 — so it lives here.
+static inline uint64_t nqs_cfg_at(const uint8_t* cf, size_t s) {
+    uint64_t c; memcpy(&c, cf + 8 * s, 8); return c;
+}
+static inline uint64_t nqs_row_cfg(const uint8_t* cf, const uint8_t* sites, size_t N,
+                                   size_t flipMode, size_t r) {
+    if (flipMode == 2) return nqs_cfg_at(cf, r / N) ^ (1ULL << (r % N));
+    uint64_t c = nqs_cfg_at(cf, r);
+    if (flipMode == 1) c ^= 1ULL << sites[r];
+    return c;
+}
+
+// Network inputs: mode 0 (mlp) N floats ±1; mode 1 (vit) T patch ids; mode 2
+// (gpt) BOS = 2^p followed by the first T−1 patch ids. Returns f32 [outRows, inDim].
+LEAN_EXPORT lean_obj_res lean_nqs_inputs(
+    b_lean_obj_arg cfgs_ba, b_lean_obj_arg sites_ba, size_t rows, size_t N,
+    size_t p, size_t T, size_t mode, size_t flipMode, lean_obj_arg w) {
+    (void)w;
+    const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
+    const uint8_t* sites = (const uint8_t*)lean_sarray_cptr(sites_ba);
+    size_t outRows = flipMode == 2 ? rows * N : rows;
+    size_t inDim = mode == 0 ? N : T;
+    size_t nb = outRows * inDim * 4;
+    lean_object* res = lean_alloc_sarray(1, nb, nb);
+    float* o = (float*)lean_sarray_cptr(res);
+    uint64_t mask = (1ULL << p) - 1;
+    for (size_t r = 0; r < outRows; r++) {
+        uint64_t c = nqs_row_cfg(cf, sites, N, flipMode, r);
+        float* row = o + r * inDim;
+        if (mode == 0) {
+            for (size_t i = 0; i < N; i++) row[i] = ((c >> i) & 1) ? 1.0f : -1.0f;
+        } else if (mode == 1) {
+            for (size_t k = 0; k < T; k++) row[k] = (float)((c >> (k * p)) & mask);
+        } else {
+            row[0] = (float)(1ULL << p);
+            for (size_t k = 0; k + 1 < T; k++) row[k + 1] = (float)((c >> (k * p)) & mask);
+        }
+    }
+    return lean_io_result_mk_ok(res);
+}
+
+// Number of up spins per row (the reference log-amplitude is linear in it). u8 [outRows].
+LEAN_EXPORT lean_obj_res lean_nqs_popcount(
+    b_lean_obj_arg cfgs_ba, b_lean_obj_arg sites_ba, size_t rows, size_t N,
+    size_t flipMode, lean_obj_arg w) {
+    (void)w;
+    const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
+    const uint8_t* sites = (const uint8_t*)lean_sarray_cptr(sites_ba);
+    size_t outRows = flipMode == 2 ? rows * N : rows;
+    lean_object* res = lean_alloc_sarray(1, outRows, outRows);
+    uint8_t* o = (uint8_t*)lean_sarray_cptr(res);
+    uint64_t nmask = N == 64 ? ~0ULL : ((1ULL << N) - 1);
+    for (size_t r = 0; r < outRows; r++)
+        o[r] = (uint8_t)__builtin_popcountll(nqs_row_cfg(cf, sites, N, flipMode, r) & nmask);
+    return lean_io_result_mk_ok(res);
+}
+
+// Patch ids per row, u8 [outRows, T] — what `lean_nqs_gpt_logpsi` gathers on.
+LEAN_EXPORT lean_obj_res lean_nqs_patch_ids(
+    b_lean_obj_arg cfgs_ba, b_lean_obj_arg sites_ba, size_t rows, size_t N,
+    size_t p, size_t T, size_t flipMode, lean_obj_arg w) {
+    (void)w;
+    const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
+    const uint8_t* sites = (const uint8_t*)lean_sarray_cptr(sites_ba);
+    size_t outRows = flipMode == 2 ? rows * N : rows;
+    lean_object* res = lean_alloc_sarray(1, outRows * T, outRows * T);
+    uint8_t* o = (uint8_t*)lean_sarray_cptr(res);
+    uint64_t mask = (1ULL << p) - 1;
+    for (size_t r = 0; r < outRows; r++) {
+        uint64_t c = nqs_row_cfg(cf, sites, N, flipMode, r);
+        for (size_t k = 0; k < T; k++) o[r * T + k] = (uint8_t)((c >> (k * p)) & mask);
+    }
+    return lean_io_result_mk_ok(res);
+}
+
+// One autoregressive step for B chains: draw patch k from softmax(logits_k + bias)
+// for every row of the eval output `out` ([B, T·V] in (t, v) order). Returns u8 [B].
+// SplitMix64-seeded xorshift, the convention of the DDPM helpers above.
+LEAN_EXPORT lean_obj_res lean_nqs_gpt_draw(
+    b_lean_obj_arg out_ba, b_lean_obj_arg bias_ba, size_t B, size_t T, size_t V,
+    size_t k, size_t seed, lean_obj_arg w) {
+    (void)w;
+    const float* out = (const float*)lean_sarray_cptr(out_ba);
+    const float* bias = (const float*)lean_sarray_cptr(bias_ba);
+    lean_object* res = lean_alloc_sarray(1, B, B);
+    uint8_t* o = (uint8_t*)lean_sarray_cptr(res);
+    uint64_t z = (uint64_t)seed + 0x9E3779B97F4A7C15ULL;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    uint64_t s = z ^ (z >> 31); if (s == 0) s = 1;
+    double* q = (double*)malloc(V * sizeof(double));
+    for (size_t b = 0; b < B; b++) {
+        const float* l = out + (b * T + k) * V;
+        double mx = -1e300;
+        for (size_t v = 0; v < V; v++) { double zz = (double)l[v] + (double)bias[v]; q[v] = zz; if (zz > mx) mx = zz; }
+        double se = 0.0;
+        for (size_t v = 0; v < V; v++) { q[v] = exp(q[v] - mx); se += q[v]; }
+        double u = ((double)(f32_xs64(&s) >> 11) / (double)(1ULL << 53)) * se;
+        double cum = 0.0;
+        size_t pick = V - 1;
+        for (size_t v = 0; v < V; v++) { cum += q[v]; if (cum >= u) { pick = v; break; } }
+        o[b] = (uint8_t)pick;
+    }
+    free(q);
+    return lean_io_result_mk_ok(res);
+}
+
+// J1-J2 Heisenberg local energies over an enumerated S_z sector (rung R4 of the
+// same demo). `cfgs` is the sector's [M] u64 configurations in ASCENDING order,
+// `a` and `phi` are [M] f64, log|ψ| and arg ψ with the reference already added.
+// Returns f32 [M, 2] = (Re, Im) of
+//   E_loc(c) = Σ_bonds J_b [ σ_i σ_j / 4 + (σ_i ≠ σ_j) · ½ · ψ(c with i,j exchanged) / ψ(c) ]
+// with bonds (i, i+1) at J1 and (i, i+2) at J2 around the ring, S = σ/2, and
+// ψ(c')/ψ(c) = exp(a' − a + i(φ' − φ)). The exchanged configuration stays in the
+// sector, so it is found by binary search; nothing leaves the enumerated set.
+LEAN_EXPORT lean_obj_res lean_nqs_j1j2_eloc(
+    b_lean_obj_arg cfgs_ba, b_lean_obj_arg a_ba, b_lean_obj_arg phi_ba,
+    size_t M, size_t N, double J1, double J2, lean_obj_arg w) {
+    (void)w;
+    const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
+    const double* a = (const double*)lean_sarray_cptr(a_ba);
+    const double* phi = (const double*)lean_sarray_cptr(phi_ba);
+    lean_object* res = lean_alloc_sarray(1, M * 8, M * 8);
+    float* o = (float*)lean_sarray_cptr(res);
+    for (size_t s = 0; s < M; s++) {
+        uint64_t c = nqs_cfg_at(cf, s);
+        double re = 0.0, im = 0.0;
+        for (size_t d = 1; d <= 2; d++) {
+            double Jb = d == 1 ? J1 : J2;
+            if (Jb == 0.0) continue;
+            for (size_t i = 0; i < N; i++) {
+                size_t j = (i + d) % N;
+                int si = (int)((c >> i) & 1) * 2 - 1;
+                int sj = (int)((c >> j) & 1) * 2 - 1;
+                re += Jb * (double)(si * sj) / 4.0;
+                if (si != sj) {
+                    uint64_t c2 = c ^ ((1ULL << i) | (1ULL << j));
+                    size_t lo = 0, hi = M;                       // binary search in the sorted sector
+                    while (lo < hi) { size_t mid = (lo + hi) / 2; if (nqs_cfg_at(cf, mid) < c2) lo = mid + 1; else hi = mid; }
+                    double r = exp(a[lo] - a[s]);
+                    double dphi = phi[lo] - phi[s];
+                    re += Jb * 0.5 * r * cos(dphi);
+                    im += Jb * 0.5 * r * sin(dphi);
+                }
+            }
+        }
+        o[2 * s] = (float)re;
+        o[2 * s + 1] = (float)im;
+    }
+    return lean_io_result_mk_ok(res);
+}

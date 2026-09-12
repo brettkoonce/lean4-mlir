@@ -1,0 +1,53 @@
+⚠ [3206/3208] Replayed demos.MainNqsIsing
+warning: demos/MainNqsIsing.lean:470:6: Variable name `nOut` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: demos/MainNqsIsing.lean:525:8: Variable name `s` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: demos/MainNqsIsing.lean:547:12: Variable name `out` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+nqs-ising-vit-n12-g1: 25825 params, N = 12, h = 1.200000, J = 1.000000, 4000 steps, enumeration of 4096 configurations, mean-field reference, seed 1
+  mean field: φ = 0.6435, E_MF = -16.320000
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 23:26:22.346561 2022602 service.cc:154] XLA service 0x72f790008410 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 23:26:22.346602 2022602 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 23:26:22.348457 2022602 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 23:26:22.348500 2022602 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 23:26:22.367103 2022602 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 23:26:25.410602 2022638 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_128', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 23:26:26.392637 2022643 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_130', 4 bytes spill stores, 4 bytes spill loads
+
+I0911 23:26:29.990676 2022637 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_249', 356 bytes spill stores, 360 bytes spill loads
+
+I0911 23:26:30.015474 2022632 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_250', 312 bytes spill stores, 324 bytes spill loads
+
+I0911 23:26:31.062813 2022639 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_248', 384 bytes spill stores, 460 bytes spill loads
+
+I0911 23:26:31.091750 2022616 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_247', 300 bytes spill stores, 384 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_ising_vit_n12_g1_train_step.mlir (@main, 115 outputs, 1 replica) in 8734 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_vit_n12_g1_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 582 ms
+  sessions loaded
+  step 0  E = -16.320000  E/N = -1.360000  Var(E_loc) = 1.56e+0  (43 ms)
+  step 500  E = -17.041202  E/N = -1.420100  Var(E_loc) = 9.61e-2  (25821 ms)
+  step 1000  E = -17.046901  E/N = -1.420575  Var(E_loc) = 2.77e-2  (50981 ms)
+  step 1500  E = -17.047807  E/N = -1.420651  Var(E_loc) = 1.60e-2  (76499 ms)
+  step 2000  E = -17.048045  E/N = -1.420670  Var(E_loc) = 1.18e-2  (102547 ms)
+  step 2500  E = -17.048369  E/N = -1.420697  Var(E_loc) = 8.76e-3  (119627 ms)
+  step 3000  E = -17.048436  E/N = -1.420703  Var(E_loc) = 7.66e-3  (130518 ms)
+  step 3500  E = -17.048497  E/N = -1.420708  Var(E_loc) = 6.95e-3  (140604 ms)
+  step 4000  E = -17.048521  E/N = -1.420710  Var(E_loc) = 6.65e-3  (150819 ms)
+trained: 4000 steps, 150826 ms
+wrote .lake/build/nqs_ising_vit_n12_g1_h120_metrics.json, _curve.csv, _samples.bin, _params.bin
+vit N=12 h=1.200000: E = -17.048521  E/N = -1.420710  Var(E_loc) = 6.65e-3  <sx> = 0.78422  C(N/2) = 0.17916  (4096 samples, 25825 params, 151 s)

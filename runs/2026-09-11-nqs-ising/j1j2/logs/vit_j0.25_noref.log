@@ -1,0 +1,24 @@
+nqs-j1j2-vit-n16-q1noref: 25922 params, J1-J2 chain N = 16, J1 = 1.000000, J2 = 0.250000, S_z = 0 sector of 12870 configurations, 4000 steps, no sign prior (noref), seed 1
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.150
+I0912 02:28:49.593764 2107987 service.cc:154] XLA service 0x7d4f3c028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0912 02:28:49.593795 2107987 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0912 02:28:49.595257 2107987 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0912 02:28:49.595290 2107987 gpu_helpers.cc:162] XLA backend allocating 2.34GiB (2510290944 bytes) on device 0 for BFCAllocator.
+I0912 02:28:49.602261 2107987 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/nqs_j1j2_vit_n16_q1noref_train_step.mlir (@main, 115 outputs, 1 replica) in 3065 ms
+[pjrt_ffi] compiled .lake/build/nqs_j1j2_vit_n16_q1noref_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 556 ms
+  sessions loaded
+  step 0  E = 4.397993  E/N = 0.274875  Im E = 1.54e-10  Var(E_loc) = 1.72e+0  (22 ms)
+  step 500  E = -6.063067  E/N = -0.378942  Im E = 1.04e-10  Var(E_loc) = 3.80e-1  (23154 ms)
+  step 1000  E = -6.183782  E/N = -0.386486  Im E = -1.30e-10  Var(E_loc) = 3.25e-1  (46452 ms)
+  step 1500  E = -6.285951  E/N = -0.392872  Im E = -2.12e-11  Var(E_loc) = 1.72e-1  (69587 ms)
+  step 2000  E = -6.304347  E/N = -0.394022  Im E = -9.04e-12  Var(E_loc) = 1.60e-1  (92498 ms)
+  step 2500  E = -6.315600  E/N = -0.394725  Im E = -5.23e-11  Var(E_loc) = 1.49e-1  (116674 ms)
+  step 3000  E = -6.324360  E/N = -0.395272  Im E = -1.63e-11  Var(E_loc) = 1.39e-1  (142470 ms)
+  step 3500  E = -6.329792  E/N = -0.395612  Im E = -7.24e-12  Var(E_loc) = 1.34e-1  (168336 ms)
+  step 4000  E = -6.332833  E/N = -0.395802  Im E = -2.30e-11  Var(E_loc) = 1.28e-1  (193962 ms)
+trained: 4000 steps, 193969 ms
+wrote .lake/build/nqs_j1j2_vit_n16_q1noref_j225_noref_metrics.json, _curve.csv, _psi.bin, _samples.bin, _params.bin
+vit j1j2 N=16 J2=0.250000: E = -6.332833  E/N = -0.395802  Im E = -2.30e-11  Var(E_loc) = 1.28e-1  Marshall weight = 0.99932  C(N/2) = 0.04021  (12870 configurations, 25922 params, 194 s)

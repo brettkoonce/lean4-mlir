@@ -1,0 +1,51 @@
+⚠ [3206/3208] Replayed demos.MainNqsIsing
+warning: demos/MainNqsIsing.lean:470:6: Variable name `nOut` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: demos/MainNqsIsing.lean:525:8: Variable name `s` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: demos/MainNqsIsing.lean:547:12: Variable name `out` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+nqs-ising-gpt-n12-g2: 25956 params, N = 12, h = 0.800000, J = 1.000000, 4000 steps, enumeration of 4096 configurations, mean-field reference, seed 1
+  mean field: φ = 0.4115, E_MF = -13.920000
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I0911 23:37:55.926568 2029923 service.cc:154] XLA service 0x7b2400008410 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0911 23:37:55.926605 2029923 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0911 23:37:55.928048 2029923 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0911 23:37:55.928076 2029923 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I0911 23:37:55.934605 2029923 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0911 23:37:57.082924 2029965 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_129', 8 bytes spill stores, 8 bytes spill loads
+
+I0911 23:37:58.122677 2029962 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_131', 4 bytes spill stores, 4 bytes spill loads
+
+I0911 23:37:59.402173 2029967 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_243', 356 bytes spill stores, 360 bytes spill loads
+
+I0911 23:37:59.851938 2029940 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_240', 300 bytes spill stores, 384 bytes spill loads
+
+I0911 23:37:59.902812 2029959 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_241', 384 bytes spill stores, 460 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/nqs_ising_gpt_n12_g2_train_step.mlir (@main, 115 outputs, 1 replica) in 3984 ms
+[pjrt_ffi] compiled .lake/build/nqs_ising_gpt_n12_g2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 432 ms
+  sessions loaded
+  step 0  E = -13.920000  E/N = -1.160000  Var(E_loc) = 3.07e-1  (19 ms)
+  step 500  E = -14.013773  E/N = -1.167814  Var(E_loc) = 7.52e-4  (40698 ms)
+  step 1000  E = -14.020916  E/N = -1.168410  Var(E_loc) = 2.06e-3  (83718 ms)
+  step 1500  E = -14.021071  E/N = -1.168423  Var(E_loc) = 7.03e-4  (128788 ms)
+  step 2000  E = -14.021099  E/N = -1.168425  Var(E_loc) = 4.32e-4  (172707 ms)
+  step 2500  E = -14.021114  E/N = -1.168426  Var(E_loc) = 3.08e-4  (214226 ms)
+  step 3000  E = -14.021120  E/N = -1.168427  Var(E_loc) = 2.54e-4  (270071 ms)
+  step 3500  E = -14.021123  E/N = -1.168427  Var(E_loc) = 2.30e-4  (358530 ms)
+  step 4000  E = -14.021124  E/N = -1.168427  Var(E_loc) = 2.17e-4  (426888 ms)
+trained: 4000 steps, 426893 ms
+wrote .lake/build/nqs_ising_gpt_n12_g2_h80_metrics.json, _curve.csv, _samples.bin, _params.bin
+gpt N=12 h=0.800000: E = -14.021124  E/N = -1.168427  Var(E_loc) = 2.17e-4  <sx> = 0.45219  C(N/2) = 0.76220  (4096 samples, 25956 params, 427 s)
