@@ -64,6 +64,11 @@ fi
 # artifact BAKES rather than a number carried forward. A shim verdict read off the light graph is
 # exactly such a carried-forward number.
 # vitema has NO f32 render (vitin_emadp128x4wxclipdrop is absent) -- run its bf16 arm only.
+# ⛔ mnv2rms IS A THIRD PRODUCTION GRAPH and it was MISSING. mnv2-default-4gpu.conf runs
+# MobileNetV2 at RMSProp + exp decay (the reference's optimizer); the `mnv2` row above is the
+# exe's DEFAULT AdamW variant, which no job conf trains. Probing `mnv2` to budget the
+# MobileNetV2 run times a graph that run does not execute -- the renders differ by ~15% in
+# size. Added 2026-09-10 while budgeting that run; it is what the 350-epoch run was probed on.
 # ⚠ `extra` is appended to the env LAST, so it can OVERRIDE anything set above it —
 # `SHIM_WORKERS=4` there beats the global `$WORKERS`. That matters: the job confs do NOT
 # share a worker count (ConvNeXt-S/B and MobileNetV2/V4 and ViT-Ti run 4, ResNet/B0 run 8)
@@ -74,6 +79,7 @@ ROWS="${ROWS:-
 r34|resnet34-imagenet-verified|momdp64|momdp64bf16|64|LEAN_MLIR_BASE_LR_U=100000
 r50|resnet50-imagenet-verified|momdp64|momdp64bf16|64|
 mnv2|mobilenetv2-imagenet-verified|adamdp64|adamdp64bf16|64|
+mnv2rms|mobilenetv2-imagenet-verified|rmsdp64|rmsdp64bf16|64|
 mnv4|mobilenetv4-imagenet-verified|adamdp64|adamdp64bf16|64|
 enet|efficientnet-imagenet-verified|rmsdp64|rmsdp64bf16|64|
 cnx|convnext-imagenet-verified|adamdpwxclipdrop|adamdpwxclipdropbf16|32|
