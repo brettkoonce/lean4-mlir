@@ -979,6 +979,14 @@ private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
   let lbl ← F32.const bs.toUSize 0.0               -- bs int32 zero labels (4 bytes each)
   pure (img, lbl, nTr, img, lbl, bs, px, crop)
 
+/-- Write `bytes` to `path` all-or-nothing: a sibling `.tmp`, then `rename(2)` over the target.
+    A crash mid-write leaves the PREVIOUS file intact rather than a truncated one — the same
+    guarantee the JAX reference's `save_train_state` gets from `os.replace`. -/
+def writeBinAtomic (path : String) (bytes : ByteArray) : IO Unit := do
+  let tmp := path ++ ".tmp"
+  IO.FS.writeBinFile tmp bytes
+  IO.FS.rename tmp path
+
 /-- **Where this (net, variant) writes and resumes its checkpoint.**
 
     Scoped by BACKEND: without the suffix an XLA run would happily resume from an IREE checkpoint
@@ -1687,13 +1695,20 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   let mvBytes := nRegions * net.nParams * 4
   let pBytes := net.nParams * 4
   -- Running BN stats (EMA of per-layer batch mean/var; mom 1.0 on the first step to seed,
-  -- then 0.1). Reset per process — washed out well before the per-epoch eval (mom 0.1).
+  -- then 0.1). Rebuilt from nothing within ~1/mom steps, so for these alone a per-process reset
+  -- would be harmless — their SHADOW below is not, and the two are checkpointed together.
   let mut runningBnStats ← F32.const nBnStats.toUSize 0.0
   -- The EMA shadow of those buffers (`ema_bn`). Starts where they start, as the reference does
-  -- (`ema_bn = bn_state`). ⚠ Like `runningBnStats` it is NOT checkpointed — both are reset per
-  -- process and rebuilt within an epoch, which is the pre-existing behaviour this does not change.
+  -- (`ema_bn = bn_state`). ▶ Both are CHECKPOINTED since 2026-09-12, as `<ckpt>.bn` beside the
+  -- blob (see the epoch-end write). ⛔ Before that a resume restarted this shadow at zero under the
+  -- mature decay, and that is NOT "rebuilt within an epoch": at 0.9999 it is a 10,000-step filter.
   let mut emaBnStats ← F32.const nBnStats.toUSize 0.0
   let mut bnFirst := true
+  -- Steps on which `ema_bn` COPIES the running stats instead of averaging them. Zero except after
+  -- resuming a checkpoint with no `.bn` companion (one written before it existed): the running
+  -- stats rebuild in ~100 steps, and seeding the shadow from them is a far better estimate than
+  -- blending in from zero at d = 0.9999.
+  let mut emaBnSeedLeft : Nat := 0
   -- The reusable step buffer: [theta|m|v | lr,bc1,bc2 | bn stats]. Built once here
   -- and thereafter carried forward from each step's output (see the inner loop).
   let mut pbuf : ByteArray := .empty
@@ -1724,6 +1739,25 @@ layout — most likely across the EMA boundary, since the `ema*` variants carry 
 it and its .epoch marker aside and start fresh."
     startEpoch := ((← IO.FS.readFile epPath).toNat?).getD 0
     IO.println s!"  ▸ resuming from checkpoint at epoch {startEpoch}"
+    -- ▶ The BN companion (see the epoch-end write). ABSENT is a warning, not a refusal: every
+    -- checkpoint written before 2026-09-12 lacks one, and for those the seed below is the fallback.
+    -- A WRONG SIZE is a refusal, for the blob's reason — a companion from another layout would
+    -- misalign every statistic and still print a plausible accuracy.
+    if hasBn then
+      let bnPath := ckptPath ++ ".bn"
+      if ← System.FilePath.pathExists bnPath then
+        let bn ← IO.FS.readBinFile bnPath
+        if bn.size != 2 * nBnStats * 4 then
+          throw <| IO.userError s!"BN companion {bnPath} is {bn.size} bytes but this run wants \
+{2 * nBnStats * 4} (2 x {nBnStats} stat floats x 4). Move it aside with its checkpoint."
+        runningBnStats := bn.extract 0 (nBnStats * 4)
+        emaBnStats := bn.extract (nBnStats * 4) (2 * nBnStats * 4)
+        bnFirst := false
+        IO.println s!"  ▸ resumed BN running stats + ema_bn from {bnPath} (hash {bn.hash})"
+      else
+        emaBnSeedLeft := 100
+        IO.println s!"  ⚠ no BN companion at {bnPath} (checkpoint predates 2026-09-12): ema_bn is \
+re-seeded from the running stats over the first 100 steps, not restored"
     (← IO.getStdout).flush
   -- Reuse ONE shuffle buffer across epochs (mirrors the reference trainer's
   -- curImg/curLbl). Shuffling the SAME mutable in place keeps it exclusive
@@ -2278,7 +2312,11 @@ gate's control, not a configuration.")
         -- fires on the same cadence. The running stats themselves DO move per micro-batch — that is
         -- what `bnMom`'s k-th-root compensation above is for — but their shadow does not.
         if emaOn && applyNow then
-          emaBnStats ← F32.ema emaBnStats runningBnStats (1.0 - emaD)
+          -- Weight 1.0 = copy: only for the first 100 steps after resuming a checkpoint that has no
+          -- `.bn` companion (see `emaBnSeedLeft`). Zero on every fresh run and every full resume.
+          emaBnStats ← F32.ema emaBnStats runningBnStats
+            (if emaBnSeedLeft > 0 then 1.0 else 1.0 - emaD)
+          if emaBnSeedLeft > 0 then emaBnSeedLeft := emaBnSeedLeft - 1
         bnFirst := false
       pbuf := out   -- no copy: the output buffer becomes the next step's input
       -- ms/step probe: start the clock past warmup, report + exit at the cap.
@@ -2424,8 +2462,28 @@ gate's control, not a configuration.")
           IO.println s!"    per-example top-1 bitmap -> {pfx}_{variant}_e{ep + 1}.bin ({correctBits.size} bytes)"
       | none => pure ()
     (← IO.getStdout).flush
-    IO.FS.writeBinFile ckptPath thetamv
-    IO.FS.writeFile epPath (toString (ep + 1))
+    -- ⛔ WRITE-THEN-RENAME, AND THE BN COMPANION (2026-09-12). This was two in-place writes, so a
+    -- crash or power cut INSIDE the blob write left a truncated file that the size guard at resume
+    -- then refuses on every restart — the supervisor burns all its attempts on a run that is not
+    -- coming back — and a crash between the two writes left the marker one epoch behind the
+    -- weights. `writeBinAtomic` makes each file all-or-nothing, and the order (companion, blob,
+    -- marker) means the marker only advances once the state it names is on disk.
+    -- ▶ `<ckpt>.bn` = [running BN stats | their EMA shadow]. Without it a resume restarted `ema_bn`
+    -- at ZERO under the MATURE decay — `emaD` is keyed off the global step, so the warmup
+    -- correction that rescues a fresh run is long spent — and at 0.9999 over 5,004 steps/epoch,
+    -- 0.9999^5004 ≈ 61% of the eval's BN statistics were still that zero one epoch later, ~10
+    -- epochs to wash out. The weights resumed exactly; the number scored off them did not. The JAX
+    -- reference's `save_train_state` carries both (`ema_bn`, `bn_state`).
+    if hasBn then
+      let bn := F32.concat #[runningBnStats, emaBnStats]
+      writeBinAtomic (ckptPath ++ ".bn") bn
+      IO.println s!"    BN companion -> {ckptPath}.bn ({nBnStats} floats x 2, hash {bn.hash})"
+      -- ⚠ Flushed HERE, not at the next step's print: stdout into supervise.sh's tee is
+      -- block-buffered, and a process killed right after its checkpoint (a reap, a thermal rest)
+      -- would otherwise lose the one line that says what the resume should read back.
+      (← IO.getStdout).flush
+    writeBinAtomic ckptPath thetamv
+    writeBinAtomic epPath (toString (ep + 1)).toUTF8
   -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3). Dumps the whole [θ|m|v] blob, so
   -- the Adam moments are compared too, not just the weights — a moment buffer
   -- that silently failed to thread would still let θ look plausible.
