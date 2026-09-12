@@ -1,0 +1,10 @@
+net	variant	prec	arm	bs	workers	med_ms	min_ms	p90_ms	mean_ms	wait_ms	steps_ep	elapsed_s	note
+mnv2rms	rmsdp64bf16	bf16	synth	64	4	78	76	78	77	2	5004	92	
+mnv2rms	rmsdp64bf16	bf16	fed	64	4	97	79	124	104	18	5004	163	
+mnv2rms	rmsdp64bf16	bf16	fed	64	1	192	139	205	189	53	5004	203	
+mnv2rms	rmsdp64bf16	bf16	fed	64	2	95	77	116	96	18	5004	151	
+mnv2rms	rmsdp64bf16	bf16	fed	64	3	94	78	116	96	16	5004	155	
+mnv2rms	rmsdp64bf16	bf16	fed	64	6	99	78	119	105	21	5004	175	
+mnv2rms	rmsdp64bf16	bf16	fed	64	8	104	78	163	124	26	5004	190	
+mnv2rms	rmsdp64bf16	bf16	fed	64	12	105	79	130	108	26	5004	197	
+mnv2rms	rmsdp64bf16	bf16	fed	64	4	96	78	119	99	18	5004	160	

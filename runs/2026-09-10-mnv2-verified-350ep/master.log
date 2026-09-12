@@ -1,0 +1,7 @@
+[sup] 2026-09-10 15:07:16 START job=mnv2-default-4gpu devs=0,1,2,3 epochs=350 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-10-mnv2-verified-350ep
+[sup] 2026-09-10 15:07:16 cmd: .lake/build/bin/mobilenetv2-imagenet-verified data
+[sup] 2026-09-10 15:07:16 eta: ETA_PLACEHOLDER
+[sup] 2026-09-10 15:07:16 attempt 1: resuming at epoch 0/350 (next rest: 999)
+[sup] 2026-09-10 15:07:16   launched PID=1911853 PGID=1911853
+[sup]   last line: done (trained MobileNetV2 (ImageNet-1k) rmsdp64bf16 + exp x0.980000/1.000000ep/warmup via packed threading).
+[sup] 2026-09-12 21:20:48 ✅ COMPLETE — 350/350 epochs
