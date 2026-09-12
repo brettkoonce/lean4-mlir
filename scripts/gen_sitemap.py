@@ -115,10 +115,20 @@ def main() -> int:
 
     # robots.txt is how a crawler DISCOVERS the sitemap without Search Console.
     # Also keeps the CI diagnostics out of the index.
+    #
+    # `docs/declarations/` is doc-gen4's search index: declaration-data.bmp is a
+    # 34 MB JSON blob (named .bmp so the browser will `<link rel=prefetch as=image>`
+    # it) that every one of the tens of thousands of doc pages references in its
+    # <head>. Crawlers that follow that link pull ~3 MB compressed apiece -- 48 GB
+    # and ~16,700 requests in one overnight window, 98% of it served from
+    # Cloudflare's cache, i.e. pure crawler traffic for a file no human reads. It
+    # is not a page and has no business being indexed; the search box fetches it
+    # from the browser regardless of what this says.
     (root / "robots.txt").write_text(
         "User-agent: *\n"
         "Allow: /\n"
         "Disallow: /build-logs/\n"
+        "Disallow: /docs/declarations/\n"
         f"\nSitemap: {base}/sitemap.xml\n",
         encoding="utf-8")
 
