@@ -14413,25 +14413,26 @@ and \S~\ref{layer:structureModule} document the bundling explicitly.
 \label{app:data}
 
 Every dataset in this book is public, and every one except ImageNet is
-fetched by a script in the repository root that drops it under
+fetched or built by a script in the repository root that drops it under
 \texttt{data/} where the trainers expect it. The table below lists each
 with its standard reference, homepage, and that fetch path. Four image
 datasets span the book's whole range:
 
 \begin{itemize}
   \item \textbf{MNIST} and \textbf{CIFAR-10} drive the verified-codegen
-    chapters of Part~1 (\S\ref{chap:cnn}, \S\ref{chap:bn}).
+    chapters of Part~1 (Chapters~\ref{chap:tensor}--\ref{chap:cnn}
+    and~\ref{chap:bn}).
   \item \textbf{Imagenette}, a ten-class subset of ImageNet at
-    $224\times224$, is the ResNet-scale recipe
-    (\S\ref{sec:residual_r34_example}).
-  \item Full \textbf{ImageNet-1k} backs the JAX-bridge runs of the larger
-    architectures (ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T,
-    ViT-Ti).
+    $224\times224$, is the recipe of Chapters~\ref{chap:residual}--\ref{chap:attention},
+    first met in \S\ref{sec:residual_r34_example}.
+  \item Full \textbf{ImageNet-1k} backs those chapters' ImageNet sections
+    (ResNet-34 and ResNet-50, MobileNetV2, EfficientNet-B0, ConvNeXt-T,
+    ViT-Tiny), on the reference and the verified path alike.
 \end{itemize}
 
 \begin{center}
-\small
-\begin{tabular}{@{}l l l p{4.6cm} p{4.2cm}@{}}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l l l p{4.3cm} p{4.0cm}@{}}
 \hline
 Dataset & Abbrev. & Reference & Homepage & Path in repo \\
 \hline
@@ -14440,13 +14441,13 @@ MNIST & MN & LeCun et al., 1998 &
   \texttt{download\_mnist.sh} $\to$ \texttt{data/} \\[2pt]
 CIFAR-10 & CF10 & Krizhevsky, 2009 &
   \href{https://www.cs.toronto.edu/~kriz/cifar.html}{\nolinkurl{cs.toronto.edu/~kriz/cifar.html}} &
-  \texttt{download\_cifar.sh} $\to$ \texttt{data/cifar-10/} \\[2pt]
+  \texttt{download\_cifar.sh}\newline $\to$ \texttt{data/cifar-10/} \\[2pt]
 Imagenette & IN10 & Howard, 2019 &
   \href{https://github.com/fastai/imagenette}{\nolinkurl{github.com/fastai/imagenette}} &
-  \texttt{download\_imagenette.sh} $\to$ \texttt{data/imagenette/} \\[2pt]
+  \texttt{download\_imagenette.sh}\newline $\to$ \texttt{data/imagenette/} \\[2pt]
 ImageNet-1k & IN1K & Deng et al., 2009 &
   \href{https://www.image-net.org/}{\nolinkurl{image-net.org}} &
-  \textit{TFDS\,$\to$\,JAX}\,\textsuperscript{*} \\
+  \textit{TFDS build}\,\textsuperscript{*} \\
 \hline
 \end{tabular}
 \end{center}
@@ -14493,20 +14494,22 @@ and 50{,}000 validation images across 64 shards (6.74\,GB), which is the
 exact layout every ImageNet trainer in this book consumes. Budget disk
 accordingly: the raw tarballs ($\sim$144\,GB) plus the 5.1.0 output
 ($\sim$155\,GB) plus TFDS's intermediate extraction mean you want roughly
-\textbf{500\,GB of free space} to prepare it in one pass. From there the
-JAX bridge does no image-loading of its own: it calls
+\textbf{500\,GB of free space} to prepare it in one pass. From there
+neither path loads images itself: the reference trainer and the verified
+path's generated shim both call
 \texttt{tfds.load('imagenet2012', split=\ldots, data\_dir=\ldots)} and
-streams through \texttt{tfds.as\_numpy}, so TFDS's \texttt{tf.data}
+stream through \texttt{tfds.as\_numpy}, so TFDS's \texttt{tf.data}
 pipeline carries the loading (parallel shard reads, JPEG decode,
 prefetch, all engineered to scale), and we inherit that performance work
 for free.
 
 \medskip\noindent\textbf{How the ImageNet numbers are validated.} Every
-top-1 and top-5 in this book follows the validation protocol of
-\texttt{timm}'s ``ResNet Strikes Back'' work, which is the reference the
-ImageNet recipes are ported from, so that a number here and a number
-there are answers to the same question. Concretely, four things are
-matched, and each was checked against \texttt{timm} rather than assumed:
+top-1 and top-5 in this book faithfully follows the validation protocol of
+\texttt{timm}'s ``ResNet Strikes Back''
+(\href{https://arxiv.org/abs/2110.00476}{arXiv:2110.00476}), so that a
+number here and a number there are answers to the same question.
+Concretely, four things are matched, and each uses \texttt{timm} as a
+reference:
 
 \begin{itemize}
   \item \textbf{The centre-crop ratio is read from \texttt{timm}'s own
@@ -14540,10 +14543,12 @@ matched, and each was checked against \texttt{timm} rather than assumed:
     downscale ratios ImageNet's validation set spans.
 \end{itemize}
 
-\medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step
-past image classification into the four other task families in the book,
-which are detection, segmentation, language and signal processing, and each
-pulls a dataset of its own:
+\section*{Demo datasets}
+
+The \texttt{demos/} trainers step
+past image classification into the five other task families in the book,
+which are detection, segmentation, language, signal processing and
+physics, and each has a dataset of its own:
 
 \begin{itemize}
   \item \textbf{MSD Task01 (BraTS)} is the segmentation dataset. It is
@@ -14575,36 +14580,45 @@ pulls a dataset of its own:
     binary-black-hole chirp, and the CNN of \S\ref{sec:bestiary_signal}
     (\texttt{gw-detect}) trains on their spectrograms against the matched
     filter's closed form.
+  \item \textbf{The M\"uller--Brown density} is the physics dataset, and
+    nothing is downloaded: the target is the Boltzmann density
+    $\exp(-U/kT)$ on the M\"uller--Brown surface, so
+    \texttt{preprocess\_boltzmann.py} writes what an overdamped Langevin
+    integrator produces in a fixed budget as the training set, an
+    independent draw from the exact density by quadrature as the
+    reference, and the grid the scorer integrates over. The flow-matching
+    generator of \S\ref{sec:bestiary_boltzmann} trains on it.
 \end{itemize}
 
 \noindent Same fetch-and-unpack story as the table above, with one extra
 step: each is tokenized or tiled into the trainer's input format by the
 matching \texttt{preprocess\_*.py} script before the first \texttt{lake exe}
-run.
+run; the strain and the M\"uller--Brown density skip the fetch, because
+that script is where they come from.
 
 \begin{center}
-\small
-\begin{tabular}{@{}l l l p{4.6cm} p{4.2cm}@{}}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l l l p{4.3cm} p{4.0cm}@{}}
 \hline
 Dataset & Abbrev. & Reference & Homepage & Path in repo \\
 \hline
 MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
   \href{http://medicaldecathlon.com/}{\nolinkurl{medicaldecathlon.com}} &
-  \texttt{download\_brats.sh} $\to$ \texttt{data/brats/} \\[2pt]
+  \texttt{download\_brats.sh}\newline $\to$ \texttt{data/brats/} \\[2pt]
 tiny Shakespeare & TShk & Karpathy, 2015 &
   \href{https://github.com/karpathy/char-rnn}{\nolinkurl{github.com/karpathy/char-rnn}} &
-  \texttt{download\_shakespeare.sh} $\to$ \texttt{data/shakespeare/} \\[2pt]
+  \texttt{download\_shakespeare.sh}\newline $\to$ \texttt{data/shakespeare/} \\[2pt]
 TinyStories & TS & Eldan \& Li, 2023 &
   \href{https://huggingface.co/datasets/roneneldan/TinyStories}{\nolinkurl{huggingface.co/datasets/roneneldan/TinyStories}} &
-  \texttt{download\_tinystories.sh} $\to$ \texttt{data/tinystories/} \\[2pt]
+  \texttt{download\_tinystories.sh}\newline $\to$ \texttt{data/tinystories/} \\[2pt]
 VisDrone-DET2019 & VisD & Zhu et al., 2021 &
   \href{https://github.com/VisDrone/VisDrone-Dataset}{\nolinkurl{github.com/VisDrone/VisDrone-Dataset}} &
-  \texttt{download\_visdrone.sh} $\to$ \texttt{data/visdrone/} \\[2pt]
+  \texttt{download\_visdrone.sh}\newline $\to$ \texttt{data/visdrone/} \\[2pt]
 GWOSC O3a strain & GWOSC & Abbott et al., 2023 &
   \href{https://gwosc.org/}{\nolinkurl{gwosc.org}} &
   \texttt{preprocess\_gw.py} $\to$ \texttt{data/gw/} \\[2pt]
 M\"uller-Brown density & MB & M\"uller \& Brown, 1979 &
-  generated by \texttt{preprocess\_boltzmann.py}, no download &
+  \texttt{preprocess\_boltzmann.py}\newline (generated, no download) &
   \texttt{data/boltzmann/} \\
 \hline
 \end{tabular}
