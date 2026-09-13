@@ -2193,11 +2193,18 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
   -- migrates. Un-migrated binaries ignore it — their backend is still the link
   -- line — so this is correct during the transition and after it.
   let lowerer := if xla then "xla" else "iree"
+  -- The XLA tiers run resident — parameters stay on the device between steps — because that
+  -- is how every chapter transcript ran and what Appendix B's tier times assume (1.3–2× the
+  -- wall clock without it, numerics unchanged). The switch lives in ffi/pjrt_ffi.c and defaults
+  -- off so the Lean loop has no backend branch; a PJRT_FFI_RESIDENT already in the env wins.
+  let resident : Array (String × Option String) ←
+    if xla && (← IO.getEnv "PJRT_FFI_RESIDENT").isNone then pure #[("PJRT_FFI_RESIDENT", some "1")]
+    else pure #[]
   let runEnv ← do
     if ← System.FilePath.pathExists (venvBin / "iree-compile") then
-      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
-             ("LEAN_MLIR_LOWERER", some lowerer)]
-    else pure #[("LEAN_MLIR_LOWERER", some lowerer)]
+      pure (#[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
+              ("LEAN_MLIR_LOWERER", some lowerer)] ++ resident)
+    else pure (#[("LEAN_MLIR_LOWERER", some lowerer)] ++ resident)
   for n in names do
     IO.println s!"\n━━━ {n}: build ━━━"
     let bp ← IO.Process.spawn { cmd := "lake", args := #["build", n] }
@@ -2356,21 +2363,22 @@ script imagenette do
 /-- The ImageNet tier's rows in chapter order, each chapter's side quest right after it (the
     `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
     rows are the ones with chapter numbers; the five side quests have job configs and no number
-    yet. Axis siblings — `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-bf16-4gpu`,
-    `vit-default-emabf16-4gpu`, `selftest` — stay `scripts/supervise.sh`-only.
-    ⚠ `r50-2018-bf16-4gpu` is the 4× 3060 box's conf (cuda13 plugin), named by the book's Track-4
-    table as the job behind its row; on this box its PRECHECK refuses, which is the honest answer. -/
+    yet. Axis siblings — `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
+    `vit-default-4gpu`, `selftest` — stay `scripts/supervise.sh`-only.
+    ⚠ `r50-2018-bf16-4gpu` and `r50-a3-wxclip-bf16-4gpu` are the 4× 3060 box's confs, named by the
+    book's Track-4 table as the jobs behind their rows; on this box their PRECHECK refuses, which is
+    the honest answer. -/
 private def imagenetRows : List (String × String × String) :=
   [ ("r34-default-4gpu",       "resnet34-imagenet-verified",     "Ch. 5  ResNet-34, the 2018 recipe"),
     ("r50-2018-bf16-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, 2018"),
-    ("r50-a3-wxclip-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, RSB-A3 (train@160)"),
+    ("r50-a3-wxclip-bf16-4gpu", "resnet50-imagenet-verified",    "Ch. 5  ResNet-50, RSB-A3 (train@160), bf16"),
     ("mnv2-default-4gpu",      "mobilenetv2-imagenet-verified",  "Ch. 6  MobileNetV2"),
     ("mnv4-default-4gpu",      "mobilenetv4-imagenet-verified",  "Ch. 6  MobileNetV4-Conv-M (side quest)"),
     ("enet-default-4gpu",      "efficientnet-imagenet-verified", "Ch. 7  EfficientNet-B0"),
     ("cnx-default-4gpu",       "convnext-imagenet-verified",     "Ch. 8  ConvNeXt-T"),
     ("cnxs-default-4gpu",      "convnext-s-imagenet-verified",   "Ch. 8  ConvNeXt-S (side quest)"),
     ("cnxb-default-4gpu",      "convnext-b-imagenet-verified",   "Ch. 8  ConvNeXt-B (side quest)"),
-    ("vit-default-4gpu",       "vit-imagenet-verified",          "Ch. 9  ViT-Tiny (DeiT-Ti)"),
+    ("vit-default-emabf16-4gpu", "vit-imagenet-verified",        "Ch. 9  ViT-Tiny (DeiT-Ti), EMA + bf16"),
     ("vits-default-g512-4gpu", "vit-s-imagenet-verified",        "Ch. 9  ViT-S at DeiT's global 512 (side quest)"),
     ("vitb-default-g512-4gpu", "vit-b-imagenet-verified",        "Ch. 9  ViT-B at DeiT's global 512 (side quest)") ]
 
@@ -2412,14 +2420,14 @@ private def runJobScript (job : String) (args : List String) : IO UInt32 := do
 
 script «r34-default-4gpu»       (args) do runJobScript "r34-default-4gpu" args
 script «r50-2018-bf16-4gpu»     (args) do runJobScript "r50-2018-bf16-4gpu" args
-script «r50-a3-wxclip-4gpu»     (args) do runJobScript "r50-a3-wxclip-4gpu" args
+script «r50-a3-wxclip-bf16-4gpu» (args) do runJobScript "r50-a3-wxclip-bf16-4gpu" args
 script «mnv2-default-4gpu»      (args) do runJobScript "mnv2-default-4gpu" args
 script «mnv4-default-4gpu»      (args) do runJobScript "mnv4-default-4gpu" args
 script «enet-default-4gpu»      (args) do runJobScript "enet-default-4gpu" args
 script «cnx-default-4gpu»       (args) do runJobScript "cnx-default-4gpu" args
 script «cnxs-default-4gpu»      (args) do runJobScript "cnxs-default-4gpu" args
 script «cnxb-default-4gpu»      (args) do runJobScript "cnxb-default-4gpu" args
-script «vit-default-4gpu»       (args) do runJobScript "vit-default-4gpu" args
+script «vit-default-emabf16-4gpu» (args) do runJobScript "vit-default-emabf16-4gpu" args
 script «vits-default-g512-4gpu» (args) do runJobScript "vits-default-g512-4gpu" args
 script «vitb-default-g512-4gpu» (args) do runJobScript "vitb-default-g512-4gpu" args
 
