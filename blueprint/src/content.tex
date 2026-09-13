@@ -359,30 +359,38 @@ function computes the right gradient. Formally that means
 \(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), so
 the backward equals that layer's \(\pdiv\)-Jacobian contracted against
 the incoming cotangent, which the Foundations chapter builds up from
-scratch. Across Chapters~1--9 there are \textbf{40 contracts}, one per
-layer, operator, and whole-network architecture. There are also
-\textbf{8 witnesses}, which are concrete end-to-end instances at specific
-weights, kept in their own column as sanity checks rather than citable
-contracts. Even Chapter~1's toolkit is used straight away by a proven
-model, so no chapter is pure scaffolding.
+scratch. A \emph{contract} is that theorem with the weights of \(f\) left
+as variables, so it holds at every weight setting; there is one per
+function, where a function is a layer, an operator, a block, or a whole
+network at a stated depth (a network at two depths, or per example and at
+batch statistics, is two functions). A \emph{witness} is the same theorem
+at one fixed set of weights: a hand-built tiny instance, a live-shaped one
+at \(224 \times 224\), or the weights a training run produced. It shows
+the contract's hypotheses can be met, and is kept in its own column rather
+than counted as a contract. A theorem that only restates a counted one at
+fixed dimensions or over the committed spec, and a smooth-point form that
+a later global theorem superseded, is not counted again. Across
+Chapters~1--9 there are \textbf{44 contracts} and \textbf{16 witnesses}.
+Even Chapter~1's toolkit is used straight away by a proven model, so no
+chapter is pure scaffolding.
 
 \begin{center}
 \small
-\begin{tabular}{l c c l}
+\begin{tabular}{l c c p{9cm}}
 \hline
 Chapter & Contracts & Witnesses & New primitive / result \\
 \hline
-1 (MNIST: linear) & 1 & --- & dense, softmax-CE, \texttt{mnistLinear}: the whole classifier \\
-2 (MNIST: 1D)    & 2 & 1   & ReLU, MLP \\
-3 (MNIST: 2D)    & 3 & 4   & conv2d, maxPool2, whole-net MNIST CNN \\
-4 (CIFAR: BN)    & 4 & 1   & per-channel BN (flat $+$ NCHW), CIFAR whole-nets $\pm$BN \\
-5 (ResNet-34)    & 9 & 1   & residual ($+$proj), GAP, stride-2 conv, block/stage, whole-net \texttt{cnn} \\
-6 (MobileNetV2)  & 3 & 1   & depthwise (stride 1$+$2), whole-net \texttt{mobilenetv2} \\
-7 (EfficientNet) & 5 & --- & swish, SE, whole-net $\times$2, \textbf{full B0} (16 MBConv blocks) \\
-8 (ConvNeXt)     & 7 & --- & GELU, LayerNorm, layer-scale, whole-net $\times$2, \textbf{full ConvNeXt-T} \\
-9 (ViT)         & 6 & --- & MHSA, block, depth-2 ($\times$2 LN forms), \textbf{every depth $k$}, \texttt{vit\_full} \\
+1 (MNIST: linear) & 1  & --- & dense, softmax-CE, \texttt{mnistLinear}: the whole classifier \\
+2 (MNIST: 1D)     & 2  & 2   & ReLU, MLP; witnesses hand-built and at trained weights \\
+3 (MNIST: 2D)     & 3  & 4   & conv2d, maxPool2, whole-net MNIST CNN; three hand-built witnesses and one at trained weights \\
+4 (CIFAR: BN)     & 6  & 1   & per-channel BN (flat $+$ NCHW), CIFAR whole-nets $\pm$BN at 2 and at 8 convs \\
+5 (ResNet-34)     & 11 & 6   & residual ($+$proj), GAP, stride-2 conv ($+$its weight grad), strided block, stage, whole-net \texttt{cnn}; \textbf{full-depth ResNet-34 and ResNet-50} at batch statistics; live-shaped witnesses up to $224 \times 224$ \\
+6 (MobileNetV2)   & 6  & 3   & depthwise (stride 1$+$2); \texttt{mobilenetv2} at representative depth and at \textbf{all 17 blocks}, per example and at batch statistics; \textbf{\mbox{MobileNetV4}} at full depth \\
+7 (EfficientNet)  & 4  & --- & swish, SE, whole-net at representative depth, \textbf{full B0} (16 \mbox{MBConv} blocks) \\
+8 (ConvNeXt)      & 5  & --- & GELU, LayerNorm, layer-scale, whole-net at representative depth, \textbf{full ConvNeXt-T} (18 blocks) \\
+9 (ViT)           & 6  & --- & MHSA, block, depth-2 ($\times$2 LN forms), \textbf{every depth $k$} (ViT-Tiny is $k = 12$), \texttt{vit\_full} \\
 \hline
-                 & \textbf{40} & \textbf{8} & total \textbf{48} \\
+                  & \textbf{44} & \textbf{16} & total \textbf{60} \\
 \hline
 \end{tabular}
 \end{center}
@@ -6178,7 +6186,7 @@ and about thirty-five minutes of GPU time:
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
 lake build mobilenetv2-verified-adam
-./.lake/build/bin/mobilenetv2-verified-adam data
+PJRT_FFI_RESIDENT=1 ./.lake/build/bin/mobilenetv2-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -7454,7 +7462,7 @@ commands, and about forty minutes of GPU time:
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
 lake build efficientnet-verified-adam
-./.lake/build/bin/efficientnet-verified-adam data
+PJRT_FFI_RESIDENT=1 ./.lake/build/bin/efficientnet-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -15122,7 +15130,8 @@ in the book.
 };
 \node[final] (r34) at (-9.0, -8.0) {
   \textbf{Full ResNet-34} \\
-  (NetSpec composition)
+  \texttt{resnet34ForwardB\_full\_} \\
+  \texttt{has\_vjp\_at\_correct}
 };
 
 % Middle pillar: EfficientNet (shifted south to clear shared-arrow lines)
@@ -15136,7 +15145,7 @@ in the book.
 };
 \node[final] (enet) at (-2.5, -9.4) {
   \textbf{Full EfficientNet-B0} \\
-  (NetSpec composition)
+  \texttt{efficientnetForwardB\_full\_has\_vjp\_correct}
 };
 
 % Right pillar: ViT
@@ -15163,8 +15172,8 @@ in the book.
   \texttt{vit\_body\_has\_vjp\_mat}
 };
 \node[final] (vit) at (5.75, -9.4) {
-  \textbf{Full ViT} \\
-  \texttt{vit\_full\_has\_vjp}
+  \textbf{Full ViT-Tiny (12 blocks)} \\
+  \texttt{vitTiny\_has\_vjp\_correct}
 };
 
 % Foundation -> R34 primitives. Arrow to Ch 3 routes via cnn.east so it
@@ -15214,9 +15223,11 @@ just the elaborator, accepts them with no project axioms.
 
 \subsection{Trust kernel}
 
-The Verified VJP Proofs suite proves \textbf{70 VJP correctness
-theorems}, one per layer, operator, and whole-network architecture,
-each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), on
+The Verified VJP Proofs suite proves \textbf{67 VJP correctness
+theorems}: the 44 contracts and 16 witnesses of the table in \emph{How
+this book is organized}, their restatements at fixed dimensions and over
+the committed specs, and the two smooth-point forms that global theorems
+superseded, each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), on
 top of the foundation \(\pdiv\) calculus and the
 differentiability/forward/witness machinery they rest on, plus the 41
 architecture definitions in the bestiary --- and \textbf{zero project
