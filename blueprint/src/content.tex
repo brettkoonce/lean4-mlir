@@ -5816,7 +5816,12 @@ GPU & Recipe & BN group & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \noindent Both rows scored over all $50{,}000$ validation images. A3
 normalizes per $512$-image micro-batch because it accumulates
 $4 \times 512$ to reach $2048$; the 2018 row is a true global batch of
-$256$. The architecture lever: against ResNet-34's $74.16\%$ on the same
+$256$. That is \emph{ghost} batch norm (Hoffer, Hubara \& Soudry 2017,
+\href{https://arxiv.org/abs/1705.08741}{arXiv:1705.08741}): the
+statistics come from a fixed sub-batch rather than the whole batch, here
+as a side effect of accumulation rather than a choice, and the group size
+is a knob of its own that \S\ref{sec:r50_a2_a1_cost} returns to. The
+architecture lever: against ResNet-34's $74.16\%$ on the same
 recipe, the bottleneck is worth $+2.79$ points. The recipe lever: A3 adds
 $+1.31$ on the same network, in less wall clock, because it trains at
 $160^2$. It also clears the paper's $78.1\%$ and the $78.05\%$ that
@@ -6046,13 +6051,13 @@ A3 is the cheap tier. The other two are recipes --- \texttt{a2-accum} and
 \texttt{a1} --- and both now render on the verified path:
 
 \begin{center}
-\begin{tabular}{@{}l c c l l l@{}}
+\begin{tabular}{@{}l c c l l@{}}
 \hline
-tier & epochs & train res & verified render & verified wall clock & top-1 \\
+tier & epochs & train res & verified render & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $22.8$ hr (bf16, measured) & $\mathbf{77.98\%}$ \\
-A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $\sim$95 hr (bf16) & $79.8\%$ (paper) \\
-A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $\sim$190 hr (bf16) & $80.4\%$ (paper) \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run (\S\ref{sec:r50_a3_vs_2018}) & $\mathbf{77.98\%}$ \\
+A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $79.8\%$ (paper) \\
+A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
@@ -6076,7 +6081,7 @@ is run:
 BCE-with-logits over Mixup/CutMix soft labels
   & Repeated augmentation is stream-level, not per-batch \\[2pt]
 Accumulation to LAMB's design batch of $2048$, at $k=8$ or at the reference's own $k=4$
-  & Nothing trained --- no epoch of either tier has run here \\[2pt]
+  & Neither tier has been run yet \\[2pt]
 \textbf{Model EMA} at decay $0.9999$ --- a \emph{fifth} blob region, $[\theta|m|v|G|E]$
   & \\[2pt]
 \textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
@@ -6113,33 +6118,6 @@ take the first half of that gap}: $k=4$ at $128$ per device is the reference's o
 factorisation, and it is the \emph{faster} arrangement besides. The last $4\times$ needs synchronised batch-norm --- a new operator,
 a changed backward, a variance that does not average, and $53$ collectives a
 step.
-
-\medskip\noindent \textbf{And what the JAX-lowerer peers cost}, A3 the control:
-
-\begin{center}
-\begin{tabular}{@{}l r r r r@{}}
-\hline
-JAX tier & train res & ms/step & min/epoch & full schedule \\
-\hline
-A3 (100 ep) & $160$ & $715$     & $7.5$  & $12.4$\,h \\
-A2 (300 ep) & $224$ & $1{,}368$ & $14.3$ & $71.3$\,h (3.0\,d) \\
-A1 (600 ep) & $224$ & $1{,}368$ & $14.3$ & $142.5$\,h (5.9\,d) \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent \textbf{And the verified column is measured, not scaled from theirs.}
-A3's graph runs $191.4$\,ms/step on four cards and the complete A2 at $4\times128$
-bf16 runs $376.9$, while A3's finished run fixes what the trainer adds at
-$38.8$\,ms per $256$ images --- \emph{additive}, since the device figures already
-contain the all-reduce and only the host's blob patch sits outside. That is $19.0$
-verified minutes an epoch, and run backwards it puts A3 itself at $23$ hours.
-
-\medskip\noindent \textbf{And A3 has been run, which is what makes the A2 and A1
-figures worth quoting.} The bf16 render finished in $22.8$ hours at $13.7$
-minutes an epoch, against the $23$ predicted from step timings alone --- an
-error of $0.2$ hours. The A2 and A1 rows are built the same way from the same
-measurements, at a scale where a wrong estimate costs a week.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
