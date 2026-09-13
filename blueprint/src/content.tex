@@ -308,6 +308,10 @@ Let's find out.
 \chapter*{How this book is organized}
 \addcontentsline{toc}{chapter}{How this book is organized}
 
+A short \emph{Foundations} chapter comes first: what a derivative is in
+Mathlib, and why the book tracks vector--Jacobian products rather than
+Jacobians. Everything after assumes it.
+
 \textbf{Part 1: The framework (Chapters 1--9).} One new primitive per
 chapter, proved correct as we go. The first half pins down the
 composition rules (chain, additive fan-in, product) on dense layers,
@@ -321,7 +325,7 @@ started'' is where those commands live.
   \item \textbf{Chapter 1: MNIST: linear classifier.} Chain rule, sum
     rule, and product rule for partial derivatives. Every backward in the
     book is a VJP (vector-Jacobian product) composed from these. This is
-    the book's hardest chapter, because it builds the whole pipeline
+    the book's densest chapter, because it builds the whole pipeline
     (foundation calculus \(\to\) VJP framework \(\to\)
     forward/loss/backward/SGD \(\to\) GPU) and then uses it on the MNIST
     linear classifier, proven and trained. Everything after is just
@@ -378,7 +382,7 @@ model, so no chapter is pure scaffolding.
 \hline
 Chapter & Contracts & Witnesses & New primitive / result \\
 \hline
-1 (Foundation)   & 1 & --- & \texttt{mnistLinear}: the whole classifier \\
+1 (MNIST: linear) & 1 & --- & dense, softmax-CE, \texttt{mnistLinear}: the whole classifier \\
 2 (MNIST: 1D)    & 2 & 1   & ReLU, MLP \\
 3 (MNIST: 2D)    & 3 & 4   & conv2d, maxPool2, whole-net MNIST CNN \\
 4 (CIFAR: BN)    & 4 & 1   & per-channel BN (flat $+$ NCHW), CIFAR whole-nets $\pm$BN \\
@@ -409,16 +413,14 @@ Every theorem and definition in the book carries a
 \texttt{\textbackslash uses\{\}} annotation, so the dependency graph from
 ``which target architecture do I care about?'' back to the foundation
 pieces you need is explicit. We get it for free from doing the proofs in
-Lean. Chapter~1 itself is short enough that the right answer for every
-target is ``just read all of it'' (11 theorems and 1 definition, mostly
-chain rule and fan-in variants). The interesting subsetting decision is
+Lean. Chapter~1 is the one chapter every target reads in full: the
+foundation rules, the dense layer and the loss. The interesting subsetting decision is
 which later chapters to read, and whether you need Chapter~9's
 matrix-machinery section.
 
 \textbf{Target: MLP (Ch~\ref{chap:mlp}).} Ch~1 + Ch~\ref{chap:mlp}.
 The MLP backward pass uses chain rule, additive fan-in, identity,
-and the Dense Jacobians, which are themselves built from this
-chapter's finite-sum, const, and reindex rules.
+and the Dense Jacobians, all of them Chapter~1's.
 
 \textbf{Target: CNN, with or without BN (Ch \ref{chap:cnn}--\ref{chap:bn}).}
 Ch~1 + Ch~\ref{chap:mlp}--\ref{chap:bn}. CNN adds Conv2d and MaxPool
@@ -490,9 +492,9 @@ Concretely, that means:
   \texttt{\textbackslash uses\{\}} annotations that pin down the
   backward pass.
 
-\item \textbf{Chapter 1 is the new material for you.} The
-  tensor-calculus chapter is what the first book didn't have. It's
-  where the gradients get formalized. If you only read one chapter
+\item \textbf{Chapter 1 is the new material for you.} Its first
+  half --- the calculus every later chapter composes --- is what the
+  first book didn't have. It's where the gradients get formalized. If you only read one chapter
   thoroughly, make it this one.
 
 \item \textbf{Training recipe upgraded.} The first book's codegen
@@ -547,13 +549,11 @@ this one accessor.
 
 Because \(\pdiv\) is defined from \(\fderiv\) rather than assumed, the
 structural rules of chain, sum, and product are theorems proved from
-Mathlib's API rather than axioms we ask you to trust. Earlier drafts of
-this book took the other route and axiomatized those eight rules as
-opaque facts. The current foundation flips that, and every later-chapter
-axiom has been pruned the same way. \(\texttt{conv2d}\), multi-head SDPA,
-patch embedding, the BN inverse-stddev broadcast, GELU, the softmax
-Jacobian, and every transformer-level composition chain are defined
-concretely and proved from the foundation. The cost is mild, because a
+Mathlib's API rather than axioms we ask you to trust, and the same holds
+all the way up: \(\texttt{conv2d}\), multi-head SDPA, patch embedding,
+the BN inverse-stddev broadcast, GELU, the softmax Jacobian, and every
+transformer-level composition chain are defined concretely and proved
+from the foundation. The cost is mild, because a
 \(\Differentiable\) hypothesis propagates through each chapter. The
 benefit is that \(\texttt{\#print axioms vit\_full\_has\_vjp}\) bottoms
 out at Lean core (\texttt{propext}, \texttt{Classical.choice},
@@ -679,7 +679,7 @@ and product, and three VJP record types (\(\HasVJP\),
 \(\HasVJPMat\), \(\HasVJPthree\), one per tensor rank) that bundle a
 backward function with its correctness claim.
 
-This is the technically hardest chapter in the book, by design. Going
+This is the densest chapter in the book, by design. Going
 from nothing to a complete trained model is the entire machinery, and we
 build all of it here: the \(\pdiv\) calculus, the VJP framework, a
 forward pass, a loss, a backward pass, an SGD step, all the way down to
@@ -755,7 +755,7 @@ the cleanest baseline in the book to start from.
 
 \section{How it works}
 
-The next twelve theorems all reduce to a single definition
+The theorems of this chapter all reduce to a single definition
 (\(\pdiv\)) plus chain rule, sum rule, and product rule. Before
 we drop you into the deep end, here's the shape of what's coming:
 
@@ -964,6 +964,8 @@ Mechanical; see \leandocref{Proofs.pdiv\_id}.
   \lean{Proofs.pdiv_const}
   \leanok
   \uses{ax:pdiv}
+  \(\pdiv(\lambda\_.\; c)\, x\, i\, j = 0\) for any constant
+  \(c \in \Vect{n}\).
 \end{theorem}
 
 \begin{proof}
@@ -1177,11 +1179,342 @@ the chain rule for \(\pdiv\).}
   \lean{Proofs.identity_has_vjp}
   \leanok
   \uses{ax:pdiv, ax:pdiv_id, def:hasvjp}
+  \(\HasVJP\, \mathrm{id}\), with backward \(B(x, dy) = dy\): the
+  identity passes the upstream gradient through unchanged.
 \end{theorem}
 
 \begin{proof}
 \leanok
 Mechanical; see \leandocref{Proofs.identity\_has\_vjp}.
+\end{proof}
+
+\prosesection{The dense layer}
+
+Everything above is machinery. Here is the first layer it is used on,
+and the one every network in this book ends in.
+
+A neural network is a long chain of functions, and ``training'' means
+using the partials of those functions to nudge their parameters in a
+direction that reduces a loss. Two different motions, and this book
+keeps two words for them: you \emph{nudge} a parameter to move the loss,
+and you \emph{jiggle} an input to find out what would move it. Every
+theorem from here to the end of the book is the answer to the same
+question, asked about a different building block: \emph{if I jiggle
+this input by} \(\varepsilon\), \emph{how does the output jiggle?}
+
+For a scalar function \(f : \mathbb{R} \to \mathbb{R}\) the answer is
+one number, the derivative. A layer takes \(n\) numbers in and puts
+\(m\) numbers out, so the full picture of how every output coordinate
+responds to every input coordinate is an \(m \times n\) table of slopes,
+one per (output, input) pair. That table is the Jacobian, and
+\(\pdiv\) above is one entry of it at a chosen \((i, j)\).
+
+Our smallest building block is a dense (or ``fully connected'')
+layer: \(y = Wx + b\), where \(W\) is an \(m \times n\) weight
+matrix, \(x\) is an \(n\)-vector, and \(b\) is an \(m\)-vector.
+Pick any output coordinate \(y_j\) and write it out:
+
+\[
+y_j = \sum_{k=1}^{n} W_{jk}\, x_k + b_j.
+\]
+
+Now jiggle \(x_i\) by \(\varepsilon\). Of the \(n\) terms in the
+sum, only the \(k = i\) term notices, and it changes by
+\(W_{ji}\,\varepsilon\). So \(\partial y_j / \partial x_i = W_{ji}\).
+The Jacobian of \(y = Wx + b\) with respect to \(x\) \emph{is the
+weight matrix \(W\) itself}. No new structure and no surprise, because the
+Jacobian of a linear map is the linear map, written as a matrix.
+
+The same exercise for the partial with respect to \(W\) gives an
+analogous answer: the dependence is local, and the entries of the
+Jacobian are just \(x_{i'}\, \delta_{jj'}\). These two, the
+input-Jacobian and the weight-Jacobian, are the only objects a dense
+layer needs.
+
+Training does not multiply Jacobians together. What it wants is the
+Jacobian transposed and applied to the upstream gradient \(dy\), which
+is the VJP of Definition~\ref{def:hasvjp}, and for a dense layer the
+three answers fall out by transposing the picture above:
+\[
+  dx = W^\top dy, \qquad dW = dy \otimes x, \qquad db = dy.
+\]
+
+One convention to fix before the theorems, because the prose and the
+Lean write the weight matrix two ways. The prose writes \(y = Wx + b\)
+with \(W\) output-major, so the input gradient is \(dx = W^{\top} dy\).
+The Lean stores \(W\) input-major ---
+\(\mathrm{dense}(W, b)\, x\, j = \sum_i x_i W_{ij} + b_j\), which is what
+the \texttt{dense} listing in the introduction says --- so the same
+gradient reads \(B(x, dy) = W\, dy\) in Theorem~\ref{thm:dense_has_vjp},
+and in the MLIR it is a contraction over the output axis of both
+operands. One transpose, three spellings.
+
+\begin{theorem}[Dense Jacobian wrt input]
+  \label{ax:pdiv_dense}
+  \lean{Proofs.pdiv_dense}
+  \leanok
+  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
+  For the dense layer
+  \(\mathrm{dense}(W, b)\, x = \lambda j.\; \bigl(\sum_i x_i\, W_{ij}\bigr) + b_j\):
+  \[
+    \pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j = W_{ij}.
+  \]
+  No hypotheses: dense is affine, so the differentiability obligations
+  are discharged inside the proof rather than assumed.
+\end{theorem}
+
+\begin{proof}
+\leanok
+\emph{Sketch: factor the layer as (finite sum of bilinear summands) +
+constant, distribute \(\pdiv\), apply the product rule per summand,
+collapse the Kronecker \(\delta\). Every foundation rule from
+Chapter~1 except the chain rule fires exactly once.}
+\begin{enumerate}
+  \item \(\pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j
+          = \pdiv\bigl(\lambda y\, j'.\, \textstyle\sum_{i'} y_{i'} W_{i'j'}\bigr)\, x\, i\, j\).
+    \pf{Split the layer as \(\bigl(\sum_{i'} \cdots\bigr) + (\text{const } b)\)
+    and apply the sum rule (Theorem~\ref{ax:pdiv_add}) and the constant
+    rule (Theorem~\ref{ax:pdiv_const}). Their differentiability
+    hypotheses hold because each summand
+    \(y \mapsto y_{i'} \cdot W_{i'j'}\) is (reindex)\,\(\times\)\,(constant)
+    --- differentiable since reindexing is a continuous linear map ---
+    and the finite sum inherits differentiability
+    (\texttt{DifferentiableAt.fun\_sum}).}
+  \item \(\prev = \sum_{i'} \pdiv\bigl(\lambda y\, j'.\,
+          y_{i'} \cdot W_{i'j'}\bigr)\, x\, i\, j\).
+    \pf{Finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}), with the
+    same per-summand differentiability.}
+  \item For each \(i'\):
+    \(\pdiv\bigl(\lambda y\, j'.\, y_{i'} \cdot W_{i'j'}\bigr)\, x\, i\, j
+      = \delta_{i i'} \cdot W_{i'j}\).
+    \pf{Product rule (Theorem~\ref{ax:pdiv_mul}) on
+    (reindex)\,\(\times\)\,(constant); the reindex Jacobian
+    (Theorem~\ref{ax:pdiv_reindex}) with \(\sigma = \lambda\_.\, i'\)
+    contributes the \(\delta\), the constant factor's Jacobian
+    vanishes (Theorem~\ref{ax:pdiv_const}); case split on \(i = i'\).}
+  \item \Qed{}
+    \pf{Substitute 3 into 2: \(\sum_{i'} \delta_{i i'} W_{i'j} = W_{ij}\)
+    (\texttt{Finset.sum\_ite\_eq}); with 1 this is the goal.}
+\end{enumerate}
+\end{proof}
+
+\begin{theorem}[Dense Jacobian wrt weight]
+  \label{ax:pdiv_dense_W}
+  \lean{Proofs.pdiv_dense_W}
+  \leanok
+  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
+  The symmetric counterpart of
+  Theorem~\ref{ax:pdiv_dense}, differentiating in \(W\) instead of
+  \(x\). Since \(\pdiv\) works on vectors, view the layer as a function
+  of the \emph{flattened} weights: for \(v \in \Vect{m \cdot n}\), let
+  \(F(v) := \mathrm{dense}(\mathrm{unflatten}\, v,\, b)\, x\), and write
+  \(\varphi\) for the index bijection
+  \((i, j) \leftrightarrow \varphi(i, j)\) (\texttt{finProdFinEquiv}).
+  \Prove{} for all \(i, j', j\):
+  \[
+    \pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j')\, j
+      = \delta_{jj'}\, x_i.
+  \]
+\end{theorem}
+
+\begin{proof}
+\leanok
+\emph{Sketch: same skeleton as Theorem~\ref{ax:pdiv_dense} --- split,
+distribute, product rule, collapse --- with the reindex step now going
+through the flatten bijection.}
+\begin{enumerate}
+  \item \(F(v)_{j_o} = \bigl(\sum_{i'} x_{i'} \cdot v_{\varphi(i', j_o)}\bigr) + b_{j_o}\).
+    \pf{Unfold \(\mathrm{dense}\) and \(\mathrm{unflatten}\).}
+  \item \(\pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j')\, j
+          = \pdiv\bigl(\lambda w\, j_o.\, \textstyle\sum_{i'}
+            x_{i'} \cdot w_{\varphi(i', j_o)}\bigr)\,
+            (\mathrm{flatten}\, W)\, \varphi(i, j')\, j\).
+    \pf{Drop the constant bias: sum rule (Theorem~\ref{ax:pdiv_add})
+    and constant rule (Theorem~\ref{ax:pdiv_const}); each summand is
+    (constant)\,\(\times\)\,(reindex), differentiable, and the finite
+    sum inherits differentiability (\texttt{DifferentiableAt.fun\_sum}).}
+  \item \(\prev = \sum_{i'} \pdiv\bigl(\lambda w\, j_o.\,
+          x_{i'} \cdot w_{\varphi(i', j_o)}\bigr)\,
+          (\mathrm{flatten}\, W)\, \varphi(i, j')\, j\).
+    \pf{Finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}).}
+  \item For each \(i'\): the summand equals
+    \(\text{if } i = i' \wedge j' = j \text{ then } x_i \text{ else } 0\).
+    \pf{Product rule (Theorem~\ref{ax:pdiv_mul}) on
+    (constant \(x_{i'}\))\,\(\times\)\,(reindex
+    \(\sigma = \lambda j_o.\, \varphi(i', j_o)\)); the constant
+    factor's Jacobian vanishes (Theorem~\ref{ax:pdiv_const}), and the
+    reindex Jacobian (Theorem~\ref{ax:pdiv_reindex}) is \(1\) exactly
+    when \(\varphi(i, j') = \varphi(i', j)\), which by injectivity of
+    \(\varphi\) is \(i = i' \wedge j' = j\).}
+  \item \Qed{}
+    \pf{Sum 4 over \(i'\): if \(j' = j\) the Kronecker condition picks
+    the single term \(x_i\) (\texttt{Finset.sum\_ite\_eq}); if
+    \(j' \neq j\) every term is \(0\). Both match
+    \(\delta_{jj'}\, x_i\); with 2 and 3 this is the goal.}
+\end{enumerate}
+\end{proof}
+
+\begin{theorem}[Dense VJP]
+  \label{thm:dense_has_vjp}
+  \lean{Proofs.dense_has_vjp}
+  \leanok
+  \uses{ax:pdiv_dense, def:hasvjp}
+  \(\HasVJP\, \bigl(\mathrm{dense}(W, b)\bigr)\): the input-gradient
+  backward of a dense layer is multiplication by \(W\).
+\end{theorem}
+
+\begin{proof}
+\leanok
+\begin{enumerate}
+  \item Define \(B(x, dy) := W\, dy\), i.e.\
+    \(B(x, dy)_i = \sum_j W_{ij}\, dy_j\).
+  \item \Suffices{} for all \(x\), \(dy\), \(i\):
+    \(B(x, dy)_i = \sum_j
+      \pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j \cdot dy_j\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \Qed{}
+    \pf{The Dense Jacobian (Theorem~\ref{ax:pdiv_dense}) gives
+    \(\pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j = W_{ij}\);
+    substituting into 2 leaves exactly \(\sum_j W_{ij}\, dy_j
+    = B(x, dy)_i\).}
+\end{enumerate}
+\end{proof}
+
+\begin{theorem}[Dense weight gradient is the outer product]
+  \label{thm:dense_weight_grad_correct}
+  \lean{Proofs.dense_weight_grad_correct}
+  \leanok
+  \uses{ax:pdiv_dense_W}
+  \(dW = x \otimes dy\), with \(F\) and \(\varphi\) as in
+  Theorem~\ref{ax:pdiv_dense_W},
+  \Prove{} for all \(i, j\):
+  \[
+    (x \otimes dy)_{ij}
+      = \sum_k \pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j)\, k \cdot dy_k.
+  \]
+\end{theorem}
+
+\begin{proof}
+\leanok
+\begin{enumerate}
+  \item Each summand:
+    \(\pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j)\, k \cdot dy_k
+      = (\text{if } k = j \text{ then } x_i \text{ else } 0) \cdot dy_k\).
+    \pf{Dense Jacobian wrt weight (Theorem~\ref{ax:pdiv_dense_W}).}
+  \item \Qed{}
+    \pf{The sum in 1 collapses at \(k = j\)
+    (\texttt{Finset.sum\_eq\_single}) to \(x_i \cdot dy_j\), which is
+    \((x \otimes dy)_{ij}\) by definition of the outer product.}
+\end{enumerate}
+\end{proof}
+
+\begin{theorem}[Dense bias gradient is identity]
+  \label{thm:dense_bias_grad_correct}
+  \lean{Proofs.dense_bias_grad_correct}
+  \leanok
+  \uses{ax:pdiv_add, ax:pdiv_const, ax:pdiv_id}
+  \(db = dy\).
+  \Prove{} for all \(i\):
+  \[
+    dy_i = \sum_j \pdiv\bigl(b' \mapsto \mathrm{dense}(W, b')\, x\bigr)\, b\, i\, j \cdot dy_j.
+  \]
+\end{theorem}
+
+\begin{proof}
+\leanok
+\begin{enumerate}
+  \item \(\pdiv\bigl(b' \mapsto \mathrm{dense}(W, b')\, x\bigr)\, b\, i\, j
+          = \delta_{ij}\).
+    \pf{As a function of \(b'\), the layer is
+    \((\text{constant in } b') + b'\): sum rule
+    (Theorem~\ref{ax:pdiv_add}), constant rule
+    (Theorem~\ref{ax:pdiv_const}), and identity Jacobian
+    (Theorem~\ref{ax:pdiv_id}). (This is the Lean lemma
+    \texttt{pdiv\_dense\_b}.)}
+  \item \Qed{}
+    \pf{Substitute 1: \(\sum_j \delta_{ij}\, dy_j = dy_i\)
+    (\texttt{Finset.sum\_eq\_single}).}
+\end{enumerate}
+\end{proof}
+
+\prosesection{The loss}
+
+The last building block is the loss: softmax cross-entropy between
+the model's output \(z \in \mathbb{R}^{10}\) and the true class
+label \(y \in \{0, \ldots, 9\}\). The full computation is
+
+\[
+L(z, y) = -\log \frac{e^{z_y}}{\sum_k e^{z_k}}.
+\]
+
+The loss is a scalar, so its Jacobian with respect to \(z\) is a
+\emph{vector}, not a matrix. Working through the algebra (chain
+rule on \(-\log \circ \mathrm{softmax}\) at the label index)
+produces a remarkably clean answer:
+
+\[
+\frac{\partial L}{\partial z} = \mathrm{softmax}(z) - \mathrm{onehot}(y).
+\]
+
+The gradient of the loss is the difference between the model's
+predicted distribution and the truth. Theorem
+\ref{ax:softmaxCE_grad} makes this formal. Its one ingredient from
+outside this chapter is the softmax Jacobian, which is proved in
+Chapter~\ref{chap:attention} alongside the rest of the softmax
+machinery and used here as a finished fact.
+
+\begin{theorem}[Softmax cross-entropy gradient]
+  \label{ax:softmaxCE_grad}
+  \lean{Proofs.softmaxCE_grad}
+  \leanok
+  \uses{ax:pdiv, ax:pdiv_softmax}
+  Write \(p := \mathrm{softmax}(z)\) and
+  \(\mathrm{CE}(z, \ell) := -\log p_\ell\) (viewed as
+  \(\Vect{1}\)-valued so \(\pdiv\) applies; we read off the only
+  output coordinate).
+  \Prove{} for all \(j\):
+  \[
+    \pdiv\bigl(\mathrm{CE}(\cdot, \ell)\bigr)\, z\, j\, 0
+      = p_j - \mathrm{onehot}(\ell)_j.
+  \]
+\end{theorem}
+
+\begin{proof}
+\leanok
+\emph{Sketch: chain rule on \(-\log \circ (z \mapsto p_\ell)\), with
+the softmax Jacobian (proved in Ch~\ref{chap:attention}) supplying the
+inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
+\(p_\ell\) the Jacobian produces.}
+\begin{enumerate}
+  \item \(p_\ell > 0\), in particular \(p_\ell \neq 0\).
+    \pf{\(p_\ell\) is a positive exponential over a positive finite
+    sum of exponentials.}
+  \item \(\pdiv\bigl(\mathrm{CE}(\cdot, \ell)\bigr)\, z\, j\, 0
+          = \fderiv_{\R}\,\bigl(z' \mapsto \mathrm{CE}(z', \ell)\bigr)\, z\, (\basisVec_j)\).
+    \pf{Definition~\ref{ax:pdiv}; the \(\Vect{1}\) wrapper just
+    evaluates the single output coordinate (\texttt{fderiv\_apply}),
+    legitimate because the wrapper is differentiable ---
+    \(\mathrm{softmax}\) is differentiable and \(\log\) is
+    differentiable away from \(0\), which 1 grants.}
+  \item \(\fderiv_{\R}\,\bigl(z' \mapsto \mathrm{CE}(z', \ell)\bigr)\, z
+          = -\bigl(p_\ell^{-1} \cdot
+            \fderiv_{\R}\,(z' \mapsto \mathrm{softmax}(z')_\ell)\, z\bigr)\).
+    \pf{\(\mathrm{CE}(\cdot, \ell) = -\log \circ
+    (z' \mapsto \mathrm{softmax}(z')_\ell)\);
+    \texttt{HasFDerivAt.log} with 1 differentiates the \(\log\), then
+    negate.}
+  \item \(\fderiv_{\R}\,(z' \mapsto \mathrm{softmax}(z')_\ell)\, z\, (\basisVec_j)
+          = \pdiv(\mathrm{softmax})\, z\, j\, \ell
+          = p_\ell\,(\delta_{j\ell} - p_j)\).
+    \pf{Definition~\ref{ax:pdiv}, then the softmax Jacobian
+    (Theorem~\ref{ax:pdiv_softmax}).}
+  \item \Qed{}
+    \pf{Chain 2--4:
+    \(-p_\ell^{-1} \cdot p_\ell\,(\delta_{j\ell} - p_j)
+      = p_j - \delta_{j\ell}\), cancelling by 1; and
+    \(\mathrm{onehot}(\ell)_j = \delta_{j\ell}\) by definition.}
+\end{enumerate}
 \end{proof}
 
 \section{Example: MNIST linear classifier}
@@ -1323,10 +1656,10 @@ product:
   \nabla_b \ell = \hat{y} - e_t
 \]
 where \(e_t \in \R^{10}\) is the one-hot vector for the true
-class. Ch~1's theorems (chain rule + identity Jacobian/VJP) plus
-the Dense Jacobian and softmax-CE gradient (formalized in
-Ch~\ref{chap:mlp}, both themselves proved from this chapter's
-foundation rules) are what guarantee these formulas are correct. The
+class. The dense VJP and its weight and bias gradients
+(Theorems~\ref{thm:dense_has_vjp}--\ref{thm:dense_bias_grad_correct})
+and the softmax-CE gradient (Theorem~\ref{ax:softmaxCE_grad}) above are
+what guarantee these formulas are correct. The
 verified renderer emits exactly these as fused StableHLO, and that
 rendering is \texttt{verified\_mlir/linear\_train\_step.mlir}, the file
 the run at the top of the chapter compiled.
@@ -1337,11 +1670,11 @@ The run at the top of this chapter is this network. Accuracy climbs from
 essentially flat from epoch~9 on, which is what a model with no hidden
 layer looks like once it has learned everything it can. Adding hidden
 layers and ReLU in Chapter~\ref{chap:mlp} takes the same dataset and the
-same recipe to 97.83\%. That gap of about 5.7 points is the value of
+same recipe to 97.81\%. That gap of about 5.7 points is the value of
 non-linearity on this task.
 
 \paragraph{Where this goes.}
-Every architecture in Part~2 extends this template the same way, one
+Every architecture in Part~1 extends this template the same way, one
 new primitive at a time:
 
 \begin{itemize}
@@ -1748,51 +2081,27 @@ loop counts epochs and slices batches. It never computes a gradient or
 touches a tensor. The lone \texttt{train\_step} call is the function
 above, and it is the only place arithmetic happens.
 
-\medskip\noindent\textbf{Where this stands.} The scheme above covers more
-than the linear classifier. The shallow chapters' train steps (MLP, CNN,
-CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures are
-proved at full architecture: ResNet-34, MobileNetV2, EfficientNet-B0,
-ConvNeXt-T, and ViT. That means machine-checked forward graphs
-throughout, whole-network backward at full depth, the non-triviality seal
-at full depth for all five (which is that the proven backward is nonzero
-at a witness), and three classical axioms.
-All five committed training steps were then re-rendered
-at the production trainers' exact signatures and \emph{tied}: every parameter
-update is proved to consume the cotangent its own backward pass delivers,
-threaded through the real forward, and each agrees on GPU to float rounding. There is one open gap, and it is narrower than it used to be. The
-theorems are over $\mathbb{R}$; the GPU runs a finite precision. What sits
-between them is not a \texttt{float32}-specific argument but a budget over
-an arbitrary rounding model (\S~\ref{sec:precision}), which
-\texttt{float32}, bf16-mixed and fp8-E4M3 all instantiate. Part~II's bestiary is deliberately lighter,
-decomposed into the same proved primitives but not carried to whole-step
-closes. The book's official claim is exactly this, no more and no less:
-\emph{every architecture in Part~I trained end-to-end under one
-machine-checked scheme}.
+\medskip\noindent\textbf{Where this stands.} The scheme above is the one
+every architecture in Part~I trains under, and the book's official claim
+is exactly this, no more and no less: \emph{every architecture in Part~I
+trained end-to-end under one machine-checked scheme}. The one open gap
+is that the theorems are over \(\mathbb{R}\) and the GPU runs a finite
+precision; \S~\ref{sec:precision} is the budget that sits between them,
+and Appendix~\ref{app:verification} carries the rest of the accounting.
 
 \chapter{MNIST: 1D MLP}
 \label{chap:mlp}
 
-\prosesection{The pdiv we built last chapter, now applied}
+\prosesection{One layer learned; now stack them}
 
-In Chapter \ref{chap:tensor} we defined a function \(\pdiv\) that
-captures the partial derivative of any sufficiently smooth function.
-We proved that three structural rules, chain and sum and product, suffice
-to compose new partials out of old ones. That was machinery without
-a target. This chapter picks the target: we're going to compute
-the partial derivative of every component of a small image classifier,
-end-to-end, and the goal is for that classifier to come out the other
-side able to recognize handwritten digits.
-
-To say the same thing more concretely: a neural network is a long
-chain of functions, and ``training'' means using the partials of
-those functions to nudge their parameters in a direction that
-reduces a loss. Two different motions, and this book keeps two words for
-them: you \emph{nudge} a parameter to move the loss, and you
-\emph{jiggle} an input to find out what would move it. Every theorem in
-this chapter is the answer to
-the same question, asked about a different building block:
-\emph{if I jiggle this input by} \(\varepsilon\), \emph{how does the
-output jiggle?}
+Chapter~\ref{chap:tensor} built the calculus, proved the dense layer's
+backward pass, and trained it. A single dense layer is a linear map, and
+a linear map can only cut pixel space with flat boundaries. This chapter
+adds the two things a hidden layer needs: a non-linearity between the
+dense layers, ReLU, and the chain rule applied more than once. Every
+theorem here is the same question as before --- \emph{if I jiggle this
+input by} \(\varepsilon\), \emph{how does the output jiggle?} --- asked
+about ReLU, and then about the whole stack.
 
 \section{Run it first}
 \label{sec:mlp_runit}
@@ -1852,56 +2161,6 @@ for the rest of the book: changing the seed moves these numbers less than
 a single run can pin them down. The interval is the wider of the two, and
 it is the one to check a claimed improvement against.
 
-\prosesection{The Jacobian as multidimensional ``how does it jiggle?''}
-
-For a scalar function \(f : \mathbb{R} \to \mathbb{R}\) the answer
-is a single number: the derivative. For our networks, no function
-is scalar-in scalar-out. The smallest layer maps an input vector
-to an output vector, so \(n\) numbers in and \(m\) numbers out. ``Jiggle
-the input'' now means: pick a direction in \(\mathbb{R}^n\) and push a
-small distance along it. The textbook word for that is a
-\emph{perturbation}, and it is the word
-Appendix~\ref{app:verification} switches to once the size of the jiggle
-has to be \emph{bounded} rather than imagined. Same motion, and the
-informal name is kept here only because nothing yet depends on how big it
-is. ``The output jiggles'' now means: a vector in \(\mathbb{R}^m\). The full picture of \emph{how every output
-coordinate responds to every input coordinate} is an \(m \times n\)
-table of numbers, one slope per (output, input) pair. That table
-is the \textbf{Jacobian}. There is nothing more to it. It is
-just the multidimensional generalization of ``the derivative is
-the slope.''
-
-The previous chapter's \(\pdiv\) is the \emph{one entry} of this
-table at a chosen \((i, j)\). The Jacobian is \(\pdiv\) applied
-across both indices at once, organized so it can be multiplied
-into other matrices later.
-
-\prosesection{The dense layer's Jacobian is the weight matrix}
-
-Our smallest building block is a dense (or ``fully connected'')
-layer: \(y = Wx + b\), where \(W\) is an \(m \times n\) weight
-matrix, \(x\) is an \(n\)-vector, and \(b\) is an \(m\)-vector.
-Pick any output coordinate \(y_j\) and write it out:
-
-\[
-y_j = \sum_{k=1}^{n} W_{jk}\, x_k + b_j.
-\]
-
-Now jiggle \(x_i\) by \(\varepsilon\). Of the \(n\) terms in the
-sum, only the \(k = i\) term notices, and it changes by
-\(W_{ji}\,\varepsilon\). So \(\partial y_j / \partial x_i = W_{ji}\).
-The Jacobian of \(y = Wx + b\) with respect to \(x\) \emph{is the
-weight matrix \(W\) itself}. No new structure and no surprise, because the
-Jacobian of a linear map is the linear map, written as a matrix.
-
-We will do the same exercise for the partial with respect to \(W\),
-and we will get an analogous answer: the dependence is local, the
-entries of the Jacobian are just \(x_{i'}\, \delta_{jj'}\). These
-two, the input-Jacobian and the weight-Jacobian, are the only objects
-we need for a dense layer. Theorems \ref{ax:pdiv_dense} and
-\ref{ax:pdiv_dense_W} below formalize them. We have already done
-the substantive work.
-
 \prosesection{ReLU: the piecewise case}
 
 ReLU is the function \(\mathrm{relu}(x) = \max(x, 0)\) applied
@@ -1916,160 +2175,28 @@ codegen substitutes the standard subgradient convention at the
 kink and we move on. The kink is the only place in the chapter
 where ``differentiable'' becomes slightly subtle.
 
-\prosesection{Softmax cross-entropy: where vectors collapse to a scalar}
+\prosesection{Composition}
 
-The last building block is the loss: softmax cross-entropy between
-the model's output \(z \in \mathbb{R}^{10}\) and the true class
-label \(y \in \{0, \ldots, 9\}\). The full computation is
+A three-layer MLP is
+\(\mathrm{dense}_2 \circ \mathrm{relu} \circ \mathrm{dense}_1 \circ
+\mathrm{relu} \circ \mathrm{dense}_0\). Chapter~\ref{chap:tensor}'s VJP
+chain rule (Theorem~\ref{thm:vjp_comp}) says the backward of a
+composition is the backwards run in reverse order, so the MLP's backward
+is three dense backwards --- each a multiplication by that layer's
+\(W\) --- with ReLU's diagonal mask applied between them. That is the
+structural fact the rest of the book leans on: a network's backward
+pass is its layers' backward passes, composed.
 
-\[
-L(z, y) = -\log \frac{e^{z_y}}{\sum_k e^{z_k}}.
-\]
-
-The loss is a scalar, so its Jacobian with respect to \(z\) is a
-\emph{vector}, not a matrix. Working through the algebra (chain
-rule on \(-\log \circ \mathrm{softmax}\) at the label index)
-produces a remarkably clean answer:
-
-\[
-\frac{\partial L}{\partial z} = \mathrm{softmax}(z) - \mathrm{onehot}(y).
-\]
-
-The gradient of the loss is the difference between the model's
-predicted distribution and the truth. Theorem
-\ref{ax:softmaxCE_grad} makes this formal.
-
-\prosesection{From Jacobians to VJPs}
-
-Training does not multiply Jacobians together directly. The loss
-is a scalar, and the quantity we actually want is ``how does
-\emph{each} parameter affect that scalar?'' That quantity is the
-Jacobian of the loss with respect to the parameters \emph{transposed}
-and applied to the upstream gradient, which is a \textbf{vector-Jacobian
-product}, or VJP. Concretely: the upstream gradient is a vector
-\(dy\), and we want to compute the corresponding \(dx\) and \(dW\).
-For a dense layer the answers fall out by transposing the picture
-we already have:
-
-\[
-dx = W^\top dy, \qquad dW = dy \otimes x, \qquad db = dy.
-\]
-
-The remaining theorems in this chapter
-(\ref{thm:dense_has_vjp} through \ref{ax:mlp_has_vjp}) are the
-formalizations of these identities, plus the proof that VJPs of
-composed layers are themselves VJPs obtained by composing the
-building blocks in reverse order. That last claim is what makes a
-3-layer MLP's backward pass exactly three transposed matrix
-multiplies, and it is the structural fact
-that the rest of the book leans on.
+There is one catch, and it is ReLU's. Theorem~\ref{thm:vjp_comp} asks
+for both functions to be differentiable everywhere, and ReLU is not. So
+the whole-network result is stated \emph{at a point}: wherever no
+pre-activation is exactly zero, the composed backward equals the
+\(\pdiv\)-contracted Jacobian (Theorem~\ref{thm:mlp_has_vjp_at}). The
+canonical witness \texttt{mlp\_has\_vjp}
+(Definition~\ref{ax:mlp_has_vjp}) is the object later chapters name; the
+theorem is what makes naming it a claim.
 
 \section{The theorems}
-
-\begin{theorem}[Dense Jacobian wrt input]
-  \label{ax:pdiv_dense}
-  \lean{Proofs.pdiv_dense}
-  \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  For the dense layer
-  \(\mathrm{dense}(W, b)\, x = \lambda j.\; \bigl(\sum_i x_i\, W_{ij}\bigr) + b_j\):
-  \[
-    \pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j = W_{ij}.
-  \]
-  No hypotheses: dense is affine, so the differentiability obligations
-  are discharged inside the proof rather than assumed.
-\end{theorem}
-
-\begin{proof}
-\leanok
-\emph{Sketch: factor the layer as (finite sum of bilinear summands) +
-constant, distribute \(\pdiv\), apply the product rule per summand,
-collapse the Kronecker \(\delta\). Every foundation rule from
-Chapter~1 except the chain rule fires exactly once.}
-\begin{enumerate}
-  \item \(\pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j
-          = \pdiv\bigl(\lambda y\, j'.\, \textstyle\sum_{i'} y_{i'} W_{i'j'}\bigr)\, x\, i\, j\).
-    \pf{Split the layer as \(\bigl(\sum_{i'} \cdots\bigr) + (\text{const } b)\)
-    and apply the sum rule (Theorem~\ref{ax:pdiv_add}) and the constant
-    rule (Theorem~\ref{ax:pdiv_const}). Their differentiability
-    hypotheses hold because each summand
-    \(y \mapsto y_{i'} \cdot W_{i'j'}\) is (reindex)\,\(\times\)\,(constant)
-    --- differentiable since reindexing is a continuous linear map ---
-    and the finite sum inherits differentiability
-    (\texttt{DifferentiableAt.fun\_sum}).}
-  \item \(\prev = \sum_{i'} \pdiv\bigl(\lambda y\, j'.\,
-          y_{i'} \cdot W_{i'j'}\bigr)\, x\, i\, j\).
-    \pf{Finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}), with the
-    same per-summand differentiability.}
-  \item For each \(i'\):
-    \(\pdiv\bigl(\lambda y\, j'.\, y_{i'} \cdot W_{i'j'}\bigr)\, x\, i\, j
-      = \delta_{i i'} \cdot W_{i'j}\).
-    \pf{Product rule (Theorem~\ref{ax:pdiv_mul}) on
-    (reindex)\,\(\times\)\,(constant); the reindex Jacobian
-    (Theorem~\ref{ax:pdiv_reindex}) with \(\sigma = \lambda\_.\, i'\)
-    contributes the \(\delta\), the constant factor's Jacobian
-    vanishes (Theorem~\ref{ax:pdiv_const}); case split on \(i = i'\).}
-  \item \Qed{}
-    \pf{Substitute 3 into 2: \(\sum_{i'} \delta_{i i'} W_{i'j} = W_{ij}\)
-    (\texttt{Finset.sum\_ite\_eq}); with 1 this is the goal.}
-\end{enumerate}
-\end{proof}
-
-\begin{theorem}[Dense Jacobian wrt weight]
-  \label{ax:pdiv_dense_W}
-  \lean{Proofs.pdiv_dense_W}
-  \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  The symmetric counterpart of
-  Theorem~\ref{ax:pdiv_dense}, differentiating in \(W\) instead of
-  \(x\). Since \(\pdiv\) works on vectors, view the layer as a function
-  of the \emph{flattened} weights: for \(v \in \Vect{m \cdot n}\), let
-  \(F(v) := \mathrm{dense}(\mathrm{unflatten}\, v,\, b)\, x\), and write
-  \(\varphi\) for the index bijection
-  \((i, j) \leftrightarrow \varphi(i, j)\) (\texttt{finProdFinEquiv}).
-  \Prove{} for all \(i, j', j\):
-  \[
-    \pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j')\, j
-      = \delta_{jj'}\, x_i.
-  \]
-\end{theorem}
-
-\begin{proof}
-\leanok
-\emph{Sketch: same skeleton as Theorem~\ref{ax:pdiv_dense} --- split,
-distribute, product rule, collapse --- with the reindex step now going
-through the flatten bijection.}
-\begin{enumerate}
-  \item \(F(v)_{j_o} = \bigl(\sum_{i'} x_{i'} \cdot v_{\varphi(i', j_o)}\bigr) + b_{j_o}\).
-    \pf{Unfold \(\mathrm{dense}\) and \(\mathrm{unflatten}\).}
-  \item \(\pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j')\, j
-          = \pdiv\bigl(\lambda w\, j_o.\, \textstyle\sum_{i'}
-            x_{i'} \cdot w_{\varphi(i', j_o)}\bigr)\,
-            (\mathrm{flatten}\, W)\, \varphi(i, j')\, j\).
-    \pf{Drop the constant bias: sum rule (Theorem~\ref{ax:pdiv_add})
-    and constant rule (Theorem~\ref{ax:pdiv_const}); each summand is
-    (constant)\,\(\times\)\,(reindex), differentiable, and the finite
-    sum inherits differentiability (\texttt{DifferentiableAt.fun\_sum}).}
-  \item \(\prev = \sum_{i'} \pdiv\bigl(\lambda w\, j_o.\,
-          x_{i'} \cdot w_{\varphi(i', j_o)}\bigr)\,
-          (\mathrm{flatten}\, W)\, \varphi(i, j')\, j\).
-    \pf{Finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}).}
-  \item For each \(i'\): the summand equals
-    \(\text{if } i = i' \wedge j' = j \text{ then } x_i \text{ else } 0\).
-    \pf{Product rule (Theorem~\ref{ax:pdiv_mul}) on
-    (constant \(x_{i'}\))\,\(\times\)\,(reindex
-    \(\sigma = \lambda j_o.\, \varphi(i', j_o)\)); the constant
-    factor's Jacobian vanishes (Theorem~\ref{ax:pdiv_const}), and the
-    reindex Jacobian (Theorem~\ref{ax:pdiv_reindex}) is \(1\) exactly
-    when \(\varphi(i, j') = \varphi(i', j)\), which by injectivity of
-    \(\varphi\) is \(i = i' \wedge j' = j\).}
-  \item \Qed{}
-    \pf{Sum 4 over \(i'\): if \(j' = j\) the Kronecker condition picks
-    the single term \(x_i\) (\texttt{Finset.sum\_ite\_eq}); if
-    \(j' \neq j\) every term is \(0\). Both match
-    \(\delta_{jj'}\, x_i\); with 2 and 3 this is the goal.}
-\end{enumerate}
-\end{proof}
 
 \begin{theorem}[ReLU Jacobian (guarded subgradient)]
   \label{ax:pdiv_relu}
@@ -2117,143 +2244,6 @@ that map's derivative and transport it.}
 \end{enumerate}
 \end{proof}
 
-\begin{theorem}[Softmax cross-entropy gradient]
-  \label{ax:softmaxCE_grad}
-  \lean{Proofs.softmaxCE_grad}
-  \leanok
-  \uses{ax:pdiv, ax:pdiv_softmax}
-  Write \(p := \mathrm{softmax}(z)\) and
-  \(\mathrm{CE}(z, \ell) := -\log p_\ell\) (viewed as
-  \(\Vect{1}\)-valued so \(\pdiv\) applies; we read off the only
-  output coordinate).
-  \Prove{} for all \(j\):
-  \[
-    \pdiv\bigl(\mathrm{CE}(\cdot, \ell)\bigr)\, z\, j\, 0
-      = p_j - \mathrm{onehot}(\ell)_j.
-  \]
-\end{theorem}
-
-\begin{proof}
-\leanok
-\emph{Sketch: chain rule on \(-\log \circ (z \mapsto p_\ell)\), with
-the softmax Jacobian (proved in Ch~\ref{chap:attention}) supplying the
-inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
-\(p_\ell\) the Jacobian produces.}
-\begin{enumerate}
-  \item \(p_\ell > 0\), in particular \(p_\ell \neq 0\).
-    \pf{\(p_\ell\) is a positive exponential over a positive finite
-    sum of exponentials.}
-  \item \(\pdiv\bigl(\mathrm{CE}(\cdot, \ell)\bigr)\, z\, j\, 0
-          = \fderiv_{\R}\,\bigl(z' \mapsto \mathrm{CE}(z', \ell)\bigr)\, z\, (\basisVec_j)\).
-    \pf{Definition~\ref{ax:pdiv}; the \(\Vect{1}\) wrapper just
-    evaluates the single output coordinate (\texttt{fderiv\_apply}),
-    legitimate because the wrapper is differentiable ---
-    \(\mathrm{softmax}\) is differentiable and \(\log\) is
-    differentiable away from \(0\), which 1 grants.}
-  \item \(\fderiv_{\R}\,\bigl(z' \mapsto \mathrm{CE}(z', \ell)\bigr)\, z
-          = -\bigl(p_\ell^{-1} \cdot
-            \fderiv_{\R}\,(z' \mapsto \mathrm{softmax}(z')_\ell)\, z\bigr)\).
-    \pf{\(\mathrm{CE}(\cdot, \ell) = -\log \circ
-    (z' \mapsto \mathrm{softmax}(z')_\ell)\);
-    \texttt{HasFDerivAt.log} with 1 differentiates the \(\log\), then
-    negate.}
-  \item \(\fderiv_{\R}\,(z' \mapsto \mathrm{softmax}(z')_\ell)\, z\, (\basisVec_j)
-          = \pdiv(\mathrm{softmax})\, z\, j\, \ell
-          = p_\ell\,(\delta_{j\ell} - p_j)\).
-    \pf{Definition~\ref{ax:pdiv}, then the softmax Jacobian
-    (Theorem~\ref{ax:pdiv_softmax}).}
-  \item \Qed{}
-    \pf{Chain 2--4:
-    \(-p_\ell^{-1} \cdot p_\ell\,(\delta_{j\ell} - p_j)
-      = p_j - \delta_{j\ell}\), cancelling by 1; and
-    \(\mathrm{onehot}(\ell)_j = \delta_{j\ell}\) by definition.}
-\end{enumerate}
-\end{proof}
-
-\begin{theorem}[Dense VJP]
-  \label{thm:dense_has_vjp}
-  \lean{Proofs.dense_has_vjp}
-  \leanok
-  \uses{ax:pdiv_dense, def:hasvjp}
-  \(\HasVJP\, \bigl(\mathrm{dense}(W, b)\bigr)\): the input-gradient
-  backward of a dense layer is multiplication by \(W\).
-\end{theorem}
-
-\begin{proof}
-\leanok
-\begin{enumerate}
-  \item Define \(B(x, dy) := W\, dy\), i.e.\
-    \(B(x, dy)_i = \sum_j W_{ij}\, dy_j\).
-  \item \Suffices{} for all \(x\), \(dy\), \(i\):
-    \(B(x, dy)_i = \sum_j
-      \pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j \cdot dy_j\).
-    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
-    backward function.}
-  \item \Qed{}
-    \pf{The Dense Jacobian (Theorem~\ref{ax:pdiv_dense}) gives
-    \(\pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j = W_{ij}\);
-    substituting into 2 leaves exactly \(\sum_j W_{ij}\, dy_j
-    = B(x, dy)_i\).}
-\end{enumerate}
-\end{proof}
-
-\begin{theorem}[Dense weight gradient is the outer product]
-  \label{thm:dense_weight_grad_correct}
-  \lean{Proofs.dense_weight_grad_correct}
-  \leanok
-  \uses{ax:pdiv_dense_W}
-  \(dW = x \otimes dy\), with \(F\) and \(\varphi\) as in
-  Theorem~\ref{ax:pdiv_dense_W},
-  \Prove{} for all \(i, j\):
-  \[
-    (x \otimes dy)_{ij}
-      = \sum_k \pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j)\, k \cdot dy_k.
-  \]
-\end{theorem}
-
-\begin{proof}
-\leanok
-\begin{enumerate}
-  \item Each summand:
-    \(\pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j)\, k \cdot dy_k
-      = (\text{if } k = j \text{ then } x_i \text{ else } 0) \cdot dy_k\).
-    \pf{Dense Jacobian wrt weight (Theorem~\ref{ax:pdiv_dense_W}).}
-  \item \Qed{}
-    \pf{The sum in 1 collapses at \(k = j\)
-    (\texttt{Finset.sum\_eq\_single}) to \(x_i \cdot dy_j\), which is
-    \((x \otimes dy)_{ij}\) by definition of the outer product.}
-\end{enumerate}
-\end{proof}
-
-\begin{theorem}[Dense bias gradient is identity]
-  \label{thm:dense_bias_grad_correct}
-  \lean{Proofs.dense_bias_grad_correct}
-  \leanok
-  \uses{ax:pdiv_add, ax:pdiv_const, ax:pdiv_id}
-  \(db = dy\).
-  \Prove{} for all \(i\):
-  \[
-    dy_i = \sum_j \pdiv\bigl(b' \mapsto \mathrm{dense}(W, b')\, x\bigr)\, b\, i\, j \cdot dy_j.
-  \]
-\end{theorem}
-
-\begin{proof}
-\leanok
-\begin{enumerate}
-  \item \(\pdiv\bigl(b' \mapsto \mathrm{dense}(W, b')\, x\bigr)\, b\, i\, j
-          = \delta_{ij}\).
-    \pf{As a function of \(b'\), the layer is
-    \((\text{constant in } b') + b'\): sum rule
-    (Theorem~\ref{ax:pdiv_add}), constant rule
-    (Theorem~\ref{ax:pdiv_const}), and identity Jacobian
-    (Theorem~\ref{ax:pdiv_id}). (This is the Lean lemma
-    \texttt{pdiv\_dense\_b}.)}
-  \item \Qed{}
-    \pf{Substitute 1: \(\sum_j \delta_{ij}\, dy_j = dy_i\)
-    (\texttt{Finset.sum\_eq\_single}).}
-\end{enumerate}
-\end{proof}
-
 \begin{definition}[ReLU VJP]
   \label{thm:relu_has_vjp}
   \lean{Proofs.relu_has_vjp}
@@ -2276,6 +2266,37 @@ inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
   witness; same shape as \texttt{relu\_has\_vjp}. Codegen
   routes the ReLU subgradient at the kink.
 \end{definition}
+
+\begin{theorem}[MLP VJP at smooth inputs]
+  \label{thm:mlp_has_vjp_at}
+  \lean{Proofs.mlp_has_vjp_at_correct}
+  \leanok
+  \uses{thm:dense_has_vjp, thm:relu_has_vjp, thm:vjp_comp, ax:mlp_has_vjp}
+  \Assume{}
+  \begin{enumerate}
+    \item no coordinate of the first pre-activation
+          \(\mathrm{dense}(W_0, b_0)\, x\) is zero
+          \hfill[\texttt{h\_smooth\_0}]
+    \item no coordinate of the second pre-activation
+          \(\mathrm{dense}(W_1, b_1)\bigl(\mathrm{relu}(\mathrm{dense}(W_0, b_0)\, x)\bigr)\)
+          is zero \hfill[\texttt{h\_smooth\_1}]
+  \end{enumerate}
+  \Prove{} the backward obtained by composing the five per-layer
+  backwards in reverse order (\texttt{mlp\_has\_vjp\_at}, built by
+  \texttt{vjp\_comp\_at}) satisfies, for all \(dy\), \(i\):
+  \[
+    \mathrm{backward}(dy)_i
+      = \sum_j \pdiv(\mathrm{mlpForward})\, x\, i\, j \cdot dy_j .
+  \]
+  Off the two smooth-point conditions the composed backward is not
+  defined, and \texttt{mlp\_has\_vjp} is the object that stands in.
+\end{theorem}
+
+\begin{proof}
+\leanok
+Chain rule at a point, five times; see
+\leandocref{Proofs.mlp\_has\_vjp\_at\_correct}.
+\end{proof}
 
 \section{Example: MNIST MLP}
 \label{sec:mlp_mnist_example}
@@ -2536,7 +2557,8 @@ half a point of give.
 \noindent\textbf{What is already proven.} \texttt{mlpForward} is the
 three-dense-layer network, and \texttt{mlp\_has\_vjp\_at} proves its
 reverse-mode derivative (the vector--Jacobian product) by chaining the
-per-layer chain rule \texttt{vjp\_comp\_at}. The parameter gradients are
+per-layer chain rule \texttt{vjp\_comp\_at}
+(Theorem~\ref{thm:mlp_has_vjp_at}). The parameter gradients are
 pinned by \texttt{dense\_weight\_grad\_correct} and
 \texttt{dense\_bias\_grad\_correct}, and the loss gradient by
 \texttt{softmaxCE\_grad}. So \emph{what} the gradient is, is not in
@@ -2562,7 +2584,6 @@ v \text{ else } 0)$, and the bridge theorem
 \]
 says the denotation of that graph is the proven derivative. The forward,
 the loss cotangent, and the parameter gradients are covered the same way.
-The printer walks the graph and emits one \texttt{stablehlo} op per node:
 
 Here is exactly what the printer emits for that graph, with nothing
 hand-written, one \texttt{stablehlo} op per IR node (default
@@ -2611,7 +2632,7 @@ theorem is precisely the claim that this text computes
     $784{\to}512{\to}512{\to}10$.
   \item \textbf{Trusted surface.} The printer's faithfulness and the
     lowerer's translation are tested rather than proved. Rounding
-    $\approx \mathbb{R}$ is no longer on this list: it is a theorem layer
+    $\approx \mathbb{R}$ is not on this list: it is a theorem layer
     over an arbitrary rounding model (\S~\ref{sec:precision}), conditional on
     two measured constants rather than assumed outright. Appendix~\ref{sec:verified_codegen} has the
     full accounting.
@@ -2736,17 +2757,6 @@ spread is symmetric about the middle, and this one is not: the
 distribution fails a normality test outright ($p < 10^{-4}$), with a long
 left tail and nothing answering it on the right.
 
-\medskip\noindent The cost is that a handful of runs cannot see this.
-Draw five of those thirty, build the ordinary 95\% interval on their mean,
-and ask whether it contains the mean of the twenty-five you did not
-draw: it does 79\% of the time, not 95\%, because five draws usually miss
-the tail and report a spread as small as $0.05$ against the true $0.27$.
-Chapter~\ref{chap:mlp}'s MLP, whose thirty runs are unremarkable, gets
-92\% from the same procedure. How many runs a claim needs is a property
-of the network, and a convolution's is higher than a dense stack's. The
-early epochs of a conv net are not a measurement; the last one is, and
-even then not from a single run.
-
 \prosesection{Three properties baked into a convolution}
 
 \begin{enumerate}
@@ -2757,19 +2767,24 @@ even then not from a single run.
   combine them later, by stacking convolutions and letting receptive
   fields grow.
 
-\item \textbf{Translation invariance.} The same weights are applied
-  at every spatial position. A feature detector that recognizes the
+\item \textbf{Translation equivariance.} The same weights are applied
+  at every spatial position, so a feature detector that recognizes the
   bottom-left curve of a ``5'' uses the same parameters whether the
-  curve appears at row 5 or row 25. The architecture imposes the
-  symmetry, and the data does not have to teach it.
+  curve appears at row 5 or row 25, and the feature map shifts with
+  the input. The architecture imposes the symmetry, and the data does
+  not have to teach it. It is also why the layer is cheap: a
+  \(3 \times 3 \times 1 \to 32\) convolution has
+  \(3 \times 3 \times 1 \times 32 + 32 = 320\) parameters regardless of
+  image size, where the matching fully-connected layer on a
+  28$\times$28 image would have
+  \(28^2 \times 28^2 \times 32 \approx 20\) million.
 
-\item \textbf{Parameter sharing.} A \(3 \times 3 \times 1 \to 32\)
-  convolution has \(3 \times 3 \times 1 \times 32 + 32 = 320\)
-  parameters total, regardless of image size. The matching
-  fully-connected layer on a 28$\times$28 image would have
-  \(28^2 \times 28^2 \times 32 \approx 20\) million. The
-  convolution gets the same expressive power with four orders of
-  magnitude fewer parameters because it reuses them.
+\item \textbf{Hierarchy.} Digits are made of strokes, and strokes of
+  edges. Stacking convolutions lets each layer combine the previous
+  one's features over a growing neighborhood, and pooling between them
+  discards \emph{where} within a window a feature fired. That is where
+  the invariance the ``5'' in the corner wanted comes from: not from
+  any one layer, but from the stack.
 \end{enumerate}
 
 Concretely, a convolution computes
@@ -2862,8 +2877,8 @@ After two convolutions and a max pool, the feature map is
 \(14 \cdot 14 \cdot 32 = 6272\)-dim feature vector and feed it into
 the same three-dense-layer head from Chapter \ref{chap:mlp},
 ending in 10-class logits. The backward through the dense head and
-the softmax-CE loss is exactly the calculation we did in the
-previous chapter, and we do not re-prove it here. The composition rule
+the softmax-CE loss is exactly the calculation of
+Chapters~\ref{chap:tensor} and~\ref{chap:mlp}, and we do not re-prove it here. The composition rule
 from Chapter \ref{chap:tensor} guarantees that the full network's
 VJP is just the per-layer VJPs strung together in reverse order:
 softmax-CE backward, dense backward $\times 3$, flatten backward,
@@ -3095,19 +3110,42 @@ reindex factor and the saved input \(x\) is the constant.}
   substitutes the standard argmax routing convention at tiebreaks.
 \end{definition}
 
+\begin{theorem}[MNIST CNN VJP at smooth inputs]
+  \label{thm:mnistCnnNoBn_has_vjp_at}
+  \lean{Proofs.mnistCnnNoBn_has_vjp_at_correct}
+  \leanok
+  \uses{ax:conv2d_has_vjp3, ax:maxPool2_has_vjp3, thm:dense_has_vjp, thm:relu_has_vjp, thm:vjp_comp}
+  \Assume{}
+  \begin{enumerate}
+    \item no coordinate of either convolution's pre-activation, nor of
+          either hidden dense layer's, is zero
+          \hfill[\texttt{h1}, \texttt{h2}, \texttt{h3}, \texttt{h4}]
+    \item every \(2 \times 2\) window the max pool sees has a strict
+          maximum \hfill[\texttt{h\_mp}]
+  \end{enumerate}
+  \Prove{} the backward obtained by composing the per-layer backwards
+  in reverse order --- dense, dense+ReLU, dense+ReLU, max pool,
+  conv+ReLU, conv+ReLU (\texttt{mnistCnnNoBn\_has\_vjp\_at}, built by
+  \texttt{vjp\_comp\_at}) --- satisfies, for all \(dy\), \(i\):
+  \[
+    \mathrm{backward}(dy)_i
+      = \sum_j \pdiv(\texttt{mnistCnnNoBnForward})\, x\, i\, j \cdot dy_j .
+  \]
+\end{theorem}
+
+\begin{proof}
+\leanok
+Chain rule at a point through the six stages; see
+\leandocref{Proofs.mnistCnnNoBn\_has\_vjp\_at\_correct}.
+\end{proof}
 \section{Example: MNIST 2D CNN}
 \label{sec:cnn_mnist_example}
 
-The MLP in Chapter~\ref{chap:mlp} crushed MNIST by flattening the
-image into a 784-dim vector and throwing dense layers at it. That
-works because MNIST is small, but it also throws away \emph{all}
-the spatial structure: pixel (5,5) and pixel (5,6) are neighbors,
-but the MLP sees no more relationship between them than it does
-between pixel (5,5) and pixel (23,14). Convolutions fix that. This
-chapter does MNIST again, the same way the Swift for TensorFlow
-book's Chapter 2 did it: two plain $3 \times 3$ convs to pull out
-local features, a max-pool to collapse the spatial grid, then the
-same dense head you already know.
+Chapter~\ref{chap:mlp}'s MLP flattened the image and threw dense
+layers at it. This chapter does MNIST again with the structure kept,
+the way the first book's Chapter~2 did: two plain $3 \times 3$ convs to
+pull out local features, a max-pool to collapse the spatial grid, then
+the same dense head you already know.
 
 \subsection*{Architecture}
 
@@ -3196,12 +3234,12 @@ precedes them. That is why Chapter~\ref{chap:mlp}'s five-entry list
 became eleven and not seven.
 
 The \texttt{.conv2d} backward pass is the theorem from earlier in
-this chapter (\S~\ref{ax:conv2d_has_vjp3}): the input VJP is
+this chapter (Theorem~\ref{ax:conv2d_has_vjp3}): the input VJP is
 another convolution, using the kernel reversed along both spatial
-axes. The max-pool backward (\S~\ref{ax:maxPool2_has_vjp3}) routes
+axes. The max-pool backward (Definition~\ref{ax:maxPool2_has_vjp3}) routes
 the gradient to the argmax position in each $2 \times 2$ window.
 The dense backward is already proved in
-Chapter~\ref{chap:mlp} (\S~\ref{thm:dense_has_vjp}). Adding
+Chapter~\ref{chap:tensor} (Theorem~\ref{thm:dense_has_vjp}). Adding
 convolution to the model introduces no new training-loop code, only
 new layer types, which the framework already knows how to compose.
 
@@ -3223,11 +3261,7 @@ SGD, no regularization and no augmentation. Note what a
 baked into \texttt{verified\_mlir/cnn\_train\_step.mlir}, which is
 \S\ref{sec:mlp_inside_train}'s point in a second chapter --- the rate is
 inside the reach of the proofs, so it cannot be set to one thing and
-trained at another. That's the
-framework's pitch made concrete: swap the architecture, keep the
-trainer. The ablation framework gives you access to the same
-variant configs (\texttt{adamOnly}, \texttt{fullRecipe}, etc.)
-without any more changes on your side.
+trained at another.
 
 \textbf{4. The program entry point.} One line, same as the MLP
 chapter. \texttt{cnnVerified.train cnnConfig} replaces
@@ -3322,12 +3356,7 @@ small dense layer, which is why ResNet-18 (a smaller version of
 ResNet-34) has $\sim$11M parameters for 1000-class ImageNet but
 Chapter~\ref{chap:cnn}'s 10-class MNIST CNN has 3.5M.
 
-The MLIR character count also tells a story: the CNN emits 21{,}884
-chars vs the MLP's 10{,}375, about 2.1$\times$ bigger. Adding
-convolutions and maxPool roughly doubles the emitted compute, not
-3.5$\times$ the way our \emph{other} (BN-equipped) CNN does. Every
-\texttt{.convBn} adds batch-norm normalize and affine ops, and the
-plain \texttt{.conv2d} used here keeps the StableHLO much tighter.
+
 
 \subsection*{The fat head is fat because it can be, not because it must be}
 
@@ -3392,6 +3421,17 @@ behind a rounding error. The MLP points are single runs, and
 Chapter~\ref{chap:mlp} gives them half a point of give for the same reason
 the CNN's needed five.
 
+\medskip\noindent The cost is that a handful of runs cannot see this.
+Draw five of the thirty runs in \S\ref{sec:cnn_runit}, build the ordinary 95\% interval on their mean,
+and ask whether it contains the mean of the twenty-five you did not
+draw: it does 79\% of the time, not 95\%, because five draws usually miss
+the tail and report a spread as small as $0.05$ against the true $0.27$.
+Chapter~\ref{chap:mlp}'s MLP, whose thirty runs are unremarkable, gets
+92\% from the same procedure. How many runs a claim needs is a property
+of the network, and a convolution's is higher than a dense stack's. The
+early epochs of a conv net are not a measurement; the last one is, and
+even then not from a single run.
+
 \medskip\noindent The whole CNN curve sits about a point above the MLP's, and it is flat
 across the entire range: an 8-wide head already reaches 98.2\% at 60K
 parameters, beating the widest 4096-wide MLP. So the 3.2M-parameter
@@ -3402,21 +3442,22 @@ because the task needs the width.
 
 \section{MLIR: Convolution}
 
-\noindent\textbf{What is already proven.} \texttt{cnnForward} is
+\noindent\textbf{What is already proven.} \texttt{mnistCnnNoBnForward} is
 the conv\,$\to$\,relu\,$\to$\,conv\,$\to$\,relu\,$\to$\,maxPool\,$\to$\,flatten\,$\to$\,dense
-network, and \texttt{cnn\_has\_vjp\_at} proves its reverse-mode derivative
-by chaining the per-layer VJPs: the dense backward
-(\S~\ref{thm:dense_has_vjp}, reused from Chapter~\ref{chap:mlp}), the
+network, and \texttt{mnistCnnNoBn\_has\_vjp\_at}
+(Theorem~\ref{thm:mnistCnnNoBn_has_vjp_at}) proves its reverse-mode
+derivative by chaining the per-layer VJPs: the dense backward
+(Theorem~\ref{thm:dense_has_vjp}, from Chapter~\ref{chap:tensor}), the
 max-pool backward (\texttt{maxPool2\_has\_vjp3},
-\S~\ref{ax:maxPool2_has_vjp3}), and the convolution backward
-(\texttt{conv2d\_has\_vjp3}, \S~\ref{ax:conv2d_has_vjp3}), all through the
+Definition~\ref{ax:maxPool2_has_vjp3}), and the convolution backward
+(\texttt{conv2d\_has\_vjp3}, Theorem~\ref{ax:conv2d_has_vjp3}), all through the
 IR-level chain rule \texttt{vjp\_comp\_at}. The convolution's reverse-mode
 derivative is the chapter's headline result: the input VJP of a
 \texttt{conv2d} is \emph{another} \texttt{conv2d}, against the kernel with
 its in- and out-channels swapped and both spatial axes reversed. The
 parameter gradients are pinned by \texttt{conv2d\_weight\_grad\_has\_vjp}
-(the transpose trick) and the dense grads from Chapter~\ref{chap:mlp}, and
-the loss gradient by \texttt{softmaxCE\_grad} (\S~\ref{ax:softmaxCE_grad}).
+(the transpose trick) and the dense grads from Chapter~\ref{chap:tensor}, and
+the loss gradient by \texttt{softmaxCE\_grad} (Theorem~\ref{ax:softmaxCE_grad}).
 So \emph{what} the convolution's gradient is, is not in question.
 
 \medskip\noindent\textbf{The gap and how we close it.} The emitted
@@ -3435,15 +3476,13 @@ where $\bar k = K - 1 - k$ is the spatial flip, and the bridge theorem
   = (\texttt{conv2d\_has\_vjp3}\,W\,b).\mathrm{backward}(x, dy)
 \]
 says the denotation of that graph is the proven conv input-VJP, the
-reversed-kernel identity that \texttt{cnn\_has\_vjp\_at} only \emph{asserts}.
+reversed-kernel identity that \texttt{mnistCnnNoBn\_has\_vjp\_at} only \emph{asserts}.
 It is discharged here by expansion at the concrete shape (and again at the
 $2{\to}2$ shape, by \texttt{conv\_back\_bridge\_2to2}). The printer walks the
 graph and emits one \texttt{stablehlo} op per node: \texttt{transpose}
 for the channel swap, \texttt{reverse} for the spatial flip,
-\texttt{convolution} for the contraction:
-
-Here is exactly what the printer emits for the first conv's backward
-($1{\to}2$ channels, $3\times3$ kernel, at $4\times4$):
+\texttt{convolution} for the contraction. Here it is for the first
+conv's backward ($1{\to}2$ channels, $3\times3$ kernel, at $4\times4$):
 
 \begin{verbatim}
 func.func @conv_back(%dy: tensor<1x2x4x4xf32>,
