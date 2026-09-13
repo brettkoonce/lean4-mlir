@@ -14823,13 +14823,17 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 ./download_imagenette.sh   # Imagenette 320px, 330 MB (imagenette tier)
 \end{verbatim}
 
-  \item \textbf{Build and run a trainer.} No backend environment variables:
-    XLA finds the device.
+  \item \textbf{Build and run a trainer.} No backend selection: XLA finds
+    the device.
 \begin{verbatim}
 lake build resnet34-verified-adam
-.lake/build/bin/resnet34-verified-adam data
+PJRT_FFI_RESIDENT=1 .lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
-    Use \texttt{CUDA\_VISIBLE\_DEVICES} / \texttt{HIP\_VISIBLE\_DEVICES} to
+    \texttt{PJRT\_FFI\_RESIDENT=1} keeps the parameters on the device
+    between steps. Every transcript in this book ran that way and the tiers
+    below set it; without it the same run takes 1.3--2$\times$ the wall
+    clock and its numerics are unchanged. Use
+    \texttt{CUDA\_VISIBLE\_DEVICES} / \texttt{HIP\_VISIBLE\_DEVICES} to
     pick a card, as with any GPU program.
 \end{enumerate}
 
@@ -14840,17 +14844,20 @@ With Track 2 in place, one command builds and runs a time-budgeted group of
 verified trainers.
 
 \begin{verbatim}
-lake run mnist        # verified MNIST: linear, MLP, CNN             (~1 min)
-lake run cifar        # ch.4 cifar8w: SGD/momentum/Adam x bn/no-bn  (~19 min)
-lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~7 h)
+lake run mnist        # verified MNIST: linear, MLP, CNN             (~2 min)
+lake run cifar        # ch.4 cifar8w: SGD/momentum/Adam x bn/no-bn  (~25 min)
+lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~6 h)
+lake run imagenet     # ImageNet-1k on 4 GPUs: bare plans, `start` runs (Track 4)
 \end{verbatim}
 
-Those are XLA wall-clocks on one RTX 4060 Ti. The Imagenette figure is the
-five chapter nets; ResNet-50 (about 75 minutes) and MobileNetV4 (about 35) ride
-in the same tier and add to it. Each trainer's transcript is teed to
-\texttt{runs/<date>-<trainer>/}. Each tier also has an \texttt{-iree} twin ---
-see \emph{The second lowerer} at the end. The tiers bundle these targets, and
-any one builds on its own:
+The three times are XLA wall-clocks on one RTX 4060 Ti, resident; the fourth
+tier is weeks of four-card time and has Track 4 to itself. The Imagenette
+figure is the five chapter nets at their chapters' times, about 3.7 hours
+between them, plus ResNet-50 (about an hour and a half) and MobileNetV4
+(under an hour), which ride in the same tier. Each trainer's transcript is
+teed to \texttt{runs/<date>-<trainer>/}. Each tier also has an
+\texttt{-iree} twin --- see \emph{The second lowerer} at the end. The tiers
+bundle these targets, and any one builds on its own:
 
 \begin{itemize}
   \item \texttt{mnist}: \texttt{mnist-linear-verified},
@@ -14858,19 +14865,19 @@ any one builds on its own:
   \item \texttt{cifar}: \texttt{cifar8w-ablation} and
     \texttt{cifar8w-bn-ablation}, each running SGD / momentum / AdamW in
     sequence --- six arms in two binaries
-  \item \texttt{imagenette}, in chapter order, each side quest after the
-    chapter it belongs to: \texttt{resnet34-verified-adam},
+  \item \begingroup\raggedright \texttt{imagenette}, in chapter order, each side
+    quest after the chapter it belongs to: \texttt{resnet34-verified-adam},
     \texttt{resnet50-verified-adam}, \texttt{mobilenetv2-verified-adam},
     \texttt{mobilenetv4-verified-adam}, \texttt{efficientnet-verified-adam},
-    \texttt{convnext-verified-adam}, \texttt{vit-verified-adam}
+    \texttt{convnext-verified-adam}, \texttt{vit-verified-adam}\par\endgroup
 \end{itemize}
 
 \section*{Track 4: ImageNet-1k runners}
 \label{sec:getting_started_track4}
 
 The scale tier. Six networks train on full ImageNet-1k off the same certified
-renderer as their Imagenette counterparts, in the chapter order
-\S\ref{sec:getting_started_track3} uses. A row is a \emph{(network, recipe)}
+renderer as their Imagenette counterparts, in the chapter order Track 3
+uses. A row is a \emph{(network, recipe)}
 pair rather than a network: ResNet-50 appears twice because
 Chapter~\ref{chap:residual} trains it on two recipes, and the recipe is the
 middle field of the job's own name.
@@ -14881,19 +14888,23 @@ middle field of the job's own name.
 \hline \\[-6pt]
 \texttt{resnet34-imagenet-verified}     & \texttt{default} (the 2018 recipe) & \texttt{r34-default-4gpu} \\
 \texttt{resnet50-imagenet-verified}     & \texttt{2018}                      & \texttt{r50-2018-bf16-4gpu} \\
-\texttt{resnet50-imagenet-verified}     & \texttt{a3} (RSB-A3, train@$160$)  & \texttt{r50-a3-wxclip-4gpu} \\
+\texttt{resnet50-imagenet-verified}     & \texttt{a3} (RSB-A3, train@$160$)  & \texttt{r50-a3-wxclip-bf16-4gpu} \\
 \texttt{mobilenetv2-imagenet-verified}  & \texttt{default}                   & \texttt{mnv2-default-4gpu} \\
 \texttt{efficientnet-imagenet-verified} & \texttt{default}                   & \texttt{enet-default-4gpu} \\
 \texttt{convnext-imagenet-verified}     & \texttt{default}                   & \texttt{cnx-default-4gpu} \\
-\texttt{vit-imagenet-verified}          & \texttt{default} (DeiT-Ti)         & \texttt{vit-default-4gpu} \\
+\texttt{vit-imagenet-verified}          & \texttt{default} (DeiT-Ti)         & \texttt{vit-default-emabf16-4gpu} \\
 \end{tabular}
 \end{center}
 
-\noindent Each job named here is the one that produced its chapter's number.
-\texttt{scripts/jobs/} also carries \emph{axis} siblings that this table does
-not list --- an fp32 peer of the ResNet-50 2018 row, an earlier A3 artifact ---
-which differ from their row in precision or in one optimizer knob, never in the
-recipe. Each config's header says which it is.
+\noindent Five of these jobs have run and are the ones behind their chapters'
+numbers; the EfficientNet-B0 and ConvNeXt-T rows are configured and have not
+finished, so Chapters~\ref{chap:se} and~\ref{chap:layernorm} carry the
+reference only. \texttt{scripts/jobs/} also carries \emph{axis} siblings that
+this table does not list --- an fp32 peer of each of the ResNet-50 2018,
+RSB-A3 and ViT rows, and an earlier A3 artifact --- which differ from their
+row in precision or in one optimizer knob, never in the recipe, plus
+\texttt{selftest}, which exercises the supervisor without a GPU. Each config's
+header says which it is.
 
 \prosesection{This tier needs Python}
 
@@ -14975,10 +14986,10 @@ status column says what each one is missing.
 \texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & rendered, EMA + sd; untrained & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{resnet50-imagenet-verified}    & \texttt{a1}       & rendered + own shim; untrained & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{mobilenetv4-imagenet-verified} & Conv-M            & tied; \texttt{mnv4-default-4gpu}, untrained & \S\ref{sec:mnv4_side_quest} \\
-\texttt{convnext-s-imagenet-verified}  & \withheld         & \texttt{cnxs-default-4gpu}, untrained & \S\ref{sec:convnext_sb} \\
-\texttt{convnext-b-imagenet-verified}  & \withheld         & \texttt{cnxb-default-4gpu}, untrained & \S\ref{sec:convnext_sb} \\
-\texttt{vit-s-imagenet-verified}       & \withheld         & global $512$; \texttt{vits-default-g512-4gpu}, untrained & \S\ref{sec:vit_sb} \\
-\texttt{vit-b-imagenet-verified}       & \withheld         & global $512$; \texttt{vitb-default-g512-4gpu}, untrained & \S\ref{sec:vit_sb} \\
+\texttt{convnext-s-imagenet-verified}  & ---               & \texttt{cnxs-default-4gpu}, untrained & \S\ref{sec:convnext_sb} \\
+\texttt{convnext-b-imagenet-verified}  & ---               & \texttt{cnxb-default-4gpu}, untrained & \S\ref{sec:convnext_sb} \\
+\texttt{vit-s-imagenet-verified}       & ---               & global $512$; \texttt{vits-default-g512-4gpu}, untrained & \S\ref{sec:vit_sb} \\
+\texttt{vit-b-imagenet-verified}       & ---               & global $512$; \texttt{vitb-default-g512-4gpu}, untrained & \S\ref{sec:vit_sb} \\
 \end{tabular}
 \end{center}
 
@@ -15033,10 +15044,11 @@ run wants both, and \S\ref{sec:jax_pipeline} is where the second one earns its
 place, including the asymmetry it leaves behind.
 
 \medskip\noindent Selecting it is \texttt{LEAN\_MLIR\_LOWERER=iree}, and every
-Track 3 tier has an \texttt{-iree} twin that does so (\texttt{lake run
-mnist-iree}, and so on). It additionally needs \texttt{iree-compile} on
-\texttt{\$PATH}, the runtime built per \texttt{historical/IREE\_BUILD.md}, and
-\texttt{ffi/libiree\_ffi.so}. Data-parallel runs are XLA-only --- collectives
+Track 3 tier has an \texttt{-iree} twin that does so (\texttt{lake run}
+\texttt{mnist-iree}, and so on). It additionally needs \texttt{iree-compile}
+on \texttt{\$PATH}, the runtime built per
+\texttt{historical/\allowbreak IREE\_BUILD.md}, and
+\texttt{ffi/\allowbreak libiree\_ffi.so}. Data-parallel runs are XLA-only --- collectives
 exist only on the PJRT path --- so Track 4 is not available on it.
 
 \chapter{On Verification}
