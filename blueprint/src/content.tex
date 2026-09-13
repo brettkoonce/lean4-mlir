@@ -341,7 +341,7 @@ started'' is where those commands live.
     capstone.
 \end{itemize}
 
-\textbf{Part 2: The bestiary (Chapter 10).} A catalog of $\sim$37
+\textbf{Part 2: The bestiary (Chapter 10).} A catalog of 45
 additional architectures, from U-Net to Mamba to diffusion models,
 each decomposed into the framework's primitives. Organized by the
 question you're asking: ``how do I do detection?'', ``how do I do
@@ -11922,16 +11922,16 @@ fan-in --- both already in Chapter~\ref{chap:tensor}'s VJP kit ---
 so no new derivation is needed.
 
 \begin{verbatim}
-def highwayMain : NetSpec where
-  name   := "Highway block — main path H(x)"
+def highway50Main : NetSpec where
+  name   := "Highway-50 — main path H(x)"
   imageH := 1
   imageW := 1
   layers := [
     .dense 50 50 .relu                           -- H(x)
   ]
 
-def highwayGate : NetSpec where
-  name   := "Highway block — transform gate T(x)"
+def highway50Gate : NetSpec where
+  name   := "Highway-50 — transform gate T(x)"
   imageH := 1
   imageW := 1
   layers := [
@@ -12392,7 +12392,7 @@ def mobileViTS : NetSpec where
 \subsubsection*{Swin Transformer (\texttt{Bestiary/SwinT.lean})}
 \emph{Two} new primitives (\S~\ref{layer:swinStage},
 \S~\ref{layer:patchMerging}). Variants: Swin-T / -S / -B / tiny.
-Swin-T lands at 28M params matching the paper (Liu et al.\ 2021,
+Swin-T lands at 28.6M params against the paper's 28M (Liu et al.\ 2021,
 \href{https://arxiv.org/abs/2103.14030}{arXiv:2103.14030}) exactly.
 
 \begin{verbatim}
@@ -12958,7 +12958,7 @@ def dcganGenerator : NetSpec where
 \emph{Two} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}). The paired-data ancestor of CycleGAN,
 from the same lab 9 months earlier (Isola et al.\ 2017,
 \href{https://arxiv.org/abs/1611.07004}{arXiv:1611.07004}). UNet
-generator (8 levels, $\sim$70M approx vs paper $\sim$54M --- our
+generator (8 levels, $\sim$62M vs paper $\sim$54M --- our
 \texttt{.unetDown} / \texttt{.unetUp} use 2 convs per level where
 Pix2Pix uses 1 strided conv, so we overcount) + PatchGAN
 discriminator (identical to CycleGAN's, 2.8M). Trained with GAN
@@ -13504,18 +13504,17 @@ def gpt2Small : NetSpec where
 
 \subsubsection*{QANet (\texttt{Bestiary/QANet.lean})}
 \emph{One} new primitive (\texttt{.separableConv}). The 2018 reading-comprehension
-architecture (Yu et al.\ 2018,
-\href{https://arxiv.org/abs/1804.09541}{arXiv:1804.09541}) that killed
-the BiLSTM for SQuAD-style
-tasks. Core contribution: an encoder block combining 4 depthwise-
+architecture that killed the BiLSTM for SQuAD-style tasks (Yu et al.\ 2018,
+\href{https://arxiv.org/abs/1804.09541}{arXiv:1804.09541}). Core contribution: an encoder block combining 4 depthwise-
 separable convs (local context) with a self-attention + FFN
 transformer block (global context) --- the ``conv + attention
 hybrid'' shape MobileViT and ConvNeXt rediscovered in 2022.
 Expressed with primitives we already have: 4
 \texttt{.separableConv 128 128 1} calls + 1
 \texttt{.transformerEncoder 128 8 512 1} per block. Per-block count:
-$\sim$270K; the paper's model encoder stack (7 blocks) lands at
-$\sim$1.9M, repeated 3 times in the full architecture. The BiDAF-
+$\sim$270K for the embedding-encoder block; the model-encoder blocks carry
+two separable convs rather than four, and the paper's seven-block stack lands
+at $\sim$1.6M, repeated 3 times in the full architecture. The BiDAF-
 style context-query attention and character/word embedding tables
 are omitted from the spec; described in prose. QANet's headline
 number was \textbf{3--4$\times$ training speedup} over BiLSTM-based
@@ -13750,8 +13749,8 @@ instead of 512$\times$512 pixels, cutting spatial work $\sim$64$\times$;
 UNet resolution, insert a spatial transformer block that cross-attends
 from image tokens to CLIP text embeddings. Shown as six separate
 NetSpecs: VAE encoder, VAE decoder, CLIP text encoder (123M, matches
-CLIP ViT-L/14 exactly), UNet backbone (202M backbone approx; real
-SD 1.5 UNet is 865M, missing $\sim$650M is the interleaved
+CLIP ViT-L/14 exactly), UNet backbone (190M backbone approx; real
+SD 1.5 UNet is 865M, missing $\sim$675M is the interleaved
 cross-attention), an explicit spatial-transformer-block spec (uses
 \texttt{.transformerDecoder} with \texttt{nQueries = 0} --- same
 primitive Whisper's decoder uses, same mechanism as DETR's decoder
@@ -14271,8 +14270,8 @@ def nerf : NetSpec where
     -- Positional encoding of (x,y,z): 3 coords × 2 × 10 freqs = 60-dim
     .positionalEncoding 3 10,
     -- 8-layer MLP with mid-skip + dual density/RGB heads.
-    -- encodedDirDim = 2·2·4 = 16 (2D direction, 4 frequencies)
-    .nerfMLP 60 16 256
+    -- encodedDirDim = 3·2·4 = 24 (3D view direction, 4 frequencies)
+    .nerfMLP 60 24 256
   ]
 \end{verbatim}
 
