@@ -4758,64 +4758,72 @@ so much harder than just leaving identity there?
 \section{Run it first}
 \label{sec:r34_runit}
 
-Before any of the math, train the thing. Four commands and about an hour
-and a half of GPU time:
+Before any of the math, train the thing. Four commands and about fifty
+minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
 lake build resnet34-verified-adam
-./.lake/build/bin/resnet34-verified-adam data
+PJRT_FFI_RESIDENT=1 ./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
 
-On one RTX 3060 (CUDA 13.3), from
-\texttt{runs/2026-09-01-r34-imagenette-rerun.log}. XLA's startup banner is
-removed, the network description line is wrapped, each interval is wrapped onto
-an indented continuation, and epochs 5 through 75 are elided:
+On one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/full\_s2.log}: seed 2 of the
+five that \S\ref{sec:r34_ablation} averages, run by the ablation driver's
+\texttt{full} arm, which is this binary's render and recipe under
+\texttt{LEAN\_MLIR\_SEED=2}. XLA's startup banner and the resident-parameter
+notices are removed, the network description line is wrapped, each interval is
+wrapped onto an indented continuation, and epochs 5 through 75 are elided:
 
 \begin{verbatim}
 [pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
 [pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir
-             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 7248 ms
+             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 6127 ms
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir
-             (@resnet34_fwd, 1 outputs, 1 replica) in 485 ms
+             (@resnet34_fwd, 1 outputs, 1 replica) in 596 ms
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir
-             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 204 ms
+             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 293 ms
 Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→
   [3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts,
   no conv biases; 56→28→14→7→GAP→dense)
   via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet34_adam_train_step.mlir
+  xla/pjrt verified_mlir/resnet34_fwd.mlir
+  xla/pjrt verified_mlir/resnet34_fwd_eval.mlir
   train 9469, val 3925; bs 32, ResNet-34 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
-Epoch 1/80: loss=2.052759 lr=0.000333
-  epoch 1: val_acc = 693/3925 = 17.656051%  top5 = 2457/3925 = 62.598726%
-    [95% CI 16.49–18.88]
-Epoch 2/80: loss=1.532879 lr=0.000667
-  epoch 2: val_acc = 1114/3925 = 28.382166%  top5 = 2935/3925 = 74.777070%
-    [95% CI 26.99–29.81]
-Epoch 3/80: loss=1.371930 lr=0.001000
-  epoch 3: val_acc = 1778/3925 = 45.299363%  top5 = 3294/3925 = 83.923567%
-    [95% CI 43.75–46.86]
-Epoch 4/80: loss=1.297244 lr=0.001000
-  epoch 4: val_acc = 1692/3925 = 43.108280%  top5 = 3531/3925 = 89.961783%
-    [95% CI 41.57–44.66]
-Epoch 76/80: loss=0.502241 lr=0.000007
-  epoch 76: val_acc = 3508/3925 = 89.375796%  top5 = 3851/3925 = 98.114650%
-    [95% CI 88.37–90.30]
-Epoch 79/80: loss=0.502180 lr=0.000000
-  epoch 79: val_acc = 3516/3925 = 89.579618%  top5 = 3854/3925 = 98.191083%
-    [95% CI 88.58–90.50]
-Epoch 80/80: loss=0.502146 lr=0.000000
-  epoch 80: val_acc = 3513/3925 = 89.503185%  top5 = 3856/3925 = 98.242038%
-    [95% CI 88.51–90.42]
+Epoch 1/80: loss=1.971035 lr=0.000333
+  epoch 1: val_acc = 1239/3925 = 31.566879%  top5 = 2766/3925 = 70.471338%
+    [95% CI 30.13–33.04]
+Epoch 2/80: loss=1.553382 lr=0.000667
+  epoch 2: val_acc = 1471/3925 = 37.477707%  top5 = 3123/3925 = 79.566879%
+    [95% CI 35.98–39.00]
+Epoch 3/80: loss=1.381944 lr=0.001000
+  epoch 3: val_acc = 1880/3925 = 47.898089%  top5 = 3159/3925 = 80.484076%
+    [95% CI 46.34–49.46]
+Epoch 4/80: loss=1.311593 lr=0.001000
+  epoch 4: val_acc = 1851/3925 = 47.159236%  top5 = 3547/3925 = 90.369427%
+    [95% CI 45.60–48.72]
+Epoch 76/80: loss=0.502131 lr=0.000007
+  epoch 76: val_acc = 3536/3925 = 90.089172%  top5 = 3859/3925 = 98.318471%
+    [95% CI 89.11–90.99]
+Epoch 79/80: loss=0.502245 lr=0.000000
+  epoch 79: val_acc = 3535/3925 = 90.063694%  top5 = 3859/3925 = 98.318471%
+    [95% CI 89.09–90.96]
+Epoch 80/80: loss=0.502085 lr=0.000000
+  epoch 80: val_acc = 3535/3925 = 90.063694%  top5 = 3859/3925 = 98.318471%
+    [95% CI 89.09–90.96]
 done (trained ResNet-34 adam + cosine/warmup via packed threading).
 \end{verbatim}
 
-Eighty epochs at about 60 seconds each, roughly eighty minutes in total, and
-\textbf{89.50\%} top-1 with \textbf{98.24\%} top-5 on Imagenette's 3,925-image
-validation split. The best epoch reached $89.81\%$.
+Eighty epochs at about 35 seconds each, 47 minutes in all, and
+\textbf{90.06\%} top-1 with \textbf{98.32\%} top-5 on Imagenette's 3,925-image
+validation split. This is one seed of five; the five land at
+$89.99 \pm 0.32$ top-1 (\S\ref{sec:r34_ablation}), and that mean is the
+number every later chapter compares against.
 
 \prosesection{The residual block: ask for the difference, not the function}
 
@@ -4884,8 +4892,9 @@ Two pieces of this template are new and worth naming:
 
 \item \textbf{Global average pool instead of flatten-plus-dense.}
   Chapters \ref{chap:cnn} and \ref{chap:bn} ended in a
-  \texttt{.flatten} followed by a $\sim$4096-to-512 dense layer
-  that contained tens of millions of parameters. ResNet collapses
+  \texttt{.flatten} followed by a dense layer ($6272 \to 512$ on MNIST,
+  $128 \to 512$ on CIFAR) that held most of the network's parameters.
+  ResNet collapses
   the final 7$\times$7$\times$512 feature map to a 512-vector
   by spatial averaging, then runs a single 512-to-10 dense. No
   flatten layer. The architectural move alone drops the model
@@ -4894,10 +4903,9 @@ Two pieces of this template are new and worth naming:
 \end{enumerate}
 
 Every chapter after this one is a variation on this template.
-ConvNeXt swaps in different blocks. MobileNetV2 swaps in
-depthwise-separable blocks. EfficientNet adds compound scaling.
-ViT replaces the whole convolutional spine with patches and
-attention. The stem-stages-head template, and the residual
+MobileNetV2 swaps in depthwise-separable blocks. EfficientNet adds
+squeeze-and-excitation to them. ConvNeXt swaps in its own block. ViT
+replaces the whole convolutional spine with patches and attention. The stem-stages-head template, and the residual
 fan-in pattern, persist.
 
 \section{The theorem}
@@ -4937,17 +4945,9 @@ fan-in pattern, persist.
 \section{Example: ResNet-34 on Imagenette}
 \label{sec:residual_r34_example}
 
-Same template as the MNIST and CIFAR chapters, but at the scale the
-architecture was designed for. ResNet-34 on 224$\times$224
-Imagenette: 10 classes, real photographs, the transition point
-from ``classroom dataset'' to ``actual image recognition.''
-
-The residual block itself is the whole trick: instead of $y = f(x)$,
-compute $y = f(x) + x$. That's the additive-fan-in pattern of
-\S~\ref{thm:biPath_has_vjp} with $\mathrm{id}$ on one branch, which
-is the composition \S~\ref{thm:residual_has_vjp} proves. Stacking 34
-layers worth of these blocks just composes the fan-in rule 34 times
-(16 residual blocks deep and 34 convs across all of them).
+ResNet-34 on 224$\times$224 Imagenette: 10 classes, real photographs,
+the transition point from ``classroom dataset'' to ``actual image
+recognition.''
 
 \subsection*{The architecture}
 
@@ -5060,7 +5060,7 @@ def resnet34AdamConfig : VerifiedConfig where
   batchSize := 32
 
 -- 3. The entry point: AdamW, cosine with a 3-epoch warmup, baseLR 1e-3.
---    Variant, batch and rate are overridable; the defaults are §5.1's.
+--    Variant, batch and rate are overridable; the defaults are Run it first's.
 def runResnet34Adam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
   let bs      := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD
@@ -5081,18 +5081,19 @@ against the same proven gradient, which is what makes
 \S\ref{sec:r34_ablation}'s ablation a measurement of the recipe rather than of the
 model --- and what Chapter~\ref{chap:bn} used to put three optimizers on one net.
 
-\medskip\noindent \textbf{The schedule.} Chapter~\ref{chap:bn} trains at a constant rate
-deliberately --- it changes one thing at a time, and a schedule is one more
-thing changing. Annealing the rate to zero on a cosine is worth $4.48$ points, the largest contribution of any knob in the
-recipe except augmentation itself, and more than the optimizer, the warmup, the
-weight decay and the label smoothing combined. It buys that by taking large
+\medskip\noindent \textbf{The schedule.} Chapter~\ref{chap:bn} trained at a
+constant rate. Annealing the rate to zero on a cosine is worth about five
+points here ($-5.00 \pm 2.60$ in \S\ref{sec:r34_ablation}), the largest
+contribution of any knob in the recipe except augmentation itself, and more
+than the optimizer, the warmup, the weight decay and the label smoothing
+combined. It buys that by taking large
 steps while the loss surface is still coarse and small ones once it is not,
 which is the reason the warmup exists at the other end and the reason a constant
 rate has to be a compromise between the two.
 
-\medskip\noindent This is the first chapter that uses the full production recipe (Adam + cosine
-+ warmup + weight decay + augmentation + label smoothing) rather
-than the s4tfBaseline. Also the first chapter where
+\medskip\noindent This is the first chapter that uses the full production
+recipe (AdamW + cosine + warmup + weight decay + augmentation + label
+smoothing). Also the first chapter where
 \texttt{.globalAvgPool} replaces the flatten-plus-fat-dense head.
 \emph{Global average pooling} (GAP) collapses each
 \(C \times H \times W\) feature map to a length-\(C\) vector by
@@ -5101,9 +5102,7 @@ averaging over the spatial dimensions,
   \mathrm{gap}(x)_c \;=\; \frac{1}{HW} \sum_{i, j} x_{c, i, j},
 \]
 so the classifier head sees one summary scalar per channel instead
-of the full \(C \cdot H \cdot W\) flattened activation. That's the
-architectural move that drops ResNet-34 from what would have been a
-$\sim$200M parameter AlexNet-era spec down to 21.3M.
+of the full \(C \cdot H \cdot W\) flattened activation.
 
 GAP is not ResNet's invention. It comes from \emph{Network in Network}
 (Lin et al.\ 2013,
@@ -5123,21 +5122,22 @@ post-2015 vision architecture in the bestiary.
 
 \subsection*{Results}
 
-\S\ref{sec:r34_runit} has the run: 80 epochs on one RTX 3060, finishing at
-\textbf{89.50\%} top-1
-and \textbf{98.24\%} top-5 on Imagenette's 3,925-image validation split. That
-is the going rate for a scratch-trained ResNet-34 at this resolution and data
+\S\ref{sec:r34_runit} has the run: 80 epochs on one RTX 4060 Ti, finishing at
+\textbf{90.06\%} top-1 and \textbf{98.32\%} top-5 on Imagenette's 3,925-image
+validation split, one seed of the five that average $89.99 \pm 0.32$. That is
+the going rate for a scratch-trained ResNet-34 at this resolution and data
 size. Rather than reprint the log, here is what is worth noticing in it.
 
-- \textbf{Per-step time is about 200\,ms} at batch 32, 295 steps to the epoch,
-  dominated by the four \texttt{.residualStage} groups where the $3 \times 3$
-  convolutions at 64, 128, 256 and 512 channels are. The first stage alone at
-  64 channels does $3 \times 3 \times 64 \times 64$ multiply-accumulates per
-  output spatial location, about $3.4 \times 10^8$ FLOPs per forward image,
-  times the batch, times three blocks at that width, times two for the
-  backward.
+\begin{itemize}
+\item \textbf{Per-step time is about 120\,ms} at batch 32, 295 steps to the
+  epoch, dominated by the four \texttt{.residualStage} groups where the
+  $3 \times 3$ convolutions at 64, 128, 256 and 512 channels are. The first
+  stage alone, at 64 channels on the $56 \times 56$ grid, is
+  $3 \times 3 \times 64 \times 64$ multiply-accumulates per output location,
+  about $1.2 \times 10^8$ per convolution, six convolutions in the stage,
+  times the batch, and the backward costs about twice the forward again.
 
-- \textbf{Final loss plateaus near 0.50}, not zero. That's the
+\item \textbf{Final loss plateaus near 0.50}, not zero. That's the
   label-smoothing floor: with $\epsilon = 0.1$ and 10 classes, the
   minimum possible cross-entropy against a smoothed target is
   $-0.9 \log 0.9 - 0.1 \log (0.1/9) \approx 0.485$. The 0.50 value
@@ -5145,13 +5145,13 @@ size. Rather than reprint the log, here is what is worth noticing in it.
   epochs would mostly just extend training time without budging the
   loss.
 
-- \textbf{BN layers: 36}. Every residual block contains two normalized
-  convolutions, and there are 16 residual blocks across the four stages
-  (3+4+6+3). Plus the stem. That is 33 from the
-  \texttt{.residualStage} expansions plus 3 stem and projection layers,
-  for 36 total. Each one proves its own VJP via
-  \S~\ref{thm:bn_has_vjp} and composes with the rest of the network
-  via \S~\ref{thm:vjp_comp}.
+\item \textbf{BN layers: 36}. Every residual block contains two normalized
+  convolutions, and there are 16 blocks across the four stages
+  (3+4+6+3): 32. The projection shortcuts that open stages 2--4 carry
+  one each, and the stem one, for 36 total. Each one proves its own VJP
+  via Theorem~\ref{thm:bn_has_vjp} and composes with the rest of the
+  network via Theorem~\ref{thm:vjp_comp}.
+\end{itemize}
 
 \section{MLIR: Residual}
 
@@ -5166,7 +5166,7 @@ upstream gradient through both branches and add}.
 one slot), and the inner $f$'s VJP is the convolution and BatchNorm
 backward already proven in Chapters~\ref{chap:cnn} and~\ref{chap:bn}. The
 whole block, and a tower of sixteen of them, composes by the chain
-rule \texttt{vjp\_comp\_at} (\S~\ref{thm:vjp_comp}).
+rule \texttt{vjp\_comp\_at} (Theorem~\ref{thm:vjp_comp}).
 
 \medskip\noindent\textbf{The gap and how we close it.} The residual
 fan-in is the structural heart of a deep ResNet. The emitted backward is
@@ -5222,8 +5222,9 @@ Chapters~\ref{chap:cnn} and~\ref{chap:bn}. Only the fan-in is new here.
 
 Six ingredients first appear here, none of which are layers. They
 all live in \texttt{TrainConfig} or training code. They don't touch
-the network, but they're what moves a scratch-trained model from 72.82\%
-(plain SGD + momentum, no other tricks) to 90.29\%.
+the network, but they're what moves a scratch-trained model from
+$83.20 \pm 1.57$ (momentum at a constant rate and nothing else, the
+\texttt{bare} arm of \S\ref{sec:r34_ablation}) to $89.99 \pm 0.32$.
 
 \textbf{Adam} (Kingma \& Ba, 2014,
 \href{https://arxiv.org/abs/1412.6980}{arXiv:1412.6980}). Replaces
@@ -5257,7 +5258,8 @@ weights. Becomes essential for larger models and larger batches, and by
 ViT-Tiny in Chapter~\ref{chap:attention} it's a necessity.
 
 \textbf{Weight decay}. Adds a small L2 shrink to all trainable weights
-each step: $w \leftarrow w - \eta \lambda w$. Regularizer, discourages
+each step: $w \leftarrow w - \eta \lambda w$, with $\lambda = 10^{-4}$
+here. Regularizer, discourages
 weights from growing without bound. Loshchilov \& Hutter's
 ``decoupled'' variant (\textbf{AdamW}, 2017,
 \href{https://arxiv.org/abs/1711.05101}{arXiv:1711.05101}) is what
@@ -5764,8 +5766,8 @@ For the fastest path through this book, the route is roughly:
     Residual blocks are where the chain rule shows it can carry
     composition through arbitrarily deep architectures, and the proof
     reduces to one additive-fan-in lemma you've already seen. Run
-    the ResNet-50 RSB-A3 ImageNet training demo locally and/or in
-    the cloud ($\sim$6--9\,hrs, $\sim$\$15 in compute).
+    the ResNet-50 RSB-A3 ImageNet training demo
+    (\S\ref{sec:r50_pjrt}; about a day on four cards).
   \item Stop here. Assume Chapters \ref{chap:depthwise}--\ref{chap:attention}
     (MobileNet, EfficientNet, ConvNeXt, ViT) and the Bestiary
     (Ch~\ref{chap:bestiary}) are correct, because they all reuse the
