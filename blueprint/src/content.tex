@@ -5560,7 +5560,7 @@ spec must be the 10-class one with a different head, and the three guards fail
 the build if any other parameter shape moves. That is what licenses reading the
 Imagenette chapter's theorems as being about this network's body.
 
-\textbf{The \texttt{shimScript} is per-net and load-bearing.} It names this
+\textbf{The \texttt{shimScript} is per-net and decides the data.} It names this
 net's own generated augmentation shim --- the same shim the reference
 consumes, which is what makes the two a matched pair rather than two
 separate stories.
@@ -7009,7 +7009,7 @@ lake run mnv2-default-4gpu
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (CUDA) & bf16 & $8.8$ min & 350 & $51.2$ hr & $\mathbf{71.912\%}$ & $\mathbf{90.520\%}$ \\
+4$\times$ 3060 (CUDA) & bf16 & $8.8$ min & 350 & $51.2$ hr & $\mathbf{71.91\%}$ & $\mathbf{90.52\%}$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -7036,8 +7036,8 @@ global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
 steps/epoch          & 5{,}004                  & 5{,}004 \\
 optimizer            & RMSProp, $\varepsilon=1.0$ & RMSProp, $\varepsilon=1.0$ \\
 \hline
-\textbf{val top-1}   & $\mathbf{71.90\%}$       & $\mathbf{71.912\%}$ \\
-\textbf{val top-5}   & $\mathbf{90.41\%}$       & $\mathbf{90.520\%}$ \\
+\textbf{val top-1}   & $\mathbf{71.90\%}$       & $\mathbf{71.91\%}$ \\
+\textbf{val top-5}   & $\mathbf{90.41\%}$       & $\mathbf{90.52\%}$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -8304,7 +8304,7 @@ every row is a one-line change to the \texttt{VerifiedNetSpec}, the
 Knob & ResNet-34 (2018) & EfficientNet-B0 (2019) & What the B0 choice buys \\
 \hline
 Backbone      & basic block, 21.8\,M   & MBConv + SE + Swish, 5.3\,M  & depthwise sandwich + SE gating --- ResNet-34-class accuracy at a quarter of the parameters \\
-Optimizer     & SGD + momentum $0.9$   & RMSProp (TF form)             & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}10^{-3}$ --- and the exact variant is load-bearing (below) \\
+Optimizer     & SGD + momentum $0.9$   & RMSProp (TF form)             & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}10^{-3}$ --- and the exact variant matters (below) \\
 Peak LR       & $0.1$                  & $0.016$                       & linearly scaled from the official $0.256$@4096 --- RMSProp's scale, not comparable to SGD's $0.1$ \\
 LR schedule   & cosine to zero         & exponential, $\times0.97$ every 2.4 epochs & the paper's staircase anneal, after the same 5-epoch warmup \\
 Epochs        & 90                     & 350                           & the long-schedule regime the regularizers need, and the row the exponential decay above makes non-negotiable \\
@@ -10873,15 +10873,19 @@ same three pieces: denoted IR, bridge theorem, printer.
 \section{ImageNet recipe}
 \label{sec:vit_imagenet}
 
-\imagenetphasenote
+The Imagenette ViT-Tiny above trained on $\sim$9.5K images. The full
+1000-class run is the same architecture with a 1000-class head, the
+\texttt{.imagenet} dataset, and the DeiT-Ti training recipe, so it is
+still patch16, embed 192, 12 transformer blocks and 3 heads, at
+5{,}717{,}416 parameters. As in every ImageNet section, the recipe runs
+on both paths --- the reference first, then the verified path, then the
+two side by side --- and this is the chapter where the pair is cleanest,
+because a transformer has no BatchNorm to normalize differently.
 
-The Imagenette ViT-Tiny above trained on $\sim$9.5K images. The
-full 1000-class run is the same architecture with a 1000-class head,
-the \texttt{.imagenet} dataset, and the DeiT-flavored training recipe,
-so it is still patch16, embed 192, 12 transformer blocks and 3 heads,
-at 5{,}717{,}416 parameters. This is the \textbf{phase-2 reference}
-implementation, \texttt{jax/MainVitImagenet.lean}, quoted as it stands
-today:
+\prosesection{The reference (JAX)}
+
+The reference trainer is \texttt{jax/MainVitImagenet.lean}, quoted as it
+stands today:
 
 \begin{verbatim}
 -- 1. Same ViT-Tiny backbone, 1000-class head.
@@ -10926,8 +10930,8 @@ def vitTinyImagenetConfigDeitInit : TrainConfig :=
   { vitTinyImagenetConfig with vitInit := true }
 
 -- 4. Two named recipes, chosen by a positional CLI arg. This is the
---    phase-2 reference driver; the verified path's entry point is
---    trainAdamSched, in the phase-4 subsection at the end of this chapter.
+--    reference driver; the verified path's entry point is trainAdamSched,
+--    in the next section.
 def vitTinyImagenetRecipes : List Recipe := [
   { name := "default",   cfg := vitTinyImagenetConfig,         ... },
   { name := "deit-init", cfg := vitTinyImagenetConfigDeitInit, ... }
@@ -10943,10 +10947,7 @@ they generate differ in exactly one function: \texttt{init\_params}, 59
 initialization sites, with the schedule, augmentation, EMA and
 evaluation identical byte-for-byte.
 
-That driver wires \texttt{.imagenet} through tfds streaming.
-\S\ref{sec:vit_phase4} is the verified path's side of it.
-
-\textbf{Gradient clipping is load-bearing.} At the DeiT learning rate
+\textbf{Gradient clipping is not optional.} At the DeiT learning rate
 (peak $5\times 10^{-4}$ for batch 512) the model collapses to chance the
 moment warmup ramps past ${\sim}1.6\times 10^{-4}$, train loss pinned at
 $\ln(1000)\approx 6.9$ and never recovering. \texttt{gradClipNorm := 1.0}
@@ -10960,26 +10961,24 @@ is the only precision flag that applies and there is no
 128 (\texttt{jax/scripts/jax\_vit\_bench.py tiny 128}, synthetic). The
 multiple is below the convnets' because ViT-Ti's matmuls are narrow
 ($d{=}192$) and proportionally more time goes to the fp32
-LayerNorm/softmax that bf16 leaves alone. The run:
+LayerNorm/softmax that bf16 leaves alone.
 
 \begin{center}
 \begin{tabular}{l l r r r r r}
 \hline
-GPU & Precision & Per epoch & Epochs & Wall-clock & Val top-1 & Val top-5 \\
+GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 300 & $\sim$41 hr & \withheld & \withheld \\
 4$\times$ 3060 (CUDA) & bf16 & 6.8 min & 300 & 34.2 hr & $\mathbf{72.31\%}$ & $\mathbf{91.12\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The 4060 Ti row is a per-epoch rate carried out to the full
-schedule, not a completed run, hence no accuracy. The 3060 row is the
-completed run: \textbf{72.31\% top-1 / 91.12\% top-5} over all 50{,}000
-validation images, 300 epochs in 34.2 hours, one attempt, no restarts,
-no thermal pauses. DeiT-Ti without distillation publishes \textbf{72.2\%
-/ 91.1\%}, so this is $+0.11$ and $+0.02$ --- on the paper, not past it
-in any meaningful sense. Per-epoch validation:
+\noindent Global batch 512 as $4 \times 128$ replicas, the EMA weights
+scored over all $50{,}000$ validation images; one attempt, no restarts.
+DeiT-Ti without distillation publishes $72.2\%$ / $91.1\%$, so this is
+$+0.11$ and $+0.02$, and at $n = 50{,}000$ the Wilson 95\% interval on
+this run is $[71.92, 72.70]$: on the paper, not past it in any meaningful
+sense.
 
 \begin{center}
 \begin{tikzpicture}
@@ -10995,6 +10994,8 @@ in any meaningful sense. Per-epoch validation:
     tick label style={font=\small},
     label style={font=\small},
     every axis plot/.append style={line width=1pt, mark size=0.8pt},
+    title style={font=\small},
+    title={DeiT-Ti recipe, 300 epochs --- reference},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
 (5,14.07) (10,30.64) (15,39.38) (20,44.78) (25,48.44) (30,51.03) (35,53.13) (40,54.89) (45,56.20) (50,57.36) (55,58.29) (60,59.14) (65,59.94) (70,60.61) (75,61.18) (80,61.85) (85,62.30) (90,62.82) (95,63.20) (100,63.62) (105,63.95) (110,64.41) (115,64.80) (120,65.20) (125,65.42) (130,65.74) (135,66.10) (140,66.44) (145,66.77) (150,66.99) (155,67.11) (160,67.49) (165,67.78) (170,68.08) (175,68.31) (180,68.57) (185,68.85) (190,69.04) (195,69.21) (200,69.40) (205,69.59) (210,69.88) (215,70.08) (220,70.30) (225,70.56) (230,70.78) (235,70.98) (240,71.19) (245,71.46) (250,71.57) (255,71.66) (260,71.78) (265,71.91) (270,71.99) (275,72.05) (280,72.12) (285,72.23) (290,72.29) (295,72.29) (300,72.31)
@@ -11008,9 +11009,10 @@ in any meaningful sense. Per-epoch validation:
 \end{tikzpicture}
 \end{center}
 
-\noindent ViT-Tiny / ImageNet-1k validation accuracy per epoch (bf16,
-4$\times$ RTX 3060, CUDA), sampled every 5 epochs across the 300-epoch
-run and scored over all 50{,}000 validation images.
+\noindent The run, sampled every 5 epochs. The slow start is Mixup and
+CutMix blending the labels, compounded by the EMA shadow lagging the live
+weights; after that it climbs to the end of the schedule without an
+overfitting turn.
 
 \textbf{Where this still differs from the paper.} The number matches.
 The recipe does not yet match exactly, and the honest list is short but
@@ -11045,40 +11047,45 @@ they could matter:
   smaller-batch run of the same recipe rather than a mis-tuned one ---
   but it is not the paper's batch, and repeated augmentation interacts
   with batch size by construction.
-\item \textbf{Gradient clipping at global norm $1.0$ is ours.} It is
-  load-bearing: without it the model collapses to chance the moment
-  warmup ramps past ${\sim}1.6\times 10^{-4}$. Whether DeiT itself
-  clips is \emph{not verified in this repo}. The config comment calls
-  it ``the DeiT default'' and that claim has never been checked against
-  DeiT's \texttt{main.py}; until someone reads the reference
-  implementation, treat it as an addition of ours.
+\item \textbf{Gradient clipping at global norm $1.0$ is ours.} DeiT does
+  not clip: its \texttt{main.py} defaults \texttt{--clip-grad} to
+  \texttt{None}. Ours went in because without it the model collapsed to
+  chance the moment warmup ramped past ${\sim}1.6\times 10^{-4}$ --- but
+  that was observed on the Xavier initialization, before \texttt{vitInit}
+  narrowed the weights $3.6\times$, and whether the collapse survives the
+  init fix is untested. Until it is, the clip stays and is an addition.
 \item \textbf{RandomResizedCrop and Random-Erasing are a from-scratch
   \texttt{tf.data} reimplementation}, not timm's code, so they agree by
   specification rather than bit-for-bit. Random-Erase fills with zero
   where timm fills with noise.
 \item \textbf{Geometric RandAugment interpolates bilinearly}, where
-  timm resolves bicubic from the model's data config;
-  appendix~\ref{app:data} carries the measurement and the decision to
-  leave it.
+  timm resolves bicubic from the model's data config. Measured, this is a
+  bound rather than a gap: on a $21^\circ$ rotation our bilinear warp sits
+  $0.56$ / $2.53$ of $255$ from PIL's bicubic on a smooth / noisy image,
+  and PIL's own bilinear sits $0.39$ / $2.41$ from it, so we are as close
+  as a bilinear implementation can be. TensorFlow's own \texttt{BICUBIC}
+  is a third resampler, ${\sim}30$ from both, so asking for it would make
+  this worse, not better.
 \end{enumerate}
 
-\noindent None of these is a bug, and the loss curve is textbook DeiT.
-But ``matches the paper's number'' and ``matches the paper'' are
-different claims, and only the first is established here.
+\noindent None of these is a bug, and the loss curve is textbook DeiT. All
+four are properties of the recipe and of the shim rather than of this
+trainer, and the verified path inherits every one of them: it runs the
+same $4\times128$, clips at the same $1.0$ inside the render, and streams
+the same \texttt{tf.data} pipeline. But ``matches the paper's number'' and
+``matches the paper'' are different claims, and only the first is
+established here, on either path.
 
 The further $+2.3$ points to DeiT-Ti's $74.5\%$ headline are a different
 thing entirely, the \emph{distillation} variant (a second
 ``distillation token'' trained against a strong CNN teacher), which we
 do not implement.
 
-\subsection*{Phase 4: the verified trainer}
+\prosesection{The verified path (PJRT)}
 \label{sec:vit_phase4}
 
-Everything above this point is the phase-2 Lean$\to$JAX trainer. The
-phase-4 peer, which trains the same network through the proof-rendered
-StableHLO that \S\ref{sec:vit_runit} ran at Imagenette scale, exists and
-builds. It is \texttt{apps/imagenette/MainViTImagenet.lean}, built as
-\texttt{lake build vit-imagenet-verified}:
+The verified trainer is \texttt{apps/imagenette/MainViTImagenet.lean},
+built as \texttt{lake build vit-\allowbreak imagenet-\allowbreak verified}:
 
 \begin{verbatim}
 -- Identical backbone, 1000 classes instead of 10.
@@ -11090,13 +11097,13 @@ def vitImagenetVerified : VerifiedNetSpec where
   shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers     := [ ... the Imagenette stack, 1000-class head ... ]
 
--- 300 epochs, because that is the schedule the phase-2 number
+-- 300 epochs, because that is the schedule the reference number
 -- above was measured on. Batch is 128 PER DEVICE, so four
 -- replicas give the reference's global 512 exactly.
 def vitImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 128
-  vitInit   := true  -- timm/DeiT init, as the phase-2 `deit-init` recipe above
+  vitInit   := true  -- timm/DeiT init, as the reference's `deit-init` recipe above
 \end{verbatim}
 
 \noindent The head is the only parameter shape that moves, from
@@ -11119,45 +11126,68 @@ Two gates that sound alike are not one property, and this chapter has
 one and a half of them rather than ConvNeXt's two.
 
 \medskip\noindent\textbf{The regularizer knobs are render variants, and
-here they compose.} Weight-decay exclusion,
-grad clipping and stochastic depth are spelled \texttt{wx},
-\texttt{clip} and \texttt{drop}, and
-\texttt{vitin\_adamdp128x4wxclipdrop} carries all three at once on top
-of AdamW and the four-way all-reduce. EMA is a variant too, and
-\texttt{vitin\_emadp128x4wxclipdropbf16} is the render that carries all
-four at once --- AdamW, the four-way all-reduce, the three regularizer
-axes and the EMA shadow. It is what made the pair below one-variable in
-recipe, and it is the artifact the run used. Mixup, CutMix and repeated augmentation never enter the
-graph at all, because they are data-side and ride the shim.
+here they compose.} Weight-decay exclusion, grad clipping and stochastic
+depth are spelled \texttt{wx}, \texttt{clip} and \texttt{drop}, EMA is a
+variant too, and \texttt{vitin\_\allowbreak emadp128x4\allowbreak wxclipdropbf16} is the render
+that carries all four at once on top of AdamW and the four-way
+all-reduce. It is the artifact the run used, and it is what makes the
+pair below one-variable in recipe. Mixup, CutMix and repeated
+augmentation never enter the graph at all, because they are data-side
+and ride the shim. It runs with:
+
+\begin{verbatim}
+lake run vit-default-emabf16-4gpu
+\end{verbatim}
+
+\begin{center}
+\begin{tabular}{l l r r r r r}
+\hline
+GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
+\hline
+4$\times$ 3060 (CUDA) & bf16 & 9.6 min & 300 & 48.0 hr & $\mathbf{72.35\%}$ & $\mathbf{91.22\%}$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Global batch 512 as $4 \times 128$ replicas, the EMA weights
+scored over the same $50{,}000$ images. One attempt, no restarts.
 
 \prosesection{The two paths, side by side}
 
 \begin{center}
 \begin{tabular}{@{}l l l@{}}
 \hline
- & verified lowerer (PJRT) & JAX lowerer \\
+ & reference (JAX) & verified path (PJRT) \\
 \hline
-lowering             & \texttt{pretty(provenGraph)} $\to$ XLA & JAX $\to$ XLA \\
-Python in the step   & none                     & yes \\
-ms/step              & 199                      & 161 \\
-per epoch            & 9.6 min                  & 6.8 min \\
-total                & 48.0 hr                  & 34.2 hr \\
+lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
+Python in the step   & yes                      & none \\
+ms/step              & 161                      & 199 \\
+per epoch            & 6.8 min                  & 9.6 min \\
+total                & 34.2 hr                  & 48.0 hr \\
 \hline
 precision            & bf16                     & bf16 \\
 global batch         & 512 ($4\times128$)       & 512 ($4\times128$) \\
 steps/epoch          & 2{,}502                  & 2{,}502 \\
 EMA (scored)         & 0.99996                  & 0.99996 \\
 \hline
-\textbf{val top-1}   & $\mathbf{72.350\%}$      & $\mathbf{72.31\%}$ \\
-\textbf{val top-5}   & $\mathbf{91.216\%}$      & $\mathbf{91.12\%}$ \\
+\textbf{val top-1}   & $\mathbf{72.31\%}$       & $\mathbf{72.35\%}$ \\
+\textbf{val top-5}   & $\mathbf{91.12\%}$       & $\mathbf{91.22\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Both columns are ViT-Tiny on the DeiT-Ti recipe, 300 epochs, on the
-same four RTX 3060 cards, scored over the same $50{,}000$ validation images.
-Rows above the first rule differ; rows between the rules are held equal by
-construction; the results below do not differ in any way that matters.
+\noindent Both columns are ViT-Tiny on the DeiT-Ti recipe, 300 epochs, on
+the same four RTX 3060 cards, scored over the same $50{,}000$ validation
+images. Rows above the first rule differ; rows between the rules are held
+equal by construction.
+
+\medskip\noindent\textbf{The two paths agree to $0.04$ points on top-1 and
+$0.10$ on top-5}, inside the floor \S\ref{sec:r34_pjrt} set ($\pm0.39$ at
+$72\%$ on $50{,}000$ images), at one seed each. Nothing sits above the
+rule but the lowering itself and what it costs: precision is equal, the
+batch is the reference's own $512$, and there is no BatchNorm to
+normalize over a different group. This is the one-variable pair in the
+book.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end together.}
 The verified path runs half a point \emph{behind} through warmup, is level by
@@ -11168,9 +11198,9 @@ epoch~100, and stays within a fifth of a point for the remaining two hundred:
 \hline
 epoch & 5 & 50 & 100 & 150 & 200 & 250 & 300 \\
 \hline
-phase-2 reference & 14.07 & 57.36 & 63.62 & 66.99 & 69.40 & 71.57 & 72.31 \\
-phase-4 verified  & 14.32 & 56.86 & 63.63 & 66.86 & 69.31 & 71.36 & 72.35 \\
-$\Delta$          & $+0.25$ & $-0.50$ & $+0.01$ & $-0.13$ & $-0.09$ & $-0.21$ & $+0.04$ \\
+reference (JAX)       & 14.07 & 57.36 & 63.62 & 66.99 & 69.40 & 71.57 & 72.31 \\
+verified path (PJRT)  & 14.32 & 56.86 & 63.63 & 66.86 & 69.31 & 71.36 & 72.35 \\
+$\Delta$              & $+0.25$ & $-0.50$ & $+0.01$ & $-0.13$ & $-0.09$ & $-0.21$ & $+0.04$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -11193,17 +11223,17 @@ $\Delta$          & $+0.25$ & $-0.50$ & $+0.01$ & $-0.13$ & $-0.09$ & $-0.21$ & 
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
 (5,14.07) (10,30.64) (15,39.38) (20,44.78) (25,48.44) (30,51.03) (35,53.13) (40,54.89) (45,56.20) (50,57.36) (55,58.29) (60,59.14) (65,59.94) (70,60.61) (75,61.18) (80,61.85) (85,62.30) (90,62.82) (95,63.20) (100,63.62) (105,63.95) (110,64.41) (115,64.80) (120,65.20) (125,65.42) (130,65.74) (135,66.10) (140,66.44) (145,66.77) (150,66.99) (155,67.11) (160,67.49) (165,67.78) (170,68.08) (175,68.31) (180,68.57) (185,68.85) (190,69.04) (195,69.21) (200,69.40) (205,69.59) (210,69.88) (215,70.08) (220,70.30) (225,70.56) (230,70.78) (235,70.98) (240,71.19) (245,71.46) (250,71.57) (255,71.66) (260,71.78) (265,71.91) (270,71.99) (275,72.05) (280,72.12) (285,72.23) (290,72.29) (295,72.29) (300,72.31)
 };
-\addlegendentry{phase-2 reference (JAX)}
+\addlegendentry{reference (JAX)}
 \addplot[red, dashed, mark=o] coordinates {
 (5,14.32) (10,29.97) (15,38.93) (20,44.20) (25,47.74) (30,50.38) (35,52.54) (40,54.36) (45,55.75) (50,56.86) (55,57.77) (60,58.72) (65,59.61) (70,60.36) (75,61.00) (80,61.65) (85,62.22) (90,62.68) (95,63.19) (100,63.63) (105,63.94) (110,64.23) (115,64.72) (120,65.03) (125,65.37) (130,65.62) (135,65.90) (140,66.22) (145,66.51) (150,66.86) (155,67.07) (160,67.35) (165,67.60) (170,67.87) (175,68.20) (180,68.39) (185,68.61) (190,68.90) (195,69.12) (200,69.31) (205,69.52) (210,69.79) (215,69.99) (220,70.12) (225,70.42) (230,70.63) (235,70.79) (240,71.08) (245,71.23) (250,71.36) (255,71.51) (260,71.67) (265,71.81) (270,71.96) (275,72.07) (280,72.17) (285,72.26) (290,72.31) (295,72.32) (300,72.35)
 };
-\addlegendentry{phase-4 verified (PJRT)}
+\addlegendentry{verified path (PJRT)}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent Two independent lowerings of one recipe, sampled every 5 epochs and
-scored over all $50{,}000$ validation images.
+\noindent One recipe, two paths to XLA, sampled every 5 epochs and scored
+over all $50{,}000$ validation images.
 
 \medskip\noindent\textbf{The remaining $48.0$ against $34.2$ hours is the data
 feed, not the renderer.} With the shim removed the verified step is
@@ -11215,6 +11245,8 @@ both are throughput-only: producer count, and \texttt{tf.data} op determinism,
 which serializes the augmentation map and costs $5.3\times$ on the producers.
 Turning it off took this run from $69$ to $48$ hours; it moves the order of
 random draws and nothing else, and the reference has never paid it either.
+The same accounting holds for every verified ImageNet run in this book,
+and the convnets' gaps are read against it.
 
 \medskip\noindent A caution on reading the two side by side: the \emph{training}
 loss is not the metric to compare. It runs ${\sim}0.47$ apart at epoch 50 where
@@ -11223,33 +11255,6 @@ $\log p$ over all $1{,}000$ classes and is hypersensitive to the
 small-probability tail, which top-1 cannot see. Held at fixed accuracy, varying
 only that tail moves the reported loss by $0.6$. The validation accuracies are
 the comparison; the loss curves are not.
-
-\subsection*{What Part 1 has established}
-
-Every layer primitive shipped in Part 1's trainers (MLP,
-CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT) has a
-machine-checked backward pass. The same \texttt{VerifiedNetSpec} /
-\texttt{VerifiedConfig} / \texttt{trainAdamSched} pipeline trains all
-of them with at most config-level changes. The MLIR each emits is
-between 7\,KB (MLP) and 1{,}316\,KB (EfficientNet-B0), and the
-lowerer compiles all of them the same way.
-
-The bestiary in Part 2 then shows that \emph{every other
-architecture you've seen in modern deep learning} composes from the
-same small set of primitives plus a handful of
-architecture-specific bundled layers. That list runs UNet, YOLO, DETR,
-Mask R-CNN, DCGAN, CycleGAN, Pix2Pix, DDPM, Stable Diffusion, VAE,
-AlphaGo, AlphaZero, MuZero, Mamba, BERT, GPT, Whisper, CLIP, LLaVA,
-SAM, SegFormer, DeepLab v3+, Nyström-former, QANet and Evoformer. Three rules (chain, additive
-fan-in, multiplicative fan-in). Five Jacobian tricks (diagonal,
-sparse Toeplitz, binary selection, rank-1 correction, outer
-product).
-
-That's the whole framework. Part~2's bestiary takes the same set
-of primitives and tours how they compose into every well-known
-modern architecture, a survey of the field expressed in the
-proven kit, with a small library of bundled idioms for the patterns
-that recur.
 
 \section{Side quest: scaling to ViT-S and B}
 \label{sec:vit_sb}
@@ -11303,6 +11308,32 @@ removed but $199$ fed, for $48.0$ hours. The ratio is not a constant --- it is
 whatever the host pipeline costs for that recipe --- so ViT-S and ViT-B should
 be expected to run over these figures by a margin nobody has measured.
 
+\subsection*{What Part 1 has established}
+
+Every layer primitive shipped in Part 1's trainers (MLP,
+CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT) has a
+machine-checked backward pass. The same \texttt{VerifiedNetSpec} /
+\texttt{VerifiedConfig} / \texttt{trainAdamSched} pipeline trains all
+of them with at most config-level changes. The MLIR each emits is
+between 7\,KB (MLP) and 1{,}316\,KB (EfficientNet-B0), and the
+lowerer compiles all of them the same way.
+
+The bestiary in Part 2 then shows that \emph{every other
+architecture you've seen in modern deep learning} composes from the
+same small set of primitives plus a handful of
+architecture-specific bundled layers. That list runs UNet, YOLO, DETR,
+Mask R-CNN, DCGAN, CycleGAN, Pix2Pix, DDPM, Stable Diffusion, VAE,
+AlphaGo, AlphaZero, MuZero, Mamba, BERT, GPT, Whisper, CLIP, LLaVA,
+SAM, SegFormer, DeepLab v3+, Nyström-former, QANet and Evoformer. Three rules (chain, additive
+fan-in, multiplicative fan-in). Five Jacobian tricks (diagonal,
+sparse Toeplitz, binary selection, rank-1 correction, outer
+product).
+
+That's the whole framework. Part~2's bestiary takes the same set
+of primitives and tours how they compose into every well-known
+modern architecture, a survey of the field expressed in the
+proven kit, with a small library of bundled idioms for the patterns
+that recur.
 
 \chapter{Bestiary of Architectures}
 \label{chap:bestiary}
