@@ -9369,17 +9369,18 @@ something larger: it composes \emph{every} layer the framework has
 proved so far into one machine-checked backward pass over a
 complete state-of-the-art image classifier.
 
-The destination is Theorem~\ref{thm:vit_body_has_vjp_mat} at the
-end of the chapter. It says, roughly: the full ViT backbone is a
-\(\HasVJPMat\), and that backbone is the patch embedding, twelve
-transformer blocks and a final LayerNorm. The proof composes everything
-this chapter introduces, plus most of what the previous chapters
-introduced, into a single tower of \texttt{vjpMat\_comp}
-applications. Read the proof's dependency list and you see a tour
-of Part 1: dense, residual, layer norm, GELU, softmax, matrix
-multiply, plus the eight or ten matrix-machinery lemmas this
-chapter sets up. None of them is new in its own right. What's new
-is how high the composition rule can be pushed.
+The destination is Theorem~\ref{thm:vitTiny_has_vjp_correct} at the
+end of the chapter. It says: the whole ViT-Tiny --- patch embedding,
+twelve transformer blocks with their own parameters, final LayerNorm
+and head --- has a backward that equals its Jacobian transpose at every
+input, assuming only \(\varepsilon > 0\) at the LayerNorms. The proof
+composes everything this chapter introduces, plus most of what the
+previous chapters introduced, into a tower of \texttt{vjpMat\_comp}
+applications with \texttt{vjp\_comp} at the joins. Read the proof's
+dependency list and you see a tour of Part 1: dense, residual, layer
+norm, GELU, softmax, matrix multiply, plus the sixteen matrix-machinery
+lemmas this chapter sets up. None of them is new in its own right.
+What's new is how high the composition rule can be pushed.
 
 \section{Run it first}
 \label{sec:vit_runit}
@@ -9392,7 +9393,7 @@ one in it:
 lake exe cache get                        # Mathlib oleans, ~30 s
 ./download_imagenette.sh                  # 330 MB dl, 2.4 GB unpacked
 lake build vit-verified-adam
-./.lake/build/bin/vit-verified-adam data
+PJRT_FFI_RESIDENT=1 ./.lake/build/bin/vit-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -9457,24 +9458,24 @@ not enough signal to keep the tail honest, which is
 \S\ref{sec:attention_vit_example}'s data-hunger argument showing up
 inside a single run rather than across the comparison table.
 
-Attention is where you would expect this to break. That run did not
-execute a
-reimplementation of the network this chapter describes. It executed
-\texttt{verified\_mlir/vit\_adam\_train\_step.mlir}, which is
-\texttt{pretty(provenGraph)} off the renderer. Every softmax in it
-backpropagates by Theorem~\ref{thm:softmax_has_vjp}, every scaled
-dot-product attention by \S\S\ref{thm:sdpa_back_Q_correct}--%
-\ref{thm:sdpa_back_V_correct}, every LayerNorm by
-Chapter~\ref{chap:layernorm}'s, every GELU by that chapter's, and every
-residual skip by Chapter~\ref{chap:residual}'s additive fan-in.
+Attention is where you would expect this to break. What ran is
+\texttt{pretty(provenGraph)}, the file
+\texttt{verified\_mlir/\allowbreak vit\_adam\_train\_step.mlir}, and every
+softmax in it backpropagates by Theorem~\ref{thm:softmax_has_vjp}, every
+scaled dot-product attention by
+Theorems~\ref{thm:sdpa_back_Q_correct}--\ref{thm:sdpa_back_V_correct},
+every LayerNorm by Chapter~\ref{chap:layernorm}'s, every GELU by that
+chapter's, and every residual skip by Chapter~\ref{chap:residual}'s
+additive fan-in.
 
 \medskip\noindent\textbf{And the fold holds at every depth.}
-\texttt{vitForward2\_has\_vjp} chains the patch embedding, all
-\emph{twelve} transformer blocks, the final LayerNorm and the head
-through \texttt{vjp\_comp}, with \texttt{vitForward2\_has\_vjp\_correct}
-carrying it back to the forward the spec denotes, and
-\texttt{vitForwardKV\_has\_vjp} generalizes it to depth $k$. Its only
-hypothesis is $\varepsilon > 0$ at the LayerNorms. It is a single global
+\texttt{vitForwardKV\_has\_vjp} chains the patch embedding, $k$
+transformer blocks with their own parameters, the final LayerNorm and
+the head through \texttt{vjp\_comp} for every $k$, and
+\texttt{vitTiny\_has\_vjp\_correct} is its instance at this network's
+shape --- twelve blocks, $224/16$, ten classes --- carried back to the
+forward the spec denotes. Its only hypothesis is $\varepsilon > 0$ at
+the LayerNorms. It is a single global
 \texttt{HasVJP} over the entire network for the same reason
 Chapter~\ref{chap:layernorm}'s is --- softmax, GELU and LayerNorm are all
 smooth --- so ViT gets the strong sentence too: every operation in the
@@ -9524,7 +9525,7 @@ other token. That's the qualitative break from CNNs:
 convolutions look only at a local neighborhood, attention looks
 everywhere. The receptive field is global from the first layer.
 
-\prosesection{Why this chapter has thirty theorems}
+\prosesection{Why this chapter has thirty-seven theorems}
 
 The math of attention is matrix algebra. Chapter~\ref{chap:tensor}'s
 foundation rules (chain, sum, product, identity) were stated and
@@ -9534,13 +9535,13 @@ matrix-level lifts of those rules: chain rule on matrices,
 additive fan-in on matrices, identity on matrices, plus matrix-specific
 moves like transpose, matmul-with-one-factor-fixed, and scalar
 scale. That's the first section of theorems below
-(\textbf{Matrix-level machinery}, \(\sim\)15 theorems). Every one of them
+(\textbf{Matrix-level machinery}, sixteen theorems). Every one of them
 is a mechanical lift of a vector-level theorem from
 Chapter~\ref{chap:tensor}, proved via the row-projection
 \(\mathrm{ContinuousLinearMap}\) and the existing chain rule. Pay
 the cost once, reuse forever.
 
-The second section (\textbf{Attention proofs}, \(\sim\)15 theorems)
+The second section (\textbf{Attention proofs}, twenty-one theorems)
 applies the matrix machinery to the actual attention math. Row-wise
 softmax (a per-row softmax applied to the \(N \times N\) score
 matrix) has the well-known closed-form Jacobian \(p_i(\delta_{ij}
@@ -9550,8 +9551,9 @@ into three matmul-backward applications (one for each of \(Q\),
 \(K\), \(V\)) plus the row-wise softmax backward, and we prove each. Then
 multi-head, then the attention sublayer (with residual), then the
 MLP sublayer (with residual), then a single transformer block,
-then a \(k\)-deep transformer tower, then the full ViT body. Each
-step is one or two compositions of the previous step. The chain
+then a \(k\)-deep transformer tower, then the ViT body, then the whole
+network at its real shape. Each step is one or two compositions of the
+previous step. The chain
 that started at \texttt{vjp\_comp} in Chapter~\ref{chap:tensor}
 reaches all the way to a 5.5M-parameter image classifier here.
 
@@ -9559,7 +9561,7 @@ reaches all the way to a 5.5M-parameter image classifier here.
 
 That's the framework-side payoff of this chapter: \textbf{every
 architectural piece used by any Part-1 network has a machine-checked
-backward}. Once we land Theorem~\ref{thm:vit_body_has_vjp_mat}, the
+backward}. Once we land Theorem~\ref{thm:vitTiny_has_vjp_correct}, the
 sentence ``the gradient computed by this trainer is the
 mathematically correct one'' is no longer a hope or a folklore
 result. It is a theorem the Lean kernel verifies on every
@@ -9583,7 +9585,7 @@ extensions of Ch~\ref{chap:tensor}'s foundation rules. Each theorem
 below is the matrix lift of a vector-level theorem from Ch
 \ref{chap:tensor}, proved by composing the vector version with the
 row-projection \(\mathrm{ContinuousLinearMap}\). The Lean proofs all
-live in \texttt{Proofs/Tensor.lean} alongside their vector
+live in \texttt{Proofs/Foundation/Tensor.lean} alongside their vector
 counterparts. We collect them here because Ch~\ref{chap:attention}
 is the first and only chapter to use them.
 
@@ -10544,34 +10546,60 @@ the \(k\)-block tower
 per-token LayerNorm
 (Theorem~\ref{thm:layerNorm_per_token_has_vjp_mat}). Every step of
 the chain that began with \texttt{vjp\_comp} in
-Chapter~\ref{chap:tensor} is a proved theorem; this is its last
-link. \Qed{}
+Chapter~\ref{chap:tensor} is a proved theorem; one link remains, the
+network itself. \Qed{}
+\end{proof}
+
+\begin{theorem}[ViT-Tiny, the whole network]
+  \label{thm:vitTiny_has_vjp_correct}
+  \lean{Proofs.vitTiny_has_vjp_correct}
+  \leanok
+  \uses{ax:patchEmbed_flat_has_vjp, thm:transformerBlock_has_vjp_mat, thm:layerNorm_per_token_has_vjp_mat, thm:dense_has_vjp, thm:vjp_comp}
+  \Assume{}
+  \begin{enumerate}
+    \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
+  \end{enumerate}
+  \Prove{} the backward of \texttt{vitForwardKV\_has\_vjp} at ViT-Tiny's
+  shape --- a \(3 \times 224 \times 224\) image, \(16 \times 16\) patches
+  (\(N = 196\) plus the CLS token), \(d = 192 = 3 \times 64\), MLP
+  \(768\), \emph{twelve} blocks with distinct parameters, ten classes ---
+  equals the \(\pdiv\)-contracted Jacobian of the flat forward
+  \texttt{vitForwardKV} at every input, cotangent and index. The
+  statement is generic in the weights.
+\end{theorem}
+
+\begin{proof}
+\leanok
+\begin{enumerate}
+  \item \texttt{vitForwardKV\_has\_vjp}: for every depth \(k\), the flat
+    forward is \(\mathrm{head} \circ \mathrm{LN}_F \circ
+    \mathrm{tower}_k \circ \mathrm{patchEmbed}\), and each factor
+    carries a \(\HasVJP\) --- the patch embedding
+    (Theorem~\ref{ax:patchEmbed_flat_has_vjp}), the tower by induction
+    on \(k\) with the block (Theorem~\ref{thm:transformerBlock_has_vjp_mat})
+    bridged to the flat vector as the step, the per-token final LayerNorm
+    (Theorem~\ref{thm:layerNorm_per_token_has_vjp_mat}, bridged the same
+    way), and the classifier (Theorem~\ref{thm:dense_has_vjp} on the CLS
+    row).
+    \pf{Three applications of \texttt{vjp\_comp}
+    (Theorem~\ref{thm:vjp_comp}); every factor is smooth, so the
+    differentiability side conditions need only assumption 1.}
+  \item \texttt{vitForwardKV\_has\_vjp\_correct}: the composed
+    backward's \texttt{correct} field, read out at any depth.
+  \item \Qed{}
+    \pf{Instantiate 2 at \(k = 12\) and the dimensions above.}
+\end{enumerate}
 \end{proof}
 
 \section{Example: ViT-Tiny on Imagenette}
 \label{sec:attention_vit_example}
 
-This is the capstone. Every layer proved in the preceding chapters
-composes into this one architecture, and that list runs dense, ReLU,
-softmax cross-entropy, convolution, maxPool, batch norm, residual,
-depthwise conv, squeeze-and-excitation, layer norm, GELU, and the
-attention mechanism itself. If the \texttt{VerifiedNetSpec} below
-compiles and the VJP of its body is proved
-(\S~\ref{thm:vit_body_has_vjp_mat}), then every layer in modern deep
-learning you've seen in this book has its backward pass
-machine-checked.
-
-ViT-Tiny (Dosovitskiy et al.\ 2020) was the smallest Vision
-Transformer variant in the original paper. It's also the least
-data-hungry, and the big ViT variants start beating ConvNets only at
-ImageNet-21K scale and above. On a 9469-image Imagenette training
-set, ViT-Tiny \emph{underperforms} every ConvNet in Part 1. That's
-part of the teaching point: transformers are not a universal
-improvement, they are a different scaling regime.
-
 \subsection*{The architecture}
 
-ViT-Tiny is the shortest spec in Part 1: \texttt{.patchEmbed} chops the
+ViT-Tiny is DeiT's (Touvron et al.\ 2021,
+\href{https://arxiv.org/abs/2012.12877}{arXiv:2012.12877}) addition to
+the family --- the original paper's smallest was ViT-Base --- and the
+shortest spec in Part 1: \texttt{.patchEmbed} chops the
 image into $16 \times 16$ patches and projects each to a 192-dim token
 (196 of them, plus a prepended CLS token), \texttt{.transformerEncoder}
 runs twelve pre-norm blocks, and a final LayerNorm feeds the CLS token
@@ -10632,10 +10660,8 @@ which is two residual sub-blocks, attention then MLP, each pre-normed.
 
 \subsection*{The verified trainer}
 
-\S\ref{sec:verified_trainer_pattern} is the pattern, and every chapter
-since Chapter~\ref{chap:depthwise} has reused it. ViT drops the same one
-of its four annotated points that ConvNeXt does. There is no
-\texttt{bnChannels} here, because there is no BatchNorm.
+The pattern is \S\ref{sec:verified_trainer_pattern}'s, minus
+\texttt{bnChannels}, as ConvNeXt's was: there is no BatchNorm.
 
 \begin{verbatim}
 import LeanMlir
@@ -10697,11 +10723,9 @@ computes from an input, and the spec's job is the \emph{parameter
 layout}, so it names them rather than folding them into a block. The
 $197$ is $196$ patches plus the prepended CLS row.
 
-\textbf{\texttt{.transformerBlock 192 768} is one block, not a stage.}
-There is no repeat count, so twelve blocks are twelve entries, exactly
-as ConvNeXt's eighteen were eighteen. Each carries the pre-norm
-sandwich drawn in the inset above: LayerNorm, MHSA, residual,
-LayerNorm, MLP, residual.
+\textbf{\texttt{.transformerBlock 192 768} is one block per line, twelve
+of them}, each the pre-norm sandwich drawn in the inset above: LayerNorm,
+MHSA, residual, LayerNorm, MLP, residual.
 
 \textbf{The arm, and why sixteen tensors is the whole block.}
 
@@ -10729,9 +10753,7 @@ LayerNorm and the head: 200.
 \texttt{vitVerified.toSpecs} is kernel-\texttt{\#guard}ed against
 \texttt{ViTLayout.specs}, an independently audited hand-list, and the
 ImageNet spec of \S\ref{sec:vit_imagenet} is pinned to this one at
-everything but its head. At 1000 classes the count is 5,717,416. So the
-listing above is not a description of the network that got trained, it
-is the object the renderer consumed.
+everything but its head. At 1000 classes the count is 5,717,416.
 
 \textbf{Twenty-four keeps for twelve blocks, and the pairing is the
 content.} ViT drops each block's attention branch and MLP branch
@@ -10763,21 +10785,20 @@ eighty epochs, and one RTX 4060 Ti:
 \hline
 Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 729\,KB    & 220 ms    & 1.5 h    & 89.71\% & 98.27\% \\
+ResNet-34        & 21.29M  & 729\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
 MobileNet V2     &  2.24M  & 1{,}047\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
-EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & \textbf{89.96\%} & 98.45\% \\
-ConvNeXt-T       & 27.83M  & 985\,KB    & 196 ms    & 1.3 h    & 85.07\% & 97.30\% \\
+EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & 89.96\% & 98.45\% \\
+ConvNeXt-T       & 27.83M  & 1{,}019\,KB & 188 ms   & 1.2 h    & 82.27\% & 96.51\% \\
 ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{61 ms} & \textbf{24 min} & 68.74\% & 90.42\% \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Step time is the epoch wall-clock divided by 295 batches, so
-it includes each epoch's validation pass. MLIR sizes are the committed
-\texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units.
+\noindent Columns as in Chapter~\ref{chap:se}'s table; ResNet-34's row is
+the five-seed mean of \S\ref{sec:r34_ablation} with one seed's timing.
 
 ViT-Tiny is the fastest per step by a factor of $1.5$ over the next
-network and the lowest-accuracy by more than sixteen points. That gap
+network and the lowest-accuracy by more than thirteen points. That gap
 is the data-hunger effect: 9,469 training images is tiny for a
 transformer. The ViT paper reached ImageNet-competitive accuracy only
 when trained on ImageNet-21K (14M images) or JFT-300M (300M images). At
@@ -10804,16 +10825,16 @@ convolutions, so there is almost nothing for that selection to vary.
 \noindent\textbf{What is already proven.} Scaled dot-product
 attention is $\mathrm{sdpa}(Q,K,V) = \mathrm{softmax}(QK^{\!\top}/\sqrt{d})\,V$.
 Its reverse-mode derivative produces three gradients ($dQ$, $dK$, $dV$),
-each proven separately (\S\S~\ref{thm:sdpa_back_Q_correct}--%
-\ref{thm:sdpa_back_V_correct}, \texttt{sdpa\_back\_Q/K/V}), all built on the
-softmax backward, which couples every position to every other
-(\S~\ref{thm:softmax_has_vjp}). Because $Q$, $K$, and $V$ are three linear
+each proven separately
+(Theorems~\ref{thm:sdpa_back_Q_correct}--\ref{thm:sdpa_back_V_correct},
+\texttt{sdpa\_back\_Q/K/V}), all built on the softmax backward, which
+couples every position to every other (Theorem~\ref{thm:softmax_has_vjp}). Because $Q$, $K$, and $V$ are three linear
 projections of the \emph{same} input $a$, the input gradient is a three-way
 fan-in, $da = dQ\,W_q^{\!\top} + dK\,W_k^{\!\top} + dV\,W_v^{\!\top}$.
 \texttt{sdpa\_has\_vjp\_mat3} bundles the three, and
 \texttt{transformerAttnSublayer\_has\_vjp\_mat} composes the whole sublayer
 (LayerNorm, the QKV projections, attention, the output projection, the
-residual) through \texttt{vjp\_comp\_at}.
+residual) through \texttt{vjpMat\_comp}.
 
 \medskip\noindent\textbf{The gap and how we close it.} The softmax backward
 is non-elementwise and the three projections are coupled. The emitted graph
