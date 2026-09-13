@@ -12005,7 +12005,7 @@ The modern ResNet-50 baseline is timm's ``ResNet Strikes Back'' A2
 recipe (Wightman et al.\ 2021,
 \href{https://arxiv.org/abs/2110.00476}{arXiv:2110.00476}) --- LAMB,
 BCE loss, repeated augmentation --- which trains this exact network
-to ${\sim}79.8\%$ top-1. The phase-2 JAX trainer
+to ${\sim}79.8\%$ top-1. The JAX reference trainer
 (\texttt{jax/MainResnet50Imagenet.lean}) wires that recipe: running
 the cheaper 100-epoch \emph{A3} tier end-to-end through the
 Lean~$\to$~StableHLO~$\to$~JAX pipeline reaches \textbf{76.66\% top-1
@@ -12491,8 +12491,9 @@ not degrade uniformly --- it collapses on whatever is simultaneously small
 
 \medskip\noindent The stack beats the hand-written PyTorch replica of
 \emph{this same architecture} by $54\%$, and runs at 65\,fps on one RTX 4060 Ti
---- or $35.7$\,fps on a 25\,W Jetson Orin Nano under TensorRT, which is the
-deployment this dataset implies. The replica, not YOLOv8, is the yardstick: it
+--- or $55.9$\,fps on a 25\,W Jetson Orin Nano under TensorRT, with a
+uint8 input path and the clocks pinned, which is the deployment this dataset
+implies. The replica, not YOLOv8, is the yardstick: it
 isolates implementation quality from architecture, which a comparison against a
 different model would conflate. The two YOLOv8s rows say something more
 interesting than either alone. At a matched budget it scores $0.140$ --- below
@@ -12675,7 +12676,7 @@ codegen primitives this rests on --- bilinear upsample (forward + VJP) and
 channel concat --- are exposed at the \texttt{Layer} level as
 \texttt{.unetDown} and \texttt{.unetUp}, which the canonical bestiary UNet
 below also uses. Three things change relative to the image
-\emph{classifiers} of Part~2:
+\emph{classifiers} of Part~1:
 
 \begin{itemize}
   \item \textbf{The label is a tensor, not a scalar.} Classifiers emit
@@ -12688,7 +12689,7 @@ below also uses. Three things change relative to the image
     in \texttt{TrainConfig} that the NLP subsection's TinyGPT uses for
     per-token loss, applied across the spatial axes instead of the
     token axis --- no new VJP machinery; the per-pixel softmax-CE
-    backward is the same one Ch~\ref{chap:mlp} derived, fired $HW$
+    backward is the same one Ch~\ref{chap:tensor} derived, fired $HW$
     times in parallel.
   \item \textbf{The network has to give spatial resolution back.}
     A classifier downsamples aggressively (input $224^2$, bottleneck
@@ -12699,7 +12700,7 @@ below also uses. Three things change relative to the image
     pixel-level detail the bottleneck threw away. That symmetry is
     exactly what \texttt{.unetUp}'s body bundles --- bilinear upsample
     + channel concat with the saved skip + two convs --- and it is the
-    only architectural piece this section's backbones add to the Part~2
+    only architectural piece this section's backbones add to the Part~1
     kit.
   \item \textbf{Inference is one forward pass; post-processing
     differs.} Segmentation doesn't autoregress; one network call
@@ -12746,7 +12747,8 @@ gives bit-identical parameters.
 
 The encoder-decoder-with-skips shape is not specific to segmentation
 either: it later became the diffusion-model backbone (DDPM, Stable
-Diffusion, in ``Image generation'' below), and the same two primitives
+Diffusion, in the diffusion subsection below, \S\ref{sec:bestiary_diffusion}),
+and the same two primitives
 carry that subsection's generative pipeline. The layer kit is shared;
 only the loss and the inference procedure change.
 
@@ -13372,7 +13374,7 @@ and 6.02 for guessing uniformly over the 65 characters. Sampling after
 that produces recognizable Shakespeare cadence, real character names
 (NORTHUMBERLAND, QUEEN MARGARET, MERCUTIO, BRUTUS) and multi-line
 dialog. Three things change relative to the image trainers shown
-throughout Part~2, and they capture what NLP training \emph{is}:
+throughout Part~1, and they capture what NLP training \emph{is}:
 
 \begin{itemize}
   \item \textbf{Input is a vocabulary index, not a pixel.} The first
@@ -13392,7 +13394,7 @@ throughout Part~2, and they capture what NLP training \emph{is}:
     \texttt{TrainConfig}) that switches the loss from ``one vector
     versus one class'' to ``$T$ vectors versus $T$ classes.'' No new
     VJP machinery; the per-token softmax-CE backward is the same one
-    Ch~\ref{chap:mlp} derived, applied $T$ times in parallel.
+    Ch~\ref{chap:tensor} derived, applied $T$ times in parallel.
   \item \textbf{Inference is autoregressive.} The training loop is a
     single forward pass per batch, just like image classification, but
     \emph{inference} is a $T$-step loop: the network predicts token
@@ -13411,11 +13413,14 @@ throughout Part~2, and they capture what NLP training \emph{is}:
 \end{itemize}
 
 That's the entire delta. Same Adam optimizer, same VJP machinery, same
-StableHLO-through-XLA pipeline. The bestiary entries below all reduce to
+StableHLO-through-XLA pipeline; the same trainer at $8.5$\,M parameters and
+a 4096-token BPE vocabulary runs on the 2\,GB TinyStories corpus
+(\texttt{tinystories}, Appendix~\ref{app:data}). The bestiary entries below
+all reduce to
 either ``GPT shape'' (decoder-only, causal mask, autoregressive
 sampling) or ``BERT shape'' (encoder-only, bidirectional attention,
 classification head); the architectural differences between them are
-smaller than the chapter-to-chapter deltas in Part~2.
+smaller than the chapter-to-chapter deltas in Part~1.
 
 \subsubsection*{Mamba (\texttt{Bestiary/Mamba.lean})}
 \emph{One} new primitive (\S~\ref{layer:mambaBlock}). Variants: Mamba-130M / 370M / 790M /
@@ -13579,8 +13584,8 @@ often with cross-attention bolted in for text conditioning. The novelty lives in
 the noise schedule and the sampling loop, not in layer design.
 
 \paragraph{DDPM on MNIST.} The \texttt{demos/MainMnistDdpmTrain.lean} trainer
-(with CIFAR-10, sinusoidal-time and attention variants beside it) is a
-timestep-conditioned UNet trained to predict the Gaussian noise added to an
+(its CIFAR-10, sinusoidal-time and attention variants are archived beside it)
+is a timestep-conditioned UNet trained to predict the Gaussian noise added to an
 image; \texttt{mnist-ddpm-sample} runs the reverse loop and writes a grid. The
 backbone is \emph{literally} the segmentation UNet of
 \S~\ref{sec:bestiary_segmentation}. Three things
@@ -13591,7 +13596,7 @@ change relative to the classifiers, segmentation nets and detectors so far:
     so far compares against something a human provided --- a class, a mask, a
     set of boxes. Diffusion manufactures its own: sample a timestep $t$, sample
     noise $\varepsilon$, add it per the schedule, predict $\varepsilon$, under
-    the same squared-error backward from Part~2
+    the same squared-error backward from Part~1
     (\texttt{lossKind := .floatTargetMse}).
   \item \textbf{The backbone is the segmentation UNet, conditioned on $t$.} One
     network must denoise at every level, so $t$ is fed in: this demo
