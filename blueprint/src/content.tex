@@ -14831,8 +14831,9 @@ PJRT_FFI_RESIDENT=1 .lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
     \texttt{PJRT\_FFI\_RESIDENT=1} keeps the parameters on the device
     between steps. Every transcript in this book ran that way and the tiers
-    below set it; without it the same run takes 1.3--2$\times$ the wall
-    clock and its numerics are unchanged. Use
+    below set it; without it the same run is slower --- 1.3--2$\times$ on
+    the Imagenette nets, about 5$\times$ on MNIST and CIFAR --- and its
+    numerics are unchanged. Use
     \texttt{CUDA\_VISIBLE\_DEVICES} / \texttt{HIP\_VISIBLE\_DEVICES} to
     pick a card, as with any GPU program.
 \end{enumerate}
@@ -14844,8 +14845,8 @@ With Track 2 in place, one command builds and runs a time-budgeted group of
 verified trainers.
 
 \begin{verbatim}
-lake run mnist        # verified MNIST: linear, MLP, CNN             (~2 min)
-lake run cifar        # ch.4 cifar8w: SGD/momentum/Adam x bn/no-bn  (~25 min)
+lake run mnist        # verified MNIST: linear, MLP, CNN              (~30 s)
+lake run cifar        # ch.4 cifar8w: SGD/momentum/Adam x bn/no-bn   (~5 min)
 lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~6 h)
 lake run imagenet     # ImageNet-1k on 4 GPUs: bare plans, `start` runs (Track 4)
 \end{verbatim}
