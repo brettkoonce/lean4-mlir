@@ -15256,8 +15256,8 @@ this book is organized}, their restatements at fixed dimensions and over
 the committed specs, and the two smooth-point forms that global theorems
 superseded, each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), on
 top of the foundation \(\pdiv\) calculus and the
-differentiability/forward/witness machinery they rest on, plus the 41
-architecture definitions in the bestiary --- and \textbf{zero project
+differentiability/forward/witness machinery they rest on, plus the
+bestiary's 45 architecture families --- and \textbf{zero project
 axioms} anywhere in it. That last figure is the one that matters, because
 it is the only one that cannot quietly grow. The axiom audit
 (\texttt{tests/AuditAxioms.lean}) re-checks \emph{every} theorem in the
@@ -15283,7 +15283,7 @@ and the empirical layer are for.
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
 the Lean community's trustworthy-judge tool for projects that claim
-zero project axioms. It runs 51 theorems (the foundation rules,
+zero project axioms. It runs 52 theorems (the foundation rules,
 every chapter's headline Jacobian, the public
 \texttt{*\_has\_vjp\_correct} wrappers, and three smooth-point
 pointwise variants (\texttt{relu\_has\_vjp\_at\_correct},
@@ -15299,7 +15299,7 @@ the run.
 This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
-The 51-theorem coverage is illustrative rather than exhaustive, since
+The 52-theorem coverage is illustrative rather than exhaustive, since
 the same recipe scales to any subset of the proof suite, and the
 same allowlist applies because every theorem in the project closes
 the same way.
@@ -15331,7 +15331,7 @@ built from three components:
     \texttt{Tensor3} types. A \emph{bridge theorem} then proves that this
     denotation equals the proven derivative: $[\![\,\text{emitted
     graph}\,]\!] = (\text{proven VJP}).\mathrm{backward}$. Examples are
-    \texttt{conv\_back\_bridge}, \texttt{bn\_back\_bridge}, and
+    \texttt{conv\_back\_bridge\_1to2}, \texttt{bn\_back\_bridge}, and
     \texttt{relu\_back\_bridge}, and each closes under the same three axioms
     as the rest of the project.
   \item \textbf{A computable printer.} A small printer walks that same IR and
@@ -15340,13 +15340,13 @@ built from three components:
     \texttt{selectPos} node becomes \texttt{compare GT 0} plus
     \texttt{select}, and so on. The emitted text \emph{is} the printout of
     the IR, by construction.
-  \item \textbf{An execution oracle.} A Python harness regenerates the
-    \texttt{.mlir} from the printer, compiles it with IREE for both the
-    \texttt{llvm-cpu} and \texttt{rocm} backends, runs it, and diffs the
-    result against an independent NumPy reference. The CPU run is the
-    correctness gate, and the GPU run (ROCm on a Radeon RX 7900 XTX, gfx1100)
-    confirms the proof-backed graph also executes on real hardware, matching
-    the reference to roughly $10^{-6}$.
+  \item \textbf{An execution oracle.} A Python harness
+    (\texttt{LeanMlir/Proofs/check\_ir\_codegen.py}) regenerates the
+    \texttt{.mlir} from the printer, compiles it with IREE, runs it, and
+    diffs the result against an independent NumPy reference. The CPU run
+    (\texttt{llvm-cpu}) is the correctness gate; the GPU leg is ROCm-only
+    and best-effort, and where it has run (a Radeon RX 7900 XTX, gfx1100)
+    the proof-backed graph matched the reference to roughly $10^{-6}$.
 \end{itemize}
 
 \medskip\noindent\textbf{Proven versus trusted.} The resulting claim is exact
@@ -15389,7 +15389,8 @@ full construction. Each reads a single committed \texttt{.mlir} holding its
 entire training step, forward through backward through the parameter update,
 and that file is the printout of one graph whose denotation a faithfulness theorem
 proves equal to the certified loss-descent step, output by output. A companion
-\emph{tie} theorem per network (\texttt{<net>\_net\_tied\_certified}) then
+\emph{tie} theorem per network (\texttt{mlp\_train\_step\_tied\_certified},
+\texttt{r34\_net\_tiedB}, \texttt{vit\_net\_tied\_certified} and their peers) then
 closes the gap a per-output bridge leaves open: the cotangent each parameter
 update consumes is the one the network's \emph{own} backward pass delivers at
 that site, threaded through the real forward activations, so each update is
@@ -15487,9 +15488,9 @@ shape with a harder proof: \texttt{convBackDenote} unfolds to a forward
 at the concrete tensor shape.
 
 \medskip\noindent\textbf{Composing the per-operator bridges.} Whole-network
-backwards are assembled by substitution. \texttt{Back.subst} plugs one graph
-into another's \texttt{cotangent} leaf, and a chain-rule lemma proves the
-denotation composes:
+backwards are assembled by substitution. The function \texttt{Back.subst}
+plugs one graph into another's \texttt{cotangent} leaf, and a chain-rule
+lemma proves the denotation composes:
 \[
   \texttt{denote\_subst}:\quad
   [\![\,e[g/\texttt{cotangent}]\,]\!]\,dz
@@ -15577,7 +15578,7 @@ those gaps and for end-to-end pipeline verification, the next oracle takes over.
 \label{sec:jax_pipeline}
 
 A separate Lean \(\to\) JAX \(\to\) XLA pipeline
-(\texttt{jax/Jax/Codegen.lean}, \(\sim 1100\) lines) produces an
+(\texttt{jax/Jax/Codegen.lean}, \(\sim 3700\) lines) produces an
 idiomatic JAX training script from the same \texttt{NetSpec} the
 Lean \(\to\) StableHLO MLIR pipeline consumes. XLA is the compiler
 JAX uses to produce GPU code, the same backend that powers
@@ -15617,9 +15618,12 @@ Layered on top of the end-to-end trace diff is a per-axiom
 differential test in \texttt{tests/vjp\_oracle/}, which compares
 each Lean-proved backward pass against JAX's
 \texttt{value\_and\_grad} autodiff on a minimal one-step training
-run. Nine cases each agree with JAX autodiff at 1--2 ULP of step-2 loss,
-and they are dense, dense+ReLU, conv, conv+BN, conv+maxPool,
-residual, depthwise, SE and attention. Any future hand-derived VJP added to
+run. Fourteen cases each agree with JAX autodiff on the step-2 loss, to
+between \(2 \times 10^{-7}\) and \(10^{-4}\), the wider ones where a
+max-pool or a depthwise reduction changes the summation order: dense,
+dense+ReLU, conv, conv+BN, conv+max-pool, residual, depthwise, global
+average pool, attention, and the SE-gated MBConv, bottleneck, MBConv-V3,
+fused-MBConv and UIB blocks. Any future hand-derived VJP added to
 the Lean proof base can be validated by a one-step comparison
 against JAX, catching algebraic errors that FD would miss (sign
 flips, wrong contraction axis, swapped indices).
@@ -15627,10 +15631,12 @@ flips, wrong contraction axis, swapped indices).
 \subsection{The execution oracle and the margin probe}
 
 Two further watchers close the loop. The \textbf{IREE-versus-NumPy
-oracle} (\S~\ref{sec:verified_codegen}) regenerates every committed
-\texttt{.mlir} from the printer, compiles it for CPU and GPU, and diffs
-the result against an independent NumPy reference, which is the one check
-that reaches past the proofs to IREE's lowering itself. And the
+oracle} (\S~\ref{sec:verified_codegen}) regenerates the per-operator and
+small-network graphs (linear, MLP, CNN, convolution, max-pool, BatchNorm,
+the loss cotangent and a ConvNeXt block) from the printer, compiles them
+for CPU, and diffs the result against an independent NumPy reference,
+which is the one check that reaches past the proofs to IREE's lowering
+itself. And the
 \textbf{margin probe} (\texttt{scripts/margin\_probe.py}) re-runs a real
 training trajectory in coupled \texttt{f32}/\texttt{f64} and checks that
 the run stays inside the float theorems' hypotheses, with no flipped ReLU
@@ -15654,7 +15660,7 @@ budgets are deductive, its interface constants (\(u\), \(e_{\exp}\),
 
 Every theorem in this book is over exact reals, and the GPU computes in
 finite precision. Until recently that gap lived entirely in the empirical
-layer, where the oracles agree to 1--2 ULP. It is now a theorem layer, and
+layer, where the oracles agree to float32 precision. It is now a theorem layer, and
 it has two halves of different reach. Keeping them apart is the honest
 part --- as is keeping the layer's \emph{generality} apart from its
 \emph{usefulness}, which \S~\ref{par:precision_reach} below returns to.
@@ -15688,9 +15694,10 @@ IREE tiles and reorders reductions freely (the price is a fan-in factor
 \(\log_2 n\cdot u\) under a named balance hypothesis). And \(\exp\) enters
 as a hypothesis (\(|\widehat{\exp}(t) - e^t| \le e_{\exp}\, e^t\))
 because GPU transcendentals have no IEEE specification.
-\(e_{\exp}\) is precisely the constant the VJP oracle
-(\S~\ref{sec:jax_pipeline}) measures, so the deductive and empirical
-layers meet at a named interface instead of a hand-wave.
+\(e_{\exp}\) is precisely the constant the margin probe pins on the
+device at 1--2 ULP (\emph{Measured against proven}, below), so the
+deductive and empirical layers meet at a named interface instead of a
+hand-wave.
 
 \paragraph{How far the model reaches, and where it stops being useful.}
 \label{par:precision_reach}
