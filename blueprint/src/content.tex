@@ -5411,11 +5411,14 @@ and 1000 classes, trained on the paper's 90-epoch schedule. The
 architecture is unchanged. Only the dataset, the output head width, and
 the training schedule differ.
 
-Ninety epochs at global batch 256 is what He et al.\ ran, and this section
-runs it \emph{twice}: once on the verified codegen path and once on the JAX
-reference. Both paths share everything above the data loader --- the
-architecture, the \texttt{.train} invocation, and every recipe knob --- so
-the only thing that differs is how the graph reaches the GPU.
+This section runs it \emph{twice}. The \emph{reference} is the
+Lean$\to$JAX trainer of \S\ref{sec:jax_pipeline}: JAX traces the generated
+program and hands XLA the graph. The \emph{verified path} hands XLA
+\texttt{pretty(provenGraph)} --- the rendered artifact the proofs reason
+about --- through the PJRT C API, with no Python at run time. Same
+architecture, same recipe, same data loader, same compiler; the only
+difference is who wrote the StableHLO. Every ImageNet section reports the
+reference first, the verified path second, and then the two side by side.
 
 The recipe in full: SGD with momentum $0.9$ at batch 256, cosine LR with a
 5-epoch warmup from peak $0.1$, label smoothing $0.1$, Inception-style
@@ -5426,19 +5429,65 @@ $10^{-4}$. Every one of those is either the original paper or the ``bag of
 tricks'' polish that became standard after 2018, and
 \S\ref{sec:r50_a3_vs_2018} is the table that says which is which.
 
-\prosesection{The PJRT lowerer}
+\prosesection{The reference (JAX)}
+
+The reference trainer is \texttt{jax/MainResnetImagenet.lean}, built as
+\texttt{lake build resnet34-imagenet}, with \texttt{.imagenet} streamed
+through tfds. It runs in bf16 --- both matmuls and convolutions cast to
+bfloat16 against fp32 master weights --- which is a throughput choice
+rather than a fidelity one, and is why its column is the faster of the
+two below.
+
+\begin{center}
+\begin{tabular}{l l r r r r r}
+\hline
+GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
+\hline
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$8.8 min & 90 & $\sim$14.8 hr & $\mathbf{74.16\%}$ & $\mathbf{91.92\%}$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Global batch 256 as $4 \times 64$ replicas, scored over all
+$50{,}000$ validation images.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
+    xmin=0, xmax=91, ymin=0, ymax=100,
+    xtick={0,15,30,45,60,75,90},
+    ytick={20,40,60,80},
+    legend pos=south east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1pt},
+    title style={font=\small},
+    title={2018 recipe, 90 epochs --- reference},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(1,7.54) (2,21.73) (3,31.53) (4,31.62) (5,35.85) (6,37.80) (7,41.35) (8,40.55) (9,42.09) (10,41.43) (11,45.71) (12,38.73) (13,40.50) (14,43.38) (15,44.94) (16,40.91) (17,44.84) (18,45.94) (19,43.69) (20,46.42) (21,45.55) (22,41.84) (23,47.34) (24,43.98) (25,45.86) (26,45.16) (27,46.98) (28,42.26) (29,47.96) (30,47.01) (31,47.77) (32,48.91) (33,50.40) (34,48.76) (35,44.92) (36,49.54) (37,49.58) (38,47.91) (39,50.04) (40,50.47) (41,48.07) (42,52.80) (43,51.72) (44,54.10) (45,51.30) (46,54.40) (47,54.30) (48,53.90) (49,52.16) (50,53.51) (51,55.02) (52,55.65) (53,54.11) (54,56.11) (55,57.71) (56,57.03) (57,57.19) (58,58.04) (59,59.84) (60,59.47) (61,60.97) (62,59.30) (63,61.60) (64,61.44) (65,61.05) (66,63.21) (67,64.12) (68,63.78) (69,63.83) (70,66.09) (71,65.70) (72,66.37) (73,66.93) (74,68.71) (75,68.71) (76,68.92) (77,69.76) (78,70.11) (79,70.75) (80,71.19) (81,71.81) (82,72.37) (83,72.76) (84,73.10) (85,73.33) (86,73.80) (87,73.89) (88,74.09) (89,74.10) (90,74.16)
+};
+\addlegendentry{top-1}
+\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
+(1,20.09) (2,45.19) (3,58.17) (4,56.65) (5,62.37) (6,65.29) (7,67.97) (8,67.02) (9,68.56) (10,68.60) (11,72.23) (12,64.91) (13,67.05) (14,70.17) (15,71.36) (16,67.07) (17,70.97) (18,72.76) (19,70.27) (20,72.81) (21,71.93) (22,68.39) (23,73.98) (24,70.24) (25,72.04) (26,71.17) (27,73.27) (28,68.36) (29,74.05) (30,72.92) (31,73.81) (32,75.14) (33,76.26) (34,75.01) (35,71.57) (36,75.05) (37,75.23) (38,74.08) (39,75.32) (40,76.41) (41,74.06) (42,78.04) (43,77.47) (44,79.03) (45,76.75) (46,79.32) (47,79.42) (48,78.55) (49,77.24) (50,78.71) (51,79.86) (52,80.08) (53,78.84) (54,80.74) (55,81.97) (56,81.16) (57,81.37) (58,82.04) (59,83.24) (60,83.00) (61,84.05) (62,83.15) (63,84.72) (64,84.26) (65,83.93) (66,85.34) (67,86.02) (68,86.11) (69,85.95) (70,87.20) (71,87.02) (72,87.58) (73,87.84) (74,88.82) (75,88.85) (76,89.12) (77,89.49) (78,89.91) (79,90.11) (80,90.35) (81,90.81) (82,90.86) (83,91.30) (84,91.42) (85,91.52) (86,91.72) (87,91.80) (88,91.85) (89,91.89) (90,91.92)
+};
+\addlegendentry{top-5}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent The run, epoch by epoch. The kink near epoch~5 is the end of
+warmup; the steady late climb is the cosine anneal.
+
+\prosesection{The verified path (PJRT)}
 \label{sec:r34_pjrt}
 
-The verified path is a second trusted lowerer, \texttt{ffi/pjrt\_ffi.c}: it
-implements the same C surface as the IREE shim and hands the graph to XLA
-through the PJRT C API. Nothing above the shim changes. The
-backend is whichever \texttt{.so} the binary linked, and backend
-detection is a weak symbol, so a binary cannot disagree with the library
-it linked. There is no Python at run time. What the trainer
-executes is \texttt{pretty(provenGraph)}: the same rendered artifact the
-proofs reason about, not a hand-written emitter.
-
-Here is the trainer:
+The verified trainer is \texttt{apps/imagenette/MainResnet34Imagenet.lean},
+built as \texttt{lake build resnet34-imagenet-verified}:
 
 \begin{verbatim}
 -- 1. Same backbone as the Imagenette net, 1000 classes instead of 10.
@@ -5495,11 +5544,8 @@ def runResnet34Imagenet (argv : List String) : IO Unit := do
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 \end{verbatim}
 
-\noindent That is \texttt{apps/imagenette/MainResnet34Imagenet.lean}, built as
-\texttt{lake build resnet34-imagenet-verified}, and it is the program the
-numbers below came from. Three things in it are worth
-pulling out, because they are what makes the listing a claim rather than a
-description.
+\noindent Three things in it are worth pulling out, because they are what
+makes the listing a claim rather than a description.
 
 \textbf{The \texttt{slug} is the artifact.} \texttt{resnet34in} names
 \texttt{verified\_mlir/resnet34in\_mom256\_train\_step.mlir}, which is
@@ -5515,11 +5561,9 @@ the build if any other parameter shape moves. That is what licenses reading the
 Imagenette chapter's theorems as being about this network's body.
 
 \textbf{The \texttt{shimScript} is per-net and load-bearing.} It names this
-net's own generated augmentation shim. Every net used to stream ResNet-34's,
-which meant an augmentation mismatch could hide inside a fair-looking
-comparison. Here it is the same shim the JAX reference consumes, which is what
-makes the two a matched pair rather than two separate stories.
-
+net's own generated augmentation shim --- the same shim the reference
+consumes, which is what makes the two a matched pair rather than two
+separate stories.
 
 \medskip\noindent It runs with:
 
@@ -5538,165 +5582,113 @@ variant, the per-replica batch and the feed setting --- and
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$24.7 min & 90 & $\sim$37.1 hr & $\mathbf{74.14\%}$ & $\mathbf{91.86\%}$ \\
-2$\times$ 7900 XTX (ROCm) & fp32 & ---            & 90 & ---           & --- & --- \\
+4$\times$ 4060 Ti (CUDA) & fp32 & $\sim$24.7 min & 90 & $\sim$37.1 hr & $\mathbf{74.14\%}$ & $\mathbf{91.86\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Global batch 256 as $4 \times 64$ replicas, fp32 throughout. The
-ROCm row is a \texttt{[TODO]}: the same render, the same C surface, a
-different backend \texttt{.so}.
+\noindent Global batch 256 as $4 \times 64$ replicas, fp32 throughout,
+scored over the same $50{,}000$ images. One attempt, no restarts.
 
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=5.6cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=91, ymin=0, ymax=100,
-    xtick={0,15,30,45,60,75,90},
-    ytick={20,40,60,80},
-    legend pos=south east,
-    legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small},
-    label style={font=\small},
-    title style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-    title={2018 recipe, 90 epochs --- verified path},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,9.60) (2,20.39) (3,26.81) (4,34.83) (5,37.11) (6,39.50) (7,40.91) (8,41.22) (9,40.49) (10,41.89) (11,43.32) (12,43.72) (13,42.38) (14,46.99) (15,43.78) (16,43.91) (17,44.95) (18,45.34) (19,49.18) (20,44.70) (21,47.25) (22,48.22) (23,43.04) (24,49.12) (25,45.10) (26,48.27) (27,47.98) (28,46.54) (29,44.65) (30,47.02) (31,50.28) (32,46.64) (33,50.63) (34,48.39) (35,50.72) (36,49.98) (37,45.66) (38,51.12) (39,47.54) (40,50.38) (41,52.99) (42,53.58) (43,52.84) (44,51.18) (45,53.92) (46,54.76) (47,54.10) (48,52.54) (49,56.62) (50,55.83) (51,55.47) (52,57.07) (53,56.76) (54,55.34) (55,56.55) (56,57.72) (57,59.00) (58,60.07) (59,59.84) (60,58.98) (61,60.51) (62,59.72) (63,60.84) (64,61.19) (65,63.33) (66,63.55) (67,63.86) (68,64.87) (69,64.21) (70,66.22) (71,66.02) (72,66.82) (73,67.09) (74,67.76) (75,68.10) (76,69.69) (77,69.90) (78,70.26) (79,70.71) (80,71.49) (81,72.12) (82,72.38) (83,72.89) (84,73.26) (85,73.66) (86,73.71) (87,73.95) (88,74.10) (89,74.17) (90,74.14)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,24.32) (2,42.27) (3,52.19) (4,61.72) (5,63.87) (6,66.60) (7,67.51) (8,68.09) (9,67.06) (10,68.19) (11,70.25) (12,70.34) (13,69.00) (14,72.87) (15,70.22) (16,70.22) (17,71.06) (18,71.92) (19,75.32) (20,71.44) (21,73.17) (22,74.52) (23,69.12) (24,75.06) (25,71.21) (26,74.51) (27,74.13) (28,72.12) (29,70.91) (30,72.85) (31,76.09) (32,72.63) (33,76.55) (34,74.61) (35,76.12) (36,75.76) (37,71.66) (38,76.17) (39,72.89) (40,75.70) (41,78.01) (42,78.18) (43,77.60) (44,77.15) (45,78.95) (46,79.70) (47,79.01) (48,78.11) (49,80.95) (50,80.36) (51,80.05) (52,81.38) (53,80.66) (54,79.97) (55,80.27) (56,81.63) (57,82.89) (58,83.52) (59,83.14) (60,82.46) (61,83.66) (62,83.08) (63,83.74) (64,84.23) (65,85.39) (66,85.74) (67,86.08) (68,86.78) (69,85.98) (70,87.06) (71,87.42) (72,87.85) (73,88.08) (74,88.16) (75,88.53) (76,89.48) (77,89.59) (78,89.82) (79,89.95) (80,90.56) (81,90.74) (82,90.82) (83,91.17) (84,91.37) (85,91.64) (86,91.70) (87,91.78) (88,91.87) (89,91.91) (90,91.86)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\end{center}
-
-\noindent The run above, epoch by epoch. One attempt, no thermal rest and no
-PCIe interruption across all 90.
-
-\prosesection{The JAX lowerer}
-
-The JAX trainer lives in
-\texttt{jax/\allowbreak Main\allowbreak Resnet\allowbreak Imagenet.lean}, builds as
-\texttt{lake build resnet34-\allowbreak imagenet}, and wires \texttt{.imagenet}
-through tfds streaming. It runs the same recipe on the same cards, and its job
-here is to be the independent second implementation the verified number is
-checked against.
-
-It runs in bf16: the spec casts both matmuls and convolutions to bfloat16
-while keeping fp32 master weights. NVIDIA's tensor cores run bf16 convolution
-about $1.6\times$ faster than fp32 --- the opposite of AMD's MIOpen, where it is
-a wash, which is why conv precision sits behind its own \texttt{bf16Conv} flag.
-That is the whole reason the reference column below is roughly three times
-quicker than the verified one: a throughput choice, not a fidelity one.
-
-\begin{center}
-\begin{tabular}{l l r r r r r}
-\hline
-GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$16.8 min & 90 & $\sim$25 hr & --- & --- \\
-4$\times$ 4060 Ti (CUDA)  & bf16 & $\sim$8.8 min  & 90 & $\sim$14.8 hr & $\mathbf{74.16\%}$ & $\mathbf{91.92\%}$ \\
-1$\times$ A100 (CUDA)     & bf16 & ---            & 90 & $\sim$9 hr & --- & --- \\
-1$\times$ MI300X (ROCm)\textsuperscript{\dag}   & bf16 & $\sim$3.5 min & 90 & $\sim$5.4 hr & \withheld & \withheld \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent Per-epoch throughput for the same recipe on other hardware. The
-A100 row is a wall-clock estimate. \textsuperscript{\dag}\,MI300X ran at batch 1024 / lr 0.4 and before the
-current validation protocol, so only its throughput is quotable.
-
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=91, ymin=0, ymax=100,
-    xtick={0,15,30,45,60,75,90},
-    ytick={20,40,60,80},
-    legend pos=south east,
-    legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small},
-    label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-    title style={font=\small},
-    title={2018 recipe, 90 epochs --- JAX lowerer},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,7.54) (2,21.73) (3,31.53) (4,31.62) (5,35.85) (6,37.80) (7,41.35) (8,40.55) (9,42.09) (10,41.43) (11,45.71) (12,38.73) (13,40.50) (14,43.38) (15,44.94) (16,40.91) (17,44.84) (18,45.94) (19,43.69) (20,46.42) (21,45.55) (22,41.84) (23,47.34) (24,43.98) (25,45.86) (26,45.16) (27,46.98) (28,42.26) (29,47.96) (30,47.01) (31,47.77) (32,48.91) (33,50.40) (34,48.76) (35,44.92) (36,49.54) (37,49.58) (38,47.91) (39,50.04) (40,50.47) (41,48.07) (42,52.80) (43,51.72) (44,54.10) (45,51.30) (46,54.40) (47,54.30) (48,53.90) (49,52.16) (50,53.51) (51,55.02) (52,55.65) (53,54.11) (54,56.11) (55,57.71) (56,57.03) (57,57.19) (58,58.04) (59,59.84) (60,59.47) (61,60.97) (62,59.30) (63,61.60) (64,61.44) (65,61.05) (66,63.21) (67,64.12) (68,63.78) (69,63.83) (70,66.09) (71,65.70) (72,66.37) (73,66.93) (74,68.71) (75,68.71) (76,68.92) (77,69.76) (78,70.11) (79,70.75) (80,71.19) (81,71.81) (82,72.37) (83,72.76) (84,73.10) (85,73.33) (86,73.80) (87,73.89) (88,74.09) (89,74.10) (90,74.16)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,20.09) (2,45.19) (3,58.17) (4,56.65) (5,62.37) (6,65.29) (7,67.97) (8,67.02) (9,68.56) (10,68.60) (11,72.23) (12,64.91) (13,67.05) (14,70.17) (15,71.36) (16,67.07) (17,70.97) (18,72.76) (19,70.27) (20,72.81) (21,71.93) (22,68.39) (23,73.98) (24,70.24) (25,72.04) (26,71.17) (27,73.27) (28,68.36) (29,74.05) (30,72.92) (31,73.81) (32,75.14) (33,76.26) (34,75.01) (35,71.57) (36,75.05) (37,75.23) (38,74.08) (39,75.32) (40,76.41) (41,74.06) (42,78.04) (43,77.47) (44,79.03) (45,76.75) (46,79.32) (47,79.42) (48,78.55) (49,77.24) (50,78.71) (51,79.86) (52,80.08) (53,78.84) (54,80.74) (55,81.97) (56,81.16) (57,81.37) (58,82.04) (59,83.24) (60,83.00) (61,84.05) (62,83.15) (63,84.72) (64,84.26) (65,83.93) (66,85.34) (67,86.02) (68,86.11) (69,85.95) (70,87.20) (71,87.02) (72,87.58) (73,87.84) (74,88.82) (75,88.85) (76,89.12) (77,89.49) (78,89.91) (79,90.11) (80,90.35) (81,90.81) (82,90.86) (83,91.30) (84,91.42) (85,91.52) (86,91.72) (87,91.80) (88,91.85) (89,91.89) (90,91.92)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\end{center}
-
-\noindent The same recipe, epoch by epoch, through the JAX lowerer. The kink
-near epoch~5 is the end of warmup; the steady late climb is the cosine anneal.
+\medskip\noindent\textbf{The lowerer underneath is interchangeable.} Run
+from the same initialization on the same box, the IREE and XLA lowerings of
+this artifact scored $17{,}312$ and $17{,}313$ correct at epoch~5 --- one
+image apart. The proof-carrying tier stops at Imagenette, so the claim is
+\emph{one architecture, two independent lowerings, agreeing}, not ``proven
+at ImageNet scale''.
 
 \prosesection{The two paths, side by side}
 
 \begin{center}
 \begin{tabular}{@{}l l l@{}}
 \hline
- & verified lowerer (PJRT) & JAX lowerer \\
+ & reference (JAX) & verified path (PJRT) \\
 \hline
-lowering            & \texttt{pretty(provenGraph)} $\to$ XLA & JAX $\to$ XLA \\
-Python at run time  & none                     & yes \\
-precision           & fp32                     & bf16 (matmul + conv) \\
-BN statistic group  & 64 (per replica)         & 256 (global) \\
-per epoch           & $\sim$24.7 min           & $\sim$8.8 min \\
-total               & $\sim$37.1 hr            & $\sim$14.8 hr \\
+lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
+Python in the step  & yes                      & none \\
+precision           & bf16 (matmul + conv)     & fp32 \\
+BN statistic group  & 256 (global)             & 64 (per replica) \\
+per epoch           & $\sim$8.8 min            & $\sim$24.7 min \\
+total               & $\sim$14.8 hr            & $\sim$37.1 hr \\
 \hline
-\textbf{val top-1}  & $\mathbf{74.14\%}$       & $\mathbf{74.16\%}$ \\
-\textbf{val top-5}  & $\mathbf{91.86\%}$       & $\mathbf{91.92\%}$ \\
+global batch        & 256 ($4\times64$)        & 256 ($4\times64$) \\
+steps/epoch         & 5{,}004                  & 5{,}004 \\
+optimizer           & SGD, momentum $0.9$      & SGD, momentum $0.9$ \\
+schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
+\hline
+\textbf{val top-1}  & $\mathbf{74.16\%}$       & $\mathbf{74.14\%}$ \\
+\textbf{val top-5}  & $\mathbf{91.92\%}$       & $\mathbf{91.86\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Both columns are ResNet-34 on the 2018 recipe, 90 epochs, global
-batch 256, on the same four 4060\,Ti cards, scored over the same $50{,}000$
-validation images under the same protocol. Everything above the rule differs
-between them; everything below it does not. A ROCm column
-(2$\times$ 7900 XTX) is \withheld{} pending hardware.
+\noindent Both columns are ResNet-34 on the 2018 recipe, 90 epochs, on the
+same four 4060\,Ti cards, scored over the same $50{,}000$ validation images
+under the same protocol. Rows above the first rule differ; rows between the
+rules are held equal by construction.
 
-\noindent Global batch 256 as $4 \times 64$, heavy-ball momentum with coupled
-$\ell_2$, cosine with a 5-epoch warmup at peak $0.1$, weight decay $10^{-4}$,
-label smoothing $0.1$ --- the same recipe, knob for knob, on both lowerers. The paper schedule at 90 epochs, completed in $37.1$ hours on one
-attempt, with no thermal rest and no PCIe interruption.
+\medskip\noindent\textbf{The two paths agree to $0.02$ points}, and that is
+well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson
+interval of Chapter~\ref{chap:tensor} is $\pm0.38$ points on either top-1
+--- $[73.77, 74.54]$ for the reference, $[73.75, 74.52]$ for the verified
+path --- so every $\Delta$ in the table is a fraction of the interval, and
+at this scale a gap under about $0.4$ points is not yet a result in either
+direction. That is the floor every side-by-side table in this book is read
+against.
 
-\medskip\noindent\textbf{The two paths agree to $0.02$ points.} Same
-architecture, same recipe, same box, same $50{,}000$ images under the same
-protocol --- but one lowered through JAX and the other through
-\texttt{pretty(provenGraph)} into XLA with no Python at run time. It is the
-closest verified-versus-reference pair in this book.
+\medskip\noindent The pair is not one-variable, and the table says where:
+the verified run is fp32 where the reference is bf16, and its BatchNorm
+normalizes over each replica's $64$ where the reference's \texttt{@jit}
+mesh reduces the statistics over the global $256$. The $0.02$ bounds the
+two together. \S\ref{sec:mnv2_phase4} is the same comparison with
+precision held equal and the BatchNorm group left as the only asymmetry.
 
-\medskip\noindent It is also a harder test than it looks. The JAX trainer
-runs under \texttt{@jit} with a \texttt{NamedSharding} mesh, so its BatchNorm
-means carry global semantics and XLA reduces them across all four cards: the
-statistic group is the whole $256$. This run is four replicas of $64$ with no
-collective touching the batch statistics, so its group is $64$ --- a fourfold
-difference that moved the answer by two hundredths of a point.
+\medskip\noindent\textbf{The curves converge; they do not merely end
+together.} The middle of the schedule is noisy on both paths --- at peak
+learning rate SGD moves top-1 by up to three points between consecutive
+epochs, in both directions --- so the row is read for its ends:
 
-\medskip\noindent The two \emph{lowerers} agree as tightly as the two paths
-do. Run from the same initialization on the same box, IREE and PJRT scored
-\textbf{17{,}312} and \textbf{17{,}313} correct at epoch~5 --- one image apart.
-The proof-carrying tier stops at Imagenette, so the claim is \emph{one
-architecture, two independent lowerings, agreeing}, not ``proven at ImageNet
-scale''.
+\begin{center}
+\begin{tabular}{@{}l r r r r r r r@{}}
+\hline
+epoch & 5 & 15 & 30 & 45 & 60 & 75 & 90 \\
+\hline
+reference (JAX)       & 35.85 & 44.94 & 47.01 & 51.30 & 59.47 & 68.71 & 74.16 \\
+verified path (PJRT)  & 37.11 & 43.78 & 47.02 & 53.92 & 58.98 & 68.10 & 74.14 \\
+$\Delta$              & $+1.26$ & $-1.16$ & $+0.01$ & $+2.62$ & $-0.49$ & $-0.61$ & $-0.02$ \\
+\hline
+\end{tabular}
+\end{center}
 
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation top-1 (\%)},
+    xmin=0, xmax=91, ymin=0, ymax=80,
+    xtick={0,15,30,45,60,75,90},
+    ytick={20,40,60,80},
+    legend pos=south east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark=none},
+]
+\addplot[blue] coordinates {
+(1,7.54) (2,21.73) (3,31.53) (4,31.62) (5,35.85) (6,37.80) (7,41.35) (8,40.55) (9,42.09) (10,41.43) (11,45.71) (12,38.73) (13,40.50) (14,43.38) (15,44.94) (16,40.91) (17,44.84) (18,45.94) (19,43.69) (20,46.42) (21,45.55) (22,41.84) (23,47.34) (24,43.98) (25,45.86) (26,45.16) (27,46.98) (28,42.26) (29,47.96) (30,47.01) (31,47.77) (32,48.91) (33,50.40) (34,48.76) (35,44.92) (36,49.54) (37,49.58) (38,47.91) (39,50.04) (40,50.47) (41,48.07) (42,52.80) (43,51.72) (44,54.10) (45,51.30) (46,54.40) (47,54.30) (48,53.90) (49,52.16) (50,53.51) (51,55.02) (52,55.65) (53,54.11) (54,56.11) (55,57.71) (56,57.03) (57,57.19) (58,58.04) (59,59.84) (60,59.47) (61,60.97) (62,59.30) (63,61.60) (64,61.44) (65,61.05) (66,63.21) (67,64.12) (68,63.78) (69,63.83) (70,66.09) (71,65.70) (72,66.37) (73,66.93) (74,68.71) (75,68.71) (76,68.92) (77,69.76) (78,70.11) (79,70.75) (80,71.19) (81,71.81) (82,72.37) (83,72.76) (84,73.10) (85,73.33) (86,73.80) (87,73.89) (88,74.09) (89,74.10) (90,74.16)
+};
+\addlegendentry{reference (JAX)}
+\addplot[red, dashed] coordinates {
+(1,9.60) (2,20.39) (3,26.81) (4,34.83) (5,37.11) (6,39.50) (7,40.91) (8,41.22) (9,40.49) (10,41.89) (11,43.32) (12,43.72) (13,42.38) (14,46.99) (15,43.78) (16,43.91) (17,44.95) (18,45.34) (19,49.18) (20,44.70) (21,47.25) (22,48.22) (23,43.04) (24,49.12) (25,45.10) (26,48.27) (27,47.98) (28,46.54) (29,44.65) (30,47.02) (31,50.28) (32,46.64) (33,50.63) (34,48.39) (35,50.72) (36,49.98) (37,45.66) (38,51.12) (39,47.54) (40,50.38) (41,52.99) (42,53.58) (43,52.84) (44,51.18) (45,53.92) (46,54.76) (47,54.10) (48,52.54) (49,56.62) (50,55.83) (51,55.47) (52,57.07) (53,56.76) (54,55.34) (55,56.55) (56,57.72) (57,59.00) (58,60.07) (59,59.84) (60,58.98) (61,60.51) (62,59.72) (63,60.84) (64,61.19) (65,63.33) (66,63.55) (67,63.86) (68,64.87) (69,64.21) (70,66.22) (71,66.02) (72,66.82) (73,67.09) (74,67.76) (75,68.10) (76,69.69) (77,69.90) (78,70.26) (79,70.71) (80,71.49) (81,72.12) (82,72.38) (83,72.89) (84,73.26) (85,73.66) (86,73.71) (87,73.95) (88,74.10) (89,74.17) (90,74.14)
+};
+\addlegendentry{verified path (PJRT)}
+\end{axis}
+\end{tikzpicture}
+\end{center}
 
+\noindent One recipe, two paths to XLA, scored over all $50{,}000$
+validation images at every epoch.
 
 \prosesection{A reasonable stopping point}
 
@@ -5735,47 +5727,52 @@ convolutions.
 \section{ResNet-50 on ImageNet: the 2018 recipe and RSB-A3}
 
 The basic block ResNet-34 is built from generalizes to the
-\emph{bottleneck} block of ResNet-50, and the \texttt{jax/} folder
-ships it as a full ImageNet demo
-(\texttt{jax/MainResnet50Imagenet.lean}) trained on the modern
-``ResNet Strikes Back'' A3 recipe (Wightman et al.\ 2021): LAMB at
-effective batch 2048 (via gradient accumulation), BCE over
-Mixup/CutMix soft targets, RandAugment, train@160 / eval@224. On the
-same proven-backward bottleneck codegen it reached $\mathbf{78.26\%}$
-top-1 / $\mathbf{93.79\%}$ top-5 at 100 epochs, clearing the paper's
-$78.1\%$ and the $78.05\%$ that \texttt{timm}'s own
-\texttt{resnet50.a3\_in1k} weights score under the same protocol.
+\emph{bottleneck} block of ResNet-50 --- a $1\times1$ down, a $3\times3$, a
+$1\times1$ back up --- at 25.6M parameters against 21.8M. This section
+moves one lever at a time. First the architecture, with the recipe held
+fixed: ResNet-50 on the 2018 recipe of \S\ref{sec:r34_pjrt}, unchanged,
+which is worth close to three points over ResNet-34. Then the recipe, with
+the architecture held fixed: the same network on RSB-A3 (Wightman et al.\
+2021, ``ResNet Strikes Back''), worth another point and a third. Both
+recipes run on both paths, so the result is a grid rather than a pair, and
+the table that closes the section is the 2018 column every later chapter's
+recipe is diffed against.
 
-\prosesection{The JAX lowerer}
+\prosesection{The reference (JAX)}
+
+The reference is \texttt{jax/MainResnet50Imagenet.lean}, the bottleneck
+backbone on the same tfds stream, with the recipe as an argument. The 2018
+row is the ResNet-34 recipe as it stands. A3 is LAMB at effective batch
+2048 (accumulated as $4\times512$), BCE over Mixup/CutMix soft targets,
+RandAugment, and train@160 / eval@224.
 
 \begin{center}
 \begin{tabular}{l l l r r r r r}
 \hline
-GPU & Recipe & BN regime & Per epoch & Ep. & Total & top-1 & top-5 \\
+GPU & Recipe & BN group & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (bf16)  & 2018   & global (256)    & $\sim$14.8 min & 90  & $\sim$24.0 hr & $\mathbf{76.95\%}$ & $\mathbf{93.44\%}$ \\
-4$\times$ 4060 Ti (bf16)  & RSB-A3 & Ghost-BN (512)  & $\sim$7.9 min & 100 & $\sim$15.1 hr & $\mathbf{78.26\%}$ & $\mathbf{93.79\%}$ \\
+4$\times$ 4060 Ti (bf16) & 2018   & 256 (global)   & $\sim$14.8 min & 90  & $\sim$24.0 hr & $\mathbf{76.95\%}$ & $\mathbf{93.44\%}$ \\
+4$\times$ 4060 Ti (bf16) & RSB-A3 & 512 (Ghost-BN) & $\sim$7.9 min  & 100 & $\sim$15.1 hr & $\mathbf{78.26\%}$ & $\mathbf{93.79\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent ResNet-50 on the same four 4060\,Ti cards, both recipes, both
-scored over all $50{,}000$ validation images. A3 accumulates $4\times512$ to
-reach effective batch $2048$, so BatchNorm normalizes per $512$-image
-micro-batch (``Ghost-BN''); the 2018 recipe runs a true global batch of $256$.
-
-\medskip\noindent The first row is the \textbf{2018 recipe} on the same
-network, which is what lets the two rows be read against each other: the
-difference between them is $\mathbf{+1.31}$ points for A3 ($76.95 \to 78.26$),
-with architecture, box, protocol and denominator all held fixed --- and A3
-reaches it in less wall clock, because it trains at $160^2$.
+\noindent Both rows scored over all $50{,}000$ validation images. A3
+normalizes per $512$-image micro-batch because it accumulates
+$4 \times 512$ to reach $2048$; the 2018 row is a true global batch of
+$256$. The architecture lever: against ResNet-34's $74.16\%$ on the same
+recipe, the bottleneck is worth $+2.79$ points. The recipe lever: A3 adds
+$+1.31$ on the same network, in less wall clock, because it trains at
+$160^2$. It also clears the paper's $78.1\%$ and the $78.05\%$ that
+\texttt{timm}'s own \texttt{resnet50.a3\_in1k} weights score under this
+protocol.
 
 \begin{center}
 \begin{tikzpicture}
 \begin{axis}[
-    width=0.92\linewidth, height=5.6cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=101, ymin=0, ymax=100,
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation top-1 (\%)},
+    xmin=0, xmax=101, ymin=0, ymax=80,
     xtick={0,20,40,60,80,100},
     ytick={20,40,60,80},
     legend pos=south east,
@@ -5783,241 +5780,162 @@ reaches it in less wall clock, because it trains at $160^2$.
     grid=major, grid style={gray!18},
     tick label style={font=\small},
     label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark=none},
     title style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-    title={2018 recipe, 90 epochs},
+    title={ResNet-50, two recipes --- reference},
 ]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+\addplot[blue] coordinates {
 (1,5.62) (2,12.26) (3,20.56) (4,26.88) (5,31.94) (6,39.00) (7,40.99) (8,39.22) (9,40.09) (10,44.78) (11,44.68) (12,40.05) (13,46.52) (14,44.43) (15,48.27) (16,46.74) (17,45.16) (18,45.97) (19,46.45) (20,48.40) (21,48.15) (22,49.31) (23,47.39) (24,49.90) (25,44.23) (26,49.32) (27,46.24) (28,47.15) (29,48.84) (30,50.11) (31,49.00) (32,49.19) (33,50.51) (34,45.38) (35,51.90) (36,50.42) (37,51.17) (38,52.60) (39,54.86) (40,54.25) (41,52.25) (42,55.65) (43,52.48) (44,57.34) (45,54.14) (46,56.66) (47,56.50) (48,54.69) (49,54.96) (50,57.40) (51,58.25) (52,56.86) (53,57.86) (54,58.89) (55,56.85) (56,61.05) (57,60.80) (58,61.29) (59,63.09) (60,63.29) (61,62.66) (62,62.64) (63,63.49) (64,64.41) (65,65.56) (66,66.45) (67,67.59) (68,67.14) (69,68.81) (70,68.19) (71,66.92) (72,69.45) (73,69.37) (74,71.08) (75,71.96) (76,71.41) (77,72.78) (78,73.17) (79,73.58) (80,74.35) (81,75.08) (82,75.18) (83,75.71) (84,76.16) (85,76.35) (86,76.60) (87,76.77) (88,76.91) (89,76.94) (90,76.95)
 };
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,15.51) (2,29.11) (3,43.08) (4,51.96) (5,58.04) (6,66.17) (7,67.57) (8,65.49) (9,66.55) (10,71.78) (11,71.30) (12,66.73) (13,72.80) (14,71.34) (15,74.40) (16,73.49) (17,70.98) (18,73.23) (19,73.08) (20,74.71) (21,74.38) (22,75.58) (23,73.22) (24,75.82) (25,69.89) (26,75.01) (27,72.38) (28,73.44) (29,74.76) (30,76.00) (31,74.82) (32,74.57) (33,76.62) (34,71.42) (35,77.62) (36,75.88) (37,76.36) (38,78.10) (39,79.43) (40,79.39) (41,77.73) (42,80.35) (43,77.30) (44,81.57) (45,78.90) (46,80.79) (47,80.80) (48,79.23) (49,79.71) (50,81.97) (51,82.10) (52,81.53) (53,81.57) (54,82.62) (55,80.91) (56,83.83) (57,83.55) (58,84.03) (59,85.97) (60,86.02) (61,85.45) (62,85.61) (63,85.55) (64,86.36) (65,87.27) (66,87.68) (67,88.27) (68,88.01) (69,89.13) (70,88.89) (71,87.74) (72,89.24) (73,89.45) (74,90.40) (75,90.91) (76,90.22) (77,91.42) (78,91.51) (79,91.84) (80,92.17) (81,92.36) (82,92.60) (83,92.89) (84,93.11) (85,93.16) (86,93.25) (87,93.33) (88,93.43) (89,93.42) (90,93.44)
+\addlegendentry{2018 (90 ep)}
+\addplot[orange] coordinates {
+(1,0.32) (2,5.34) (3,6.81) (4,14.70) (5,11.62) (6,23.92) (7,27.06) (8,27.37) (9,35.02) (10,35.15) (11,37.37) (12,36.58) (13,41.56) (14,42.43) (15,41.37) (16,38.14) (17,43.49) (18,42.18) (19,39.75) (20,45.80) (21,43.14) (22,42.05) (23,46.11) (24,44.61) (25,46.88) (26,44.95) (27,47.33) (28,45.88) (29,50.31) (30,48.04) (31,36.35) (32,44.06) (33,47.24) (34,52.21) (35,40.58) (36,49.36) (37,43.32) (38,54.21) (39,49.11) (40,52.03) (41,51.79) (42,53.93) (43,48.36) (44,52.52) (45,59.70) (46,52.96) (47,54.78) (48,55.10) (49,56.45) (50,52.80) (51,59.18) (52,62.93) (53,62.82) (54,62.71) (55,61.33) (56,62.99) (57,62.87) (58,60.49) (59,60.91) (60,63.07) (61,62.78) (62,66.71) (63,64.46) (64,67.76) (65,70.47) (66,69.36) (67,69.58) (68,70.74) (69,66.93) (70,68.29) (71,71.02) (72,71.03) (73,71.12) (74,73.37) (75,72.69) (76,72.41) (77,73.87) (78,74.58) (79,75.03) (80,75.70) (81,75.25) (82,75.94) (83,75.53) (84,76.58) (85,76.17) (86,77.22) (87,77.39) (88,77.26) (89,77.84) (90,77.72) (91,77.96) (92,77.91) (93,78.11) (94,78.17) (95,78.20) (96,78.23) (97,78.19) (98,78.28) (99,78.26) (100,78.26)
 };
-\addlegendentry{top-5}
+\addlegendentry{RSB-A3 (100 ep)}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent ResNet-50 / ImageNet-1k validation accuracy per epoch on the
-\textbf{2018} recipe, four 4060\,Ti cards, on the same axes as the A3 curve in
-\S\ref{sec:r50_pjrt} below. It shows the three-part shape ResNet-34 does: a
-fast climb, a long shallow middle, and a final lift as the cosine anneals.
+\noindent The two recipes on the reference, epoch by epoch. A3 starts far
+lower --- $0.32\%$ at epoch~1 against $5.62\%$ --- because BCE over mixup
+targets gives almost no signal until the logits separate; from roughly
+epoch~25 the two trade the lead, and A3 holds it outright only from
+epoch~86. At the matched epoch~90 it leads by $0.77$ ($77.72$ against
+$76.95$), and its last ten epochs of anneal add the rest. The schedules are
+different lengths, so at a shared epoch the two cosines are at different
+points in their decay; the endpoints are what the $+1.31$ is measured from.
 
-\medskip\noindent Against A3 the two are closer through the middle than the
-$+1.31$ endpoint gap suggests. From roughly epoch~25 they trade the lead
-repeatedly, and A3 does not hold it outright until epoch~86; at the matched
-epoch~90 A3 leads by $0.77$ ($77.72$ against $76.95$), and its remaining ten
-epochs of anneal add the rest. A3 also \emph{starts} far lower --- $0.32\%$ at
-epoch~1 against $5.62\%$ here --- because BCE over mixup targets gives almost
-no signal until the logits separate. \emph{Compare the middles with care:} the
-schedules are different lengths, so at a shared epoch index the two cosines are
-at different points in their decay. The endpoints are what the $+1.31$ is
-measured from.
-
-\textbf{What the re-run corrected, and what it was worth.} Beyond the
-protocol change above, two optimizer corrections read out of \texttt{timm}'s
-own source went in: LAMB's gradient clip, which \texttt{timm} enables by
-default (\texttt{max\_grad\_norm} $= 1.0$) and we did not, and its guard
-excluding the \texttt{no\_weight\_decay} group from layer adaptation, which we
-had been applying to every parameter. Those two, the padding fix and the new
-evaluation are together what moved this section's ResNet-50 onto
-\texttt{timm}'s own footing --- a fidelity correction, not a recipe change,
-which is why the $78.26\%$ is quotable against \texttt{timm}'s $78.05\%$
-rather than an improvement on it.
-
-\prosesection{The PJRT lowerer}
+\prosesection{The verified path (PJRT)}
 \label{sec:r50_pjrt}
 
-The same recipe on the verified path of \S\ref{sec:r34_pjrt}, unchanged. The
-artifact is
+The verified trainer is the ResNet-34 one of \S\ref{sec:r34_pjrt} with the
+bottleneck backbone substituted, and each recipe is its own render:
+\texttt{resnet50in\_momdp64bf16} for 2018, and for A3
+\texttt{resnet50in160\_lambaccdp8x64wxclipbcebf16} --- LAMB $\times$
+BCE-with-logits $\times$ accumulation $k=8$ at four replicas of $64$, the
+same effective $2048$, train@160 / eval@224. They run with:
 
-\smallskip
-{\centering\texttt{resnet50in160\_lambaccdp8x64wxclipbcebf16\_train\_step}\par}
-\smallskip
-
-\noindent --- LAMB $\times$ BCE-with-logits $\times$ gradient accumulation
-$k=8$, four replicas at per-replica batch 64 for an effective batch of 2048,
-train@160 / eval@224.
+\begin{verbatim}
+lake run r50-2018-bf16-4gpu
+lake run r50-a3-wxclip-bf16-4gpu
+\end{verbatim}
 
 \begin{center}
-\begin{tabular}{l l l r r r r}
+\begin{tabular}{l l l r r r r r}
 \hline
-GPU & Recipe & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
+GPU & Recipe & BN group & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (bf16)    & 2018 (90 ep)    & Ghost-BN (64) & $\sim$20.5 min & $\sim$30.7 hr & $\mathbf{77.07\%}$ & $\mathbf{93.48\%}$ \\
-4$\times$ 3060 (bf16)     & RSB-A3 (100 ep) & Ghost-BN (64) & $\sim$13.7 min & $\sim$22.8 hr & $\mathbf{77.98\%}$ & $\mathbf{93.76\%}$ \\
+4$\times$ 3060 (bf16) & 2018   & 64 (per replica) & $\sim$20.5 min & 90  & $\sim$30.7 hr & $\mathbf{77.07\%}$ & $\mathbf{93.48\%}$ \\
+4$\times$ 3060 (bf16) & RSB-A3 & 64 (per replica) & $\sim$13.7 min & 100 & $\sim$22.8 hr & $\mathbf{77.98\%}$ & $\mathbf{93.76\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The first row is the same network on the \emph{2018} recipe --- the
-ResNet-34 configuration of \S\ref{sec:r34_pjrt} with the bottleneck backbone
-substituted, so the only thing separating it from the A3 row is the recipe. It
-runs with:
+\noindent Scored over the same $50{,}000$ images. \texttt{shimScript}
+(\S\ref{sec:r34_pjrt}) is a field on the network rather than on the recipe,
+so at $224^2$ the two recipes need two shims and the wrong one trains the
+right optimizer on the wrong data; the job configs refuse to start with it.
 
-\begin{verbatim}
-CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
-  SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
-  LEAN_MLIR_VARIANT=momdp64bf16 LEAN_MLIR_BATCH=64 LEAN_MLIR_EPOCHS=90 \
-  LEAN_MLIR_RECIPE=2018 LEAN_MLIR_BASE_LR_U=100000 \
-  .lake/build/bin/resnet50-imagenet-verified data
-\end{verbatim}
-
-\noindent \textbf{\texttt{LEAN\_MLIR\_RECIPE} selects the augmentation.}
-\texttt{shimScript} (\S\ref{sec:r34_pjrt}) is a field on the network rather than
-on the recipe, so at $224^2$ the two recipes need two shims and choosing the
-wrong one trains the right optimizer on the wrong data. \texttt{scripts/jobs/}
-encodes that, and the schedule knobs, as refusing prechecks.
-
-\textbf{How to quote these.} The A3 row lands $0.28$ points behind the JAX
-reference above ($78.26\%$ / $93.79\%$) and $0.07$ behind \texttt{timm}'s own
-$78.05\%$, measured over the same $50{,}000$ images under the same protocol.
-The recipe is not yet A3 to the letter --- the ledger below is what is in and
-what is still out --- so it is \emph{the A3 recipe on the verified path, with
-these deltas}, rather than ``RSB-A3 reproduced''. The 2018 row needs no such
-hedge: it is the recipe in full, and it lands $0.12$ points \emph{ahead} of its
-own JAX reference.
-
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=5.6cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=101, ymin=0, ymax=100,
-    xtick={0,20,40,60,80,100},
-    ytick={20,40,60,80},
-    legend pos=south east,
-    legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small},
-    label style={font=\small},
-    title style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-    title={RSB-A3 (2021), 100 epochs --- verified path},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,2.81) (2,7.78) (3,15.89) (4,23.13) (5,24.53) (6,29.49) (7,33.10) (8,35.75) (9,40.62) (10,42.59) (11,43.50) (12,45.92) (13,47.79) (14,45.68) (15,49.27) (16,49.15) (17,50.42) (18,51.79) (19,50.85) (20,53.34) (21,47.99) (22,52.52) (23,54.02) (24,51.77) (25,53.98) (26,54.38) (27,53.02) (28,54.08) (29,52.88) (30,55.30) (31,53.70) (32,57.21) (33,55.45) (34,57.14) (35,56.24) (36,56.14) (37,60.42) (38,52.69) (39,60.44) (40,61.01) (41,58.73) (42,59.63) (43,60.16) (44,63.77) (45,61.29) (46,63.13) (47,62.03) (48,63.23) (49,60.37) (50,65.17) (51,61.85) (52,65.30) (53,66.21) (54,65.86) (55,66.96) (56,67.20) (57,67.09) (58,66.80) (59,67.37) (60,68.23) (61,70.11) (62,69.99) (63,70.08) (64,70.80) (65,71.48) (66,70.92) (67,70.83) (68,72.56) (69,72.21) (70,73.25) (71,72.99) (72,73.60) (73,74.17) (74,74.24) (75,74.83) (76,75.08) (77,75.09) (78,75.16) (79,75.40) (80,75.89) (81,76.16) (82,76.44) (83,76.32) (84,76.93) (85,76.94) (86,77.01) (87,77.20) (88,77.24) (89,77.49) (90,77.73) (91,77.60) (92,77.80) (93,77.81) (94,77.86) (95,77.95) (96,77.94) (97,77.96) (98,77.99) (99,78.02) (100,77.98)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,9.58) (2,21.21) (3,36.32) (4,45.89) (5,48.37) (6,54.72) (7,59.19) (8,61.90) (9,67.03) (10,69.04) (11,69.46) (12,72.21) (13,74.33) (14,71.18) (15,75.00) (16,74.56) (17,75.99) (18,77.10) (19,75.91) (20,77.87) (21,73.00) (22,77.06) (23,78.45) (24,76.79) (25,78.24) (26,78.66) (27,77.40) (28,78.45) (29,77.15) (30,79.13) (31,77.95) (32,81.01) (33,79.37) (34,80.47) (35,80.16) (36,80.17) (37,83.34) (38,77.02) (39,83.57) (40,83.41) (41,81.83) (42,82.67) (43,83.01) (44,85.82) (45,84.22) (46,85.20) (47,84.37) (48,85.25) (49,82.72) (50,86.56) (51,84.27) (52,86.73) (53,87.37) (54,87.02) (55,87.64) (56,87.82) (57,87.57) (58,87.74) (59,87.86) (60,88.26) (61,89.59) (62,89.73) (63,89.72) (64,90.02) (65,90.39) (66,90.06) (67,90.03) (68,91.12) (69,90.82) (70,91.46) (71,91.17) (72,91.49) (73,92.08) (74,91.87) (75,92.20) (76,92.30) (77,92.60) (78,92.44) (79,92.50) (80,92.84) (81,92.82) (82,93.04) (83,92.94) (84,93.23) (85,93.21) (86,93.32) (87,93.45) (88,93.42) (89,93.53) (90,93.59) (91,93.66) (92,93.67) (93,93.63) (94,93.68) (95,93.74) (96,93.76) (97,93.76) (98,93.74) (99,93.78) (100,93.76)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\end{center}
-
-\noindent The verified path's own curve, on the same axes as the 2018 panel
-above so the two can be read against each other. The endpoint is $0.28$ points
-below the reference. The curve is also visibly noisy in its middle third ---
-epoch~40 sits at $50.4$ against epoch~39's $54.3$ --- which is the LAMB
-trust-ratio recipe at effective batch $2048$ under a cosine that has barely
-begun to anneal, and it says a mid-training comparison between these panels
-carries much less information than their endpoints do.
-
-\medskip\noindent A closer comparison than the endpoints --- the two curves
-epoch by epoch, or a paired test over the same $50{,}000$ images --- would need
-the reference's per-example output, which this book does not carry.
-
-\medskip\noindent What that gap is \emph{not} evidence of: the two paths
-still differ in more than the codegen. The reference normalises BatchNorm over
-$512$ and this run over $64$, an eightfold difference in the statistic group
-and much the largest known asymmetry between them. Attributing the $0.28$ to
-the verified codegen requires closing that first.
-
-\medskip\noindent \textbf{Precision is not one of those differences.} This row
-and the reference are both bf16, on the same recipe at the same effective
-batch, so the $-0.28$ is not carrying a precision term. The top-5 gap is
-$-0.03$ --- three thousandths of a point, or seventeen images out of fifty
-thousand.
-
-\medskip\noindent\emph{In, and in the $77.98\%$ above.} What this run
-carries that a bare A3 transcription would not:
-
-\begin{itemize}
-  \item \texttt{wdExcludeNormBias} --- BN $\gamma/\beta$ and biases are not
-    decayed; 54 decayed / 107 excluded of 161. Largest single contributor.
-  \item \textbf{LAMB's gradient clip} (timm's \texttt{max\_grad\_norm}
-    $= 1.0$ default), applied after the all-reduce \emph{and} after the
-    accumulation, at threshold $kC$ (\texttt{Proofs.clipFactor\_accum}).
-  \item The \texttt{no\_weight\_decay} group is not layer-adapted.
-  \item BN running-statistic momentum compensated for accumulation.
-    Evaluation-only.
-  \item Evaluation scores all $50{,}000$ images. \textbf{Every top-1
-    outside this chapter is still over $49{,}920$.}
-  \item RandAugment Posterize, plus timm's validation protocol and
-    resampler (appendix~\ref{app:data}).
-  \item \emph{Verification:} the optimizer is tied to the reference at
-    the \emph{update} as well as the gradient --- six variants to
-    $\sim\!10^{-7}$.
-\end{itemize}
-
-\medskip\noindent\emph{Still out}, in rough order of expected effect:
-
-\begin{itemize}
-  \item Ghost-BN group 64 against the reference's 512; no collective
-    touches the batch statistics. The largest known difference between the
-    two paths, and \emph{untested}: the $-0.28$ points between them is its
-    upper bound only if nothing else contributes. It is the \emph{only} known
-    asymmetry between the two paths.
-  \item $0.08\%$ of each epoch dropped ($8 \nmid 5004$); structural to $k$.
-  \item Mixup $\lambda$ drawn host-side from NumPy, so agreement is
-    distributional, never per-step.
-\end{itemize}
+\medskip\noindent The A3 render carries the recipe as
+\S\ref{sec:r50_a3_vs_2018} tabulates it, including the three places a bare
+transcription would miss: BN $\gamma/\beta$ and biases excluded from weight
+decay, LAMB's gradient clip at \texttt{timm}'s default (after the all-reduce
+\emph{and} the accumulation, at threshold $kC$,
+\texttt{Proofs.clipFactor\_accum}), and the \texttt{no\_weight\_decay} group
+left out of layer adaptation. The optimizer is tied to the reference at the
+update as well as the gradient, six variants to $\sim\!10^{-7}$. What it
+does not carry is the reference's BatchNorm group: no collective touches the
+batch statistics, so each replica normalizes over its own $64$ against the
+reference's $512$ --- an eightfold gap, and much the largest asymmetry
+between the two A3 columns. The rest of the list is small: $0.08\%$ of each
+epoch is dropped because $8 \nmid 5004$, and Mixup's $\lambda$ is drawn
+host-side, so agreement there is distributional rather than per-step.
 
 \prosesection{The two paths, side by side}
-
-Both recipes have now been run on both lowerers, which is what makes this a
-grid rather than a pair of anecdotes.
 
 \begin{center}
 \begin{tabular}{@{}l r r r @{\qquad} r r r@{}}
 \hline
  & \multicolumn{3}{c}{\textbf{2018} (90 ep)} & \multicolumn{3}{c}{\textbf{RSB-A3} (100 ep)} \\
- & JAX & PJRT & $\Delta$ & JAX & PJRT & $\Delta$ \\
+ & reference & verified & $\Delta$ & reference & verified & $\Delta$ \\
 \hline
 top-1        & $76.95$ & $\mathbf{77.07}$ & $+0.12$ & $78.26$ & $\mathbf{77.98}$ & $-0.28$ \\
 top-5        & $93.44$ & $\mathbf{93.48}$ & $+0.04$ & $93.79$ & $\mathbf{93.76}$ & $-0.03$ \\
 precision    & bf16 & bf16 & & bf16 & bf16 & \\
+BN group     & 256 & 64 & & 512 & 64 & \\
 box          & 4060\,Ti & 3060 & & 4060\,Ti & 3060 & \\
 wall clock   & $24.0$\,h & $30.7$\,h & & $15.1$\,h & $22.8$\,h & \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent \textbf{The two lowerers agree within $0.28$ points of top-1 on both
-recipes}, and both agree to within $0.04$ on top-5. That is the claim the grid
-licenses and the reason the second lowerer exists: with one backend the proofs
-decorate a code generator and nothing checks the generator, while a second
-independent lowering makes the verified path the artifact and JAX the oracle it
-is checked against.
+\noindent Four runs, one per cell, every cell bf16 and every cell scored over
+the same $50{,}000$ images. The reference column is four 4060\,Ti and the
+verified column four 3060 throughout, which is what lets $\Delta$ be read as
+a path difference rather than a path-and-box one.
 
-\medskip\noindent \textbf{And the recipe delta replicates.} A3 beats 2018 by
-$+1.31$ points on the JAX lowerer and by $+0.91$ on the verified one. Agreement
-at a single configuration can be a coincidence of that configuration; a
-\emph{difference} that reproduces across two independent implementations is
-harder to arrange by accident, and it is what a one-row comparison cannot show.
-
-\medskip\noindent Both columns are internally uniform in precision and in box:
-every cell is bf16, the JAX column is four 4060\,Ti and the PJRT column is four
-3060. That is what lets the $\Delta$ column be read as a lowerer difference
-rather than a lowerer-and-precision one.
-
-\medskip\noindent \textbf{What this is not evidence of.} Each cell is one run
-at one seed, and $0.28$ points is inside what seed variance alone produces on
-ImageNet --- the agreement is consistent with the lowerers matching, not proof
-that they do. Nothing here is a paired test: these are four scalars with
-overlapping intervals, and the $95\%$ binomial half-width on $50{,}000$ images
-at $77\%$ is $\pm0.37$, wider than every $\Delta$ in the table. The A3 column
-trains at $160$ and evaluates at $224$ while the 2018 column does both at
+\medskip\noindent\textbf{The two paths agree within $0.28$ points on both
+recipes}, and within $0.04$ on top-5 --- inside the floor \S\ref{sec:r34_pjrt}
+set, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one seed per cell. \textbf{And the recipe delta
+replicates}: A3 beats 2018 by $+1.31$ on the reference and $+0.91$ on the
+verified path. Agreement at a single configuration can be a coincidence of
+that configuration; a \emph{difference} that reproduces across two
+independent implementations is harder to arrange by accident, and it is
+what a one-row comparison cannot show. Two things the grid does not settle.
+The A3 column trains at $160$ and evaluates at $224$ while 2018 does both at
 $224$, so the recipe delta confounds resolution with recipe, by A3's own
-design. And one non-uniformity does survive: the A3/PJRT cell is the only one
-rendered after \texttt{f4e4172} (2026-08-29), which moved $124$ artifacts to
-their 4-D pointwise shape and shifted a ResNet-34 Imagenette number by $0.33$
-with no reduction axis changed. Measured on A3, that rendering change is worth
-$+0.07$ --- inside the $\pm0.37$ --- which is why the other three cells are
-quoted as they stand.
+design. And the A3 pair's $-0.28$ sits on an eightfold BatchNorm-group
+difference that nothing here isolates.
+
+\medskip\noindent\textbf{The A3 curves meet; they do not travel together.}
+The verified path runs ahead through most of the schedule, by as much as
+seventeen points, and the two converge only in the anneal --- within a
+point from epoch~80 and $0.01$ apart at epoch~90. Where that route
+difference lives is not established; the BatchNorm group is the one large
+known asymmetry, and it is why this pair is read at its endpoints and
+nowhere else:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r r r@{}}
+\hline
+epoch & 5 & 25 & 50 & 75 & 90 & 100 \\
+\hline
+reference (JAX)       & 11.62 & 46.88 & 52.80 & 72.69 & 77.72 & 78.26 \\
+verified path (PJRT)  & 24.53 & 53.98 & 65.17 & 74.83 & 77.73 & 77.98 \\
+$\Delta$              & $+12.91$ & $+7.10$ & $+12.37$ & $+2.14$ & $+0.01$ & $-0.28$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation top-1 (\%)},
+    xmin=0, xmax=101, ymin=0, ymax=80,
+    xtick={0,20,40,60,80,100},
+    ytick={20,40,60,80},
+    legend pos=south east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark=none},
+]
+\addplot[blue] coordinates {
+(1,0.32) (2,5.34) (3,6.81) (4,14.70) (5,11.62) (6,23.92) (7,27.06) (8,27.37) (9,35.02) (10,35.15) (11,37.37) (12,36.58) (13,41.56) (14,42.43) (15,41.37) (16,38.14) (17,43.49) (18,42.18) (19,39.75) (20,45.80) (21,43.14) (22,42.05) (23,46.11) (24,44.61) (25,46.88) (26,44.95) (27,47.33) (28,45.88) (29,50.31) (30,48.04) (31,36.35) (32,44.06) (33,47.24) (34,52.21) (35,40.58) (36,49.36) (37,43.32) (38,54.21) (39,49.11) (40,52.03) (41,51.79) (42,53.93) (43,48.36) (44,52.52) (45,59.70) (46,52.96) (47,54.78) (48,55.10) (49,56.45) (50,52.80) (51,59.18) (52,62.93) (53,62.82) (54,62.71) (55,61.33) (56,62.99) (57,62.87) (58,60.49) (59,60.91) (60,63.07) (61,62.78) (62,66.71) (63,64.46) (64,67.76) (65,70.47) (66,69.36) (67,69.58) (68,70.74) (69,66.93) (70,68.29) (71,71.02) (72,71.03) (73,71.12) (74,73.37) (75,72.69) (76,72.41) (77,73.87) (78,74.58) (79,75.03) (80,75.70) (81,75.25) (82,75.94) (83,75.53) (84,76.58) (85,76.17) (86,77.22) (87,77.39) (88,77.26) (89,77.84) (90,77.72) (91,77.96) (92,77.91) (93,78.11) (94,78.17) (95,78.20) (96,78.23) (97,78.19) (98,78.28) (99,78.26) (100,78.26)
+};
+\addlegendentry{reference (JAX)}
+\addplot[red, dashed] coordinates {
+(1,2.81) (2,7.78) (3,15.89) (4,23.13) (5,24.53) (6,29.49) (7,33.10) (8,35.75) (9,40.62) (10,42.59) (11,43.50) (12,45.92) (13,47.79) (14,45.68) (15,49.27) (16,49.15) (17,50.42) (18,51.79) (19,50.85) (20,53.34) (21,47.99) (22,52.52) (23,54.02) (24,51.77) (25,53.98) (26,54.38) (27,53.02) (28,54.08) (29,52.88) (30,55.30) (31,53.70) (32,57.21) (33,55.45) (34,57.14) (35,56.24) (36,56.14) (37,60.42) (38,52.69) (39,60.44) (40,61.01) (41,58.73) (42,59.63) (43,60.16) (44,63.77) (45,61.29) (46,63.13) (47,62.03) (48,63.23) (49,60.37) (50,65.17) (51,61.85) (52,65.30) (53,66.21) (54,65.86) (55,66.96) (56,67.20) (57,67.09) (58,66.80) (59,67.37) (60,68.23) (61,70.11) (62,69.99) (63,70.08) (64,70.80) (65,71.48) (66,70.92) (67,70.83) (68,72.56) (69,72.21) (70,73.25) (71,72.99) (72,73.60) (73,74.17) (74,74.24) (75,74.83) (76,75.08) (77,75.09) (78,75.16) (79,75.40) (80,75.89) (81,76.16) (82,76.44) (83,76.32) (84,76.93) (85,76.94) (86,77.01) (87,77.20) (88,77.24) (89,77.49) (90,77.73) (91,77.60) (92,77.80) (93,77.81) (94,77.86) (95,77.95) (96,77.94) (97,77.96) (98,77.99) (99,78.02) (100,77.98)
+};
+\addlegendentry{verified path (PJRT)}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent RSB-A3 on both paths, scored over all $50{,}000$ validation images
+at every epoch.
 
 \subsection*{What A3 changes from the 2018 recipe}
 \label{sec:r50_a3_vs_2018}
@@ -6089,7 +6007,7 @@ not ``the same render as A2''}: the decay is baked, so its $0.01$ against A2's
 $0.02$ is a re-render, kept apart so one line among $18{,}000$ cannot be lost.
 
 \medskip\noindent \textbf{The two regularisers these renders used to be missing
-are now in them.} The ledger \S\ref{sec:r50_pjrt} keeps for A3, before anything
+are now in them.} What is in these renders and what is still out, before anything
 is run:
 
 \begin{center}
@@ -7145,9 +7063,9 @@ MobileNetV2 has BatchNorm in every block. The
 verified path runs four replicas of $64$ with no collective touching the
 batch statistics, so it normalizes over groups of $64$; the JAX reference
 under a \texttt{NamedSharding} mesh reduces globally, so it normalizes over
-$256$. Section~\ref{sec:r34_pjrt} measured that same fourfold
-difference as worth $0.02$ points on ResNet-34 at convergence. The $+0.012$
-here is the same order. So the honest claim is that the two paths agree to
+$256$. The ResNet-34 pair of \S\ref{sec:r34_pjrt}, which carries the same
+fourfold difference and a precision difference besides, landed $0.02$ apart at
+convergence. The $+0.012$ here is the same order. So the honest claim is that the two paths agree to
 within the BatchNorm-group effect --- not that the lowerer has been shown
 neutral. Separating those would take a verified render that all-reduces the
 batch statistics, which no committed artifact does --- and which is not a patch
