@@ -1,0 +1,2 @@
+launch 17:16:45 verified, GPU 0, PJRT_FFI_RESIDENT=1, ckpt cleared: 0 left
+exit 0 at 18:30:35

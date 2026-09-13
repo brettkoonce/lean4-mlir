@@ -1,0 +1,4 @@
+launch 17:15:53 jax reference, GPU 1, fp32, jax/.lake/build/bin/convnext-tiny data/imagenette
+exit 0 at 17:17:43
+relaunch 17:17:57 jax reference, GPU 1, fp32, PYTHONUNBUFFERED=1 (first launch at 17:15 was block-buffered; killed at 17:22 during compile, no epoch completed)
+exit 0 at 18:40:50

@@ -91,6 +91,11 @@ lean_exe «mobilenet-v4-imagenet» where
 lean_exe «efficientnet-b0-imagenet» where
   root := `MainEfficientNetImagenet
 
+-- ConvNeXt-Tiny on Imagenette: Chapter 8's JAX reference on the shared
+-- Imagenette recipe (2026-09-13, the layer-scale init control).
+lean_exe «convnext-tiny» where
+  root := `MainConvNeXt
+
 -- ConvNeXt-Tiny on 1000-class ImageNet, bf16 incl. bf16 conv. First JAX-path
 -- port of ConvNeXt (depthwise-7×7 + channel-LN + LayerScale blocks).
 lean_exe «convnext-tiny-imagenet» where
