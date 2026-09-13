@@ -6167,7 +6167,9 @@ the \(C_\text{in}\) channels into each of \(C_\text{out}\) new
 channels. Both happen inside the same kernel and at the same cost
 \(C_\text{in} \times C_\text{out} \times k^2\) weights per layer.
 
-Howard et al.\ 2017 (MobileNetV1, then V2 in
+Howard et al.\ 2017 (MobileNetV1,
+\href{https://arxiv.org/abs/1704.04861}{arXiv:1704.04861}) and Sandler
+et al.\ 2018 (MobileNetV2,
 \href{https://arxiv.org/abs/1801.04381}{arXiv:1801.04381})
 asked: what if we factored those two responsibilities and only
 paid the full cost of one of them? The spatial mixing is locally
@@ -6180,7 +6182,7 @@ efficiency without losing much expressive power.
 \label{sec:mnv2_runit}
 
 Before the factorization, train the factorized network. Four commands,
-and about the same GPU time Chapter~\ref{chap:residual} asked for:
+and about thirty-five minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
@@ -6229,10 +6231,11 @@ Eighty epochs at about 26 seconds each, thirty-five minutes in total, and
 3,925-image validation split. The best epoch reached $89.32\%$. Set that
 against Chapter~\ref{chap:residual}, which ran the same data, the same
 recipe and the same number of epochs through a network with
-$9.5\times$ the parameters and finished at $89.71\%$ top-1 and $98.27\%$
-top-5. MobileNetV2 gives up less than half a point of top-1, picks up
-four tenths of top-5, and does it in thirty-five minutes against an hour
-and a half.
+$9.5\times$ the parameters and averages $89.99 \pm 0.32$ top-1 and
+$98.46\%$ top-5 over five seeds. MobileNetV2 gives up three quarters of
+a point of top-1 --- less than one run's own $\pm 0.97$ interval --- picks
+up a fifth of a point of top-5, and does it in thirty-five minutes
+against forty-seven.
 
 Epoch 2 is worth a glance before moving on. Validation accuracy
 \emph{falls}, from $24.1\%$ to $17.3\%$, while the training loss drops
@@ -6257,7 +6260,8 @@ width or depth, so they cover all seventeen blocks.
 One scope note, because this is the chapter where the distinction starts
 to bite. The theorem that folds those rules into a single statement about
 the \emph{whole} network is \texttt{mobilenetv2\_full\_has\_vjp\_at}, in
-\texttt{MobileNetV2FullVJP.lean}, and it covers the stem, all seventeen
+\texttt{Proofs/Nets/MobileNet/MobileNetV2FullVJP.lean}, and it covers the
+stem, all seventeen
 bottlenecks and the head. What ties the full 17-block spec
 to the paper's architecture is a separate denotational result about the
 forward, \texttt{mobilenetv2Verified\_denote\_eq}, with
@@ -6281,15 +6285,6 @@ and \texttt{running-stats BN: 52 layers, 34112 stat floats} is the driver
 threading the running averages out of the train step and into it. This
 network has 52 BatchNorms against ResNet-34's 36, which is what a block
 built from three convolutions instead of two costs.
-
-To run this net alongside the other six at the same scale and recipe:
-
-\begin{verbatim}
-lake run imagenette
-\end{verbatim}
-
-That is the whole Part-I tier at $224^2$, and it is an afternoon rather
-than the minute \texttt{lake run mnist} takes.
 
 \prosesection{Depthwise: one kernel per channel, no cross-channel sum}
 
@@ -6396,7 +6391,7 @@ MobileNetV2 stacks 17 inverted-residual blocks across seven stages
 average pool, and a 1280-to-10 dense head. That is the same
 stem-stages-head template as ResNet-34. Total: 2.24M parameters,
 9.5$\times$ fewer than ResNet-34, at a modest accuracy cost
-($89.25\%$ against ResNet-34's $89.71\%$ on Imagenette, both
+($89.25\%$ against ResNet-34's $89.99\%$ on Imagenette, both
 measured in this book). For mobile and embedded deployment that
 trade is the whole reason MobileNet exists.
 
@@ -6531,21 +6526,6 @@ Same three steps as the conv2d bias VJP
 \section{Example: MobileNet V2 on Imagenette}
 \label{sec:depthwise_mnv2_example}
 
-Depthwise convolution on its own is rarely used directly. You
-almost always see it wrapped in a \emph{depthwise-separable}
-sandwich: $1 \times 1$ expand, $3 \times 3$ depthwise, $1 \times 1$
-project, with a residual connection around the whole thing. That
-sandwich is the inverted-residual block that defines MobileNet V2,
-and it is how depthwise convolutions got their fame.
-
-The point of depthwise is \emph{parameter efficiency}. A normal
-$3 \times 3$ conv over 64 channels uses $3 \times 3 \times 64
-\times 64 = 36864$ weights. A depthwise version uses $3 \times 3
-\times 64 = 576$ weights. 64$\times$ fewer. The depthwise-separable
-block recovers the missing cross-channel expressivity with the
-surrounding $1 \times 1$ convs, at a combined cost far below a full
-$3 \times 3$. MobileNet V2 is 17 of these blocks together.
-
 \subsection*{The architecture}
 
 The same vertical column as ResNet-34, now built from
@@ -6679,7 +6659,7 @@ visible as the places where \texttt{stride} is 2. Internally each block
 is a $1 \times 1$ conv to \texttt{mid} channels, a $3 \times 3$
 depthwise at that width, a $1 \times 1$ project to \texttt{oc}, and a
 residual skip when \texttt{ic == oc} and \texttt{stride == 1}. Its VJP
-is \S~\ref{ax:depthwise_has_vjp3} for the depthwise conv composed with
+is Theorem~\ref{ax:depthwise_has_vjp3} for the depthwise conv composed with
 the dense, BN and biPath theorems already proved.
 
 \textbf{Fifty-two BatchNorms, and the list is not three per block.} Every
@@ -6727,14 +6707,15 @@ too: \texttt{LEAN\_MLIR\_VARIANT=rms} loads
 seconds each on one RTX 4060 Ti, finishing at \textbf{89.25\%}
 top-1 and \textbf{98.68\%} top-5 on Imagenette's 3,925-image
 validation split. Against Chapter~\ref{chap:residual}'s ResNet-34 at
-$89.71\%$ on the same data and the same recipe, that is
-\textbf{0.46 points of top-1} for \textbf{9.5$\times$ fewer parameters}
+$89.99 \pm 0.32$ on the same data and the same recipe, that is
+\textbf{0.74 points of top-1} for \textbf{9.5$\times$ fewer parameters}
 (2.24M against 21.3M). That is the depthwise-separable trade, and on
 this evidence it is a better one than the architecture's reputation
 suggests. Rather than reprint the log, here is what is worth noticing
 in it.
 
-- \textbf{2.24M parameters, and 1.05\,MB of MLIR} (1\,047\,327 chars)
+\begin{itemize}
+\item \textbf{2.24M parameters, and 1.05\,MB of MLIR} (1\,047\,327 chars)
   for the AdamW training step. ResNet-34 emitted 729\,KB with $9.5\times$
   the parameters, so the smaller network renders the \emph{larger}
   program. Emission is per-op, and the separable block trades one
@@ -6742,12 +6723,13 @@ in it.
   went down and operation count went up, and the text follows the
   second.
 
-- \textbf{Per-step time is about 90\,ms} at batch 32, against
-  ResNet-34's 220\,ms at the same batch and the same 295 steps to the
-  epoch, so the whole run takes thirty-five minutes rather than an hour
-  and a half. That is a real $2.4\times$, and it is also well short of
-  what the parameter count promises: $9.5\times$ fewer weights buys
-  $2.4\times$ the throughput, not $9.5\times$. Depthwise convolution is
+\item \textbf{Per-step time is about 90\,ms} at batch 32, against
+  ResNet-34's 120\,ms at the same batch, the same 295 steps to the epoch
+  and the same resident parameters, so the whole run takes thirty-five
+  minutes rather than forty-seven. That is a real $1.3\times$, and it is
+  far short of what the parameter count promises: $9.5\times$ fewer
+  weights buys $1.3\times$ the throughput, not $9.5\times$. Depthwise
+  convolution is
   memory-bound. It does nine multiply-accumulates per output element
   where the standard $3 \times 3$ it replaces does $9 C_\text{in}$, so
   the kernel spends its time moving activations rather than multiplying
@@ -6755,27 +6737,28 @@ in it.
   \S\ref{sec:mnv2_imagenet} sees the same sub-proportional scaling at
   ImageNet.
 
-- \textbf{Three artifacts, not one.} The train step is accompanied by
+\item \textbf{Three artifacts, not one.} The train step is accompanied by
   \texttt{mobilenetv2\_fwd} (143\,476 chars) and
   \texttt{mobilenetv2\_fwd\_eval} (111\,150 chars), the second existing
   only because BatchNorm evaluates differently than it trains. It is
   the concrete cost of the \texttt{bnChannels} line in the spec above.
 
-- \textbf{52 BN layers}, up from ResNet-34's 36, for the same reason
+\item \textbf{52 BN layers}, up from ResNet-34's 36, for the same reason
   the MLIR is bigger: more internal convolutions means more
   BN-after-conv pairs. Each one still proves its VJP via
-  \S~\ref{thm:bn_has_vjp}.
+  Theorem~\ref{thm:bn_has_vjp}.
 
-- \textbf{Final loss plateaus near 0.50} again, and for the same reason
+\item \textbf{Final loss plateaus near 0.50} again, and for the same reason
   it did in Chapter~\ref{chap:residual}. The label-smoothing floor at
   $\varepsilon = 0.1$ over ten classes is about $0.485$, so this run has
   essentially converged rather than stalled.
+\end{itemize}
 
 \section{MLIR: Depthwise Convolution}
 
 \noindent\textbf{What is already proven.} A depthwise convolution
 applies one $k\times k$ kernel per channel with no cross-channel sum, so its
-reverse-mode derivative (\S~\ref{ax:depthwise_has_vjp3},
+reverse-mode derivative (Theorem~\ref{ax:depthwise_has_vjp3},
 \texttt{depthwise\_has\_vjp3}) is a reversed-kernel convolution \emph{minus}
 the channel transpose the full-conv VJP of Chapter~\ref{chap:cnn} needs:
 with no $\sum_{c_\text{in}}$ to take the adjoint of, there is no in/out
@@ -6839,7 +6822,7 @@ then the two side by side.
 
 \prosesection{The reference (JAX)}
 
-The reference trainer is \texttt{jax/MainMobileNetV2Imagenet.lean}, and its
+The reference trainer is \texttt{jax/MainMobilenetV2Imagenet.lean}, and its
 spec and recipe are:
 
 \begin{verbatim}
@@ -6928,7 +6911,7 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \noindent Global batch 256 as $4 \times 64$ replicas, scored over all
 $50{,}000$ validation images; one attempt, no restarts, and $6.6$ minutes
 an epoch held to within a second across all $350$. The wall-clock win over
-the $9.5\times$-larger ResNet-34 is real but sub-proportional, exactly as
+the $9.5\times$-larger ResNet-34 is real but sub-proportional, as
 \S\ref{sec:mnv2_runit} measured at small scale: depthwise convolution is
 memory-bound, so an order of magnitude fewer FLOPs buys a factor of two or
 three on this hardware rather than nine. The RMSProp peak of $0.045$ took
