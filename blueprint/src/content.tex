@@ -11463,7 +11463,7 @@ asymptote we don't approach.
 \draw[band] (0,-6.75) -- (15.7,-6.75);
 \node[catlbl] at (2.15,-7.7) {Residual\\skip $\cdot$ merge};
 \opchiprowD{cBr}{\PA}{-7.1}{residual/g, invResidual/y, layerScale/r}
-\opchiprow{cBr}{\PB}{-7.1}{bottleneck, highway, denseBlock, cspBlock, fpn, unetDown, unetUp}
+\opchiprow{cBr}{\PB}{-7.1}{bottleneck, denseBlock, cspBlock, fpn, unetDown, unetUp}
 \draw[band] (0,-8.85) -- (15.7,-8.85);
 \node[catlbl] at (2.15,-9.5) {Multi-branch\\parallel};
 \opchiprowD{cVi}{\PA}{-9.2}{squeeze-excite/y}
@@ -11487,9 +11487,13 @@ asymptote we don't approach.
 \section{Bestiary-only \texttt{Layer} primitives}
 \label{sec:bestiary_primitives}
 
-Twenty-two new \texttt{Layer} constructors were added by the bestiary chapters.
-None are codegen-backed (MlirCodegen emits \texttt{// UNSUPPORTED}); the
-goal is pedagogical shape + parameter accounting, not training runs.
+Twenty-four \texttt{Layer} constructors exist only for the bestiary. The two
+plain ones, \texttt{.separableConv} (Xception, QANet) and
+\texttt{.fireModule} (SqueezeNet), are described in their entries; the
+twenty-two bundled ones are defined here. Two of these are codegen-backed,
+\texttt{.unetDown} and \texttt{.unetUp}, which the segmentation and diffusion
+demos train through; the rest emit \texttt{// UNSUPPORTED}, and their goal
+is pedagogical shape and parameter accounting, not training runs.
 
 \begin{definition}[Inception module]
   \label{layer:inceptionModule}
@@ -11666,7 +11670,8 @@ goal is pedagogical shape + parameter accounting, not training runs.
   \label{layer:unetUp}
   \lean{Layer.unetUp}
   \leanok
-  Transposed-conv $2\times$ upsample + concat with matching skip +
+  Bilinear $2\times$ upsample (parameter-free, in place of a transposed
+  conv) + concat with the matching skip +
   $2 \times$ \texttt{(conv3$\times$3 + BN + ReLU)}. Signature:
   \texttt{unetUp (ic oc : Nat)}, where \texttt{oc} is both the output
   channel count and the expected skip width.
@@ -11903,9 +11908,9 @@ classification head fell out of favor.
 \subsubsection*{Highway Networks (\texttt{Bestiary/Highway.lean})}
 \emph{Zero} new math --- the architecture is built entirely from the
 product rule and additive fan-in (Chapter~\ref{chap:tensor}'s
-toolkit) applied to two parallel dense / conv paths. \emph{One}
-shape-only primitive, \texttt{.highwayBlock ic oc}, bundling the
-two paths and the gate-blend (Srivastava, Greff, Schmidhuber 2015,
+toolkit) applied to two parallel dense / conv paths, and \emph{zero}
+new primitives: the two paths are two \texttt{NetSpec}s below and the
+gate-blend is prose (Srivastava, Greff, Schmidhuber 2015,
 \href{https://arxiv.org/abs/1505.00387}{arXiv:1505.00387}). Variants:
 canonical 50-layer Highway-MLP, deeper 100-layer fixture, tiny.
 
