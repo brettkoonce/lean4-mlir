@@ -487,14 +487,14 @@ namespace ConvNeXtLayout
     `(dims, initKind)` order MUST match `@convnext_train_step`'s signature — both from the
     same [3,3,9,3] generator (tests/TestConvNeXt*.lean). `initKind`: 0 = He(fan-in)
     (depthwise 49, expand c, project 4c, patchify 48, downsample 4c, dense 768), 1 = ones
-    (LN γ / layerScale γ), 2 = zeros (LN β / bias). -/
+    (LN γ), 2 = zeros (LN β / bias), 3 = 1e-6 (layerScale γ, the paper's init). -/
 private def depths : Array Nat := #[3, 3, 9, 3]
 private def dims   : Array Nat := #[96, 192, 384, 768]
 private def blockSpec (c e : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,1,7,7],0),(#[c],2),(#[c],1),(#[c],2),   -- depthwise W,b ; LN γ,β (PER-CHANNEL, §2m)
     (#[e,c,1,1],0),(#[e],2),                      -- expand W,b
     (#[c,e,1,1],0),(#[c],2),                      -- project W,b
-    (#[c],1)]                                     -- layerScale γ (per-channel)
+    (#[c],3)]                                     -- layerScale γ (per-channel), kind 3 = 1e-6
 private def downSpec (ci co : Nat) : Array (Array Nat × Nat) :=
   #[(#[ci],1),(#[ci],2),(#[co,ci,2,2],0),(#[co],2)]  -- LN γ,β at the PRE-conv width ; conv W,b
 /-- `(dims, initKind)` for every param, in func-arg order.

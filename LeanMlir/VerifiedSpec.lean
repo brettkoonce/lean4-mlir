@@ -191,7 +191,9 @@ private def bottleneckStageSpec (ic oc count stride : Nat) : Array (Array Nat ×
   return a
 
 /-- The `(dims, initKind)` params this layer contributes, in func-arg order
-    (`initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias)). -/
+    (`initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias), 3 = 1e-6 (layer scale γ,
+    the ConvNeXt paper's value and the JAX reference's `emitLayerScaleInit`; it was kind 1 until
+    2026-09-13, so the two paths trained ConvNeXt from different inits)). -/
 def toSpecs : VLayer → Array (Array Nat × Nat)
   | convBn ic oc k _        => convBnSpec ic oc k
   | convBnNB ic oc k _      => convBnNBSpec ic oc k
@@ -235,10 +237,10 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
     (if expand == 1 then #[] else #[(#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)])
   | convNextBlock c =>                               -- depthwise 7×7 | LN(scalar) | expand | project | layerScale
     #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),
-      (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]
+      (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],3)]   -- layerScale γ: kind 3 = 1e-6
   | convNextBlockCh c =>                             -- as above with a per-channel LN affine
     #[(#[c,1,7,7],0),(#[c],2),(#[c],1),(#[c],2),
-      (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]
+      (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],3)]   -- layerScale γ: kind 3 = 1e-6
   | layerNorm d             => #[(#[d],1),(#[d],2)]   -- per-channel γ,β
   | transformerBlock d m =>                          -- LN1 | Wq/Wk/Wv/Wo | LN2 | MLP(d→m→d)
     #[(#[d],1),(#[d],2),

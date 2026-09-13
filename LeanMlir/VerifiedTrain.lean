@@ -80,7 +80,7 @@ structure VerifiedNet where
       `.lake/build/<slug>_{ts,fwd}_v.vmfb`, and the `m.<slug>_{train_step,fwd}` funcs. -/
   slug     : String
   /-- `(dims, initKind)` per param, in func-arg order — the matching `XLayout.specs`.
-      `initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias). -/
+      `initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias), 3 = 1e-6 (layer scale). -/
   specs    : Array (Array Nat × Nat)
   /-- Per-example flattened input width (e.g. `3 * 224 * 224`). -/
   d0       : Nat
@@ -409,7 +409,13 @@ def mkSession (mlirPath : String) : IO LowererSession := do
 
       * rank-4 conv kernel `[oc, ic, kH, kW]` → He **fan-OUT**, variance `2/(oc·kH·kW)`
       * rank-2 dense matrix `[in, out]`       → **Glorot**, variance `2/(in + out)`
-      * γ = 1 (kind 1), β / bias = 0 (kind 2)
+      * γ = 1 (kind 1), β / bias = 0 (kind 2), layer scale = 1e-6 (kind 3)
+
+    ⚠ **Kind 3 is new on 2026-09-13.** ConvNeXt's layer scale was kind 1 — ones — while the JAX
+    reference (`emitLayerScaleInit`) and the paper use 1e-6, so the two paths never shared an
+    init on that net; every ConvNeXt accuracy recorded before this date is from γ = 1. Kind 3
+    must be matched here explicitly: the `_` branch below is He, which is the wrong answer for a
+    per-channel scale.
 
     ⚠ **Both weight cases CHANGED 2026-08-04.** This used variance `2/fan_in` for BOTH, where
     [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean) emits `uniform(±√(6/fan_out))` for convs (variance `2/fan_out` —
@@ -434,6 +440,7 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0
+  | 3 => F32.const n.toUSize 1e-6
   | 2 =>
     -- `biasSigma` is the gates' escape hatch, not a trainer knob: the weight-decay and grad-clip
     -- ties need a non-zero bias or their update is identically vacuous. `none` is the trainer's
