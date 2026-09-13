@@ -3563,8 +3563,8 @@ them}. The takeaways are concrete:
   (Theorem~\ref{ax:bnIstdBroadcast_diff}).
 \item BN's payoff is \emph{speed} and \emph{stability}: a deeper
   network reaches the same accuracy in far fewer epochs with it than
-  without, and under a strong optimizer the un-normalized net does not
-  reliably finish training at all. The example in
+  without, and five runs of the same command land two to three times
+  closer together. The example in
   \S\ref{sec:bn_cifar_example} measures both directly.
 \end{itemize}
 
@@ -3572,7 +3572,7 @@ The proofs themselves use Mathlib's \texttt{HasFDerivAt.sqrt},
 \texttt{(hasDerivAt\_inv).comp\_hasFDerivAt}, and a centering CLM
 chained through the chain rule from Ch~\ref{chap:tensor}. They're
 correct (the Lean kernel checks them) and they're available in
-\texttt{Proofs/BatchNorm.lean} for the curious. You do not need to
+\texttt{Proofs/Architectures/BatchNorm.lean} for the curious. You do not need to
 understand them line-by-line to use BN as a layer or to follow the
 rest of the book. \textbf{Ch~\ref{chap:residual} (ResNet-34) is
 the easiest chapter in the book and follows immediately. This
@@ -3673,11 +3673,7 @@ the headline accuracy drops out of the nineties. BatchNorm's backward is
 also the first in this book you can't read off by inspection.
 
 \medskip\noindent The learning rate is constant here --- no warmup, no
-decay --- which is not what a CIFAR recipe would normally do and is
-deliberate: \S\ref{sec:bn_cifar_example} spends the rest of the chapter
-changing one thing at a time, and a schedule is one more thing changing.
-Chapter~\ref{chap:residual} adds cosine annealing back and shows what it
-buys. Run five times at this setting the net lands between
+decay. Run five times at this setting the net lands between
 $75.8$ and $76.7\%$, so the number above is an ordinary
 draw rather than a best one, and the tables later in the chapter report
 medians over five for the same reason.
@@ -3731,10 +3727,11 @@ Notice what happens to the formula as \(\sigma^2 \to 0\):
 \(\mathrm{istd} \to 1/\sqrt{\varepsilon}\), bounded. Without \(\varepsilon\)
 the gradient diverges. Theorem \ref{ax:bnIstdBroadcast_diff} is
 the formal statement that \(\varepsilon > 0\) is sufficient to
-make this term differentiable. This is the \emph{one place in
-the book} where the math actually requires real-analysis machinery
-beyond chain-sum-product. Everything else in the framework reduces
-to those three rules.
+make this term differentiable. This is the \emph{first place in
+the book} where the math requires real-analysis machinery beyond
+chain-sum-product (ConvNeXt's GELU and the transformer's softmax are
+the others); everything else in the framework reduces to those three
+rules.
 
 \prosesection{The three-term backward}
 
@@ -4089,20 +4086,22 @@ Two levers govern the answer, \textbf{normalization} and the
 computed in, turns out not to move it at all --- which is its own kind of
 finding --- and a knob, the width of the head, does not either. We move each against an \emph{identical, machine-checked
 gradient}, holding everything else fixed: same architecture, same 40
-epochs, and the same data pipeline (per-epoch shuffle, random horizontal
-flip, cosine learning-rate schedule with warmup). The findings,
+epochs, the same data pipeline (per-epoch shuffle, random horizontal
+flip) and one constant learning rate. The findings,
 stated up front so the graphs are no surprise:
 
 \begin{itemize}
 \item \textbf{Normalization buys stability, and speed on the way.}
   BatchNorm (dropped between each conv and its ReLU) reaches a given
-  accuracy in markedly fewer epochs. It also keeps the net alive: the
-  un-normalized net's training loss went to \texttt{NaN} in six of our
-  fourteen runs, and the normalized net's never did.
+  accuracy in markedly fewer epochs. It also makes the result
+  repeatable: five runs of the un-normalized net spread over 2.7 to 3.3
+  points under every optimizer, five of the normalized net over 0.2 to
+  1.1.
 \item \textbf{The optimizer moves the ceiling most.} Trading plain SGD
   for SGD-with-momentum is worth about two points of final accuracy,
-  more than anything else here. AdamW sits between the two, and its
-  per-coordinate adaptivity earns less than momentum does.
+  more than anything else here. AdamW lands level with plain SGD once
+  BN is in, and its per-coordinate adaptivity earns less than momentum
+  does.
 \item \textbf{The arithmetic does not move the ranking.} Recomputing the
   normalized ladder in bf16 leaves the optimizer ordering exactly where it
   was, with medians moving by $+0.31$, $-0.02$ and $-0.33$ --- every one of
@@ -4128,7 +4127,7 @@ from that verified training step running on a GPU.
 reproduce run to run on CUDA, because XLA selects convolution algorithms
 per process, so two runs of the identical command differ. Every accuracy
 in this section is therefore the \emph{median} of five independent runs
-of the same command at the same seed (four for the AdamW rows), and each
+of the same command at the same seed, and each
 table states the observed range alongside it. That spread is about a
 point, which is wide enough to swallow small differences, so the text
 below only ranks gaps that are clearly outside it.
@@ -4286,8 +4285,8 @@ is why they are threaded separately through \texttt{bnChannels} rather
 than living in this list.
 
 \medskip\noindent\textbf{The spec-to-proof tie.} These are
-\texttt{VerifiedNetSpec}s, which is what makes the listing above load
-bearing rather than descriptive. The \texttt{slug} names the committed
+\texttt{VerifiedNetSpec}s, which is what makes the listing above
+binding rather than descriptive. The \texttt{slug} names the committed
 render, so \texttt{cifar8w\_bn} is
 \texttt{verified\_mlir/cifar8w\_bn\_\{mom,sgd,adam\}\_train\_step.mlir},
 the files the run in \S\ref{sec:bn_runit} handed to XLA. The
@@ -4300,7 +4299,7 @@ and \emph{parametrically in the head width}, which is why the
 $512$-wide head here and the $64$-wide one behind \texttt{cifar8-bn-verified}
 need no separate proof between them. \texttt{cifarCnn8\_has\_vjp\_at\_correct}
 (\texttt{Proofs/Nets/Small/CifarCNN.lean}) is the statement that its
-backward is the derivative, and \texttt{Proofs/Cifar8Close.lean} carries
+backward is the derivative, and \texttt{Proofs/Nets/Small/Cifar8Close.lean} carries
 that through to the emitted training step. Both nets run the same
 XLA/PJRT path on the GPU.
 
@@ -4344,7 +4343,7 @@ shared pipeline, 40 epochs, BN vs no-BN, through the verified renderer.
 Median of $n{=}5$ runs per curve. The final points span 74.1 to 75.2 with BN
 and 68.0 to 70.7 without.
 
-\medskip\noindent BN leads from the first epoch --- 41\% against the bare net\'s 13\% ---
+\medskip\noindent BN leads from the first epoch --- 41\% against the bare net's 13\% ---
 and never gives the lead back, finishing 5.8 points up
 (74.5\% vs 68.8\%). The un-normalized net traces the same
 arc roughly ten epochs behind, and the gap never closes: it is still
@@ -4354,7 +4353,7 @@ losing at epoch 40 by more than the spread of either set of runs.
 cent is barely above chance on ten classes, and the un-normalized net
 spends four epochs getting to where the normalized one starts. The
 conditioning the three-term backward
-(\S\ref{thm:bnNormalize_has_vjp}) buys is what that is, and it is worth
+(Theorem~\ref{thm:bnNormalize_has_vjp}) buys is what that is, and it is worth
 more the deeper the stack --- exactly the trend that makes BN standard
 equipment by ResNet's thirty-four layers.
 
@@ -4394,15 +4393,19 @@ $+1.5$ under AdamW. The benefit shrinks as the optimizer gets
 stronger, which is the familiar reading: a better update rule can
 partly substitute for better conditioning, and never entirely.
 
-\medskip\noindent\textbf{Where the failure actually is.} Not in the
-accuracies, which all look reasonable, but in the losses behind them.
-Three of the five un-normalized AdamW runs sent their training loss to
-\texttt{NaN} and still reported 72.8\% at epoch 40 --- a number that
-would have gone in the table unremarked if we had only scored accuracy.
-None of the SGD or momentum runs did it, with or without BN. The
-un-normalized net is not unstable in general; it is unstable under the
-optimizer with the most internal state to corrupt, and only the loss
-says so.
+\medskip\noindent\textbf{Where the spread is.} Read the parenthesised
+ranges. Without BN, five runs of the same command land 2.7 to 3.3 points
+apart under every optimizer; with it, 1.1 under SGD, 1.0 under momentum
+and 0.2 under AdamW. The normalized net is not only ahead, it is the one
+whose number means something from a single run. The un-normalized AdamW
+runs also printed \texttt{loss=NaN} in late epochs in three of the five
+seeds while their accuracy held, and that turned out to be the
+diagnostic, not the training: the progress line's loss is
+$\sum \mathrm{onehot}\cdot\log(\mathrm{softmax})$ with no log-sum-exp
+guard, so once an off-class probability underflows to zero it prints
+$0\cdot(-\infty)$. The gradient is $\mathrm{softmax}-\mathrm{onehot}$
+and never takes the log; the next epoch's loss came back finite and the
+accuracy never moved.
 
 The reason we can make this comparison \emph{and trust it} is that the
 optimizer is one swappable rendered tail. The forward pass, the
@@ -4426,12 +4429,14 @@ SGD, that the binary32 step actually decreases the loss is itself a
 proved theorem.
 
 \noindent It is worth being precise about what that does and does not
-cover, because the AdamW column just exercised the gap. The proofs say
-the emitted graph computes the gradient this chapter derives, and they
-say it in exact real arithmetic. They say nothing about whether forty
-epochs of binary32 updates stay in range. A verified gradient is not a
-guarantee of numerical stability, and three \texttt{NaN} losses under a
-correct AdamW step are what that distinction looks like when it bites.
+cover. The proofs say the emitted graph computes the gradient this
+chapter derives, and they say it in exact real arithmetic. They say
+nothing about whether forty epochs of binary32 updates stay in range,
+and nothing at all about the progress line: the scalar loss it prints is
+a report-only op outside the proven graph, which is exactly where the
+\texttt{NaN} above came from. A verified gradient is not a guarantee of
+numerical stability, and the low-precision seed that collapses to chance
+in the next section is what that distinction looks like when it bites.
 
 \medskip\noindent\textbf{One caution about what this table measures.} An
 ablation measures the thing you varied only if everything else is held
@@ -4469,9 +4474,11 @@ the dense layers, full precision through the normalization.
 
 \medskip\noindent So: the eight-convolution net \emph{with} BatchNorm,
 one renderer, one constant rate, forty epochs, five seeds, and precision
-the only thing that differs between a pair of rows. All twenty-three
-convolutions are bf16 in the low-precision arms --- forward, input
-gradient and weight gradient alike. Six arms, five seeds each, from
+the only thing that differs between a pair of rows. Every convolution
+op in the graph is bf16 in the low-precision arms --- twenty-three of
+them: eight forward, eight weight gradients, and the seven input
+gradients (the first layer's input is the image and needs none). Six
+arms, five seeds each, from
 \texttt{runs/2026-09-01-bnprec-seeds/}:
 
 \begin{center}
@@ -4499,13 +4506,15 @@ result Chapter~\ref{chap:residual} was going to assume, and it no longer
 has to.
 
 \medskip\noindent The un-normalized net answers differently, and the
-difference is the interesting part. Run the same comparison there and the
-medians move by $-1.40$, $-0.56$ and $-0.09$, and one bf16 momentum seed
-collapses to chance where no fp32 seed does. Normalization is doing more
+difference is the interesting part. Run the same comparison there (the
+\texttt{fp32b} and \texttt{bf16} arms of
+\texttt{runs/2026-09-01-cifar8w-6arm-constlr/}) and the medians move by
+$-1.40$, $-0.56$ and $-0.09$, and one bf16 momentum seed collapses to
+chance where no fp32 seed does. Normalization is doing more
 than accelerating training: it is absorbing the perturbation. A net that
-was already fragile in fp32 --- the three \texttt{NaN} losses under a
-correct AdamW step from the previous section --- is the one where
-sixteen fewer mantissa bits show up at all.
+was already the less repeatable one in fp32 --- the three-point ranges
+of the previous section --- is the one where sixteen fewer mantissa
+bits show up at all.
 
 \medskip\noindent The same pattern holds for a lever we did not mean to
 pull. Changing the op family at fixed fp32 --- per-example to batched, the
@@ -4526,26 +4535,27 @@ imply a comparison that was never run.
 Almost not at all, which is exactly why we could borrow MNIST's head
 untouched. The 2$\times$512 head carries about $334{,}000$ of the net's
 $374{,}000$ parameters. Swap it for a narrow 64-wide head ($13{,}000$
-params, whole net down to $53{,}000$) and the best cell on the board
-barely moves: BN with momentum gives $77.1\%$ wide against $77.1\%$
-narrow, and the optimizer ordering is unchanged. Seven times the
-parameters buys no accuracy, and costs about $1.6\times$ the wall-clock
-per epoch (${\approx}6.3$ vs ${\approx}3.9$ seconds on an RTX 4060 Ti).
-The eight convolutions over the $32 \times 32$ maps dominate the compute,
-while the head is cheap matmul however big it is. That is the lesson the
+params, whole net down to $53{,}000$) and, under AdamW on the sweep
+below, the two land within a point of each other with overlapping
+intervals: $73.13\%$ narrow, $74.09\%$ wide. Seven times the parameters
+buys no accuracy the test set can resolve. The eight convolutions over
+the $32 \times 32$ maps dominate the compute, and the head is cheap
+matmul at these widths --- the sweep's 4096-wide point is where it stops
+being cheap, nine times the wall clock of the 64-wide run for nothing.
+That is the lesson the
 bridge makes concrete: at this scale the \emph{depth} of the
 convolutional body is the lever, not the width of the classifier on top.
 It is why the head can stay MNIST's, and why the next chapter spends its
 budget on thirty-four layers of \emph{more convolution} rather than a
 bigger head.
 
-The two-point comparison above (64 vs 512) is worth drawing out in full,
+That two-point comparison is worth drawing out in full,
 because the parametric renderer makes it cheap: \texttt{cifar8-bn-grid}
 holds the eight-convolution backbone fixed and renders the AdamW train step
 at any head width $d$ (the same $D_1$ that was hard-wired to 64 is now a
 parameter of the verified emitter), so we can sweep $d$ from 8 to 4096 and
-train each point on its own proof-rendered StableHLO. Split across the two
-gfx1100s, the whole curve is one short run:
+train each point on its own proof-rendered StableHLO. Dealt across three
+of the box's four cards, the whole curve is a 22-minute run:
 
 \begin{center}
 \begin{tikzpicture}
@@ -4554,10 +4564,10 @@ gfx1100s, the whole curve is one short run:
     xlabel={Dense-head width $d$ (both head layers; backbone fixed)},
     ylabel={CIFAR-10 test accuracy (\%)},
     xmode=log, log basis x=2,
-    xmin=6.5, xmax=5000, ymin=65.3, ymax=73.4,
+    xmin=6.5, xmax=5000, ymin=69, ymax=75.5,
     xtick={8,16,32,64,128,256,512,1024,2048,4096},
     xticklabels={8,16,32,64,128,256,512,1024,2048,4096},
-    ytick={66,68,70,72},
+    ytick={69,70,71,72,73,74,75},
     grid=major, grid style={gray!18},
     tick label style={font=\small},
     label style={font=\small},
@@ -4568,34 +4578,41 @@ gfx1100s, the whole curve is one short run:
   error bar style={blue!55!white, line width=0.6pt},
   error mark options={rotate=90, mark size=2.5pt, blue!55!white, line width=0.6pt}]
 coordinates {
-(8,66.78) +- (0,0.92) (16,71.10) +- (0,0.89) (32,71.70) +- (0,0.88) (64,71.07) +- (0,0.89) (128,71.43) +- (0,0.89) (256,71.49) +- (0,0.89) (512,71.55) +- (0,0.88) (1024,72.17) +- (0,0.88) (2048,71.60) +- (0,0.88) (4096,71.73) +- (0,0.88)
+(8,70.38) += (0,0.89) -= (0,0.90) (16,72.06) += (0,0.87) -= (0,0.89) (32,73.61) += (0,0.85) -= (0,0.87) (64,73.13) += (0,0.86) -= (0,0.88) (128,73.60) += (0,0.85) -= (0,0.87) (256,73.66) += (0,0.85) -= (0,0.87) (512,74.09) += (0,0.85) -= (0,0.87) (1024,73.34) += (0,0.86) -= (0,0.88) (2048,73.38) += (0,0.86) -= (0,0.88) (4096,73.07) += (0,0.86) -= (0,0.88)
 };
-\addplot[only marks, mark=o, mark size=4pt, red, line width=1pt, forget plot] coordinates {(64,71.07)};
-\node[anchor=west, font=\footnotesize, red!70!black] at (axis cs:74,69.4)
+\addplot[only marks, mark=o, mark size=4pt, red, line width=1pt, forget plot] coordinates {(64,73.13)};
+\node[anchor=west, font=\footnotesize, red!70!black] at (axis cs:74,71.6)
   {canonical head $d{=}64$};
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
 \noindent Dense-head width sweep for the 8-conv cifar8 net with per-channel
-BatchNorm, AdamW, 25 epochs, conv backbone held at $[16,16,32,32]$
-(\texttt{runs/cifar8bn\_grid\_results.tsv}). Each point is one run, so the
-whiskers are the 95\% Wilson interval for that accuracy on the $9{,}984$
-evaluated test images --- about $\pm 0.9$ here --- and not a spread over
-repeats. Read that way the curve makes a sharper claim than ``essentially
-flat'': every width from $d{=}16$ to $d{=}4096$ spans only $71.1$ to
-$72.2\%$, which is narrower than a single point's own interval, so the nine
-plateau intervals all overlap and \emph{none} of the differences between
-them is resolvable from this experiment. The $256\times$ wider head buys
-nothing measurable, while its $17$M-parameter classifier just overfits
-(train loss $0.03$, test unmoved). The one difference that does survive is
-$d{=}8$ ($66.8\%$, interval $65.9$--$67.7$), which clears the lowest plateau
-bound of $70.2$ by more than two points: there the $128{\to}8$ first layer
-throttles the 128-dim feature map the convolutions produce. The canonical $d{=}64$ (circled) sits squarely on the plateau: the
-head width genuinely does not matter here, which is the whole reason the net
-could borrow MNIST's classifier untouched. (Absolute accuracy is a couple of
-points below the 40-epoch board above, because this is a 25-epoch
-single-optimizer sweep, but the \emph{shape} is the point.)
+BatchNorm, AdamW, 25 epochs under a cosine schedule with a three-epoch
+warmup (the grid driver's own recipe; the levers above ran at a constant
+rate), conv backbone held at $[16,16,32,32]$
+(\texttt{runs/2026-09-13-cifar8bn-grid-xla/}). Each point is one run, so
+the whiskers are the 95\% Wilson interval for that accuracy on the full
+$10{,}000$-image test set --- about $\pm 0.9$ here --- and not a spread
+over repeats. Read that way the curve makes a sharper claim than
+``essentially flat'': every width from $d{=}32$ to $d{=}4096$ spans only
+$73.1$ to $74.1\%$, which is narrower than a single point's own interval,
+so the eight plateau intervals all overlap and \emph{none} of the
+differences between them is resolvable from this experiment. The
+$128\times$ wider head buys nothing measurable; its $17$M-parameter
+classifier fits the training set a little harder (final train loss $0.39$
+against $0.52$ at $d{=}64$) and the test set does not notice. Two
+differences do survive. $d{=}16$ ($72.1\%$, interval $71.2$--$72.9$) sits
+under the top of the plateau, its interval stopping short of $d{=}512$'s,
+and $d{=}8$ ($70.4\%$, interval $69.5$--$71.3$) is below every plateau
+point, its upper bound about a point under the lowest plateau bound of
+$72.2$: there the $128{\to}8$ first layer throttles the 128-dim feature
+map the convolutions produce. The canonical $d{=}64$ (circled) sits
+squarely on the plateau: the head width genuinely does not matter here,
+which is the whole reason the net could borrow MNIST's classifier
+untouched. (The $d{=}512$ point is the board's own net, and lands within a
+quarter point of its 40-epoch AdamW cell on a shorter, scheduled run; the
+\emph{shape} is the point.)
 
 \subsection*{Why the levers work}
 
@@ -4618,8 +4635,8 @@ curves and the table measure.
 The two levers interact, and the momentum column is where that shows.
 Momentum makes each step longer and more consistent, which is why it wins
 on accuracy, and a longer step through eight unnormalized layers is also
-exactly what runs the activations out of binary32 range. Normalization is
-what makes the aggressive optimizer survivable. That is the standard
+what let one low-precision momentum run collapse to chance. Normalization
+is what makes the aggressive optimizer survivable. That is the standard
 account of why the two arrived together, and why every image architecture
 since 2015 bakes a normalization layer in by default. At larger depth
 the effect is stronger still, and it is what opens up the learning rates
@@ -4631,7 +4648,7 @@ many passes the net needs, but whether it finishes them at all.
 \noindent\textbf{What is already proven.} BatchNorm factors as
 $\mathrm{bnForward} = \mathrm{bnAffine} \circ \mathrm{bnNormalize}$, and its
 reverse-mode derivative is the three-term formula of
-\S~\ref{thm:bnNormalize_has_vjp}: with $\hat{x} = (x-\mu)\,\mathrm{istd}$,
+Theorem~\ref{thm:bnNormalize_has_vjp}: with $\hat{x} = (x-\mu)\,\mathrm{istd}$,
 \[
   dx = \frac{\mathrm{istd}\,\gamma}{n}\Bigl(n\,dy
        \;-\; \textstyle\sum_k dy_k
@@ -4639,9 +4656,9 @@ reverse-mode derivative is the three-term formula of
 \]
 \texttt{bn\_has\_vjp} proves it, composing \texttt{bnNormalize\_has\_vjp}
 (the rank-1 wringer) with \texttt{bnAffine\_has\_vjp} (the $\gamma\,dy$
-half). The one subtlety, isolated in \S~\ref{ax:bnIstdBroadcast_diff}, is
+half). The one subtlety, isolated in Theorem~\ref{ax:bnIstdBroadcast_diff}, is
 that the inverse-stddev term carries an $\mathrm{istd}^3$ that needs
-$\varepsilon > 0$ to stay differentiable. That is the single place in the
+$\varepsilon > 0$ to stay differentiable. That is the first place in the
 book where the math reaches past chain-sum-product into real analysis.
 
 \medskip\noindent\textbf{The gap and how we close it.} The three-term
@@ -4705,7 +4722,7 @@ ConvNeXt blocks built on this foundation.
   \item \textbf{Representative scale} ($n = 4$).
 \end{itemize}
 
-The next chapter (\S~\ref{chap:residual}) adds residual connections
+The next chapter (Chapter~\ref{chap:residual}) adds residual connections
 and the same mechanical approach: prove that the VJP of a skip
 connection is additive fan-in, compose with BN and conv, and the
 rest of the ResNet family falls out without introducing any new
