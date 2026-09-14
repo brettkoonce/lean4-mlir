@@ -124,19 +124,68 @@ def main() -> int:
     # Cloudflare's cache, i.e. pure crawler traffic for a file no human reads. It
     # is not a page and has no business being indexed; the search box fetches it
     # from the browser regardless of what this says.
+    # Everything under docs/ except our own namespaces is a vendored library (a
+    # locally rebuilt Mathlib and its deps — see the module docstring). The sitemap
+    # already omits them, but that only means we do not ASK for them: doc-gen4 links
+    # every type in every signature to its declaration page, so a crawler walking
+    # docs/LeanMlir/ falls straight into docs/Mathlib/ and mirrors somebody else's
+    # library on this domain. Invert it — block docs/ wholesale, re-Allow what is
+    # ours. Google and Bing resolve conflicts by LONGEST match, so
+    # `Allow: /docs/LeanMlir/` (18 chars) beats `Disallow: /docs/` (6).
+    #
+    # NB this blocks CRAWLING, not indexing. A URL already in the index stays there
+    # (URL-only, no snippet) until re-crawled, which this now prevents. To actively
+    # REMOVE pages you must serve `<meta name="robots" content="noindex">` and let
+    # them be crawled first, then disallow. Nothing under docs/ is externally linked
+    # enough for that to be worth the two-step today.
+    # ORDER AND THE MISSING `Allow: /` ARE BOTH DELIBERATE.
+    #
+    # Two parser families disagree about conflicts. RFC 9309 (and Google, Bing)
+    # take the MOST SPECIFIC match; older/simpler parsers — urllib.robotparser
+    # among them, and plenty of bots — take the FIRST match in file order. A
+    # leading `Allow: /` is a no-op under the first (a path with no Disallow is
+    # allowed anyway) and catastrophic under the second: it matches everything
+    # first, so every Disallow below it is dead. The file carried one until
+    # 2026-09-14, which silently neutered the docs/declarations/ rule for exactly
+    # the unsophisticated crawlers it was written for.
+    #
+    # So: no blanket Allow, and Allow lines BEFORE the Disallow they carve out of.
+    # Longest-match parsers pick `/docs/LeanMlir/` (18 chars) over `/docs/` (6);
+    # first-match parsers hit the Allow first. Both land in the same place.
+    doc_allows = "".join(f"Allow: /docs/{k}/\n" for k in DOC_KEEP)
     (root / "robots.txt").write_text(
         "User-agent: *\n"
-        "Allow: /\n"
         "Disallow: /build-logs/\n"
-        "Disallow: /docs/declarations/\n"
-        f"\nSitemap: {base}/sitemap.xml\n",
+        + doc_allows
+        # doc-gen4's shared CSS/JS sit at the docs/ root; without these our OWN
+        # pages report as blocked-resource in Search Console. Wildcards are an
+        # RFC 9309 extension — parsers that lack them fall through to
+        # `Disallow: /docs/`, which costs styling on a page we do not rank on.
+        + "Allow: /docs/*.css\n"
+        + "Allow: /docs/*.js\n"
+        # Ahead of the blanket docs/ rule so first-match parsers still attribute
+        # the block to this line. It is the 48 GB overnight; keep it visible.
+        + "Disallow: /docs/declarations/\n"
+        # Everything else under docs/ is a locally rebuilt Mathlib and its deps —
+        # see the module docstring. The sitemap already omits them, but that only
+        # means we do not ASK: doc-gen4 links every type in every signature to its
+        # declaration page, so a crawler walking docs/LeanMlir/ falls straight
+        # into docs/Mathlib/ and mirrors somebody else's library on this domain.
+        #
+        # NB this blocks CRAWLING, not indexing. A URL already indexed stays
+        # (URL-only, no snippet) until re-crawled, which this now prevents. To
+        # actively REMOVE such pages, serve `<meta name="robots" content=
+        # "noindex">` and let them be crawled first, THEN disallow.
+        + "Disallow: /docs/\n"
+        + f"\nSitemap: {base}/sitemap.xml\n",
         encoding="utf-8")
 
     n_bp = sum(1 for u in urls if u.startswith("blueprint"))
     n_doc = sum(1 for u in urls if u.startswith("docs/"))
     print(f"sitemap.xml: {len(urls)} URLs "
           f"({n_bp} blueprint, {n_doc} docs, {len(urls)-n_bp-n_doc} other) -> {base}/")
-    print("robots.txt: written (build-logs/ disallowed)")
+    print(f"robots.txt: written (build-logs/ + docs/ disallowed; "
+          f"allowed: {', '.join(DOC_KEEP)})")
     return 0
 
 
