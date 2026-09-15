@@ -14,6 +14,9 @@ placeholder; every curve here is measured.
 
   .venv-gw/bin/python scripts/gw_figure.py <table_val.json> [out.png] [--data=data/gw]
                                            [--cnn-real=<table_val.json>] [--net=B0|CNN]
+                                           # keep --net short (<= ~14 chars): it is a
+                                           # legend label, and panel (d)'s clear wedge
+                                           # is narrow -- see the placement note below
                                            [--events=catalogue.json]
 
 `table_val.json` is `gw_metrics.py table --out=<dir>`'s output; pass the one written
@@ -117,22 +120,35 @@ def main():
         ax = fig.add_subplot(gs[row, 2])
         srch = R["matched filter network"]
         ceiling = ncx2.sf(srch["thr"] ** 2, 4, rhos ** 2)
-        ax.plot(rhos, ceiling, color=INK, lw=1.6,
-                label=f"closed form Q₂(ρ, ρ*), ρ* = {srch['thr']:.2f}")
+        # Legend copy is kept SHORT on purpose: panel (d)'s curves leave only a
+        # narrow clear wedge on the left (see the legend placement below), and a
+        # label long enough to spill past ρ ≈ 7 lands on the CNN curve. ρ* and the
+        # training set moved to the caption; the stats line below is already nearly
+        # panel-wide at 7.2pt and has no room either.
+        ax.plot(rhos, ceiling, color=INK, lw=1.6, label="closed form Q₂")
         xs = np.array([r["lo"] + 0.5 for r in srch["rows"]])
         pd = np.array([r["pd"] for r in srch["rows"]], dtype=float)
         sg = np.array([r["sig"] for r in srch["rows"]], dtype=float)
         ax.errorbar(xs, pd, yerr=2 * sg, color=INK, lw=1.0, ls=":", marker="o", ms=3,
-                    capsize=0, label="PyCBC coherent search")
+                    capsize=0, label="PyCBC search")
         if "CNN" in R:
             cnn = R["CNN"]
             pc = np.array([r["pd"] for r in cnn["rows"]], dtype=float)
             sc = np.array([r["sig"] for r in cnn["rows"]], dtype=float)
             ax.errorbar(xs, pc, yerr=2 * sc, color=BLUE, lw=1.4, ls="--", marker="s", ms=3,
-                        capsize=0, label=f"{net} on spectrograms, trained on "
-                                         f"{'Gaussian' if row == 0 or cnn_real is None else 'real'}")
-            ax.text(0.98, 0.06, f"SNR at P_d = ½:  search {srch['rho50']:.2f}   CNN {cnn['rho50']:.2f}",
-                    transform=ax.transAxes, fontsize=7.2, color=MUTED, ha="right")
+                        capsize=0, label=net)
+            # Two lines, not one: at 7.2pt the single-line form spanned nearly the
+            # full panel, which is also why ρ* and the training set could not be
+            # appended to it (both live in the caption now — content.tex,
+            # fig:gw_detect). Broken at the colon it occupies about half the width
+            # and tucks into the bottom right corner, clear of the curves in both
+            # panels. Grows upward from the anchor, so va="bottom"; right-aligned
+            # as a block via ma="right".
+            ax.text(0.98, 0.05,
+                    f"SNR at P_d = ½:\n"
+                    f"search {srch['rho50']:.2f}   CNN {cnn['rho50']:.2f}",
+                    transform=ax.transAxes, fontsize=7.2, color=MUTED,
+                    ha="right", va="bottom", ma="right", linespacing=1.35)
         if events and row == 0:
             for name, snr in events:
                 if snr <= 20:
@@ -143,7 +159,17 @@ def main():
         if row == 1:
             ax.set_xlabel("injected optimal network SNR ρ")
         ax.set_title(("(c)" if row == 0 else "(d)") + f"  {label}", loc="left")
-        ax.legend(loc="lower right", frameon=False, fontsize=6.8, bbox_to_anchor=(1.0, 0.13))
+        # ONE placement for both panels, which only became possible once the
+        # legend copy was shortened: at the old label lengths the box reached past
+        # ρ ≈ 12 and (d)'s CNN curve is there, which is what forced (d) onto the
+        # left for a while. Short labels keep it right of ρ ≈ 15, where both panels
+        # have saturated and the corner is free.
+        #
+        # 0.16, not 0.13: the two-line stats block below is ~0.14 axes tall and
+        # shares this corner, so the legend has to clear that as well as the
+        # curves. Lowest anchor that does, by measurement. Re-tune if the copy, the
+        # line count, or the data changes.
+        ax.legend(loc="lower right", frameon=False, fontsize=6.0, bbox_to_anchor=(1.0, 0.16))
         ax.grid(True, color="0.9", lw=0.6)
         for s in ("top", "right"):
             ax.spines[s].set_visible(False)
