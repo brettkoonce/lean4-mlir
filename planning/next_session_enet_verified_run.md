@@ -1,5 +1,9 @@
 # next_session_enet_verified_run.md — run `efficientnet-imagenet-verified`, then land §7's phase-4 half
 
+**✅ CLOSED 2026-09-16** — the run landed at **76.878 / 93.154 in 73 h 23 m** (archive:
+`runs/2026-09-12-enet-verified-350ep/RESULTS.md`) and §7 has its phase-4 half. Successor:
+`planning/next_session_convnext_verified_run.md`. The brief below is kept as written.
+
 **Opened 2026-09-12.** Successor to `next_session_mnv2_verified_run.md`, which closed the same
 day: MobileNetV2 ran to **71.912 / 90.520 in 54 h 13 m, one attempt**, and §6 got its phase-4
 half. One job here: run the **phase-4 verified/PJRT EfficientNet-B0** to completion, then write
