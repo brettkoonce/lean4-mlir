@@ -1,0 +1,1813 @@
+I0915 18:19:49.419162 3393244 service.cc:154] XLA service 0x786e2c052930 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0915 18:19:49.419188 3393244 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0915 18:19:49.419191 3393244 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0915 18:19:49.419195 3393244 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0915 18:19:49.419197 3393244 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0915 18:19:49.422358 3393244 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I0915 18:19:49.422398 3393244 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+I0915 18:19:49.422434 3393244 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 1 for BFCAllocator.
+I0915 18:19:49.422449 3393244 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 2 for BFCAllocator.
+I0915 18:19:49.422456 3393244 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0915 18:19:49.536858 3393244 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I0915 18:19:52.104052 3393244 cuda_dnn.cc:442] Loaded cuDNN version 92400
+W0915 18:19:53.445007 3393311 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0915 18:19:54.431872 3393311 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0915 18:19:54.555981 3393311 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0915 18:19:54.810360 3393323 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_44', 96 bytes spill stores, 64 bytes spill loads
+
+I0915 18:19:54.928778 3393326 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_44', 96 bytes spill stores, 64 bytes spill loads
+
+W0915 18:19:55.449723 3393311 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0915 18:19:57.012239 3393311 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0915 18:20:05.117739 3393320 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_45', 128 bytes spill stores, 72 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/efficientnetin_emarmsdp64dropdobf16_train_step.mlir (@efficientnetin_emarmsdp64dropdobf16_train_step, 965 outputs, 4 replicas) in 37008 ms
+I0915 18:20:26.809898 3393316 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 12 bytes spill stores, 12 bytes spill loads
+
+I0915 18:20:26.943206 3393319 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 64 bytes spill stores, 64 bytes spill loads
+
+I0915 18:20:27.041191 3393306 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 128 bytes spill stores, 84 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/efficientnetin_fwd.mlir (@efficientnetin_fwd, 1 outputs, 1 replica) in 6204 ms
+[pjrt_ffi] compiled verified_mlir/efficientnetin_fwd_eval.mlir (@efficientnetin_fwd_eval, 1 outputs, 1 replica) in 507 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496433.729582 3396317 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1789496433.957982 3396317 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496435.642508 3396317 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1789496436.403819 3396422 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+EfficientNet-B0 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  xla/pjrt verified_mlir/efficientnetin_emarmsdp64dropdobf16_train_step.mlir
+  xla/pjrt verified_mlir/efficientnetin_fwd.mlir
+  xla/pjrt verified_mlir/efficientnetin_fwd_eval.mlir
+  imagenet shim: jax/.lake/build/generated_efficientnet_b0_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 50000 images, 28710 MB
+  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)
+  train 1281167, test 50000; bs 64, EfficientNet-B0 (ImageNet-1k) emarmsdp64dropdobf16 (exp x0.970000/2.400000ep+warmup 5ep, baseLR 0.016000), He init
+  ▸ RMSPROP: m = momentum buffer (init 0), v = running MEAN-SQUARE (init 1.0, TF convention — this optimizer is not bias-corrected)
+  ▸ STOCHASTIC DEPTH: 9 drop sites, keeps #[0.973000, 0.947000, 0.920000, 0.907000, 0.880000, 0.867000, 0.840000, 0.827000, 0.813000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+  ▸ CLASSIFIER DROPOUT: keep 0.800000, mask tensor<256x1280xf32> (PER-ELEMENT, one Bernoulli per example×feature — not per-example like the drop scales), host-drawn per step at seed+999983, 1/keep folded in. Eval is the identity (drop-free forward).
+  ▸ EMA: region 3 of 4 [θ|m|v|ema], shadow starts AT the weights, decay min(0.999900, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW.
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnetin_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  DATA-PARALLEL: 4 replicas x bs 64 = global batch 256, 5004 steps/epoch
+  ▸ resuming from checkpoint at epoch 320
+  ▸ resumed BN running stats + ema_bn from .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (hash 9435912683718406142)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496472.321825 3396598 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1789496472.349680 3396598 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496473.392462 3396598 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496476.537927 3396717 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1789496476.565515 3396717 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789496476.945989 3396716 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496477.979472 3396717 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496481.134539 3396915 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1789496481.162132 3396915 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789496481.508371 3396912 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496482.573306 3396915 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496485.697159 3397125 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1789496485.724328 3397125 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1789496486.057064 3397123 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789496487.124142 3397125 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+[pjrt_ffi] RESIDENT: @efficientnetin_emarmsdp64dropdobf16_train_step holds 852 parameter tensors (80.7 MB) on 4 devices; they stop crossing PCIe from here
+I0915 18:21:30.583506 3393301 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I0915 18:21:30.583543 3393298 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I0915 18:21:30.583588 3393295 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I0000 00:00:1789496490.930849 3397684 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+  imagenet shim: jax/.lake/build/generated_efficientnet_b0_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 1)
+  imagenet shim: jax/.lake/build/generated_efficientnet_b0_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 2)
+  imagenet shim: jax/.lake/build/generated_efficientnet_b0_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 3)
+  imagenet shim: jax/.lake/build/generated_efficientnet_b0_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 4)
+  imagenet shim: 4 sharded producers (round-robin over batches)
+  ▸ SHIM PREFETCH: ON (depth 4 over 4 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+  step 0/5004: loss=2.227290
+  step 1/5004: loss=2.609820
+  step 2/5004: loss=2.138574
+  step 100/5004: loss=2.223819
+  step 200/5004: loss=1.929720
+  step 300/5004: loss=2.223032
+  step 400/5004: loss=2.201231
+  step 500/5004: loss=2.069060
+  step 600/5004: loss=2.169793
+  step 700/5004: loss=2.644400
+  step 800/5004: loss=2.375268
+  step 900/5004: loss=2.593730
+  step 1000/5004: loss=2.177571
+  step 1100/5004: loss=2.535043
+  step 1200/5004: loss=2.246467
+  step 1300/5004: loss=2.252647
+  step 1400/5004: loss=2.157201
+  step 1500/5004: loss=2.188295
+  step 1600/5004: loss=2.298354
+  step 1700/5004: loss=2.623422
+  step 1800/5004: loss=2.033171
+  step 1900/5004: loss=2.234060
+  step 2000/5004: loss=2.039366
+  step 2100/5004: loss=2.083181
+  step 2200/5004: loss=2.416967
+  step 2300/5004: loss=2.370997
+  step 2400/5004: loss=2.377264
+  step 2500/5004: loss=2.596651
+  step 2600/5004: loss=2.008944
+  step 2700/5004: loss=2.262848
+  step 2800/5004: loss=2.069849
+  step 2900/5004: loss=2.180882
+  step 3000/5004: loss=2.236521
+  step 3100/5004: loss=2.581300
+  step 3200/5004: loss=2.571802
+  step 3300/5004: loss=2.341785
+  step 3400/5004: loss=2.287883
+  step 3500/5004: loss=2.189103
+  step 3600/5004: loss=2.316196
+  step 3700/5004: loss=2.433438
+  step 3800/5004: loss=2.069851
+  step 3900/5004: loss=2.321876
+  step 4000/5004: loss=2.105265
+  step 4100/5004: loss=1.994302
+  step 4200/5004: loss=2.440494
+  step 4300/5004: loss=2.247406
+  step 4400/5004: loss=2.333934
+  step 4500/5004: loss=2.078978
+  step 4600/5004: loss=2.366541
+  step 4700/5004: loss=2.615114
+  step 4800/5004: loss=2.384084
+  step 4900/5004: loss=2.372008
+  step 5000/5004: loss=2.107628
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 321/350: loss=2.272867 lr=0.000290
+  epoch 321: test_acc = 38344/50000 = 76.688000%  top5 = 46544/50000 = 93.088000%  [95% CI 76.32–77.06]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 9335589878122474368)
+  step 0/5004: loss=2.023764
+  step 1/5004: loss=2.331136
+  step 2/5004: loss=2.247327
+  step 100/5004: loss=2.249609
+  step 200/5004: loss=1.939665
+  step 300/5004: loss=2.154855
+  step 400/5004: loss=2.286681
+  step 500/5004: loss=2.451840
+  step 600/5004: loss=2.130759
+  step 700/5004: loss=2.065373
+  step 800/5004: loss=2.096935
+  step 900/5004: loss=2.148256
+  step 1000/5004: loss=2.503742
+  step 1100/5004: loss=2.461656
+  step 1200/5004: loss=1.952386
+  step 1300/5004: loss=2.512166
+  step 1400/5004: loss=2.149505
+  step 1500/5004: loss=2.484472
+  step 1600/5004: loss=2.578724
+  step 1700/5004: loss=2.483503
+  step 1800/5004: loss=2.457706
+  step 1900/5004: loss=2.293224
+  step 2000/5004: loss=2.070694
+  step 2100/5004: loss=2.227548
+  step 2200/5004: loss=2.287993
+  step 2300/5004: loss=1.959599
+  step 2400/5004: loss=2.421565
+  step 2500/5004: loss=2.352067
+  step 2600/5004: loss=2.798863
+  step 2700/5004: loss=2.270632
+  step 2800/5004: loss=2.184739
+  step 2900/5004: loss=2.168679
+  step 3000/5004: loss=1.979607
+  step 3100/5004: loss=2.437071
+  step 3200/5004: loss=2.165683
+  step 3300/5004: loss=2.309831
+  step 3400/5004: loss=2.564831
+  step 3500/5004: loss=2.042381
+  step 3600/5004: loss=2.250275
+  step 3700/5004: loss=2.376166
+  step 3800/5004: loss=2.420696
+  step 3900/5004: loss=2.360600
+  step 4000/5004: loss=2.475562
+  step 4100/5004: loss=2.386855
+  step 4200/5004: loss=2.169482
+  step 4300/5004: loss=2.373467
+  step 4400/5004: loss=2.501400
+  step 4500/5004: loss=2.401131
+  step 4600/5004: loss=2.127663
+  step 4700/5004: loss=2.169322
+  step 4800/5004: loss=2.082798
+  step 4900/5004: loss=2.149189
+  step 5000/5004: loss=2.247325
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 322/350: loss=2.277390 lr=0.000286
+  epoch 322: test_acc = 38329/50000 = 76.658000%  top5 = 46524/50000 = 93.048000%  [95% CI 76.29–77.03]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 6926416109286478504)
+  step 0/5004: loss=2.250208
+  step 1/5004: loss=2.036197
+  step 2/5004: loss=2.298075
+  step 100/5004: loss=2.370251
+  step 200/5004: loss=2.253256
+  step 300/5004: loss=2.669936
+  step 400/5004: loss=2.209657
+  step 500/5004: loss=2.289031
+  step 600/5004: loss=2.062144
+  step 700/5004: loss=2.264517
+  step 800/5004: loss=2.418420
+  step 900/5004: loss=2.135326
+  step 1000/5004: loss=2.455815
+  step 1100/5004: loss=2.080491
+  step 1200/5004: loss=2.606580
+  step 1300/5004: loss=2.191532
+  step 1400/5004: loss=2.114936
+  step 1500/5004: loss=2.244196
+  step 1600/5004: loss=2.123398
+  step 1700/5004: loss=2.380897
+  step 1800/5004: loss=2.391937
+  step 1900/5004: loss=2.344491
+  step 2000/5004: loss=2.399924
+  step 2100/5004: loss=2.175020
+  step 2200/5004: loss=2.136545
+  step 2300/5004: loss=2.447768
+  step 2400/5004: loss=2.484407
+  step 2500/5004: loss=2.080175
+  step 2600/5004: loss=2.388915
+  step 2700/5004: loss=2.376807
+  step 2800/5004: loss=2.521122
+  step 2900/5004: loss=2.157974
+  step 3000/5004: loss=2.298288
+  step 3100/5004: loss=2.303375
+  step 3200/5004: loss=2.455001
+  step 3300/5004: loss=1.955933
+  step 3400/5004: loss=2.384686
+  step 3500/5004: loss=2.379585
+  step 3600/5004: loss=2.195135
+  step 3700/5004: loss=2.514703
+  step 3800/5004: loss=2.464978
+  step 3900/5004: loss=2.148027
+  step 4000/5004: loss=2.153935
+  step 4100/5004: loss=2.198830
+  step 4200/5004: loss=1.901285
+  step 4300/5004: loss=2.221789
+  step 4400/5004: loss=2.251365
+  step 4500/5004: loss=2.565172
+  step 4600/5004: loss=2.546848
+  step 4700/5004: loss=2.008318
+  step 4800/5004: loss=2.199611
+  step 4900/5004: loss=2.405992
+  step 5000/5004: loss=2.069341
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 323/350: loss=2.268636 lr=0.000283
+  epoch 323: test_acc = 38288/50000 = 76.576000%  top5 = 46521/50000 = 93.042000%  [95% CI 76.20–76.95]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 9930642874757414924)
+  step 0/5004: loss=2.201537
+  step 1/5004: loss=2.495374
+  step 2/5004: loss=2.032159
+  step 100/5004: loss=2.559317
+  step 200/5004: loss=2.257249
+  step 300/5004: loss=2.621693
+  step 400/5004: loss=2.119274
+  step 500/5004: loss=2.263948
+  step 600/5004: loss=2.082943
+  step 700/5004: loss=2.174325
+  step 800/5004: loss=2.019959
+  step 900/5004: loss=2.283620
+  step 1000/5004: loss=2.363391
+  step 1100/5004: loss=2.226128
+  step 1200/5004: loss=2.429993
+  step 1300/5004: loss=2.479213
+  step 1400/5004: loss=2.564891
+  step 1500/5004: loss=2.394561
+  step 1600/5004: loss=2.041678
+  step 1700/5004: loss=2.363773
+  step 1800/5004: loss=2.139387
+  step 1900/5004: loss=2.399693
+  step 2000/5004: loss=2.002659
+  step 2100/5004: loss=2.219502
+  step 2200/5004: loss=2.077669
+  step 2300/5004: loss=2.353897
+  step 2400/5004: loss=2.308263
+  step 2500/5004: loss=2.339281
+  step 2600/5004: loss=2.237198
+  step 2700/5004: loss=2.196036
+  step 2800/5004: loss=2.166478
+  step 2900/5004: loss=2.486912
+  step 3000/5004: loss=2.001904
+  step 3100/5004: loss=2.425287
+  step 3200/5004: loss=2.279064
+  step 3300/5004: loss=2.704069
+  step 3400/5004: loss=2.527288
+  step 3500/5004: loss=2.045839
+  step 3600/5004: loss=2.385035
+  step 3700/5004: loss=2.070009
+  step 3800/5004: loss=1.986106
+  step 3900/5004: loss=2.105117
+  step 4000/5004: loss=2.320503
+  step 4100/5004: loss=2.016242
+  step 4200/5004: loss=2.177321
+  step 4300/5004: loss=2.155426
+  step 4400/5004: loss=1.926216
+  step 4500/5004: loss=1.790231
+  step 4600/5004: loss=2.102951
+  step 4700/5004: loss=2.188187
+  step 4800/5004: loss=2.445488
+  step 4900/5004: loss=1.942561
+  step 5000/5004: loss=2.080638
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 324/350: loss=2.274477 lr=0.000279
+  epoch 324: test_acc = 38324/50000 = 76.648000%  top5 = 46519/50000 = 93.038000%  [95% CI 76.28–77.02]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 6548780274845118509)
+  step 0/5004: loss=2.079575
+  step 1/5004: loss=2.439742
+  step 2/5004: loss=2.093891
+  step 100/5004: loss=2.076444
+  step 200/5004: loss=2.278341
+  step 300/5004: loss=2.453937
+  step 400/5004: loss=2.216620
+  step 500/5004: loss=2.128634
+  step 600/5004: loss=1.982255
+  step 700/5004: loss=2.521777
+  step 800/5004: loss=2.194036
+  step 900/5004: loss=2.147107
+  step 1000/5004: loss=2.080778
+  step 1100/5004: loss=2.458426
+  step 1200/5004: loss=2.271822
+  step 1300/5004: loss=1.926809
+  step 1400/5004: loss=2.351793
+  step 1500/5004: loss=2.012703
+  step 1600/5004: loss=2.141274
+  step 1700/5004: loss=2.389403
+  step 1800/5004: loss=2.295690
+  step 1900/5004: loss=2.262794
+  step 2000/5004: loss=2.197327
+  step 2100/5004: loss=2.370166
+  step 2200/5004: loss=2.584636
+  step 2300/5004: loss=1.914418
+  step 2400/5004: loss=2.724559
+  step 2500/5004: loss=2.383481
+  step 2600/5004: loss=2.127335
+  step 2700/5004: loss=2.146843
+  step 2800/5004: loss=2.339359
+  step 2900/5004: loss=2.301983
+  step 3000/5004: loss=2.586952
+  step 3100/5004: loss=2.167667
+  step 3200/5004: loss=2.399715
+  step 3300/5004: loss=2.465590
+  step 3400/5004: loss=2.603247
+  step 3500/5004: loss=2.639123
+  step 3600/5004: loss=2.195541
+  step 3700/5004: loss=2.247659
+  step 3800/5004: loss=2.222501
+  step 3900/5004: loss=2.188976
+  step 4000/5004: loss=2.025899
+  step 4100/5004: loss=2.460302
+  step 4200/5004: loss=2.130425
+  step 4300/5004: loss=2.305132
+  step 4400/5004: loss=2.159025
+  step 4500/5004: loss=2.269968
+  step 4600/5004: loss=2.388246
+  step 4700/5004: loss=2.760978
+  step 4800/5004: loss=2.432308
+  step 4900/5004: loss=2.174101
+  step 5000/5004: loss=2.190480
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 325/350: loss=2.267017 lr=0.000276
+  epoch 325: test_acc = 38347/50000 = 76.694000%  top5 = 46530/50000 = 93.060000%  [95% CI 76.32–77.06]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 2066490037371205318)
+  step 0/5004: loss=2.169822
+  step 1/5004: loss=2.264182
+  step 2/5004: loss=2.382877
+  step 100/5004: loss=2.134788
+  step 200/5004: loss=2.064671
+  step 300/5004: loss=2.563002
+  step 400/5004: loss=2.346612
+  step 500/5004: loss=2.057191
+  step 600/5004: loss=2.597761
+  step 700/5004: loss=2.310497
+  step 800/5004: loss=2.348078
+  step 900/5004: loss=2.227819
+  step 1000/5004: loss=2.295228
+  step 1100/5004: loss=2.726693
+  step 1200/5004: loss=2.071229
+  step 1300/5004: loss=1.725416
+  step 1400/5004: loss=2.348143
+  step 1500/5004: loss=2.012850
+  step 1600/5004: loss=2.228790
+  step 1700/5004: loss=2.062715
+  step 1800/5004: loss=2.565216
+  step 1900/5004: loss=2.089153
+  step 2000/5004: loss=2.428605
+  step 2100/5004: loss=2.295413
+  step 2200/5004: loss=2.375841
+  step 2300/5004: loss=2.704576
+  step 2400/5004: loss=2.163296
+  step 2500/5004: loss=2.364886
+  step 2600/5004: loss=2.478759
+  step 2700/5004: loss=2.330069
+  step 2800/5004: loss=2.467905
+  step 2900/5004: loss=2.275562
+  step 3000/5004: loss=2.288510
+  step 3100/5004: loss=2.424340
+  step 3200/5004: loss=2.032914
+  step 3300/5004: loss=2.016255
+  step 3400/5004: loss=2.060627
+  step 3500/5004: loss=2.292030
+  step 3600/5004: loss=2.497242
+  step 3700/5004: loss=2.560197
+  step 3800/5004: loss=2.363357
+  step 3900/5004: loss=2.258990
+  step 4000/5004: loss=2.087880
+  step 4100/5004: loss=2.475110
+  step 4200/5004: loss=1.961933
+  step 4300/5004: loss=2.320367
+  step 4400/5004: loss=2.311607
+  step 4500/5004: loss=2.235955
+  step 4600/5004: loss=2.561672
+  step 4700/5004: loss=2.414119
+  step 4800/5004: loss=2.128548
+  step 4900/5004: loss=2.468583
+  step 5000/5004: loss=2.220526
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 326/350: loss=2.267245 lr=0.000272
+  epoch 326: test_acc = 38368/50000 = 76.736000%  top5 = 46549/50000 = 93.098000%  [95% CI 76.36–77.10]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 6900207435472486617)
+  step 0/5004: loss=2.458923
+  step 1/5004: loss=2.559115
+  step 2/5004: loss=2.355840
+  step 100/5004: loss=2.000258
+  step 200/5004: loss=2.454025
+  step 300/5004: loss=2.448324
+  step 400/5004: loss=2.042763
+  step 500/5004: loss=2.349484
+  step 600/5004: loss=2.320115
+  step 700/5004: loss=2.376806
+  step 800/5004: loss=2.322160
+  step 900/5004: loss=2.364839
+  step 1000/5004: loss=2.384181
+  step 1100/5004: loss=2.221341
+  step 1200/5004: loss=2.298657
+  step 1300/5004: loss=2.461935
+  step 1400/5004: loss=2.159494
+  step 1500/5004: loss=2.253282
+  step 1600/5004: loss=2.388899
+  step 1700/5004: loss=1.861474
+  step 1800/5004: loss=2.268225
+  step 1900/5004: loss=2.356030
+  step 2000/5004: loss=1.859651
+  step 2100/5004: loss=2.146506
+  step 2200/5004: loss=2.024943
+  step 2300/5004: loss=2.229331
+  step 2400/5004: loss=2.023806
+  step 2500/5004: loss=1.829299
+  step 2600/5004: loss=2.191572
+  step 2700/5004: loss=2.142682
+  step 2800/5004: loss=2.718901
+  step 2900/5004: loss=2.338309
+  step 3000/5004: loss=2.422884
+  step 3100/5004: loss=1.778862
+  step 3200/5004: loss=2.054542
+  step 3300/5004: loss=2.198881
+  step 3400/5004: loss=2.063673
+  step 3500/5004: loss=2.459190
+  step 3600/5004: loss=2.294835
+  step 3700/5004: loss=2.131624
+  step 3800/5004: loss=2.296332
+  step 3900/5004: loss=2.437884
+  step 4000/5004: loss=2.299170
+  step 4100/5004: loss=2.319902
+  step 4200/5004: loss=2.399038
+  step 4300/5004: loss=1.918128
+  step 4400/5004: loss=1.981351
+  step 4500/5004: loss=2.467618
+  step 4600/5004: loss=2.522482
+  step 4700/5004: loss=2.614407
+  step 4800/5004: loss=2.026124
+  step 4900/5004: loss=2.290836
+  step 5000/5004: loss=2.132177
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 327/350: loss=2.269221 lr=0.000269
+  epoch 327: test_acc = 38327/50000 = 76.654000%  top5 = 46522/50000 = 93.044000%  [95% CI 76.28–77.02]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 13372881126850783822)
+  step 0/5004: loss=2.141071
+  step 1/5004: loss=2.334320
+  step 2/5004: loss=2.066979
+  step 100/5004: loss=2.572453
+  step 200/5004: loss=2.035139
+  step 300/5004: loss=2.188805
+  step 400/5004: loss=1.731883
+  step 500/5004: loss=1.764876
+  step 600/5004: loss=2.604936
+  step 700/5004: loss=2.001450
+  step 800/5004: loss=2.176893
+  step 900/5004: loss=2.708302
+  step 1000/5004: loss=2.189719
+  step 1100/5004: loss=2.124309
+  step 1200/5004: loss=2.323710
+  step 1300/5004: loss=1.955618
+  step 1400/5004: loss=2.185227
+  step 1500/5004: loss=2.247259
+  step 1600/5004: loss=2.184541
+  step 1700/5004: loss=2.457302
+  step 1800/5004: loss=2.104923
+  step 1900/5004: loss=2.495654
+  step 2000/5004: loss=2.250931
+  step 2100/5004: loss=2.247745
+  step 2200/5004: loss=2.403234
+  step 2300/5004: loss=2.064492
+  step 2400/5004: loss=2.127269
+  step 2500/5004: loss=2.195795
+  step 2600/5004: loss=2.113417
+  step 2700/5004: loss=2.495046
+  step 2800/5004: loss=2.344266
+  step 2900/5004: loss=1.939131
+  step 3000/5004: loss=2.634639
+  step 3100/5004: loss=2.477210
+  step 3200/5004: loss=2.106348
+  step 3300/5004: loss=2.556573
+  step 3400/5004: loss=2.086759
+  step 3500/5004: loss=2.351891
+  step 3600/5004: loss=2.043912
+  step 3700/5004: loss=1.953785
+  step 3800/5004: loss=2.057032
+  step 3900/5004: loss=2.402687
+  step 4000/5004: loss=2.071960
+  step 4100/5004: loss=2.258297
+  step 4200/5004: loss=2.316993
+  step 4300/5004: loss=2.505041
+  step 4400/5004: loss=1.811593
+  step 4500/5004: loss=2.120279
+  step 4600/5004: loss=2.115028
+  step 4700/5004: loss=1.968973
+  step 4800/5004: loss=2.223907
+  step 4900/5004: loss=2.225294
+  step 5000/5004: loss=2.009226
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 328/350: loss=2.271613 lr=0.000265
+  epoch 328: test_acc = 38330/50000 = 76.660000%  top5 = 46555/50000 = 93.110000%  [95% CI 76.29–77.03]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 7043960879711526979)
+  step 0/5004: loss=2.145523
+  step 1/5004: loss=2.111487
+  step 2/5004: loss=2.038663
+  step 100/5004: loss=2.302555
+  step 200/5004: loss=1.978785
+  step 300/5004: loss=2.066929
+  step 400/5004: loss=2.621585
+  step 500/5004: loss=2.362269
+  step 600/5004: loss=2.142117
+  step 700/5004: loss=2.011638
+  step 800/5004: loss=2.656128
+  step 900/5004: loss=1.852881
+  step 1000/5004: loss=2.203184
+  step 1100/5004: loss=2.174054
+  step 1200/5004: loss=2.471760
+  step 1300/5004: loss=2.460614
+  step 1400/5004: loss=2.351861
+  step 1500/5004: loss=1.743110
+  step 1600/5004: loss=2.377509
+  step 1700/5004: loss=2.493438
+  step 1800/5004: loss=2.200662
+  step 1900/5004: loss=2.059206
+  step 2000/5004: loss=2.164727
+  step 2100/5004: loss=2.459816
+  step 2200/5004: loss=2.241841
+  step 2300/5004: loss=2.186548
+  step 2400/5004: loss=2.458496
+  step 2500/5004: loss=2.371502
+  step 2600/5004: loss=2.394428
+  step 2700/5004: loss=2.610254
+  step 2800/5004: loss=2.054273
+  step 2900/5004: loss=2.108303
+  step 3000/5004: loss=2.320583
+  step 3100/5004: loss=2.423279
+  step 3200/5004: loss=2.045178
+  step 3300/5004: loss=2.043744
+  step 3400/5004: loss=2.342660
+  step 3500/5004: loss=2.501659
+  step 3600/5004: loss=2.238406
+  step 3700/5004: loss=2.486709
+  step 3800/5004: loss=2.411491
+  step 3900/5004: loss=2.549198
+  step 4000/5004: loss=2.217020
+  step 4100/5004: loss=2.084026
+  step 4200/5004: loss=2.457016
+  step 4300/5004: loss=2.359051
+  step 4400/5004: loss=2.628182
+  step 4500/5004: loss=2.254457
+  step 4600/5004: loss=2.317092
+  step 4700/5004: loss=2.193363
+  step 4800/5004: loss=2.136944
+  step 4900/5004: loss=2.213724
+  step 5000/5004: loss=2.123298
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 329/350: loss=2.269468 lr=0.000262
+  epoch 329: test_acc = 38360/50000 = 76.720000%  top5 = 46537/50000 = 93.074000%  [95% CI 76.35–77.09]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 9345734633441199196)
+  step 0/5004: loss=2.340285
+  step 1/5004: loss=2.094993
+  step 2/5004: loss=2.470882
+  step 100/5004: loss=2.322591
+  step 200/5004: loss=2.130928
+  step 300/5004: loss=2.198738
+  step 400/5004: loss=2.379419
+  step 500/5004: loss=2.102784
+  step 600/5004: loss=2.100779
+  step 700/5004: loss=1.803536
+  step 800/5004: loss=2.535177
+  step 900/5004: loss=2.440983
+  step 1000/5004: loss=2.213258
+  step 1100/5004: loss=2.069891
+  step 1200/5004: loss=2.728397
+  step 1300/5004: loss=2.588363
+  step 1400/5004: loss=2.588380
+  step 1500/5004: loss=2.236254
+  step 1600/5004: loss=2.433176
+  step 1700/5004: loss=2.350905
+  step 1800/5004: loss=2.156483
+  step 1900/5004: loss=2.156046
+  step 2000/5004: loss=2.245573
+  step 2100/5004: loss=2.718952
+  step 2200/5004: loss=2.297905
+  step 2300/5004: loss=2.078647
+  step 2400/5004: loss=2.336558
+  step 2500/5004: loss=2.628100
+  step 2600/5004: loss=2.293174
+  step 2700/5004: loss=2.161274
+  step 2800/5004: loss=2.057080
+  step 2900/5004: loss=2.151099
+  step 3000/5004: loss=2.144709
+  step 3100/5004: loss=2.381774
+  step 3200/5004: loss=2.350151
+  step 3300/5004: loss=2.110856
+  step 3400/5004: loss=2.634205
+  step 3500/5004: loss=2.382084
+  step 3600/5004: loss=2.171843
+  step 3700/5004: loss=2.199687
+  step 3800/5004: loss=2.052361
+  step 3900/5004: loss=2.047113
+  step 4000/5004: loss=2.177717
+  step 4100/5004: loss=2.160627
+  step 4200/5004: loss=2.264325
+  step 4300/5004: loss=2.291641
+  step 4400/5004: loss=2.336539
+  step 4500/5004: loss=2.221272
+  step 4600/5004: loss=2.158902
+  step 4700/5004: loss=2.471014
+  step 4800/5004: loss=2.763380
+  step 4900/5004: loss=2.404996
+  step 5000/5004: loss=2.123167
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 330/350: loss=2.262405 lr=0.000259
+  epoch 330: test_acc = 38376/50000 = 76.752000%  top5 = 46561/50000 = 93.122000%  [95% CI 76.38–77.12]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 4962613352989387168)
+  step 0/5004: loss=2.383848
+  step 1/5004: loss=2.295121
+  step 2/5004: loss=2.241543
+  step 100/5004: loss=2.028258
+  step 200/5004: loss=2.127957
+  step 300/5004: loss=2.433951
+  step 400/5004: loss=2.349900
+  step 500/5004: loss=2.002295
+  step 600/5004: loss=2.741953
+  step 700/5004: loss=2.068120
+  step 800/5004: loss=2.117704
+  step 900/5004: loss=2.393007
+  step 1000/5004: loss=2.237697
+  step 1100/5004: loss=2.349625
+  step 1200/5004: loss=2.102620
+  step 1300/5004: loss=2.318084
+  step 1400/5004: loss=2.255083
+  step 1500/5004: loss=1.831874
+  step 1600/5004: loss=2.315037
+  step 1700/5004: loss=2.093438
+  step 1800/5004: loss=2.268352
+  step 1900/5004: loss=2.043155
+  step 2000/5004: loss=2.411792
+  step 2100/5004: loss=2.496537
+  step 2200/5004: loss=2.039182
+  step 2300/5004: loss=2.324543
+  step 2400/5004: loss=2.247087
+  step 2500/5004: loss=2.291163
+  step 2600/5004: loss=2.481619
+  step 2700/5004: loss=2.222798
+  step 2800/5004: loss=1.819122
+  step 2900/5004: loss=2.272898
+  step 3000/5004: loss=2.367991
+  step 3100/5004: loss=2.179325
+  step 3200/5004: loss=1.967540
+  step 3300/5004: loss=2.026634
+  step 3400/5004: loss=2.066953
+  step 3500/5004: loss=2.389366
+  step 3600/5004: loss=2.210326
+  step 3700/5004: loss=1.751739
+  step 3800/5004: loss=2.226026
+  step 3900/5004: loss=2.713751
+  step 4000/5004: loss=2.182865
+  step 4100/5004: loss=2.033365
+  step 4200/5004: loss=2.276759
+  step 4300/5004: loss=2.293792
+  step 4400/5004: loss=2.213970
+  step 4500/5004: loss=2.318763
+  step 4600/5004: loss=1.968934
+  step 4700/5004: loss=2.577621
+  step 4800/5004: loss=2.308213
+  step 4900/5004: loss=2.631979
+  step 5000/5004: loss=2.266833
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 331/350: loss=2.268008 lr=0.000255
+  epoch 331: test_acc = 38376/50000 = 76.752000%  top5 = 46547/50000 = 93.094000%  [95% CI 76.38–77.12]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 15044814800189095824)
+  step 0/5004: loss=2.293329
+  step 1/5004: loss=2.438633
+  step 2/5004: loss=2.366067
+  step 100/5004: loss=2.092226
+  step 200/5004: loss=2.393874
+  step 300/5004: loss=2.534657
+  step 400/5004: loss=2.280332
+  step 500/5004: loss=2.053677
+  step 600/5004: loss=2.062628
+  step 700/5004: loss=2.332401
+  step 800/5004: loss=2.279647
+  step 900/5004: loss=2.320252
+  step 1000/5004: loss=2.339675
+  step 1100/5004: loss=2.295409
+  step 1200/5004: loss=2.220837
+  step 1300/5004: loss=2.013210
+  step 1400/5004: loss=2.509021
+  step 1500/5004: loss=2.076909
+  step 1600/5004: loss=2.081543
+  step 1700/5004: loss=2.268129
+  step 1800/5004: loss=2.671754
+  step 1900/5004: loss=2.167518
+  step 2000/5004: loss=2.165447
+  step 2100/5004: loss=2.156571
+  step 2200/5004: loss=2.483279
+  step 2300/5004: loss=2.139734
+  step 2400/5004: loss=2.338658
+  step 2500/5004: loss=2.562671
+  step 2600/5004: loss=2.616555
+  step 2700/5004: loss=2.115446
+  step 2800/5004: loss=2.557825
+  step 2900/5004: loss=2.531261
+  step 3000/5004: loss=2.113287
+  step 3100/5004: loss=2.400549
+  step 3200/5004: loss=2.104007
+  step 3300/5004: loss=2.106018
+  step 3400/5004: loss=1.901032
+  step 3500/5004: loss=2.445205
+  step 3600/5004: loss=2.054970
+  step 3700/5004: loss=2.565185
+  step 3800/5004: loss=2.142747
+  step 3900/5004: loss=2.262909
+  step 4000/5004: loss=2.229773
+  step 4100/5004: loss=2.292795
+  step 4200/5004: loss=2.355193
+  step 4300/5004: loss=2.500632
+  step 4400/5004: loss=2.454287
+  step 4500/5004: loss=2.416892
+  step 4600/5004: loss=2.291359
+  step 4700/5004: loss=1.832339
+  step 4800/5004: loss=1.848263
+W0000 00:00:1789504869.729560 3398146 prefetch_autotuner.cc:55] Prefetch autotuner tried to allocate 91453 bytes after encountering the first element of size 91453 bytes.This already causes the autotune ram budget to be exceeded. To stay within the ram budget, either increase the ram budget or reduce element size
+  step 4900/5004: loss=1.960292
+  step 5000/5004: loss=2.350853
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 332/350: loss=2.265829 lr=0.000252
+  epoch 332: test_acc = 38359/50000 = 76.718000%  top5 = 46571/50000 = 93.142000%  [95% CI 76.35–77.09]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 16962758098718384622)
+  step 0/5004: loss=2.410717
+  step 1/5004: loss=2.111814
+  step 2/5004: loss=2.401081
+  step 100/5004: loss=2.090631
+  step 200/5004: loss=2.041430
+  step 300/5004: loss=2.066636
+  step 400/5004: loss=2.205930
+  step 500/5004: loss=2.240031
+  step 600/5004: loss=2.306088
+  step 700/5004: loss=2.388586
+  step 800/5004: loss=2.095663
+  step 900/5004: loss=1.971901
+  step 1000/5004: loss=2.272105
+  step 1100/5004: loss=2.485631
+  step 1200/5004: loss=2.205120
+  step 1300/5004: loss=2.474165
+  step 1400/5004: loss=2.152714
+  step 1500/5004: loss=1.976974
+  step 1600/5004: loss=2.158221
+  step 1700/5004: loss=2.279706
+  step 1800/5004: loss=2.012873
+  step 1900/5004: loss=2.343713
+  step 2000/5004: loss=2.349011
+  step 2100/5004: loss=2.196359
+  step 2200/5004: loss=2.383842
+  step 2300/5004: loss=2.366742
+  step 2400/5004: loss=1.907443
+  step 2500/5004: loss=2.037982
+  step 2600/5004: loss=2.451974
+  step 2700/5004: loss=1.922968
+  step 2800/5004: loss=2.550572
+  step 2900/5004: loss=2.347786
+  step 3000/5004: loss=2.357119
+  step 3100/5004: loss=2.883100
+  step 3200/5004: loss=2.388331
+  step 3300/5004: loss=2.141911
+  step 3400/5004: loss=2.205342
+  step 3500/5004: loss=2.261848
+  step 3600/5004: loss=2.205973
+  step 3700/5004: loss=2.205307
+  step 3800/5004: loss=2.004058
+  step 3900/5004: loss=2.108232
+  step 4000/5004: loss=2.244329
+  step 4100/5004: loss=2.298278
+  step 4200/5004: loss=2.018526
+  step 4300/5004: loss=2.373458
+  step 4400/5004: loss=2.304685
+  step 4500/5004: loss=2.573478
+  step 4600/5004: loss=2.279691
+  step 4700/5004: loss=2.323440
+  step 4800/5004: loss=2.297960
+  step 4900/5004: loss=2.749445
+  step 5000/5004: loss=2.148824
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 333/350: loss=2.261943 lr=0.000249
+  epoch 333: test_acc = 38364/50000 = 76.728000%  top5 = 46556/50000 = 93.112000%  [95% CI 76.36–77.10]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 4258089882964413400)
+  step 0/5004: loss=2.392091
+  step 1/5004: loss=2.430223
+  step 2/5004: loss=2.027030
+  step 100/5004: loss=2.142097
+  step 200/5004: loss=2.366610
+  step 300/5004: loss=2.342554
+  step 400/5004: loss=2.210184
+  step 500/5004: loss=2.509099
+  step 600/5004: loss=2.224855
+  step 700/5004: loss=1.949708
+  step 800/5004: loss=2.247632
+  step 900/5004: loss=2.256042
+  step 1000/5004: loss=1.935840
+  step 1100/5004: loss=2.791336
+  step 1200/5004: loss=2.603717
+  step 1300/5004: loss=2.484336
+  step 1400/5004: loss=2.350866
+  step 1500/5004: loss=2.066999
+  step 1600/5004: loss=2.715523
+  step 1700/5004: loss=2.616855
+  step 1800/5004: loss=2.112604
+  step 1900/5004: loss=1.954159
+  step 2000/5004: loss=1.806210
+  step 2100/5004: loss=2.169596
+  step 2200/5004: loss=2.175579
+  step 2300/5004: loss=2.281551
+  step 2400/5004: loss=2.487332
+  step 2500/5004: loss=2.190629
+  step 2600/5004: loss=2.482946
+  step 2700/5004: loss=2.370879
+  step 2800/5004: loss=2.122245
+  step 2900/5004: loss=2.667917
+  step 3000/5004: loss=2.073340
+  step 3100/5004: loss=2.549152
+  step 3200/5004: loss=2.162012
+  step 3300/5004: loss=2.451695
+  step 3400/5004: loss=2.396359
+  step 3500/5004: loss=2.189483
+  step 3600/5004: loss=2.541654
+  step 3700/5004: loss=2.230241
+  step 3800/5004: loss=2.328141
+  step 3900/5004: loss=1.987561
+  step 4000/5004: loss=2.310982
+  step 4100/5004: loss=2.151212
+  step 4200/5004: loss=2.287561
+  step 4300/5004: loss=2.738117
+  step 4400/5004: loss=1.930544
+  step 4500/5004: loss=2.016134
+  step 4600/5004: loss=2.664720
+  step 4700/5004: loss=2.081071
+  step 4800/5004: loss=2.657422
+  step 4900/5004: loss=2.205381
+  step 5000/5004: loss=2.099051
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 334/350: loss=2.264548 lr=0.000246
+  epoch 334: test_acc = 38367/50000 = 76.734000%  top5 = 46577/50000 = 93.154000%  [95% CI 76.36–77.10]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 7341350395634250121)
+  step 0/5004: loss=2.117431
+  step 1/5004: loss=2.021574
+  step 2/5004: loss=2.463754
+  step 100/5004: loss=2.309964
+  step 200/5004: loss=2.561930
+  step 300/5004: loss=2.121452
+  step 400/5004: loss=2.371800
+  step 500/5004: loss=2.191658
+  step 600/5004: loss=2.322128
+  step 700/5004: loss=2.158411
+  step 800/5004: loss=2.735800
+  step 900/5004: loss=2.051210
+  step 1000/5004: loss=2.221678
+  step 1100/5004: loss=2.538124
+  step 1200/5004: loss=2.134289
+  step 1300/5004: loss=2.394135
+  step 1400/5004: loss=2.434707
+  step 1500/5004: loss=2.467294
+  step 1600/5004: loss=2.245251
+  step 1700/5004: loss=2.043030
+  step 1800/5004: loss=2.151603
+  step 1900/5004: loss=1.939590
+  step 2000/5004: loss=2.097675
+  step 2100/5004: loss=2.230473
+  step 2200/5004: loss=2.259150
+  step 2300/5004: loss=2.170521
+  step 2400/5004: loss=2.061846
+  step 2500/5004: loss=1.981703
+  step 2600/5004: loss=2.316011
+  step 2700/5004: loss=2.130812
+  step 2800/5004: loss=2.294187
+  step 2900/5004: loss=2.400587
+  step 3000/5004: loss=2.031296
+  step 3100/5004: loss=2.377865
+  step 3200/5004: loss=1.996903
+  step 3300/5004: loss=2.125248
+  step 3400/5004: loss=2.217640
+  step 3500/5004: loss=2.514011
+  step 3600/5004: loss=2.206867
+  step 3700/5004: loss=2.241920
+  step 3800/5004: loss=2.474346
+  step 3900/5004: loss=2.206244
+  step 4000/5004: loss=2.268842
+  step 4100/5004: loss=2.341178
+  step 4200/5004: loss=2.192360
+  step 4300/5004: loss=2.162936
+  step 4400/5004: loss=1.765821
+  step 4500/5004: loss=1.919487
+  step 4600/5004: loss=2.477922
+  step 4700/5004: loss=2.316455
+  step 4800/5004: loss=2.124942
+W0000 00:00:1789506948.549628 3398146 prefetch_autotuner.cc:55] Prefetch autotuner tried to allocate 91453 bytes after encountering the first element of size 91453 bytes.This already causes the autotune ram budget to be exceeded. To stay within the ram budget, either increase the ram budget or reduce element size
+  step 4900/5004: loss=2.149702
+  step 5000/5004: loss=2.042697
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 335/350: loss=2.260159 lr=0.000243
+  epoch 335: test_acc = 38420/50000 = 76.840000%  top5 = 46566/50000 = 93.132000%  [95% CI 76.47–77.21]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 11311434298906573181)
+  step 0/5004: loss=2.345066
+  step 1/5004: loss=2.128194
+  step 2/5004: loss=2.624834
+  step 100/5004: loss=2.018901
+  step 200/5004: loss=2.029752
+  step 300/5004: loss=2.153249
+  step 400/5004: loss=2.486126
+  step 500/5004: loss=2.190773
+  step 600/5004: loss=2.804224
+  step 700/5004: loss=2.030947
+  step 800/5004: loss=2.023729
+  step 900/5004: loss=2.283923
+  step 1000/5004: loss=2.338162
+  step 1100/5004: loss=2.217052
+  step 1200/5004: loss=2.215542
+  step 1300/5004: loss=2.114802
+  step 1400/5004: loss=2.407248
+  step 1500/5004: loss=2.780330
+  step 1600/5004: loss=2.117944
+  step 1700/5004: loss=2.144775
+  step 1800/5004: loss=2.149931
+  step 1900/5004: loss=2.321168
+  step 2000/5004: loss=2.366864
+  step 2100/5004: loss=2.271196
+  step 2200/5004: loss=2.366938
+  step 2300/5004: loss=2.185432
+  step 2400/5004: loss=2.650465
+  step 2500/5004: loss=2.366351
+  step 2600/5004: loss=2.672560
+  step 2700/5004: loss=2.341746
+  step 2800/5004: loss=2.530491
+  step 2900/5004: loss=2.539765
+  step 3000/5004: loss=2.015133
+  step 3100/5004: loss=2.185743
+  step 3200/5004: loss=2.229425
+  step 3300/5004: loss=2.350689
+  step 3400/5004: loss=1.975943
+  step 3500/5004: loss=2.257182
+  step 3600/5004: loss=2.209908
+  step 3700/5004: loss=2.079027
+  step 3800/5004: loss=2.066056
+  step 3900/5004: loss=2.394144
+  step 4000/5004: loss=1.828708
+  step 4100/5004: loss=2.215466
+  step 4200/5004: loss=2.706850
+  step 4300/5004: loss=2.358590
+  step 4400/5004: loss=2.499702
+  step 4500/5004: loss=1.967082
+  step 4600/5004: loss=2.256936
+  step 4700/5004: loss=1.948743
+  step 4800/5004: loss=2.293501
+  step 4900/5004: loss=2.305690
+  step 5000/5004: loss=2.090763
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 336/350: loss=2.261472 lr=0.000240
+  epoch 336: test_acc = 38369/50000 = 76.738000%  top5 = 46569/50000 = 93.138000%  [95% CI 76.37–77.11]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 11920593340846481595)
+  step 0/5004: loss=2.307065
+  step 1/5004: loss=2.565122
+  step 2/5004: loss=2.024582
+  step 100/5004: loss=2.146739
+  step 200/5004: loss=2.454194
+  step 300/5004: loss=2.078954
+  step 400/5004: loss=2.257739
+  step 500/5004: loss=2.180374
+  step 600/5004: loss=2.261913
+  step 700/5004: loss=2.310833
+  step 800/5004: loss=2.173908
+  step 900/5004: loss=2.258510
+  step 1000/5004: loss=2.344590
+  step 1100/5004: loss=2.342782
+  step 1200/5004: loss=2.453319
+  step 1300/5004: loss=2.246532
+  step 1400/5004: loss=2.180901
+  step 1500/5004: loss=2.420469
+  step 1600/5004: loss=2.172230
+  step 1700/5004: loss=2.378117
+  step 1800/5004: loss=2.185727
+  step 1900/5004: loss=2.466329
+  step 2000/5004: loss=2.247804
+  step 2100/5004: loss=2.128147
+  step 2200/5004: loss=1.995011
+  step 2300/5004: loss=2.394571
+  step 2400/5004: loss=2.066724
+  step 2500/5004: loss=2.184679
+  step 2600/5004: loss=2.698742
+  step 2700/5004: loss=1.988313
+  step 2800/5004: loss=1.872310
+  step 2900/5004: loss=2.273007
+  step 3000/5004: loss=2.513704
+  step 3100/5004: loss=2.191404
+  step 3200/5004: loss=2.310106
+  step 3300/5004: loss=2.240353
+  step 3400/5004: loss=1.868217
+  step 3500/5004: loss=2.510960
+  step 3600/5004: loss=2.314142
+  step 3700/5004: loss=2.855249
+  step 3800/5004: loss=2.194465
+  step 3900/5004: loss=2.212988
+  step 4000/5004: loss=2.409778
+  step 4100/5004: loss=2.279113
+  step 4200/5004: loss=2.369145
+  step 4300/5004: loss=2.033339
+  step 4400/5004: loss=2.465529
+  step 4500/5004: loss=2.301822
+  step 4600/5004: loss=2.181019
+  step 4700/5004: loss=2.486094
+  step 4800/5004: loss=2.430323
+  step 4900/5004: loss=2.154997
+  step 5000/5004: loss=2.138929
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 337/350: loss=2.259263 lr=0.000237
+  epoch 337: test_acc = 38377/50000 = 76.754000%  top5 = 46590/50000 = 93.180000%  [95% CI 76.38–77.12]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 4045843455898166485)
+  step 0/5004: loss=2.324204
+  step 1/5004: loss=2.059007
+  step 2/5004: loss=2.363883
+  step 100/5004: loss=2.318944
+  step 200/5004: loss=2.357577
+  step 300/5004: loss=1.684866
+  step 400/5004: loss=2.211411
+  step 500/5004: loss=2.445010
+  step 600/5004: loss=2.174818
+  step 700/5004: loss=2.158580
+  step 800/5004: loss=2.123496
+  step 900/5004: loss=2.340833
+  step 1000/5004: loss=2.125784
+  step 1100/5004: loss=2.497684
+  step 1200/5004: loss=2.394790
+  step 1300/5004: loss=2.104331
+  step 1400/5004: loss=2.299064
+  step 1500/5004: loss=2.333945
+  step 1600/5004: loss=2.209719
+  step 1700/5004: loss=2.261095
+  step 1800/5004: loss=2.413389
+  step 1900/5004: loss=2.186681
+  step 2000/5004: loss=2.294945
+  step 2100/5004: loss=2.483426
+  step 2200/5004: loss=2.420792
+  step 2300/5004: loss=2.309627
+  step 2400/5004: loss=2.442070
+  step 2500/5004: loss=2.129490
+  step 2600/5004: loss=1.875922
+  step 2700/5004: loss=2.031889
+  step 2800/5004: loss=2.324870
+  step 2900/5004: loss=2.212627
+  step 3000/5004: loss=2.040455
+  step 3100/5004: loss=2.400443
+  step 3200/5004: loss=1.985540
+  step 3300/5004: loss=2.409936
+  step 3400/5004: loss=2.035104
+  step 3500/5004: loss=2.188655
+  step 3600/5004: loss=2.248833
+  step 3700/5004: loss=2.416013
+  step 3800/5004: loss=2.279812
+  step 3900/5004: loss=2.290571
+  step 4000/5004: loss=2.224148
+  step 4100/5004: loss=2.435247
+  step 4200/5004: loss=2.430221
+  step 4300/5004: loss=2.391664
+  step 4400/5004: loss=2.275767
+  step 4500/5004: loss=2.460996
+  step 4600/5004: loss=2.318226
+  step 4700/5004: loss=2.343163
+  step 4800/5004: loss=2.153331
+  step 4900/5004: loss=2.185305
+  step 5000/5004: loss=2.320652
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 338/350: loss=2.259546 lr=0.000234
+  epoch 338: test_acc = 38409/50000 = 76.818000%  top5 = 46580/50000 = 93.160000%  [95% CI 76.45–77.19]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 13589589825602619858)
+  step 0/5004: loss=2.523729
+  step 1/5004: loss=2.189636
+  step 2/5004: loss=2.167514
+  step 100/5004: loss=1.970501
+  step 200/5004: loss=2.378424
+  step 300/5004: loss=2.119462
+  step 400/5004: loss=2.533995
+  step 500/5004: loss=2.352778
+  step 600/5004: loss=2.267917
+  step 700/5004: loss=2.468674
+  step 800/5004: loss=2.246912
+  step 900/5004: loss=2.306225
+  step 1000/5004: loss=2.270162
+  step 1100/5004: loss=2.394106
+  step 1200/5004: loss=2.308088
+  step 1300/5004: loss=2.159264
+  step 1400/5004: loss=2.473371
+  step 1500/5004: loss=2.329644
+  step 1600/5004: loss=2.210784
+  step 1700/5004: loss=2.164172
+  step 1800/5004: loss=2.053430
+  step 1900/5004: loss=2.517363
+  step 2000/5004: loss=2.480095
+  step 2100/5004: loss=2.147421
+  step 2200/5004: loss=2.177280
+  step 2300/5004: loss=2.235874
+  step 2400/5004: loss=2.051070
+  step 2500/5004: loss=2.086059
+  step 2600/5004: loss=2.166165
+  step 2700/5004: loss=2.140832
+  step 2800/5004: loss=2.007764
+  step 2900/5004: loss=2.019396
+  step 3000/5004: loss=2.271625
+  step 3100/5004: loss=2.204817
+  step 3200/5004: loss=2.370192
+  step 3300/5004: loss=2.353570
+  step 3400/5004: loss=2.175538
+  step 3500/5004: loss=2.219198
+  step 3600/5004: loss=2.199797
+  step 3700/5004: loss=2.334467
+  step 3800/5004: loss=1.970143
+  step 3900/5004: loss=2.957222
+  step 4000/5004: loss=2.644338
+  step 4100/5004: loss=2.369522
+  step 4200/5004: loss=2.269209
+  step 4300/5004: loss=2.570452
+  step 4400/5004: loss=2.585880
+  step 4500/5004: loss=2.329598
+  step 4600/5004: loss=2.323666
+  step 4700/5004: loss=2.320324
+  step 4800/5004: loss=2.423303
+  step 4900/5004: loss=2.038864
+  step 5000/5004: loss=2.331279
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 339/350: loss=2.257709 lr=0.000231
+  epoch 339: test_acc = 38414/50000 = 76.828000%  top5 = 46574/50000 = 93.148000%  [95% CI 76.46–77.20]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 3654822442002397458)
+  step 0/5004: loss=2.112602
+  step 1/5004: loss=2.282289
+  step 2/5004: loss=2.191724
+  step 100/5004: loss=2.531782
+  step 200/5004: loss=2.366292
+  step 300/5004: loss=1.986421
+  step 400/5004: loss=2.303001
+  step 500/5004: loss=2.114507
+  step 600/5004: loss=2.371915
+  step 700/5004: loss=2.129445
+  step 800/5004: loss=2.148488
+  step 900/5004: loss=2.103941
+  step 1000/5004: loss=2.320022
+  step 1100/5004: loss=2.059122
+  step 1200/5004: loss=2.319959
+  step 1300/5004: loss=2.323008
+  step 1400/5004: loss=2.273753
+  step 1500/5004: loss=2.290140
+  step 1600/5004: loss=2.122625
+  step 1700/5004: loss=2.416294
+  step 1800/5004: loss=2.557697
+  step 1900/5004: loss=2.244682
+  step 2000/5004: loss=2.140973
+  step 2100/5004: loss=2.183647
+  step 2200/5004: loss=2.375349
+  step 2300/5004: loss=2.507728
+  step 2400/5004: loss=2.170740
+  step 2500/5004: loss=2.436002
+  step 2600/5004: loss=1.972583
+  step 2700/5004: loss=2.096796
+  step 2800/5004: loss=2.700529
+  step 2900/5004: loss=2.347618
+  step 3000/5004: loss=2.249056
+  step 3100/5004: loss=2.318612
+  step 3200/5004: loss=2.135062
+  step 3300/5004: loss=2.317728
+  step 3400/5004: loss=2.166872
+  step 3500/5004: loss=2.055985
+  step 3600/5004: loss=2.464128
+  step 3700/5004: loss=2.246195
+  step 3800/5004: loss=1.873203
+  step 3900/5004: loss=2.046129
+  step 4000/5004: loss=2.393929
+  step 4100/5004: loss=2.376544
+  step 4200/5004: loss=2.181557
+  step 4300/5004: loss=2.378025
+  step 4400/5004: loss=2.403222
+  step 4500/5004: loss=2.306178
+  step 4600/5004: loss=2.185937
+  step 4700/5004: loss=2.079239
+  step 4800/5004: loss=2.443716
+  step 4900/5004: loss=2.887685
+  step 5000/5004: loss=2.136536
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 340/350: loss=2.259770 lr=0.000228
+  epoch 340: test_acc = 38397/50000 = 76.794000%  top5 = 46575/50000 = 93.150000%  [95% CI 76.42–77.16]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 16861130947468205161)
+  step 0/5004: loss=2.158831
+  step 1/5004: loss=2.311056
+  step 2/5004: loss=2.516478
+  step 100/5004: loss=1.969311
+  step 200/5004: loss=1.899648
+  step 300/5004: loss=2.272852
+  step 400/5004: loss=2.111356
+  step 500/5004: loss=2.084759
+  step 600/5004: loss=2.451846
+  step 700/5004: loss=2.501070
+  step 800/5004: loss=2.440110
+  step 900/5004: loss=2.291031
+  step 1000/5004: loss=2.077177
+  step 1100/5004: loss=2.364831
+  step 1200/5004: loss=2.516318
+  step 1300/5004: loss=2.197590
+  step 1400/5004: loss=2.295725
+  step 1500/5004: loss=2.481732
+  step 1600/5004: loss=2.302273
+  step 1700/5004: loss=2.070202
+  step 1800/5004: loss=2.006279
+  step 1900/5004: loss=2.251879
+  step 2000/5004: loss=2.221889
+  step 2100/5004: loss=2.142659
+  step 2200/5004: loss=1.963802
+  step 2300/5004: loss=2.482378
+  step 2400/5004: loss=2.314977
+  step 2500/5004: loss=1.931168
+  step 2600/5004: loss=1.942899
+  step 2700/5004: loss=2.431706
+  step 2800/5004: loss=2.281476
+  step 2900/5004: loss=2.233169
+  step 3000/5004: loss=2.011116
+  step 3100/5004: loss=1.729745
+  step 3200/5004: loss=2.224782
+  step 3300/5004: loss=2.307104
+  step 3400/5004: loss=2.205777
+  step 3500/5004: loss=2.041574
+  step 3600/5004: loss=2.311164
+  step 3700/5004: loss=2.136900
+  step 3800/5004: loss=1.955129
+  step 3900/5004: loss=2.662895
+  step 4000/5004: loss=2.434034
+  step 4100/5004: loss=1.989214
+  step 4200/5004: loss=2.477904
+  step 4300/5004: loss=2.120224
+  step 4400/5004: loss=2.296051
+  step 4500/5004: loss=2.024085
+  step 4600/5004: loss=2.183088
+  step 4700/5004: loss=2.262311
+  step 4800/5004: loss=2.130129
+  step 4900/5004: loss=1.890569
+  step 5000/5004: loss=2.293303
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 341/350: loss=2.259345 lr=0.000225
+  epoch 341: test_acc = 38440/50000 = 76.880000%  top5 = 46589/50000 = 93.178000%  [95% CI 76.51–77.25]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 13496175636019073012)
+  step 0/5004: loss=2.217683
+  step 1/5004: loss=2.340872
+  step 2/5004: loss=2.671535
+  step 100/5004: loss=2.279033
+  step 200/5004: loss=2.568017
+  step 300/5004: loss=2.454722
+  step 400/5004: loss=2.578412
+  step 500/5004: loss=2.077961
+  step 600/5004: loss=2.185224
+  step 700/5004: loss=2.119231
+  step 800/5004: loss=2.168044
+  step 900/5004: loss=1.983665
+  step 1000/5004: loss=2.286765
+  step 1100/5004: loss=2.089386
+  step 1200/5004: loss=2.097216
+  step 1300/5004: loss=2.276491
+  step 1400/5004: loss=2.270794
+  step 1500/5004: loss=2.464676
+  step 1600/5004: loss=2.429456
+  step 1700/5004: loss=2.562477
+  step 1800/5004: loss=2.312135
+  step 1900/5004: loss=2.005476
+  step 2000/5004: loss=2.419982
+  step 2100/5004: loss=2.031676
+  step 2200/5004: loss=2.498754
+  step 2300/5004: loss=2.256895
+  step 2400/5004: loss=2.312916
+  step 2500/5004: loss=2.341882
+  step 2600/5004: loss=2.124454
+  step 2700/5004: loss=2.167145
+  step 2800/5004: loss=2.033682
+  step 2900/5004: loss=2.193143
+  step 3000/5004: loss=2.201243
+  step 3100/5004: loss=2.353540
+  step 3200/5004: loss=2.451101
+  step 3300/5004: loss=1.807699
+  step 3400/5004: loss=2.322939
+  step 3500/5004: loss=2.371533
+  step 3600/5004: loss=2.381330
+  step 3700/5004: loss=2.097898
+  step 3800/5004: loss=2.532665
+  step 3900/5004: loss=2.050530
+  step 4000/5004: loss=2.032270
+  step 4100/5004: loss=2.115680
+  step 4200/5004: loss=2.395748
+  step 4300/5004: loss=2.260484
+  step 4400/5004: loss=2.323221
+  step 4500/5004: loss=2.211551
+  step 4600/5004: loss=2.488097
+  step 4700/5004: loss=2.156071
+  step 4800/5004: loss=2.412326
+  step 4900/5004: loss=2.350559
+  step 5000/5004: loss=2.094401
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 342/350: loss=2.258111 lr=0.000222
+  epoch 342: test_acc = 38431/50000 = 76.862000%  top5 = 46579/50000 = 93.158000%  [95% CI 76.49–77.23]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 15345173760198329549)
+  step 0/5004: loss=2.121053
+  step 1/5004: loss=2.127456
+  step 2/5004: loss=2.155416
+  step 100/5004: loss=2.270466
+  step 200/5004: loss=2.268785
+  step 300/5004: loss=2.281284
+  step 400/5004: loss=2.638782
+  step 500/5004: loss=2.189052
+  step 600/5004: loss=2.213448
+  step 700/5004: loss=2.436586
+  step 800/5004: loss=2.291415
+  step 900/5004: loss=2.360843
+  step 1000/5004: loss=2.112413
+  step 1100/5004: loss=2.493046
+  step 1200/5004: loss=2.441120
+  step 1300/5004: loss=1.915455
+  step 1400/5004: loss=2.361416
+  step 1500/5004: loss=2.373996
+  step 1600/5004: loss=2.447670
+  step 1700/5004: loss=2.292736
+  step 1800/5004: loss=2.308148
+  step 1900/5004: loss=2.257161
+  step 2000/5004: loss=2.113740
+  step 2100/5004: loss=2.002376
+  step 2200/5004: loss=2.216135
+  step 2300/5004: loss=1.986407
+  step 2400/5004: loss=2.543005
+  step 2500/5004: loss=2.368918
+  step 2600/5004: loss=2.263812
+  step 2700/5004: loss=2.491711
+  step 2800/5004: loss=2.267242
+  step 2900/5004: loss=2.291668
+  step 3000/5004: loss=2.283464
+  step 3100/5004: loss=2.341142
+  step 3200/5004: loss=2.036052
+  step 3300/5004: loss=2.829839
+  step 3400/5004: loss=2.106799
+  step 3500/5004: loss=2.249958
+  step 3600/5004: loss=2.080091
+  step 3700/5004: loss=2.260386
+  step 3800/5004: loss=2.320094
+  step 3900/5004: loss=2.675126
+  step 4000/5004: loss=2.286362
+  step 4100/5004: loss=1.833356
+  step 4200/5004: loss=2.308723
+  step 4300/5004: loss=2.087331
+  step 4400/5004: loss=2.051307
+  step 4500/5004: loss=2.687650
+  step 4600/5004: loss=2.238786
+  step 4700/5004: loss=1.843007
+  step 4800/5004: loss=1.935146
+W0000 00:00:1789512663.607572 3398146 prefetch_autotuner.cc:55] Prefetch autotuner tried to allocate 91453 bytes after encountering the first element of size 91453 bytes.This already causes the autotune ram budget to be exceeded. To stay within the ram budget, either increase the ram budget or reduce element size
+  step 4900/5004: loss=2.112399
+  step 5000/5004: loss=2.249752
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 343/350: loss=2.254290 lr=0.000219
+  epoch 343: test_acc = 38444/50000 = 76.888000%  top5 = 46574/50000 = 93.148000%  [95% CI 76.52–77.26]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 10218572685280017563)
+  step 0/5004: loss=2.449538
+  step 1/5004: loss=2.613898
+  step 2/5004: loss=2.125003
+  step 100/5004: loss=2.477062
+  step 200/5004: loss=2.131011
+  step 300/5004: loss=2.332860
+  step 400/5004: loss=1.767972
+  step 500/5004: loss=2.576271
+  step 600/5004: loss=2.090055
+  step 700/5004: loss=2.590471
+  step 800/5004: loss=2.354299
+  step 900/5004: loss=2.082456
+  step 1000/5004: loss=2.078671
+  step 1100/5004: loss=2.229312
+  step 1200/5004: loss=2.149399
+  step 1300/5004: loss=2.191386
+  step 1400/5004: loss=2.330548
+  step 1500/5004: loss=2.387944
+  step 1600/5004: loss=2.161012
+  step 1700/5004: loss=2.358432
+  step 1800/5004: loss=2.107282
+  step 1900/5004: loss=2.479273
+  step 2000/5004: loss=2.312315
+  step 2100/5004: loss=2.359418
+  step 2200/5004: loss=2.245068
+  step 2300/5004: loss=2.477062
+  step 2400/5004: loss=2.200601
+  step 2500/5004: loss=2.041511
+  step 2600/5004: loss=2.318084
+  step 2700/5004: loss=1.986850
+  step 2800/5004: loss=1.813798
+  step 2900/5004: loss=2.485016
+  step 3000/5004: loss=2.392237
+  step 3100/5004: loss=2.120341
+  step 3200/5004: loss=2.485183
+  step 3300/5004: loss=2.345201
+  step 3400/5004: loss=2.354999
+  step 3500/5004: loss=2.169644
+  step 3600/5004: loss=2.121435
+  step 3700/5004: loss=2.593235
+  step 3800/5004: loss=2.276819
+  step 3900/5004: loss=1.861951
+  step 4000/5004: loss=2.553251
+  step 4100/5004: loss=2.079362
+  step 4200/5004: loss=2.441552
+  step 4300/5004: loss=2.552745
+  step 4400/5004: loss=2.309984
+  step 4500/5004: loss=2.436877
+  step 4600/5004: loss=2.527969
+  step 4700/5004: loss=2.169017
+  step 4800/5004: loss=1.952589
+  step 4900/5004: loss=2.251415
+  step 5000/5004: loss=2.745040
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 344/350: loss=2.252457 lr=0.000217
+  epoch 344: test_acc = 38428/50000 = 76.856000%  top5 = 46595/50000 = 93.190000%  [95% CI 76.48–77.22]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 8922757957146174550)
+  step 0/5004: loss=1.946019
+  step 1/5004: loss=1.933824
+  step 2/5004: loss=2.103716
+  step 100/5004: loss=2.515972
+  step 200/5004: loss=2.319955
+  step 300/5004: loss=2.134299
+  step 400/5004: loss=2.158766
+  step 500/5004: loss=2.346030
+  step 600/5004: loss=2.260701
+  step 700/5004: loss=2.053759
+  step 800/5004: loss=2.555317
+  step 900/5004: loss=2.420879
+  step 1000/5004: loss=2.400876
+  step 1100/5004: loss=2.154210
+  step 1200/5004: loss=2.092246
+  step 1300/5004: loss=2.096445
+  step 1400/5004: loss=2.007776
+  step 1500/5004: loss=2.068690
+  step 1600/5004: loss=2.492357
+  step 1700/5004: loss=2.211090
+  step 1800/5004: loss=2.248315
+  step 1900/5004: loss=2.117763
+  step 2000/5004: loss=2.496453
+  step 2100/5004: loss=2.083821
+  step 2200/5004: loss=2.443538
+  step 2300/5004: loss=2.065685
+  step 2400/5004: loss=2.089306
+  step 2500/5004: loss=1.970203
+  step 2600/5004: loss=2.131861
+  step 2700/5004: loss=2.131312
+  step 2800/5004: loss=2.178289
+  step 2900/5004: loss=2.167132
+  step 3000/5004: loss=2.069804
+  step 3100/5004: loss=2.214784
+  step 3200/5004: loss=2.200867
+  step 3300/5004: loss=2.194168
+  step 3400/5004: loss=2.062564
+  step 3500/5004: loss=2.289620
+  step 3600/5004: loss=2.274974
+  step 3700/5004: loss=1.838047
+  step 3800/5004: loss=2.091430
+  step 3900/5004: loss=2.303035
+  step 4000/5004: loss=2.357433
+  step 4100/5004: loss=2.459895
+  step 4200/5004: loss=2.275109
+  step 4300/5004: loss=2.110322
+  step 4400/5004: loss=2.285106
+  step 4500/5004: loss=2.203373
+  step 4600/5004: loss=2.395445
+  step 4700/5004: loss=2.488605
+  step 4800/5004: loss=1.926574
+  step 4900/5004: loss=2.445279
+  step 5000/5004: loss=2.127058
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 345/350: loss=2.243969 lr=0.000214
+  epoch 345: test_acc = 38426/50000 = 76.852000%  top5 = 46594/50000 = 93.188000%  [95% CI 76.48–77.22]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 15522459496756944008)
+  step 0/5004: loss=2.401676
+  step 1/5004: loss=2.361448
+  step 2/5004: loss=2.640905
+  step 100/5004: loss=2.201735
+  step 200/5004: loss=2.227922
+  step 300/5004: loss=2.139732
+  step 400/5004: loss=2.299863
+  step 500/5004: loss=2.072727
+  step 600/5004: loss=2.456382
+  step 700/5004: loss=2.189738
+  step 800/5004: loss=2.159191
+  step 900/5004: loss=2.352071
+  step 1000/5004: loss=2.047158
+  step 1100/5004: loss=2.214982
+  step 1200/5004: loss=2.258926
+  step 1300/5004: loss=2.256729
+  step 1400/5004: loss=1.923012
+  step 1500/5004: loss=2.313107
+  step 1600/5004: loss=2.505107
+  step 1700/5004: loss=2.260457
+  step 1800/5004: loss=2.136975
+  step 1900/5004: loss=2.050917
+  step 2000/5004: loss=2.006931
+  step 2100/5004: loss=2.239779
+  step 2200/5004: loss=2.109476
+  step 2300/5004: loss=2.064455
+  step 2400/5004: loss=2.198165
+  step 2500/5004: loss=2.461766
+  step 2600/5004: loss=2.148526
+  step 2700/5004: loss=1.930549
+  step 2800/5004: loss=2.250232
+  step 2900/5004: loss=2.260812
+  step 3000/5004: loss=2.377723
+  step 3100/5004: loss=2.326225
+  step 3200/5004: loss=2.015099
+  step 3300/5004: loss=2.324186
+  step 3400/5004: loss=2.212111
+  step 3500/5004: loss=2.186294
+  step 3600/5004: loss=2.312621
+  step 3700/5004: loss=2.270233
+  step 3800/5004: loss=2.285780
+  step 3900/5004: loss=2.504321
+  step 4000/5004: loss=2.156733
+  step 4100/5004: loss=2.258031
+  step 4200/5004: loss=2.084495
+  step 4300/5004: loss=2.267927
+  step 4400/5004: loss=1.977839
+  step 4500/5004: loss=2.364877
+  step 4600/5004: loss=2.215214
+  step 4700/5004: loss=2.359249
+  step 4800/5004: loss=2.494986
+  step 4900/5004: loss=2.246300
+  step 5000/5004: loss=2.112757
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 346/350: loss=2.246970 lr=0.000211
+  epoch 346: test_acc = 38453/50000 = 76.906000%  top5 = 46616/50000 = 93.232000%  [95% CI 76.53–77.27]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 559565056885286237)
+  step 0/5004: loss=2.053349
+  step 1/5004: loss=2.616241
+  step 2/5004: loss=2.470515
+  step 100/5004: loss=2.525493
+  step 200/5004: loss=2.316278
+  step 300/5004: loss=2.146774
+  step 400/5004: loss=2.209767
+  step 500/5004: loss=2.448898
+  step 600/5004: loss=2.327844
+  step 700/5004: loss=2.163078
+  step 800/5004: loss=2.080691
+  step 900/5004: loss=2.454633
+  step 1000/5004: loss=2.116764
+  step 1100/5004: loss=2.611942
+  step 1200/5004: loss=2.241083
+  step 1300/5004: loss=2.600823
+  step 1400/5004: loss=2.448617
+  step 1500/5004: loss=2.392462
+  step 1600/5004: loss=2.361263
+  step 1700/5004: loss=2.374798
+  step 1800/5004: loss=2.128886
+  step 1900/5004: loss=2.108636
+  step 2000/5004: loss=2.069355
+  step 2100/5004: loss=2.428990
+  step 2200/5004: loss=1.923531
+  step 2300/5004: loss=2.074078
+  step 2400/5004: loss=2.091713
+  step 2500/5004: loss=2.105165
+  step 2600/5004: loss=2.120006
+  step 2700/5004: loss=2.160276
+  step 2800/5004: loss=2.489599
+  step 2900/5004: loss=2.652467
+  step 3000/5004: loss=2.211764
+  step 3100/5004: loss=2.404018
+  step 3200/5004: loss=2.121764
+  step 3300/5004: loss=2.103855
+  step 3400/5004: loss=2.136391
+  step 3500/5004: loss=2.026360
+  step 3600/5004: loss=2.483065
+  step 3700/5004: loss=1.942665
+  step 3800/5004: loss=2.362292
+  step 3900/5004: loss=2.216107
+  step 4000/5004: loss=2.122919
+  step 4100/5004: loss=2.093526
+  step 4200/5004: loss=2.103964
+  step 4300/5004: loss=2.309871
+  step 4400/5004: loss=2.383885
+  step 4500/5004: loss=2.076416
+  step 4600/5004: loss=2.502043
+  step 4700/5004: loss=1.958848
+  step 4800/5004: loss=2.316156
+W0000 00:00:1789515750.320479 3398146 prefetch_autotuner.cc:55] Prefetch autotuner tried to allocate 91453 bytes after encountering the first element of size 91453 bytes.This already causes the autotune ram budget to be exceeded. To stay within the ram budget, either increase the ram budget or reduce element size
+  step 4900/5004: loss=2.362570
+  step 5000/5004: loss=2.044007
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 347/350: loss=2.250753 lr=0.000208
+  epoch 347: test_acc = 38433/50000 = 76.866000%  top5 = 46590/50000 = 93.180000%  [95% CI 76.49–77.23]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 9409353257729783697)
+  step 0/5004: loss=2.360077
+  step 1/5004: loss=2.217353
+  step 2/5004: loss=2.149165
+  step 100/5004: loss=2.183423
+  step 200/5004: loss=2.295250
+  step 300/5004: loss=1.870381
+  step 400/5004: loss=2.136538
+  step 500/5004: loss=2.182294
+  step 600/5004: loss=2.037896
+  step 700/5004: loss=1.936534
+  step 800/5004: loss=2.231012
+  step 900/5004: loss=2.345593
+  step 1000/5004: loss=2.323816
+  step 1100/5004: loss=2.461460
+  step 1200/5004: loss=2.379364
+  step 1300/5004: loss=2.098183
+  step 1400/5004: loss=2.091635
+  step 1500/5004: loss=2.161332
+  step 1600/5004: loss=1.952908
+  step 1700/5004: loss=2.074517
+  step 1800/5004: loss=2.057282
+  step 1900/5004: loss=1.954517
+  step 2000/5004: loss=2.601997
+  step 2100/5004: loss=2.119292
+  step 2200/5004: loss=2.146847
+  step 2300/5004: loss=2.465041
+  step 2400/5004: loss=2.460675
+  step 2500/5004: loss=2.350556
+  step 2600/5004: loss=2.458921
+  step 2700/5004: loss=2.272169
+  step 2800/5004: loss=2.339092
+  step 2900/5004: loss=2.374695
+  step 3000/5004: loss=2.153695
+  step 3100/5004: loss=2.484248
+  step 3200/5004: loss=2.504438
+  step 3300/5004: loss=2.478676
+  step 3400/5004: loss=1.982033
+  step 3500/5004: loss=2.197809
+  step 3600/5004: loss=2.499375
+  step 3700/5004: loss=2.066676
+  step 3800/5004: loss=2.227132
+  step 3900/5004: loss=2.063291
+  step 4000/5004: loss=2.264878
+  step 4100/5004: loss=2.236348
+  step 4200/5004: loss=1.946243
+  step 4300/5004: loss=1.913511
+  step 4400/5004: loss=1.860102
+  step 4500/5004: loss=2.351502
+  step 4600/5004: loss=2.239439
+  step 4700/5004: loss=1.980815
+  step 4800/5004: loss=2.194308
+  step 4900/5004: loss=2.327799
+  step 5000/5004: loss=1.802465
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 348/350: loss=2.246952 lr=0.000206
+  epoch 348: test_acc = 38395/50000 = 76.790000%  top5 = 46590/50000 = 93.180000%  [95% CI 76.42–77.16]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 1828785785351207426)
+  step 0/5004: loss=2.242614
+  step 1/5004: loss=2.188501
+  step 2/5004: loss=2.096594
+  step 100/5004: loss=2.276959
+  step 200/5004: loss=2.572862
+  step 300/5004: loss=2.426670
+  step 400/5004: loss=2.114431
+  step 500/5004: loss=2.101197
+  step 600/5004: loss=2.432518
+  step 700/5004: loss=2.037218
+  step 800/5004: loss=2.064692
+  step 900/5004: loss=1.882231
+  step 1000/5004: loss=2.472367
+  step 1100/5004: loss=2.318828
+  step 1200/5004: loss=2.098205
+  step 1300/5004: loss=2.169964
+  step 1400/5004: loss=2.367958
+  step 1500/5004: loss=2.119358
+  step 1600/5004: loss=2.359333
+  step 1700/5004: loss=1.983503
+  step 1800/5004: loss=1.910320
+  step 1900/5004: loss=2.321219
+  step 2000/5004: loss=2.156478
+  step 2100/5004: loss=2.327400
+  step 2200/5004: loss=2.336295
+  step 2300/5004: loss=2.027422
+  step 2400/5004: loss=2.257146
+  step 2500/5004: loss=2.336518
+  step 2600/5004: loss=2.211930
+  step 2700/5004: loss=1.929157
+  step 2800/5004: loss=2.748706
+  step 2900/5004: loss=2.308874
+  step 3000/5004: loss=2.029371
+  step 3100/5004: loss=1.949780
+  step 3200/5004: loss=2.295119
+  step 3300/5004: loss=2.329742
+  step 3400/5004: loss=1.925767
+  step 3500/5004: loss=2.317870
+  step 3600/5004: loss=2.153975
+  step 3700/5004: loss=2.130130
+  step 3800/5004: loss=2.317316
+  step 3900/5004: loss=2.354160
+  step 4000/5004: loss=2.359578
+  step 4100/5004: loss=2.169837
+  step 4200/5004: loss=2.053647
+  step 4300/5004: loss=2.192832
+  step 4400/5004: loss=2.271804
+  step 4500/5004: loss=2.351627
+  step 4600/5004: loss=1.952574
+  step 4700/5004: loss=2.070210
+  step 4800/5004: loss=2.394228
+  step 4900/5004: loss=2.003255
+  step 5000/5004: loss=1.924551
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 349/350: loss=2.244027 lr=0.000203
+  epoch 349: test_acc = 38410/50000 = 76.820000%  top5 = 46573/50000 = 93.146000%  [95% CI 76.45–77.19]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 12665317789905310451)
+  step 0/5004: loss=2.383873
+  step 1/5004: loss=2.520563
+  step 2/5004: loss=1.850142
+  step 100/5004: loss=2.057146
+  step 200/5004: loss=2.528589
+  step 300/5004: loss=2.262941
+  step 400/5004: loss=2.256684
+  step 500/5004: loss=2.174490
+  step 600/5004: loss=2.096243
+  step 700/5004: loss=2.413334
+  step 800/5004: loss=2.251955
+  step 900/5004: loss=2.146250
+  step 1000/5004: loss=2.272649
+  step 1100/5004: loss=2.059927
+  step 1200/5004: loss=2.066781
+  step 1300/5004: loss=2.160843
+  step 1400/5004: loss=2.254042
+  step 1500/5004: loss=2.006257
+  step 1600/5004: loss=2.254237
+  step 1700/5004: loss=2.147483
+  step 1800/5004: loss=2.044571
+  step 1900/5004: loss=2.811142
+  step 2000/5004: loss=2.080403
+  step 2100/5004: loss=2.116075
+  step 2200/5004: loss=2.304290
+  step 2300/5004: loss=2.342356
+  step 2400/5004: loss=2.581969
+  step 2500/5004: loss=2.165718
+  step 2600/5004: loss=2.194269
+  step 2700/5004: loss=2.357181
+  step 2800/5004: loss=2.257097
+  step 2900/5004: loss=2.274285
+  step 3000/5004: loss=2.161523
+  step 3100/5004: loss=1.920945
+  step 3200/5004: loss=2.228113
+  step 3300/5004: loss=2.205031
+  step 3400/5004: loss=2.415510
+  step 3500/5004: loss=2.187974
+  step 3600/5004: loss=2.140397
+  step 3700/5004: loss=2.061220
+  step 3800/5004: loss=1.959839
+  step 3900/5004: loss=2.472778
+  step 4000/5004: loss=2.145182
+  step 4100/5004: loss=2.198065
+  step 4200/5004: loss=2.206913
+  step 4300/5004: loss=2.472483
+  step 4400/5004: loss=2.066621
+  step 4500/5004: loss=2.398412
+  step 4600/5004: loss=2.406833
+  step 4700/5004: loss=2.267088
+  step 4800/5004: loss=2.134072
+W0000 00:00:1789518503.334496 3398146 prefetch_autotuner.cc:55] Prefetch autotuner tried to allocate 91453 bytes after encountering the first element of size 91453 bytes.This already causes the autotune ram budget to be exceeded. To stay within the ram budget, either increase the ram budget or reduce element size
+  step 4900/5004: loss=2.503167
+  step 5000/5004: loss=2.100391
+[pjrt_ffi] RESIDENT: @efficientnetin_fwd_eval holds 311 parameter tensors (20.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 350/350: loss=2.246197 lr=0.000201
+  epoch 350: test_acc = 38439/50000 = 76.878000%  top5 = 46577/50000 = 93.154000%  [95% CI 76.51–77.25]
+    BN companion -> .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (42016 floats x 2, hash 16844717115387661669)
+done (trained EfficientNet-B0 (ImageNet-1k) emarmsdp64dropdobf16 + exp x0.970000/2.400000ep/warmup via packed threading).

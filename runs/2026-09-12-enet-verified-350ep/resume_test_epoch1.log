@@ -1,0 +1,23 @@
+epoch-1 marker seen 23:19:58; SIGTERM trainer pid=2480996
+save line hash=7468205912590194089   file: 336128 bytes 2026-09-12 23:19:58.459593697 +0000 sha256=80e172e8a41cd73a
+  epoch 1: test_acc = 10308/50000 = 20.616000%  top5 = 21612/50000 = 43.224000%  [95% CI 20.26–20.97]
+load line hash=7468205912590194089   23:21:50
+✅ HASH-MATCH
+1:===== 2026-09-12 23:06:23 attempt 1 (from epoch 0) =====
+156:===== 2026-09-12 23:20:25 attempt 2 (from epoch 1) =====
+214:  ▸ resuming from checkpoint at epoch 1
+215:  ▸ resumed BN running stats + ema_bn from .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn (hash 7468205912590194089)
+[sup]   last line:   step 1/5004: loss=5.108153
+[sup] 2026-09-12 23:20:10   ended (exited) at epoch 1; 15s then retry
+[sup] 2026-09-12 23:20:25 attempt 2: resuming at epoch 1/350 (next rest: 999)
+[sup] 2026-09-12 23:20:25   launched PID=2489668 PGID=2489668
+resumed attempt is stepping:   step 2/5004: loss=5.043445
+
+[exited with code 0]
+--- epoch clock so far
+1	1789255198	23:19:58
+-rw-rw-r-- 1 skoonce skoonce 84616768 2026-09-12 23:19:58.507011502 +0000 .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin
+-rw-rw-r-- 1 skoonce skoonce   336128 2026-09-12 23:19:58.459593697 +0000 .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.bn
+-rw-rw-r-- 1 skoonce skoonce        1 2026-09-12 23:19:58.508272956 +0000 .lake/build/efficientnetin_emarmsdp64dropdobf16_ckpt_xla.bin.epoch
+active
+23:22:27

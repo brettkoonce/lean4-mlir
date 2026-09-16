@@ -1,0 +1,7 @@
+net	variant	prec	arm	bs	workers	med_ms	min_ms	p90_ms	mean_ms	wait_ms	steps_ep	elapsed_s	note
+enetema	emarmsdp64dropdobf16	bf16	fed	64	4	134	102	151	134	32	5004	250	
+enetema	emarmsdp64dropdobf16	bf16	fed	64	6	136	99	153	135	37	5004	261	
+enetema	emarmsdp64dropdobf16	bf16	fed	64	8	137	103	153	136	34	5004	272	
+enetema	emarmsdp64dropdobf16	bf16	fed	64	10	137	102	154	137	35	5004	285	
+enetema	emarmsdp64dropdobf16	bf16	fed	64	12	139	101	161	140	38	5004	303	
+enetema	emarmsdp64dropdobf16	bf16	synth	64	8	98	96	99	97	2	5004	151	

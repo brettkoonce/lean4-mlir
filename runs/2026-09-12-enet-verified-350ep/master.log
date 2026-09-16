@@ -1,0 +1,47 @@
+[sup] 2026-09-12 23:06:23 START job=enet-default-4gpu devs=0,1,2,3 epochs=350 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-12-enet-verified-350ep
+[sup] 2026-09-12 23:06:23 cmd: .lake/build/bin/efficientnet-imagenet-verified data
+[sup] 2026-09-12 23:06:23 eta: bf16 ~68 h (2.8 d) on 4x 3060 (134 ms/step mean at SHIM_WORKERS=4, no stall tail; +~5% eval/ckpt; 350 ep)
+[sup] 2026-09-12 23:06:23 attempt 1: resuming at epoch 0/350 (next rest: 999)
+[sup] 2026-09-12 23:06:23   launched PID=2480996 PGID=2480996
+[sup]   last line:   step 1/5004: loss=5.108153
+[sup] 2026-09-12 23:20:10   ended (exited) at epoch 1; 15s then retry
+[sup] 2026-09-12 23:20:25 attempt 2: resuming at epoch 1/350 (next rest: 999)
+[sup] 2026-09-12 23:20:25   launched PID=2489668 PGID=2489668
+[sup] 2026-09-14 03:25:23 supervisor exiting — taking the run down (PID=2489668 PGID=2489668)
+[sup] 2026-09-14 03:25:28 START job=enet-default-4gpu devs=0,1,2,3 epochs=350 rest_after=[125 160 200 240 280 320] temp_max=78 stall=1800s logs=runs/2026-09-12-enet-verified-350ep
+[sup] 2026-09-14 03:25:28 cmd: .lake/build/bin/efficientnet-imagenet-verified data
+[sup] 2026-09-14 03:25:28 eta: bf16 ~68 h (2.8 d) on 4x 3060 (134 ms/step mean at SHIM_WORKERS=4, no stall tail; +~5% eval/ckpt; 350 ep)
+[sup] 2026-09-14 03:25:28 attempt 1: resuming at epoch 123/350 (next rest: 125)
+[sup] 2026-09-14 03:25:28   launched PID=2867522 PGID=2867522
+[sup] 2026-09-14 03:50:51   💤 epoch 125 reached — planned cooldown 15s
+[sup]   last line:   step 2/5004: loss=2.899883
+[sup] 2026-09-14 03:51:08   cooldown over
+[sup] 2026-09-14 03:51:08 attempt 2: resuming at epoch 125/350 (next rest: 160)
+[sup] 2026-09-14 03:51:08   launched PID=2877805 PGID=2877805
+[sup] 2026-09-14 10:42:23   💤 epoch 160 reached — planned cooldown 15s
+[sup]   last line:   step 2/5004: loss=2.395166
+[sup] 2026-09-14 10:42:41   cooldown over
+[sup] 2026-09-14 10:42:41 attempt 3: resuming at epoch 160/350 (next rest: 200)
+[sup] 2026-09-14 10:42:41   launched PID=2953961 PGID=2953961
+[sup] 2026-09-14 18:46:13   💤 epoch 200 reached — planned cooldown 15s
+[sup]   last line:   step 2/5004: loss=2.326622
+[sup] 2026-09-14 18:46:30   cooldown over
+[sup] 2026-09-14 18:46:30 attempt 4: resuming at epoch 200/350 (next rest: 240)
+[sup] 2026-09-14 18:46:30   launched PID=3059886 PGID=3059886
+[sup] 2026-09-15 02:40:14   💤 epoch 240 reached — planned cooldown 15s
+[sup]   last line:   step 2/5004: loss=2.520972
+[sup] 2026-09-15 02:40:31   cooldown over
+[sup] 2026-09-15 02:40:31 attempt 5: resuming at epoch 240/350 (next rest: 280)
+[sup] 2026-09-15 02:40:31   launched PID=3159875 PGID=3159875
+[sup] 2026-09-15 10:26:44   💤 epoch 280 reached — planned cooldown 15s
+[sup]   last line:   step 2/5004: loss=2.380988
+[sup] 2026-09-15 10:27:01   cooldown over
+[sup] 2026-09-15 10:27:01 attempt 6: resuming at epoch 280/350 (next rest: 320)
+[sup] 2026-09-15 10:27:01   launched PID=3250402 PGID=3250402
+[sup] 2026-09-15 18:19:30   💤 epoch 320 reached — planned cooldown 15s
+[sup]   last line:   step 2/5004: loss=2.328301
+[sup] 2026-09-15 18:19:48   cooldown over
+[sup] 2026-09-15 18:19:48 attempt 7: resuming at epoch 320/350 (next rest: 999)
+[sup] 2026-09-15 18:19:48   launched PID=3393236 PGID=3393236
+[sup]   last line: done (trained EfficientNet-B0 (ImageNet-1k) emarmsdp64dropdobf16 + exp x0.970000/2.400000ep/warmup via packed threading).
+[sup] 2026-09-16 00:29:28 ✅ COMPLETE — 350/350 epochs
