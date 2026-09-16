@@ -575,13 +575,30 @@ def shimMixDefault (shimScript : String) : IO String := do
     | _ :: rest :: _ => pure ((rest.splitOn "'").headD "")
     | _              => pure ""
 
+/-- The stdio shape every shim child is spawned with. It has a name because `IO.Process.Child` is
+    INDEXED by its config: without a concrete one the child cannot be stored in a structure, and
+    without storing it the trainer holds a pipe it can neither kill nor reap. -/
+abbrev ShimCfg : IO.Process.StdioConfig :=
+  { stdin := .null, stdout := .piped, stderr := .inherit }
+
+/-- A live shim producer: the child process AND its stdout pipe.
+
+    ⚠ `spawnShim` used to return the handle alone and drop the child on the floor. Two things that
+    costs: the validation shim left a `<defunct>` python for the life of every ImageNet run, and a
+    producer could not be REPLACED mid-run — which is what a 350-epoch EfficientNet run needed after
+    one of four loaders degraded and, under the round-robin read, paced the whole run at 1.8× its
+    clean step time (`planning/shim_loader_health_and_resume_tests.md` §1). -/
+structure ShimProc where
+  child : IO.Process.Child ShimCfg
+  h     : IO.FS.Handle
+
 /-- Spawn the shim for one split and consume its preamble.
 
     The preamble (`LMSH` | version | batch | flat) is checked rather than skipped: a batch or
     resolution mismatch between the render and the shim would otherwise read as garbage pixels and
     look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
 def spawnShim (shimScript : String) (split : String) (batch flat seed : Nat)
-    (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0) : IO IO.FS.Handle := do
+    (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0) : IO ShimProc := do
   -- `shimScript` is the NET'S OWN generated shim (`VerifiedNet.shimScript`), not a shared default.
   -- An empty one refuses here rather than falling back: R34's shim was the fallback for years and
   -- it silently gave every other net R34's augmentation. See that field's docstring.
@@ -660,8 +677,12 @@ or SHIM_MIX=off."
     | none =>
       IO.println s!"  ⚠ this net's recipe declares SHIM_MIX={mixDefault}; wire v1 cannot carry a \
 mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND its mixing."
+  -- ⚠ `stderr := .inherit` is the default and is spelled out anyway: `IO.Process.Child` is INDEXED
+  -- by its stdio config, so the child `spawn` returns only has `ShimProc`'s field type when all
+  -- three fields match `ShimCfg` syntactically.
   let child ← IO.Process.spawn {
-    cmd := py.toString, args := #[script.toString], stdout := .piped, stdin := .null,
+    cmd := py.toString, args := #[script.toString],
+    stdout := .piped, stdin := .null, stderr := .inherit,
     env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
              ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv ++ mixEnv }
   let h := child.stdout
@@ -699,7 +720,7 @@ the render wants batch={batch} flat={flat} — refusing rather than reading misa
   -- like a run streaming the right one. This line is what makes the wiring readable from a log.
   IO.println s!"  imagenet shim: {script} — {split} split, batch {sBatch}, {sFlat} floats/img \
 (seed {seed}){if nclasses > 0 then s!", wire v{ver} soft targets [{batch}x{nclasses}]" else ""}"
-  pure h
+  pure { child := child, h := h }
 
 /-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
     (the shim writes labels first so a partial record is detectable at the smaller read). -/
@@ -819,11 +840,11 @@ reading a misframed batch"
     same augmentation sequence, and since the shards hold different images that is not a
     correctness bug — but it needlessly correlates the crops across workers. -/
 def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n : Nat)
-    (nclasses : Nat := 0) : IO (Array IO.FS.Handle) := do
+    (nclasses : Nat := 0) : IO (Array ShimProc) := do
   if n <= 1 then
     pure #[← spawnShim shimScript split batch flat seed none nclasses]
   else
-    let mut hs : Array IO.FS.Handle := #[]
+    let mut hs : Array ShimProc := #[]
     for i in [0:n] do
       hs := hs.push (← spawnShim shimScript split batch flat (seed + i) (some (i, n)) nclasses)
     IO.println s!"  imagenet shim: {n} sharded producers (round-robin over batches)"
@@ -831,10 +852,10 @@ def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n :
 
 /-- Round-robin read: batch `k` comes from worker `k % n`. `readExact` already blocks until a whole
     record has arrived, so a slow worker throttles rather than corrupting — the framing cannot slip. -/
-def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) (nclasses : Nat := 0)
+def readShimBatchRR (hs : Array ShimProc) (k batch flat : Nat) (nclasses : Nat := 0)
     (imgBuf : Option (IO.Ref ByteArray) := none) : IO (ByteArray × ByteArray) := do
   match hs[k % hs.size]? with
-  | some h => readShimBatch h batch flat nclasses imgBuf
+  | some p => readShimBatch p.h batch flat nclasses imgBuf
   | none   => throw <| IO.userError "readShimBatchRR: no shim producers were spawned"
 
 
@@ -921,7 +942,8 @@ private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0)
     -- (`training=False` ⇒ no RRC, no AutoAugment/RandAugment, no erasing), so the two nets whose
     -- pipelines differ only in TRAIN augmentation drain an identical val set — but the crop rule
     -- itself is per-config (`testCropRatio`), so the script still has to be the net's own.
-    let h ← spawnShim net.shimScript "validation" vb flat 0
+    let vp ← spawnShim net.shimScript "validation" vb flat 0
+    let h := vp.h
     IO.println "  imagenet: draining the val split into RAM (~30 GB, one time)…"
     -- Reserve the final size and append each batch as it lands, rather than collecting all
     -- ~196 chunks and folding `(· ++ ·)` over them at the end. The fold cost ~45 GB of pure
@@ -953,6 +975,11 @@ scoring cannot see a zero-padded batch. This run's eval denominator is {n}, not 
         else
           evI := evI ++ i; evL := evL ++ l; n := n + rows
     IO.println s!"  imagenet: val ready — {n} images, {evI.size / 1048576} MB"
+    -- ⚠ REAP IT. The val stream ends by itself, but `LEAN_MLIR_EVAL_BATCHSTATS` can stop the drain
+    -- early with the child still writing, so kill THEN wait rather than waiting on a live process.
+    -- Without this the producer stayed a `<defunct>` python for the life of every ImageNet run.
+    try vp.child.kill catch _ => pure ()
+    let _ ← vp.child.wait
     -- ⭐ ANNOUNCED, because it is the denominator every top-1 from this run divides by, and it
     -- moved on 2026-08-14 (49,920 → 50,000). A number quoted against the old denominator is not
     -- comparable to one quoted against timm's, and nothing else in the output says which was used.
@@ -1834,7 +1861,10 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- stream to one constant batch. Both are deterministic, which is all that gate's bit-identity
   -- verdict needs, but a constant batch is less numerically varied, so re-confirm the FAULT
   -- control fires before trusting a green from it.
-  let imgStreams : Array IO.FS.Handle ←
+  -- The base seed for the producers. Bound rather than read inline because a REPLACEMENT loader
+  -- has to derive its own from it (`shimSeed + slot + generation × n`).
+  let shimSeed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
+  let mut imgStreams : Array ShimProc ←
     if net.data == .imagenet && !synth then
       -- ⚠⚠ `net.d0`, NOT `3 * 224 * 224`. This is the width the TRAIN shim is *told* to emit, and
       -- it is the SECOND of two hardcoded 224s that had to fall for the 160 net — the other was
@@ -1844,9 +1874,23 @@ re-seeded from the running stats over the first 100 steps, not restored"
       -- ▶ INERT for every incumbent — `LeanMlir/VerifiedNets.lean`'s closing `#guard` block proves
       -- `net.d0 == 3*224*224` for all six 224 ImageNet nets, so this substitutes equal for equal
       -- there and changes only `resnet50in160`.
-      spawnShimSharded net.shimScript "train" gbs net.d0
-        (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1) shimWorkers shimNC
+      spawnShimSharded net.shimScript "train" gbs net.d0 shimSeed shimWorkers shimNC
     else pure #[]
+  -- ▶ `LEAN_MLIR_SHIM_RESPAWN_EPOCHS=E` (default 0 = off): every E epochs ONE producer is killed
+  -- and replaced, cycling through the slots, so no loader lives past `E × n` epochs and at most one
+  -- is ever cold. It exists because a single tf.data loader degrades after hours of uptime and the
+  -- round-robin read then runs the whole job at its pace — 690 → 1,250 s/epoch on the 350-epoch
+  -- EfficientNet run, cleared instantly by a restart (`planning/shim_loader_health_and_resume_tests.md`).
+  -- ⚠ This is the BLOCKING form: the replacement is spawned at the epoch boundary and the trainer
+  -- waits out its startup (~30 s, i.e. ~0.4% at E=10). §3d of that doc has the zero-downtime
+  -- variant — spawn in the background, swap when its preamble lands — which is worth building only
+  -- if this proves too coarse.
+  -- ⚠ ANNOUNCED, like every other knob here: a run whose producers are being replaced under it and
+  -- says so nowhere is indistinguishable in the log from one that is not.
+  let respawnEvery := ((← IO.getEnv "LEAN_MLIR_SHIM_RESPAWN_EPOCHS").bind (·.toNat?)).getD 0
+  if respawnEvery > 0 && !imgStreams.isEmpty then
+    IO.println s!"  ▸ SHIM RESPAWN: one producer every {respawnEvery} epoch(s), round-robin over \
+{imgStreams.size} — no loader lives past {respawnEvery * imgStreams.size} epochs."
   if synth && net.data == .imagenet then
     -- ⚠ ANNOUNCED, because the previous behaviour was silent and that is the whole defect: a
     -- number measured this way is NOT a step time, and nothing else in the log would say so.
@@ -1994,6 +2038,9 @@ gate's control, not a configuration.")
   -- true for every slot on the first step, and for the tail slots at the end of the run.
   let mut inflight : Array (Option (Task (Except IO.Error (ByteArray × ByteArray)))) :=
     Array.replicate (max 1 imgStreams.size) none
+  -- Bumped once per respawn; it picks the slot (round-robin) and seeds the replacement, so two
+  -- generations of the same shard never draw the same augmentation sequence.
+  let mut shimGen : Nat := 0
   for ep in [startEpoch:nEpochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
@@ -2491,6 +2538,36 @@ gate's control, not a configuration.")
       (← IO.getStdout).flush
     writeBinAtomic ckptPath thetamv
     writeBinAtomic epPath (toString (ep + 1)).toUTF8
+    -- ▶ The staggered loader respawn (see `respawnEvery` above). Placed AFTER the checkpoint so a
+    -- crash during a respawn costs nothing, and at an epoch boundary so the discarded batch below
+    -- is the only data cost.
+    -- ⚠ `ep + 1 < nEpochs`: without it the last epoch spawns a replacement and the process exits
+    -- on top of it — a python that starts, builds a tf.data pipeline and is killed seconds later.
+    -- Caught by the smoke test, which respawned generation 3 after its final epoch.
+    if respawnEvery > 0 && !imgStreams.isEmpty && ep + 1 < nEpochs
+        && (ep + 1) % respawnEvery == 0 then
+      let slot := shimGen % imgStreams.size
+      -- ⚠⚠ CONSUME THE OUTSTANDING READ FIRST. The prefetch keeps one read in flight per producer,
+      -- and killing the child closes the pipe under it — the task would surface a torn read at the
+      -- next step. Its batch is dropped on the floor; the step it was issued for is re-read from
+      -- the replacement, because the refill loop issues into whichever slot is empty. One batch of
+      -- data skipped per respawn, on a stream that reshuffles and never ends.
+      if let some t := inflight[slot]! then
+        let _ ← IO.wait t
+      inflight := inflight.set! slot none
+      -- ⚠ `arr[i]!` would want `Inhabited ShimProc`, and a live child process has no sensible
+      -- default, so the slot is taken with `[i]?` and the replacement happens inside the `some`.
+      if let some old := imgStreams[slot]? then
+        try old.child.kill catch _ => pure ()
+        let _ ← old.child.wait
+        shimGen := shimGen + 1
+        let newSeed := shimSeed + slot + shimGen * imgStreams.size
+        let fresh ← spawnShim net.shimScript "train" gbs net.d0 newSeed
+                      (some (slot, imgStreams.size)) shimNC
+        imgStreams := imgStreams.set! slot fresh
+        IO.println s!"  ▸ shim respawn: producer {slot} of {imgStreams.size} replaced after epoch \
+{ep + 1} (generation {shimGen}, seed {newSeed})"
+        (← IO.getStdout).flush
   -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3). Dumps the whole [θ|m|v] blob, so
   -- the Adam moments are compared too, not just the weights — a moment buffer
   -- that silently failed to thread would still let θ look plausible.

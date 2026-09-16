@@ -64,6 +64,22 @@ trap restore EXIT INT TERM
 for f in "$CKPT" "$CKPT.epoch"; do [ -f "$f" ] && cp -p "$f" "$SAVED/"; done
 [ -f "$SAVED/$(basename "$CKPT")" ] && echo "   (stashed an existing $CKPT — restored on exit)"
 
+# Box selection, exactly as scripts/jobs/*.conf do it (6d3cb267): ares' pinned `.venv` + the
+# xla_cuda12 plugin if that is what exists, else the 4x 3060 box's /home/skoonce/.venv-cuda +
+# xla_cuda13 — which also needs SHIM_PYTHON, because that box's .venv/bin/python3 is a WRAPPER that
+# execs a retired ROCm venv with no usable jax.
+# ⛔ This script hardcoded ares' plugin path and died at step 0 on the 3060 box —
+# "dlopen(...xla_cuda12...): No such file or directory", then "iree_ffi_session_create failed" —
+# so the one gate covering the shim read path could not run on the box doing the ImageNet runs.
+ARES_PLUG=".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so"
+if [ -f "$ARES_PLUG" ]; then
+  BOX_PLUG="$ARES_PLUG"; BOX_SHIMPY=()
+else
+  BOX_PLUG="/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so"
+  BOX_SHIMPY=(SHIM_PYTHON="/home/skoonce/.venv-cuda/bin/python3")
+fi
+[ -f "$BOX_PLUG" ] || { echo "✗ no PJRT plugin found (looked for $BOX_PLUG)"; exit 2; }
+
 echo "── depth-1 shim prefetch: bit-identity gate ──"
 echo "   net      resnet34in/$VARIANT, ${REPLICAS} x bs${BATCH} on devices $DEVS"
 echo "   window   $EPOCHS epoch(s) x $STEPS steps = $((EPOCHS * STEPS)) steps"
@@ -78,6 +94,7 @@ if [ ! -f "$DET/libpjrt_ffi.so" ] || [ ffi/pjrt_ffi.c -nt "$DET/libpjrt_ffi.so" 
     echo "   ✗ det_shim.sh failed:"; cat "$OUT/det_shim.log"; exit 2; }
 fi
 echo "   shim     $DET/libpjrt_ffi.so (autotuning OFF — correctness instrument, not a timing one)"
+echo "   plugin   $BOX_PLUG"
 
 run () {
   local tag=$1 pf=$2
@@ -94,7 +111,8 @@ run () {
     LD_LIBRARY_PATH="$DET" \
     CUDA_VISIBLE_DEVICES="$DEVS" \
     HIP_VISIBLE_DEVICES="$DEVS" \
-    PJRT_PLUGIN=".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so" \
+    PJRT_PLUGIN="$BOX_PLUG" \
+    "${BOX_SHIMPY[@]}" \
     PJRT_REPLICAS="$REPLICAS" \
     LEAN_MLIR_REPLICAS="$REPLICAS" \
     LEAN_MLIR_VARIANT="$VARIANT" \

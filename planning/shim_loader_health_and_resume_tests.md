@@ -125,10 +125,35 @@ nondeterministic with determinism off. ⚠ Must stay strict round-robin under `S
 `tests/prefetch_tie.sh`, `scripts/residency_gate.sh`, `scripts/mixup_gate.py` and
 `scripts/shim_wiring_gate.py` replay streams.
 
-### 3b. Level 1 — staggered periodic respawn
+### 3b. Level 1 — staggered periodic respawn ✅ BUILT 2026-09-16
 Every `E` epochs replace ONE loader, cycling through the handles, so none lives longer than `4E`
-epochs and at most one is ever cold. Knob: `SHIM_RESPAWN_EPOCHS=E`, default off, announced in the
-banner.
+epochs and at most one is ever cold. Knob: **`LEAN_MLIR_SHIM_RESPAWN_EPOCHS=E`**, default 0 = off,
+announced in the banner.
+
+**What landed** (`LeanMlir/VerifiedTrain.lean`): the §3e prerequisites — `ShimProc` (child + pipe),
+`spawnShim`/`spawnShimSharded` returning it, `readShimBatchRR` indexing `.h`, and the validation
+shim now killed and reaped instead of left as a `<defunct>` python — plus the respawn itself at the
+epoch boundary, after the checkpoint is on disk.
+
+⚠ **The BLOCKING form, not §3d's zero-downtime swap.** The replacement is spawned at the boundary
+and the trainer waits out its startup. Measured on the smoke test: **~3 s per respawn**, an order
+cheaper than the ~30 s budgeted, because `spawnShim` only waits for the 16-byte preamble rather
+than the first batch. At `E=10` that is ~0.05%. ▶ §3d is worth building only if that changes.
+
+**Evidence.**
+* Inert when off: `tests/prefetch_tie.sh` — control 0 differing bytes, verdict 0 differing bytes
+  over 24 steps across an epoch boundary, i.e. the refactor moved no bit of trained state.
+  ⛔ That gate hardcoded ares' `xla_cuda12` plugin path and could not run on the 3060 box at all
+  (`dlopen … No such file or directory` at step 0); it is box-aware now, like the job confs.
+* Works when on: R34 bf16, `LEAN_MLIR_G2_STEPS=12 LEAN_MLIR_MAX_EPOCHS=3
+  LEAN_MLIR_SHIM_RESPAWN_EPOCHS=1` — banner announced, slots 0→1→2 cycled after epochs 1/2/3,
+  seeds 5/10/15 (`shimSeed + slot + gen×n`, so no two generations of a shard repeat an
+  augmentation sequence), stepping continued across each swap, **zero shim children left behind**.
+* ⚠ The smoke test also caught the respawn firing after the FINAL epoch — spawn a loader, exit on
+  top of it. Fixed with `ep + 1 < nEpochs`.
+
+⚠ **Still unmeasured: whether it actually prevents the slowdown.** It is a mitigation aimed at a
+cause nobody has identified (§2 is still the experiment that would). The R34 bf16 run is the test.
 
 ### 3c. Level 2 — lag-triggered respawn
 Keep a rolling p50 of issue→ready latency per handle; the prefetch already timestamps both
