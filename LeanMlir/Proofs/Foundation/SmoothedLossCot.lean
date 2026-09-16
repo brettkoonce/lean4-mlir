@@ -68,9 +68,9 @@ theorem softCE_oneHot (K : Nat) (z : Vec K) (label : Fin K) :
     softCE K (oneHot K label) z = crossEntropy K z label := by
   simp only [softCE, oneHot]
   rw [Finset.sum_eq_single label
-      (fun k _ hk => by rw [if_neg hk]; ring)
+      (fun k _ hk => by rw [ite_eq_right hk]; ring)
       (fun h => absurd (Finset.mem_univ label) h)]
-  rw [if_pos rfl, one_mul]
+  rw [ite_eq_left rfl, one_mul]
 
 /-- **The soft-target CE gradient**, with NO hypothesis on `t`:
     `∂/∂z_j (−Σ_k t_k log p_k) = (Σ_k t_k)·p_j − t_j`. Each summand is `softmaxCE_grad`; the sum
@@ -107,9 +107,9 @@ theorem softCE_grad (K : Nat) (t z : Vec K) (j : Fin K) :
   simp only [hterm, oneHot, mul_sub, mul_ite, mul_one, mul_zero]
   rw [Finset.sum_sub_distrib, ← Finset.sum_mul,
       Finset.sum_eq_single j
-        (fun k _ hk => if_neg (fun h : j = k => hk h.symm))
+        (fun k _ hk => ite_eq_right (fun h : j = k => hk h.symm))
         (fun h => absurd (Finset.mem_univ j) h),
-      if_pos rfl]
+      ite_eq_left rfl]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Label smoothing as a map on targets

@@ -106,8 +106,8 @@ theorem mc_mean_lower_bound (ν : Measure E) [IsProbabilityMeasure ν]
   have hsub : {ω : Fin N → E | N * t ≤ ∑ i, X i ω}ᶜ
       ⊆ {ω : Fin N → E | (∑ i, f (ω i)) / N - t ≤ p} := by
     intro ω hω
-    simp only [Set.mem_compl_iff, Set.mem_setOf_eq, not_le] at hω
-    simp only [Set.mem_setOf_eq]
+    simp only [Set.mem_compl_iff, Set.mem_ofPred_eq, not_le] at hω
+    simp only [Set.mem_ofPred_eq]
     have hsum : (∑ i, X i ω) = (∑ i, f (ω i)) - N * p := by
       rw [hX]
       rw [Finset.sum_sub_distrib]
@@ -139,7 +139,7 @@ end MCBound
 lemma stdNormalQuantile_of_nonpos {q : ℝ} (hq : q ≤ 0) : stdNormalQuantile q = 0 := by
   have hset : {s : ℝ | stdNormalCDF s < q} = ∅ := by
     ext s
-    simp only [Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false, not_lt]
+    simp only [Set.mem_ofPred_eq, Set.mem_empty_iff_false, iff_false, not_lt]
     exact hq.trans (stdNormalCDF_pos s).le
   rw [stdNormalQuantile, hset, Real.sSup_empty]
 
@@ -191,7 +191,7 @@ theorem smoothing_mc_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
               (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0) ∂γ)
                 < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0) ∂γ} := by
     intro ω hω
-    simp only [Set.mem_setOf_eq] at hω ⊢
+    simp only [Set.mem_ofPred_eq] at hω ⊢
     intro δ hδ j hj
     set q : ℝ := (∑ i, f (ω i)) / N - t with hq
     have hδq : ‖δ‖ < σ * stdNormalQuantile q := hδ

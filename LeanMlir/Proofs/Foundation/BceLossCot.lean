@@ -173,7 +173,7 @@ theorem bceLogits_grad (K : Nat) (t z : Vec K) (j : Fin K) :
                 k z' kk) from rfl, hsum]
   simp only [hterm]
   rw [Finset.sum_ite_eq (Finset.univ : Finset (Fin K)) j
-        (fun k => sigmoidScalar (z k) - t k), if_pos (Finset.mem_univ j)]
+        (fun k => sigmoidScalar (z k) - t k), ite_eq_left (Finset.mem_univ j)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The emitted graph

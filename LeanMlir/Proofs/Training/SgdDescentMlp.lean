@@ -55,17 +55,17 @@ theorem relu_entry_lipschitz (n : Nat) (u v : Vec n) (k : Fin n) :
     |relu n u k - relu n v k| ≤ |u k - v k| := by
   simp only [relu]
   by_cases hu : u k > 0 <;> by_cases hv : v k > 0
-  · rw [if_pos hu, if_pos hv]
-  · rw [if_pos hu, if_neg hv]
+  · rw [ite_eq_left hu, ite_eq_left hv]
+  · rw [ite_eq_left hu, ite_eq_right hv]
     have hv' : v k ≤ 0 := not_lt.mp hv
     rw [sub_zero, abs_of_pos hu, abs_of_pos (by linarith : (0:ℝ) < u k - v k)]
     linarith
-  · rw [if_neg hu, if_pos hv]
+  · rw [ite_eq_right hu, ite_eq_left hv]
     have hu' : u k ≤ 0 := not_lt.mp hu
     rw [zero_sub, abs_neg, abs_of_pos hv,
       abs_of_neg (by linarith : u k - v k < 0)]
     linarith
-  · rw [if_neg hu, if_neg hv]
+  · rw [ite_eq_right hu, ite_eq_right hv]
     simp
 
 /-- **Margins freeze signs.** If a value drifts by at most `c` and sits at
@@ -413,12 +413,12 @@ theorem mlp_hidden_loss_grad_lipschitz {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
         then (1:ℝ) else 0) =
       (if dense (Mat.unflatten v) b₁ a₀ j > 0 then (1:ℝ) else 0) := by
     by_cases hp : dense (Mat.unflatten v) b₁ a₀ j > 0
-    · rw [if_pos hp, if_pos ((hstab j).2.mpr hp)]
-    · rw [if_neg hp, if_neg (fun h => hp ((hstab j).2.mp h))]
+    · rw [ite_eq_left hp, ite_eq_left ((hstab j).2.mpr hp)]
+    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab j).2.mp h))]
   rw [hmask]
   by_cases hp : dense (Mat.unflatten v) b₁ a₀ j > 0
   · -- live mask: the drift is `a₀ᵢ` times the contracted softmax drift
-    rw [if_pos hp]
+    rw [ite_eq_left hp]
     have hcollapse : a₀ i * ((1:ℝ) *
           ∑ k, W₂ j k *
             (softmax d₃ (dense W₂ b₂
@@ -511,7 +511,7 @@ theorem mlp_hidden_loss_grad_lipschitz {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
       _ = (2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 / (1 - 2 * (w₂ * (a * D)))) *
             (t * D) := by ring
   · -- dead mask: both gradients vanish
-    rw [if_neg hp]
+    rw [ite_eq_right hp]
     simp only [zero_mul, mul_zero, sub_self, abs_zero]
     have hC0 : 0 ≤ 2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 /
         (1 - 2 * (w₂ * (a * D))) :=
@@ -1026,8 +1026,8 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
         then (1:ℝ) else 0) =
       (if dense (Mat.unflatten v) b₀ x j > 0 then (1:ℝ) else 0) := by
     by_cases hp : dense (Mat.unflatten v) b₀ x j > 0
-    · rw [if_pos hp, if_pos ((hstab0 j).2.mpr hp)]
-    · rw [if_neg hp, if_neg (fun h => hp ((hstab0 j).2.mp h))]
+    · rw [ite_eq_left hp, ite_eq_left ((hstab0 j).2.mpr hp)]
+    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab0 j).2.mp h))]
   have hmask1 : ∀ l, (if dense W₁ b₁
         (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x)) l > 0
         then (1:ℝ) else 0) =
@@ -1035,13 +1035,13 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
         then (1:ℝ) else 0) := by
     intro l
     by_cases hp : dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-    · rw [if_pos hp, if_pos ((hstab1 l).2.mpr hp)]
-    · rw [if_neg hp, if_neg (fun h => hp ((hstab1 l).2.mp h))]
+    · rw [ite_eq_left hp, ite_eq_left ((hstab1 l).2.mpr hp)]
+    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab1 l).2.mp h))]
   rw [hmask0]
   simp only [hmask1]
   by_cases hp : dense (Mat.unflatten v) b₀ x j > 0
   · -- live outer mask
-    rw [if_pos hp]
+    rw [ite_eq_left hp]
     have hcollapse : x i * ((1:ℝ) *
           ∑ l, W₁ j l *
             ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
@@ -1208,7 +1208,7 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
             (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))) * (t * D) := by
           ring
   · -- dead outer mask: both gradients vanish
-    rw [if_neg hp]
+    rw [ite_eq_right hp]
     simp only [zero_mul, mul_zero, sub_self, abs_zero]
     have hC0 : 0 ≤ 2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
         (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) :=
@@ -1500,8 +1500,8 @@ theorem mlp_w1_grad_close {d₁ d₂ d₃ : Nat} (M : FloatModel)
         (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
     simp only [oneHot]
     by_cases h : k = label
-    · rw [if_pos h, abs_le]; constructor <;> linarith
-    · rw [if_neg h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
   -- the masked W₂ᵀ contraction within `layerBudget … cotErr`
   have hcot1 := M.cot_step_close W₂ (M.dense W₁ b₁ a₀) (Proofs.dense W₁ b₁ a₀)
     (M.softmaxCECotF fexp (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀))) label)
@@ -1581,10 +1581,10 @@ theorem mlp_hidden_loss_gradAt_reluMask {d₁ d₂ d₃ : Nat}
   congr 1
   rw [FloatModel.reluMask]
   by_cases h : dense W₁ b₁ a₀ j > 0
-  · rw [if_pos h, if_pos h, one_mul]
+  · rw [ite_eq_left h, ite_eq_left h, one_mul]
     simp only [dense, add_zero]
     exact Finset.sum_congr rfl fun k _ => mul_comm _ _
-  · rw [if_neg h, if_neg h, zero_mul]
+  · rw [ite_eq_right h, ite_eq_right h, zero_mul]
 
 /-- **One binary32 SGD step on the MLP's hidden weights provably decreases
     the cross-entropy loss — with NO abstract gradient-accuracy parameter.**
@@ -1757,11 +1757,11 @@ theorem reluMask_dense_transpose_eq {p n : Nat} (z : Vec p) (W : Mat p n)
       FloatModel.reluMask z (dense (fun j i' => W i' j) (fun _ => 0) c) l := by
   rw [FloatModel.reluMask]
   by_cases h : z l > 0
-  · rw [if_pos h, if_pos h, one_mul]
+  · rw [ite_eq_left h, ite_eq_left h, one_mul]
     show (∑ k, W l k * c k) = (∑ k, c k * W l k) + (0:ℝ)
     rw [add_zero]
     exact Finset.sum_congr rfl fun k _ => mul_comm _ _
-  · rw [if_neg h, if_neg h, zero_mul]
+  · rw [ite_eq_right h, ite_eq_right h, zero_mul]
 
 /-- **The binary32 input-layer (`W₀`) gradient of the MLP loss**, exactly as
     the rendered trainer computes it (`x` the exact input): `fl(xᵢ · c̃₀ⱼ)`
@@ -1942,8 +1942,8 @@ theorem mlp_w0_grad_close {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
         (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
     simp only [oneHot]
     by_cases h : k = label
-    · rw [if_pos h, abs_le]; constructor <;> linarith
-    · rw [if_neg h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
   -- first masked W₂ᵀ contraction: layer-1 cotangent (under the layer-1 margin)
   have hcot1 : ∀ l, |reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
         (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)

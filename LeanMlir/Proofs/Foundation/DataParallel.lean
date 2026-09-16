@@ -218,14 +218,14 @@ theorem lossGrad_smul_coord {P : Nat} (c : ℝ) (j : Fin P) (θ : Vec P) (i : Fi
   rw [pdiv_const_smul c (fun θ' : Vec P => fun _ : Fin 1 => θ' j) θ hlin i 0,
       pdiv_reindex (fun _ : Fin 1 => j) θ i 0]
   by_cases h : i = j
-  · rw [if_pos h, if_pos h, mul_one]
-  · rw [if_neg h, if_neg h, mul_zero]
+  · rw [ite_eq_left h, ite_eq_left h, mul_one]
+  · rw [ite_eq_right h, ite_eq_right h, mul_zero]
 
 /-- `bnToyLoss`'s gradient is the squared slice mean, at every coordinate of `Vec 1`. -/
 theorem lossGrad_bnToyLoss {N : Nat} (xs : Fin N → ℝ) (θ : Vec 1) (i : Fin 1) :
     lossGrad (bnToyLoss xs) θ i = (sliceMean xs) ^ 2 := by
   rw [show bnToyLoss xs = (fun θ' : Vec 1 => (sliceMean xs) ^ 2 * θ' 0) from rfl,
-      lossGrad_smul_coord, if_pos (Subsingleton.elim i 0)]
+      lossGrad_smul_coord, ite_eq_left (Subsingleton.elim i 0)]
 
 /-- ⛔⛔ **With batch coupling the previous section is FALSE, and here is the witness.**
     Two replicas, one example each — slices `{0}` and `{2}`, global batch `{0, 2}`. The

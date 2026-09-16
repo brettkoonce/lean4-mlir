@@ -92,7 +92,7 @@ lemma measurable_argmaxNet {E : Type*} [MeasurableSpace E] {k : ℕ}
           ∩ ⋂ b : Fin (k + 1), {x | (∀ j, f x j ≤ f x b) → c ≤ b}) := by
     ext x
     simp only [Set.mem_preimage, Set.mem_singleton_iff, Set.mem_inter_iff,
-      Set.mem_setOf_eq, Set.mem_iInter]
+      Set.mem_ofPred_eq, Set.mem_iInter]
     constructor
     · intro hx
       subst hx
@@ -106,7 +106,7 @@ lemma measurable_argmaxNet {E : Type*} [MeasurableSpace E] {k : ℕ}
   have hmaxSet : ∀ b : Fin (k + 1), MeasurableSet {x : E | ∀ j, f x j ≤ f x b} := by
     intro b
     have : {x : E | ∀ j, f x j ≤ f x b} = ⋂ j, {x | f x j ≤ f x b} :=
-      Set.setOf_forall _
+      Set.ofPred_forall _
     rw [this]
     exact MeasurableSet.iInter fun j => measurableSet_le (hf j) (hf b)
   rw [hfiber]
@@ -118,7 +118,7 @@ lemma measurable_argmaxNet {E : Type*} [MeasurableSpace E] {k : ℕ}
   · have : {x : E | (∀ j, f x j ≤ f x b) → c ≤ b}
         = {x | ∀ j, f x j ≤ f x b}ᶜ := by
       ext x
-      simp only [Set.mem_setOf_eq, Set.mem_compl_iff]
+      simp only [Set.mem_ofPred_eq, Set.mem_compl_iff]
       exact ⟨fun h hx => hcb (h hx), fun h hx => absurd hx h⟩
     rw [this]
     exact (hmaxSet b).compl
@@ -132,7 +132,7 @@ lemma isOpen_strictRegion {E : Type*} [TopologicalSpace E] {k : ℕ}
   have hrw : {x | ∀ j, j ≠ c → f x j < f x c}
       = ⋂ j : Fin (k + 1), (if j = c then Set.univ else {x | f x j < f x c}) := by
     ext x
-    simp only [Set.mem_setOf_eq, Set.mem_iInter]
+    simp only [Set.mem_ofPred_eq, Set.mem_iInter]
     constructor
     · intro h j
       by_cases hj : j = c
@@ -249,13 +249,13 @@ theorem argmaxNet_smoothProb_mem_Ioo {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
       · subst h
         simp only [hc']
         exact one_ne_zero
-      · simp only [hc', if_neg h]
+      · simp only [hc', ite_eq_right h]
         exact Ne.symm h
     have hdisj : Disjoint A ((fun z => x + σ • z) ⁻¹' S c') := by
       rw [Set.disjoint_right]
       intro z hz
       have : C (x + σ • z) = c' := hSsub c' hz
-      simp only [hA_def, Set.mem_setOf_eq, this]
+      simp only [hA_def, Set.mem_ofPred_eq, this]
       exact fun h => hcc' h
     have hpos' : 0 < γ.real ((fun z => x + σ • z) ⁻¹' S c') :=
       ENNReal.toReal_pos ((hSopen c').measure_pos γ (hSne c')).ne'

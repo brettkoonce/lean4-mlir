@@ -115,7 +115,7 @@ theorem pdiv_id {n : Nat} (x : Vec n) (i j : Fin n) :
   rw [basisVec_apply]
   rcases eq_or_ne j i with h | h
   · subst h; simp
-  · rw [if_neg h, if_neg (fun h' => h h'.symm)]
+  · rw [ite_eq_right h, ite_eq_right (fun h' => h h'.symm)]
 
 /-- **Constant function Jacobian** — zero. -/
 theorem pdiv_const {m n : Nat} (c : Vec n) (x : Vec m)
@@ -140,7 +140,7 @@ theorem pdiv_reindex {a b : Nat} (σ : Fin b → Fin a) (x : Vec a)
   rw [basisVec_apply]
   rcases eq_or_ne (σ j) i with h | h
   · subst h; simp
-  · rw [if_neg h, if_neg (fun h' => h h'.symm)]
+  · rw [ite_eq_right h, ite_eq_right (fun h' => h h'.symm)]
 
 /-- **Product rule** for `pdiv`. `Vec n` is a normed algebra over ℝ
     via `Pi.normedAlgebra`, so `fderiv_mul` applies directly to the
@@ -236,8 +236,8 @@ theorem pdiv_coordFun {K : Nat} (f : ℝ → ℝ) (f' : ℝ) (k : Fin K) (z : Ve
   show basisVec j k * f' = _
   rw [basisVec_apply]
   by_cases h : j = k
-  · rw [if_pos h, if_pos h.symm, one_mul]
-  · rw [if_neg h, if_neg (fun h' : k = j => h h'.symm), zero_mul]
+  · rw [ite_eq_left h, ite_eq_left h.symm, one_mul]
+  · rw [ite_eq_right h, ite_eq_right (fun h' : k = j => h h'.symm), zero_mul]
 
 /-- **Finset-sum rule** — derived from `pdiv_add` and `pdiv_const` by
     induction on the Finset. Linearity of the derivative extended to
@@ -536,7 +536,7 @@ theorem pdivMat_id {a b : Nat} (A : Mat a b)
   · obtain ⟨hik, hjl⟩ := h
     subst hik; subst hjl
     simp
-  · rw [if_neg h, if_neg]
+  · rw [ite_eq_right h, ite_eq_right]
     intro heq
     apply h
     have := finProdFinEquiv.injective heq
@@ -803,17 +803,17 @@ theorem pdivMat_matmul_left_const {m p q : Nat} (C : Mat m p) (B : Mat p q)
         apply hs
         have := finProdFinEquiv.injective heq
         exact ⟨(Prod.mk.inj this).1.symm, (Prod.mk.inj this).2.symm⟩
-      rw [if_neg hne]; simp [hs]
+      rw [ite_eq_right hne]; simp [hs]
   simp_rw [hkey]
   -- Goal: ∑ s, (if s = i ∧ l = j then C k s else 0) = if l = j then C k i else 0
   by_cases hlj : l = j
-  · rw [if_pos hlj]
+  · rw [ite_eq_left hlj]
     -- Each `s = i ∧ l = j` term reduces to `s = i` (given hlj).
     simp_rw [show ∀ s : Fin p, (s = i ∧ l = j) ↔ (s = i) from
       fun s => ⟨And.left, fun h => ⟨h, hlj⟩⟩]
     rw [Finset.sum_ite_eq' Finset.univ i (fun s => C k s)]
     simp
-  · rw [if_neg hlj]
+  · rw [ite_eq_right hlj]
     -- All terms false; sum is 0.
     simp_rw [show ∀ s : Fin p, (s = i ∧ l = j) ↔ False from
       fun s => ⟨fun h => hlj h.2, False.elim⟩]
@@ -903,15 +903,15 @@ theorem pdivMat_matmul_right_const {m p q : Nat} (A : Mat m p) (D : Mat p q)
         apply hs
         have := finProdFinEquiv.injective heq
         exact ⟨(Prod.mk.inj this).2.symm, (Prod.mk.inj this).1⟩
-      rw [if_neg hne]; simp [hs]
+      rw [ite_eq_right hne]; simp [hs]
   simp_rw [hkey]
   by_cases hik : i = k
-  · rw [if_pos hik]
+  · rw [ite_eq_left hik]
     simp_rw [show ∀ s : Fin p, (s = j ∧ i = k) ↔ (s = j) from
       fun s => ⟨And.left, fun h => ⟨h, hik⟩⟩]
     rw [Finset.sum_ite_eq' Finset.univ j (fun s => D s l)]
     simp
-  · rw [if_neg hik]
+  · rw [ite_eq_right hik]
     simp_rw [show ∀ s : Fin p, (s = j ∧ i = k) ↔ False from
       fun s => ⟨fun h => hik h.2, False.elim⟩]
     simp
@@ -989,24 +989,24 @@ theorem pdivMat_rowIndep {m n p : Nat} (g : Vec n → Vec p)
   simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
   by_cases hik : i = k
   · subst hik
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     have h_basis : (rowProj i) (basisVec (finProdFinEquiv (i, j))) = basisVec j := by
       funext j'
       show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (i, j')) = basisVec j j'
       simp only [basisVec_apply]
       by_cases hjj : j' = j
       · subst hjj; simp
-      · rw [if_neg hjj, if_neg ?_]
+      · rw [ite_eq_right hjj, ite_eq_right ?_]
         intro heq
         apply hjj
         exact (Prod.mk.inj (finProdFinEquiv.injective heq.symm)).2.symm
     rw [h_basis]
-  · rw [if_neg hik]
+  · rw [ite_eq_right hik]
     have h_basis : (rowProj k) (basisVec (finProdFinEquiv (i, j))) = (0 : Vec n) := by
       funext j'
       show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (k, j')) = (0 : ℝ)
       simp only [basisVec_apply]
-      rw [if_neg]
+      rw [ite_eq_right]
       intro heq
       apply hik
       exact (Prod.mk.inj (finProdFinEquiv.injective heq)).1.symm
@@ -1183,7 +1183,7 @@ theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_
   -- Compute (slabProj h_l) (basisVec (encode(i, encode(h_j, j')))) — one of two cases.
   by_cases hhh : h_j = h_l
   · subst hhh
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     have h_basis : (slabProj h_j) (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) =
                    (basisVec (finProdFinEquiv (i, j')) : Vec (n * d_in)) := by
       funext idx
@@ -1195,7 +1195,7 @@ theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_
       by_cases hii : idx = finProdFinEquiv (i, j')
       · subst hii
         simp [Equiv.symm_apply_apply]
-      · rw [if_neg hii, if_neg]
+      · rw [ite_eq_right hii, ite_eq_right]
         intro heq
         apply hii
         have step1 := finProdFinEquiv.injective heq
@@ -1204,7 +1204,7 @@ theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_
               (Equiv.apply_symm_apply _ _).symm]
         exact congrArg finProdFinEquiv (Prod.ext (Prod.mk.inj step1).1 (Prod.mk.inj h_inner).2)
     rw [h_basis]
-  · rw [if_neg hhh]
+  · rw [ite_eq_right hhh]
     have h_basis : (slabProj h_l) (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) =
                    (0 : Vec (n * d_in)) := by
       funext idx
@@ -1213,7 +1213,7 @@ theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_
                              finProdFinEquiv (h_l, (finProdFinEquiv.symm idx).2))) =
            (0 : ℝ)
       simp only [basisVec_apply]
-      rw [if_neg]
+      rw [ite_eq_right]
       intro heq
       apply hhh
       have step1 := finProdFinEquiv.injective heq
@@ -1397,7 +1397,7 @@ theorem pdivMat_scalarScale {m n : Nat} (s : ℝ) (A : Mat m n)
       apply hij
       have := finProdFinEquiv.injective heq
       exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
-    rw [if_neg hij, if_neg hne]
+    rw [ite_eq_right hij, ite_eq_right hne]
 
 /-- **Transpose Jacobian** — theorem, derived from `pdiv_reindex` via
     the flatten bijection.  `∂A^T_{kl} / ∂A_{ij} = δ_{l=i, k=j}`. -/
@@ -1435,7 +1435,7 @@ theorem pdivMat_transpose {m n : Nat} (A : Mat m n)
       apply h
       have := finProdFinEquiv.injective heq
       exact ⟨(Prod.mk.inj this).2, (Prod.mk.inj this).1⟩
-    rw [if_neg hne, if_neg h]
+    rw [ite_eq_right hne, ite_eq_right h]
 
 /-- **Matmul with right factor varying, left factor fixed** — proved.
 
@@ -1932,7 +1932,7 @@ theorem pdiv3_id {c h w : Nat} (x : Tensor3 c h w)
   by_cases h : ci = co ∧ hi = ho ∧ wi = wo
   · obtain ⟨hc, hh, hw⟩ := h
     subst hc; subst hh; subst hw; simp
-  · rw [if_neg h, if_neg]
+  · rw [ite_eq_right h, ite_eq_right]
     intro heq
     apply h
     -- heq : finProdFinEquiv (fPF (ci, hi), wi) = finProdFinEquiv (fPF (co, ho), wo)

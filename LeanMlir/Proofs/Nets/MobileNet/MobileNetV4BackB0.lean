@@ -608,21 +608,21 @@ noncomputable def mnv4PostDWSlot (N : Nat) {c h w kH kW : Nat} (postDWk : Nat)
 
 @[simp] theorem mnv4PreDWSlot_zero (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PreDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := if_pos rfl
+    mnv4PreDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := ite_eq_left rfl
 
 @[simp] theorem mnv4PreDWSlot_succ (N : Nat) {c h w kH kW : Nat} (k : Nat)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
     mnv4PreDWSlot (h := h) (w := w) N (k + 1) W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
-  if_neg (Nat.succ_ne_zero k)
+  ite_eq_right (Nat.succ_ne_zero k)
 
 @[simp] theorem mnv4PostDWSlot_zero (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PostDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := if_pos rfl
+    mnv4PostDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := ite_eq_left rfl
 
 @[simp] theorem mnv4PostDWSlot_succ (N : Nat) {c h w kH kW : Nat} (k : Nat)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
     mnv4PostDWSlot (h := h) (w := w) N (k + 1) W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
-  if_neg (Nat.succ_ne_zero k)
+  ite_eq_right (Nat.succ_ne_zero k)
 
 /-- ⭐ **A UIB skip block built from the table's two `k`s.** The family is now *computed* from
     `preDWk`/`postDWk` rather than selected by the caller, so a family mis-dispatch has to be a

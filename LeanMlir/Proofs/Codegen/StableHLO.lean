@@ -2887,8 +2887,8 @@ theorem sgdB_isCertifiedGradStep (lr : ℝ) (label : Fin n) (j : Fin n) :
 /-- `maximum(a,0)` equals ReLU's pointwise `if a>0 then a else 0`. -/
 private theorem max_zero_eq (a : ℝ) : max a 0 = if a > 0 then a else 0 := by
   by_cases h : (0 : ℝ) < a
-  · rw [if_pos h, max_eq_left h.le]
-  · rw [if_neg h, max_eq_right (not_lt.1 h)]
+  · rw [ite_eq_left h, max_eq_left h.le]
+  · rw [ite_eq_right h, max_eq_right (not_lt.1 h)]
 
 /-- **ReLU forward faithfulness.** `maximum(·,0)` denotes the proven `relu`. -/
 theorem reluF_faithful {k : Nat} (e : SHlo k) : den (.reluF e) = relu k (den e) := by

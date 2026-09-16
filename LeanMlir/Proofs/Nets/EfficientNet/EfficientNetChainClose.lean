@@ -82,8 +82,8 @@ noncomputable def reindex_has_vjp {a b : Nat} (σ : Fin b → Fin a) :
     apply Finset.sum_congr rfl
     intro j _
     by_cases hij : i = σ j
-    · rw [if_pos hij, if_pos hij, one_mul]
-    · rw [if_neg hij, if_neg hij, zero_mul]
+    · rw [ite_eq_left hij, ite_eq_left hij, one_mul]
+    · rw [ite_eq_right hij, ite_eq_right hij, zero_mul]
 
 /-- **`bnBatchLA` is the proven `bnBatchTensor4`, conjugated by the `mul_assoc` reindex.** Both reindex
     maps are `reindexCLM (Fin.cast …)`; the middle is the genuinely batch-coupled true batch-norm. -/

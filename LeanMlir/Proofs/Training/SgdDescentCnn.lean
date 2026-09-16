@@ -94,7 +94,7 @@ theorem max4_sub_abs_le_sum {a b c d a' b' c' d' : ℝ} :
     ⚠ `@[reducible]` is load-bearing on Lean ≥ 4.33 (see planning/archive/lean_434_and_cleanup.md):
     `t3Idx_def` folds the raw encoding into the `ite` CONDITION below, but simp does not rewrite
     inside the `Decidable` INSTANCE argument, so the goal carries a folded condition over an
-    unfolded instance and every `if_pos`/`if_neg` here fails to match. `basisVec`, which produces
+    unfolded instance and every `ite_eq_left`/`ite_eq_right` here fails to match. `basisVec`, which produces
     that `ite`, is `@[reducible]` for the same reason. -/
 @[reducible] def t3Idx {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
     Fin (c * h * w) :=
@@ -1006,8 +1006,8 @@ theorem MaxPool2MarginQ.poolBack_close {c h w : Nat} {δ : ℝ}
       (if MaxPool2IsArgmax x ci hi wi then ax else 0)| ≤ e := by
   have hiff := hm.isArgmax_iff hclose ci hi wi
   by_cases hA : MaxPool2IsArgmax x ci hi wi
-  · rw [if_pos hA, if_pos (hiff.mpr hA)]; exact ha
-  · rw [if_neg hA, if_neg (fun h => hA (hiff.mp h)), sub_zero, abs_zero]
+  · rw [ite_eq_left hA, ite_eq_left (hiff.mpr hA)]; exact ha
+  · rw [ite_eq_right hA, ite_eq_right (fun h => hA (hiff.mp h)), sub_zero, abs_zero]
     exact le_trans (abs_nonneg _) ha
 
 -- ════════════════════════════════════════════════════════════════
@@ -1266,27 +1266,27 @@ theorem pool_relu_input_grad {c h w d₃ d₄ nC : Nat}
         intro ho _
         rw [Finset.sum_eq_zero]
         intro wo _
-        rw [if_neg (fun hcon => hne_co hcon.1)]
+        rw [ite_eq_right (fun hcon => hne_co hcon.1)]
         ring)
       (fun habs => absurd (Finset.mem_univ ci) habs)]
   rw [Finset.sum_eq_single (winRow hi)
       (fun ho _ hne_ho => by
         rw [Finset.sum_eq_zero]
         intro wo _
-        rw [if_neg (fun hcon => hne_ho hcon.2.1)]
+        rw [ite_eq_right (fun hcon => hne_ho hcon.2.1)]
         ring)
       (fun habs => absurd (Finset.mem_univ _) habs)]
   rw [Finset.sum_eq_single (winCol wi)
       (fun wo _ hne_wo => by
-        rw [if_neg (fun hcon => hne_wo hcon.2.2.1)]
+        rw [ite_eq_right (fun hcon => hne_wo hcon.2.2.1)]
         ring)
       (fun habs => absurd (Finset.mem_univ _) habs)]
   by_cases hA : MaxPool2IsArgmax
       (Tensor3.unflatten (relu (c * (2*h) * (2*w)) z₂)) ci hi wi
-  · rw [if_pos ⟨rfl, rfl, rfl, hA⟩, if_pos hA,
+  · rw [ite_eq_left ⟨rfl, rfl, rfl, hA⟩, ite_eq_left hA,
       ce_head3_input_grad W₃ b₃ W₄ b₄ W₅ b₅ label _ hz3 hz4]
     simp only [ite_mul, one_mul, zero_mul]
-  · rw [if_neg (fun hcon => hA hcon.2.2.2), if_neg hA, zero_mul]
+  · rw [ite_eq_right (fun hcon => hA hcon.2.2.2), ite_eq_right hA, zero_mul]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The conv weight-map Jacobian: closed form, point-free, ℓ1 row mass
@@ -1318,9 +1318,9 @@ theorem conv2d_weight_pdiv {ic oc h w kH kW : Nat} (b : Vec oc)
           Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
         (k4Idx o cc kh kw) (t3Idx co hi wi) := by
     rw [Finset.sum_eq_single (t3Idx co hi wi)
-      (fun j _ hne => by rw [basisVec_apply, if_neg hne, mul_zero])
+      (fun j _ hne => by rw [basisVec_apply, ite_eq_right hne, mul_zero])
       (fun habs => absurd (Finset.mem_univ _) habs)]
-    rw [basisVec_apply, if_pos rfl, mul_one]
+    rw [basisVec_apply, ite_eq_left rfl, mul_one]
   rw [← hsum, ← hb]
   -- evaluate the transpose-trick backward at the basis vector
   simp only [conv2d_weight_grad_has_vjp, k4Idx, Equiv.symm_apply_apply,
@@ -1328,27 +1328,27 @@ theorem conv2d_weight_pdiv {ic oc h w kH kW : Nat} (b : Vec oc)
   simp only [t3Idx_def]
   rcases eq_or_ne co o with hco | hco
   · subst hco
-    rw [if_pos rfl,
+    rw [ite_eq_left rfl,
       Finset.sum_eq_single hi
         (fun hi' _ hne_hi => by
           rw [Finset.sum_eq_zero]
           intro wi' _
-          rw [if_neg (fun heq => hne_hi
+          rw [ite_eq_right (fun heq => hne_hi
             (t3Idx_inj (show t3Idx co hi' wi' = t3Idx co hi wi
               from heq)).2.1), mul_zero])
         (fun habs => absurd (Finset.mem_univ _) habs),
       Finset.sum_eq_single wi
         (fun wi' _ hne_wi => by
-          rw [if_neg (fun heq => hne_wi
+          rw [ite_eq_right (fun heq => hne_wi
             (t3Idx_inj (show t3Idx co hi wi' = t3Idx co hi wi
               from heq)).2.2), mul_zero])
         (fun habs => absurd (Finset.mem_univ _) habs),
-      if_pos rfl, mul_one]
-  · rw [if_neg hco, Finset.sum_eq_zero]
+      ite_eq_left rfl, mul_one]
+  · rw [ite_eq_right hco, Finset.sum_eq_zero]
     intro hi' _
     rw [Finset.sum_eq_zero]
     intro wi' _
-    rw [if_neg (fun heq => hco
+    rw [ite_eq_right (fun heq => hco
       ((t3Idx_inj (show t3Idx o hi' wi' = t3Idx co hi wi from heq)).1).symm),
       mul_zero]
 
@@ -1375,13 +1375,13 @@ theorem conv2d_weight_pdiv_row_l1 {ic oc h w kH kW : Nat} (b : Vec oc)
       intro hi _
       rw [Finset.sum_eq_zero]
       intro wi _
-      rw [if_neg hne_co, abs_zero])
+      rw [ite_eq_right hne_co, abs_zero])
     (fun habs => absurd (Finset.mem_univ _) habs)]
   calc ∑ hi : Fin h, ∑ wi : Fin w,
         |if o = o then convPad kH kW x cc kh kw hi wi else 0|
       ≤ ∑ _hi : Fin h, ∑ _wi : Fin w, a := by
         refine Finset.sum_le_sum fun hi _ => Finset.sum_le_sum fun wi _ => ?_
-        rw [if_pos rfl]
+        rw [ite_eq_left rfl]
         exact abs_convPad_le x ha hx cc kh kw hi wi
     _ = ((h * w : ℕ) : ℝ) * a := by
         rw [Finset.sum_const, Finset.sum_const, Finset.card_univ,
@@ -1894,10 +1894,10 @@ theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
   -- collapse the `if ci = o` conv-channel selector
   rw [Finset.sum_eq_single o
     (fun ci _ hne => Finset.sum_eq_zero fun hi _ => Finset.sum_eq_zero fun wi _ =>
-      by rw [if_neg hne, zero_mul])
+      by rw [ite_eq_right hne, zero_mul])
     (fun habs => absurd (Finset.mem_univ o) habs)]
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
-  rw [if_pos (rfl : o = o)]
+  rw [ite_eq_left (rfl : o = o)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Increment 2 — the conv2 float-backward grad-close (two generic cores)
@@ -1917,12 +1917,12 @@ theorem mask_scalar_close {zt z xt x ez ex : ℝ}
   · have h1 : ¬ z > 0 := by linarith
     have h2 : ¬ zt > 0 := by
       rw [not_lt]; rw [abs_of_neg hneg] at hm; linarith [hzi.2]
-    rw [if_neg h1, if_neg h2]; simpa using hex
+    rw [ite_eq_right h1, ite_eq_right h2]; simpa using hex
   · exfalso; rw [hzero, abs_zero] at hm
     linarith [(abs_nonneg (zt - z)).trans hz]
   · have h2 : zt > 0 := by
       rw [abs_of_pos hpos] at hm; linarith [hzi.1]
-    rw [if_pos hpos, if_pos h2, one_mul, one_mul]; exact hx
+    rw [ite_eq_left hpos, ite_eq_left h2, one_mul, one_mul]; exact hx
 
 /-- **Float dot against a perturbed cotangent** — the conv-2 grad-close's final
     contraction (the conv peer of the MLP's scalar `mul_close`: a dot, because
@@ -2217,8 +2217,8 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
         (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
     simp only [oneHot]
     by_cases hkl : k = label
-    · rw [if_pos hkl, abs_le]; constructor <;> linarith
-    · rw [if_neg hkl, abs_le]; constructor <;> linarith
+    · rw [ite_eq_left hkl, abs_le]; constructor <;> linarith
+    · rw [ite_eq_right hkl, abs_le]; constructor <;> linarith
   -- two masked Wᵀ cotangent steps + the unmasked W₃ step
   have hc4 : ∀ q, |FloatModel.reluMask Z4F (M.dense (fun j i' => W₅ i' j)
         (fun _ => 0) (M.softmaxCECotF fexp Z5F label)) q -
@@ -2302,11 +2302,11 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
     intro ci hi wi
     simp only [hcotRdef]
     by_cases hz : ZC (t3Idx ci hi wi) > 0
-    · rw [if_pos hz, one_mul]
+    · rw [ite_eq_left hz, one_mul]
       split_ifs with hA
       · exact hcPoolMag (t3Idx ci (winRow hi) (winCol wi))
       · simpa using CPnn
-    · rw [if_neg hz, zero_mul, abs_zero]; exact CPnn
+    · rw [ite_eq_right hz, zero_mul, abs_zero]; exact CPnn
   have hcellMag : ∀ ci hi wi, |cotF ci hi wi| ≤ CP + ecv := by
     intro ci hi wi
     have htri := abs_sub_abs_le_abs_sub (cotF ci hi wi) (cotR ci hi wi)
@@ -2875,8 +2875,8 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     intro ci hi wi
     by_cases hp : Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)
         (t3Idx ci hi wi) > 0
-    · rw [if_pos ((hstab2 _).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab2 _).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab2 _).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab2 _).2.mp hgt)), ite_eq_right hp]
   have hmask3 : ∀ l : Fin d₃,
       (if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁))))
@@ -2887,8 +2887,8 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     intro l
     by_cases hp : dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l > 0
-    · rw [if_pos ((hstab3 l).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab3 l).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab3 l).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab3 l).2.mp hgt)), ite_eq_right hp]
   have hmask4 : ∀ q : Fin d₄,
       (if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
@@ -2902,8 +2902,8 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     by_cases hp : dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten
           (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q > 0
-    · rw [if_pos ((hstab4 q).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab4 q).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab4 q).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab4 q).2.mp hgt)), ite_eq_right hp]
   have hargiff : ∀ (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)),
       MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁))))
@@ -2994,14 +2994,14 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
         intro hi _
         rw [Finset.sum_eq_zero]
         intro wi _
-        rw [if_neg hne, abs_zero])
+        rw [ite_eq_right hne, abs_zero])
       (fun habs => absurd (Finset.mem_univ _) habs)]
     calc ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
           |if o = o then convPad kH kW x₁ cc kh kw hi wi else 0|
         ≤ ∑ _hi : Fin (2*h), ∑ _wi : Fin (2*w), a := by
           refine Finset.sum_le_sum fun hi _ =>
             Finset.sum_le_sum fun wi _ => ?_
-          rw [if_pos rfl]
+          rw [ite_eq_left rfl]
           exact abs_convPad_le x₁ ha hx cc kh kw hi wi
       _ = ((2*h * (2*w) : ℕ) : ℝ) * a := by
           rw [Finset.sum_const, Finset.sum_const, Finset.card_univ,
@@ -3065,7 +3065,7 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
   by_cases hA : MaxPool2IsArgmax (Tensor3.unflatten
       (relu (c * (2*h) * (2*w)) (Tensor3.flatten
         (conv2d (Kernel4.unflatten v) b₂ x₁)))) ci hi wi
-  · rw [if_pos ((hargiff ci hi wi).mpr hA), if_pos hA, ← mul_sub,
+  · rw [ite_eq_left ((hargiff ci hi wi).mpr hA), ite_eq_left hA, ← mul_sub,
       abs_mul, ← mul_sub, abs_mul]
     refine mul_le_mul_of_nonneg_left ?_ (abs_nonneg _)
     refine le_trans (mul_le_of_le_one_left (abs_nonneg _) ?_) ?_
@@ -3089,7 +3089,7 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
             (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d))
               b₂ x₁))))))))))
         (oneHot nC label) hS (t3Idx ci (winRow hi) (winCol wi))
-  · rw [if_neg (fun hA' => hA ((hargiff ci hi wi).mp hA')), if_neg hA]
+  · rw [ite_eq_right (fun hA' => hA ((hargiff ci hi wi).mp hA')), ite_eq_right hA]
     simp only [mul_zero, sub_self, abs_zero]
     exact mul_nonneg (abs_nonneg _) hM0
 
@@ -3596,9 +3596,9 @@ theorem sum_pinned_le {n : Nat} {X : ℝ} (hX : 0 ≤ X) (P : Fin n → Prop)
   by_cases hex : ∃ i, P i
   · obtain ⟨i₀, hi₀⟩ := hex
     rw [Finset.sum_eq_single i₀
-      (fun j _ hne => if_neg (fun hP => hne (huniq j i₀ hP hi₀)))
-      (fun h => absurd (Finset.mem_univ _) h), if_pos hi₀]
-  · rw [Finset.sum_eq_zero (fun i _ => if_neg (fun hP => hex ⟨i, hP⟩))]
+      (fun j _ hne => ite_eq_right (fun hP => hne (huniq j i₀ hP hi₀)))
+      (fun h => absurd (Finset.mem_univ _) h), ite_eq_left hi₀]
+  · rw [Finset.sum_eq_zero (fun i _ => ite_eq_right (fun hP => hex ⟨i, hP⟩))]
     exact hX
 
 /-- Rotate the innermost summation index of a triple sum to the front. -/
@@ -3701,17 +3701,17 @@ theorem abs_convTap_expand {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
         (fun kh _ hne => by
           rw [Finset.sum_eq_zero]
           intro kw _
-          exact if_neg (fun hcon => hne (Fin.ext (by
+          exact ite_eq_right (fun hcon => hne (Fin.ext (by
             show kh.val = hi.val + (kH - 1) / 2 - ho.val
             omega))))
         (fun habs => absurd (Finset.mem_univ _) habs),
       Finset.sum_eq_single
         (⟨wi.val + (kW - 1) / 2 - wo.val, hpad.2.2.2⟩ : Fin kW)
-        (fun kw _ hne => if_neg (fun hcon => hne (Fin.ext (by
+        (fun kw _ hne => ite_eq_right (fun hcon => hne (Fin.ext (by
           show kw.val = wi.val + (kW - 1) / 2 - wo.val
           omega))))
         (fun habs => absurd (Finset.mem_univ _) habs),
-      if_pos ⟨by show hi.val + (kH - 1) / 2 - ho.val + ho.val = _; omega,
+      ite_eq_left ⟨by show hi.val + (kH - 1) / 2 - ho.val + ho.val = _; omega,
         by show wi.val + (kW - 1) / 2 - wo.val + wo.val = _; omega⟩]
   · rw [abs_zero]
     symm
@@ -3719,7 +3719,7 @@ theorem abs_convTap_expand {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
     intro kh _
     rw [Finset.sum_eq_zero]
     intro kw _
-    refine if_neg (fun hcon => hpad ?_)
+    refine ite_eq_right (fun hcon => hpad ?_)
     have hk1 := kh.isLt
     have hk2 := kw.isLt
     omega
@@ -3762,13 +3762,13 @@ theorem convTap_out_l1 {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
                         then |W co ci kh kw| else 0) := by
                     refine Finset.sum_le_sum fun ho _ => ?_
                     by_cases hrow : kh.val + ho.val = hi.val + (kH - 1) / 2
-                    · rw [if_pos hrow]
+                    · rw [ite_eq_left hrow]
                       refine sum_pinned_le (abs_nonneg _) _ ?_
                       intro i j hPi hPj
                       exact Fin.ext (by omega)
-                    · rw [if_neg hrow]
+                    · rw [ite_eq_right hrow]
                       refine le_of_eq (Finset.sum_eq_zero fun wo _ => ?_)
-                      exact if_neg (fun hcon => hrow hcon.1)
+                      exact ite_eq_right (fun hcon => hrow hcon.1)
                 _ ≤ |W co ci kh kw| := by
                     refine sum_pinned_le (abs_nonneg _) _ ?_
                     intro i j hPi hPj
@@ -3819,13 +3819,13 @@ theorem convTap_in_l1 {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
                         then |W co ci kh kw| else 0) := by
                     refine Finset.sum_le_sum fun hi _ => ?_
                     by_cases hrow : kh.val + ho.val = hi.val + (kH - 1) / 2
-                    · rw [if_pos hrow]
+                    · rw [ite_eq_left hrow]
                       refine sum_pinned_le (abs_nonneg _) _ ?_
                       intro i j hPi hPj
                       exact Fin.ext (by omega)
-                    · rw [if_neg hrow]
+                    · rw [ite_eq_right hrow]
                       refine le_of_eq (Finset.sum_eq_zero fun wi _ => ?_)
-                      exact if_neg (fun hcon => hrow hcon.1)
+                      exact ite_eq_right (fun hcon => hrow hcon.1)
                 _ ≤ |W co ci kh kw| := by
                     refine sum_pinned_le (abs_nonneg _) _ ?_
                     intro i j hPi hPj
@@ -3862,19 +3862,19 @@ theorem conv2d_input_pdiv3 {ic oc h w kH kW : Nat}
         intro ho' _
         rw [Finset.sum_eq_zero]
         intro wo' _
-        rw [if_neg (fun hcon => hne hcon.1), mul_zero])
+        rw [ite_eq_right (fun hcon => hne hcon.1), mul_zero])
       (fun habs => absurd (Finset.mem_univ _) habs),
       Finset.sum_eq_single ho
       (fun ho' _ hne => by
         rw [Finset.sum_eq_zero]
         intro wo' _
-        rw [if_neg (fun hcon => hne hcon.2.1), mul_zero])
+        rw [ite_eq_right (fun hcon => hne hcon.2.1), mul_zero])
       (fun habs => absurd (Finset.mem_univ _) habs),
       Finset.sum_eq_single wo
       (fun wo' _ hne => by
-        rw [if_neg (fun hcon => hne hcon.2.2), mul_zero])
+        rw [ite_eq_right (fun hcon => hne hcon.2.2), mul_zero])
       (fun habs => absurd (Finset.mem_univ _) habs),
-      if_pos ⟨rfl, rfl, rfl⟩, mul_one]
+      ite_eq_left ⟨rfl, rfl, rfl⟩, mul_one]
   rw [← hsum, ← hb]
   -- evaluate the explicit input-gradient formula at the basis cotangent
   simp only [conv2d_has_vjp3, conv2d_input_grad_formula]
@@ -4010,17 +4010,17 @@ theorem abs_convPad_sub_expand {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
         (fun i _ hne => by
           rw [Finset.sum_eq_zero]
           intro j _
-          exact if_neg (fun hcon => hne (Fin.ext (by
+          exact ite_eq_right (fun hcon => hne (Fin.ext (by
             show i.val = kh.val + ho.val - (kH - 1) / 2
             omega))))
         (fun habs => absurd (Finset.mem_univ _) habs),
       Finset.sum_eq_single
         (⟨kw.val + wo.val - (kW - 1) / 2, hpad.2.2.2⟩ : Fin w)
-        (fun j _ hne => if_neg (fun hcon => hne (Fin.ext (by
+        (fun j _ hne => ite_eq_right (fun hcon => hne (Fin.ext (by
           show j.val = kw.val + wo.val - (kW - 1) / 2
           omega))))
         (fun habs => absurd (Finset.mem_univ _) habs),
-      if_pos ⟨by show _ = kh.val + ho.val - (kH - 1) / 2 + _; omega,
+      ite_eq_left ⟨by show _ = kh.val + ho.val - (kH - 1) / 2 + _; omega,
         by show _ = kw.val + wo.val - (kW - 1) / 2 + _; omega⟩]
   · rw [sub_zero, abs_zero]
     symm
@@ -4028,7 +4028,7 @@ theorem abs_convPad_sub_expand {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
     intro i _
     rw [Finset.sum_eq_zero]
     intro j _
-    refine if_neg (fun hcon => hpad ?_)
+    refine ite_eq_right (fun hcon => hpad ?_)
     have h1 := i.isLt
     have h2 := j.isLt
     omega
@@ -4162,13 +4162,13 @@ theorem conv2d_input_l1_drift {ic oc h w kH kW : Nat}
                         then |x' c i j - x c i j| else 0) := by
                     refine Finset.sum_le_sum fun ho _ => ?_
                     by_cases hrow : kh.val + ho.val = i.val + (kH - 1) / 2
-                    · rw [if_pos hrow]
+                    · rw [ite_eq_left hrow]
                       refine sum_pinned_le (abs_nonneg _) _ ?_
                       intro p q hPp hPq
                       exact Fin.ext (by omega)
-                    · rw [if_neg hrow]
+                    · rw [ite_eq_right hrow]
                       refine le_of_eq (Finset.sum_eq_zero fun wo _ => ?_)
-                      exact if_neg (fun hcon => hrow hcon.1)
+                      exact ite_eq_right (fun hcon => hrow hcon.1)
                 _ ≤ |x' c i j - x c i j| := by
                     refine sum_pinned_le (abs_nonneg _) _ ?_
                     intro p q hPp hPq
@@ -4788,9 +4788,9 @@ theorem cnn1_pool_head_input_grad {c h w d₃ d₄ nC kH kW : Nat}
         (relu_differentiableAt_of_smooth (c * (2*h) * (2*w)) z₁ hz1) hGF]
   simp_rw [pdiv_relu (c * (2*h) * (2*w)) z₁ hz1 (t3Idx ci hi wi)]
   rw [Finset.sum_eq_single (t3Idx ci hi wi)
-    (fun j _ hne => by rw [if_neg (fun heq => hne heq.symm), zero_mul])
+    (fun j _ hne => by rw [ite_eq_right (fun heq => hne heq.symm), zero_mul])
     (fun habs => absurd (Finset.mem_univ _) habs),
-    if_pos rfl]
+    ite_eq_left rfl]
   congr 1
   -- hop 2: through conv2 as a function of its input
   have hop2 : pdiv ((fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 =>
@@ -5185,10 +5185,10 @@ theorem cnn_conv1_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
   rw [convWeightGrad_eq_dot x₀ _ o cc kh kw]
   rw [Finset.sum_eq_single o
     (fun ci _ hne => Finset.sum_eq_zero fun hi _ => Finset.sum_eq_zero fun wi _ =>
-      by rw [if_neg hne, zero_mul])
+      by rw [ite_eq_right hne, zero_mul])
     (fun habs => absurd (Finset.mem_univ o) habs)]
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
-  rw [if_pos (rfl : o = o)]
+  rw [ite_eq_left (rfl : o = o)]
 
 /-- **The binary32 conv-1 weight gradient the rendered trainer computes** — the
     conv-1 peer of `cnnConv2FloatGrad`, one conv-backward deeper. At kernel
@@ -5529,8 +5529,8 @@ theorem cnn_conv2_cot_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
         (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
     simp only [oneHot]
     by_cases hkl : k = label
-    · rw [if_pos hkl, abs_le]; constructor <;> linarith
-    · rw [if_neg hkl, abs_le]; constructor <;> linarith
+    · rw [ite_eq_left hkl, abs_le]; constructor <;> linarith
+    · rw [ite_eq_right hkl, abs_le]; constructor <;> linarith
   -- two masked Wᵀ cotangent steps + unmasked W₃ step
   have hc4 : ∀ q, |FloatModel.reluMask Z4F (M.dense (fun j i' => W₅ i' j)
         (fun _ => 0) (M.softmaxCECotF fexp Z5F label)) q -
@@ -5631,8 +5631,8 @@ theorem cnn_conv2_cot_real_abs_le {c h w d₃ d₄ nC kH kW : Nat}
         (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
     simp only [oneHot]
     by_cases hkl : k = label
-    · rw [if_pos hkl, abs_le]; constructor <;> linarith
-    · rw [if_neg hkl, abs_le]; constructor <;> linarith
+    · rw [ite_eq_left hkl, abs_le]; constructor <;> linarith
+    · rw [ite_eq_right hkl, abs_le]; constructor <;> linarith
   have hc4Mag : ∀ q, |FloatModel.reluMask
       (dense W₄ b₄ (relu d₃ (dense W₃ b₃ PR))) (dense (fun j i' => W₅ i' j)
       (fun _ => 0) (fun k => softmax nC Z5 k - oneHot nC label k)) q| ≤
@@ -5658,12 +5658,12 @@ theorem cnn_conv2_cot_real_abs_le {c h w d₃ d₄ nC kH kW : Nat}
       (layerAct_nonneg hw₅ le_rfl zero_le_one)) (fun i j' => hW₃ j' i)
       (fun _ => by simp) hc3Mag j
   by_cases hz : Tensor3.flatten (conv2d W₂ b₂ X2) (t3Idx co ho wo) > 0
-  · rw [if_pos hz, one_mul]
+  · rw [ite_eq_left hz, one_mul]
     split_ifs with hA
     · exact hcPoolMag (t3Idx co (winRow ho) (winCol wo))
     · simpa using FloatModel.layerAct_nonneg hw₃ le_rfl (FloatModel.layerAct_nonneg hw₄
         le_rfl (FloatModel.layerAct_nonneg hw₅ le_rfl zero_le_one))
-  · rw [if_neg hz, zero_mul, abs_zero]
+  · rw [ite_eq_right hz, zero_mul, abs_zero]
     exact FloatModel.layerAct_nonneg hw₃ le_rfl (FloatModel.layerAct_nonneg hw₄
       le_rfl (FloatModel.layerAct_nonneg hw₅ le_rfl zero_le_one))
 
@@ -6131,8 +6131,8 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     intro ci hi wi
     by_cases hp : Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀)
         (t3Idx ci hi wi) > 0
-    · rw [if_pos ((hstab1 _).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab1 _).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab1 _).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab1 _).2.mp hgt)), ite_eq_right hp]
   have hmask2 : ∀ k : Fin (c * (2*h) * (2*w)),
       (if Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
@@ -6146,8 +6146,8 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     by_cases hp : Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten
           (conv2d (Kernel4.unflatten u) b₁ x₀))))) k > 0
-    · rw [if_pos ((hstab2 _).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab2 _).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab2 _).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab2 _).2.mp hgt)), ite_eq_right hp]
   have hmask3 : ∀ l : Fin d₃,
       (if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -6164,8 +6164,8 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
         (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d (Kernel4.unflatten u) b₁ x₀)))))))) l > 0
-    · rw [if_pos ((hstab3 l).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab3 l).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab3 l).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab3 l).2.mp hgt)), ite_eq_right hp]
   have hmask4 : ∀ q : Fin d₄,
       (if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
@@ -6182,8 +6182,8 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
           (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d (Kernel4.unflatten u) b₁ x₀)))))))))) q > 0
-    · rw [if_pos ((hstab4 q).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab4 q).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab4 q).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab4 q).2.mp hgt)), ite_eq_right hp]
   have hargiff : ∀ (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)),
       MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -6303,14 +6303,14 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
         intro hi _
         rw [Finset.sum_eq_zero]
         intro wi _
-        rw [if_neg hne, abs_zero])
+        rw [ite_eq_right hne, abs_zero])
       (fun habs => absurd (Finset.mem_univ _) habs)]
     calc ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
           |if o = o then convPad kH kW x₀ cc kh kw hi wi else 0|
         ≤ ∑ _hi : Fin (2*h), ∑ _wi : Fin (2*w), a := by
           refine Finset.sum_le_sum fun hi _ =>
             Finset.sum_le_sum fun wi _ => ?_
-          rw [if_pos rfl]
+          rw [ite_eq_left rfl]
           exact abs_convPad_le x₀ ha hx cc kh kw hi wi
       _ = ((2*h * (2*w) : ℕ) : ℝ) * a := by
           rw [Finset.sum_const, Finset.sum_const, Finset.card_univ,
@@ -6448,7 +6448,7 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d (Kernel4.unflatten u) b₁ x₀))))))))
       co ho wo
-  · rw [if_pos ((hargiff co ho wo).mpr hA), if_pos hA, ← mul_sub,
+  · rw [ite_eq_left ((hargiff co ho wo).mpr hA), ite_eq_left hA, ← mul_sub,
       abs_mul]
     refine le_trans (mul_le_of_le_one_left (abs_nonneg _) ?_) ?_
     · split_ifs <;> simp
@@ -6483,8 +6483,8 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
                   (conv2d (Kernel4.unflatten (u + t • d))
                     b₁ x₀))))))))))))))
         (oneHot nC label) hS (t3Idx co (winRow ho) (winCol wo))
-  · rw [if_neg (fun hA' => hA ((hargiff co ho wo).mp hA')),
-      if_neg hA]
+  · rw [ite_eq_right (fun hA' => hA ((hargiff co ho wo).mp hA')),
+      ite_eq_right hA]
     simp only [mul_zero, sub_self, abs_zero]
     exact hM0
 -- ════════════════════════════════════════════════════════════════
@@ -7061,36 +7061,36 @@ theorem conv2d_bias_pdiv {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
       = pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o
           (t3Idx co hi wi) := by
     rw [Finset.sum_eq_single (t3Idx co hi wi)
-      (fun j _ hne => by rw [basisVec_apply, if_neg hne, mul_zero])
+      (fun j _ hne => by rw [basisVec_apply, ite_eq_right hne, mul_zero])
       (fun habs => absurd (Finset.mem_univ _) habs)]
-    rw [basisVec_apply, if_pos rfl, mul_one]
+    rw [basisVec_apply, ite_eq_left rfl, mul_one]
   rw [← hsum, ← hb]
   -- evaluate the spatial-sum backward at the basis vector
   simp only [conv2d_bias_grad_has_vjp, basisVec_apply]
   simp only [t3Idx_def]
   rcases eq_or_ne co o with hco | hco
   · subst hco
-    rw [if_pos rfl,
+    rw [ite_eq_left rfl,
       Finset.sum_eq_single hi
         (fun hi' _ hne_hi => by
           rw [Finset.sum_eq_zero]
           intro wi' _
-          rw [if_neg (fun heq => hne_hi
+          rw [ite_eq_right (fun heq => hne_hi
             (t3Idx_inj (show t3Idx co hi' wi' = t3Idx co hi wi
               from heq)).2.1)])
         (fun habs => absurd (Finset.mem_univ _) habs),
       Finset.sum_eq_single wi
         (fun wi' _ hne_wi => by
-          rw [if_neg (fun heq => hne_wi
+          rw [ite_eq_right (fun heq => hne_wi
             (t3Idx_inj (show t3Idx co hi wi' = t3Idx co hi wi
               from heq)).2.2)])
         (fun habs => absurd (Finset.mem_univ _) habs),
-      if_pos rfl]
-  · rw [if_neg hco, Finset.sum_eq_zero]
+      ite_eq_left rfl]
+  · rw [ite_eq_right hco, Finset.sum_eq_zero]
     intro hi' _
     rw [Finset.sum_eq_zero]
     intro wi' _
-    rw [if_neg (fun heq => hco
+    rw [ite_eq_right (fun heq => hco
       ((t3Idx_inj (show t3Idx o hi' wi' = t3Idx co hi wi
         from heq)).1).symm)]
 
@@ -7592,8 +7592,8 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     intro ci hi wi
     by_cases hp : Tensor3.flatten (conv2d W₂ b x₁)
         (t3Idx ci hi wi) > 0
-    · rw [if_pos ((hstab2 _).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab2 _).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab2 _).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab2 _).2.mp hgt)), ite_eq_right hp]
   have hmask3 : ∀ l : Fin d₃,
       (if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₂ (b + t • d) x₁))))
@@ -7604,8 +7604,8 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     intro l
     by_cases hp : dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b x₁)))) l > 0
-    · rw [if_pos ((hstab3 l).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab3 l).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab3 l).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab3 l).2.mp hgt)), ite_eq_right hp]
   have hmask4 : ∀ q : Fin d₄,
       (if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
@@ -7619,8 +7619,8 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     by_cases hp : dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten
           (conv2d W₂ b x₁)))))) q > 0
-    · rw [if_pos ((hstab4 q).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab4 q).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab4 q).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab4 q).2.mp hgt)), ite_eq_right hp]
   have hargiff : ∀ (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)),
       MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ (b + t • d) x₁))))
@@ -7708,14 +7708,14 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
         intro hi _
         rw [Finset.sum_eq_zero]
         intro wi _
-        rw [if_neg hne, abs_zero])
+        rw [ite_eq_right hne, abs_zero])
       (fun habs => absurd (Finset.mem_univ _) habs)]
     calc ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
           |if o = o then (1:ℝ) else 0|
         ≤ ∑ _hi : Fin (2*h), ∑ _wi : Fin (2*w), (1:ℝ) := by
           refine Finset.sum_le_sum fun hi _ =>
             Finset.sum_le_sum fun wi _ => ?_
-          rw [if_pos rfl, abs_one]
+          rw [ite_eq_left rfl, abs_one]
       _ = ((2*h * (2*w) : ℕ) : ℝ) := by
           rw [Finset.sum_const, Finset.sum_const, Finset.card_univ,
             Finset.card_univ, Fintype.card_fin, Fintype.card_fin,
@@ -7768,7 +7768,7 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
   by_cases hA : MaxPool2IsArgmax (Tensor3.unflatten
       (relu (c * (2*h) * (2*w)) (Tensor3.flatten
         (conv2d W₂ b x₁)))) ci hi wi
-  · rw [if_pos ((hargiff ci hi wi).mpr hA), if_pos hA, ← mul_sub,
+  · rw [ite_eq_left ((hargiff ci hi wi).mpr hA), ite_eq_left hA, ← mul_sub,
       abs_mul, ← mul_sub, abs_mul]
     refine mul_le_mul_of_nonneg_left ?_ (abs_nonneg _)
     refine le_trans (mul_le_of_le_one_left (abs_nonneg _) ?_) ?_
@@ -7791,7 +7791,7 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
           (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ (b + t • d) x₁))))))))))
         (oneHot nC label) hS (t3Idx ci (winRow hi) (winCol wi))
-  · rw [if_neg (fun hA' => hA ((hargiff ci hi wi).mp hA')), if_neg hA]
+  · rw [ite_eq_right (fun hA' => hA ((hargiff ci hi wi).mp hA')), ite_eq_right hA]
     simp only [mul_zero, sub_self, abs_zero]
     exact mul_nonneg (abs_nonneg _) hM0
 
@@ -8805,8 +8805,8 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     intro ci hi wi
     by_cases hp : Tensor3.flatten (conv2d W₁ b x₀)
         (t3Idx ci hi wi) > 0
-    · rw [if_pos ((hstab1 _).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab1 _).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab1 _).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab1 _).2.mp hgt)), ite_eq_right hp]
   have hmask2 : ∀ k : Fin (c * (2*h) * (2*w)),
       (if Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
@@ -8820,8 +8820,8 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     by_cases hp : Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten
           (conv2d W₁ b x₀))))) k > 0
-    · rw [if_pos ((hstab2 _).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab2 _).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab2 _).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab2 _).2.mp hgt)), ite_eq_right hp]
   have hmask3 : ∀ l : Fin d₃,
       (if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -8838,8 +8838,8 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
         (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d W₁ b x₀)))))))) l > 0
-    · rw [if_pos ((hstab3 l).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab3 l).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab3 l).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab3 l).2.mp hgt)), ite_eq_right hp]
   have hmask4 : ∀ q : Fin d₄,
       (if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
@@ -8856,8 +8856,8 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
           (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d W₁ b x₀)))))))))) q > 0
-    · rw [if_pos ((hstab4 q).2.mpr hp), if_pos hp]
-    · rw [if_neg (fun hgt => hp ((hstab4 q).2.mp hgt)), if_neg hp]
+    · rw [ite_eq_left ((hstab4 q).2.mpr hp), ite_eq_left hp]
+    · rw [ite_eq_right (fun hgt => hp ((hstab4 q).2.mp hgt)), ite_eq_right hp]
   have hargiff : ∀ (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)),
       MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -8976,14 +8976,14 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
         intro hi _
         rw [Finset.sum_eq_zero]
         intro wi _
-        rw [if_neg hne, abs_zero])
+        rw [ite_eq_right hne, abs_zero])
       (fun habs => absurd (Finset.mem_univ _) habs)]
     calc ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
           |if o = o then (1:ℝ) else 0|
         ≤ ∑ _hi : Fin (2*h), ∑ _wi : Fin (2*w), (1:ℝ) := by
           refine Finset.sum_le_sum fun hi _ =>
             Finset.sum_le_sum fun wi _ => ?_
-          rw [if_pos rfl, abs_one]
+          rw [ite_eq_left rfl, abs_one]
       _ = ((2*h * (2*w) : ℕ) : ℝ) := by
           rw [Finset.sum_const, Finset.sum_const, Finset.card_univ,
             Finset.card_univ, Fintype.card_fin, Fintype.card_fin,
@@ -9120,7 +9120,7 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d W₁ b x₀))))))))
       co ho wo
-  · rw [if_pos ((hargiff co ho wo).mpr hA), if_pos hA, ← mul_sub,
+  · rw [ite_eq_left ((hargiff co ho wo).mpr hA), ite_eq_left hA, ← mul_sub,
       abs_mul]
     refine le_trans (mul_le_of_le_one_left (abs_nonneg _) ?_) ?_
     · split_ifs <;> simp
@@ -9155,8 +9155,8 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
                   (conv2d W₁ (b + t • d)
                     x₀))))))))))))))
         (oneHot nC label) hS (t3Idx co (winRow ho) (winCol wo))
-  · rw [if_neg (fun hA' => hA ((hargiff co ho wo).mp hA')),
-      if_neg hA]
+  · rw [ite_eq_right (fun hA' => hA ((hargiff co ho wo).mp hA')),
+      ite_eq_right hA]
     simp only [mul_zero, sub_self, abs_zero]
     exact hM0
 
@@ -9451,10 +9451,10 @@ theorem cnn_conv2_bias_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
   rw [convBiasGrad_eq_sum _ o]
   rw [Finset.sum_eq_single o
     (fun ci _ hne => Finset.sum_eq_zero fun hi _ => Finset.sum_eq_zero fun wi _ =>
-      by rw [if_neg hne, zero_mul])
+      by rw [ite_eq_right hne, zero_mul])
     (fun habs => absurd (Finset.mem_univ o) habs)]
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
-  rw [if_pos (rfl : o = o), one_mul]
+  rw [ite_eq_left (rfl : o = o), one_mul]
 
 /-- **The conv-2 bias-gradient grad-close budget** — `cnnConv2GradBudget` with
     the `a·` input factor stripped (the bias Jacobian carries no input window):
@@ -9871,10 +9871,10 @@ theorem cnn_conv1_bias_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
   rw [convBiasGrad_eq_sum _ o]
   rw [Finset.sum_eq_single o
     (fun ci _ hne => Finset.sum_eq_zero fun hi _ => Finset.sum_eq_zero fun wi _ =>
-      by rw [if_neg hne, zero_mul])
+      by rw [ite_eq_right hne, zero_mul])
     (fun habs => absurd (Finset.mem_univ o) habs)]
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
-  rw [if_pos (rfl : o = o), one_mul]
+  rw [ite_eq_left (rfl : o = o), one_mul]
 
 /-- **The conv-1 bias-gradient grad-close budget** — `cnnConv1GradBudget` with
     the `a·` input factors stripped (the bias Jacobian carries no input window):

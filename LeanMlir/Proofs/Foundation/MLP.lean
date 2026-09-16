@@ -85,8 +85,8 @@ theorem pdiv_dense {m n : Nat} (W : Mat m n) (b : Vec n)
         from pdiv_const _ _ _ _]
     -- Goal: (if i = i' then 1 else 0) * W i' j + x i' * 0 = if i = i' then W i' j else 0
     by_cases h : i = i'
-    · rw [if_pos h, if_pos h]; ring
-    · rw [if_neg h, if_neg h]; ring
+    · rw [ite_eq_left h, ite_eq_left h]; ring
+    · rw [ite_eq_right h, ite_eq_right h]; ring
   simp_rw [hterm]
   -- Step 4: collapse the Kronecker sum.
   rw [Finset.sum_ite_eq Finset.univ i (fun i' => W i' j)]
@@ -185,7 +185,7 @@ theorem pdiv_dense_W {m n : Nat} (b : Vec n) (x : Vec m) (W : Mat m n)
         apply h
         have := finProdFinEquiv.injective heq
         exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
-      rw [if_neg hne, if_neg h]
+      rw [ite_eq_right hne, ite_eq_right h]
       ring
   simp_rw [hterm]
   -- Step 5: collapse the sum over i'. ∑ i', if i = i' ∧ j' = j then x i else 0.
@@ -194,7 +194,7 @@ theorem pdiv_dense_W {m n : Nat} (b : Vec n) (x : Vec m) (W : Mat m n)
     simp only [and_true]
     rw [Finset.sum_ite_eq Finset.univ i (fun _ => x i)]
     simp
-  · rw [if_neg (fun h => hj'j h.symm)]
+  · rw [ite_eq_right (fun h => hj'j h.symm)]
     simp_rw [show ∀ i' : Fin m, (i = i' ∧ j' = j) ↔ False from
       fun i' => ⟨fun h => hj'j h.2, False.elim⟩]
     simp
@@ -272,7 +272,7 @@ theorem dense_weight_grad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
   simp_rw [pdiv_dense_W]
   -- Σ k, (if k = j then x i else 0) * dy k  collapses to x i * dy j
   rw [Finset.sum_eq_single j
-      (fun k _ hne => by rw [if_neg hne]; ring)
+      (fun k _ hne => by rw [ite_eq_right hne]; ring)
       (fun h => absurd (Finset.mem_univ j) h)]
   simp [Mat.outer]
 
@@ -304,7 +304,7 @@ theorem dense_bias_grad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
       ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' x) b i j * dy j := by
   simp_rw [pdiv_dense_b W b x]
   rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+      (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
       (fun h => absurd (Finset.mem_univ i) h)]
   simp
 
@@ -339,8 +339,8 @@ noncomputable def reluLinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n :
                       else (0 : Vec n →L[ℝ] ℝ))) y k = _
   rw [ContinuousLinearMap.pi_apply]
   by_cases hxk : x k > 0
-  · rw [if_pos hxk, if_pos hxk]; rfl
-  · rw [if_neg hxk, if_neg hxk]; rfl
+  · rw [ite_eq_left hxk, ite_eq_left hxk]; rfl
+  · rw [ite_eq_right hxk, ite_eq_right hxk]; rfl
 
 /-- **ReLU is differentiable at smooth points.** Within `Metric.ball x r`
     for `r := min |x k|`, every coordinate keeps its sign — so `relu n`
@@ -380,12 +380,12 @@ theorem relu_hasFDerivAt (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) :
         have h_abs : |y k - x k| < -x k := by rwa [abs_of_neg hxk_neg] at h_close
         have h_lt : y k - x k < -x k := (abs_lt.mp h_abs).2
         linarith
-      rw [if_neg (not_lt.mpr hyk_neg.le), if_neg (not_lt.mpr hxk_neg.le)]
+      rw [ite_eq_right (not_lt.mpr hyk_neg.le), ite_eq_right (not_lt.mpr hxk_neg.le)]
     · have hyk_pos : 0 < y k := by
         have h_abs : |y k - x k| < x k := by rwa [abs_of_pos hxk_pos] at h_close
         have h_lt : -(x k) < y k - x k := (abs_lt.mp h_abs).1
         linarith
-      rw [if_pos hyk_pos, if_pos hxk_pos]
+      rw [ite_eq_left hyk_pos, ite_eq_left hxk_pos]
   have h_evt : (relu n) =ᶠ[nhds x] (⇑(reluLinearPart n x) : Vec n → Vec n) :=
     h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds x hr_pos)
   exact (reluLinearPart n x).hasFDerivAt.congr_of_eventuallyEq h_evt
@@ -408,11 +408,11 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
   unfold pdiv
   rw [(relu_hasFDerivAt n x h_smooth).fderiv, reluLinearPart_apply, basisVec_apply]
   by_cases hij : i = j
-  · subst hij; rw [if_pos rfl, if_pos rfl]
-  · rw [if_neg (fun h : j = i => hij h.symm), if_neg hij]
+  · subst hij; rw [ite_eq_left rfl, ite_eq_left rfl]
+  · rw [ite_eq_right (fun h : j = i => hij h.symm), ite_eq_right hij]
     by_cases hxj : x j > 0
-    · rw [if_pos hxj]
-    · rw [if_neg hxj]
+    · rw [ite_eq_left hxj]
+    · rw [ite_eq_right hxj]
 
 /-- **ReLU bundled VJP — canonical (junk-at-kink) witness.**
 
@@ -449,12 +449,12 @@ theorem relu_codegen_matches_canonical (n : Nat) (x : Vec n)
   show ∑ j : Fin n, pdiv (relu n) x i j * dy j = _
   simp_rw [pdiv_relu n x h_smooth i]
   rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+      (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
       (fun h => absurd (Finset.mem_univ i) h)]
-  rw [if_pos rfl]
+  rw [ite_eq_left rfl]
   by_cases hx : x i > 0
-  · rw [if_pos hx, if_pos hx]; ring
-  · rw [if_neg hx, if_neg hx]; ring
+  · rw [ite_eq_left hx, ite_eq_left hx]; ring
+  · rw [ite_eq_right hx, ite_eq_right hx]; ring
 
 /-- **Diagonal-indicator restatement of the smooth-point bridge.**
     `relu_has_vjp.backward x dy i = 1_{x i > 0} · dy i` at smooth
@@ -466,8 +466,8 @@ theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
     (if x i > 0 then (1 : ℝ) else 0) * dy i := by
   rw [relu_codegen_matches_canonical n x h_smooth dy i]
   by_cases hx : x i > 0
-  · rw [if_pos hx, if_pos hx]; ring
-  · rw [if_neg hx, if_neg hx]; ring
+  · rw [ite_eq_left hx, ite_eq_left hx]; ring
+  · rw [ite_eq_right hx, ite_eq_right hx]; ring
 
 /-- **ReLU pointwise VJP — no canonical-witness escape.**
 
@@ -482,12 +482,12 @@ noncomputable def relu_has_vjp_at (n : Nat) (x : Vec n)
     intro dy i
     simp_rw [pdiv_relu n x h_smooth]
     rw [Finset.sum_eq_single i
-        (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
         (fun h => absurd (Finset.mem_univ i) h)]
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     by_cases hxi : x i > 0
-    · rw [if_pos hxi, if_pos hxi]; ring
-    · rw [if_neg hxi, if_neg hxi]; ring
+    · rw [ite_eq_left hxi, ite_eq_left hxi]; ring
+    · rw [ite_eq_right hxi, ite_eq_right hxi]; ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § Softmax Cross-Entropy Loss

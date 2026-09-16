@@ -119,8 +119,8 @@ theorem pdiv_fwd (j : Fin 49) (c : Fin 10) :
       intro m
       rw [pdiv_dense, pdiv_relu 8 _ preact_ne, preact_eq]
       by_cases hmk : m = k
-      · rw [if_pos hmk, if_pos hmk]
-      · rw [if_neg hmk, if_neg hmk, mul_zero]
+      · rw [ite_eq_left hmk, ite_eq_left hmk]
+      · rw [ite_eq_right hmk, ite_eq_right hmk, mul_zero]
     rw [Finset.sum_congr rfl fun m _ => hterm m,
         Finset.sum_ite_eq' Finset.univ k
           (fun m => W1V j m * (if hpreVals m > 0 then (1:ℝ) else 0))]

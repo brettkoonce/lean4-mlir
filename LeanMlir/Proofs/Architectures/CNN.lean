@@ -180,12 +180,12 @@ theorem conv2d_differentiable {ic oc h w kH kW : Nat}
           if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
             x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
         (fun x : Tensor3 ic h w => x c ⟨hh - pH, hP.2.1⟩ ⟨ww - pW, hP.2.2.2⟩) from by
-      funext x; rw [dif_pos hP]]
+      funext x; rw [dite_eq_left hP]]
     fun_prop
   · rw [show (fun x : Tensor3 ic h w =>
           if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
             x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
-        (fun _ : Tensor3 ic h w => (0 : ℝ)) from by funext x; rw [dif_neg hP]]
+        (fun _ : Tensor3 ic h w => (0 : ℝ)) from by funext x; rw [dite_eq_right hP]]
     exact differentiableAt_const _
 
 /-- **Differentiability of an `if hpad : P then v(σ hpad) else 0` term.**
@@ -197,10 +197,10 @@ lemma differentiableAt_pad_eval {n : Nat} (P : Prop) [Decidable P]
     DifferentiableAt ℝ (fun y : Vec n => if h : P then y (σ h) else (0 : ℝ)) v := by
   by_cases hP : P
   · rw [show (fun y : Vec n => if h : P then y (σ h) else (0 : ℝ)) =
-            (fun y => y (σ hP)) from by funext y; rw [dif_pos hP]]
+            (fun y => y (σ hP)) from by funext y; rw [dite_eq_left hP]]
     fun_prop
   · rw [show (fun y : Vec n => if h : P then y (σ h) else (0 : ℝ)) =
-            (fun _ => (0 : ℝ)) from by funext y; rw [dif_neg hP]]
+            (fun _ => (0 : ℝ)) from by funext y; rw [dite_eq_right hP]]
     exact differentiableAt_const _
 
 /-- **Pdiv of a per-output dependent if-eval-or-zero family.**
@@ -235,20 +235,20 @@ lemma pdiv_pi_pad_eval {n m : Nat}
         (fun v' : Vec n => v' (σ idx_out hpad)) from by
       funext v'
       show (if h : P idx_out then v' (σ idx_out h) else (0 : ℝ)) = v' (σ idx_out hpad)
-      rw [dif_pos hpad]]
+      rw [dite_eq_left hpad]]
     rw [show (fun v' : Vec n => v' (σ idx_out hpad)) =
           ((ContinuousLinearMap.proj (σ idx_out hpad) : Vec n →L[ℝ] ℝ) : Vec n → ℝ)
         from rfl]
     rw [ContinuousLinearMap.fderiv]
     show (ContinuousLinearMap.proj (σ idx_out hpad) : Vec n →L[ℝ] ℝ) (basisVec idx_in) = _
-    rw [ContinuousLinearMap.proj_apply, basisVec_apply, dif_pos hpad]
+    rw [ContinuousLinearMap.proj_apply, basisVec_apply, dite_eq_left hpad]
   · rw [show (fun v' : Vec n =>
           (fun v'' k' => if h : P k' then v'' (σ k' h) else (0 : ℝ)) v' idx_out) =
         (fun _ => (0 : ℝ)) from by
       funext v'
       show (if h : P idx_out then v' (σ idx_out h) else (0 : ℝ)) = 0
-      rw [dif_neg hpad]]
-    rw [(hasFDerivAt_const (0 : ℝ) v).fderiv, dif_neg hpad]
+      rw [dite_eq_right hpad]]
+    rw [(hasFDerivAt_const (0 : ℝ) v).fderiv, dite_eq_right hpad]
     rfl
 
 /-- **Pdiv of `c_const * pad-eval` family.** Combines `pdiv_mul`,
@@ -641,13 +641,13 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
                        khh.val + ohw_hi.val - (kH - 1) / 2 < h ∧
                        (kW - 1) / 2 ≤ kww.val + ohw_wi.val ∧
                        kww.val + ohw_wi.val - (kW - 1) / 2 < w
-        · rw [dif_pos hpad, dif_pos hpad]
+        · rw [dite_eq_left hpad, dite_eq_left hpad]
           by_cases heq : finProdFinEquiv (finProdFinEquiv
               (cc, ⟨khh.val + ohw_hi.val - (kH - 1) / 2, hpad.2.1⟩),
               ⟨kww.val + ohw_wi.val - (kW - 1) / 2, hpad.2.2.2⟩) = idx_in
-          · rw [if_pos heq, if_pos heq.symm]
-          · rw [if_neg heq, if_neg (fun h => heq h.symm)]
-        · rw [dif_neg hpad, dif_neg hpad]
+          · rw [ite_eq_left heq, ite_eq_left heq.symm]
+          · rw [ite_eq_right heq, ite_eq_right (fun h => heq h.symm)]
+        · rw [dite_eq_right hpad, dite_eq_right hpad]
       simp_rw [h_inner_c]
     -- Step 2: substitute h_pdiv into the RHS sum and collapse.
     show conv2d_input_grad_formula W dy ci hi wi =
@@ -682,8 +682,8 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
                      hi.val + (kH - 1) / 2 - ho.val < kH ∧
                      wo.val ≤ wi.val + (kW - 1) / 2 ∧
                      wi.val + (kW - 1) / 2 - wo.val < kW
-      · simp only [dif_pos hb]
-      · simp only [dif_neg hb, zero_mul]]
+      · simp only [dite_eq_left hb]
+      · simp only [dite_eq_right hb, zero_mul]]
     -- Goal: (if hb : back_cond then W co ci ⟨kh*⟩ ⟨kw*⟩ else 0) * dy co ho wo
     --     = (∑ c kh kw, W co c kh kw * indicator) * dy co ho wo
     congr 1
@@ -704,7 +704,7 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
                       kh.val + ho.val - (kH - 1) / 2 < h ∧
                       (kW - 1) / 2 ≤ kw.val + wo.val ∧
                       kw.val + wo.val - (kW - 1) / 2 < w
-      · rw [dif_pos hpad]
+      · rw [dite_eq_left hpad]
         by_cases h_match : c = ci ∧ kh.val + ho.val = hi.val + (kH - 1) / 2 ∧
                                     kw.val + wo.val = wi.val + (kW - 1) / 2
         · -- Build the explicit Fin equality for the indicator's RHS.
@@ -722,9 +722,9 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
               show kw.val + wo.val - (kW - 1) / 2 = wi.val
               omega
             rw [← h_c, ← h_hi, ← h_wi]
-          rw [if_pos h_idx_in_eq, if_pos h_match]
-        · rw [if_neg h_match]
-          rw [if_neg]
+          rw [ite_eq_left h_idx_in_eq, ite_eq_left h_match]
+        · rw [ite_eq_right h_match]
+          rw [ite_eq_right]
           intro h_eq
           apply h_match
           rw [hidx_in] at h_eq
@@ -739,8 +739,8 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
           · have h_wi : wi.val = kw.val + wo.val - (kW - 1) / 2 :=
               Fin.ext_iff.mp h_inj_pair.2
             omega
-      · rw [dif_neg hpad]
-        rw [if_neg]
+      · rw [dite_eq_right hpad]
+        rw [ite_eq_right]
         intro ⟨_, hkh_eq, hkw_eq⟩
         apply hpad
         refine ⟨?_, ?_, ?_, ?_⟩
@@ -755,14 +755,14 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
                    hi.val + (kH - 1) / 2 - ho.val < kH ∧
                    wo.val ≤ wi.val + (kW - 1) / 2 ∧
                    wi.val + (kW - 1) / 2 - wo.val < kW
-    · rw [dif_pos hb]
+    · rw [dite_eq_left hb]
       -- Σ c collapses on c = ci, then Σ kh on kh = ⟨hi+pH-ho, hb.2.1⟩, then Σ kw similarly.
       symm
       rw [Finset.sum_eq_single ci ?_ ?_]
       rw [Finset.sum_eq_single ⟨hi.val + (kH - 1) / 2 - ho.val, hb.2.1⟩ ?_ ?_]
       rw [Finset.sum_eq_single ⟨wi.val + (kW - 1) / 2 - wo.val, hb.2.2.2⟩ ?_ ?_]
       · -- Main: W co ci ⟨kh*⟩ ⟨kw*⟩ * (if ci=ci ∧ ... then 1 else 0) = W co ci ⟨kh*⟩ ⟨kw*⟩
-        rw [if_pos]
+        rw [ite_eq_left]
         · ring
         refine ⟨rfl, ?_, ?_⟩
         · show hi.val + (kH - 1) / 2 - ho.val + ho.val = hi.val + (kH - 1) / 2
@@ -770,7 +770,7 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
         · show wi.val + (kW - 1) / 2 - wo.val + wo.val = wi.val + (kW - 1) / 2
           omega
       · intro kw _ hkw_ne
-        rw [if_neg ?_]; · ring
+        rw [ite_eq_right ?_]; · ring
         intro ⟨_, _, hkw_eq⟩
         apply hkw_ne
         apply Fin.ext
@@ -779,7 +779,7 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
       · intro hni; exact absurd (Finset.mem_univ _) hni
       · intro kh _ hkh_ne
         apply Finset.sum_eq_zero; intro kw _
-        rw [if_neg ?_]; · ring
+        rw [ite_eq_right ?_]; · ring
         intro ⟨_, hkh_eq, _⟩
         apply hkh_ne
         apply Fin.ext
@@ -789,15 +789,15 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
       · intro c _ hc_ne
         apply Finset.sum_eq_zero; intro kh _
         apply Finset.sum_eq_zero; intro kw _
-        rw [if_neg (fun ⟨hcc, _, _⟩ => hc_ne hcc)]; ring
+        rw [ite_eq_right (fun ⟨hcc, _, _⟩ => hc_ne hcc)]; ring
       · intro hni; exact absurd (Finset.mem_univ ci) hni
-    · rw [dif_neg hb]
+    · rw [dite_eq_right hb]
       -- Show the inner sum is 0: for !back_cond, no (c, kh, kw) satisfies the indicator.
       symm
       apply Finset.sum_eq_zero; intro c _
       apply Finset.sum_eq_zero; intro kh _
       apply Finset.sum_eq_zero; intro kw _
-      rw [if_neg ?_]; · ring
+      rw [ite_eq_right ?_]; · ring
       intro ⟨_, hkh_eq, hkw_eq⟩
       apply hb
       refine ⟨?_, ?_, ?_, ?_⟩
@@ -1513,22 +1513,22 @@ noncomputable def conv2d_weight_grad_has_vjp {ic oc h w kH kW : Nat}
             (fun c _ hc_ne =>
               Finset.sum_eq_zero (fun kh _ =>
                 Finset.sum_eq_zero (fun kw _ => by
-                  rw [if_neg (fun ⟨_, hc, _, _⟩ => hc_ne hc), zero_mul])))
+                  rw [ite_eq_right (fun ⟨_, hc, _, _⟩ => hc_ne hc), zero_mul])))
             (fun hni => absurd (Finset.mem_univ c') hni)]
       rw [Finset.sum_eq_single kh'
             (fun kh _ hkh_ne =>
               Finset.sum_eq_zero (fun kw _ => by
-                rw [if_neg (fun ⟨_, _, hkh, _⟩ => hkh_ne hkh), zero_mul]))
+                rw [ite_eq_right (fun ⟨_, _, hkh, _⟩ => hkh_ne hkh), zero_mul]))
             (fun hni => absurd (Finset.mem_univ kh') hni)]
       rw [Finset.sum_eq_single kw'
             (fun kw _ hkw_ne => by
-              rw [if_neg (fun ⟨_, _, _, hkw⟩ => hkw_ne hkw), zero_mul])
+              rw [ite_eq_right (fun ⟨_, _, _, hkw⟩ => hkw_ne hkw), zero_mul])
             (fun hni => absurd (Finset.mem_univ kw') hni)]
       -- Final: (if (ohw_o = o' ∧ c' = c' ∧ kh' = kh' ∧ kw' = kw') then 1 else 0) * xpad(c', kh', kw')
       --        = if ohw_o = o' then xpad(c', kh', kw') else 0
       by_cases h_o : ohw_o = o'
-      · rw [if_pos ⟨h_o, rfl, rfl, rfl⟩, one_mul, if_pos h_o]
-      · rw [if_neg (fun ⟨h, _⟩ => h_o h), zero_mul, if_neg h_o]
+      · rw [ite_eq_left ⟨h_o, rfl, rfl, rfl⟩, one_mul, ite_eq_left h_o]
+      · rw [ite_eq_right (fun ⟨h, _⟩ => h_o h), zero_mul, ite_eq_right h_o]
     -- Step 2: substitute h_pdiv into the backward sum and collapse.
     show (∑ hi : Fin h, ∑ wi : Fin w,
             (let pH := (kH - 1) / 2
@@ -1607,14 +1607,14 @@ noncomputable def conv2d_weight_grad_has_vjp {ic oc h w kH kW : Nat}
           (fun o _ ho_ne =>
             Finset.sum_eq_zero (fun hi _ =>
               Finset.sum_eq_zero (fun wi _ => by
-                rw [if_neg ho_ne, zero_mul])))
+                rw [ite_eq_right ho_ne, zero_mul])))
           (fun hni => absurd (Finset.mem_univ o') hni)]
     -- Now the outer (if o' = o' then ... else 0) collapses to the body.
     apply Finset.sum_congr rfl
     intro hi _
     apply Finset.sum_congr rfl
     intro wi _
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
 
 /-- Named accessor for the conv2d weight backward — aligns with MLIR
     codegen (the "transpose trick" `stablehlo.convolution` in the backward
@@ -2090,8 +2090,8 @@ theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
     intro ⟨co, ho, wo, ab, ab'⟩
     show 0 < (if ab = ab' then (1 : ℝ) else _)
     by_cases hab : ab = ab'
-    · rw [if_pos hab]; norm_num
-    · rw [if_neg hab]
+    · rw [ite_eq_left hab]; norm_num
+    · rw [ite_eq_right hab]
       exact abs_pos.mpr (sub_ne_zero.mpr (h_smooth co ho wo ab ab' hab))
   -- Radius = (inf gap) / 4 — leaves slack 2r < r_raw for the diff argument.
   let univ_S : Finset (Fin c × Fin h × Fin w × (Fin 2 × Fin 2) × (Fin 2 × Fin 2)) :=
@@ -2153,7 +2153,7 @@ theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
               |x co (winRowInv ho a') (winColInv wo b') -
                x co (winRowInv ho ab.1) (winColInv wo ab.2)| := by
             show (if (a', b') = ab then (1 : ℝ) else _) = _
-            rw [if_neg h_eq]
+            rw [ite_eq_right h_eq]
           rw [h_gap_expanded] at h_gap
           rw [abs_sub_comm] at h_gap
           have h_pos : 0 ≤ x co (winRowInv ho ab.1) (winColInv wo ab.2) -
@@ -2306,25 +2306,25 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
         intro ho _
         rw [Finset.sum_eq_zero]
         intro wo _
-        rw [if_neg (fun ⟨h1, _, _, _⟩ => hne_co h1)]
+        rw [ite_eq_right (fun ⟨h1, _, _, _⟩ => hne_co h1)]
         ring)
       (fun h => absurd (Finset.mem_univ ci) h)]
   rw [Finset.sum_eq_single (winRow hi_in)
       (fun ho _ hne_ho => by
         rw [Finset.sum_eq_zero]
         intro wo _
-        rw [if_neg (fun ⟨_, h2, _, _⟩ => hne_ho h2)]
+        rw [ite_eq_right (fun ⟨_, h2, _, _⟩ => hne_ho h2)]
         ring)
       (fun h => absurd (Finset.mem_univ _) h)]
   rw [Finset.sum_eq_single (winCol wi_in)
       (fun wo _ hne_wo => by
-        rw [if_neg (fun ⟨_, _, h3, _⟩ => hne_wo h3)]
+        rw [ite_eq_right (fun ⟨_, _, h3, _⟩ => hne_wo h3)]
         ring)
       (fun h => absurd (Finset.mem_univ _) h)]
   by_cases h_arg : MaxPool2IsArgmax x ci hi_in wi_in
-  · rw [if_pos ⟨rfl, rfl, rfl, h_arg⟩, if_pos h_arg]
+  · rw [ite_eq_left ⟨rfl, rfl, rfl, h_arg⟩, ite_eq_left h_arg]
     ring
-  · rw [if_neg (fun ⟨_, _, _, h⟩ => h_arg h), if_neg h_arg]
+  · rw [ite_eq_right (fun ⟨_, _, _, h⟩ => h_arg h), ite_eq_right h_arg]
     ring
 
 /-- **MaxPool2 pointwise VJP — no canonical-witness escape.**
@@ -2609,13 +2609,13 @@ theorem pdiv_globalAvgPoolFlat (c h w : Nat) (v : Vec (c * h * w))
   rw [← Finset.mul_sum]
   -- ∑ p, (if idx = enc(ci,p.1,p.2) then 1 else 0) = if channel idx = ci then 1 else 0
   by_cases hch : flatChannel c h w idx = ci
-  · rw [if_pos hch]
+  · rw [ite_eq_left hch]
     -- the unique p matching is the spatial coords of idx
     set p0 : Fin h × Fin w :=
       ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2,
        (finProdFinEquiv.symm idx).2) with hp0
     rw [Finset.sum_eq_single p0]
-    · rw [if_pos]
+    · rw [ite_eq_left]
       · ring
       · -- idx = enc(ci, p0.1, p0.2)
         rw [hp0]
@@ -2629,7 +2629,7 @@ theorem pdiv_globalAvgPoolFlat (c h w : Nat) (v : Vec (c * h * w))
             (finProdFinEquiv.symm idx).2)
         rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
     · intro p _ hne
-      rw [if_neg]
+      rw [ite_eq_right]
       intro heq
       apply hne
       -- idx = enc(ci,p.1,p.2) and idx = enc(ci,p0.1,p0.2) ⟹ p = p0
@@ -2652,10 +2652,10 @@ theorem pdiv_globalAvgPoolFlat (c h w : Nat) (v : Vec (c * h * w))
       have hhe : p.1 = p0.1 := (Prod.mk.inj (finProdFinEquiv.injective h2)).2
       exact Prod.ext hhe hwe
     · intro hp; exact absurd (Finset.mem_univ _) hp
-  · rw [if_neg hch, zero_div]
+  · rw [ite_eq_right hch, zero_div]
     rw [Finset.sum_eq_zero, mul_zero]
     intro p _
-    rw [if_neg]
+    rw [ite_eq_right]
     intro heq
     apply hch
     -- idx = enc(ci,p.1,p.2) ⟹ channel idx = ci
@@ -2672,9 +2672,9 @@ noncomputable def globalAvgPoolFlat_has_vjp (c h w : Nat) :
     simp_rw [pdiv_globalAvgPoolFlat]
     -- ∑ ci, (if flatChannel idx = ci then 1 else 0)/(hw) * dy ci
     rw [Finset.sum_eq_single (flatChannel c h w idx)]
-    · rw [if_pos rfl]; ring
+    · rw [ite_eq_left rfl]; ring
     · intro b _ hne
-      rw [if_neg (fun heq => hne heq.symm)]; ring
+      rw [ite_eq_right (fun heq => hne heq.symm)]; ring
     · intro hp; exact absurd (Finset.mem_univ _) hp
 
 /-- **Uniform VJP-correctness wrapper** for `globalAvgPoolFlat` — a citable

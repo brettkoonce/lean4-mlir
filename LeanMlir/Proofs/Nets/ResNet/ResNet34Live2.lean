@@ -76,7 +76,7 @@ theorem bnForward_chan_lt {n : Nat} (ε β : ℝ) (hε : 0 < ε) (z : Vec n) (k�
 /-- ReLU is the identity on a strictly-positive coordinate. -/
 theorem relu_pos_eq {n : Nat} (z : Vec n) (k : Fin n) (h : 0 < z k) :
     relu n z k = z k := by
-  simp only [relu]; rw [if_pos h]
+  simp only [relu]; rw [ite_eq_left h]
 
 /-- **ReLU preserves strict order in the kept-positive region** — where the net is
     smooth (the invariant maintains positivity alongside the order). -/

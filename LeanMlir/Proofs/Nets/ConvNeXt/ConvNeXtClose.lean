@@ -89,7 +89,7 @@ theorem pdiv_layerScale_gamma {n : Nat} (x : Vec n) (γ : Vec n) (i j : Fin n) :
   rw [pdiv_id, pdiv_const]
   by_cases hij : i = j
   · subst hij; simp
-  · rw [if_neg hij, if_neg hij]; ring
+  · rw [ite_eq_right hij, ite_eq_right hij]; ring
 
 /-- The rendered **layer-scale γ gradient**: `dγ_i = x_i · dy_i` (elementwise multiply of the
     saved layer input with the cotangent — the `layerScaleF`-shaped backward). -/
@@ -103,8 +103,8 @@ theorem layerScale_gamma_grad_bridge {n : Nat} (x : Vec n) (γ : Vec n) (dy : Ve
       = ∑ j : Fin n, pdiv (fun γ' : Vec n => layerScale γ' x) γ i j * dy j := by
   simp_rw [pdiv_layerScale_gamma]
   rw [Finset.sum_eq_single i]
-  · rw [if_pos rfl]; rfl
-  · intro b _ hne; rw [if_neg (fun h => hne h.symm)]; ring
+  · rw [ite_eq_left rfl]; rfl
+  · intro b _ hne; rw [ite_eq_right (fun h => hne h.symm)]; ring
   · intro hp; exact absurd (Finset.mem_univ _) hp
 
 /-- **Layer-scale γ output, certified.** `γⁿ = γ − lr·(x ⊙ dy)` denotes

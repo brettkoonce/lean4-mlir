@@ -56,9 +56,9 @@ noncomputable def biasAdd_has_vjp {n : Nat} (βv : Vec n) :
     intro z dy i
     simp_rw [pdiv_id_add_const βv z]
     rw [Finset.sum_eq_single i
-        (fun j _ hne => by rw [if_neg (Ne.symm hne), zero_mul])
+        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne), zero_mul])
         (fun h => absurd (Finset.mem_univ i) h)]
-    rw [if_pos rfl, one_mul]
+    rw [ite_eq_left rfl, one_mul]
 
 /-- **Vector-LN VJP** — `(+β) ∘ layerScale γ ∘ LN(1,0)`, three proven pieces glued
     by `vjp_comp`. Only `0 < ε`. -/
@@ -804,11 +804,11 @@ theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Ve
       (fun k _ hne => by
         rw [Equiv.symm_apply_apply]
         dsimp only
-        rw [if_neg (Ne.symm hne), mul_zero, zero_mul])
+        rw [ite_eq_right (Ne.symm hne), mul_zero, zero_mul])
       (fun h => absurd (Finset.mem_univ i) h)]
   rw [Equiv.symm_apply_apply]
   dsimp only
-  rw [if_pos rfl, mul_one]
+  rw [ite_eq_left rfl, mul_one]
   ring
 
 /-- **Vector-LN β-gradient bridge.** -/
@@ -828,11 +828,11 @@ theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec
       (fun k _ hne => by
         rw [Equiv.symm_apply_apply]
         dsimp only
-        rw [if_neg (Ne.symm hne), zero_mul])
+        rw [ite_eq_right (Ne.symm hne), zero_mul])
       (fun h => absurd (Finset.mem_univ i) h)]
   rw [Equiv.symm_apply_apply]
   dsimp only
-  rw [if_pos rfl, one_mul]
+  rw [ite_eq_left rfl, one_mul]
 
 /-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes
     the certified rowwise vector-LN ∂/∂γv contraction. Covers all five LN sites of

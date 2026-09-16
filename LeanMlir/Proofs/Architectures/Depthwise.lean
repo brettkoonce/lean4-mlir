@@ -384,13 +384,13 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
                      khh.val + ohw_hi.val - (kH - 1) / 2 < h ∧
                      (kW - 1) / 2 ≤ kww.val + ohw_wi.val ∧
                      kww.val + ohw_wi.val - (kW - 1) / 2 < w
-      · rw [dif_pos hpad, dif_pos hpad]
+      · rw [dite_eq_left hpad, dite_eq_left hpad]
         by_cases heq : finProdFinEquiv (finProdFinEquiv
             (ohw_o, ⟨khh.val + ohw_hi.val - (kH - 1) / 2, hpad.2.1⟩),
             ⟨kww.val + ohw_wi.val - (kW - 1) / 2, hpad.2.2.2⟩) = idx_in
-        · rw [if_pos heq, if_pos heq.symm]
-        · rw [if_neg heq, if_neg (fun h => heq h.symm)]
-      · rw [dif_neg hpad, dif_neg hpad]
+        · rw [ite_eq_left heq, ite_eq_left heq.symm]
+        · rw [ite_eq_right heq, ite_eq_right (fun h => heq h.symm)]
+      · rw [dite_eq_right hpad, dite_eq_right hpad]
     -- Step 2: substitute h_pdiv and collapse.
     show depthwiseConv2d_input_grad_formula W dy ci hi wi =
       ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
@@ -431,7 +431,7 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
                           kh.val + ho.val - (kH - 1) / 2 < h ∧
                           (kW - 1) / 2 ≤ kw.val + wo.val ∧
                           kw.val + wo.val - (kW - 1) / 2 < w
-          · rw [dif_pos hpad, if_neg ?_]
+          · rw [dite_eq_left hpad, ite_eq_right ?_]
             intro h_eq
             rw [hidx_in] at h_eq
             have h_inj := finProdFinEquiv.injective h_eq
@@ -439,7 +439,7 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
             have h_inj_inner := finProdFinEquiv.injective h_inj_pair.1
             have h_inj_inner_pair := Prod.mk.inj h_inj_inner
             exact hco_ne h_inj_inner_pair.1.symm
-          · rw [dif_neg hpad])
+          · rw [dite_eq_right hpad])
         (fun hni => absurd (Finset.mem_univ ci) hni)]
     -- Now: LHS = ∑ ho wo, formula_inner; RHS = ∑ ho wo, pdiv3 at co=ci * dy ci ho wo.
     apply Finset.sum_congr rfl; intro ho _
@@ -467,8 +467,8 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
                      hi.val + (kH - 1) / 2 - ho.val < kH ∧
                      wo.val ≤ wi.val + (kW - 1) / 2 ∧
                      wi.val + (kW - 1) / 2 - wo.val < kW
-      · simp only [dif_pos hb]
-      · simp only [dif_neg hb, zero_mul]]
+      · simp only [dite_eq_left hb]
+      · simp only [dite_eq_right hb, zero_mul]]
     congr 1
     -- Convert the dependent-if indicator to a non-dependent 2-conjunct form.
     have h_indicator : ∀ (kh : Fin kH) (kw : Fin kW),
@@ -487,7 +487,7 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
                       kh.val + ho.val - (kH - 1) / 2 < h ∧
                       (kW - 1) / 2 ≤ kw.val + wo.val ∧
                       kw.val + wo.val - (kW - 1) / 2 < w
-      · rw [dif_pos hpad]
+      · rw [dite_eq_left hpad]
         by_cases h_match : kh.val + ho.val = hi.val + (kH - 1) / 2 ∧
                            kw.val + wo.val = wi.val + (kW - 1) / 2
         · have h_idx_in_eq : idx_in = finProdFinEquiv (finProdFinEquiv
@@ -503,9 +503,9 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
               show kw.val + wo.val - (kW - 1) / 2 = wi.val
               omega
             rw [← h_hi, ← h_wi]
-          rw [if_pos h_idx_in_eq, if_pos h_match]
-        · rw [if_neg h_match]
-          rw [if_neg]
+          rw [ite_eq_left h_idx_in_eq, ite_eq_left h_match]
+        · rw [ite_eq_right h_match]
+          rw [ite_eq_right]
           intro h_eq
           apply h_match
           rw [hidx_in] at h_eq
@@ -520,8 +520,8 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
           · have h_wi : wi.val = kw.val + wo.val - (kW - 1) / 2 :=
               Fin.ext_iff.mp h_inj_pair.2
             omega
-      · rw [dif_neg hpad]
-        rw [if_neg]
+      · rw [dite_eq_right hpad]
+        rw [ite_eq_right]
         intro ⟨hkh_eq, hkw_eq⟩
         apply hpad
         refine ⟨?_, ?_, ?_, ?_⟩
@@ -536,11 +536,11 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
                    hi.val + (kH - 1) / 2 - ho.val < kH ∧
                    wo.val ≤ wi.val + (kW - 1) / 2 ∧
                    wi.val + (kW - 1) / 2 - wo.val < kW
-    · rw [dif_pos hb]
+    · rw [dite_eq_left hb]
       symm
       rw [Finset.sum_eq_single ⟨hi.val + (kH - 1) / 2 - ho.val, hb.2.1⟩ ?_ ?_]
       rw [Finset.sum_eq_single ⟨wi.val + (kW - 1) / 2 - wo.val, hb.2.2.2⟩ ?_ ?_]
-      · rw [if_pos]
+      · rw [ite_eq_left]
         · ring
         refine ⟨?_, ?_⟩
         · show hi.val + (kH - 1) / 2 - ho.val + ho.val = hi.val + (kH - 1) / 2
@@ -548,7 +548,7 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
         · show wi.val + (kW - 1) / 2 - wo.val + wo.val = wi.val + (kW - 1) / 2
           omega
       · intro kw _ hkw_ne
-        rw [if_neg ?_]; · ring
+        rw [ite_eq_right ?_]; · ring
         intro ⟨_, hkw_eq⟩
         apply hkw_ne
         apply Fin.ext
@@ -557,18 +557,18 @@ noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
       · intro hni; exact absurd (Finset.mem_univ _) hni
       · intro kh _ hkh_ne
         apply Finset.sum_eq_zero; intro kw _
-        rw [if_neg ?_]; · ring
+        rw [ite_eq_right ?_]; · ring
         intro ⟨hkh_eq, _⟩
         apply hkh_ne
         apply Fin.ext
         show kh.val = hi.val + (kH - 1) / 2 - ho.val
         omega
       · intro hni; exact absurd (Finset.mem_univ _) hni
-    · rw [dif_neg hb]
+    · rw [dite_eq_right hb]
       symm
       apply Finset.sum_eq_zero; intro kh _
       apply Finset.sum_eq_zero; intro kw _
-      rw [if_neg ?_]; · ring
+      rw [ite_eq_right ?_]; · ring
       intro ⟨hkh_eq, hkw_eq⟩
       apply hb
       refine ⟨?_, ?_, ?_, ?_⟩
@@ -628,12 +628,12 @@ theorem depthwise_differentiable {c h w kH kW : Nat}
           if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
             x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
         (fun x : Tensor3 c h w => x ch ⟨hh - pH, hP.2.1⟩ ⟨ww - pW, hP.2.2.2⟩) from by
-      funext x; rw [dif_pos hP]]
+      funext x; rw [dite_eq_left hP]]
     fun_prop
   · rw [show (fun x : Tensor3 c h w =>
           if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
             x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
-        (fun _ : Tensor3 c h w => (0 : ℝ)) from by funext x; rw [dif_neg hP]]
+        (fun _ : Tensor3 c h w => (0 : ℝ)) from by funext x; rw [dite_eq_right hP]]
     exact differentiableAt_const _
 
 /-- **Flat depthwise conv** — `depthwiseConv2d` bridged into flattened
@@ -1073,20 +1073,20 @@ noncomputable def depthwise_weight_grad_has_vjp3 {c h w kH kW : Nat}
       rw [Finset.sum_eq_single hi_k
             (fun kh _ hkh_ne =>
               Finset.sum_eq_zero (fun kw _ => by
-                rw [if_neg (fun ⟨_, hhi, _⟩ => hkh_ne hhi.symm), zero_mul]))
+                rw [ite_eq_right (fun ⟨_, hhi, _⟩ => hkh_ne hhi.symm), zero_mul]))
             (fun hni => absurd (Finset.mem_univ hi_k) hni)]
       rw [Finset.sum_eq_single wi_k
             (fun kw _ hkw_ne => by
-              rw [if_neg (fun ⟨_, _, hwi⟩ => hkw_ne hwi.symm), zero_mul])
+              rw [ite_eq_right (fun ⟨_, _, hwi⟩ => hkw_ne hwi.symm), zero_mul])
             (fun hni => absurd (Finset.mem_univ wi_k) hni)]
       -- Goal: (if (ci = co ∧ hi_k = hi_k ∧ wi_k = wi_k) then 1 else 0) * x_pad
       --       = if co = ci then x_pad(ci) else 0
       by_cases h_c : co = ci
-      · rw [if_pos ⟨h_c.symm, rfl, rfl⟩, one_mul, if_pos h_c]
-        -- After if_pos, both sides have the form `let pH := ...` containing `x ci ...` (LHS)
+      · rw [ite_eq_left ⟨h_c.symm, rfl, rfl⟩, one_mul, ite_eq_left h_c]
+        -- After ite_eq_left, both sides have the form `let pH := ...` containing `x ci ...` (LHS)
         -- and `x ci ...` (RHS). They should be definitionally equal since co = ci.
         rw [h_c]
-      · rw [if_neg (fun ⟨h, _⟩ => h_c h.symm), zero_mul, if_neg h_c]
+      · rw [ite_eq_right (fun ⟨h, _⟩ => h_c h.symm), zero_mul, ite_eq_right h_c]
     -- Step 2: collapse the triple sum using h_pdiv3.
     show (∑ ho : Fin h, ∑ wo : Fin w,
             (let pH := (kH - 1) / 2
@@ -1106,12 +1106,12 @@ noncomputable def depthwise_weight_grad_has_vjp3 {c h w kH kW : Nat}
           (fun co _ hco_ne =>
             Finset.sum_eq_zero (fun ho _ =>
               Finset.sum_eq_zero (fun wo _ => by
-                rw [if_neg hco_ne, zero_mul])))
+                rw [ite_eq_right hco_ne, zero_mul])))
           (fun hni => absurd (Finset.mem_univ ci) hni)]
     -- Now: LHS = ∑ ho wo, (if ci = ci then x_pad(ci) else 0) * dy ci ho wo. The if is true.
     apply Finset.sum_congr rfl; intro ho _
     apply Finset.sum_congr rfl; intro wo _
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
 
 /-- Named accessor for the depthwise weight backward. -/
 noncomputable abbrev depthwiseConv2d_weight_grad {c h w kH kW : Nat}

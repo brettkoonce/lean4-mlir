@@ -486,14 +486,14 @@ theorem relu_close {n : Nat} (xt xa : Vec n) (e : ℝ)
   by_cases ht : xt i > 0
   · by_cases ha : xa i > 0
     · simpa [ht, ha] using h
-    · rw [if_pos ht, if_neg ha, sub_zero, abs_of_pos ht]
+    · rw [ite_eq_left ht, ite_eq_right ha, sub_zero, abs_of_pos ht]
       rw [not_lt] at ha
       linarith [h1.2]
   · by_cases ha : xa i > 0
-    · rw [if_neg ht, if_pos ha, zero_sub, abs_neg, abs_of_pos ha]
+    · rw [ite_eq_right ht, ite_eq_left ha, zero_sub, abs_neg, abs_of_pos ha]
       rw [not_lt] at ht
       linarith [h1.1]
-    · rw [if_neg ht, if_neg ha]
+    · rw [ite_eq_right ht, ite_eq_right ha]
       simpa using he0
 
 -- ════════════════════════════════════════════════════════════════
@@ -1000,7 +1000,7 @@ theorem reluMask_close {n : ℕ} {zt z vt v : Vec n} {ez ev : ℝ}
       rw [not_lt]
       rw [abs_of_neg hneg] at hmi
       linarith [hzi.2]
-    rw [if_neg h1, if_neg h2]
+    rw [ite_eq_right h1, ite_eq_right h2]
     simpa using hev
   · exfalso
     rw [hzero] at hmi
@@ -1009,7 +1009,7 @@ theorem reluMask_close {n : ℕ} {zt z vt v : Vec n} {ez ev : ℝ}
   · have h2 : zt i > 0 := by
       rw [abs_of_pos hpos] at hmi
       linarith [hzi.1]
-    rw [if_pos hpos, if_pos h2]
+    rw [ite_eq_left hpos, ite_eq_left h2]
     exact hv i
 
 /-- **Cotangent through one layer** — `mask(z, Wᵀ·c)`, float vs real. The
@@ -1838,8 +1838,8 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
   have hy : |softmax n z k - oneHot n label k| ≤ 1 := by
     simp only [oneHot]
     by_cases h : k = label
-    · rw [if_pos h, abs_le]; constructor <;> linarith
-    · rw [if_neg h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
   -- the final rounded subtract
   have hrnd : |M.softmaxCECotF fexp zt label k -
       (M.softmaxF fexp zt k - oneHot n label k)| ≤

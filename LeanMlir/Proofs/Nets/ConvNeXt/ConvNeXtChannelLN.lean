@@ -249,8 +249,8 @@ theorem pdiv_reindexOut_contract {m n n' : Nat} (f : Vec m → Vec n) (x : Vec m
         pdiv_comp f (fun z : Vec n => fun k : Fin n' => z (σ k)) x hf hg i j]
     simp_rw [pdiv_reindex (fun k : Fin n' => σ k)]
     rw [Finset.sum_eq_single (σ j)
-        (fun o _ hne => by rw [if_neg hne, mul_zero])
-        (fun h => absurd (Finset.mem_univ (σ j)) h), if_pos rfl, mul_one]
+        (fun o _ hne => by rw [ite_eq_right hne, mul_zero])
+        (fun h => absurd (Finset.mem_univ (σ j)) h), ite_eq_left rfl, mul_one]
   simp_rw [hstep]
   rw [← Equiv.sum_comp σ (fun o => pdiv f x i o * cot (σ.symm o))]
   exact Finset.sum_congr rfl (fun j _ => by rw [Equiv.symm_apply_apply])

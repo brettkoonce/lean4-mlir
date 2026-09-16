@@ -169,11 +169,11 @@ theorem sm_cot_l1 :
       |softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j|) =
       ∑ j ∈ Finset.univ.erase lblD, softmax 10 (dense Wd bd xd) j := by
     refine Finset.sum_congr rfl fun j hj => ?_
-    rw [show oneHot 10 lblD j = 0 from if_neg (Finset.mem_erase.mp hj).1,
+    rw [show oneHot 10 lblD j = 0 from ite_eq_right (Finset.mem_erase.mp hj).1,
         sub_zero, abs_of_pos (sm_pos j)]
   have hlbl : |softmax 10 (dense Wd bd xd) lblD - oneHot 10 lblD lblD| =
       1 - softmax 10 (dense Wd bd xd) lblD := by
-    rw [show oneHot 10 lblD lblD = 1 from if_pos rfl,
+    rw [show oneHot 10 lblD lblD = 1 from ite_eq_left rfl,
         abs_of_nonpos (by linarith [sm_le_one lblD]), neg_sub]
   have hs := sm_pos lblD
   linarith [hsplit, hsplit1, herase, hlbl]
@@ -184,7 +184,7 @@ theorem sm_cot_sq :
     (1 : ℝ) / 4 ≤ ∑ j, (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j) ^ 2 := by
   have hterm : (1 : ℝ) / 4 ≤
       (softmax 10 (dense Wd bd xd) lblD - oneHot 10 lblD lblD) ^ 2 := by
-    rw [show oneHot 10 lblD lblD = 1 from if_pos rfl]
+    rw [show oneHot 10 lblD lblD = 1 from ite_eq_left rfl]
     nlinarith [sm_lbl_le_half, (sm_pos lblD).le]
   exact hterm.trans (Finset.single_le_sum
     (f := fun j => (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j) ^ 2)

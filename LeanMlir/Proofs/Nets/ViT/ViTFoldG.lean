@@ -150,9 +150,9 @@ theorem posEmbedGrad_den {ic H W P N D : Nat} (cotN : String)
   simp only [den]
   simp_rw [pdiv_patchEmbed_pos]
   rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [if_neg (Ne.symm (Ne.symm hne).symm), zero_mul])
+      (fun j _ hne => by rw [ite_eq_right (Ne.symm (Ne.symm hne).symm), zero_mul])
       (fun h => absurd (Finset.mem_univ i) h)]
-  rw [if_pos rfl, one_mul]
+  rw [ite_eq_left rfl, one_mul]
 
 /-- **CLS-token GRADIENT denotes the certified gradient.** The render slices row 0 of the embed
     cotangent (`clsSliceF`) and then reduces it as a `[1, D]` batch, so the op is

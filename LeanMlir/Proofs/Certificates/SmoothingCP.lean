@@ -144,7 +144,7 @@ lemma pi_hitCount_eq_binomial (ν : Measure E) [IsProbabilityMeasure ν] {A : Se
     have hpre : e.symm ⁻¹' {ω | hitCount A (N + 1) ω = j}
         = {y : E × (Fin N → E) | A.indicator 1 y.1 + hitCount A N y.2 = j} := by
       ext y
-      simp only [Set.mem_preimage, Set.mem_setOf_eq, hsymm, hitCount_insertNth_zero]
+      simp only [Set.mem_preimage, Set.mem_ofPred_eq, hsymm, hitCount_insertNth_zero]
     have hstep : (Measure.pi fun _ : Fin (N + 1) => ν)
           {ω | hitCount A (N + 1) ω = j}
         = (ν.prod μN)
@@ -193,7 +193,7 @@ lemma pi_hitCount_eq_binomial (ν : Measure E) [IsProbabilityMeasure ν] {A : Se
       have hshift : {τ : Fin N → E | 1 + hitCount A N τ = m + 1}
           = {τ | hitCount A N τ = m} := by
         ext τ
-        simp only [Set.mem_setOf_eq]
+        simp only [Set.mem_ofPred_eq]
         omega
       rw [hshift, ih m]
       rcases lt_trichotomy m N with hmN | hmN | hmN
@@ -233,7 +233,7 @@ lemma pi_hitCount_tail_real (ν : Measure E) [IsProbabilityMeasure ν] {A : Set 
   have hunion : {ω : Fin N → E | k ≤ hitCount A N ω}
       = ⋃ j ∈ Finset.Icc k N, {ω | hitCount A N ω = j} := by
     ext ω
-    simp only [Set.mem_setOf_eq, Set.mem_iUnion, Finset.mem_Icc]
+    simp only [Set.mem_ofPred_eq, Set.mem_iUnion, Finset.mem_Icc]
     constructor
     · exact fun h => ⟨hitCount A N ω, ⟨h, hitCount_le A N ω⟩, rfl⟩
     · rintro ⟨j, ⟨hkj, _⟩, hj⟩
@@ -245,7 +245,7 @@ lemma pi_hitCount_tail_real (ν : Measure E) [IsProbabilityMeasure ν] {A : Set 
       (fun j => {ω : Fin N → E | hitCount A N ω = j}) := by
     intro a _ b _ hab
     refine Set.disjoint_left.mpr fun ω ha hb => hab ?_
-    simp only [Set.mem_setOf_eq] at ha hb
+    simp only [Set.mem_ofPred_eq] at ha hb
     omega
   rw [hunion, measureReal_biUnion_finset hdisj hmeas]
   exact Finset.sum_congr rfl fun j _ => pi_hitCount_real_eq_binomial ν hA N j
@@ -274,7 +274,7 @@ theorem cp_coverage (ν : Measure E) [IsProbabilityMeasure ν] {A : Set E}
     have hgood : {ω : Fin N → E | hitCount A N ω < k₀}
         ⊆ {ω | cpLower α N (hitCount A N ω) ≤ p} := by
       intro ω hω
-      simp only [Set.mem_setOf_eq] at hω ⊢
+      simp only [Set.mem_ofPred_eq] at hω ⊢
       by_contra hgt
       exact absurd ⟨not_le.mp hgt, hitCount_le A N ω⟩ (Nat.find_min hK hω)
     have hp01 : p ∈ Set.Icc (0:ℝ) 1 := ⟨measureReal_nonneg, measureReal_le_one⟩
@@ -297,7 +297,7 @@ theorem cp_coverage (ν : Measure E) [IsProbabilityMeasure ν] {A : Set E}
   · have huniv : {ω : Fin N → E | cpLower α N (hitCount A N ω) ≤ p}
         = Set.univ := by
       ext ω
-      simp only [Set.mem_setOf_eq, Set.mem_univ, iff_true]
+      simp only [Set.mem_ofPred_eq, Set.mem_univ, iff_true]
       by_contra hgt
       exact hK ⟨hitCount A N ω, not_le.mp hgt, hitCount_le A N ω⟩
     rw [huniv, probReal_univ]
@@ -336,7 +336,7 @@ lemma binomTail_monotoneOn (N k : ℕ) :
   rw [hreal p hp] at htailp
   rw [← htailq, ← htailp]
   refine measureReal_mono (fun ω hω => ?_)
-  simp only [Set.mem_setOf_eq] at hω ⊢
+  simp only [Set.mem_ofPred_eq] at hω ⊢
   exact hω.trans (hitCount_mono (Set.Icc_subset_Icc le_rfl hqp) N ω)
 
 /-- At `q = 1` the tail is exactly 1 (only the `j = N` term survives). -/
@@ -413,8 +413,8 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     intro ω
     refine Finset.sum_congr rfl fun i _ => ?_
     by_cases h : C (x + σ • ω i) = y
-    · rw [if_pos h, Set.indicator_of_mem (show ω i ∈ A from h), Pi.one_apply]
-    · rw [if_neg h, Set.indicator_of_notMem (show ω i ∉ A from h)]
+    · rw [ite_eq_left h, Set.indicator_of_mem (show ω i ∈ A from h), Pi.one_apply]
+    · rw [ite_eq_right h, Set.indicator_of_notMem (show ω i ∉ A from h)]
   -- the coverage event implies the certificate
   have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
         cpLower α N (hitCount A N ω) ≤ γ.real A}
@@ -425,7 +425,7 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
               (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0) ∂γ)
                 < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0) ∂γ} := by
     intro ω hω
-    simp only [Set.mem_setOf_eq] at hω ⊢
+    simp only [Set.mem_ofPred_eq] at hω ⊢
     intro δ hδ j hj
     rw [hcount ω] at hδ
     set q : ℝ := cpLower α N (hitCount A N ω) with hq
@@ -490,8 +490,8 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     intro ω
     refine Finset.sum_congr rfl fun i _ => ?_
     by_cases h : C (x + σ • ω i) = y
-    · rw [if_pos h, Set.indicator_of_mem (show ω i ∈ A from h), Pi.one_apply]
-    · rw [if_neg h, Set.indicator_of_notMem (show ω i ∉ A from h)]
+    · rw [ite_eq_left h, Set.indicator_of_mem (show ω i ∈ A from h), Pi.one_apply]
+    · rw [ite_eq_right h, Set.indicator_of_notMem (show ω i ∉ A from h)]
   have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
         cpLower α N (hitCount A N ω) ≤ γ.real A}
       ⊆ {ω | (∑ i, if C (x + σ • ω i) = y then 1 else 0) = k₀ →
@@ -501,7 +501,7 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
               (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0) ∂γ)
                 < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0) ∂γ} := by
     intro ω hω
-    simp only [Set.mem_setOf_eq] at hω ⊢
+    simp only [Set.mem_ofPred_eq] at hω ⊢
     intro hcnt δ hδ j hj
     rw [hcount ω] at hcnt
     have hqcp : q₀ ≤ cpLower α N (hitCount A N ω) := by

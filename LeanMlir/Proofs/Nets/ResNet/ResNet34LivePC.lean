@@ -447,7 +447,7 @@ theorem liveFwd2_X2_asym : liveFwd2 X2 0 < liveFwd2 X2 1 := by
 -- ── `liveFwd2 0` collapses to a constant (channel-symmetric) ──
 
 theorem relu_const_pos {n : Nat} (c : ℝ) (hc : 0 < c) : relu n (fun _ => c) = fun _ => c := by
-  funext k; simp only [relu]; rw [if_pos hc]
+  funext k; simp only [relu]; rw [ite_eq_left hc]
 
 theorem decimateFlat_const {h w : Nat} (c : ℝ) :
     decimateFlat 2 h w (fun _ => c) = fun _ => c := by funext k; rfl

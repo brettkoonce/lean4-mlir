@@ -90,24 +90,24 @@ theorem pdivMat_rowIndep_perRow {m n p : Nat} (g : Fin m → (Vec n → Vec p))
   simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
   by_cases hik : i = k
   · subst hik
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     have h_basis : (rowProj i) (basisVec (finProdFinEquiv (i, j))) = basisVec j := by
       funext j'
       show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (i, j')) = basisVec j j'
       simp only [basisVec_apply]
       by_cases hjj : j' = j
       · subst hjj; simp
-      · rw [if_neg hjj, if_neg ?_]
+      · rw [ite_eq_right hjj, ite_eq_right ?_]
         intro heq
         apply hjj
         exact (Prod.mk.inj (finProdFinEquiv.injective heq.symm)).2.symm
     rw [h_basis]
-  · rw [if_neg hik]
+  · rw [ite_eq_right hik]
     have h_basis : (rowProj k) (basisVec (finProdFinEquiv (i, j))) = (0 : Vec n) := by
       funext j'
       show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (k, j')) = (0 : ℝ)
       simp only [basisVec_apply]
-      rw [if_neg]
+      rw [ite_eq_right]
       intro heq
       apply hik
       exact (Prod.mk.inj (finProdFinEquiv.injective heq)).1.symm
@@ -402,9 +402,9 @@ theorem reassocBack_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * (h * w)))
   show (∑ k : Fin (oc * h * w), (if idx = reassocBackIdx oc h w k then (1 : ℝ) else 0) * dy k)
       = dy (reassocFwdIdx oc h w idx)
   rw [Finset.sum_eq_single (reassocFwdIdx oc h w idx)]
-  · rw [if_pos (reassocBackIdx_reassocFwdIdx oc h w idx).symm, one_mul]
+  · rw [ite_eq_left (reassocBackIdx_reassocFwdIdx oc h w idx).symm, one_mul]
   · intro k _ hk
-    rw [if_neg, zero_mul]
+    rw [ite_eq_right, zero_mul]
     intro hcond
     exact hk (by rw [hcond, reassocFwdIdx_reassocBackIdx])
   · intro h; exact absurd (Finset.mem_univ _) h
@@ -416,9 +416,9 @@ theorem reassocFwd_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * h * w))
   show (∑ k : Fin (oc * (h * w)), (if idx = reassocFwdIdx oc h w k then (1 : ℝ) else 0) * dy k)
       = dy (reassocBackIdx oc h w idx)
   rw [Finset.sum_eq_single (reassocBackIdx oc h w idx)]
-  · rw [if_pos (reassocFwdIdx_reassocBackIdx oc h w idx).symm, one_mul]
+  · rw [ite_eq_left (reassocFwdIdx_reassocBackIdx oc h w idx).symm, one_mul]
   · intro k _ hk
-    rw [if_neg, zero_mul]
+    rw [ite_eq_right, zero_mul]
     intro hcond
     exact hk (by rw [hcond, reassocBackIdx_reassocFwdIdx])
   · intro h; exact absurd (Finset.mem_univ _) h
@@ -603,9 +603,9 @@ theorem bnchwBack_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (oc * (N * (h * 
   show (∑ k : Fin (N * (oc * (h * w))), (if idx = bnchwBackIdx N oc h w k then (1 : ℝ) else 0) * dy k)
       = dy (bnchwFwdIdx N oc h w idx)
   rw [Finset.sum_eq_single (bnchwFwdIdx N oc h w idx)]
-  · rw [if_pos (bnchwBackIdx_bnchwFwdIdx N oc h w idx).symm, one_mul]
+  · rw [ite_eq_left (bnchwBackIdx_bnchwFwdIdx N oc h w idx).symm, one_mul]
   · intro k _ hk
-    rw [if_neg, zero_mul]
+    rw [ite_eq_right, zero_mul]
     intro hcond
     exact hk (by rw [hcond, bnchwFwdIdx_bnchwBackIdx])
   · intro h; exact absurd (Finset.mem_univ _) h
@@ -617,9 +617,9 @@ theorem bnchwFwd_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (N * (oc * (h * w
   show (∑ k : Fin (oc * (N * (h * w))), (if idx = bnchwFwdIdx N oc h w k then (1 : ℝ) else 0) * dy k)
       = dy (bnchwBackIdx N oc h w idx)
   rw [Finset.sum_eq_single (bnchwBackIdx N oc h w idx)]
-  · rw [if_pos (bnchwFwdIdx_bnchwBackIdx N oc h w idx).symm, one_mul]
+  · rw [ite_eq_left (bnchwFwdIdx_bnchwBackIdx N oc h w idx).symm, one_mul]
   · intro k _ hk
-    rw [if_neg, zero_mul]
+    rw [ite_eq_right, zero_mul]
     intro hcond
     exact hk (by rw [hcond, bnchwBackIdx_bnchwFwdIdx])
   · intro h; exact absurd (Finset.mem_univ _) h

@@ -1195,9 +1195,9 @@ private lemma mulVec_headPadMat {N heads d : Nat} (W : Mat (heads * d) (heads * 
   rw [Fintype.sum_prod_type]
   simp only [Equiv.symm_apply_apply]
   rw [Finset.sum_eq_single h]
-  · apply Finset.sum_congr rfl; intro j _; rw [if_pos rfl]
+  · apply Finset.sum_congr rfl; intro j _; rw [ite_eq_left rfl]
   · intro h' _ hne
-    apply Finset.sum_eq_zero; intro j _; rw [if_neg hne, mul_zero]
+    apply Finset.sum_eq_zero; intro j _; rw [ite_eq_right hne, mul_zero]
   · intro hc; exact absurd (Finset.mem_univ h) hc
 
 /-- `denseRowBack W` of head `h`'s pad of a flattened `[N,d]` matrix `M` reads off

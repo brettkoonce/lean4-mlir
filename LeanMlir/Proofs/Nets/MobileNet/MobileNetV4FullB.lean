@@ -520,7 +520,7 @@ theorem mnv4ExtraDWBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     (e : SHlo (N * (s.ic * s.h * s.h))) :
     den (mnv4ExtraDWBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ExtraDWBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
-    if_neg hq, if_neg hd, mnv4DWReluLayer, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.comp_fwd,
+    ite_eq_right hq, ite_eq_right hd, mnv4DWReluLayer, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.comp_fwd,
     projB, cbReluB, dwbReluB, den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv,
     den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
 
@@ -549,7 +549,7 @@ theorem mnv4ConvNeXtBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec
     (e : SHlo (N * (s.ic * s.h * s.h))) :
     den (mnv4ConvNeXtBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ConvNeXtBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
-    if_neg hq, if_pos hd, mnv4DWReluLayer, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.id'_fwd,
+    ite_eq_right hq, ite_eq_left hd, mnv4DWReluLayer, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.id'_fwd,
     CertLayer.comp_fwd, projB, cbReluB, dwbReluB, den_batchOp_relu_eq_reluF, reluF_faithful,
     den_batchOp_conv, den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
 
@@ -571,7 +571,7 @@ theorem mnv4FfnBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     (e : SHlo (N * (s.ic * s.h * s.h))) :
     den (mnv4FfnBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4FfnBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
-    if_pos hq, if_pos hd, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.id'_fwd, CertLayer.comp_fwd,
+    ite_eq_left hq, ite_eq_left hd, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.id'_fwd, CertLayer.comp_fwd,
     projB, cbReluB, den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv,
     den_bnBatchF, Function.comp_apply]
 
@@ -604,7 +604,7 @@ theorem mnv4PreStridedGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     (e : SHlo (N * (s.ic * (2 * s.h) * (2 * s.h)))) :
     den (mnv4PreStridedGraphB epsStr N s p e) = (mnv4PreStridedBodyOfRow N s p).fwd (den e) := by
   simp only [mnv4PreStridedGraphB, mnv4PreStridedBodyOfRow, mnv4UibPreStridedBody, mnv4PostDWSlot,
-    if_neg hd, mnv4DWReluLayer, mnv4DWReluStridedLayer, mnv4ExpandLayer, mnv4ProjectLayer,
+    ite_eq_right hd, mnv4DWReluLayer, mnv4DWReluStridedLayer, mnv4ExpandLayer, mnv4ProjectLayer,
     CertLayer.comp_fwd, projB, cbReluB, dwbReluB, dwbReluBstrided, den_batchOp_relu_eq_reluF,
     reluF_faithful, den_batchOp_conv, den_batchOp_depthwise, den_batchOp_depthwiseStrided,
     den_bnBatchF, Function.comp_apply]

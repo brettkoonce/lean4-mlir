@@ -71,7 +71,7 @@ theorem pdiv_layerScale {n : Nat} (γ : Vec n) (x : Vec n) (i j : Fin n) :
   rw [pdiv_const, pdiv_id]
   by_cases hij : i = j
   · subst hij; simp
-  · rw [if_neg hij, if_neg hij]; ring
+  · rw [ite_eq_right hij, ite_eq_right hij]; ring
 
 /-- **Layer scale VJP**: `back(x, dy)_i = γ i * dy i`. -/
 noncomputable def layerScale_has_vjp {n : Nat} (γ : Vec n) :
@@ -81,8 +81,8 @@ noncomputable def layerScale_has_vjp {n : Nat} (γ : Vec n) :
     intro x dy i
     simp_rw [pdiv_layerScale]
     rw [Finset.sum_eq_single i]
-    · rw [if_pos rfl]
-    · intro b _ hne; rw [if_neg (fun h => hne h.symm)]; ring
+    · rw [ite_eq_left rfl]
+    · intro b _ hne; rw [ite_eq_right (fun h => hne h.symm)]; ring
     · intro hp; exact absurd (Finset.mem_univ _) hp
 
 theorem layerScale_has_vjp_correct {n : Nat} (γ : Vec n)

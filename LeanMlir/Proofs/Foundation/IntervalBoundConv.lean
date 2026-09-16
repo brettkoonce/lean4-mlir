@@ -118,14 +118,14 @@ theorem denseV_boxSound {m n : Nat} (W : Mat m n) (b : Vec n) :
       ≤ ∑ i, u i * W i j := by
     refine Finset.sum_le_sum fun i _ => ?_
     by_cases hW : 0 ≤ W i j
-    · rw [if_pos hW]; exact mul_le_mul_of_nonneg_right (hu i).1 hW
-    · rw [if_neg hW]; exact mul_le_mul_of_nonpos_right (hu i).2 (le_of_not_ge hW)
+    · rw [ite_eq_left hW]; exact mul_le_mul_of_nonneg_right (hu i).1 hW
+    · rw [ite_eq_right hW]; exact mul_le_mul_of_nonpos_right (hu i).2 (le_of_not_ge hW)
   have hhi : (∑ i, u i * W i j)
       ≤ ∑ i, if 0 ≤ W i j then hi i * W i j else lo i * W i j := by
     refine Finset.sum_le_sum fun i _ => ?_
     by_cases hW : 0 ≤ W i j
-    · rw [if_pos hW]; exact mul_le_mul_of_nonneg_right (hu i).2 hW
-    · rw [if_neg hW]; exact mul_le_mul_of_nonpos_right (hu i).1 (le_of_not_ge hW)
+    · rw [ite_eq_left hW]; exact mul_le_mul_of_nonneg_right (hu i).2 hW
+    · rw [ite_eq_right hW]; exact mul_le_mul_of_nonpos_right (hu i).1 (le_of_not_ge hW)
   simp only [denseLoV, denseHiV, dense]
   exact ⟨by linarith [hlo], by linarith [hhi]⟩
 
@@ -141,8 +141,8 @@ theorem denseLoV_uniform {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (ε :
     rw [Finset.mul_sum, ← Finset.sum_sub_distrib]
     refine Finset.sum_congr rfl fun i _ => ?_
     by_cases hW : 0 ≤ W i j
-    · rw [if_pos hW, abs_of_nonneg hW]; ring
-    · rw [if_neg hW, abs_of_neg (lt_of_not_ge hW)]; ring
+    · rw [ite_eq_left hW, abs_of_nonneg hW]; ring
+    · rw [ite_eq_right hW, abs_of_neg (lt_of_not_ge hW)]; ring
   simp only [denseLoV]
   rw [key]; ring
 
@@ -155,8 +155,8 @@ theorem denseHiV_uniform {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (ε :
     rw [Finset.mul_sum, ← Finset.sum_add_distrib]
     refine Finset.sum_congr rfl fun i _ => ?_
     by_cases hW : 0 ≤ W i j
-    · rw [if_pos hW, abs_of_nonneg hW]; ring
-    · rw [if_neg hW, abs_of_neg (lt_of_not_ge hW)]; ring
+    · rw [ite_eq_left hW, abs_of_nonneg hW]; ring
+    · rw [ite_eq_right hW, abs_of_neg (lt_of_not_ge hW)]; ring
   simp only [denseHiV]
   rw [key]; ring
 
@@ -168,8 +168,8 @@ theorem denseHiV_uniform {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (ε :
 theorem relu_apply_eq_max {n : Nat} (x : Vec n) (i : Fin n) : relu n x i = max (x i) 0 := by
   simp only [relu]
   by_cases h : x i > 0
-  · rw [if_pos h, max_eq_left h.le]
-  · rw [if_neg h, max_eq_right (le_of_not_gt h)]
+  · rw [ite_eq_left h, max_eq_left h.le]
+  · rw [ite_eq_right h, max_eq_right (le_of_not_gt h)]
 
 noncomputable def reluLoV {n : Nat} (lo : Vec n) : Vec n := fun i => max (lo i) 0
 noncomputable def reluHiV {n : Nat} (hi : Vec n) : Vec n := fun i => max (hi i) 0
@@ -254,9 +254,9 @@ theorem convTap_mono {ic h w kH kW : Nat} {lo hi u : Tensor3 ic h w}
   unfold convTap
   by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
       (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
-  · rw [dif_pos hpad, dif_pos hpad, dif_pos hpad]
+  · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]
     exact hu c _ _
-  · rw [dif_neg hpad, dif_neg hpad, dif_neg hpad]
+  · rw [dite_eq_right hpad, dite_eq_right hpad, dite_eq_right hpad]
     exact ⟨le_refl 0, le_refl 0⟩
 
 /-- Sign-split LOWER image of `conv2d W b`. The split sits outside the pad test
@@ -292,9 +292,9 @@ theorem conv2d_boxSound3 {ic oc h w kH kW : Nat}
     refine Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
       Finset.sum_le_sum fun kw _ => ?_
     by_cases hW : 0 ≤ W o c kh kw
-    · rw [if_pos hW]
+    · rw [ite_eq_left hW]
       exact mul_le_mul_of_nonneg_left (convTap_mono hu c kh kw hI wI).1 hW
-    · rw [if_neg hW]
+    · rw [ite_eq_right hW]
       exact mul_le_mul_of_nonpos_left (convTap_mono hu c kh kw hI wI).2 (le_of_not_ge hW)
   have hhi : (∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
         W o c kh kw * convTap u c kh kw hI wI)
@@ -304,9 +304,9 @@ theorem conv2d_boxSound3 {ic oc h w kH kW : Nat}
     refine Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
       Finset.sum_le_sum fun kw _ => ?_
     by_cases hW : 0 ≤ W o c kh kw
-    · rw [if_pos hW]
+    · rw [ite_eq_left hW]
       exact mul_le_mul_of_nonneg_left (convTap_mono hu c kh kw hI wI).2 hW
-    · rw [if_neg hW]
+    · rw [ite_eq_right hW]
       exact mul_le_mul_of_nonpos_left (convTap_mono hu c kh kw hI wI).1 (le_of_not_ge hW)
   rw [conv2d_eq_tap]
   simp only [convLo, convHi]
@@ -466,16 +466,16 @@ theorem denseT_boxSound3V {c h w k : Nat} (W : Fin c → Fin h → Fin w → Fin
     refine Finset.sum_le_sum fun o _ => Finset.sum_le_sum fun i _ =>
       Finset.sum_le_sum fun m _ => ?_
     by_cases hW : 0 ≤ W o i m j
-    · rw [if_pos hW]; exact mul_le_mul_of_nonneg_right (hu o i m).1 hW
-    · rw [if_neg hW]; exact mul_le_mul_of_nonpos_right (hu o i m).2 (le_of_not_ge hW)
+    · rw [ite_eq_left hW]; exact mul_le_mul_of_nonneg_right (hu o i m).1 hW
+    · rw [ite_eq_right hW]; exact mul_le_mul_of_nonpos_right (hu o i m).2 (le_of_not_ge hW)
   have hhi : (∑ o, ∑ i, ∑ m, u o i m * W o i m j)
       ≤ ∑ o, ∑ i, ∑ m,
           if 0 ≤ W o i m j then hi o i m * W o i m j else lo o i m * W o i m j := by
     refine Finset.sum_le_sum fun o _ => Finset.sum_le_sum fun i _ =>
       Finset.sum_le_sum fun m _ => ?_
     by_cases hW : 0 ≤ W o i m j
-    · rw [if_pos hW]; exact mul_le_mul_of_nonneg_right (hu o i m).2 hW
-    · rw [if_neg hW]; exact mul_le_mul_of_nonpos_right (hu o i m).1 (le_of_not_ge hW)
+    · rw [ite_eq_left hW]; exact mul_le_mul_of_nonneg_right (hu o i m).2 hW
+    · rw [ite_eq_right hW]; exact mul_le_mul_of_nonpos_right (hu o i m).1 (le_of_not_ge hW)
   simp only [denseT, denseTLo, denseTHi]
   exact ⟨by linarith [hlo], by linarith [hhi]⟩
 
@@ -581,8 +581,8 @@ theorem convTap_uniform_lo {ic h w kH kW : Nat} (x : Tensor3 ic h w) (ε : ℝ)
   unfold convTap onesT
   by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
       (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
-  · rw [dif_pos hpad, dif_pos hpad, dif_pos hpad]; ring
-  · rw [dif_neg hpad, dif_neg hpad, dif_neg hpad]; ring
+  · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]; ring
+  · rw [dite_eq_right hpad, dite_eq_right hpad, dite_eq_right hpad]; ring
 
 /-- A tap of the uniform box's UPPER face splits into `tap x + ε·tap 𝟙`. -/
 theorem convTap_uniform_hi {ic h w kH kW : Nat} (x : Tensor3 ic h w) (ε : ℝ)
@@ -592,8 +592,8 @@ theorem convTap_uniform_hi {ic h w kH kW : Nat} (x : Tensor3 ic h w) (ε : ℝ)
   unfold convTap onesT
   by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
       (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
-  · rw [dif_pos hpad, dif_pos hpad, dif_pos hpad]; ring
-  · rw [dif_neg hpad, dif_neg hpad, dif_neg hpad]; ring
+  · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]; ring
+  · rw [dite_eq_right hpad, dite_eq_right hpad, dite_eq_right hpad]; ring
 
 /-- **Uniform-box collapse, LOWER.** On the first layer's box `x ∓ ε` the conv
     sign split evaluates to `conv2d W b x − ε · conv2d |W| 0 𝟙` — one ordinary
@@ -614,8 +614,8 @@ theorem convLo_uniform {ic oc h w kH kW : Nat}
         - ε * (absK W o c kh kw * convTap (onesT ic h w) c kh kw hI wI) := by
     intro c kh kw
     by_cases hW : 0 ≤ W o c kh kw
-    · rw [if_pos hW, convTap_uniform_lo, absK, abs_of_nonneg hW]; ring
-    · rw [if_neg hW, convTap_uniform_hi, absK, abs_of_neg (lt_of_not_ge hW)]; ring
+    · rw [ite_eq_left hW, convTap_uniform_lo, absK, abs_of_nonneg hW]; ring
+    · rw [ite_eq_right hW, convTap_uniform_hi, absK, abs_of_neg (lt_of_not_ge hW)]; ring
   calc b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
           (if 0 ≤ W o c kh kw
             then W o c kh kw * convTap (fun a b' d => x a b' d - ε) c kh kw hI wI
@@ -645,8 +645,8 @@ theorem convHi_uniform {ic oc h w kH kW : Nat}
         + ε * (absK W o c kh kw * convTap (onesT ic h w) c kh kw hI wI) := by
     intro c kh kw
     by_cases hW : 0 ≤ W o c kh kw
-    · rw [if_pos hW, convTap_uniform_hi, absK, abs_of_nonneg hW]; ring
-    · rw [if_neg hW, convTap_uniform_lo, absK, abs_of_neg (lt_of_not_ge hW)]; ring
+    · rw [ite_eq_left hW, convTap_uniform_hi, absK, abs_of_nonneg hW]; ring
+    · rw [ite_eq_right hW, convTap_uniform_lo, absK, abs_of_neg (lt_of_not_ge hW)]; ring
   calc b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
           (if 0 ≤ W o c kh kw
             then W o c kh kw * convTap (fun a b' d => x a b' d + ε) c kh kw hI wI

@@ -20,7 +20,7 @@ example : pdiv (fun v : Vec 2 => v) ![3, 7] 0 0 = 1 := by
 example : pdiv (fun v : Vec 2 => v) ![3, 7] 0 1 = 0 := by
   rw [pdiv_id]
   show (if (0 : Fin 2) = 1 then (1 : ℝ) else 0) = 0
-  rw [if_neg (by intro h; exact absurd h (by decide))]
+  rw [ite_eq_right (by intro h; exact absurd h (by decide))]
 
 -- pdiv on constant ─────────────────────────────────────────────────
 example : pdiv (fun _ : Vec 2 => (![5, 9] : Vec 2)) ![3, 7] 0 0 = 0 := by
@@ -33,7 +33,7 @@ example (A : Mat 2 3) : pdivMat Mat.transpose A 0 1 1 0 = 1 := by
 example (A : Mat 2 3) : pdivMat Mat.transpose A 0 1 0 1 = 0 := by
   rw [pdivMat_transpose]
   -- Indices don't all match: j = 0 vs k = 1, condition `j = k ∧ i = l` is false.
-  rw [if_neg (by intro h; exact absurd h.1 (by decide))]
+  rw [ite_eq_right (by intro h; exact absurd h.1 (by decide))]
 
 -- HasVJP on dense gives the documented backward ────────────────────
 -- (definitionally — this confirms that for `dense`, `correct` is NOT
@@ -57,11 +57,11 @@ example : (relu_has_vjp 2).backward ![3, -1] ![5, 7] 0 = 5 := by
   -- Inline the bridge proof so this example doesn't depend on AuditBridge.lean.
   simp_rw [pdiv_relu 2 ![3, -1] h_smooth 0]
   rw [Finset.sum_eq_single 0
-      (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+      (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
       (fun h => absurd (Finset.mem_univ (0 : Fin 2)) h)]
   show (if (0 : Fin 2) = 0 then (if (3 : ℝ) > 0 then (1 : ℝ) else 0) else 0) *
        (![5, 7] : Vec 2) 0 = 5
-  rw [if_pos rfl, if_pos (by norm_num : (3 : ℝ) > 0)]
+  rw [ite_eq_left rfl, ite_eq_left (by norm_num : (3 : ℝ) > 0)]
   show (1 : ℝ) * 5 = 5
   ring
 
@@ -75,11 +75,11 @@ example : (relu_has_vjp 2).backward ![3, -1] ![5, 7] 1 = 0 := by
     · show (-1 : ℝ) ≠ 0; norm_num
   simp_rw [pdiv_relu 2 ![3, -1] h_smooth 1]
   rw [Finset.sum_eq_single 1
-      (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+      (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
       (fun h => absurd (Finset.mem_univ (1 : Fin 2)) h)]
   show (if (1 : Fin 2) = 1 then (if (-1 : ℝ) > 0 then (1 : ℝ) else 0) else 0) *
        (![5, 7] : Vec 2) 1 = 0
-  rw [if_pos rfl, if_neg (by norm_num : ¬ ((-1 : ℝ) > 0))]
+  rw [ite_eq_left rfl, ite_eq_right (by norm_num : ¬ ((-1 : ℝ) > 0))]
   show (0 : ℝ) * 7 = 0
   ring
 

@@ -223,11 +223,11 @@ theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
   case lv =>
     intro p _ hp
     rw [Finset.mem_filter] at hp
-    rw [dif_neg (fun hpr => hp ⟨Finset.mem_univ p, hpr⟩), mul_zero]
+    rw [dite_eq_right (fun hpr => hp ⟨Finset.mem_univ p, hpr⟩), mul_zero]
   case rv =>
     intro q _ hq
     rw [Finset.mem_filter] at hq
-    rw [dif_neg (fun hpr => hq ⟨Finset.mem_univ q, hpr⟩)]
+    rw [dite_eq_right (fun hpr => hq ⟨Finset.mem_univ q, hpr⟩)]
   -- the partial bijection on the pad supports
   refine Finset.sum_bij'
     (fun p hp => ((⟨p.1.val + hi.val - (kH-1)/2, by
@@ -263,7 +263,7 @@ theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
     intro p hp
     have hb := (Finset.mem_filter.mp hp).2
     have h1 := p.1.isLt; have h2 := p.2.isLt
-    rw [dif_pos hb, dif_pos (by refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only <;> omega)]
+    rw [dite_eq_left hb, dite_eq_left (by refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only <;> omega)]
     dsimp only
     have ea : kH - 1 - p.1.val = hi.val + (kH - 1) / 2 - (p.1.val + hi.val - (kH - 1) / 2) := by omega
     have eb : kW - 1 - p.2.val = wi.val + (kW - 1) / 2 - (p.2.val + wi.val - (kW - 1) / 2) := by omega

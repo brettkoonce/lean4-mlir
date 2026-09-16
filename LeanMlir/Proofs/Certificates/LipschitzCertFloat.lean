@@ -223,8 +223,8 @@ theorem real_tie (y : EuclideanSpace ℝ (Fin 49)) (k : Fin 10) :
         = max (denseE W1s y m) 0
     rw [hinner m]
     by_cases h : denseE W1s y m > 0
-    · rw [if_pos h, max_eq_left h.le]
-    · rw [if_neg h, max_eq_right (not_lt.mp h)]
+    · rw [ite_eq_left h, max_eq_left h.le]
+    · rw [ite_eq_right h, max_eq_right (not_lt.mp h)]
   rw [hr]
   exact mul_comm _ _
 

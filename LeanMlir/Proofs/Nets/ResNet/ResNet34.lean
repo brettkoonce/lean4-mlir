@@ -561,12 +561,12 @@ theorem flatConv_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec
 theorem relu_nonneg (n : Nat) (v : Vec n) (k : Fin n) : 0 ≤ relu n v k := by
   simp only [relu]
   by_cases h : v k > 0
-  · rw [if_pos h]; exact le_of_lt h
-  · rw [if_neg h]
+  · rw [ite_eq_left h]; exact le_of_lt h
+  · rw [ite_eq_right h]
 
 /-- ReLU is the identity on a positive constant vector. -/
 theorem relu_const_pos (n : Nat) (c : ℝ) (hc : 0 < c) : relu n (fun _ => c) = (fun _ => c) := by
-  funext i; simp only [relu]; rw [if_pos hc]
+  funext i; simp only [relu]; rw [ite_eq_left hc]
 
 /-- A stride-2 conv with zero kernel/bias maps anything to `0` (decimate of `0`). -/
 theorem flatConvStride2_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
@@ -785,7 +785,7 @@ theorem stem_pos : ∀ k, 0 < stem X k := by
   have hbn := stem_bn_pos k
   show 0 < (relu (1 * 16 * 16) ∘ bnForward (1 * 16 * 16) 1 1 20 ∘ flatConvStride2 Ws bs) X k
   simp only [Function.comp_apply, relu]
-  rw [if_pos hbn]; exact hbn
+  rw [ite_eq_left hbn]; exact hbn
 
 /-- The stem output is injective: `bn` of the injective decimated input is injective
     (`bnForward_injective`, `γ = 1 ≠ 0`) and the ReLU is the identity (`stem_pos`). -/

@@ -36,13 +36,13 @@ theorem relu_codegen_matches_canonical (n : Nat) (x : Vec n)
   simp_rw [pdiv_relu n x h_smooth i]
   -- Step 3: collapse the Kronecker δ on i
   rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+      (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
       (fun h => absurd (Finset.mem_univ i) h)]
   -- Step 4: pull the if outside
-  rw [if_pos rfl]
+  rw [ite_eq_left rfl]
   by_cases hx : x i > 0
-  · rw [if_pos hx, if_pos hx]; ring
-  · rw [if_neg hx, if_neg hx]; ring
+  · rw [ite_eq_left hx, ite_eq_left hx]; ring
+  · rw [ite_eq_right hx, ite_eq_right hx]; ring
 
 /-- **Bridge: ReLU at a non-smooth point.** When some coordinate
 `k` of `x` is exactly zero, the canonical backward at index `i` agrees
@@ -66,8 +66,8 @@ theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
     (if x i > 0 then (1 : ℝ) else 0) * dy i := by
   rw [relu_codegen_matches_canonical n x h_smooth dy i]
   by_cases hx : x i > 0
-  · rw [if_pos hx, if_pos hx]; ring
-  · rw [if_neg hx, if_neg hx]; ring
+  · rw [ite_eq_left hx, ite_eq_left hx]; ring
+  · rw [ite_eq_right hx, ite_eq_right hx]; ring
 
 end ProofsAudit
 

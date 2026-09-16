@@ -100,24 +100,24 @@ theorem pdivMat_rowIndep_at {m n p : Nat} (g : Vec n → Vec p)
   simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
   by_cases hik : i = k
   · subst hik
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     have h_basis : (rowProj i) (basisVec (finProdFinEquiv (i, j))) = basisVec j := by
       funext j'
       show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (i, j')) = basisVec j j'
       simp only [basisVec_apply]
       by_cases hjj : j' = j
       · subst hjj; simp
-      · rw [if_neg hjj, if_neg ?_]
+      · rw [ite_eq_right hjj, ite_eq_right ?_]
         intro heq
         apply hjj
         exact (Prod.mk.inj (finProdFinEquiv.injective heq.symm)).2.symm
     rw [h_basis]
-  · rw [if_neg hik]
+  · rw [ite_eq_right hik]
     have h_basis : (rowProj k) (basisVec (finProdFinEquiv (i, j))) = (0 : Vec n) := by
       funext j'
       show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (k, j')) = (0 : ℝ)
       simp only [basisVec_apply]
-      rw [if_neg]
+      rw [ite_eq_right]
       intro heq
       apply hik
       exact (Prod.mk.inj (finProdFinEquiv.injective heq)).1.symm

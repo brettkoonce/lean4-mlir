@@ -111,7 +111,7 @@ theorem lipsdp_slack_of_cert {h : ℕ} (G Sm L : Fin h → Fin h → ℝ)
     · subst hab
       simp only [ite_true]
       ring
-    · simp only [if_neg hab]
+    · simp only [ite_eq_right hab]
       ring
   have p1 : ∑ a, ∑ b, (2 : ℝ) * (if a = b then T a * z a ^ 2 else 0)
       = 2 * ∑ k, T k * z k ^ 2 := by

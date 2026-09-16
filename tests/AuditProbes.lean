@@ -133,6 +133,6 @@ example (dy : Vec 2) (i : Fin 2) :
     intro k; fin_cases k <;> simp
   rw [relu_codegen_matches_canonical 2 _ h_smooth dy i]
   have h_pos : (![3, 7] : Vec 2) i > 0 := by fin_cases i <;> simp
-  rw [if_pos h_pos]
+  rw [ite_eq_left h_pos]
 
 end ProofsAudit2

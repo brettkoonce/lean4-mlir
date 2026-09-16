@@ -251,12 +251,12 @@ theorem pdiv_gelu (n : Nat) (x : Vec n) (i j : Fin n) :
   by_cases hij : i = j
   · subst hij
     show basisVec i i * deriv geluScalar (x i) = if i = i then geluScalarDeriv (x i) else 0
-    simp only [if_pos rfl, one_mul]
+    simp only [ite_eq_left rfl, one_mul]
     rfl
   · have h_basis : basisVec i j = 0 := by
       simp only [basisVec_apply]
-      rw [if_neg]; intro heq; exact hij heq.symm
-    rw [h_basis, zero_mul, if_neg hij]
+      rw [ite_eq_right]; intro heq; exact hij heq.symm
+    rw [h_basis, zero_mul, ite_eq_right hij]
 
 /-- **GELU VJP**: elementwise multiply by the scalar derivative.
 
@@ -372,12 +372,12 @@ theorem pdiv_swish (n : Nat) (x : Vec n) (i j : Fin n) :
   show basisVec i j * deriv swishScalar (x j) = _
   by_cases hij : i = j
   · subst hij
-    simp only [if_pos rfl, one_mul]
+    simp only [ite_eq_left rfl, one_mul]
     rfl
   · have h_basis : basisVec i j = 0 := by
       simp only [basisVec_apply]
-      rw [if_neg]; intro heq; exact hij heq.symm
-    rw [h_basis, zero_mul, if_neg hij]
+      rw [ite_eq_right]; intro heq; exact hij heq.symm
+    rw [h_basis, zero_mul, ite_eq_right hij]
 
 /-- **Swish VJP**: elementwise multiply by the scalar derivative.
     Same template as ReLU/GELU. The codegen emits the closed-form

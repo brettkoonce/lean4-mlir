@@ -177,7 +177,7 @@ lemma stdNormalQuantile_anti {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
     stdNormalQuantile (1 - q) = -stdNormalQuantile q := by
   have hset : {t | stdNormalCDF t < 1 - q} = -{t | q < stdNormalCDF t} := by
     ext t
-    simp only [Set.mem_setOf_eq, Set.mem_neg, stdNormalCDF_neg]
+    simp only [Set.mem_ofPred_eq, Set.mem_neg, stdNormalCDF_neg]
     constructor <;> intro h <;> linarith
   rw [stdNormalQuantile, hset, Real.sSup_neg, stdNormalQuantile,
     stdNormalCDF_sSup_lt_eq_sInf_gt hq]
@@ -715,7 +715,7 @@ exactly what the `*-smooth` drivers sample. -/
 lemma stdNormalQuantile_cdf (s : ℝ) : stdNormalQuantile (stdNormalCDF s) = s := by
   have hset : {r | stdNormalCDF r < stdNormalCDF s} = Set.Iio s := by
     ext r
-    simp only [Set.mem_setOf_eq, Set.mem_Iio]
+    simp only [Set.mem_ofPred_eq, Set.mem_Iio]
     exact ⟨fun h => stdNormalCDF_strictMono.lt_iff_lt.mp h,
       fun h => stdNormalCDF_strictMono h⟩
   rw [stdNormalQuantile, hset, csSup_Iio]

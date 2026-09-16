@@ -163,19 +163,19 @@ theorem pdiv_rowDense_W {N a c : Nat} (bb : Vec c) (X : Mat N a) (W : Mat a c)
         finProdFinEquiv.injective hij
       have hi : i = i' := congrArg Prod.fst hpair
       have hj : j' = (finProdFinEquiv.symm idx).2 := congrArg Prod.snd hpair
-      rw [if_pos hij, if_pos ⟨hi, hj⟩, mul_one, ← hi]
-    · rw [if_neg hij, mul_zero, if_neg]
+      rw [ite_eq_left hij, ite_eq_left ⟨hi, hj⟩, mul_one, ← hi]
+    · rw [ite_eq_right hij, mul_zero, ite_eq_right]
       intro ⟨hi, hj⟩
       exact hij (by rw [hi, hj])
   simp_rw [hterm]
   -- Step 5: collapse the Fin a sum at i' = i.
   rw [Finset.sum_eq_single i
       (fun i' _ hne => by
-        rw [if_neg]; intro ⟨hi, _⟩; exact hne hi.symm)
+        rw [ite_eq_right]; intro ⟨hi, _⟩; exact hne hi.symm)
       (fun h => absurd (Finset.mem_univ i) h)]
   by_cases hj : j' = (finProdFinEquiv.symm idx).2
-  · rw [if_pos ⟨rfl, hj⟩, if_pos hj]
-  · rw [if_neg (fun hc => hj hc.2), if_neg hj]
+  · rw [ite_eq_left ⟨rfl, hj⟩, ite_eq_left hj]
+  · rw [ite_eq_right (fun hc => hj hc.2), ite_eq_right hj]
 
 /-- The rendered **per-token dense weight gradient**: the token-axis-contracted
     outer product `dW_(i,j) = Σ_r X_(r,i)·dY_(r,j)` (one `dot_general` contracting
@@ -206,9 +206,9 @@ theorem vit_rowDenseW_grad_bridge {N a c : Nat} (bb : Vec c) (X : Mat N a)
   intro r _
   rw [Finset.sum_eq_single j
       (fun k _ hne => by
-        rw [Equiv.symm_apply_apply, if_neg (by simpa using (Ne.symm hne)), zero_mul])
+        rw [Equiv.symm_apply_apply, ite_eq_right (by simpa using (Ne.symm hne)), zero_mul])
       (fun h => absurd (Finset.mem_univ j) h)]
-  rw [Equiv.symm_apply_apply, if_pos rfl]
+  rw [Equiv.symm_apply_apply, ite_eq_left rfl]
 
 /-- **Per-token dense b-gradient bridge.** The rendered token-axis reduce equals
     the certified rowwise-dense ∂/∂b contraction. -/
@@ -248,9 +248,9 @@ theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
   intro r _
   rw [Finset.sum_eq_single i
       (fun k _ hne => by
-        rw [Equiv.symm_apply_apply, if_neg (Ne.symm hne), zero_mul])
+        rw [Equiv.symm_apply_apply, ite_eq_right (Ne.symm hne), zero_mul])
       (fun h => absurd (Finset.mem_univ i) h)]
-  rw [Equiv.symm_apply_apply, if_pos rfl, one_mul]
+  rw [Equiv.symm_apply_apply, ite_eq_left rfl, one_mul]
 
 /-- **Per-token dense W output, certified.** `Wⁿ = W − lr·(Σ_tokens xᵣ ⊗ dyᵣ)` denotes
     `W − lr·(certified ∂(rowwise dense)/∂W · cotangent)`. Covers Wq/Wk/Wv/Wo and
@@ -511,9 +511,9 @@ theorem vit_render_pos_certified {ic H W P N D : Nat}
             (Mat.flatten pos) i j * dy j := by
   simp_rw [pdiv_patchEmbed_pos]
   rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [if_neg (Ne.symm (Ne.symm hne).symm), zero_mul])
+      (fun j _ hne => by rw [ite_eq_right (Ne.symm (Ne.symm hne).symm), zero_mul])
       (fun h => absurd (Finset.mem_univ i) h)]
-  rw [if_pos rfl, one_mul]
+  rw [ite_eq_left rfl, one_mul]
 
 /-- The rendered **CLS-token gradient**: the row-0 slice of the patch-embed
     output cotangent (`clsSliceF`'s shape, applied to the embed cotangent). -/
@@ -563,13 +563,13 @@ theorem vit_render_cls_certified {ic H W P N D : Nat}
         intro k _
         rw [Equiv.symm_apply_apply]
         dsimp only
-        rw [if_neg (by simpa using (Fin.val_ne_of_ne hne)), zero_mul, zero_mul])
+        rw [ite_eq_right (by simpa using (Fin.val_ne_of_ne hne)), zero_mul, zero_mul])
       (fun h => absurd (Finset.mem_univ _) h)]
   rw [Finset.sum_eq_single i
       (fun k _ hne => by
         rw [Equiv.symm_apply_apply]
         dsimp only
-        rw [if_neg (Ne.symm hne), mul_zero, zero_mul])
+        rw [ite_eq_right (Ne.symm hne), mul_zero, zero_mul])
       (fun h => absurd (Finset.mem_univ i) h)]
   rw [Equiv.symm_apply_apply]
   dsimp only
@@ -770,7 +770,7 @@ theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
   -- additionally (symm idx).2 = d (nested fPF injectivity).
   rw [Finset.sum_eq_single ((c, kh, kw) : Fin ic × Fin P × Fin P)
       (fun t _ hne => by
-        rw [if_neg, zero_mul]
+        rw [ite_eq_right, zero_mul]
         intro heq
         apply hne
         have h1 := finProdFinEquiv.injective heq
@@ -782,13 +782,13 @@ theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
         exact Prod.ext hc.symm (Prod.ext hkh.symm hkw.symm))
       (fun h => absurd (Finset.mem_univ _) h)]
   by_cases hd : (finProdFinEquiv.symm idx).2 = d
-  · rw [if_pos hd]
+  · rw [ite_eq_left hd]
     rw [show finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw) =
           finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
             ((finProdFinEquiv.symm idx).2, (c, kh, kw).1), (c, kh, kw).2.1),
             (c, kh, kw).2.2) from by rw [hd]]
-    rw [if_pos rfl, one_mul]
-  · rw [if_neg hd, if_neg, zero_mul]
+    rw [ite_eq_left rfl, one_mul]
+  · rw [ite_eq_right hd, ite_eq_right, zero_mul]
     intro heq
     apply hd
     have h1 := finProdFinEquiv.injective heq
@@ -841,11 +841,11 @@ theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
         (fun k _ hne => by
           rw [Equiv.symm_apply_apply]
           dsimp only
-          rw [if_neg hne, zero_mul])
+          rw [ite_eq_right hne, zero_mul])
         (fun h => absurd (Finset.mem_univ d) h)]
     rw [Equiv.symm_apply_apply]
     dsimp only
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
   simp_rw [hrow]
   rw [Fin.sum_univ_succ]
   unfold patchEmbed_weight_grad
@@ -913,11 +913,11 @@ theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
         (fun k _ hne => by
           rw [Equiv.symm_apply_apply]
           dsimp only
-          rw [if_neg (Ne.symm hne), mul_zero, zero_mul])
+          rw [ite_eq_right (Ne.symm hne), mul_zero, zero_mul])
         (fun h => absurd (Finset.mem_univ i) h)]
     rw [Equiv.symm_apply_apply]
     dsimp only
-    rw [if_pos rfl, mul_one]
+    rw [ite_eq_left rfl, mul_one]
   simp_rw [hrow]
   rw [Fin.sum_univ_succ]
   unfold patchEmbed_bias_grad

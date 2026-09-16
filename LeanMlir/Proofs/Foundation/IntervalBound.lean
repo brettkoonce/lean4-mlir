@@ -82,9 +82,9 @@ theorem denseLo_le {m n : ℕ} (W : Fin m → Fin n → ℝ) {lo hi : Fin n → 
   rw [denseE_apply]
   refine Finset.sum_le_sum fun j _ => ?_
   by_cases h : 0 ≤ W k j
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     exact mul_le_mul_of_nonneg_left (hbox j).1 h
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     exact mul_le_mul_of_nonpos_left (hbox j).2 (le_of_not_ge h)
 
 theorem le_denseHi {m n : ℕ} (W : Fin m → Fin n → ℝ) {lo hi : Fin n → ℝ}
@@ -93,9 +93,9 @@ theorem le_denseHi {m n : ℕ} (W : Fin m → Fin n → ℝ) {lo hi : Fin n → 
   rw [denseE_apply]
   refine Finset.sum_le_sum fun j _ => ?_
   by_cases h : 0 ≤ W k j
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     exact mul_le_mul_of_nonneg_left (hbox j).2 h
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     exact mul_le_mul_of_nonpos_left (hbox j).1 (le_of_not_ge h)
 
 /-- ReLU maps the box `[lo, hi]` into `[reluLo lo, reluHi hi]`. -/
@@ -117,8 +117,8 @@ theorem denseLo_uniform {m n : ℕ} (W : Fin m → Fin n → ℝ)
   rw [Finset.mul_sum, ← Finset.sum_sub_distrib]
   refine Finset.sum_congr rfl fun j _ => ?_
   by_cases h : 0 ≤ W k j
-  · rw [if_pos h, abs_of_nonneg h]; ring
-  · rw [if_neg h, abs_of_neg (lt_of_not_ge h)]; ring
+  · rw [ite_eq_left h, abs_of_nonneg h]; ring
+  · rw [ite_eq_right h, abs_of_neg (lt_of_not_ge h)]; ring
 
 theorem denseHi_uniform {m n : ℕ} (W : Fin m → Fin n → ℝ)
     (x : EuclideanSpace ℝ (Fin n)) (ε : ℝ) (k : Fin m) :
@@ -128,8 +128,8 @@ theorem denseHi_uniform {m n : ℕ} (W : Fin m → Fin n → ℝ)
   rw [Finset.mul_sum, ← Finset.sum_add_distrib]
   refine Finset.sum_congr rfl fun j _ => ?_
   by_cases h : 0 ≤ W k j
-  · rw [if_pos h, abs_of_nonneg h]; ring
-  · rw [if_neg h, abs_of_neg (lt_of_not_ge h)]; ring
+  · rw [ite_eq_left h, abs_of_nonneg h]; ring
+  · rw [ite_eq_right h, abs_of_neg (lt_of_not_ge h)]; ring
 
 /-- The 2-layer LOWER box endpoint, evaluated: outer sign-split over the
     ReLU'd first-layer uniform box, with the inner sums left as `⟨w,x⟩` and

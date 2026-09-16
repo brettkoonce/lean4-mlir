@@ -371,7 +371,7 @@ theorem maxPool2_pos {c h w : Nat} {x : Tensor3 c (2*h) (2*w)}
     ReLU-as-identity steps that fold the composition into a plain conv
     stack at a smooth (everywhere-positive) point. -/
 theorem relu_id_of_pos {n : Nat} {v : Vec n} (hv : ∀ i, 0 < v i) : relu n v = v := by
-  funext i; simp only [relu]; rw [if_pos (hv i)]
+  funext i; simp only [relu]; rw [ite_eq_left (hv i)]
 
 /-- A dense layer with nonnegative weights, a strictly-positive bias, and a
     nonnegative input is strictly positive — the propagating positivity
@@ -649,9 +649,9 @@ noncomputable def b5 : Vec 10 := fun _ => 0
 
 /-- conv1 vanishes off the center tap (the `conv2d_center3x3` hypothesis). -/
 theorem hW1 (o : Fin 2) (c : Fin 1) (kh kw : Fin 3) (hne : ¬(kh = 1 ∧ kw = 1)) :
-    W1 o c kh kw = 0 := by simp only [W1]; exact if_neg hne
+    W1 o c kh kw = 0 := by simp only [W1]; exact ite_eq_right hne
 theorem hW2 (o c : Fin 2) (kh kw : Fin 3) (hne : ¬(kh = 1 ∧ kw = 1)) :
-    W2 o c kh kw = 0 := by simp only [W2]; exact if_neg hne
+    W2 o c kh kw = 0 := by simp only [W2]; exact ite_eq_right hne
 /-- conv1 center tap is `1`. -/
 theorem W1_center (o : Fin 2) (c : Fin 1) : W1 o c 1 1 = 1 := by simp [W1]
 

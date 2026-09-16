@@ -87,12 +87,12 @@ theorem pdiv_sigmoid (n : Nat) (x : Vec n) (i j : Fin n) :
   show basisVec i j * deriv sigmoidScalar (x j) = _
   by_cases hij : i = j
   · subst hij
-    simp only [if_pos rfl, one_mul]
+    simp only [ite_eq_left rfl, one_mul]
     rfl
   · have h_basis : basisVec i j = 0 := by
       simp only [basisVec_apply]
-      rw [if_neg]; intro heq; exact hij heq.symm
-    rw [h_basis, zero_mul, if_neg hij]
+      rw [ite_eq_right]; intro heq; exact hij heq.symm
+    rw [h_basis, zero_mul, ite_eq_right hij]
 
 noncomputable def sigmoid_has_vjp (n : Nat) : HasVJP (sigmoid n) where
   backward := fun x dy i => dy i * sigmoidScalarDeriv (x i)
@@ -141,8 +141,8 @@ noncomputable def broadcastFlat_has_vjp (c h w : Nat) :
     apply Finset.sum_congr rfl
     intro j _
     by_cases hkj : flatChannel c h w j = k
-    · rw [if_pos hkj, if_pos hkj.symm, one_mul]
-    · rw [if_neg hkj, if_neg (fun he => hkj he.symm), zero_mul]
+    · rw [ite_eq_left hkj, ite_eq_left hkj.symm, one_mul]
+    · rw [ite_eq_right hkj, ite_eq_right (fun he => hkj he.symm), zero_mul]
 
 -- ════════════════════════════════════════════════════════════════
 -- § SE gate: squeeze → reduce(swish) → expand → sigmoid → broadcast

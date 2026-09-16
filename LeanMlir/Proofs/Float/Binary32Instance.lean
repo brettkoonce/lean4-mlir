@@ -65,7 +65,7 @@ theorem rndP_err (p : ℕ) (x : ℝ) :
   · simp [hx]
   · have hax : (0 : ℝ) < |x| := abs_pos.mpr hx
     unfold rndP
-    rw [if_neg hx]
+    rw [ite_eq_right hx]
     set e : ℤ := Int.log 2 |x| with he
     set s : ℝ := (2 : ℝ) ^ (e - (p : ℤ)) with hs
     have hs0 : (0 : ℝ) < s := zpow_pos (by norm_num) _

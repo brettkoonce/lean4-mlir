@@ -172,7 +172,7 @@ theorem lambScale_not_shared :
   have h4 : Real.sqrt 4 = 2 := by
     rw [show (4:ℝ) = 2 ^ 2 by norm_num, Real.sqrt_sq (by norm_num : (0:ℝ) ≤ 2)]
   unfold lambTrust
-  rw [if_pos ⟨by norm_num, by norm_num⟩, if_pos ⟨by norm_num, by norm_num⟩, h4, Real.sqrt_one]
+  rw [ite_eq_left ⟨by norm_num, by norm_num⟩, ite_eq_left ⟨by norm_num, by norm_num⟩, h4, Real.sqrt_one]
   norm_num
 
 /-- ⭐ **The decay is inside the ratio, and that is observable.** At `wd = 0` the direction is pure

@@ -75,8 +75,8 @@ theorem layerScaleChGammaGrad_den {c h w : Nat} (xN cotN : String)
   intro j _
   rw [Proofs.CnxPoC.pdiv_layerScaleCh_gamma]
   by_cases hcc : chanIdx c h w j = cc
-  · rw [if_pos hcc, if_pos hcc.symm]
-  · rw [if_neg hcc, if_neg (fun h => hcc h.symm)]; ring
+  · rw [ite_eq_left hcc, ite_eq_left hcc.symm]
+  · rw [ite_eq_right hcc, ite_eq_right (fun h => hcc h.symm)]; ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 1×1 convolutions (expand / project) and the stem bias

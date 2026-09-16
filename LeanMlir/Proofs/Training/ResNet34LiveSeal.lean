@@ -212,7 +212,7 @@ theorem cd_ray (t : ℝ) : cd (Y + t • V) = t := by
   have hV0 : (Tensor3.unflatten V : Tensor3 2 (2 * 16) (2 * 16)) 0 0 0 = 1 := by
     simp [Tensor3.unflatten, V]
   have hV1 : (Tensor3.unflatten V : Tensor3 2 (2 * 16) (2 * 16)) 1 0 0 = 0 := by
-    simp only [Tensor3.unflatten, V, basisVec_apply]; rw [if_neg idx01_ne]
+    simp only [Tensor3.unflatten, V, basisVec_apply]; rw [ite_eq_right idx01_ne]
   have e : ∀ c : Fin 2, (Tensor3.unflatten (Y + t • V) : Tensor3 2 (2 * 16) (2 * 16)) c 0 0
       = (Tensor3.unflatten Y : Tensor3 2 (2 * 16) (2 * 16)) c 0 0
         + t * (Tensor3.unflatten V : Tensor3 2 (2 * 16) (2 * 16)) c 0 0 := by

@@ -325,8 +325,8 @@ theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
     intro ⟨co, ho, wo, ab, ab'⟩
     show 0 < (if samePos ho wo ab ab' then (1 : ℝ) else _)
     by_cases hab : samePos ho wo ab ab'
-    · rw [if_pos hab]; norm_num
-    · rw [if_neg hab]
+    · rw [ite_eq_left hab]; norm_num
+    · rw [ite_eq_right hab]
       exact abs_pos.mpr (sub_ne_zero.mpr (h_smooth co ho wo ab ab' hab))
   let univ_S : Finset (Fin c × Fin h × Fin w × (Fin 3 × Fin 3) × (Fin 3 × Fin 3)) := univ
   set r_raw := univ_S.inf' univ_nonempty gap with hr_raw_def
@@ -383,7 +383,7 @@ theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
               |x co (win3RowInv ho a') (win3ColInv wo b') -
                x co (win3RowInv ho ab.1) (win3ColInv wo ab.2)| := by
             show (if samePos ho wo (a', b') ab then (1 : ℝ) else _) = _
-            rw [if_neg h_eq]
+            rw [ite_eq_right h_eq]
           rw [h_gap_expanded] at h_gap
           rw [abs_sub_comm] at h_gap
           have h_pos : 0 ≤ x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) -

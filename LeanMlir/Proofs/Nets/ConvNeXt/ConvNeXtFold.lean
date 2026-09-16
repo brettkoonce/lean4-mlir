@@ -61,8 +61,8 @@ theorem cnx_render_lsgammaCh_certified {c h w : Nat} (x : Vec (c * h * w)) (γ :
   intro j _
   rw [pdiv_layerScaleCh_gamma]
   by_cases hcc : chanIdx c h w j = cc
-  · rw [if_pos hcc, if_pos hcc.symm]
-  · rw [if_neg hcc, if_neg (fun h => hcc h.symm)]; ring
+  · rw [ite_eq_left hcc, ite_eq_left hcc.symm]
+  · rw [ite_eq_right hcc, ite_eq_right (fun h => hcc h.symm)]; ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § The §1 den-fold — each new core op `den`otes the certified loss-descent step

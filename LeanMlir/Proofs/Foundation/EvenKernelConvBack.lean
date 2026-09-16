@@ -140,11 +140,11 @@ theorem conv2d_padOdd_eq {ic oc h w kH kW : Nat}
   simp only [hkh, hkw, hpH, hpW]
   by_cases hg : (kH - 1) / 2 ≤ kh.val + hi.val ∧ kh.val + hi.val - (kH - 1) / 2 < h ∧
       (kW - 1) / 2 ≤ kw.val + wi.val ∧ kw.val + wi.val - (kW - 1) / 2 < w
-  · rw [dif_pos (by omega : (kH - 1) / 2 + 1 ≤ kh.val + 1 + hi.val ∧
+  · rw [dite_eq_left (by omega : (kH - 1) / 2 + 1 ≤ kh.val + 1 + hi.val ∧
           kh.val + 1 + hi.val - ((kH - 1) / 2 + 1) < h ∧
           (kW - 1) / 2 + 1 ≤ kw.val + 1 + wi.val ∧
           kw.val + 1 + wi.val - ((kW - 1) / 2 + 1) < w),
-       dif_pos hg]
+       dite_eq_left hg]
     -- ⚠ NOT `congr 1 <;> Fin.ext (by omega)`: after `congr` the goal is
     -- `(⟨_, _⟩ : Fin h).val = (⟨_, _⟩).val` and `omega` treats `Fin.val ⟨·,·⟩` as opaque.
     -- Rewriting the Nat index expressions makes both sides syntactically identical instead.
@@ -153,7 +153,7 @@ theorem conv2d_padOdd_eq {ic oc h w kH kW : Nat}
     have e2 : kw.val + 1 + wi.val - ((kW - 1) / 2 + 1) = kw.val + wi.val - (kW - 1) / 2 := by
       omega
     simp only [e1, e2]
-  · rw [dif_neg (by omega), dif_neg hg]
+  · rw [dite_eq_right (by omega), dite_eq_right hg]
 
 /-- `flatConv` inherits it — the flat form is `flatten ∘ conv2d ∘ unflatten`. -/
 theorem flatConv_padOdd_eq {ic oc h w kH kW : Nat}

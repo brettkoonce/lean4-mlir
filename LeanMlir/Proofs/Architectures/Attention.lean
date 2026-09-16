@@ -292,8 +292,8 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
   rw [show (∑ k : Fin (c' + 1), Real.exp (z k) * (if k = i then (1 : ℝ) else 0)) =
         Real.exp (z i) from by
       rw [Finset.sum_eq_single i]
-      · rw [if_pos rfl, mul_one]
-      · intros b _ hb; rw [if_neg hb, mul_zero]
+      · rw [ite_eq_left rfl, mul_one]
+      · intros b _ hb; rw [ite_eq_right hb, mul_zero]
       · intro h; exact absurd (Finset.mem_univ i) h]
   -- Unfold softmax on the RHS and convert `if j = i` to `if i = j`.
   show Real.exp (z j) * (-(S ^ 2)⁻¹ * Real.exp (z i)) +
@@ -301,8 +301,8 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
        (Real.exp (z j) / S) * ((if i = j then (1 : ℝ) else 0) - Real.exp (z i) / S)
   have h_if : (if j = i then (1 : ℝ) else 0) = (if i = j then (1 : ℝ) else 0) := by
     by_cases h : i = j
-    · rw [if_pos h, if_pos h.symm]
-    · rw [if_neg h, if_neg (fun heq => h heq.symm)]
+    · rw [ite_eq_left h, ite_eq_left h.symm]
+    · rw [ite_eq_right h, ite_eq_right (fun heq => h heq.symm)]
   rw [h_if]
   field_simp
   ring
@@ -1179,9 +1179,9 @@ theorem mhsa_lift_c_CLM_apply (n d : Nat) (c : Fin 3) (u : Vec (n * d))
   show (ContinuousLinearMap.pi _) u idx = _
   rw [ContinuousLinearMap.pi_apply]
   by_cases hc : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-  · rw [if_pos hc, if_pos hc]
+  · rw [ite_eq_left hc, ite_eq_left hc]
     rfl
-  · rw [if_neg hc, if_neg hc]
+  · rw [ite_eq_right hc, ite_eq_right hc]
     rfl
 
 /-- "Embed Q' into slab at the c-th third, keep other thirds at slab's values."
@@ -1209,8 +1209,8 @@ theorem mhsa_embed_c_eq (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
         then 0 else Mat.flatten slab idx)
   rw [mhsa_lift_c_CLM_apply]
   by_cases hcond : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-  · rw [if_pos hcond, if_pos hcond, if_pos hcond, add_zero]
-  · rw [if_neg hcond, if_neg hcond, if_neg hcond, zero_add]
+  · rw [ite_eq_left hcond, ite_eq_left hcond, ite_eq_left hcond, add_zero]
+  · rw [ite_eq_right hcond, ite_eq_right hcond, ite_eq_right hcond, zero_add]
 
 theorem mhsa_embed_c_hasFDerivAt (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     (u₀ : Vec (n * d)) :
@@ -1256,16 +1256,16 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     simp only [Equiv.symm_apply_apply]
     by_cases hc' : c' = c
     · subst hc'
-      rw [if_pos rfl]
+      rw [ite_eq_left rfl]
       simp
-    · rw [if_neg hc']
-      rw [if_neg hc']
+    · rw [ite_eq_right hc']
+      rw [ite_eq_right hc']
       unfold Mat.flatten mhsa_proj_c
       simp only [Equiv.symm_apply_apply]
   unfold mhsa_g
   by_cases hc0 : c = (0 : Fin 3)
   · subst hc0
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     have h0 := h_proj_match (0 : Fin 3)
     have h1 := h_proj_match (1 : Fin 3)
     have h2 := h_proj_match (2 : Fin 3)
@@ -1280,10 +1280,10 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
       (mhsa_proj_c (1 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u)))
       (mhsa_proj_c (2 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u)))) = _
     rw [h0, h1, h2]
-  · rw [if_neg hc0]
+  · rw [ite_eq_right hc0]
     by_cases hc1 : c = (1 : Fin 3)
     · subst hc1
-      rw [if_pos rfl]
+      rw [ite_eq_left rfl]
       have h0 := h_proj_match (0 : Fin 3)
       have h1 := h_proj_match (1 : Fin 3)
       have h2 := h_proj_match (2 : Fin 3)
@@ -1294,7 +1294,7 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
         (mhsa_proj_c (1 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (1 : Fin 3) slab u)))
         (mhsa_proj_c (2 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (1 : Fin 3) slab u)))) = _
       rw [h0, h1, h2]
-    · rw [if_neg hc1]
+    · rw [ite_eq_right hc1]
       have hc2 : c = (2 : Fin 3) := by
         fin_cases c
         · exact absurd rfl hc0
@@ -1321,7 +1321,7 @@ theorem mhsa_embed_c_at_proj (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d)) :
                                 (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2))
         else Mat.flatten slab idx) = _
   by_cases hcond : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-  · rw [if_pos hcond]
+  · rw [ite_eq_left hcond]
     show Mat.flatten (mhsa_proj_c c slab)
           (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
                             (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2)) =
@@ -1337,7 +1337,7 @@ theorem mhsa_embed_c_at_proj (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d)) :
     congr 1
     rw [show c = (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 from hcond.symm]
     exact (Equiv.apply_symm_apply _ _)
-  · rw [if_neg hcond]
+  · rw [ite_eq_right hcond]
 
 /-- **Helper for `pdivMat_mhsa_g_split` (per-c chain rule).**
     For each `c : Fin 3`, the chain rule gives:
@@ -1408,10 +1408,10 @@ theorem pdivMat_mhsa_g_split (n d : Nat) (slab : Mat n (3 * d))
     by_cases hidx : idx = finProdFinEquiv (i, finProdFinEquiv (c, j))
     · subst hidx
       simp [Equiv.symm_apply_apply]
-    · rw [if_neg hidx]
+    · rw [ite_eq_right hidx]
       -- Show LHS = 0.
       by_cases hcond : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-      · rw [if_pos hcond, if_neg]
+      · rw [ite_eq_left hcond, ite_eq_right]
         intro heq
         apply hidx
         have h_inj := finProdFinEquiv.injective heq
@@ -1432,7 +1432,7 @@ theorem pdivMat_mhsa_g_split (n d : Nat) (slab : Mat n (3 * d))
         have key : finProdFinEquiv (finProdFinEquiv.symm idx) = idx :=
           Equiv.apply_symm_apply _ _
         rw [← key, h_full]
-      · rw [if_neg hcond]
+      · rw [ite_eq_right hcond]
   -- The pdiv on the LHS of the goal:
   unfold pdivMat pdiv
   -- Key step: rewrite basisVec (fPF(i, fPF(c, j))) = mhsa_lift_c_CLM (basisVec (fPF(i, j))).
@@ -1451,24 +1451,24 @@ theorem pdivMat_mhsa_g_split (n d : Nat) (slab : Mat n (3 * d))
   -- Case on c.
   by_cases hc0 : c = (0 : Fin 3)
   · subst hc0
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     rw [pdivMat_mhsa_g_split_chain n d slab (0 : Fin 3)
           (fun Q' => sdpa n d Q' (mhsa_proj_c (1 : Fin 3) slab) (mhsa_proj_c (2 : Fin 3) slab))
           (fun u => by
             have h := mhsa_g_comp_embed n d (0 : Fin 3) slab u
-            rw [if_pos rfl] at h
+            rw [ite_eq_left rfl] at h
             exact h)]
-  · rw [if_neg hc0]
+  · rw [ite_eq_right hc0]
     by_cases hc1 : c = (1 : Fin 3)
     · subst hc1
-      rw [if_pos rfl]
+      rw [ite_eq_left rfl]
       rw [pdivMat_mhsa_g_split_chain n d slab (1 : Fin 3)
             (fun K' => sdpa n d (mhsa_proj_c (0 : Fin 3) slab) K' (mhsa_proj_c (2 : Fin 3) slab))
             (fun u => by
               have h := mhsa_g_comp_embed n d (1 : Fin 3) slab u
-              rw [if_neg (by decide : (1 : Fin 3) ≠ (0 : Fin 3)), if_pos rfl] at h
+              rw [ite_eq_right (by decide : (1 : Fin 3) ≠ (0 : Fin 3)), ite_eq_left rfl] at h
               exact h)]
-    · rw [if_neg hc1]
+    · rw [ite_eq_right hc1]
       have hc2 : c = (2 : Fin 3) := by
         fin_cases c
         · exact absurd rfl hc0
@@ -1479,8 +1479,8 @@ theorem pdivMat_mhsa_g_split (n d : Nat) (slab : Mat n (3 * d))
             (fun V' => sdpa n d (mhsa_proj_c (0 : Fin 3) slab) (mhsa_proj_c (1 : Fin 3) slab) V')
             (fun u => by
               have h := mhsa_g_comp_embed n d (2 : Fin 3) slab u
-              rw [if_neg (by decide : (2 : Fin 3) ≠ (0 : Fin 3)),
-                  if_neg (by decide : (2 : Fin 3) ≠ (1 : Fin 3))] at h
+              rw [ite_eq_right (by decide : (2 : Fin 3) ≠ (0 : Fin 3)),
+                  ite_eq_right (by decide : (2 : Fin 3) ≠ (1 : Fin 3))] at h
               exact h)]
 
 /-- **HasVJPMat for column-stacked SDPA.** Backward column-stacks the three
@@ -1521,21 +1521,21 @@ noncomputable def mhsa_g_has_vjp_mat (n d : Nat) :
     -- Now goal: ... = ∑ k' l', (if p.1 = 0 then ... else if p.1 = 1 then ... else ...) * dY[k', l']
     -- Pull the if outside the sum, then apply sdpa_back_*_correct.
     by_cases hc0 : p.1 = (0 : Fin 3)
-    · rw [if_pos hc0]
-      simp_rw [if_pos hc0]
+    · rw [ite_eq_left hc0]
+      simp_rw [ite_eq_left hc0]
       exact sdpa_back_Q_correct n d (mhsa_proj_c (0 : Fin 3) slab)
                                  (mhsa_proj_c (1 : Fin 3) slab)
                                  (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
-    · rw [if_neg hc0]
-      simp_rw [if_neg hc0]
+    · rw [ite_eq_right hc0]
+      simp_rw [ite_eq_right hc0]
       by_cases hc1 : p.1 = (1 : Fin 3)
-      · rw [if_pos hc1]
-        simp_rw [if_pos hc1]
+      · rw [ite_eq_left hc1]
+        simp_rw [ite_eq_left hc1]
         exact sdpa_back_K_correct n d (mhsa_proj_c (0 : Fin 3) slab)
                                    (mhsa_proj_c (1 : Fin 3) slab)
                                    (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
-      · rw [if_neg hc1]
-        simp_rw [if_neg hc1]
+      · rw [ite_eq_right hc1]
+        simp_rw [ite_eq_right hc1]
         exact sdpa_back_V_correct n d (mhsa_proj_c (0 : Fin 3) slab)
                                    (mhsa_proj_c (1 : Fin 3) slab)
                                    (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
@@ -2672,10 +2672,10 @@ noncomputable def cls_slice_flat_has_vjp (N D : Nat) :
     -- Sum of (if idx = fPF(0, j) then 1 else 0) * dy j over j.
     -- If p.1 = 0 then idx = fPF (0, p.2), so the unique matching j is p.2.
     by_cases hrow : p.1 = (0 : Fin (N + 1))
-    · rw [if_pos hrow]
+    · rw [ite_eq_left hrow]
       rw [Finset.sum_eq_single p.2
           (fun j _ hne => by
-            rw [if_neg ?_, zero_mul]
+            rw [ite_eq_right ?_, zero_mul]
             intro heq
             apply hne
             -- idx = fPF (0, j), and idx = fPF p = fPF (p.1, p.2) = fPF (0, p.2)
@@ -2688,7 +2688,7 @@ noncomputable def cls_slice_flat_has_vjp (N D : Nat) :
             have : p.2 = j := (Prod.mk.inj this).2
             exact this.symm)
           (fun h => absurd (Finset.mem_univ p.2) h)]
-      rw [if_pos]
+      rw [ite_eq_left]
       · ring
       · -- idx = fPF (0, p.2)
         have hfpf : finProdFinEquiv (p.1, p.2) = idx := by
@@ -2696,11 +2696,11 @@ noncomputable def cls_slice_flat_has_vjp (N D : Nat) :
           rw [hp]; exact Equiv.apply_symm_apply _ _
         rw [hrow] at hfpf
         exact hfpf.symm
-    · rw [if_neg hrow]
+    · rw [ite_eq_right hrow]
       symm
       apply Finset.sum_eq_zero
       intro j _
-      rw [if_neg ?_, zero_mul]
+      rw [ite_eq_right ?_, zero_mul]
       intro heq
       apply hrow
       -- idx = fPF (0, j), so p.1 = 0.
@@ -2951,7 +2951,7 @@ noncomputable def patchEmbed_flat_has_vjp
         by_cases hn0_k : (finProdFinEquiv.symm k).1.val = 0
         · -- LHS = pos_embed n d + cls_token d
           -- RHS = (pos_embed n d + cls_token d) + Σ_zero  (each summand = 0 because pad-guard ⊥)
-          simp_rw [if_pos hn0_k]
+          simp_rw [ite_eq_left hn0_k]
           rw [show (∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
                 W_conv ((finProdFinEquiv.symm k).2) c kh kw *
                 (let W' := W / patchSize
@@ -2981,13 +2981,13 @@ noncomputable def patchEmbed_flat_has_vjp
                          (c, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
                      else 0) : ℝ) = 0 from ?_]
           · ring
-          rw [dif_neg]
+          rw [dite_eq_right]
           intro h
           exact h.1 hn0_k
         · -- LHS = pos_embed + b_conv + Σ_orig (with 2-conj pad).
           -- RHS = (pos_embed + b_conv) + Σ_new (with 3-conj pad).
           -- Σ_orig = Σ_new because ¬(n.val=0) is true, so 3-conj ⇔ 2-conj dites equal.
-          simp_rw [if_neg hn0_k]
+          simp_rw [ite_eq_right hn0_k]
           rw [show (∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
                 W_conv ((finProdFinEquiv.symm k).2) c kh kw *
                 (let W' := W / patchSize
@@ -3022,8 +3022,8 @@ noncomputable def patchEmbed_flat_has_vjp
                               patchSize + kh.val < H ∧
                            ((finProdFinEquiv.symm k).1.val - 1) % (W / patchSize) *
                               patchSize + kw.val < W
-          · rw [dif_pos ⟨hn0_k, hpad'⟩, dif_pos hpad']
-          · rw [dif_neg ?_, dif_neg hpad']
+          · rw [dite_eq_left ⟨hn0_k, hpad'⟩, dite_eq_left hpad']
+          · rw [dite_eq_right ?_, dite_eq_right hpad']
             intro h
             exact hpad' h.2]
       -- Now apply pdiv_add to split into pdiv const_F (= 0) + pdiv var_F.
@@ -3327,20 +3327,20 @@ noncomputable def patchEmbed_flat_has_vjp
                           patchSize + khh.val < H ∧
                         ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
                           patchSize + kww.val < W
-        · rw [dif_pos hpad, dif_pos hpad]
+        · rw [dite_eq_left hpad, dite_eq_left hpad]
           by_cases heq : finProdFinEquiv (finProdFinEquiv
               (cc, ⟨((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
                      patchSize + khh.val, hpad.2.1⟩),
               ⟨((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
                      patchSize + kww.val, hpad.2.2⟩) = idx_in
-          · rw [if_pos heq, if_pos heq.symm]
-          · rw [if_neg heq, if_neg (fun h => heq h.symm)]
-        · rw [dif_neg hpad, dif_neg hpad]
+          · rw [ite_eq_left heq, ite_eq_left heq.symm]
+          · rw [ite_eq_right heq, ite_eq_right (fun h => heq h.symm)]
+        · rw [dite_eq_right hpad, dite_eq_right hpad]
       simp_rw [h_inner_c]
       -- Now case-split on hn0 to convert the 3-conjunct dite to either 0 (n=0)
       -- or the desired 2-conjunct dite (n ≠ 0).
       by_cases hn0 : (finProdFinEquiv.symm idx_out).1.val = 0
-      · rw [dif_pos hn0]
+      · rw [dite_eq_left hn0]
         apply Finset.sum_eq_zero; intro c _
         apply Finset.sum_eq_zero; intro kh _
         apply Finset.sum_eq_zero; intro kw _
@@ -3364,8 +3364,8 @@ noncomputable def patchEmbed_flat_has_vjp
                     ⟨((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
                           patchSize + kw.val, hpad.2.2⟩) then (1 : ℝ) else 0)
               else 0) = 0
-        rw [dif_neg h_neg, mul_zero]
-      · rw [dif_neg hn0]
+        rw [dite_eq_right h_neg, mul_zero]
+      · rw [dite_eq_right hn0]
         apply Finset.sum_congr rfl; intro c _
         apply Finset.sum_congr rfl; intro kh _
         apply Finset.sum_congr rfl; intro kw _
@@ -3398,14 +3398,14 @@ noncomputable def patchEmbed_flat_has_vjp
                             (W / patchSize) * patchSize + kh.val < H ∧
                          ((finProdFinEquiv.symm idx_out).1.val - 1) %
                             (W / patchSize) * patchSize + kw.val < W
-        · rw [dif_pos ⟨hn0, hpad'⟩, dif_pos hpad']
+        · rw [dite_eq_left ⟨hn0, hpad'⟩, dite_eq_left hpad']
         · have h_neg' : ¬(¬((finProdFinEquiv.symm idx_out).1.val = 0) ∧
                           ((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
                               patchSize + kh.val < H ∧
                           ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
                               patchSize + kw.val < W) :=
             fun h => hpad' h.2
-          rw [dif_neg h_neg', dif_neg hpad']
+          rw [dite_eq_right h_neg', dite_eq_right hpad']
     -- Step 2: closing collapse.
     show patchEmbed_input_grad_formula ic H W patchSize N D W_conv dy idx_in =
          ∑ idx_out : Fin ((N + 1) * D),
@@ -3452,7 +3452,7 @@ noncomputable def patchEmbed_flat_has_vjp
     rw [Fintype.sum_prod_type]
     -- Split Σ n via Fin.sum_univ_succ: n=0 row + ∑ p:Fin N (n=p.succ).
     rw [Fin.sum_univ_succ]
-    -- The n=0 term contributes 0 (each summand has dif_pos rfl → 0, then 0 * dy = 0).
+    -- The n=0 term contributes 0 (each summand has dite_eq_left rfl → 0, then 0 * dy = 0).
     rw [show (∑ d : Fin D,
         (if _hn0 : ((0 : Fin (N + 1)).val = 0) then (0 : ℝ)
          else
@@ -3470,12 +3470,12 @@ noncomputable def patchEmbed_flat_has_vjp
                 else 0)) * dy (finProdFinEquiv ((0 : Fin (N + 1)), d))) = 0 from by
       apply Finset.sum_eq_zero; intro d _
       have h_zero : ((0 : Fin (N + 1)).val = 0) := Fin.val_zero (N + 1)
-      rw [dif_pos h_zero, zero_mul]]
+      rw [dite_eq_left h_zero, zero_mul]]
     rw [zero_add]
-    -- Per-p: simplify dif_neg at p.succ + match formula.
+    -- Per-p: simplify dite_eq_right at p.succ + match formula.
     apply Finset.sum_congr rfl; intro p _
     have h_p_ne : (Fin.succ p).val ≠ 0 := Nat.succ_ne_zero _
-    simp_rw [dif_neg h_p_ne]
+    simp_rw [dite_eq_right h_p_ne]
     -- The `(p.succ).val - 1 = p.val` simplification.
     have h_p_succ_sub : (Fin.succ p).val - 1 = p.val := by
       show p.val + 1 - 1 = p.val
@@ -3500,7 +3500,7 @@ noncomputable def patchEmbed_flat_has_vjp
       simp only [h_p_succ_sub]
       by_cases hpad : p.val / (W / patchSize) * patchSize + kh.val < H ∧
                       p.val % (W / patchSize) * patchSize + kw.val < W
-      · rw [dif_pos hpad]
+      · rw [dite_eq_left hpad]
         by_cases h_match : c = c_in ∧
                            p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
                            p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
@@ -3520,8 +3520,8 @@ noncomputable def patchEmbed_flat_has_vjp
               show p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
               exact h_match.2.2
             rw [h_c, ← h_hh, ← h_ww]
-          rw [if_pos h_idx_in_eq, if_pos h_match]
-        · rw [if_neg h_match, if_neg]
+          rw [ite_eq_left h_idx_in_eq, ite_eq_left h_match]
+        · rw [ite_eq_right h_match, ite_eq_right]
           intro h_eq
           apply h_match
           rw [hidx_in] at h_eq
@@ -3532,8 +3532,8 @@ noncomputable def patchEmbed_flat_has_vjp
           refine ⟨h_inj_inner_pair.1.symm, ?_, ?_⟩
           · exact (Fin.ext_iff.mp h_inj_inner_pair.2).symm
           · exact (Fin.ext_iff.mp h_inj_pair.2).symm
-      · rw [dif_neg hpad]
-        rw [if_neg]
+      · rw [dite_eq_right hpad]
+        rw [ite_eq_right]
         intro ⟨_, h_hh, h_ww⟩
         apply hpad
         refine ⟨?_, ?_⟩
@@ -3572,13 +3572,13 @@ noncomputable def patchEmbed_flat_has_vjp
         apply Finset.sum_congr rfl; intro kw _
         by_cases h_match : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
                            p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
-        · rw [dif_pos h_match]
+        · rw [dite_eq_left h_match]
           apply Finset.sum_congr rfl; intro d _
-          rw [dif_pos h_match]
-        · rw [dif_neg h_match]
+          rw [dite_eq_left h_match]
+        · rw [dite_eq_right h_match]
           symm
           apply Finset.sum_eq_zero; intro d _
-          rw [dif_neg h_match]]
+          rw [dite_eq_right h_match]]
       -- Now: ∑ kh, ∑ kw, ∑ d, body. Move Σ d outermost via two sum_comm applications.
       -- Step 1: swap inner ∑ kw and ∑ d (under ∑ kh binder) via a per-kh helper.
       rw [show (∑ kh : Fin patchSize, ∑ kw : Fin patchSize, ∑ d : Fin D,
@@ -3628,7 +3628,7 @@ noncomputable def patchEmbed_flat_has_vjp
                   (1 : ℝ) else 0)) : ℝ) = 0 from by
           apply Finset.sum_eq_zero; intro kh _
           apply Finset.sum_eq_zero; intro kw _
-          rw [if_neg (fun ⟨h, _⟩ => hc_ne h), mul_zero]]
+          rw [ite_eq_right (fun ⟨h, _⟩ => hc_ne h), mul_zero]]
         rw [zero_mul]
       · intro h; exact absurd (Finset.mem_univ c_in) h
       -- Now: (∑ kh, ∑ kw, W d c_in kh kw * (if c_in = c_in ∧ h_match then 1 else 0)) * dy
@@ -3641,8 +3641,8 @@ noncomputable def patchEmbed_flat_has_vjp
       -- = if h_match then W d c_in kh kw * dy else 0
       by_cases h_match : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
                          p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
-      · rw [if_pos ⟨rfl, h_match⟩, dif_pos h_match]; ring
-      · rw [if_neg (fun ⟨_, h⟩ => h_match h), dif_neg h_match]; ring
+      · rw [ite_eq_left ⟨rfl, h_match⟩, dite_eq_left h_match]; ring
+      · rw [ite_eq_right (fun ⟨_, h⟩ => h_match h), dite_eq_right h_match]; ring
     rw [h_rhs_canonical]
 
 /-! ## The full ViT theorem

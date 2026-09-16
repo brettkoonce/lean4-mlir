@@ -314,8 +314,8 @@ theorem linear_grad_close {m n : Nat} (M : FloatModel) (W : Mat m n)
   have hy : |softmax n (dense W b x) j - oneHot n label j| ≤ 1 := by
     simp only [oneHot]
     by_cases h : j = label
-    · rw [if_pos h, abs_le]; constructor <;> linarith
-    · rw [if_neg h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
+    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
   -- the input multiply: exact left operand (`|xᵢ − xᵢ| = 0 ≤ 0`)
   have hxx : |x i - x i| ≤ (0:ℝ) := by simp
   exact M.mul_close hxx hcot (hx i) hy

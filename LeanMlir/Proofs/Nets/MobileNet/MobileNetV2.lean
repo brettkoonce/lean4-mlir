@@ -68,8 +68,8 @@ noncomputable def relu6LinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n 
                       else (0 : Vec n →L[ℝ] ℝ))) y k = _
   rw [ContinuousLinearMap.pi_apply]
   by_cases hxk : 0 < x k ∧ x k < 6
-  · rw [if_pos hxk, if_pos hxk]; rfl
-  · rw [if_neg hxk, if_neg hxk]; rfl
+  · rw [ite_eq_left hxk, ite_eq_left hxk]; rfl
+  · rw [ite_eq_right hxk, ite_eq_right hxk]; rfl
 
 theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) :
@@ -123,12 +123,12 @@ theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
     rw [hcomp]
     by_cases hk : 0 < x k ∧ x k < 6
     · have h1 : (fun y : Vec n => g y k) = fun y : Vec n => y k := by
-        funext y; show (if 0 < x k ∧ x k < 6 then y k else _) = y k; rw [if_pos hk]
-      rw [h1, if_pos hk]
+        funext y; show (if 0 < x k ∧ x k < 6 then y k else _) = y k; rw [ite_eq_left hk]
+      rw [h1, ite_eq_left hk]
       exact (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).hasFDerivAt
     · have h1 : (fun y : Vec n => g y k) = fun _ : Vec n => (if x k ≤ 0 then (0:ℝ) else 6) := by
-        funext y; show (if 0 < x k ∧ x k < 6 then y k else _) = _; rw [if_neg hk]
-      rw [h1, if_neg hk]
+        funext y; show (if 0 < x k ∧ x k < 6 then y k else _) = _; rw [ite_eq_right hk]
+      rw [h1, ite_eq_right hk]
       exact hasFDerivAt_const _ _
   -- Step B: relu6 =ᶠ g near x.
   have h_local : Set.EqOn (relu6 n) g (Metric.ball x r) := by
@@ -152,7 +152,7 @@ theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
       have hyk_neg : y k < 0 := by
         have h_abs : |y k - x k| < -x k := by rwa [abs_of_neg hxneg] at h_close0
         have := (abs_lt.mp h_abs).2; linarith
-      rw [if_neg (by rintro ⟨h, _⟩; linarith), if_pos (le_of_lt hxneg)]
+      rw [ite_eq_right (by rintro ⟨h, _⟩; linarith), ite_eq_left (le_of_lt hxneg)]
       rw [max_eq_right (le_of_lt hyk_neg), min_eq_left (by linarith)]
     · exact absurd hx0 (h_smooth k).1
     · -- x k > 0. Subcase on x k vs 6.
@@ -165,7 +165,7 @@ theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
           have h_abs : |y k - x k| < |x k - 6| := h_close6
           rw [abs_of_neg (by linarith : x k - 6 < 0)] at h_abs
           have := (abs_lt.mp h_abs).2; linarith
-        rw [if_pos ⟨hxpos, hx6⟩]
+        rw [ite_eq_left ⟨hxpos, hx6⟩]
         rw [max_eq_left (le_of_lt hyk_pos), min_eq_left (le_of_lt hyk_lt6)]
       · exact absurd hx6 (h_smooth k).2
       · -- x k > 6: y k > 6; result 6; condition false
@@ -173,7 +173,7 @@ theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
           have h_abs : |y k - x k| < |x k - 6| := h_close6
           rw [abs_of_pos (by linarith : 0 < x k - 6)] at h_abs
           have := (abs_lt.mp h_abs).1; linarith
-        rw [if_neg (by rintro ⟨_, h⟩; linarith), if_neg (by linarith)]
+        rw [ite_eq_right (by rintro ⟨_, h⟩; linarith), ite_eq_right (by linarith)]
         rw [max_eq_left (by linarith : (0:ℝ) ≤ y k), min_eq_right (le_of_lt hyk_gt6)]
   have h_evt : (relu6 n) =ᶠ[nhds x] g :=
     h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds x hr_pos)
@@ -192,11 +192,11 @@ theorem pdiv_relu6 (n : Nat) (x : Vec n)
   unfold pdiv
   rw [(relu6_hasFDerivAt n x h_smooth).fderiv, relu6LinearPart_apply, basisVec_apply]
   by_cases hij : i = j
-  · subst hij; rw [if_pos rfl, if_pos rfl]
-  · rw [if_neg (fun h : j = i => hij h.symm), if_neg hij]
+  · subst hij; rw [ite_eq_left rfl, ite_eq_left rfl]
+  · rw [ite_eq_right (fun h : j = i => hij h.symm), ite_eq_right hij]
     by_cases hxj : 0 < x j ∧ x j < 6
-    · rw [if_pos hxj]
-    · rw [if_neg hxj]
+    · rw [ite_eq_left hxj]
+    · rw [ite_eq_right hxj]
 
 noncomputable def relu6_has_vjp_at (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : HasVJPAt (relu6 n) x where
@@ -205,12 +205,12 @@ noncomputable def relu6_has_vjp_at (n : Nat) (x : Vec n)
     intro dy i
     simp_rw [pdiv_relu6 n x h_smooth]
     rw [Finset.sum_eq_single i
-        (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
         (fun h => absurd (Finset.mem_univ i) h)]
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     by_cases hxi : 0 < x i ∧ x i < 6
-    · rw [if_pos hxi, if_pos hxi]; ring
-    · rw [if_neg hxi, if_neg hxi]; ring
+    · rw [ite_eq_left hxi, ite_eq_left hxi]; ring
+    · rw [ite_eq_right hxi, ite_eq_right hxi]; ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § Conv/Depthwise + BN + ReLU6 blocks (flat Vec space)

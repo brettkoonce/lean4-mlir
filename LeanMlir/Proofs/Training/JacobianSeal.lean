@@ -41,8 +41,8 @@ theorem HasVJP.backward_ne_zero_of_pdiv_ne {m n : Nat} {f : Vec m → Vec n}
   rw [h.correct]
   have hsum : (∑ j : Fin n, pdiv f x i₀ j * basisVec j₀ j) = pdiv f x i₀ j₀ := by
     rw [Finset.sum_eq_single j₀]
-    · rw [basisVec_apply, if_pos rfl, mul_one]
-    · intro j _ hj; rw [basisVec_apply, if_neg hj, mul_zero]
+    · rw [basisVec_apply, ite_eq_left rfl, mul_one]
+    · intro j _ hj; rw [basisVec_apply, ite_eq_right hj, mul_zero]
     · intro hni; exact absurd (Finset.mem_univ j₀) hni
   rw [hsum]; exact hpd
 
@@ -53,8 +53,8 @@ theorem sum_smul_basisVec {m : Nat} (v : Vec m) :
   rw [Finset.sum_apply]
   simp only [Pi.smul_apply, smul_eq_mul, basisVec_apply]
   rw [Finset.sum_eq_single k]
-  · rw [if_pos rfl, mul_one]
-  · intro b _ hb; rw [if_neg (fun h => hb h.symm), mul_zero]
+  · rw [ite_eq_left rfl, mul_one]
+  · intro b _ hb; rw [ite_eq_right (fun h => hb h.symm), mul_zero]
   · intro hni; exact absurd (Finset.mem_univ k) hni
 
 /-- A whole row of the Jacobian vanishing is the Fréchet derivative vanishing on that
@@ -120,8 +120,8 @@ theorem HasVJPAt.backward_ne_zero_of_pdiv_ne {m n : Nat} {f : Vec m → Vec n}
   rw [h.correct]
   have hsum : (∑ j : Fin n, pdiv f x i₀ j * basisVec j₀ j) = pdiv f x i₀ j₀ := by
     rw [Finset.sum_eq_single j₀]
-    · rw [basisVec_apply, if_pos rfl, mul_one]
-    · intro j _ hj; rw [basisVec_apply, if_neg hj, mul_zero]
+    · rw [basisVec_apply, ite_eq_left rfl, mul_one]
+    · intro j _ hj; rw [basisVec_apply, ite_eq_right hj, mul_zero]
     · intro hni; exact absurd (Finset.mem_univ j₀) hni
   rw [hsum]; exact hpd
 

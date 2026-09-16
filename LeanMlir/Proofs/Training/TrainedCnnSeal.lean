@@ -179,8 +179,8 @@ theorem d4inner : ∀ k m : Fin 8,
     intro l
     rw [pdiv_dense, pdiv_relu 8 _ d4_ne, d4_eq]
     by_cases hlm : l = m
-    · rw [if_pos hlm, if_pos hlm]
-    · rw [if_neg hlm, if_neg hlm, mul_zero]
+    · rw [ite_eq_left hlm, ite_eq_left hlm]
+    · rw [ite_eq_right hlm, ite_eq_right hlm, mul_zero]
   rw [Finset.sum_congr rfl (fun l _ => hterm l),
       Finset.sum_ite_eq' Finset.univ m
         (fun l => W4 k l * (if d4V l > 0 then (1:ℝ) else 0))]
@@ -211,8 +211,8 @@ theorem d3inner : ∀ (k : Fin (2*3*3)) (m : Fin 8),
     intro l
     rw [pdiv_dense, pdiv_relu 8 _ d3_ne, d3_eq]
     by_cases hlm : l = m
-    · rw [if_pos hlm, if_pos hlm]
-    · rw [if_neg hlm, if_neg hlm, mul_zero]
+    · rw [ite_eq_left hlm, ite_eq_left hlm]
+    · rw [ite_eq_right hlm, ite_eq_right hlm, mul_zero]
   rw [Finset.sum_congr rfl (fun l _ => hterm l),
       Finset.sum_ite_eq' Finset.univ m
         (fun l => W3 k l * (if d3V l > 0 then (1:ℝ) else 0))]
@@ -252,7 +252,7 @@ theorem S2_c0 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -277,7 +277,7 @@ theorem S2_c1 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -302,7 +302,7 @@ theorem S2_c2 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -327,7 +327,7 @@ theorem S2_c3 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -352,7 +352,7 @@ theorem S2_c4 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -377,7 +377,7 @@ theorem S2_c5 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -402,7 +402,7 @@ theorem S2_c6 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -427,7 +427,7 @@ theorem S2_c7 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -451,7 +451,7 @@ theorem S2_c8 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -475,7 +475,7 @@ theorem S2_c9 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -500,7 +500,7 @@ theorem S2_c10 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -524,7 +524,7 @@ theorem S2_c11 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -549,7 +549,7 @@ theorem S2_c12 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -574,7 +574,7 @@ theorem S2_c13 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -598,7 +598,7 @@ theorem S2_c14 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -623,7 +623,7 @@ theorem S2_c15 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -648,7 +648,7 @@ theorem S2_c16 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -672,7 +672,7 @@ theorem S2_c17 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -697,7 +697,7 @@ theorem S2_c18 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -722,7 +722,7 @@ theorem S2_c19 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -747,7 +747,7 @@ theorem S2_c20 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -772,7 +772,7 @@ theorem S2_c21 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -796,7 +796,7 @@ theorem S2_c22 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -821,7 +821,7 @@ theorem S2_c23 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -846,7 +846,7 @@ theorem S2_c24 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -871,7 +871,7 @@ theorem S2_c25 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -895,7 +895,7 @@ theorem S2_c26 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -920,7 +920,7 @@ theorem S2_c27 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -944,7 +944,7 @@ theorem S2_c28 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -969,7 +969,7 @@ theorem S2_c29 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -994,7 +994,7 @@ theorem S2_c30 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1019,7 +1019,7 @@ theorem S2_c31 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1044,7 +1044,7 @@ theorem S2_c32 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1069,7 +1069,7 @@ theorem S2_c33 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1094,7 +1094,7 @@ theorem S2_c34 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1118,7 +1118,7 @@ theorem S2_c35 :
       then Tensor3.unflatten t3V (⟨0, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1143,7 +1143,7 @@ theorem S2_c36 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1168,7 +1168,7 @@ theorem S2_c37 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1193,7 +1193,7 @@ theorem S2_c38 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1218,7 +1218,7 @@ theorem S2_c39 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1243,7 +1243,7 @@ theorem S2_c40 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1268,7 +1268,7 @@ theorem S2_c41 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨0, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1293,7 +1293,7 @@ theorem S2_c42 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1318,7 +1318,7 @@ theorem S2_c43 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1342,7 +1342,7 @@ theorem S2_c44 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1366,7 +1366,7 @@ theorem S2_c45 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1391,7 +1391,7 @@ theorem S2_c46 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1415,7 +1415,7 @@ theorem S2_c47 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨1, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1440,7 +1440,7 @@ theorem S2_c48 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1465,7 +1465,7 @@ theorem S2_c49 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1489,7 +1489,7 @@ theorem S2_c50 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1513,7 +1513,7 @@ theorem S2_c51 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1538,7 +1538,7 @@ theorem S2_c52 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1562,7 +1562,7 @@ theorem S2_c53 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨2, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1587,7 +1587,7 @@ theorem S2_c54 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1612,7 +1612,7 @@ theorem S2_c55 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1637,7 +1637,7 @@ theorem S2_c56 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1662,7 +1662,7 @@ theorem S2_c57 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1687,7 +1687,7 @@ theorem S2_c58 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1712,7 +1712,7 @@ theorem S2_c59 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨3, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1737,7 +1737,7 @@ theorem S2_c60 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1762,7 +1762,7 @@ theorem S2_c61 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1787,7 +1787,7 @@ theorem S2_c62 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1812,7 +1812,7 @@ theorem S2_c63 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1837,7 +1837,7 @@ theorem S2_c64 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1862,7 +1862,7 @@ theorem S2_c65 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨4, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1887,7 +1887,7 @@ theorem S2_c66 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨0, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1912,7 +1912,7 @@ theorem S2_c67 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨1, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1936,7 +1936,7 @@ theorem S2_c68 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨2, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv
@@ -1961,7 +1961,7 @@ theorem S2_c69 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨3, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -1985,7 +1985,7 @@ theorem S2_c70 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨4, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_pos (by
+  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
@@ -2009,7 +2009,7 @@ theorem S2_c71 :
       then Tensor3.unflatten t3V (⟨1, by norm_num⟩ : Fin (2))
         (winRow (⟨5, by norm_num⟩ : Fin (6))) (winCol (⟨5, by norm_num⟩ : Fin (6))) else 0)
     = t2V (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
-  rw [if_neg (by
+  rw [ite_eq_right (by
     intro hmax
     have hv := hmax (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 2)
     simp [winRow, winCol, winRowInv, winColInv, r2V] at hv

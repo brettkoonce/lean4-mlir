@@ -299,8 +299,8 @@ theorem pdiv_bnAffine (n : Nat) (γ β : ℝ)
       from pdiv_const (fun _ : Fin n => γ) v i j]
   rw [pdiv_id]
   by_cases h : i = j
-  · rw [if_pos h, if_pos h]; ring
-  · rw [if_neg h, if_neg h]; ring
+  · rw [ite_eq_left h, ite_eq_left h]; ring
+  · rw [ite_eq_right h, ite_eq_right h]; ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § The hard Jacobian: `pdiv_bnNormalize` — now derived
@@ -567,8 +567,8 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
     rw [show (∑ j' : Fin (n' + 1), (basisVec i : Vec (n' + 1)) j') = 1 from by
         simp only [basisVec_apply]
         rw [Finset.sum_eq_single i]
-        · rw [if_pos rfl]
-        · intros b _ hb; rw [if_neg hb]
+        · rw [ite_eq_left rfl]
+        · intros b _ hb; rw [ite_eq_right hb]
         · intro h; exact absurd (Finset.mem_univ i) h]
     rw [one_div]
   -- Compute the sum CLM applied to basisVec i: equals 2 (x i - μ).
@@ -594,8 +594,8 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
           2 * (x k - bnMean (n' + 1) x) * (if k = i then (1 : ℝ) else 0)) =
         2 * (x i - bnMean (n' + 1) x) from by
         rw [Finset.sum_eq_single i]
-        · rw [if_pos rfl, mul_one]
-        · intros b _ hb; rw [if_neg hb, mul_zero]
+        · rw [ite_eq_left rfl, mul_one]
+        · intros b _ hb; rw [ite_eq_right hb, mul_zero]
         · intro h; exact absurd (Finset.mem_univ i) h]
     rw [show (∑ k : Fin (n' + 1),
           2 * (x k - bnMean (n' + 1) x) * ((n' + 1 : Nat) : ℝ)⁻¹) =
