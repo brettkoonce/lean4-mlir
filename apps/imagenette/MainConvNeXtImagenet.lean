@@ -5,8 +5,11 @@ import LeanMlir.VerifiedNets
 The ConvNeXt peer of `resnet34-imagenet-verified` and `vit-imagenet-verified` (§2p).
 Unlike those two, this one needed a renderer change first: `nClasses` was a hardcoded literal and
 `-α/K` was a caller-supplied string independent of it — the two-writers-for-one-fact shape that
-produced R34's K=10 gradient bug. Both are fixed; `cBS` is still private, so this renders at
-batch 32 (global 128 on four replicas).
+produced R34's K=10 gradient bug. Both are fixed; and since 2026-09-17 `cBS`/`bB` are PARAMETERS, so this renders at
+**batch 64 — global 256 on four replicas, which is its JAX reference's batch exactly**
+(`ConvNeXtRenderB.cnxInBS`). It rendered at 32 (global 128) until then, which made the pair a
+pair in architecture only: half the batch, twice the updates, and an LR off the linear-scaling
+rule. ⭐ The rescope also made the LR correct for free — see `baseLR` below.
 
 XLA-only by construction: collectives live on the PJRT path.
 
@@ -19,12 +22,15 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 gone from the target name because it no longer distinguishes anything.
 -/
 
-/-- 300 epochs at 32 per device — the ConvNeXt paper's schedule length. `batchSize` is PER DEVICE
-    and must match the batch the selected variant was rendered at (32; it is baked into the graph,
-    so a mismatch is a shape error at the first invoke rather than a silent limp). -/
+/-- 300 epochs at 64 per device — the ConvNeXt paper's schedule length. `batchSize` is PER DEVICE
+    and must match the batch the selected variant was rendered at (**64** since 2026-09-17; it is
+    baked into the graph, so a mismatch is a shape error at the first invoke rather than a silent
+    limp). ⚠ 64 × 4 replicas = global 256 = `SPE 5004`, which is what the JAX reference
+    (`/home/skoonce/convnext_t300_3060/`) trains at; at the old 32 this job ran 10,009 steps/epoch
+    against the reference's 5,004. -/
 def convnextImagenetConfig : VerifiedConfig where
   epochs    := 300
-  batchSize := 32
+  batchSize := 64
 
 /-- Entry point. Defaults to the single-device `adam` variant rather than `adamdp`, matching the
     R34 and ViT ImageNet drivers: a DP default makes a plain invocation fail at the first step with
@@ -35,9 +41,13 @@ def runConvNeXtImagenet (argv : List String) : IO Unit := do
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.00025   -- `convNeXtTinyImagenetConfig.learningRate`: 4e-3@bs4096 scaled to bs256.
-                          -- ⚠ this run is at global 128, so the linear-scaling rule would put it
-                          -- near 1.25e-4; 2.5e-4 is kept to match the reference knob and left as
-                          -- the thing to tune first if it under- or over-steps.
+                          -- ⭐ SINCE THE BATCH-64 RESCOPE THIS IS THE RIGHT NUMBER AND NEEDS NO
+                          -- OVERRIDE: the run is at global 256 (4 × 64), so 2.5e-4 is both the
+                          -- linear-scaling value AND the reference's own knob
+                          -- (its banner: `lr=0.000250  batch_size=256 (4 devices x 64)`).
+                          -- ⚠ Until 2026-09-17 this comment said the opposite — the run was at
+                          -- global 128 where the rule wanted ~1.25e-4 and 2.5e-4 was a deliberate
+                          -- mismatch left as "the thing to tune first". The rescope closed it.
   -- ⚠ `LEAN_MLIR_EPOCHS` SETS the schedule where `LEAN_MLIR_MAX_EPOCHS` only CAPS it
   -- (`min n cfg.epochs`). `totalSteps := cfg.epochs * nb / accK` is what the cosine anneals over,
   -- so EPOCHS=80 is a complete 80-epoch experiment while MAX_EPOCHS=80 is a PREFIX of the committed

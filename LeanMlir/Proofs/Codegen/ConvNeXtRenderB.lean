@@ -57,11 +57,60 @@ private def zMB {a b : Nat} : Mat a b := fun _ _ => 0
     concrete rounding here would be claiming the emitter knows about it, which it does not. -/
 private def zrndB : ℝ → ℝ := fun r => r
 
-/-- Batch, eps and the stage table — read from the per-example renderer's own constants where they
+/- **The per-replica batch — a PARAMETER now, not a private constant** (2026-09-17).
+
+   It was `private def bB : Nat := 32`. See the long note at the top of `ConvNeXtRender` for WHY
+   it moved (the ImageNet job ran at global 128 against its reference's 256, so the pair was not a
+   pair); this note records what is different on THIS side.
+
+   ⚠⚠ **Here the batch is a TYPE INDEX, not just a serialization width.** In the per-example file
+   `cBS` is only ever `pretty`'s first argument. Here it also appears in `Vec (bB*(c*h*h))`,
+   `(N := bB)` and `Vec (bB*nClasses)` — the shapes the batched forms are INDEXED by. That is why
+   this file is the one that actually has to be right: a wrong width in the per-example file is a
+   wrong annotation, and a wrong width here is a different graph.
+
+   ⚠ Threading shape, same as the per-example file: private helpers take it FIRST with NO default
+   (the compiler enumerates the sites); public entry points take it LAST, defaulted to 32, so
+   every committed render, every `tests/` caller and both ConvNeXt-S/B forwards stay
+   BYTE-IDENTICAL. Verified by regenerating: at the default the diff is empty.
+
+   ⚠⚠ **The two files MUST MOVE TOGETHER and `convNextAdamTrainStepFaithfulB` is where they meet.**
+   That function spells the batch ONCE and hands it to both halves — `convNextBackAllB` (the BODY,
+   at `N := bB`) and `convNextAdamTrainStepFaithful` (the WRAPPER, via `cBS`: `%x`'s declared
+   shape, the `%bsc` loss divisor, the drop-path signature). It is the same discipline `sd`, `V`
+   and `bf16` already get here, and for the same reason: two halves that a caller could set
+   independently is the defect this file's own thread keeps finding. A disagreement is LOUD —
+   the wrapper declares `tensor<B₁×3×224×224>` over a body computing at `N := B₂` and the lowerer
+   rejects the module — but loud at the lowerer is still later than loud at the type checker. -/
+/-- **ConvNeXt-T / ImageNet's per-replica batch, spelled ONCE for the whole `convnextin_*`
+    family** (2026-09-17).
+
+    **64, not the 32 every other ConvNeXt render uses**, and the reason is a PAIRING fact rather
+    than a throughput one. This net's JAX reference trains at **global 256 = 4 × 64** (its own
+    banner: `batch 256 (4x64) · SPE 5004`). The verified job ran 4 × 32 = **global 128 with
+    10,009 steps/epoch** and a `baseLR` that is the bs-256 value — half the batch, twice the
+    updates, and an LR off the linear-scaling rule. That is a RECIPE difference, not a lowering
+    difference, and it forfeits the only thing this pair is in the book for: ConvNeXt has **no
+    BatchNorm**, so a tie here says the LOWERER is clean and an offset here implicates the lowerer
+    or the feed fleet-wide. Neither reading survives if the batch does not match.
+
+    ⚠ Spelled once because it has to reach thirteen `#eval`s AND both halves of every train step
+    (body at `N := bB`, wrapper via `cBS`). Thirteen literals is the shape of defect this file's
+    own thread keeps finding.
+
+    ⚠ **`convnextsin_*` and `convnextbin_*` (ConvNeXt-S and -B at ImageNet) stay at the 32
+    default, deliberately.** Neither has ever been trained or paired with a reference, so moving
+    them would churn nine committed artifacts and nine gate runs for nothing. If either is ever
+    launched, its job's `LEAN_MLIR_BATCH` must be checked against its render — the `PRECHECK` in
+    `scripts/jobs/cnx-default-4gpu.conf` greps the artifact for its own baked batch and is the
+    template for that. -/
+def cnxInBS : Nat := 64
+
+/-- Eps and the stage table — read from the per-example renderer's own constants where they
     are public, restated where they are `private`. ⚠ Restated, not re-derived: if these drift the
     byte tie fails loudly, which is the point of tying against the committed artifact rather than
-    against a second copy of the shapes. -/
-private def bB : Nat := 32
+    against a second copy of the shapes. ⚠ **The BATCH was named in this docstring until
+    2026-09-17**, when it stopped being a constant — see the note above. -/
 private def bEPS : String := "1.0e-6"
 private def bSpats  : Array Nat := #[56, 28, 14, 7]
 
@@ -91,7 +140,7 @@ private def bBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 
     ⚠ `m := h*h` is the SPATIAL row count PER EXAMPLE and `N := bB` is the batch. Collapsing those
     two into one index is exactly the defect this file exists to remove, and it is why the
     descriptors carry `(m, n)` internally instead of reading the SHlo index. -/
-private def lnFwdSiteB (gN btN xin : String) (c h : Nat) :
+private def lnFwdSiteB (bB : Nat) (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand xin (zVB : Vec (bB*(c*h*h))))))
@@ -111,7 +160,7 @@ private def lnFwdSiteB (gN btN xin : String) (c h : Nat) :
     with `ConvNeXtRender.headLnFwdSite`, because `convnext-fwd-b-tie` asserts the two renderers
     emit the same bytes — the gate that went red for three commits when `f4e4172` lifted only the
     batched pointwise arms. -/
-private def headLnFwdSiteB (gN btN xin : String) (d : Nat) :
+private def headLnFwdSiteB (bB : Nat) (gN btN xin : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, n)  ← pretty bB (.batchOp (N := bB)
                                 (.lnRow (m := 1) (n := d) "%one" "%zero" bEPS 0 1 0)
@@ -123,7 +172,7 @@ private def headLnFwdSiteB (gN btN xin : String) (d : Nat) :
     pure (k1 ++ k2 ++ k3, o)
 
 /-- The head LN's **input-VJP**, batched peer. -/
-private def headLnBackSiteB (gN xName cot : String) (d : Nat) :
+private def headLnBackSiteB (bB : Nat) (gN xName cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, da) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (zVB : Vec d))
                                  (.operand cot (zVB : Vec (bB*(1*d)))))
@@ -136,12 +185,12 @@ private def headLnBackSiteB (gN xName cot : String) (d : Nat) :
 -- GRADIENT (`veclnGammaGradB`), which does not read the current γ — only the SGD peer does, and
 -- this batched renderer has no SGD arm. Named `_` so the linter says so instead of the reader
 -- having to work it out.
-private def headLnGammaTailB (_gN xName cot : String) (d : Nat) :
+private def headLnGammaTailB (bB : Nat) (_gN xName cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) :=
   pretty bB (.veclnGammaGradB (N := bB) (R := 1) (D := d) xName bEPS 0
                 (zVB : Vec (bB*(1*d))) (.operand cot (zVB : Vec (bB*(1*d)))))
 
-private def headLnBetaTailB (cot : String) (d : Nat) :
+private def headLnBetaTailB (bB : Nat) (cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) :=
   pretty bB (.rowDenseBiasGradB (N := bB) (R := 1) (c := d)
                 (.operand cot (zVB : Vec (bB*(1*d)))))
@@ -161,7 +210,7 @@ private def headLnBetaTailB (cot : String) (d : Nat) :
     ⚠ At `drop = none` **no `pretty` call happens**, so the fresh-name counter does not move and the
     drop-free chain re-renders byte-identically. That is what keeps `convnext-fwd-b-tie` and the
     committed artifacts free of this feature. -/
-private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := none)
+private def fwdBlockB (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option Nat := none)
     -- ⚠ TRAILING and defaulted, the `wx`/`clip`/`sd` idiom: every existing call site re-renders
     -- byte-identically, which is gate 1 for free.
     (bf16 : Bool := false) :
@@ -170,7 +219,7 @@ private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := non
       (if bf16 then .depthwiseBf16 (h := h) (w := h) zrndB s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB
        else .depthwise (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB)
       (.operand xin zVB))
-  let (k2, n) ← lnFwdSiteB s!"%{pfx}ng" s!"%{pfx}nbt" d c h
+  let (k2, n) ← lnFwdSiteB bB s!"%{pfx}ng" s!"%{pfx}nbt" d c h
   -- ⚠ The block's 1×1s are `.conv` at `kH = kW = 1`, so they take `convBf16` — NOT a new matmul op.
   -- §10.3's guess that ConvNeXt's "large 1×1s are matmuls in disguise" needing new activation ×
   -- activation ops is wrong for THIS render; the only true matmul is the classifier head, which
@@ -195,9 +244,9 @@ private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := non
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ kD ++ k7, ⟨xin, d, n, e', g, p, bout⟩)
 
 /-- One **downsample** forward, batched: channel-LN then 2×2/s2 conv. -/
-private def fwdDownB (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
+private def fwdDownB (bB : Nat) (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String) := do
-  let (k1, n) ← lnFwdSiteB s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
+  let (k1, n) ← lnFwdSiteB bB s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
   -- ⚠ SYMMETRIC pad (`convStrided`, not `convStridedXla`) — ConvNeXt is torchvision-origin. Both
   -- spellings give the same output size at every kernel, so only a forward tie separates them.
   let (k2, o) ← pretty bB (.batchOp (N := bB)
@@ -221,7 +270,9 @@ set_option maxRecDepth 8000 in
     identity, and the `forward ⊂ train-step` prefix audit keeps a partner for the SD render instead
     of quietly not covering it. -/
 def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
-    (V : CnxDims := bTiny) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS CFwd := do
+    (V : CnxDims := bTiny) (bf16 : Bool := false)
+    -- ⚠ THE PER-REPLICA BATCH — trailing + defaulted, see the note at the top of this file.
+    (bB : Nat := 32) : StateM Proofs.StableHLO.EmitS CFwd := do
   -- ⭐ **The 4×4/s4 patchify stem — one of ConvNeXt's two genuinely new bf16 ops.** Its emit keeps
   -- `convStride4`'s pad-one-less rule (`[[0,0]]` at k=4), which is NOT the symmetric pad every
   -- other forward conv uses; `BatchableOp.convStride4Bf16` carries the note.
@@ -229,7 +280,7 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
       (if bf16 then .convStride4Bf16 (h := 56) (w := 56) zrndB "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB
        else .convStride4 (h := 56) (w := 56) "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
       (.operand "%x" (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56)))))))
-  let (cSln, stem) ← lnFwdSiteB "%psng" "%psnbt" stemC V.dims[0]! 56
+  let (cSln, stem) ← lnFwdSiteB bB "%psng" "%psnbt" stemC V.dims[0]! 56
   let mut fwd := cS ++ cSln
   let mut cur := stem
   let mut blksAll : Array (Array FNames) := #[]
@@ -245,18 +296,18 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
       -- ⚠⚠ AND `D` MUST BE PASSED. Dropping it takes the ConvNeXt-T default silently: at S that
       -- pairs stage 3's 27 blocks with T's stage-3 numbering and stage 4 with indices 15..17 that
       -- another stage already owns — duplicate mask sites on a graph that compiles and descends.
-      let (code, bn) ← fwdBlockB s!"s{si}b{j}" cur c e h
+      let (code, bn) ← fwdBlockB bB s!"s{si}b{j}" cur c e h
                           (if sd then some (cnxBlockIdx si j V) else none) bf16
       fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
     blksAll := blksAll.push blks
     if si < 3 then
       downIn := downIn.push cur
-      let (code, n, o) ← fwdDownB s!"d{si}" cur c V.dims[si+1]! bSpats[si+1]! bf16
+      let (code, n, o) ← fwdDownB bB s!"d{si}" cur c V.dims[si+1]! bSpats[si+1]! bf16
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := 7) (w := 7))
       (.operand cur zVB))
   -- ⭐ head LN (2026-08-30, §7.1) — the per-example peer of `ConvNeXtRender`'s.
-  let (cHn, hn) ← headLnFwdSiteB "%hng" "%hnbt" gap V.dims[3]!
+  let (cHn, hn) ← headLnFwdSiteB bB "%hng" "%hnbt" gap V.dims[3]!
   let (cLog, logits) ← pretty bB (.batchOp (N := bB)
       (.dense "%Wd" "%bd" (zMB : Mat (V.dims[3]!) nClasses) zVB) (.operand hn zVB))
   pure { code := fwd ++ cG ++ cHn ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
@@ -280,8 +331,10 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     -- two. A bf16 eval forward would need its own prefix partner and its own gate; the train step
     -- is where the payoff is and where §15 scoped the work.
     (bf16 : Bool := false)
+    -- ⚠ THE PER-REPLICA BATCH — trailing + defaulted, see the note at the top of this file.
+    (bB : Nat := 32)
     : String := Id.run do
-  let F : CFwd := (convNextFwdChainB nClasses sd V bf16).run' (0, [])
+  let F : CFwd := (convNextFwdChainB nClasses sd V bf16 (bB := bB)).run' (0, [])
   let body := F.code; let logits := F.logits
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [bB, 3*224*224]) ::
@@ -310,7 +363,7 @@ cannot judge:
   one-example check. -/
 
 /-- One **channel-LN input-VJP** site, batched. -/
-private def lnBackSiteB (gN xName cot : String) (c h : Nat) :
+private def lnBackSiteB (bB : Nat) (gN xName cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                    (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
@@ -325,7 +378,7 @@ private def lnBackSiteB (gN xName cot : String) (c h : Nat) :
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
 /-- The **γ tail** for one LN site — the two-level `veclnGammaGradB`. -/
-private def lnGammaTailB (_gN xName cot : String) (c h : Nat) :
+private def lnGammaTailB (bB : Nat) (_gN xName cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
@@ -336,7 +389,7 @@ private def lnGammaTailB (_gN xName cot : String) (c h : Nat) :
     pure (k1 ++ k2 ++ k3, o)
 
 /-- The **β tail** — the two-level `rowDenseBiasGradB`, contracting batch and spatial rows. -/
-private def lnBetaTailB (cot : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS (String × String) := do
+private def lnBetaTailB (bB : Nat) (cot : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, dT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
     let (k2, o) ← pretty bB (.rowDenseBiasGradB (N := bB) (R := h*h) (c := c)
@@ -364,7 +417,7 @@ private def lnBetaTailB (cot : String) (c h : Nat) : StateM Proofs.StableHLO.Emi
     against an undropped cotangent. It type-checks, trains and descends: 18 of 180 gradients wrong
     by a per-example factor, on the parameter stochastic depth is *about*. At `drop = none` this is
     `dy` itself, so nothing moves. -/
-private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Option Nat := none)
+private def bwdBlockB (bB : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Option Nat := none)
     (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String) := do
   let (kD, dyd) ← match drop with
@@ -384,7 +437,7 @@ private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Optio
         (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB)
     else .convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}eW"
       (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB))
-  let (k5, cot_d) ← lnBackSiteB s!"%{pfx}ng" b.d cot_n c h
+  let (k5, cot_d) ← lnBackSiteB bB s!"%{pfx}ng" b.d cot_n c h
   let (k6, cot_main) ← pretty bB (if bf16 then
       .depthwiseBackBatchedBf16 (N := bB) (h := h) (w := h) zrndB s!"%{pfx}dW"
         (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB)
@@ -395,7 +448,7 @@ private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Optio
   pure (kD ++ k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd)
 
 /-- One **downsample** backward. -/
-private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
+private def bwdDownB (bB : Nat) (pfx dy xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String) := do
   -- ⚠⚠ **THE 2×2/s2 ASYMMETRIC-PAD TRAP (§15.2 trap 1).** `convStridedBackBatched`'s dgrad pad is
   -- `[[kH-1-pH, pH], …]`, which agrees with the symmetric spelling at every ODD kernel and is
@@ -407,7 +460,7 @@ private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) (bf16 : Bool := fals
         (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2))))
     else .convStridedBackBatched (N := bB) (h := h2) (w := h2) s!"%{pfx}W"
       (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
-  let (k2, cot_x) ← lnBackSiteB s!"%{pfx}ng" xin cot_n ci (2*h2)
+  let (k2, cot_x) ← lnBackSiteB bB s!"%{pfx}ng" xin cot_n ci (2*h2)
   pure (k1 ++ k2, cot_n, cot_x)
 
 /-- The **parameter gradients of one block** — every one a `*GradB`, i.e. `Σ_n` over the batch of
@@ -415,7 +468,7 @@ private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) (bf16 : Bool := fals
     per-example renderer (it did not move with 4c leg 3 either), since `%lr` is a runtime operand on
     the AdamW path and a baked literal on the SGD one (§2a-quater's silent-hyperparameter hazard) —
     and `ConvNeXtStepTie.lean` is stated at those bytes. -/
-private def blockParamGradB (pfx : String) (b : FNames)
+private def blockParamGradB (bB : Nat) (pfx : String) (b : FNames)
     (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat)
     -- ⚠ `bf16` reaches the WEIGHT grads only. Every BIAS grad below stays f32 in every net:
     -- `Σ_{batch,spatial} dy` is a reduction, not a contraction, so there is nothing for a tensor
@@ -444,8 +497,8 @@ private def blockParamGradB (pfx : String) (b : FNames)
   let (cEb, nEb) ← pretty bB (.convBiasGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
       (kH := 1) (kW := 1) (zKB : Kernel4 e c 1 1) (zVB : Vec (bB*(c*h*h))) (zVB : Vec e)
       (.operand cot_e zVB))
-  let (cNg, nNg) ← lnGammaTailB s!"%{pfx}ng" b.d cot_n c h
-  let (cNb, nNb) ← lnBetaTailB cot_n c h
+  let (cNg, nNg) ← lnGammaTailB bB s!"%{pfx}ng" b.d cot_n c h
+  let (cNb, nNb) ← lnBetaTailB bB cot_n c h
   let (cDw, nDw) ← pretty bB (if bf16 then
       .depthwiseWeightGradBBf16 (N := bB) (c := c) (h := h) (w := h)
         (kH := 7) (kW := 7) zrndB b.xin (zVB : Vec c) (zVB : Vec (bB*(c*h*h)))
@@ -462,14 +515,14 @@ private def blockParamGradB (pfx : String) (b : FNames)
      (s!"{pfx}lg", nLg)])
 
 /-- The **parameter gradients of one downsample**. -/
-private def downParamGradB (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat)
+private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat)
     (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
   let (cB, nB) ← pretty bB (.convStridedBiasGradB (N := bB) (ic := ci) (oc := co) (h := h2)
       (w := h2) (kH := 2) (kW := 2) (zKB : Kernel4 co ci 2 2)
       (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zVB : Vec co) (.operand dy zVB))
-  let (cNg, nNg) ← lnGammaTailB s!"%{pfx}ng" downIn cot_n ci (2*h2)
-  let (cNb, nNb) ← lnBetaTailB cot_n ci (2*h2)
+  let (cNg, nNg) ← lnGammaTailB bB s!"%{pfx}ng" downIn cot_n ci (2*h2)
+  let (cNb, nNb) ← lnBetaTailB bB cot_n ci (2*h2)
   -- ⚠ The wgrad pad is `[[p-1, p+1], …]`, the OPPOSITE shift from the dgrad's `[[p+1, p-1], …]`
   -- in `bwdDownB`. `convStridedWeightGradBBf16` keeps its f32 peer's geometry verbatim;
   -- `scripts/xla_pad_op_check.py` caught this pair being "fixed by symmetry" once already.
@@ -508,10 +561,12 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     -- every bias gradient, the classifier head and the whole AdamW tail stay f32, which is the
     -- carve-out every bf16 render in this repo makes. ⚠ §14 measured that those carve-outs are
     -- NOT a fixed tax: they cost MobileNetV2 nothing and EfficientNet-B0 almost everything.
-    (bf16 : Bool := false) :
+    (bf16 : Bool := false)
+    -- ⚠ THE PER-REPLICA BATCH — trailing + defaulted, see the note at the top of this file.
+    (bB : Nat := 32) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain the byte-tied `convNextFwdChainB` emits ═══
-    let F : CFwd ← convNextFwdChainB nClasses sd V bf16
+    let F : CFwd ← convNextFwdChainB nClasses sd V bf16 (bB := bB)
     let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := bB) (.expe (n := nClasses))
           (.operand F.logits (zVB : Vec (bB*nClasses)))))
@@ -538,7 +593,7 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     -- ═══ head ═══
     let (cDd, cot_hn) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (zMB : Mat (V.dims[3]!) nClasses))
         (.operand dyName zVB))
-    let (cHnB, cot_gap) ← headLnBackSiteB "%hng" F.gap cot_hn V.dims[3]!
+    let (cHnB, cot_gap) ← headLnBackSiteB bB "%hng" F.gap cot_hn V.dims[3]!
     let (cWd, nWd) ← pretty bB (.weightGradB (N := bB) (m := V.dims[3]!) (n := nClasses) F.hn
         (zVB : Vec (bB*V.dims[3]!)) (.operand dyName (zVB : Vec (bB*nClasses))))
     let (cBd, nBd) ← pretty bB (.biasGradB (N := bB) (n := nClasses)
@@ -549,8 +604,8 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     -- `convnext-fwd-b-tie` goes red on 24 lines that are otherwise character-for-character equal.
     -- (It also puts the names out of order against the concatenation below, i.e. use-before-def.)
     -- Order here: dotOut → LN input-VJP → Wd → bd → LN γ → LN β.
-    let (cHg, nHg) ← headLnGammaTailB "%hng" F.gap cot_hn V.dims[3]!
-    let (cHb, nHb) ← headLnBetaTailB cot_hn V.dims[3]!
+    let (cHg, nHg) ← headLnGammaTailB bB "%hng" F.gap cot_hn V.dims[3]!
+    let (cHb, nHb) ← headLnBetaTailB bB cot_hn V.dims[3]!
     let mut updMap : List (String × String) :=
       [("hng", nHg), ("hnbt", nHb), ("Wd", nWd), ("bd", nBd)]
     let bD := V.dims[3]!
@@ -575,21 +630,21 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
         -- in reverse to name the same sites — the mismatch would pair every backward site with the
         -- wrong forward mask, which typechecks and trains.
         let (code, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd) ←
-          bwdBlockB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j V) else none) bf16
+          bwdBlockB bB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j V) else none) bf16
         -- ⚠ `dyd`, not `dy` — LayerScale's γ gradient reads the cotangent at the LayerScale OUTPUT,
         -- which the drop site scales. See `bwdBlockB`.
-        let (pcode, pairs) ← blockParamGradB s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dyd c e h bf16
+        let (pcode, pairs) ← blockParamGradB bB s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dyd c e h bf16
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_xin
       if si > 0 then
         let ci := V.dims[si-1]!; let h2 := bSpats[si]!
-        let (code, cot_n, cot_x) ← bwdDownB s!"d{si-1}" dy (F.downIn[si-1]!) ci c h2 bf16
-        let (pcode, pairs) ← downParamGradB s!"d{si-1}" (F.downLn[si-1]!) (F.downIn[si-1]!)
+        let (code, cot_n, cot_x) ← bwdDownB bB s!"d{si-1}" dy (F.downIn[si-1]!) ci c h2 bf16
+        let (pcode, pairs) ← downParamGradB bB s!"d{si-1}" (F.downLn[si-1]!) (F.downIn[si-1]!)
             cot_n dy ci c h2 bf16
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
     -- ═══ stem: back through the stem LN, then the patchify conv's own gradients ═══
-    let (cg, ng) ← lnGammaTailB "%psng" F.stemC dy V.dims[0]! 56
-    let (cb, nb) ← lnBetaTailB dy V.dims[0]! 56
-    let (cx, dx) ← lnBackSiteB "%psng" F.stemC dy V.dims[0]! 56
+    let (cg, ng) ← lnGammaTailB bB "%psng" F.stemC dy V.dims[0]! 56
+    let (cb, nb) ← lnBetaTailB bB dy V.dims[0]! 56
+    let (cx, dx) ← lnBackSiteB bB "%psng" F.stemC dy V.dims[0]! 56
     bwd := bwd ++ cg ++ cb ++ cx
     updMap := updMap ++ [("psng", ng), ("psnbt", nb)]
     dy := dx
@@ -635,7 +690,16 @@ def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
     -- the emission but not the name writes `…bf16_train_step.mlir` declaring
     -- `@convnextin_adamwxclipdrop_train_step`, and the driver refuses at load. The `#guard`s at
     -- the bottom of this file pin every spelling.
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- ⚠⚠ **THE PER-REPLICA BATCH, AND THIS IS WHERE THE TWO RENDERERS MEET.** Spelled ONCE
+    -- here and handed to BOTH halves below — `convNextBackAllB` (the BODY, at `N := bB`) and
+    -- `convNextAdamTrainStepFaithful` (the WRAPPER, as `cBS`: `%x`'s declared shape, the `%bsc`
+    -- loss divisor, the drop-path signature). Exactly the discipline `sd`, `V` and `bf16` get,
+    -- and for the same reason: a caller able to set the two independently is this file's own
+    -- recurring defect. ⚠ At the default every committed artifact is byte-identical; the
+    -- ImageNet `#eval`s below pass 64 so the verified job pairs with its JAX reference's global
+    -- 256 (4 × 64) instead of running at 128 with twice the updates.
+    (bB : Nat := 32) : String :=
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   convNextAdamTrainStepFaithful alphaStr negAlphaKStr bStr replicas nClasses slug ema
     wdExclude wdStr clip clipStr
@@ -647,11 +711,11 @@ def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
     -- decides how many blocks are EMITTED, the wrapper decides how many parameters are DECLARED,
     -- and a disagreement between them is an arity mismatch the driver reports as a blob-walk
     -- failure rather than anything that names the depth table.
-    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses sd V bf16))
+    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses sd V bf16 (bB := bB)))
     -- ⚠⚠ AND HERE. `bf16` reaching the traversal above but not this line is the entry-name defect
     -- in its most convincing form — the graph really would be bf16, every gate-2 check would pass,
     -- and only the artifact's declared name would be wrong.
-    (sd := sd) (V := V) (bf16 := bf16)
+    (sd := sd) (V := V) (bf16 := bf16) (cBS := bB)
 
 /-- The drop-free forward's banner — the line `ConvNeXtRender.convNextFwdFaithfulV` emits, restated
     here so the byte tie can demand **byte-identity** rather than "identical apart from a comment".
@@ -747,16 +811,16 @@ end Proofs.StableHLO
 -- (`weightDecay := 0.05`, `wdExcludeNormBias := true`, `gradClipNorm := 1.0`, `dropPath := 0.1`) —
 -- the first ConvNeXt artifact that carries every optimizer-and-regulariser knob its reference sets.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
-    (sd := true))
+    (sd := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
-    (sd := true))
+    (sd := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_drop_fwd.mlir"
   (Proofs.StableHLO.convNextFwdRenderB "convnextin_drop_fwd" 1000
-    Proofs.StableHLO.cnxDropFwdBanner (sd := true))
+    Proofs.StableHLO.cnxDropFwdBanner (sd := true) (bB := cnxInBS))
 
 -- ── ⭐⭐ THE bf16 PEERS — `adamwxclipdropbf16` (`planning/archive/bf16_renderer.md` §15) ─────────────────
 -- ConvNeXt is the sixth net on the bf16 render path and it needed **exactly two new ops**:
@@ -787,18 +851,18 @@ end Proofs.StableHLO
 -- second, neither of which is a statement about the renderer. Read any 4-replica number here as a
 -- SYSTEM result and check `SHIM_WORKERS` before ever blaming the emit.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
-    (sd := true) (bf16 := true))
+    (sd := true) (bf16 := true) (bB := cnxInBS))
 -- ▶ The DP peer, per §0.5's rule: an ImageNet run loads the DP render, and DP renders are exactly
 -- the ones that silently fall behind their single-device peers. ConvNeXt's collectives are already
 -- tied (unlike MNv4's, which is why THAT net rendered single-device only), so this inherits nothing
 -- untied. ⚠ The clip still sits AFTER the collective: 180 all_reduces, not 360, all before the norm
 -- fold — and all of them f32, which is the §13.2 tax this artifact will pay.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
-    (sd := true) (bf16 := true))
+    (sd := true) (bf16 := true) (bB := cnxInBS))
 
 -- ── ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` ────────────────────────────────────────────
 -- `planning/archive/vit_convnext_sb_scaleup.md`. The second net here added by RESHAPING an existing
@@ -1053,13 +1117,14 @@ end Proofs.StableHLO
 -- above lists (no `wx`, no clip, one-hot targets); the decay was never one of those ways.
 -- The variant that MATCHES the reference is `convnextin_adamdpwxclip` below.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adam_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
-    (wdStr := "0.05"))
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (wdStr := "0.05") (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin"
-    (wdStr := "0.05"))
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (wdStr := "0.05") (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner)
+  (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
+    (bB := cnxInBS))
 
 -- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
 -- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 121 of the 180 params take `%wdz`: every
@@ -1075,8 +1140,8 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "-0.010000" "32.0" 1 10 "convnext"
     (ema := false) (wdExclude := true))
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwx_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
-    (ema := false) (wdExclude := true) (wdStr := "0.05"))
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (bB := cnxInBS))
 
 -- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/archive/grad_clip.md`) ───────────────────────────
 -- `convnextTinyImagenetConfig.gradClipNorm := 1.0`. `convnextTinyConfig` sets nothing, so the
@@ -1098,24 +1163,26 @@ end Proofs.StableHLO
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0"))
 -- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
-    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (bB := cnxInBS))
 -- ▶ **THE DATA-PARALLEL PEER — the artifact an ImageNet run actually loads.** Until this landed the
 -- DP ImageNet render was three features behind its single-device peer (wrong decay, no `wx`, no
 -- clip), so the shipping recipe existed only in the variant nothing would run. ⚠ The clip sits
 -- AFTER the collective: 180 all_reduces, not 360, all before the norm fold.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin"
-    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (bB := cnxInBS))
 
 -- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/archive/recipe_gaps.md` v1.2c) ──────────────────────────
 -- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so
 -- without this render the `convnextin` pair is not comparable at all, whatever else it carries. The EMA
 -- work landed on `convnext_ema` (Imagenette) and stopped there; found by listing artifacts.
 #eval IO.FS.writeFile "verified_mlir/convnextin_ema_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin" (ema := true))
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin" (ema := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_emadp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin" (ema := true))
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin" (ema := true) (bB := cnxInBS))
 
 -- ════════════════════════════════════════════════════════════════
 -- § ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` (`planning/archive/vit_convnext_sb_scaleup.md`)
