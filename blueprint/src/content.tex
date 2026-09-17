@@ -7037,7 +7037,7 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{center}
 
 \noindent Global batch 256 as $4 \times 64$ replicas, scored over the same
-$50{,}000$ images. One attempt, no restarts.
+$50{,}000$ images.
 
 \prosesection{The two paths, side by side}
 
@@ -8247,56 +8247,88 @@ throughout --- $194$ \texttt{stablehlo.logistic} and not one
 the stem and the $1\times1$ head. The two phases describe the same network.
 
 \prosesection{The two paths, side by side}
+
 \begin{center}
 \begin{tabular}{@{}l l l@{}}
- & verified lowerer (PJRT) & JAX lowerer \\
 \hline
-lowering             & \texttt{pretty(provenGraph)} $\to$ XLA & JAX $\to$ XLA \\
-Python in the step   & none                        & yes \\
-BN statistic group   & 64 (per replica)            & 256 (global) \\
+ & reference (JAX) & verified path (PJRT) \\
 \hline
-precision            & bf16                        & bf16 \\
-global batch         & 256 ($4\times64$)           & 256 ($4\times64$) \\
-steps/epoch          & 5{,}004                     & 5{,}004 \\
-optimizer            & RMSProp (TF form)           & RMSProp (TF form) \\
+lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
+Python in the step   & yes                      & none \\
+BN statistic group   & 256 (global)             & 64 (per replica) \\
+ms/step              & $\sim$92                 & 134 \\
+per epoch            & 8.0 min                  & 11.7 min \\
+total                & 46.6 hr                  & 73.4 hr \\
+\hline
+precision            & bf16                     & bf16 \\
+global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
+steps/epoch          & 5{,}004                  & 5{,}004 \\
+optimizer            & RMSProp (TF form)        & RMSProp (TF form) \\
 EMA                  & $0.9999$, weights + BN buffers & $0.9999$, weights + BN buffers \\
-augmentation         & AutoAugment                 & AutoAugment \\
+augmentation         & AutoAugment              & AutoAugment \\
 \hline
-\textbf{val top-1}   & $\mathbf{76.878\%}$         & $\mathbf{77.15\%}$ \\
-\textbf{val top-5}   & $\mathbf{93.154\%}$         & $\mathbf{93.30\%}$ \\
+\textbf{val top-1}   & $\mathbf{77.15\%}$       & $\mathbf{76.878\%}$ \\
+\textbf{val top-5}   & $\mathbf{93.30\%}$       & $\mathbf{93.154\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Both columns are EfficientNet-B0 on the paper-faithful RMSProp recipe,
-350 epochs, on the same four RTX 3060 cards. Rows above the first rule differ;
-rows between the rules are held equal by construction. The reference's own
-per-epoch evaluation reads $77.18\%$ at epoch 350; the $77.15\%$ headline is
-that same checkpoint rescored over all $50{,}000$ images, and the gap between
-those two figures is the scale of a single evaluation's noise.
+\noindent Both columns are EfficientNet-B0 on the paper's RMSProp recipe at
+350 epochs, on the same four RTX 3060 cards, scored over the same
+$50{,}000$ validation images; the verified column is the
+\texttt{emarmsdp64dropdobf16} render, \texttt{lake run enet-default-4gpu}.
+Rows above the first rule differ; rows between the rules are held equal by
+construction. The reference's in-training evaluation reads $77.18\%$ at
+epoch~350; the $77.15\%$ headline is the same checkpoint rescored from its
+saved state at a different evaluation batch size, and the $0.03$ between
+them is bf16 batch-shape noise. Against the in-training figure the verified
+path's $76.878\%$ is $-0.30$, the $\Delta$ the curve table below carries.
 
-\medskip\noindent\textbf{$-0.27$ points --- and unlike MobileNetV2's pair, this
-one is not a dead heat.} The verified final carries a 95\% Wilson interval of
-$[76.51, 77.25]$, which contains the reference, so the last epoch alone cannot
-distinguish them. Averaging removes that ambiguity: over the last fifty epochs
-the verified path scores $76.71\%$ against the reference's $77.03\%$, a
-$-0.32$ gap across fifty independent evaluations rather than one. The offset is
-real, it is small, and this section does not claim to know its cause.
+\medskip\noindent\textbf{$-0.27$ points --- and unlike MobileNetV2's pair,
+this one is not a dead heat.} Read against the floor \S\ref{sec:r34_pjrt}
+set, one evaluation at $-0.27$ is not a result: the verified final's 95\%
+Wilson interval, $[76.51, 77.25]$, contains the reference. What separates
+this pair from MobileNetV2's is persistence. From epoch~51 the verified
+curve sits below the reference at every one of 300 evaluations, and over the
+last fifty the paired gap averages $-0.32$ with a spread of $0.07$ ---
+narrower than either curve's own spread over the same fifty ($0.11$ and $0.14$).
+On this validation set the two paths did not converge to one curve but to
+two, three tenths of a point apart. Whether the three tenths would survive
+on images neither run scored is what one validation set cannot say; that
+the trajectories differ, it can. This section does not claim to know why.
 
-\medskip\noindent\textbf{[TODO: revisit BN sharding]}
+\medskip\noindent\textbf{The suspect is the BatchNorm group, and it is
+unmeasured.} As in \S\ref{sec:mnv2_phase4}, precision is held equal, so the
+one numerical asymmetry above the rule is the BatchNorm group: each
+replica's $64$ against the reference's global $256$, for the structural
+reason given there --- no committed render can all-reduce the batch
+statistics. The two pairs that carry the same fourfold difference landed
+$0.10$ and $0.01$ apart, and MobileNetV2 has as much BatchNorm as this net
+($52$ layers to $49$), so the count of normalization layers does not by
+itself explain a $0.3$. What this recipe adds is that evaluation scores an
+EMA of the BatchNorm buffers in place of the live statistics, and whether
+that turns a per-replica group into a persistent offset is not known. The
+test is cheap and touches no proof: train the reference with per-shard
+BatchNorm and see whether the $0.3$ appears on the JAX side. A third
+difference is variance rather than bias --- the stochastic-depth and
+dropout masks are host-drawn on one side and JAX-PRNG on the other --- and
+does not survive a fifty-epoch average.
 
-\medskip\noindent\textbf{The curves track, and the gap closes.} The verified path
-leads through warmup, falls about half a point behind by epoch~50, and recovers
-to $-0.3$ by epoch~200, where it stays:
+\medskip\noindent\textbf{[TODO: global BN.]}
+
+\medskip\noindent\textbf{The curves track; the gap narrows and then holds.}
+The verified path leads through the first fifty epochs on average ($+0.17$),
+runs about half a point behind from there to epoch~200, and narrows to
+$-0.4$ over epochs 200--250 and $-0.3$ from 250 on, where it stays:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r r r r@{}}
 \hline
 epoch & 10 & 50 & 100 & 150 & 200 & 300 & 350 \\
 \hline
-phase-2 reference & 61.69 & 70.78 & 73.14 & 75.07 & 75.93 & 76.92 & 77.18 \\
-phase-4 verified  & 61.79 & 70.22 & 72.83 & 74.41 & 75.50 & 76.54 & 76.88 \\
-$\Delta$          & $+0.10$ & $-0.56$ & $-0.31$ & $-0.66$ & $-0.43$ & $-0.38$ & $-0.30$ \\
+reference (JAX)       & 61.69 & 70.78 & 73.14 & 75.07 & 75.93 & 76.92 & 77.18 \\
+verified path (PJRT)  & 61.79 & 70.22 & 72.83 & 74.41 & 75.50 & 76.54 & 76.88 \\
+$\Delta$              & $+0.10$ & $-0.56$ & $-0.31$ & $-0.66$ & $-0.43$ & $-0.38$ & $-0.30$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -8319,20 +8351,19 @@ $\Delta$          & $+0.10$ & $-0.56$ & $-0.31$ & $-0.66$ & $-0.43$ & $-0.38$ & 
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
 (1,10.09) (10,61.69) (20,66.35) (30,68.83) (40,70.02) (50,70.78) (60,71.70) (70,71.95) (80,72.31) (90,73.12) (100,73.14) (110,73.57) (120,74.15) (130,74.33) (140,74.84) (150,75.07) (160,75.30) (170,75.47) (180,75.65) (190,75.84) (200,75.93) (210,76.07) (220,76.20) (230,76.22) (240,76.35) (250,76.42) (260,76.52) (270,76.65) (280,76.67) (290,76.76) (300,76.92) (310,76.84) (320,76.95) (330,77.18) (340,77.19) (350,77.18)
 };
-\addlegendentry{phase-2 reference (JAX)}
+\addlegendentry{reference (JAX)}
 \addplot[red, dashed, mark=o] coordinates {
 (1,20.62) (10,61.79) (20,66.06) (30,67.91) (40,69.39) (50,70.22) (60,70.91) (70,71.57) (80,72.01) (90,72.40) (100,72.83) (110,73.30) (120,73.53) (130,73.84) (140,74.12) (150,74.41) (160,74.68) (170,74.88) (180,75.04) (190,75.40) (200,75.50) (210,75.51) (220,75.81) (230,75.90) (240,75.99) (250,76.12) (260,76.22) (270,76.29) (280,76.36) (290,76.47) (300,76.54) (310,76.62) (320,76.71) (330,76.75) (340,76.79) (350,76.88)
 };
-\addlegendentry{phase-4 verified (PJRT)}
+\addlegendentry{verified path (PJRT)}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent Two independent lowerings of one recipe, sampled every 10 epochs and
-scored over all $50{,}000$ validation images. The verified curve's epoch-1
-$20.62\%$ against the reference's $10.09\%$ is unexplained: both sides apply the
-same warmup-corrected decay $\min(\mathrm{decay}, (1+t)/(10+t))$, so it is not
-that. The two are level by epoch~10 and the gap never recurs.
+\noindent One recipe, two paths to XLA, sampled every 10 epochs and scored
+over all $50{,}000$ validation images. The verified curve's epoch-1
+$20.62\%$ against the reference's $10.09\%$ is unexplained; the two are
+level by epoch~10 and the difference never recurs.
 
 \subsection*{What the EfficientNet recipe changes from the 2018 recipe}
 
@@ -8372,6 +8403,16 @@ horizontal flip as the base augmentation, batch 256, train and eval
 both at $224$, bf16 matmul and convolution (the SE $1\times1$s in
 fp32), and no gradient clipping, which is unlike every later recipe in
 this ladder.
+
+The two quietest rows carry the chapter's two debugging lessons, both
+told in full above. ``RMSProp (TF form)'' is doing real work:
+$\varepsilon$ inside the square root and a mean-square accumulator that
+starts at $1$ are the difference between training stably at the paper's
+$0.016$ and eroding top-1 over the run. And the EMA row only evaluates
+correctly because the BN running statistics are shadowed alongside the
+weights (\texttt{ema\_bn}); averaged weights against live BN statistics
+is an eval blow-up, a failure mode specific to BatchNorm nets trained
+with weight averaging.
 
 The through-line of the 2018$\to$2019 shift is \emph{smaller,
 longer, more automated}: a quarter of the parameters trained for
@@ -11209,7 +11250,7 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{center}
 
 \noindent Global batch 512 as $4 \times 128$ replicas, the EMA weights
-scored over the same $50{,}000$ images. One attempt, no restarts.
+scored over the same $50{,}000$ images.
 
 \prosesection{The two paths, side by side}
 
