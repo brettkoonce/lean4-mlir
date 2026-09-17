@@ -1,0 +1,7 @@
+[sup] 2026-09-16 03:28:58 START job=r34-default-bf16-4gpu devs=0,1,2,3 epochs=90 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-16-r34-bf16-90ep
+[sup] 2026-09-16 03:28:58 cmd: .lake/build/bin/resnet34-imagenet-verified data
+[sup] 2026-09-16 03:28:58 eta: bf16 ~21.4 h on 4x 3060 (163 ms/step mean at SHIM_WORKERS=4, no stall tail; +~5% eval/ckpt; 90 ep)
+[sup] 2026-09-16 03:28:58 attempt 1: resuming at epoch 0/90 (next rest: 999)
+[sup] 2026-09-16 03:28:58   launched PID=3519915 PGID=3519915
+[sup]   last line: done (trained ResNet-34 (ImageNet-1k) momdp64bf16 + cosine/warmup via packed threading).
+[sup] 2026-09-17 01:39:28 ✅ COMPLETE — 90/90 epochs

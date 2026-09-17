@@ -125,7 +125,7 @@ nondeterministic with determinism off. ⚠ Must stay strict round-robin under `S
 `tests/prefetch_tie.sh`, `scripts/residency_gate.sh`, `scripts/mixup_gate.py` and
 `scripts/shim_wiring_gate.py` replay streams.
 
-### 3b. Level 1 — staggered periodic respawn ✅ BUILT 2026-09-16
+### 3b. Level 1 — staggered periodic respawn ✅ BUILT 2026-09-16 · ⚠ STILL UNTESTED AGAINST THE FAULT (2026-09-17)
 Every `E` epochs replace ONE loader, cycling through the handles, so none lives longer than `4E`
 epochs and at most one is ever cold. Knob: **`LEAN_MLIR_SHIM_RESPAWN_EPOCHS=E`**, default 0 = off,
 announced in the banner.
@@ -152,8 +152,31 @@ than the first batch. At `E=10` that is ~0.05%. ▶ §3d is worth building only 
 * ⚠ The smoke test also caught the respawn firing after the FINAL epoch — spawn a loader, exit on
   top of it. Fixed with `ep + 1 < nEpochs`.
 
-⚠ **Still unmeasured: whether it actually prevents the slowdown.** It is a mitigation aimed at a
-cause nobody has identified (§2 is still the experiment that would). The R34 bf16 run is the test.
+⭐⭐ **THE R34 bf16 RUN HAPPENED — 2026-09-17, and the fault DID NOT REPRODUCE.**
+`runs/2026-09-16-r34-bf16-90ep/` (74.064 / 91.754 in 22 h 10 m, one attempt). It was run as **Arm A**:
+respawn OFF for all 90 epochs, `REST_EPOCHS=""`, so the loaders ran **21.9 h continuously** — past the
+≥ 16 h bar §5 asked for, and past the ~13 h at which B0's producer diverged.
+
+* **Pace held.** By loader age: 884 s (0–2 h warm-up), then 873/873/872/872/873 through 12 h, and
+  882/883/881 from 16 h to the end. Zero respawns, zero rests, zero thermal events.
+* **Memory plateaued.** Arena class ~3.2–3.45 GiB at spawn → ~3.9–4.2 GiB by hour 2 → **flat for the
+  next twenty hours**, and **uniform across all four loaders**. B0's signature was ONE producer at
+  5 → 7–11 GiB while the others sat still.
+* ⛔ **The five slow epochs in that run are NOT this fault.** e57/e59/e60/e61/e62 (972–1055 s) track
+  host `MemAvailable` falling 126 → 87 GiB for ~2.5 h — another job of Brett's on the same box,
+  confirmed. They **recovered on their own**, and loader RSS *fell* through them. This fault has
+  never self-cleared; it only ever went away on a kill.
+
+⭐ **And there is a mechanism, not just a null.** The `SHIM_WORKERS` sweep taken immediately before
+(`runs/2026-09-16-r34-bf16-sweep/`) measured R34's feed at **19 ms of a 163 ms step (12 %)** against
+B0's **37 of 134 (28 %)** — fed-minus-synth, 800 steps per arm. R34's shim is flip-only; B0's does
+AutoAugment + RandAugment per image. A shim doing a quarter of the per-image work allocates to
+steady state early and stays there. **There is very little feed here to degrade.**
+
+⚠⚠ **What this settles and what it does not.** It **bounds** the fault to heavy-augmentation shims;
+it does **not** exonerate the multi-process loader arrangement, and it says **nothing** about whether
+the respawn works in production — the respawn was never switched on. The root cause inside the loader
+remains unidentified; **§2's allocator soak is still the experiment that would find it.**
 
 ### 3c. Level 2 — lag-triggered respawn
 Keep a rolling p50 of issue→ready latency per handle; the prefetch already timestamps both
@@ -225,13 +248,28 @@ respawn** (§3b, with §3a Level 0 and the §3e prerequisites) and the tweaks ju
 §2/§4; then test it **on this box with the R34-2018 bf16 job**, which is wanted anyway. The same
 slowdown has shown on ares on that job — R34's shim is flip-only, so the fault is **not**
 AutoAugment-specific, which again points at the multi-process loader arrangement.
-⚠ **No `r34-2018-bf16` job conf exists** here or on `origin/main` (2026-09-14): only
-`r34-default-4gpu.conf` and the R50 pair `r50-2018-4gpu.conf` / `r50-2018-bf16-4gpu.conf`. Either
-it lives uncommitted on ares, or it is to be written as R34's counterpart of `r50-2018-bf16`
-(`resnet34in_momdp64bf16` is committed).
-⚠ The respawn masks the fault it fixes. To learn anything about H1 from that run, keep
-`loader_rss.tsv` logging and give each loader a long enough life (e.g. ≥ 16 h) to show the
-divergence before it is replaced.
+✅ **DONE 2026-09-17.** The conf was written as R34's counterpart of `r50-2018-bf16` —
+`scripts/jobs/r34-default-bf16-4gpu.conf`. ⛔ Named `default`, **not** `2018`: §2c N1 forces `RECIPE`
+to equal the second dash-field, R34's recipe slug is `default` (there is no
+`generated_resnet34_imagenet_2018_shim.py`), and `supervise.sh` refuses a mismatch, so
+`r34-2018-bf16-4gpu` would have been rejected at launch. `r34-default-4gpu.conf` was deliberately
+left at fp32 — it is the lakefile's Ch. 5 ImageNet row and the reproduction path for the book's
+published 74.14 / 91.86. The run: `runs/2026-09-16-r34-bf16-90ep/`, and the advice below was
+followed — `loader_rss.tsv` logged throughout, respawn OFF, loaders given **21.9 h** of life.
+
+⚠⚠ **AND THE RESULT CONTRADICTS THE PARAGRAPH ABOVE.** "The same slowdown has shown on ares on that
+job" — it did **not** reproduce here: 90 epochs, 21.9 h of continuous loader uptime, pace flat, arena
+plateaued at hour 2, growth uniform across all four loaders (§3b has the numbers). One of these is
+true and both are on record, so the difference has to be named before either is quoted:
+* the ares observation may have been the same **host-memory** confound this run hit and correctly
+  excluded (five epochs at 972–1055 s that tracked `MemAvailable` 126 → 87 GiB and self-recovered —
+  a co-tenant job, confirmed). If nobody was logging `MemAvailable` on ares, that is indistinguishable
+  from a loader fault, and it is exactly what it looks like.
+* or the fault is **box-dependent** (ares is 4× 4060 Ti on 32 threads; this is 4× 3060 on 24), in
+  which case the flip-only/heavy-aug framing in §3b is the wrong axis and core count or thread
+  oversubscription is the right one.
+▶ Neither is established. ⛔ Do not cite "it shows on R34 too" as support for the multi-process
+hypothesis until the ares run is re-examined for host memory over its slow window.
 
 **While the EfficientNet run finishes (now → ~2026-09-16 00:00 UTC):**
 - Loader-RSS logger running (`enet-loaders` unit → `runs/2026-09-12-enet-verified-350ep/loader_rss.tsv`,

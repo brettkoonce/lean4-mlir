@@ -1,0 +1,7 @@
+⚠⚠ LOADER FAULT SIGNATURE at 2026-09-16 17:25:38 UTC
+epoch(s) over 950 s (normal 872): e57=1055s
+loaders at detection:
+  pid 3521420  age  13.9 h  rss  4.89 GiB  arena  3.63 GiB  maps 332
+  pid 3521608  age  13.9 h  rss  5.22 GiB  arena  4.00 GiB  maps 319
+  pid 3521788  age  13.9 h  rss  5.15 GiB  arena  3.92 GiB  maps 324
+  pid 3521996  age  13.9 h  rss  5.24 GiB  arena  3.99 GiB  maps 322
