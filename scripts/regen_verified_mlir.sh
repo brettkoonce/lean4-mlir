@@ -503,6 +503,22 @@ sys.exit(rc)
 PY
 }
 
+# ── the batch / loss-divisor audit ──
+# ⛔ THE DEFECT: the per-replica batch decides the SHAPES and the loss-gradient batch divisor is a
+# SEPARATE spelling of the same fact. Move one without the other and a 64-row cotangent gets
+# divided by 32.0 — every gradient exactly 2x too large, well-typed, no shape error (the divisor is
+# a scalar broadcast), and nothing fails. It reads as a 2x learning rate. Found 2026-09-17 on
+# ConvNeXt's batch-64 rescope; the fleet was otherwise clean.
+# ⚠ Its own control lives in the script (`--control`) and is run here, because a gate nobody has
+# seen fail is not a gate.
+check_batch_divisor() {
+  echo "── batch / loss-divisor audit (the batch spelled twice) ──"
+  local rc=0
+  python3 scripts/batch_divisor_gate.py | sed 's/^/  /' || rc=1
+  python3 scripts/batch_divisor_gate.py --control | sed 's/^/  /' || rc=1
+  return $rc
+}
+
 if [ "$WHAT" = "check" ]; then
   rc=0
   check_writers || rc=1
@@ -520,6 +536,8 @@ if [ "$WHAT" = "check" ]; then
   check_no_empty_slot || rc=1
   echo
   check_zero_bias_decls || rc=1
+  echo
+  check_batch_divisor || rc=1
   exit $rc
 fi
 
