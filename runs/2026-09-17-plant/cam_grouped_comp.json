@@ -1,0 +1,214 @@
+{
+ "true class": {
+  "mean_share": 0.7857018709182739,
+  "median_share": 0.7990210652351379,
+  "uniform": 0.5888538956642151,
+  "lift": 0.19684801995754242,
+  "frac_below_half": 0.011485666262022598,
+  "frac_below_uniform": 0.011859183864039592
+ },
+ "per_class": [
+  [
+   "Peach healthy",
+   0.55970299243927,
+   71
+  ],
+  [
+   "Tomato Tomato mosaic virus",
+   0.6029940843582153,
+   66
+  ],
+  [
+   "Tomato Late blight",
+   0.6428095102310181,
+   375
+  ],
+  [
+   "Tomato Leaf Mold",
+   0.6825607419013977,
+   172
+  ],
+  [
+   "Peach Bacterial spot",
+   0.7025808691978455,
+   542
+  ],
+  [
+   "Tomato Spider mites Two-spotted spider mite",
+   0.7121041417121887,
+   320
+  ],
+  [
+   "Tomato Tomato Yellow Leaf Curl Virus",
+   0.7246823906898499,
+   1100
+  ],
+  [
+   "Tomato Early blight",
+   0.7276644110679626,
+   215
+  ],
+  [
+   "Tomato healthy",
+   0.7295860648155212,
+   330
+  ],
+  [
+   "Tomato Septoria leaf spot",
+   0.7322121858596802,
+   337
+  ],
+  [
+   "Blueberry healthy",
+   0.7438809275627136,
+   324
+  ],
+  [
+   "Apple healthy",
+   0.7571381330490112,
+   286
+  ],
+  [
+   "Tomato Target Spot",
+   0.7824459075927734,
+   288
+  ],
+  [
+   "Grape Black rot",
+   0.7943768501281738,
+   168
+  ],
+  [
+   "Orange Haunglongbing (Citrus greening)",
+   0.7966480851173401,
+   980
+  ],
+  [
+   "Cherry (including sour) healthy",
+   0.8002203106880188,
+   123
+  ],
+  [
+   "Apple Cedar apple rust",
+   0.8011011481285095,
+   52
+  ],
+  [
+   "Raspberry healthy",
+   0.8011596202850342,
+   162
+  ],
+  [
+   "Grape Esca (Black Measles)",
+   0.8035129904747009,
+   284
+  ],
+  [
+   "Tomato Bacterial spot",
+   0.8083906173706055,
+   436
+  ],
+  [
+   "Strawberry Leaf scorch",
+   0.809295654296875,
+   200
+  ],
+  [
+   "Corn (maize) Common rust ",
+   0.8167117238044739,
+   217
+  ],
+  [
+   "Potato Late blight",
+   0.8202929496765137,
+   212
+  ],
+  [
+   "Cherry (including sour) Powdery mildew",
+   0.8219423294067383,
+   219
+  ],
+  [
+   "Pepper, bell healthy",
+   0.8235129714012146,
+   283
+  ],
+  [
+   "Apple Black rot",
+   0.827053427696228,
+   146
+  ],
+  [
+   "Pepper, bell Bacterial spot",
+   0.8271918296813965,
+   166
+  ],
+  [
+   "Soybean healthy",
+   0.8457786440849304,
+   973
+  ],
+  [
+   "Apple Apple scab",
+   0.8472791910171509,
+   127
+  ],
+  [
+   "Grape healthy",
+   0.8530755639076233,
+   100
+  ],
+  [
+   "Grape Leaf blight (Isariopsis Leaf Spot)",
+   0.8565925359725952,
+   204
+  ],
+  [
+   "Corn (maize) Northern Leaf Blight",
+   0.8574453592300415,
+   220
+  ],
+  [
+   "Strawberry healthy",
+   0.8599070310592651,
+   80
+  ],
+  [
+   "Potato healthy",
+   0.8612191677093506,
+   32
+  ],
+  [
+   "Squash Powdery mildew",
+   0.8731192946434021,
+   378
+  ],
+  [
+   "Potato Early blight",
+   0.8860341310501099,
+   164
+  ],
+  [
+   "Corn (maize) Cercospora leaf spot Gray leaf spot",
+   0.8862962126731873,
+   107
+  ],
+  [
+   "Corn (maize) healthy",
+   0.9952664971351624,
+   250
+  ]
+ ],
+ "by_correct": {
+  "correct": 0.7860025763511658,
+  "wrong": 0.7379363179206848
+ },
+ "predicted class": {
+  "mean_share": 0.785699725151062,
+  "median_share": 0.7990850210189819,
+  "uniform": 0.5888538956642151,
+  "lift": 0.1968459188938141,
+  "frac_below_half": 0.011485666262022598,
+  "frac_below_uniform": 0.011765804463535343
+ }
+}

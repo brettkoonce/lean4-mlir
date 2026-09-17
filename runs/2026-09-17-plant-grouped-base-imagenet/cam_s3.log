@@ -1,0 +1,27 @@
+plant resnet34: 36 BN layers, 38 classes, split grouped, train base, init imagenet, field none, 10 epochs, batch 64, lr 0.001000, seed 3 (eval only)
+I0917 19:11:27.094908 3198004 service.cc:154] XLA service 0x72d4980279a0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0917 19:11:27.094990 3198004 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0917 19:11:27.097414 3198004 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 19:11:27.097472 3198004 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0917 19:11:27.104749 3198004 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2188 ms
+  21304166 params (21304166 by NetSpec.totalParams), 17024 BN stat floats, head 19494
+  bootstrap: 21284672 floats from .lake/build/jax_r34_imagenet.bin (BN statistics start fresh)
+  val 5484; eval parts #[pvg_test 10709, pvg_test_seg 10709, pvg_test_bg 10709, pvg_test_leaf 10709, pvg_test_none 10709, pd_all 2578] (6576 ms)
+  loaded runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_params.bin
+score: .venv/bin/python scripts/plant_score.py runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_logits_pd_all.bin --part pd_all --restrict
+I0917 19:12:44.516400 3198004 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 19:12:44.516774 3198004 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_fwd_cam.mlir (@forward_cam, 1 outputs, 1 replica) in 162 ms
+plant resnet34 [grouped/base/imagenet] pvg_test: accuracy 99.510000%  -> runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_logits_pvg_test.bin
+plant resnet34 [grouped/base/imagenet] pvg_test_seg: accuracy 72.010000%  -> runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_logits_pvg_test_seg.bin
+plant resnet34 [grouped/base/imagenet] pvg_test_bg: accuracy 24.490000%  -> runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_logits_pvg_test_bg.bin
+plant resnet34 [grouped/base/imagenet] pvg_test_leaf: accuracy 94.200000%  -> runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_logits_pvg_test_leaf.bin
+plant resnet34 [grouped/base/imagenet] pvg_test_none: accuracy 2.330000%  -> runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_logits_pvg_test_none.bin
+plant resnet34 [grouped/base/imagenet] pd_all: accuracy 15.750000%  -> runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_logits_pd_all.bin
+cam: pvg_test 10709 images → runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_cam_pvg_test.bin ([n, 2, 7, 7] f32) (14 s)
+cam: pd_all 2578 images → runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s3_cam_pd_all.bin ([n, 2, 7, 7] f32) (3 s)

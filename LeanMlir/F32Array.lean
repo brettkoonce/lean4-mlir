@@ -295,6 +295,18 @@ opaque loadImagenette (path : @& String) : IO (ByteArray × ByteArray × Nat)
 @[extern "lean_f32_load_imagenette_sized"]
 opaque loadImagenetteSized (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArray × Nat)
 
+/-- Gather `count` records of an Imagenette-format file held as RAW bytes (`IO.FS.readBinFile`)
+    by index — `idx` is `count` little-endian u32 record indices — into an ImageNet-normalised
+    f32 batch `[count, 3, imgSize, imgSize]`, exactly as `loadImagenetteSized` would have
+    converted them. The u8 records stay resident (196 KB per 256² image against 786 KB as f32),
+    which is what lets a 43k-image PlantVillage part, or the union of two, sit in memory. -/
+@[extern "lean_f32_imagenette_gather"]
+opaque imagenetteGather (raw : @& ByteArray) (idx : @& ByteArray) (count : USize) (imgSize : USize) : IO ByteArray
+
+/-- The labels of every record of a raw Imagenette-format file, as int32-LE `[n × 4]`. -/
+@[extern "lean_f32_imagenette_labels"]
+opaque imagenetteLabels (raw : @& ByteArray) (imgSize : USize) : IO ByteArray
+
 /-- Load Oxford-IIIT Pets binary file. Returns
     (images f32 ByteArray, masks uint8 ByteArray, count).
     Images are 224×224×3, channel-first, normalized with ImageNet mean/std.

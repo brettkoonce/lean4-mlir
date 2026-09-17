@@ -1,0 +1,27 @@
+plant resnet34: 36 BN layers, 38 classes, split grouped, train base, init runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s1, field 4, 5 epochs, batch 64, lr 0.000100, seed 1 (eval only)
+I0917 20:47:43.756670 3211158 service.cc:154] XLA service 0x7353a4028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0917 20:47:43.756748 3211158 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0917 20:47:43.758576 3211158 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 20:47:43.758617 3211158 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0917 20:47:43.765784 3211158 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2044 ms
+  21304166 params (21304166 by NetSpec.totalParams), 17024 BN stat floats, head 19494
+  init: runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s1_params.bin + _bn_stats.bin
+  val 5484; eval parts #[pvg_test 10709, pvg_test_seg 10709, pvg_test_bg 10709, pvg_test_leaf 10709, pvg_test_none 10709, pd_fold4_test 505] (5867 ms)
+  loaded runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_params.bin
+score: .venv/bin/python scripts/plant_score.py runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_logits_pd_fold4_test.bin --part pd_fold4_test --restrict
+I0917 20:48:59.989934 3211158 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 20:48:59.990314 3211158 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_fwd_cam.mlir (@forward_cam, 1 outputs, 1 replica) in 148 ms
+plant resnet34 [grouped/base/ckpt/field4] pvg_test: accuracy 90.480000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_logits_pvg_test.bin
+plant resnet34 [grouped/base/ckpt/field4] pvg_test_seg: accuracy 78.340000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_logits_pvg_test_seg.bin
+plant resnet34 [grouped/base/ckpt/field4] pvg_test_bg: accuracy 14.570000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_logits_pvg_test_bg.bin
+plant resnet34 [grouped/base/ckpt/field4] pvg_test_leaf: accuracy 73.580000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_logits_pvg_test_leaf.bin
+plant resnet34 [grouped/base/ckpt/field4] pvg_test_none: accuracy 4.740000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_logits_pvg_test_none.bin
+plant resnet34 [grouped/base/ckpt/field4] pd_fold4_test: accuracy 40.590000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_logits_pd_fold4_test.bin
+cam: pvg_test 10709 images → runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_cam_pvg_test.bin ([n, 2, 7, 7] f32) (15 s)
+cam: pd_fold4_test 505 images → runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field4_s1_cam_pd_fold4_test.bin ([n, 2, 7, 7] f32) (0 s)

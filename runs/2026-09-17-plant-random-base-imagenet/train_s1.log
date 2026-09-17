@@ -1,0 +1,35 @@
+plant resnet34: 36 BN layers, 38 classes, split random, train base, init imagenet, field none, 10 epochs, batch 64, lr 0.001000, seed 1
+I0917 17:04:03.585055 3135429 service.cc:154] XLA service 0x79e3a0028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0917 17:04:03.585087 3135429 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0917 17:04:03.587268 3135429 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 17:04:03.587306 3135429 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0917 17:04:03.594155 3135429 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2267 ms
+  21304166 params (21304166 by NetSpec.totalParams), 17024 BN stat floats, head 19494
+  bootstrap: 21284672 floats from .lake/build/jax_r34_imagenet.bin (BN statistics start fresh)
+  val 5428; eval parts #[pv_test 5430, pv_test_seg 5430, pv_test_bg 5430, pv_test_leaf 5430, pv_test_none 5430, pd_all 2578] (10035 ms)
+  train 43447 images from #[pv_train] (6049 ms)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_train_step.mlir (@main, 403 outputs, 1 replica) in 3916 ms
+    step 0: loss 4.100300 (1273 ms so far)
+    step 1: loss 4.407900 (1705 ms so far)
+    step 2: loss 4.336800 (2030 ms so far)
+  epoch 1/10: loss 0.465100  val acc 84.120000%  pd_all acc 11.370000%  (229 s train, 9 s eval) *
+  epoch 2/10: loss 0.127900  val acc 96.670000%  pd_all acc 14.120000%  (230 s train, 9 s eval) *
+  epoch 3/10: loss 0.073300  val acc 97.290000%  pd_all acc 12.960000%  (264 s train, 9 s eval) *
+  epoch 4/10: loss 0.062800  val acc 97.940000%  pd_all acc 13.190000%  (264 s train, 9 s eval) *
+  epoch 5/10: loss 0.037600  val acc 98.430000%  pd_all acc 12.650000%  (265 s train, 9 s eval) *
+  epoch 6/10: loss 0.025200  val acc 98.890000%  pd_all acc 11.290000%  (265 s train, 9 s eval) *
+  epoch 7/10: loss 0.014400  val acc 99.300000%  pd_all acc 12.370000%  (267 s train, 9 s eval) *
+  epoch 8/10: loss 0.007800  val acc 99.560000%  pd_all acc 13.650000%  (265 s train, 9 s eval) *
+  epoch 9/10: loss 0.003900  val acc 99.650000%  pd_all acc 13.930000%  (265 s train, 9 s eval) *
+  epoch 10/10: loss 0.002500  val acc 99.670000%  pd_all acc 13.850000%  (214 s train, 9 s eval) *
+trained: 6780 steps in 2627 s; best val epoch 10 (99.670000%)
+score: .venv/bin/python scripts/plant_score.py runs/2026-09-17-plant-random-base-imagenet/plant_resnet34_random_base_imagenet_s1_logits_pd_all.bin --part pd_all --restrict
+plant resnet34 [random/base/imagenet] pv_test: accuracy 99.720000%  -> runs/2026-09-17-plant-random-base-imagenet/plant_resnet34_random_base_imagenet_s1_logits_pv_test.bin
+plant resnet34 [random/base/imagenet] pv_test_seg: accuracy 45.470000%  -> runs/2026-09-17-plant-random-base-imagenet/plant_resnet34_random_base_imagenet_s1_logits_pv_test_seg.bin
+plant resnet34 [random/base/imagenet] pv_test_bg: accuracy 22.030000%  -> runs/2026-09-17-plant-random-base-imagenet/plant_resnet34_random_base_imagenet_s1_logits_pv_test_bg.bin
+plant resnet34 [random/base/imagenet] pv_test_leaf: accuracy 95.170000%  -> runs/2026-09-17-plant-random-base-imagenet/plant_resnet34_random_base_imagenet_s1_logits_pv_test_leaf.bin
+plant resnet34 [random/base/imagenet] pv_test_none: accuracy 9.320000%  -> runs/2026-09-17-plant-random-base-imagenet/plant_resnet34_random_base_imagenet_s1_logits_pv_test_none.bin
+plant resnet34 [random/base/imagenet] pd_all: accuracy 13.850000%  -> runs/2026-09-17-plant-random-base-imagenet/plant_resnet34_random_base_imagenet_s1_logits_pd_all.bin

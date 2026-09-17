@@ -300,6 +300,85 @@ the columns, MLP −53, convolutions −21. Per class the blocked column runs 16
 leaked (it neighbours train in capture order — hence val ≈ 92%, test ≈ 78% in
 every blocked log) and 6% of test hands return from earlier in the numbering.
 
+## Agriculture — chapter 6's ResNet-34 from lab leaves to field leaves
+
+Chapter 6's ResNet-34 from the ImageNet prefix (the BraTS/VisDrone/NEU bootstrap),
+with a 38-way head, on **PlantVillage** — 54,305 lab photographs of single picked
+leaves on a grey background, the dataset the agriculture literature reports on most
+(Mohanty et al. 2016, CC BY-SA 3.0) — and then, with the same weights, on
+**PlantDoc** — 2,578 field photographs of the same crops, 28 classes that all map
+into PlantVillage's 38 (Singh et al. 2020, CC BY 4.0). The lab number reproduces;
+the field number is the demo. Three explainers say where the evidence was: the
+closed-form CAM, an exact two-player Shapley value (leaf vs background, four
+forward passes per image, efficiency to the float), and the counterfactuals
+themselves — the same leaves on black, on their own background colour, the
+background alone, a flat colour. Then three fixes, each scored on the same 2,578
+field images.
+
+`MainPlantLeaf.lean` (`lake exe plant-leaf`), `scripts/plant_score.py`,
+`scripts/plant_shapley.py`, `scripts/plant_cam.py`, `scripts/plant_figure.py`. See
+`planning/plant_lab_to_field_demo.md` and `runs/2026-09-17-plant/README.md`.
+
+```bash
+./download_plant.sh          # two git clones (4.8 + 1.9 GB), the maintainers' split lists, census,
+                             # leaf grouping, the ArASL leak audit, masks, composites, augmentations
+
+# Act 1–2: the base arm under the maintainers' leaf-grouped split (~40 min on one 4060 Ti);
+# scores PlantVillage test, its four counterfactuals and all of PlantDoc in one run
+CUDA_VISIBLE_DEVICES=0 lake exe plant-leaf split=grouped train=base init=imagenet seed=1 tag=s1 out=runs/x
+python3 scripts/plant_score.py runs/x/plant_resnet34_grouped_base_imagenet_s1_logits_pd_all.bin --part pd_all --restrict
+
+# Act 3: the CAM of every test image, and the exact two-player Shapley value
+CUDA_VISIBLE_DEVICES=0 lake exe plant-leaf split=grouped train=base init=imagenet seed=1 tag=s1 out=runs/x eval cam=1
+python3 scripts/plant_cam.py runs/x/plant_resnet34_grouped_base_imagenet_s1_cam_pvg_test.bin --split pvg
+python3 scripts/plant_shapley.py two-player --split pvg --logits runs/x/plant_resnet34_grouped_base_imagenet_s1
+
+# Act 4: train=comp (leaves on Imagenette backgrounds) | train=aug | field=<fold> from a checkpoint
+CUDA_VISIBLE_DEVICES=1 lake exe plant-leaf split=grouped train=comp init=imagenet seed=1 tag=s1 out=runs/x
+CUDA_VISIBLE_DEVICES=2 lake exe plant-leaf split=grouped init=runs/x/plant_resnet34_grouped_base_imagenet_s1 field=0 fieldn=250 epochs=5 out=runs/x
+```
+
+![PlantVillage → PlantDoc: CAM, Shapley, the background fix](figures/plant_lab_to_field.png)
+
+**All 2,578 PlantDoc images, argmax over the 28 mapped classes; PlantVillage is the
+maintainers' 10,709-image grouped test:**
+
+| arm | PlantVillage | PlantDoc | |
+|---|---|---|---|
+| **ResNet-34, ImageNet prefix**, 3 seeds | **99.57 ± 0.06** | **17.80 ± 1.77** | the literature's number, and the field's |
+| — random split (the papers' protocol) | 99.72 | 16.56 | |
+| — from scratch | 99.07 | 11.60 | |
+| + every training leaf also on an Imagenette background, 3 seeds | 99.44 ± 0.15 | 21.48 ± 1.25 | the diagnosis, attacked |
+| + photometric + geometric augmentation | 99.62 | 19.24 | |
+| + 250 field labels, 5-fold | — | 22.69 | ten per class |
+| + all field labels (2,062 per fold), 5-fold | — | **45.00** | |
+| + backgrounds, then 250 / all field labels | — | 26.57 / 42.05 | the fixes stack at few labels, not at many |
+| published, random split / other conditions | 99.35 | ≈ 31 | Mohanty et al. 2016 |
+
+**The diagnosis, grouped test tenth, three seeds each (base → +backgrounds):**
+
+| | base | +backgrounds |
+|---|---|---|
+| the same leaves on **black** (`segmented`) | **60** (49 / 59 / 72) | **96.3** |
+| leaf on its own median background colour | 94.3 | 98.8 |
+| background only (leaf filled with that colour) | 25.1 | 13.5 |
+| a flat image of the colour, nothing else (chance 2.6) | 4.4 | 2.6 |
+| exact two-player Shapley: leaf share of the class logit | 85.0% | 96.1% |
+| — images where the background helps (φ_bg > 0) | 88.2% | 71.4% |
+| CAM mass inside the leaf mask (uniform map: 58.9%) | 70.9% | 78.6% (seed 1) |
+
+⭐ **The two attribution maps say "mostly the leaf" and the counterfactuals say the
+background is decisive anyway** — black behind the same leaf costs ~50 points, a flat
+colour alone scores above chance, and the background's marginal contribution is
+positive for nine test images in ten. Saliency is not sensitivity. The background fix
+moves every diagnostic the right way and the field number by +3.7 points (three seeds each, every fixed seed above every base seed); two thousand
+field labels move it by 29.
+
+⚠ The ArASL leak audit finds PlantVillage **pixel-clean** (0.1% of consecutive frames
+within 6 grey levels; 1.3% of random-split test images with a near-twin) and the leaf
+grouping does not move the lab number (99.64 vs 99.72): the split was never the leak
+here, the laboratory was.
+
 ---
 
 ## DDPM — diffusion generative models
@@ -530,6 +609,7 @@ demos/
 ├── MainYolov1NeuDetFpn.lean               # the same detector on NEU-DET steel defects (industrial inspection)
 ├── MainYolov1NeuDet448.lean               #   and the single-grid arm beside it, out of the archive
 ├── MainAraslSigns.lean                    # chapter-4 CNN on ArASL sign-language letters, random vs blocked split (people watching)
+├── MainPlantLeaf.lean                     # chapter-6 R34 on PlantVillage lab leaves → PlantDoc field leaves, CAM + Shapley (agriculture)
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator

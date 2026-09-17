@@ -1,0 +1,2 @@
+done grouped base imagenet s2: plant resnet34 [grouped/base/imagenet] pd_all: accuracy 16.990000%
+done grouped base imagenet s3: plant resnet34 [grouped/base/imagenet] pd_all: accuracy 15.750000%

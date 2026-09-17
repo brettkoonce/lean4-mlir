@@ -258,6 +258,53 @@ static lean_obj_res load_imagenette_sized(const char* path, size_t img_size) {
     return lean_io_result_mk_ok(outer);
 }
 
+// ---- Imagenette-format records held as raw bytes: gather by index → f32, and the labels ----
+// The whole-file loaders above turn a part into f32 at load (786 KB per 256² image); a 43k-image
+// PlantVillage part is 34 GB that way and the union arms double it. These keep the u8 records
+// resident (196 KB per image) and convert one batch at a time, ImageNet-normalised exactly as
+// load_imagenette_sized does. `idx` is `count` little-endian u32 record indices.
+LEAN_EXPORT lean_obj_res lean_f32_imagenette_gather(
+    b_lean_obj_arg raw_ba, b_lean_obj_arg idx_ba, size_t count, size_t img_size, lean_obj_arg w) {
+    (void)w;
+    const uint8_t* raw = lean_sarray_cptr(raw_ba);
+    const uint8_t* idx = lean_sarray_cptr(idx_ba);
+    const size_t n = (size_t)(raw[0] | (raw[1] << 8) | (raw[2] << 16) | ((uint32_t)raw[3] << 24));
+    const size_t pix = 3 * img_size * img_size, rec = 1 + pix, hw = img_size * img_size;
+    if (lean_sarray_size(raw_ba) < 4 + n * rec)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("imagenette_gather: file shorter than its header says")));
+    size_t nbytes = count * pix * 4;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    float* out = (float*)lean_sarray_cptr(ba);
+    const float mean[3] = {0.485f, 0.456f, 0.406f};
+    const float istd[3] = {1.0f/0.229f, 1.0f/0.224f, 1.0f/0.225f};
+    for (size_t i = 0; i < count; i++) {
+        size_t k = (size_t)(idx[4*i] | (idx[4*i+1] << 8) | (idx[4*i+2] << 16) | ((uint32_t)idx[4*i+3] << 24));
+        if (k >= n) { lean_dec(ba);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("imagenette_gather: index out of range"))); }
+        const uint8_t* src = raw + 4 + k * rec + 1;
+        float* dst = out + i * pix;
+        for (int ch = 0; ch < 3; ch++) {
+            float m = mean[ch], sc = istd[ch];
+            for (size_t j = 0; j < hw; j++) dst[ch*hw+j] = (src[ch*hw+j]/255.0f - m) * sc;
+        }
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
+// Labels of every record as int32 LE (the layout `F32.sliceLabels` and the train step expect).
+LEAN_EXPORT lean_obj_res lean_f32_imagenette_labels(b_lean_obj_arg raw_ba, size_t img_size, lean_obj_arg w) {
+    (void)w;
+    const uint8_t* raw = lean_sarray_cptr(raw_ba);
+    const size_t n = (size_t)(raw[0] | (raw[1] << 8) | (raw[2] << 16) | ((uint32_t)raw[3] << 24));
+    const size_t rec = 1 + 3 * img_size * img_size;
+    if (lean_sarray_size(raw_ba) < 4 + n * rec)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("imagenette_labels: file shorter than its header says")));
+    lean_object* ba = lean_alloc_sarray(1, n * 4, n * 4);
+    uint8_t* lbl = lean_sarray_cptr(ba);
+    for (size_t i = 0; i < n; i++) { lbl[4*i] = raw[4 + i * rec]; lbl[4*i+1] = lbl[4*i+2] = lbl[4*i+3] = 0; }
+    return lean_io_result_mk_ok(ba);
+}
+
 LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj, lean_obj_arg w) {
     (void)w;
     return load_imagenette_sized(lean_string_cstr(path_obj), 224);

@@ -1,0 +1,97 @@
+PlantVillage: 54305 colour images (expected 54305), 38 classes, per class 152 (Potato___healthy) to 5507 (Orange___Haunglongbing_(Citrus_greening)); segmented 54306 files, 54305 colour images have a mask twin (0 s)
+  Apple___Apple_scab                                     630  labs {'frec_scab': 630}
+  Apple___Black_rot                                      621  labs {'jr_frge.s': 621}
+  Apple___Cedar_apple_rust                               275  labs {'frec_c.rust': 275}
+  Apple___healthy                                       1645  labs {'rs_hl': 1645}
+  Blueberry___healthy                                   1502  labs {'rs_hl': 1502}
+  Cherry_(including_sour)___Powdery_mildew              1052  labs {'frec_pwd.m': 1052}
+  Cherry_(including_sour)___healthy                      854  labs {'jr_hl': 854}
+  Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot     513  labs {'rs_glsp': 513}
+  Corn_(maize)___Common_rust_                           1192  labs {'rs_rust': 1192}
+  Corn_(maize)___Northern_Leaf_Blight                    985  labs {'rs_nlb': 985}
+  Corn_(maize)___healthy                                1162  labs {'r.s_hl': 1162}
+  Grape___Black_rot                                     1180  labs {'fam_b.rot': 1180}
+  Grape___Esca_(Black_Measles)                          1383  labs {'fam_b.msls': 1383}
+  Grape___Leaf_blight_(Isariopsis_Leaf_Spot)            1076  labs {'fam_l.blight': 1076}
+  Grape___healthy                                        423  labs {'mt.n.v_hl': 423}
+  Orange___Haunglongbing_(Citrus_greening)              5507  labs {'crec_hlb': 3371, 'uf.citrus_hlb_lab': 2136}
+  Peach___Bacterial_spot                                2297  labs {'rutg._bact.s': 1311, 'rut._bact.s': 986}
+  Peach___healthy                                        360  labs {'rutg._hl': 360}
+  Pepper,_bell___Bacterial_spot                          997  labs {'jr_b.spot': 589, 'nrec_b.spot': 408}
+  Pepper,_bell___healthy                                1478  labs {'jr_hl': 1476, 'bell-pepper-plant-61726': 1, 'screen shot 2015-05-06 at 4.01.13 pm': 1}
+  Potato___Early_blight                                 1000  labs {'rs_early.b': 1000}
+  Potato___Late_blight                                  1000  labs {'rs_lb': 1000}
+  Potato___healthy                                       152  labs {'rs_hl': 152}
+  Raspberry___healthy                                    371  labs {'mary_hl': 371}
+  Soybean___healthy                                     5090  labs {'rs_hl': 4806, 'rs_hl 5677': 1, 'rs_hl 5641': 1}
+  Squash___Powdery_mildew                               1835  labs {'md_powd.m': 975, 'umd_powd.m': 860}
+  Strawberry___Leaf_scorch                              1109  labs {'rs_l.scorch': 1109}
+  Strawberry___healthy                                   456  labs {'rs_hl': 456}
+  Tomato___Bacterial_spot                               2127  labs {'gcrec_bact.sp': 1756, 'uf.grc_bs_lab leaf': 371}
+  Tomato___Early_blight                                 1000  labs {'rs_erly.b': 1000}
+  Tomato___Late_blight                                  1909  labs {'rs_late.b': 920, 'ghlb2 leaf': 612, 'ghlb2es leaf': 15}
+  Tomato___Leaf_Mold                                     952  labs {'crnl_l.mold': 952}
+  Tomato___Septoria_leaf_spot                           1771  labs {'matt.s_cg': 1000, 'jr_sept.l.s': 497, 'keller.st_cg': 274}
+  Tomato___Spider_mites Two-spotted_spider_mite         1676  labs {'com.g_spm_fl': 1676}
+  Tomato___Target_Spot                                  1404  labs {'com.g_tgs_fl': 1404}
+  Tomato___Tomato_Yellow_Leaf_Curl_Virus                5357  labs {'uf.grc_ylcv_lab': 2619, 'ylcv_gcrec': 1470, 'ylcv_nrec': 1268}
+  Tomato___Tomato_mosaic_virus                           373  labs {'psu_cg': 373}
+  Tomato___healthy                                      1591  labs {'rs_hl': 999, 'gh_hl leaf': 320, 'gh_hl leaf 466.1': 2}
+leaf map: 41111/54305 images covered, 7593 leaves, images per leaf mode 4 (max 33); uncovered in 15 classes: {'Tomato___Tomato_Yellow_Leaf_Curl_Virus': 2619, 'Squash___Powdery_mildew': 1835, 'Tomato___Target_Spot': 1404, 'Corn_(maize)___Common_rust_': 1192, 'Corn_(maize)___healthy': 1162, 'Tomato___Late_blight': 989}…
+official split: 10709 test files matched of 10709 listed
+  leaves straddling the official train/test line: 0 of 7593
+pv   split: train 43447  val 5428  test 5430
+pvg  split: train 38112  val 5484  test 10709
+thumbnails (45 s)
+chains along suffix numbers: 0.1% of consecutive pairs under 6 grey levels (ArASL: 73.5%); median consecutive |Δ| 31.3
+  Tomato___healthy                         gh_hl leaf     n=  320 consec|Δ|  13.0 under   0.9%
+  Tomato___Late_blight                     ghlb2 leaf     n=  612 consec|Δ|  18.5 under   0.7%
+  Apple___healthy                          rs_hl          n= 1645 consec|Δ|  34.7 under   0.4%  same-leaf 84%
+  Orange___Haunglongbing_(Citrus_greening) uf.citrus_hlb_lab n= 2136 consec|Δ|  19.5 under   0.4%  same-leaf 93%
+  Corn_(maize)___healthy                   r.s_hl         n= 1162 consec|Δ|  38.2 under   0.2%
+  Apple___Apple_scab                       frec_scab      n=  630 consec|Δ|  31.3 under   0.2%  same-leaf 83%
+  Corn_(maize)___Northern_Leaf_Blight      rs_nlb         n=  985 consec|Δ|  30.3 under   0.1%
+  Cherry_(including_sour)___Powdery_mildew frec_pwd.m     n= 1052 consec|Δ|  31.1 under   0.1%  same-leaf 94%
+leak audit pv  :   1.3% of test images have a train image within 6 grey levels at 16×16 (0.1% at 64×64; median nearest 14.2); nearest is same class 56.6%, same leaf 6.9%  (44 s)
+   leaked per class (top 8): {'Tomato___healthy': 25.2, 'Tomato___Late_blight': 5.2, 'Orange___Haunglongbing_(Citr': 2.0, 'Cherry_(including_sour)___Po': 1.9, 'Apple___healthy': 1.2, 'Cherry_(including_sour)___he': 1.2, 'Corn_(maize)___Northern_Leaf': 1.0, 'Blueberry___healthy': 0.7}
+leak audit pvg :   1.0% of test images have a train image within 6 grey levels at 16×16 (0.1% at 64×64; median nearest 14.6); nearest is same class 53.3%, same leaf 0.0%  (77 s)
+   leaked per class (top 8): {'Tomato___healthy': 20.3, 'Tomato___Late_blight': 6.9, 'Corn_(maize)___Northern_Leaf': 0.9, 'Tomato___Septoria_leaf_spot': 0.6, 'Tomato___Tomato_Yellow_Leaf_': 0.5, 'Corn_(maize)___healthy': 0.4, 'Peach___Bacterial_spot': 0.2, 'Orange___Haunglongbing_(Citr': 0.1}
+PlantDoc: 2578 images (2342 train / 236 test), 28 classes all mapped; 10 PlantVillage classes have no twin
+  Apple Scab Leaf                        → Apple___Apple_scab                                     93
+  Apple leaf                             → Apple___healthy                                        91
+  Apple rust leaf                        → Apple___Cedar_apple_rust                               89
+  Bell_pepper leaf                       → Pepper,_bell___healthy                                 61
+  Bell_pepper leaf spot                  → Pepper,_bell___Bacterial_spot                          71
+  Blueberry leaf                         → Blueberry___healthy                                   117
+  Cherry leaf                            → Cherry_(including_sour)___healthy                      57
+  Corn Gray leaf spot                    → Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot     68
+  Corn leaf blight                       → Corn_(maize)___Northern_Leaf_Blight                   192
+  Corn rust leaf                         → Corn_(maize)___Common_rust_                           116
+  Peach leaf                             → Peach___healthy                                       112
+  Potato leaf early blight               → Potato___Early_blight                                 117
+  Potato leaf late blight                → Potato___Late_blight                                  105
+  Raspberry leaf                         → Raspberry___healthy                                   119
+  Soyabean leaf                          → Soybean___healthy                                      65
+  Squash Powdery mildew leaf             → Squash___Powdery_mildew                               130
+  Strawberry leaf                        → Strawberry___healthy                                   96
+  Tomato Early blight leaf               → Tomato___Early_blight                                  88
+  Tomato Septoria leaf spot              → Tomato___Septoria_leaf_spot                           151
+  Tomato leaf                            → Tomato___healthy                                       63
+  Tomato leaf bacterial spot             → Tomato___Bacterial_spot                               110
+  Tomato leaf late blight                → Tomato___Late_blight                                  111
+  Tomato leaf mosaic virus               → Tomato___Tomato_mosaic_virus                           54
+  Tomato leaf yellow virus               → Tomato___Tomato_Yellow_Leaf_Curl_Virus                 76
+  Tomato mold leaf                       → Tomato___Leaf_Mold                                     91
+  Tomato two spotted spider mites leaf   → Tomato___Spider_mites Two-spotted_spider_mite           2
+  grape leaf                             → Grape___healthy                                        69
+  grape leaf black rot                   → Grape___Black_rot                                      64
+pv: wrote train/val/test + test_seg/test_bg/mask (mean leaf coverage 59%) (228 s)
+pvg: wrote train/val/test + test_seg/test_bg/mask (mean leaf coverage 59%) (296 s)
+PlantDoc: wrote all/train/test + 5 folds (334 s)
+meta + manifest saved (335 s): 126656 records in 19 parts
+pv: wrote train_comp (427 s)
+pv: wrote train_aug (561 s)
+pvg: wrote train_comp (628 s)
+pvg: wrote train_aug (733 s)
+meta + manifest saved (733 s): 289774 records in 23 parts
+done (733 s)

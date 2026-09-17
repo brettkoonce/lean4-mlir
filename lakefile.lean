@@ -741,6 +741,13 @@ lean_exe «arasl-signs» where
   root := `demos.MainAraslSigns
   moreLinkArgs := lowererLink
 
+-- The agriculture demo (planning/plant_lab_to_field_demo.md): chapter 6's ResNet-34 from the
+-- ImageNet prefix on PlantVillage's lab leaves, scored on PlantDoc's field leaves, with the
+-- leaf-mask CAM statistic as the diagnosis and three fixes. Zero new codegen.
+lean_exe «plant-leaf» where
+  root := `demos.MainPlantLeaf
+  moreLinkArgs := lowererLink
+
 -- ─── Gates — the two checkers CI and every doc commit run ───
 
 /-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware

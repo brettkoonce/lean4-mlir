@@ -12933,6 +12933,126 @@ classifier is not: it reads one static handshape per frame ---
 fingerspelling, no motion, no grammar, no continuous signing --- and the
 honest number for even that task on new hands is the right-hand column.
 
+\subsection{Agriculture --- demo: lab leaves to field leaves on PlantVillage and PlantDoc}
+\label{sec:bestiary_agriculture}
+
+Networks that look at crops. The demo trains a leaf-disease classifier on
+the dataset the agriculture literature uses most, reproduces its famous
+number, and then asks the two questions that number does not answer: what
+does the same net score on a photograph taken in a field, and what was it
+looking at.
+
+\textbf{The data.} PlantVillage (Hughes \& Salath\'e 2015; Mohanty, Hughes
+\& Salath\'e 2016; CC~BY-SA~3.0) is $54{,}305$ photographs of single picked
+leaves laid on a grey background in a laboratory: 38 classes over 14 crops
+--- apple scab, tomato early blight, corn rust, grape black rot, and the
+healthy leaf of each crop. Published classifiers score $99$--$99.7\%$ on a
+random split of it. PlantDoc (Singh et al.\ 2020; CC~BY~4.0) is $2{,}578$
+photographs of the same crops and diseases taken where they grow --- leaves
+on the plant, several per frame, soil and sky behind them, phone lighting
+--- in 28 classes that all map onto PlantVillage's. The net here is
+Chapter~\ref{chap:residual}'s ResNet-34 from its ImageNet weights with a
+38-way head, ten epochs on PlantVillage, forty minutes on one card; PlantDoc
+is never seen in training except by the last two rows of the table, which
+learn from it five-fold and are scored only on field images they did not
+train on. (A near-duplicate audit of PlantVillage finds none, and the
+maintainers' own leaf-grouped split gives the same number as a random one;
+whatever the lab number hides, it is not a repeated frame.)
+
+\begin{center}
+\small
+\begin{tabular}{l c c p{3.9cm}}
+\hline
+& PlantVillage test & PlantDoc, all $2{,}578$ & \\
+\hline
+\textbf{ResNet-34, ImageNet prefix}, 3 seeds & \textbf{99.57} $\pm$ 0.06 & \textbf{17.80} $\pm$ 1.77 & the demo \\
+\quad the same, random split & 99.72 & 16.56 & the papers' split \\
+\quad the same, from scratch & 99.07 & 11.60 & what ImageNet buys \\
++ leaves on Imagenette backgrounds, 3 seeds & 99.44 $\pm$ 0.15 & \textbf{21.48} $\pm$ 1.25 & the diagnosis, attacked \\
++ photometric/geometric augmentation & 99.62 & 19.24 & the modern recipe \\
++ 250 field labels, five-fold & --- & 22.69 & ten per class \\
++ all field labels, five-fold & --- & 45.00 & $2{,}062$ per fold \\
++ backgrounds, then 250 / all field labels & --- & 26.57 / 42.05 & stack at few labels only \\
+published, PlantVillage random split & 99.35 & --- & Mohanty et al.\ 2016 \\
+published, on images from elsewhere & --- & $\approx 31$ & Mohanty et al.\ 2016 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent \textbf{The first two columns are the result.} The net that
+scores $99.6\%$ in the laboratory scores $18\%$ in the field ($2{,}578$
+images, 28 classes, chance $3.6\%$). Nothing was wrong with the training;
+the distribution was. The rest of the section asks the net what it learned,
+with three instruments that need only the trained weights and the leaf mask
+PlantVillage ships with every image.
+
+\begin{center}
+\small
+\begin{tabular}{l c c}
+\hline
+What the trained net is asked, PlantVillage test ($10{,}709$) & base & + backgrounds \\
+\hline
+the test leaves as photographed & 99.6 & 99.4 \\
+the same leaves on a black background & \textbf{60} & \textbf{96} \\
+the leaf on its own median background colour & 94 & 99 \\
+the background only, leaf filled with that colour (chance 2.6) & \textbf{25} & 14 \\
+a flat image of that colour and nothing else & 4.4 & 2.6 \\
+\hline
+Shapley value: share of the class evidence due to the leaf & 85\% & 96\% \\
+Shapley value: images where the background \emph{helps} & 88\% & 71\% \\
+class-activation map: share of the map inside the leaf (uniform map: 59\%) & 71\% & 79\% \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The upper rows are counterfactuals: the same test leaves, edited.
+The lower rows are the two explainers. The class-activation map is the
+usual heat map --- the class's weights applied to the last feature map ---
+and the number is how much of its heat falls inside the leaf. The Shapley
+value treats the image as a game with two players, the leaf and the
+background, and asks how much of the class score each is responsible for;
+with two players it is exact from four forward passes (the image, the leaf
+alone, the background alone, neither), and the two shares add up to the
+whole score. Both explainers say the same reassuring thing: the evidence is
+the leaf, $85\%$ of it. The counterfactuals say otherwise. Put the same leaf
+on black and the net loses forty points; show it the background with the
+leaf painted out and it is right one time in four; show it a flat rectangle
+of the background's colour and it still beats chance. The background
+\emph{helps} in nine images out of ten, a little each time. A map of where
+the evidence is heaviest does not say what the net cannot do without.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/plant_lab_to_field.png}
+\caption{(a) Four PlantVillage test leaves --- tomato early blight, corn
+leaf blight, apple scab, grape black rot --- with the class-activation map
+and the Shapley map of the base net, and the map after the background fix;
+under each map, the share of it inside the leaf. The heat is on the
+lesions. (b) The same four diseases in PlantDoc field photographs the base
+net misreads, with the map and the prediction of the base net, the
+background-fixed net, and the net after field labels. (c) What the
+background fix trains on: a training leaf and the same leaf pasted onto an
+unrelated photograph.}
+\label{fig:plant_lab_to_field}
+\end{figure}
+
+\noindent \textbf{The fixes.} Pasting every training leaf onto an unrelated
+photograph (the composites of panel c) attacks exactly what the table
+found, and repairs it: the leaves on black go from $60\%$ to $96\%$, the
+background alone falls toward chance, the leaf's Shapley share rises to
+$96\%$. In the field it buys three and a half points, $17.8 \pm 1.8$ to
+$21.5 \pm 1.3$ over three seeds each. Stronger augmentation --- colour,
+rotation, erasing --- changes none of the diagnostics and stays inside the
+seed noise. Field labels are what work: ten per class buy seven points, all
+two thousand buy twenty-seven, and the two fixes stack only while labels are
+scarce. The laboratory artefact is real and removable, and removing it is
+not what gets the net into the field.
+
+\medskip\noindent What this classifier is not: a diagnosis. It reads one
+leaf at one moment --- no severity, no spread across a field, no symptom
+before the lesion shows --- and the honest number for even that, on a
+photograph a grower would take, is the right-hand column.
+
 \subsection{Semantic segmentation --- demo: UNet on BraTS}
 \label{sec:bestiary_segmentation}
 
@@ -14868,6 +14988,13 @@ physics, and each has a dataset of its own:
     random split the literature reports on and under a split that keeps each
     class's capture order together, and the pair of numbers is the demo of
     \S\ref{sec:bestiary_people}.
+  \item \textbf{PlantVillage and PlantDoc} are the agriculture pair: $54{,}305$
+    laboratory photographs of single picked leaves on a grey background, 38
+    classes over 14 crops, and $2{,}578$ field photographs of 13 of the same
+    crops in 28 classes that all map into PlantVillage's 38. Chapter~\ref{chap:residual}'s
+    ResNet-34 (\texttt{plant-leaf}) trains on the first and is scored on the
+    second, and the demo of \S\ref{sec:bestiary_agriculture} is what the
+    second number does to the first.
   \item \textbf{MSD Task01 (BraTS)} is the segmentation dataset. It is
     four-modality brain-tumour MRI, and the thin-class collapse is the
     whole problem rather than a nuisance
@@ -14922,6 +15049,12 @@ NEU-DET & NEU & Song \& Yan, 2013; He et al., 2020 &
 ArASL & ArASL & Latif et al., 2019 &
   \href{https://data.mendeley.com/datasets/y7pckrw6z2/1}{\nolinkurl{data.mendeley.com/datasets/y7pckrw6z2}} &
   \texttt{download\_arasl.sh}\newline $\to$ \texttt{data/arasl/}  \\[2pt]
+PlantVillage & PV & Hughes \& Salath\'e, 2015; Mohanty et al., 2016 &
+  \href{https://github.com/spMohanty/PlantVillage-Dataset}{\nolinkurl{github.com/spMohanty/PlantVillage-Dataset}} &
+  \texttt{download\_plant.sh}\newline $\to$ \texttt{data/plant/}  \\[2pt]
+PlantDoc & PD & Singh et al., 2020 &
+  \href{https://github.com/pratikkayal/PlantDoc-Dataset}{\nolinkurl{github.com/pratikkayal/PlantDoc-Dataset}} &
+  \texttt{download\_plant.sh}\newline $\to$ \texttt{data/plant/}  \\[2pt]
 MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
   \href{http://medicaldecathlon.com/}{\nolinkurl{medicaldecathlon.com}} &
   \texttt{download\_brats.sh}\newline $\to$ \texttt{data/brats/}  \\[2pt]
@@ -15035,6 +15168,53 @@ release without signer ids cannot separate; the section reports it as the
 protocol's floor. Images are written as f32 in $[0,1]$, the range the
 chapter's CIFAR loader feeds, and epochs are chosen on the validation tenth
 and reported on the test tenth.
+
+\medskip\noindent\textbf{Building the PlantVillage and PlantDoc datasets.}
+PlantVillage is the Hughes--Salath\'e leaf-disease set (\emph{An open access
+repository of images on plant health}, arXiv:1511.08060, 2015; Mohanty,
+Hughes \& Salath\'e, \emph{Using deep learning for image-based plant disease
+detection}, Front.\ Plant Sci.~7:1419, 2016): $54{,}305$ colour photographs
+of single picked leaves on a grey or paper background, $256\times256$, 38
+classes over 14 crops, $152$ to $5{,}507$ per class, with a
+\texttt{segmented} twin of every image (the leaf on black) and, in the
+current release, a grouping of the photographs by leaf ($7{,}946$ leaves,
+four photographs of most of them) together with a leaf-grouped $80/20$ split
+that the maintainers publish beside the data. The repository's dataset card
+gives CC~BY-SA~3.0. PlantDoc is Singh, Jain, Jain, Kayal, Kumawat \&
+Batra's field set (\emph{PlantDoc: a dataset for visual plant disease
+detection}, CoDS-COMAD 2020): $2{,}578$ web photographs of leaves on plants,
+13 of the same crops in 28 classes --- 18 diseases and 10 healthy, one of
+them with two images --- under CC~BY~4.0. \texttt{download\_plant.sh}
+clones both from their GitHub repositories, fetches the maintainers' split
+lists, and checks the census before anything runs: exactly $54{,}305$ colour
+files under exactly the 38 folder names, a segmented twin for each (matched
+on the suffix after the uuid, because one class's colour files carry no
+uuid), $2{,}578$ PlantDoc files, and a $10{,}709$-line test list. ⛔ The
+Kaggle ``New Plant Diseases Dataset'' is PlantVillage with augmented copies on
+both sides of its own split and is not used.
+
+\texttt{preprocess\_plant.py} writes the Imagenette record format at $256$
+for training parts and $224$ centre-cropped for evaluation parts. PlantVillage
+is split twice, $80/10/10$ per class: \texttt{random}, a stratified
+permutation, and \texttt{grouped}, whose test set is the maintainers'
+$10{,}709$ exactly and whose validation tenth is carved from their training
+list by leaf id, so no leaf straddles a line. The audit of the ArASL build
+runs on it and finds $0.1\%$ of consecutive photographs within six grey
+levels and $1.3\%$ of random-split test images with a near-twin in training:
+the four photographs of a leaf are different poses. Beside the test tenth it
+writes the same images from \texttt{segmented}, the leaf on its image's median
+background colour, the background with the leaf filled by that colour, and
+the flat colour alone --- the four counterfactuals of the section's two-player
+Shapley value, sharing one fill --- and the leaf mask at $224$ and on the
+$7\times7$ grid of the class-activation map. Every training leaf is also
+composited onto a random crop of a random Imagenette training image (the mask
+feathered by two pixels; Imagenette has no agriculture in it) and given one
+photometric-and-geometric variant, as two further training parts. PlantDoc's
+28 classes are mapped to PlantVillage ids by a table the preprocessor prints
+(ten PlantVillage classes have no field twin); its images are resized to a
+$256$ shorter side and centre-cropped; and it is written whole, under its
+official split, and as five stratified folds, so a net fine-tuned on field
+images scores every field image once, held out.
 
 \medskip\noindent\textbf{Building the BraTS dataset.}
 \emph{BraTS~2021 proper} (1{,}251 cases) is

@@ -1,0 +1,30 @@
+plant resnet34: 36 BN layers, 38 classes, split grouped, train base, init runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s1, field 3, 5 epochs, batch 64, lr 0.000100, seed 1
+I0917 18:11:16.092820 3165775 service.cc:154] XLA service 0x7ba498028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0917 18:11:16.092875 3165775 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0917 18:11:16.094983 3165775 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 18:11:16.095099 3165775 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0917 18:11:16.106838 3165775 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2237 ms
+  21304166 params (21304166 by NetSpec.totalParams), 17024 BN stat floats, head 19494
+  init: runs/2026-09-17-plant-grouped-base-imagenet/plant_resnet34_grouped_base_imagenet_s1_params.bin + _bn_stats.bin
+  val 5484; eval parts #[pvg_test 10709, pvg_test_seg 10709, pvg_test_bg 10709, pvg_test_leaf 10709, pvg_test_none 10709, pd_fold3_test 510] (6904 ms)
+  train 2068 images from #[pd_fold3_train] (181 ms)
+[pjrt_ffi] compiled .lake/build/plant_resnet34_train_step.mlir (@main, 403 outputs, 1 replica) in 3863 ms
+    step 0: loss 8.457400 (734 ms so far)
+    step 1: loss 6.774100 (1082 ms so far)
+    step 2: loss 7.238800 (1434 ms so far)
+  epoch 1/5: loss 6.613300  val acc 91.670000%  pd_fold3_test acc 30.780000%  (11 s train, 6 s eval)
+  epoch 2/5: loss 3.770400  val acc 91.760000%  pd_fold3_test acc 43.530000%  (43 s train, 6 s eval)
+  epoch 3/5: loss 2.574200  val acc 91.170000%  pd_fold3_test acc 47.250000%  (11 s train, 7 s eval)
+  epoch 4/5: loss 2.105400  val acc 90.240000%  pd_fold3_test acc 48.820000%  (11 s train, 6 s eval)
+  epoch 5/5: loss 1.925300  val acc 90.740000%  pd_fold3_test acc 47.060000%  (11 s train, 6 s eval)
+trained: 160 steps in 122 s; fixed schedule, last epoch kept
+score: .venv/bin/python scripts/plant_score.py runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field3_s1_logits_pd_fold3_test.bin --part pd_fold3_test --restrict
+plant resnet34 [grouped/base/ckpt/field3] pvg_test: accuracy 90.670000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field3_s1_logits_pvg_test.bin
+plant resnet34 [grouped/base/ckpt/field3] pvg_test_seg: accuracy 76.410000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field3_s1_logits_pvg_test_seg.bin
+plant resnet34 [grouped/base/ckpt/field3] pvg_test_bg: accuracy 15.620000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field3_s1_logits_pvg_test_bg.bin
+plant resnet34 [grouped/base/ckpt/field3] pvg_test_leaf: accuracy 72.680000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field3_s1_logits_pvg_test_leaf.bin
+plant resnet34 [grouped/base/ckpt/field3] pvg_test_none: accuracy 5.500000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field3_s1_logits_pvg_test_none.bin
+plant resnet34 [grouped/base/ckpt/field3] pd_fold3_test: accuracy 47.060000%  -> runs/2026-09-17-plant-grouped-field-imagenet/plant_resnet34_grouped_base_ckpt_field3_s1_logits_pd_fold3_test.bin

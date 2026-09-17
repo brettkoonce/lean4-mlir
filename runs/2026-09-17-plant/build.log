@@ -1,0 +1,8 @@
+✔ [6403/6405] Built demos.MainPlantLeaf (2.6s)
+✔ [6404/6405] Built demos.MainPlantLeaf:c.o (1.7s)
+✔ [6405/6405] Built «plant-leaf»:exe (1.0s)
+Build completed successfully (6405 jobs).
+
+real	0m7.312s
+user	0m7.775s
+sys	0m3.590s
