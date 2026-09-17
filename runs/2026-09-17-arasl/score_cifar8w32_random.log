@@ -1,0 +1,26 @@
+== ArASL random split, 5404 test images, 1 run(s) ==
+  arasl_cifar8w_32_random_s1_logits_test.bin        98.21% [97.82, 98.53]
+  pooled:  98.21% [97.82, 98.53]
+leak audit (random): 92.3% of test images have a train image within 6 grey levels at 16×16, 88.3% at 64×64
+  accuracy on leaked (16×16)       n= 4988:  99.62% [99.41, 99.76]
+  accuracy on not leaked (16×16)   n=  416:  81.25% [77.22, 84.71]
+  accuracy on leaked (64×64)       n= 4773:  99.79% [99.61, 99.89]
+  accuracy on not leaked (64×64)   n=  631:  86.21% [83.30, 88.68]
+  1-NN on 16×16 thumbnails (nearest train image's label):  95.65% [95.07, 96.16]
+per class (test, pooled over seeds):
+  ra     95.8   thaa   96.0   ta     96.2   dha    96.5
+  haa    96.7   taa    96.7   jeem   96.8   saad   96.8
+  fa     96.9   gaaf   97.1   meem   97.2   khaa   97.5
+  dal    97.5   zay    97.8   kaaf   98.3   waw    98.5
+  thal   98.7   ha     98.7   seen   98.8   dhad   98.8
+  ghain  99.0   aleff  99.4   ya     99.4   la     99.4
+  bb     99.4   nun    99.5   ain    99.5   al    100.0
+  laam  100.0   sheen 100.0   toot  100.0   yaa   100.0
+  weakest: ra 95.8%, thaa 96.0%, ta 96.2%, dha 96.5%, haa 96.7%
+most confused pairs (both directions, pooled over 1 run(s)):
+  dha   ↔ ta        8.0 per run  (dha→ta 5, ta→dha 3)
+  fa    ↔ gaaf      7.0 per run  (fa→gaaf 3, gaaf→fa 4)
+  taa   ↔ thaa      5.0 per run  (taa→thaa 2, thaa→taa 3)
+  kaaf  ↔ thaa      4.0 per run  (kaaf→thaa 2, thaa→kaaf 2)
+  haa   ↔ jeem      3.0 per run  (haa→jeem 1, jeem→haa 2)
+wrote runs/2026-09-17-arasl/score_cifar8w32_random.json

@@ -1,0 +1,2 @@
+done cifar8w-32 random s1: arasl cifar8w 32 on the random split, test: accuracy 98.210000%  -> runs/2026-09-17-arasl-cifar8w-random/arasl_cifar8w_32_random_s1_logits_test.bin
+done cifar8w-32 blocked s1: arasl cifar8w 32 on the blocked split, test: accuracy 71.030000%  -> runs/2026-09-17-arasl-cifar8w-blocked/arasl_cifar8w_32_blocked_s1_logits_test.bin

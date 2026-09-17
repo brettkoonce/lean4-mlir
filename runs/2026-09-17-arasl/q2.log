@@ -1,0 +1,4 @@
+done mlp random s1: arasl mlp on the random split, test: accuracy 94.860000%  -> runs/2026-09-17-arasl-mlp-random/arasl_mlp_random_s1_logits_test.bin
+done mlp blocked s1: arasl mlp on the blocked split, test: accuracy 42.090000%  -> runs/2026-09-17-arasl-mlp-blocked/arasl_mlp_blocked_s1_logits_test.bin
+done linear random s1: arasl linear on the random split, test: accuracy 53.200000%  -> runs/2026-09-17-arasl-linear-random/arasl_linear_random_s1_logits_test.bin
+done linear blocked s1: arasl linear on the blocked split, test: accuracy 15.370000%  -> runs/2026-09-17-arasl-linear-blocked/arasl_linear_blocked_s1_logits_test.bin

@@ -734,6 +734,13 @@ lean_exe «gw-detect» where
   root := `demos.MainGwDetect
   moreLinkArgs := lowererLink
 
+-- The people-watching demo (planning/arasl_people_watching_demo.md): chapter 4's CNN on
+-- Arabic sign-language letters under a random and a capture-order-blocked split of the
+-- same burst frames, scored by `scripts/arasl_score.py` with a leak audit. Zero new codegen.
+lean_exe «arasl-signs» where
+  root := `demos.MainAraslSigns
+  moreLinkArgs := lowererLink
+
 -- ─── Gates — the two checkers CI and every doc commit run ───
 
 /-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware

@@ -1,0 +1,48 @@
+54049 images, 32 classes, per class 1293 (yaa) to 2114 (ain), 658 not 64x64 L (16 s)
+  haa    768x1024     ×10
+  kaaf   256x256      ×320
+  meem   256x256      ×318
+  ra     RGB          ×7
+  seen   RGB          ×1
+  thaa   RGB          ×1
+  toot   RGB          ×1
+bursts: median consecutive |Δ| 3.3 grey levels (random pair within a class: 32.9); 73.5% of consecutive pairs under 6; 14336 chains, 3.8 frames each, longest 58
+  ain    n= 2114  consec |Δ|   2.8  random  32.6  under-thr  77.8%  chains  470  mean  4.5  max  28
+  al     n= 1343  consec |Δ|   4.4  random  29.4  under-thr  63.9%  chains  485  mean  2.8  max  19
+  aleff  n= 1672  consec |Δ|   3.2  random  43.4  under-thr  75.7%  chains  407  mean  4.1  max  44
+  bb     n= 1791  consec |Δ|   3.0  random  36.9  under-thr  75.6%  chains  438  mean  4.1  max  35
+  dal    n= 1634  consec |Δ|   3.4  random  30.5  under-thr  74.9%  chains  411  mean  4.0  max  24
+  dha    n= 1723  consec |Δ|   3.5  random  29.6  under-thr  75.0%  chains  431  mean  4.0  max  26
+  dhad   n= 1670  consec |Δ|   3.2  random  31.1  under-thr  77.1%  chains  384  mean  4.3  max  31
+  fa     n= 1955  consec |Δ|   2.9  random  32.7  under-thr  75.4%  chains  481  mean  4.1  max  27
+  gaaf   n= 1705  consec |Δ|   3.2  random  34.0  under-thr  75.3%  chains  422  mean  4.0  max  32
+  ghain  n= 1977  consec |Δ|   3.2  random  32.1  under-thr  74.4%  chains  506  mean  3.9  max  29
+  ha     n= 1592  consec |Δ|   3.0  random  34.7  under-thr  76.1%  chains  382  mean  4.2  max  24
+  haa    n= 1526  consec |Δ|   2.9  random  31.5  under-thr  75.8%  chains  370  mean  4.1  max  27
+  jeem   n= 1552  consec |Δ|   3.6  random  34.0  under-thr  71.2%  chains  448  mean  3.5  max  23
+  kaaf   n= 1774  consec |Δ|   3.2  random  37.8  under-thr  72.2%  chains  494  mean  3.6  max  29
+  khaa   n= 1607  consec |Δ|   2.8  random  30.4  under-thr  77.6%  chains  361  mean  4.5  max  57
+  la     n= 1746  consec |Δ|   3.7  random  38.1  under-thr  71.6%  chains  496  mean  3.5  max  31
+  laam   n= 1832  consec |Δ|   3.4  random  31.8  under-thr  74.2%  chains  473  mean  3.9  max  58
+  meem   n= 1765  consec |Δ|   3.2  random  30.5  under-thr  72.8%  chains  480  mean  3.7  max  26
+  nun    n= 1819  consec |Δ|   3.8  random  35.9  under-thr  69.3%  chains  560  mean  3.2  max  27
+  ra     n= 1659  consec |Δ|   3.4  random  30.2  under-thr  72.0%  chains  466  mean  3.6  max  30
+  saad   n= 1895  consec |Δ|   3.2  random  32.3  under-thr  73.1%  chains  511  mean  3.7  max  33
+  seen   n= 1638  consec |Δ|   3.6  random  36.5  under-thr  71.4%  chains  470  mean  3.5  max  28
+  sheen  n= 1507  consec |Δ|   4.2  random  31.5  under-thr  65.8%  chains  516  mean  2.9  max  25
+  ta     n= 1816  consec |Δ|   3.4  random  29.3  under-thr  72.6%  chains  499  mean  3.6  max  26
+  taa    n= 1838  consec |Δ|   3.3  random  37.9  under-thr  74.5%  chains  469  mean  3.9  max  35
+  thaa   n= 1766  consec |Δ|   3.1  random  38.2  under-thr  77.0%  chains  407  mean  4.3  max  29
+  thal   n= 1582  consec |Δ|   3.8  random  33.0  under-thr  71.2%  chains  456  mean  3.5  max  27
+  toot   n= 1791  consec |Δ|   3.5  random  37.9  under-thr  74.5%  chains  458  mean  3.9  max  30
+  waw    n= 1371  consec |Δ|   3.4  random  42.6  under-thr  71.0%  chains  398  mean  3.4  max  25
+  ya     n= 1722  consec |Δ|   3.5  random  40.0  under-thr  72.2%  chains  480  mean  3.6  max  25
+  yaa    n= 1293  consec |Δ|   3.4  random  24.4  under-thr  74.8%  chains  326  mean  4.0  max  25
+  zay    n= 1374  consec |Δ|   3.6  random  33.9  under-thr  72.3%  chains  381  mean  3.6  max  24
+  weakest class al: 63.9% under threshold — Gate 0 chain premise HOLDS (≥ 60% in every class)
+random   split: train 43241  val 5404  test 5404
+blocked  split: train 43238  val 5416  test 5395
+leak audit random  :  92.3% of test images have a train image within 6 grey levels at 16×16 (median nearest 1.2);  88.3% at 64×64 (median 2.5); nearest is same class 95.7%; same-class leaks sit a median 1 files apart  (44 s)
+leak audit blocked :   6.4% of test images have a train image within 6 grey levels at 16×16 (median nearest 13.3);   3.7% at 64×64 (median 15.6); nearest is same class 28.6%; same-class leaks sit a median 306 files apart  (44 s)
+  Gate 0 audit: random ≫ blocked HOLDS
+wrote data/arasl/{random,blocked}_{train,val,test}.bin + labels + meta (107 s total)

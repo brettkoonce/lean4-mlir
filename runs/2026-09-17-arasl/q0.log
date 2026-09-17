@@ -1,0 +1,3 @@
+done cifar8w random s1: arasl cifar8w on the random split, test: accuracy 98.520000%  -> runs/2026-09-17-arasl-cifar8w-random/arasl_cifar8w_random_s1_logits_test.bin
+done cifar8w random s2: arasl cifar8w on the random split, test: accuracy 98.720000%  -> runs/2026-09-17-arasl-cifar8w-random/arasl_cifar8w_random_s2_logits_test.bin
+done cifar8w random s3: arasl cifar8w on the random split, test: accuracy 98.610000%  -> runs/2026-09-17-arasl-cifar8w-random/arasl_cifar8w_random_s3_logits_test.bin

@@ -1,0 +1,36 @@
+blocked test, seed 1 — per class: accuracy, median |Δ| to nearest train image (16×16), % leaked
+  fa     acc  22.7  median nn  16.7  leaked  0.0%
+  gaaf   acc  30.6  median nn  14.8  leaked  0.0%
+  thaa   acc  31.5  median nn  16.0  leaked  0.0%
+  kaaf   acc  47.7  median nn  15.3  leaked  0.0%
+  dhad   acc  51.8  median nn  14.8  leaked 32.1%
+  ha     acc  56.3  median nn  10.9  leaked  0.0%
+  taa    acc  59.5  median nn  13.4  leaked 20.5%
+  saad   acc  61.1  median nn  13.9  leaked  0.0%
+  yaa    acc  64.6  median nn  13.6  leaked  0.0%
+  waw    acc  74.5  median nn  21.0  leaked  0.0%
+  la     acc  78.3  median nn  28.8  leaked  0.0%
+  nun    acc  79.9  median nn  17.2  leaked  0.0%
+  zay    acc  83.2  median nn   9.7  leaked  1.5%
+  toot   acc  85.8  median nn  13.2  leaked 14.2%
+  laam   acc  86.5  median nn  15.5  leaked  0.0%
+  bb     acc  87.1  median nn  14.8  leaked  6.7%
+  meem   acc  90.1  median nn  14.1  leaked  1.2%
+  dal    acc  90.7  median nn  10.7  leaked  8.7%
+  ghain  acc  91.4  median nn   8.3  leaked 12.6%
+  aleff  acc  93.3  median nn  13.3  leaked  9.7%
+  jeem   acc  93.4  median nn   9.0  leaked  5.3%
+  ain    acc  93.8  median nn  13.8  leaked 15.4%
+  khaa   acc  93.8  median nn   8.2  leaked 14.8%
+  dha    acc  94.1  median nn  10.4  leaked  5.9%
+  haa    acc  97.4  median nn   8.7  leaked 11.7%
+  al     acc  98.5  median nn  18.1  leaked  0.0%
+  ra     acc  98.8  median nn   8.2  leaked 29.5%
+  ya     acc  99.4  median nn  11.1  leaked  0.0%
+  ta     acc  99.5  median nn  10.3  leaked  4.3%
+  seen   acc 100.0  median nn  14.5  leaked  0.0%
+  sheen  acc 100.0  median nn  11.5  leaked  1.3%
+  thal   acc 100.0  median nn  11.6  leaked  5.0%
+Spearman(acc, median nn) = -0.51
+blocked VAL tenth: 37.5% leaked at 16×16, median nn 8.2, nearest same class 57.5%
+blocked TEST tenth: 6.4% leaked, median nn 13.3, nearest same class 28.6%

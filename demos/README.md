@@ -240,6 +240,68 @@ The VisDrone single-grid row is `yolov1-visdrone448` (the archived 448/14 arm,
 
 ---
 
+## People watching — the chapter-4 CNN on Arabic sign-language letters, under two splits
+
+Chapter 4's `CIFAR-CNN8-wide-BN` — one-channel stem, 32-way head, nothing else
+changed — on ArASL: 54,049 grey 64×64 crops of hands spelling the 32 letters of
+the Arabic alphabet (Latif et al. 2019, Mendeley `y7pckrw6z2`, CC BY 4.0), the
+dataset the Arabic sign-language literature reports 96–99.6% on. The images
+are **video bursts** (73.5% of consecutive files differ by under 6 grey levels;
+14,336 chains of 3.8 frames) and the release records no signer, so the same
+images are trained twice: under the literature's random split and under a
+split that keeps each class's capture order together. The pair of numbers is
+the demo; a leak audit (for every test image, the nearest training image) says
+what each split did.
+
+`MainAraslSigns.lean` (`lake exe arasl-signs`), copied from the GW demo's host
+loop. See `planning/arasl_people_watching_demo.md` and `runs/2026-09-17-arasl/README.md`.
+
+```bash
+./download_arasl.sh          # Mendeley, URLs resolved from the public API, sha256-checked;
+                             # writes both splits + census + chain statistic + leak audit
+
+# the demo: the chapter net under each split, ~5 min per run on one 4060 Ti
+CUDA_VISIBLE_DEVICES=0 lake exe arasl-signs net=cifar8w split=random  seed=1 tag=s1 out=runs/x
+CUDA_VISIBLE_DEVICES=1 lake exe arasl-signs net=cifar8w split=blocked seed=1 tag=s1 out=runs/x
+# the bracket: net=mlp | net=linear, and the chapter's own 32×32 input with size=32
+
+# Wilson interval, leaked-vs-not accuracy, 1-NN floor, per class, confused pairs
+python3 scripts/arasl_score.py runs/x/arasl_cifar8w_blocked_s{1,2,3}_logits_test.bin --split=blocked --top 8 --json runs/x/score.json
+python3 scripts/arasl_figure.py --score runs/x/score.json --logits runs/x/arasl_cifar8w_blocked_s1_logits_test.bin
+```
+
+![ArASL: the alphabet, nearest training images under each split, confused pairs](figures/arasl_signs.png)
+
+**ArASL test (80/10/10 per class), at the val-peak epoch, 3 seeds for the chapter net:**
+
+| arm | random split | blocked split | |
+|---|---|---|---|
+| **CIFAR-CNN8-wide-BN**, 64×64 | **98.62** ± 0.10 | **77.94** ± 0.80 | the demo |
+| — on test images with a near-duplicate in train | 99.73 | 98.46 | 92.3% / 6.4% of the test tenth |
+| — on the rest | 85.26 | 76.53 | |
+| CIFAR-CNN8-wide-BN at 32×32 | 98.21 | 71.03 | the chapter's own input |
+| MLP 4096-512-512-32 | 94.86 | 42.09 | |
+| linear 4096-32 | 53.20 | 15.37 | |
+| 1-NN on 16×16 thumbnails | 95.65 | 28.60 | no parameters |
+| published CNNs, random split | 96.6–97.6 | — | |
+| published transfer / ViT, random split | 99.3–99.6 | — | |
+
+⭐ **The published 96–99% is mostly the frame, not the hand.** Nine in ten
+random-split test images have a training image within 6 grey levels; the net
+is at 99.7% on those and 85.3% on the rest, and a parameter-free nearest-
+neighbour lookup already gets 95.7%. Keep each hand's frames on one side of
+the line and the same net, recipe and seeds score 77.9%.
+
+⭐ The bracket loses more the less it can generalise: linear −38 points between
+the columns, MLP −53, convolutions −21. Per class the blocked column runs 16.5%
+(`fa`) to 100% (`sheen`); `fa`→`gaaf` 181 times in three runs, the reverse once.
+
+⚠ The blocked split is a proxy, not a signer split: the val tenth is 37.5%
+leaked (it neighbours train in capture order — hence val ≈ 92%, test ≈ 78% in
+every blocked log) and 6% of test hands return from earlier in the numbering.
+
+---
+
 ## DDPM — diffusion generative models
 
 Denoising diffusion on MNIST. A tiny UNet predicts the noise
@@ -467,6 +529,7 @@ demos/
 ├── MainYolov1VisdroneFpn.lean             # R34+FPN detector on VisDrone, train + infer
 ├── MainYolov1NeuDetFpn.lean               # the same detector on NEU-DET steel defects (industrial inspection)
 ├── MainYolov1NeuDet448.lean               #   and the single-grid arm beside it, out of the archive
+├── MainAraslSigns.lean                    # chapter-4 CNN on ArASL sign-language letters, random vs blocked split (people watching)
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator

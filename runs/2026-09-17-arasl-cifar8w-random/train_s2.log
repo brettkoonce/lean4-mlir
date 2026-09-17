@@ -1,0 +1,62 @@
+arasl cifar8w: 8 BN layers, 32 classes, split random, 30 epochs, batch 64, lr 0.001000, seed 2
+I0917 14:51:15.470462 3113853 service.cc:154] XLA service 0x772088028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0917 14:51:15.470524 3113853 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0917 14:51:15.472345 3113853 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 14:51:15.472400 3113853 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0917 14:51:15.481199 3113853 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0917 14:51:16.442669 3113893 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 64 bytes spill stores, 64 bytes spill loads
+
+I0917 14:51:16.460808 3113879 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 32 bytes spill stores, 32 bytes spill loads
+
+I0917 14:51:16.668040 3113871 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 812 bytes spill stores, 812 bytes spill loads
+
+I0917 14:51:16.808826 3113883 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/arasl_cifar8w_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1648 ms
+  581424 params (581424 by NetSpec.totalParams), 384 BN stat floats
+  val 5404 / test 5404 images of 64×64, first image in [0.090000, 0.925000], labels 0..31 (153 ms)
+  train 43241 images (374 ms)
+I0917 14:51:18.408735 3113893 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 32 bytes spill stores, 32 bytes spill loads
+
+I0917 14:51:18.786770 3113867 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 712 bytes spill stores, 712 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/arasl_cifar8w_train_step.mlir (@main, 107 outputs, 1 replica) in 1956 ms
+    step 0: loss 4.777800 (48 ms so far)
+    step 1: loss 4.893800 (68 ms so far)
+    step 2: loss 4.885500 (82 ms so far)
+  epoch 1/30: loss 1.660400  val acc 84.440000%  test acc 85.640000%  (10864 ms train, 568 ms eval) *
+  epoch 2/30: loss 0.296200  val acc 93.020000%  test acc 93.650000%  (11067 ms train, 554 ms eval) *
+  epoch 3/30: loss 0.160000  val acc 94.560000%  test acc 95.190000%  (12013 ms train, 651 ms eval) *
+  epoch 4/30: loss 0.121600  val acc 95.320000%  test acc 96.060000%  (11755 ms train, 584 ms eval) *
+  epoch 5/30: loss 0.097000  val acc 95.520000%  test acc 96.520000%  (11497 ms train, 569 ms eval) *
+  epoch 6/30: loss 0.084000  val acc 95.980000%  test acc 95.970000%  (11816 ms train, 562 ms eval) *
+  epoch 7/30: loss 0.065400  val acc 95.500000%  test acc 95.820000%  (11713 ms train, 588 ms eval)
+  epoch 8/30: loss 0.058000  val acc 96.970000%  test acc 97.690000%  (11922 ms train, 583 ms eval) *
+  epoch 9/30: loss 0.047000  val acc 96.740000%  test acc 97.220000%  (11654 ms train, 586 ms eval)
+  epoch 10/30: loss 0.044900  val acc 97.210000%  test acc 97.670000%  (11453 ms train, 585 ms eval) *
+  epoch 11/30: loss 0.032600  val acc 96.740000%  test acc 97.410000%  (42654 ms train, 681 ms eval)
+  epoch 12/30: loss 0.025800  val acc 97.590000%  test acc 98.090000%  (15587 ms train, 636 ms eval) *
+  epoch 13/30: loss 0.026900  val acc 97.740000%  test acc 98.350000%  (14909 ms train, 645 ms eval) *
+  epoch 14/30: loss 0.017000  val acc 97.870000%  test acc 98.370000%  (15253 ms train, 617 ms eval) *
+  epoch 15/30: loss 0.013900  val acc 98.150000%  test acc 98.430000%  (14343 ms train, 572 ms eval) *
+  epoch 16/30: loss 0.006200  val acc 98.190000%  test acc 98.240000%  (14535 ms train, 648 ms eval) *
+  epoch 17/30: loss 0.009100  val acc 97.460000%  test acc 98.090000%  (38702 ms train, 596 ms eval)
+  epoch 18/30: loss 0.014900  val acc 98.170000%  test acc 98.560000%  (10343 ms train, 556 ms eval)
+  epoch 19/30: loss 0.004900  val acc 98.320000%  test acc 98.500000%  (11311 ms train, 565 ms eval) *
+  epoch 20/30: loss 0.003500  val acc 98.330000%  test acc 98.580000%  (8079 ms train, 454 ms eval) *
+  epoch 21/30: loss 0.002800  val acc 98.330000%  test acc 98.690000%  (10453 ms train, 587 ms eval)
+  epoch 22/30: loss 0.002700  val acc 98.280000%  test acc 98.670000%  (11691 ms train, 571 ms eval)
+  epoch 23/30: loss 0.002400  val acc 98.390000%  test acc 98.820000%  (12129 ms train, 571 ms eval) *
+  epoch 24/30: loss 0.002100  val acc 98.350000%  test acc 98.780000%  (11793 ms train, 567 ms eval)
+  epoch 25/30: loss 0.002000  val acc 98.390000%  test acc 98.700000%  (11386 ms train, 573 ms eval)
+  epoch 26/30: loss 0.001800  val acc 98.390000%  test acc 98.720000%  (11086 ms train, 521 ms eval)
+  epoch 27/30: loss 0.001700  val acc 98.410000%  test acc 98.720000%  (42369 ms train, 447 ms eval) *
+  epoch 28/30: loss 0.001600  val acc 98.350000%  test acc 98.820000%  (9594 ms train, 468 ms eval)
+  epoch 29/30: loss 0.001600  val acc 98.350000%  test acc 98.780000%  (10009 ms train, 580 ms eval)
+  epoch 30/30: loss 0.001500  val acc 98.350000%  test acc 98.740000%  (11016 ms train, 562 ms eval)
+trained: 20250 steps in 460 s; best val epoch 27 (98.410000%)
+score: .venv/bin/python scripts/arasl_score.py runs/2026-09-17-arasl-cifar8w-random/arasl_cifar8w_random_s2_logits_test.bin --split=random
+arasl cifar8w on the random split, val: accuracy 98.410000%  -> runs/2026-09-17-arasl-cifar8w-random/arasl_cifar8w_random_s2_logits_val.bin
+arasl cifar8w on the random split, test: accuracy 98.720000%  -> runs/2026-09-17-arasl-cifar8w-random/arasl_cifar8w_random_s2_logits_test.bin

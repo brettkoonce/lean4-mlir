@@ -1,0 +1,3 @@
+done cifar8w blocked s1: arasl cifar8w on the blocked split, test: accuracy 78.780000%  -> runs/2026-09-17-arasl-cifar8w-blocked/arasl_cifar8w_blocked_s1_logits_test.bin
+done cifar8w blocked s2: arasl cifar8w on the blocked split, test: accuracy 77.850000%  -> runs/2026-09-17-arasl-cifar8w-blocked/arasl_cifar8w_blocked_s2_logits_test.bin
+done cifar8w blocked s3: arasl cifar8w on the blocked split, test: accuracy 77.180000%  -> runs/2026-09-17-arasl-cifar8w-blocked/arasl_cifar8w_blocked_s3_logits_test.bin

@@ -1,0 +1,50 @@
+arasl linear: 0 BN layers, 32 classes, split blocked, 30 epochs, batch 64, lr 0.001000, seed 1
+I0917 15:05:12.509777 3118794 service.cc:154] XLA service 0x72c0b0028880 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0917 15:05:12.509845 3118794 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0917 15:05:12.511639 3118794 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0917 15:05:12.511675 3118794 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0917 15:05:12.518398 3118794 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/arasl_linear_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 520 ms
+  131104 params (131104 by NetSpec.totalParams), 0 BN stat floats
+  val 5416 / test 5395 images of 64×64, first image in [0.243000, 0.902000], labels 0..31 (116 ms)
+  train 43238 images (251 ms)
+[pjrt_ffi] compiled .lake/build/arasl_linear_train_step.mlir (@main, 7 outputs, 1 replica) in 312 ms
+    step 0: loss 3.972500 (7 ms so far)
+    step 1: loss 3.999000 (9 ms so far)
+    step 2: loss 4.100400 (10 ms so far)
+  epoch 1/30: loss 3.408300  val acc 12.410000%  test acc 9.010000%  (1024 ms train, 233 ms eval) *
+  epoch 2/30: loss 3.117100  val acc 15.490000%  test acc 10.660000%  (1083 ms train, 243 ms eval) *
+  epoch 3/30: loss 2.892600  val acc 15.120000%  test acc 11.660000%  (1027 ms train, 242 ms eval)
+  epoch 4/30: loss 2.710700  val acc 14.880000%  test acc 14.120000%  (1037 ms train, 235 ms eval)
+  epoch 5/30: loss 2.593200  val acc 19.980000%  test acc 15.110000%  (977 ms train, 237 ms eval) *
+  epoch 6/30: loss 2.502200  val acc 20.640000%  test acc 14.960000%  (1102 ms train, 249 ms eval) *
+  epoch 7/30: loss 2.433900  val acc 17.150000%  test acc 14.240000%  (1122 ms train, 245 ms eval)
+  epoch 8/30: loss 2.357900  val acc 17.340000%  test acc 12.960000%  (1037 ms train, 229 ms eval)
+  epoch 9/30: loss 2.271700  val acc 20.090000%  test acc 13.850000%  (1047 ms train, 229 ms eval)
+  epoch 10/30: loss 2.230100  val acc 19.410000%  test acc 13.880000%  (1005 ms train, 227 ms eval)
+  epoch 11/30: loss 2.171200  val acc 18.320000%  test acc 15.110000%  (980 ms train, 236 ms eval)
+  epoch 12/30: loss 2.130100  val acc 17.080000%  test acc 13.750000%  (941 ms train, 235 ms eval)
+  epoch 13/30: loss 2.079100  val acc 20.730000%  test acc 13.860000%  (904 ms train, 231 ms eval) *
+  epoch 14/30: loss 2.035500  val acc 19.260000%  test acc 13.880000%  (917 ms train, 244 ms eval)
+  epoch 15/30: loss 2.000700  val acc 17.630000%  test acc 13.350000%  (924 ms train, 249 ms eval)
+  epoch 16/30: loss 1.964900  val acc 21.580000%  test acc 15.070000%  (992 ms train, 230 ms eval) *
+  epoch 17/30: loss 1.921800  val acc 19.090000%  test acc 14.680000%  (927 ms train, 227 ms eval)
+  epoch 18/30: loss 1.896600  val acc 22.510000%  test acc 14.880000%  (944 ms train, 244 ms eval) *
+  epoch 19/30: loss 1.864400  val acc 22.160000%  test acc 15.240000%  (961 ms train, 227 ms eval)
+  epoch 20/30: loss 1.830800  val acc 22.450000%  test acc 14.350000%  (967 ms train, 234 ms eval)
+  epoch 21/30: loss 1.811900  val acc 25.000000%  test acc 15.370000%  (973 ms train, 233 ms eval) *
+  epoch 22/30: loss 1.790800  val acc 24.480000%  test acc 14.900000%  (946 ms train, 230 ms eval)
+  epoch 23/30: loss 1.767200  val acc 23.450000%  test acc 15.760000%  (941 ms train, 230 ms eval)
+  epoch 24/30: loss 1.752400  val acc 22.180000%  test acc 16.370000%  (1030 ms train, 232 ms eval)
+  epoch 25/30: loss 1.736500  val acc 24.460000%  test acc 15.250000%  (988 ms train, 228 ms eval)
+  epoch 26/30: loss 1.721800  val acc 24.650000%  test acc 16.870000%  (913 ms train, 230 ms eval)
+  epoch 27/30: loss 1.712900  val acc 23.840000%  test acc 15.640000%  (918 ms train, 230 ms eval)
+  epoch 28/30: loss 1.705400  val acc 24.630000%  test acc 15.830000%  (915 ms train, 230 ms eval)
+  epoch 29/30: loss 1.700300  val acc 24.280000%  test acc 16.090000%  (965 ms train, 233 ms eval)
+  epoch 30/30: loss 1.697800  val acc 24.340000%  test acc 15.850000%  (997 ms train, 242 ms eval)
+trained: 20250 steps in 36 s; best val epoch 21 (25.000000%)
+score: .venv/bin/python scripts/arasl_score.py runs/2026-09-17-arasl-linear-blocked/arasl_linear_blocked_s1_logits_test.bin --split=blocked
+arasl linear on the blocked split, val: accuracy 25.000000%  -> runs/2026-09-17-arasl-linear-blocked/arasl_linear_blocked_s1_logits_val.bin
+arasl linear on the blocked split, test: accuracy 15.370000%  -> runs/2026-09-17-arasl-linear-blocked/arasl_linear_blocked_s1_logits_test.bin

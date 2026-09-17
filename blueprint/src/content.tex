@@ -12815,6 +12815,124 @@ full frame at a mean IoU of $0.52$, and the head has to regress the rest.
 Both are levers the detector already has; neither was pulled, because the
 comparison the section makes needs the detector to be the detector.
 
+\subsection{People watching --- demo: Arabic sign-language letters on ArASL}
+\label{sec:bestiary_people}
+
+Networks whose input is a person: a face, a gait, a hand. The demo is
+Chapter~\ref{chap:bn}'s CIFAR net on the dataset the Arabic sign-language
+literature reports on, run twice on the same images --- once under the
+split every published number uses, once under a split that keeps each
+hand's frames together --- and the pair of numbers is the result. ArASL
+(Latif et al.\ 2019, Data in Brief~23; Mendeley \texttt{y7pckrw6z2}, CC~BY~4.0)
+is $54{,}049$ grayscale $64\times64$ crops of static hand signs for the 32
+letters of the Arabic alphabet, $1{,}293$ to $2{,}114$ per class, performed
+by ``more than 40 people''. Published classifiers score $96.6$--$97.6\%$ for
+CNNs trained from scratch (Latif et al.\ 2020; Alani \& Cosma 2021;
+Abdelghfar et al.\ 2023) and $99.3$--$99.6\%$ for transfer-learned
+EfficientNets and ViTs (Al Nabih et al.\ 2024; arXiv:2410.00681;
+arXiv:2501.08169), all on random splits. The images are video bursts:
+sorted by file number within a class, consecutive frames differ by a median
+$3.3$ grey levels per pixel where a random pair of the same class differs by
+$33$, and cutting where the gap exceeds $6$ leaves $14{,}336$ chains of $3.8$
+frames. No signer, session or date is recorded. The two protocols are
+$80/10/10$ per class from one seed: \texttt{random}, a stratified
+permutation, and \texttt{blocked}, each class's capture order cut at the
+$80\%$ and $90\%$ marks with each cut moved to the nearest chain boundary.
+An audit then measures what the split did: for every test image, the
+nearest training image of any class at $16\times16$. Under \texttt{random},
+$92.3\%$ of test images have a training image within $6$ grey levels and
+$95.7\%$ of those neighbours carry the test image's own label; under
+\texttt{blocked}, $6.4\%$ and $28.6\%$. The residual $6\%$ is the same hand
+returning a median $306$ files later, which a release without signer ids
+cannot separate.
+
+Two numbers change in the network and nothing in the code generation does.
+\texttt{CIFAR-CNN8-wide-BN} as Chapter~\ref{chap:bn} spells it --- eight
+convolutions in four conv-conv-pool stages at 16, 16, 32, 32 channels into
+the $2\times512$ head --- takes a one-channel stem and a 32-way output; on
+the native $64\times64$ input the four pools end at $4\times4$, so the
+flatten is $512$ wide and the net is $0.58$\,M parameters. The recipe is the
+gravitational-wave demo's, unchanged: the ordinary train step with integer
+labels, Adam at $10^{-3}$ with one warm-up epoch and cosine decay, batch 64,
+30 epochs, no flip (a mirrored hand is a different sign for some letters),
+five minutes on one card. The chapter's linear and MLP rungs run through
+the same loop as the bracket, and the chapter net at its own $32\times32$
+input checks that the resolution is not the story. Epochs are chosen on
+the validation tenth and the numbers below are the test tenth at that
+epoch, three seeds for the chapter net, with a $95\%$ Wilson interval on
+the pooled $\approx 16{,}200$ trials of $\pm 0.2$ (random) and $\pm 0.6$ (blocked).
+
+\begin{center}
+\small
+\begin{tabular}{l c c p{4.8cm}}
+\hline
+ArASL test, 80/10/10 per class & random split & blocked split & \\
+\hline
+\textbf{CIFAR-CNN8-wide-BN}, $64\times64$, 3 seeds & \textbf{98.62} $\pm$ 0.10 & \textbf{77.94} $\pm$ 0.80 & the demo \\
+\quad with a near-duplicate in train & 99.73 & 98.46 & $92.3\%$ / $6.4\%$ of the test tenth \\
+\quad without & 85.26 & 76.53 & $7.7\%$ / $93.6\%$ \\
+CIFAR-CNN8-wide-BN at $32\times32$ & 98.21 & 71.03 & the chapter's own input \\
+MLP $4096$-$512$-$512$-$32$ & 94.86 & 42.09 & what convolutions buy \\
+linear $4096$-$32$ & 53.20 & 15.37 & the floor \\
+1-NN on $16\times16$ thumbnails & 95.65 & 28.60 & nearest training image's label \\
+published CNNs, from scratch & 96.6--97.6 & --- & 2020--23 \\
+published transfer / transformer & 99.3--99.6 & --- & ViT, EfficientNet-B2, 2024--25 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/arasl_signs.png}
+\caption{(a) The 32 letters, one crop per class. (b) A test image and its
+nearest training image for two letters, under the random split (left) and
+the blocked split (right), with the mean grey-level gap per pixel: under
+\texttt{random} the neighbour is the same hand two grey levels away; under
+\texttt{blocked} it is a different hand sixteen levels away, and for
+\emph{saad} a different letter. (c) The four most confused letter pairs on
+the blocked split, a test crop of each letter and the count of each
+confusion per run.}
+\label{fig:arasl_signs}
+\end{figure}
+
+\noindent \textbf{The two columns are the result.} Under the literature's
+protocol the chapter net scores $98.6\%$, above every published
+from-scratch CNN and a point under the transfer-learned transformers; under
+the blocked split the same net, recipe and seeds score $77.9\%$. The audit
+says where the twenty points went. Nine in ten random-split test images
+have a training image within six grey levels, and on those the net is at
+$99.7\%$; on the $416$ that do not it is $85.3\%$; and a nearest-neighbour
+lookup on $16\times16$ thumbnails --- no parameters, the training image's
+label --- scores $95.7\%$ on the random split and $28.6\%$ on the blocked
+one. The published $96$--$99\%$ is mostly the frame, not the hand. The
+bracket says the same thing from below: the linear classifier loses $38$
+points between the columns and the MLP $53$, because a pixel-space model
+can only memorise the hand it saw, and the convolutions lose $21$, which is
+the part of the letter they read. The chapter net at its own $32\times32$
+input loses half a point on the random split and seven more on the blocked
+one --- the difference between hands lives at a resolution the difference
+between frames does not need. Per class, the blocked column runs from
+$16.5\%$ (\emph{fa}) to $100\%$ (\emph{sheen}): the last tenth of some
+classes' capture order is a hand no training frame covers, and the classes
+farthest from their nearest training image are among the worst, but not
+all the far ones fail --- \emph{al} and \emph{seen} sit as far from
+training as \emph{fa} does and score $94\%$ and $100\%$. The rest is which
+letter the new hand's shape lands near: \emph{fa} is called \emph{gaaf}
+$181$ times in three runs and \emph{gaaf} is called \emph{fa} once, and
+\emph{taa} and \emph{thaa}, which differ by one raised finger, confuse in
+both directions.
+
+\medskip\noindent Two caveats belong beside the number. The blocked split
+is a proxy for a signer split, not one: the release records no signer, the
+validation tenth sits next to the training tenths in capture order and is
+$37.5\%$ leaked against the test tenth's $6.4\%$ (every blocked run shows
+validation near $92\%$ and test near $78\%$, and the epoch is chosen on the
+leakier of the two), and the $6\%$ of test hands that return from earlier
+in the numbering is a floor the protocol cannot remove. And what this
+classifier is not: it reads one static handshape per frame ---
+fingerspelling, no motion, no grammar, no continuous signing --- and the
+honest number for even that task on new hands is the right-hand column.
+
 \subsection{Semantic segmentation --- demo: UNet on BraTS}
 \label{sec:bestiary_segmentation}
 
@@ -14743,6 +14861,13 @@ physics, and each has a dataset of its own:
     seventy tiny ones. The same R34+FPN detector (\texttt{yolov1-neudet-fpn})
     and the single-grid head beside it (\texttt{yolov1-neudet448}) train on
     it unchanged.
+  \item \textbf{ArASL} is the people-watching dataset: $54{,}049$ grey
+    $64\times64$ crops of hands spelling the 32 letters of the Arabic
+    sign-language alphabet, captured as video bursts of consecutive frames.
+    The chapter-4 CNN (\texttt{arasl-signs}) trains on it twice, under the
+    random split the literature reports on and under a split that keeps each
+    class's capture order together, and the pair of numbers is the demo of
+    \S\ref{sec:bestiary_people}.
   \item \textbf{MSD Task01 (BraTS)} is the segmentation dataset. It is
     four-modality brain-tumour MRI, and the thin-class collapse is the
     whole problem rather than a nuisance
@@ -14794,6 +14919,9 @@ VisDrone-DET2019 & VisD & Zhu et al., 2021 &
 NEU-DET & NEU & Song \& Yan, 2013; He et al., 2020 &
   \href{http://faculty.neu.edu.cn/songkc/en/zdylm/263265/list/index.htm}{\nolinkurl{faculty.neu.edu.cn/songkc}} &
   \texttt{download\_neu.sh}\newline $\to$ \texttt{data/neu\_det/}  \\[2pt]
+ArASL & ArASL & Latif et al., 2019 &
+  \href{https://data.mendeley.com/datasets/y7pckrw6z2/1}{\nolinkurl{data.mendeley.com/datasets/y7pckrw6z2}} &
+  \texttt{download\_arasl.sh}\newline $\to$ \texttt{data/arasl/}  \\[2pt]
 MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
   \href{http://medicaldecathlon.com/}{\nolinkurl{medicaldecathlon.com}} &
   \texttt{download\_brats.sh}\newline $\to$ \texttt{data/brats/}  \\[2pt]
@@ -14866,6 +14994,47 @@ unchanged. The $200$-px crop is upsampled to the detector's $448$
 ResNet-34 stem a byte prefix of the initialisation and lets the same
 bootstrap self-check pass as on VisDrone. Epochs are chosen on the
 validation $360$ and reported on the test $360$.
+
+\medskip\noindent\textbf{Building the ArASL dataset.} ArASL is Latif,
+Mohammad, Alghazo, AlKhalaf \& AlKhalaf's Arabic sign-language alphabet set
+(\emph{ArASL: Arabic Alphabets Sign Language Dataset}, Data in Brief~23,
+2019; Mendeley Data \texttt{y7pckrw6z2} v1, CC~BY~4.0): $54{,}049$
+grayscale $64\times64$ crops of static hand signs for the 32 letters,
+$1{,}293$ (\emph{yaa}) to $2{,}114$ (\emph{ain}) per class, performed by
+``more than 40 people''. The licence permits redistribution, so
+\texttt{download\_arasl.sh} fetches the zip and the label CSV from Mendeley
+directly; the download URLs carry a per-file uuid, which the script resolves
+from Mendeley's public API at run time and checks against the sha256 the API
+reports. The census runs before anything trains: exactly $54{,}049$ files
+under exactly the 32 folder names, numbered $1$ to $n$ without a gap in every
+class, and the $658$ files that are not $64\times64$ grey --- $638$ at
+$256\times256$ in \emph{kaaf} and \emph{meem}, ten at $768\times1024$ in
+\emph{haa}, ten RGB --- listed, then resized and converted with one
+resampler.
+
+The file numbers are capture order and the images are video bursts.
+\texttt{preprocess\_arasl.py} measures it: sorted by number within a
+class, consecutive frames differ by a median $3.3$ grey levels per pixel
+where a random pair of the same class differs by $33$; $73.5\%$ of
+consecutive pairs are under $6$, and cutting where the gap exceeds $6$
+leaves $14{,}336$ chains of $3.8$ frames on average, the longest $58$, with
+the weakest class (\emph{al}) still at $64\%$. No signer, session or date
+is recorded anywhere in the release. The preprocessor therefore writes the
+same images under two protocols, $80/10/10$ per class from one seed: a
+stratified permutation (\texttt{random}, the protocol every published
+number uses), and each class's capture order cut at the $80\%$ and $90\%$
+marks with each cut moved to the nearest chain boundary so no burst
+straddles two parts (\texttt{blocked}). It then audits both: for every
+test image, the nearest training image of any class at $16\times16$. Under
+\texttt{random}, $92.3\%$ of test images have a training image within $6$
+grey levels (median nearest $1.2$) and $95.7\%$ of nearest neighbours carry
+the test image's own label; under \texttt{blocked}, $6.4\%$ and $28.6\%$.
+The residual $6\%$ is not a straddled burst --- the audit checks that none
+does --- but the same hand returning a median $306$ files later, which a
+release without signer ids cannot separate; the section reports it as the
+protocol's floor. Images are written as f32 in $[0,1]$, the range the
+chapter's CIFAR loader feeds, and epochs are chosen on the validation tenth
+and reported on the test tenth.
 
 \medskip\noindent\textbf{Building the BraTS dataset.}
 \emph{BraTS~2021 proper} (1{,}251 cases) is

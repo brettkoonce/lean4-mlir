@@ -1,0 +1,9 @@
+54049 images, 32 classes, per class 1293 (yaa) to 2114 (ain), 658 not 64x64 L (9 s)
+bursts: median consecutive |Δ| 3.3 grey levels (random pair within a class: 32.9); 73.5% of consecutive pairs under 6; 14336 chains, 3.8 frames each, longest 58
+  weakest class al: 63.9% under threshold — Gate 0 chain premise HOLDS (≥ 60% in every class)
+random   split: train 43241  val 5404  test 5404
+blocked  split: train 43238  val 5416  test 5395
+leak audit random  :  92.3% of test images have a train image within 6 grey levels at 16×16 (median nearest 1.2);  88.3% at 64×64 (median 2.5); nearest is same class 95.7%; same-class leaks sit a median 1 files apart  (75 s)
+leak audit blocked :   6.4% of test images have a train image within 6 grey levels at 16×16 (median nearest 13.3);   3.7% at 64×64 (median 15.6); nearest is same class 28.6%; same-class leaks sit a median 306 files apart  (75 s)
+  Gate 0 audit: random ≫ blocked HOLDS
+wrote data/arasl/{random,blocked}_{train,val,test}_32.bin + labels + meta (166 s total)

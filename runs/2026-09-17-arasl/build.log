@@ -1,0 +1,8 @@
+✔ [6403/6405] Built demos.MainAraslSigns (2.4s)
+✔ [6404/6405] Built demos.MainAraslSigns:c.o (1.4s)
+✔ [6405/6405] Built «arasl-signs»:exe (1.0s)
+Build completed successfully (6405 jobs).
+
+real	0m14.811s
+user	0m15.310s
+sys	0m3.920s
