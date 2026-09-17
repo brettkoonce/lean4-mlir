@@ -5604,7 +5604,8 @@ def runResnet34Imagenet (argv : List String) : IO Unit := do
 makes the listing a claim rather than a description.
 
 \textbf{The \texttt{slug} is the artifact.} \texttt{resnet34in} names
-\texttt{verified\_mlir/resnet34in\_mom256\_train\_step.mlir}, which is
+\texttt{verified\_mlir/resnet34in\_<variant>\_train\_step.mlir} ---
+\texttt{momdp64bf16} for the run below --- which is
 \texttt{pretty(provenGraph)} off the same renderer every earlier chapter used.
 Scaling to ImageNet needed nothing new in it. \texttt{nClasses}, the batch, the
 optimizer and the slug are all ordinary parameters, so the ImageNet artifacts
@@ -5624,11 +5625,11 @@ separate stories.
 \medskip\noindent It runs with:
 
 \begin{verbatim}
-lake run r34-default-4gpu
+lake run r34-default-bf16-4gpu
 \end{verbatim}
 
 \noindent The job config behind that name,
-\texttt{scripts/jobs/r34-default-4gpu.conf}, carries what used to be a
+\texttt{scripts/jobs/r34-default-bf16-4gpu.conf}, carries what used to be a
 seven-variable command line --- the device list, both replica knobs, the
 variant, the per-replica batch and the feed setting --- and
 \S\ref{sec:getting_started_track4} says what the supervisor behind it does.
@@ -5638,13 +5639,13 @@ variant, the per-replica batch and the feed setting --- and
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA) & fp32 & $\sim$24.7 min & 90 & $\sim$37.1 hr & $\mathbf{74.14\%}$ & $\mathbf{91.86\%}$ \\
+4$\times$ 3060 (CUDA) & bf16 & $\sim$14.6 min & 90 & $\sim$22.2 hr & $\mathbf{74.06\%}$ & $\mathbf{91.75\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Global batch 256 as $4 \times 64$ replicas, fp32 throughout,
-scored over the same $50{,}000$ images. One attempt, no restarts.
+\noindent Global batch 256 as $4 \times 64$ replicas, bf16 matmul and
+convolution as on the reference, scored over the same $50{,}000$ images.
 
 \medskip\noindent\textbf{The lowerer underneath is interchangeable.} Run
 from the same initialization on the same box, the IREE and XLA lowerings of
@@ -5662,47 +5663,51 @@ at ImageNet scale''.
 \hline
 lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step  & yes                      & none \\
-precision           & bf16 (matmul + conv)     & fp32 \\
+box                 & 4$\times$ 4060\,Ti       & 4$\times$ 3060 \\
 BN statistic group  & 256 (global)             & 64 (per replica) \\
-per epoch           & $\sim$8.8 min            & $\sim$24.7 min \\
-total               & $\sim$14.8 hr            & $\sim$37.1 hr \\
+per epoch           & $\sim$8.8 min            & $\sim$14.6 min \\
+total               & $\sim$14.8 hr            & $\sim$22.2 hr \\
 \hline
+precision           & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
 global batch        & 256 ($4\times64$)        & 256 ($4\times64$) \\
 steps/epoch         & 5{,}004                  & 5{,}004 \\
 optimizer           & SGD, momentum $0.9$      & SGD, momentum $0.9$ \\
 schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
 \hline
-\textbf{val top-1}  & $\mathbf{74.16\%}$       & $\mathbf{74.14\%}$ \\
-\textbf{val top-5}  & $\mathbf{91.92\%}$       & $\mathbf{91.86\%}$ \\
+\textbf{val top-1}  & $\mathbf{74.16\%}$       & $\mathbf{74.06\%}$ \\
+\textbf{val top-5}  & $\mathbf{91.92\%}$       & $\mathbf{91.75\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Both columns are ResNet-34 on the 2018 recipe, 90 epochs, on the
-same four 4060\,Ti cards, scored over the same $50{,}000$ validation images
-under the same protocol. Rows above the first rule differ; rows between the
-rules are held equal by construction.
+\noindent Both columns are ResNet-34 on the 2018 recipe, 90 epochs, scored
+over the same $50{,}000$ validation images under the same protocol; the
+reference ran on four 4060\,Ti and the verified path on four 3060, the
+arrangement \S\ref{sec:r50_pjrt}'s grid keeps. Rows above the first rule
+differ; rows between the rules are held equal by construction.
 
-\medskip\noindent\textbf{The two paths agree to $0.02$ points}, and that is
-well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson
+\medskip\noindent\textbf{The two paths agree to $0.10$ points on top-1 and
+$0.17$ on top-5}, and that is well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson
 interval of Chapter~\ref{chap:tensor} is $\pm0.38$ points on either top-1
---- $[73.77, 74.54]$ for the reference, $[73.75, 74.52]$ for the verified
-path --- so every $\Delta$ in the table is a fraction of the interval, and
+--- $[73.77, 74.54]$ for the reference, $[73.68, 74.45]$ for the verified
+path --- so the gap in the table is a fraction of the interval, and
 at this scale a gap under about $0.4$ points is not yet a result in either
 direction. That is the floor every side-by-side table in this book is read
 against.
 
 \medskip\noindent The pair is not one-variable, and the table says where:
-the verified run is fp32 where the reference is bf16, and its BatchNorm
-normalizes over each replica's $64$ where the reference's \texttt{@jit}
-mesh reduces the statistics over the global $256$. The $0.02$ bounds the
-two together. \S\ref{sec:mnv2_phase4} is the same comparison with
-precision held equal and the BatchNorm group left as the only asymmetry.
+the verified run is on four 3060 where the reference is on four 4060\,Ti,
+and its BatchNorm normalizes over each replica's $64$ where the reference's
+\texttt{@jit} mesh reduces the statistics over the global $256$. The $0.10$
+bounds the two together. \S\ref{sec:mnv2_phase4} is the same comparison on
+one box, with the BatchNorm group left as the only asymmetry.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The middle of the schedule is noisy on both paths --- at peak
-learning rate SGD moves top-1 by up to three points between consecutive
-epochs, in both directions --- so the row is read for its ends:
+learning rate SGD moves top-1 by several points between consecutive
+epochs, in both directions, seven at the worst on either path --- so the row
+is read for its ends. Over the last fifteen epochs the two average within
+$0.04$ of each other:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r r r r@{}}
@@ -5710,8 +5715,8 @@ epochs, in both directions --- so the row is read for its ends:
 epoch & 5 & 15 & 30 & 45 & 60 & 75 & 90 \\
 \hline
 reference (JAX)       & 35.85 & 44.94 & 47.01 & 51.30 & 59.47 & 68.71 & 74.16 \\
-verified path (PJRT)  & 37.11 & 43.78 & 47.02 & 53.92 & 58.98 & 68.10 & 74.14 \\
-$\Delta$              & $+1.26$ & $-1.16$ & $+0.01$ & $+2.62$ & $-0.49$ & $-0.61$ & $-0.02$ \\
+verified path (PJRT)  & 30.06 & 44.32 & 48.70 & 53.34 & 60.72 & 68.54 & 74.06 \\
+$\Delta$              & $-5.79$ & $-0.62$ & $+1.69$ & $+2.04$ & $+1.25$ & $-0.17$ & $-0.10$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -5736,7 +5741,7 @@ $\Delta$              & $+1.26$ & $-1.16$ & $+0.01$ & $+2.62$ & $-0.49$ & $-0.61
 };
 \addlegendentry{reference (JAX)}
 \addplot[red, dashed] coordinates {
-(1,9.60) (2,20.39) (3,26.81) (4,34.83) (5,37.11) (6,39.50) (7,40.91) (8,41.22) (9,40.49) (10,41.89) (11,43.32) (12,43.72) (13,42.38) (14,46.99) (15,43.78) (16,43.91) (17,44.95) (18,45.34) (19,49.18) (20,44.70) (21,47.25) (22,48.22) (23,43.04) (24,49.12) (25,45.10) (26,48.27) (27,47.98) (28,46.54) (29,44.65) (30,47.02) (31,50.28) (32,46.64) (33,50.63) (34,48.39) (35,50.72) (36,49.98) (37,45.66) (38,51.12) (39,47.54) (40,50.38) (41,52.99) (42,53.58) (43,52.84) (44,51.18) (45,53.92) (46,54.76) (47,54.10) (48,52.54) (49,56.62) (50,55.83) (51,55.47) (52,57.07) (53,56.76) (54,55.34) (55,56.55) (56,57.72) (57,59.00) (58,60.07) (59,59.84) (60,58.98) (61,60.51) (62,59.72) (63,60.84) (64,61.19) (65,63.33) (66,63.55) (67,63.86) (68,64.87) (69,64.21) (70,66.22) (71,66.02) (72,66.82) (73,67.09) (74,67.76) (75,68.10) (76,69.69) (77,69.90) (78,70.26) (79,70.71) (80,71.49) (81,72.12) (82,72.38) (83,72.89) (84,73.26) (85,73.66) (86,73.71) (87,73.95) (88,74.10) (89,74.17) (90,74.14)
+(1,8.70) (2,17.34) (3,25.78) (4,33.29) (5,30.06) (6,32.50) (7,40.35) (8,40.42) (9,37.95) (10,44.64) (11,43.02) (12,41.01) (13,43.50) (14,42.27) (15,44.32) (16,41.56) (17,41.19) (18,48.75) (19,45.40) (20,46.14) (21,43.96) (22,45.61) (23,47.07) (24,44.61) (25,48.23) (26,47.12) (27,47.14) (28,47.71) (29,49.06) (30,48.70) (31,50.76) (32,49.48) (33,49.92) (34,50.87) (35,45.04) (36,49.85) (37,51.51) (38,49.34) (39,52.37) (40,48.84) (41,52.12) (42,51.94) (43,52.54) (44,53.34) (45,53.34) (46,53.55) (47,53.95) (48,55.02) (49,54.30) (50,56.34) (51,55.95) (52,53.80) (53,57.11) (54,56.81) (55,58.26) (56,59.13) (57,56.06) (58,57.57) (59,59.86) (60,60.72) (61,59.12) (62,61.55) (63,61.54) (64,62.14) (65,58.11) (66,62.46) (67,63.99) (68,64.53) (69,63.40) (70,65.45) (71,66.20) (72,67.16) (73,67.61) (74,67.28) (75,68.54) (76,69.73) (77,69.57) (78,70.41) (79,70.62) (80,71.56) (81,71.61) (82,72.37) (83,72.70) (84,73.04) (85,73.42) (86,73.72) (87,73.90) (88,73.97) (89,74.06) (90,74.06)
 };
 \addlegendentry{verified path (PJRT)}
 \end{axis}
@@ -7076,8 +7081,8 @@ no collective touching the batch statistics, so it normalizes over groups
 of $64$; the reference under a \texttt{NamedSharding} mesh reduces
 globally, so it normalizes over $256$. The ResNet-34 pair of
 \S\ref{sec:r34_pjrt}, which carries the same fourfold difference and a
-precision difference besides, landed $0.02$ apart at convergence; the
-$+0.01$ here is the same order. So the claim is that the two paths agree
+box difference besides, landed $0.10$ apart at convergence, inside the
+floor; the $+0.01$ here is smaller still. So the claim is that the two paths agree
 to within the BatchNorm-group effect --- not that the path has been shown
 neutral. Separating those would take a verified render that all-reduces
 the batch statistics, which no committed artifact does, and which is not a
@@ -14942,7 +14947,7 @@ middle field of the job's own name.
 \begin{tabular}{@{}lll@{}}
 \textbf{Target} & \textbf{Recipe} & \textbf{Job config} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet34-imagenet-verified}     & \texttt{default} (the 2018 recipe) & \texttt{r34-default-4gpu} \\
+\texttt{resnet34-imagenet-verified}     & \texttt{default} (the 2018 recipe) & \texttt{r34-default-bf16-4gpu} \\
 \texttt{resnet50-imagenet-verified}     & \texttt{2018}                      & \texttt{r50-2018-bf16-4gpu} \\
 \texttt{resnet50-imagenet-verified}     & \texttt{a3} (RSB-A3, train@$160$)  & \texttt{r50-a3-wxclip-bf16-4gpu} \\
 \texttt{mobilenetv2-imagenet-verified}  & \texttt{default}                   & \texttt{mnv2-default-4gpu} \\
@@ -14952,12 +14957,11 @@ middle field of the job's own name.
 \end{tabular}
 \end{center}
 
-\noindent Five of these jobs have run and are the ones behind their chapters'
-numbers; the EfficientNet-B0 and ConvNeXt-T rows are configured and have not
-finished, so Chapters~\ref{chap:se} and~\ref{chap:layernorm} carry the
-reference only. \texttt{scripts/jobs/} also carries \emph{axis} siblings that
-this table does not list --- an fp32 peer of each of the ResNet-50 2018,
-RSB-A3 and ViT rows, and an earlier A3 artifact --- which differ from their
+\noindent Six of these jobs have run and are the ones behind their chapters'
+numbers; the ConvNeXt-T row is configured and has not finished, so
+Chapter~\ref{chap:layernorm} carries the reference only. \texttt{scripts/jobs/} also carries \emph{axis} siblings that
+this table does not list --- an fp32 peer of each of the ResNet-34,
+ResNet-50 2018, RSB-A3 and ViT rows, and an earlier A3 artifact --- which differ from their
 row in precision or in one optimizer knob, never in the recipe, plus
 \texttt{selftest}, which exercises the supervisor without a GPU. Each config's
 header says which it is.
@@ -14996,7 +15000,7 @@ shape error at the first invoke.
 under-step a heavy-ball render by $\sim$100$\times$, which looks like a broken
 render rather than a wrong knob. That is the one-card shape. The four-card one,
 with every knob taken from the job's own config, is \texttt{lake run
-r34-default-4gpu once} --- the next section.
+r34-default-bf16-4gpu once} --- the next section.
 
 \prosesection{Running one for a day and a half}
 
@@ -15005,9 +15009,9 @@ These are multi-day runs, so they go through a supervisor
 the restart policy, and the job's own name is the command:
 
 \begin{verbatim}
-lake run r34-default-4gpu        # supervised: resumes, restarts on AER / heat / stall
-lake run r34-default-4gpu plan   # the precheck and the wall-clock on file; runs nothing
-lake run r34-default-4gpu once   # one foreground run with the job's env, no restarts
+lake run r34-default-bf16-4gpu        # supervised: resumes, restarts on AER / heat / stall
+lake run r34-default-bf16-4gpu plan   # the precheck and the wall-clock on file; runs nothing
+lake run r34-default-bf16-4gpu once   # one foreground run with the job's env, no restarts
 lake run imagenet                # every row's plan, in chapter order; runs nothing
 lake run imagenet start          # the rows in order, each resuming from its checkpoint
 \end{verbatim}

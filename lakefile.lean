@@ -2351,7 +2351,7 @@ script imagenette do
 -- per-replica batch and the per-net feed setting all live THERE, and `scripts/supervise.sh` is
 -- the engine that runs it with the restart policy a multi-day run on this box needs. These
 -- scripts add nothing to that. They make the job's own name the command, so the seven-variable
--- incantation the book used to print is `lake run r34-default-4gpu`.
+-- incantation the book used to print is `lake run r34-default-bf16-4gpu`.
 --
 -- Modes, the first argument to a job script:
 --   (none)   supervised run — resumes from the job's checkpoint, restarts on AER / heat / stall
@@ -2363,13 +2363,13 @@ script imagenette do
 /-- The ImageNet tier's rows in chapter order, each chapter's side quest right after it (the
     `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
     rows are the ones with chapter numbers; the five side quests have job configs and no number
-    yet. Axis siblings — `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
+    yet. Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
     `vit-default-4gpu`, `selftest` — stay `scripts/supervise.sh`-only.
-    ⚠ `r50-2018-bf16-4gpu` and `r50-a3-wxclip-bf16-4gpu` are the 4× 3060 box's confs, named by the
+    ⚠ `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip-bf16-4gpu` are the 4× 3060 box's confs, named by the
     book's Track-4 table as the jobs behind their rows; on this box their PRECHECK refuses, which is
     the honest answer. -/
 private def imagenetRows : List (String × String × String) :=
-  [ ("r34-default-4gpu",       "resnet34-imagenet-verified",     "Ch. 5  ResNet-34, the 2018 recipe"),
+  [ ("r34-default-bf16-4gpu",  "resnet34-imagenet-verified",     "Ch. 5  ResNet-34, the 2018 recipe, bf16"),
     ("r50-2018-bf16-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, 2018"),
     ("r50-a3-wxclip-bf16-4gpu", "resnet50-imagenet-verified",    "Ch. 5  ResNet-50, RSB-A3 (train@160), bf16"),
     ("mnv2-default-4gpu",      "mobilenetv2-imagenet-verified",  "Ch. 6  MobileNetV2"),
@@ -2418,7 +2418,7 @@ private def runJobScript (job : String) (args : List String) : IO UInt32 := do
       if !(← ensurePjrtShim) then return 1
     runJob job exe mode
 
-script «r34-default-4gpu»       (args) do runJobScript "r34-default-4gpu" args
+script «r34-default-bf16-4gpu»  (args) do runJobScript "r34-default-bf16-4gpu" args
 script «r50-2018-bf16-4gpu»     (args) do runJobScript "r50-2018-bf16-4gpu" args
 script «r50-a3-wxclip-bf16-4gpu» (args) do runJobScript "r50-a3-wxclip-bf16-4gpu" args
 script «mnv2-default-4gpu»      (args) do runJobScript "mnv2-default-4gpu" args
