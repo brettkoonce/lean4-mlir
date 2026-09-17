@@ -1,0 +1,2 @@
+epoch  mAP_ml   caAP     recall   mAP_argmax | per-class AP, ml (cr in pa ps rs sc)
+e30    0.6299   0.6398   0.9867   0.6293   | 0.3058 0.6778 0.8384 0.7248 0.4675 0.7653 

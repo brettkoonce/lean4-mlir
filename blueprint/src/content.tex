@@ -12723,6 +12723,98 @@ def detrR50 : NetSpec where
   ]
 \end{verbatim}
 
+\subsection{Industrial inspection --- demo: the same detector on NEU-DET steel defects}
+
+The detector of the previous section, unchanged --- backbone, neck, heads,
+loss, ImageNet bootstrap, scorer --- on the dataset the industrial-inspection
+literature reports on. NEU-DET (Song \& Yan 2013; boxes He et al.\ 2020) is
+$1{,}800$ grayscale $200\times200$ crops of hot-rolled steel strip, $300$ per
+class over six defect types --- crazing, inclusion, patches, pitted surface,
+rolled-in scale, scratches --- with Pascal-VOC boxes. It is VisDrone's opposite
+regime. A crop holds $2.3$ defects, half of which span more than half the frame;
+at the detector's $448$\,px input, $98\%$ of the training boxes route to the
+coarsest pyramid level and none to the finest. This is the dataset on which a
+single $14\times14$ grid should \emph{not} collapse, and running both heads on
+both datasets is what shows when multi-scale detection pays.
+
+Three constants change and nothing in the code generation does: the anchor
+priors are re-fitted to NEU's boxes (VisDrone's largest is $0.18\times0.15$ of
+the frame; a steel defect is often half of it), the class weights are off
+(the data is balanced), and the six classes take ids $0$--$5$ of the ten-slot
+one-hot, since the $5+10$ per-anchor width is baked into the \texttt{fpnDetect}
+emitter and the scorer averages over the classes present. NEU-DET ships no
+split; the one here is $1{,}080/360/360$, stratified $180/60/60$ per class from
+a fixed seed. Epochs are chosen on the validation $360$ and the numbers below
+are the test $360$ at that epoch, scored by the VisDrone protocol against
+uncapped ground truth. The single-grid arm is the same ResNet-34 and the same
+bootstrap under a one-grid YOLOv1 head at $448/14$, run for the same 30
+epochs.
+
+\begin{center}
+\small
+\begin{tabular}{l c c c}
+\hline
+NEU-DET test & mAP@0.5 & recall & class-agnostic AP \\
+\hline
+\textbf{R34+FPN, the VisDrone recipe} (e28) & \textbf{0.623} & 0.992 & 0.625 \\
+R34+FPN, photometric augmentation off (e30) & 0.630 & 0.987 & 0.640 \\
+R34+FPN, no ImageNet bootstrap (e26) & 0.555 & 0.986 & 0.555 \\
+\textbf{R34, single $14\times14$ grid} (e28) & \textbf{0.607} & 0.917 & 0.609 \\
+published stock detectors, $640$\,px, 300\,ep & 0.73--0.78 & --- & --- \\
+published improved variants & $\approx 0.83$ & --- & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabular}{l c c c}
+\hline
+VisDrone val, the same two heads & mAP@0.5 & recall & class-agnostic AP \\
+\hline
+\textbf{R34+FPN}, 30\,ep, +scale aug & \textbf{0.2363} & 0.769 & 0.487 \\
+\textbf{R34, single $14\times14$ grid}, 12\,ep & \textbf{0.0391} & 0.184 & 0.107 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/neudet_fpn.png}
+\caption{Truth (top), the R34+FPN (middle) and the single-grid head (bottom)
+on one crazing, inclusion, rolled-in-scale and scratches crop from NEU-DET
+validation, each with two ground-truth boxes; each model draws its two
+highest-scoring boxes. Both heads find the same defects. Crazing, whose box
+is a region of texture rather than an object, is where the boxes disagree
+with the truth and with each other.}
+\label{fig:neudet_fpn}
+\end{figure}
+
+\noindent \textbf{The second table is the result.} On steel the single grid
+matches the multi-scale head, $0.607$ against $0.623$; on drones it is six
+times behind, $0.039$ against $0.236$, with recall $0.18$ against $0.77$ ---
+same backbone, same bootstrap, same scorer, same lowerer in all four cells.
+The FPN pays for itself only where objects are small; on NEU-DET it runs three
+heads for one level's worth of work, and the head that collapses on VisDrone
+is not wrong, it is wrong \emph{for drones}. Recall is not the limit on steel:
+the FPN finds $99\%$ of defects and the mean is held down by two classes,
+crazing at $0.29$ and rolled-in scale at $0.41$ against $0.66$--$0.84$ for the
+other four --- the diffuse textures whose ``box'' is most of the crop, the
+worst two in every published NEU-DET table and the worst two for both heads
+here. The ImageNet prefix is worth $+0.07$ at $1{,}080$ training images, a gap
+that has not closed by epoch 30. Photometric augmentation is within the noise
+floor the VisDrone table established ($+0.007$, $n=1$).
+
+\medskip\noindent The distance to the published rows is recipe. Those
+detectors run at $640$\,px for 300 epochs on a $1{,}440/180/180$ split; this
+one runs at $448$\,px for 30 epochs, which on $1{,}080$ images is $4{,}050$
+steps against VisDrone's $24{,}000$, and both arms are still rising at epoch
+30. The anchor priors are a second, smaller part of it: three per level fit
+a level that carries $98\%$ of the boxes at every aspect from $64$\,px to the
+full frame at a mean IoU of $0.52$, and the head has to regress the rest.
+Both are levers the detector already has; neither was pulled, because the
+comparison the section makes needs the detector to be the detector.
+
 \subsection{Semantic segmentation --- demo: UNet on BraTS}
 \label{sec:bestiary_segmentation}
 
@@ -14638,6 +14730,19 @@ which are detection, segmentation, language, signal processing and
 physics, and each has a dataset of its own:
 
 \begin{itemize}
+  \item \textbf{VisDrone-DET2019} is where detection leaves the household
+    frame entirely. It is drone-altitude imagery where the objects are the
+    problem: a median box is $20 \times 25$\,px in the source frame, some 70
+    of them per image, so a single $7\times7$ grid collapses outright and
+    the multi-scale FPN head of Definition~\ref{layer:fpnModule} becomes
+    necessary rather than decorative.
+  \item \textbf{NEU-DET} is the industrial-inspection dataset, and the
+    VisDrone detector's opposite regime: $1{,}800$ grayscale $200\times200$
+    crops of hot-rolled steel strip, $300$ per class over six defect types,
+    with one or two large Pascal-VOC boxes per crop where a drone frame has
+    seventy tiny ones. The same R34+FPN detector (\texttt{yolov1-neudet-fpn})
+    and the single-grid head beside it (\texttt{yolov1-neudet448}) train on
+    it unchanged.
   \item \textbf{MSD Task01 (BraTS)} is the segmentation dataset. It is
     four-modality brain-tumour MRI, and the thin-class collapse is the
     whole problem rather than a nuisance
@@ -14653,20 +14758,6 @@ physics, and each has a dataset of its own:
     $\sim$2\,GB, is its scaled-up sibling, byte-level-BPE tokenized to a
     deliberately small 4096-token vocabulary for the
     $\sim$8.5\,M-parameter decoder-only GPT (\texttt{tinystories}).
-  \item \textbf{VisDrone-DET2019} is where detection leaves the household
-    frame entirely. It is drone-altitude imagery where the objects are the
-    problem: a median box is $20 \times 25$\,px in the source frame, some 70
-    of them per image, so a single $7\times7$ grid collapses outright and
-    the multi-scale FPN head of Definition~\ref{layer:fpnModule} becomes
-    necessary rather than decorative.
-  \item \textbf{GWOSC O3a strain} is the signal-processing dataset: the
-    Hanford and Livingston interferometers' strain from the first half of
-    the third observing run, published by the Gravitational Wave Open
-    Science Center under CC BY 4.0. Twenty-six 4096-second file pairs are
-    cut into two-second windows, half of them given an injected
-    binary-black-hole chirp, and the CNN of \S\ref{sec:bestiary_signal}
-    (\texttt{gw-detect}) trains on their spectrograms against the matched
-    filter's closed form.
   \item \textbf{The M\"uller--Brown density} is the physics dataset, and
     nothing is downloaded: the target is the Boltzmann density
     $\exp(-U/kT)$ on the M\"uller--Brown surface, so
@@ -14675,6 +14766,14 @@ physics, and each has a dataset of its own:
     independent draw from the exact density by quadrature as the
     reference, and the grid the scorer integrates over. The flow-matching
     generator of \S\ref{sec:bestiary_boltzmann} trains on it.
+  \item \textbf{GWOSC O3a strain} is the signal-processing dataset: the
+    Hanford and Livingston interferometers' strain from the first half of
+    the third observing run, published by the Gravitational Wave Open
+    Science Center under CC BY 4.0. Twenty-six 4096-second file pairs are
+    cut into two-second windows, half of them given an injected
+    binary-black-hole chirp, and the CNN of \S\ref{sec:bestiary_signal}
+    (\texttt{gw-detect}) trains on their spectrograms against the matched
+    filter's closed form.
 \end{itemize}
 
 \noindent Same fetch-and-unpack story as the table above, with one extra
@@ -14689,24 +14788,27 @@ that script is where they come from.
 \hline
 Dataset & Abbrev. & Reference & Homepage & Path in repo \\
 \hline
-MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
-  \href{http://medicaldecathlon.com/}{\nolinkurl{medicaldecathlon.com}} &
-  \texttt{download\_brats.sh}\newline $\to$ \texttt{data/brats/} \\[2pt]
-tiny Shakespeare & TShk & Karpathy, 2015 &
-  \href{https://github.com/karpathy/char-rnn}{\nolinkurl{github.com/karpathy/char-rnn}} &
-  \texttt{download\_shakespeare.sh}\newline $\to$ \texttt{data/shakespeare/} \\[2pt]
-TinyStories & TS & Eldan \& Li, 2023 &
-  \href{https://huggingface.co/datasets/roneneldan/TinyStories}{\nolinkurl{huggingface.co/datasets/roneneldan/TinyStories}} &
-  \texttt{download\_tinystories.sh}\newline $\to$ \texttt{data/tinystories/} \\[2pt]
 VisDrone-DET2019 & VisD & Zhu et al., 2021 &
   \href{https://github.com/VisDrone/VisDrone-Dataset}{\nolinkurl{github.com/VisDrone/VisDrone-Dataset}} &
-  \texttt{download\_visdrone.sh}\newline $\to$ \texttt{data/visdrone/} \\[2pt]
-GWOSC O3a strain & GWOSC & Abbott et al., 2023 &
-  \href{https://gwosc.org/}{\nolinkurl{gwosc.org}} &
-  \texttt{preprocess\_gw.py} $\to$ \texttt{data/gw/} \\[2pt]
+  \texttt{download\_visdrone.sh}\newline $\to$ \texttt{data/visdrone/}  \\[2pt]
+NEU-DET & NEU & Song \& Yan, 2013; He et al., 2020 &
+  \href{http://faculty.neu.edu.cn/songkc/en/zdylm/263265/list/index.htm}{\nolinkurl{faculty.neu.edu.cn/songkc}} &
+  \texttt{download\_neu.sh}\newline $\to$ \texttt{data/neu\_det/}  \\[2pt]
+MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
+  \href{http://medicaldecathlon.com/}{\nolinkurl{medicaldecathlon.com}} &
+  \texttt{download\_brats.sh}\newline $\to$ \texttt{data/brats/}  \\[2pt]
+tiny Shakespeare & TShk & Karpathy, 2015 &
+  \href{https://github.com/karpathy/char-rnn}{\nolinkurl{github.com/karpathy/char-rnn}} &
+  \texttt{download\_shakespeare.sh}\newline $\to$ \texttt{data/shakespeare/}  \\[2pt]
+TinyStories & TS & Eldan \& Li, 2023 &
+  \href{https://huggingface.co/datasets/roneneldan/TinyStories}{\nolinkurl{huggingface.co/datasets/roneneldan/TinyStories}} &
+  \texttt{download\_tinystories.sh}\newline $\to$ \texttt{data/tinystories/}  \\[2pt]
 M\"uller-Brown density & MB & M\"uller \& Brown, 1979 &
   \texttt{preprocess\_boltzmann.py}\newline (generated, no download) &
-  \texttt{data/boltzmann/} \\
+  \texttt{data/boltzmann/}  \\[2pt]
+GWOSC O3a strain & GWOSC & Abbott et al., 2023 &
+  \href{https://gwosc.org/}{\nolinkurl{gwosc.org}} &
+  \texttt{preprocess\_gw.py} $\to$ \texttt{data/gw/}  \\
 \hline
 \end{tabular}
 \end{center}
@@ -14732,6 +14834,38 @@ The strain has no download script: which files to fetch is part of the
 preprocessing, so \texttt{preprocess\_gw.py} picks them off the GWOSC
 timeline, fetches them and builds the sets in one run.
 \normalsize
+
+\medskip\noindent\textbf{Building the NEU-DET dataset.} NEU-DET is
+Kechen Song's group's hot-rolled steel strip surface-defect set at
+Northeastern University: $1{,}800$ grayscale $200\times200$ crops, $300$
+for each of crazing, inclusion, patches, pitted surface, rolled-in scale
+and scratches, with $4{,}189$ Pascal-VOC boxes (\emph{references:} Song \&
+Yan, \emph{A noise robust method based on completed local binary patterns
+for hot-rolled steel strip surface defects}, Appl.\ Surf.\ Sci.~285, 2013,
+the images; He, Song, Meng \& Yan, \emph{An End-to-end Steel Surface Defect
+Detection Approach via Fusing Multiple Hierarchical Features}, IEEE
+TIM~69(4), 2020, the boxes). No licence is stated; the maintainer's page
+asks for a citation. \texttt{download\_neu.sh} therefore fetches the
+maintainer's own Google-Drive copy (26\,MB) and the repository
+redistributes nothing --- the same posture as BraTS below. The download
+checks the census before anything else: $1{,}800$ images with $1{,}800$
+matching XMLs and exactly the six class names, because mirrors of this set
+differ in file extension and in whether the names carry underscores.
+
+The set ships no split. \texttt{preprocess\_neu\_det.py} draws
+$1{,}080/360/360$ --- train, validation, test --- stratified $180/60/60$
+per class from a fixed seed, so every split is balanced and the draw is
+the same on every machine; the anchor priors are then fitted on the
+training $1{,}080$ alone (\texttt{scripts/neu\_anchors.py}). It writes the
+two record formats the VisDrone preprocessor writes --- the multi-scale
+FPN target to \texttt{data/neu\_det\_fpn/} and the single-grid target
+with the uncapped ground-truth sidecar to \texttt{data/neu\_det448/} ---
+so the detector's loaders, its code generation and its scorer run
+unchanged. The $200$-px crop is upsampled to the detector's $448$
+(the grey JPEGs are already three-channel), which keeps the ImageNet
+ResNet-34 stem a byte prefix of the initialisation and lets the same
+bootstrap self-check pass as on VisDrone. Epochs are chosen on the
+validation $360$ and reported on the test $360$.
 
 \medskip\noindent\textbf{Building the BraTS dataset.}
 \emph{BraTS~2021 proper} (1{,}251 cases) is

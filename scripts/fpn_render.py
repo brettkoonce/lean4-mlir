@@ -41,8 +41,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from yolo_map_visdrone import (CLASS_NAMES, decode_fpn, iou,
-                               load_anchors_file, read_gt_full)
+from yolo_map_visdrone import (CLASS_NAMES, CLASS_TABLES, decode, decode_fpn, iou,
+                               load_anchors_file, read_gt_full, set_classes,
+                               set_geometry)
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -220,7 +221,14 @@ def main():
                          "for a 3-way compare). cols: one frame per column, panels "
                          "stacked — the original landscape shape, better on a page.")
     ap.add_argument("--no-legend", action="store_true")
+    ap.add_argument("--classes", choices=sorted(CLASS_TABLES), default="visdrone",
+                    help="class-name table (visdrone | neu), as in yolo_map_visdrone.py")
+    ap.add_argument("--compare-grid", default=None, metavar="LOGITS",
+                    help="a SINGLE-GRID arm's [N,5880] logits (yolov1-*448 infer) as "
+                         "an extra column, decoded with the scorer's single-grid "
+                         "decode at 448/14 — the FPN-vs-grid figure for NEU-DET")
     args = ap.parse_args()
+    set_classes(args.classes)
 
     scales = [(g, load_anchors_file(str(Path(args.fpn) / f"anchors_fpn_{p}.txt")))
               for g, p in zip(FPN_GRIDS, ("p3", "p4", "p5"))]
@@ -231,8 +239,19 @@ def main():
 
     logits = load(args.logits)
     n_rec = logits.shape[0]
-    others = [load(args.compare)] if args.compare else []
-    print(f"{n_rec} records of {NTOT} logits" + (f" (+1 compare set)" if others else ""))
+    # Each extra column is (array, decoder). The FPN compare shares decode_fpn; a
+    # single-grid compare uses the scorer's `decode` at 448/14 (5,880 wide), so the
+    # boxes drawn are again by construction the boxes that arm was scored on.
+    fpn_dec = lambda row: decode_fpn(row, scales, args.conf_thresh, args.nms_iou,
+                                     topk=args.topk)
+    others = [(load(args.compare), fpn_dec)] if args.compare else []
+    if args.compare_grid:
+        set_geometry(IMG_PX, 14)
+        g = np.fromfile(args.compare_grid, dtype=np.float32)
+        gw = 30 * 14 * 14
+        grid_dec = lambda row: decode(row, args.conf_thresh, args.nms_iou, "raw")
+        others.append((g.reshape(g.size // gw, gw), grid_dec))
+    print(f"{n_rec} records of {NTOT} logits" + (f" (+{len(others)} compare set)" if others else ""))
 
     gts = None
     if args.gt:
@@ -259,11 +278,10 @@ def main():
             gt_boxes = [(c, None, b) for (c, b) in gts[i]]
             lab = (labels[0] if labels else "truth") + f"  ({len(gt_boxes)})"
             panels.append(draw(img, gt_boxes, label=lab, scale=args.scale))
-        for k, src in enumerate([logits] + others):
-            dets = decode_fpn(src[i], scales, args.conf_thresh, args.nms_iou,
-                              topk=args.topk)
+        for k, (src, dec) in enumerate([(logits, fpn_dec)] + others):
+            dets = sorted(dec(src[i]), key=lambda d: -d[1])
             if args.topk_per_gt and gts is not None:
-                # decode_fpn returns triples ranked by score; K = this frame's GT count.
+                # ranked by score; K = this frame's GT count.
                 dets = dets[:len(gts[i])]
             if args.match and gts is not None:
                 m = match_dets(dets, gts[i], args.match_iou)

@@ -59,6 +59,24 @@ set_geometry(224, 7)
 CLASS_NAMES = {0: "pedestrian", 1: "people", 2: "bicycle", 3: "car", 4: "van",
                5: "truck", 6: "tricycle", 7: "awning-tri", 8: "bus", 9: "motor"}
 
+# `--classes neu`: NEU-DET's six defect classes in ids 0..5 (preprocess_neu_det.py).
+# The FPN head still emits ten class logits — the 5+10 per-anchor width is baked
+# into the codegen — so the decode below argmaxes over all ten and a stray
+# prediction of a dead slot (6..9) is dropped at `if cid not in confs`. The
+# table only decides which ids are scored and what they are called.
+CLASS_TABLES = {
+    "visdrone": dict(CLASS_NAMES),
+    "neu": {0: "crazing", 1: "inclusion", 2: "patches", 3: "pitted_surf",
+            4: "rolled-in", 5: "scratches"},
+}
+
+
+def set_classes(name):
+    """Swap the scored class table in place, so importers that took CLASS_NAMES
+    by reference (fpn_render.py) see the new names too."""
+    CLASS_NAMES.clear()
+    CLASS_NAMES.update(CLASS_TABLES[name])
+
 
 def sigmoid(x):
     return 1.0 / (1.0 + np.exp(-x))
@@ -379,11 +397,18 @@ def main():
                     help="explicit path to the uncapped GT sidecar. Default: auto-use "
                          "val_bin's .full_gt.bin if present. --gt-capped forces the old "
                          "56-box-truncated GT (NOT VisDrone protocol).")
+    ap.add_argument("--classes", choices=sorted(CLASS_TABLES), default="visdrone",
+                    help="class-name table: visdrone (10 ids, default) or neu "
+                         "(NEU-DET's six defects in ids 0..5)")
     ap.add_argument("--gt-capped", action="store_true",
                     help="score against the 56-box-capped raw_boxes tail instead of the "
                          "full-GT sidecar (drops ~34.9%% of val GT; for A/B with old runs only)")
     args = ap.parse_args()
     global SCORE_MODE, MULTILABEL, MULTILABEL_K, MULTILABEL_FLOOR
+    set_classes(args.classes)
+    if args.classes != "visdrone":
+        print(f"classes: {args.classes} ({len(CLASS_NAMES)} scored: "
+              f"{', '.join(CLASS_NAMES[c] for c in sorted(CLASS_NAMES))})")
     SCORE_MODE = args.score
     MULTILABEL, MULTILABEL_K, MULTILABEL_FLOOR = args.multilabel, args.ml_k, args.ml_floor
     if MULTILABEL:

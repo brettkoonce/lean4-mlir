@@ -676,6 +676,17 @@ lean_exe «yolov1-visdrone-fpn» where
   root := `demos.MainYolov1VisdroneFpn
   moreLinkArgs := lowererLink
 
+-- The VisDrone detector, unchanged, on NEU-DET steel defects — the opposite
+-- regime (2 large defects per crop vs 70 tiny cars). planning/neu_det_fpn_demo.md.
+lean_exe «yolov1-neudet-fpn» where
+  root := `demos.MainYolov1NeuDetFpn
+  moreLinkArgs := lowererLink
+
+-- The single-grid 14×14 arm (0.0000 on VisDrone) on the same NEU-DET records.
+lean_exe «yolov1-neudet448» where
+  root := `demos.MainYolov1NeuDet448
+  moreLinkArgs := lowererLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := lowererLink

@@ -2102,14 +2102,95 @@ int iree_ffi_train_step_adam_ddpm(
   return rc;
 }
 
+// YOLOv1 single-grid variant: the DDPM protocol (an f32 target tensor in place
+// of the class-index vector) plus ONE more f32 input, the per-cell mask
+// [b, gH, gW], between the target [b, perCell, gH, gW] and lr. Input order
+// mirrors ffi/iree_ffi.c's push sequence exactly (params, x, target, mask,
+// lr, t), which is the order the `useYolov1` train-step codegen declares.
+// Ported 2026-09-17 for the NEU-DET single-grid arm (planning/neu_det_fpn_demo.md).
 int iree_ffi_train_step_adam_yolov1(
     iree_ffi_session_t* s, const char* f, int b, int gH, int gW, int pc, int np,
     const int32_t* pr, const int64_t* pd, const int64_t* ps, const float* pp,
     int xr, const int64_t* xd, const float* x, const float* yy, const float* my,
     float lr, float t,
     float* po, float* lo, int nb, const int64_t* bs, float* bo) {
-  (void)s;(void)f;(void)b;(void)gH;(void)gW;(void)pc;(void)np;(void)pr;(void)pd;
-  (void)ps;(void)pp;(void)xr;(void)xd;(void)x;(void)yy;(void)my;(void)lr;(void)t;
-  (void)po;(void)lo;(void)nb;(void)bs;(void)bo;
-  return not_ported("train_step_adam_yolov1");
+
+  if (np < 0 || xr < 0 || nb < 0) return 1;
+  const int have_bn   = (bo && nb > 0) ? 1 : 0;
+  const int n_inputs  = np + 5;                       // params, x, target, mask, lr, t
+  const int n_outputs = np + 1 + (have_bn ? nb * 2 : 0);
+
+  // Total rank across every input: the params, x, target (rank 4), mask
+  // (rank 3), and two rank-0 scalars which contribute no dims.
+  int64_t n_dims = 0;
+  for (int i = 0; i < np; i++) {
+    if (pr[i] < 0) return 1;
+    n_dims += pr[i];
+  }
+  n_dims += xr + 4 + 3;
+
+  int32_t*      ranks = (int32_t*)     malloc((size_t)n_inputs  * sizeof(*ranks));
+  int64_t*      dims  = (int64_t*)     malloc((size_t)(n_dims ? n_dims : 1) * sizeof(*dims));
+  const float** ins   = (const float**)malloc((size_t)n_inputs  * sizeof(*ins));
+  int64_t*      totes = (int64_t*)     malloc((size_t)n_outputs * sizeof(*totes));
+  float**       outs  = (float**)      malloc((size_t)n_outputs * sizeof(*outs));
+  if (!ranks || !dims || !ins || !totes || !outs) {
+    free(ranks); free(dims); free(ins); free(totes); free(outs);
+    fprintf(stderr, "[pjrt_ffi] train_step_adam_yolov1: out of memory\n");
+    return 1;
+  }
+
+  float lr_v = lr, t_v = t;
+
+  // ── inputs ──
+  int      di   = 0;
+  int64_t  poff = 0;
+  for (int i = 0; i < np; i++) {
+    ranks[i] = pr[i];
+    for (int k = 0; k < pr[i]; k++) dims[di + k] = pd[di + k];
+    ins[i]   = pp + poff;
+    di      += pr[i];
+    poff    += ps[i];
+  }
+  ranks[np] = xr;
+  for (int k = 0; k < xr; k++) dims[di + k] = xd[k];
+  ins[np]   = x;
+  di       += xr;
+
+  ranks[np + 1] = 4;                                  // target [b, perCell, gH, gW]
+  dims[di + 0] = b; dims[di + 1] = pc; dims[di + 2] = gH; dims[di + 3] = gW;
+  ins[np + 1]   = yy;
+  di           += 4;
+
+  ranks[np + 2] = 3;                                  // mask [b, gH, gW]
+  dims[di + 0] = b; dims[di + 1] = gH; dims[di + 2] = gW;
+  ins[np + 2]   = my;
+  di           += 3;
+
+  ranks[np + 3] = 0;  ins[np + 3] = &lr_v;
+  ranks[np + 4] = 0;  ins[np + 4] = &t_v;
+
+  // ── outputs ──
+  int64_t ooff = 0;
+  for (int i = 0; i < np; i++) {
+    totes[i] = ps[i];
+    outs[i]  = po + ooff;
+    ooff    += ps[i];
+  }
+  totes[np] = 1;
+  outs[np]  = lo;
+  if (have_bn) {
+    int64_t boff = 0;
+    for (int i = 0; i < nb * 2; i++) {
+      totes[np + 1 + i] = bs[i];
+      outs[np + 1 + i]  = bo + boff;
+      boff             += bs[i];
+    }
+  }
+
+  int rc = iree_ffi_invoke_f32(s, f, n_inputs, ranks, dims, ins,
+                               n_outputs, totes, outs);
+
+  free(ranks); free(dims); free(ins); free(totes); free(outs);
+  return rc;
 }

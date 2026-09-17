@@ -163,6 +163,83 @@ gap is recipe rather than architecture — and scale augmentation alone has clos
 
 ---
 
+## Industrial inspection — the same detector on NEU-DET steel defects
+
+The VisDrone detector above, unchanged — backbone, neck, heads, loss, bootstrap,
+scorer — on the dataset the industrial-inspection literature reports on:
+NEU-DET, 1,800 grayscale 200×200 crops of hot-rolled steel, six defect classes,
+Pascal-VOC boxes. It is VisDrone's opposite regime: **2.3 defects per crop,
+half of them spanning more than half the frame**, against seventy 20-px cars
+per drone frame. 98% of NEU's boxes route to the coarsest level, so this is the
+dataset on which a single 14×14 grid should *not* collapse — and running the
+two heads on both datasets is what shows when multi-scale detection pays.
+
+`MainYolov1NeuDetFpn.lean` (FPN) and `MainYolov1NeuDet448.lean` (single grid).
+See `planning/neu_det_fpn_demo.md` and `runs/2026-09-17-neudet-fpn-run1/README.md`.
+
+```bash
+./download_neu.sh            # maintainer's Drive copy, 26 MB; fits anchors; writes both record formats
+
+# the FPN arm — the 0.2363 recipe's flags are this binary's DEFAULTS; ~25 min on one 4060 Ti
+CUDA_VISIBLE_DEVICES=0 FPN_TAG=run1 lake exe yolov1-neudet-fpn data/neu_det_fpn
+# the single-grid arm beside it, same epochs
+CUDA_VISIBLE_DEVICES=1 YOLO_TAG=run1 YOLO_EPOCHS=30 lake exe yolov1-neudet448 data/neu_det448
+
+# every saved epoch, inferred and scored (VisDrone protocol + the plain argmax check)
+scripts/neudet_eval_sweep.sh fpn  run1 0 val
+scripts/neudet_eval_sweep.sh grid run1 1 val
+scripts/neudet_eval_sweep.sh fpn  run1 0 test "28"      # the table's row, at the val-peak epoch
+
+python3 scripts/fpn_render.py runs/2026-09-17-neudet-fpn-run1-sweep/e30_val/logits.bin \
+    data/neu_det_fpn/val.bin --fpn data/neu_det --gt data/neu_det448/val.full_gt.bin \
+    --classes neu --compare-grid runs/2026-09-17-neudet-grid-run1-sweep/e30_val/logits.bin \
+    --indices 33,87,267,327 --topk-per-gt --layout cols --out demos/figures/neudet_fpn.png
+```
+
+What changed against the VisDrone binary: the anchor priors (k-means on NEU
+boxes, `scripts/neu_anchors.py`), the class weights (off — 300 crops per class),
+and six classes in ids 0–5 of the ten-slot one-hot (the 5+10 per-anchor width is
+baked into the `fpnDetect` codegen; the scorer averages over classes present).
+Defaults are the measured recipe, so `FPN_BACKBONE` is `r34` and `FPN_CLSW` is
+`none` here. `FPN_TAG` still has to be set on `infer`; `FPN_EVAL_SPLIT=test` and
+`FPN_EVAL_EPOCH=N` pick the split and the checkpoint.
+
+![NEU-DET: truth, R34+FPN, single grid](figures/neudet_fpn.png)
+
+Truth / R34+FPN / single 14×14 grid on a crazing, inclusion, rolled-in-scale and
+scratches crop. **NEU-DET test (360 images), at each arm's val-peak epoch:**
+
+| arm | mAP@0.5 | recall | class-agnostic AP |
+|---|---|---|---|
+| **R34+FPN**, VisDrone recipe (e28) | **0.623** | 0.992 | 0.625 |
+| R34+FPN, HSV+hflip off (e30) | 0.630 | 0.987 | 0.640 |
+| R34+FPN, no ImageNet bootstrap (e26) | 0.555 | 0.986 | 0.555 |
+| **R34 single grid 14×14** (e28) | **0.607** | 0.917 | 0.609 |
+| published stock detectors, 640 px, 300 ep | 0.73–0.78 | | |
+| published improved variants | ~0.83 | | |
+
+**The same two heads on VisDrone val** (548 images, uncapped GT): R34+FPN
+**0.2363** / 0.769 / 0.487; single grid 14×14 **0.0391** / 0.184 / 0.107.
+
+⭐ **On steel the grid head matches the FPN (0.61 vs 0.62); on drones it is six
+times behind (0.04 vs 0.24, recall 0.18 vs 0.77).** Same backbone, bootstrap,
+scorer and lowerer in all four cells. Multi-scale detection pays only where
+objects are small; on NEU the neck runs three heads for one level's work.
+
+⭐ Recall is 0.99 on NEU — the number is ranking, and it is two classes: crazing
+(0.29) and rolled-in scale (0.41), the diffuse textures whose "box" is most of
+the crop, worst for both heads and in every NEU paper. The ImageNet prefix is
+worth +0.07 at 1,080 images. Photometric augmentation is within the n=1 noise
+floor (+0.007). Both arms are still rising at e30 — 30 epochs here is 4,050
+steps against VisDrone's 24,000 — and the gap to the published rows is
+schedule, resolution and split before it is architecture.
+
+The VisDrone single-grid row is `yolov1-visdrone448` (the archived 448/14 arm,
+12 epochs) measured on the current data and lowerer:
+`runs/2026-09-17-visdrone-grid448-remeasure/`.
+
+---
+
 ## DDPM — diffusion generative models
 
 Denoising diffusion on MNIST. A tiny UNet predicts the noise
@@ -388,6 +465,8 @@ demos/
 ├── MainUnetBratsTrain.lean                # from-scratch UNet on BraTS
 ├── MainBratsPredict.lean                  # render predicted masks from a checkpoint
 ├── MainYolov1VisdroneFpn.lean             # R34+FPN detector on VisDrone, train + infer
+├── MainYolov1NeuDetFpn.lean               # the same detector on NEU-DET steel defects (industrial inspection)
+├── MainYolov1NeuDet448.lean               #   and the single-grid arm beside it, out of the archive
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator
