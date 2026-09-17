@@ -1,0 +1,14 @@
+  ▶ cnx/bf16/fed (variant adamdpwxclipdropbf16, bs 64, workers 4) ...
+    → 220 ms/step (min 203, wait 17 ms, 5004 steps/ep, 223s)
+  ▶ cnx/bf16/synth (variant adamdpwxclipdropbf16, bs 64, workers 4) ...
+    → 205 ms/step (min 202, wait 3 ms, 5004 steps/ep, 154s)
+ALL DONE -> runs/2026-09-17-cnx-sweep/sweep.tsv
+net  variant               prec  arm    bs  workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+cnx  adamdpwxclipdropbf16  bf16  fed    64  4        220     203     233     219      17       5004      223        
+cnx  adamdpwxclipdropbf16  bf16  synth  64  4        205     202     207     205      3        5004      154        
+── peak memory per GPU (MiB) during the probe ──
+  GPU 0: 9343 MiB
+  GPU 1: 9181 MiB
+  GPU 2: 9181 MiB
+  GPU 3: 9181 MiB
+probe rc=0
