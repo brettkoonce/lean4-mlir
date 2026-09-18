@@ -58,26 +58,14 @@ noncomputable def idBlk2_hasVJPAt (h w : Nat) (hhw : 0 < 2 * h * w)
 
 theorem idBlk2_diffAt (h w : Nat) (hhw : 0 < 2 * h * w)
     (a : Vec (2 * h * w)) (ha : ∀ k, 0 ≤ a k) : DifferentiableAt ℝ (idBlk2 h w) a := by
-  have hsm₁ : ∀ k, bnForward (2 * h * w) 1 0 1 (flatConv Zk2 Zb2 a) k ≠ 0 := fun k => by
-    rw [flatConv_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
-    change (1 : ℝ) ≠ 0; norm_num
-  have hF_diff : DifferentiableAt ℝ
-      ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2)) a :=
-    resblock_body_differentiableAt (h := h) (w := w) Zk2 Zb2 Zk2 Zb2 1 0 1 1 0 1
-      (by norm_num) (by norm_num) a hsm₁
-  have hsm_res : ∀ k, residual
-      ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2)) a k ≠ 0 := fun k => by
-    show ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2)) a k + a k ≠ 0
-    rw [idBlk2_body_const h w hhw a]; change (1 : ℝ) + a k ≠ 0
-    exact ne_of_gt (by linarith [ha k])
-  show DifferentiableAt ℝ (relu (2 * h * w) ∘ residual
-    ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2))) a
-  exact (relu_differentiableAt_of_smooth (2 * h * w) _ hsm_res).comp a
-    (DifferentiableAt.add hF_diff (differentiableAt_id))
+  exact resblock_differentiableAt (h := h) (w := w) Zk2 Zb2 Zk2 Zb2 1 0 1 1 0 1 (by norm_num)
+    (by norm_num) a
+    (fun k => by
+      rw [flatConv_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+      change (1 : ℝ) ≠ 0; norm_num)
+    (fun k => by
+      rw [idBlk2_body_const h w hhw a]; change (1 : ℝ) + a k ≠ 0
+      exact ne_of_gt (by linarith [ha k]))
 
 /-- **On a nonnegative activation, the identity block is the affine shift `a + 1`** — the
     body is the constant 1 and the post-add ReLU is off (`a + 1 ≥ 1 > 0`). -/

@@ -1039,29 +1039,7 @@ theorem ce_head3_differentiableAt {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
       (fun y : Vec p => fun _ : Fin 1 => crossEntropy nC
         (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y)))))
         label) u := by
-  rw [differentiableAt_pi]
-  intro _
-  have h1 : DifferentiableAt ℝ
-      (fun y : Vec p => relu d₃ (dense W₃ b₃ y)) u :=
-    (relu_differentiableAt_of_smooth d₃ _ hz3).comp
-      (f := fun y : Vec p => dense W₃ b₃ y) u ((dense_differentiable W₃ b₃) u)
-  have h2 : DifferentiableAt ℝ
-      (fun y : Vec p => dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))) u :=
-    ((dense_differentiable W₄ b₄) _).comp
-      (f := fun y : Vec p => relu d₃ (dense W₃ b₃ y)) u h1
-  have h3 : DifferentiableAt ℝ
-      (fun y : Vec p => relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y)))) u :=
-    (relu_differentiableAt_of_smooth d₄ _ hz4).comp
-      (f := fun y : Vec p => dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))) u h2
-  have h4 : DifferentiableAt ℝ
-      (fun y : Vec p =>
-        dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))))) u :=
-    ((dense_differentiable W₅ b₅) _).comp
-      (f := fun y : Vec p => relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))))
-      u h3
-  exact (crossEntropy_differentiable nC label).differentiableAt.comp
-    (f := fun y : Vec p =>
-      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))))) u h4
+  fun_prop (disch := assumption)
 
 /-- **Loss input-gradient of the 3-dense head** `CE∘d₅∘relu∘d₄∘relu∘d₃`
     at the pooled vector — one `pdiv_comp` hop (peel `dense W₃`) on top of
@@ -1089,23 +1067,7 @@ theorem ce_head3_input_grad {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
       (fun z : Vec d₃ => fun _ : Fin 1 => crossEntropy nC
         (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ z)))) label)
       (dense W₃ b₃ u) := by
-    rw [differentiableAt_pi]
-    intro _
-    have h1 : DifferentiableAt ℝ
-        (fun z : Vec d₃ => relu d₄ (dense W₄ b₄ (relu d₃ z)))
-        (dense W₃ b₃ u) :=
-      (relu_differentiableAt_of_smooth d₄ _ hz4).comp
-        (f := fun z : Vec d₃ => dense W₄ b₄ (relu d₃ z)) _
-        (((dense_differentiable W₄ b₄) _).comp (f := relu d₃) _
-          (relu_differentiableAt_of_smooth d₃ _ hz3))
-    have h2 : DifferentiableAt ℝ
-        (fun z : Vec d₃ => dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ z))))
-        (dense W₃ b₃ u) :=
-      ((dense_differentiable W₅ b₅) _).comp
-        (f := fun z : Vec d₃ => relu d₄ (dense W₄ b₄ (relu d₃ z))) _ h1
-    exact (crossEntropy_differentiable nC label).differentiableAt.comp
-      (f := fun z : Vec d₃ =>
-        dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ z)))) _ h2
+    fun_prop (disch := assumption)
   rw [show (fun y : Vec p => fun _ : Fin 1 => crossEntropy nC
           (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y)))))
           label)
@@ -1140,23 +1102,10 @@ theorem pool_head_differentiableAt {c h w d₃ d₄ nC : Nat}
         (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
           (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y))))))) label)
       z₂ := by
-  have hHd := ce_head3_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label
-    (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) z₂)) hz3 hz4
-  have hpt : Tensor3.flatten (Tensor3.unflatten
-      (relu (c * (2*h) * (2*w)) z₂) : Tensor3 c (2*h) (2*w)) =
-      relu (c * (2*h) * (2*w)) z₂ := Tensor3.flatten_unflatten _
-  have hmp_d : DifferentiableAt ℝ (maxPoolFlat c h w)
-      (relu (c * (2*h) * (2*w)) z₂) := by
-    rw [← hpt]
+  have hmp_d : DifferentiableAt ℝ (maxPoolFlat c h w) (relu (c * (2*h) * (2*w)) z₂) := by
+    rw [← Tensor3.flatten_unflatten (relu _ z₂)]
     exact maxPoolFlat_differentiableAt _ hmp hc hh hw
-  have h1 : DifferentiableAt ℝ
-      (fun y : Vec (c * (2*h) * (2*w)) =>
-        maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y)) z₂ :=
-    hmp_d.comp (f := relu (c * (2*h) * (2*w))) z₂
-      (relu_differentiableAt_of_smooth _ _ hz2)
-  exact hHd.comp
-    (f := fun y : Vec (c * (2*h) * (2*w)) =>
-      maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y)) z₂ h1
+  fun_prop (disch := assumption)
 
 /-- **Loss input-gradient at the conv output** — the key glue of the conv
     rung. The chain `pdiv`s through the relu (mask) and the pool (frozen
@@ -1636,15 +1585,9 @@ theorem cnn_conv2_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
           (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
           label) v := by
-  have hG := pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw
-    (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)) hz2 hmp hz3 hz4
-  have h0 : DifferentiableAt ℝ
-      (fun v' : Vec (c * c * kH * kW) =>
-        Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) v :=
-    (conv2d_weight_differentiable b₂ x₁) v
-  exact ((differentiableAt_pi.mp hG) 0).comp
-    (f := fun v' : Vec (c * c * kH * kW) =>
-      Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) v h0
+  exact (differentiableAt_pi.mp (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw _
+    hz2 hmp hz3 hz4) 0).comp (f := fun v' : Vec (c * c * kH * kW) =>
+      Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) v ((conv2d_weight_differentiable b₂ x₁) v)
 
 /-- **Closed form of the conv2 loss gradient** at any four-margin point —
     the EXISTING fold `conv_total_loss_grad_fold` (generic in the
@@ -4670,24 +4613,9 @@ theorem cnn1_pool_head_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
           (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
               (relu (c * (2*h) * (2*w)) y))))))))))) label) z₁ := by
-  have hG2 := pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw
-    (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-      (relu (c * (2*h) * (2*w)) z₁)))) hz2 hmp hz3 hz4
-  have hflat : DifferentiableAt ℝ
-      (fun v : Vec (c * (2*h) * (2*w)) =>
-        Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten v)))
-      (relu (c * (2*h) * (2*w)) z₁) :=
-    (flatConv_differentiable (h := 2*h) (w := 2*w) W₂ b₂) _
-  have hGF : DifferentiableAt ℝ
-      ((fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 => crossEntropy nC
-          (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-            (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y))))))) label) ∘
-        (fun v : Vec (c * (2*h) * (2*w)) =>
-          Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten v))))
-      (relu (c * (2*h) * (2*w)) z₁) :=
-    hG2.comp (relu (c * (2*h) * (2*w)) z₁) hflat
-  exact hGF.comp (f := relu (c * (2*h) * (2*w))) z₁
-    (relu_differentiableAt_of_smooth _ z₁ hz1)
+  exact (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw _ hz2 hmp hz3 hz4).comp
+    (f := fun y : Vec (c * (2*h) * (2*w)) => Tensor3.flatten (conv2d W₂ b₂
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w)) y)))) z₁ (by fun_prop (disch := assumption))
 
 /-- **Loss input-gradient at the conv1 output** — the conv1 peer of
     `pool_relu_input_grad`. One more relu mask and one conv-as-input
@@ -4866,16 +4794,9 @@ theorem cnn_conv1_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
               (relu (c * (2*h) * (2*w)) (Tensor3.flatten
                 (conv2d (Kernel4.unflatten u') b₁ x₀)))))))))))))
           label) u := by
-  have hG1 := cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-    label hc hh hw (Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀))
-    hz1 hz2 hmp hz3 hz4
-  have h0 : DifferentiableAt ℝ
-      (fun u' : Vec (c * ic * kH * kW) =>
-        Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)) u :=
-    (conv2d_weight_differentiable b₁ x₀) u
-  exact ((differentiableAt_pi.mp hG1) 0).comp
-    (f := fun u' : Vec (c * ic * kH * kW) =>
-      Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)) u h0
+  exact (differentiableAt_pi.mp (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
+    hc hh hw _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun u' : Vec (c * ic * kH * kW) =>
+      Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)) u ((conv2d_weight_differentiable b₁ x₀) u)
 
 /-- **Closed form of the conv1 loss gradient** at any five-margin point —
     the same fold, contracted with the conv1 head gradient
@@ -7341,13 +7262,9 @@ theorem cnn_conv2_bias_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
         crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
           (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b := by
-  have hG := pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw
-    (Tensor3.flatten (conv2d W₂ b x₁)) hz2 hmp hz3 hz4
-  have h0 : DifferentiableAt ℝ
-      (fun b' : Vec c => Tensor3.flatten (conv2d W₂ b' x₁)) b :=
-    (conv2d_bias_differentiable W₂ x₁) b
-  exact ((differentiableAt_pi.mp hG) 0).comp
-    (f := fun b' : Vec c => Tensor3.flatten (conv2d W₂ b' x₁)) b h0
+  exact (differentiableAt_pi.mp (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw _
+    hz2 hmp hz3 hz4) 0).comp (f := fun b' : Vec c =>
+      Tensor3.flatten (conv2d W₂ b' x₁)) b ((conv2d_bias_differentiable W₂ x₁) b)
 
 /-- **Closed form of the conv2 bias loss gradient** at any four-margin
     point — the EXISTING fold `conv_bias_total_loss_grad_fold` contracted
@@ -8422,14 +8339,9 @@ theorem cnn_conv1_bias_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
               (relu (c * (2*h) * (2*w)) (Tensor3.flatten
                 (conv2d W₁ b' x₀)))))))))))))
           label) b := by
-  have hG1 := cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-    label hc hh hw (Tensor3.flatten (conv2d W₁ b x₀))
-    hz1 hz2 hmp hz3 hz4
-  have h0 : DifferentiableAt ℝ
-      (fun b' : Vec c => Tensor3.flatten (conv2d W₁ b' x₀)) b :=
-    (conv2d_bias_differentiable W₁ x₀) b
-  exact ((differentiableAt_pi.mp hG1) 0).comp
-    (f := fun b' : Vec c => Tensor3.flatten (conv2d W₁ b' x₀)) b h0
+  exact (differentiableAt_pi.mp (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
+    hc hh hw _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun b' : Vec c =>
+      Tensor3.flatten (conv2d W₁ b' x₀)) b ((conv2d_bias_differentiable W₁ x₀) b)
 
 /-- **Closed form of the conv1 bias loss gradient** at any five-margin
     point — the bias fold at conv1, contracted with the conv1 head

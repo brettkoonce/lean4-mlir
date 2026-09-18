@@ -164,11 +164,7 @@ theorem mlp_hidden_total_loss_grad {d₁ d₂ d₃ : Nat}
   have hG_diff : DifferentiableAt ℝ
       (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
       (dense W₁ b₁ a₀) := by
-    rw [differentiableAt_pi]
-    intro _
-    exact (StableHLO.crossEntropy_differentiable d₃ label).differentiableAt.comp _
-      ((dense_differentiable W₂ b₂).differentiableAt.comp _
-        (relu_differentiableAt_of_smooth d₂ _ h_smooth))
+    fun_prop (disch := assumption)
   -- The loss-of-W₁ map is `G ∘ (W₁-weight-map)`; apply the chain rule.
   rw [show (fun v : Vec (d₁ * d₂) => fun _ : Fin 1 =>
               crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) label)
@@ -207,23 +203,7 @@ theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
       (fun z : Vec d₁ => fun _ : Fin 1 =>
         crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
       (dense W₀ b₀ x) := by
-    rw [differentiableAt_pi]
-    intro _
-    have hr1 : DifferentiableAt ℝ (relu d₁) (dense W₀ b₀ x) :=
-      relu_differentiableAt_of_smooth d₁ _ h_smooth_0
-    have hr2 : DifferentiableAt ℝ (relu d₂) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) :=
-      relu_differentiableAt_of_smooth d₂ _ h_smooth_1
-    have h1 : DifferentiableAt ℝ (fun z : Vec d₁ => dense W₁ b₁ (relu d₁ z)) (dense W₀ b₀ x) :=
-      (dense_differentiable W₁ b₁).differentiableAt.comp (f := relu d₁) _ hr1
-    have h2 : DifferentiableAt ℝ (fun z : Vec d₁ => relu d₂ (dense W₁ b₁ (relu d₁ z)))
-        (dense W₀ b₀ x) :=
-      hr2.comp (f := fun z : Vec d₁ => dense W₁ b₁ (relu d₁ z)) _ h1
-    have h3 : DifferentiableAt ℝ
-        (fun z : Vec d₁ => dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) (dense W₀ b₀ x) :=
-      (dense_differentiable W₂ b₂).differentiableAt.comp
-        (f := fun z : Vec d₁ => relu d₂ (dense W₁ b₁ (relu d₁ z))) _ h2
-    exact (StableHLO.crossEntropy_differentiable d₃ label).differentiableAt.comp
-      (f := fun z : Vec d₁ => dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) _ h3
+    fun_prop (disch := assumption)
   rw [show (fun v : Vec (d₀ * d₁) => fun _ : Fin 1 =>
               crossEntropy d₃
                 (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) label)

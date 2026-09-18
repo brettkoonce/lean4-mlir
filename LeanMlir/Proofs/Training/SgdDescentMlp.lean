@@ -211,10 +211,7 @@ theorem ce_head_relu_input_grad {d₂ d₃ : Nat} (W₂ : Mat d₂ d₃)
   have hg : DifferentiableAt ℝ
       (fun z' : Vec d₂ => fun _ : Fin 1 =>
         crossEntropy d₃ (dense W₂ b₂ z') label) (relu d₂ z) := by
-    rw [differentiableAt_pi]
-    intro _
-    exact (crossEntropy_differentiable d₃ label).differentiableAt.comp _
-      ((dense_differentiable W₂ b₂) _)
+    fun_prop
   rw [show (fun y : Vec d₂ => fun _ : Fin 1 =>
           crossEntropy d₃ (dense W₂ b₂ (relu d₂ y)) label)
         = (fun z' : Vec d₂ => fun _ : Fin 1 =>
@@ -240,23 +237,8 @@ theorem mlp_hidden_loss_differentiableAt {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂
         crossEntropy d₃
           (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w') b₁ a₀))) label)
       w := by
-  have h0 : DifferentiableAt ℝ
-      (fun w' : Vec (d₁ * d₂) => dense (Mat.unflatten w') b₁ a₀) w :=
-    (denseWeightMap_differentiable b₁ a₀) w
-  have h2 : DifferentiableAt ℝ
-      (fun w' : Vec (d₁ * d₂) => relu d₂ (dense (Mat.unflatten w') b₁ a₀))
-      w :=
-    (relu_differentiableAt_of_smooth d₂ _ hz).comp
-      (f := fun w' : Vec (d₁ * d₂) => dense (Mat.unflatten w') b₁ a₀) w h0
-  have h3 : DifferentiableAt ℝ
-      (fun w' : Vec (d₁ * d₂) =>
-        dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w') b₁ a₀))) w :=
-    ((dense_differentiable W₂ b₂) _).comp
-      (f := fun w' : Vec (d₁ * d₂) =>
-        relu d₂ (dense (Mat.unflatten w') b₁ a₀)) w h2
-  exact (crossEntropy_differentiable d₃ label).differentiableAt.comp
-    (f := fun w' : Vec (d₁ * d₂) =>
-      dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w') b₁ a₀))) w h3
+  unfold dense Mat.unflatten at hz ⊢
+  fun_prop (disch := assumption)
 
 /-- **Closed form of the hidden-layer loss gradient at any off-kink
     parameter point**: `∂L/∂W₁_{ij} = a₀ᵢ·relu'(z₁ⱼ)·∑ₖ W₂ⱼₖ·(softmax −
@@ -703,20 +685,7 @@ theorem ce_head2_input_grad {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
       (fun u : Vec d₁ => fun _ : Fin 1 =>
         crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ u))) label)
       (relu d₁ z) := by
-    rw [differentiableAt_pi]
-    intro _
-    have h2 : DifferentiableAt ℝ
-        (fun u : Vec d₁ => relu d₂ (dense W₁ b₁ u)) (relu d₁ z) :=
-      (relu_differentiableAt_of_smooth d₂ _ hz1).comp
-        (f := fun u : Vec d₁ => dense W₁ b₁ u) _
-        ((dense_differentiable W₁ b₁) _)
-    have h3 : DifferentiableAt ℝ
-        (fun u : Vec d₁ => dense W₂ b₂ (relu d₂ (dense W₁ b₁ u)))
-        (relu d₁ z) :=
-      ((dense_differentiable W₂ b₂) _).comp
-        (f := fun u : Vec d₁ => relu d₂ (dense W₁ b₁ u)) _ h2
-    exact (crossEntropy_differentiable d₃ label).differentiableAt.comp
-      (f := fun u : Vec d₁ => dense W₂ b₂ (relu d₂ (dense W₁ b₁ u))) _ h3
+    fun_prop (disch := assumption)
   rw [show (fun y : Vec d₁ => fun _ : Fin 1 => crossEntropy d₃
           (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ y)))) label)
         = (fun u : Vec d₁ => fun _ : Fin 1 => crossEntropy d₃
@@ -732,15 +701,7 @@ theorem ce_head2_input_grad {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
       (fun u : Vec d₂ => fun _ : Fin 1 =>
         crossEntropy d₃ (dense W₂ b₂ (relu d₂ u)) label)
       (dense W₁ b₁ (relu d₁ z)) := by
-    rw [differentiableAt_pi]
-    intro _
-    have h3 : DifferentiableAt ℝ
-        (fun u : Vec d₂ => dense W₂ b₂ (relu d₂ u))
-        (dense W₁ b₁ (relu d₁ z)) :=
-      ((dense_differentiable W₂ b₂) _).comp (f := relu d₂) _
-        (relu_differentiableAt_of_smooth d₂ _ hz1)
-    exact (crossEntropy_differentiable d₃ label).differentiableAt.comp
-      (f := fun u : Vec d₂ => dense W₂ b₂ (relu d₂ u)) _ h3
+    fun_prop (disch := assumption)
   rw [show (fun u : Vec d₁ => fun _ : Fin 1 => crossEntropy d₃
           (dense W₂ b₂ (relu d₂ (dense W₁ b₁ u))) label)
         = (fun u : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃
@@ -763,36 +724,8 @@ theorem mlp_input_loss_differentiableAt {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec 
         crossEntropy d₃ (dense W₂ b₂ (relu d₂
           (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w') b₀ x))))) label)
       w := by
-  have h0 : DifferentiableAt ℝ
-      (fun w' : Vec (d₀ * d₁) => dense (Mat.unflatten w') b₀ x) w :=
-    (denseWeightMap_differentiable b₀ x) w
-  have h1 : DifferentiableAt ℝ
-      (fun w' : Vec (d₀ * d₁) => relu d₁ (dense (Mat.unflatten w') b₀ x))
-      w :=
-    (relu_differentiableAt_of_smooth d₁ _ hz0).comp
-      (f := fun w' : Vec (d₀ * d₁) => dense (Mat.unflatten w') b₀ x) w h0
-  have h2 : DifferentiableAt ℝ
-      (fun w' : Vec (d₀ * d₁) =>
-        dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w') b₀ x))) w :=
-    ((dense_differentiable W₁ b₁) _).comp
-      (f := fun w' : Vec (d₀ * d₁) =>
-        relu d₁ (dense (Mat.unflatten w') b₀ x)) w h1
-  have h3 : DifferentiableAt ℝ
-      (fun w' : Vec (d₀ * d₁) =>
-        relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w') b₀ x)))) w :=
-    (relu_differentiableAt_of_smooth d₂ _ hz1).comp
-      (f := fun w' : Vec (d₀ * d₁) =>
-        dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w') b₀ x))) w h2
-  have h4 : DifferentiableAt ℝ
-      (fun w' : Vec (d₀ * d₁) => dense W₂ b₂ (relu d₂
-        (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w') b₀ x))))) w :=
-    ((dense_differentiable W₂ b₂) _).comp
-      (f := fun w' : Vec (d₀ * d₁) =>
-        relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w') b₀ x))))
-      w h3
-  exact (crossEntropy_differentiable d₃ label).differentiableAt.comp
-    (f := fun w' : Vec (d₀ * d₁) => dense W₂ b₂ (relu d₂
-      (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w') b₀ x))))) w h4
+  unfold dense Mat.unflatten at hz0 hz1 ⊢
+  fun_prop (disch := assumption)
 
 /-- **Closed form of the input-layer loss gradient at any two-margin
     point**: `∂L/∂W₀_{ij} = xᵢ·relu'(z₀ⱼ)·∑ₗ W₁ⱼₗ·relu'(z₁ₗ)·∑ₖ W₂ₗₖ·

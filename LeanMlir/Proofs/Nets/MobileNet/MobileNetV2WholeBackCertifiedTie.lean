@@ -88,11 +88,7 @@ theorem convStridedBnRelu6PC_differentiableAt {ic oc h w kH kW : Nat}
                        bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β
       ∘ flatConvStride2Xla (h := h) (w := w) W b) v := by
-  have hinner : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
-    ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp
-      (flatConvStride2Xla_differentiable W b)) v
-  exact (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
+  unfold flatConvStride2Xla at *; fun_prop (disch := assumption)
 
 /-- **The STEM tie.** -/
 theorem convStridedBnRelu6PCBack_eq_vjp_backward {ic oc h w kH kW : Nat}

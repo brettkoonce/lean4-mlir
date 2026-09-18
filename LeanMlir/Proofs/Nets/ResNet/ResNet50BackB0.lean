@@ -199,10 +199,7 @@ noncomputable def r50BottleneckB_has_vjp_at (N : Nat) {c mid h w kH₁ kW₁ kH�
   have hbody_diff := r50BodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
     W₃ b₃ ε₃ hε₃ γ₃ β₃ x h_s1 h_s2
   have hres_vjp := residual_has_vjp_at _ x hbody_diff hbody_vjp
-  have hres_diff : DifferentiableAt ℝ (residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-        cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-        cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
-    hbody_diff.add (differentiable_id.differentiableAt)
+  have hres_diff := hbody_diff.add (differentiable_id.differentiableAt)
   exact vjp_comp_at _ (relu (N * (c * h * w))) x
     hres_diff
     (relu_differentiableAt_of_smooth (N * (c * h * w)) _ h_out)
@@ -325,10 +322,7 @@ noncomputable def r50ProjBlockB_has_vjp_at (N : Nat)
   have hproj_diff : DifferentiableAt ℝ (projB N (h := h) (w := w) Wp bp εp γp βp) x :=
     (projB_differentiable N Wp bp εp hεp γp βp) x
   have hres_vjp := residualProj_has_vjp_at _ _ x hproj_diff hbody_diff hproj_vjp hbody_vjp
-  have hres_diff : DifferentiableAt ℝ (residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
-        (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-         cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-         cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x := hproj_diff.add hbody_diff
+  have hres_diff := hproj_diff.add hbody_diff
   exact vjp_comp_at _ (relu (N * (oc * h * w))) x
     hres_diff
     (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ h_out)
@@ -561,11 +555,7 @@ noncomputable def r50DownBlockB_has_vjp_at (N : Nat)
   have hproj_diff : DifferentiableAt ℝ (projStridedB N (h := h) (w := w) Wp bp εp γp βp) x :=
     (projStridedB_differentiable N Wp bp εp hεp γp βp) x
   have hres_vjp := residualProj_has_vjp_at _ _ x hproj_diff hbody_diff hproj_vjp hbody_vjp
-  have hres_diff : DifferentiableAt ℝ
-      (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-        (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-         cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-         cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁)) x := hproj_diff.add hbody_diff
+  have hres_diff := hproj_diff.add hbody_diff
   exact vjp_comp_at _ (relu (N * (oc * h * w))) x
     hres_diff
     (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ h_out)

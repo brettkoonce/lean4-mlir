@@ -529,10 +529,7 @@ noncomputable def r34DownBlockB_has_vjp_at (N : Nat) {ic oc h w kH₁ kW₁ kH�
         (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
          cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
     residualProj_has_vjp_at _ _ x hproj_diff hbody_diff hproj_vjp hbody_vjp
-  have hres_diff : DifferentiableAt ℝ (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-        (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-         cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
-    hproj_diff.add hbody_diff
+  have hres_diff := hproj_diff.add hbody_diff
   exact vjp_comp_at _ (relu (N * (oc * h * w))) x
     hres_diff
     (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ h_out)

@@ -81,19 +81,14 @@ theorem sgdB_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (j : Fin n) :
 /-- **`crossEntropy` is differentiable in the logits.** The standalone form of the
     differentiability infrastructure inside `softmaxCE_grad`: `softmax > 0` lets
     `Real.log` (hence `crossEntropy = -log(softmax · label)`) inherit smoothness. -/
+@[fun_prop]
 theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
     Differentiable ℝ (fun z : Vec c => crossEntropy c z label) := by
   cases c with
   | zero => exact label.elim0
   | succ c' =>
-    have h_softmax_pos : ∀ z : Vec (c' + 1), 0 < softmax (c' + 1) z label := fun z =>
-      div_pos (Real.exp_pos _)
-        (Finset.sum_pos (fun k _ => Real.exp_pos _) Finset.univ_nonempty)
-    have h_softmax_label_diff : Differentiable ℝ
-        (fun z : Vec (c' + 1) => softmax (c' + 1) z label) :=
-      fun z => differentiableAt_pi.mp ((softmax_diff (c' + 1)) z) label
-    show Differentiable ℝ (fun z => -(Real.log (softmax (c' + 1) z label)))
-    exact fun z => ((h_softmax_label_diff z).log (h_softmax_pos z).ne').neg
+    unfold crossEntropy softmax; simp only [div_eq_mul_inv]
+    fun_prop (disch := intro z; positivity)
 
 /-- **The dense layer is differentiable in its (flattened) weights.** The map
     `v ↦ dense (unflatten v) b x` is affine — a finite sum of coordinate

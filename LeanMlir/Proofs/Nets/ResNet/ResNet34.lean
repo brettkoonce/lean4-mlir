@@ -42,10 +42,7 @@ theorem chainComp_differentiable {n : Nat} (fs : List (Vec n → Vec n))
     (hdiff : ∀ f ∈ fs, Differentiable ℝ f) : Differentiable ℝ (chainComp fs) := by
   induction fs with
   | nil => exact differentiable_id
-  | cons f fs ih =>
-    rw [chainComp_cons]
-    exact (hdiff f (List.mem_cons.2 (Or.inl rfl))).comp
-      (ih (fun g hg => hdiff g (List.mem_cons.2 (Or.inr hg))))
+  | cons f fs ih => exact (hdiff f (by simp)).comp (ih fun g hg => hdiff g (by simp [hg]))
 
 /-- **Deep-chain VJP.** A composition of a list of differentiable maps that each
     have a VJP has a VJP — the backward runs each block's backward in reverse
@@ -298,17 +295,13 @@ noncomputable def resblock_bodyStrided_has_vjp_at {ic oc h w kH₁ kW₁ kH₂ k
     HasVJPAt
       ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
         (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v := by
-  have hconv1_diff : Differentiable ℝ
-      (flatConvStride2 W₁ b₁ : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
-    flatConvStride2_differentiable W₁ b₁
   have step1 : HasVJPAt
       (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v :=
     convBnReluStrided_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ v h_smooth₁
   have step1_diff : DifferentiableAt ℝ
-      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v := by
-    apply DifferentiableAt.comp
-    · exact relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth₁
-    · exact ((bnForward_differentiable (oc * h * w) ε₁ γ₁ β₁ hε₁).comp hconv1_diff) v
+      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v :=
+    (relu_differentiableAt_of_smooth _ _ h_smooth₁).comp v
+      (convBnStrided_differentiable W₁ b₁ ε₁ γ₁ β₁ hε₁ v)
   exact vjp_comp_at
     (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)
     (bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) v
@@ -327,14 +320,8 @@ theorem resblock_bodyStrided_differentiableAt {ic oc h w kH₁ kW₁ kH₂ kW₂
     DifferentiableAt ℝ
       ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
         (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v := by
-  have hconv1_diff : Differentiable ℝ
-      (flatConvStride2 W₁ b₁ : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
-    flatConvStride2_differentiable W₁ b₁
-  apply DifferentiableAt.comp
-  · exact (convBn_differentiable W₂ b₂ ε₂ γ₂ β₂ hε₂) _
-  · apply DifferentiableAt.comp
-    · exact relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth₁
-    · exact ((bnForward_differentiable (oc * h * w) ε₁ γ₁ β₁ hε₁).comp hconv1_diff) v
+  unfold flatConvStride2 at h_smooth₁ ⊢
+  fun_prop (disch := assumption)
 
 /-- **Full strided residual-projection block VJP** — the block that opens each
     ResNet-34 downsampling stage: `relu( proj(x) + F(x) )` where both the body's
@@ -614,26 +601,14 @@ noncomputable def idBlk_hasVJPAt (h w : Nat) (hhw : 0 < 1 * h * w)
 /-- The identity block is differentiable at any nonnegative activation. -/
 theorem idBlk_diffAt (h w : Nat) (hhw : 0 < 1 * h * w)
     (a : Vec (1 * h * w)) (ha : ∀ k, 0 ≤ a k) : DifferentiableAt ℝ (idBlk h w) a := by
-  have hsm₁ : ∀ k, bnForward (1 * h * w) 1 0 1 (flatConv Zk Zb a) k ≠ 0 := fun k => by
-    rw [flatConv_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
-    change (1:ℝ) ≠ 0; norm_num
-  have hF_diff : DifferentiableAt ℝ
-      ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-        (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb)) a :=
-    resblock_body_differentiableAt (h := h) (w := w) Zk Zb Zk Zb 1 0 1 1 0 1
-      (by norm_num) (by norm_num) a hsm₁
-  have hsm_res : ∀ k, residual
-      ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-        (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb)) a k ≠ 0 := fun k => by
-    show ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-        (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb)) a k + a k ≠ 0
-    rw [idBlk_body_const h w hhw a]; change (1:ℝ) + a k ≠ 0
-    exact ne_of_gt (by linarith [ha k])
-  show DifferentiableAt ℝ (relu (1 * h * w) ∘ residual
-    ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-      (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb))) a
-  exact (relu_differentiableAt_of_smooth (1 * h * w) _ hsm_res).comp a
-    (DifferentiableAt.add hF_diff differentiable_id.differentiableAt)
+  exact resblock_differentiableAt (h := h) (w := w) Zk Zb Zk Zb 1 0 1 1 0 1 (by norm_num)
+    (by norm_num) a
+    (fun k => by
+      rw [flatConv_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+      change (1:ℝ) ≠ 0; norm_num)
+    (fun k => by
+      rw [idBlk_body_const h w hhw a]; change (1:ℝ) + a k ≠ 0
+      exact ne_of_gt (by linarith [ha k]))
 
 /-- A chain of identity blocks fed a nonnegative base stays nonnegative (each block is a
     ReLU; the base only matters for the empty chain). -/
@@ -702,31 +677,14 @@ noncomputable def downBlk_hasVJPAt (h w : Nat) (hhw : 0 < 1 * h * w)
 /-- The strided block is differentiable at every point. -/
 theorem downBlk_diffAt (h w : Nat) (hhw : 0 < 1 * h * w)
     (a : Vec (1 * (2 * h) * (2 * w))) : DifferentiableAt ℝ (downBlk h w) a := by
-  have hsm₁ : ∀ k, bnForward (1 * h * w) 1 0 1 (flatConvStride2 Zk Zb a) k ≠ 0 := fun k => by
-    rw [flatConvStride2_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
-    change (1:ℝ) ≠ 0; norm_num
-  have hproj_diff : DifferentiableAt ℝ (bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb) a :=
-    convBnStrided_differentiable (h := h) (w := w) Zk Zb 1 0 1 (by norm_num) a
-  have hF_diff : DifferentiableAt ℝ
-      ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-        (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)) a :=
-    resblock_bodyStrided_differentiableAt (h := h) (w := w) Zk Zb Zk Zb 1 0 1 1 0 1
-      (by norm_num) (by norm_num) a hsm₁
-  have hsm_res : ∀ k, residualProj
-      (bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)
-      ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-        (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)) a k ≠ 0 := fun k => by
-    show (bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb) a k
-        + ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-            (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)) a k ≠ 0
-    rw [downBlk_proj_const h w hhw a, downBlk_body_const h w hhw a]
-    change (1:ℝ) + 1 ≠ 0; norm_num
-  show DifferentiableAt ℝ (relu (1 * h * w) ∘ residualProj
-    (bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)
-    ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-      (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb))) a
-  exact (relu_differentiableAt_of_smooth (1 * h * w) _ hsm_res).comp a
-    (DifferentiableAt.add hproj_diff hF_diff)
+  -- both paths are the constant `1`, so the block is the constant `relu 2 = 2`
+  suffices hc : downBlk h w = fun _ _ => 2 by rw [hc]; exact differentiableAt_const _
+  funext a' k
+  have hp := congrFun (downBlk_proj_const h w hhw a') k
+  have hb := congrFun (downBlk_body_const h w hhw a') k
+  simp only [Function.comp_apply] at hp hb
+  simp only [downBlk, residualProj, biPath, Function.comp_apply, relu, hp, hb]
+  norm_num
 
 -- ════════════════════════════════════════════════════════════════
 -- § The concrete ResNet-34 instance (1 channel, 32×32 input)

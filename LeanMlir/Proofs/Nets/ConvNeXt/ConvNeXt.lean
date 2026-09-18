@@ -132,15 +132,8 @@ theorem convNextBlockBody_differentiable {c cExp h w kH kW : Nat}
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
     Differentiable ℝ (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
-  unfold convNextBlockBody
-  have hdw := depthwiseFlat_differentiable (h := h) (w := w) Wdw bdw
-  have hln := bnForward_differentiable (c * h * w) εn γn βn hεn
-  have hex := flatConv_differentiable (h := h) (w := w) Wex bex
-  have hge := gelu_diff (cExp * h * w)
-  have hpr := flatConv_differentiable (h := h) (w := w) Wpr bpr
-  have hls := layerScale_differentiable γls
-  -- layerNormForward = bnForward definitionally
-  exact hls.comp (hpr.comp (hge.comp (hex.comp (hln.comp hdw))))
+  unfold convNextBlockBody layerNormForward layerScale gelu
+  fun_prop (disch := assumption)
 
 /-- **ConvNeXt block body VJP (global)** — built by chaining the
     everywhere-differentiable piece VJPs through `vjp_comp`. Needs only
@@ -216,10 +209,8 @@ theorem convNextBlock_differentiable {c cExp h w kH kW : Nat}
     (γls : Vec (c * h * w)) :
     Differentiable ℝ (convNextBlock Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
   unfold convNextBlock residual
-  intro v
-  exact DifferentiableAt.add
-    ((convNextBlockBody_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls) v)
-    differentiable_id.differentiableAt
+  exact (convNextBlockBody_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).add
+    differentiable_id
 
 /-- **ConvNeXt block VJP (global)** — `residual_has_vjp` on top of the
     block-body VJP. Needs only `0 < εn`. Global since the body is

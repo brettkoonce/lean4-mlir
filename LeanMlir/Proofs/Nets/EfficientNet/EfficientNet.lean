@@ -161,15 +161,11 @@ noncomputable def seGate {c h w r : Nat}
   broadcastFlat c h w ∘ sigmoid c ∘ dense W₂ b₂ ∘ swish r ∘
     dense W₁ b₁ ∘ globalAvgPoolFlat c h w
 
+@[fun_prop]
 theorem seGate_differentiable {c h w r : Nat}
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
-    Differentiable ℝ (seGate (h := h) (w := w) W₁ b₁ W₂ b₂) :=
-  (broadcastFlat_differentiable c h w).comp
-    ((sigmoid_diff c).comp
-      ((dense_differentiable W₂ b₂).comp
-        ((swish_diff r).comp
-          ((dense_differentiable W₁ b₁).comp
-            (globalAvgPoolFlat_differentiable c h w)))))
+    Differentiable ℝ (seGate (h := h) (w := w) W₁ b₁ W₂ b₂) := by
+  unfold seGate broadcastFlat sigmoid swish; fun_prop
 
 noncomputable def seGate_has_vjp {c h w r : Nat}
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
@@ -219,15 +215,11 @@ noncomputable def seBlockFull_has_vjp {c h w r : Nat}
     (seGate_differentiable W₁ b₁ W₂ b₂)
     (seGate_has_vjp W₁ b₁ W₂ b₂)
 
+@[fun_prop]
 theorem seBlockFull_differentiable {c h w r : Nat}
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
     Differentiable ℝ (seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂) := by
-  show Differentiable ℝ (seBlock (seGate (h := h) (w := w) W₁ b₁ W₂ b₂))
-  generalize hgate : seGate (h := h) (w := w) W₁ b₁ W₂ b₂ = gate
-  have hg : Differentiable ℝ gate := hgate ▸ seGate_differentiable W₁ b₁ W₂ b₂
-  show Differentiable ℝ (fun x : Vec (c * h * w) => fun i => x i * gate x i)
-  apply differentiable_pi.mpr; intro i
-  exact (differentiable_apply i).mul (differentiable_pi.mp hg i)
+  unfold seBlockFull seBlock; fun_prop
 
 -- ════════════════════════════════════════════════════════════════
 -- § conv → bn → swish  (smooth expand stage; swish has no kink)
@@ -342,6 +334,7 @@ noncomputable def mbconvBody_has_vjp {cin cmid cout h w kHe kWe kHd kWd kHp kWp 
     (hS_diff.comp (hD_diff.comp hE_diff)) hP_diff
     hSDE (convBn_has_vjp Wp bp εp γp βp hεp)
 
+@[fun_prop]
 theorem mbconvBody_differentiable {cin cmid cout h w kHe kWe kHd kWd kHp kWp r : Nat}
     (We : Kernel4 cmid cin kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ) (hεd : 0 < εd)
@@ -349,11 +342,7 @@ theorem mbconvBody_differentiable {cin cmid cout h w kHe kWe kHd kWd kHp kWp r :
     (Wp : Kernel4 cout cmid kHp kWp) (bp : Vec cout) (εp γp βp : ℝ) (hεp : 0 < εp) :
     Differentiable ℝ (mbconvBody We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp
       : Vec (cin * h * w) → Vec (cout * h * w)) := by
-  unfold mbconvBody
-  exact (convBn_differentiable Wp bp εp γp βp hεp).comp
-    ((seBlockFull_differentiable Ws₁ bs₁ Ws₂ bs₂).comp
-      ((dwBnSwish_differentiable Wd bd εd γd βd hεd).comp
-        (convBnSwish_differentiable We be εe γe βe hεe)))
+  unfold mbconvBody swish; fun_prop (disch := assumption)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Residual MBConv (stride-1, cin = cout = c): identity skip
@@ -394,10 +383,7 @@ theorem mbconvResidual_differentiable {c cmid h w kHe kWe kHd kWd kHp kWp r : Na
     (Wp : Kernel4 c cmid kHp kWp) (bp : Vec c) (εp γp βp : ℝ) (hεp : 0 < εp) :
     Differentiable ℝ (residual (mbconvBody (h := h) (w := w)
         We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp)) := by
-  unfold residual biPath
-  apply differentiable_pi.mpr; intro i
-  have hb := mbconvBody_differentiable (h := h) (w := w) We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp
-  exact (differentiable_pi.mp hb i).add (differentiable_apply i)
+  unfold residual biPath; fun_prop (disch := assumption)
 
 -- ════════════════════════════════════════════════════════════════
 -- § End-to-end representative EfficientNet

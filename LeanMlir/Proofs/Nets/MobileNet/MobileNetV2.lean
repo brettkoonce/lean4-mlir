@@ -96,6 +96,7 @@ theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
     filter_upwards [ht.eventually (eventually_gt_nhds h6)] with y hy
     simp [relu6, hy.le, ((show (0 : ℝ) < 6 by norm_num).trans hy).le]
 
+@[fun_prop]
 theorem relu6_differentiableAt_of_smooth (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : DifferentiableAt ℝ (relu6 n) x :=
   (relu6_hasFDerivAt n x h_smooth).differentiableAt

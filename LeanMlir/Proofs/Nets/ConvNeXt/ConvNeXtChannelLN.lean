@@ -95,14 +95,9 @@ noncomputable def rowLNVecFlat_has_vjp (s c : Nat) (ε : ℝ) (γ β : Vec c) (h
     HasVJP (rowLNVecFlat s c ε γ β) :=
   hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat s c ε γ β hε)
 
-/-- `transposeFlat` is a coordinate permutation, hence a `reindexCLM`. -/
+/-- `transposeFlat` is a coordinate permutation — Attention's `transpose_flat_diff`. -/
 theorem transposeFlat_diff (m n : Nat) : Differentiable ℝ (transposeFlat m n) := by
-  have h : transposeFlat m n = fun v : Vec (m * n) => fun idx : Fin (n * m) =>
-      v (finProdFinEquiv ((finProdFinEquiv.symm idx).2, (finProdFinEquiv.symm idx).1)) := by
-    funext v idx; rfl
-  rw [h]
-  exact (reindexCLM (fun idx : Fin (n * m) =>
-    finProdFinEquiv ((finProdFinEquiv.symm idx).2, (finProdFinEquiv.symm idx).1))).differentiable
+  exact transpose_flat_diff
 
 /-- `transposeFlat`'s VJP is `Tensor.lean`'s `transpose_has_vjp` through the flatten bijection —
     the flat form is definitionally the bridged Mat form, so this is a re-typing, not a proof. -/
@@ -260,50 +255,12 @@ theorem pdiv_reindexOut_contract {m n n' : Nat} (f : Vec m → Vec n) (x : Vec m
     `pdiv_comp` needs and what it does not export.) -/
 theorem rowLNVecFlat_gamma_diffAt (s c : Nat) (ε : ℝ) (β : Vec c) (X : Vec (s * c)) (γ : Vec c) :
     DifferentiableAt ℝ (fun γ' : Vec c => rowLNVecFlat s c ε γ' β X) γ := by
-  have hmul : DifferentiableAt ℝ
-      (fun (v : Vec c) (o : Fin (s * c)) =>
-        layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o).1)
-            (finProdFinEquiv.symm o).2 * v (finProdFinEquiv.symm o).2) γ :=
-    (differentiableAt_const _).mul
-      (reindexCLM (fun o : Fin (s * c) => (finProdFinEquiv.symm o).2)).differentiableAt
-  have hconst : DifferentiableAt ℝ
-      (fun (_ : Vec c) (o : Fin (s * c)) => β (finProdFinEquiv.symm o).2) γ :=
-    differentiableAt_const _
-  have hshape : (fun γ' : Vec c => rowLNVecFlat s c ε γ' β X)
-      = (fun γ' : Vec c => fun o : Fin (s * c) =>
-          (fun (v : Vec c) (o' : Fin (s * c)) =>
-            layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o').1)
-                (finProdFinEquiv.symm o').2 * v (finProdFinEquiv.symm o').2) γ' o
-          + (fun (_ : Vec c) (o' : Fin (s * c)) => β (finProdFinEquiv.symm o').2) γ' o) := by
-    funext γ' o
-    unfold rowLNVecFlat layerNormVec Mat.flatten Mat.unflatten
-    ring
-  rw [hshape]
-  exact hmul.add hconst
+  unfold rowLNVecFlat layerNormVec Mat.flatten; fun_prop
 
 /-- The β peer: `const + gather β`. -/
 theorem rowLNVecFlat_beta_diffAt (s c : Nat) (ε : ℝ) (γ : Vec c) (X : Vec (s * c)) (β : Vec c) :
     DifferentiableAt ℝ (fun β' : Vec c => rowLNVecFlat s c ε γ β' X) β := by
-  have hconst : DifferentiableAt ℝ
-      (fun (_ : Vec c) (o : Fin (s * c)) =>
-        γ (finProdFinEquiv.symm o).2 *
-          layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o).1)
-            (finProdFinEquiv.symm o).2) β := differentiableAt_const _
-  have hgather : DifferentiableAt ℝ
-      (fun (v : Vec c) (o : Fin (s * c)) => v (finProdFinEquiv.symm o).2) β :=
-    (reindexCLM (fun o : Fin (s * c) => (finProdFinEquiv.symm o).2)).differentiableAt
-  have hshape : (fun β' : Vec c => rowLNVecFlat s c ε γ β' X)
-      = (fun β' : Vec c => fun o : Fin (s * c) =>
-          (fun (_ : Vec c) (o' : Fin (s * c)) =>
-            γ (finProdFinEquiv.symm o').2 *
-              layerNormForward c ε 1 0 (Mat.unflatten X (finProdFinEquiv.symm o').1)
-                (finProdFinEquiv.symm o').2) β' o
-          + (fun (v : Vec c) (o' : Fin (s * c)) => v (finProdFinEquiv.symm o').2) β' o) := by
-    funext β' o
-    unfold rowLNVecFlat layerNormVec Mat.flatten Mat.unflatten
-    ring
-  rw [hshape]
-  exact hconst.add hgather
+  unfold rowLNVecFlat layerNormVec Mat.flatten; fun_prop
 
 /-- **The γ contraction, moved to the row layout.** The activation-layout Jacobian against the
     activation-layout cotangent equals the row-layout Jacobian against the TRANSPOSED cotangent —

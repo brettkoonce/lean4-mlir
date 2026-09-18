@@ -145,12 +145,10 @@ noncomputable def r50ProjB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50Pr
 theorem r50ProjB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (v : Vec (N * (ic * h * w))) (hs : R50ProjSmoothAt N h w p v) :
     DifferentiableAt ℝ (r50ProjB N h w p) v := by
-  have hbody := StableHLO.r50BodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2
-  have hproj : DifferentiableAt ℝ (projB N (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp) v :=
-    (projB_differentiable N p.Wp p.bp p.εp hq.hp p.γp p.βp) v
   exact (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ hs.hout).comp v
-    (hproj.add hbody)
+    ((projB_differentiable N p.Wp p.bp p.εp hq.hp p.γp p.βp v).add
+      (StableHLO.r50BodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+        p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2))
 
 /-- Strided projection bottleneck VJP — `r50DownBlockB_has_vjp_at` at the bundle's fields. -/
 noncomputable def r50DownB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
@@ -165,13 +163,10 @@ theorem r50DownB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW 
     (hq : R50ProjPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : R50DownSmoothAt N h w p v) :
     DifferentiableAt ℝ (r50DownB N h w p) v := by
-  have hbody := StableHLO.r50DownBodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2
-  have hproj : DifferentiableAt ℝ
-      (StableHLO.projStridedB N (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp) v :=
-    (StableHLO.projStridedB_differentiable N p.Wp p.bp p.εp hq.hp p.γp p.βp) v
   exact (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ hs.hout).comp v
-    (hproj.add hbody)
+    ((StableHLO.projStridedB_differentiable N p.Wp p.bp p.εp hq.hp p.γp p.βp v).add
+      (StableHLO.r50DownBodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+        p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2))
 
 -- ════════════════════════════════════════════════════════════════
 -- § The running activations — `r50PreK` = the net truncated after block `K`

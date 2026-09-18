@@ -81,11 +81,7 @@ theorem convBnRelu6StridedPC_differentiableAt {ic oc h w kH kW : Nat}
                        bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
       (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v := by
-  have hinner : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
-    ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp
-      (flatConvStride2Xla_differentiable W b)) v
-  exact (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
+  unfold flatConvStride2Xla at *; fun_prop (disch := assumption)
 
 /-- Differentiability peer of `invresBodyPC_has_vjp_at` (which `MobileNetV2BackCertifiedTie`
     did not need, having no `residual` wrapper to feed). -/
@@ -226,10 +222,8 @@ noncomputable def ivResidW_has_vjp_at (h w : Nat) {c mid : Nat} (p : IVW c mid c
 theorem ivResidW_differentiableAt (h w : Nat) {c mid : Nat} (p : IVW c mid c)
     (hq : IVPos p) (v : Vec (c * h * w)) (hs : IVSmoothAt h w p v) :
     DifferentiableAt ℝ (ivResidW h w p) v := by
-  have hbody := invresBodyPC_differentiableAt p.eW p.eb p.eε p.eγ p.eβ hq.he
-    p.dW p.db p.dε p.dγ p.dβ hq.hd p.pW p.pb p.pε p.pγ p.pβ hq.hp v hs.he hs.hd
-  show DifferentiableAt ℝ (biPath _ (fun y => y)) v
-  exact DifferentiableAt.add hbody differentiable_id.differentiableAt
+  exact (invresBodyPC_differentiableAt p.eW p.eb p.eε p.eγ p.eβ hq.he p.dW p.db p.dε p.dγ p.dβ
+    hq.hd p.pW p.pb p.pε p.pγ p.pβ hq.hp v hs.he hs.hd).add differentiableAt_id
 
 /-- Stride-2 downsampling bottleneck VJP — `invresBodyStridedPC_has_vjp_at` at the bundle. -/
 noncomputable def ivStridedW_has_vjp_at (h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
@@ -301,10 +295,7 @@ noncomputable def mnv2HeadW_has_vjp_at (w : MNV2PaperWeights) (hh : 0 < w.hε)
 theorem mnv2HeadW_differentiableAt (w : MNV2PaperWeights) (hh : 0 < w.hε)
     (v : Vec (320 * 7 * 7)) (h_head : MNV2HeadSmoothAt w v) :
     DifferentiableAt ℝ (mnv2HeadW w) v := by
-  unfold mnv2HeadW
-  have c_diff := convBnRelu6PC_differentiableAt (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ hh v h_head
-  exact ((dense_differentiable w.fcW w.fcb) _).comp v
-    (((globalAvgPoolFlat_differentiable 1280 7 7) _).comp v c_diff)
+  unfold mnv2HeadW MNV2HeadSmoothAt at *; fun_prop (disch := assumption)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The running activations — `mnv2PreK` = the net truncated after block `K`

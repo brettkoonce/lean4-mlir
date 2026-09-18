@@ -378,11 +378,8 @@ theorem cbrStridedPC_differentiableAt {ic oc h w kH kW : Nat}
     (v : Vec (ic * (2 * h) * (2 * w)))
     (h_smooth : ∀ k, bnPerChannelTensor3 oc h w ε γ β (flatConvStride2 W b v) k ≠ 0) :
     DifferentiableAt ℝ (cbrStridedPC (h := h) (w := w) W b ε γ β) v := by
-  have hinner : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2 W b) v :=
-    ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp
-      (flatConvStride2_differentiable W b)) v
-  exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
+  unfold cbrStridedPC flatConvStride2 at *
+  fun_prop (disch := assumption)
 
 /-- **The stem tie.** `r34InputGrad`'s stem slot — `flatConvStride2Back Ws ∘ bnB ∘ reluMaskBack`,
     with the BN-back pinned to the certified per-channel backward and the mask to the actual

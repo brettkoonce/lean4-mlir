@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `f4a41380`)
+## Status (2026-09-18, main `7f1093ad`)
 
-**Landed** — about 4.4k lines out, every theorem name and statement unchanged:
+**Landed** — about 4.9k lines out, every theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -36,26 +36,24 @@ suspected, no drop-in located.
 | `bbd3e3f0` | FloatSubnormalBridge, MuonGeometry/NewtonSchulz, CrownBound, ResNet34Live{Realistic,PC,2}, the two seal files |
 | `998f2c70` | **§0.1 done for Foundation + Architectures**: `pdiv_clm` / `pdiv_of_affine` / `pdiv_of_linear` in `Tensor.lean`; 14 sites (conv / depthwise input-weight-bias, GAP, patch-embed, CLS, BN affine + centered, dense, dense-W, both matmuls); `pdiv_pi_pad_eval` + `pdiv_const_mul_pi_pad_eval` deleted |
 | `f4a41380` | **§0.1 done for Nets** (−400): ViTClose `pdiv_rowDense_W`, `pdiv_patchEmbed_W`, the row-dense bias Jacobian, `pdiv_id_add_const`, `pdiv_maskGather_add_const`, both `pdiv_scalarAffine_*`; `ViTVecLN.pdiv_vecLN_beta`; `pdiv_layerScale`, `pdiv_layerScale_gamma`, `pdiv_layerScaleCh_gamma`, the two scalar-LN Jacobians (ConvNeXt, ConvNeXtClose, ConvNeXtFold); both `pdiv_bnPerChannelFlat_*` (CifarBnClose). `pdiv_patchEmbed_{pos,cls,b}` and `pdiv_vecLN_gamma` already delegate to the two helpers, so they stay |
-| *(staged)* | **§0.3 done + §0.2 for Foundation/Architectures** (−830). §0.3: `relu`, `relu6`, `maxPool2`, `maxPool3s2` linearisations on `Filter.eventually_all` / `hasFDerivAt_pi` (the maxpools' `0 < c,h,w` are now unused, kept as `_hc _hh _hw`). §0.2: 31 `Differentiable` proofs → `fun_prop` (Attention ×15, CNN ×5, Depthwise ×2, StridedConv ×2, BatchNorm ×2, MLP, PerChannelBN, BatchMapVJPAt, `Tensor3.{un,}flatten`); new `@[fun_prop] differentiable_dite_zero` (CNN) for the pad-guarded reads; 14 existing atoms tagged `@[fun_prop]` (dense, relu-at-smooth, bnForward, bnIstdBroadcast, layerNorm, conv2d, flatConv, depthwise, depthwiseFlat, globalAvgPoolFlat, decimate{,Odd}Flat, bnPerChannelTensor3, differentiableAt_pad_eval) |
+| `7f1093ad` | **§0.3 done + §0.2 for Foundation/Architectures** (−830). §0.3: `relu`, `relu6`, `maxPool2`, `maxPool3s2` linearisations on `Filter.eventually_all` / `hasFDerivAt_pi` (the maxpools' `0 < c,h,w` are now unused, kept as `_hc _hh _hw`). §0.2: 31 `Differentiable` proofs → `fun_prop` (Attention ×15, CNN ×5, Depthwise ×2, StridedConv ×2, BatchNorm ×2, MLP, PerChannelBN, BatchMapVJPAt, `Tensor3.{un,}flatten`); new `@[fun_prop] differentiable_dite_zero` (CNN) for the pad-guarded reads; 14 existing atoms tagged `@[fun_prop]` (dense, relu-at-smooth, bnForward, bnIstdBroadcast, layerNorm, conv2d, flatConv, depthwise, depthwiseFlat, globalAvgPoolFlat, decimate{,Odd}Flat, bnPerChannelTensor3, differentiableAt_pad_eval) |
+| *(staged)* | **§0.2 done** (−530): Nets + Training. ViTVecLN ×7, ConvNeXt ×7, ResNet ×13 top-level + 5 inline (B0 `hres_diff` ascriptions dropped), EfficientNet ×10, MobileNet ×5, `crossEntropy_differentiable`, SgdDescentCnn ×7 + 1 inline, SgdDescentMlp ×2 + 3 inline, MlpTrainStep 2 inline. 7 more atoms tagged (`batchMap`, `bnBatchLA`, `seGate`, `seBlockFull`, `mbconvBody`, `relu6_differentiableAt_of_smooth`, `crossEntropy`). Left as they are: `vitForwardKV_differentiable` and `convNextForwardTCh_differentiable` (fun_prop hits a kernel timeout on the recursive stage folds), `chanLNTensor3_diff` (needs an 8-name unfold), `r50IdB_differentiableAt`, and the 3-line-type + 1-line-`.comp` inline haves that `vjp_comp_at` needs typed |
 
 **Deferred on purpose:** `BceLossCot.one_sub_sigmoidScalar` (wants the §0.4 `sigmoidScalar = Real.sigmoid`
 batch — ~200-module rebuild); `DataParallel.dpIterate_lockstep` (the `Semiconj` term is not shorter);
 the `X_inj` family (1 line each).
 
 **Next, in order:**
-1. **§0.2 in Nets + Training** — the atoms above are now tagged, so this is leaf-only. Top-level
-   `Differentiable`/`DifferentiableAt` proofs of ≥5 lines: ResNet 13, ViT 8, ConvNeXt 9,
-   EfficientNet 8 (incl. `batchMap_differentiable`: `unfold StableHLO.batchMap; fun_prop`),
-   Training 9, MobileNet 2 (~770 lines). ⚠ the audit's "63 twins / 652 lines in
-   MobileNet+EfficientNet" overstates it: those are mostly 1–3-line `.comp` chains of named atoms,
-   not hand-built blocks.
-2. **§0.4 sigmoid/elementwise** — `pdiv_elementwise` (gelu/swish/sigmoid/coordFun), `sigmoidScalar :=
+1. **§0.4 sigmoid/elementwise** — `pdiv_elementwise` (gelu/swish/sigmoid/coordFun), `sigmoidScalar :=
    Real.sigmoid`, then `one_sub_sigmoidScalar`.
-3. **Near-clones**, one family per commit, largest first: `SgdDescentCnn` kernel/bias slots (§4),
+2. **Near-clones**, one family per commit, largest first: `SgdDescentCnn` kernel/bias slots (§4),
    `CertLayer.comp` adoption (§0.6), `BnPairTiedB` (§7), fused-from-unfused (§7), the G1/G2 generator
    lemmas (§5).
-4. Still open from §11: defects 2 (single-buffer magnitude in four test comparators) and 3 (vjp-oracle
+3. Still open from §11: defects 2 (single-buffer magnitude in four test comparators) and 3 (vjp-oracle
    nets defined twice); §0.7 is a keep-or-retire decision for the user.
+4. Small §0.2 leftovers in root-side files, for whenever those files are next rebuilt anyway:
+   `StridedConv.flatConvStride2Xla_differentiable`, `Depthwise.depthwiseStride2FlatXla_differentiable`
+   (`unfold …; fun_prop`, 4 → 1 each).
 
 **How the batches were run** (worked; keep doing it):
 - *Keep every statement verbatim.* Replace only a proof body — for a `have h_pdiv` inside a long VJP
@@ -86,7 +84,10 @@ the `X_inj` family (1 line each).
   `attribute [fun_prop] X` in the scratch file instead. It has no rule for `dite` (hence
   `differentiable_dite_zero`) nor for `/` with a nonzero side condition (`simp only [div_eq_mul_inv]`
   first, then `fun_prop (disch := intro z; positivity)`). Hypotheses like `0 < ε` on tagged atoms
-  go through `fun_prop (disch := assumption)`.
+  go through `fun_prop (disch := assumption)`. Don't tag stage-level composites (`cbsB_`, `seB_`,
+  `projB_differentiable`, …): `fun_prop` then times out in `whnf`; tag the atoms and unfold the stage.
+- Four forked helpers drafting one file group each (scratch-only, `final_<File>.lean` with primed
+  names) and a mechanical splice from those files worked well — ~55 sites in one pass.
 
 ---
 

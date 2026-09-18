@@ -124,11 +124,7 @@ theorem mbExpFwdB_differentiable (N : Nat) {ic mid oc h w kHd kWd r : Nat}
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
     Differentiable ℝ (mbExpFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd
       Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) := by
-  unfold mbExpFwdB
-  exact (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp).comp
-    ((seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂).comp
-      ((dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd).comp
-        (cbsB_differentiable N (h := h) (w := w) We be εe hεe γe βe)))
+  unfold mbExpFwdB cbsB dwbsB swish; fun_prop (disch := assumption)
 noncomputable def mbExpFwdB_has_vjp (N : Nat) {ic mid oc h w kHd kWd r : Nat}
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)

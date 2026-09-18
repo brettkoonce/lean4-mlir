@@ -37,21 +37,10 @@ theorem batchMap_eq_rowwiseFlat {N a b : Nat} (f : Vec a → Vec b) :
   rfl
 
 /-- **`batchMap N f` is differentiable** when `f` is — it is `f` applied independently per example. -/
+@[fun_prop]
 theorem batchMap_differentiable {N a b : Nat} (f : Vec a → Vec b) (hf : Differentiable ℝ f) :
     Differentiable ℝ (StableHLO.batchMap N f) := by
-  rw [batchMap_eq_rowwiseFlat]
-  apply differentiable_pi.mpr
-  intro idx
-  have hcoord :
-      (fun v : Vec (N * a) =>
-          Mat.flatten ((fun A : Mat N a => fun r => f (A r)) (Mat.unflatten v)) idx)
-        = (fun w : Vec a => f w (finProdFinEquiv.symm idx).2) ∘
-            (reindexCLM (fun i : Fin a => finProdFinEquiv ((finProdFinEquiv.symm idx).1, i))) := by
-    funext v; rfl
-  rw [hcoord]
-  exact Differentiable.comp
-    (differentiable_pi.mp hf (finProdFinEquiv.symm idx).2)
-    (reindexCLM _).differentiable
+  unfold StableHLO.batchMap; fun_prop
 
 /-- **`batchMap N f` VJP — block-diagonal (the genuinely-new lemma).** A batch-separable op's VJP
     applies `f`'s proven VJP independently per example. The backward, like the forward, reshapes to
@@ -94,6 +83,7 @@ theorem bnBatchLA_eq_comp (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
           (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm)) := by
   rfl
 
+@[fun_prop]
 theorem bnBatchLA_differentiable (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     Differentiable ℝ (StableHLO.bnBatchLA N oc h w ε γ β) := by
   rw [bnBatchLA_eq_comp]
@@ -226,10 +216,7 @@ theorem mbNoExpFwdB_differentiable (N : Nat) {ic oc h w kHd kWd r : Nat}
     (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
     (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
     Differentiable ℝ (mbNoExpFwdB N (h := h) (w := w) Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) := by
-  unfold mbNoExpFwdB
-  exact (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp).comp
-    ((seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂).comp
-      (dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd))
+  unfold mbNoExpFwdB dwbsB swish; fun_prop (disch := assumption)
 noncomputable def mbNoExpFwdB_has_vjp (N : Nat) {ic oc h w kHd kWd r : Nat}
     (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec ic)
     (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
@@ -251,11 +238,7 @@ theorem mbStridedFwdB_differentiable (N : Nat) {ic mid oc h w kHd kWd r : Nat}
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
     Differentiable ℝ (mbStridedFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd
       Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) := by
-  unfold mbStridedFwdB
-  exact (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp).comp
-    ((seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂).comp
-      ((dwbsSB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd).comp
-        (cbsB_differentiable N (h := 2 * h) (w := 2 * w) We be εe hεe γe βe)))
+  unfold mbStridedFwdB cbsB dwbsSB depthwiseStride2Flat swish; fun_prop (disch := assumption)
 noncomputable def mbStridedFwdB_has_vjp (N : Nat) {ic mid oc h w kHd kWd r : Nat}
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
@@ -281,16 +264,7 @@ theorem mbResidFwdB_differentiable (N : Nat) {c mid h w kHd kWd r : Nat}
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c) :
     Differentiable ℝ (mbResidFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd
       Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) := by
-  have dBody : Differentiable ℝ (projB N (h := h) (w := w) Wp bp εp γp βp ∘
-      seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘ dwbsB N (h := h) (w := w) Wd bd εd γd βd ∘
-      cbsB N (h := h) (w := w) We be εe γe βe) :=
-    (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp).comp
-      ((seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂).comp
-        ((dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd).comp
-          (cbsB_differentiable N (h := h) (w := w) We be εe hεe γe βe)))
-  unfold mbResidFwdB residual biPath
-  apply differentiable_pi.mpr; intro i
-  exact (differentiable_pi.mp dBody i).add (differentiable_apply i)
+  unfold mbResidFwdB residual biPath cbsB dwbsB swish; fun_prop (disch := assumption)
 noncomputable def mbResidFwdB_has_vjp (N : Nat) {c mid h w kHd kWd r : Nat}
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
@@ -316,10 +290,7 @@ theorem headFwdB_differentiable (N : Nat) {c oc h w nC : Nat}
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
     (Wfc : Mat oc nC) (bfc : Vec nC) :
     Differentiable ℝ (headFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc) := by
-  unfold headFwdB
-  exact (batchMap_differentiable (dense Wfc bfc) (dense_differentiable Wfc bfc)).comp
-    ((batchMap_differentiable (globalAvgPoolFlat oc h w) (globalAvgPoolFlat_differentiable oc h w)).comp
-      (cbsB_differentiable N (h := h) (w := w) Wh bh εh hεh γh βh))
+  unfold headFwdB cbsB swish; fun_prop (disch := assumption)
 noncomputable def headFwdB_has_vjp (N : Nat) {c oc h w nC : Nat}
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
     (Wfc : Mat oc nC) (bfc : Vec nC) :

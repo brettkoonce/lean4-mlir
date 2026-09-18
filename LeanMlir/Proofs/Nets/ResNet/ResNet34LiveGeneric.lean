@@ -90,24 +90,9 @@ theorem liveDownW_diff (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 
   have hsm₁ : ∀ k, bnForward (2 * h * w) 1 0 1 (flatConvStride2 Zk2 Zb2 a) k ≠ 0 := fun k => by
     rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
     change (1 : ℝ) ≠ 0; norm_num
-  have hproj_diff : DifferentiableAt ℝ (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2) a :=
-    convBnStrided_differentiable (h := h) (w := w) W Zb2 1 1 βp (by norm_num) a
-  have hF_diff : DifferentiableAt ℝ
-      ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a :=
-    resblock_bodyStrided_differentiableAt (h := h) (w := w) Zk2 Zb2 Zk2 Zb2 1 0 1 1 0 1
-      (by norm_num) (by norm_num) a hsm₁
-  have hsm_res : ∀ k, residualProj
-      (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2)
-      ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a k ≠ 0 := fun k =>
-    ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k)
-  show DifferentiableAt ℝ (relu (2 * h * w) ∘ residualProj
-    (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2)
-    ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2))) a
-  exact (relu_differentiableAt_of_smooth (2 * h * w) _ hsm_res).comp a
-    (DifferentiableAt.add hproj_diff hF_diff)
+  have hsm := fun k => ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k)
+  unfold liveDownW residualProj flatConvStride2 at *
+  fun_prop (disch := first | assumption | norm_num)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net ResNet-34 VJP, ∀ downsample kernels

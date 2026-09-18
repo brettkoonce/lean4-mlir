@@ -87,12 +87,7 @@ theorem cnxBodyWith_diff {c cExp h w kH kW : Nat}
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
     Differentiable ℝ (cnxBodyWith LN Wdw bdw Wex bex Wpr bpr γls) := by
-  unfold cnxBodyWith
-  exact (layerScale_differentiable γls).comp
-    ((flatConv_differentiable (h := h) (w := w) Wpr bpr).comp
-      ((gelu_diff (cExp * h * w)).comp
-        ((flatConv_differentiable (h := h) (w := w) Wex bex).comp
-          (hLN.comp (depthwiseFlat_differentiable (h := h) (w := w) Wdw bdw)))))
+  unfold cnxBodyWith layerScale gelu; fun_prop
 
 /-- The body VJP, given the LN's. Only the LN carries a hypothesis — gelu is smooth and
     conv/layerScale are linear, so this is global exactly as `convNextBlockBody_has_vjp` is. -/
@@ -153,11 +148,8 @@ theorem cnxBlockChW_diff {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
     Differentiable ℝ (cnxBlockChW p) := by
   unfold cnxBlockChW residual
-  intro v
-  exact DifferentiableAt.add
-    ((cnxBodyWith_diff (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
-      p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p)) v)
-    differentiable_id.differentiableAt
+  exact (cnxBodyWith_diff (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
+    p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p)).add differentiable_id
 
 noncomputable def cnxBlockChW_has_vjp {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
