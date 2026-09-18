@@ -31,15 +31,8 @@ variable {E : Type*} [MeasurableSpace E]
     `iIndepFun` fact the Hoeffding sum bound needs. -/
 lemma iIndepFun_eval_pi (ν : Measure E) [IsProbabilityMeasure ν] (N : ℕ) :
     iIndepFun (fun (i : Fin N) (ω : Fin N → E) => ω i)
-      (Measure.pi fun _ : Fin N => ν) := by
-  rw [iIndepFun_iff_map_fun_eq_pi_map (fun i => (measurable_pi_apply i).aemeasurable)]
-  have h1 : (fun (ω : Fin N → E) (i : Fin N) => ω i) = id := rfl
-  have h2 : (fun i : Fin N =>
-      Measure.map (fun ω : Fin N → E => ω i) (Measure.pi fun _ : Fin N => ν))
-      = fun _ : Fin N => ν := by
-    funext i
-    exact (measurePreserving_eval (fun _ : Fin N => ν) i).map_eq
-  rw [h1, Measure.map_id, h2]
+      (Measure.pi fun _ : Fin N => ν) :=
+  iIndepFun_pi (X := fun _ => id) fun _ => aemeasurable_id
 
 /-- **One-sided Hoeffding for a `[0,1]`-valued Monte-Carlo mean.** With
     probability `≥ 1 − exp(−2Nt²)` over `N` iid samples from `ν`, the
@@ -57,16 +50,8 @@ theorem mc_mean_lower_bound (ν : Measure E) [IsProbabilityMeasure ν]
   -- the centered coordinate variables
   set X : Fin N → (Fin N → E) → ℝ := fun i ω => f (ω i) - p with hX
   -- each is (1/2)²-subgaussian by Hoeffding's lemma for bounded variables
-  have hmean : ∀ i : Fin N, (∫ ω, f (ω i) ∂μN) = p := by
-    intro i
-    calc (∫ ω, f (ω i) ∂μN)
-        = ∫ y, f y ∂(Measure.map (fun ω : Fin N → E => ω i) μN) :=
-          (integral_map (measurable_pi_apply i).aemeasurable
-            hfm.aestronglyMeasurable).symm
-      _ = p := by
-          rw [hp]
-          exact congrArg (fun m => ∫ y, f y ∂m)
-            (measurePreserving_eval (fun _ : Fin N => ν) i).map_eq
+  have hmean : ∀ i : Fin N, (∫ ω, f (ω i) ∂μN) = p :=
+    fun _ => integral_comp_eval hfm.aestronglyMeasurable
   have hsubG : ∀ i : Fin N,
       HasSubgaussianMGF (X i) (((1 : ℝ≥0) / 2) ^ 2) μN := by
     intro i
@@ -84,10 +69,8 @@ theorem mc_mean_lower_bound (ν : Measure E) [IsProbabilityMeasure ν]
     rw [hXi]
     exact h
   -- iid: compose coordinate independence with the (measurable) shift
-  have hindep : iIndepFun X μN := by
-    have h0 : iIndepFun (fun (i : Fin N) (ω : Fin N → E) => ω i) μN :=
-      iIndepFun_eval_pi ν N
-    exact h0.comp (fun i => fun v => f v - p) (fun i => (hfm.sub measurable_const))
+  have hindep : iIndepFun X μN :=
+    iIndepFun_pi (X := fun _ v => f v - p) fun _ => (hfm.sub measurable_const).aemeasurable
   -- Hoeffding on the sum
   have hHoeff := HasSubgaussianMGF.measure_sum_ge_le_of_iIndepFun hindep
     (c := fun _ : Fin N => ((1 : ℝ≥0) / 2) ^ 2)

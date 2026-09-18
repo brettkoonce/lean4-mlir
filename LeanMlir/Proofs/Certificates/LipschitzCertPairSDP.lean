@@ -1,4 +1,6 @@
 import LeanMlir.Proofs.Certificates.LipschitzCertInstance
+import Mathlib.LinearAlgebra.Matrix.PosDef
+import Mathlib.Algebra.Order.Star.Real
 
 /-! # Per-pair LipSDP certificates (Fazlyab–Robey–Hassani–Morari–Pappas 2019)
 
@@ -32,14 +34,6 @@ namespace LipschitzCertDemo
 
 open scoped BigOperators
 
-/-- Rotate a triple sum: `Σₐ Σ_b Σᵢ = Σᵢ Σₐ Σ_b`. -/
-private theorem sum_comm3 {M : Type*} [AddCommMonoid M] {p q r : ℕ}
-    (f : Fin p → Fin q → Fin r → M) :
-    ∑ a, ∑ b, ∑ i, f a b i = ∑ i, ∑ a, ∑ b, f a b i := by
-  rw [show (∑ a, ∑ b, ∑ i, f a b i) = ∑ a, ∑ i, ∑ b, f a b i from
-    Finset.sum_congr rfl fun a _ => Finset.sum_comm]
-  exact Finset.sum_comm
-
 -- ════════════════════════════════════════════════════════════════
 -- § ReLU slope restriction (the incremental quadratic constraint)
 -- ════════════════════════════════════════════════════════════════
@@ -67,24 +61,13 @@ theorem quad_form_nonneg_of_ldl {h : ℕ} (M L : Fin h → Fin h → ℝ)
     (d : Fin h → ℝ) (hd : ∀ i, 0 ≤ d i)
     (hM : ∀ a b, M a b = ∑ i, L a i * (d i * L b i)) (z : Fin h → ℝ) :
     0 ≤ ∑ a, ∑ b, z a * (M a b * z b) := by
-  have key : ∑ a, ∑ b, z a * (M a b * z b)
-      = ∑ i, d i * (∑ a, L a i * z a) ^ 2 := by
-    have lhs : ∑ a, ∑ b, z a * (M a b * z b)
-        = ∑ a, ∑ b, ∑ i, (L a i * z a) * (d i * (L b i * z b)) := by
-      refine Finset.sum_congr rfl fun a _ => Finset.sum_congr rfl fun b _ => ?_
-      rw [hM a b, Finset.sum_mul, Finset.mul_sum]
-      exact Finset.sum_congr rfl fun i _ => by ring
-    have rhs : ∑ i, d i * (∑ a, L a i * z a) ^ 2
-        = ∑ i, ∑ a, ∑ b, (L a i * z a) * (d i * (L b i * z b)) := by
-      refine Finset.sum_congr rfl fun i _ => ?_
-      rw [sq, Finset.sum_mul_sum, Finset.mul_sum]
-      refine Finset.sum_congr rfl fun a _ => ?_
-      rw [Finset.mul_sum]
-      exact Finset.sum_congr rfl fun b _ => by ring
-    rw [lhs, rhs]
-    exact sum_comm3 _
-  rw [key]
-  exact Finset.sum_nonneg fun i _ => mul_nonneg (hd i) (sq_nonneg _)
+  -- `M = L·diag(d)·Lᵀ` with `diag(d)` PSD, so `M` is PSD (Mathlib's `PosSemidef` congruence)
+  have hMeq : Matrix.of M = Matrix.of L * Matrix.diagonal d * (Matrix.of L).conjTranspose := by
+    ext a b
+    simp [hM, Matrix.mul_apply, Matrix.diagonal, mul_comm, mul_left_comm]
+  have hpsd : (Matrix.of M).PosSemidef := hMeq ▸
+    (Matrix.PosSemidef.diagonal (fun i => hd i)).mul_mul_conjTranspose_same (Matrix.of L)
+  simpa [dotProduct, Matrix.mulVec, Finset.mul_sum] using hpsd.dotProduct_mulVec_nonneg z
 
 /-- Discharge the LipSDP slack inequality from a concrete factored
     certificate: if `Sm = 2·diag(T) − vvᵀ − (1/ρ)·T∘G∘T` entrywise (`h1`)
@@ -206,17 +189,8 @@ theorem pair_sq_bound {n h : ℕ} (W : Fin h → Fin n → ℝ)
   -- Gram identity:  Σ w² = the TGT double sum
   have hEB : ∑ j, (∑ k, W k j * (T k * z k)) ^ 2
       = ∑ a, ∑ b, (T a * z a) * (G a b * (T b * z b)) := by
-    calc ∑ j, (∑ k, W k j * (T k * z k)) ^ 2
-        = ∑ j, ∑ a, ∑ b, (W a j * (T a * z a)) * (W b j * (T b * z b)) := by
-          refine Finset.sum_congr rfl fun j _ => ?_
-          rw [sq, Finset.sum_mul_sum]
-      _ = ∑ a, ∑ b, ∑ j, (W a j * (T a * z a)) * (W b j * (T b * z b)) :=
-          (sum_comm3 fun a b j =>
-            (W a j * (T a * z a)) * (W b j * (T b * z b))).symm
-      _ = ∑ a, ∑ b, (T a * z a) * (G a b * (T b * z b)) := by
-          refine Finset.sum_congr rfl fun a _ => Finset.sum_congr rfl fun b _ => ?_
-          rw [hG a b, Finset.sum_mul, Finset.mul_sum]
-          exact Finset.sum_congr rfl fun j _ => by ring
+    rw [sum_sq_matTvec_eq W (fun k => T k * z k) G hG]
+    simp only [Finset.mul_sum]
   -- complete the square:  2ρ·Σ w·Δx ≤ ρ²·Σ Δx² + Σ w²
   have hsq : 2 * ρ * (∑ j, (∑ k, W k j * (T k * z k)) * (x j - x' j))
       ≤ ρ ^ 2 * (∑ j, (x j - x' j) ^ 2)

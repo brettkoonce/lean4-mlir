@@ -86,23 +86,14 @@ noncomputable def hitCount (A : Set E) (N : ℕ) (ω : Fin N → E) : ℕ :=
 omit [MeasurableSpace E] in
 /-- The count is monotone in the target set. -/
 lemma hitCount_mono {A B : Set E} (hAB : A ⊆ B) (N : ℕ) (ω : Fin N → E) :
-    hitCount A N ω ≤ hitCount B N ω := by
-  simp only [hitCount]
-  refine Finset.sum_le_sum fun i _ => ?_
-  by_cases h : ω i ∈ A
-  · rw [Set.indicator_of_mem h, Set.indicator_of_mem (hAB h)]
-  · rw [Set.indicator_of_notMem h]
-    omega
+    hitCount A N ω ≤ hitCount B N ω :=
+  Finset.sum_le_sum fun i _ => Set.indicator_le_indicator_of_subset hAB (fun _ => Nat.zero_le _) (ω i)
 
 omit [MeasurableSpace E] in
 lemma hitCount_le (A : Set E) (N : ℕ) (ω : Fin N → E) : hitCount A N ω ≤ N := by
-  simp only [hitCount]
-  calc (∑ i, A.indicator 1 (ω i)) ≤ ∑ _i : Fin N, 1 :=
-        Finset.sum_le_sum fun i _ => by
-          by_cases h : ω i ∈ A
-          · rw [Set.indicator_of_mem h]; exact le_rfl
-          · rw [Set.indicator_of_notMem h]; omega
-    _ = N := by simp
+  have := Finset.sum_le_card_nsmul Finset.univ (fun i => A.indicator (1 : E → ℕ) (ω i)) 1
+    (fun i _ => Set.indicator_le_self' (fun _ _ => zero_le_one) (ω i))
+  simpa [hitCount] using this
 
 lemma measurable_hitCount {A : Set E} (hA : MeasurableSet A) (N : ℕ) :
     Measurable (hitCount A N) :=

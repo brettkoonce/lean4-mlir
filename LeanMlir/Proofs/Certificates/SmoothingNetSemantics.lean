@@ -39,27 +39,24 @@ open scoped BigOperators ENNReal NNReal RealInnerProductSpace
 -- ════════ § the argmax classifier ════════
 
 open scoped Classical in
+/-- Some logit is maximal: the maximizer set `argmaxNet` takes the least of is nonempty. -/
+lemma argmaxNet_nonempty {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ) (x : E) :
+    (Finset.univ.filter fun c => ∀ j, f x j ≤ f x c).Nonempty := by
+  obtain ⟨c, -, hc⟩ := Finset.exists_max_image Finset.univ (f x) ⟨0, Finset.mem_univ 0⟩
+  exact ⟨c, Finset.mem_filter.mpr ⟨Finset.mem_univ c, fun j => hc j (Finset.mem_univ j)⟩⟩
+
+open scoped Classical in
 /-- The argmax classifier of a logit map, LOWEST index winning ties: the
     least index among the maximizers. Total and deterministic — the
     tie-break never matters at strict-argmax points. -/
 noncomputable def argmaxNet {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ)
     (x : E) : Fin (k + 1) :=
-  (Finset.univ.filter fun c => ∀ j, f x j ≤ f x c).min' (by
-    obtain ⟨c, -, hc⟩ :=
-      Finset.exists_max_image Finset.univ (f x) ⟨0, Finset.mem_univ 0⟩
-    exact ⟨c, Finset.mem_filter.mpr
-      ⟨Finset.mem_univ c, fun j => hc j (Finset.mem_univ j)⟩⟩)
+  (Finset.univ.filter fun c => ∀ j, f x j ≤ f x c).min' (argmaxNet_nonempty f x)
 
 lemma argmaxNet_isMax {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ) (x : E) :
     ∀ j, f x j ≤ f x (argmaxNet f x) := by
   classical
-  have h := Finset.min'_mem
-    (Finset.univ.filter fun c => ∀ j, f x j ≤ f x c)
-    (by
-      obtain ⟨c, -, hc⟩ :=
-        Finset.exists_max_image Finset.univ (f x) ⟨0, Finset.mem_univ 0⟩
-      exact ⟨c, Finset.mem_filter.mpr
-        ⟨Finset.mem_univ c, fun j => hc j (Finset.mem_univ j)⟩⟩)
+  have h := Finset.min'_mem _ (argmaxNet_nonempty f x)
   exact (Finset.mem_filter.mp h).2
 
 /-- At a STRICT argmax the tie-break is irrelevant: `argmaxNet` returns it. -/
@@ -129,36 +126,15 @@ lemma isOpen_strictRegion {E : Type*} [TopologicalSpace E] {k : ℕ}
     {f : E → Fin (k + 1) → ℝ} (hf : ∀ j, Continuous fun x => f x j)
     (c : Fin (k + 1)) :
     IsOpen {x | ∀ j, j ≠ c → f x j < f x c} := by
-  have hrw : {x | ∀ j, j ≠ c → f x j < f x c}
-      = ⋂ j : Fin (k + 1), (if j = c then Set.univ else {x | f x j < f x c}) := by
-    ext x
-    simp only [Set.mem_ofPred_eq, Set.mem_iInter]
-    constructor
-    · intro h j
-      by_cases hj : j = c
-      · simp [hj]
-      · simpa [hj] using h j hj
-    · intro h j hj
-      have := h j
-      simpa [hj] using this
-  rw [hrw]
-  refine isOpen_iInter_of_finite fun j => ?_
-  by_cases hj : j = c
-  · simp [hj]
-  · simpa [hj] using isOpen_lt (hf j) (hf c)
+  simp only [Set.ofPred_forall]
+  exact isOpen_iInter_of_finite fun j => isOpen_iInter_of_finite fun _ => isOpen_lt (hf j) (hf c)
 
 -- ════════ § stdGaussian has full support ════════
 
 /-- `N(0,1)` charges every nonempty open set (the pdf is everywhere positive) —
     packaged as the Mathlib `IsOpenPosMeasure` class. -/
-instance : (gaussianReal 0 1).IsOpenPosMeasure := by
-  refine ⟨fun U hU ⟨x, hx⟩ => ?_⟩
-  obtain ⟨ε, hε, hball⟩ := Metric.isOpen_iff.mp hU x hx
-  have hsub : Set.Ioo (x - ε) (x + ε) ⊆ U := by
-    rw [← Real.ball_eq_Ioo]; exact hball
-  intro h0
-  exact absurd (measure_mono_null hsub h0)
-    (stdGaussian_Ioo_pos (by linarith)).ne'
+instance : (gaussianReal 0 1).IsOpenPosMeasure :=
+  (gaussianReal_absolutelyContinuous' 0 one_ne_zero).isOpenPosMeasure
 
 /-- The standard Gaussian on a finite-dimensional inner-product space charges
     every nonempty open set: it is the pushforward of the pi-Gaussian (open-pos
@@ -166,23 +142,9 @@ instance : (gaussianReal 0 1).IsOpenPosMeasure := by
 instance stdGaussian.instIsOpenPosMeasure {E : Type*} [NormedAddCommGroup E]
     [InnerProductSpace ℝ E] [FiniteDimensional ℝ E] [MeasurableSpace E]
     [BorelSpace E] : (stdGaussian E).IsOpenPosMeasure := by
-  constructor
-  intro U hU hne
-  set T : (Fin (Module.finrank ℝ E) → ℝ) → E :=
-    fun x => ∑ i, x i • stdOrthonormalBasis ℝ E i with hT
-  have hTcont : Continuous T := by
-    refine continuous_finsetSum _ fun i _ => ?_
-    exact (continuous_apply i).smul continuous_const
-  rw [stdGaussian, Measure.map_apply hTcont.measurable hU.measurableSet]
-  have hopen : IsOpen (T ⁻¹' U) := hU.preimage hTcont
-  have hnonempty : (T ⁻¹' U).Nonempty := by
-    obtain ⟨e, he⟩ := hne
-    refine ⟨fun i => (stdOrthonormalBasis ℝ E).repr e i, ?_⟩
-    show T _ ∈ U
-    have := (stdOrthonormalBasis ℝ E).sum_repr e
-    rw [hT]
-    simpa [this] using he
-  exact (hopen.measure_pos _ hnonempty).ne'
+  refine Continuous.isOpenPosMeasure_map (by fun_prop) fun e => ?_
+  exact ⟨fun i => (stdOrthonormalBasis ℝ E).repr e i,
+    by simpa using (stdOrthonormalBasis ℝ E).sum_repr e⟩
 
 -- ════════ § the hp discharge: witnesses ⇒ interior class probabilities ════════
 
@@ -263,9 +225,7 @@ theorem argmaxNet_smoothProb_mem_Ioo {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     have hsum : γ.real A + γ.real ((fun z => x + σ • z) ⁻¹' S c') ≤ 1 := by
       have hunion := measureReal_union (μ := γ) hdisj
         ((hSopen c').measurableSet)
-      have hle : γ.real (A ∪ (fun z => x + σ • z) ⁻¹' S c') ≤ 1 := by
-        rw [show (1:ℝ) = γ.real Set.univ from (probReal_univ (μ := γ)).symm]
-        exact measureReal_mono (Set.subset_univ _) (measure_ne_top _ _)
+      have hle : γ.real (A ∪ (fun z => x + σ • z) ⁻¹' S c') ≤ 1 := measureReal_le_one
       rw [hunion] at hle
       linarith
     linarith

@@ -83,10 +83,8 @@ lemma stdNormalCDF_panel {a b : ℝ} (h0 : 0 ≤ a) (hab : a ≤ b) :
   have hnn : (0:ℝ) ≤ (b - a) * gaussianPDFReal 0 1 a :=
     mul_nonneg (sub_nonneg.mpr hab) (gaussianPDFReal_nonneg 0 1 a)
   have hreal : (gaussianReal 0 1).real (Set.Ioc a b)
-      ≤ (b - a) * gaussianPDFReal 0 1 a := by
-    rw [measureReal_def]
-    refine le_trans (ENNReal.toReal_mono (by finiteness) hmeas) ?_
-    rw [ENNReal.toReal_ofReal hnn]
+      ≤ (b - a) * gaussianPDFReal 0 1 a :=
+    ENNReal.toReal_le_of_le_ofReal hnn hmeas
   linarith
 
 -- ════════ § rational exp lower bound + √(2π) lower bound ════════
