@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Float.DepthwiseFloatBridge
+import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 
 /-! # `depthwise_close_mixed` — the bf16-mixed DEPTHWISE convolution against exact ℝ
 
@@ -52,9 +53,8 @@ theorem depthwiseConv2d_eq_dw_dot {c h w kH kW : Nat} (W : DepthwiseKernel c kH 
       = (∑ k, dwWindow kH kW x ch hi wi k * dwSlice W ch k) + b ch := by
   rw [depthwiseConv2d_eq_dense]; rfl
 
-/-- The Higham bracket at the depthwise fan-in — `convBr`'s peer, with `n = kH·kW`. -/
-noncomputable def dwBr (M L : FloatModel) (n : Nat) : ℝ :=
-  ((1 + M.u) ^ (n + 1) - 1) * (1 + L.u) ^ 2 + (2 * L.u + L.u ^ 2)
+/-- The Higham bracket at the depthwise fan-in — `convBr` itself, with `n = kH·kW`. -/
+noncomputable def dwBr (M L : FloatModel) (n : Nat) : ℝ := convBr M L n
 
 /-- `Σ|kernel·window|` over the receptive field — the magnitude the bound scales. -/
 noncomputable def dwFanS {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
@@ -87,53 +87,8 @@ theorem depthwise_close_mixed (L : FloatModel) {c h w kH kW : Nat}
       M.u * ((1 + L.u) * (1 + dwBr M L (kH*kW)) * dwFanS W x ch hi wi + |b ch|)
         + L.u * (1 + dwBr M L (kH*kW)) * dwFanS W x ch hi wi
         + dwBr M L (kH*kW) * dwFanS W x ch hi wi := by
-  have hMu := M.u_nonneg
-  have hLu := L.u_nonneg
-  set win := dwWindow kH kW x ch hi wi with hwin
-  set ker := dwSlice W ch with hker
-  set S := dwFanS W x ch hi wi with hS
-  set br := dwBr M L (kH*kW) with hbr
-  set p := M.dotMixed L win ker with hp
-  set P := ∑ k, win k * ker k with hP
-  have hS0 : (0:ℝ) ≤ S := Finset.sum_nonneg fun _ _ => abs_nonneg _
-  have hbr0 : (0:ℝ) ≤ br := by
-    have h1 : (0:ℝ) ≤ (1 + M.u) ^ (kH*kW + 1) - 1 :=
-      sub_nonneg.mpr (one_le_pow₀ (by linarith))
-    have h2 : (0:ℝ) ≤ (1 + L.u) ^ 2 := sq_nonneg _
-    have h3 : (0:ℝ) ≤ 2 * L.u + L.u ^ 2 := by nlinarith
-    simp only [hbr, dwBr]; nlinarith
-  -- the dot
-  have hD : |p - P| ≤ br * S := by
-    have h := M.dot_close_mixed_uniform L win ker
-    simpa [hp, hP, hS, hbr, dwBr, dwFanS, hker, hwin] using h
-  have hPS : |P| ≤ S := by
-    simpa [hP, hS, dwFanS, hker, hwin] using Finset.abs_sum_le_sum_abs (fun k => win k * ker k) _
-  have hpb : |p| ≤ (1 + br) * S := by
-    have := abs_sub_abs_le_abs_sub p P
-    nlinarith [abs_nonneg p, abs_nonneg P]
-  -- the store
-  have hstore : |L.rnd p - p| ≤ L.u * |p| := L.err p
-  have hLp : |L.rnd p| ≤ (1 + L.u) * (1 + br) * S := by
-    have h1 : |L.rnd p| ≤ |L.rnd p - p| + |p| := by simpa using abs_sub_le (L.rnd p) p 0
-    nlinarith [abs_nonneg p]
-  have hLpP : |L.rnd p - P| ≤ L.u * (1 + br) * S + br * S := by
-    have h : |L.rnd p - P| ≤ |L.rnd p - p| + |p - P| := abs_sub_le _ _ _
-    nlinarith [abs_nonneg p]
-  -- the bias add, at the accumulate precision
-  have hadd : |M.rnd (L.rnd p + b ch) - (L.rnd p + b ch)| ≤ M.u * |L.rnd p + b ch| := M.err _
-  have hy : |L.rnd p + b ch| ≤ (1 + L.u) * (1 + br) * S + |b ch| := by
-    have := abs_add_le (L.rnd p) (b ch); linarith
   rw [depthwiseConv2d_eq_dw_dot]
-  show |M.add (L.rnd p) (b ch) - (P + b ch)| ≤ _
-  simp only [FloatModel.add]
-  have hsplit : |M.rnd (L.rnd p + b ch) - (P + b ch)|
-      ≤ |M.rnd (L.rnd p + b ch) - (L.rnd p + b ch)| + |L.rnd p - P| := by
-    have : M.rnd (L.rnd p + b ch) - (P + b ch)
-         = (M.rnd (L.rnd p + b ch) - (L.rnd p + b ch)) + (L.rnd p - P) := by ring
-    rw [this]; exact abs_add_le _ _
-  have hMy : M.u * |L.rnd p + b ch| ≤ M.u * ((1 + L.u) * (1 + br) * S + |b ch|) :=
-    mul_le_mul_of_nonneg_left hy hMu
-  linarith
+  exact M.storeBias_close L _ _ (b ch)
 
 end FloatModel
 end Proofs

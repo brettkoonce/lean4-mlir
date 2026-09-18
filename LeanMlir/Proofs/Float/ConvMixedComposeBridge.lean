@@ -155,22 +155,6 @@ theorem conv2d_sub_abs_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW} {b :
 -- § The mixed-precision conv budget, with an INHERITED error
 -- ════════════════════════════════════════════════════════════════
 
-/-- `convBr` as a function of the two roundoffs alone — the same bracket, with the `FloatModel`s
-    peeled off so a concrete instance evaluates by `norm_num`. -/
-noncomputable def convBrR (uacc uleaf : ℝ) (n : ℕ) : ℝ :=
-  ((1 + uacc) ^ (n + 1) - 1) * (1 + uleaf) ^ 2 + (2 * uleaf + uleaf ^ 2)
-
-theorem convBr_eq_convBrR (M L : FloatModel) (n : ℕ) :
-    convBr M L n = convBrR M.u L.u n := rfl
-
-theorem convBrR_nonneg {uacc uleaf : ℝ} (hacc : 0 ≤ uacc) (hleaf : 0 ≤ uleaf) (n : ℕ) :
-    0 ≤ convBrR uacc uleaf n := by
-  have h1 : (0 : ℝ) ≤ (1 + uacc) ^ (n + 1) - 1 :=
-    sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have h2 : (0 : ℝ) ≤ (1 + uleaf) ^ 2 := sq_nonneg _
-  have h3 : (0 : ℝ) ≤ 2 * uleaf + uleaf ^ 2 := by nlinarith [sq_nonneg uleaf]
-  simp only [convBrR]; nlinarith
-
 /-- ⭐⭐ **The mixed-precision conv budget — the `layerBudget` peer, and the object this whole
     file exists to produce.** Four terms:
 
@@ -230,11 +214,8 @@ theorem FloatModel.convMixed_close_prop (M L : FloatModel) {ic oc h w kH kW : Na
   set br := convBrR M.u L.u n with hbrdef
   have hbr0 : 0 ≤ br := convBrR_nonneg hMu hLu n
   -- the float conv's own input magnitude is A + E, not A
-  have hxt : ∀ c i j, |xt c i j| ≤ A + E := by
-    intro c i j
-    have := abs_sub_le (xt c i j) (xa c i j) 0
-    have h1 : |xt c i j| ≤ |xt c i j - xa c i j| + |xa c i j| := by simpa using this
-    linarith [hd c i j, hxa c i j]
+  have hxt : ∀ c i j, |xt c i j| ≤ A + E := fun c i j => by
+    linarith [abs_sub_abs_le_abs_sub (xt c i j) (xa c i j), hd c i j, hxa c i j]
   set S := convFanS W xt o hi wi with hSdef
   have hS0 : 0 ≤ S := Finset.sum_nonneg fun _ _ => abs_nonneg _
   have hSle : S ≤ (n : ℝ) * w' * (A + E) :=

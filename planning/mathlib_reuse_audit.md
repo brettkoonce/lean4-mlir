@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `a7696b70`, 7 ahead of origin, + the staged row)
+## Status (2026-09-18, main `03cbb0db`, 8 ahead of origin, + the staged row)
 
-**Landed** — about 12.1k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 12.4k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -60,7 +60,8 @@ suspected, no drop-in located.
 | `73a0db90` | **§4 Mathlib one-liners + Training's §0.5 idioms** (−119): `JacobianSeal` — both `backward_ne_zero_of_pdiv_ne` are `simpa [h.correct]` (the `sum_eq_single` block was written twice), `sum_smul_basisVec` one `simp`, `fderiv_eq_zero_of_pdiv_all_zero` via `sum_smul_basisVec` + `map_sum` (a `pdiv` row is `fderiv` on the basis vector by definition), `exists_pdiv_ne_of_fderiv_ne` one `simpa … using mt …`; the unpinned `fderiv_basisVec_eq_zero_of_pdiv_row` deleted. `fderiv_apply_eq_sum_grad` on `LinearMap.pi_apply_eq_sum_univ` (15 → 5). New `abs_softmax_sub_oneHot_le_one` (`SgdDescentLinear`, parked until §3 makes FloatBridge's softmax bounds public) replaces five 14-line copies (Linear, Mlp ×2, Cnn ×2). `MlpSlot`'s mask freeze is `if_congr`; nine margin ⇒ off-kink proofs are `abs_pos.mp (h.trans_lt hm)`. Left: eight `sum_const`/`card_univ` rewrites (a line or less each) |
 | `96bb507b` | **§3 FloatBridge** (−243): new `FloatModel.rnd_close` (`|a − b| ≤ e`, `|a| ≤ A` ⇒ `|fl(a) − b| ≤ u·A + e` — every rounded `add`/`sub`/`mul`/`div` is `M.rnd` of the exact op) and `abs_rnd_le` (`|fl(x)| ≤ (1+u)|x|`): `mul_close`, `sgd_step_close`, `dense_close_mixed`'s bias add, `softmaxF_close`, `softmax_ce_cot_close` and `ResNet34FloatBridge.add_close` end in one `rnd_close`; the four leaf-magnitude `calc`s in the mixed dots are `abs_rnd_le`. New `mlp_l1_close` — the layer-0 → layer-1 forward prefix (`l0`, `r0`, `ha₁`, `l1`) as one conjunction — replaces 17 lines in each of the five `mlp_*_step_float_close`. `mulErr_mono`, `sgdErr_mono`, `layerBudget_le_of`, `denseMixedBudget_le_of` are `unfold; gcongr`. `pow_one_add_sub_one_le` on `geom_sum_mul`; `pow_gamma_bound` via `(1+u)^k ≤ e^{k·u}` + `exp_sub_one_le` (moved up), so the private `one_sub_mul_pow_le` goes. `relu_close` on `abs_max_sub_max_le_abs`; `relu_abs_le` one line. `softmax_nonneg` / `softmax_le_one` are public and `abs_softmax_sub_oneHot_le_one` moves up from `SgdDescentLinear` (same full name), closing FloatBridge's own copy |
 | `a7696b70` | **§3 BN float** (−125): `bnIstd_close` is `bnIstd_close_at` at the floor `V = ε` (25 → 7; it moved below its general form); `FloatModel.bnVar_close` runs `bnMean_close_of` on the float squares plus a `|bnMean fsq − bnVar| ≤ esq` shift, instead of re-deriving the sum-and-divide chain (103 → 41, `bnVarBudget` unchanged). The centered, β-add and mean-divide stages of `bnForward_close_of` / `bnMean_close_of` / `bnVar_close` are `rnd_close`. BnInputBridge's private `abs_sub_le_add` is Mathlib `abs_sub` |
-| *(staged)* | **§3 `FloatClose` family** (−140): new `FloatClose.of_close` (`FloatComposeBridge`) — a real bound `R`, a fresh-input rounding bound `E` and the error modulus give `FloatClose A (R+E)`; `floatClose_flatConv` (18 → 4), `_dense` (16 → 6), `_gap` (48 → 30), `_depthwise` (20 → 4), `_flatConvMixed` (21 → 4) and `_bn` (30 → 15) are instances. `floatClose_bnRelu` is `(floatClose_bn …).comp (floatClose_relu _)` (44 → 1) and `floatClose_residualBlock` `(floatClose_addResidual M hF).comp (floatClose_relu _)` (28 → 1). Binder-only renames in five pinned statements whose `0 ≤ β` / `0 ≤ A` hypothesis only fed the old `0 ≤ E` step: `_hβ` (flatConv, dense, depthwise, flatConvMixed), `_hA0` (gap) |
+| `03cbb0db` | **§3 `FloatClose` family** (−140): new `FloatClose.of_close` (`FloatComposeBridge`) — a real bound `R`, a fresh-input rounding bound `E` and the error modulus give `FloatClose A (R+E)`; `floatClose_flatConv` (18 → 4), `_dense` (16 → 6), `_gap` (48 → 30), `_depthwise` (20 → 4), `_flatConvMixed` (21 → 4) and `_bn` (30 → 15) are instances. `floatClose_bnRelu` is `(floatClose_bn …).comp (floatClose_relu _)` (44 → 1) and `floatClose_residualBlock` `(floatClose_addResidual M hF).comp (floatClose_relu _)` (28 → 1). Binder-only renames in five pinned statements whose `0 ≤ β` / `0 ≤ A` hypothesis only fed the old `0 ≤ E` step: `_hβ` (flatConv, dense, depthwise, flatConvMixed), `_hA0` (gap) |
+| *(staged)* | **§3 mixed precision** (−65): new `FloatModel.storeBias_close` (`ConvMixedFloatBridge`) — dot → store at `L` → bias add at `M`, both roundings through `rnd_close` / `abs_rnd_le` — makes `conv_close_mixed` and `depthwise_close_mixed` 2 lines each (54 before). The bracket is one definition: `convBrR` / `convBrR_nonneg` / `convBr_eq_convBrR` move up from `ConvMixedComposeBridge` (same full names), `convBr M L n := convBrR M.u L.u n`, `dwBr := convBr` (`rfl`-equal to the HEAD formulas), and the two inline nonnegativity proofs go; `DepthwiseMixedFloatBridge` imports `ConvMixedFloatBridge`. `floatClose_addResidual`'s magnitude is `abs_rnd_le` |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -90,10 +91,11 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    name. Several of the drift/radius copies may already be gone inside the slot lemmas. `SgdDescentCnn` is a
    leaf (Certs ≈ 35 s); the seal files are leaves too. `FloatBridge` (~100 downstream) holds the private
    `softmax_nonneg`/`softmax_le_one` that §3's item 2 wants public — keep that for the §3 batch.
-2. **§3 Float near-clones** (~500) — in progress 2026-09-18: FloatBridge (staged row), then the BN pair
-   (`bnVar_close` on `bnMean_close_of`, `bnIstd_close` = `bnIstd_close_at`, −125), the `FloatClose.of_close`
-   family (−140) and the mixed-precision `storeBias_close` / one bracket (−65), drafted and checked. Open: the
-   `convWindow3` hoist onto SgdDescentCnn's window block (~35; costs an import edge or a new module). `conv_close_mixed` ≡ `depthwise_close_mixed`; `FloatClose.of_close`;
+2. **§3 Float near-clones** — done 2026-09-18 (−573 over four commits, against ~500 estimated). Left: the
+   `convWindow3` hoist onto SgdDescentCnn's window block (~35; `convWindow3` is `rfl`-equal to a `convPad`
+   lambda, but reusing SgdDescentCnn's lemmas means importing it into ConvMixedFloatBridge — 43 modules then
+   rebuild on every SgdDescentCnn edit — or a new shared `convPad` module); `bnVar_nonneg` / `bnIstd_pos`
+   into BatchNorm.lean waits for the root-file batch (item 6). `conv_close_mixed` ≡ `depthwise_close_mixed`; `FloatClose.of_close`;
    `floatClose_bnRelu` / `_residualBlock` as `.comp`; `bnVar_close` on `bnMean_close_of`;
    `FloatModel.rnd_close` / `abs_rnd_le`; `mlp_l1_close`; public softmax bounds +
    `abs_softmax_sub_oneHot_le_one` (×7, Training too). ⚠ `FloatBridge` has ~100 downstream.

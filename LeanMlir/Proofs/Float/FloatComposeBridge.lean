@@ -229,9 +229,8 @@ theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
   · have hb := (hFm v hv i).1
     nlinarith [abs_add_le (F v i) (v i), hv i, abs_nonneg (F v i), abs_nonneg (v i)]
   · have hsum : |FF v i + v i| ≤ B + A := (abs_add_le _ _).trans (add_le_add (hFm v hv i).2 (hv i))
-    show |M.rnd (FF v i + v i)| ≤ _
-    nlinarith [M.err (FF v i + v i), abs_sub_abs_le_abs_sub (M.rnd (FF v i + v i)) (FF v i + v i),
-      abs_nonneg (FF v i + v i)]
+    refine (M.abs_rnd_le _).trans ?_
+    nlinarith [abs_nonneg (FF v i + v i)]
   · refine (M.add_close (hFe vt va e hva hvt hd i) (hd i)).trans ?_
     have h1 : M.u * (|F va i| + LF e + |va i| + e) ≤ M.u * (B + LF e + A + e) :=
       mul_le_mul_of_nonneg_left (by linarith [(hFm va hva i).1, hva i]) hu

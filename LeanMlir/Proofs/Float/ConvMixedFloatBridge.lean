@@ -97,11 +97,26 @@ end Proofs
 
 namespace Proofs
 
-/-- The Higham-style bracket `dot_close_mixed_uniform` produces at fan-in `n`: fan-in
-    amplification rides the ACCUMULATE precision `M.u`, the leaf precision contributes a flat
+/-- The Higham-style bracket `dot_close_mixed_uniform` produces at fan-in `n`, as a function of
+    the two roundoffs alone (so a concrete instance evaluates by `norm_num`): fan-in
+    amplification rides the ACCUMULATE roundoff `uacc`, the leaf roundoff contributes a flat
     per-leaf term. -/
-noncomputable def convBr (M L : FloatModel) (n : Nat) : ℝ :=
-  ((1 + M.u) ^ (n + 1) - 1) * (1 + L.u) ^ 2 + (2 * L.u + L.u ^ 2)
+noncomputable def convBrR (uacc uleaf : ℝ) (n : ℕ) : ℝ :=
+  ((1 + uacc) ^ (n + 1) - 1) * (1 + uleaf) ^ 2 + (2 * uleaf + uleaf ^ 2)
+
+theorem convBrR_nonneg {uacc uleaf : ℝ} (hacc : 0 ≤ uacc) (hleaf : 0 ≤ uleaf) (n : ℕ) :
+    0 ≤ convBrR uacc uleaf n := by
+  have h1 : (0 : ℝ) ≤ (1 + uacc) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have h2 : (0 : ℝ) ≤ (1 + uleaf) ^ 2 := sq_nonneg _
+  have h3 : (0 : ℝ) ≤ 2 * uleaf + uleaf ^ 2 := by nlinarith [sq_nonneg uleaf]
+  simp only [convBrR]; nlinarith
+
+/-- The bracket at an accumulate model `M` and a leaf model `L`. -/
+noncomputable def convBr (M L : FloatModel) (n : Nat) : ℝ := convBrR M.u L.u n
+
+theorem convBr_eq_convBrR (M L : FloatModel) (n : ℕ) :
+    convBr M L n = convBrR M.u L.u n := rfl
 
 /-- `Σ|kernel·window|` over the receptive field — the magnitude the bound scales. -/
 noncomputable def convFanS {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
@@ -110,6 +125,36 @@ noncomputable def convFanS {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
 
 namespace FloatModel
 variable (M : FloatModel)
+
+/-- ⭐ **The mixed-precision store-then-bias step, once.** A dot accumulated at `M` over leaves
+    rounded to `L` (`dotMixed`), rounded to `L` again on store, then a bias added at `M`: three
+    terms, one per rounding — the dot (`convBr`, fan-in `n`), the store (`L.u`) and the bias add
+    (`M.u`). `conv_close_mixed` and `depthwise_close_mixed` are this at their receptive fields. -/
+theorem storeBias_close (L : FloatModel) {n : Nat} (x y : Vec n) (β : ℝ) :
+    |M.add (L.rnd (M.dotMixed L x y)) β - ((∑ k, x k * y k) + β)| ≤
+      M.u * ((1 + L.u) * (1 + convBr M L n) * (∑ k, |x k * y k|) + |β|)
+        + L.u * (1 + convBr M L n) * (∑ k, |x k * y k|)
+        + convBr M L n * (∑ k, |x k * y k|) := by
+  set S := ∑ k, |x k * y k| with hS
+  set br := convBr M L n with hbr
+  set p := M.dotMixed L x y
+  set P := ∑ k, x k * y k
+  have hbr0 : 0 ≤ br := convBrR_nonneg M.u_nonneg L.u_nonneg n
+  -- the dot
+  have hD : |p - P| ≤ br * S := by
+    simpa [hS, hbr, convBr, convBrR] using M.dot_close_mixed_uniform L x y
+  have hpb : |p| ≤ (1 + br) * S := by
+    have hPS : |P| ≤ S := Finset.abs_sum_le_sum_abs _ _
+    nlinarith [abs_sub_abs_le_abs_sub p P]
+  -- the store, then the bias add at the accumulate precision
+  have hLpP := L.rnd_close hD hpb
+  have hy : |L.rnd p + β| ≤ (1 + L.u) * (1 + br) * S + |β| := by
+    have := (L.abs_rnd_le p).trans (mul_le_mul_of_nonneg_left hpb (by linarith [L.u_nonneg]))
+    linarith [abs_add_le (L.rnd p) β]
+  have h := M.rnd_close (a := L.rnd p + β) (b := P + β)
+    (by simpa only [add_sub_add_right_eq_sub] using hLpP) hy
+  show |M.rnd (L.rnd p + β) - (P + β)| ≤ _
+  linarith
 
 /-- **The mixed-precision convolution, as the emitted graph computes it.** Operands rounded to
     the leaf precision `L` and accumulated at `M` (`dotMixed`), the accumulator then rounded to
@@ -140,53 +185,8 @@ theorem conv_close_mixed (L : FloatModel) {ic oc h w kH kW : Nat}
       M.u * ((1 + L.u) * (1 + convBr M L (ic*kH*kW)) * convFanS W x o hi wi + |b o|)
         + L.u * (1 + convBr M L (ic*kH*kW)) * convFanS W x o hi wi
         + convBr M L (ic*kH*kW) * convFanS W x o hi wi := by
-  have hMu := M.u_nonneg
-  have hLu := L.u_nonneg
-  set ker := Tensor3.flatten (convSlice W o) with hker
-  set win := Tensor3.flatten (convWindow3 kH kW x hi wi) with hwin
-  set S := convFanS W x o hi wi with hS
-  set br := convBr M L (ic*kH*kW) with hbr
-  set p := M.dotMixed L ker win with hp
-  set P := ∑ k, ker k * win k with hP
-  have hS0 : (0:ℝ) ≤ S := Finset.sum_nonneg fun _ _ => abs_nonneg _
-  have hbr0 : (0:ℝ) ≤ br := by
-    have h1 : (0:ℝ) ≤ (1 + M.u) ^ (ic*kH*kW + 1) - 1 :=
-      sub_nonneg.mpr (one_le_pow₀ (by linarith))
-    have h2 : (0:ℝ) ≤ (1 + L.u) ^ 2 := sq_nonneg _
-    have h3 : (0:ℝ) ≤ 2 * L.u + L.u ^ 2 := by nlinarith
-    simp only [hbr, convBr]; nlinarith
-  -- the dot
-  have hD : |p - P| ≤ br * S := by
-    have h := M.dot_close_mixed_uniform L ker win
-    simpa [hp, hP, hS, hbr, convBr, convFanS, hker, hwin] using h
-  have hPS : |P| ≤ S := by
-    simpa [hP, hS, convFanS, hker, hwin] using Finset.abs_sum_le_sum_abs (fun k => ker k * win k) _
-  have hpb : |p| ≤ (1 + br) * S := by
-    have := abs_sub_abs_le_abs_sub p P
-    nlinarith [abs_nonneg p, abs_nonneg P]
-  -- the store
-  have hstore : |L.rnd p - p| ≤ L.u * |p| := L.err p
-  have hLp : |L.rnd p| ≤ (1 + L.u) * (1 + br) * S := by
-    have h1 : |L.rnd p| ≤ |L.rnd p - p| + |p| := by simpa using abs_sub_le (L.rnd p) p 0
-    nlinarith [abs_nonneg p]
-  have hLpP : |L.rnd p - P| ≤ L.u * (1 + br) * S + br * S := by
-    have h : |L.rnd p - P| ≤ |L.rnd p - p| + |p - P| := abs_sub_le _ _ _
-    nlinarith [abs_nonneg p]
-  -- the bias add, at the accumulate precision
-  have hadd : |M.rnd (L.rnd p + b o) - (L.rnd p + b o)| ≤ M.u * |L.rnd p + b o| := M.err _
-  have hy : |L.rnd p + b o| ≤ (1 + L.u) * (1 + br) * S + |b o| := by
-    have := abs_add_le (L.rnd p) (b o); linarith
-  rw [conv2d_eq_flat_dot]
-  show |M.add (L.rnd p) (b o) - (b o + P)| ≤ _
-  simp only [FloatModel.add]
-  have hsplit : |M.rnd (L.rnd p + b o) - (b o + P)|
-      ≤ |M.rnd (L.rnd p + b o) - (L.rnd p + b o)| + |L.rnd p - P| := by
-    have : M.rnd (L.rnd p + b o) - (b o + P)
-         = (M.rnd (L.rnd p + b o) - (L.rnd p + b o)) + (L.rnd p - P) := by ring
-    rw [this]; exact abs_add_le _ _
-  have hMy : M.u * |L.rnd p + b o| ≤ M.u * ((1 + L.u) * (1 + br) * S + |b o|) :=
-    mul_le_mul_of_nonneg_left hy hMu
-  linarith
+  rw [conv2d_eq_flat_dot, add_comm (b o)]
+  exact M.storeBias_close L _ _ (b o)
 
 end FloatModel
 end Proofs
