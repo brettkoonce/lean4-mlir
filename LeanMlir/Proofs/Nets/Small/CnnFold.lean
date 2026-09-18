@@ -127,14 +127,8 @@ theorem dW5_den {c h w d1 nClasses : Nat}
       = W₅ i j - lr * ∑ k : Fin nClasses,
           pdiv (fun v : Vec (d1 * nClasses) =>
                   dense (Mat.unflatten v) b₅ (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))))
-               (Mat.flatten W₅) (finProdFinEquiv (i, j)) k * dy k := by
-  have step : den (SHlo.weightSgd aN "%W5" lrStr (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) W₅ lr
-                (.operand dyN dy)) (finProdFinEquiv (i, j))
-            = W₅ i j - lr * emitWeightGrad (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool))))
-                Back.cotangent dy i j := by
-    simp only [den, emitWeightGrad, Mat.outer, Back.denote, Mat.flatten, Equiv.symm_apply_apply]
-  rw [step, weight_grad_bridge W₅ b₅ (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool))))
-        Back.cotangent dy i j]; rfl
+               (Mat.flatten W₅) (finProdFinEquiv (i, j)) k * dy k :=
+  Cifar8PoC.denseW_den aN "%W5" lrStr dyN _ W₅ b₅ _ lr i j
 
 /-- Hidden-layer weight op `W₄` = certified step (cotangent = `mlpCotOut1 W₅ h4`). -/
 theorem dW4_den {c h w d1 nClasses : Nat}
@@ -147,15 +141,8 @@ theorem dW4_den {c h w d1 nClasses : Nat}
       = W₄ i j - lr * ∑ k : Fin d1,
           pdiv (fun v : Vec (d1 * d1) => dense (Mat.unflatten v) b₄ (relu d1 (dense W₃ b₃ pool)))
                (Mat.flatten W₄) (finProdFinEquiv (i, j)) k
-            * (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy k := by
-  have step : den (SHlo.weightSgd aN "%W4" lrStr (relu d1 (dense W₃ b₃ pool)) W₄ lr
-                (.operand cN ((mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy)))
-                (finProdFinEquiv (i, j))
-            = W₄ i j - lr * emitWeightGrad (relu d1 (dense W₃ b₃ pool))
-                (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i j := by
-    simp only [den, emitWeightGrad, Mat.outer, Mat.flatten, Equiv.symm_apply_apply]
-  rw [step, weight_grad_bridge W₄ b₄ (relu d1 (dense W₃ b₃ pool))
-        (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i j]
+            * (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy k :=
+  Cifar8PoC.denseW_den aN "%W4" lrStr cN _ W₄ b₄ _ lr i j
 
 /-- Input-layer (pool) weight op `W₃` = certified step (cotangent = `mlpCotOut0 W₄ W₅ h3 h4`). -/
 theorem dW3_den {c h w d1 nClasses : Nat}
@@ -170,17 +157,8 @@ theorem dW3_den {c h w d1 nClasses : Nat}
           pdiv (fun v : Vec ((c*h*w) * d1) => dense (Mat.unflatten v) b₃ pool)
                (Mat.flatten W₃) (finProdFinEquiv (i, j)) k
             * (mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool)
-                (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy k := by
-  have step : den (SHlo.weightSgd "%pool" "%W3" lrStr pool W₃ lr
-                (.operand cN ((mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool)
-                                (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy)))
-                (finProdFinEquiv (i, j))
-            = W₃ i j - lr * emitWeightGrad pool
-                (mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool)
-                  (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i j := by
-    simp only [den, emitWeightGrad, Mat.outer, Mat.flatten, Equiv.symm_apply_apply]
-  rw [step, weight_grad_bridge W₃ b₃ pool
-        (mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool) (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i j]
+                (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy k :=
+  Cifar8PoC.denseW_den "%pool" "%W3" lrStr cN _ W₃ b₃ _ lr i j
 
 /-- Output-layer bias op `b₅` = certified step. -/
 theorem db5_den {c h w d1 nClasses : Nat}
@@ -190,12 +168,8 @@ theorem db5_den {c h w d1 nClasses : Nat}
     den (SHlo.biasSgd "%b5" lrStr b₅ lr (.operand dyN dy)) i
       = b₅ i - lr * ∑ j : Fin nClasses,
           pdiv (fun b' : Vec nClasses =>
-                  dense W₅ b' (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool))))) b₅ i j * dy j := by
-  have step : den (SHlo.biasSgd "%b5" lrStr b₅ lr (.operand dyN dy)) i
-            = b₅ i - lr * emitBiasGrad Back.cotangent dy i := by
-    simp only [den, emitBiasGrad, Back.denote]
-  rw [step, bias_grad_bridge W₅ b₅ (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool))))
-        Back.cotangent dy i]; rfl
+                  dense W₅ b' (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool))))) b₅ i j * dy j :=
+  Cifar8PoC.denseB_den "%b5" lrStr dyN W₅ _ b₅ _ lr i
 
 /-- Hidden-layer bias op `b₄` = certified step. -/
 theorem db4_den {c h w d1 nClasses : Nat}
@@ -205,13 +179,8 @@ theorem db4_den {c h w d1 nClasses : Nat}
           (.operand cN ((mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy))) i
       = b₄ i - lr * ∑ j : Fin d1,
           pdiv (fun b' : Vec d1 => dense W₄ b' (relu d1 (dense W₃ b₃ pool))) b₄ i j
-            * (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy j := by
-  have step : den (SHlo.biasSgd "%b4" lrStr b₄ lr
-                (.operand cN ((mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy))) i
-            = b₄ i - lr * emitBiasGrad (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i := by
-    simp only [den, emitBiasGrad]
-  rw [step, bias_grad_bridge W₄ b₄ (relu d1 (dense W₃ b₃ pool))
-        (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i]
+            * (mlpCotOut1 W₅ (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy j :=
+  Cifar8PoC.denseB_den "%b4" lrStr cN W₄ _ b₄ _ lr i
 
 /-- Input-layer (pool) bias op `b₃` = certified step. -/
 theorem db3_den {c h w d1 nClasses : Nat}
@@ -223,15 +192,8 @@ theorem db3_den {c h w d1 nClasses : Nat}
       = b₃ i - lr * ∑ j : Fin d1,
           pdiv (fun b' : Vec d1 => dense W₃ b' pool) b₃ i j
             * (mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool)
-                (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy j := by
-  have step : den (SHlo.biasSgd "%b3" lrStr b₃ lr
-                (.operand cN ((mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool)
-                                (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy))) i
-            = b₃ i - lr * emitBiasGrad (mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool)
-                (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i := by
-    simp only [den, emitBiasGrad]
-  rw [step, bias_grad_bridge W₃ b₃ pool
-        (mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool) (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i]
+                (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))).denote dy j :=
+  Cifar8PoC.denseB_den "%b3" lrStr cN W₃ _ b₃ _ lr i
 
 /-! ## Tie (dense head) — the top loss cotangent is the composed softmax-CE of the CONV forward
 

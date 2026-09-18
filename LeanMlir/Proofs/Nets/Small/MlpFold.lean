@@ -67,13 +67,8 @@ theorem W2_den_certified (aN lrStr dyN : String) (i : Fin d₂) (j : Fin d₃) :
       = W₂ i j - lr * ∑ k : Fin d₃,
           pdiv (fun v : Vec (d₂ * d₃) =>
                   dense (Mat.unflatten v) b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))))
-               (Mat.flatten W₂) (finProdFinEquiv (i, j)) k * g k := by
-  have step : den (SHlo.weightSgd aN "%W2" lrStr (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) W₂ lr
-                (.operand dyN g)) (finProdFinEquiv (i, j))
-            = W₂ i j - lr * emitWeightGrad (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))
-                Back.cotangent g i j := by
-    simp only [den, emitWeightGrad, Mat.outer, Back.denote, Mat.flatten, Equiv.symm_apply_apply]
-  rw [step, mlp_render_W2_certified W₀ b₀ W₁ b₁ W₂ b₂ x g lr i j]
+               (Mat.flatten W₂) (finProdFinEquiv (i, j)) k * g k :=
+  Cifar8PoC.denseW_den aN "%W2" lrStr dyN _ W₂ b₂ _ lr i j
 
 /-- Hidden-layer weight op `weightSgd a0 W₁ (cot = mlpCotOut1)` = certified `W₁` step. -/
 theorem W1_den_certified (aN lrStr cN : String) (i : Fin d₁) (j : Fin d₂) :
@@ -83,14 +78,8 @@ theorem W1_den_certified (aN lrStr cN : String) (i : Fin d₁) (j : Fin d₂) :
       = W₁ i j - lr * ∑ k : Fin d₂,
           pdiv (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ (relu d₁ (dense W₀ b₀ x)))
                (Mat.flatten W₁) (finProdFinEquiv (i, j)) k
-            * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k := by
-  have step : den (SHlo.weightSgd aN "%W1" lrStr (relu d₁ (dense W₀ b₀ x)) W₁ lr
-                (.operand cN ((mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g)))
-                (finProdFinEquiv (i, j))
-            = W₁ i j - lr * emitWeightGrad (relu d₁ (dense W₀ b₀ x))
-                (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i j := by
-    simp only [den, emitWeightGrad, Mat.outer, Mat.flatten, Equiv.symm_apply_apply]
-  rw [step, mlp_render_W1_certified W₀ b₀ W₁ b₁ W₂ x g lr i j]
+            * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k :=
+  Cifar8PoC.denseW_den aN "%W1" lrStr cN _ W₁ b₁ _ lr i j
 
 /-- Input-layer weight op `weightSgd x W₀ (cot = mlpCotOut0)` = certified `W₀` step. -/
 theorem W0_den_certified (lrStr cN : String) (i : Fin d₀) (j : Fin d₁) :
@@ -100,25 +89,16 @@ theorem W0_den_certified (lrStr cN : String) (i : Fin d₀) (j : Fin d₁) :
       = W₀ i j - lr * ∑ k : Fin d₁,
           pdiv (fun v : Vec (d₀ * d₁) => dense (Mat.unflatten v) b₀ x)
                (Mat.flatten W₀) (finProdFinEquiv (i, j)) k
-            * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k := by
-  have step : den (SHlo.weightSgd "%x" "%W0" lrStr x W₀ lr
-                (.operand cN ((mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g)))
-                (finProdFinEquiv (i, j))
-            = W₀ i j - lr * emitWeightGrad x
-                (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i j := by
-    simp only [den, emitWeightGrad, Mat.outer, Mat.flatten, Equiv.symm_apply_apply]
-  rw [step, mlp_render_W0_certified W₀ b₀ W₁ b₁ W₂ x g lr i j]
+            * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k :=
+  Cifar8PoC.denseW_den "%x" "%W0" lrStr cN _ W₀ b₀ _ lr i j
 
 /-- Output-layer bias op = certified `b₂` step. -/
 theorem b2_den_certified (lrStr dyN : String) (i : Fin d₃) :
     den (SHlo.biasSgd "%b2" lrStr b₂ lr (.operand dyN g)) i
       = b₂ i - lr * ∑ j : Fin d₃,
           pdiv (fun b' : Vec d₃ => dense W₂ b' (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) b₂ i j
-            * g j := by
-  have step : den (SHlo.biasSgd "%b2" lrStr b₂ lr (.operand dyN g)) i
-            = b₂ i - lr * emitBiasGrad (Back.cotangent) g i := by
-    simp only [den, emitBiasGrad, Back.denote]
-  rw [step, mlp_render_b2_certified W₀ b₀ W₁ b₁ W₂ b₂ x g lr i]
+            * g j :=
+  Cifar8PoC.denseB_den "%b2" lrStr dyN W₂ _ b₂ _ lr i
 
 /-- Hidden-layer bias op = certified `b₁` step. -/
 theorem b1_den_certified (lrStr cN : String) (i : Fin d₂) :
@@ -126,12 +106,8 @@ theorem b1_den_certified (lrStr cN : String) (i : Fin d₂) :
           (.operand cN ((mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g))) i
       = b₁ i - lr * ∑ j : Fin d₂,
           pdiv (fun b' : Vec d₂ => dense W₁ b' (relu d₁ (dense W₀ b₀ x))) b₁ i j
-            * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j := by
-  have step : den (SHlo.biasSgd "%b1" lrStr b₁ lr
-                (.operand cN ((mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g))) i
-            = b₁ i - lr * emitBiasGrad (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i := by
-    simp only [den, emitBiasGrad]
-  rw [step, mlp_render_b1_certified W₀ b₀ W₁ b₁ W₂ x g lr i]
+            * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j :=
+  Cifar8PoC.denseB_den "%b1" lrStr cN W₁ _ b₁ _ lr i
 
 /-- Input-layer bias op = certified `b₀` step. -/
 theorem b0_den_certified (lrStr cN : String) (i : Fin d₁) :
@@ -139,12 +115,8 @@ theorem b0_den_certified (lrStr cN : String) (i : Fin d₁) :
           (.operand cN ((mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g))) i
       = b₀ i - lr * ∑ j : Fin d₁,
           pdiv (fun b' : Vec d₁ => dense W₀ b' x) b₀ i j
-            * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j := by
-  have step : den (SHlo.biasSgd "%b0" lrStr b₀ lr
-                (.operand cN ((mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g))) i
-            = b₀ i - lr * emitBiasGrad (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i := by
-    simp only [den, emitBiasGrad]
-  rw [step, mlp_render_b0_certified W₀ b₀ W₁ b₁ W₂ x g lr i]
+            * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j :=
+  Cifar8PoC.denseB_den "%b0" lrStr cN W₀ _ b₀ _ lr i
 
 /-! ## Fully tied — the top loss cotangent is the composed softmax-CE of the forward
 
