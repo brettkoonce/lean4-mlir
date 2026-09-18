@@ -50,9 +50,9 @@ def main : IO Unit := do
   if !(← chk "func inputs" nIn (1 + 3*110 + 3 + 72 + 1)) then bad := bad + 1
   let entry := s!"@resnet34_{r34AdamVariant B 1}_train_step("
   if (m.splitOn entry).length > 1 then
-    IO.println s!"  ✓ entry point {entry.dropRight 1}"
+    IO.println s!"  ✓ entry point {entry.dropEnd 1}"
   else
-    IO.println s!"  ✗ entry point missing (expected {entry.dropRight 1})"; bad := bad + 1
+    IO.println s!"  ✗ entry point missing (expected {entry.dropEnd 1})"; bad := bad + 1
 
   -- ── ⚠ THE TWO-WORLDS SPLIT, pinned. See the module docstring. ──
   -- This render is BATCH BN; `verified_mlir/resnet34_fwd.mlir` is per-example. Recording it here

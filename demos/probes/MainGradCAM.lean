@@ -266,4 +266,4 @@ def main (args : List String) : IO Unit := do
 
   Cam.writePPM outPath stripH stripW allRows
   IO.eprintln s!"  wrote {outPath} ({stripH}×{stripW} = {allRows.size + 50} bytes)"
-  IO.eprintln s!"  view: display {outPath}   or   convert {outPath} {outPath.dropRight 4}.png"
+  IO.eprintln s!"  view: display {outPath}   or   convert {outPath} {outPath.dropEnd 4}.png"

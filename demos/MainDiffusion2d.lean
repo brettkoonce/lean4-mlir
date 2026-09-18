@@ -617,7 +617,7 @@ wrong times"
   let gridSfx := if logabar then "_logabar" else if logsnr then "_logsnr" else ""
   let outPath := s!".lake/build/diffusion2d_samples_{target}{armSfx}_{sampler}{gridSfx}\
 _s{steps}_n{nSteps}_e{etaPct}.bin"
-  let stem := (outPath.toList.take (outPath.length - 4)).asString
+  let stem := String.ofList (outPath.toList.take (outPath.length - 4))
   IO.FS.writeBinFile outPath x
   IO.FS.writeBinFile s!".lake/build/diffusion2d_samples_{target}.bin" x
   IO.FS.writeBinFile s!"{stem}.noise.bin" z

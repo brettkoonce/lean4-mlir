@@ -266,7 +266,7 @@ theorem cp_coverage (ν : Measure E) [IsProbabilityMeasure ν] {A : Set E}
         {ω | cpLower α N (hitCount A N ω) ≤ ν.real A} := by
   classical
   set μN : Measure (Fin N → E) := Measure.pi fun _ : Fin N => ν with hμN
-  haveI : IsProbabilityMeasure μN := by rw [hμN]; infer_instance
+  have : IsProbabilityMeasure μN := by rw [hμN]; infer_instance
   set p : ℝ := ν.real A with hp
   by_cases hK : ∃ m, p < cpLower α N m ∧ m ≤ N
   · set k₀ := Nat.find hK with hk₀
@@ -318,7 +318,7 @@ lemma binomTail_monotoneOn (N k : ℕ) :
   intro q hq p hp hqp
   show binomTail N k q ≤ binomTail N k p
   set ν : Measure ℝ := volume.restrict (Set.Icc (0:ℝ) 1) with hν
-  haveI : IsProbabilityMeasure ν := by
+  have : IsProbabilityMeasure ν := by
     constructor
     rw [hν, Measure.restrict_apply_univ, Real.volume_Icc]
     norm_num

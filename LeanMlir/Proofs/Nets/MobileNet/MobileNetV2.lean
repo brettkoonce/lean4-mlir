@@ -79,7 +79,7 @@ theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
     have h_eq : (relu6 0 : Vec 0 → Vec 0) = (⇑(relu6LinearPart 0 x) : Vec 0 → Vec 0) := by
       funext _ k; exact k.elim0
     rw [h_eq]; exact (relu6LinearPart 0 x).hasFDerivAt
-  haveI : Nonempty (Fin n) := ⟨⟨0, hn_pos⟩⟩
+  have : Nonempty (Fin n) := ⟨⟨0, hn_pos⟩⟩
   -- `g` is the locally-matching AFFINE function: identity-proj on the active
   -- region, constant 0 below and constant 6 above. Its fderiv is exactly
   -- `relu6LinearPart` (constant branches contribute 0). We show

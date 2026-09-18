@@ -1,5 +1,12 @@
 # Repro: `(kernel) deterministic timeout` on Lean 4.34.0, absent on 4.32.2
 
+> **Fixed in the module 2026-09-18** — see `planning/handoff_lean_434.md` §0. The witnesses sat at
+> the composed chain applied to `x` (what `_` elaborates to) while the saved activations were
+> stage by stage; the kernel identifying the two is the timeout, and the isolated `rfl` does not
+> finish at level 3 on 4.32.2 either. `trunc_k3_FAILS_on_4.34.lean` is a snapshot of the old module
+> and still reproduces; `generate_truncation.py` reads the CURRENT module, whose saved activations
+> are now point-free and named as each level's inner map, so its output no longer fails.
+
 ## What
 `LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtWholeBackCertifiedTieB.lean` builds on Lean **4.32.2** and
 fails on **4.34.0** with `(kernel) deterministic timeout` on `convNextForwardTChB_has_vjp_at`

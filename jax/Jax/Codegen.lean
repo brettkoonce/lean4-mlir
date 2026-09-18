@@ -1524,7 +1524,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
         "                   jnp.ones(" ++ toString ic ++ "), jnp.zeros(" ++ toString ic ++ ")))\n"
       -- Pointwise: reuse emitConvBnInit for 1x1 conv
       code := code ++ emitConvBnInit s!"SepConv PW {ic}→{oc}" ic oc 1
-    | .invertedResidual ic oc expand stride n =>
+    | .invertedResidual ic oc expand _stride n =>
       -- First block: ic→mid→oc
       let mid := ic * expand
       if expand != 1 then
@@ -1945,7 +1945,7 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
       code := code ++ "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
     | .convBn ic oc k _ _ =>
       code := code ++ emitConvBnToBuf s!"convBn {ic}→{oc}, {k}×{k}"
-    | .convNextStage c nBlocks _ _ =>
+    | .convNextStage _c nBlocks _ _ =>
       for bi in [:nBlocks] do
         code := code ++ emitConvBiasToBuf s!"ConvNeXt[{bi}] DW 7x7"
         code := code ++ emitLNToBuf s!"ConvNeXt[{bi}] LN"
@@ -2237,7 +2237,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         toString (pidx + 1) ++ "][0], params[" ++ toString (pidx + 1) ++ "][1], params[" ++
         toString (pidx + 1) ++ "][2], stride=" ++ strideStr ++ ")\n"
       pidx := pidx + 2
-    | .mbConv ic oc expand kSize stride n useSE =>
+    | .mbConv _ic _oc expand kSize stride n useSE =>
       let nPerBlock (blockExpand : Nat) (se : Bool) :=
         (if blockExpand != 1 then 1 else 0) + 1 + (if se then 2 else 0) + 1
       let seArg := if useSE then "True" else "False"

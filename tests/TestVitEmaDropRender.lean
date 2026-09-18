@@ -59,7 +59,7 @@ def operandNames (src : String) : List String :=
     | some sig =>
       (sig.splitOn "%").tail!.filterMap fun frag =>
         match (frag.splitOn ":").head? with
-        | some nm => if nm.isEmpty then none else some nm.trim
+        | some nm => if nm.isEmpty then none else some nm.trimAscii.toString
         | none    => none
     | none => []
   | _ => []

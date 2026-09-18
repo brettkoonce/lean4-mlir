@@ -101,7 +101,7 @@ def main (args : List String) : IO Unit := do
   if x256.size != reps * x32.size || y256.size != reps * y32.size then
     IO.eprintln "internal: duplicate construction is wrong"; IO.Process.exit 1
 
-  let runOne (path fn tag : String) (x y : ByteArray) (b : Nat) : IO ByteArray := do
+  let runOne (path fn _tag : String) (x y : ByteArray) (b : Nat) : IO ByteArray := do
     let sess ← mkSession path
     LowererSession.mlpTrainStepV sess fn x pbuf shapes y
       b.toUSize net.d0.toUSize net.nClasses.toUSize

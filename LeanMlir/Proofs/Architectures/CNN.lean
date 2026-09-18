@@ -2078,9 +2078,9 @@ theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
         Tensor3.flatten (maxPool2 (Tensor3.unflatten v)))
       (reindexCLM (maxPool2LocalReindex x))
       (Tensor3.flatten x) := by
-  haveI : Nonempty (Fin c) := ⟨⟨0, hc⟩⟩
-  haveI : Nonempty (Fin h) := ⟨⟨0, hh⟩⟩
-  haveI : Nonempty (Fin w) := ⟨⟨0, hw⟩⟩
+  have : Nonempty (Fin c) := ⟨⟨0, hc⟩⟩
+  have : Nonempty (Fin h) := ⟨⟨0, hh⟩⟩
+  have : Nonempty (Fin w) := ⟨⟨0, hw⟩⟩
   -- Per-window gap function: positive everywhere under smoothness.
   let gap : Fin c × Fin h × Fin w × (Fin 2 × Fin 2) × (Fin 2 × Fin 2) → ℝ :=
     fun p => if p.2.2.2.1 = p.2.2.2.2 then 1

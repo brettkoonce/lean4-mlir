@@ -514,9 +514,8 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
                   ((2 * C k x) • C k) x := fun k => by
     have h := (hCk_at k).mul (hCk_at k)
     -- h : HasFDerivAt (... * ...) (C k x • C k + C k x • C k) x
-    -- v4.31: `convert … using 1` also spawns spurious `AddCommGroup`/`Module`
-    -- instance-defeq side goals (closed by `rfl`) alongside the real derivative goal.
-    convert h using 1 <;> first | rw [two_mul, add_smul] | rfl
+    convert h using 1
+    rw [two_mul, add_smul]
   have h_sumsq_at : HasFDerivAt
       (fun x' : Vec (n' + 1) => ∑ k : Fin (n' + 1), C k x' * C k x')
       (∑ k : Fin (n' + 1), (2 * C k x) • C k) x :=

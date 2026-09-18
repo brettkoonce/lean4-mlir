@@ -17,7 +17,7 @@ package «lean4-mlir» where
 -- Mathlib archives and the build fails.
 meta if get_config? env = some "dev" then
 require «doc-gen4» from git
-  "https://github.com/leanprover/doc-gen4" @ "main"
+  "https://github.com/leanprover/doc-gen4" @ "v4.34.0"
 
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4" @ "v4.34.0"

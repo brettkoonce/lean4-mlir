@@ -72,8 +72,12 @@ free once the spelling is normalised at a definition:
 * The saved activations are functions, so each `cnxTk` is a one-step iota with syntactically
   identical sides. Stated the other way — the chain's own `f x` against an applied
   `cnxSavedA k w x` — identifying the two costs 2 s at depth one and does not finish at depth two.
-* The closing step is `simp only [Function.comp_apply, cnxV0]`, not `rfl`: after the eleven peels
-  the two sides differ only by `Function.comp`, and `rfl` will not take that route.
+* The closing step is `rw [cnxV0]` and `rw [Function.comp_apply]`, not `rfl`: after the eleven peels
+  the two sides differ only by `Function.comp` and `cnxV0`, and `rfl` will not take that route.
+  ⛔ Nor `simp only [Function.comp_apply, cnxV0]`, which elaborates just as fast: both lemmas are
+  definitional, so simp records no step and the KERNEL re-derives the whole chain by unfolding —
+  17 s and 6 GB for this module on Lean 4.32.2, 6 min and 48 GB on 4.34.0. The `rw`s hand it
+  syntactic rewrites instead: 3 s and 3 GB on 4.34.0.
 
 ⚠ `planning/archive/float_budget_numbers_log.md` §3.7(d) records this trap in its other guise, where the
 computed dimension meets a metavariable (`2 * ?h = 112`) and the unification is higher-order; there
@@ -542,7 +546,6 @@ noncomputable def convNextForwardTCh_vjp_chain {nC : Nat} (w : CnxTWeightsCh nC)
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) :=
   cnxV11 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε
 
-set_option maxHeartbeats 1000000 in
 /-- ⭐⭐ **`convnextInputGrad` IS the certified whole-net ConvNeXt-T gradient.** -/
 theorem convnextInputGrad_eq_convNextForwardTCh_vjp {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
@@ -592,6 +595,7 @@ theorem convnextInputGrad_eq_convNextForwardTCh_vjp {nC : Nat} (w : CnxTWeightsC
       cnxT3 w hsε h1 hd1 x,
       cnxT2 w hsε h1 x,
       cnxT1 w hsε x]
-  simp only [Function.comp_apply, cnxV0]
+  rw [cnxV0]
+  repeat rw [Function.comp_apply]
 
 end Proofs

@@ -155,4 +155,4 @@ def main (args : List String) : IO Unit := do
   IO.FS.writeBinFile outPath ppm
   IO.eprintln s!"  wrote {outPath} ({ppm.size} bytes)"
   IO.eprintln s!"  view with e.g. `display {outPath}` or convert:"
-  IO.eprintln s!"    convert {outPath} {outPath.dropRight 4}.png"
+  IO.eprintln s!"    convert {outPath} {outPath.dropEnd 4}.png"

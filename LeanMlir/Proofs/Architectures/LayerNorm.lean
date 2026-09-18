@@ -162,12 +162,8 @@ theorem Real.hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^
   have h : Real.tanh = fun z => Real.sinh z / Real.cosh z := funext Real.tanh_eq_sinh_div_cosh
   rw [h]
   have hd := (Real.hasDerivAt_sinh y).div (Real.hasDerivAt_cosh y) (Real.cosh_pos y).ne'
-  -- v4.31: `convert … using 1` also spawns spurious `AddCommGroup` instance-defeq
-  -- side goals (closed by `rfl`) alongside the real derivative-equality goal.
-  convert hd using 1 <;>
-    first
-      | rfl
-      | (simp only [div_pow]; field_simp)
+  convert hd using 1
+  simp only [div_pow]; field_simp
 
 /-- **Closed form of `geluScalarDeriv`** — the analytic derivative of the
     tanh-approximation GELU. With `u = √(2/π)·(x + 0.044715·x³)` and `t = tanh u`,

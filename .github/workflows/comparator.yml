@@ -16,11 +16,12 @@ name: Comparator (independent kernel re-check)
 # makes the kernel legible if the sandbox ever fails.
 #
 # Tool pinning: lean4export reads the project's `.olean`s, so its build
-# must stay olean-compatible with the project's Lean (v4.32.2). LEAN4EXPORT_REF
-# stays on upstream's `v4.32.0` release tag — upstream cut no v4.32.1/.2 tag —
-# and the `cp lean-toolchain` in the build step below is what makes that safe:
-# the v4.32.0 *source* is rebuilt with the project's exact Lean, and the cache
-# key hashes lean-toolchain so a bump busts it. What matters is the Lean the
+# must stay olean-compatible with the project's Lean (v4.34.0). LEAN4EXPORT_REF
+# is upstream's `v4.34.0` release tag, and the `cp lean-toolchain` in the
+# build step below is what keeps that safe across a patch bump with no tag
+# (as 4.32.2 was, built from the v4.32.0 tag): the tagged *source* is rebuilt
+# with the project's exact Lean, and the cache key hashes lean-toolchain so a
+# bump busts it. What matters is the Lean the
 # exporter is BUILT with, not the tag it is built FROM; a mismatch shows up as
 # "incompatible header" at the export step, which looks nothing like a proof
 # failure. If a future bump breaks the build, pin LEAN4EXPORT_REF/COMPARATOR_REF
@@ -65,7 +66,7 @@ jobs:
     # already uses 180 here, which is why it survived the same cold build.
     timeout-minutes: 90
     env:
-      LEAN4EXPORT_REF: 4e7915201d3f9f04470d9eae002fa695f7cdc589  # tag v4.32.0
+      LEAN4EXPORT_REF: 076e8e57707e813375e8f9da8bf989799ace9680  # tag v4.34.0
       COMPARATOR_REF:  3afea238d63125383110f8b59acaf11d7788c3e1
       # v0.1.14 is the first release whose CLI accepts comparator's
       # single-dash `-ldd` / `-add-exec` (v0.1.13's urfave/cli rejects them).
@@ -160,7 +161,7 @@ jobs:
           git clone https://github.com/leanprover/lean4export ~/lean4export
           git -C ~/lean4export checkout "$LEAN4EXPORT_REF"
           # lean4export reads the project's .oleans, so it must be built with
-          # the project's exact Lean (v4.32.0) — the `cp lean-toolchain` below
+          # the project's exact Lean (v4.34.0) — the `cp lean-toolchain` below
           # forces that; a mismatched build rejects our headers ("incompatible
           # header").
           cp lean-toolchain ~/lean4export/lean-toolchain

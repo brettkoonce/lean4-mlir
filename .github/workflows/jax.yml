@@ -114,7 +114,7 @@ jobs:
         # compiles the parent's source under a different Lean AND against its
         # own Mathlib pin — which also costs a second multi-GB cache the 10 GB
         # budget cannot absorb. jax/ sat on 4.30 while root moved to 4.32; that
-        # is closed now (both v4.32.0, same mathlib rev), and this step keeps it
+        # is closed now (same toolchain, same mathlib rev), and this step keeps it
         # closed. A warning rather than a failure: drift is worth seeing
         # immediately, but is not itself a broken build.
         run: |

@@ -99,7 +99,7 @@ backend {← LowererSession.backendName}"
   for i in [0:bs] do
     y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
 
-  let runOne (path tag : String) : IO ByteArray := do
+  let runOne (path _tag : String) : IO ByteArray := do
     let sess ← mkSession path
     LowererSession.mlpTrainStepV sess s!"m.{slug}_train_step" x θ shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize

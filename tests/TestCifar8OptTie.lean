@@ -170,7 +170,7 @@ adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
         sp := sp + 1; which := which ++ [pIdx]
       pOff := pOff + sz; pIdx := pIdx + 1
     pure (if mMax > 1e-30 then aMax / mMax else 0.0, sp, which)
-  let stats (u w : ByteArray) : Float × Nat := let (r, sp, _) := statsD u w; (r, sp)
+  let _stats (u w : ByteArray) : Float × Nat := let (r, sp, _) := statsD u w; (r, sp)
   let (ctlRel, ctlSpread, ctlWhich) := statsD oa oc
 
   let mut gAbs : Float := 0.0; let mut gMag : Float := 0.0

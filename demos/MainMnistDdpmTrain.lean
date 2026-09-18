@@ -129,7 +129,7 @@ def main (args : List String) : IO Unit := do
   -- Per-image element count for the IMAGE channel (1 channel pre-conditioning).
   -- After `prependTChannel` this doubles to 2 * H * W for the network input.
   let nPix : Nat := 1 * spec.imageH * spec.imageW
-  let nPixCond : Nat := 2 * spec.imageH * spec.imageW
+  let _nPixCond : Nat := 2 * spec.imageH * spec.imageW
   let Tmax : Nat := 1000
   let bpE := nTrain / cfg.batchSize
   let allShapes := spec.shapesBA

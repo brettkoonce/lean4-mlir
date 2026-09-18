@@ -1,7 +1,41 @@
 # Handoff — Lean 4.34.0 bring-over (branch `lean-4.34`)
 
-Written 2026-09-16. Everything here is measured, not assumed. If you are picking this up cold,
-read §1 and §6 first.
+## 0. RESOLVED 2026-09-18 — read this first; §1–§7 are the 2026-09-16 state
+
+Everything below §0 is the handoff as written, kept because its ruled-out list still holds.
+The blocker and two regressions §7 had not reached are fixed; every CI gate that can run
+locally is green on 4.34.0.
+
+**The cause** of items 1–3 was not depth or Mathlib: it was the KERNEL re-deriving a
+definitional step across the chain. Item 4 is a separate memory regression.
+
+1. **TieB apex** — `_` for each level's inner map elaborates to the composed chain, so every
+   witness sat at the chain applied to `x` while the saved activations are stage-by-stage
+   `cnxSavedB_k B w x`. Identifying the two, alone as an `rfl`, does not finish at level 3 on
+   EITHER toolchain (killed at 250 s on 4.32.2); 4.32.2 only got through the apex by some path
+   4.34 no longer takes. Fix: `cnxSavedB_k` point-free `abbrev`s (`batchMap B stage ∘ cnxSavedB_{k-1} B w`)
+   named as each level's inner map — apex 2 s.
+2. **TieB tie** — `simp only [Function.comp_apply, convNextForwardTChB_has_vjp_at,
+   vjp_comp_diff_at_fst_backward]` is pure `dsimp` (all three are `rfl`), so simp recorded no
+   step and the kernel unfolded the whole net under the witnesses' `.backward`s: 40+ GB. Fix:
+   the same steps as `rw`s. Whole module: timeout → 2.6 s, 2.7 GB.
+3. **Per-example Tie** (`ConvNeXtWholeBackCertifiedTie.lean`, never failed, so the 09-16 run did
+   not see it) — its closing `simp only [Function.comp_apply, cnxV0]`, the same hazard:
+   17 s / 6 GB on 4.32.2, **6 min / 48 GB** on 4.34.0 (a 16 GB CI runner OOMs). Fix: `rw`. 2.4 s.
+4. **`IbpConvScorecardImgsA/B`** (CertsHeavy, never built on 4.34 before) — 8.22 GB on 4.32.2,
+   **16.11 GB** on 4.34.0, same olean and CPU-seconds: 4.34 elaborates a module's theorem proofs
+   as concurrent tasks and holds twice the memory while they run. `Elab.async false` → 7.10 GB
+   but serial, 29 min a chunk. Fix: the generator now emits four 2-image chunks
+   (`scripts/ibp_conv_scorecard.py`, `N_CHUNKS`), 9.1–9.7 GB each; `certs-heavy.yml` lists all four.
+
+Measured against 4.32.2 and not regressed: the twelve slowest `Certs` modules (StableHLO, the
+Lipschitz/Smoothing scorecards, the R34 ties, TrainedCnn*), and the CertsHeavy FullImgs/FullNets/IBP
+peaks (all at or under their recorded 4.32 numbers).
+
+The rest of the bring-over — manifest regenerated with `-Kenv=dev` (doc-gen4 pinned to
+`v4.34.0`; plain `lake update` had dropped it), `jax/` manifest, lean4export pin, 4.34's new
+lints (haveI, unused pattern variables, deprecated `dropRight`/`trim`/`asString`/
+`Mathlib.Data.Real.Basic`, dead `convert … <;>` workarounds) — is in the commit.
 
 ## 1. State in one paragraph
 

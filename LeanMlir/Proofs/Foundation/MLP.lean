@@ -354,7 +354,7 @@ theorem relu_hasFDerivAt (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) :
     have h_eq : (relu 0 : Vec 0 → Vec 0) = (⇑(reluLinearPart 0 x) : Vec 0 → Vec 0) := by
       funext _ k; exact k.elim0
     rw [h_eq]; exact (reluLinearPart 0 x).hasFDerivAt
-  haveI : Nonempty (Fin n) := ⟨⟨0, hn_pos⟩⟩
+  have : Nonempty (Fin n) := ⟨⟨0, hn_pos⟩⟩
   let r : ℝ := Finset.univ.inf' Finset.univ_nonempty (fun k : Fin n => |x k|)
   have hr_pos : 0 < r := by
     refine (Finset.lt_inf'_iff _).mpr ?_

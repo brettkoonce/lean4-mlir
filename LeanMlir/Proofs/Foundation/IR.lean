@@ -709,7 +709,7 @@ theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
       = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy := by
   simp only [emitMlpBack, denote_subst, mlp_has_vjp_at, vjp_comp_at, Back.denote,
              emitDenseBack, emitReluBack, HasVJP.toHasVJPAt, dense_has_vjp, relu_has_vjp_at,
-             id_eq, Function.comp_apply]
+             Function.comp_apply]
   rfl
 
 -- ════════════════════════════════════════════════════════════════

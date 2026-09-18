@@ -79,7 +79,7 @@ def runRecipeMain (exe : String) (spec : NetSpec) (ds : DatasetKind)
     -- provably the augmentation this recipe trains on — one writer, no drift. See
     -- `JaxCodegen.generateShim`.
     if args.any (fun a => a == "--shim") then
-      let out := (if r.out.endsWith ".py" then r.out.dropRight 3 else r.out) ++ "_shim.py"
+      let out := (if r.out.endsWith ".py" then (r.out.dropEnd 3).toString else r.out) ++ "_shim.py"
       let code := JaxCodegen.generateShim spec r.cfg
       IO.FS.createDirAll ".lake/build"
       IO.FS.writeFile (".lake/build/" ++ out) code

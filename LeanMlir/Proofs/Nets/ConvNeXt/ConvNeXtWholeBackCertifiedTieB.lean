@@ -21,10 +21,11 @@ one architecture over: ConvNeXt is smooth everywhere, so every stage has a GLOBA
 batched witness is `batchMap_has_vjp_at` over `HasVJP.toHasVJPAt` at each row — no smooth-point
 hypothesis anywhere, only the 23 LayerNorm positivities the per-example tie already carries.
 
-1. `cnxSavedB0 … cnxSavedB10` — the eleven batched stage inputs, saved STAGE BY STAGE
-   (`batchMap B stage (cnxSavedB_{k-1} …)`), not as `batchMap B` of the composed per-example
-   prefix: the two agree only up to `batchMap_comp`, not `rfl`, and the apex's `vjp_comp_diff_at`
-   produces the former.
+1. `cnxSavedB0 … cnxSavedB10` — the eleven batched stage inputs, as reducible functions of the
+   batch saved STAGE BY STAGE (`batchMap B stage ∘ cnxSavedB_{k-1} B w`), not as `batchMap B` of
+   the composed per-example prefix: the two agree only up to `batchMap_comp`, not `rfl`, and the
+   apex's `vjp_comp_diff_at` produces the former. Each is also its apex level's inner map, so the
+   stage witness above it sits at `cnxSavedB_k B w x` on the nose (item 4).
 2. The twelve batched stage witnesses `cnx*B_at`, each `batchMap_has_vjp_at` over the per-example
    `HasVJP` at each row — at the dimension spellings the per-example tie normalised (`cnxDn1`,
    `cnxLNh`, `cnxSavedA0`: `ConvNeXtWholeBackCertifiedTie.lean`'s "two spellings of one numeral"
@@ -37,10 +38,14 @@ hypothesis anywhere, only the 23 LayerNorm positivities the per-example tie alre
    `maxRecDepth 100000` on the numerals, the batched form of the per-example tie's "two spellings
    of one numeral" rule.
 4. `convNextForwardTChB_has_vjp_at` — the twelve-stage apex, eleven `vjp_comp_diff_at`s over the
-   batched stage witnesses at the batched saved activations — and
+   batched stage witnesses, level `k`'s inner map named `cnxSavedB_k B w` — and
    `convnextInputGradB_eq_convNextForwardTChB_vjp`, the tie: twelve leaf rewrites, then the eleven
-   levels peeled by `vjp_comp_diff_at_fst_backward` (a twelve-level `rfl` times out at 10⁶
-   heartbeats: it looks for the unfolding through the concrete witnesses first).
+   levels peeled by `rw [vjp_comp_diff_at_fst_backward]`. ⛔ Neither may leave the kernel a
+   definitional step across the chain. A witness point spelled as the composed chain applied to
+   `x` (what `_` elaborates to), or a peel by `simp only` (the peel lemma is `rfl`, so simp records
+   no step), makes the kernel unfold saved activations against the chain underneath the witnesses'
+   `.backward`s. Spelled that way this module took ~18 min on Lean 4.32.2 and does not check at all
+   on 4.34.0 (kernel timeout; tens of GB with the budget raised). As written it checks in seconds.
 5. `convNextForwardTChB_eq_chain` — the shape check: `batchMap B` of the per-example twelve-factor
    chain IS the twelve batched stages, by `batchMap_comp` eleven times — and
    `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp`, the tie carried to the committed GLOBAL
@@ -63,59 +68,59 @@ set_option maxRecDepth 100000
 -- ═════════════════════════════════════════════════
 
 /-- The batched stem-conv output — the stem LayerNorm's saved input at every example. -/
-noncomputable def cnxSavedB0 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (96 * 56 * 56)) :=
-  StableHLO.batchMap B (cnxSavedA0 w) x
+noncomputable abbrev cnxSavedB0 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (96 * 56 * 56)) :=
+  StableHLO.batchMap B (cnxSavedA0 w)
 
 /-- Stage 1's batched saved input. -/
-noncomputable def cnxSavedB1 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (96 * 56 * 56)) :=
-  StableHLO.batchMap B (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ) (cnxSavedB0 B w x)
+noncomputable abbrev cnxSavedB1 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (96 * 56 * 56)) :=
+  StableHLO.batchMap B (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ) ∘ cnxSavedB0 B w
 
 /-- Downsample 1's batched saved input. -/
-noncomputable def cnxSavedB2 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (96 * 56 * 56)) :=
-  StableHLO.batchMap B (convNextStageChK 3 w.s1) (cnxSavedB1 B w x)
+noncomputable abbrev cnxSavedB2 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (96 * 56 * 56)) :=
+  StableHLO.batchMap B (convNextStageChK 3 w.s1) ∘ cnxSavedB1 B w
 
 /-- Stage 2's batched saved input. -/
-noncomputable def cnxSavedB3 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (192 * 28 * 28)) :=
-  StableHLO.batchMap B (cnxDn1 w) (cnxSavedB2 B w x)
+noncomputable abbrev cnxSavedB3 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (192 * 28 * 28)) :=
+  StableHLO.batchMap B (cnxDn1 w) ∘ cnxSavedB2 B w
 
 /-- Downsample 2's batched saved input. -/
-noncomputable def cnxSavedB4 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (192 * 28 * 28)) :=
-  StableHLO.batchMap B (convNextStageChK 3 w.s2) (cnxSavedB3 B w x)
+noncomputable abbrev cnxSavedB4 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (192 * 28 * 28)) :=
+  StableHLO.batchMap B (convNextStageChK 3 w.s2) ∘ cnxSavedB3 B w
 
 /-- Stage 3's batched saved input. -/
-noncomputable def cnxSavedB5 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (384 * 14 * 14)) :=
-  StableHLO.batchMap B (cnxDn2 w) (cnxSavedB4 B w x)
+noncomputable abbrev cnxSavedB5 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (384 * 14 * 14)) :=
+  StableHLO.batchMap B (cnxDn2 w) ∘ cnxSavedB4 B w
 
 /-- Downsample 3's batched saved input. -/
-noncomputable def cnxSavedB6 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (384 * 14 * 14)) :=
-  StableHLO.batchMap B (convNextStageChK 9 w.s3) (cnxSavedB5 B w x)
+noncomputable abbrev cnxSavedB6 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (384 * 14 * 14)) :=
+  StableHLO.batchMap B (convNextStageChK 9 w.s3) ∘ cnxSavedB5 B w
 
 /-- Stage 4's batched saved input. -/
-noncomputable def cnxSavedB7 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (768 * 7 * 7)) :=
-  StableHLO.batchMap B (cnxDn3 w) (cnxSavedB6 B w x)
+noncomputable abbrev cnxSavedB7 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (768 * 7 * 7)) :=
+  StableHLO.batchMap B (cnxDn3 w) ∘ cnxSavedB6 B w
 
 /-- GAP's batched saved input. -/
-noncomputable def cnxSavedB8 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * (768 * 7 * 7)) :=
-  StableHLO.batchMap B (convNextStageChK 3 w.s4) (cnxSavedB7 B w x)
+noncomputable abbrev cnxSavedB8 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * (768 * 7 * 7)) :=
+  StableHLO.batchMap B (convNextStageChK 3 w.s4) ∘ cnxSavedB7 B w
 
 /-- The head LayerNorm's batched saved input. -/
-noncomputable def cnxSavedB9 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * 768) :=
-  StableHLO.batchMap B (globalAvgPoolFlat 768 7 7) (cnxSavedB8 B w x)
+noncomputable abbrev cnxSavedB9 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * 768) :=
+  StableHLO.batchMap B (globalAvgPoolFlat 768 7 7) ∘ cnxSavedB8 B w
 
 /-- The classifier's batched saved input. -/
-noncomputable def cnxSavedB10 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
-    (x : Vec (B * (3 * 224 * 224))) : Vec (B * 768) :=
-  StableHLO.batchMap B (cnxLNh w) (cnxSavedB9 B w x)
+noncomputable abbrev cnxSavedB10 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) :
+    Vec (B * (3 * 224 * 224)) → Vec (B * 768) :=
+  StableHLO.batchMap B (cnxLNh w) ∘ cnxSavedB9 B w
 
 -- ═════════════════════════════════════════════════
 -- § The twelve batched stage witnesses
@@ -318,7 +323,9 @@ theorem cnxDenseBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : Ve
 -- ═════════════════════════════════════════════════
 
 /-- **The batched whole-net witness**, twelve batched stages composed by `vjp_comp_diff_at`, each
-    at the batched saved activation the chain uses (`cnxSavedB0 … cnxSavedB10`). -/
+    at the batched saved activation the chain uses (`cnxSavedB0 … cnxSavedB10`). Level `k`'s inner
+    map is named `cnxSavedB_k B w` rather than left to the unifier, which would fill it with the
+    composed chain and put every witness at the chain applied to `x` (see the module note, item 4). -/
 noncomputable def convNextForwardTChB_has_vjp_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
@@ -339,17 +346,19 @@ noncomputable def convNextForwardTChB_has_vjp_at (B : Nat) {nC : Nat} (w : CnxTW
         ∘ StableHLO.batchMap B (convNextStageChK 3 w.s1)
         ∘ StableHLO.batchMap B (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ)
         ∘ StableHLO.batchMap B (cnxSavedA0 w)) x :=
-  (vjp_comp_diff_at _ (StableHLO.batchMap B (dense w.Wd w.bd)) x
-    (vjp_comp_diff_at _ (StableHLO.batchMap B (cnxLNh w)) x
-      (vjp_comp_diff_at _ (StableHLO.batchMap B (globalAvgPoolFlat 768 7 7)) x
-        (vjp_comp_diff_at _ (StableHLO.batchMap B (convNextStageChK 3 w.s4)) x
-          (vjp_comp_diff_at _ (StableHLO.batchMap B (cnxDn3 w)) x
-            (vjp_comp_diff_at _ (StableHLO.batchMap B (convNextStageChK 9 w.s3)) x
-              (vjp_comp_diff_at _ (StableHLO.batchMap B (cnxDn2 w)) x
-                (vjp_comp_diff_at _ (StableHLO.batchMap B (convNextStageChK 3 w.s2)) x
-                  (vjp_comp_diff_at _ (StableHLO.batchMap B (cnxDn1 w)) x
-                    (vjp_comp_diff_at _ (StableHLO.batchMap B (convNextStageChK 3 w.s1)) x
-                      (vjp_comp_diff_at (StableHLO.batchMap B (cnxSavedA0 w))
+  (vjp_comp_diff_at (cnxSavedB10 B w) (StableHLO.batchMap B (dense w.Wd w.bd)) x
+    (vjp_comp_diff_at (cnxSavedB9 B w) (StableHLO.batchMap B (cnxLNh w)) x
+      (vjp_comp_diff_at (cnxSavedB8 B w) (StableHLO.batchMap B (globalAvgPoolFlat 768 7 7)) x
+        (vjp_comp_diff_at (cnxSavedB7 B w) (StableHLO.batchMap B (convNextStageChK 3 w.s4)) x
+          (vjp_comp_diff_at (cnxSavedB6 B w) (StableHLO.batchMap B (cnxDn3 w)) x
+            (vjp_comp_diff_at (cnxSavedB5 B w) (StableHLO.batchMap B (convNextStageChK 9 w.s3)) x
+              (vjp_comp_diff_at (cnxSavedB4 B w) (StableHLO.batchMap B (cnxDn2 w)) x
+                (vjp_comp_diff_at (cnxSavedB3 B w)
+                    (StableHLO.batchMap B (convNextStageChK 3 w.s2)) x
+                  (vjp_comp_diff_at (cnxSavedB2 B w) (StableHLO.batchMap B (cnxDn1 w)) x
+                    (vjp_comp_diff_at (cnxSavedB1 B w)
+                        (StableHLO.batchMap B (convNextStageChK 3 w.s1)) x
+                      (vjp_comp_diff_at (cnxSavedB0 B w)
                         (StableHLO.batchMap B (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ)) x
                         ⟨cnxStemB_at B w x,
                          batchMap_differentiableAt _ x (fun _ => (cnxD0 w).differentiableAt)⟩
@@ -383,17 +392,18 @@ noncomputable def convNextForwardTChB_has_vjp_at (B : Nat) {nC : Nat} (w : CnxTW
      batchMap_differentiableAt _ _ (fun _ => (dense_differentiable w.Wd w.bd).differentiableAt)⟩).fst
 
 /-- One `vjp_comp_diff_at` level's backward, unfolded: the composite runs `g`'s backward, then
-    `f`'s. Definitional, stated so that a chain of eleven levels peels by `simp only` rather than
-    by a `rfl` that has to find the same unfolding through twelve concrete witnesses. -/
+    `f`'s. Definitional, stated so that a chain of eleven levels peels by `rw` rather than by a
+    `rfl` that has to find the same unfolding through twelve concrete witnesses. ⛔ Not by
+    `simp only`: simp would use it as a `dsimp` step and record nothing for the kernel to replay. -/
 theorem vjp_comp_diff_at_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (x : Vec m) (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
     (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) (dy : Vec p) :
     (vjp_comp_diff_at f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
 
-set_option maxHeartbeats 1000000 in
 /-- ⭐⭐ **THE BATCHED TIE.** `convnextInputGradB` with every slot the per-example slot at the
-    batched saved activation IS the batched apex's backward. Twelve leaf rewrites, then the eleven
-    composition levels peeled by `vjp_comp_diff_at_fst_backward`. -/
+    batched saved activation IS the batched apex's backward. Twelve leaf rewrites, the chain's
+    eleven `∘`s applied, then the eleven composition levels peeled by
+    `vjp_comp_diff_at_fst_backward` — every step a `rw`, so the kernel replays rewrites. -/
 theorem convnextInputGradB_eq_convNextForwardTChB_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
@@ -429,7 +439,9 @@ theorem convnextInputGradB_eq_convNextForwardTChB_vjp (B : Nat) {nC : Nat} (w : 
       cnxLNhBackB_eq_vjp B w hhε (cnxSavedB9 B w x),
       cnxDenseBackB_eq_vjp B w (cnxSavedB10 B w x)]
   funext dy
-  simp only [Function.comp_apply, convNextForwardTChB_has_vjp_at, vjp_comp_diff_at_fst_backward]
+  repeat rw [Function.comp_apply]
+  rw [convNextForwardTChB_has_vjp_at]
+  repeat rw [vjp_comp_diff_at_fst_backward]
 
 /-- **The shape check.** `batchMap B` of the per-example twelve-factor chain — the function
     `convNextForwardTCh_has_vjp` is stated on — IS the twelve batched stages the apex is stated

@@ -38,7 +38,7 @@ the measured row is a measurement and is labelled as one. Both are LOWER bounds
 `propext / Classical.choice / Quot.sound`.
 
 This module carries the net, its box-soundness witness and the per-position
-kernel `ℓ1` weight `AC`; the per-image boxes live in `IbpConvScorecardImgsA/B`
+kernel `ℓ1` weight `AC`; the per-image boxes live in `IbpConvScorecardImgsA`–`D`
 and the counts in `IbpConvScorecard`. The split is a memory bound, not
 bookkeeping: one 8-image module peaked at 14.68 GB, over what a 16 GB CI runner
 carries. -/

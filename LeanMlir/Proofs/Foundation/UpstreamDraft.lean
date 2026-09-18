@@ -176,7 +176,7 @@ invariant under negation, so the mass of `Iic (-x)` is the mass of `Ici x`, whic
 is the mass of the complement of `Iic x`. -/
 lemma cdf_gaussianReal_neg {v : ℝ≥0} (hv : v ≠ 0) (x : ℝ) :
     cdf (gaussianReal 0 v) (-x) = 1 - cdf (gaussianReal 0 v) x := by
-  haveI : NullSingletonClass (gaussianReal 0 v) := nullSingletonClass_gaussianReal hv
+  have : NullSingletonClass (gaussianReal 0 v) := nullSingletonClass_gaussianReal hv
   have hmap : (gaussianReal 0 v).map (fun y => -y) = gaussianReal 0 v := by
     simpa using gaussianReal_map_neg (μ := 0) (v := v)
   have hpre : (fun y : ℝ => -y) ⁻¹' Iic (-x) = Ici x := by ext y; simp

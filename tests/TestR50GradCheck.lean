@@ -341,7 +341,7 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
   IO.println s!"             ⭐ the stem's B, which is the only path through maxPool3s2: {stemB}"
   IO.println s!"          ⟂  control: {ctl.size} sites where the invariance is FALSE (residual-add \
 BNs + the head)"
-  let ctlSorted := (ctl.map (fun (ts, nm) => cosine ts)).qsort (fun a b => a < b)
+  let ctlSorted := (ctl.map (fun (ts, _nm) => cosine ts)).qsort (fun a b => a < b)
   let ctlMed := ctlSorted[ctlSorted.size / 2]!
   -- ⭐⭐ **THE 10th-PERCENTILE VIOLATION, and it is what the verdict below now rests on.**
   --

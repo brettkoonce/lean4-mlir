@@ -147,6 +147,9 @@ jobs:
           #   FullImgsA 11.42 GB   FullNets 10.14 GB   IBP 9.19 GB
           #   ConvImgsB  8.63 GB   ConvImgsA 8.43 GB   IBPUncon 8.28 GB
           #   FullImgsB  4.39 GB   Full 3.47 GB  ConvNet 3.10 GB  Conv 2.65 GB
+          #   Lean 4.34.0 (2026-09-18, per-module `lake build` under /usr/bin/time -v): the old
+          #   ConvImgsA/B pair doubled to 16.11 GB (8.22 on 4.32.2 — 4.34 elaborates a module's
+          #   proofs concurrently); now four 2-image chunks ConvImgsA–D at 9.14–9.68 GB.
           #   Crown / CrownUncon: UNMEASURED. Both are CertsHeavy roots (lakefile) and were
           #   missing from this loop until 2026-09-09, so the final `lake build CertsHeavy` was
           #   free to elaborate them together — the exact class this loop exists to prevent.
@@ -172,6 +175,8 @@ jobs:
                    IbpConvScorecardNet \
                    IbpConvScorecardImgsA \
                    IbpConvScorecardImgsB \
+                   IbpConvScorecardImgsC \
+                   IbpConvScorecardImgsD \
                    IbpConvScorecard; do
             echo "=== building $m ==="
             free -m | head -2

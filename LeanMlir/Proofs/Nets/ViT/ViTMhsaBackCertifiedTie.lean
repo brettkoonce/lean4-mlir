@@ -26,8 +26,6 @@ residual fan-in (the standard `perRowFlat`/`dense_transpose`/`diagBack` flat↔M
 
 namespace Proofs
 
-open scoped Real
-
 variable {h N dh : Nat}
 
 /-- **The projection-back leaf coordinate.** A per-token `dense (Wᵀ) 0` projection-backward

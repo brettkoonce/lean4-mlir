@@ -3034,7 +3034,7 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
           (dense W₁ b₁ (relu e₁ (dense W₀ b₀ x))) dy)
       = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
   simp only [mlpBackGraph, den, mlp_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
-             HasVJP.toHasVJPAt, Mat.mulVec, id_eq, Function.comp_apply]
+             HasVJP.toHasVJPAt, Mat.mulVec, Function.comp_apply]
   rfl
 
 -- ════════════════════════════════════════════════════════════════

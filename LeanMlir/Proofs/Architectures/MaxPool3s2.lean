@@ -311,9 +311,9 @@ theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
         Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)))
       (reindexCLM (maxPool3s2LocalReindex x))
       (Tensor3.flatten x) := by
-  haveI : Nonempty (Fin c) := ⟨⟨0, hc⟩⟩
-  haveI : Nonempty (Fin h) := ⟨⟨0, hh⟩⟩
-  haveI : Nonempty (Fin w) := ⟨⟨0, hw⟩⟩
+  have : Nonempty (Fin c) := ⟨⟨0, hc⟩⟩
+  have : Nonempty (Fin h) := ⟨⟨0, hh⟩⟩
+  have : Nonempty (Fin w) := ⟨⟨0, hw⟩⟩
   let samePos : Fin h → Fin w → (Fin 3 × Fin 3) → (Fin 3 × Fin 3) → Prop :=
     fun ho wo ab ab' =>
       (win3RowInv ho ab.1, win3ColInv wo ab.2) = (win3RowInv ho ab'.1, win3ColInv wo ab'.2)

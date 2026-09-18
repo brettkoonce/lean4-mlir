@@ -58,9 +58,9 @@ def main : IO Unit := do
   -- drift the way a hardcoded name would.
   let entry := s!"@mnv4_{mnv4AdamVariant B 1}_train_step("
   if (m.splitOn entry).length > 1 then
-    IO.println s!"  ✓ entry point {entry.dropRight 1}"
+    IO.println s!"  ✓ entry point {entry.dropEnd 1}"
   else
-    IO.println s!"  ✗ entry point missing/renamed (expected {entry.dropRight 1})"; bad := bad + 1
+    IO.println s!"  ✗ entry point missing/renamed (expected {entry.dropEnd 1})"; bad := bad + 1
 
   -- ── ⭐ THE FORWARD-PREFIX GATE (see the module docstring) ──
   -- `mnv4FwdChainB` is called first inside the train step, so its fresh-name counter starts at 0

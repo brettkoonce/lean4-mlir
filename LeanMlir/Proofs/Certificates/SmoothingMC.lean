@@ -51,7 +51,7 @@ theorem mc_mean_lower_bound (ν : Measure E) [IsProbabilityMeasure ν]
       ≤ (Measure.pi fun _ : Fin N => ν).real
           {ω | (∑ i, f (ω i)) / N - t ≤ ∫ z, f z ∂ν} := by
   set μN : Measure (Fin N → E) := Measure.pi fun _ : Fin N => ν with hμN
-  haveI : IsProbabilityMeasure μN := by
+  have : IsProbabilityMeasure μN := by
     rw [hμN]; infer_instance
   set p : ℝ := ∫ z, f z ∂ν with hp
   -- the centered coordinate variables
