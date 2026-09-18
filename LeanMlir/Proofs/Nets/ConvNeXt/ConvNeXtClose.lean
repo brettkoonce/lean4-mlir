@@ -79,11 +79,9 @@ theorem cnx_render_dw7b_certified {c h w : Nat}
     of `pdiv_layerScale`. -/
 theorem pdiv_layerScale_gamma {n : Nat} (x : Vec n) (γ : Vec n) (i j : Fin n) :
     pdiv (fun γ' : Vec n => layerScale γ' x) γ i j = if i = j then x i else 0 := by
-  rw [pdiv_of_linear _ (fun _ _ => by funext; simp [layerScale, add_mul])
-    (fun _ _ => by funext; simp [layerScale, mul_assoc])]
-  rcases eq_or_ne i j with rfl | h
-  · simp [layerScale]
-  · simp [layerScale, h, Ne.symm h]
+  rw [show (fun γ' : Vec n => layerScale γ' x) = layerScale x from
+    funext fun _ => funext fun _ => mul_comm _ _]
+  exact pdiv_layerScale x γ i j
 
 /-- The rendered **layer-scale γ gradient**: `dγ_i = x_i · dy_i` (elementwise multiply of the
     saved layer input with the cotangent — the `layerScaleF`-shaped backward). -/
@@ -95,11 +93,7 @@ noncomputable def layerScale_grad_gamma {n : Nat} (x dy : Vec n) : Vec n :=
 theorem layerScale_gamma_grad_bridge {n : Nat} (x : Vec n) (γ : Vec n) (dy : Vec n) (i : Fin n) :
     layerScale_grad_gamma x dy i
       = ∑ j : Fin n, pdiv (fun γ' : Vec n => layerScale γ' x) γ i j * dy j := by
-  simp_rw [pdiv_layerScale_gamma]
-  rw [Finset.sum_eq_single i]
-  · rw [ite_eq_left rfl]; rfl
-  · intro b _ hne; rw [ite_eq_right (fun h => hne h.symm)]; ring
-  · intro hp; exact absurd (Finset.mem_univ _) hp
+  simp [pdiv_layerScale_gamma, layerScale_grad_gamma]
 
 /-- **Layer-scale γ output, certified.** `γⁿ = γ − lr·(x ⊙ dy)` denotes
     `γ − lr·(certified ∂(layerScale)/∂γ · cotangent)`. The multiplicative-bias peer of

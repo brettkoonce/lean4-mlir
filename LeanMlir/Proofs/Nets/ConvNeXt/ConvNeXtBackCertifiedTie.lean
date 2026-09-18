@@ -116,11 +116,9 @@ The proof is piecewise, and every piece is already in the repo:
   `bn_grad_input` through the canonical `∑ pdiv` form, NOT by `rfl` (the `bn_has_vjp` witness is
   built through a `rw [bnForward_eq_compose]` cast — the trap `bnBack_faithful_fn` documents).
 
-Two things worth reading off the statement. **The tie is β-free**: the certified backward does not
-depend on the LN bias, and neither does the chain — the `+β` translation's VJP is the
-identity, which is why `chanLNTensor3Back` never took a `β` in the first place. And the transfer
-to the committed witness goes through `HasVJP.backward_unique`, so it does not matter that
-`chanLNTensor3_has_vjp` is tactic-built: any two witnesses for one map have one backward. -/
+**The tie is β-free**: the certified backward does not depend on the LN bias, and neither does
+the chain — the `+β` translation's VJP is the identity, which is why `chanLNTensor3Back` never
+took a `β` in the first place. -/
 
 /-- **Any two VJP witnesses for the same map have the same backward.** Both `.correct` to the same
     `∑ pdiv f x i j * dy j`, so the backward is a property of `f`, not of how the witness was
@@ -171,40 +169,19 @@ theorem rowLNVecFlat_has_vjp_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (
   rw [layerNormVec_has_vjp_backward_eq ε hε γ β]
   rfl
 
-/-- The channel-LN VJP as a TERM-mode `vjp_comp` chain — the same five factors
-    `chanLNTensor3_has_vjp` composes, but assembled without the leading `unfold`, so its backward
-    reduces definitionally to the nested chain. Only a stepping stone: `HasVJP.backward_unique`
-    transfers the result to the committed witness. -/
-noncomputable def chanLNTensor3_vjp_chain (c h w : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
-    HasVJP (chanLNTensor3 c h w ε γ β) :=
-  let d0 := reassocFwd_differentiable c h w
-  let d1 := transposeFlat_diff c (h * w)
-  let d2 := rowLNVecFlat_diff (h * w) c ε γ β hε
-  let d3 := transposeFlat_diff (h * w) c
-  let d4 := reassocBack_differentiable c h w
-  vjp_comp _ _ (d3.comp (d2.comp (d1.comp d0))) d4
-    (vjp_comp _ _ (d2.comp (d1.comp d0)) d3
-      (vjp_comp _ _ (d1.comp d0) d2
-        (vjp_comp _ _ d0 d1 (reassocFwd_has_vjp c h w) (transposeFlat_has_vjp c (h * w)))
-        (rowLNVecFlat_has_vjp (h * w) c ε γ β hε))
-      (transposeFlat_has_vjp (h * w) c))
-    (reassocBack_has_vjp c h w)
-
 /-- **THE §2n §B TIE: the channel-LN backward chain IS the certified VJP.** `chanLNTensor3Back` —
     the hand-composed reverse of `chanLNTensor3` — equals `(chanLNTensor3_has_vjp …).backward` at
     every saved input and cotangent, so the chain is **the certified gradient**.
 
-    Proof: compute the term-mode chain's backward by rewriting its five factors (two reassoc
-    collapses, two transposes by `rfl`, the row map through `bn_grad_input`), then transfer to the
-    committed tactic-built witness by `HasVJP.backward_unique`. The channel-LN peer of
-    `cnxBlockBodyBack_eq_convNextBlockBody_vjp`; 3-axiom-clean. -/
+    Proof: the witness is a term-mode `vjp_comp` chain, so its backward unfolds to the nested
+    chain; rewrite its five factors (two reassoc collapses, two transposes by `rfl`, the row map
+    through `bn_grad_input`). The channel-LN peer of `cnxBlockBodyBack_eq_convNextBlockBody_vjp`;
+    3-axiom-clean. -/
 theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (c * h * w)) :
     chanLNTensor3Back c h w ε γ x = (chanLNTensor3_has_vjp c h w ε γ β hε).backward x := by
   funext dy
-  rw [HasVJP.backward_unique (chanLNTensor3_has_vjp c h w ε γ β hε)
-        (chanLNTensor3_vjp_chain c h w ε γ β hε) x dy]
-  simp only [chanLNTensor3_vjp_chain, vjp_comp]
+  simp only [chanLNTensor3_has_vjp, vjp_comp]
   rw [reassocBack_has_vjp_backward_eq, transposeFlat_has_vjp_backward_eq,
       rowLNVecFlat_has_vjp_backward_eq (β := β) ε hε,
       transposeFlat_has_vjp_backward_eq, reassocFwd_has_vjp_backward_eq]

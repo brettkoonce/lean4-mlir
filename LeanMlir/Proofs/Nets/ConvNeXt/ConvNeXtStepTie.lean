@@ -337,11 +337,6 @@ theorem cnxLossCot_den (nlogN ohN : String) (logits : Vec 10) (label : Fin 10) :
 `@[irreducible]` so the 18-deep nested composition stays opaque during the capstone's dimension
 inference (the r34/mnv2 heartbeat lesson). -/
 
-/-- The stem's patchify conv output — the stem LN's input, and the activation `psW`/`psb` see. -/
-@[irreducible] noncomputable def cnxStemPatchO {c h w : Nat}
-    (Wst : Kernel4 c 3 4 4) (bst : Vec c) (x : Vec (3*(2*(2*h))*(2*(2*w)))) : Vec (c*h*w) :=
-  flatConvStride4 Wst bst x
-
 /-- The stem output: patchify conv **then** channel-LN (§2m — the pre-§2m render had no stem LN). -/
 @[irreducible] noncomputable def cnxStemFwdO {c h w : Nat} (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (bst psng psnbt : Vec c)

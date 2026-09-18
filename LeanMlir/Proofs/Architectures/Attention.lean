@@ -231,20 +231,12 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
              _root_.sum_apply, ContinuousLinearMap.proj_apply, basisVec_apply]
   -- Collapse the Kronecker sum: Σ_k exp(z k) * (if k = i then 1 else 0) = exp(z i).
   rw [show (∑ k : Fin (c' + 1), Real.exp (z k) * (if k = i then (1 : ℝ) else 0)) =
-        Real.exp (z i) from by
-      rw [Finset.sum_eq_single i]
-      · rw [ite_eq_left rfl, mul_one]
-      · intros b _ hb; rw [ite_eq_right hb, mul_zero]
-      · intro h; exact absurd (Finset.mem_univ i) h]
+        Real.exp (z i) from by simp]
   -- Unfold softmax on the RHS and convert `if j = i` to `if i = j`.
   show Real.exp (z j) * (-(S ^ 2)⁻¹ * Real.exp (z i)) +
        S⁻¹ * (Real.exp (z j) * (if j = i then (1 : ℝ) else 0)) =
        (Real.exp (z j) / S) * ((if i = j then (1 : ℝ) else 0) - Real.exp (z i) / S)
-  have h_if : (if j = i then (1 : ℝ) else 0) = (if i = j then (1 : ℝ) else 0) := by
-    by_cases h : i = j
-    · rw [ite_eq_left h, ite_eq_left h.symm]
-    · rw [ite_eq_right h, ite_eq_right (fun heq => h heq.symm)]
-  rw [h_if]
+  simp only [@eq_comm _ j i]
   field_simp
   ring
 
@@ -1900,6 +1892,19 @@ noncomputable def transformerMlp_has_vjp_mat (N D mlpDim : Nat)
     inner_has_vjp
     (dense_per_token_has_vjp_mat N mlpDim D Wfc2 bfc2)
 
+/-- VJP of a pre-norm residual sublayer `X ↦ X + F (L X)` (norm `L`, then body `F`):
+    `biPathMat_has_vjp` of the identity skip and the `vjpMat_comp` chain `L`-back ∘
+    `F`-back. Every transformer sublayer (scalar- and vector-LN, attention and MLP) is
+    an instance. -/
+noncomputable def preLNRes_has_vjp_mat {N D : Nat} (L F : Mat N D → Mat N D)
+    (hL : Differentiable ℝ (fun v : Vec (N * D) => Mat.flatten (L (Mat.unflatten v))))
+    (hF : Differentiable ℝ (fun v : Vec (N * D) => Mat.flatten (F (Mat.unflatten v))))
+    (vL : HasVJPMat L) (vF : HasVJPMat F) :
+    HasVJPMat (biPathMat (fun X => X) (F ∘ L)) :=
+  biPathMat_has_vjp _ _ (identity_mat_flat_diff N D)
+    (by simpa [Function.comp_def, Mat.unflatten_flatten] using hF.comp hL)
+    (identityMat_has_vjp N D) (vjpMat_comp L F hL hF vL vF)
+
 /-- Attention sublayer: `X ↦ X + MHSA(LN1(X))`. Top-level composition;
     the `biPathMat` skip-adds identity to the MHSA∘LN1 branch. -/
 noncomputable def transformerAttnSublayer (N heads d_head : Nat) (ε γ1 β1 : ℝ)
@@ -1964,29 +1969,17 @@ lemma transformerAttnSublayer_flat_diff
   exact (identity_mat_flat_diff N (heads * d_head)).add
     (transformerAttnSublayer_inner_flat_diff N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
 
-/-- Attention sublayer VJP: `biPathMat` of identity and `mhsa ∘ LN1`.
-    Theorem, no longer axiom: discharges the `Differentiable` hypotheses
-    using `identity_mat_flat_diff` for the skip arm and the inner Diff
-    helper above for the `mhsa ∘ LN1` arm. -/
+/-- Attention sublayer VJP: `preLNRes_has_vjp_mat` at `L = LN1`, `F = mhsa`. -/
 noncomputable def transformerAttnSublayer_has_vjp_mat (N heads d_head : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
     HasVJPMat (transformerAttnSublayer N heads d_head ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo) :=
-  -- Inner arm composition: mhsa ∘ LN1
-  let inner_has_vjp :=
-    vjpMat_comp _ (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo)
-      (layerNorm_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
-      (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo)
-      (layerNorm_per_token_has_vjp_mat N (heads * d_head) ε γ1 β1 hε)
-      (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo)
-  biPathMat_has_vjp _ _
-    (identity_mat_flat_diff N (heads * d_head))
-    (transformerAttnSublayer_inner_flat_diff N heads d_head ε γ1 β1 hε
-       Wq Wk Wv Wo bq bk bv bo)
-    (identityMat_has_vjp N (heads * d_head))
-    inner_has_vjp
+  preLNRes_has_vjp_mat _ _ (layerNorm_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
+    (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo)
+    (layerNorm_per_token_has_vjp_mat N (heads * d_head) ε γ1 β1 hε)
+    (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 /-- Differentiability of the MLP sublayer's non-trivial arm
     (`transformerMlp ∘ LN2`). Composition of `transformerMlp_flat_diff`
@@ -2017,26 +2010,17 @@ lemma transformerMlpSublayer_flat_diff
   exact (identity_mat_flat_diff N (heads * d_head)).add
     (transformerMlpSublayer_inner_flat_diff N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
 
-/-- MLP sublayer VJP: `biPathMat` of identity and `transformerMlp ∘ LN2`.
-    Theorem, no longer axiom: same recipe as `transformerAttnSublayer_has_vjp_mat`. -/
+/-- MLP sublayer VJP: `preLNRes_has_vjp_mat` at `L = LN2`, `F = transformerMlp`. -/
 noncomputable def transformerMlpSublayer_has_vjp_mat (N heads d_head mlpDim : Nat)
     (ε γ2 β2 : ℝ) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     HasVJPMat (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2
                  Wfc1 bfc1 Wfc2 bfc2) :=
-  let inner_has_vjp :=
-    vjpMat_comp _ (transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-      (layerNorm_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
-      (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-      (layerNorm_per_token_has_vjp_mat N (heads * d_head) ε γ2 β2 hε)
-      (transformerMlp_has_vjp_mat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-  biPathMat_has_vjp _ _
-    (identity_mat_flat_diff N (heads * d_head))
-    (transformerMlpSublayer_inner_flat_diff N heads d_head mlpDim ε γ2 β2 hε
-       Wfc1 bfc1 Wfc2 bfc2)
-    (identityMat_has_vjp N (heads * d_head))
-    inner_has_vjp
+  preLNRes_has_vjp_mat _ _ (layerNorm_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
+    (layerNorm_per_token_has_vjp_mat N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_has_vjp_mat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
 
 /-- Differentiability of the flattened transformer block.
     `MlpSublayer ∘ AttnSublayer`; both sublayers' flat Diff are theorems above. -/
@@ -2584,63 +2568,10 @@ noncomputable def patchEmbed_flat_has_vjp
     -- Substitute h_pdiv on RHS.
     simp_rw [h_pdiv]
     -- Reindex Σ idx_out → Σ pair via finProdFinEquiv.symm.
-    rw [Fintype.sum_equiv finProdFinEquiv.symm
-        (fun idx_out : Fin ((N + 1) * D) =>
-          (if _hn0 : (finProdFinEquiv.symm idx_out).1.val = 0 then (0 : ℝ)
-           else
-             ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-               W_conv (finProdFinEquiv.symm idx_out).2 c kh kw *
-                 (let W' := W / patchSize
-                  let p := (finProdFinEquiv.symm idx_out).1.val - 1
-                  let h' := p / W'
-                  let w' := p % W'
-                  let hh := h' * patchSize + kh.val
-                  let ww := w' * patchSize + kw.val
-                  if hpad : hh < H ∧ ww < W then
-                    (if idx_in = finProdFinEquiv (finProdFinEquiv
-                        (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩) then (1 : ℝ) else 0)
-                  else 0)) * dy idx_out)
-        (fun pair : Fin (N + 1) × Fin D =>
-          (if _hn0 : pair.1.val = 0 then (0 : ℝ)
-           else
-             ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-               W_conv pair.2 c kh kw *
-                 (let W' := W / patchSize
-                  let p := pair.1.val - 1
-                  let h' := p / W'
-                  let w' := p % W'
-                  let hh := h' * patchSize + kh.val
-                  let ww := w' * patchSize + kw.val
-                  if hpad : hh < H ∧ ww < W then
-                    (if idx_in = finProdFinEquiv (finProdFinEquiv
-                        (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩) then (1 : ℝ) else 0)
-                  else 0)) * dy (finProdFinEquiv pair))
-        (fun idx_out => by
-          show _ * _ = _ * _
-          rw [Equiv.apply_symm_apply])]
-    rw [Fintype.sum_prod_type]
-    -- Split Σ n via Fin.sum_univ_succ: n=0 row + ∑ p:Fin N (n=p.succ).
-    rw [Fin.sum_univ_succ]
-    -- The n=0 term contributes 0 (each summand has dite_eq_left rfl → 0, then 0 * dy = 0).
-    rw [show (∑ d : Fin D,
-        (if _hn0 : ((0 : Fin (N + 1)).val = 0) then (0 : ℝ)
-         else
-           ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-             W_conv ((0 : Fin (N + 1)), d).2 c kh kw *
-               (let W' := W / patchSize
-                let p := ((0 : Fin (N + 1)), d).1.val - 1
-                let h' := p / W'
-                let w' := p % W'
-                let hh := h' * patchSize + kh.val
-                let ww := w' * patchSize + kw.val
-                if hpad : hh < H ∧ ww < W then
-                  (if idx_in = finProdFinEquiv (finProdFinEquiv
-                      (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩) then (1 : ℝ) else 0)
-                else 0)) * dy (finProdFinEquiv ((0 : Fin (N + 1)), d))) = 0 from by
-      apply Finset.sum_eq_zero; intro d _
-      have h_zero : ((0 : Fin (N + 1)).val = 0) := Fin.val_zero (N + 1)
-      rw [dite_eq_left h_zero, zero_mul]]
-    rw [zero_add]
+    -- Reindex `Σ idx_out` as `Σ (n, d)`; the CLS row `n = 0` contributes nothing.
+    rw [← Equiv.sum_comp finProdFinEquiv, Fintype.sum_prod_type, Fin.sum_univ_succ]
+    simp only [Equiv.symm_apply_apply, Fin.val_zero, dite_true, zero_mul, Finset.sum_const_zero,
+      zero_add]
     -- Per-p: simplify dite_eq_right at p.succ + match formula.
     apply Finset.sum_congr rfl; intro p _
     have h_p_ne : (Fin.succ p).val ≠ 0 := Nat.succ_ne_zero _
@@ -2669,150 +2600,26 @@ noncomputable def patchEmbed_flat_has_vjp
       simp only [h_p_succ_sub]
       by_cases hpad : p.val / (W / patchSize) * patchSize + kh.val < H ∧
                       p.val % (W / patchSize) * patchSize + kw.val < W
-      · rw [dite_eq_left hpad]
-        by_cases h_match : c = c_in ∧
-                           p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                           p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
-        · have h_idx_in_eq : idx_in = finProdFinEquiv (finProdFinEquiv
-              (c, ⟨p.val / (W / patchSize) * patchSize + kh.val, hpad.1⟩),
-              ⟨p.val % (W / patchSize) * patchSize + kw.val, hpad.2⟩) := by
-            rw [hidx_in]
-            have h_c : c_in = c := h_match.1.symm
-            have h_hh : (⟨p.val / (W / patchSize) * patchSize + kh.val, hpad.1⟩ : Fin H) =
-                hh_in := by
-              apply Fin.ext
-              show p.val / (W / patchSize) * patchSize + kh.val = hh_in.val
-              exact h_match.2.1
-            have h_ww : (⟨p.val % (W / patchSize) * patchSize + kw.val, hpad.2⟩ : Fin W) =
-                ww_in := by
-              apply Fin.ext
-              show p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
-              exact h_match.2.2
-            rw [h_c, ← h_hh, ← h_ww]
-          rw [ite_eq_left h_idx_in_eq, ite_eq_left h_match]
-        · rw [ite_eq_right h_match, ite_eq_right]
-          intro h_eq
-          apply h_match
-          rw [hidx_in] at h_eq
-          have h_inj := finProdFinEquiv.injective h_eq
-          have h_inj_pair := Prod.mk.inj h_inj
-          have h_inj_inner := finProdFinEquiv.injective h_inj_pair.1
-          have h_inj_inner_pair := Prod.mk.inj h_inj_inner
-          refine ⟨h_inj_inner_pair.1.symm, ?_, ?_⟩
-          · exact (Fin.ext_iff.mp h_inj_inner_pair.2).symm
-          · exact (Fin.ext_iff.mp h_inj_pair.2).symm
-      · rw [dite_eq_right hpad]
-        rw [ite_eq_right]
-        intro ⟨_, h_hh, h_ww⟩
-        apply hpad
-        refine ⟨?_, ?_⟩
-        · rw [h_hh]; exact hh_in.isLt
-        · rw [h_ww]; exact ww_in.isLt
+      · rw [dite_eq_left hpad, hidx_in]
+        refine if_congr ?_ rfl rfl
+        simp only [EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq, Fin.ext_iff, @eq_comm _ c_in,
+          @eq_comm _ hh_in.val, @eq_comm _ ww_in.val, and_assoc]
+      · rw [dite_eq_right hpad, ite_eq_right]
+        rintro ⟨_, h_hh, h_ww⟩
+        exact hpad ⟨h_hh ▸ hh_in.isLt, h_ww ▸ ww_in.isLt⟩
     -- Use h_indicator to rewrite dite to conjunction-indicator.
     simp_rw [h_indicator]
-    -- Now: LHS = ∑ kh kw, (if h_match then ∑ d, W d c_in kh kw * dy else 0)
-    --      RHS = ∑ d, (∑ c kh kw, W * (if c=c_in ∧ h_match then 1 else 0)) * dy
-    -- Strategy: reduce both sides to the canonical form
-    --     ∑ d, ∑ kh, ∑ kw, (if h_match then W d c_in kh kw * dy else 0)
-    -- Step 1: convert LHS.
-    have h_lhs_canonical :
-        (∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-            if _h : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                    p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-              ∑ d : Fin D, W_conv d c_in kh kw * dy (finProdFinEquiv (Fin.succ p, d))
-            else 0) =
-        ∑ d : Fin D, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-            (if _h : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                    p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-              W_conv d c_in kh kw * dy (finProdFinEquiv (Fin.succ p, d))
-            else 0) := by
-      -- Pull if into Σ d, then swap orders to get Σ d outermost.
-      rw [show (∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-              if _h : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                      p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-                ∑ d : Fin D, W_conv d c_in kh kw * dy (finProdFinEquiv (Fin.succ p, d))
-              else 0) =
-            (∑ kh : Fin patchSize, ∑ kw : Fin patchSize, ∑ d : Fin D,
-              (if _h : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                      p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-                W_conv d c_in kh kw * dy (finProdFinEquiv (Fin.succ p, d))
-              else 0)) from by
-        apply Finset.sum_congr rfl; intro kh _
-        apply Finset.sum_congr rfl; intro kw _
-        by_cases h_match : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                           p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
-        · rw [dite_eq_left h_match]
-          apply Finset.sum_congr rfl; intro d _
-          rw [dite_eq_left h_match]
-        · rw [dite_eq_right h_match]
-          symm
-          apply Finset.sum_eq_zero; intro d _
-          rw [dite_eq_right h_match]]
-      -- Now: ∑ kh, ∑ kw, ∑ d, body. Move Σ d outermost via two sum_comm applications.
-      -- Step 1: swap inner ∑ kw and ∑ d (under ∑ kh binder) via a per-kh helper.
-      rw [show (∑ kh : Fin patchSize, ∑ kw : Fin patchSize, ∑ d : Fin D,
-            (if _h : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                    p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-              W_conv d c_in kh kw * dy (finProdFinEquiv (Fin.succ p, d))
-            else 0)) =
-            (∑ kh : Fin patchSize, ∑ d : Fin D, ∑ kw : Fin patchSize,
-            (if _h : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                    p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-              W_conv d c_in kh kw * dy (finProdFinEquiv (Fin.succ p, d))
-            else 0)) from by
-        apply Finset.sum_congr rfl; intro kh _
-        exact Finset.sum_comm]
-      -- Step 2: swap outer ∑ kh and ∑ d.
-      rw [Finset.sum_comm]
-    rw [h_lhs_canonical]
-    -- Step 2: convert RHS.
-    have h_rhs_canonical :
-        (∑ d : Fin D,
-            (∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-              W_conv d c kh kw *
-                (if c = c_in ∧
-                    p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                    p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-                  (1 : ℝ) else 0)) *
-            dy (finProdFinEquiv (Fin.succ p, d))) =
-        ∑ d : Fin D, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-            (if _h : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                    p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-              W_conv d c_in kh kw * dy (finProdFinEquiv (Fin.succ p, d))
-            else 0) := by
-      apply Finset.sum_congr rfl; intro d _
-      -- Per-d: (∑ c kh kw, W * indicator) * dy = ∑ kh kw, [if h_match then W d c_in * dy else 0]
-      rw [Finset.sum_mul]  -- (∑ c, ...) * dy = ∑ c, ... * dy
-      -- Goal: ∑ c, (∑ kh, ∑ kw, W * indicator) * dy = ∑ kh, ∑ kw, ...
-      -- Hmm wait, Finset.sum_mul applied to outermost ∑ c.
-      rw [Finset.sum_eq_single c_in]
-      rotate_left
-      · -- Other c contribute 0.
-        intro c _ hc_ne
-        rw [show ((∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-              W_conv d c kh kw *
-                (if c = c_in ∧
-                    p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                    p.val % (W / patchSize) * patchSize + kw.val = ww_in.val then
-                  (1 : ℝ) else 0)) : ℝ) = 0 from by
-          apply Finset.sum_eq_zero; intro kh _
-          apply Finset.sum_eq_zero; intro kw _
-          rw [ite_eq_right (fun ⟨h, _⟩ => hc_ne h), mul_zero]]
-        rw [zero_mul]
-      · intro h; exact absurd (Finset.mem_univ c_in) h
-      -- Now: (∑ kh, ∑ kw, W d c_in kh kw * (if c_in = c_in ∧ h_match then 1 else 0)) * dy
-      -- = ∑ kh, ∑ kw, [if h_match then W d c_in kh kw * dy else 0]
-      rw [Finset.sum_mul]
-      apply Finset.sum_congr rfl; intro kh _
-      rw [Finset.sum_mul]
-      apply Finset.sum_congr rfl; intro kw _
-      -- Per-(d, kh, kw): W d c_in kh kw * (if c_in = c_in ∧ h_match then 1 else 0) * dy
-      -- = if h_match then W d c_in kh kw * dy else 0
-      by_cases h_match : p.val / (W / patchSize) * patchSize + kh.val = hh_in.val ∧
-                         p.val % (W / patchSize) * patchSize + kw.val = ww_in.val
-      · rw [ite_eq_left ⟨rfl, h_match⟩, dite_eq_left h_match]; ring
-      · rw [ite_eq_right (fun ⟨_, h⟩ => h_match h), dite_eq_right h_match]; ring
-    rw [h_rhs_canonical]
+    -- Collapse `c = c_in` and float both sides to `∑ kh, [row match] ∑ kw, [col match] …`.
+    simp only [ite_and, mul_ite, mul_one, mul_zero, Finset.sum_ite_irrel, Finset.sum_const_zero,
+      Finset.sum_ite_eq', Finset.mem_univ, ite_true, Finset.sum_mul, ite_mul, zero_mul, dite_eq_ite]
+    -- The RHS sums `d` outermost; move it inside both window sums.
+    rw [Finset.sum_comm]
+    refine Finset.sum_congr rfl fun kh _ => ?_
+    rw [Finset.sum_ite_irrel, Finset.sum_const_zero]
+    refine if_congr Iff.rfl ?_ rfl
+    rw [Finset.sum_comm]
+    refine Finset.sum_congr rfl fun kw _ => ?_
+    rw [Finset.sum_ite_irrel, Finset.sum_const_zero]
 
 /-! ## The full ViT theorem
 

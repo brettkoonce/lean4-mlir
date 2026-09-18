@@ -147,12 +147,7 @@ theorem posEmbedGrad_den {ic H W P N D : Nat} (cotN : String)
           pdiv (fun p : Vec ((N + 1) * D) =>
                   patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
             (Mat.flatten pos) i j * dy j := by
-  simp only [den]
-  simp_rw [pdiv_patchEmbed_pos]
-  rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [ite_eq_right (Ne.symm (Ne.symm hne).symm), zero_mul])
-      (fun h => absurd (Finset.mem_univ i) h)]
-  rw [ite_eq_left rfl, one_mul]
+  simp [den, pdiv_patchEmbed_pos]
 
 /-- **CLS-token GRADIENT denotes the certified gradient.** The render slices row 0 of the embed
     cotangent (`clsSliceF`) and then reduces it as a `[1, D]` batch, so the op is

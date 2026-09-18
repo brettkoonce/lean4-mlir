@@ -414,13 +414,7 @@ theorem vitFwdGraphMH_faithful
           γ1₁ β1₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
           γ1₂ β1₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂
           γF βF Wcls bcls x := by
-  have h0 : den (SHlo.patchEmbedF (P := patchSize) "%Wp" "%bp" "%cls" "%pos"
-        Wc bc cls pos (.operand "%x" x))
-      = Mat.flatten (Mat.unflatten
-          (patchEmbed_flat ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x)) := by
-    simp only [patchEmbedF_faithful, den_operand]
-    rw [Mat.flatten_unflatten]
-    rfl
+  have h0 := patchEmbedF_x_den ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x
   have h1 := vitBlockGraphMH_den_aux "b1_" epsStr sStr ε γ1₁ β1₁
     Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
     _ _ h0
@@ -498,13 +492,7 @@ theorem vitFwdGraphMHV_faithful
           γ1₁ β1₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
           γ1₂ β1₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂
           γF βF Wcls bcls x := by
-  have h0 : den (SHlo.patchEmbedF (P := patchSize) "%Wp" "%bp" "%cls" "%pos"
-        Wc bc cls pos (.operand "%x" x))
-      = Mat.flatten (Mat.unflatten
-          (patchEmbed_flat ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x)) := by
-    simp only [patchEmbedF_faithful, den_operand]
-    rw [Mat.flatten_unflatten]
-    rfl
+  have h0 := patchEmbedF_x_den ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x
   have h1 := vitBlockGraphMHV_den_aux "b1_" epsStr sStr oneStr zeroStr ε γ1₁ β1₁
     Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
     _ _ h0

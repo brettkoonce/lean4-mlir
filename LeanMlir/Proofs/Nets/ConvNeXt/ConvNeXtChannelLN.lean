@@ -134,22 +134,22 @@ theorem chanLNTensor3_diff (c h w : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < �
         ((transposeFlat_diff c (h * w)).comp (reassocFwd_differentiable c h w))))
 
 /-- **Channel-LN VJP (global)** — `vjp_comp` over the five proven pieces. The only hypothesis
-    is the LN positivity `0 < ε`, exactly as the scalar `layerNorm_has_vjp` it replaces. -/
+    is the LN positivity `0 < ε`, exactly as the scalar `layerNorm_has_vjp` it replaces. A term,
+    not a tactic proof, so its `.backward` unfolds to the nested chain. -/
 noncomputable def chanLNTensor3_has_vjp (c h w : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
-    HasVJP (chanLNTensor3 c h w ε γ β) := by
-  unfold chanLNTensor3
-  have d0 := reassocFwd_differentiable c h w
-  have d1 := transposeFlat_diff c (h * w)
-  have d2 := rowLNVecFlat_diff (h * w) c ε γ β hε
-  have d3 := transposeFlat_diff (h * w) c
-  have d4 := reassocBack_differentiable c h w
-  have e1 := vjp_comp _ _ d0 d1 (reassocFwd_has_vjp c h w) (transposeFlat_has_vjp c (h * w))
-  have f1 := d1.comp d0
-  have e2 := vjp_comp _ _ f1 d2 e1 (rowLNVecFlat_has_vjp (h * w) c ε γ β hε)
-  have f2 := d2.comp f1
-  have e3 := vjp_comp _ _ f2 d3 e2 (transposeFlat_has_vjp (h * w) c)
-  have f3 := d3.comp f2
-  exact vjp_comp _ _ f3 d4 e3 (reassocBack_has_vjp c h w)
+    HasVJP (chanLNTensor3 c h w ε γ β) :=
+  let d0 := reassocFwd_differentiable c h w
+  let d1 := transposeFlat_diff c (h * w)
+  let d2 := rowLNVecFlat_diff (h * w) c ε γ β hε
+  let d3 := transposeFlat_diff (h * w) c
+  let d4 := reassocBack_differentiable c h w
+  vjp_comp _ _ (d3.comp (d2.comp (d1.comp d0))) d4
+    (vjp_comp _ _ (d2.comp (d1.comp d0)) d3
+      (vjp_comp _ _ (d1.comp d0) d2
+        (vjp_comp _ _ d0 d1 (reassocFwd_has_vjp c h w) (transposeFlat_has_vjp c (h * w)))
+        (rowLNVecFlat_has_vjp (h * w) c ε γ β hε))
+      (transposeFlat_has_vjp (h * w) c))
+    (reassocBack_has_vjp c h w)
 
 /-- **The emitted three-op affine tail IS the per-token vector-LN.** The chain normalises with
     `lnRowF` at scalar γ=1/β=0 and then applies the REAL `[c]` affine with `rowScaleF`/`rowBiasF`
@@ -216,16 +216,6 @@ noncomputable def chanRowsPerm (c h w : Nat) : Fin (c * h * w) ≃ Fin ((h * w) 
   ⟨chanRowsIdx c h w, chanRowsIdxInv c h w,
    chanRowsIdxInv_chanRowsIdx c h w, chanRowsIdx_chanRowsIdxInv c h w⟩
 
-/-- The row view IS the reindex by the inverse permutation (definitional; stated so the two
-    spellings are visibly one map rather than two that happen to agree). -/
-theorem chanLNRows_eq_reindex (c h w : Nat) (v : Vec (c * h * w)) :
-    chanLNRows c h w v = fun o => v ((chanRowsPerm c h w).symm o) := rfl
-
-/-- And channel-LN is the row-LN read through the permutation. -/
-theorem chanLNTensor3_eq_rows (c h w : Nat) (ε : ℝ) (γ β : Vec c) (x : Vec (c * h * w)) :
-    chanLNTensor3 c h w ε γ β x
-      = fun j => rowLNVecFlat (h * w) c ε γ β (chanLNRows c h w x) (chanRowsPerm c h w j) := rfl
-
 /-- **An output-side permutation moves onto the cotangent as its inverse.** Generic: for any
     differentiable `f` and any bijection `σ` of output indices, contracting the Jacobian of
     `σ`-reindexed `f` with a cotangent is contracting `f`'s own Jacobian with the `σ⁻¹`-reindexed
@@ -242,10 +232,7 @@ theorem pdiv_reindexOut_contract {m n n' : Nat} (f : Vec m → Vec n) (x : Vec m
     rw [show (fun y : Vec m => fun k : Fin n' => f y (σ k))
           = (fun z : Vec n => fun k : Fin n' => z (σ k)) ∘ f from rfl,
         pdiv_comp f (fun z : Vec n => fun k : Fin n' => z (σ k)) x hf hg i j]
-    simp_rw [pdiv_reindex (fun k : Fin n' => σ k)]
-    rw [Finset.sum_eq_single (σ j)
-        (fun o _ hne => by rw [ite_eq_right hne, mul_zero])
-        (fun h => absurd (Finset.mem_univ (σ j)) h), ite_eq_left rfl, mul_one]
+    simp [pdiv_reindex (fun k : Fin n' => σ k)]
   simp_rw [hstep]
   rw [← Equiv.sum_comp σ (fun o => pdiv f x i o * cot (σ.symm o))]
   exact Finset.sum_congr rfl (fun j _ => by rw [Equiv.symm_apply_apply])

@@ -130,13 +130,6 @@ noncomputable def vitCotFl (N D nClasses : Nat) (Wcls : Mat D nClasses)
     (dy : Vec nClasses) : Vec ((N + 1) * D) :=
   clsPadFlat N D (Mat.mulVec Wcls dy)
 
-/-- Cotangent at **block 2's output**: the final-LN input-VJP at the saved pre-LN
-    input `b2out`, of `vitCotFl`. -/
-noncomputable def vitCotB2out (N D nClasses : Nat) (ε γF : ℝ)
-    (Wcls : Mat D nClasses) (b2out : Vec ((N + 1) * D)) (dy : Vec nClasses) :
-    Vec ((N + 1) * D) :=
-  rowLNBackFlat (N + 1) D ε γF b2out (vitCotFl N D nClasses Wcls dy)
-
 -- ════════════════════════════════════════════════════════════════
 -- § The SDPA ties — the rendered matmul chain IS the proven closed backward
 -- ════════════════════════════════════════════════════════════════

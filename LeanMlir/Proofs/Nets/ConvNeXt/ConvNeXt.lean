@@ -74,11 +74,7 @@ noncomputable def layerScale_has_vjp {n : Nat} (γ : Vec n) :
   backward := fun _x dy i => γ i * dy i
   correct := by
     intro x dy i
-    simp_rw [pdiv_layerScale]
-    rw [Finset.sum_eq_single i]
-    · rw [ite_eq_left rfl]
-    · intro b _ hne; rw [ite_eq_right (fun h => hne h.symm)]; ring
-    · intro hp; exact absurd (Finset.mem_univ _) hp
+    simp [pdiv_layerScale]
 
 theorem layerScale_has_vjp_correct {n : Nat} (γ : Vec n)
     (x dy : Vec n) (i : Fin n) :

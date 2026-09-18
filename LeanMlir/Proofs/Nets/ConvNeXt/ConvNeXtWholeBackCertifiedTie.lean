@@ -400,11 +400,6 @@ private noncomputable def cnxV10 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w
   vjp_comp (cnxSavedA9 w) _ (cnxD9 w hsε h1 hd1 h2 hd2 h3 hd3 h4) (cnxLNhDiff w hhε)
     (cnxV9 w hsε h1 hd1 h2 hd2 h3 hd3 h4) (cnxLNhVjp w hhε)
 
-private theorem cnxD11 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
-    (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
-    (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) :
-    Differentiable ℝ (dense w.Wd w.bd ∘ cnxSavedA10 w) :=
-  (dense_differentiable w.Wd w.bd).comp (cnxD10 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
 private noncomputable def cnxV11 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) :

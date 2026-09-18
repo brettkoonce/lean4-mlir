@@ -49,14 +49,7 @@ theorem cnx_render_lsgammaCh_certified {c h w : Nat} (x : Vec (c * h * w)) (γ :
     γ cc - lr * ∑ k : Fin (c * h * w), (if chanIdx c h w k = cc then x k * dy k else 0)
       = γ cc - lr * ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
-  congr 1
-  apply congrArg (lr * ·)
-  apply Finset.sum_congr rfl
-  intro j _
-  rw [pdiv_layerScaleCh_gamma]
-  by_cases hcc : chanIdx c h w j = cc
-  · rw [ite_eq_left hcc, ite_eq_left hcc.symm]
-  · rw [ite_eq_right hcc, ite_eq_right (fun h => hcc h.symm)]; ring
+  simp only [pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The §1 den-fold — each new core op `den`otes the certified loss-descent step

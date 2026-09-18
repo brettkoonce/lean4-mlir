@@ -47,11 +47,7 @@ noncomputable def biasAdd_has_vjp {n : Nat} (βv : Vec n) :
   backward := fun _z dy => dy
   correct := by
     intro z dy i
-    simp_rw [pdiv_id_add_const βv z]
-    rw [Finset.sum_eq_single i
-        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne), zero_mul])
-        (fun h => absurd (Finset.mem_univ i) h)]
-    rw [ite_eq_left rfl, one_mul]
+    simp [pdiv_id_add_const βv z]
 
 /-- **Vector-LN VJP** — `(+β) ∘ layerScale γ ∘ LN(1,0)`, three proven pieces glued
     by `vjp_comp`. Only `0 < ε`. -/
@@ -164,18 +160,10 @@ noncomputable def transformerAttnSublayerV_has_vjp_mat (N heads d_head : Nat)
     (bq bk bv bo : Vec (heads * d_head)) :
     HasVJPMat (transformerAttnSublayerV N heads d_head ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo) :=
-  let inner_has_vjp :=
-    vjpMat_comp _ (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo)
-      (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
-      (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo)
-      (layerNormVec_per_token_has_vjp_mat N (heads * d_head) ε γ1 β1 hε)
-      (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo)
-  biPathMat_has_vjp _ _
-    (identity_mat_flat_diff N (heads * d_head))
-    (transformerAttnSublayerV_inner_flat_diff N heads d_head ε γ1 β1 hε
-       Wq Wk Wv Wo bq bk bv bo)
-    (identityMat_has_vjp N (heads * d_head))
-    inner_has_vjp
+  preLNRes_has_vjp_mat _ _ (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
+    (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo)
+    (layerNormVec_per_token_has_vjp_mat N (heads * d_head) ε γ1 β1 hε)
+    (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 /-- Flat Diff of the MLPᵥ sublayer's non-trivial arm. -/
 lemma transformerMlpSublayerV_inner_flat_diff
@@ -210,18 +198,10 @@ noncomputable def transformerMlpSublayerV_has_vjp_mat (N heads d_head mlpDim : N
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     HasVJPMat (transformerMlpSublayerV N heads d_head mlpDim ε γ2 β2
                  Wfc1 bfc1 Wfc2 bfc2) :=
-  let inner_has_vjp :=
-    vjpMat_comp _ (transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-      (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
-      (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-      (layerNormVec_per_token_has_vjp_mat N (heads * d_head) ε γ2 β2 hε)
-      (transformerMlp_has_vjp_mat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-  biPathMat_has_vjp _ _
-    (identity_mat_flat_diff N (heads * d_head))
-    (transformerMlpSublayerV_inner_flat_diff N heads d_head mlpDim ε γ2 β2 hε
-       Wfc1 bfc1 Wfc2 bfc2)
-    (identityMat_has_vjp N (heads * d_head))
-    inner_has_vjp
+  preLNRes_has_vjp_mat _ _ (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
+    (layerNormVec_per_token_has_vjp_mat N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_has_vjp_mat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
 
 /-- Flat Diff of the vector-LN block. -/
 lemma transformerBlockV_flat_diff (N heads d_head mlpDim : Nat)
@@ -590,13 +570,7 @@ theorem vitFwdGraphV_faithful
           γ1₁ β1₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
           γ1₂ β1₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂
           γF βF Wcls bcls x := by
-  have h0 : den (SHlo.patchEmbedF (P := patchSize) "%Wp" "%bp" "%cls" "%pos"
-        Wc bc cls pos (.operand "%x" x))
-      = Mat.flatten (Mat.unflatten
-          (patchEmbed_flat ic H W patchSize N (1 * d) Wc bc cls pos x)) := by
-    simp only [patchEmbedF_faithful, den_operand]
-    rw [Mat.flatten_unflatten]
-    rfl
+  have h0 := patchEmbedF_x_den ic H W patchSize N (1 * d) Wc bc cls pos x
   have h1 := vitBlockGraphV_den_aux "b1_" epsStr sStr oneStr zeroStr ε γ1₁ β1₁
     Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
     _ _ h0
@@ -682,19 +656,7 @@ theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Ve
             * dy o := by
   simp_rw [pdiv_vecLN_gamma]
   rw [sum_fin_prod N D]
-  unfold vecLN_grad_gamma Mat.unflatten
-  apply Finset.sum_congr rfl
-  intro r _
-  rw [Finset.sum_eq_single i
-      (fun k _ hne => by
-        rw [Equiv.symm_apply_apply]
-        dsimp only
-        rw [ite_eq_right (Ne.symm hne), mul_zero, zero_mul])
-      (fun h => absurd (Finset.mem_univ i) h)]
-  rw [Equiv.symm_apply_apply]
-  dsimp only
-  rw [ite_eq_left rfl, mul_one]
-  ring
+  simp [vecLN_grad_gamma, Mat.unflatten, mul_comm]
 
 /-- **Vector-LN β-gradient bridge.** -/
 theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec D)
@@ -706,18 +668,7 @@ theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec
             * dy o := by
   simp_rw [pdiv_vecLN_beta]
   rw [sum_fin_prod N D]
-  unfold vecLN_grad_beta Mat.unflatten
-  apply Finset.sum_congr rfl
-  intro r _
-  rw [Finset.sum_eq_single i
-      (fun k _ hne => by
-        rw [Equiv.symm_apply_apply]
-        dsimp only
-        rw [ite_eq_right (Ne.symm hne), zero_mul])
-      (fun h => absurd (Finset.mem_univ i) h)]
-  rw [Equiv.symm_apply_apply]
-  dsimp only
-  rw [ite_eq_left rfl, one_mul]
+  simp [vecLN_grad_beta, Mat.unflatten]
 
 /-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes
     the certified rowwise vector-LN ∂/∂γv contraction. Covers all five LN sites of

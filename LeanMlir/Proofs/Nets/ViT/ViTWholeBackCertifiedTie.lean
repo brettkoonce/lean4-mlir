@@ -21,11 +21,9 @@ Four things assemble it, and only the second is a proof rather than an enumerati
    backwards in the OPPOSITE order, each at its own saved activation, and the tail's saved input
    is block `0`'s forward OUTPUT. `cnxStageChKBack_eq_vjp`'s induction verbatim: one rewrite of
    the block tie and one of the inductive hypothesis.
-3. **A term-mode apex.** `vitForwardKV_has_vjp` is tactic-built and opens with `unfold
-   vitForwardKV`, so its `.backward` sits behind an `Eq.mpr` the kernel will not reduce through.
-   `vitApexVJP` is the same four-factor `vjp_comp` chain written as a term, and
-   `HasVJP.backward_unique` carries the tie from it to the committed witness — the escape
-   `EfficientNetFullWholeBackCertifiedTie.lean` used, and the `▸`-transport trap it names.
+3. **The apex witness.** `vitApexVJP` names the committed `vitForwardKV_has_vjp`; its
+   `.backward` reduces through the four `vjp_comp` factors by `rfl` (ViTBackB0's
+   `vitNetBackGraph_faithful` unfolds it the same way).
 4. **A shape check.** `vitForwardKV_eq_chain` says the four-factor composition the apex is stated
    at IS the committed `vitForwardKV`, by `rfl`.
 
@@ -97,14 +95,11 @@ theorem vitTowerBackK_eq_vjp (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0
       rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § 3. A term-mode apex, and the shape check
+-- § 3. The apex witness, and the shape check
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The whole-net witness as a TERM.** The same four-factor `vjp_comp` chain
-    `vitForwardKV_has_vjp` builds, written without the leading `unfold` — so `.backward` is a
-    projection the kernel reduces, where the committed witness's sits behind an `Eq.mpr`. The
-    two are tied by `HasVJP.backward_unique` below; nothing here is a second definition of the
-    gradient, it is the same one spelled so that it computes. -/
+/-- **The whole-net witness the apex is stated at** — the committed `vitForwardKV_has_vjp`, whose
+    `.backward` is the four-factor `vjp_comp` chain by `rfl`. -/
 noncomputable def vitApexVJP
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
@@ -116,27 +111,8 @@ noncomputable def vitApexVJP
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
     HasVJP (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) :=
-  vjp_comp _ (classifier_flat N (heads * d_head) nClasses Wcls bcls)
-    ((layerNormVec_per_token_flat_diff (N + 1) (heads * d_head) ε γF βF hε).comp
-      ((vitBodyKVFlat_diff (N + 1) heads d_head mlpDim ε hε k ps).comp
-        (patchEmbed_flat_diff ic H W patchSize N (heads * d_head)
-          W_conv b_conv cls_token pos_embed)))
-    (classifier_flat_diff N (heads * d_head) nClasses Wcls bcls)
-    (vjp_comp _ _
-      ((vitBodyKVFlat_diff (N + 1) heads d_head mlpDim ε hε k ps).comp
-        (patchEmbed_flat_diff ic H W patchSize N (heads * d_head)
-          W_conv b_conv cls_token pos_embed))
-      (layerNormVec_per_token_flat_diff (N + 1) (heads * d_head) ε γF βF hε)
-      (vjp_comp _ _
-        (patchEmbed_flat_diff ic H W patchSize N (heads * d_head)
-          W_conv b_conv cls_token pos_embed)
-        (vitBodyKVFlat_diff (N + 1) heads d_head mlpDim ε hε k ps)
-        (patchEmbed_flat_has_vjp ic H W patchSize N (heads * d_head)
-          W_conv b_conv cls_token pos_embed)
-        (vitBodyKVFlat_has_vjp (N + 1) heads d_head mlpDim ε hε k ps))
-      (hasVJPMat_to_hasVJP
-        (layerNormVec_per_token_has_vjp_mat (N + 1) (heads * d_head) ε γF βF hε)))
-    (classifier_flat_has_vjp N (heads * d_head) nClasses Wcls bcls)
+  vitForwardKV_has_vjp ic H W patchSize N mlpDim heads d_head nClasses k
+    W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls
 
 /-- The four-factor composition the apex is stated at IS the committed `vitForwardKV`. The shape
     check `ResNet34BackCertifiedTie.lean` lacked and ConvNeXt wrote before anyone needed it. -/
@@ -157,7 +133,7 @@ theorem vitForwardKV_eq_chain
           ∘ patchEmbed_flat ic H W patchSize N (heads * d_head)
               W_conv b_conv cls_token pos_embed := rfl
 
-/-- **`vitInputGradK` IS the term-mode apex's backward.** Four rewrites, one per factor: the
+/-- **`vitInputGradK` IS the apex witness's backward.** Four rewrites, one per factor: the
     tower fold, the final-LN tie, the head tie, and the patch-embed endpoint (`rfl`). -/
 theorem vitInputGradK_eq_vitApexVJP
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
@@ -189,8 +165,7 @@ theorem vitInputGradK_eq_vitApexVJP
 
 /-- ⭐⭐ **THE APEX.** `vitInputGradK` — the whole-net ViT-Tiny input gradient, every slot pinned
     to the certified per-op backward at its own saved activation — IS
-    `(vitForwardKV_has_vjp …).backward x`, the committed depth-12 witness. Carried from the
-    term-mode apex by `HasVJP.backward_unique`: two witnesses for one map have one backward. -/
+    `(vitForwardKV_has_vjp …).backward x`, the committed depth-12 witness — `vitApexVJP` by name. -/
 theorem vitInputGradK_eq_vitForwardKV_vjp
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
@@ -204,11 +179,9 @@ theorem vitInputGradK_eq_vitForwardKV_vjp
     vitInputGradK ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
       = (vitForwardKV_has_vjp ic H W patchSize N mlpDim heads d_head nClasses k
-          W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x := by
-  funext dy
-  rw [vitInputGradK_eq_vitApexVJP (βF := βF) (bcls := bcls) ic H W patchSize N mlpDim heads
-        d_head nClasses k W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x]
-  exact HasVJP.backward_unique _ _ x dy
+          W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x :=
+  vitInputGradK_eq_vitApexVJP (βF := βF) (bcls := bcls) ic H W patchSize N mlpDim heads
+    d_head nClasses k W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x
 
 /-- **The apex, read as the Jacobian.** `vitInputGradK` is the `pdiv`-contracted Jacobian
     transpose of the committed `vitForwardKV`, at EVERY image and EVERY cotangent — the ViT peer

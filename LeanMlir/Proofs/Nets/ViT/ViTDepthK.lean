@@ -386,13 +386,7 @@ theorem vitFwdGraphKMHV_faithful
           Wc bc cls pos k ps γF βF Wcls bcls x)
       = vitForwardKV ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps γF βF Wcls bcls x := by
-  have h0 : den (SHlo.patchEmbedF (P := patchSize) "%Wp" "%bp" "%cls" "%pos"
-        Wc bc cls pos (.operand "%x" x))
-      = Mat.flatten (Mat.unflatten
-          (patchEmbed_flat ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x)) := by
-    simp only [patchEmbedF_faithful, den_operand]
-    rw [Mat.flatten_unflatten]
-    rfl
+  have h0 := patchEmbedF_x_den ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x
   have hbody := vitBodyGraphKMHV_den epsStr sStr oneStr zeroStr ε 0 k ps _ _ h0
   simp only [vitFwdGraphKMHV, denseF_faithful, clsSliceF_faithful, rowBiasF_faithful,
              rowScaleF_faithful, lnRowF_faithful, hbody]

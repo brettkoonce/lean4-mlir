@@ -48,19 +48,12 @@ theorem rowLNVecFlatBack_eq_vecLN_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γ 
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § The two sublayer backward decompositions (both `rfl`)
+-- § The MLP sublayer backward decomposition (`rfl`)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The vector-LN attention sublayer's VJP backward decomposes** (`biPathMat` unfold, `rfl`):
-    the residual skip passes the cotangent through, and the non-trivial arm is
-    `LNᵥ₁-back ∘ mhsa-back` at the saved `LNᵥ₁` output. -/
-theorem transformerAttnSublayerV_backward_decomp (ε : ℝ) (hε : 0 < ε) (γ1 β1 : Vec (h * dh))
-    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh)) (A dY : Mat N (h * dh)) :
-    (transformerAttnSublayerV_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward A dY
-      = (fun i j => dY i j +
-          (layerNormVec_per_token_has_vjp_mat N (h * dh) ε γ1 β1 hε).backward A
-            ((mhsa_has_vjp_mat N h dh Wq Wk Wv Wo bq bk bv bo).backward
-              (fun n => layerNormVec (h * dh) ε γ1 β1 (A n)) dY) i j) := rfl
+-- The attention-sublayer decomposition and the block unfold at the vector LN,
+-- `transformerAttnSublayerV_backward_decomp` / `transformerBlockV_backward_unfold`,
+-- live in `ViTBackB0.lean`, whose multi-head graph capstones rewrite with them too.
 
 /-- **The vector-LN MLP sublayer's VJP backward decomposes** — the MLP peer, also `rfl`. -/
 theorem transformerMlpSublayerV_backward_decomp (dff : Nat) (ε : ℝ) (hε : 0 < ε)
@@ -72,19 +65,6 @@ theorem transformerMlpSublayerV_backward_decomp (dff : Nat) (ε : ℝ) (hε : 0 
           (layerNormVec_per_token_has_vjp_mat N (h * dh) ε γ2 β2 hε).backward hM
             ((transformerMlp_has_vjp_mat N (h * dh) dff Wfc1 bfc1 Wfc2 bfc2).backward
               (fun n => layerNormVec (h * dh) ε γ2 β2 (hM n)) dz) i j := rfl
-
-/-- **The vector-LN block VJP backward unfolds**: `block.backward A dz = attn.backward A
-    (mlp.backward (attn A) dz)`. The outer `vjpMat_comp`'s projection, `rfl`. -/
-theorem transformerBlockV_backward_unfold (dff : Nat) (ε : ℝ) (hε : 0 < ε)
-    (γ1 β1 γ2 β2 : Vec (h * dh))
-    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh))
-    (Wfc1 : Mat (h * dh) dff) (bfc1 : Vec dff) (Wfc2 : Mat dff (h * dh)) (bfc2 : Vec (h * dh))
-    (A dz : Mat N (h * dh)) :
-    (transformerBlockV_has_vjp_mat N h dh dff ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo
-        γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward A dz
-      = (transformerAttnSublayerV_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward A
-          ((transformerMlpSublayerV_has_vjp_mat N h dh dff ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).backward
-            (transformerAttnSublayerV N h dh ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A) dz) := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § The two sublayer flat ties

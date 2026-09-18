@@ -461,6 +461,16 @@ def vitFwdGraph {ic H W P N D mlpDim nClasses : Nat}
   let fl := SHlo.lnRowF "%gF" "%btF" epsStr ε γF βF b2
   denseF "%Wcls" "%bcls" Wcls bcls (.clsSliceF fl)
 
+/-- The patch-embed stage over the image operand `%x`, in the `Mat.flatten (Mat.unflatten …)` form
+    the block `den_aux` lemmas take — stage 0 of every ViT forward-graph faithfulness proof. -/
+lemma patchEmbedF_x_den (ic H W patchSize N D : Nat) (Wc : Kernel4 D ic patchSize patchSize)
+    (bc cls : Vec D) (pos : Mat (N + 1) D) (x : Vec (ic * H * W)) :
+    den (SHlo.patchEmbedF (P := patchSize) "%Wp" "%bp" "%cls" "%pos"
+        Wc bc cls pos (.operand "%x" x))
+      = Mat.flatten (Mat.unflatten (patchEmbed_flat ic H W patchSize N D Wc bc cls pos x)) := by
+  rw [Mat.flatten_unflatten]
+  rfl
+
 /-- **ViT forward faithfulness** — the ch10 close's Item A apex: the
     representative forward graph denotes the proven distinct-param 2-block
     `vitForward2` at one head (`heads := 1`, `D := 1 * d`,
@@ -493,13 +503,7 @@ theorem vitFwdGraph_faithful
           γ1₂ β1₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂
           γF βF Wcls bcls x := by
   -- Stage 0: the patch embedding (the den helper IS `patchEmbed_flat`).
-  have h0 : den (SHlo.patchEmbedF (P := patchSize) "%Wp" "%bp" "%cls" "%pos"
-        Wc bc cls pos (.operand "%x" x))
-      = Mat.flatten (Mat.unflatten
-          (patchEmbed_flat ic H W patchSize N (1 * d) Wc bc cls pos x)) := by
-    simp only [patchEmbedF_faithful, den_operand]
-    rw [Mat.flatten_unflatten]
-    rfl
+  have h0 := patchEmbedF_x_den ic H W patchSize N (1 * d) Wc bc cls pos x
   -- Stage 1/2: the two blocks, chained through their Mat forms.
   have h1 := vitBlockGraph_den_aux "b1_" epsStr sStr ε γ1₁ β1₁
     Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁

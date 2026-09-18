@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
-import LeanMlir.Proofs.Nets.ViT.ViTFold
+import LeanMlir.Proofs.Nets.ViT.ViTFoldG
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 
 /-! # T3 §1 fold for ConvNeXt-T at the UN-FUSED gradient — the Adam artifact's op set
@@ -70,13 +70,7 @@ theorem layerScaleChGammaGrad_den {c h w : Nat} (xN cotN : String)
     den (SHlo.layerScaleChGammaGrad xN x (.operand cotN dy)) cc
       = ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
-  simp only [den]
-  apply Finset.sum_congr rfl
-  intro j _
-  rw [Proofs.CnxPoC.pdiv_layerScaleCh_gamma]
-  by_cases hcc : chanIdx c h w j = cc
-  · rw [ite_eq_left hcc, ite_eq_left hcc.symm]
-  · rw [ite_eq_right hcc, ite_eq_right (fun h => hcc h.symm)]; ring
+  simp only [den, Proofs.CnxPoC.pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 1×1 convolutions (expand / project) and the stem bias
@@ -215,18 +209,16 @@ theorem headLnGammaGrad_den {N D : Nat} (xN epsStr cotN : String)
     den (SHlo.veclnGammaGrad xN epsStr ε x (.operand cotN dy)) k
       = ∑ o : Fin (N * D),
           pdiv (fun gv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε gv βv (Mat.unflatten x r))) γ k o * dy o := by
-  simp only [den]
-  exact vit_veclnGamma_grad_bridge ε βv γ (Mat.unflatten x) dy k
+                  Mat.flatten (fun r => layerNormVec D ε gv βv (Mat.unflatten x r))) γ k o * dy o :=
+  Proofs.ViTPoCG.veclnGammaGrad_den xN epsStr cotN ε βv x γ dy k
 
 /-- **Head-LN β GRADIENT denotes the certified β gradient** (`Σ_rows dy`). -/
 theorem headLnBetaGrad_den {N D : Nat} (cotN : String)
     (ε : ℝ) (γv : Vec D) (X : Mat N D) (β : Vec D) (dy : Vec (N * D)) (k : Fin D) :
     den (SHlo.rowDenseBiasGrad (N := N) (c := D) (.operand cotN dy)) k
       = ∑ o : Fin (N * D),
-          pdiv (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β k o * dy o := by
-  simp only [den]
-  exact vit_veclnBeta_grad_bridge ε γv β X dy k
+          pdiv (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β k o * dy o :=
+  Proofs.ViTPoCG.rowDenseBiasGrad_den_lnbeta cotN ε γv X β dy k
 
 /-- **Classifier weight GRADIENT denotes the certified outer product.** The head runs on the
     single GAP+LN vector, so this is the plain `weightGrad`, not the row-lifted one. -/
@@ -235,16 +227,14 @@ theorem headWGrad_den {m n : Nat} (aN cotN : String)
     den (SHlo.weightGrad aN a (.operand cotN cot)) (finProdFinEquiv (i, j))
       = ∑ k : Fin n,
           pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b a) (Mat.flatten W)
-               (finProdFinEquiv (i, j)) k * cot k := by
-  simp only [den, Mat.flatten, Equiv.symm_apply_apply]
-  exact dense_weight_grad_correct W b a cot i j
+               (finProdFinEquiv (i, j)) k * cot k :=
+  Proofs.ViTPoCG.headWGrad_den aN cotN a W b cot i j
 
 /-- **Classifier bias GRADIENT denotes the certified cotangent.** -/
 theorem headBGrad_den {m n : Nat} (cotN : String)
     (W : Mat m n) (a : Vec m) (b : Vec n) (cot : Vec n) (i : Fin n) :
     den (SHlo.biasGrad (.operand cotN cot)) i
-      = ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' a) b i j * cot j := by
-  simp only [den]
-  exact dense_bias_grad_correct W b a cot i
+      = ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' a) b i j * cot j :=
+  Proofs.ViTPoCG.headBGrad_den cotN W a b cot i
 
 end Proofs.CnxPoCG

@@ -113,19 +113,6 @@ theorem mhsaBackFlat_eq_mhsa_vjp
 -- § The attention-sublayer reconciliation — grounding the MHSA leaf in the block
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxHeartbeats 10000000 in
-/-- **The certified attention-sublayer VJP decomposes** (the `biPathMat` unfold, `rfl`): the residual
-    skip passes the cotangent through (`identityMat` backward = `dY`), and the non-trivial arm is the
-    chain `LN₁-back ∘ mhsa-back` at the saved LayerNorm output `LN₁ A` (`vjpMat_comp`). The Mat-space
-    analogue of `transformerBlock_backward_unfold`. -/
-theorem transformerAttnSublayer_backward_decomp (ε γ1 β1 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh)) (A dY : Mat N (h * dh)) :
-    (transformerAttnSublayer_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward A dY
-      = (fun i j => dY i j +
-          (layerNorm_per_token_has_vjp_mat N (h * dh) ε γ1 β1 hε).backward A
-            ((mhsa_has_vjp_mat N h dh Wq Wk Wv Wo bq bk bv bo).backward
-              (fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) dY) i j) := rfl
-
 /-- **The attention-sublayer backward, flat, with the MHSA leaf plugged in.** The certified
     attention-sublayer VJP (flattened) IS the residual skip `v` plus the certified **per-token**
     LayerNorm backward of (the unflatten of) `mhsaBackFlat` — the proven sdpa-adjoint leaf
@@ -254,21 +241,6 @@ theorem transformerMlpSublayer_backward_decomp (dff : Nat) (ε γ2 β2 : ℝ) (h
           (layerNorm_per_token_has_vjp_mat N (h * dh) ε γ2 β2 hε).backward hM
             ((transformerMlp_has_vjp_mat N (h * dh) dff Wfc1 bfc1 Wfc2 bfc2).backward
               (fun n => layerNormForward (h * dh) ε γ2 β2 (hM n)) dz) i j := rfl
-
-set_option maxHeartbeats 4000000 in
-/-- **The transformer-block VJP backward unfolds** (general heads): `block.backward A dz =
-    attn.backward A (mlp.backward (attn A) dz)`. The general-heads peer of ViTBackB0's heads=1
-    `transformerBlock_backward_unfold`; `rfl` (outer `vjpMat_comp`). -/
-theorem transformerBlock_backward_unfold_gen (dff : Nat)
-    (ε γ1 β1 γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh))
-    (Wfc1 : Mat (h * dh) dff) (bfc1 : Vec dff) (Wfc2 : Mat dff (h * dh)) (bfc2 : Vec (h * dh))
-    (A dz : Mat N (h * dh)) :
-    (transformerBlock_has_vjp_mat N h dh dff ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo
-        γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward A dz
-      = (transformerAttnSublayer_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward A
-          ((transformerMlpSublayer_has_vjp_mat N h dh dff ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).backward
-            (transformerAttnSublayer N h dh ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A) dz) := rfl
 
 /-- **The attention-sublayer backward chain IS the certified attn-sublayer VJP, flat.**
     The chain `residual (perRowFlatPR lnB₁ ∘ mhsaBackFlat)` (with `lnB₁ r =` the single-token

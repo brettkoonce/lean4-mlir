@@ -103,14 +103,7 @@ theorem vit_rowDenseW_grad_bridge {N a c : Nat} (bb : Vec c) (X : Mat N a)
                (Mat.flatten W) (finProdFinEquiv (i, j)) o * dy o := by
   simp_rw [pdiv_rowDense_W]
   rw [sum_fin_prod N c]
-  unfold rowDense_weight_grad Mat.unflatten
-  apply Finset.sum_congr rfl
-  intro r _
-  rw [Finset.sum_eq_single j
-      (fun k _ hne => by
-        rw [Equiv.symm_apply_apply, ite_eq_right (by simpa using (Ne.symm hne)), zero_mul])
-      (fun h => absurd (Finset.mem_univ j) h)]
-  rw [Equiv.symm_apply_apply, ite_eq_left rfl]
+  simp [rowDense_weight_grad, Mat.unflatten]
 
 /-- **Per-token dense b-gradient bridge.** The rendered token-axis reduce equals
     the certified rowwise-dense ∂/∂b contraction. -/
@@ -134,14 +127,7 @@ theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
     simp only [basisVec_apply, @eq_comm _ _ i]
   simp_rw [hpdiv]
   rw [sum_fin_prod N c]
-  unfold rowDense_bias_grad Mat.unflatten
-  apply Finset.sum_congr rfl
-  intro r _
-  rw [Finset.sum_eq_single i
-      (fun k _ hne => by
-        rw [Equiv.symm_apply_apply, ite_eq_right (Ne.symm hne), zero_mul])
-      (fun h => absurd (Finset.mem_univ i) h)]
-  rw [Equiv.symm_apply_apply, ite_eq_left rfl, one_mul]
+  simp [rowDense_bias_grad, Mat.unflatten]
 
 /-- **Per-token dense W output, certified.** `Wⁿ = W − lr·(Σ_tokens xᵣ ⊗ dyᵣ)` denotes
     `W − lr·(certified ∂(rowwise dense)/∂W · cotangent)`. Covers Wq/Wk/Wv/Wo and
@@ -362,11 +348,7 @@ theorem vit_render_pos_certified {ic H W P N D : Nat}
           pdiv (fun p : Vec ((N + 1) * D) =>
                   patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
             (Mat.flatten pos) i j * dy j := by
-  simp_rw [pdiv_patchEmbed_pos]
-  rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [ite_eq_right (Ne.symm (Ne.symm hne).symm), zero_mul])
-      (fun h => absurd (Finset.mem_univ i) h)]
-  rw [ite_eq_left rfl, one_mul]
+  simp [pdiv_patchEmbed_pos]
 
 /-- The rendered **CLS-token gradient**: the row-0 slice of the patch-embed
     output cotangent (`clsSliceF`'s shape, applied to the embed cotangent). -/
@@ -407,26 +389,8 @@ theorem vit_render_cls_certified {ic H W P N D : Nat}
           pdiv (fun cl : Vec D =>
                   patchEmbed_flat ic H W P N D Wc bc cl pos img) cls i j * dy j := by
   simp_rw [pdiv_patchEmbed_cls]
-  unfold cls_token_grad
-  congr 1
   rw [sum_fin_prod (N + 1) D]
-  rw [Finset.sum_eq_single (0 : Fin (N + 1))
-      (fun n _ hne => by
-        apply Finset.sum_eq_zero
-        intro k _
-        rw [Equiv.symm_apply_apply]
-        dsimp only
-        rw [ite_eq_right (by simpa using (Fin.val_ne_of_ne hne)), zero_mul, zero_mul])
-      (fun h => absurd (Finset.mem_univ _) h)]
-  rw [Finset.sum_eq_single i
-      (fun k _ hne => by
-        rw [Equiv.symm_apply_apply]
-        dsimp only
-        rw [ite_eq_right (Ne.symm hne), mul_zero, zero_mul])
-      (fun h => absurd (Finset.mem_univ i) h)]
-  rw [Equiv.symm_apply_apply]
-  dsimp only
-  simp
+  simp [cls_token_grad]
 
 -- ════════════════════════════════════════════════════════════════
 -- § E. Patch-projection conv Wp/bp — the embed kernel close
@@ -522,32 +486,7 @@ theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
             * dy o := by
   simp_rw [pdiv_patchEmbed_W]
   rw [sum_fin_prod (N + 1) D]
-  -- collapse the channel axis at dd = d
-  have hrow : ∀ n : Fin (N + 1),
-      (∑ k : Fin D,
-        (if (finProdFinEquiv.symm (finProdFinEquiv (n, k))).2 = d then
-          (if (finProdFinEquiv.symm (finProdFinEquiv (n, k))).1.val = 0 then 0
-           else patchRead ic H W P img c kh kw
-                  ((finProdFinEquiv.symm (finProdFinEquiv (n, k))).1.val - 1))
-         else 0) * dy (finProdFinEquiv (n, k)))
-      = (if n.val = 0 then 0
-         else patchRead ic H W P img c kh kw (n.val - 1)) *
-          dy (finProdFinEquiv (n, d)) := by
-    intro n
-    rw [Finset.sum_eq_single d
-        (fun k _ hne => by
-          rw [Equiv.symm_apply_apply]
-          dsimp only
-          rw [ite_eq_right hne, zero_mul])
-        (fun h => absurd (Finset.mem_univ d) h)]
-    rw [Equiv.symm_apply_apply]
-    dsimp only
-    rw [ite_eq_left rfl]
-  simp_rw [hrow]
-  rw [Fin.sum_univ_succ]
-  unfold patchEmbed_weight_grad
-  simp only [Fin.val_zero, reduceIte, zero_mul, zero_add, Fin.val_succ,
-             Nat.succ_ne_zero, ite_false, Nat.add_sub_cancel]
+  simp [patchEmbed_weight_grad, Fin.sum_univ_succ]
 
 /-- **Patch-kernel output, certified.** `Wpⁿ = Wp − lr·(patch-grid reduce)`
     denotes the certified ∂(patchEmbed)/∂Wp contraction. -/
@@ -599,27 +538,7 @@ theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
                   patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
   simp_rw [pdiv_patchEmbed_b]
   rw [sum_fin_prod (N + 1) D]
-  have hrow : ∀ n : Fin (N + 1),
-      (∑ k : Fin D,
-        (if (finProdFinEquiv.symm (finProdFinEquiv (n, k))).1.val = 0 then (0 : ℝ) else 1) *
-          (if i = (finProdFinEquiv.symm (finProdFinEquiv (n, k))).2 then 1 else 0) *
-          dy (finProdFinEquiv (n, k)))
-      = (if n.val = 0 then (0 : ℝ) else 1) * dy (finProdFinEquiv (n, i)) := by
-    intro n
-    rw [Finset.sum_eq_single i
-        (fun k _ hne => by
-          rw [Equiv.symm_apply_apply]
-          dsimp only
-          rw [ite_eq_right (Ne.symm hne), mul_zero, zero_mul])
-        (fun h => absurd (Finset.mem_univ i) h)]
-    rw [Equiv.symm_apply_apply]
-    dsimp only
-    rw [ite_eq_left rfl, mul_one]
-  simp_rw [hrow]
-  rw [Fin.sum_univ_succ]
-  unfold patchEmbed_bias_grad
-  simp only [Fin.val_zero, reduceIte, zero_mul, zero_add, Fin.val_succ,
-             Nat.succ_ne_zero, ite_false, one_mul]
+  simp [patchEmbed_bias_grad, Fin.sum_univ_succ]
 
 /-- **Patch bias output, certified.** -/
 theorem vit_render_patchb_certified {ic H W P N D : Nat}
