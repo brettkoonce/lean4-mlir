@@ -176,6 +176,33 @@ structure VerifiedConfig where
       NOT display-only: init is host-side, so the flag genuinely changes training and no
       re-render is needed. Off by default — every other net keeps its seed reproducibility. -/
   vitInit   : Bool := false
+  /-- **ConvNeXt `_init_weights` — the verified peer of `TrainConfig.cnxInit`** (2026-09-18).
+      `trunc_normal_(std=0.02)` on **every conv AND the head**; biases 0, LayerNorm γ 1,
+      LayerScale γ 1e-6 — which the other three `kind`s already do, so this flag only has to
+      reach the WEIGHTS.
+
+      ⛔ **Why it exists.** The 2026-09-17 ConvNeXt/ImageNet pair run was killed at epoch 67
+      because the two arms did not share an init: the reference sets `cnxInit := true`
+      (`jax/MainConvNeXtImagenet.lean`) while the verified path used the He fan-in default —
+      **2.6x-10.2x wider**, worst at the 4x4 stem (0.2041 vs 0.02) and the 7x7 depthwise
+      (0.2020 vs 0.02). That confounds exactly the lowering question the pair exists to answer.
+      `runs/2026-09-17-cnx-verified-300ep/RESULTS.md` §7.0 carries the measurement.
+
+      ⚠ **SEPARATE from `vitInit`, deliberately, and this is the same trap `TrainConfig` records
+      on the JAX side**: the two specs DISAGREE on the conv path. timm's ViT leaves the patch
+      embed on PyTorch's `U(±1/√fan_in)` while ConvNeXt trunc-normals its convs like everything
+      else. One boolean cannot express both, so setting `vitInit` for a ConvNeXt would put the
+      stem back at the wrong width.
+
+      ⚠ **Variance-matched, not distribution-matched.** `F32.heInit` sums three uniforms
+      (Bates-3, ≈normal) where the reference draws `trunc_normal`. At σ = 0.02 that truncation is
+      INERT — `trunc_normal_`'s bounds are ABSOLUTE ±2, i.e. ±100σ, so nothing is ever truncated
+      and the reference is effectively a plain normal. What remains is Bates-3's slightly lighter
+      tail at equal σ, the same deliberate gap every other net carries.
+
+      Like `vitInit`, NOT display-only and needs no re-render: init is host-side, so no committed
+      artifact moves. Off by default — every other net keeps its seed reproducibility. -/
+  cnxInit   : Bool := false
   /-- BatchNorm running-statistic **decay** — the verified peer of `TrainConfig.bnMomentum`,
       and the same TF sense: the weight on the OLD estimate, so timm's PyTorch
       `momentum = 0.1` is `0.9` here. That field's docstring carries the per-net table and
@@ -436,7 +463,7 @@ def mkSession (mlirPath : String) : IO LowererSession := do
     changing the sampler would move every net for a second-order reason. -/
 def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     (vitInit : Bool := false) (biasSigma : Option Float := none)
-    (heFanIn : Bool := false) : IO ByteArray := do
+    (heFanIn : Bool := false) (cnxInit : Bool := false) : IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0
@@ -468,7 +495,15 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     -- (Bates-3, ≈normal) where the JAX side draws `random.normal`. Same σ, different shape — the
     -- same deliberate gap the 2026-08-04 note below records for every other net.
     let variance :=
-      if vitInit then
+      -- ⭐ **ConvNeXt `_init_weights`: σ = 0.02 on EVERY weight, whatever its rank.** Simpler
+      -- than `vitInit` below, which has to special-case the patch embed — ConvNeXt trunc-normals
+      -- its convs and its head alike. Measured on this net's 183 specs: 58 rank-4 (stem, 7x7
+      -- depthwise, the 1x1s, the 2x2 downsamples) + 1 rank-2 (head) land here; the other 124 are
+      -- `kind` 1/2/3 above (LayerNorm γ=1, biases 0, LayerScale γ=1e-6) and already match the
+      -- reference, so this branch is the whole of the difference.
+      -- ⚠ FIRST, so it cannot be silently overridden by a rank test below it.
+      if cnxInit then 0.0004                                                      -- 0.02²
+      else if vitInit then
         if dims.size == 4 then 1.0 / (3.0 * (dims[1]! * dims[2]! * dims[3]!).toFloat)  -- Conv2d dflt
         else 0.0004                                                                     -- 0.02²
       -- ⚠ `heFanIn` is a SEPARABILITY knob for one gate, not an initialisation opinion. It is the
@@ -1678,8 +1713,13 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
   if cfg.vitInit then
     IO.println "  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)"
+  -- ⚠ ANNOUNCED, because the run this flag exists for was killed over an init nobody could see
+  -- from the log. The banner line further down says "He init" unconditionally; that is now a lie
+  -- whenever either flag is set, so each says so here.
+  if cfg.cnxInit then
+    IO.println "  ▸ INIT: ConvNeXt _init_weights (σ=0.02 on every conv AND the head; biases 0, LN γ 1, LayerScale γ 1e-6)"
   for spec in net.specs do
-    parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit)
+    parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit (cnxInit := cfg.cnxInit))
     seed := seed + 1
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit
   -- vector of exact L2 norm r, before any training. This is the CONDITIONING

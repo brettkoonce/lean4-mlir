@@ -1698,6 +1698,27 @@ lean_exe «mnv4-dp-check» where
   root := `tests.TestMnv4DpCheck
   moreLinkArgs := lowererLink
 
+/-- **`cnx-init-check` — the known-answer gate for ConvNeXt's verified weight init.**
+
+    ⛔ The 2026-09-17 ConvNeXt/ImageNet pair run was KILLED at epoch 67 because the two arms did
+    not share an init: the JAX reference sets `cnxInit := true` (ConvNeXt `_init_weights`,
+    `trunc_normal(0.02)` on every conv AND the head) and the verified path used `mkParam`'s He
+    default. Two arms with different inits cannot isolate the lowerer, which is the one thing this
+    BatchNorm-free net is in the book for. `runs/2026-09-17-cnx-verified-300ep/RESULTS.md` §7.0.
+
+    ⚠⚠ **Init is the hardest thing in this repo to read off the source and be right.** It is
+    host-side, it never reaches a committed artifact so no drift guard covers it, and the two
+    init paths disagree on the rank-4 rule — `mkParam` is He **fan-OUT** (`2/(oc·kh·kw)`) while
+    `SpecHelpers.heInitLayer` is fan-**IN** (`2/(ic·kh·kw)`). Reading the wrong file gives ratios
+    off by an order of magnitude and, at some shapes, in the wrong DIRECTION. So this gate
+    MEASURES the emitted parameters over the real 183-spec layout rather than arguing from source.
+
+    Asserts σ = 0.02 on every weight spec, LayerNorm γ exactly 1.0, biases exactly 0.0 and
+    LayerScale γ exactly 1e-6 — and carries its own CONTROL: with the flag off the weights must
+    land somewhere else, or the gate is reading a flag that does nothing. No GPU, no lowerer. -/
+lean_exe «cnx-init-check» where
+  root := `tests.TestCnxInit
+
 /-- The ConvNeXt peer, gated by the same EXACT duplicated-batch identity — and the one net that
     needs no BatchNorm caveat to justify it: LayerNorm reduces within an example, never across the
     batch, so nothing couples the replicas at all.

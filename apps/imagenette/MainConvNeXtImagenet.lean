@@ -31,6 +31,20 @@ gone from the target name because it no longer distinguishes anything.
 def convnextImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 64
+  -- ⭐⭐ **ConvNeXt `_init_weights`, and it is the reason the 2026-09-17 run was killed at e67.**
+  -- The JAX reference sets `cnxInit := true` (`jax/MainConvNeXtImagenet.lean:65`); this side used
+  -- the He fan-in default, i.e. **2.6x-10.2x wider** — 0.2041 vs 0.02 at the 4x4 stem, 0.2020 vs
+  -- 0.02 at the 7x7 depthwise. Two arms with different inits cannot isolate the lowerer, which is
+  -- the ONE thing this BatchNorm-free net is in the book for.
+  -- `runs/2026-09-17-cnx-verified-300ep/RESULTS.md` §7.0 has the per-layer table.
+  -- ⚠ Host-side: no committed artifact moves, and no re-render is needed.
+  -- ⚠ Set HERE and not on the ConvNeXt-S/-B ImageNet mains or the Imagenette `convnext-verified-adam`:
+  --   S and B have never been trained or paired, and Imagenette HAS a landed number that this
+  --   would invalidate. Neither should ride along silently on a flag flipped for T.
+  -- ⛔ A checkpoint written before this flag existed must NOT be resumed into a run with it set —
+  --   init is applied only on a FRESH start, so a resume silently keeps the old weights. The
+  --   e67 blob was deleted for exactly this reason.
+  cnxInit   := true
 
 /-- Entry point. Defaults to the single-device `adam` variant rather than `adamdp`, matching the
     R34 and ViT ImageNet drivers: a DP default makes a plain invocation fail at the first step with
