@@ -273,6 +273,33 @@ theorem pdiv_finset_sum {m n : Nat} {α : Type*} [DecidableEq α]
     rw [heq, pdiv_add _ _ _ hdiff_a hdiff_sumT, ih hdiff_T,
         Finset.sum_insert ha]
 
+/-- **Linear rule** — the Jacobian of a continuous linear map is the map itself read on the
+    basis vector: `fderiv ℝ L x = L` at every `x` (`ContinuousLinearMap.fderiv`). -/
+theorem pdiv_clm {m n : Nat} (L : Vec m →L[ℝ] Vec n) (x : Vec m) (i : Fin m) (j : Fin n) :
+    pdiv L x i j = L (basisVec i) j := by
+  rw [pdiv, ContinuousLinearMap.fderiv]
+
+/-- **Affine rule** — if `f` is additive and homogeneous it is a linear map on the
+    finite-dimensional `Vec m`, hence continuous (`LinearMap.continuous_on_pi`), and the Jacobian
+    of `v ↦ f v + c` at every point is `f` read on the basis vector. Every conv / depthwise /
+    dense / patch-embed / pooling / BN-affine Jacobian in the suite is this with `c` the bias:
+    two one-line linearity side goals instead of distributing `pdiv` through the sum. -/
+theorem pdiv_of_affine {m n : Nat} (f : Vec m → Vec n) (c : Vec n)
+    (hadd : ∀ u v, f (u + v) = f u + f v) (hsmul : ∀ (a : ℝ) v, f (a • v) = a • f v)
+    (x : Vec m) (i : Fin m) (j : Fin n) :
+    pdiv (fun v => f v + c) x i j = f (basisVec i) j := by
+  let L : Vec m →ₗ[ℝ] Vec n := ⟨⟨f, hadd⟩, hsmul⟩
+  have hf : (fun v => f v + c) = fun v => (⟨L, L.continuous_on_pi⟩ : Vec m →L[ℝ] Vec n) v + c :=
+    rfl
+  rw [pdiv, hf, fderiv_add_const, ContinuousLinearMap.fderiv]; rfl
+
+/-- **Linear rule, unbundled** — `pdiv_of_affine` at `c = 0`. -/
+theorem pdiv_of_linear {m n : Nat} (f : Vec m → Vec n)
+    (hadd : ∀ u v, f (u + v) = f u + f v) (hsmul : ∀ (a : ℝ) v, f (a • v) = a • f v)
+    (x : Vec m) (i : Fin m) (j : Fin n) :
+    pdiv f x i j = f (basisVec i) j := by
+  simpa using pdiv_of_affine f 0 hadd hsmul x i j
+
 -- ════════════════════════════════════════════════════════════════
 -- § VJP Framework
 -- ════════════════════════════════════════════════════════════════
@@ -711,210 +738,30 @@ appear in scaled dot-product attention's backward pass:
 Each is a direct transcription of an elementary calculus fact. They are
 numerically gradient-checked in `check_jacobians.py`. -/
 
-/-- **Matmul Jacobian (left-const)** — theorem, derived from
-    `pdiv_finset_sum` + `pdiv_mul` + `pdiv_const` + `pdiv_reindex`. -/
+/-- **Matmul Jacobian (left-const)** — `B' ↦ C·B'` is linear, so by `pdiv_of_linear` the entry
+    is `C·E_{ij}` read at `(k, l)`: `C k i` when `l = j`. -/
 theorem pdivMat_matmul_left_const {m p q : Nat} (C : Mat m p) (B : Mat p q)
     (i : Fin p) (j : Fin q) (k : Fin m) (l : Fin q) :
     pdivMat (fun B' : Mat p q => Mat.mul C B') B i j k l =
     if l = j then C k i else 0 := by
-  unfold pdivMat
-  -- Step 1: flatten(Mat.mul C (unflatten v)) at idx = Σ_s C_{k'(idx), s} · v(fPF(s, l'(idx)))
-  have h_reduces :
-      (fun v : Vec (p * q) =>
-        Mat.flatten ((fun B' : Mat p q => Mat.mul C B') (Mat.unflatten v))) =
-      (fun v : Vec (p * q) => fun idx : Fin (m * q) =>
-        ∑ s : Fin p,
-          C (finProdFinEquiv.symm idx).1 s *
-          v (finProdFinEquiv (s, (finProdFinEquiv.symm idx).2))) := by
-    funext v idx
-    show Mat.mul C (Mat.unflatten v)
-           (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 = _
-    unfold Mat.mul Mat.unflatten
-    rfl
-  rw [h_reduces]
-  -- Step 2: linearity distributes pdiv over the Σ_s.
-  -- Each summand is `(const_in_v) * (reindex of v)` — Differentiable.
-  have h_summand_diff : ∀ s ∈ (Finset.univ : Finset (Fin p)),
-      DifferentiableAt ℝ
-        (fun (v : Vec (p * q)) (idx : Fin (m * q)) =>
-          C (finProdFinEquiv.symm idx).1 s *
-          v (finProdFinEquiv (s, (finProdFinEquiv.symm idx).2)))
-        (Mat.flatten B) := by
-    intro s _
-    have h_const : DifferentiableAt ℝ
-        (fun (_ : Vec (p * q)) (idx : Fin (m * q)) =>
-          C (finProdFinEquiv.symm idx).1 s) (Mat.flatten B) :=
-      differentiableAt_const _
-    have h_reindex : DifferentiableAt ℝ
-        (fun (w : Vec (p * q)) (idx : Fin (m * q)) =>
-          w (finProdFinEquiv (s, (finProdFinEquiv.symm idx).2))) (Mat.flatten B) :=
-      (reindexCLM (fun idx : Fin (m * q) =>
-        finProdFinEquiv (s, (finProdFinEquiv.symm idx).2))).differentiableAt
-    exact h_const.mul h_reindex
-  rw [pdiv_finset_sum _ _ _ h_summand_diff]
-  -- Step 3: each summand is a product (const · reindex); pdiv_mul + pdiv_const + pdiv_reindex.
-  have hterm : ∀ s : Fin p,
-      pdiv (fun v : Vec (p * q) => fun idx : Fin (m * q) =>
-              C (finProdFinEquiv.symm idx).1 s *
-              v (finProdFinEquiv (s, (finProdFinEquiv.symm idx).2)))
-           (Mat.flatten B) (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l)) =
-      C k s * (if finProdFinEquiv (i, j) = finProdFinEquiv (s, l) then 1 else 0) := by
-    intro s
-    -- Factor as (const fn) · (reindex fn):
-    have h_prod :
-        (fun v : Vec (p * q) => fun idx : Fin (m * q) =>
-          C (finProdFinEquiv.symm idx).1 s *
-          v (finProdFinEquiv (s, (finProdFinEquiv.symm idx).2))) =
-        (fun v idx =>
-          (fun (_ : Vec (p * q)) (idx' : Fin (m * q)) =>
-            C (finProdFinEquiv.symm idx').1 s) v idx *
-          (fun (w : Vec (p * q)) (idx' : Fin (m * q)) =>
-            w (finProdFinEquiv (s, (finProdFinEquiv.symm idx').2))) v idx) := rfl
-    have h_const_diff : DifferentiableAt ℝ
-        (fun (_ : Vec (p * q)) (idx' : Fin (m * q)) =>
-          C (finProdFinEquiv.symm idx').1 s) (Mat.flatten B) :=
-      differentiableAt_const _
-    have h_reindex_diff : DifferentiableAt ℝ
-        (fun (w : Vec (p * q)) (idx' : Fin (m * q)) =>
-          w (finProdFinEquiv (s, (finProdFinEquiv.symm idx').2))) (Mat.flatten B) :=
-      (reindexCLM (fun idx' : Fin (m * q) =>
-        finProdFinEquiv (s, (finProdFinEquiv.symm idx').2))).differentiableAt
-    rw [h_prod, pdiv_mul _ _ _ h_const_diff h_reindex_diff]
-    rw [show pdiv (fun _ : Vec (p * q) => fun idx' : Fin (m * q) =>
-              C (finProdFinEquiv.symm idx').1 s)
-            (Mat.flatten B) (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l)) = 0
-        from pdiv_const _ _ _ _]
-    rw [pdiv_reindex (fun idx' => finProdFinEquiv (s, (finProdFinEquiv.symm idx').2))]
-    -- (fPF.symm (fPF (k, l))).2 = l and (fPF.symm (fPF (k, l))).1 = k
-    simp only [Equiv.symm_apply_apply]
-    ring
-  simp_rw [hterm]
-  -- Step 4: collapse the Finset sum.
-  -- Only s = i contributes (when j = l); otherwise all terms are zero.
-  have hkey : ∀ s : Fin p,
-      C k s * (if finProdFinEquiv (i, j) = finProdFinEquiv (s, l) then (1:ℝ) else 0) =
-      if s = i ∧ l = j then C k s else 0 := by
-    intro s
-    by_cases hs : s = i ∧ l = j
-    · obtain ⟨hsi, hlj⟩ := hs
-      subst hsi; subst hlj; simp
-    · have hne : finProdFinEquiv (i, j) ≠ finProdFinEquiv (s, l) := by
-        intro heq
-        apply hs
-        have := finProdFinEquiv.injective heq
-        exact ⟨(Prod.mk.inj this).1.symm, (Prod.mk.inj this).2.symm⟩
-      rw [ite_eq_right hne]; simp [hs]
-  simp_rw [hkey]
-  -- Goal: ∑ s, (if s = i ∧ l = j then C k s else 0) = if l = j then C k i else 0
-  by_cases hlj : l = j
-  · rw [ite_eq_left hlj]
-    -- Each `s = i ∧ l = j` term reduces to `s = i` (given hlj).
-    simp_rw [show ∀ s : Fin p, (s = i ∧ l = j) ↔ (s = i) from
-      fun s => ⟨And.left, fun h => ⟨h, hlj⟩⟩]
-    rw [Finset.sum_ite_eq' Finset.univ i (fun s => C k s)]
-    simp
-  · rw [ite_eq_right hlj]
-    -- All terms false; sum is 0.
-    simp_rw [show ∀ s : Fin p, (s = i ∧ l = j) ↔ False from
-      fun s => ⟨fun h => hlj h.2, False.elim⟩]
-    simp
+  rw [pdivMat, pdiv_of_linear (fun v => Mat.flatten (Mat.mul C (Mat.unflatten v)))
+    (fun _ _ => by
+      funext; simp [Mat.flatten, Mat.mul, Mat.unflatten, mul_add, Finset.sum_add_distrib])
+    (fun _ _ => by
+      funext; simp [Mat.flatten, Mat.mul, Mat.unflatten, Finset.mul_sum, mul_left_comm])]
+  by_cases h : l = j <;> simp [Mat.flatten, Mat.mul, Mat.unflatten, h, Prod.ext_iff]
 
-/-- **Matmul Jacobian (right-const)** — theorem, same recipe as the
-    left-const case with roles swapped. -/
+/-- **Matmul Jacobian (right-const)** — the left-const case with roles swapped: `A' ↦ A'·D` is
+    linear, and `E_{ij}·D` read at `(k, l)` is `D j l` when `i = k`. -/
 theorem pdivMat_matmul_right_const {m p q : Nat} (A : Mat m p) (D : Mat p q)
     (i : Fin m) (j : Fin p) (k : Fin m) (l : Fin q) :
     pdivMat (fun A' : Mat m p => Mat.mul A' D) A i j k l =
     if i = k then D j l else 0 := by
-  unfold pdivMat
-  have h_reduces :
-      (fun v : Vec (m * p) =>
-        Mat.flatten ((fun A' : Mat m p => Mat.mul A' D) (Mat.unflatten v))) =
-      (fun v : Vec (m * p) => fun idx : Fin (m * q) =>
-        ∑ s : Fin p,
-          v (finProdFinEquiv ((finProdFinEquiv.symm idx).1, s)) *
-          D s (finProdFinEquiv.symm idx).2) := by
-    funext v idx
-    show Mat.mul (Mat.unflatten v) D
-           (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 = _
-    unfold Mat.mul Mat.unflatten
-    rfl
-  rw [h_reduces]
-  have h_summand_diff : ∀ s ∈ (Finset.univ : Finset (Fin p)),
-      DifferentiableAt ℝ
-        (fun (v : Vec (m * p)) (idx : Fin (m * q)) =>
-          v (finProdFinEquiv ((finProdFinEquiv.symm idx).1, s)) *
-          D s (finProdFinEquiv.symm idx).2)
-        (Mat.flatten A) := by
-    intro s _
-    have h_reindex : DifferentiableAt ℝ
-        (fun (w : Vec (m * p)) (idx : Fin (m * q)) =>
-          w (finProdFinEquiv ((finProdFinEquiv.symm idx).1, s))) (Mat.flatten A) :=
-      (reindexCLM (fun idx : Fin (m * q) =>
-        finProdFinEquiv ((finProdFinEquiv.symm idx).1, s))).differentiableAt
-    have h_const : DifferentiableAt ℝ
-        (fun (_ : Vec (m * p)) (idx : Fin (m * q)) =>
-          D s (finProdFinEquiv.symm idx).2) (Mat.flatten A) :=
-      differentiableAt_const _
-    exact h_reindex.mul h_const
-  rw [pdiv_finset_sum _ _ _ h_summand_diff]
-  have hterm : ∀ s : Fin p,
-      pdiv (fun v : Vec (m * p) => fun idx : Fin (m * q) =>
-              v (finProdFinEquiv ((finProdFinEquiv.symm idx).1, s)) *
-              D s (finProdFinEquiv.symm idx).2)
-           (Mat.flatten A) (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l)) =
-      D s l * (if finProdFinEquiv (i, j) = finProdFinEquiv (k, s) then 1 else 0) := by
-    intro s
-    have h_prod :
-        (fun v : Vec (m * p) => fun idx : Fin (m * q) =>
-          v (finProdFinEquiv ((finProdFinEquiv.symm idx).1, s)) *
-          D s (finProdFinEquiv.symm idx).2) =
-        (fun v idx =>
-          (fun (w : Vec (m * p)) (idx' : Fin (m * q)) =>
-            w (finProdFinEquiv ((finProdFinEquiv.symm idx').1, s))) v idx *
-          (fun (_ : Vec (m * p)) (idx' : Fin (m * q)) =>
-            D s (finProdFinEquiv.symm idx').2) v idx) := rfl
-    have h_reindex_diff : DifferentiableAt ℝ
-        (fun (w : Vec (m * p)) (idx' : Fin (m * q)) =>
-          w (finProdFinEquiv ((finProdFinEquiv.symm idx').1, s))) (Mat.flatten A) :=
-      (reindexCLM (fun idx' : Fin (m * q) =>
-        finProdFinEquiv ((finProdFinEquiv.symm idx').1, s))).differentiableAt
-    have h_const_diff : DifferentiableAt ℝ
-        (fun (_ : Vec (m * p)) (idx' : Fin (m * q)) =>
-          D s (finProdFinEquiv.symm idx').2) (Mat.flatten A) :=
-      differentiableAt_const _
-    rw [h_prod, pdiv_mul _ _ _ h_reindex_diff h_const_diff]
-    rw [pdiv_reindex (fun idx' => finProdFinEquiv ((finProdFinEquiv.symm idx').1, s))]
-    rw [show pdiv (fun _ : Vec (m * p) => fun idx' : Fin (m * q) =>
-              D s (finProdFinEquiv.symm idx').2)
-            (Mat.flatten A) (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l)) = 0
-        from pdiv_const _ _ _ _]
-    simp only [Equiv.symm_apply_apply]
-    ring
-  simp_rw [hterm]
-  have hkey : ∀ s : Fin p,
-      D s l * (if finProdFinEquiv (i, j) = finProdFinEquiv (k, s) then (1:ℝ) else 0) =
-      if s = j ∧ i = k then D s l else 0 := by
-    intro s
-    by_cases hs : s = j ∧ i = k
-    · obtain ⟨hsj, hik⟩ := hs
-      subst hsj; subst hik; simp
-    · have hne : finProdFinEquiv (i, j) ≠ finProdFinEquiv (k, s) := by
-        intro heq
-        apply hs
-        have := finProdFinEquiv.injective heq
-        exact ⟨(Prod.mk.inj this).2.symm, (Prod.mk.inj this).1⟩
-      rw [ite_eq_right hne]; simp [hs]
-  simp_rw [hkey]
-  by_cases hik : i = k
-  · rw [ite_eq_left hik]
-    simp_rw [show ∀ s : Fin p, (s = j ∧ i = k) ↔ (s = j) from
-      fun s => ⟨And.left, fun h => ⟨h, hik⟩⟩]
-    rw [Finset.sum_ite_eq' Finset.univ j (fun s => D s l)]
-    simp
-  · rw [ite_eq_right hik]
-    simp_rw [show ∀ s : Fin p, (s = j ∧ i = k) ↔ False from
-      fun s => ⟨fun h => hik h.2, False.elim⟩]
-    simp
+  rw [pdivMat, pdiv_of_linear (fun v => Mat.flatten (Mat.mul (Mat.unflatten v) D))
+    (fun _ _ => by
+      funext; simp [Mat.flatten, Mat.mul, Mat.unflatten, add_mul, Finset.sum_add_distrib])
+    (fun _ _ => by funext; simp [Mat.flatten, Mat.mul, Mat.unflatten, Finset.mul_sum, mul_assoc])]
+  by_cases h : i = k <;> simp [Mat.flatten, Mat.mul, Mat.unflatten, h, Prod.ext_iff, eq_comm]
 
 /-- **Row-wise Jacobian decomposition** — proved (planning/archive/VJP.md follow-up D).
 

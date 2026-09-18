@@ -203,82 +203,6 @@ lemma differentiableAt_pad_eval {n : Nat} (P : Prop) [Decidable P]
             (fun _ => (0 : ℝ)) from by funext y; rw [dite_eq_right hP]]
     exact differentiableAt_const _
 
-/-- **Pdiv of a per-output dependent if-eval-or-zero family.**
-    Given a per-output dependent if `fun v k' ↦ if h : P k' then v (σ k' h) else 0`,
-    its pdiv at `(idx_in, idx_out)` is the indicator
-    `if P holds at idx_out ∧ σ matches idx_in then 1 else 0`. The proof uses
-    `fderiv_apply` to extract the `idx_out`-th component, then `by_cases` on
-    `P idx_out` to discharge the dependent-if. -/
-lemma pdiv_pi_pad_eval {n m : Nat}
-    (P : Fin m → Prop) [∀ k, Decidable (P k)]
-    (σ : (k : Fin m) → P k → Fin n)
-    (v : Vec n) (idx_in : Fin n) (idx_out : Fin m) :
-    pdiv (fun (v' : Vec n) (k' : Fin m) =>
-            if h : P k' then v' (σ k' h) else (0 : ℝ))
-          v idx_in idx_out =
-    if h : P idx_out then (if σ idx_out h = idx_in then (1 : ℝ) else 0) else 0 := by
-  unfold pdiv
-  have h_diff_pi : DifferentiableAt ℝ (fun (v' : Vec n) (k' : Fin m) =>
-      if h : P k' then v' (σ k' h) else (0 : ℝ)) v := by
-    rw [differentiableAt_pi]
-    intro k'
-    exact differentiableAt_pad_eval (P k') (σ k') v
-  rw [show fderiv ℝ (fun (v' : Vec n) (k' : Fin m) =>
-              if h : P k' then v' (σ k' h) else (0 : ℝ)) v (basisVec idx_in) idx_out
-        = fderiv ℝ (fun v' : Vec n =>
-            (fun v'' k' => if h : P k' then v'' (σ k' h) else (0 : ℝ)) v' idx_out)
-            v (basisVec idx_in) from by
-    rw [fderiv_apply h_diff_pi idx_out]; rfl]
-  by_cases hpad : P idx_out
-  · rw [show (fun v' : Vec n =>
-          (fun v'' k' => if h : P k' then v'' (σ k' h) else (0 : ℝ)) v' idx_out) =
-        (fun v' : Vec n => v' (σ idx_out hpad)) from by
-      funext v'
-      show (if h : P idx_out then v' (σ idx_out h) else (0 : ℝ)) = v' (σ idx_out hpad)
-      rw [dite_eq_left hpad]]
-    rw [show (fun v' : Vec n => v' (σ idx_out hpad)) =
-          ((ContinuousLinearMap.proj (σ idx_out hpad) : Vec n →L[ℝ] ℝ) : Vec n → ℝ)
-        from rfl]
-    rw [ContinuousLinearMap.fderiv]
-    show (ContinuousLinearMap.proj (σ idx_out hpad) : Vec n →L[ℝ] ℝ) (basisVec idx_in) = _
-    rw [ContinuousLinearMap.proj_apply, basisVec_apply, dite_eq_left hpad]
-  · rw [show (fun v' : Vec n =>
-          (fun v'' k' => if h : P k' then v'' (σ k' h) else (0 : ℝ)) v' idx_out) =
-        (fun _ => (0 : ℝ)) from by
-      funext v'
-      show (if h : P idx_out then v' (σ idx_out h) else (0 : ℝ)) = 0
-      rw [dite_eq_right hpad]]
-    rw [(hasFDerivAt_const (0 : ℝ) v).fderiv, dite_eq_right hpad]
-    rfl
-
-/-- **Pdiv of `c_const * pad-eval` family.** Combines `pdiv_mul`,
-    `pdiv_const`, and `pdiv_pi_pad_eval` for the conv2d per-summand
-    pattern: a `k'`-varying constant times the dependent if-eval-or-zero. -/
-lemma pdiv_const_mul_pi_pad_eval {n m : Nat}
-    (c_const : Fin m → ℝ)
-    (P : Fin m → Prop) [∀ k, Decidable (P k)]
-    (σ : (k : Fin m) → P k → Fin n)
-    (v : Vec n) (idx_in : Fin n) (idx_out : Fin m) :
-    pdiv (fun (v' : Vec n) (k' : Fin m) =>
-            c_const k' *
-            (if h : P k' then v' (σ k' h) else (0 : ℝ)))
-          v idx_in idx_out =
-    c_const idx_out *
-    (if h : P idx_out then (if σ idx_out h = idx_in then (1 : ℝ) else 0) else 0) := by
-  have h_const_diff : DifferentiableAt ℝ
-      (fun (_ : Vec n) (k' : Fin m) => c_const k') v := differentiableAt_const _
-  have h_pad_diff : DifferentiableAt ℝ
-      (fun (v' : Vec n) (k' : Fin m) =>
-        if h : P k' then v' (σ k' h) else (0 : ℝ)) v := by
-    rw [differentiableAt_pi]
-    intro k'
-    exact differentiableAt_pad_eval (P k') (σ k') v
-  rw [pdiv_mul _ _ _ h_const_diff h_pad_diff]
-  rw [show pdiv (fun (_ : Vec n) (k' : Fin m) => c_const k') v idx_in idx_out = 0
-      from pdiv_const _ _ _ _]
-  rw [pdiv_pi_pad_eval]
-  ring
-
 /-- **Closed-form input gradient for conv2d** — direct formula, written as
     a sum over output positions `(co, ho, wo)` with reconstructed kernel
     offsets `kh_nat = hi + pH − ho`, `kw_nat = wi + pW − wo`. The body is
@@ -303,13 +227,10 @@ noncomputable def conv2d_input_grad_formula {ic oc h w kH kW : Nat}
 /-- **Conv2d input-VJP** — proved from foundation rules.
 
     The function `v ↦ flatten (conv2d W b (unflatten v))` is affine in
-    `v`: a constant `b o(idx_out)` plus a triple sum over `(c, kh, kw)`
-    of `W o(idx_out) c kh kw * (if pad-cond then v(reindex) else 0)`.
-    Each summand factors as `(constant W) * (if-pad-conditional in v)`,
-    so `pdiv_add` + `pdiv_const` + `pdiv_finset_sum` (×3) + `pdiv_mul` +
-    a `by_cases` on the pad condition (CLM-projection on the pad-true
-    branch, constant zero on the pad-false branch) collapse the
-    per-`(idx_in, idx_out)` pdiv. Reindex `Fin (oc*h*w) ↔ Fin oc × Fin h × Fin w`
+    `v`: the bias-free conv (linear in `v`) plus the broadcast bias, so
+    `pdiv_of_affine` reads each per-`(idx_in, idx_out)` entry off the
+    bias-free conv of the basis vector — a sum over `(c, kh, kw)` of
+    `W o(idx_out) c kh kw` times the pad-guarded Kronecker. Reindex `Fin (oc*h*w) ↔ Fin oc × Fin h × Fin w`
     on the sum-over-`idx_out`, then a triple `Finset.sum_eq_single` over
     `(c, kh, kw)` (matching `idx_in`'s decoded `(ci, hi, wi)`) gives the
     closed-form input gradient `conv2d_input_grad_formula`.
@@ -357,298 +278,29 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
                  (1 : ℝ) else 0)
              else 0) := by
       intro idx_out
-      -- Set abbreviations for idx_out components (idx_out unpacks to (ohw_o, ohw_hi, ohw_wi)).
-      set ohw_wi : Fin w := (finProdFinEquiv.symm idx_out).2 with hohw_wi
-      set ohw_hi : Fin h :=
-        (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).2 with hohw_hi
-      set ohw_o : Fin oc :=
-        (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).1 with hohw_o
-      -- Decompose `f = (constant b) + (sum over c kh kw of W * if-pad-cond)`.
-      rw [show (fun v' : Vec (ic * h * w) =>
-                Tensor3.flatten (conv2d W b (Tensor3.unflatten v'))) =
-            (fun v' k =>
-              (fun (_ : Vec (ic * h * w)) (k' : Fin (oc * h * w)) =>
-                b ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) v' k +
-              (fun (v'' : Vec (ic * h * w)) (k' : Fin (oc * h * w)) =>
-                ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       (Tensor3.unflatten v'') c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) v' k) from by
-        funext v' k
-        unfold Tensor3.flatten conv2d
-        rfl]
-      have h_b_diff : DifferentiableAt ℝ
-          (fun (_ : Vec (ic * h * w)) (k' : Fin (oc * h * w)) =>
-            b ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) (Tensor3.flatten x) :=
-        differentiableAt_const _
-      have h_lin_diff : DifferentiableAt ℝ
-          (fun (v'' : Vec (ic * h * w)) (k' : Fin (oc * h * w)) =>
-            ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-              W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-              (let pH := (kH - 1) / 2
-               let pW := (kW - 1) / 2
-               let hh := kh.val +
-                 (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-               let ww := kw.val + (finProdFinEquiv.symm k').2.val
-               if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                 (Tensor3.unflatten v'') c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-               else 0)) (Tensor3.flatten x) := by
-        rw [differentiableAt_pi]
-        intro k'
-        apply DifferentiableAt.fun_sum; intro c _
-        apply DifferentiableAt.fun_sum; intro kh _
-        apply DifferentiableAt.fun_sum; intro kw _
-        apply DifferentiableAt.mul (differentiableAt_const _)
-        unfold Tensor3.unflatten
-        exact differentiableAt_pad_eval _
-          (fun hpad => finProdFinEquiv (finProdFinEquiv
-            (c, ⟨kh.val + (finProdFinEquiv.symm
-              (finProdFinEquiv.symm k').1).2.val - (kH - 1) / 2, hpad.2.1⟩),
-            ⟨kw.val + (finProdFinEquiv.symm k').2.val - (kW - 1) / 2, hpad.2.2.2⟩)) _
-      rw [pdiv_add _ _ _ h_b_diff h_lin_diff]
-      rw [show pdiv (fun (_ : Vec (ic * h * w)) (k' : Fin (oc * h * w)) =>
-                  b ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1))
-                (Tensor3.flatten x) idx_in idx_out = 0
-          from pdiv_const _ _ _ _]
-      rw [zero_add]
-      -- Distribute pdiv over the c-sum.
-      rw [show (fun (v'' : Vec (ic * h * w)) (k' : Fin (oc * h * w)) =>
-                ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       (Tensor3.unflatten v'') c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) =
-            (fun v'' k' => ∑ c : Fin ic,
-              (fun (cc : Fin ic) (v''' : Vec (ic * h * w)) (k'' : Fin (oc * h * w)) =>
-                ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) cc kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       (Tensor3.unflatten v''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) c v'' k') from rfl]
-      have h_c_diff : ∀ cc ∈ (Finset.univ : Finset (Fin ic)),
-          DifferentiableAt ℝ
-            (fun (v''' : Vec (ic * h * w)) (k'' : Fin (oc * h * w)) =>
-              ∑ kh : Fin kH, ∑ kw : Fin kW,
-                W ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) cc kh kw *
-                (let pH := (kH - 1) / 2
-                 let pW := (kW - 1) / 2
-                 let hh := kh.val +
-                   (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                 let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                 if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                   (Tensor3.unflatten v''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                 else 0)) (Tensor3.flatten x) := by
-        intro cc _
-        rw [differentiableAt_pi]
-        intro k''
-        apply DifferentiableAt.fun_sum; intro kh _
-        apply DifferentiableAt.fun_sum; intro kw _
-        apply DifferentiableAt.mul (differentiableAt_const _)
-        unfold Tensor3.unflatten
-        exact differentiableAt_pad_eval _
-          (fun hpad => finProdFinEquiv (finProdFinEquiv
-            (cc, ⟨kh.val + (finProdFinEquiv.symm
-              (finProdFinEquiv.symm k'').1).2.val - (kH - 1) / 2, hpad.2.1⟩),
-            ⟨kw.val + (finProdFinEquiv.symm k'').2.val - (kW - 1) / 2, hpad.2.2.2⟩)) _
-      rw [pdiv_finset_sum _ _ _ h_c_diff]
-      -- Now distribute over kh and kw inside each c-summand.
-      have h_inner_c : ∀ cc : Fin ic,
-          pdiv (fun (v''' : Vec (ic * h * w)) (k'' : Fin (oc * h * w)) =>
-                  ∑ kh : Fin kH, ∑ kw : Fin kW,
-                    W ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) cc kh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := kh.val +
-                         (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         (Tensor3.unflatten v''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0)) (Tensor3.flatten x) idx_in idx_out =
-          ∑ kh : Fin kH, ∑ kw : Fin kW,
-            W ohw_o cc kh kw *
-            (let pH := (kH - 1) / 2
-             let pW := (kW - 1) / 2
-             let hh := kh.val + ohw_hi.val
-             let ww := kw.val + ohw_wi.val
-             if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-               (if idx_in = finProdFinEquiv (finProdFinEquiv
-                   (cc, ⟨hh - pH, hpad.2.1⟩), ⟨ww - pW, hpad.2.2.2⟩) then (1 : ℝ) else 0)
-             else 0) := by
-        intro cc
-        -- Distribute over kh.
-        rw [show (fun (v''' : Vec (ic * h * w)) (k'' : Fin (oc * h * w)) =>
-                  ∑ kh : Fin kH, ∑ kw : Fin kW,
-                    W ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) cc kh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := kh.val +
-                         (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         (Tensor3.unflatten v''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0)) =
-              (fun v''' k'' => ∑ kh : Fin kH,
-                (fun (khh : Fin kH) (v'''' : Vec (ic * h * w)) (k''' : Fin (oc * h * w)) =>
-                  ∑ kw : Fin kW,
-                    W ((finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).1) cc khh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := khh.val +
-                         (finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k''').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         (Tensor3.unflatten v'''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0)) kh v''' k'') from rfl]
-        have h_kh_diff : ∀ khh ∈ (Finset.univ : Finset (Fin kH)),
-            DifferentiableAt ℝ
-              (fun (v'''' : Vec (ic * h * w)) (k''' : Fin (oc * h * w)) =>
-                ∑ kw : Fin kW,
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).1) cc khh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := khh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k''').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       (Tensor3.unflatten v'''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) (Tensor3.flatten x) := by
-          intro khh _
-          rw [differentiableAt_pi]
-          intro k'''
-          apply DifferentiableAt.fun_sum; intro kw _
-          apply DifferentiableAt.mul (differentiableAt_const _)
-          unfold Tensor3.unflatten
-          exact differentiableAt_pad_eval _
-            (fun hpad => finProdFinEquiv (finProdFinEquiv
-              (cc, ⟨khh.val + (finProdFinEquiv.symm
-                (finProdFinEquiv.symm k''').1).2.val - (kH - 1) / 2, hpad.2.1⟩),
-              ⟨kw.val + (finProdFinEquiv.symm k''').2.val - (kW - 1) / 2, hpad.2.2.2⟩)) _
-        rw [pdiv_finset_sum _ _ _ h_kh_diff]
-        congr 1; ext khh
-        -- Distribute over kw.
-        rw [show (fun (v'''' : Vec (ic * h * w)) (k''' : Fin (oc * h * w)) =>
-                  ∑ kw : Fin kW,
-                    W ((finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).1) cc khh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := khh.val +
-                         (finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k''').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         (Tensor3.unflatten v'''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0)) =
-              (fun v'''' k''' => ∑ kw : Fin kW,
-                (fun (kww : Fin kW) (v''''' : Vec (ic * h * w)) (k'''' : Fin (oc * h * w)) =>
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).1) cc khh kww *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := khh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).2.val
-                     let ww := kww.val + (finProdFinEquiv.symm k'''').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       (Tensor3.unflatten v''''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) kw v'''' k''') from rfl]
-        have h_kw_diff : ∀ kww ∈ (Finset.univ : Finset (Fin kW)),
-            DifferentiableAt ℝ
-              (fun (v''''' : Vec (ic * h * w)) (k'''' : Fin (oc * h * w)) =>
-                W ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).1) cc khh kww *
-                  (let pH := (kH - 1) / 2
-                   let pW := (kW - 1) / 2
-                   let hh := khh.val +
-                     (finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).2.val
-                   let ww := kww.val + (finProdFinEquiv.symm k'''').2.val
-                   if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                     (Tensor3.unflatten v''''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                   else 0)) (Tensor3.flatten x) := by
-          intro kww _
-          rw [differentiableAt_pi]
-          intro k''''
-          apply DifferentiableAt.mul (differentiableAt_const _)
-          unfold Tensor3.unflatten
-          exact differentiableAt_pad_eval _
-            (fun hpad => finProdFinEquiv (finProdFinEquiv
-              (cc, ⟨khh.val + (finProdFinEquiv.symm
-                (finProdFinEquiv.symm k'''').1).2.val - (kH - 1) / 2, hpad.2.1⟩),
-              ⟨kww.val + (finProdFinEquiv.symm k'''').2.val - (kW - 1) / 2, hpad.2.2.2⟩)) _
-        rw [pdiv_finset_sum _ _ _ h_kw_diff]
-        congr 1; ext kww
-        -- Per-(cc, khh, kww) summand: factor as (W constant) * (dite in v).
-        -- After unfolding `Tensor3.unflatten`, the inner becomes
-        -- `if hpad : ... then v(σ) else 0`, fitting `pdiv_const_mul_pi_pad_eval`.
-        rw [show (fun (v''''' : Vec (ic * h * w)) (k'''' : Fin (oc * h * w)) =>
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).1) cc khh kww *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := khh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).2.val
-                     let ww := kww.val + (finProdFinEquiv.symm k'''').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       (Tensor3.unflatten v''''') cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) =
-              (fun (v''''' : Vec (ic * h * w)) (k'''' : Fin (oc * h * w)) =>
-                (fun k''''' : Fin (oc * h * w) =>
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).1) cc khh kww) k'''' *
-                (if hpad : (kH - 1) / 2 ≤ khh.val + (finProdFinEquiv.symm
-                              (finProdFinEquiv.symm k'''').1).2.val ∧
-                            khh.val + (finProdFinEquiv.symm
-                              (finProdFinEquiv.symm k'''').1).2.val - (kH - 1) / 2 < h ∧
-                            (kW - 1) / 2 ≤ kww.val + (finProdFinEquiv.symm k'''').2.val ∧
-                            kww.val + (finProdFinEquiv.symm k'''').2.val - (kW - 1) / 2 < w then
-                  v''''' (finProdFinEquiv (finProdFinEquiv
-                    (cc, ⟨khh.val + (finProdFinEquiv.symm
-                            (finProdFinEquiv.symm k'''').1).2.val - (kH - 1) / 2, hpad.2.1⟩),
-                    ⟨kww.val + (finProdFinEquiv.symm k'''').2.val - (kW - 1) / 2,
-                      hpad.2.2.2⟩))
-                else 0)) from by
-          funext v''''' k''''
-          unfold Tensor3.unflatten
-          rfl]
-        rw [pdiv_const_mul_pi_pad_eval
-          (fun k''''' : Fin (oc * h * w) =>
-            W ((finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).1) cc khh kww)
-          (fun k'''' => (kH - 1) / 2 ≤ khh.val + (finProdFinEquiv.symm
-              (finProdFinEquiv.symm k'''').1).2.val ∧
-            khh.val + (finProdFinEquiv.symm
-              (finProdFinEquiv.symm k'''').1).2.val - (kH - 1) / 2 < h ∧
-            (kW - 1) / 2 ≤ kww.val + (finProdFinEquiv.symm k'''').2.val ∧
-            kww.val + (finProdFinEquiv.symm k'''').2.val - (kW - 1) / 2 < w)
-          (fun k'''' hpad => finProdFinEquiv (finProdFinEquiv
-            (cc, ⟨khh.val + (finProdFinEquiv.symm
-              (finProdFinEquiv.symm k'''').1).2.val - (kH - 1) / 2, hpad.2.1⟩),
-            ⟨kww.val + (finProdFinEquiv.symm k'''').2.val - (kW - 1) / 2, hpad.2.2.2⟩))]
-        -- Show the result matches the desired form (with ohw_o, ohw_hi, ohw_wi abbreviations).
-        show W ohw_o cc khh kww * _ = W ohw_o cc khh kww * _
-        congr 1
-        -- Goal: dite-form on the LHS = dite-form on the RHS (after symmetrizing the
-        -- equality direction: σ idx_out h = idx_in vs idx_in = ...).
-        by_cases hpad : (kH - 1) / 2 ≤ khh.val + ohw_hi.val ∧
-                       khh.val + ohw_hi.val - (kH - 1) / 2 < h ∧
-                       (kW - 1) / 2 ≤ kww.val + ohw_wi.val ∧
-                       kww.val + ohw_wi.val - (kW - 1) / 2 < w
-        · rw [dite_eq_left hpad, dite_eq_left hpad]
-          by_cases heq : finProdFinEquiv (finProdFinEquiv
-              (cc, ⟨khh.val + ohw_hi.val - (kH - 1) / 2, hpad.2.1⟩),
-              ⟨kww.val + ohw_wi.val - (kW - 1) / 2, hpad.2.2.2⟩) = idx_in
-          · rw [ite_eq_left heq, ite_eq_left heq.symm]
-          · rw [ite_eq_right heq, ite_eq_right (fun h => heq h.symm)]
-        · rw [dite_eq_right hpad, dite_eq_right hpad]
-      simp_rw [h_inner_c]
+      -- The conv is affine in its input: the bias-free conv plus the broadcast bias.
+      have hsplit : (fun v' : Vec (ic * h * w) =>
+            Tensor3.flatten (conv2d W b (Tensor3.unflatten v'))) =
+          fun v => Tensor3.flatten (conv2d W 0 (Tensor3.unflatten v)) +
+            (fun k => b (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1) := by
+        funext v k
+        simp only [Tensor3.flatten, conv2d, Pi.add_apply, Pi.zero_apply, zero_add]
+        ring
+      rw [hsplit, pdiv_of_affine]
+      · simp only [Tensor3.flatten, conv2d, Tensor3.unflatten, Pi.zero_apply, zero_add,
+          basisVec_apply, @eq_comm _ idx_in]
+      · intro u v; funext k
+        simp only [Tensor3.flatten, conv2d, Tensor3.unflatten, Pi.add_apply, Pi.zero_apply,
+          zero_add, ← Finset.sum_add_distrib]
+        refine Finset.sum_congr rfl fun c _ => Finset.sum_congr rfl fun kh _ =>
+          Finset.sum_congr rfl fun kw _ => ?_
+        split_ifs <;> ring
+      · intro a v; funext k
+        simp only [Tensor3.flatten, conv2d, Tensor3.unflatten, Pi.smul_apply, Pi.zero_apply,
+          zero_add, smul_eq_mul, Finset.mul_sum]
+        refine Finset.sum_congr rfl fun c _ => Finset.sum_congr rfl fun kh _ =>
+          Finset.sum_congr rfl fun kw _ => ?_
+        split_ifs <;> ring
     -- Step 2: substitute h_pdiv into the RHS sum and collapse.
     show conv2d_input_grad_formula W dy ci hi wi =
       ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
@@ -1118,12 +770,10 @@ gradient-checks the transpose-trick formula against finite differences. -/
 /-- **Conv2d weight-VJP** — proved from foundation rules.
 
     The function `v ↦ flatten (conv2d (unflatten v) b x)` is affine in
-    `v`: a constant `b o(idx_out)` plus a triple sum over `(c, kh, kw)`
-    of `(unflatten v) o(idx_out) c kh kw * x_pad_term`. Each summand
-    factors as `(reindex of v) * (x-only constant)`, so `pdiv_add` +
-    `pdiv_const` + `pdiv_finset_sum` (×3) + `pdiv_mul` + `pdiv_reindex`
-    collapse the per-(idx_in, idx_out) pdiv. Triple-sum collapse via
-    `Finset.sum_eq_single` gives the transpose-trick backward
+    `v`: the broadcast bias `b o(idx_out)` plus the bias-free conv, which is
+    linear in `v`. `pdiv_of_affine` reads each Jacobian entry off the bias-free
+    conv of a basis vector — a Kronecker at `(o', c', kh', kw')` against the
+    padded input — and the collapsed sum is the transpose-trick backward
     `dW[o', c', kh', kw'] = Σ_{hi, wi} x_pad_term(...) · dy(flat(o', hi, wi))`. -/
 noncomputable def conv2d_weight_grad_has_vjp {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Tensor3 ic h w) :
@@ -1147,474 +797,41 @@ noncomputable def conv2d_weight_grad_has_vjp {ic oc h w kH kW : Nat}
       * dy (finProdFinEquiv (finProdFinEquiv (o', hi), wi))
   correct := by
     intro v dy idx_in
-    -- Set abbreviations for the unpacked idx_in components (kernel position).
-    set kw' : Fin kW := (finProdFinEquiv.symm idx_in).2 with hkw'
-    set kh' : Fin kH :=
-      (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).2 with hkh'
-    set o' : Fin oc := (finProdFinEquiv.symm
-      (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1).1 with ho'
-    set c' : Fin ic := (finProdFinEquiv.symm
-      (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1).2 with hc'
-    -- Identity: idx_in unpacks to (o', c', kh', kw') and re-packs back.
-    have h_idx_in_eq :
-        finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (o', c'), kh'), kw') = idx_in := by
-      rw [ho', hc', hkh', hkw']
-      rw [show ((finProdFinEquiv.symm
-                  (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1).1,
-                (finProdFinEquiv.symm
-                  (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1).2) =
-               finProdFinEquiv.symm
-                  (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1 from rfl,
-          Equiv.apply_symm_apply]
-      rw [show ((finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1,
-                (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).2) =
-               finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1 from rfl,
-          Equiv.apply_symm_apply]
-      rw [show ((finProdFinEquiv.symm idx_in).1, (finProdFinEquiv.symm idx_in).2) =
-               finProdFinEquiv.symm idx_in from rfl,
-          Equiv.apply_symm_apply]
-    -- Step 1: per-idx_out pdiv formula.
-    have h_pdiv : ∀ idx_out : Fin (oc * h * w),
-        pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v idx_in idx_out =
-        (if (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).1 = o' then
-          (let pH := (kH - 1) / 2
-           let pW := (kW - 1) / 2
-           let hh := kh'.val +
-             (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).2.val
-           let ww := kw'.val + (finProdFinEquiv.symm idx_out).2.val
-           if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-             x c' ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-           else 0)
-         else 0) := by
-      intro idx_out
-      -- Set abbreviations for idx_out components, prevents auto-resugaring.
-      set ohw_wi : Fin w := (finProdFinEquiv.symm idx_out).2 with hohw_wi
-      set ohw_hi : Fin h :=
-        (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).2 with hohw_hi
-      set ohw_o : Fin oc :=
-        (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).1 with hohw_o
-      -- Decompose f = (constant b) + (sum over c kh kw of (reindex_v * x_pad_const)).
-      rw [show (fun v' : Vec (oc * ic * kH * kW) =>
-                Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) =
-            (fun v' k =>
-              (fun (_ : Vec (oc * ic * kH * kW)) (k' : Fin (oc * h * w)) =>
-                b ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) v' k +
-              (fun (v'' : Vec (oc * ic * kH * kW)) (k' : Fin (oc * h * w)) =>
-                ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  (Kernel4.unflatten v'')
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) v' k) from by
-        funext v' k
-        unfold Tensor3.flatten conv2d
-        rfl]
-      have h_b_diff : DifferentiableAt ℝ
-          (fun (_ : Vec (oc * ic * kH * kW)) (k' : Fin (oc * h * w)) =>
-            b ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) v :=
-        differentiableAt_const _
-      have h_lin_diff : DifferentiableAt ℝ
-          (fun (v'' : Vec (oc * ic * kH * kW)) (k' : Fin (oc * h * w)) =>
-            ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-              (Kernel4.unflatten v'')
-                ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-              (let pH := (kH - 1) / 2
-               let pW := (kW - 1) / 2
-               let hh := kh.val +
-                 (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-               let ww := kw.val + (finProdFinEquiv.symm k').2.val
-               if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                 x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-               else 0)) v := by
-        unfold Kernel4.unflatten; fun_prop
-      rw [pdiv_add _ _ _ h_b_diff h_lin_diff]
-      rw [show pdiv (fun (_ : Vec (oc * ic * kH * kW)) (k' : Fin (oc * h * w)) =>
-                  b ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1))
-                v idx_in idx_out = 0
-          from pdiv_const _ _ _ _]
-      rw [zero_add]
-      -- Distribute over the triple sum.
-      rw [show (fun (v'' : Vec (oc * ic * kH * kW)) (k' : Fin (oc * h * w)) =>
-                ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  (Kernel4.unflatten v'')
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) =
-            (fun v'' k' => ∑ c : Fin ic,
-              (fun (cc : Fin ic) (v''' : Vec (oc * ic * kH * kW))
-                  (k'' : Fin (oc * h * w)) =>
-                ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  (Kernel4.unflatten v''')
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) cc kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) c v'' k') from rfl]
-      have h_c_summand_diff : ∀ cc ∈ (Finset.univ : Finset (Fin ic)),
-          DifferentiableAt ℝ
-            (fun (v''' : Vec (oc * ic * kH * kW)) (k'' : Fin (oc * h * w)) =>
-              ∑ kh : Fin kH, ∑ kw : Fin kW,
-                (Kernel4.unflatten v''')
-                  ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) cc kh kw *
-                (let pH := (kH - 1) / 2
-                 let pW := (kW - 1) / 2
-                 let hh := kh.val +
-                   (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                 let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                 if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                   x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                 else 0)) v := by
-        intro cc _; unfold Kernel4.unflatten; fun_prop
-      rw [pdiv_finset_sum _ _ _ h_c_summand_diff]
-      have h_inner_c : ∀ cc : Fin ic,
-          pdiv (fun (v''' : Vec (oc * ic * kH * kW))
-                    (k'' : Fin (oc * h * w)) =>
-                ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  (Kernel4.unflatten v''')
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) cc kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) v idx_in idx_out =
-          ∑ kh : Fin kH, ∑ kw : Fin kW,
-            (if idx_in = finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-              (ohw_o, cc), kh), kw)
-              then (1 : ℝ) else 0) *
-            (let pH := (kH - 1) / 2
-             let pW := (kW - 1) / 2
-             let hh := kh.val + ohw_hi.val
-             let ww := kw.val + ohw_wi.val
-             if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-               x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-             else 0) := by
-        intro cc
-        rw [show (fun (v''' : Vec (oc * ic * kH * kW))
-                      (k'' : Fin (oc * h * w)) =>
-                  ∑ kh : Fin kH, ∑ kw : Fin kW,
-                    (Kernel4.unflatten v''')
-                      ((finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1)
-                      cc kh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := kh.val +
-                         (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k'').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0)) =
-              (fun v''' k'' => ∑ kh : Fin kH,
-                (fun (khh : Fin kH) (v'''' : Vec (oc * ic * kH * kW))
-                    (k''' : Fin (oc * h * w)) =>
-                  ∑ kw : Fin kW,
-                    (Kernel4.unflatten v'''')
-                      ((finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).1)
-                      cc khh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := khh.val +
-                         (finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k''').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0)) kh v''' k'') from rfl]
-        have h_kh_summand_diff : ∀ khh ∈ (Finset.univ : Finset (Fin kH)),
-            DifferentiableAt ℝ
-              (fun (v'''' : Vec (oc * ic * kH * kW)) (k''' : Fin (oc * h * w)) =>
-                ∑ kw : Fin kW,
-                  (Kernel4.unflatten v'''')
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).1)
-                    cc khh kw *
-                  (let pH := (kH - 1) / 2
-                   let pW := (kW - 1) / 2
-                   let hh := khh.val +
-                     (finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).2.val
-                   let ww := kw.val + (finProdFinEquiv.symm k''').2.val
-                   if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                     x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                   else 0)) v := by
-          intro khh _; unfold Kernel4.unflatten; fun_prop
-        rw [pdiv_finset_sum _ _ _ h_kh_summand_diff]
-        congr 1; ext khh
-        rw [show (fun (v'''' : Vec (oc * ic * kH * kW))
-                      (k''' : Fin (oc * h * w)) =>
-                  ∑ kw : Fin kW,
-                    (Kernel4.unflatten v'''')
-                      ((finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).1)
-                      cc khh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := khh.val +
-                         (finProdFinEquiv.symm (finProdFinEquiv.symm k''').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k''').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0)) =
-              (fun v'''' k''' => ∑ kw : Fin kW,
-                (fun (kww : Fin kW) (v''''' : Vec (oc * ic * kH * kW))
-                    (k'''' : Fin (oc * h * w)) =>
-                  (Kernel4.unflatten v''''')
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).1)
-                    cc khh kww *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := khh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).2.val
-                     let ww := kww.val + (finProdFinEquiv.symm k'''').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) kw v'''' k''') from rfl]
-        have h_kw_summand_diff : ∀ kww ∈ (Finset.univ : Finset (Fin kW)),
-            DifferentiableAt ℝ
-              (fun (v''''' : Vec (oc * ic * kH * kW)) (k'''' : Fin (oc * h * w)) =>
-                (Kernel4.unflatten v''''')
-                  ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).1)
-                  cc khh kww *
-                (let pH := (kH - 1) / 2
-                 let pW := (kW - 1) / 2
-                 let hh := khh.val +
-                   (finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).2.val
-                 let ww := kww.val + (finProdFinEquiv.symm k'''').2.val
-                 if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                   x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                 else 0)) v := by
-          intro kww _; unfold Kernel4.unflatten; fun_prop
-        rw [pdiv_finset_sum _ _ _ h_kw_summand_diff]
-        congr 1; ext kww
-        -- Per-summand: factor as (reindex v) * (constant in v).
-        rw [show (fun (v''''' : Vec (oc * ic * kH * kW))
-                      (k'''' : Fin (oc * h * w)) =>
-                  (Kernel4.unflatten v''''')
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).1)
-                    cc khh kww *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := khh.val +
-                       (finProdFinEquiv.symm (finProdFinEquiv.symm k'''').1).2.val
-                     let ww := kww.val + (finProdFinEquiv.symm k'''').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) =
-              (fun v''''' k'''' =>
-                (fun (v'''''' : Vec (oc * ic * kH * kW))
-                    (k''''' : Fin (oc * h * w)) =>
-                  v'''''' (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).1, cc),
-                      khh), kww))) v''''' k'''' *
-                (fun (_ : Vec (oc * ic * kH * kW))
-                    (k''''' : Fin (oc * h * w)) =>
-                  (let pH := (kH - 1) / 2
-                   let pW := (kW - 1) / 2
-                   let hh := khh.val +
-                     (finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).2.val
-                   let ww := kww.val + (finProdFinEquiv.symm k''''').2.val
-                   if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                     x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                   else 0)) v''''' k'''') from by
-          funext v''''' k''''
-          unfold Kernel4.unflatten
-          rfl]
-        have h_reindex_diff : DifferentiableAt ℝ
-            (fun (v'''''' : Vec (oc * ic * kH * kW))
-                 (k''''' : Fin (oc * h * w)) =>
-              v'''''' (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                ((finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).1, cc),
-                  khh), kww))) v :=
-          (reindexCLM (fun k''''' : Fin (oc * h * w) =>
-            finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-              ((finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).1, cc),
-                khh), kww))).differentiableAt
-        have h_xpad_const_diff : DifferentiableAt ℝ
-            (fun (_ : Vec (oc * ic * kH * kW))
-                 (k''''' : Fin (oc * h * w)) =>
-              (let pH := (kH - 1) / 2
-               let pW := (kW - 1) / 2
-               let hh := khh.val +
-                 (finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).2.val
-               let ww := kww.val + (finProdFinEquiv.symm k''''').2.val
-               if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                 x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-               else 0)) v :=
-          differentiableAt_const _
-        rw [pdiv_mul _ _ _ h_reindex_diff h_xpad_const_diff]
-        rw [show (fun (v'''''' : Vec (oc * ic * kH * kW))
-                      (k''''' : Fin (oc * h * w)) =>
-                  v'''''' (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).1, cc),
-                      khh), kww))) =
-              (fun y k''''' =>
-                y ((fun k'''''' : Fin (oc * h * w) =>
-                  finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                    ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''''').1).1, cc),
-                      khh), kww)) k''''')) from rfl]
-        rw [pdiv_reindex (fun k'''''' : Fin (oc * h * w) =>
-            finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-              ((finProdFinEquiv.symm (finProdFinEquiv.symm k'''''').1).1, cc),
-                khh), kww))]
-        rw [show pdiv (fun (_ : Vec (oc * ic * kH * kW))
-                          (k''''' : Fin (oc * h * w)) =>
-                  (let pH := (kH - 1) / 2
-                   let pW := (kW - 1) / 2
-                   let hh := khh.val +
-                     (finProdFinEquiv.symm (finProdFinEquiv.symm k''''').1).2.val
-                   let ww := kww.val + (finProdFinEquiv.symm k''''').2.val
-                   if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                     x cc ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                   else 0))
-                v idx_in idx_out = 0
-            from pdiv_const _ _ _ _]
-        ring
-      simp_rw [h_inner_c]
-      -- Now: ∑ c kh kw, (if idx_in = ker_idx(ohw_o, c, kh, kw) then 1 else 0) * xpad
-      --      = if ohw_o = o' then xpad(c', kh', kw') else 0.
-      -- Rewrite indicator: by injectivity, idx_in = ker_idx(ohw_o, c, kh, kw)
-      -- iff (ohw_o, c, kh, kw) = (o', c', kh', kw').
-      have h_indicator : ∀ c : Fin ic, ∀ kh : Fin kH, ∀ kw : Fin kW,
-          (idx_in = finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-              (ohw_o, c), kh), kw)) ↔
-          (ohw_o = o' ∧ c = c' ∧ kh = kh' ∧ kw = kw') := by
-        intro c kh kw
-        constructor
-        · intro h
-          rw [← h_idx_in_eq] at h
-          have hpair := finProdFinEquiv.injective h
-          have hpair2 := finProdFinEquiv.injective (Prod.mk.inj hpair).1
-          have hpair3 := finProdFinEquiv.injective (Prod.mk.inj hpair2).1
-          refine ⟨?_, ?_, ?_, ?_⟩
-          · exact (Prod.mk.inj hpair3).1.symm
-          · exact (Prod.mk.inj hpair3).2.symm
-          · exact (Prod.mk.inj hpair2).2.symm
-          · exact (Prod.mk.inj hpair).2.symm
-        · rintro ⟨ho_eq, hc_eq, hkh_eq, hkw_eq⟩
-          rw [← h_idx_in_eq, ← ho_eq, ← hc_eq, ← hkh_eq, ← hkw_eq]
-      simp_rw [h_indicator]
-      -- Triple sum collapse via Finset.sum_eq_single (3 levels deep).
-      -- For c ≠ c': inner sum is 0 since the conjunction (... ∧ c = c' ∧ ...) is false.
-      rw [Finset.sum_eq_single c'
-            (fun c _ hc_ne =>
-              Finset.sum_eq_zero (fun kh _ =>
-                Finset.sum_eq_zero (fun kw _ => by
-                  rw [ite_eq_right (fun ⟨_, hc, _, _⟩ => hc_ne hc), zero_mul])))
-            (fun hni => absurd (Finset.mem_univ c') hni)]
-      rw [Finset.sum_eq_single kh'
-            (fun kh _ hkh_ne =>
-              Finset.sum_eq_zero (fun kw _ => by
-                rw [ite_eq_right (fun ⟨_, _, hkh, _⟩ => hkh_ne hkh), zero_mul]))
-            (fun hni => absurd (Finset.mem_univ kh') hni)]
-      rw [Finset.sum_eq_single kw'
-            (fun kw _ hkw_ne => by
-              rw [ite_eq_right (fun ⟨_, _, _, hkw⟩ => hkw_ne hkw), zero_mul])
-            (fun hni => absurd (Finset.mem_univ kw') hni)]
-      -- Final: (if (ohw_o = o' ∧ c' = c' ∧ kh' = kh' ∧ kw' = kw') then 1 else 0) * xpad(c', kh', kw')
-      --        = if ohw_o = o' then xpad(c', kh', kw') else 0
-      by_cases h_o : ohw_o = o'
-      · rw [ite_eq_left ⟨h_o, rfl, rfl, rfl⟩, one_mul, ite_eq_left h_o]
-      · rw [ite_eq_right (fun ⟨h, _⟩ => h_o h), zero_mul, ite_eq_right h_o]
-    -- Step 2: substitute h_pdiv into the backward sum and collapse.
-    show (∑ hi : Fin h, ∑ wi : Fin w,
-            (let pH := (kH - 1) / 2
-             let pW := (kW - 1) / 2
-             let hh := kh'.val + hi.val
-             let ww := kw'.val + wi.val
-             if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-               x c' ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-             else 0)
-            * dy (finProdFinEquiv (finProdFinEquiv (o', hi), wi))) =
-          ∑ idx_out : Fin (oc * h * w),
-            pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
-              v idx_in idx_out * dy idx_out
-    simp_rw [h_pdiv]
-    -- Now goal: ∑ hi wi, xpad * dy(flat(o', hi, wi)) = ∑ idx_out, (if o(idx_out) = o' then xpad' else 0) * dy(idx_out)
-    -- Convert idx_out → ((o, hi), wi) → (o, hi, wi) via two Fintype.sum_equiv's.
-    rw [Fintype.sum_equiv finProdFinEquiv.symm
-        (fun idx_out : Fin (oc * h * w) =>
-          (if (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).1 = o' then
-            (let pH := (kH - 1) / 2
-             let pW := (kW - 1) / 2
-             let hh := kh'.val +
-               (finProdFinEquiv.symm (finProdFinEquiv.symm idx_out).1).2.val
-             let ww := kw'.val + (finProdFinEquiv.symm idx_out).2.val
-             if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-               x c' ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-             else 0)
-           else 0) * dy idx_out)
-        (fun pair : Fin (oc * h) × Fin w =>
-          (if (finProdFinEquiv.symm pair.1).1 = o' then
-            (let pH := (kH - 1) / 2
-             let pW := (kW - 1) / 2
-             let hh := kh'.val + (finProdFinEquiv.symm pair.1).2.val
-             let ww := kw'.val + pair.2.val
-             if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-               x c' ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-             else 0)
-           else 0) * dy (finProdFinEquiv pair))
-        (fun idx_out => by
-          show _ * _ = _ * _
-          rw [Equiv.apply_symm_apply])]
-    rw [Fintype.sum_prod_type]
-    rw [Fintype.sum_equiv finProdFinEquiv.symm
-        (fun pair_h : Fin (oc * h) =>
-          ∑ wi : Fin w,
-            (if (finProdFinEquiv.symm pair_h).1 = o' then
-              (let pH := (kH - 1) / 2
-               let pW := (kW - 1) / 2
-               let hh := kh'.val + (finProdFinEquiv.symm pair_h).2.val
-               let ww := kw'.val + wi.val
-               if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                 x c' ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-               else 0)
-             else 0) * dy (finProdFinEquiv (pair_h, wi)))
-        (fun ohi : Fin oc × Fin h =>
-          ∑ wi : Fin w,
-            (if ohi.1 = o' then
-              (let pH := (kH - 1) / 2
-               let pW := (kW - 1) / 2
-               let hh := kh'.val + ohi.2.val
-               let ww := kw'.val + wi.val
-               if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                 x c' ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-               else 0)
-             else 0) * dy (finProdFinEquiv (finProdFinEquiv ohi, wi)))
-        (fun pair_h => by
-          have h_inv : finProdFinEquiv (finProdFinEquiv.symm pair_h
-              : Fin oc × Fin h) = pair_h :=
-            Equiv.apply_symm_apply _ _
-          simp_rw [h_inv])]
-    rw [Fintype.sum_prod_type]
-    -- Goal: ∑ hi, ∑ wi, xpad * dy(flat(o', hi, wi)) = ∑ o, ∑ hi, ∑ wi, (if o = o' then xpad else 0) * dy(...)
-    -- Pull (if o = o' then ... else 0) and collapse o-sum via Finset.sum_eq_single.
-    rw [Finset.sum_eq_single o'
-          (fun o _ ho_ne =>
-            Finset.sum_eq_zero (fun hi _ =>
-              Finset.sum_eq_zero (fun wi _ => by
-                rw [ite_eq_right ho_ne, zero_mul])))
-          (fun hni => absurd (Finset.mem_univ o') hni)]
-    -- Now the outer (if o' = o' then ... else 0) collapses to the body.
-    apply Finset.sum_congr rfl
-    intro hi _
-    apply Finset.sum_congr rfl
-    intro wi _
-    rw [ite_eq_left rfl]
+    -- The map is affine in the kernel: the bias-free conv (linear in `v'`) plus the broadcast
+    -- bias, so each Jacobian entry is the bias-free conv of the basis vector `e_idx_in`.
+    have hsplit : (fun v' : Vec (oc * ic * kH * kW) =>
+          Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) =
+        fun v' => Tensor3.flatten (conv2d (Kernel4.unflatten v') 0 x) +
+          (fun k => b (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1) := by
+      funext v' k; simp only [Tensor3.flatten, conv2d, Pi.add_apply, Pi.zero_apply, zero_add]
+      ring
+    have hadd : ∀ u u' : Vec (oc * ic * kH * kW),
+        Tensor3.flatten (conv2d (Kernel4.unflatten (u + u')) 0 x) =
+          Tensor3.flatten (conv2d (Kernel4.unflatten u) 0 x) +
+            Tensor3.flatten (conv2d (Kernel4.unflatten u') 0 x) := by
+      intro u u'; funext k
+      simp only [Tensor3.flatten, conv2d, Kernel4.unflatten, Pi.add_apply, Pi.zero_apply,
+        zero_add, add_mul, Finset.sum_add_distrib]
+    have hsmul : ∀ (a : ℝ) (u : Vec (oc * ic * kH * kW)),
+        Tensor3.flatten (conv2d (Kernel4.unflatten (a • u)) 0 x) =
+          a • Tensor3.flatten (conv2d (Kernel4.unflatten u) 0 x) := by
+      intro a u; funext k
+      simp only [Tensor3.flatten, conv2d, Kernel4.unflatten, Pi.smul_apply, Pi.zero_apply,
+        zero_add, smul_eq_mul, Finset.mul_sum, mul_assoc]
+    rw [hsplit]
+    simp only [pdiv_of_affine (fun v' => Tensor3.flatten (conv2d (Kernel4.unflatten v') 0 x)) _
+      hadd hsmul]
+    -- Unpack `idx_in = (o', c', kh', kw')` and re-index `idx_out` as `(o, hi, wi)`.
+    obtain ⟨⟨q, kw'⟩, rfl⟩ := finProdFinEquiv.surjective idx_in
+    obtain ⟨⟨r, kh'⟩, rfl⟩ := finProdFinEquiv.surjective q
+    obtain ⟨⟨o', c'⟩, rfl⟩ := finProdFinEquiv.surjective r
+    rw [← Equiv.sum_comp (finProdFinEquiv : Fin (oc * h) × Fin w ≃ Fin (oc * h * w)),
+      Fintype.sum_prod_type, ← Equiv.sum_comp (finProdFinEquiv : Fin oc × Fin h ≃ Fin (oc * h)),
+      Fintype.sum_prod_type]
+    simp only [Tensor3.flatten, conv2d, Kernel4.unflatten, Pi.zero_apply, zero_add,
+      basisVec_apply, Equiv.symm_apply_apply, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq,
+      and_assoc, ite_and, ite_mul, one_mul, zero_mul, Finset.sum_ite_irrel,
+      Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ, ite_true]
 
 /-- Named accessor for the conv2d weight backward — aligns with MLIR
     codegen (the "transpose trick" `stablehlo.convolution` in the backward
@@ -1628,9 +845,9 @@ noncomputable def conv2d_weight_grad {ic oc h w kH kW : Nat}
 
 /-- **Conv2d bias-VJP** — proved from foundation rules. Now that `conv2d`
     is a real def, the function `b ↦ flatten (conv2d W b x)` decomposes
-    as `(channel-reindex from b) + (W,x-only term constant in b)`. Apply
-    `pdiv_add` + `pdiv_reindex` + `pdiv_const`, then collapse the
-    Kronecker over the `(c, hi, wi)` decomposition of `Fin (oc*h*w)`.
+    as `(channel broadcast of b) + (bias-free conv, constant in b)`, so
+    `pdiv_of_affine` gives the channel Kronecker, collapsed over the
+    `(c, hi, wi)` decomposition of `Fin (oc*h*w)`.
     The backward is `db[o] = Σ_{hi, wi} dy[o, hi, wi]` (matches
     `conv2d_bias_grad_formula` below). -/
 noncomputable def conv2d_bias_grad_has_vjp {ic oc h w kH kW : Nat}
@@ -1641,114 +858,20 @@ noncomputable def conv2d_bias_grad_has_vjp {ic oc h w kH kW : Nat}
       dy (finProdFinEquiv (finProdFinEquiv (o, hi), wi))
   correct := by
     intro b dy o
-    -- Step 1: pdiv decomposition. f decomposes as `b ↦ b(chan idx)` + `(W,x term)`.
-    have h_pdiv : ∀ idx : Fin (oc * h * w),
-        pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o idx =
-        (if o = (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1
-          then (1:ℝ) else 0) := by
-      intro idx
-      rw [show (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) =
-            (fun b' k =>
-              (fun y : Vec oc => fun k' : Fin (oc * h * w) =>
-                y ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) b' k +
-              (fun (_ : Vec oc) (k' : Fin (oc * h * w)) =>
-                ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-                    (let pH := (kH - 1) / 2
-                     let pW := (kW - 1) / 2
-                     let hh := kh.val + (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-                     let ww := kw.val + (finProdFinEquiv.symm k').2.val
-                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                       x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                     else 0)) b' k) from by
-        funext b' k
-        unfold Tensor3.flatten conv2d
-        rfl]
-      have h_reindex_diff : DifferentiableAt ℝ
-          (fun y : Vec oc => fun k' : Fin (oc * h * w) =>
-            y ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) b :=
-        (reindexCLM (fun k' : Fin (oc * h * w) =>
-          (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)).differentiableAt
-      have h_const_diff : DifferentiableAt ℝ
-          (fun (_ : Vec oc) (k' : Fin (oc * h * w)) =>
-            ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-              W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-                (let pH := (kH - 1) / 2
-                 let pW := (kW - 1) / 2
-                 let hh := kh.val + (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-                 let ww := kw.val + (finProdFinEquiv.symm k').2.val
-                 if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                   x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                 else 0)) b :=
-        differentiableAt_const _
-      rw [pdiv_add _ _ _ h_reindex_diff h_const_diff]
-      rw [show (fun y : Vec oc => fun k' : Fin (oc * h * w) =>
-                  y ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) =
-            (fun y => fun k' => y ((fun k'' : Fin (oc * h * w) =>
-                (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) k')) from rfl]
-      rw [pdiv_reindex (fun k'' : Fin (oc * h * w) =>
-            (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1)]
-      rw [show pdiv (fun (_ : Vec oc) (k' : Fin (oc * h * w)) =>
-                  ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-                    W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) c kh kw *
-                      (let pH := (kH - 1) / 2
-                       let pW := (kW - 1) / 2
-                       let hh := kh.val + (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
-                       let ww := kw.val + (finProdFinEquiv.symm k').2.val
-                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-                         x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-                       else 0))
-                  b o idx = 0
-          from pdiv_const _ _ _ _]
-      ring
-    -- Step 2: substitute and collapse the Kronecker via two stages of finProdFinEquiv.
-    simp_rw [h_pdiv]
-    -- Σ idx, [if o = chan(idx) then 1 else 0] * dy idx
-    -- Convert idx ∈ Fin (oc*h*w) to ((c, hi), wi) via finProdFinEquiv.symm twice.
-    rw [Fintype.sum_equiv finProdFinEquiv.symm
-        (fun idx : Fin (oc * h * w) =>
-          (if o = (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1 then (1:ℝ) else 0)
-          * dy idx)
-        (fun pair : Fin (oc * h) × Fin w =>
-          (if o = (finProdFinEquiv.symm pair.1).1 then (1:ℝ) else 0)
-          * dy (finProdFinEquiv pair))
-        (fun idx => by
-          show _ * _ = _ * _
-          rw [Equiv.apply_symm_apply])]
-    rw [Fintype.sum_prod_type]
-    rw [Fintype.sum_equiv finProdFinEquiv.symm
-        (fun pair_h : Fin (oc * h) =>
-          ∑ wi : Fin w,
-            (if o = (finProdFinEquiv.symm pair_h).1 then (1:ℝ) else 0)
-            * dy (finProdFinEquiv (pair_h, wi)))
-        (fun ch_pair : Fin oc × Fin h =>
-          ∑ wi : Fin w,
-            (if o = ch_pair.1 then (1:ℝ) else 0)
-            * dy (finProdFinEquiv (finProdFinEquiv ch_pair, wi)))
-        (fun pair_h => by
-          have h_inv : finProdFinEquiv (finProdFinEquiv.symm pair_h
-                : Fin oc × Fin h) = pair_h :=
-            Equiv.apply_symm_apply _ _
-          simp_rw [h_inv])]
-    rw [Fintype.sum_prod_type]
-    -- Goal is now ∑ c, ∑ hi, ∑ wi, (if o = c then 1 else 0) * dy (flat (c, hi, wi))
-    have h_pull : ∀ c : Fin oc,
-        (∑ hi : Fin h, ∑ wi : Fin w,
-          (if o = c then (1:ℝ) else 0)
-          * dy (finProdFinEquiv (finProdFinEquiv (c, hi), wi))) =
-        (if o = c then (1:ℝ) else 0) *
-          ∑ hi : Fin h, ∑ wi : Fin w,
-            dy (finProdFinEquiv (finProdFinEquiv (c, hi), wi)) := by
-      intro c
-      rw [Finset.mul_sum]
-      apply Finset.sum_congr rfl
-      intro hi _
-      rw [Finset.mul_sum]
-    simp_rw [h_pull, ite_mul, one_mul, zero_mul]
-    rw [Finset.sum_ite_eq Finset.univ o (fun c =>
-        ∑ hi : Fin h, ∑ wi : Fin w,
-          dy (finProdFinEquiv (finProdFinEquiv (c, hi), wi)))]
-    simp
+    -- `b ↦ conv2d W b x` is affine: the bias broadcast (linear in `b`) plus the bias-free conv.
+    have hsplit : (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) =
+        fun b' => (fun k => b' (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1) +
+          Tensor3.flatten (conv2d W 0 x) := by
+      funext b' k; simp only [Tensor3.flatten, conv2d, Pi.add_apply, Pi.zero_apply, zero_add]
+    rw [hsplit]
+    simp only [pdiv_of_affine (fun b' k => b' (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1)
+      _ (fun _ _ => rfl) (fun _ _ => rfl), basisVec_apply]
+    -- Re-index `Fin (oc*h*w)` as `(c, hi, wi)` and collapse the channel Kronecker at `c = o`.
+    rw [← Equiv.sum_comp (finProdFinEquiv : Fin (oc * h) × Fin w ≃ Fin (oc * h * w)),
+      Fintype.sum_prod_type, ← Equiv.sum_comp (finProdFinEquiv : Fin oc × Fin h ≃ Fin (oc * h)),
+      Fintype.sum_prod_type]
+    simp only [Equiv.symm_apply_apply, ite_mul, one_mul, zero_mul, Finset.sum_ite_irrel,
+      Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ, ite_true]
 
 /-- Named accessor for the conv2d bias backward via the VJP framework. -/
 noncomputable def conv2d_bias_grad {ic oc h w kH kW : Nat}
@@ -2427,10 +1550,9 @@ example : True := trivial  -- anchor for the docstring above
   subgradient convention).
 
 Derived (not axioms):
-- `conv2d_has_vjp3` — Phase 4: input-path VJP, proved from foundation
-  rules using the per-coord pdiv chain plus a custom `pdiv_pi_pad_eval`
-  helper for the dependent-`if hpad : pad then v(σ hpad) else 0`
-  pattern. Backward function is `conv2d_input_grad_formula` (sum over
+- `conv2d_has_vjp3` — input-path VJP, proved with `pdiv_of_affine` (the
+  conv is affine in its input; the Jacobian entry is the bias-free conv of a
+  basis vector, a pad-guarded Kronecker). Backward function is `conv2d_input_grad_formula` (sum over
   `(co, ho, wo)` with reconstructed kernel offsets `kh = hi+pH-ho`,
   `kw = wi+pW-wo`).
 - `conv2d_weight_grad_has_vjp` — Phase 7: the weight-path VJP, bundled
@@ -2559,108 +1681,20 @@ theorem pdiv_globalAvgPoolFlat (c h w : Nat) (v : Vec (c * h * w))
     (idx : Fin (c * h * w)) (ci : Fin c) :
     pdiv (globalAvgPoolFlat c h w) v idx ci =
       (if flatChannel c h w idx = ci then 1 else 0) / (h * w) := by
-  rw [globalAvgPoolFlat_as_sum]
-  -- summands differentiable
-  have h_summand_diff : ∀ p ∈ (Finset.univ : Finset (Fin h × Fin w)),
-      DifferentiableAt ℝ
-        (fun (u : Vec (c * h * w)) (k : Fin c) =>
-          (1 / (h * w : ℝ)) *
-          u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) v := by
-    intro p _
-    have h_const : DifferentiableAt ℝ
-        (fun (_ : Vec (c * h * w)) (_ : Fin c) => (1 / (h * w : ℝ))) v :=
-      differentiableAt_const _
-    have h_reindex : DifferentiableAt ℝ
-        (fun (u : Vec (c * h * w)) (k : Fin c) =>
-          u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) v :=
-      (reindexCLM (fun k : Fin c =>
-        finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))).differentiableAt
-    exact h_const.mul h_reindex
-  rw [pdiv_finset_sum _ _ _ h_summand_diff]
-  -- each summand pdiv
-  have hterm : ∀ p : Fin h × Fin w,
-      pdiv (fun (u : Vec (c * h * w)) (k : Fin c) =>
-              (1 / (h * w : ℝ)) *
-              u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) v idx ci =
-      (1 / (h * w : ℝ)) *
-        (if idx = finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2) then 1 else 0) := by
-    intro p
-    have h_prod :
-        (fun (u : Vec (c * h * w)) (k : Fin c) =>
-          (1 / (h * w : ℝ)) *
-          u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) =
-        (fun u k =>
-          (fun (_ : Vec (c * h * w)) (_ : Fin c) => (1 / (h * w : ℝ))) u k *
-          (fun (u' : Vec (c * h * w)) (k' : Fin c) =>
-            u' (finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))) u k) := rfl
-    have h_const_diff : DifferentiableAt ℝ
-        (fun (_ : Vec (c * h * w)) (_ : Fin c) => (1 / (h * w : ℝ))) v :=
-      differentiableAt_const _
-    have h_reindex_diff : DifferentiableAt ℝ
-        (fun (u' : Vec (c * h * w)) (k' : Fin c) =>
-          u' (finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))) v :=
-      (reindexCLM (fun k' : Fin c =>
-        finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))).differentiableAt
-    rw [h_prod, pdiv_mul _ _ _ h_const_diff h_reindex_diff]
-    rw [pdiv_const, pdiv_reindex (fun k' : Fin c =>
-          finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))]
-    ring
-  simp_rw [hterm]
-  rw [← Finset.mul_sum]
-  -- ∑ p, (if idx = enc(ci,p.1,p.2) then 1 else 0) = if channel idx = ci then 1 else 0
-  by_cases hch : flatChannel c h w idx = ci
-  · rw [ite_eq_left hch]
-    -- the unique p matching is the spatial coords of idx
-    set p0 : Fin h × Fin w :=
-      ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2,
-       (finProdFinEquiv.symm idx).2) with hp0
-    rw [Finset.sum_eq_single p0]
-    · rw [ite_eq_left]
-      · ring
-      · -- idx = enc(ci, p0.1, p0.2)
-        rw [hp0]
-        show idx = finProdFinEquiv
-          (finProdFinEquiv (ci, (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
-            (finProdFinEquiv.symm idx).2)
-        rw [← hch]
-        show idx = finProdFinEquiv
-          (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1,
-            (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
-            (finProdFinEquiv.symm idx).2)
-        rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
-    · intro p _ hne
-      rw [ite_eq_right]
-      intro heq
-      apply hne
-      -- idx = enc(ci,p.1,p.2) and idx = enc(ci,p0.1,p0.2) ⟹ p = p0
-      have hidx0 : idx = finProdFinEquiv
-          (finProdFinEquiv (ci, p0.1), p0.2) := by
-        rw [hp0]
-        show idx = finProdFinEquiv
-          (finProdFinEquiv (ci, (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
-            (finProdFinEquiv.symm idx).2)
-        rw [← hch]
-        show idx = finProdFinEquiv
-          (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1,
-            (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
-            (finProdFinEquiv.symm idx).2)
-        rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
-      rw [hidx0] at heq
-      have h1 := finProdFinEquiv.injective heq
-      have h2 : finProdFinEquiv (ci, p.1) = finProdFinEquiv (ci, p0.1) := (Prod.mk.inj h1).1.symm
-      have hwe : p.2 = p0.2 := (Prod.mk.inj h1).2.symm
-      have hhe : p.1 = p0.1 := (Prod.mk.inj (finProdFinEquiv.injective h2)).2
-      exact Prod.ext hhe hwe
-    · intro hp; exact absurd (Finset.mem_univ _) hp
-  · rw [ite_eq_right hch, zero_div]
-    rw [Finset.sum_eq_zero, mul_zero]
-    intro p _
-    rw [ite_eq_right]
-    intro heq
-    apply hch
-    -- idx = enc(ci,p.1,p.2) ⟹ channel idx = ci
-    unfold flatChannel
-    rw [heq, Equiv.symm_apply_apply, Equiv.symm_apply_apply]
+  -- GAP is linear, so the entry is GAP of the basis vector: a spatial sum of a Kronecker.
+  rw [pdiv_of_linear]
+  · obtain ⟨⟨p, w0⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    obtain ⟨⟨c0, h0⟩, rfl⟩ := finProdFinEquiv.surjective p
+    simp only [globalAvgPoolFlat, globalAvgPool, Tensor3.unflatten, flatChannel, basisVec_apply,
+      Equiv.symm_apply_apply, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq, and_assoc, ite_and,
+      Finset.sum_ite_irrel, Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ, ite_true,
+      @eq_comm _ ci]
+  · intro u u'; funext k
+    simp only [globalAvgPoolFlat, globalAvgPool, Tensor3.unflatten, Pi.add_apply,
+      Finset.sum_add_distrib, add_div]
+  · intro a u; funext k
+    simp only [globalAvgPoolFlat, globalAvgPool, Tensor3.unflatten, Pi.smul_apply, smul_eq_mul,
+      ← mul_div_assoc, Finset.mul_sum]
 
 /-- **Global average pool VJP (flattened).** Linear map; backward
     broadcasts `dy ci / (h*w)` to every spatial cell of channel `ci`. -/

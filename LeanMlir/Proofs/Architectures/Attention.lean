@@ -2659,57 +2659,11 @@ noncomputable def cls_slice_flat_has_vjp (N D : Nat) :
     if p.1 = (0 : Fin (N + 1)) then dy p.2 else 0
   correct := by
     intro v dy idx
-    set p := finProdFinEquiv.symm idx with hp
-    show (if p.1 = (0 : Fin (N + 1)) then dy p.2 else 0) = _
-    -- Goal RHS: ∑ j, pdiv cls_slice_flat v idx j * dy j
-    -- pdiv_reindex gives: pdiv = if idx = fPF (0, j) then 1 else 0.
-    simp_rw [show ∀ j : Fin D,
-        pdiv (cls_slice_flat N D) v idx j =
-          (if idx = finProdFinEquiv ((0 : Fin (N + 1)), j) then 1 else 0) from
-      fun j => pdiv_reindex
-                 (fun k : Fin D => finProdFinEquiv ((0 : Fin (N + 1)), k))
-                 v idx j]
-    -- Sum of (if idx = fPF(0, j) then 1 else 0) * dy j over j.
-    -- If p.1 = 0 then idx = fPF (0, p.2), so the unique matching j is p.2.
-    by_cases hrow : p.1 = (0 : Fin (N + 1))
-    · rw [ite_eq_left hrow]
-      rw [Finset.sum_eq_single p.2
-          (fun j _ hne => by
-            rw [ite_eq_right ?_, zero_mul]
-            intro heq
-            apply hne
-            -- idx = fPF (0, j), and idx = fPF p = fPF (p.1, p.2) = fPF (0, p.2)
-            have hfpf : finProdFinEquiv (p.1, p.2) = idx := by
-              show finProdFinEquiv p = idx
-              rw [hp]; exact Equiv.apply_symm_apply _ _
-            have heq2 : finProdFinEquiv (p.1, p.2) = finProdFinEquiv ((0 : Fin (N + 1)), j) := by
-              rw [hfpf]; exact heq
-            have := finProdFinEquiv.injective heq2
-            have : p.2 = j := (Prod.mk.inj this).2
-            exact this.symm)
-          (fun h => absurd (Finset.mem_univ p.2) h)]
-      rw [ite_eq_left]
-      · ring
-      · -- idx = fPF (0, p.2)
-        have hfpf : finProdFinEquiv (p.1, p.2) = idx := by
-          show finProdFinEquiv p = idx
-          rw [hp]; exact Equiv.apply_symm_apply _ _
-        rw [hrow] at hfpf
-        exact hfpf.symm
-    · rw [ite_eq_right hrow]
-      symm
-      apply Finset.sum_eq_zero
-      intro j _
-      rw [ite_eq_right ?_, zero_mul]
-      intro heq
-      apply hrow
-      -- idx = fPF (0, j), so p.1 = 0.
-      have hfpf : finProdFinEquiv (p.1, p.2) = idx := by
-        show finProdFinEquiv p = idx
-        rw [hp]; exact Equiv.apply_symm_apply _ _
-      have heq2 : finProdFinEquiv (p.1, p.2) = finProdFinEquiv ((0 : Fin (N + 1)), j) := by
-        rw [hfpf]; exact heq
-      exact (Prod.mk.inj (finProdFinEquiv.injective heq2)).1
+    obtain ⟨⟨n, d⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    unfold cls_slice_flat
+    simp only [pdiv_reindex, Equiv.symm_apply_apply, EmbeddingLike.apply_eq_iff_eq,
+      Prod.mk.injEq, ite_mul, one_mul, zero_mul, ite_and, Finset.sum_ite_irrel,
+      Finset.sum_ite_eq, Finset.mem_univ, ite_true, Finset.sum_const_zero]
 
 /-- **Classifier head**: flattened CLS slice + dense projection to `Vec nClasses`.
 
@@ -2866,11 +2820,9 @@ noncomputable def patchEmbed_input_grad_formula
 
 /-- **Patch embedding VJP — proved from foundation rules.**
 
-    Phase 6b (Apr 2026): the forward (de-opaqued in Phase 6a) is linear in
-    `img` plus constants; the only non-trivial pattern is the dependent
-    `if hpad : ... then img(σ) else 0` handled by `pdiv_const_mul_pi_pad_eval`
-    (already used for conv2d/depthwise input-VJPs). Closing collapse mirrors
-    `conv2d_has_vjp3`, with one new wrinkle: split `Σ n : Fin (N+1)` into
+    The forward is affine in `img` (`pdiv_of_affine`): the pad-guarded conv read, identically
+    zero on the CLS row, plus the constant `pos_embed + (cls_token | b_conv)`. Closing collapse
+    mirrors `conv2d_has_vjp3`, with one new wrinkle: split `Σ n : Fin (N+1)` into
     `n = 0` (CLS row, contributes 0 to img-grad) + `Σ p : Fin N` (n = p+1)
     via `Fin.sum_univ_succ`.
 
@@ -2895,13 +2847,9 @@ noncomputable def patchEmbed_flat_has_vjp
          (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).2),
         (finProdFinEquiv.symm idx_in).2)
       rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
-    -- Step 1: per-(idx_in, idx_out) pdiv lemma. We decompose the forward as
-    --   F = const_F + var_F
-    -- where var_F absorbs the `n.val = 0` split into the pad guard:
-    --   var_F img k = ∑ c kh kw, W_conv * (if hpad : ¬(n.val=0) ∧ hh<H ∧ ww<W
-    --                                      then img(σ) else 0).
-    -- This makes var_F linear in img with no `if n.val = 0` test, so
-    -- pdiv_finset_sum + pdiv_const_mul_pi_pad_eval apply uniformly.
+    -- Step 1: per-(idx_in, idx_out) pdiv lemma. The forward is affine in the image
+    -- (`pdiv_of_affine`): the pad-guarded conv read, zero on the CLS row, plus the
+    -- constant `pos_embed + (cls_token | b_conv)`.
     have h_pdiv : ∀ idx_out : Fin ((N + 1) * D),
         pdiv (patchEmbed_flat ic H W patchSize N D
                 W_conv b_conv cls_token pos_embed) img idx_in idx_out =
@@ -2920,492 +2868,34 @@ noncomputable def patchEmbed_flat_has_vjp
                      (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩) then (1 : ℝ) else 0)
                else 0) := by
       intro idx_out
-      -- Decompose F = const_F + var_F via the absorb-trick: var_F's pad-guard
-      -- includes `¬(n.val = 0)` as a conjunct, so var_F is identically 0 at
-      -- output rows with n.val = 0. This bypasses the `if n.val = 0` test in
-      -- the original forward and gives us a uniform Σ c kh kw form.
-      rw [show (patchEmbed_flat ic H W patchSize N D
-              W_conv b_conv cls_token pos_embed) =
-          (fun img' k =>
-            (fun (_ : Vec (ic * H * W)) (k' : Fin ((N + 1) * D)) =>
-              pos_embed (finProdFinEquiv.symm k').1 (finProdFinEquiv.symm k').2 +
-              (if (finProdFinEquiv.symm k').1.val = 0 then
-                 cls_token (finProdFinEquiv.symm k').2
-               else b_conv (finProdFinEquiv.symm k').2)) img' k +
-            (fun (img'' : Vec (ic * H * W)) (k' : Fin ((N + 1) * D)) =>
+      have hsplit : patchEmbed_flat ic H W patchSize N D W_conv b_conv cls_token pos_embed =
+          fun v => (fun k : Fin ((N + 1) * D) =>
+            if _hn0 : (finProdFinEquiv.symm k).1.val = 0 then 0
+            else
               ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-                W_conv (finProdFinEquiv.symm k').2 c kh kw *
+                W_conv (finProdFinEquiv.symm k).2 c kh kw *
                   (let W' := W / patchSize
-                   let p := (finProdFinEquiv.symm k').1.val - 1
+                   let p := (finProdFinEquiv.symm k).1.val - 1
                    let h' := p / W'
                    let w' := p % W'
                    let hh := h' * patchSize + kh.val
                    let ww := w' * patchSize + kw.val
-                   if hpad : ¬((finProdFinEquiv.symm k').1.val = 0) ∧
-                             hh < H ∧ ww < W then
-                     img'' (finProdFinEquiv (finProdFinEquiv
-                       (c, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                   else 0)) img' k) from by
-        funext img' k
-        unfold patchEmbed_flat
-        by_cases hn0_k : (finProdFinEquiv.symm k).1.val = 0
-        · -- LHS = pos_embed n d + cls_token d
-          -- RHS = (pos_embed n d + cls_token d) + Σ_zero  (each summand = 0 because pad-guard ⊥)
-          simp_rw [ite_eq_left hn0_k]
-          rw [show (∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-                W_conv ((finProdFinEquiv.symm k).2) c kh kw *
-                (let W' := W / patchSize
-                 let p := (finProdFinEquiv.symm k).1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * patchSize + kh.val
-                 let ww := w' * patchSize + kw.val
-                 if hpad : ¬((finProdFinEquiv.symm k).1.val = 0) ∧
-                           hh < H ∧ ww < W then
-                   img' (finProdFinEquiv (finProdFinEquiv
-                     (c, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                 else 0) : ℝ) = 0 from ?_]
-          · ring
-          apply Finset.sum_eq_zero; intro c _
-          apply Finset.sum_eq_zero; intro kh _
-          apply Finset.sum_eq_zero; intro kw _
-          rw [show ((let W' := W / patchSize
-                     let p := (finProdFinEquiv.symm k).1.val - 1
-                     let h' := p / W'
-                     let w' := p % W'
-                     let hh := h' * patchSize + kh.val
-                     let ww := w' * patchSize + kw.val
-                     if hpad : ¬((finProdFinEquiv.symm k).1.val = 0) ∧
-                               hh < H ∧ ww < W then
-                       img' (finProdFinEquiv (finProdFinEquiv
-                         (c, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                     else 0) : ℝ) = 0 from ?_]
-          · ring
-          rw [dite_eq_right]
-          intro h
-          exact h.1 hn0_k
-        · -- LHS = pos_embed + b_conv + Σ_orig (with 2-conj pad).
-          -- RHS = (pos_embed + b_conv) + Σ_new (with 3-conj pad).
-          -- Σ_orig = Σ_new because ¬(n.val=0) is true, so 3-conj ⇔ 2-conj dites equal.
-          simp_rw [ite_eq_right hn0_k]
-          rw [show (∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-                W_conv ((finProdFinEquiv.symm k).2) c kh kw *
-                (let W' := W / patchSize
-                 let p := (finProdFinEquiv.symm k).1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * patchSize + kh.val
-                 let ww := w' * patchSize + kw.val
-                 if hpad : ¬((finProdFinEquiv.symm k).1.val = 0) ∧
-                           hh < H ∧ ww < W then
-                   img' (finProdFinEquiv (finProdFinEquiv
-                     (c, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                 else 0)) =
-                (∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-                W_conv ((finProdFinEquiv.symm k).2) c kh kw *
-                (let W' := W / patchSize
-                 let p := (finProdFinEquiv.symm k).1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * patchSize + kh.val
-                 let ww := w' * patchSize + kw.val
-                 if hpad : hh < H ∧ ww < W then
-                   img' (finProdFinEquiv (finProdFinEquiv
-                     (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
-                 else 0)) from ?_]
-          · ring
-          apply Finset.sum_congr rfl; intro c _
-          apply Finset.sum_congr rfl; intro kh _
-          apply Finset.sum_congr rfl; intro kw _
-          congr 1
-          by_cases hpad' : ((finProdFinEquiv.symm k).1.val - 1) / (W / patchSize) *
-                              patchSize + kh.val < H ∧
-                           ((finProdFinEquiv.symm k).1.val - 1) % (W / patchSize) *
-                              patchSize + kw.val < W
-          · rw [dite_eq_left ⟨hn0_k, hpad'⟩, dite_eq_left hpad']
-          · rw [dite_eq_right ?_, dite_eq_right hpad']
-            intro h
-            exact hpad' h.2]
-      -- Now apply pdiv_add to split into pdiv const_F (= 0) + pdiv var_F.
-      have h_const_diff : DifferentiableAt ℝ
-          (fun (_ : Vec (ic * H * W)) (k' : Fin ((N + 1) * D)) =>
-            pos_embed (finProdFinEquiv.symm k').1 (finProdFinEquiv.symm k').2 +
-            (if (finProdFinEquiv.symm k').1.val = 0 then
-               cls_token (finProdFinEquiv.symm k').2
-             else b_conv (finProdFinEquiv.symm k').2)) img :=
-        differentiableAt_const _
-      have h_var_diff : DifferentiableAt ℝ
-          (fun (img'' : Vec (ic * H * W)) (k' : Fin ((N + 1) * D)) =>
-            ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-              W_conv (finProdFinEquiv.symm k').2 c kh kw *
-                (let W' := W / patchSize
-                 let p := (finProdFinEquiv.symm k').1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * patchSize + kh.val
-                 let ww := w' * patchSize + kw.val
-                 if hpad : ¬((finProdFinEquiv.symm k').1.val = 0) ∧
-                           hh < H ∧ ww < W then
-                   img'' (finProdFinEquiv (finProdFinEquiv
-                     (c, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                 else 0)) img := by
-        rw [differentiableAt_pi]
-        intro k'
-        apply DifferentiableAt.fun_sum; intro c _
-        apply DifferentiableAt.fun_sum; intro kh _
-        apply DifferentiableAt.fun_sum; intro kw _
-        apply DifferentiableAt.mul (differentiableAt_const _)
-        exact differentiableAt_pad_eval _
-          (fun hpad => finProdFinEquiv (finProdFinEquiv
-            (c, ⟨((finProdFinEquiv.symm k').1.val - 1) / (W / patchSize) *
-                  patchSize + kh.val, hpad.2.1⟩),
-            ⟨((finProdFinEquiv.symm k').1.val - 1) % (W / patchSize) *
-              patchSize + kw.val, hpad.2.2⟩)) _
-      rw [pdiv_add _ _ _ h_const_diff h_var_diff]
-      rw [show pdiv (fun (_ : Vec (ic * H * W)) (k' : Fin ((N + 1) * D)) =>
-            pos_embed (finProdFinEquiv.symm k').1 (finProdFinEquiv.symm k').2 +
-            (if (finProdFinEquiv.symm k').1.val = 0 then
-               cls_token (finProdFinEquiv.symm k').2
-             else b_conv (finProdFinEquiv.symm k').2)) img idx_in idx_out = 0
-          from pdiv_const _ _ _ _]
-      rw [zero_add]
-      -- Distribute pdiv over Σ c.
-      rw [show (fun (img'' : Vec (ic * H * W)) (k' : Fin ((N + 1) * D)) =>
-            ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-              W_conv (finProdFinEquiv.symm k').2 c kh kw *
-                (let W' := W / patchSize
-                 let p := (finProdFinEquiv.symm k').1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * patchSize + kh.val
-                 let ww := w' * patchSize + kw.val
-                 if hpad : ¬((finProdFinEquiv.symm k').1.val = 0) ∧
-                           hh < H ∧ ww < W then
-                   img'' (finProdFinEquiv (finProdFinEquiv
-                     (c, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                 else 0)) =
-          (fun img'' k' => ∑ c : Fin ic,
-            (fun (cc : Fin ic) (img''' : Vec (ic * H * W))
-                 (k'' : Fin ((N + 1) * D)) =>
-              ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-                W_conv (finProdFinEquiv.symm k'').2 cc kh kw *
-                  (let W' := W / patchSize
-                   let p := (finProdFinEquiv.symm k'').1.val - 1
-                   let h' := p / W'
-                   let w' := p % W'
-                   let hh := h' * patchSize + kh.val
-                   let ww := w' * patchSize + kw.val
-                   if hpad : ¬((finProdFinEquiv.symm k'').1.val = 0) ∧
-                             hh < H ∧ ww < W then
-                     img''' (finProdFinEquiv (finProdFinEquiv
-                       (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                   else 0)) c img'' k') from rfl]
-      have h_c_diff : ∀ cc ∈ (Finset.univ : Finset (Fin ic)),
-          DifferentiableAt ℝ
-            (fun (img''' : Vec (ic * H * W)) (k'' : Fin ((N + 1) * D)) =>
-              ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-                W_conv (finProdFinEquiv.symm k'').2 cc kh kw *
-                  (let W' := W / patchSize
-                   let p := (finProdFinEquiv.symm k'').1.val - 1
-                   let h' := p / W'
-                   let w' := p % W'
-                   let hh := h' * patchSize + kh.val
-                   let ww := w' * patchSize + kw.val
-                   if hpad : ¬((finProdFinEquiv.symm k'').1.val = 0) ∧
-                             hh < H ∧ ww < W then
-                     img''' (finProdFinEquiv (finProdFinEquiv
-                       (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                   else 0)) img := by
-        intro cc _
-        rw [differentiableAt_pi]
-        intro k''
-        apply DifferentiableAt.fun_sum; intro kh _
-        apply DifferentiableAt.fun_sum; intro kw _
-        apply DifferentiableAt.mul (differentiableAt_const _)
-        exact differentiableAt_pad_eval _
-          (fun hpad => finProdFinEquiv (finProdFinEquiv
-            (cc, ⟨((finProdFinEquiv.symm k'').1.val - 1) / (W / patchSize) *
-                  patchSize + kh.val, hpad.2.1⟩),
-            ⟨((finProdFinEquiv.symm k'').1.val - 1) % (W / patchSize) *
-              patchSize + kw.val, hpad.2.2⟩)) _
-      rw [pdiv_finset_sum _ _ _ h_c_diff]
-      -- For each c, distribute over kh-sum.
-      have h_inner_c : ∀ cc : Fin ic,
-          pdiv (fun (img''' : Vec (ic * H * W)) (k'' : Fin ((N + 1) * D)) =>
-            ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-              W_conv (finProdFinEquiv.symm k'').2 cc kh kw *
-                (let W' := W / patchSize
-                 let p := (finProdFinEquiv.symm k'').1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * patchSize + kh.val
-                 let ww := w' * patchSize + kw.val
-                 if hpad : ¬((finProdFinEquiv.symm k'').1.val = 0) ∧
-                           hh < H ∧ ww < W then
-                   img''' (finProdFinEquiv (finProdFinEquiv
-                     (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                 else 0)) img idx_in idx_out =
-          ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-            W_conv (finProdFinEquiv.symm idx_out).2 cc kh kw *
-              (let W' := W / patchSize
-               let p := (finProdFinEquiv.symm idx_out).1.val - 1
-               let h' := p / W'
-               let w' := p % W'
-               let hh := h' * patchSize + kh.val
-               let ww := w' * patchSize + kw.val
-               if hpad : ¬((finProdFinEquiv.symm idx_out).1.val = 0) ∧
-                         hh < H ∧ ww < W then
-                 (if idx_in = finProdFinEquiv (finProdFinEquiv
-                     (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩) then (1 : ℝ) else 0)
-               else 0) := by
-        intro cc
-        -- Distribute over kh.
-        rw [show (fun (img''' : Vec (ic * H * W)) (k'' : Fin ((N + 1) * D)) =>
-              ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-                W_conv (finProdFinEquiv.symm k'').2 cc kh kw *
-                  (let W' := W / patchSize
-                   let p := (finProdFinEquiv.symm k'').1.val - 1
-                   let h' := p / W'
-                   let w' := p % W'
-                   let hh := h' * patchSize + kh.val
-                   let ww := w' * patchSize + kw.val
-                   if hpad : ¬((finProdFinEquiv.symm k'').1.val = 0) ∧
-                             hh < H ∧ ww < W then
-                     img''' (finProdFinEquiv (finProdFinEquiv
-                       (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                   else 0)) =
-            (fun img''' k'' => ∑ kh : Fin patchSize,
-              (fun (khh : Fin patchSize) (img'''' : Vec (ic * H * W))
-                   (k''' : Fin ((N + 1) * D)) =>
-                ∑ kw : Fin patchSize,
-                  W_conv (finProdFinEquiv.symm k''').2 cc khh kw *
-                    (let W' := W / patchSize
-                     let p := (finProdFinEquiv.symm k''').1.val - 1
-                     let h' := p / W'
-                     let w' := p % W'
-                     let hh := h' * patchSize + khh.val
-                     let ww := w' * patchSize + kw.val
-                     if hpad : ¬((finProdFinEquiv.symm k''').1.val = 0) ∧
-                               hh < H ∧ ww < W then
-                       img'''' (finProdFinEquiv (finProdFinEquiv
-                         (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                     else 0)) kh img''' k'') from rfl]
-        have h_kh_diff : ∀ khh ∈ (Finset.univ : Finset (Fin patchSize)),
-            DifferentiableAt ℝ
-              (fun (img'''' : Vec (ic * H * W)) (k''' : Fin ((N + 1) * D)) =>
-                ∑ kw : Fin patchSize,
-                  W_conv (finProdFinEquiv.symm k''').2 cc khh kw *
-                    (let W' := W / patchSize
-                     let p := (finProdFinEquiv.symm k''').1.val - 1
-                     let h' := p / W'
-                     let w' := p % W'
-                     let hh := h' * patchSize + khh.val
-                     let ww := w' * patchSize + kw.val
-                     if hpad : ¬((finProdFinEquiv.symm k''').1.val = 0) ∧
-                               hh < H ∧ ww < W then
-                       img'''' (finProdFinEquiv (finProdFinEquiv
-                         (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                     else 0)) img := by
-          intro khh _
-          rw [differentiableAt_pi]
-          intro k'''
-          apply DifferentiableAt.fun_sum; intro kw _
-          apply DifferentiableAt.mul (differentiableAt_const _)
-          exact differentiableAt_pad_eval _
-            (fun hpad => finProdFinEquiv (finProdFinEquiv
-              (cc, ⟨((finProdFinEquiv.symm k''').1.val - 1) / (W / patchSize) *
-                    patchSize + khh.val, hpad.2.1⟩),
-              ⟨((finProdFinEquiv.symm k''').1.val - 1) % (W / patchSize) *
-                patchSize + kw.val, hpad.2.2⟩)) _
-        rw [pdiv_finset_sum _ _ _ h_kh_diff]
-        congr 1; ext khh
-        -- Distribute over kw.
-        rw [show (fun (img'''' : Vec (ic * H * W)) (k''' : Fin ((N + 1) * D)) =>
-              ∑ kw : Fin patchSize,
-                W_conv (finProdFinEquiv.symm k''').2 cc khh kw *
-                  (let W' := W / patchSize
-                   let p := (finProdFinEquiv.symm k''').1.val - 1
-                   let h' := p / W'
-                   let w' := p % W'
-                   let hh := h' * patchSize + khh.val
-                   let ww := w' * patchSize + kw.val
-                   if hpad : ¬((finProdFinEquiv.symm k''').1.val = 0) ∧
-                             hh < H ∧ ww < W then
-                     img'''' (finProdFinEquiv (finProdFinEquiv
-                       (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                   else 0)) =
-            (fun img'''' k''' => ∑ kw : Fin patchSize,
-              (fun (kww : Fin patchSize) (img''''' : Vec (ic * H * W))
-                   (k'''' : Fin ((N + 1) * D)) =>
-                W_conv (finProdFinEquiv.symm k'''').2 cc khh kww *
-                  (let W' := W / patchSize
-                   let p := (finProdFinEquiv.symm k'''').1.val - 1
-                   let h' := p / W'
-                   let w' := p % W'
-                   let hh := h' * patchSize + khh.val
-                   let ww := w' * patchSize + kww.val
-                   if hpad : ¬((finProdFinEquiv.symm k'''').1.val = 0) ∧
-                             hh < H ∧ ww < W then
-                     img''''' (finProdFinEquiv (finProdFinEquiv
-                       (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                   else 0)) kw img'''' k''') from rfl]
-        have h_kw_diff : ∀ kww ∈ (Finset.univ : Finset (Fin patchSize)),
-            DifferentiableAt ℝ
-              (fun (img''''' : Vec (ic * H * W)) (k'''' : Fin ((N + 1) * D)) =>
-                W_conv (finProdFinEquiv.symm k'''').2 cc khh kww *
-                  (let W' := W / patchSize
-                   let p := (finProdFinEquiv.symm k'''').1.val - 1
-                   let h' := p / W'
-                   let w' := p % W'
-                   let hh := h' * patchSize + khh.val
-                   let ww := w' * patchSize + kww.val
-                   if hpad : ¬((finProdFinEquiv.symm k'''').1.val = 0) ∧
-                             hh < H ∧ ww < W then
-                     img''''' (finProdFinEquiv (finProdFinEquiv
-                       (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                   else 0)) img := by
-          intro kww _
-          rw [differentiableAt_pi]
-          intro k''''
-          apply DifferentiableAt.mul (differentiableAt_const _)
-          exact differentiableAt_pad_eval _
-            (fun hpad => finProdFinEquiv (finProdFinEquiv
-              (cc, ⟨((finProdFinEquiv.symm k'''').1.val - 1) / (W / patchSize) *
-                    patchSize + khh.val, hpad.2.1⟩),
-              ⟨((finProdFinEquiv.symm k'''').1.val - 1) % (W / patchSize) *
-                patchSize + kww.val, hpad.2.2⟩)) _
-        rw [pdiv_finset_sum _ _ _ h_kw_diff]
-        congr 1; ext kww
-        -- Per-(cc, khh, kww) summand: factor as (W constant) * (dite in img).
-        rw [show (fun (img''''' : Vec (ic * H * W)) (k'''' : Fin ((N + 1) * D)) =>
-              W_conv (finProdFinEquiv.symm k'''').2 cc khh kww *
-                (let W' := W / patchSize
-                 let p := (finProdFinEquiv.symm k'''').1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * patchSize + khh.val
-                 let ww := w' * patchSize + kww.val
-                 if hpad : ¬((finProdFinEquiv.symm k'''').1.val = 0) ∧
-                           hh < H ∧ ww < W then
-                   img''''' (finProdFinEquiv (finProdFinEquiv
-                     (cc, ⟨hh, hpad.2.1⟩), ⟨ww, hpad.2.2⟩))
-                 else 0)) =
-            (fun (img''''' : Vec (ic * H * W)) (k'''' : Fin ((N + 1) * D)) =>
-              (fun k''''' : Fin ((N + 1) * D) =>
-                W_conv (finProdFinEquiv.symm k''''').2 cc khh kww) k'''' *
-              (if hpad : ¬((finProdFinEquiv.symm k'''').1.val = 0) ∧
-                        ((finProdFinEquiv.symm k'''').1.val - 1) / (W / patchSize) *
-                          patchSize + khh.val < H ∧
-                        ((finProdFinEquiv.symm k'''').1.val - 1) % (W / patchSize) *
-                          patchSize + kww.val < W then
-                img''''' (finProdFinEquiv (finProdFinEquiv
-                  (cc, ⟨((finProdFinEquiv.symm k'''').1.val - 1) / (W / patchSize) *
-                       patchSize + khh.val, hpad.2.1⟩),
-                  ⟨((finProdFinEquiv.symm k'''').1.val - 1) % (W / patchSize) *
-                       patchSize + kww.val, hpad.2.2⟩))
-              else 0)) from rfl]
-        rw [pdiv_const_mul_pi_pad_eval
-          (fun k'''' : Fin ((N + 1) * D) =>
-            W_conv (finProdFinEquiv.symm k'''').2 cc khh kww)
-          (fun k'''' => ¬((finProdFinEquiv.symm k'''').1.val = 0) ∧
-            ((finProdFinEquiv.symm k'''').1.val - 1) / (W / patchSize) *
-              patchSize + khh.val < H ∧
-            ((finProdFinEquiv.symm k'''').1.val - 1) % (W / patchSize) *
-              patchSize + kww.val < W)
-          (fun k'''' hpad => finProdFinEquiv (finProdFinEquiv
-            (cc, ⟨((finProdFinEquiv.symm k'''').1.val - 1) / (W / patchSize) *
-                  patchSize + khh.val, hpad.2.1⟩),
-            ⟨((finProdFinEquiv.symm k'''').1.val - 1) % (W / patchSize) *
-              patchSize + kww.val, hpad.2.2⟩))]
-        -- Bridge: pdiv_const_mul_pi_pad_eval gives the form `σ = idx_in` (sigma on left);
-        -- h_inner_c expects `idx_in = σ`. Symmetrize via by_cases on σ_eq.
-        show W_conv (finProdFinEquiv.symm idx_out).2 cc khh kww * _ =
-             W_conv (finProdFinEquiv.symm idx_out).2 cc khh kww * _
-        congr 1
-        by_cases hpad : ¬((finProdFinEquiv.symm idx_out).1.val = 0) ∧
-                        ((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + khh.val < H ∧
-                        ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kww.val < W
-        · rw [dite_eq_left hpad, dite_eq_left hpad]
-          by_cases heq : finProdFinEquiv (finProdFinEquiv
-              (cc, ⟨((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                     patchSize + khh.val, hpad.2.1⟩),
-              ⟨((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                     patchSize + kww.val, hpad.2.2⟩) = idx_in
-          · rw [ite_eq_left heq, ite_eq_left heq.symm]
-          · rw [ite_eq_right heq, ite_eq_right (fun h => heq h.symm)]
-        · rw [dite_eq_right hpad, dite_eq_right hpad]
-      simp_rw [h_inner_c]
-      -- Now case-split on hn0 to convert the 3-conjunct dite to either 0 (n=0)
-      -- or the desired 2-conjunct dite (n ≠ 0).
-      by_cases hn0 : (finProdFinEquiv.symm idx_out).1.val = 0
-      · rw [dite_eq_left hn0]
-        apply Finset.sum_eq_zero; intro c _
-        apply Finset.sum_eq_zero; intro kh _
-        apply Finset.sum_eq_zero; intro kw _
-        -- Per-summand: dite has 3-conj cond; ¬(n_out.val = 0) is False (since hn0),
-        -- so dite = 0 and summand = W * 0 = 0.
-        have h_neg : ¬(¬((finProdFinEquiv.symm idx_out).1.val = 0) ∧
-                      ((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + kh.val < H ∧
-                      ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kw.val < W) :=
-          fun h => h.1 hn0
-        show W_conv (finProdFinEquiv.symm idx_out).2 c kh kw *
-             (if hpad : ¬((finProdFinEquiv.symm idx_out).1.val = 0) ∧
-                       ((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + kh.val < H ∧
-                       ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kw.val < W then
-                (if idx_in = finProdFinEquiv (finProdFinEquiv
-                    (c, ⟨((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + kh.val, hpad.2.1⟩),
-                    ⟨((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kw.val, hpad.2.2⟩) then (1 : ℝ) else 0)
-              else 0) = 0
-        rw [dite_eq_right h_neg, mul_zero]
-      · rw [dite_eq_right hn0]
-        apply Finset.sum_congr rfl; intro c _
-        apply Finset.sum_congr rfl; intro kh _
-        apply Finset.sum_congr rfl; intro kw _
-        -- Per-summand: bridge 3-conj let-form to 2-conj let-form using ¬hn0.
-        show W_conv (finProdFinEquiv.symm idx_out).2 c kh kw *
-             (if hpad : ¬((finProdFinEquiv.symm idx_out).1.val = 0) ∧
-                       ((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + kh.val < H ∧
-                       ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kw.val < W then
-                (if idx_in = finProdFinEquiv (finProdFinEquiv
-                    (c, ⟨((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + kh.val, hpad.2.1⟩),
-                    ⟨((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kw.val, hpad.2.2⟩) then (1 : ℝ) else 0)
-              else 0) =
-             W_conv (finProdFinEquiv.symm idx_out).2 c kh kw *
-             (if hpad : ((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + kh.val < H ∧
-                       ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kw.val < W then
-                (if idx_in = finProdFinEquiv (finProdFinEquiv
-                    (c, ⟨((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                          patchSize + kh.val, hpad.1⟩),
-                    ⟨((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                          patchSize + kw.val, hpad.2⟩) then (1 : ℝ) else 0)
-              else 0)
-        congr 1
-        by_cases hpad' : ((finProdFinEquiv.symm idx_out).1.val - 1) /
-                            (W / patchSize) * patchSize + kh.val < H ∧
-                         ((finProdFinEquiv.symm idx_out).1.val - 1) %
-                            (W / patchSize) * patchSize + kw.val < W
-        · rw [dite_eq_left ⟨hn0, hpad'⟩, dite_eq_left hpad']
-        · have h_neg' : ¬(¬((finProdFinEquiv.symm idx_out).1.val = 0) ∧
-                          ((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-                              patchSize + kh.val < H ∧
-                          ((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-                              patchSize + kw.val < W) :=
-            fun h => hpad' h.2
-          rw [dite_eq_right h_neg', dite_eq_right hpad']
+                   if hpad : hh < H ∧ ww < W then
+                     v (finProdFinEquiv (finProdFinEquiv (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
+                   else 0)) +
+            fun k => pos_embed (finProdFinEquiv.symm k).1 (finProdFinEquiv.symm k).2 +
+              if (finProdFinEquiv.symm k).1.val = 0 then cls_token (finProdFinEquiv.symm k).2
+              else b_conv (finProdFinEquiv.symm k).2 := by
+        funext v k; unfold patchEmbed_flat; dsimp only [Pi.add_apply]
+        by_cases hn : (finProdFinEquiv.symm k).1.val = 0
+        · rw [ite_eq_left hn, ite_eq_left hn, dite_eq_left hn, zero_add]
+        · rw [ite_eq_right hn, ite_eq_right hn, dite_eq_right hn]; ring
+      rw [hsplit, pdiv_of_affine]
+      · simp only [basisVec_apply, @eq_comm _ _ idx_in]
+      · intro u v; funext k
+        simp only [Pi.add_apply, dite_add_dite, add_zero, ← Finset.sum_add_distrib, ← mul_add]
+      · intro a v; funext k
+        simp only [Pi.smul_apply, smul_eq_mul, mul_dite, mul_zero, Finset.mul_sum, mul_left_comm a]
     -- Step 2: closing collapse.
     show patchEmbed_input_grad_formula ic H W patchSize N D W_conv dy idx_in =
          ∑ idx_out : Fin ((N + 1) * D),

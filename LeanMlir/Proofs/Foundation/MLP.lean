@@ -20,184 +20,34 @@ namespace Proofs
 noncomputable def dense {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) : Vec n :=
   fun j => (∑ i : Fin m, x i * W i j) + b j
 
-/-- **Dense Jacobian** — `∂(W·x + b)_j/∂x_i = W_{ij}`. Derived from the
-    foundation theorems (`pdiv_add`, `pdiv_const`, `pdiv_finset_sum`,
-    `pdiv_mul`, `pdiv_reindex`). The proof factors
-    `dense W b` into `(∑ i', x i' * W i' j) + b j`, distributes pdiv
-    over the outer sum and finset sum, applies the product rule per
-    summand, and collapses the Kronecker δ. -/
+/-- **Dense Jacobian** — `∂(W·x + b)_j/∂x_i = W_{ij}`. `dense W b` is the linear map
+    `x ↦ (Σ_i x_i W_{ij})_j` plus the constant `b`, so `pdiv_of_affine` reads the entry off the
+    basis vector and the Kronecker sum collapses. -/
 theorem pdiv_dense {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (i : Fin m) (j : Fin n) :
     pdiv (dense W b) x i j = W i j := by
-  unfold dense
-  -- Step 1: rewrite as `(sum x' * W) + (constant b)` to apply pdiv_add.
-  rw [show (fun x' : Vec m => fun j' : Fin n =>
-              (∑ i' : Fin m, x' i' * W i' j') + b j') =
-        (fun x' j' =>
-          (fun y : Vec m => fun j'' : Fin n => ∑ i' : Fin m, y i' * W i' j'') x' j' +
-          (fun _ : Vec m => b) x' j') from rfl]
-  -- Differentiable evidence for the sum-of-bilinear-summands and the constant.
-  have h_summand_diff : ∀ i' ∈ (Finset.univ : Finset (Fin m)),
-      DifferentiableAt ℝ
-        (fun (x' : Vec m) (j'' : Fin n) => x' i' * W i' j'') x := by
-    intro i' _
-    have h_y : DifferentiableAt ℝ (fun (y : Vec m) (_ : Fin n) => y i') x :=
-      (reindexCLM (fun _ : Fin n => i')).differentiableAt
-    have h_W : DifferentiableAt ℝ (fun (_ : Vec m) (j'' : Fin n) => W i' j'') x :=
-      differentiableAt_const _
-    exact h_y.mul h_W
-  have h_sum_diff : DifferentiableAt ℝ
-      (fun (y : Vec m) (j'' : Fin n) => ∑ i' : Fin m, y i' * W i' j'') x := by
-    have : (fun (y : Vec m) (j'' : Fin n) => ∑ i' : Fin m, y i' * W i' j'') =
-           (fun y : Vec m => ∑ i' : Fin m,
-             fun j'' : Fin n => y i' * W i' j'') := by
-      funext y j''; rw [Finset.sum_apply]
-    rw [this]
-    exact DifferentiableAt.fun_sum (fun i' _ => h_summand_diff i' (Finset.mem_univ i'))
-  have h_const_diff : DifferentiableAt ℝ (fun _ : Vec m => b) x :=
-    differentiableAt_const _
-  rw [pdiv_add _ _ _ h_sum_diff h_const_diff, pdiv_const, add_zero]
-  -- Step 2: distribute pdiv over the finset sum.
-  rw [pdiv_finset_sum (Finset.univ : Finset (Fin m))
-      (fun i' x' j'' => x' i' * W i' j'') x h_summand_diff i j]
-  -- Step 3: each summand is `(fun x' _ => x' i') * (fun _ _ => W i' j)`. Apply pdiv_mul.
-  have hterm : ∀ i' : Fin m,
-      pdiv (fun x' : Vec m => fun j' : Fin n => x' i' * W i' j') x i j =
-      if i = i' then W i' j else 0 := by
-    intro i'
-    rw [show (fun x' : Vec m => fun j' : Fin n => x' i' * W i' j') =
-          (fun x' j' =>
-            (fun y : Vec m => fun j'' : Fin n => y i') x' j' *
-            (fun _ : Vec m => fun j'' : Fin n => W i' j'') x' j') from rfl]
-    have h_y_diff : DifferentiableAt ℝ
-        (fun (y : Vec m) (_ : Fin n) => y i') x :=
-      (reindexCLM (fun _ : Fin n => i')).differentiableAt
-    have h_W_diff : DifferentiableAt ℝ
-        (fun (_ : Vec m) (_ : Fin n) => W i' j) x :=
-      differentiableAt_const _
-    rw [pdiv_mul _ _ _ h_y_diff (differentiableAt_const _)]
-    -- The reindex factor: `fun y j'' => y i'` = reindex via `fun _ : Fin n => i'`.
-    rw [show (fun y : Vec m => fun j'' : Fin n => y i') =
-          (fun y => fun j'' => y ((fun _ : Fin n => i') j'')) from rfl]
-    rw [pdiv_reindex (fun _ : Fin n => i')]
-    -- The const factor: pdiv = 0.
-    rw [show pdiv (fun _ : Vec m => fun j'' : Fin n => W i' j'') x i j = 0
-        from pdiv_const _ _ _ _]
-    -- Goal: (if i = i' then 1 else 0) * W i' j + x i' * 0 = if i = i' then W i' j else 0
-    by_cases h : i = i'
-    · rw [ite_eq_left h, ite_eq_left h]; ring
-    · rw [ite_eq_right h, ite_eq_right h]; ring
-  simp_rw [hterm]
-  -- Step 4: collapse the Kronecker sum.
-  rw [Finset.sum_ite_eq Finset.univ i (fun i' => W i' j)]
+  rw [show dense W b = fun y => (fun k => ∑ i' : Fin m, y i' * W i' k) + b from rfl,
+    pdiv_of_affine (fun y k => ∑ i' : Fin m, y i' * W i' k) b
+      (fun _ _ => by funext; simp [add_mul, Finset.sum_add_distrib])
+      (fun _ _ => by funext; simp [Finset.mul_sum, mul_assoc])]
   simp
 
-/-- **Jacobian of dense wrt W** — `∂dense(W, b, x)_j/∂W_{i, j'} = x_i·δ(j, j')`.
-    Derived from foundation theorems (`pdiv_add`, `pdiv_const`,
-    `pdiv_finset_sum`, `pdiv_mul`, `pdiv_reindex`) over the flatten
-    bijection. Symmetric counterpart to `pdiv_dense`. -/
+/-- **Jacobian of dense wrt W** — `∂dense(W, b, x)_j/∂W_{i, j'} = x_i·δ(j, j')`. Over the
+    flatten bijection `v ↦ dense (unflatten v) b x` is linear in `v` plus the constant `b`
+    (`pdiv_of_affine`). Symmetric counterpart to `pdiv_dense`. -/
 theorem pdiv_dense_W {m n : Nat} (b : Vec n) (x : Vec m) (W : Mat m n)
     (i : Fin m) (j' : Fin n) (j : Fin n) :
     pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
          (Mat.flatten W) (finProdFinEquiv (i, j')) j =
       if j = j' then x i else 0 := by
-  -- Step 1: unfold dense + unflatten to an explicit Vec (m*n) → Vec n form.
   rw [show (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) =
-        (fun v : Vec (m * n) => fun jo : Fin n =>
-          (∑ i' : Fin m, x i' * v (finProdFinEquiv (i', jo))) + b jo) from by
-      funext v jo; unfold dense Mat.unflatten; rfl]
-  -- Step 2: split into (sum) + (constant bias) and apply pdiv_add + pdiv_const.
-  rw [show (fun v : Vec (m * n) => fun jo : Fin n =>
-              (∑ i' : Fin m, x i' * v (finProdFinEquiv (i', jo))) + b jo) =
-        (fun v jo =>
-          (fun w : Vec (m * n) => fun jo' : Fin n =>
-              ∑ i' : Fin m, x i' * w (finProdFinEquiv (i', jo'))) v jo +
-          (fun _ : Vec (m * n) => b) v jo) from rfl]
-  -- Differentiable evidence for the sum-of-bilinear-summands and the constant.
-  have h_summand_diff : ∀ i' ∈ (Finset.univ : Finset (Fin m)),
-      DifferentiableAt ℝ
-        (fun (v : Vec (m * n)) (jo : Fin n) =>
-          x i' * v (finProdFinEquiv (i', jo))) (Mat.flatten W) := by
-    intro i' _
-    have h_const : DifferentiableAt ℝ
-        (fun (_ : Vec (m * n)) (_ : Fin n) => x i') (Mat.flatten W) :=
-      differentiableAt_const _
-    have h_reindex : DifferentiableAt ℝ
-        (fun (w : Vec (m * n)) (jo' : Fin n) => w (finProdFinEquiv (i', jo'))) (Mat.flatten W) :=
-      (reindexCLM (fun jo' : Fin n => finProdFinEquiv (i', jo'))).differentiableAt
-    exact h_const.mul h_reindex
-  have h_sum_diff : DifferentiableAt ℝ
-      (fun (w : Vec (m * n)) (jo' : Fin n) =>
-        ∑ i' : Fin m, x i' * w (finProdFinEquiv (i', jo'))) (Mat.flatten W) := by
-    have h_eq : (fun (w : Vec (m * n)) (jo' : Fin n) =>
-                  ∑ i' : Fin m, x i' * w (finProdFinEquiv (i', jo'))) =
-                (fun w : Vec (m * n) => ∑ i' : Fin m,
-                  fun jo' : Fin n => x i' * w (finProdFinEquiv (i', jo'))) := by
-      funext w jo'; rw [Finset.sum_apply]
-    rw [h_eq]
-    exact DifferentiableAt.fun_sum (fun i' _ => h_summand_diff i' (Finset.mem_univ i'))
-  have h_const_diff : DifferentiableAt ℝ (fun _ : Vec (m * n) => b) (Mat.flatten W) :=
-    differentiableAt_const _
-  rw [pdiv_add _ _ _ h_sum_diff h_const_diff, pdiv_const, add_zero]
-  -- Step 3: distribute pdiv over the finset sum (over Fin m).
-  rw [pdiv_finset_sum (Finset.univ : Finset (Fin m))
-      (fun i' v jo => x i' * v (finProdFinEquiv (i', jo)))
-      (Mat.flatten W) h_summand_diff (finProdFinEquiv (i, j')) j]
-  -- Step 4: each summand is (const x_i') × (reindex v at (i', jo)). Apply pdiv_mul.
-  have hterm : ∀ i' : Fin m,
-      pdiv (fun v : Vec (m * n) => fun jo : Fin n =>
-              x i' * v (finProdFinEquiv (i', jo)))
-           (Mat.flatten W) (finProdFinEquiv (i, j')) j =
-      if i = i' ∧ j' = j then x i else 0 := by
-    intro i'
-    rw [show (fun v : Vec (m * n) => fun jo : Fin n =>
-                x i' * v (finProdFinEquiv (i', jo))) =
-          (fun v jo =>
-            (fun (_ : Vec (m * n)) (_ : Fin n) => x i') v jo *
-            (fun (w : Vec (m * n)) (jo' : Fin n) =>
-                w (finProdFinEquiv (i', jo'))) v jo) from rfl]
-    have h_const_inner : DifferentiableAt ℝ
-        (fun (_ : Vec (m * n)) (_ : Fin n) => x i') (Mat.flatten W) :=
-      differentiableAt_const _
-    have h_reindex_inner : DifferentiableAt ℝ
-        (fun (w : Vec (m * n)) (jo' : Fin n) =>
-          w (finProdFinEquiv (i', jo'))) (Mat.flatten W) :=
-      (reindexCLM (fun jo' : Fin n => finProdFinEquiv (i', jo'))).differentiableAt
-    rw [pdiv_mul _ _ _ h_const_inner h_reindex_inner]
-    -- Const factor pdiv = 0.
-    rw [show pdiv (fun (_ : Vec (m * n)) (_ : Fin n) => x i') (Mat.flatten W)
-              (finProdFinEquiv (i, j')) j = 0
-        from pdiv_const _ _ _ _]
-    -- Reindex factor via pdiv_reindex with σ = `fun jo => finProdFinEquiv (i', jo)`.
-    rw [show (fun (w : Vec (m * n)) (jo' : Fin n) =>
-                w (finProdFinEquiv (i', jo'))) =
-          (fun w => fun jo' =>
-            w ((fun jo'' : Fin n => finProdFinEquiv (i', jo'')) jo')) from rfl]
-    rw [pdiv_reindex (fun jo'' : Fin n => finProdFinEquiv (i', jo''))]
-    -- Goal: 0 * x i' + x i' * (if (fPF (i, j')) = fPF (i', j) then 1 else 0)
-    --       = if i = i' ∧ j' = j then x i else 0
-    by_cases h : i = i' ∧ j' = j
-    · obtain ⟨hii', hj'j⟩ := h
-      subst hii'; subst hj'j
-      simp
-    · have hne : finProdFinEquiv (i, j') ≠ finProdFinEquiv (i', j) := by
-        intro heq
-        apply h
-        have := finProdFinEquiv.injective heq
-        exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
-      rw [ite_eq_right hne, ite_eq_right h]
-      ring
-  simp_rw [hterm]
-  -- Step 5: collapse the sum over i'. ∑ i', if i = i' ∧ j' = j then x i else 0.
-  by_cases hj'j : j' = j
-  · subst hj'j
-    simp only [and_true]
-    rw [Finset.sum_ite_eq Finset.univ i (fun _ => x i)]
-    simp
-  · rw [ite_eq_right (fun h => hj'j h.symm)]
-    simp_rw [show ∀ i' : Fin m, (i = i' ∧ j' = j) ↔ False from
-      fun i' => ⟨fun h => hj'j h.2, False.elim⟩]
-    simp
+      fun v => (fun k => ∑ i' : Fin m, x i' * v (finProdFinEquiv (i', k))) + b from rfl,
+    pdiv_of_affine (fun v k => ∑ i' : Fin m, x i' * v (finProdFinEquiv (i', k))) b
+      (fun _ _ => by funext; simp [mul_add, Finset.sum_add_distrib])
+      (fun _ _ => by funext; simp [Finset.mul_sum, mul_left_comm])]
+  rcases eq_or_ne j j' with h | h
+  · subst h; simp [Prod.ext_iff]
+  · simp [Prod.ext_iff, h]
 
 /-- Dense VJP — proved. -/
 noncomputable def dense_has_vjp {m n : Nat} (W : Mat m n) (b : Vec n) :

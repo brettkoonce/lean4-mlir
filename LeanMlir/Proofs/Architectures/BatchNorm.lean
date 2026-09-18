@@ -261,46 +261,16 @@ theorem bnForward_eq_compose (n : Nat) (ε γ β : ℝ) :
 
 /-- The affine Jacobian is diagonal: `∂(γ·vᵢ + β)/∂vⱼ = γ · δᵢⱼ`.
 
-    Proved from foundation rules: `bnAffine` decomposes as
-    `(γ · v) + (constant β)`, where the linear term factors further
-    as `(constant γ) * (identity)` for `pdiv_mul`. The pieces collapse
-    via `pdiv_add` + `pdiv_mul` + `pdiv_const` + `pdiv_id`. -/
+    `bnAffine` is the linear map `v ↦ γ · v` plus the constant `β`, so `pdiv_of_affine`
+    reads the Jacobian off the basis vector. -/
 theorem pdiv_bnAffine (n : Nat) (γ β : ℝ)
     (v : Vec n) (i j : Fin n) :
     pdiv (bnAffine n γ β) v i j =
       if i = j then γ else 0 := by
-  unfold bnAffine
-  -- Decompose `γ * v i + β` as `(γ · v) + (const β)`.
-  rw [show (fun v : Vec n => fun i : Fin n => γ * v i + β) =
-        (fun v i =>
-          (fun (y : Vec n) (k : Fin n) => γ * y k) v i +
-          (fun (_ : Vec n) (_ : Fin n) => β) v i) from rfl]
-  have h_lin_diff : DifferentiableAt ℝ
-      (fun (y : Vec n) (k : Fin n) => γ * y k) v := by fun_prop
-  have h_const_β_diff : DifferentiableAt ℝ
-      (fun (_ : Vec n) (_ : Fin n) => β) v :=
-    differentiableAt_const _
-  rw [pdiv_add _ _ _ h_lin_diff h_const_β_diff]
-  -- Constant term: pdiv = 0.
-  rw [show pdiv (fun (_ : Vec n) (_ : Fin n) => β) v i j = 0
-      from pdiv_const (fun _ : Fin n => β) v i j]
-  -- Linear term: factor as (constant γ) * identity, apply pdiv_mul.
-  rw [show (fun y : Vec n => fun k : Fin n => γ * y k) =
-        (fun y k =>
-          (fun (_ : Vec n) (_ : Fin n) => γ) y k *
-          (fun (y' : Vec n) => y') y k) from rfl]
-  have h_const_γ_diff : DifferentiableAt ℝ
-      (fun (_ : Vec n) (_ : Fin n) => γ) v :=
-    differentiableAt_const _
-  have h_id_diff : DifferentiableAt ℝ
-      (fun (y' : Vec n) => y') v := differentiableAt_id
-  rw [pdiv_mul _ _ _ h_const_γ_diff h_id_diff]
-  rw [show pdiv (fun (_ : Vec n) (_ : Fin n) => γ) v i j = 0
-      from pdiv_const (fun _ : Fin n => γ) v i j]
-  rw [pdiv_id]
-  by_cases h : i = j
-  · rw [ite_eq_left h, ite_eq_left h]; ring
-  · rw [ite_eq_right h, ite_eq_right h]; ring
+  rw [show bnAffine n γ β = fun y => (fun k => γ * y k) + fun _ => β from rfl, pdiv_of_affine]
+  · simp only [basisVec_apply, mul_ite, mul_one, mul_zero, @eq_comm _ j i]
+  · intro u v; funext k; simp only [Pi.add_apply, mul_add]
+  · intro a v; funext k; simp only [Pi.smul_apply, smul_eq_mul, mul_left_comm γ a]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The hard Jacobian: `pdiv_bnNormalize` — now derived
@@ -314,7 +284,7 @@ collapse via `ring` using the `x̂ᵢ = (xᵢ - μ) · istd` identity.
 Both elementary calculus facts are now proved from the foundation:
 
 1. `pdiv_bnCentered` — ∂(xⱼ - μ(x))/∂xᵢ = δᵢⱼ - 1/n.
-   Proved via Mathlib's `HasDerivAt.sub` applied to `id` and `(const_mul) ∘ (Finset.sum)`.
+   Proved via `pdiv_of_linear`: centering is a linear map.
 
 2. `pdiv_bnIstdBroadcast` — ∂istd(x,ε)/∂xᵢ = -istd³ · (xᵢ - μ) / n.
    Proved via the centering CLM + `HasFDerivAt.sqrt` (under `bnVar + ε > 0`)
@@ -343,61 +313,17 @@ theorem bnXhat_eq_product (n : Nat) (ε : ℝ) (x : Vec n) :
 
     `∂(xⱼ - μ(x))/∂xᵢ = δᵢⱼ - 1/n`
 
-    Decomposition: `bnCentered y k = y k - (∑ s, y s)/n` factors as
-    `(id y) k + (-(1/n)) * (∑ s, y s)`. The first half collapses via
-    `pdiv_id`; the second factors as `(constant) * (sum)` and uses
-    `pdiv_mul` + `pdiv_const` + `pdiv_finset_sum` + `pdiv_reindex` to
-    yield `-1/n`. -/
+    `bnCentered` is linear, so `pdiv_of_linear` reads the Jacobian off the basis vector:
+    `eᵢ` has entry `δᵢⱼ` and mean `1/n`. -/
 theorem pdiv_bnCentered (n : Nat) (x : Vec n) (i j : Fin n) :
     pdiv (bnCentered n) x i j =
       (if i = j then (1 : ℝ) else 0) - 1 / (n : ℝ) := by
-  -- Step 1: rewrite bnCentered as `id + (-(∑ ·)/n)`.
-  rw [show (bnCentered n : Vec n → Vec n) =
-        (fun y k =>
-          (fun (y' : Vec n) => y') y k +
-          (fun (y' : Vec n) (_ : Fin n) => -((∑ s : Fin n, y' s) / (n : ℝ))) y k) from by
-    funext y k
-    unfold bnCentered bnMean
-    ring]
-  have h_id_diff : DifferentiableAt ℝ (fun y' : Vec n => y') x := differentiableAt_id
-  have h_negMean_diff : DifferentiableAt ℝ
-      (fun (y' : Vec n) (_ : Fin n) => -((∑ s : Fin n, y' s) / (n : ℝ))) x := by fun_prop
-  rw [pdiv_add _ _ _ h_id_diff h_negMean_diff, pdiv_id]
-  -- Step 2: factor the negMean term as (constant -1/n) * (sum).
-  rw [show (fun (y' : Vec n) (_ : Fin n) => -((∑ s : Fin n, y' s) / (n : ℝ))) =
-        (fun y' k =>
-          (fun (_ : Vec n) (_ : Fin n) => -(1 / (n : ℝ))) y' k *
-          (fun (z : Vec n) (_ : Fin n) => ∑ s : Fin n, z s) y' k) from by
-    funext y' k
-    ring]
-  have h_neg_const_diff : DifferentiableAt ℝ
-      (fun (_ : Vec n) (_ : Fin n) => -(1 / (n : ℝ))) x :=
-    differentiableAt_const _
-  have h_sum_diff : DifferentiableAt ℝ
-      (fun (z : Vec n) (_ : Fin n) => ∑ s : Fin n, z s) x := by fun_prop
-  rw [pdiv_mul _ _ _ h_neg_const_diff h_sum_diff]
-  rw [show pdiv (fun (_ : Vec n) (_ : Fin n) => -(1 / (n : ℝ))) x i j = 0
-      from pdiv_const (fun _ : Fin n => -(1 / (n : ℝ))) x i j]
-  -- Step 3: pdiv of `∑ s, z s` via pdiv_finset_sum + pdiv_reindex.
-  rw [show (fun (z : Vec n) (_ : Fin n) => ∑ s : Fin n, z s) =
-        (fun z k => ∑ s : Fin n,
-          (fun (z' : Vec n) (_ : Fin n) => z' s) z k) from rfl]
-  have h_proj_diff : ∀ s ∈ (Finset.univ : Finset (Fin n)),
-      DifferentiableAt ℝ (fun (z' : Vec n) (_ : Fin n) => z' s) x := by
-    intro s _
-    exact (reindexCLM (fun _ : Fin n => s)).differentiableAt
-  rw [pdiv_finset_sum _ _ _ h_proj_diff]
-  have h_term : ∀ s : Fin n,
-      pdiv (fun (z' : Vec n) (_ : Fin n) => z' s) x i j =
-        if i = s then (1 : ℝ) else 0 := by
-    intro s
-    rw [show (fun (z' : Vec n) (_ : Fin n) => z' s) =
-          (fun z' => fun k' : Fin n => z' ((fun _ : Fin n => s) k')) from rfl]
-    rw [pdiv_reindex (fun _ : Fin n => s)]
-  simp_rw [h_term]
-  rw [Finset.sum_ite_eq Finset.univ i (fun _ : Fin n => (1 : ℝ))]
-  simp
-  ring
+  rw [pdiv_of_linear]
+  · simp only [bnCentered, bnMean, basisVec_apply, Finset.sum_ite_eq', Finset.mem_univ, ite_true,
+      @eq_comm _ j i]
+  · intro u v; funext k; simp only [bnCentered, bnMean, Pi.add_apply, Finset.sum_add_distrib]; ring
+  · intro a v; funext k
+    simp only [bnCentered, bnMean, Pi.smul_apply, smul_eq_mul, ← Finset.mul_sum]; ring
 
 /-- **Smoothness of `bnIstdBroadcast`** — proved from Mathlib calculus
     (planning/archive/VJP.md follow-up C).
