@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `491f9b31`, 1 ahead of origin, + the staged row)
+## Status (2026-09-18, main `b50ba380`, 2 ahead of origin, + the staged row)
 
-**Landed** — about 11.6k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 11.7k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -54,7 +54,8 @@ suspected, no drop-in located.
 | `7f727834` | **§7/§8 tie clauses, row-dense / LN** (−155): the same fold for the ViT and ConvNeXt ties — `ViTPoC.{RowDense{W,B},VecLN{Gamma,Beta}}SgdTied` (`ViTFold`), `ViTPoCGB.{RowDense{W,B},VecLN{Gamma,Beta}}TiedB` (`ViTFoldGB`), `CnxPoC.ChanLN{Gamma,Beta}SgdTied`, `CnxPoCGB.ChanLN{Gamma,Beta}TiedB`. 66 clauses in 12 tie `def`s (ViTStepTie/GB, ConvNeXtStepTie/GB; the ConvNeXt head uses the ViT vector-LN Props), each `def` `rfl`-equal to its HEAD text; the tie proofs don't move. Left as written: ViT's final-LN pair, whose cotangent is an unparenthesised application |
 | `feba953c` | **§10 test and program duplicates** (−1,238; §11 defects 2–4 closed): `TestCifar8WideTrain` deleted — `TestCifar8AdamTrain`'s six train steps are one packed-signature `trainStep` + per-optimizer one-liners over `(d1, fname)`, and `main` renders both canonical widths (`cifar8` at 64, `cifar8w` at 512); all 17 renders byte-identical to the two old files, all 14 committed artifacts `iree-compile`. The 14 vjp-oracle nets + `cfg` live once in `LeanMlir/VjpOracleNets.lean` (namespace `VjpOracle`), imported by the 14 phase-3 and 14 phase-2 mains (one call each); `ci_smoke.sh` 14/14. `TestMHSA` gradchecks the shipped `ViTRender.mhsaFwd`/`mhsaBack` (its copy is gone; renders byte-identical); `TestMHSA`/`TestSDPA` call `adjointGradcheck`, which is `adjointGradcheckFixed … []`. The comparators in `TestR50AccumTie`, `TestR50AccumShardTie`, `TestChannelLN`, `TestConvBiasZero` (×3) take the magnitude over both buffers |
 | `491f9b31` | **§4 descent-capstone arithmetic** (−123): new `sgd_step_l1_le` (`SgdDescent`) — the `ℓ1` radius `lr·(‖g‖₁ + m·η)` of an inexact step — replaces the 15-line `calc` in `sgd_descent_inexact` and the seven capstones (Linear, Mlp ×2, Cnn ×4); each site keeps its stated `hD` type. New `softmax_seg_drift` (`SgdDescentLinear`) — logit drift `≤ t·δ` with `2δ < 1` gives softmax drift `≤ 2tδ/(1−2δ)` (`softmax_perturb` + `exp_sub_one_le` + the denominator step) — closes the softmax step of the Linear, `MlpSlot` and `Conv2Slot` Lipschitz lemmas (Cnn 26 → 1 lines). Only three softmax copies were left; `Conv1Slot`/`Conv2Slot`/`MlpSlot` had absorbed the other four |
-| *(staged)* | **§4 `finProdFinEquiv` reindexing** (−101): new `sum_finProdFinEquiv` (`SgdDescent`; the same statement as `sum_fin_prod` in `ViTClose`, parked here until the root-file batch) — `∑ k : Fin (m·n), f k` as the row-major double sum. `sum_t3`, `sum_w3`, `sum_abs_k4` are `simp only [sum_finProdFinEquiv]` (+ `rfl` for the non-reducible `w3Idx`/`k4Idx`), `sum_s2` is the lemma itself, `sum_abs_flatten_cols` one line; `sum_abs_kernel_slab_le` (30 lines) is `sum_abs_k4` + `Finset.single_le_sum` (so `sum_abs_k4` moved above it) and Linear's column-mass `hinj` the same argument; `k4Idx_inj` / `t3Idx_inj` are `simpa [and_assoc]`. The four hand-peeled 3-level indices are `t3Idx_surj` and the two 4-level ones `k4Idx_surj` (7 → 2 and 6 → 1 lines) |
+| `b50ba380` | **§4 `finProdFinEquiv` reindexing** (−101): new `sum_finProdFinEquiv` (`SgdDescent`; the same statement as `sum_fin_prod` in `ViTClose`, parked here until the root-file batch) — `∑ k : Fin (m·n), f k` as the row-major double sum. `sum_t3`, `sum_w3`, `sum_abs_k4` are `simp only [sum_finProdFinEquiv]` (+ `rfl` for the non-reducible `w3Idx`/`k4Idx`), `sum_s2` is the lemma itself, `sum_abs_flatten_cols` one line; `sum_abs_kernel_slab_le` (30 lines) is `sum_abs_k4` + `Finset.single_le_sum` (so `sum_abs_k4` moved above it) and Linear's column-mass `hinj` the same argument; `k4Idx_inj` / `t3Idx_inj` are `simpa [and_assoc]`. The four hand-peeled 3-level indices are `t3Idx_surj` and the two 4-level ones `k4Idx_surj` (7 → 2 and 6 → 1 lines) |
+| *(staged)* | **§4 seal files** (−90): new `fderiv_ne_zero_of_ray` (`JacobianSeal`) — a readout `ℓ` of `f` with nonzero derivative along `t ↦ x + t • v` at `0` gives `fderiv ℝ f x ≠ 0`; the readout is a plain function (`fun y => y 0` or `fun y => y 0 - y 1`, differentiability by `fun_prop`), since `proj 0 - proj 1` as a `→L` stalls in instance elaboration. The five `*_jacobian_nonzero` seals (MNv2 toy / 224, R34 toy / 224 / full depth) go 14–17 → 4–6 lines. New `hasDerivAt_mul_self_zero` (`t·Q t` has derivative `Q 0` for `Q` continuous at `0`) closes the four `gd_hasDerivAt*` / `g_hasDerivAt` slope arguments (12–13 → 3–5). `winF` moves into the MNv2 toy seal in place of the identical private `win'`; the γ-general `bnForward_chan_diff_γ` / `UDiff_bn_γ` move from `Mnv2RealSeal` into `R34RealSeal` (unpinned; the MNv2 file reaches them through its `open`), and `UDiff_bn` is their γ = 1 case (13 → 2). Deleted, unpinned: `g_full_hasDerivAt` (dead since the full seal went through `fderiv_add_const`), `max_add_r` (= `max_add_add_right`). Left: `MobileNetV2.lean`'s private `win` (240 downstream — root-file batch), `ldS` = `ldSβ · · 20` (§6 live witnesses), `stemS`/`Rr`/`ray` (not instances) |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -72,10 +73,12 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    plus the seal files, one commit each (see §4 below for the lemma sketches):
    - ~~softmax segment drift → `softmax_seg_drift`; ℓ1 step radius `hD` ×8 → `sgd_step_l1_le`~~ (`491f9b31`);
    - ~~the `finProdFinEquiv` reindex ×5 → `sum_finProdFinEquiv`, the inline peels → `t3Idx_surj`/`k4Idx_surj`~~
-     (staged row);
-   - the `*_jacobian_nonzero` ray argument ×6 (the MNv2 / R34 seal files, `ResNet34LiveFull`) →
-     `fderiv_ne_zero_of_ray`;
-   - the seal-file specialisations (`bnForward_chan_diff`, `winF`/`win'`/`win`, `ldS`/`stemS`/`Rr`/`ray`).
+     (`b50ba380`);
+   - ~~the `*_jacobian_nonzero` ray argument → `fderiv_ne_zero_of_ray`; the seal-file specialisations~~ (staged
+     row);
+   - left in §4: the dense-difference identity ×5 / `smul_l1_mass` inline ×7 / `dense_unflatten_diff` ×2 /
+     `mask_scalar_close` / `hcot0` bullet (~150), and the one-line Mathlib items (`fderiv_apply_eq_sum_grad`,
+     `JacobianSeal.sum_smul_basisVec` / `fderiv_eq_zero_of_pdiv_all_zero`, `abs_triple_sum_sub_le`).
    ⚠ §4's line numbers are from `aed84250`: `SgdDescentCnn` has since shrunk 9,974 → 8,374 and
    `SgdDescentMlp` 2,187 → 1,926 (the `Conv1Slot`/`Conv2Slot`/`MlpSlot` batches), so re-locate each site by
    name. Several of the drift/radius copies may already be gone inside the slot lemmas. `SgdDescentCnn` is a

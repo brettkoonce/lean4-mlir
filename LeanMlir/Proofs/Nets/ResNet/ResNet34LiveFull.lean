@@ -313,21 +313,10 @@ theorem gd_full_hasDerivAt :
 
 /-- **`fderiv ℝ liveFwd2Full Y ≠ 0`** — the full-depth `[3,4,6,3]` live ResNet-34's whole-net
     Jacobian is genuinely non-trivial at the witness base `Y` (level-3 seal, full depth). -/
-theorem liveFwd2Full_jacobian_nonzero : fderiv ℝ liveFwd2Full Y ≠ 0 := by
-  intro hzero
-  have hfd : HasFDerivAt liveFwd2Full (0 : Vec (2 * (2 * 16) * (2 * 16)) →L[ℝ] Vec 2) Y := by
-    rw [← hzero]; exact liveFwd2Full_diff_Y.hasFDerivAt
-  have hsmul : HasDerivAt (fun t : ℝ => Y + t • V) V 0 := by
-    simpa using ((hasDerivAt_id (0 : ℝ)).smul_const V).const_add Y
-  have hcomp : HasDerivAt (fun t : ℝ => liveFwd2Full (Y + t • V)) (0 : Vec 2) 0 := by
-    have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    exact this
-  have hpi := hasDerivAt_pi.mp hcomp
-  have hd : HasDerivAt (fun t : ℝ => liveFwd2Full (Y + t • V) 0 - liveFwd2Full (Y + t • V) 1) 0 0 := by
-    have := (hpi 0).sub (hpi 1)
-    simp only [Pi.zero_apply, sub_zero] at this
-    exact this
-  exact (Rr_pos 0).ne' (gd_full_hasDerivAt.unique hd)
+theorem liveFwd2Full_jacobian_nonzero : fderiv ℝ liveFwd2Full Y ≠ 0 :=
+  -- the output channel difference along `Y + t • V` has derivative `Rr 0 ≠ 0`
+  fderiv_ne_zero_of_ray V liveFwd2Full_diff_Y (fun y => y 0 - y 1) (by fun_prop) (Rr_pos 0).ne'
+    gd_full_hasDerivAt
 
 /-- **The full-depth level-3 seal** (Item A, full `[3,4,6,3]` depth): the proven whole-network
     backward of the full-depth live ResNet-34 is **not the zero map** at the witness base `Y`. -/

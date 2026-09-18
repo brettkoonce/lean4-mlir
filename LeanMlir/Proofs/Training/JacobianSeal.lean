@@ -135,6 +135,39 @@ theorem HasVJPAt.backward_nontrivial_of_fderiv_ne {m n : Nat} {f : Vec m → Vec
   exact ⟨j₀, i₀, h.backward_ne_zero_of_pdiv_ne hpd⟩
 
 -- ════════════════════════════════════════════════════════════════
+-- § Discharging `fderiv ≠ 0` along a ray
+--   The live witnesses exhibit one readout of the output (a channel, or a
+--   channel difference) whose derivative along a ray `t ↦ x + t • v` is
+--   nonzero at `t = 0`; along the ray the readout is `t · Q t`, `Q` continuous.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **A nonzero directional derivative seals `fderiv ≠ 0`.** If a readout `ℓ` of `f`
+    (differentiable at `f x`) has derivative `c ≠ 0` along the ray `t ↦ x + t • v` at
+    `t = 0`, the Fréchet derivative of `f` at `x` is not the zero map (a zero one would
+    give the readout derivative `0`). -/
+theorem fderiv_ne_zero_of_ray {m n : Nat} {f : Vec m → Vec n} {x : Vec m} (v : Vec m)
+    (hf : DifferentiableAt ℝ f x) (ℓ : Vec n → ℝ) (hℓ : DifferentiableAt ℝ ℓ (f x)) {c : ℝ}
+    (hc : c ≠ 0) (hg : HasDerivAt (fun t : ℝ => ℓ (f (x + t • v))) c 0) :
+    fderiv ℝ f x ≠ 0 := by
+  intro hzero
+  have hray : HasDerivAt (fun t : ℝ => x + t • v) v 0 := by
+    simpa using ((hasDerivAt_id (0 : ℝ)).smul_const v).const_add x
+  have h0 := (hℓ.hasFDerivAt.comp x (hzero ▸ hf.hasFDerivAt)).comp_hasDerivAt_of_eq (0 : ℝ)
+    hray (by simp)
+  simp only [ContinuousLinearMap.comp_zero, zero_apply] at h0
+  exact hc (hg.unique h0)
+
+/-- **`t · Q t` has derivative `Q 0` at `0`** for any `Q` continuous there — the
+    product-rule cross-term carries the factor `t`, so no derivative of `Q` is needed
+    (its slope at `0` is `Q` itself). -/
+theorem hasDerivAt_mul_self_zero {Q : ℝ → ℝ} (hQ : ContinuousAt Q 0) :
+    HasDerivAt (fun t : ℝ => t * Q t) (Q 0) 0 := by
+  rw [hasDerivAt_iff_tendsto_slope]
+  refine Filter.Tendsto.congr' ?_ (hQ.tendsto.mono_left nhdsWithin_le_nhds)
+  filter_upwards [self_mem_nhdsWithin] with y hy
+  rw [slope_def_field, sub_zero, zero_mul, sub_zero, mul_div_cancel_left₀ _ hy]
+
+-- ════════════════════════════════════════════════════════════════
 -- § Demonstration — the linear classifier (Jacobian = W)
 -- ════════════════════════════════════════════════════════════════
 

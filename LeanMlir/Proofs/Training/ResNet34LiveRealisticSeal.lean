@@ -42,8 +42,6 @@ open Proofs ResNet34Live2 ResNet34LivePC ResNet34LiveSeal ResNet34LiveRealistic
 -- § The maxpool shift lemma (uniform channel offset)
 -- ════════════════════════════════════════════════════════════════
 
-theorem max_add_r (a b δ : ℝ) : max (a + δ) (b + δ) = max a b + δ := max_add_add_right a b δ
-
 /-- **MaxPool shifts uniformly**: if channel 0 is channel 1 plus the constant `δ` at every
     position, the maxpool of channel 0 is the maxpool of channel 1 plus `δ` (the max of a
     uniformly-shifted family). No selection/argmax argument needed. -/
@@ -51,7 +49,7 @@ theorem maxPool2_shift {h w : Nat} (x : Tensor3 2 (2 * h) (2 * w)) (δ : ℝ)
     (hx : ∀ i j, x 0 i j = x 1 i j + δ) (hi : Fin h) (wi : Fin w) :
     maxPool2 x 0 hi wi = maxPool2 x 1 hi wi + δ := by
   simp only [maxPool2, hx]
-  rw [max_add_r, max_add_r, max_add_r]
+  rw [max_add_add_right, max_add_add_right, max_add_add_right]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The uniform channel-difference invariant `UDiff`
@@ -63,20 +61,31 @@ def UDiff {h w : Nat} (δ : ℝ) (u : Vec (2 * h * w)) : Prop :=
   ∀ (i : Fin h) (j : Fin w),
     (Tensor3.unflatten u : Tensor3 2 h w) 0 i j = (Tensor3.unflatten u : Tensor3 2 h w) 1 i j + δ
 
-/-- **BN scales the uniform channel difference by its (positive, global) `istd`.** -/
-theorem UDiff_bn {h w : Nat} (β δ : ℝ) (z : Vec (2 * h * w)) (hz : UDiff δ z) :
-    UDiff (δ * bnIstd (2 * h * w) z 1) (bnForward (2 * h * w) 1 1 β z) := by
+/-- **BN (general γ) acts on coordinate differences by `γ·istd`** — the γ-general
+    `bnForward_chan_diff`; the MobileNetV2 realistic seal uses it at γ = 1/128. -/
+theorem bnForward_chan_diff_γ {n : Nat} (ε γ β : ℝ) (z : Vec n) (k₀ k₁ : Fin n) :
+    bnForward n ε γ β z k₀ - bnForward n ε γ β z k₁ = γ * (z k₀ - z k₁) * bnIstd n z ε := by
+  simp only [bnForward, bnXhat]; ring
+
+/-- **BN (general γ) multiplies the uniform channel difference by `γ·istd`.** -/
+theorem UDiff_bn_γ {h w : Nat} (γ β δ : ℝ) (z : Vec (2 * h * w)) (hz : UDiff δ z) :
+    UDiff (γ * δ * bnIstd (2 * h * w) z 1) (bnForward (2 * h * w) 1 γ β z) := by
   intro i j
-  show bnForward (2 * h * w) 1 1 β z (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
-     = bnForward (2 * h * w) 1 1 β z (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j))
-       + δ * bnIstd (2 * h * w) z 1
-  have hd := bnForward_chan_diff (n := 2 * h * w) 1 β z
+  show bnForward (2 * h * w) 1 γ β z (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
+     = bnForward (2 * h * w) 1 γ β z (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j))
+       + γ * δ * bnIstd (2 * h * w) z 1
+  have hd := bnForward_chan_diff_γ (n := 2 * h * w) 1 γ β z
     (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
     (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j))
   have hzδ : z (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
            - z (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j)) = δ := by
     have := hz i j; simp only [Tensor3.unflatten] at this; linarith
   rw [hzδ] at hd; linarith
+
+/-- **BN scales the uniform channel difference by its (positive, global) `istd`.** -/
+theorem UDiff_bn {h w : Nat} (β δ : ℝ) (z : Vec (2 * h * w)) (hz : UDiff δ z) :
+    UDiff (δ * bnIstd (2 * h * w) z 1) (bnForward (2 * h * w) 1 1 β z) := by
+  simpa only [one_mul] using UDiff_bn_γ 1 β δ z hz
 
 /-- Decimation preserves the uniform channel difference. -/
 theorem UDiff_decimate {h w : Nat} (δ : ℝ) (a : Vec (2 * (2 * h) * (2 * w))) (ha : UDiff δ a) :
@@ -315,17 +324,9 @@ theorem gd_ray224 (t : ℝ) :
 
 theorem gd_hasDerivAt224 :
     HasDerivAt (fun t : ℝ => liveFwd224S (Y224 + t • V224u) 0 - liveFwd224S (Y224 + t • V224u) 1)
-      (Rr224 0) 0 := by
-  have hmul : HasDerivAt (fun t : ℝ => t * Rr224 t) (Rr224 0) 0 := by
-    rw [hasDerivAt_iff_tendsto_slope]
-    have hslope : slope (fun t : ℝ => t * Rr224 t) 0 =ᶠ[𝓝[≠] (0 : ℝ)] Rr224 := by
-      filter_upwards [self_mem_nhdsWithin] with y hy
-      have hy0 : y ≠ 0 := by simpa using hy
-      simp only [slope_def_field, sub_zero, zero_mul]
-      rw [mul_comm, mul_div_assoc, div_self hy0, mul_one]
-    exact Filter.Tendsto.congr' hslope.symm
-      (Rr224_continuous.continuousAt.tendsto.mono_left nhdsWithin_le_nhds)
-  exact hmul.congr_of_eventuallyEq (Filter.Eventually.of_forall (fun t => gd_ray224 t))
+      (Rr224 0) 0 :=
+  (hasDerivAt_mul_self_zero Rr224_continuous.continuousAt).congr_of_eventuallyEq
+    (Filter.Eventually.of_forall (fun t => gd_ray224 t))
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net VJP at the base `Y224` (maxpool no-tie via injectivity)
@@ -419,22 +420,10 @@ theorem liveFwd224_diff_Y : DifferentiableAt ℝ liveFwd224 Y224 := by
 
 /-- **`fderiv ℝ liveFwd224 Y224 ≠ 0`** — the 224×224 live ResNet-34's whole-net Jacobian is
     genuinely non-trivial at the witness base `Y224` (level-3 seal, realistic dims). -/
-theorem liveFwd224_jacobian_nonzero : fderiv ℝ liveFwd224 Y224 ≠ 0 := by
-  intro hzero
-  have hfd : HasFDerivAt liveFwd224 (0 : Vec (2 * (2 * 112) * (2 * 112)) →L[ℝ] Vec 2) Y224 := by
-    rw [← hzero]; exact liveFwd224_diff_Y.hasFDerivAt
-  have hsmul : HasDerivAt (fun t : ℝ => Y224 + t • V224u) V224u 0 := by
-    simpa using ((hasDerivAt_id (0 : ℝ)).smul_const V224u).const_add Y224
-  have hcomp : HasDerivAt (fun t : ℝ => liveFwd224 (Y224 + t • V224u)) (0 : Vec 2) 0 := by
-    have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    exact this
-  have hpi := hasDerivAt_pi.mp hcomp
-  have hd : HasDerivAt (fun t : ℝ => liveFwd224 (Y224 + t • V224u) 0 - liveFwd224 (Y224 + t • V224u) 1) 0 0 := by
-    have := (hpi 0).sub (hpi 1)
-    simp only [Pi.zero_apply, sub_zero] at this
-    exact this
-  rw [liveFwd224_eq_S] at hd
-  exact (Rr224_pos 0).ne' (gd_hasDerivAt224.unique hd)
+theorem liveFwd224_jacobian_nonzero : fderiv ℝ liveFwd224 Y224 ≠ 0 :=
+  -- the output channel difference along `Y224 + t • V224u` has derivative `Rr224 0 ≠ 0`
+  fderiv_ne_zero_of_ray V224u liveFwd224_diff_Y (fun y => y 0 - y 1) (by fun_prop)
+    (Rr224_pos 0).ne' (by rw [liveFwd224_eq_S]; exact gd_hasDerivAt224)
 
 /-- **The level-3 seal for the 224×224 live ResNet-34** (Item D, level 3): the proven
     whole-network backward of the nonzero-weight live ResNet-34 at real ImageNet resolution

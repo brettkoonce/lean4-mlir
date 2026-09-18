@@ -97,30 +97,6 @@ theorem fwdR_has_vjp_correct (v : Vec (1 * 112 * 112)) (dy : Vec 2) (i : Fin (1 
   (fwdR_has_vjp_at v).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
--- § γ-general `UDiff` BN scaling and the BN channel-difference identity
--- ════════════════════════════════════════════════════════════════
-
-/-- **BN (general γ) acts on coordinate differences by `γ·istd`.** -/
-theorem bnForward_chan_diff_γ {n : Nat} (ε γ β : ℝ) (z : Vec n) (k₀ k₁ : Fin n) :
-    bnForward n ε γ β z k₀ - bnForward n ε γ β z k₁ = γ * (z k₀ - z k₁) * bnIstd n z ε := by
-  simp only [bnForward, bnXhat]; ring
-
-/-- **BN (general γ) multiplies the uniform channel difference by `γ·istd`.** -/
-theorem UDiff_bn_γ {h w : Nat} (γ β δ : ℝ) (z : Vec (2 * h * w)) (hz : UDiff δ z) :
-    UDiff (γ * δ * bnIstd (2 * h * w) z 1) (bnForward (2 * h * w) 1 γ β z) := by
-  intro i j
-  show bnForward (2 * h * w) 1 γ β z (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
-     = bnForward (2 * h * w) 1 γ β z (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j))
-       + γ * δ * bnIstd (2 * h * w) z 1
-  have hd := bnForward_chan_diff_γ (n := 2 * h * w) 1 γ β z
-    (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
-    (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j))
-  have hzδ : z (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
-           - z (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j)) = δ := by
-    have := hz i j; simp only [Tensor3.unflatten] at this; linarith
-  rw [hzδ] at hd; linarith
-
--- ════════════════════════════════════════════════════════════════
 -- § Generic (dim-free) block reductions at γ = 1/128
 -- ════════════════════════════════════════════════════════════════
 
@@ -326,37 +302,18 @@ theorem Rr_continuous : Continuous Rr := by
     ((istdc _ A2_continuous).mul ((istdc _ A3_continuous).mul (istdc _ A4_continuous)))
 
 theorem gd_hasDerivAt_mnv2 :
-    HasDerivAt (fun t : ℝ => fwdRS (t • VR) 0 - fwdRS (t • VR) 1) (-Rr 0) 0 := by
-  have hmul : HasDerivAt (fun t : ℝ => -t * Rr t) (-Rr 0) 0 := by
-    rw [hasDerivAt_iff_tendsto_slope]
-    have hslope : slope (fun t : ℝ => -t * Rr t) 0 =ᶠ[𝓝[≠] (0 : ℝ)] (fun t => -Rr t) := by
-      filter_upwards [self_mem_nhdsWithin] with y hy
-      have hy0 : y ≠ 0 := by simpa using hy
-      simp only [slope_def_field, sub_zero, neg_zero, zero_mul]
-      rw [show -y * Rr y = -(Rr y) * y from by ring, mul_div_assoc, div_self hy0, mul_one]
-    exact Filter.Tendsto.congr' hslope.symm
-      (Rr_continuous.neg.continuousAt.tendsto.mono_left nhdsWithin_le_nhds)
-  exact hmul.congr_of_eventuallyEq (Filter.Eventually.of_forall (fun t => gd_ray_mnv2 t))
+    HasDerivAt (fun t : ℝ => fwdRS (t • VR) 0 - fwdRS (t • VR) 1) (-Rr 0) 0 :=
+  HasDerivAt.congr_of_eventuallyEq
+    (hasDerivAt_mul_self_zero (Q := fun t => -Rr t) Rr_continuous.neg.continuousAt)
+    (Filter.Eventually.of_forall (fun t => (gd_ray_mnv2 t).trans (neg_mul_comm t (Rr t))))
 
 /-- **`fderiv ℝ fwdR 0 ≠ 0`** — the 224×224 live MobileNetV2's whole-net Jacobian is genuinely
     non-trivial at the witness input `0` (level-3 seal, realistic dims). -/
 theorem fwdR_jacobian_nonzero : fderiv ℝ fwdR 0 ≠ 0 := by
-  have hfwd : fwdR = fwdRS := funext fwdR_eq
-  rw [hfwd]
-  intro hzero
-  have hfd : HasFDerivAt fwdRS (0 : Vec (1 * 112 * 112) →L[ℝ] Vec 2) (0 : Vec (1 * 112 * 112)) := by
-    rw [← hzero]; exact (fwdRS_differentiable 0).hasFDerivAt
-  have hsmul : HasDerivAt (fun t : ℝ => t • VR) VR 0 := by
-    simpa using (hasDerivAt_id (0 : ℝ)).smul_const VR
-  have hcomp : HasDerivAt (fun t : ℝ => fwdRS (t • VR)) (0 : Vec 2) 0 := by
-    have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    exact this
-  have hpi := hasDerivAt_pi.mp hcomp
-  have hd : HasDerivAt (fun t : ℝ => fwdRS (t • VR) 0 - fwdRS (t • VR) 1) 0 0 := by
-    have := (hpi 0).sub (hpi 1)
-    simp only [Pi.zero_apply, sub_zero] at this
-    exact this
-  exact (neg_ne_zero.mpr (Rr_pos 0).ne') (gd_hasDerivAt_mnv2.unique hd)
+  rw [show fwdR = fwdRS from funext fwdR_eq]
+  -- the output channel difference along `t • VR` has derivative `-Rr 0 ≠ 0`
+  exact fderiv_ne_zero_of_ray VR (fwdRS_differentiable 0) (fun y => y 0 - y 1) (by fun_prop)
+    (neg_ne_zero.mpr (Rr_pos 0).ne') (by simpa only [zero_add] using gd_hasDerivAt_mnv2)
 
 /-- **The level-3 seal for the 224×224 live MobileNetV2** (Item D, level 3): the proven
     whole-network backward of the nonzero-weight live MobileNetV2 at real ImageNet resolution

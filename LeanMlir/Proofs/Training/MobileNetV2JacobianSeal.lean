@@ -230,37 +230,19 @@ theorem g_eq (t : ℝ) : fwdCF (t • X) 0 = 3 + Qq t * t := by
     product-rule cross-term carries a factor `t`, so it vanishes at `0`, leaving
     `g'(0) = Qq 0 = -(3/4)·P(0) ≠ 0`. -/
 theorem g_hasDerivAt : HasDerivAt (fun (t : ℝ) => fwdCF (t • X) 0) (Qq 0) 0 := by
-  have hg_eq : (fun (t : ℝ) => fwdCF (t • X) 0) = fun t => 3 + Qq t * t := funext g_eq
+  have hg_eq : (fun (t : ℝ) => fwdCF (t • X) 0) = fun t => 3 + t * Qq t :=
+    funext fun t => by rw [g_eq, mul_comm]
   rw [hg_eq]
-  have hmul : HasDerivAt (fun t : ℝ => Qq t * t) (Qq 0) 0 := by
-    rw [hasDerivAt_iff_tendsto_slope]
-    have hslope : slope (fun t : ℝ => Qq t * t) 0 =ᶠ[𝓝[≠] (0 : ℝ)] Qq := by
-      filter_upwards [self_mem_nhdsWithin] with y hy
-      have hy0 : y ≠ 0 := by simpa using hy
-      simp only [slope_def_field, sub_zero, mul_zero]
-      rw [mul_div_assoc, div_self hy0, mul_one]
-    exact Filter.Tendsto.congr' hslope.symm
-      ((Qq_continuous.continuousAt).tendsto.mono_left nhdsWithin_le_nhds)
-  exact hmul.const_add 3
+  exact (hasDerivAt_mul_self_zero Qq_continuous.continuousAt).const_add 3
 
 -- ════════════════════════════════════════════════════════════════
 -- § The seal: `fderiv ≠ 0` ⇒ non-trivial backward at the witness `0`
 -- ════════════════════════════════════════════════════════════════
 
-theorem fwdCF_fderiv_ne : fderiv ℝ fwdCF 0 ≠ 0 := by
-  intro hzero
-  -- if the Jacobian at 0 were zero, the directional derivative would vanish
-  have hfd : HasFDerivAt fwdCF (0 : Vec (1 * 2 * 2) →L[ℝ] Vec 2) (0 : Vec (1 * 2 * 2)) := by
-    rw [← hzero]; exact (fwdCF_differentiable 0).hasFDerivAt
-  have hsmul : HasDerivAt (fun t : ℝ => t • X) X 0 := by
-    simpa using (hasDerivAt_id (0 : ℝ)).smul_const X
-  have hcomp : HasDerivAt (fun t : ℝ => fwdCF (t • X)) (0 : Vec 2) 0 := by
-    have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    exact this
-  have hcomp0 : HasDerivAt (fun t : ℝ => fwdCF (t • X) 0) (0 : ℝ) 0 := by
-    have := (hasDerivAt_pi.mp hcomp) (0 : Fin 2)
-    simpa using this
-  exact Qq_zero_ne (g_hasDerivAt.unique hcomp0)
+theorem fwdCF_fderiv_ne : fderiv ℝ fwdCF 0 ≠ 0 :=
+  -- channel 0 along the ray `t • X` has derivative `Qq 0 ≠ 0`
+  fderiv_ne_zero_of_ray X (fwdCF_differentiable 0) (fun y => y 0) (by fun_prop) Qq_zero_ne
+    (by simpa using g_hasDerivAt)
 
 /-- **`fderiv ℝ fwd 0 ≠ 0`** — the live MobileNetV2's whole-net Jacobian is
     genuinely non-trivial at the witness input `0` (level-3 seal). -/
@@ -269,7 +251,9 @@ theorem mnv2Live_jacobian_nonzero : fderiv ℝ fwd 0 ≠ 0 := by
 
 -- ── the pointwise VJP at an arbitrary input (window holds everywhere) ──
 
-private theorem win' (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
+/-- The five ReLU6 sites discharge through the one window lemma (length 8, γ=1,
+    β=3, ε=1), regardless of the activation feeding them. -/
+theorem winF (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
     bnForward (2 * 2 * 2) 1 1 3 z k ≠ 0 ∧ bnForward (2 * 2 * 2) 1 1 3 z k ≠ 6 := by
   obtain ⟨h0, h6⟩ := bn13_window (2 * 2 * 2) (by norm_num) (by norm_num) 1 one_pos z k
   exact ⟨h0.ne', h6.ne⟩
@@ -280,8 +264,8 @@ noncomputable def mnv2Live_has_vjp_at_input (v : Vec (1 * 2 * 2)) : HasVJPAt fwd
   mobilenetv2_has_vjp_at Ws bs 1 1 3 one_pos
     We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
     We₂ be₂ 1 1 3 one_pos Wd₂ bd₂ 1 1 3 one_pos Wp₂ bp₂ 1 1 3 one_pos Wh bh v
-    (fun k => win' _ k) (fun k => win' _ k) (fun k => win' _ k)
-    (fun k => win' _ k) (fun k => win' _ k)
+    (fun k => winF _ k) (fun k => winF _ k) (fun k => winF _ k)
+    (fun k => winF _ k) (fun k => winF _ k)
 
 /-- **The level-3 seal for `Mnv2Live`** (Item B2): the proven whole-network
     backward of the nonzero-weight live MobileNetV2 is **not the zero map** at the

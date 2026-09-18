@@ -21,8 +21,8 @@ so a zeroed-body **skip** block `residual (invresBody …)` is the affine shift
 post-add ReLU to be off). A chain of `k` such blocks is `a ↦ a + 3k`; the shift is
 channel-symmetric, so it passes through GAP (`gap (a+c) = gap a + c`) and the
 identity head, surviving as a single additive constant `+45 = 3·15` that **cancels
-in the directional derivative** at the witness input `0`. So the whole seal reduces
-to `MobileNetV2JacobianSeal`'s `Qq` / `g_hasDerivAt` verbatim, while the whole-net
+in the derivative** at the witness input `0`. So the whole seal reduces to
+`MobileNetV2JacobianSeal`'s `mnv2Live_jacobian_nonzero` verbatim, while the whole-net
 VJP is genuinely composed through all 17 block backward maps (`fwdFull_has_vjp_at`).
 -/
 
@@ -31,18 +31,6 @@ namespace Mnv2Live
 
 open scoped BigOperators
 open Finset Filter Topology
-
--- ════════════════════════════════════════════════════════════════
--- § The window lemma (every ReLU6 site, every input) — public copy
--- ════════════════════════════════════════════════════════════════
-
-/-- The five ReLU6 sites discharge through the one window lemma (length 8, γ=1,
-    β=3, ε=1), regardless of the activation feeding them. (A public peer of the
-    file-private `win`/`win'`, reusable in the chain assembly below.) -/
-theorem winF (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
-    bnForward (2 * 2 * 2) 1 1 3 z k ≠ 0 ∧ bnForward (2 * 2 * 2) 1 1 3 z k ≠ 6 := by
-  obtain ⟨h0, h6⟩ := bn13_window (2 * 2 * 2) (by norm_num) (by norm_num) 1 one_pos z k
-  exact ⟨h0.ne', h6.ne⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The identity inverted-residual block (= block-1: zeroed body, skip)
@@ -205,17 +193,8 @@ theorem fwdFull_has_vjp_correct (x : Vec (1 * 2 * 2)) (dy : Vec 2) (i : Fin (1 *
   (fwdFull_has_vjp_at x).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
--- § The full-depth level-3 seal (reuses `Qq` / `g_hasDerivAt` via the washout)
+-- § The full-depth level-3 seal (reuses `mnv2Live_jacobian_nonzero` via the washout)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The full net's channel-0 output along the ray has the same derivative as the
-    2-block witness (the chain is transparent to it — a constant `+45` offset). -/
-theorem g_full_hasDerivAt : HasDerivAt (fun t : ℝ => fwdFull (t • X) 0) (Qq 0) 0 := by
-  have heq : (fun t : ℝ => fwdFull (t • X) 0) = (fun t : ℝ => fwdCF (t • X) 0 + 45) := by
-    funext t
-    rw [fwdFull_eq_add, fwd_eq_fwdCF]
-  rw [heq]
-  exact g_hasDerivAt.add_const 45
 
 /-- **`fderiv ℝ fwdFull 0 ≠ 0`** — the full-depth (17-block) live MobileNetV2's
     whole-net Jacobian is genuinely non-trivial at the witness input `0`. -/

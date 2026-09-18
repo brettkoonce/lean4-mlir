@@ -419,17 +419,8 @@ theorem gd_ray_eventually :
 /-- **The directional derivative of the output difference at the base is `Rr 0 ≠ 0`.**
     The factor `t` makes every `istd`-derivative cross-term vanish at `0`. -/
 theorem gd_hasDerivAt :
-    HasDerivAt (fun t : ℝ => liveFwd2S (Y + t • V) 0 - liveFwd2S (Y + t • V) 1) (Rr 0) 0 := by
-  have hmul : HasDerivAt (fun t : ℝ => t * Rr t) (Rr 0) 0 := by
-    rw [hasDerivAt_iff_tendsto_slope]
-    have hslope : slope (fun t : ℝ => t * Rr t) 0 =ᶠ[𝓝[≠] (0 : ℝ)] Rr := by
-      filter_upwards [self_mem_nhdsWithin] with y hy
-      have hy0 : y ≠ 0 := by simpa using hy
-      simp only [slope_def_field, sub_zero, zero_mul]
-      rw [mul_comm, mul_div_assoc, div_self hy0, mul_one]
-    exact Filter.Tendsto.congr' hslope.symm
-      (Rr_continuous.continuousAt.tendsto.mono_left nhdsWithin_le_nhds)
-  exact hmul.congr_of_eventuallyEq gd_ray_eventually
+    HasDerivAt (fun t : ℝ => liveFwd2S (Y + t • V) 0 - liveFwd2S (Y + t • V) 1) (Rr 0) 0 :=
+  (hasDerivAt_mul_self_zero Rr_continuous.continuousAt).congr_of_eventuallyEq gd_ray_eventually
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net VJP at the base `Y` (maxpool no-tie via per-channel injectivity)
@@ -526,22 +517,10 @@ theorem liveFwd2_diff_Y : DifferentiableAt ℝ liveFwd2 Y := by
 
 /-- **`fderiv ℝ liveFwd2 Y ≠ 0`** — the live ResNet-34's whole-net Jacobian is genuinely
     non-trivial at the witness base `Y` (level-3 seal). -/
-theorem liveFwd2_jacobian_nonzero : fderiv ℝ liveFwd2 Y ≠ 0 := by
-  intro hzero
-  have hfd : HasFDerivAt liveFwd2 (0 : Vec (2 * (2 * 16) * (2 * 16)) →L[ℝ] Vec 2) Y := by
-    rw [← hzero]; exact liveFwd2_diff_Y.hasFDerivAt
-  have hsmul : HasDerivAt (fun t : ℝ => Y + t • V) V 0 := by
-    simpa using ((hasDerivAt_id (0 : ℝ)).smul_const V).const_add Y
-  have hcomp : HasDerivAt (fun t : ℝ => liveFwd2 (Y + t • V)) (0 : Vec 2) 0 := by
-    have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    exact this
-  have hpi := hasDerivAt_pi.mp hcomp
-  have hd : HasDerivAt (fun t : ℝ => liveFwd2 (Y + t • V) 0 - liveFwd2 (Y + t • V) 1) 0 0 := by
-    have := (hpi 0).sub (hpi 1)
-    simp only [Pi.zero_apply, sub_zero] at this
-    exact this
-  rw [liveFwd2_eq_S] at hd
-  exact (Rr_pos 0).ne' (gd_hasDerivAt.unique hd)
+theorem liveFwd2_jacobian_nonzero : fderiv ℝ liveFwd2 Y ≠ 0 :=
+  -- the output channel difference along `Y + t • V` has derivative `Rr 0 ≠ 0`
+  fderiv_ne_zero_of_ray V liveFwd2_diff_Y (fun y => y 0 - y 1) (by fun_prop) (Rr_pos 0).ne'
+    (by rw [liveFwd2_eq_S]; exact gd_hasDerivAt)
 
 /-- **The level-3 seal for the live ResNet-34** (Item A): the proven whole-network
     backward of the nonzero-weight live ResNet-34 is **not the zero map** at the witness
