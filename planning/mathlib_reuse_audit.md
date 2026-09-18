@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `0fe85cc3`)
+## Status (2026-09-18, main `54a33add`)
 
-**Landed** — about 5.0k lines out, every theorem name and statement unchanged:
+**Landed** — about 5.2k lines out, every theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -38,19 +38,24 @@ suspected, no drop-in located.
 | `f4a41380` | **§0.1 done for Nets** (−400): ViTClose `pdiv_rowDense_W`, `pdiv_patchEmbed_W`, the row-dense bias Jacobian, `pdiv_id_add_const`, `pdiv_maskGather_add_const`, both `pdiv_scalarAffine_*`; `ViTVecLN.pdiv_vecLN_beta`; `pdiv_layerScale`, `pdiv_layerScale_gamma`, `pdiv_layerScaleCh_gamma`, the two scalar-LN Jacobians (ConvNeXt, ConvNeXtClose, ConvNeXtFold); both `pdiv_bnPerChannelFlat_*` (CifarBnClose). `pdiv_patchEmbed_{pos,cls,b}` and `pdiv_vecLN_gamma` already delegate to the two helpers, so they stay |
 | `7f1093ad` | **§0.3 done + §0.2 for Foundation/Architectures** (−830). §0.3: `relu`, `relu6`, `maxPool2`, `maxPool3s2` linearisations on `Filter.eventually_all` / `hasFDerivAt_pi` (the maxpools' `0 < c,h,w` are now unused, kept as `_hc _hh _hw`). §0.2: 31 `Differentiable` proofs → `fun_prop` (Attention ×15, CNN ×5, Depthwise ×2, StridedConv ×2, BatchNorm ×2, MLP, PerChannelBN, BatchMapVJPAt, `Tensor3.{un,}flatten`); new `@[fun_prop] differentiable_dite_zero` (CNN) for the pad-guarded reads; 14 existing atoms tagged `@[fun_prop]` (dense, relu-at-smooth, bnForward, bnIstdBroadcast, layerNorm, conv2d, flatConv, depthwise, depthwiseFlat, globalAvgPoolFlat, decimate{,Odd}Flat, bnPerChannelTensor3, differentiableAt_pad_eval) |
 | `0fe85cc3` | **§0.2 done** (−530): Nets + Training. ViTVecLN ×7, ConvNeXt ×7, ResNet ×13 top-level + 5 inline (B0 `hres_diff` ascriptions dropped), EfficientNet ×10, MobileNet ×5, `crossEntropy_differentiable`, SgdDescentCnn ×7 + 1 inline, SgdDescentMlp ×2 + 3 inline, MlpTrainStep 2 inline. 7 more atoms tagged (`batchMap`, `bnBatchLA`, `seGate`, `seBlockFull`, `mbconvBody`, `relu6_differentiableAt_of_smooth`, `crossEntropy`). Left as they are: `vitForwardKV_differentiable` and `convNextForwardTCh_differentiable` (fun_prop hits a kernel timeout on the recursive stage folds), `chanLNTensor3_diff` (needs an 8-name unfold), `r50IdB_differentiableAt`, and the 3-line-type + 1-line-`.comp` inline haves that `vjp_comp_at` needs typed |
-| *(staged)* | **§0.4 done** (−66, and §11 defect 6 closed): `pdiv_elementwise` in `Tensor.lean` (`hasFDerivAt_pi` + `HasDerivAt.comp_hasFDerivAt`); `pdiv_gelu`, `pdiv_swish`, `pdiv_sigmoid` are one-line instances and `pdiv_coordFun` the same argument at one coordinate. `sigmoidScalar` keeps its definition; the bridge `sigmoidScalar_eq_sigmoid` (and `swishScalar_eq_mul_sigmoid`) brings in Mathlib's `Real.sigmoid`, so `sigmoidScalar_diff`, `swishScalar_diff` and `BceLossCot.one_sub_sigmoidScalar` are one line. New: `swishScalarDeriv_eq`, `sigmoidScalarDeriv_eq` — the closed forms the `swishBack`/`sigmoidBack` emitters render, previously only claimed in comments |
+| `54a33add` | **§0.4 done** (−66, and §11 defect 6 closed): `pdiv_elementwise` in `Tensor.lean` (`hasFDerivAt_pi` + `HasDerivAt.comp_hasFDerivAt`); `pdiv_gelu`, `pdiv_swish`, `pdiv_sigmoid` are one-line instances and `pdiv_coordFun` the same argument at one coordinate. `sigmoidScalar` keeps its definition; the bridge `sigmoidScalar_eq_sigmoid` (and `swishScalar_eq_mul_sigmoid`) brings in Mathlib's `Real.sigmoid`, so `sigmoidScalar_diff`, `swishScalar_diff` and `BceLossCot.one_sub_sigmoidScalar` are one line. New: `swishScalarDeriv_eq`, `sigmoidScalarDeriv_eq` — the closed forms the `swishBack`/`sigmoidBack` emitters render, previously only claimed in comments |
+| *(staged)* | **§4 near-clones, `SgdDescentCnn` conv2 slot** (−190): new `Conv2Slot` namespace — the drift chain, the four margin lemmas and the segment-Lipschitz gradient stated once for any parameter map `Z` into conv2's pre-activation with per-entry drift `ρ·‖e‖₁`, `ℓ1` drift `(2h)(2w)·ρ·‖e‖₁`, and a fixed Jacobian row `J`. The conv2-kernel (`ρ = a`) and conv2-bias (`ρ = 1`) lemmas are instances (Lipschitz 304 → 25 and 277 → 14); the unpinned `cnn{,b2}_postrelu_close` / `_z3_drift` / `_z4_drift` are gone. Capstones left as they are: they are mostly statement and already delegate to `sgd_descends` + the Lipschitz lemma, so a generic capstone would add lines |
 
 **Deferred on purpose:** `DataParallel.dpIterate_lockstep` (the `Semiconj` term is not shorter);
 the `X_inj` family (1 line each); `sigmoidScalar := Real.sigmoid` as a definition (the bridge lemma
 gets the same reuse without moving its 32 consumers).
 
 **Next, in order:**
-1. **Near-clones**, one family per commit, largest first: `SgdDescentCnn` kernel/bias slots (§4),
-   `CertLayer.comp` adoption (§0.6), `BnPairTiedB` (§7), fused-from-unfused (§7), the G1/G2 generator
-   lemmas (§5).
-2. Still open from §11: defects 2 (single-buffer magnitude in four test comparators) and 3 (vjp-oracle
+1. **§4 `SgdDescentCnn` conv1 slot** — `cnn1_*` vs `cnnb1_*` (drift chain, five margins, Lipschitz 531 / 521).
+   The conv1 gradient's Jacobian depends on the relu₁ mask, so `Conv2Slot.loss_grad_lipschitz` does not
+   apply as is; a `Conv1Slot` generic over `Z₁` (or a `Conv2Slot` variant whose `J` is frozen along the
+   segment) is the shape to try. Also the `gradAt` / `gradAt_reluMask` / `grad_close` pairs.
+2. **Other near-clones**, one family per commit, largest first: head drift/margin family across the four
+   slots + 3 Mlp copies (§4), `CertLayer.comp` adoption (§0.6), `BnPairTiedB` (§7), fused-from-unfused (§7),
+   the G1/G2 generator lemmas (§5).
+3. Still open from §11: defects 2 (single-buffer magnitude in four test comparators) and 3 (vjp-oracle
    nets defined twice); §0.7 is a keep-or-retire decision for the user.
-3. Small §0.2 leftovers in root-side files, for whenever those files are next rebuilt anyway:
+4. Small §0.2 leftovers in root-side files, for whenever those files are next rebuilt anyway:
    `StridedConv.flatConvStride2Xla_differentiable`, `Depthwise.depthwiseStride2FlatXla_differentiable`
    (`unfold …; fun_prop`, 4 → 1 each).
 
@@ -88,6 +93,10 @@ gets the same reuse without moving its 32 consumers).
 - A scratch file that imports a downstream module sees that module's Mathlib imports, not the target
   file's: draft a lemma for a root file (`Tensor.lean`) against an import of that file only, or the
   splice can fail on a missing Mathlib module (`HasDerivAt.comp_hasFDerivAt` needs `Deriv.Comp`).
+- Near-clone slots: generate the generic lemma mechanically from the kernel text (regex the conv map
+  into `Z`, the input bound `a` into `ρ`), then hand-edit the seams; instances pass the map explicitly
+  (`(fun v' => …)`), bias instances pass `(ρ := 1)` explicitly and convert with `simpa only [one_mul]`.
+  In a `by simpa … using` body, continuation lines must be indented past the tactic column.
 - Four forked helpers drafting one file group each (scratch-only, `final_<File>.lean` with primed
   names) and a mechanical splice from those files worked well — ~55 sites in one pass.
 
