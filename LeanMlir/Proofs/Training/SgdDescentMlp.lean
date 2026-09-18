@@ -233,15 +233,10 @@ theorem loss_grad_lipschitz {P d₂ d₃ : Nat} (Z : Vec P → Vec d₂) (W₂ :
   have hδ0 : (0:ℝ) ≤ w₂ * (ρ * D) := mul_nonneg hw₂ (mul_nonneg hρ hD0)
   -- the margin freezes every mask along the segment
   have hstab := fun l => margin_keeps_offkink_of_drift Z hσ hZ v d hd hm t ht0 ht1 l
-  have hz_v : ∀ l, Z v l ≠ 0 := fun l h0 => absurd (hm l) (by
-    rw [h0, abs_zero]; exact not_lt.mpr (mul_nonneg hσ hD0))
+  have hz_v : ∀ l, Z v l ≠ 0 := fun l => abs_pos.mp ((mul_nonneg hσ hD0).trans_lt (hm l))
   rw [hgrad (v + t • d) hQt (fun l => (hstab l).1), hgrad v hQv hz_v]
   have hmask : ∀ l, (if Z (v + t • d) l > 0 then (1:ℝ) else 0) =
-      if Z v l > 0 then (1:ℝ) else 0 := by
-    intro l
-    by_cases hp : Z v l > 0
-    · rw [ite_eq_left hp, ite_eq_left ((hstab l).2.mpr hp)]
-    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab l).2.mp h))]
+      if Z v l > 0 then (1:ℝ) else 0 := fun l => if_congr (hstab l).2 rfl rfl
   simp only [hmask]
   -- the softmax drift along the segment
   have hzdrift : ∀ k, |dense W₂ b₂ (relu d₂ (Z (v + t • d))) k -
@@ -783,8 +778,7 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
       (0 < dense (Mat.unflatten v') b₀ x k ↔ 0 < dense (Mat.unflatten v) b₀ x k))
     (fun v' hQ hz1 => ?_) v d hd (fun l => lt_of_eq_of_lt (by ring) (hmargin1 l))
     (lt_of_eq_of_lt (by ring) hsmall) t ht
-    (fun k => ⟨fun h0 => absurd (hmargin0 k) (by
-      rw [h0, abs_zero]; exact not_lt.mpr (mul_nonneg ha hD0)), Iff.rfl⟩)
+    (fun k => ⟨abs_pos.mp ((mul_nonneg ha hD0).trans_lt (hmargin0 k)), Iff.rfl⟩)
     (fun k => margin_keeps_offkink b₀ x ha hx v d hd hmargin0 t ht.1 ht.2 k)).trans_eq
     (by ring)
   -- at a frozen relu₀ point the input gradient is that row contracted with the head
@@ -1051,22 +1045,8 @@ theorem mlp_w1_grad_close {d₁ d₂ d₃ : Nat} (M : FloatModel)
   -- the real cotangent `softmax − onehot ∈ [−1, 1]`
   have hC2 : ∀ k, |softmax d₃
       (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k -
-      oneHot d₃ label k| ≤ 1 := by
-    intro k
-    have hD : 0 < ∑ t, Real.exp (Proofs.dense W₂ b₂
-        (relu d₂ (Proofs.dense W₁ b₁ a₀)) t) :=
-      Finset.sum_pos (fun t _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
-    have hs0 : 0 ≤ softmax d₃
-        (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k :=
-      div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun t _ => (Real.exp_pos _).le)
-    have hs1 : softmax d₃
-        (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k ≤ 1 :=
-      (div_le_one hD).mpr
-        (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
-    simp only [oneHot]
-    by_cases h : k = label
-    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
-    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
+      oneHot d₃ label k| ≤ 1 :=
+    fun k => abs_softmax_sub_oneHot_le_one _ label k
   -- the masked W₂ᵀ contraction within `layerBudget … cotErr`
   have hcot1 := M.cot_step_close W₂ (M.dense W₁ b₁ a₀) (Proofs.dense W₁ b₁ a₀)
     (M.softmaxCECotF fexp (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀))) label)
@@ -1286,10 +1266,7 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
     simp only [FloatModel.mulErr]
     nlinarith [e1, e2]
   -- the layer-1 pre-activations are off the kink (from the rounding margin)
-  have hz : ∀ k, dense W₁ b₁ a₀ k ≠ 0 := fun k hzero => by
-    have h := hmargin_round k
-    rw [hzero, abs_zero] at h
-    exact absurd h (not_lt.mpr hB1)
+  have hz : ∀ k, dense W₁ b₁ a₀ k ≠ 0 := fun k => abs_pos.mp (hB1.trans_lt (hmargin_round k))
   -- discharge `mlp_hidden_sgd_descends`' abstract η by the proven grad-close
   have hgh : ∀ idx, |M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label idx -
       gradAt (fun w => crossEntropy d₃
@@ -1493,22 +1470,8 @@ theorem mlp_w0_grad_close {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
   -- real head cotangent `softmax − onehot ∈ [−1, 1]`
   have hC2 : ∀ k, |softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
       (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
-      oneHot d₃ label k| ≤ 1 := by
-    intro k
-    have hD : 0 < ∑ t, Real.exp (Proofs.dense W₂ b₂ (relu d₂
-        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))) t) :=
-      Finset.sum_pos (fun t _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
-    have hs0 : 0 ≤ softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
-        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))) ) k :=
-      div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun t _ => (Real.exp_pos _).le)
-    have hs1 : softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
-        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))) ) k ≤ 1 :=
-      (div_le_one hD).mpr
-        (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
-    simp only [oneHot]
-    by_cases h : k = label
-    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
-    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
+      oneHot d₃ label k| ≤ 1 :=
+    fun k => abs_softmax_sub_oneHot_le_one _ label k
   -- first masked W₂ᵀ contraction: layer-1 cotangent (under the layer-1 margin)
   have hcot1 : ∀ l, |reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
         (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
@@ -1792,14 +1755,9 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
     simp only [FloatModel.mulErr]
     nlinarith [e1, e2]
   -- the two pre-activations are off the kink (from the rounding margins)
-  have hz0 : ∀ k, dense W₀ b₀ x k ≠ 0 := fun k hzero => by
-    have h := hmargin0_round k
-    rw [hzero, abs_zero] at h
-    exact absurd h (not_lt.mpr hE₀0)
-  have hz1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0 := fun k hzero => by
-    have h := hmargin1_round k
-    rw [hzero, abs_zero] at h
-    exact absurd h (not_lt.mpr hE₁0)
+  have hz0 : ∀ k, dense W₀ b₀ x k ≠ 0 := fun k => abs_pos.mp (hE₀0.trans_lt (hmargin0_round k))
+  have hz1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0 := fun k =>
+    abs_pos.mp (hE₁0.trans_lt (hmargin1_round k))
   -- discharge `mlp_input_sgd_descends`' abstract η by the proven grad-close
   have hgh : ∀ idx, |M.mlpInputFloatGrad W₀ b₀ W₁ b₁ W₂ b₂ x fexp label idx -
       gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂

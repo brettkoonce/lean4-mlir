@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `7639580e`, 3 ahead of origin, + the staged row)
+## Status (2026-09-18, main `5c53587b`, 4 ahead of origin, + the staged row)
 
-**Landed** — about 11.9k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 12.0k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -56,7 +56,8 @@ suspected, no drop-in located.
 | `491f9b31` | **§4 descent-capstone arithmetic** (−123): new `sgd_step_l1_le` (`SgdDescent`) — the `ℓ1` radius `lr·(‖g‖₁ + m·η)` of an inexact step — replaces the 15-line `calc` in `sgd_descent_inexact` and the seven capstones (Linear, Mlp ×2, Cnn ×4); each site keeps its stated `hD` type. New `softmax_seg_drift` (`SgdDescentLinear`) — logit drift `≤ t·δ` with `2δ < 1` gives softmax drift `≤ 2tδ/(1−2δ)` (`softmax_perturb` + `exp_sub_one_le` + the denominator step) — closes the softmax step of the Linear, `MlpSlot` and `Conv2Slot` Lipschitz lemmas (Cnn 26 → 1 lines). Only three softmax copies were left; `Conv1Slot`/`Conv2Slot`/`MlpSlot` had absorbed the other four |
 | `b50ba380` | **§4 `finProdFinEquiv` reindexing** (−101): new `sum_finProdFinEquiv` (`SgdDescent`; the same statement as `sum_fin_prod` in `ViTClose`, parked here until the root-file batch) — `∑ k : Fin (m·n), f k` as the row-major double sum. `sum_t3`, `sum_w3`, `sum_abs_k4` are `simp only [sum_finProdFinEquiv]` (+ `rfl` for the non-reducible `w3Idx`/`k4Idx`), `sum_s2` is the lemma itself, `sum_abs_flatten_cols` one line; `sum_abs_kernel_slab_le` (30 lines) is `sum_abs_k4` + `Finset.single_le_sum` (so `sum_abs_k4` moved above it) and Linear's column-mass `hinj` the same argument; `k4Idx_inj` / `t3Idx_inj` are `simpa [and_assoc]`. The four hand-peeled 3-level indices are `t3Idx_surj` and the two 4-level ones `k4Idx_surj` (7 → 2 and 6 → 1 lines) |
 | `7639580e` | **§4 seal files** (−90): new `fderiv_ne_zero_of_ray` (`JacobianSeal`) — a readout `ℓ` of `f` with nonzero derivative along `t ↦ x + t • v` at `0` gives `fderiv ℝ f x ≠ 0`; the readout is a plain function (`fun y => y 0` or `fun y => y 0 - y 1`, differentiability by `fun_prop`), since `proj 0 - proj 1` as a `→L` stalls in instance elaboration. The five `*_jacobian_nonzero` seals (MNv2 toy / 224, R34 toy / 224 / full depth) go 14–17 → 4–6 lines. New `hasDerivAt_mul_self_zero` (`t·Q t` has derivative `Q 0` for `Q` continuous at `0`) closes the four `gd_hasDerivAt*` / `g_hasDerivAt` slope arguments (12–13 → 3–5). `winF` moves into the MNv2 toy seal in place of the identical private `win'`; the γ-general `bnForward_chan_diff_γ` / `UDiff_bn_γ` move from `Mnv2RealSeal` into `R34RealSeal` (unpinned; the MNv2 file reaches them through its `open`), and `UDiff_bn` is their γ = 1 case (13 → 2). Deleted, unpinned: `g_full_hasDerivAt` (dead since the full seal went through `fderiv_add_const`), `max_add_r` (= `max_add_add_right`). Left: `MobileNetV2.lean`'s private `win` (240 downstream — root-file batch), `ldS` = `ldSβ · · 20` (§6 live witnesses), `stemS`/`Rr`/`ray` (not instances) |
-| *(staged)* | **§4 dense / conv difference identities** (−176): `smul_l1_mass{,_le}`, `dense_unflatten_diff`, `dense_unflatten_col_drift` move up from `SgdDescentMlp` into `SgdDescentLinear`, whose `dense_unflatten_drift` (41 lines) is now `dense_unflatten_col_drift` + the column-mass bound and whose segment drift uses `smul_l1_mass`. The "difference of two affine evaluations" identities are one `simp only [… ← Finset.sum_sub_distrib …]` each: `dense_unflatten_diff`, `dense_input_drift`'s `hdiff`, `conv2d_kernel_sub` (20 → 2), and new `conv2d_input_sub` (beside `conv2d_kernel_sub` / `conv2d_bias_sub`) for the two 25-line inline copies in `conv2d_input_entry_drift` / `conv2d_input_l1_drift`; `head3_sum_drift`'s `hcoll` and `abs_triple_sum_sub_le` (30 → 4) the same way. `mask_scalar_close` is `sign_stable_of_close` + `if_congr` (its `hex` is now unused: `_hex`), `relu_entry_lipschitz` is `abs_max_sub_max_le_abs` via `max_def_lt`, Linear's 21-line `hcot0` is `M.cotErr_nonneg` |
+| `5c53587b` | **§4 dense / conv difference identities** (−176): `smul_l1_mass{,_le}`, `dense_unflatten_diff`, `dense_unflatten_col_drift` move up from `SgdDescentMlp` into `SgdDescentLinear`, whose `dense_unflatten_drift` (41 lines) is now `dense_unflatten_col_drift` + the column-mass bound and whose segment drift uses `smul_l1_mass`. The "difference of two affine evaluations" identities are one `simp only [… ← Finset.sum_sub_distrib …]` each: `dense_unflatten_diff`, `dense_input_drift`'s `hdiff`, `conv2d_kernel_sub` (20 → 2), and new `conv2d_input_sub` (beside `conv2d_kernel_sub` / `conv2d_bias_sub`) for the two 25-line inline copies in `conv2d_input_entry_drift` / `conv2d_input_l1_drift`; `head3_sum_drift`'s `hcoll` and `abs_triple_sum_sub_le` (30 → 4) the same way. `mask_scalar_close` is `sign_stable_of_close` + `if_congr` (its `hex` is now unused: `_hex`), `relu_entry_lipschitz` is `abs_max_sub_max_le_abs` via `max_def_lt`, Linear's 21-line `hcot0` is `M.cotErr_nonneg` |
+| *(staged)* | **§4 Mathlib one-liners + Training's §0.5 idioms** (−119): `JacobianSeal` — both `backward_ne_zero_of_pdiv_ne` are `simpa [h.correct]` (the `sum_eq_single` block was written twice), `sum_smul_basisVec` one `simp`, `fderiv_eq_zero_of_pdiv_all_zero` via `sum_smul_basisVec` + `map_sum` (a `pdiv` row is `fderiv` on the basis vector by definition), `exists_pdiv_ne_of_fderiv_ne` one `simpa … using mt …`; the unpinned `fderiv_basisVec_eq_zero_of_pdiv_row` deleted. `fderiv_apply_eq_sum_grad` on `LinearMap.pi_apply_eq_sum_univ` (15 → 5). New `abs_softmax_sub_oneHot_le_one` (`SgdDescentLinear`, parked until §3 makes FloatBridge's softmax bounds public) replaces five 14-line copies (Linear, Mlp ×2, Cnn ×2). `MlpSlot`'s mask freeze is `if_congr`; nine margin ⇒ off-kink proofs are `abs_pos.mp (h.trans_lt hm)`. Left: eight `sum_const`/`card_univ` rewrites (a line or less each) |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -70,7 +71,7 @@ pinned statements of one fact, each already a 2-line proof over the pointwise le
 **Next, in order** (handoff for the next session: chase the remaining duplicates, largest verified first,
 one family per commit; the pinned-statement questions wait for the end list below). ⚠ Recent batches landed
 at 35–70% of their estimates (signatures stay; some listed sites turn out not to be the shape) — plan on half.
-1. **§4 Training near-clones** (~600, likely ~300 at the landing rate) — in progress 2026-09-18. Families
+1. **§4 Training near-clones** — done 2026-09-18 (−609 over five commits, against ~600 estimated). Families
    plus the seal files, one commit each (see §4 below for the lemma sketches):
    - ~~softmax segment drift → `softmax_seg_drift`; ℓ1 step radius `hD` ×8 → `sgd_step_l1_le`~~ (`491f9b31`);
    - ~~the `finProdFinEquiv` reindex ×5 → `sum_finProdFinEquiv`, the inline peels → `t3Idx_surj`/`k4Idx_surj`~~
@@ -78,9 +79,9 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    - ~~the `*_jacobian_nonzero` ray argument → `fderiv_ne_zero_of_ray`; the seal-file specialisations~~
      (`7639580e`);
    - ~~the dense-difference identity / `smul_l1_mass` / `dense_unflatten_diff` / `mask_scalar_close` / `hcot0`
-     bullet, `abs_triple_sum_sub_le`~~ (staged row);
-   - left in §4: the Mathlib one-liners (`fderiv_apply_eq_sum_grad`, `JacobianSeal.sum_smul_basisVec` /
-     `fderiv_eq_zero_of_pdiv_all_zero`) and Training's share of the §0.5 idioms.
+     bullet, `abs_triple_sum_sub_le`~~ (`5c53587b`);
+   - ~~the Mathlib one-liners and Training's share of the §0.5 idioms~~ (staged row). **§4 is done** with this
+     row; §3 picks up FloatBridge's `|softmax − oneHot| ≤ 1` copy and moves `abs_softmax_sub_oneHot_le_one` up.
    ⚠ §4's line numbers are from `aed84250`: `SgdDescentCnn` has since shrunk 9,974 → 8,374 and
    `SgdDescentMlp` 2,187 → 1,926 (the `Conv1Slot`/`Conv2Slot`/`MlpSlot` batches), so re-locate each site by
    name. Several of the drift/radius copies may already be gone inside the slot lemmas. `SgdDescentCnn` is a

@@ -38,31 +38,12 @@ theorem HasVJP.backward_ne_zero_of_pdiv_ne {m n : Nat} {f : Vec m → Vec n}
     (h : HasVJP f) (x : Vec m) {i₀ : Fin m} {j₀ : Fin n}
     (hpd : pdiv f x i₀ j₀ ≠ 0) :
     h.backward x (basisVec j₀) i₀ ≠ 0 := by
-  rw [h.correct]
-  have hsum : (∑ j : Fin n, pdiv f x i₀ j * basisVec j₀ j) = pdiv f x i₀ j₀ := by
-    rw [Finset.sum_eq_single j₀]
-    · rw [basisVec_apply, ite_eq_left rfl, mul_one]
-    · intro j _ hj; rw [basisVec_apply, ite_eq_right hj, mul_zero]
-    · intro hni; exact absurd (Finset.mem_univ j₀) hni
-  rw [hsum]; exact hpd
+  simpa [h.correct] using hpd
 
 /-- The standard basis decomposition `∑ᵢ vᵢ · eᵢ = v` on `Vec m`. -/
 theorem sum_smul_basisVec {m : Nat} (v : Vec m) :
     (∑ i : Fin m, v i • basisVec i) = v := by
-  funext k
-  rw [Finset.sum_apply]
-  simp only [Pi.smul_apply, smul_eq_mul, basisVec_apply]
-  rw [Finset.sum_eq_single k]
-  · rw [ite_eq_left rfl, mul_one]
-  · intro b _ hb; rw [ite_eq_right (fun h => hb h.symm), mul_zero]
-  · intro hni; exact absurd (Finset.mem_univ k) hni
-
-/-- A whole row of the Jacobian vanishing is the Fréchet derivative vanishing on that
-    basis vector: `pdiv f x i · = (fderiv ℝ f x) eᵢ`, by definition of `pdiv`. -/
-theorem fderiv_basisVec_eq_zero_of_pdiv_row {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
-    {i : Fin m} (hrow : ∀ j, pdiv f x i j = 0) :
-    fderiv ℝ f x (basisVec i) = 0 := by
-  funext j; exact hrow j
+  funext k; simp [Finset.sum_apply]
 
 /-- **All Jacobian entries zero ⇒ the Fréchet derivative is the zero map.** `fderiv ℝ f x`
     is ℝ-linear, so it is determined by its values on the standard basis; if those all
@@ -71,15 +52,10 @@ theorem fderiv_basisVec_eq_zero_of_pdiv_row {m n : Nat} (f : Vec m → Vec n) (x
 theorem fderiv_eq_zero_of_pdiv_all_zero {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
     (hall : ∀ i j, pdiv f x i j = 0) :
     fderiv ℝ f x = 0 := by
-  have hbasis : ∀ i, fderiv ℝ f x (basisVec i) = 0 := fun i =>
-    fderiv_basisVec_eq_zero_of_pdiv_row f x (hall i)
-  apply ContinuousLinearMap.ext
-  intro v
-  calc fderiv ℝ f x v
-      = fderiv ℝ f x (∑ i : Fin m, v i • basisVec i) := by rw [sum_smul_basisVec]
-    _ = ∑ i : Fin m, fderiv ℝ f x (v i • basisVec i) := by rw [map_sum]
-    _ = ∑ i : Fin m, v i • fderiv ℝ f x (basisVec i) := by simp_rw [map_smul]
-    _ = 0 := by simp_rw [hbasis]; simp
+  -- a row of `pdiv` is `fderiv` on that basis vector, by definition
+  refine ContinuousLinearMap.ext fun v => ?_
+  rw [← sum_smul_basisVec v, map_sum]
+  simp [fun i => (funext (hall i) : fderiv ℝ f x (basisVec i) = 0)]
 
 /-- **The seal in `fderiv` form.** A nonzero Fréchet derivative at the witness yields a
     nonzero Jacobian entry — the clean analytic hypothesis behind
@@ -87,11 +63,7 @@ theorem fderiv_eq_zero_of_pdiv_all_zero {m n : Nat} (f : Vec m → Vec n) (x : V
 theorem exists_pdiv_ne_of_fderiv_ne {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
     (hfd : fderiv ℝ f x ≠ 0) :
     ∃ (i : Fin m) (j : Fin n), pdiv f x i j ≠ 0 := by
-  by_contra hcon
-  refine hfd (fderiv_eq_zero_of_pdiv_all_zero f x ?_)
-  intro i j
-  by_contra hne
-  exact hcon ⟨i, j, hne⟩
+  simpa [not_forall] using mt (fderiv_eq_zero_of_pdiv_all_zero f x) hfd
 
 /-- Packaging: a nonzero Fréchet derivative ⇒ the proven backward is non-trivial at `x`
     (some basis-cotangent probe returns a nonzero row). The form a whole-net witness uses:
@@ -117,13 +89,7 @@ theorem HasVJPAt.backward_ne_zero_of_pdiv_ne {m n : Nat} {f : Vec m → Vec n}
     {x : Vec m} (h : HasVJPAt f x) {i₀ : Fin m} {j₀ : Fin n}
     (hpd : pdiv f x i₀ j₀ ≠ 0) :
     h.backward (basisVec j₀) i₀ ≠ 0 := by
-  rw [h.correct]
-  have hsum : (∑ j : Fin n, pdiv f x i₀ j * basisVec j₀ j) = pdiv f x i₀ j₀ := by
-    rw [Finset.sum_eq_single j₀]
-    · rw [basisVec_apply, ite_eq_left rfl, mul_one]
-    · intro j _ hj; rw [basisVec_apply, ite_eq_right hj, mul_zero]
-    · intro hni; exact absurd (Finset.mem_univ j₀) hni
-  rw [hsum]; exact hpd
+  simpa [h.correct] using hpd
 
 /-- **The seal in `fderiv` form, pointwise.** `HasVJPAt` analogue of
     `HasVJP.backward_nontrivial_of_fderiv_ne`: a nonzero Fréchet derivative

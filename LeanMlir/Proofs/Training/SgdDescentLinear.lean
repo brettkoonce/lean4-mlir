@@ -146,6 +146,17 @@ theorem softmax_seg_drift {n : Nat} (zt z : Vec n) {t δ : ℝ} (ht0 : 0 ≤ t) 
   exact div_le_div_of_nonneg_left (mul_nonneg zero_le_two (mul_nonneg ht0 hδ0))
     (by linarith) (by linarith)
 
+/-- **`|softmax − oneHot| ≤ 1`** — the magnitude of every softmax-CE head cotangent:
+    `softmax` lies in `[0, 1]` and a one-hot entry is `0` or `1`. It belongs beside
+    `softmax_abs_le_one` in FloatBridge (whose private nonneg / le-one pair it re-derives)
+    and moves there with the §3 float batch. -/
+theorem abs_softmax_sub_oneHot_le_one {n : Nat} (z : Vec n) (label k : Fin n) :
+    |softmax n z k - oneHot n label k| ≤ 1 := by
+  have hs0 : 0 ≤ softmax n z k :=
+    div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun j _ => (Real.exp_pos _).le)
+  have hs1 := (abs_le.mp (FloatModel.softmax_abs_le_one z k)).2
+  simp only [oneHot]; split_ifs <;> rw [abs_le] <;> constructor <;> linarith
+
 /-- **Segment-Lipschitz gradient for the linear softmax-CE loss, explicit
     constant.** Under the small-step condition `2aD < 1`, the gradient
     entries drift by at most `(2a²/(1−2aD))·(t·D)` along `[v, v+d]` — the
@@ -300,20 +311,7 @@ theorem linear_grad_close {m n : Nat} (M : FloatModel) (W : Mat m n)
   have hcot := M.softmax_ce_cot_close fexp (M.dense W b x) (dense W b x)
     label heexp0 heexp1 hfexp hρ1 hδ j
   -- `softmax − onehot ∈ [−1, 1]`
-  have hs0 : 0 ≤ softmax n (dense W b x) j :=
-    div_nonneg (Real.exp_pos _).le
-      (Finset.sum_nonneg fun k _ => (Real.exp_pos _).le)
-  have hs1 : softmax n (dense W b x) j ≤ 1 := by
-    have hD : 0 < ∑ k, Real.exp (dense W b x k) :=
-      Finset.sum_pos (fun k _ => Real.exp_pos _) ⟨j, Finset.mem_univ j⟩
-    exact (div_le_one hD).mpr
-      (Finset.single_le_sum (fun k _ => (Real.exp_pos _).le)
-        (Finset.mem_univ j))
-  have hy : |softmax n (dense W b x) j - oneHot n label j| ≤ 1 := by
-    simp only [oneHot]
-    by_cases h : j = label
-    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
-    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
+  have hy := abs_softmax_sub_oneHot_le_one (dense W b x) label j
   -- the input multiply: exact left operand (`|xᵢ − xᵢ| = 0 ≤ 0`)
   have hxx : |x i - x i| ≤ (0:ℝ) := by simp
   exact M.mul_close hxx hcot (hx i) hy

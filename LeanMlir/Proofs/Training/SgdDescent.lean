@@ -49,18 +49,10 @@ theorem sum_finProdFinEquiv {M : Type*} [AddCommMonoid M] {m n : Nat}
 theorem fderiv_apply_eq_sum_grad {m : Nat} (f : Vec m → ℝ) (x : Vec m)
     (d : Vec m) :
     fderiv ℝ f x d = ∑ i, d i * gradAt f x i := by
-  have hd : d = ∑ i, d i • basisVec i := by
-    funext k
-    rw [Finset.sum_apply]
-    simp only [Pi.smul_apply, basisVec, smul_eq_mul, mul_ite, mul_one,
-      mul_zero]
-    rw [Finset.sum_ite_eq]
-    simp
-  calc fderiv ℝ f x d = fderiv ℝ f x (∑ i, d i • basisVec i) := by rw [← hd]
-    _ = ∑ i, fderiv ℝ f x (d i • basisVec i) := map_sum _ _ _
-    _ = ∑ i, d i * gradAt f x i :=
-        Finset.sum_congr rfl fun i _ => by
-          rw [map_smul]; simp [gradAt, smul_eq_mul]
+  rw [← ContinuousLinearMap.coe_coe, LinearMap.pi_apply_eq_sum_univ]
+  exact Finset.sum_congr rfl fun i _ => by
+    simp only [gradAt, smul_eq_mul, ContinuousLinearMap.coe_coe]
+    congr 2; funext j; exact if_congr eq_comm rfl rfl
 
 /-- **Descent lemma along a segment** (MVT form). If `f` is differentiable
     on the segment `[x, x+d]` and its gradient entries drift by at most

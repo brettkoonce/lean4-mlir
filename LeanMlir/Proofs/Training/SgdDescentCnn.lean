@@ -2062,19 +2062,8 @@ theorem cnn_conv2_cot_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
   have hHeadCot : ∀ k, |M.softmaxCECotF fexp Z5F label k -
       (softmax nC Z5 k - oneHot nC label k)| ≤ ecH := fun k =>
     M.softmax_ce_cot_close fexp Z5F Z5 label heexp0 heexp1 hfexp hρ1 hDLclose k
-  have hHeadMag : ∀ k, |softmax nC Z5 k - oneHot nC label k| ≤ 1 := by
-    intro k
-    have hD : 0 < ∑ t, Real.exp (Z5 t) :=
-      Finset.sum_pos (fun t _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
-    have hs0 : 0 ≤ softmax nC Z5 k :=
-      div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun t _ => (Real.exp_pos _).le)
-    have hs1 : softmax nC Z5 k ≤ 1 :=
-      (div_le_one hD).mpr
-        (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
-    simp only [oneHot]
-    by_cases hkl : k = label
-    · rw [ite_eq_left hkl, abs_le]; constructor <;> linarith
-    · rw [ite_eq_right hkl, abs_le]; constructor <;> linarith
+  have hHeadMag : ∀ k, |softmax nC Z5 k - oneHot nC label k| ≤ 1 :=
+    fun k => abs_softmax_sub_oneHot_le_one _ label k
   -- two masked Wᵀ cotangent steps + unmasked W₃ step
   have hc4 : ∀ q, |FloatModel.reluMask Z4F (M.dense (fun j i' => W₅ i' j)
         (fun _ => 0) (M.softmaxCECotF fexp Z5F label)) q -
@@ -2164,19 +2153,8 @@ theorem cnn_conv2_cot_real_abs_le {c h w d₃ d₄ nC kH kW : Nat}
   set PR := maxPoolFlat c h w (relu (c * (2*h) * (2*w))
     (Tensor3.flatten (conv2d W₂ b₂ X2))) with hPR
   set Z5 := dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ PR)))) with hZ5
-  have hHeadMag : ∀ k, |softmax nC Z5 k - oneHot nC label k| ≤ 1 := by
-    intro k
-    have hD : 0 < ∑ t, Real.exp (Z5 t) :=
-      Finset.sum_pos (fun t _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
-    have hs0 : 0 ≤ softmax nC Z5 k :=
-      div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun t _ => (Real.exp_pos _).le)
-    have hs1 : softmax nC Z5 k ≤ 1 :=
-      (div_le_one hD).mpr
-        (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
-    simp only [oneHot]
-    by_cases hkl : k = label
-    · rw [ite_eq_left hkl, abs_le]; constructor <;> linarith
-    · rw [ite_eq_right hkl, abs_le]; constructor <;> linarith
+  have hHeadMag : ∀ k, |softmax nC Z5 k - oneHot nC label k| ≤ 1 :=
+    fun k => abs_softmax_sub_oneHot_le_one _ label k
   have hc4Mag : ∀ q, |FloatModel.reluMask
       (dense W₄ b₄ (relu d₃ (dense W₃ b₃ PR))) (dense (fun j i' => W₅ i' j)
       (fun _ => 0) (fun k => softmax nC Z5 k - oneHot nC label k)) q| ≤
@@ -2879,10 +2857,7 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
   -- base-point conditions from the margins
   have hz2_v : ∀ k,
       Z v k ≠ 0 :=
-    fun k h0 => by
-      have hk := hm2 k
-      rw [h0, abs_zero] at hk
-      exact absurd hk (not_lt.mpr hρD0)
+    fun k => abs_pos.mp (hρD0.trans_lt (hm2 k))
   have hmp_v : MaxPool2Smooth (Tensor3.unflatten
       (relu (c * (2*h) * (2*w))
         (Z v)) :
@@ -2890,19 +2865,12 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
   have hz3_v : ∀ l, dense W₃ b₃ (maxPoolFlat c h w
       (relu (c * (2*h) * (2*w))
         (Z v))) l ≠ 0 :=
-    fun l h0 => by
-      have hk := hm3 l
-      rw [h0, abs_zero] at hk
-      exact absurd hk (not_lt.mpr (mul_nonneg hw₃
-        (mul_nonneg (Nat.cast_nonneg _) hρD0)))
+    fun l => abs_pos.mp ((mul_nonneg hw₃ (mul_nonneg (Nat.cast_nonneg _) hρD0)).trans_lt (hm3 l))
   have hz4_v : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
       (relu (c * (2*h) * (2*w)) (Z v))))) q ≠ 0 :=
-    fun q h0 => by
-      have hk := hm4 q
-      rw [h0, abs_zero] at hk
-      exact absurd hk (not_lt.mpr (mul_nonneg hw₄
-        (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₃
-          (mul_nonneg (Nat.cast_nonneg _) hρD0)))))
+    fun q =>
+      abs_pos.mp ((mul_nonneg hw₄ (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₃
+        (mul_nonneg (Nat.cast_nonneg _) hρD0)))).trans_lt (hm4 q))
   -- segment-point conditions: everything frozen
   have hstab2 := fun k =>
     margin_keeps_offkink_of_drift Z hρ hZ v d hd hm2 t ht0 ht1 k
@@ -4524,8 +4492,7 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC kH kW : Nat}
       ((c * kH * kW : ℕ) : ℝ) * (w₂ * (ρ * D)) by ring])
     (fun l => lt_of_eq_of_lt (by ring) (hm3 l)) (fun q => lt_of_eq_of_lt (by ring) (hm4 q))
     (lt_of_eq_of_lt (by ring) hsmall) t ht
-    (fun k => ⟨fun h0 => absurd (hm1 k) (by
-      rw [h0, abs_zero]; exact not_lt.mpr (mul_nonneg hρ hD0)), Iff.rfl⟩)
+    (fun k => ⟨abs_pos.mp ((mul_nonneg hρ hD0).trans_lt (hm1 k)), Iff.rfl⟩)
     (fun k => margin_keeps_offkink_of_drift Z hρ hZ v d hd hm1 t ht.1 ht.2 k)).trans_eq
     (by ring)
   -- at a frozen-mask point the conv1 gradient is that row contracted with the head
