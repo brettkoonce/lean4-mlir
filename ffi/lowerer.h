@@ -38,6 +38,14 @@ typedef struct iree_ffi_session_t iree_ffi_session_t;
 // none of them need a NULL check or a stub.
 iree_ffi_session_t* lowerer_session_create(const char* path);
 
+// The SHARDED INFERENCE session (pjrt_ffi.c's `pjrt_ffi_session_create_dp`): an
+// eval forward compiled for `replicas` devices, outputs gathered from all of
+// them. Also a real function, for the same one-time-load reason. XLA-only and
+// optional: when the loaded shim does not export it (the IREE shim, or an XLA
+// shim built before it existed) it says so and returns NULL — never a quiet
+// fall back to one device.
+iree_ffi_session_t* lowerer_session_create_dp(const char* path, int replicas);
+
 // Names the loaded lowerer: "xla", "iree", or "none" before the first session.
 const char* lowerer_active_name(void);
 

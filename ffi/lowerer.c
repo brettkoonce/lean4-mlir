@@ -113,6 +113,8 @@ static int bind_all(void* h) {
 // The session ctor is resolved separately because it is the only symbol needed
 // before `g_active` is meaningful.
 static iree_ffi_session_t* (*s_session_create)(const char*) = NULL;
+// Optional, like the OPT pointers: NULL on the IREE shim and on a stale XLA one.
+static iree_ffi_session_t* (*s_session_create_dp)(const char*, int) = NULL;
 
 static int load_once(void) {
   static int done = 0;
@@ -176,10 +178,26 @@ static int load_once(void) {
     g_active = "none";
     return 1;
   }
+  *(void**)(&s_session_create_dp) = dlsym(h, "pjrt_ffi_session_create_dp");
   return 0;
 }
 
 iree_ffi_session_t* lowerer_session_create(const char* path) {
   if (load_once()) return NULL;
   return s_session_create(path);
+}
+
+iree_ffi_session_t* lowerer_session_create_dp(const char* path, int replicas) {
+  if (load_once()) return NULL;
+  if (!s_session_create_dp) {
+    // ⚠ The stale-shim case is the likely one: the shim is a gcc one-liner under
+    // ffi/, not a lake target, so a rebuilt binary can meet an old .so.
+    fprintf(stderr,
+            "[lowerer] the loaded %s shim has no 'pjrt_ffi_session_create_dp' — a sharded "
+            "eval needs the XLA shim, rebuilt from the current ffi/pjrt_ffi.c:\n"
+            "  gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so\n",
+            g_active);
+    return NULL;
+  }
+  return s_session_create_dp(path, replicas);
 }

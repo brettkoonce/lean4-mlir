@@ -128,6 +128,9 @@ struct iree_ffi_session_t {
   char* entry;      // original func name, before the @main rename
   int num_outputs;  // from the compiled executable — used by the G4 guard
   int replicas;     // what THIS graph was compiled for (see session_create)
+  int gather;       // 1 only from `pjrt_ffi_session_create_dp` at >1 replica: a
+                    // graph with NO cross-replica op run sharded, so every
+                    // replica's outputs are its OWN shard's — see d2h_gather
   resident_t res;   // §2d.3; all-zero unless PJRT_FFI_RESIDENT engaged
 };
 
@@ -258,6 +261,11 @@ static int pinned_enabled(void) {
 //           failure mode residency introduces — "a stale retained handle" is one
 //           of the three this comment already names, and unlike mode 1 it is a
 //           defect no amount of contraction can absorb.
+//   mode 3  GATHER: a sharded inference session reads replica 0's output into
+//           EVERY replica's slot — "four copies of shard 0", which is exactly the
+//           replica-0-only read-back the train step uses and `d2h_gather`
+//           replaces. Every size still agrees, so nothing in the shim can catch
+//           it; `scripts/sharded_eval_gate.sh` must, and runs it as its control.
 static int fault_mode(void) {
   static int t = -1;
   if (t < 0) { const char* e = getenv("PJRT_FFI_FAULT"); t = e ? atoi(e) : 0; }
@@ -704,7 +712,23 @@ static char* rename_entry_to_main(const char* src, char** entry_out) {
   return out;
 }
 
-iree_ffi_session_t* iree_ffi_session_create(const char* path) {
+// Any op through which replicas exchange data. A sharded INFERENCE session must
+// contain none: its correctness rests on replica r's outputs depending on replica
+// r's input shard alone. Wider than the `all_reduce` test below on purpose — that
+// one only chooses a replica count; this one guards a read-back contract.
+static int has_cross_replica_op(const char* mlir) {
+  static const char* const kOps[] = {
+    "all_reduce", "all_gather", "reduce_scatter", "collective_permute",
+    "all_to_all", "collective_broadcast",
+  };
+  for (size_t i = 0; i < sizeof(kOps) / sizeof(kOps[0]); i++)
+    if (strstr(mlir, kOps[i])) return 1;
+  return 0;
+}
+
+// `dp_replicas == 0` is the ordinary create: the replica count is inferred from
+// the graph. `> 0` is `pjrt_ffi_session_create_dp`'s explicit count.
+static iree_ffi_session_t* session_create_core(const char* path, int dp_replicas) {
   if (ensure_client()) return NULL;
 
   size_t n = 0;
@@ -715,6 +739,22 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   char* mlir = rename_entry_to_main(src, &entry);
   free(src);
   if (!mlir) return NULL;
+
+  if (dp_replicas > 0) {
+    if (has_cross_replica_op(mlir)) {
+      fprintf(stderr,
+              "[pjrt_ffi] %s has a cross-replica op — a sharded inference session is only "
+              "for graphs whose replicas never communicate (a train step compiles at "
+              "PJRT_REPLICAS through the ordinary create)\n", path);
+      free(mlir); free(entry); return NULL;
+    }
+    if (dp_replicas > g_replicas) {
+      fprintf(stderr,
+              "[pjrt_ffi] sharded session for %d replicas, but PJRT_REPLICAS=%d — only that "
+              "many devices were enumerated\n", dp_replicas, g_replicas);
+      free(mlir); free(entry); return NULL;
+    }
+  }
 
   PJRT_Program prog = {0};
   prog.struct_size = PJRT_Program_STRUCT_SIZE;
@@ -728,11 +768,14 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   cc.client = g_client;
   cc.program = &prog;
   // Replica count is PER GRAPH, not per process. A module with no cross-replica
-  // op computes the same thing at any replica count and is only ever invoked
-  // single-device (the eval forward is exactly this), so compile it for one
-  // replica — otherwise Execute rejects it with "Attempted to execute with 1
-  // argument lists when local device count is 2".
-  int reps = (g_replicas > 1 && strstr(mlir, "all_reduce")) ? g_replicas : 1;
+  // op computes the same thing at any replica count, so the ordinary create
+  // compiles it for one replica — otherwise a single-device Execute is rejected
+  // with "Attempted to execute with 1 argument lists when local device count is
+  // 2". ▶ Running such a module on N devices is legitimate — data-parallel
+  // inference, N argument lists of N input shards — and is what
+  // `pjrt_ffi_session_create_dp` is for: it states the count instead.
+  int reps = dp_replicas > 0 ? dp_replicas
+           : (g_replicas > 1 && strstr(mlir, "all_reduce")) ? g_replicas : 1;
   size_t optlen = 0;
   const unsigned char* optbuf =
       pjrt_compile_options_for(reps, command_buffers_disabled(), &optlen);
@@ -779,9 +822,38 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   s->entry = entry;
   s->num_outputs = num_outputs;
   s->replicas = reps;
-  fprintf(stderr, "[pjrt_ffi] compiled %s (@%s, %d outputs, %d replica%s) in %.0f ms\n",
-          path, entry, num_outputs, reps, reps == 1 ? "" : "s", compile_ms);
+  s->gather = (dp_replicas > 1);
+  fprintf(stderr, "[pjrt_ffi] compiled %s (@%s, %d outputs, %d replica%s%s) in %.0f ms\n",
+          path, entry, num_outputs, reps, reps == 1 ? "" : "s",
+          s->gather ? ", SHARDED — outputs gathered from every replica" : "", compile_ms);
   return s;
+}
+
+iree_ffi_session_t* iree_ffi_session_create(const char* path) {
+  return session_create_core(path, 0);
+}
+
+// ─── sharded inference session ─────────────────────────────────────────────
+//
+// Exported ONLY by this shim; `ffi/lowerer.c` dlsym()s it optionally, so the
+// IREE shim and any XLA shim built before it make the caller fail loudly
+// instead of evaluating on one device. The eval forward is the use: it has no
+// cross-replica op, so the SAME module computes the same function on any
+// device, and N devices over N input shards is plain data-parallel inference —
+// no new render, nothing in `verified_mlir/` moves.
+//
+// What makes it a different session and not just a different count is the
+// READ-BACK: both invoke paths read replica 0 only, which is right for a train
+// step (the all_reduce makes every replica's result identical) and wrong here
+// (every replica's result is its own shard's). `gather` switches them to
+// `d2h_gather`. Refuses any graph with a cross-replica op, so the two contracts
+// can never meet in one session.
+iree_ffi_session_t* pjrt_ffi_session_create_dp(const char* path, int replicas) {
+  if (replicas < 1) {
+    fprintf(stderr, "[pjrt_ffi] sharded session asked for %d replicas\n", replicas);
+    return NULL;
+  }
+  return session_create_core(path, replicas);
 }
 
 void iree_ffi_session_release(iree_ffi_session_t* sess) {
@@ -1073,6 +1145,76 @@ int iree_ffi_invoke_f32(
                       input_data, NULL, n_outputs, output_totals, output_data);
 }
 
+// ─── gathered read-back, for a sharded inference session ──────────────────
+//
+// ONE copy, called by both invoke paths below when `sess->gather` is set — the
+// copying one and the resident (hold) one — so the two cannot drift. Their
+// replica-0 loops are left exactly as they were.
+//
+// The caller's output i is the GLOBAL tensor, `output_totals[i]` floats, laid
+// out as the input was before the shim split it: replica r's output i lands at
+// `output_data[i] + r * output_totals[i] / N`. That is the inverse of the input
+// split row block for row block, so row k of the result is row k of the batch
+// the caller handed in.
+//
+// ⚠ Each piece is size-checked against the graph like the replica-0 path does,
+// but that check CANNOT see the mis-gather this function exists to prevent —
+// every replica's output has the same size. PJRT_FFI_FAULT=3 injects exactly
+// that; the equality gate is what has to catch it.
+static int d2h_gather(iree_ffi_session_t* sess, PJRT_Buffer** out, int n_replicas,
+                      int n_outputs, const int64_t* output_totals,
+                      float* const* output_data, tacct_t* acct) {
+  int rc = 0;
+  const int fault = (fault_mode() == 3);
+  if (fault) {
+    static int said = 0;
+    if (!said++)
+      fprintf(stderr, "[pjrt_ffi] ⚠ PJRT_FFI_FAULT=3: gathering replica 0 into EVERY "
+                      "replica's slot (fault injection)\n");
+  }
+  PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_replicas * n_outputs, sizeof(*d2h));
+  double td = acct ? now_ms() : 0;
+  for (int i = 0; i < n_outputs && !rc; i++) {
+    if (output_totals[i] % n_replicas != 0) {
+      fprintf(stderr,
+              "[pjrt_ffi] @%s output %d: %lld floats do not split over %d replicas\n",
+              sess->entry, i, (long long)output_totals[i], n_replicas);
+      rc = 4; break;
+    }
+    const size_t per = (size_t)(output_totals[i] / n_replicas);
+    const size_t want = per * sizeof(float);
+    if (acct) acct->d2h_mb += (double)output_totals[i] * 4.0 / 1048576.0;
+    for (int rep = 0; rep < n_replicas; rep++) {
+      PJRT_Buffer* src = out[(size_t)(fault ? 0 : rep) * n_outputs + i];
+      PJRT_Buffer_ToHostBuffer_Args q = {0};
+      q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+      q.src = src;
+      q.dst = NULL;
+      if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), "ToHostBuffer(gather size)")) { rc = 4; break; }
+      if (q.dst_size != want) {
+        fprintf(stderr,
+                "[pjrt_ffi] output %d replica %d size mismatch: graph %zu bytes, caller "
+                "%zu (= %lld floats / %d replicas)\n",
+                i, rep, q.dst_size, want, (long long)output_totals[i], n_replicas);
+        rc = 4; break;
+      }
+      PJRT_Buffer_ToHostBuffer_Args a = {0};
+      a.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+      a.src = src;
+      a.dst = output_data[i] + (size_t)rep * per;
+      a.dst_size = want;
+      if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer(gather)")) { rc = 4; break; }
+      d2h[(size_t)rep * n_outputs + i] = a.event;
+    }
+  }
+  if (acct) { acct->d2h_issue += now_ms() - td; td = now_ms(); }
+  for (int k = 0; k < n_replicas * n_outputs; k++)
+    if (d2h[k] && await_event(d2h[k], "d2h(gather)")) rc = 4;
+  if (acct) acct->d2h_await += now_ms() - td;
+  free(d2h);
+  return rc;
+}
+
 // ─── data-parallel invoke ──────────────────────────────────────────────────
 //
 // Exported ONLY by this shim. `iree_lean_ffi.c` reaches it through a WEAK
@@ -1090,6 +1232,10 @@ int iree_ffi_invoke_f32(
 // If that collective were ever missing, the replicas would silently diverge and
 // this would quietly return replica 0's private answer — hence the check below
 // that the executable really was compiled for `n_replicas`.
+//
+// ▶ The one exception is a SHARDED INFERENCE session (`sess->gather`, from
+// `pjrt_ffi_session_create_dp`): no collective by construction, every replica's
+// output is its own shard's, and all of them are read back — `d2h_gather`.
 int pjrt_ffi_invoke_f32_dp(
     iree_ffi_session_t* sess,
     const char* fn_name,
@@ -1237,6 +1383,9 @@ int pjrt_ffi_invoke_f32_dp(
     }
   }
 
+  if (sess->gather) {
+    rc = d2h_gather(sess, out, n_replicas, n_outputs, output_totals, output_data, acct);
+  } else
   // Device -> host from replica 0 only (all replicas hold the same result).
   {
     PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
@@ -1388,6 +1537,16 @@ int pjrt_ffi_invoke_f32_resident_v2(
   // comment. The output-range half of this guard does not apply there, because
   // the point of hold mode is that there IS no output counterpart.
   const int hold = (res_out < 0);
+  // ⛔ A sharded inference session has no all_reduce, so an UPDATE-mode retained
+  // set would drift apart replica by replica with nothing to say so. Only hold
+  // mode — parameters in, logits out — is meaningful there.
+  if (sess->gather && !hold) {
+    fprintf(stderr,
+            "[pjrt_ffi] @%s is a sharded inference session — resident UPDATE mode would "
+            "let its replicas diverge; only hold mode (res_out < 0) is allowed\n",
+            sess->entry);
+    return 1;
+  }
   if (n_resident <= 0 || res_in < 0 || res_in + n_resident > n_inputs ||
       (!hold && res_out + n_resident > n_outputs)) {
     fprintf(stderr,
@@ -1655,6 +1814,11 @@ int pjrt_ffi_invoke_f32_resident_v2(
   }
 
   // ── device → host for the NON-resident outputs, replica 0 only ────────────
+  // (…or from EVERY replica on a sharded inference session, which is hold mode
+  // by the guard above, so there is no resident output range to skip.)
+  if (sess->gather) {
+    rc = d2h_gather(sess, out, n_replicas, n_outputs, output_totals, output_data, acct);
+  } else
   {
     PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
     double td = acct ? now_ms() : 0;

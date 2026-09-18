@@ -431,6 +431,61 @@ def mkSession (mlirPath : String) : IO LowererSession := do
     compileVmfb mlirPath s!".lake/build/{stem}_{target}.vmfb"
     LowererSession.create s!".lake/build/{stem}_{target}.vmfb"
 
+/-- `mkSession` for the **eval forward** at `replicas` devices, the sharded-inference session
+    (`LowererSession.createDp`, outputs gathered). `replicas ≤ 1` IS `mkSession`, so a single-GPU
+    run and every IREE run are unchanged. Past 1 it is XLA-only and says so rather than quietly
+    evaluating on one card, which is where this eval lived until 2026-09-18 (3 of 4 GPUs idle for
+    ~100 s every ConvNeXt epoch). -/
+def mkSessionDp (mlirPath : String) (replicas : Nat) : IO LowererSession := do
+  if replicas ≤ 1 then return ← mkSession mlirPath
+  if (← LowererSession.backendName) != "xla" then
+    throw <| IO.userError s!"a {replicas}-replica eval needs the XLA lowerer; this binary loaded \
+'{← LowererSession.backendName}'"
+  IO.println s!"  xla/pjrt {mlirPath}  (eval, SHARDED over {replicas} replicas)"
+  LowererSession.createDp mlirPath replicas.toUSize
+
+/-- **The eval pass**: score `nEval` images through a forward session, `replicas × evalBs` per
+    invoke. `(top-1 correct, top-5 correct, per-image top-1 bitmap)`. The bitmap is filled only
+    when `wantBits`, in eval order, one byte per image.
+
+    ⭐ ONE copy, shared by the per-epoch eval in `trainAdamSched` and by `scoreCheckpoint`. That is
+    not tidiness: `scripts/sharded_eval_gate.sh` compares 1 replica against N through
+    `score-checkpoint`, and a gate on a COPY of the loop says nothing about the loop that runs.
+
+    ⚠⚠ THE RAGGED TAIL is the first thing to get wrong. 50,000 is not a multiple of 4 × 64 = 256:
+    it is 195 full invokes and an 80-image tail, which fills replica 0 and a quarter of replica 1,
+    while replicas 2 and 3 score pure padding. `F32.sliceImagesPad` zero-pads the invoke to the
+    global batch, the shim gathers the logits back in ROW ORDER, and only
+    `min gB (nEval − bi·gB)` rows are scored. The pad rows are computed and never read. -/
+def evalScore (sess : LowererSession) (fn : String) (params shapes evalImg evalLbl : ByteArray)
+    (nEval evalBs evalD0 nc replicas : Nat) (nResident gen : USize) (wantBits : Bool) :
+    IO (Nat × Nat × ByteArray) := do
+  let r := max replicas 1
+  let gB := r * evalBs
+  let xShape := packXShape #[gB, evalD0]
+  let nbt := (nEval + gB - 1) / gB   -- ceil: the last partial invoke is zero-padded, not dropped
+  let mut correct := 0
+  let mut correct5 := 0
+  let mut bits : ByteArray := ByteArray.empty
+  for bi in [0:nbt] do
+    -- ⚠ `evalD0`, not the train width: the val buffer was drained at the EVAL width (RSB-A3 trains
+    -- at 160², evaluates at 224²), and slicing it at the other one strides through it wrongly.
+    let xb := F32.sliceImagesPad evalImg (bi * gB) gB evalD0 nEval
+    let logits ← if r == 1
+      then LowererSession.forwardF32 sess fn params shapes xb xShape gB.toUSize nc.toUSize
+             nResident gen
+      else LowererSession.forwardF32Dp sess fn params shapes xb xShape gB.toUSize nc.toUSize
+             r.toUSize nResident gen
+    for j in [0:min gB (nEval - bi * gB)] do   -- score real rows only, not the pad
+      let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
+      let lbl  := F32.readLabel evalLbl (bi * gB + j)
+      if pred == lbl then correct := correct + 1
+      if wantBits then bits := bits.push (if pred == lbl then 1 else 0)
+      -- top-5 by the label's RANK, matching the reference's `sum(logits > true_logit) < 5`.
+      if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
+        correct5 := correct5 + 1
+  return (correct, correct5, bits)
+
 /-- Init one parameter from its `(dims, initKind)` spec, matching the JAX reference's
     initialisers — they are the oracle these nets are paired against:
 
@@ -1489,18 +1544,25 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   let fwdVariant := s!"{net.mlirDir}/{net.slug}_{variant}_fwd.mlir"
   let fwdPath := if (← System.FilePath.pathExists fwdVariant) then fwdVariant
                  else s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-  let fwdSess ← mkSession fwdPath
-  let fwdEvalSess ← if hasBn then
-      mkSession s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
-    else pure fwdSess
-  let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   -- ⚠ `mkSynthData` must be sized at the GLOBAL batch, not `bs`. Under data
   -- parallelism one step consumes `bs * replicas` images (the shim shards them),
   -- so a `bs`-sized synthetic buffer is read past its end every step: silent at
   -- bs32×2, a `free(): invalid next size` abort at bs128×2. Found 2026-07-30
   -- while measuring the parameter transfer share (handoff §2d.3). This is why
-  -- `replicas` is read here and not with the other knobs below.
+  -- `replicas` is read here and not with the other knobs below — and, since
+  -- 2026-09-18, ABOVE the eval sessions, which are compiled at it.
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
+  -- ⭐ THE EVAL IS SHARDED OVER THE SAME DEVICES AS THE TRAIN STEP (2026-09-18). It used to run on
+  -- replica 0 alone. `grep -c all_reduce` is 0 on every `_fwd`/`_fwd_eval`, so the train steps
+  -- were N-replica and the eval never was. Measured on the killed ConvNeXt run: ~100 s/epoch at
+  -- 91% util on GPU 0 while GPUs 1-3 sat at 0%. Same artifacts, nothing re-rendered. The gate is
+  -- `scripts/sharded_eval_gate.sh`: an identical correct count and bitmap at 1 and N replicas, with
+  -- a control that must fail.
+  let fwdSess ← mkSessionDp fwdPath replicas
+  let fwdEvalSess ← if hasBn then
+      mkSessionDp s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir" replicas
+    else pure fwdSess
+  let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   -- ▶ `LEAN_MLIR_EVAL_BATCHSTATS=1` — a DIAGNOSTIC, not a feature. Scores through `@<slug>_fwd`
   -- (BN over the EVAL BATCH's own statistics) instead of `@<slug>_fwd_eval` (the accumulated
   -- running buffers). It exists to separate "the weights are bad" from "the running statistics
@@ -1561,8 +1623,8 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- param dump. See planning/archive/xla_pjrt_ladder.md §3.
   -- LEAN_MLIR_REPLICAS: data-parallel device count. The graph is rendered at the
   -- PER-REPLICA batch (cfg.batchSize), so one step consumes `bs * replicas`
-  -- images and the shim splits them. Eval stays single-device at `bs`, because
-  -- the forward graph is rendered at that batch. See planning/archive/xla_pjrt_ladder.md §10.
+  -- images and the shim splits them. Eval is sharded the same way since 2026-09-18 (`evalScore`):
+  -- `replicas × evalBs` per invoke, logits gathered. See planning/archive/xla_pjrt_ladder.md §10.
   -- LEAN_MLIR_SKIP_EVAL: skip the per-epoch eval pass. It used to be REQUIRED whenever the train
   -- batch differed from the forward's baked one (bs256, bs128-DP); `evalBs` below removes that,
   -- so it is now just "don't spend the time".
@@ -1573,7 +1635,6 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
     | some n => min n nbFull
     | none   => nbFull
   -- `evalBs`/`evalD0` are read off the eval artifact ABOVE, before `loadData` — see there.
-  let nbt := (nEval + evalBs - 1) / evalBs  -- ceil: the last partial batch is zero-padded, not dropped
   -- The schedule label is part of the run's evidence, not decoration: an exponential-decay run and
   -- a cosine one are different experiments and the log has to say which it was. Spelled so the
   -- string is UNCHANGED at the default (`expDecayRate = 0`), i.e. every existing log line still reads
@@ -1657,6 +1718,11 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
 new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{accK}), compensated for grad-accum" else ""}"
   if replicas > 1 then
     IO.println s!"  DATA-PARALLEL: {replicas} replicas x bs {bs} = global batch {gbs}, {nb} steps/epoch"
+    -- ⚠ Announced with the TAIL, because the tail is where a sharded eval goes wrong.
+    let egB := replicas * evalBs
+    IO.println s!"  EVAL SHARDED: {replicas} replicas x {evalBs} = {egB} {evalName} images per invoke, \
+{(nEval + egB - 1) / egB} invokes, last one {nEval - (nEval - 1) / egB * egB} real + \
+{((nEval + egB - 1) / egB) * egB - nEval} pad"
   (← IO.getStdout).flush
   -- ⚠ The drop scales go LAST, after the BN stats, matching `enetFwdSig`/`inSig`'s placement.
   -- Anywhere else and they capture an existing positional slot — the mnv2 `convBias` failure
@@ -1703,10 +1769,6 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   let nResident := (nRegions * net.paramShapes.size).toUSize
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
-  -- eval-only: the train step passes its dims directly. ⚠ `packXShape #[evalBs, evalD0]`, NOT
-  -- `net.xShape evalBs` — the latter bakes `net.d0`, i.e. the TRAIN width, which is wrong the
-  -- moment eval runs at a different resolution (RSB-A3: train 160², eval 224²).
-  let xShape := packXShape #[evalBs, evalD0]
   let tsFn  := s!"m.{net.slug}_{variant}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut parts : Array ByteArray := #[]
@@ -2486,8 +2548,6 @@ gate's control, not a configuration.")
                       else thetaCur
     let evalShapes := if useRunning then fwdEvalShapes else fwdShapes
     let evalResident := (net.paramShapes.size + (if useRunning then 2 * net.bnChannels.size else 0)).toUSize
-    let mut correct := 0
-    let mut correct5 := 0
     -- ▶ `LEAN_MLIR_DUMP_CORRECT=<prefix>` writes one byte per validation image, 1 = top-1 correct,
     -- in eval order, to `<prefix>_e{N}.bin`. Unset ⇒ not accumulated and not written, so the
     -- default path is byte-identical.
@@ -2504,31 +2564,13 @@ gate's control, not a configuration.")
     -- ⚠ It is a measurement about these two TRAINED MODELS, not about the recipe: "does this
     -- architecture change help" is a statement about the seed distribution and still needs n runs.
     let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
-    let mut correctBits : ByteArray := ByteArray.empty
-    for bi in [0:(if skipEval then 0 else nbt)] do
-      -- ⚠ `evalD0`, not `d0`: `evalImg` was drained at the EVAL width, so slicing it at the TRAIN
-      -- width would stride through the buffer wrongly from the second row on (RSB-A3: 224² val
-      -- rows read as 160²). Silent — it would score a plausible-looking accuracy off garbage.
-      let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs evalD0 nEval
-      -- Hold the eval parameters on device across the eval batches (§2d.3). The
-      -- count is the tensor count of `evalShapes`, which for a BN net is the
-      -- params PLUS the two running-stat slots per layer — all of them are inputs
-      -- with no output counterpart, so all of them can be held.
-      let logits ← LowererSession.forwardF32 evalSess evalFn evalParams evalShapes
-                      xb xShape evalBs.toUSize nc.toUSize
-                      evalResident (ep + 1).toUSize
-      for j in [0:min evalBs (nEval - bi * evalBs)] do   -- score real rows only, not the pad
-        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
-        let lbl  := F32.readLabel evalLbl (bi * evalBs + j)
-        if pred == lbl then correct := correct + 1
-        if dumpCorrect.isSome then
-          correctBits := correctBits.push (if pred == lbl then 1 else 0)
-        -- top-5 by the label's RANK, matching the reference's `sum(logits > true_logit) < 5`.
-        -- Free: it reads the same logits row already on the host, and it is the metric the
-        -- reference's headline is quoted by (72.02% top-1 / 90.62% top-5), which this side could
-        -- not state at all until now.
-        if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
-          correct5 := correct5 + 1
+    -- Hold the eval parameters on device across the eval batches (§2d.3), one set per replica. The
+    -- count is the tensor count of `evalShapes`, which for a BN net is the params PLUS the two
+    -- running-stat slots per layer — all of them are inputs with no output counterpart, so all of
+    -- them can be held. `gen := ep + 1` re-seeds them every epoch.
+    let (correct, correct5, correctBits) ← if skipEval then pure (0, 0, ByteArray.empty)
+      else evalScore evalSess evalFn evalParams evalShapes evalImg evalLbl
+             nEval evalBs evalD0 nc replicas evalResident (ep + 1).toUSize dumpCorrect.isSome
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let acc5 := correct5.toFloat / nEval.toFloat * 100.0
     -- ⚠ Under `LEAN_MLIR_SKIP_EVAL` the loop above runs ZERO batches, so `correct` is 0 and this
@@ -2734,37 +2776,33 @@ adds a 4th region and the EMA shadow a 5th."
 ({if VerifiedVariant.emaRegion variant == some regIdx then "the EMA SHADOW" else "the live weights"}), \
 {net.nParams} params"
   (← IO.getStdout).flush
-  let sess ← mkSession fwdPath
+  -- ▶ `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
+  -- read exactly as the trainers read it. ⭐ This is the knob `scripts/sharded_eval_gate.sh` turns:
+  -- one checkpoint at 1 and at N replicas must give the same count AND the same bitmap, because
+  -- the loop below is the per-epoch eval's own (`evalScore`), not a copy of it.
+  let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
+  let sess ← mkSessionDp fwdPath replicas
   -- ⚠ `evalOnly := true` — this tool never touches the train split, and on Imagenette reading it
   -- anyway is 7.4 GB held for nothing. Inert on `.imagenet`, which streams.
   let (_, _, _, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir evalD0 (evalOnly := true)
   let nc := net.nClasses
-  let nbt := (nEval + evalBs - 1) / evalBs   -- ceil: the last partial batch is zero-padded
-  let xShape := packXShape #[evalBs, evalD0]
   let fwdShapes := net.shapesBA
-  let mut correct := 0
-  let mut correct5 := 0
+  if replicas > 1 then
+    let egB := replicas * evalBs
+    IO.println s!"  EVAL SHARDED: {replicas} replicas x {evalBs} = {egB} images per invoke, \
+{(nEval + egB - 1) / egB} invokes, last one {nEval - (nEval - 1) / egB * egB} real + \
+{((nEval + egB - 1) / egB) * egB - nEval} pad"
   -- ▶ `LEAN_MLIR_DUMP_CORRECT=<prefix>` -> `<prefix>.bin`, one byte per val image (1 = top-1
   -- correct), in eval order. ⭐ THIS is the site McNemar wants: score two committed checkpoints,
   -- then compare their bitmaps. θ never changes here, so the bitmap is a pure function of the
   -- checkpoint and the val set — re-scoring gives the identical file.
   let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
-  let mut correctBits : ByteArray := ByteArray.empty
-  for bi in [0:nbt] do
-    let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs evalD0 nEval
-    -- Hold the parameters on device across every batch — one push, not `nbt` of them. `gen` is a
-    -- constant because θ never changes here, which is the whole difference from the training loop.
-    let logits ← LowererSession.forwardF32 sess s!"m.{net.slug}_fwd" theta fwdShapes
-                    xb xShape evalBs.toUSize nc.toUSize
-                    net.paramShapes.size.toUSize 1
-    for j in [0:min evalBs (nEval - bi * evalBs)] do   -- score real rows only, not the pad
-      let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
-      let lbl  := F32.readLabel evalLbl (bi * evalBs + j)
-      if pred == lbl then correct := correct + 1
-      if dumpCorrect.isSome then
-        correctBits := correctBits.push (if pred == lbl then 1 else 0)
-      if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
-        correct5 := correct5 + 1
+  -- Hold the parameters on device across every batch — one push per replica, not one per invoke.
+  -- `gen` is a constant because θ never changes here, which is the whole difference from the
+  -- training loop.
+  let (correct, correct5, correctBits) ← evalScore sess s!"m.{net.slug}_fwd" theta fwdShapes
+    evalImg evalLbl nEval evalBs evalD0 nc replicas net.paramShapes.size.toUSize 1
+    dumpCorrect.isSome
   let acc := correct.toFloat / nEval.toFloat * 100.0
   let acc5 := correct5.toFloat / nEval.toFloat * 100.0
   -- ⭐ Printed in the SAME shape as the in-training line, so the equality gate is a literal

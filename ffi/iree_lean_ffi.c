@@ -90,6 +90,25 @@ LEAN_EXPORT lean_obj_res lean_iree_session_create(
       lean_alloc_external(g_iree_session_class, sess));
 }
 
+// ---- Session create, SHARDED INFERENCE (XLA only) ----
+// The eval forward compiled for `replicas` devices with its outputs gathered from
+// all of them — see `pjrt_ffi_session_create_dp`. Drive it with
+// `lean_iree_forward_f32_dp` at the same replica count.
+LEAN_EXPORT lean_obj_res lean_iree_session_create_dp(
+    b_lean_obj_arg path_obj, size_t replicas, lean_obj_arg world) {
+  (void)world;
+  ensure_iree_session_class();
+  const char* path = lean_string_cstr(path_obj);
+  iree_ffi_session_t* sess = lowerer_session_create_dp(path, (int)replicas);
+  if (!sess) {
+    return lean_io_result_mk_error(
+        lean_mk_io_user_error(
+            lean_mk_string("pjrt_ffi_session_create_dp failed (see stderr)")));
+  }
+  return lean_io_result_mk_ok(
+      lean_alloc_external(g_iree_session_class, sess));
+}
+
 // ---- Helpers: Float64 FloatArray → float32 staging buffer ----
 static float* fa_to_f32(b_lean_obj_arg fa, size_t n) {
   double const* src = lean_float_array_cptr(fa);
@@ -832,7 +851,13 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_seg(
 // ---- Zero-copy f32 generic forward pass ----
 // Pushes x first, then param tensors. Returns logits as ByteArray.
 // Forward signature: forward(x, W0, g0, bt0, W1, ...) -> logits
-LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
+//
+// ONE body behind both exports, the `invoke_typed` idiom: `replicas == 1` is
+// `lean_iree_forward_f32` and makes exactly the calls it always made;
+// `replicas > 1` is `lean_iree_forward_f32_dp` — x (input 0) sharded by rows,
+// the parameters replicated, the logits gathered back in row order by the shim.
+// `batch` is then the GLOBAL batch, `replicas` × the rendered one.
+static lean_obj_res forward_core(
     b_lean_obj_arg sess_obj,
     b_lean_obj_arg fn_name_obj,
     b_lean_obj_arg params_ba,
@@ -840,8 +865,11 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
     b_lean_obj_arg x_ba,
     b_lean_obj_arg x_shape_ba,
     size_t batch, size_t n_classes, size_t n_resident, size_t res_gen,
-    lean_obj_arg world) {
-  (void)world;
+    size_t replicas) {
+  if (replicas > 1 && !pjrt_ffi_invoke_f32_dp) {
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+        "sharded forward needs the XLA shim (libpjrt_ffi.so)")));
+  }
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -904,22 +932,73 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
   // parameters change once per epoch, the caller changes the token, and the shim
   // re-seeds. A held set that went stale silently would score last epoch's weights
   // and read as a training plateau rather than as an error.
-  int rc = use_resident(n_resident)
-    ? pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, 1,
-        /*res_in=*/1, /*res_out=*/-1, (int)n_resident, (long long)res_gen,
-        n_inputs, input_ranks, input_dims_flat, input_data, NULL,
-        1, out_totals, outputs)
-    : iree_ffi_invoke_f32(sess, fn_name,
-        n_inputs, input_ranks, input_dims_flat, input_data,
-        1, out_totals, outputs);
+  int rc;
+  if (replicas <= 1) {
+    rc = use_resident(n_resident)
+      ? pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, 1,
+          /*res_in=*/1, /*res_out=*/-1, (int)n_resident, (long long)res_gen,
+          n_inputs, input_ranks, input_dims_flat, input_data, NULL,
+          1, out_totals, outputs)
+      : iree_ffi_invoke_f32(sess, fn_name,
+          n_inputs, input_ranks, input_dims_flat, input_data,
+          1, out_totals, outputs);
+  } else {
+    // Sharded: x only. Hold mode then keeps one parameter set per DEVICE, seeded
+    // once per `res_gen` exactly as above, so the parameter push is N× once per
+    // epoch — not N× per batch, which is what the copying `_dp` path would cost.
+    unsigned char* shard = (unsigned char*)calloc((size_t)n_inputs, 1);
+    shard[0] = 1;
+    rc = use_resident(n_resident)
+      ? pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, (int)replicas,
+          /*res_in=*/1, /*res_out=*/-1, (int)n_resident, (long long)res_gen,
+          n_inputs, input_ranks, input_dims_flat, input_data, shard,
+          1, out_totals, outputs)
+      : pjrt_ffi_invoke_f32_dp(sess, fn_name, (int)replicas,
+          n_inputs, input_ranks, input_dims_flat, input_data, shard,
+          1, out_totals, outputs);
+    free(shard);
+  }
 
   free(input_ranks); free(input_dims_flat); free(input_data);
   if (rc != 0) {
     lean_dec_ref(result);
     return lean_io_result_mk_error(
-        lean_mk_io_user_error(lean_mk_string("f32 forward failed")));
+        lean_mk_io_user_error(lean_mk_string(
+            replicas > 1 ? "sharded f32 forward failed" : "f32 forward failed")));
   }
   return lean_io_result_mk_ok(result);
+}
+
+LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
+    b_lean_obj_arg sess_obj,
+    b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg params_ba,
+    b_lean_obj_arg shapes_ba,
+    b_lean_obj_arg x_ba,
+    b_lean_obj_arg x_shape_ba,
+    size_t batch, size_t n_classes, size_t n_resident, size_t res_gen,
+    lean_obj_arg world) {
+  (void)world;
+  return forward_core(sess_obj, fn_name_obj, params_ba, shapes_ba, x_ba, x_shape_ba,
+                      batch, n_classes, n_resident, res_gen, 1);
+}
+
+// The sharded eval forward. `sess` must come from `lean_iree_session_create_dp`
+// at this same `replicas` — the shim refuses a count the executable was not
+// compiled for.
+LEAN_EXPORT lean_obj_res lean_iree_forward_f32_dp(
+    b_lean_obj_arg sess_obj,
+    b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg params_ba,
+    b_lean_obj_arg shapes_ba,
+    b_lean_obj_arg x_ba,
+    b_lean_obj_arg x_shape_ba,
+    size_t batch, size_t n_classes, size_t replicas,
+    size_t n_resident, size_t res_gen,
+    lean_obj_arg world) {
+  (void)world;
+  return forward_core(sess_obj, fn_name_obj, params_ba, shapes_ba, x_ba, x_shape_ba,
+                      batch, n_classes, n_resident, res_gen, replicas);
 }
 
 // ---- Verified-renderer linear train step (StableHLO.linearTrainStepModuleV) ----

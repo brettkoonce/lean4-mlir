@@ -21,6 +21,20 @@ namespace LowererSession
 @[extern "lean_iree_session_create"]
 opaque create (path : @& String) : IO LowererSession
 
+/-- A **sharded inference** session — XLA only. The `.mlir` is compiled for `replicas` devices
+    and its outputs are GATHERED from all of them, so it is driven by `forwardF32Dp` at the same
+    count. `create` compiles a graph with no cross-replica op for one device; this states the
+    count instead. That graph computes the same function on every device, so data-parallel
+    inference needs no new render.
+
+    It REFUSES any graph with a cross-replica op: the train step's read-back takes replica 0
+    only (correct there, because the `all_reduce` makes every replica's result identical), and
+    the two contracts must not meet in one session. It is also a loud error, never a fall back
+    to one device, when the loaded shim predates it or is IREE's. Use `VerifiedNet.mkSessionDp`
+    rather than calling this directly. -/
+@[extern "lean_iree_session_create_dp"]
+opaque createDp (path : @& String) (replicas : USize) : IO LowererSession
+
 /-- `"iree"` or `"xla"` — which shim this binary was linked against. Detected by
     probing for a symbol only `libpjrt_ffi.so` defines, so it cannot disagree
     with the linked library. See `planning/archive/xla_pjrt_ladder.md`. -/
@@ -168,6 +182,26 @@ opaque forwardF32
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (batch : USize) (nClasses : USize)
+  (nResident : USize := 0) (gen : USize := 0) : IO ByteArray
+
+/-- `forwardF32` over `replicas` devices, for a session from `createDp` at that count.
+
+    `batch` and `xShape`'s leading dim are the **GLOBAL** batch, `replicas` × the rendered one.
+    Replica `r` gets rows `[r·b, (r+1)·b)` of `x`, the parameters go to every replica, and the
+    logits come back as ONE `batch × nClasses` buffer in the original row order. So a caller
+    indexes the result exactly as it indexes `x`, and the ragged-tail logic is unchanged: pad to
+    the global batch and score only the real rows.
+
+    `nResident`/`gen` are `forwardF32`'s hold mode. Each device keeps its own copy of the
+    parameters, so the push is `replicas`× once per `gen`, not once per batch.
+
+    At `replicas = 1` it makes exactly the calls `forwardF32` makes. -/
+@[extern "lean_iree_forward_f32_dp"]
+opaque forwardF32Dp
+  (sess : @& LowererSession) (fnName : @& String)
+  (params : @& ByteArray) (shapes : @& ByteArray)
+  (x : @& ByteArray) (xShape : @& ByteArray)
+  (batch : USize) (nClasses : USize) (replicas : USize)
   (nResident : USize := 0) (gen : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@linear_train_step`
