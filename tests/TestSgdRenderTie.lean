@@ -64,12 +64,13 @@ def main (args : List String) : IO Unit := do
         "usage: sgd-render-tie <slug> <pathA> <lrA> <pathB> <lrB>\n\
          both learning rates are REQUIRED and are not defaulted: the gradient is recovered as \
          (θ − θ')/lr, so a wrong lr silently rescales one side.")
-  -- `ViTGradcheck.parseFloat` yields 0.0 on anything it cannot read, which the next guard catches:
-  -- a mistyped lr is the one input error that would silently rescale one side of the comparison.
+  -- `ViTGradcheck.parseFloat` yields 0.0 on anything it cannot read and NaN/∞ on `nan`/`inf`, which
+  -- the next guard catches: a mistyped lr is the one input error that would silently rescale one side
+  -- of the comparison.
   let lrA := ViTGradcheck.parseFloat lrAs
   let lrB := ViTGradcheck.parseFloat lrBs
-  if lrA == 0.0 || lrB == 0.0 then
-    throw (IO.userError s!"lr must be a non-zero float (got '{lrAs}' → {lrA}, '{lrBs}' → {lrB}); \
+  if lrA == 0.0 || lrB == 0.0 || !lrA.isFinite || !lrB.isFinite then
+    throw (IO.userError s!"lr must be a finite non-zero float (got '{lrAs}' → {lrA}, '{lrBs}' → {lrB}); \
 lr = 0 makes the gradient unrecoverable")
   let net := (← netBySlug slug).toNet
   let bs  := 32                            -- the baked batch of every one of these renders

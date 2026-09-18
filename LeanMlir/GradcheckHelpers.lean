@@ -13,41 +13,27 @@ Used by the ch10 ViT de-risk tests (TestSDPA/TestMHSA/TestViTBlock). All Lean4. 
 
 namespace ViTGradcheck
 
-/-- `10^k` as a `Float` (k may be negative). -/
-def pow10 (k : Int) : Float :=
-  if k ≥ 0 then (List.range k.toNat).foldl (fun a _ => a * 10.0) 1.0
-  else (List.range (-k).toNat).foldl (fun a _ => a / 10.0) 1.0
+/-- Parse one iree-printed float token (`-0.00623606`, `1.3e-05`, `42`, `nan`, `-inf`); `none`
+    on anything else. Decimal and scientific forms go through the elaborator's own literal decoder
+    (`Lean.Syntax.decodeScientificLitVal?` + `Float.ofScientific`), so a token rounds exactly as the
+    same literal written in Lean source would; a bare integer, which that decoder rejects, falls
+    back to `String.toNat?`. `nan`/`inf` are kept as NaN/∞ so a non-finite output fails a gradcheck
+    rather than reading as a number. -/
+def parseFloat? (tok : String) : Option Float :=
+  let (neg, body) :=
+    if tok.startsWith "-" then (true, (tok.drop 1).toString)
+    else if tok.startsWith "+" then (false, (tok.drop 1).toString)
+    else (false, tok)
+  let v? : Option Float :=
+    if body == "nan" then some (0.0 / 0.0)
+    else if body == "inf" then some (1.0 / 0.0)
+    else match Lean.Syntax.decodeScientificLitVal? body with
+      | some (m, s, e) => some (Float.ofScientific m s e)
+      | none => body.toNat?.map Nat.toFloat
+  v?.map fun v => if neg then -v else v
 
-def digitsToNat (cs : List Char) : Nat :=
-  cs.foldl (fun acc c => acc * 10 + (c.toNat - '0'.toNat)) 0
-
-/-- Split a `List Char` at the first occurrence of `c` (the separator dropped). -/
-def splitAtChar (c : Char) (xs : List Char) : (List Char × Option (List Char)) :=
-  match xs.span (· != c) with
-  | (pre, [])        => (pre, none)
-  | (pre, _ :: post) => (pre, some post)
-
-/-- Parse one iree-printed float token (`-0.00623606`, `1.3e-05`, `42`), entirely
-    over `List Char` (robust to the String/Slice API churn). -/
-def parseFloat (tok : String) : Float := Id.run do
-  let cs0 := (tok.toList).map (fun c => if c == 'E' then 'e' else c)
-  let (neg, cs) := match cs0 with
-    | '-' :: rest => (true, rest)
-    | '+' :: rest => (false, rest)
-    | _           => (false, cs0)
-  let (mantCs, expCsOpt) := splitAtChar 'e' cs
-  let expVal : Int := match expCsOpt with
-    | none              => 0
-    | some ('-' :: ds)  => -(Int.ofNat (digitsToNat ds))
-    | some ('+' :: ds)  => Int.ofNat (digitsToNat ds)
-    | some ds           => Int.ofNat (digitsToNat ds)
-  let (intCs, fracCsOpt) := splitAtChar '.' mantCs
-  let ip := Float.ofNat (digitsToNat intCs)
-  let mant := match fracCsOpt with
-    | none        => ip
-    | some fracCs => ip + Float.ofNat (digitsToNat fracCs) * pow10 (-(fracCs.length : Int))
-  let v := mant * pow10 expVal
-  return (if neg then -v else v)
+/-- `parseFloat?` with `0.0` for a token it cannot read. -/
+def parseFloat (tok : String) : Float := (parseFloat? tok).getD 0.0
 
 /-- Extract the parsed result buffers (in `result[i]` order) from an
     iree-run-module stdout: each value line is `…xf32=[a b][c d]…`. -/
