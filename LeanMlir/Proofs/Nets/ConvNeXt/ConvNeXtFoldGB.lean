@@ -296,4 +296,30 @@ theorem headBGradB_den {N D nC : Nat} (cotN : String)
       = ∑ j : Fin nC, pdiv (fun b' : Vec nC => dense Wc b' a) bc i j * batchSlice N nC cot n j :=
   Proofs.ViTPoCGB.headBGradB_den cotN Wc a bc cot n i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Tie clauses — one batched channel-LN gradient node each (each its `_den` lemma's statement with the index
+--   bound, over the flat input `x`; `intro i; exact …_den … i` proves it)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A batched channel-LN γ gradient node, tied (`chanLnGammaGradB_den`). -/
+def ChanLNGammaTiedB (N h w : Nat) {c : Nat} (xN epsStr cotN : String) (ε : ℝ) (β : Vec c)
+    (x : Vec (N * (c * h * w))) (γ : Vec c) (cot : Vec (N * (c * h * w))) : Prop :=
+  ∀ k : Fin c,
+    den (SHlo.veclnGammaGradB (N := N) (R := h * w) (D := c) xN epsStr ε
+          (batchMap N (chanLNRows c h w) x)
+          (.operand cotN (batchMap N (chanLNRows c h w) cot))) k
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β (batchSlice N (c * h * w) x n)) γ k j
+            * batchSlice N (c * h * w) cot n j
+
+/-- A batched channel-LN β gradient node, tied (`chanLnBetaGradB_den`). -/
+def ChanLNBetaTiedB (N h w : Nat) {c : Nat} (cotN : String) (ε : ℝ) (γ : Vec c)
+    (x : Vec (N * (c * h * w))) (β : Vec c) (cot : Vec (N * (c * h * w))) : Prop :=
+  ∀ k : Fin c,
+    den (SHlo.rowDenseBiasGradB (N := N) (R := h * w) (c := c)
+          (.operand cotN (batchMap N (chanLNRows c h w) cot))) k
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' (batchSlice N (c * h * w) x n)) β k j
+            * batchSlice N (c * h * w) cot n j
+
 end Proofs.CnxPoCGB

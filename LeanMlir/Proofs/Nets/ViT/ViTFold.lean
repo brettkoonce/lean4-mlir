@@ -136,4 +136,46 @@ theorem headB_den {D nC : Nat} (bN lrStr cotN : String)
           pdiv (fun b' : Vec nC => dense Wc b' a) bc i j * cot j :=
   Proofs.Cifar8PoC.denseB_den bN lrStr cotN Wc a bc cot lr i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Tie clauses — one per-token SGD node each (each its `_den` lemma's statement with the index
+--   bound, over the flat input `x`; `intro i; exact …_den … i` proves it)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A per-token dense weight SGD node, tied (`rowDenseWeightSgd_den`). -/
+def RowDenseWSgdTied (N : Nat) {a c : Nat} (xN wN lrStr cotN : String) (bb : Vec c)
+    (x : Vec (N * a)) (W : Mat a c) (dy : Vec (N * c)) (lr : ℝ) : Prop :=
+  ∀ (i : Fin a) (j : Fin c),
+    den (SHlo.rowDenseWeightSgd xN wN lrStr x W lr (.operand cotN dy)) (finProdFinEquiv (i, j))
+      = W i j - lr * ∑ o : Fin (N * c),
+          pdiv (fun v : Vec (a * c) =>
+                  Mat.flatten (fun r => dense (Mat.unflatten v) bb (Mat.unflatten x r)))
+               (Mat.flatten W) (finProdFinEquiv (i, j)) o * dy o
+
+/-- A per-token dense bias SGD node, tied (`rowDenseBiasSgd_den`). -/
+def RowDenseBSgdTied (N : Nat) {a c : Nat} (bN lrStr cotN : String) (W : Mat a c)
+    (x : Vec (N * a)) (b : Vec c) (dy : Vec (N * c)) (lr : ℝ) : Prop :=
+  ∀ i : Fin c,
+    den (SHlo.rowDenseBiasSgd bN lrStr b lr (.operand cotN dy)) i
+      = b i - lr * ∑ o : Fin (N * c),
+          pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (Mat.unflatten x r))) b i o
+            * dy o
+
+/-- A vector-LN γ SGD node, tied (`veclnGammaSgd_den`). -/
+def VecLNGammaSgdTied (N : Nat) {D : Nat} (gN xN epsStr lrStr cotN : String) (ε : ℝ)
+    (βv : Vec D) (x : Vec (N * D)) (γ : Vec D) (dy : Vec (N * D)) (lr : ℝ) : Prop :=
+  ∀ k : Fin D,
+    den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε x γ lr (.operand cotN dy)) k
+      = γ k - lr * ∑ o : Fin (N * D),
+          pdiv (fun gv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε gv βv (Mat.unflatten x r))) γ k o * dy o
+
+/-- A vector-LN β SGD node, tied (`rowDenseBiasSgd_den_lnbeta`). -/
+def VecLNBetaSgdTied (N : Nat) {D : Nat} (bN lrStr cotN : String) (ε : ℝ) (γv : Vec D)
+    (x : Vec (N * D)) (β : Vec D) (dy : Vec (N * D)) (lr : ℝ) : Prop :=
+  ∀ i : Fin D,
+    den (SHlo.rowDenseBiasSgd bN lrStr β lr (.operand cotN dy)) i
+      = β i - lr * ∑ o : Fin (N * D),
+          pdiv (fun bv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε γv bv (Mat.unflatten x r))) β i o * dy o
+
 end Proofs.ViTPoC

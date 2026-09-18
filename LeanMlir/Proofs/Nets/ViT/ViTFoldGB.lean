@@ -275,4 +275,55 @@ theorem headBGradB_den {N D nC : Nat} (cotN : String)
   simp only [den]
   exact dense_bias_grad_correct Wc bc a (batchSlice N nC cot n) i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Tie clauses — one batched gradient node each (each its `_den` lemma's statement with the index
+--   bound, over the flat input `x`; `intro i; exact …_den … i` proves it)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A batched per-token dense weight gradient node, tied (`rowDenseWeightGradB_den`). -/
+def RowDenseWTiedB (N tk : Nat) {a c : Nat} (xN cotN : String) (bb : Vec c)
+    (x : Vec (N * (tk * a))) (W : Mat a c) (dy : Vec (N * (tk * c))) : Prop :=
+  ∀ (i : Fin a) (j : Fin c),
+    den (SHlo.rowDenseWeightGradB (N := N) (tk := tk) (a := a) (c := c) xN x (.operand cotN dy))
+        (finProdFinEquiv (i, j))
+      = ∑ n : Fin N, ∑ o : Fin (tk * c),
+          pdiv (fun v : Vec (a * c) =>
+                  Mat.flatten (fun r =>
+                    dense (Mat.unflatten v) bb (Mat.unflatten (batchSlice N (tk * a) x n) r)))
+               (Mat.flatten W) (finProdFinEquiv (i, j)) o
+            * batchSlice N (tk * c) dy n o
+
+/-- A batched per-token dense bias gradient node, tied (`rowDenseBiasGradB_den`). -/
+def RowDenseBTiedB (N tk : Nat) {a c : Nat} (cotN : String) (W : Mat a c)
+    (x : Vec (N * (tk * a))) (b : Vec c) (dy : Vec (N * (tk * c))) : Prop :=
+  ∀ i : Fin c,
+    den (SHlo.rowDenseBiasGradB (N := N) (R := tk) (c := c) (.operand cotN dy)) i
+      = ∑ n : Fin N, ∑ o : Fin (tk * c),
+          pdiv (fun b' : Vec c =>
+                  Mat.flatten (fun r => dense W b' (Mat.unflatten (batchSlice N (tk * a) x n) r)))
+               b i o
+            * batchSlice N (tk * c) dy n o
+
+/-- A batched vector-LN γ gradient node, tied (`veclnGammaGradB_den`). -/
+def VecLNGammaTiedB (N R : Nat) {D : Nat} (xN epsStr cotN : String) (ε : ℝ) (βv : Vec D)
+    (x : Vec (N * (R * D))) (γ : Vec D) (dy : Vec (N * (R * D))) : Prop :=
+  ∀ k : Fin D,
+    den (SHlo.veclnGammaGradB (N := N) (R := R) (D := D) xN epsStr ε x (.operand cotN dy)) k
+      = ∑ n : Fin N, ∑ o : Fin (R * D),
+          pdiv (fun gv : Vec D =>
+                  Mat.flatten (fun r =>
+                    layerNormVec D ε gv βv (Mat.unflatten (batchSlice N (R * D) x n) r))) γ k o
+            * batchSlice N (R * D) dy n o
+
+/-- A batched vector-LN β gradient node, tied (`rowDenseBiasGradB_den_lnbeta`). -/
+def VecLNBetaTiedB (N R : Nat) {D : Nat} (cotN : String) (ε : ℝ) (γv : Vec D)
+    (x : Vec (N * (R * D))) (β : Vec D) (dy : Vec (N * (R * D))) : Prop :=
+  ∀ i : Fin D,
+    den (SHlo.rowDenseBiasGradB (N := N) (R := R) (c := D) (.operand cotN dy)) i
+      = ∑ n : Fin N, ∑ o : Fin (R * D),
+          pdiv (fun bv : Vec D =>
+                  Mat.flatten (fun r =>
+                    layerNormVec D ε γv bv (Mat.unflatten (batchSlice N (R * D) x n) r))) β i o
+            * batchSlice N (R * D) dy n o
+
 end Proofs.ViTPoCGB

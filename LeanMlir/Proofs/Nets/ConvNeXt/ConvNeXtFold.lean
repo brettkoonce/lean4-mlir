@@ -123,4 +123,27 @@ theorem chanLnBetaSgd_den {c h w : Nat} (bN lrStr cotN : String)
   simp only [den]
   exact cnx_render_chlnbeta_certified ε γ β x cot lr k
 
+-- ════════════════════════════════════════════════════════════════
+-- § Tie clauses — one channel-LN SGD node each (each its `_den` lemma's statement with the index
+--   bound, over the flat input `x`; `intro i; exact …_den … i` proves it)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A channel-LN γ SGD node, tied (`chanLnGammaSgd_den`). -/
+def ChanLNGammaSgdTied (h w : Nat) {c : Nat} (gN xN epsStr lrStr cotN : String) (ε : ℝ)
+    (β : Vec c) (x : Vec (c * h * w)) (γ : Vec c) (cot : Vec (c * h * w)) (lr : ℝ) : Prop :=
+  ∀ k : Fin c,
+    den (SHlo.veclnGammaSgd (N := h * w) (D := c) gN xN epsStr lrStr ε
+          (chanLNRows c h w x) γ lr (.operand cotN (chanLNRows c h w cot))) k
+      = γ k - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j
+
+/-- A channel-LN β SGD node, tied (`chanLnBetaSgd_den`). -/
+def ChanLNBetaSgdTied (h w : Nat) {c : Nat} (bN lrStr cotN : String) (ε : ℝ) (γ : Vec c)
+    (x : Vec (c * h * w)) (β : Vec c) (cot : Vec (c * h * w)) (lr : ℝ) : Prop :=
+  ∀ k : Fin c,
+    den (SHlo.rowDenseBiasSgd (N := h * w) (c := c) bN lrStr β lr
+          (.operand cotN (chanLNRows c h w cot))) k
+      = β k - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j
+
 end Proofs.CnxPoC

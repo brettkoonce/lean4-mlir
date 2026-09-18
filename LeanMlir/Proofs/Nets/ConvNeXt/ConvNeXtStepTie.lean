@@ -112,16 +112,8 @@ def cnxBlockChTied {c cExp h w : Nat}
           = bdw o - lr * ∑ j : Fin (c*h*w),
               pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d Wdw b' (Tensor3.unflatten xin))) bdw o j * cotD j)
     -- channel-LN γ/β  (cot = cotN', LN input = d; the op sees both as their [h·w, c] views)
-  ∧ (∀ k : Fin c,
-        den (SHlo.veclnGammaSgd (N := h*w) (D := c) gN xN epsStr lrStr ε
-              (chanLNRows c h w d) ng lr (.operand cotN (chanLNRows c h w cotN'))) k
-          = ng k - lr * ∑ j : Fin (c*h*w),
-              pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' nbt d) ng k j * cotN' j)
-  ∧ (∀ k : Fin c,
-        den (SHlo.rowDenseBiasSgd (N := h*w) (c := c) bN lrStr nbt lr
-              (.operand cotN (chanLNRows c h w cotN'))) k
-          = nbt k - lr * ∑ j : Fin (c*h*w),
-              pdiv (fun β' : Vec c => chanLNTensor3 c h w ε ng β' d) nbt k j * cotN' j)
+  ∧ CnxPoC.ChanLNGammaSgdTied h w gN xN epsStr lrStr cotN ε nbt d ng cotN' lr
+  ∧ CnxPoC.ChanLNBetaSgdTied h w bN lrStr cotN ε ng d nbt cotN' lr
     -- expand 1×1 conv (c → cExp) W/b  (cot = cotE, conv input = nl)
   ∧ (∀ idx : Fin (cExp*c*1*1),
         den (SHlo.convWeightSgd xN wN lrStr bex (Tensor3.unflatten nl) Wex lr (.operand cotN cotE)) idx
@@ -185,17 +177,8 @@ def cnxDownChTied {ci co h w : Nat}
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin n : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) : Prop :=
     let cotN' : Vec (ci*(2*h)*(2*w)) := (flatConvStride2_has_vjp Wd bd).backward n dyOut
-    (∀ k : Fin ci,
-        den (SHlo.veclnGammaSgd (N := (2*h)*(2*w)) (D := ci) gN xN epsStr lrStr ε
-              (chanLNRows ci (2*h) (2*w) xin) dng lr
-              (.operand cotN (chanLNRows ci (2*h) (2*w) cotN'))) k
-          = dng k - lr * ∑ j : Fin (ci*(2*h)*(2*w)),
-              pdiv (fun γ' : Vec ci => chanLNTensor3 ci (2*h) (2*w) ε γ' dnbt xin) dng k j * cotN' j)
-  ∧ (∀ k : Fin ci,
-        den (SHlo.rowDenseBiasSgd (N := (2*h)*(2*w)) (c := ci) bN lrStr dnbt lr
-              (.operand cotN (chanLNRows ci (2*h) (2*w) cotN'))) k
-          = dnbt k - lr * ∑ j : Fin (ci*(2*h)*(2*w)),
-              pdiv (fun β' : Vec ci => chanLNTensor3 ci (2*h) (2*w) ε dng β' xin) dnbt k j * cotN' j)
+    CnxPoC.ChanLNGammaSgdTied (2 * h) (2 * w) gN xN epsStr lrStr cotN ε dnbt xin dng cotN' lr
+  ∧ CnxPoC.ChanLNBetaSgdTied (2 * h) (2 * w) bN lrStr cotN ε dng xin dnbt cotN' lr
   ∧ (∀ idx : Fin (co*ci*2*2),
         den (SHlo.convStridedWeightSgd xN wN lrStr bd n Wd lr (.operand cotN dyOut)) idx
           = Kernel4.flatten Wd idx - lr * ∑ j : Fin (co*h*w),
@@ -234,16 +217,8 @@ def cnxStemChTied {c h w : Nat}
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) (xstem : Tensor3 3 h w) (patch : Vec (c*h*w))
     (dyStem : Vec (c*h*w)) (lr : ℝ) : Prop :=
     let cotPatch : Vec (c*h*w) := chanLNTensor3Back c h w ε psng patch dyStem
-    (∀ k : Fin c,
-        den (SHlo.veclnGammaSgd (N := h*w) (D := c) gN xN epsStr lrStr ε
-              (chanLNRows c h w patch) psng lr (.operand cotN (chanLNRows c h w dyStem))) k
-          = psng k - lr * ∑ j : Fin (c*h*w),
-              pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' psnbt patch) psng k j * dyStem j)
-  ∧ (∀ k : Fin c,
-        den (SHlo.rowDenseBiasSgd (N := h*w) (c := c) bN lrStr psnbt lr
-              (.operand cotN (chanLNRows c h w dyStem))) k
-          = psnbt k - lr * ∑ j : Fin (c*h*w),
-              pdiv (fun β' : Vec c => chanLNTensor3 c h w ε psng β' patch) psnbt k j * dyStem j)
+    CnxPoC.ChanLNGammaSgdTied h w gN xN epsStr lrStr cotN ε psnbt patch psng dyStem lr
+  ∧ CnxPoC.ChanLNBetaSgdTied h w bN lrStr cotN ε psng patch psnbt dyStem lr
   ∧ (∀ o : Fin c,
         den (SHlo.convBiasSgd bN lrStr Wst xstem psb lr (.operand cotN cotPatch)) o
           = psb o - lr * ∑ j : Fin (c*h*w),
@@ -282,19 +257,8 @@ def cnxHeadChTied (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 10) (bfc : Vec 10)
     (gap : Vec (1*768)) (hn : Vec 768) (g : Vec 10) (lr : ℝ) : Prop :=
     let cotHn : Vec (1*768) := (dense_has_vjp Wfc bfc).backward hn g
-    (∀ k : Fin 768,
-        den (SHlo.veclnGammaSgd (N := 1) (D := 768) gN xN epsStr lrStr ε gap hng lr
-              (.operand cotN cotHn)) k
-          = hng k - lr * ∑ o : Fin (1*768),
-              pdiv (fun γ' : Vec 768 =>
-                      Mat.flatten (fun r => layerNormVec 768 ε γ' hnbt (Mat.unflatten gap r)))
-                   hng k o * cotHn o)
-  ∧ (∀ k : Fin 768,
-        den (SHlo.rowDenseBiasSgd (N := 1) (c := 768) bN lrStr hnbt lr (.operand cotN cotHn)) k
-          = hnbt k - lr * ∑ o : Fin (1*768),
-              pdiv (fun β' : Vec 768 =>
-                      Mat.flatten (fun r => layerNormVec 768 ε hng β' (Mat.unflatten gap r)))
-                   hnbt k o * cotHn o)
+    ViTPoC.VecLNGammaSgdTied 1 gN xN epsStr lrStr cotN ε hnbt gap hng cotHn lr
+  ∧ ViTPoC.VecLNBetaSgdTied 1 bN lrStr cotN ε hng gap hnbt cotHn lr
   ∧ (∀ i : Fin 10,
         den (SHlo.biasSgd bdN lrStr bfc lr (.operand dyN g)) i
           = bfc i - lr * ∑ j : Fin 10, pdiv (fun b' : Vec 10 => dense Wfc b' hn) bfc i j * g j)

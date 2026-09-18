@@ -52,77 +52,29 @@ def vitBlockTiedV {Np1 D mlpDim : Nat}
     let cotLn2 : Vec (Np1 * D)      := vitCotLn2 Wfc1 Wfc2 m1 dyOut
     let cotM1  : Vec (Np1 * mlpDim) := vitCotM1 Wfc2 m1 dyOut
     -- LN₁ γ/β  (cot = cotLn1, LN input = xin)
-    (∀ kk : Fin D,
-        den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε xin γ1 lr (.operand cotN cotLn1)) kk
-          = γ1 kk - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun gv : Vec D => Mat.flatten (fun r => layerNormVec D ε gv β1 (Mat.unflatten xin r))) γ1 kk o * cotLn1 o)
-  ∧ (∀ i : Fin D,
-        den (SHlo.rowDenseBiasSgd bN lrStr β1 lr (.operand cotN cotLn1)) i
-          = β1 i - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γ1 bv (Mat.unflatten xin r))) β1 i o * cotLn1 o)
+    ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β1 xin γ1 cotLn1 lr
+  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ1 xin β1 cotLn1 lr
     -- Q dense W/b  (cot = dQ, dense input = ln1)
-  ∧ (∀ (i : Fin D) (j : Fin D),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln1 Wq lr (.operand cotN dQ)) (finProdFinEquiv (i, j))
-          = Wq i j - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun vmat : Vec (D * D) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bq (Mat.unflatten ln1 r))) (Mat.flatten Wq) (finProdFinEquiv (i, j)) o * dQ o)
-  ∧ (∀ i : Fin D,
-        den (SHlo.rowDenseBiasSgd bN lrStr bq lr (.operand cotN dQ)) i
-          = bq i - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun b' : Vec D => Mat.flatten (fun r => dense Wq b' (Mat.unflatten ln1 r))) bq i o * dQ o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bq ln1 Wq dQ lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wq ln1 bq dQ lr
     -- K dense W/b  (cot = dK)
-  ∧ (∀ (i : Fin D) (j : Fin D),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln1 Wk lr (.operand cotN dK)) (finProdFinEquiv (i, j))
-          = Wk i j - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun vmat : Vec (D * D) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bk (Mat.unflatten ln1 r))) (Mat.flatten Wk) (finProdFinEquiv (i, j)) o * dK o)
-  ∧ (∀ i : Fin D,
-        den (SHlo.rowDenseBiasSgd bN lrStr bk lr (.operand cotN dK)) i
-          = bk i - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun b' : Vec D => Mat.flatten (fun r => dense Wk b' (Mat.unflatten ln1 r))) bk i o * dK o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bk ln1 Wk dK lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wk ln1 bk dK lr
     -- V dense W/b  (cot = dV)
-  ∧ (∀ (i : Fin D) (j : Fin D),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln1 Wv lr (.operand cotN dV)) (finProdFinEquiv (i, j))
-          = Wv i j - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun vmat : Vec (D * D) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bv (Mat.unflatten ln1 r))) (Mat.flatten Wv) (finProdFinEquiv (i, j)) o * dV o)
-  ∧ (∀ i : Fin D,
-        den (SHlo.rowDenseBiasSgd bN lrStr bv lr (.operand cotN dV)) i
-          = bv i - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun b' : Vec D => Mat.flatten (fun r => dense Wv b' (Mat.unflatten ln1 r))) bv i o * dV o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bv ln1 Wv dV lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wv ln1 bv dV lr
     -- out-proj dense W/b  (cot = cotH, dense input = att)
-  ∧ (∀ (i : Fin D) (j : Fin D),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr att Wo lr (.operand cotN cotH)) (finProdFinEquiv (i, j))
-          = Wo i j - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun vmat : Vec (D * D) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bo (Mat.unflatten att r))) (Mat.flatten Wo) (finProdFinEquiv (i, j)) o * cotH o)
-  ∧ (∀ i : Fin D,
-        den (SHlo.rowDenseBiasSgd bN lrStr bo lr (.operand cotN cotH)) i
-          = bo i - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun b' : Vec D => Mat.flatten (fun r => dense Wo b' (Mat.unflatten att r))) bo i o * cotH o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bo att Wo cotH lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wo att bo cotH lr
     -- LN₂ γ/β  (cot = cotLn2, LN input = h)
-  ∧ (∀ kk : Fin D,
-        den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε h γ2 lr (.operand cotN cotLn2)) kk
-          = γ2 kk - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun gv : Vec D => Mat.flatten (fun r => layerNormVec D ε gv β2 (Mat.unflatten h r))) γ2 kk o * cotLn2 o)
-  ∧ (∀ i : Fin D,
-        den (SHlo.rowDenseBiasSgd bN lrStr β2 lr (.operand cotN cotLn2)) i
-          = β2 i - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γ2 bv (Mat.unflatten h r))) β2 i o * cotLn2 o)
+  ∧ ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β2 h γ2 cotLn2 lr
+  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ2 h β2 cotLn2 lr
     -- fc1 dense W/b  (cot = cotM1, dense input = ln2)
-  ∧ (∀ (i : Fin D) (j : Fin mlpDim),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln2 Wfc1 lr (.operand cotN cotM1)) (finProdFinEquiv (i, j))
-          = Wfc1 i j - lr * ∑ o : Fin (Np1 * mlpDim),
-              pdiv (fun vmat : Vec (D * mlpDim) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bfc1 (Mat.unflatten ln2 r))) (Mat.flatten Wfc1) (finProdFinEquiv (i, j)) o * cotM1 o)
-  ∧ (∀ i : Fin mlpDim,
-        den (SHlo.rowDenseBiasSgd bN lrStr bfc1 lr (.operand cotN cotM1)) i
-          = bfc1 i - lr * ∑ o : Fin (Np1 * mlpDim),
-              pdiv (fun b' : Vec mlpDim => Mat.flatten (fun r => dense Wfc1 b' (Mat.unflatten ln2 r))) bfc1 i o * cotM1 o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bfc1 ln2 Wfc1 cotM1 lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wfc1 ln2 bfc1 cotM1 lr
     -- fc2 dense W/b  (cot = dyOut, dense input = g)
-  ∧ (∀ (i : Fin mlpDim) (j : Fin D),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr g Wfc2 lr (.operand cotN dyOut)) (finProdFinEquiv (i, j))
-          = Wfc2 i j - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun vmat : Vec (mlpDim * D) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bfc2 (Mat.unflatten g r))) (Mat.flatten Wfc2) (finProdFinEquiv (i, j)) o * dyOut o)
-  ∧ (∀ i : Fin D,
-        den (SHlo.rowDenseBiasSgd bN lrStr bfc2 lr (.operand cotN dyOut)) i
-          = bfc2 i - lr * ∑ o : Fin (Np1 * D),
-              pdiv (fun b' : Vec D => Mat.flatten (fun r => dense Wfc2 b' (Mat.unflatten g r))) bfc2 i o * dyOut o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bfc2 g Wfc2 dyOut lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wfc2 g bfc2 dyOut lr
 
 /-- **The block tie holds** — every conjunct is a delegation to a §1-fold generic (`ViTPoC.*_den`) at
     the chain cotangent. Pure thread + fan-in; ZERO new core ops/bridges. -/
@@ -299,77 +251,29 @@ def vitBlockTiedMHV {Np1 heads d mlpDim : Nat}
     let cotLn2 : Vec (Np1 * (heads * d))      := vitCotLn2 Wfc1 Wfc2 m1 dyOut
     let cotM1  : Vec (Np1 * mlpDim) := vitCotM1 Wfc2 m1 dyOut
     -- LN₁ γ/β  (cot = cotLn1, LN input = xin)
-    (∀ kk : Fin (heads * d),
-        den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε xin γ1 lr (.operand cotN cotLn1)) kk
-          = γ1 kk - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun gv : Vec (heads * d) => Mat.flatten (fun r => layerNormVec (heads * d) ε gv β1 (Mat.unflatten xin r))) γ1 kk o * cotLn1 o)
-  ∧ (∀ i : Fin (heads * d),
-        den (SHlo.rowDenseBiasSgd bN lrStr β1 lr (.operand cotN cotLn1)) i
-          = β1 i - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun bv : Vec (heads * d) => Mat.flatten (fun r => layerNormVec (heads * d) ε γ1 bv (Mat.unflatten xin r))) β1 i o * cotLn1 o)
+    ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β1 xin γ1 cotLn1 lr
+  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ1 xin β1 cotLn1 lr
     -- Q dense W/b  (cot = dQ, dense input = ln1)
-  ∧ (∀ (i : Fin (heads * d)) (j : Fin (heads * d)),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln1 Wq lr (.operand cotN dQ)) (finProdFinEquiv (i, j))
-          = Wq i j - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun vmat : Vec ((heads * d) * (heads * d)) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bq (Mat.unflatten ln1 r))) (Mat.flatten Wq) (finProdFinEquiv (i, j)) o * dQ o)
-  ∧ (∀ i : Fin (heads * d),
-        den (SHlo.rowDenseBiasSgd bN lrStr bq lr (.operand cotN dQ)) i
-          = bq i - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun b' : Vec (heads * d) => Mat.flatten (fun r => dense Wq b' (Mat.unflatten ln1 r))) bq i o * dQ o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bq ln1 Wq dQ lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wq ln1 bq dQ lr
     -- K dense W/b  (cot = dK)
-  ∧ (∀ (i : Fin (heads * d)) (j : Fin (heads * d)),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln1 Wk lr (.operand cotN dK)) (finProdFinEquiv (i, j))
-          = Wk i j - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun vmat : Vec ((heads * d) * (heads * d)) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bk (Mat.unflatten ln1 r))) (Mat.flatten Wk) (finProdFinEquiv (i, j)) o * dK o)
-  ∧ (∀ i : Fin (heads * d),
-        den (SHlo.rowDenseBiasSgd bN lrStr bk lr (.operand cotN dK)) i
-          = bk i - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun b' : Vec (heads * d) => Mat.flatten (fun r => dense Wk b' (Mat.unflatten ln1 r))) bk i o * dK o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bk ln1 Wk dK lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wk ln1 bk dK lr
     -- V dense W/b  (cot = dV)
-  ∧ (∀ (i : Fin (heads * d)) (j : Fin (heads * d)),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln1 Wv lr (.operand cotN dV)) (finProdFinEquiv (i, j))
-          = Wv i j - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun vmat : Vec ((heads * d) * (heads * d)) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bv (Mat.unflatten ln1 r))) (Mat.flatten Wv) (finProdFinEquiv (i, j)) o * dV o)
-  ∧ (∀ i : Fin (heads * d),
-        den (SHlo.rowDenseBiasSgd bN lrStr bv lr (.operand cotN dV)) i
-          = bv i - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun b' : Vec (heads * d) => Mat.flatten (fun r => dense Wv b' (Mat.unflatten ln1 r))) bv i o * dV o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bv ln1 Wv dV lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wv ln1 bv dV lr
     -- out-proj dense W/b  (cot = cotH, dense input = att)
-  ∧ (∀ (i : Fin (heads * d)) (j : Fin (heads * d)),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr att Wo lr (.operand cotN cotH)) (finProdFinEquiv (i, j))
-          = Wo i j - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun vmat : Vec ((heads * d) * (heads * d)) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bo (Mat.unflatten att r))) (Mat.flatten Wo) (finProdFinEquiv (i, j)) o * cotH o)
-  ∧ (∀ i : Fin (heads * d),
-        den (SHlo.rowDenseBiasSgd bN lrStr bo lr (.operand cotN cotH)) i
-          = bo i - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun b' : Vec (heads * d) => Mat.flatten (fun r => dense Wo b' (Mat.unflatten att r))) bo i o * cotH o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bo att Wo cotH lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wo att bo cotH lr
     -- LN₂ γ/β  (cot = cotLn2, LN input = h)
-  ∧ (∀ kk : Fin (heads * d),
-        den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε h γ2 lr (.operand cotN cotLn2)) kk
-          = γ2 kk - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun gv : Vec (heads * d) => Mat.flatten (fun r => layerNormVec (heads * d) ε gv β2 (Mat.unflatten h r))) γ2 kk o * cotLn2 o)
-  ∧ (∀ i : Fin (heads * d),
-        den (SHlo.rowDenseBiasSgd bN lrStr β2 lr (.operand cotN cotLn2)) i
-          = β2 i - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun bv : Vec (heads * d) => Mat.flatten (fun r => layerNormVec (heads * d) ε γ2 bv (Mat.unflatten h r))) β2 i o * cotLn2 o)
+  ∧ ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β2 h γ2 cotLn2 lr
+  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ2 h β2 cotLn2 lr
     -- fc1 dense W/b  (cot = cotM1, dense input = ln2)
-  ∧ (∀ (i : Fin (heads * d)) (j : Fin mlpDim),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr ln2 Wfc1 lr (.operand cotN cotM1)) (finProdFinEquiv (i, j))
-          = Wfc1 i j - lr * ∑ o : Fin (Np1 * mlpDim),
-              pdiv (fun vmat : Vec ((heads * d) * mlpDim) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bfc1 (Mat.unflatten ln2 r))) (Mat.flatten Wfc1) (finProdFinEquiv (i, j)) o * cotM1 o)
-  ∧ (∀ i : Fin mlpDim,
-        den (SHlo.rowDenseBiasSgd bN lrStr bfc1 lr (.operand cotN cotM1)) i
-          = bfc1 i - lr * ∑ o : Fin (Np1 * mlpDim),
-              pdiv (fun b' : Vec mlpDim => Mat.flatten (fun r => dense Wfc1 b' (Mat.unflatten ln2 r))) bfc1 i o * cotM1 o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bfc1 ln2 Wfc1 cotM1 lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wfc1 ln2 bfc1 cotM1 lr
     -- fc2 dense W/b  (cot = dyOut, dense input = g)
-  ∧ (∀ (i : Fin mlpDim) (j : Fin (heads * d)),
-        den (SHlo.rowDenseWeightSgd xN wN lrStr g Wfc2 lr (.operand cotN dyOut)) (finProdFinEquiv (i, j))
-          = Wfc2 i j - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun vmat : Vec (mlpDim * (heads * d)) => Mat.flatten (fun r => dense (Mat.unflatten vmat) bfc2 (Mat.unflatten g r))) (Mat.flatten Wfc2) (finProdFinEquiv (i, j)) o * dyOut o)
-  ∧ (∀ i : Fin (heads * d),
-        den (SHlo.rowDenseBiasSgd bN lrStr bfc2 lr (.operand cotN dyOut)) i
-          = bfc2 i - lr * ∑ o : Fin (Np1 * (heads * d)),
-              pdiv (fun b' : Vec (heads * d) => Mat.flatten (fun r => dense Wfc2 b' (Mat.unflatten g r))) bfc2 i o * dyOut o)
+  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bfc2 g Wfc2 dyOut lr
+  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wfc2 g bfc2 dyOut lr
 
 theorem vit_block_tiedMHV {Np1 heads d mlpDim : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)

@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `2a737436`, 1 ahead of origin, + the staged row)
+## Status (2026-09-18, main `38a320c6`, 2 ahead of origin, + the staged row)
 
-**Landed** — about 10k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 10.2k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -50,7 +50,8 @@ suspected, no drop-in located.
 | `cb36729c` | **§7 fused-from-unfused, EfficientNet** (−119): the eight fused `EnetPoC.*_den` folds (`EfficientNetFold.lean`) are now their un-fused peers (`ResNet34PoCB` / `EnetPoCG`) through `*SgdB_eq_grad` — one `rw` each, `congrArg` for the XLA-`SAME` stem, which has no `_eq_grad` lemma but is `θ − lr·` its gradient node by `rfl`. For that the import runs the other way: `ResNet34FoldB` imports `EfficientNetFold`'s three imports instead of it, and `EfficientNetFold` imports `EfficientNetFoldG`. New `EnetPoC.BnSgdPairTiedB` + `bnSgdPairTiedB_holds` (the fused γ/β pair) fold the 10 pairs in `EfficientNetStepTie`'s tie `def`s, same splice as `BnPairTiedB` |
 | `01c6c6f2` | **§6 small-net dense-head folds** (−101): `Cifar8PoC.denseW_den` / `denseB_den` (the emitted `weightSgd` / `biasSgd` of any dense layer, free in activation, weights and cotangent) move unchanged from `Cifar8Fold.lean` to `MlpTrainStep.lean`, the leafiest common ancestor of the small-net folds (46 downstream); the 18 per-layer copies in `MlpFold`, `CnnFold`, `CifarFold` are one-line instances (activation and cotangent by unification). `Cifar8Fold.lean` keeps only its module doc (six files import it) |
 | `2a737436` | **§8 ViT/ConvNeXt near-clones** (−691, 20 files). `preLNRes_has_vjp_mat` (`Attention.lean`): the four pre-LN residual sublayer VJPs (scalar/vector LN × attention/MLP) are instances, `rfl`-equal backwards; `patchEmbed_flat_has_vjp.correct` and `pdiv_softmax` on `sum_ite_eq` / `if_congr` (Attention 2,992 → 2,799). The heads = 1 MHSA collapse is `mhsaClean_backward_collapseMH` + the `Fin 1` reindex (121 → 21 lines, 4M heartbeats gone; `qkv_back_fanin`, `sum_one_3d` deleted). The 12 backward-unfold `rfl` lemmas → 6: the four in the tie files move up into `ViTBackB0` under the same names (`_root_.`, types `Expr`-identical; two are AuditAxioms-pinned) and six private copies go. `mlpSublayerBackGraph_faithful` is the MH one at `hm1 := 0`. `vitApexVJP` is `vitForwardKV_has_vjp` itself and `chanLNTensor3_has_vjp` is the term-mode chain, so both `backward_unique` transfers and `chanLNTensor3_vjp_chain` go (the docstrings' "tactic witness sits behind an `Eq.mpr`" was false: `vitNetBackGraph_faithful` already unfolds it by `rfl`). New `StableHLO.patchEmbedF_x_den` (`ViTFwdGraph`) — stage 0 of the five ViT forward-graph faithfulness proofs. Grad bridges on `sum_ite_eq` (ViTClose ×6, ViTVecLN ×2, ViTFoldG, ConvNeXtFold/FoldG, ChannelLN); the four ConvNeXt head folds delegate to the ViT ones (`ConvNeXtFoldG` now imports `ViTFoldG`); `pdiv_layerScale_gamma` from `pdiv_layerScale`. Dead: `hasVJP_backward_det`, `vitCotB2out`, `cnxStemPatchO`, `cnxD11`, the two ChannelLN doc `rfl`s |
-| *(staged)* | **§7 tie clauses, conv / depthwise / dense** (−469): one clause `Prop` per gradient node, each its `_den` lemma's statement with the index bound — `ConvWTiedB`, `ConvBTiedB`, `ConvStrided{W,B}TiedB`, `ConvStridedXlaWTiedB`, `Depthwise{W,B}TiedB`, `DepthwiseStridedWTiedB`, `Dense{W,B}TiedB` (`ResNet34FoldB`, beside `BnPairTiedB`) and the fused `ConvWSgdTiedB`, `DepthwiseWSgdTiedB`, `Dense{W,B}SgdTiedB` (`EfficientNetFold`). 116 clauses in 30 tie `def`s (R34, R50, MNv2, MNv4, EfficientNet G + fused, ConvNeXt GB) are one line each; the tie proofs don't move (`intro idx` unfolds the Prop). Each rewritten `def` checked `rfl`-equal to its HEAD text. Left as written: seven one-off ops (MNv2's `convStridedXlaBias` / `depthwiseStridedXla` pair, the fused ENet `convStridedXla` / `depthwiseStrided` weights, ConvNeXt's stride-4 stem pair, ViT's patch bias) |
+| `38a320c6` | **§7 tie clauses, conv / depthwise / dense** (−469): one clause `Prop` per gradient node, each its `_den` lemma's statement with the index bound — `ConvWTiedB`, `ConvBTiedB`, `ConvStrided{W,B}TiedB`, `ConvStridedXlaWTiedB`, `Depthwise{W,B}TiedB`, `DepthwiseStridedWTiedB`, `Dense{W,B}TiedB` (`ResNet34FoldB`, beside `BnPairTiedB`) and the fused `ConvWSgdTiedB`, `DepthwiseWSgdTiedB`, `Dense{W,B}SgdTiedB` (`EfficientNetFold`). 116 clauses in 30 tie `def`s (R34, R50, MNv2, MNv4, EfficientNet G + fused, ConvNeXt GB) are one line each; the tie proofs don't move (`intro idx` unfolds the Prop). Each rewritten `def` checked `rfl`-equal to its HEAD text. Left as written: seven one-off ops (MNv2's `convStridedXlaBias` / `depthwiseStridedXla` pair, the fused ENet `convStridedXla` / `depthwiseStrided` weights, ConvNeXt's stride-4 stem pair, ViT's patch bias) |
+| *(staged)* | **§7/§8 tie clauses, row-dense / LN** (−155): the same fold for the ViT and ConvNeXt ties — `ViTPoC.{RowDense{W,B},VecLN{Gamma,Beta}}SgdTied` (`ViTFold`), `ViTPoCGB.{RowDense{W,B},VecLN{Gamma,Beta}}TiedB` (`ViTFoldGB`), `CnxPoC.ChanLN{Gamma,Beta}SgdTied`, `CnxPoCGB.ChanLN{Gamma,Beta}TiedB`. 66 clauses in 12 tie `def`s (ViTStepTie/GB, ConvNeXtStepTie/GB; the ConvNeXt head uses the ViT vector-LN Props), each `def` `rfl`-equal to its HEAD text; the tie proofs don't move. Left as written: ViT's final-LN pair, whose cotangent is an unparenthesised application |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -64,37 +65,34 @@ pinned statements of one fact, each already a 2-line proof over the pointwise le
 **Next, in order** (handoff for the next session: chase the remaining duplicates, largest verified first,
 one family per commit; the pinned-statement questions wait for the end list below). ⚠ Recent batches landed
 at 35–70% of their estimates (signatures stay; some listed sites turn out not to be the shape) — plan on half.
-1. **§7/§8 ViT/ConvNeXt tie clauses** — the same fold for the row-dense and vector-LN nodes (~68 clauses in
-   `def`s: `rowDense{Weight,Bias}{Sgd,GradB}`, `veclnGamma{Sgd,GradB}` in ViTStepTie/GB and
-   ConvNeXtStepTie/GB; likely ~250). The CIFAR conv clauses sit in pinned theorem statements — end list.
-2. **§10 test and program duplicates** (~1,100): `TestCifar8WideTrain` ≡ `TestCifar8AdamTrain` at `D1 = 512`
+1. **§10 test and program duplicates** (~1,100): `TestCifar8WideTrain` ≡ `TestCifar8AdamTrain` at `D1 = 512`
    (~600); the vjp-oracle nets defined twice (§11 defect 3, ~380 → one `LeanMlir/VjpOracleNets.lean` both
    packages import); `TestMHSA` checking a copy of the emitter (defect 4, ~165); defect 2 (single-buffer
    magnitude in four comparators) while there.
-3. **§4 Training near-clones** (~600): softmax segment drift ×7 → `softmax_seg_drift`; ℓ1 step radius ×8 →
+2. **§4 Training near-clones** (~600): softmax segment drift ×7 → `softmax_seg_drift`; ℓ1 step radius ×8 →
    `sgd_step_l1_le`; the `finProdFinEquiv` reindex ×5 → `sum_finProdFinEquiv`; the `*_jacobian_nonzero` ray
    argument ×6 → `fderiv_ne_zero_of_ray`; the seal-file specialisations.
-4. **§3 Float near-clones** (~500): `conv_close_mixed` ≡ `depthwise_close_mixed`; `FloatClose.of_close`;
+3. **§3 Float near-clones** (~500): `conv_close_mixed` ≡ `depthwise_close_mixed`; `FloatClose.of_close`;
    `floatClose_bnRelu` / `_residualBlock` as `.comp`; `bnVar_close` on `bnMean_close_of`;
    `FloatModel.rnd_close` / `abs_rnd_le`; `mlp_l1_close`; public softmax bounds +
    `abs_softmax_sub_oneHot_le_one` (×7, Training too). ⚠ `FloatBridge` has ~100 downstream.
-5. **§6/§7 remaining duplicates and witnesses** (~700, mostly verified): the live witnesses as
+4. **§6/§7 remaining duplicates and witnesses** (~700, mostly verified): the live witnesses as
    `liveDownW` / `liveFwdW` / `stemβ` instances (~430); the exact duplicates (§6 ~110, §7 ~130); `MnistCNN`'s
    `Mini` ≡ `Spatial` (~90); `reluAfter_has_vjp_at` for MnistCNN's two relu-after-map VJPs (small).
-6. **§9 Codegen** (~400 in Lean): one `den_batchOp` (~110); the five local re-spellings in `StableHLO.lean`
+5. **§9 Codegen** (~400 in Lean): one `den_batchOp` (~110); the five local re-spellings in `StableHLO.lean`
    (~100); `batchSlice` as an abbrev of `Mat.unflatten` (~37); `DropPath` = `dropout ∘ dropScale` (~25);
    the zero placeholders. ⚠ `StableHLO.lean` has ~190 downstream — batch these. The renderer near-clones
    (~600, likely) must stay byte-identical (the `#guard`s and the CI diff).
-7. **§5 generator lemmas** (~1,600 emitted): G2 `pair_sq_bound_mlp` (148×), G1 `mlp_out_eq` (72×), G3/G4.
+6. **§5 generator lemmas** (~1,600 emitted): G2 `pair_sq_bound_mlp` (148×), G1 `mlp_out_eq` (72×), G3/G4.
    Edit the generator, regenerate, diff the output, check `regen_verified_mlir.sh` / the render guard lists.
-8. **Root-file batches, together** (each is a full ~7.5-min `Certs` rebuild): §1 `Tensor.lean` (~600:
+7. **Root-file batches, together** (each is a full ~7.5-min `Certs` rebuild): §1 `Tensor.lean` (~600:
    `pdivMat_rowIndep_perRow_at`, `pdivMat_colIndep`, the Kronecker `correct` fields, the `finProdFinEquiv`
    reindexes, `vjp_comp` from `vjp_comp_at`); the §0.5 Finset idiom sweep (~250 sites); the §0.2 leftovers —
    tag `flatConvStride2Xla_differentiable` / `depthwiseStride2FlatXla_differentiable` `@[fun_prop]`, after
    which three of the §0.6(b) stage twins drop their `unfold`; the §8 backward-uniqueness copies
    (`hasVJPMat_backward_det{,'}` in ViTBackB0, `HasVJP.backward_unique` in ConvNeXtBackCertifiedTie, and
    the EvenKernelConvBack / BatchMapVJPAt / ResNet34BackCertifiedTieB / StableHLO ones) → one per structure.
-9. **§0.6(c)** MobileNetV2 / EfficientNet bodies and whole-net folds onto `CertLayer`, as MobileNetV4 was
+8. **§0.6(c)** MobileNetV2 / EfficientNet bodies and whole-net folds onto `CertLayer`, as MobileNetV4 was
    (~400, likely). ⚠ Leave the hand-unrolled whole-net apex chains alone (kernel timeouts, `opaqueA*`).
 
 **At the end — pinned statements** (user decisions; add new ones here as they turn up):
