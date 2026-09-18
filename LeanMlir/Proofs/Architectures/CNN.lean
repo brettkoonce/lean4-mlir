@@ -468,12 +468,27 @@ theorem flatConv_differentiable {ic oc h w kH kW : Nat}
   Tensor3.flatten_differentiable.comp
     ((conv2d_differentiable W b).comp Tensor3.unflatten_differentiable)
 
+/-- **An `act ∘ norm ∘ lin` stage's VJP at a point** — a conv (or depthwise, or batched) op, a
+    normalisation, then an activation. `lin` and `norm` are differentiable everywhere, so their
+    global VJPs lift through `.toHasVJPAt`; `act` needs a derivative and a VJP only at the stage's
+    pre-activation `norm (lin v)`, which is what relu and relu6 have off their kinks. Two
+    `vjp_comp_at`s: `norm ∘ lin`, then `act`. Every conv-bn-act stage VJP in the repo is this at a
+    particular `lin`, `norm` and `act`. -/
+noncomputable def stage_has_vjp_at {a b : Nat}
+    (lin : Vec a → Vec b) (norm : Vec b → Vec b) (act : Vec b → Vec b) (v : Vec a)
+    (hlin : Differentiable ℝ lin) (hlinV : HasVJP lin)
+    (hnorm : Differentiable ℝ norm) (hnormV : HasVJP norm)
+    (hact : DifferentiableAt ℝ act (norm (lin v))) (hactV : HasVJPAt act (norm (lin v))) :
+    HasVJPAt (act ∘ norm ∘ lin) v :=
+  vjp_comp_at (norm ∘ lin) act v ((hnorm (lin v)).comp v (hlin v)) hact
+    (vjp_comp_at lin norm v (hlin v) (hnorm _) (hlinV.toHasVJPAt v) (hnormV.toHasVJPAt _)) hactV
+
 /-- **conv → bn → relu block VJP at a smooth point.**
 
     The workhorse for composing a ResNet VJP. In flattened `Vec` space,
     the block is `relu ∘ bnForward ∘ flatConv : Vec (ic*h*w) → Vec (oc*h*w)`
     (BatchNorm runs over the `oc*h*w` flattened activations with scalar
-    `ε, γ, β`). We build `HasVJPAt` at a point `v` via two `vjp_comp_at`:
+    `ε, γ, β`). It is `stage_has_vjp_at` at a point `v`:
 
     * inner = `bnForward ∘ flatConv` — both differentiable everywhere
       (`flatConv_differentiable`, `bnForward_differentiable`), so their
@@ -490,27 +505,11 @@ noncomputable def convBnRelu_has_vjp_at {ic oc h w kH kW : Nat}
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 0) :
-    HasVJPAt (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b) v := by
-  -- inner step: bnForward ∘ flatConv (both differentiable everywhere)
-  have hconv_diff : Differentiable ℝ (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w)) :=
-    flatConv_differentiable W b
-  have hbn_diff : Differentiable ℝ (bnForward (oc * h * w) ε γ β) :=
-    bnForward_differentiable (oc * h * w) ε γ β hε
-  have step1 : HasVJPAt (bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
-    vjp_comp_at (flatConv W b) (bnForward (oc * h * w) ε γ β) v
-      (hconv_diff v)
-      (hbn_diff _)
-      ((hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).toHasVJPAt v)
-      ((bn_has_vjp (oc * h * w) ε γ β hε).toHasVJPAt _)
-  have step1_diff : DifferentiableAt ℝ
-      (bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
-    DifferentiableAt.comp v (hbn_diff (flatConv W b v)) (hconv_diff v)
-  -- outer step: relu (needs smoothness)
-  exact vjp_comp_at (bnForward (oc * h * w) ε γ β ∘ flatConv W b)
-    (relu (oc * h * w)) v
-    step1_diff
+    HasVJPAt (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
+  stage_has_vjp_at (flatConv W b) (bnForward (oc * h * w) ε γ β) (relu (oc * h * w)) v
+    (flatConv_differentiable W b) (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b))
+    (bnForward_differentiable (oc * h * w) ε γ β hε) (bn_has_vjp (oc * h * w) ε γ β hε)
     (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    step1
     (relu_has_vjp_at (oc * h * w) _ h_smooth)
 
 -- ════════════════════════════════════════════════════════════════
@@ -1725,9 +1724,7 @@ theorem convBnRelu_differentiableAt {ic oc h w kH kW : Nat}
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 0) :
     DifferentiableAt ℝ (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b) v := by
-  have hinner : DifferentiableAt ℝ (bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
-    ((bnForward_differentiable (oc * h * w) ε γ β hε).comp (flatConv_differentiable W b)) v
-  exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
+  fun_prop (disch := assumption)
 
 -- abbreviations for layer functions
 noncomputable abbrev cbr {ic oc h w kH kW : Nat}

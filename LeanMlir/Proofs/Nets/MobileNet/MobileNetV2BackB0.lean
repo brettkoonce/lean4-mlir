@@ -92,22 +92,11 @@ noncomputable def bnRelu6Stage_has_vjp_at (N : Nat) {a oc h w : Nat}
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * a))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 0 ∧
                      bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 6) :
-    HasVJPAt (relu6 (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x := by
-  -- inner = bnBatchLA ∘ batchMap op (global, lifted to `_at`)
-  have hbatch_diff : Differentiable ℝ (batchMap N op) := batchMap_differentiable op hop
-  have hbn_diff : Differentiable ℝ (bnBatchLA N oc h w ε γ β) :=
-    bnBatchLA_differentiable N oc h w ε hε γ β
-  have inner_diff : DifferentiableAt ℝ (bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-    (hbn_diff.comp hbatch_diff) x
-  have inner_vjp : HasVJPAt (bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-    vjp_comp_at (batchMap N op) (bnBatchLA N oc h w ε γ β) x
-      (hbatch_diff x) (hbn_diff _)
-      ((batchMap_has_vjp op hopv hop).toHasVJPAt x)
-      ((bnBatchLA_has_vjp N oc h w ε hε γ β).toHasVJPAt _)
-  exact vjp_comp_at (bnBatchLA N oc h w ε γ β ∘ batchMap N op)
-    (relu6 (N * (oc * h * w))) x inner_diff
+    HasVJPAt (relu6 (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
+  stage_has_vjp_at (batchMap N op) (bnBatchLA N oc h w ε γ β) (relu6 (N * (oc * h * w))) x
+    (batchMap_differentiable op hop) (batchMap_has_vjp op hopv hop)
+    (bnBatchLA_differentiable N oc h w ε hε γ β) (bnBatchLA_has_vjp N oc h w ε hε γ β)
     (relu6_differentiableAt_of_smooth (N * (oc * h * w)) _ h_smooth)
-    inner_vjp
     (relu6_has_vjp_at (N * (oc * h * w)) _ h_smooth)
 
 /-- Differentiability of the generic relu6-on-batched-bn-stage at a smooth point. -/
@@ -117,9 +106,7 @@ theorem bnRelu6Stage_differentiableAt (N : Nat) {a oc h w : Nat}
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 0 ∧
                      bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 6) :
     DifferentiableAt ℝ (relu6 (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x := by
-  have inner : DifferentiableAt ℝ (bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-    ((bnBatchLA_differentiable N oc h w ε hε γ β).comp (batchMap_differentiable op hop)) x
-  exact (relu6_differentiableAt_of_smooth (N * (oc * h * w)) _ h_smooth).comp x inner
+  fun_prop (disch := assumption)
 
 /-- `cbrB` (conv-bn-relu6) `_at` VJP at a smooth point. -/
 noncomputable def cbrB_has_vjp_at (N : Nat) {ic oc h w kH kW : Nat}
@@ -204,8 +191,8 @@ theorem cbrBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   rw [cbrBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [cbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
-    Function.comp_apply]
+  simp only [cbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+    HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- Batched **depthwise → bn → relu6** stage backward graph (MobileNetV2 depthwise). -/
 noncomputable def dwbrBackBatchedGraph {N c h w kH kW : Nat}
@@ -225,8 +212,8 @@ theorem dwbrBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbrBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [dwbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
-    Function.comp_apply]
+  simp only [dwbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+    HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- Batched **STRIDE-2 depthwise → bn → relu6** stage backward graph (MobileNetV2
     downsample depthwise). The stride-2 analogue of `dwbrBackBatchedGraph`: the
@@ -251,8 +238,8 @@ theorem dwbrBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbrBstridedBackBatchedGraph, depthwiseStridedXlaBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [dwbrBstrided_has_vjp_at, bnRelu6Stage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
-    Function.comp_apply]
+  simp only [dwbrBstrided_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+    HasVJP.toHasVJPAt, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The SE-less body: `projB ∘ dwbrB ∘ cbrB`

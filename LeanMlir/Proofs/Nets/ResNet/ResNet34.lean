@@ -247,23 +247,11 @@ noncomputable def convBnReluStrided_has_vjp_at {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
     (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 0) :
-    HasVJPAt (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v := by
-  have hconv_diff : Differentiable ℝ
-      (flatConvStride2 W b : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
-    flatConvStride2_differentiable W b
-  have hbn_diff : Differentiable ℝ (bnForward (oc * h * w) ε γ β) :=
-    bnForward_differentiable (oc * h * w) ε γ β hε
-  have step1 : HasVJPAt (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
-    vjp_comp_at (flatConvStride2 W b) (bnForward (oc * h * w) ε γ β) v
-      (hconv_diff v) (hbn_diff _)
-      ((flatConvStride2_has_vjp W b).toHasVJPAt v)
-      ((bn_has_vjp (oc * h * w) ε γ β hε).toHasVJPAt _)
-  have step1_diff : DifferentiableAt ℝ
-      (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
-    DifferentiableAt.comp v (hbn_diff _) (hconv_diff v)
-  exact vjp_comp_at (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b)
-    (relu (oc * h * w)) v step1_diff
-    (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth) step1
+    HasVJPAt (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
+  stage_has_vjp_at (flatConvStride2 W b) (bnForward (oc * h * w) ε γ β) (relu (oc * h * w)) v
+    (flatConvStride2_differentiable W b) (flatConvStride2_has_vjp W b)
+    (bnForward_differentiable (oc * h * w) ε γ β hε) (bn_has_vjp (oc * h * w) ε γ β hε)
+    (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
     (relu_has_vjp_at (oc * h * w) _ h_smooth)
 
 /-- **Strided block VJP correctness** (ℝ-headline): the strided downsampling

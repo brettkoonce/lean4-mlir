@@ -737,25 +737,12 @@ noncomputable def convBnReluPC_has_vjp_at {ic oc h w kH kW : Nat}
     (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, bnPerChannelTensor3 oc h w ε γ β (flatConv W b v) k ≠ 0) :
-    HasVJPAt (relu (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConv W b) v := by
-  have hconv_diff : Differentiable ℝ (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w)) :=
-    flatConv_differentiable W b
-  have hbn_diff : Differentiable ℝ (bnPerChannelTensor3 oc h w ε γ β) :=
-    bnPerChannelTensor3_differentiable oc h w ε hε γ β
-  have step1 : HasVJPAt (bnPerChannelTensor3 oc h w ε γ β ∘ flatConv W b) v :=
-    vjp_comp_at (flatConv W b) (bnPerChannelTensor3 oc h w ε γ β) v
-      (hconv_diff v)
-      (hbn_diff _)
-      ((hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).toHasVJPAt v)
-      ((bnPerChannelTensor3_has_vjp oc h w ε hε γ β).toHasVJPAt _)
-  have step1_diff : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConv W b) v :=
-    DifferentiableAt.comp v (hbn_diff (flatConv W b v)) (hconv_diff v)
-  exact vjp_comp_at (bnPerChannelTensor3 oc h w ε γ β ∘ flatConv W b)
-    (relu (oc * h * w)) v
-    step1_diff
+    HasVJPAt (relu (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConv W b) v :=
+  stage_has_vjp_at (flatConv W b) (bnPerChannelTensor3 oc h w ε γ β) (relu (oc * h * w)) v
+    (flatConv_differentiable W b) (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b))
+    (bnPerChannelTensor3_differentiable oc h w ε hε γ β)
+    (bnPerChannelTensor3_has_vjp oc h w ε hε γ β)
     (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    step1
     (relu_has_vjp_at (oc * h * w) _ h_smooth)
 
 /-- **conv → per-channel-BN → relu is differentiable at a smooth point.** -/
@@ -765,9 +752,7 @@ theorem convBnReluPC_differentiableAt {ic oc h w kH kW : Nat}
     (h_smooth : ∀ k, bnPerChannelTensor3 oc h w ε γ β (flatConv W b v) k ≠ 0) :
     DifferentiableAt ℝ
       (relu (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConv W b) v := by
-  have hinner : DifferentiableAt ℝ (bnPerChannelTensor3 oc h w ε γ β ∘ flatConv W b) v :=
-    ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp (flatConv_differentiable W b)) v
-  exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
+  fun_prop (disch := assumption)
 
 /-- The Chapter-4 **BatchNorm** CIFAR forward: `cifarCnnForward` with a per-example
     **per-channel** `bnPerChannelTensor3` (`m=h·w`) inserted between each conv and its

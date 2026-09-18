@@ -62,24 +62,14 @@ noncomputable def convStridedBnRelu6PC_has_vjp_at {ic oc h w kH kW : Nat}
     (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
                        bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     HasVJPAt (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β
-      ∘ flatConvStride2Xla (h := h) (w := w) W b) v := by
-  have hconv_diff : Differentiable ℝ
-      (flatConvStride2Xla W b : Vec (ic * (2*h) * (2*w)) → Vec (oc * h * w)) :=
-    flatConvStride2Xla_differentiable W b
-  have hbn_diff : Differentiable ℝ (bnPerChannelTensor3 oc h w ε γ β) :=
-    bnPerChannelTensor3_differentiable oc h w ε hε γ β
-  have step1 : HasVJPAt (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
-    vjp_comp_at (flatConvStride2Xla W b) (bnPerChannelTensor3 oc h w ε γ β) v
-      (hconv_diff v) (hbn_diff _)
-      ((flatConvStride2Xla_has_vjp W b).toHasVJPAt v)
-      ((bnPerChannelTensor3_has_vjp oc h w ε hε γ β).toHasVJPAt _)
-  have step1_diff : DifferentiableAt ℝ
-      (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v :=
-    DifferentiableAt.comp v (hbn_diff (flatConvStride2Xla W b v)) (hconv_diff v)
-  exact vjp_comp_at (bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b)
-    (relu6 (oc * h * w)) v step1_diff
+      ∘ flatConvStride2Xla (h := h) (w := w) W b) v :=
+  stage_has_vjp_at (flatConvStride2Xla (h := h) (w := w) W b) (bnPerChannelTensor3 oc h w ε γ β)
+    (relu6 (oc * h * w)) v
+    (flatConvStride2Xla_differentiable W b) (flatConvStride2Xla_has_vjp W b)
+    (bnPerChannelTensor3_differentiable oc h w ε hε γ β)
+    (bnPerChannelTensor3_has_vjp oc h w ε hε γ β)
     (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    step1 (relu6_has_vjp_at (oc * h * w) _ h_smooth)
+    (relu6_has_vjp_at (oc * h * w) _ h_smooth)
 
 theorem convStridedBnRelu6PC_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)

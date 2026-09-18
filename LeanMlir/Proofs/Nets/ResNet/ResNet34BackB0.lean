@@ -92,21 +92,11 @@ noncomputable def bnReluStage_has_vjp_at (N : Nat) {a oc h w : Nat}
     (op : Vec a → Vec (oc * h * w)) (hop : Differentiable ℝ op) (hopv : HasVJP op)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * a))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 0) :
-    HasVJPAt (relu (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x := by
-  have hbatch_diff : Differentiable ℝ (batchMap N op) := batchMap_differentiable op hop
-  have hbn_diff : Differentiable ℝ (bnBatchLA N oc h w ε γ β) :=
-    bnBatchLA_differentiable N oc h w ε hε γ β
-  have inner_diff : DifferentiableAt ℝ (bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-    (hbn_diff.comp hbatch_diff) x
-  have inner_vjp : HasVJPAt (bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-    vjp_comp_at (batchMap N op) (bnBatchLA N oc h w ε γ β) x
-      (hbatch_diff x) (hbn_diff _)
-      ((batchMap_has_vjp op hopv hop).toHasVJPAt x)
-      ((bnBatchLA_has_vjp N oc h w ε hε γ β).toHasVJPAt _)
-  exact vjp_comp_at (bnBatchLA N oc h w ε γ β ∘ batchMap N op)
-    (relu (N * (oc * h * w))) x inner_diff
+    HasVJPAt (relu (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
+  stage_has_vjp_at (batchMap N op) (bnBatchLA N oc h w ε γ β) (relu (N * (oc * h * w))) x
+    (batchMap_differentiable op hop) (batchMap_has_vjp op hopv hop)
+    (bnBatchLA_differentiable N oc h w ε hε γ β) (bnBatchLA_has_vjp N oc h w ε hε γ β)
     (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ h_smooth)
-    inner_vjp
     (relu_has_vjp_at (N * (oc * h * w)) _ h_smooth)
 
 /-- Differentiability of the generic relu-on-batched-bn-stage at a smooth point. -/
@@ -115,9 +105,7 @@ theorem bnReluStage_differentiableAt (N : Nat) {a oc h w : Nat}
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * a))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 0) :
     DifferentiableAt ℝ (relu (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x := by
-  have inner : DifferentiableAt ℝ (bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-    ((bnBatchLA_differentiable N oc h w ε hε γ β).comp (batchMap_differentiable op hop)) x
-  exact (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ h_smooth).comp x inner
+  fun_prop (disch := assumption)
 
 /-- `cbReluB` (conv-bn-relu) `_at` VJP at a smooth point. -/
 noncomputable def cbReluB_has_vjp_at (N : Nat) {ic oc h w kH kW : Nat}
@@ -159,8 +147,8 @@ theorem cbReluBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   rw [cbReluBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [cbReluB_has_vjp_at, bnReluStage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
-    Function.comp_apply]
+  simp only [cbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+    HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The conv → bn → relu stage as a `CertLayer`, certified where its pre-relu activation misses 0.
     The kernel extent is a binder, so the same layer is a 1×1 or a 3×3. -/
@@ -369,7 +357,7 @@ theorem cbReluStridedBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   rw [cbReluStridedBackBatchedGraph, convStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [cbReluStridedB_has_vjp_at, bnReluStage_has_vjp_at, vjp_comp_at,
+  simp only [cbReluStridedB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The strided conv → bn → relu stage as a `CertLayer` — `cbReluLayer` with `flatConvStride2`. -/

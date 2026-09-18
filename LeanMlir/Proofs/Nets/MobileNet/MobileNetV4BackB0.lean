@@ -159,8 +159,8 @@ theorem dwbReluBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbReluBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [dwbReluB_has_vjp_at, bnReluStage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
-    Function.comp_apply]
+  simp only [dwbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+    HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The strided depthwise-relu stage's backward graph. -/
 noncomputable def dwbReluBstridedBackBatchedGraph {N c h w kH kW : Nat}
@@ -181,8 +181,8 @@ theorem dwbReluBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbReluBstridedBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [dwbReluBstrided_has_vjp_at, bnReluStage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
-    Function.comp_apply]
+  simp only [dwbReluBstrided_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+    HasVJP.toHasVJPAt, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The four UIB stages, as CertLayers
