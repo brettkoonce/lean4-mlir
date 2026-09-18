@@ -214,13 +214,6 @@ def parseArg (args : List String) (key : String) (dflt : String) : String :=
   | some a => (a.toRawSubstring.drop (key.length + 1)).toString
   | none => dflt
 
-def parseFloat (s : String) (dflt : Float) : Float :=
-  match s.toNat? with
-  | some n => n.toFloat
-  | none => match s.splitOn "." with
-    | [a, b] => a.toNat!.toFloat + b.toNat!.toFloat / (10.0 : Float) ^ b.length.toFloat
-    | _ => dflt
-
 /-- `fieldn` images of a part, stratified by class in a seeded order — the "a few hundred
     field labels" arm. Returns indices into the part. -/
 def stratifiedSubset (p : Part) (want : Nat) (seed : Nat) : Array Nat := Id.run do
@@ -252,7 +245,7 @@ def main (args : List String) : IO Unit := do
   let fieldN := (parseArg args "fieldn" "0").toNat!
   let epochs := (parseArg args "epochs" "10").toNat!
   let B := (parseArg args "batch" "64").toNat!
-  let lr := parseFloat (parseArg args "lr" (if field == "none" then "0.001" else "0.0001")) 0.001
+  let lr := (ViTGradcheck.parseFloat? (parseArg args "lr" (if field == "none" then "0.001" else "0.0001"))).getD 0.001
   let seed := (parseArg args "seed" "1").toNat!
   let tag := parseArg args "tag" ""
   let outDir := parseArg args "out" ".lake/build"

@@ -131,14 +131,6 @@ def parseArg (args : List String) (key : String) (dflt : String) : String :=
   | some a => (a.toRawSubstring.drop (key.length + 1)).toString
   | none => dflt
 
-/-- `0.001` → 0.001; an integer string is taken as is. -/
-def parseFloat (s : String) (dflt : Float) : Float :=
-  match s.toNat? with
-  | some n => n.toFloat
-  | none => match s.splitOn "." with
-    | [a, b] => a.toNat!.toFloat + b.toNat!.toFloat / (10.0 : Float) ^ b.length.toFloat
-    | _ => dflt
-
 /-- Read a part: images `[n, 1, s, s]` f32 and int32 labels, sizes cross-checked. -/
 def loadPart (dataDir split part sfx : String) (nPix : Nat) : IO (ByteArray × ByteArray × Nat) := do
   let ip := s!"{dataDir}/{split}_{part}{sfx}.bin"
@@ -161,7 +153,7 @@ def main (args : List String) : IO Unit := do
   let split := parseArg args "split" "blocked"
   let epochs := (parseArg args "epochs" "30").toNat!
   let B := (parseArg args "batch" "64").toNat!
-  let lr := parseFloat (parseArg args "lr" "0.001") 0.001
+  let lr := (ViTGradcheck.parseFloat? (parseArg args "lr" "0.001")).getD 0.001
   let seed := (parseArg args "seed" "1").toNat!
   let size := (parseArg args "size" "64").toNat!
   let tag := parseArg args "tag" ""

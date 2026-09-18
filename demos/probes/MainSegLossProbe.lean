@@ -30,21 +30,6 @@ import LeanMlir
 def probeWeights (NC : Nat) : List Float :=
   (List.range NC).map (fun c => 1.0 + c.toFloat)
 
-/-- Minimal non-negative decimal parser. Lean core has no `String.toFloat?`, and
-    the alternative — baking the demo's weight vector into this file too — is a
-    constant duplicated across two modules with no way to keep them honest.
-    Handles `"3"`, `"3.5"`, `"220.0868"`; rejects anything else, which is the
-    right answer for a probe CLI. -/
-private def parseFloat? (s : String) : Option Float :=
-  match s.splitOn "." with
-  | [a] => a.toNat?.map Nat.toFloat
-  | [a, b] => do
-    let ai ← a.toNat?
-    let bi ← b.toNat?
-    let scale := (List.range b.length).foldl (fun acc _ => acc * 10.0) 1.0
-    some (ai.toFloat + bi.toFloat / scale)
-  | _ => none
-
 def main (args : List String) : IO Unit := do
   let nums := (args.filterMap String.toNat?)
   let n (i : Nat) (d : Nat) : Nat := (nums[i]?).getD d
@@ -60,11 +45,11 @@ def main (args : List String) : IO Unit := do
   -- reaching for the String API.
   let cliWeights : Option (List Float) :=
     match (args.filter (·.startsWith "w=")).head? with
-    | some a => (((a.drop 2).toString).splitOn ":").mapM parseFloat?
+    | some a => (((a.drop 2).toString).splitOn ":").mapM ViTGradcheck.parseFloat?
     | none => none
   let gamma : Float :=
     match (args.filter (·.startsWith "g=")).head? with
-    | some a => (parseFloat? (a.drop 2).toString).getD 2.0
+    | some a => (ViTGradcheck.parseFloat? (a.drop 2).toString).getD 2.0
     | none => 2.0
   -- `wce1` and `focal0` are the degenerate-parameter twins of `ce`: an all-ones
   -- weight vector, and γ=0. Each must reproduce plain CE exactly — the cheapest
