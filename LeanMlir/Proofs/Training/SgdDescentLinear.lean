@@ -146,17 +146,6 @@ theorem softmax_seg_drift {n : Nat} (zt z : Vec n) {t δ : ℝ} (ht0 : 0 ≤ t) 
   exact div_le_div_of_nonneg_left (mul_nonneg zero_le_two (mul_nonneg ht0 hδ0))
     (by linarith) (by linarith)
 
-/-- **`|softmax − oneHot| ≤ 1`** — the magnitude of every softmax-CE head cotangent:
-    `softmax` lies in `[0, 1]` and a one-hot entry is `0` or `1`. It belongs beside
-    `softmax_abs_le_one` in FloatBridge (whose private nonneg / le-one pair it re-derives)
-    and moves there with the §3 float batch. -/
-theorem abs_softmax_sub_oneHot_le_one {n : Nat} (z : Vec n) (label k : Fin n) :
-    |softmax n z k - oneHot n label k| ≤ 1 := by
-  have hs0 : 0 ≤ softmax n z k :=
-    div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun j _ => (Real.exp_pos _).le)
-  have hs1 := (abs_le.mp (FloatModel.softmax_abs_le_one z k)).2
-  simp only [oneHot]; split_ifs <;> rw [abs_le] <;> constructor <;> linarith
-
 /-- **Segment-Lipschitz gradient for the linear softmax-CE loss, explicit
     constant.** Under the small-step condition `2aD < 1`, the gradient
     entries drift by at most `(2a²/(1−2aD))·(t·D)` along `[v, v+d]` — the

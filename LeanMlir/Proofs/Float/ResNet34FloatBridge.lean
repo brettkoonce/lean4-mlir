@@ -40,21 +40,9 @@ variable (M : FloatModel)
     residual fan-in's float budget. -/
 theorem add_close {xt x yt y ex ey : ℝ} (hx : |xt - x| ≤ ex) (hy : |yt - y| ≤ ey) :
     |M.add xt yt - (x + y)| ≤ M.u * (|x| + ex + |y| + ey) + (ex + ey) := by
-  have hu := M.u_nonneg
-  have hxt : |xt| ≤ |x| + ex := by
-    have h := abs_sub_le xt x 0; simp only [sub_zero] at h; linarith
-  have hyt : |yt| ≤ |y| + ey := by
-    have h := abs_sub_le yt y 0; simp only [sub_zero] at h; linarith
-  have h1 : |M.add xt yt - (xt + yt)| ≤ M.u * |xt + yt| := M.err _
-  have h2 : |(xt + yt) - (x + y)| ≤ ex + ey := by
-    have he : (xt + yt) - (x + y) = (xt - x) + (yt - y) := by ring
-    rw [he]; exact (abs_add_le _ _).trans (add_le_add hx hy)
-  have hsum : |xt + yt| ≤ |x| + ex + (|y| + ey) :=
-    (abs_add_le _ _).trans (add_le_add hxt hyt)
-  calc |M.add xt yt - (x + y)|
-      ≤ |M.add xt yt - (xt + yt)| + |(xt + yt) - (x + y)| := abs_sub_le _ _ _
-    _ ≤ M.u * |xt + yt| + (ex + ey) := add_le_add h1 h2
-    _ ≤ M.u * (|x| + ex + |y| + ey) + (ex + ey) := by gcongr; linarith [hsum]
+  refine M.rnd_close (by rw [add_sub_add_comm]; exact (abs_add_le _ _).trans (add_le_add hx hy))
+    ((abs_add_le _ _).trans ?_)
+  linarith [abs_sub_abs_le_abs_sub xt x, abs_sub_abs_le_abs_sub yt y]
 
 /-- **Residual block output (post-skip ReLU).** With the two branches `bt`/`st`
     within `eb`/`es` of the real `b`/`s` (magnitudes `≤ A`/`B`), the rounded

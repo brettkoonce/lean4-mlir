@@ -94,6 +94,18 @@ noncomputable def mlpF {d₀ d₁ d₂ d₃ : Nat}
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) : Vec d₃ :=
   M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))
 
+/-- **One rounding on top of an inherited error.** If the operand `a` is within `e` of the
+    exact `b` and `|a| ≤ A`, then `fl(a)` is within `u·A + e` of `b` — the step every
+    rounded `add`/`sub`/`mul`/`div` close takes (each is `M.rnd` of the exact operation). -/
+theorem rnd_close {a b A e : ℝ} (hab : |a - b| ≤ e) (hA : |a| ≤ A) :
+    |M.rnd a - b| ≤ M.u * A + e :=
+  (abs_sub_le _ a _).trans (add_le_add ((M.err a).trans
+    (mul_le_mul_of_nonneg_left hA M.u_nonneg)) hab)
+
+/-- Rounding grows a magnitude by at most the factor `1 + u`. -/
+theorem abs_rnd_le (x : ℝ) : |M.rnd x| ≤ (1 + M.u) * |x| := by
+  linarith [M.err x, abs_sub_abs_le_abs_sub (M.rnd x) x]
+
 -- ════════════════════════════════════════════════════════════════
 -- § Exponent bookkeeping
 -- ════════════════════════════════════════════════════════════════
@@ -113,17 +125,10 @@ private theorem one_add_u_le_pow {k : ℕ} (hk : 1 ≤ k) :
     back to the familiar first-order "≈ k·u" bound. -/
 theorem pow_one_add_sub_one_le (u : ℝ) (hu : 0 ≤ u) (k : ℕ) :
     (1 + u) ^ k - 1 ≤ k * u * (1 + u) ^ k := by
-  induction k with
-  | zero => simp
-  | succ k ih =>
-    have h0 : (0 : ℝ) ≤ 1 + u := by linarith
-    have hs : (1 + u) ^ (k + 1) = (1 + u) ^ k * (1 + u) := pow_succ _ _
-    have h1k : (1 : ℝ) ≤ (1 + u) ^ (k + 1) := one_le_pow₀ (by linarith)
-    have hihm : ((1 + u) ^ k - 1) * (1 + u) ≤ (k * u * (1 + u) ^ k) * (1 + u) :=
-      mul_le_mul_of_nonneg_right ih h0
-    have hu1 : u * 1 ≤ u * (1 + u) ^ (k + 1) := mul_le_mul_of_nonneg_left h1k hu
-    push_cast
-    nlinarith [hihm, hu1, hs]
+  -- `(1+u)^k − 1 = u·Σ_{i<k} (1+u)^i`, each term `≤ (1+u)^k`
+  rw [← geom_sum_mul, add_sub_cancel_left, mul_comm _ u, mul_comm (k : ℝ), mul_assoc]
+  refine mul_le_mul_of_nonneg_left ((Finset.sum_le_card_nsmul _ _ _ fun i hi =>
+    pow_le_pow_right₀ (by linarith) (Finset.mem_range.mp hi).le).trans_eq (by simp)) hu
 
 -- ════════════════════════════════════════════════════════════════
 -- § The two scalar assembly steps (pure-ℝ bookkeeping)
@@ -278,10 +283,7 @@ theorem dot_close_mixed (L : FloatModel) {n : ℕ} (x y : Vec n) :
     refine (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun i _ => ?_)
     have hxe : |L.rnd (x i) - x i| ≤ L.u * |x i| := L.err (x i)
     have hye : |L.rnd (y i) - y i| ≤ L.u * |y i| := L.err (y i)
-    have hxb : |L.rnd (x i)| ≤ (1 + L.u) * |x i| :=
-      calc |L.rnd (x i)| ≤ |L.rnd (x i) - x i| + |x i| := by
-            simpa using abs_sub_le (L.rnd (x i)) (x i) 0
-        _ ≤ (1 + L.u) * |x i| := by linarith
+    have hxb : |L.rnd (x i)| ≤ (1 + L.u) * |x i| := L.abs_rnd_le (x i)
     have t1 : |L.rnd (x i)| * |L.rnd (y i) - y i| ≤
         (1 + L.u) * |x i| * (L.u * |y i|) :=
       mul_le_mul hxb hye (abs_nonneg _)
@@ -324,14 +326,8 @@ theorem dot_close_mixed_uniform (L : FloatModel) {n : ℕ} (x y : Vec n) :
       (1 + L.u) ^ 2 * ∑ i, |x i * y i| := by
     rw [Finset.mul_sum]
     refine Finset.sum_le_sum fun i _ => ?_
-    have hxb : |L.rnd (x i)| ≤ (1 + L.u) * |x i| :=
-      calc |L.rnd (x i)| ≤ |L.rnd (x i) - x i| + |x i| := by
-            simpa using abs_sub_le (L.rnd (x i)) (x i) 0
-        _ ≤ (1 + L.u) * |x i| := by linarith [L.err (x i)]
-    have hyb : |L.rnd (y i)| ≤ (1 + L.u) * |y i| :=
-      calc |L.rnd (y i)| ≤ |L.rnd (y i) - y i| + |y i| := by
-            simpa using abs_sub_le (L.rnd (y i)) (y i) 0
-        _ ≤ (1 + L.u) * |y i| := by linarith [L.err (y i)]
+    have hxb : |L.rnd (x i)| ≤ (1 + L.u) * |x i| := L.abs_rnd_le (x i)
+    have hyb : |L.rnd (y i)| ≤ (1 + L.u) * |y i| := L.abs_rnd_le (y i)
     rw [abs_mul, abs_mul]
     calc |L.rnd (x i)| * |L.rnd (y i)|
         ≤ (1 + L.u) * |x i| * ((1 + L.u) * |y i|) :=
@@ -387,21 +383,8 @@ theorem dense_close_mixed (L : FloatModel) {m n : Nat} (W : Mat m n)
   have hreal : Proofs.dense W b x j = P + b j := rfl
   have hmix : M.denseMixed L W b x j = M.add p (b j) := rfl
   rw [hmix, hreal]
-  have hadd : |M.add p (b j) - (p + b j)| ≤ M.u * |p + b j| := M.err _
-  have htri : |M.add p (b j) - (P + b j)| ≤
-      M.u * |p + b j| + |p - P| := by
-    have h1 := abs_sub_le (M.add p (b j)) (p + b j) (P + b j)
-    have h2 : |p + b j - (P + b j)| = |p - P| := by
-      rw [show p + b j - (P + b j) = p - P from by ring]
-    linarith [hadd]
-  have hpbj : |p + b j| ≤ (S + br * S) + |b j| :=
-    (abs_add_le p (b j)).trans (by linarith [hpabs])
-  calc |M.add p (b j) - (P + b j)|
-      ≤ M.u * |p + b j| + |p - P| := htri
-    _ ≤ M.u * ((S + br * S) + |b j|) + br * S := by
-        have hm := mul_le_mul_of_nonneg_left hpbj hu
-        linarith [hm, hD]
-    _ = M.u * (S + |b j|) + (1 + M.u) * (br * S) := by ring
+  exact (M.rnd_close (e := br * S) (by rwa [add_sub_add_right_eq_sub])
+    ((abs_add_le p (b j)).trans (add_le_add_left hpabs _))).trans_eq (by ring)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Dense layer: rounded-at-perturbed-input vs real-at-real-input
@@ -479,22 +462,9 @@ theorem dense_close_fresh {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
 theorem relu_close {n : Nat} (xt xa : Vec n) (e : ℝ)
     (hx : ∀ i, |xt i - xa i| ≤ e) (i : Fin n) :
     |relu n xt i - relu n xa i| ≤ e := by
-  have h := hx i
-  have h1 := abs_le.mp h
-  have he0 : 0 ≤ e := le_trans (abs_nonneg _) h
-  simp only [relu]
-  by_cases ht : xt i > 0
-  · by_cases ha : xa i > 0
-    · simpa [ht, ha] using h
-    · rw [ite_eq_left ht, ite_eq_right ha, sub_zero, abs_of_pos ht]
-      rw [not_lt] at ha
-      linarith [h1.2]
-  · by_cases ha : xa i > 0
-    · rw [ite_eq_right ht, ite_eq_left ha, zero_sub, abs_neg, abs_of_pos ha]
-      rw [not_lt] at ht
-      linarith [h1.1]
-    · rw [ite_eq_right ht, ite_eq_right ha]
-      simpa using he0
+  refine le_trans ?_ (hx i)
+  simpa only [relu, gt_iff_lt, ← max_def_lt, max_comm (0:ℝ)] using
+    abs_max_sub_max_le_abs (xt i) (xa i) 0
 
 -- ════════════════════════════════════════════════════════════════
 -- § Capstones: the Tier-1 nets
@@ -548,24 +518,18 @@ theorem mlp_float_close {d₀ d₁ d₂ d₃ : Nat}
 -- § The γ-form: rational budgets for numeric instantiation
 -- ════════════════════════════════════════════════════════════════
 
-/-- `(1 − k·u)·(1+u)^k ≤ 1`, unconditionally (for `k·u ≥ 1` the left side
-    is `≤ 0`). The division-free product form of the classical `γₖ` bound,
-    so the induction needs no `k·u < 1` bookkeeping. -/
-private theorem one_sub_mul_pow_le (u : ℝ) (hu : 0 ≤ u) (k : ℕ) :
-    (1 - (k : ℝ) * u) * (1 + u) ^ k ≤ 1 := by
-  induction k with
-  | zero => simp
-  | succ k ih =>
-    have hp : (0 : ℝ) ≤ (1 + u) ^ k := pow_nonneg (by linarith) k
-    have hs : (1 + u) ^ (k + 1) = (1 + u) ^ k * (1 + u) := pow_succ _ _
-    have key : (1 - ((k : ℝ) + 1) * u) * (1 + u) ≤ 1 - (k : ℝ) * u := by
-      nlinarith [mul_nonneg (mul_nonneg
-        (add_nonneg (Nat.cast_nonneg (α := ℝ) k) zero_le_one) hu) hu]
-    push_cast
-    calc (1 - ((k : ℝ) + 1) * u) * (1 + u) ^ (k + 1)
-        = ((1 - ((k : ℝ) + 1) * u) * (1 + u)) * (1 + u) ^ k := by rw [hs]; ring
-      _ ≤ (1 - (k : ℝ) * u) * (1 + u) ^ k := mul_le_mul_of_nonneg_right key hp
-      _ ≤ 1 := ih
+/-- `e^x − 1 ≤ x/(1−x)` for `0 ≤ x < 1` — the exp analogue of the γ-form,
+    from `1 − x ≤ e^(−x)` alone; keeps the numeric head budget in
+    `norm_num` country. -/
+theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
+    Real.exp x - 1 ≤ x / (1 - x) := by
+  have hp := Real.exp_pos x
+  have hprod : Real.exp x * Real.exp (-x) = 1 := by
+    rw [← Real.exp_add]; simp
+  have h1 : (1 - x) * Real.exp x ≤ 1 := by
+    nlinarith [Real.add_one_le_exp (-x), hp]
+  rw [le_div_iff₀ (by linarith : (0:ℝ) < 1 - x)]
+  nlinarith [h1]
 
 /-- **The classical `γₖ` bound**: for `k·u < 1`,
     `(1+u)^k − 1 ≤ k·u/(1 − k·u)`. Turns the compounded budgets into plain
@@ -574,15 +538,11 @@ private theorem one_sub_mul_pow_le (u : ℝ) (hu : 0 ≤ u) (k : ℕ) :
 theorem pow_gamma_bound (u : ℝ) (hu : 0 ≤ u) (k : ℕ)
     (hk : (k : ℝ) * u < 1) :
     (1 + u) ^ k - 1 ≤ (k : ℝ) * u / (1 - (k : ℝ) * u) := by
-  have hpos : 0 < 1 - (k : ℝ) * u := by linarith
-  have h0 := one_sub_mul_pow_le u hu k
-  have h1 : (1 + u) ^ k ≤ 1 / (1 - (k : ℝ) * u) := by
-    rw [le_div_iff₀ hpos]
-    linarith [mul_comm ((1 + u) ^ k) (1 - (k : ℝ) * u)]
-  have h2 : 1 / (1 - (k : ℝ) * u) - 1 = (k : ℝ) * u / (1 - (k : ℝ) * u) := by
-    field_simp
-    ring
-  linarith
+  -- `(1+u)^k ≤ e^(k·u)`, then the γ-form of `e^x − 1`
+  have hexp : (1 + u) ^ k ≤ Real.exp (k * u) := by
+    rw [Real.exp_nat_mul]
+    exact pow_le_pow_left₀ (by linarith) (by linarith [Real.add_one_le_exp u]) k
+  linarith [exp_sub_one_le hk]
 
 /-- `x ↦ x/(1−x)` is monotone on `[0, 1)` — lets a `u ≤ u32` hypothesis ride
     through the γ-form. -/
@@ -627,27 +587,13 @@ private theorem layerBudget_le_of {u : ℝ} {m : ℕ} {w β A E g Ē : ℝ}
     (hu : 0 ≤ u) (hw : 0 ≤ w) (hβ : 0 ≤ β) (hA : 0 ≤ A)
     (hG : (1 + u) ^ (m + 2) - 1 ≤ g) (hE0 : 0 ≤ E) (hE : E ≤ Ē) :
     layerBudget u m w β A E ≤ g * ((m : ℝ) * w * (A + Ē) + β) + (m : ℝ) * w * Ē := by
-  have hG0 : (0 : ℝ) ≤ (1 + u) ^ (m + 2) - 1 :=
-    sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hmw : (0 : ℝ) ≤ (m : ℝ) * w := mul_nonneg (Nat.cast_nonneg m) hw
-  have hAE : (m : ℝ) * w * (A + E) ≤ (m : ℝ) * w * (A + Ē) :=
-    mul_le_mul_of_nonneg_left (by linarith) hmw
-  have hX0 : (0 : ℝ) ≤ (m : ℝ) * w * (A + E) + β :=
-    add_nonneg (mul_nonneg hmw (add_nonneg hA hE0)) hβ
-  have h1 : ((1 + u) ^ (m + 2) - 1) * ((m : ℝ) * w * (A + E) + β)
-      ≤ g * ((m : ℝ) * w * (A + Ē) + β) :=
-    mul_le_mul hG (by linarith) hX0 (hG0.trans hG)
-  have h2 : (m : ℝ) * w * E ≤ (m : ℝ) * w * Ē :=
-    mul_le_mul_of_nonneg_left hE hmw
-  exact add_le_add h1 h2
+  have hg0 : 0 ≤ g := (sub_nonneg.mpr (one_le_pow₀ (by linarith))).trans hG
+  unfold layerBudget; gcongr
 
 /-- ReLU never grows magnitudes. -/
 theorem relu_abs_le {n : ℕ} (z : Vec n) (i : Fin n) :
     |relu n z i| ≤ |z i| := by
-  simp only [relu]
-  by_cases h : z i > 0
-  · simp [h]
-  · simp [h]
+  unfold relu; split_ifs <;> simp
 
 /-- Real dense-layer magnitude bound: `|denseⱼ| ≤ layerAct m w β a`. -/
 theorem dense_abs_le {m n : ℕ} {W : Mat m n} {b : Vec n} {x : Vec m}
@@ -873,14 +819,7 @@ theorem mul_close {xt x yt y ea ec A C : ℝ}
   have habs : |xt * yt| ≤ (A + ea) * (C + ec) := by
     rw [abs_mul]
     exact mul_le_mul hxt hyt (abs_nonneg _) (by linarith)
-  have hrnd : |M.mul xt yt - xt * yt| ≤ M.u * |xt * yt| := M.err _
-  have htri : |M.mul xt yt - x * y| ≤
-      |M.mul xt yt - xt * yt| + |xt * yt - x * y| := abs_sub_le _ _ _
-  have h2 : M.u * |xt * yt| ≤ M.u * ((A + ea) * (C + ec)) :=
-    mul_le_mul_of_nonneg_left habs hu
-  show |M.mul xt yt - x * y| ≤
-    M.u * ((A + ea) * (C + ec)) + (A * ec + ea * C + ea * ec)
-  linarith
+  exact M.rnd_close hprod habs
 
 /-- **Rounded SGD update**: `fl(θ − fl(lr·gt))` is within `sgdErr` of the
     real step `θ − lr·g`. Two roundings plus the inherited gradient error. -/
@@ -897,38 +836,14 @@ theorem sgd_step_close (θ : ℝ) {gt g lr G eg : ℝ}
   have hlrg : |lr * gt| ≤ lr * (G + eg) := by
     rw [abs_mul, abs_of_nonneg hlr]
     exact mul_le_mul_of_nonneg_left hgt hlr
-  have hp1 : |M.mul lr gt - lr * gt| ≤ M.u * |lr * gt| := M.err _
-  have hp2 : |lr * gt - lr * g| ≤ lr * eg := by
-    rw [show lr * gt - lr * g = lr * (gt - g) from by ring, abs_mul,
-        abs_of_nonneg hlr]
-    exact mul_le_mul_of_nonneg_left hg hlr
-  have hmono := mul_le_mul_of_nonneg_left hlrg hu
-  have hpclose : |M.mul lr gt - lr * g| ≤ M.u * (lr * (G + eg)) + lr * eg := by
-    have htri := abs_sub_le (M.mul lr gt) (lr * gt) (lr * g)
-    linarith
-  have hpabs : |M.mul lr gt| ≤ (1 + M.u) * (lr * (G + eg)) := by
-    have htri : |M.mul lr gt| ≤ |M.mul lr gt - lr * gt| + |lr * gt| := by
-      have h := abs_sub_le (M.mul lr gt) (lr * gt) 0
-      simp only [sub_zero] at h
-      linarith
-    nlinarith
-  have hsub : |M.sub θ (M.mul lr gt) - (θ - M.mul lr gt)| ≤
-      M.u * |θ - M.mul lr gt| := M.err _
-  have hθp : |θ - M.mul lr gt| ≤ |θ| + (1 + M.u) * (lr * (G + eg)) := by
-    have h := abs_sub_le θ 0 (M.mul lr gt)
-    simp only [sub_zero, zero_sub, abs_neg] at h
-    linarith
-  have h3 : |(θ - M.mul lr gt) - (θ - lr * g)| = |M.mul lr gt - lr * g| := by
-    rw [show (θ - M.mul lr gt) - (θ - lr * g) = -(M.mul lr gt - lr * g) from
-        by ring, abs_neg]
-  have htri2 : |M.sub θ (M.mul lr gt) - (θ - lr * g)| ≤
-      |M.sub θ (M.mul lr gt) - (θ - M.mul lr gt)| +
-        |(θ - M.mul lr gt) - (θ - lr * g)| := abs_sub_le _ _ _
-  have h4 := mul_le_mul_of_nonneg_left hθp hu
-  show |M.sub θ (M.mul lr gt) - (θ - lr * g)| ≤
-    M.u * (|θ| + (1 + M.u) * (lr * (G + eg)))
-      + (M.u * (lr * (G + eg)) + lr * eg)
-  linarith [htri2, hsub, h3, hpclose, h4]
+  -- the product rounding, then the subtract rounding on top of it
+  have hpclose : |M.mul lr gt - lr * g| ≤ M.u * (lr * (G + eg)) + lr * eg :=
+    M.rnd_close (by rw [← mul_sub, abs_mul, abs_of_nonneg hlr]
+                    exact mul_le_mul_of_nonneg_left hg hlr) hlrg
+  have hpabs : |M.mul lr gt| ≤ (1 + M.u) * (lr * (G + eg)) :=
+    (M.abs_rnd_le _).trans (mul_le_mul_of_nonneg_left hlrg (by linarith))
+  exact M.rnd_close (e := M.u * (lr * (G + eg)) + lr * eg)
+    (by rwa [sub_sub_sub_cancel_left, abs_sub_comm]) ((abs_sub _ _).trans (add_le_add_right hpabs _))
 
 private theorem mulErr_nonneg {u A C ea ec : ℝ} (hu : 0 ≤ u) (hA : 0 ≤ A)
     (hC : 0 ≤ C) (hea : 0 ≤ ea) (hec : 0 ≤ ec) : 0 ≤ mulErr u A C ea ec :=
@@ -940,34 +855,13 @@ private theorem mulErr_mono {u u' A C ea ea' ec : ℝ}
     (hu : 0 ≤ u) (huu : u ≤ u') (hA : 0 ≤ A) (hC : 0 ≤ C)
     (hea0 : 0 ≤ ea) (hea : ea ≤ ea') (hec : 0 ≤ ec) :
     mulErr u A C ea ec ≤ mulErr u' A C ea' ec := by
-  have h1 : (A + ea) * (C + ec) ≤ (A + ea') * (C + ec) :=
-    mul_le_mul_of_nonneg_right (by linarith) (by linarith)
-  have h10 : (0:ℝ) ≤ (A + ea) * (C + ec) :=
-    mul_nonneg (by linarith) (by linarith)
-  have t1 : u * ((A + ea) * (C + ec)) ≤ u' * ((A + ea') * (C + ec)) :=
-    mul_le_mul huu h1 h10 (by linarith)
-  have t2 : ea * C ≤ ea' * C := mul_le_mul_of_nonneg_right hea hC
-  have t3 : ea * ec ≤ ea' * ec := mul_le_mul_of_nonneg_right hea hec
-  exact add_le_add t1 (by linarith)
+  unfold mulErr; gcongr; linarith
 
 theorem sgdErr_mono {u u' lr Θ Θ' G eg eg' : ℝ}
     (hu : 0 ≤ u) (huu : u ≤ u') (hlr : 0 ≤ lr) (hΘ0 : 0 ≤ Θ) (hΘ : Θ ≤ Θ')
     (hG : 0 ≤ G) (heg0 : 0 ≤ eg) (heg : eg ≤ eg') :
     sgdErr u lr Θ G eg ≤ sgdErr u' lr Θ' G eg' := by
-  have hin : lr * (G + eg) ≤ lr * (G + eg') :=
-    mul_le_mul_of_nonneg_left (by linarith) hlr
-  have hin0 : (0:ℝ) ≤ lr * (G + eg) := mul_nonneg hlr (by linarith)
-  have h1u : (1 + u) * (lr * (G + eg)) ≤ (1 + u') * (lr * (G + eg')) :=
-    mul_le_mul (by linarith) hin hin0 (by linarith)
-  have hX0 : (0:ℝ) ≤ Θ + (1 + u) * (lr * (G + eg)) :=
-    add_nonneg hΘ0 (mul_nonneg (by linarith) hin0)
-  have t1 : u * (Θ + (1 + u) * (lr * (G + eg))) ≤
-      u' * (Θ' + (1 + u') * (lr * (G + eg'))) :=
-    mul_le_mul huu (by linarith) hX0 (by linarith)
-  have t2 : u * (lr * (G + eg)) ≤ u' * (lr * (G + eg')) :=
-    mul_le_mul huu hin hin0 (by linarith)
-  have t3 : lr * eg ≤ lr * eg' := mul_le_mul_of_nonneg_left heg hlr
-  exact add_le_add t1 (add_le_add t2 t3)
+  unfold sgdErr; gcongr <;> linarith
 
 /-- ReLU backward mask — `if z > 0 then v else 0`. Compare + select: exact
     in floating point, so the float chain applies it bare (the rendered
@@ -1037,6 +931,32 @@ theorem cot_step_close {m n : ℕ} (W : Mat m n) (zt z : Vec m) (ct c : Vec n)
 -- § Train-step capstones: rounded SGD entries vs the certified step
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The MLP's first two rounded layers** from a fresh input: layer 0's pre-activation (and
+    its ReLU) within `E₀ = layerBudget … a 0`, the real layer-0 activation within
+    `A₁ = layerAct d₀ w₀ β₀ a`, and layer 1's pre-activation within
+    `layerBudget … A₁ E₀` — the forward prefix every step capstone below starts from. -/
+theorem mlp_l1_close {d₀ d₁ d₂ : Nat} {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} {W₁ : Mat d₁ d₂}
+    {b₁ : Vec d₂} {x : Vec d₀} {w₀ β₀ w₁ β₁ a : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁) (ha : 0 ≤ a)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁) (hx : ∀ i, |x i| ≤ a) :
+    (∀ j, |M.dense W₀ b₀ x j - Proofs.dense W₀ b₀ x j| ≤ layerBudget M.u d₀ w₀ β₀ a 0) ∧
+    (∀ j, |relu d₁ (M.dense W₀ b₀ x) j - relu d₁ (Proofs.dense W₀ b₀ x) j| ≤
+      layerBudget M.u d₀ w₀ β₀ a 0) ∧
+    (∀ i, |relu d₁ (Proofs.dense W₀ b₀ x) i| ≤ layerAct d₀ w₀ β₀ a) ∧
+    (∀ j, |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j -
+      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) (layerBudget M.u d₀ w₀ β₀ a 0)) := by
+  have hE₀0 := layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl (m := d₀)
+  have l0 : ∀ j, |M.dense W₀ b₀ x j - Proofs.dense W₀ b₀ x j| ≤
+      layerBudget M.u d₀ w₀ β₀ a 0 := fun j =>
+    (M.dense_close_fresh W₀ b₀ x j).trans (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j)
+  have r0 := fun j => relu_close _ _ _ l0 j
+  have ha₁ : ∀ i, |relu d₁ (Proofs.dense W₀ b₀ x) i| ≤ layerAct d₀ w₀ β₀ a :=
+    fun i => (relu_abs_le _ i).trans (dense_abs_le ha hW₀ hb₀ hx i)
+  exact ⟨l0, r0, ha₁, fun j => (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j).trans
+    (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j)⟩
+
 /-- **Rounded output-layer weight update (W₂).** The float update
     `fl(W₂ᵢⱼ − fl(lr·fl(ã₂ᵢ·gtⱼ)))` — outer-product gradient from the *stored
     float forward activation*, as the rendered trainer computes it — is
@@ -1071,23 +991,7 @@ theorem mlp_w2_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     layerAct_nonneg hw₁ hβ₁ hA₁0
   have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
     layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
-  -- float forward chain: ã₂ within E₁ of a₂
-  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
-      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
-    (M.dense_close_fresh W₀ b₀ x j').trans
-      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
-  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
-      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    fun j' => relu_close _ _ _ l0 j'
-  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
-      layerAct d₀ w₀ β₀ a :=
-    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
-  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
-      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
-      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
-        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
-    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
-      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   have r1 : ∀ j', |relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))) j' -
       relu d₂ (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))) j'| ≤
       layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
@@ -1155,23 +1059,7 @@ theorem mlp_w1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
   have hC₁0 : 0 ≤ layerAct d₃ w₂ 0 G := layerAct_nonneg hw₂ le_rfl hG0
   have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
     layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
-  -- float forward chain to the layer-1 pre-activation
-  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
-      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
-    (M.dense_close_fresh W₀ b₀ x j').trans
-      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
-  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
-      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    fun j' => relu_close _ _ _ l0 j'
-  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
-      layerAct d₀ w₀ β₀ a :=
-    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
-  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
-      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
-      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
-        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
-    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
-      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   -- the backward cotangent through the mask, under the margin
   have hcot : ∀ j', |reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
       (M.dense (fun j'' i' => W₂ i' j'') (fun _ => 0) gt) j' -
@@ -1222,22 +1110,7 @@ theorem mlp_b1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
       (layerBudget M.u d₃ w₂ 0 G eg) := by
   have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
     layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
-  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
-      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
-    (M.dense_close_fresh W₀ b₀ x j').trans
-      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
-  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
-      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    fun j' => relu_close _ _ _ l0 j'
-  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
-      layerAct d₀ w₀ β₀ a :=
-    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
-  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
-      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
-      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
-        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
-    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
-      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   have hcot := fun j' =>
     M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin j'
   have hc₁ : |reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
@@ -1289,22 +1162,7 @@ theorem mlp_w0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     layerBudget_nonneg M.u_nonneg hw₂ le_rfl hG0 heg
   have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
     layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
-  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
-      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
-    (M.dense_close_fresh W₀ b₀ x j').trans
-      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
-  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
-      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    fun j' => relu_close _ _ _ l0 j'
-  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
-      layerAct d₀ w₀ β₀ a :=
-    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
-  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
-      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
-      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
-        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
-    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
-      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   -- layer-1 cotangent, then the layer-0 cotangent through the second mask
   have hcot := fun j' =>
     M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin₁ j'
@@ -1372,22 +1230,7 @@ theorem mlp_b0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     layerBudget_nonneg M.u_nonneg hw₂ le_rfl hG0 heg
   have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
     layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
-  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
-      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
-    (M.dense_close_fresh W₀ b₀ x j').trans
-      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
-  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
-      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    fun j' => relu_close _ _ _ l0 j'
-  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
-      layerAct d₀ w₀ β₀ a :=
-    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
-  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
-      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
-      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
-        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
-    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
-      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   have hcot := fun j' =>
     M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin₁ j'
   have hc₁mag : ∀ j', |reluMask
@@ -1533,18 +1376,26 @@ noncomputable def softmaxCECotF (fexp : ℝ → ℝ) {n : Nat} (z : Vec n)
     (label : Fin n) : Vec n :=
   fun k => M.sub (M.softmaxF fexp z k) (oneHot n label k)
 
-private theorem softmax_nonneg {n : ℕ} (z : Vec n) (k : Fin n) :
+theorem softmax_nonneg {n : ℕ} (z : Vec n) (k : Fin n) :
     0 ≤ softmax n z k :=
   div_nonneg (Real.exp_pos _).le
     (Finset.sum_nonneg fun j _ => (Real.exp_pos (z j)).le)
 
-private theorem softmax_le_one {n : ℕ} (z : Vec n) (k : Fin n) :
+theorem softmax_le_one {n : ℕ} (z : Vec n) (k : Fin n) :
     softmax n z k ≤ 1 := by
   have hD : 0 < ∑ j, Real.exp (z j) :=
     Finset.sum_pos (fun j _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
   exact (div_le_one hD).mpr
     (Finset.single_le_sum (fun j _ => (Real.exp_pos (z j)).le)
       (Finset.mem_univ k))
+
+/-- **`|softmax − oneHot| ≤ 1`** — the magnitude of every softmax-CE head cotangent:
+    `softmax` lies in `[0, 1]` and a one-hot entry is `0` or `1`. -/
+theorem _root_.Proofs.abs_softmax_sub_oneHot_le_one {n : ℕ} (z : Vec n) (label k : Fin n) :
+    |softmax n z k - oneHot n label k| ≤ 1 := by
+  have hs0 := softmax_nonneg z k
+  have hs1 := softmax_le_one z k
+  simp only [oneHot]; split_ifs <;> rw [abs_le] <;> constructor <;> linarith
 
 /-- **Softmax perturbation, elementary ratio form**: a coordinatewise logit
     error `δ` moves every softmax output by at most `e^(2δ) − 1`. Proved by
@@ -1788,15 +1639,7 @@ theorem softmaxF_close (fexp : ℝ → ℝ) {eexp : ℝ} {n : ℕ} (z : Vec n)
         (softmax n z k) 0
     rw [abs_of_nonneg hs0] at h1
     linarith
-  have hrnd : |M.softmaxF fexp z k -
-      fexp (z k) / M.sum (fun j => fexp (z j))| ≤
-      M.u * |fexp (z k) / M.sum (fun j => fexp (z j))| := M.err _
-  have htri : |M.softmaxF fexp z k - softmax n z k| ≤
-      |M.softmaxF fexp z k - fexp (z k) / M.sum (fun j => fexp (z j))| +
-        |fexp (z k) / M.sum (fun j => fexp (z j)) - softmax n z k| :=
-    abs_sub_le _ _ _
-  have h4 := mul_le_mul_of_nonneg_left hQabs hu
-  linarith
+  exact M.rnd_close hQs hQabs
 
 /-- **The rounded softmax−onehot cotangent is within `cotErr` of the
     certified real gradient** `softmax(z) − onehot` — the `pdiv`-certified
@@ -1832,42 +1675,11 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
   have hsm0 : 0 ≤ smErr M.u eexp δ n := by
     simp only [smErr]
     nlinarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp n)]
-  -- |real softmax − onehot| ≤ 1
-  have hs0 := softmax_nonneg z k
-  have hs1 := softmax_le_one z k
-  have hy : |softmax n z k - oneHot n label k| ≤ 1 := by
-    simp only [oneHot]
-    by_cases h : k = label
-    · rw [ite_eq_left h, abs_le]; constructor <;> linarith
-    · rw [ite_eq_right h, abs_le]; constructor <;> linarith
+  have hy := abs_softmax_sub_oneHot_le_one z label k
   -- the final rounded subtract
-  have hrnd : |M.softmaxCECotF fexp zt label k -
-      (M.softmaxF fexp zt k - oneHot n label k)| ≤
-      M.u * |M.softmaxF fexp zt k - oneHot n label k| := M.err _
-  have hsFy : |M.softmaxF fexp zt k - oneHot n label k| ≤
-      1 + smErr M.u eexp δ n := by
-    have h1 : |M.softmaxF fexp zt k - oneHot n label k| ≤
-        |M.softmaxF fexp zt k - softmax n z k| +
-          |softmax n z k - oneHot n label k| := abs_sub_le _ _ _
-    linarith
-  have htri : |M.softmaxCECotF fexp zt label k -
-      (softmax n z k - oneHot n label k)| ≤
-      |M.softmaxCECotF fexp zt label k -
-        (M.softmaxF fexp zt k - oneHot n label k)| +
-        |M.softmaxF fexp zt k - softmax n z k| := by
-    have h1 := abs_sub_le (M.softmaxCECotF fexp zt label k)
-      (M.softmaxF fexp zt k - oneHot n label k)
-      (softmax n z k - oneHot n label k)
-    have h2 : |(M.softmaxF fexp zt k - oneHot n label k) -
-        (softmax n z k - oneHot n label k)| =
-        |M.softmaxF fexp zt k - softmax n z k| := by
-      rw [show (M.softmaxF fexp zt k - oneHot n label k) -
-          (softmax n z k - oneHot n label k) =
-          M.softmaxF fexp zt k - softmax n z k from by ring]
-    linarith
-  have h4 := mul_le_mul_of_nonneg_left hsFy hu
-  simp only [cotErr]
-  linarith
+  have hsFy : |M.softmaxF fexp zt k - oneHot n label k| ≤ 1 + smErr M.u eexp δ n := by
+    linarith [abs_sub_le (M.softmaxF fexp zt k) (softmax n z k) (oneHot n label k)]
+  exact M.rnd_close (e := smErr M.u eexp δ n) (by rwa [sub_sub_sub_cancel_right]) hsFy
 
 /-- **`|softmax z k| ≤ 1`** — the real softmax is a probability (public face of the
     `softmax_nonneg`/`softmax_le_one` pair, the magnitude attention's output matmul needs). -/
@@ -1906,19 +1718,6 @@ theorem softmaxF_close_at (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
   have htri := abs_sub_le (M.softmaxF fexp zt k) (softmax n zt k) (softmax n z k)
   simp only [smErr]
   linarith
-
-/-- `e^x − 1 ≤ x/(1−x)` for `0 ≤ x < 1` — the exp analogue of the γ-form,
-    from `1 − x ≤ e^(−x)` alone; keeps the numeric head budget in
-    `norm_num` country. -/
-theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
-    Real.exp x - 1 ≤ x / (1 - x) := by
-  have hp := Real.exp_pos x
-  have hprod : Real.exp x * Real.exp (-x) = 1 := by
-    rw [← Real.exp_add]; simp
-  have h1 : (1 - x) * Real.exp x ≤ 1 := by
-    nlinarith [Real.add_one_le_exp (-x), hp]
-  rw [le_div_iff₀ (by linarith : (0:ℝ) < 1 - x)]
-  nlinarith [h1]
 
 /-- **Numeric head budget at the committed MNIST output** (`n = 10`): for
     any model at binary32 accuracy, `exp` accurate to `eexp ≤ 10⁻⁶`
@@ -2073,27 +1872,8 @@ theorem denseMixedBudget_le_of {uacc uleaf : ℝ} {m : ℕ} {w β a g P Q U : �
     (hP : (1 + uleaf) ^ 2 ≤ P) (hQ : 2 * uleaf + uleaf ^ 2 ≤ Q) :
     denseMixedBudget uacc uleaf m w β a ≤
       U * ((m : ℝ) * w * a + β) + (1 + U) * ((g * P + Q) * ((m : ℝ) * w * a)) := by
-  unfold denseMixedBudget
-  have hmwa : (0 : ℝ) ≤ (m : ℝ) * w * a :=
-    mul_nonneg (mul_nonneg (Nat.cast_nonneg m) hw) ha
-  have hxb : (0 : ℝ) ≤ (m : ℝ) * w * a + β := by linarith
-  have hpow0 : 0 ≤ (1 + uacc) ^ (m + 1) - 1 :=
-    sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hleafpos : 0 ≤ 2 * uleaf + uleaf ^ 2 := by nlinarith [huleaf0, sq_nonneg uleaf]
-  have hQ0 : 0 ≤ Q := le_trans hleafpos hQ
-  have hbrkpos : 0 ≤ ((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2
-      + (2 * uleaf + uleaf ^ 2) :=
-    add_nonneg (mul_nonneg hpow0 (sq_nonneg _)) hleafpos
-  have hbrk : ((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2 + (2 * uleaf + uleaf ^ 2)
-      ≤ g * P + Q := add_le_add (mul_le_mul hg hP (sq_nonneg _) hg0) hQ
-  have t1 : uacc * ((m : ℝ) * w * a + β) ≤ U * ((m : ℝ) * w * a + β) :=
-    mul_le_mul_of_nonneg_right huacc hxb
-  have t2 : (1 + uacc) * ((((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2
-        + (2 * uleaf + uleaf ^ 2)) * ((m : ℝ) * w * a))
-      ≤ (1 + U) * ((g * P + Q) * ((m : ℝ) * w * a)) :=
-    mul_le_mul (by linarith) (mul_le_mul_of_nonneg_right hbrk hmwa)
-      (mul_nonneg hbrkpos hmwa) (by linarith)
-  linarith [t1, t2]
+  have hpow0 : 0 ≤ (1 + uacc) ^ (m + 1) - 1 := sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  unfold denseMixedBudget; gcongr
 
 /-- **The worst-case E4M3 per-logit budget at the MNIST-linear dims** (784→n;
     E4M3 leaf `u_leaf ≤ 2⁻⁴`, fp32 accumulate `u_acc ≤ 2⁻²⁴`; pixels `|x| ≤ 1`,
