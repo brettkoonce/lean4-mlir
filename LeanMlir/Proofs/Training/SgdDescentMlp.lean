@@ -142,12 +142,7 @@ theorem margin_keeps_offkink_of_drift {P n : Nat} (Z : Vec P → Vec n) {ρ D : 
 theorem sum_abs_flatten_cols {m n : Nat} (d : Vec (m * n)) :
     ∑ j : Fin n, ∑ i : Fin m, |d (finProdFinEquiv (i, j))| =
       ∑ idx, |d idx| := by
-  calc ∑ j : Fin n, ∑ i : Fin m, |d (finProdFinEquiv (i, j))|
-      = ∑ i : Fin m, ∑ j : Fin n, |d (finProdFinEquiv (i, j))| :=
-        Finset.sum_comm
-    _ = ∑ idx, |d idx| := by
-        rw [← Equiv.sum_comp finProdFinEquiv fun idx => |d idx|,
-          Fintype.sum_prod_type]
+  rw [sum_finProdFinEquiv fun idx => |d idx|]; exact Finset.sum_comm
 
 /-- The dense pre-activation difference under a weight perturbation, exactly:
     column `j` only sees the column-`j` slice of the perturbation. -/

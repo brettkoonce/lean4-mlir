@@ -118,17 +118,7 @@ theorem flatten_t3Idx {c h w : Nat} (T : Tensor3 c h w)
 theorem sum_t3 {c h w : Nat} (f : Fin (c * h * w) → ℝ) :
     ∑ k, f k = ∑ ci : Fin c, ∑ hi : Fin h, ∑ wi : Fin w,
       f (t3Idx ci hi wi) := by
-  calc ∑ k, f k
-      = ∑ p : Fin (c * h) × Fin w, f (finProdFinEquiv p) :=
-        (Equiv.sum_comp finProdFinEquiv f).symm
-    _ = ∑ q : Fin (c * h), ∑ wi : Fin w, f (finProdFinEquiv (q, wi)) :=
-        Fintype.sum_prod_type _
-    _ = ∑ p : Fin c × Fin h, ∑ wi : Fin w,
-          f (finProdFinEquiv (finProdFinEquiv p, wi)) :=
-        (Equiv.sum_comp finProdFinEquiv
-          (fun q => ∑ wi : Fin w, f (finProdFinEquiv (q, wi)))).symm
-    _ = ∑ ci : Fin c, ∑ hi : Fin h, ∑ wi : Fin w,
-          f (t3Idx ci hi wi) := Fintype.sum_prod_type _
+  simp only [sum_finProdFinEquiv]
 
 /-- Every flat spatial index is a `t3Idx` — lets a per-cell bound be lifted to
     the whole flattened conv-output vector (`∀ k`), the form `relu_close` /
@@ -228,13 +218,8 @@ theorem maxPoolFlat_entry_lipschitz {c h w : Nat}
     (u v : Vec (c * (2*h) * (2*w))) {δ : ℝ}
     (hδ : ∀ k, |u k - v k| ≤ δ) (q : Fin (c * h * w)) :
     |maxPoolFlat c h w u q - maxPoolFlat c h w v q| ≤ δ := by
-  obtain ⟨p, rfl⟩ := finProdFinEquiv.surjective q
-  obtain ⟨pp, wo⟩ := p
-  obtain ⟨r, rfl⟩ := finProdFinEquiv.surjective pp
-  obtain ⟨ci, ho⟩ := r
-  rw [show finProdFinEquiv (finProdFinEquiv (ci, ho), wo) =
-        t3Idx ci ho wo from rfl,
-    maxPoolFlat_apply, maxPoolFlat_apply]
+  obtain ⟨ci, ho, wo, rfl⟩ := t3Idx_surj q
+  rw [maxPoolFlat_apply, maxPoolFlat_apply]
   exact max4_sub_abs_le (hδ _) (hδ _) (hδ _) (hδ _)
 
 /-- `ℓ1` contraction: the pooled drift, summed over all pooled entries, is
@@ -451,13 +436,15 @@ theorem k4Idx_inj {oc ic kH kW : Nat} {o : Fin oc} {c c' : Fin ic}
     {kh kh' : Fin kH} {kw kw' : Fin kW}
     (hEq : k4Idx o c kh kw = k4Idx o c' kh' kw') :
     c = c' ∧ kh = kh' ∧ kw = kw' := by
-  unfold k4Idx at hEq
-  have h1 := finProdFinEquiv.injective hEq
-  have hkw : kw = kw' := (Prod.ext_iff.mp h1).2
-  have h2 := finProdFinEquiv.injective (Prod.ext_iff.mp h1).1
-  have hkh : kh = kh' := (Prod.ext_iff.mp h2).2
-  have h3 := finProdFinEquiv.injective (Prod.ext_iff.mp h2).1
-  exact ⟨(Prod.ext_iff.mp h3).2, hkh, hkw⟩
+  simpa [k4Idx, and_assoc] using hEq
+
+/-- The output-channel slabs tile the kernel: summing the slab masses over
+    the output channels recovers the total `ℓ1` mass. -/
+theorem sum_abs_k4 {oc ic kH kW : Nat} (e : Vec (oc * ic * kH * kW)) :
+    ∑ idx, |e idx| =
+      ∑ o : Fin oc, ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+        |e (k4Idx o c kh kw)| := by
+  simp only [sum_finProdFinEquiv]; rfl
 
 /-- The `ℓ1` mass of one output-channel slab is at most the total `ℓ1`
     mass — the conv analogue of a dense column being part of the flat
@@ -466,54 +453,9 @@ theorem sum_abs_kernel_slab_le {oc ic kH kW : Nat}
     (e : Vec (oc * ic * kH * kW)) (o : Fin oc) :
     ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, |e (k4Idx o c kh kw)| ≤
       ∑ idx, |e idx| := by
-  have hcollapse : ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-      |e (k4Idx o c kh kw)| =
-      ∑ p : (Fin ic × Fin kH) × Fin kW, |e (k4Idx o p.1.1 p.1.2 p.2)| := by
-    calc ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, |e (k4Idx o c kh kw)|
-        = ∑ q : Fin ic × Fin kH, ∑ kw : Fin kW, |e (k4Idx o q.1 q.2 kw)| :=
-          (Fintype.sum_prod_type (fun q : Fin ic × Fin kH =>
-            ∑ kw : Fin kW, |e (k4Idx o q.1 q.2 kw)|)).symm
-      _ = ∑ p : (Fin ic × Fin kH) × Fin kW,
-            |e (k4Idx o p.1.1 p.1.2 p.2)| :=
-          (Fintype.sum_prod_type (fun p : (Fin ic × Fin kH) × Fin kW =>
-            |e (k4Idx o p.1.1 p.1.2 p.2)|)).symm
-  rw [hcollapse]
-  have himg : ∑ idx ∈ Finset.univ.image
-      (fun p : (Fin ic × Fin kH) × Fin kW => k4Idx o p.1.1 p.1.2 p.2),
-      |e idx| =
-      ∑ p : (Fin ic × Fin kH) × Fin kW, |e (k4Idx o p.1.1 p.1.2 p.2)| :=
-    Finset.sum_image fun p _ p' _ hpq => by
-      obtain ⟨h1, h2, h3⟩ := k4Idx_inj hpq
-      exact Prod.ext (Prod.ext h1 h2) h3
-  rw [← himg]
-  exact Finset.sum_le_sum_of_subset_of_nonneg (Finset.subset_univ _)
-    (fun idx _ _ => abs_nonneg _)
-
-/-- The slabs tile the kernel: summing the slab masses over the output
-    channels recovers the total `ℓ1` mass. -/
-theorem sum_abs_k4 {oc ic kH kW : Nat} (e : Vec (oc * ic * kH * kW)) :
-    ∑ idx, |e idx| =
-      ∑ o : Fin oc, ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        |e (k4Idx o c kh kw)| := by
-  calc ∑ idx, |e idx|
-      = ∑ p : Fin (oc * ic * kH) × Fin kW, |e (finProdFinEquiv p)| :=
-        (Equiv.sum_comp finProdFinEquiv (fun idx => |e idx|)).symm
-    _ = ∑ q : Fin (oc * ic * kH), ∑ kw : Fin kW,
-          |e (finProdFinEquiv (q, kw))| := Fintype.sum_prod_type _
-    _ = ∑ p : Fin (oc * ic) × Fin kH, ∑ kw : Fin kW,
-          |e (finProdFinEquiv (finProdFinEquiv p, kw))| :=
-        (Equiv.sum_comp finProdFinEquiv (fun q => ∑ kw : Fin kW,
-          |e (finProdFinEquiv (q, kw))|)).symm
-    _ = ∑ q : Fin (oc * ic), ∑ kh : Fin kH, ∑ kw : Fin kW,
-          |e (finProdFinEquiv (finProdFinEquiv (q, kh), kw))| :=
-        Fintype.sum_prod_type _
-    _ = ∑ p : Fin oc × Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          |e (k4Idx p.1 p.2 kh kw)| :=
-        (Equiv.sum_comp finProdFinEquiv (fun q => ∑ kh : Fin kH,
-          ∑ kw : Fin kW,
-            |e (finProdFinEquiv (finProdFinEquiv (q, kh), kw))|)).symm
-    _ = ∑ o : Fin oc, ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          |e (k4Idx o c kh kw)| := Fintype.sum_prod_type _
+  rw [sum_abs_k4 e]
+  exact Finset.single_le_sum (f := fun o => ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+    |e (k4Idx o c kh kw)|) (fun _ _ => by positivity) (Finset.mem_univ o)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Conv forward rounding budget (planning §1b-A): conv = dense at the
@@ -533,17 +475,7 @@ def w3Idx {ic kH kW : Nat} (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
 theorem sum_w3 {ic kH kW : Nat} (g : Fin (ic * kH * kW) → ℝ) :
     ∑ idx, g idx =
       ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, g (w3Idx c kh kw) := by
-  calc ∑ idx, g idx
-      = ∑ p : Fin (ic * kH) × Fin kW, g (finProdFinEquiv p) :=
-        (Equiv.sum_comp finProdFinEquiv g).symm
-    _ = ∑ q : Fin (ic * kH), ∑ kw : Fin kW, g (finProdFinEquiv (q, kw)) :=
-        Fintype.sum_prod_type _
-    _ = ∑ p : Fin ic × Fin kH, ∑ kw : Fin kW,
-          g (finProdFinEquiv (finProdFinEquiv p, kw)) :=
-        (Equiv.sum_comp finProdFinEquiv (fun q => ∑ kw : Fin kW,
-          g (finProdFinEquiv (q, kw)))).symm
-    _ = ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, g (w3Idx c kh kw) :=
-        Fintype.sum_prod_type _
+  simp only [sum_finProdFinEquiv]; rfl
 
 /-- The per-output-coordinate conv *window* as a flat `Vec` over the fan-in:
     the (padded) input reads that the kernel slab dots against. -/
@@ -1024,11 +956,7 @@ theorem t3Idx_def {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
 theorem t3Idx_inj {c h w : Nat} {ci ci' : Fin c} {hi hi' : Fin h}
     {wi wi' : Fin w} (hEq : t3Idx ci hi wi = t3Idx ci' hi' wi') :
     ci = ci' ∧ hi = hi' ∧ wi = wi' := by
-  unfold t3Idx at hEq
-  have h1 := finProdFinEquiv.injective hEq
-  have hwi : wi = wi' := (Prod.ext_iff.mp h1).2
-  have h2 := finProdFinEquiv.injective (Prod.ext_iff.mp h1).1
-  exact ⟨(Prod.ext_iff.mp h2).1, (Prod.ext_iff.mp h2).2, hwi⟩
+  simpa [and_assoc] using hEq
 
 /-- The 3-dense head `CE ∘ d₅ ∘ relu ∘ d₄ ∘ relu ∘ d₃` is differentiable
     at any point whose two ReLU pre-activations are off the kinks. -/
@@ -1347,11 +1275,8 @@ theorem conv2d_weight_pdiv_row_l1 {ic oc h w kH kW : Nat} (b : Vec oc)
 
 /-- The spatial `(hi, wi)` sum collapses to one flat sum over `Fin (h·w)`. -/
 theorem sum_s2 {h w : Nat} (g : Fin (h * w) → ℝ) :
-    ∑ s, g s = ∑ hi : Fin h, ∑ wi : Fin w, g (finProdFinEquiv (hi, wi)) := by
-  calc ∑ s, g s = ∑ p : Fin h × Fin w, g (finProdFinEquiv p) :=
-        (Equiv.sum_comp finProdFinEquiv g).symm
-    _ = ∑ hi : Fin h, ∑ wi : Fin w, g (finProdFinEquiv (hi, wi)) :=
-        Fintype.sum_prod_type _
+    ∑ s, g s = ∑ hi : Fin h, ∑ wi : Fin w, g (finProdFinEquiv (hi, wi)) :=
+  sum_finProdFinEquiv g
 
 /-- The padded-input window for a fixed kernel slot, flattened over the
     `(hi, wi)` spatial grid — the left operand of the conv weight-grad dot. -/
@@ -2423,13 +2348,8 @@ theorem conv2d_flat_kernel_drift_total {ic oc h w kH kW : Nat} (b : Vec oc)
     |Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b x) k -
       Tensor3.flatten (conv2d (Kernel4.unflatten v) b x) k| ≤
       a * ∑ idx, |e idx| := by
-  obtain ⟨p, rfl⟩ := finProdFinEquiv.surjective k
-  obtain ⟨pp, wi⟩ := p
-  obtain ⟨q, rfl⟩ := finProdFinEquiv.surjective pp
-  obtain ⟨o, hi⟩ := q
-  rw [show finProdFinEquiv (finProdFinEquiv (o, hi), wi) =
-        t3Idx o hi wi from rfl,
-    flatten_t3Idx, flatten_t3Idx]
+  obtain ⟨o, hi, wi, rfl⟩ := t3Idx_surj k
+  rw [flatten_t3Idx, flatten_t3Idx]
   exact conv2d_kernel_drift_total b x ha hx v e o hi wi
 
 /-- `ℓ1` conv drift, flat-index form of `conv2d_kernel_drift_sum`. -/
@@ -3266,12 +3186,7 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
         (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
         (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
           (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))) * (t * D) := by
-  obtain ⟨p1, rfl⟩ := finProdFinEquiv.surjective idx
-  obtain ⟨p2, kw⟩ := p1
-  obtain ⟨p3, rfl⟩ := finProdFinEquiv.surjective p2
-  obtain ⟨p4, kh⟩ := p3
-  obtain ⟨p5, rfl⟩ := finProdFinEquiv.surjective p4
-  obtain ⟨o, cc⟩ := p5
+  obtain ⟨o, cc, kh, kw, rfl⟩ := k4Idx_surj idx
   exact Conv2Slot.loss_grad_lipschitz (fun v' => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) W₃ b₃ W₄ b₄ W₅ b₅ label ha
     (conv2d_flat_kernel_drift_total b₂ x₁ ha hx) (conv2d_flat_kernel_drift_sum b₂ x₁ ha hx) hw₃ hW₃ hw₄ hW₄ hw₅ hW₅
     (fun ci hi wi => if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0)
@@ -4363,13 +4278,8 @@ theorem z2_entry_drift {P c h w kH kW : Nat}
       Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
         (relu (c * (2*h) * (2*w)) (Z v)))) k| ≤
       ((c * kH * kW : ℕ) : ℝ) * (w₂ * (ρ * ∑ idx, |e idx|)) := by
-  obtain ⟨p, rfl⟩ := finProdFinEquiv.surjective k
-  obtain ⟨pp, wo⟩ := p
-  obtain ⟨q, rfl⟩ := finProdFinEquiv.surjective pp
-  obtain ⟨o, ho⟩ := q
-  rw [show finProdFinEquiv (finProdFinEquiv (o, ho), wo) =
-        t3Idx o ho wo from rfl,
-    flatten_t3Idx, flatten_t3Idx]
+  obtain ⟨o, ho, wo, rfl⟩ := t3Idx_surj k
+  rw [flatten_t3Idx, flatten_t3Idx]
   exact conv2d_input_entry_drift W₂ b₂ _ _ hw₂ hW₂
     (mul_nonneg hρ (Finset.sum_nonneg fun _ _ => abs_nonneg _))
     (fun cc i j => Conv2Slot.postrelu_close Z hZ v e cc i j) o ho wo
@@ -5810,12 +5720,7 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
         (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
           (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) *
             (a * D))))))))))) * (t * D) := by
-  obtain ⟨p1, rfl⟩ := finProdFinEquiv.surjective idx
-  obtain ⟨p2, kw⟩ := p1
-  obtain ⟨p3, rfl⟩ := finProdFinEquiv.surjective p2
-  obtain ⟨p4, kh⟩ := p3
-  obtain ⟨p5, rfl⟩ := finProdFinEquiv.surjective p4
-  obtain ⟨o, cc⟩ := p5
+  obtain ⟨o, cc, kh, kw, rfl⟩ := k4Idx_surj idx
   exact Conv1Slot.loss_grad_lipschitz
     (fun u' => Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀))
     W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label ha (conv2d_flat_kernel_drift_total b₁ x₀ ha hx)
@@ -6315,13 +6220,8 @@ theorem conv2d_flat_bias_drift_total {ic oc h w kH kW : Nat}
     (k : Fin (oc * h * w)) :
     |Tensor3.flatten (conv2d W (b + e) x) k -
       Tensor3.flatten (conv2d W b x) k| ≤ ∑ idx, |e idx| := by
-  obtain ⟨p, rfl⟩ := finProdFinEquiv.surjective k
-  obtain ⟨pp, wi⟩ := p
-  obtain ⟨q, rfl⟩ := finProdFinEquiv.surjective pp
-  obtain ⟨o, hi⟩ := q
-  rw [show finProdFinEquiv (finProdFinEquiv (o, hi), wi) =
-        t3Idx o hi wi from rfl,
-    flatten_t3Idx, flatten_t3Idx, conv2d_bias_sub]
+  obtain ⟨o, hi, wi, rfl⟩ := t3Idx_surj k
+  rw [flatten_t3Idx, flatten_t3Idx, conv2d_bias_sub]
   exact Finset.single_le_sum (f := fun idx => |e idx|)
     (fun idx _ => abs_nonneg _) (Finset.mem_univ o)
 

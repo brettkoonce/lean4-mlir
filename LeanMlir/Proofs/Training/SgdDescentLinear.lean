@@ -101,14 +101,9 @@ theorem dense_unflatten_drift {m n : Nat} (b : Vec n) (x : Vec m)
   rw [h1]
   have hinj : (∑ i : Fin m, |d (finProdFinEquiv (i, k))|) ≤
       ∑ idx, |d idx| := by
-    have himg : ∑ idx ∈ Finset.univ.image
-        (fun i : Fin m => finProdFinEquiv (i, k)), |d idx| =
-        ∑ i : Fin m, |d (finProdFinEquiv (i, k))| :=
-      Finset.sum_image fun i _ i' _ h =>
-        (Prod.ext_iff.mp (finProdFinEquiv.injective h)).1
-    rw [← himg]
-    exact Finset.sum_le_sum_of_subset_of_nonneg (Finset.subset_univ _)
-      (fun idx _ _ => abs_nonneg _)
+    rw [sum_finProdFinEquiv fun idx => |d idx|, Finset.sum_comm]
+    exact Finset.single_le_sum (f := fun j => ∑ i : Fin m, |d (finProdFinEquiv (i, j))|)
+      (fun _ _ => by positivity) (Finset.mem_univ k)
   calc |∑ i, x i * d (finProdFinEquiv (i, k))|
       ≤ ∑ i, |x i * d (finProdFinEquiv (i, k))| :=
         Finset.abs_sum_le_sum_abs _ _
