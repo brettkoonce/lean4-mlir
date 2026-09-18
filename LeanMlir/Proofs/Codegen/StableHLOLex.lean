@@ -12,20 +12,20 @@ This file lands the **numeric keystone** of that lexer: the decimal
 `Nat ⟷ String` round-trip. Every per-op recognizer must read shapes (`784`,
 `10`, …) back out of `tensor<784x10xf32>` type annotations, and `emitTok`
 renders every such shape with `toString` (Lean's decimal `Nat.repr`). So
-`parseNat (toString n) = n` is the one lemma the *whole* lexer is built on, and
-it is the genuinely-hard, fully-reusable part (a fuel induction over
-`Nat.toDigitsCore`, no Mathlib analysis — `[propext, Classical.choice, Quot.sound]`).
+`parseNat (toString n) = n` is the one lemma the *whole* lexer is built on.
 
-## Why a from-scratch `List Char` codec (not `String.toNat?`)
+## A `List Char` codec, and core already has it
 
 A 2026-06-27 probe established that Lean-core string *parsing* primitives —
 `String.toNat?`, `String.splitOn` — are **kernel-opaque**: they do not reduce
-under `decide`/`rfl` (they fold over `String.Pos`/`Substring` iterators). So
-(a) there is no off-the-shelf `(toString n).toNat? = some n`, and (b) a concrete
-`decide`-the-instance shortcut is impossible. A verified lexer must therefore be
-built at the `List Char` level with *structurally-recursive* functions and proven
-by induction — which is exactly what `parseNat`/`dstep` below are. (Rendering —
-`toString`, `ty`, `++` — *does* reduce by `rfl`, so the emit side needs nothing.)
+under `decide`/`rfl` (they fold over `String.Pos`/`Substring` iterators), so a
+concrete `decide`-the-instance shortcut is impossible and a verified lexer has to
+work at the `List Char` level with structurally-recursive functions. Core ships
+exactly that level's decimal codec: `Nat.ofDigitChars` is a `List.foldl` Horner
+step (so it reduces), and `Nat.ofDigitChars_ten_toDigits` is its round-trip
+against `Nat.toDigits`, which is what `toString` renders. `parseNat` below is that
+fold. (Rendering — `toString`, `ty`, `++` — reduces by `rfl`, so the emit side
+needs nothing.)
 
 ## Honest scope of the remaining lexer (corrects the planning doc)
 
@@ -74,108 +74,18 @@ It does *not* close per-op StableHLO *spec* conformance, IREE lowering, or
 namespace Proofs
 namespace StableHLO
 
-open Nat
-
--- ════════════════════════════════════════════════════════════════
--- § Decimal digit ⟷ Char
--- ════════════════════════════════════════════════════════════════
-
-/-- Inverse of `Nat.digitChar` on `'0'..'9'` (the chars `toString` emits). -/
-def digitVal (c : Char) : Option Nat :=
-  if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat) else none
-
-/-- One big-endian Horner step: `acc * 10 + digit`. -/
-def dstep (acc : Nat) (c : Char) : Nat := acc * 10 + (digitVal c).getD 0
-
-/-- `digitVal` is the value inverse of `Nat.digitChar` on single decimal digits. -/
-theorem digitVal_digitChar_all : ∀ d, d < 10 → (digitVal (Nat.digitChar d)).getD 0 = d := by
-  decide
-
-/-- A Horner step on a rendered digit is `acc * 10 + d`. -/
-theorem dstep_digitChar (acc d : Nat) (h : d < 10) :
-    dstep acc (Nat.digitChar d) = acc * 10 + d := by
-  unfold dstep; rw [digitVal_digitChar_all d h]
-
--- ════════════════════════════════════════════════════════════════
--- § The decimal round-trip (fuel induction over `Nat.toDigitsCore`)
--- ════════════════════════════════════════════════════════════════
-
-/-- The accumulator argument of `toDigitsCore` is always a pure **suffix** of
-    its output: digits are prepended in front of `l`. -/
-theorem toDigitsCore_suffix (f : Nat) :
-    ∀ (n : Nat) (l : List Char),
-      Nat.toDigitsCore 10 f n l = Nat.toDigitsCore 10 f n [] ++ l := by
-  induction f with
-  | zero => intro n l; simp [Nat.toDigitsCore]
-  | succ f ih =>
-    intro n l
-    simp only [Nat.toDigitsCore]
-    by_cases hx : n / 10 = 0
-    · simp [hx]
-    · simp only [hx, ite_false]
-      rw [ih (n/10) (Nat.digitChar (n % 10) :: l), ih (n/10) [Nat.digitChar (n % 10)]]
-      simp
-
-/-- **Horner value.** Folding `dstep` over the digit list of `n` (big-endian)
-    from `acc` yields `acc * 10^(#digits) + n`. The inductive heart of the
-    round-trip. -/
-theorem foldl_dstep_toDigitsCore (f : Nat) :
-    ∀ (n acc : Nat), n < 10 ^ f →
-      List.foldl dstep acc (Nat.toDigitsCore 10 f n []) =
-        acc * 10 ^ (Nat.toDigitsCore 10 f n []).length + n := by
-  induction f with
-  | zero => intro n acc h; simp at h; simp [Nat.toDigitsCore, h]
-  | succ f ih =>
-    intro n acc h
-    simp only [Nat.toDigitsCore]
-    by_cases hx : n / 10 = 0
-    · have hn : n < 10 := by omega
-      have hmod : n % 10 = n := Nat.mod_eq_of_lt hn
-      simp only [hx, ite_true]
-      simp only [List.foldl, List.length]
-      rw [hmod, dstep_digitChar acc n hn]
-      ring
-    · have hlt : n / 10 < 10 ^ f := by
-        rw [pow_succ] at h; exact Nat.div_lt_of_lt_mul (by omega)
-      have hmodlt : n % 10 < 10 := Nat.mod_lt n (by omega)
-      simp only [hx, ite_false]
-      rw [toDigitsCore_suffix f (n/10) [Nat.digitChar (n % 10)]]
-      rw [List.foldl_append, ih (n/10) acc hlt]
-      simp only [List.foldl, List.length_append, List.length]
-      rw [dstep_digitChar _ (n % 10) hmodlt]
-      have : 10 * (n / 10) + n % 10 = n := by omega
-      ring_nf
-      omega
-
-/-- `n < 10^(n+1)` — the fuel `Nat.toDigits` allocates (`n+1`) always suffices. -/
-theorem lt_ten_pow_succ (n : Nat) : n < 10 ^ (n + 1) := by
-  have h1 : n < 2 ^ n := Nat.lt_two_pow_self
-  have h2 : (2:Nat) ^ n ≤ 10 ^ n := Nat.pow_le_pow_left (by omega) n
-  have h3 : (10:Nat) ^ n ≤ 10 ^ (n+1) := Nat.pow_le_pow_right (by omega) (by omega)
-  omega
-
-/-- `toString n` (= `Nat.repr n`) is exactly `Nat.toDigitsCore 10 (n+1) n []`. -/
-theorem toString_toList (n : Nat) :
-    (toString n).toList = Nat.toDigitsCore 10 (n+1) n [] := by
-  show (Nat.repr n).toList = _
-  unfold Nat.repr Nat.toDigits
-  rw [String.toList_ofList]
-
--- ════════════════════════════════════════════════════════════════
--- § Keystone
--- ════════════════════════════════════════════════════════════════
-
-/-- The lexer's numeric core: decode a string's chars as a big-endian decimal.
+/-- The lexer's numeric core: decode a string's chars as a big-endian decimal — core's
+    `Nat.ofDigitChars`, a `List.foldl`, so it still reduces under `decide`.
     (Non-validating — it only ever sees `emit`'s output, which is always digits;
     rejecting non-digit input is a robustness property, not a faithfulness one.) -/
-def parseNat (s : String) : Nat := List.foldl dstep 0 s.toList
+def parseNat (s : String) : Nat := Nat.ofDigitChars 10 s.toList 0
 
 /-- **Decimal round-trip keystone.** Parsing the rendered decimal of any `n`
-    recovers `n` — the one lemma the whole verified lexer rests on. -/
+    recovers `n` — the one lemma the whole verified lexer rests on. `toString n` is
+    `Nat.repr n`, whose chars are `Nat.toDigits 10 n`, and core's
+    `Nat.ofDigitChars_ten_toDigits` inverts exactly that. -/
 theorem parseNat_toString (n : Nat) : parseNat (toString n) = n := by
-  unfold parseNat
-  rw [toString_toList n, foldl_dstep_toDigitsCore (n+1) n 0 (lt_ten_pow_succ n)]
-  simp
+  simp [parseNat, Nat.ofDigitChars_ten_toDigits]
 
 end StableHLO
 end Proofs
