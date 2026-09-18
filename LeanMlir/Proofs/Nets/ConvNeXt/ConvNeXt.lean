@@ -21,7 +21,7 @@ This file contributes three genuinely new pieces:
 
   * `layerScale` — per-channel learnable elementwise scale, a diagonal
     linear map; `Differentiable` + a `HasVJP` (`back i = γ i · dy i`),
-    its Jacobian derived from `pdiv_mul`/`pdiv_const`/`pdiv_id`.
+    its Jacobian read off the basis vector by `pdiv_of_linear`.
   * the **ConvNeXt block body** `layerScale ∘ project ∘ gelu ∘ expand ∘
     LayerNorm ∘ depthwise`, everywhere-differentiable, with a pointwise
     VJP built by chaining the piece VJPs through `vjp_comp_at`; and the
@@ -62,16 +62,11 @@ theorem layerScale_differentiable {n : Nat} (γ : Vec n) :
 /-- **Jacobian of `layerScale`** — `∂(γ_j x_j)/∂x_i = γ_i δ_{ij}`. -/
 theorem pdiv_layerScale {n : Nat} (γ : Vec n) (x : Vec n) (i j : Fin n) :
     pdiv (layerScale γ) x i j = if i = j then γ i else 0 := by
-  have h_eq : (layerScale γ) =
-      (fun y : Vec n => fun k => (fun _ : Vec n => γ) y k * (fun w : Vec n => w) y k) := by
-    funext y k; rfl
-  rw [h_eq]
-  rw [pdiv_mul (fun _ : Vec n => γ) (fun w : Vec n => w) x
-        (differentiableAt_const γ) differentiableAt_id i j]
-  rw [pdiv_const, pdiv_id]
-  by_cases hij : i = j
-  · subst hij; simp
-  · rw [ite_eq_right hij, ite_eq_right hij]; ring
+  rw [pdiv_of_linear _ (fun _ _ => by funext; simp [layerScale, mul_add])
+    (fun _ _ => by funext; simp [layerScale, mul_left_comm])]
+  rcases eq_or_ne i j with rfl | h
+  · simp [layerScale]
+  · simp [layerScale, h, Ne.symm h]
 
 /-- **Layer scale VJP**: `back(x, dy)_i = γ i * dy i`. -/
 noncomputable def layerScale_has_vjp {n : Nat} (γ : Vec n) :

@@ -757,26 +757,15 @@ theorem pdiv_vecLN_beta {N D : Nat} (ε : ℝ) (γv : Vec D) (X : Mat N D)
             Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
       = if i = (finProdFinEquiv.symm o).2 then 1 else 0 := by
   rw [show (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γv bv (X r)))
-        = (fun bv : Vec D => fun o' : Fin (N * D) =>
-            (fun o'' : Fin (N * D) =>
-              γv (finProdFinEquiv.symm o'').2 *
-                layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o'').1)
-                  (finProdFinEquiv.symm o'').2) o' +
-            bv ((fun o'' : Fin (N * D) => (finProdFinEquiv.symm o'').2) o')) from by
+        = fun bv => (fun o' : Fin (N * D) => bv (finProdFinEquiv.symm o').2) +
+            fun o' => γv (finProdFinEquiv.symm o').2 *
+              layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o').1)
+                (finProdFinEquiv.symm o').2 from by
       funext bv o'
       unfold layerNormVec Mat.flatten
-      rfl]
-  have h_const : DifferentiableAt ℝ
-      (fun (_ : Vec D) (o'' : Fin (N * D)) =>
-        γv (finProdFinEquiv.symm o'').2 *
-          layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o'').1)
-            (finProdFinEquiv.symm o'').2) β := differentiableAt_const _
-  have h_gather : DifferentiableAt ℝ
-      (fun (w : Vec D) (o'' : Fin (N * D)) =>
-        w ((fun o''' : Fin (N * D) => (finProdFinEquiv.symm o''').2) o'')) β :=
-    (reindexCLM (fun o''' : Fin (N * D) => (finProdFinEquiv.symm o''').2)).differentiableAt
-  rw [pdiv_add _ _ _ h_const h_gather, pdiv_const, zero_add,
-      pdiv_reindex (fun o''' : Fin (N * D) => (finProdFinEquiv.symm o''').2) β i o]
+      exact add_comm _ _,
+    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
+  simp [@eq_comm _ i]
 
 /-- The rendered **vector-LN γ gradient**: per-channel, the batch+token reduce
     `dγ_k = Σ_r dY_(r,k)·x̂_r(k)` (KEEPS the channel axis — `ViTRender`'s form). -/

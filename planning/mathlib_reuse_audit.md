@@ -23,6 +23,63 @@ suspected, no drop-in located.
 
 ---
 
+## Status (2026-09-18, main `998f2c70`, pushed)
+
+**Landed** — about 3.6k lines out, every theorem name and statement unchanged:
+
+| commit | what |
+|---|---|
+| `a91c85a0` | §10/§11 defect 1: `ViTGradcheck.parseFloat` rebuilt on `Lean.Syntax.decodeScientificLitVal?`; `TestSgdRenderTie`'s lr guard also rejects non-finite |
+| `2fb6574a` | the three demo `parseFloat` copies call the shared `parseFloat?` |
+| `dc7150b3` | §9 `StableHLOLex` onto core `Nat.ofDigitChars`; `StableHLOParse.parseStack_toToks` in one line |
+| `671d0d5f` | §5 LipschitzCertPairSDP (PSD, Gram), SmoothingNetSemantics, SmoothingMC, SmoothingCP, SmoothingPhiBounds |
+| `bbd3e3f0` | FloatSubnormalBridge, MuonGeometry/NewtonSchulz, CrownBound, ResNet34Live{Realistic,PC,2}, the two seal files |
+| `998f2c70` | **§0.1 done for Foundation + Architectures**: `pdiv_clm` / `pdiv_of_affine` / `pdiv_of_linear` in `Tensor.lean`; 14 sites (conv / depthwise input-weight-bias, GAP, patch-embed, CLS, BN affine + centered, dense, dense-W, both matmuls); `pdiv_pi_pad_eval` + `pdiv_const_mul_pi_pad_eval` deleted |
+| *(staged)* | **§0.1 done for Nets** (−400): ViTClose `pdiv_rowDense_W`, `pdiv_patchEmbed_W`, the row-dense bias Jacobian, `pdiv_id_add_const`, `pdiv_maskGather_add_const`, both `pdiv_scalarAffine_*`; `ViTVecLN.pdiv_vecLN_beta`; `pdiv_layerScale`, `pdiv_layerScale_gamma`, `pdiv_layerScaleCh_gamma`, the two scalar-LN Jacobians (ConvNeXt, ConvNeXtClose, ConvNeXtFold); both `pdiv_bnPerChannelFlat_*` (CifarBnClose). `pdiv_patchEmbed_{pos,cls,b}` and `pdiv_vecLN_gamma` already delegate to the two helpers, so they stay |
+
+**Deferred on purpose:** `BceLossCot.one_sub_sigmoidScalar` (wants the §0.4 `sigmoidScalar = Real.sigmoid`
+batch — ~200-module rebuild); `DataParallel.dpIterate_lockstep` (the `Semiconj` term is not shorter);
+the `X_inj` family (1 line each).
+
+**Next, in order:**
+1. **§0.3 `Filter.eventually_all`** — `MLP.relu_hasFDerivAt`, `MobileNetV2.relu6_hasFDerivAt`,
+   `CNN.maxPool2_flat_hasFDerivAt`, `MaxPool3s2.maxPool3s2_flat_hasFDerivAt` (~310); bundle with the
+   §0.2 `fun_prop` sweep and `MLP.dense_differentiable` since both rebuild the `MLP` cone anyway.
+2. **§0.4 sigmoid/elementwise** — `pdiv_elementwise` (gelu/swish/sigmoid/coordFun), `sigmoidScalar :=
+   Real.sigmoid`, then `one_sub_sigmoidScalar`.
+3. **Near-clones**, one family per commit, largest first: `SgdDescentCnn` kernel/bias slots (§4),
+   `CertLayer.comp` adoption (§0.6), `BnPairTiedB` (§7), fused-from-unfused (§7), the G1/G2 generator
+   lemmas (§5).
+4. Still open from §11: defects 2 (single-buffer magnitude in four test comparators) and 3 (vjp-oracle
+   nets defined twice); §0.7 is a keep-or-retire decision for the user.
+
+**How the batches were run** (worked; keep doing it):
+- *Keep every statement verbatim.* Replace only a proof body — for a `have h_pdiv` inside a long VJP
+  proof, just that `have` — so the rest of the proof, `formalization.yaml`, `AuditAxioms` and the
+  docstring gate never move. Every site in `998f2c70` did.
+- *Scratch first, per site.* Restate the exact statement (with its local context as binders) in a scratch
+  file importing the built module, prove it there, then splice. The oleans are only read, so helpers can
+  draft sites in parallel; splice bottom-up so reported line numbers stay valid; don't build while a
+  helper is still reading oleans.
+- *Rebuild cost decides batching.* Downstream module counts: `Tensor` 301, `MLP` 331, `BatchNorm` 248,
+  `CNN` 242, `Attention` 200, `StableHLO` 193, `FloatBridge` 102, `LipschitzCert` 35, the leaf files
+  1–8. A root-file batch took 8 min for `lake build Certs` (4038 jobs); leaf batches ~2 min.
+  `Nets/ConvNeXt/ConvNeXt.lean` is imported by `StableHLO`, so a batch touching it costs ~7 min.
+- *Gate* = `lake build Certs` + `lake build` + `lake env lean tests/AuditAxioms.lean` (every
+  `#print axioms` emits a verdict, all ⊆ {propext, Classical.choice, Quot.sound}) +
+  `lake exe docstring-checkrefs` + `scripts/check_audit_coverage.py` + `scripts/check_render_coverage.py`.
+- Traps met: `simp_all` inside a proof that sits under `set x := … with hx` rewrites with `hx` — use
+  `simp only [..., @eq_comm _ idx_in]` instead; `rw [pdiv_of_linear]` needs `f` passed explicitly when
+  the side goals are lambdas; plain `mul_left_comm` can time out in `acLt` (fix the scalar:
+  `mul_left_comm a`); `split_ifs` also splits a right-hand-side padding `dite` — prefer `by_cases`.
+- `pdiv_of_affine` wants `fun v => f v + c`: a site written `fun v k => f v k + c k` takes
+  `show … = fun v => (fun k => …) + c from rfl` first (when the constant comes first,
+  `funext …; exact add_comm _ _`). After the rewrite, destructure a flat index with
+  `obtain ⟨⟨r, k⟩, rfl⟩ := finProdFinEquiv.surjective idx` before `simp [Prod.ext_iff]` — otherwise
+  simp turns `finProdFinEquiv.symm idx` into `divNat`/`modNat` and case hypotheses stop matching.
+
+---
+
 ## 0. Cross-cutting: one Mathlib construction, many files
 
 ### 0.1 — Jacobians of affine maps, derived term by term (~2,900 lines)

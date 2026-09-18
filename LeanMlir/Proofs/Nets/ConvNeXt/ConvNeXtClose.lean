@@ -27,9 +27,8 @@ Two genuinely-new bridge families:
   and `BatchNorm.lean` deliberately left `bn_grad_gamma`/`bn_grad_beta` as definitions ("scalar
   params don't fit the `pdiv`/`HasVJP` framework cleanly"). This file closes that gap by embedding
   the scalar as `Vec 1`: as a function of `γ' : Vec 1`, LN is affine —
-  `γ' ↦ fun k => x̂ₖ · γ'(0) + β` — so its Jacobian collapses through
-  `pdiv_add`/`pdiv_mul`/`pdiv_const`/`pdiv_reindex` (the `CifarBnClose` recipe with the constant
-  channel map `Fin n → Fin 1`) to `∂yₖ/∂γ = x̂ₖ` (resp. `1` for β), certifying the rendered whole-`n`
+  `γ' ↦ fun k => x̂ₖ · γ'(0) + β` — so `pdiv_of_affine` reads its Jacobian off the basis vector
+  as `∂yₖ/∂γ = x̂ₖ` (resp. `1` for β), certifying the rendered whole-`n`
   reduces `dγ = Σ dy·x̂`, `dβ = Σ dy` (`bn_grad_gamma`/`bn_grad_beta` — now bridged, not just defined).
   Affine in the params, so no `0 < ε` needed (ε only enters the constant x̂).
 
@@ -80,16 +79,11 @@ theorem cnx_render_dw7b_certified {c h w : Nat}
     of `pdiv_layerScale`. -/
 theorem pdiv_layerScale_gamma {n : Nat} (x : Vec n) (γ : Vec n) (i j : Fin n) :
     pdiv (fun γ' : Vec n => layerScale γ' x) γ i j = if i = j then x i else 0 := by
-  have h_eq : (fun γ' : Vec n => layerScale γ' x) =
-      (fun y : Vec n => fun k => (fun w : Vec n => w) y k * (fun _ : Vec n => x) y k) := by
-    funext y k; rfl
-  rw [h_eq]
-  rw [pdiv_mul (fun w : Vec n => w) (fun _ : Vec n => x) γ
-        differentiableAt_id (differentiableAt_const x) i j]
-  rw [pdiv_id, pdiv_const]
-  by_cases hij : i = j
-  · subst hij; simp
-  · rw [ite_eq_right hij, ite_eq_right hij]; ring
+  rw [pdiv_of_linear _ (fun _ _ => by funext; simp [layerScale, add_mul])
+    (fun _ _ => by funext; simp [layerScale, mul_assoc])]
+  rcases eq_or_ne i j with rfl | h
+  · simp [layerScale]
+  · simp [layerScale, h, Ne.symm h]
 
 /-- The rendered **layer-scale γ gradient**: `dγ_i = x_i · dy_i` (elementwise multiply of the
     saved layer input with the cotangent — the `layerScaleF`-shaped backward). -/
@@ -123,57 +117,35 @@ theorem cnx_render_lsgamma_certified {n : Nat} (x : Vec n) (γ : Vec n) (dy : Ve
 -- (BatchNorm.lean) are the rendered whole-`n` reduces `Σ dy·x̂` / `Σ dy`, stated there as
 -- *definitions only* because scalar params fall outside the `Vec`-indexed `pdiv` framework.
 -- Embedding the scalar as `Vec 1` brings them inside: as a function of `γ' : Vec 1`, LN is
--- affine (`fun y k => x̂_k · y 0 + β`), so the CifarBnClose Jacobian recipe applies with the
--- constant channel map `Fin n → Fin 1`. Affine in the params ⇒ no `0 < ε` hypothesis.
+-- affine (`fun y k => x̂_k · y 0 + β`), so `pdiv_of_affine` reads the Jacobian off the basis
+-- vector. Affine in the params ⇒ no `0 < ε` hypothesis.
 -- ════════════════════════════════════════════════════════════════
 
 /-- scalar-LN as a function of γ (β, x fixed), written affinely:
     `γ' ↦ fun k => x̂_k · γ'(0) + β`. -/
 private theorem layerNorm_gamma_affine (n : Nat) (ε β : ℝ) (x : Vec n) :
     (fun γ' : Vec 1 => layerNormForward n ε (γ' 0) β x)
-      = fun y k => bnXhat n ε x k * y ((fun _ : Fin n => (0 : Fin 1)) k) + β := by
+      = fun y => (fun k => bnXhat n ε x k * y 0) + fun _ => β := by
   funext y k
-  simp only [layerNormForward, bnForward]
+  simp only [layerNormForward, bnForward, Pi.add_apply]
   ring
 
 /-- scalar-LN as a function of β (γ, x fixed):
     `β' ↦ fun k => γ·x̂_k + β'(0)`. -/
 private theorem layerNorm_beta_affine (n : Nat) (ε γ : ℝ) (x : Vec n) :
     (fun β' : Vec 1 => layerNormForward n ε γ (β' 0) x)
-      = fun y k => γ * bnXhat n ε x k + y ((fun _ : Fin n => (0 : Fin 1)) k) := by
+      = fun y => (fun _ => y 0) + fun k => γ * bnXhat n ε x k := by
   funext y k
-  simp only [layerNormForward, bnForward]
+  simp only [layerNormForward, bnForward, Pi.add_apply]
+  ring
 
 /-- **Jacobian of scalar-LN w.r.t. γ** — `∂y_j/∂γ = x̂_j` (dense in `j`: the scalar γ scales
     every output). The scalar special-case of `pdiv_bnPerChannelFlat_gamma`. -/
 private theorem pdiv_layerNorm_gamma (n : Nat) (ε β : ℝ) (x : Vec n) (γ : Vec 1)
     (i : Fin 1) (j : Fin n) :
     pdiv (fun γ' : Vec 1 => layerNormForward n ε (γ' 0) β x) γ i j = bnXhat n ε x j := by
-  rw [layerNorm_gamma_affine]
-  set XH : Vec n := bnXhat n ε x with hXH
-  set BC : Vec n := fun _ => β with hBC
-  have hmul_diff : DifferentiableAt ℝ
-      (fun y : Vec 1 => fun k : Fin n => XH k * y ((fun _ : Fin n => (0 : Fin 1)) k)) γ :=
-    (differentiableAt_const XH).mul
-      ((reindexCLM (fun _ : Fin n => (0 : Fin 1))).differentiableAt)
-  have hconst_diff : DifferentiableAt ℝ (fun _ : Vec 1 => BC) γ := differentiableAt_const _
-  rw [show (fun (y : Vec 1) (k : Fin n) => XH k * y ((fun _ : Fin n => (0 : Fin 1)) k) + β)
-        = (fun y k => (fun y' k' => XH k' * y' ((fun _ : Fin n => (0 : Fin 1)) k')) y k
-                      + (fun _ k' => BC k') y k) from rfl,
-      pdiv_add _ _ _ hmul_diff hconst_diff,
-      pdiv_const BC γ i j, add_zero]
-  have hconstXH_diff : DifferentiableAt ℝ (fun _ : Vec 1 => XH) γ := differentiableAt_const _
-  have hgather_diff : DifferentiableAt ℝ
-      (fun y : Vec 1 => fun k : Fin n => y ((fun _ : Fin n => (0 : Fin 1)) k)) γ :=
-    (reindexCLM (fun _ : Fin n => (0 : Fin 1))).differentiableAt
-  rw [show (fun (y : Vec 1) (k : Fin n) => XH k * y ((fun _ : Fin n => (0 : Fin 1)) k))
-        = (fun y k => (fun _ k' => XH k') y k
-                      * (fun y' k' => y' ((fun _ : Fin n => (0 : Fin 1)) k')) y k) from rfl,
-      pdiv_mul _ _ _ hconstXH_diff hgather_diff,
-      pdiv_const XH γ i j,
-      pdiv_reindex (fun _ : Fin n => (0 : Fin 1)) γ i j]
-  have hi0 : i = 0 := Fin.eq_zero i
-  subst hi0
+  rw [layerNorm_gamma_affine, pdiv_of_affine _ _ (fun _ _ => by funext; simp [mul_add])
+    (fun _ _ => by funext; simp [mul_left_comm]), Fin.fin_one_eq_zero i]
   simp
 
 /-- **Jacobian of scalar-LN w.r.t. β** — `∂y_j/∂β = 1` (the scalar β shifts every output).
@@ -181,20 +153,8 @@ private theorem pdiv_layerNorm_gamma (n : Nat) (ε β : ℝ) (x : Vec n) (γ : V
 private theorem pdiv_layerNorm_beta (n : Nat) (ε γ : ℝ) (x : Vec n) (β : Vec 1)
     (i : Fin 1) (j : Fin n) :
     pdiv (fun β' : Vec 1 => layerNormForward n ε γ (β' 0) x) β i j = 1 := by
-  rw [layerNorm_beta_affine]
-  set CC : Vec n := fun k => γ * bnXhat n ε x k with hCC
-  have hconst_diff : DifferentiableAt ℝ (fun _ : Vec 1 => CC) β := differentiableAt_const _
-  have hgather_diff : DifferentiableAt ℝ
-      (fun y : Vec 1 => fun k : Fin n => y ((fun _ : Fin n => (0 : Fin 1)) k)) β :=
-    (reindexCLM (fun _ : Fin n => (0 : Fin 1))).differentiableAt
-  rw [show (fun (y : Vec 1) (k : Fin n) => γ * bnXhat n ε x k + y ((fun _ : Fin n => (0 : Fin 1)) k))
-        = (fun y k => (fun _ k' => CC k') y k
-                      + (fun y' k' => y' ((fun _ : Fin n => (0 : Fin 1)) k')) y k) from rfl,
-      pdiv_add _ _ _ hconst_diff hgather_diff,
-      pdiv_const CC β i j, zero_add,
-      pdiv_reindex (fun _ : Fin n => (0 : Fin 1)) β i j]
-  have hi0 : i = 0 := Fin.eq_zero i
-  subst hi0
+  rw [layerNorm_beta_affine, pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl),
+    Fin.fin_one_eq_zero i]
   simp
 
 /-- **Scalar-LN γ-gradient bridge.** The rendered whole-`n` reduce `dγ = Σ_j dy_j·x̂_j`

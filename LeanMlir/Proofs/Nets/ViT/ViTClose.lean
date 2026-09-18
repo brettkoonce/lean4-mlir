@@ -34,8 +34,9 @@ Two genuinely-new bridge families (everything else is reuse or a reindex):
 The classifier head (`dense` on the CLS vector) is VERBATIM M2 `weight/bias_grad_bridge`
 reuse at `[D, nClasses]`. The patch-embed conv `Wp`/`bp` (§ E) closes over
 `patchEmbed_flat` directly — the kernel is the VARIABLE and the pad-guarded image reads
-are CONSTANT coefficients (the mirror of the input-grad case), so the same const×reindex
-recipe applies with the CLS row masked out. 3-axiom clean by construction.
+are CONSTANT coefficients (the mirror of the input-grad case), so the forward is affine in
+the kernel and `pdiv_of_affine` applies with the CLS row masked out. 3-axiom clean by
+construction.
 -/
 
 namespace Proofs
@@ -53,9 +54,9 @@ lemma sum_fin_prod {M : Type*} [AddCommMonoid M] (m n : Nat)
 -- ════════════════════════════════════════════════════════════════
 -- § A. Per-token dense W/b — the row-lifted M2 family (genuinely new)
 --
--- `fun v => Mat.flatten (fun r => dense (Mat.unflatten v) b (X r))` is, in `v`, a sum of
--- constant×reindex summands per output coordinate (the CifarBnClose recipe at the flat
--- `[N·c]` output index): `y_(r,k) = Σ_i X_(r,i)·v_(i,k) + b_k`.
+-- `fun v => Mat.flatten (fun r => dense (Mat.unflatten v) b (X r))` is, in `v`, linear plus
+-- the constant bias — `y_(r,k) = Σ_i X_(r,i)·v_(i,k) + b_k` at the flat `[N·c]` output
+-- index — so `pdiv_of_affine` reads the Jacobian off the basis vector.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Jacobian of the per-token dense w.r.t. the (flattened) shared weight** —
@@ -67,115 +68,16 @@ theorem pdiv_rowDense_W {N a c : Nat} (bb : Vec c) (X : Mat N a) (W : Mat a c)
          (Mat.flatten W) (finProdFinEquiv (i, j')) idx =
       if j' = (finProdFinEquiv.symm idx).2
         then X (finProdFinEquiv.symm idx).1 i else 0 := by
-  -- Step 1: explicit Vec (a*c) → Vec (N*c) normal form.
-  rw [show (fun v : Vec (a * c) =>
-              Mat.flatten (fun r => dense (Mat.unflatten v) bb (X r))) =
-        (fun v : Vec (a * c) => fun o : Fin (N * c) =>
-          (∑ i' : Fin a, X (finProdFinEquiv.symm o).1 i' *
-              v (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) +
-            bb (finProdFinEquiv.symm o).2) from by
-      funext v o; unfold dense Mat.unflatten Mat.flatten; rfl]
-  -- Step 2: split (sum) + (constant bias): pdiv_add + pdiv_const.
-  rw [show (fun v : Vec (a * c) => fun o : Fin (N * c) =>
-              (∑ i' : Fin a, X (finProdFinEquiv.symm o).1 i' *
-                  v (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) +
-                bb (finProdFinEquiv.symm o).2) =
-        (fun v o =>
-          (fun w : Vec (a * c) => fun o' : Fin (N * c) =>
-              ∑ i' : Fin a, X (finProdFinEquiv.symm o').1 i' *
-                w (finProdFinEquiv (i', (finProdFinEquiv.symm o').2))) v o +
-          (fun _ : Vec (a * c) =>
-              fun o' : Fin (N * c) => bb (finProdFinEquiv.symm o').2) v o) from rfl]
-  have h_summand_diff : ∀ i' ∈ (Finset.univ : Finset (Fin a)),
-      DifferentiableAt ℝ
-        (fun (v : Vec (a * c)) (o : Fin (N * c)) =>
-          X (finProdFinEquiv.symm o).1 i' *
-            v (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) (Mat.flatten W) := by
-    intro i' _
-    have h_const : DifferentiableAt ℝ
-        (fun (_ : Vec (a * c)) (o : Fin (N * c)) =>
-          X (finProdFinEquiv.symm o).1 i') (Mat.flatten W) :=
-      differentiableAt_const _
-    have h_reindex : DifferentiableAt ℝ
-        (fun (w : Vec (a * c)) (o : Fin (N * c)) =>
-          w (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) (Mat.flatten W) :=
-      (reindexCLM (fun o : Fin (N * c) =>
-        finProdFinEquiv (i', (finProdFinEquiv.symm o).2))).differentiableAt
-    exact h_const.mul h_reindex
-  have h_sum_diff : DifferentiableAt ℝ
-      (fun (w : Vec (a * c)) (o : Fin (N * c)) =>
-        ∑ i' : Fin a, X (finProdFinEquiv.symm o).1 i' *
-          w (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) (Mat.flatten W) := by
-    have h_eq : (fun (w : Vec (a * c)) (o : Fin (N * c)) =>
-                  ∑ i' : Fin a, X (finProdFinEquiv.symm o).1 i' *
-                    w (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) =
-                (fun w : Vec (a * c) => ∑ i' : Fin a,
-                  fun o : Fin (N * c) => X (finProdFinEquiv.symm o).1 i' *
-                    w (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) := by
-      funext w o; rw [Finset.sum_apply]
-    rw [h_eq]
-    exact DifferentiableAt.fun_sum (fun i' _ => h_summand_diff i' (Finset.mem_univ i'))
-  have h_const_diff : DifferentiableAt ℝ
-      (fun _ : Vec (a * c) =>
-        fun o' : Fin (N * c) => bb (finProdFinEquiv.symm o').2) (Mat.flatten W) :=
-    differentiableAt_const _
-  rw [pdiv_add _ _ _ h_sum_diff h_const_diff, pdiv_const, add_zero]
-  -- Step 3: pdiv through the Fin a sum.
-  rw [pdiv_finset_sum (Finset.univ : Finset (Fin a))
-      (fun i' v o => X (finProdFinEquiv.symm o).1 i' *
-        v (finProdFinEquiv (i', (finProdFinEquiv.symm o).2)))
-      (Mat.flatten W) h_summand_diff (finProdFinEquiv (i, j')) idx]
-  -- Step 4: each summand is (const) × (reindex); pdiv_mul + pdiv_const + pdiv_reindex.
-  have hterm : ∀ i' : Fin a,
-      pdiv (fun v : Vec (a * c) => fun o : Fin (N * c) =>
-              X (finProdFinEquiv.symm o).1 i' *
-                v (finProdFinEquiv (i', (finProdFinEquiv.symm o).2)))
-           (Mat.flatten W) (finProdFinEquiv (i, j')) idx =
-      if i = i' ∧ j' = (finProdFinEquiv.symm idx).2
-        then X (finProdFinEquiv.symm idx).1 i else 0 := by
-    intro i'
-    rw [show (fun v : Vec (a * c) => fun o : Fin (N * c) =>
-                X (finProdFinEquiv.symm o).1 i' *
-                  v (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) =
-          (fun v o =>
-            (fun (_ : Vec (a * c)) (o' : Fin (N * c)) =>
-              X (finProdFinEquiv.symm o').1 i') v o *
-            (fun (w : Vec (a * c)) (o' : Fin (N * c)) =>
-              w (finProdFinEquiv (i', (finProdFinEquiv.symm o').2))) v o) from rfl]
-    have h_const_inner : DifferentiableAt ℝ
-        (fun (_ : Vec (a * c)) (o' : Fin (N * c)) =>
-          X (finProdFinEquiv.symm o').1 i') (Mat.flatten W) :=
-      differentiableAt_const _
-    have h_reindex_inner : DifferentiableAt ℝ
-        (fun (w : Vec (a * c)) (o' : Fin (N * c)) =>
-          w (finProdFinEquiv (i', (finProdFinEquiv.symm o').2))) (Mat.flatten W) :=
-      (reindexCLM (fun o' : Fin (N * c) =>
-        finProdFinEquiv (i', (finProdFinEquiv.symm o').2))).differentiableAt
-    rw [pdiv_mul _ _ _ h_const_inner h_reindex_inner,
-        pdiv_const,
-        pdiv_reindex (fun o' : Fin (N * c) =>
-          finProdFinEquiv (i', (finProdFinEquiv.symm o').2))
-          (Mat.flatten W) (finProdFinEquiv (i, j')) idx]
-    rw [zero_mul, zero_add]
-    by_cases hij : finProdFinEquiv (i, j') =
-        finProdFinEquiv (i', (finProdFinEquiv.symm idx).2)
-    · have hpair : (i, j') = (i', (finProdFinEquiv.symm idx).2) :=
-        finProdFinEquiv.injective hij
-      have hi : i = i' := congrArg Prod.fst hpair
-      have hj : j' = (finProdFinEquiv.symm idx).2 := congrArg Prod.snd hpair
-      rw [ite_eq_left hij, ite_eq_left ⟨hi, hj⟩, mul_one, ← hi]
-    · rw [ite_eq_right hij, mul_zero, ite_eq_right]
-      intro ⟨hi, hj⟩
-      exact hij (by rw [hi, hj])
-  simp_rw [hterm]
-  -- Step 5: collapse the Fin a sum at i' = i.
-  rw [Finset.sum_eq_single i
-      (fun i' _ hne => by
-        rw [ite_eq_right]; intro ⟨hi, _⟩; exact hne hi.symm)
-      (fun h => absurd (Finset.mem_univ i) h)]
-  by_cases hj : j' = (finProdFinEquiv.symm idx).2
-  · rw [ite_eq_left ⟨rfl, hj⟩, ite_eq_left hj]
-  · rw [ite_eq_right (fun hc => hj hc.2), ite_eq_right hj]
+  rw [show (fun v : Vec (a * c) => Mat.flatten (fun r => dense (Mat.unflatten v) bb (X r))) =
+      fun v => (fun o : Fin (N * c) => ∑ i' : Fin a, X (finProdFinEquiv.symm o).1 i' *
+          v (finProdFinEquiv (i', (finProdFinEquiv.symm o).2))) +
+        fun o => bb (finProdFinEquiv.symm o).2 from rfl,
+    pdiv_of_affine _ _ (fun _ _ => by funext; simp [mul_add, Finset.sum_add_distrib])
+      (fun _ _ => by funext; simp [Finset.mul_sum, mul_left_comm])]
+  obtain ⟨⟨r, k⟩, rfl⟩ := finProdFinEquiv.surjective idx
+  rcases eq_or_ne j' k with rfl | h
+  · simp [Prod.ext_iff]
+  · simp [Prod.ext_iff, h, Ne.symm h]
 
 /-- The rendered **per-token dense weight gradient**: the token-axis-contracted
     outer product `dW_(i,j) = Σ_r X_(r,i)·dY_(r,j)` (one `dot_general` contracting
@@ -218,29 +120,18 @@ theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
       = ∑ o : Fin (N * c),
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r)))
                bb i o * dy o := by
-  -- Jacobian: ∂y_(r,k)/∂b_i = δ_(k,i) — constant + gather.
+  -- Jacobian: ∂y_(r,k)/∂b_i = δ_(k,i) — gather + constant.
   have hpdiv : ∀ o : Fin (N * c),
       pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r))) bb i o =
         if i = (finProdFinEquiv.symm o).2 then 1 else 0 := by
     intro o
     rw [show (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r))) =
-          (fun b' : Vec c => fun o' : Fin (N * c) =>
-            (fun (_ : Vec c) (o'' : Fin (N * c)) =>
-              ∑ i' : Fin a, X (finProdFinEquiv.symm o'').1 i' *
-                W i' (finProdFinEquiv.symm o'').2) b' o' +
-            (fun (w : Vec c) (o'' : Fin (N * c)) =>
-              w ((fun o''' : Fin (N * c) => (finProdFinEquiv.symm o''').2) o'')) b' o') from by
-        funext b' o'; unfold dense Mat.flatten; rfl]
-    have h_const : DifferentiableAt ℝ
-        (fun (_ : Vec c) (o'' : Fin (N * c)) =>
-          ∑ i' : Fin a, X (finProdFinEquiv.symm o'').1 i' *
-            W i' (finProdFinEquiv.symm o'').2) bb := differentiableAt_const _
-    have h_gather : DifferentiableAt ℝ
-        (fun (w : Vec c) (o'' : Fin (N * c)) =>
-          w ((fun o''' : Fin (N * c) => (finProdFinEquiv.symm o''').2) o'')) bb :=
-      (reindexCLM (fun o''' : Fin (N * c) => (finProdFinEquiv.symm o''').2)).differentiableAt
-    rw [pdiv_add _ _ _ h_const h_gather, pdiv_const, zero_add,
-        pdiv_reindex (fun o''' : Fin (N * c) => (finProdFinEquiv.symm o''').2) bb i o]
+          fun b' => (fun o' : Fin (N * c) => b' (finProdFinEquiv.symm o').2) +
+            fun o' => ∑ i' : Fin a, X (finProdFinEquiv.symm o').1 i' *
+              W i' (finProdFinEquiv.symm o').2 from by
+        funext b' o'; unfold dense Mat.flatten; exact add_comm _ _,
+      pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
+    simp only [basisVec_apply, @eq_comm _ _ i]
   simp_rw [hpdiv]
   rw [sum_fin_prod N c]
   unfold rowDense_bias_grad Mat.unflatten
@@ -288,28 +179,10 @@ private theorem pdiv_scalarAffine_gamma {m : Nat} (XH C : Vec m) (γ : Vec 1)
     (i : Fin 1) (j : Fin m) :
     pdiv (fun y : Vec 1 => fun k => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k) + C k)
       γ i j = XH j := by
-  have hmul_diff : DifferentiableAt ℝ
-      (fun y : Vec 1 => fun k : Fin m => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k)) γ :=
-    (differentiableAt_const XH).mul
-      ((reindexCLM (fun _ : Fin m => (0 : Fin 1))).differentiableAt)
-  have hconst_diff : DifferentiableAt ℝ (fun _ : Vec 1 => C) γ := differentiableAt_const _
-  rw [show (fun (y : Vec 1) (k : Fin m) => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k) + C k)
-        = (fun y k => (fun y' k' => XH k' * y' ((fun _ : Fin m => (0 : Fin 1)) k')) y k
-                      + (fun _ k' => C k') y k) from rfl,
-      pdiv_add _ _ _ hmul_diff hconst_diff,
-      pdiv_const C γ i j, add_zero]
-  have hconstXH_diff : DifferentiableAt ℝ (fun _ : Vec 1 => XH) γ := differentiableAt_const _
-  have hgather_diff : DifferentiableAt ℝ
-      (fun y : Vec 1 => fun k : Fin m => y ((fun _ : Fin m => (0 : Fin 1)) k)) γ :=
-    (reindexCLM (fun _ : Fin m => (0 : Fin 1))).differentiableAt
-  rw [show (fun (y : Vec 1) (k : Fin m) => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k))
-        = (fun y k => (fun _ k' => XH k') y k
-                      * (fun y' k' => y' ((fun _ : Fin m => (0 : Fin 1)) k')) y k) from rfl,
-      pdiv_mul _ _ _ hconstXH_diff hgather_diff,
-      pdiv_const XH γ i j,
-      pdiv_reindex (fun _ : Fin m => (0 : Fin 1)) γ i j]
-  have hi0 : i = 0 := Fin.eq_zero i
-  subst hi0
+  rw [show (fun y : Vec 1 => fun k => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k) + C k)
+      = fun y => (fun k => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k)) + C from rfl,
+    pdiv_of_affine _ _ (fun _ _ => by funext; simp [mul_add])
+      (fun _ _ => by funext; simp [mul_left_comm]), Fin.fin_one_eq_zero i]
   simp
 
 /-- Generic scalar-shift Jacobian: `∂(C_k + β(0))/∂β = 1`. The
@@ -318,18 +191,10 @@ private theorem pdiv_scalarAffine_beta {m : Nat} (C : Vec m) (β : Vec 1)
     (i : Fin 1) (j : Fin m) :
     pdiv (fun y : Vec 1 => fun k => C k + y ((fun _ : Fin m => (0 : Fin 1)) k)) β i j
       = 1 := by
-  have hconst_diff : DifferentiableAt ℝ (fun _ : Vec 1 => C) β := differentiableAt_const _
-  have hgather_diff : DifferentiableAt ℝ
-      (fun y : Vec 1 => fun k : Fin m => y ((fun _ : Fin m => (0 : Fin 1)) k)) β :=
-    (reindexCLM (fun _ : Fin m => (0 : Fin 1))).differentiableAt
-  rw [show (fun (y : Vec 1) (k : Fin m) => C k + y ((fun _ : Fin m => (0 : Fin 1)) k))
-        = (fun y k => (fun _ k' => C k') y k
-                      + (fun y' k' => y' ((fun _ : Fin m => (0 : Fin 1)) k')) y k) from rfl,
-      pdiv_add _ _ _ hconst_diff hgather_diff,
-      pdiv_const C β i j, zero_add,
-      pdiv_reindex (fun _ : Fin m => (0 : Fin 1)) β i j]
-  have hi0 : i = 0 := Fin.eq_zero i
-  subst hi0
+  rw [show (fun y : Vec 1 => fun k => C k + y ((fun _ : Fin m => (0 : Fin 1)) k))
+      = fun y => (fun k => y ((fun _ : Fin m => (0 : Fin 1)) k)) + C from
+        funext fun _ => funext fun _ => add_comm _ _,
+    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl), Fin.fin_one_eq_zero i]
   simp
 
 /-- Rowwise scalar-LN as a function of γ (β, X fixed), affinely: the coefficient
@@ -452,11 +317,9 @@ theorem vit_render_rowlnbeta_certified (N D : Nat) (ε γ : ℝ) (β : Vec 1)
 /-- Identity-plus-constant Jacobian: `∂(p_k + C_k)/∂p_i = δ_(i,k)`. -/
 theorem pdiv_id_add_const {m : Nat} (C : Vec m) (x : Vec m) (i j : Fin m) :
     pdiv (fun p : Vec m => fun k => p k + C k) x i j = if i = j then 1 else 0 := by
-  have h_id : DifferentiableAt ℝ (fun p : Vec m => p) x := differentiableAt_id
-  have h_const : DifferentiableAt ℝ (fun _ : Vec m => C) x := differentiableAt_const _
-  rw [show (fun p : Vec m => fun k => p k + C k)
-        = (fun p k => (fun w : Vec m => w) p k + (fun _ : Vec m => C) p k) from rfl,
-      pdiv_add _ _ _ h_id h_const, pdiv_const, add_zero, pdiv_id]
+  rw [show (fun p : Vec m => fun k => p k + C k) = fun p => p + C from rfl,
+    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
+  simp only [basisVec_apply, @eq_comm _ j i]
 
 /-- Masked-gather-plus-constant Jacobian:
     `∂(mask_k·cl_(σ k) + C_k)/∂cl_i = mask_k·δ_(i,σ k)`. -/
@@ -464,21 +327,11 @@ theorem pdiv_maskGather_add_const {m D : Nat} (mask : Vec m) (σ : Fin m → Fin
     (C : Vec m) (x : Vec D) (i : Fin D) (j : Fin m) :
     pdiv (fun cl : Vec D => fun k => mask k * cl (σ k) + C k) x i j
       = mask j * (if i = σ j then 1 else 0) := by
-  have h_mask : DifferentiableAt ℝ (fun _ : Vec D => mask) x := differentiableAt_const _
-  have h_gather : DifferentiableAt ℝ (fun (w : Vec D) (k : Fin m) => w (σ k)) x :=
-    (reindexCLM σ).differentiableAt
-  have h_mul : DifferentiableAt ℝ (fun (w : Vec D) (k : Fin m) => mask k * w (σ k)) x :=
-    h_mask.mul h_gather
-  have h_const : DifferentiableAt ℝ (fun _ : Vec D => C) x := differentiableAt_const _
   rw [show (fun cl : Vec D => fun k => mask k * cl (σ k) + C k)
-        = (fun cl k =>
-            (fun (w : Vec D) (k' : Fin m) =>
-              (fun _ : Vec D => mask) w k' * (fun (w' : Vec D) (k'' : Fin m) => w' (σ k'')) w k') cl k +
-            (fun _ : Vec D => C) cl k) from rfl,
-      pdiv_add _ _ _ h_mul h_const, pdiv_const, add_zero,
-      pdiv_mul _ _ _ h_mask h_gather, pdiv_const,
-      pdiv_reindex σ x i j]
-  ring
+      = fun cl => (fun k => mask k * cl (σ k)) + C from rfl,
+    pdiv_of_affine _ _ (fun _ _ => by funext; simp [mul_add])
+      (fun _ _ => by funext; simp [mul_left_comm])]
+  simp only [basisVec_apply, @eq_comm _ (σ j) i]
 
 /-- **Jacobian of `patchEmbed_flat` w.r.t. the (flattened) position embedding** —
     the identity: pos is broadcast-added to every token. -/
@@ -581,8 +434,8 @@ theorem vit_render_cls_certified {ic H W P N D : Nat}
 -- The KEY structural fact: as a function of the (flattened) kernel, `patchEmbed_flat`
 -- is linear with CONSTANT coefficients — the pad-guarded image reads sit in the
 -- coefficient, not the variable (the mirror of the input-grad case, where the
--- pad-eval calculus was needed). So the §A const×reindex recipe applies verbatim,
--- with §C's mask trick zeroing the CLS row.
+-- pad-eval calculus was needed). So `pdiv_of_affine` reads the Jacobian off the basis
+-- vector, as in §A, with the CLS row's coefficient zero.
 -- ════════════════════════════════════════════════════════════════
 
 /-- The pad-guarded patch read of `patchEmbed_flat`, named: input pixel
@@ -613,188 +466,32 @@ theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
           (if (finProdFinEquiv.symm idx).1.val = 0 then 0
            else patchRead ic H W P img c kh kw ((finProdFinEquiv.symm idx).1.val - 1))
         else 0 := by
-  -- Normal form: a single product-indexed sum of (reindex)×(constant masked read),
-  -- plus the kernel-free constant part.
+  -- Linear in the kernel (the pad-guarded reads are constant coefficients, zero on the CLS
+  -- row) plus the kernel-free part, so `pdiv_of_affine` reads the entry off the basis vector.
   rw [show (fun v : Vec (D * ic * P * P) =>
               patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img) =
-        (fun v : Vec (D * ic * P * P) => fun o : Fin ((N + 1) * D) =>
-          (∑ t : Fin ic × Fin P × Fin P,
-            v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                  ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-              (if (finProdFinEquiv.symm o).1.val = 0 then 0
-               else patchRead ic H W P img t.1 t.2.1 t.2.2
-                      ((finProdFinEquiv.symm o).1.val - 1))) +
-          patchEmbed_flat ic H W P N D (fun _ _ _ _ => 0) bc cls pos img o) from by
+        fun v => (fun o : Fin ((N + 1) * D) =>
+          if (finProdFinEquiv.symm o).1.val = 0 then 0 else
+            ∑ c' : Fin ic, ∑ kh' : Fin P, ∑ kw' : Fin P,
+              v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                  ((finProdFinEquiv.symm o).2, c'), kh'), kw')) *
+                patchRead ic H W P img c' kh' kw' ((finProdFinEquiv.symm o).1.val - 1)) +
+          patchEmbed_flat ic H W P N D (fun _ _ _ _ => 0) bc cls pos img from by
       funext v o
-      unfold patchEmbed_flat patchRead Kernel4.unflatten
-      simp only [Fintype.sum_prod_type]
-      by_cases h : (finProdFinEquiv.symm o).1.val = 0
-      · simp only [h, ite_true, mul_zero, Finset.sum_const_zero, zero_add]
-      · simp only [h, ite_false, zero_mul, Finset.sum_const_zero, add_zero]
-        rw [show (∑ c' : Fin ic, ∑ kh' : Fin P, ∑ kw' : Fin P,
-              v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                    ((finProdFinEquiv.symm o).2, c'), kh'), kw')) *
-                (let W' := W / P
-                 let p := (finProdFinEquiv.symm o).1.val - 1
-                 let h' := p / W'
-                 let w' := p % W'
-                 let hh := h' * P + kh'.val
-                 let ww := w' * P + kw'.val
-                 if hpad : hh < H ∧ ww < W then
-                   img (finProdFinEquiv (finProdFinEquiv (c', ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
-                 else 0)) =
-            (∑ c' : Fin ic, ∑ kh' : Fin P, ∑ kw' : Fin P,
-              (let W' := W / P
-               let p := (finProdFinEquiv.symm o).1.val - 1
-               let h' := p / W'
-               let w' := p % W'
-               let hh := h' * P + kh'.val
-               let ww := w' * P + kw'.val
-               if hpad : hh < H ∧ ww < W then
-                 img (finProdFinEquiv (finProdFinEquiv (c', ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
-               else 0) *
-              v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                    ((finProdFinEquiv.symm o).2, c'), kh'), kw'))) from by
-          apply Finset.sum_congr rfl; intro c' _
-          apply Finset.sum_congr rfl; intro kh' _
-          apply Finset.sum_congr rfl; intro kw' _
-          ring]
-        ring]
-  -- pdiv through (sum + const), then per-summand (reindex × const).
-  have h_summand_diff : ∀ t ∈ (Finset.univ : Finset (Fin ic × Fin P × Fin P)),
-      DifferentiableAt ℝ
-        (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
-          v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-            (if (finProdFinEquiv.symm o).1.val = 0 then 0
-             else patchRead ic H W P img t.1 t.2.1 t.2.2
-                    ((finProdFinEquiv.symm o).1.val - 1))) (Kernel4.flatten Wc) := by
-    intro t _
-    exact ((reindexCLM (fun o : Fin ((N + 1) * D) =>
-        finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-          ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))).differentiableAt).mul
-      (differentiableAt_const _)
-  have h_sum_diff : DifferentiableAt ℝ
-      (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
-        ∑ t : Fin ic × Fin P × Fin P,
-          v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-            (if (finProdFinEquiv.symm o).1.val = 0 then 0
-             else patchRead ic H W P img t.1 t.2.1 t.2.2
-                    ((finProdFinEquiv.symm o).1.val - 1))) (Kernel4.flatten Wc) := by
-    have h_eq : (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
-          ∑ t : Fin ic × Fin P × Fin P,
-            v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                  ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-              (if (finProdFinEquiv.symm o).1.val = 0 then 0
-               else patchRead ic H W P img t.1 t.2.1 t.2.2
-                      ((finProdFinEquiv.symm o).1.val - 1))) =
-        (fun v : Vec (D * ic * P * P) => ∑ t : Fin ic × Fin P × Fin P,
-          fun o : Fin ((N + 1) * D) =>
-            v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                  ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-              (if (finProdFinEquiv.symm o).1.val = 0 then 0
-               else patchRead ic H W P img t.1 t.2.1 t.2.2
-                      ((finProdFinEquiv.symm o).1.val - 1))) := by
-      funext v o; rw [Finset.sum_apply]
-    rw [h_eq]
-    exact DifferentiableAt.fun_sum (fun t _ => h_summand_diff t (Finset.mem_univ t))
-  have h_const_diff : DifferentiableAt ℝ
-      (fun _ : Vec (D * ic * P * P) =>
-        patchEmbed_flat ic H W P N D (fun _ _ _ _ => 0) bc cls pos img)
-      (Kernel4.flatten Wc) := differentiableAt_const _
-  rw [pdiv_add _ _ _ h_sum_diff h_const_diff, pdiv_const, add_zero]
-  rw [pdiv_finset_sum (Finset.univ : Finset (Fin ic × Fin P × Fin P))
-      (fun t v o =>
-        v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-              ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-          (if (finProdFinEquiv.symm o).1.val = 0 then 0
-           else patchRead ic H W P img t.1 t.2.1 t.2.2
-                  ((finProdFinEquiv.symm o).1.val - 1)))
-      (Kernel4.flatten Wc) h_summand_diff
-      (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx]
-  have hterm : ∀ t : Fin ic × Fin P × Fin P,
-      pdiv (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
-              v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                    ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-                (if (finProdFinEquiv.symm o).1.val = 0 then 0
-                 else patchRead ic H W P img t.1 t.2.1 t.2.2
-                        ((finProdFinEquiv.symm o).1.val - 1)))
-           (Kernel4.flatten Wc)
-           (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx =
-      (if finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw) =
-            finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-              ((finProdFinEquiv.symm idx).2, t.1), t.2.1), t.2.2)
-        then 1 else 0) *
-        (if (finProdFinEquiv.symm idx).1.val = 0 then 0
-         else patchRead ic H W P img t.1 t.2.1 t.2.2
-                ((finProdFinEquiv.symm idx).1.val - 1)) := by
-    intro t
-    have h_gather : DifferentiableAt ℝ
-        (fun (w : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
-          w (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))) (Kernel4.flatten Wc) :=
-      (reindexCLM (fun o : Fin ((N + 1) * D) =>
-        finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-          ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))).differentiableAt
-    have h_maskread : DifferentiableAt ℝ
-        (fun (_ : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
-          (if (finProdFinEquiv.symm o).1.val = 0 then (0 : ℝ)
-           else patchRead ic H W P img t.1 t.2.1 t.2.2
-                  ((finProdFinEquiv.symm o).1.val - 1))) (Kernel4.flatten Wc) :=
-      differentiableAt_const _
-    rw [show (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
-                v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                      ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
-                  (if (finProdFinEquiv.symm o).1.val = 0 then 0
-                   else patchRead ic H W P img t.1 t.2.1 t.2.2
-                          ((finProdFinEquiv.symm o).1.val - 1))) =
-          (fun v o =>
-            (fun (w : Vec (D * ic * P * P)) (o' : Fin ((N + 1) * D)) =>
-              w (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-                    ((finProdFinEquiv.symm o').2, t.1), t.2.1), t.2.2))) v o *
-            (fun (_ : Vec (D * ic * P * P)) (o' : Fin ((N + 1) * D)) =>
-              (if (finProdFinEquiv.symm o').1.val = 0 then (0 : ℝ)
-               else patchRead ic H W P img t.1 t.2.1 t.2.2
-                      ((finProdFinEquiv.symm o').1.val - 1))) v o) from rfl,
-        pdiv_mul _ _ _ h_gather h_maskread,
-        pdiv_const,
-        pdiv_reindex (fun o : Fin ((N + 1) * D) =>
-          finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-            ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))
-          (Kernel4.flatten Wc)
-          (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx]
-    ring
-  simp_rw [hterm]
-  -- Collapse the product sum at t = (c, kh, kw); the kernel index matches iff
-  -- additionally (symm idx).2 = d (nested fPF injectivity).
-  rw [Finset.sum_eq_single ((c, kh, kw) : Fin ic × Fin P × Fin P)
-      (fun t _ hne => by
-        rw [ite_eq_right, zero_mul]
-        intro heq
-        apply hne
-        have h1 := finProdFinEquiv.injective heq
-        have hkw : kw = t.2.2 := congrArg Prod.snd h1
-        have h2 := finProdFinEquiv.injective (congrArg Prod.fst h1)
-        have hkh : kh = t.2.1 := congrArg Prod.snd h2
-        have h3 := finProdFinEquiv.injective (congrArg Prod.fst h2)
-        have hc : c = t.1 := congrArg Prod.snd h3
-        exact Prod.ext hc.symm (Prod.ext hkh.symm hkw.symm))
-      (fun h => absurd (Finset.mem_univ _) h)]
-  by_cases hd : (finProdFinEquiv.symm idx).2 = d
-  · rw [ite_eq_left hd]
-    rw [show finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw) =
-          finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
-            ((finProdFinEquiv.symm idx).2, (c, kh, kw).1), (c, kh, kw).2.1),
-            (c, kh, kw).2.2) from by rw [hd]]
-    rw [ite_eq_left rfl, one_mul]
-  · rw [ite_eq_right hd, ite_eq_right, zero_mul]
-    intro heq
-    apply hd
-    have h1 := finProdFinEquiv.injective heq
-    have h2 := finProdFinEquiv.injective (congrArg Prod.fst h1)
-    have h3 := finProdFinEquiv.injective (congrArg Prod.fst h2)
-    exact (congrArg Prod.fst h3).symm
+      by_cases h : (finProdFinEquiv.symm o).1.val = 0 <;>
+        simp only [patchEmbed_flat, patchRead, Kernel4.unflatten, Pi.add_apply, h, ite_true,
+          ite_false, zero_mul, Finset.sum_const_zero, add_zero, zero_add]
+      ring,
+    pdiv_of_affine _ _
+      (fun _ _ => by
+        funext; simp only [Pi.add_apply]; split_ifs <;> simp [add_mul, Finset.sum_add_distrib])
+      (fun _ _ => by
+        funext; simp only [Pi.smul_apply, smul_eq_mul]
+        split_ifs <;> simp [Finset.mul_sum, mul_assoc])]
+  obtain ⟨⟨n, dd⟩, rfl⟩ := finProdFinEquiv.surjective idx
+  rcases eq_or_ne dd d with rfl | h
+  · simp [Prod.ext_iff, ite_and]
+  · simp [Prod.ext_iff, h]
 
 /-- The rendered **patch-kernel gradient**: for each tap `(d,c,kh,kw)`, the
     patch-grid reduce `Σ_p read(c,kh,kw,p)·dy_(p+1,d)` — the "dilate dy /
