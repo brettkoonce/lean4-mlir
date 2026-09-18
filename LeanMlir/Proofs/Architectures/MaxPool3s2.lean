@@ -296,140 +296,43 @@ noncomputable def maxPool3s2LocalReindex {c h w : Nat}
   let ab := maxPool3s2Argmax x co ho wo
   finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho ab.1), win3ColInv wo ab.2)
 
-/-- **Smooth-point local linearisation.** On a metric ball around `flatten x` the flattened
-    pool agrees with the reindex `y ↦ y ∘ σ`. Mirrors `maxPool2_flat_hasFDerivAt`; the one
-    structural change is that the gap function and the domination argument branch on whether the
-    two offsets name the same **position** (the clamped duplicate), not on whether the offsets
-    are equal — `MaxPool3s2Smooth` says nothing about coincident positions because there the
-    values are literally the same number. -/
+/-- **Smooth-point local linearisation.** Near `flatten x` the flattened pool agrees with the
+    reindex `y ↦ y ∘ σ`: every window keeps its argmax, since finitely many strict inequalities
+    persist on a neighbourhood (`Filter.eventually_all`). Mirrors `maxPool2_flat_hasFDerivAt`; the
+    one structural change is that the domination argument branches on whether an offset names the
+    argmax's own **position** (the clamped duplicate), not on whether the offsets are equal —
+    `MaxPool3s2Smooth` says nothing about coincident positions because there the values are
+    literally the same number. The positivity hypotheses are not used. -/
 theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w))
     (h_smooth : MaxPool3s2Smooth x)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    (_hc : 0 < c) (_hh : 0 < h) (_hw : 0 < w) :
     HasFDerivAt
       (fun v : Vec (c * (2 * h) * (2 * w)) =>
         Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)))
       (reindexCLM (maxPool3s2LocalReindex x))
       (Tensor3.flatten x) := by
-  have : Nonempty (Fin c) := ⟨⟨0, hc⟩⟩
-  have : Nonempty (Fin h) := ⟨⟨0, hh⟩⟩
-  have : Nonempty (Fin w) := ⟨⟨0, hw⟩⟩
-  let samePos : Fin h → Fin w → (Fin 3 × Fin 3) → (Fin 3 × Fin 3) → Prop :=
-    fun ho wo ab ab' =>
-      (win3RowInv ho ab.1, win3ColInv wo ab.2) = (win3RowInv ho ab'.1, win3ColInv wo ab'.2)
-  let gap : Fin c × Fin h × Fin w × (Fin 3 × Fin 3) × (Fin 3 × Fin 3) → ℝ :=
-    fun p => if samePos p.2.1 p.2.2.1 p.2.2.2.1 p.2.2.2.2 then 1
-             else |x p.1 (win3RowInv p.2.1 p.2.2.2.1.1) (win3ColInv p.2.2.1 p.2.2.2.1.2)
-                  - x p.1 (win3RowInv p.2.1 p.2.2.2.2.1) (win3ColInv p.2.2.1 p.2.2.2.2.2)|
-  have hgap_pos : ∀ p, 0 < gap p := by
-    intro ⟨co, ho, wo, ab, ab'⟩
-    show 0 < (if samePos ho wo ab ab' then (1 : ℝ) else _)
-    by_cases hab : samePos ho wo ab ab'
-    · rw [ite_eq_left hab]; norm_num
-    · rw [ite_eq_right hab]
-      exact abs_pos.mpr (sub_ne_zero.mpr (h_smooth co ho wo ab ab' hab))
-  let univ_S : Finset (Fin c × Fin h × Fin w × (Fin 3 × Fin 3) × (Fin 3 × Fin 3)) := univ
-  set r_raw := univ_S.inf' univ_nonempty gap with hr_raw_def
-  have hr_raw_pos : 0 < r_raw := by
-    refine (Finset.lt_inf'_iff _).mpr ?_
-    intro p _; exact hgap_pos p
-  set r := r_raw / 4 with hr_def
-  have hr_pos : 0 < r := by show 0 < r_raw / 4; linarith
-  have hgap_le : ∀ co ho wo ab ab', gap (co, ho, wo, ab, ab') ≥ r_raw :=
-    fun co ho wo ab ab' => Finset.inf'_le _ (mem_univ _)
-  have h_local : Set.EqOn
-      (fun v : Vec (c * (2 * h) * (2 * w)) =>
-        Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)))
-      (reindexCLM (maxPool3s2LocalReindex x) : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w))
-      (Metric.ball (Tensor3.flatten x) r) := by
-    intro y hy
-    have hy_norm : ‖y - Tensor3.flatten x‖ < r := by
-      rwa [Metric.mem_ball, dist_eq_norm] at hy
-    have hy_coord : ∀ k, |y k - Tensor3.flatten x k| < r := by
-      intro k
-      have h1 : ‖(y - Tensor3.flatten x) k‖ ≤ ‖y - Tensor3.flatten x‖ :=
-        norm_le_pi_norm (y - Tensor3.flatten x) k
-      rw [Real.norm_eq_abs] at h1
-      have : |y k - Tensor3.flatten x k| ≤ ‖y - Tensor3.flatten x‖ := by
-        show |(y - Tensor3.flatten x) k| ≤ _
-        exact h1
-      linarith
-    funext k_out
-    set r1 := finProdFinEquiv.symm k_out with hr1
-    set wo : Fin w := r1.2 with hwo
-    set r2 := finProdFinEquiv.symm r1.1 with hr2
-    set co : Fin c := r2.1 with hco
-    set ho : Fin h := r2.2 with hho
-    set ab := maxPool3s2Argmax x co ho wo with hab
-    have h_max_y : ∀ a' b' : Fin 3,
-        Tensor3.unflatten y co (win3RowInv ho a') (win3ColInv wo b') ≤
-        Tensor3.unflatten y co (win3RowInv ho ab.1) (win3ColInv wo ab.2) := by
-      intro a' b'
-      by_cases h_eq : samePos ho wo (a', b') ab
-      · -- The two offsets name ONE cell (the clamped duplicate): equal by congruence.
-        have h1 : win3RowInv ho a' = win3RowInv ho ab.1 := congrArg Prod.fst h_eq
-        have h2 : win3ColInv wo b' = win3ColInv wo ab.2 := congrArg Prod.snd h_eq
-        rw [h1, h2]
-      · have h_le_x : x co (win3RowInv ho a') (win3ColInv wo b') ≤
-                      x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) :=
-          maxPool3s2Argmax_max x co ho wo (a', b')
-        have h_ne_x : x co (win3RowInv ho a') (win3ColInv wo b') ≠
-                      x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) :=
-          h_smooth co ho wo (a', b') ab h_eq
-        have h_diff_x : x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) -
-                        x co (win3RowInv ho a') (win3ColInv wo b') ≥ r_raw := by
-          have h_gap := hgap_le co ho wo (a', b') ab
-          have h_gap_expanded : gap (co, ho, wo, (a', b'), ab) =
-              |x co (win3RowInv ho a') (win3ColInv wo b') -
-               x co (win3RowInv ho ab.1) (win3ColInv wo ab.2)| := by
-            show (if samePos ho wo (a', b') ab then (1 : ℝ) else _) = _
-            rw [ite_eq_right h_eq]
-          rw [h_gap_expanded] at h_gap
-          rw [abs_sub_comm] at h_gap
-          have h_pos : 0 ≤ x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) -
-                       x co (win3RowInv ho a') (win3ColInv wo b') := by
-            have := lt_of_le_of_ne h_le_x h_ne_x; linarith
-          rwa [abs_of_nonneg h_pos] at h_gap
-        set k_ab : Fin (c * (2 * h) * (2 * w)) :=
-          finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho ab.1), win3ColInv wo ab.2)
-        set k_ab' : Fin (c * (2 * h) * (2 * w)) :=
-          finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho a'), win3ColInv wo b')
-        have h_unflat_ab : Tensor3.unflatten y co (win3RowInv ho ab.1) (win3ColInv wo ab.2)
-                          = y k_ab := rfl
-        have h_unflat_ab' : Tensor3.unflatten y co (win3RowInv ho a') (win3ColInv wo b')
-                           = y k_ab' := rfl
-        have h_flat_x_ab : Tensor3.flatten x k_ab =
-            x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) := by
-          show x (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab).1).1
-                  (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab).1).2
-                  (finProdFinEquiv.symm k_ab).2 = _
-          simp [k_ab, Equiv.symm_apply_apply]
-        have h_flat_x_ab' : Tensor3.flatten x k_ab' =
-            x co (win3RowInv ho a') (win3ColInv wo b') := by
-          show x (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab').1).1
-                  (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab').1).2
-                  (finProdFinEquiv.symm k_ab').2 = _
-          simp [k_ab', Equiv.symm_apply_apply]
-        rw [h_unflat_ab, h_unflat_ab']
-        have hy_ab := hy_coord k_ab
-        have hy_ab' := hy_coord k_ab'
-        rw [h_flat_x_ab] at hy_ab
-        rw [h_flat_x_ab'] at hy_ab'
-        have h_lhs_ge : y k_ab - y k_ab' ≥
-            (x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) -
-             x co (win3RowInv ho a') (win3ColInv wo b')) - 2 * r := by
-          have h1 := abs_sub_lt_iff.mp hy_ab
-          have h2 := abs_sub_lt_iff.mp hy_ab'
-          linarith
-        have h_2r_lt : 2 * r < r_raw := by show 2 * (r_raw / 4) < r_raw; linarith
-        linarith
-    show maxPool3s2 (Tensor3.unflatten y) co ho wo = y (maxPool3s2LocalReindex x k_out)
-    rw [maxPool3s2_eq_at_max (Tensor3.unflatten y) co ho wo ab.1 ab.2 h_max_y]
-    show Tensor3.unflatten y co (win3RowInv ho ab.1) (win3ColInv wo ab.2) =
-         y (maxPool3s2LocalReindex x k_out)
-    rfl
-  exact (reindexCLM (maxPool3s2LocalReindex x)).hasFDerivAt.congr_of_eventuallyEq
-    (h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds _ hr_pos))
+  refine (reindexCLM (maxPool3s2LocalReindex x)).hasFDerivAt.congr_of_eventuallyEq ?_
+  -- An offset naming the argmax's own cell (the clamped duplicate) is equal, not below.
+  have hmax : ∀ᶠ y in nhds (Tensor3.flatten x), ∀ (co : Fin c) (ho : Fin h) (wo : Fin w)
+      (a' b' : Fin 3), Tensor3.unflatten y co (win3RowInv ho a') (win3ColInv wo b') ≤
+        Tensor3.unflatten y co (win3RowInv ho (maxPool3s2Argmax x co ho wo).1)
+          (win3ColInv wo (maxPool3s2Argmax x co ho wo).2) := by
+    have hcont : ∀ co hi wi, ContinuousAt
+        (fun y : Vec (c * (2 * h) * (2 * w)) => Tensor3.unflatten y co hi wi) (Tensor3.flatten x) :=
+      fun _ _ _ => (continuous_apply _).continuousAt
+    simp only [Filter.eventually_all]
+    intro co ho wo a' b'
+    by_cases hab : (win3RowInv ho a', win3ColInv wo b') =
+        (win3RowInv ho (maxPool3s2Argmax x co ho wo).1, win3ColInv wo (maxPool3s2Argmax x co ho wo).2)
+    · obtain ⟨hr, hs⟩ := Prod.mk.inj hab
+      exact Filter.Eventually.of_forall fun _ => by rw [hr, hs]
+    · refine ((hcont _ _ _).eventually_lt (hcont _ _ _) ?_).mono fun _ => le_of_lt
+      simpa [Tensor3.unflatten_flatten] using lt_of_le_of_ne
+        (maxPool3s2Argmax_max x co ho wo (a', b')) (h_smooth co ho wo (a', b') _ hab)
+  filter_upwards [hmax] with y hy
+  funext k_out
+  exact maxPool3s2_eq_at_max (Tensor3.unflatten y) _ _ _ _ _ (hy _ _ _)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The smooth-point Jacobian and the VJP witness

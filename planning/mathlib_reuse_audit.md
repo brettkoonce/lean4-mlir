@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `998f2c70`, pushed)
+## Status (2026-09-18, main `f4a41380`)
 
-**Landed** — about 3.6k lines out, every theorem name and statement unchanged:
+**Landed** — about 4.4k lines out, every theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -35,16 +35,20 @@ suspected, no drop-in located.
 | `671d0d5f` | §5 LipschitzCertPairSDP (PSD, Gram), SmoothingNetSemantics, SmoothingMC, SmoothingCP, SmoothingPhiBounds |
 | `bbd3e3f0` | FloatSubnormalBridge, MuonGeometry/NewtonSchulz, CrownBound, ResNet34Live{Realistic,PC,2}, the two seal files |
 | `998f2c70` | **§0.1 done for Foundation + Architectures**: `pdiv_clm` / `pdiv_of_affine` / `pdiv_of_linear` in `Tensor.lean`; 14 sites (conv / depthwise input-weight-bias, GAP, patch-embed, CLS, BN affine + centered, dense, dense-W, both matmuls); `pdiv_pi_pad_eval` + `pdiv_const_mul_pi_pad_eval` deleted |
-| *(staged)* | **§0.1 done for Nets** (−400): ViTClose `pdiv_rowDense_W`, `pdiv_patchEmbed_W`, the row-dense bias Jacobian, `pdiv_id_add_const`, `pdiv_maskGather_add_const`, both `pdiv_scalarAffine_*`; `ViTVecLN.pdiv_vecLN_beta`; `pdiv_layerScale`, `pdiv_layerScale_gamma`, `pdiv_layerScaleCh_gamma`, the two scalar-LN Jacobians (ConvNeXt, ConvNeXtClose, ConvNeXtFold); both `pdiv_bnPerChannelFlat_*` (CifarBnClose). `pdiv_patchEmbed_{pos,cls,b}` and `pdiv_vecLN_gamma` already delegate to the two helpers, so they stay |
+| `f4a41380` | **§0.1 done for Nets** (−400): ViTClose `pdiv_rowDense_W`, `pdiv_patchEmbed_W`, the row-dense bias Jacobian, `pdiv_id_add_const`, `pdiv_maskGather_add_const`, both `pdiv_scalarAffine_*`; `ViTVecLN.pdiv_vecLN_beta`; `pdiv_layerScale`, `pdiv_layerScale_gamma`, `pdiv_layerScaleCh_gamma`, the two scalar-LN Jacobians (ConvNeXt, ConvNeXtClose, ConvNeXtFold); both `pdiv_bnPerChannelFlat_*` (CifarBnClose). `pdiv_patchEmbed_{pos,cls,b}` and `pdiv_vecLN_gamma` already delegate to the two helpers, so they stay |
+| *(staged)* | **§0.3 done + §0.2 for Foundation/Architectures** (−830). §0.3: `relu`, `relu6`, `maxPool2`, `maxPool3s2` linearisations on `Filter.eventually_all` / `hasFDerivAt_pi` (the maxpools' `0 < c,h,w` are now unused, kept as `_hc _hh _hw`). §0.2: 31 `Differentiable` proofs → `fun_prop` (Attention ×15, CNN ×5, Depthwise ×2, StridedConv ×2, BatchNorm ×2, MLP, PerChannelBN, BatchMapVJPAt, `Tensor3.{un,}flatten`); new `@[fun_prop] differentiable_dite_zero` (CNN) for the pad-guarded reads; 14 existing atoms tagged `@[fun_prop]` (dense, relu-at-smooth, bnForward, bnIstdBroadcast, layerNorm, conv2d, flatConv, depthwise, depthwiseFlat, globalAvgPoolFlat, decimate{,Odd}Flat, bnPerChannelTensor3, differentiableAt_pad_eval) |
 
 **Deferred on purpose:** `BceLossCot.one_sub_sigmoidScalar` (wants the §0.4 `sigmoidScalar = Real.sigmoid`
 batch — ~200-module rebuild); `DataParallel.dpIterate_lockstep` (the `Semiconj` term is not shorter);
 the `X_inj` family (1 line each).
 
 **Next, in order:**
-1. **§0.3 `Filter.eventually_all`** — `MLP.relu_hasFDerivAt`, `MobileNetV2.relu6_hasFDerivAt`,
-   `CNN.maxPool2_flat_hasFDerivAt`, `MaxPool3s2.maxPool3s2_flat_hasFDerivAt` (~310); bundle with the
-   §0.2 `fun_prop` sweep and `MLP.dense_differentiable` since both rebuild the `MLP` cone anyway.
+1. **§0.2 in Nets + Training** — the atoms above are now tagged, so this is leaf-only. Top-level
+   `Differentiable`/`DifferentiableAt` proofs of ≥5 lines: ResNet 13, ViT 8, ConvNeXt 9,
+   EfficientNet 8 (incl. `batchMap_differentiable`: `unfold StableHLO.batchMap; fun_prop`),
+   Training 9, MobileNet 2 (~770 lines). ⚠ the audit's "63 twins / 652 lines in
+   MobileNet+EfficientNet" overstates it: those are mostly 1–3-line `.comp` chains of named atoms,
+   not hand-built blocks.
 2. **§0.4 sigmoid/elementwise** — `pdiv_elementwise` (gelu/swish/sigmoid/coordFun), `sigmoidScalar :=
    Real.sigmoid`, then `one_sub_sigmoidScalar`.
 3. **Near-clones**, one family per commit, largest first: `SgdDescentCnn` kernel/bias slots (§4),
@@ -77,6 +81,12 @@ the `X_inj` family (1 line each).
   `funext …; exact add_comm _ _`). After the rewrite, destructure a flat index with
   `obtain ⟨⟨r, k⟩, rfl⟩ := finProdFinEquiv.surjective idx` before `simp [Prod.ext_iff]` — otherwise
   simp turns `finProdFinEquiv.symm idx` into `divNat`/`modNat` and case hypotheses stop matching.
+- `fun_prop`: an `@[fun_prop]` tag only reaches downstream files after its home module is rebuilt,
+  so a standalone `lake env lean` of a downstream file fails until then — simulate with
+  `attribute [fun_prop] X` in the scratch file instead. It has no rule for `dite` (hence
+  `differentiable_dite_zero`) nor for `/` with a nonzero side condition (`simp only [div_eq_mul_inv]`
+  first, then `fun_prop (disch := intro z; positivity)`). Hypotheses like `0 < ε` on tagged atoms
+  go through `fun_prop (disch := assumption)`.
 
 ---
 

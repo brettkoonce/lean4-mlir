@@ -141,67 +141,33 @@ noncomputable def conv2d {ic oc h w kH kW : Nat}
            x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
          else 0)
 
+/-- **A pad-guarded read is differentiable.** The guard `P` does not depend on `x`, so
+    `if hP : P then f hP x else 0` is one branch or the constant `0`. Tagged for `fun_prop`, which
+    has no rule for a dependent `if`; every conv / depthwise pad-eval goes through it. -/
+@[fun_prop]
+theorem differentiable_dite_zero {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
+    (P : Prop) [Decidable P] (f : P → E → ℝ) (hf : ∀ hP, Differentiable ℝ (f hP)) :
+    Differentiable ℝ fun x => if hP : P then f hP x else 0 := by
+  by_cases hP : P <;> simp only [hP, ↓reduceDIte] <;> fun_prop
+
 /-- **Conv2d is differentiable everywhere.** Each output coordinate
     `conv2d W b x o hi wi` is the affine map
     `b o + ∑_{c,kh,kw} W o c kh kw · (pad-eval x)`: a constant bias plus a
-    finite ℝ-linear combination of input coordinates (the dependent
-    `if`-pad-eval being either a projection or the constant `0`).
-    `differentiable_pi` reduces to per-coordinate differentiability;
-    `DifferentiableAt.fun_sum` lifts the triple sum, and each pad-eval
-    summand is a projection (pad true) or constant (pad false). -/
+    finite ℝ-linear combination of pad-guarded input reads
+    (`differentiable_dite_zero`). -/
+@[fun_prop]
 theorem conv2d_differentiable {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     Differentiable ℝ (conv2d W b : Tensor3 ic h w → Tensor3 oc h w) := by
-  apply differentiable_pi.mpr; intro o
-  apply differentiable_pi.mpr; intro hi
-  apply differentiable_pi.mpr; intro wi
-  show Differentiable ℝ (fun x : Tensor3 ic h w =>
-    b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-      W o c kh kw *
-        (let pH := (kH - 1) / 2
-         let pW := (kW - 1) / 2
-         let hh := kh.val + hi.val
-         let ww := kw.val + wi.val
-         if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-           x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-         else 0))
-  apply Differentiable.const_add
-  intro x
-  apply DifferentiableAt.fun_sum; intro c _
-  apply DifferentiableAt.fun_sum; intro kh _
-  apply DifferentiableAt.fun_sum; intro kw _
-  apply DifferentiableAt.const_mul
-  set pH := (kH - 1) / 2
-  set pW := (kW - 1) / 2
-  set hh := kh.val + hi.val
-  set ww := kw.val + wi.val
-  by_cases hP : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w
-  · rw [show (fun x : Tensor3 ic h w =>
-          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-            x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
-        (fun x : Tensor3 ic h w => x c ⟨hh - pH, hP.2.1⟩ ⟨ww - pW, hP.2.2.2⟩) from by
-      funext x; rw [dite_eq_left hP]]
-    fun_prop
-  · rw [show (fun x : Tensor3 ic h w =>
-          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-            x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
-        (fun _ : Tensor3 ic h w => (0 : ℝ)) from by funext x; rw [dite_eq_right hP]]
-    exact differentiableAt_const _
+  unfold conv2d; fun_prop
 
-/-- **Differentiability of an `if hpad : P then v(σ hpad) else 0` term.**
-    The dependent-`if` would otherwise stymie `fun_prop`. By proof
-    irrelevance, the chosen branch is a CLM (eval-at-σ if `P`, the
-    constant `0` otherwise) — both differentiable in `v`. -/
+/-- **Differentiability of an `if hpad : P then v(σ hpad) else 0` term** — the pointwise,
+    `Vec`-indexed form of `differentiable_dite_zero`. -/
+@[fun_prop]
 lemma differentiableAt_pad_eval {n : Nat} (P : Prop) [Decidable P]
     (σ : P → Fin n) (v : Vec n) :
     DifferentiableAt ℝ (fun y : Vec n => if h : P then y (σ h) else (0 : ℝ)) v := by
-  by_cases hP : P
-  · rw [show (fun y : Vec n => if h : P then y (σ h) else (0 : ℝ)) =
-            (fun y => y (σ hP)) from by funext y; rw [dite_eq_left hP]]
-    fun_prop
-  · rw [show (fun y : Vec n => if h : P then y (σ h) else (0 : ℝ)) =
-            (fun _ => (0 : ℝ)) from by funext y; rw [dite_eq_right hP]]
-    exact differentiableAt_const _
+  exact differentiable_dite_zero P _ (fun _ => by fun_prop) v
 
 /-- **Closed-form input gradient for conv2d** — direct formula, written as
     a sum over output positions `(co, ho, wo)` with reconstructed kernel
@@ -495,6 +461,7 @@ noncomputable def flatConv {ic oc h w kH kW : Nat}
     differentiable maps `unflatten`, `conv2d`, `flatten`. This is the
     differentiability witness `vjp_comp_at` needs to chain conv into the
     block. -/
+@[fun_prop]
 theorem flatConv_differentiable {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     Differentiable ℝ (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w)) :=
@@ -624,12 +591,7 @@ theorem resblock_body_differentiableAt {ic mid oc h w kH₁ kW₁ kH₂ kW₂ : 
     DifferentiableAt ℝ
       ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
         (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) v := by
-  apply DifferentiableAt.comp
-  · exact (convBn_differentiable W₂ b₂ ε₂ γ₂ β₂ hε₂) _
-  · apply DifferentiableAt.comp
-    · exact relu_differentiableAt_of_smooth (mid * h * w) _ h_smooth₁
-    · exact ((bnForward_differentiable (mid * h * w) ε₁ γ₁ β₁ hε₁).comp
-        (flatConv_differentiable W₁ b₁)) v
+  fun_prop (disch := assumption)
 
 /-- **Full basic residual block VJP (identity skip).**
 
@@ -1188,140 +1150,39 @@ noncomputable def maxPool2LocalReindex {c h w : Nat}
   let ab := maxPool2Argmax x co ho wo
   finProdFinEquiv (finProdFinEquiv (co, winRowInv ho ab.1), winColInv wo ab.2)
 
-/-- **Smooth-point local-linearization for max-pool.** On a metric ball
-    around `flatten x`, the flattened max-pool agrees with the reindex
-    `y ↦ y ∘ σ` where σ routes each output position to its argmax's
-    input position. Promoted via `EventuallyEq`. -/
+/-- **Smooth-point local-linearization for max-pool.** Near `flatten x` the
+    flattened max-pool agrees with the reindex `y ↦ y ∘ σ` where σ routes each
+    output position to its argmax's input position: every window keeps its
+    argmax, since finitely many strict inequalities persist on a neighbourhood
+    (`Filter.eventually_all`). Promoted via `EventuallyEq`. The positivity
+    hypotheses are not used. -/
 theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w))
     (h_smooth : MaxPool2Smooth x)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    (_hc : 0 < c) (_hh : 0 < h) (_hw : 0 < w) :
     HasFDerivAt
       (fun v : Vec (c * (2 * h) * (2 * w)) =>
         Tensor3.flatten (maxPool2 (Tensor3.unflatten v)))
       (reindexCLM (maxPool2LocalReindex x))
       (Tensor3.flatten x) := by
-  have : Nonempty (Fin c) := ⟨⟨0, hc⟩⟩
-  have : Nonempty (Fin h) := ⟨⟨0, hh⟩⟩
-  have : Nonempty (Fin w) := ⟨⟨0, hw⟩⟩
-  -- Per-window gap function: positive everywhere under smoothness.
-  let gap : Fin c × Fin h × Fin w × (Fin 2 × Fin 2) × (Fin 2 × Fin 2) → ℝ :=
-    fun p => if p.2.2.2.1 = p.2.2.2.2 then 1
-             else |x p.1 (winRowInv p.2.1 p.2.2.2.1.1) (winColInv p.2.2.1 p.2.2.2.1.2)
-                  - x p.1 (winRowInv p.2.1 p.2.2.2.2.1) (winColInv p.2.2.1 p.2.2.2.2.2)|
-  have hgap_pos : ∀ p, 0 < gap p := by
-    intro ⟨co, ho, wo, ab, ab'⟩
-    show 0 < (if ab = ab' then (1 : ℝ) else _)
-    by_cases hab : ab = ab'
-    · rw [ite_eq_left hab]; norm_num
-    · rw [ite_eq_right hab]
-      exact abs_pos.mpr (sub_ne_zero.mpr (h_smooth co ho wo ab ab' hab))
-  -- Radius = (inf gap) / 4 — leaves slack 2r < r_raw for the diff argument.
-  let univ_S : Finset (Fin c × Fin h × Fin w × (Fin 2 × Fin 2) × (Fin 2 × Fin 2)) :=
-    Finset.univ
-  set r_raw := univ_S.inf' Finset.univ_nonempty gap with hr_raw_def
-  have hr_raw_pos : 0 < r_raw := by
-    refine (Finset.lt_inf'_iff _).mpr ?_
-    intro p _; exact hgap_pos p
-  set r := r_raw / 4 with hr_def
-  have hr_pos : 0 < r := by show 0 < r_raw / 4; linarith
-  have hgap_le : ∀ co ho wo ab ab',
-      gap (co, ho, wo, ab, ab') ≥ r_raw := fun co ho wo ab ab' =>
-    Finset.inf'_le _ (Finset.mem_univ _)
-  have h_local : Set.EqOn
-      (fun v : Vec (c * (2 * h) * (2 * w)) =>
-        Tensor3.flatten (maxPool2 (Tensor3.unflatten v)))
-      (reindexCLM (maxPool2LocalReindex x) : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w))
-      (Metric.ball (Tensor3.flatten x) r) := by
-    intro y hy
-    have hy_norm : ‖y - Tensor3.flatten x‖ < r := by
-      rwa [Metric.mem_ball, dist_eq_norm] at hy
-    have hy_coord : ∀ k, |y k - Tensor3.flatten x k| < r := by
-      intro k
-      have h1 : ‖(y - Tensor3.flatten x) k‖ ≤ ‖y - Tensor3.flatten x‖ :=
-        norm_le_pi_norm (y - Tensor3.flatten x) k
-      rw [Real.norm_eq_abs] at h1
-      have : |y k - Tensor3.flatten x k| ≤ ‖y - Tensor3.flatten x‖ := by
-        show |(y - Tensor3.flatten x) k| ≤ _
-        exact h1
-      linarith
-    funext k_out
-    set r1 := finProdFinEquiv.symm k_out with hr1
-    set wo : Fin w := r1.2 with hwo
-    set r2 := finProdFinEquiv.symm r1.1 with hr2
-    set co : Fin c := r2.1 with hco
-    set ho : Fin h := r2.2 with hho
-    set ab := maxPool2Argmax x co ho wo with hab
-    have h_max_y : ∀ a' b' : Fin 2,
-        Tensor3.unflatten y co (winRowInv ho a') (winColInv wo b') ≤
-        Tensor3.unflatten y co (winRowInv ho ab.1) (winColInv wo ab.2) := by
-      intro a' b'
-      by_cases h_eq : (a', b') = ab
-      · have ha : a' = ab.1 := congrArg Prod.fst h_eq
-        have hb : b' = ab.2 := congrArg Prod.snd h_eq
-        rw [ha, hb]
-      · have h_le_x : x co (winRowInv ho a') (winColInv wo b') ≤
-                      x co (winRowInv ho ab.1) (winColInv wo ab.2) :=
-          maxPool2Argmax_max x co ho wo (a', b')
-        have h_ne_x : x co (winRowInv ho a') (winColInv wo b') ≠
-                      x co (winRowInv ho ab.1) (winColInv wo ab.2) :=
-          h_smooth co ho wo (a', b') ab h_eq
-        have h_strict_x : x co (winRowInv ho a') (winColInv wo b') <
-                          x co (winRowInv ho ab.1) (winColInv wo ab.2) :=
-          lt_of_le_of_ne h_le_x h_ne_x
-        have h_diff_x : x co (winRowInv ho ab.1) (winColInv wo ab.2) -
-                        x co (winRowInv ho a') (winColInv wo b') ≥ r_raw := by
-          have h_gap := hgap_le co ho wo (a', b') ab
-          have h_gap_expanded : gap (co, ho, wo, (a', b'), ab) =
-              |x co (winRowInv ho a') (winColInv wo b') -
-               x co (winRowInv ho ab.1) (winColInv wo ab.2)| := by
-            show (if (a', b') = ab then (1 : ℝ) else _) = _
-            rw [ite_eq_right h_eq]
-          rw [h_gap_expanded] at h_gap
-          rw [abs_sub_comm] at h_gap
-          have h_pos : 0 ≤ x co (winRowInv ho ab.1) (winColInv wo ab.2) -
-                       x co (winRowInv ho a') (winColInv wo b') := by linarith
-          rwa [abs_of_nonneg h_pos] at h_gap
-        set k_ab : Fin (c * (2 * h) * (2 * w)) :=
-          finProdFinEquiv (finProdFinEquiv (co, winRowInv ho ab.1), winColInv wo ab.2)
-        set k_ab' : Fin (c * (2 * h) * (2 * w)) :=
-          finProdFinEquiv (finProdFinEquiv (co, winRowInv ho a'), winColInv wo b')
-        have h_unflat_ab : Tensor3.unflatten y co (winRowInv ho ab.1) (winColInv wo ab.2)
-                          = y k_ab := rfl
-        have h_unflat_ab' : Tensor3.unflatten y co (winRowInv ho a') (winColInv wo b')
-                           = y k_ab' := rfl
-        have h_flat_x_ab : Tensor3.flatten x k_ab =
-            x co (winRowInv ho ab.1) (winColInv wo ab.2) := by
-          show x (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab).1).1
-                  (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab).1).2
-                  (finProdFinEquiv.symm k_ab).2 = _
-          simp [k_ab, Equiv.symm_apply_apply]
-        have h_flat_x_ab' : Tensor3.flatten x k_ab' =
-            x co (winRowInv ho a') (winColInv wo b') := by
-          show x (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab').1).1
-                  (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab').1).2
-                  (finProdFinEquiv.symm k_ab').2 = _
-          simp [k_ab', Equiv.symm_apply_apply]
-        rw [h_unflat_ab, h_unflat_ab']
-        have hy_ab := hy_coord k_ab
-        have hy_ab' := hy_coord k_ab'
-        rw [h_flat_x_ab] at hy_ab
-        rw [h_flat_x_ab'] at hy_ab'
-        have h_lhs_ge : y k_ab - y k_ab' ≥
-            (x co (winRowInv ho ab.1) (winColInv wo ab.2) -
-             x co (winRowInv ho a') (winColInv wo b')) - 2 * r := by
-          have h1 := abs_sub_lt_iff.mp hy_ab
-          have h2 := abs_sub_lt_iff.mp hy_ab'
-          linarith
-        have h_2r_lt : 2 * r < r_raw := by show 2 * (r_raw / 4) < r_raw; linarith
-        linarith
-    show maxPool2 (Tensor3.unflatten y) co ho wo = y (maxPool2LocalReindex x k_out)
-    rw [maxPool2_eq_at_max (Tensor3.unflatten y) co ho wo ab.1 ab.2 h_max_y]
-    show Tensor3.unflatten y co (winRowInv ho ab.1) (winColInv wo ab.2) =
-         y (maxPool2LocalReindex x k_out)
-    rfl
-  exact (reindexCLM (maxPool2LocalReindex x)).hasFDerivAt.congr_of_eventuallyEq
-    (h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds _ hr_pos))
+  refine (reindexCLM (maxPool2LocalReindex x)).hasFDerivAt.congr_of_eventuallyEq ?_
+  have hmax : ∀ᶠ y in nhds (Tensor3.flatten x), ∀ (co : Fin c) (ho : Fin h) (wo : Fin w)
+      (a' b' : Fin 2), Tensor3.unflatten y co (winRowInv ho a') (winColInv wo b') ≤
+        Tensor3.unflatten y co (winRowInv ho (maxPool2Argmax x co ho wo).1)
+          (winColInv wo (maxPool2Argmax x co ho wo).2) := by
+    have hcont : ∀ co hi wi, ContinuousAt
+        (fun y : Vec (c * (2 * h) * (2 * w)) => Tensor3.unflatten y co hi wi) (Tensor3.flatten x) :=
+      fun _ _ _ => (continuous_apply _).continuousAt
+    simp only [Filter.eventually_all]
+    intro co ho wo a' b'
+    by_cases hab : (a', b') = maxPool2Argmax x co ho wo
+    · exact Filter.Eventually.of_forall fun _ => by rw [← hab]
+    · refine ((hcont _ _ _).eventually_lt (hcont _ _ _) ?_).mono fun _ => le_of_lt
+      simpa [Tensor3.unflatten_flatten] using lt_of_le_of_ne (maxPool2Argmax_max x co ho wo (a', b'))
+        (h_smooth co ho wo _ _ hab)
+  filter_upwards [hmax] with y hy
+  funext k_out
+  exact maxPool2_eq_at_max (Tensor3.unflatten y) _ _ _ _ _ (hy _ _ _)
 
 /-- **MaxPool2 smooth-point Jacobian.** At a smooth point, `pdiv3` of
     `maxPool2` is a sparse 0/1 indicator: 1 exactly when the output
@@ -1652,6 +1513,7 @@ noncomputable def globalAvgPool {c h w : Nat} (x : Tensor3 c h w) : Vec c :=
 noncomputable def globalAvgPoolFlat (c h w : Nat) : Vec (c * h * w) → Vec c :=
   fun v => globalAvgPool (Tensor3.unflatten v : Tensor3 c h w)
 
+@[fun_prop]
 theorem globalAvgPoolFlat_differentiable (c h w : Nat) :
     Differentiable ℝ (globalAvgPoolFlat c h w) := by
   unfold globalAvgPoolFlat globalAvgPool Tensor3.unflatten
@@ -1830,16 +1692,8 @@ theorem resblock_differentiableAt {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
         residual
           ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
             (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))) v := by
-  set F :=
-    ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
-      (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) with hF
-  have hF_diff : DifferentiableAt ℝ F v :=
-    resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
-  have hres_diff : DifferentiableAt ℝ (residual F) v := by
-    show DifferentiableAt ℝ (biPath F (fun x => x)) v
-    exact DifferentiableAt.add hF_diff differentiable_id.differentiableAt
-  have h_smooth_res : ∀ k, residual F v k ≠ 0 := h_smooth_out
-  exact (relu_differentiableAt_of_smooth (c * h * w) _ h_smooth_res).comp v hres_diff
+  unfold residual
+  fun_prop (disch := assumption)
 
 -- resblockProj output diffAt: relu ∘ residualProj proj F
 theorem resblockProj_differentiableAt
@@ -1862,19 +1716,8 @@ theorem resblockProj_differentiableAt
           (bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp)
           ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
             (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))) v := by
-  set proj := (bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp) with hproj
-  set F :=
-    ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
-      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) with hF
-  have hproj_diff : DifferentiableAt ℝ proj v :=
-    (convBn_differentiable Wp bp εp γp βp hεp) v
-  have hF_diff : DifferentiableAt ℝ F v :=
-    resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
-  have hres_diff : DifferentiableAt ℝ (residualProj proj F) v := by
-    show DifferentiableAt ℝ (biPath proj F) v
-    exact DifferentiableAt.add hproj_diff hF_diff
-  have h_smooth_res : ∀ k, residualProj proj F v k ≠ 0 := h_smooth_out
-  exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth_res).comp v hres_diff
+  unfold residualProj
+  fun_prop (disch := assumption)
 
 -- convBnRelu diffAt
 theorem convBnRelu_differentiableAt {ic oc h w kH kW : Nat}

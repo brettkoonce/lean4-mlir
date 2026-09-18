@@ -75,35 +75,10 @@ theorem mnistLinear_has_vjp_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     `x`, hence smooth; this is the underlying `Differentiable ℝ`
     statement that `vjp_comp_at` needs when composing through dense
     layers. -/
+@[fun_prop]
 theorem dense_differentiable {m n : Nat} (W : Mat m n) (b : Vec n) :
     Differentiable ℝ (dense W b) := by
-  intro x
-  unfold dense
-  rw [show (fun x' : Vec m => fun j' : Fin n =>
-              (∑ i' : Fin m, x' i' * W i' j') + b j') =
-        (fun x' j' =>
-          (fun y : Vec m => fun j'' : Fin n => ∑ i' : Fin m, y i' * W i' j'') x' j' +
-          (fun _ : Vec m => b) x' j') from rfl]
-  have h_summand_diff : ∀ i' ∈ (Finset.univ : Finset (Fin m)),
-      DifferentiableAt ℝ
-        (fun (x' : Vec m) (j'' : Fin n) => x' i' * W i' j'') x := by
-    intro i' _
-    have h_y : DifferentiableAt ℝ (fun (y : Vec m) (_ : Fin n) => y i') x :=
-      (reindexCLM (fun _ : Fin n => i')).differentiableAt
-    have h_W : DifferentiableAt ℝ (fun (_ : Vec m) (j'' : Fin n) => W i' j'') x :=
-      differentiableAt_const _
-    exact h_y.mul h_W
-  have h_sum_diff : DifferentiableAt ℝ
-      (fun (y : Vec m) (j'' : Fin n) => ∑ i' : Fin m, y i' * W i' j'') x := by
-    have : (fun (y : Vec m) (j'' : Fin n) => ∑ i' : Fin m, y i' * W i' j'') =
-           (fun y : Vec m => ∑ i' : Fin m,
-             fun j'' : Fin n => y i' * W i' j'') := by
-      funext y j''; rw [Finset.sum_apply]
-    rw [this]
-    exact DifferentiableAt.fun_sum (fun i' _ => h_summand_diff i' (Finset.mem_univ i'))
-  have h_const_diff : DifferentiableAt ℝ (fun _ : Vec m => b) x :=
-    differentiableAt_const _
-  exact h_sum_diff.add h_const_diff
+  unfold dense; fun_prop
 
 /-- **Dense weight gradient is the outer product** — theorem (Phase 7).
 
@@ -192,56 +167,26 @@ noncomputable def reluLinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n :
   · rw [ite_eq_left hxk, ite_eq_left hxk]; rfl
   · rw [ite_eq_right hxk, ite_eq_right hxk]; rfl
 
-/-- **ReLU is differentiable at smooth points.** Within `Metric.ball x r`
-    for `r := min |x k|`, every coordinate keeps its sign — so `relu n`
-    agrees with `reluLinearPart n x` on a neighborhood. `EventuallyEq`
-    promotes the CLM's `HasFDerivAt` to ReLU's. -/
+/-- **ReLU is differentiable at smooth points.** Near `x` every coordinate keeps its sign
+    (finitely many strict inequalities persist, `Filter.eventually_all`), so `relu n` agrees
+    with `reluLinearPart n x` on a neighbourhood. `EventuallyEq` promotes the CLM's
+    `HasFDerivAt` to ReLU's. -/
 theorem relu_hasFDerivAt (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) :
     HasFDerivAt (relu n) (reluLinearPart n x) x := by
-  rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
-  · subst hn0
-    -- Vec 0 is a singleton; relu and reluLinearPart agree pointwise.
-    have h_eq : (relu 0 : Vec 0 → Vec 0) = (⇑(reluLinearPart 0 x) : Vec 0 → Vec 0) := by
-      funext _ k; exact k.elim0
-    rw [h_eq]; exact (reluLinearPart 0 x).hasFDerivAt
-  have : Nonempty (Fin n) := ⟨⟨0, hn_pos⟩⟩
-  let r : ℝ := Finset.univ.inf' Finset.univ_nonempty (fun k : Fin n => |x k|)
-  have hr_pos : 0 < r := by
-    refine (Finset.lt_inf'_iff _).mpr ?_
-    intro k _; exact abs_pos.mpr (h_smooth k)
-  have hr_le : ∀ k : Fin n, r ≤ |x k| := fun k =>
-    Finset.inf'_le _ (Finset.mem_univ k)
-  have h_local : Set.EqOn (relu n) (⇑(reluLinearPart n x)) (Metric.ball x r) := by
-    intro y hy
-    have hy_norm : ‖y - x‖ < r := by
-      rw [Metric.mem_ball, dist_eq_norm] at hy; exact hy
-    funext k
-    have h_close : |y k - x k| < |x k| := by
-      have h1 : |y k - x k| ≤ ‖y - x‖ := by
-        have h2 : ‖(y - x) k‖ ≤ ‖y - x‖ := norm_le_pi_norm (y - x) k
-        rw [Real.norm_eq_abs] at h2
-        exact h2
-      linarith [hr_le k]
-    show (relu n y) k = (reluLinearPart n x) y k
-    rw [reluLinearPart_apply]
-    show (if y k > 0 then y k else 0) = if x k > 0 then y k else 0
-    rcases lt_or_gt_of_ne (h_smooth k) with hxk_neg | hxk_pos
-    · have hyk_neg : y k < 0 := by
-        have h_abs : |y k - x k| < -x k := by rwa [abs_of_neg hxk_neg] at h_close
-        have h_lt : y k - x k < -x k := (abs_lt.mp h_abs).2
-        linarith
-      rw [ite_eq_right (not_lt.mpr hyk_neg.le), ite_eq_right (not_lt.mpr hxk_neg.le)]
-    · have hyk_pos : 0 < y k := by
-        have h_abs : |y k - x k| < x k := by rwa [abs_of_pos hxk_pos] at h_close
-        have h_lt : -(x k) < y k - x k := (abs_lt.mp h_abs).1
-        linarith
-      rw [ite_eq_left hyk_pos, ite_eq_left hxk_pos]
-  have h_evt : (relu n) =ᶠ[nhds x] (⇑(reluLinearPart n x) : Vec n → Vec n) :=
-    h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds x hr_pos)
-  exact (reluLinearPart n x).hasFDerivAt.congr_of_eventuallyEq h_evt
+  refine (reluLinearPart n x).hasFDerivAt.congr_of_eventuallyEq ?_
+  have hsign : ∀ k, ∀ᶠ y in nhds x, (y k > 0 ↔ x k > 0) := fun k => by
+    have ht := (continuous_apply k).continuousAt.tendsto (x := x)
+    rcases (h_smooth k).lt_or_gt with h | h
+    · filter_upwards [ht.eventually (eventually_lt_nhds h)] with y hy
+      exact iff_of_false hy.not_gt h.not_gt
+    · filter_upwards [ht.eventually (eventually_gt_nhds h)] with y hy
+      exact iff_of_true hy h
+  filter_upwards [Filter.eventually_all.2 hsign] with y hy
+  funext k; simp only [relu, reluLinearPart_apply, hy k]
 
 /-- **ReLU is `DifferentiableAt` at smooth points.** Corollary of
     `relu_hasFDerivAt`; lets `vjp_comp_at` chain through ReLU. -/
+@[fun_prop]
 theorem relu_differentiableAt_of_smooth (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) : DifferentiableAt ℝ (relu n) x :=
   (relu_hasFDerivAt n x h_smooth).differentiableAt

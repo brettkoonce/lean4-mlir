@@ -144,32 +144,7 @@ theorem rowwisePerRow_flat_differentiable {m n p : Nat} (g : Fin m → (Vec n �
     (h_g_diff : ∀ r, Differentiable ℝ (g r)) :
     Differentiable ℝ (fun v : Vec (m * n) =>
       Mat.flatten ((fun A : Mat m n => fun r => g r (A r)) (Mat.unflatten v))) := by
-  set F : Vec (m * n) → Vec (m * p) :=
-    fun v => Mat.flatten ((fun A : Mat m n => fun r => g r (A r)) (Mat.unflatten v)) with hF
-  set rowProj : Fin m → (Vec (m * n) →L[ℝ] Vec n) := fun k' =>
-    reindexCLM (fun j' : Fin n => finProdFinEquiv (k', j'))
-  have h_coord : ∀ (k' : Fin m) (l' : Fin p),
-      (fun v : Vec (m * n) => F v (finProdFinEquiv (k', l'))) =
-      (fun w : Vec n => g k' w l') ∘ (rowProj k') := by
-    intro k' l'
-    funext v
-    show Mat.flatten ((fun A : Mat m n => fun r => g r (A r)) (Mat.unflatten v))
-        (finProdFinEquiv (k', l')) = g k' ((rowProj k') v) l'
-    unfold Mat.flatten
-    simp only [Equiv.symm_apply_apply]
-    show g k' (Mat.unflatten v k') l' = g k' ((rowProj k') v) l'
-    rfl
-  have h_g_l : ∀ (r : Fin m) (l' : Fin p) (w : Vec n),
-      DifferentiableAt ℝ (fun w => g r w l') w :=
-    fun r l' w => differentiableAt_pi.mp (h_g_diff r w) l'
-  intro v
-  rw [(differentiableAt_pi : DifferentiableAt ℝ F v ↔ _)]
-  intro idx
-  have h_idx' : idx = finProdFinEquiv
-      ((finProdFinEquiv.symm idx).1, (finProdFinEquiv.symm idx).2) := by
-    conv_lhs => rw [← Equiv.apply_symm_apply finProdFinEquiv idx]
-  rw [h_idx', h_coord _ _]
-  exact (h_g_l _ _ _).comp v (rowProj _).differentiableAt
+  unfold Mat.flatten Mat.unflatten; fun_prop
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-channel BatchNorm
@@ -435,6 +410,7 @@ noncomputable def bnPerChannelTensor3 (oc h w : Nat) (ε : ℝ) (γ β : Vec oc)
     Vec (oc * h * w) → Vec (oc * h * w) :=
   reassocBack oc h w ∘ (bnPerChannelFlat oc (h * w) ε γ β) ∘ reassocFwd oc h w
 
+@[fun_prop]
 theorem bnPerChannelTensor3_differentiable (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     Differentiable ℝ (bnPerChannelTensor3 oc h w ε γ β) := by
   unfold bnPerChannelTensor3

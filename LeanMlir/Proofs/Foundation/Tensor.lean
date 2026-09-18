@@ -1414,33 +1414,19 @@ theorem flatten_unflatten {c h w : Nat} (v : Vec (c * h * w)) :
 
 /-- **`Tensor3.flatten` is differentiable.** It is a coordinate
     reindexing: each output coordinate `flatten x k` is the single input
-    coordinate `x (decode k)`, hence a projection. `differentiable_pi`
-    reduces to per-coordinate differentiability, which `fun_prop`
-    discharges via the eval/projection rule. -/
+    coordinate `x (decode k)`, hence a projection. -/
 @[fun_prop]
 theorem flatten_differentiable {c h w : Nat} :
     Differentiable ℝ (Tensor3.flatten : Tensor3 c h w → Vec (c * h * w)) := by
-  rw [differentiable_pi]; intro k
-  show Differentiable ℝ (fun x : Tensor3 c h w =>
-    let ch_w := finProdFinEquiv.symm k
-    let c_h := finProdFinEquiv.symm ch_w.1
-    x c_h.1 c_h.2 ch_w.2)
-  fun_prop
+  unfold flatten; fun_prop
 
 /-- **`Tensor3.unflatten` is differentiable.** The inverse reindexing:
     each output coordinate `unflatten v ci hi wi` is the single input
-    coordinate `v (encode (ci,hi,wi))`. Three nested `differentiable_pi`
-    peel the `Fin c → Fin h → Fin w → ℝ` pi structure; `fun_prop`
-    discharges the innermost projection. -/
+    coordinate `v (encode (ci,hi,wi))`, hence a projection. -/
 @[fun_prop]
 theorem unflatten_differentiable {c h w : Nat} :
     Differentiable ℝ (Tensor3.unflatten : Vec (c * h * w) → Tensor3 c h w) := by
-  rw [show (Tensor3.unflatten : Vec (c * h * w) → Tensor3 c h w) =
-        fun v ci hi wi => v (finProdFinEquiv (finProdFinEquiv (ci, hi), wi)) from rfl]
-  apply differentiable_pi.mpr; intro ci
-  apply differentiable_pi.mpr; intro hi
-  apply differentiable_pi.mpr; intro wi
-  fun_prop
+  unfold unflatten; fun_prop
 
 end Tensor3
 

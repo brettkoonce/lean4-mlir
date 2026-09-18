@@ -74,110 +74,27 @@ noncomputable def relu6LinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n 
 theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) :
     HasFDerivAt (relu6 n) (relu6LinearPart n x) x := by
-  rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
-  · subst hn0
-    have h_eq : (relu6 0 : Vec 0 → Vec 0) = (⇑(relu6LinearPart 0 x) : Vec 0 → Vec 0) := by
-      funext _ k; exact k.elim0
-    rw [h_eq]; exact (relu6LinearPart 0 x).hasFDerivAt
-  have : Nonempty (Fin n) := ⟨⟨0, hn_pos⟩⟩
-  -- `g` is the locally-matching AFFINE function: identity-proj on the active
-  -- region, constant 0 below and constant 6 above. Its fderiv is exactly
-  -- `relu6LinearPart` (constant branches contribute 0). We show
-  -- `HasFDerivAt g (relu6LinearPart) x` and `relu6 =ᶠ g` near x.
-  let g : Vec n → Vec n := fun y k =>
-    if 0 < x k ∧ x k < 6 then y k else (if x k ≤ 0 then 0 else 6)
-  -- radius: distance to nearest kink (0 or 6) over all coordinates
-  let r : ℝ := Finset.univ.inf' Finset.univ_nonempty
-    (fun k : Fin n => min |x k| |x k - 6|)
-  have hr_pos : 0 < r := by
-    refine (Finset.lt_inf'_iff _).mpr ?_
-    intro k _
-    apply lt_min
-    · exact abs_pos.mpr (h_smooth k).1
-    · exact abs_pos.mpr (sub_ne_zero.mpr (h_smooth k).2)
-  have hr_le : ∀ k : Fin n, r ≤ min |x k| |x k - 6| := fun k =>
-    Finset.inf'_le _ (Finset.mem_univ k)
-  -- Step A: g has fderiv relu6LinearPart at x.
-  have hg_fderiv : HasFDerivAt g (relu6LinearPart n x) x := by
-    unfold relu6LinearPart
-    rw [hasFDerivAt_pi]
-    intro k
-    show HasFDerivAt (fun y : Vec n => g y k)
-      ((ContinuousLinearMap.proj k).comp (ContinuousLinearMap.pi fun k' =>
-        if 0 < x k' ∧ x k' < 6 then ContinuousLinearMap.proj k'
-                    else (0 : Vec n →L[ℝ] ℝ))) x
-    -- The component derivative `(proj k).comp(pi ...)` equals the branch CLM
-    -- `if 0<x k<6 then proj k else 0`. Provide that simpler CLM and convert.
-    have hcomp : (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).comp
-          (ContinuousLinearMap.pi fun k' =>
-            if 0 < x k' ∧ x k' < 6 then ContinuousLinearMap.proj k'
-                        else (0 : Vec n →L[ℝ] ℝ)) =
-        (if 0 < x k ∧ x k < 6 then (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ)
-          else 0) := by
-      apply ContinuousLinearMap.ext; intro y
-      show (ContinuousLinearMap.pi fun k' =>
-            if 0 < x k' ∧ x k' < 6 then ContinuousLinearMap.proj k'
-                        else (0 : Vec n →L[ℝ] ℝ)) y k =
-        (if 0 < x k ∧ x k < 6 then (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ) else 0) y
-      rw [ContinuousLinearMap.pi_apply]
-    rw [hcomp]
-    by_cases hk : 0 < x k ∧ x k < 6
-    · have h1 : (fun y : Vec n => g y k) = fun y : Vec n => y k := by
-        funext y; show (if 0 < x k ∧ x k < 6 then y k else _) = y k; rw [ite_eq_left hk]
-      rw [h1, ite_eq_left hk]
-      exact (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).hasFDerivAt
-    · have h1 : (fun y : Vec n => g y k) = fun _ : Vec n => (if x k ≤ 0 then (0:ℝ) else 6) := by
-        funext y; show (if 0 < x k ∧ x k < 6 then y k else _) = _; rw [ite_eq_right hk]
-      rw [h1, ite_eq_right hk]
-      exact hasFDerivAt_const _ _
-  -- Step B: relu6 =ᶠ g near x.
-  have h_local : Set.EqOn (relu6 n) g (Metric.ball x r) := by
-    intro y hy
-    have hy_norm : ‖y - x‖ < r := by
-      rw [Metric.mem_ball, dist_eq_norm] at hy; exact hy
-    funext k
-    have h_close : |y k - x k| < min |x k| |x k - 6| := by
-      have h1 : |y k - x k| ≤ ‖y - x‖ := by
-        have h2 : ‖(y - x) k‖ ≤ ‖y - x‖ := norm_le_pi_norm (y - x) k
-        rw [Real.norm_eq_abs] at h2
-        exact h2
-      linarith [hr_le k]
-    have h_close0 : |y k - x k| < |x k| := lt_of_lt_of_le h_close (min_le_left _ _)
-    have h_close6 : |y k - x k| < |x k - 6| := lt_of_lt_of_le h_close (min_le_right _ _)
-    show (relu6 n y) k = g y k
-    show min (max (y k) 0) 6 = if 0 < x k ∧ x k < 6 then y k else (if x k ≤ 0 then 0 else 6)
-    -- Three cases on x k: < 0, in (0,6), > 6.
-    rcases lt_trichotomy (x k) 0 with hxneg | hx0 | hxpos
-    · -- x k < 0: y k < 0 too; result 0; condition false
-      have hyk_neg : y k < 0 := by
-        have h_abs : |y k - x k| < -x k := by rwa [abs_of_neg hxneg] at h_close0
-        have := (abs_lt.mp h_abs).2; linarith
-      rw [ite_eq_right (by rintro ⟨h, _⟩; linarith), ite_eq_left (le_of_lt hxneg)]
-      rw [max_eq_right (le_of_lt hyk_neg), min_eq_left (by linarith)]
-    · exact absurd hx0 (h_smooth k).1
-    · -- x k > 0. Subcase on x k vs 6.
-      rcases lt_trichotomy (x k) 6 with hx6 | hx6 | hx6
-      · -- 0 < x k < 6: y k in (0,6); result y k; condition true
-        have hyk_pos : 0 < y k := by
-          have h_abs : |y k - x k| < x k := by rwa [abs_of_pos hxpos] at h_close0
-          have := (abs_lt.mp h_abs).1; linarith
-        have hyk_lt6 : y k < 6 := by
-          have h_abs : |y k - x k| < |x k - 6| := h_close6
-          rw [abs_of_neg (by linarith : x k - 6 < 0)] at h_abs
-          have := (abs_lt.mp h_abs).2; linarith
-        rw [ite_eq_left ⟨hxpos, hx6⟩]
-        rw [max_eq_left (le_of_lt hyk_pos), min_eq_left (le_of_lt hyk_lt6)]
-      · exact absurd hx6 (h_smooth k).2
-      · -- x k > 6: y k > 6; result 6; condition false
-        have hyk_gt6 : 6 < y k := by
-          have h_abs : |y k - x k| < |x k - 6| := h_close6
-          rw [abs_of_pos (by linarith : 0 < x k - 6)] at h_abs
-          have := (abs_lt.mp h_abs).1; linarith
-        rw [ite_eq_right (by rintro ⟨_, h⟩; linarith), ite_eq_right (by linarith)]
-        rw [max_eq_left (by linarith : (0:ℝ) ≤ y k), min_eq_right (le_of_lt hyk_gt6)]
-  have h_evt : (relu6 n) =ᶠ[nhds x] g :=
-    h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds x hr_pos)
-  exact hg_fderiv.congr_of_eventuallyEq h_evt
+  unfold relu6LinearPart
+  rw [hasFDerivAt_pi]
+  intro k
+  -- Each coordinate is locally constant 0, the identity, or constant 6: `x k` sits strictly
+  -- inside one of the three pieces and `y k` stays there for `y` near `x`.
+  have ht := (continuous_apply k).continuousAt.tendsto (x := x)
+  rcases (h_smooth k).1.lt_or_gt with h0 | h0
+  · rw [ite_eq_right fun h => h0.not_gt h.1]
+    refine (hasFDerivAt_const 0 x).congr_of_eventuallyEq ?_
+    filter_upwards [ht.eventually (eventually_lt_nhds h0)] with y hy
+    simp [relu6, hy.le]
+  rcases (h_smooth k).2.lt_or_gt with h6 | h6
+  · rw [ite_eq_left ⟨h0, h6⟩]
+    refine (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).hasFDerivAt.congr_of_eventuallyEq ?_
+    filter_upwards [ht.eventually (eventually_gt_nhds h0), ht.eventually (eventually_lt_nhds h6)]
+      with y hy0 hy6
+    simp [relu6, hy0.le, hy6.le]
+  · rw [ite_eq_right fun h => h6.not_gt h.2]
+    refine (hasFDerivAt_const 6 x).congr_of_eventuallyEq ?_
+    filter_upwards [ht.eventually (eventually_gt_nhds h6)] with y hy
+    simp [relu6, hy.le, ((show (0 : ℝ) < 6 by norm_num).trans hy).le]
 
 theorem relu6_differentiableAt_of_smooth (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : DifferentiableAt ℝ (relu6 n) x :=

@@ -380,47 +380,13 @@ noncomputable abbrev depthwiseConv2d_input_grad {c h w kH kW : Nat}
 /-- **`depthwiseConv2d` is differentiable everywhere.** Mirror of
     `conv2d_differentiable`: `depthwiseConv2d W b x ch hi wi` is the affine
     map `b ch + ∑_{kh,kw} W ch kh kw · (pad-eval x)` — a constant bias plus a
-    finite ℝ-linear combination of input coordinates (the dependent `if`-pad-
-    eval being a projection or the constant `0`). `differentiable_pi` reduces
-    to per-coordinate differentiability; `DifferentiableAt.fun_sum` lifts the
-    double sum (no `Σ c` — depthwise reads only its own channel). -/
+    finite ℝ-linear combination of pad-guarded input reads
+    (`differentiable_dite_zero`; no `Σ c` — depthwise reads only its own channel). -/
+@[fun_prop]
 theorem depthwise_differentiable {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) :
     Differentiable ℝ (depthwiseConv2d W b : Tensor3 c h w → Tensor3 c h w) := by
-  apply differentiable_pi.mpr; intro ch
-  apply differentiable_pi.mpr; intro hi
-  apply differentiable_pi.mpr; intro wi
-  show Differentiable ℝ (fun x : Tensor3 c h w =>
-    b ch + ∑ kh : Fin kH, ∑ kw : Fin kW,
-      W ch kh kw *
-        (let pH := (kH - 1) / 2
-         let pW := (kW - 1) / 2
-         let hh := kh.val + hi.val
-         let ww := kw.val + wi.val
-         if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-           x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-         else 0))
-  apply Differentiable.const_add
-  intro x
-  apply DifferentiableAt.fun_sum; intro kh _
-  apply DifferentiableAt.fun_sum; intro kw _
-  apply DifferentiableAt.const_mul
-  set pH := (kH - 1) / 2
-  set pW := (kW - 1) / 2
-  set hh := kh.val + hi.val
-  set ww := kw.val + wi.val
-  by_cases hP : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w
-  · rw [show (fun x : Tensor3 c h w =>
-          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-            x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
-        (fun x : Tensor3 c h w => x ch ⟨hh - pH, hP.2.1⟩ ⟨ww - pW, hP.2.2.2⟩) from by
-      funext x; rw [dite_eq_left hP]]
-    fun_prop
-  · rw [show (fun x : Tensor3 c h w =>
-          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-            x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
-        (fun _ : Tensor3 c h w => (0 : ℝ)) from by funext x; rw [dite_eq_right hP]]
-    exact differentiableAt_const _
+  unfold depthwiseConv2d; fun_prop
 
 /-- **Flat depthwise conv** — `depthwiseConv2d` bridged into flattened
     `Vec → Vec` space: `flatten ∘ depthwiseConv2d W b ∘ unflatten`. Channels
@@ -435,6 +401,7 @@ noncomputable def depthwiseFlat {c h w kH kW : Nat}
 /-- **`depthwiseFlat` is differentiable everywhere.** Composition of the
     three differentiable maps `unflatten`, `depthwiseConv2d`, `flatten`.
     Mirror of `flatConv_differentiable`. -/
+@[fun_prop]
 theorem depthwiseFlat_differentiable {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) :
     Differentiable ℝ (depthwiseFlat W b : Vec (c * h * w) → Vec (c * h * w)) :=
@@ -469,11 +436,7 @@ theorem depthwiseStride2Flat_differentiable {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) :
     Differentiable ℝ (depthwiseStride2Flat W b
       : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := by
-  unfold depthwiseStride2Flat
-  have hf : Differentiable ℝ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
-    depthwiseFlat_differentiable W b
-  have hg : Differentiable ℝ (decimateFlat c h w) := decimateFlat_differentiable c h w
-  exact hg.comp hf
+  unfold depthwiseStride2Flat; fun_prop
 
 /-- **Stride-2 depthwise input-VJP** — by the chain rule (`vjp_comp`) on
     `decimateFlat ∘ depthwiseFlat`, reusing the proven stride-1 depthwise input-VJP

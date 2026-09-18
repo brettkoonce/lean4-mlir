@@ -333,33 +333,19 @@ theorem pdiv_bnCentered (n : Nat) (x : Vec n) (i j : Fin n) :
     everywhere positive, so `Real.sqrt` is differentiable
     (`Differentiable.sqrt` with non-zero hypothesis), and its
     reciprocal is differentiable too. -/
+@[fun_prop]
 theorem bnIstdBroadcast_diff (n : Nat) (ε : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (bnIstdBroadcast n ε) := by
+  have hpos : ∀ x : Vec n, 0 < bnVar n x + ε := fun x => by
+    have : 0 ≤ bnVar n x :=
+      div_nonneg (Finset.sum_nonneg fun _ _ => mul_self_nonneg _) (Nat.cast_nonneg _)
+    linarith
+  have hsqrt : Differentiable ℝ fun x : Vec n => Real.sqrt (bnVar n x + ε) :=
+    (by unfold bnVar bnMean; fun_prop : Differentiable ℝ fun x : Vec n => bnVar n x + ε).sqrt
+      fun x => (hpos x).ne'
   unfold bnIstdBroadcast bnIstd
-  rw [differentiable_pi]
-  intro _
-  -- Goal: Differentiable ℝ (fun x => 1 / Real.sqrt (bnVar n x + ε))
-  have h_var : Differentiable ℝ (fun x : Vec n => bnVar n x + ε) := by
-    unfold bnVar bnMean; fun_prop
-  have h_var_nonneg : ∀ x : Vec n, 0 ≤ bnVar n x := by
-    intro x
-    unfold bnVar
-    apply div_nonneg
-    · exact Finset.sum_nonneg (fun _ _ => mul_self_nonneg _)
-    · exact Nat.cast_nonneg _
-  have h_arg_pos : ∀ x : Vec n, 0 < bnVar n x + ε := fun x => by
-    have := h_var_nonneg x; linarith
-  have h_arg_ne : ∀ x : Vec n, bnVar n x + ε ≠ 0 := fun x => (h_arg_pos x).ne'
-  have h_sqrt : Differentiable ℝ (fun x : Vec n => Real.sqrt (bnVar n x + ε)) :=
-    h_var.sqrt h_arg_ne
-  have h_sqrt_ne : ∀ x : Vec n, Real.sqrt (bnVar n x + ε) ≠ 0 := fun x =>
-    (Real.sqrt_pos.mpr (h_arg_pos x)).ne'
-  -- 1 / √(...) = (√(...))⁻¹
-  have h_eq : (fun x : Vec n => 1 / Real.sqrt (bnVar n x + ε)) =
-              (fun x : Vec n => (Real.sqrt (bnVar n x + ε))⁻¹) := by
-    funext x; rw [one_div]
-  rw [h_eq]
-  exact fun x => (h_sqrt x).inv (h_sqrt_ne x)
+  simp only [one_div]
+  exact differentiable_pi.2 fun _ x => (hsqrt x).inv (Real.sqrt_pos.2 (hpos x)).ne'
 
 /-- **Broadcast inverse-stddev Jacobian** — proved (was an axiom).
 
@@ -686,23 +672,13 @@ noncomputable def bn_has_vjp (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     `ε > 0` hypothesis is what licenses the inverse-sqrt smoothness. This
     is the differentiability witness `vjp_comp_at` needs to chain `bn`
     into the conv→bn→relu block. -/
+@[fun_prop]
 theorem bnForward_differentiable (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (bnForward n ε γ β) := by
-  rw [bnForward_eq_compose]
-  have h_normalize_diff : Differentiable ℝ (bnNormalize n ε) := by
-    rw [show bnNormalize n ε =
-          (fun y : Vec n => fun k : Fin n =>
-            bnCentered n y k * bnIstdBroadcast n ε y k) from by
-      funext y; exact bnXhat_eq_product n ε y]
-    have h_centered : Differentiable ℝ (bnCentered n) := by
-      have h_eq : (bnCentered n : Vec n → Vec n) =
-                  fun x => fun j => x j - (∑ i, x i) * ((n : ℝ))⁻¹ := by
-        funext x j; unfold bnCentered bnMean; ring
-      rw [h_eq]; fun_prop
-    exact h_centered.mul (bnIstdBroadcast_diff n ε hε)
-  have h_affine_diff : Differentiable ℝ (bnAffine n γ β) := by
-    unfold bnAffine; fun_prop
-  exact h_affine_diff.comp h_normalize_diff
+  have h := bnIstdBroadcast_diff n ε hε
+  show Differentiable ℝ fun x i => γ * ((x i - bnMean n x) * bnIstdBroadcast n ε x i) + β
+  unfold bnMean
+  fun_prop
 
 /-- The standalone end-to-end theorem: `bn_grad_input` is the correct VJP
     of `bnForward`. Follows from `bn_has_vjp` by definitional unfolding. -/

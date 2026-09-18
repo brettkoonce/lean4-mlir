@@ -112,88 +112,29 @@ lemma dense_diff {m n : Nat} (W : Mat m n) (b : Vec n) :
     Differentiable ℝ (dense W b) := by
   unfold dense; fun_prop
 
-/-- Differentiability of `softmax c` — same recipe as `rowSoftmax_flat_diff`,
-    but on the unflattened vector. -/
+/-- Differentiability of `softmax c`: each coordinate is `exp(z k) · (Σ_j exp(z j))⁻¹`, and the
+    denominator is positive. -/
 lemma softmax_diff (c : Nat) : Differentiable ℝ (softmax c) := by
   match c with
-  | 0 =>
-    -- Codomain Vec 0 — trivially differentiable.
-    rw [show (softmax 0 : Vec 0 → Vec 0) = (fun _ : Vec 0 => fun (k : Fin 0) => (0 : ℝ)) by
-      funext _ k; exact k.elim0]
-    intro v
-    exact (differentiable_const _).differentiableAt
+  | 0 => rw [Subsingleton.elim (softmax 0) fun _ => 0]; exact differentiable_const _
   | c + 1 =>
-    rw [differentiable_pi]
-    intro k
-    -- The k-th coord is `exp(z k) * (Σ j, exp(z j))⁻¹`.
-    have h_fn : (fun z : Vec (c + 1) => softmax (c + 1) z k) =
-                (fun z : Vec (c + 1) =>
-                  Real.exp (z k) * (∑ j : Fin (c + 1), Real.exp (z j))⁻¹) := by
-      funext z
-      show (let e := fun j => Real.exp (z j); let total := ∑ k', e k'; e k / total) = _
-      rw [div_eq_mul_inv]
-    rw [h_fn]
-    have h_num : Differentiable ℝ (fun z : Vec (c + 1) => Real.exp (z k)) := by fun_prop
-    have h_denom : Differentiable ℝ
-        (fun z : Vec (c + 1) => ∑ j : Fin (c + 1), Real.exp (z j)) := by fun_prop
-    have h_ne : ∀ z : Vec (c + 1),
-        (∑ j : Fin (c + 1), Real.exp (z j)) ≠ 0 := fun z =>
-      (Finset.sum_pos (fun j _ => Real.exp_pos _) Finset.univ_nonempty).ne'
-    have h_inv : Differentiable ℝ
-        (fun z : Vec (c + 1) => (∑ j : Fin (c + 1), Real.exp (z j))⁻¹) :=
-      fun z => (h_denom z).inv (h_ne z)
-    exact h_num.mul h_inv
+    unfold softmax; simp only [div_eq_mul_inv]
+    fun_prop (disch := intro z; positivity)
 
-/-- Differentiability of `layerNormForward D ε γ β`.
-    `layerNormForward = bnForward = bnAffine ∘ bnNormalize` (definitionally),
-    where the chain is differentiable when `ε > 0`. -/
+/-- Differentiability of `layerNormForward D ε γ β` — it is `bnForward` (definitionally),
+    differentiable when `ε > 0`. Tagged for `fun_prop`. -/
+@[fun_prop]
 lemma layerNorm_diff (D : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (layerNormForward D ε γ β) := by
-  show Differentiable ℝ (bnForward D ε γ β)
-  rw [bnForward_eq_compose]
-  -- bnForward = bnAffine ∘ bnNormalize
-  apply Differentiable.comp
-  · -- bnAffine is differentiable
-    unfold bnAffine; fun_prop
-  · -- bnNormalize is differentiable (centered * istdBroadcast, both diff)
-    rw [show bnNormalize D ε =
-          (fun y : Vec D => fun k : Fin D =>
-            bnCentered D y k * bnIstdBroadcast D ε y k) from by
-      funext y; exact bnXhat_eq_product D ε y]
-    have h_centered : Differentiable ℝ (bnCentered D) := by
-      unfold bnCentered bnMean; fun_prop
-    exact h_centered.mul (bnIstdBroadcast_diff D ε hε)
+  exact bnForward_differentiable D ε γ β hε
 
-/-- Differentiability of the flattened per-token LayerNorm map.
-    Now a theorem (was an axiom): each output coord projects through a
-    row-projection CLM into `layerNorm_diff` at that row. -/
+/-- Differentiability of the flattened per-token LayerNorm map: each output coordinate is a
+    coordinate of `layerNormForward` (`layerNorm_diff`) applied to one row of the input. -/
 theorem layerNorm_per_token_flat_diff (N D : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten ((fun X : Mat N D => fun n => layerNormForward D ε γ β (X n))
                    (Mat.unflatten v))) := by
-  rw [differentiable_pi]
-  intro idx
-  set p := finProdFinEquiv.symm idx
-  -- The idx-coord equals layerNormForward applied to the p.1-th row, then
-  -- coord p.2: layerNormForward (row_proj_p.1 v) p.2.
-  have h_eq : (fun v : Vec (N * D) =>
-        Mat.flatten ((fun X : Mat N D => fun n => layerNormForward D ε γ β (X n))
-                     (Mat.unflatten v)) idx) =
-      (fun w : Vec D => layerNormForward D ε γ β w p.2) ∘
-      (fun v : Vec (N * D) => fun j' : Fin D => v (finProdFinEquiv (p.1, j'))) := by
-    funext v
-    show Mat.flatten _ idx = _
-    show layerNormForward D ε γ β (Mat.unflatten v p.1) p.2 = _
-    rfl
-  rw [h_eq]
-  -- (layerNormForward _ _ _ _ · p.2) is the p.2-coord projection of layerNormForward;
-  -- diff via layerNorm_diff + differentiableAt_pi.mp.
-  have h_outer : Differentiable ℝ (fun w : Vec D => layerNormForward D ε γ β w p.2) :=
-    fun w => differentiableAt_pi.mp ((layerNorm_diff D ε γ β hε) w) p.2
-  have h_proj : Differentiable ℝ
-      (fun v : Vec (N * D) => fun j' : Fin D => v (finProdFinEquiv (p.1, j'))) :=
-    (reindexCLM (fun j' : Fin D => finProdFinEquiv (p.1, j'))).differentiable
-  exact h_outer.comp h_proj
+  unfold Mat.flatten Mat.unflatten; fun_prop (disch := assumption)
 
 /-- Differentiability of the flattened identity matrix map.
     `Mat.flatten ∘ id ∘ Mat.unflatten = id` on `Vec (a*b)`. -/
@@ -1045,79 +986,30 @@ noncomputable def mhsa_weights (n d : Nat) (slab : Mat n (3 * d)) : Mat n n :=
 theorem mhsa_weights_flat_diff (n d : Nat) :
     Differentiable ℝ (fun v : Vec (n * (3 * d)) =>
       Mat.flatten ((mhsa_weights n d) (Mat.unflatten v))) := by
-  have h_eq : (fun v : Vec (n * (3 * d)) =>
-      Mat.flatten ((mhsa_weights n d) (Mat.unflatten v))) =
-      (fun u : Vec (n * n) => Mat.flatten (rowSoftmax (Mat.unflatten u))) ∘
-      (fun v : Vec (n * (3 * d)) =>
-        Mat.flatten ((mhsa_pre_weights n d) (Mat.unflatten v))) := by
-    funext v
-    show Mat.flatten (rowSoftmax (mhsa_pre_weights n d (Mat.unflatten v))) =
-         Mat.flatten (rowSoftmax (Mat.unflatten
-           (Mat.flatten (mhsa_pre_weights n d (Mat.unflatten v)))))
-    rw [Mat.unflatten_flatten]
-  rw [h_eq]
-  exact (rowSoftmax_flat_diff n n).comp (mhsa_pre_weights_flat_diff n d)
+  have h := (rowSoftmax_flat_diff n n).comp (mhsa_pre_weights_flat_diff n d)
+  simp only [Function.comp_def, Mat.unflatten_flatten] at h
+  exact h
 
 /-- **Joint flat-diff of column-stacked SDPA.**
 
     The blocker for Phase 3 (per `planning/archive/mhsa.md`): joint diff in `(Q, K, V)`
     doesn't follow from the existing per-input `_flat_diff` lemmas. Here
     we prove it by treating the qkv-slab as the variable, factoring SDPA
-    as `Mat.mul ∘ rowSoftmax ∘ scaled-matmul`, and chaining: pre-softmax
-    is fun_prop-able (polynomial in slab coords), rowSoftmax composes via
-    `rowSoftmax_flat_diff`, final matmul-with-V splits per output coord
-    into a sum of products of two diff scalars. -/
+    as `Mat.mul ∘ rowSoftmax ∘ scaled-matmul`: the weights are differentiable
+    (`mhsa_weights_flat_diff`), and the final matmul with the V-third of the
+    slab is polynomial in the weights and the slab coordinates. -/
 theorem mhsa_g_flat_diff (n d : Nat) :
     Differentiable ℝ (fun v : Vec (n * (3 * d)) =>
       Mat.flatten ((mhsa_g n d) (Mat.unflatten v))) := by
-  rw [differentiable_pi]
-  intro idx
-  set p := finProdFinEquiv.symm idx with hp_def
-  -- The idx-th coord = (mhsa_g (unflatten v))[p.1, p.2]
-  --                  = Σ s, weights[p.1, s] * V[s, p.2]
-  --                  = Σ s, Mat.flatten weights (fPF(p.1, s)) * v (fPF(s, fPF3(2, p.2)))
-  have h_eq : (fun v : Vec (n * (3 * d)) =>
-      Mat.flatten ((mhsa_g n d) (Mat.unflatten v)) idx) =
-      (fun v : Vec (n * (3 * d)) =>
-        ∑ s : Fin n,
-          Mat.flatten ((mhsa_weights n d) (Mat.unflatten v)) (finProdFinEquiv (p.1, s)) *
-          v (finProdFinEquiv (s, finProdFinEquiv ((2 : Fin 3), p.2)))) := by
-    funext v
-    show (mhsa_g n d (Mat.unflatten v)) p.1 p.2 = _
-    unfold mhsa_g sdpa
-    show Mat.mul (rowSoftmax (fun i j => sdpa_scale d *
-      Mat.mul
-        (fun r j' => Mat.unflatten v r (finProdFinEquiv ((0 : Fin 3), j')))
-        (Mat.transpose (fun r j' => Mat.unflatten v r (finProdFinEquiv ((1 : Fin 3), j'))))
-        i j))
-      (fun r j => Mat.unflatten v r (finProdFinEquiv ((2 : Fin 3), j))) p.1 p.2 = _
-    unfold Mat.mul
-    -- LHS: Σ s, weights[p.1, s] * V[s, p.2]
-    -- RHS: Σ s, Mat.flatten (mhsa_weights ...) (fPF(p.1, s)) * v (fPF(s, fPF3(2, p.2)))
-    apply Finset.sum_congr rfl
-    intro s _
-    -- The second factors `Mat.unflatten v s (fPF(2, p.2))` and `v (fPF(s, fPF(2, p.2)))`
-    -- are def-equal by `Mat.unflatten`, so `congr 1` auto-closes that side; only the
-    -- weights side remains.
-    congr 1
-    -- Goal: rowSoftmax (...) p.1 s = Mat.flatten (mhsa_weights …) (fPF(p.1, s))
-    show rowSoftmax _ p.1 s = Mat.flatten ((mhsa_weights n d) (Mat.unflatten v)) _
-    unfold Mat.flatten mhsa_weights
-    simp only [Equiv.symm_apply_apply]
-    show rowSoftmax _ p.1 s = rowSoftmax (mhsa_pre_weights n d (Mat.unflatten v)) p.1 s
-    unfold mhsa_pre_weights Mat.mul
-    rfl
-  rw [h_eq]
-  -- Each summand is product of two differentiable scalar functions.
-  apply Differentiable.fun_sum
-  intro s _
-  have h_w : Differentiable ℝ (fun v : Vec (n * (3 * d)) =>
-      Mat.flatten ((mhsa_weights n d) (Mat.unflatten v)) (finProdFinEquiv (p.1, s))) :=
-    fun v => differentiableAt_pi.mp ((mhsa_weights_flat_diff n d) v) _
-  have h_v : Differentiable ℝ (fun v : Vec (n * (3 * d)) =>
-      v (finProdFinEquiv (s, finProdFinEquiv ((2 : Fin 3), p.2)))) := by
-    fun_prop
-  exact h_w.mul h_v
+  -- `mhsa_g` is the softmax weights times the V-third of the slab; the weights enter through
+  -- their flat-diff lemma, the rest is polynomial.
+  have key : ∀ F : Vec (n * (3 * d)) → Vec (n * n), Differentiable ℝ F →
+      Differentiable ℝ (fun v : Vec (n * (3 * d)) => Mat.flatten (Mat.mul (Mat.unflatten (F v))
+        (fun r j => Mat.unflatten v r (finProdFinEquiv ((2 : Fin 3), j))))) := by
+    intro F hF; unfold Mat.flatten Mat.mul Mat.unflatten; fun_prop
+  have h := key _ (mhsa_weights_flat_diff n d)
+  simp only [Mat.unflatten_flatten] at h
+  exact h
 
 /-! ### Column-stacked SDPA VJP
 
@@ -1889,26 +1781,11 @@ theorem mhsa_layer_flat_diff (N heads d_head : Nat)
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo
                      (Mat.unflatten v))) := by
-  have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo (Mat.unflatten v))) =
-      (fun u : Vec (N * (heads * d_head)) =>
-        Mat.flatten ((fun M : Mat N (heads * d_head) => fun n => dense Wo bo (M n))
-                     (Mat.unflatten u))) ∘
-      (fun u : Vec (N * (heads * (3 * d_head))) =>
-        Mat.flatten ((colSlabApply (mhsa_g N d_head) (heads := heads)) (Mat.unflatten u)
-                     : Mat N (heads * d_head))) ∘
-      (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten ((fun X' : Mat N (heads * d_head) => fun n =>
-            dense (mhsa_qkv_W heads d_head Wq Wk Wv) (mhsa_qkv_b heads d_head bq bk bv) (X' n))
-            (Mat.unflatten v))) := by
-    funext v
-    rw [mhsa_layer_eq_compose]
-    simp [Function.comp, Mat.unflatten_flatten]
-  rw [h_eq]
-  exact (dense_per_token_flat_diff (N := N) Wo bo).comp
-    ((colSlabApply_flat_diff (mhsa_g N d_head) (mhsa_g_flat_diff N d_head)).comp
-     (dense_per_token_flat_diff (N := N) (mhsa_qkv_W heads d_head Wq Wk Wv)
-                                (mhsa_qkv_b heads d_head bq bk bv)))
+  simpa [mhsa_layer_eq_compose, Function.comp_def, Mat.unflatten_flatten] using
+    (dense_per_token_flat_diff (N := N) Wo bo).comp
+      ((colSlabApply_flat_diff (mhsa_g N d_head) (mhsa_g_flat_diff N d_head)).comp
+        (dense_per_token_flat_diff (N := N) (mhsa_qkv_W heads d_head Wq Wk Wv)
+          (mhsa_qkv_b heads d_head bq bk bv)))
 
 -- ════════════════════════════════════════════════════════════════
 -- § 4. Transformer Block (Phase 8 — composition, no hand-waving)
@@ -1973,71 +1850,15 @@ noncomputable def transformerMlp (N D mlpDim : Nat)
   (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)) ∘
   (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n))
 
-/-- Differentiability of the flattened `transformerMlp` — composition of
-    `dense ∘ gelu ∘ dense` per-token. Built from the three per-token-flat
-    Diff helpers via `Differentiable.comp`, with the usual `Mat.unflatten_flatten`
-    rewrite to push the bijection through `∘`. -/
+/-- Differentiability of the flattened `transformerMlp` — `dense ∘ gelu ∘ dense` per token,
+    all smooth (`Real.differentiable_tanh` is tagged for `fun_prop`). -/
 lemma transformerMlp_flat_diff (N D mlpDim : Nat)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten (transformerMlp N D mlpDim Wfc1 bfc1 Wfc2 bfc2
                      (Mat.unflatten v))) := by
-  unfold transformerMlp Mat.unflatten Mat.flatten dense gelu geluScalar
-  -- After unfolding, the three layers compose as one explicit function.
-  -- `dense` and the two row indexings are linear; `geluScalar` is the
-  -- only obstacle (handled by `gelu_per_token_flat_diff`, now a
-  -- theorem via Real.differentiable_tanh). We factor through the
-  -- gelu helper rather than reproving it inline.
-  -- Strategy: show the function equals `flat_dense₂ ∘ flat_gelu ∘ flat_dense₁`
-  -- through `Mat.unflatten_flatten` round-trips, then chain `Differentiable.comp`.
-  have h1 : Differentiable ℝ (fun v : Vec (N * D) =>
-      Mat.flatten ((fun X : Mat N D => fun n => dense Wfc1 bfc1 (X n))
-                   (Mat.unflatten v))) :=
-    dense_per_token_flat_diff Wfc1 bfc1
-  have h2 : Differentiable ℝ (fun v : Vec (N * mlpDim) =>
-      Mat.flatten ((fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n))
-                   (Mat.unflatten v))) :=
-    gelu_per_token_flat_diff N mlpDim
-  have h3 : Differentiable ℝ (fun v : Vec (N * mlpDim) =>
-      Mat.flatten ((fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n))
-                   (Mat.unflatten v))) :=
-    dense_per_token_flat_diff Wfc2 bfc2
-  -- Restate the goal using the composed form via Mat.flatten/unflatten round-trip.
-  have h_eq : (fun v : Vec (N * D) =>
-        Mat.flatten ((((fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n)) ∘
-                       (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n))) ∘
-                      (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n)))
-                     (Mat.unflatten v))) =
-      (fun u : Vec (N * mlpDim) => Mat.flatten
-         (((fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n)) ∘
-           (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)))
-            (Mat.unflatten u))) ∘
-      (fun v : Vec (N * D) => Mat.flatten
-         ((fun X : Mat N D => fun n => dense Wfc1 bfc1 (X n)) (Mat.unflatten v))) := by
-    funext v; simp [Function.comp, Mat.unflatten_flatten]
-  -- After the round-trip simp, the goal is the composition of the outer two
-  -- with the innermost dense₁. The outer two compose similarly:
-  have h_outer_eq : (fun u : Vec (N * mlpDim) => Mat.flatten
-        (((fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n)) ∘
-          (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)))
-           (Mat.unflatten u))) =
-      (fun u : Vec (N * mlpDim) => Mat.flatten
-        ((fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n))
-           (Mat.unflatten u))) ∘
-      (fun u : Vec (N * mlpDim) => Mat.flatten
-        ((fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n))
-           (Mat.unflatten u))) := by
-    funext u; simp [Function.comp, Mat.unflatten_flatten]
-  -- Rebuild the goal step by step.
-  show Differentiable ℝ (fun v : Vec (N * D) =>
-        Mat.flatten ((((fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n)) ∘
-                       (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n))) ∘
-                      (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n)))
-                     (Mat.unflatten v)))
-  rw [h_eq]
-  rw [h_outer_eq]
-  exact (h3.comp h2).comp h1
+  unfold transformerMlp Mat.unflatten Mat.flatten dense gelu geluScalar; fun_prop
 
 /-- `HasVJPMat` for the MLP sublayer — chain of two `vjpMat_comp`
     steps over per-token liftings (`dense ∘ gelu ∘ dense`). Theorem,
@@ -2127,21 +1948,9 @@ lemma transformerAttnSublayer_inner_flat_diff
           (fun X : Mat N (heads * d_head) => fun n =>
             layerNormForward (heads * d_head) ε γ1 β1 (X n)))
          (Mat.unflatten v))) := by
-  have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten
-          (((mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
-            (fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ1 β1 (X n)))
-           (Mat.unflatten v))) =
-      (fun u : Vec (N * (heads * d_head)) => Mat.flatten
-          (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo (Mat.unflatten u))) ∘
-      (fun v : Vec (N * (heads * d_head)) => Mat.flatten
-          ((fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ1 β1 (X n)) (Mat.unflatten v))) := by
-    funext v; simp [Function.comp, Mat.unflatten_flatten]
-  rw [h_eq]
-  exact (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo).comp
-        (layerNorm_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
+  simpa [Function.comp_def, Mat.unflatten_flatten] using
+    (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo).comp
+      (layerNorm_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
 
 /-- Differentiability of the flattened attention sublayer.
     `biPathMat (id) (mhsa ∘ LN1)` flattens to a sum, both arms Differentiable. -/
@@ -2152,34 +1961,8 @@ lemma transformerAttnSublayer_flat_diff
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerAttnSublayer N heads d_head ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo (Mat.unflatten v))) := by
-  unfold transformerAttnSublayer biPathMat
-  -- Goal: Differentiable of `fun v k => (id (Mat.unflatten v) + (mhsa ∘ LN) (Mat.unflatten v)) ...`.
-  -- Each output coordinate is a sum of two coordinates of the two arms — both Diff.
-  have h_id := identity_mat_flat_diff N (heads * d_head)
-  have h_inner := transformerAttnSublayer_inner_flat_diff N heads d_head ε γ1 β1 hε
-                    Wq Wk Wv Wo bq bk bv bo
-  -- The biPathMat unfolds to `fun M r s => F M r s + G M r s`. Flattened:
-  --   fun v k => F (Mat.unflatten v) (fPF.symm k).1 (fPF.symm k).2 +
-  --              G (Mat.unflatten v) (fPF.symm k).1 (fPF.symm k).2
-  -- = (Mat.flatten ∘ F ∘ Mat.unflatten) v k + (Mat.flatten ∘ G ∘ Mat.unflatten) v k
-  have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten (fun (r : Fin N) (s : Fin (heads * d_head)) =>
-          (fun X : Mat N (heads * d_head) => X) (Mat.unflatten v) r s +
-          ((mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
-            (fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ1 β1 (X n)))
-            (Mat.unflatten v) r s)) =
-      fun v => fun k =>
-        (fun v' : Vec (N * (heads * d_head)) =>
-          Mat.flatten ((fun X : Mat N (heads * d_head) => X) (Mat.unflatten v'))) v k +
-        (fun v' : Vec (N * (heads * d_head)) =>
-          Mat.flatten (((mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
-            (fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ1 β1 (X n)))
-            (Mat.unflatten v'))) v k := by
-    funext v k; unfold Mat.flatten; rfl
-  rw [h_eq]
-  exact h_id.add h_inner
+  exact (identity_mat_flat_diff N (heads * d_head)).add
+    (transformerAttnSublayer_inner_flat_diff N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
 
 /-- Attention sublayer VJP: `biPathMat` of identity and `mhsa ∘ LN1`.
     Theorem, no longer axiom: discharges the `Differentiable` hypotheses
@@ -2218,21 +2001,9 @@ lemma transformerMlpSublayer_inner_flat_diff
           (fun X : Mat N (heads * d_head) => fun n =>
             layerNormForward (heads * d_head) ε γ2 β2 (X n)))
          (Mat.unflatten v))) := by
-  have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten
-          (((transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
-            (fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ2 β2 (X n)))
-           (Mat.unflatten v))) =
-      (fun u : Vec (N * (heads * d_head)) => Mat.flatten
-          (transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten u))) ∘
-      (fun v : Vec (N * (heads * d_head)) => Mat.flatten
-          ((fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ2 β2 (X n)) (Mat.unflatten v))) := by
-    funext v; simp [Function.comp, Mat.unflatten_flatten]
-  rw [h_eq]
-  exact (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2).comp
-        (layerNorm_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
+  simpa [Function.comp_def, Mat.unflatten_flatten] using
+    (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2).comp
+      (layerNorm_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
 
 /-- Differentiability of the flattened MLP sublayer.
     `biPathMat (id) (transformerMlp ∘ LN2)` flattens to a sum, both arms Differentiable. -/
@@ -2243,28 +2014,8 @@ lemma transformerMlpSublayer_flat_diff
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2
                      Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
-  unfold transformerMlpSublayer biPathMat
-  have h_id := identity_mat_flat_diff N (heads * d_head)
-  have h_inner := transformerMlpSublayer_inner_flat_diff N heads d_head mlpDim ε γ2 β2 hε
-                    Wfc1 bfc1 Wfc2 bfc2
-  have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten (fun (r : Fin N) (s : Fin (heads * d_head)) =>
-          (fun X : Mat N (heads * d_head) => X) (Mat.unflatten v) r s +
-          ((transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
-            (fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ2 β2 (X n)))
-            (Mat.unflatten v) r s)) =
-      fun v => fun k =>
-        (fun v' : Vec (N * (heads * d_head)) =>
-          Mat.flatten ((fun X : Mat N (heads * d_head) => X) (Mat.unflatten v'))) v k +
-        (fun v' : Vec (N * (heads * d_head)) =>
-          Mat.flatten (((transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
-            (fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γ2 β2 (X n)))
-            (Mat.unflatten v'))) v k := by
-    funext v k; unfold Mat.flatten; rfl
-  rw [h_eq]
-  exact h_id.add h_inner
+  exact (identity_mat_flat_diff N (heads * d_head)).add
+    (transformerMlpSublayer_inner_flat_diff N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
 
 /-- MLP sublayer VJP: `biPathMat` of identity and `transformerMlp ∘ LN2`.
     Theorem, no longer axiom: same recipe as `transformerAttnSublayer_has_vjp_mat`. -/
@@ -2300,24 +2051,9 @@ lemma transformerBlock_flat_diff (N heads d_head mlpDim : Nat)
       Mat.flatten (transformerBlock N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2
                    (Mat.unflatten v))) := by
-  unfold transformerBlock
-  have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten
-          (((transformerMlpSublayer N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
-            (transformerAttnSublayer N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo))
-           (Mat.unflatten v))) =
-      (fun u : Vec (N * (heads * d_head)) => Mat.flatten
-          (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2
-             (Mat.unflatten u))) ∘
-      (fun v : Vec (N * (heads * d_head)) => Mat.flatten
-          (transformerAttnSublayer N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
-             (Mat.unflatten v))) := by
-    funext v; simp [Function.comp, Mat.unflatten_flatten]
-  rw [h_eq]
-  exact (transformerMlpSublayer_flat_diff N heads d_head mlpDim ε γ2 β2 hε
-            Wfc1 bfc1 Wfc2 bfc2).comp
-        (transformerAttnSublayer_flat_diff N heads d_head ε γ1 β1 hε
-            Wq Wk Wv Wo bq bk bv bo)
+  simpa [transformerBlock, Function.comp_def, Mat.unflatten_flatten] using
+    (transformerMlpSublayer_flat_diff N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).comp
+      (transformerAttnSublayer_flat_diff N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
 
 /-- **Transformer block VJP** — composition of attn + mlp sublayers.
     Theorem, no longer axiom: a single `vjpMat_comp` of the two sublayer
@@ -2393,35 +2129,13 @@ lemma transformerTower_flat_diff (k N heads d_head mlpDim : Nat)
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2
                    (Mat.unflatten v))) := by
   induction k with
-  | zero =>
-    -- transformerTower 0 ... = fun X => X
-    show Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten ((fun X : Mat N (heads * d_head) => X) (Mat.unflatten v)))
-    exact identity_mat_flat_diff N (heads * d_head)
+  | zero => exact identity_mat_flat_diff N (heads * d_head)
   | succ k' ih =>
-    -- transformerTower (k'+1) = block ∘ transformerTower k'  (defeq via Nat.rec)
-    show Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten (((transformerBlock N heads d_head mlpDim ε γ1 β1
-                       Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
-                    (transformerTower k' N heads d_head mlpDim ε γ1 β1
-                       Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2))
-                   (Mat.unflatten v)))
-    have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-          Mat.flatten (((transformerBlock N heads d_head mlpDim ε γ1 β1
-                           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
-                        (transformerTower k' N heads d_head mlpDim ε γ1 β1
-                           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2))
-                       (Mat.unflatten v))) =
-        (fun u : Vec (N * (heads * d_head)) => Mat.flatten
-            (transformerBlock N heads d_head mlpDim ε γ1 β1
-               Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten u))) ∘
-        (fun v : Vec (N * (heads * d_head)) => Mat.flatten
-            (transformerTower k' N heads d_head mlpDim ε γ1 β1
-               Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
-      funext v; simp [Function.comp, Mat.unflatten_flatten]
-    rw [h_eq]
-    exact (transformerBlock_flat_diff N heads d_head mlpDim ε γ1 β1 hε
-              Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).comp ih
+    -- `transformerTower (k'+1) = block ∘ transformerTower k'` by `Nat.rec`.
+    have h := (transformerBlock_flat_diff N heads d_head mlpDim ε γ1 β1 hε
+      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).comp ih
+    simp only [Function.comp_def, Mat.unflatten_flatten] at h
+    exact h
 
 /-- **Transformer tower VJP** — k-fold composition. Theorem, no longer axiom:
     induction on `k` via `vjpMat_comp` and `transformerBlock_has_vjp_mat`. -/
@@ -2507,25 +2221,10 @@ lemma vit_body_flat_diff (k N heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < �
       Mat.flatten (vit_body k N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF
                    (Mat.unflatten v))) := by
-  unfold vit_body
-  have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten
-          (((fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γF βF (X n)) ∘
-            (transformerTower k N heads d_head mlpDim ε γ1 β1
-               Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2))
-           (Mat.unflatten v))) =
-      (fun u : Vec (N * (heads * d_head)) => Mat.flatten
-          ((fun X : Mat N (heads * d_head) => fun n =>
-              layerNormForward (heads * d_head) ε γF βF (X n)) (Mat.unflatten u))) ∘
-      (fun v : Vec (N * (heads * d_head)) => Mat.flatten
-          (transformerTower k N heads d_head mlpDim ε γ1 β1
-             Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
-    funext v; simp [Function.comp, Mat.unflatten_flatten]
-  rw [h_eq]
-  exact (layerNorm_per_token_flat_diff N (heads * d_head) ε γF βF hε).comp
-        (transformerTower_flat_diff k N heads d_head mlpDim ε γ1 β1 hε
-           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+  simpa [vit_body, Function.comp_def, Mat.unflatten_flatten] using
+    (layerNorm_per_token_flat_diff N (heads * d_head) ε γF βF hε).comp
+      (transformerTower_flat_diff k N heads d_head mlpDim ε γ1 β1 hε
+        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
 
 /-- **The ViT body VJP** — `finalLN ∘ transformerTower`. Theorem, no longer
     axiom: a single `vjpMat_comp` of the tower + final LN with their
@@ -2767,29 +2466,9 @@ lemma patchEmbed_flat_diff
     Differentiable ℝ (patchEmbed_flat ic H W patchSize N D
                        W_conv b_conv cls_token pos_embed) := by
   unfold patchEmbed_flat
-  intro img
-  rw [differentiableAt_pi]
-  intro idx_out
-  -- The body at idx_out is a constant (pos_embed) + (if n=0 then constant else
-  -- b_conv + Σ c kh kw, W_conv * pad-guarded img-read). All terms are
-  -- DifferentiableAt in img.
-  apply DifferentiableAt.add (differentiableAt_const _)
-  by_cases hn : (finProdFinEquiv.symm idx_out).1.val = 0
-  · simp only [hn, ite_true]
-    exact differentiableAt_const _
-  · simp only [hn, ite_false]
-    apply DifferentiableAt.add (differentiableAt_const _)
-    apply DifferentiableAt.fun_sum; intro c _
-    apply DifferentiableAt.fun_sum; intro kh _
-    apply DifferentiableAt.fun_sum; intro kw _
-    apply DifferentiableAt.mul (differentiableAt_const _)
-    -- The pad-eval pattern: if hpad : (hh < H ∧ ww < W) then img(σ hpad) else 0
-    exact differentiableAt_pad_eval _
-      (fun hpad => finProdFinEquiv (finProdFinEquiv
-        (c, ⟨((finProdFinEquiv.symm idx_out).1.val - 1) / (W / patchSize) *
-              patchSize + kh.val, hpad.1⟩),
-        ⟨((finProdFinEquiv.symm idx_out).1.val - 1) % (W / patchSize) *
-          patchSize + kw.val, hpad.2⟩)) _
+  intro img; rw [differentiableAt_pi]; intro idx_out
+  by_cases hn : (finProdFinEquiv.symm idx_out).1.val = 0 <;>
+    simp only [hn, ite_true, ite_false] <;> fun_prop
 
 /-- **Closed-form input gradient for `patchEmbed_flat`** — direct formula,
     written as a sum over patches `p : Fin N` with reconstructed kernel

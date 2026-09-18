@@ -50,6 +50,7 @@ noncomputable def decimateFlat (oc h w : Nat) :
     Vec (oc * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
   fun y k => y (decimateIdx oc h w k)
 
+@[fun_prop]
 theorem decimateFlat_differentiable (oc h w : Nat) :
     Differentiable ℝ (decimateFlat oc h w) :=
   (reindexCLM (decimateIdx oc h w)).differentiable
@@ -86,13 +87,7 @@ theorem flatConvStride2_differentiable {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     Differentiable ℝ (flatConvStride2 W b
       : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) := by
-  unfold flatConvStride2
-  -- pin the stride-1 conv's spatial dims to 2h×2w structurally (else the
-  -- nonlinear `oc*?*? = oc*(2h)*(2w)` won't unify)
-  have hf : Differentiable ℝ (flatConv (h := 2 * h) (w := 2 * w) W b) :=
-    flatConv_differentiable W b
-  have hg : Differentiable ℝ (decimateFlat oc h w) := decimateFlat_differentiable oc h w
-  exact hg.comp hf
+  unfold flatConvStride2; fun_prop
 
 /-- **Stride-2 conv input-VJP** — the centerpiece. By the chain rule
     (`vjp_comp`) on `decimateFlat ∘ flatConv`, reusing the proven stride-1 conv
@@ -217,6 +212,7 @@ noncomputable def decimateOddFlat (oc h w : Nat) :
     Vec (oc * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
   fun y k => y (decimateOddIdx oc h w k)
 
+@[fun_prop]
 theorem decimateOddFlat_differentiable (oc h w : Nat) :
     Differentiable ℝ (decimateOddFlat oc h w) :=
   (reindexCLM (decimateOddIdx oc h w)).differentiable
@@ -250,11 +246,7 @@ theorem flatConvStride4_differentiable {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     Differentiable ℝ (flatConvStride4 W b
       : Vec (ic * (2 * (2 * h)) * (2 * (2 * w))) → Vec (oc * h * w)) := by
-  unfold flatConvStride4
-  have hf : Differentiable ℝ (flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
-    flatConv_differentiable W b
-  exact (decimateFlat_differentiable oc h w).comp
-    ((decimateOddFlat_differentiable oc (2 * h) (2 * w)).comp hf)
+  unfold flatConvStride4; fun_prop
 
 /-- **Stride-4 conv input-VJP** — two `vjp_comp` steps over the proven stride-1
     conv input-VJP and the two decimation VJPs (backward = zero-upsample twice,

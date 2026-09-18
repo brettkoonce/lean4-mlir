@@ -133,18 +133,9 @@ theorem pdivMat_rowIndep_at {m n p : Nat} (g : Vec n → Vec p)
 theorem batchMap_differentiableAt {N a b : Nat} (f : Vec a → Vec b) (v : Vec (N * a))
     (hf : ∀ r : Fin N, DifferentiableAt ℝ f (Mat.unflatten v r)) :
     DifferentiableAt ℝ (StableHLO.batchMap N f) v := by
-  rw [batchMap_eq_rowwiseFlat]
-  apply differentiableAt_pi.mpr
-  intro idx
-  have hcoord :
-      (fun w : Vec (N * a) =>
-          Mat.flatten ((fun A : Mat N a => fun r => f (A r)) (Mat.unflatten w)) idx)
-        = (fun z : Vec a => f z (finProdFinEquiv.symm idx).2) ∘
-            (reindexCLM (fun i : Fin a => finProdFinEquiv ((finProdFinEquiv.symm idx).1, i))) := by
-    funext w; rfl
-  rw [hcoord]
-  refine DifferentiableAt.comp v ?_ (reindexCLM _).differentiableAt
-  exact differentiableAt_pi.mp (hf (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2
+  unfold Mat.unflatten at hf
+  unfold StableHLO.batchMap
+  fun_prop (disch := assumption)
 
 /-- **`batchMap`'s Jacobian is block-diagonal across the batch, at a point.** `pdivMat_rowIndep_at`
     read through `batchMap_eq_rowwiseFlat`: entry `(idx, jdx)` vanishes unless the two indices name
