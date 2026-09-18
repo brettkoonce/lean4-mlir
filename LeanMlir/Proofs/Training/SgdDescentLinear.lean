@@ -119,6 +119,19 @@ theorem dense_unflatten_drift {m n : Nat} (b : Vec n) (x : Vec m)
     _ = a * ∑ i, |d (finProdFinEquiv (i, k))| := by rw [Finset.mul_sum]
     _ ≤ a * ∑ idx, |d idx| := mul_le_mul_of_nonneg_left hinj ha
 
+/-- **Softmax drift along a segment.** Logits that move by at most `t·δ` (`t ∈ [0, 1]`,
+    `2δ < 1`) move every softmax output by at most `2tδ/(1−2δ)`: `softmax_perturb`'s
+    `e^(2tδ) − 1`, the γ-form `exp_sub_one_le`, then `t ≤ 1` in the denominator. The
+    linear, MLP and CNN segment-Lipschitz lemmas all end in this step. -/
+theorem softmax_seg_drift {n : Nat} (zt z : Vec n) {t δ : ℝ} (ht0 : 0 ≤ t) (ht1 : t ≤ 1)
+    (hδ0 : 0 ≤ δ) (hsmall : 2 * δ < 1) (hz : ∀ k, |zt k - z k| ≤ t * δ) (k : Fin n) :
+    |softmax n zt k - softmax n z k| ≤ 2 * (t * δ) / (1 - 2 * δ) := by
+  have htδ : t * δ ≤ δ := mul_le_of_le_one_left hδ0 ht1
+  refine (FloatModel.softmax_perturb zt z hz k).trans
+    ((FloatModel.exp_sub_one_le (by linarith)).trans ?_)
+  exact div_le_div_of_nonneg_left (mul_nonneg zero_le_two (mul_nonneg ht0 hδ0))
+    (by linarith) (by linarith)
+
 /-- **Segment-Lipschitz gradient for the linear softmax-CE loss, explicit
     constant.** Under the small-step condition `2aD < 1`, the gradient
     entries drift by at most `(2a²/(1−2aD))·(t·D)` along `[v, v+d]` — the
@@ -160,20 +173,7 @@ theorem linear_loss_grad_lipschitz {m n : Nat} (b : Vec n) (x : Vec m)
       nlinarith [mul_le_mul_of_nonneg_left hd (mul_nonneg ht0 ha)]
     linarith
   -- softmax drift via the ratio sandwich + γ-form linearization
-  have hsm := FloatModel.softmax_perturb
-    (dense (Mat.unflatten (v + t • d)) b x)
-    (dense (Mat.unflatten v) b x) hz j
-  have htaD : 2 * (t * (a * D)) < 1 := by nlinarith
-  have hexp : Real.exp (2 * (t * (a * D))) - 1 ≤
-      2 * (t * (a * D)) / (1 - 2 * (t * (a * D))) :=
-    FloatModel.exp_sub_one_le htaD
-  have hden : 2 * (t * (a * D)) / (1 - 2 * (t * (a * D))) ≤
-      2 * (t * (a * D)) / (1 - 2 * (a * D)) := by
-    refine div_le_div_of_nonneg_left (by nlinarith) (by linarith) ?_
-    nlinarith
-  have hsmle : |softmax n (dense (Mat.unflatten (v + t • d)) b x) j -
-      softmax n (dense (Mat.unflatten v) b x) j| ≤
-      2 * (t * (a * D)) / (1 - 2 * (a * D)) := by linarith
+  have hsmle := softmax_seg_drift _ _ ht0 ht1 haD0 hsmall hz j
   calc |x i| * |softmax n (dense (Mat.unflatten (v + t • d)) b x) j -
         softmax n (dense (Mat.unflatten v) b x) j|
       ≤ a * (2 * (t * (a * D)) / (1 - 2 * (a * D))) :=
@@ -231,20 +231,8 @@ theorem linear_sgd_descends {m n : Nat} (W : Mat m n) (b : Vec n)
       (denseWeightMap_differentiable b x)).differentiableAt
   -- ℓ1 radius of the step
   have hD : (∑ idx, |(-(lr • gh)) idx|) ≤
-      lr * ((∑ idx, |gradAt f (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) * η) := by
-    calc (∑ idx, |(-(lr • gh)) idx|) = ∑ idx, lr * |gh idx| := by
-          refine Finset.sum_congr rfl fun idx _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ idx, lr * (|gradAt f (Mat.flatten W) idx| + η) := by
-          refine Finset.sum_le_sum fun idx _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h3 : |gh idx| ≤ |gh idx - gradAt f (Mat.flatten W) idx| +
-              |gradAt f (Mat.flatten W) idx| := by
-            simpa using abs_sub_le (gh idx) (gradAt f (Mat.flatten W) idx) 0
-          linarith [hgh idx]
-      _ = lr * ((∑ idx, |gradAt f (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+      lr * ((∑ idx, |gradAt f (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) * η) :=
+    sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f (Mat.flatten W) gh hlr hη hC0 hgh
     (fun t _ => hdiffall _)
     (fun t ht idx => by

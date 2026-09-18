@@ -124,6 +124,21 @@ theorem descent_segment {m : Nat} (f : Vec m → ℝ) (x d : Vec m) {C D : ℝ}
     rw [hkey, hsplit]
   linarith
 
+/-- **`ℓ1` radius of an inexact SGD step.** With the oracle `gh` within `η` of `g`
+    coordinatewise, the step `−lr·gh` has `ℓ1` mass at most `lr·(‖g‖₁ + m·η)` — the
+    radius every descent capstone feeds `descent_segment` and its margin lemmas. -/
+theorem sgd_step_l1_le {m : Nat} (g gh : Vec m) {lr η : ℝ} (hlr : 0 ≤ lr)
+    (hgh : ∀ i, |gh i - g i| ≤ η) :
+    (∑ j, |(-(lr • gh)) j|) ≤ lr * ((∑ j, |g j|) + m * η) := by
+  calc (∑ j, |(-(lr • gh)) j|) = ∑ j, lr * |gh j| := by
+        refine Finset.sum_congr rfl fun j _ => ?_
+        simp [abs_mul, abs_of_nonneg hlr]
+    _ ≤ ∑ j, lr * (|g j| + η) := Finset.sum_le_sum fun j _ =>
+        mul_le_mul_of_nonneg_left (by linarith [abs_sub_abs_le_abs_sub (gh j) (g j), hgh j]) hlr
+    _ = lr * ((∑ j, |g j|) + m * η) := by
+        rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
+          Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+
 /-- **One inexact SGD step, explicit quadratic bound.** With a gradient
     oracle `gh` within `η` of `∇f(x)` coordinatewise, step `x − lr·gh`, and
     segment smoothness at the `ℓ1` step radius `lr·(‖∇f‖₁ + m·η)`:
@@ -146,21 +161,7 @@ theorem sgd_descent_inexact {m : Nat} (f : Vec m → ℝ) (x gh : Vec m)
       f x - lr * (∑ i, gradAt f x i ^ 2)
         + lr * η * (∑ i, |gradAt f x i|)
         + C * (lr * ((∑ j, |gradAt f x j|) + m * η)) ^ 2 := by
-  -- ℓ1 bound on the step
-  have hD : (∑ j, |(-(lr • gh)) j|) ≤
-      lr * ((∑ j, |gradAt f x j|) + m * η) := by
-    calc (∑ j, |(-(lr • gh)) j|) = ∑ j, lr * |gh j| := by
-          refine Finset.sum_congr rfl fun j _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ j, lr * (|gradAt f x j| + η) := by
-          refine Finset.sum_le_sum fun j _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h1 : |gh j| ≤ |gh j - gradAt f x j| + |gradAt f x j| := by
-            simpa using abs_sub_le (gh j) (gradAt f x j) 0
-          linarith [hgh j]
-      _ = lr * ((∑ j, |gradAt f x j|) + m * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  have hD := sgd_step_l1_le (gradAt f x) gh hlr hgh
   -- inner-product bound: ⟨d, ∇f⟩ ≤ −lr·‖∇f‖₂² + lr·η·‖∇f‖₁
   have hinner : (∑ i, (-(lr • gh)) i * gradAt f x i) ≤
       -(lr * ∑ i, gradAt f x i ^ 2)

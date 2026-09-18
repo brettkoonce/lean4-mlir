@@ -326,15 +326,7 @@ theorem loss_grad_lipschitz {P d₂ d₃ : Nat} (Z : Vec P → Vec d₂) (W₂ :
           mul_le_mul_of_nonneg_left (h1.trans (mul_le_mul_of_nonneg_left
             (mul_le_mul_of_nonneg_left hd ht0) hρ)) hw₂
       _ = t * (w₂ * (ρ * D)) := by ring
-  have hδlt : 2 * (t * (w₂ * (ρ * D))) < 1 := by
-    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
-  have hS : ∀ k, |softmax d₃ (dense W₂ b₂ (relu d₂ (Z (v + t • d)))) k -
-      softmax d₃ (dense W₂ b₂ (relu d₂ (Z v))) k| ≤
-      2 * (t * (w₂ * (ρ * D))) / (1 - 2 * (w₂ * (ρ * D))) := fun k => by
-    refine (FloatModel.softmax_perturb _ _ hzdrift k).trans
-      ((FloatModel.exp_sub_one_le hδlt).trans ?_)
-    refine div_le_div_of_nonneg_left (by nlinarith [mul_nonneg ht0 hδ0]) hden ?_
-    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
+  have hS := softmax_seg_drift _ _ ht0 ht1 hδ0 hsmall hzdrift
   have hM0 : (0:ℝ) ≤ (d₃ : ℝ) * (w₂ * (2 * (t * (w₂ * (ρ * D))) /
       (1 - 2 * (w₂ * (ρ * D))))) :=
     mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₂
@@ -561,21 +553,8 @@ theorem mlp_hidden_sgd_descends {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
   -- ℓ1 radius of the step
   have hD : (∑ idx, |(-(lr • gh)) idx|) ≤
       lr * ((∑ idx, |gradAt f (Mat.flatten W₁) idx|) +
-        ((d₁ * d₂ : ℕ) : ℝ) * η) := by
-    calc (∑ idx, |(-(lr • gh)) idx|) = ∑ idx, lr * |gh idx| := by
-          refine Finset.sum_congr rfl fun idx _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ idx, lr * (|gradAt f (Mat.flatten W₁) idx| + η) := by
-          refine Finset.sum_le_sum fun idx _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h3 : |gh idx| ≤ |gh idx - gradAt f (Mat.flatten W₁) idx| +
-              |gradAt f (Mat.flatten W₁) idx| := by
-            simpa using abs_sub_le (gh idx) (gradAt f (Mat.flatten W₁) idx) 0
-          linarith [hgh idx]
-      _ = lr * ((∑ idx, |gradAt f (Mat.flatten W₁) idx|) +
-            ((d₁ * d₂ : ℕ) : ℝ) * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+        ((d₁ * d₂ : ℕ) : ℝ) * η) :=
+    sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f (Mat.flatten W₁) gh hlr hη hC0 hgh
     (fun t ht => mlp_hidden_loss_differentiableAt b₁ W₂ b₂ a₀ label _
       (fun k => (margin_keeps_offkink b₁ a₀ ha hx (Mat.flatten W₁)
@@ -977,21 +956,8 @@ theorem mlp_input_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁
   -- ℓ1 radius of the step
   have hD : (∑ idx, |(-(lr • gh)) idx|) ≤
       lr * ((∑ idx, |gradAt f (Mat.flatten W₀) idx|) +
-        ((d₀ * d₁ : ℕ) : ℝ) * η) := by
-    calc (∑ idx, |(-(lr • gh)) idx|) = ∑ idx, lr * |gh idx| := by
-          refine Finset.sum_congr rfl fun idx _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ idx, lr * (|gradAt f (Mat.flatten W₀) idx| + η) := by
-          refine Finset.sum_le_sum fun idx _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h3 : |gh idx| ≤ |gh idx - gradAt f (Mat.flatten W₀) idx| +
-              |gradAt f (Mat.flatten W₀) idx| := by
-            simpa using abs_sub_le (gh idx) (gradAt f (Mat.flatten W₀) idx) 0
-          linarith [hgh idx]
-      _ = lr * ((∑ idx, |gradAt f (Mat.flatten W₀) idx|) +
-            ((d₀ * d₁ : ℕ) : ℝ) * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+        ((d₀ * d₁ : ℕ) : ℝ) * η) :=
+    sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f (Mat.flatten W₀) gh hlr hη hC0 hgh
     (fun t ht => mlp_input_loss_differentiableAt b₀ W₁ b₁ W₂ b₂ x label _
       (fun k => (margin_keeps_offkink b₀ x ha hx (Mat.flatten W₀)

@@ -3113,32 +3113,7 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
           (Nat.cast_nonneg _)) hw₄) (Nat.cast_nonneg _)) hw₅
     have h4 := mul_le_mul_of_nonneg_left h3 ht0
     linarith
-  have hδlt : 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-      (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) < 1 := by
-    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
-  have hexp := FloatModel.exp_sub_one_le hδlt
-  have hmono : 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-        (1 - 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))))) ≤
-      2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) := by
-    refine div_le_div_of_nonneg_left
-      (by nlinarith [mul_nonneg ht0 hδ0]) hden ?_
-    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
-  have hS : ∀ k, |softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-      (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-        (Z (v + t • d))))))))) k -
-      softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Z v)))))))) k| ≤
-      2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) :=
-    fun k => le_trans (FloatModel.softmax_perturb _ _ hzdrift k)
-      (le_trans hexp hmono)
+  have hS := softmax_seg_drift _ _ ht0 ht1 hδ0 hsmall hzdrift
   have hΔ0 : (0:ℝ) ≤ 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
       (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
       (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
@@ -3493,23 +3468,8 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
   -- ℓ1 radius of the step
   have hD : (∑ idx, |(-(lr • gh)) idx|) ≤
       lr * ((∑ idx, |gradAt f (Kernel4.flatten W₂) idx|) +
-        ((c * c * kH * kW : ℕ) : ℝ) * η) := by
-    calc (∑ idx, |(-(lr • gh)) idx|) = ∑ idx, lr * |gh idx| := by
-          refine Finset.sum_congr rfl fun idx _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ idx, lr * (|gradAt f (Kernel4.flatten W₂) idx| + η) := by
-          refine Finset.sum_le_sum fun idx _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h3 : |gh idx| ≤
-              |gh idx - gradAt f (Kernel4.flatten W₂) idx| +
-              |gradAt f (Kernel4.flatten W₂) idx| := by
-            simpa using abs_sub_le (gh idx)
-              (gradAt f (Kernel4.flatten W₂) idx) 0
-          linarith [hgh idx]
-      _ = lr * ((∑ idx, |gradAt f (Kernel4.flatten W₂) idx|) +
-            ((c * c * kH * kW : ℕ) : ℝ) * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+        ((c * c * kH * kW : ℕ) : ℝ) * η) :=
+    sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f (Kernel4.flatten W₂) gh hlr hη hC0 hgh
     (fun t ht => cnn_conv2_loss_differentiableAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
       label hc hh hw _
@@ -6033,22 +5993,8 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
               b₁ x₀)))))))))) q| := fun q => by
     rw [Kernel4.unflatten_flatten]
     exact hm4 q
-  have hD : (∑ idx, |(-(lr • gh)) idx|) ≤ lr * ((∑ idx, |gradAt f (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η) := by
-    calc (∑ idx, |(-(lr • gh)) idx|) = ∑ idx, lr * |gh idx| := by
-          refine Finset.sum_congr rfl fun idx _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ idx, lr * (|gradAt f (Kernel4.flatten W₁) idx| + η) := by
-          refine Finset.sum_le_sum fun idx _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h3 : |gh idx| ≤
-              |gh idx - gradAt f (Kernel4.flatten W₁) idx| +
-              |gradAt f (Kernel4.flatten W₁) idx| := by
-            simpa using abs_sub_le (gh idx)
-              (gradAt f (Kernel4.flatten W₁) idx) 0
-          linarith [hgh idx]
-      _ = lr * ((∑ idx, |gradAt f (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  have hD : (∑ idx, |(-(lr • gh)) idx|) ≤ lr * ((∑ idx, |gradAt f (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η) :=
+    sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f (Kernel4.flatten W₁) gh hlr hη hC0 hgh
     (fun t ht => cnn_conv1_loss_differentiableAt b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄
       W₅ b₅ label hc hh hw _
@@ -6846,20 +6792,8 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     div_nonneg (by positivity) hden.le
   -- ℓ1 radius of the step
   have hD : (∑ o, |(-(lr • gh)) o|) ≤
-      lr * ((∑ o, |gradAt f b₂ o|) + (c : ℝ) * η) := by
-    calc (∑ o, |(-(lr • gh)) o|) = ∑ o, lr * |gh o| := by
-          refine Finset.sum_congr rfl fun o _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ o, lr * (|gradAt f b₂ o| + η) := by
-          refine Finset.sum_le_sum fun o _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h3 : |gh o| ≤
-              |gh o - gradAt f b₂ o| + |gradAt f b₂ o| := by
-            simpa using abs_sub_le (gh o) (gradAt f b₂ o) 0
-          linarith [hgh o]
-      _ = lr * ((∑ o, |gradAt f b₂ o|) + (c : ℝ) * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+      lr * ((∑ o, |gradAt f b₂ o|) + (c : ℝ) * η) :=
+    sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f b₂ gh hlr hη hC0 hgh
     (fun t ht => cnn_conv2_bias_loss_differentiableAt W₂ x₁ W₃ b₃ W₄ b₄
       W₅ b₅ label hc hh hw _
@@ -7444,20 +7378,8 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
   have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ idx, |gradAt f b₁ idx|) + (c : ℝ) * η)))))))))) := by linarith
   have hC0 : (0:ℝ) ≤ 2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 / (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ idx, |gradAt f b₁ idx|) + (c : ℝ) * η))))))))))) :=
     div_nonneg (by positivity) hden.le
-  have hD : (∑ idx, |(-(lr • gh)) idx|) ≤ lr * ((∑ idx, |gradAt f b₁ idx|) + (c : ℝ) * η) := by
-    calc (∑ idx, |(-(lr • gh)) idx|) = ∑ idx, lr * |gh idx| := by
-          refine Finset.sum_congr rfl fun idx _ => ?_
-          simp [abs_mul, abs_of_nonneg hlr]
-      _ ≤ ∑ idx, lr * (|gradAt f b₁ idx| + η) := by
-          refine Finset.sum_le_sum fun idx _ => ?_
-          refine mul_le_mul_of_nonneg_left ?_ hlr
-          have h3 : |gh idx| ≤
-              |gh idx - gradAt f b₁ idx| + |gradAt f b₁ idx| := by
-            simpa using abs_sub_le (gh idx) (gradAt f b₁ idx) 0
-          linarith [hgh idx]
-      _ = lr * ((∑ idx, |gradAt f b₁ idx|) + (c : ℝ) * η) := by
-          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  have hD : (∑ idx, |(-(lr • gh)) idx|) ≤ lr * ((∑ idx, |gradAt f b₁ idx|) + (c : ℝ) * η) :=
+    sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f b₁ gh hlr hη hC0 hgh
     (fun t ht => cnn_conv1_bias_loss_differentiableAt W₁ x₀ W₂ b₂ W₃ b₃
       W₄ b₄ W₅ b₅ label hc hh hw _

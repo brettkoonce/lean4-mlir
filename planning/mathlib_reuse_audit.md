@@ -23,7 +23,7 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `7f727834`, 3 ahead of origin, + the staged row)
+## Status (2026-09-18, main `feba953c` = origin, pushed)
 
 **Landed** — about 11.4k lines out, every pinned theorem name and statement unchanged:
 
@@ -52,7 +52,8 @@ suspected, no drop-in located.
 | `2a737436` | **§8 ViT/ConvNeXt near-clones** (−691, 20 files). `preLNRes_has_vjp_mat` (`Attention.lean`): the four pre-LN residual sublayer VJPs (scalar/vector LN × attention/MLP) are instances, `rfl`-equal backwards; `patchEmbed_flat_has_vjp.correct` and `pdiv_softmax` on `sum_ite_eq` / `if_congr` (Attention 2,992 → 2,799). The heads = 1 MHSA collapse is `mhsaClean_backward_collapseMH` + the `Fin 1` reindex (121 → 21 lines, 4M heartbeats gone; `qkv_back_fanin`, `sum_one_3d` deleted). The 12 backward-unfold `rfl` lemmas → 6: the four in the tie files move up into `ViTBackB0` under the same names (`_root_.`, types `Expr`-identical; two are AuditAxioms-pinned) and six private copies go. `mlpSublayerBackGraph_faithful` is the MH one at `hm1 := 0`. `vitApexVJP` is `vitForwardKV_has_vjp` itself and `chanLNTensor3_has_vjp` is the term-mode chain, so both `backward_unique` transfers and `chanLNTensor3_vjp_chain` go (the docstrings' "tactic witness sits behind an `Eq.mpr`" was false: `vitNetBackGraph_faithful` already unfolds it by `rfl`). New `StableHLO.patchEmbedF_x_den` (`ViTFwdGraph`) — stage 0 of the five ViT forward-graph faithfulness proofs. Grad bridges on `sum_ite_eq` (ViTClose ×6, ViTVecLN ×2, ViTFoldG, ConvNeXtFold/FoldG, ChannelLN); the four ConvNeXt head folds delegate to the ViT ones (`ConvNeXtFoldG` now imports `ViTFoldG`); `pdiv_layerScale_gamma` from `pdiv_layerScale`. Dead: `hasVJP_backward_det`, `vitCotB2out`, `cnxStemPatchO`, `cnxD11`, the two ChannelLN doc `rfl`s |
 | `38a320c6` | **§7 tie clauses, conv / depthwise / dense** (−469): one clause `Prop` per gradient node, each its `_den` lemma's statement with the index bound — `ConvWTiedB`, `ConvBTiedB`, `ConvStrided{W,B}TiedB`, `ConvStridedXlaWTiedB`, `Depthwise{W,B}TiedB`, `DepthwiseStridedWTiedB`, `Dense{W,B}TiedB` (`ResNet34FoldB`, beside `BnPairTiedB`) and the fused `ConvWSgdTiedB`, `DepthwiseWSgdTiedB`, `Dense{W,B}SgdTiedB` (`EfficientNetFold`). 116 clauses in 30 tie `def`s (R34, R50, MNv2, MNv4, EfficientNet G + fused, ConvNeXt GB) are one line each; the tie proofs don't move (`intro idx` unfolds the Prop). Each rewritten `def` checked `rfl`-equal to its HEAD text. Left as written: seven one-off ops (MNv2's `convStridedXlaBias` / `depthwiseStridedXla` pair, the fused ENet `convStridedXla` / `depthwiseStrided` weights, ConvNeXt's stride-4 stem pair, ViT's patch bias) |
 | `7f727834` | **§7/§8 tie clauses, row-dense / LN** (−155): the same fold for the ViT and ConvNeXt ties — `ViTPoC.{RowDense{W,B},VecLN{Gamma,Beta}}SgdTied` (`ViTFold`), `ViTPoCGB.{RowDense{W,B},VecLN{Gamma,Beta}}TiedB` (`ViTFoldGB`), `CnxPoC.ChanLN{Gamma,Beta}SgdTied`, `CnxPoCGB.ChanLN{Gamma,Beta}TiedB`. 66 clauses in 12 tie `def`s (ViTStepTie/GB, ConvNeXtStepTie/GB; the ConvNeXt head uses the ViT vector-LN Props), each `def` `rfl`-equal to its HEAD text; the tie proofs don't move. Left as written: ViT's final-LN pair, whose cotangent is an unparenthesised application |
-| *(staged)* | **§10 test and program duplicates** (−1,238; §11 defects 2–4 closed): `TestCifar8WideTrain` deleted — `TestCifar8AdamTrain`'s six train steps are one packed-signature `trainStep` + per-optimizer one-liners over `(d1, fname)`, and `main` renders both canonical widths (`cifar8` at 64, `cifar8w` at 512); all 17 renders byte-identical to the two old files, all 14 committed artifacts `iree-compile`. The 14 vjp-oracle nets + `cfg` live once in `LeanMlir/VjpOracleNets.lean` (namespace `VjpOracle`), imported by the 14 phase-3 and 14 phase-2 mains (one call each); `ci_smoke.sh` 14/14. `TestMHSA` gradchecks the shipped `ViTRender.mhsaFwd`/`mhsaBack` (its copy is gone; renders byte-identical); `TestMHSA`/`TestSDPA` call `adjointGradcheck`, which is `adjointGradcheckFixed … []`. The comparators in `TestR50AccumTie`, `TestR50AccumShardTie`, `TestChannelLN`, `TestConvBiasZero` (×3) take the magnitude over both buffers |
+| `feba953c` | **§10 test and program duplicates** (−1,238; §11 defects 2–4 closed): `TestCifar8WideTrain` deleted — `TestCifar8AdamTrain`'s six train steps are one packed-signature `trainStep` + per-optimizer one-liners over `(d1, fname)`, and `main` renders both canonical widths (`cifar8` at 64, `cifar8w` at 512); all 17 renders byte-identical to the two old files, all 14 committed artifacts `iree-compile`. The 14 vjp-oracle nets + `cfg` live once in `LeanMlir/VjpOracleNets.lean` (namespace `VjpOracle`), imported by the 14 phase-3 and 14 phase-2 mains (one call each); `ci_smoke.sh` 14/14. `TestMHSA` gradchecks the shipped `ViTRender.mhsaFwd`/`mhsaBack` (its copy is gone; renders byte-identical); `TestMHSA`/`TestSDPA` call `adjointGradcheck`, which is `adjointGradcheckFixed … []`. The comparators in `TestR50AccumTie`, `TestR50AccumShardTie`, `TestChannelLN`, `TestConvBiasZero` (×3) take the magnitude over both buffers |
+| *(staged)* | **§4 descent-capstone arithmetic** (−123): new `sgd_step_l1_le` (`SgdDescent`) — the `ℓ1` radius `lr·(‖g‖₁ + m·η)` of an inexact step — replaces the 15-line `calc` in `sgd_descent_inexact` and the seven capstones (Linear, Mlp ×2, Cnn ×4); each site keeps its stated `hD` type. New `softmax_seg_drift` (`SgdDescentLinear`) — logit drift `≤ t·δ` with `2δ < 1` gives softmax drift `≤ 2tδ/(1−2δ)` (`softmax_perturb` + `exp_sub_one_le` + the denominator step) — closes the softmax step of the Linear, `MlpSlot` and `Conv2Slot` Lipschitz lemmas (Cnn 26 → 1 lines). Only three softmax copies were left; `Conv1Slot`/`Conv2Slot`/`MlpSlot` had absorbed the other four |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -66,9 +67,19 @@ pinned statements of one fact, each already a 2-line proof over the pointwise le
 **Next, in order** (handoff for the next session: chase the remaining duplicates, largest verified first,
 one family per commit; the pinned-statement questions wait for the end list below). ⚠ Recent batches landed
 at 35–70% of their estimates (signatures stay; some listed sites turn out not to be the shape) — plan on half.
-1. **§4 Training near-clones** (~600): softmax segment drift ×7 → `softmax_seg_drift`; ℓ1 step radius ×8 →
-   `sgd_step_l1_le`; the `finProdFinEquiv` reindex ×5 → `sum_finProdFinEquiv`; the `*_jacobian_nonzero` ray
-   argument ×6 → `fderiv_ne_zero_of_ray`; the seal-file specialisations.
+1. **§4 Training near-clones** (~600, likely ~300 at the landing rate) — in progress 2026-09-18. Families
+   plus the seal files, one commit each (see §4 below for the lemma sketches):
+   - ~~softmax segment drift → `softmax_seg_drift`; ℓ1 step radius `hD` ×8 → `sgd_step_l1_le`~~ (staged row);
+   - the `finProdFinEquiv` reindex ×5 (`sum_t3`, `sum_w3`, `sum_s2`, `sum_abs_k4`, `sum_abs_flatten_cols`)
+     → one `sum_finProdFinEquiv`, plus the 7 inline `surjective` peels → `t3Idx_surj`/`k4Idx_surj`;
+   - the `*_jacobian_nonzero` ray argument ×6 (the MNv2 / R34 seal files, `ResNet34LiveFull`) →
+     `fderiv_ne_zero_of_ray`;
+   - the seal-file specialisations (`bnForward_chan_diff`, `winF`/`win'`/`win`, `ldS`/`stemS`/`Rr`/`ray`).
+   ⚠ §4's line numbers are from `aed84250`: `SgdDescentCnn` has since shrunk 9,974 → 8,374 and
+   `SgdDescentMlp` 2,187 → 1,926 (the `Conv1Slot`/`Conv2Slot`/`MlpSlot` batches), so re-locate each site by
+   name. Several of the drift/radius copies may already be gone inside the slot lemmas. `SgdDescentCnn` is a
+   leaf (Certs ≈ 35 s); the seal files are leaves too. `FloatBridge` (~100 downstream) holds the private
+   `softmax_nonneg`/`softmax_le_one` that §3's item 2 wants public — keep that for the §3 batch.
 2. **§3 Float near-clones** (~500): `conv_close_mixed` ≡ `depthwise_close_mixed`; `FloatClose.of_close`;
    `floatClose_bnRelu` / `_residualBlock` as `.comp`; `bnVar_close` on `bnMean_close_of`;
    `FloatModel.rnd_close` / `abs_rnd_le`; `mlp_l1_close`; public softmax bounds +
