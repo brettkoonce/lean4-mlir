@@ -362,23 +362,8 @@ def r50IdTiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : String) (p : R5
                       (Tensor3.unflatten (batchSlice N (oc * h * w) xin n))))
                  (Kernel4.flatten p.W₁) idx j * batchSlice N (mid * h * w) cotC1 n j)
   ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₁ (reassocB N (mid) (h) (w) c1)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN1))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₁ γ' p.β₁
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c1)))
-                 p.γ₁ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN1) j)
-  ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN1))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₁ p.γ₁ β'
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c1)))
-                 p.β₁ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN1) j)
+  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
+      (reassocB N mid h w cotN1)
   ∧
   (∀ idx : Fin (mid * mid * 3 * 3),
       den (SHlo.convWeightGradB xN p.b₂ r1 p.W₂ (.operand cotN cotC2)) idx
@@ -388,23 +373,8 @@ def r50IdTiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : String) (p : R5
                       (Tensor3.unflatten (batchSlice N (mid * h * w) r1 n))))
                  (Kernel4.flatten p.W₂) idx j * batchSlice N (mid * h * w) cotC2 n j)
   ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₂ (reassocB N (mid) (h) (w) c2)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN2))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₂ γ' p.β₂
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c2)))
-                 p.γ₂ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN2) j)
-  ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN2))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₂ p.γ₂ β'
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c2)))
-                 p.β₂ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN2) j)
+  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+      (reassocB N mid h w cotN2)
   ∧
   (∀ idx : Fin (oc * mid * 1 * 1),
       den (SHlo.convWeightGradB xN p.b₃ r2 p.W₃ (.operand cotN cotC3)) idx
@@ -414,45 +384,24 @@ def r50IdTiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : String) (p : R5
                       (Tensor3.unflatten (batchSlice N (mid * h * w) r2 n))))
                  (Kernel4.flatten p.W₃) idx j * batchSlice N (oc * h * w) cotC3 n j)
   ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₃ (reassocB N (oc) (h) (w) c3)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.ε₃ γ' p.β₃
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) c3)))
-                 p.γ₃ k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
-  ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.ε₃ p.γ₃ β'
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) c3)))
-                 p.β₃ k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
+  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+      (reassocB N oc h w cotA)
 
 theorem r50_idblock_tiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : String) (p : R50IdW mid oc)
     (xin dyOut : Vec (N * (oc * h * w))) :
     r50IdTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r50IdTiedB
   intro r1 r2 c1 c2 c3 cotA cotC3 cotN2 cotC2 cotN1 cotC1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₁ p.γ₁ p.β₁
-                 (reassocB N mid h w c1) (reassocB N mid h w cotN1) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₁ p.γ₁ p.β₁
-                 (bnchwFwd N mid h w (reassocB N mid h w c1)) (reassocB N mid h w cotN1) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
+          (reassocB N mid h w cotN1)
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₂ p.γ₂ p.β₂
-                 (reassocB N mid h w c2) (reassocB N mid h w cotN2) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₂ p.γ₂ p.β₂
-                 (bnchwFwd N mid h w (reassocB N mid h w c2)) (reassocB N mid h w cotN2) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+          (reassocB N mid h w cotN2)
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₃ r2 p.W₃ cotC3 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₃ p.γ₃ p.β₃
-                 (reassocB N oc h w c3) (reassocB N oc h w cotA) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₃ p.γ₃ p.β₃
-                 (bnchwFwd N oc h w (reassocB N oc h w c3)) (reassocB N oc h w cotA) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+          (reassocB N oc h w cotA)
 
 /-- ⭐ **Stride-1 projection bottleneck, tied.** Twelve nodes: the identity block's nine plus the
     1×1 skip's weight and its BatchNorm γ/β. ⚠ The skip's conv is an ORDINARY `convWeightGradB` —
@@ -482,23 +431,8 @@ def r50ProjTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (Tensor3.unflatten (batchSlice N (ic * h * w) xin n))))
                  (Kernel4.flatten p.W₁) idx j * batchSlice N (mid * h * w) cotC1 n j)
   ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₁ (reassocB N (mid) (h) (w) c1)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN1))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₁ γ' p.β₁
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c1)))
-                 p.γ₁ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN1) j)
-  ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN1))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₁ p.γ₁ β'
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c1)))
-                 p.β₁ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN1) j)
+  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
+      (reassocB N mid h w cotN1)
   ∧
   (∀ idx : Fin (mid * mid * 3 * 3),
       den (SHlo.convWeightGradB xN p.b₂ r1 p.W₂ (.operand cotN cotC2)) idx
@@ -508,23 +442,8 @@ def r50ProjTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (Tensor3.unflatten (batchSlice N (mid * h * w) r1 n))))
                  (Kernel4.flatten p.W₂) idx j * batchSlice N (mid * h * w) cotC2 n j)
   ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₂ (reassocB N (mid) (h) (w) c2)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN2))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₂ γ' p.β₂
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c2)))
-                 p.γ₂ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN2) j)
-  ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN2))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₂ p.γ₂ β'
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c2)))
-                 p.β₂ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN2) j)
+  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+      (reassocB N mid h w cotN2)
   ∧
   (∀ idx : Fin (oc * mid * 1 * 1),
       den (SHlo.convWeightGradB xN p.b₃ r2 p.W₃ (.operand cotN cotC3)) idx
@@ -534,23 +453,8 @@ def r50ProjTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (Tensor3.unflatten (batchSlice N (mid * h * w) r2 n))))
                  (Kernel4.flatten p.W₃) idx j * batchSlice N (oc * h * w) cotC3 n j)
   ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₃ (reassocB N (oc) (h) (w) c3)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.ε₃ γ' p.β₃
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) c3)))
-                 p.γ₃ k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
-  ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.ε₃ p.γ₃ β'
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) c3)))
-                 p.β₃ k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
+  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+      (reassocB N oc h w cotA)
   ∧
   (∀ idx : Fin (oc * ic * 1 * 1),
       den (SHlo.convWeightGradB xN p.bp xin p.Wp (.operand cotN cotCp)) idx
@@ -560,50 +464,27 @@ def r50ProjTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (Tensor3.unflatten (batchSlice N (ic * h * w) xin n))))
                  (Kernel4.flatten p.Wp) idx j * batchSlice N (oc * h * w) cotCp n j)
   ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnGammaGradB vN epsStr p.εp (reassocB N (oc) (h) (w) cp)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.εp γ' p.βp
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cp)))
-                 p.γp k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
-  ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.εp p.γp β'
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cp)))
-                 p.βp k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
+  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
+      (reassocB N oc h w cotA)
 
 theorem r50_projblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p : R50ProjW ic mid oc)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
     r50ProjTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r50ProjTiedB
   intro r1 r2 c1 c2 c3 cp cotA cotC3 cotN2 cotC2 cotN1 cotC1 cotCp
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₁ p.γ₁ p.β₁
-                 (reassocB N mid h w c1) (reassocB N mid h w cotN1) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₁ p.γ₁ p.β₁
-                 (bnchwFwd N mid h w (reassocB N mid h w c1)) (reassocB N mid h w cotN1) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
+          (reassocB N mid h w cotN1)
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₂ p.γ₂ p.β₂
-                 (reassocB N mid h w c2) (reassocB N mid h w cotN2) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₂ p.γ₂ p.β₂
-                 (bnchwFwd N mid h w (reassocB N mid h w c2)) (reassocB N mid h w cotN2) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+          (reassocB N mid h w cotN2)
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₃ r2 p.W₃ cotC3 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₃ p.γ₃ p.β₃
-                 (reassocB N oc h w c3) (reassocB N oc h w cotA) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₃ p.γ₃ p.β₃
-                 (bnchwFwd N oc h w (reassocB N oc h w c3)) (reassocB N oc h w cotA) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+          (reassocB N oc h w cotA)
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.bp xin p.Wp cotCp idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.εp p.γp p.βp
-                 (reassocB N oc h w cp) (reassocB N oc h w cotA) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.εp p.γp p.βp
-                 (bnchwFwd N oc h w (reassocB N oc h w cp)) (reassocB N oc h w cotA) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
+          (reassocB N oc h w cotA)
 
 /-- **Strided projection bottleneck, tied.** Twelve nodes, and TWO of the four conv weights are
     the strided op. ⚠⚠ v1.5: `W₁` is an ordinary `convWeightGradB` at the INPUT grid `2h × 2w` and
@@ -633,23 +514,8 @@ def r50DownTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (Tensor3.unflatten (batchSlice N (ic * (2 * h) * (2 * w)) xin n))))
                  (Kernel4.flatten p.W₁) idx j * batchSlice N (mid * (2 * h) * (2 * w)) cotC1 n j)
   ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₁ (reassocB N (mid) (2 * h) (2 * w) c1)
-            (.operand cotN (reassocB N (mid) (2 * h) (2 * w) cotN1))) k
-        = ∑ j : Fin ((mid) * (N * ((2 * h) * (2 * w)))),
-            pdiv (fun γ' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((2 * h) * (2 * w))) p.ε₁ γ' p.β₁
-                      (bnchwFwd N (mid) (2 * h) (2 * w) (reassocB N (mid) (2 * h) (2 * w) c1)))
-                 p.γ₁ k j * bnchwFwd N (mid) (2 * h) (2 * w) (reassocB N (mid) (2 * h) (2 * w) cotN1) j)
-  ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := 2 * h) (w := 2 * w)
-            (.operand cotN (reassocB N (mid) (2 * h) (2 * w) cotN1))) k
-        = ∑ j : Fin ((mid) * (N * ((2 * h) * (2 * w)))),
-            pdiv (fun β' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((2 * h) * (2 * w))) p.ε₁ p.γ₁ β'
-                      (bnchwFwd N (mid) (2 * h) (2 * w) (reassocB N (mid) (2 * h) (2 * w) c1)))
-                 p.β₁ k j * bnchwFwd N (mid) (2 * h) (2 * w) (reassocB N (mid) (2 * h) (2 * w) cotN1) j)
+  ResNet34PoCB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN p.ε₁ p.γ₁ p.β₁
+      (reassocB N mid (2 * h) (2 * w) c1) (reassocB N mid (2 * h) (2 * w) cotN1)
   ∧
   (∀ idx : Fin (mid * mid * 3 * 3),
       den (SHlo.convStridedWeightGradB xN p.b₂ r1 p.W₂ (.operand cotN cotC2)) idx
@@ -659,23 +525,8 @@ def r50DownTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (batchSlice N (mid * (2 * h) * (2 * w)) r1 n))
                  (Kernel4.flatten p.W₂) idx j * batchSlice N (mid * h * w) cotC2 n j)
   ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₂ (reassocB N (mid) (h) (w) c2)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN2))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₂ γ' p.β₂
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c2)))
-                 p.γ₂ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN2) j)
-  ∧
-  (∀ k : Fin (mid),
-      den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
-            (.operand cotN (reassocB N (mid) (h) (w) cotN2))) k
-        = ∑ j : Fin ((mid) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (mid) =>
-                    bnPerChannelFlat (mid) (N * ((h) * (w))) p.ε₂ p.γ₂ β'
-                      (bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) c2)))
-                 p.β₂ k j * bnchwFwd N (mid) (h) (w) (reassocB N (mid) (h) (w) cotN2) j)
+  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+      (reassocB N mid h w cotN2)
   ∧
   (∀ idx : Fin (oc * mid * 1 * 1),
       den (SHlo.convWeightGradB xN p.b₃ r2 p.W₃ (.operand cotN cotC3)) idx
@@ -685,23 +536,8 @@ def r50DownTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (Tensor3.unflatten (batchSlice N (mid * h * w) r2 n))))
                  (Kernel4.flatten p.W₃) idx j * batchSlice N (oc * h * w) cotC3 n j)
   ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnGammaGradB vN epsStr p.ε₃ (reassocB N (oc) (h) (w) c3)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.ε₃ γ' p.β₃
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) c3)))
-                 p.γ₃ k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
-  ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.ε₃ p.γ₃ β'
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) c3)))
-                 p.β₃ k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
+  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+      (reassocB N oc h w cotA)
   ∧
   (∀ idx : Fin (oc * ic * 1 * 1),
       den (SHlo.convStridedWeightGradB xN p.bp xin p.Wp (.operand cotN cotCp)) idx
@@ -711,51 +547,27 @@ def r50DownTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
                       (batchSlice N (ic * (2 * h) * (2 * w)) xin n))
                  (Kernel4.flatten p.Wp) idx j * batchSlice N (oc * h * w) cotCp n j)
   ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnGammaGradB vN epsStr p.εp (reassocB N (oc) (h) (w) cp)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun γ' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.εp γ' p.βp
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cp)))
-                 p.γp k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
-  ∧
-  (∀ k : Fin (oc),
-      den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-            (.operand cotN (reassocB N (oc) (h) (w) cotA))) k
-        = ∑ j : Fin ((oc) * (N * ((h) * (w)))),
-            pdiv (fun β' : Vec (oc) =>
-                    bnPerChannelFlat (oc) (N * ((h) * (w))) p.εp p.γp β'
-                      (bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cp)))
-                 p.βp k j * bnchwFwd N (oc) (h) (w) (reassocB N (oc) (h) (w) cotA) j)
+  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
+      (reassocB N oc h w cotA)
 
 theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p : R50ProjW ic mid oc)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
     r50DownTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r50DownTiedB
   intro r1 r2 c1 c2 c3 cp cotA cotC3 cotN2 cotC2 cotN1 cotC1 cotCp
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₁ p.γ₁ p.β₁
-                 (reassocB N mid (2 * h) (2 * w) c1) (reassocB N mid (2 * h) (2 * w) cotN1) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₁ p.γ₁ p.β₁
-                 (bnchwFwd N mid (2 * h) (2 * w) (reassocB N mid (2 * h) (2 * w) c1))
-                 (reassocB N mid (2 * h) (2 * w) cotN1) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁
+          (reassocB N mid (2 * h) (2 * w) c1) (reassocB N mid (2 * h) (2 * w) cotN1)
   · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₂ p.γ₂ p.β₂
-                 (reassocB N mid h w c2) (reassocB N mid h w cotN2) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₂ p.γ₂ p.β₂
-                 (bnchwFwd N mid h w (reassocB N mid h w c2)) (reassocB N mid h w cotN2) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+          (reassocB N mid h w cotN2)
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₃ r2 p.W₃ cotC3 idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.ε₃ p.γ₃ p.β₃
-                 (reassocB N oc h w c3) (reassocB N oc h w cotA) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.ε₃ p.γ₃ p.β₃
-                 (bnchwFwd N oc h w (reassocB N oc h w c3)) (reassocB N oc h w cotA) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+          (reassocB N oc h w cotA)
   · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN p.bp xin p.Wp cotCp idx
-  · intro k;   exact ResNet34PoCB.bnGammaGradB_den vN epsStr cotN p.εp p.γp p.βp
-                 (reassocB N oc h w cp) (reassocB N oc h w cotA) k
-  · intro k;   exact ResNet34PoCB.bnBetaGradB_den cotN p.εp p.γp p.βp
-                 (bnchwFwd N oc h w (reassocB N oc h w cp)) (reassocB N oc h w cotA) k
+  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
+          (reassocB N oc h w cotA)
 
 
 -- ════════════════════════════════════════════════════════════════
