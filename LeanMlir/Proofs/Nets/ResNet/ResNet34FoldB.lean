@@ -206,4 +206,121 @@ theorem denseBGradB_den {N c : Nat}
   intro n _
   exact dense_bias_grad_correct W b x (batchSlice N c cot n) j
 
+-- ════════════════════════════════════════════════════════════════
+-- § Tie clauses — one gradient node each
+--   What a step tie states per conv / depthwise / dense parameter: the emitted `*GradB` node
+--   denotes the certified `Σ_n` gradient at the layer's input `x` and output cotangent `cot`.
+--   Each is its `_den` lemma's statement with the index bound, so `intro idx; exact …_den … idx`
+--   proves it (and `EnetPoCG` / `Mnv2PaperPoCG` / `CnxPoCGB` peers prove the same Props).
+-- ════════════════════════════════════════════════════════════════
+
+/-- A stride-1 conv weight gradient node, tied (`convWGradB_den`). -/
+def ConvWTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN : String) (b : Vec oc)
+    (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW) (cot : Vec (N * (oc * h * w))) :
+    Prop :=
+  ∀ idx : Fin (oc * ic * kH * kW),
+    den (SHlo.convWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+                  Tensor3.flatten (conv2d (Kernel4.unflatten v') b
+                    (Tensor3.unflatten (batchSlice N (ic * h * w) x n))))
+               (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j
+
+/-- A stride-1 conv bias gradient node, tied (`convBGradB_den`). -/
+def ConvBTiedB (N h w : Nat) {ic oc kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
+    (x : Vec (N * (ic * h * w))) (b : Vec oc) (cot : Vec (N * (oc * h * w))) : Prop :=
+  ∀ o : Fin oc,
+    den (SHlo.convBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun b' : Vec oc =>
+                  Tensor3.flatten (conv2d W b'
+                    (Tensor3.unflatten (batchSlice N (ic * h * w) x n))))
+               b o j * batchSlice N (oc * h * w) cot n j
+
+/-- A stride-2 (symmetric-pad) conv weight gradient node, tied (`convStridedWGradB_den`). -/
+def ConvStridedWTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN : String) (b : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
+    (cot : Vec (N * (oc * h * w))) : Prop :=
+  ∀ idx : Fin (oc * ic * kH * kW),
+    den (SHlo.convStridedWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+                  flatConvStride2 (Kernel4.unflatten v') b
+                    (batchSlice N (ic * (2 * h) * (2 * w)) x n))
+               (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j
+
+/-- A stride-2 (symmetric-pad) conv bias gradient node, tied (`convStridedBGradB_den`). -/
+def ConvStridedBTiedB (N h w : Nat) {ic oc kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (b : Vec oc) (cot : Vec (N * (oc * h * w))) : Prop :=
+  ∀ o : Fin oc,
+    den (SHlo.convStridedBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun b' : Vec oc =>
+                  flatConvStride2 W b' (batchSlice N (ic * (2 * h) * (2 * w)) x n))
+               b o j * batchSlice N (oc * h * w) cot n j
+
+/-- A stride-2 XLA-`SAME` conv weight gradient node, tied (`EnetPoCG.convStridedXlaWGradB_den`). -/
+def ConvStridedXlaWTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN : String) (b : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
+    (cot : Vec (N * (oc * h * w))) : Prop :=
+  ∀ idx : Fin (oc * ic * kH * kW),
+    den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+                  flatConvStride2Xla (Kernel4.unflatten v') b
+                    (batchSlice N (ic * (2 * h) * (2 * w)) x n))
+               (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j
+
+/-- A stride-1 depthwise weight gradient node, tied (`EnetPoCG.depthwiseWGradB_den`). -/
+def DepthwiseWTiedB (N h w : Nat) {c kH kW : Nat} (xN cotN : String) (b : Vec c)
+    (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) :
+    Prop :=
+  ∀ idx : Fin (c * kH * kW),
+    den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun v' : Vec (c * kH * kW) =>
+                  Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
+                    (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
+               (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j
+
+/-- A stride-1 depthwise bias gradient node, tied (`Mnv2PaperPoCG.depthwiseBGradB_den`). -/
+def DepthwiseBTiedB (N h w : Nat) {c kH kW : Nat} (cotN : String) (W : DepthwiseKernel c kH kW)
+    (x : Vec (N * (c * h * w))) (b : Vec c) (cot : Vec (N * (c * h * w))) : Prop :=
+  ∀ o : Fin c,
+    den (SHlo.depthwiseBiasGradB W x b (.operand cotN cot)) o
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun b' : Vec c =>
+                  Tensor3.flatten (depthwiseConv2d W b'
+                    (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
+               b o j * batchSlice N (c * h * w) cot n j
+
+/-- A stride-2 depthwise weight gradient node, tied (`EnetPoCG.depthwiseStridedWGradB_den`). -/
+def DepthwiseStridedWTiedB (N h w : Nat) {c kH kW : Nat} (xN cotN : String) (b : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    (cot : Vec (N * (c * h * w))) : Prop :=
+  ∀ idx : Fin (c * kH * kW),
+    den (SHlo.depthwiseStridedWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun v' : Vec (c * kH * kW) =>
+                  depthwiseStride2Flat (Tensor3.unflatten v') b
+                    (batchSlice N (c * (2 * h) * (2 * w)) x n))
+               (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j
+
+/-- A dense weight gradient node, tied (`denseWGradB_den`). -/
+def DenseWTiedB (N : Nat) {a c : Nat} (xN cotN : String) (x : Vec (N * a)) (W : Mat a c)
+    (b : Vec c) (cot : Vec (N * c)) : Prop :=
+  ∀ (i : Fin a) (j : Fin c),
+    den (SHlo.denseWeightGradB (c := c) xN x (.operand cotN cot)) (finProdFinEquiv (i, j))
+      = ∑ n : Fin N, ∑ k : Fin c,
+          pdiv (fun v : Vec (a * c) => dense (Mat.unflatten v) b (batchSlice N a x n))
+               (Mat.flatten W) (finProdFinEquiv (i, j)) k * batchSlice N c cot n k
+
+/-- A dense bias gradient node, tied — free in `W` and `x`, which `b`'s gradient ignores. -/
+def DenseBTiedB (N : Nat) {a c : Nat} (cotN : String) (W : Mat a c) (x : Vec a) (b : Vec c)
+    (cot : Vec (N * c)) : Prop :=
+  ∀ j : Fin c,
+    den (SHlo.denseBiasGradB (N := N) (.operand cotN cot)) j
+      = ∑ n : Fin N, ∑ k : Fin c,
+          pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k
+
 end Proofs.ResNet34PoCB

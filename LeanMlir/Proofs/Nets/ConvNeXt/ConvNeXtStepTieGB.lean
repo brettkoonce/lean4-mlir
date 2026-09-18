@@ -147,20 +147,8 @@ def cnxBlockChTiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε 
   let cotDB : Vec (N * (c*h*w))    :=
     batchMapAux N (blkCotD ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
   -- depthwise 7×7 W/b  (cot = cotDB, input = xin)
-  (∀ idx : Fin (c*7*7),
-      den (SHlo.depthwiseWeightGradB xN bdw xin Wdw (.operand cotN cotDB)) idx
-        = ∑ n : Fin N, ∑ j : Fin (c*h*w),
-            pdiv (fun v' : Vec (c*7*7) =>
-                    Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') bdw
-                      (Tensor3.unflatten (batchSlice N (c*h*w) xin n))))
-                 (Tensor3.flatten Wdw) idx j * batchSlice N (c*h*w) cotDB n j)
-  ∧ (∀ o : Fin c,
-      den (SHlo.depthwiseBiasGradB Wdw xin bdw (.operand cotN cotDB)) o
-        = ∑ n : Fin N, ∑ j : Fin (c*h*w),
-            pdiv (fun b' : Vec c =>
-                    Tensor3.flatten (depthwiseConv2d Wdw b'
-                      (Tensor3.unflatten (batchSlice N (c*h*w) xin n))))
-                 bdw o j * batchSlice N (c*h*w) cotDB n j)
+  ResNet34PoCB.DepthwiseWTiedB N h w xN cotN bdw xin Wdw cotDB
+  ∧ ResNet34PoCB.DepthwiseBTiedB N h w cotN Wdw xin bdw cotDB
   -- channel-LN γ/β  (cot = cotNB, LN input = dB; the ops see both as their batched [h·w, c] views)
   ∧ (∀ k : Fin c,
       den (SHlo.veclnGammaGradB (N := N) (R := h*w) (D := c) xN epsStr ε
@@ -176,35 +164,11 @@ def cnxBlockChTiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε 
             pdiv (fun β' : Vec c => chanLNTensor3 c h w ε ng β' (batchSlice N (c*h*w) dB n))
                  nbt k j * batchSlice N (c*h*w) cotNB n j)
   -- expand 1×1 conv (c → cExp) W/b  (cot = cotEB, conv input = nlB)
-  ∧ (∀ idx : Fin (cExp*c*1*1),
-      den (SHlo.convWeightGradB xN bex nlB Wex (.operand cotN cotEB)) idx
-        = ∑ n : Fin N, ∑ j : Fin (cExp*h*w),
-            pdiv (fun v' : Vec (cExp*c*1*1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') bex
-                      (Tensor3.unflatten (batchSlice N (c*h*w) nlB n))))
-                 (Kernel4.flatten Wex) idx j * batchSlice N (cExp*h*w) cotEB n j)
-  ∧ (∀ o : Fin cExp,
-      den (SHlo.convBiasGradB (h := h) (w := w) Wex nlB bex (.operand cotN cotEB)) o
-        = ∑ n : Fin N, ∑ j : Fin (cExp*h*w),
-            pdiv (fun b' : Vec cExp =>
-                    Tensor3.flatten (conv2d Wex b'
-                      (Tensor3.unflatten (batchSlice N (c*h*w) nlB n))))
-                 bex o j * batchSlice N (cExp*h*w) cotEB n j)
+  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bex nlB Wex cotEB
+  ∧ ResNet34PoCB.ConvBTiedB N h w cotN Wex nlB bex cotEB
   -- project 1×1 conv (cExp → c) W/b  (cot = cotPB, conv input = gB)
-  ∧ (∀ idx : Fin (c*cExp*1*1),
-      den (SHlo.convWeightGradB xN bpr gB Wpr (.operand cotN cotPB)) idx
-        = ∑ n : Fin N, ∑ j : Fin (c*h*w),
-            pdiv (fun v' : Vec (c*cExp*1*1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') bpr
-                      (Tensor3.unflatten (batchSlice N (cExp*h*w) gB n))))
-                 (Kernel4.flatten Wpr) idx j * batchSlice N (c*h*w) cotPB n j)
-  ∧ (∀ o : Fin c,
-      den (SHlo.convBiasGradB (h := h) (w := w) Wpr gB bpr (.operand cotN cotPB)) o
-        = ∑ n : Fin N, ∑ j : Fin (c*h*w),
-            pdiv (fun b' : Vec c =>
-                    Tensor3.flatten (conv2d Wpr b'
-                      (Tensor3.unflatten (batchSlice N (cExp*h*w) gB n))))
-                 bpr o j * batchSlice N (c*h*w) cotPB n j)
+  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bpr gB Wpr cotPB
+  ∧ ResNet34PoCB.ConvBTiedB N h w cotN Wpr gB bpr cotPB
   -- per-channel layer-scale γ  (cot = dyOut directly, layer input = pB)
   ∧ (∀ cc : Fin c,
       den (SHlo.layerScaleChGammaGradB (N := N) (c := c) (h := h) (w := w) xN pB
@@ -256,17 +220,8 @@ def cnxDownChTiedGB (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String) (ε : 
             pdiv (fun β' : Vec ci =>
                     chanLNTensor3 ci (2*h) (2*w) ε dng β' (batchSlice N (ci*(2*h)*(2*w)) xin n))
                  dnbt k j * batchSlice N (ci*(2*h)*(2*w)) cotNB n j)
-  ∧ (∀ idx : Fin (co*ci*2*2),
-      den (SHlo.convStridedWeightGradB xN bd nB Wd (.operand cotN dyOut)) idx
-        = ∑ n : Fin N, ∑ j : Fin (co*h*w),
-            pdiv (fun v' : Vec (co*ci*2*2) =>
-                    flatConvStride2 (Kernel4.unflatten v') bd (batchSlice N (ci*(2*h)*(2*w)) nB n))
-                 (Kernel4.flatten Wd) idx j * batchSlice N (co*h*w) dyOut n j)
-  ∧ (∀ o : Fin co,
-      den (SHlo.convStridedBiasGradB (h := h) (w := w) Wd nB bd (.operand cotN dyOut)) o
-        = ∑ n : Fin N, ∑ j : Fin (co*h*w),
-            pdiv (fun b' : Vec co => flatConvStride2 Wd b' (batchSlice N (ci*(2*h)*(2*w)) nB n))
-                 bd o j * batchSlice N (co*h*w) dyOut n j)
+  ∧ ResNet34PoCB.ConvStridedWTiedB N h w xN cotN bd nB Wd dyOut
+  ∧ ResNet34PoCB.ConvStridedBTiedB N h w cotN Wd nB bd dyOut
 
 theorem cnx_down_ch_tiedGB (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)

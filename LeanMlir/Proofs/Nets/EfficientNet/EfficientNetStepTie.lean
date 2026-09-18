@@ -176,13 +176,7 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * h * w)) := swBackB (N * (mid * h * w)) en cotEr
   let cotEc : Vec (N * (mid * h * w)) := bnBackB N mid h w εe hεe γe βe ec cotEn
   -- expand 1×1 conv (c → mid), cot = cotEc
-  (∀ idx : Fin (mid * ic * 1 * 1),
-        den (SHlo.convWeightSgdB xN wN lrStr be xin We lr (.operand cotN cotEc)) idx
-          = Kernel4.flatten We idx - lr * ∑ n : Fin N, ∑ j : Fin (mid * h * w),
-              pdiv (fun v' : Vec (mid * ic * 1 * 1) =>
-                      Tensor3.flatten (conv2d (Kernel4.unflatten v') be
-                        (Tensor3.unflatten (batchSlice N (ic * h * w) xin n))))
-                   (Kernel4.flatten We) idx j * batchSlice N (mid * h * w) cotEc n j)
+  EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN be xin We cotEc lr
   ∧ (∀ o : Fin mid,
         den (SHlo.bnBetaSgdB bN lrStr be lr (.operand cotN (reassocB N mid h w cotEc))) o
           = be o - lr * ∑ j : Fin (mid * (N * (h * w))),
@@ -191,13 +185,7 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
   ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εe γe βe (reassocB N mid h w ec)
         (reassocB N mid h w cotEn) lr
   -- depthwise (stride-1, kHd×kWd), cot = cotDc
-  ∧ (∀ idx : Fin (mid * kHd * kWd),
-        den (SHlo.depthwiseWeightSgdB xN wN lrStr bd er Wd lr (.operand cotN cotDc)) idx
-          = Tensor3.flatten Wd idx - lr * ∑ n : Fin N, ∑ j : Fin (mid * h * w),
-              pdiv (fun v' : Vec (mid * kHd * kWd) =>
-                      Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') bd
-                        (Tensor3.unflatten (batchSlice N (mid * h * w) er n))))
-                   (Tensor3.flatten Wd) idx j * batchSlice N (mid * h * w) cotDc n j)
+  ∧ EnetPoC.DepthwiseWSgdTiedB N h w xN wN lrStr cotN bd er Wd cotDc lr
   ∧ (∀ o : Fin mid,
         den (SHlo.bnBetaSgdB bN lrStr bd lr (.operand cotN (reassocB N mid h w cotDc))) o
           = bd o - lr * ∑ j : Fin (mid * (N * (h * w))),
@@ -206,34 +194,12 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
   ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn) lr
   -- SE reduce dense W₁/b₁ (mid → r), cot = cotE1; excite dense W₂/b₂ (r → mid), cot = cotE2
-  ∧ (∀ i : Fin mid, ∀ j : Fin r,
-        den (SHlo.denseWeightSgdB xN wN lrStr s Wz1 lr (.operand cotN cotE1)) (finProdFinEquiv (i, j))
-          = Wz1 i j - lr * ∑ n : Fin N, ∑ k : Fin r,
-              pdiv (fun v : Vec (mid * r) => dense (Mat.unflatten v) bz1 (batchSlice N mid s n))
-                   (Mat.flatten Wz1) (finProdFinEquiv (i, j)) k * batchSlice N r cotE1 n k)
-  ∧ (∀ j : Fin r,
-        den (SHlo.denseBiasSgdB bN lrStr bz1 lr (.operand cotN cotE1)) j
-          = bz1 j - lr * ∑ n : Fin N, ∑ k : Fin r,
-              pdiv (fun b' : Vec r => dense (0 : Mat r r) b' (0 : Vec r))
-                   bz1 j k * batchSlice N r cotE1 n k)
-  ∧ (∀ i : Fin r, ∀ j : Fin mid,
-        den (SHlo.denseWeightSgdB xN wN lrStr z Wz2 lr (.operand cotN cotE2)) (finProdFinEquiv (i, j))
-          = Wz2 i j - lr * ∑ n : Fin N, ∑ k : Fin mid,
-              pdiv (fun v : Vec (r * mid) => dense (Mat.unflatten v) bz2 (batchSlice N r z n))
-                   (Mat.flatten Wz2) (finProdFinEquiv (i, j)) k * batchSlice N mid cotE2 n k)
-  ∧ (∀ j : Fin mid,
-        den (SHlo.denseBiasSgdB bN lrStr bz2 lr (.operand cotN cotE2)) j
-          = bz2 j - lr * ∑ n : Fin N, ∑ k : Fin mid,
-              pdiv (fun b' : Vec mid => dense (0 : Mat mid mid) b' (0 : Vec mid))
-                   bz2 j k * batchSlice N mid cotE2 n k)
+  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
+  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
+  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ (∀ idx : Fin (oc * mid * 1 * 1),
-        den (SHlo.convWeightSgdB xN wN lrStr bp se Wp lr (.operand cotN cotPbn)) idx
-          = Kernel4.flatten Wp idx - lr * ∑ n : Fin N, ∑ j : Fin (oc * h * w),
-              pdiv (fun v' : Vec (oc * mid * 1 * 1) =>
-                      Tensor3.flatten (conv2d (Kernel4.unflatten v') bp
-                        (Tensor3.unflatten (batchSlice N (mid * h * w) se n))))
-                   (Kernel4.flatten Wp) idx j * batchSlice N (oc * h * w) cotPbn n j)
+  ∧ EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ (∀ o : Fin oc,
         den (SHlo.bnBetaSgdB bN lrStr bp lr (.operand cotN (reassocB N oc h w cotPbn))) o
           = bp o - lr * ∑ j : Fin (oc * (N * (h * w))),
@@ -316,13 +282,7 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * (2 * h) * (2 * w))) := swBackB (N * (mid * (2 * h) * (2 * w))) en cotEr
   let cotEc : Vec (N * (mid * (2 * h) * (2 * w))) := bnBackB N mid (2 * h) (2 * w) εe hεe γe βe ec cotEn
   -- expand 1×1 conv (ic → mid, at 2h×2w), cot = cotEc
-  (∀ idx : Fin (mid * ic * 1 * 1),
-        den (SHlo.convWeightSgdB xN wN lrStr be xin We lr (.operand cotN cotEc)) idx
-          = Kernel4.flatten We idx - lr * ∑ n : Fin N, ∑ j : Fin (mid * (2 * h) * (2 * w)),
-              pdiv (fun v' : Vec (mid * ic * 1 * 1) =>
-                      Tensor3.flatten (conv2d (Kernel4.unflatten v') be
-                        (Tensor3.unflatten (batchSlice N (ic * (2 * h) * (2 * w)) xin n))))
-                   (Kernel4.flatten We) idx j * batchSlice N (mid * (2 * h) * (2 * w)) cotEc n j)
+  EnetPoC.ConvWSgdTiedB N (2 * h) (2 * w) xN wN lrStr cotN be xin We cotEc lr
   ∧ (∀ o : Fin mid,
         den (SHlo.bnBetaSgdB bN lrStr be lr (.operand cotN (reassocB N mid (2 * h) (2 * w) cotEc))) o
           = be o - lr * ∑ j : Fin (mid * (N * ((2 * h) * (2 * w)))),
@@ -345,34 +305,12 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
   ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn) lr
   -- SE reduce/excite dense (mid → r → mid)
-  ∧ (∀ i : Fin mid, ∀ j : Fin r,
-        den (SHlo.denseWeightSgdB xN wN lrStr s Wz1 lr (.operand cotN cotE1)) (finProdFinEquiv (i, j))
-          = Wz1 i j - lr * ∑ n : Fin N, ∑ k : Fin r,
-              pdiv (fun v : Vec (mid * r) => dense (Mat.unflatten v) bz1 (batchSlice N mid s n))
-                   (Mat.flatten Wz1) (finProdFinEquiv (i, j)) k * batchSlice N r cotE1 n k)
-  ∧ (∀ j : Fin r,
-        den (SHlo.denseBiasSgdB bN lrStr bz1 lr (.operand cotN cotE1)) j
-          = bz1 j - lr * ∑ n : Fin N, ∑ k : Fin r,
-              pdiv (fun b' : Vec r => dense (0 : Mat r r) b' (0 : Vec r))
-                   bz1 j k * batchSlice N r cotE1 n k)
-  ∧ (∀ i : Fin r, ∀ j : Fin mid,
-        den (SHlo.denseWeightSgdB xN wN lrStr z Wz2 lr (.operand cotN cotE2)) (finProdFinEquiv (i, j))
-          = Wz2 i j - lr * ∑ n : Fin N, ∑ k : Fin mid,
-              pdiv (fun v : Vec (r * mid) => dense (Mat.unflatten v) bz2 (batchSlice N r z n))
-                   (Mat.flatten Wz2) (finProdFinEquiv (i, j)) k * batchSlice N mid cotE2 n k)
-  ∧ (∀ j : Fin mid,
-        den (SHlo.denseBiasSgdB bN lrStr bz2 lr (.operand cotN cotE2)) j
-          = bz2 j - lr * ∑ n : Fin N, ∑ k : Fin mid,
-              pdiv (fun b' : Vec mid => dense (0 : Mat mid mid) b' (0 : Vec mid))
-                   bz2 j k * batchSlice N mid cotE2 n k)
+  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
+  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
+  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ (∀ idx : Fin (oc * mid * 1 * 1),
-        den (SHlo.convWeightSgdB xN wN lrStr bp se Wp lr (.operand cotN cotPbn)) idx
-          = Kernel4.flatten Wp idx - lr * ∑ n : Fin N, ∑ j : Fin (oc * h * w),
-              pdiv (fun v' : Vec (oc * mid * 1 * 1) =>
-                      Tensor3.flatten (conv2d (Kernel4.unflatten v') bp
-                        (Tensor3.unflatten (batchSlice N (mid * h * w) se n))))
-                   (Kernel4.flatten Wp) idx j * batchSlice N (oc * h * w) cotPbn n j)
+  ∧ EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ (∀ o : Fin oc,
         den (SHlo.bnBetaSgdB bN lrStr bp lr (.operand cotN (reassocB N oc h w cotPbn))) o
           = bp o - lr * ∑ j : Fin (oc * (N * (h * w))),
@@ -446,13 +384,7 @@ def enetNoExpTied {N ic oc h w r kHd kWd : Nat}
   let cotDn : Vec (N * (ic * h * w)) := swBackB (N * (ic * h * w)) dn cotDxSe
   let cotDc : Vec (N * (ic * h * w)) := bnBackB N ic h w εd hεd γd βd dc cotDn
   -- depthwise (stride-1, kHd×kWd, on ic), cot = cotDc
-  (∀ idx : Fin (ic * kHd * kWd),
-        den (SHlo.depthwiseWeightSgdB xN wN lrStr bd xin Wd lr (.operand cotN cotDc)) idx
-          = Tensor3.flatten Wd idx - lr * ∑ n : Fin N, ∑ j : Fin (ic * h * w),
-              pdiv (fun v' : Vec (ic * kHd * kWd) =>
-                      Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') bd
-                        (Tensor3.unflatten (batchSlice N (ic * h * w) xin n))))
-                   (Tensor3.flatten Wd) idx j * batchSlice N (ic * h * w) cotDc n j)
+  EnetPoC.DepthwiseWSgdTiedB N h w xN wN lrStr cotN bd xin Wd cotDc lr
   ∧ (∀ o : Fin ic,
         den (SHlo.bnBetaSgdB bN lrStr bd lr (.operand cotN (reassocB N ic h w cotDc))) o
           = bd o - lr * ∑ j : Fin (ic * (N * (h * w))),
@@ -461,34 +393,12 @@ def enetNoExpTied {N ic oc h w r kHd kWd : Nat}
   ∧ EnetPoC.BnSgdPairTiedB N ic h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N ic h w dc)
         (reassocB N ic h w cotDn) lr
   -- SE reduce/excite dense (ic → r → ic)
-  ∧ (∀ i : Fin ic, ∀ j : Fin r,
-        den (SHlo.denseWeightSgdB xN wN lrStr s Wz1 lr (.operand cotN cotE1)) (finProdFinEquiv (i, j))
-          = Wz1 i j - lr * ∑ n : Fin N, ∑ k : Fin r,
-              pdiv (fun v : Vec (ic * r) => dense (Mat.unflatten v) bz1 (batchSlice N ic s n))
-                   (Mat.flatten Wz1) (finProdFinEquiv (i, j)) k * batchSlice N r cotE1 n k)
-  ∧ (∀ j : Fin r,
-        den (SHlo.denseBiasSgdB bN lrStr bz1 lr (.operand cotN cotE1)) j
-          = bz1 j - lr * ∑ n : Fin N, ∑ k : Fin r,
-              pdiv (fun b' : Vec r => dense (0 : Mat r r) b' (0 : Vec r))
-                   bz1 j k * batchSlice N r cotE1 n k)
-  ∧ (∀ i : Fin r, ∀ j : Fin ic,
-        den (SHlo.denseWeightSgdB xN wN lrStr z Wz2 lr (.operand cotN cotE2)) (finProdFinEquiv (i, j))
-          = Wz2 i j - lr * ∑ n : Fin N, ∑ k : Fin ic,
-              pdiv (fun v : Vec (r * ic) => dense (Mat.unflatten v) bz2 (batchSlice N r z n))
-                   (Mat.flatten Wz2) (finProdFinEquiv (i, j)) k * batchSlice N ic cotE2 n k)
-  ∧ (∀ j : Fin ic,
-        den (SHlo.denseBiasSgdB bN lrStr bz2 lr (.operand cotN cotE2)) j
-          = bz2 j - lr * ∑ n : Fin N, ∑ k : Fin ic,
-              pdiv (fun b' : Vec ic => dense (0 : Mat ic ic) b' (0 : Vec ic))
-                   bz2 j k * batchSlice N ic cotE2 n k)
+  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
+  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
+  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2 lr
   -- project 1×1 conv (ic → oc), cot = cotPbn
-  ∧ (∀ idx : Fin (oc * ic * 1 * 1),
-        den (SHlo.convWeightSgdB xN wN lrStr bp se Wp lr (.operand cotN cotPbn)) idx
-          = Kernel4.flatten Wp idx - lr * ∑ n : Fin N, ∑ j : Fin (oc * h * w),
-              pdiv (fun v' : Vec (oc * ic * 1 * 1) =>
-                      Tensor3.flatten (conv2d (Kernel4.unflatten v') bp
-                        (Tensor3.unflatten (batchSlice N (ic * h * w) se n))))
-                   (Kernel4.flatten Wp) idx j * batchSlice N (oc * h * w) cotPbn n j)
+  ∧ EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ (∀ o : Fin oc,
         den (SHlo.bnBetaSgdB bN lrStr bp lr (.operand cotN (reassocB N oc h w cotPbn))) o
           = bp o - lr * ∑ j : Fin (oc * (N * (h * w))),
@@ -590,13 +500,7 @@ def enetHeadTied {N c oc h w nC : Nat}
   let cotHsw : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) hn cotHr
   let cotHbn : Vec (N * (oc * h * w)) := bnBackB N oc h w εh hεh γh βh hc cotHsw
   -- head 1×1 conv (c → oc), cot = cotHbn
-  (∀ idx : Fin (oc * c * 1 * 1),
-        den (SHlo.convWeightSgdB xN wN lrStr bh xhead Wh lr (.operand cotN cotHbn)) idx
-          = Kernel4.flatten Wh idx - lr * ∑ n : Fin N, ∑ j : Fin (oc * h * w),
-              pdiv (fun v' : Vec (oc * c * 1 * 1) =>
-                      Tensor3.flatten (conv2d (Kernel4.unflatten v') bh
-                        (Tensor3.unflatten (batchSlice N (c * h * w) xhead n))))
-                   (Kernel4.flatten Wh) idx j * batchSlice N (oc * h * w) cotHbn n j)
+  EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bh xhead Wh cotHbn lr
   ∧ (∀ o : Fin oc,
         den (SHlo.bnBetaSgdB bN lrStr bh lr (.operand cotN (reassocB N oc h w cotHbn))) o
           = bh o - lr * ∑ j : Fin (oc * (N * (h * w))),
@@ -605,16 +509,8 @@ def enetHeadTied {N c oc h w nC : Nat}
   ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εh γh βh (reassocB N oc h w hc)
         (reassocB N oc h w cotHsw) lr
   -- dense classifier (oc → nC), cot = g (the batched softmax-CE gradient)
-  ∧ (∀ i : Fin oc, ∀ j : Fin nC,
-        den (SHlo.denseWeightSgdB dN wN lrStr a_gap Wfc lr (.operand cotN g)) (finProdFinEquiv (i, j))
-          = Wfc i j - lr * ∑ n : Fin N, ∑ k : Fin nC,
-              pdiv (fun v : Vec (oc * nC) => dense (Mat.unflatten v) bfc (batchSlice N oc a_gap n))
-                   (Mat.flatten Wfc) (finProdFinEquiv (i, j)) k * batchSlice N nC g n k)
-  ∧ (∀ j : Fin nC,
-        den (SHlo.denseBiasSgdB dN lrStr bfc lr (.operand cotN g)) j
-          = bfc j - lr * ∑ n : Fin N, ∑ k : Fin nC,
-              pdiv (fun b' : Vec nC => dense (0 : Mat nC nC) b' (0 : Vec nC))
-                   bfc j k * batchSlice N nC g n k)
+  ∧ EnetPoC.DenseWSgdTiedB N dN wN lrStr cotN a_gap Wfc bfc g lr
+  ∧ EnetPoC.DenseBSgdTiedB N dN lrStr cotN (0 : Mat nC nC) (0 : Vec nC) bfc g lr
 
 theorem enet_head_tied {N c oc h w nC : Nat}
     (xN wN bN gN vN epsStr lrStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)

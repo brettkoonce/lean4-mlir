@@ -169,4 +169,49 @@ theorem depthwiseStridedWB_den {N c h w kH kW : Nat}
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
   rw [depthwiseStridedWeightSgdB_eq_grad, EnetPoCG.depthwiseStridedWGradB_den]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Tie clauses — one fused SGD node each (the `ResNet34PoCB.*TiedB` clauses under `θ − lr·`)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A stride-1 conv weight SGD node, tied (`convWB_den`). -/
+def ConvWSgdTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN wN lrStr cotN : String) (b : Vec oc)
+    (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW) (cot : Vec (N * (oc * h * w)))
+    (lr : ℝ) : Prop :=
+  ∀ idx : Fin (oc * ic * kH * kW),
+    den (SHlo.convWeightSgdB xN wN lrStr b x W lr (.operand cotN cot)) idx
+      = Kernel4.flatten W idx - lr * ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+                  Tensor3.flatten (conv2d (Kernel4.unflatten v') b
+                    (Tensor3.unflatten (batchSlice N (ic * h * w) x n))))
+               (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j
+
+/-- A stride-1 depthwise weight SGD node, tied (`depthwiseWB_den`). -/
+def DepthwiseWSgdTiedB (N h w : Nat) {c kH kW : Nat} (xN wN lrStr cotN : String) (b : Vec c)
+    (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w)))
+    (lr : ℝ) : Prop :=
+  ∀ idx : Fin (c * kH * kW),
+    den (SHlo.depthwiseWeightSgdB xN wN lrStr b x W lr (.operand cotN cot)) idx
+      = Tensor3.flatten W idx - lr * ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun v' : Vec (c * kH * kW) =>
+                  Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
+                    (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
+               (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j
+
+/-- A dense weight SGD node, tied (`denseWB_den`). -/
+def DenseWSgdTiedB (N : Nat) {a c : Nat} (xN wN lrStr cotN : String) (x : Vec (N * a))
+    (W : Mat a c) (b : Vec c) (cot : Vec (N * c)) (lr : ℝ) : Prop :=
+  ∀ (i : Fin a) (j : Fin c),
+    den (SHlo.denseWeightSgdB xN wN lrStr x W lr (.operand cotN cot)) (finProdFinEquiv (i, j))
+      = W i j - lr * ∑ n : Fin N, ∑ k : Fin c,
+          pdiv (fun v : Vec (a * c) => dense (Mat.unflatten v) b (batchSlice N a x n))
+               (Mat.flatten W) (finProdFinEquiv (i, j)) k * batchSlice N c cot n k
+
+/-- A dense bias SGD node, tied — free in `W` and `x`, which `b`'s gradient ignores. -/
+def DenseBSgdTiedB (N : Nat) {a c : Nat} (bN lrStr cotN : String) (W : Mat a c) (x : Vec a)
+    (b : Vec c) (cot : Vec (N * c)) (lr : ℝ) : Prop :=
+  ∀ j : Fin c,
+    den (SHlo.denseBiasSgdB bN lrStr b lr (.operand cotN cot)) j
+      = b j - lr * ∑ n : Fin N, ∑ k : Fin c,
+          pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k
+
 end Proofs.EnetPoC

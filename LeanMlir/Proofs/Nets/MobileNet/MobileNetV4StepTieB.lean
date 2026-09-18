@@ -300,48 +300,22 @@ def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   let cotDn := mnv4CotDn N s p xin dyOut
   let cotDc := mnv4CotDc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  (∀ idx : Fin (s.ic * s.preDWk * s.preDWk),
-      den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq (.operand cotN cotQc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (s.ic * s.h * s.h),
-            pdiv (fun v' : Vec (s.ic * s.preDWk * s.preDWk) =>
-                    depthwiseFlat (Tensor3.unflatten v') p.bq
-                      (batchSlice N (s.ic * s.h * s.h) xin n))
-                 (Tensor3.flatten p.Wq) idx j * batchSlice N (s.ic * s.h * s.h) cotQc n j)
+  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
   ∧
   ResNet34PoCB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
   ∧
-  (∀ idx : Fin ((s.ic * s.expand) * s.ic * 1 * 1),
-      den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN cotEc)) idx
-        = ∑ n : Fin N, ∑ j : Fin ((s.ic * s.expand) * s.h * s.h),
-            pdiv (fun v' : Vec ((s.ic * s.expand) * s.ic * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.be
-                      (Tensor3.unflatten (batchSlice N (s.ic * s.h * s.h) qr n))))
-                 (Kernel4.flatten p.We) idx j
-              * batchSlice N ((s.ic * s.expand) * s.h * s.h) cotEc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
   ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  (∀ idx : Fin ((s.ic * s.expand) * s.postDWk * s.postDWk),
-      den (SHlo.depthwiseWeightGradB xN p.bd er p.Wd (.operand cotN cotDc)) idx
-        = ∑ n : Fin N, ∑ j : Fin ((s.ic * s.expand) * s.h * s.h),
-            pdiv (fun v' : Vec ((s.ic * s.expand) * s.postDWk * s.postDWk) =>
-                    depthwiseFlat (Tensor3.unflatten v') p.bd
-                      (batchSlice N ((s.ic * s.expand) * s.h * s.h) er n))
-                 (Tensor3.flatten p.Wd) idx j
-              * batchSlice N ((s.ic * s.expand) * s.h * s.h) cotDc n j)
+  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
   ∧
   ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
       (reassocB N (s.ic * s.expand) s.h s.h dc) (reassocB N (s.ic * s.expand) s.h s.h cotDn)
   ∧
-  (∀ idx : Fin (s.oc * (s.ic * s.expand) * 1 * 1),
-      den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN cotPc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (s.oc * s.h * s.h),
-            pdiv (fun v' : Vec (s.oc * (s.ic * s.expand) * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.bz
-                      (Tensor3.unflatten (batchSlice N ((s.ic * s.expand) * s.h * s.h) dr n))))
-                 (Kernel4.flatten p.Wz) idx j * batchSlice N (s.oc * s.h * s.h) cotPc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
@@ -377,36 +351,17 @@ def mnv4ConvNeXtTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : 
   let cotEn := mnv4CotEn N s p xin dyOut
   let cotEc := mnv4CotEc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  (∀ idx : Fin (s.ic * s.preDWk * s.preDWk),
-      den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq (.operand cotN cotQc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (s.ic * s.h * s.h),
-            pdiv (fun v' : Vec (s.ic * s.preDWk * s.preDWk) =>
-                    depthwiseFlat (Tensor3.unflatten v') p.bq
-                      (batchSlice N (s.ic * s.h * s.h) xin n))
-                 (Tensor3.flatten p.Wq) idx j * batchSlice N (s.ic * s.h * s.h) cotQc n j)
+  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
   ∧
   ResNet34PoCB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
   ∧
-  (∀ idx : Fin ((s.ic * s.expand) * s.ic * 1 * 1),
-      den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN cotEc)) idx
-        = ∑ n : Fin N, ∑ j : Fin ((s.ic * s.expand) * s.h * s.h),
-            pdiv (fun v' : Vec ((s.ic * s.expand) * s.ic * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.be
-                      (Tensor3.unflatten (batchSlice N (s.ic * s.h * s.h) qr n))))
-                 (Kernel4.flatten p.We) idx j
-              * batchSlice N ((s.ic * s.expand) * s.h * s.h) cotEc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
   ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  (∀ idx : Fin (s.oc * (s.ic * s.expand) * 1 * 1),
-      den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN cotPc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (s.oc * s.h * s.h),
-            pdiv (fun v' : Vec (s.oc * (s.ic * s.expand) * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.bz
-                      (Tensor3.unflatten (batchSlice N ((s.ic * s.expand) * s.h * s.h) dr n))))
-                 (Kernel4.flatten p.Wz) idx j * batchSlice N (s.oc * s.h * s.h) cotPc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
@@ -435,25 +390,12 @@ def mnv4FfnTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibPa
   let cotEn := mnv4CotEn N s p xin dyOut
   let cotEc := mnv4CotEc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  (∀ idx : Fin ((s.ic * s.expand) * s.ic * 1 * 1),
-      den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN cotEc)) idx
-        = ∑ n : Fin N, ∑ j : Fin ((s.ic * s.expand) * s.h * s.h),
-            pdiv (fun v' : Vec ((s.ic * s.expand) * s.ic * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.be
-                      (Tensor3.unflatten (batchSlice N (s.ic * s.h * s.h) qr n))))
-                 (Kernel4.flatten p.We) idx j
-              * batchSlice N ((s.ic * s.expand) * s.h * s.h) cotEc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
   ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  (∀ idx : Fin (s.oc * (s.ic * s.expand) * 1 * 1),
-      den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN cotPc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (s.oc * s.h * s.h),
-            pdiv (fun v' : Vec (s.oc * (s.ic * s.expand) * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.bz
-                      (Tensor3.unflatten (batchSlice N ((s.ic * s.expand) * s.h * s.h) dr n))))
-                 (Kernel4.flatten p.Wz) idx j * batchSlice N (s.oc * s.h * s.h) cotPc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
@@ -504,48 +446,22 @@ def mnv4PreStridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p 
   let cotDn := mnv4SCotDn N s p xin dyOut
   let cotDc := mnv4SCotDc N s p xin dyOut
   let cotPc := mnv4SCotPc N s p xin dyOut
-  (∀ idx : Fin (s.ic * s.preDWk * s.preDWk),
-      den (SHlo.depthwiseStridedWeightGradB xN p.bq xin p.Wq (.operand cotN cotQc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (s.ic * s.h * s.h),
-            pdiv (fun v' : Vec (s.ic * s.preDWk * s.preDWk) =>
-                    depthwiseStride2Flat (Tensor3.unflatten v') p.bq
-                      (batchSlice N (s.ic * (2 * s.h) * (2 * s.h)) xin n))
-                 (Tensor3.flatten p.Wq) idx j * batchSlice N (s.ic * s.h * s.h) cotQc n j)
+  ResNet34PoCB.DepthwiseStridedWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
   ∧
   ResNet34PoCB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
   ∧
-  (∀ idx : Fin ((s.ic * s.expand) * s.ic * 1 * 1),
-      den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN cotEc)) idx
-        = ∑ n : Fin N, ∑ j : Fin ((s.ic * s.expand) * s.h * s.h),
-            pdiv (fun v' : Vec ((s.ic * s.expand) * s.ic * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.be
-                      (Tensor3.unflatten (batchSlice N (s.ic * s.h * s.h) qr n))))
-                 (Kernel4.flatten p.We) idx j
-              * batchSlice N ((s.ic * s.expand) * s.h * s.h) cotEc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
   ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  (∀ idx : Fin ((s.ic * s.expand) * s.postDWk * s.postDWk),
-      den (SHlo.depthwiseWeightGradB xN p.bd er p.Wd (.operand cotN cotDc)) idx
-        = ∑ n : Fin N, ∑ j : Fin ((s.ic * s.expand) * s.h * s.h),
-            pdiv (fun v' : Vec ((s.ic * s.expand) * s.postDWk * s.postDWk) =>
-                    depthwiseFlat (Tensor3.unflatten v') p.bd
-                      (batchSlice N ((s.ic * s.expand) * s.h * s.h) er n))
-                 (Tensor3.flatten p.Wd) idx j
-              * batchSlice N ((s.ic * s.expand) * s.h * s.h) cotDc n j)
+  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
   ∧
   ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
       (reassocB N (s.ic * s.expand) s.h s.h dc) (reassocB N (s.ic * s.expand) s.h s.h cotDn)
   ∧
-  (∀ idx : Fin (s.oc * (s.ic * s.expand) * 1 * 1),
-      den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN cotPc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (s.oc * s.h * s.h),
-            pdiv (fun v' : Vec (s.oc * (s.ic * s.expand) * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') p.bz
-                      (Tensor3.unflatten (batchSlice N ((s.ic * s.expand) * s.h * s.h) dr n))))
-                 (Kernel4.flatten p.Wz) idx j * batchSlice N (s.oc * s.h * s.h) cotPc n j)
+  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
@@ -602,13 +518,7 @@ def mnv4StemTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : String)
   let sc := batchMap N (flatConvStride2Xla Ws bs) x
   let cotN' := mnv4StemCotN N h w Ws bs εs γs βs x dyStem
   let cotC := mnv4StemCotC N h w Ws bs εs γs βs x dyStem
-  (∀ idx : Fin (oc * ic * kH * kW),
-      den (SHlo.convStridedXlaWeightGradB xN bs x Ws (.operand cotN cotC)) idx
-        = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
-            pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                    flatConvStride2Xla (Kernel4.unflatten v') bs
-                      (batchSlice N (ic * (2 * h) * (2 * w)) x n))
-                 (Kernel4.flatten Ws) idx j * batchSlice N (oc * h * w) cotC n j)
+  ResNet34PoCB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotC
   ∧
   ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w sc)
       (reassocB N oc h w cotN')
@@ -675,24 +585,12 @@ def mnv4FusedTiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH
   let cotN' := mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotC := mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotPc := mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
-  (∀ idx : Fin (mid * ic * kH * kW),
-      den (SHlo.convStridedWeightGradB xN bc xin Wc (.operand cotN cotC)) idx
-        = ∑ n : Fin N, ∑ j : Fin (mid * h * w),
-            pdiv (fun v' : Vec (mid * ic * kH * kW) =>
-                    flatConvStride2 (Kernel4.unflatten v') bc
-                      (batchSlice N (ic * (2 * h) * (2 * w)) xin n))
-                 (Kernel4.flatten Wc) idx j * batchSlice N (mid * h * w) cotC n j)
+  ResNet34PoCB.ConvStridedWTiedB N h w xN cotN bc xin Wc cotC
   ∧
   ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εc γc βc (reassocB N mid h w fc)
       (reassocB N mid h w cotN')
   ∧
-  (∀ idx : Fin (oc * mid * 1 * 1),
-      den (SHlo.convWeightGradB xN bp sw Wp (.operand cotN cotPc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
-            pdiv (fun v' : Vec (oc * mid * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') bp
-                      (Tensor3.unflatten (batchSlice N (mid * h * w) sw n))))
-                 (Kernel4.flatten Wp) idx j * batchSlice N (oc * h * w) cotPc n j)
+  ResNet34PoCB.ConvWTiedB N h w xN cotN bp sw Wp cotPc
   ∧
   ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
       (reassocB N oc h w dyF)
@@ -782,24 +680,12 @@ def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
   let cotH1c := mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHn := mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHc := mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
-  (∀ idx : Fin (mid * c * 1 * 1),
-      den (SHlo.convWeightGradB xN b1 xin W1 (.operand cotN cotH1c)) idx
-        = ∑ n : Fin N, ∑ j : Fin (mid * h * w),
-            pdiv (fun v' : Vec (mid * c * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') b1
-                      (Tensor3.unflatten (batchSlice N (c * h * w) xin n))))
-                 (Kernel4.flatten W1) idx j * batchSlice N (mid * h * w) cotH1c n j)
+  ResNet34PoCB.ConvWTiedB N h w xN cotN b1 xin W1 cotH1c
   ∧
   ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN ε1 γ1 β1 (reassocB N mid h w c1)
       (reassocB N mid h w cotH1n)
   ∧
-  (∀ idx : Fin (oc * mid * 1 * 1),
-      den (SHlo.convWeightGradB xN b2 r1 W2 (.operand cotN cotHc)) idx
-        = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
-            pdiv (fun v' : Vec (oc * mid * 1 * 1) =>
-                    Tensor3.flatten (conv2d (Kernel4.unflatten v') b2
-                      (Tensor3.unflatten (batchSlice N (mid * h * w) r1 n))))
-                 (Kernel4.flatten W2) idx j * batchSlice N (oc * h * w) cotHc n j)
+  ResNet34PoCB.ConvWTiedB N h w xN cotN b2 r1 W2 cotHc
   ∧
   ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN ε2 γ2 β2 (reassocB N oc h w c2)
       (reassocB N oc h w cotHn)
