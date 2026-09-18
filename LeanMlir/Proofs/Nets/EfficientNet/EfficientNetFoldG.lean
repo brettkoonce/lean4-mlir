@@ -13,9 +13,8 @@ weight nodes are `*GradBBf16`, their own kind, folded in [`Foundation/Bf16GradNo
 
 ⭐ **One lemma per op kind certifies every optimizer variant at once**, because RMSProp, AdamW,
 plain SGD, EMA and the data-parallel peers all consume the same gradient node. The fusion itself is
-`rfl` (`StableHLO.lean`'s `*SgdB_eq_grad` family), so nothing here is new mathematics — these are
-`EfficientNetFold.lean`'s proofs with the `congr 1` / `congrArg (lr * ·)` wrapper peeling
-dropped, exactly as `ResNet34FoldB.lean` did for r34.
+`rfl` (`StableHLO.lean`'s `*SgdB_eq_grad` family), so nothing here is new mathematics, and
+`EfficientNetFold.lean`'s fused lemmas are these (and `ResNet34FoldB.lean`'s) through that family.
 
 ## ⭐ Five of the eight op kinds were ALREADY proven, in r34's file
 

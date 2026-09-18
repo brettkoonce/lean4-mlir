@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `4246a624`, 3 ahead of origin, + the staged row)
+## Status (2026-09-18, main `15c237c8`, 4 ahead of origin, + the staged row)
 
-**Landed** — about 8.6k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 8.7k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -46,7 +46,8 @@ suspected, no drop-in located.
 | `9fa47e55` | **§0.6(a) `CertLayer` adoption, R34/R50 blocks** (−507): new `CertLayer.residualProj` and `CertLayer.reluOut` (CertifiedChain) and four stage layers in `ResNet34BackB0` (`cbReluLayer`, `projLayer`, `cbReluStridedLayer`, `projStridedLayer`). The five block layers (`r34BasicBlockLayer`, `r34DownBlockLayer`, `r50BottleneckLayer`, `r50ProjBlockLayer`, `r50DownBlockLayer`) are composites of those, moved up from `BackNetFolds` / `ResNet50BackNet` into the files that prove the capstones. Each block `_has_vjp_at` is its layer's `.vjp`, each capstone its `.faithful` (29–45-line proofs → 2–3 lines), and the `FullBVJP` block differentiability lemmas its `.diff`. `mnv4ExpandLayer` / `mnv4ProjectLayer` were the same two stage layers; MNv4 now uses `cbReluLayer` / `projLayer`. Gone, unpinned and unused after this: the R34 down-body and R50 body / down-body VJPs and `_faithful`s, and the four `*BodyB_differentiableAt`. The layers' `ok` changes shape (`(A ∧ True) ∧ B` etc.; `projLayer` contributes `True`); no consumer destructured it. R34BackB0 640 → 560, R50BackB0 653 → 400, R50BackNet 339 → 226, BackNetFolds 330 → 272 |
 | `45a6eb27` | **§0.6(b) one stage VJP** (−176): new `stage_has_vjp_at` in `Architectures/CNN.lean` — the VJP of `act ∘ norm ∘ lin` at a point, from `lin`'s and `norm`'s global VJPs and `act`'s pointwise one. The 15 hand-built copies (relu and relu6 over global, per-channel and batched BN: `convBnRelu`, `convBnReluStrided`, `convBnReluPC`, `cbrStridedPC`, `bnReluStage`, the four MobileNetV2 relu6 stages and their three per-channel peers, `convBnRelu6StridedPC` / `convStridedBnRelu6PC`, `bnRelu6Stage`) are one call each (14–21 lines → 4–6); the seven batched-stage faithfulness proofs add it to their `simp only` unfold list. Ten stage `_differentiableAt` twins are `fun_prop (disch := assumption)` (two after `unfold` of the XLA strided op). Not the same shape, so left: the EfficientNet swish stages (global `HasVJP`, already 6–10 lines) and MnistCNN's two relu-after-map VJPs (5–6 lines) |
 | `4246a624` | **§7 `BnPairTiedB`, MobileNet/EfficientNet family** (−509): new `ResNet34PoCB.BnPairTiedB` (`ResNet34FoldB.lean`) — the γ and β gradient-node clauses of one batched BN layer, at its pre-BN activation and output cotangent — and `bnPairTiedB_holds` (the two `_den` lemmas). The 38 pairs in `MobileNetV4StepTieB` (18), `MobileNetV2StepTieB` (10) and `EfficientNetStepTieG` (10) are folded into their tie `def`s (14 lines → 2) and proved by one `bnPairTiedB_holds` each; the `refine` arities drop to match. EfficientNet's β clauses were stated with γ and the activation at `0` (β's gradient ignores both); the pair states them at the layer's own, which is equally true, and the ties' only consumers are in-file and `AuditAxioms`. The conv-bias β clauses (`bnBetaGradB` at the pre-BN cotangent) are not pairs and stay. Spliced mechanically: regex over whitespace-normalised clauses with balanced-paren atoms, each pair checked field by field (same cotangent, ε, β, layer) before replacing |
-| *(staged)* | **§7 `BnPairTiedB`, ResNet family** (−285): the 17 pairs in `ResNet50StepTieB` (11) and `ResNet34StepTieB` (6, stem included), same splice. All 55 grad-form pairs now go through `BnPairTiedB` |
+| `15c237c8` | **§7 `BnPairTiedB`, ResNet family** (−285): the 17 pairs in `ResNet50StepTieB` (11) and `ResNet34StepTieB` (6, stem included), same splice. All 55 grad-form pairs now go through `BnPairTiedB` |
+| *(staged)* | **§7 fused-from-unfused, EfficientNet** (−119): the eight fused `EnetPoC.*_den` folds (`EfficientNetFold.lean`) are now their un-fused peers (`ResNet34PoCB` / `EnetPoCG`) through `*SgdB_eq_grad` — one `rw` each, `congrArg` for the XLA-`SAME` stem, which has no `_eq_grad` lemma but is `θ − lr·` its gradient node by `rfl`. For that the import runs the other way: `ResNet34FoldB` imports `EfficientNetFold`'s three imports instead of it, and `EfficientNetFold` imports `EfficientNetFoldG`. New `EnetPoC.BnSgdPairTiedB` + `bnSgdPairTiedB_holds` (the fused γ/β pair) fold the 10 pairs in `EfficientNetStepTie`'s tie `def`s, same splice as `BnPairTiedB` |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -71,14 +72,17 @@ gets the same reuse without moving its 32 consumers).
    (`obtain ⟨…⟩`, `.1.2`) moves. Check `formalization.yaml` / the book for the Props' bodies before choosing
    between (a) folding into the defs and (b) keeping the defs and proving each pair with `bnPairTiedB_holds`.
    **Decided 2026-09-18: (a), fold into the defs** (neither `formalization.yaml` nor the book shows them).
-   Done for all 55 grad-form pairs (`4246a624` + the staged ResNet row, −794 together). Left: the
-   fused-SGD twin (`bnGammaSgd{,B}` pairs in `EfficientNetStepTie`, `Cifar8BnStepTie`, `CifarBnStepTie`),
-   a different pair; `EfficientNetStepTie` also overlaps item 3, so do that item first.
+   Done for all 55 grad-form pairs (`4246a624`, `15c237c8`, −794 together) and the 10 fused pairs in
+   `EfficientNetStepTie` (item 3's row). ⚠ Not folded: the 12 fused pairs in `Cifar8BnStepTie` /
+   `CifarBnStepTie` sit in the *theorem statements* of the pinned `cifar8Bn_convbn_tied_certified` /
+   `cifarBn_convbn_tied_certified`, not in a tie `def`, so folding them would change those statements
+   (equivalently, by unfolding). A user decision; ~116 lines.
    Do one family per commit (MobileNet/EfficientNet, then ResNet/Small); the `ConvBnStageTiedB` twin (§4 note,
    ~500, likely) is the natural follow-on.
-3. **§7 fused-from-unfused** (~340–640, verified on 4 lemmas + 1 tie): `EfficientNetFold.lean` (8 lemmas, 190
-   lines) re-proves `EfficientNetFoldG.lean` (each is `rw [depthwiseWeightSgdB_eq_grad,
-   EnetPoCG.depthwiseWGradB_den]`); `EfficientNetStepTie`'s block ties re-prove `EfficientNetStepTieG`'s.
+3. **§7 fused-from-unfused**: the folds are done (staged row). The fused block-tie *theorems* still
+   prove their clauses directly rather than from `EfficientNetStepTieG`'s ties: `StepTieG` imports
+   `StepTie`, so deriving them means moving the five theorems (and `efficientnet_net_tied`) into a file
+   downstream of both, for ~60 lines — each proof is already one bullet per clause. Not worth it alone.
    Smaller neighbours in §4/§7: dense-head folds (`Small/Cifar8Fold` generics, 18 copies, ~290), one
    `softmaxCELossCot_den` (×7, ~80), `HasVJP.sgd_certified` (~250, mostly AuditAxioms-only, §0.7).
 4. **§5 generator lemmas** — G2: `pair_sq_bound_mlp` for the `pairSq*` body the SDP scripts emit 148× (~1,300

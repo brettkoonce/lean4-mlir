@@ -188,18 +188,8 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
           = be o - lr * ∑ j : Fin (mid * (N * (h * w))),
               pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εe (fun _ => 0) β' (fun _ => 0))
                    be o j * bnchwFwd N mid h w (reassocB N mid h w cotEc) j)
-  ∧ (∀ idx : Fin mid,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εe γe (reassocB N mid h w ec) lr
-              (.operand cotN (reassocB N mid h w cotEn))) idx
-          = γe idx - lr * ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun γ' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εe γ' βe
-                      (bnchwFwd N mid h w (reassocB N mid h w ec)))
-                   γe idx j * bnchwFwd N mid h w (reassocB N mid h w cotEn) j)
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaSgdB bN lrStr βe lr (.operand cotN (reassocB N mid h w cotEn))) o
-          = βe o - lr * ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εe (fun _ => 0) β' (fun _ => 0))
-                   βe o j * bnchwFwd N mid h w (reassocB N mid h w cotEn) j)
+  ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εe γe βe (reassocB N mid h w ec)
+        (reassocB N mid h w cotEn) lr
   -- depthwise (stride-1, kHd×kWd), cot = cotDc
   ∧ (∀ idx : Fin (mid * kHd * kWd),
         den (SHlo.depthwiseWeightSgdB xN wN lrStr bd er Wd lr (.operand cotN cotDc)) idx
@@ -213,18 +203,8 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
           = bd o - lr * ∑ j : Fin (mid * (N * (h * w))),
               pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
                    bd o j * bnchwFwd N mid h w (reassocB N mid h w cotDc) j)
-  ∧ (∀ idx : Fin mid,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εd γd (reassocB N mid h w dc) lr
-              (.operand cotN (reassocB N mid h w cotDn))) idx
-          = γd idx - lr * ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun γ' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd γ' βd
-                      (bnchwFwd N mid h w (reassocB N mid h w dc)))
-                   γd idx j * bnchwFwd N mid h w (reassocB N mid h w cotDn) j)
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaSgdB bN lrStr βd lr (.operand cotN (reassocB N mid h w cotDn))) o
-          = βd o - lr * ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
-                   βd o j * bnchwFwd N mid h w (reassocB N mid h w cotDn) j)
+  ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
+        (reassocB N mid h w cotDn) lr
   -- SE reduce dense W₁/b₁ (mid → r), cot = cotE1; excite dense W₂/b₂ (r → mid), cot = cotE2
   ∧ (∀ i : Fin mid, ∀ j : Fin r,
         den (SHlo.denseWeightSgdB xN wN lrStr s Wz1 lr (.operand cotN cotE1)) (finProdFinEquiv (i, j))
@@ -259,18 +239,8 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
           = bp o - lr * ∑ j : Fin (oc * (N * (h * w))),
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
                    bp o j * bnchwFwd N oc h w (reassocB N oc h w cotPbn) j)
-  ∧ (∀ idx : Fin oc,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εp γp (reassocB N oc h w pc) lr
-              (.operand cotN (reassocB N oc h w dyOut))) idx
-          = γp idx - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp γ' βp
-                      (bnchwFwd N oc h w (reassocB N oc h w pc)))
-                   γp idx j * bnchwFwd N oc h w (reassocB N oc h w dyOut) j)
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaSgdB bN lrStr βp lr (.operand cotN (reassocB N oc h w dyOut))) o
-          = βp o - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
-                   βp o j * bnchwFwd N oc h w (reassocB N oc h w dyOut) j)
+  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
+        (reassocB N oc h w dyOut) lr
 
 theorem enet_exp_tied {N ic mid oc h w r kHd kWd : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
@@ -285,23 +255,23 @@ theorem enet_exp_tied {N ic mid oc h w r kHd kWd : Nat}
   unfold enetExpTied
   intro ec en er dc dn dr s e1 z e2 se pc cotPbn cotSeOut dgate cotE2 cotZ cotE1
         cotDxSe cotDn cotDc cotEr cotEn cotEc
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact EnetPoC.convWB_den xN wN lrStr cotN be xin We cotEc lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εe (fun _ => 0) be (fun _ => 0) (reassocB N mid h w cotEc) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εe γe βe (reassocB N mid h w ec) (reassocB N mid h w cotEn) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εe (fun _ => 0) βe (fun _ => 0) (reassocB N mid h w cotEn) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εe γe βe
+          (reassocB N mid h w ec) (reassocB N mid h w cotEn) lr
   · intro idx; exact EnetPoC.depthwiseWB_den xN wN lrStr cotN bd er Wd cotDc lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εd (fun _ => 0) bd (fun _ => 0) (reassocB N mid h w cotDc) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εd γd βd (reassocB N mid h w dc) (reassocB N mid h w cotDn) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εd (fun _ => 0) βd (fun _ => 0) (reassocB N mid h w cotDn) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εd γd βd
+          (reassocB N mid h w dc) (reassocB N mid h w cotDn) lr
   · intro i j; exact EnetPoC.denseWB_den xN wN lrStr cotN s Wz1 bz1 cotE1 lr i j
   · intro j;   exact EnetPoC.denseBB_den bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr j
   · intro i j; exact EnetPoC.denseWB_den xN wN lrStr cotN z Wz2 bz2 cotE2 lr i j
   · intro j;   exact EnetPoC.denseBB_den bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr j
   · intro idx; exact EnetPoC.convWB_den xN wN lrStr cotN bp se Wp cotPbn lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εp (fun _ => 0) bp (fun _ => 0) (reassocB N oc h w cotPbn) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εp γp βp (reassocB N oc h w pc) (reassocB N oc h w dyOut) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εp (fun _ => 0) βp (fun _ => 0) (reassocB N oc h w dyOut) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εp γp βp
+          (reassocB N oc h w pc) (reassocB N oc h w dyOut) lr
 
 /-! ## Strided downsampling MBConv block — all 16 params tied (b2/b4/b6/b12)
 
@@ -358,18 +328,8 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
           = be o - lr * ∑ j : Fin (mid * (N * ((2 * h) * (2 * w)))),
               pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * ((2 * h) * (2 * w))) εe (fun _ => 0) β' (fun _ => 0))
                    be o j * bnchwFwd N mid (2 * h) (2 * w) (reassocB N mid (2 * h) (2 * w) cotEc) j)
-  ∧ (∀ idx : Fin mid,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εe γe (reassocB N mid (2 * h) (2 * w) ec) lr
-              (.operand cotN (reassocB N mid (2 * h) (2 * w) cotEn))) idx
-          = γe idx - lr * ∑ j : Fin (mid * (N * ((2 * h) * (2 * w)))),
-              pdiv (fun γ' : Vec mid => bnPerChannelFlat mid (N * ((2 * h) * (2 * w))) εe γ' βe
-                      (bnchwFwd N mid (2 * h) (2 * w) (reassocB N mid (2 * h) (2 * w) ec)))
-                   γe idx j * bnchwFwd N mid (2 * h) (2 * w) (reassocB N mid (2 * h) (2 * w) cotEn) j)
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaSgdB bN lrStr βe lr (.operand cotN (reassocB N mid (2 * h) (2 * w) cotEn))) o
-          = βe o - lr * ∑ j : Fin (mid * (N * ((2 * h) * (2 * w)))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * ((2 * h) * (2 * w))) εe (fun _ => 0) β' (fun _ => 0))
-                   βe o j * bnchwFwd N mid (2 * h) (2 * w) (reassocB N mid (2 * h) (2 * w) cotEn) j)
+  ∧ EnetPoC.BnSgdPairTiedB N mid (2 * h) (2 * w) gN vN epsStr bN lrStr cotN εe γe βe
+        (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn) lr
   -- strided depthwise (kHd×kWd, 2h→h), cot = cotDc
   ∧ (∀ idx : Fin (mid * kHd * kWd),
         den (SHlo.depthwiseStridedWeightSgdB xN wN lrStr bd er Wd lr (.operand cotN cotDc)) idx
@@ -382,18 +342,8 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
           = bd o - lr * ∑ j : Fin (mid * (N * (h * w))),
               pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
                    bd o j * bnchwFwd N mid h w (reassocB N mid h w cotDc) j)
-  ∧ (∀ idx : Fin mid,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εd γd (reassocB N mid h w dc) lr
-              (.operand cotN (reassocB N mid h w cotDn))) idx
-          = γd idx - lr * ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun γ' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd γ' βd
-                      (bnchwFwd N mid h w (reassocB N mid h w dc)))
-                   γd idx j * bnchwFwd N mid h w (reassocB N mid h w cotDn) j)
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaSgdB bN lrStr βd lr (.operand cotN (reassocB N mid h w cotDn))) o
-          = βd o - lr * ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
-                   βd o j * bnchwFwd N mid h w (reassocB N mid h w cotDn) j)
+  ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
+        (reassocB N mid h w cotDn) lr
   -- SE reduce/excite dense (mid → r → mid)
   ∧ (∀ i : Fin mid, ∀ j : Fin r,
         den (SHlo.denseWeightSgdB xN wN lrStr s Wz1 lr (.operand cotN cotE1)) (finProdFinEquiv (i, j))
@@ -428,18 +378,8 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
           = bp o - lr * ∑ j : Fin (oc * (N * (h * w))),
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
                    bp o j * bnchwFwd N oc h w (reassocB N oc h w cotPbn) j)
-  ∧ (∀ idx : Fin oc,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εp γp (reassocB N oc h w pc) lr
-              (.operand cotN (reassocB N oc h w dyOut))) idx
-          = γp idx - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp γ' βp
-                      (bnchwFwd N oc h w (reassocB N oc h w pc)))
-                   γp idx j * bnchwFwd N oc h w (reassocB N oc h w dyOut) j)
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaSgdB bN lrStr βp lr (.operand cotN (reassocB N oc h w dyOut))) o
-          = βp o - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
-                   βp o j * bnchwFwd N oc h w (reassocB N oc h w dyOut) j)
+  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
+        (reassocB N oc h w dyOut) lr
 
 theorem enet_strided_tied {N ic mid oc h w r kHd kWd : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
@@ -454,23 +394,23 @@ theorem enet_strided_tied {N ic mid oc h w r kHd kWd : Nat}
   unfold enetStridedTied
   intro ec en er dc dn dr s e1 z e2 se pc cotPbn cotSeOut dgate cotE2 cotZ cotE1
         cotDxSe cotDn cotDc cotEr cotEn cotEc
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact EnetPoC.convWB_den xN wN lrStr cotN be xin We cotEc lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εe (fun _ => 0) be (fun _ => 0) (reassocB N mid (2 * h) (2 * w) cotEc) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εe γe βe (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εe (fun _ => 0) βe (fun _ => 0) (reassocB N mid (2 * h) (2 * w) cotEn) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εe γe βe
+          (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn) lr
   · intro idx; exact EnetPoC.depthwiseStridedWB_den xN wN lrStr cotN bd er Wd cotDc lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εd (fun _ => 0) bd (fun _ => 0) (reassocB N mid h w cotDc) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εd γd βd (reassocB N mid h w dc) (reassocB N mid h w cotDn) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εd (fun _ => 0) βd (fun _ => 0) (reassocB N mid h w cotDn) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εd γd βd
+          (reassocB N mid h w dc) (reassocB N mid h w cotDn) lr
   · intro i j; exact EnetPoC.denseWB_den xN wN lrStr cotN s Wz1 bz1 cotE1 lr i j
   · intro j;   exact EnetPoC.denseBB_den bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr j
   · intro i j; exact EnetPoC.denseWB_den xN wN lrStr cotN z Wz2 bz2 cotE2 lr i j
   · intro j;   exact EnetPoC.denseBB_den bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr j
   · intro idx; exact EnetPoC.convWB_den xN wN lrStr cotN bp se Wp cotPbn lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εp (fun _ => 0) bp (fun _ => 0) (reassocB N oc h w cotPbn) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εp γp βp (reassocB N oc h w pc) (reassocB N oc h w dyOut) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εp (fun _ => 0) βp (fun _ => 0) (reassocB N oc h w dyOut) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εp γp βp
+          (reassocB N oc h w pc) (reassocB N oc h w dyOut) lr
 
 /-! ## No-expand MBConv block (b1, t=1) — all 12 params tied (depthwise on `ic` → SE → project)
 
@@ -518,18 +458,8 @@ def enetNoExpTied {N ic oc h w r kHd kWd : Nat}
           = bd o - lr * ∑ j : Fin (ic * (N * (h * w))),
               pdiv (fun β' : Vec ic => bnPerChannelFlat ic (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
                    bd o j * bnchwFwd N ic h w (reassocB N ic h w cotDc) j)
-  ∧ (∀ idx : Fin ic,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εd γd (reassocB N ic h w dc) lr
-              (.operand cotN (reassocB N ic h w cotDn))) idx
-          = γd idx - lr * ∑ j : Fin (ic * (N * (h * w))),
-              pdiv (fun γ' : Vec ic => bnPerChannelFlat ic (N * (h * w)) εd γ' βd
-                      (bnchwFwd N ic h w (reassocB N ic h w dc)))
-                   γd idx j * bnchwFwd N ic h w (reassocB N ic h w cotDn) j)
-  ∧ (∀ o : Fin ic,
-        den (SHlo.bnBetaSgdB bN lrStr βd lr (.operand cotN (reassocB N ic h w cotDn))) o
-          = βd o - lr * ∑ j : Fin (ic * (N * (h * w))),
-              pdiv (fun β' : Vec ic => bnPerChannelFlat ic (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
-                   βd o j * bnchwFwd N ic h w (reassocB N ic h w cotDn) j)
+  ∧ EnetPoC.BnSgdPairTiedB N ic h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N ic h w dc)
+        (reassocB N ic h w cotDn) lr
   -- SE reduce/excite dense (ic → r → ic)
   ∧ (∀ i : Fin ic, ∀ j : Fin r,
         den (SHlo.denseWeightSgdB xN wN lrStr s Wz1 lr (.operand cotN cotE1)) (finProdFinEquiv (i, j))
@@ -564,18 +494,8 @@ def enetNoExpTied {N ic oc h w r kHd kWd : Nat}
           = bp o - lr * ∑ j : Fin (oc * (N * (h * w))),
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
                    bp o j * bnchwFwd N oc h w (reassocB N oc h w cotPbn) j)
-  ∧ (∀ idx : Fin oc,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εp γp (reassocB N oc h w pc) lr
-              (.operand cotN (reassocB N oc h w dyOut))) idx
-          = γp idx - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp γ' βp
-                      (bnchwFwd N oc h w (reassocB N oc h w pc)))
-                   γp idx j * bnchwFwd N oc h w (reassocB N oc h w dyOut) j)
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaSgdB bN lrStr βp lr (.operand cotN (reassocB N oc h w dyOut))) o
-          = βp o - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
-                   βp o j * bnchwFwd N oc h w (reassocB N oc h w dyOut) j)
+  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
+        (reassocB N oc h w dyOut) lr
 
 theorem enet_noexp_tied {N ic oc h w r kHd kWd : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
@@ -588,19 +508,19 @@ theorem enet_noexp_tied {N ic oc h w r kHd kWd : Nat}
       Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp xin dyOut lr := by
   unfold enetNoExpTied
   intro dc dn dr s e1 z e2 se pc cotPbn cotSeOut dgate cotE2 cotZ cotE1 cotDxSe cotDn cotDc
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact EnetPoC.depthwiseWB_den xN wN lrStr cotN bd xin Wd cotDc lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εd (fun _ => 0) bd (fun _ => 0) (reassocB N ic h w cotDc) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εd γd βd (reassocB N ic h w dc) (reassocB N ic h w cotDn) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εd (fun _ => 0) βd (fun _ => 0) (reassocB N ic h w cotDn) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εd γd βd
+          (reassocB N ic h w dc) (reassocB N ic h w cotDn) lr
   · intro i j; exact EnetPoC.denseWB_den xN wN lrStr cotN s Wz1 bz1 cotE1 lr i j
   · intro j;   exact EnetPoC.denseBB_den bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr j
   · intro i j; exact EnetPoC.denseWB_den xN wN lrStr cotN z Wz2 bz2 cotE2 lr i j
   · intro j;   exact EnetPoC.denseBB_den bN lrStr cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2 lr j
   · intro idx; exact EnetPoC.convWB_den xN wN lrStr cotN bp se Wp cotPbn lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εp (fun _ => 0) bp (fun _ => 0) (reassocB N oc h w cotPbn) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εp γp βp (reassocB N oc h w pc) (reassocB N oc h w dyOut) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εp (fun _ => 0) βp (fun _ => 0) (reassocB N oc h w dyOut) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εp γp βp
+          (reassocB N oc h w pc) (reassocB N oc h w dyOut) lr
 
 /-! ## Stem — the 3×3/s2 conv-bn-swish (4 params), feeding block 1
 
@@ -630,18 +550,8 @@ def enetStemTied {N ic oc h w kHs kWs : Nat}
           = bs o - lr * ∑ j : Fin (oc * (N * (h * w))),
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εs (fun _ => 0) β' (fun _ => 0))
                    bs o j * bnchwFwd N oc h w (reassocB N oc h w cotStc) j)
-  ∧ (∀ idx : Fin oc,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εs γs (reassocB N oc h w stc) lr
-              (.operand cotN (reassocB N oc h w cotBnS))) idx
-          = γs idx - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εs γ' βs
-                      (bnchwFwd N oc h w (reassocB N oc h w stc)))
-                   γs idx j * bnchwFwd N oc h w (reassocB N oc h w cotBnS) j)
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaSgdB bN lrStr βs lr (.operand cotN (reassocB N oc h w cotBnS))) o
-          = βs o - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εs (fun _ => 0) β' (fun _ => 0))
-                   βs o j * bnchwFwd N oc h w (reassocB N oc h w cotBnS) j)
+  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εs γs βs (reassocB N oc h w stc)
+        (reassocB N oc h w cotBnS) lr
 
 theorem enet_stem_tied {N ic oc h w kHs kWs : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String) (εs : ℝ) (hεs : 0 < εs)
@@ -650,11 +560,11 @@ theorem enet_stem_tied {N ic oc h w kHs kWs : Nat}
     enetStemTied xN wN bN gN vN epsStr lrStr cotN εs hεs Ws bs γs βs x dyStem lr := by
   unfold enetStemTied
   intro stc stn cotBnS cotStc
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_⟩
   · intro idx; exact EnetPoC.convStridedWB_den xN wN lrStr cotN bs x Ws cotStc lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εs (fun _ => 0) bs (fun _ => 0) (reassocB N oc h w cotStc) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εs γs βs (reassocB N oc h w stc) (reassocB N oc h w cotBnS) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εs (fun _ => 0) βs (fun _ => 0) (reassocB N oc h w cotBnS) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εs γs βs
+          (reassocB N oc h w stc) (reassocB N oc h w cotBnS) lr
 
 /-! ## Head — the 1×1 conv-bn-swish (4 params) → GAP → dense (Wfc/bfc), + the loss cotangent
 
@@ -692,18 +602,8 @@ def enetHeadTied {N c oc h w nC : Nat}
           = bh o - lr * ∑ j : Fin (oc * (N * (h * w))),
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εh (fun _ => 0) β' (fun _ => 0))
                    bh o j * bnchwFwd N oc h w (reassocB N oc h w cotHbn) j)
-  ∧ (∀ idx : Fin oc,
-        den (SHlo.bnGammaSgdB gN vN epsStr lrStr εh γh (reassocB N oc h w hc) lr
-              (.operand cotN (reassocB N oc h w cotHsw))) idx
-          = γh idx - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εh γ' βh
-                      (bnchwFwd N oc h w (reassocB N oc h w hc)))
-                   γh idx j * bnchwFwd N oc h w (reassocB N oc h w cotHsw) j)
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaSgdB bN lrStr βh lr (.operand cotN (reassocB N oc h w cotHsw))) o
-          = βh o - lr * ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εh (fun _ => 0) β' (fun _ => 0))
-                   βh o j * bnchwFwd N oc h w (reassocB N oc h w cotHsw) j)
+  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εh γh βh (reassocB N oc h w hc)
+        (reassocB N oc h w cotHsw) lr
   -- dense classifier (oc → nC), cot = g (the batched softmax-CE gradient)
   ∧ (∀ i : Fin oc, ∀ j : Fin nC,
         den (SHlo.denseWeightSgdB dN wN lrStr a_gap Wfc lr (.operand cotN g)) (finProdFinEquiv (i, j))
@@ -723,11 +623,11 @@ theorem enet_head_tied {N c oc h w nC : Nat}
     enetHeadTied xN wN bN gN vN epsStr lrStr cotN dN εh hεh Wh bh γh βh Wfc bfc xhead onehot lr := by
   unfold enetHeadTied
   intro hc hn hr a_gap logits g cotGapIn cotHr cotHsw cotHbn
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact EnetPoC.convWB_den xN wN lrStr cotN bh xhead Wh cotHbn lr idx
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εh (fun _ => 0) bh (fun _ => 0) (reassocB N oc h w cotHbn) lr o
-  · intro idx; exact EnetPoC.bnGammaB_den gN vN epsStr lrStr cotN εh γh βh (reassocB N oc h w hc) (reassocB N oc h w cotHsw) lr idx
-  · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εh (fun _ => 0) βh (fun _ => 0) (reassocB N oc h w cotHsw) lr o
+  · exact EnetPoC.bnSgdPairTiedB_holds gN vN epsStr bN lrStr cotN εh γh βh
+          (reassocB N oc h w hc) (reassocB N oc h w cotHsw) lr
   · intro i j; exact EnetPoC.denseWB_den dN wN lrStr cotN a_gap Wfc bfc g lr i j
   · intro j;   exact EnetPoC.denseBB_den dN lrStr cotN (0 : Mat nC nC) (0 : Vec nC) bfc g lr j
 

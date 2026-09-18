@@ -1,4 +1,6 @@
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
+import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Nets.Small.CnnTrainStep
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetClose
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 
 /-! # T3 §1 fold for ResNet-34 at TRUE BATCH-NORM — the UN-FUSED gradient ops
@@ -24,9 +26,8 @@ wrap).
 `StableHLO.lean`'s `*SgdB_eq_grad` family (`convWeightSgdB_eq_grad`, …) says each fused op IS
 `θ − lr·` applied to the un-fused one, all by `rfl`, and its own docstring says it exists to
 "unblock a batched `resnet34_adam_train_step` rendered from `Proofs/` — the blocker was the fusion,
-never Adam." So the eight lemmas below are `EfficientNetFold.lean`'s proofs with the
-`congr 1` / `congrArg (lr * ·)` wrapper peeling dropped: the same per-example VJP bridge under the
-same `Σ_n`.
+never Adam." So the eight lemmas below are the per-example VJP bridge under `Σ_n` with no
+`θ − lr·` wrapper, and `EfficientNetFold.lean`'s fused lemmas are them through `*SgdB_eq_grad`.
 
 ⚠ **Symmetric padding, not XLA-`SAME`.** The strided lemmas here are about `convStridedWeightGradB`
 / `convStridedBiasGradB`, whose `den` is `flatConvStride2_*`; B0's peers are about the
@@ -51,7 +52,7 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched stride-1 conv weight GRADIENT denotes the certified `Σ_n` weight gradient.** The
-    un-fused peer of `EfficientNetPoC.convWB_den`: same `Σ_n` of `conv_weight_grad_bridge`, with no
+    un-fused peer of `EnetPoC.convWB_den`: same `Σ_n` of `conv_weight_grad_bridge`, with no
     `θ − lr·` wrapper because the batched r34 render hands this node to an optimizer tail. -/
 theorem convWGradB_den {N ic oc h w kH kW : Nat}
     (xN cotN : String) (b : Vec oc) (x : Vec (N * (ic * h * w)))
