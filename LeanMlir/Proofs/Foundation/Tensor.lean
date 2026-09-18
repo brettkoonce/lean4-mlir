@@ -11,6 +11,7 @@ import Mathlib.Analysis.Calculus.FDeriv.Comp
 import Mathlib.Analysis.Calculus.FDeriv.Pi
 import Mathlib.Analysis.Calculus.FDeriv.Linear
 import Mathlib.Analysis.Calculus.Deriv.Basic
+import Mathlib.Analysis.Calculus.Deriv.Comp
 
 /-!
 # Tensor Algebra for VJP Proofs
@@ -210,34 +211,37 @@ theorem pdiv_const_smul {m n : Nat} (c : ℝ) (f : Vec m → Vec n) (x : Vec m)
 -- § The mean the collective computes
 -- ════════════════════════════════════════════════════════════════
 
-/-- **A scalar function of ONE coordinate, lifted to `Vec K → Vec 1`, and its `pdiv`.** `pdiv_sigmoid`'s
-    proof at one coordinate and a general `f`; the shape every summand of a per-class loss has. -/
+/-- **Elementwise rule** — a scalar function applied to every coordinate has a diagonal
+    Jacobian, the scalar derivative on the diagonal: each coordinate is `φ ∘ proj k`
+    (`HasDerivAt.comp_hasFDerivAt`), assembled by `hasFDerivAt_pi`. GELU, swish and sigmoid are
+    this with `φ` their scalar function. -/
+theorem pdiv_elementwise {n : Nat} (φ : ℝ → ℝ) (x : Vec n)
+    (hφ : ∀ k, DifferentiableAt ℝ φ (x k)) (i j : Fin n) :
+    pdiv (fun y : Vec n => fun k => φ (y k)) x i j = if i = j then deriv φ (x i) else 0 := by
+  have h : HasFDerivAt (fun y : Vec n => fun k => φ (y k))
+      (ContinuousLinearMap.pi fun k => deriv φ (x k) • ContinuousLinearMap.proj k) x :=
+    hasFDerivAt_pi.2 fun k => by
+      have := (hφ k).hasDerivAt.comp_hasFDerivAt x
+        (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).hasFDerivAt
+      exact this
+  rw [pdiv, h.fderiv]
+  rcases eq_or_ne i j with rfl | hij
+  · simp
+  · simp [hij, Ne.symm hij]
+
+/-- **A scalar function of ONE coordinate, lifted to `Vec K → Vec 1`, and its `pdiv`.** The
+    elementwise rule at one coordinate and a general `f`; the shape every summand of a per-class
+    loss has. -/
 theorem pdiv_coordFun {K : Nat} (f : ℝ → ℝ) (f' : ℝ) (k : Fin K) (z : Vec K)
     (hf : HasDerivAt f f' (z k)) (j : Fin K) :
     pdiv (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z j 0 = if j = k then f' else 0 := by
-  have hproj := (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).differentiableAt (x := z)
-  have hdiff : DifferentiableAt ℝ (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z := by
-    rw [differentiableAt_pi]
-    intro _
-    exact hf.differentiableAt.comp z hproj
-  unfold pdiv
-  have h_swap : fderiv ℝ (fun z' : Vec K => fun _ : Fin 1 => f (z' k)) z (basisVec j) 0
-              = fderiv ℝ (fun y : Vec K => f (y k)) z (basisVec j) := by
-    rw [fderiv_apply hdiff (0 : Fin 1)]
-    rfl
-  rw [h_swap]
-  have h_decomp : (fun y : Vec K => f (y k))
-                = f ∘ (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ) := by
-    funext y; rfl
-  rw [h_decomp, fderiv_comp z hf.differentiableAt hproj,
-      (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).fderiv]
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  rw [fderiv_eq_smul_deriv, hf.deriv]
-  show basisVec j k * f' = _
-  rw [basisVec_apply]
-  by_cases h : j = k
-  · rw [ite_eq_left h, ite_eq_left h.symm, one_mul]
-  · rw [ite_eq_right h, ite_eq_right (fun h' : k = j => h h'.symm), zero_mul]
+  have h : HasFDerivAt (fun z' : Vec K => fun _ : Fin 1 => f (z' k))
+      (ContinuousLinearMap.pi fun _ => f' • ContinuousLinearMap.proj k) z :=
+    hasFDerivAt_pi.2 fun _ => by
+      have := hf.comp_hasFDerivAt z (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).hasFDerivAt
+      exact this
+  rw [pdiv, h.fderiv]
+  simp [@eq_comm _ k j]
 
 /-- **Finset-sum rule** — derived from `pdiv_add` and `pdiv_const` by
     induction on the Finset. Linearity of the derivative extended to

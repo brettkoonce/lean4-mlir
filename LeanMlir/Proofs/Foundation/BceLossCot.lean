@@ -99,13 +99,7 @@ theorem log_sigmoidScalar (z : ℝ) : Real.log (sigmoidScalar z) = -softplus (-z
 
 /-- `1 − σ(z) = σ(−z)`, hence `log(1 − σ(z)) = −softplus(z)`. -/
 theorem one_sub_sigmoidScalar (z : ℝ) : 1 - sigmoidScalar z = sigmoidScalar (-z) := by
-  have hz : Real.exp z ≠ 0 := (Real.exp_pos z).ne'
-  have h1 : (1 : ℝ) + Real.exp (-z) ≠ 0 := by positivity
-  have h2 : (1 : ℝ) + Real.exp z ≠ 0 := by positivity
-  unfold sigmoidScalar
-  rw [neg_neg, Real.exp_neg]
-  field_simp
-  ring
+  rw [sigmoidScalar_eq_sigmoid, Real.sigmoid_neg]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The loss, and that it is binary cross-entropy

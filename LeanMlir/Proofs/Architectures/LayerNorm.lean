@@ -8,6 +8,7 @@ import Mathlib.Analysis.SpecialFunctions.Pow.Real
 import Mathlib.Analysis.Calculus.Deriv.Basic
 import Mathlib.Analysis.Calculus.Deriv.Inv
 import Mathlib.Analysis.Calculus.FDeriv.Prod
+import Mathlib.Analysis.SpecialFunctions.Sigmoid
 
 /-!
 # LayerNorm & GELU
@@ -172,7 +173,7 @@ theorem Real.hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^
 
     This is exactly the closed form the verified `geluBack` StableHLO emitter
     renders — so the emitted backward text is certified equal to `deriv geluScalar`
-    (not merely the empirically-validated formula that swish/sigmoid rely on).
+    (`swishScalarDeriv_eq` / `sigmoidScalarDeriv_eq` do the same for swish and sigmoid).
     Proof: assemble `HasDerivAt` for the polynomial inner, `tanh` via
     `Real.hasDerivAt_tanh`, and the outer product, then `HasDerivAt.deriv`. -/
 theorem geluScalarDeriv_eq (x : ℝ) :
@@ -214,45 +215,12 @@ lemma gelu_diff (D : Nat) : Differentiable ℝ (gelu D) := by
 
     `gelu n` has diagonal Jacobian: each output coord depends only on
     the corresponding input coord via `geluScalar`. So
-    `∂(gelu n y)_j / ∂y_i = (geluScalar' (y i))` if `i = j`, else `0`.
-
-    Proof: `fderiv_apply` to extract output coord `j`, then chain rule
-    through `geluScalar ∘ proj_j`, then `fderiv_eq_smul_deriv` to
-    convert scalar `fderiv` back to `deriv`. -/
+    `∂(gelu n y)_j / ∂y_i = (geluScalar' (y i))` if `i = j`, else `0` —
+    `pdiv_elementwise` at `geluScalar`. -/
 theorem pdiv_gelu (n : Nat) (x : Vec n) (i j : Fin n) :
     pdiv (gelu n) x i j =
-    if i = j then geluScalarDeriv (x i) else 0 := by
-  unfold pdiv
-  -- Convert the (j-th coord of) fderiv (gelu n) to fderiv of the j-th coord function.
-  have h_swap : fderiv ℝ (gelu n) x (basisVec i) j =
-                fderiv ℝ (fun y : Vec n => gelu n y j) x (basisVec i) := by
-    rw [fderiv_apply ((gelu_diff n) x) j]
-    rfl
-  rw [h_swap]
-  -- The j-th coord function is `geluScalar ∘ proj_j`.
-  have h_decomp : (fun y : Vec n => gelu n y j) =
-                  geluScalar ∘ (ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ) := by
-    funext y; rfl
-  rw [h_decomp]
-  rw [fderiv_comp _ (geluScalar_diff _)
-        (ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ).differentiableAt]
-  rw [(ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ).fderiv]
-  -- Now goal: ((fderiv ℝ geluScalar (proj j x)).comp (proj j)) (basisVec i) = ...
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  -- Goal: fderiv ℝ geluScalar (x j) (basisVec i j) = ...
-  rw [fderiv_eq_smul_deriv]
-  show basisVec i j • deriv geluScalar (x j) = if i = j then geluScalarDeriv (x i) else 0
-  -- basisVec i j = if j = i then 1 else 0; geluScalarDeriv = deriv geluScalar.
-  show basisVec i j * deriv geluScalar (x j) = _
-  by_cases hij : i = j
-  · subst hij
-    show basisVec i i * deriv geluScalar (x i) = if i = i then geluScalarDeriv (x i) else 0
-    simp only [ite_eq_left rfl, one_mul]
-    rfl
-  · have h_basis : basisVec i j = 0 := by
-      simp only [basisVec_apply]
-      rw [ite_eq_right]; intro heq; exact hij heq.symm
-    rw [h_basis, zero_mul, ite_eq_right hij]
+    if i = j then geluScalarDeriv (x i) else 0 :=
+  pdiv_elementwise geluScalar x (fun _ => geluScalar_diff _) i j
 
 /-- **GELU VJP**: elementwise multiply by the scalar derivative.
 
@@ -325,60 +293,46 @@ noncomputable def swish (n : Nat) (x : Vec n) : Vec n :=
   fun i => swishScalar (x i)
 
 /-- **Scalar derivative of `swishScalar`** — defined via Mathlib's
-    `deriv`. The closed form is `σ(x)·(1 + x·(1 - σ(x)))`; we define it
-    as `deriv swishScalar` so the link to `swishScalar` is automatic. -/
+    `deriv`. The closed form is `σ(x)·(1 + x·(1 - σ(x)))` (`swishScalarDeriv_eq`);
+    we define it as `deriv swishScalar` so the link to `swishScalar` is automatic. -/
 noncomputable def swishScalarDeriv (x : ℝ) : ℝ :=
   deriv swishScalar x
+
+/-- `swishScalar x = x · σ(x)` with Mathlib's logistic function `Real.sigmoid`. -/
+theorem swishScalar_eq_mul_sigmoid : swishScalar = fun x => x * Real.sigmoid x := by
+  funext x; simp [swishScalar, Real.sigmoid, div_eq_mul_inv]
+
+/-- **Closed form of `swishScalarDeriv`**: `σ(x)·(1 + x·(1 − σ(x)))`, from
+    `Real.hasDerivAt_sigmoid` — the formula the `swishBack` StableHLO emitter renders. -/
+theorem swishScalarDeriv_eq (x : ℝ) :
+    swishScalarDeriv x = Real.sigmoid x * (1 + x * (1 - Real.sigmoid x)) := by
+  unfold swishScalarDeriv
+  rw [swishScalar_eq_mul_sigmoid]
+  refine ((hasDerivAt_id' x).mul (Real.hasDerivAt_sigmoid x)).deriv.trans ?_
+  ring
 
 /-- Differentiability of `swishScalar`. The denominator `1 + exp(-x)` is
     always positive, so the quotient is smooth everywhere. -/
 @[fun_prop]
 lemma swishScalar_diff : Differentiable ℝ swishScalar := by
-  unfold swishScalar
-  intro x
-  have h_pos : (0 : ℝ) < 1 + Real.exp (-x) := by positivity
-  exact DifferentiableAt.div differentiableAt_id (by fun_prop) h_pos.ne'
+  rw [swishScalar_eq_mul_sigmoid]; fun_prop
 
 /-- Differentiability of `swish D` as a function on `Vec D`. -/
 lemma swish_diff (D : Nat) : Differentiable ℝ (swish D) := by
   unfold swish; fun_prop
 
-/-- **Partial derivative of Swish** — diagonal Jacobian. Identical proof
-    template to `pdiv_gelu`: each output coord depends only on the
-    corresponding input coord via `swishScalar`. -/
+/-- **Partial derivative of Swish** — diagonal Jacobian: each output coord
+    depends only on the corresponding input coord via `swishScalar`
+    (`pdiv_elementwise`). -/
 theorem pdiv_swish (n : Nat) (x : Vec n) (i j : Fin n) :
     pdiv (swish n) x i j =
-    if i = j then swishScalarDeriv (x i) else 0 := by
-  unfold pdiv
-  have h_swap : fderiv ℝ (swish n) x (basisVec i) j =
-                fderiv ℝ (fun y : Vec n => swish n y j) x (basisVec i) := by
-    rw [fderiv_apply ((swish_diff n) x) j]
-    rfl
-  rw [h_swap]
-  have h_decomp : (fun y : Vec n => swish n y j) =
-                  swishScalar ∘ (ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ) := by
-    funext y; rfl
-  rw [h_decomp]
-  rw [fderiv_comp _ (swishScalar_diff _)
-        (ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ).differentiableAt]
-  rw [(ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ).fderiv]
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  rw [fderiv_eq_smul_deriv]
-  show basisVec i j • deriv swishScalar (x j) = if i = j then swishScalarDeriv (x i) else 0
-  show basisVec i j * deriv swishScalar (x j) = _
-  by_cases hij : i = j
-  · subst hij
-    simp only [ite_eq_left rfl, one_mul]
-    rfl
-  · have h_basis : basisVec i j = 0 := by
-      simp only [basisVec_apply]
-      rw [ite_eq_right]; intro heq; exact hij heq.symm
-    rw [h_basis, zero_mul, ite_eq_right hij]
+    if i = j then swishScalarDeriv (x i) else 0 :=
+  pdiv_elementwise swishScalar x (fun _ => swishScalar_diff _) i j
 
 /-- **Swish VJP**: elementwise multiply by the scalar derivative.
     Same template as ReLU/GELU. The codegen emits the closed-form
-    `σ(x)·(1 + x·(1 - σ(x)))` directly; this proof connects it
-    back to `swishScalar`'s `fderiv` via `swishScalarDeriv = deriv`. -/
+    `σ(x)·(1 + x·(1 - σ(x)))` directly; `swishScalarDeriv_eq` equates it
+    with `swishScalarDeriv = deriv swishScalar`. -/
 noncomputable def swish_has_vjp (n : Nat) : HasVJP (swish n) where
   backward := fun x dy i => dy i * swishScalarDeriv (x i)
   correct := by

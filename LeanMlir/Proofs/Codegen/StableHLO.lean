@@ -6922,7 +6922,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .swishBack x n, r :: st => do
       let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
           -- swish input-VJP: dy ⊙ σ(x)·(1 + x·(1−σ(x))), recomputing σ from the saved
-          -- pre-activation {x} (matches `swishScalarDeriv`'s closed form, IRPrint `swishB`).
+          -- pre-activation {x} (`swishScalarDeriv_eq`, IRPrint `swishB`).
           let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
           let inr ← fresh; let sp ← fresh; let o ← fresh
           pure (s!"    {s} = stablehlo.logistic {x} : {ty d}\n" ++
@@ -6942,7 +6942,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .sigmoidBack x n, r :: st => do
       let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
           -- sigmoid input-VJP: dy ⊙ σ(x)·(1−σ(x)), recomputing σ from the saved
-          -- pre-activation {x} (matches `sigmoidScalarDeriv`'s closed form, IRPrint `sigmoidBackM`).
+          -- pre-activation {x} (`sigmoidScalarDeriv_eq`, IRPrint `sigmoidBackM`).
           let s ← fresh; let one ← fresh; let om ← fresh; let sp ← fresh; let o ← fresh
           pure (s!"    {s} = stablehlo.logistic {x} : {ty d}\n" ++
                 s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++

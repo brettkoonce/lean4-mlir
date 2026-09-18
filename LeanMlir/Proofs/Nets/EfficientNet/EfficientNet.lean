@@ -55,44 +55,27 @@ noncomputable def sigmoid (n : Nat) (x : Vec n) : Vec n :=
 noncomputable def sigmoidScalarDeriv (x : ℝ) : ℝ :=
   deriv sigmoidScalar x
 
+/-- `sigmoidScalar` is Mathlib's logistic function `Real.sigmoid`. -/
+theorem sigmoidScalar_eq_sigmoid : sigmoidScalar = Real.sigmoid := by
+  funext x; simp [sigmoidScalar, Real.sigmoid]
+
+/-- **Closed form of `sigmoidScalarDeriv`**: `σ(x)·(1 − σ(x))` (`Real.deriv_sigmoid`) — the
+    formula the `sigmoidBack` StableHLO emitter renders. -/
+theorem sigmoidScalarDeriv_eq (x : ℝ) :
+    sigmoidScalarDeriv x = sigmoidScalar x * (1 - sigmoidScalar x) := by
+  simp [sigmoidScalarDeriv, sigmoidScalar_eq_sigmoid, Real.deriv_sigmoid]
+
 @[fun_prop]
 lemma sigmoidScalar_diff : Differentiable ℝ sigmoidScalar := by
-  unfold sigmoidScalar
-  intro x
-  have h_pos : (0 : ℝ) < 1 + Real.exp (-x) := by positivity
-  exact DifferentiableAt.div (differentiableAt_const _) (by fun_prop) h_pos.ne'
+  rw [sigmoidScalar_eq_sigmoid]; exact differentiable_sigmoid
 
 lemma sigmoid_diff (D : Nat) : Differentiable ℝ (sigmoid D) := by
   unfold sigmoid; fun_prop
 
 theorem pdiv_sigmoid (n : Nat) (x : Vec n) (i j : Fin n) :
     pdiv (sigmoid n) x i j =
-    if i = j then sigmoidScalarDeriv (x i) else 0 := by
-  unfold pdiv
-  have h_swap : fderiv ℝ (sigmoid n) x (basisVec i) j =
-                fderiv ℝ (fun y : Vec n => sigmoid n y j) x (basisVec i) := by
-    rw [fderiv_apply ((sigmoid_diff n) x) j]
-    rfl
-  rw [h_swap]
-  have h_decomp : (fun y : Vec n => sigmoid n y j) =
-                  sigmoidScalar ∘ (ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ) := by
-    funext y; rfl
-  rw [h_decomp]
-  rw [fderiv_comp _ (sigmoidScalar_diff _)
-        (ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ).differentiableAt]
-  rw [(ContinuousLinearMap.proj j : Vec n →L[ℝ] ℝ).fderiv]
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  rw [fderiv_eq_smul_deriv]
-  show basisVec i j • deriv sigmoidScalar (x j) = if i = j then sigmoidScalarDeriv (x i) else 0
-  show basisVec i j * deriv sigmoidScalar (x j) = _
-  by_cases hij : i = j
-  · subst hij
-    simp only [ite_eq_left rfl, one_mul]
-    rfl
-  · have h_basis : basisVec i j = 0 := by
-      simp only [basisVec_apply]
-      rw [ite_eq_right]; intro heq; exact hij heq.symm
-    rw [h_basis, zero_mul, ite_eq_right hij]
+    if i = j then sigmoidScalarDeriv (x i) else 0 :=
+  pdiv_elementwise sigmoidScalar x (fun _ => sigmoidScalar_diff _) i j
 
 noncomputable def sigmoid_has_vjp (n : Nat) : HasVJP (sigmoid n) where
   backward := fun x dy i => dy i * sigmoidScalarDeriv (x i)
