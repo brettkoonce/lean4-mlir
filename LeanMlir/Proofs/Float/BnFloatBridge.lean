@@ -71,42 +71,8 @@ theorem bnVar_nonneg (n : ℕ) (x : Vec n) : 0 ≤ bnVar n x := by
   unfold bnVar
   exact div_nonneg (Finset.sum_nonneg fun i _ => mul_self_nonneg _) (Nat.cast_nonneg n)
 
-/-- **BN inverse-stddev rounding budget (the keystone).** Model the GPU
-    inverse-stddev by a supplied `fistd` with relative accuracy `ers`
-    (`|fistd t − 1/√t| ≤ ers·(1/√t)`), evaluated at the rounded `fvarε ≥ ε`
-    (the float `σ²+ε`, within `evar` of the real `σ²+ε`). Then the float istd is
-    within `ers/√ε + evar/(2ε√ε)` of the certified `bnIstd`. The first term is
-    the `rsqrt` accuracy lifted to the `ε`-floor; the second is the variance
-    rounding pushed through `rsqrt_lipschitz`. The BN analog of the softmax
-    `exp`-accuracy handoff. -/
-theorem bnIstd_close {n : ℕ} {ε ers evar fvarε : ℝ} (x : Vec n)
-    (fistd : ℝ → ℝ) (hε : 0 < ε) (hers : 0 ≤ ers) (hfv : ε ≤ fvarε)
-    (hrs : |fistd fvarε - 1 / Real.sqrt fvarε| ≤ ers * (1 / Real.sqrt fvarε))
-    (hclose : |fvarε - (bnVar n x + ε)| ≤ evar) :
-    |fistd fvarε - bnIstd n x ε| ≤
-      ers / Real.sqrt ε + evar / (2 * ε * Real.sqrt ε) := by
-  have hsε : 0 < Real.sqrt ε := Real.sqrt_pos.mpr hε
-  have hbε : ε ≤ bnVar n x + ε := by have := bnVar_nonneg n x; linarith
-  -- term 1: the rsqrt accuracy, lifted from 1/√fvarε up to 1/√ε
-  have hinv : 1 / Real.sqrt fvarε ≤ 1 / Real.sqrt ε :=
-    one_div_le_one_div_of_le hsε (Real.sqrt_le_sqrt hfv)
-  have ht1 : |fistd fvarε - 1 / Real.sqrt fvarε| ≤ ers / Real.sqrt ε := by
-    calc |fistd fvarε - 1 / Real.sqrt fvarε| ≤ ers * (1 / Real.sqrt fvarε) := hrs
-      _ ≤ ers * (1 / Real.sqrt ε) := mul_le_mul_of_nonneg_left hinv hers
-      _ = ers / Real.sqrt ε := by rw [mul_one_div]
-  -- term 2: the variance rounding pushed through the Lipschitz bound
-  have ht2 : |1 / Real.sqrt fvarε - bnIstd n x ε| ≤ evar / (2 * ε * Real.sqrt ε) := by
-    unfold bnIstd
-    calc |1 / Real.sqrt fvarε - 1 / Real.sqrt (bnVar n x + ε)|
-        ≤ |fvarε - (bnVar n x + ε)| / (2 * ε * Real.sqrt ε) := rsqrt_lipschitz hε hfv hbε
-      _ ≤ evar / (2 * ε * Real.sqrt ε) := by gcongr
-  calc |fistd fvarε - bnIstd n x ε|
-      ≤ |fistd fvarε - 1 / Real.sqrt fvarε| + |1 / Real.sqrt fvarε - bnIstd n x ε| :=
-        abs_sub_le _ _ _
-    _ ≤ ers / Real.sqrt ε + evar / (2 * ε * Real.sqrt ε) := add_le_add ht1 ht2
-
-/-- **BN inverse-stddev budget at the OPERATING POINT (a-posteriori).** Identical
-    to `bnIstd_close`, but the `1/√` Lipschitz floor is a *variance lower bound*
+/-- **BN inverse-stddev budget at the OPERATING POINT (a-posteriori).** The general
+    form of `bnIstd_close` (below): the `1/√` Lipschitz floor is a *variance lower bound*
     `V ≤ σ²+ε` (both float and real), not the `ε`-floor. `rsqrt_lipschitz` is
     floor-agnostic, so the bound becomes `ers/√V + evar/(2V√V)` — and since the
     measured `σ²` is `O(1)` (never near 0), `V ≈ σ²+ε ≫ ε` makes this ~`(σ²/ε)^{3/2}`
@@ -137,6 +103,22 @@ theorem bnIstd_close_at {n : ℕ} {ε ers evar fvarε V : ℝ} (x : Vec n)
       ≤ |fistd fvarε - 1 / Real.sqrt fvarε| + |1 / Real.sqrt fvarε - bnIstd n x ε| :=
         abs_sub_le _ _ _
     _ ≤ ers / Real.sqrt V + evar / (2 * V * Real.sqrt V) := add_le_add ht1 ht2
+
+/-- **BN inverse-stddev rounding budget (the keystone).** Model the GPU
+    inverse-stddev by a supplied `fistd` with relative accuracy `ers`
+    (`|fistd t − 1/√t| ≤ ers·(1/√t)`), evaluated at the rounded `fvarε ≥ ε`
+    (the float `σ²+ε`, within `evar` of the real `σ²+ε`). Then the float istd is
+    within `ers/√ε + evar/(2ε√ε)` of the certified `bnIstd`. The first term is
+    the `rsqrt` accuracy lifted to the `ε`-floor; the second is the variance
+    rounding pushed through `rsqrt_lipschitz`. The BN analog of the softmax
+    `exp`-accuracy handoff; `bnIstd_close_at` at the floor `V = ε`. -/
+theorem bnIstd_close {n : ℕ} {ε ers evar fvarε : ℝ} (x : Vec n)
+    (fistd : ℝ → ℝ) (hε : 0 < ε) (hers : 0 ≤ ers) (hfv : ε ≤ fvarε)
+    (hrs : |fistd fvarε - 1 / Real.sqrt fvarε| ≤ ers * (1 / Real.sqrt fvarε))
+    (hclose : |fvarε - (bnVar n x + ε)| ≤ evar) :
+    |fistd fvarε - bnIstd n x ε| ≤
+      ers / Real.sqrt ε + evar / (2 * ε * Real.sqrt ε) :=
+  bnIstd_close_at x fistd hε hers hfv (by linarith [bnVar_nonneg n x]) hrs hclose
 
 -- ════════════════════════════════════════════════════════════════
 -- § The normalize chain: BN forward closeness given mean + istd errors
@@ -174,25 +156,13 @@ theorem FloatModel.bnForward_close_of {n : Nat} (M : FloatModel)
     (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd) :
     |M.bnForwardF γ β fμ fistdv x i - bnForward n ε γ β x i| ≤
       bnNormBudget M.u D S G Bbnd emean eistd := by
-  have hu := M.u_nonneg
   set μ := bnMean n x with hμ
   set istd := bnIstd n x ε with histddef
   have hD0 : 0 ≤ D := (abs_nonneg _).trans hD
-  have hS0 : 0 ≤ S := (abs_nonneg _).trans hSabs
   -- stage 1: centered  fl(xᵢ ⊖ fμ) ≈ xᵢ − μ
-  have hxfμ : |x i - fμ| ≤ D + emean := by
-    have hmean' : |μ - fμ| ≤ emean := by rw [abs_sub_comm]; exact hmean
-    calc |x i - fμ| ≤ |x i - μ| + |μ - fμ| := abs_sub_le _ _ _
-      _ ≤ D + emean := add_le_add hD hmean'
-  have hs1 : |M.sub (x i) fμ - (x i - μ)| ≤ M.u * (D + emean) + emean := by
-    have h1 : |M.sub (x i) fμ - (x i - fμ)| ≤ M.u * |x i - fμ| := M.err _
-    have h2 : |(x i - fμ) - (x i - μ)| ≤ emean := by
-      have he : (x i - fμ) - (x i - μ) = μ - fμ := by ring
-      rw [he, abs_sub_comm]; exact hmean
-    calc |M.sub (x i) fμ - (x i - μ)|
-        ≤ |M.sub (x i) fμ - (x i - fμ)| + |(x i - fμ) - (x i - μ)| := abs_sub_le _ _ _
-      _ ≤ M.u * |x i - fμ| + emean := add_le_add h1 h2
-      _ ≤ M.u * (D + emean) + emean := by gcongr
+  have hs1 : |M.sub (x i) fμ - (x i - μ)| ≤ M.u * (D + emean) + emean :=
+    M.rnd_close (by rw [show x i - fμ - (x i - μ) = μ - fμ by ring, abs_sub_comm]; exact hmean)
+      ((abs_sub_le _ μ _).trans (add_le_add hD (by rwa [abs_sub_comm])))
   -- stage 2: x̂  fl(centered ⊙ fistdv) ≈ (xᵢ − μ)·istd
   have hs2 : |M.mul (M.sub (x i) fμ) fistdv - (x i - μ) * istd| ≤
       FloatModel.mulErr M.u D S (M.u * (D + emean) + emean) eistd :=
@@ -211,30 +181,12 @@ theorem FloatModel.bnForward_close_of {n : Nat} (M : FloatModel)
   have hgxhat : |γ * ((x i - μ) * istd)| ≤ G * (D * S) := by
     rw [abs_mul]; exact mul_le_mul hγ hxhat (abs_nonneg _) ((abs_nonneg _).trans hγ)
   have hs3mag : |s3| ≤ G * (D * S) + es3 := by
-    calc |s3| = |(s3 - γ * ((x i - μ) * istd)) + γ * ((x i - μ) * istd)| := by
-          congr 1; ring
-      _ ≤ |s3 - γ * ((x i - μ) * istd)| + |γ * ((x i - μ) * istd)| := abs_add_le _ _
-      _ ≤ es3 + G * (D * S) := add_le_add hs3 hgxhat
-      _ = G * (D * S) + es3 := by ring
-  have hsumβ : |s3 + β| ≤ G * (D * S) + es3 + Bbnd := by
-    calc |s3 + β| ≤ |s3| + |β| := abs_add_le _ _
-      _ ≤ (G * (D * S) + es3) + Bbnd := add_le_add hs3mag hβ
-      _ = G * (D * S) + es3 + Bbnd := by ring
-  have hgoal :
-      |M.bnForwardF γ β fμ fistdv x i - bnForward n ε γ β x i| ≤
-        M.u * (G * (D * S) + es3 + Bbnd) + es3 := by
-    simp only [FloatModel.bnForwardF, bnForward, bnXhat, ← hμ, ← histddef, ← hs3def]
-    have h4a : |M.add s3 β - (s3 + β)| ≤ M.u * |s3 + β| := M.err _
-    have h4b : |(s3 + β) - (γ * ((x i - μ) * istd) + β)| ≤ es3 := by
-      have he : (s3 + β) - (γ * ((x i - μ) * istd) + β) = s3 - γ * ((x i - μ) * istd) := by
-        ring
-      rw [he]; exact hs3
-    calc |M.add s3 β - (γ * ((x i - μ) * istd) + β)|
-        ≤ |M.add s3 β - (s3 + β)| + |(s3 + β) - (γ * ((x i - μ) * istd) + β)| :=
-          abs_sub_le _ _ _
-      _ ≤ M.u * |s3 + β| + es3 := add_le_add h4a h4b
-      _ ≤ M.u * (G * (D * S) + es3 + Bbnd) + es3 := by gcongr
-  exact hgoal.trans_eq (by rw [bnNormBudget, ← hes3])
+    linarith [abs_sub_abs_le_abs_sub s3 (γ * ((x i - μ) * istd))]
+  have hsumβ : |s3 + β| ≤ G * (D * S) + es3 + Bbnd := (abs_add_le _ _).trans (add_le_add hs3mag hβ)
+  simp only [FloatModel.bnForwardF, bnForward, bnXhat, ← hμ, ← histddef, ← hs3def]
+  refine (M.rnd_close ?_ hsumβ).trans_eq (by rw [bnNormBudget, ← hes3])
+  rw [show s3 + β - (γ * ((x i - μ) * istd) + β) = s3 - γ * ((x i - μ) * istd) by ring]
+  exact hs3
 
 -- ════════════════════════════════════════════════════════════════
 -- § The mean reduction (the easy Higham budget)
@@ -256,14 +208,11 @@ theorem FloatModel.bnMean_close_of {n : ℕ} (M : FloatModel) {fsum : Vec n → 
     (x : Vec n) (hn : 0 < n) (hγn0 : 0 ≤ γn)
     (hsc : |fsum x - ∑ i, x i| ≤ γn * ∑ i, |x i|) (hA : ∀ i, |x i| ≤ A) :
     |M.div (fsum x) (n : ℝ) - bnMean n x| ≤ M.u * ((γn + 1) * A) + γn * A := by
-  have hu := M.u_nonneg
   have hnR : (0:ℝ) < (n:ℝ) := by exact_mod_cast hn
-  have hA0 : 0 ≤ A := (abs_nonneg _).trans (hA ⟨0, hn⟩)
   have hsumabs : ∑ i, |x i| ≤ (n:ℝ) * A := by
     calc ∑ i, |x i| ≤ ∑ _i : Fin n, A := Finset.sum_le_sum fun i _ => hA i
       _ = (n:ℝ) * A := by
           rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-  have hsumabs0 : 0 ≤ ∑ i, |x i| := Finset.sum_nonneg fun i _ => abs_nonneg _
   -- |Σx| ≤ Σ|x|, hence |fsum x| ≤ (γn+1)·Σ|x|
   have hSabs : |fsum x| ≤ (γn + 1) * ((n:ℝ) * A) := by
     have htri := abs_sub_le (fsum x) (∑ i, x i) 0
@@ -274,23 +223,15 @@ theorem FloatModel.bnMean_close_of {n : ℕ} (M : FloatModel) {fsum : Vec n → 
       _ = (γn + 1) * ∑ i, |x i| := by ring
       _ ≤ (γn + 1) * ((n:ℝ) * A) := mul_le_mul_of_nonneg_left hsumabs (by linarith)
   rw [show bnMean n x = (∑ i, x i) / (n:ℝ) from rfl]
-  -- triangle through (fsum x)/n
-  have step1 : |M.div (fsum x) (n:ℝ) - (fsum x) / (n:ℝ)| ≤ M.u * |(fsum x) / (n:ℝ)| := M.err _
-  have hSn : |(fsum x) / (n:ℝ)| ≤ (γn + 1) * A := by
-    rw [abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
-    calc |fsum x| ≤ (γn + 1) * ((n:ℝ) * A) := hSabs
-      _ = (γn + 1) * A * (n:ℝ) := by ring
-  have step2 : |(fsum x) / (n:ℝ) - (∑ i, x i) / (n:ℝ)| ≤ γn * A := by
-    rw [div_sub_div_same, abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
+  -- one division rounding over (fsum x)/n
+  refine M.rnd_close ?_ ?_
+  · rw [div_sub_div_same, abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
     calc |fsum x - ∑ i, x i| ≤ γn * ∑ i, |x i| := hsc
       _ ≤ γn * ((n:ℝ) * A) := mul_le_mul_of_nonneg_left hsumabs hγn0
       _ = γn * A * (n:ℝ) := by ring
-  calc |M.div (fsum x) (n:ℝ) - (∑ i, x i) / (n:ℝ)|
-      ≤ |M.div (fsum x) (n:ℝ) - (fsum x) / (n:ℝ)|
-        + |(fsum x) / (n:ℝ) - (∑ i, x i) / (n:ℝ)| := abs_sub_le _ _ _
-    _ ≤ M.u * |(fsum x) / (n:ℝ)| + γn * A := add_le_add step1 step2
-    _ ≤ M.u * ((γn + 1) * A) + γn * A := by
-        linarith [mul_le_mul_of_nonneg_left hSn hu]
+  · rw [abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
+    calc |fsum x| ≤ (γn + 1) * ((n:ℝ) * A) := hSabs
+      _ = (γn + 1) * A * (n:ℝ) := by ring
 
 /-- **BN mean rounding budget.** The float mean `fl((Σx)/n)` (rounded sum, then a
     rounded division by the exact `n`) is within
@@ -368,102 +309,40 @@ theorem FloatModel.bnVar_close {n : ℕ} (M : FloatModel) (x : Vec n) {fμ emean
     (hD : ∀ i, |x i - bnMean n x| ≤ D) :
     |M.div (M.sum (fun i => M.mul (M.sub (x i) fμ) (M.sub (x i) fμ))) (n : ℝ) - bnVar n x|
       ≤ bnVarBudget M.u D emean n := by
-  have hu := M.u_nonneg
   have hnR : (0:ℝ) < (n:ℝ) := by exact_mod_cast hn
   set μ := bnMean n x with hμ
   have hD0 : 0 ≤ D := (abs_nonneg _).trans (hD ⟨0, hn⟩)
   set es1 := M.u * (D + emean) + emean with hes1
   set γn := (1 + M.u) ^ (n + 1) - 1 with hγn
-  have hγn0 : 0 ≤ γn := sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hpow : (1 + M.u) ^ (n + 1) = γn + 1 := by rw [hγn]; ring
+  have hγn0 : 0 ≤ γn := sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
   -- per-coordinate centered error  fl(xᵢ ⊖ fμ) ≈ xᵢ − μ, within es1
-  have hces : ∀ i, |M.sub (x i) fμ - (x i - μ)| ≤ es1 := by
-    intro i
-    have hxfμ : |x i - fμ| ≤ D + emean := by
-      have hmean' : |μ - fμ| ≤ emean := by rw [abs_sub_comm]; exact hmean
-      calc |x i - fμ| ≤ |x i - μ| + |μ - fμ| := abs_sub_le _ _ _
-        _ ≤ D + emean := add_le_add (hD i) hmean'
-    have h1 : |M.sub (x i) fμ - (x i - fμ)| ≤ M.u * |x i - fμ| := M.err _
-    have h2 : |(x i - fμ) - (x i - μ)| ≤ emean := by
-      have he : (x i - fμ) - (x i - μ) = μ - fμ := by ring
-      rw [he, abs_sub_comm]; exact hmean
-    calc |M.sub (x i) fμ - (x i - μ)|
-        ≤ |M.sub (x i) fμ - (x i - fμ)| + |(x i - fμ) - (x i - μ)| := abs_sub_le _ _ _
-      _ ≤ M.u * |x i - fμ| + emean := add_le_add h1 h2
-      _ ≤ es1 := by rw [hes1]; gcongr
+  have hces : ∀ i, |M.sub (x i) fμ - (x i - μ)| ≤ es1 := fun i =>
+    M.rnd_close (by rw [show x i - fμ - (x i - μ) = μ - fμ by ring, abs_sub_comm]; exact hmean)
+      ((abs_sub_le _ μ _).trans (add_le_add (hD i) (by rwa [abs_sub_comm])))
   set esq := FloatModel.mulErr M.u D D es1 es1 with hesq
   -- per-coordinate square error and float-square magnitude
   have hsqerr : ∀ i, |M.mul (M.sub (x i) fμ) (M.sub (x i) fμ) - (x i - μ) * (x i - μ)| ≤ esq :=
     fun i => M.mul_close (hces i) (hces i) (hD i) (hD i)
   have hsqmag : ∀ i, |(x i - μ) * (x i - μ)| ≤ D * D := by
     intro i; rw [abs_mul]; exact mul_le_mul (hD i) (hD i) (abs_nonneg _) hD0
-  have hfsqmag : ∀ i, |M.mul (M.sub (x i) fμ) (M.sub (x i) fμ)| ≤ D * D + esq := by
-    intro i
-    have htri := abs_sub_le (M.mul (M.sub (x i) fμ) (M.sub (x i) fμ)) ((x i - μ) * (x i - μ)) 0
-    simp only [sub_zero] at htri
-    calc |M.mul (M.sub (x i) fμ) (M.sub (x i) fμ)|
-        ≤ |M.mul (M.sub (x i) fμ) (M.sub (x i) fμ) - (x i - μ) * (x i - μ)|
-          + |(x i - μ) * (x i - μ)| := htri
-      _ ≤ esq + D * D := add_le_add (hsqerr i) (hsqmag i)
-      _ = D * D + esq := by ring
-  -- the float numerator sum and the real one
   set fsq := fun i => M.mul (M.sub (x i) fμ) (M.sub (x i) fμ) with hfsq
-  set sq := fun i => (x i - μ) * (x i - μ) with hsq
-  have hfsqabs : ∑ i, |fsq i| ≤ (n:ℝ) * (D * D + esq) := by
-    calc ∑ i, |fsq i| ≤ ∑ _i : Fin n, (D * D + esq) :=
-          Finset.sum_le_sum fun i _ => hfsqmag i
-      _ = (n:ℝ) * (D * D + esq) := by
-          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-  have hfsqabs0 : 0 ≤ ∑ i, |fsq i| := Finset.sum_nonneg fun i _ => abs_nonneg _
-  -- |Σ fsq − Σ sq| ≤ n·esq
-  have hsumdiff : |∑ i, fsq i - ∑ i, sq i| ≤ (n:ℝ) * esq := by
-    rw [← Finset.sum_sub_distrib]
-    calc |∑ i, (fsq i - sq i)| ≤ ∑ i, |fsq i - sq i| := Finset.abs_sum_le_sum_abs _ _
+  have hfsqmag : ∀ i, |fsq i| ≤ D * D + esq := fun i => by
+    linarith [abs_sub_abs_le_abs_sub (fsq i) ((x i - μ) * (x i - μ)), hsqerr i, hsqmag i]
+  -- the float numerator's mean is the mean reduction's budget …
+  have hmean' := M.bnMean_close_of (fsum := M.sum) fsq hn hγn0 (M.sum_close fsq) hfsqmag
+  -- … and its real mean is within `esq` of the variance (term by term)
+  have hshift : |bnMean n fsq - bnVar n x| ≤ esq := by
+    show |(∑ i, fsq i) / (n:ℝ) - (∑ i, (x i - μ) * (x i - μ)) / (n:ℝ)| ≤ esq
+    rw [div_sub_div_same, abs_div, abs_of_pos hnR, div_le_iff₀ hnR, ← Finset.sum_sub_distrib]
+    calc |∑ i, (fsq i - (x i - μ) * (x i - μ))|
+        ≤ ∑ i, |fsq i - (x i - μ) * (x i - μ)| := Finset.abs_sum_le_sum_abs _ _
       _ ≤ ∑ _i : Fin n, esq := Finset.sum_le_sum fun i _ => hsqerr i
-      _ = (n:ℝ) * esq := by
-          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-  -- sum_close on the float numerator
-  have hsc : |M.sum fsq - ∑ i, fsq i| ≤ γn * ∑ i, |fsq i| := M.sum_close fsq
-  -- |M.sum fsq − Σ sq| ≤ γn·n(D²+esq) + n·esq
-  have hnumdiff : |M.sum fsq - ∑ i, sq i| ≤ γn * ((n:ℝ) * (D * D + esq)) + (n:ℝ) * esq := by
-    calc |M.sum fsq - ∑ i, sq i|
-        ≤ |M.sum fsq - ∑ i, fsq i| + |∑ i, fsq i - ∑ i, sq i| := abs_sub_le _ _ _
-      _ ≤ γn * ∑ i, |fsq i| + (n:ℝ) * esq := add_le_add hsc hsumdiff
-      _ ≤ γn * ((n:ℝ) * (D * D + esq)) + (n:ℝ) * esq :=
-          add_le_add (mul_le_mul_of_nonneg_left hfsqabs hγn0) le_rfl
-  -- |M.sum fsq| ≤ (1+γn)·n(D²+esq)  (the magnitude for the division rounding)
-  have hsqsumabs : ∑ i, |sq i| ≤ (n:ℝ) * (D * D) := by
-    calc ∑ i, |sq i| ≤ ∑ _i : Fin n, D * D := Finset.sum_le_sum fun i _ => hsqmag i
-      _ = (n:ℝ) * (D * D) := by
-          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-  have hfsumabs : |M.sum fsq| ≤ (γn + 1) * ((n:ℝ) * (D * D + esq)) := by
-    have htri := abs_sub_le (M.sum fsq) (∑ i, fsq i) 0
-    simp only [sub_zero] at htri
-    have hSigf : |∑ i, fsq i| ≤ ∑ i, |fsq i| := Finset.abs_sum_le_sum_abs _ _
-    calc |M.sum fsq| ≤ |M.sum fsq - ∑ i, fsq i| + |∑ i, fsq i| := htri
-      _ ≤ γn * ∑ i, |fsq i| + ∑ i, |fsq i| := add_le_add hsc hSigf
-      _ = (γn + 1) * ∑ i, |fsq i| := by ring
-      _ ≤ (γn + 1) * ((n:ℝ) * (D * D + esq)) :=
-          mul_le_mul_of_nonneg_left hfsqabs (by linarith)
-  -- bnVar = (Σ sq)/n; triangle through (M.sum fsq)/n
-  have hbv : bnVar n x = (∑ i, sq i) / (n:ℝ) := rfl
-  rw [hbv]
-  have step1 : |M.div (M.sum fsq) (n:ℝ) - (M.sum fsq) / (n:ℝ)| ≤ M.u * |(M.sum fsq) / (n:ℝ)| :=
-    M.err _
-  have hSn : |(M.sum fsq) / (n:ℝ)| ≤ (γn + 1) * (D * D + esq) := by
-    rw [abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
-    calc |M.sum fsq| ≤ (γn + 1) * ((n:ℝ) * (D * D + esq)) := hfsumabs
-      _ = (γn + 1) * (D * D + esq) * (n:ℝ) := by ring
-  have step2 : |(M.sum fsq) / (n:ℝ) - (∑ i, sq i) / (n:ℝ)| ≤ γn * (D * D + esq) + esq := by
-    rw [div_sub_div_same, abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
-    calc |M.sum fsq - ∑ i, sq i| ≤ γn * ((n:ℝ) * (D * D + esq)) + (n:ℝ) * esq := hnumdiff
-      _ = (γn * (D * D + esq) + esq) * (n:ℝ) := by ring
-  calc |M.div (M.sum fsq) (n:ℝ) - (∑ i, sq i) / (n:ℝ)|
-      ≤ |M.div (M.sum fsq) (n:ℝ) - (M.sum fsq) / (n:ℝ)|
-        + |(M.sum fsq) / (n:ℝ) - (∑ i, sq i) / (n:ℝ)| := abs_sub_le _ _ _
-    _ ≤ M.u * ((γn + 1) * (D * D + esq)) + (γn * (D * D + esq) + esq) := by
-        refine add_le_add (le_trans step1 ?_) step2
-        exact mul_le_mul_of_nonneg_left hSn hu
+      _ = esq * (n:ℝ) := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, mul_comm]
+  calc |M.div (M.sum fsq) (n:ℝ) - bnVar n x|
+      ≤ |M.div (M.sum fsq) (n:ℝ) - bnMean n fsq| + |bnMean n fsq - bnVar n x| :=
+        abs_sub_le _ _ _
+    _ ≤ M.u * ((γn + 1) * (D * D + esq)) + γn * (D * D + esq) + esq := add_le_add hmean' hshift
     _ = bnVarBudget M.u D emean n := by
         rw [bnVarBudget, ← hes1, ← hesq, ← hγn]; ring
 

@@ -43,10 +43,6 @@ theorem bnMean_input_close {n : ℕ} (x y : Vec n) (hn : 0 < n) :
   calc |∑ i, x i - ∑ i, y i| = |∑ i, (x i - y i)| := by rw [Finset.sum_sub_distrib]
     _ ≤ ∑ i, |x i - y i| := Finset.abs_sum_le_sum_abs _ _
 
-/-- `|a − μ| ≤ |a| + |μ|` (triangle through 0). -/
-private theorem abs_sub_le_add (a b : ℝ) : |a - b| ≤ |a| + |b| := by
-  have h := abs_sub_le a 0 b; simp only [sub_zero, zero_sub, abs_neg] at h; exact h
-
 /-- **Variance input-sensitivity.** `|σ²(x) − σ²(y)| ≤ 8A·(Σ|xᵢ−yᵢ|)/n` under
     `|xᵢ|,|yᵢ| ≤ A` — each centered-square difference factors as
     `((cx)−(cy))·((cx)+(cy))`, bounded by `(|xᵢ−yᵢ|+δ)·4A` with `δ = (Σ|x−y|)/n`
@@ -73,10 +69,10 @@ theorem bnVar_input_close {n : ℕ} (x y : Vec n) {A : ℝ} (hn : 0 < n)
     rw [hfac, abs_mul]
     have hd1 : |(x i - μx) - (y i - μy)| ≤ |x i - y i| + δ := by
       have he : (x i - μx) - (y i - μy) = (x i - y i) - (μx - μy) := by ring
-      rw [he]; exact (abs_sub_le_add _ _).trans (add_le_add le_rfl hμd)
+      rw [he]; exact (abs_sub _ _).trans (add_le_add le_rfl hμd)
     have hd2 : |(x i - μx) + (y i - μy)| ≤ 4 * A := by
-      have hx1 : |x i - μx| ≤ A + A := (abs_sub_le_add _ _).trans (add_le_add (hAx i) hμxA)
-      have hy1 : |y i - μy| ≤ A + A := (abs_sub_le_add _ _).trans (add_le_add (hAy i) hμyA)
+      have hx1 : |x i - μx| ≤ A + A := (abs_sub _ _).trans (add_le_add (hAx i) hμxA)
+      have hy1 : |y i - μy| ≤ A + A := (abs_sub _ _).trans (add_le_add (hAy i) hμyA)
       calc |(x i - μx) + (y i - μy)| ≤ |x i - μx| + |y i - μy| := abs_add_le _ _
         _ ≤ (A + A) + (A + A) := add_le_add hx1 hy1
         _ = 4 * A := by ring
@@ -162,9 +158,9 @@ theorem bnForward_input_close {n : ℕ} (x y : Vec n) {A ε γ β : ℝ} (hn : 0
       = ((x i - μx) - (y i - μy)) * sx + (y i - μy) * (sx - sy) := by ring
   have hcd : |(x i - μx) - (y i - μy)| ≤ |x i - y i| + δ := by
     have he : (x i - μx) - (y i - μy) = (x i - y i) - (μx - μy) := by ring
-    rw [he]; exact (abs_sub_le_add _ _).trans (add_le_add le_rfl hμd)
+    rw [he]; exact (abs_sub _ _).trans (add_le_add le_rfl hμd)
   have hcyA : |y i - μy| ≤ 2 * A := by
-    have h := (abs_sub_le_add (y i) μy).trans (add_le_add (hAy i) hμyA); linarith
+    have h := (abs_sub (y i) μy).trans (add_le_add (hAy i) hμyA); linarith
   have hcore : |(x i - μx) * sx - (y i - μy) * sy| ≤
       (|x i - y i| + δ) * (1 / Real.sqrt ε) + 2 * A * ((8 * A * δ) / (2 * ε * Real.sqrt ε)) := by
     rw [hsplit]
