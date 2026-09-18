@@ -2415,48 +2415,6 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
 -- § Drift transport: conv → relu → pool → dense → relu → dense → logits
 -- ════════════════════════════════════════════════════════════════
 
-/-- The `ℓ1` mass of a scaled step. -/
-theorem smul_l1_mass {n : Nat} (e : Vec n) {t : ℝ} (ht0 : 0 ≤ t) :
-    (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by
-  rw [Finset.mul_sum]
-  exact Finset.sum_congr rfl fun idx _ => by
-    simp [abs_mul, abs_of_nonneg ht0]
-
-/-- A `t`-scaled step stays inside the step radius for `t ∈ [0,1]`. -/
-theorem smul_l1_mass_le {n : Nat} (e : Vec n) {t D : ℝ} (ht0 : 0 ≤ t)
-    (ht1 : t ≤ 1) (he : (∑ idx, |e idx|) ≤ D) :
-    (∑ idx, |(t • e) idx|) ≤ D := by
-  rw [smul_l1_mass e ht0]
-  calc t * ∑ idx, |e idx|
-      ≤ 1 * D := mul_le_mul ht1 he
-        (Finset.sum_nonneg fun _ _ => abs_nonneg _) zero_le_one
-    _ = D := one_mul D
-
-/-- A dense layer's output moves by at most `w·‖Δinput‖₁` per entry — the
-    `ℓ1→ℓ∞` operator bound used at every dense crossing of the chain. -/
-theorem dense_input_drift {m n : Nat} (W : Mat m n) (b : Vec n)
-    {wb : ℝ} (hW : ∀ i j, |W i j| ≤ wb)
-    (u u' : Vec m) (j : Fin n) :
-    |dense W b u' j - dense W b u j| ≤ wb * ∑ i, |u' i - u i| := by
-  have hdiff : dense W b u' j - dense W b u j =
-      ∑ i, (u' i - u i) * W i j := by
-    have h2 : (∑ i, u' i * W i j) - (∑ i, u i * W i j) =
-        ∑ i, (u' i - u i) * W i j := by
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun i _ => by ring
-    show ((∑ i, u' i * W i j) + b j) - ((∑ i, u i * W i j) + b j) = _
-    linarith [h2]
-  rw [hdiff]
-  calc |∑ i, (u' i - u i) * W i j|
-      ≤ ∑ i, |(u' i - u i) * W i j| := Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ i, |u' i - u i| * wb :=
-        Finset.sum_le_sum fun i _ => by
-          rw [abs_mul]
-          exact mul_le_mul_of_nonneg_left (hW i j) (abs_nonneg _)
-    _ = wb * ∑ i, |u' i - u i| := by
-        rw [← Finset.sum_mul]
-        ring
-
 /-- Per-entry conv drift, flat-index form of `conv2d_kernel_drift_total`. -/
 theorem conv2d_flat_kernel_drift_total {ic oc h w kH kW : Nat} (b : Vec oc)
     (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
@@ -2649,24 +2607,6 @@ theorem logit_drift {P c h w d₃ d₄ nC : Nat}
         rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
           nsmul_eq_mul]
 
-/-- The relu₂ margin keeps the conv pre-activation off the kink, same
-    sign, along the whole step segment. -/
-theorem margin2_keeps_offkink {P c h w : Nat}
-    (Z : Vec P → Vec (c * (2*h) * (2*w))) {ρ D : ℝ} (hρ : 0 ≤ ρ)
-    (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|) (v e : Vec P)
-    (he : (∑ idx, |e idx|) ≤ D)
-    (hm : ∀ k, ρ * D <
-      |Z v k|)
-    (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1) (k : Fin (c * (2*h) * (2*w))) :
-    Z (v + t • e) k ≠ 0 ∧
-      (0 < Z (v + t • e) k
-        ↔ 0 < Z v k) := by
-  refine sign_stable_of_close ?_ (hm k)
-  have h1 := hZ v (t • e) k
-  have h2 : ρ * (∑ idx, |(t • e) idx|) ≤ ρ * D :=
-    mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) hρ
-  linarith
-
 /-- The POST-relu tensor stays within the pool margin radius `ρ·D` along
     the whole step segment — what `MaxPool2MarginQ.{smooth_of_close,
     isArgmax_iff, pdiv3_eq}` consume. -/
@@ -2800,7 +2740,7 @@ theorem cnn_margin2_keeps_offkink {c h w kH kW : Nat} (b₂ : Vec c)
     Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁) k ≠ 0 ∧
       (0 < Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁) k
         ↔ 0 < Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k) :=
-  Conv2Slot.margin2_keeps_offkink (fun v' => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) ha (conv2d_flat_kernel_drift_total b₂ x₁ ha hx)
+  margin_keeps_offkink_of_drift (fun v' => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) ha (conv2d_flat_kernel_drift_total b₂ x₁ ha hx)
     v e he hm t ht0 ht1 k
 
 /-- The POST-relu tensor stays within the pool margin radius `a·D` along
@@ -3079,7 +3019,7 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
           (mul_nonneg (Nat.cast_nonneg _) hρD0)))))
   -- segment-point conditions: everything frozen
   have hstab2 := fun k =>
-    margin2_keeps_offkink Z hρ hZ v d hd hm2 t ht0 ht1 k
+    margin_keeps_offkink_of_drift Z hρ hZ v d hd hm2 t ht0 ht1 k
   have hz2_t : ∀ k, Z (v + t • d) k ≠ 0 :=
     fun k => (hstab2 k).1
   have hclose := fun ci hi wi =>
@@ -4564,7 +4504,7 @@ theorem margin2_keeps_offkink {P c h w kH kW : Nat}
           (relu (c * (2*h) * (2*w)) (Z (v + t • e))))) k ↔
         0 < Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
           (relu (c * (2*h) * (2*w)) (Z v)))) k) :=
-  Conv2Slot.margin2_keeps_offkink (ρ := ((c * kH * kW : ℕ) : ℝ) * (w₂ * ρ))
+  margin_keeps_offkink_of_drift (ρ := ((c * kH * kW : ℕ) : ℝ) * (w₂ * ρ))
     (fun v' => Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
       (relu (c * (2*h) * (2*w)) (Z v')))))
     (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₂ hρ))
@@ -4819,7 +4759,7 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC kH kW : Nat}
     (lt_of_eq_of_lt (by ring) hsmall) t ht
     (fun k => ⟨fun h0 => absurd (hm1 k) (by
       rw [h0, abs_zero]; exact not_lt.mpr (mul_nonneg hρ hD0)), Iff.rfl⟩)
-    (fun k => Conv2Slot.margin2_keeps_offkink Z hρ hZ v d hd hm1 t ht.1 ht.2 k)).trans_eq
+    (fun k => margin_keeps_offkink_of_drift Z hρ hZ v d hd hm1 t ht.1 ht.2 k)).trans_eq
     (by ring)
   -- at a frozen-mask point the conv1 gradient is that row contracted with the head
   rw [hgrad v' (fun k => (hQ k).1) hz2 hmp hz3 hz4]
@@ -4913,7 +4853,7 @@ theorem cnn1_margin1_keeps_offkink {ic c h w kH kW : Nat} (b₁ : Vec c)
     Tensor3.flatten (conv2d (Kernel4.unflatten (u + t • e)) b₁ x₀) k ≠ 0 ∧
       (0 < Tensor3.flatten (conv2d (Kernel4.unflatten (u + t • e)) b₁ x₀) k
         ↔ 0 < Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀) k) :=
-  Conv2Slot.margin2_keeps_offkink (fun u' => Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀))
+  margin_keeps_offkink_of_drift (fun u' => Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀))
     ha (conv2d_flat_kernel_drift_total b₁ x₀ ha hx) u e he hm t ht0 ht1 k
 
 /-- The relu₂ margin (at the conv1 radius) keeps the conv2
@@ -6570,7 +6510,7 @@ theorem cnnb2_margin2_keeps_offkink {c h w kH kW : Nat}
     Tensor3.flatten (conv2d W₂ (b + t • e) x₁) k ≠ 0 ∧
       (0 < Tensor3.flatten (conv2d W₂ (b + t • e) x₁) k
         ↔ 0 < Tensor3.flatten (conv2d W₂ b x₁) k) :=
-  Conv2Slot.margin2_keeps_offkink (ρ := 1) (fun b' => Tensor3.flatten (conv2d W₂ b' x₁)) zero_le_one (fun v e k => by simpa only [one_mul] using conv2d_flat_bias_drift_total W₂ x₁ v e k)
+  margin_keeps_offkink_of_drift (ρ := 1) (fun b' => Tensor3.flatten (conv2d W₂ b' x₁)) zero_le_one (fun v e k => by simpa only [one_mul] using conv2d_flat_bias_drift_total W₂ x₁ v e k)
     b e he (by simpa only [one_mul] using hm) t ht0 ht1 k
 
 /-- The POST-relu tensor stays within the bias-rung pool margin radius
@@ -7028,7 +6968,7 @@ theorem cnnb1_margin1_keeps_offkink {ic c h w kH kW : Nat}
     Tensor3.flatten (conv2d W₁ (b + t • e) x₀) k ≠ 0 ∧
       (0 < Tensor3.flatten (conv2d W₁ (b + t • e) x₀) k
         ↔ 0 < Tensor3.flatten (conv2d W₁ b x₀) k) :=
-  Conv2Slot.margin2_keeps_offkink (ρ := 1) (fun b' => Tensor3.flatten (conv2d W₁ b' x₀)) zero_le_one
+  margin_keeps_offkink_of_drift (ρ := 1) (fun b' => Tensor3.flatten (conv2d W₁ b' x₀)) zero_le_one
     (fun v e k => by simpa only [one_mul] using conv2d_flat_bias_drift_total W₁ x₀ v e k) b e he
     (by simpa only [one_mul] using hm) t ht0 ht1 k
 

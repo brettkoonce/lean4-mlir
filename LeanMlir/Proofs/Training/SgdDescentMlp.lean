@@ -83,6 +83,59 @@ theorem sign_stable_of_close {zt z c : ℝ} (hc : |zt - z| ≤ c)
   · have hzt : 0 < zt := by rw [abs_of_pos hpos] at hm; linarith [habs.1]
     exact ⟨ne_of_gt hzt, ⟨fun _ => hpos, fun _ => hzt⟩⟩
 
+/-- The `ℓ1` mass of a scaled step. -/
+theorem smul_l1_mass {n : Nat} (e : Vec n) {t : ℝ} (ht0 : 0 ≤ t) :
+    (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by
+  rw [Finset.mul_sum]
+  exact Finset.sum_congr rfl fun idx _ => by
+    simp [abs_mul, abs_of_nonneg ht0]
+
+/-- A `t`-scaled step stays inside the step radius for `t ∈ [0,1]`. -/
+theorem smul_l1_mass_le {n : Nat} (e : Vec n) {t D : ℝ} (ht0 : 0 ≤ t)
+    (ht1 : t ≤ 1) (he : (∑ idx, |e idx|) ≤ D) :
+    (∑ idx, |(t • e) idx|) ≤ D := by
+  rw [smul_l1_mass e ht0]
+  calc t * ∑ idx, |e idx|
+      ≤ 1 * D := mul_le_mul ht1 he
+        (Finset.sum_nonneg fun _ _ => abs_nonneg _) zero_le_one
+    _ = D := one_mul D
+
+/-- A dense layer's output moves by at most `w·‖Δinput‖₁` per entry — the
+    `ℓ1→ℓ∞` operator bound used at every dense crossing of the chain. -/
+theorem dense_input_drift {m n : Nat} (W : Mat m n) (b : Vec n)
+    {wb : ℝ} (hW : ∀ i j, |W i j| ≤ wb)
+    (u u' : Vec m) (j : Fin n) :
+    |dense W b u' j - dense W b u j| ≤ wb * ∑ i, |u' i - u i| := by
+  have hdiff : dense W b u' j - dense W b u j =
+      ∑ i, (u' i - u i) * W i j := by
+    have h2 : (∑ i, u' i * W i j) - (∑ i, u i * W i j) =
+        ∑ i, (u' i - u i) * W i j := by
+      rw [← Finset.sum_sub_distrib]
+      exact Finset.sum_congr rfl fun i _ => by ring
+    show ((∑ i, u' i * W i j) + b j) - ((∑ i, u i * W i j) + b j) = _
+    linarith [h2]
+  rw [hdiff]
+  calc |∑ i, (u' i - u i) * W i j|
+      ≤ ∑ i, |(u' i - u i) * W i j| := Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ i, |u' i - u i| * wb :=
+        Finset.sum_le_sum fun i _ => by
+          rw [abs_mul]
+          exact mul_le_mul_of_nonneg_left (hW i j) (abs_nonneg _)
+    _ = wb * ∑ i, |u' i - u i| := by
+        rw [← Finset.sum_mul]
+        ring
+
+/-- **A per-entry drift inside the margin keeps a pre-activation off the kink along the
+    whole segment** — for any parameter map `Z` whose entries move by at most `ρ·‖e‖₁`, the
+    margin `ρ·D < |Z v k|` at step radius `D` freezes every sign on `[v, v+e]`. -/
+theorem margin_keeps_offkink_of_drift {P n : Nat} (Z : Vec P → Vec n) {ρ D : ℝ}
+    (hρ : 0 ≤ ρ) (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|) (v e : Vec P)
+    (he : (∑ idx, |e idx|) ≤ D) (hm : ∀ k, ρ * D < |Z v k|)
+    (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1) (k : Fin n) :
+    Z (v + t • e) k ≠ 0 ∧ (0 < Z (v + t • e) k ↔ 0 < Z v k) :=
+  sign_stable_of_close ((hZ v (t • e) k).trans
+    (mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) hρ)) (hm k)
+
 /-- The `ℓ1` mass of a flattened weight perturbation, summed column by
     column, is the total `ℓ1` mass — `finProdFinEquiv` partitions the
     flat index set into the columns. -/
@@ -157,21 +210,9 @@ theorem margin_keeps_offkink {m n : Nat} (b : Vec n) (x : Vec m)
     (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1) (j : Fin n) :
     dense (Mat.unflatten (v + t • e)) b x j ≠ 0 ∧
       (0 < dense (Mat.unflatten (v + t • e)) b x j ↔
-        0 < dense (Mat.unflatten v) b x j) := by
-  refine sign_stable_of_close ?_ (hmargin j)
-  have h1 := dense_unflatten_drift b x ha hx v (t • e) j
-  have h2 : (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by
-    rw [Finset.mul_sum]
-    exact Finset.sum_congr rfl fun idx _ => by
-      simp [abs_mul, abs_of_nonneg ht0]
-  rw [h2] at h1
-  have h3 : a * (t * ∑ idx, |e idx|) ≤ a * D := by
-    refine mul_le_mul_of_nonneg_left ?_ ha
-    calc t * ∑ idx, |e idx|
-        ≤ 1 * D := mul_le_mul ht1 he
-          (Finset.sum_nonneg fun _ _ => abs_nonneg _) zero_le_one
-      _ = D := one_mul D
-  linarith
+        0 < dense (Mat.unflatten v) b x j) :=
+  margin_keeps_offkink_of_drift (fun w => dense (Mat.unflatten w) b x) ha
+    (dense_unflatten_drift b x ha hx) v e he hmargin t ht0 ht1 j
 
 -- ════════════════════════════════════════════════════════════════
 -- § Input-gradients of the loss head — the pdiv-level closed forms
@@ -221,6 +262,106 @@ theorem ce_head_relu_input_grad {d₂ d₃ : Nat} (W₂ : Mat d₂ d₃)
   rw [Finset.sum_ite_eq]
   simp only [Finset.mem_univ, ite_true]
   rw [ce_dense_input_grad]
+
+/-- ReLU then a dense layer: an input drift of `ℓ1` mass `B` moves each output entry by at
+    most `w·B`. -/
+theorem dense_relu_drift {m n : Nat} (W : Mat m n) (b : Vec n) {wb : ℝ} (hw : 0 ≤ wb)
+    (hW : ∀ i j, |W i j| ≤ wb) (u u' : Vec m) (j : Fin n) :
+    |dense W b (relu m u') j - dense W b (relu m u) j| ≤ wb * ∑ i, |u' i - u i| :=
+  (dense_input_drift W b hW _ _ j).trans
+    (mul_le_mul_of_nonneg_left (Finset.sum_le_sum fun i _ => relu_entry_lipschitz m _ _ i) hw)
+
+namespace MlpSlot
+
+/-- **Segment-Lipschitz gradient for an MLP-slot loss, explicit constant.** For a map `Z`
+    into a ReLU layer's pre-activation whose entries move by at most `σ·‖e‖₁` (`hZ`) and whose
+    `ℓ1` drift is at most `ρ·‖e‖₁` (`hZ1`), and whose loss gradient at every off-kink point is
+    a fixed row `J` (row mass `≤ ρ`) contracted with the mask and the `W₂` head (`hgrad`, needed
+    only where `Q` holds): the margin `σ·D` freezes the mask along `[v, v+d]`, the row factors
+    out, and the difference collapses to the softmax drift. The hidden layer is the instance
+    `σ = ρ = a`; the input layer takes `Z` = the middle pre-activation, `σ = w₁·a`,
+    `ρ = d₂·w₁·a`, `J` = `xᵢ`·relu₀'s frozen mask·`W₁`'s row, `Q` = relu₀'s signs frozen. -/
+theorem loss_grad_lipschitz {P d₂ d₃ : Nat} (Z : Vec P → Vec d₂) (W₂ : Mat d₂ d₃)
+    (b₂ : Vec d₃) (label : Fin d₃) {σ ρ w₂ D : ℝ} (hσ : 0 ≤ σ)
+    (hZ : ∀ v e l, |Z (v + e) l - Z v l| ≤ σ * ∑ idx, |e idx|)
+    (hZ1 : ∀ v e, ∑ l, |Z (v + e) l - Z v l| ≤ ρ * ∑ idx, |e idx|)
+    (hw₂ : 0 ≤ w₂) (hW₂ : ∀ j k, |W₂ j k| ≤ w₂)
+    (J : Fin d₂ → ℝ) (hJ : ∑ l, |J l| ≤ ρ) (idx : Fin P) (Q : Vec P → Prop)
+    (hgrad : ∀ v' : Vec P, Q v' → (∀ l, Z v' l ≠ 0) →
+      gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂ (Z w))) label) v' idx =
+        ∑ l, J l * ((if Z v' l > 0 then (1:ℝ) else 0) *
+          ∑ k, W₂ l k *
+            (softmax d₃ (dense W₂ b₂ (relu d₂ (Z v'))) k - oneHot d₃ label k)))
+    (v d : Vec P) (hd : (∑ idx, |d idx|) ≤ D) (hm : ∀ l, σ * D < |Z v l|)
+    (hsmall : 2 * (w₂ * (ρ * D)) < 1)
+    (t : ℝ) (ht : t ∈ Set.Icc (0:ℝ) 1) (hQv : Q v) (hQt : Q (v + t • d)) :
+    |gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂ (Z w))) label)
+        (v + t • d) idx -
+      gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂ (Z w))) label) v idx| ≤
+      (2 * (d₃ : ℝ) * w₂ ^ 2 * ρ ^ 2 / (1 - 2 * (w₂ * (ρ * D)))) * (t * D) := by
+  obtain ⟨ht0, ht1⟩ := ht
+  have hD0 : 0 ≤ D := le_trans (Finset.sum_nonneg fun _ _ => abs_nonneg _) hd
+  have hρ : 0 ≤ ρ := le_trans (Finset.sum_nonneg fun _ _ => abs_nonneg _) hJ
+  have hden : (0:ℝ) < 1 - 2 * (w₂ * (ρ * D)) := by linarith
+  have hδ0 : (0:ℝ) ≤ w₂ * (ρ * D) := mul_nonneg hw₂ (mul_nonneg hρ hD0)
+  -- the margin freezes every mask along the segment
+  have hstab := fun l => margin_keeps_offkink_of_drift Z hσ hZ v d hd hm t ht0 ht1 l
+  have hz_v : ∀ l, Z v l ≠ 0 := fun l h0 => absurd (hm l) (by
+    rw [h0, abs_zero]; exact not_lt.mpr (mul_nonneg hσ hD0))
+  rw [hgrad (v + t • d) hQt (fun l => (hstab l).1), hgrad v hQv hz_v]
+  have hmask : ∀ l, (if Z (v + t • d) l > 0 then (1:ℝ) else 0) =
+      if Z v l > 0 then (1:ℝ) else 0 := by
+    intro l
+    by_cases hp : Z v l > 0
+    · rw [ite_eq_left hp, ite_eq_left ((hstab l).2.mpr hp)]
+    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab l).2.mp h))]
+  simp only [hmask]
+  -- the softmax drift along the segment
+  have hzdrift : ∀ k, |dense W₂ b₂ (relu d₂ (Z (v + t • d))) k -
+      dense W₂ b₂ (relu d₂ (Z v)) k| ≤ t * (w₂ * (ρ * D)) := fun k => by
+    refine (dense_relu_drift W₂ b₂ hw₂ hW₂ _ _ k).trans ?_
+    have h1 := hZ1 v (t • d)
+    rw [smul_l1_mass d ht0] at h1
+    calc w₂ * ∑ l, |Z (v + t • d) l - Z v l| ≤ w₂ * (ρ * (t * D)) :=
+          mul_le_mul_of_nonneg_left (h1.trans (mul_le_mul_of_nonneg_left
+            (mul_le_mul_of_nonneg_left hd ht0) hρ)) hw₂
+      _ = t * (w₂ * (ρ * D)) := by ring
+  have hδlt : 2 * (t * (w₂ * (ρ * D))) < 1 := by
+    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
+  have hS : ∀ k, |softmax d₃ (dense W₂ b₂ (relu d₂ (Z (v + t • d)))) k -
+      softmax d₃ (dense W₂ b₂ (relu d₂ (Z v))) k| ≤
+      2 * (t * (w₂ * (ρ * D))) / (1 - 2 * (w₂ * (ρ * D))) := fun k => by
+    refine (FloatModel.softmax_perturb _ _ hzdrift k).trans
+      ((FloatModel.exp_sub_one_le hδlt).trans ?_)
+    refine div_le_div_of_nonneg_left (by nlinarith [mul_nonneg ht0 hδ0]) hden ?_
+    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
+  have hM0 : (0:ℝ) ≤ (d₃ : ℝ) * (w₂ * (2 * (t * (w₂ * (ρ * D))) /
+      (1 - 2 * (w₂ * (ρ * D))))) :=
+    mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₂
+      (div_nonneg (by positivity) hden.le))
+  -- per row: the frozen mask, then the `W₂` contraction of the softmax drift
+  have hrow : ∀ l, |J l * ((if Z v l > 0 then (1:ℝ) else 0) *
+        ∑ k, W₂ l k * (softmax d₃ (dense W₂ b₂ (relu d₂ (Z (v + t • d)))) k -
+          oneHot d₃ label k)) -
+      J l * ((if Z v l > 0 then (1:ℝ) else 0) *
+        ∑ k, W₂ l k * (softmax d₃ (dense W₂ b₂ (relu d₂ (Z v))) k -
+          oneHot d₃ label k))| ≤
+      |J l| * ((d₃ : ℝ) * (w₂ * (2 * (t * (w₂ * (ρ * D))) /
+        (1 - 2 * (w₂ * (ρ * D)))))) := fun l => by
+    rw [← mul_sub, ← mul_sub, abs_mul, abs_mul, ← Finset.sum_sub_distrib]
+    refine mul_le_mul_of_nonneg_left (le_trans (mul_le_of_le_one_left (abs_nonneg _)
+      (by split_ifs <;> simp)) ?_) (abs_nonneg _)
+    refine (Finset.abs_sum_le_sum_abs _ _).trans ((Finset.sum_le_sum fun k _ => ?_).trans
+      (by rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]))
+    rw [← mul_sub, sub_sub_sub_cancel_right, abs_mul]
+    exact mul_le_mul (hW₂ l k) (hS k) (abs_nonneg _) hw₂
+  rw [← Finset.sum_sub_distrib]
+  refine (Finset.abs_sum_le_sum_abs _ _).trans ((Finset.sum_le_sum fun l _ => hrow l).trans ?_)
+  rw [← Finset.sum_mul]
+  refine (mul_le_mul_of_nonneg_right hJ hM0).trans_eq ?_
+  ring
+
+end MlpSlot
 
 -- ════════════════════════════════════════════════════════════════
 -- § Hidden layer W₁: gradient closed form, frozen-mask Lipschitz, descent
@@ -307,39 +448,9 @@ theorem mlp_hidden_logit_drift {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
     (v e : Vec (d₁ * d₂)) (k : Fin d₃) :
     |dense W₂ b₂ (relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀)) k -
       dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀)) k| ≤
-      w₂ * (a * ∑ idx, |e idx|) := by
-  have hdiff : dense W₂ b₂ (relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀)) k -
-      dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀)) k =
-      ∑ j, (relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀) j -
-        relu d₂ (dense (Mat.unflatten v) b₁ a₀) j) * W₂ j k := by
-    have h2 : (∑ j, relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀) j * W₂ j k) -
-        (∑ j, relu d₂ (dense (Mat.unflatten v) b₁ a₀) j * W₂ j k) =
-        ∑ j, (relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀) j -
-          relu d₂ (dense (Mat.unflatten v) b₁ a₀) j) * W₂ j k := by
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun j _ => by ring
-    show ((∑ j, relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀) j * W₂ j k) + b₂ k) -
-        ((∑ j, relu d₂ (dense (Mat.unflatten v) b₁ a₀) j * W₂ j k) + b₂ k) = _
-    linarith [h2]
-  rw [hdiff]
-  calc |∑ j, (relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀) j -
-        relu d₂ (dense (Mat.unflatten v) b₁ a₀) j) * W₂ j k|
-      ≤ ∑ j, |(relu d₂ (dense (Mat.unflatten (v + e)) b₁ a₀) j -
-          relu d₂ (dense (Mat.unflatten v) b₁ a₀) j) * W₂ j k| :=
-        Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ j, |dense (Mat.unflatten (v + e)) b₁ a₀ j -
-          dense (Mat.unflatten v) b₁ a₀ j| * w₂ :=
-        Finset.sum_le_sum fun j _ => by
-          rw [abs_mul]
-          exact mul_le_mul (relu_entry_lipschitz d₂ _ _ j) (hW₂ j k)
-            (abs_nonneg _) (abs_nonneg _)
-    _ = (∑ j, |dense (Mat.unflatten (v + e)) b₁ a₀ j -
-          dense (Mat.unflatten v) b₁ a₀ j|) * w₂ := by
-        rw [← Finset.sum_mul]
-    _ ≤ (a * ∑ idx, |e idx|) * w₂ :=
-        mul_le_mul_of_nonneg_right
-          (dense_unflatten_drift_sum b₁ a₀ hx v e) hw₂
-    _ = w₂ * (a * ∑ idx, |e idx|) := by ring
+      w₂ * (a * ∑ idx, |e idx|) :=
+  (dense_relu_drift W₂ b₂ hw₂ hW₂ _ _ k).trans
+    (mul_le_mul_of_nonneg_left (dense_unflatten_drift_sum b₁ a₀ hx v e) hw₂)
 
 /-- **Segment-Lipschitz gradient for the hidden-layer loss, explicit
     constant.** Under the margin `a·D < |z₁ⱼ|` (the step cannot flip a ReLU
@@ -347,7 +458,7 @@ theorem mlp_hidden_logit_drift {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
     condition `2·w₂·a·D < 1`, the gradient entries drift by at most
     `(2·d₃·w₂²·a²/(1−2·w₂·a·D))·(t·D)` along `[v, v+d]` — the exact shape
     `descent_segment` consumes. The hidden-layer peer of
-    `linear_loss_grad_lipschitz`. -/
+    `linear_loss_grad_lipschitz`; `MlpSlot.loss_grad_lipschitz` at `σ = ρ = a`. -/
 theorem mlp_hidden_loss_grad_lipschitz {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (a₀ : Vec d₁) (label : Fin d₃)
     {a w₂ D : ℝ} (ha : 0 ≤ a) (hx : ∀ i, |a₀ i| ≤ a)
@@ -364,141 +475,16 @@ theorem mlp_hidden_loss_grad_lipschitz {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
         v idx| ≤
       (2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 / (1 - 2 * (w₂ * (a * D)))) *
         (t * D) := by
-  obtain ⟨ht0, ht1⟩ := ht
-  have hD0 : 0 ≤ D :=
-    le_trans (Finset.sum_nonneg fun _ _ => abs_nonneg _) hd
-  have hden : (0:ℝ) < 1 - 2 * (w₂ * (a * D)) := by linarith
   obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-  -- ℓ1 mass of the scaled step
-  have htmass : (∑ idx, |(t • d) idx|) = t * ∑ idx, |d idx| := by
-    rw [Finset.mul_sum]
-    exact Finset.sum_congr rfl fun idx _ => by
-      simp [abs_mul, abs_of_nonneg ht0]
-  -- the margin keeps every pre-activation off the kink, same sign, along
-  -- the segment
-  have hz_v : ∀ k, dense (Mat.unflatten v) b₁ a₀ k ≠ 0 := fun k => by
-    intro h0
-    have h := hmargin k
-    rw [h0, abs_zero] at h
-    exact absurd h (not_lt.mpr (mul_nonneg ha hD0))
-  have hstab : ∀ k,
-      dense (Mat.unflatten (v + t • d)) b₁ a₀ k ≠ 0 ∧
-        (0 < dense (Mat.unflatten (v + t • d)) b₁ a₀ k ↔
-          0 < dense (Mat.unflatten v) b₁ a₀ k) :=
-    fun k => margin_keeps_offkink b₁ a₀ ha hx v d hd hmargin t ht0 ht1 k
-  have hz_t : ∀ k, dense (Mat.unflatten (v + t • d)) b₁ a₀ k ≠ 0 :=
-    fun k => (hstab k).1
-  rw [mlp_hidden_loss_gradAt b₁ W₂ b₂ a₀ label (v + t • d) hz_t i j,
-      mlp_hidden_loss_gradAt b₁ W₂ b₂ a₀ label v hz_v i j]
-  -- the frozen mask
-  have hmask : (if dense (Mat.unflatten (v + t • d)) b₁ a₀ j > 0
-        then (1:ℝ) else 0) =
-      (if dense (Mat.unflatten v) b₁ a₀ j > 0 then (1:ℝ) else 0) := by
-    by_cases hp : dense (Mat.unflatten v) b₁ a₀ j > 0
-    · rw [ite_eq_left hp, ite_eq_left ((hstab j).2.mpr hp)]
-    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab j).2.mp h))]
-  rw [hmask]
-  by_cases hp : dense (Mat.unflatten v) b₁ a₀ j > 0
-  · -- live mask: the drift is `a₀ᵢ` times the contracted softmax drift
-    rw [ite_eq_left hp]
-    have hcollapse : a₀ i * ((1:ℝ) *
-          ∑ k, W₂ j k *
-            (softmax d₃ (dense W₂ b₂
-              (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀))) k -
-              oneHot d₃ label k)) -
-        a₀ i * ((1:ℝ) *
-          ∑ k, W₂ j k *
-            (softmax d₃ (dense W₂ b₂
-              (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k -
-              oneHot d₃ label k)) =
-        a₀ i * ∑ k, W₂ j k *
-          (softmax d₃ (dense W₂ b₂
-            (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀))) k -
-            softmax d₃ (dense W₂ b₂
-              (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k) := by
-      rw [one_mul, one_mul, ← mul_sub, ← Finset.sum_sub_distrib]
-      congr 1
-      exact Finset.sum_congr rfl fun k _ => by ring
-    rw [hcollapse, abs_mul]
-    -- logit drift along the segment, then the softmax ratio sandwich
-    have hzdrift : ∀ k, |dense W₂ b₂
-          (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀)) k -
-        dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀)) k| ≤
-        t * (w₂ * (a * D)) := by
-      intro k
-      have h1 := mlp_hidden_logit_drift b₁ W₂ b₂ a₀ hx hw₂ hW₂ v (t • d) k
-      rw [htmass] at h1
-      have h2 : w₂ * (a * (t * ∑ idx, |d idx|)) ≤ t * (w₂ * (a * D)) := by
-        nlinarith [mul_le_mul_of_nonneg_left hd
-          (mul_nonneg (mul_nonneg hw₂ ha) ht0)]
-      linarith
-    have hsm := fun k => FloatModel.softmax_perturb
-      (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀)))
-      (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) hzdrift k
-    have hδlt : 2 * (t * (w₂ * (a * D))) < 1 := by
-      nlinarith [mul_le_mul_of_nonneg_right ht1
-        (mul_nonneg hw₂ (mul_nonneg ha hD0))]
-    have hexp : Real.exp (2 * (t * (w₂ * (a * D)))) - 1 ≤
-        2 * (t * (w₂ * (a * D))) / (1 - 2 * (t * (w₂ * (a * D)))) :=
-      FloatModel.exp_sub_one_le hδlt
-    have hmono : 2 * (t * (w₂ * (a * D))) /
-          (1 - 2 * (t * (w₂ * (a * D)))) ≤
-        2 * (t * (w₂ * (a * D))) / (1 - 2 * (w₂ * (a * D))) := by
-      refine div_le_div_of_nonneg_left
-        (by nlinarith [mul_nonneg ht0 (mul_nonneg hw₂ (mul_nonneg ha hD0))])
-        hden ?_
-      nlinarith [mul_le_mul_of_nonneg_right ht1
-        (mul_nonneg hw₂ (mul_nonneg ha hD0))]
-    have hS : ∀ k, |softmax d₃ (dense W₂ b₂
-          (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀))) k -
-        softmax d₃ (dense W₂ b₂
-          (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k| ≤
-        2 * (t * (w₂ * (a * D))) / (1 - 2 * (w₂ * (a * D))) :=
-      fun k => le_trans (hsm k) (le_trans hexp hmono)
-    have hsum : |∑ k, W₂ j k *
-          (softmax d₃ (dense W₂ b₂
-            (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀))) k -
-            softmax d₃ (dense W₂ b₂
-              (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k)| ≤
-        (d₃ : ℝ) * (w₂ *
-          (2 * (t * (w₂ * (a * D))) / (1 - 2 * (w₂ * (a * D))))) := by
-      calc |∑ k, W₂ j k *
-            (softmax d₃ (dense W₂ b₂
-              (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀))) k -
-              softmax d₃ (dense W₂ b₂
-                (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k)|
-          ≤ ∑ k, |W₂ j k *
-              (softmax d₃ (dense W₂ b₂
-                (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀))) k -
-                softmax d₃ (dense W₂ b₂
-                  (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k)| :=
-            Finset.abs_sum_le_sum_abs _ _
-        _ ≤ ∑ _k : Fin d₃, w₂ *
-              (2 * (t * (w₂ * (a * D))) / (1 - 2 * (w₂ * (a * D)))) :=
-            Finset.sum_le_sum fun k _ => by
-              rw [abs_mul]
-              exact mul_le_mul (hW₂ j k) (hS k) (abs_nonneg _) hw₂
-        _ = (d₃ : ℝ) * (w₂ *
-              (2 * (t * (w₂ * (a * D))) / (1 - 2 * (w₂ * (a * D))))) := by
-            rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
-              nsmul_eq_mul]
-    calc |a₀ i| * |∑ k, W₂ j k *
-          (softmax d₃ (dense W₂ b₂
-            (relu d₂ (dense (Mat.unflatten (v + t • d)) b₁ a₀))) k -
-            softmax d₃ (dense W₂ b₂
-              (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k)|
-        ≤ a * ((d₃ : ℝ) * (w₂ *
-            (2 * (t * (w₂ * (a * D))) / (1 - 2 * (w₂ * (a * D)))))) :=
-          mul_le_mul (hx i) hsum (abs_nonneg _) ha
-      _ = (2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 / (1 - 2 * (w₂ * (a * D)))) *
-            (t * D) := by ring
-  · -- dead mask: both gradients vanish
-    rw [ite_eq_right hp]
-    simp only [zero_mul, mul_zero, sub_self, abs_zero]
-    have hC0 : 0 ≤ 2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 /
-        (1 - 2 * (w₂ * (a * D))) :=
-      div_nonneg (by positivity) hden.le
-    exact mul_nonneg hC0 (mul_nonneg ht0 hD0)
+  exact MlpSlot.loss_grad_lipschitz (fun w => dense (Mat.unflatten w) b₁ a₀) W₂ b₂ label ha
+    (dense_unflatten_drift b₁ a₀ ha hx) (dense_unflatten_drift_sum b₁ a₀ hx) hw₂ hW₂
+    (fun l => if l = j then a₀ i else 0)
+    (by rw [Finset.sum_eq_single j (fun l _ hl => by simp [hl]) (by simp)]; simpa using hx i)
+    _ (fun _ => True)
+    (fun v' _ hz => by
+      rw [mlp_hidden_loss_gradAt b₁ W₂ b₂ a₀ label v' hz i j,
+        Finset.sum_eq_single j (fun l _ hl => by simp [hl]) (by simp), ite_eq_left rfl])
+    v d hd hmargin hsmall t ht trivial trivial
 
 /-- **One inexact SGD step on the MLP's hidden weights provably decreases
     the cross-entropy loss.** All of `sgd_descends`' hypotheses discharged
@@ -804,7 +790,7 @@ theorem mlp_input_loss_gradAt {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
     arriving at layer 1 is no longer column-structured. -/
 theorem mlp_input_logit_drift {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
-    (x : Vec d₀) {a w₁ w₂ : ℝ} (ha : 0 ≤ a)
+    (x : Vec d₀) {a w₁ w₂ : ℝ} (_ha : 0 ≤ a)
     (hx : ∀ i, |x i| ≤ a) (hw₁ : 0 ≤ w₁) (hW₁ : ∀ j l, |W₁ j l| ≤ w₁)
     (hW₂ : ∀ l k, |W₂ l k| ≤ w₂)
     (v e : Vec (d₀ * d₁)) (k : Fin d₃) :
@@ -813,52 +799,13 @@ theorem mlp_input_logit_drift {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
       dense W₂ b₂ (relu d₂ (dense W₁ b₁
         (relu d₁ (dense (Mat.unflatten v) b₀ x)))) k| ≤
       w₂ * ((d₂ : ℝ) * (w₁ * (a * ∑ idx, |e idx|))) := by
-  have hdiff : dense W₂ b₂ (relu d₂ (dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x)))) k -
-      dense W₂ b₂ (relu d₂ (dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten v) b₀ x)))) k =
-      ∑ l, (relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x))) l -
-        relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten v) b₀ x))) l) * W₂ l k := by
-    have h2 : (∑ l, relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x))) l * W₂ l k) -
-        (∑ l, relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten v) b₀ x))) l * W₂ l k) =
-        ∑ l, (relu d₂ (dense W₁ b₁
-            (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x))) l -
-          relu d₂ (dense W₁ b₁
-            (relu d₁ (dense (Mat.unflatten v) b₀ x))) l) * W₂ l k := by
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun l _ => by ring
-    show ((∑ l, relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x))) l * W₂ l k) +
-            b₂ k) -
-        ((∑ l, relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten v) b₀ x))) l * W₂ l k) + b₂ k) = _
-    linarith [h2]
-  rw [hdiff]
-  calc |∑ l, (relu d₂ (dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x))) l -
-        relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten v) b₀ x))) l) * W₂ l k|
-      ≤ ∑ l, |(relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x))) l -
-          relu d₂ (dense W₁ b₁
-            (relu d₁ (dense (Mat.unflatten v) b₀ x))) l) * W₂ l k| :=
-        Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ _l : Fin d₂, (w₁ * (a * ∑ idx, |e idx|)) * w₂ :=
-        Finset.sum_le_sum fun l _ => by
-          rw [abs_mul]
-          refine mul_le_mul ?_ (hW₂ l k) (abs_nonneg _)
-            (mul_nonneg hw₁ (mul_nonneg ha
-              (Finset.sum_nonneg fun _ _ => abs_nonneg _)))
-          exact le_trans (relu_entry_lipschitz d₂ _ _ l)
-            (mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l)
-    _ = (d₂ : ℝ) * ((w₁ * (a * ∑ idx, |e idx|)) * w₂) := by
-        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
-          nsmul_eq_mul]
-    _ = w₂ * ((d₂ : ℝ) * (w₁ * (a * ∑ idx, |e idx|))) := by ring
+  rcases Nat.eq_zero_or_pos d₂ with h0 | hpos
+  · subst h0; simp [dense]
+  have hw₂ : 0 ≤ w₂ := (abs_nonneg _).trans (hW₂ ⟨0, hpos⟩ k)
+  refine (dense_relu_drift W₂ b₂ hw₂ hW₂ _ _ k).trans (mul_le_mul_of_nonneg_left
+    ((Finset.sum_le_sum fun l _ => mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l).trans_eq
+      ?_) hw₂)
+  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
 
 /-- The layer-1 margin keeps the *middle* pre-activation off the kink along
     the segment: the perturbation arrives through one dense + ReLU, so the
@@ -874,20 +821,11 @@ theorem margin_keeps_offkink_mid {d₀ d₁ d₂ : Nat} (b₀ : Vec d₁)
     (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1) (l : Fin d₂) :
     dense W₁ b₁ (relu d₁ (dense (Mat.unflatten (v + t • e)) b₀ x)) l ≠ 0 ∧
       (0 < dense W₁ b₁ (relu d₁ (dense (Mat.unflatten (v + t • e)) b₀ x)) l ↔
-        0 < dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l) := by
-  refine sign_stable_of_close ?_ (hmargin1 l)
-  have h1 := mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v (t • e) l
-  have htm : (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by
-    rw [Finset.mul_sum]
-    exact Finset.sum_congr rfl fun idx _ => by
-      simp [abs_mul, abs_of_nonneg ht0]
-  rw [htm] at h1
-  have htsum : t * (∑ idx, |e idx|) ≤ D :=
-    (mul_le_mul ht1 he (Finset.sum_nonneg fun _ _ => abs_nonneg _)
-      zero_le_one).trans_eq (one_mul D)
-  have h2 : w₁ * (a * (t * ∑ idx, |e idx|)) ≤ w₁ * (a * D) :=
-    mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left htsum ha) hw₁
-  linarith
+        0 < dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l) :=
+  margin_keeps_offkink_of_drift (ρ := w₁ * a)
+    (fun w => dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))) (mul_nonneg hw₁ ha)
+    (fun v e l => (mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l).trans_eq (by ring))
+    v e he (fun l => lt_of_eq_of_lt (by ring) (hmargin1 l)) t ht0 ht1 l
 
 /-- **Segment-Lipschitz gradient for the input-layer loss, explicit
     constant.** Under both margins (neither ReLU layer's sign pattern can
@@ -895,7 +833,8 @@ theorem margin_keeps_offkink_mid {d₀ d₁ d₂ : Nat} (b₀ : Vec d₁)
     entries drift by at most
     `(2·d₃·d₂²·w₁²·w₂²·a²/(1−2·w₂·d₂·w₁·a·D))·(t·D)`. The input-layer peer
     of `mlp_hidden_loss_grad_lipschitz`; the extra `d₂·w₁` is the middle
-    layer's `ℓ1→ℓ1` operator factor. -/
+    layer's `ℓ1→ℓ1` operator factor. `MlpSlot.loss_grad_lipschitz` at the middle
+    pre-activation, `σ = w₁·a`, `ρ = d₂·w₁·a`. -/
 theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
     (x : Vec d₀) (label : Fin d₃) {a w₁ w₂ D : ℝ}
@@ -916,237 +855,37 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
         v idx| ≤
       (2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
         (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))) * (t * D) := by
-  obtain ⟨ht0, ht1⟩ := ht
-  have hD0 : 0 ≤ D :=
-    le_trans (Finset.sum_nonneg fun _ _ => abs_nonneg _) hd
-  have hden : (0:ℝ) < 1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))) := by
-    linarith
-  have hδ0 : (0:ℝ) ≤ w₂ * ((d₂ : ℝ) * (w₁ * (a * D))) :=
-    mul_nonneg hw₂ (mul_nonneg (Nat.cast_nonneg d₂)
-      (mul_nonneg hw₁ (mul_nonneg ha hD0)))
+  have hD0 : 0 ≤ D := le_trans (Finset.sum_nonneg fun _ _ => abs_nonneg _) hd
   obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-  have htmass : (∑ idx, |(t • d) idx|) = t * ∑ idx, |d idx| := by
-    rw [Finset.mul_sum]
-    exact Finset.sum_congr rfl fun idx _ => by
-      simp [abs_mul, abs_of_nonneg ht0]
-  -- base point off both kinks
-  have hz0_v : ∀ k, dense (Mat.unflatten v) b₀ x k ≠ 0 := fun k h0 => by
-    have h := hmargin0 k
-    rw [h0, abs_zero] at h
-    exact absurd h (not_lt.mpr (mul_nonneg ha hD0))
-  have hz1_v : ∀ l,
-      dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l ≠ 0 :=
-    fun l h0 => by
-      have h := hmargin1 l
-      rw [h0, abs_zero] at h
-      exact absurd h (not_lt.mpr (mul_nonneg hw₁ (mul_nonneg ha hD0)))
-  -- both sign patterns frozen along the segment
-  have hstab0 := fun k =>
-    margin_keeps_offkink b₀ x ha hx v d hd hmargin0 t ht0 ht1 k
-  have hstab1 := fun l =>
-    margin_keeps_offkink_mid b₀ W₁ b₁ x ha hx hw₁ hW₁ v d hd hmargin1
-      t ht0 ht1 l
-  have hz0_t : ∀ k, dense (Mat.unflatten (v + t • d)) b₀ x k ≠ 0 :=
-    fun k => (hstab0 k).1
-  have hz1_t : ∀ l, dense W₁ b₁
-      (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x)) l ≠ 0 :=
-    fun l => (hstab1 l).1
-  rw [mlp_input_loss_gradAt b₀ W₁ b₁ W₂ b₂ x label (v + t • d)
-        hz0_t hz1_t i j,
-      mlp_input_loss_gradAt b₀ W₁ b₁ W₂ b₂ x label v hz0_v hz1_v i j]
-  -- the frozen masks
-  have hmask0 : (if dense (Mat.unflatten (v + t • d)) b₀ x j > 0
-        then (1:ℝ) else 0) =
-      (if dense (Mat.unflatten v) b₀ x j > 0 then (1:ℝ) else 0) := by
-    by_cases hp : dense (Mat.unflatten v) b₀ x j > 0
-    · rw [ite_eq_left hp, ite_eq_left ((hstab0 j).2.mpr hp)]
-    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab0 j).2.mp h))]
-  have hmask1 : ∀ l, (if dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x)) l > 0
-        then (1:ℝ) else 0) =
-      (if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-        then (1:ℝ) else 0) := by
-    intro l
-    by_cases hp : dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-    · rw [ite_eq_left hp, ite_eq_left ((hstab1 l).2.mpr hp)]
-    · rw [ite_eq_right hp, ite_eq_right (fun h => hp ((hstab1 l).2.mp h))]
-  rw [hmask0]
-  simp only [hmask1]
-  by_cases hp : dense (Mat.unflatten v) b₀ x j > 0
-  · -- live outer mask
-    rw [ite_eq_left hp]
-    have hcollapse : x i * ((1:ℝ) *
-          ∑ l, W₁ j l *
-            ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-                then (1:ℝ) else 0) *
-              ∑ k, W₂ l k *
-                (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                  (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-                  oneHot d₃ label k))) -
-        x i * ((1:ℝ) *
-          ∑ l, W₁ j l *
-            ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-                then (1:ℝ) else 0) *
-              ∑ k, W₂ l k *
-                (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                  (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k -
-                  oneHot d₃ label k))) =
-        x i * ∑ l, W₁ j l *
-          ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-              then (1:ℝ) else 0) *
-            ∑ k, W₂ l k *
-              (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-                softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                  (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k)) := by
-      rw [one_mul, one_mul, ← mul_sub, ← Finset.sum_sub_distrib]
-      congr 1
-      refine Finset.sum_congr rfl fun l _ => ?_
-      rw [← mul_sub, ← mul_sub]
-      congr 2
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun k _ => by ring
-    rw [hcollapse, abs_mul]
-    -- logit drift along the segment
-    have hzdrift : ∀ k, |dense W₂ b₂ (relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x)))) k -
-        dense W₂ b₂ (relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten v) b₀ x)))) k| ≤
-        t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))) := by
-      intro k
-      have h1 := mlp_input_logit_drift b₀ W₁ b₁ W₂ b₂ x ha hx hw₁ hW₁
-        hW₂ v (t • d) k
-      rw [htmass] at h1
-      have h2 : w₂ * ((d₂ : ℝ) * (w₁ * (a * (t * ∑ idx, |d idx|)))) ≤
-          w₂ * ((d₂ : ℝ) * (w₁ * (a * (t * D)))) :=
-        mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-          (mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-            (mul_le_mul_of_nonneg_left hd ht0) ha) hw₁)
-          (Nat.cast_nonneg d₂)) hw₂
-      have h3 : w₂ * ((d₂ : ℝ) * (w₁ * (a * (t * D)))) =
-          t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))) := by ring
-      linarith
-    have hsm := fun k => FloatModel.softmax_perturb
-      (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x)))))
-      (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten v) b₀ x))))) hzdrift k
-    have hδlt : 2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) < 1 := by
-      nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
-    have hexp : Real.exp (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))) -
-        1 ≤ 2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-          (1 - 2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))) :=
-      FloatModel.exp_sub_one_le hδlt
-    have hmono : 2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-          (1 - 2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))) ≤
-        2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-          (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) := by
-      refine div_le_div_of_nonneg_left
-        (by nlinarith [mul_nonneg ht0 hδ0]) hden ?_
-      nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
-    have hS : ∀ k, |softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-        softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-          (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k| ≤
-        2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-          (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) :=
-      fun k => le_trans (hsm k) (le_trans hexp hmono)
-    -- contract through W₂ (per inner sum), the frozen mask, then W₁
-    have hinner : ∀ l, |∑ k, W₂ l k *
-          (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-            (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-            softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-              (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k)| ≤
-        (d₃ : ℝ) * (w₂ * (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-          (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))))) := by
-      intro l
-      calc |∑ k, W₂ l k *
-            (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-              (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-              softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k)|
-          ≤ ∑ k, |W₂ l k *
-              (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-                softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                  (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k)| :=
-            Finset.abs_sum_le_sum_abs _ _
-        _ ≤ ∑ _k : Fin d₃, w₂ *
-              (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-                (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))) :=
-            Finset.sum_le_sum fun k _ => by
-              rw [abs_mul]
-              exact mul_le_mul (hW₂ l k) (hS k) (abs_nonneg _) hw₂
-        _ = (d₃ : ℝ) * (w₂ *
-              (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-                (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))))) := by
-            rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
-              nsmul_eq_mul]
-    have hsum : |∑ l, W₁ j l *
-          ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-              then (1:ℝ) else 0) *
-            ∑ k, W₂ l k *
-              (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-                softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                  (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k))| ≤
-        (d₂ : ℝ) * (w₁ * ((d₃ : ℝ) * (w₂ *
-          (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-            (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))))))) := by
-      calc |∑ l, W₁ j l *
-            ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-                then (1:ℝ) else 0) *
-              ∑ k, W₂ l k *
-                (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                  (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-                  softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                    (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k))|
-          ≤ ∑ l, |W₁ j l *
-              ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-                  then (1:ℝ) else 0) *
-                ∑ k, W₂ l k *
-                  (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                    (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-                    softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                      (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k))| :=
-            Finset.abs_sum_le_sum_abs _ _
-        _ ≤ ∑ _l : Fin d₂, w₁ * ((d₃ : ℝ) * (w₂ *
-              (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-                (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))))) := by
-            refine Finset.sum_le_sum fun l _ => ?_
-            rw [abs_mul]
-            refine mul_le_mul (hW₁ j l) ?_ (abs_nonneg _) hw₁
-            rw [abs_mul]
-            refine le_trans (mul_le_of_le_one_left (abs_nonneg _) ?_)
-              (hinner l)
-            split_ifs <;> simp
-        _ = (d₂ : ℝ) * (w₁ * ((d₃ : ℝ) * (w₂ *
-              (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-                (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))))))) := by
-            rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
-              nsmul_eq_mul]
-    calc |x i| * |∑ l, W₁ j l *
-          ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-              then (1:ℝ) else 0) *
-            ∑ k, W₂ l k *
-              (softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                (relu d₁ (dense (Mat.unflatten (v + t • d)) b₀ x))))) k -
-                softmax d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁
-                  (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k))|
-        ≤ a * ((d₂ : ℝ) * (w₁ * ((d₃ : ℝ) * (w₂ *
-            (2 * (t * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) /
-              (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))))))) :=
-          mul_le_mul (hx i) hsum (abs_nonneg _) ha
-      _ = (2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
-            (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D)))))) * (t * D) := by
-          ring
-  · -- dead outer mask: both gradients vanish
-    rw [ite_eq_right hp]
-    simp only [zero_mul, mul_zero, sub_self, abs_zero]
-    have hC0 : 0 ≤ 2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
-        (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * D))))) :=
-      div_nonneg (by positivity) hden.le
-    exact mul_nonneg hC0 (mul_nonneg ht0 hD0)
+  -- relu₀'s frozen mask, `xᵢ` and `W₁`'s row `j`: one fixed row at the middle pre-activation
+  have hJ : ∑ l, |x i * ((if dense (Mat.unflatten v) b₀ x j > 0 then (1:ℝ) else 0) *
+      W₁ j l)| ≤ (d₂ : ℝ) * (w₁ * a) := by
+    refine (Finset.sum_le_sum fun l _ => ?_).trans_eq
+      (by rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul])
+    rw [abs_mul, abs_mul, mul_comm w₁ a]
+    exact mul_le_mul (hx i) ((mul_le_of_le_one_left (abs_nonneg _)
+      (by split_ifs <;> simp)).trans (hW₁ j l)) (by positivity) ha
+  refine (MlpSlot.loss_grad_lipschitz (σ := w₁ * a) (ρ := (d₂ : ℝ) * (w₁ * a))
+    (fun w => dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))) W₂ b₂ label
+    (mul_nonneg hw₁ ha)
+    (fun v e l => (mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l).trans_eq (by ring))
+    (fun v e => (Finset.sum_le_sum fun l _ =>
+      mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l).trans_eq (by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring))
+    hw₂ hW₂ _ hJ _
+    (fun v' => ∀ k, dense (Mat.unflatten v') b₀ x k ≠ 0 ∧
+      (0 < dense (Mat.unflatten v') b₀ x k ↔ 0 < dense (Mat.unflatten v) b₀ x k))
+    (fun v' hQ hz1 => ?_) v d hd (fun l => lt_of_eq_of_lt (by ring) (hmargin1 l))
+    (lt_of_eq_of_lt (by ring) hsmall) t ht
+    (fun k => ⟨fun h0 => absurd (hmargin0 k) (by
+      rw [h0, abs_zero]; exact not_lt.mpr (mul_nonneg ha hD0)), Iff.rfl⟩)
+    (fun k => margin_keeps_offkink b₀ x ha hx v d hd hmargin0 t ht.1 ht.2 k)).trans_eq
+    (by ring)
+  -- at a frozen relu₀ point the input gradient is that row contracted with the head
+  rw [mlp_input_loss_gradAt b₀ W₁ b₁ W₂ b₂ x label v' (fun k => (hQ k).1) hz1 i j]
+  simp only [gt_iff_lt, (hQ j).2]
+  rw [← mul_assoc, Finset.mul_sum]
+  exact Finset.sum_congr rfl fun l _ => by rw [mul_assoc, mul_assoc, mul_assoc]
 
 /-- **One inexact SGD step on the MLP's input weights provably decreases
     the cross-entropy loss.** The deepest descent capstone: both ReLU
