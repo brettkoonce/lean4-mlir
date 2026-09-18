@@ -52,6 +52,21 @@ theorem FloatClose.comp {m n p : Nat} {A B C : ℝ}
       (fun k => (hfm va hva k).1) (fun k => (hfm vt hvt k).2)
       (fun k => hfe vt va e hva hvt hd k) i
 
+/-- **The standard way to build a `FloatClose` instance.** A real bound `R` on the box, a
+    rounding bound `E` at an exactly-represented input, and the error modulus give
+    `FloatClose A (R + E)`: the float output is within `E` of the real one, so its magnitude is
+    at most `R + E`. Every per-op instance below with a fresh-input rounding term is this. -/
+theorem FloatClose.of_close {m n : Nat} {A R E : ℝ} {f fF : Vec m → Vec n} {L : ℝ → ℝ}
+    (hreal : ∀ v, (∀ k, |v k| ≤ A) → ∀ i, |f v i| ≤ R)
+    (hround : ∀ v, (∀ k, |v k| ≤ A) → ∀ i, |fF v i - f v i| ≤ E)
+    (herr : ∀ vt va e, (∀ k, |va k| ≤ A) → (∀ k, |vt k| ≤ A) → (∀ k, |vt k - va k| ≤ e)
+      → ∀ i, |fF vt i - f va i| ≤ L e) :
+    FloatClose A (R + E) f fF L := by
+  refine ⟨fun v hv i => ?_, herr⟩
+  have h1 := hreal v hv i; have h2 := hround v hv i
+  have h3 := abs_sub_abs_le_abs_sub (fF v i) (f v i)
+  exact ⟨by linarith [abs_nonneg (fF v i - f v i)], by linarith⟩
+
 /-- **ReLU is `FloatClose` with modulus `id`** — exact in float (real = float map),
     1-Lipschitz on the inherited error, never grows magnitudes. -/
 theorem floatClose_relu {n : Nat} (A : ℝ) :
@@ -64,58 +79,34 @@ theorem floatClose_relu {n : Nat} (A : ℝ) :
     extra rounding) — that sum is the propagated magnitude `B`. -/
 theorem floatClose_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
+    (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
     FloatClose A
       (layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0)
       (flatConv (h := h) (w := w) W b) (M.flatConvF (h := h) (w := w) W b)
-      (fun e => layerBudget M.u (ic * kH * kW) w' β A e) := by
-  have hLB0 : 0 ≤ layerBudget M.u (ic * kH * kW) w' β A 0 :=
-    layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
-  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
-  · have hreal := flatConv_abs_le hA hW hb hv i
-    have hround : |M.flatConvF W b v i - flatConv W b v i|
-        ≤ layerBudget M.u (ic * kH * kW) w' β A 0 :=
-      M.flatConvF_close W b v v hw' hA le_rfl hW hb hv (fun k => by simp) i
-    have htri : |M.flatConvF W b v i|
-        ≤ |M.flatConvF W b v i - flatConv W b v i| + |flatConv W b v i| := by
-      simpa using abs_sub_le (M.flatConvF W b v i) (flatConv W b v i) 0
-    exact ⟨hreal.trans (le_add_of_nonneg_right hLB0), by
-      calc |M.flatConvF W b v i|
-          ≤ |M.flatConvF W b v i - flatConv W b v i| + |flatConv W b v i| := htri
-        _ ≤ layerBudget M.u (ic * kH * kW) w' β A 0 + layerAct (ic * kH * kW) w' β A :=
-            add_le_add hround hreal
-        _ = layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0 := by ring⟩
-  · have he : 0 ≤ e := (abs_nonneg _).trans (hd ⟨0, hn⟩)
-    exact M.flatConvF_close W b vt va hw' hA he hW hb hva hd i
+      (fun e => layerBudget M.u (ic * kH * kW) w' β A e) :=
+  FloatClose.of_close (fun v hv i => flatConv_abs_le hA hW hb hv i)
+    (fun v hv i => M.flatConvF_close W b v v hw' hA le_rfl hW hb hv (fun k => by simp) i)
+    (fun vt va e hva _ hd i => M.flatConvF_close W b vt va hw' hA
+      ((abs_nonneg _).trans (hd ⟨0, hn⟩)) hW hb hva hd i)
 
 /-- **Dense layer is `FloatClose`** with modulus the fan-in `layerBudget` (the dense
     analogue of `floatClose_flatConv`). Real output ≤ `layerAct`; float output ≤ that
     + the fresh-input rounding `layerBudget(e=0)`. The SE excite/reduce denses and the
     classifier head are this instance; the ViT MLP denses reuse it too. -/
 theorem floatClose_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n)
-    {w' β A : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hm : 0 < m)
+    {w' β A : ℝ} (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hm : 0 < m)
     (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) :
     FloatClose A
       (layerAct m w' β A + layerBudget M.u m w' β A 0)
       (Proofs.dense W b) (M.dense W b)
-      (fun e => layerBudget M.u m w' β A e) := by
-  have hLB0 : 0 ≤ layerBudget M.u m w' β A 0 :=
-    layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
-  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
-  · have hreal : |Proofs.dense W b v i| ≤ layerAct m w' β A :=
-      dense_abs_le hA hW hb hv i
-    have hround : |M.dense W b v i - Proofs.dense W b v i| ≤ layerBudget M.u m w' β A 0 :=
-      (M.dense_close_fresh W b v i).trans (M.denseErr_le_uniform hw' le_rfl hW hb hv i)
-    refine ⟨hreal.trans (le_add_of_nonneg_right hLB0), ?_⟩
-    calc |M.dense W b v i|
-        ≤ |M.dense W b v i - Proofs.dense W b v i| + |Proofs.dense W b v i| := by
-          simpa using abs_sub_le (M.dense W b v i) (Proofs.dense W b v i) 0
-      _ ≤ layerBudget M.u m w' β A 0 + layerAct m w' β A := add_le_add hround hreal
-      _ = layerAct m w' β A + layerBudget M.u m w' β A 0 := by ring
-  · have he : 0 ≤ e := (abs_nonneg _).trans (hd ⟨0, hm⟩)
-    exact (M.dense_close W b vt va e he hd i).trans
-      (M.denseErr_le_uniform hw' he hW hb hva i)
+      (fun e => layerBudget M.u m w' β A e) :=
+  FloatClose.of_close (fun v hv i => dense_abs_le hA hW hb hv i)
+    (fun v hv i => (M.dense_close_fresh W b v i).trans
+      (M.denseErr_le_uniform hw' le_rfl hW hb hv i))
+    (fun vt va e hva _ hd i => by
+      have he : 0 ≤ e := (abs_nonneg _).trans (hd ⟨0, hm⟩)
+      exact (M.dense_close W b vt va e he hd i).trans (M.denseErr_le_uniform hw' he hW hb hva i))
 
 /-- **Demo: a conv→relu unit is `FloatClose`** — `(conv).comp (relu)` folds the
     conv `layerBudget` modulus and ReLU's `id`. A 2-conv chain
@@ -157,40 +148,22 @@ theorem floatClose_maxPool3s2 {c h w : Nat} (A : ℝ) :
     back to `e`); the float roundoff is `gapFlat_close`'s budget `gb`. Output magnitude
     `A + gb`, modulus `e ↦ gb + e`. -/
 theorem floatClose_gap {c h w : Nat} (M : FloatModel) {A : ℝ}
-    (hA0 : 0 ≤ A) (hhw : 0 < h * w) :
+    (_hA0 : 0 ≤ A) (hhw : 0 < h * w) :
     FloatClose A
       (A + (M.u * ((1 + M.u) ^ (h * w + 1) * A) + ((1 + M.u) ^ (h * w + 1) - 1) * A))
       (globalAvgPoolFlat c h w) M.gapFlatF
       (fun e => (M.u * ((1 + M.u) ^ (h * w + 1) * A)
                  + ((1 + M.u) ^ (h * w + 1) - 1) * A) + e) := by
-  have hu := M.u_nonneg
   have hhwR : (0:ℝ) < ((h * w : ℕ) : ℝ) := by exact_mod_cast hhw
   set gb := M.u * ((1 + M.u) ^ (h * w + 1) * A) + ((1 + M.u) ^ (h * w + 1) - 1) * A
     with hgbdef
-  have hgb0 : 0 ≤ gb := by
-    rw [hgbdef]
-    have hpow : (1:ℝ) ≤ (1 + M.u) ^ (h * w + 1) := one_le_pow₀ (by linarith)
-    have h2 : 0 ≤ ((1 + M.u) ^ (h * w + 1) - 1) * A := mul_nonneg (by linarith) hA0
-    have h1 : 0 ≤ M.u * ((1 + M.u) ^ (h * w + 1) * A) := by positivity
-    linarith
-  refine ⟨fun v hv ci => ?_, fun vt va e hva hvt hd ci => ?_⟩
-  · -- magnitude at v
-    have hAt : ∀ ci' hi wi, |Tensor3.unflatten v ci' hi wi| ≤ A := fun _ _ _ => hv _
-    have hreal : |globalAvgPoolFlat c h w v ci| ≤ A := by
-      rw [globalAvgPoolFlat_eq_bnMean v ci]
-      exact bnMean_abs_le _ hhw (fun s => hAt _ _ _)
-    have hround : |M.gapFlatF v ci - globalAvgPoolFlat c h w v ci| ≤ gb := by
-      rw [hgbdef]; exact M.gapFlat_close v hhw hAt ci
-    refine ⟨hreal.trans (le_add_of_nonneg_right hgb0), ?_⟩
-    calc |M.gapFlatF v ci|
-        ≤ |M.gapFlatF v ci - globalAvgPoolFlat c h w v ci| + |globalAvgPoolFlat c h w v ci| := by
-          simpa using abs_sub_le (M.gapFlatF v ci) (globalAvgPoolFlat c h w v ci) 0
-      _ ≤ gb + A := add_le_add hround hreal
-      _ = A + gb := by ring
+  refine FloatClose.of_close (fun v hv ci => ?_) (fun v hv ci => ?_) (fun vt va e hva hvt hd ci => ?_)
+  · rw [globalAvgPoolFlat_eq_bnMean v ci]
+    exact bnMean_abs_le _ hhw (fun s => hv _)
+  · rw [hgbdef]; exact M.gapFlat_close v hhw (fun _ _ _ => hv _) ci
   · -- error: vt within e of va per coordinate
-    have hAtt : ∀ ci' hi wi, |Tensor3.unflatten vt ci' hi wi| ≤ A := fun _ _ _ => hvt _
     have hround : |M.gapFlatF vt ci - globalAvgPoolFlat c h w vt ci| ≤ gb := by
-      rw [hgbdef]; exact M.gapFlat_close vt hhw hAtt ci
+      rw [hgbdef]; exact M.gapFlat_close vt hhw (fun _ _ _ => hvt _) ci
     have hshift : |globalAvgPoolFlat c h w vt ci - globalAvgPoolFlat c h w va ci| ≤ e := by
       rw [globalAvgPoolFlat_eq_bnMean vt ci, globalAvgPoolFlat_eq_bnMean va ci]
       refine (bnMean_input_close _ _ hhw).trans ?_
@@ -240,42 +213,8 @@ theorem floatClose_cifarStage {ic c h w : Nat} (M : FloatModel)
 -- § The residual skip (a branching combinator, not a plain .comp)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Residual block `relu(F(x) + x)` is `FloatClose`** — the branching combinator
-    (the skip reuses the input, so it's not a plain `.comp`). Given the body `F`
-    `FloatClose A B`, the block's float (rounded skip-add) is within
-    `reluAdd_close`'s budget of the real `relu(F(x)+x)`; output magnitude
-    `(1+u)(B+A)`. The defining ResNet op. -/
-theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
-    {F FF : Vec m → Vec m} {LF : ℝ → ℝ} (hF : FloatClose A B F FF LF) :
-    FloatClose A (B + A + M.u * (B + A))
-      (fun v => relu m (fun j => F v j + v j))
-      (fun v => relu m (fun j => M.add (FF v j) (v j)))
-      (fun e => M.u * (B + LF e + A + e) + (LF e + e)) := by
-  have hu := M.u_nonneg
-  obtain ⟨hFm, hFe⟩ := hF
-  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
-  · have hb : |F v i| ≤ B := (hFm v hv i).1
-    have hfb : |FF v i| ≤ B := (hFm v hv i).2
-    have hvi : |v i| ≤ A := hv i
-    have hBA : 0 ≤ B + A := by
-      have := (abs_nonneg (F v i)).trans hb; have := (abs_nonneg (v i)).trans hvi; linarith
-    refine ⟨?_, ?_⟩
-    · calc |relu m (fun j => F v j + v j) i| ≤ |F v i + v i| := relu_abs_le _ i
-        _ ≤ |F v i| + |v i| := abs_add_le _ _
-        _ ≤ B + A := add_le_add hb hvi
-        _ ≤ B + A + M.u * (B + A) := le_add_of_nonneg_right (mul_nonneg hu hBA)
-    · have hsum : |FF v i + v i| ≤ B + A := (abs_add_le _ _).trans (add_le_add hfb hvi)
-      calc |relu m (fun j => M.add (FF v j) (v j)) i| ≤ |M.add (FF v i) (v i)| := relu_abs_le _ i
-        _ ≤ |M.add (FF v i) (v i) - (FF v i + v i)| + |FF v i + v i| := by
-            simpa using abs_sub_le (M.add (FF v i) (v i)) (FF v i + v i) 0
-        _ ≤ M.u * |FF v i + v i| + |FF v i + v i| := add_le_add (M.err _) le_rfl
-        _ ≤ M.u * (B + A) + (B + A) := add_le_add (mul_le_mul_of_nonneg_left hsum hu) hsum
-        _ = B + A + M.u * (B + A) := by ring
-  · exact M.reluAdd_close (fun k => hFe vt va e hva hvt hd k) hd
-      (fun k => (hFm va hva k).1) hva i
-
 /-- **Additive residual `F(x) + x` (no trailing activation) is `FloatClose`** — the
-    MBConv / transformer skip, the no-ReLU cousin of `floatClose_residualBlock`. The
+    MBConv / transformer skip, the skip of `floatClose_residualBlock` without its ReLU. The
     rounded skip-add `fl(FF(x) ⊕ x)` is within `add_close`'s budget of the real
     `F(x) + x`; output magnitude `(1+u)(B+A)`. -/
 theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
@@ -286,29 +225,30 @@ theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
       (fun e => M.u * (B + LF e + A + e) + (LF e + e)) := by
   have hu := M.u_nonneg
   obtain ⟨hFm, hFe⟩ := hF
-  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
-  · have hb : |F v i| ≤ B := (hFm v hv i).1
-    have hfb : |FF v i| ≤ B := (hFm v hv i).2
-    have hvi : |v i| ≤ A := hv i
-    have hBA : 0 ≤ B + A := by
-      have := (abs_nonneg (F v i)).trans hb; have := (abs_nonneg (v i)).trans hvi; linarith
-    refine ⟨?_, ?_⟩
-    · calc |F v i + v i| ≤ |F v i| + |v i| := abs_add_le _ _
-        _ ≤ B + A := add_le_add hb hvi
-        _ ≤ B + A + M.u * (B + A) := le_add_of_nonneg_right (mul_nonneg hu hBA)
-    · have hsum : |FF v i + v i| ≤ B + A := (abs_add_le _ _).trans (add_le_add hfb hvi)
-      calc |M.add (FF v i) (v i)|
-          ≤ |M.add (FF v i) (v i) - (FF v i + v i)| + |FF v i + v i| := by
-            simpa using abs_sub_le (M.add (FF v i) (v i)) (FF v i + v i) 0
-        _ ≤ M.u * |FF v i + v i| + |FF v i + v i| := add_le_add (M.err _) le_rfl
-        _ ≤ M.u * (B + A) + (B + A) := add_le_add (mul_le_mul_of_nonneg_left hsum hu) hsum
-        _ = B + A + M.u * (B + A) := by ring
+  refine ⟨fun v hv i => ⟨?_, ?_⟩, fun vt va e hva hvt hd i => ?_⟩
+  · have hb := (hFm v hv i).1
+    nlinarith [abs_add_le (F v i) (v i), hv i, abs_nonneg (F v i), abs_nonneg (v i)]
+  · have hsum : |FF v i + v i| ≤ B + A := (abs_add_le _ _).trans (add_le_add (hFm v hv i).2 (hv i))
+    show |M.rnd (FF v i + v i)| ≤ _
+    nlinarith [M.err (FF v i + v i), abs_sub_abs_le_abs_sub (M.rnd (FF v i + v i)) (FF v i + v i),
+      abs_nonneg (FF v i + v i)]
   · refine (M.add_close (hFe vt va e hva hvt hd i) (hd i)).trans ?_
-    have hb : |F va i| ≤ B := (hFm va hva i).1
-    have ha : |va i| ≤ A := hva i
     have h1 : M.u * (|F va i| + LF e + |va i| + e) ≤ M.u * (B + LF e + A + e) :=
-      mul_le_mul_of_nonneg_left (by linarith) hu
+      mul_le_mul_of_nonneg_left (by linarith [(hFm va hva i).1, hva i]) hu
     linarith
+
+/-- **Residual block `relu(F(x) + x)` is `FloatClose`** — the branching combinator
+    (the skip reuses the input, so it's not a plain `.comp`). Given the body `F`
+    `FloatClose A B`, the block's float (rounded skip-add) is within
+    `reluAdd_close`'s budget of the real `relu(F(x)+x)`; output magnitude
+    `(1+u)(B+A)`. The defining ResNet op: `floatClose_addResidual` then `floatClose_relu`. -/
+theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
+    {F FF : Vec m → Vec m} {LF : ℝ → ℝ} (hF : FloatClose A B F FF LF) :
+    FloatClose A (B + A + M.u * (B + A))
+      (fun v => relu m (fun j => F v j + v j))
+      (fun v => relu m (fun j => M.add (FF v j) (v j)))
+      (fun e => M.u * (B + LF e + A + e) + (LF e + e)) :=
+  (floatClose_addResidual M hF).comp (floatClose_relu _)
 
 /-- **THE RESIDUAL FOLD: a (no-BN) ResNet basic block is `FloatClose`.** Body
     `conv₂ → relu → conv₁` folded via `.comp`, then wrapped by the residual
@@ -339,64 +279,13 @@ theorem floatClose_resBlock {c h w : Nat} (M : FloatModel)
 -- § BN → relu as a FloatClose instance (the other r34 wrap)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **BN→relu is `FloatClose`** (per-example, training-mode). The float BN computes
-    its stats from the input via the supplied `fμ`/`fistdv` (within `emean`/`eistd`
-    of the true stats on the magnitude domain — discharged by `bnMean_close` /
-    `bnVar_close` + `bnIstd_close_at` when instantiated). Error from `bnRelu_close`
-    (rounding + input-shift); float-output magnitude from `bnForward_close_of`.
-    With this + `floatClose_flatConv` + the residual combinator, the r34 identity
-    block folds entirely through `.comp`. -/
-theorem floatClose_bnRelu {m : Nat} (M : FloatModel)
-    {ε γ β emean eistd D S G Bbnd A : ℝ} (fμ fistdv : Vec m → ℝ)
-    (hn : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
-    (hmean : ∀ v, (∀ k, |v k| ≤ A) → |fμ v - bnMean m v| ≤ emean)
-    (histd : ∀ v, (∀ k, |v k| ≤ A) → |fistdv v - bnIstd m v ε| ≤ eistd)
-    (hD : ∀ v, (∀ k, |v k| ≤ A) → ∀ j, |v j - bnMean m v| ≤ D)
-    (hSabs : ∀ v, (∀ k, |v k| ≤ A) → |bnIstd m v ε| ≤ S) :
-    FloatClose A (G * (D * S) + Bbnd + bnNormBudget M.u D S G Bbnd emean eistd)
-      (fun v => relu m (bnForward m ε γ β v))
-      (fun v => relu m (M.bnForwardF γ β (fμ v) (fistdv v) v))
-      (fun e => bnReluBudget M.u D S G Bbnd emean eistd A e ε) := by
-  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i =>
-    M.bnRelu_close vt va i hn hε hd hvt hva (hmean vt hvt) (histd vt hvt)
-      (hD vt hvt) (hSabs vt hvt) hγ hβ⟩
-  -- magnitude: real |bnForward| ≤ G·D·S + Bbnd; float ≤ that + bnNormBudget rounding
-  have hu := M.u_nonneg
-  have hG0 : 0 ≤ G := (abs_nonneg _).trans hγ
-  have hBbnd0 : 0 ≤ Bbnd := (abs_nonneg _).trans hβ
-  have hS0 : 0 ≤ S := (abs_nonneg _).trans (hSabs v hv)
-  have hD0 : 0 ≤ D := (abs_nonneg _).trans (hD v hv i)
-  have hem0 : 0 ≤ emean := (abs_nonneg _).trans (hmean v hv)
-  have hei0 : 0 ≤ eistd := (abs_nonneg _).trans (histd v hv)
-  have hnb0 : 0 ≤ bnNormBudget M.u D S G Bbnd emean eistd := by
-    unfold bnNormBudget FloatModel.mulErr; positivity
-  have hxhat : |bnXhat m ε v i| ≤ D * S := by
-    unfold bnXhat; rw [abs_mul]
-    exact mul_le_mul (hD v hv i) (hSabs v hv) (abs_nonneg _) ((abs_nonneg _).trans (hD v hv i))
-  have hreal : |bnForward m ε γ β v i| ≤ G * (D * S) + Bbnd := by
-    unfold bnForward
-    refine (abs_add_le _ _).trans (add_le_add ?_ hβ)
-    rw [abs_mul]; exact mul_le_mul hγ hxhat (abs_nonneg _) ((abs_nonneg _).trans hγ)
-  have hround := M.bnForward_close_of (ε := ε) v i (hmean v hv) (histd v hv)
-    (hD v hv i) (hSabs v hv) hγ hβ
-  refine ⟨(relu_abs_le _ i).trans (hreal.trans (le_add_of_nonneg_right hnb0)), ?_⟩
-  · refine (relu_abs_le _ i).trans ?_
-    have htri : |M.bnForwardF γ β (fμ v) (fistdv v) v i|
-        ≤ |M.bnForwardF γ β (fμ v) (fistdv v) v i - bnForward m ε γ β v i|
-          + |bnForward m ε γ β v i| := by
-      simpa using abs_sub_le (M.bnForwardF γ β (fμ v) (fistdv v) v i) (bnForward m ε γ β v i) 0
-    calc |M.bnForwardF γ β (fμ v) (fistdv v) v i|
-        ≤ |M.bnForwardF γ β (fμ v) (fistdv v) v i - bnForward m ε γ β v i|
-          + |bnForward m ε γ β v i| := htri
-      _ ≤ bnNormBudget M.u D S G Bbnd emean eistd + (G * (D * S) + Bbnd) := add_le_add hround hreal
-      _ = G * (D * S) + Bbnd + bnNormBudget M.u D S G Bbnd emean eistd := by ring
-
-/-- **BN alone (no activation) is `FloatClose`** — `floatClose_bnRelu` with the
-    trailing ReLU dropped, error from `bnStep_close` (rounding `bnForward_close_of`
-    + input-shift `bnForward_input_close`), same `bnReluBudget` modulus (ReLU only
-    shrinks, so removing it leaves the budget unchanged). The BN-before-swish steps
-    in EfficientNet's MBConv (and BN-before-GELU positions generally) are this
-    instance. -/
+/-- **BN (no activation) is `FloatClose`** (per-example, training-mode). The float BN computes
+    its stats from the input via the supplied `fμ`/`fistdv` (within `emean`/`eistd` of the true
+    stats on the magnitude domain — discharged by `bnMean_close` / `bnVar_close` +
+    `bnIstd_close_at` when instantiated). Error from `bnStep_close` (rounding
+    `bnForward_close_of` + input-shift `bnForward_input_close`); magnitude the real
+    `|γ|·|x̂| + |β|` plus that rounding. The BN-before-swish steps in EfficientNet's MBConv (and
+    BN-before-GELU positions generally) are this instance. -/
 theorem floatClose_bn {m : Nat} (M : FloatModel)
     {ε γ β emean eistd D S G Bbnd A : ℝ} (fμ fistdv : Vec m → ℝ)
     (hn : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
@@ -408,37 +297,35 @@ theorem floatClose_bn {m : Nat} (M : FloatModel)
       (fun v => bnForward m ε γ β v)
       (fun v => M.bnForwardF γ β (fμ v) (fistdv v) v)
       (fun e => bnReluBudget M.u D S G Bbnd emean eistd A e ε) := by
-  refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i =>
-    M.bnStep_close vt va i hn hε hd hvt hva (hmean vt hvt) (histd vt hvt)
-      (hD vt hvt) (hSabs vt hvt) hγ hβ⟩
-  have hu := M.u_nonneg
-  have hG0 : 0 ≤ G := (abs_nonneg _).trans hγ
-  have hBbnd0 : 0 ≤ Bbnd := (abs_nonneg _).trans hβ
-  have hS0 : 0 ≤ S := (abs_nonneg _).trans (hSabs v hv)
-  have hD0 : 0 ≤ D := (abs_nonneg _).trans (hD v hv i)
-  have hem0 : 0 ≤ emean := (abs_nonneg _).trans (hmean v hv)
-  have hei0 : 0 ≤ eistd := (abs_nonneg _).trans (histd v hv)
-  have hnb0 : 0 ≤ bnNormBudget M.u D S G Bbnd emean eistd := by
-    unfold bnNormBudget FloatModel.mulErr; positivity
+  refine FloatClose.of_close (fun v hv i => ?_)
+    (fun v hv i => M.bnForward_close_of (ε := ε) v i (hmean v hv) (histd v hv)
+      (hD v hv i) (hSabs v hv) hγ hβ)
+    (fun vt va e hva hvt hd i => M.bnStep_close vt va i hn hε hd hvt hva (hmean vt hvt)
+      (histd vt hvt) (hD vt hvt) (hSabs vt hvt) hγ hβ)
   have hxhat : |bnXhat m ε v i| ≤ D * S := by
     unfold bnXhat; rw [abs_mul]
     exact mul_le_mul (hD v hv i) (hSabs v hv) (abs_nonneg _) ((abs_nonneg _).trans (hD v hv i))
-  have hreal : |bnForward m ε γ β v i| ≤ G * (D * S) + Bbnd := by
-    unfold bnForward
-    refine (abs_add_le _ _).trans (add_le_add ?_ hβ)
-    rw [abs_mul]; exact mul_le_mul hγ hxhat (abs_nonneg _) ((abs_nonneg _).trans hγ)
-  have hround := M.bnForward_close_of (ε := ε) v i (hmean v hv) (histd v hv)
-    (hD v hv i) (hSabs v hv) hγ hβ
-  refine ⟨hreal.trans (le_add_of_nonneg_right hnb0), ?_⟩
-  have htri : |M.bnForwardF γ β (fμ v) (fistdv v) v i|
-      ≤ |M.bnForwardF γ β (fμ v) (fistdv v) v i - bnForward m ε γ β v i|
-        + |bnForward m ε γ β v i| := by
-    simpa using abs_sub_le (M.bnForwardF γ β (fμ v) (fistdv v) v i) (bnForward m ε γ β v i) 0
-  calc |M.bnForwardF γ β (fμ v) (fistdv v) v i|
-      ≤ |M.bnForwardF γ β (fμ v) (fistdv v) v i - bnForward m ε γ β v i|
-        + |bnForward m ε γ β v i| := htri
-    _ ≤ bnNormBudget M.u D S G Bbnd emean eistd + (G * (D * S) + Bbnd) := add_le_add hround hreal
-    _ = G * (D * S) + Bbnd + bnNormBudget M.u D S G Bbnd emean eistd := by ring
+  show |bnForward m ε γ β v i| ≤ _
+  unfold bnForward
+  refine (abs_add_le _ _).trans (add_le_add ?_ hβ)
+  rw [abs_mul]; exact mul_le_mul hγ hxhat (abs_nonneg _) ((abs_nonneg _).trans hγ)
+
+/-- **BN→relu is `FloatClose`** — `floatClose_bn` followed by `floatClose_relu` (ReLU is exact
+    and 1-Lipschitz, so the BN modulus and magnitude pass through unchanged). With this +
+    `floatClose_flatConv` + the residual combinator, the r34 identity block folds entirely
+    through `.comp`. -/
+theorem floatClose_bnRelu {m : Nat} (M : FloatModel)
+    {ε γ β emean eistd D S G Bbnd A : ℝ} (fμ fistdv : Vec m → ℝ)
+    (hn : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
+    (hmean : ∀ v, (∀ k, |v k| ≤ A) → |fμ v - bnMean m v| ≤ emean)
+    (histd : ∀ v, (∀ k, |v k| ≤ A) → |fistdv v - bnIstd m v ε| ≤ eistd)
+    (hD : ∀ v, (∀ k, |v k| ≤ A) → ∀ j, |v j - bnMean m v| ≤ D)
+    (hSabs : ∀ v, (∀ k, |v k| ≤ A) → |bnIstd m v ε| ≤ S) :
+    FloatClose A (G * (D * S) + Bbnd + bnNormBudget M.u D S G Bbnd emean eistd)
+      (fun v => relu m (bnForward m ε γ β v))
+      (fun v => relu m (M.bnForwardF γ β (fμ v) (fistdv v) v))
+      (fun e => bnReluBudget M.u D S G Bbnd emean eistd A e ε) :=
+  (floatClose_bn M fμ fistdv hn hε hγ hβ hmean histd hD hSabs).comp (floatClose_relu _)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The final fold: a block iterated to depth (r34's [3,4,6,3] stages)

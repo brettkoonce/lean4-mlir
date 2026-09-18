@@ -173,28 +173,15 @@ theorem depthwiseFlat_abs_le {c h w kH kW : Nat} {W : DepthwiseKernel c kH kW}
     MBConv depthwise stage folds through `.comp` like any other conv. -/
 theorem floatClose_depthwise {c h w kH kW : Nat} (M : FloatModel)
     (W : DepthwiseKernel c kH kW) (b : Vec c) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < c * h * w)
+    (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < c * h * w)
     (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ β) :
     FloatClose A
       (FloatModel.layerAct (kH * kW) w' β A + FloatModel.layerBudget M.u (kH * kW) w' β A 0)
       (depthwiseFlat (h := h) (w := w) W b) (M.depthwiseFlatF (h := h) (w := w) W b)
-      (fun e => FloatModel.layerBudget M.u (kH * kW) w' β A e) := by
-  have hLB0 : 0 ≤ FloatModel.layerBudget M.u (kH * kW) w' β A 0 :=
-    FloatModel.layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
-  refine ⟨fun v hv k => ?_, fun vt va e hva hvt hd k => ?_⟩
-  · have hreal := depthwiseFlat_abs_le hA hW hb hv k
-    have hround : |M.depthwiseFlatF W b v k - depthwiseFlat W b v k|
-        ≤ FloatModel.layerBudget M.u (kH * kW) w' β A 0 :=
-      M.depthwiseFlatF_close W b v v hw' hA le_rfl hW hb hv (fun k => by simp) k
-    refine ⟨hreal.trans (le_add_of_nonneg_right hLB0), ?_⟩
-    calc |M.depthwiseFlatF W b v k|
-        ≤ |M.depthwiseFlatF W b v k - depthwiseFlat W b v k| + |depthwiseFlat W b v k| := by
-          simpa using abs_sub_le (M.depthwiseFlatF W b v k) (depthwiseFlat W b v k) 0
-      _ ≤ FloatModel.layerBudget M.u (kH * kW) w' β A 0
-            + FloatModel.layerAct (kH * kW) w' β A := add_le_add hround hreal
-      _ = FloatModel.layerAct (kH * kW) w' β A
-            + FloatModel.layerBudget M.u (kH * kW) w' β A 0 := by ring
-  · have he : 0 ≤ e := (abs_nonneg _).trans (hd ⟨0, hn⟩)
-    exact M.depthwiseFlatF_close W b vt va hw' hA he hW hb hva hd k
+      (fun e => FloatModel.layerBudget M.u (kH * kW) w' β A e) :=
+  FloatClose.of_close (fun v hv k => depthwiseFlat_abs_le hA hW hb hv k)
+    (fun v hv k => M.depthwiseFlatF_close W b v v hw' hA le_rfl hW hb hv (fun k => by simp) k)
+    (fun vt va e hva _ hd k => M.depthwiseFlatF_close W b vt va hw' hA
+      ((abs_nonneg _).trans (hd ⟨0, hn⟩)) hW hb hva hd k)
 
 end Proofs

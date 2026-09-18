@@ -301,30 +301,16 @@ theorem FloatModel.flatConvMixed_close (M L : FloatModel) {ic oc h w kH kW : Nat
     `FloatClose` and therefore applies to this verbatim. -/
 theorem floatClose_flatConvMixed {ic oc h w kH kW : Nat} (M L : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
+    (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
     FloatClose A
       (layerAct (ic * kH * kW) w' β A + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0)
       (flatConv (h := h) (w := w) W b) (M.flatConvMixed L (h := h) (w := w) W b)
-      (fun E => convMixedBudget M.u L.u (ic * kH * kW) w' β A E) := by
-  have hB0 : 0 ≤ convMixedBudget M.u L.u (ic * kH * kW) w' β A 0 :=
-    convMixedBudget_nonneg M.u_nonneg L.u_nonneg hw' hβ hA le_rfl
-  refine ⟨fun v hv i => ?_, fun vt va E hva hvt hd i => ?_⟩
-  · have hreal : |flatConv W b v i| ≤ layerAct (ic * kH * kW) w' β A :=
-      flatConv_abs_le hA hW hb hv i
-    have hround : |M.flatConvMixed L W b v i - flatConv W b v i|
-        ≤ convMixedBudget M.u L.u (ic * kH * kW) w' β A 0 :=
-      M.flatConvMixed_close L W b v v hw' hA le_rfl hW hb hv (fun k => by simp) i
-    refine ⟨hreal.trans (le_add_of_nonneg_right hB0), ?_⟩
-    calc |M.flatConvMixed L W b v i|
-        ≤ |M.flatConvMixed L W b v i - flatConv W b v i| + |flatConv W b v i| := by
-          simpa using abs_sub_le (M.flatConvMixed L W b v i) (flatConv W b v i) 0
-      _ ≤ convMixedBudget M.u L.u (ic * kH * kW) w' β A 0
-            + layerAct (ic * kH * kW) w' β A := add_le_add hround hreal
-      _ = layerAct (ic * kH * kW) w' β A
-            + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0 := by ring
-  · have hE : 0 ≤ E := (abs_nonneg _).trans (hd ⟨0, hn⟩)
-    exact M.flatConvMixed_close L W b vt va hw' hA hE hW hb hva hd i
+      (fun E => convMixedBudget M.u L.u (ic * kH * kW) w' β A E) :=
+  FloatClose.of_close (fun v hv i => flatConv_abs_le hA hW hb hv i)
+    (fun v hv i => M.flatConvMixed_close L W b v v hw' hA le_rfl hW hb hv (fun k => by simp) i)
+    (fun vt va E hva _ hd i => M.flatConvMixed_close L W b vt va hw' hA
+      ((abs_nonneg _).trans (hd ⟨0, hn⟩)) hW hb hva hd i)
 
 -- ════════════════════════════════════════════════════════════════
 -- § What bf16 costs the WHOLE-NET bound — the per-layer gain
