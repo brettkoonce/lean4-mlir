@@ -195,7 +195,13 @@ jobs:
           # output's den proven = the certified fderiv-derived SGD step. A ✅ is
           # data-driven: it only prints if the net's PoC capstone is in the
           # 3-axiom closure above (so this table can't drift from what's proven).
-          faithful() { echo "$out" | grep -qE "'Proofs.$1' depends on axioms: \[$AX3(, $AX3)*\]\$" && printf '✅' || printf '⚠️'; }
+          # ⛔ A HERE-STRING, NOT `echo "$out" | grep -q`. This step runs under `pipefail` (above).
+          # `grep -q` exits at its first match, and `echo` is still writing ~1 MB of audit output
+          # into the closed pipe. It gets SIGPIPE, pipefail fails the pipeline, and a theorem that
+          # IS in the closure prints ⚠️. Until 2026-09-18 that was 34 of the 36 cells (the log's
+          # 34 "echo: write error: Broken pipe" lines). Only names printed near the END of the
+          # audit came out ✅. A name that is genuinely absent still prints ⚠️.
+          faithful() { grep -qE "'Proofs.$1' depends on axioms: \[$AX3(, $AX3)*\]\$" <<< "$out" && printf '✅' || printf '⚠️'; }
           {
             echo ""
             echo "## Verified-faithful train steps"
