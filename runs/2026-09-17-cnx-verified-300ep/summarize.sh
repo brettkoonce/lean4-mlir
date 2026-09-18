@@ -9,6 +9,11 @@
 #   R34's lesson was that the plausible reference log on disk was a different run.
 # ⚠ reference_curve.tsv stores FRACTIONS (0.8153); the verified log prints PERCENTAGES (81.53).
 #   The window table below scales the reference by 100. Getting that wrong reads as a 80-point gap.
+# ⚠⚠ AND THE ENDPOINT COMPARISON IS AGAINST THE **RAW** ARM, 81.51 / 95.50 — not the 81.53 the
+#   book prints, which is the EMA arm. This run is `ema := false`. EMA is worth only +0.02 here
+#   (vs +0.82 on B0), but this pair exists to read an offset of about that size, so the arms have
+#   to match. The per-epoch curve below is the training log's and is unaffected; it is the FINAL
+#   number that must pair raw-to-raw. See RESULTS.md §8.
 set -u
 cd /home/skoonce/lean/proof_verify_demo/verify-v2 || exit 1
 R=runs/2026-09-17-cnx-verified-300ep

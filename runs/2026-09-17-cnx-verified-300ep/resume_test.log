@@ -1,0 +1,18 @@
+══ resume known-answer test, ConvNeXt-T bf16 — started 2026-09-17 04:13:37 UTC ══
+epoch-1 marker seen 04:25:40
+  ckpt: 343069536 bytes  sha256=97411ff875719f274377f1195125d0e3  mtime=1789619133
+    epoch 1: test_acc = 253/50000 = 0.506000%  top5 = 1099/50000 = 2.198000%  [95% CI 0.45–0.57]
+SIGTERM -> trainer pid=3823944 (NOT the supervisor)
+resume line:   ▸ resuming from checkpoint at epoch 1   (04:27:10)
+  ✅ resumed AT EPOCH 1
+  ✅ checkpoint BYTE-IDENTICAL across the restart (343069536 bytes, 97411ff875719f274377f1195125d0e3)
+  ✅ still no .bn companion (correct for LayerNorm)
+  ✅ stepping again:   step 2/5004: loss=6.831951
+    epoch 2: test_acc = 303/50000 = 0.606000%  top5 = 1287/50000 = 2.574000%  [95% CI 0.54–0.68]
+  epoch1 top1=0.506000%  epoch2 top1=0.606000%
+  ✅ CONTINUOUS — epoch 2 is above epoch 1; the resume kept the weights and the optimizer state
+── the reference's own first two epochs, for comparison ──
+epoch  lr       train_loss  top1_n  top1    top5    val_loss  train_s  val_s
+1      1.2e-05  6.919       322     0.0064  0.0247  6.7495    1002.6   31.5
+2      2.5e-05  6.857       338     0.0068  0.0281  6.6887    900.1    17.7
+══ done 2026-09-17 04:48:11 UTC ══

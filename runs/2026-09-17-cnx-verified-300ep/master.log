@@ -1,0 +1,10 @@
+[sup] 2026-09-17 04:03:37 START job=cnx-default-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-17-cnx-verified-300ep
+[sup] 2026-09-17 04:03:37 cmd: .lake/build/bin/convnext-imagenet-verified data
+[sup] 2026-09-17 04:03:37 eta: bf16 ~96 h (4.0 d) on 4x 3060 (220 ms/step fed at SHIM_WORKERS=4, 205 synth; 5,004 steps/ep; +~5% eval/ckpt; 300 ep)
+[sup] 2026-09-17 04:03:37 attempt 1: resuming at epoch 0/300 (next rest: 999)
+[sup] 2026-09-17 04:03:37   launched PID=3823944 PGID=3823944
+[sup]   last line:   step 2/5004: loss=6.845026
+[sup] 2026-09-17 04:25:48   ended (exited) at epoch 1; 15s then retry
+[sup] 2026-09-17 04:26:03 attempt 2: resuming at epoch 1/300 (next rest: 999)
+[sup] 2026-09-17 04:26:03   launched PID=3839484 PGID=3839484
+[sup] 2026-09-18 02:48:04 supervisor exiting — taking the run down (PID=3839484 PGID=3839484)
