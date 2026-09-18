@@ -155,6 +155,28 @@ theorem bnBetaGradB_den {N oc h w : Nat}
   simp only [den]
   exact bnPerChannel_grad_beta_correct oc (N * (h * w)) ε γ β v (bnchwFwd N oc h w cot) c
 
+/-- **One batched BN layer's γ and β gradient nodes, tied** — the pair every step tie states per
+    BatchNorm: the emitted `bnGammaGradB` / `bnBetaGradB` denote the certified per-channel γ and β
+    gradients over the merged batch+spatial axis, at the layer's pre-BN activation `v` and its
+    output cotangent `cot` (both in the network layout). -/
+def BnPairTiedB (N oc h w : Nat) (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
+    (v cot : Vec (N * (oc * (h * w)))) : Prop :=
+  (∀ k : Fin oc,
+      den (SHlo.bnGammaGradB vN epsStr ε v (.operand cotN cot)) k
+        = ∑ j : Fin (oc * (N * (h * w))),
+            pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ' β (bnchwFwd N oc h w v))
+                 γ k j * bnchwFwd N oc h w cot j)
+  ∧ (∀ k : Fin oc,
+      den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN cot)) k
+        = ∑ j : Fin (oc * (N * (h * w))),
+            pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ β' (bnchwFwd N oc h w v))
+                 β k j * bnchwFwd N oc h w cot j)
+
+theorem bnPairTiedB_holds {N oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
+    (v cot : Vec (N * (oc * (h * w)))) : BnPairTiedB N oc h w vN epsStr cotN ε γ β v cot :=
+  ⟨fun k => bnGammaGradB_den vN epsStr cotN ε γ β v cot k,
+   fun k => bnBetaGradB_den cotN ε γ β (bnchwFwd N oc h w v) cot k⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § Head dense weight / bias
 -- ════════════════════════════════════════════════════════════════
