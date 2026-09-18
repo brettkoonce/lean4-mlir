@@ -26,5 +26,5 @@
 # the shim's freshness, the LR and the box are all asserted by cnx-default-4gpu.conf's PRECHECK,
 # which refuses the launch rather than running the wrong graph for four days.
 # Throughput measured on this box 2026-09-17: runs/2026-09-17-cnx-sweep/.
-export RUNDIR=runs/2026-09-17-cnx-verified-300ep
+export RUNDIR=runs/2026-09-18-cnx-verified-300ep
 exec scripts/supervise.sh cnx-default-4gpu

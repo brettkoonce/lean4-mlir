@@ -183,7 +183,7 @@ structure VerifiedConfig where
 
       ⛔ **Why it exists.** The 2026-09-17 ConvNeXt/ImageNet pair run was killed at epoch 67
       because the two arms did not share an init: the reference sets `cnxInit := true`
-      (`jax/MainConvNeXtImagenet.lean`) while the verified path used the He fan-in default —
+      ([`jax/MainConvNeXtImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainConvNeXtImagenet.lean)) while the verified path used the He fan-in default —
       **2.6x-10.2x wider**, worst at the 4x4 stem (0.2041 vs 0.02) and the 7x7 depthwise
       (0.2020 vs 0.02). That confounds exactly the lowering question the pair exists to answer.
       `runs/2026-09-17-cnx-verified-300ep/RESULTS.md` §7.0 carries the measurement.
