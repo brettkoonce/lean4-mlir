@@ -42,10 +42,7 @@ open Proofs ResNet34Live2 ResNet34LivePC ResNet34LiveSeal ResNet34LiveRealistic
 -- § The maxpool shift lemma (uniform channel offset)
 -- ════════════════════════════════════════════════════════════════
 
-theorem max_add_r (a b δ : ℝ) : max (a + δ) (b + δ) = max a b + δ := by
-  rcases le_total a b with h | h
-  · rw [max_eq_right h]; exact max_eq_right (by linarith)
-  · rw [max_eq_left h]; exact max_eq_left (by linarith)
+theorem max_add_r (a b δ : ℝ) : max (a + δ) (b + δ) = max a b + δ := max_add_add_right a b δ
 
 /-- **MaxPool shifts uniformly**: if channel 0 is channel 1 plus the constant `δ` at every
     position, the maxpool of channel 0 is the maxpool of channel 1 plus `δ` (the max of a

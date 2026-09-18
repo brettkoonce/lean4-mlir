@@ -30,9 +30,8 @@ open Proofs ResNet34Live2 ResNet34LivePC
 -- ════════════════════════════════════════════════════════════════
 
 theorem sqrt_lt_param (n : ℕ) (β : ℝ) (hβ : 0 ≤ β) (h : (n : ℝ) < β ^ 2) :
-    Real.sqrt (n : ℝ) < β := by
-  rw [show β = Real.sqrt (β ^ 2) by rw [Real.sqrt_sq hβ]]
-  exact Real.sqrt_lt_sqrt (by positivity) h
+    Real.sqrt (n : ℝ) < β :=
+  (Real.sqrt_lt n.cast_nonneg hβ).2 h
 
 -- ════════════════════════════════════════════════════════════════
 -- § The β-parametric live downsample (generalizes `liveDownPC`'s β=20)

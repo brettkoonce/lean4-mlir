@@ -323,16 +323,10 @@ theorem muon_polar_achieves_nuclear_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (
 theorem conj_diag_pow (W : Matrix (Fin n) (Fin n) ℝ) (d : Fin n → ℝ)
     (hWtW : Wᵀ * W = 1) (k : ℕ) :
     (W * Matrix.diagonal d * Wᵀ) ^ k = W * Matrix.diagonal (fun i => (d i) ^ k) * Wᵀ := by
-  have hWWt : W * Wᵀ = 1 := mul_eq_one_comm.mp hWtW
-  induction k with
-  | zero => simp [hWWt]
-  | succ m ih =>
-    rw [pow_succ, ih,
-       show W * Matrix.diagonal (fun i => d i ^ m) * Wᵀ * (W * Matrix.diagonal d * Wᵀ)
-          = W * (Matrix.diagonal (fun i => d i ^ m) * (Wᵀ * W) * Matrix.diagonal d) * Wᵀ from by
-            simp only [Matrix.mul_assoc],
-       hWtW, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
-    simp only [pow_succ]
+  -- conjugation by the unit `W` (inverse `Wᵀ`) commutes with `^ k`, and a diagonal's power is pointwise
+  have := Units.conj_pow ⟨W, Wᵀ, mul_eq_one_comm.mp hWtW, hWtW⟩ (Matrix.diagonal d) k
+  simp only [Units.val_mk, Units.inv_mk, Matrix.diagonal_pow] at this
+  exact this
 
 /-- **The Shampoo = Muon jewel.** Single-step Shampoo preconditions the gradient `G` by the inverse
     fourth-roots of its two Gram matrices: `G ↦ (GGᵀ)^{-1/4} G (GᵀG)^{-1/4}`. This **equals Muon's

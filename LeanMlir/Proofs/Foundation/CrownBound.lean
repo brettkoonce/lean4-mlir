@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Foundation.IntervalBound
 import LeanMlir.Proofs.Foundation.ListDot
+import Mathlib.Data.List.GetD
 
 /-! # CROWN: a linear-relaxation bound on the seam IBP already certifies through
 
@@ -222,10 +223,9 @@ noncomputable def crownRow {n h : ℕ} (a : Fin h → ℝ) (W1 : Fin h → Fin n
     row applied directly. -/
 theorem crownRow_dot {n h : ℕ} (a : Fin h → ℝ) (W1 : Fin h → Fin n → ℝ)
     (x' : EuclideanSpace ℝ (Fin n)) :
-    (∑ t, a t * denseE W1 x' t) = ∑ i, crownRow a W1 i * x' i := by
-  simp only [denseE_apply, crownRow, Finset.mul_sum, Finset.sum_mul]
-  rw [Finset.sum_comm]
-  exact Finset.sum_congr rfl fun i _ => Finset.sum_congr rfl fun t _ => by ring
+    (∑ t, a t * denseE W1 x' t) = ∑ i, crownRow a W1 i * x' i :=
+  -- `crownRow a W1` is `Matrix.vecMul a (Matrix.of W1)`, so this is `a ⬝ᵥ (W1 *ᵥ x') = (a ᵥ* W1) ⬝ᵥ x'`
+  Matrix.dotProduct_mulVec a (Matrix.of W1) (fun i => x' i)
 
 /-- **Concretization, once.** On the uniform box `x ∓ ε` a linear functional
     bottoms out at `⟨A, x₀⟩ − ε‖A‖₁`. This is `denseLo_uniform` read at the
@@ -336,14 +336,7 @@ def combZ (n : ℕ) : List ℤ → List (List ℤ) → List ℤ
   | _ :: _, [] => List.replicate n 0
   | c :: cs, r :: rs => scaleAddZ c r (combZ n cs rs)
 
-theorem getD_replicate_zero (n i : ℕ) : (List.replicate n (0 : ℤ)).getD i 0 = 0 := by
-  induction n generalizing i with
-  | zero => simp
-  | succ m ih =>
-      rw [List.replicate_succ]
-      cases i with
-      | zero => simp
-      | succ k => simpa using ih k
+theorem getD_replicate_zero (n i : ℕ) : (List.replicate n (0 : ℤ)).getD i 0 = 0 := by simp
 
 theorem length_combZ (n : ℕ) : ∀ (cs : List ℤ) (rows : List (List ℤ)),
     (∀ r ∈ rows, r.length = n) → (combZ n cs rows).length = n
@@ -365,12 +358,8 @@ theorem getD_scaleAddZ (c : ℤ) : ∀ (row acc : List ℤ), row.length = acc.le
       exact getD_scaleAddZ c rs as (by simpa using h) i
 
 theorem getD_map_getD (rows : List (List ℤ)) (i : ℕ) : ∀ t : ℕ,
-    (rows.map (fun r => r.getD i 0)).getD t 0 = (rows.getD t []).getD i 0
-  | 0 => by cases rows <;> simp
-  | t + 1 => by
-      cases rows with
-      | nil => simp
-      | cons r rs => simpa using getD_map_getD rs i t
+    (rows.map (fun r => r.getD i 0)).getD t 0 = (rows.getD t []).getD i 0 := fun t => by
+  simpa using List.getD_map (fun r : List ℤ => r.getD i 0) (l := rows) (d := []) (n := t)
 
 /-- The combined row, entry by entry, is a plain `dotZ` of the coefficients
     against the rows' `i`-th column. -/

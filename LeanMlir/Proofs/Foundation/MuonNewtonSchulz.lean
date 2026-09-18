@@ -60,9 +60,8 @@ theorem nsStep_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ) (σ : F
       = U * Matrix.diagonal (fun i => nsScalar a b c (σ i)) * Vᵀ := by
   -- a scalar `r •` slides through the conjugation triple `U (diag d) Vᵀ` onto the diagonal
   have hdiag_smul : ∀ (r : ℝ) (d : Fin n → ℝ),
-      r • Matrix.diagonal d = Matrix.diagonal (fun i => r * d i) := by
-    intro r d; ext i j
-    by_cases h : i = j <;> simp [Matrix.smul_apply, h, smul_eq_mul]
+      r • Matrix.diagonal d = Matrix.diagonal (fun i => r * d i) :=
+    fun r d => (Matrix.diagonal_smul r d).symm
   have hsmul : ∀ (r : ℝ) (d : Fin n → ℝ),
       r • (U * Matrix.diagonal d * Vᵀ) = U * Matrix.diagonal (fun i => r * d i) * Vᵀ := by
     intro r d; rw [← Matrix.smul_mul, ← Matrix.mul_smul, hdiag_smul]
@@ -100,7 +99,7 @@ theorem nsStep_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ) (σ : F
     intro d1 d2 d3
     have hd : Matrix.diagonal (fun i => d1 i + d2 i + d3 i)
         = Matrix.diagonal d1 + Matrix.diagonal d2 + Matrix.diagonal d3 := by
-      ext i j; by_cases h : i = j <;> simp [Matrix.add_apply, h]
+      simp only [← Matrix.diagonal_add]
     rw [hd, Matrix.mul_add, Matrix.mul_add, Matrix.add_mul, Matrix.add_mul]
   simp only [nsStep]
   rw [hquint, hcube, hsmul, hsmul, hsmul, hsum3,

@@ -50,11 +50,7 @@ theorem maxPool2_chan_lt {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) (ci cj : 
     (hi : Fin h) (wi : Fin w) :
     maxPool2 x cj hi wi < maxPool2 x ci hi wi := by
   simp only [maxPool2]
-  refine max_lt (max_lt ?_ ?_) (max_lt ?_ ?_)
-  · exact lt_of_lt_of_le (hlt _ _) (le_max_of_le_left (le_max_left _ _))
-  · exact lt_of_lt_of_le (hlt _ _) (le_max_of_le_left (le_max_right _ _))
-  · exact lt_of_lt_of_le (hlt _ _) (le_max_of_le_right (le_max_left _ _))
-  · exact lt_of_lt_of_le (hlt _ _) (le_max_of_le_right (le_max_right _ _))
+  exact max_lt_max (max_lt_max (hlt _ _) (hlt _ _)) (max_lt_max (hlt _ _) (hlt _ _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § Scalar BN and ReLU preserve the order invariant

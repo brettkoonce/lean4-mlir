@@ -220,18 +220,10 @@ theorem g_full_hasDerivAt : HasDerivAt (fun t : ℝ => fwdFull (t • X) 0) (Qq 
 /-- **`fderiv ℝ fwdFull 0 ≠ 0`** — the full-depth (17-block) live MobileNetV2's
     whole-net Jacobian is genuinely non-trivial at the witness input `0`. -/
 theorem fwdFull_jacobian_nonzero : fderiv ℝ fwdFull 0 ≠ 0 := by
-  intro hzero
-  have hfd : HasFDerivAt fwdFull (0 : Vec (1 * 2 * 2) →L[ℝ] Vec 2) (0 : Vec (1 * 2 * 2)) := by
-    rw [← hzero]; exact (fwdFull_differentiable 0).hasFDerivAt
-  have hsmul : HasDerivAt (fun t : ℝ => t • X) X 0 := by
-    simpa using (hasDerivAt_id (0 : ℝ)).smul_const X
-  have hcomp : HasDerivAt (fun t : ℝ => fwdFull (t • X)) (0 : Vec 2) 0 := by
-    have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    exact this
-  have hcomp0 : HasDerivAt (fun t : ℝ => fwdFull (t • X) 0) (0 : ℝ) 0 := by
-    have := (hasDerivAt_pi.mp hcomp) (0 : Fin 2)
-    simpa using this
-  exact Qq_zero_ne (g_full_hasDerivAt.unique hcomp0)
+  -- `fwdFull = fwd + 45` and a constant offset has zero derivative
+  have heq : fwdFull = fun v => fwd v + (fun _ => (45 : ℝ)) := by
+    funext v j; rw [fwdFull_eq_add]; rfl
+  rw [heq, fderiv_add_const]; exact mnv2Live_jacobian_nonzero
 
 /-- **The full-depth level-3 seal** (full 17-block MobileNetV2): the proven whole-
     network backward of the full-depth live MobileNetV2 is **not the zero map** at

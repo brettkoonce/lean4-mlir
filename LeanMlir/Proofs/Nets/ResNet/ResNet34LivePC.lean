@@ -188,11 +188,8 @@ noncomputable def stem2 : Vec (2 * (2 * 16) * (2 * 16)) → Vec (2 * 16 * 16) :=
 theorem stem2_conv_eq : flatConvStride2 WsId2 Zb2 X2 = decimateFlat 2 16 16 X2 := by
   unfold flatConvStride2; simp only [Function.comp_apply]; rw [flatConv_WsId2_X2]
 
-theorem sqrt512_lt_30 : Real.sqrt ((2 * 16 * 16 : ℕ) : ℝ) < 30 := by
-  rw [show ((2 * 16 * 16 : ℕ) : ℝ) = 512 by norm_num,
-      show (30 : ℝ) = Real.sqrt 900 by
-        rw [show (900 : ℝ) = 30 ^ 2 by norm_num, Real.sqrt_sq (by norm_num)]]
-  exact Real.sqrt_lt_sqrt (by norm_num) (by norm_num)
+theorem sqrt512_lt_30 : Real.sqrt ((2 * 16 * 16 : ℕ) : ℝ) < 30 :=
+  (Real.sqrt_lt' (by norm_num)).2 (by norm_num)
 
 /-- The stem's BN output is strictly positive: `bn ≥ 30 − √512 > 0`. -/
 theorem stem2_bn_pos : ∀ k, 0 < bnForward (2 * 16 * 16) 1 1 30 (flatConvStride2 WsId2 Zb2 X2) k := by
@@ -227,10 +224,8 @@ theorem stem2_maxpool_smooth :
 -- § The whole 2-channel live ResNet-34 + its VJP (empty identity chains)
 -- ════════════════════════════════════════════════════════════════
 
-theorem sqrt_lt_20 {n : ℕ} (h : (n : ℝ) < 400) : Real.sqrt (n : ℝ) < 20 := by
-  rw [show (20 : ℝ) = Real.sqrt 400 by
-    rw [show (400 : ℝ) = 20 ^ 2 by norm_num, Real.sqrt_sq (by norm_num)]]
-  exact Real.sqrt_lt_sqrt (by positivity) h
+theorem sqrt_lt_20 {n : ℕ} (h : (n : ℝ) < 400) : Real.sqrt (n : ℝ) < 20 :=
+  (Real.sqrt_lt' (by norm_num)).2 (by linarith)
 
 /-- Identity dense head: reads each channel's GAP — `dense Wd2 bd2 u = u`. -/
 noncomputable def Wd2 : Mat 2 2 := fun i j => if i = j then 1 else 0

@@ -60,9 +60,7 @@ noncomputable def subFloorF32 : ℝ := ((2 : ℝ) ^ (150 : ℕ))⁻¹
 theorem minNormalF32_pos : 0 < minNormalF32 := by unfold minNormalF32; positivity
 theorem subFloorF32_pos : 0 < subFloorF32 := by unfold subFloorF32; positivity
 
-theorem minNormalF32_le_one : minNormalF32 ≤ 1 := by
-  rw [minNormalF32, inv_eq_one_div, div_le_one (by positivity)]
-  norm_num
+theorem minNormalF32_le_one : minNormalF32 ≤ 1 := by unfold minNormalF32; norm_num
 
 -- ════════════════════════════════════════════════════════════════
 -- § The honest model of a real binary32 rounder
@@ -147,16 +145,8 @@ theorem bnDenom_normal (F : FaithfulFloatModel) {ε var : ℝ}
 theorem bnSqrt_normal (F : FaithfulFloatModel) {ε var : ℝ}
     (hε : F.minNormal ≤ ε) (hvar : 0 ≤ var) :
     F.minNormal ≤ |Real.sqrt (var + ε)| := by
-  have hsum : F.minNormal ≤ var + ε := le_trans hε (by linarith)
-  have hsq : F.minNormal ^ 2 ≤ var + ε := by
-    have hle : F.minNormal ^ 2 ≤ F.minNormal := by
-      nlinarith [F.minNormal_pos, F.minNormal_le_one]
-    linarith
-  have hle : F.minNormal ≤ Real.sqrt (var + ε) :=
-    calc F.minNormal = Real.sqrt (F.minNormal ^ 2) :=
-          (Real.sqrt_sq F.minNormal_pos.le).symm
-      _ ≤ Real.sqrt (var + ε) := Real.sqrt_le_sqrt hsq
-  rwa [abs_of_nonneg (Real.sqrt_nonneg _)]
+  rw [abs_of_nonneg (Real.sqrt_nonneg _), Real.le_sqrt' F.minNormal_pos]
+  nlinarith [F.minNormal_pos, F.minNormal_le_one]
 
 /-- **Stays-normal — the inverse standard deviation `istd = 1/√(var+ε)`.** With
     a mild a-priori upper bound on the denominator's root (`√(var+ε) ≤
@@ -166,12 +156,8 @@ theorem bnSqrt_normal (F : FaithfulFloatModel) {ε var : ℝ}
     bridge rounds never underflows. -/
 theorem istd_ge_minNormal (F : FaithfulFloatModel) {ε var : ℝ}
     (hpos : 0 < var + ε) (hub : Real.sqrt (var + ε) ≤ F.minNormal⁻¹) :
-    F.minNormal ≤ 1 / Real.sqrt (var + ε) := by
-  have hs : 0 < Real.sqrt (var + ε) := Real.sqrt_pos.mpr hpos
-  rw [le_div_iff₀ hs]
-  calc F.minNormal * Real.sqrt (var + ε) ≤ F.minNormal * F.minNormal⁻¹ :=
-        mul_le_mul_of_nonneg_left hub F.minNormal_pos.le
-    _ = 1 := mul_inv_cancel₀ F.minNormal_pos.ne'
+    F.minNormal ≤ 1 / Real.sqrt (var + ε) :=
+  (le_one_div F.minNormal_pos (Real.sqrt_pos.mpr hpos)).mpr (by rwa [one_div])
 
 -- ════════════════════════════════════════════════════════════════
 -- § The residual floor is globally negligible
