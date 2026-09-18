@@ -98,51 +98,12 @@ private def backModule : String :=
 -- § Numerical gradcheck (all in Lean4; shells out to iree-run-module)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Format a flat `Array Float` as an iree-run-module `--input=shape=v1 v2 …`. -/
-private def fmtInput (shape : String) (xs : Array Float) : String :=
-  s!"--input={shape}=" ++ String.intercalate " " (xs.toList.map toString)
-
-/-- Run a compiled `.vmfb` function on flat `[n,d]` inputs, return result buffers. -/
-private def runFn (vmfb fn : String) (inputs : Array (Array Float)) : IO (Array (Array Float)) := do
-  let args := #[s!"--module={vmfb}", "--device=hip", s!"--function={fn}"] ++
-              inputs.map (fmtInput s!"{Nn}x{Dd}xf32")
-  let r ← IO.Process.output { cmd := "iree-run-module", args := args }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[run {fn}] FAILED:\n{r.stderr.take 1500}"
-    return #[]
-  return parseResults r.stdout
-
-/-- The adjoint/finite-difference gradcheck of the compiled SDPA fwd/back. -/
+/-- The adjoint/finite-difference gradcheck of the compiled SDPA fwd/back: all three backward
+    paths (dQ, dK, dV) against one directional derivative. -/
 private def gradcheck : IO Unit := do
-  let len := Nn * Dd
-  let Q := randVec 1 len;  let K := randVec 2 len;  let V := randVec 3 len
-  let dOut := randVec 4 len
-  let vQ := randVec 5 len;  let vK := randVec 6 len;  let vV := randVec 7 len
-  let eps : Float := 1.0e-3
-  -- backward: dQ, dK, dV
-  let back ← runFn ".lake/build/sdpa_back.vmfb" "sdpa_back" #[Q, K, V, dOut]
-  if back.size != 3 then
-    IO.eprintln s!"[gradcheck] expected 3 back results, got {back.size}"; return
-  let dQ := back[0]!; let dK := back[1]!; let dV := back[2]!
-  let lhs := dot dQ vQ + dot dK vK + dot dV vV
-  -- Φ(s) = ⟨fwd(Q+s·vQ, K+s·vK, V+s·vV), dOut⟩
-  let phi (s : Float) : IO Float := do
-    let f ← runFn ".lake/build/sdpa_fwd.vmfb" "sdpa_fwd"
-              #[axpy s vQ Q, axpy s vK K, axpy s vV V]
-    if f.size != 1 then IO.eprintln "[gradcheck] fwd result missing"; return 0.0
-    return dot f[0]! dOut
-  let phiP ← phi eps
-  let phiM ← phi (-eps)
-  let rhs := (phiP - phiM) / (2.0 * eps)
-  let absErr := Float.abs (lhs - rhs)
-  let relErr := absErr / (Float.abs rhs + 1.0e-9)
-  IO.println s!"[gradcheck] adjoint lhs = {lhs}"
-  IO.println s!"[gradcheck] finite-diff rhs = {rhs}"
-  IO.println s!"[gradcheck] abs err = {absErr}   rel err = {relErr}"
-  if relErr < 1.0e-2 then
-    IO.println "[gradcheck] ✅ PASS (SDPA 3-path backward matches finite differences)"
-  else
-    IO.eprintln "[gradcheck] ❌ FAIL — backward does NOT match finite differences"
+  let sh := s!"{Nn}x{Dd}xf32"
+  let _ ← adjointGradcheck "sdpa gradcheck" ".lake/build/sdpa_fwd.vmfb" "sdpa_fwd"
+    ".lake/build/sdpa_back.vmfb" "sdpa_back" [sh, sh, sh] [Nn*Dd, Nn*Dd, Nn*Dd] sh (Nn*Dd)
 
 def main : IO Unit := do
   IO.println "── @sdpa_fwd ──"

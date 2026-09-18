@@ -589,8 +589,7 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "tests" ]; then
     tests/TestConvNeXtTrain.lean \
     tests/TestViTFwd.lean \
     tests/TestViTTrain.lean \
-    tests/TestCifar8AdamTrain.lean \
-    tests/TestCifar8WideTrain.lean
+    tests/TestCifar8AdamTrain.lean
   do
     echo "  lake env lean $f"
     lake env lean "$f"

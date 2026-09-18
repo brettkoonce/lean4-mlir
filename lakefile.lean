@@ -461,7 +461,7 @@ lean_exe «mnist-cnn-verified» where
 -- ─── Tier 2 — `lake run cifar`: the wide 8-conv CIFAR net, SGD / momentum / AdamW × no-BN / BN (Chapter 4) ───
 
 -- Wide-head (MNIST-style 2×512 dense, d1=512) cifar8 optimizer ablation: each exe runs SGD /
--- momentum / AdamW in sequence on the controlled pipeline. Render: tests/TestCifar8WideTrain.lean.
+-- momentum / AdamW in sequence on the controlled pipeline. Render: Proofs/Codegen/CnnRender.lean at d1 := 512.
 lean_exe «cifar8w-ablation» where
   root := `apps.cifar.MainCifar8WideAblation
   moreLinkArgs := lowererLink

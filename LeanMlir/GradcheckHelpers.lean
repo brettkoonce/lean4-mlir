@@ -72,45 +72,13 @@ def dot (a b : Array Float) : Float :=
 def axpy (a : Float) (x y : Array Float) : Array Float :=
   (y.zip x).map (fun (yi, xi) => yi + a * xi)
 
-/-- **Adjoint/finite-difference gradcheck** of a compiled fwd/back pair.
-    `inShapes`/`inLens` describe the forward inputs (in arg order); the backward
-    is expected to return one gradient per input in the same order. `outShape`/
-    `outLen` describe the forward's single output (the `dOut` cotangent). Returns
-    `true` iff the relative error is below `tol` (default 1e-2, for f32). -/
-def adjointGradcheck (label fwdVmfb fwdFn backVmfb backFn : String)
-    (inShapes : List String) (inLens : List Nat)
-    (outShape : String) (outLen : Nat)
-    (seedBase : Nat := 0) (eps : Float := 1.0e-3) (tol : Float := 1.0e-2) : IO Bool := do
-  let params := (inLens.zipIdx).map (fun (l, i) => randVec (seedBase + 100 + i) l)
-  let dirs   := (inLens.zipIdx).map (fun (l, i) => randVec (seedBase + 200 + i) l)
-  let dO := randVec (seedBase + 42) outLen
-  let ins := inShapes.zip params
-  let back ← runFn backVmfb backFn (ins ++ [(outShape, dO)])
-  if back.size != inShapes.length then
-    IO.eprintln s!"[{label}] expected {inShapes.length} back results, got {back.size}"; return false
-  let lhs := ((back.toList.zip dirs).map (fun (g, v) => dot g v)).foldl (· + ·) 0.0
-  let phi (s : Float) : IO Float := do
-    let pert := (params.zip dirs).map (fun (pv, vv) => axpy s vv pv)
-    let f ← runFn fwdVmfb fwdFn (inShapes.zip pert)
-    if f.size != 1 then IO.eprintln s!"[{label}] fwd result missing"; return 0.0
-    return dot f[0]! dO
-  let phiP ← phi eps
-  let phiM ← phi (-eps)
-  let rhs := (phiP - phiM) / (2.0 * eps)
-  let absErr := Float.abs (lhs - rhs)
-  let relErr := absErr / (Float.abs rhs + 1.0e-9)
-  IO.println s!"[{label}] adjoint lhs = {lhs}   finite-diff rhs = {rhs}"
-  IO.println s!"[{label}] abs err = {absErr}   rel err = {relErr}"
-  if relErr < tol then
-    IO.println s!"[{label}] ✅ PASS"; return true
-  else
-    IO.eprintln s!"[{label}] ❌ FAIL — backward does NOT match finite differences"; return false
-
-/-- Like `adjointGradcheck` but with `fixed` inputs (concrete `(shape,values)`)
-    that are passed to BOTH fwd and back, never perturbed, and have no expected
-    gradient — e.g. a ViT input image (first layer ⇒ no image grad). The forward
-    arg order is `fixed ++ params`; the backward is `fixed ++ params ++ dOut` and
-    returns one grad per PARAM (in order). -/
+/-- **Adjoint/finite-difference gradcheck** of a compiled fwd/back pair, checking
+    ⟨back(in, dOut), v⟩ ≈ (Φ(+ε) − Φ(−ε))/2ε with Φ(s) = ⟨fwd(in + s·v), dOut⟩ for random `v`.
+    `inShapes`/`inLens` describe the perturbed inputs (in arg order), `outShape`/`outLen` the
+    forward's single output. `fixed` inputs (concrete `(shape,values)`) are passed to BOTH fwd and
+    back, never perturbed, and have no expected gradient — e.g. a ViT input image. Forward arg
+    order is `fixed ++ params`; the backward takes `fixed ++ params ++ dOut` and returns one grad
+    per PARAM (in order). `true` iff the relative error is below `tol` (default 1e-2, for f32). -/
 def adjointGradcheckFixed (label fwdVmfb fwdFn backVmfb backFn : String)
     (fixed : List (String × Array Float))
     (inShapes : List String) (inLens : List Nat)
@@ -140,5 +108,13 @@ def adjointGradcheckFixed (label fwdVmfb fwdFn backVmfb backFn : String)
     IO.println s!"[{label}] ✅ PASS"; return true
   else
     IO.eprintln s!"[{label}] ❌ FAIL — backward does NOT match finite differences"; return false
+
+/-- `adjointGradcheckFixed` with no fixed inputs: the backward returns one gradient per input. -/
+def adjointGradcheck (label fwdVmfb fwdFn backVmfb backFn : String)
+    (inShapes : List String) (inLens : List Nat)
+    (outShape : String) (outLen : Nat)
+    (seedBase : Nat := 0) (eps : Float := 1.0e-3) (tol : Float := 1.0e-2) : IO Bool :=
+  adjointGradcheckFixed label fwdVmfb fwdFn backVmfb backFn [] inShapes inLens outShape outLen
+    seedBase eps tol
 
 end ViTGradcheck

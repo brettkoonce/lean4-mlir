@@ -96,10 +96,11 @@ wrong at patchEmbed / transformer boundaries.
 
 ## Adding a case
 
-1. Create `Main<CaseName>.lean` at repo root (phase 3) and
-   `jax/Main<CaseName>.lean` (phase 2) with the same NetSpec + cfg.
-   Keep the cfg minimal — no cosine, no warmup, no wd, no augment,
-   `batchSize := 4`, `epochs := 1`.
+1. Add the NetSpec to `LeanMlir/VjpOracleNets.lean` — both sides import it, with the shared
+   minimal `VjpOracle.cfg` (Adam, no cosine, no warmup, no wd, no augment, `batchSize := 4`,
+   `epochs := 1`) — and create the two one-call mains,
+   `tests/vjp_oracle/phase3/MainVjpOracle<Case>.lean` (phase 3) and
+   `jax/tests/vjp_oracle/phase2/MainVjpOracle<Case>.lean` (phase 2).
 2. Add `lean_exe` entries for each binary to the two lakefiles.
 3. Add the case name to the default loop in `run.sh`.
 4. Document expected tolerance in the table above.

@@ -345,7 +345,7 @@ def cifar8BnG (d : Nat) : VerifiedNetSpec where
 /-- `cifar8Verified` with the MNIST-style **wide 2×512 dense head** (`d1=512`): flatten 128 →
     512 → relu → 512 → relu → 10. Same 8-conv backbone; the head jumps from 13K to 334K floats
     (whole net 52,858 → 373,626). Same parametric VJP `Proofs.cifarCnn8_has_vjp_at` (the dense
-    bridge is generic in width). Slug `cifar8w` (render [`tests/TestCifar8WideTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestCifar8WideTrain.lean)). -/
+    bridge is generic in width). Slug `cifar8w` (render [`LeanMlir/Proofs/Codegen/CnnRender.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Codegen/CnnRender.lean) at `d1 := 512`). -/
 def cifar8wVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN8-wide"
   slug     := "cifar8w"

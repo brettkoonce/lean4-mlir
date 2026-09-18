@@ -2,10 +2,11 @@ import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.ViTRender
 import LeanMlir.Types
 
-/-! # `cifar8{,_bn}_adam_train_step` — the cifar8 verified train step with AdamW
+/-! # `cifar8{,w}{,_bn}_{adam,mom,sgd}_train_step` — the cifar8 train steps, three optimizers
 
 The Adam peer of `verified_mlir/cifar8_train_step.mlir` (no-BN) and
-`verified_mlir/cifar8_bn_train_step.mlir` (per-channel BN). Same forward + backward +
+`verified_mlir/cifar8_bn_train_step.mlir` (per-channel BN), at the canonical dense-head width
+`D1 = 64` (slug `cifar8`) and the wide `d1 = 512` (slug `cifar8w`). Same forward + backward +
 param-gradient body as the SGD render (`Proofs.StableHLO.cifar8{,Bn}TrainStepText` — the
 readable predecessor that exposes every `%dW*`/`%db*`/`%dg*`/`%db*` gradient as a named SSA
 value), with the per-param SGD update `θ − lr·∇` swapped for `ViTRender.emitAdamV`
@@ -21,7 +22,8 @@ Gotcha: cifar8's conv-bias params are named `%b1..%b8`, which would collide with
 (names are irrelevant to it), so we rename the conv biases `%cb1..%cb8` here. Conv-bias
 *gradients* stay `%db1..%db8` (no collision).
 
-Run (renders both .mlir): `lake env lean tests/TestCifar8AdamTrain.lean`
+Run (renders every step at both widths, then smoke-compiles the committed artifacts):
+`lake env lean tests/TestCifar8AdamTrain.lean`
 -/
 
 open Proofs Proofs.StableHLO
@@ -147,7 +149,8 @@ private def scatter (o src dgrad : String) (C Hh Ww : Nat) : String :=
     cotangent `%dy` (divided by `B`), `%loss`, then the full reverse pass producing every
     param gradient `%dW1..%dW8`, `%db1..%db8`, `%dW9/%dWa/%dWb`, `%db9/%dba/%dbb`. Conv-bias
     *params* are `%cb1..%cb8` (collision-free); their grads stay `%db1..%db8`. -/
-private def cifar8AdamBody : String :=
+private def cifar8AdamBody (d1 : Nat := D1) : String :=
+  let D1 := d1
   let H := IMH; let W := IMW
   let H2 := H / 2;  let W2 := W / 2
   let H3 := H2 / 2; let W3 := W2 / 2
@@ -230,7 +233,8 @@ private def cifar8AdamBody : String :=
 
 /-- The 22 cifar8 params: `(SSA-name-without-%, gradient-SSA, dims)`, in func-arg order
     (= `cifar8Verified.toSpecs`). Conv biases are `%cb1..%cb8` (collision-free). -/
-private def params : List (String × String × List Nat) :=
+private def params (d1 : Nat := D1) : List (String × String × List Nat) :=
+  let D1 := d1
   [("W1","%dW1",[C1,IC,KH,KW]), ("cb1","%db1",[C1]),
    ("W2","%dW2",[C1,C1,KH,KW]), ("cb2","%db2",[C1]),
    ("W3","%dW3",[C2,C1,KH,KW]), ("cb3","%db3",[C2]),
@@ -243,26 +247,40 @@ private def params : List (String × String × List Nat) :=
    ("Wa","%dWa",[D1,D1]), ("ba","%dba",[D1]),
    ("Wb","%dWb",[D1,NC]), ("bb","%dbb",[NC])]
 
-/-- `@cifar8_adam_train_step` — the no-BN body + per-param `emitAdamV`, packed `[θ|m|v]` +
-    `%lr`/`%bc1`/`%bc2` signature, returning `[θ'|m'|v'|loss|bc1|bc2]`. -/
-private def cifar8AdamTrainStep : String :=
-  let updParts := params.map (fun (nm, gr, ds) =>
-    ViTRender.emitAdamVDP ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm REPLICAS)
+/-- One packed train step: `body` + the per-param update `emit` over `ps`, signature
+    `[θ|m|v] + %lr/%bc1/%bc2 + %onehot`, returning `[θ'|m'|v'|loss|bc1|bc2]` (the shape the generic
+    `VerifiedNet.trainAdamSched` driver expects). The six steps below differ only in body,
+    params, `emit`, its baked constants, and the func name. -/
+private def trainStep (fname body consts : String) (ps : List (String × String × List Nat))
+    (emit : String → String → String → String → List Nat → String →
+      String × String × String × String) : String :=
+  let updParts := ps.map (fun (nm, gr, ds) =>
+    emit ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
   let upd := String.join (updParts.map (·.1))
   let thetaN := updParts.map (·.2.1)
   let mN := updParts.map (·.2.2.1)
   let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  let dims := params.map (fun (_, _, ds) => ds)
+  let psig := String.intercalate ", " (ps.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
+  let msig := String.intercalate ", " (ps.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
+  let vsig := String.intercalate ", " (ps.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  let dims := ps.map (fun (_, _, ds) => ds)
   let allDims := dims ++ dims ++ dims
   let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
   let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
   let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
     s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
-  "module @m {\n" ++ s!"  func.func @cifar8_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    cifar8AdamBody ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+  "module @m {\n" ++ s!"  func.func @{fname}({argSig}) -> ({retTy}) " ++ "{\n" ++
+    body ++ consts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
+/-- AdamW for one parameter: `ViTRender.emitAdamV`, behind `REPLICAS`' gradient all-reduce. -/
+private def emitAdam (θ g m v : String) (ds : List Nat) (t : String) :
+    String × String × String × String :=
+  ViTRender.emitAdamVDP θ g m v ds t REPLICAS
+
+/-- `@cifar8_adam_train_step` — the no-BN body + per-param AdamW. `d1` sweeps the dense-head
+    width (default = canonical 64; `cifar8w` is 512). -/
+private def cifar8AdamTrainStep (d1 : Nat := D1) (fname := "cifar8_adam_train_step") : String :=
+  trainStep fname (cifar8AdamBody d1) adamConsts (params d1) emitAdam
 
 -- ════════════ BN variant (per-channel BatchNorm) ════════════
 
@@ -446,28 +464,10 @@ private def paramsBn (d1 : Nat := D1) : List (String × String × List Nat) :=
    ("Wa","%dWa",[D1,D1]), ("ba","%dba",[D1]),
    ("Wb","%dWb",[D1,NC]), ("bb","%dbb",[NC])]
 
-/-- `@cifar8_bn_adam_train_step` — the BN body + per-param `emitAdamV`, packed `[θ|m|v]`.
-    `d1` sweeps the dense-head width (default = canonical 64, byte-identical committed render);
-    `fname` names the exported func so a grid driver can slug it (`cifar8_bn_{d}_adam_train_step`). -/
-private def cifar8BnAdamTrainStep (d1 : Nat := D1)
-    (fname : String := "cifar8_bn_adam_train_step") : String :=
-  let updParts := (paramsBn d1).map (fun (nm, gr, ds) =>
-    ViTRender.emitAdamVDP ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm REPLICAS)
-  let upd := String.join (updParts.map (·.1))
-  let thetaN := updParts.map (·.2.1)
-  let mN := updParts.map (·.2.2.1)
-  let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " ((paramsBn d1).map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " ((paramsBn d1).map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " ((paramsBn d1).map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  let dims := (paramsBn d1).map (fun (_, _, ds) => ds)
-  let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
-  let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
-  "module @m {\n" ++ s!"  func.func @{fname}({argSig}) -> ({retTy}) " ++ "{\n" ++
-    cifar8BnAdamBody d1 ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+/-- `@cifar8_bn_adam_train_step` — the BN body + per-param AdamW. `fname` names the exported
+    func so a grid driver can slug it (`cifar8_bn_{d}_adam_train_step`). -/
+private def cifar8BnAdamTrainStep (d1 : Nat := D1) (fname := "cifar8_bn_adam_train_step") : String :=
+  trainStep fname (cifar8BnAdamBody d1) adamConsts (paramsBn d1) emitAdam
 
 -- ════════════ Nesterov-momentum SGD variant (same body, momentum update) ════════════
 
@@ -494,48 +494,13 @@ private def emitMomentum (θ g m v : String) (ds : List Nat) (t : String) : Stri
     s!"    %momnew{t} = stablehlo.subtract {θ}, %momst{t} : {T}\n"
   (s, s!"%momnew{t}", m, s!"%momvel{t}")
 
-/-- `@cifar8_mom_train_step` — the no-BN body + per-param `emitMomentum`, same packed
-    `[θ|m|v]`+`lr`/`bc1`/`bc2` signature as the Adam step (the m/bc slots are passthrough). -/
-private def cifar8MomTrainStep : String :=
-  let updParts := params.map (fun (nm, gr, ds) =>
-    emitMomentum ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
-  let upd := String.join (updParts.map (·.1))
-  let thetaN := updParts.map (·.2.1)
-  let mN := updParts.map (·.2.2.1)
-  let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  let dims := params.map (fun (_, _, ds) => ds)
-  let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
-  let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
-  "module @m {\n" ++ s!"  func.func @cifar8_mom_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    cifar8AdamBody ++ momentumConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+/-- `@cifar8{,_bn}_mom_train_step` — the no-BN / BN body + per-param `emitMomentum`, same packed
+    signature as the Adam step (the m/bc slots are passthrough). -/
+private def cifar8MomTrainStep (d1 : Nat := D1) (fname := "cifar8_mom_train_step") : String :=
+  trainStep fname (cifar8AdamBody d1) momentumConsts (params d1) emitMomentum
 
-/-- `@cifar8_bn_mom_train_step` — the BN body + per-param `emitMomentum`. -/
-private def cifar8BnMomTrainStep : String :=
-  let paramsBn := paramsBn D1              -- pin to the canonical head width (64)
-  let cifar8BnAdamBody := cifar8BnAdamBody D1
-  let updParts := paramsBn.map (fun (nm, gr, ds) =>
-    emitMomentum ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
-  let upd := String.join (updParts.map (·.1))
-  let thetaN := updParts.map (·.2.1)
-  let mN := updParts.map (·.2.2.1)
-  let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  let dims := paramsBn.map (fun (_, _, ds) => ds)
-  let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
-  let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
-  "module @m {\n" ++ s!"  func.func @cifar8_bn_mom_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    cifar8BnAdamBody ++ momentumConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+private def cifar8BnMomTrainStep (d1 : Nat := D1) (fname := "cifar8_bn_mom_train_step") : String :=
+  trainStep fname (cifar8BnAdamBody d1) momentumConsts (paramsBn d1) emitMomentum
 
 -- ════════════ plain SGD on the SAME pipeline (controlled optimizer ablation) ════════════
 
@@ -551,105 +516,58 @@ private def emitSgd (θ g m v : String) (ds : List Nat) (t : String) : String ×
     s!"    %sgdnew{t} = stablehlo.subtract {θ}, %sgdst{t} : {T}\n"
   (s, s!"%sgdnew{t}", m, v)
 
-/-- `@cifar8_sgd_train_step` — the no-BN body + per-param `emitSgd`, same packed signature. -/
-private def cifar8SgdTrainStep : String :=
-  let updParts := params.map (fun (nm, gr, ds) =>
-    emitSgd ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
-  let upd := String.join (updParts.map (·.1))
-  let thetaN := updParts.map (·.2.1)
-  let mN := updParts.map (·.2.2.1)
-  let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  let dims := params.map (fun (_, _, ds) => ds)
-  let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
-  let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
-  "module @m {\n" ++ s!"  func.func @cifar8_sgd_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    cifar8AdamBody ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+/-- `@cifar8{,_bn}_sgd_train_step` — the no-BN / BN body + per-param `emitSgd`. -/
+private def cifar8SgdTrainStep (d1 : Nat := D1) (fname := "cifar8_sgd_train_step") : String :=
+  trainStep fname (cifar8AdamBody d1) "" (params d1) emitSgd
 
-/-- `@cifar8_bn_sgd_train_step` — the BN body + per-param `emitSgd`. -/
-private def cifar8BnSgdTrainStep : String :=
-  let paramsBn := paramsBn D1              -- pin to the canonical head width (64)
-  let cifar8BnAdamBody := cifar8BnAdamBody D1
-  let updParts := paramsBn.map (fun (nm, gr, ds) =>
-    emitSgd ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
-  let upd := String.join (updParts.map (·.1))
-  let thetaN := updParts.map (·.2.1)
-  let mN := updParts.map (·.2.2.1)
-  let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  let dims := paramsBn.map (fun (_, _, ds) => ds)
-  let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
-  let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
-  "module @m {\n" ++ s!"  func.func @cifar8_bn_sgd_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    cifar8BnAdamBody ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
-
+private def cifar8BnSgdTrainStep (d1 : Nat := D1) (fname := "cifar8_bn_sgd_train_step") : String :=
+  trainStep fname (cifar8BnAdamBody d1) "" (paramsBn d1) emitSgd
 
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.createDirAll ".lake/build"
-  -- NOTE: `verified_mlir/cifar8_adam_train_step.mlir` is no longer written here. It renders from
-  -- `LeanMlir/Proofs/Codegen/CnnRender.lean` as pretty(provenGraph), with the optimizer now the
-  -- proven `adamWParamF`/`adamMNextF`/`adamVNextF` rather than `ViTRender.emitAdamV`
-  -- (planning/archive/xla_pjrt_handoff.md §2a-ter). The two renders tie EXACTLY — all 158577 returned
-  -- floats bit-identical, `.lake/build/bin/cifar8-adam-tie`. `cifar8AdamTrainStep` below is kept
-  -- as the reference the tie was measured against; adding a second writer back would re-open the
-  -- silent last-writer-wins clobber §2a is about.
-  let bmlir := cifar8BnAdamTrainStep D1 "cifar8_bn_adam_train_step"
-  IO.println s!"rendered cifar8_bn AdamW train step: {bmlir.length} chars, {(paramsBn D1).length} params"
-  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8_bn_adam_train_step.mlir` is now written by
-  -- `Proofs/Codegen/CnnRender.lean` (`cifar8BnTrainStepFaithfulV … (some .adamw)`) as
-  -- pretty(provenGraph), and that `#eval` is its ONLY writer. The render above STAYS as the tie's
-  -- reference — `cifar8-opt-tie bn_adam` drives it against the certified bytes: recovered gradient
-  -- norm-rel 1.0e-6, spread 8/38 params against a reorder control that disturbs the SAME 8 (the
-  -- conv biases, cancelling reduces), %loss bit-exact, against a bit-exact A-vs-A floor. Writing
-  -- here would be the §2a last-writer-wins race, so the write is gone and the render is not.
-  IO.println s!"  (cifar8_bn_adam: retained as the tie reference; NOT written — §2i)"
-  let mmlir := cifar8MomTrainStep
-  IO.println s!"rendered cifar8 Nesterov-mom train step: {mmlir.length} chars, {params.length} params"
-  -- ✅ RETIRED 2026-07-29 (§2i): `verified_mlir/cifar8_mom_train_step.mlir` is now written by
-  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph), and that `#eval` is its ONLY writer.
-  -- The render above STAYS as the tie's reference — `cifar8-opt-tie mom` drives it against the
-  -- certified bytes and came back BIT-EXACT on all 52,858 recovered gradient coordinates. Writing
-  -- here would be the §2a last-writer-wins race, so the write is gone and the render is not.
-  IO.println s!"  (cifar8_mom: Nesterov-mom render retained as the tie reference; NOT written — §2i)"
-  let bmmlir := cifar8BnMomTrainStep
-  IO.println s!"rendered cifar8_bn Nesterov-mom train step: {bmmlir.length} chars, {(paramsBn D1).length} params"
-  -- ✅ RETIRED 2026-07-30 (§2i) — see the cifar8_bn_adam note above. `cifar8-opt-tie bn_mom`:
-  -- norm-rel 1.0e-6, spread 8/38 = the control's 8, `m` passthrough bit-exact.
-  IO.println s!"  (cifar8_bn_mom: retained as the tie reference; NOT written — §2i)"
-  let smlir := cifar8SgdTrainStep
-  IO.println s!"rendered cifar8 SGD-sched train step: {smlir.length} chars, {params.length} params"
-  -- ✅ RETIRED 2026-07-29 (§2i): `verified_mlir/cifar8_sgd_train_step.mlir` is now written by
-  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph), and that `#eval` is its ONLY writer.
-  -- The render above STAYS as the tie's reference — `cifar8-opt-tie sgd` drives it against the
-  -- certified bytes and came back BIT-EXACT on all 52,858 recovered gradient coordinates. Writing
-  -- here would be the §2a last-writer-wins race, so the write is gone and the render is not.
-  IO.println s!"  (cifar8_sgd: SGD-sched render retained as the tie reference; NOT written — §2i)"
-  let bsmlir := cifar8BnSgdTrainStep
-  IO.println s!"rendered cifar8_bn SGD-sched train step: {bsmlir.length} chars, {(paramsBn D1).length} params"
-  -- ✅ RETIRED 2026-07-30 (§2i) — see the cifar8_bn_adam note above. `cifar8-opt-tie bn_sgd`:
-  -- norm-rel 3.8e-5 against a reorder control of 1.9e-5 (2.0×, inside the 4× rule) and spread
-  -- 11/38 against the control's 12 — a strict SUBSET. ⚠ That 3.8e-5 is NOT a looser agreement than
-  -- the other two: sgd's gradient is recovered as `(θ − θ')/lr` at lr 1e-3, which amplifies the
-  -- output-level difference 1000×. The raw θ' slots differ by max 3.0e-8 on θ' ≈ 1.0, i.e. ~4 ULPs
-  -- of binary32 — the same graph disagreement adam sees through a 10× lens.
-  IO.println s!"  (cifar8_bn_sgd: retained as the tie reference; NOT written — §2i)"
-  tryCompile "verified_mlir/cifar8_adam_train_step.mlir" "/tmp/cifar8_adam_ts.vmfb" "cifar8 AdamW"
-  tryCompile "verified_mlir/cifar8_bn_adam_train_step.mlir" "/tmp/cifar8_bn_adam_ts.vmfb" "cifar8_bn AdamW"
-  tryCompile "verified_mlir/cifar8_mom_train_step.mlir" "/tmp/cifar8_mom_ts.vmfb" "cifar8 Nesterov-mom"
-  tryCompile "verified_mlir/cifar8_bn_mom_train_step.mlir" "/tmp/cifar8_bn_mom_ts.vmfb" "cifar8_bn Nesterov-mom"
-  tryCompile "verified_mlir/cifar8_sgd_train_step.mlir" "/tmp/cifar8_sgd_ts.vmfb" "cifar8 SGD-sched"
-  tryCompile "verified_mlir/cifar8_bn_sgd_train_step.mlir" "/tmp/cifar8_bn_sgd_ts.vmfb" "cifar8_bn SGD-sched"
+  -- ✅ RETIRED 2026-07-29/30 (§2i): none of these renders is WRITTEN. Each committed artifact's
+  -- only writer is `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) (the `cifar8w` fwds:
+  -- `StableHLO.cifar8{,Bn}FwdModuleV` at `d1 := 512`); a second writer here would re-open the §2a
+  -- last-writer-wins race (planning/archive/xla_pjrt_handoff.md §2a-ter). The renders stay as the
+  -- references the ties were measured against — `cifar8-adam-tie` / `cifar8-opt-tie` / `fwd-tie`:
+  --   cifar8  adam        all 158577 returned floats bit-exact (the proven optimizer is now
+  --                       `adamWParamF`/`adamMNextF`/`adamVNextF`, not `ViTRender.emitAdamV`)
+  --           mom, sgd    recovered gradient bit-exact on all 52,858 coordinates
+  --           bn_adam,    norm-rel 1.0e-6, spread 8/38 params against a reorder control that
+  --           bn_mom      disturbs the SAME 8 (the conv biases, cancelling reduces); %loss and
+  --                       `m` passthrough bit-exact, against a bit-exact A-vs-A floor
+  --           bn_sgd      3.8e-5 vs the control's 1.9e-5 (inside the 4× rule), spread 11/38 ⊂ 12
+  --   cifar8w adam, mom,  gradient bit-exact, spread 0/22
+  --           sgd
+  --           bn_adam,    1.0e-6, spread 8/38 = the control's 8
+  --           bn_mom
+  --           bn_sgd      3.4e-5 vs the control's 3.3e-5, spread 12/38 ⊂ 14
+  --           fwd, bn_fwd logits bit-exact 1280/1280
+  -- ⚠ bn_sgd's larger number is not a looser agreement: its gradient is recovered as `(θ − θ')/lr`
+  -- at lr 1e-3, which amplifies the output-level difference 1000×. The raw θ' slots differ by max
+  -- 3.0e-8 on θ' ≈ 1.0 — ~4 ULPs of binary32, the same disagreement adam sees through a 10× lens.
+  let steps := ["adam", "bn_adam", "mom", "bn_mom", "sgd", "bn_sgd"]
+  for (d1, slug) in [(D1, "cifar8"), (512, "cifar8w")] do
+    let renders := [cifar8AdamTrainStep d1 s!"{slug}_adam_train_step",
+                    cifar8BnAdamTrainStep d1 s!"{slug}_bn_adam_train_step",
+                    cifar8MomTrainStep d1 s!"{slug}_mom_train_step",
+                    cifar8BnMomTrainStep d1 s!"{slug}_bn_mom_train_step",
+                    cifar8SgdTrainStep d1 s!"{slug}_sgd_train_step",
+                    cifar8BnSgdTrainStep d1 s!"{slug}_bn_sgd_train_step"]
+    for (k, mlir) in steps.zip renders do
+      IO.println s!"rendered {slug}_{k}_train_step: {mlir.length} chars (tie reference, not written)"
+  -- eval-forward graphs at d1 = 512 (the StableHLO renderers emit @cifar8_fwd / @cifar8_bn_fwd;
+  -- renamed to the cifar8w slug trainAdamSched's `m.cifar8w_fwd` eval call resolves)
+  let fwd := (cifar8FwdText B IC C1 C2 C3 C4 IMH IMW KH KW 512 NC).replace "@cifar8_fwd" "@cifar8w_fwd"
+  let bnfwd := (cifar8BnFwdTextPC B IC C1 C2 C3 C4 IMH IMW KH KW 512 NC "1.0e-05").replace
+    "@cifar8_bn_fwd" "@cifar8w_bn_fwd"
+  IO.println s!"rendered cifar8w fwd / bn_fwd: {fwd.length} / {bnfwd.length} chars (tie references)"
+  for slug in ["cifar8", "cifar8w"] do
+    for k in steps do
+      tryCompile s!"verified_mlir/{slug}_{k}_train_step.mlir" s!"/tmp/{slug}_{k}_ts.vmfb" s!"{slug} {k}"
+  tryCompile "verified_mlir/cifar8w_fwd.mlir" "/tmp/cifar8w_fwd.vmfb" "cifar8w fwd"
+  tryCompile "verified_mlir/cifar8w_bn_fwd.mlir" "/tmp/cifar8w_bn_fwd.vmfb" "cifar8w_bn fwd"
   -- ── FC-head width sweep (conv backbone @ [16,16,32,32] fixed) ──
   -- Render adamw train-step + forward for each dense-head width d, func-slugged so the
   -- `cifar8-bn-grid` driver trains each via `trainAdamSched "adam"` (eval through @<slug>_fwd,

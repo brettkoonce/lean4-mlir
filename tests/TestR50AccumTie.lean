@@ -76,7 +76,9 @@ Knobs: `R50_ACC_VARIANT` (default `acc4x64`), `R50_ACC_PEER` (default `adam64`),
 `R50_ACC_RES` (`224` default / `160`), `R50_ACC_TOL_U` (micro-units, default 10 = 1e-5).
 -/
 
-/-- Max |a−b| and max |a| over a float range of two blobs, plus the bit-exact count. -/
+/-- Max |a−b| and max(|a|,|b|) over a float range of two blobs, plus the bit-exact count. The
+    magnitude is over BOTH buffers (`TestDropPathTie.cmpBufs`): over `a` alone, an `a` driven to zero
+    reads as rel 0. -/
 private def cmp (a b : ByteArray) (offA offB n : Nat) : Float × Float × Nat := Id.run do
   let mut d := 0.0; let mut m := 0.0; let mut ex := 0
   for i in [0:n] do
@@ -84,7 +86,7 @@ private def cmp (a b : ByteArray) (offA offB n : Nat) : Float × Float × Nat :=
     let y := F32.read b (offB + i).toUSize
     if x == y then ex := ex + 1
     if (x - y).abs > d then d := (x - y).abs
-    if x.abs > m then m := x.abs
+    if max x.abs y.abs > m then m := max x.abs y.abs
   return (d, m, ex)
 
 def main : IO Unit := do

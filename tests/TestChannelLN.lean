@@ -178,7 +178,7 @@ private def maxRel (a b : ByteArray) (n : Nat) : Float × Float := Id.run do
     let u := F32.read a i.toUSize
     let w := F32.read b i.toUSize
     if (u-w).abs > d then d := (u-w).abs
-    if u.abs > m then m := u.abs
+    if max u.abs w.abs > m then m := max u.abs w.abs
   (d, m)
 
 -- ════════════════════════════════════════════════════════════════

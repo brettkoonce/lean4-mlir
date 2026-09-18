@@ -165,7 +165,7 @@ private def ablateMode (net : VerifiedNet) (ckpt : String) : IO Unit := do
     for i in [0:bs * net.nClasses] do
       let a := F32.read u i.toUSize; let b := F32.read w i.toUSize
       if (a-b).abs > d then d := (a-b).abs
-      if a.abs > m then m := a.abs
+      if max a.abs b.abs > m then m := max a.abs b.abs
     (d, m)
   let (dNb, mag) := cmp la lb
   let (dNβ, _)   := cmp la lc
@@ -276,7 +276,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
             total := total + 1
             if a == b then exact := exact + 1
             if (a-b).abs > maxD then maxD := (a-b).abs; worst := s!"param {i} region {r}"
-            if a.abs > maxM then maxM := a.abs
+            if max a.abs b.abs > maxM then maxM := max a.abs b.abs
         offA := offA + sz; offB := offB + sz
     for j in [0:3 + nBnStats] do
       let a := F32.read oA (3 * nPA + j).toUSize
@@ -284,7 +284,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
       total := total + 1
       if a == b then exact := exact + 1
       if (a-b).abs > maxD then maxD := (a-b).abs; worst := s!"loss/bnstat {j}"
-      if a.abs > maxM then maxM := a.abs
+      if max a.abs b.abs > maxM then maxM := max a.abs b.abs
     (maxD, maxM, exact, total, worst)
   -- Per REGION (§4): `bnstat` and `%loss` are FORWARD-only outputs, so if they are bit-exact the
   -- forward is identical and any difference is confined to the backward — which is what a
@@ -405,7 +405,7 @@ Run it against the pre-swap layout (the point is to compare the two).")
     if !a.isFinite || !b.isFinite then nonFinite := nonFinite + 1
     if a == b then exact := exact + 1
     if (a-b).abs > maxD then maxD := (a-b).abs
-    if a.abs > maxM then maxM := a.abs
+    if max a.abs b.abs > maxM then maxM := max a.abs b.abs
   IO.println s!"  |logits|max = {maxM}   max abs diff = {maxD}   bit-exact {exact}/{n}"
   if nonFinite > 0 then
     throw (IO.userError s!"DEGENERATE: {nonFinite}/{n} non-finite logits — the tie proves nothing")

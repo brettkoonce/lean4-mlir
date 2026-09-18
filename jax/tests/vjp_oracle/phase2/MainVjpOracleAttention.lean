@@ -1,26 +1,9 @@
 import Jax
+import LeanMlir.VjpOracleNets
 
-def attentionNet : NetSpec where
-  name   := "vjp-oracle-attention"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .patchEmbed 1 16 7 16,
-    .transformerEncoder 16 2 32 1,
-    .dense 16 10 .identity
-  ]
+-- VJP oracle, JAX side: `VjpOracle.attentionNet` (spec shared with tests/vjp_oracle/phase3/).
 
-def vjpCfg : TrainConfig where
-  learningRate := 0.001
-  batchSize    := 4
-  epochs       := 1
-  useAdam      := true
-  weightDecay  := 0.0
-  cosineDecay  := false
-  warmupEpochs := 0
-  augment      := false
-
-#eval attentionNet.validate!
+#eval VjpOracle.attentionNet.validate!
 
 def main (args : List String) : IO Unit :=
-  runJax attentionNet vjpCfg .mnist (args.head? |>.getD "data") "generated_vjp_oracle_attention.py"
+  runJax VjpOracle.attentionNet VjpOracle.cfg .mnist (args.head? |>.getD "data") "generated_vjp_oracle_attention.py"

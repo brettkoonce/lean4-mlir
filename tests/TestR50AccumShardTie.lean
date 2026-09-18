@@ -76,7 +76,7 @@ private def cmp (a b : ByteArray) (off n : Nat) : Float × Float × Nat := Id.ru
     let y := F32.read b (off + i).toUSize
     if x == y then ex := ex + 1
     if (x - y).abs > d then d := (x - y).abs
-    if x.abs > m then m := x.abs
+    if max x.abs y.abs > m then m := max x.abs y.abs
   return (d, m, ex)
 
 def main : IO Unit := do
