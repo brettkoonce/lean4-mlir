@@ -11,7 +11,8 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 `ResNet50BackNet.lean` folded R50 and `CertifiedChain.lean` made the machinery net-agnostic. This
 file pays that off: every other conv net's block capstone becomes a `CertLayer`, so
 `CertLayer.comp` / `CertLayer.chain` compose them into stages and trunks with **no new proof per
-net and no new proof per depth**.
+net and no new proof per depth**. (R34's two block layers are defined in `ResNet34BackB0`, composed
+from its stage layers; the R34 stage and trunk folds are here.)
 
 ⭐ **The per-net work was making the blocks pluggable, not proving anything.** Each capstone took
 its cotangent as `dy : Vec n` and wrapped it internally as `.operand "%dy" dy`, so a block could
@@ -116,65 +117,6 @@ noncomputable def cnxBlockChLayer {c cExp h w kH kW : Nat}
   vjp := fun x _ => (cnxBlockChW_has_vjp p hε).toHasVJPAt x
   graph := fun x e => cnxResidBlockChBackGraph p x e
   faithful := fun x _ e => cnxResidBlockChBackGraph_faithful p hε x e
-
--- ════════════════════════════════════════════════════════════════
--- § ResNet-34 — relu, so `_at` with TWO smoothness clauses
--- ════════════════════════════════════════════════════════════════
-
-/-- The batched R34 identity basic block as a `CertLayer`. Two `ok` clauses: the body's mid-relu
-    and the OUTER post-residual relu — the extra factor R34 has over the MBConv/inverted-residual
-    blocks. An endomorphism, so `chain` iterates it into a stage tail. -/
-noncomputable def r34BasicBlockLayer (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
-    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
-    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) where
-  fwd := relu (N * (c * h * w)) ∘
-    residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-              cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)
-  ok := fun x =>
-    (∀ k, bnBatchLA N c h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) ∧
-    (∀ k, residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-            cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0)
-  diff := by
-    intro x hx
-    exact (relu_differentiableAt_of_smooth _ _ hx.2).comp x
-      ((r34BodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x hx.1).add
-        differentiable_id.differentiableAt)
-  vjp := fun x hx =>
-    r34BasicBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x hx.1 hx.2
-  graph := fun x e => r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x e
-  faithful := fun x hx e =>
-    r34BasicBlockBackBatchedGraph_faithful W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x e hx.1 hx.2
-
-/-- The batched R34 downsample basic block as a `CertLayer`. Halves resolution (hence the `2*h` in
-    the input type), with a strided conv1 and a strided projection skip. -/
-noncomputable def r34DownBlockLayer (N : Nat) {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
-    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec oc)
-    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
-    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) where
-  fwd := relu (N * (oc * h * w)) ∘
-    residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-      (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-       cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)
-  ok := fun x =>
-    (∀ k, bnBatchLA N oc h w ε₁ γ₁ β₁ (batchMap N (flatConvStride2 W₁ b₁) x) k ≠ 0) ∧
-    (∀ k, residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-            (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0)
-  diff := by
-    intro x hx
-    exact (relu_differentiableAt_of_smooth _ _ hx.2).comp x
-      (((projStridedB_differentiable N Wp bp εp hεp γp βp) x).add
-        (r34DownBodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x hx.1))
-  vjp := fun x hx =>
-    r34DownBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      Wp bp εp hεp γp βp x hx.1 hx.2
-  graph := fun x e => r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-    Wp bp εp γp βp x e
-  faithful := fun x hx e =>
-    r34DownBlockBackBatchedGraph_faithful W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      Wp bp εp hεp γp βp x e hx.1 hx.2
 
 -- ════════════════════════════════════════════════════════════════
 -- § MobileNetV2 — relu6, so `_at` with TWO-SIDED clauses

@@ -127,6 +127,36 @@ noncomputable def residual {n : Nat} (L : CertLayer n n) : CertLayer n n where
     rw [hsum, L.faithful x hx e]
     rfl
 
+/-- ⭐ **A projected residual** — `x ↦ P.fwd x + F.fwd x`, both paths nontrivial. The backward
+    graph is the fan-in `addV (P.graph …) (F.graph …)`, certified where both paths are. The
+    downsample-block peer of `residual`: a projection skip changes the width, so the layer is
+    `m → n`. -/
+noncomputable def residualProj {m n : Nat} (P F : CertLayer m n) : CertLayer m n where
+  fwd := Proofs.residualProj P.fwd F.fwd
+  ok := fun x => P.ok x ∧ F.ok x
+  diff := fun x hx => (P.diff x hx.1).add (F.diff x hx.2)
+  vjp := fun x hx => residualProj_has_vjp_at P.fwd F.fwd x (P.diff x hx.1) (F.diff x hx.2)
+    (P.vjp x hx.1) (F.vjp x hx.2)
+  graph := fun x e => .addV (P.graph x e) (F.graph x e)
+  faithful := by
+    intro x hx e
+    funext i
+    have hsum : den (SHlo.addV (P.graph x e) (F.graph x e)) i
+        = den (P.graph x e) i + den (F.graph x e) i := rfl
+    rw [hsum, P.faithful x hx.1 e, F.faithful x hx.2 e]
+    rfl
+
+/-- ⭐ **The post-residual relu** of a ResNet block, as a layer: certified where its input misses the
+    kink, with the `%outR` mask as its backward. `(residual F).comp (reluOut _)` is a whole identity
+    block, so its capstone is `.faithful` of that composite. -/
+noncomputable def reluOut (n : Nat) : CertLayer n n where
+  fwd := relu n
+  ok := fun x => ∀ k, x k ≠ 0
+  diff := fun x hx => relu_differentiableAt_of_smooth n x hx
+  vjp := fun x hx => relu_has_vjp_at n x hx
+  graph := fun x e => .selectPos "%outR" x e
+  faithful := fun x hx e => selectPos_faithful _ x hx e
+
 /-- Fold a list of endo-layers into one. **List order is FORWARD execution order**:
     `chain [L₁, L₂, L₃] |>.fwd = L₃.fwd ∘ L₂.fwd ∘ L₁.fwd`. -/
 noncomputable def chain {n : Nat} : List (CertLayer n n) → CertLayer n n

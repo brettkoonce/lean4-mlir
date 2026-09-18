@@ -73,7 +73,7 @@ noncomputable def mnv4CotPc (N : Nat) (s : UibSpec) (p : UibParams s)
   bnInB N s.oc s.h s.h p.ez p.gz
     (batchMap N (flatConv p.Wz p.bz)
       ((mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd
-        ((mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+        ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
           ((mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
             xin))))
     dyOut
@@ -86,7 +86,7 @@ noncomputable def mnv4CotDn (N : Nat) (s : UibSpec) (p : UibParams s)
   reluMaskB (N * (s.ic * s.expand * s.h * s.h))
     (bnBatchLA N (s.ic * s.expand) s.h s.h p.ed p.gd p.bd2
       (batchMap N (depthwiseFlat p.Wd p.bd)
-        ((mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+        ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
           ((mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
             xin))))
     (cInB N p.Wz p.bz (mnv4CotPc N s p xin dyOut))
@@ -97,7 +97,7 @@ noncomputable def mnv4CotDc (N : Nat) (s : UibSpec) (p : UibParams s)
     Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   bnInB N (s.ic * s.expand) s.h s.h p.ed p.gd
     (batchMap N (depthwiseFlat p.Wd p.bd)
-      ((mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+      ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
         ((mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
           xin)))
     (mnv4CotDn N s p xin dyOut)
@@ -172,7 +172,7 @@ noncomputable def mnv4SCotPc (N : Nat) (s : UibSpec) (p : UibParams s)
   bnInB N s.oc s.h s.h p.ez p.gz
     (batchMap N (flatConv p.Wz p.bz)
       ((mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd
-        ((mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+        ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
           ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
             xin))))
     dyOut
@@ -185,7 +185,7 @@ noncomputable def mnv4SCotDn (N : Nat) (s : UibSpec) (p : UibParams s)
   reluMaskB (N * (s.ic * s.expand * s.h * s.h))
     (bnBatchLA N (s.ic * s.expand) s.h s.h p.ed p.gd p.bd2
       (batchMap N (depthwiseFlat p.Wd p.bd)
-        ((mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+        ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
           ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
             xin))))
     (cInB N p.Wz p.bz (mnv4SCotPc N s p xin dyOut))
@@ -196,7 +196,7 @@ noncomputable def mnv4SCotDc (N : Nat) (s : UibSpec) (p : UibParams s)
     Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   bnInB N (s.ic * s.expand) s.h s.h p.ed p.gd
     (batchMap N (depthwiseFlat p.Wd p.bd)
-      ((mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+      ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
         ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
           xin)))
     (mnv4SCotDn N s p xin dyOut)
@@ -287,7 +287,7 @@ noncomputable def mnv4SkipCotIn {N n : Nat} (bodyDx dyOut : Vec (N * n)) : Vec (
 def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
   let qr := (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
-  let er := (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
+  let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
   let qc := batchMap N (depthwiseFlat p.Wq p.bq) xin
   let ec := batchMap N (flatConv p.We p.be) qr
@@ -431,7 +431,7 @@ theorem mnv4_extradw_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) 
 def mnv4ConvNeXtTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
   let qr := (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
-  let er := (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
+  let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
   let qc := batchMap N (depthwiseFlat p.Wq p.bq) xin
   let ec := batchMap N (flatConv p.We p.be) qr
@@ -540,7 +540,7 @@ theorem mnv4_convnext_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String)
 def mnv4FfnTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
   let qr := (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
-  let er := (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
+  let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
   let ec := batchMap N (flatConv p.We p.be) qr
   let pc := batchMap N (flatConv p.Wz p.bz) dr
@@ -635,7 +635,7 @@ theorem mnv4_ffn_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p :
 def mnv4PreStridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
   let qr := (mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
-  let er := (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
+  let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
   let qc := batchMap N (depthwiseStride2Flat p.Wq p.bq) xin
   let ec := batchMap N (flatConv p.We p.be) qr

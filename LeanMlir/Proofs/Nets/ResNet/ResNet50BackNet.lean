@@ -3,8 +3,9 @@ import LeanMlir.Proofs.Foundation.CertifiedChain
 
 /-! # R50's NET-level backward fold — the block capstones chained into stages and a trunk
 
-`ResNet50BackB0.lean` proves the three *block* capstones. This file folds them: each block becomes
-a `CertLayer` ([`Foundation/CertifiedChain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/CertifiedChain.lean)), and stages and the trunk are `CertLayer.comp` /
+`ResNet50BackB0.lean` proves the three *block* capstones, each as a `CertLayer`
+([`Foundation/CertifiedChain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/CertifiedChain.lean)): `r50BottleneckLayer`, `r50ProjBlockLayer`,
+`r50DownBlockLayer`. This file folds them: stages and the trunk are `CertLayer.comp` /
 `CertLayer.chain` of those. Faithfulness at every level is then **`CertLayer.faithful` applied to
 the composite** — no per-depth proof, and nothing re-derived.
 
@@ -40,120 +41,6 @@ holds where the net is differentiable, and it deepens correctly rather than bein
 -/
 
 namespace Proofs.StableHLO
-
--- ════════════════════════════════════════════════════════════════
--- § The three block forms, as CertLayers
--- ════════════════════════════════════════════════════════════════
-
-/-- The identity bottleneck as a `CertLayer`. ⭐ **An endomorphism** (`ic = oc`, resolution
-    unchanged), which is what lets `CertLayer.chain` iterate it — a stage tail is n of these. -/
-noncomputable def r50BottleneckLayer (N : Nat) {c mid h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ : Nat}
-    (W₁ : Kernel4 mid c kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
-    (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
-    (W₃ : Kernel4 c mid kH₃ kW₃) (b₃ : Vec c) (ε₃ : ℝ) (hε₃ : 0 < ε₃) (γ₃ β₃ : Vec c) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) where
-  fwd := relu (N * (c * h * w)) ∘
-    residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-              cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-              cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)
-  ok := fun x =>
-    (∀ k, bnBatchLA N mid h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) ∧
-    (∀ k, bnBatchLA N mid h w ε₂ γ₂ β₂
-        (batchMap N (flatConv W₂ b₂) (cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁ x)) k ≠ 0) ∧
-    (∀ k, residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-            cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-            cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0)
-  diff := by
-    intro x hx
-    exact (relu_differentiableAt_of_smooth _ _ hx.2.2).comp x
-      ((r50BodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          W₃ b₃ ε₃ hε₃ γ₃ β₃ x hx.1 hx.2.1).add differentiable_id.differentiableAt)
-  vjp := fun x hx =>
-    r50BottleneckB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      W₃ b₃ ε₃ hε₃ γ₃ β₃ x hx.1 hx.2.1 hx.2.2
-  graph := fun x e => r50BottleneckBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-    W₃ b₃ ε₃ γ₃ β₃ x e
-  faithful := fun x hx e =>
-    r50BottleneckBackBatchedGraph_faithful W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      W₃ b₃ ε₃ hε₃ γ₃ β₃ x e hx.1 hx.2.1 hx.2.2
-
-/-- ⭐ The **stride-1 projection** bottleneck as a `CertLayer` — R50 stage 1 block 0, the form with
-    no R34 analogue. Changes channels, keeps resolution, so it is NOT an endomorphism and composes
-    via `comp` rather than `chain`. -/
-noncomputable def r50ProjBlockLayer (N : Nat)
-    {ic mid oc h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ kHp kWp : Nat}
-    (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
-    (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
-    (W₃ : Kernel4 oc mid kH₃ kW₃) (b₃ : Vec oc) (ε₃ : ℝ) (hε₃ : 0 < ε₃) (γ₃ β₃ : Vec oc)
-    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
-    CertLayer (N * (ic * h * w)) (N * (oc * h * w)) where
-  fwd := relu (N * (oc * h * w)) ∘
-    residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
-      (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-       cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-       cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)
-  ok := fun x =>
-    (∀ k, bnBatchLA N mid h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) ∧
-    (∀ k, bnBatchLA N mid h w ε₂ γ₂ β₂
-        (batchMap N (flatConv W₂ b₂) (cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁ x)) k ≠ 0) ∧
-    (∀ k, residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
-            (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-             cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0)
-  diff := by
-    intro x hx
-    exact (relu_differentiableAt_of_smooth _ _ hx.2.2).comp x
-      (((projB_differentiable N Wp bp εp hεp γp βp) x).add
-        (r50BodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          W₃ b₃ ε₃ hε₃ γ₃ β₃ x hx.1 hx.2.1))
-  vjp := fun x hx =>
-    r50ProjBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x hx.1 hx.2.1 hx.2.2
-  graph := fun x e => r50ProjBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-    W₃ b₃ ε₃ γ₃ β₃ Wp bp εp γp βp x e
-  faithful := fun x hx e =>
-    r50ProjBlockBackBatchedGraph_faithful W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x e hx.1 hx.2.1 hx.2.2
-
-/-- The **strided projection** bottleneck as a `CertLayer` — stages 2/3/4, block 0. Halves the
-    resolution, which is why its input type carries `2*h`/`2*w`. ⚠ The stride is on the 3×3
-    (`cbReluStridedB` at `W₂`), so `h_s1` is stated at the input resolution and `h_s2` at the
-    output one. -/
-noncomputable def r50DownBlockLayer (N : Nat)
-    {ic mid oc h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ kHp kWp : Nat}
-    (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
-    (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
-    (W₃ : Kernel4 oc mid kH₃ kW₃) (b₃ : Vec oc) (ε₃ : ℝ) (hε₃ : 0 < ε₃) (γ₃ β₃ : Vec oc)
-    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
-    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) where
-  fwd := relu (N * (oc * h * w)) ∘
-    residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-      (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-       cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-       cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁)
-  ok := fun x =>
-    (∀ k, bnBatchLA N mid (2 * h) (2 * w) ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) ∧
-    (∀ k, bnBatchLA N mid h w ε₂ γ₂ β₂
-        (batchMap N (flatConvStride2 W₂ b₂)
-          (cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁ x)) k ≠ 0) ∧
-    (∀ k, residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-            (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
-             cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0)
-  diff := by
-    intro x hx
-    exact (relu_differentiableAt_of_smooth _ _ hx.2.2).comp x
-      (((projStridedB_differentiable N Wp bp εp hεp γp βp) x).add
-        (r50DownBodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          W₃ b₃ ε₃ hε₃ γ₃ β₃ x hx.1 hx.2.1))
-  vjp := fun x hx =>
-    r50DownBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x hx.1 hx.2.1 hx.2.2
-  graph := fun x e => r50DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-    W₃ b₃ ε₃ γ₃ β₃ Wp bp εp γp βp x e
-  faithful := fun x hx e =>
-    r50DownBlockBackBatchedGraph_faithful W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-      W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x e hx.1 hx.2.1 hx.2.2
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stages — a projection block followed by ANY number of identity blocks

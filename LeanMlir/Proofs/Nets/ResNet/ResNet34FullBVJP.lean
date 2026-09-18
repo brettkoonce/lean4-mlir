@@ -110,10 +110,9 @@ noncomputable def r34IdB_has_vjp_at (N h w : Nat) {c : Nat} (p : R34IdW c)
 
 theorem r34IdB_differentiableAt (N h w : Nat) {c : Nat} (p : R34IdW c)
     (hq : R34IdPos p) (v : Vec (N * (c * h * w))) (hs : R34IdSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r34IdB N h w p) v := by
-  exact (relu_differentiableAt_of_smooth (N * (c * h * w)) _ hs.hout).comp v
-    ((StableHLO.r34BodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-      p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ v hs.hmid).add differentiable_id.differentiableAt)
+    DifferentiableAt ℝ (r34IdB N h w p) v :=
+  (StableHLO.r34BasicBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂).diff v ⟨⟨hs.hmid, trivial⟩, hs.hout⟩
 
 /-- Downsample basic block VJP — `r34DownBlockB_has_vjp_at` at the bundle's fields. -/
 noncomputable def r34DownB_has_vjp_at (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
@@ -126,11 +125,10 @@ noncomputable def r34DownB_has_vjp_at (N h w : Nat) {ic oc : Nat} (p : R34DownW 
 theorem r34DownB_differentiableAt (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (hq : R34DownPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : R34DownSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r34DownB N h w p) v := by
-  exact (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ hs.hout).comp v
-    ((StableHLO.projStridedB_differentiable N p.Wp p.bp p.εp hq.hp p.γp p.βp v).add
-      (StableHLO.r34DownBodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-        p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ v hs.hmid))
+    DifferentiableAt ℝ (r34DownB N h w p) v :=
+  (StableHLO.r34DownBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp).diff v
+    ⟨⟨trivial, hs.hmid, trivial⟩, hs.hout⟩
 
 /-- ⭐ Stem VJP: the 7×7/s2 conv-bn-relu, then the batched 3×3/s2 pool. The pool half is where
     `batchMap_has_vjp_at` earns its existence. -/

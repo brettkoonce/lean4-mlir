@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-18, main `7c379b55`, 1 ahead of origin, + the staged row)
+## Status (2026-09-18, main `850dac3b` = origin, + the staged row)
 
-**Landed** — about 7.1k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 7.6k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -42,7 +42,8 @@ suspected, no drop-in located.
 | `a9c57a3b` | **§4 near-clones, `SgdDescentCnn` conv2 slot** (−190): new `Conv2Slot` namespace — the drift chain, the four margin lemmas and the segment-Lipschitz gradient stated once for any parameter map `Z` into conv2's pre-activation with per-entry drift `ρ·‖e‖₁`, `ℓ1` drift `(2h)(2w)·ρ·‖e‖₁`, and a fixed Jacobian row `J`. The conv2-kernel (`ρ = a`) and conv2-bias (`ρ = 1`) lemmas are instances (Lipschitz 304 → 25 and 277 → 14); the unpinned `cnn{,b2}_postrelu_close` / `_z3_drift` / `_z4_drift` are gone. Capstones left as they are: they are mostly statement and already delegate to `sgd_descends` + the Lipschitz lemma, so a generic capstone would add lines |
 | `046ec333` | **§4 near-clones, `SgdDescentCnn` conv1 slot + the four `gradAt` closed forms** (−1,290; file 9,974 → 8,682): new `Conv1Slot` namespace — the drift chain (`z2_entry_drift`, `z2_l1_drift`, `pool_l1_drift`, `logit_drift`), the relu₂/pool/relu₃/relu₄ margins and the segment-Lipschitz gradient, stated once for any map `Z` into conv1's pre-activation. From conv2's pre-activation on it is `Conv2Slot` at radius `c·kH·kW·w₂·ρ` (`ring` re-associates the radii); relu₁'s margin is `Conv2Slot.margin2_keeps_offkink` at `Z` itself. The Lipschitz lemma folds `J₁`, the frozen relu₁ mask and conv2's taps into one fixed row at the conv2 pre-activation (row mass `(2h)(2w)·c·kH·kW·w₂·ρ`, via `convTap_out_l1` + new `sum_swap_triple_triple`) and calls `Conv2Slot.loss_grad_lipschitz`, which gained a predicate `Q` (`hgrad` only where `Q` holds, `Q` at both segment ends; the conv2 rungs pass `True`). Lipschitz proofs 471 → 15 (kernel) and 459 → 11 (bias). New `gradAt_comp_t3` (chain rule with the flat index split into its triple) takes the four `gradAt` closed forms (conv1/conv2 × kernel/bias) from 73–128-line `calc`s to 10–11 lines; new `convPad_row_l1` / `biasRow_l1` replace the inline row-mass proofs. The unpinned `cnn{,b}1_postrelu{1,2}_close` / `_z3_drift` / `_z4_drift` are gone; every other name and statement is unchanged (`Conv2Slot.loss_grad_lipschitz` is unpinned) |
 | `7c379b55` | **§4 `SgdDescentCnn` `grad_close` family** (−248; file 8,682 → 8,434): `cnn_conv2_grad_close` (204-line body) predated `cnn_conv2_cot_close` and re-derived its whole chain inline; it is now `cnn_conv2_cot_close` at the exact input `x₁` + the final `dot_perturbed_close` (≈30 lines), like its bias twin. `cnnConv2GradBudget` already equals that composite with its `let`s unfolded, so no definition changed. The cotangent block (`cnnConv2CotBudget`, `cnnConv2CotMag`, `cnn_conv2_cot_close`, `cnn_conv2_cot_real_abs_le`, `abs_le_of_close`) moved up from the conv1 section to sit before its first user. New `FloatModel.cnnConv2CotMag_nonneg` / `cnnConv2CotBudget_nonneg` replace five hand-built nonnegativity chains (both conv1 `grad_close`s and three float capstones; the conv2-kernel capstone's was ~55 lines) |
-| *(staged)* | **§4 head family, `SgdDescentMlp`** (−322; Mlp 2,187 → 1,925, Cnn 8,434 → 8,374): new `MlpSlot.loss_grad_lipschitz` — the segment-Lipschitz gradient for any map `Z` into a ReLU layer's pre-activation with per-entry drift `σ·‖e‖₁`, `ℓ1` drift `ρ·‖e‖₁` and a fixed row `J` (the `Conv2Slot` shape, same `Q` hook). `mlp_hidden_loss_grad_lipschitz` is `σ = ρ = a` (proof 135 → 10 lines); `mlp_input_loss_grad_lipschitz` takes `Z` = the middle pre-activation, `σ = w₁·a`, `ρ = d₂·w₁·a`, `J` = `xᵢ`·relu₀'s frozen mask·`W₁`'s row, `Q` = relu₀'s signs (231 → 31). New `margin_keeps_offkink_of_drift` (the margin lemma for any per-entry drift) replaces `margin_keeps_offkink`'s and `margin_keeps_offkink_mid`'s proofs and the identical `Conv2Slot.margin2_keeps_offkink` (deleted; its seven callers point at the shared one). New `dense_relu_drift` takes the logit drifts 32 → 2 and 46 → 7; `smul_l1_mass{,_le}` and `dense_input_drift` move up from `SgdDescentCnn`. `mlp_input_logit_drift`'s now-unused `ha` is `_ha`; every other name and statement unchanged |
+| `850dac3b` | **§4 head family, `SgdDescentMlp`** (−322; Mlp 2,187 → 1,925, Cnn 8,434 → 8,374): new `MlpSlot.loss_grad_lipschitz` — the segment-Lipschitz gradient for any map `Z` into a ReLU layer's pre-activation with per-entry drift `σ·‖e‖₁`, `ℓ1` drift `ρ·‖e‖₁` and a fixed row `J` (the `Conv2Slot` shape, same `Q` hook). `mlp_hidden_loss_grad_lipschitz` is `σ = ρ = a` (proof 135 → 10 lines); `mlp_input_loss_grad_lipschitz` takes `Z` = the middle pre-activation, `σ = w₁·a`, `ρ = d₂·w₁·a`, `J` = `xᵢ`·relu₀'s frozen mask·`W₁`'s row, `Q` = relu₀'s signs (231 → 31). New `margin_keeps_offkink_of_drift` (the margin lemma for any per-entry drift) replaces `margin_keeps_offkink`'s and `margin_keeps_offkink_mid`'s proofs and the identical `Conv2Slot.margin2_keeps_offkink` (deleted; its seven callers point at the shared one). New `dense_relu_drift` takes the logit drifts 32 → 2 and 46 → 7; `smul_l1_mass{,_le}` and `dense_input_drift` move up from `SgdDescentCnn`. `mlp_input_logit_drift`'s now-unused `ha` is `_ha`; every other name and statement unchanged |
+| *(staged)* | **§0.6(a) `CertLayer` adoption, R34/R50 blocks** (−507): new `CertLayer.residualProj` and `CertLayer.reluOut` (CertifiedChain) and four stage layers in `ResNet34BackB0` (`cbReluLayer`, `projLayer`, `cbReluStridedLayer`, `projStridedLayer`). The five block layers (`r34BasicBlockLayer`, `r34DownBlockLayer`, `r50BottleneckLayer`, `r50ProjBlockLayer`, `r50DownBlockLayer`) are composites of those, moved up from `BackNetFolds` / `ResNet50BackNet` into the files that prove the capstones. Each block `_has_vjp_at` is its layer's `.vjp`, each capstone its `.faithful` (29–45-line proofs → 2–3 lines), and the `FullBVJP` block differentiability lemmas its `.diff`. `mnv4ExpandLayer` / `mnv4ProjectLayer` were the same two stage layers; MNv4 now uses `cbReluLayer` / `projLayer`. Gone, unpinned and unused after this: the R34 down-body and R50 body / down-body VJPs and `_faithful`s, and the four `*BodyB_differentiableAt`. The layers' `ok` changes shape (`(A ∧ True) ∧ B` etc.; `projLayer` contributes `True`); no consumer destructured it. R34BackB0 640 → 560, R50BackB0 653 → 400, R50BackNet 339 → 226, BackNetFolds 330 → 272 |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -50,12 +51,36 @@ long as the setup); `DataParallel.dpIterate_lockstep` (the `Semiconj` term is no
 the `X_inj` family (1 line each); `sigmoidScalar := Real.sigmoid` as a definition (the bridge lemma
 gets the same reuse without moving its 32 consumers).
 
-**Next, in order:**
-1. **Other near-clones**, one family per commit, largest first: `CertLayer.comp` adoption (§0.6),
-   `BnPairTiedB` (§7), fused-from-unfused (§7), the G1/G2 generator lemmas (§5).
-2. Still open from §11: defects 2 (single-buffer magnitude in four test comparators) and 3 (vjp-oracle
+**Next, in order** (handoff for the next session; the `SgdDescent*` near-clone families are finished):
+1. **§0.6 `CertLayer.comp` adoption**, the rest (~850). (a), the R34/R50 block capstones, landed at −507
+   rather than the ~950 estimated: the capstones keep their signatures, so only their bodies went.
+   (b) one `stage_has_vjp_at` for the act∘norm∘lin stage VJP written 17+× (sites listed in §0.6); `rfl`-equal
+   for 5 checked. ~450. Pairs with `reluAfter_has_vjp_at` (§4 note, ~150).
+   (c) MobileNetV2 / EfficientNet bodies and whole-net folds, ported as MobileNetV4 was. ~400, likely.
+   ⚠ The files record kernel timeouts on hand-unrolled whole-net chains (`opaqueA*`, `rNNPreK`): leave the
+   whole-net apex chains alone (lead only). Measure each file's downstream count before batching (Nets files
+   feed StableHLO — see *Rebuild cost* below).
+2. **§7 `BnPairTiedB`** (~1,200, verified on `mnv2Stride1TiedB`) — the BN γ/β conjunct pair, proven by
+   `ResNet34PoCB.bnGammaGradB_den` / `bnBetaGradB_den`, repeated 48× in MobileNetV4StepTieB (18),
+   MobileNetV2StepTieB (10), EfficientNetStepTieG (10), EfficientNetStepTie (10) and ~29× more (ResNet50StepTieB 11,
+   Cifar8BnStepTie 8, ResNet34StepTieB 6, CifarBnStepTie 4) → `def BnPairTiedB … : Prop` + a 2-line
+   `bnPairTiedB_holds`. ⚠ The tie Props (`mnv2Stride1TiedB`, `r34IdTiedB`, …) are `def`s: folding the pair into
+   them changes their bodies, not any theorem statement, but every proof that destructures the conjunction
+   (`obtain ⟨…⟩`, `.1.2`) moves. Check `formalization.yaml` / the book for the Props' bodies before choosing
+   between (a) folding into the defs and (b) keeping the defs and proving each pair with `bnPairTiedB_holds`.
+   Do one family per commit (MobileNet/EfficientNet, then ResNet/Small); the `ConvBnStageTiedB` twin (§4 note,
+   ~500, likely) is the natural follow-on.
+3. **§7 fused-from-unfused** (~340–640, verified on 4 lemmas + 1 tie): `EfficientNetFold.lean` (8 lemmas, 190
+   lines) re-proves `EfficientNetFoldG.lean` (each is `rw [depthwiseWeightSgdB_eq_grad,
+   EnetPoCG.depthwiseWGradB_den]`); `EfficientNetStepTie`'s block ties re-prove `EfficientNetStepTieG`'s.
+   Smaller neighbours in §4/§7: dense-head folds (`Small/Cifar8Fold` generics, 18 copies, ~290), one
+   `softmaxCELossCot_den` (×7, ~80), `HasVJP.sgd_certified` (~250, mostly AuditAxioms-only, §0.7).
+4. **§5 generator lemmas** — G2: `pair_sq_bound_mlp` for the `pairSq*` body the SDP scripts emit 148× (~1,300
+   emitted lines); G1: `mlp_out_eq` for the `hout` block emitted 72× (~290). These change generated files: edit
+   the generator, regenerate, diff the output, and check `regen_verified_mlir.sh` / the render guard lists.
+5. Still open from §11: defects 2 (single-buffer magnitude in four test comparators) and 3 (vjp-oracle
    nets defined twice); §0.7 is a keep-or-retire decision for the user.
-3. Small §0.2 leftovers in root-side files, for whenever those files are next rebuilt anyway:
+6. Small §0.2 leftovers in root-side files, for whenever those files are next rebuilt anyway:
    `StridedConv.flatConvStride2Xla_differentiable`, `Depthwise.depthwiseStride2FlatXla_differentiable`
    (`unfold …; fun_prop`, 4 → 1 each).
 
@@ -113,6 +138,12 @@ gets the same reuse without moving its 32 consumers).
 - `SgdDescentCnn` is a leaf: `lake build Certs` ≈ 35 s, a standalone `lake env lean` of the file ≈ 20 s.
 - Four forked helpers drafting one file group each (scratch-only, `final_<File>.lean` with primed
   names) and a mechanical splice from those files worked well — ~55 sites in one pass.
+- `CertLayer` capstones: make the named `_has_vjp_at` def the composite layer's `.vjp` at the same
+  point and the capstone its `.faithful`; the hand-written graph defs stay and are `rfl`-equal to the
+  composite's `.graph`. Consumers that `rw [← capstone]` never unfold the VJP def, so they don't move.
+  `comp` conjoins `ok` as `L₁.ok x ∧ L₂.ok (L₁.fwd x)` and a globally certified stage contributes
+  `True`, so hypotheses go in as `⟨⟨h_s1, trivial⟩, h_out⟩`. Left-nest three stages
+  (`(L₁.comp L₂).comp L₃`) so `.fwd` is `f₃ ∘ (f₂ ∘ f₁)`, the association the stated types use.
 
 ---
 

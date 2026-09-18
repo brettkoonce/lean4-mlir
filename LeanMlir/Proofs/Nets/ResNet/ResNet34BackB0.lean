@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
+import LeanMlir.Proofs.Foundation.CertifiedChain
 
 /-! # Backward-graph faithfulness for the VERIFIED ResNet-34 basic block
 
@@ -43,6 +44,10 @@ one at the outer relu's pre-activation `residual(F)(x)`.
   residual-fan-in(body-back) + identity skip) denotes the proven
   `relu ∘ residual(F)` VJP (`vjp_comp_at(residual_has_vjp_at(body), relu)`),
   threaded through both relu smoothness hypotheses.
+* `cbReluLayer` / `projLayer` / `cbReluStridedLayer` / `projStridedLayer` — the four
+  stages as `CertLayer`s. `r34BasicBlockLayer` / `r34DownBlockLayer` compose them with
+  `CertLayer.comp`, `residual` / `residualProj` and `reluOut`, and each body/block VJP
+  and capstone here is that composite's `.vjp` / `.faithful`.
 
 ## The strided/downsample block (`relu ∘ residualProj(proj, F_s)`)
 
@@ -157,42 +162,54 @@ theorem cbReluBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   simp only [cbReluB_has_vjp_at, bnReluStage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
     Function.comp_apply]
 
+/-- The conv → bn → relu stage as a `CertLayer`, certified where its pre-relu activation misses 0.
+    The kernel extent is a binder, so the same layer is a 1×1 or a 3×3. -/
+noncomputable def cbReluLayer (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    CertLayer (N * (ic * h * w)) (N * (oc * h * w)) where
+  fwd := cbReluB N (h := h) (w := w) W b ε γ β
+  ok := fun x => ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0
+  diff := fun x hx => cbReluB_differentiableAt N W b ε hε γ β x hx
+  vjp := fun x hx => cbReluB_has_vjp_at N W b ε hε γ β x hx
+  graph := fun x e => cbReluBackBatchedGraph W b ε γ β x e
+  faithful := fun x hx e => cbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
+
+/-- `cbReluLayer`'s forward is `cbReluB`. -/
+theorem cbReluLayer_fwd_apply (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (v : Vec (N * (ic * h * w))) :
+    (cbReluLayer (h := h) (w := w) N W b ε hε γ β).fwd v
+      = cbReluB N (h := h) (w := w) W b ε γ β v := rfl
+
+/-- The conv → bn stage (`projB`, no activation) as a `CertLayer`. Globally certified
+    (`ok = True`): with no activation there is no kink. -/
+noncomputable def projLayer (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    CertLayer (N * (ic * h * w)) (N * (oc * h * w)) where
+  fwd := projB N (h := h) (w := w) W b ε γ β
+  ok := fun _ => True
+  diff := fun x _ => (projB_differentiable N W b ε hε γ β) x
+  vjp := fun x _ => (projB_has_vjp N W b ε hε γ β).toHasVJPAt x
+  graph := fun x e => projBackBatchedGraph W b ε γ β x e
+  faithful := fun x _ e => projBackBatchedGraph_faithful W b ε hε γ β x e
+
 -- ════════════════════════════════════════════════════════════════
 -- § The body: `cbB ∘ cbReluB`  (= projB ∘ cbReluB)
 -- ════════════════════════════════════════════════════════════════
 
 /-- The batched ResNet-34 basic-block body's VJP at a smooth point —
-    `projB ∘ cbReluB` (conv-bn after conv-bn-relu). One `vjp_comp_at` threading
-    the mid-relu smoothness family; `projB` (global, no activation) is lifted via
-    `.toHasVJPAt`.
-
-    `h_s1` is the stage-1 relu smoothness (at the cbReluB pre-relu activation). -/
+    `projB ∘ cbReluB` (conv-bn after conv-bn-relu), the VJP of
+    `cbReluLayer.comp projLayer`. `projB` has no activation, so the only smoothness
+    hypothesis is `h_s1`, the stage-1 relu's (at the cbReluB pre-relu activation). -/
 noncomputable def r34BodyB_has_vjp_at (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
     (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c)
     (x : Vec (N * (c * h * w)))
     (h_s1 : ∀ k, bnBatchLA N c h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) :
     HasVJPAt (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-              cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x := by
-  have h1_vjp : HasVJPAt (cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    cbReluB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ x h_s1
-  have h1_diff : DifferentiableAt ℝ (cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    cbReluB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ x h_s1
-  exact vjp_comp_at _ (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂) x
-    h1_diff
-    ((projB_differentiable N (h := h) (w := w) W₂ b₂ ε₂ hε₂ γ₂ β₂) _)
-    h1_vjp
-    ((projB_has_vjp N (h := h) (w := w) W₂ b₂ ε₂ hε₂ γ₂ β₂).toHasVJPAt _)
-
-theorem r34BodyB_differentiableAt (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
-    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
-    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c)
-    (x : Vec (N * (c * h * w)))
-    (h_s1 : ∀ k, bnBatchLA N c h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) :
-    DifferentiableAt ℝ (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
               cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-  ((projB_differentiable N (h := h) (w := w) W₂ b₂ ε₂ hε₂ γ₂ β₂) _).comp x
-    (cbReluB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ x h_s1)
+  ((cbReluLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁).comp
+    (projLayer N W₂ b₂ ε₂ hε₂ γ₂ β₂)).vjp x ⟨h_s1, trivial⟩
 
 /-- The batched ResNet-34 body backward graph: the two stage graphs chained at
     their cumulative forward activations (`cbReluB⁻¹ ∘ projB⁻¹`). -/
@@ -210,19 +227,29 @@ theorem r34BodyBackBatchedGraph_faithful {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w)))
     (h_s1 : ∀ k, bnBatchLA N c h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) :
     den (r34BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x e)
-      = (r34BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward (den e) := by
-  rw [r34BodyBackBatchedGraph, cbReluBackBatchedGraph_faithful (hε := hε₁) (h_smooth := h_s1),
-      projBackBatchedGraph_faithful (hε := hε₂)]
-  simp only [r34BodyB_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt, Function.comp_apply]
+      = (r34BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward (den e) :=
+  ((cbReluLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁).comp
+    (projLayer N W₂ b₂ ε₂ hε₂ γ₂ β₂)).faithful x ⟨h_s1, trivial⟩ e
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-block VJP: `relu ∘ residual(F)` (outer relu after the add)
 -- ════════════════════════════════════════════════════════════════
 
+/-- The batched R34 identity basic block as a `CertLayer`: `residual (cbReluLayer ; projLayer)`,
+    then `reluOut`. Its `ok` is the body's mid-relu and the OUTER post-residual relu — the extra
+    factor R34 has over the MBConv/inverted-residual blocks (`projLayer` contributes `True`). An
+    endomorphism, so `chain` iterates it into a stage tail. -/
+noncomputable def r34BasicBlockLayer (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c) :
+    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
+  (CertLayer.residual ((cbReluLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁).comp
+    (projLayer N W₂ b₂ ε₂ hε₂ γ₂ β₂))).comp (CertLayer.reluOut _)
+
 /-- The batched ResNet-34 identity basic block's VJP at a smooth point —
-    `relu ∘ residual(F)` with body `F = projB ∘ cbReluB`. One `vjp_comp_at`
-    composing the residual fan-in VJP (`residual_has_vjp_at` of the body) with the
-    OUTER relu's pointwise VJP at the pre-relu activation `residual(F)(x)`.
+    `relu ∘ residual(F)` with body `F = projB ∘ cbReluB`: the residual fan-in VJP
+    of the body, then the OUTER relu's pointwise VJP at the pre-relu activation
+    `residual(F)(x)` (`r34BasicBlockLayer`'s VJP).
 
     `h_s1` is the body's mid-relu smoothness; `h_out` is the outer-relu smoothness
     (at `residual(F)(x)`). -/
@@ -235,24 +262,9 @@ noncomputable def r34BasicBlockB_has_vjp_at (N : Nat) {c h w kH₁ kW₁ kH₂ k
                     cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     HasVJPAt (relu (N * (c * h * w)) ∘
               residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                        cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x := by
-  have hbody_vjp : HasVJPAt (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-        cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    r34BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1
-  have hbody_diff : DifferentiableAt ℝ (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-        cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    r34BodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1
-  have hres_vjp : HasVJPAt (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-        cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
-    residual_has_vjp_at _ x hbody_diff hbody_vjp
-  have hres_diff : DifferentiableAt ℝ (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-        cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
-    hbody_diff.add (differentiable_id.differentiableAt)
-  exact vjp_comp_at _ (relu (N * (c * h * w))) x
-    hres_diff
-    (relu_differentiableAt_of_smooth (N * (c * h * w)) _ h_out)
-    hres_vjp
-    (relu_has_vjp_at (N * (c * h * w)) _ h_out)
+                        cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
+  (r34BasicBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂).vjp x
+    ⟨⟨h_s1, trivial⟩, h_out⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-block backward graph (body fan-in + outer relu)
@@ -284,7 +296,8 @@ noncomputable def r34BasicBlockBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂
     equal to `r34BasicBlockB_has_vjp_at` (= `vjp_comp_at(residual_has_vjp_at(F),
     relu)`). The ResNet-34 analogue of `mbResidBlockBackBatchedGraph_faithful` /
     `mnv2ResidBlockBackBatchedGraph_faithful`, with the extra outer-relu factor,
-    threaded through both relu smoothness hypotheses.
+    threaded through both relu smoothness hypotheses. It is `r34BasicBlockLayer`'s
+    `faithful`.
 
     Key fact: the outer relu's `.selectPos` mask is applied ONCE to the incoming
     `dy` (giving `masked = relu_has_vjp_at.backward (den ecot)`), and that masked cotangent
@@ -299,35 +312,9 @@ theorem r34BasicBlockBackBatchedGraph_faithful {N c h w kH₁ kW₁ kH₂ kW₂ 
     (h_out : ∀ k, residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                     cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x ecot)
-      = (r34BasicBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1 h_out).backward (den ecot) := by
-  -- The masked cotangent denotes relu's backward applied to dy.
-  have hmask : den (SHlo.selectPos "%outR"
-        (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-          cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)
-      = (relu_has_vjp_at (N * (c * h * w)) _ h_out).backward (den ecot) :=
-    selectPos_faithful _ _ h_out ecot
-  -- The body backward (fed the masked cotangent) denotes the body VJP at that masked cotangent.
-  have hbody : den (r34BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
-        (SHlo.selectPos "%outR"
-          (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-            cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
-      = (r34BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward
-          ((relu_has_vjp_at (N * (c * h * w)) _ h_out).backward (den ecot)) := by
-    rw [r34BodyBackBatchedGraph_faithful (hε₁ := hε₁) (hε₂ := hε₂) (h_s1 := h_s1), hmask]
-  funext i
-  -- LHS unfolds: addV(bodyBack(masked), masked) i = bodyBack(masked) i + masked i.
-  have hsum : den (r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x ecot) i
-      = den (r34BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
-            (SHlo.selectPos "%outR"
-              (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i
-        + den (SHlo.selectPos "%outR"
-              (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot) i := rfl
-  rw [hsum, hbody, hmask]
-  -- RHS: vjp_comp_at(residual, relu).backward (den ecot) = residual.backward (relu.backward (den ecot))
-  --    = bodyBack(relu.backward (den ecot)) + (relu.backward (den ecot))  [residual_has_vjp_at = biPath f id]
-  rfl
+      = (r34BasicBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1 h_out).backward (den ecot) :=
+  (r34BasicBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂).faithful x
+    ⟨⟨h_s1, trivial⟩, h_out⟩ ecot
 
 -- ════════════════════════════════════════════════════════════════
 -- § DOWNSAMPLE BLOCK — `relu ∘ residualProj(proj, F_s)`
@@ -385,6 +372,17 @@ theorem cbReluStridedBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   simp only [cbReluStridedB_has_vjp_at, bnReluStage_has_vjp_at, vjp_comp_at,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
+/-- The strided conv → bn → relu stage as a `CertLayer` — `cbReluLayer` with `flatConvStride2`. -/
+noncomputable def cbReluStridedLayer (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) where
+  fwd := cbReluStridedB N (h := h) (w := w) W b ε γ β
+  ok := fun x => ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConvStride2 W b) x) k ≠ 0
+  diff := fun x hx => cbReluStridedB_differentiableAt N W b ε hε γ β x hx
+  vjp := fun x hx => cbReluStridedB_has_vjp_at N W b ε hε γ β x hx
+  graph := fun x e => cbReluStridedBackBatchedGraph W b ε γ β x e
+  faithful := fun x hx e => cbReluStridedBackBatchedGraph_faithful W b ε hε γ β x e hx
+
 -- ════════════════════════════════════════════════════════════════
 -- § The strided projection skip — `projStridedB` (conv_strided → bn, no relu)
 -- ════════════════════════════════════════════════════════════════
@@ -428,41 +426,21 @@ theorem projStridedBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
       bnBatchLABack_faithful (β := β) (hε := hε)]
   simp only [projStridedB_has_vjp, bnStage_has_vjp, vjp_comp]
 
+/-- The strided conv → bn projection skip as a `CertLayer` — `projLayer` with `flatConvStride2`,
+    globally certified. -/
+noncomputable def projStridedLayer (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) where
+  fwd := projStridedB N (h := h) (w := w) W b ε γ β
+  ok := fun _ => True
+  diff := fun x _ => (projStridedB_differentiable N W b ε hε γ β) x
+  vjp := fun x _ => (projStridedB_has_vjp N W b ε hε γ β).toHasVJPAt x
+  graph := fun x e => projStridedBackBatchedGraph W b ε γ β x e
+  faithful := fun x _ e => projStridedBackBatchedGraph_faithful W b ε hε γ β x e
+
 -- ════════════════════════════════════════════════════════════════
 -- § The downsample body: `projB ∘ cbReluStridedB`  (strided conv1, stride-1 conv2)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The batched ResNet-34 downsample-block body's VJP at a smooth point —
-    `projB ∘ cbReluStridedB` (stride-1 conv-bn after STRIDED conv-bn-relu). One
-    `vjp_comp_at` threading the mid-relu smoothness family; `projB` (global, no
-    activation) is lifted via `.toHasVJPAt`. The strided sibling of
-    `r34BodyB_has_vjp_at` (`cbReluStridedB` for `cbReluB`). -/
-noncomputable def r34DownBodyB_has_vjp_at (N : Nat) {ic oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
-    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec oc)
-    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (h_s1 : ∀ k, bnBatchLA N oc h w ε₁ γ₁ β₁ (batchMap N (flatConvStride2 W₁ b₁) x) k ≠ 0) :
-    HasVJPAt (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-              cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x := by
-  have h1_vjp : HasVJPAt (cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    cbReluStridedB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ x h_s1
-  have h1_diff : DifferentiableAt ℝ (cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    cbReluStridedB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ x h_s1
-  exact vjp_comp_at _ (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂) x
-    h1_diff
-    ((projB_differentiable N (h := h) (w := w) W₂ b₂ ε₂ hε₂ γ₂ β₂) _)
-    h1_vjp
-    ((projB_has_vjp N (h := h) (w := w) W₂ b₂ ε₂ hε₂ γ₂ β₂).toHasVJPAt _)
-
-theorem r34DownBodyB_differentiableAt (N : Nat) {ic oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
-    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec oc)
-    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (h_s1 : ∀ k, bnBatchLA N oc h w ε₁ γ₁ β₁ (batchMap N (flatConvStride2 W₁ b₁) x) k ≠ 0) :
-    DifferentiableAt ℝ (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-              cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-  ((projB_differentiable N (h := h) (w := w) W₂ b₂ ε₂ hε₂ γ₂ β₂) _).comp x
-    (cbReluStridedB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ x h_s1)
 
 /-- The batched ResNet-34 downsample body backward graph: the two stage graphs
     chained at their cumulative forward activations (`cbReluStridedB⁻¹ ∘ projB⁻¹`).
@@ -476,27 +454,27 @@ noncomputable def r34DownBodyBackBatchedGraph {N ic oc h w kH₁ kW₁ kH₂ kW�
   cbReluStridedBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ x
     (projBackBatchedGraph W₂ b₂ ε₂ γ₂ β₂ x1 e)
 
-theorem r34DownBodyBackBatchedGraph_faithful {N ic oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
-    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec oc)
-    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w)))
-    (h_s1 : ∀ k, bnBatchLA N oc h w ε₁ γ₁ β₁ (batchMap N (flatConvStride2 W₁ b₁) x) k ≠ 0) :
-    den (r34DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x e)
-      = (r34DownBodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward (den e) := by
-  rw [r34DownBodyBackBatchedGraph,
-      cbReluStridedBackBatchedGraph_faithful (hε := hε₁) (h_smooth := h_s1),
-      projBackBatchedGraph_faithful (hε := hε₂)]
-  simp only [r34DownBodyB_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt, Function.comp_apply]
-
 -- ════════════════════════════════════════════════════════════════
 -- § The whole downsample-block VJP: `relu ∘ residualProj(proj, F_s)`
 -- ════════════════════════════════════════════════════════════════
 
+/-- The batched R34 downsample basic block as a `CertLayer`: `residualProj (projStridedLayer)
+    (cbReluStridedLayer ; projLayer)`, then `reluOut`. Halves resolution (hence the `2*h` in the
+    input type), with a strided conv1 and a strided projection skip. -/
+noncomputable def r34DownBlockLayer (N : Nat) {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
+    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
+  (CertLayer.residualProj (projStridedLayer N (h := h) (w := w) Wp bp εp hεp γp βp)
+    ((cbReluStridedLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁).comp
+      (projLayer N W₂ b₂ ε₂ hε₂ γ₂ β₂))).comp (CertLayer.reluOut _)
+
 /-- The batched ResNet-34 downsample basic block's VJP at a smooth point —
     `relu ∘ residualProj(proj, F_s)` with body `F_s = projB ∘ cbReluStridedB` and
-    projection skip `proj = projStridedB`. One `vjp_comp_at` composing the projected
-    residual fan-in VJP (`residualProj_has_vjp_at` of skip + body) with the OUTER
-    relu's pointwise VJP at the pre-relu activation `residualProj(proj, F_s)(x)`.
+    projection skip `proj = projStridedB`: the projected residual fan-in VJP (skip +
+    body), then the OUTER relu's pointwise VJP at the pre-relu activation
+    `residualProj(proj, F_s)(x)` (`r34DownBlockLayer`'s VJP).
 
     The strided sibling of `r34BasicBlockB_has_vjp_at`: `residualProj` (BOTH paths
     nontrivial) for `residual` (identity skip), strided convs in body+skip.
@@ -514,27 +492,9 @@ noncomputable def r34DownBlockB_has_vjp_at (N : Nat) {ic oc h w kH₁ kW₁ kH�
     HasVJPAt (relu (N * (oc * h * w)) ∘
               residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                 (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                 cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x := by
-  have hbody_vjp : HasVJPAt (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-        cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    r34DownBodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1
-  have hbody_diff : DifferentiableAt ℝ (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-        cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-    r34DownBodyB_differentiableAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1
-  have hproj_vjp : HasVJPAt (projStridedB N (h := h) (w := w) Wp bp εp γp βp) x :=
-    (projStridedB_has_vjp N Wp bp εp hεp γp βp).toHasVJPAt x
-  have hproj_diff : DifferentiableAt ℝ (projStridedB N (h := h) (w := w) Wp bp εp γp βp) x :=
-    (projStridedB_differentiable N Wp bp εp hεp γp βp) x
-  have hres_vjp : HasVJPAt (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-        (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-         cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
-    residualProj_has_vjp_at _ _ x hproj_diff hbody_diff hproj_vjp hbody_vjp
-  have hres_diff := hproj_diff.add hbody_diff
-  exact vjp_comp_at _ (relu (N * (oc * h * w))) x
-    hres_diff
-    (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ h_out)
-    hres_vjp
-    (relu_has_vjp_at (N * (oc * h * w)) _ h_out)
+                 cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁)) x :=
+  (r34DownBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
+    Wp bp εp hεp γp βp).vjp x ⟨⟨trivial, h_s1, trivial⟩, h_out⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole downsample-block backward graph (proj+body fan-in + outer relu)
@@ -573,7 +533,8 @@ noncomputable def r34DownBlockBackBatchedGraph {N ic oc h w kH₁ kW₁ kH₂ kW
     `r34DownBlockB_has_vjp_at` (= `vjp_comp_at(residualProj_has_vjp_at(proj, F_s),
     relu)`). The strided sibling of `r34BasicBlockBackBatchedGraph_faithful`:
     `residualProj` (both backward paths nontrivial) for `residual` (identity skip),
-    `convStridedBackBatched` in the body's conv1 and the whole projection skip.
+    `convStridedBackBatched` in the body's conv1 and the whole projection skip. It is
+    `r34DownBlockLayer`'s `faithful`.
 
     Key fact: the outer relu's `.selectPos` mask is applied ONCE to the incoming
     `dy` (giving `masked = relu_has_vjp_at.backward (den ecot)`), and that masked cotangent
@@ -592,49 +553,8 @@ theorem r34DownBlockBackBatchedGraph_faithful {N ic oc h w kH₁ kW₁ kH₂ kW�
                      cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp x ecot)
       = (r34DownBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          Wp bp εp hεp γp βp x h_s1 h_out).backward (den ecot) := by
-  -- The masked cotangent denotes relu's backward applied to dy.
-  have hmask : den (SHlo.selectPos "%outR"
-        (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-          (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-           cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)
-      = (relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot) :=
-    selectPos_faithful _ _ h_out ecot
-  -- The body backward (fed the masked cotangent) denotes the body VJP at it.
-  have hbody : den (r34DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
-        (SHlo.selectPos "%outR"
-          (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-            (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
-      = (r34DownBodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
-    rw [r34DownBodyBackBatchedGraph_faithful (hε₁ := hε₁) (hε₂ := hε₂) (h_s1 := h_s1), hmask]
-  -- The projection-skip backward (same masked cotangent) denotes the skip VJP at it.
-  have hproj : den (projStridedBackBatchedGraph Wp bp εp γp βp x
-        (SHlo.selectPos "%outR"
-          (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-            (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
-      = (projStridedB_has_vjp N Wp bp εp hεp γp βp).backward x
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
-    rw [projStridedBackBatchedGraph_faithful (hε := hεp), hmask]
-  funext i
-  -- LHS unfolds: addV(projBack(masked), bodyBack(masked)) i = projBack(masked) i + bodyBack(masked) i.
-  have hsum : den (r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp x ecot) i
-      = den (projStridedBackBatchedGraph Wp bp εp γp βp x
-            (SHlo.selectPos "%outR"
-              (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-                (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                 cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i
-        + den (r34DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
-              (SHlo.selectPos "%outR"
-                (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
-                  (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                   cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i := rfl
-  rw [hsum, hbody, hproj]
-  -- RHS: vjp_comp_at(residualProj, relu).backward (den ecot) = residualProj.backward (relu.backward (den ecot))
-  --   = proj.backward(relu.backward (den ecot)) + body.backward(relu.backward (den ecot))
-  --   [residualProj_has_vjp_at = biPath_has_vjp_at proj body]
-  rfl
+          Wp bp εp hεp γp βp x h_s1 h_out).backward (den ecot) :=
+  (r34DownBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
+    Wp bp εp hεp γp βp).faithful x ⟨⟨trivial, h_s1, trivial⟩, h_out⟩ ecot
 
 end Proofs.StableHLO

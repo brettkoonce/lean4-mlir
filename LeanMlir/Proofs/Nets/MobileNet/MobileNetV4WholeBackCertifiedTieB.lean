@@ -552,7 +552,7 @@ theorem mnv4HeadStack_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
       = r34HeadB N 7 7 w.Wd w.bd
           (cbReluB N (h := 7) (w := 7) w.hW w.hb w.hE w.hg w.hbt
             (cbReluB N (h := 7) (w := 7) w.h1W w.h1b w.h1E w.h1g w.h1bt v)) := by
-  simp only [mnv4HeadStack, mnv4Head, CertLayer.comp_fwd_apply, mnv4ExpandLayer_fwd_apply,
+  simp only [mnv4HeadStack, mnv4Head, CertLayer.comp_fwd_apply, cbReluLayer_fwd_apply,
     mnv4GapLayer_fwd_apply, mnv4DenseLayer_fwd_apply, r34HeadB_apply]
 
 /-- The forward at GROUP granularity — `rfl`, because `mobilenetv4ForwardB_full` IS the nest of

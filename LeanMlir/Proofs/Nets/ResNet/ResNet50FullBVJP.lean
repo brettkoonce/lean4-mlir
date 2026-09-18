@@ -128,11 +128,10 @@ noncomputable def r50IdB_has_vjp_at (N h w : Nat) {mid oc : Nat} (p : R50IdW mid
 
 theorem r50IdB_differentiableAt (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
     (hq : R50IdPos p) (v : Vec (N * (oc * h * w))) (hs : R50IdSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r50IdB N h w p) v := by
-  have hbody := StableHLO.r50BodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2
-  exact (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ hs.hout).comp v
-    (hbody.add differentiable_id.differentiableAt)
+    DifferentiableAt ℝ (r50IdB N h w p) v :=
+  (StableHLO.r50BottleneckLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃).diff v
+    ⟨⟨⟨hs.hm1, hs.hm2⟩, trivial⟩, hs.hout⟩
 
 /-- Stride-1 projection bottleneck VJP — `r50ProjBlockB_has_vjp_at` at the bundle's fields. -/
 noncomputable def r50ProjB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
@@ -144,11 +143,10 @@ noncomputable def r50ProjB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50Pr
 
 theorem r50ProjB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (v : Vec (N * (ic * h * w))) (hs : R50ProjSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r50ProjB N h w p) v := by
-  exact (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ hs.hout).comp v
-    ((projB_differentiable N p.Wp p.bp p.εp hq.hp p.γp p.βp v).add
-      (StableHLO.r50BodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-        p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2))
+    DifferentiableAt ℝ (r50ProjB N h w p) v :=
+  (StableHLO.r50ProjBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
+    p.Wp p.bp p.εp hq.hp p.γp p.βp).diff v ⟨⟨trivial, ⟨hs.hm1, hs.hm2⟩, trivial⟩, hs.hout⟩
 
 /-- Strided projection bottleneck VJP — `r50DownBlockB_has_vjp_at` at the bundle's fields. -/
 noncomputable def r50DownB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
@@ -162,11 +160,10 @@ noncomputable def r50DownB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50Pr
 theorem r50DownB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : R50DownSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r50DownB N h w p) v := by
-  exact (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ hs.hout).comp v
-    ((StableHLO.projStridedB_differentiable N p.Wp p.bp p.εp hq.hp p.γp p.βp v).add
-      (StableHLO.r50DownBodyB_differentiableAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-        p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2))
+    DifferentiableAt ℝ (r50DownB N h w p) v :=
+  (StableHLO.r50DownBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
+    p.Wp p.bp p.εp hq.hp p.γp p.βp).diff v ⟨⟨trivial, ⟨hs.hm1, hs.hm2⟩, trivial⟩, hs.hout⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The running activations — `r50PreK` = the net truncated after block `K`

@@ -79,7 +79,7 @@ precedent, closed over 2026-09-06/07.
 
 ⚠ **Two things this file's certificates do NOT give you.** (i) The head models ONE conv stage;
 Conv-M's render has **two** (`%h1W` 256→960, then `%hW` 960→1280), so a whole-net use composes
-`mnv4ExpandLayer` twice. (ii) The **stem** is not here and cannot be a `CertLayer`: no render
+`cbReluLayer` twice. (ii) The **stem** is not here and cannot be a `CertLayer`: no render
 emits a gradient into `%x`, so there is no `convStridedXlaBackBatched` token and hence no backward
 graph to be faithful to. That is B0's situation exactly — `enetTrunk` takes its stem as a
 parameter for the same reason — and a net-level forward must compose the stem's VJP by
@@ -202,37 +202,9 @@ noncomputable def mnv4DWReluLayer (N : Nat) {c h w kH kW : Nat}
   graph := fun x e => dwbReluBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => dwbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
 
-/-- The UIB **expand** (1×1 conv → bn → relu) as a `CertLayer` — `cbReluB`, reused verbatim from
-    `ResNet34BackB0`. The kernel extent is a binder, so 1×1 is an argument. -/
-noncomputable def mnv4ExpandLayer (N : Nat) {ic mid h w kH kW : Nat}
-    (W : Kernel4 mid ic kH kW) (b : Vec mid) (ε : ℝ) (hε : 0 < ε) (γ β : Vec mid) :
-    CertLayer (N * (ic * h * w)) (N * (mid * h * w)) where
-  fwd := cbReluB N (h := h) (w := w) W b ε γ β
-  ok := fun x => ∀ k, bnBatchLA N mid h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0
-  diff := fun x hx => cbReluB_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => cbReluB_has_vjp_at N W b ε hε γ β x hx
-  graph := fun x e => cbReluBackBatchedGraph W b ε γ β x e
-  faithful := fun x hx e => cbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
-
-
-/-- The UIB/head **expand** layer's forward is `cbReluB`. -/
-theorem mnv4ExpandLayer_fwd_apply (N : Nat) {ic mid h w kH kW : Nat}
-    (W : Kernel4 mid ic kH kW) (b : Vec mid) (ε : ℝ) (hε : 0 < ε) (γ β : Vec mid)
-    (v : Vec (N * (ic * h * w))) :
-    (mnv4ExpandLayer (h := h) (w := w) N W b ε hε γ β).fwd v
-      = cbReluB N (h := h) (w := w) W b ε γ β v := rfl
-/-- The UIB **project** (1×1 conv → bn, NO activation) as a `CertLayer` — `projB`, reused verbatim.
-    ⚠ Globally certified (`ok = True`): with no activation there is no kink, which is why a UIB
-    block has three smoothness families and not four. -/
-noncomputable def mnv4ProjectLayer (N : Nat) {mid oc h w kH kW : Nat}
-    (W : Kernel4 oc mid kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    CertLayer (N * (mid * h * w)) (N * (oc * h * w)) where
-  fwd := projB N (h := h) (w := w) W b ε γ β
-  ok := fun _ => True
-  diff := fun x _ => (projB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (projB_has_vjp N W b ε hε γ β).toHasVJPAt x
-  graph := fun x e => projBackBatchedGraph W b ε γ β x e
-  faithful := fun x _ e => projBackBatchedGraph_faithful W b ε hε γ β x e
+-- The UIB **expand** (1×1 conv → bn → relu) and **project** (1×1 conv → bn) stages are
+-- `ResNet34BackB0`'s `cbReluLayer` and `projLayer`. The project stage has no activation and so no
+-- kink, which is why a UIB block has three smoothness families and not four.
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE FAMILY COLLAPSE — one body, four families, `id'` in the empty slots
@@ -510,7 +482,7 @@ theorem mnv4FusedStage_faithful (N : Nat) {ic mid oc h w : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-! MNv4's head is `1×1 conv (256 → 1280) → BN → relu → GAP(7×7) → dense`. The conv stage is
-`mnv4ExpandLayer` again (conv-bn-relu is conv-bn-relu, and the kernel extent is a binder), so only
+`cbReluLayer` again (conv-bn-relu is conv-bn-relu, and the kernel extent is a binder), so only
 GAP and the classifier are new.
 
 ⭐ **Both tie by `rfl`.** `den` of `.gapBackBatched` is *definitionally* the row-wise GAP VJP, and
@@ -636,9 +608,9 @@ noncomputable def mnv4UibSkipBlockOfKs (N : Nat) {c mid h w kHp kWp kHd kWd kHe 
     CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
   mnv4UibSkipBlock N
     (mnv4PreDWSlot (h := h) (w := w) N preDWk Wq bq εq hεq γq βq)
-    (mnv4ExpandLayer N We be εe hεe γe βe)
+    (cbReluLayer N We be εe hεe γe βe)
     (mnv4PostDWSlot (h := h) (w := w) N postDWk Wd bd εd hεd γd βd)
-    (mnv4ProjectLayer N Wz bz εz hεz γz βz)
+    (projLayer N Wz bz εz hεz γz βz)
 
 /-- The four families, named — read off the two kernel slots by **exactly** the rule the slots
     dispatch on and the render emits. -/
@@ -772,9 +744,9 @@ noncomputable def mnv4BodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
     CertLayer (N * (s.ic * s.h * s.h)) (N * (s.oc * s.h * s.h)) :=
   mnv4UibBody N
     (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2)
-    (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
+    (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
     (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2)
-    (mnv4ProjectLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
+    (projLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
 
 /-- ⭐ **The row-built body's backward graph denotes its VJP.** Immediate from `CertLayer.faithful`
     — the point is not the proof but that its subject is determined by `s` alone. -/
@@ -803,9 +775,9 @@ noncomputable def mnv4PreStridedBodyOfRow (N : Nat) (s : UibSpec) (p : UibParams
     CertLayer (N * (s.ic * (2 * s.h) * (2 * s.h))) (N * (s.oc * s.h * s.h)) :=
   mnv4UibPreStridedBody N
     (mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2)
-    (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
+    (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
     (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2)
-    (mnv4ProjectLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
+    (projLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
 
 /-- ⭐ **The row-built pre-strided body's backward graph denotes its VJP.** As for
     `mnv4BodyOfRow_faithful`, the content is not the proof but that its subject is determined by

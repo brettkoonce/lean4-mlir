@@ -285,18 +285,18 @@ noncomputable def mnv4FusedStack (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) 
     CertLayer (N * (32 * 112 * 112)) (N * (48 * 56 * 56)) :=
   mnv4FusedStage N
     (mnv4FusedConvLayer (h := 56) (w := 56) N w.f0cW w.f0cb w.f0cE w.hf0cE w.f0cg w.f0cbt)
-    (mnv4ProjectLayer (h := 56) (w := 56) N w.f0pW w.f0pb w.f0pE w.hf0pE w.f0pg w.f0pbt)
+    (projLayer (h := 56) (w := 56) N w.f0pW w.f0pb w.f0pE w.hf0pE w.f0pg w.f0pbt)
 
 /-- **The head**: 1×1 256 → 960 conv-bn-relu, 1×1 960 → 1280 conv-bn-relu, GAP(7×7), classifier.
 
     ⚠ `mnv4Head` models ONE conv stage and Conv-M's render emits **two** (`%h1W` then `%hW`), so
-    the first is composed on the outside as a second `mnv4ExpandLayer` — conv-bn-relu is
+    the first is composed on the outside as a second `cbReluLayer` — conv-bn-relu is
     conv-bn-relu and the kernel extent is a binder, so 1×1 is an argument. ⭐ GAP and dense are
     both globally certified and both tie by `rfl`; only the two relus carry a condition. -/
 noncomputable def mnv4HeadStack (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) :
     CertLayer (N * (256 * 7 * 7)) (N * nCls) :=
-  (mnv4ExpandLayer (h := 7) (w := 7) N w.h1W w.h1b w.h1E w.hh1E w.h1g w.h1bt).comp
-    (mnv4Head N (mnv4ExpandLayer (h := 7) (w := 7) N w.hW w.hb w.hE w.hhE w.hg w.hbt)
+  (cbReluLayer (h := 7) (w := 7) N w.h1W w.h1b w.h1E w.hh1E w.h1g w.h1bt).comp
+    (mnv4Head N (cbReluLayer (h := 7) (w := 7) N w.hW w.hb w.hE w.hhE w.hg w.hbt)
       (mnv4GapLayer N (c := 1280) (h := 7) (w := 7)) (mnv4DenseLayer N w.Wd w.bd))
 
 /-! ⚠⚠ **The trunk is built in GROUPS, and that is a proof-engineering requirement.** One 24-stage
@@ -482,9 +482,9 @@ theorem mnv4FusedGraphB_faithful (epsStr : String) (N h w : Nat) {ic mid oc kH k
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (mnv4FusedGraphB epsStr N h w Wc bc εc γc βc Wp bp εp γp βp e)
       = (mnv4FusedStage N (mnv4FusedConvLayer (h := h) (w := w) N Wc bc εc hεc γc βc)
-          (mnv4ProjectLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).fwd (den e) := by
+          (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).fwd (den e) := by
   simp only [mnv4FusedGraphB, mnv4FusedStage, mnv4FusedConvLayer,
-    mnv4ProjectLayer, CertLayer.comp_fwd, fusedConvB, projB,
+    projLayer, CertLayer.comp_fwd, fusedConvB, projB,
     den_batchOp_swish_eq_swishF, swishF_faithful, den_batchOp_conv, den_batchOp_convStrided,
     den_bnBatchF, Function.comp_apply]
 
@@ -520,7 +520,7 @@ theorem mnv4ExtraDWBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     (e : SHlo (N * (s.ic * s.h * s.h))) :
     den (mnv4ExtraDWBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ExtraDWBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
-    ite_eq_right hq, ite_eq_right hd, mnv4DWReluLayer, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.comp_fwd,
+    ite_eq_right hq, ite_eq_right hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.comp_fwd,
     projB, cbReluB, dwbReluB, den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv,
     den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
 
@@ -549,7 +549,7 @@ theorem mnv4ConvNeXtBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec
     (e : SHlo (N * (s.ic * s.h * s.h))) :
     den (mnv4ConvNeXtBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ConvNeXtBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
-    ite_eq_right hq, ite_eq_left hd, mnv4DWReluLayer, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.id'_fwd,
+    ite_eq_right hq, ite_eq_left hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.id'_fwd,
     CertLayer.comp_fwd, projB, cbReluB, dwbReluB, den_batchOp_relu_eq_reluF, reluF_faithful,
     den_batchOp_conv, den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
 
@@ -571,7 +571,7 @@ theorem mnv4FfnBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     (e : SHlo (N * (s.ic * s.h * s.h))) :
     den (mnv4FfnBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4FfnBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
-    ite_eq_left hq, ite_eq_left hd, mnv4ExpandLayer, mnv4ProjectLayer, CertLayer.id'_fwd, CertLayer.comp_fwd,
+    ite_eq_left hq, ite_eq_left hd, cbReluLayer, projLayer, CertLayer.id'_fwd, CertLayer.comp_fwd,
     projB, cbReluB, den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv,
     den_bnBatchF, Function.comp_apply]
 
@@ -604,7 +604,7 @@ theorem mnv4PreStridedGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     (e : SHlo (N * (s.ic * (2 * s.h) * (2 * s.h)))) :
     den (mnv4PreStridedGraphB epsStr N s p e) = (mnv4PreStridedBodyOfRow N s p).fwd (den e) := by
   simp only [mnv4PreStridedGraphB, mnv4PreStridedBodyOfRow, mnv4UibPreStridedBody, mnv4PostDWSlot,
-    ite_eq_right hd, mnv4DWReluLayer, mnv4DWReluStridedLayer, mnv4ExpandLayer, mnv4ProjectLayer,
+    ite_eq_right hd, mnv4DWReluLayer, mnv4DWReluStridedLayer, cbReluLayer, projLayer,
     CertLayer.comp_fwd, projB, cbReluB, dwbReluB, dwbReluBstrided, den_batchOp_relu_eq_reluF,
     reluF_faithful, den_batchOp_conv, den_batchOp_depthwise, den_batchOp_depthwiseStrided,
     den_bnBatchF, Function.comp_apply]
@@ -658,10 +658,10 @@ theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid oc nCls :
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (hε2 : 0 < ε2) (γ2 β2 : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (e : SHlo (N * (c * h * w))) :
     den (mnv4HeadGraphB epsStr N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd e)
-      = ((mnv4ExpandLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1).comp
-          (mnv4Head N (mnv4ExpandLayer (h := h) (w := w) N W2 b2 ε2 hε2 γ2 β2)
+      = ((cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1).comp
+          (mnv4Head N (cbReluLayer (h := h) (w := w) N W2 b2 ε2 hε2 γ2 β2)
             (mnv4GapLayer N (c := oc) (h := h) (w := w)) (mnv4DenseLayer N Wd bd))).fwd (den e) := by
-  simp only [mnv4HeadGraphB, mnv4Head, mnv4ExpandLayer, mnv4GapLayer,
+  simp only [mnv4HeadGraphB, mnv4Head, cbReluLayer, mnv4GapLayer,
     mnv4DenseLayer, CertLayer.comp_fwd, cbReluB, den_batchOp_relu_eq_reluF, reluF_faithful,
     den_batchOp_conv, den_batchOp_gap, den_batchOp_dense, den_bnBatchF, Function.comp_apply]
 
