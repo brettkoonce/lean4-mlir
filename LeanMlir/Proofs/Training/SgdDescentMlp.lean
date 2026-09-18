@@ -53,20 +53,8 @@ open StableHLO
     that lets forward drift pass through a kinked layer unamplified. -/
 theorem relu_entry_lipschitz (n : Nat) (u v : Vec n) (k : Fin n) :
     |relu n u k - relu n v k| ≤ |u k - v k| := by
-  simp only [relu]
-  by_cases hu : u k > 0 <;> by_cases hv : v k > 0
-  · rw [ite_eq_left hu, ite_eq_left hv]
-  · rw [ite_eq_left hu, ite_eq_right hv]
-    have hv' : v k ≤ 0 := not_lt.mp hv
-    rw [sub_zero, abs_of_pos hu, abs_of_pos (by linarith : (0:ℝ) < u k - v k)]
-    linarith
-  · rw [ite_eq_right hu, ite_eq_left hv]
-    have hu' : u k ≤ 0 := not_lt.mp hu
-    rw [zero_sub, abs_neg, abs_of_pos hv,
-      abs_of_neg (by linarith : u k - v k < 0)]
-    linarith
-  · rw [ite_eq_right hu, ite_eq_right hv]
-    simp
+  simpa only [relu, gt_iff_lt, ← max_def_lt, max_comm (0:ℝ)] using
+    abs_max_sub_max_le_abs (u k) (v k) 0
 
 /-- **Margins freeze signs.** If a value drifts by at most `c` and sits at
     distance more than `c` from the kink, the drifted value is still off the
@@ -83,23 +71,6 @@ theorem sign_stable_of_close {zt z c : ℝ} (hc : |zt - z| ≤ c)
   · have hzt : 0 < zt := by rw [abs_of_pos hpos] at hm; linarith [habs.1]
     exact ⟨ne_of_gt hzt, ⟨fun _ => hpos, fun _ => hzt⟩⟩
 
-/-- The `ℓ1` mass of a scaled step. -/
-theorem smul_l1_mass {n : Nat} (e : Vec n) {t : ℝ} (ht0 : 0 ≤ t) :
-    (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by
-  rw [Finset.mul_sum]
-  exact Finset.sum_congr rfl fun idx _ => by
-    simp [abs_mul, abs_of_nonneg ht0]
-
-/-- A `t`-scaled step stays inside the step radius for `t ∈ [0,1]`. -/
-theorem smul_l1_mass_le {n : Nat} (e : Vec n) {t D : ℝ} (ht0 : 0 ≤ t)
-    (ht1 : t ≤ 1) (he : (∑ idx, |e idx|) ≤ D) :
-    (∑ idx, |(t • e) idx|) ≤ D := by
-  rw [smul_l1_mass e ht0]
-  calc t * ∑ idx, |e idx|
-      ≤ 1 * D := mul_le_mul ht1 he
-        (Finset.sum_nonneg fun _ _ => abs_nonneg _) zero_le_one
-    _ = D := one_mul D
-
 /-- A dense layer's output moves by at most `w·‖Δinput‖₁` per entry — the
     `ℓ1→ℓ∞` operator bound used at every dense crossing of the chain. -/
 theorem dense_input_drift {m n : Nat} (W : Mat m n) (b : Vec n)
@@ -108,12 +79,7 @@ theorem dense_input_drift {m n : Nat} (W : Mat m n) (b : Vec n)
     |dense W b u' j - dense W b u j| ≤ wb * ∑ i, |u' i - u i| := by
   have hdiff : dense W b u' j - dense W b u j =
       ∑ i, (u' i - u i) * W i j := by
-    have h2 : (∑ i, u' i * W i j) - (∑ i, u i * W i j) =
-        ∑ i, (u' i - u i) * W i j := by
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun i _ => by ring
-    show ((∑ i, u' i * W i j) + b j) - ((∑ i, u i * W i j) + b j) = _
-    linarith [h2]
+    simp only [dense, add_sub_add_right_eq_sub, ← Finset.sum_sub_distrib, sub_mul]
   rw [hdiff]
   calc |∑ i, (u' i - u i) * W i j|
       ≤ ∑ i, |(u' i - u i) * W i j| := Finset.abs_sum_le_sum_abs _ _
@@ -143,40 +109,6 @@ theorem sum_abs_flatten_cols {m n : Nat} (d : Vec (m * n)) :
     ∑ j : Fin n, ∑ i : Fin m, |d (finProdFinEquiv (i, j))| =
       ∑ idx, |d idx| := by
   rw [sum_finProdFinEquiv fun idx => |d idx|]; exact Finset.sum_comm
-
-/-- The dense pre-activation difference under a weight perturbation, exactly:
-    column `j` only sees the column-`j` slice of the perturbation. -/
-theorem dense_unflatten_diff {m n : Nat} (b : Vec n) (x : Vec m)
-    (v e : Vec (m * n)) (j : Fin n) :
-    dense (Mat.unflatten (v + e)) b x j - dense (Mat.unflatten v) b x j =
-      ∑ i, x i * e (finProdFinEquiv (i, j)) := by
-  have h2 : (∑ i : Fin m,
-      x i * (v (finProdFinEquiv (i, j)) + e (finProdFinEquiv (i, j)))) -
-      (∑ i : Fin m, x i * v (finProdFinEquiv (i, j))) =
-      ∑ i : Fin m, x i * e (finProdFinEquiv (i, j)) := by
-    rw [← Finset.sum_sub_distrib]
-    exact Finset.sum_congr rfl fun i _ => by ring
-  show ((∑ i : Fin m, x i * (v + e) (finProdFinEquiv (i, j))) + b j) -
-      ((∑ i : Fin m, x i * v (finProdFinEquiv (i, j))) + b j) = _
-  simp only [Pi.add_apply]
-  linarith [h2]
-
-/-- Column-refined drift: the column-`j` pre-activation moves by at most
-    `a` times the column-`j` `ℓ1` mass (not the total mass — this is what
-    keeps the hidden-layer Lipschitz constant width-free). -/
-theorem dense_unflatten_col_drift {m n : Nat} (b : Vec n) (x : Vec m)
-    {a : ℝ} (hx : ∀ i, |x i| ≤ a) (v e : Vec (m * n)) (j : Fin n) :
-    |dense (Mat.unflatten (v + e)) b x j - dense (Mat.unflatten v) b x j| ≤
-      a * ∑ i, |e (finProdFinEquiv (i, j))| := by
-  rw [dense_unflatten_diff]
-  calc |∑ i, x i * e (finProdFinEquiv (i, j))|
-      ≤ ∑ i, |x i * e (finProdFinEquiv (i, j))| :=
-        Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ i, a * |e (finProdFinEquiv (i, j))| :=
-        Finset.sum_le_sum fun i _ => by
-          rw [abs_mul]
-          exact mul_le_mul_of_nonneg_right (hx i) (abs_nonneg _)
-    _ = a * ∑ i, |e (finProdFinEquiv (i, j))| := by rw [Finset.mul_sum]
 
 /-- Summed over all coordinates, the pre-activation drift is bounded by
     `a·‖e‖₁` *total* — the column masses tile the flat index set. -/

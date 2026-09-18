@@ -796,26 +796,8 @@ theorem conv2d_kernel_sub {ic oc h w kH kW : Nat} (b : Vec oc)
       conv2d (Kernel4.unflatten v) b x o hi wi =
       ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
         e (k4Idx o c kh kw) * convPad kH kW x c kh kw hi wi := by
-  have hb : conv2d (Kernel4.unflatten (v + e)) b x o hi wi -
-      conv2d (Kernel4.unflatten v) b x o hi wi =
-      (∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        Kernel4.unflatten (v + e) o c kh kw *
-          convPad kH kW x c kh kw hi wi) -
-      ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        Kernel4.unflatten v o c kh kw *
-          convPad kH kW x c kh kw hi wi := by
-    rw [conv2d_eq_convPad, conv2d_eq_convPad]
-    ring
-  rw [hb, ← Finset.sum_sub_distrib]
-  refine Finset.sum_congr rfl fun c _ => ?_
-  rw [← Finset.sum_sub_distrib]
-  refine Finset.sum_congr rfl fun kh _ => ?_
-  rw [← Finset.sum_sub_distrib]
-  refine Finset.sum_congr rfl fun kw _ => ?_
-  rw [unflatten_k4Idx, unflatten_k4Idx]
-  show (v + e) (k4Idx o c kh kw) * _ - v (k4Idx o c kh kw) * _ = _
-  rw [Pi.add_apply]
-  ring
+  simp only [conv2d_eq_convPad, unflatten_k4Idx, Pi.add_apply, add_sub_add_left_eq_sub,
+    ← Finset.sum_sub_distrib, add_mul, add_sub_cancel_left]
 
 /-- **Per-entry conv drift, slab-refined**: a kernel perturbation moves the
     output entry `(o, hi, wi)` by at most `a` times the `ℓ1` mass of the
@@ -1715,20 +1697,11 @@ theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
     `𝟙[z₂>0]` in the conv-2 grad-close sits on a scalar cell (not a `Vec`), so
     it needs this rather than the vector `reluMask_close`. -/
 theorem mask_scalar_close {zt z xt x ez ex : ℝ}
-    (hz : |zt - z| ≤ ez) (hm : ez < |z|) (hx : |xt - x| ≤ ex) (hex : 0 ≤ ex) :
+    (hz : |zt - z| ≤ ez) (hm : ez < |z|) (hx : |xt - x| ≤ ex) (_hex : 0 ≤ ex) :
     |(if zt > 0 then (1:ℝ) else 0) * xt -
       (if z > 0 then (1:ℝ) else 0) * x| ≤ ex := by
-  have hzi := abs_le.mp hz
-  rcases lt_trichotomy z 0 with hneg | hzero | hpos
-  · have h1 : ¬ z > 0 := by linarith
-    have h2 : ¬ zt > 0 := by
-      rw [not_lt]; rw [abs_of_neg hneg] at hm; linarith [hzi.2]
-    rw [ite_eq_right h1, ite_eq_right h2]; simpa using hex
-  · exfalso; rw [hzero, abs_zero] at hm
-    linarith [(abs_nonneg (zt - z)).trans hz]
-  · have h2 : zt > 0 := by
-      rw [abs_of_pos hpos] at hm; linarith [hzi.1]
-    rw [ite_eq_left hpos, ite_eq_left h2, one_mul, one_mul]; exact hx
+  rw [if_congr (sign_stable_of_close hz hm).2 rfl rfl, ← mul_sub, abs_mul]
+  exact (mul_le_of_le_one_left (abs_nonneg _) (by split_ifs <;> simp)).trans hx
 
 /-- **Float dot against a perturbed cotangent** — the conv-2 grad-close's final
     contraction (the conv peer of the MLP's scalar `mul_close`: a dot, because
@@ -2757,14 +2730,7 @@ theorem head3_sum_drift {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
         (m₄ r * ∑ k, W₅ r k * (s k - oh k)))) =
       ∑ l, W₃ q l * (m₃ l * ∑ r, W₄ l r *
         (m₄ r * ∑ k, W₅ r k * (s' k - s k))) := by
-    rw [← Finset.sum_sub_distrib]
-    refine Finset.sum_congr rfl fun l _ => ?_
-    rw [← mul_sub, ← mul_sub, ← Finset.sum_sub_distrib]
-    congr 2
-    refine Finset.sum_congr rfl fun r _ => ?_
-    rw [← mul_sub, ← mul_sub, ← Finset.sum_sub_distrib]
-    congr 2
-    exact Finset.sum_congr rfl fun k _ => by ring
+    simp only [← Finset.sum_sub_distrib, ← mul_sub, sub_sub_sub_cancel_right]
   rw [hcoll]
   have hinner : ∀ r, |∑ k, W₅ r k * (s' k - s k)| ≤
       (nC : ℝ) * (w₅ * Δ) := by
@@ -3681,27 +3647,10 @@ theorem abs_triple_sum_sub_le {α β γ : Type*}
     |(∑ a : α, ∑ b : β, ∑ c : γ, f a b c) -
         ∑ a : α, ∑ b : β, ∑ c : γ, g a b c| ≤
       ∑ a : α, ∑ b : β, ∑ c : γ, |f a b c - g a b c| := by
-  calc |(∑ a : α, ∑ b : β, ∑ c : γ, f a b c) -
-        ∑ a : α, ∑ b : β, ∑ c : γ, g a b c|
-      = |∑ a : α, ((∑ b : β, ∑ c : γ, f a b c) -
-          ∑ b : β, ∑ c : γ, g a b c)| := by
-        rw [← Finset.sum_sub_distrib]
-    _ ≤ ∑ a : α, |(∑ b : β, ∑ c : γ, f a b c) -
-          ∑ b : β, ∑ c : γ, g a b c| := Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ a : α, ∑ b : β, ∑ c : γ, |f a b c - g a b c| := by
-        refine Finset.sum_le_sum fun a _ => ?_
-        calc |(∑ b : β, ∑ c : γ, f a b c) - ∑ b : β, ∑ c : γ, g a b c|
-            = |∑ b : β, ((∑ c : γ, f a b c) - ∑ c : γ, g a b c)| := by
-              rw [← Finset.sum_sub_distrib]
-          _ ≤ ∑ b : β, |(∑ c : γ, f a b c) - ∑ c : γ, g a b c| :=
-              Finset.abs_sum_le_sum_abs _ _
-          _ ≤ ∑ b : β, ∑ c : γ, |f a b c - g a b c| := by
-              refine Finset.sum_le_sum fun b _ => ?_
-              calc |(∑ c : γ, f a b c) - ∑ c : γ, g a b c|
-                  = |∑ c : γ, (f a b c - g a b c)| := by
-                    rw [← Finset.sum_sub_distrib]
-                _ ≤ ∑ c : γ, |f a b c - g a b c| :=
-                    Finset.abs_sum_le_sum_abs _ _
+  simp only [← Finset.sum_sub_distrib]
+  exact (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun a _ =>
+    (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun b _ =>
+      Finset.abs_sum_le_sum_abs _ _))
 
 /-- The kernel tap that multiplies input entry `(ci,hi,wi)` in output
     entry `(co,ho,wo)` — the input-side Jacobian entry of `conv2d`.
@@ -3973,6 +3922,16 @@ theorem abs_convPad_sub_le {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
   · exact hclose _ _ _
   · simpa using hδ
 
+/-- The conv output difference under an input perturbation, exactly: the kernel taps
+    contract the padded-input differences — `conv2d` is linear in its input (the input-side
+    peer of `conv2d_kernel_sub` / `conv2d_bias_sub`). -/
+theorem conv2d_input_sub {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x x' : Tensor3 ic h w) (o : Fin oc) (ho : Fin h) (wo : Fin w) :
+    conv2d W b x' o ho wo - conv2d W b x o ho wo =
+      ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+        W o c kh kw * (convPad kH kW x' c kh kw ho wo - convPad kH kW x c kh kw ho wo) := by
+  simp only [conv2d_eq_convPad, add_sub_add_left_eq_sub, ← Finset.sum_sub_distrib, mul_sub]
+
 /-- **Per-entry conv input drift**: each output reads `ic·kH·kW` padded
     inputs through taps bounded by `wK`. -/
 theorem conv2d_input_entry_drift {ic oc h w kH kW : Nat}
@@ -3982,38 +3941,7 @@ theorem conv2d_input_entry_drift {ic oc h w kH kW : Nat}
     (o : Fin oc) (ho : Fin h) (wo : Fin w) :
     |conv2d W b x' o ho wo - conv2d W b x o ho wo| ≤
       ((ic * kH * kW : ℕ) : ℝ) * (wK * δ) := by
-  rw [conv2d_eq_convPad, conv2d_eq_convPad]
-  have hdiff : (b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        W o c kh kw * convPad kH kW x' c kh kw ho wo) -
-      (b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        W o c kh kw * convPad kH kW x c kh kw ho wo) =
-      ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-          convPad kH kW x c kh kw ho wo) := by
-    have h1 : ∀ c : Fin ic,
-        (∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * convPad kH kW x' c kh kw ho wo) -
-        (∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * convPad kH kW x c kh kw ho wo) =
-        ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-            convPad kH kW x c kh kw ho wo) := by
-      intro c
-      rw [← Finset.sum_sub_distrib]
-      refine Finset.sum_congr rfl fun kh _ => ?_
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun kw _ => by ring
-    have h2 : (∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * convPad kH kW x' c kh kw ho wo) -
-        (∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * convPad kH kW x c kh kw ho wo) =
-        ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-            convPad kH kW x c kh kw ho wo) := by
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun c _ => h1 c
-    linarith [h2]
-  rw [hdiff]
+  rw [conv2d_input_sub]
   calc |∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
         W o c kh kw * (convPad kH kW x' c kh kw ho wo -
           convPad kH kW x c kh kw ho wo)|
@@ -4099,38 +4027,7 @@ theorem conv2d_input_l1_drift {ic oc h w kH kW : Nat}
         wK * |convPad kH kW x' c kh kw ho wo -
           convPad kH kW x c kh kw ho wo| := by
     intro o ho wo
-    rw [conv2d_eq_convPad, conv2d_eq_convPad]
-    have hdiff : (b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * convPad kH kW x' c kh kw ho wo) -
-        (b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * convPad kH kW x c kh kw ho wo) =
-        ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-            convPad kH kW x c kh kw ho wo) := by
-      have h1 : ∀ c : Fin ic,
-          (∑ kh : Fin kH, ∑ kw : Fin kW,
-            W o c kh kw * convPad kH kW x' c kh kw ho wo) -
-          (∑ kh : Fin kH, ∑ kw : Fin kW,
-            W o c kh kw * convPad kH kW x c kh kw ho wo) =
-          ∑ kh : Fin kH, ∑ kw : Fin kW,
-            W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-              convPad kH kW x c kh kw ho wo) := by
-        intro c
-        rw [← Finset.sum_sub_distrib]
-        refine Finset.sum_congr rfl fun kh _ => ?_
-        rw [← Finset.sum_sub_distrib]
-        exact Finset.sum_congr rfl fun kw _ => by ring
-      have h2 : (∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-            W o c kh kw * convPad kH kW x' c kh kw ho wo) -
-          (∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-            W o c kh kw * convPad kH kW x c kh kw ho wo) =
-          ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-            W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-              convPad kH kW x c kh kw ho wo) := by
-        rw [← Finset.sum_sub_distrib]
-        exact Finset.sum_congr rfl fun c _ => h1 c
-      linarith [h2]
-    rw [hdiff]
+    rw [conv2d_input_sub]
     calc |∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
           W o c kh kw * (convPad kH kW x' c kh kw ho wo -
             convPad kH kW x c kh kw ho wo)|

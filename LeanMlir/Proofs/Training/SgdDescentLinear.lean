@@ -78,6 +78,49 @@ theorem linear_loss_gradAt {m n : Nat} (b : Vec n) (x : Vec m)
         rw [Finset.sum_ite_eq']
         simp
 
+/-- The `ℓ1` mass of a scaled step. -/
+theorem smul_l1_mass {n : Nat} (e : Vec n) {t : ℝ} (ht0 : 0 ≤ t) :
+    (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by
+  rw [Finset.mul_sum]
+  exact Finset.sum_congr rfl fun idx _ => by
+    simp [abs_mul, abs_of_nonneg ht0]
+
+/-- A `t`-scaled step stays inside the step radius for `t ∈ [0,1]`. -/
+theorem smul_l1_mass_le {n : Nat} (e : Vec n) {t D : ℝ} (ht0 : 0 ≤ t)
+    (ht1 : t ≤ 1) (he : (∑ idx, |e idx|) ≤ D) :
+    (∑ idx, |(t • e) idx|) ≤ D := by
+  rw [smul_l1_mass e ht0]
+  calc t * ∑ idx, |e idx|
+      ≤ 1 * D := mul_le_mul ht1 he
+        (Finset.sum_nonneg fun _ _ => abs_nonneg _) zero_le_one
+    _ = D := one_mul D
+
+/-- The dense pre-activation difference under a weight perturbation, exactly:
+    column `j` only sees the column-`j` slice of the perturbation. -/
+theorem dense_unflatten_diff {m n : Nat} (b : Vec n) (x : Vec m)
+    (v e : Vec (m * n)) (j : Fin n) :
+    dense (Mat.unflatten (v + e)) b x j - dense (Mat.unflatten v) b x j =
+      ∑ i, x i * e (finProdFinEquiv (i, j)) := by
+  simp only [dense, Mat.unflatten, Pi.add_apply, add_sub_add_right_eq_sub,
+    ← Finset.sum_sub_distrib, mul_add, add_sub_cancel_left]
+
+/-- Column-refined drift: the column-`j` pre-activation moves by at most
+    `a` times the column-`j` `ℓ1` mass (not the total mass — this is what
+    keeps the hidden-layer Lipschitz constant width-free). -/
+theorem dense_unflatten_col_drift {m n : Nat} (b : Vec n) (x : Vec m)
+    {a : ℝ} (hx : ∀ i, |x i| ≤ a) (v e : Vec (m * n)) (j : Fin n) :
+    |dense (Mat.unflatten (v + e)) b x j - dense (Mat.unflatten v) b x j| ≤
+      a * ∑ i, |e (finProdFinEquiv (i, j))| := by
+  rw [dense_unflatten_diff]
+  calc |∑ i, x i * e (finProdFinEquiv (i, j))|
+      ≤ ∑ i, |x i * e (finProdFinEquiv (i, j))| :=
+        Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ i, a * |e (finProdFinEquiv (i, j))| :=
+        Finset.sum_le_sum fun i _ => by
+          rw [abs_mul]
+          exact mul_le_mul_of_nonneg_right (hx i) (abs_nonneg _)
+    _ = a * ∑ i, |e (finProdFinEquiv (i, j))| := by rw [Finset.mul_sum]
+
 /-- The logits move linearly in the parameters: a parameter perturbation of
     `ℓ1` mass `‖d‖₁` moves every logit by at most `a·‖d‖₁`. -/
 theorem dense_unflatten_drift {m n : Nat} (b : Vec n) (x : Vec m)
@@ -85,34 +128,10 @@ theorem dense_unflatten_drift {m n : Nat} (b : Vec n) (x : Vec m)
     (v d : Vec (m * n)) (k : Fin n) :
     |dense (Mat.unflatten (v + d)) b x k - dense (Mat.unflatten v) b x k| ≤
       a * ∑ idx, |d idx| := by
-  have h1 : dense (Mat.unflatten (v + d)) b x k -
-      dense (Mat.unflatten v) b x k =
-      ∑ i, x i * d (finProdFinEquiv (i, k)) := by
-    have h2 : (∑ i : Fin m,
-        x i * (v (finProdFinEquiv (i, k)) + d (finProdFinEquiv (i, k)))) -
-        (∑ i : Fin m, x i * v (finProdFinEquiv (i, k))) =
-        ∑ i : Fin m, x i * d (finProdFinEquiv (i, k)) := by
-      rw [← Finset.sum_sub_distrib]
-      exact Finset.sum_congr rfl fun i _ => by ring
-    show ((∑ i : Fin m, x i * (v + d) (finProdFinEquiv (i, k))) + b k) -
-        ((∑ i : Fin m, x i * v (finProdFinEquiv (i, k))) + b k) = _
-    simp only [Pi.add_apply]
-    linarith [h2]
-  rw [h1]
-  have hinj : (∑ i : Fin m, |d (finProdFinEquiv (i, k))|) ≤
-      ∑ idx, |d idx| := by
-    rw [sum_finProdFinEquiv fun idx => |d idx|, Finset.sum_comm]
-    exact Finset.single_le_sum (f := fun j => ∑ i : Fin m, |d (finProdFinEquiv (i, j))|)
-      (fun _ _ => by positivity) (Finset.mem_univ k)
-  calc |∑ i, x i * d (finProdFinEquiv (i, k))|
-      ≤ ∑ i, |x i * d (finProdFinEquiv (i, k))| :=
-        Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ i, a * |d (finProdFinEquiv (i, k))| :=
-        Finset.sum_le_sum fun i _ => by
-          rw [abs_mul]
-          exact mul_le_mul_of_nonneg_right (hx i) (abs_nonneg _)
-    _ = a * ∑ i, |d (finProdFinEquiv (i, k))| := by rw [Finset.mul_sum]
-    _ ≤ a * ∑ idx, |d idx| := mul_le_mul_of_nonneg_left hinj ha
+  refine (dense_unflatten_col_drift b x hx v d k).trans (mul_le_mul_of_nonneg_left ?_ ha)
+  rw [sum_finProdFinEquiv fun idx => |d idx|, Finset.sum_comm]
+  exact Finset.single_le_sum (f := fun j => ∑ i : Fin m, |d (finProdFinEquiv (i, j))|)
+    (fun _ _ => by positivity) (Finset.mem_univ k)
 
 /-- **Softmax drift along a segment.** Logits that move by at most `t·δ` (`t ∈ [0, 1]`,
     `2δ < 1`) move every softmax output by at most `2tδ/(1−2δ)`: `softmax_perturb`'s
@@ -159,11 +178,7 @@ theorem linear_loss_grad_lipschitz {m n : Nat} (b : Vec n) (x : Vec m)
       dense (Mat.unflatten v) b x k| ≤ t * (a * D) := by
     intro k
     have h1 := dense_unflatten_drift b x ha hx v (t • d) k
-    have h2 : (∑ idx, |(t • d) idx|) = t * ∑ idx, |d idx| := by
-      rw [Finset.mul_sum]
-      refine Finset.sum_congr rfl fun idx _ => ?_
-      simp [abs_mul, abs_of_nonneg ht0]
-    rw [h2] at h1
+    rw [smul_l1_mass d ht0] at h1
     have h3 : a * (t * ∑ idx, |d idx|) ≤ t * (a * D) := by
       nlinarith [mul_le_mul_of_nonneg_left hd (mul_nonneg ht0 ha)]
     linarith
@@ -356,27 +371,7 @@ theorem linear_float_sgd_descends {m n : Nat} (M : FloatModel) (W : Mat m n)
           (Mat.flatten W) idx ^ 2) / 2 := by
   -- the head budget is nonnegative (it bounds an absolute value)
   have hu := M.u_nonneg
-  have hcot0 : 0 ≤ FloatModel.cotErr M.u eexp δ n := by
-    have hpow : (1:ℝ) ≤ (1 + M.u) ^ (n + 1) := one_le_pow₀ (by linarith)
-    have hρ0 : 0 ≤ FloatModel.smRho M.u eexp n := by
-      simp only [FloatModel.smRho]
-      have := mul_nonneg (by linarith : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1)
-        (by linarith : (0:ℝ) ≤ 1 + eexp)
-      linarith
-    have hκ0 : 0 ≤ FloatModel.smKappa M.u eexp n := by
-      simp only [FloatModel.smKappa]
-      exact div_nonneg (by linarith) (by linarith)
-    have hexp0 : 0 ≤ Real.exp (2 * δ) - 1 := by
-      have := Real.add_one_le_exp (2 * δ); linarith
-    have hsm0 : 0 ≤ FloatModel.smErr M.u eexp δ n := by
-      simp only [FloatModel.smErr]
-      have := mul_nonneg hu
-        (by linarith : (0:ℝ) ≤ 1 + FloatModel.smKappa M.u eexp n)
-      linarith
-    simp only [FloatModel.cotErr]
-    have := mul_nonneg hu
-      (by linarith : (0:ℝ) ≤ 1 + FloatModel.smErr M.u eexp δ n)
-    linarith
+  have hcot0 := M.cotErr_nonneg heexp0 hδ0 hρ1
   have hηF0 : 0 ≤ FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n) := by
     have e1 : (0:ℝ) ≤ M.u * ((a + 0) * (1 + FloatModel.cotErr M.u eexp δ n)) :=
       mul_nonneg hu (mul_nonneg (by linarith) (by linarith))
