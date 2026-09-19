@@ -20,7 +20,7 @@ the LN backward reuses `rowScaleF` on the cotangent (diagonal — its own input-
 axis (`dγ_k = Σ_{b,tokens} dy·x̂`, certified `vit_render_vecln{gamma,beta}_certified`).
 
 Forward AND the whole backward cotangent chain are proof-rendered through `pretty` over
-the very tokens of `vitFwdGraphMHV` — forward (`patchEmbedF`/`lnRowF`/`denseRowF`/
+the very tokens of `vitFwdGraphKMHV` — forward (`patchEmbedF`/`lnRowF`/`denseRowF`/
 **per head: `headSliceF` → `matmulF`/`transposeF`/`scaleF`/`softmaxRowF` → `headPadF`**,
 the pad-sum concat as `addV`/`clsSliceF`/`denseF`) and backward (`dotOut`, `clsPadF`,
 `lnRowBack`, `denseRowBack`, `geluBack`, `softmaxRowBack`, and the **per-head SDPA 3-path

@@ -109,8 +109,8 @@ theorem vit_block_tiedV {Np1 D mlpDim : Nat}
 
 /-! ## Whole-net thread (single-head vector-LN, 2-block representative) — the convnext pattern
 
-`vitBlockFwdOV` is the forward block step (= `vitBlockSpelledV`, exposing the block output);
-`vitBlockTiedAtV` recomputes the 11 saved activations from the block INPUT (the `vitBlockSpelledV`
+`vitBlockFwdOV` is the forward block step (the spelled vector-LN block, exposing its output);
+`vitBlockTiedAtV` recomputes the 11 saved activations from the block INPUT (the spelled block's
 let-chain) and delegates to `vit_block_tiedV` — so the block's params tie at the REAL forward + the
 threaded `dyOut`. `vitBlockCotInAtV` is the attention-residual fan-in (`vitCotXinV`), the block's input
 cotangent (= the previous block's `dyOut`). `@[irreducible]` so the nested 2-block composition stays
@@ -120,7 +120,7 @@ opaque (the r34/mnv2 heartbeat lesson). -/
     (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
     (xin : Vec (Np1 * D)) : Vec (Np1 * D) :=
-  -- inline `vitBlockSpelledV` at D (it is stated at `1 * D`, not defeq) — the block output
+  -- the spelled vector-LN block at `D` — the block output
   let X    : Mat Np1 D := Mat.unflatten xin
   let ln1  : Mat Np1 D := fun r k => layerScale γ1 (fun s => layerNormForward D ε 1 0 (X r) s) k + β1 k
   let Q    : Mat Np1 D := fun r => dense Wq bq (ln1 r)
@@ -156,7 +156,7 @@ opaque (the r34/mnv2 heartbeat lesson). -/
   let cotH := vitCotHV ε γ2 Wfc1 Wfc2 (Mat.flatten h) (Mat.flatten m1) dyOut
   vitCotXinV ε γ1 Wq Wk Wv xin dQ dK dV cotH
 
-/-- **Input-only block tie** — recompute the 11 saves from `xin` (the `vitBlockSpelledV` let-chain),
+/-- **Input-only block tie** — recompute the 11 saves from `xin` (the spelled block's let-chain),
     then the generic block tie holds. The vit peer of `cnxBlockTiedAt`. -/
 @[irreducible] def vitBlockTiedAtV {Np1 D mlpDim : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)

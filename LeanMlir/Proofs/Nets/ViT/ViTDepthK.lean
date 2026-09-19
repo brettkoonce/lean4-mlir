@@ -3,18 +3,16 @@ import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 /-!
 # ViT scaling pass — depth-k (general-depth tower, distinct per-block params)
 
-The proven `transformerTower_has_vjp_mat` shares ONE param tuple across blocks;
-the 2-block `vitForward2V` carried distinct params but fixed the depth. This
-file closes general depth at the production form (vector-[D] LN + multi-head):
+The proven `transformerTower_has_vjp_mat` shares ONE param tuple across blocks. This
+file builds the net with distinct per-block params at every depth, at the production form
+(vector-[D] LN + multi-head):
 
 1. **`BlockParamsV`** — the 16-field per-block param structure, and
    **`vitBodyKVFlat`** — the depth-`k` block fold (head recursion: block 0
    first), with **`vitBodyKVFlat_has_vjp`** by induction on `k` (the chain step
-   is `vjp_comp` + the bridged `transformerBlockV_has_vjp_mat`, exactly
-   `vitForward2V_has_vjp`'s step with a `Fin k` param function).
+   is `vjp_comp` + the bridged `transformerBlockV_has_vjp_mat`).
    **`vitForwardKV(_has_vjp[_correct])`** — the whole net at depth `k`,
-   UNCONDITIONAL except `0 < ε`. `vitForwardKV_two_eq`: at `k = 2` it IS
-   `vitForward2V` (definitional).
+   UNCONDITIONAL except `0 < ε`.
 
 2. **`vitBodyGraphKMHV`** — the token-level fold of `vitBlockGraphMHV` with
    per-block SSA prefixes `b{base+i}_`, and **`vitFwdGraphKMHV_faithful`**:
@@ -62,7 +60,7 @@ noncomputable def blockV (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
   transformerBlockV Np1 heads d_head mlpDim ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
     p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2
 
-/-- One block at the flat index (the `vitForward2V` per-block spelling). -/
+/-- One block at the flat index. -/
 noncomputable def blockVFlat (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
     (p : BlockParamsV (heads * d_head) mlpDim) :
     Vec (Np1 * (heads * d_head)) → Vec (Np1 * (heads * d_head)) :=
@@ -78,8 +76,8 @@ noncomputable def vitBodyKV (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
       (vitBodyKV Np1 heads d_head mlpDim ε k (fun i => ps i.succ)) ∘
       (blockV Np1 heads d_head mlpDim ε (ps 0))
 
-/-- **Depth-`k` block fold at the flat index** — per-block flat stages (the
-    `vitForward2V` spelling, so the VJP composes block-at-a-time). -/
+/-- **Depth-`k` block fold at the flat index** — per-block flat stages, so the VJP
+    composes block-at-a-time. -/
 noncomputable def vitBodyKVFlat (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
     (k : Nat) → (Fin k → BlockParamsV (heads * d_head) mlpDim) →
     Vec (Np1 * (heads * d_head)) → Vec (Np1 * (heads * d_head))
@@ -149,7 +147,7 @@ noncomputable def vitBodyKVFlat_has_vjp (Np1 heads d_head mlpDim : Nat)
 
 /-- **Depth-`k` distinct-param ViT forward** (vector-LN): patch embed →
     `k` blocks (`Fin k → BlockParamsV`) → final vector-LN → CLS slice →
-    dense head. `vitForward2V` generalized over depth. -/
+    dense head. -/
 noncomputable def vitForwardKV
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
@@ -168,30 +166,6 @@ noncomputable def vitForwardKV
   (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps) ∘
   (patchEmbed_flat ic H W patchSize N (heads * d_head)
     W_conv b_conv cls_token pos_embed)
-
-/-- **At `k = 2` the depth-`k` net IS `vitForward2V`** (definitional — the
-    fold unrolls to exactly the 2-block composition). -/
-theorem vitForwardKV_two_eq
-    (ic H W patchSize N mlpDim heads d_head nClasses : Nat)
-    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
-    (b_conv : Vec (heads * d_head))
-    (cls_token : Vec (heads * d_head))
-    (pos_embed : Mat (N + 1) (heads * d_head))
-    (ε : ℝ)
-    (ps : Fin 2 → BlockParamsV (heads * d_head) mlpDim)
-    (γF βF : Vec (heads * d_head))
-    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses 2
-      W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls =
-    vitForward2V ic H W patchSize N mlpDim heads d_head nClasses
-      W_conv b_conv cls_token pos_embed ε
-      (ps 0).γ1 (ps 0).β1 (ps 0).Wq (ps 0).Wk (ps 0).Wv (ps 0).Wo
-      (ps 0).bq (ps 0).bk (ps 0).bv (ps 0).bo (ps 0).γ2 (ps 0).β2
-      (ps 0).Wfc1 (ps 0).bfc1 (ps 0).Wfc2 (ps 0).bfc2
-      (ps 1).γ1 (ps 1).β1 (ps 1).Wq (ps 1).Wk (ps 1).Wv (ps 1).Wo
-      (ps 1).bq (ps 1).bk (ps 1).bv (ps 1).bo (ps 1).γ2 (ps 1).β2
-      (ps 1).Wfc1 (ps 1).bfc1 (ps 1).Wfc2 (ps 1).bfc2
-      γF βF Wcls bcls := rfl
 
 /-- **Whole-net VJP for the depth-`k` ViT (global).** All-smooth, so the only
     hypothesis is `0 < ε` — at EVERY depth. Three `vjp_comp` steps gluing
@@ -371,7 +345,7 @@ def vitFwdGraphKMHV {ic H W P N hm1 d mlpDim nClasses : Nat}
 
 /-- **Depth-`k` multi-head vector-LN ViT forward faithfulness** — the
     general-depth graph denotes `vitForwardKV` at `heads := hm1 + 1`, for
-    EVERY depth `k`. The depth analogue of `vitFwdGraphMHV_faithful`. -/
+    EVERY depth `k`. -/
 theorem vitFwdGraphKMHV_faithful
     (ic H W patchSize N hm1 d mlpDim nClasses : Nat)
     (epsStr sStr oneStr zeroStr : String)

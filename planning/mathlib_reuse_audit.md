@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-19, origin `b469a1c4` + the three rows below it)
+## Status (2026-09-19, origin `b469a1c4` + the four rows below it)
 
-**Landed** — about 24.2k lines out. Every pinned theorem name and statement is unchanged except where a
+**Landed** — about 24.7k lines out. Every pinned theorem name and statement is unchanged except where a
 row says otherwise (the five CIFAR/CNN tie statements, and the retired declarations: 81, the cifar-BN
 net's seven, and the §0.7 leftovers):
 
@@ -85,7 +85,8 @@ net's seven, and the §0.7 leftovers):
 | `b469a1c4` | **End-list — the hand-written `*TrainStepText` / `*FwdText*` emitters retired** (−926, 13 files; no statement or artifact changes). The seven left after `abede27d` — `mlpTrainStepText`, `cnnTrainStepText`, `cifarTrainStepText`, `cifar8TrainStepText`, `cifar8FwdText`, `cifar8BnTrainStepText`, `cifar8BnFwdTextPC` — had no live caller but `tests/TestCifar8AdamTrain`'s two char-count prints (gone). Every other mention named an emitter as an artifact's source, which the `*FaithfulV` renders took over: the five `Main*Verified` docstrings, four lakefile comments, `IreeRuntime`, the FFI shim comment and `CnnTrainStep` now name the `*FaithfulV` render; the renderers' "same op text as `…Text`" notes and the `#eval` blocks' "kept for reference" / "not `…Text`" asides are dropped. A use-count diff against `abede27d` found no orphans |
 | `18c31142` | **§0.7 leftover (a) — the 13 SGD-wrapped audit-only restatements retired** (−166, 9 files; 13 pinned declarations, 1,685 → 1,672 verdicts, by the user's decision). Each was `θ − lr·∇` around a bridge or a `.correct` field with no Lean consumer: `mlp_render_{W,b}{0,1,2}_certified` (`MlpTrainStep`; not part of `MlpCanonical`'s audit surface, which pins `train_step_tied_certified`), `cnx_render_{dw7W,dw7b,lsgamma}_certified` (`ConvNeXtClose`), the symmetric-pad `mnv2_render_depthwise{W,b}_strided_certified` (`MobileNetV2Close`; the MNv2 fold certifies the `_xla` ops) and `vit_render_rowln{gamma,beta}_certified` (`ViTClose`). The bridges they wrapped stay pinned (`mlp_layer{0,1}_bias_grad_bridge` and `vit_rowln{Gamma,Beta}_grad_bridge` are now audit-only too, but they are the statements, not restatements). Prose that cited them now names the bridge: the MNv2 table the `_xla` certs, the ConvNeXt table and `ConvNeXtFold` `layerScale_gamma_grad_bridge`, `FloatBridge` the `mlp_layer*_weight_grad_bridge`s. ⚠ `docstring-checkrefs` only checks names carrying a marker (`_bridge` is one, `_certified` is not), so a re-pointed citation can start failing where the old one never did: `ConvNeXtClose.layerScale_gamma_grad_bridge` is not a name |
 | `cf0e1e39` | **§0.7 leftover (c) — the scalar-LN / heads = 1 ViT chain retired** (−1,444, 15 files; 59 declarations, 21 pinned, 1,672 → 1,651 verdicts, by the user's decision, the extent after they chose the full fixed point). The survey's closure treated every other pin as a root and sized 17 declarations / 6 pins; the cut then left 8 pins with no user, and following those to the fixed point ("no non-audit user outside the removed set") added 42 more: the representative 1-head `vitForward2` / `vitForward2_has_vjp{,_correct}` and its forward graphs (`vitFwdGraph{,MH}_faithful`, `vitBlockGraph{,MH}`, the spelled scalar blocks), `ViTBackB0`'s whole heads = 1 backward path (the MHSA collapse `mhsa_backward_collapse` and its SDPA width bridges, the scalar-LN sublayer and block back graphs at heads = 1 and multi-head), and `ViTMhsaBackCertifiedTie`'s scalar per-token flat ties with `vitBlockBackPR_eq_transformerBlock_vjp`. Nothing on the vector-LN path used any of it. The book's example of a pinned block backward now cites `vitBlockBackV_eq_transformerBlockV_vjp`. Module docs of `ViTFwdGraph`, `ViTMultiHead`, `ViTBackB0`, `ViTBackChains`, `ViTClose`, `ViTMhsaBackCertifiedTie` and `ViTVecLNBackCertifiedTie` rewritten to what they now hold; five emptied section headers and ~10 "peer of <retired>" docstrings fixed. `ViTBackB0` now elaborates in ~3 s at 2.9 GB (`BackNetFolds`' "~11 min, ~14 GB" dropped). ⚠ The fixed point needs a second check the closure can't give: diff "pinned, no non-audit user" against HEAD after cutting |
-| *(this commit)* | **§0.7 leftover (b) — `vitNetBackGraph_faithful` proved once** (−174, 5 files; audit 1,651 → 1,649, by the user's decision). `ViTBackB0`'s direct proof (~100 lines: three `vjp_comp` backward rules unfolded and Vec↔Mat bridged by hand) is gone and `ViTBackNet`'s `CertLayer` fold proof carries the pinned name (was `_via_fold`); the two types were checked `Expr`-equal against the pre-rebuild oleans with a `run_meta` before the swap. The orphan pass then took `vitBodyBackGraphKMHV_den` (the tower's direct-induction den, pinned; the user chose to retire it — the fold's `vitTrunkV_graph` + `vitTrunkV_faithful` carry the fact) and its unpinned helper `vitBodyKVFlat_has_vjp_succ_backward`. History notes in `ViTBackNet` / `CertifiedChain` / `ViTWholeBackCertifiedTie` that said `ViTBackB0` proves it directly are updated |
+| `53068abb` | **§0.7 leftover (b) — `vitNetBackGraph_faithful` proved once** (−174, 5 files; audit 1,651 → 1,649, by the user's decision). `ViTBackB0`'s direct proof (~100 lines: three `vjp_comp` backward rules unfolded and Vec↔Mat bridged by hand) is gone and `ViTBackNet`'s `CertLayer` fold proof carries the pinned name (was `_via_fold`); the two types were checked `Expr`-equal against the pre-rebuild oleans with a `run_meta` before the swap. The orphan pass then took `vitBodyBackGraphKMHV_den` (the tower's direct-induction den, pinned; the user chose to retire it — the fold's `vitTrunkV_graph` + `vitTrunkV_faithful` carry the fact) and its unpinned helper `vitBodyKVFlat_has_vjp_succ_backward`. History notes in `ViTBackNet` / `CertifiedChain` / `ViTWholeBackCertifiedTie` that said `ViTBackB0` proves it directly are updated |
+| *(this commit)* | **End-list items 3 and 4 — the 2-block vector-LN ViT retired, the fused-ENet derivation dropped** (−531, 8 files; 16 declarations, 6 pinned, 1,649 → 1,643 verdicts, by the user's decision). Item 4 was planned as "derive the 2-block net as depth-k at k = 2"; after (c) all four of its apexes (`vitForward2V_has_vjp_correct`, `vitForwardKV_two_eq`, `vitFwdGraphV_faithful`, `vitFwdGraphMHV_faithful`) were audit-only, so it went the way of the scalar net: `vitForward2V` + VJP, the 1-head vector-LN graph and spelled block, the 2-block multi-head graph, `vitForwardKV_two_eq`, and `mhsa_layer_one_head` with its three helpers (only the 1-head graph used it). The depth-`k` net keeps what it uses (`vitBlockGraphMHV{,_den_aux}`, `vitBlockSpelledMHV{,_eq}`, the flat bridges). `ViTRender`'s depth-12 render and `TestViTTrainPC` now cite `vitFwdGraphKMHV(_faithful)` — the 2-block theorem they named never covered depth 12. `ViTStepTie`'s 2-block representative *tie* (`vit_net_tied_certified`, cited by the book) does not use `vitForward2V` and stays. Item 3 dropped on measurement: both EfficientNet tie files' proofs are 13 one-liners and the fused `_den` lemmas they cite already come from the G ones (`cb36729c`); deriving the fused ties would trade each one-liner for a `rw [*SgdB_eq_grad]` + congruence and move 5 pinned theorems below `StepTieG`, for ≈ 0 lines |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -106,10 +107,11 @@ the order to try them, with what was measured on 2026-09-19:
    once). ⚠ Sizing retirements: a closure that treats every other pin as a root undercounts — (c) was
    sized at 17 declarations and came to 59. After each cut, diff "pinned, no non-audit user" and "unused,
    unpinned" against HEAD and iterate.
-3. **Fused EfficientNet ties from `EfficientNetStepTieG`'s** (~60; `StepTieG` imports `StepTie`, so a
-   file move comes first).
-4. **The 2-block vector-LN ViT as the depth-k net at k = 2** (~100; both sit upstream of `ViTDepthK`, so
-   the pinned theorems move into it).
+3. ~~**Fused EfficientNet ties from `EfficientNetStepTieG`'s**~~ — dropped 2026-09-19 on measurement (≈ 0
+   lines; see the last Status row).
+4. ~~**The 2-block vector-LN ViT as the depth-k net at k = 2**~~ — retired instead, 2026-09-19 (last
+   Status row).
+**The end list is empty.**
 Each is a user decision: survey, report the measured size, and ask before cutting. Statement changes
 get the `↔`-against-HEAD check below; retirements get the fixed-point orphan pass.
 
@@ -205,10 +207,10 @@ CertsHeavy`, `lake env lean tests/AuditAxiomsHeavy.lean` (61 verdicts), and the 
   2026-09-19 (−2,102; see the Status row). The leftovers — the 13 SGD-wrapped `*_render_*_certified`
   restatements, the scalar-LN ViT chain and `vitNetBackGraph_faithful`'s second proof — are retired
   too (item 2 of the next-session block).
-- The fused EfficientNet tie theorems derived from `EfficientNetStepTieG`'s (~60; needs a file move,
-  since `StepTieG` imports `StepTie`).
-- The 2-block vector-LN ViT (`vitForward2V_has_vjp`, `vitFwdGraphMHV{,_faithful}`) as the depth-k one at
-  k = 2: both sit upstream of `ViTDepthK`, so deriving them means moving pinned theorems into it (~100).
+- ~~The fused EfficientNet tie theorems derived from `EfficientNetStepTieG`'s~~ — dropped 2026-09-19:
+  measured at ≈ 0 lines, plus a file move for 5 pinned theorems (Status row).
+- ~~The 2-block vector-LN ViT as the depth-k one at k = 2~~ — retired instead, 2026-09-19: all four of its
+  apexes were audit-only after the scalar chain went (Status row).
 - ~~The hand-written `*TrainStepText` / `*FwdText*` emitters in `StableHLO.lean`~~ — retired 2026-09-19
   (`abede27d` with the cifar-BN net, then the seven remaining; see the Status rows).
 

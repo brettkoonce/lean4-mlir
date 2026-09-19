@@ -745,8 +745,6 @@ open Proofs
 #print axioms Proofs.CnxTiePoC.cnx_head_ch_tied
 #print axioms Proofs.CnxTiePoC.cnxLossCot_den
 #print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
--- ViT RENDER (planning/archive/vit_close.md Item A)
-#print axioms mhsa_layer_one_head
 -- ViT CLOSE (planning/archive/vit_close.md Item C)
 #print axioms pdiv_rowDense_W
 #print axioms vit_rowDenseW_grad_bridge
@@ -776,9 +774,6 @@ open Proofs
 -- ViT SCALING PASS
 #print axioms layerNormVec_has_vjp
 #print axioms transformerBlockV_has_vjp_mat
-#print axioms vitForward2V_has_vjp
-#print axioms vitForward2V_has_vjp_correct
-#print axioms StableHLO.vitFwdGraphV_faithful
 #print axioms pdiv_vecLN_gamma
 #print axioms pdiv_vecLN_beta
 #print axioms vit_veclnGamma_grad_bridge
@@ -791,12 +786,10 @@ open Proofs
 #print axioms mhsa_layer_spelled
 #print axioms vitBlockSpelledMHV_eq
 #print axioms StableHLO.den_headsSumG
-#print axioms StableHLO.vitFwdGraphMHV_faithful
 
 -- ViT scaling pass: depth-k (ViTDepthK.lean)
 #print axioms vitBodyKVFlat_eq_flatten
 #print axioms vitBodyKVFlat_has_vjp
-#print axioms vitForwardKV_two_eq
 #print axioms vitForwardKV_has_vjp
 #print axioms vitForwardKV_has_vjp_correct
 -- Production capstone

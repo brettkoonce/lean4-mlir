@@ -7,7 +7,7 @@ The ViT peer of `MobileNetV2Render`/`ConvNeXtRender`: the full depth-12 ViT-Tiny
 `pretty` of the verified multi-head vector-LN graph (`vitBlockGraphMHV` × 12 + patch embed + final
 vector-LN + CLS-slice dense head). The committed [`LeanMlir/ViTRender.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/ViTRender.lean) is a hand-written String
 emitter (faithful per-op, NOT `pretty(provenGraph)`); this renders the SAME forward as `pretty` of the
-proven `SHlo` graph, so `den(graph) = vitForward` (via `vitFwdGraphMHV_faithful`, here at depth-12).
+proven `SHlo` graph, so `den(graph) = vitForward` (via `vitFwdGraphKMHV_faithful`, at depth 12).
 
 Render is value-independent (`skel` erases the `ℝ`/`Mat`/`Vec` fields), so placeholders (`0`, zero
 mats/vecs) are passed; the emitted `epsStr`/`sStr` literals carry the real ε / SDPA-scale. This file
@@ -245,7 +245,7 @@ def blkArgSig (i : Nat) (V : VitDims := vitTiDims) : String :=
      s!"%b{i}_Wfc2: {ty [m,d]}", s!"%b{i}_bfc2: {ty [d]}"]
 
 /-- **ViT-Tiny depth-12 forward rendered ENTIRELY from the verified AST.** Every line is `pretty` of a
-    verified `SHlo` node; `den(graph) = vitForward` by `vitFwdGraphMHV_faithful` (at depth-12). The
+    verified `SHlo` node; `den(graph) = vitForward` by `vitFwdGraphKMHV_faithful` (at depth 12). The
     output is the `[BS,10]` logits. (FORWARD half of the §1 train-step render.) -/
 def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
     (nClasses : Nat := 10) : String :=

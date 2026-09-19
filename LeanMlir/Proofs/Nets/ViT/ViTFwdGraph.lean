@@ -2,108 +2,19 @@ import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.Attention
 
 /-!
-# ViT forward-graph pieces — the heads = 1 MHSA reduction and the flat ↔ Mat bridges
+# ViT forward-graph pieces — the flat ↔ Mat bridges
 
 The ch10 token layer's ViT den helpers (`StableHLO.lean`) are local re-spellings; this file
-ties them back to the proven Attention forms, for the forward-graph faithfulness proofs
-(`ViTVecLN`, `ViTMultiHead`, `ViTDepthK`) to build on:
-
-1. **`mhsa_layer_one_head`** — at heads = 1, MHSA is three matmuls + a row-softmax.
-2. **The flat ↔ Mat bridges** — each den helper applied to a `Mat.flatten` is the flatten of
-   the Mat-level op — and `patchEmbedF_x_den`, the patch-embed stage every ViT forward-graph
-   faithfulness proof starts from.
+ties them back to the proven Attention forms for the forward-graph faithfulness proofs
+(`ViTMultiHead`, `ViTDepthK`): each den helper applied to a `Mat.flatten` is the flatten of
+the Mat-level op, and `patchEmbedF_x_den` is the patch-embed stage every ViT forward-graph
+faithfulness proof starts from.
 -/
-
-namespace Proofs
-
--- ════════════════════════════════════════════════════════════════
--- § 1. heads = 1: MHSA is three matmuls + a row-softmax
--- ════════════════════════════════════════════════════════════════
-
-/-- Sum over `Fin (1 * d)` re-indexed through `finProdFinEquiv (0, ·)` —
-    the head axis of a 1-head reshape is trivial. -/
-private lemma sum_fin_one_mul {M : Type*} [AddCommMonoid M] (d : Nat)
-    (f : Fin (1 * d) → M) :
-    (∑ k : Fin (1 * d), f k) = ∑ j : Fin d, f (finProdFinEquiv ((0 : Fin 1), j)) := by
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin 1 × Fin d ≃ Fin (1 * d)) f]
-  rw [Fintype.sum_prod_type]
-  exact Fin.sum_univ_one _
-
-/-- At one head, the per-head column gather is the identity modulo the
-    `Fin 1 × Fin d ≃ Fin (1 * d)` reindex: contracting the gathered
-    columns equals contracting the full rows. -/
-private lemma matmul_one_head {Np1 d : Nat} (A B : Mat Np1 (1 * d)) :
-    Mat.mul (fun r c => A r (finProdFinEquiv ((0 : Fin 1), c)))
-      (Mat.transpose fun r c => B r (finProdFinEquiv ((0 : Fin 1), c))) =
-    Mat.mul A (Mat.transpose B) := by
-  funext i j
-  unfold Mat.mul Mat.transpose
-  exact (sum_fin_one_mul d fun k => A i k * B j k).symm
-
-/-- The 1-head reshape round-trip: scattering through row 0 of the head
-    axis and gathering back is the identity index. -/
-private lemma fpf_one_head {d : Nat} (k : Fin (1 * d)) :
-    finProdFinEquiv ((0 : Fin 1), (finProdFinEquiv.symm k).2) = k := by
-  have h0 : (finProdFinEquiv.symm k).1 = (0 : Fin 1) := Fin.eq_zero _
-  calc finProdFinEquiv ((0 : Fin 1), (finProdFinEquiv.symm k).2)
-      = finProdFinEquiv ((finProdFinEquiv.symm k).1, (finProdFinEquiv.symm k).2) := by
-        rw [h0]
-    _ = k := Equiv.apply_symm_apply _ _
-
-/-- **MHSA at heads = 1 is three matmuls + a row-softmax.** The per-head
-    slice/concat plumbing of `mhsa_layer` collapses (the head axis is
-    `Fin 1`), leaving exactly the ch10 graph spelling: Q/K/V per-token
-    dense → `Q·Kᵀ` → `·1/√d` → row-softmax → `P·V` → output dense.
-    `ViTVecLN`'s spelled-block tie (`vitBlockSpelledV_eq`) rewrites with it. -/
-lemma mhsa_layer_one_head (Np1 d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (X : Mat Np1 (1 * d)) :
-    mhsa_layer Np1 1 d Wq Wk Wv Wo bq bk bv bo X =
-      fun n => dense Wo bo
-        (Mat.mul
-          (rowSoftmax (fun i j => sdpa_scale d *
-            Mat.mul (fun r c => dense Wq bq (X r) c)
-              (Mat.transpose (fun r c => dense Wk bk (X r) c)) i j))
-          (fun r c => dense Wv bv (X r) c) n) := by
-  funext n j
-  unfold mhsa_layer sdpa sdpa_scale dense
-  dsimp only
-  congr 1
-  apply Finset.sum_congr rfl
-  intro k _
-  have h0 : (finProdFinEquiv.symm k).1 = (0 : Fin 1) := Fin.eq_zero _
-  rw [h0]
-  -- Factor the beta-expanded Q/K gathers so `matmul_one_head` applies
-  -- (the `have` type is the goal's syntactic form; the proof term is the
-  -- factored form — they are beta-defeq).
-  have hQK : Mat.mul
-      (fun (n' : Fin Np1) (j' : Fin d) =>
-        (∑ k' : Fin (1 * d), X n' k' * Wq k' (finProdFinEquiv ((0 : Fin 1), j'))) +
-          bq (finProdFinEquiv ((0 : Fin 1), j')))
-      (Mat.transpose fun (n' : Fin Np1) (j' : Fin d) =>
-        (∑ k' : Fin (1 * d), X n' k' * Wk k' (finProdFinEquiv ((0 : Fin 1), j'))) +
-          bk (finProdFinEquiv ((0 : Fin 1), j'))) =
-    Mat.mul
-      (fun (r : Fin Np1) (c : Fin (1 * d)) =>
-        (∑ i : Fin (1 * d), X r i * Wq i c) + bq c)
-      (Mat.transpose fun (r : Fin Np1) (c : Fin (1 * d)) =>
-        (∑ i : Fin (1 * d), X r i * Wk i c) + bk c) :=
-    matmul_one_head
-      (fun (r : Fin Np1) (c : Fin (1 * d)) =>
-        (∑ i : Fin (1 * d), X r i * Wq i c) + bq c)
-      (fun (r : Fin Np1) (c : Fin (1 * d)) =>
-        (∑ i : Fin (1 * d), X r i * Wk i c) + bk c)
-  simp only [hQK]
-  unfold Mat.mul
-  dsimp only
-  simp only [fpf_one_head]
-
-end Proofs
 
 namespace Proofs.StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § 2. Flat ↔ Mat bridges + the patch-embed stage
+-- § Flat ↔ Mat bridges + the patch-embed stage
 -- ════════════════════════════════════════════════════════════════
 
 /-! ### Flat ↔ Mat commutation bridges
