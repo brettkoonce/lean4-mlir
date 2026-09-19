@@ -322,7 +322,7 @@ theorem r50IdGraphB_faithful (p epsStr : String) (N h w : Nat) {mid oc : Nat} (p
     (e : SHlo (N * (oc * h * w))) :
     den (r50IdGraphB p epsStr N h w pw e) = r50IdB N h w pw (den e) := by
   unfold r50IdGraphB r50IdB projB cbReluB residual biPath
-  simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv, den_bnBatchF,
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
     den_addVB, Function.comp_apply]
 
 /-- ⭐ Stride-1 projection bottleneck graph — stage 1 block 0. The skip is a plain `1×1` conv → BN
@@ -357,7 +357,7 @@ theorem r50ProjGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Na
     (pw : R50ProjW ic mid oc) (e : SHlo (N * (ic * h * w))) :
     den (r50ProjGraphB p epsStr N h w pw e) = r50ProjB N h w pw (den e) := by
   unfold r50ProjGraphB r50ProjB projB cbReluB residualProj biPath
-  simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv, den_bnBatchF,
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
     den_addVB, Function.comp_apply]
   congr 1
   funext i
@@ -391,8 +391,8 @@ theorem r50DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Na
     (pw : R50ProjW ic mid oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (r50DownGraphB p epsStr N h w pw e) = r50DownB N h w pw (den e) := by
   unfold r50DownGraphB r50DownB projB projStridedB cbReluB cbReluStridedB residualProj biPath
-  simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv,
-    den_batchOp_convStrided, den_bnBatchF, den_addVB, Function.comp_apply]
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
+    den_addVB, Function.comp_apply]
   congr 1
   funext i
   ring

@@ -12,7 +12,7 @@ statistics, and had no such theorem.
 `bnBatchLA` is the one op in `efficientnetForwardB` that is not `batchMap N` of a per-example op —
 it reduces μ/var across examples, which is why it has its own constructor. Frozen statistics are
 constants, so the eval BN *is* per-example — `batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)`
-— and `den_batchOp_bnEval` proves the `bnEval` descriptor denotes exactly that, by `rfl`. With that
+— and `denOp`'s `bnEval` arm is exactly that, so `den_batchOp` reads it off by `rfl`. With that
 one site replaced, **every stage below is `batchMap N` of a per-example op or a pointwise map**
 (read the five stage defs: conv, depthwise, SE and GAP/dense are `batchMap`, swish is pointwise,
 the residual is a coordinatewise add). So every leaf a per-example fold needs is one the net
@@ -20,9 +20,9 @@ already has.
 
 ⚠ That last paragraph is a statement about the SHAPE of these definitions, checkable by reading
 them; the whole-net factorisation `efficientnetForwardBEval N = batchMap N (per-example forward)`
-is NOT stated as a theorem here. Only the per-site claim is proved (`den_batchOp_bnEval`). Proving
-the whole-net one needs a `batchMap N f ∘ batchMap N g = batchMap N (f ∘ g)` lemma, which the repo
-does not yet have, plus a per-example B0 def to be the witness — worth doing, not done.
+is NOT stated as a theorem here. Only the per-site claim is proved (`den_batchOp` at `bnEval`).
+Proving the whole-net one needs a `batchMap N f ∘ batchMap N g = batchMap N (f ∘ g)` lemma, which
+the repo does not yet have, plus a per-example B0 def to be the witness — worth doing, not done.
 
 ⚠ **And it is the only BN mode a whole-net float NUMBER can be stated at.** Training-mode BN's
 error modulus is quadratic in the window, so the fold squares at each of this net's ten BN sites
@@ -188,7 +188,7 @@ theorem stemGraphBEval_faithful (epsStr : String) {N ic oc h w : Nat}
     den (stemGraphBEval epsStr Ws bs ε γs βs μs vs e)
       = stemBEval N (h := h) (w := w) Ws bs ε γs βs μs vs (den e) := by
   unfold stemGraphBEval stemBEval
-  simp only [den_batchOp_convStridedXla, den_batchOp_bnEval, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, denOp, swishF_faithful, Function.comp_apply]
 
 /-- MBConv1 (no expand) at inference: dw-bn-swish → SE → project-bn, batched. -/
 def mbNoExpGraphBEval (p epsStr : String) {N ic oc h w kHd kWd r : Nat} (ε : ℝ)
@@ -214,7 +214,7 @@ theorem mbNoExpGraphBEval_faithful (p epsStr : String) {N ic oc h w kHd kWd r : 
       = mbNoExpFwdBEval N (h := h) (w := w) ε Wd bd γd βd μd vd Wz₁ bz₁ Wz₂ bz₂
           Wp bp γp βp μp vp (den e) := by
   unfold mbNoExpGraphBEval mbNoExpFwdBEval projBEval seB dwbsBEval
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwise, den_batchOp_bnEval,
+  simp only [den_batchOp, denOp,
              swishF_faithful, Function.comp_apply]
 
 /-- MBConv6 strided at inference: expand-bn-swish (at `2h×2w`) → strided dw-bn-swish → SE →
@@ -249,8 +249,7 @@ theorem mbStridedGraphBEval_faithful (p epsStr : String) {N ic mid oc h w kHd kW
       = mbStridedFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
           Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp (den e) := by
   unfold mbStridedGraphBEval mbStridedFwdBEval projBEval seB dwbsSBEval cbsBEval
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwiseStrided,
-             den_batchOp_bnEval, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, denOp, swishF_faithful, Function.comp_apply]
 
 /-- MBConv6 with identity residual at inference: `addV body skip`. -/
 def mbResidGraphBEval (p epsStr : String) {N c mid h w kHd kWd r : Nat} (ε : ℝ)
@@ -284,7 +283,7 @@ theorem mbResidGraphBEval_faithful (p epsStr : String) {N c mid h w kHd kWd r : 
       = mbResidFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
           Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp (den e) := by
   unfold mbResidGraphBEval mbResidFwdBEval projBEval seB dwbsBEval cbsBEval residual biPath
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwise, den_batchOp_bnEval,
+  simp only [den_batchOp, denOp,
              swishF_faithful, den_addV, Function.comp_apply]
 
 /-- Head at inference: 1×1 conv-bn-swish → GAP → dense, batched. -/
@@ -305,7 +304,7 @@ theorem headGraphBEval_faithful (epsStr : String) {N c oc h w nC : Nat} (ε : �
     den (headGraphBEval epsStr ε Wh bh γh βh μh vh Wfc bfc e)
       = headFwdBEval N (h := h) (w := w) ε Wh bh γh βh μh vh Wfc bfc (den e) := by
   unfold headGraphBEval headFwdBEval cbsBEval
-  simp only [den_batchOp_dense, den_batchOp_gap, den_batchOp_conv, den_batchOp_bnEval,
+  simp only [den_batchOp, denOp,
              swishF_faithful, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════

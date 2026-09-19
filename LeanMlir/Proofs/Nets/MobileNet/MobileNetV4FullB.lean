@@ -443,7 +443,7 @@ example (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 
 /-- Stem graph: 3×3/s2 XLA-`SAME` conv → batch BN → relu.
 
     ⚠⚠ **GENERIC in the widths, and that is a correctness-of-elaboration requirement, not style.**
-    Pinning `ic := 3, oc := 32, h := 112` here makes `den_batchOp_convStridedXla`'s `rfl` a claim
+    Pinning `ic := 3, oc := 32, h := 112` here makes the conv's `den_batchOp` `rfl` a claim
     about concrete 150528- and 401408-element tensors, and the KERNEL tries to reduce it: the
     lemma takes over a minute and then fails with `(kernel) deterministic timeout`. Proven at
     binders it takes two seconds, and applying it at the net's literals is free — instantiating a
@@ -461,8 +461,9 @@ theorem mnv4StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc kH kW : N
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (mnv4StemGraphB epsStr N h w Ws bs εs γs βs e)
       = mnv4StemB N h w Ws bs εs γs βs (den e) := by
-  simp only [mnv4StemGraphB, mnv4StemB, den_batchOp_relu_eq_reluF, reluF_faithful,
-    den_batchOp_convStridedXla, den_bnBatchF, Function.comp_apply]
+  unfold mnv4StemGraphB
+  simp only [mnv4StemB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
+    den_bnBatchF, Function.comp_apply]
 
 /-- Fused stage graph: 3×3/s2 SYMMETRIC conv → BN → **swish** → 1×1 project → BN. No skip.
     ⚠ Generic in the widths, for the reason `mnv4StemGraphB` records. -/
@@ -485,7 +486,7 @@ theorem mnv4FusedGraphB_faithful (epsStr : String) (N h w : Nat) {ic mid oc kH k
           (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).fwd (den e) := by
   simp only [mnv4FusedGraphB, mnv4FusedStage, mnv4FusedConvLayer,
     projLayer, CertLayer.comp_fwd, fusedConvB, projB,
-    den_batchOp_swish_eq_swishF, swishF_faithful, den_batchOp_conv, den_batchOp_convStrided,
+    ↓den_batchOp_swish_eq_swishF, swishF_faithful, den_batchOp, denOp,
     den_bnBatchF, Function.comp_apply]
 
 /-- **ExtraDW body graph** — both depthwises present, 13 of Conv-M's 21 rows (and all three
@@ -521,8 +522,8 @@ theorem mnv4ExtraDWBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     den (mnv4ExtraDWBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ExtraDWBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
     ite_eq_right hq, ite_eq_right hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.comp_fwd,
-    projB, cbReluB, dwbReluB, den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv,
-    den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
+    projB, cbReluB, dwbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
+    den_bnBatchF, Function.comp_apply]
 
 /-- **ConvNeXt-like body graph** — pre-DW only, `postDWk = 0`, four of Conv-M's rows (8, 10, 16,
     21). ⛔ The absent depthwise emits NO tokens, exactly as `mnv4PostDWSlot` inserts `id'`: the
@@ -550,8 +551,8 @@ theorem mnv4ConvNeXtBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec
     den (mnv4ConvNeXtBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ConvNeXtBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
     ite_eq_right hq, ite_eq_left hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.id'_fwd,
-    CertLayer.comp_fwd, projB, cbReluB, dwbReluB, den_batchOp_relu_eq_reluF, reluF_faithful,
-    den_batchOp_conv, den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
+    CertLayer.comp_fwd, projB, cbReluB, dwbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
+    den_batchOp, denOp, den_bnBatchF, Function.comp_apply]
 
 /-- **FFN body graph** — neither depthwise, four of Conv-M's rows (9, 15, 19, 20): expand,
     project, and nothing else. Both slots are `id'`. -/
@@ -572,7 +573,7 @@ theorem mnv4FfnBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     den (mnv4FfnBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4FfnBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
     ite_eq_left hq, ite_eq_left hd, cbReluLayer, projLayer, CertLayer.id'_fwd, CertLayer.comp_fwd,
-    projB, cbReluB, den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv,
+    projB, cbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
     den_bnBatchF, Function.comp_apply]
 
 /-- **Pre-strided block graph** — rows 1, 3 and 11, the only stride-2 rows Conv-M has, and all
@@ -605,8 +606,8 @@ theorem mnv4PreStridedGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     den (mnv4PreStridedGraphB epsStr N s p e) = (mnv4PreStridedBodyOfRow N s p).fwd (den e) := by
   simp only [mnv4PreStridedGraphB, mnv4PreStridedBodyOfRow, mnv4UibPreStridedBody, mnv4PostDWSlot,
     ite_eq_right hd, mnv4DWReluLayer, mnv4DWReluStridedLayer, cbReluLayer, projLayer,
-    CertLayer.comp_fwd, projB, cbReluB, dwbReluB, dwbReluBstrided, den_batchOp_relu_eq_reluF,
-    reluF_faithful, den_batchOp_conv, den_batchOp_depthwise, den_batchOp_depthwiseStrided,
+    CertLayer.comp_fwd, projB, cbReluB, dwbReluB, dwbReluBstrided, ↓den_batchOp_relu_eq_reluF,
+    reluF_faithful, den_batchOp, denOp,
     den_bnBatchF, Function.comp_apply]
 
 /-- ⭐⭐ **One skip row's graph: its body's, plus the identity skip.** Trivial as a definition and
@@ -662,8 +663,8 @@ theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid oc nCls :
           (mnv4Head N (cbReluLayer (h := h) (w := w) N W2 b2 ε2 hε2 γ2 β2)
             (mnv4GapLayer N (c := oc) (h := h) (w := w)) (mnv4DenseLayer N Wd bd))).fwd (den e) := by
   simp only [mnv4HeadGraphB, mnv4Head, cbReluLayer, mnv4GapLayer,
-    mnv4DenseLayer, CertLayer.comp_fwd, cbReluB, den_batchOp_relu_eq_reluF, reluF_faithful,
-    den_batchOp_conv, den_batchOp_gap, den_batchOp_dense, den_bnBatchF, Function.comp_apply]
+    mnv4DenseLayer, CertLayer.comp_fwd, cbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
+    den_batchOp, denOp, den_bnBatchF, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness (T2)

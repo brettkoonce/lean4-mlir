@@ -183,7 +183,7 @@ theorem stemGraphB_faithful (epsStr : String) {N ic oc h w : Nat}
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (stemGraphB epsStr Ws bs εs γs βs e) = stemB N (h := h) (w := w) Ws bs εs γs βs (den e) := by
   unfold stemGraphB stemB
-  simp only [den_batchOp_convStridedXla, den_bnBatchF, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, denOp, den_bnBatchF, swishF_faithful, Function.comp_apply]
 
 /-- MBConv1 (no expand): dw-bn-swish → SE → project-bn, batched. -/
 def mbNoExpGraphB (p epsStr : String) {N ic oc h w kHd kWd r : Nat}
@@ -206,7 +206,7 @@ theorem mbNoExpGraphB_faithful (p epsStr : String) {N ic oc h w kHd kWd r : Nat}
     den (mbNoExpGraphB p epsStr Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp e)
       = mbNoExpFwdB N (h := h) (w := w) Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp (den e) := by
   unfold mbNoExpGraphB mbNoExpFwdB projB seB dwbsB
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwise, den_bnBatchF,
+  simp only [den_batchOp, denOp, den_bnBatchF,
              swishF_faithful, Function.comp_apply]
 
 /-- MBConv6 strided: expand-bn-swish (at `2h×2w`) → strided dw-bn-swish → SE → project-bn, batched. -/
@@ -235,7 +235,7 @@ theorem mbStridedGraphB_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r 
       = mbStridedFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂
           Wp bp εp γp βp (den e) := by
   unfold mbStridedGraphB mbStridedFwdB projB seB dwbsSB cbsB
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwiseStrided, den_bnBatchF,
+  simp only [den_batchOp, denOp, den_bnBatchF,
              swishF_faithful, Function.comp_apply]
 
 /-- MBConv6 with identity residual: `addV body skip`, body = project ∘ SE ∘ dw ∘ expand, batched. -/
@@ -265,7 +265,7 @@ theorem mbResidGraphB_faithful (p epsStr : String) {N c mid h w kHd kWd r : Nat}
       = mbResidFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂
           Wp bp εp γp βp (den e) := by
   unfold mbResidGraphB mbResidFwdB projB seB dwbsB cbsB residual biPath
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwise, den_bnBatchF,
+  simp only [den_batchOp, denOp, den_bnBatchF,
              swishF_faithful, den_addV, Function.comp_apply]
 
 /-- Head: 1×1 conv-bn-swish → GAP → dense, batched. -/
@@ -285,7 +285,7 @@ theorem headGraphB_faithful (epsStr : String) {N c oc h w nC : Nat}
     den (headGraphB epsStr Wh bh εh γh βh Wfc bfc e)
       = headFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc (den e) := by
   unfold headGraphB headFwdB cbsB
-  simp only [den_batchOp_dense, den_batchOp_gap, den_batchOp_conv, den_bnBatchF, swishF_faithful,
+  simp only [den_batchOp, denOp, den_bnBatchF, swishF_faithful,
              Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════

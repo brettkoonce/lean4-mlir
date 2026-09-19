@@ -1736,6 +1736,9 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .convStridedBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (flatConvStride2 (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
                  + Tensor3.flatten (fun o _ _ => bias o) i
+  -- ⚠ The XLA-`SAME` stride-2 conv is `flatConvStride2Xla`, NOT `flatConvStride2`: the two tokens
+  -- have identical types and emitted shapes, so this arm is the only place they differ. Getting it
+  -- wrong would make the render provably compute one net while emitting the other.
   | _, _, .convStridedXla _ _ W bias => flatConvStride2Xla W bias
   | _, _, .convStridedXlaBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (flatConvStride2Xla (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
@@ -1750,6 +1753,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .depthwiseStridedBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (depthwiseStride2Flat (fun cc a d => rnd (W cc a d)) 0 (fun j => rnd (x j)) i)
                  + Tensor3.flatten (fun cc _ _ => bias cc) i
+  -- ⚠ `depthwiseStride2FlatXla`, NOT `depthwiseStride2Flat`: same caveat as `.convStridedXla`.
   | _, _, .depthwiseStridedXla _ _ W bias => depthwiseStride2FlatXla W bias
   | _, _, .depthwiseStridedXlaBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (depthwiseStride2FlatXla (fun cc a d => rnd (W cc a d)) 0 (fun j => rnd (x j)) i)
@@ -1757,12 +1761,18 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .dense _ _ W bias => dense W bias
   | _, _, .gap (c := c) (h := h) (w := w) => globalAvgPoolFlat c h w
   | _, _, .seBlock (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ => seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂
+  -- Inference BN: each example independently, with the same frozen statistics. Under `batchMap N`
+  -- no `N` appears except as the number of applications, so an example's logits cannot depend on
+  -- which others share its batch (unlike `bnBatchF`, whose `bnBatchLA` couples the batch).
   | _, _, .bnEval (oc := oc) (h := h) (w := w) _ _ _ _ _ ε γ β μ var =>
       bnPerChannelEvalTensor3 oc h w ε γ β μ var
   | _, _, .swish (n := n) => swish n
   | _, _, .relu (n := n) => relu n
   | _, _, .relu6 (n := n) => relu6 n
   | _, _, .maxPool (c := c) (h := h) (w := w) => maxPoolFlat c h w
+  -- ⚠ Same type as `.maxPool`, different function (He et al.'s 3×3/s2 window). The pair share an
+  -- arity, op counts, the prefix audit and the emitted shape, which is how the deviation went
+  -- undocumented on every ResNet here; this arm and the emitted text are what separate them.
   | _, _, .maxPool3s2 (c := c) (h := h) (w := w) => maxPool3s2Flat c h w
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
@@ -2401,63 +2411,15 @@ theorem convertF_faithful {n : Nat} (rnd : ℝ → ℝ) (e : SHlo n) :
 @[simp] theorem den_selectMid {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
     den (.selectMid s x e) = fun i => if 0 < x i ∧ x i < 6 then den e i else 0 := rfl
 
--- Batched-lift faithfulness: `den` of each batched token = `batchMap N` of the
--- proven per-example op (rfl, since `denOp` returns that op directly), and the
--- true-batch-norm token denotes `bnBatchLA` (= the proven `bnBatchTensor4`).
-@[simp] theorem den_batchOp_conv {N ic oc h w kH kW : Nat} (wN bN : String)
-    (W : Kernel4 oc ic kH kW) (bias : Vec oc) (e : SHlo (N * (ic*h*w))) :
-    den (.batchOp (N := N) (.conv (h := h) (w := w) wN bN W bias) e)
-      = batchMap N (flatConv W bias) (den e) := rfl
-@[simp] theorem den_batchOp_convStrided {N ic oc h w kH kW : Nat} (wN bN : String)
-    (W : Kernel4 oc ic kH kW) (bias : Vec oc) (e : SHlo (N * (ic*(2*h)*(2*w)))) :
-    den (.batchOp (N := N) (.convStrided (h := h) (w := w) wN bN W bias) e)
-      = batchMap N (flatConvStride2 W bias) (den e) := rfl
-/-- The XLA-`SAME` peer. ⚠ Note it denotes `flatConvStride2Xla`, NOT `flatConvStride2` — the two
-    tokens have identical types and identical emitted shapes, so this `rfl` is the only place the
-    distinction is recorded. Getting it wrong would make the render provably compute one net while
-    emitting the other. -/
-@[simp] theorem den_batchOp_convStridedXla {N ic oc h w kH kW : Nat} (wN bN : String)
-    (W : Kernel4 oc ic kH kW) (bias : Vec oc) (e : SHlo (N * (ic*(2*h)*(2*w)))) :
-    den (.batchOp (N := N) (.convStridedXla (h := h) (w := w) wN bN W bias) e)
-      = batchMap N (flatConvStride2Xla W bias) (den e) := rfl
-@[simp] theorem den_batchOp_depthwise {N c h w kH kW : Nat} (wN bN : String)
-    (W : DepthwiseKernel c kH kW) (bias : Vec c) (e : SHlo (N * (c*h*w))) :
-    den (.batchOp (N := N) (.depthwise (h := h) (w := w) wN bN W bias) e)
-      = batchMap N (depthwiseFlat W bias) (den e) := rfl
-@[simp] theorem den_batchOp_depthwiseStrided {N c h w kH kW : Nat} (wN bN : String)
-    (W : DepthwiseKernel c kH kW) (bias : Vec c) (e : SHlo (N * (c*(2*h)*(2*w)))) :
-    den (.batchOp (N := N) (.depthwiseStrided (h := h) (w := w) wN bN W bias) e)
-      = batchMap N (depthwiseStride2Flat W bias) (den e) := rfl
-/-- The XLA-`SAME` depthwise peer. ⚠ Denotes `depthwiseStride2FlatXla`, NOT `depthwiseStride2Flat`
-    — same caveat as `den_batchOp_convStridedXla`: this `rfl` is the only place the two are
-    distinguished. -/
-@[simp] theorem den_batchOp_depthwiseStridedXla {N c h w kH kW : Nat} (wN bN : String)
-    (W : DepthwiseKernel c kH kW) (bias : Vec c) (e : SHlo (N * (c*(2*h)*(2*w)))) :
-    den (.batchOp (N := N) (.depthwiseStridedXla (h := h) (w := w) wN bN W bias) e)
-      = batchMap N (depthwiseStride2FlatXla W bias) (den e) := rfl
-@[simp] theorem den_batchOp_dense {N a c : Nat} (wN bN : String)
-    (W : Mat a c) (bias : Vec c) (e : SHlo (N * a)) :
-    den (.batchOp (N := N) (.dense wN bN W bias) e)
-      = batchMap N (dense W bias) (den e) := rfl
-/-- **Batched inference-BN faithfulness.** The `bnEval` descriptor at the batched index denotes the
-    proven `bnPerChannelEvalTensor3` applied to **each example independently, with the same frozen
-    statistics**. That is the formal statement of "eval is class-batch-independent" at `N := B`: no
-    `N` appears on the right except as the number of independent applications, so an example's
-    logits cannot depend on which others share its batch — unlike `bnBatchF`, whose `den`
-    (`bnBatchLA`) genuinely couples the batch. Being affine in `x`, it needs no `0 < ε`. -/
-@[simp] theorem den_batchOp_bnEval {N oc h w : Nat} (gN bN muN varN es : String) (ε : ℝ)
-    (γ β μ var : Vec oc) (e : SHlo (N * (oc*h*w))) :
-    den (.batchOp (N := N) (.bnEval (h := h) (w := w) gN bN muN varN es ε γ β μ var) e)
-      = batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ var) (den e) := rfl
-@[simp] theorem den_batchOp_gap {N c h w : Nat} (e : SHlo (N * (c*h*w))) :
-    den (.batchOp (N := N) (.gap (c := c) (h := h) (w := w)) e)
-      = batchMap N (globalAvgPoolFlat c h w) (den e) := rfl
-@[simp] theorem den_batchOp_seBlock {N c h w r : Nat} (w1 b1 w2 b2 : String)
-    (W₁ : Mat c r) (β₁ : Vec r) (W₂ : Mat r c) (β₂ : Vec c) (e : SHlo (N * (c*h*w))) :
-    den (.batchOp (N := N) (.seBlock (h := h) (w := w) w1 b1 w2 b2 W₁ β₁ W₂ β₂) e)
-      = batchMap N (seBlockFull (h := h) (w := w) W₁ β₁ W₂ β₂) (den e) := rfl
-@[simp] theorem den_batchOp_swish {N n : Nat} (e : SHlo (N * n)) :
-    den (.batchOp (N := N) (.swish (n := n)) e) = batchMap N (swish n) (den e) := rfl
+/-- **A batched token denotes its per-example op, lifted.** `den (.batchOp op e)` is `batchMap N` of
+    `denOp op`, the proven per-example map, by `rfl`; `simp only [den_batchOp, denOp]` reads a
+    batched graph's denotation off `denOp`'s arms. `skel` erases values, so a descriptor with the
+    wrong `denOp` emits identical bytes: this equation is the half the emit ties cannot see. The
+    true-batch-norm token is not a descriptor; it denotes `bnBatchLA` (`den_bnBatchF`). -/
+@[simp] theorem den_batchOp {N a b : Nat} (op : BatchableOp a b) (e : SHlo (N * a)) :
+    den (.batchOp (N := N) op e) = batchMap N (denOp op) (den e) := rfl
+
+attribute [simp] denOp
 
 /-- **Pointwise maps are `batchMap`-free.** Lifting an elementwise map across `N` examples IS the
     elementwise map at the batched index `N·n`. This is why moving the pointwise nodes onto
@@ -2477,41 +2439,6 @@ theorem batchMap_pointwise {N n : Nat} (g : ℝ → ℝ) (v : Vec (N * n)) :
 theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.swish (n := n)) e) = den (.swishF e) :=
   batchMap_pointwise swishScalar (den e)
-@[simp] theorem den_batchOp_softmaxRow {N m n : Nat} (e : SHlo (N * (m*n))) :
-    den (.batchOp (N := N) (.softmaxRow (m := m) (n := n)) e)
-      = batchMap N (rowSoftmaxFlat m n) (den e) := rfl
-@[simp] theorem den_batchOp_denseRowBack {N rows a c : Nat} (wN : String) (W : Mat a c)
-    (e : SHlo (N * (rows*c))) :
-    den (.batchOp (N := N) (.denseRowBack (rows := rows) wN W) e)
-      = batchMap N (rowDenseBackFlat rows a c W) (den e) := rfl
-@[simp] theorem den_batchOp_relu {N n : Nat} (e : SHlo (N * n)) :
-    den (.batchOp (N := N) (.relu (n := n)) e) = batchMap N (relu n) (den e) := rfl
--- ── ViT / ConvNeXt's five row/pointwise descriptors (§0.2 ▶2). The DENOTATION half of the
---    batched-index move, and it is the half `tests/TestBatchedEmitTie.lean` structurally cannot
---    see: `skel` erases values, so a descriptor with the wrong `denOp` emits identical bytes.
---    Each is `batchMap N` of the SAME proven per-example map its descriptor-less peer denotes,
---    by `rfl` — which is what makes the batched node honest at `N := B` rather than a one-example
---    function wearing a `tensor<Bxn>` type.
-@[simp] theorem den_batchOp_gelu {N n : Nat} (e : SHlo (N * n)) :
-    den (.batchOp (N := N) (.gelu (n := n)) e) = batchMap N (gelu n) (den e) := rfl
-@[simp] theorem den_batchOp_dotOut {N m n : Nat} (wN : String) (W : Mat m n) (e : SHlo (N * n)) :
-    den (.batchOp (N := N) (.dotOut wN W) e)
-      = batchMap N (fun v i => ∑ j, W i j * v j) (den e) := rfl
-@[simp] theorem den_batchOp_expe {N n : Nat} (e : SHlo (N * n)) :
-    den (.batchOp (N := N) (.expe (n := n)) e)
-      = batchMap N (fun v j => Real.exp (v j)) (den e) := rfl
-@[simp] theorem den_batchOp_softmaxDiv {N n : Nat} (e : SHlo (N * n)) :
-    den (.batchOp (N := N) (.softmaxDiv (n := n)) e)
-      = batchMap N (fun v j => v j / ∑ k, v k) (den e) := rfl
-@[simp] theorem den_batchOp_layerScaleCh {N c h w : Nat} (gN : String) (γ : Vec c)
-    (e : SHlo (N * (c*h*w))) :
-    den (.batchOp (N := N) (.layerScaleCh (c := c) (h := h) (w := w) gN γ) e)
-      = batchMap N (fun v => layerScale (fun k => γ (chanIdx c h w k)) v) (den e) := rfl
-@[simp] theorem den_batchOp_convStride4 {N ic oc h w kH kW : Nat} (wN bN : String)
-    (W : Kernel4 oc ic kH kW) (bias : Vec oc)
-    (e : SHlo (N * (ic*(2*(2*h))*(2*(2*w))))) :
-    den (.batchOp (N := N) (.convStride4 (h := h) (w := w) wN bN W bias) e)
-      = batchMap N (flatConvStride4 W bias) (den e) := rfl
 
 /-- **The softmax denominator is PER EXAMPLE — the property this descriptor exists for.** Example
     `k`'s output divides by example `k`'s own sum, not by the sum over the whole batch.
@@ -2525,56 +2452,7 @@ theorem den_batchOp_softmaxDiv_per_example {N n : Nat} (e : SHlo (N * n))
     (k : Fin N) (j : Fin n) :
     den (.batchOp (N := N) (.softmaxDiv (n := n)) e) (finProdFinEquiv (k, j))
       = batchSlice N n (den e) k j / ∑ i, batchSlice N n (den e) k i := by
-  simp [den_batchOp_softmaxDiv, batchMap, batchSlice]
-@[simp] theorem den_batchOp_transpose {N m n : Nat} (e : SHlo (N * (m*n))) :
-    den (.batchOp (N := N) (.transpose (m := m) (n := n)) e)
-      = batchMap N (transposeFlat m n) (den e) := rfl
-@[simp] theorem den_batchOp_lnRow {N m n : Nat} (gN bN es : String) (ε γ β : ℝ)
-    (e : SHlo (N * (m*n))) :
-    den (.batchOp (N := N) (.lnRow (m := m) (n := n) gN bN es ε γ β) e)
-      = batchMap N (rowLNFlat m n ε γ β) (den e) := rfl
-@[simp] theorem den_batchOp_rowScale {N m n : Nat} (gN : String) (γ : Vec n)
-    (e : SHlo (N * (m*n))) :
-    den (.batchOp (N := N) (.rowScale (m := m) (n := n) gN γ) e)
-      = batchMap N (rowScaleFlat m n γ) (den e) := rfl
-@[simp] theorem den_batchOp_rowBias {N m n : Nat} (bN : String) (β : Vec n)
-    (e : SHlo (N * (m*n))) :
-    den (.batchOp (N := N) (.rowBias (m := m) (n := n) bN β) e)
-      = batchMap N (rowBiasFlat m n β) (den e) := rfl
-
-/-! ### ViT increment 1 — the six batch-invariant forms
-
-⚠ Read the binders: `N` is the BATCH and `tk` is ViT's token count. The per-example renderer calls
-the token axis `N`, so these two statements are the place where that name is re-pointed, and
-getting them the wrong way round type-checks (both are `Nat` and both appear multiplied). -/
-
-@[simp] theorem den_batchOp_denseRow {N tk a c : Nat} (wN bN : String) (W : Mat a c) (b : Vec c)
-    (e : SHlo (N * (tk*a))) :
-    den (.batchOp (N := N) (.denseRow (N := tk) wN bN W b) e)
-      = batchMap N (rowDenseFlat tk a c W b) (den e) := rfl
-
-@[simp] theorem den_batchOp_patchEmbed {N ic H W P tk D : Nat} (wN bN clsN posN : String)
-    (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (tk+1) D) (e : SHlo (N * (ic*H*W))) :
-    den (.batchOp (N := N) (.patchEmbed (N := tk) wN bN clsN posN Wc bc cls pos) e)
-      = batchMap N (patchEmbedFlat ic H W P tk D Wc bc cls pos) (den e) := rfl
-
-@[simp] theorem den_batchOp_clsSlice {N tk D : Nat} (e : SHlo (N * ((tk+1)*D))) :
-    den (.batchOp (N := N) (.clsSlice (N := tk) (D := D)) e)
-      = batchMap N (clsSliceFlat tk D) (den e) := rfl
-
-@[simp] theorem den_batchOp_clsPad {N tk D : Nat} (e : SHlo (N * D)) :
-    den (.batchOp (N := N) (.clsPad (N := tk) (D := D)) e)
-      = batchMap N (clsPadFlat tk D) (den e) := rfl
-
-@[simp] theorem den_batchOp_headSlice {N tk heads d : Nat} (h : Fin heads)
-    (e : SHlo (N * (tk*(heads*d)))) :
-    den (.batchOp (N := N) (.headSlice (N := tk) (d := d) h) e)
-      = batchMap N (headSliceFlat tk heads d h) (den e) := rfl
-
-@[simp] theorem den_batchOp_headPad {N tk heads d : Nat} (h : Fin heads)
-    (e : SHlo (N * (tk*d))) :
-    den (.batchOp (N := N) (.headPad (N := tk) (heads := heads) h) e)
-      = batchMap N (headPadFlat tk heads d h) (den e) := rfl
+  simp [batchMap, batchSlice]
 
 /-- ⭐ **THE CLS SLICE IS THE ONE PLACE THE BATCH AND THE TOKEN AXIS COULD SWAP SILENTLY.**
     `clsSlice` takes `(tk+1)*D` to `D` — it CONTRACTS — and `batchMap N` of it takes `N*((tk+1)*D)`
@@ -2585,7 +2463,7 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
     (k : Fin N) (i : Fin D) :
     den (.batchOp (N := N) (.clsSlice (N := tk) (D := D)) e) (finProdFinEquiv (k, i))
       = clsSliceFlat tk D (batchSlice N ((tk+1)*D) (den e) k) i := by
-  simp only [den_batchOp_clsSlice, batchMap, Equiv.symm_apply_apply]
+  simp only [den_batchOp, denOp, batchMap, Equiv.symm_apply_apply]
   rfl
 
 /-- **The two halves agree, per form.** The batched descriptor denotes the batch-lift of exactly
@@ -2628,20 +2506,9 @@ theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
 @[simp] theorem den_bnBatchVarB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w)))) :
     den (.bnBatchVarB e)
       = fun c => bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) := rfl
-@[simp] theorem den_batchOp_maxPool {N c h w : Nat} (e : SHlo (N * (c*(2*h)*(2*w)))) :
-    den (.batchOp (N := N) (.maxPool (c := c) (h := h) (w := w)) e)
-      = batchMap N (maxPoolFlat c h w) (den e) := rfl
 @[simp] theorem den_maxPoolBackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
     (e : SHlo (N*(c*h*w))) :
     den (.maxPoolBackB xN x e) = batchMapAux N (maxPoolBackFlat c h w) x (den e) := rfl
-/-- ⭐ The batched 3×3/s2 pool forward denotes He et al.'s pool lifted across the batch. ⚠ Read it
-    beside `den_batchOp_maxPool` directly above: **same type, different function.** The two
-    descriptors are indistinguishable to every structural check the repo has — arity, op counts,
-    the prefix audit and the shape of the emitted text — which is exactly how the deviation
-    survived undocumented on every ResNet here. `maxPool3s2_ne_maxPool_descr` pins them apart. -/
-@[simp] theorem den_batchOp_maxPool3s2 {N c h w : Nat} (e : SHlo (N * (c*(2*h)*(2*w)))) :
-    den (.batchOp (N := N) (.maxPool3s2 (c := c) (h := h) (w := w)) e)
-      = batchMap N (maxPool3s2Flat c h w) (den e) := rfl
 @[simp] theorem den_maxPool3s2BackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
     (e : SHlo (N*(c*h*w))) :
     den (.maxPool3s2BackB xN x e) = batchMapAux N (maxPool3s2BackFlat c h w) x (den e) := rfl
@@ -4826,7 +4693,7 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .maxPool (c := c) (h := h) (w := w) => ("maxPool", [], [N, c, h, w])
   -- ⚠ A DIFFERENT tag from `.maxPool`, deliberately. The two denote different functions at the
   -- same type, so sharing a tag would make the emitted text the only thing separating them — and
-  -- the emitted text is what a reader checks last. `maxPool3s2_ne_maxPool_descr` is the den-side
+  -- the emitted text is what a reader checks last. `denOp`'s `.maxPool3s2` arm is the den-side
   -- half of the same pin.
   | .maxPool3s2 (c := c) (h := h) (w := w) => ("maxPool3s2", [], [N, c, h, w])
   | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])

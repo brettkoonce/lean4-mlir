@@ -156,7 +156,8 @@ private def cases : List (String × String × String) :=
   --    already honest at the batched index and only its EMIT read the width off the SHlo index;
   --    `softmaxDiv`'s emit already reduced per example while its DEN would have divided by the
   --    sum over the whole batch. This file can only see the first kind — the second is
-  --    `den_batchOp_softmaxDiv`'s job — which is the standing argument for gating both halves.
+  --    `den_batchOp_softmaxDiv_per_example`'s job — which is the standing argument for gating
+  --    both halves.
   , ("expe",
      render (pretty BS (.expe (.operand "%x" zv))),
      render (pretty BS (.batchOp (N := BS) (.expe (n := n)) (.operand "%x" zvb))))

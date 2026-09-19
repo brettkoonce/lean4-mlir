@@ -219,7 +219,7 @@ theorem mnv2StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc kH kW : N
     den (mnv2StemGraphB epsStr N h w Ws bs εs γs βs e)
       = mnv2StemB N h w Ws bs εs γs βs (den e) := by
   unfold mnv2StemGraphB mnv2StemB
-  simp only [den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp_convStridedXla,
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp,
     den_bnBatchF, Function.comp_apply]
 
 /-- `t = 1` bottleneck graph (b1): depthwise -> BN -> relu6 -> project 1x1 -> BN. -/
@@ -236,8 +236,8 @@ theorem mnv2NoExpGraphB_faithful (pfx epsStr : String) (N h w : Nat) {ic oc : Na
     (p : IVWNoExp ic oc) (e : SHlo (N * (ic * h * w))) :
     den (mnv2NoExpGraphB pfx epsStr N h w p e) = mnv2NoExpB N h w p (den e) := by
   unfold mnv2NoExpGraphB mnv2NoExpB projB dwbrB
-  simp only [den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp_conv,
-    den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp, den_bnBatchF,
+    Function.comp_apply]
 
 /-- Stride-1 no-skip bottleneck graph (b11, b17): expand -> depthwise -> project, batch BN after
     each, relu6 after the first two. -/
@@ -257,8 +257,8 @@ theorem mnv2ExpOnlyGraphB_faithful (pfx epsStr : String) (N h w : Nat) {ic mid o
     (p : IVW ic mid oc) (e : SHlo (N * (ic * h * w))) :
     den (mnv2ExpOnlyGraphB pfx epsStr N h w p e) = mnv2ExpOnlyB N h w p (den e) := by
   unfold mnv2ExpOnlyGraphB mnv2ExpOnlyB projB dwbrB cbrB
-  simp only [den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp_conv,
-    den_batchOp_depthwise, den_bnBatchF, Function.comp_apply]
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp, den_bnBatchF,
+    Function.comp_apply]
 
 /-- Stride-1 skip bottleneck graph: the body plus the `addVB` identity skip, the block-input
     subtree `e` shared between both arms as the render emits it. -/
@@ -294,8 +294,8 @@ theorem mnv2StridedGraphB_faithful (pfx epsStr : String) (N h w : Nat) {ic mid o
     (p : IVW ic mid oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (mnv2StridedGraphB pfx epsStr N h w p e) = mnv2StridedB N h w p (den e) := by
   unfold mnv2StridedGraphB mnv2StridedB projB dwbrBstrided cbrB
-  simp only [den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp_conv,
-    den_batchOp_depthwiseStridedXla, den_bnBatchF, Function.comp_apply]
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp, den_bnBatchF,
+    Function.comp_apply]
 
 /-- Head graph: 1x1 conv -> batch BN -> relu6 -> GAP -> dense. -/
 def mnv2HeadGraphB (epsStr : String) (N h w : Nat) {ic oc nCls : Nat}
@@ -313,8 +313,8 @@ theorem mnv2HeadGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc nCls : Na
     den (mnv2HeadGraphB epsStr N h w Wh bh εh γh βh Wd bd e)
       = mnv2HeadB N h w Wh bh εh γh βh Wd bd (den e) := by
   unfold mnv2HeadGraphB mnv2HeadB cbrB
-  simp only [den_batchOp_dense, den_batchOp_gap, den_batchOp_relu6_eq_relu6F, relu6F_faithful,
-    den_batchOp_conv, den_bnBatchF, Function.comp_apply]
+  simp only [den_batchOp, denOp, ↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_bnBatchF,
+    Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness

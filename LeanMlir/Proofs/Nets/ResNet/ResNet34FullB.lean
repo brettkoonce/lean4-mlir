@@ -216,7 +216,8 @@ theorem r34IdGraphB_faithful (p epsStr : String) (N h w : Nat) {c : Nat} (pw : R
     (e : SHlo (N * (c * h * w))) :
     den (r34IdGraphB p epsStr N h w pw e) = r34IdB N h w pw (den e) := by
   unfold r34IdGraphB r34IdB projB cbReluB residual biPath
-  simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv, den_bnBatchF, den_addVB,
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
+    den_addVB,
     Function.comp_apply]
 
 /-- Downsample basic-block graph: `relu(addVB(projection, body))` — projection first, matching
@@ -239,7 +240,7 @@ theorem r34DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic oc : Nat}
     (pw : R34DownW ic oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (r34DownGraphB p epsStr N h w pw e) = r34DownB N h w pw (den e) := by
   unfold r34DownGraphB r34DownB projB projStridedB cbReluStridedB residualProj biPath
-  simp only [den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp_conv, den_batchOp_convStrided,
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
     den_bnBatchF, den_addVB, Function.comp_apply]
 
 /-- Stem graph: 7x7/s2 conv -> bn -> relu -> 3x3/s2 max-pool. -/
@@ -257,8 +258,8 @@ theorem r34StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
     den (r34StemGraphB epsStr N h w Ws bs εs γs βs e)
       = r34StemB N h w Ws bs εs γs βs (den e) := by
   unfold r34StemGraphB r34StemB cbReluStridedB
-  simp only [den_batchOp_maxPool3s2, den_batchOp_relu_eq_reluF, reluF_faithful,
-    den_batchOp_convStrided, den_bnBatchF, Function.comp_apply]
+  simp only [den_batchOp, denOp, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_bnBatchF,
+    Function.comp_apply]
 
 /-- Head graph: GAP then dense. -/
 def r34HeadGraphB (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
@@ -270,7 +271,7 @@ theorem r34HeadGraphB_faithful (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (b
     (e : SHlo (N * (c * h * w))) :
     den (r34HeadGraphB N h w Wd bd e) = r34HeadB N h w Wd bd (den e) := by
   unfold r34HeadGraphB r34HeadB
-  simp only [den_batchOp_dense, den_batchOp_gap, Function.comp_apply]
+  simp only [den_batchOp, denOp, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness

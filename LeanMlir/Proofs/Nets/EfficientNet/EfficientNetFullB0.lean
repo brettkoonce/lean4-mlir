@@ -170,7 +170,7 @@ theorem mbExpGraphB_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r : Na
       = mbExpFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂
           Wp bp εp γp βp (den e) := by
   unfold mbExpGraphB mbExpFwdB projB seB dwbsB cbsB
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwise, den_bnBatchF,
+  simp only [den_batchOp, denOp, den_bnBatchF,
              swishF_faithful, Function.comp_apply]
 
 end StableHLO

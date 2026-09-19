@@ -87,7 +87,7 @@ theorem mbExpGraphBEval_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r 
       = mbExpFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
           Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp (den e) := by
   unfold mbExpGraphBEval mbExpFwdBEval projBEval seB dwbsBEval cbsBEval
-  simp only [den_batchOp_conv, den_batchOp_seBlock, den_batchOp_depthwise, den_batchOp_bnEval,
+  simp only [den_batchOp, denOp,
              swishF_faithful, Function.comp_apply]
 
 end StableHLO
