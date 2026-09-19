@@ -4,11 +4,9 @@ import LeanMlir.Proofs.Nets.ViT.ViTBackChains
 
 /-! # §B: the ViT encoder-block backward tie at the VECTOR LayerNorm the net runs
 
-`ViTMhsaBackCertifiedTie.lean` closes the block tie at `γ1 β1 γ2 β2 : ℝ` — the *scalar* LayerNorm
-of the representative close — against `transformerBlock_has_vjp_mat`. The shipped depth-12 net is
-`vitForwardKV`, whose blocks are `transformerBlockV` at `γ β : Vec D`, the form
-`ViTRender.lean` emits and `ViTVecLN.lean` calls *"MORE faithful"*. This file re-states the tie
-there, so the whole-net fold in `ViTWholeBackCertifiedTie.lean` is about the blocks the artifact
+The shipped depth-12 net is `vitForwardKV`, whose blocks are `transformerBlockV` at
+`γ β : Vec D`, the form `ViTRender.lean` emits. This file states the block backward tie there,
+so the whole-net fold in `ViTWholeBackCertifiedTie.lean` is about the blocks the artifact
 contains. It is package 3.1's move for ConvNeXt-T, one architecture over.
 
 ⭐ **There is no new analysis, and the reason is that ConvNeXt already built ViT's LayerNorm
@@ -19,11 +17,11 @@ with 'token' read as 'spatial position'"*. `rowLNVecFlat_has_vjp_backward_eq` al
 `layerNormVec_per_token_has_vjp_mat`. So the vector-LN seam (`rowLNVecFlatBack_eq_vecLN_vjp`) is
 that lemma read at a flat saved input, and everything else in the block — `mhsaBackFlat`, the
 `dense Wᵀ 0` input-VJPs, the `diagBack` GELU derivative, the `perRowFlatPR` residual seams — is
-LayerNorm-agnostic and is reused from the scalar file verbatim.
+LayerNorm-agnostic and is reused from `ViTMhsaBackCertifiedTie.lean` verbatim.
 
-⚠ Both sublayer decompositions and the block unfold are `rfl` at the vector LN exactly as they
-are at the scalar one: `transformerBlockV_has_vjp_mat` is the same `vjpMat_comp` /
-`biPathMat_has_vjp` assembly with one argument changed, so the projections reduce identically.
+⚠ Both sublayer decompositions and the block unfold are `rfl` at the vector LN:
+`transformerBlockV_has_vjp_mat` is a `vjpMat_comp` / `biPathMat_has_vjp` assembly, so the
+projections reduce.
 3-axiom-clean.
 -/
 
@@ -37,8 +35,7 @@ variable {h N dh : Nat}
 
 /-- **The vector-LN backward at a flat saved input IS the certified per-token vector-LN VJP,
     flattened.** `rowLNVecFlat_has_vjp_backward_eq` (ConvNeXt's) read through
-    `hasVJPMat_to_hasVJP`'s projection. The vector-LN peer of `perRowFlatPR_LN_back`, and the
-    only LayerNorm-specific step in this file. -/
+    `hasVJPMat_to_hasVJP`'s projection. The only LayerNorm-specific step in this file. -/
 theorem rowLNVecFlatBack_eq_vecLN_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec D)
     (X dy : Vec (n * D)) :
     rowLNVecFlatBack n D ε γ X dy
@@ -70,8 +67,8 @@ theorem transformerMlpSublayerV_backward_decomp (dff : Nat) (ε : ℝ) (hε : 0 
 -- § The two sublayer flat ties
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The attention-sublayer backward float-half IS the certified sublayer VJP, flat.** The
-    vector-LN peer of `attnSubFlatTie`: `residual (rowLNVecFlatBack ∘ mhsaBackFlat)` with Q/K/V
+/-- **The attention-sublayer backward float-half IS the certified sublayer VJP, flat.**
+    `residual (rowLNVecFlatBack ∘ mhsaBackFlat)` with Q/K/V
     pinned at `LNᵥ₁(A)` and the LN backward at the block's own saved input. The sdpa leaf is
     `mhsaBackFlat_eq_mhsa_vjp`, which never mentions a LayerNorm. -/
 theorem attnSubFlatTieV (ε : ℝ) (hε : 0 < ε) (γ1 β1 : Vec (h * dh))
@@ -103,8 +100,8 @@ theorem attnSubFlatTieV (ε : ℝ) (hε : 0 < ε) (γ1 β1 : Vec (h * dh))
   rw [hw]
   exact add_comm _ _
 
-/-- **The MLP-sublayer backward float-half IS the certified sublayer VJP, flat.** The vector-LN
-    peer of `mlpSubFlatTie`, with the residual lifted out of the per-token fold. The per-token
+/-- **The MLP-sublayer backward float-half IS the certified sublayer VJP, flat.** The residual
+    is lifted out of the per-token fold. The per-token
     body tie (`transformerMlp_back_flat_eq_perRowFlatPR`) is LayerNorm-agnostic and reused
     verbatim; only the LN₂-back seam changes. -/
 theorem mlpSubFlatTieV (dff : Nat) (ε : ℝ) (hε : 0 < ε) (γ2 β2 : Vec (h * dh))
@@ -142,9 +139,8 @@ theorem mlpSubFlatTieV (dff : Nat) (ε : ℝ) (hε : 0 < ε) (γ2 β2 : Vec (h *
     LN₂ backward at the attention sublayer's output; the GELU derivative at
     `dense₁(LNᵥ₂(attn A))`), IS the certified `transformerBlockV` input-gradient VJP, flattened.
 
-    This is `vitBlockBackPR_eq_transformerBlock_vjp` at the LayerNorm the shipped net actually
-    has. Assembled from the block unfold and the two sublayer flat ties; no new analysis, and
-    general in the head count exactly as the scalar tie is. -/
+    Assembled from the block unfold and the two sublayer flat ties; no new analysis, and general
+    in the head count. -/
 theorem vitBlockBackV_eq_transformerBlockV_vjp (dff : Nat) (ε : ℝ) (hε : 0 < ε)
     (γ1 β1 γ2 β2 : Vec (h * dh))
     (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh))

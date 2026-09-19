@@ -3,11 +3,8 @@ import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 /-!
 # ViT scaling pass — multi-head rendering + faithfulness
 
-The representative ViT close (Items A–D) rendered at heads = 1, where MHSA
-collapses to three matmuls + a row-softmax (`mhsa_layer_one_head`). The MATH
-was always general in `heads` (`mhsa_has_vjp_mat`, `transformerBlock(V)_has_vjp_mat`,
-`vitForward2(V)_has_vjp`); what was missing is RENDERING + faithfulness at
-heads > 1. This file closes that:
+The MATH is general in `heads` (`mhsa_has_vjp_mat`, `transformerBlockV_has_vjp_mat`,
+`vitForward2V_has_vjp`); this file supplies the RENDERING + faithfulness at heads > 1:
 
 1. **`mhsa_layer_spelled`** — the load-bearing tie, the general-`heads`
    successor of `mhsa_layer_one_head`: `mhsa_layer N heads d` IS, per head,
@@ -16,10 +13,10 @@ heads > 1. This file closes that:
    receives exactly one head's value, and the sum stays at the single index
    `N·(heads·d)` (no `(N·a)+(N·b)` Nat-cast trouble a binary concat would hit).
 
-2. **`vitBlockGraphMH(V)`** over the two new ch10 tokens
+2. **`vitBlockGraphMHV`** over the two new ch10 tokens
    `headSliceF`/`headPadF` (+ `headsSumG`, a left-assoc `addV` fold), with
-   **`vitFwdGraphMH(V)_faithful`**: the multi-head forward graphs denote the
-   proven `vitForward2`/`vitForward2V` at `heads := hm1 + 1` — faithfulness
+   **`vitFwdGraphMHV_faithful`**: the multi-head vector-LN forward graph denotes the
+   proven `vitForward2V` at `heads := hm1 + 1` — faithfulness
    against `mhsa_layer N heads d` DIRECTLY, not a 1-head specialization.
 
 The graph layer is stated at `heads = hm1 + 1` (the head fold needs a first
@@ -91,56 +88,9 @@ lemma mhsa_layer_spelled (Np1 heads d : Nat)
 -- § 2. The spelled multi-head blocks (Mat level)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The ch10 spelled pre-norm transformer block at general `heads` (Mat level) —
-    the exact op sequence `vitBlockGraphMH` denotes: LN₁ → Q/K/V per-token dense
-    → per head (slice → `Q_h·K_hᵀ` → `·1/√d` → row-softmax → `P_h·V_h` → pad) →
-    Σ heads → output dense → +res → LN₂ → fc1 → GELU → fc2 → +res. -/
-noncomputable def vitBlockSpelledMH (Np1 heads d mlpDim : Nat) (ε γ1 β1 : ℝ)
-    (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
-    (γ2 β2 : ℝ)
-    (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (X : Mat Np1 (heads * d)) : Mat Np1 (heads * d) :=
-  let ln1 : Mat Np1 (heads * d) := fun r => layerNormForward (heads * d) ε γ1 β1 (X r)
-  let Q : Mat Np1 (heads * d) := fun r => dense Wq bq (ln1 r)
-  let K : Mat Np1 (heads * d) := fun r => dense Wk bk (ln1 r)
-  let V : Mat Np1 (heads * d) := fun r => dense Wv bv (ln1 r)
-  let att : Mat Np1 (heads * d) := ∑ h : Fin heads, headPadMat Np1 heads d h
-    (Mat.mul
-      (rowSoftmax (fun i j => sdpa_scale d *
-        Mat.mul (headSliceMat Np1 heads d h Q)
-          (Mat.transpose (headSliceMat Np1 heads d h K)) i j))
-      (headSliceMat Np1 heads d h V))
-  let O : Mat Np1 (heads * d) := fun r => dense Wo bo (att r)
-  let hres : Mat Np1 (heads * d) := fun r s => X r s + O r s
-  let ln2 : Mat Np1 (heads * d) := fun r => layerNormForward (heads * d) ε γ2 β2 (hres r)
-  let m1 : Mat Np1 mlpDim := fun r => dense Wfc1 bfc1 (ln2 r)
-  let g : Mat Np1 mlpDim := fun r => gelu mlpDim (m1 r)
-  let m2 : Mat Np1 (heads * d) := fun r => dense Wfc2 bfc2 (g r)
-  fun r s => hres r s + m2 r s
-
-/-- **The spelled multi-head block IS `transformerBlock` at general `heads`.**
-    The sublayer/residual structure matches definitionally once
-    `mhsa_layer_spelled` turns the per-head plumbing into the pad-sum. -/
-lemma vitBlockSpelledMH_eq (Np1 heads d mlpDim : Nat) (ε γ1 β1 : ℝ)
-    (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
-    (γ2 β2 : ℝ)
-    (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (X : Mat Np1 (heads * d)) :
-    vitBlockSpelledMH Np1 heads d mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
-        γ2 β2 Wfc1 bfc1 Wfc2 bfc2 X =
-      transformerBlock Np1 heads d mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
-        γ2 β2 Wfc1 bfc1 Wfc2 bfc2 X := by
-  unfold transformerBlock transformerMlpSublayer transformerAttnSublayer
-         transformerMlp biPathMat
-  simp only [Function.comp_apply]
-  rw [mhsa_layer_spelled]
-  rfl
-
 /-- The spelled multi-head block at vector-[D] LN — each LN site decomposed as
     the graph (and `ViTRender`) emit it: pure normalize (scalar-LN at 1,0) →
-    per-channel scale → per-channel bias; attention as `vitBlockSpelledMH`. -/
+    per-channel scale → per-channel bias; attention spelled per head (`mhsa_layer_spelled`). -/
 noncomputable def vitBlockSpelledMHV (Np1 heads d mlpDim : Nat) (ε : ℝ)
     (γ1 β1 : Vec (heads * d))
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
@@ -242,64 +192,9 @@ lemma flatten_sum {m n H : Nat} (G : Fin H → Mat m n) :
 -- § 4. The multi-head block graphs + denotations
 -- ════════════════════════════════════════════════════════════════
 
-/-- One spelled pre-norm transformer block over the ch10 tokens at
-    `heads = hm1 + 1`: `lnRowF` → Q/K/V `denseRowF` → per head
-    (`headSliceF` → `matmulF`(Q_h, `transposeF` K_h) → `scaleF` →
-    `softmaxRowF` → `matmulF`(P_h, V_h) → `headPadF`) → `headsSumG` →
-    output `denseRowF` → `addV` residual → `lnRowF` → fc1 → `geluF` → fc2 →
-    `addV` residual. -/
-def vitBlockGraphMH {Np1 hm1 d mlpDim : Nat} (pfx epsStr sStr : String)
-    (ε s : ℝ) (γ1 β1 : ℝ)
-    (Wq Wk Wv Wo : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
-    (bq bk bv bo : Vec ((hm1 + 1) * d))
-    (γ2 β2 : ℝ)
-    (Wfc1 : Mat ((hm1 + 1) * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim ((hm1 + 1) * d)) (bfc2 : Vec ((hm1 + 1) * d))
-    (x : SHlo (Np1 * ((hm1 + 1) * d))) : SHlo (Np1 * ((hm1 + 1) * d)) :=
-  let ln1 := SHlo.lnRowF s!"%{pfx}g1" s!"%{pfx}bt1" epsStr ε γ1 β1 x
-  let q := SHlo.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" Wq bq ln1
-  let k := SHlo.denseRowF s!"%{pfx}Wk" s!"%{pfx}bk" Wk bk ln1
-  let v := SHlo.denseRowF s!"%{pfx}Wv" s!"%{pfx}bv" Wv bv ln1
-  let att := headsSumG (fun h : Fin (hm1 + 1) => SHlo.headPadF h
-    (SHlo.matmulF
-      (SHlo.softmaxRowF (SHlo.scaleF sStr s
-        (SHlo.matmulF (SHlo.headSliceF h q)
-          (SHlo.transposeF (SHlo.headSliceF h k)))))
-      (SHlo.headSliceF h v)))
-  let o := SHlo.denseRowF s!"%{pfx}Wo" s!"%{pfx}bo" Wo bo att
-  let hres := SHlo.addV x o
-  let ln2 := SHlo.lnRowF s!"%{pfx}g2" s!"%{pfx}bt2" epsStr ε γ2 β2 hres
-  let m2 := SHlo.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" Wfc2 bfc2
-    (SHlo.geluF (SHlo.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" Wfc1 bfc1 ln2))
-  SHlo.addV hres m2
-
-/-- **Multi-head block-graph denotation** (generalized over the input's Mat
-    form): the spelled token block denotes `Mat.flatten ∘ vitBlockSpelledMH ∘
-    Mat.unflatten` at `heads := hm1 + 1`, `s := sdpa_scale d`. -/
-private lemma vitBlockGraphMH_den_aux {Np1 hm1 d mlpDim : Nat}
-    (pfx epsStr sStr : String) (ε γ1 β1 : ℝ)
-    (Wq Wk Wv Wo : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
-    (bq bk bv bo : Vec ((hm1 + 1) * d))
-    (γ2 β2 : ℝ)
-    (Wfc1 : Mat ((hm1 + 1) * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim ((hm1 + 1) * d)) (bfc2 : Vec ((hm1 + 1) * d))
-    (e : SHlo (Np1 * ((hm1 + 1) * d))) (A : Mat Np1 ((hm1 + 1) * d))
-    (hA : den e = Mat.flatten A) :
-    den (vitBlockGraphMH pfx epsStr sStr ε (sdpa_scale d) γ1 β1
-          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 e) =
-      Mat.flatten (vitBlockSpelledMH Np1 (hm1 + 1) d mlpDim ε γ1 β1
-          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 A) := by
-  simp only [vitBlockGraphMH, lnRowF_faithful, denseRowF_faithful, matmulF_faithful,
-             transposeF_faithful, scaleF_faithful, softmaxRowF_faithful, geluF_faithful,
-             headSliceF_faithful, headPadF_faithful, den_headsSumG, den_addV, hA]
-  simp only [rowLNFlat_flat, rowDenseFlat_flat, headSliceFlat_flat, transposeFlat_flat,
-             matMulFlat_flat, scale_flat, rowSoftmaxFlat_flat, headPadFlat_flat,
-             flatten_sum, gelu_flat, add_flat_pt]
-  rfl
-
 /-- The vector-LN multi-head block over the tokens: each LN site is
     `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β` (the `ViTRender`
-    decomposition); attention as `vitBlockGraphMH`. -/
+    decomposition); attention per head: `headSliceF` → SDPA → `headPadF`, folded by `headsSumG`. -/
 def vitBlockGraphMHV {Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr oneStr zeroStr : String)
     (ε s : ℝ) (γ1 β1 : Vec ((hm1 + 1) * d))
@@ -358,74 +253,6 @@ lemma vitBlockGraphMHV_den_aux {Np1 hm1 d mlpDim : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The multi-head forward graphs + faithfulness
 -- ════════════════════════════════════════════════════════════════
-
-/-- Whole **multi-head ViT forward** graph (scalar LN): patch embed → 2 spelled
-    multi-head blocks (distinct params) → final per-token LN → CLS slice →
-    dense head, at `heads = hm1 + 1`, `D = (hm1+1)·d`. -/
-def vitFwdGraphMH {ic H W P N hm1 d mlpDim nClasses : Nat}
-    (epsStr sStr : String) (ε s : ℝ)
-    (Wc : Kernel4 ((hm1 + 1) * d) ic P P) (bc : Vec ((hm1 + 1) * d))
-    (cls : Vec ((hm1 + 1) * d)) (pos : Mat (N + 1) ((hm1 + 1) * d))
-    (γ1₁ β1₁ : ℝ) (Wq₁ Wk₁ Wv₁ Wo₁ : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
-    (bq₁ bk₁ bv₁ bo₁ : Vec ((hm1 + 1) * d))
-    (γ2₁ β2₁ : ℝ) (Wfc1₁ : Mat ((hm1 + 1) * d) mlpDim) (bfc1₁ : Vec mlpDim)
-    (Wfc2₁ : Mat mlpDim ((hm1 + 1) * d)) (bfc2₁ : Vec ((hm1 + 1) * d))
-    (γ1₂ β1₂ : ℝ) (Wq₂ Wk₂ Wv₂ Wo₂ : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
-    (bq₂ bk₂ bv₂ bo₂ : Vec ((hm1 + 1) * d))
-    (γ2₂ β2₂ : ℝ) (Wfc1₂ : Mat ((hm1 + 1) * d) mlpDim) (bfc1₂ : Vec mlpDim)
-    (Wfc2₂ : Mat mlpDim ((hm1 + 1) * d)) (bfc2₂ : Vec ((hm1 + 1) * d))
-    (γF βF : ℝ) (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
-    (x : Vec (ic * H * W)) : SHlo nClasses :=
-  let embed : SHlo ((N + 1) * ((hm1 + 1) * d)) :=
-    .patchEmbedF "%Wp" "%bp" "%cls" "%pos" Wc bc cls pos (.operand "%x" x)
-  let b1 := vitBlockGraphMH "b1_" epsStr sStr ε s γ1₁ β1₁
-    Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ embed
-  let b2 := vitBlockGraphMH "b2_" epsStr sStr ε s γ1₂ β1₂
-    Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ b1
-  let fl := SHlo.lnRowF "%gF" "%btF" epsStr ε γF βF b2
-  denseF "%Wcls" "%bcls" Wcls bcls (.clsSliceF fl)
-
-/-- **Multi-head ViT forward faithfulness** — the scaling-pass apex: the
-    multi-head forward graph denotes the proven distinct-param 2-block
-    `vitForward2` at `heads := hm1 + 1` — against `mhsa_layer` directly
-    (per-block `vitBlockGraphMH_den_aux` + `vitBlockSpelledMH_eq`,
-    `mhsa_layer_spelled` under the hood). -/
-theorem vitFwdGraphMH_faithful
-    (ic H W patchSize N hm1 d mlpDim nClasses : Nat)
-    (epsStr sStr : String)
-    (Wc : Kernel4 ((hm1 + 1) * d) ic patchSize patchSize) (bc : Vec ((hm1 + 1) * d))
-    (cls : Vec ((hm1 + 1) * d)) (pos : Mat (N + 1) ((hm1 + 1) * d))
-    (ε : ℝ)
-    (γ1₁ β1₁ : ℝ) (Wq₁ Wk₁ Wv₁ Wo₁ : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
-    (bq₁ bk₁ bv₁ bo₁ : Vec ((hm1 + 1) * d))
-    (γ2₁ β2₁ : ℝ) (Wfc1₁ : Mat ((hm1 + 1) * d) mlpDim) (bfc1₁ : Vec mlpDim)
-    (Wfc2₁ : Mat mlpDim ((hm1 + 1) * d)) (bfc2₁ : Vec ((hm1 + 1) * d))
-    (γ1₂ β1₂ : ℝ) (Wq₂ Wk₂ Wv₂ Wo₂ : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
-    (bq₂ bk₂ bv₂ bo₂ : Vec ((hm1 + 1) * d))
-    (γ2₂ β2₂ : ℝ) (Wfc1₂ : Mat ((hm1 + 1) * d) mlpDim) (bfc1₂ : Vec mlpDim)
-    (Wfc2₂ : Mat mlpDim ((hm1 + 1) * d)) (bfc2₂ : Vec ((hm1 + 1) * d))
-    (γF βF : ℝ) (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
-    (x : Vec (ic * H * W)) :
-    den (vitFwdGraphMH epsStr sStr ε (sdpa_scale d) Wc bc cls pos
-          γ1₁ β1₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
-          γ1₂ β1₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂
-          γF βF Wcls bcls x)
-      = vitForward2 ic H W patchSize N mlpDim (hm1 + 1) d nClasses Wc bc cls pos ε
-          γ1₁ β1₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
-          γ1₂ β1₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂
-          γF βF Wcls bcls x := by
-  have h0 := patchEmbedF_x_den ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x
-  have h1 := vitBlockGraphMH_den_aux "b1_" epsStr sStr ε γ1₁ β1₁
-    Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ γ2₁ β2₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁
-    _ _ h0
-  have h2 := vitBlockGraphMH_den_aux "b2_" epsStr sStr ε γ1₂ β1₂
-    Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ γ2₂ β2₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂
-    _ _ h1
-  simp only [vitFwdGraphMH, denseF_faithful, clsSliceF_faithful, lnRowF_faithful, h2]
-  simp only [rowLNFlat_flat, vitBlockSpelledMH_eq]
-  unfold vitForward2 classifier_flat
-  simp only [Function.comp_apply, Mat.unflatten_flatten]
-  rfl
 
 /-- Whole **multi-head vector-LN ViT forward** graph: patch embed → 2 spelled
     multi-head vector-LN blocks (distinct params) → final vector-LN (the same

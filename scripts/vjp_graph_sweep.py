@@ -136,7 +136,7 @@ def main() -> int:
     # this script reproduces it (1 hole, `efficientnetForwardB`). `mat` has NEVER been checked
     # against a hand-derived answer, and its classification is known to be unreliable —
     # `mhsa_g`/`colSlabwise` are demonstrably consumed on the way to `mhsaBackGraphMH_faithful`
-    # (via `mhsaClean`, a def, and `mhsaClean_backward_collapse`, whose name matches no filter)
+    # (via `mhsaClean`, a def, and `mhsaClean_backward_collapseMH`, whose name matches no filter)
     # yet land in the hole column. Do NOT read that column as debt; tuning the filter until it
     # looks clean is how a sweep manufactures a false green.
     EXPECTED_BATCHED_HOLES = {"efficientnetForwardB"}

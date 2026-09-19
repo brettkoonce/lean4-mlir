@@ -473,7 +473,7 @@ lemma rowBiasFlat_flat {m n : Nat} (β : Vec n) (A : Mat m n) :
 
 /-- One spelled vector-LN block over the tokens: each LN site is
     `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β` (the `ViTRender` decomposition);
-    everything else as `vitBlockGraph`. `oneStr`/`zeroStr` name the rendered
+    attention at one head as three matmuls + a row-softmax (`mhsa_layer_one_head`). `oneStr`/`zeroStr` name the rendered
     constant-1/0 scalars the pure-normalize sites reference. -/
 def vitBlockGraphV {Np1 D mlpDim : Nat} (pfx epsStr sStr oneStr zeroStr : String)
     (ε s : ℝ) (γ1 β1 : Vec D)
@@ -545,7 +545,7 @@ def vitFwdGraphV {ic H W P N D mlpDim nClasses : Nat}
   denseF "%Wcls" "%bcls" Wcls bcls (.clsSliceF fl)
 
 /-- **Vector-LN ViT forward faithfulness** — the graph denotes `vitForward2V` at
-    one head. The scaling-pass peer of `vitFwdGraph_faithful`. -/
+    one head. -/
 theorem vitFwdGraphV_faithful
     (ic H W patchSize N d mlpDim nClasses : Nat)
     (epsStr sStr oneStr zeroStr : String)

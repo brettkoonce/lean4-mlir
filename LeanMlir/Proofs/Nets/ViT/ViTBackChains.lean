@@ -14,10 +14,9 @@ from the attention core outwards:
 * the full MHSA input-gradient backward `mhsaBackFlat` — output-projection backward, the three
   cores, the three projection backwards fanning in at `X` (`mhsaBackFlat_eq_mhsa_vjp` ties it to
   `mhsa_has_vjp_mat`);
-* the encoder-block backward, in three spellings: `vitBlockBack` (one shared LN map per site),
-  `vitBlockBackPR` (per-token LN and GELU slots — the form the certified per-token block VJP
-  takes, `vitBlockBackPR_eq_transformerBlock_vjp`), and `vitBlockBackV` (the vector-`[D]`
-  LayerNorm the shipped net runs, with `rowLNVecFlatBack` in both LN slots);
+* the encoder-block backward, in two spellings: `vitBlockBack` (one shared LN map per site)
+  and `vitBlockBackV` (the vector-`[D]` LayerNorm the shipped net runs, with
+  `rowLNVecFlatBack` in both LN slots, tied by `vitBlockBackV_eq_transformerBlockV_vjp`);
 * `vitBlockBackVAt`, `vitTowerBackK` (the head-first depth-`k` tower fold), the two saved
   prefixes and the whole-net chain `vitInputGradK` — the reverse of `vitForwardKV`, tied by
   `vitInputGradK_eq_vitForwardKV_vjp` (`ViTWholeBackCertifiedTie.lean`);
@@ -114,7 +113,7 @@ noncomputable def mhsaBackFlat (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Ma
       cotangent flows both through the MHSA backward and directly to `x`.
 
     The LN backwards (`lnB₁`/`lnB₂`) are supplied as one shared map per site; `geluBack` is the
-    saved-derivative `diagBack`. The per-token form is `vitBlockBackPR`. -/
+    saved-derivative `diagBack`. -/
 noncomputable def vitBlockBack {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh))
     (lnB₁ : Vec (h * dh) → Vec (h * dh)) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
     (sgelu : Vec dff) (lnB₂ : Vec (h * dh) → Vec (h * dh)) :
@@ -124,36 +123,15 @@ noncomputable def vitBlockBack {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh))
         (lnB₂ ∘ Proofs.dense (Mat.transpose W₁) (0 : Vec (h * dh)) ∘ diagBack sgelu
           ∘ Proofs.dense (Mat.transpose W₂) (0 : Vec dff)))
 
-/-- **The per-token-input-aware ViT encoder-block backward** — the enrichment of
-    `vitBlockBack` whose LayerNorm and GELU slots thread *each token's* saved activation
-    (`perRowFlatPR` instead of `perRowFlat`). Structurally identical to `vitBlockBack`
-    (residual MLP-sublayer back, then residual attention-sublayer back), but `lnB₁`/`lnB₂`
-    are now per-token *families* `Fin N → (Vec → Vec)` and the GELU derivative `sgelu` is a
-    per-token family `Fin N → Vec dff`. This is the form the certified per-token block VJP
-    actually takes: `layerNorm_per_token_has_vjp_mat.backward A` runs the single-token LN
-    backward at each token's own saved input `A r` (its Jacobian differs per token), which a
-    single shared `lnB₁` cannot carry. `vitBlockBack` is the special case of all rows sharing
-    one map; this is the general one `vitBlockBackPR_eq_transformerBlock_vjp` equals. -/
-noncomputable def vitBlockBackPR {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh))
-    (Q K V : Mat N (h * dh))
-    (lnB₁ : Fin N → (Vec (h * dh) → Vec (h * dh))) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
-    (sgelu : Fin N → Vec dff) (lnB₂ : Fin N → (Vec (h * dh) → Vec (h * dh))) :
-    Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
-  Proofs.residual (perRowFlatPR N (h * dh) lnB₁ ∘ mhsaBackFlat Wq Wk Wv Wo Q K V)
-    ∘ perRowFlatPR N (h * dh) (fun r => Proofs.residual
-        (lnB₂ r ∘ Proofs.dense (Mat.transpose W₁) (0 : Vec (h * dh)) ∘ diagBack (sgelu r)
-          ∘ Proofs.dense (Mat.transpose W₂) (0 : Vec dff)))
-
-/-- **The vector-LayerNorm ViT encoder-block input-gradient backward.** `vitBlockBackPR` with its
-    two per-token LN slots replaced by `rowLNVecFlatBack` at the site's flat saved input, and the
-    MLP sublayer's residual lifted out of the per-token fold (`perRowFlatPR_residual`: a per-row
-    `residual` is the row lift plus the cotangent, so the two spellings agree).
+/-- **The vector-LayerNorm ViT encoder-block input-gradient backward.** `rowLNVecFlatBack` in
+    both LN slots at the site's flat saved input, per-token GELU slopes in the MLP sublayer's
+    per-row fold (`perRowFlatPR`), and each sublayer's residual outside its fold.
 
     Reading right to left, this is the reverse of `transformerBlockV`: the MLP sublayer's
     `dense W₂ ∘ gelu ∘ dense W₁ ∘ LN₂` backward under a residual, then the attention sublayer's
-    `mhsa ∘ LN₁` backward under a residual. ⛔ `vitBlockBackPR`'s tie is at the SCALAR LayerNorm
-    (`γ β : ℝ`); the shipped depth-12 net is `vitForwardKV`, whose blocks are `transformerBlockV`
-    at `γ β : Vec D`, and this is the spelling the whole-net tie is stated at. -/
+    `mhsa ∘ LN₁` backward under a residual. The shipped depth-12 net is `vitForwardKV`, whose
+    blocks are `transformerBlockV` at `γ β : Vec D`; this is the spelling the whole-net tie is
+    stated at. -/
 noncomputable def vitBlockBackV {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh))
     (Q K V : Mat N (h * dh)) (ε : ℝ) (γ1 : Vec (h * dh)) (X1 : Vec (N * (h * dh)))
     (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh)) (sgelu : Fin N → Vec dff)

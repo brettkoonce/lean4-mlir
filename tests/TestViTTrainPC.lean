@@ -295,7 +295,7 @@ private def blockParamGrads (i : Nat) (b : FNames)
   vecLNParamGrad s!"%dg1_{i}" s!"%dbt1_{i}" b.xh1 cot_ln1 NT DD ++
   vecLNParamGrad s!"%dg2_{i}" s!"%dbt2_{i}" b.xh2 cot_ln2 NT DD
 
-/-- per-block param (name, type) list, forward order (matches `vitFwdGraph` arg order). -/
+/-- per-block param (name, type) list, forward order. -/
 private def blkParams (i : Nat) : List (String × String) :=
   [(s!"g1_{i}", ty [DD]), (s!"bt1_{i}", ty [DD]),
    (s!"Wq{i}", ty [DD,DD]), (s!"bq{i}", ty [DD]),

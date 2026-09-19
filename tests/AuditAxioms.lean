@@ -746,10 +746,7 @@ open Proofs
 #print axioms Proofs.CnxTiePoC.cnxLossCot_den
 #print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
 -- ViT RENDER (planning/archive/vit_close.md Item A)
-#print axioms vitForward2_has_vjp
-#print axioms vitForward2_has_vjp_correct
 #print axioms mhsa_layer_one_head
-#print axioms StableHLO.vitFwdGraph_faithful
 -- ViT CLOSE (planning/archive/vit_close.md Item C)
 #print axioms pdiv_rowDense_W
 #print axioms vit_rowDenseW_grad_bridge
@@ -792,10 +789,8 @@ open Proofs
 -- ViT scaling pass: multi-head (ViTMultiHead.lean)
 #print axioms sum_headPadMat_apply
 #print axioms mhsa_layer_spelled
-#print axioms vitBlockSpelledMH_eq
 #print axioms vitBlockSpelledMHV_eq
 #print axioms StableHLO.den_headsSumG
-#print axioms StableHLO.vitFwdGraphMH_faithful
 #print axioms StableHLO.vitFwdGraphMHV_faithful
 
 -- ViT scaling pass: depth-k (ViTDepthK.lean)
@@ -1011,17 +1006,8 @@ open Proofs
 #print axioms Proofs.projBack_core_coord
 #print axioms Proofs.woback_unflatten
 #print axioms Proofs.mhsaBackFlat_eq_mhsa_vjp
--- §B vit attn-SUBLAYER reconciliation (grounds the MHSA leaf in the block)
-#print axioms Proofs.transformerAttnSublayer_backward_decomp
-#print axioms Proofs.transformerAttnSublayerBack_flat_decomp
--- §B THE FULL vitBlockBack TIE (the per-token-LN enrichment that closes the structural gap above)
-#print axioms Proofs.perRowFlatPR_LN_back
+-- §B the MLP-sublayer per-token leaf
 #print axioms Proofs.transformerMlp_back_flat_eq_perRowFlatPR
-#print axioms Proofs.transformerMlpSublayer_backward_decomp
-#print axioms Proofs.transformerBlock_backward_unfold_gen
-#print axioms Proofs.attnSubFlatTie
-#print axioms Proofs.mlpSubFlatTie
-#print axioms Proofs.vitBlockBackPR_eq_transformerBlock_vjp
 -- §B endpoint leaf ties
 #print axioms Proofs.dense_transpose_eq_vjp_backward
 #print axioms Proofs.gapBack_eq_vjp_backward
@@ -1482,19 +1468,9 @@ open Proofs
 -- Capstone: the whole batched ResNet-34 downsample basic block backward graph
 #print axioms StableHLO.r34DownBlockBackBatchedGraph_faithful
 
--- ViT whole-block backward-graph faithfulness (den-level, per-token Mat-VJP)
-#print axioms StableHLO.mhsa_backward_collapse
-#print axioms StableHLO.mhsaBackGraph_faithful
-#print axioms StableHLO.mlpSublayerBackGraph_faithful
-#print axioms StableHLO.attnSublayerBackGraph_faithful
-#print axioms StableHLO.transformerBlockBackGraph_faithful
-
 -- ViT whole-block backward-graph faithfulness, lifted to GENERAL MULTI-HEAD
 #print axioms StableHLO.mhsa_backward_collapseMH
 #print axioms StableHLO.mhsaBackGraphMH_faithful
-#print axioms StableHLO.mlpSublayerBackGraph_faithfulMH
-#print axioms StableHLO.attnSublayerBackGraphMH_faithful
-#print axioms StableHLO.transformerBlockBackGraphMH_faithful
 
 -- ViT whole-block backward-graph faithfulness at the FULL PRODUCTION config
 #print axioms StableHLO.rowVecLNBack_eq_backward

@@ -83,14 +83,6 @@ theorem perRowFlatPR_apply {n d : Nat} (g : Fin n → (Vec d → Vec d))
 theorem perRowFlatPR_const {n d : Nat} (f : Vec d → Vec d) :
     perRowFlatPR n d (fun _ => f) = perRowFlat n d f := rfl
 
-/-- **Composition of per-row families fuses** — `(perRowFlatPR g) ∘ (perRowFlatPR g')` is
-    `perRowFlatPR (fun r => g r ∘ g' r)` (each row is independent, so the two per-row maps
-    compose row-by-row). The flat reflection of `rowwise`'s `vjpMat_comp`. -/
-theorem perRowFlatPR_comp {n d : Nat} (g g' : Fin n → (Vec d → Vec d)) :
-    perRowFlatPR n d g ∘ perRowFlatPR n d g' = perRowFlatPR n d (fun r => g r ∘ g' r) := by
-  funext v
-  simp only [Function.comp, perRowFlatPR, Mat.unflatten_flatten]
-
 -- ════════════════════════════════════════════════════════════════
 -- § The 2×2 max-pool backward (a lookup) and the conv input-VJP
 -- ════════════════════════════════════════════════════════════════

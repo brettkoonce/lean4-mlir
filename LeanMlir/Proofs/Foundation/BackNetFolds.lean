@@ -42,8 +42,7 @@ Stages and trunks are `comp`/`chain` applications, so they are available for all
 only R50 has them written out (`ResNet50BackNet.lean`), because a trunk needs the net's block table
 and resolution ladder spelled out and that is per-net bookkeeping, not proof. ⚠ ViT is **not**
 here: its blocks are per-token `Mat`-shaped with a different backward vocabulary
-(`transformerBlockBackGraph` and three MH variants), and `ViTBackB0` is the heaviest module in the
-repo (~11 min, ~14 GB — memory `vit-backb0-ci-cost`). It is a separate sitting.
+(`transformerBlockVBackGraphMH`). It is a separate sitting (`ViTBackNet.lean`).
 
 ✅ **That sitting happened — [`Nets/ViT/ViTBackNet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ViT/ViTBackNet.lean) (2026-08-10).** Two corrections it
 forced, both worth reading before trusting this file's framing:

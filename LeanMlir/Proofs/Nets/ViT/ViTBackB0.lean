@@ -5,38 +5,32 @@ import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Codegen.StableHLO
 
-/-! # ViT whole-block backward-graph faithfulness (heads = 1, per-token Mat VJP)
+/-! # ViT backward-graph faithfulness (per-token Mat VJP)
 
-The ViT analogue of the other four nets' `*BackB0` capstones: a *backward*
-StableHLO graph (over the ch10 backward tokens — `denseRowBack`/`geluBack`/
+The ViT analogue of the other four nets' `*BackB0` capstones: *backward*
+StableHLO graphs (over the ch10 backward tokens — `denseRowBack`/`geluBack`/
 `lnRowBack`/`softmaxRowBack`/`matmulF`/`transposeF`/`scaleF`/`addV`) whose
-denotation IS the proven whole transformer-block VJP
-`transformerBlock_has_vjp_mat` (Attention.lean), at **heads = 1** (matching the
-committed render config that `ViTFwdGraph.lean`'s `vitFwdGraph_faithful` uses —
-all `1 * d_head`).
+denotations ARE the proven VJPs, from the MLP and MHSA pieces up to the multi-head
+vector-LN block the shipped net runs (`transformerBlockV_has_vjp_mat`) and the
+depth-`k` whole net (`vitNetBackGraph`).
 
 Unlike the conv nets — whose blocks live natively as `Vec → Vec` (`HasVJP`) — a
 transformer block lives in the per-token matrix framework `HasVJPMat` (`Mat N D →
 Mat N D`). The block VJP's `.backward` is therefore `Mat`-valued, while `den` is
 `Vec`-valued; the faithfulness statements bridge the two through `Mat.flatten`
-(exactly the convention `vitFwdGraph_faithful` uses on the forward side):
+(the convention the forward-graph faithfulness theorems use):
 
     den (…BackGraph A e) = Mat.flatten ((… _has_vjp_mat …).backward A (Mat.unflatten (den e)))
 
-Three stages, each `lake build`-green before the next:
+The pieces, bottom-up:
 
-  * **Stage 1** — `mlpSublayerBackGraph` ↔ `transformerMlpSublayer_has_vjp_mat`.
-    Residual fan-in (`addV (inner) (%dz)`) where inner =
-    `lnRowBack(LN₂) ∘ denseRowBack(Wfc1) ∘ geluBack ∘ denseRowBack(Wfc2)` at the
-    cumulative forward activations.
-  * **Stage 2** — `attnSublayerBackGraph` ↔ `transformerAttnSublayer_has_vjp_mat`.
-    The crux: MHSA backward = `denseRowBack(qkv) ∘ [SDPA backward] ∘
-    denseRowBack(Wo)` with the SDPA backward assembled from
-    `matmulF`/`transposeF`/`scaleF`/`softmaxRowBack`, bridged at heads = 1 to
-    `mhsa_g_has_vjp_mat`, then LN₁-back + residual fan-in.
-  * **Stage 3** — `transformerBlockBackGraph` ↔ `transformerBlock_has_vjp_mat`,
-    via the `vjpMat_comp` structure `block.backward A dY = attn.backward A
-    (mlp.backward (attn A) dY)`.
+  * **MLP** — `transformerMlpBackGraph` ↔ `transformerMlp_has_vjp_mat`
+    (`denseRowBack(Wfc1) ∘ geluBack ∘ denseRowBack(Wfc2)` at the saved activations).
+  * **MHSA** — a clean witness `mhsaClean` tied to `mhsa_has_vjp_mat`, its multi-head
+    collapse `mhsa_backward_collapseMH` (a sum over heads of per-head `sdpa_back_{Q,K,V}`),
+    and the MHSA backward graph `mhsaBackGraphMH` over `sdpaBack{Q,K,V}Graph`.
+  * **Vector-LN block, tower, whole net** — `transformerBlockVBackGraphMH`,
+    `vitBodyBackGraphKMHV` (by induction on `k`) and `vitNetBackGraph`.
 
 The framework `.backward` rules (Tensor.lean):
   * `vjpMat_comp F G … .backward A dY = hF.backward A (hG.backward (F A) dY)`
@@ -138,107 +132,15 @@ theorem transformerMlpBackGraph_faithful {Np1 D mlpDim : Nat}
   rw [rowDenseBackFlat_eq_backward Wfc1 bfc1 Y]
   rfl
 
-/-- The transformer MLP-sublayer non-trivial arm backward graph
-    (`transformerMlp ∘ LN₂`; outermost backward token = earliest forward op = LN₂):
-
-      `lnRowBack(LN₂ @ h) ∘ transformerMlpBackGraph(@ Y = LN₂ h)`
-
-    The LN₂ backward reads its saved pre-norm input `h`; the MLP-body back reads
-    the MLP input `Y = LN₂ h`. -/
-noncomputable def mlpSublayerInnerBackGraph {Np1 D mlpDim : Nat}
-    (ε γ2 : ℝ)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim D)
-    (h : Vec (Np1 * D)) (Y : Mat Np1 D) (e : SHlo (Np1 * D)) : SHlo (Np1 * D) :=
-  .lnRowBack "%g2" "%h" "ε" ε γ2 h
-    (transformerMlpBackGraph Wfc1 bfc1 Wfc2 Y e)
-
-/-- **MLP-sublayer inner-arm backward-graph faithfulness.** The reverse-order
-    chain denotes the proven `(vjpMat_comp LN₂ transformerMlp).backward h ·`, the
-    sublayer's non-trivial arm. `Y = LN₂ h` is the saved MLP input. -/
-theorem mlpSublayerInnerBackGraph_faithful {Np1 D mlpDim : Nat}
-    (ε γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
-    (h : Mat Np1 D) (dz : Mat Np1 D) :
-    den (mlpSublayerInnerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-          (fun r => layerNormForward D ε γ2 β2 (h r)) (.operand "%dz" (Mat.flatten dz)))
-      = Mat.flatten
-          ((layerNorm_per_token_has_vjp_mat Np1 D ε γ2 β2 hε).backward h
-            ((transformerMlp_has_vjp_mat Np1 D mlpDim Wfc1 bfc1 Wfc2 bfc2).backward
-              (fun r => layerNormForward D ε γ2 β2 (h r)) dz)) := by
-  simp only [mlpSublayerInnerBackGraph, lnRowBack_faithful]
-  rw [transformerMlpBackGraph_faithful Wfc1 bfc1 Wfc2 bfc2
-        (fun r => layerNormForward D ε γ2 β2 (h r)) dz
-        (.operand "%dz" (Mat.flatten dz)) rfl]
-  rw [rowLNBackFlat_eq_backward (β := β2) ε γ2 hε h
-        ((transformerMlp_has_vjp_mat Np1 D mlpDim Wfc1 bfc1 Wfc2 bfc2).backward
-          (fun r => layerNormForward D ε γ2 β2 (h r)) dz)]
-
-/-- The whole transformer MLP-sublayer backward graph (inner arm + identity skip):
-    `addV (innerBack … (%dz)) (%dz)`. The identity skip contributes the cotangent
-    verbatim; `addV` sums the two residual paths. -/
-noncomputable def mlpSublayerBackGraph {Np1 D mlpDim : Nat}
-    (ε γ2 : ℝ)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim D)
-    (h : Vec (Np1 * D)) (Y : Mat Np1 D) (dz : Vec (Np1 * D)) : SHlo (Np1 * D) :=
-  .addV (mlpSublayerInnerBackGraph ε γ2 Wfc1 bfc1 Wfc2 h Y (.operand "%dz" dz))
-        (.operand "%dz" dz)
-
-/-- **MLP sublayer backward-graph faithfulness at `heads = hm1 + 1`.** The residual-fan-in
-    graph denotes the proven `transformerMlpSublayer_has_vjp_mat` backward: the identity skip
-    contributes the cotangent verbatim, the non-trivial arm is the `LN₂`-back of the MLP-body
-    back, at the saved `h` (LN₂'s pre-norm input). -/
-theorem mlpSublayerBackGraph_faithfulMH {Np1 hm1 d mlpDim : Nat}
-    (ε γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wfc1 : Mat ((hm1+1) * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim ((hm1+1) * d)) (bfc2 : Vec ((hm1+1) * d))
-    (h : Mat Np1 ((hm1+1) * d)) (dz : Mat Np1 ((hm1+1) * d)) :
-    den (mlpSublayerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-          (fun r => layerNormForward ((hm1+1) * d) ε γ2 β2 (h r)) (Mat.flatten dz))
-      = Mat.flatten ((transformerMlpSublayer_has_vjp_mat Np1 (hm1+1) d mlpDim ε γ2 β2 hε
-          Wfc1 bfc1 Wfc2 bfc2).backward h dz) := by
-  funext j
-  show den (mlpSublayerInnerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-            (fun r => layerNormForward ((hm1+1) * d) ε γ2 β2 (h r))
-            (.operand "%dz" (Mat.flatten dz))) j + Mat.flatten dz j = _
-  rw [mlpSublayerInnerBackGraph_faithful ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2 h dz]
-  show _ = Mat.flatten ((transformerMlpSublayer_has_vjp_mat Np1 (hm1+1) d mlpDim
-              ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).backward h dz) j
-  show Mat.flatten ((layerNorm_per_token_has_vjp_mat Np1 ((hm1+1) * d) ε γ2 β2 hε).backward h
-          ((transformerMlp_has_vjp_mat Np1 ((hm1+1) * d) mlpDim Wfc1 bfc1 Wfc2 bfc2).backward
-            (fun r => layerNormForward ((hm1+1) * d) ε γ2 β2 (h r)) dz)) j
-        + Mat.flatten dz j = _
-  unfold Mat.flatten
-  exact add_comm _ _
-
-/-- **MLP sublayer backward-graph faithfulness (Stage 1 capstone).** The
-    residual-fan-in graph denotes the proven `transformerMlpSublayer_has_vjp_mat`
-    backward at heads = 1, under `0 < ε`: `mlpSublayerBackGraph_faithfulMH` at
-    `hm1 = 0`. -/
-theorem mlpSublayerBackGraph_faithful {Np1 d_head mlpDim : Nat}
-    (ε γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wfc1 : Mat (1 * d_head) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim (1 * d_head)) (bfc2 : Vec (1 * d_head))
-    (h : Mat Np1 (1 * d_head)) (dz : Mat Np1 (1 * d_head)) :
-    den (mlpSublayerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-          (fun r => layerNormForward (1 * d_head) ε γ2 β2 (h r)) (Mat.flatten dz))
-      = Mat.flatten ((transformerMlpSublayer_has_vjp_mat Np1 1 d_head mlpDim ε γ2 β2 hε
-          Wfc1 bfc1 Wfc2 bfc2).backward h dz) :=
-  mlpSublayerBackGraph_faithfulMH (hm1 := 0) ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2 h dz
-
 -- ════════════════════════════════════════════════════════════════
--- § Stage 2 — MHSA backward heads = 1 collapse (the crux)
+-- § Stage 2 — the clean MHSA witness
 -- ════════════════════════════════════════════════════════════════
 
 /-! The proven `mhsa_has_vjp_mat` witness is built via `by rw [mhsa_layer_eq_compose];
 exact vjpMat_comp …`, so its `.backward` field does NOT reduce by `rfl` (the
 `Eq.mpr` transport blocks whnf). We instead build a *clean* witness `mhsaClean`
 for the same factored function (whose `.backward` unfolds transparently), tie it
-to `mhsa_has_vjp_mat` by VJP determinism, and collapse it at heads = 1 to the
-plain three-way dense fan-in over `sdpa_back_{Q,K,V}` (the form ViTChainClose's
-`vitCotD{Q,K,V}_eq_sdpa_back_*` ties target). -/
+to `mhsa_has_vjp_mat` by VJP determinism; the multi-head collapse below runs on it. -/
 
 /-- A *clean* `HasVJPMat` witness for the factored MHSA — the same `vjpMat_comp`
     chain `mhsa_has_vjp_mat`'s body uses, but stated for the explicit composition
@@ -299,33 +201,11 @@ theorem mhsaClean_backward_eq (N heads d_head : Nat)
   exact HasVJPMat.backward_unique_of_eq hfun (mhsaClean N heads d_head Wq Wk Wv Wo bq bk bv bo)
     (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo) X dY
 
-/-- The collapsed heads = 1 MHSA backward: the three-way dense fan-in
-    (`Mat.mulVec Wq/Wk/Wv`, reshaping the inner-`d` SDPA backwards up to `1*d`)
-    over `sdpa_back_{Q,K,V}` at the inner-`d` dense projections of `X` and the
-    `Wo`-back of the cotangent `dh`. -/
-noncomputable def mhsaBackCollapsed (N d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv _bo : Vec (1 * d))
-    (X dh : Mat N (1 * d)) : Mat N (1 * d) :=
-  let Qg : Mat N d := fun r j => dense Wq bq (X r) (finProdFinEquiv ((0:Fin 1), j))
-  let Kg : Mat N d := fun r j => dense Wk bk (X r) (finProdFinEquiv ((0:Fin 1), j))
-  let Vg : Mat N d := fun r j => dense Wv bv (X r) (finProdFinEquiv ((0:Fin 1), j))
-  let dAttg : Mat N d := fun r j => Mat.mulVec Wo (dh r) (finProdFinEquiv ((0:Fin 1), j))
-  let dQg : Mat N d := sdpa_back_Q N d Qg Kg Vg dAttg
-  let dKg : Mat N d := sdpa_back_K N d Qg Kg Vg dAttg
-  let dVg : Mat N d := sdpa_back_V N d Qg Kg Vg dAttg
-  fun r c =>
-    Mat.mulVec Wq (fun cc => dQg r (finProdFinEquiv.symm cc).2) c
-    + Mat.mulVec Wk (fun cc => dKg r (finProdFinEquiv.symm cc).2) c
-    + Mat.mulVec Wv (fun cc => dVg r (finProdFinEquiv.symm cc).2) c
-
-
 -- ════════════════════════════════════════════════════════════════
 -- § Stage 1 (MULTI-HEAD) — MHSA backward general-`heads` collapse
 -- ════════════════════════════════════════════════════════════════
 
-/-! The multi-head analogue of the heads = 1 collapse. Where heads = 1 collapses
-the colSlab-lifted backward to a single three-way dense fan-in, general heads
-collapses to a SUM over heads: each head `h` slices the dense Q/K/V projections
+/-! The colSlab-lifted MHSA backward collapses to a SUM over heads: each head `h` slices the dense Q/K/V projections
 and the `Wo`-back cotangent to head `h`'s columns, runs `sdpa_back_{Q,K,V}` at
 `d_head`, and the qkv-stack dense-back contracts head `h`'s SDPA backward against
 the `finProdFinEquiv (h, ·)` columns of `Wq/Wk/Wv`. -/
@@ -556,186 +436,7 @@ theorem mhsa_backward_collapseMH (N heads d : Nat)
       = mhsaBackCollapsedMH N heads d Wq Wk Wv Wo bq bk bv bo X dh := by
   rw [← mhsaClean_backward_eq, mhsaClean_backward_collapseMH]
 
-/-- **MHSA backward heads = 1 collapse.** The clean MHSA witness's backward equals
-    the plain three-way dense fan-in over `sdpa_back_{Q,K,V}` (`mhsaBackCollapsed`):
-    the general-`heads` collapse at one head, where the `Fin 1` head sum is its one
-    term and each `Mat.mulVec W` over `1 * d` columns reindexes to head 0's `d`. -/
-theorem mhsaClean_backward_collapse (N d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (X dh : Mat N (1 * d)) :
-    (mhsaClean N 1 d Wq Wk Wv Wo bq bk bv bo).backward X dh
-      = mhsaBackCollapsed N d Wq Wk Wv Wo bq bk bv bo X dh := by
-  rw [mhsaClean_backward_collapseMH]
-  have hr : ∀ (W : Mat (1 * d) (1 * d)) (g : Fin d → ℝ) (c : Fin (1 * d)),
-      Mat.mulVec W (fun cc => g (finProdFinEquiv.symm cc).2) c
-        = ∑ j : Fin d, W c (finProdFinEquiv ((0 : Fin 1), j)) * g j := by
-    intro W g c
-    unfold Mat.mulVec
-    rw [← Equiv.sum_comp (finProdFinEquiv : Fin 1 × Fin d ≃ Fin (1 * d)),
-      Fintype.sum_prod_type, Fin.sum_univ_one]
-    simp only [Equiv.symm_apply_apply]
-  funext r c
-  simp only [mhsaBackCollapsedMH, mhsaBackCollapsed, Fin.sum_univ_one, hr]
-
-/-- The proven MHSA VJP's backward at heads = 1 IS the collapsed three-way fan-in. -/
-theorem mhsa_backward_collapse (N d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (X dh : Mat N (1 * d)) :
-    (mhsa_has_vjp_mat N 1 d Wq Wk Wv Wo bq bk bv bo).backward X dh
-      = mhsaBackCollapsed N d Wq Wk Wv Wo bq bk bv bo X dh := by
-  rw [← mhsaClean_backward_eq, mhsaClean_backward_collapse]
-
--- ── SDPA-back width bridges: lifting the inner-`d` `sdpa_back_*` (which
---    `mhsaBackCollapsed` uses, via `mhsa_g`) to the `1*d`-spelled `sdpa_back_*`
---    (which the ViTChainClose ties + the `1*d` forward graph use). The one-head
---    column gather collapses the matmuls (`matmul_oh`), and `sdpa_scale (1*d) =
---    sdpa_scale d`. ──
-
-/-- Gather a `Mat N (1*d)` to `Mat N d` through the head-0 column slice. -/
-private noncomputable def gth {N d : Nat} (M1 : Mat N (1 * d)) : Mat N d :=
-  fun r j => M1 r (finProdFinEquiv ((0:Fin 1), j))
-
-private lemma matmul_oh {N d : Nat} (A1 B1 : Mat N (1 * d)) :
-    Mat.mul (gth A1) (Mat.transpose (gth B1)) = Mat.mul A1 (Mat.transpose B1) := by
-  funext i j; unfold Mat.mul Mat.transpose gth
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin 1 × Fin d ≃ Fin (1*d)) (fun k => A1 i k * B1 j k)]
-  rw [Fintype.sum_prod_type, Fin.sum_univ_one]
-
-private lemma weights_oh {N d : Nat} (Q1 K1 : Mat N (1 * d)) :
-    sdpa_weights N d (gth Q1) (gth K1) = sdpa_weights N (1 * d) Q1 K1 := by
-  unfold sdpa_weights
-  have hsc : sdpa_scale (1 * d) = sdpa_scale d := by unfold sdpa_scale; rw [Nat.one_mul]
-  rw [matmul_oh, hsc]
-
-private lemma dweights_oh {N d : Nat} (V1 dAtt1 : Mat N (1 * d)) :
-    sdpa_dWeights (gth V1) (gth dAtt1) = sdpa_dWeights V1 dAtt1 := by
-  unfold sdpa_dWeights; funext i j; unfold Mat.mul Mat.transpose gth
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin 1 × Fin d ≃ Fin (1*d)) (fun k => dAtt1 i k * V1 j k)]
-  rw [Fintype.sum_prod_type, Fin.sum_univ_one]
-
-private lemma dscores_oh {N d : Nat} (Q1 K1 V1 dAtt1 : Mat N (1 * d)) :
-    sdpa_dScores N d (gth Q1) (gth K1) (gth V1) (gth dAtt1)
-      = sdpa_dScores N (1 * d) Q1 K1 V1 dAtt1 := by
-  unfold sdpa_dScores sdpa_dScaled
-  have hsc : sdpa_scale (1 * d) = sdpa_scale d := by unfold sdpa_scale; rw [Nat.one_mul]
-  rw [weights_oh, dweights_oh, hsc]
-
-/-- The `1*d`-lifted flatten of a `Mat N d` (the cotangent shape the per-token
-    `denseRowBack Wq/Wk/Wv` of `mhsaBackCollapsed` reads). -/
-noncomputable def liftFlat (N d : Nat) (M : Mat N d) : Vec (N * (1 * d)) :=
-  Mat.flatten (fun r (cc : Fin (1 * d)) => M r (finProdFinEquiv.symm cc).2)
-
-private lemma liftFlat_mul_gth_right {N d : Nat} (DS : Mat N N) (B1 : Mat N (1 * d)) :
-    liftFlat N d (Mat.mul DS (gth B1)) = Mat.flatten (Mat.mul DS B1) := by
-  unfold liftFlat; funext k; unfold Mat.flatten
-  have hmul : ∀ (r : Fin N) (j' : Fin d),
-      Mat.mul DS (gth B1) r j' = Mat.mul DS B1 r (finProdFinEquiv ((0:Fin 1), j')) := by
-    intro r j'; unfold Mat.mul gth; rfl
-  show Mat.mul DS (gth B1) (finProdFinEquiv.symm k).1
-        (finProdFinEquiv.symm (finProdFinEquiv.symm k).2).2 = _
-  rw [hmul]
-  show Mat.mul DS B1 (finProdFinEquiv.symm k).1
-        (finProdFinEquiv ((0:Fin 1), (finProdFinEquiv.symm (finProdFinEquiv.symm k).2).2)) = _
-  congr 1
-  conv_rhs => rw [show (finProdFinEquiv.symm k).2
-      = finProdFinEquiv (finProdFinEquiv.symm (finProdFinEquiv.symm k).2) from
-        (Equiv.apply_symm_apply _ _).symm]
-  congr 1; exact Prod.ext (Subsingleton.elim _ _) rfl
-
-theorem sdpa_back_Q_oh {N d : Nat} (Q1 K1 V1 dAtt1 : Mat N (1 * d)) :
-    liftFlat N d (sdpa_back_Q N d (gth Q1) (gth K1) (gth V1) (gth dAtt1))
-      = Mat.flatten (sdpa_back_Q N (1 * d) Q1 K1 V1 dAtt1) := by
-  unfold sdpa_back_Q; rw [dscores_oh]
-  exact liftFlat_mul_gth_right (sdpa_dScores N (1 * d) Q1 K1 V1 dAtt1) K1
-
-theorem sdpa_back_K_oh {N d : Nat} (Q1 K1 V1 dAtt1 : Mat N (1 * d)) :
-    liftFlat N d (sdpa_back_K N d (gth Q1) (gth K1) (gth V1) (gth dAtt1))
-      = Mat.flatten (sdpa_back_K N (1 * d) Q1 K1 V1 dAtt1) := by
-  unfold sdpa_back_K; rw [dscores_oh]
-  exact liftFlat_mul_gth_right (Mat.transpose (sdpa_dScores N (1 * d) Q1 K1 V1 dAtt1)) Q1
-
-theorem sdpa_back_V_oh {N d : Nat} (Q1 K1 V1 dAtt1 : Mat N (1 * d)) :
-    liftFlat N d (sdpa_back_V N d (gth Q1) (gth K1) (gth V1) (gth dAtt1))
-      = Mat.flatten (sdpa_back_V N (1 * d) Q1 K1 V1 dAtt1) := by
-  unfold sdpa_back_V; rw [weights_oh]
-  exact liftFlat_mul_gth_right (Mat.transpose (sdpa_weights N (1 * d) Q1 K1)) dAtt1
-
--- ── The MHSA backward in ViTChainClose's renderable cotangent forms ──
-
-set_option maxHeartbeats 2000000 in
-/-- The collapsed MHSA backward (flattened) IS the ViTChainClose three-way
-    LN₁-fan-in over `vitCotD{Q,K,V}` (the `matmulF`/`scaleF`/`softmaxRowBack`/
-    `transposeF` rendered SDPA backwards). The per-projection cotangents are the
-    `1*d`-spelled `sdpa_back_{Q,K,V}` (`vitCotD*_eq_sdpa_back_*`), lifted from the
-    inner-`d` ones `mhsaBackCollapsed` carries via the `sdpa_back_*_oh` bridges. -/
-theorem mhsaBackCollapsed_eq_vitCot (N d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (X dh : Mat N (1 * d)) :
-    Mat.flatten (mhsaBackCollapsed N d Wq Wk Wv Wo bq bk bv bo X dh)
-      = vitCotLn1 Wq Wk Wv
-          (vitCotDQ (1 * d)
-            (Mat.flatten (fun i j => sdpa_scale (1*d) *
-              Mat.mul (fun r => dense Wq bq (X r)) (Mat.transpose (fun r => dense Wk bk (X r))) i j))
-            (Mat.flatten (fun r => dense Wk bk (X r)))
-            (Mat.flatten (fun r => dense Wv bv (X r)))
-            (Mat.flatten (fun r => Mat.mulVec Wo (dh r))))
-          (vitCotDK (1 * d)
-            (Mat.flatten (fun i j => sdpa_scale (1*d) *
-              Mat.mul (fun r => dense Wq bq (X r)) (Mat.transpose (fun r => dense Wk bk (X r))) i j))
-            (Mat.flatten (fun r => dense Wq bq (X r)))
-            (Mat.flatten (fun r => dense Wv bv (X r)))
-            (Mat.flatten (fun r => Mat.mulVec Wo (dh r))))
-          (vitCotDV
-            (Mat.flatten (sdpa_weights N (1*d) (fun r => dense Wq bq (X r)) (fun r => dense Wk bk (X r))))
-            (Mat.flatten (fun r => Mat.mulVec Wo (dh r)))) := by
-  set Q1 : Mat N (1*d) := fun r => dense Wq bq (X r) with hQ1
-  set K1 : Mat N (1*d) := fun r => dense Wk bk (X r) with hK1
-  set V1 : Mat N (1*d) := fun r => dense Wv bv (X r) with hV1
-  set dAtt1 : Mat N (1*d) := fun r => Mat.mulVec Wo (dh r) with hdAtt1
-  rw [vitCotDQ_eq_sdpa_back_Q N (1*d) Q1 K1 V1 dAtt1,
-      vitCotDK_eq_sdpa_back_K N (1*d) Q1 K1 V1 dAtt1,
-      vitCotDV_eq_sdpa_back_V N (1*d) Q1 K1 V1 dAtt1]
-  -- The collapsed cotangents `Qg/Kg/Vg/dAttg` are `gth`-gathers of `Q1/K1/V1/dAtt1`.
-  have hgQ : (fun (r : Fin N) (j : Fin d) => dense Wq bq (X r) (finProdFinEquiv ((0:Fin 1), j)))
-              = gth Q1 := rfl
-  have hgK : (fun (r : Fin N) (j : Fin d) => dense Wk bk (X r) (finProdFinEquiv ((0:Fin 1), j)))
-              = gth K1 := rfl
-  have hgV : (fun (r : Fin N) (j : Fin d) => dense Wv bv (X r) (finProdFinEquiv ((0:Fin 1), j)))
-              = gth V1 := rfl
-  have hgA : (fun (r : Fin N) (j : Fin d) => Mat.mulVec Wo (dh r) (finProdFinEquiv ((0:Fin 1), j)))
-              = gth dAtt1 := rfl
-  have hQ : (fun (r : Fin N) (cc : Fin (1*d)) =>
-              sdpa_back_Q N d (gth Q1) (gth K1) (gth V1) (gth dAtt1) r (finProdFinEquiv.symm cc).2)
-            = Mat.unflatten (Mat.flatten (sdpa_back_Q N (1*d) Q1 K1 V1 dAtt1)) := by
-    rw [← sdpa_back_Q_oh Q1 K1 V1 dAtt1]; unfold liftFlat; rw [Mat.unflatten_flatten]
-  have hK : (fun (r : Fin N) (cc : Fin (1*d)) =>
-              sdpa_back_K N d (gth Q1) (gth K1) (gth V1) (gth dAtt1) r (finProdFinEquiv.symm cc).2)
-            = Mat.unflatten (Mat.flatten (sdpa_back_K N (1*d) Q1 K1 V1 dAtt1)) := by
-    rw [← sdpa_back_K_oh Q1 K1 V1 dAtt1]; unfold liftFlat; rw [Mat.unflatten_flatten]
-  have hV : (fun (r : Fin N) (cc : Fin (1*d)) =>
-              sdpa_back_V N d (gth Q1) (gth K1) (gth V1) (gth dAtt1) r (finProdFinEquiv.symm cc).2)
-            = Mat.unflatten (Mat.flatten (sdpa_back_V N (1*d) Q1 K1 V1 dAtt1)) := by
-    rw [← sdpa_back_V_oh Q1 K1 V1 dAtt1]; unfold liftFlat; rw [Mat.unflatten_flatten]
-  unfold mhsaBackCollapsed vitCotLn1 rowDenseBackFlat
-  simp only [hgQ, hgK, hgV, hgA]
-  funext k
-  unfold Mat.flatten
-  dsimp only []
-  rw [show (fun cc => sdpa_back_Q N d (gth Q1) (gth K1) (gth V1) (gth dAtt1)
-              (finProdFinEquiv.symm k).1 (finProdFinEquiv.symm cc).2)
-        = Mat.unflatten (Mat.flatten (sdpa_back_Q N (1*d) Q1 K1 V1 dAtt1)) (finProdFinEquiv.symm k).1
-      from congrFun hQ _,
-      show (fun cc => sdpa_back_K N d (gth Q1) (gth K1) (gth V1) (gth dAtt1)
-              (finProdFinEquiv.symm k).1 (finProdFinEquiv.symm cc).2)
-        = Mat.unflatten (Mat.flatten (sdpa_back_K N (1*d) Q1 K1 V1 dAtt1)) (finProdFinEquiv.symm k).1
-      from congrFun hK _,
-      show (fun cc => sdpa_back_V N d (gth Q1) (gth K1) (gth V1) (gth dAtt1)
-              (finProdFinEquiv.symm k).1 (finProdFinEquiv.symm cc).2)
-        = Mat.unflatten (Mat.flatten (sdpa_back_V N (1*d) Q1 K1 V1 dAtt1)) (finProdFinEquiv.symm k).1
-      from congrFun hV _]
-  rfl
-
--- ── The MHSA backward graph (heads = 1) ──
+-- ── The SDPA backward segment graphs (one head's; `mhsaBackGraphMH` runs them per head) ──
 
 /-- SDPA dQ-segment subgraph: `matmulF(scaleF(softmaxRowBack(matmulF(dAtt, transposeF v))), k)`
     — denotes `vitCotDQ`. `ss` = saved pre-softmax scaled scores; `k`/`v`/`dAtt` saved. -/
@@ -781,243 +482,6 @@ theorem sdpaBackVGraph_faithful (Np1 D : Nat) (p : Vec (Np1*Np1)) (e : SHlo (Np1
     den (sdpaBackVGraph Np1 D p e) = vitCotDV p (den e) := by
   unfold sdpaBackVGraph vitCotDV
   simp only [matmulF_faithful, transposeF_faithful, den_operand]
-
-/-- The whole MHSA backward graph (heads = 1): the three-way LN₁-fan-in
-    `addV (addV (denseRowBack Wq (dQ)) (denseRowBack Wk (dK))) (denseRowBack Wv (dV))`,
-    where each `d{Q,K,V}` is the SDPA backward subgraph fed the `Wo`-backward
-    `denseRowBack Wo (%dh)` (the cotangent at the SDPA output). Saved activations:
-    `Q/K/V` (the dense projections of `X`), the pre-softmax scores `ss`, and the
-    post-softmax weights `p`. -/
-noncomputable def mhsaBackGraph (Np1 d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d))
-    (Q K V : Vec (Np1*(1*d))) (ss : Vec (Np1*Np1)) (p : Vec (Np1*Np1))
-    (dh : Vec (Np1*(1*d))) : SHlo (Np1*(1*d)) :=
-  let dAtt := SHlo.denseRowBack "%Wo" Wo (.operand "%dh" dh)
-  .addV
-    (.addV
-      (.denseRowBack "%Wq" Wq (sdpaBackQGraph Np1 (1*d) ss K V dAtt))
-      (.denseRowBack "%Wk" Wk (sdpaBackKGraph Np1 (1*d) ss Q V dAtt)))
-    (.denseRowBack "%Wv" Wv (sdpaBackVGraph Np1 (1*d) p dAtt))
-
-set_option maxHeartbeats 2000000 in
-/-- **MHSA backward-graph faithfulness (heads = 1).** The three-way SDPA-backward
-    fan-in graph denotes the proven `mhsa_has_vjp_mat.backward` (flattened), at the
-    saved dense projections `Q = dense Wq, K = dense Wk, V = dense Wv`, pre-softmax
-    scores `ss`, and post-softmax weights `p`. -/
-theorem mhsaBackGraph_faithful (Np1 d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (X dh : Mat Np1 (1 * d)) :
-    den (mhsaBackGraph Np1 d Wq Wk Wv Wo
-          (Mat.flatten (fun r => dense Wq bq (X r)))
-          (Mat.flatten (fun r => dense Wk bk (X r)))
-          (Mat.flatten (fun r => dense Wv bv (X r)))
-          (Mat.flatten (fun i j => sdpa_scale (1*d) *
-            Mat.mul (fun r => dense Wq bq (X r)) (Mat.transpose (fun r => dense Wk bk (X r))) i j))
-          (Mat.flatten (sdpa_weights Np1 (1*d) (fun r => dense Wq bq (X r))
-            (fun r => dense Wk bk (X r))))
-          (Mat.flatten dh))
-      = Mat.flatten ((mhsa_has_vjp_mat Np1 1 d Wq Wk Wv Wo bq bk bv bo).backward X dh) := by
-  rw [mhsa_backward_collapse, mhsaBackCollapsed_eq_vitCot]
-  -- den (addV (addV Q K) V) = den Q + den K + den V; each branch is `denseRowBack` of
-  -- the SDPA-back subgraph (which denotes `vitCotD{Q,K,V}` at the `Wo`-back cotangent).
-  unfold mhsaBackGraph
-  rw [show den (.addV
-            (.addV (.denseRowBack "%Wq" Wq (sdpaBackQGraph Np1 (1*d) _ _ _
-                      (.denseRowBack "%Wo" Wo (.operand "%dh" (Mat.flatten dh)))))
-                   (.denseRowBack "%Wk" Wk (sdpaBackKGraph Np1 (1*d) _ _ _
-                      (.denseRowBack "%Wo" Wo (.operand "%dh" (Mat.flatten dh))))))
-            (.denseRowBack "%Wv" Wv (sdpaBackVGraph Np1 (1*d) _
-                      (.denseRowBack "%Wo" Wo (.operand "%dh" (Mat.flatten dh))))))
-        = fun j =>
-            den (.denseRowBack "%Wq" Wq (sdpaBackQGraph Np1 (1*d)
-                  (Mat.flatten (fun i j => sdpa_scale (1*d) *
-                    Mat.mul (fun r => dense Wq bq (X r)) (Mat.transpose (fun r => dense Wk bk (X r))) i j))
-                  (Mat.flatten (fun r => dense Wk bk (X r)))
-                  (Mat.flatten (fun r => dense Wv bv (X r)))
-                  (.denseRowBack "%Wo" Wo (.operand "%dh" (Mat.flatten dh))))) j
-            + den (.denseRowBack "%Wk" Wk (sdpaBackKGraph Np1 (1*d)
-                  (Mat.flatten (fun i j => sdpa_scale (1*d) *
-                    Mat.mul (fun r => dense Wq bq (X r)) (Mat.transpose (fun r => dense Wk bk (X r))) i j))
-                  (Mat.flatten (fun r => dense Wq bq (X r)))
-                  (Mat.flatten (fun r => dense Wv bv (X r)))
-                  (.denseRowBack "%Wo" Wo (.operand "%dh" (Mat.flatten dh))))) j
-            + den (.denseRowBack "%Wv" Wv (sdpaBackVGraph Np1 (1*d)
-                  (Mat.flatten (sdpa_weights Np1 (1*d) (fun r => dense Wq bq (X r))
-                    (fun r => dense Wk bk (X r))))
-                  (.denseRowBack "%Wo" Wo (.operand "%dh" (Mat.flatten dh))))) j
-        from rfl]
-  -- Each branch: denseRowBack Wq of the SDPA-back subgraph denoting vitCotDQ at the Wo-back.
-  have hdAtt : den (SHlo.denseRowBack "%Wo" Wo (.operand "%dh" (Mat.flatten dh)))
-      = Mat.flatten (fun r => Mat.mulVec Wo (dh r)) := by
-    rw [denseRowBack_faithful, den_operand]; unfold rowDenseBackFlat
-    rw [Mat.unflatten_flatten]
-  funext j
-  rw [denseRowBack_faithful, denseRowBack_faithful, denseRowBack_faithful,
-      sdpaBackQGraph_faithful, sdpaBackKGraph_faithful, sdpaBackVGraph_faithful, hdAtt]
-  -- RHS is `vitCotLn1 Wq Wk Wv (vitCotDQ …) (vitCotDK …) (vitCotDV …)`.
-  unfold vitCotLn1
-  rfl
-
--- ════════════════════════════════════════════════════════════════
--- § Stage 2 — Attention sublayer backward graph (MHSA + LN₁ + residual)
--- ════════════════════════════════════════════════════════════════
-
-/-- The attention-sublayer non-trivial arm backward graph (`mhsa ∘ LN₁`; outermost
-    backward token = earliest forward op = LN₁):
-
-      `lnRowBack(LN₁ @ x) ∘ mhsaBackGraph(@ X = LN₁ x)`
-
-    `x` (saved pre-LN₁ block input) feeds the LN₁ backward; the saved Q/K/V/scores/
-    weights inside `mhsaBackGraph` are computed at `X = LN₁ x`. -/
-noncomputable def attnSublayerInnerBackGraph (Np1 d : Nat) (ε γ1 : ℝ)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv _bo : Vec (1 * d))
-    (x : Vec (Np1 * (1 * d))) (X : Mat Np1 (1 * d)) (e : SHlo (Np1 * (1 * d))) :
-    SHlo (Np1 * (1 * d)) :=
-  .lnRowBack "%g1" "%x" "ε" ε γ1 x
-    (mhsaBackGraph Np1 d Wq Wk Wv Wo
-      (Mat.flatten (fun r => dense Wq bq (X r)))
-      (Mat.flatten (fun r => dense Wk bk (X r)))
-      (Mat.flatten (fun r => dense Wv bv (X r)))
-      (Mat.flatten (fun i j => sdpa_scale (1*d) *
-        Mat.mul (fun r => dense Wq bq (X r)) (Mat.transpose (fun r => dense Wk bk (X r))) i j))
-      (Mat.flatten (sdpa_weights Np1 (1*d) (fun r => dense Wq bq (X r))
-        (fun r => dense Wk bk (X r))))
-      (den e))
-
-/-- **Attention-sublayer inner-arm backward-graph faithfulness.** The reverse-order
-    chain denotes the proven `(vjpMat_comp LN₁ mhsa).backward x ·`. `X = LN₁ x` is
-    the saved MHSA input. -/
-theorem attnSublayerInnerBackGraph_faithful (Np1 d : Nat) (ε γ1 β1 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (x : Mat Np1 (1 * d)) (dh : Mat Np1 (1 * d)) :
-    den (attnSublayerInnerBackGraph Np1 d ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten x)
-          (fun r => layerNormForward (1 * d) ε γ1 β1 (x r)) (.operand "%dh" (Mat.flatten dh)))
-      = Mat.flatten
-          ((layerNorm_per_token_has_vjp_mat Np1 (1 * d) ε γ1 β1 hε).backward x
-            ((mhsa_has_vjp_mat Np1 1 d Wq Wk Wv Wo bq bk bv bo).backward
-              (fun r => layerNormForward (1 * d) ε γ1 β1 (x r)) dh)) := by
-  simp only [attnSublayerInnerBackGraph, lnRowBack_faithful, den_operand]
-  rw [mhsaBackGraph_faithful Np1 d Wq Wk Wv Wo bq bk bv bo
-        (fun r => layerNormForward (1 * d) ε γ1 β1 (x r)) dh]
-  rw [rowLNBackFlat_eq_backward (β := β1) ε γ1 hε x
-        ((mhsa_has_vjp_mat Np1 1 d Wq Wk Wv Wo bq bk bv bo).backward
-          (fun r => layerNormForward (1 * d) ε γ1 β1 (x r)) dh)]
-
-/-- The whole attention-sublayer backward graph (inner arm + identity skip):
-    `addV (innerBack … (%dh)) (%dh)`. -/
-noncomputable def attnSublayerBackGraph (Np1 d : Nat) (ε γ1 : ℝ)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (x : Vec (Np1 * (1 * d))) (X : Mat Np1 (1 * d)) (dh : Vec (Np1 * (1 * d))) :
-    SHlo (Np1 * (1 * d)) :=
-  .addV (attnSublayerInnerBackGraph Np1 d ε γ1 Wq Wk Wv Wo bq bk bv bo x X
-          (.operand "%dh" dh))
-        (.operand "%dh" dh)
-
-/-- **The certified attention-sublayer VJP decomposes** (the `biPathMat` unfold, `rfl`): the residual
-    skip passes the cotangent through (`identityMat` backward = `dY`), and the non-trivial arm is the
-    chain `LN₁-back ∘ mhsa-back` at the saved LayerNorm output `LN₁ A` (`vjpMat_comp`). General in the
-    head count: the heads = 1 and multi-head capstones below both rewrite with it. -/
-theorem _root_.Proofs.transformerAttnSublayer_backward_decomp {h N dh : Nat} (ε γ1 β1 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh)) (A dY : Mat N (h * dh)) :
-    (transformerAttnSublayer_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward A dY
-      = (fun i j => dY i j +
-          (layerNorm_per_token_has_vjp_mat N (h * dh) ε γ1 β1 hε).backward A
-            ((mhsa_has_vjp_mat N h dh Wq Wk Wv Wo bq bk bv bo).backward
-              (fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) dY) i j) := rfl
-
-/-- **Attention sublayer backward-graph faithfulness (Stage 2 capstone).** The
-    residual-fan-in graph denotes the proven `transformerAttnSublayer_has_vjp_mat`
-    backward (heads = 1), under `0 < ε`. The `biPathMat` skip arm is the identity;
-    the non-trivial arm is the LN₁-back of the MHSA back. The forward activations
-    fed: `x` (LN₁'s pre-norm input, the block input) and `X = LN₁ x` (MHSA input). -/
-theorem attnSublayerBackGraph_faithful (Np1 d : Nat) (ε γ1 β1 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (x : Mat Np1 (1 * d)) (dh : Mat Np1 (1 * d)) :
-    den (attnSublayerBackGraph Np1 d ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten x)
-          (fun r => layerNormForward (1 * d) ε γ1 β1 (x r)) (Mat.flatten dh))
-      = Mat.flatten ((transformerAttnSublayer_has_vjp_mat Np1 1 d ε γ1 β1 hε
-          Wq Wk Wv Wo bq bk bv bo).backward x dh) := by
-  rw [transformerAttnSublayer_backward_decomp]
-  funext j
-  show den (attnSublayerInnerBackGraph Np1 d ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten x)
-            (fun r => layerNormForward (1 * d) ε γ1 β1 (x r))
-            (.operand "%dh" (Mat.flatten dh))) j + Mat.flatten dh j = _
-  rw [attnSublayerInnerBackGraph_faithful Np1 d ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo x dh]
-  -- Both sides are flatten of the pointwise sum; commute the addition.
-  unfold Mat.flatten
-  exact add_comm _ _
-
--- ════════════════════════════════════════════════════════════════
--- § Stage 3 — Whole transformer-block backward graph
--- ════════════════════════════════════════════════════════════════
-
-/-- The whole transformer-block backward graph (heads = 1). `transformerBlock =
-    mlpSublayer ∘ attnSublayer`, so `block.backward A dY = attn.backward A
-    (mlp.backward (attn A) dY)`: the MLP-sublayer backward graph (at the saved
-    attention-sublayer output `h`) feeds the attention-sublayer backward graph's
-    cotangent (at the saved block input `A`). Saved activations: `A` (block input),
-    `h = attnSublayer A` (attention-sublayer output / MLP-sublayer input). -/
-noncomputable def transformerBlockBackGraph (Np1 d mlpDim : Nat)
-    (ε γ1 β1 γ2 β2 : ℝ)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (Wfc1 : Mat (1 * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim (1 * d))
-    (A : Mat Np1 (1 * d)) (h : Mat Np1 (1 * d)) (dY : Vec (Np1 * (1 * d))) :
-    SHlo (Np1 * (1 * d)) :=
-  -- MLP sublayer backward at `h`, producing the cotangent at the attn-sublayer output;
-  -- then the attention sublayer backward at `A`.
-  attnSublayerBackGraph Np1 d ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten A)
-    (fun r => layerNormForward (1 * d) ε γ1 β1 (A r))
-    (den (mlpSublayerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-            (fun r => layerNormForward (1 * d) ε γ2 β2 (h r)) dY))
-
-/-- **The transformer-block VJP backward unfolds**: `block.backward A dz = attn.backward A
-    (mlp.backward (attn A) dz)`, the outer `vjpMat_comp`'s projection (`rfl`). General in the
-    head count, like `transformerAttnSublayer_backward_decomp`. -/
-theorem _root_.Proofs.transformerBlock_backward_unfold_gen {h N dh : Nat} (dff : Nat)
-    (ε γ1 β1 γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh))
-    (Wfc1 : Mat (h * dh) dff) (bfc1 : Vec dff) (Wfc2 : Mat dff (h * dh)) (bfc2 : Vec (h * dh))
-    (A dz : Mat N (h * dh)) :
-    (transformerBlock_has_vjp_mat N h dh dff ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo
-        γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward A dz
-      = (transformerAttnSublayer_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward A
-          ((transformerMlpSublayer_has_vjp_mat N h dh dff ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).backward
-            (transformerAttnSublayer N h dh ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A) dz) := rfl
-
-/-- **Whole transformer-block backward-graph faithfulness (Stage 3 capstone).**
-    The block backward graph denotes the proven `transformerBlock_has_vjp_mat`
-    backward (heads = 1), under `0 < ε`. Wires the MLP-sublayer backward (at the
-    saved attention-sublayer output `h = attnSublayer A`) into the attention-sublayer
-    backward (at the saved block input `A`), per `block.backward A dY = attn.backward
-    A (mlp.backward (attn A) dY)`. -/
-theorem transformerBlockBackGraph_faithful (Np1 d mlpDim : Nat)
-    (ε γ1 β1 γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
-    (Wfc1 : Mat (1 * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim (1 * d)) (bfc2 : Vec (1 * d))
-    (A dY : Mat Np1 (1 * d)) :
-    den (transformerBlockBackGraph Np1 d mlpDim ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
-          Wfc1 bfc1 Wfc2 A
-          (transformerAttnSublayer Np1 1 d ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A)
-          (Mat.flatten dY))
-      = Mat.flatten ((transformerBlock_has_vjp_mat Np1 1 d mlpDim ε γ1 β1 hε
-          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward A dY) := by
-  rw [transformerBlock_backward_unfold_gen (bfc2 := bfc2)]
-  -- abbreviate the attn-sublayer output `h`.
-  set h : Mat Np1 (1 * d) := transformerAttnSublayer Np1 1 d ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A with hh
-  -- The block graph = attnSublayerBackGraph at `A` fed `den (mlpSublayerBackGraph at h dY)`.
-  show den (attnSublayerBackGraph Np1 d ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten A)
-            (fun r => layerNormForward (1 * d) ε γ1 β1 (A r))
-            (den (mlpSublayerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-                    (fun r => layerNormForward (1 * d) ε γ2 β2 (h r)) (Mat.flatten dY)))) = _
-  -- the MLP sublayer back graph denotes `mlp.backward h dY` (flattened).
-  rw [mlpSublayerBackGraph_faithful ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2 h dY]
-  -- the attn sublayer back graph (fed that flattened cotangent) denotes `attn.backward A (·)`.
-  rw [attnSublayerBackGraph_faithful Np1 d ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo A
-        ((transformerMlpSublayer_has_vjp_mat Np1 1 d mlpDim ε γ2 β2 hε
-            Wfc1 bfc1 Wfc2 bfc2).backward h dY)]
-
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stage 2 (MULTI-HEAD) — MHSA backward graph
@@ -1228,106 +692,6 @@ theorem mhsaBackGraphMH_faithful {Np1 hm1 d : Nat}
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § Stage 3 (MULTI-HEAD) — attn sublayer + whole block
--- ════════════════════════════════════════════════════════════════
-
-/-- Attn-sublayer non-trivial arm (`mhsa ∘ LN₁`), multi-head. -/
-noncomputable def attnSublayerInnerBackGraphMH {Np1 hm1 d : Nat} (ε γ1 : ℝ)
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv _bo : Vec ((hm1+1) * d))
-    (x : Vec (Np1 * ((hm1+1) * d))) (X : Mat Np1 ((hm1+1) * d))
-    (e : SHlo (Np1 * ((hm1+1) * d))) : SHlo (Np1 * ((hm1+1) * d)) :=
-  SHlo.lnRowBack "%g1" "%x" "ε" ε γ1 x
-    (mhsaBackGraphMH Wq Wk Wv Wo
-      (fun h => Mat.flatten (fun r j => dense Wq bq (X r) (finProdFinEquiv (h, j))))
-      (fun h => Mat.flatten (fun r j => dense Wk bk (X r) (finProdFinEquiv (h, j))))
-      (fun h => Mat.flatten (fun r j => dense Wv bv (X r) (finProdFinEquiv (h, j))))
-      (fun h => Mat.flatten (fun i j => sdpa_scale d *
-        Mat.mul (fun r j' => dense Wq bq (X r) (finProdFinEquiv (h, j')))
-          (Mat.transpose (fun r j' => dense Wk bk (X r) (finProdFinEquiv (h, j')))) i j))
-      (fun h => Mat.flatten (sdpa_weights Np1 d
-        (fun r j' => dense Wq bq (X r) (finProdFinEquiv (h, j')))
-        (fun r j' => dense Wk bk (X r) (finProdFinEquiv (h, j')))))
-      (den e))
-
-theorem attnSublayerInnerBackGraphMH_faithful {Np1 hm1 d : Nat} (ε γ1 β1 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
-    (x : Mat Np1 ((hm1+1) * d)) (dh : Mat Np1 ((hm1+1) * d)) :
-    den (attnSublayerInnerBackGraphMH ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten x)
-          (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (x r)) (.operand "%dh" (Mat.flatten dh)))
-      = Mat.flatten
-          ((layerNorm_per_token_has_vjp_mat Np1 ((hm1+1) * d) ε γ1 β1 hε).backward x
-            ((mhsa_has_vjp_mat Np1 (hm1+1) d Wq Wk Wv Wo bq bk bv bo).backward
-              (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (x r)) dh)) := by
-  simp only [attnSublayerInnerBackGraphMH, lnRowBack_faithful, den_operand]
-  rw [mhsaBackGraphMH_faithful Wq Wk Wv Wo bq bk bv bo
-        (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (x r)) dh]
-  rw [rowLNBackFlat_eq_backward (β := β1) ε γ1 hε x
-        ((mhsa_has_vjp_mat Np1 (hm1+1) d Wq Wk Wv Wo bq bk bv bo).backward
-          (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (x r)) dh)]
-
-noncomputable def attnSublayerBackGraphMH {Np1 hm1 d : Nat} (ε γ1 : ℝ)
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
-    (x : Vec (Np1 * ((hm1+1) * d))) (X : Mat Np1 ((hm1+1) * d))
-    (dh : Vec (Np1 * ((hm1+1) * d))) : SHlo (Np1 * ((hm1+1) * d)) :=
-  SHlo.addV (attnSublayerInnerBackGraphMH ε γ1 Wq Wk Wv Wo bq bk bv bo x X
-          (.operand "%dh" dh))
-        (.operand "%dh" dh)
-
-theorem attnSublayerBackGraphMH_faithful {Np1 hm1 d : Nat} (ε γ1 β1 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
-    (x : Mat Np1 ((hm1+1) * d)) (dh : Mat Np1 ((hm1+1) * d)) :
-    den (attnSublayerBackGraphMH ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten x)
-          (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (x r)) (Mat.flatten dh))
-      = Mat.flatten ((transformerAttnSublayer_has_vjp_mat Np1 (hm1+1) d ε γ1 β1 hε
-          Wq Wk Wv Wo bq bk bv bo).backward x dh) := by
-  rw [transformerAttnSublayer_backward_decomp (bo := bo)]
-  funext j
-  show den (attnSublayerInnerBackGraphMH ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten x)
-            (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (x r))
-            (.operand "%dh" (Mat.flatten dh))) j + Mat.flatten dh j = _
-  rw [attnSublayerInnerBackGraphMH_faithful ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo x dh]
-  unfold Mat.flatten
-  exact add_comm _ _
-
-noncomputable def transformerBlockBackGraphMH {Np1 hm1 d mlpDim : Nat}
-    (ε γ1 β1 γ2 β2 : ℝ)
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
-    (Wfc1 : Mat ((hm1+1) * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim ((hm1+1) * d))
-    (A : Mat Np1 ((hm1+1) * d)) (h : Mat Np1 ((hm1+1) * d)) (dY : Vec (Np1 * ((hm1+1) * d))) :
-    SHlo (Np1 * ((hm1+1) * d)) :=
-  attnSublayerBackGraphMH ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten A)
-    (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (A r))
-    (den (mlpSublayerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-            (fun r => layerNormForward ((hm1+1) * d) ε γ2 β2 (h r)) dY))
-
-
-theorem transformerBlockBackGraphMH_faithful {Np1 hm1 d mlpDim : Nat}
-    (ε γ1 β1 γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
-    (Wfc1 : Mat ((hm1+1) * d) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim ((hm1+1) * d)) (bfc2 : Vec ((hm1+1) * d))
-    (A dY : Mat Np1 ((hm1+1) * d)) :
-    den (transformerBlockBackGraphMH ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
-          Wfc1 bfc1 Wfc2 A
-          (transformerAttnSublayer Np1 (hm1+1) d ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A)
-          (Mat.flatten dY))
-      = Mat.flatten ((transformerBlock_has_vjp_mat Np1 (hm1+1) d mlpDim ε γ1 β1 hε
-          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward A dY) := by
-  rw [transformerBlock_backward_unfold_gen (bfc2 := bfc2)]
-  set h : Mat Np1 ((hm1+1) * d) :=
-    transformerAttnSublayer Np1 (hm1+1) d ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A with hh
-  show den (attnSublayerBackGraphMH ε γ1 Wq Wk Wv Wo bq bk bv bo (Mat.flatten A)
-            (fun r => layerNormForward ((hm1+1) * d) ε γ1 β1 (A r))
-            (den (mlpSublayerBackGraph ε γ2 Wfc1 bfc1 Wfc2 (Mat.flatten h)
-                    (fun r => layerNormForward ((hm1+1) * d) ε γ2 β2 (h r)) (Mat.flatten dY)))) = _
-  rw [mlpSublayerBackGraph_faithfulMH ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2 h dY]
-  rw [attnSublayerBackGraphMH_faithful ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo A
-        ((transformerMlpSublayer_has_vjp_mat Np1 (hm1+1) d mlpDim ε γ2 β2 hε
-            Wfc1 bfc1 Wfc2 bfc2).backward h dY)]
-
-
--- ════════════════════════════════════════════════════════════════
 -- § VECTOR-LN VARIANT — production-parity capstone (multi-head + vec-LN)
 -- ════════════════════════════════════════════════════════════════
 
@@ -1388,9 +752,8 @@ theorem rowVecLNBack_eq_backward {N D : Nat} (ε : ℝ) (γv βv : Vec D) (hε :
 
 /-- The vec-LN MLP-sublayer non-trivial arm backward graph (`transformerMlp ∘ LNᵥ₂`;
     outermost backward token = earliest forward op = LN₂). REUSES `transformerMlpBackGraph`
-    verbatim (the MLP body is LN-agnostic); the only change vs the scalar
-    `mlpSublayerInnerBackGraph` is the LN-back fragment: `lnRowBack(γ=1) ∘ rowScaleF γ2v`
-    instead of `lnRowBack(γ2)`. `Y = LNᵥ₂ h` is the saved MLP input. -/
+    verbatim (the MLP body is LN-agnostic), after the vector-LN back fragment
+    `lnRowBack(γ=1) ∘ rowScaleF γ2v`. `Y = LNᵥ₂ h` is the saved MLP input. -/
 noncomputable def mlpSublayerVInnerBackGraph {Np1 D mlpDim : Nat}
     (ε : ℝ) (γ2v : Vec D)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D)
@@ -1460,8 +823,7 @@ theorem mlpSublayerVBackGraph_faithfulMH {Np1 hm1 d mlpDim : Nat}
 -- ── Stage 3: Vec-LN attention sublayer backward graph (multi-head) ──
 
 /-- The vec-LN attn-sublayer non-trivial arm (`mhsa ∘ LNᵥ₁`), multi-head. REUSES
-    `mhsaBackGraphMH` verbatim; the only change vs the scalar `attnSublayerInnerBackGraphMH`
-    is the LN-back fragment: `lnRowBack(γ=1) ∘ rowScaleF γ1v`. -/
+    `mhsaBackGraphMH` verbatim, after the vector-LN back fragment `lnRowBack(γ=1) ∘ rowScaleF γ1v`. -/
 noncomputable def attnSublayerVInnerBackGraphMH {Np1 hm1 d : Nat} (ε : ℝ)
     (γ1v : Vec ((hm1+1) * d))
     (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv _bo : Vec ((hm1+1) * d))

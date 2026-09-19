@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 # ViT scaling pass — depth-k (general-depth tower, distinct per-block params)
 
 The proven `transformerTower_has_vjp_mat` shares ONE param tuple across blocks;
-the 2-block `vitForward2(V)` carried distinct params but fixed the depth. This
+the 2-block `vitForward2V` carried distinct params but fixed the depth. This
 file closes general depth at the production form (vector-[D] LN + multi-head):
 
 1. **`BlockParamsV`** — the 16-field per-block param structure, and
