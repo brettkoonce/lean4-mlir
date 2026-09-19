@@ -4296,10 +4296,10 @@ the files the run in \S\ref{sec:bn_runit} handed to XLA. The
 \texttt{toSpecs}, and a \texttt{\#guard} in the same file pins that
 layout against the one the renderer emits, so a spec that drifts from
 its render fails the build rather than training something else. The
-gradient itself is \texttt{Proofs.cifarCnn8\_has\_vjp\_at}, proved once
+gradient itself is \texttt{Proofs.cifarCnnBn8\_has\_vjp\_at}, proved once
 and \emph{parametrically in the head width}, which is why the
 $512$-wide head here and the $64$-wide one behind \texttt{cifar8-bn-verified}
-need no separate proof between them. \texttt{cifarCnn8\_has\_vjp\_at\_correct}
+need no separate proof between them. \texttt{cifarCnnBn8\_has\_vjp\_at\_correct}
 (\texttt{Proofs/Nets/Small/CifarCNN.lean}) is the statement that its
 backward is the derivative, and \texttt{Proofs/Nets/Small/Cifar8BnStepTie.lean} carries
 that through to the emitted training step. Both nets run the same
