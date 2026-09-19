@@ -111,9 +111,8 @@ noncomputable def lambScale (wn2 : ℝ) (r : Vec n) : Vec n := fun i =>
     nonnegative, including at the negative arguments it maps to 0, so this needs no hypothesis on
     `v'`. `clipDenom_pos` / `adam_denom_pos` verbatim. This is what makes the reference's `+ 1e-6`
     load-bearing rather than cosmetic: at `ε = 0` with `v = 0` and `g = 0` the ratio is `0/0`. -/
-theorem lambDenom_pos (ε x : ℝ) (hε : 0 < ε) : 0 < Real.sqrt x + ε := by
-  have hx : 0 ≤ Real.sqrt x := Real.sqrt_nonneg _
-  linarith
+theorem lambDenom_pos (ε x : ℝ) (hε : 0 < ε) : 0 < Real.sqrt x + ε :=
+  clipDenom_pos ε x hε
 
 /-- The trust ratio is nonnegative. -/
 theorem lambTrust_nonneg (wn2 rn2 : ℝ) : 0 ≤ lambTrust wn2 rn2 := by
@@ -164,16 +163,7 @@ theorem lambScale_not_shared :
     ∃ (wn2 : ℝ) (r₁ r₂ : Vec 1),
       lambTrust wn2 (gradSumSq r₁) ≠ lambTrust wn2 (gradSumSq r₂) := by
   refine ⟨1, (fun _ => 1), (fun _ => 2), ?_⟩
-  have h1 : gradSumSq (n := 1) (fun _ => (1:ℝ)) = 1 := by
-    simp [gradSumSq]
-  have h2 : gradSumSq (n := 1) (fun _ => (2:ℝ)) = 4 := by
-    simp [gradSumSq]; norm_num
-  rw [h1, h2]
-  have h4 : Real.sqrt 4 = 2 := by
-    rw [show (4:ℝ) = 2 ^ 2 by norm_num, Real.sqrt_sq (by norm_num : (0:ℝ) ≤ 2)]
-  unfold lambTrust
-  rw [ite_eq_left ⟨by norm_num, by norm_num⟩, ite_eq_left ⟨by norm_num, by norm_num⟩, h4, Real.sqrt_one]
-  norm_num
+  norm_num [lambTrust, gradSumSq]
 
 /-- ⭐ **The decay is inside the ratio, and that is observable.** At `wd = 0` the direction is pure
     bias-corrected Adam; any other `wd` moves it by exactly `wd·θ`, BEFORE `lambScale` takes its

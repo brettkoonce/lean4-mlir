@@ -1846,15 +1846,6 @@ noncomputable def patchEmbedBackGraph (ic H W P N D : Nat)
     (Wc : Kernel4 D ic P P) (e : SHlo ((N+1)*D)) : SHlo (ic*H*W) :=
   .patchEmbedBack "%Wp" Wc e
 
-/-- **patchEmbed input-backward tie.** The local re-spelling `patchEmbedBackFlat`
-    IS the proven `patchEmbed_flat_has_vjp.backward` (`patchEmbed_input_grad_formula`,
-    activation-independent — patchEmbed is affine). (`rfl`, like the forward tie.) -/
-theorem patchEmbedBackFlat_eq_backward (ic H W P N D : Nat)
-    (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (N+1) D)
-    (img : Vec (ic*H*W)) (dy : Vec ((N+1)*D)) :
-    patchEmbedBackFlat ic H W P N D Wc dy
-      = (patchEmbed_flat_has_vjp ic H W P N D Wc bc cls pos).backward img dy := rfl
-
 /-- **patchEmbed input-backward-graph faithfulness (Stage 4).** Denotes the proven
     `patchEmbed_flat_has_vjp.backward` at any saved image `img` (linear — the
     activation is irrelevant). -/
@@ -1862,9 +1853,7 @@ theorem patchEmbedBackGraph_faithful (ic H W P N D : Nat)
     (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (N+1) D)
     (img : Vec (ic*H*W)) (e : SHlo ((N+1)*D)) :
     den (patchEmbedBackGraph ic H W P N D Wc e)
-      = (patchEmbed_flat_has_vjp ic H W P N D Wc bc cls pos).backward img (den e) := by
-  simp only [patchEmbedBackGraph, patchEmbedBack_faithful]
-  rw [patchEmbedBackFlat_eq_backward ic H W P N D Wc bc cls pos img (den e)]
+      = (patchEmbed_flat_has_vjp ic H W P N D Wc bc cls pos).backward img (den e) := rfl
 
 -- ── Stage 5: Whole-net backward graph + faithfulness ──
 

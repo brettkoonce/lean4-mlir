@@ -49,20 +49,16 @@ noncomputable def adamWStep (β₁ β₂ ε lr wd bc₁ bc₂ : ℝ) (θ m v g :
     incoming `v` is nonnegative — so, starting from `v = 0`, every step keeps
     `√v̂` real and the denominator below well-defined. -/
 theorem adamVNext_nonneg {β₂ : ℝ} (hβ₂0 : 0 ≤ β₂) (hβ₂1 : β₂ ≤ 1)
-    {v g : Vec n} (hv : ∀ i, 0 ≤ v i) (i : Fin n) : 0 ≤ adamVNext β₂ v g i := by
-  have h1 : 0 ≤ β₂ * v i := mul_nonneg hβ₂0 (hv i)
-  have h2 : 0 ≤ (1 - β₂) * (g i) ^ 2 := mul_nonneg (by linarith) (sq_nonneg _)
-  show 0 ≤ β₂ * v i + (1 - β₂) * (g i) ^ 2
-  linarith
+    {v g : Vec n} (hv : ∀ i, 0 ≤ v i) (i : Fin n) : 0 ≤ adamVNext β₂ v g i :=
+  add_nonneg (mul_nonneg hβ₂0 (hv i)) (mul_nonneg (sub_nonneg.2 hβ₂1) (sq_nonneg _))
 
 /-- **Well-definedness of the AdamW update.** The denominator `√(v'/bc₂) + ε` is
     strictly positive whenever `ε > 0` — `Real.sqrt` is unconditionally nonnegative,
     so there is no division by zero in `adamWParam` (the analogue of the BatchNorm
     `0 < ε` positivity side condition, but unconditional in `v`). -/
 theorem adam_denom_pos {β₂ ε bc₂ : ℝ} (hε : 0 < ε) {v g : Vec n} (i : Fin n) :
-    0 < Real.sqrt (adamVNext β₂ v g i / bc₂) + ε := by
-  have hs : 0 ≤ Real.sqrt (adamVNext β₂ v g i / bc₂) := Real.sqrt_nonneg _
-  linarith
+    0 < Real.sqrt (adamVNext β₂ v g i / bc₂) + ε :=
+  add_pos_of_nonneg_of_pos (Real.sqrt_nonneg _) hε
 
 /-- **Coordinate closed form** — the spec the emitted Adam graph must denote
     (the `adamWParam` analogue of the SGD `θ − lr·certified-grad` render close).

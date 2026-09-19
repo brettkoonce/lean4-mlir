@@ -95,11 +95,8 @@ noncomputable def rmsPropStep (ρ μ ε lr : ℝ) (θ sq buf g : Vec n) : Vec n 
     convention and is bias-corrected for it; RMSProp here is not bias-corrected, which is why the
     init value is part of the recipe rather than an implementation detail. -/
 theorem rmsSqNext_nonneg {ρ : ℝ} (hρ0 : 0 ≤ ρ) (hρ1 : ρ ≤ 1)
-    {sq g : Vec n} (hsq : ∀ i, 0 ≤ sq i) (i : Fin n) : 0 ≤ rmsSqNext ρ sq g i := by
-  have h1 : 0 ≤ ρ * sq i := mul_nonneg hρ0 (hsq i)
-  have h2 : 0 ≤ (1 - ρ) * (g i) ^ 2 := mul_nonneg (by linarith) (sq_nonneg _)
-  show 0 ≤ ρ * sq i + (1 - ρ) * (g i) ^ 2
-  linarith
+    {sq g : Vec n} (hsq : ∀ i, 0 ≤ sq i) (i : Fin n) : 0 ≤ rmsSqNext ρ sq g i :=
+  adamVNext_nonneg hρ0 hρ1 hsq i
 
 /-- **Well-definedness of the RMSProp update.** With `ε > 0` and a nonnegative mean-square the
     denominator `√(s' + ε)` is strictly positive, so there is no division by zero.

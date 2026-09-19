@@ -179,12 +179,9 @@ noncomputable def keepProb (dropRate : ℝ) (i totalDrop : Nat) : ℝ :=
 theorem keepProb_last (dropRate : ℝ) (totalDrop : Nat) (h : 2 ≤ totalDrop) :
     keepProb dropRate (totalDrop - 1) totalDrop = 1 - dropRate := by
   have hd : ((totalDrop : ℝ) - 1) ≠ 0 := by
-    have : (2 : ℝ) ≤ (totalDrop : ℝ) := by exact_mod_cast h
-    intro hc; rw [sub_eq_zero] at hc; rw [hc] at this; norm_num at this
-  have hcast : ((totalDrop - 1 : Nat) : ℝ) = (totalDrop : ℝ) - 1 := by
-    have : 1 ≤ totalDrop := le_trans (by norm_num) h
-    push_cast [Nat.cast_sub this]; ring
-  rw [keepProb, hcast, mul_div_assoc, div_self hd, mul_one]
+    have : (2 : ℝ) ≤ totalDrop := by exact_mod_cast h
+    linarith
+  rw [keepProb, Nat.cast_sub (by omega), Nat.cast_one, mul_div_assoc, div_self hd, mul_one]
 
 /-- **`dropRate = 0` is the identity ramp** — every site keeps everything, so the whole feature is
     inert. This is the denotation-side peer of gate 1's strong form (*"at `dropPath = 0` every

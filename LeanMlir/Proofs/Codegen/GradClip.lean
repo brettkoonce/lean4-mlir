@@ -88,9 +88,8 @@ def clipScale (fac : ℝ) (g : Vec n) : Vec n := fun i => fac * g i
     hypothesis on `s`. The `AdamStep.adam_denom_pos` argument verbatim. This is what makes the
     reference's `+ 1e-6` load-bearing rather than cosmetic: at `ε = 0` and a zero gradient the
     factor is `0/0`. -/
-theorem clipDenom_pos (ε s : ℝ) (hε : 0 < ε) : 0 < Real.sqrt s + ε := by
-  have hs : 0 ≤ Real.sqrt s := Real.sqrt_nonneg _
-  linarith
+theorem clipDenom_pos (ε s : ℝ) (hε : 0 < ε) : 0 < Real.sqrt s + ε :=
+  add_pos_of_nonneg_of_pos (Real.sqrt_nonneg _) hε
 
 /-- The factor never exceeds 1 — clipping only ever shrinks. Immediate from `min`, and stated
     because it is the half of the specification a "scale by `c/‖g‖`" misreading would drop: without

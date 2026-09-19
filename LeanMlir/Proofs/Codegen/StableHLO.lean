@@ -117,12 +117,8 @@ def batchSlice (N a : Nat) (v : Vec (N * a)) (n : Fin N) : Vec a :=
     per-example lift back off at one example. -/
 theorem batchSlice_batchMap {N a b : Nat} (f : Vec a → Vec b) (x : Vec (N * a))
     (n : Fin N) :
-    batchSlice N b (batchMap N f x) n = f (batchSlice N a x n) := by
-  funext i
-  show f (fun j : Fin a => x (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv (n, i))).1, j)))
-        (finProdFinEquiv.symm (finProdFinEquiv (n, i))).2 = _
-  rw [Equiv.symm_apply_apply]
-  rfl
+    batchSlice N b (batchMap N f x) n = f (batchSlice N a x n) :=
+  congrFun (Mat.unflatten_flatten fun n => f (batchSlice N a x n)) n
 
 /-- **Per-example block-apply with per-example AUXILIARY data.** `batchMap` lifts one *fixed*
     function across the batch; this lifts a family indexed by each example's own saved value —
@@ -973,8 +969,8 @@ inductive SHlo : Nat → Type where
   -- ViT patch embedding (one coarse token, like `seBlock`): stride-P VALID conv
   -- (kernel `[D,ic,P,P]`, the non-overlapping patch projection) + bias, channels-
   -- last transpose + flatten to `[N,D]` tokens, prepend the CLS token, add the
-  -- position embedding. `den` via `patchEmbedFlat` (a local re-spelling of the
-  -- proven `patchEmbed_flat`, Attention.lean — the tie is `rfl` in ViTFwdGraph).
+  -- position embedding. `den` via `patchEmbedFlat` (= the proven `patchEmbed_flat`,
+  -- Attention.lean).
   | patchEmbedF {ic H W P N D : Nat} (wName bName clsName posName : String)
       (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D) :
       SHlo (ic*H*W) → SHlo ((N+1)*D)
@@ -982,8 +978,8 @@ inductive SHlo : Nat → Type where
   -- (reversed-kernel `conv_transpose` on the patch-token rows of the `[N+1,D]`
   -- cotangent; the CLS row and position-add contribute nothing — input-VJP = id
   -- on a +constant). `den` via `patchEmbedBackFlat` (= the proven
-  -- `patchEmbed_input_grad_formula` = `patchEmbed_flat_has_vjp.backward`, the tie
-  -- is `rfl` in ViTBackB0). Linear in the cotangent — activation-independent, so
+  -- `patchEmbed_input_grad_formula` = `patchEmbed_flat_has_vjp.backward`). Linear
+  -- in the cotangent — activation-independent, so
   -- it routes through the generic `batched` Raw/Tok tag (like the strided-conv
   -- backward batched ops) rather than a bespoke top-level Raw/Tok constructor.
   | patchEmbedBack {ic H W P N D : Nat} (wName : String)
@@ -1493,17 +1489,15 @@ noncomputable def maxPool3s2BackFlat (c h w : Nat)
 
 /-- **Row-softmax (flattened)** — apply the 1-D `softmax` (MLP.lean) to each of
     the `m` rows of the row-major `Vec (m*n)`. Definitionally equal to
-    `Mat.flatten ∘ rowSoftmax ∘ Mat.unflatten` (Attention.lean's `rowSoftmax`);
-    spelled with MLP's `softmax` so `StableHLO` needn't import `Attention`
-    (the tie to `rowSoftmax` is an `rfl` faithfulness lemma in `TestSoftmaxRow`). -/
+    `Mat.flatten ∘ rowSoftmax ∘ Mat.unflatten` (Attention.lean's `rowSoftmax`; the
+    tie is `rowSoftmaxFlat_flat` in ViTFwdGraph). -/
 noncomputable def rowSoftmaxFlat (m n : Nat) (v : Vec (m*n)) : Vec (m*n) :=
   Mat.flatten (fun i => softmax n ((Mat.unflatten v) i))
 
 /-- **Row-softmax backward (flattened)** — per row, the proven closed form
     `pᵢ⊙(dyᵢ − ⟨pᵢ,dyᵢ⟩)` with `pᵢ = softmax(preActᵢ)`. Definitionally equal to
     `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward (Mat.unflatten preAct) ∘ Mat.unflatten`
-    (since `softmax_has_vjp.backward z dy i = let p := softmax z; p i·(dy i − ⟨p,dy⟩)`);
-    spelled with MLP's `softmax` to keep `Attention` out of `StableHLO`'s imports. -/
+    (since `softmax_has_vjp.backward z dy i = let p := softmax z; p i·(dy i − ⟨p,dy⟩)`). -/
 noncomputable def rowSoftmaxBackFlat (m n : Nat) (preAct dy : Vec (m*n)) : Vec (m*n) :=
   Mat.flatten (fun i =>
     let p := softmax n ((Mat.unflatten preAct) i)
@@ -1511,9 +1505,8 @@ noncomputable def rowSoftmaxBackFlat (m n : Nat) (preAct dy : Vec (m*n)) : Vec (
     let s := ∑ j, p j * dyi j
     fun c => p c * (dyi c - s))
 
--- ── Chapter 9 (ViT) den helpers — flattened matrix/row-wise forms, spelled
---    with `Mat`/`bnForward`/`dense` so `StableHLO` needn't import `Attention`
---    (the rfl ties to `rowSoftmax`-style Attention forms live in ViTFwdGraph). ──
+-- ── Chapter 9 (ViT) den helpers — flattened matrix/row-wise forms (the `rfl` ties
+--    to the Attention.lean forms live in ViTFwdGraph). ──
 
 /-- **Flattened matrix multiply** `C = A·B` on row-major flat operands.
     Definitionally `Mat.flatten ∘ Mat.mul ∘ Mat.unflatten²`. -/
@@ -1547,70 +1540,23 @@ noncomputable def rowDenseBackFlat (N a c : Nat) (W : Mat a c) (dy : Vec (N*c)) 
     Vec (N*a) :=
   Mat.flatten (fun i => Mat.mulVec W ((Mat.unflatten dy) i))
 
-/-- **ViT patch embedding (flattened)** — a LOCAL re-spelling of the proven
-    `patchEmbed_flat` (Attention.lean), kept here so `StableHLO` needn't import
-    `Attention` (the tie is an `rfl` lemma in ViTFwdGraph). Output row `n`:
-    CLS token at `n = 0`, else conv-projection of patch `n−1` + bias; plus the
-    position embedding everywhere. -/
-noncomputable def patchEmbedFlat
-    (ic H W patchSize N D : Nat)
-    (W_conv : Kernel4 D ic patchSize patchSize) (b_conv : Vec D)
-    (cls_token : Vec D) (pos_embed : Mat (N + 1) D) :
-    Vec (ic * H * W) → Vec ((N + 1) * D) :=
-  fun img =>
-    fun idx_out =>
-      let n := (finProdFinEquiv.symm idx_out).1
-      let d := (finProdFinEquiv.symm idx_out).2
-      pos_embed n d +
-        (if n.val = 0 then
-          cls_token d
-         else
-          b_conv d +
-          ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-            W_conv d c kh kw *
-              (let W' := W / patchSize
-               let p := n.val - 1
-               let h' := p / W'
-               let w' := p % W'
-               let hh := h' * patchSize + kh.val
-               let ww := w' * patchSize + kw.val
-               if hpad : hh < H ∧ ww < W then
-                 img (finProdFinEquiv (finProdFinEquiv (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
-               else 0))
+/-- **ViT patch embedding (flattened)** — the proven `patchEmbed_flat` (Attention.lean). Output
+    row `n`: CLS token at `n = 0`, else conv-projection of patch `n−1` + bias; plus the position
+    embedding everywhere. -/
+noncomputable abbrev patchEmbedFlat := @patchEmbed_flat
 
-/-- **ViT patch-embedding input-VJP (flattened)** — a LOCAL re-spelling of the
-    proven `patchEmbed_input_grad_formula` (Attention.lean), kept here so
-    `StableHLO` needn't import `Attention` (the tie is an `rfl` lemma in
-    ViTBackB0). The closed-form image cotangent: a sum over patches `p : Fin N`
-    with reconstructed kernel offsets `(kh, kw)` matching the decoded input
-    position `(c, hh, ww)`. The CLS row (`n = 0`) and the position-add (a
-    +constant, input-VJP = id) contribute nothing — `idx_in` only flows through
-    the conv-projection branch (`n = p+1`), so this is purely the strided 16×16
-    patchify conv's input-VJP on the patch-token part of the cotangent. -/
-noncomputable def patchEmbedBackFlat
-    (ic H W patchSize N D : Nat)
-    (W_conv : Kernel4 D ic patchSize patchSize)
-    (dy : Vec ((N + 1) * D)) : Vec (ic * H * W) :=
-  fun idx_in =>
-    let c  := (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1
-    let hh := (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).2
-    let ww := (finProdFinEquiv.symm idx_in).2
-    ∑ p : Fin N, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
-      let W' := W / patchSize
-      let h' := p.val / W'
-      let w' := p.val % W'
-      if _h_match : h' * patchSize + kh.val = hh.val ∧
-                    w' * patchSize + kw.val = ww.val then
-        ∑ d : Fin D, W_conv d c kh kw *
-          dy (finProdFinEquiv (p.succ, d))
-      else 0
+/-- **ViT patch-embedding input-VJP (flattened)** — the proven `patchEmbed_input_grad_formula`
+    (Attention.lean), i.e. `patchEmbed_flat_has_vjp.backward`: the strided patchify conv's input-VJP
+    on the patch-token rows of the cotangent. The CLS row and the position-add (a +constant)
+    contribute nothing. -/
+noncomputable abbrev patchEmbedBackFlat := @patchEmbed_input_grad_formula
 
-/-- **ViT patch-embedding weight-grad (flattened)** — a LOCAL re-spelling of the proven
-    `patchEmbed_weight_grad` (Attention.lean), kept here so `StableHLO` needn't import
-    `Attention` (the tie is the §1-fold `vit_render_patchW_certified`). The non-overlapping
-    16×16/s16 patchify conv's weight-VJP: `dW_(d,c,kh,kw) = Σ_patches (patch pixel read)·
-    dy_(patch.succ, d)` — token 0 is the CLS row (excluded); the pixel read mirrors
-    `patchEmbedFlat`'s, and `dy (finProdFinEquiv (p.succ, d))` mirrors `patchEmbedBackFlat`. -/
+/-- **ViT patch-embedding weight-grad (flattened)** — ViTClose.lean's `patchEmbed_weight_grad`,
+    flattened (that file is downstream of this one; the tie is the §1-fold
+    `vit_render_patchW_certified`). The non-overlapping 16×16/s16 patchify conv's weight-VJP:
+    `dW_(d,c,kh,kw) = Σ_patches (patch pixel read)·dy_(patch.succ, d)` — token 0 is the CLS row
+    (excluded); the pixel read mirrors `patchEmbed_flat`'s, and `dy (finProdFinEquiv (p.succ, d))`
+    mirrors `patchEmbedBackFlat`. -/
 noncomputable def patchEmbedWeightGradFlat
     (ic H W patchSize N D : Nat)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) :
@@ -1627,7 +1573,7 @@ noncomputable def patchEmbedWeightGradFlat
        else 0)
       * dy (finProdFinEquiv (p.succ, d)))
 
-/-- **ViT patch embedding at bf16 operands (flattened)** — `patchEmbedFlat`'s body with the three
+/-- **ViT patch embedding at bf16 operands (flattened)** — `patchEmbed_flat`'s body with the three
     roundings the emit actually performs, and nothing else.
 
     ⚠⚠ **The placement of each `rnd` is the whole content of this definition**, so read it against
@@ -2428,10 +2374,8 @@ attribute [simp] denOp
     bytes. Cf. `swishBackB`/`sigmoidBackB`, which are NOT descriptors precisely because their
     backward is not of this shape — it reads a per-example saved activation. -/
 theorem batchMap_pointwise {N n : Nat} (g : ℝ → ℝ) (v : Vec (N * n)) :
-    batchMap N (fun (x : Vec n) i => g (x i)) v = fun idx => g (v idx) := by
-  funext idx
-  simp only [batchMap]
-  exact congrArg g (congrArg v (Equiv.apply_symm_apply finProdFinEquiv idx))
+    batchMap N (fun (x : Vec n) i => g (x i)) v = fun idx => g (v idx) :=
+  congrArg (fun w idx => g (w idx)) (Mat.flatten_unflatten v)
 
 /-- The descriptor form of swish denotes exactly what the descriptor-less `swishF` denoted at the
     same index — the batched graph computes the same function, only the emit width now travels
@@ -5394,9 +5338,7 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
 
 /-- The full entry — `[c,h,w]` plus the row-view flag — recorded for SSA name `nm`. -/
 def lookupEntry (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat × Bool) :=
-  match tbl.find? (fun e => e.1 == nm) with
-  | some (_, c, h, w, rv) => some (c, h, w, rv)
-  | none                  => none
+  tbl.lookup nm
 
 /-- The `[c,h,w]` `nm` carries **as a map**. A row view answers `none`: it holds the same elements
     in a different order, so unflattening it to `[B,c,h,w]` would not be an inverse pair. -/
