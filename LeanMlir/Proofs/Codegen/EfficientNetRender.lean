@@ -147,9 +147,6 @@ private def convW1 (adam : Bool) (B ic oc hh ww : Nat) (xName wName lrStr dy : S
     -- ⚠ bf16 reaches ONLY the `adam` branch's un-fused `*GradB`. The `else` branch is the
     -- fused plain-SGD tail (`*SgdB`), which no bf16 artifact renders — it stays f32.
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String) := do
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zb : Vec oc := fun _ => 0
   let zx : Vec (B * (ic * hh * ww)) := fun _ => 0
   let zk : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
@@ -167,9 +164,6 @@ private def dwW (adam : Bool) (B c hh ww kd : Nat) (xName wName lrStr dy : Strin
     -- ⚠ bf16 reaches ONLY the `adam` branch's un-fused `*GradB`. The `else` branch is the
     -- fused plain-SGD tail (`*SgdB`), which no bf16 artifact renders — it stays f32.
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String) := do
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zb : Vec c := fun _ => 0
   let zx : Vec (B * (c * hh * ww)) := fun _ => 0
   let zk : DepthwiseKernel c kd kd := fun _ _ _ => 0
@@ -187,9 +181,6 @@ private def dwWS (adam : Bool) (B c hh ww kd : Nat) (xName wName lrStr dy : Stri
     -- ⚠ bf16 reaches ONLY the `adam` branch's un-fused `*GradB`. The `else` branch is the
     -- fused plain-SGD tail (`*SgdB`), which no bf16 artifact renders — it stays f32.
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String) := do
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zb : Vec c := fun _ => 0
   let zx : Vec (B * (c * (2*hh) * (2*ww))) := fun _ => 0
   let zk : DepthwiseKernel c kd kd := fun _ _ _ => 0
@@ -380,9 +371,6 @@ private def bnSiteB (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName stat
 private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
   let zMid : Vec (B * (mid * hh * ww)) := fun _ => 0
   let _zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
@@ -432,9 +420,6 @@ private def eFwdNoSkip (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xNa
 private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zIn  : Vec (B * (ic * (2*hh) * (2*ww))) := fun _ => 0
   let zMidH : Vec (B * (mid * (2*hh) * (2*ww))) := fun _ => 0
   let zMid : Vec (B * (mid * hh * ww)) := fun _ => 0
@@ -465,9 +450,6 @@ private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xN
 private def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
   let _zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
@@ -496,9 +478,6 @@ private def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p 
     (f : EFwd) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zMidF : Vec (B * (mid * hh * ww)) := fun _ => 0
   let zMidB : Vec (B * (mid * (hh * ww))) := fun _ => 0
   let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
@@ -570,9 +549,6 @@ private def eBackStrided (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr
     (f : EFwd) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zMidHF : Vec (B * (mid * (2*hh) * (2*ww))) := fun _ => 0
   let zMidHB : Vec (B * (mid * ((2*hh) * (2*ww)))) := fun _ => 0
   let zMidF : Vec (B * (mid * hh * ww)) := fun _ => 0
@@ -622,9 +598,6 @@ private def eBackNoExp (adam : Bool) (B ic oc hh kd r : Nat) (epsStr lrStr p xNa
     (f : EFwd) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zInF  : Vec (B * (ic * hh * ww)) := fun _ => 0
   let zInB  : Vec (B * (ic * (hh * ww))) := fun _ => 0
   let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
@@ -761,9 +734,6 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     (sd : Bool := false) (cd : Bool := false)
     -- ▶ TRAILING and defaulted, so every committed forward re-renders byte-identical.
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS ENetFwd := do
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   -- `dp i` is `some i` exactly when block `i` is in `enetDropIdxs` AND stochastic depth is on —
   -- so the one list drives the signature and every call site, and the ramp index carried is the
   -- BLOCK index (see `enetDropIdxs`' note on why the site ordinal would be wrong).
@@ -917,8 +887,6 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) (convBias : Bool := false)
     (sd : Bool := false) (cd : Bool := false) (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × List String × String × List (String × String × Nat × Nat)) := do
-    -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are — see `eFwdBody`.
-    let zrnd : ℝ → ℝ := fun r => r
     let F : ENetFwd ← enetFwdChain B nClasses .train epsStr convBias sd cd bf16
     -- The SAME `dp` the forward used, from the SAME `enetDropIdxs`. The backward walks the
     -- blocks in REVERSE, so a carried counter would have to be reversed too — the easy place

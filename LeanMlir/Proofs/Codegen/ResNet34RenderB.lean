@@ -337,10 +337,6 @@ private def idFwdB (B c hh : Nat) (epsStr p xName : String)
   let zk  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
   let zin : Vec (B*(c*hh*ww)) := fun _ => 0
   let zbn : Vec (B*(c*(hh*ww))) := fun _ => 0
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk`/`zc`/`zin` are: the render produces
-  -- TEXT, and `skel` erases every ℝ payload before a token is emitted. The rounding-bearing
-  -- `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let (cC1, nC1) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk zc else .conv (h := hh) (w := ww) s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk zc) (.operand xName zin))
   let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zc zc (.operand nC1 zin))
   let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := c*hh*ww)) (.operand nN1 zin))
@@ -365,10 +361,6 @@ private def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
   let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0
   let zinS : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
   let zout : Vec (B*(c*hh*ww)) := fun _ => 0
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk`/`zc`/`zin` are: the render produces
-  -- TEXT, and `skel` erases every ℝ payload before a token is emitted. The rounding-bearing
-  -- `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let (cC1, nC1) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := hh) (w := ww) zrnd s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk1 zc else .convStrided (h := hh) (w := ww) s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk1 zc) (.operand xName zinS))
   let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zc zc (.operand nC1 zout))
   let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := c*hh*ww)) (.operand nN1 zout))
@@ -394,10 +386,6 @@ private def idBackGradB (B c hh : Nat) (epsStr p : String) (f : BFwdB) (dyName :
   let zk  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
   let zin : Vec (B*(c*hh*ww)) := fun _ => 0
   let zbn : Vec (B*(c*(hh*ww))) := fun _ => 0
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk`/`zc`/`zin` are: the render produces
-  -- TEXT, and `skel` erases every ℝ payload before a token is emitted. The rounding-bearing
-  -- `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let (cDa,  nDa)  ← pretty B (.selectPosB f.a zin (.operand dyName zin))
   let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zc zbn (.operand nDa zbn))
   let (cDc2, nDc2) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := c) (oc := c) (h := hh) (w := ww) zrnd s!"%{p}W2" zk zc (.operand nDn2 zin) else .convBackBatched (N := B) (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W2" zk zc (.operand nDn2 zin))
@@ -436,10 +424,6 @@ private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dy
   let zinS : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
   let zout : Vec (B*(c*hh*ww)) := fun _ => 0
   let zbn  : Vec (B*(c*(hh*ww))) := fun _ => 0
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk`/`zc`/`zin` are: the render produces
-  -- TEXT, and `skel` erases every ℝ payload before a token is emitted. The rounding-bearing
-  -- `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let (cDa,  nDa)  ← pretty B (.selectPosB f.a zout (.operand dyName zout))
   let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zc zbn (.operand nDa zbn))
   let (cDc2, nDc2) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := c) (oc := c) (h := hh) (w := ww) zrnd s!"%{p}W2" zk2 zc (.operand nDn2 zout) else .convBackBatched (N := B) (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W2" zk2 zc (.operand nDn2 zout))
@@ -1345,8 +1329,6 @@ def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
   let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
   let z64   : Vec 64 := fun _ => 0
   let z112  : Vec (B*(64*112*112)) := fun _ => 0
-  -- Placeholder rounding, as `zSk`/`z64` are placeholders — see `idFwdB`.
-  let zrnd  : ℝ → ℝ := fun r => r
   let (cStc, nStc) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sbi" 64) zSk z64 else .convStrided (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64) (.operand "%x" zx))
   let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
@@ -1457,8 +1439,6 @@ here first"
     let z112  : Vec (B*(64*112*112)) := fun _ => 0
     let z112b : Vec (B*(64*(112*112))) := fun _ => 0
     let z56   : Vec (B*(64*56*56)) := fun _ => 0
-    -- Placeholder rounding, as `zSk`/`z64` are placeholders — see `idFwdB`.
-    let zrnd  : ℝ → ℝ := fun r => r
     let nStc := F.stc; let nStn := F.stn; let nStr := F.str
     let f1  := F.b[0]!;  let f2  := F.b[1]!;  let f3  := F.b[2]!;  let f4  := F.b[3]!
     let f5  := F.b[4]!;  let f6  := F.b[5]!;  let f7  := F.b[6]!;  let f8  := F.b[7]!

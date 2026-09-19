@@ -164,10 +164,6 @@ def dpAt (sd : Bool) (i : Nat) : Option Nat := if sd then some i else none
 private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
     (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
-  -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
   let zk1  : Kernel4 mid oc 1 1 := fun _ _ _ _ => 0
@@ -201,10 +197,6 @@ private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
 private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
-  -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
   let zk1  : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
@@ -246,10 +238,6 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
 private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
-  -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
   let zk1  : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
@@ -298,10 +286,6 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
     (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
-  -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zm    : Vec mid := fun _ => 0
   let zo    : Vec oc := fun _ => 0
   let zk1   : Kernel4 mid oc 1 1 := fun _ _ _ _ => 0
@@ -361,10 +345,6 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
     (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
-  -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zm    : Vec mid := fun _ => 0
   let zo    : Vec oc := fun _ => 0
   let zk1   : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
@@ -433,10 +413,6 @@ private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f :
     (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
-  -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zm    : Vec mid := fun _ => 0
   let zo    : Vec oc := fun _ => 0
   let zk1   : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
@@ -558,10 +534,6 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
   let _z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
   let _z56   : Vec (B*(64*q2*q2)) := fun _ => 0
-  -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
-  -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let (cStc, nStc) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := q1) (w := q1) zrnd "%sW" (zb 64) zSk z64 else .convStrided (h := q1) (w := q1) "%sW" (zb 64) zSk z64) (.operand "%x" zx))
   let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := q1) (w := q1) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
@@ -759,8 +731,6 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let _zNC   : Vec nClasses := fun _ => 0
     let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp  : Vec (B*nClasses) := fun _ => 0
-    -- Placeholder rounding, as the `z*` zeros are placeholders — see `bnkIdFwdB`.
-    let zrnd : ℝ → ℝ := fun r => r
     let nStc := fw.stc; let nStn := fw.stn; let nStr := fw.str; let _nStp := fw.stp
     let nGap := fw.gap; let nLog := fw.logits
     let f1 := fw.b[0]!;  let f2 := fw.b[1]!;  let f3 := fw.b[2]!;  let f4 := fw.b[3]!

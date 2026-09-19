@@ -96,10 +96,6 @@ structure MBBackB where
 private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
-  -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
@@ -135,10 +131,6 @@ private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (conv
 private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
-  -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
@@ -172,10 +164,6 @@ private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBia
 private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
-  -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
@@ -209,10 +197,6 @@ private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convB
 private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
-  -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zkp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
@@ -244,10 +228,6 @@ private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBBackB := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
-  -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
@@ -330,10 +310,6 @@ private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xN
     (f : MBFwdB) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBBackB := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
-  -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
@@ -415,10 +391,6 @@ private def irBackNoExpGradB (B ic oc hh : Nat) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBBackB := do
   let ww := hh
-  -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
-  -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
-  -- rounding-bearing `den` lives in the tie theorems, not here.
-  let zrnd : ℝ → ℝ := fun r => r
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zkp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
@@ -666,8 +638,6 @@ set_option maxRecDepth 4000000 in
     the call SEQUENCE, and the sequence is unchanged. -/
 def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MNV2FwdRecB := do
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are — see `irFwdStridedB`.
-  let zrnd : ℝ → ℝ := fun r => r
   -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → batch BN → relu6 (NO maxpool) ═══
   let zx    : Vec (B*(3*224*224)) := fun _ => 0
   let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
@@ -783,8 +753,6 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let alphaStr    := fmt6 0.1                 -- α itself ("0.100000")
   let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are — see `irFwdStridedB`.
-    let zrnd : ℝ → ℝ := fun r => r
     -- ═══ forward — the SAME traversal `@mobilenetv2_fwd` renders, so the forward this
     --     differentiates and the forward the driver scores with are one graph by construction
     --     (leg 2 of `planning/archive/renderer_convergence.md`) ═══

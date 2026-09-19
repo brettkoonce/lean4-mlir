@@ -794,9 +794,6 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
     (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
     (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses) (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) (bf16 : Bool := false) : String :=
-  -- Identity, exactly as the ImageNet `*RenderB` renderers pass it (ResNet34RenderB l.81):
-  -- the PROOF carries an arbitrary `rnd`; the bf16 claim lives in the EMIT shape.
-  let zrnd : ℝ → ℝ := fun r => r
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
   let s2h := 2*s3h; let s2w := 2*s3w
@@ -1006,7 +1003,6 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))))
     -- Trailing + defaulted so every existing positional call site is unchanged.
     (replicas : Nat := 1) (opt : CifarOpt := .adamw) (bf16 : Bool := false) : String :=
-  let zrnd : ℝ → ℝ := fun r => r   -- identity, as the ImageNet renderers pass it
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
   let s2h := 2*s3h; let s2w := 2*s3w
@@ -1246,7 +1242,6 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (x : Vec (B*(ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))))
     -- Trailing + defaulted so every existing positional call site is unchanged.
     (replicas : Nat := 1) (opt : CifarOpt := .adamw) (bf16 : Bool := false) (fp8 : Bool := false) : String :=
-  let zrnd : ℝ → ℝ := fun r => r   -- identity, as the ImageNet renderers pass it
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
   let s2h := 2*s3h; let s2w := 2*s3w
@@ -1902,7 +1897,6 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (x : Vec (B*(ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))))
     -- Trailing + defaulted so every existing positional call site is unchanged.
     (replicas : Nat := 1) (opt : CifarOpt := .adamw) (bf16 : Bool := false) : String :=
-  let zrnd : ℝ → ℝ := fun r => r   -- identity, as the ImageNet renderers pass it
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
   let s2h := 2*s3h; let s2w := 2*s3w

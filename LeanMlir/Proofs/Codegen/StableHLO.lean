@@ -9214,6 +9214,15 @@ def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM EmitS (String × String) :=
   | [r] => pure (code, r)
   | _   => pure (code, "%MALFORMED")
 
+/-- **The rounding a render hands the bf16/fp8 ops: the identity.** A placeholder, exactly as a
+    renderer's zero kernels are: a render produces TEXT, `skel` erases every ℝ payload before a
+    token is emitted, and the emitted text is decided by the tag. The rounding-bearing `den` lives
+    in the tie theorems, where `rnd` is arbitrary and the accuracy statement
+    ([`Proofs/Float/*MixedFloatBridge.lean`](https://github.com/brettkoonce/lean4-mlir/tree/main/LeanMlir/Proofs/Float))
+    instantiates it at bf16 round-to-nearest with `|rnd x − x| ≤ 2⁻⁸|x|`. A render that baked a
+    concrete rounding here would be claiming the emitter knows about it, which it does not. -/
+abbrev zrnd : ℝ → ℝ := fun r => r
+
 /-- **The cross-replica gradient mean as `pretty` of the `allReduceMeanF` node** — the drop-in
     for `ViTRender.emitGradAllReduce` in every batched render (4d piece 2, 2026-09-07), measured
     byte-identical on every committed `*dp*` artifact. At `replicas ≤ 1` it emits nothing and

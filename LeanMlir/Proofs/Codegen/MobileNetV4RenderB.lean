@@ -253,9 +253,6 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := c * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zc   : Vec c := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zqk  : DepthwiseKernel c preDWk preDWk := fun _ _ _ => 0
@@ -308,9 +305,6 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : Bn
     (epsStr p xName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := ic * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -358,9 +352,6 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := ic * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
@@ -409,9 +400,6 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     (epsStr p xName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := if expand == 1 then oc else ic * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zkf  : Kernel4 mid ic k k := fun _ _ _ _ => 0
@@ -499,9 +487,6 @@ deriving Inhabited
 def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     -- ▶ TRAILING and defaulted, so `@mnv4_fwd` / `@mnv4_fwd_eval` re-render byte-identical.
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu ═══
   -- ⭐ `.convStridedXla`, NOT `.convStrided` — and this net is the reason that token exists.
   -- The reference stem is `conv_bn(…, stride=(2,2), padding='SAME')`, and XLA `'SAME'` on a 3×3/s2
@@ -664,9 +649,6 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := c * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zc   : Vec c := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zqk  : DepthwiseKernel c preDWk preDWk := fun _ _ _ => 0
@@ -761,9 +743,6 @@ private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := ic * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -852,9 +831,6 @@ private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := ic * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
@@ -923,9 +899,6 @@ private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := if expand == 1 then oc else ic * expand
-  -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
-  -- and `skel` erases every ℝ payload before a token is emitted.
-  let zrnd : ℝ → ℝ := fun r => r
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zkf  : Kernel4 mid ic k k := fun _ _ _ _ => 0
@@ -1062,8 +1035,6 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let alphaStr := fmt6 0.1
   let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are — see `uibFwdSkipB`.
-    let zrnd : ℝ → ℝ := fun r => r
     -- ═══ forward: THE SHARED CHAIN, not a second copy ═══
     -- ⭐⭐ `@mnv4_fwd`, `@mnv4_fwd_eval` and this train step are all `mnv4FwdChainB`. The peers
     -- inline a second transcription of the block table into their train step and rely on eyes to
