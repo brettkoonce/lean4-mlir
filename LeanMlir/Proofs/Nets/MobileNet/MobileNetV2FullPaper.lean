@@ -25,8 +25,7 @@ Per-block (ic→oc, mid=t·ic, spatial, kind):
 
 Like ResNet-34's full net (`ResNet34RenderPC`), the deliverable HERE is forward + graph +
 faithfulness; the param-grad close is already covered: every
-`MobileNetV2Close`/`MobileNetV2ChainClose` bridge is dim-polymorphic and applies at the
-paper shapes verbatim.
+`MobileNetV2Close` bridge is dim-polymorphic and applies at the paper shapes verbatim.
 
 **The whole-net input-VJP at all seventeen now exists**, one file over:
 `Proofs.mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), folded over the

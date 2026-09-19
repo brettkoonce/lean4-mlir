@@ -9,7 +9,7 @@ backward chain alternates **BN-output cotangent** (relu-masked — what the γ/�
 **conv-output cotangent** (the BN input-VJP `bnPerChannelTensor3_grad_input` of it — what the conv
 W/b ops consume). The cross-pool₁ step is cifar's `cifarChainCotW2` move (conv₃-back then maxpool₁-back)
 with a BN-back in front; the within-stage steps are conv-back + relu-mask + BN-back (the
-`Cifar8Close` BN-chain recipe, here at the 2-stage cifar dims).
+`Cifar8BnStepTie` chain, here at the 2-stage cifar dims).
 
 **Zero new ops, zero new bridges.** The conv W/b ties reuse `CifarPoC.convW_den`/`convB_den`
 (generic in the cotangent); the BN γ/β ties reuse `CifarBnPoC.bnGamma_den`/`bnBeta_den` (generic in

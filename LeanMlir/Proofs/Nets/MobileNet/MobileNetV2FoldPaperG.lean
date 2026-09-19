@@ -1,12 +1,14 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FoldPaper
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
+import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
+import LeanMlir.Proofs.Nets.Small.Cifar8Fold
+import LeanMlir.Proofs.Nets.Small.CifarBnFold
 
 /-! # T3 §1 fold for MobileNetV2 at 17 blocks, UN-FUSED and BATCHED — the Adam artifact's op set
 
-`MobileNetV2FoldPaper.lean` makes every parameter output of the SGD-inline
-`mobilenetv2_train_step.mlir` `den`-faithful at the fused `θ − lr·g` ops of the PER-EXAMPLE render.
-This is its peer for every other train step this net ships — and, since 4c leg 2 retired that
-renderer and that artifact on 2026-09-06, for every train step it ships at all.
+This file makes every parameter gradient node of MobileNetV2's batched train steps `den`-faithful
+— every train step the net ships, since 4c leg 2 retired the per-example SGD-inline renderer and
+its artifact on 2026-09-06.
 
 ⛔ **MobileNetV2's two renders did not overlap the way the other four nets' do.** ConvNeXt, ViT and
 EfficientNet each render one traversal with two endings under an `adam : Bool`. MobileNetV2 did
@@ -33,21 +35,11 @@ needs. The four genuinely new ones are all XLA-`SAME`-or-depthwise BIAS shapes t
 emits: `convStridedXlaBiasGradB`, `depthwiseBiasGradB`, `depthwiseStridedXlaWeightGradB`,
 `depthwiseStridedXlaBiasGradB`.
 
-## ⛔ Two corrections to `MobileNetV2FoldPaper.lean`'s header, found here
-
-1. **The artifact it names does not exist.** That file says it writes
-   `verified_mlir/mobilenetv2_paper_train_step.mlir`. `mnv2TrainStepFaithfulVPaper`'s `funcName`
-   DEFAULT was `"mobilenetv2_paper_train_step"`, but its one call site passed
-   `"mobilenetv2_train_step"`, and that was the committed 17-block artifact
-   (`mobilenetv2_reduced_train_step.mlir` was the 6-block one). ⛔ Both, and the writer, are retired
-   as of 2026-09-06 — 4c leg 2.
-2. **The shipped parameter count is 158, not 210.** 210 is the census at `convBias := true`; both
-   that writer and `MobileNetV2RenderB` default to `convBias := false` — the conv, depthwise and
-   project biases are folded into the BatchNorm that follows each of them — and
-   `mobilenetv2_train_step.mlir` returned exactly 158 updated tensors, as does the parameter
-   half of `mobilenetv2_adam_train_step.mlir`. 158 = stem 3 + b1 6 + 16 blocks × 9 + head 3 +
-   dense 2. Neither correction touches a theorem: every fold in that file is `∀`-quantified over
-   op instances and true at both flag settings.
+⚠ **The shipped parameter count is 158, not 210.** 210 is the census at `convBias := true`;
+`MobileNetV2RenderB` defaults to `convBias := false` — the conv, depthwise and project biases are
+folded into the BatchNorm that follows each of them — and the parameter half of
+`mobilenetv2_adam_train_step.mlir` returns exactly 158 updated tensors: stem 3 + b1 6 + 16 blocks
+× 9 + head 3 + dense 2.
 
 ## The op table of `mobilenetv2_adam_train_step.mlir`
 

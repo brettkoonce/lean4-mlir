@@ -4485,7 +4485,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   -- kernel tail checks (SmoothingCP.binomTail_le_of_kernel_check) consume.
   let mut dumpRows : Array String := #["sigma,img_idx,label,pred,abstain,radius,count,n"]
   -- Lipschitz-hypothesis probe (SMOOTH_LIP_PROBE): measures |Φ⁻¹(p_ĉ(x+δ))−Φ⁻¹(p_ĉ(x))| vs the
-  -- proven bound ‖δ‖/σ — the empirical grounding of `smoothing_certified_radius`'s (1/σ)-Lipschitz hyp.
+  -- proven bound ‖δ‖/σ — the empirical grounding of `smoothing_certified_radius_probit`'s (1/σ)-Lipschitz hyp.
   let lipProbe := (← IO.getEnv "SMOOTH_LIP_PROBE").isSome
   let mut lipRows : Array String := #["sigma,img_idx,delta,dg,bound,ratio"]
   let mut lipMax := 0.0
@@ -4568,7 +4568,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
         IO.println s!"    certified {t+1}/{nCert} ..."; (← IO.getStdout).flush
     -- (4) Lipschitz-hypothesis probe: shift x by r·(unit vector) and compare the probit-score change
     --     |Φ⁻¹(p_ĉ(x+δ))−Φ⁻¹(p_ĉ(x))| to the PROVEN bound ‖δ‖/σ (Salman et al. 2019 Lemma 2 — the
-    --     hypothesis `smoothing_certified_radius` assumes). ratio = Δg·σ/‖δ‖ ≤ 1 ⟺ (1/σ)-Lipschitz holds.
+    --     hypothesis `smoothing_certified_radius_probit` assumes). ratio = Δg·σ/‖δ‖ ≤ 1 ⟺ (1/σ)-Lipschitz holds.
     if lipProbe then
       let rGrid : Array Float := #[0.1, 0.2, 0.3, 0.5, 0.75, 1.0]
       let mProbe := min 40 nEval

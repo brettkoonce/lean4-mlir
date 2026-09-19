@@ -3,7 +3,7 @@
 
 Reads runs/smooth_<slug>_lipschitz.csv (sigma,img_idx,delta,dg,bound,ratio). Plots the normalized
 ratio  Δg·σ/‖δ‖ = |Φ⁻¹(p_ĉ(x+δ)) − Φ⁻¹(p_ĉ(x))| / (‖δ‖/σ)  against the input shift ‖δ‖. The
-(1/σ)-Lipschitz hypothesis of smoothing_certified_radius is exactly ratio ≤ 1 — a single horizontal
+(1/σ)-Lipschitz hypothesis of smoothing_certified_radius_probit is exactly ratio ≤ 1 — a single horizontal
 line, σ-independent. Every measured point below y=1 grounds the theorem's assumption on the real net.
 """
 import csv, sys, os

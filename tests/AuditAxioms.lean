@@ -34,21 +34,16 @@ import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Nets.Small.CnnTrainStep
 import LeanMlir.Proofs.Nets.Small.CifarBnClose
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
-import LeanMlir.Proofs.Nets.Small.Cifar8Close
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ChainClose
 import LeanMlir.Proofs.Foundation.ConvLossFold
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetClose
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
-import LeanMlir.Proofs.Nets.ResNet.ResNet34Close
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FoldPaper
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose
@@ -486,13 +481,6 @@ open Proofs
 -- The XLA-SAME per-example stem dens (2026-09-05)
 #print axioms Mnv2PoC.convStridedXlaW_den
 #print axioms Mnv2PoC.convStridedXlaB_den
--- ch7-MobileNetV2 FULL 17-block paper §1 fold (den)
-#print axioms Mnv2PaperPoC.mnv2StemParamsCertified
-#print axioms Mnv2PaperPoC.mnv2NoExpParamsCertified
-#print axioms Mnv2PaperPoC.mnv2Stride1ParamsCertified
-#print axioms Mnv2PaperPoC.mnv2Stride2ParamsCertified
-#print axioms Mnv2PaperPoC.mnv2HeadParamsCertified
-#print axioms Mnv2PaperPoC.mnv2DenseParamsCertified
 -- ch8-EfficientNet-B0 §1 fold (den)
 #print axioms EnetPoC.convWB_den
 #print axioms EnetPoC.convStridedWB_den
@@ -689,18 +677,6 @@ open Proofs
 #print axioms cnn_render_convb2_chain_certified
 #print axioms cnn_render_convW1_chain_certified
 #print axioms cnn_render_convb1_chain_certified
--- DEEPER 8-conv CIFAR (cifar8)
-#print axioms cifar8DenseHeadCot_denote
-#print axioms cifar8_render_denseWb_chain_certified
-#print axioms cifar8_render_densebb_chain_certified
-#print axioms cifar8_render_denseW9_chain_certified
-#print axioms cifar8_render_denseb9_chain_certified
-#print axioms cifar8_render_convW8_chain_certified
-#print axioms cifar8_render_convb8_chain_certified
-#print axioms cifar8_render_bn8gamma_chain_certified
-#print axioms cifar8_render_bn8beta_chain_certified
-#print axioms cifar8_render_convW7_chain_certified
-#print axioms cifar8_render_convb7_chain_certified
 -- MobileNetV2 CLOSE (planning/archive/mobilenetv2_close.md Item C)
 #print axioms mnv2_depthwise_weight_grad_bridge
 #print axioms mnv2_depthwise_bias_grad_bridge
@@ -717,35 +693,11 @@ open Proofs
 #print axioms mnv2_render_depthwiseb_strided_xla_certified
 -- MobileNetV2 RENDER (planning/archive/mobilenetv2_close.md Item A)
 #print axioms StableHLO.mobilenetv2FwdGraphFullPC_faithful
--- MobileNetV2 cotangent-chain CLOSE (Item D)
-#print axioms invres_render_projW_chain_certified
-#print axioms invres_render_projb_chain_certified
-#print axioms invres_render_dwW_s1_chain_certified
-#print axioms invres_render_dwb_s1_chain_certified
-#print axioms invres_render_dwW_s2_chain_certified
-#print axioms invres_render_dwb_s2_chain_certified
-#print axioms invres_render_expW_s1_chain_certified
-#print axioms invres_render_expW_s2_chain_certified
-#print axioms mnv2_stem_render_convW_chain_certified
 -- THE COTANGENT PASS / = ∂loss/∂θ FOLD
 #print axioms conv_total_loss_grad_fold
 #print axioms conv_bias_total_loss_grad_fold
 #print axioms depthwise_total_loss_grad_fold
 #print axioms depthwise_bias_total_loss_grad_fold
--- EfficientNet-B0 CLOSE (Item C)
-#print axioms enet_render_dw5W_certified
-#print axioms enet_render_dw5b_certified
-#print axioms enet_render_dw5W_strided_certified
-#print axioms enet_render_dw5b_strided_certified
-#print axioms enet_render_bngamma_certified
-#print axioms enet_render_bnbeta_certified
--- ResNet-34 CLOSE (Item C)
-#print axioms r34_render_stem_convW_certified
-#print axioms r34_render_stem_convb_certified
-#print axioms r34_render_blockConvW_certified
-#print axioms r34_render_blockConvb_certified
-#print axioms r34_render_downConvW_certified
-#print axioms r34_render_downConvb_certified
 -- ResNet-34 RENDER (Item A)
 #print axioms StableHLO.idBlockGraphPC_faithful
 #print axioms StableHLO.downBlockGraphPC_faithful
@@ -805,18 +757,6 @@ open Proofs
 #print axioms Proofs.cnx_render_chlnbeta_certified
 #print axioms Proofs.CnxPoC.chanLnGammaSgd_den
 #print axioms Proofs.CnxPoC.chanLnBetaSgd_den
--- ConvNeXt cotangent-chain CLOSE (planning/archive/convnext_close.md Item D)
-#print axioms cnx_render_lsgamma_chain_certified
-#print axioms cnx_render_projW_chain_certified
-#print axioms cnx_render_projb_chain_certified
-#print axioms cnx_render_expW_chain_certified
-#print axioms cnx_render_expb_chain_certified
-#print axioms cnx_render_lngamma_chain_certified
-#print axioms cnx_render_lnbeta_chain_certified
-#print axioms cnx_render_dw7W_chain_certified
-#print axioms cnx_render_dw7b_chain_certified
-#print axioms cnx_stem_render_convW_chain_certified
-#print axioms cnx_stem_render_convb_chain_certified
 -- ch9-ConvNeXt-T FULL [3,3,9,3] §1a TIE
 #print axioms Proofs.CnxTiePoC.cnx_block_ch_tied
 #print axioms Proofs.CnxTiePoC.cnx_down_ch_tied
@@ -857,24 +797,6 @@ open Proofs
 #print axioms vitCotDQ_eq_sdpa_back_Q
 #print axioms vitCotDK_eq_sdpa_back_K
 #print axioms vitCotDV_eq_sdpa_back_V
-#print axioms vit_render_Wfc2_chain_certified
-#print axioms vit_render_bfc2_chain_certified
-#print axioms vit_render_Wfc1_chain_certified
-#print axioms vit_render_bfc1_chain_certified
-#print axioms vit_render_ln2gamma_chain_certified
-#print axioms vit_render_ln2beta_chain_certified
-#print axioms vit_render_Wo_chain_certified
-#print axioms vit_render_bo_chain_certified
-#print axioms vit_render_Wq_chain_certified
-#print axioms vit_render_Wk_chain_certified
-#print axioms vit_render_Wv_chain_certified
-#print axioms vit_render_ln1gamma_chain_certified
-#print axioms vit_render_ln1beta_chain_certified
-#print axioms vit_render_lnFgamma_chain_certified
-#print axioms vit_render_pos_chain_certified
-#print axioms vit_render_cls_chain_certified
-#print axioms vit_render_patchW_chain_certified
-#print axioms vit_render_patchb_chain_certified
 -- ViT SCALING PASS
 #print axioms layerNormVec_has_vjp
 #print axioms transformerBlockV_has_vjp_mat
@@ -887,13 +809,6 @@ open Proofs
 #print axioms vit_veclnBeta_grad_bridge
 #print axioms vit_render_veclngamma_certified
 #print axioms vit_render_veclnbeta_certified
--- Vector-LN render upgrade + chain pins
-#print axioms vit_render_vecln1gamma_chain_certified
-#print axioms vit_render_vecln1beta_chain_certified
-#print axioms vit_render_vecln2gamma_chain_certified
-#print axioms vit_render_vecln2beta_chain_certified
-#print axioms vit_render_veclnFgamma_chain_certified
-#print axioms vit_render_veclnFbeta_chain_certified
 
 -- ViT scaling pass: multi-head (ViTMultiHead.lean)
 #print axioms sum_headPadMat_apply
@@ -1761,7 +1676,6 @@ open Proofs
 #print axioms Proofs.clm_lipschitzL2
 
 -- Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019)
-#print axioms Proofs.smoothing_certified_radius
 #print axioms Proofs.smoothed_margin_certified_radius
 
 -- The smoothing radius at the REAL Gaussian quantile (SmoothingGaussian.lean, G1)
@@ -1774,7 +1688,6 @@ open Proofs
 
 -- G2, the 1-D Neyman–Pearson core (smoothing_gaussian_lemma.md)
 #print axioms Proofs.stdNormalCDF_quantile
-#print axioms Proofs.gaussian_np_shift
 
 -- G3, dimension reduction (smoothing_gaussian_lemma.md)
 #print axioms Proofs.integral_gaussianReal_shift_eq
@@ -2014,7 +1927,6 @@ open Proofs
 #print axioms Proofs.IBP.CertifiedAtLinf3.mono
 #print axioms Proofs.IBP.CertifiedAtLinfV.mono
 
-
 -- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean, post_audit_roadmap §2)
 #print axioms Proofs.rndP_err
 #print axioms Proofs.binary32_e4m3_argmax_preserved
@@ -2157,7 +2069,6 @@ open Proofs
 -- The bf16-mixed DEPTHWISE (DepthwiseMixedFloatBridge.lean, 2026-08-24)
 #print axioms Proofs.depthwiseConv2d_eq_dw_dot
 #print axioms Proofs.FloatModel.depthwise_close_mixed
-
 
 -- RESNET-34 AT TRUE BATCH BN — T1-forward and T2 (ResNet34FullB.lean, 2026-09-06)
 #print axioms Proofs.resnet34ForwardB_full
@@ -2422,12 +2333,6 @@ open Proofs
 #print axioms Proofs.StableHLO.resnet50FwdGraphB_full_faithful
 
 -- §3.5(c): RESNET-50's T3 -- THE FOLD AND THE TIE (ResNet50{Faithful,Tie}PoCB.lean, 2026-09-06)
-#print axioms Proofs.ResNet50PoCB.r50BnGradsCertified
-#print axioms Proofs.ResNet50PoCB.r50StemGradsCertified
-#print axioms Proofs.ResNet50PoCB.r50IdGradsCertified
-#print axioms Proofs.ResNet50PoCB.r50ProjGradsCertified
-#print axioms Proofs.ResNet50PoCB.r50DownGradsCertified
-#print axioms Proofs.ResNet50PoCB.r50HeadGradsCertified
 #print axioms Proofs.ResNet50TieB.r50IdCotIn_eq_vjp
 #print axioms Proofs.ResNet50TieB.r50ProjCotIn_eq_vjp
 #print axioms Proofs.ResNet50TieB.r50DownCotIn_eq_vjp

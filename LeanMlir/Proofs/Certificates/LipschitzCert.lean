@@ -19,11 +19,12 @@ per-layer **product** `L = ∏ᵢ ‖Wᵢ‖₂` is a sound (if loose) global co
 the demos make visual (linear tight → MLP/CNN vacuous).
 
 The second half of the file formalizes the *other* certificate — **randomized smoothing**
-(Cohen–Rosenfeld–Kolter 2019, the `*-smooth` demos): `smoothing_certified_radius` gives the
+(Cohen–Rosenfeld–Kolter 2019, the `*-smooth` demos): `smoothing_certified_radius_probit` gives the
 `σ·Φ⁻¹(p_A)` radius the driver reports, as the same Lipschitz-margin argument on the per-class
 probit score fields `Φ⁻¹∘P[f(x+η)=·]` — depth-independent, non-vacuous where the product collapses.
-`smoothing_certified_radius_probit` is the `Ioo (0,1)` variant that the REAL Gaussian quantile can
-instantiate (`SmoothingGaussian.lean` discharges its `hmono`/`hanti` at the true `Φ⁻¹`).
+It asks monotonicity and oddness of the probit only on `(0,1)`, which is what lets the REAL
+Gaussian quantile instantiate it (`SmoothingGaussian.lean` discharges its `hmono`/`hanti` at the
+true `Φ⁻¹`).
 
 All results are `propext / Classical.choice / Quot.sound`-clean ([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)). -/
 
@@ -197,50 +198,16 @@ theorem smoothed_margin_certified_radius {σ : ℝ} (hσ : 0 < σ)
     nlinarith [hδ]
   nlinarith [hi', hj', hmar, hfrac]
 
-/-- **Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019).** The form the
-    `*-smooth` drivers report: with `p c x = P[f(x+η)=c]`, an (abstract) probit `Φ⁻¹ = Phiinv`
-    that is increasing (`hmono`) and odd about ½ (`hanti : Φ⁻¹(1−p) = −Φ⁻¹(p)` — the real inverse
-    Gaussian CDF is both), per-class scores `Φ⁻¹∘(p c)` each `(1/σ)`-Lipschitz (`hg`), and the
-    runner-up bound `p_j(x) ≤ 1 − p_A(x)` (the non-top mass; `hrunner`), **every `‖δ‖₂ < σ·Φ⁻¹(p_A(x))`
-    keeps class `i` the strict argmax of the noise-probabilities** — i.e. `ĝ(x+δ) = i`. This is the
-    `σ·Φ⁻¹(p_A)` radius, derived from the core step via `p_B ≤ 1−p_A ⇒ Φ⁻¹(p_B) ≤ −Φ⁻¹(p_A)`,
-    so the margin `Φ⁻¹(p_A)−Φ⁻¹(p_B) ≥ 2·Φ⁻¹(p_A)`. Depth-independent: no per-layer norm, no product. -/
-theorem smoothing_certified_radius {σ : ℝ} (hσ : 0 < σ)
-    {Phiinv : ℝ → ℝ} (hmono : Monotone Phiinv)
-    (hanti : ∀ p : ℝ, Phiinv (1 - p) = -Phiinv p)
-    {p : Fin k → E → ℝ}
-    (hg : ∀ c, LipschitzL2 (1 / σ) (fun x => Phiinv (p c x)))
-    {x δ : E} {i : Fin k}
-    (hrunner : ∀ j, j ≠ i → p j x ≤ 1 - p i x)
-    (hδ : ‖δ‖ < σ * Phiinv (p i x)) :
-    ∀ j, j ≠ i → p j (x + δ) < p i (x + δ) := by
-  -- probit scores: margin ≥ 2·Φ⁻¹(p_A) at x, then the core step in g-space
-  have hscore : ∀ j, j ≠ i →
-      Phiinv (p j (x + δ)) < Phiinv (p i (x + δ)) := by
-    refine smoothed_margin_certified_radius (g := fun c x => Phiinv (p c x)) hσ hg
-      (m := 2 * Phiinv (p i x)) ?_ ?_
-    · intro j hj
-      have h1 : Phiinv (p j x) ≤ Phiinv (1 - p i x) := hmono (hrunner j hj)
-      have h2 : Phiinv (1 - p i x) = -Phiinv (p i x) := hanti _
-      show 2 * Phiinv (p i x) ≤ Phiinv (p i x) - Phiinv (p j x)
-      linarith [h1, h2]
-    · have e : σ * (2 * Phiinv (p i x)) / 2 = σ * Phiinv (p i x) := by ring
-      rw [e]; exact hδ
-  -- Φ⁻¹ increasing ⇒ the strict score order forces the strict probability order
-  intro j hj
-  by_contra h
-  exact absurd (hmono (not_lt.mp h)) (not_le.mpr (hscore j hj))
-
-/-- **The radius theorem at an honest probit (Ioo variant).** The TRUE quantile `Φ⁻¹` is
-    unbounded on `(0,1)`, so no total real-valued `Phiinv` can satisfy the global `hmono`
-    of `smoothing_certified_radius` while agreeing with it — the abstract theorem is fine,
-    but it can never be *instantiated* at the real inverse Gaussian CDF. This variant fixes
-    that: all class probabilities live in `(0,1)` (`hp` — Monte-Carlo/Clopper–Pearson
-    estimates are never exactly 0 or 1), and monotonicity/oddness are only required ON
-    `Ioo 0 1`, which the real `Φ⁻¹` satisfies (`SmoothingGaussian.lean` discharges both,
-    making the Cohen radius a theorem about the genuine Gaussian quantile with only the
-    Neyman–Pearson Lipschitz core `hg` left as a hypothesis). Same proof, with the Ioo
-    memberships threaded through. -/
+/-- **Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019), at an honest probit.**
+    The form the `*-smooth` drivers report: with `p c x = P[f(x+η)=c]` in `(0,1)` (`hp` —
+    Monte-Carlo/Clopper–Pearson estimates are never exactly 0 or 1), a probit `Φ⁻¹ = Phiinv`
+    that is increasing and odd about ½ ON `(0,1)` (`hmono`, `hanti`), per-class scores
+    `Φ⁻¹∘(p c)` each `(1/σ)`-Lipschitz (`hg`), and the runner-up bound `p_j(x) ≤ 1 − p_A(x)`,
+    every `‖δ‖₂ < σ·Φ⁻¹(p_A(x))` keeps class `i` the strict argmax of the noise-probabilities.
+    ⚠ The TRUE quantile is unbounded on `(0,1)`, so the monotonicity is only asked on `(0,1)`:
+    a GLOBAL `Monotone Phiinv` agreeing with it cannot exist. `SmoothingGaussian.lean`
+    discharges both conditions at the real `Φ⁻¹`, leaving only the Neyman–Pearson Lipschitz
+    core `hg` as a hypothesis. -/
 theorem smoothing_certified_radius_probit {σ : ℝ} (hσ : 0 < σ)
     {Phiinv : ℝ → ℝ} (hmono : MonotoneOn Phiinv (Set.Ioo 0 1))
     (hanti : ∀ q ∈ Set.Ioo (0:ℝ) 1, Phiinv (1 - q) = -Phiinv q)

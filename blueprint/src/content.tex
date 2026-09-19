@@ -4297,7 +4297,7 @@ and \emph{parametrically in the head width}, which is why the
 $512$-wide head here and the $64$-wide one behind \texttt{cifar8-bn-verified}
 need no separate proof between them. \texttt{cifarCnn8\_has\_vjp\_at\_correct}
 (\texttt{Proofs/Nets/Small/CifarCNN.lean}) is the statement that its
-backward is the derivative, and \texttt{Proofs/Nets/Small/Cifar8Close.lean} carries
+backward is the derivative, and \texttt{Proofs/Nets/Small/Cifar8BnStepTie.lean} carries
 that through to the emitted training step. Both nets run the same
 XLA/PJRT path on the GPU.
 

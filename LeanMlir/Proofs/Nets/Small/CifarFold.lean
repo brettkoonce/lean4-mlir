@@ -160,8 +160,7 @@ verbatim (every one is generic in its downstream cotangent):
 
 Only **W₂** needs a new constructor `cifarChainCotW2`: its cotangent crosses pool₁ at the *relu-free*
 conv₃-input boundary, so it is relu₂ mask on `maxpool₁-back(conv₃-back(W₃, cotW3))` — a conv input-VJP
-*then* a maxpool input-VJP, the step cnn (one pool) never had. (Same shape as `cifar8CotBn8`'s maxpool
-step, with a conv-back feeding the pool and no BN.) -/
+*then* a maxpool input-VJP, the step cnn (one pool) never had. -/
 
 /-- Cotangent the cifar backward chain delivers at **conv₂'s output** (`c1` ch @ `2(2h)`): the relu₂
     mask on `maxpool₁-back(conv₃-back(W₃, cotW3))`. `conv₃-back` (the `Back3.conv` input-VJP via

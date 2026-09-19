@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Nets.ResNet.ResNet34Close
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.Small.Cifar8Fold
 import LeanMlir.Proofs.Nets.Small.CifarBnFold
 
@@ -32,9 +32,8 @@ The genuinely-new shapes are the **strided convolutions** — the 7×7/s2 stem a
 downsample bodies + projection skips — which no prior fold exercised through an SGD op. They get
 the two new core ops `convStridedWeightSgd`/`convStridedBiasSgd` (StableHLO.lean) and the two
 `den = certified` lemmas below. Both are *one-line delegations* to the generic strided bridge
-`mnv2_render_stem_conv{W,b}_certified` (the same bridge ResNet34Close pins to r34's kernel sizes
-via `r34_render_{down,stem}Conv{W,b}_certified`), exactly mirroring `CifarPoC.convW_den`'s
-delegation to `cnn_render_convW_certified`.
+`mnv2_render_stem_conv{W,b}_certified`, exactly mirroring `CifarPoC.convW_den`'s delegation to
+`cnn_render_convW_certified`.
 
 * **`convStridedWeightSgd`** emits the strided weight-grad text (zero-upsample the cotangent —
   the decimate-backward — then the SAME transpose-trick stride-1 weight-grad conv on the 2h×2w

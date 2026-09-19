@@ -1,12 +1,12 @@
-import LeanMlir.Proofs.Nets.ResNet.ResNet50FoldB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
 import LeanMlir.Proofs.Foundation.BceLossCot
 
 /-! # ResNet-50's T3 §1a TIE — the un-fused, batched whole-net thread
 
-`ResNet50FoldB.lean` makes every parameter GRADIENT node of ResNet-50's batched train step
-`den`-faithful for an ARBITRARY cotangent. This removes the "arbitrary": each is pinned to the one
+`ResNet34FoldB.lean`'s op-kind folds (`ResNet34PoCB.*GradB_den`) make every parameter GRADIENT
+node of ResNet-50's batched train step `den`-faithful for an ARBITRARY cotangent. This removes the "arbitrary": each is pinned to the one
 the emitted backward chain delivers, so the whole train step is `den`-composed forward → loss →
 backward with no free activation and no symbolic cotangent. With T1 and T2 that is ResNet-50's T3,
 and it makes this the third net whose train-step tie is about the artifact its quoted accuracy
@@ -330,7 +330,7 @@ theorem r50DownCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid
 -- § The per-block-type tie bundles — every parameter node at its chain cotangent
 -- ════════════════════════════════════════════════════════════════
 
-/-! Each conjunct is `ResNet50FoldB`'s `∀ cot` fold instantiated at the cotangent the
+/-! Each conjunct is a `ResNet34PoCB` op-kind fold instantiated at the cotangent the
 render's chain delivers, so nothing here is a new proof: the bundles are the §1 fold with the
 freedom removed. `reassocB` bridges the conv/relu index `N·(c·h·w)` to the BatchNorm parameter
 ops' `N·(c·(h·w))`. ⛔ There are NO conv-bias conjuncts: `ResNet50RenderB` has no `convBias` flag,

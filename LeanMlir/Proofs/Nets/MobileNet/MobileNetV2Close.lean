@@ -194,7 +194,7 @@ theorem mnv2_render_depthwiseW_strided_certified {c h w kH kW : Nat}
 
 /-- **Strided depthwise weight output, certified — XLA-`SAME` phase.** MobileNetV2's four strided
     depthwises. ⚠ The symmetric lemma above stays: EfficientNet-B0's strided depthwises are
-    symmetric in render and reference alike (`EfficientNetClose.lean` reuses it). -/
+    symmetric in render and reference alike. -/
 theorem mnv2_render_depthwiseW_strided_xla_certified {c h w kH kW : Nat}
     (b : Vec c) (x : Vec (c * (2 * h) * (2 * w)))
     (v : Vec (c * kH * kW)) (dy : Vec (c * h * w)) (lr : ℝ) (i : Fin (c * kH * kW)) :

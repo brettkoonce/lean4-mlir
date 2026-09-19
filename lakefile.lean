@@ -69,8 +69,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ViTRender,
              `LeanMlir.Proofs.Codegen.ViTRenderB]
 
-/-- **`lake build Certs`** — the certificate corpus (202 roots reaching 236 modules,
-    ~153k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
+/-- **`lake build Certs`** — the certificate corpus (196 roots reaching 230 modules,
+    ~137k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
     Muon, the float model, …): the VJP proof suite's apex modules; their transitive
     imports cover every proof file (they subsume the `Proofs` roots above, so
     building `Certs` builds everything the axiom audit needs). Built +
@@ -103,13 +103,9 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Codegen.CnnRender,
              `LeanMlir.Proofs.Nets.Small.CifarBnClose,
              `LeanMlir.Proofs.Nets.Small.CnnChainClose,
-             `LeanMlir.Proofs.Nets.Small.Cifar8Close,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderPC,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ChainClose,
              `LeanMlir.Proofs.Foundation.ConvLossFold,
-             `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetClose,
-             `LeanMlir.Proofs.Nets.ResNet.ResNet34Close,
              `LeanMlir.Proofs.Codegen.ResNet34RenderPC,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose,
              `LeanMlir.Proofs.Nets.ViT.ViTFwdGraph,
@@ -168,7 +164,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FoldB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4WholeBackCertifiedTieB,
-             `LeanMlir.Proofs.Nets.ResNet.ResNet50FoldB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB,
              `LeanMlir.Proofs.Foundation.BackwardMaps,
              `LeanMlir.Proofs.Architectures.ChannelLNBack,
@@ -235,7 +230,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34Fold,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FoldPaper,
              `LeanMlir.Proofs.Codegen.EfficientNetRender,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie,

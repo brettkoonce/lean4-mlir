@@ -24,13 +24,10 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ChainClose
 import LeanMlir.Proofs.Foundation.ConvLossFold
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetClose
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
-import LeanMlir.Proofs.Nets.ResNet.ResNet34Close
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose

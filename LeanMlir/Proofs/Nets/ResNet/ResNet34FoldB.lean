@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Nets.Small.CnnTrainStep
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetClose
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 
 /-! # T3 §1 fold for ResNet-34 at TRUE BATCH-NORM — the UN-FUSED gradient ops
