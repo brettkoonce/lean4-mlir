@@ -133,10 +133,10 @@ jobs:
           git diff --exit-code -- \
               verified_mlir/linear_fwd.mlir verified_mlir/linear_train_step.mlir \
               verified_mlir/mlp_fwd.mlir verified_mlir/cnn_fwd.mlir \
-              verified_mlir/cifar_fwd.mlir verified_mlir/cifar_bn_fwd.mlir \
+              verified_mlir/cifar_fwd.mlir \
               verified_mlir/cifar8_fwd.mlir verified_mlir/cifar8_bn_fwd.mlir \
               verified_mlir/cifar8w_fwd.mlir \
-            || { echo "::error::committed verified_mlir/{linear,mlp,cnn,cifar,cifar_bn,cifar8,cifar8_bn,cifar8w}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean)"; exit 1; }
+            || { echo "::error::committed verified_mlir/{linear,mlp,cnn,cifar,cifar8,cifar8_bn,cifar8w}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean)"; exit 1; }
           # Per-net train-step renderers.
           lake env lean LeanMlir/Proofs/Codegen/MlpRender.lean
           git diff --exit-code -- verified_mlir/mlp_train_step.mlir \
@@ -149,7 +149,7 @@ jobs:
           # family at the wide head, which is what the book's §4.3 "Lever 3" trains on.
           git diff --exit-code -- \
               verified_mlir/cnn_train_step.mlir \
-              verified_mlir/cifar_train_step.mlir verified_mlir/cifar_bn_train_step.mlir \
+              verified_mlir/cifar_train_step.mlir \
               verified_mlir/cifar8_train_step.mlir verified_mlir/cifar8_bn_train_step.mlir \
               verified_mlir/cifar8_bf16_train_step.mlir \
               verified_mlir/cifar8_bf16_mom_train_step.mlir \
@@ -173,7 +173,7 @@ jobs:
               verified_mlir/cifar8b_fwd.mlir \
               verified_mlir/cifar8wb_fwd.mlir \
               verified_mlir/cifar8wb_bn_fwd.mlir \
-            || { echo "::error::committed verified_mlir/{cnn,cifar,cifar_bn,cifar8,cifar8_bn,cifar8_bf16*,cifar8b*,cifar8wb*}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/CnnRender.lean)"; exit 1; }
+            || { echo "::error::committed verified_mlir/{cnn,cifar,cifar8,cifar8_bn,cifar8_bf16*,cifar8b*,cifar8wb*}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/CnnRender.lean)"; exit 1; }
           # ⭐ Both ResNet-34 forwards used to come from `ResNet34Render.lean`, and were baselined
           # while the train step beside them was guarded — so `resnet34_fwd` could drift away from
           # the graph the Adam step differentiates, with CI green. 4c leg 1 (2026-09-06) retired

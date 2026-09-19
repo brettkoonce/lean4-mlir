@@ -4,7 +4,7 @@ import LeanMlir.Types
 
 /-! # Item B — structured MobileNetV2 train-step render (TRUE batch-norm, exact-parity)
 
-The MobileNetV2 peer of `cifarBnTrainStepStructured` (CnnRender.lean). The convs, depthwise, relu6,
+The MobileNetV2 peer of CnnRender.lean's structured train steps. The convs, depthwise, relu6,
 residual `addV`, GAP and dense forward + backward are proof-rendered through `pretty` over the tokens
 of `mobilenetv2FwdGraphFullPC` (Item A) — forward (`flatConvStridedF`/`flatConvF`/`depthwiseF`/
 `depthwiseStridedF`/`relu6F`/`addV`/`gapF`/`denseF`) and backward (`dotOut`, `selectMid`, `convBack`,

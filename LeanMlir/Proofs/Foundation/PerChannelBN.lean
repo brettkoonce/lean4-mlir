@@ -248,7 +248,7 @@ theorem bnEvalForward_differentiable (m : Nat) (ε γ β μ v : ℝ) :
   unfold bnEvalForward; fun_prop
 
 /-- The rendered **per-channel γ gradient**: `dγ_c = Σ_{s} dy_(c,s) · x̂_(c,s)` (the
-    `reduce` over batch/spatial of `dy·x̂` in `cifarBnTrainStepStructured`'s `bnParamGradPC`).
+    `reduce` over batch/spatial of `dy·x̂` that the `bnGammaSgd` op emits).
     `x̂` is recomputed from the saved BN input `v` (the conv output). Lives here (not
     `CifarBnClose`) so the `bnGammaSgd` `SHlo` op's `den` can reference it. -/
 noncomputable def bnPerChannel_grad_gamma (oc m : Nat) (ε : ℝ) (v dy : Vec (oc * m)) : Vec oc :=

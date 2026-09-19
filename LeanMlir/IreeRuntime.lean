@@ -360,28 +360,6 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end CifarLayout
 
-namespace CifarBnLayout
-/-- BN-CIFAR params: each conv layer carries per-channel γ/β `[c]` after its
-    bias, interleaved as `W|b|γ|β`. 22 params (4×{W,b,γ,β} + 3×{W,b}). Order MUST
-    match `@cifar_bn_train_step`'s signature. -/
-def paramShapes : Array (Array Nat) := #[
-  #[32, 3, 3, 3], #[32], #[32], #[32],   -- conv0: 3→32  + γ1,β1 [32]
-  #[32, 32, 3, 3], #[32], #[32], #[32],  -- conv1: 32→32 + γ2,β2 [32]
-  #[64, 32, 3, 3], #[64], #[64], #[64],  -- conv2: 32→64 + γ3,β3 [64]
-  #[64, 64, 3, 3], #[64], #[64], #[64],  -- conv3: 64→64 + γ4,β4 [64]
-  #[4096, 512], #[512],                  -- dense0
-  #[512, 512], #[512],                   -- dense1
-  #[512, 10], #[10]                      -- dense2
-]
-def nParams : Nat :=
-  (32*3*3*3 + 32 + 32 + 32) + (32*32*3*3 + 32 + 32 + 32) +
-  (64*32*3*3 + 64 + 64 + 64) + (64*64*3*3 + 64 + 64 + 64) +
-  4096*512 + 512 + 512*512 + 512 + 512*10 + 10
-def lossIdx : Nat := nParams
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
-end CifarBnLayout
-
 namespace ResNet34Layout
 /-- Chapter-5 **real ResNet-34** params (IMAGENETTE 3×224×224 — paper-native ImageNet
     resolution): **7×7 stride-2 stem** {W=`[64,3,7,7]`,γ,β} (224→112), then the

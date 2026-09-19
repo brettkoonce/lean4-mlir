@@ -23,9 +23,11 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-19, origin `0c2410d6` + the §0.6(c) row below)
+## Status (2026-09-19, origin `31f76507` + the cifar-BN row below)
 
-**Landed** — about 17.6k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 21.5k lines out. Every pinned theorem name and statement is unchanged except where a
+row says otherwise (the five CIFAR/CNN tie statements, the 81 retired declarations, and the retired
+cifar-BN net's seven):
 
 | commit | what |
 |---|---|
@@ -78,7 +80,8 @@ suspected, no drop-in located.
 | `0c2410d6` | **Root batch 3 — the §0.5 sweep** (−482, 17 files, proof bodies only): SgdDescentCnn −372 (the `sum_eq_single` collapses as one `simp [ite_and, …]`, 12 `sum_le_card_nsmul` bounds, constant triple sums by `simp`, `if_congr` mask freezes, three pinned double-sum `calc`s 15 → 4), FloatBridge −20, the Smoothing files −35, SgdDescentMlp −12, the Float bridges, EfficientNet, MnistCNN and the seal files |
 | `96ab0fdd` | **§0.6(c) MobileNetV2 batched blocks onto `CertLayer`** (−32, 5 files), the `9fa47e55` port for the one §0.6(c) tier it fits. New stage layers `cbrLayer`, `dwbrLayer`, `dwbrStridedLayer` (`MobileNetV2BackB0`) beside `projLayer`, which moves up from `ResNet34BackB0` (same full name); `mnv2BodyLayer` / `mnv2DownBodyLayer` compose them. `mnv2BodyB_has_vjp_at` / `mnv2DownBodyB_has_vjp_at` are their `.vjp` (25 → 2 lines each), the `_differentiableAt`s their `.diff`, the pinned `mnv2BodyBackBatchedGraph_faithful` / `mnv2DownBodyBackBatchedGraph_faithful` their `.faithful`, and the pinned `mnv2ResidBlockBackBatchedGraph_faithful` is `CertLayer.residual mnv2BodyLayer`'s (12 → 2); the hand-written graphs are `rfl`-equal to the composites'. `BackNetFolds`' pinned `mnv2ResidBlockLayer` is that `residual` (30 → 2; its `ok` is now `(A ∧ B) ∧ True`, read only by `#print axioms`). The `t = 1` block (`mnv2NoExpB_has_vjp_at` / `_differentiableAt`, `FullBVJP`; `mnv2NoExpBackGraph_faithful`, `StepTieB`) is `dwbrLayer ; projLayer`. Statements dominate these declarations, so the cut is small; the gain is that MobileNetV2's batched blocks are built the way R34/R50/MNv4's are |
 | `68184e64` | **End-list item 1 — the CIFAR/CNN tie statements folded** (−251, 7 files; five pinned statements change, by the user's decision). New clause Props, each a `_den` lemma's statement under `∀`: `ConvWSgdTied` / `ConvBSgdTied` (`CnnChainClose`, the common ancestor of the MNIST-CNN and CIFAR folds) and the pair `CifarBnPoC.BnSgdPairTied` + `bnSgdPairTied_holds` (`CifarBnFold`) — the per-example peers of `ConvWSgdTiedB` / `BnSgdPairTiedB`. The 52 conv W/b clauses and 12 BN γ/β pairs in `cnn_conv_tied_certified`, `cifar_conv_tied_certified`, `cifar8_convs_tied_certified`, `cifarBn_convbn_tied_certified` and `cifar8Bn_convbn_tied_certified` are one line each (4–5 → 1, 10 → 1); names unchanged, `AuditAxioms` their only consumer. Spliced from templates with every repeated field checked; each new statement proved `↔` its HEAD text in scratch by `simp only [the Props, and_assoc]` (a mutated cotangent fails the check). The BN pairs regroup `γ ∧ β ∧ rest` as `(γ ∧ β) ∧ rest`, so the `refine` arities drop (16 → 12, 32 → 24) |
-| *(this commit)* | **§0.7 retired — the restatements only `AuditAxioms` consumed** (−2,102, 30 files; 81 pinned declarations and their `#print axioms` lines, 1,773 → 1,692 verdicts). Six whole files deleted — `EfficientNetClose`, `MobileNetV2FoldPaper` (its artifact was retired 2026-09-06), `ResNet34Close`, `Cifar8Close`, `ResNet50FoldB` (ResNet-50's tie uses `ResNet34PoCB`'s op-kind folds), and `MobileNetV2ChainClose` (empty once its restatements and their helpers went); each importer takes the deleted file's own imports, and the six `Certs` roots go (every module stays reachable; the lakefile comment re-measured: 196 roots, 230 modules, ~137k lines). All 54 per-layer `*_chain_certified` went — `ViTChainClose` (18), `ViTVecLN` (6), `ConvNeXtChainClose` (11), and with the deleted files `Cifar8Close` (10) and `MobileNetV2ChainClose` (9) — as did `smoothing_certified_radius` (the `_probit` variant is the one that instantiates at the real quantile) and `gaussian_np_shift` (`pi_gaussian_np_shift` carries its own likelihood-ratio argument). Cotangent helpers orphaned by the cut went with them (`vitCotH`, `vitCotAtt`, `vitCotXin`, `cnxCotD`, `cnxCotXin`, `cnxStemCot`, the five `invresCot*` / `mnv2StemCot`, `cdf_gaussianReal_shift`), found by iterating an unused-and-unpinned check to a fixed point. Prose that cited the retired names or files rewritten, incl. `certs.yml`'s MobileNetV2 summary row (now `Mnv2PaperPoCG.depthwiseStridedXla{W,B}GradB_den`) and one blueprint `\texttt` path. The `CnnChainClose` four are NOT audit-only (`CnnFold`'s `cW2_den`… build on them) and stay |
+| `31f76507` | **§0.7 retired — the restatements only `AuditAxioms` consumed** (−2,102, 30 files; 81 pinned declarations and their `#print axioms` lines, 1,773 → 1,692 verdicts). Six whole files deleted — `EfficientNetClose`, `MobileNetV2FoldPaper` (its artifact was retired 2026-09-06), `ResNet34Close`, `Cifar8Close`, `ResNet50FoldB` (ResNet-50's tie uses `ResNet34PoCB`'s op-kind folds), and `MobileNetV2ChainClose` (empty once its restatements and their helpers went); each importer takes the deleted file's own imports, and the six `Certs` roots go (every module stays reachable; the lakefile comment re-measured: 196 roots, 230 modules, ~137k lines). All 54 per-layer `*_chain_certified` went — `ViTChainClose` (18), `ViTVecLN` (6), `ConvNeXtChainClose` (11), and with the deleted files `Cifar8Close` (10) and `MobileNetV2ChainClose` (9) — as did `smoothing_certified_radius` (the `_probit` variant is the one that instantiates at the real quantile) and `gaussian_np_shift` (`pi_gaussian_np_shift` carries its own likelihood-ratio argument). Cotangent helpers orphaned by the cut went with them (`vitCotH`, `vitCotAtt`, `vitCotXin`, `cnxCotD`, `cnxCotXin`, `cnxStemCot`, the five `invresCot*` / `mnv2StemCot`, `cdf_gaussianReal_shift`), found by iterating an unused-and-unpinned check to a fixed point. Prose that cited the retired names or files rewritten, incl. `certs.yml`'s MobileNetV2 summary row (now `Mnv2PaperPoCG.depthwiseStridedXla{W,B}GradB_den`) and one blueprint `\texttt` path. The `CnnChainClose` four are NOT audit-only (`CnnFold`'s `cW2_den`… build on them) and stay |
+| *(this commit)* | **The 4-conv cifar-BN net retired** (−1,456 Lean/yml, −728 artifact lines, 23 files; 7 pinned declarations and their `#print axioms` lines, 1,692 → 1,685 verdicts, by the user's decision). Found while surveying the `*TrainStepText` callers: `verified_mlir/cifar_bn_fwd.mlir` was still written by the hand-written `cifarBnFwdTextPC`, not by `cifarBnFwdModuleV` — so the pinned `cifarBnVerified_fwd_faithful` certified a graph whose render was not the shipped file (same ops, different bytes). Nothing public cited the net (not the book, not the README); its runs were an uncited 5-seed sweep and one PGD log. Gone: the `cifar-bn-verified` / `cifar-bn-pgd` exes and apps, `cifarBnVerified`, `CifarBnLayout`, `genCifarBnPgdStep` / `attackPgdCifarBn` (and `attackPgdConvNet`'s `withCert`, which only the BN attack set to `false`), both artifacts and their writers, the five renderers (`cifarBnTrainStepStructured`, `cifarBnTrainStepFaithfulV`, `cifarBnFwdModuleV`, `cifarBnTrainStepText`, `cifarBnFwdTextPC`), `cifarBnFwdGraph{,_faithful}`, `cifarCnnBnForward` / `cifarCnnBn_has_vjp_at{,_correct}`, the `SpecVJP` trio (`denoteCifarBn`, `cifarBnVerified_{denote_eq,has_vjp,fwd_faithful}`), `CifarBnStepTie` (whole file; its `Certs` root goes: 195 roots, 229 modules, ~135k lines), the two CI drift-guard entries and the `certs.yml` row. Stay: `CifarBnFold` / `CifarBnClose` (the per-channel γ/β folds the cifar8-BN, R34 and MNv2 ties build on; their docs now say so), `convBnReluPC_*`, the untyped `cifar-bn-train` baseline and ablation rows, and `scripts/cifar_bn_margin_probe.py` (self-contained numpy). A use-count diff of every declaration against HEAD found no orphans |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -88,6 +91,29 @@ gets the same reuse without moving its 32 consumers). From §8: the vector-LN ba
 pinned statements of one fact, each already a 2-line proof over the pointwise lemma, in sibling files);
 `layerScale_grad_gamma` = `diagBack` (`rfl`, but no proof gets shorter); `preLNRes` flat-diff helpers
 (one line saved per site, 14 lines of statement).
+
+**Next session — the end list (start here).** Items 1–7 below are done; what remains is the end list
+further down ("At the end — pinned statements"), each item a user decision already taken in outline. In
+the order to try them, with what was measured on 2026-09-19:
+1. **The `*TrainStepText` / `*FwdText*` emitters** — surveyed 2026-09-19: the only live callers were
+   `cifar_bn_fwd.mlir`'s writer (gone with the cifar-BN net, row above) and two char-count prints in
+   `tests/TestCifar8AdamTrain`; every other hit is a comment naming the emitter as an artifact's source,
+   which the `*FaithfulV` renders took over. Next: retire the remaining seven (mlp, cnn, cifar, cifar8,
+   cifar8 fwd, cifar8Bn, cifar8Bn fwd; ~910 lines) and point those comments at the `*FaithfulV` renders.
+2. **The §0.7 leftovers**, recounted: (a) 13 SGD-wrapped `*_render_*_certified` are audit-only —
+   `MlpTrainStep` 6, `ConvNeXtClose` 3, `ViTClose` 2, `MobileNetV2Close` 2 (the audit's ~250 predates the
+   deletions); check whether `MlpTrainStep`'s six belong to the deliberate `MlpCanonical` audit surface
+   before cutting them. (b) `vitNetBackGraph_faithful` is proved twice and both are pinned:
+   `ViTBackB0:1877` (bespoke induction, ~100 lines) and `ViTBackNet:355` `_via_fold`; retiring the first
+   means the pinned name moves down into `ViTBackNet` with the fold proof — check `ViTBackB0`'s own users
+   first. (c) The 1-head scalar-LN ViT chain (§8's lead, "54 AuditAxioms-only declarations") — not
+   recounted; identify the declarations before sizing it.
+3. **Fused EfficientNet ties from `EfficientNetStepTieG`'s** (~60; `StepTieG` imports `StepTie`, so a
+   file move comes first).
+4. **The 2-block vector-LN ViT as the depth-k net at k = 2** (~100; both sit upstream of `ViTDepthK`, so
+   the pinned theorems move into it).
+Each is a user decision: survey, report the measured size, and ask before cutting. Statement changes
+get the `↔`-against-HEAD check below; retirements get the fixed-point orphan pass.
 
 **Next, in order** (handoff for the next session: chase the remaining duplicates, largest verified first,
 one family per commit; the pinned-statement questions wait for the end list below). ⚠ Recent batches landed
@@ -160,7 +186,7 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    **Next:** the end-list decisions below.
 
 **Handoff for a new session.** Read this Status section, the "How the batches were run" list and the
-trap list below, then `git log --oneline 0c2410d6..` (the commits since the last push). The check
+trap list below, then `git log --oneline 1da2619f..31f76507` (session 5–6 commits; everything is pushed). The check
 scripts of earlier sessions lived in scratch and are gone; recreate the gate as: `lake build Certs` →
 `lake build` → `lake env lean tests/AuditAxioms.lean` (count `#print axioms` lines = verdict lines,
 every `depends on axioms: [...]` ⊆ {propext, Classical.choice, Quot.sound}; ⚠ long lists wrap across
@@ -185,10 +211,8 @@ CertsHeavy`, `lake env lean tests/AuditAxiomsHeavy.lean` (61 verdicts), and the 
   since `StepTieG` imports `StepTie`).
 - The 2-block vector-LN ViT (`vitForward2V_has_vjp`, `vitFwdGraphMHV{,_faithful}`) as the depth-k one at
   k = 2: both sit upstream of `ViTDepthK`, so deriving them means moving pinned theorems into it (~100).
-- The hand-written `*TrainStepText` / `*FwdText*` emitters in `StableHLO.lean` (~1,110 lines: mlp, cnn,
-  cifar, cifarBn, cifar8, cifar8Bn), "kept for reference" since the `*FaithfulV` renders replaced them
-  (CnnRender's comments). Callers: `tests/TestCifar8AdamTrain`, `IreeRuntime` (`mlpTrainStepText`),
-  `CnnTrainStep` (`cnnTrainStepText`). Retire, or keep and hoist their op-template `let`s (~300).
+- The hand-written `*TrainStepText` / `*FwdText*` emitters in `StableHLO.lean` — retire (user's decision,
+  2026-09-19). The cifar-BN pair went with its net; seven remain (~910 lines).
 
 **How the batches were run** (worked; keep doing it):
 - *Keep every statement verbatim.* Replace only a proof body — for a `have h_pdiv` inside a long VJP
@@ -300,6 +324,18 @@ CertsHeavy`, `lake env lean tests/AuditAxiomsHeavy.lean` (61 verdicts), and the 
   `lake env lean tests/AuditAxiomsHeavy.lean`, and `lake env lean` on each `SDPFull` module (in no lib).
   `SDPFullUncon` imports `SDPFull`: write its olean with `-o` and put it where `lake env` looks (a
   second root prepended to `LEAN_PATH` shadows the whole `LeanMlir` package); remove it afterwards.
+- **Changing a pinned statement** (user-approved only): in scratch, state
+  `theorem chk <binders> : (<HEAD statement>) ↔ (<new statement>) := by simp only [<the new Props>, and_assoc]`
+  for each rewritten theorem, then mutate one argument and confirm the check fails. Clause Props
+  (`ConvWSgdTied` …) go beside the `_den` lemma whose statement they are, at the common ancestor of their
+  users.
+- **Retiring declarations:** cut by LINES, not regex — a regex docstring match can run across earlier
+  declarations. Remove a declaration with its docstring and any `set_option … in` above it, then iterate
+  "unused anywhere AND unpinned" to a fixed point (helpers orphan in rounds). Match audit lines by the
+  exact declaration, and check the short name is not declared elsewhere. A deleted file's importers take
+  its own imports; drop its lakefile roots and confirm every module is still reachable from `Certs`.
+  Then grep the whole tree (docs, `.github/`, `blueprint/`, `scripts/`) for the names and file names —
+  `docstring-checkrefs` catches file links but not every prose mention.
 - `CertLayer` capstones: make the named `_has_vjp_at` def the composite layer's `.vjp` at the same
   point and the capstone its `.faithful`; the hand-written graph defs stay and are `rfl`-equal to the
   composite's `.graph`. Consumers that `rw [← capstone]` never unfold the VJP def, so they don't move.

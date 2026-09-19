@@ -150,7 +150,6 @@ import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Nets.Small.CifarBnFold
-import LeanMlir.Proofs.Nets.Small.CifarBnStepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8Fold
 import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
@@ -456,10 +455,6 @@ open Proofs
 -- ch5-CIFAR-BN fully folded
 #print axioms CifarBnPoC.bnGamma_den
 #print axioms CifarBnPoC.bnBeta_den
--- ch5-CIFAR-BN §1a TIE
-#print axioms CifarBnPoC.cifarBnLossCot_den
-#print axioms CifarBnPoC.cifarBn_W7_tied_totalloss
-#print axioms CifarBnPoC.cifarBn_convbn_tied_certified
 -- deeper 8-conv cifar8 fully folded
 #print axioms Cifar8PoC.denseW_den
 #print axioms Cifar8PoC.denseB_den
@@ -590,9 +585,7 @@ open Proofs
 -- Concrete tiny CIFAR instance
 #print axioms Tiny.cifarTinyCnn_has_vjp_correct
 
--- Chapter-5 CIFAR **BatchNorm** variant
-#print axioms cifarCnnBn_has_vjp_at_correct
-#print axioms StableHLO.cifarBnFwdGraph_faithful
+-- Chapter-5 BatchNorm backward render
 #print axioms StableHLO.bnBack_faithful
 
 -- Deeper 8-conv CIFAR (the pedagogical BN-acceleration demo)
@@ -2021,8 +2014,6 @@ open Proofs
 #print axioms cnnVerified_fwd_faithful
 #print axioms cifarVerified_denote_eq
 #print axioms cifarVerified_fwd_faithful
-#print axioms cifarBnVerified_denote_eq
-#print axioms cifarBnVerified_fwd_faithful
 #print axioms mobilenetv2Rep_denote_eq
 #print axioms mobilenetv2Rep_fwd_faithful
 -- mnv2 FULL-paper tie (the committed 21-entry spec ↔ mobilenetv2ForwardPaper)

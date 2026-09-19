@@ -1,10 +1,10 @@
 import LeanMlir.Proofs.Foundation.PerChannelBN
 
-/-! # Closing the CIFAR-BN render — the BN parameter-gradient bridges (dγ, dβ certified)
+/-! # Closing the per-channel BN render — the BN parameter-gradient bridges (dγ, dβ certified)
 
 The non-BN closes (`cnn_render_conv{W,b}_certified` + the M2 dense bridges) and the BN
 **input**-grad (`bnPerChannel_grad_input_correct`, under `0<ε`) already cover every
-parameter of the CIFAR-BN train step except the per-channel BN scale/shift γ, β. This
+parameter of a per-channel-BN train step except the BN scale/shift γ, β. This
 file supplies their bridges — the BN analogue of `IR.bias_grad_bridge` / `conv_bias_grad`.
 
 γ and β enter BN **affinely**: per channel `c`, `y_(c,s) = γ_c · x̂_(c,s) + β_c`, and x̂
@@ -14,8 +14,8 @@ by a channel-gather, plus a constant. `pdiv_of_affine` therefore reads its Jacob
 basis vector as the sparse indicator
 `∂y_j/∂γ_idx = x̂_j·[chan j = idx]` (resp. `[chan j = idx]`), and contracting with the
 cotangent `dy` gives exactly the rendered per-channel reduces
-`dγ_c = Σ_s dy·x̂`, `dβ_c = Σ_s dy` (the `bnParamGradPC` block in
-`cifarBnTrainStepStructured`). Unlike the BN input grad these need no `0<ε` (affine in the
+`dγ_c = Σ_s dy·x̂`, `dβ_c = Σ_s dy` (the `bnGammaSgd` / `bnBetaSgd` ops). Unlike the BN
+input grad these need no `0<ε` (affine in the
 params; ε only enters the constant x̂). See `planning/archive/render_close_handoff.md` §2b.
 -/
 

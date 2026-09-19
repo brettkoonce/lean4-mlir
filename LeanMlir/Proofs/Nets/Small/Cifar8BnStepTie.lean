@@ -3,10 +3,10 @@ import LeanMlir.Proofs.Nets.Small.Cifar8Fold
 
 /-! # PoC: the cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) §1a TIE
 
-cifar8's §1a tie + a BN-back at every conv (exactly the cifar→cifar-bn step, at 4 stages). The backward
+cifar8's §1a tie + a BN-back at every conv. The backward
 chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the γ/β ops) and **conv-output
 cotangent** `cotCᵢ` (`bnPerChannelTensor3_grad_input` of `dyBnᵢ` — fed to the conv W/b ops), repeated
-over 4 conv→conv→pool stages with the same cross-pool move (conv-back then maxpool-back) cifar-bn used.
+over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
 
 **Zero new ops/bridges/constructors.** Conv ties reuse `CifarPoC.convW_den`/`convB_den`; BN ties reuse
 `CifarBnPoC.bnGamma_den`/`bnBeta_den`; dense head + loss-cot reuse `Cifar8PoC`/cifar. All 38 params

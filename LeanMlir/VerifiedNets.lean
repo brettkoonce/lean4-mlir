@@ -194,30 +194,6 @@ def cifarVerified : VerifiedNetSpec where
     (#[64, 32, 3, 3], 0), (#[64], 2), (#[64, 64, 3, 3], 0), (#[64], 2),
     (#[4096, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
 
-/-- The Chapter-4 CIFAR-10 CNN **with per-channel BatchNorm** (`.bnPerChannel`, γ/β
-    per channel) after each conv. Same backbone as `cifarVerified` + 4 `.bnPerChannel` layers.
-    VJP: `cifarBnVerified_has_vjp` (the conditional fold is `cifarCnnBn_has_vjp_at`). -/
-def cifarBnVerified : VerifiedNetSpec where
-  name     := "CIFAR-CNN-BN"
-  slug     := "cifar_bn"
-  inC      := 3
-  imageH   := 32
-  imageW   := 32
-  nClasses := 10
-  data     := .cifar
-  layers   := [.conv 3 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
-               .conv 32 64 3 1, .bnPerChannel 64, .relu, .conv 64 64 3 1, .bnPerChannel 64, .relu, .maxPool 2 2, .flatten,
-               .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "CIFAR-10 CNN + per-channel BatchNorm via the VERIFIED renderer (conv→BN→relu ×4, 2 pools, 512→512→10) → %LOWERER% → GPU"
-
--- conv{W,b} then per-channel BN{γ:[c],β:[c]} ×4, then 3 dense{W,b}.
-#guard cifarBnVerified.toSpecs ==
-  #[(#[32, 3, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
-    (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
-    (#[64, 32, 3, 3], 0), (#[64], 2), (#[64], 1), (#[64], 2),
-    (#[64, 64, 3, 3], 0), (#[64], 2), (#[64], 1), (#[64], 2),
-    (#[4096, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
-
 /-- The deeper **8-conv CIFAR-10 CNN (no BN)** — the pedagogical BN-demo backbone: four
     `conv→conv→pool` stages, channels `[16,16,32,32]`, 32→16→8→4→2 spatial, then the
     reused 3-dense head (`d1=64`): flatten 128 → 64 → relu → 64 → relu → 10. VJP:

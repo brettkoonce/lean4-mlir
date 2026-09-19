@@ -235,16 +235,13 @@ theorem cnnVerified_fwd_faithful (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
       = denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x := by
   exact cnnFwdGraph_faithful (h := 14) (w := 14) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x
 
-/-! ## Rung 4 + E (CIFAR, both variants): completing the ch5 ladder
+/-! ## Rung 4 + E (CIFAR): completing the ch5 ladder
 
-The two CIFAR-10 nets (ic=3, c1=32, c2=64, h=w=8 — spatial 32→16→8). Each gets the
-spec→math denotation (= `cifarCnnForward` / `cifarCnnBnForward` by `rfl`), the canonical
-witness VJP, and the forward spec→generated-MLIR tie (`cifarFwdGraph_faithful` /
-`cifarBnFwdGraph_faithful`). The conditional folds are `cifarCnn_has_vjp_at` /
-`cifarCnnBn_has_vjp_at` (six ReLU kinks + two maxpools; BN adds `0 < εᵢ`). The BN here is
-the SCALAR `bnForward` (one γ/β over c·h·w), the same op ViT's LayerNorm witness reduces to. -/
+The CIFAR-10 net (ic=3, c1=32, c2=64, h=w=8 — spatial 32→16→8) gets the spec→math
+denotation (= `cifarCnnForward` by `rfl`), the canonical witness VJP, and the forward
+spec→generated-MLIR tie (`cifarFwdGraph_faithful`). The conditional fold is
+`cifarCnn_has_vjp_at` (six ReLU kinks + two maxpools). -/
 
--- ── CIFAR (no BN) ──
 noncomputable def denoteCifar (layers : List VLayer)
     (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32)
     (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64)
@@ -284,62 +281,6 @@ theorem cifarVerified_fwd_faithful
     den (cifarFwdGraph (h := 8) (w := 8) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x)
       = denoteCifar cifarVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x := by
   exact cifarFwdGraph_faithful (h := 8) (w := 8) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x
-
--- ── CIFAR + scalar BatchNorm ──
-noncomputable def denoteCifarBn (layers : List VLayer)
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
-    (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
-    (W₇ : Mat 512 10) (b₇ : Vec 10) : Vec 3072 → Vec 10 :=
-  match layers with
-  | [.conv 3 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
-     .conv 32 64 3 1, .bnPerChannel 64, .relu, .conv 64 64 3 1, .bnPerChannel 64, .relu, .maxPool 2 2, .flatten,
-     .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10] =>
-      cifarCnnBnForward (h := 8) (w := 8) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-        W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇
-  | _ => fun _ => 0
-
-theorem cifarBnVerified_denote_eq
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
-    (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
-    (W₇ : Mat 512 10) (b₇ : Vec 10) :
-    denoteCifarBn cifarBnVerified.layers W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-        W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇
-      = cifarCnnBnForward (h := 8) (w := 8) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-          W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ := rfl
-
-/-- **The (per-channel-BN) CIFAR spec carries the math.** -/
-noncomputable def cifarBnVerified_has_vjp
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
-    (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
-    (W₇ : Mat 512 10) (b₇ : Vec 10) :
-    HasVJP (denoteCifarBn cifarBnVerified.layers W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-              W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇) := HasVJP.canonical _
-
-open Proofs.StableHLO in
-/-- **Generated (per-channel-BN) CIFAR forward MLIR ↔ spec.** (`epsStr` = the rendered ε text;
-    the denotation uses the real `εᵢ`, so it holds for any string.) -/
-theorem cifarBnVerified_fwd_faithful (epsStr : String)
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
-    (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
-    (W₇ : Mat 512 10) (b₇ : Vec 10) (x : Vec 3072) :
-    den (cifarBnFwdGraph (h := 8) (w := 8) epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-          W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ x)
-      = denoteCifarBn cifarBnVerified.layers W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-          W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ x := by
-  exact cifarBnFwdGraph_faithful (h := 8) (w := 8) epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-          W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ x
 
 /-! ## Rung B/C (ch7 MobileNetV2, representative): the strided 6-block witness
 

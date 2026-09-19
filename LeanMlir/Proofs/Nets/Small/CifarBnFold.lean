@@ -1,17 +1,12 @@
 import LeanMlir.Proofs.Nets.Small.CifarBnClose
 import LeanMlir.Proofs.Nets.Small.CifarFold
 
-/-! # PoC: the CIFAR-BN (Chapter 4, per-channel BatchNorm) train step, proof-tied
+/-! # PoC: the per-channel BatchNorm γ/β ops, proof-tied
 
-The per-channel-BatchNorm peer of `CifarFold`: `conv→BN→relu ×4, 2 pools,
-3 dense` — 22 params (4 conv kernels/biases, 4 BN scale/shift pairs γ/β, 3 dense
-layers). `MainCifarBnVerified` trains on `verified_mlir/cifar_bn_train_step.mlir`.
+The per-channel-BatchNorm peer of `CifarFold`'s conv and dense folds, used by the cifar8-BN
+tie (`Cifar8BnStepTie`), `ResNet34Fold` and `MobileNetV2FoldPaperG`.
 
-**Reuses everything from the non-BN fold:**
-* **Conv layers (W₁…W₄):** `CifarPoC.convW_den`/`convB_den` (generic, no new ops).
-* **Dense head (W₅/W₆/W₇):** `CifarPoC.{dW,db}{5,6,7}_den` (same head — pool₂ input).
-
-**New here — the BN scale/shift ops.** The per-channel γ/β updates use the new core
+**The BN scale/shift ops.** The per-channel γ/β updates use the core
 ops `bnGammaSgd`/`bnBetaSgd`, whose `den` is `γ − lr·bnPerChannel_grad_gamma` /
 `β − lr·bnPerChannel_grad_beta` (the certs work in the `oc·m` flat-spatial layout; the
 op's `den` bridges its `oc·h·w` activation layout via `reassocFwd`, exactly as the BN

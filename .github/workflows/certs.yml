@@ -214,7 +214,6 @@ jobs:
             echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | $(faithful MlpPoC.mlp_train_step_tied_certified) | \`mlp_train_step_tied_certified\` |"
             echo "| mnist-cnn (2d) | $(faithful CnnPoC.cW1_den) | $(faithful CnnPoC.db5_den) | $(faithful CnnPoC.cnn_conv_tied_certified) | \`cnn_conv_tied_certified\` |"
             echo "| cifar (ch5, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful CifarPoC.db7_den) | $(faithful CifarPoC.cifar_conv_tied_certified) | \`cifar_conv_tied_certified\` |"
-            echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | $(faithful CifarBnPoC.cifarBn_convbn_tied_certified) | \`cifarBn_convbn_tied_certified\` |"
             echo "| cifar8 (8-conv, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8PoC.cifar8_convs_tied_certified) | \`cifar8_convs_tied_certified\` |"
             echo "| cifar8-bn (8-conv) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8BnPoC.cifar8Bn_convbn_tied_certified) | \`cifar8Bn_convbn_tied_certified\` |"
             echo "| r34 (ch6)          | $(faithful ResNet34PoC.convStridedW_den) | $(faithful ResNet34PoC.convStridedB_den) | $(faithful ResNet34TieB.r34_net_tiedB) | \`r34_net_tiedB\` (full [3,4,6,3], 110 params) |"

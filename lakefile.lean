@@ -69,8 +69,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ViTRender,
              `LeanMlir.Proofs.Codegen.ViTRenderB]
 
-/-- **`lake build Certs`** — the certificate corpus (196 roots reaching 230 modules,
-    ~137k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
+/-- **`lake build Certs`** — the certificate corpus (195 roots reaching 229 modules,
+    ~135k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
     Muon, the float model, …): the VJP proof suite's apex modules; their transitive
     imports cover every proof file (they subsume the `Proofs` roots above, so
     building `Certs` builds everything the axiom audit needs). Built +
@@ -224,7 +224,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.Small.CnnFold,
              `LeanMlir.Proofs.Nets.Small.CifarFold,
              `LeanMlir.Proofs.Nets.Small.CifarBnFold,
-             `LeanMlir.Proofs.Nets.Small.CifarBnStepTie,
              `LeanMlir.Proofs.Nets.Small.Cifar8Fold,
              `LeanMlir.Proofs.Nets.Small.Cifar8StepTie,
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie,
@@ -980,13 +979,6 @@ lean_exe «cifar-spectral» where
   root := `apps.cifar.MainCifarSpectral
   moreLinkArgs := lowererLink
 
--- Phase-3 PGD attack on the verified CIFAR-10 CNN + (instance) BatchNorm: genCifarBnPgdStep runs
--- the proven input-VJP through 4 instance-norm layers (the BN grad-input 3-term formula). Cert
--- N/A (instance-norm Lipschitz is data-dependent) — the attack rung only.
-lean_exe «cifar-bn-pgd» where
-  root := `apps.cifar.MainCifarBnPgd
-  moreLinkArgs := lowererLink
-
 -- The deep-net payoff: smoothing certifies a non-vacuous L2 radius on the 7-layer CIFAR CNN where
 -- the conv-aware spectral product was 942K-loose (cert 0%). Same forward-only procedure, any depth.
 lean_exe «cifar-smooth» where
@@ -1011,12 +1003,6 @@ lean_exe «cifar-verified» where
 -- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainCifarE4M3Verified.lean.
 lean_exe «cifar-e4m3-verified» where
   root := `apps.cifar.MainCifarE4M3Verified
-  moreLinkArgs := lowererLink
-
--- Chapter 5 (BatchNorm): trains the CIFAR-10 CNN + per-example BN on the
--- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
-lean_exe «cifar-bn-verified» where
-  root := `apps.cifar.MainCifarBnVerified
   moreLinkArgs := lowererLink
 
 -- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
