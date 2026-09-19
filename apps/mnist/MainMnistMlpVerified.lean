@@ -4,7 +4,7 @@ import LeanMlir.VerifiedNets
 
 Chapter 3: `dense 784→512 → relu → dense 512→512 → relu → dense 512→10` +
 softmax-CE. Trains on `verified_mlir/mlp_train_step.mlir`
-(`Proofs.StableHLO.mlpTrainStepText`), whose forward/backward/grad ops are each
+(`Proofs.StableHLO.mlpTrainStepFaithfulV`), whose forward/backward/grad ops are each
 proven faithful to the Mathlib `fderiv` math (`mlpFwdGraph_faithful`,
 `mlpBackGraph_faithful`, `reluF_faithful`, `selectPos_faithful`,
 `wGrad/bGrad_is*Jacobian`, `lossCotGraph_isCEgrad`) — audited 3-axiom-clean.

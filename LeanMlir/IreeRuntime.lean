@@ -251,7 +251,7 @@ opaque mlpTrainStepVDP
   (nResident : USize := 0) (nShardTail : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@mlp_train_step`
-    (`StableHLO.mlpTrainStepText`) through the generic IREE invoke. `params` is
+    (`StableHLO.mlpTrainStepFaithfulV`) through the generic IREE invoke. `params` is
     the packed f32 weights (sliced per `shapes`, same layout as `forwardF32`);
     `x` is `batch×d₀`; `y` is int32 `[batch]` (one-hot built in the C shim with
     `d₃` classes). Returns the updated params, packed in the same layout.

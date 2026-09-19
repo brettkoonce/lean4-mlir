@@ -11,10 +11,10 @@ SSA), then emit the backward / param-grad / SGD ops referencing the captured nam
 
 The forward pieces (`denseF`/`reluF`, `lossCotGraph`) are denotable and proven faithful
 (`denseF_faithful`/`reluF_faithful`/`lossCotGraph_isCEgrad`); the backward + param-grad +
-SGD ops mirror the GPU-validated emitter (the same op text as `mlpTrainStepText`), now
-assembled around proof-rendered forward SSA. The result is a valid MLP train-step module
-generated from the proven forward graphs — the multi-intermediate generalization of the
-linear render half (cf. `planning/archive/verified_train_step.md`, Crux B).
+SGD ops are GPU-validated op templates, assembled around proof-rendered forward SSA. The
+result is a valid MLP train-step module generated from the proven forward graphs — the
+multi-intermediate generalization of the linear render half (cf.
+`planning/archive/verified_train_step.md`, Crux B).
 -/
 
 namespace Proofs.StableHLO
@@ -27,7 +27,7 @@ open Proofs
 def mlpTrainStepStructured (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) : String :=
-  -- op templates (same as the GPU-validated `mlpTrainStepText`)
+  -- op templates (GPU-validated)
   let dg (o a w cA cB tA tB tO : String) : String :=
     s!"    {o} = stablehlo.dot_general {a}, {w}, contracting_dims = [{cA}] x [{cB}], precision = [DEFAULT, DEFAULT] : ({tA}, {tB}) -> {tO}\n"
   let reduce (o dyk : String) (nn : Nat) : String :=

@@ -54,7 +54,7 @@ theorem conv_bias_grad_bridge {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § Closing the CNN render — the conv param outputs denote the certified gradients
 --
--- The CNN train step (`cnnTrainStepText` — conv→relu→conv→relu→maxpool→dense→relu→
+-- The CNN train step (`cnnTrainStepFaithfulV` — conv→relu→conv→relu→maxpool→dense→relu→
 -- dense→relu→dense) renders, per conv layer, `%dWᵢ = convWGrad` (the transpose-trick
 -- kernel gradient) and `%Wᵢn = Wᵢ − lr·%dWᵢ`. These theorems are the denotation side:
 -- each rendered conv SGD output equals `θ − lr·(certified conv Jacobian · the cotangent

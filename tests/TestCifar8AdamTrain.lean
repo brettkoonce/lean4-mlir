@@ -7,15 +7,15 @@ import LeanMlir.Types
 The Adam peer of `verified_mlir/cifar8_train_step.mlir` (no-BN) and
 `verified_mlir/cifar8_bn_train_step.mlir` (per-channel BN), at the canonical dense-head width
 `D1 = 64` (slug `cifar8`) and the wide `d1 = 512` (slug `cifar8w`). Same forward + backward +
-param-gradient body as the SGD render (`Proofs.StableHLO.cifar8{,Bn}TrainStepText` — the
-readable predecessor that exposes every `%dW*`/`%db*`/`%dg*`/`%db*` gradient as a named SSA
-value), with the per-param SGD update `θ − lr·∇` swapped for `ViTRender.emitAdamV`
-(`θ' = θ − lr·(m̂/(√v̂+ε)) − lr·wd·θ`, op-for-op `Proofs.adamWParam`) and the
-`[θ|m|v]` + scalar-tail packed signature the generic `VerifiedNet.trainAdamSched` driver
-expects. The cotangent is divided by `B` (mean gradients — Adam needs the true mean, the
-1/B factor cannot fold into `lr` the way it does for SGD), and the in-graph mean softmax-CE
-`%loss` is emitted in the slot after `[θ'|m'|v']` for logging. No label smoothing, so the
-*only* difference vs the SGD path is the optimizer map — a clean optimizer ablation.
+param-gradient body as the SGD render (`Proofs.StableHLO.cifar8{,Bn}TrainStepFaithfulV`), every
+`%dW*`/`%db*`/`%dg*`/`%db*` gradient a named SSA value, with the per-param SGD update `θ − lr·∇`
+swapped for `ViTRender.emitAdamV` (`θ' = θ − lr·(m̂/(√v̂+ε)) − lr·wd·θ`, op-for-op
+`Proofs.adamWParam`) and the `[θ|m|v]` + scalar-tail packed signature the generic
+`VerifiedNet.trainAdamSched` driver expects. The cotangent is divided by `B` (mean gradients —
+Adam needs the true mean, the 1/B factor cannot fold into `lr` the way it does for SGD), and the
+in-graph mean softmax-CE `%loss` is emitted in the slot after `[θ'|m'|v']` for logging. No label
+smoothing, so the *only* difference vs the SGD path is the optimizer map — a clean optimizer
+ablation.
 
 Gotcha: cifar8's conv-bias params are named `%b1..%b8`, which would collide with
 `emitAdamV`/`adamConsts`' β₁/β₂ constants `%b1`/`%b2`. The FFI packs params by shape order
@@ -57,7 +57,7 @@ private def adamConsts : String :=
   "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
   "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
 
--- ════════════ shared body helpers (transcribed from cifar8TrainStepText) ════════════
+-- ════════════ shared body helpers (the cifar8 SGD train step's op templates) ════════════
 
 private def pH : Nat := (KH - 1) / 2
 private def pW : Nat := (KW - 1) / 2
@@ -557,12 +557,6 @@ def main : IO Unit := do
                     cifar8BnSgdTrainStep d1 s!"{slug}_bn_sgd_train_step"]
     for (k, mlir) in steps.zip renders do
       IO.println s!"rendered {slug}_{k}_train_step: {mlir.length} chars (tie reference, not written)"
-  -- eval-forward graphs at d1 = 512 (the StableHLO renderers emit @cifar8_fwd / @cifar8_bn_fwd;
-  -- renamed to the cifar8w slug trainAdamSched's `m.cifar8w_fwd` eval call resolves)
-  let fwd := (cifar8FwdText B IC C1 C2 C3 C4 IMH IMW KH KW 512 NC).replace "@cifar8_fwd" "@cifar8w_fwd"
-  let bnfwd := (cifar8BnFwdTextPC B IC C1 C2 C3 C4 IMH IMW KH KW 512 NC "1.0e-05").replace
-    "@cifar8_bn_fwd" "@cifar8w_bn_fwd"
-  IO.println s!"rendered cifar8w fwd / bn_fwd: {fwd.length} / {bnfwd.length} chars (tie references)"
   for slug in ["cifar8", "cifar8w"] do
     for k in steps do
       tryCompile s!"verified_mlir/{slug}_{k}_train_step.mlir" s!"/tmp/{slug}_{k}_ts.vmfb" s!"{slug} {k}"

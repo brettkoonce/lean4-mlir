@@ -5,7 +5,7 @@ import LeanMlir.VerifiedNets
 The pedagogical BN-demo backbone (no-BN half): four `conv→conv→pool` stages, channels
 `[16,16,32,32]`, 32→16→8→4→2 spatial, then the reused 3-dense head
 (flatten 128 → 64 → relu → 64 → relu → 10) + softmax-CE. Trains on
-`verified_mlir/cifar8_train_step.mlir` (`Proofs.StableHLO.cifar8TrainStepText`); the
+`verified_mlir/cifar8_train_step.mlir` (`Proofs.StableHLO.cifar8TrainStepFaithfulV`); the
 whole-network VJP is `Proofs.cifarCnn8_has_vjp_at` — audited 3-axiom-clean.
 
 The model is the `cifar8Verified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`). Trains

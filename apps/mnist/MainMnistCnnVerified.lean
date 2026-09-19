@@ -5,7 +5,7 @@ import LeanMlir.VerifiedNets
 Chapter 4: `conv 1→32 → relu → conv 32→32 → relu → maxpool 28→14 →
 flatten → dense 6272→512 → relu → dense 512→512 → relu → dense 512→10` +
 softmax-CE. Trains on `verified_mlir/cnn_train_step.mlir`
-(`Proofs.StableHLO.cnnTrainStepText`), whose forward/backward/grad ops are each
+(`Proofs.StableHLO.cnnTrainStepFaithfulV`), whose forward/backward/grad ops are each
 proven faithful to the Mathlib `fderiv` math (`cnnFwdGraph_faithful`,
 `convBack_faithful`, `maxPoolBack_faithful`, `reluF_faithful`,
 `selectPos_faithful`, `wGrad/bGrad_is*Jacobian`, `lossCotGraph_isCEgrad`) —

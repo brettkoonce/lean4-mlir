@@ -13,9 +13,8 @@ the conv-specific tail ops (`convWGrad`, `selMask4`, `select_and_scatter`) consu
 **4-D NCHW** activations. We bridge that with explicit `reshape` glue in the tail: capture
 the flat pre-acts/acts from `pretty (cnnFwdGraph …)` (proof-rendered), reshape the four
 the conv tail needs (`%hc1,%ac1,%hc2,%ac2`) plus `%xr` back to `[B,c,H,W]`, then emit the
-GPU-validated backward/param-grad/SGD templates (the same op text as `cnnTrainStepText`)
-around the captured names. `reshape` is a semantic/GPU no-op (flat and NCHW are the same
-buffer), so the rendered module trains identically to the committed hand-written one.
+GPU-validated backward/param-grad/SGD templates around the captured names. `reshape` is a
+semantic/GPU no-op (flat and NCHW are the same buffer).
 
 The forward pieces (`flatConvF`/`reluF`/`maxPoolF`/`denseF`, loss cotangent) are denotable
 and proven faithful (`flatConvF_faithful`/`reluF_faithful`/`maxPoolF_faithful`/
@@ -40,7 +39,7 @@ def cnnTrainStepStructured (B ic c h w d1 nClasses kH kW : Nat) (lr : String)
     (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
     (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic*(2*h)*(2*w))) : String :=
   let H := 2*h; let W := 2*w; let flat := c*h*w
-  -- ── op templates (same op text as the GPU-validated `cnnTrainStepText`) ──
+  -- ── op templates (GPU-validated) ──
   let dg (o a wn cA cB tA tB tO : String) : String :=
     s!"    {o} = stablehlo.dot_general {a}, {wn}, contracting_dims = [{cA}] x [{cB}], precision = [DEFAULT, DEFAULT] : ({tA}, {tB}) -> {tO}\n"
   let reduce0 (o dyk : String) (nn : Nat) : String :=
@@ -248,7 +247,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     spatial scales (channels `ic→c1→c1` then `c1→c2→c2`; spatial `H×W → H/2 → H/4`). Forward
     rendered all-flat from the proven `cifarFwdGraph`; the conv tail's 4-D consumers are
     recovered by ten flat→NCHW `reshape`s (`%hc{1..4},%ac{1..4},%pool1,%xr`, at the two
-    scales). Tail = `cifarTrainStepText`'s backward/grad/SGD templates wired to the captured
+    scales). Tail = the GPU-validated backward/grad/SGD templates wired to the captured
     names. Dim convention matches `cifarFwdGraph`/`cifarFwdModuleV`: `h,w` are the FINAL
     pooled spatial sizes, so the image is `4h × 4w` (`H := 4h`, stage-2 `H2 := 2h`,
     flattened map `flat := c2·h·w`). The close is `cnn_render_conv{W,b}_certified`
@@ -263,7 +262,7 @@ def cifarTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lr : Stri
   let H2 := 2*h; let W2 := 2*w            -- stage-2 spatial after pool1 (16)
   let flat := c2*h*w                       -- final pooled, flattened
   let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
-  -- ── op templates (same op text as the GPU-validated `cifarTrainStepText`) ──
+  -- ── op templates (GPU-validated) ──
   let dg (o a wn cA cB tA tB tO : String) : String :=
     s!"    {o} = stablehlo.dot_general {a}, {wn}, contracting_dims = [{cA}] x [{cB}], precision = [DEFAULT, DEFAULT] : ({tA}, {tB}) -> {tO}\n"
   let reduce0 (o dyk : String) (nn : Nat) : String :=
@@ -1893,8 +1892,7 @@ end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/cnn_train_step.mlir` (what MainMnistCnnVerified trains on)
 -- from the faithful renderer; the den-certified proofs live in CnnFold.lean.
--- (cnnTrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
--- reference.) Dims `128 1 32 14 14 512 10 3 3`: B=128, ic=1, c=32, h=w=14 (post-pool,
+-- Dims `128 1 32 14 14 512 10 3 3`: B=128, ic=1, c=32, h=w=14 (post-pool,
 -- image 28×28), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128 (mean-loss equiv).
 #eval IO.FS.writeFile "verified_mlir/cnn_train_step.mlir"
   (Proofs.StableHLO.cnnTrainStepFaithfulV 128 1 32 14 14 512 10 3 3 "0.00078125"
@@ -1904,8 +1902,7 @@ end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/cifar_train_step.mlir` (what MainCifarVerified trains on)
 -- from the faithful renderer; the den-certified proofs live in CifarFold.lean.
--- (cifarTrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
--- reference.) Dims `128 3 32 64 8 8 512 10 3 3`: B=128, ic=3, c1=32, c2=64, h=w=8
+-- Dims `128 3 32 64 8 8 512 10 3 3`: B=128, ic=3, c1=32, c2=64, h=w=8
 -- (final pooled, image 32×32), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128.
 #eval IO.FS.writeFile "verified_mlir/cifar_train_step.mlir"
   (Proofs.StableHLO.cifarTrainStepFaithfulV 128 3 32 64 8 8 512 10 3 3 "0.00078125"
@@ -1916,8 +1913,7 @@ end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/cifar8_train_step.mlir` (what MainCifar8Verified trains on)
 -- from the faithful renderer; the den-certified proofs live in Cifar8Fold.lean.
--- (cifar8TrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
--- reference.) Dims `128 3 16 16 32 32 2 2 64 10 3 3`: h=w=2 (final pooled, image 32×32).
+-- Dims `128 3 16 16 32 32 2 2 64 10 3 3`: h=w=2 (final pooled, image 32×32).
 -- Regenerate `verified_mlir/cifar8_adam_train_step.mlir` — the AdamW peer, same forward/backward
 -- with the fused SGD tail replaced by un-fused gradients + the proven AdamW ops
 -- (planning/archive/xla_pjrt_handoff.md §2a-ter). Hyperparameters match the retired tests render:
@@ -2096,7 +2092,7 @@ end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/cifar8_bn_train_step.mlir` (what MainCifar8BnVerified trains on)
 -- from the faithful renderer; den-certified by the existing generics (CifarPoC.conv{W,B}_den,
--- CifarBnPoC.bn{Gamma,Beta}_den, Cifar8PoC.dense{W,B}_den). cifar8BnTrainStepText kept for ref.
+-- CifarBnPoC.bn{Gamma,Beta}_den, Cifar8PoC.dense{W,B}_den).
 #eval IO.FS.writeFile "verified_mlir/cifar8_bn_train_step.mlir"
   (Proofs.StableHLO.cifar8BnTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "1.0e-05" "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)

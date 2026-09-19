@@ -1249,7 +1249,7 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp2(
   return lean_io_result_mk_ok(result);
 }
 
-// ---- Verified-renderer MLP train step (StableHLO.mlpTrainStepText) ----
+// ---- Verified-renderer MLP train step (StableHLO.mlpTrainStepFaithfulV) ----
 // Module signature (x, W0,b0,W1,b1,W2,b2, onehot) -> (W0n,b0n,W1n,b1n,W2n,b2n).
 // Inputs: x[batch,d0], the params (packed f32, sliced per `shapes`), onehot
 // (built here from int32 labels y[batch], d3 classes). Returns the updated

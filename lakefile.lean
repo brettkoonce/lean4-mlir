@@ -423,7 +423,7 @@ lean_exe «mnist-linear-verified» where
 -- binary run twice, which is a stronger comparison than two binaries.
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
--- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
+-- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepFaithfulV).
 
 lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
@@ -437,7 +437,7 @@ lean_exe «mnist-mlp-verified» where
 -- $LEAN_MLIR_LOWERER, so its `-xla` peer and their shared-body file are gone.
 
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
--- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
+-- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepFaithfulV).
 /-- Shared body of the verified CNN trainer — imported by BOTH the IREE and XLA
     executables so their config and He-init seed cannot drift. -/
 
@@ -993,7 +993,7 @@ lean_exe «cifar8-bn-grid» where
   moreLinkArgs := lowererLink
 
 -- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
--- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepText).
+-- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepFaithfulV).
 lean_exe «cifar-verified» where
   root := `apps.cifar.MainCifarVerified
   moreLinkArgs := lowererLink
@@ -1006,7 +1006,7 @@ lean_exe «cifar-e4m3-verified» where
   moreLinkArgs := lowererLink
 
 -- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
--- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepText).
+-- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepFaithfulV).
 lean_exe «cifar8-verified» where
   root := `apps.cifar.MainCifar8Verified
   moreLinkArgs := lowererLink
