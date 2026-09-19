@@ -59,7 +59,7 @@ namespace Proofs
 /-- **Whole-network paper EfficientNet-B0 VJP.** The VJP of the eighteen-stage chain
     `head ∘ b16 ∘ … ∘ b1 ∘ stem` — seventeen `vjp_comp`s, dimension-generic and parametric in
     every component, `HasVJP` everywhere (no smooth point: every activation on this path is
-    differentiable on all of `ℝ`). The sixteen-block peer of `efficientnetB_has_vjp`. -/
+    differentiable on all of `ℝ`). -/
 noncomputable def efficientnetB_full_has_vjp {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 : Nat}
     (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16) (b16 : Vec s16 → Vec s17)
     (head : Vec s17 → Vec s18)

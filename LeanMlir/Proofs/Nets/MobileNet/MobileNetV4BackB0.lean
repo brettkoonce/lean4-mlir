@@ -60,8 +60,7 @@ pattern, and the cheapest: the declaration list was one `grep` away).
 
 **Built here — everything at the BLOCK and STAGE level, which is this file's whole remit:** the two
 depthwise-relu stages (stride-1 + strided) and their backward graphs; the four stage `CertLayer`s;
-the family-collapsing body and the skip block; both stride-2 forms (`mnv4UibPreStridedBody`,
-`mnv4UibPostStridedBody`) with their faithfulness theorems; the **fused stage** (swish, stage 0)
+the family-collapsing body and the skip block; the stride-2 form (`mnv4UibPreStridedBody`; Conv-M has no post-strided row); the **fused stage** (swish, stage 0)
 with `stemBackBatchedGraph` — the symmetric-padding strided conv-bn-swish backward that closed
 EfficientNet's stem hole at the same time; the **head** (`mnv4Head`, its GAP and dense layers both
 tying by `rfl`); the table-driven `k = 0` dispatch; and `UibParams`, the row-typed weight record.
@@ -70,8 +69,8 @@ Nine of these are in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/l
 **Not built here — the NET level, which is four other files as of 2026-09-07.** T1 (the whole-net
 forward and its input-VJP) is [`Nets/MobileNet/MobileNetV4FullB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean) +
 `MobileNetV4FullBVJP.lean`, T2 (the typed forward graph at `mnv4FwdChainB`'s tokens) is in the
-first of those, T3 (the fold and tie at the emitted gradient nodes, all 233) is
-`MobileNetV4FoldB.lean` + `MobileNetV4StepTieB.lean`, and T6 (the certified whole-net
+first of those, T3 (the tie at the emitted gradient nodes, all 233) is
+`MobileNetV4StepTieB.lean`, and T6 (the certified whole-net
 backward tie) is `MobileNetV4WholeBackCertifiedTieB.lean` + its float chain. Each of them consumes
 what is built here, block by block. `planning/archive/mnv4_proofs_tier.md` is the record; ResNet-50 — which
 was in exactly this position, block-level only with no per-example legacy — was the file-by-file
@@ -81,8 +80,7 @@ precedent, closed over 2026-09-06/07.
 Conv-M's render has **two** (`%h1W` 256→960, then `%hW` 960→1280), so a whole-net use composes
 `cbReluLayer` twice. (ii) The **stem** is not here and cannot be a `CertLayer`: no render
 emits a gradient into `%x`, so there is no `convStridedXlaBackBatched` token and hence no backward
-graph to be faithful to. That is B0's situation exactly — `enetTrunk` takes its stem as a
-parameter for the same reason — and a net-level forward must compose the stem's VJP by
+graph to be faithful to. That is B0's situation exactly, and a net-level forward must compose the stem's VJP by
 `vjp_comp_at` rather than by `CertLayer.comp`.
 -/
 
@@ -236,19 +234,6 @@ noncomputable def mnv4UibSkipBlock (N : Nat) {c mid h w : Nat}
     CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
   CertLayer.residual (mnv4UibBody N preDW expand postDW project)
 
-/-- ⭐⭐ **THE MNv4 BLOCK THEOREM.** The UIB block's backward graph denotes its VJP — for every
-    family, because the family is an argument. Immediate from `CertLayer.faithful`. -/
-theorem mnv4UibSkipBlock_faithful (N : Nat) {c mid h w : Nat}
-    (preDW : CertLayer (N * (c * h * w)) (N * (c * h * w)))
-    (expand : CertLayer (N * (c * h * w)) (N * (mid * h * w)))
-    (postDW : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (c * h * w)))
-    (x : Vec (N * (c * h * w))) (hx : (mnv4UibSkipBlock N preDW expand postDW project).ok x)
-    (e : SHlo (N * (c * h * w))) :
-    den ((mnv4UibSkipBlock N preDW expand postDW project).graph x e)
-      = ((mnv4UibSkipBlock N preDW expand postDW project).vjp x hx).backward (den e) :=
-  (mnv4UibSkipBlock N preDW expand postDW project).faithful x hx e
-
 /-- **The four families, as four applications.** Type-level check that each of MNv4's block forms
     is this one body with `id'` in the empty depthwise slots — the collapse §8 asked about, made
     concrete. `ExtraDW` is the general case and needs no wrapper. -/
@@ -342,46 +327,6 @@ noncomputable def mnv4UibPreStridedBody (N : Nat) {ic mid oc h w : Nat}
     CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
   preDW.comp (expand.comp (postDW.comp project))
 
-/-- **Post-strided UIB body** — MNv4 block 3 (80→160), the only one. No pre-DW, so the EXPAND runs
-    at the full `2h` resolution and the post-DW does the reduction.
-
-    ⚠ Note what this costs: the expand here is a 1×1 over `mid = ic·expand` channels at `2h×2w`,
-    i.e. 4× the spatial positions of the pre-strided form. Reading the pre-strided body onto this
-    block would be a type error, which is the good case — but reading the *render* wrongly would
-    not have been, which is why `MobileNetV4RenderB` splits the two. -/
-noncomputable def mnv4UibPostStridedBody (N : Nat) {ic mid oc h w : Nat}
-    (expand : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * (2 * h) * (2 * w))))
-    (postDW : CertLayer (N * (mid * (2 * h) * (2 * w))) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w))) :
-    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
-  expand.comp (postDW.comp project)
-
-/-- ⭐ **The pre-strided block's backward graph denotes its VJP.** No skip (channels change), so the
-    block IS the body. Immediate from `CertLayer.faithful`. -/
-theorem mnv4UibPreStridedBody_faithful (N : Nat) {ic mid oc h w : Nat}
-    (preDW : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (ic * h * w)))
-    (expand : CertLayer (N * (ic * h * w)) (N * (mid * h * w)))
-    (postDW : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
-    (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hx : (mnv4UibPreStridedBody N preDW expand postDW project).ok x)
-    (e : SHlo (N * (oc * h * w))) :
-    den ((mnv4UibPreStridedBody N preDW expand postDW project).graph x e)
-      = ((mnv4UibPreStridedBody N preDW expand postDW project).vjp x hx).backward (den e) :=
-  (mnv4UibPreStridedBody N preDW expand postDW project).faithful x hx e
-
-/-- ⭐ **The post-strided block's backward graph denotes its VJP.** -/
-theorem mnv4UibPostStridedBody_faithful (N : Nat) {ic mid oc h w : Nat}
-    (expand : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * (2 * h) * (2 * w))))
-    (postDW : CertLayer (N * (mid * (2 * h) * (2 * w))) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
-    (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hx : (mnv4UibPostStridedBody N expand postDW project).ok x)
-    (e : SHlo (N * (oc * h * w))) :
-    den ((mnv4UibPostStridedBody N expand postDW project).graph x e)
-      = ((mnv4UibPostStridedBody N expand postDW project).vjp x hx).backward (den e) :=
-  (mnv4UibPostStridedBody N expand postDW project).faithful x hx e
-
 -- ════════════════════════════════════════════════════════════════
 -- § THE FUSED STAGE (stage 0) — swish, and globally smooth
 -- ════════════════════════════════════════════════════════════════
@@ -404,8 +349,7 @@ explicit `(p,p)` tuple and `scripts/convention_audit.py` reads the render at `sy
 stage gets its own name with the same `bnSwishStage_*` lemmas. What was missing repo-wide was the
 **backward graph**: `stemBackBatchedGraph` below, at the symmetric `convStridedBackBatched`. ⚠ It
 serves MNv4's fused stage only; B0's XLA stem has no batched input-VJP token (no render emits a
-gradient into the image), so `enetTrunk` takes its stem layer as a parameter and B0's stem stays
-un-graph-certified — recorded in `planning/archive/proofs_tier_to_paper_nets.md`. -/
+gradient into the image), so B0's stem stays un-graph-certified — recorded in `planning/archive/proofs_tier_to_paper_nets.md`. -/
 
 /-- MNv4's fused stage forward: **symmetric** strided k×k conv → bn → swish. -/
 noncomputable def fusedConvB (N : Nat) {ic oc h w kH kW : Nat}
@@ -464,18 +408,6 @@ noncomputable def mnv4FusedStage (N : Nat) {ic mid oc h w : Nat}
     (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w))) :
     CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
   fusedConv.comp project
-
-/-- ⭐ **The fused stage's backward graph denotes its VJP.** ⚠ Note the `ok` here: because both
-    constituents are globally smooth, `(mnv4FusedStage …).ok` is `True ∧ True` — the stage is
-    certified at **every** input, with nothing to discharge. The only such stage in MNv4. -/
-theorem mnv4FusedStage_faithful (N : Nat) {ic mid oc h w : Nat}
-    (fusedConv : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
-    (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hx : (mnv4FusedStage N fusedConv project).ok x) (e : SHlo (N * (oc * h * w))) :
-    den ((mnv4FusedStage N fusedConv project).graph x e)
-      = ((mnv4FusedStage N fusedConv project).vjp x hx).backward (den e) :=
-  (mnv4FusedStage N fusedConv project).faithful x hx e
 
 -- ════════════════════════════════════════════════════════════════
 -- § THE HEAD — 1×1 conv-bn-relu → GAP → dense
@@ -537,17 +469,6 @@ noncomputable def mnv4Head (N : Nat) {c oc h w nC : Nat}
     (cls : CertLayer (N * oc) (N * nC)) :
     CertLayer (N * (c * h * w)) (N * nC) :=
   headConv.comp (gap.comp cls)
-
-/-- ⭐⭐ **The head's backward graph denotes its VJP.** -/
-theorem mnv4Head_faithful (N : Nat) {c oc h w nC : Nat}
-    (headConv : CertLayer (N * (c * h * w)) (N * (oc * h * w)))
-    (gap : CertLayer (N * (oc * h * w)) (N * oc))
-    (cls : CertLayer (N * oc) (N * nC))
-    (x : Vec (N * (c * h * w))) (hx : (mnv4Head N headConv gap cls).ok x)
-    (e : SHlo (N * nC)) :
-    den ((mnv4Head N headConv gap cls).graph x e)
-      = ((mnv4Head N headConv gap cls).vjp x hx).backward (den e) :=
-  (mnv4Head N headConv gap cls).faithful x hx e
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller
@@ -748,15 +669,6 @@ noncomputable def mnv4BodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
     (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2)
     (projLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
 
-/-- ⭐ **The row-built body's backward graph denotes its VJP.** Immediate from `CertLayer.faithful`
-    — the point is not the proof but that its subject is determined by `s` alone. -/
-theorem mnv4BodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams s)
-    (x : Vec (N * (s.ic * s.h * s.h))) (hx : (mnv4BodyOfRow N s p).ok x)
-    (e : SHlo (N * (s.oc * s.h * s.h))) :
-    den ((mnv4BodyOfRow N s p).graph x e)
-      = ((mnv4BodyOfRow N s p).vjp x hx).backward (den e) :=
-  (mnv4BodyOfRow N s p).faithful x hx e
-
 -- Every non-`stride2` row has `oc = ic`, so `CertLayer.residual` applies to all eighteen of them.
 #guard (mnv4Blocks.filter (fun s => !s.stride2)).all (fun s => s.oc == s.ic)
 
@@ -769,8 +681,7 @@ theorem mnv4BodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams s)
     happen to fill it.
 
     ⛔ There is deliberately no `mnv4PostStridedBodyOfRow`: Conv-M has **no** post-strided row
-    (Conv-S had one), so a row-typed wrapper for that arm would have no possible argument. The
-    un-typed `mnv4UibPostStridedBody` above stays, certified and unexercised. -/
+    (Conv-S had one), so a row-typed wrapper for that arm would have no possible argument. -/
 noncomputable def mnv4PreStridedBodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
     CertLayer (N * (s.ic * (2 * s.h) * (2 * s.h))) (N * (s.oc * s.h * s.h)) :=
   mnv4UibPreStridedBody N
@@ -778,16 +689,6 @@ noncomputable def mnv4PreStridedBodyOfRow (N : Nat) (s : UibSpec) (p : UibParams
     (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
     (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2)
     (projLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
-
-/-- ⭐ **The row-built pre-strided body's backward graph denotes its VJP.** As for
-    `mnv4BodyOfRow_faithful`, the content is not the proof but that its subject is determined by
-    `s` alone. -/
-theorem mnv4PreStridedBodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams s)
-    (x : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))))
-    (hx : (mnv4PreStridedBodyOfRow N s p).ok x) (e : SHlo (N * (s.oc * s.h * s.h))) :
-    den ((mnv4PreStridedBodyOfRow N s p).graph x e)
-      = ((mnv4PreStridedBodyOfRow N s p).vjp x hx).backward (den e) :=
-  (mnv4PreStridedBodyOfRow N s p).faithful x hx e
 
 /-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
 

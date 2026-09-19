@@ -21,7 +21,7 @@ the leaf ties that are one `rfl` from a certified VJP (`decimateBack_eq_vjp`,
 (`convFlatBack_eq_vjp_backward`, `depthwiseFlatBack_eq_vjp_backward`, …) stay in the per-op tie
 files that always held them.
 
-Net-level chains (`r34InputGradB`, `mnv2InputGrad`, `vitInputGradK`, …) are NOT here: each lives
+Net-level chains (`r34InputGradB`, `mnv2InputGradB`, `vitInputGradK`, …) are NOT here: each lives
 beside its own tie. The ConvNeXt/ViT channel-LayerNorm backward is in `ChannelLNBack.lean`, which
 imports this file. -/
 
@@ -222,7 +222,7 @@ noncomputable def depthwiseStride2FlatXlaBack {c h w kH kW : Nat} (W : Depthwise
 
 /-- **Global-average-pool backward** — the certified GAP VJP: route `dy(channel)` to every spatial
     cell of that channel, divided by `h·w`. `Vec c → Vec (c·h·w)`. The head endpoint of every conv
-    net's backward chain (`r34InputGrad`, `mnv2InputGrad`, `efficientnetInputGradB`, …); the
+    net's backward chain (`r34InputGrad`, `mnv2InputGradB`, `efficientnetInputGradB_full`, …); the
     emitted `SHlo.gapBack` denotes `globalAvgPoolFlat_has_vjp`'s backward, which is this map. -/
 noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
   fun idx => dy (flatChannel c h w idx) / ((h : ℝ) * (w : ℝ))

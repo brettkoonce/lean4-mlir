@@ -70,18 +70,6 @@ theorem convWGradB_den {N ic oc h w kH kW : Nat}
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j :=
   Proofs.ResNet34PoCB.convWGradB_den xN cotN b x W cot idx
 
-/-- **Batched BN γ GRADIENT denotes the certified per-channel γ gradient** at the merged
-    batch+spatial width `m = N·(h·w)`. All 49 sites. `ResNet34PoCB.bnGammaGradB_den`. -/
-theorem bnGammaGradB_den {N oc h w : Nat}
-    (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
-    (v : Vec (N * (oc * (h * w)))) (cot : Vec (N * (oc * (h * w)))) (c : Fin oc) :
-    den (SHlo.bnGammaGradB vN epsStr ε v (.operand cotN cot)) c
-      = ∑ j : Fin (oc * (N * (h * w))),
-          pdiv (fun γ' : Vec oc =>
-                  bnPerChannelFlat oc (N * (h * w)) ε γ' β (bnchwFwd N oc h w v))
-               γ c j * bnchwFwd N oc h w cot j :=
-  Proofs.ResNet34PoCB.bnGammaGradB_den vN epsStr cotN ε γ β v cot c
-
 /-- **Batched BN β GRADIENT denotes the certified per-channel β gradient** `Σ_{batch,spatial} cot`.
     Used at all 49 BN βs AND at every conv bias, which the render folds onto the following BN.
     `ResNet34PoCB.bnBetaGradB_den`. -/

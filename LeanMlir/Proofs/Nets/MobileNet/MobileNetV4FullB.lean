@@ -55,7 +55,7 @@ capstone that had to become `rw` instead of `simp only`.
 ⚠⚠ **The stem sits OUTSIDE the chain, and this is EfficientNet-B0's situation exactly.**
 `CertLayer` demands a backward graph, and **no render emits a gradient into `%x`** — there is no
 `convStridedXlaBackBatched` token, because the artifact's backward ends at the stem conv's WEIGHT
-gradient. B0's `enetTrunk` takes its stem as a parameter for the same reason. So `mnv4StemB` is a
+gradient. B0's stem sits outside its chain for the same reason. So `mnv4StemB` is a
 plain function here, its VJP is `bnReluStage_has_vjp_at` at `flatConvStride2Xla`, and the net-level
 VJP composes the two with `vjp_comp_at`.
 
@@ -144,8 +144,7 @@ abbrev mnv4Row21 : UibSpec := ⟨"21", 256, 256, 2, 5, 0,  7, false⟩  -- ConvN
 #guard (mnv4Blocks.filter (fun s => s.family == .ffn)).length = 4
 #guard (mnv4Blocks.filter (fun s => s.family == .convNeXtLike)).length = 4
 #guard mnv4Blocks.all (fun s => s.family != .ib)
--- ⚠ All three stride-2 rows are PRE-strided, so `mnv4UibPostStridedBody` has no consumer in this
--- file. That arm stays certified and unexercised; a green build is not coverage of it.
+-- ⚠ All three stride-2 rows are PRE-strided; Conv-M has no post-strided row.
 #guard (mnv4Blocks.filter (fun s => s.stride2)).map (·.p) = ["1", "3", "11"]
 #guard (mnv4Blocks.filter (fun s => s.stride2)).all (fun s => s.preDWk != 0)
 

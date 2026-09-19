@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 
 /-! # ConvNeXt whole-block backward-graph faithfulness (per-example / batch-1)
 
-The ConvNeXt analogue of `mbconvResidual_backGraph_faithful` (EfficientNet) and
+The ConvNeXt analogue of `mbResidBlockBackBatchedGraph_faithful` (EfficientNet) and
 `r34*BackBatchedGraph_faithful` (ResNet-34): a *backward* StableHLO graph that
 denotes the proven whole-block VJP.
 
@@ -15,7 +15,7 @@ the per-example separable `layerNormForward` (= `bnForward` on the feature axis)
 so NONE of EfficientNet's `batchMap`/`bnBatchLA` batched machinery is needed
 (`ConvNeXtChainClose.lean:8`). So this file targets the per-example VJPs of the shipped
 CHANNEL-LN net directly, modeled on the per-example section of `EfficientNetBackB0.lean`
-(`residualBackGraph`, `convBnSwishBackGraph`, `mbconvResidual_backGraph_faithful`).
+(`residualBackGraph`, `convBnSwishBackGraph`).
 
 `chanLNBackGraph` and its faithfulness come first, then the block, residual-block and downsample
 capstones over it (§2o Part A, 2026-07-31). `chanLNBackGraph_faithful` is the backward peer of

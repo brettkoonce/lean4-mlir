@@ -4,15 +4,11 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # The MobileNetV2 / MobileNetV4 backward chains — the ℝ maps the MobileNet ties are about
 
 The hand-composed reverse of the committed MobileNet forwards, as plain `def`s on the cotangent:
-the two inverted-residual body backwards (`invresBodyBackPC`, `invresBodyStridedBackPC`, where the
-depthwise input-VJP lands), the per-example six-block chain `mnv2InputGrad` (the reverse of
-`mobilenetv2Forward_full_pc`, the Imagenette per-channel render), and the batched chains
-`mnv2InputGradB` (seventeen bottlenecks, the reverse of `mobilenetv2ForwardB_full`) and
+the batched chains `mnv2InputGradB` (seventeen bottlenecks, the reverse of `mobilenetv2ForwardB_full`) and
 `mnv4InputGradB` (MobileNetV4-Conv-M: the fused stage, twenty-one UIB blocks and two head convs,
 the reverse of `mobilenetv4ForwardB_full`), both at a variable batch `N` and class count. Each
 chain keeps its block backwards and its BatchNorm backwards as *supplied* maps and spells only the
-endpoints, so that the certified tie (`MobileNetV2BackCertifiedTie`,
-`MobileNetV2WholeBackCertifiedTie`, `MobileNetV2WholeBackCertifiedTieB`,
+endpoints, so that the certified tie (`MobileNetV2WholeBackCertifiedTieB`,
 `MobileNetV4WholeBackCertifiedTieB`) is a statement about a NAMED chain of the forward's shape.
 
 ⚠ Padding is XLA-`SAME` at every stem (`flatConvStride2XlaBack`, the odd-phase scatter
@@ -31,77 +27,9 @@ chain runs one `flatConvStride2XlaBack` past that point, exactly as EfficientNet
 identical stem. ⚠ Conv-M has no quoted accuracy; what pins its artifact to the reference is the
 pair of ties re-run 2026-09-07.
 
-Moved here from the float bridges that defined them beside their float twins on 2026-09-08
-(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
+No number is stated about either chain. -/
 
 namespace Proofs
-
--- ════════════════════════════════════════════════════════════════
--- § The inverted-residual body backwards (per-channel BN, per-example)
--- ════════════════════════════════════════════════════════════════
-
-/-- The stride-1 inverted-residual body input-gradient VJP at a smooth point — the **reverse of
-    `invresBodyPC = project ∘ depthwise ∘ expand`**: `expandBack ∘ depthwiseBack ∘ projectBack`.
-    `projectBack = convFlatBack Wp ∘ bnBp` (no relu6); `depthwiseBack = depthwiseFlatBack Wd ∘ bnBd ∘
-    reluMaskBack m_d`; `expandBack = convFlatBack We ∘ bnBe ∘ reluMaskBack m_e`. The BN-backs are the
-    per-channel BatchNorm backwards (supplied); the relu6 kinks are fixed masks (`0 < preact < 6`
-    at the smooth point). MobileNetV2 has no SE, so the depthwise input-VJP is the whole novelty. -/
-noncomputable def invresBodyBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 mid ic kHe kWe) (Wd : DepthwiseKernel mid kHd kWd) (Wp : Kernel4 oc mid kHp kWp)
-    (bnBe bnBd : Vec (mid * h * w) → Vec (mid * h * w))
-    (bnBp : Vec (oc * h * w) → Vec (oc * h * w))
-    (m_e m_d : Fin (mid * h * w) → Prop) [DecidablePred m_e] [DecidablePred m_d] :
-    Vec (oc * h * w) → Vec (ic * h * w) :=
-  (convFlatBack (h := h) (w := w) We ∘ bnBe ∘ reluMaskBack m_e)
-  ∘ (depthwiseFlatBack (h := h) (w := w) Wd ∘ bnBd ∘ reluMaskBack m_d)
-  ∘ (convFlatBack (h := h) (w := w) Wp ∘ bnBp)
-
-/-- The stride-2 (downsample) inverted-residual body input-gradient VJP — the **reverse of
-    `invresBodyStridedPC = project ∘ depthwiseStrided ∘ expand(2h×2w)`**:
-    `expandBack(2h×2w) ∘ depthwiseStridedBack ∘ projectBack`, where the depthwise reverses through
-    `depthwiseStride2FlatXlaBack` (the odd-phase zero-upsample scatter, then the reversed-kernel
-    depthwise). -/
-noncomputable def invresBodyStridedBackPC {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 mid ic kHe kWe) (Wd : DepthwiseKernel mid kHd kWd) (Wp : Kernel4 oc mid kHp kWp)
-    (bnBe : Vec (mid * (2 * h) * (2 * w)) → Vec (mid * (2 * h) * (2 * w)))
-    (bnBd : Vec (mid * h * w) → Vec (mid * h * w))
-    (bnBp : Vec (oc * h * w) → Vec (oc * h * w))
-    (m_e : Fin (mid * (2 * h) * (2 * w)) → Prop) [DecidablePred m_e]
-    (m_d : Fin (mid * h * w) → Prop) [DecidablePred m_d] :
-    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
-  (convFlatBack (h := 2 * h) (w := 2 * w) We ∘ bnBe ∘ reluMaskBack m_e)
-  ∘ (depthwiseStride2FlatXlaBack (h := h) (w := w) Wd ∘ bnBd ∘ reluMaskBack m_d)
-  ∘ (convFlatBack (h := h) (w := w) Wp ∘ bnBp)
-
--- ════════════════════════════════════════════════════════════════
--- § The per-example whole-net chain (the six-block Imagenette render)
--- ════════════════════════════════════════════════════════════════
-
-/-- The whole MobileNetV2 input-gradient VJP at a smooth point — the **exact reverse of
-    `mobilenetv2Forward_full_pc`**: `dense ∘ GAP ∘ head ∘ b6 ∘ b5 ∘ residual b4 ∘ b3 ∘ residual b2 ∘
-    b1 ∘ stem` reversed. The stem/head/GAP/dense endpoints are concrete (`flatConvStride2XlaBack ∘ bnBs ∘
-    reluMaskBack` / `convFlatBack ∘ bnBh ∘ reluMaskBack` / `gapBack` / `dense (transposeᵀ) 0`); the 6
-    inverted-residual block backwards `b1B..b6B` are supplied (each an `invresBody*BackPC` at the
-    tie, the skip blocks `b2`/`b4` wrapped by `Proofs.residual`). Channel/spatial schedule encoded in
-    the block maps' dims (the strided blocks halve spatial; the skip blocks preserve). -/
-noncomputable def mnv2InputGrad
-    (Ws : Kernel4 16 3 3 3) (Wh : Kernel4 128 64 1 1) (Wfc : Mat 128 10)
-    (bnBs : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
-    (bnBh : Vec (128 * 7 * 7) → Vec (128 * 7 * 7))
-    (b1B : Vec (24 * 56 * 56) → Vec (16 * 112 * 112))
-    (b2B : Vec (24 * 56 * 56) → Vec (24 * 56 * 56))
-    (b3B : Vec (32 * 28 * 28) → Vec (24 * 56 * 56))
-    (b4B : Vec (32 * 28 * 28) → Vec (32 * 28 * 28))
-    (b5B : Vec (64 * 14 * 14) → Vec (32 * 28 * 28))
-    (b6B : Vec (64 * 7 * 7) → Vec (64 * 14 * 14))
-    (m_stem : Fin (16 * 112 * 112) → Prop) [DecidablePred m_stem]
-    (m_head : Fin (128 * 7 * 7) → Prop) [DecidablePred m_head] :
-    Vec 10 → Vec (3 * 224 * 224) :=
-  (flatConvStride2XlaBack (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
-  ∘ b1B ∘ b2B ∘ b3B ∘ b4B ∘ b5B ∘ b6B
-  ∘ (convFlatBack (h := 7) (w := 7) Wh ∘ bnBh ∘ reluMaskBack m_head)
-  ∘ gapBack 128 7 7
-  ∘ dense (Mat.transpose Wfc) (0 : Vec 128)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The batched whole-net chains (true batch-norm, variable N and class count)

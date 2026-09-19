@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 
-/-! # Item A — the BATCHED EfficientNet-B0 forward graph (true batch-norm, matches the render)
+/-! # The BATCHED EfficientNet-B0 block forwards and graphs (true batch-norm, matches the render)
 
 The EfficientNet peer of `MobileNetV2RenderPC.lean` / `ResNet34RenderPC.lean` — but EfficientNet's
 operational render ([`tests/TestEfficientNetFwd.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestEfficientNetFwd.lean)) emits **true batch-norm** (reduce μ/var over the
@@ -16,19 +16,14 @@ EfficientNet's does not. So the forward graph here genuinely lives at the **batc
 * the one batch-coupled op, true batch-norm, is `SHlo.bnBatchF`, denoting `bnBatchLA` (= the proven
   `bnBatchTensor4`, reindexed to the network's left-assoc `N·(oc·h·w)` flat layout).
 
-We prove the FORWARD half — `den (graph) = forward` — for a representative EfficientNet-B0 that
-structurally exercises **every** element of B0: the stride-2 stem conv-bn-swish, an MBConv1 (`t=1`,
-**no expand**) SE block, an MBConv6 expand SE block with a **stride-2** downsample (3×3 depthwise), an
-MBConv6 expand SE block with a **5×5** depthwise and an **identity residual** skip, the 1×1 conv-bn-swish
-head, GAP and the dense classifier — all with **true batch-norm** and the squeeze-excite gate
-(`seBlockFull`). Squeeze-excite is the genuinely-new structure; here it enters as `BatchableOp.seBlock`
-(= `batchMap N seBlockFull`).
-
-Like `ResNet34RenderPC`, faithfulness is **per-block** (`*GraphB_faithful`: `den (block graph) = block
-forward (den input)`), then chained — so the kernel never reduces the whole net at once. 3-axiom clean.
-(The full 16-MBConv `[t,c,n,s,k]` enumeration is mechanical repetition of these block abbreviations;
-the structural + batched-infra content — the batched graph, true batch-norm, SE — is here. The
-structured render is Item B; the SE/BN cotangent chain is Item D.)
+We prove the FORWARD half — `den (graph) = forward` — for every block form B0 has: the stride-2
+stem conv-bn-swish, an MBConv1 (`t=1`, **no expand**) SE block, an MBConv6 expand SE block with a
+**stride-2** downsample, an MBConv6 expand SE block with an **identity residual** skip, and the 1×1
+conv-bn-swish head, GAP and the dense classifier — all with **true batch-norm** and the
+squeeze-excite gate (`seBlockFull`, entering as `BatchableOp.seBlock` = `batchMap N seBlockFull`).
+Faithfulness is **per-block** (`*GraphB_faithful`: `den (block graph) = block forward (den input)`),
+so `EfficientNetFullB0` chains the sixteen-block net without the kernel reducing it at once.
+3-axiom clean.
 -/
 
 namespace Proofs
@@ -128,40 +123,6 @@ noncomputable def headFwdB (N : Nat) {c oc h w nC : Nat}
     Vec (N * (c * h * w)) → Vec (N * nC) :=
   StableHLO.batchMap N (dense Wfc bfc) ∘ StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
     cbsB N (h := h) (w := w) Wh bh εh γh βh
-
--- ════════════════════════════════════════════════════════════════
--- § The representative batched EfficientNet-B0 ℝ-forward (true batch-norm + SE)
---   stem(3×3 s2) → MBConv1(no-exp,SE) → MBConv6(exp,s2,3×3,SE) → MBConv6(exp,5×5,SE,+residual)
---   → head(1×1,bn,swish,GAP,dense).  Channels 3→32→16→24(→24)→1280→10; spatial 224→112→56.
--- ════════════════════════════════════════════════════════════════
-
-noncomputable def efficientnetForwardB
-    (N : Nat)
-    (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (γs βs : Vec 32)
-    (Wd1 : DepthwiseKernel 32 3 3) (bd1 : Vec 32) (εd1 : ℝ) (γd1 βd1 : Vec 32)
-    (Wz1a : Mat 32 8) (bz1a : Vec 8) (Wz1b : Mat 8 32) (bz1b : Vec 32)
-    (Wp1 : Kernel4 16 32 1 1) (bp1 : Vec 16) (εp1 : ℝ) (γp1 βp1 : Vec 16)
-    (We2 : Kernel4 96 16 1 1) (be2 : Vec 96) (εe2 : ℝ) (γe2 βe2 : Vec 96)
-    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 : ℝ) (γd2 βd2 : Vec 96)
-    (Wz2a : Mat 96 4) (bz2a : Vec 4) (Wz2b : Mat 4 96) (bz2b : Vec 96)
-    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 : ℝ) (γp2 βp2 : Vec 24)
-    (We3 : Kernel4 144 24 1 1) (be3 : Vec 144) (εe3 : ℝ) (γe3 βe3 : Vec 144)
-    (Wd3 : DepthwiseKernel 144 5 5) (bd3 : Vec 144) (εd3 : ℝ) (γd3 βd3 : Vec 144)
-    (Wz3a : Mat 144 6) (bz3a : Vec 6) (Wz3b : Mat 6 144) (bz3b : Vec 144)
-    (Wp3 : Kernel4 24 144 1 1) (bp3 : Vec 24) (εp3 : ℝ) (γp3 βp3 : Vec 24)
-    (Wh : Kernel4 1280 24 1 1) (bh : Vec 1280) (εh : ℝ) (γh βh : Vec 1280)
-    (Wfc : Mat 1280 10) (bfc : Vec 10)
-    (x : Vec (N * (3 * 224 * 224))) : Vec (N * 10) :=
-  -- nested-application form (NOT `∘`) so the faithfulness proof closes by pure delta — the per-block
-  -- `rw` chain produces exactly this term, and no composition needs reducing.
-  headFwdB N (h := 56) (w := 56) Wh bh εh γh βh Wfc bfc
-    (mbResidFwdB N (h := 56) (w := 56) We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3
-        Wz3a bz3a Wz3b bz3b Wp3 bp3 εp3 γp3 βp3
-      (mbStridedFwdB N (h := 56) (w := 56) We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2
-          Wz2a bz2a Wz2b bz2b Wp2 bp2 εp2 γp2 βp2
-        (mbNoExpFwdB N (h := 112) (w := 112) Wd1 bd1 εd1 γd1 βd1 Wz1a bz1a Wz1b bz1b
-            Wp1 bp1 εp1 γp1 βp1
-          (stemB N (h := 112) (w := 112) Ws bs εs γs βs x))))
 
 namespace StableHLO
 
@@ -287,74 +248,6 @@ theorem headGraphB_faithful (epsStr : String) {N c oc h w nC : Nat}
   unfold headGraphB headFwdB cbsB
   simp only [den_batchOp, denOp, den_bnBatchF, swishF_faithful,
              Function.comp_apply]
-
--- ════════════════════════════════════════════════════════════════
--- § The full batched graph + faithfulness (chaining the per-block lemmas)
--- ════════════════════════════════════════════════════════════════
-
-/-- The representative **batched EfficientNet-B0 forward** graph at the batched index `N·(c·h·w)`:
-    stem → MBConv1(no-exp) → MBConv6(strided 3×3) → MBConv6(5×5, residual) → head. Every spatial op
-    is `batchOp`; **true batch-norm** is `bnBatchF`; pointwise swish is `swishF`; the residual is
-    `addV`. Built by composing the per-block graphs; denotes `efficientnetForwardB`. -/
-def efficientnetFwdGraphB
-    (N : Nat) (epsStr : String)
-    (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (γs βs : Vec 32)
-    (Wd1 : DepthwiseKernel 32 3 3) (bd1 : Vec 32) (εd1 : ℝ) (γd1 βd1 : Vec 32)
-    (Wz1a : Mat 32 8) (bz1a : Vec 8) (Wz1b : Mat 8 32) (bz1b : Vec 32)
-    (Wp1 : Kernel4 16 32 1 1) (bp1 : Vec 16) (εp1 : ℝ) (γp1 βp1 : Vec 16)
-    (We2 : Kernel4 96 16 1 1) (be2 : Vec 96) (εe2 : ℝ) (γe2 βe2 : Vec 96)
-    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 : ℝ) (γd2 βd2 : Vec 96)
-    (Wz2a : Mat 96 4) (bz2a : Vec 4) (Wz2b : Mat 4 96) (bz2b : Vec 96)
-    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 : ℝ) (γp2 βp2 : Vec 24)
-    (We3 : Kernel4 144 24 1 1) (be3 : Vec 144) (εe3 : ℝ) (γe3 βe3 : Vec 144)
-    (Wd3 : DepthwiseKernel 144 5 5) (bd3 : Vec 144) (εd3 : ℝ) (γd3 βd3 : Vec 144)
-    (Wz3a : Mat 144 6) (bz3a : Vec 6) (Wz3b : Mat 6 144) (bz3b : Vec 144)
-    (Wp3 : Kernel4 24 144 1 1) (bp3 : Vec 24) (εp3 : ℝ) (γp3 βp3 : Vec 24)
-    (Wh : Kernel4 1280 24 1 1) (bh : Vec 1280) (εh : ℝ) (γh βh : Vec 1280)
-    (Wfc : Mat 1280 10) (bfc : Vec 10)
-    (x : Vec (N * (3 * 224 * 224))) : SHlo (N * 10) :=
-  headGraphB epsStr (h := 56) (w := 56) Wh bh εh γh βh Wfc bfc
-    (mbResidGraphB "b3" epsStr (h := 56) (w := 56) We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3
-        Wz3a bz3a Wz3b bz3b Wp3 bp3 εp3 γp3 βp3
-      (mbStridedGraphB "b2" epsStr (h := 56) (w := 56) We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2
-          Wz2a bz2a Wz2b bz2b Wp2 bp2 εp2 γp2 βp2
-        (mbNoExpGraphB "b1" epsStr (h := 112) (w := 112) Wd1 bd1 εd1 γd1 βd1 Wz1a bz1a Wz1b bz1b
-            Wp1 bp1 εp1 γp1 βp1
-          (stemGraphB epsStr (h := 112) (w := 112) Ws bs εs γs βs (.operand "%x" x)))))
-
-/-- **Batched EfficientNet-B0 forward faithfulness.** The batched render graph (true batch-norm + SE,
-    at index `N·(c·h·w)`) denotes `efficientnetForwardB`. Chained from the per-block `*GraphB_faithful`
-    lemmas (each fires as a `simp` rewrite, so the kernel never reduces the whole net at once) — the
-    `ResNet34RenderPC` recipe lifted to the batched index. The "text = render of a proven forward graph"
-    half for EfficientNet at the render's genuine (batch-coupled) BN flavor. -/
-theorem efficientnetFwdGraphB_faithful
-    (N : Nat) (epsStr : String)
-    (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (γs βs : Vec 32)
-    (Wd1 : DepthwiseKernel 32 3 3) (bd1 : Vec 32) (εd1 : ℝ) (γd1 βd1 : Vec 32)
-    (Wz1a : Mat 32 8) (bz1a : Vec 8) (Wz1b : Mat 8 32) (bz1b : Vec 32)
-    (Wp1 : Kernel4 16 32 1 1) (bp1 : Vec 16) (εp1 : ℝ) (γp1 βp1 : Vec 16)
-    (We2 : Kernel4 96 16 1 1) (be2 : Vec 96) (εe2 : ℝ) (γe2 βe2 : Vec 96)
-    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 : ℝ) (γd2 βd2 : Vec 96)
-    (Wz2a : Mat 96 4) (bz2a : Vec 4) (Wz2b : Mat 4 96) (bz2b : Vec 96)
-    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 : ℝ) (γp2 βp2 : Vec 24)
-    (We3 : Kernel4 144 24 1 1) (be3 : Vec 144) (εe3 : ℝ) (γe3 βe3 : Vec 144)
-    (Wd3 : DepthwiseKernel 144 5 5) (bd3 : Vec 144) (εd3 : ℝ) (γd3 βd3 : Vec 144)
-    (Wz3a : Mat 144 6) (bz3a : Vec 6) (Wz3b : Mat 6 144) (bz3b : Vec 144)
-    (Wp3 : Kernel4 24 144 1 1) (bp3 : Vec 24) (εp3 : ℝ) (γp3 βp3 : Vec 24)
-    (Wh : Kernel4 1280 24 1 1) (bh : Vec 1280) (εh : ℝ) (γh βh : Vec 1280)
-    (Wfc : Mat 1280 10) (bfc : Vec 10)
-    (x : Vec (N * (3 * 224 * 224))) :
-    den (efficientnetFwdGraphB N epsStr Ws bs εs γs βs Wd1 bd1 εd1 γd1 βd1 Wz1a bz1a Wz1b bz1b
-          Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wz2a bz2a Wz2b bz2b
-          Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wz3a bz3a Wz3b bz3b
-          Wp3 bp3 εp3 γp3 βp3 Wh bh εh γh βh Wfc bfc x)
-      = efficientnetForwardB N Ws bs εs γs βs Wd1 bd1 εd1 γd1 βd1 Wz1a bz1a Wz1b bz1b
-          Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wz2a bz2a Wz2b bz2b
-          Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wz3a bz3a Wz3b bz3b
-          Wp3 bp3 εp3 γp3 βp3 Wh bh εh γh βh Wfc bfc x := by
-  rw [efficientnetFwdGraphB, headGraphB_faithful, mbResidGraphB_faithful,
-      mbStridedGraphB_faithful, mbNoExpGraphB_faithful, stemGraphB_faithful, den_operand]
-  rfl
 
 end StableHLO
 end Proofs

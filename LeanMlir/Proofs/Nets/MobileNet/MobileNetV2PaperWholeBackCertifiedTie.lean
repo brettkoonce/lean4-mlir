@@ -54,8 +54,7 @@ namespace Proofs
 -- § The apex — a straight 21-stage chain, every stage opaque
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Whole-network paper MobileNetV2 VJP.** `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`, the
-    17-block peer of `mobilenetv2PC_has_vjp_at`. Twenty `vjp_comp_diff_at`s and nothing else:
+/-- **Whole-network paper MobileNetV2 VJP.** `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`. Twenty `vjp_comp_diff_at`s and nothing else:
     MobileNetV2's skips live INSIDE the block maps and its strides inside the strided bodies, so
     there is no `ChainData` list and no separate downsample slot at any depth. Dimension-generic
     and parametric in every component. -/

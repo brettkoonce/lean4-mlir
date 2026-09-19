@@ -2333,8 +2333,6 @@ theorem dotInBf16_eq_dotIn_rounded {m n : Nat} (rnd : ℝ → ℝ) (s : String) 
     den (.expe e) = fun j => Real.exp (den e j) := rfl
 @[simp] theorem den_softmaxDiv {n : Nat} (e : SHlo n) :
     den (.softmaxDiv e) = fun j => den e j / ∑ k, den e k := rfl
-@[simp] theorem den_sub {n : Nat} (a b : SHlo n) :
-    den (.sub a b) = fun j => den a j - den b j := rfl
 @[simp] theorem den_addV {n : Nat} (a b : SHlo n) :
     den (.addV a b) = fun j => den a j + den b j := rfl
 @[simp] theorem den_reluF {n : Nat} (e : SHlo n) :
@@ -3173,25 +3171,6 @@ to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, neve
     den (.convStridedBiasSgd bN lrS W x b lr e) o
       = b o - lr * den (.convStridedBiasGrad W x b e) o := rfl
 
-/-- **XLA-`SAME` strided-conv weight-SGD faithfulness.** The per-example op's `den` IS the
-    proven `flatConvStride2Xla_weight_grad_has_vjp` descent step. There is no per-example
-    `convStridedXlaWeightGrad` token to factor through (only the batched `…B` one exists), so this
-    pins the `den` directly, as `convStride4WeightGrad_faithful` does. -/
-@[simp] theorem convStridedXlaWeightSgd_faithful {ic oc h w kH kW : Nat} (xN wN lrS : String)
-    (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
-    (e : SHlo (oc*h*w)) (idx : Fin (oc*ic*kH*kW)) :
-    den (.convStridedXlaWeightSgd xN wN lrS b x W lr e) idx
-      = Kernel4.flatten W idx
-        - lr * (flatConvStride2Xla_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) idx := rfl
-
-/-- **XLA-`SAME` strided-conv bias-SGD faithfulness.** Same `reduce` text as `convBiasSgd`; the
-    `den` is the `flatConvStride2Xla` bias VJP. -/
-@[simp] theorem convStridedXlaBiasSgd_faithful {ic oc h w kH kW : Nat} (bN lrS : String)
-    (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc) (lr : ℝ)
-    (e : SHlo (oc*h*w)) (o : Fin oc) :
-    den (.convStridedXlaBiasSgd bN lrS W x b lr e) o
-      = b o - lr * (flatConvStride2Xla_bias_grad_has_vjp W x).backward b (den e) o := rfl
-
 @[simp] theorem bnGammaSgd_eq_grad {oc h w : Nat} (gN vN es lrS : String) (ε : ℝ) (γ : Vec oc)
     (v : Vec (oc*h*w)) (lr : ℝ) (e : SHlo (oc*h*w)) (c : Fin oc) :
     den (.bnGammaSgd gN vN es lrS ε γ v lr e) c
@@ -3497,30 +3476,6 @@ theorem depthwiseBack_faithful {c h w kH kW : Nat} (wN : String)
 theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) (e : SHlo (c*h*w)) :
     den (.depthwiseStridedBack wN W b v e) = (depthwiseStride2Flat_has_vjp W b).backward v (den e) := rfl
-
-/-- **XLA-`SAME` strided-depthwise input-VJP faithfulness.** `depthwiseStridedBack`'s text with
-    the transposed-conv pad at `[p+1, p-1]`; denotes the proven `depthwiseStride2FlatXla_has_vjp`
-    backward (= scatter onto the ODD positions, then the stride-1 depthwise input-VJP). -/
-theorem depthwiseStridedXlaBack_faithful {c h w kH kW : Nat} (wN : String)
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) (e : SHlo (c*h*w)) :
-    den (.depthwiseStridedXlaBack wN W b v e) = (depthwiseStride2FlatXla_has_vjp W b).backward v (den e) := rfl
-
-/-- **XLA-`SAME` strided-depthwise weight-SGD faithfulness.** `den` IS the
-    `depthwiseStride2Xla_weight_grad_has_vjp` descent step (through the non-reducing
-    `depthwiseStridedXlaWeightSgdDen` wrapper, Depthwise.lean). -/
-@[simp] theorem depthwiseStridedXlaWeightSgd_faithful {c h w kH kW : Nat} (xN wN lrS : String)
-    (b : Vec c) (x : Vec (c*(2*h)*(2*w))) (W : DepthwiseKernel c kH kW) (lr : ℝ)
-    (e : SHlo (c*h*w)) (idx : Fin (c*kH*kW)) :
-    den (.depthwiseStridedXlaWeightSgd xN wN lrS b x W lr e) idx
-      = Tensor3.flatten W idx
-        - lr * (depthwiseStride2Xla_weight_grad_has_vjp b x).backward (Tensor3.flatten W) (den e) idx := rfl
-
-/-- **XLA-`SAME` strided-depthwise bias-SGD faithfulness.** -/
-@[simp] theorem depthwiseStridedXlaBiasSgd_faithful {c h w kH kW : Nat} (bN lrS : String)
-    (W : DepthwiseKernel c kH kW) (x : Vec (c*(2*h)*(2*w))) (b : Vec c) (lr : ℝ)
-    (e : SHlo (c*h*w)) (o : Fin c) :
-    den (.depthwiseStridedXlaBiasSgd bN lrS W x b lr e) o
-      = b o - lr * (depthwiseStride2Xla_bias_grad_has_vjp W x).backward b (den e) o := rfl
 
 /-- **Swish forward faithfulness.** The `multiply(x, logistic(x))` graph denotes
     the proven `swish` (= `x · σ(x)`, LayerNorm.lean). Smooth everywhere; no kink,
@@ -4008,8 +3963,7 @@ theorem mobilenetv2FwdGraph_faithful
     → 1×1 conv-bn-relu6 head → global-avg-pool → dense. Concrete (not symbolic) peer of
     `mobilenetv2FwdGraph`, tied to the *full* forward `mobilenetv2Forward_full`. Scalar BN.
     ⚠ The five stride-2 sites read the XLA-`SAME` (odd) phase, like every other MobileNetV2
-    graph since 2026-09-05; this one is the scalar-BN stepping stone `mobilenetv2FwdGraphFullPC`
-    replaced, and writes no artifact. -/
+    graph since 2026-09-05; this one is the scalar-BN stepping stone, and writes no artifact. -/
 def mobilenetv2FwdGraphFull
     (epsStr : String)
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)

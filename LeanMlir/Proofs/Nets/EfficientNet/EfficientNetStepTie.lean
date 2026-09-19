@@ -9,7 +9,7 @@ file pins each cotangent to the **actual loss-driven backward chain** of the ren
 the real forward activations through every param op and composing the backward cotangent from the
 loss down through all 16 MBConv blocks (with the residual fan-in at every stride-1 skip AND the SE
 gate fan-in), so each output's `den = certified` becomes a single composed theorem with the forward
-= the proven `efficientnetForwardB`.
+= the proven `efficientnetForwardB_full`.
 
 **What is NEW vs mnv2's tie** (the harder content, hence a dedicated effort):
 * **swish** masks instead of relu6 — the cotangent crosses `swishBack` (smooth, no two-kink
@@ -23,8 +23,6 @@ gate fan-in), so each output's `den = certified` becomes a single composed theor
   must BUILD explicit chain-cot constructors (the bulk of the remaining work).
 
 ## Landed so far (all 3-axiom clean — `[propext, Classical.choice, Quot.sound]`)
-* `efficientnetLossCot_den` — the emitted loss-cotangent graph (`softmaxRowF − %onehot`, the batched
-  per-row softmax-CE gradient) denotes `rowSoftmax(logits) − onehot`. The top of the cotangent chain.
 * **All five per-block-type tie lemmas — every one of the 262 params' SGD ops** denotes the certified
   batched `Σ_n` loss-descent step at the REAL loss-driven backward cotangent:
   - `enet_exp_tied` (16 params) — stride-1 expand block; covers the 9 residual blocks (`ic=oc`) AND the
@@ -56,16 +54,6 @@ open Proofs Proofs.StableHLO
 namespace Proofs.EnetTiePoC
 
 open scoped BigOperators
-
-/-- **The emitted loss-cotangent graph denotes the (batched, per-row) softmax-CE gradient at the
-    logits.** The renderer's `sub (softmaxRowF logits) %onehot`; `rowSoftmaxFlat` is the per-row
-    softmax over the `n=10` classes. The top of the §1a cotangent chain (generic in the batch unit
-    `m`; the renderer instantiates `m=1`). -/
-theorem efficientnetLossCot_den {m : Nat} (nlogN ohN : String) (logits oh : Vec (m * 10)) :
-    den (SHlo.sub (SHlo.softmaxRowF (m := m) (n := 10) (.operand nlogN logits)) (.operand ohN oh))
-      = fun idx => rowSoftmaxFlat m 10 logits idx - oh idx := by
-  funext idx
-  simp only [den_sub, softmaxRowF_faithful, den_operand]
 
 /-! ## Chain-cotangent helpers — the per-op batched backward steps (built fresh, HasVJP-style)
 
@@ -481,7 +469,7 @@ theorem enet_stem_tied {N ic oc h w kHs kWs : Nat}
 `dense(GAP(swish(bn(conv Wh bh)))))` (320→1280 conv, GAP, 1280→nClasses dense), then the batched
 per-row softmax-CE gradient `g = rowSoftmax(logits) − onehot`. The head conv params tie at the chain
 cotangent (loss → dense-back → GAP-back → swish/BN-back); the dense Wfc/bfc tie at the loss cotangent
-`g` directly (the `efficientnetLossCot_den` graph denotes `g`). -/
+`g` directly. -/
 
 /-- **Head, tied.** The 4 head conv-bn params + the 2 dense params (Wfc/bfc) denote the certified step
     at the real head forward + the loss-driven cotangent `g = rowSoftmax(logits) − onehot`. -/

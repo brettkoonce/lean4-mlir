@@ -224,7 +224,7 @@ fidelity:
 
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
        VJP, with a shape check that the opaque-block chain IS the committed forward: the
-       per-example `r34InputGrad_eq_resnet34_vjp`, `mnv2InputGrad_eq_mobilenetv2_vjp`,
+       per-example `r34InputGrad_eq_resnet34_vjp`,
        `convnextInputGrad_eq_convNextForwardTCh_vjp`, `efficientnetInputGradB_full_correct` (16
        blocks, through `HasVJP.backward_unique`) and `vitInputGradK_eq_vitForwardKV_vjp` (depth
        12, 3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g — ViT's and

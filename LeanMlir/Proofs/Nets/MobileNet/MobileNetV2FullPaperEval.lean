@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 The eval twin of `MobileNetV2FullPaper.lean`. That file states the seventeen-block `[t,c,n,s]` net
 at TRAINING BatchNorm, the world its VJP and its typed graph live in; this file states the same
 ladder at INFERENCE BatchNorm — frozen running statistics at all **52** sites, one shared `ε`, as
-`mobilenetv2Forward_full_pc_eval` and the shipped `mobilenetv2_fwd_eval` both do — and proves its
+the shipped `mobilenetv2_fwd_eval` does — and proves its
 typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, the graph of
 `mobilenetv2_fwd_eval.mlir` and its 1000-class twin. (Built 2026-09-05 so the whole-net float
 budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —
@@ -17,9 +17,7 @@ abbreviations (`ivExpandPCEval` / `ivDepthwisePCEval` / `ivDepthwiseStridedPCEva
 tokens: every BatchNorm node's `den` is `bnPerChannelEvalTensor3`, proved once.
 
 ⭐ **The SSA names are the committed ones, and that is the point of this file's graph.** The
-six-block eval graph (`mobilenetv2FwdGraphFullPCEval`) names its statistic slots `%mue1`/`%vare1`,
-which matches no artifact and could not, since its net has none; the seventeen-block TRAINING
-graph names its parameters `%b17gp`/`%b17btp`, where the render emits `%gp17`/`%btp17`. This
+seventeen-block TRAINING graph names its parameters `%b17gp`/`%b17btp`, where the render emits `%gp17`/`%btp17`. This
 file's graph carries `bnSiteP`'s names verbatim: `%stnmu`/`%stnvar` for the stem, `%b{k}enmu`,
 `%b{k}dnmu`, `%b{k}pnmu` and their `nvar` peers per block, `%hnmu`/`%hnvar` for the head, around
 `irSig`/`irSigNoExp`'s `%We{k}`/`%ge{k}`/`%bte{k}`/`%Wd{k}`/`%gd{k}`/`%btd{k}`/`%Wp{k}`/`%gp{k}`/
@@ -43,7 +41,7 @@ namespace Proofs
 -- ════════════════════════════════════════════════════════════════
 
 /-- Weights and running statistics of one MobileNetV2 bottleneck at inference. ⚠ No per-site `ε`:
-    the eval forward takes ONE shared `ε`, as `mobilenetv2Forward_full_pc_eval` does and as the
+    the eval forward takes ONE shared `ε`, as the
     render emits (a single `eps` constant), where the training bundle `IVW` carries one per site. -/
 structure IVWEval (ic mid oc : Nat) where
   eW : Kernel4 mid ic 1 1

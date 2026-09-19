@@ -169,15 +169,6 @@ theorem mnv2_render_stem_convb_certified {ic oc h w kH kW : Nat}
           pdiv (fun b' : Vec oc => flatConvStride2 W b' x) b o j * dy j := by
   rw [(flatConvStride2_bias_grad_has_vjp W x).correct]
 
-/-- **Stem conv bias output, certified — XLA-`SAME` phase.** -/
-theorem mnv2_render_stem_convb_xla_certified {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (x : Vec (ic * (2 * h) * (2 * w)))
-    (b : Vec oc) (dy : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :
-    b o - lr * (flatConvStride2Xla_bias_grad_has_vjp W x).backward b dy o
-      = b o - lr * ∑ j : Fin (oc * h * w),
-          pdiv (fun b' : Vec oc => flatConvStride2Xla W b' x) b o j * dy j := by
-  rw [(flatConvStride2Xla_bias_grad_has_vjp W x).correct]
-
 -- ── C.2 Strided depthwise weight (`dW`, blocks b1,b3,b5,b6) ──
 -- (`depthwiseStride2_weight_grad_has_vjp` RELOCATED to `Depthwise.lean` — see § C header.)
 

@@ -52,21 +52,6 @@ theorem residualBackGraph_faithful {n : Nat}
   -- with `id.backward x dy = dy`; defeq but needs full-transparency unfolding.
   rfl
 
-/-- **Fully concrete instance — no remaining hypothesis.** A residual block
-    `x ↦ x + dense W b x` (square `W`): its backward graph `addV (backGraph W dy) %dy`
-    denotes the proven `residual_has_vjp (dense W b)` backward. The body hypothesis
-    of `residualBackGraph_faithful` is discharged by the existing per-op
-    `backGraph_faithful`. This is the smallest end-to-end fan-in backward
-    faithfulness: a *branching* backward graph proven equal to a composed VJP. -/
-theorem residual_dense_backGraph_faithful {n : Nat}
-    (W : Mat n n) (b x dy : Vec n) :
-    den (residualBackGraph (backGraph W dy) (.operand "%dy" dy))
-      = (residual_has_vjp (dense W b) (dense_differentiable W b)
-          (dense_has_vjp W b)).backward x dy :=
-  residualBackGraph_faithful (dense W b) (dense_differentiable W b)
-    (dense_has_vjp W b) x (.operand "%dy" dy) (backGraph W dy)
-    (backGraph_faithful (W := W) (b := b) (x := x) dy)
-
 -- ════════════════════════════════════════════════════════════════
 -- § Squeeze-excite (multiplicative fan-in) — the harder branch
 -- ════════════════════════════════════════════════════════════════
@@ -103,44 +88,6 @@ theorem seBlockBackGraph_faithful {n : Nat}
   -- with `id.backward x u = u`; defeq under full transparency.
   rfl
 
-/-- **Fully concrete SE instance — no remaining hypothesis** (linear gate).
-    `seBlock (dense W b)` (square `W`): its multiplicative-fan-in backward
-    graph denotes the proven `seBlock_has_vjp` backward. The gate-path
-    hypothesis is discharged by `backGraph_faithful` at the SE cotangent
-    `x ⊙ dy`. Exercises the product-rule bi-cotangent structure end-to-end;
-    the GAP+sigmoid gate of EfficientNet additionally needs `sigmoidBack`
-    (present) and a `gapBack` op (the remaining IR primitive). -/
-theorem se_dense_backGraph_faithful {n : Nat}
-    (W : Mat n n) (b x dy : Vec n) :
-    den (seBlockBackGraph (backGraph W (fun j => x j * dy j)) (dense W b x) dy)
-      = (seBlock_has_vjp (dense W b) (dense_differentiable W b)
-          (dense_has_vjp W b)).backward x dy :=
-  seBlockBackGraph_faithful (dense W b) (dense_differentiable W b)
-    (dense_has_vjp W b) x dy (backGraph W (fun j => x j * dy j))
-    (backGraph_faithful (W := W) (b := b) (x := x) (fun j => x j * dy j))
-
--- ════════════════════════════════════════════════════════════════
--- § `gapBack`: the squeeze's input-cotangent (new core-IR primitive)
--- ════════════════════════════════════════════════════════════════
-
-/-- **GAP-backward (VJP) faithfulness.** The new `gapBack` SHlo op denotes the
-    proven `globalAvgPoolFlat_has_vjp` backward: the per-channel cotangent
-    broadcast back over the H×W grid and scaled by `1/(h·w)`. This is the last
-    *per-op* brick the EfficientNet SE **gate** sub-network needs — its squeeze
-    is a global-average-pool, whose backward had no renderable op before.
-    Combined with the existing `sigmoidBack`/`denseRowBack`, the concrete
-    GAP→dense→sigmoid gate's backward is now expressible, which discharges the
-    `gateBack` hypothesis of `seBlockBackGraph_faithful` for the real SE gate. -/
-theorem gapBack_faithful {c h w : Nat} (v : Vec (c * h * w)) (e : SHlo c) :
-    den (SHlo.gapBack (c := c) (h := h) (w := w) e)
-      = (globalAvgPoolFlat_has_vjp c h w).backward v (den e) := rfl
-
-/-- **broadcastBack (VJP = sum-over-spatial) faithfulness.** Denotes the
-    adjoint of `broadcastFlat` — the gate's outermost backward op. -/
-theorem broadcastBack_faithful {c h w : Nat} (v : Vec c) (e : SHlo (c * h * w)) :
-    den (SHlo.broadcastBack (c := c) (h := h) (w := w) e)
-      = (broadcastFlat_has_vjp c h w).backward v (den e) := rfl
-
 -- ════════════════════════════════════════════════════════════════
 -- § The CONCRETE EfficientNet SE gate, assembled from per-op bricks
 -- ════════════════════════════════════════════════════════════════
@@ -172,23 +119,6 @@ theorem seGate_backGraph_faithful {c h w r : Nat}
     den (seGateBackGraph W₁ b₁ W₂ b₂ x (fun j => x j * dy j))
       = (seGate_has_vjp (h := h) (w := w) W₁ b₁ W₂ b₂).backward x
           (fun j => x j * dy j) := rfl
-
-/-- **Concrete EfficientNet SE block, whole backward graph ↔ proven VJP.**
-    `seBlockFull = x ⊙ seGate(x)` with the real GAP→reduce→swish→expand→sigmoid
-    gate: its multiplicative-fan-in backward graph (main path `seGate(x) ⊙ dy`
-    via `layerScaleF`, plus the assembled gate-path `seGateBackGraph` at the
-    cotangent `x ⊙ dy`) denotes the proven `seBlockFull_has_vjp` backward. No
-    remaining hypothesis. -/
-theorem seBlockFull_backGraph_faithful {c h w r : Nat}
-    (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
-    (x dy : Vec (c * h * w)) :
-    den (seBlockBackGraph (seGateBackGraph W₁ b₁ W₂ b₂ x (fun j => x j * dy j))
-          (seGate (h := h) (w := w) W₁ b₁ W₂ b₂ x) dy)
-      = (seBlockFull_has_vjp (h := h) (w := w) W₁ b₁ W₂ b₂).backward x dy :=
-  seBlockBackGraph_faithful (seGate (h := h) (w := w) W₁ b₁ W₂ b₂)
-    (seGate_differentiable W₁ b₁ W₂ b₂) (seGate_has_vjp W₁ b₁ W₂ b₂)
-    x dy (seGateBackGraph W₁ b₁ W₂ b₂ x (fun j => x j * dy j))
-    (seGate_backGraph_faithful W₁ b₁ W₂ b₂ x dy)
 
 -- ════════════════════════════════════════════════════════════════
 -- § MBConv stage bricks: conv/depthwise-bn-swish + conv-bn (proj)
@@ -336,39 +266,6 @@ theorem mbconvBodyBackGraph_faithful {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat
       seBlockFullBackGraphE_faithful,
       convBnBackGraph_faithful (hε := hεp)]
   rfl
-
-/-- The whole MBConv residual block backward graph (body + identity skip). -/
-noncomputable def mbconvResidualBackGraph {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
-    (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ)
-    (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ)
-    (Ws₁ : Mat cmid r) (bs₁ : Vec r) (Ws₂ : Mat r cmid) (bs₂ : Vec cmid)
-    (Wp : Kernel4 c cmid kHp kWp) (bp : Vec c) (εp γp βp : ℝ)
-    (x dy : Vec (c * h * w)) : SHlo (c * h * w) :=
-  residualBackGraph
-    (mbconvBodyBackGraph We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp x
-      (.operand "%dy" dy)) (.operand "%dy" dy)
-
-/-- **The whole per-example EfficientNet MBConv residual block: backward graph
-    ↔ proven VJP, no hypotheses beyond `ε>0`.** Assembles all stage bricks
-    (`convBnSwish`/`dwBnSwish`/`SE`/`convBn`) + the identity skip into the proven
-    `mbconvResidual_has_vjp` backward. -/
-theorem mbconvResidual_backGraph_faithful {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
-    (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
-    (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ) (hεd : 0 < εd)
-    (Ws₁ : Mat cmid r) (bs₁ : Vec r) (Ws₂ : Mat r cmid) (bs₂ : Vec cmid)
-    (Wp : Kernel4 c cmid kHp kWp) (bp : Vec c) (εp γp βp : ℝ) (hεp : 0 < εp)
-    (x dy : Vec (c * h * w)) :
-    den (mbconvResidualBackGraph We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp x dy)
-      = (mbconvResidual_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd
-          Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp).backward x dy :=
-  residualBackGraph_faithful
-    (mbconvBody We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp)
-    (mbconvBody_differentiable We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
-    (mbconvBody_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
-    x (.operand "%dy" dy)
-    (mbconvBodyBackGraph We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp x (.operand "%dy" dy))
-    (mbconvBodyBackGraph_faithful We be εe γe βe hεe Wd bd εd γd βd hεd
-      Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp x (.operand "%dy" dy))
 
 -- ════════════════════════════════════════════════════════════════
 -- § Batched lifting (start): true batch-norm backward primitive
@@ -765,8 +662,7 @@ noncomputable def mbResidBlockBackBatchedGraph {N c mid h w kHd kWd r : Nat}
 /-- **CAPSTONE — the whole batched EfficientNet MBConv residual block: backward
     graph ↔ the proven `mbResidFwdB_has_vjp`.** The four batched stage backward
     graphs (`cbsB`/`dwbsB`/`seB`/`projB`) chained at their forward activations +
-    the identity skip, proven equal to the repo's batched MBConv block VJP. The
-    batched analogue of the per-example `mbconvResidual_backGraph_faithful`. -/
+    the identity skip, proven equal to the repo's batched MBConv block VJP. -/
 theorem mbResidBlockBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)

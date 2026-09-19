@@ -186,12 +186,6 @@ noncomputable def fwdFull_has_vjp_at (x : Vec (1 * 2 * 2)) : HasVJPAt fwdFull x 
     ((dense_differentiable Wh bh) _) s4_vjp
     ((dense_has_vjp Wh bh).toHasVJPAt _)
 
-/-- **Public correctness theorem** — the full-depth net's backward equals the
-    `pdiv`-contracted Jacobian VJP at every input. -/
-theorem fwdFull_has_vjp_correct (x : Vec (1 * 2 * 2)) (dy : Vec 2) (i : Fin (1 * 2 * 2)) :
-    (fwdFull_has_vjp_at x).backward dy i = ∑ j : Fin 2, pdiv fwdFull x i j * dy j :=
-  (fwdFull_has_vjp_at x).correct dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § The full-depth level-3 seal (reuses `mnv2Live_jacobian_nonzero` via the washout)
 -- ════════════════════════════════════════════════════════════════
@@ -206,8 +200,7 @@ theorem fwdFull_jacobian_nonzero : fderiv ℝ fwdFull 0 ≠ 0 := by
 
 /-- **The full-depth level-3 seal** (full 17-block MobileNetV2): the proven whole-
     network backward of the full-depth live MobileNetV2 is **not the zero map** at
-    the witness input `0` — some basis-cotangent probe returns a nonzero row. The
-    full-depth peer of `mnv2Live_backward_nontrivial`. -/
+    the witness input `0` — some basis-cotangent probe returns a nonzero row. -/
 theorem fwdFull_backward_nontrivial :
     ∃ (j₀ : Fin 2) (i₀ : Fin (1 * 2 * 2)),
       (fwdFull_has_vjp_at 0).backward (basisVec j₀) i₀ ≠ 0 :=

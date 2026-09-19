@@ -122,7 +122,6 @@ import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
 import LeanMlir.Proofs.Training.SgdDescentMlp
 import LeanMlir.Proofs.Codegen.AdamStep
@@ -139,7 +138,6 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 import LeanMlir.Proofs.Foundation.BackNetFolds
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FoldB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4WholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
@@ -228,7 +226,6 @@ open Proofs
 #print axioms HasVJPAt.backward_nontrivial_of_fderiv_ne
 -- Item B2 discharged at the live MobileNetV2 witness (MobileNetV2JacobianSeal.lean)
 #print axioms Mnv2Live.mnv2Live_jacobian_nonzero
-#print axioms Mnv2Live.mnv2Live_backward_nontrivial
 
 -- CNN
 #print axioms maxPool2_has_vjp3_correct
@@ -296,10 +293,8 @@ open Proofs
 #print axioms relu6_has_vjp_at
 #print axioms mobilenetv2_has_vjp_at_correct
 -- MobileNetV2: concrete whole-network instance, every ReLU6 smoothness hypothesis discharged
-#print axioms MobileNetV2Concrete.mnv2Concrete_has_vjp_correct
 -- MobileNetV2: the LIVE counterpart
 #print axioms Mnv2Live.bn13_window
-#print axioms Mnv2Live.mnv2Live_has_vjp_correct
 -- ...and the live witness is non-degenerate
 #print axioms Mnv2Live.chSum_convX
 #print axioms Mnv2Live.mnv2Live_forward_nonconstant
@@ -470,11 +465,7 @@ open Proofs
 -- ch7-MobileNetV2 §1 fold (depthwise half)
 #print axioms Mnv2PoC.depthwiseW_den
 #print axioms Mnv2PoC.depthwiseB_den
-#print axioms Mnv2PoC.depthwiseStridedW_den
-#print axioms Mnv2PoC.depthwiseStridedB_den
 -- The XLA-SAME per-example stem dens (2026-09-05)
-#print axioms Mnv2PoC.convStridedXlaW_den
-#print axioms Mnv2PoC.convStridedXlaB_den
 -- ch8-EfficientNet-B0 §1 fold (den)
 #print axioms EnetPoC.convWB_den
 #print axioms EnetPoC.convStridedWB_den
@@ -485,7 +476,6 @@ open Proofs
 #print axioms EnetPoC.depthwiseWB_den
 #print axioms EnetPoC.depthwiseStridedWB_den
 -- ch8-EfficientNet-B0 §1a TIE
-#print axioms EnetTiePoC.efficientnetLossCot_den
 #print axioms EnetTiePoC.enet_exp_tied
 #print axioms EnetTiePoC.enet_strided_tied
 #print axioms EnetTiePoC.enet_noexp_tied
@@ -609,7 +599,6 @@ open Proofs
 #print axioms ResNet34LiveFull.liveFwd2Full_jacobian_nonzero
 #print axioms ResNet34LiveFull.liveFwd2Full_backward_nontrivial
 -- Item B2 FULL DEPTH (MobileNetV2JacobianSealFull.lean)
-#print axioms Mnv2Live.fwdFull_has_vjp_correct
 #print axioms Mnv2Live.fwdFull_nonconstant
 #print axioms Mnv2Live.fwdFull_jacobian_nonzero
 #print axioms Mnv2Live.fwdFull_backward_nontrivial
@@ -660,11 +649,9 @@ open Proofs
 #print axioms mnv2_render_stem_convb_certified
 -- Their XLA-SAME twins (2026-09-05)
 #print axioms mnv2_render_stem_convW_xla_certified
-#print axioms mnv2_render_stem_convb_xla_certified
 #print axioms mnv2_render_depthwiseW_strided_xla_certified
 #print axioms mnv2_render_depthwiseb_strided_xla_certified
 -- MobileNetV2 RENDER (planning/archive/mobilenetv2_close.md Item A)
-#print axioms StableHLO.mobilenetv2FwdGraphFullPC_faithful
 -- THE COTANGENT PASS / = ∂loss/∂θ FOLD
 #print axioms conv_total_loss_grad_fold
 #print axioms conv_bias_total_loss_grad_fold
@@ -680,7 +667,6 @@ open Proofs
 #print axioms StableHLO.mbStridedGraphB_faithful
 #print axioms StableHLO.mbResidGraphB_faithful
 #print axioms StableHLO.headGraphB_faithful
-#print axioms StableHLO.efficientnetFwdGraphB_faithful
 -- EfficientNet-B0 cotangent-chain CLOSE (Item D)
 #print axioms batchMap_has_vjp
 #print axioms batchMap_differentiable
@@ -692,7 +678,6 @@ open Proofs
 #print axioms mbStridedFwdB_has_vjp
 #print axioms mbResidFwdB_has_vjp
 #print axioms headFwdB_has_vjp
-#print axioms efficientnetForwardB_has_vjp
 -- FULL EfficientNet-B0 (all 16 MBConv blocks, real [t,c,n,s,k] spec)
 #print axioms StableHLO.mbExpGraphB_faithful
 #print axioms StableHLO.efficientnetFwdGraphB_full_faithful
@@ -906,7 +891,6 @@ open Proofs
 #print axioms Proofs.FloatModel.bnMean_close_of
 #print axioms Proofs.FloatModel.bnMean_num_le
 -- The SECOND ImageNet-scale whole-net float number: the MobileNetV2 inference forward (mnv2EvalBridge)
-#print axioms Proofs.StableHLO.mobilenetv2FwdGraphFullPCEval_faithful
 -- The mnv2 block bridges are generic in the NORMALISATION too (`*Gen`)
 #print axioms Proofs.mobilenetv2ForwardPaperEval
 #print axioms Proofs.StableHLO.ivNoExpGraphEvalW_faithful
@@ -915,13 +899,11 @@ open Proofs
 #print axioms Proofs.StableHLO.ivStridedGraphEvalW_faithful
 #print axioms Proofs.StableHLO.mobilenetv2FwdGraphPaperEval_faithful
 -- The EfficientNet-B0 INFERENCE forward and its graph
-#print axioms Proofs.efficientnetForwardBEval
 #print axioms Proofs.StableHLO.stemGraphBEval_faithful
 #print axioms Proofs.StableHLO.mbNoExpGraphBEval_faithful
 #print axioms Proofs.StableHLO.mbStridedGraphBEval_faithful
 #print axioms Proofs.StableHLO.mbResidGraphBEval_faithful
 #print axioms Proofs.StableHLO.headGraphBEval_faithful
-#print axioms Proofs.StableHLO.efficientnetFwdGraphBEval_faithful
 -- The B0 stage and block bridges are generic in the NORMALISATION (`*BGen`)
 #print axioms Proofs.mbExpFwdBEval
 #print axioms Proofs.StableHLO.mbExpGraphBEval_faithful
@@ -932,7 +914,6 @@ open Proofs
 #print axioms Proofs.efficientnetForwardB_fullEval
 #print axioms Proofs.StableHLO.efficientnetFwdGraphB_fullEval_faithful
 -- The FOURTH ImageNet-scale whole-net float statement, ConvNeXt-T's forward (cnxBridge), a different kind of statement
-#print axioms Proofs.efficientnetForwardB_eq_chain
 -- §B integrity tie (the r34 identity block)
 #print axioms Proofs.convFlatBack_eq_vjp_backward
 #print axioms Proofs.rblkPC_has_vjp_at
@@ -960,11 +941,8 @@ open Proofs
 #print axioms Proofs.cnxBlockChBack_eq_vjp
 -- §B integrity tie (mnv2)
 #print axioms Proofs.invresBodyPC_has_vjp_at
-#print axioms Proofs.invresBodyBackPC_eq_invresBodyPC_vjp
 #print axioms Proofs.invresBodyStridedPC_has_vjp_at
-#print axioms Proofs.invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp
 -- §B integrity tie (efficientnet)
-#print axioms Proofs.mbconvBodyBack_eq_mbconvBody_vjp
 -- §B integrity tie (vit MHSA — the sdpa adjoint)
 #print axioms Proofs.projBack_core_coord
 #print axioms Proofs.woback_unflatten
@@ -990,20 +968,13 @@ open Proofs
 #print axioms Proofs.convStridedBnRelu6PC_differentiableAt
 #print axioms Proofs.convStridedBnRelu6PCBack_eq_vjp_backward
 #print axioms Proofs.convBnRelu6PCBack_eq_vjp_backward
-#print axioms Proofs.residualBack_eq_vjp_backward
-#print axioms Proofs.mobilenetv2PC_has_vjp_at
-#print axioms Proofs.mobilenetv2Forward_full_pc_eq_chain
-#print axioms Proofs.mnv2InputGrad_eq_mobilenetv2_vjp
 -- AND THE SAME TIE AT THE PAPER DEPTH — all seventeen bottlenecks (MobileNetV2PaperWholeBackCertifiedTie.lean)
 #print axioms Proofs.mobilenetv2PaperPC_has_vjp_at
 #print axioms Proofs.mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp
 #print axioms Proofs.mobilenetv2ForwardPaper_eq_slots
 -- AND FOR THE WHOLE EFFICIENTNET-B0 (EfficientNetWholeBackCertifiedTie.lean)
-#print axioms Proofs.efficientnetB_has_vjp
 #print axioms Proofs.stemBBack_eq_vjp_backward
 #print axioms Proofs.headFwdBBack_eq_vjp_backward
-#print axioms Proofs.efficientnetInputGradB_eq_efficientnetForwardB_vjp
-#print axioms Proofs.efficientnetForwardB_has_vjp_committed
 -- AND AT THE PAPER DEPTH — all 16 MBConv blocks (EfficientNetFullWholeBackCertifiedTie.lean)
 #print axioms Proofs.efficientnetB_full_has_vjp
 #print axioms Proofs.efficientnetInputGradB_full_eq_efficientnetB_full_vjp
@@ -1349,13 +1320,8 @@ open Proofs
 
 -- EfficientNet backward-graph faithfulness (den-level)
 #print axioms StableHLO.residualBackGraph_faithful
-#print axioms StableHLO.residual_dense_backGraph_faithful
 #print axioms StableHLO.seBlockBackGraph_faithful
-#print axioms StableHLO.se_dense_backGraph_faithful
-#print axioms StableHLO.gapBack_faithful
-#print axioms StableHLO.broadcastBack_faithful
 #print axioms StableHLO.seGate_backGraph_faithful
-#print axioms StableHLO.seBlockFull_backGraph_faithful
 #print axioms StableHLO.bnBack_faithful_fn
 #print axioms StableHLO.convBnSwishBackGraph_faithful
 #print axioms StableHLO.dwBnSwishBackGraph_faithful
@@ -1363,7 +1329,6 @@ open Proofs
 #print axioms StableHLO.seGateBackGraphE_faithful
 #print axioms StableHLO.seBlockFullBackGraphE_faithful
 #print axioms StableHLO.mbconvBodyBackGraph_faithful
-#print axioms StableHLO.mbconvResidual_backGraph_faithful
 -- ConvNeXt backward-graph faithfulness (den-level)
 -- §2o Part A (2026-07-31)
 #print axioms Proofs.rowLNBack_affine_eq
@@ -1391,11 +1356,6 @@ open Proofs
 -- Its XLA-SAME peer, the token MobileNetV2's Adam render emits at its four strided depthwises.
 #print axioms StableHLO.depthwiseStridedXlaBackBatched_faithful
 -- The PER-EXAMPLE XLA-SAME backward tokens MobileNetV2's SGD train step emits (MobileNetV2Render.lean, 2026-09-05)
-#print axioms StableHLO.depthwiseStridedXlaBack_faithful
-#print axioms StableHLO.depthwiseStridedXlaWeightSgd_faithful
-#print axioms StableHLO.depthwiseStridedXlaBiasSgd_faithful
-#print axioms StableHLO.convStridedXlaWeightSgd_faithful
-#print axioms StableHLO.convStridedXlaBiasSgd_faithful
 -- Batched strided depthwise → bn → swish stage backward graph.
 #print axioms StableHLO.dwbsSBackBatchedGraph_faithful
 -- Capstone: the batched EfficientNet downsample MBConv body backward graph.
@@ -1469,24 +1429,14 @@ open Proofs
 #print axioms StableHLO.r50DownBlockLayer
 
 -- r34 / mnv2 / enet / convnext
-#print axioms StableHLO.enetMBConvLayer
 #print axioms StableHLO.cnxBlockChLayer
 #print axioms StableHLO.r34BasicBlockLayer
 #print axioms StableHLO.r34DownBlockLayer
-#print axioms StableHLO.mnv2ResidBlockLayer
-#print axioms StableHLO.enetChain_faithful
 
 -- MNv4 — the four UIB families COLLAPSED into one body
 #print axioms StableHLO.dwbReluBackBatchedGraph_faithful
 #print axioms StableHLO.dwbReluBstridedBackBatchedGraph_faithful
-#print axioms StableHLO.mnv4UibSkipBlock_faithful
-#print axioms StableHLO.mnv4UibPreStridedBody_faithful
-#print axioms StableHLO.mnv4UibPostStridedBody_faithful
 #print axioms StableHLO.stemBackBatchedGraph_faithful
-#print axioms StableHLO.mnv4FusedStage_faithful
-#print axioms StableHLO.mnv4Head_faithful
-#print axioms StableHLO.mnv4BodyOfRow_faithful
-#print axioms StableHLO.mnv4PreStridedBodyOfRow_faithful
 
 -- MNv4's NET level (T1, T2)
 #print axioms StableHLO.mobilenetv4ForwardB_full_has_vjp_at
@@ -1498,14 +1448,6 @@ open Proofs
 #print axioms StableHLO.mnv4PreStridedGraphB_faithful
 
 -- MNv4's T3 §1 fold
-#print axioms Mnv4PoCB.mnv4BnGradsCertified
-#print axioms Mnv4PoCB.mnv4StemGradsCertified
-#print axioms Mnv4PoCB.mnv4FusedGradsCertified
-#print axioms Mnv4PoCB.mnv4ExtraDWGradsCertified
-#print axioms Mnv4PoCB.mnv4ConvNeXtGradsCertified
-#print axioms Mnv4PoCB.mnv4FfnGradsCertified
-#print axioms Mnv4PoCB.mnv4PreStridedGradsCertified
-#print axioms Mnv4PoCB.mnv4HeadGradsCertified
 
 -- MNv4's T3 §1a tie
 #print axioms Mnv4TieB.mnv4_extradw_tiedB
@@ -1527,15 +1469,8 @@ open Proofs
 #print axioms Proofs.mobilenetv4ForwardB_full_eq_slots
 
 -- EfficientNet — §8e's VJP-without-backward-graph holes, closed
-#print axioms StableHLO.enetMbExp_faithful
-#print axioms StableHLO.enetMbNoExp_faithful
-#print axioms StableHLO.enetMbStrided_faithful
-#print axioms StableHLO.enetHead_faithful
-#print axioms StableHLO.mbStridedFwdBackBatchedGraph_faithful
-#print axioms StableHLO.mbExpFwdBackBatchedGraph_faithful
 #print axioms StableHLO.mbNoExpBackBatchedGraph_faithful
 #print axioms StableHLO.headBackBatchedGraph_faithful
-#print axioms StableHLO.enetTrunk
 -- ViT-Tiny §1 FOLD (ViTFold)
 #print axioms Proofs.ViTPoC.veclnGammaSgd_den
 #print axioms Proofs.ViTPoC.rowDenseWeightSgd_den
@@ -2000,7 +1935,6 @@ open Proofs
 
 -- 4b.1 EfficientNet-B0
 #print axioms Proofs.EnetPoCG.convWGradB_den
-#print axioms Proofs.EnetPoCG.bnGammaGradB_den
 #print axioms Proofs.EnetPoCG.bnBetaGradB_den
 #print axioms Proofs.EnetPoCG.denseWGradB_den
 #print axioms Proofs.EnetPoCG.denseBGradB_den
@@ -2060,11 +1994,6 @@ open Proofs
 #print axioms Proofs.Mnv2PaperPoCG.depthwiseBGradB_den
 #print axioms Proofs.Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den
 #print axioms Proofs.Mnv2PaperPoCG.depthwiseStridedXlaBGradB_den
-#print axioms Proofs.Mnv2PaperPoCG.mnv2StemGradsCertified
-#print axioms Proofs.Mnv2PaperPoCG.mnv2NoExpGradsCertified
-#print axioms Proofs.Mnv2PaperPoCG.mnv2Stride1GradsCertified
-#print axioms Proofs.Mnv2PaperPoCG.mnv2Stride2GradsCertified
-#print axioms Proofs.Mnv2PaperPoCG.mnv2HeadDenseGradsCertified
 
 -- 4.2a: THE LABEL-SMOOTHED LOSS COTANGENT, AT A GENERAL TARGET (SmoothedLossCot.lean, 2026-09-06)
 #print axioms Proofs.softCE_oneHot

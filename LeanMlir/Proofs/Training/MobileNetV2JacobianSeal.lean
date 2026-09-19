@@ -251,24 +251,5 @@ theorem mnv2Live_jacobian_nonzero : fderiv ℝ fwd 0 ≠ 0 := by
 
 -- ── the pointwise VJP at an arbitrary input (window holds everywhere) ──
 
-/-- The whole-net VJP holds at *every* input (the window discharges all five
-    ReLU6 sites regardless of the activation), so we may seal at `0`. -/
-noncomputable def mnv2Live_has_vjp_at_input (v : Vec (1 * 2 * 2)) : HasVJPAt fwd v :=
-  mobilenetv2_has_vjp_at Ws bs 1 1 3 one_pos
-    We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
-    We₂ be₂ 1 1 3 one_pos Wd₂ bd₂ 1 1 3 one_pos Wp₂ bp₂ 1 1 3 one_pos Wh bh v
-    (fun k => win _ k) (fun k => win _ k) (fun k => win _ k)
-    (fun k => win _ k) (fun k => win _ k)
-
-/-- **The level-3 seal for `Mnv2Live`** (Item B2): the proven whole-network
-    backward of the nonzero-weight live MobileNetV2 is **not the zero map** at the
-    witness input `0` — some basis-cotangent probe returns a nonzero row. This is
-    strictly stronger than `mnv2Live_forward_nonconstant` (level 2): a non-constant
-    forward could still have a zero Jacobian at the witness; this rules that out. -/
-theorem mnv2Live_backward_nontrivial :
-    ∃ (j₀ : Fin 2) (i₀ : Fin (1 * 2 * 2)),
-      (mnv2Live_has_vjp_at_input 0).backward (basisVec j₀) i₀ ≠ 0 :=
-  (mnv2Live_has_vjp_at_input 0).backward_nontrivial_of_fderiv_ne mnv2Live_jacobian_nonzero
-
 end Mnv2Live
 end Proofs

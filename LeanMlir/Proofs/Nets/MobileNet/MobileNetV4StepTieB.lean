@@ -1,12 +1,15 @@
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FoldB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 
 /-! # T3 §1a tie for MobileNetV4-Conv-M — every gradient node at its CHAIN cotangent
 
-`MobileNetV4FoldB.lean` proves every parameter gradient node denotes the certified gradient
-**for an arbitrary cotangent**. This file removes that freedom: each node is stated at the
-cotangent the render's own backward chain delivers, driven by a loss cotangent `g` at the logits.
+Every parameter gradient node MNv4's batched train step emits denotes the certified gradient
+**for an arbitrary cotangent**, by a leaf lemma it shares with ResNet-34 or EfficientNet-B0 (the
+table below). This file removes that freedom: each node is stated at the cotangent the render's own
+backward chain delivers, driven by a loss cotangent `g` at the logits.
 
 ⚠⚠ **No accuracy is quoted for this net.** Conv-M has no Imagenette run and no verified ImageNet
 run; the ties that pin these statements to the reference's function are the 2026-09-07 pair.
@@ -19,10 +22,34 @@ none after the project's BatchNorm. So the block-output cotangent `dyOut` reache
 mask, and where its skip branch carries the masked cotangent. Here the skip fan-in is
 `addVB (body dx) dyOut`, unmasked.
 
-⭐⭐ **And every block's `*CotIn_eq_vjp` is `mnv4BodyOfRow_faithful`, not a new derivation.** The
+⭐⭐ **And every block's `*CotIn_eq_vjp` is its block layer's `.faithful`, not a new derivation.** The
 UIB bodies are `CertLayer`s, so `den (graph x e) = vjp.backward (den e)` is already a theorem one
 tier down — the very fact 4.2a/4.2c/§3.5c re-derive per block for r34, mnv2 and R50. This file
 composes certified VJPs; it does not re-prove them.
+
+## ⭐⭐ Zero new fp32 op-kind lemmas — MNv4's nine kinds are three other nets', verbatim
+
+| op kind | sites | certificate |
+|---|---|---|
+| `bnGammaGradB` / `bnBetaGradB` | 77 BN layers | `ResNet34PoCB.bnGammaGradB_den` / `bnBetaGradB_den` |
+| `convWeightGradB` | expands, projects, both head convs, the fused project | `ResNet34PoCB.convWGradB_den` |
+| `convStridedWeightGradB` (SYMMETRIC) | the fused stage's 3×3/s2 | `ResNet34PoCB.convStridedWGradB_den` |
+| `convStridedXlaWeightGradB` (XLA-`SAME`) | the stem, and only the stem | `EnetPoCG.convStridedXlaWGradB_den` |
+| `depthwiseWeightGradB` | every stride-1 depthwise | `EnetPoCG.depthwiseWGradB_den` |
+| `depthwiseStridedWeightGradB` | rows 1, 3, 11's leading depthwise | `EnetPoCG.depthwiseStridedWGradB_den` |
+| `denseWeightGradB` / `denseBiasGradB` | the classifier | `ResNet34PoCB.denseWGradB_den` / `denseBGradB_den` |
+
+⚠⚠ **TWO padding phases, and the two strided conv kinds are NOT interchangeable.** The stem is
+XLA-`SAME` (`flatConvStride2Xla`, EfficientNet-B0's op) and the fused stage is SYMMETRIC
+(`flatConvStride2`, ResNet's). Identical types, identical emitted shapes, different certificates —
+`scripts/convention_audit.py` is what reads them apart, and swapping one for the other is the
+6.16e-2-vs-1.79e-6 forward-tie defect `planning/archive/mnv4_verified.md` §3b measured.
+
+⛔ **MNv4 emits no conv BIAS gradient at all.** `MobileNetV4RenderB` has no `convBias` flag — every
+bias is folded into its BatchNorm and bound to `%zb{c}` — so `convBiasGradB` and its strided peers
+are never emitted and there is nothing to state. Same situation as ResNet-50. The five
+`*GradBBf16` kinds the bf16 artifacts emit are folded in
+[`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean).
 
 ## ⚠⚠ Everything here is GENERIC IN THE ROW, and that is load-bearing
 
@@ -320,7 +347,7 @@ def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
-/-- ⭐⭐ **And it holds** — twelve instantiations of `MobileNetV4FoldB`'s `∀ cot` fold with
+/-- ⭐⭐ **And it holds** — twelve instantiations of the shared `∀ cot` leaf folds with
     the freedom removed. Nothing here is new mathematics; what is new is that the cotangents are
     the chain's, not free. -/
 theorem mnv4_extradw_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
@@ -466,7 +493,7 @@ def mnv4PreStridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p 
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
-/-- ⭐⭐ **And it holds** — twelve instantiations (the first at the STRIDED depthwise) of `MobileNetV4FoldB`'s `∀ cot` fold with
+/-- ⭐⭐ **And it holds** — twelve instantiations (the first at the STRIDED depthwise) of the shared `∀ cot` leaf folds with
     the freedom removed. Nothing here is new mathematics; what is new is that the cotangents are
     the chain's, not free. -/
 theorem mnv4_prestrided_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)

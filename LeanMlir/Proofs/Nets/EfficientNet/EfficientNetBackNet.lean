@@ -1,34 +1,20 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
-/-! # EfficientNet's four remaining holes, closed — and they were all one shape
+/-! # EfficientNet's MBConv1 and head backward graphs
 
-`planning/archive/mnv4_verified.md` §8e swept the repo for **certified batched forwards with no BACKWARD
-graph** and found five. One (`efficientnetForwardB`) is the whole-net forward, which no net has and
-which is the artifact-tie item. The other four are EfficientNet's:
-
-| forward | is | why it had no backward graph |
-|---|---|---|
-| `mbExpFwdB` | `projB ∘ seB ∘ dwbsB ∘ cbsB` | `mbBodyBackBatchedGraph` is the *same* chain, but its types bake in `ic = oc = c` for the residual — it could not serve the channel-changing form |
-| `mbNoExpFwdB` | `projB ∘ seB ∘ dwbsB` | MBConv1: no expand stage, so nothing composed it |
-| `mbStridedFwdB` | `projB ∘ seB ∘ dwbsSB ∘ cbsB@2h` | the downsample variant |
-| `headFwdB` | `dense ∘ GAP ∘ cbsB` | same shape as MNv4's head, swish for relu |
-
-⭐ **Every constituent stage was already certified AND already had a backward graph.** Nothing was
-missing mathematically — what was missing was the *composition*, and before `CertLayer` each one
-would have been a hand-written `den`-chain + `rfl` in the shape §8b describes. Here they are four
-`comp` chains and the faithfulness is `CertLayer.faithful`.
-
-⚠ **This is the argument for the fold, stated as a measurement.** These four holes existed for as
-long as EfficientNet has, nothing was red, and no test failed — the theorems simply did not exist.
-They became one afternoon's work only once composition was a combinator.
+`planning/archive/mnv4_verified.md` §8e swept the repo for **certified batched forwards with no
+BACKWARD graph**. Four were EfficientNet's; two turned out to be naming artifacts and two were
+genuine (the table below). This file states the four EfficientNet stages as `CertLayer`s and closes
+the two genuine holes against the named forwards: `mbNoExpBackBatchedGraph_faithful` (MBConv1,
+`projB ∘ seB ∘ dwbsB` — no expand stage, so nothing had composed it) and
+`headBackBatchedGraph_faithful` (`dense ∘ GAP ∘ cbsB`).
 
 ## Every stage here is GLOBAL
 
 EfficientNet is swish/sigmoid throughout, both smooth, so every layer below has `ok = True`: the
 backward graph denotes the VJP at **every** input, no side conditions. Contrast MNv4/R34/R50, whose
-relu kinks force `_at`. That also means the four block layers compose with **no hypothesis
-threading at all** — `(enetMbExp …).ok` is a conjunction of `True`s.
+relu kinks force `_at`.
 -/
 
 namespace Proofs.StableHLO
@@ -84,103 +70,10 @@ noncomputable def enetSeLayer (N : Nat) {c h w r : Nat}
   faithful := fun _ _ _ => rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § The four holes, as four `comp` chains
--- ════════════════════════════════════════════════════════════════
-
-/-- **`mbExpFwdB`** — MBConv6: expand → depthwise → SE → project. ⭐ Unlike `mbBodyB` this is
-    channel-changing (`ic ≠ oc` allowed), which is exactly why `mbBodyBackBatchedGraph` could not
-    serve it: that graph's types bake in `ic = oc = c` for the residual it feeds. -/
-noncomputable def enetMbExp (N : Nat) {ic mid oc h w : Nat}
-    (expand : CertLayer (N * (ic * h * w)) (N * (mid * h * w)))
-    (depthwise : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (se : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w))) :
-    CertLayer (N * (ic * h * w)) (N * (oc * h * w)) :=
-  expand.comp (depthwise.comp (se.comp project))
-
-/-- **`mbNoExpFwdB`** — MBConv1: no expand stage, so the depthwise runs on the block input. -/
-noncomputable def enetMbNoExp (N : Nat) {ic oc h w : Nat}
-    (depthwise : CertLayer (N * (ic * h * w)) (N * (ic * h * w)))
-    (se : CertLayer (N * (ic * h * w)) (N * (ic * h * w)))
-    (project : CertLayer (N * (ic * h * w)) (N * (oc * h * w))) :
-    CertLayer (N * (ic * h * w)) (N * (oc * h * w)) :=
-  depthwise.comp (se.comp project)
-
-/-- **`mbStridedFwdB`** — the downsample MBConv. ⚠ The expand runs at the INPUT resolution `2h` and
-    the *depthwise* carries the stride, the same placement MNv4's post-strided UIB uses. -/
-noncomputable def enetMbStrided (N : Nat) {ic mid oc h w : Nat}
-    (expand : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * (2 * h) * (2 * w))))
-    (depthwise : CertLayer (N * (mid * (2 * h) * (2 * w))) (N * (mid * h * w)))
-    (se : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w))) :
-    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
-  expand.comp (depthwise.comp (se.comp project))
-
-/-- **`headFwdB`** — EfficientNet's head: 1×1 conv-bn-**swish** → GAP → dense. ⭐ Structurally
-    MNv4's head with swish for relu, so it reuses `mnv4GapLayer` and `mnv4DenseLayer` verbatim —
-    those two are net-agnostic despite the name. -/
-noncomputable def enetHead (N : Nat) {c oc h w nC : Nat}
-    (headConv : CertLayer (N * (c * h * w)) (N * (oc * h * w)))
-    (gap : CertLayer (N * (oc * h * w)) (N * oc))
-    (cls : CertLayer (N * oc) (N * nC)) :
-    CertLayer (N * (c * h * w)) (N * nC) :=
-  headConv.comp (gap.comp cls)
-
--- ════════════════════════════════════════════════════════════════
--- § The four faithfulness theorems — each is `CertLayer.faithful`
--- ════════════════════════════════════════════════════════════════
-
-theorem enetMbExp_faithful (N : Nat) {ic mid oc h w : Nat}
-    (expand : CertLayer (N * (ic * h * w)) (N * (mid * h * w)))
-    (depthwise se : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
-    (x : Vec (N * (ic * h * w))) (hx : (enetMbExp N expand depthwise se project).ok x)
-    (e : SHlo (N * (oc * h * w))) :
-    den ((enetMbExp N expand depthwise se project).graph x e)
-      = ((enetMbExp N expand depthwise se project).vjp x hx).backward (den e) :=
-  (enetMbExp N expand depthwise se project).faithful x hx e
-
-theorem enetMbNoExp_faithful (N : Nat) {ic oc h w : Nat}
-    (depthwise se : CertLayer (N * (ic * h * w)) (N * (ic * h * w)))
-    (project : CertLayer (N * (ic * h * w)) (N * (oc * h * w)))
-    (x : Vec (N * (ic * h * w))) (hx : (enetMbNoExp N depthwise se project).ok x)
-    (e : SHlo (N * (oc * h * w))) :
-    den ((enetMbNoExp N depthwise se project).graph x e)
-      = ((enetMbNoExp N depthwise se project).vjp x hx).backward (den e) :=
-  (enetMbNoExp N depthwise se project).faithful x hx e
-
-theorem enetMbStrided_faithful (N : Nat) {ic mid oc h w : Nat}
-    (expand : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * (2 * h) * (2 * w))))
-    (depthwise : CertLayer (N * (mid * (2 * h) * (2 * w))) (N * (mid * h * w)))
-    (se : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
-    (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hx : (enetMbStrided N expand depthwise se project).ok x)
-    (e : SHlo (N * (oc * h * w))) :
-    den ((enetMbStrided N expand depthwise se project).graph x e)
-      = ((enetMbStrided N expand depthwise se project).vjp x hx).backward (den e) :=
-  (enetMbStrided N expand depthwise se project).faithful x hx e
-
-theorem enetHead_faithful (N : Nat) {c oc h w nC : Nat}
-    (headConv : CertLayer (N * (c * h * w)) (N * (oc * h * w)))
-    (gap : CertLayer (N * (oc * h * w)) (N * oc))
-    (cls : CertLayer (N * oc) (N * nC))
-    (x : Vec (N * (c * h * w))) (hx : (enetHead N headConv gap cls).ok x)
-    (e : SHlo (N * nC)) :
-    den ((enetHead N headConv gap cls).graph x e)
-      = ((enetHead N headConv gap cls).vjp x hx).backward (den e) :=
-  (enetHead N headConv gap cls).faithful x hx e
-
--- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ CLOSING §8e's HOLES AGAINST THE *NAMED* FORWARDS
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠⚠ **The `comp` chains above did NOT close §8e's holes, and re-running the sweep is what said
-so.** They give the *capability* — a certified composition — but they are stated over abstract
-`CertLayer` arguments, so nothing referenced `mbExpFwdB_has_vjp` and friends. The sweep reported
-the same five holes afterwards. **A fix that the measurement does not confirm is not a fix.**
-
-⭐ Probing the named forwards then found the real situation, which is **not** what §8e assumed:
+/-! ⭐ Probing the named forwards found the real situation, which is **not** what §8e assumed:
 
 | forward | verdict |
 |---|---|
@@ -193,35 +86,6 @@ the same five holes afterwards. **A fix that the measurement does not confirm is
 lesson is the same one §4c(a) taught about the relu6 detector, in the opposite direction — there a
 detector could not fire, here one fires spuriously. **Both are measurement bugs, and only re-running
 the measurement after the fix catches either.** -/
-
-/-- ⭐ `mbStridedFwdB`'s backward graph — the SAME graph `mbDownBodyB` already had, restated against
-    the other name for that VJP. `rfl`-level, because the two `_has_vjp` defs are one object. -/
-theorem mbStridedFwdBackBatchedGraph_faithful {N ic mid oc h w kHd kWd r : Nat}
-    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
-    den (mbDownBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂
-          Wp bp εp γp βp x e)
-      = (mbStridedFwdB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd
-          Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp).backward x (den e) :=
-  mbDownBodyBackBatchedGraph_faithful We be εe hεe γe βe Wd bd εd hεd γd βd
-    Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp x e
-
-/-- `mbExpFwdB`'s backward graph, where its types meet `mbBodyB`'s (`ic = oc = c`, the residual
-    MBConv6 that EfficientNet actually stacks). -/
-theorem mbExpFwdBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
-    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
-    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
-    den (mbBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp x e)
-      = (mbExpFwdB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd
-          Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp).backward x (den e) :=
-  mbBodyBackBatchedGraph_faithful We be εe hεe γe βe Wd bd εd hεd γd βd
-    Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp x e
 
 /-- **`mbNoExpFwdB`'s backward graph** — genuinely new: MBConv1 has no expand stage, so
     `dwbsB⁻¹ ∘ seB⁻¹ ∘ projB⁻¹` had never been chained. -/
@@ -268,17 +132,5 @@ theorem headBackBatchedGraph_faithful {N c oc h w nC : Nat}
   rw [headBackBatchedGraph, cbsBackBatchedGraph_faithful (hε := hεh)]
   simp only [headFwdB_has_vjp, vjp_comp, Function.comp_apply]
   rfl
-
-/-- **EfficientNet-B0's trunk, as a type-level check.** MBConv1 (no-expand) at full resolution,
-    then a strided MBConv6, then a stride-1 MBConv6 — the `stem → MBConv1 → MBConv6/s2 → MBConv6`
-    ladder `EfficientNetRenderPC` documents for its representative forward. -/
-noncomputable def enetTrunk (N : Nat) {c₀ c₁ c₂ h w : Nat}
-    (stem : CertLayer (N * (c₀ * (2 * (2 * h)) * (2 * (2 * w))))
-                      (N * (c₁ * (2 * h) * (2 * w))))
-    (mb1 : CertLayer (N * (c₁ * (2 * h) * (2 * w))) (N * (c₁ * (2 * h) * (2 * w))))
-    (mb6s2 : CertLayer (N * (c₁ * (2 * h) * (2 * w))) (N * (c₂ * h * w)))
-    (mb6 : CertLayer (N * (c₂ * h * w)) (N * (c₂ * h * w))) :
-    CertLayer (N * (c₀ * (2 * (2 * h)) * (2 * (2 * w)))) (N * (c₂ * h * w)) :=
-  stem.comp (mb1.comp (mb6s2.comp mb6))
 
 end Proofs.StableHLO

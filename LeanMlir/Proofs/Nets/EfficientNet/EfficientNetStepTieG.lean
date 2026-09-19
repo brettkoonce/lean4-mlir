@@ -382,7 +382,7 @@ theorem enet_stem_tiedG {N ic oc h w kHs kWs : Nat}
 `dense(GAP(swish(bn(conv Wh bh)))))` (320→1280 conv, GAP, 1280→nClasses dense), then the batched
 per-row softmax-CE gradient `g = rowSoftmax(logits) − onehot`. The head conv params tie at the chain
 cotangent (loss → dense-back → GAP-back → swish/BN-back); the dense Wfc/bfc tie at the loss cotangent
-`g` directly (the `efficientnetLossCot_den` graph denotes `g`). -/
+`g` directly. -/
 
 /-- **Head, tied.** The 4 head conv-bn params + the 2 dense params (Wfc/bfc) denote the certified step
     at the real head forward + the loss-driven cotangent `g = rowSoftmax(logits) − onehot`. -/

@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 /-! # ConvNeXt-T's whole-net backward tie — the stage fold, and ⛔ what the tie FOUND
 
 ⭐ **Read `EvenKernelConvBack.lean` first; the finding is the deliverable.** This file was started
-as the ConvNeXt peer of `r34InputGrad_eq_resnet34_vjp` and `mnv2InputGrad_eq_mobilenetv2_vjp` —
+as the ConvNeXt peer of `r34InputGrad_eq_resnet34_vjp` —
 `planning/archive/float_budget_numbers_log.md` §3.18, done BEFORE the number rather than after it, because
 §3.10's tie found r34 reversing the wrong pool and moved a committed number 4×. It paid out the
 same way at the first leaf it touched.
@@ -46,9 +46,8 @@ all the work and no new conv machinery is needed. On top of it:
 4. ⭐⭐ **`convnextInputGrad_eq_convNextForwardTCh_vjp` — THE APEX.** `convnextInputGrad`, with
    every slot pinned to the certified per-op backward at its own saved activation, IS
    `(convNextForwardTCh_has_vjp …).backward x`. The ConvNeXt peer of
-   `r34InputGrad_eq_resnet34_vjp` and `mnv2InputGrad_eq_mobilenetv2_vjp`, and **stronger than
-   both**: `convNextForwardTCh_has_vjp` is `HasVJP` — everywhere — not the smooth-point `HasVJPAt`
-   those two are, because GELU, LayerNorm, convolution and the layer scale are all smooth and
+   `r34InputGrad_eq_resnet34_vjp`, and **stronger**: `convNextForwardTCh_has_vjp` is `HasVJP` —
+   everywhere — not the smooth-point `HasVJPAt` that one is, because GELU, LayerNorm, convolution and the layer scale are all smooth and
    ConvNeXt has no kink anywhere. Its only hypotheses are the 23 LayerNorm positivities, so unlike
    every other whole-net backward tie in this repo it carries no smoothness side-condition.
    ⭐⭐ And ConvNeXt has its shape check too

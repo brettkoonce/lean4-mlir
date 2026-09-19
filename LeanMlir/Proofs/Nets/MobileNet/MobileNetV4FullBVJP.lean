@@ -34,8 +34,7 @@ ResNet-50's own shape at seven stages rather than eighteen.
 
 ⚠⚠ `CertLayer` demands a backward graph and **no render emits a gradient into `%x`** — there is no
 `convStridedXlaBackBatched` token, because the artifact's backward ends at the stem conv's WEIGHT
-gradient. That is EfficientNet-B0's situation exactly (`enetTrunk` takes its stem as a parameter
-for the same reason), so MNv4's stem stays a plain function and the apex is one `vjp_comp_at`.
+gradient. That is EfficientNet-B0's situation exactly, so MNv4's stem stays a plain function and the apex is one `vjp_comp_at`.
 
 ⭐ **No new `Foundation` lemma was needed.** `bnReluStage_has_vjp_at` is generic in the inner op,
 so the XLA-padded stride-2 stem is one instantiation at `flatConvStride2Xla` — the same lemma

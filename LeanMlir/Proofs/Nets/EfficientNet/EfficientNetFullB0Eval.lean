@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 The eval twin of `EfficientNetFullB0.lean`. That file states the sixteen-block `[t,c,n,s,k]` net at
 TRAINING BatchNorm (`bnBatchLA`), the world its VJP and its typed graph live in; this file states
 the same ladder at INFERENCE BatchNorm — frozen running statistics at all **49** sites, one shared
-`ε`, as `efficientnetForwardBEval` and the shipped `efficientnet_fwd_eval` both do — and proves
+`ε`, as the shipped `efficientnet_fwd_eval` does — and proves
 its typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, the graph of
 `efficientnet_fwd_eval.mlir` and its 1000-class twin. (Built 2026-09-05 so the whole-net float
 budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —

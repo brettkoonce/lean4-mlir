@@ -192,8 +192,7 @@ theorem flatConvStride2Back_eq_vjp_backward {ic oc h w kH kW : Nat}
     matching `flatConvStride2Xla = decimateOddFlat ∘ flatConv`. The TF-origin stems' (B0,
     MobileNetV2) leaf. ⚠ This is the theorem that fixes the odd-phase backward's DIRECTION: the
     emitted transposed-conv pad `[p+1, p-1]` (opposite to the weight grads' `[p-1, p+1]`) denotes
-    this map through `depthwiseStridedXlaBack_faithful`'s conv peer, so a backward derived "by
-    symmetry" with the weight grads cannot be tied here. -/
+    this map, so a backward derived "by symmetry" with the weight grads cannot be tied here. -/
 theorem flatConvStride2XlaBack_eq_vjp_backward {ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
@@ -537,9 +536,8 @@ private theorem chainComp₅_comp {m n : Nat} (f g h i j : Vec n → Vec n) (k :
     prose in a docstring. Here the pool appears on both sides of one statement the kernel
     checks.
 
-    The MobileNetV2 peer is `mobilenetv2Forward_full_pc_eq_chain`
-    (`MobileNetV2WholeBackCertifiedTie.lean`), which had this from the day it was written; the
-    ConvNeXt peer is `convNextForwardTCh_eq_chain` ([`Nets/ConvNeXt/ConvNeXtFullT.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtFullT.lean)). ⚠ Both of
+    The MobileNetV2 peer is `mobilenetv2ForwardPaper_eq_slots`
+    (`MobileNetV2PaperWholeBackCertifiedTie.lean`); the ConvNeXt peer is `convNextForwardTCh_eq_chain` ([`Nets/ConvNeXt/ConvNeXtFullT.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtFullT.lean)). ⚠ Both of
     those are a bare `rfl` and this one CANNOT be: their apexes chain their blocks one slot each,
     where `resnet34_has_vjp_at` groups its `[3,4,6,3]` runs under `chainComp`, and a `chainComp`
     node has to be reduced away BEFORE the defeq — see `chainComp₂_comp` above. -/

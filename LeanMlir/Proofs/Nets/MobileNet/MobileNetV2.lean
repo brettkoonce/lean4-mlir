@@ -35,7 +35,7 @@ the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
 The strided sites — the 6-block `mobilenetv2Forward_full`'s stem and its four downsample
 depthwises — read `flatConvStride2Xla` / `depthwiseStride2FlatXla`, the XLA-`SAME` (odd)
 phase every MobileNetV2 artifact emits, re-spelled 2026-09-05 with the rest of the Proofs
-tier. This net is the scalar-BN stepping stone `mobilenetv2Forward_full_pc` replaced: no
+tier. This net is a scalar-BN stepping stone: no
 artifact and no float number rests on it, and it moved so the whole MobileNetV2 cone reads
 one phase. The 2-block generic `mobilenetv2Forward` below has a stride-1 stem and is not
 affected either way.
@@ -768,60 +768,19 @@ namespace MobileNetV2Concrete
 noncomputable def Ws  : Kernel4 2 1 1 1 := fun _ _ _ _ => 0
 noncomputable def bs  : Vec 2 := fun _ => 0
 noncomputable def We₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def bE₁ : Vec 2 := fun _ => 0
 noncomputable def Wd₁ : DepthwiseKernel 2 1 1 := fun _ _ _ => 0
-noncomputable def bD₁ : Vec 2 := fun _ => 0
 noncomputable def Wp₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def bP₁ : Vec 2 := fun _ => 0
 noncomputable def We₂ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def bE₂ : Vec 2 := fun _ => 0
 noncomputable def Wd₂ : DepthwiseKernel 2 1 1 := fun _ _ _ => 0
-noncomputable def bD₂ : Vec 2 := fun _ => 0
 noncomputable def Wp₂ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def bP₂ : Vec 2 := fun _ => 0
 noncomputable def Wh  : Mat 2 2 := fun _ _ => 0
 noncomputable def bh  : Vec 2 := fun _ => 0
 noncomputable def X   : Vec (1 * 2 * 2) := fun _ => 0
 
-/-- **Whole-network VJP for a concrete MobileNetV2** — every ReLU6
-    smoothness hypothesis (`bn ≠ 0 ∧ bn ≠ 6` at the five relu6 sites)
-    discharged: every BN input is the zero vector (zero kernels), so each
-    BN output is its shift `β = 1 ∈ (0,6)` via `bnForward_const`. -/
-noncomputable def mnv2Concrete_has_vjp_at :
-    HasVJPAt (mobilenetv2Forward Ws bs 1 1 1 We₁ bE₁ 1 1 1 Wd₁ bD₁ 1 1 1 Wp₁ bP₁ 1 1 1
-      We₂ bE₂ 1 1 1 Wd₂ bD₂ 1 1 1 Wp₂ bP₂ 1 1 1 Wh bh) X :=
-  mobilenetv2_has_vjp_at Ws bs 1 1 1 (by norm_num)
-    We₁ bE₁ 1 1 1 (by norm_num) Wd₁ bD₁ 1 1 1 (by norm_num) Wp₁ bP₁ 1 1 1 (by norm_num)
-    We₂ bE₂ 1 1 1 (by norm_num) Wd₂ bD₂ 1 1 1 (by norm_num) Wp₂ bP₂ 1 1 1 (by norm_num)
-    Wh bh X
-    (by intro k
-        rw [flatConv_eq_zero Ws bs (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
-        exact ⟨by norm_num, by norm_num⟩)
-    (by intro k
-        rw [flatConv_eq_zero We₁ bE₁ (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
-        exact ⟨by norm_num, by norm_num⟩)
-    (by intro k
-        rw [depthwiseFlat_eq_zero Wd₁ bD₁ (fun _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
-        exact ⟨by norm_num, by norm_num⟩)
-    (by intro k
-        rw [flatConv_eq_zero We₂ bE₂ (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
-        exact ⟨by norm_num, by norm_num⟩)
-    (by intro k
-        rw [depthwiseFlat_eq_zero Wd₂ bD₂ (fun _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
-        exact ⟨by norm_num, by norm_num⟩)
-
-/-- **Public unconditional correctness theorem** — the concrete MobileNetV2's
-    backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
-theorem mnv2Concrete_has_vjp_correct (dy : Vec 2) (i : Fin (1 * 2 * 2)) :
-    mnv2Concrete_has_vjp_at.backward dy i =
-      ∑ j : Fin 2, pdiv (mobilenetv2Forward Ws bs 1 1 1 We₁ bE₁ 1 1 1 Wd₁ bD₁ 1 1 1 Wp₁ bP₁ 1 1 1
-        We₂ bE₂ 1 1 1 Wd₂ bD₂ 1 1 1 Wp₂ bP₂ 1 1 1 Wh bh) X i j * dy j :=
-  mnv2Concrete_has_vjp_at.correct dy i
-
 end MobileNetV2Concrete
 
 -- ════════════════════════════════════════════════════════════════
--- § The *live* counterpart of `MobileNetV2Concrete`
+-- § The *live* MobileNetV2 witness
 --
 --   `MobileNetV2Concrete` (above) discharges the off-the-kink bundle by
 --   zeroing every kernel → constant output → zero Jacobian. `Mnv2Live`
@@ -943,30 +902,6 @@ theorem win (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
     bnForward (2 * 2 * 2) 1 1 3 z k ≠ 0 ∧ bnForward (2 * 2 * 2) 1 1 3 z k ≠ 6 := by
   obtain ⟨h0, h6⟩ := bn13_window (2 * 2 * 2) (by norm_num) (by norm_num) 1 one_pos z k
   exact ⟨h0.ne', h6.ne⟩
-
-/-- **Unconditional whole-network VJP on a nonzero, non-collapsed MobileNetV2.**
-    Every ReLU6 smoothness hypothesis of `mobilenetv2_has_vjp_at` is discharged
-    by `win` (the window lemma) — *not* by a constant collapse. No side
-    conditions; three-axiom closure. -/
-noncomputable def mnv2Live_has_vjp_at :
-    HasVJPAt (mobilenetv2Forward Ws bs 1 1 3
-      We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
-      We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh) X :=
-  mobilenetv2_has_vjp_at Ws bs 1 1 3 one_pos
-    We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
-    We₂ be₂ 1 1 3 one_pos Wd₂ bd₂ 1 1 3 one_pos Wp₂ bp₂ 1 1 3 one_pos Wh bh X
-    (fun k => win _ k) (fun k => win _ k) (fun k => win _ k)
-    (fun k => win _ k) (fun k => win _ k)
-
-/-- **Public unconditional correctness theorem** — the nonzero-weight
-    MobileNetV2's backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
-theorem mnv2Live_has_vjp_correct (dy : Vec 2) (i : Fin (1 * 2 * 2)) :
-    mnv2Live_has_vjp_at.backward dy i =
-      ∑ j : Fin 2,
-        pdiv (mobilenetv2Forward Ws bs 1 1 3
-          We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
-          We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh) X i j * dy j :=
-  mnv2Live_has_vjp_at.correct dy i
 
 -- ── Non-vacuity seal: the live forward is genuinely non-constant ──
 -- Everything below proves `mnv2Live_forward_nonconstant : forward X ≠ forward 0`,
