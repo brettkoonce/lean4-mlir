@@ -3,53 +3,15 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
 import LeanMlir.Proofs.Nets.ViT.ViTFoldG
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 
-/-! # T3 §1 fold for ConvNeXt-T at the UN-FUSED gradient — the Adam artifact's op set
+/-! # ConvNeXt-T un-fused gradient nodes at the per-example index
 
-`ConvNeXtFold.lean` (with the shared per-example folds it leans on) makes every parameter
-output of the SGD-inline `convnext_train_step.mlir` `den`-faithful at the fused `θ − lr·g` ops.
-`ConvNeXtRender.lean` renders that traversal TWICE, under one `adam : Bool`: the `false` branch
-emits the fused `*Sgd` ops, and the `true` branch emits the RAW gradient and hands it to the AdamW
-triple. Every non-SGD artifact of this net — `convnext_adam_train_step.mlir`, the ImageNet
-`convnextin_adamdpwxclipdrop` whose accuracy the book quotes, and the clip/weight-decay/drop-path
-variants — is on the `true` branch. This file is the fold at those nodes.
-
-⭐ **One lemma per op kind certifies every optimizer tail at once**, because AdamW, the clipped and
-weight-decayed variants and plain SGD all consume the same gradient node. The fusion itself is
-`rfl` (`StableHLO.lean`'s `*Sgd_eq_grad` family), so nothing here is new mathematics: each proof is
-the fused lemma's proof with the `congr 1` / `congrArg (lr * ·)` wrapper peeling dropped, which is
-`ResNet34FoldB.lean`'s recipe at the per-example index.
-
-## ⭐ ConvNeXt was already half-way there, and the reason is worth recording
-
-`psW`, the 4×4/s4 patchify stem weight, has **no fused peer at all** — `convStride4WeightGrad` is a
-gradient op in both renders, because the SGD path wraps it in hand-written text (a declared §5
-carve-out). That carve-out was the exception; 4b makes it the norm, and `psWGrad_den` below is the
-only lemma in this file whose statement is unchanged from what the SGD render already needed.
-
-## The op table of `convnext_adam_train_step.mlir`
-
-| emitted node | lemma | fused peer it un-fuses |
-|---|---|---|
-| `layerScaleChGammaGrad` (18 block γ) | `layerScaleChGammaGrad_den` | `ConvNeXtFold.layerScaleChGammaSgd_den` |
-| `convWeightGrad` / `convBiasGrad` (18 expand + 18 project 1×1, + the stem bias) | `convWGrad_den` / `convBGrad_den` | `CifarPoC.convW_den` / `convB_den` |
-| `depthwiseWeightGrad` / `depthwiseBiasGrad` (18 × 7×7) | `depthwiseWGrad_den` / `depthwiseBGrad_den` | `Mnv2PoC.depthwiseW_den` / `depthwiseB_den` |
-| `convStridedWeightGrad` / `convStridedBiasGrad` (3 × 2×2/s2 downsample) | `convStridedWGrad_den` / `convStridedBGrad_den` | `ResNet34PoC.convStridedW_den` / `convStridedB_den` |
-| `convStride4WeightGrad` (patchify stem) | `psWGrad_den` | none — already un-fused |
-| `veclnGammaGrad` / `rowDenseBiasGrad` at `N = h·w` (22 spatial LN sites) | `chanLnGammaGrad_den` / `chanLnBetaGrad_den` | `ConvNeXtFold.chanLnGammaSgd_den` / `chanLnBetaSgd_den` |
-| `veclnGammaGrad` / `rowDenseBiasGrad` at `N = 1` (the head LN, after GAP) | `headLnGammaGrad_den` / `headLnBetaGrad_den` | `ViTPoC.veclnGammaSgd_den` / `rowDenseBiasSgd_den_lnbeta` |
-| `weightGrad` / `biasGrad` (the classifier) | `headWGrad_den` / `headBGrad_den` | `Cifar8PoC.denseW_den` / `denseB_den` |
-
-⚠ **Symmetric padding at the downsamples.** These are `convStridedWeightGrad` /
-`convStridedBiasGrad`, whose `den` is `flatConvStride2_*`; MobileNetV2's and B0's stems are the
-`convStridedXla*` ops. ConvNeXt is PyTorch-origin, and at an even 2×2 kernel the two phases are
-genuinely different functions, not a cosmetic choice.
-
-## Honest residual
-* Every lemma is `∀ cot`, so each holds at the actual backward-chain cotangent without naming it.
-  Pinning them is the §1a tie (`ConvNeXtStepTie.lean`); re-pointing that capstone at these nodes
-  needs the smoothed-target loss cotangent, scoped with r34's batched tie.
-* The all-reduce in `convnextin_adamdp*` is emitted text outside the AST, so these lemmas are about
-  the per-replica gradient node.
+Three per-example lemmas that `ConvNeXtFoldGB` lifts over the batch: the per-channel layer-scale
+γ gradient (`layerScaleChGammaGrad_den`) and the channel-LN γ/β gradients (`chanLnGammaGrad_den`,
+`chanLnBetaGrad_den`). Each is `den`-faithful at the RAW gradient node, the one every optimizer
+tail (AdamW, the clipped and weight-decayed variants, SGD) consumes. The fusion is `rfl`
+(`StableHLO.lean`'s `*Sgd_eq_grad` family), so each proof is its fused peer's in `ConvNeXtFold`
+with the `θ − lr·` wrapper dropped. Every Adam artifact of this net renders from the batched chain;
+its fold is `ConvNeXtFoldGB`.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -71,99 +33,6 @@ theorem layerScaleChGammaGrad_den {c h w : Nat} (xN cotN : String)
       = ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
   simp only [den, Proofs.CnxPoC.pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
-
--- ════════════════════════════════════════════════════════════════
--- § The 1×1 convolutions (expand / project) and the stem bias
--- ════════════════════════════════════════════════════════════════
-
-/-- **Conv weight GRADIENT denotes the certified weight gradient.** Kernel-generic, so the one
-    lemma covers every 1×1 expand and project AND — at 4×4 — the stem's bias-side twin. -/
-theorem convWGrad_den {ic oc h w kH kW : Nat} (xN cotN : String)
-    (b : Vec oc) (x : Tensor3 ic h w) (W : Kernel4 oc ic kH kW) (cot : Vec (oc * h * w))
-    (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convWeightGrad xN b x W (.operand cotN cot)) idx
-      = ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-                  Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
-               (Kernel4.flatten W) idx j * cot j :=
-  conv_weight_grad_bridge b x (Kernel4.flatten W) cot idx
-
-/-- **Conv bias GRADIENT denotes the certified bias gradient** (the channel sum). Covers the
-    expand/project biases and the patchify stem's `psb`. -/
-theorem convBGrad_den {ic oc h w kH kW : Nat} (cotN : String)
-    (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) (b : Vec oc) (cot : Vec (oc * h * w))
-    (o : Fin oc) :
-    den (SHlo.convBiasGrad W x b (.operand cotN cot)) o
-      = ∑ j : Fin (oc * h * w),
-          pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * cot j :=
-  conv_bias_grad_bridge W x b cot o
-
--- ════════════════════════════════════════════════════════════════
--- § The 7×7 depthwise
--- ════════════════════════════════════════════════════════════════
-
-/-- **Depthwise weight GRADIENT denotes the certified weight gradient.** All 18 blocks; the
-    kernel size is a variable, so 7×7 is an instance. -/
-theorem depthwiseWGrad_den {c h w kH kW : Nat} (xN cotN : String)
-    (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW) (cot : Vec (c * h * w))
-    (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseWeightGrad xN b x W (.operand cotN cot)) idx
-      = ∑ j : Fin (c * h * w),
-          pdiv (fun v' : Vec (c * kH * kW) =>
-                  Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b x))
-               (Tensor3.flatten W) idx j * cot j := by
-  simp only [den]
-  rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b x)).correct
-      (Tensor3.flatten W) cot idx]
-  simp only [hasVJP3_to_hasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
-
-/-- **Depthwise bias GRADIENT denotes the certified bias gradient.** -/
-theorem depthwiseBGrad_den {c h w kH kW : Nat} (cotN : String)
-    (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w) (b : Vec c) (cot : Vec (c * h * w))
-    (o : Fin c) :
-    den (SHlo.depthwiseBiasGrad W x b (.operand cotN cot)) o
-      = ∑ j : Fin (c * h * w),
-          pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b o j * cot j :=
-  (depthwise_bias_grad_has_vjp W x).correct b cot o
-
--- ════════════════════════════════════════════════════════════════
--- § The 2×2/s2 downsamples and the 4×4/s4 patchify stem
---   ⚠ SYMMETRIC padding — `flatConvStride2`, not the XLA-`SAME` twin B0/MobileNetV2 use.
--- ════════════════════════════════════════════════════════════════
-
-/-- **Strided conv weight GRADIENT denotes the certified weight gradient.** The three 2×2/s2
-    downsamples. Kernel-generic: `sWGradGeom`'s odd/even split is what makes the even kernel a
-    call site of the same certificate rather than a hand-written emit. -/
-theorem convStridedWGrad_den {ic oc h w kH kW : Nat} (xN cotN : String)
-    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) (W : Kernel4 oc ic kH kW)
-    (cot : Vec (oc * h * w)) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStridedWeightGrad xN b x W (.operand cotN cot)) idx
-      = ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) => flatConvStride2 (Kernel4.unflatten v') b x)
-               (Kernel4.flatten W) idx j * cot j :=
-  (flatConvStride2_weight_grad_has_vjp b x).correct (Kernel4.flatten W) cot idx
-
-/-- **Strided conv bias GRADIENT denotes the certified bias gradient.** -/
-theorem convStridedBGrad_den {ic oc h w kH kW : Nat} (cotN : String)
-    (W : Kernel4 oc ic kH kW) (x : Vec (ic * (2 * h) * (2 * w))) (b : Vec oc)
-    (cot : Vec (oc * h * w)) (o : Fin oc) :
-    den (SHlo.convStridedBiasGrad W x b (.operand cotN cot)) o
-      = ∑ j : Fin (oc * h * w),
-          pdiv (fun b' : Vec oc => flatConvStride2 W b' x) b o j * cot j :=
-  (flatConvStride2_bias_grad_has_vjp W x).correct b cot o
-
-/-- **Patchify-stem weight GRADIENT denotes the certified weight gradient.** ⭐ The one op in this
-    net that was ALREADY un-fused: `convStride4WeightGrad` has no `*Sgd` peer, because the SGD
-    render wraps it in hand-written text. What 4b changes is that this shape is no longer the
-    exception. -/
-theorem psWGrad_den {ic oc h w kH kW : Nat} (xN cotN : String)
-    (b : Vec oc) (x : Vec (ic * (2 * (2 * h)) * (2 * (2 * w)))) (W : Kernel4 oc ic kH kW)
-    (cot : Vec (oc * h * w)) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStride4WeightGrad xN b x W (.operand cotN cot)) idx
-      = ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) => flatConvStride4 (Kernel4.unflatten v') b x)
-               (Kernel4.flatten W) idx j * cot j :=
-  (flatConvStride4_weight_grad_has_vjp b x).correct (Kernel4.flatten W) cot idx
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 22 spatial LayerNorm sites — the CHANNEL-LN form the render actually emits
@@ -197,44 +66,5 @@ theorem chanLnBetaGrad_den {c h w : Nat} (cotN : String)
   rw [chanLN_beta_contract ε γ β x cot k]
   exact vit_veclnBeta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
     (chanLNRows c h w cot) k
-
--- ════════════════════════════════════════════════════════════════
--- § The head — the post-GAP LayerNorm at one row, and the classifier
--- ════════════════════════════════════════════════════════════════
-
-/-- **Head-LN γ GRADIENT denotes the certified γ gradient.** ViT's vector LayerNorm at `N = 1`:
-    the head LN runs after GAP, on a single `[1, d]` row. -/
-theorem headLnGammaGrad_den {N D : Nat} (xN epsStr cotN : String)
-    (ε : ℝ) (βv : Vec D) (x : Vec (N * D)) (γ : Vec D) (dy : Vec (N * D)) (k : Fin D) :
-    den (SHlo.veclnGammaGrad xN epsStr ε x (.operand cotN dy)) k
-      = ∑ o : Fin (N * D),
-          pdiv (fun gv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε gv βv (Mat.unflatten x r))) γ k o * dy o :=
-  Proofs.ViTPoCG.veclnGammaGrad_den xN epsStr cotN ε βv x γ dy k
-
-/-- **Head-LN β GRADIENT denotes the certified β gradient** (`Σ_rows dy`). -/
-theorem headLnBetaGrad_den {N D : Nat} (cotN : String)
-    (ε : ℝ) (γv : Vec D) (X : Mat N D) (β : Vec D) (dy : Vec (N * D)) (k : Fin D) :
-    den (SHlo.rowDenseBiasGrad (N := N) (c := D) (.operand cotN dy)) k
-      = ∑ o : Fin (N * D),
-          pdiv (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β k o * dy o :=
-  Proofs.ViTPoCG.rowDenseBiasGrad_den_lnbeta cotN ε γv X β dy k
-
-/-- **Classifier weight GRADIENT denotes the certified outer product.** The head runs on the
-    single GAP+LN vector, so this is the plain `weightGrad`, not the row-lifted one. -/
-theorem headWGrad_den {m n : Nat} (aN cotN : String)
-    (a : Vec m) (W : Mat m n) (b : Vec n) (cot : Vec n) (i : Fin m) (j : Fin n) :
-    den (SHlo.weightGrad aN a (.operand cotN cot)) (finProdFinEquiv (i, j))
-      = ∑ k : Fin n,
-          pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b a) (Mat.flatten W)
-               (finProdFinEquiv (i, j)) k * cot k :=
-  Proofs.ViTPoCG.headWGrad_den aN cotN a W b cot i j
-
-/-- **Classifier bias GRADIENT denotes the certified cotangent.** -/
-theorem headBGrad_den {m n : Nat} (cotN : String)
-    (W : Mat m n) (a : Vec m) (b : Vec n) (cot : Vec n) (i : Fin n) :
-    den (SHlo.biasGrad (.operand cotN cot)) i
-      = ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' a) b i j * cot j :=
-  Proofs.ViTPoCG.headBGrad_den cotN W a b cot i
 
 end Proofs.CnxPoCG

@@ -38,9 +38,9 @@ artifact.** `ty [] = "tensor<f32>"`, and `grep -c 'tensor<1xf32>'` is **0** in b
 `convnext_train_step.mlir` and `convnext_adam_train_step.mlir` — the scalar params are `tensor<f32>`
 on both sides. Handoff §0b repeats the stale claim.)*
 
-Every other param (depthwise-7×7 W/b, 1×1 expand/project W/b, per-channel layer-scale γ, scalar-LN
-γ/β, downsample 2×2 W/b, dense W/b) denotes the certified loss-descent step (`ConvNeXtFold` +
-`ConvNeXtClose`/M2/M3). Render is value-independent (`skel` erases values), so placeholders + `lr:=0`
+Every other param (depthwise-7×7 W/b, 1×1 expand/project W/b, per-channel layer-scale γ,
+channel-LN γ/β, downsample 2×2 W/b, dense W/b) denotes the certified loss-descent step
+(`ConvNeXtFold` + M2/M3). Render is value-independent (`skel` erases values), so placeholders + `lr:=0`
 are passed; the emitted `lrStr`/`epsStr` literals carry the real values. -/
 
 open Proofs Proofs.StableHLO

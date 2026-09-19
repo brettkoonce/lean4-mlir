@@ -107,7 +107,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderPC,
              `LeanMlir.Proofs.Foundation.ConvLossFold,
              `LeanMlir.Proofs.Codegen.ResNet34RenderPC,
-             `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose,
              `LeanMlir.Proofs.Nets.ViT.ViTFwdGraph,
              `LeanMlir.Proofs.Nets.ViT.ViTClose,
              `LeanMlir.Proofs.Nets.ViT.ViTChainClose,

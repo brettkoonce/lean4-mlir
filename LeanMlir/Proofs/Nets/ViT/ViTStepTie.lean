@@ -13,227 +13,32 @@ backward cotangent chain. Its batched peer at the un-fused gradient node, the sm
 batch binder — the chain every `vitin_*` accuracy comes from — is `ViTTiePoCGB.vit_net_tiedGB`,
 built from this file's block ties by `batchMap` / `batchMapAux`.
 
-The file is layered the way it was built, and the first two layers are the ladder, not the result:
-* `vit_block_tiedV` — one vector-LN block at a single head, generic in the cotangent: the two
-  residual fan-ins (`vitCotHV`, `vitCotXinV`), the three-way fan-in at LN₁ (`vitCotLn1`), the
-  SDPA backward pinned to the audited `sdpa_back_{Q,K,V}` (`ViTChainClose.vitCotD{Q,K,V}`).
-* `vit_net_tiedV` — the 2-block single-head whole-net thread, the ConvNeXt pattern.
-* `vit_block_tiedMHV` / `vit_net_tiedMHV` — the same at 3 heads via `ViTMultiHeadChain`'s
-  `vitCotD{Q,K,V}mh`, threaded to depth 12 (`vit_net_tiedMHV2` is the depth-2 smoke test).
-* `vit_net_tied_certified` — the 200-parameter capstone: the 192 block parameters, the final LN,
-  the classifier and the patch embed (`vit_cls_den` covers the CLS token at `N = 1`).
+The file has two layers:
+* `vit_block_tiedMHV` / `vit_block_tiedAtMHV` — one multi-head (3 heads, d_head 64) vector-LN
+  block, generic in the cotangent: the two residual fan-ins (`vitCotHV`, `vitCotXinV`), the
+  three-way fan-in at LN₁ (`vitCotLn1`), and the per-head SDPA backward (`ViTMultiHeadChain`'s
+  `vitCotD{Q,K,V}mh`).
+* `vit_net_tied_certified` — the 200-parameter capstone: the 192 block parameters threaded
+  through all 12 blocks, the final LN, the classifier and the patch embed (`vit_cls_den` covers the
+  CLS token at `N = 1`).
 
 Every conjunct delegates to a `ViTPoC.*_den` fold lemma at the chain cotangent — zero new ops,
-zero new bridges. The vector-LN granularity that ships (`[192]` γ/β) is what is modelled; the
-scalar-LN `vitNetBackGraph` is a parallel universe this file never touches. -/
+zero new bridges. The vector-LN granularity that ships (`[192]` γ/β) is what is modelled. -/
 
 namespace Proofs.ViTTiePoC
 
 open scoped BigOperators
 open Proofs Proofs.StableHLO
 
-/-- **One vector-LN transformer block, tied.** Every one of the block's 16 params, fed the cotangent
-    the real backward chain delivers at its site, `den`otes `θ − lr·(certified ∂/∂θ · chain-cot)`.
-    Threads the saved single-head activations (`xin`→`ln1`→`q/k/v`→`ss`/`p`→`att`→`h`→`ln2`→`m1`→`g`)
-    and the chain cotangents (the MLP-residual + attention-residual + three-way LN₁ fan-ins). -/
-def vitBlockTiedV {Np1 D mlpDim : Nat}
-    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
-    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
-    (xin ln1 q k v att h ln2 : Vec (Np1 * D)) (g : Vec (Np1 * mlpDim))
-    (ss p : Vec (Np1 * Np1)) (m1 : Vec (Np1 * mlpDim))
-    (dyOut : Vec (Np1 * D)) (lr : ℝ) : Prop :=
-    let dAtt   : Vec (Np1 * D)      := vitCotAttV ε γ2 Wo Wfc1 Wfc2 h m1 dyOut
-    let dQ     : Vec (Np1 * D)      := vitCotDQ D ss k v dAtt
-    let dK     : Vec (Np1 * D)      := vitCotDK D ss q v dAtt
-    let dV     : Vec (Np1 * D)      := vitCotDV p dAtt
-    let cotLn1 : Vec (Np1 * D)      := vitCotLn1 Wq Wk Wv dQ dK dV
-    let cotH   : Vec (Np1 * D)      := vitCotHV ε γ2 Wfc1 Wfc2 h m1 dyOut
-    let cotLn2 : Vec (Np1 * D)      := vitCotLn2 Wfc1 Wfc2 m1 dyOut
-    let cotM1  : Vec (Np1 * mlpDim) := vitCotM1 Wfc2 m1 dyOut
-    -- LN₁ γ/β  (cot = cotLn1, LN input = xin)
-    ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β1 xin γ1 cotLn1 lr
-  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ1 xin β1 cotLn1 lr
-    -- Q dense W/b  (cot = dQ, dense input = ln1)
-  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bq ln1 Wq dQ lr
-  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wq ln1 bq dQ lr
-    -- K dense W/b  (cot = dK)
-  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bk ln1 Wk dK lr
-  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wk ln1 bk dK lr
-    -- V dense W/b  (cot = dV)
-  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bv ln1 Wv dV lr
-  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wv ln1 bv dV lr
-    -- out-proj dense W/b  (cot = cotH, dense input = att)
-  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bo att Wo cotH lr
-  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wo att bo cotH lr
-    -- LN₂ γ/β  (cot = cotLn2, LN input = h)
-  ∧ ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β2 h γ2 cotLn2 lr
-  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ2 h β2 cotLn2 lr
-    -- fc1 dense W/b  (cot = cotM1, dense input = ln2)
-  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bfc1 ln2 Wfc1 cotM1 lr
-  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wfc1 ln2 bfc1 cotM1 lr
-    -- fc2 dense W/b  (cot = dyOut, dense input = g)
-  ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bfc2 g Wfc2 dyOut lr
-  ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wfc2 g bfc2 dyOut lr
-
-/-- **The block tie holds** — every conjunct is a delegation to a §1-fold generic (`ViTPoC.*_den`) at
-    the chain cotangent. Pure thread + fan-in; ZERO new core ops/bridges. -/
-theorem vit_block_tiedV {Np1 D mlpDim : Nat}
-    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
-    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
-    (xin ln1 q k v att h ln2 : Vec (Np1 * D)) (g : Vec (Np1 * mlpDim))
-    (ss p : Vec (Np1 * Np1)) (m1 : Vec (Np1 * mlpDim))
-    (dyOut : Vec (Np1 * D)) (lr : ℝ) :
-    vitBlockTiedV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
-      Wfc1 bfc1 Wfc2 bfc2 xin ln1 q k v att h ln2 g ss p m1 dyOut lr := by
-  unfold vitBlockTiedV
-  intro dAtt dQ dK dV cotLn1 cotH cotLn2 cotM1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro kk;  exact ViTPoC.veclnGammaSgd_den gN xN epsStr lrStr cotN ε β1 xin γ1 cotLn1 lr kk
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε γ1 (Mat.unflatten xin) β1 cotLn1 lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bq ln1 Wq dQ lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wq (Mat.unflatten ln1) bq dQ lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bk ln1 Wk dK lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wk (Mat.unflatten ln1) bk dK lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bv ln1 Wv dV lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wv (Mat.unflatten ln1) bv dV lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bo att Wo cotH lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wo (Mat.unflatten att) bo cotH lr i
-  · intro kk;  exact ViTPoC.veclnGammaSgd_den gN xN epsStr lrStr cotN ε β2 h γ2 cotLn2 lr kk
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε γ2 (Mat.unflatten h) β2 cotLn2 lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bfc1 ln2 Wfc1 cotM1 lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wfc1 (Mat.unflatten ln2) bfc1 cotM1 lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bfc2 g Wfc2 dyOut lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wfc2 (Mat.unflatten g) bfc2 dyOut lr i
-
-/-! ## Whole-net thread (single-head vector-LN, 2-block representative) — the convnext pattern
-
-`vitBlockFwdOV` is the forward block step (the spelled vector-LN block, exposing its output);
-`vitBlockTiedAtV` recomputes the 11 saved activations from the block INPUT (the spelled block's
-let-chain) and delegates to `vit_block_tiedV` — so the block's params tie at the REAL forward + the
-threaded `dyOut`. `vitBlockCotInAtV` is the attention-residual fan-in (`vitCotXinV`), the block's input
-cotangent (= the previous block's `dyOut`). `@[irreducible]` so the nested 2-block composition stays
-opaque (the r34/mnv2 heartbeat lesson). -/
-
-@[irreducible] noncomputable def vitBlockFwdOV {Np1 D mlpDim : Nat} (ε : ℝ)
-    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
-    (xin : Vec (Np1 * D)) : Vec (Np1 * D) :=
-  -- the spelled vector-LN block at `D` — the block output
-  let X    : Mat Np1 D := Mat.unflatten xin
-  let ln1  : Mat Np1 D := fun r k => layerScale γ1 (fun s => layerNormForward D ε 1 0 (X r) s) k + β1 k
-  let Q    : Mat Np1 D := fun r => dense Wq bq (ln1 r)
-  let K    : Mat Np1 D := fun r => dense Wk bk (ln1 r)
-  let V    : Mat Np1 D := fun r => dense Wv bv (ln1 r)
-  let P    : Mat Np1 Np1 := rowSoftmax (fun i j => sdpa_scale D * Mat.mul Q (Mat.transpose K) i j)
-  let h    : Mat Np1 D := fun r s => X r s + dense Wo bo (Mat.mul P V r) s
-  let ln2  : Mat Np1 D := fun r k => layerScale γ2 (fun s => layerNormForward D ε 1 0 (h r) s) k + β2 k
-  let g    : Mat Np1 mlpDim := fun r => gelu mlpDim (dense Wfc1 bfc1 (ln2 r))
-  Mat.flatten (fun r s => h r s + dense Wfc2 bfc2 (g r) s)
-
-/-- Attention-residual fan-in: the block-input cotangent the chain hands upstream (`vitCotXinV`,
-    recomputing the saves from `xin`). -/
-@[irreducible] noncomputable def vitBlockCotInAtV {Np1 D mlpDim : Nat} (ε : ℝ)
-    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D)
-    (xin dyOut : Vec (Np1 * D)) : Vec (Np1 * D) :=
-  let X    : Mat Np1 D := Mat.unflatten xin
-  let ln1  : Mat Np1 D := fun r k => layerScale γ1 (fun s => layerNormForward D ε 1 0 (X r) s) k + β1 k
-  let Q    : Mat Np1 D := fun r => dense Wq bq (ln1 r)
-  let K    : Mat Np1 D := fun r => dense Wk bk (ln1 r)
-  let V    : Mat Np1 D := fun r => dense Wv bv (ln1 r)
-  let ss   : Mat Np1 Np1 := fun i j => sdpa_scale D * Mat.mul Q (Mat.transpose K) i j
-  let P    : Mat Np1 Np1 := rowSoftmax ss
-  let att  : Mat Np1 D := Mat.mul P V
-  let h    : Mat Np1 D := fun r s => X r s + dense Wo bo (att r) s
-  let ln2  : Mat Np1 D := fun r k => layerScale γ2 (fun s => layerNormForward D ε 1 0 (h r) s) k + β2 k
-  let m1   : Mat Np1 mlpDim := fun r => dense Wfc1 bfc1 (ln2 r)
-  let dAtt := vitCotAttV ε γ2 Wo Wfc1 Wfc2 (Mat.flatten h) (Mat.flatten m1) dyOut
-  let dQ   := vitCotDQ D (Mat.flatten ss) (Mat.flatten K) (Mat.flatten V) dAtt
-  let dK   := vitCotDK D (Mat.flatten ss) (Mat.flatten Q) (Mat.flatten V) dAtt
-  let dV   := vitCotDV (Mat.flatten P) dAtt
-  let cotH := vitCotHV ε γ2 Wfc1 Wfc2 (Mat.flatten h) (Mat.flatten m1) dyOut
-  vitCotXinV ε γ1 Wq Wk Wv xin dQ dK dV cotH
-
-/-- **Input-only block tie** — recompute the 11 saves from `xin` (the spelled block's let-chain),
-    then the generic block tie holds. The vit peer of `cnxBlockTiedAt`. -/
-@[irreducible] def vitBlockTiedAtV {Np1 D mlpDim : Nat}
-    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
-    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
-    (xin dyOut : Vec (Np1 * D)) (lr : ℝ) : Prop :=
-  let X    : Mat Np1 D := Mat.unflatten xin
-  let ln1  : Mat Np1 D := fun r k => layerScale γ1 (fun s => layerNormForward D ε 1 0 (X r) s) k + β1 k
-  let Q    : Mat Np1 D := fun r => dense Wq bq (ln1 r)
-  let K    : Mat Np1 D := fun r => dense Wk bk (ln1 r)
-  let V    : Mat Np1 D := fun r => dense Wv bv (ln1 r)
-  let ss   : Mat Np1 Np1 := fun i j => sdpa_scale D * Mat.mul Q (Mat.transpose K) i j
-  let P    : Mat Np1 Np1 := rowSoftmax ss
-  let att  : Mat Np1 D := Mat.mul P V
-  let h    : Mat Np1 D := fun r s => X r s + dense Wo bo (att r) s
-  let ln2  : Mat Np1 D := fun r k => layerScale γ2 (fun s => layerNormForward D ε 1 0 (h r) s) k + β2 k
-  let m1   : Mat Np1 mlpDim := fun r => dense Wfc1 bfc1 (ln2 r)
-  let g    : Mat Np1 mlpDim := fun r => gelu mlpDim (m1 r)
-  vitBlockTiedV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
-    Wfc1 bfc1 Wfc2 bfc2 xin (Mat.flatten ln1) (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V)
-    (Mat.flatten att) (Mat.flatten h) (Mat.flatten ln2) (Mat.flatten g)
-    (Mat.flatten ss) (Mat.flatten P) (Mat.flatten m1) dyOut lr
-
-/-- **The input-only block tie holds.** Unfold the saves, delegate to `vit_block_tiedV`. -/
-theorem vit_block_tiedAtV {Np1 D mlpDim : Nat}
-    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
-    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
-    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
-    (xin dyOut : Vec (Np1 * D)) (lr : ℝ) :
-    vitBlockTiedAtV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
-      Wfc1 bfc1 Wfc2 bfc2 xin dyOut lr := by
-  unfold vitBlockTiedAtV
-  exact vit_block_tiedV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
-    Wfc1 bfc1 Wfc2 bfc2 xin _ _ _ _ _ _ _ _ _ _ _ dyOut lr
-
-set_option maxHeartbeats 4000000 in
-/-- **The 2-block vector-LN ViT, tied through the real forward + the inter-block cotangent fan-in.**
-    Block inputs are the real forward prefixes (`ib1` the embedded tokens, `ib2 = vitBlockFwdOV(ib1)`);
-    the block-2 output cotangent is the final-LN input-VJP of the classifier-back (`vitCotB2outV`), and
-    block 1's `dyOut` is what block 2 hands upstream (`vitBlockCotInAtV` — the attention-residual fan-in).
-    BOTH blocks' 16 params then `den = θ − lr·(certified ∂/∂θ · real-chain cotangent)`. The vit peer of
-    convnext's `cnx_net_tied_certified` at the 2-block single-head representative. (Final-LN γ/β, the
-    classifier, and the patch embed reuse the §1-fold + chain certs directly; not bundled here.) -/
-theorem vit_net_tiedV {N D mlpDim nClasses : Nat}
-    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ) (γF : Vec D) (Wcls : Mat D nClasses)
-    -- block 1
-    (γ1₁ β1₁ γ2₁ β2₁ : Vec D) (Wq₁ Wk₁ Wv₁ Wo₁ : Mat D D) (bq₁ bk₁ bv₁ bo₁ : Vec D)
-    (Wfc1₁ : Mat D mlpDim) (bfc1₁ : Vec mlpDim) (Wfc2₁ : Mat mlpDim D) (bfc2₁ : Vec D)
-    -- block 2
-    (γ1₂ β1₂ γ2₂ β2₂ : Vec D) (Wq₂ Wk₂ Wv₂ Wo₂ : Mat D D) (bq₂ bk₂ bv₂ bo₂ : Vec D)
-    (Wfc1₂ : Mat D mlpDim) (bfc1₂ : Vec mlpDim) (Wfc2₂ : Mat mlpDim D) (bfc2₂ : Vec D)
-    (ib1 : Vec ((N + 1) * D)) (dy : Vec nClasses) (lr : ℝ) :
-    let ib2    : Vec ((N + 1) * D) := vitBlockFwdOV ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1
-    let b2out  : Vec ((N + 1) * D) := vitBlockFwdOV ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2
-    let dyOut2 : Vec ((N + 1) * D) := vitCotB2outV N D nClasses ε γF Wcls b2out dy
-    let dyOut1 : Vec ((N + 1) * D) := vitBlockCotInAtV ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ ib2 dyOut2
-    -- block 1 tied at its real input (ib1) + the cotangent block 2 hands upstream (dyOut1)
-    vitBlockTiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁
-        Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1 dyOut1 lr
-    -- block 2 tied at its real input (ib2) + the final-LN-back cotangent (dyOut2)
-  ∧ vitBlockTiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂
-        Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2 dyOut2 lr := by
-  intro ib2 b2out dyOut2 dyOut1
-  refine ⟨?_, ?_⟩
-  · exact vit_block_tiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1 dyOut1 lr
-  · exact vit_block_tiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2 dyOut2 lr
-
-
 /-! ## Multi-head promotion (3 heads, d_head=64) — the committed-render block tie
 
 The committed `vitTrainStepRenderV` is multi-head: the SDPA-internal backward `dAtt → dQ/dK/dV`
-runs per head (`vitCotD{Q,K,V}mh`, `ViTMultiHeadChain`), so the Q/K/V dense cots change from the
-single-head `vitCotD{Q,K,V}` to the multi-head `…mh` cots; everything else (the out-proj `Wo`, LN₂,
-the MLP) is head-agnostic and unchanged. `vitBlockTiedMHV` is `vitBlockTiedV` with that swap (and
-no separate `ss`/`p` saves — the per-head scores/weights are recomputed inside the `…mh` cots from
-the saved Q/K). The 16 conjuncts and proof delegations are otherwise identical (the §1-fold generics
-`ViTPoC.*_den` are head-agnostic). -/
+runs per head (`vitCotD{Q,K,V}mh`, `ViTMultiHeadChain`), so the Q/K/V dense cotangents are the
+multi-head `…mh` ones rather than the single-head `vitCotD{Q,K,V}`; everything else (the out-proj
+`Wo`, LN₂, the MLP) is head-agnostic. `vitBlockTiedMHV` states the block's 16 parameter ties with
+those cotangents (no separate `ss`/`p` saves — the per-head scores/weights are recomputed inside the
+`…mh` cots from the saved Q/K); every conjunct delegates to a head-agnostic §1-fold generic
+`ViTPoC.*_den`. `@[irreducible]` wrappers keep the 12-block composition opaque. -/
 
 def vitBlockTiedMHV {Np1 heads d mlpDim : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
@@ -377,133 +182,6 @@ theorem vit_block_tiedAtMHV {Np1 heads d mlpDim : Nat}
   unfold vitBlockTiedAtMHV
   exact vit_block_tiedMHV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
     Wfc1 bfc1 Wfc2 bfc2 xin _ _ _ _ _ _ _ _ _ dyOut lr
-
-
-set_option maxHeartbeats 4000000 in
-/-- **The 2-block MULTI-HEAD vector-LN ViT, tied** (the multi-head peer of `vit_net_tiedV`) — a
-    validation thread for the multi-head per-block infra at depth 2 before the depth-12 promotion. -/
-theorem vit_net_tiedMHV2 {N heads d mlpDim nClasses : Nat}
-    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ) (γF : Vec (heads * d)) (Wcls : Mat (heads * d) nClasses)
-    (γ1₁ β1₁ γ2₁ β2₁ : Vec (heads * d)) (Wq₁ Wk₁ Wv₁ Wo₁ : Mat (heads * d) (heads * d)) (bq₁ bk₁ bv₁ bo₁ : Vec (heads * d))
-    (Wfc1₁ : Mat (heads * d) mlpDim) (bfc1₁ : Vec mlpDim) (Wfc2₁ : Mat mlpDim (heads * d)) (bfc2₁ : Vec (heads * d))
-    (γ1₂ β1₂ γ2₂ β2₂ : Vec (heads * d)) (Wq₂ Wk₂ Wv₂ Wo₂ : Mat (heads * d) (heads * d)) (bq₂ bk₂ bv₂ bo₂ : Vec (heads * d))
-    (Wfc1₂ : Mat (heads * d) mlpDim) (bfc1₂ : Vec mlpDim) (Wfc2₂ : Mat mlpDim (heads * d)) (bfc2₂ : Vec (heads * d))
-    (ib1 : Vec ((N + 1) * (heads * d))) (dy : Vec nClasses) (lr : ℝ) :
-    let ib2    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1
-    let b2out  : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2
-    let dyOut2 : Vec ((N + 1) * (heads * d)) := vitCotB2outV N (heads * d) nClasses ε γF Wcls b2out dy
-    let dyOut1 : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ ib2 dyOut2
-    vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁
-        Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1 dyOut1 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂
-        Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2 dyOut2 lr := by
-  intro ib2 b2out dyOut2 dyOut1
-  refine ⟨?_, ?_⟩
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1 dyOut1 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2 dyOut2 lr
-
-
-set_option maxHeartbeats 16000000 in
-set_option maxRecDepth 400000 in
-/-- **The whole depth-12 MULTI-HEAD vector-LN ViT train step, tied through the real forward.**
-    The 12 transformer blocks (3 heads, d_head=64), each fed the cotangent the real multi-head
-    backward chain delivers at its site, denote the certified loss-descent step. Block inputs are
-    the real forward prefixes (`ib1` the embedded tokens, `ib_{k+1} = vitBlockFwdOMHV(ib_k)`); the
-    block-12 output cotangent is the final-LN input-VJP of the classifier-back (`vitCotB2outV`), and
-    each upstream `dyOut_k` is the attention-residual fan-in the next block hands back
-    (`vitBlockCotInAtMHV`, now multi-head). The depth-12 promotion of `vit_net_tiedMHV2`; the vit
-    peer of convnext's 18-block `cnx_net_tied_certified`. (Final-LN γ/β, classifier, patch embed
-    reuse the §1-fold + chain certs directly; bundled in the next step, not here.) -/
-theorem vit_net_tiedMHV {N heads d mlpDim nClasses : Nat}
-    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ) (γF : Vec ((heads * d))) (Wcls : Mat ((heads * d)) nClasses)
-    -- block 1
-    (lnG1_1 lnB1_1 lnG2_1 lnB2_1 : Vec ((heads * d))) (mWq_1 mWk_1 mWv_1 mWo_1 : Mat ((heads * d)) (heads * d)) (mbq_1 mbk_1 mbv_1 mbo_1 : Vec ((heads * d)))
-    (fW1_1 : Mat ((heads * d)) mlpDim) (fb1_1 : Vec mlpDim) (fW2_1 : Mat mlpDim ((heads * d))) (fb2_1 : Vec ((heads * d)))
-    -- block 2
-    (lnG1_2 lnB1_2 lnG2_2 lnB2_2 : Vec ((heads * d))) (mWq_2 mWk_2 mWv_2 mWo_2 : Mat ((heads * d)) (heads * d)) (mbq_2 mbk_2 mbv_2 mbo_2 : Vec ((heads * d)))
-    (fW1_2 : Mat ((heads * d)) mlpDim) (fb1_2 : Vec mlpDim) (fW2_2 : Mat mlpDim ((heads * d))) (fb2_2 : Vec ((heads * d)))
-    -- block 3
-    (lnG1_3 lnB1_3 lnG2_3 lnB2_3 : Vec ((heads * d))) (mWq_3 mWk_3 mWv_3 mWo_3 : Mat ((heads * d)) (heads * d)) (mbq_3 mbk_3 mbv_3 mbo_3 : Vec ((heads * d)))
-    (fW1_3 : Mat ((heads * d)) mlpDim) (fb1_3 : Vec mlpDim) (fW2_3 : Mat mlpDim ((heads * d))) (fb2_3 : Vec ((heads * d)))
-    -- block 4
-    (lnG1_4 lnB1_4 lnG2_4 lnB2_4 : Vec ((heads * d))) (mWq_4 mWk_4 mWv_4 mWo_4 : Mat ((heads * d)) (heads * d)) (mbq_4 mbk_4 mbv_4 mbo_4 : Vec ((heads * d)))
-    (fW1_4 : Mat ((heads * d)) mlpDim) (fb1_4 : Vec mlpDim) (fW2_4 : Mat mlpDim ((heads * d))) (fb2_4 : Vec ((heads * d)))
-    -- block 5
-    (lnG1_5 lnB1_5 lnG2_5 lnB2_5 : Vec ((heads * d))) (mWq_5 mWk_5 mWv_5 mWo_5 : Mat ((heads * d)) (heads * d)) (mbq_5 mbk_5 mbv_5 mbo_5 : Vec ((heads * d)))
-    (fW1_5 : Mat ((heads * d)) mlpDim) (fb1_5 : Vec mlpDim) (fW2_5 : Mat mlpDim ((heads * d))) (fb2_5 : Vec ((heads * d)))
-    -- block 6
-    (lnG1_6 lnB1_6 lnG2_6 lnB2_6 : Vec ((heads * d))) (mWq_6 mWk_6 mWv_6 mWo_6 : Mat ((heads * d)) (heads * d)) (mbq_6 mbk_6 mbv_6 mbo_6 : Vec ((heads * d)))
-    (fW1_6 : Mat ((heads * d)) mlpDim) (fb1_6 : Vec mlpDim) (fW2_6 : Mat mlpDim ((heads * d))) (fb2_6 : Vec ((heads * d)))
-    -- block 7
-    (lnG1_7 lnB1_7 lnG2_7 lnB2_7 : Vec ((heads * d))) (mWq_7 mWk_7 mWv_7 mWo_7 : Mat ((heads * d)) (heads * d)) (mbq_7 mbk_7 mbv_7 mbo_7 : Vec ((heads * d)))
-    (fW1_7 : Mat ((heads * d)) mlpDim) (fb1_7 : Vec mlpDim) (fW2_7 : Mat mlpDim ((heads * d))) (fb2_7 : Vec ((heads * d)))
-    -- block 8
-    (lnG1_8 lnB1_8 lnG2_8 lnB2_8 : Vec ((heads * d))) (mWq_8 mWk_8 mWv_8 mWo_8 : Mat ((heads * d)) (heads * d)) (mbq_8 mbk_8 mbv_8 mbo_8 : Vec ((heads * d)))
-    (fW1_8 : Mat ((heads * d)) mlpDim) (fb1_8 : Vec mlpDim) (fW2_8 : Mat mlpDim ((heads * d))) (fb2_8 : Vec ((heads * d)))
-    -- block 9
-    (lnG1_9 lnB1_9 lnG2_9 lnB2_9 : Vec ((heads * d))) (mWq_9 mWk_9 mWv_9 mWo_9 : Mat ((heads * d)) (heads * d)) (mbq_9 mbk_9 mbv_9 mbo_9 : Vec ((heads * d)))
-    (fW1_9 : Mat ((heads * d)) mlpDim) (fb1_9 : Vec mlpDim) (fW2_9 : Mat mlpDim ((heads * d))) (fb2_9 : Vec ((heads * d)))
-    -- block 10
-    (lnG1_10 lnB1_10 lnG2_10 lnB2_10 : Vec ((heads * d))) (mWq_10 mWk_10 mWv_10 mWo_10 : Mat ((heads * d)) (heads * d)) (mbq_10 mbk_10 mbv_10 mbo_10 : Vec ((heads * d)))
-    (fW1_10 : Mat ((heads * d)) mlpDim) (fb1_10 : Vec mlpDim) (fW2_10 : Mat mlpDim ((heads * d))) (fb2_10 : Vec ((heads * d)))
-    -- block 11
-    (lnG1_11 lnB1_11 lnG2_11 lnB2_11 : Vec ((heads * d))) (mWq_11 mWk_11 mWv_11 mWo_11 : Mat ((heads * d)) (heads * d)) (mbq_11 mbk_11 mbv_11 mbo_11 : Vec ((heads * d)))
-    (fW1_11 : Mat ((heads * d)) mlpDim) (fb1_11 : Vec mlpDim) (fW2_11 : Mat mlpDim ((heads * d))) (fb2_11 : Vec ((heads * d)))
-    -- block 12
-    (lnG1_12 lnB1_12 lnG2_12 lnB2_12 : Vec ((heads * d))) (mWq_12 mWk_12 mWv_12 mWo_12 : Mat ((heads * d)) (heads * d)) (mbq_12 mbk_12 mbv_12 mbo_12 : Vec ((heads * d)))
-    (fW1_12 : Mat ((heads * d)) mlpDim) (fb1_12 : Vec mlpDim) (fW2_12 : Mat mlpDim ((heads * d))) (fb2_12 : Vec ((heads * d)))
-    (ib1 : Vec ((N + 1) * (heads * d))) (dy : Vec nClasses) (lr : ℝ) :
-    let ib2    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1
-    let ib3    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2
-    let ib4    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3
-    let ib5    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4
-    let ib6    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5
-    let ib7    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6
-    let ib8    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7
-    let ib9    : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8
-    let ib10   : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 fb2_9 ib9
-    let ib11   : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 fb2_10 ib10
-    let ib12   : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11
-    let b12out : Vec ((N + 1) * (heads * d)) := vitBlockFwdOMHV ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12
-    let dy12   : Vec ((N + 1) * (heads * d)) := vitCotB2outV N ((heads * d)) nClasses ε γF Wcls b12out dy
-    let dy11   : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 ib12 dy12
-    let dy10   : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 ib11 dy11
-    let dy9    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 ib10 dy10
-    let dy8    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 ib9 dy9
-    let dy7    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 ib8 dy8
-    let dy6    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 ib7 dy7
-    let dy5    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 ib6 dy6
-    let dy4    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 ib5 dy5
-    let dy3    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 ib4 dy4
-    let dy2    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 ib3 dy3
-    let dy1    : Vec ((N + 1) * (heads * d)) := vitBlockCotInAtMHV ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 ib2 dy2
-    vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1 dy1 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2 dy2 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3 dy3 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4 dy4 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5 dy5 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6 dy6 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7 dy7 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8 dy8 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 fb2_9 ib9 dy9 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 fb2_10 ib10 dy10 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11 dy11 lr
-  ∧ vitBlockTiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12 dy12 lr := by
-  intro ib2 ib3 ib4 ib5 ib6 ib7 ib8 ib9 ib10 ib11 ib12 b12out dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1 dy1 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2 dy2 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3 dy3 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4 dy4 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5 dy5 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6 dy6 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7 dy7 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8 dy8 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 fb2_9 ib9 dy9 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 fb2_10 ib10 dy10 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11 dy11 lr
-  · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12 dy12 lr
-
 
 /-! ## Task 3 — the non-block param bundle + the all-200-params capstone (committed ViT-Tiny config)
 

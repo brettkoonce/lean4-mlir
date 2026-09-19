@@ -28,7 +28,7 @@ an AST without a fold.
 | `convWeightGradB` / `convBiasGradB` (18 expand + 18 project 1×1, + the stem bias) | `convWGradB_den` / `convBGradB_den` | `ResNet34PoCB`'s, verbatim |
 | `depthwiseWeightGradB` / `depthwiseBiasGradB` (18 × 7×7) | `depthwiseWGradB_den` / `depthwiseBGradB_den` | `EnetPoCG` / `Mnv2PaperPoCG` |
 | `convStridedWeightGradB` / `convStridedBiasGradB` (3 × 2×2/s2 downsample) | `convStridedWGradB_den` / `convStridedBGradB_den` | `ResNet34PoCB`'s, verbatim |
-| `convStride4WeightGradB` (patchify stem) | `psWGradB_den` | `CnxPoCG.psWGrad_den` |
+| `convStride4WeightGradB` (patchify stem) | `psWGradB_den` | `flatConvStride4_weight_grad_has_vjp`, per example |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = h·w` (22 spatial LN sites) | `chanLnGammaGradB_den` / `chanLnBetaGradB_den` | `CnxPoCG.chanLnGammaGrad_den` / `chanLnBetaGrad_den` |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = 1` (the head LN, after GAP) | `headLnGammaGradB_den` / `headLnBetaGradB_den` | `ViTPoCGB`'s two-level LN lemmas |
 | `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` | `ViTPoCGB.headWGradB_den` / `headBGradB_den` |

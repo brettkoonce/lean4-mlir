@@ -13,9 +13,8 @@ dw 7×7, 10 classes. Forward AND the whole backward cotangent chain are proof-re
 layer-scale backward IS the forward token applied to the cotangent (`layerScale`'s input-VJP is
 `γ ⊙ dy` — diagonal/symmetric), so no new backward token. Only the no-SHlo-constructor pieces
 are hand-emitted: the GAP backward, conv/depthwise/dense weight+bias grads, layer-scale
-`dγ = Σ_b x⊙dy` (`layerScale_grad_gamma`/`layerScale_gamma_grad_bridge`), and scalar-LN
-`dγ = Σ dy·x̂`, `dβ = Σ dy` (`bn_grad_gamma/beta`, certified via the `Vec 1` embedding in
-`ConvNeXtClose.lean`); reshape glue (flat→NCHW) only at those.
+`dγ = Σ_b x⊙dy`, and scalar-LN `dγ = Σ dy·x̂`, `dβ = Σ dy` (`bn_grad_gamma/beta`); reshape glue
+(flat→NCHW) only at those.
 
 Unlike the MNV2/r34 peers there is no committed same-signature renderer (the committed
 `TestConvNeXtTrain.lean` is the full ConvNeXt-T [3,3,9,3]; "come back to scaling later"), so
@@ -77,8 +76,7 @@ private def biasGrad (o dyFlat : String) (oc Hh Ww : Nat) : String :=
   rs4 s!"{o}i" dyFlat oc Hh Ww ++
   s!"    {o} = stablehlo.reduce({o}i init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n"
 
-/-- layer-scale γ-grad `dγ = Σ_b x ⊙ dy` (per-element over the flat c·h·w map):
-    the rendered form of `layerScale_grad_gamma` (certified `layerScale_gamma_grad_bridge`). -/
+/-- layer-scale γ-grad `dγ = Σ_b x ⊙ dy` (per-element over the flat c·h·w map). -/
 private def lsGrad (o xFlat dyFlat : String) (n : Nat) : String :=
   s!"    {o}p = stablehlo.multiply {xFlat}, {dyFlat} : {ty [BS, n]}\n" ++
   s!"    {o} = stablehlo.reduce({o}p init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS, n]}, tensor<f32>) -> {ty [n]}\n"

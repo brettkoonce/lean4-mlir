@@ -24,16 +24,16 @@ why the byte tie cannot see it and `den_rowDenseBiasGradB_at_one` exists to argu
 
 ## The op table of every committed ViT train step, after leg 4
 
-| emitted node | lemma | per-example peer it batches |
+| emitted node | lemma | per-example peer (fused `ViTPoC` op unless noted) |
 |---|---|---|
-| `veclnGammaGradB` (25 LN γ: LN1/LN2 × 12 + final) | `veclnGammaGradB_den` | `ViTPoCG.veclnGammaGrad_den` |
-| `rowDenseBiasGradB` (25 LN β) | `rowDenseBiasGradB_den_lnbeta` | `ViTPoCG.rowDenseBiasGrad_den_lnbeta` |
-| `rowDenseWeightGradB` (Wq/Wk/Wv/Wo/Wfc1/Wfc2 × 12) | `rowDenseWeightGradB_den` | `ViTPoCG.rowDenseWeightGrad_den` |
-| `rowDenseBiasGradB` (bq/bk/bv/bo/bfc1/bfc2 × 12) | `rowDenseBiasGradB_den` | `ViTPoCG.rowDenseBiasGrad_den` |
-| `patchEmbedWeightGradB` / `patchEmbedBiasGradB` | `patchEmbedWeightGradB_den` / `patchEmbedBiasGradB_den` | the `*Grad_den` pair |
-| `posEmbedGradB` | `posEmbedGradB_den` | `ViTPoCG.posEmbedGrad_den` |
-| `denseBiasGradB` at `N = B` (the CLS token) | `clsGrad_denB` | `ViTPoCG.clsGrad_den`, at `N = 1` |
-| `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` | `ViTPoCG.headWGrad_den` / `headBGrad_den` |
+| `veclnGammaGradB` (25 LN γ: LN1/LN2 × 12 + final) | `veclnGammaGradB_den` | `ViTPoC.veclnGammaSgd_den` |
+| `rowDenseBiasGradB` (25 LN β) | `rowDenseBiasGradB_den_lnbeta` | `ViTPoC.rowDenseBiasSgd_den_lnbeta` |
+| `rowDenseWeightGradB` (Wq/Wk/Wv/Wo/Wfc1/Wfc2 × 12) | `rowDenseWeightGradB_den` | `ViTPoC.rowDenseWeightSgd_den` |
+| `rowDenseBiasGradB` (bq/bk/bv/bo/bfc1/bfc2 × 12) | `rowDenseBiasGradB_den` | `ViTPoC.rowDenseBiasSgd_den` |
+| `patchEmbedWeightGradB` / `patchEmbedBiasGradB` | `patchEmbedWeightGradB_den` / `patchEmbedBiasGradB_den` | `ViTPoC.patchEmbedWeightSgd_den` / `patchEmbedBiasSgd_den` |
+| `posEmbedGradB` | `posEmbedGradB_den` | `ViTPoCG.posEmbedGrad_den` (un-fused) |
+| `denseBiasGradB` at `N = B` (the CLS token) | `clsGrad_denB` | `ViTPoCG.clsGrad_den` (un-fused), at `N = 1` |
+| `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` | `ViTPoC.headW_den` / `headB_den` |
 
 ⭐ **No new mathematics: every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n`.** That is `ResNet34FoldB.denseWGradB_den`'s shape, and

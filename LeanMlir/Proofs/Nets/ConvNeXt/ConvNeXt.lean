@@ -172,17 +172,6 @@ noncomputable def convNextBlockBody_has_vjp {c cExp h w kH kW : Nat}
   set LS := layerScale γls with hLS
   exact vjp_comp (PR ∘ (GE ∘ (EX ∘ (LN ∘ D)))) LS s4_diff hls s4_vjp (layerScale_has_vjp γls)
 
-/-- **ConvNeXt block body VJP at a point** — the global witness restricted
-    to a point. Kept for downstream `_at` consumers. -/
-noncomputable def convNextBlockBody_has_vjp_at {c cExp h w kH kW : Nat}
-    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
-    (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w)) (v : Vec (c * h * w)) :
-    HasVJPAt (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls) v :=
-  (convNextBlockBody_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).toHasVJPAt v
-
 /-- **Full ConvNeXt block** = `residual (block body)`. ConvNeXt uses an
     identity skip (no projection, no post-add activation), so this is the
     plain `residual` of the block body. -/
@@ -221,17 +210,6 @@ noncomputable def convNextBlock_has_vjp {c cExp h w kH kW : Nat}
   residual_has_vjp (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls)
     (convNextBlockBody_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
     (convNextBlockBody_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
-
-/-- **ConvNeXt block VJP at a point** — the global witness restricted to a
-    point. Kept for downstream `_at` consumers. -/
-noncomputable def convNextBlock_has_vjp_at {c cExp h w kH kW : Nat}
-    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
-    (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w)) (v : Vec (c * h * w)) :
-    HasVJPAt (convNextBlock Wdw bdw εn γn βn Wex bex Wpr bpr γls) v :=
-  (convNextBlock_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).toHasVJPAt v
 
 -- ════════════════════════════════════════════════════════════════
 -- § End-to-end ConvNeXt

@@ -11,24 +11,19 @@ everything in a ViT is per-example separable (the EfficientNet contrast).
 |--------------------------------------|----------------------------|--------------|
 | Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the M2 outer-product bridge row-lifted |
 | classifier `Wcls`/`bcls`             | dense on the CLS row       | M2 `weight/bias_grad_bridge` (**reuse** — single-vector dense) |
-| LN γ/β ×5 sites (scalar, per-token)  | rowwise `layerNormForward` | `vit_rowln{Gamma,Beta}_grad_bridge` (**new**): the ConvNeXtClose `Vec 1` embedding row-lifted — `dγ = Σ_{tokens} Σ_D dy·x̂`, `dβ = Σ Σ dy` (affine in the params ⇒ no `0 < ε`) |
+| LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `vit_vecln{Gamma,Beta}_grad_bridge` (`ViTVecLN`) |
 | `pos_embed`                          | additive (`patchEmbed_flat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
 | `cls_token`                          | row-0 scatter (`patchEmbed_flat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
 | patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbed_flat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
 | attention internals (softmax, scale) | —                          | no parameters |
 
-Two genuinely-new bridge families (everything else is reuse or a reindex):
+One genuinely-new bridge family (everything else is reuse or a reindex):
 
 * **Per-token dense W/b** — every row of `[N,a]` through the same `W : [a,c]` (+ `b`).
   The W-Jacobian of the flattened rowwise dense is block-sparse —
   `∂y_(r,k)/∂W_(i,j) = X_(r,i)·δ_(k,j)` — so the rendered per-token outer-product reduce
   `dW_(i,j) = Σ_r X_(r,i)·dY_(r,j)` (one `dot_general` contracting the token axis) is the
   certified contraction. Covers Wq/Wk/Wv/Wo, Wfc1/Wfc2 and their biases at every block.
-* **Row-lifted scalar-LN γ/β** — the ConvNeXtClose `Vec 1` embedding generalized from one
-  LN site over `Vec n` to N token rows: as a function of `γ' : Vec 1` the rowwise LN is
-  affine, `γ' ↦ fun (r,k) => x̂_r(k)·γ'(0) + β`, so the Jacobian is the flattened per-row
-  x̂ and the rendered whole-tensor reduce `dγ = Σ_r Σ_k dY_(r,k)·x̂_r(k) = Σ_r bn_grad_gamma (X r) (dY r)`
-  is certified. Likewise `dβ = Σ_r Σ_k dY_(r,k)`.
 
 The classifier head (`dense` on the CLS vector) is VERBATIM M2 `weight/bias_grad_bridge`
 reuse at `[D, nClasses]`. The patch-embed conv `Wp`/`bp` (§ E) closes over
@@ -141,124 +136,6 @@ theorem vit_render_rowdenseb_certified {N a c : Nat} (W : Mat a c) (X : Mat N a)
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r)))
                bb i o * dy o := by
   rw [vit_rowDenseb_grad_bridge W X bb dy i]
-
--- ════════════════════════════════════════════════════════════════
--- § B. Row-lifted scalar-LN γ/β — the ConvNeXtClose Vec-1 embedding over N token rows
---
--- As a function of `γ' : Vec 1`, the rowwise LN is affine: `γ' ↦ fun (r,k) => x̂_r(k)·γ'(0) + β`
--- (per-row x̂, flattened). Same recipe as `pdiv_layerNorm_gamma`, abstracted over the
--- coefficient vector so one proof serves every site shape. Affine in the params ⇒ no `0 < ε`.
--- ════════════════════════════════════════════════════════════════
-
-/-- Generic scalar-affine Jacobian: `∂(XH_k·γ(0) + C_k)/∂γ = XH_k`. The
-    `pdiv_layerNorm_gamma` recipe with the coefficient vector abstracted. -/
-private theorem pdiv_scalarAffine_gamma {m : Nat} (XH C : Vec m) (γ : Vec 1)
-    (i : Fin 1) (j : Fin m) :
-    pdiv (fun y : Vec 1 => fun k => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k) + C k)
-      γ i j = XH j := by
-  rw [show (fun y : Vec 1 => fun k => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k) + C k)
-      = fun y => (fun k => XH k * y ((fun _ : Fin m => (0 : Fin 1)) k)) + C from rfl,
-    pdiv_of_affine _ _ (fun _ _ => by funext; simp [mul_add])
-      (fun _ _ => by funext; simp [mul_left_comm]), Fin.fin_one_eq_zero i]
-  simp
-
-/-- Generic scalar-shift Jacobian: `∂(C_k + β(0))/∂β = 1`. The
-    `pdiv_layerNorm_beta` recipe, coefficient-abstracted. -/
-private theorem pdiv_scalarAffine_beta {m : Nat} (C : Vec m) (β : Vec 1)
-    (i : Fin 1) (j : Fin m) :
-    pdiv (fun y : Vec 1 => fun k => C k + y ((fun _ : Fin m => (0 : Fin 1)) k)) β i j
-      = 1 := by
-  rw [show (fun y : Vec 1 => fun k => C k + y ((fun _ : Fin m => (0 : Fin 1)) k))
-      = fun y => (fun k => y ((fun _ : Fin m => (0 : Fin 1)) k)) + C from
-        funext fun _ => funext fun _ => add_comm _ _,
-    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl), Fin.fin_one_eq_zero i]
-  simp
-
-/-- Rowwise scalar-LN as a function of γ (β, X fixed), affinely: the coefficient
-    at flat index `(r,k)` is the row-r normalized value `x̂_r(k)`. -/
-private theorem rowLN_gamma_affine (N D : Nat) (ε β : ℝ) (X : Mat N D) :
-    (fun γ' : Vec 1 => Mat.flatten (fun r => layerNormForward D ε (γ' 0) β (X r)))
-      = fun y idx =>
-          bnXhat D ε (X (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2 *
-            y ((fun _ : Fin (N * D) => (0 : Fin 1)) idx) + β := by
-  funext y idx
-  simp only [Mat.flatten, layerNormForward, bnForward]
-  ring
-
-/-- Rowwise scalar-LN as a function of β (γ, X fixed). -/
-private theorem rowLN_beta_affine (N D : Nat) (ε γ : ℝ) (X : Mat N D) :
-    (fun β' : Vec 1 => Mat.flatten (fun r => layerNormForward D ε γ (β' 0) (X r)))
-      = fun y idx =>
-          γ * bnXhat D ε (X (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2 +
-            y ((fun _ : Fin (N * D) => (0 : Fin 1)) idx) := by
-  funext y idx
-  simp only [Mat.flatten, layerNormForward, bnForward]
-
-/-- **Jacobian of the rowwise scalar-LN w.r.t. γ** — `∂y_(r,k)/∂γ = x̂_r(k)` (dense:
-    the shared scalar γ scales every token's every channel). -/
-theorem pdiv_rowLN_gamma (N D : Nat) (ε β : ℝ) (X : Mat N D) (γ : Vec 1)
-    (i : Fin 1) (idx : Fin (N * D)) :
-    pdiv (fun γ' : Vec 1 =>
-            Mat.flatten (fun r => layerNormForward D ε (γ' 0) β (X r))) γ i idx
-      = bnXhat D ε (X (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2 := by
-  rw [rowLN_gamma_affine]
-  exact pdiv_scalarAffine_gamma
-    (fun o => bnXhat D ε (X (finProdFinEquiv.symm o).1) (finProdFinEquiv.symm o).2)
-    (fun _ => β) γ i idx
-
-/-- **Jacobian of the rowwise scalar-LN w.r.t. β** — `∂y_(r,k)/∂β = 1`. -/
-theorem pdiv_rowLN_beta (N D : Nat) (ε γ : ℝ) (X : Mat N D) (β : Vec 1)
-    (i : Fin 1) (idx : Fin (N * D)) :
-    pdiv (fun β' : Vec 1 =>
-            Mat.flatten (fun r => layerNormForward D ε γ (β' 0) (X r))) β i idx
-      = 1 := by
-  rw [rowLN_beta_affine]
-  exact pdiv_scalarAffine_beta
-    (fun o => γ * bnXhat D ε (X (finProdFinEquiv.symm o).1) (finProdFinEquiv.symm o).2)
-    β i idx
-
-/-- The rendered **rowwise-LN γ gradient**: the whole-tensor reduce
-    `dγ = Σ_r Σ_k dY_(r,k)·x̂_r(k)` — per-row `bn_grad_gamma`, summed over tokens. -/
-noncomputable def rowLN_grad_gamma (N D : Nat) (ε : ℝ) (X dY : Mat N D) : ℝ :=
-  ∑ r : Fin N, bn_grad_gamma D ε (X r) (dY r)
-
-/-- The rendered **rowwise-LN β gradient**: `dβ = Σ_r Σ_k dY_(r,k)`. -/
-noncomputable def rowLN_grad_beta (N D : Nat) (dY : Mat N D) : ℝ :=
-  ∑ r : Fin N, bn_grad_beta D (dY r)
-
-/-- **Rowwise scalar-LN γ-gradient bridge.** The rendered whole-tensor reduce
-    equals the certified rowwise-LN ∂/∂γ contraction. -/
-theorem vit_rowlnGamma_grad_bridge (N D : Nat) (ε β : ℝ) (γ : Vec 1) (X : Mat N D)
-    (dy : Vec (N * D)) :
-    rowLN_grad_gamma N D ε X (Mat.unflatten dy)
-      = ∑ idx : Fin (N * D),
-          pdiv (fun γ' : Vec 1 =>
-                  Mat.flatten (fun r => layerNormForward D ε (γ' 0) β (X r)))
-            γ 0 idx * dy idx := by
-  simp_rw [pdiv_rowLN_gamma]
-  rw [sum_finProdFinEquiv (m := N) (n := D)]
-  unfold rowLN_grad_gamma bn_grad_gamma Mat.unflatten
-  apply Finset.sum_congr rfl
-  intro r _
-  apply Finset.sum_congr rfl
-  intro k _
-  rw [Equiv.symm_apply_apply]
-  dsimp only
-  ring
-
-/-- **Rowwise scalar-LN β-gradient bridge.** The rendered whole-tensor reduce
-    `Σ_r Σ_k dY_(r,k)` equals the certified rowwise-LN ∂/∂β contraction. -/
-theorem vit_rowlnBeta_grad_bridge (N D : Nat) (ε γ : ℝ) (β : Vec 1) (X : Mat N D)
-    (dy : Vec (N * D)) :
-    rowLN_grad_beta N D (Mat.unflatten dy)
-      = ∑ idx : Fin (N * D),
-          pdiv (fun β' : Vec 1 =>
-                  Mat.flatten (fun r => layerNormForward D ε γ (β' 0) (X r)))
-            β 0 idx * dy idx := by
-  simp_rw [pdiv_rowLN_beta, one_mul]
-  rw [sum_finProdFinEquiv (m := N) (n := D)]
-  unfold rowLN_grad_beta bn_grad_beta Mat.unflatten
-  rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § C. pos_embed + cls_token — the two embed-parameter reindex closes

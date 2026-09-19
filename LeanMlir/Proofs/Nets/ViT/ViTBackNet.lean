@@ -121,19 +121,6 @@ noncomputable def vitTrunkV {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
   | k + 1, ps =>
       (vitBlockVLayer (Np1 := Np1) ε hε (ps 0)).comp (vitTrunkV ε hε k (fun i => ps i.succ))
 
-/-- The trunk **is** `CertLayer.chain` at the `Fin`-indexed block list — i.e. this is the generic
-    combinator, not a ViT-specific recursion that happens to look like one. -/
-theorem vitTrunkV_eq_chain {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
-    ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim),
-      vitTrunkV (Np1 := Np1) ε hε k ps
-        = CertLayer.chain (List.ofFn (fun i => vitBlockVLayer (Np1 := Np1) ε hε (ps i)))
-  | 0, _ => rfl
-  | k + 1, ps => by
-      rw [List.ofFn_succ, CertLayer.chain_cons]
-      show (vitBlockVLayer (Np1 := Np1) ε hε (ps 0)).comp (vitTrunkV ε hε k (fun i => ps i.succ))
-          = _
-      rw [vitTrunkV_eq_chain ε hε k (fun i => ps i.succ)]
-
 /-- ⭐ **The trunk's forward IS the shipped depth-`k` body.** Without this the fold would be a
     chain of blocks that merely resembles ViT's; with it, `vitTrunkV` is `vitBodyKVFlat`. -/
 theorem vitTrunkV_fwd {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
@@ -177,16 +164,6 @@ theorem vitTrunkV_graph {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
         vitTrunkV_graph ε hε k (fun i => ps i.succ)
           (blockV Np1 (hm1+1) d mlpDim ε (ps 0) A) e]
       rfl
-
-/-- **The trunk is certified at every depth**, immediate from `CertLayer.faithful`. Stated to make
-    the payoff visible: no induction on depth appears here, because `comp` already carries it. -/
-theorem vitTrunkV_faithful {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
-    (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
-    (v : Vec (Np1 * ((hm1+1) * d))) (hv : (vitTrunkV (Np1 := Np1) ε hε k ps).ok v)
-    (e : SHlo (Np1 * ((hm1+1) * d))) :
-    den ((vitTrunkV (Np1 := Np1) ε hε k ps).graph v e)
-      = ((vitTrunkV (Np1 := Np1) ε hε k ps).vjp v hv).backward (den e) :=
-  (vitTrunkV ε hε k ps).faithful v hv e
 
 /-- ⭐ **A ViT trunk's `ok` is `True` at every depth** — the smooth tier's payoff. `CertLayer.comp`
     conjoins preconditions, so for a relu net this would be a deepening stack of side conditions
@@ -391,24 +368,5 @@ pinned in the types instead of stated in a docstring. ViT-Tiny is 12 identical-s
 nets there is no ladder to pin, only the depth and the widths, and every block has the same type
 (which is why `chain` over a `List.replicate`-shaped index is the right form here and a
 per-row-typed parameter record buys nothing). -/
-
-/-- **ViT-Tiny's trunk**: depth 12 at `heads = 3`, `d_head = 64`, `mlpDim = 768`, 197 tokens.
-    ⚠ The `2 + 1` in the head count is how `hm1 + 1` spells "3 heads"; the multi-head capstones
-    are all stated at `heads = hm1 + 1` so that `heads = 0` is unrepresentable. -/
-noncomputable def vitTinyTrunk (ε : ℝ) (hε : 0 < ε)
-    (ps : Fin 12 → BlockParamsV ((2 + 1) * 64) 768) :
-    CertLayer (197 * ((2 + 1) * 64)) (197 * ((2 + 1) * 64)) :=
-  vitTrunkV (Np1 := 197) ε hε 12 ps
-
-/-- ViT-Tiny's trunk is the shipped depth-12 body, and its backward graph is the shipped
-    depth-12 tower. Both are `vitTrunkV_fwd` / `vitTrunkV_graph` at `k = 12`; stated at the
-    concrete config so the config itself is checked, not just the generic shape. -/
-theorem vitTinyTrunk_is_shipped (ε : ℝ) (hε : 0 < ε)
-    (ps : Fin 12 → BlockParamsV ((2 + 1) * 64) 768)
-    (A : Mat 197 ((2 + 1) * 64)) (e : SHlo (197 * ((2 + 1) * 64))) :
-    (vitTinyTrunk ε hε ps).fwd (Mat.flatten A)
-        = vitBodyKVFlat 197 (2 + 1) 64 768 ε 12 ps (Mat.flatten A)
-      ∧ (vitTinyTrunk ε hε ps).graph (Mat.flatten A) e = vitBodyBackGraphKMHV ε 12 ps A e :=
-  ⟨vitTrunkV_fwd ε hε 12 ps (Mat.flatten A), vitTrunkV_graph ε hε 12 ps A e⟩
 
 end Proofs.StableHLO

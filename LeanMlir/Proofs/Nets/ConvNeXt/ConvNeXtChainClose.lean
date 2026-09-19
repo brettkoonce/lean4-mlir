@@ -1,9 +1,10 @@
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 
 /-! # ConvNeXt Item D — the block cotangent chain
 
-`ConvNeXtClose.lean` (Item C) certifies each ConvNeXt param output for *any* cotangent `dy` at that
-layer's output. This file defines the cotangent the **actual backward chain delivers** at each
+The Item C param bridges (`ConvNeXtFold`, the M2/M3 conv and dense bridges) certify each ConvNeXt
+param output for *any* cotangent `dy` at that layer's output. This file defines the cotangent the **actual backward chain delivers** at each
 layer (`planning/archive/convnext_close.md` Item D), and the step ties (`ConvNeXtStepTie`,
 `ConvNeXtStepTieGB`) feed those cotangents to Item C's bridges at the real forward. Pure-Lean,
 batch-1 — LayerNorm is per-example separable, so none of EfficientNet's batched-VJP machinery

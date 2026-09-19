@@ -13,140 +13,26 @@ denotes the proven whole-block VJP.
 ConvNeXt's whole verified stack is **per-example / batch-1** — LayerNorm here is
 the per-example separable `layerNormForward` (= `bnForward` on the feature axis),
 so NONE of EfficientNet's `batchMap`/`bnBatchLA` batched machinery is needed
-(`ConvNeXtChainClose.lean:8`). So this file targets the per-example VJP
-`convNextBlock_has_vjp` directly, modeled on the per-example section of
-`EfficientNetBackB0.lean` (`residualBackGraph`, `convBnSwishBackGraph`,
-`mbconvResidual_backGraph_faithful`).
+(`ConvNeXtChainClose.lean:8`). So this file targets the per-example VJPs of the shipped
+CHANNEL-LN net directly, modeled on the per-example section of `EfficientNetBackB0.lean`
+(`residualBackGraph`, `convBnSwishBackGraph`, `mbconvResidual_backGraph_faithful`).
 
-Two worlds live here, and the distinction is the whole point of the file:
-
-  * **§1 — the ch9 representative (SCALAR LN).** `cnxBlockBodyBackGraph` /
-    `cnxResidBlockBackGraph` denote `convNextBlockBody_has_vjp` / `convNextBlock_has_vjp`.
-    The block is `residual (block body)` with an identity skip, so the brick is
-    `residualBackGraph (bodyBack …) dy`, closed via `residualBackGraph_faithful`.
-
-  * **§2 (§2o Part A, 2026-07-31) — the SHIPPED net (CHANNEL LN).** `chanLNBackGraph` and its
-    faithfulness, then the block, residual-block and downsample capstones over it. This is what
-    the §2n drop left uncovered.
-
-**What §2o Part A fixed.** §2n's commit message said the channel-LN *downsample* had no graph-side
-backward capstone. Measured afterwards it was wider than that: the two capstones that SURVIVED the
-drop (§1 above) are over `convNextBlockBody` — the ch9 representative's SCALAR LN — so the shipped
-channel-LN net had **no `den`-level backward capstone at any level**, only the five FORWARD graph
-theorems from §2m. The drop did not cause that; it removed the scalar capstone that was making the
-column look populated. §2 closes it: `chanLNBackGraph_faithful` is the backward peer of §2m's
-`chanLNGraph_faithful`, and `chanLNBackGraph_eq_vjp` chains it through §B
-(`ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`) so every capstone in §2 lands on the
-CERTIFIED VJP rather than on a hand-composed reverse chain.
+`chanLNBackGraph` and its faithfulness come first, then the block, residual-block and downsample
+capstones over it (§2o Part A, 2026-07-31). `chanLNBackGraph_faithful` is the backward peer of
+§2m's `chanLNGraph_faithful`, and `chanLNBackGraph_eq_vjp` chains it through §B
+(`ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`), so every capstone lands on the
+CERTIFIED VJP rather than on a hand-composed reverse chain. The block is `residual (block body)`
+with an identity skip, so the brick is `residualBackGraph (bodyBack …) dy`, closed via
+`residualBackGraph_faithful`.
 
 The block body is `layerScale ∘ project(1×1) ∘ gelu ∘ expand(1×1) ∘ LN ∘
 depthwise(7×7)`; everything is smooth (GELU is smooth, conv/layerScale linear, LN
 smooth given `ε>0`), so the body VJP is the unconditional `vjp_comp` chain
 `convNextBlockBody_has_vjp` and the only side condition is the LayerNorm positivity
-`0 < εn`. The LN backward is the one non-`rfl` op: `layerNorm_has_vjp` is
-*definitionally* `bn_has_vjp`, so `bnBack_faithful_fn` (the `∑ pdiv` bridge) closes it.
-
-Same scalar-LN representation caveat as `convNextBlockBody`'s doc-comment.
+`0 < εn`. The LN backward is the one non-`rfl` op, closed by `chanLNBackGraph_eq_vjp`.
 -/
 
 open Proofs Proofs.StableHLO
-
-namespace Proofs.StableHLO
-
--- ════════════════════════════════════════════════════════════════
--- § ConvNeXt block body backward graph (per-example)
--- ════════════════════════════════════════════════════════════════
-
-/-- The ConvNeXt block-body backward graph `D⁻¹ ∘ LN⁻¹ ∘ EX⁻¹ ∘ GE⁻¹ ∘ PR⁻¹ ∘ LS⁻¹`,
-    each op's backward applied at its forward input activation (outermost backward
-    token = earliest forward op `depthwise`; innermost child applied to the cotangent
-    subgraph `e`). The reverse-order chain of `convNextBlockBody`'s VJP:
-
-      `depthwiseBack ∘ bnBack(LN) ∘ convBack(expand) ∘ geluBack ∘ convBack(project)
-        ∘ layerScaleF`
-
-    `layerScaleF` is the (input-independent diagonal) layer-scale backward; the two
-    `convBack`s are the 1×1 expand/project; `bnBack` is the LayerNorm backward
-    (LN = BN on the feature axis). -/
-noncomputable def cnxBlockBodyBackGraph {c cExp h w kH kW : Nat}
-    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
-    (εn : ℝ) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w))
-    (x : Vec (c * h * w)) (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
-  let d  := depthwiseFlat (h := h) (w := w) Wdw bdw x              -- LN's input
-  let nl := layerNormForward (c * h * w) εn γn βn d                -- EX's input
-  let ex := flatConv (h := h) (w := w) Wex bex nl                  -- GE's input
-  let ge := gelu (cExp * h * w) ex                                 -- PR's input
-  .depthwiseBack "%cnxWdw" Wdw bdw x
-    (.bnBack "%cnxGn" "%cnxXn" "cnxE" εn γn d
-      (.convBack "%cnxWex" Wex bex nl
-        (.geluBack "%cnxGe" ex
-          (.convBack "%cnxWpr" Wpr bpr ge
-            (.layerScaleF "%cnxGls" γls e)))))
-
-/-- **ConvNeXt block-body backward-graph faithfulness.** The reverse-order graph
-    denotes the proven `convNextBlockBody_has_vjp` backward, under `0 < εn`. The LN
-    backward is the one non-`rfl` op (`bnBack_faithful_fn`); the rest
-    (`depthwiseBack`/`convBack`/`geluBack`/`layerScaleF`) are `rfl`-faithful per-op
-    tokens, and `layerScaleF` denotes the input-independent diagonal layer-scale
-    backward. -/
-theorem cnxBlockBodyBackGraph_faithful {c cExp h w kH kW : Nat}
-    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
-    (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w))
-    (x : Vec (c * h * w)) (e : SHlo (c * h * w)) :
-    den (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x e)
-      = (convNextBlockBody_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).backward
-          x (den e) := by
-  simp only [cnxBlockBodyBackGraph, convNextBlockBody_has_vjp, vjp_comp,
-    depthwiseBack_faithful, bnBack_faithful_fn (β := βn) (hε := hεn),
-    convBack_faithful, geluBack_faithful, layerScaleF_faithful, Function.comp_apply]
-  rfl
-
--- ════════════════════════════════════════════════════════════════
--- § Identity/residual block capstone (per-example)
--- ════════════════════════════════════════════════════════════════
-
-/-- The whole ConvNeXt residual block backward graph (block body + identity skip):
-    `residualBackGraph (bodyBack … (%dy)) dy`. The identity skip contributes the
-    cotangent verbatim; `addV` sums the two paths. -/
-noncomputable def cnxResidBlockBackGraph {c cExp h w kH kW : Nat}
-    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
-    (εn : ℝ) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w))
-    (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) : SHlo (c * h * w) :=
-  residualBackGraph
-    (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x ecot) ecot
-
-/-- **The whole per-example ConvNeXt residual block: backward graph ↔ proven VJP**
-    (identity/residual capstone), no hypotheses beyond `0 < εn`. Assembles the body
-    backward graph (`cnxBlockBodyBackGraph`) + the identity skip into the proven
-    `convNextBlock_has_vjp` backward via `residualBackGraph_faithful`. -/
-theorem cnxResidBlockBackGraph_faithful {c cExp h w kH kW : Nat}
-    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
-    (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w))
-    (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) :
-    den (cnxResidBlockBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x ecot)
-      = (convNextBlock_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).backward x (den ecot) :=
-  residualBackGraph_faithful
-    (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls)
-    (convNextBlockBody_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
-    (convNextBlockBody_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
-    x ecot
-    (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x ecot)
-    (cnxBlockBodyBackGraph_faithful Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls x
-      ecot)
-
-end Proofs.StableHLO
 
 namespace Proofs
 
@@ -215,9 +101,9 @@ theorem chanLNBackGraph_eq_vjp (gN xN epsStr : String) {c h w : Nat} (ε : ℝ) 
       = (chanLNTensor3_has_vjp c h w ε γ β hε).backward x (den e) := by
   rw [chanLNBackGraph_faithful, chanLNTensor3Back_eq_chanLN_vjp (β := β) ε hε γ x]
 
-/-- The channel-LN block-body backward graph — `cnxBlockBodyBackGraph`'s shape with the scalar
-    `bnBack` replaced by `chanLNBackGraph` and the LN affine widened from `ℝ` to `Vec c`, which is
-    exactly what §2m's flip did to the forward. -/
+/-- The channel-LN block-body backward graph — the block body's reverse chain with
+    `chanLNBackGraph` for the LayerNorm and the LN affine at `Vec c`, which is exactly what §2m's
+    flip did to the forward. -/
 noncomputable def cnxBlockBodyChBackGraph {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (γn βn : Vec c)

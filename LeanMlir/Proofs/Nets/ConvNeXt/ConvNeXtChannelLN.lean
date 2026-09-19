@@ -280,8 +280,7 @@ theorem chanLN_beta_contract {c h w : Nat} (ε : ℝ) (γ β : Vec c) (x cot : V
 /-- **Channel-LN γ output, certified.** The rendered per-channel reduce — ViT's
     `vecLN_grad_gamma` on the two transposed views the tail emits — equals the certified Jacobian
     of `chanLNTensor3` in its `Vec c` γ, contracted with the activation-layout cotangent. The
-    `Vec c` peer of `ConvNeXtClose.cnx_render_lngamma_certified`, and the `den` target of the
-    render's `veclnGammaSgd` LN tail. -/
+    `den` target of the render's `veclnGammaSgd` LN tail. -/
 theorem cnx_render_chlngamma_certified {c h w : Nat} (ε : ℝ) (β γ : Vec c)
     (x cot : Vec (c * h * w)) (lr : ℝ) (k : Fin c) :
     γ k - lr * vecLN_grad_gamma (h * w) c ε (Mat.unflatten (chanLNRows c h w x))

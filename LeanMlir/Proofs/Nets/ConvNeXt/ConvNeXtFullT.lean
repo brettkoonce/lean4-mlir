@@ -22,7 +22,7 @@ Per the handoff recipe (`planning/archive/convnext_close.md` §"Scaling handoff"
 
 GELU/LN/conv are smooth, so the whole-net VJP is GLOBAL (unconditional except the 22 LN
 positivities) — ConvNeXt-T joins `efficientnetForwardB_full_has_vjp` and `vitForwardKV`.
-The `ConvNeXtClose`/`ConvNeXtChainClose` param bridges are dim-generic and cover all 18 blocks
+The `ConvNeXtFold`/`ConvNeXtChainClose` param bridges are dim-generic and cover all 18 blocks
 verbatim; the downsample conv W/b reuse the proven stride-2 bridges.
 
 ⚠ **§2n (2026-07-31): the scalar-LN twin of this chain is GONE.** Until then every definition

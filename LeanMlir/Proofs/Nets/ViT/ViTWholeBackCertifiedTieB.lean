@@ -22,8 +22,8 @@ smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
    (g ∘ f) = batchMap B g ∘ batchMap B f`, the lemma the shape check needs and the reason the
    chain saves its activations stage by stage: the two spellings agree only up to
    `finProdFinEquiv.symm_apply_apply`, which is not `rfl`.
-2. The four batched leaf ties, one per stage. The patch-embed one is `rfl` (its per-example tie
-   is); the other three are `funext` to one example, one rewrite of the per-example tie at that
+2. The batched leaf ties. The patch-embed stage needs none (its backward is `rfl`); the other
+   three are `funext` to one example, one rewrite of the per-example tie at that
    example's row (`vitTowerBackK_eq_vjp`, `vitFinalLNBack_eq_vjp`,
    `vitHeadBack_eq_classifier_vjp`), then `rfl` — `batchMapAux`'s slice and the lift's
    `.backward` row are the same term, as `maxPool3s2FlatBackB_eq_vjp_backward` found for r34.
@@ -85,14 +85,6 @@ noncomputable def vitHeadB_at (B N D nClasses : Nat) (Wcls : Mat D nClasses)
   batchMap_has_vjp_at _ v
     (fun _ => (classifier_flat_has_vjp N D nClasses Wcls bcls).toHasVJPAt _)
     (fun _ => (classifier_flat_diff N D nClasses Wcls bcls).differentiableAt)
-
-/-- **The batched patch-embed tie is `rfl`**, as the per-example one is: `batchMap B` of the
-    linear formula IS the lift's row-wise backward, term for term. -/
-theorem vitEmbedBackB_eq_vjp (B ic H W patchSize N D : Nat)
-    (W_conv : Kernel4 D ic patchSize patchSize) (b_conv cls_token : Vec D)
-    (pos_embed : Mat (N + 1) D) (x : Vec (B * (ic * H * W))) :
-    StableHLO.batchMap B (patchEmbed_input_grad_formula ic H W patchSize N D W_conv)
-      = (vitEmbedB_at B ic H W patchSize N D W_conv b_conv cls_token pos_embed x).backward := rfl
 
 /-- **The batched tower tie.** `batchMapAux B` of the depth-`k` tower backward at the batched
     saved input IS the lift's backward: one example, one rewrite of `vitTowerBackK_eq_vjp` at

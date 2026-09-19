@@ -10,7 +10,7 @@ import LeanMlir.Proofs.Architectures.ChannelLNBack
 
 The Chapter-7 §1a tie: mnv2's whole-net thread (now `MobileNetV2TieB.mnv2_net_tiedB`; the
 per-example original was deleted 2026-09-08) for the
-ConvNeXt-T schedule. The §1 fold (`ConvNeXtFold` + `ConvNeXtClose`/M2/M3/ViT) already makes
+ConvNeXt-T schedule. The §1 fold (`ConvNeXtFold` + M2/M3/ViT) already makes
 every rendered param op `den = certified ∀ cotangent`; this file feeds each consumer the **real
 forward activations** of the `convNextTrainStepFaithfulV` render and the **loss-driven
 backward-chain cotangent** that net delivers — so the whole 18-block train step is den-composed

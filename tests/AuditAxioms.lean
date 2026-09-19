@@ -46,7 +46,6 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
 import LeanMlir.Proofs.Nets.ViT.ViTClose
@@ -715,19 +714,11 @@ open Proofs
 -- ConvNeXt RENDER (planning/archive/convnext_close.md Item A)
 #print axioms StableHLO.convNextFwdGraph_faithful
 -- ConvNeXt CLOSE (planning/archive/convnext_close.md Item C)
-#print axioms pdiv_layerScale_gamma
-#print axioms layerScale_gamma_grad_bridge
-#print axioms cnx_lnGamma_grad_bridge
-#print axioms cnx_lnBeta_grad_bridge
-#print axioms cnx_render_lngamma_certified
-#print axioms cnx_render_lnbeta_certified
 -- ConvNeXt §1 fold START
 #print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
 #print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
 -- ConvNeXt §1 fold
 #print axioms Proofs.CnxPoC.layerScaleChGammaSgd_den
-#print axioms Proofs.CnxPoC.lnGammaSgd_den
-#print axioms Proofs.CnxPoC.lnBetaSgd_den
 -- The CHANNEL-LN γ/β param certs (ConvNeXtChannelLN)
 #print axioms Proofs.chanRowsIdxInv_chanRowsIdx
 #print axioms Proofs.chanRowsIdx_chanRowsIdxInv
@@ -751,10 +742,6 @@ open Proofs
 #print axioms vit_rowDenseb_grad_bridge
 #print axioms vit_render_rowdenseW_certified
 #print axioms vit_render_rowdenseb_certified
-#print axioms pdiv_rowLN_gamma
-#print axioms pdiv_rowLN_beta
-#print axioms vit_rowlnGamma_grad_bridge
-#print axioms vit_rowlnBeta_grad_bridge
 #print axioms pdiv_patchEmbed_pos
 #print axioms vit_render_pos_certified
 #print axioms pdiv_patchEmbed_cls
@@ -978,8 +965,6 @@ open Proofs
 -- Its XLA-SAME peer (MobileNetV2's four strided depthwises, B0's downsample depthwise).
 #print axioms Proofs.depthwiseStride2FlatXlaBack_eq_vjp_backward
 -- §B integrity tie (convnext)
-#print axioms Proofs.cnxBlockBodyBack_eq_convNextBlockBody_vjp
-#print axioms Proofs.cnxBlockBack_eq_convNextBlock_vjp
 -- §2n §B at ConvNeXt's REAL channel LayerNorm
 #print axioms Proofs.HasVJP.backward_unique
 #print axioms Proofs.bn_grad_input_eq_vjp_backward
@@ -1107,7 +1092,6 @@ open Proofs
 #print axioms Proofs.vitBlockBackVAt_eq_vjp
 #print axioms Proofs.vitHeadBack_eq_classifier_vjp
 #print axioms Proofs.vitFinalLNBack_eq_vjp
-#print axioms Proofs.vitPatchEmbedBack_eq_vjp
 #print axioms Proofs.vitTowerBackK_eq_vjp
 #print axioms Proofs.vitForwardKV_eq_chain
 #print axioms Proofs.vitInputGradK_eq_vitApexVJP
@@ -1115,7 +1099,6 @@ open Proofs
 #print axioms Proofs.vitInputGradK_correct
 #print axioms Proofs.vitTinyInputGrad_eq_vitTiny_vjp
 -- ViT WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index (ViTWholeBackCertifiedTieB.lean, 2026-09-08)
-#print axioms Proofs.vitEmbedBackB_eq_vjp
 #print axioms Proofs.vitTowerBackB_eq_vjp
 #print axioms Proofs.vitLNBackB_eq_vjp
 #print axioms Proofs.vitHeadBackB_eq_vjp
@@ -1399,8 +1382,6 @@ open Proofs
 #print axioms StableHLO.mbconvBodyBackGraph_faithful
 #print axioms StableHLO.mbconvResidual_backGraph_faithful
 -- ConvNeXt backward-graph faithfulness (den-level)
-#print axioms StableHLO.cnxBlockBodyBackGraph_faithful
-#print axioms StableHLO.cnxResidBlockBackGraph_faithful
 -- §2o Part A (2026-07-31)
 #print axioms Proofs.rowLNBack_affine_eq
 #print axioms StableHLO.chanLNBackGraph_faithful
@@ -1481,11 +1462,8 @@ open Proofs
 
 -- ViT folded onto the net-agnostic `CertLayer` machinery (ViTBackNet.lean, 2026-08-10)
 #print axioms StableHLO.vitBlockVLayer
-#print axioms StableHLO.vitTrunkV_eq_chain
 #print axioms StableHLO.vitTrunkV_fwd
 #print axioms StableHLO.vitTrunkV_graph
-#print axioms StableHLO.vitTrunkV_faithful
-#print axioms StableHLO.vitTinyTrunk_is_shipped
 
 -- THE WHOLE NET AS ONE `CertLayer`
 #print axioms StableHLO.vitPatchEmbedLayer
@@ -1514,7 +1492,6 @@ open Proofs
 
 -- r34 / mnv2 / enet / convnext
 #print axioms StableHLO.enetMBConvLayer
-#print axioms StableHLO.cnxBlockLayer
 #print axioms StableHLO.cnxBlockChLayer
 #print axioms StableHLO.r34BasicBlockLayer
 #print axioms StableHLO.r34DownBlockLayer
@@ -1594,10 +1571,7 @@ open Proofs
 #print axioms Proofs.ViTPoC.headW_den
 #print axioms Proofs.ViTPoC.headB_den
 -- ViT-Tiny §1a TIE — per-block (ViTStepTie)
-#print axioms Proofs.ViTTiePoC.vit_block_tiedV
 -- ViT-Tiny §1a TIE — whole-net thread (2-block vector-LN representative)
-#print axioms Proofs.ViTTiePoC.vit_block_tiedAtV
-#print axioms Proofs.ViTTiePoC.vit_net_tiedV
 -- ViT-Tiny §1a TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTStepTie)
 #print axioms Proofs.vitCotDQmh_eq
 #print axioms Proofs.vitCotDKmh_eq
@@ -1605,7 +1579,6 @@ open Proofs
 -- The multi-head per-block tie (vit_block_tiedMHV)
 #print axioms Proofs.ViTTiePoC.vit_block_tiedMHV
 #print axioms Proofs.ViTTiePoC.vit_block_tiedAtMHV
-#print axioms Proofs.ViTTiePoC.vit_net_tiedMHV
 -- ViT-Tiny §1a TIE — the ALL-200-PARAMS capstone (vit_net_tied_certified)
 #print axioms Proofs.ViTTiePoC.vit_cls_den
 #print axioms Proofs.ViTTiePoC.vit_finalLN_tied
@@ -2061,31 +2034,12 @@ open Proofs
 
 -- 4b.2 ConvNeXt-T
 #print axioms Proofs.CnxPoCG.layerScaleChGammaGrad_den
-#print axioms Proofs.CnxPoCG.convWGrad_den
-#print axioms Proofs.CnxPoCG.convBGrad_den
-#print axioms Proofs.CnxPoCG.depthwiseWGrad_den
-#print axioms Proofs.CnxPoCG.depthwiseBGrad_den
-#print axioms Proofs.CnxPoCG.convStridedWGrad_den
-#print axioms Proofs.CnxPoCG.convStridedBGrad_den
-#print axioms Proofs.CnxPoCG.psWGrad_den
 #print axioms Proofs.CnxPoCG.chanLnGammaGrad_den
 #print axioms Proofs.CnxPoCG.chanLnBetaGrad_den
-#print axioms Proofs.CnxPoCG.headLnGammaGrad_den
-#print axioms Proofs.CnxPoCG.headLnBetaGrad_den
-#print axioms Proofs.CnxPoCG.headWGrad_den
-#print axioms Proofs.CnxPoCG.headBGrad_den
 
 -- 4b.3 ViT-Tiny — vit_adam_train_step and vitin_adamdp128x4wxclipdrop
-#print axioms Proofs.ViTPoCG.veclnGammaGrad_den
-#print axioms Proofs.ViTPoCG.rowDenseBiasGrad_den_lnbeta
-#print axioms Proofs.ViTPoCG.rowDenseWeightGrad_den
-#print axioms Proofs.ViTPoCG.rowDenseBiasGrad_den
-#print axioms Proofs.ViTPoCG.patchEmbedWeightGrad_den
-#print axioms Proofs.ViTPoCG.patchEmbedBiasGrad_den
 #print axioms Proofs.ViTPoCG.posEmbedGrad_den
 #print axioms Proofs.ViTPoCG.clsGrad_den
-#print axioms Proofs.ViTPoCG.headWGrad_den
-#print axioms Proofs.ViTPoCG.headBGrad_den
 
 -- 4c leg 4 ViT-Tiny
 #print axioms Proofs.ViTPoCGB.veclnGammaGradB_den

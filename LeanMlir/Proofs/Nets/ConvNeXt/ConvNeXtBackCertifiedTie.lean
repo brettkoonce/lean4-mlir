@@ -7,103 +7,34 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 /-! # §B: the ConvNeXt block-body backward chain IS the certified VJP
 
 `cnxBlockBodyBack` (`ConvNeXtBackChains.lean`) is the hand-composed reverse of the ConvNeXt block
-body, written in the per-op backward maps of `BackwardMaps.lean`. This file closes §B for that
-body: the chain IS the certified input-gradient VJP `convNextBlockBody_has_vjp` (`ConvNeXt.lean`),
-in the SAME non-batched vocabulary.
+body, written in the per-op backward maps of `BackwardMaps.lean`. This file closes §B for the net
+the repo ships, whose LayerNorm is the CHANNEL LN `chanLNTensor3`: the chain IS the certified
+input-gradient VJP, in the SAME non-batched vocabulary.
 
-The ConvNeXt block body is `convNextBlockBody = layerScale ∘ project ∘ GELU ∘ expand ∘ LN ∘ depthwise`,
-whose certified VJP backward applies the reverses in order
-`LS.back → PR.back → GE.back → EX.back → LN.back → D.back`. `cnxBlockBodyBack` is the exact
-peer chain `depthwiseFlatBack ∘ lnB ∘ convFlatBack Wex ∘ geluB ∘ convFlatBack Wpr ∘ lsB`. The tie pins
-the three smooth/diagonal/norm backs (`lsB`/`geluB`/`lnB`) to the certified `layerScale`/`gelu`/`LN`
-backwards at the exact saved activations, and ties the two 1×1 convs + the depthwise to their certified
+The block body is `layerScale ∘ project ∘ GELU ∘ expand ∘ LN ∘ depthwise`, whose certified VJP
+backward applies the reverses in order `LS.back → PR.back → GE.back → EX.back → LN.back → D.back`.
+`cnxBlockBodyBack` is the exact peer chain
+`depthwiseFlatBack ∘ lnB ∘ convFlatBack Wex ∘ geluB ∘ convFlatBack Wpr ∘ lsB`. The tie pins the
+layer-scale and GELU backs (`lsB`/`geluB`) to the certified backwards at the exact saved
+activations, fills the LN slot with the concrete `chanLNTensor3Back` (tied by
+`chanLNTensor3Back_eq_chanLN_vjp`), and ties the two 1×1 convs + the depthwise to their certified
 input-VJPs via the leaf gates (`convFlatBack_eq_vjp_backward`, `depthwiseFlatBack_eq_vjp_backward`).
-The conv/depthwise backwards ignore their primal (linear), the pinned backs match the certified saved
-activations definitionally, so the whole tie closes by rewriting the three convolution leaves + `rfl`.
-
-This is the convnext analogue of `r34IdBlockBack_eq_rblkPC_vjp`; b1-free (the per-example body is the
-non-batched object the chain reverses, no `batchMap` reconciliation). The certified
-`convNextBlockBody_has_vjp` already existed, so the work is the depthwise leaf gate (shared, in
-`DepthwiseBackCertifiedTie`) + this per-block tie. 3-axiom-clean.
+b1-free: the per-example body is the non-batched object the chain reverses, so there is no
+`batchMap` reconciliation. 3-axiom-clean.
 -/
 
 namespace Proofs
 
 open Classical
 
-/-- **The §B ConvNeXt body tie: hand-composed backward = certified VJP.** `cnxBlockBodyBack`, with its
-    abstract layer-scale / GELU / LayerNorm backs pinned to the certified `layerScale` / `gelu` /
-    `layerNorm` backwards at the exact saved forward activations (`depthwiseFlat … v` for LN, the deeper
-    forward partials for GELU/LS), equals `(convNextBlockBody_has_vjp_at …).backward`.
-
-    Both sides apply the six op-reverses in the order `LS → PR → GE → EX → LN → D`. The two 1×1 convs
-    tie via `convFlatBack_eq_vjp_backward` (1×1 is odd) and the depthwise via
-    `depthwiseFlatBack_eq_vjp_backward`; the conv/depthwise backwards ignore their (linear) primal and
-    the pinned smooth backs carry the certified saved activations, so after rewriting the three leaves
-    everything matches definitionally. Closes under `[propext, Classical.choice, Quot.sound]`. -/
-theorem cnxBlockBodyBack_eq_convNextBlockBody_vjp {c cExp h w kHd kWd : Nat}
-    (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
-    (Wdw : DepthwiseKernel c kHd kWd) (bdw : Vec c)
-    (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w)) (v : Vec (c * h * w)) :
-    cnxBlockBodyBack Wdw Wex Wpr
-      ((layerNorm_has_vjp (c * h * w) εn γn βn hεn).backward (depthwiseFlat Wdw bdw v))
-      ((layerScale_has_vjp γls).backward
-        ((flatConv (h := h) (w := w) Wpr bpr ∘ gelu (cExp * h * w) ∘
-          flatConv (h := h) (w := w) Wex bex ∘ layerNormForward (c * h * w) εn γn βn ∘
-          depthwiseFlat (h := h) (w := w) Wdw bdw) v))
-      ((gelu_has_vjp (cExp * h * w)).backward
-        ((flatConv (h := h) (w := w) Wex bex ∘ layerNormForward (c * h * w) εn γn βn ∘
-          depthwiseFlat (h := h) (w := w) Wdw bdw) v))
-      = (convNextBlockBody_has_vjp_at Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls v).backward := by
-  funext dy
-  unfold cnxBlockBodyBack
-  rw [convFlatBack_eq_vjp_backward (W := Wex) (b := bex)
-        (x := (layerNormForward (c * h * w) εn γn βn ∘ depthwiseFlat (h := h) (w := w) Wdw bdw) v)
-        (by decide) (by decide),
-      convFlatBack_eq_vjp_backward (W := Wpr) (b := bpr)
-        (x := (gelu (cExp * h * w) ∘ flatConv (h := h) (w := w) Wex bex ∘
-          layerNormForward (c * h * w) εn γn βn ∘ depthwiseFlat (h := h) (w := w) Wdw bdw) v)
-        (by decide) (by decide),
-      depthwiseFlatBack_eq_vjp_backward hkHd hkWd Wdw bdw v]
-  rfl
-
-/-- **The §B ConvNeXt block tie (residual-wrapped).** The full block is `residual (body)`, so the
-    block backward `residual (cnxBlockBodyBack …)` (the `dy ↦ bodyBack(dy) + dy` additive skip)
-    equals `(convNextBlock_has_vjp_at …).backward`. Immediate
-    from the body tie + the residual fan-in (`residual_has_vjp = biPath_has_vjp body id`, the skip's
-    backward is `dy`): rewrite the body tie, then `rfl`. 3-axiom-clean. -/
-theorem cnxBlockBack_eq_convNextBlock_vjp {c cExp h w kHd kWd : Nat}
-    (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
-    (Wdw : DepthwiseKernel c kHd kWd) (bdw : Vec c)
-    (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w)) (v : Vec (c * h * w)) :
-    Proofs.residual (cnxBlockBodyBack Wdw Wex Wpr
-      ((layerNorm_has_vjp (c * h * w) εn γn βn hεn).backward (depthwiseFlat Wdw bdw v))
-      ((layerScale_has_vjp γls).backward
-        ((flatConv (h := h) (w := w) Wpr bpr ∘ gelu (cExp * h * w) ∘
-          flatConv (h := h) (w := w) Wex bex ∘ layerNormForward (c * h * w) εn γn βn ∘
-          depthwiseFlat (h := h) (w := w) Wdw bdw) v))
-      ((gelu_has_vjp (cExp * h * w)).backward
-        ((flatConv (h := h) (w := w) Wex bex ∘ layerNormForward (c * h * w) εn γn βn ∘
-          depthwiseFlat (h := h) (w := w) Wdw bdw) v)))
-      = (convNextBlock_has_vjp_at Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls v).backward := by
-  rw [cnxBlockBodyBack_eq_convNextBlockBody_vjp hkHd hkWd Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls v]
-  rfl
-
 -- ════════════════════════════════════════════════════════════════
 -- § §B at ConvNeXt's REAL channel LayerNorm (§2n) — the LN op itself
 -- ════════════════════════════════════════════════════════════════
 
-/-! The two ties above pin the block body's ABSTRACT `lnB` slot to a certified backward, which is
-why they never had to look inside a LayerNorm. `chanLNTensor3Back` (`ChannelLNBack.lean`)
-is not abstract — it is a concrete five-factor chain, the row map conjugated by the forward's four
-layout permutations. So it owes the tie the block ties did not: that the
-chain IS `chanLNTensor3_has_vjp`'s backward. That is what this section proves.
+/-! `chanLNTensor3Back` (`ChannelLNBack.lean`) is not an abstract slot — it is a concrete
+five-factor chain, the row map conjugated by the forward's four layout permutations. So it owes a
+tie of its own: that the chain IS `chanLNTensor3_has_vjp`'s backward. That is what this section
+proves.
 
 The proof is piecewise, and every piece is already in the repo:
 
@@ -168,8 +99,7 @@ theorem rowLNVecFlat_has_vjp_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (
 
     Proof: the witness is a term-mode `vjp_comp` chain, so its backward unfolds to the nested
     chain; rewrite its five factors (two reassoc collapses, two transposes by `rfl`, the row map
-    through `bn_grad_input`). The channel-LN peer of `cnxBlockBodyBack_eq_convNextBlockBody_vjp`;
-    3-axiom-clean. -/
+    through `bn_grad_input`). 3-axiom-clean. -/
 theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (c * h * w)) :
     chanLNTensor3Back c h w ε γ x = (chanLNTensor3_has_vjp c h w ε γ β hε).backward x := by
@@ -180,18 +110,17 @@ theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) 
       transposeFlat_has_vjp_backward_eq, reassocFwd_has_vjp_backward_eq]
   rfl
 
-/-- **The §B channel-LN BODY tie: the block-body backward chain = the certified VJP.** The peer of
-    `cnxBlockBodyBack_eq_convNextBlockBody_vjp` for the net the repo ships. `cnxBlockBodyBack` with
+/-- **The §B channel-LN BODY tie: the block-body backward chain = the certified VJP**, for the net
+    the repo ships. `cnxBlockBodyBack` with
     its LayerNorm slot filled by the CONCRETE `chanLNTensor3Back` (at the saved post-depthwise
     activation) and its
     layer-scale / GELU slots pinned to the certified backwards equals
     `(cnxBodyWith_has_vjp (chanLNTensor3 …) …).backward`.
 
-    Note what fills the LN slot here: not a certified object but the concrete five-factor
-    chain. That is the point — the scalar tie could pin an abstract `lnB` to whatever it liked,
-    while this one has to go through `chanLNTensor3Back_eq_chanLN_vjp` to earn it. Otherwise the
-    proof is the scalar one: rewrite the two 1×1 conv leaves and the depthwise leaf through their
-    gates, rewrite the LN chain through its tie, and the rest matches definitionally.
+    Note what fills the LN slot: not a certified object but the concrete five-factor chain, which
+    has to go through `chanLNTensor3Back_eq_chanLN_vjp` to earn its place. The proof rewrites the
+    two 1×1 conv leaves and the depthwise leaf through their gates, rewrites the LN chain through
+    its tie, and the rest matches definitionally.
     3-axiom-clean. -/
 theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)

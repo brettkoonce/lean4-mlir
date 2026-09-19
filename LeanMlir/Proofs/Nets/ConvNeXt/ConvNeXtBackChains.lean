@@ -39,8 +39,9 @@ namespace Proofs
     `geluB = diagBack (gelu'(saved))`; `convFlatBack Wex` the expand back; `lnB` the LayerNorm back
     (= BN-back); `depthwiseFlatBack Wdw` the depthwise input-VJP. The full block is
     `residual (body)`, so the block backward is `residual (cnxBlockBodyBack …)`;
-    `cnxBlockBodyBack_eq_convNextBlockBody_vjp` pins the supplied slots to their certified
-    backwards and shows the chain IS `convNextBlockBody_has_vjp`'s. -/
+    `ConvNeXtBackCertifiedTie.cnxBodyWithChanLNBack_eq_vjp` fills the LN slot with the concrete
+    channel-LN chain, pins the other slots to their certified backwards, and shows the chain IS
+    the certified body VJP. -/
 noncomputable def cnxBlockBodyBack {c cExp h w kHd kWd : Nat}
     (Wdw : DepthwiseKernel c kHd kWd) (Wex : Kernel4 cExp c 1 1) (Wpr : Kernel4 c cExp 1 1)
     (lnB lsB : Vec (c * h * w) → Vec (c * h * w))

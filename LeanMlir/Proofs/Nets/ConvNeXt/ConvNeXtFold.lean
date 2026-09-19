@@ -1,26 +1,25 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtClose
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 
 /-! # ConvNeXt-T §1 fold — the per-channel layer-scale γ gradient cert (the one new proof)
 
 The committed ConvNeXt SGD net trains **per-channel** layer-scale `γ : Vec c` (the `layerScaleChF`
-forward, which broadcasts `γ` over the `c·h·w` activation via `chanIdx`), NOT the per-element `Vec n`
-layer-scale that `layerScale_gamma_grad_bridge` (ConvNeXtClose) certifies. So the §1 fold needs the
-**per-channel** version: the γ-gradient w.r.t. the `Vec c` parameter is the per-channel reduce
+forward, which broadcasts `γ` over the `c·h·w` activation via `chanIdx`), NOT a per-element `Vec n`
+layer-scale. So the §1 fold needs the **per-channel** version: the γ-gradient w.r.t. the `Vec c` parameter is the per-channel reduce
 `dγ_c = Σ_{k : chanIdx k = c} x_k · dy_k` (the `lsGradCh` emit: `multiply x dy` → `reduce[0,2,3]`),
 and this is exactly the certified Jacobian of `layerScaleChF`'s forward (as a function of `γ : Vec c`)
 contracted with the cotangent.
 
 This is the only genuinely-NEW proof obligation for the ConvNeXt tie (the depthwise-7×7, 1×1-conv,
-strided-stem/downsample, dense, and scalar-LN γ/β param grads are all covered by existing
-`ConvNeXtClose` / M2 / M3 certs). Like `ConvNeXtClose.pdiv_layerScale_gamma` it is linear in the
-parameter (`pdiv_of_linear`), but with the `chanIdx` reindex (the per-channel broadcast) in place
-of the identity — `∂(γ'(chanIdx j)·x_j)/∂γ'_c = x_j·[chanIdx j = c]`.
+strided-stem/downsample and dense param grads are covered by the existing M2 / M3 certs, the
+channel-LN γ/β by `ConvNeXtChannelLN`). It is linear in the parameter (`pdiv_of_linear`), with the
+`chanIdx` reindex (the per-channel broadcast) — `∂(γ'(chanIdx j)·x_j)/∂γ'_c = x_j·[chanIdx j = c]`.
 
-Once the `layerScaleChGammaSgd` core `SHlo` op lands (the per-channel layer-scale param-SGD, emitting
-`lsGradCh` + the SGD wrap), its `den` reduces to the LHS here, so `den = certified` is a one-line
-delegation to `cnx_render_lsgammaCh_certified`. -/
+The `layerScaleChGammaSgd` core `SHlo` op (the per-channel layer-scale param-SGD, emitting
+`lsGradCh` + the SGD wrap) `den`otes the LHS here, so `den = certified` is a one-line delegation to
+`cnx_render_lsgammaCh_certified` (`layerScaleChGammaSgd_den`). -/
 
 namespace Proofs.CnxPoC
 
@@ -28,9 +27,8 @@ open scoped BigOperators
 open Proofs Proofs.StableHLO
 
 /-- **Jacobian of per-channel layer-scale w.r.t. the `Vec c` parameter** —
-    `∂(γ'(chanIdx j)·x_j)/∂γ'_c = x_j·[chanIdx j = c]`. The per-channel mirror of
-    `ConvNeXtClose.pdiv_layerScale_gamma` (which is per-element); the broadcast `chanIdx` reindex
-    replaces the identity, so the basis vector read through it is the channel indicator. -/
+    `∂(γ'(chanIdx j)·x_j)/∂γ'_c = x_j·[chanIdx j = c]`. The broadcast `chanIdx` reindex makes the
+    basis vector read through it the channel indicator. -/
 theorem pdiv_layerScaleCh_gamma {c h w : Nat} (x : Vec (c * h * w)) (γ : Vec c)
     (cc : Fin c) (j : Fin (c * h * w)) :
     pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j
@@ -42,8 +40,7 @@ theorem pdiv_layerScaleCh_gamma {c h w : Nat} (x : Vec (c * h * w)) (γ : Vec c)
 /-- **Per-channel layer-scale γ output, certified.** The rendered per-channel reduce
     `dγ_c = Σ_{k : chanIdx k = c} x_k·dy_k` (the `lsGradCh` emit) equals the certified Jacobian of
     `layerScaleChF`'s forward (as a function of `γ : Vec c`) contracted with the cotangent. The
-    `Vec c` peer of `layerScale_gamma_grad_bridge` (ConvNeXtClose); the `den` target of the (pending)
-    `layerScaleChGammaSgd` core op. -/
+    `den` target of the `layerScaleChGammaSgd` core op. -/
 theorem cnx_render_lsgammaCh_certified {c h w : Nat} (x : Vec (c * h * w)) (γ : Vec c)
     (dy : Vec (c * h * w)) (lr : ℝ) (cc : Fin c) :
     γ cc - lr * ∑ k : Fin (c * h * w), (if chanIdx c h w k = cc then x k * dy k else 0)
@@ -66,27 +63,6 @@ theorem layerScaleChGammaSgd_den {c h w : Nat} (gN xN lrStr cotN : String)
   simp only [den]
   exact cnx_render_lsgammaCh_certified x γ dy lr cc
 
-/-- **Scalar-LN γ op denotes the certified step** (`γ − lr·Σ dy·x̂`). Delegation to
-    `cnx_render_lngamma_certified` (the `Vec 1` embedding). The free `β` is the LN's β (the γ grad is
-    β-independent). -/
-theorem lnGammaSgd_den {n : Nat} (gN xN epsStr lrStr cotN : String)
-    (ε β : ℝ) (x : Vec n) (γ : Vec 1) (dy : Vec n) (lr : ℝ) (i : Fin 1) :
-    den (SHlo.lnGammaSgd gN xN epsStr lrStr ε x γ lr (.operand cotN dy)) i
-      = γ 0 - lr * ∑ j : Fin n,
-          pdiv (fun γ' : Vec 1 => layerNormForward n ε (γ' 0) β x) γ 0 j * dy j := by
-  simp only [den]
-  exact cnx_render_lngamma_certified n ε β γ x dy lr
-
-/-- **Scalar-LN β op denotes the certified step** (`β − lr·Σ dy`). Delegation to
-    `cnx_render_lnbeta_certified`. The free `ε`/`γ` carry the LN constants (β grad is independent). -/
-theorem lnBetaSgd_den {n : Nat} (bN lrStr cotN : String)
-    (ε γ : ℝ) (β : Vec 1) (x : Vec n) (dy : Vec n) (lr : ℝ) (i : Fin 1) :
-    den (SHlo.lnBetaSgd bN lrStr β lr (.operand cotN dy)) i
-      = β 0 - lr * ∑ j : Fin n,
-          pdiv (fun β' : Vec 1 => layerNormForward n ε γ (β' 0) x) β 0 j * dy j := by
-  simp only [den]
-  exact cnx_render_lnbeta_certified n ε γ β x dy lr
-
 /-! ## The channel-LN γ/β ops — the two the committed render actually emits
 
 `ConvNeXtRender.lnGammaTail`/`lnBetaTail` re-emit the `[h·w, c]` transposes and then run ViT's
@@ -94,8 +70,7 @@ theorem lnBetaSgd_den {n : Nat} (bN lrStr cotN : String)
 views `chanLNRows` of the saved LN input and of the chain cotangent — the values those SSA names
 denote. The certified Jacobian on the right is `chanLNTensor3`'s, in the `c·h·w` activation
 layout the rest of the block lives in; `ConvNeXtChannelLN`'s permutation argument is what lets
-one op serve both layouts. These replace the scalar `lnGammaSgd_den`/`lnBetaSgd_den` above at
-every one of the net's 22 spatial LN sites (1 stem + 18 block + 3 downsample); the 23rd, the
+one op serve both layouts. They cover every one of the net's 22 spatial LN sites (1 stem + 18 block + 3 downsample); the 23rd, the
 head, runs after GAP and is ViT's vector-LN at `N = 1` (`ViTPoC.veclnGammaSgd_den`). -/
 
 /-- **Channel-LN γ op denotes the certified step.** One-line delegation to

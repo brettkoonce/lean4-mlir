@@ -60,16 +60,6 @@ theorem vitFinalLNBack_eq_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : V
   funext dy
   exact (rowLNVecFlat_has_vjp_backward_eq ε hε γF βF X dy).symm
 
-/-- **The patch-embed backward tie is `rfl`.** `patchEmbed_flat_has_vjp` is a structure whose
-    `backward` field IS `patchEmbed_input_grad_formula` — the one endpoint in this repo that
-    needed no reconciliation. -/
-theorem vitPatchEmbedBack_eq_vjp (ic H W patchSize N D : Nat)
-    (W_conv : Kernel4 D ic patchSize patchSize) (b_conv : Vec D) (cls_token : Vec D)
-    (pos_embed : Mat (N + 1) D) (x : Vec (ic * H * W)) :
-    patchEmbed_input_grad_formula ic H W patchSize N D W_conv
-      = (patchEmbed_flat_has_vjp ic H W patchSize N D W_conv b_conv cls_token
-          pos_embed).backward x := rfl
-
 -- ════════════════════════════════════════════════════════════════
 -- § 2. ⭐ The depth-`k` tower fold — the one real proof
 -- ════════════════════════════════════════════════════════════════

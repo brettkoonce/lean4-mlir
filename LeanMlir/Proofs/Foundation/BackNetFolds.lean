@@ -84,30 +84,10 @@ noncomputable def enetMBConvLayer (N : Nat) {c mid h w kHd kWd r : Nat}
 -- § ConvNeXt — gelu is smooth, so `ok = True`
 -- ════════════════════════════════════════════════════════════════
 
-/-- The per-example ConvNeXt residual block as a `CertLayer` (spatial-LN form). Globally
-    certified. ⚠ ConvNeXt is per-example (batch-1): LayerNorm is separable across examples, so
-    there is no batched machinery to carry — see `ConvNeXtBackB0`'s header. -/
-noncomputable def cnxBlockLayer {c cExp h w kH kW : Nat}
-    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
-    (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
-    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (γls : Vec (c * h * w)) :
-    CertLayer (c * h * w) (c * h * w) where
-  fwd := convNextBlock Wdw bdw εn γn βn Wex bex Wpr bpr γls
-  ok := fun _ => True
-  diff := fun x _ =>
-    (convNextBlock_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls) x
-  vjp := fun x _ =>
-    (convNextBlock_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).toHasVJPAt x
-  graph := fun x e => cnxResidBlockBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x e
-  faithful := fun x _ e =>
-    cnxResidBlockBackGraph_faithful Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls x e
-
 /-- ⭐ The **channel-LN** ConvNeXt block as a `CertLayer` — the form the *shipped* net's stages are
     actually built from (`cnxResidBlockChBackGraph_faithful` is described in `ConvNeXtBackB0` as
     "the capstone the shipped net was missing"). This is the one to chain for a real ConvNeXt
-    stage; `cnxBlockLayer` above is the spatial-LN sibling. -/
+    stage. -/
 noncomputable def cnxBlockChLayer {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
     CertLayer (c * h * w) (c * h * w) where
