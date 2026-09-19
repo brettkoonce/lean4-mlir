@@ -857,12 +857,7 @@ noncomputable def cnnConcrete_has_vjp_at :
       apply maxPool2Smooth_of_injective
       intro ci r r' s s' heq
       simp only [Tensor3.unflatten] at heq
-      have h1 := bnX_inj heq
-      have h2 := finProdFinEquiv.injective h1
-      have h3 : (finProdFinEquiv (ci, r)) = (finProdFinEquiv (ci, r')) := congrArg Prod.fst h2
-      have h4 : s = s' := congrArg Prod.snd h2
-      have h5 := finProdFinEquiv.injective h3
-      exact ⟨congrArg Prod.snd h5, h4⟩)
+      simpa [Prod.ext_iff] using bnX_inj heq)
     -- h_rb1
     (fun k => by rw [bnForward_gamma_zero]; norm_num)
     -- h_rb1o

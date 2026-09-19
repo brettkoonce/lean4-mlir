@@ -55,9 +55,7 @@ theorem bnStep_close {n : Nat} {ε γ β emean eistd D S G Bbnd A e1 fμ fistdv 
   -- δ = (Σ|vt−va|)/n ≤ e1
   have hδ : (∑ k, |vt k - va k|) / (n:ℝ) ≤ e1 := by
     rw [div_le_iff₀ hnR]
-    calc ∑ k, |vt k - va k| ≤ ∑ _k : Fin n, e1 := Finset.sum_le_sum fun k _ => he1 k
-      _ = e1 * (n:ℝ) := by
-          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+    exact (Finset.sum_le_card_nsmul _ _ _ fun k _ => he1 k).trans_eq (by simp [mul_comm])
   have hround := M.bnForward_close_of (ε := ε) vt i hmean histd (hD i) hSabs hγ hβ
   have hshift0 := bnForward_input_close (γ := γ) (β := β) (A := A) (ε := ε)
     vt va hn hε hAvt hAva i

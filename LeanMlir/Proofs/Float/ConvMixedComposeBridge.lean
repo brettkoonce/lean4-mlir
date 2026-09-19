@@ -102,12 +102,7 @@ theorem convFanS_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW}
       (Tensor3.flatten_abs_le (fun c kh kw => hW o c kh kw) k)
       (Tensor3.flatten_abs_le (convWindow3_abs_le hA hx hi wi) k)
       (abs_nonneg _) hw'
-  calc convFanS W x o hi wi
-      ≤ ∑ _k : Fin (ic * kH * kW), w' * A :=
-        Finset.sum_le_sum fun k _ => hstep k
-    _ = ((ic * kH * kW : ℕ) : ℝ) * (w' * A) := by
-        rw [Finset.sum_const]; simp [nsmul_eq_mul]
-    _ = ((ic * kH * kW : ℕ) : ℝ) * w' * A := by ring
+  exact (Finset.sum_le_card_nsmul _ _ _ fun k _ => hstep k).trans_eq (by simp [mul_assoc])
 
 -- ════════════════════════════════════════════════════════════════
 -- § The real convolution is Lipschitz in its input
@@ -140,16 +135,11 @@ theorem conv2d_sub_abs_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW} {b :
           * (Tensor3.flatten (convWindow3 kH kW xt hi wi) k
              - Tensor3.flatten (convWindow3 kH kW xa hi wi) k)| :=
         Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ _k : Fin (ic * kH * kW), w' * E := by
-        refine Finset.sum_le_sum fun k _ => ?_
-        rw [abs_mul]
-        exact mul_le_mul
+    _ ≤ ((ic * kH * kW : ℕ) : ℝ) * w' * E :=
+        (Finset.sum_le_card_nsmul _ _ _ fun k _ => (abs_mul _ _).trans_le (mul_le_mul
           (Tensor3.flatten_abs_le (fun c kh kw => hW o c kh kw) k)
           (Tensor3.flatten_sub_abs_le (convWindow3_sub_abs_le hE hd hi wi) k)
-          (abs_nonneg _) hw'
-    _ = ((ic * kH * kW : ℕ) : ℝ) * (w' * E) := by
-        rw [Finset.sum_const]; simp [nsmul_eq_mul]
-    _ = ((ic * kH * kW : ℕ) : ℝ) * w' * E := by ring
+          (abs_nonneg _) hw')).trans_eq (by simp [mul_assoc])
 
 -- ════════════════════════════════════════════════════════════════
 -- § The mixed-precision conv budget, with an INHERITED error

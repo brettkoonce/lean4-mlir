@@ -110,12 +110,9 @@ theorem logit_gap_stable (hf : LipschitzL2 L f)
     have := hf (x + δ) x
     rwa [add_sub_cancel_left] at this
   -- |vᵢ − vⱼ| ≤ √2·‖v‖
-  have hcoord : |v i - v j| ≤ Real.sqrt 2 * ‖v‖ := by
-    rw [← Real.sqrt_sq_eq_abs]
-    calc Real.sqrt ((v i - v j) ^ 2)
-        ≤ Real.sqrt (2 * ‖v‖ ^ 2) := Real.sqrt_le_sqrt (coord_pair_bound v hij)
-      _ = Real.sqrt 2 * ‖v‖ := by
-          rw [Real.sqrt_mul (by norm_num), Real.sqrt_sq (norm_nonneg _)]
+  have hcoord : |v i - v j| ≤ Real.sqrt 2 * ‖v‖ :=
+    abs_le_of_sq_le_sq (by rw [mul_pow, Real.sq_sqrt zero_le_two]; exact coord_pair_bound v hij)
+      (by positivity)
   -- chain: √2‖v‖ ≤ √2·L·‖δ‖
   have hchain : |v i - v j| ≤ Real.sqrt 2 * L * ‖δ‖ := by
     refine hcoord.trans ?_

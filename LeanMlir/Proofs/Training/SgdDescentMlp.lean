@@ -62,12 +62,9 @@ theorem relu_entry_lipschitz (n : Nat) (u v : Vec n) (k : Fin n) :
 theorem sign_stable_of_close {zt z c : ℝ} (hc : |zt - z| ≤ c)
     (hm : c < |z|) : zt ≠ 0 ∧ (0 < zt ↔ 0 < z) := by
   have habs := abs_le.mp hc
-  rcases lt_trichotomy z 0 with hneg | hzero | hpos
+  rcases (abs_pos.mp (((abs_nonneg _).trans hc).trans_lt hm)).lt_or_gt with hneg | hpos
   · have hzt : zt < 0 := by rw [abs_of_neg hneg] at hm; linarith [habs.2]
     exact ⟨ne_of_lt hzt, by constructor <;> intro h <;> linarith⟩
-  · exfalso
-    rw [hzero, abs_zero] at hm
-    exact absurd hm (not_lt.mpr (le_trans (abs_nonneg _) hc))
   · have hzt : 0 < zt := by rw [abs_of_pos hpos] at hm; linarith [habs.1]
     exact ⟨ne_of_gt hzt, ⟨fun _ => hpos, fun _ => hzt⟩⟩
 
@@ -1125,11 +1122,7 @@ theorem mlp_hidden_loss_gradAt_reluMask {d₁ d₂ d₃ : Nat}
       Mat.unflatten_flatten]
   congr 1
   rw [FloatModel.reluMask]
-  by_cases h : dense W₁ b₁ a₀ j > 0
-  · rw [ite_eq_left h, ite_eq_left h, one_mul]
-    simp only [dense, add_zero]
-    exact Finset.sum_congr rfl fun k _ => mul_comm _ _
-  · rw [ite_eq_right h, ite_eq_right h, zero_mul]
+  split_ifs <;> simp [dense, mul_comm]
 
 /-- **One binary32 SGD step on the MLP's hidden weights provably decreases
     the cross-entropy loss — with NO abstract gradient-accuracy parameter.**
@@ -1298,12 +1291,7 @@ theorem reluMask_dense_transpose_eq {p n : Nat} (z : Vec p) (W : Mat p n)
     (if z l > 0 then (1:ℝ) else 0) * ∑ k, W l k * c k =
       FloatModel.reluMask z (dense (fun j i' => W i' j) (fun _ => 0) c) l := by
   rw [FloatModel.reluMask]
-  by_cases h : z l > 0
-  · rw [ite_eq_left h, ite_eq_left h, one_mul]
-    show (∑ k, W l k * c k) = (∑ k, c k * W l k) + (0:ℝ)
-    rw [add_zero]
-    exact Finset.sum_congr rfl fun k _ => mul_comm _ _
-  · rw [ite_eq_right h, ite_eq_right h, zero_mul]
+  split_ifs <;> simp [dense, mul_comm]
 
 /-- **The binary32 input-layer (`W₀`) gradient of the MLP loss**, exactly as
     the rendered trainer computes it (`x` the exact input): `fl(xᵢ · c̃₀ⱼ)`

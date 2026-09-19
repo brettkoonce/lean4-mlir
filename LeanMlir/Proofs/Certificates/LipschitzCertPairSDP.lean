@@ -307,11 +307,8 @@ theorem certified_at_eps_pair {n k : ℕ}
       _ ≤ Lp ^ 2 * ‖δ‖ ^ 2 :=
           mul_le_mul_of_nonneg_right hρL (sq_nonneg _)
       _ = (Lp * ‖δ‖) ^ 2 := by ring
-  have h2 : |(f (x + δ) i - f (x + δ) j) - (f x i - f x j)| ≤ Lp * ‖δ‖ := by
-    rw [← Real.sqrt_sq_eq_abs]
-    calc Real.sqrt (((f (x + δ) i - f (x + δ) j) - (f x i - f x j)) ^ 2)
-        ≤ Real.sqrt ((Lp * ‖δ‖) ^ 2) := Real.sqrt_le_sqrt h1
-      _ = Lp * ‖δ‖ := Real.sqrt_sq (by positivity)
+  have h2 : |(f (x + δ) i - f (x + δ) j) - (f x i - f x j)| ≤ Lp * ‖δ‖ :=
+    abs_le_of_sq_le_sq h1 (by positivity)
   have h3 : Lp * ‖δ‖ < Lp * ε := mul_lt_mul_of_pos_left hδ hLp
   have h4 := neg_le_of_abs_le h2
   linarith [hmargin, h3, h4]

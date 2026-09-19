@@ -332,15 +332,13 @@ lemma binomTail_monotoneOn (N k : ℕ) :
 
 /-- At `q = 1` the tail is exactly 1 (only the `j = N` term survives). -/
 lemma binomTail_one {N k : ℕ} (hk : k ≤ N) : binomTail N k 1 = 1 := by
-  rw [binomTail, Finset.sum_eq_single N]
+  rw [binomTail, Finset.sum_eq_single_of_mem N (Finset.mem_Icc.mpr ⟨hk, le_rfl⟩)]
   · simp
   · intro j hj hjN
     have hNj : N - j ≠ 0 := by
       rw [Finset.mem_Icc] at hj
       omega
     simp [zero_pow hNj]
-  · intro h
-    exact absurd (Finset.mem_Icc.mpr ⟨hk, le_rfl⟩) h
 
 /-- **The solved-form CP bound**: one in-kernel tail check
     `binomTail N k q₀ ≤ α` certifies `q₀` as a lower bound for `cpLower` —
@@ -393,19 +391,13 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   have hpA : γ.real A = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ := by
     rw [← integral_indicator_one hA]
     refine integral_congr_ae (ae_of_all _ fun z => ?_)
-    by_cases h : C (x + σ • z) = y
-    · rw [Set.indicator_of_mem (show z ∈ A from h), Pi.one_apply]
-      simp [h]
-    · rw [Set.indicator_of_notMem (show z ∉ A from h)]
-      simp [h]
+    by_cases h : C (x + σ • z) = y <;> simp [h, hA_def]
   -- the driver's count IS hitCount
   have hcount : ∀ ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)),
       (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω := by
     intro ω
     refine Finset.sum_congr rfl fun i _ => ?_
-    by_cases h : C (x + σ • ω i) = y
-    · rw [ite_eq_left h, Set.indicator_of_mem (show ω i ∈ A from h), Pi.one_apply]
-    · rw [ite_eq_right h, Set.indicator_of_notMem (show ω i ∉ A from h)]
+    by_cases h : C (x + σ • ω i) = y <;> simp [h, hA_def]
   -- the coverage event implies the certificate
   have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
         cpLower α N (hitCount A N ω) ≤ γ.real A}
@@ -471,18 +463,12 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   have hpA : γ.real A = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ := by
     rw [← integral_indicator_one hA]
     refine integral_congr_ae (ae_of_all _ fun z => ?_)
-    by_cases h : C (x + σ • z) = y
-    · rw [Set.indicator_of_mem (show z ∈ A from h), Pi.one_apply]
-      simp [h]
-    · rw [Set.indicator_of_notMem (show z ∉ A from h)]
-      simp [h]
+    by_cases h : C (x + σ • z) = y <;> simp [h, hA_def]
   have hcount : ∀ ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)),
       (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω := by
     intro ω
     refine Finset.sum_congr rfl fun i _ => ?_
-    by_cases h : C (x + σ • ω i) = y
-    · rw [ite_eq_left h, Set.indicator_of_mem (show ω i ∈ A from h), Pi.one_apply]
-    · rw [ite_eq_right h, Set.indicator_of_notMem (show ω i ∉ A from h)]
+    by_cases h : C (x + σ • ω i) = y <;> simp [h, hA_def]
   have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
         cpLower α N (hitCount A N ω) ≤ γ.real A}
       ⊆ {ω | (∑ i, if C (x + σ • ω i) = y then 1 else 0) = k₀ →

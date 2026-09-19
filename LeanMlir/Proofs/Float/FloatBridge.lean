@@ -600,15 +600,10 @@ theorem dense_abs_le {m n : ℕ} {W : Mat m n} {b : Vec n} {x : Vec m}
     {w β a : ℝ} (ha : 0 ≤ a)
     (hW : ∀ i j, |W i j| ≤ w) (hb : ∀ j, |b j| ≤ β) (hx : ∀ i, |x i| ≤ a)
     (j : Fin n) : |Proofs.dense W b x j| ≤ layerAct m w β a := by
-  have h1 : |∑ i, x i * W i j| ≤ (m : ℝ) * w * a := by
-    calc |∑ i, x i * W i j| ≤ ∑ i, |x i * W i j| :=
-          Finset.abs_sum_le_sum_abs _ _
-      _ ≤ ∑ _i : Fin m, a * w := by
-          refine Finset.sum_le_sum fun i _ => ?_
-          rw [abs_mul]
-          exact mul_le_mul (hx i) (hW i j) (abs_nonneg _) ha
-      _ = (m : ℝ) * (a * w) := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
-      _ = (m : ℝ) * w * a := by ring
+  have h1 : |∑ i, x i * W i j| ≤ (m : ℝ) * w * a :=
+    (Finset.abs_sum_le_sum_abs _ _).trans ((Finset.sum_le_card_nsmul _ _ _ fun i _ =>
+      (abs_mul _ _).trans_le (mul_le_mul (hx i) (hW i j) (abs_nonneg _) ha)).trans_eq
+        (by simp [mul_comm a, mul_assoc]))
   calc |Proofs.dense W b x j| = |(∑ i, x i * W i j) + b j| := rfl
     _ ≤ |∑ i, x i * W i j| + |b j| := abs_add_le _ _
     _ ≤ (m : ℝ) * w * a + β := add_le_add h1 (hb j)
@@ -623,17 +618,11 @@ theorem denseErr_le_uniform {m n : ℕ} {W : Mat m n} {b : Vec n} {xa : Vec m}
     M.denseErr W b xa e j ≤ layerBudget M.u m w β a e := by
   have hG : (0 : ℝ) ≤ (1 + M.u) ^ (m + 2) - 1 :=
     sub_nonneg.mpr (M.one_le_pow_one_add_u (m + 2))
-  have hsum1 : (∑ i, |W i j| * (|xa i| + e)) ≤ (m : ℝ) * w * (a + e) := by
-    calc (∑ i, |W i j| * (|xa i| + e)) ≤ ∑ _i : Fin m, w * (a + e) := by
-          refine Finset.sum_le_sum fun i _ => ?_
-          exact mul_le_mul (hW i j) (by linarith [hxa i])
-            (add_nonneg (abs_nonneg _) he) hw
-      _ = (m : ℝ) * (w * (a + e)) := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
-      _ = (m : ℝ) * w * (a + e) := by ring
-  have hsum2 : (∑ i, |W i j|) ≤ (m : ℝ) * w := by
-    calc (∑ i, |W i j|) ≤ ∑ _i : Fin m, w :=
-          Finset.sum_le_sum fun i _ => hW i j
-      _ = (m : ℝ) * w := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
+  have hsum1 : (∑ i, |W i j| * (|xa i| + e)) ≤ (m : ℝ) * w * (a + e) :=
+    (Finset.sum_le_card_nsmul _ _ _ fun i _ => mul_le_mul (hW i j) (add_le_add (hxa i) le_rfl)
+      (add_nonneg (abs_nonneg _) he) hw).trans_eq (by simp [mul_assoc])
+  have hsum2 : (∑ i, |W i j|) ≤ (m : ℝ) * w :=
+    (Finset.sum_le_card_nsmul _ _ _ fun i _ => hW i j).trans_eq (by simp)
   have hmono1 : ((1 + M.u) ^ (m + 2) - 1) * ((∑ i, |W i j| * (|xa i| + e)) + |b j|)
       ≤ ((1 + M.u) ^ (m + 2) - 1) * ((m : ℝ) * w * (a + e) + β) :=
     mul_le_mul_of_nonneg_left (add_le_add hsum1 (hb j)) hG
@@ -873,9 +862,7 @@ noncomputable def reluMask {n : ℕ} (z v : Vec n) : Vec n :=
 theorem reluMask_abs_le {n : ℕ} (z v : Vec n) (i : Fin n) :
     |reluMask z v i| ≤ |v i| := by
   simp only [reluMask]
-  by_cases h : z i > 0
-  · simp [h]
-  · simp [h]
+  split_ifs <;> simp
 
 /-- **The float-side kink condition.** If the pre-activation error `ez`
     cannot flip any sign — `ez < |zᵢ|`, a *quantitative margin*, the float
@@ -888,7 +875,7 @@ theorem reluMask_close {n : ℕ} {zt z vt v : Vec n} {ez ev : ℝ}
   have hzi := abs_le.mp (hz i)
   have hmi := hm i
   simp only [reluMask]
-  rcases lt_trichotomy (z i) 0 with hneg | hzero | hpos
+  rcases (abs_pos.mp (((abs_nonneg _).trans (hz i)).trans_lt hmi)).lt_or_gt with hneg | hpos
   · have h1 : ¬ z i > 0 := by linarith
     have h2 : ¬ zt i > 0 := by
       rw [not_lt]
@@ -896,10 +883,6 @@ theorem reluMask_close {n : ℕ} {zt z vt v : Vec n} {ez ev : ℝ}
       linarith [hzi.2]
     rw [ite_eq_right h1, ite_eq_right h2]
     simpa using hev
-  · exfalso
-    rw [hzero] at hmi
-    simp only [abs_zero] at hmi
-    linarith [(abs_nonneg (zt i - z i)).trans (hz i)]
   · have h2 : zt i > 0 := by
       rw [abs_of_pos hpos] at hmi
       linarith [hzi.1]
@@ -1832,12 +1815,9 @@ theorem dense_close_mixed_uniform_budget (L : FloatModel) {m n : ℕ}
       denseMixedBudget M.u L.u m w β a := by
   have hu := M.u_nonneg
   have hbase := M.dense_close_mixed L W b x j
-  have hSb : (∑ i, |x i * W i j|) ≤ (m : ℝ) * w * a := by
-    calc (∑ i, |x i * W i j|) ≤ ∑ _i : Fin m, a * w := by
-          refine Finset.sum_le_sum fun i _ => ?_
-          rw [abs_mul]; exact mul_le_mul (hx i) (hW i j) (abs_nonneg _) ha
-      _ = (m : ℝ) * (a * w) := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
-      _ = (m : ℝ) * w * a := by ring
+  have hSb : (∑ i, |x i * W i j|) ≤ (m : ℝ) * w * a :=
+    (Finset.sum_le_card_nsmul _ _ _ fun i _ => (abs_mul _ _).trans_le
+      (mul_le_mul (hx i) (hW i j) (abs_nonneg _) ha)).trans_eq (by simp [mul_comm a, mul_assoc])
   have hbabs : |b j| ≤ β := hb j
   set S := ∑ i, |x i * W i j| with hS
   set br := ((1 + M.u) ^ (m + 1) - 1) * (1 + L.u) ^ 2 + (2 * L.u + L.u ^ 2)

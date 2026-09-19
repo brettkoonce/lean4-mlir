@@ -173,11 +173,7 @@ theorem argmaxNet_smoothProb_mem_Ioo {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   have hpA : γ.real A = ∫ z, (if C (x + σ • z) = c then (1:ℝ) else 0) ∂γ := by
     rw [← integral_indicator_one hA]
     refine integral_congr_ae (ae_of_all _ fun z => ?_)
-    by_cases h : C (x + σ • z) = c
-    · rw [Set.indicator_of_mem (show z ∈ A from h), Pi.one_apply]
-      simp [h]
-    · rw [Set.indicator_of_notMem (show z ∉ A from h)]
-      simp [h]
+    by_cases h : C (x + σ • z) = c <;> simp [h, hA_def]
   rw [← hpA]
   -- the affine noise map and the per-class strict open regions
   have haff : Continuous fun z : EuclideanSpace ℝ (Fin (n + 1)) => x + σ • z :=
@@ -207,12 +203,7 @@ theorem argmaxNet_smoothProb_mem_Ioo {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   · -- p_c < 1: any OTHER class's witness region is disjoint from A
     set c' : Fin (k + 2) := if c = 0 then 1 else 0 with hc'
     have hcc' : c' ≠ c := by
-      by_cases h : c = 0
-      · subst h
-        simp only [hc']
-        exact one_ne_zero
-      · simp only [hc', ite_eq_right h]
-        exact Ne.symm h
+      by_cases h : c = 0 <;> simp [hc', h, eq_comm]
     have hdisj : Disjoint A ((fun z => x + σ • z) ⁻¹' S c') := by
       rw [Set.disjoint_right]
       intro z hz

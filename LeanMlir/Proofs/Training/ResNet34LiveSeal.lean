@@ -212,10 +212,7 @@ theorem cd_stemS (v : Vec (2 * (2 * 16) * (2 * 16))) :
 theorem idx01_ne :
     (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), (0 : Fin (2 * 16))), (0 : Fin (2 * 16))))
     ≠ (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), (0 : Fin (2 * 16))), (0 : Fin (2 * 16)))) := by
-  intro h
-  have h2 := finProdFinEquiv.injective h
-  have h3 := finProdFinEquiv.injective (congrArg Prod.fst h2)
-  exact absurd (congrArg Prod.fst h3) (by decide)
+  simp
 
 /-- **The carrier `cd` along the ray is exactly `t`** (base is channel-symmetric, the
     perturbation hits only channel 0's top-left). -/

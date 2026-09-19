@@ -120,12 +120,7 @@ noncomputable def broadcastFlat_has_vjp (c h w : Nat) :
           if k = flatChannel c h w j then 1 else 0 := by
       intro j
       exact pdiv_reindex (flatChannel c h w) v k j
-    simp_rw [hpd]
-    apply Finset.sum_congr rfl
-    intro j _
-    by_cases hkj : flatChannel c h w j = k
-    · rw [ite_eq_left hkj, ite_eq_left hkj.symm, one_mul]
-    · rw [ite_eq_right hkj, ite_eq_right (fun he => hkj he.symm), zero_mul]
+    simp only [hpd, ite_mul, one_mul, zero_mul, @eq_comm _ k]
 
 -- ════════════════════════════════════════════════════════════════
 -- § SE gate: squeeze → reduce(swish) → expand → sigmoid → broadcast

@@ -42,8 +42,7 @@ open Proofs Mnv2Live R34RealSeal
 theorem bnForward_ub {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (v : Vec n) (k : Fin n) :
     bnForward n ε γ β v k ≤ β + |γ| * Real.sqrt (n : ℝ) := by
   have hsq := bnXhat_sq_le ε hε v k
-  have habs : |bnXhat n ε v k| ≤ Real.sqrt (n : ℝ) := by
-    rw [← Real.sqrt_sq_eq_abs]; exact Real.sqrt_le_sqrt hsq
+  have habs : |bnXhat n ε v k| ≤ Real.sqrt (n : ℝ) := Real.abs_le_sqrt hsq
   have hmul : |γ * bnXhat n ε v k| ≤ |γ| * Real.sqrt (n : ℝ) := by
     rw [abs_mul]; exact mul_le_mul_of_nonneg_left habs (abs_nonneg γ)
   have hle : γ * bnXhat n ε v k ≤ |γ| * Real.sqrt (n : ℝ) := le_trans (le_abs_self _) hmul

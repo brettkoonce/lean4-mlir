@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-19, main `716ba7d3`, 5 ahead of origin, + the staged row)
+## Status (2026-09-19, main `e56d15a6`, 8 ahead of origin, + the staged row)
 
-**Landed** — about 15.4k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 17.6k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -72,7 +72,10 @@ suspected, no drop-in located.
 | `cb52f18b` | **§9 one `zrnd`** (−151): the renderers' identity rounding for the bf16/fp8 ops is one documented `StableHLO.zrnd`; the 48 `let zrnd := fun r => r` in CnnRender, EfficientNetRender, the MNv2/MNv4/R34/R50 `RenderB`s, their repeated "placeholder rounding" comment blocks and the private `zrndB` / `vzrnd` go (use sites unchanged but the two renames). All 249 `verified_mlir/` artifacts re-render byte-identically |
 | `f6dc58c9` | **§9 one AdamW tail** (−59): `StableHLO.prettyAdamW` (the `adamMNextF`/`adamVNextF`/`adamWParamF` triple on a gradient name, with the `wdName`/`wd` note that sat in ViTRender) and `adamWConsts wdStr` (β₁/β₂/ε/wd). The seven triples (MNv2 `adamOneM`, MNv4 `adamOne4`, `enetAdamOne`, `convnextAdamOne`, `vitAdamOne`, R34 `optOne`'s `.adamw` and `.adamwAccum`) call it, and the six AdamW constant blocks are `adamWConsts` (`adamConstsM`, `adamConsts4`, `enetAdamConsts` deleted; `vitAdamConsts`, `convnextAdamConsts`, `optConstsB .adamw` delegate). Byte-identical |
 | `716ba7d3` | **§5 generator sync** (scripts only): four generators had drifted from their committed output — hand edits made after generation (`732c7750`'s docstring link, the 4.34 `ite_eq_left`/`ite_eq_right` renames, `TrainedLinearDescent`'s scope paragraph) that the next regeneration would have reverted. Each now regenerates its committed file byte-identically, and `lipschitz_cert_scorecard.py`, `_float.py` and `trained_linear_descent.py` resolve paths from the repo root instead of an absolute path into the sibling `lean4-jax` checkout |
-| *(staged)* | **§5 generator lemmas** (−2,198 Lean, −122 scripts): G2 `pair_sq_bound_mlp` (`pair_sq_bound` on `denseE W2 ∘ reluE ∘ denseE W1`'s own gap) and `pair_sq_symm` (`LipschitzCertPairSDP`) make every emitted `pairSq*` theorem one term — the 12-line body and the 6-line reverse-order wrapper; G1 `mlp_out_eq` (`LipschitzCertInstance`) makes the 73 emitted `hout` blocks one line. G3: `lipschitz_cert_float.py` no longer emits `coord_abs_le_norm` (Mathlib `PiLp.norm_apply_le`) or `layerBudget_le_of'` (FloatBridge's `FloatModel.layerBudget_le_of`, now public); `trained_linear_descent.py` uses `FloatModel.softmax_le_one` for `sm_le_one`. G4: `sqrt_two_le_rat` (one line, `Real.sqrt_le_iff`) and `certified_at_eps` move from the generated scorecard into `LipschitzCertInstance` under the same full names. Regenerated: the pooled scorecard, its float tier, the four SDP files, `FullImgsA/B`, `SmoothingNetWitness`, `TrainedLinearDescent`; every declaration and statement unchanged. Checked: the gate, `lake build CertsHeavy` + `AuditAxiomsHeavy`, and the two CI-disabled `SDPFull` modules by `lake env lean` (160 s / 15.6 GB and 133 s / 13.4 GB; `Uncon` imports `SDPFull`, so the first needs `-o` to an olean the second can find) |
+| `50153adf` | **§5 generator lemmas** (−2,198 Lean, −122 scripts): G2 `pair_sq_bound_mlp` (`pair_sq_bound` on `denseE W2 ∘ reluE ∘ denseE W1`'s own gap) and `pair_sq_symm` (`LipschitzCertPairSDP`) make every emitted `pairSq*` theorem one term — the 12-line body and the 6-line reverse-order wrapper; G1 `mlp_out_eq` (`LipschitzCertInstance`) makes the 73 emitted `hout` blocks one line. G3: `lipschitz_cert_float.py` no longer emits `coord_abs_le_norm` (Mathlib `PiLp.norm_apply_le`) or `layerBudget_le_of'` (FloatBridge's `FloatModel.layerBudget_le_of`, now public); `trained_linear_descent.py` uses `FloatModel.softmax_le_one` for `sm_le_one`. G4: `sqrt_two_le_rat` (one line, `Real.sqrt_le_iff`) and `certified_at_eps` move from the generated scorecard into `LipschitzCertInstance` under the same full names. Regenerated: the pooled scorecard, its float tier, the four SDP files, `FullImgsA/B`, `SmoothingNetWitness`, `TrainedLinearDescent`; every declaration and statement unchanged. Checked: the gate, `lake build CertsHeavy` + `AuditAxiomsHeavy`, and the two CI-disabled `SDPFull` modules by `lake env lean` (160 s / 15.6 GB and 133 s / 13.4 GB; `Uncon` imports `SDPFull`, so the first needs `-o` to an olean the second can find) |
+| `306f9d5c` | **Root batch 1 — Foundation** (−1,094, 20 files). `Tensor.lean` (−579) gains the shared lemmas: `pdivMat_rowIndep_perRow_at` (per-row maps, differentiable at the point; `pdivMat_rowIndep` 87 → 7, the pinned `pdivMat_rowIndep_at` 2 lines, PerChannelBN's copy gone), `HasVJP.canonical` (the 14 spelled-out `∑ pdiv` witnesses in SpecVJP/MLP), `backward_unique` / `backward_unique_of_eq` for `HasVJP`, `HasVJPAt`, `HasVJPMat` beside their structures (four pinned — same full names; the copies in ConvNeXtBackCertifiedTie, ResNet34BackCertifiedTieB, EvenKernelConvBack, BatchMapVJPAt go, and ViTBackB0's `hasVJPMat_backward_det{,'}` / StableHLO's `hasVJPAt_backward_det` are deleted for them), and `sum_finProdFinEquiv` (SgdDescent's copy and ViTClose's `sum_fin_prod` go). The §1 items: `pdivMat_colIndep` 146 → 50, the seven Kronecker `correct` fields 134 → 49, the five `finProdFinEquiv` reindexes 251 → 112, the four injectivity case bashes, `vjp_comp` / `vjp3_comp` from their `_at` peers (`backward` `rfl`-equal), `pdiv_finset_sum` / `pdiv_comp` / `pdiv_id` / `pdiv_const` / `pdiv_reindex`, the flatten inverses. Elsewhere: `batchMap_has_vjp_at.correct` 31 → 5 (BatchMapVJPAt imports StableHLO instead of EfficientNetChainClose); new `IR.reverseSlab_eq_gradSlab` carries IR's and DepthwiseBackCertifiedTie's slab proofs (61 → 3, 57 → 3); the MLP relu trio; DataParallel's lifted-sum duplicate; a generic `reindexVJP` (+ `reindexVJP_backward_of_inv`) under the six reindex VJPs (`rfl`-equal; StridedConv now imports PerChannelBN); `flatConvStride2Xla_differentiable` `@[fun_prop]`; `decimateOddIdx_injective` (pinned) 18 → 4; ViTBackNet's `_via_fold` tail one line |
+| `e56d15a6` | **Root batch 2 — Architectures and nets** (−653, 13 files). `Attention.lean` (−475): new `flat_diff_comp` (9 sites), `rowSoftmax_flat_diff` on `fun_prop`, `rowSoftmax_has_vjp_mat.correct` is `rowwise_has_vjp_mat`'s, the MHSA embed / split / compose proofs (`mhsa_layer_eq_compose` 85 → 6, `mhsa_g_comp_embed` −62, `colSlabApply_flat_diff` −44), `dense_diff` one line, the unused `dense_input_diff` gone. `BatchNorm.lean` gains `bnVar_nonneg` (pinned, from BnFloatBridge), `bnIstd_pos` and `bnXhat_sq_le` (from ResNet34), `bnForward_const` (from MobileNetV2); `CNN.lean` gains `flatConv_eq_zero` (from MobileNetV2); ResNet34's `bnForward_const_eq` / `flatConv_zero` copies go (20 call sites renamed). `max_close` (pinned) 18 → 1, `maxPool2_codegen_matches_canonical` (pinned) 26 → 1, `Kernel4.flatten_unflatten` 18 → 1, `Mnv2Live.bn13_window` (pinned) 42 → 5 (its now-unused `hn` binder is `_hn`), `decimateIdx_injective` 23 → 4; `depthwiseStride2FlatXla_differentiable` `@[fun_prop]` and four stage twins drop their `unfold`; `Mnv2Live.win` is public and the seal files' `winF` copy goes |
+| *(staged)* | **Root batch 3 — the §0.5 sweep** (−482, 17 files, proof bodies only): SgdDescentCnn −372 (the `sum_eq_single` collapses as one `simp [ite_and, …]`, 12 `sum_le_card_nsmul` bounds, constant triple sums by `simp`, `if_congr` mask freezes, three pinned double-sum `calc`s 15 → 4), FloatBridge −20, the Smoothing files −35, SgdDescentMlp −12, the Float bridges, EfficientNet, MnistCNN and the seal files |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -127,13 +130,12 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    `lean4-jax/` path: `lipschitz_cert_witness_s8.py`, `_power_iter.py`, `_rationalize.py` (writes a
    snippet into an old scratchpad), `trained_cnn_{witness,seal}.py`, `mnv2_forward_tie.py`,
    `xla_pad_op_check.py`.
-6. **Root-file batches, together** (each is a full ~7.5-min `Certs` rebuild): §1 `Tensor.lean` (~600:
-   `pdivMat_rowIndep_perRow_at`, `pdivMat_colIndep`, the Kronecker `correct` fields, the `finProdFinEquiv`
-   reindexes, `vjp_comp` from `vjp_comp_at`); the §0.5 Finset idiom sweep (~250 sites); the §0.2 leftovers —
-   tag `flatConvStride2Xla_differentiable` / `depthwiseStride2FlatXla_differentiable` `@[fun_prop]`, after
-   which three of the §0.6(b) stage twins drop their `unfold`; the §8 backward-uniqueness copies
-   (`hasVJPMat_backward_det{,'}` in ViTBackB0, `HasVJP.backward_unique` in ConvNeXtBackCertifiedTie, and
-   the EvenKernelConvBack / BatchMapVJPAt / ResNet34BackCertifiedTieB / StableHLO ones) → one per structure.
+6. **Root-file batches** — done 2026-09-19 (−2,229 over three commits, seven parallel helpers on disjoint
+   files against a fixed shared-lemma contract; every commit state gated, the heavy tier re-checked).
+   Left: `conv2d_1x1'` in MobileNetV2 is MnistCNN's `conv2d_1x1` (move it into CNN.lean, ~16); ResNet34Concrete's
+   1-channel stem; a shared `pdiv_lift_sum` (its only common home is Tensor.lean, next to `pdiv_finset_sum`);
+   Attention's three unused `mhsa_proj_c_*` (~15); the index maps as `finCongr` / `Equiv` (their def bodies are
+   unfolded in ~17 files); `transformerTower` via `Nat.iterate` and `kRev` → `Fin.rev` (no net gain).
 7. **§0.6(c)** MobileNetV2 / EfficientNet bodies and whole-net folds onto `CertLayer`, as MobileNetV4 was
    (~400, likely). ⚠ Leave the hand-unrolled whole-net apex chains alone (kernel timeouts, `opaqueA*`).
 
@@ -248,6 +250,13 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
   rewrite all 249 `verified_mlir/` artifacts on rebuild, so `git status verified_mlir/` after the gate is
   the byte-identity check.
 - `pkill -f <pattern>` inside a Bash call whose own command line contains the pattern kills that call.
+- Parallel helpers on disjoint files: fix the cross-file lemmas' exact statements first in a compiled
+  contract file; helpers check files that consume them with the contract pasted in, primed. A
+  symlink mirror of `.lake/build/lib/lean` with a helper's rebuilt oleans swapped in lets it compile
+  every downstream module without touching the repo's build. Subagents cannot write report `.md`
+  files — they return the report as text.
+- `simp only [Mat.unflatten]` does not unfold `Mat.unflatten` applied to a lambda with no further
+  argument (the equation lemma is stated fully applied) — `unfold` it.
 - Regenerate into scratch BEFORE editing a generator: 4 of 9 had drifted from their committed text. A
   copy with `D` / `OUT` / `SRC` / `ROOT` / `OUTDIR` rewritten by `sed` runs any of them into scratch;
   `lipschitz_cert_pair_sdp.py` takes ~8 min, `_pair_sdp_full.py` ~11.5 min (it re-runs

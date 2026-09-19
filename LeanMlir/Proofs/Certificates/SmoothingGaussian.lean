@@ -618,15 +618,8 @@ theorem pi_gaussian_np_shift {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm 
       (g := fun s => Real.exp (d * s - d ^ 2 / 2) * (Set.Iic t).indicator (1 : ℝ → ℝ) s)
       (hWm.mul hh1d), ← integral_gaussianReal_shift_eq hh1d d]
     have hind : ∀ s : ℝ, (Set.Iic t).indicator (1 : ℝ → ℝ) (s + d)
-        = (Set.Iic (t - d)).indicator (1 : ℝ → ℝ) s := by
-      intro s
-      have hiff : s + d ≤ t ↔ s ≤ t - d := by constructor <;> intro <;> linarith
-      by_cases hs : s ≤ t - d
-      · rw [Set.indicator_of_mem (Set.mem_Iic.mpr (hiff.mpr hs)),
-          Set.indicator_of_mem (Set.mem_Iic.mpr hs)]
-        rfl
-      · rw [Set.indicator_of_notMem (fun hmem => hs (hiff.mp (Set.mem_Iic.mp hmem))),
-          Set.indicator_of_notMem (fun hmem => hs (Set.mem_Iic.mp hmem))]
+        = (Set.Iic (t - d)).indicator (1 : ℝ → ℝ) s := fun s => by
+      simp only [Set.indicator_apply, Set.mem_Iic, Pi.one_apply, le_sub_iff_add_le]
     simp only [hind]
     rw [integral_indicator_Iic_gaussianReal]
     rfl
@@ -676,13 +669,8 @@ theorem stdGaussian_np_shift {n : ℕ} {f : EuclideanSpace ℝ (Fin (n + 1)) →
       rw [Pi.add_apply, Pi.smul_apply, smul_eq_mul, add_smul]
     simp only [hterm, Finset.sum_add_distrib]
     congr 1
-    rw [Finset.sum_eq_single 0]
-    · rw [Pi.single_eq_same, mul_one, hb0', hu, smul_smul,
-        mul_inv_cancel₀ hδnorm, one_smul]
-    · intro i _ hi
-      rw [Pi.single_eq_of_ne hi, mul_zero, zero_smul]
-    · intro habs
-      exact absurd (Finset.mem_univ 0) habs
+    rw [Fintype.sum_eq_single 0 fun i hi => by rw [Pi.single_eq_of_ne hi, mul_zero, zero_smul],
+      Pi.single_eq_same, mul_one, hb0', hu, smul_smul, mul_inv_cancel₀ hδnorm, one_smul]
   -- apply the pi-space NP theorem to the pulled-back function
   have hnp := pi_gaussian_np_shift (F := fun x => f (∑ i, x i • b i))
     (hfm.comp hsum_meas) (fun x => hf0 _) (fun x => hf1 _) (norm_nonneg δ)

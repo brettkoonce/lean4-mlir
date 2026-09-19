@@ -168,11 +168,7 @@ theorem floatClose_gap {c h w : Nat} (M : FloatModel) {A : ℝ}
       rw [globalAvgPoolFlat_eq_bnMean vt ci, globalAvgPoolFlat_eq_bnMean va ci]
       refine (bnMean_input_close _ _ hhw).trans ?_
       rw [div_le_iff₀ hhwR]
-      calc ∑ s, |Tensor3.unflatten vt ci (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2
-                - Tensor3.unflatten va ci (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2|
-          ≤ ∑ _s : Fin (h * w), e := Finset.sum_le_sum (fun s _ => hd _)
-        _ = e * ((h * w : ℕ) : ℝ) := by
-            rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+      exact (Finset.sum_le_card_nsmul _ _ _ fun s _ => hd _).trans_eq (by simp [mul_comm])
     calc |M.gapFlatF vt ci - globalAvgPoolFlat c h w va ci|
         ≤ |M.gapFlatF vt ci - globalAvgPoolFlat c h w vt ci|
           + |globalAvgPoolFlat c h w vt ci - globalAvgPoolFlat c h w va ci| := abs_sub_le _ _ _

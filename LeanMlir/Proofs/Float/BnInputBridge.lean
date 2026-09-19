@@ -28,10 +28,8 @@ theorem bnMean_abs_le {n : ℕ} (x : Vec n) {A : ℝ} (hn : 0 < n) (hA : ∀ i, 
   have hnR : (0:ℝ) < (n:ℝ) := by exact_mod_cast hn
   unfold bnMean
   rw [abs_div, abs_of_pos hnR, div_le_iff₀ hnR]
-  calc |∑ i, x i| ≤ ∑ i, |x i| := Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ _i : Fin n, A := Finset.sum_le_sum fun i _ => hA i
-    _ = A * (n:ℝ) := by
-        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+  exact (Finset.abs_sum_le_sum_abs _ _).trans
+    ((Finset.sum_le_card_nsmul _ _ _ fun i _ => hA i).trans_eq (by simp [mul_comm]))
 
 /-- **Mean input-sensitivity.** `|μ(x) − μ(y)| ≤ (Σ|xᵢ−yᵢ|)/n`. -/
 theorem bnMean_input_close {n : ℕ} (x y : Vec n) (hn : 0 < n) :

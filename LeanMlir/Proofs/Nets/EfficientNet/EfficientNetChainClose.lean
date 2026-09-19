@@ -67,12 +67,7 @@ noncomputable def reindex_has_vjp {a b : Nat} (σ : Fin b → Fin a) :
         = ∑ j : Fin b, pdiv (reindexCLM σ) v i j * dy j
     have hpd : ∀ j : Fin b, pdiv (reindexCLM σ) v i j = if i = σ j then 1 else 0 := by
       intro j; exact pdiv_reindex σ v i j
-    simp_rw [hpd]
-    apply Finset.sum_congr rfl
-    intro j _
-    by_cases hij : i = σ j
-    · rw [ite_eq_left hij, ite_eq_left hij, one_mul]
-    · rw [ite_eq_right hij, ite_eq_right hij, zero_mul]
+    simp only [hpd, ite_mul, one_mul, zero_mul]
 
 /-- **`bnBatchLA` is the proven `bnBatchTensor4`, conjugated by the `mul_assoc` reindex.** Both reindex
     maps are `reindexCLM (Fin.cast …)`; the middle is the genuinely batch-coupled true batch-norm. -/
