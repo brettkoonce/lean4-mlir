@@ -16,23 +16,21 @@ channel-generic VJP/differentiability machinery (`rblkPStrided_has_vjp_at`,
   / nonnegativity, mirroring Stage 1's `liveDown` at `oc = ic = 2`.
 - `stem2` — the 2-channel stem (channel-diagonal identity stem conv ⇒ `flatConvStride2 = decimate`,
   so the maxpool no-tie reuses Stage-1's global `bnForward_injective` pattern; `β = 30 > √512`).
-- **`liveFwd2_has_vjp_at`** — the **whole 2-channel ResNet-34 backward**: stem + maxpool + three
-  `liveDownPC` downsamples + per-channel GAP + identity head (empty identity-block chains — a first
-  non-degenerate witness; full depth is Item D), with *every* smoothness/no-tie hypothesis of the
-  dimension-generic `resnet34_has_vjp_at` discharged. The entire **smoothness side** of the live
-  witness, at 2 channels.
+- The whole 2-channel backward over these layers, with *every* smoothness/no-tie hypothesis of
+  the dimension-generic `resnet34_has_vjp_at` discharged, is
+  `ResNet34LiveFull.liveFwd2Full_has_vjp_at_of`, at full [3,4,6,3] depth.
 - **`liveFwd2_nonconstant`** — **the non-vacuity**: `liveFwd2 X2 ≠ liveFwd2 0`. Threads the Stage-2
   channel-order invariant `Dom2` (channel 1 strictly dominates channel 0 at every position) from the
   positional input through stem → maxpool → the three downsamples to the per-channel head, so
   `liveFwd2 X2 0 < liveFwd2 X2 1`; the zero input collapses channel-symmetric (`liveFwd2 0 = const 21`).
 - `bnForward_coord_inj` — scalar BN injective per coordinate (a reusable no-tie ingredient).
 
-This is the **first non-degenerate ResNet-34 whole-net backward witness** (level 2): a real 34-layer
-ResNet skeleton (strided stem + maxpool + three strided downsamples + GAP + dense), nonzero weights,
-`forward X ≠ forward 0`, every smoothness/no-tie hypothesis discharged, 3-axiom clean. It retires the
-"degenerate (constant-output) witness" caveat for ResNet-34. (Full identity-block depth = Item D; the
-level-3 nonzero-Jacobian seal is a separate follow-up — the ReLUs/maxpool bind off-witness, so the
-`Mnv2Live` input-0 global-smoothness trick does not transfer.)
+This is the **first non-degenerate ResNet-34 witness** (level 2): a real 34-layer ResNet skeleton
+(strided stem + maxpool + three strided downsamples + GAP + dense), nonzero weights,
+`forward X ≠ forward 0`, 3-axiom clean. It retires the "degenerate (constant-output) witness" caveat
+for ResNet-34. Full identity-block depth and the level-3 nonzero-Jacobian seal are
+`ResNet34LiveFull` (the seal's machinery is `ResNet34LiveSeal`: the ReLUs/maxpool bind off-witness,
+so the `Mnv2Live` input-0 global-smoothness trick does not transfer).
 -/
 
 namespace Proofs
@@ -224,7 +222,7 @@ theorem stemβ_bn_pos (s : Nat) (β : ℝ) (hn : Real.sqrt ((2 * s * s : ℕ) : 
   linarith
 
 /-- The stem output at the positional input is injective: `bn` of the injective decimated
-    input is injective, ReLU is the identity (positive). Stage-1's `stem_inj` at 2 channels. -/
+    input is injective, ReLU is the identity (positive). -/
 theorem stemβ_inj (s : Nat) (β : ℝ) (hn : Real.sqrt ((2 * s * s : ℕ) : ℝ) < β) :
     Function.Injective (stemβ s β (Xs s)) := by
   have hstemeq : stemβ s β (Xs s) = bnForward (2 * s * s) 1 1 β (flatConvStride2 WsId2 Zb2 (Xs s)) := by
@@ -283,50 +281,12 @@ theorem sqrt_lt_20 {n : ℕ} (h : (n : ℝ) < 400) : Real.sqrt (n : ℝ) < 20 :=
 noncomputable def Wd2 : Mat 2 2 := fun i j => if i = j then 1 else 0
 noncomputable def bd2 : Vec 2 := fun _ => 0
 
-noncomputable def stem2_vjp : HasVJPAt stem2 X2 := stemβ_vjp 16 30 sqrt512_lt_30 X2
-theorem stem2_diff : DifferentiableAt ℝ stem2 X2 := stemβ_diff 16 30 sqrt512_lt_30 X2
-
-noncomputable def hmp_vjp2 : HasVJPAt (maxPoolFlat 2 8 8) (stem2 X2) :=
-  maxPoolFlat_vjp_of_smooth _ (stemβ_maxpool_smooth 8 30 sqrt512_lt_30)
-
-theorem hmp_diff2 : DifferentiableAt ℝ (maxPoolFlat 2 8 8) (stem2 X2) :=
-  maxPoolFlat_diff_of_smooth (by norm_num) (by norm_num) (by norm_num) _
-    (stemβ_maxpool_smooth 8 30 sqrt512_lt_30)
-
 /-- **The 2-channel live ResNet-34 forward** — strided stem + maxpool + three
     signal-carrying `liveDownPC` downsamples + per-channel GAP + identity head, with
     empty identity-block chains (a first non-degenerate witness; full depth = Item D). -/
 noncomputable def liveFwd2 : Vec (2 * (2 * 16) * (2 * 16)) → Vec 2 :=
   dense Wd2 bd2 ∘ globalAvgPoolFlat 2 1 1 ∘
     liveDownPC 1 1 ∘ liveDownPC 2 2 ∘ liveDownPC 4 4 ∘ maxPoolFlat 2 8 8 ∘ stem2
-
-/-- **Whole-network VJP for the 2-channel live ResNet-34** — every smoothness/no-tie
-    hypothesis discharged at `oc = ic = 2`. -/
-noncomputable def liveFwd2_has_vjp_at : HasVJPAt liveFwd2 X2 :=
-  resnet34_has_vjp_at stem2 (maxPoolFlat 2 8 8)
-    ([] : List (Vec (2 * 8 * 8) → Vec (2 * 8 * 8))) (liveDownPC 4 4)
-    ([] : List (Vec (2 * 4 * 4) → Vec (2 * 4 * 4))) (liveDownPC 2 2)
-    ([] : List (Vec (2 * 2 * 2) → Vec (2 * 2 * 2))) (liveDownPC 1 1)
-    ([] : List (Vec (2 * 1 * 1) → Vec (2 * 1 * 1)))
-    (globalAvgPoolFlat 2 1 1) (dense Wd2 bd2) X2
-    ⟨stem2_vjp, stem2_diff⟩
-    ⟨hmp_vjp2, hmp_diff2⟩
-    PUnit.unit
-    ⟨liveDownPC_vjp 4 4 (by norm_num) (sqrt_lt_20 (by norm_num)) _,
-     liveDownPC_diff 4 4 (by norm_num) (sqrt_lt_20 (by norm_num)) _⟩
-    PUnit.unit
-    ⟨liveDownPC_vjp 2 2 (by norm_num) (sqrt_lt_20 (by norm_num)) _,
-     liveDownPC_diff 2 2 (by norm_num) (sqrt_lt_20 (by norm_num)) _⟩
-    PUnit.unit
-    ⟨liveDownPC_vjp 1 1 (by norm_num) (sqrt_lt_20 (by norm_num)) _,
-     liveDownPC_diff 1 1 (by norm_num) (sqrt_lt_20 (by norm_num)) _⟩
-    PUnit.unit
-    ⟨(globalAvgPoolFlat_has_vjp 2 1 1).toHasVJPAt _, (globalAvgPoolFlat_differentiable 2 1 1) _⟩
-    ⟨(dense_has_vjp Wd2 bd2).toHasVJPAt _, (dense_differentiable Wd2 bd2) _⟩
-
-theorem liveFwd2_has_vjp_correct (dy : Vec 2) (i : Fin (2 * (2 * 16) * (2 * 16))) :
-    liveFwd2_has_vjp_at.backward dy i = ∑ j : Fin 2, pdiv liveFwd2 X2 i j * dy j :=
-  liveFwd2_has_vjp_at.correct dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Non-vacuity via the Stage-2 channel-order invariant (`Dom2`)

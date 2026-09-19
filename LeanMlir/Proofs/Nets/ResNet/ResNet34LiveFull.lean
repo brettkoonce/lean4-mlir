@@ -27,7 +27,7 @@ open Proofs ResNet34Live2 ResNet34LivePC ResNet34LiveSeal
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 2-channel identity residual block (zeroed body, BN (1,0,1))
---   The c = 2 peer of `Proofs.idBlk`: `relu(x + bn₂(conv₂(relu(bn₁(conv₁ x)))))` with
+--   The 2-channel zero-weight identity block: `relu(x + bn₂(conv₂(relu(bn₁(conv₁ x)))))` with
 --   every conv zeroed, so the body collapses to the constant 1 and the block is `relu(x+1)`.
 -- ════════════════════════════════════════════════════════════════
 
@@ -188,14 +188,6 @@ noncomputable def liveFwd2Full_has_vjp_at_of (x : Vec (2 * (2 * 16) * (2 * 16)))
     (idBlk2_chainData 1 1 (by norm_num) 2 _ (fun i => liveDownPC_nonneg 1 1 _ i))
     ⟨(globalAvgPoolFlat_has_vjp 2 1 1).toHasVJPAt _, (globalAvgPoolFlat_differentiable 2 1 1) _⟩
     ⟨(dense_has_vjp Wd2 bd2).toHasVJPAt _, (dense_differentiable Wd2 bd2) _⟩
-
-/-- Whole-net VJP at the asymmetric witness `X2` (level-2 / non-vacuity witness). -/
-noncomputable def liveFwd2Full_has_vjp_at_X2 : HasVJPAt liveFwd2Full X2 :=
-  liveFwd2Full_has_vjp_at_of X2 ⟨stem2_vjp, stem2_diff⟩ ⟨hmp_vjp2, hmp_diff2⟩
-
-theorem liveFwd2Full_has_vjp_correct (dy : Vec 2) (i : Fin (2 * (2 * 16) * (2 * 16))) :
-    liveFwd2Full_has_vjp_at_X2.backward dy i = ∑ j : Fin 2, pdiv liveFwd2Full X2 i j * dy j :=
-  liveFwd2Full_has_vjp_at_X2.correct dy i
 
 /-- Whole-net VJP at the channel-symmetric base `Y` (the seal witness). -/
 noncomputable def liveFwd2Full_has_vjp_at_Y : HasVJPAt liveFwd2Full Y :=

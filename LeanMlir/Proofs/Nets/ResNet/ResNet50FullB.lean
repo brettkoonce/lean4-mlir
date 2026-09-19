@@ -3,8 +3,8 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 
 /-! # ResNet-50 at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
 
-ResNet-50 is the largest hole in the Proofs tier: `planning/archive/proofs_tier_to_paper_nets.md` §2's
-audit row reads "none; `r50Trunk_3463` is a backward fold" with every tier ✗. §3.5(a) is this file
+ResNet-50 was the largest hole in the Proofs tier (`planning/archive/proofs_tier_to_paper_nets.md`
+§2: every tier ✗). §3.5(a) is this file
 — a net-level ℝ forward at the [3,4,6,3] bottleneck ladder, in the world the artifacts run —
 and §3.5(b) is the typed graph over it, in the second half of this file.
 
@@ -17,9 +17,8 @@ BatchNorm-world split to port later, and none of 4b's or 4c's axes apply to this
 ## What is new here, and what is not
 
 ⭐⭐ **Nothing about the blocks is new.** `ResNet50BackB0.lean` already carries all three batched
-bottleneck forms at `bnBatchLA` with their `_at` VJPs and backward-graph faithfulness, and
-`BackNetFolds.lean` folds them to the paper depth as `r50Trunk_3463`. What was missing is the level
-above. This file is that enumeration, exactly as `ResNet34FullB.lean` was for r34.
+bottleneck forms at `bnBatchLA` with their `_at` VJPs and backward-graph faithfulness. What was
+missing is the level above. This file is that enumeration, exactly as `ResNet34FullB.lean` was for r34.
 
 ⭐ **The stem and the head are ResNet-34's, imported rather than re-declared.** `r34StemB` is
 generic in `{ic oc}` and `r34HeadB` in `{c nCls}`, and R50's stem (7×7/s2 conv-bn-relu, then He et

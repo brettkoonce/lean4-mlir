@@ -28,7 +28,7 @@ preserves it because `bn(z)k₀ − bn(z)k₁ = (z k₀ − z k₁)·istd` with 
 (`relu_chan_lt`); decimate / identity-block `+const` preserve it trivially.
 
 These are reusable, dimension-generic, and 3-axiom clean. The 2-channel layer
-rebuild (stem / maxpool / `liveDownPC` / `idBlk` at `c = 2`) and the final
+rebuild (stem / maxpool / `liveDownPC` / the identity block at `c = 2`) and the final
 assembly remain (multi-session).
 -/
 

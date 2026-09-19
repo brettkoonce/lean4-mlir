@@ -2,14 +2,16 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34LivePC
 import Mathlib.Analysis.Calculus.Deriv.Prod
 
 /-!
-# `ResNet34LivePC` nonzero-Jacobian seal — Item A level 3
+# The live ResNet-34 nonzero-Jacobian seal — Item A level 3 machinery
 
 `planning/archive/whole_network_backward.md` Item A: take the live 2-channel ResNet-34
-witness (`ResNet34LivePC.liveFwd2`) from **level 2**
-(`liveFwd2_nonconstant : forward X2 ≠ forward 0`) up to **level 3**, the
-*nonzero-Jacobian seal*: the proven whole-net backward is genuinely non-trivial
-at a witness point — `fderiv ℝ liveFwd2 · ≠ 0`, hence (via the `JacobianSeal`
-bridge) `backward (basisVec j₀) i₀ ≠ 0`.
+witness from **level 2** (`liveFwd2_nonconstant : forward X2 ≠ forward 0`) up to
+**level 3**, the *nonzero-Jacobian seal*: the proven whole-net backward is genuinely
+non-trivial at a witness point — `fderiv ℝ · · ≠ 0`, hence (via the `JacobianSeal`
+bridge) `backward (basisVec j₀) i₀ ≠ 0`. The seal itself is stated at full [3,4,6,3]
+depth (`ResNet34LiveFull.liveFwd2Full_jacobian_nonzero` / `_backward_nontrivial`); this
+file is the machinery it runs on: the base point `Y`, the ray, and the channel-difference
+argument below.
 
 ## Why this needs a new idea (vs. `Mnv2Live`)
 
@@ -484,61 +486,6 @@ noncomputable def hmp_vjp_Y : HasVJPAt (maxPoolFlat 2 8 8) (stem2 Y) :=
 theorem hmp_diff_Y : DifferentiableAt ℝ (maxPoolFlat 2 8 8) (stem2 Y) :=
   maxPoolFlat_diff_of_smooth (by norm_num) (by norm_num) (by norm_num) _
     (stemβ_Ys_maxpool_smooth 8 30 sqrt512_lt_30)
-
-/-- **The whole 2-channel live ResNet-34 VJP at the base `Y`** — the witness point of
-    the level-3 seal (the maxpool no-tie holds because `Y` is per-channel injective). -/
-noncomputable def liveFwd2_has_vjp_at_Y : HasVJPAt liveFwd2 Y :=
-  resnet34_has_vjp_at stem2 (maxPoolFlat 2 8 8)
-    ([] : List (Vec (2 * 8 * 8) → Vec (2 * 8 * 8))) (liveDownPC 4 4)
-    ([] : List (Vec (2 * 4 * 4) → Vec (2 * 4 * 4))) (liveDownPC 2 2)
-    ([] : List (Vec (2 * 2 * 2) → Vec (2 * 2 * 2))) (liveDownPC 1 1)
-    ([] : List (Vec (2 * 1 * 1) → Vec (2 * 1 * 1)))
-    (globalAvgPoolFlat 2 1 1) (dense Wd2 bd2) Y
-    ⟨stem2_vjp_Y, stem2_diff_Y⟩
-    ⟨hmp_vjp_Y, hmp_diff_Y⟩
-    PUnit.unit
-    ⟨liveDownPC_vjp 4 4 (by norm_num) (sqrt_lt_20 (by norm_num)) _,
-     liveDownPC_diff 4 4 (by norm_num) (sqrt_lt_20 (by norm_num)) _⟩
-    PUnit.unit
-    ⟨liveDownPC_vjp 2 2 (by norm_num) (sqrt_lt_20 (by norm_num)) _,
-     liveDownPC_diff 2 2 (by norm_num) (sqrt_lt_20 (by norm_num)) _⟩
-    PUnit.unit
-    ⟨liveDownPC_vjp 1 1 (by norm_num) (sqrt_lt_20 (by norm_num)) _,
-     liveDownPC_diff 1 1 (by norm_num) (sqrt_lt_20 (by norm_num)) _⟩
-    PUnit.unit
-    ⟨(globalAvgPoolFlat_has_vjp 2 1 1).toHasVJPAt _, (globalAvgPoolFlat_differentiable 2 1 1) _⟩
-    ⟨(dense_has_vjp Wd2 bd2).toHasVJPAt _, (dense_differentiable Wd2 bd2) _⟩
-
-theorem liveFwd2_diff_Y : DifferentiableAt ℝ liveFwd2 Y := by
-  show DifferentiableAt ℝ (dense Wd2 bd2 ∘ globalAvgPoolFlat 2 1 1 ∘
-    liveDownPC 1 1 ∘ liveDownPC 2 2 ∘ liveDownPC 4 4 ∘ maxPoolFlat 2 8 8 ∘ stem2) Y
-  exact (dense_differentiable Wd2 bd2).differentiableAt.comp Y
-    ((globalAvgPoolFlat_differentiable 2 1 1).differentiableAt.comp Y
-      ((liveDownPC_diff 1 1 (by norm_num) (sqrt_lt_20 (by norm_num)) _).comp Y
-        ((liveDownPC_diff 2 2 (by norm_num) (sqrt_lt_20 (by norm_num)) _).comp Y
-          ((liveDownPC_diff 4 4 (by norm_num) (sqrt_lt_20 (by norm_num)) _).comp Y
-            (hmp_diff_Y.comp Y stem2_diff_Y)))))
-
--- ════════════════════════════════════════════════════════════════
--- § The seal
--- ════════════════════════════════════════════════════════════════
-
-/-- **`fderiv ℝ liveFwd2 Y ≠ 0`** — the live ResNet-34's whole-net Jacobian is genuinely
-    non-trivial at the witness base `Y` (level-3 seal). -/
-theorem liveFwd2_jacobian_nonzero : fderiv ℝ liveFwd2 Y ≠ 0 :=
-  -- the output channel difference along `Y + t • V` has derivative `Rr 0 ≠ 0`
-  fderiv_ne_zero_of_ray V liveFwd2_diff_Y (fun y => y 0 - y 1) (by fun_prop) (Rr_pos 0).ne'
-    (by rw [liveFwd2_eq_S]; exact gd_hasDerivAt)
-
-/-- **The level-3 seal for the live ResNet-34** (Item A): the proven whole-network
-    backward of the nonzero-weight live ResNet-34 is **not the zero map** at the witness
-    base `Y` — some basis-cotangent probe returns a nonzero row. Strictly stronger than
-    `liveFwd2_nonconstant` (level 2): a non-constant forward could still have a zero
-    Jacobian at the witness; this rules that out. -/
-theorem liveFwd2_backward_nontrivial :
-    ∃ (j₀ : Fin 2) (i₀ : Fin (2 * (2 * 16) * (2 * 16))),
-      liveFwd2_has_vjp_at_Y.backward (basisVec j₀) i₀ ≠ 0 :=
-  liveFwd2_has_vjp_at_Y.backward_nontrivial_of_fderiv_ne liveFwd2_jacobian_nonzero
 
 end ResNet34LiveSeal
 end Proofs

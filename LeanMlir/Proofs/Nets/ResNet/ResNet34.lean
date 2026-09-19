@@ -10,9 +10,9 @@ stage every block is a self-map `Vec n → Vec n` (same channel count) but with 
 not an `iterate` of one map.
 
 This file proves the generic enabler: if every map in a list is differentiable
-and has a VJP, their composition (`chainComp`) does too — by induction chaining
-`vjp_comp`. That turns "16 blocks deep" into a `List.length`, no per-block
-boilerplate. The full ResNet-34 forward (strided proj blocks via `flatConvStride2`
+and has a VJP at its running activation, their composition (`chainComp`) does too —
+by induction chaining `vjp_comp_at` (`chain_vjp_diff_at`). That turns "16 blocks
+deep" into a `List.length`, no per-block boilerplate. The full ResNet-34 forward (strided proj blocks via `flatConvStride2`
 + chained identity blocks + per-channel BN) is assembled on top of this.
 
 Closes under `[propext, Classical.choice, Quot.sound]`.
@@ -36,40 +36,6 @@ noncomputable def chainComp {n : Nat} (fs : List (Vec n → Vec n)) : Vec n → 
 
 @[simp] theorem chainComp_cons {n : Nat} (f : Vec n → Vec n) (fs : List (Vec n → Vec n)) :
     chainComp (f :: fs) = f ∘ chainComp fs := rfl
-
-/-- A chain of differentiable maps is differentiable. -/
-theorem chainComp_differentiable {n : Nat} (fs : List (Vec n → Vec n))
-    (hdiff : ∀ f ∈ fs, Differentiable ℝ f) : Differentiable ℝ (chainComp fs) := by
-  induction fs with
-  | nil => exact differentiable_id
-  | cons f fs ih => exact (hdiff f (by simp)).comp (ih fun g hg => hdiff g (by simp [hg]))
-
-/-- **Deep-chain VJP.** A composition of a list of differentiable maps that each
-    have a VJP has a VJP — the backward runs each block's backward in reverse
-    order. By induction chaining `vjp_comp`; the structural heart of a deep
-    ResNet stage (k distinct-weight basic blocks). -/
-noncomputable def vjp_chain {n : Nat} (fs : List (Vec n → Vec n))
-    (hdiff : ∀ f ∈ fs, Differentiable ℝ f) (hvjp : ∀ f ∈ fs, HasVJP f) :
-    HasVJP (chainComp fs) :=
-  match fs with
-  | [] => show HasVJP (id : Vec n → Vec n) from identity_has_vjp n
-  | f :: rest =>
-    show HasVJP (f ∘ chainComp rest) from
-    vjp_comp (chainComp rest) f
-      (chainComp_differentiable rest (fun g hg => hdiff g (List.mem_cons.2 (Or.inr hg))))
-      (hdiff f (List.mem_cons.2 (Or.inl rfl)))
-      (vjp_chain rest (fun g hg => hdiff g (List.mem_cons.2 (Or.inr hg)))
-                      (fun g hg => hvjp g (List.mem_cons.2 (Or.inr hg))))
-      (hvjp f (List.mem_cons.2 (Or.inl rfl)))
-
-/-- **Deep-chain VJP correctness** (ℝ-headline): the chained backward equals the
-    `pdiv`-contracted Jacobian of the whole composition. -/
-theorem vjp_chain_correct {n : Nat} (fs : List (Vec n → Vec n))
-    (hdiff : ∀ f ∈ fs, Differentiable ℝ f) (hvjp : ∀ f ∈ fs, HasVJP f)
-    (x dy : Vec n) (i : Fin n) :
-    (vjp_chain fs hdiff hvjp).backward x dy i
-      = ∑ j : Fin n, pdiv (chainComp fs) x i j * dy j :=
-  (vjp_chain fs hdiff hvjp).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Deep-block chain at a smooth point (the conditional `_at` chain)
@@ -99,45 +65,6 @@ noncomputable def chain_vjp_diff_at {n : Nat} (x : Vec n) :
       let ih := chain_vjp_diff_at x rest d.snd.snd
       ⟨vjp_comp_at (chainComp rest) f x ih.snd d.fst ih.fst d.snd.fst, d.fst.comp x ih.snd⟩
 
-/-- **Deep-block chain VJP at a smooth point.** A composition of conditional
-    (`HasVJPAt`) blocks — e.g. the k identity residual blocks of a ResNet stage —
-    has a VJP at `x`, given each block is differentiable + has a VJP at its
-    running activation (`ChainData`). The `_at` peer of `vjp_chain`. -/
-noncomputable def vjp_chain_at {n : Nat} (x : Vec n) (fs : List (Vec n → Vec n))
-    (hdata : ChainData x fs) : HasVJPAt (chainComp fs) x :=
-  (chain_vjp_diff_at x fs hdata).fst
-
-/-- **Deep-chain-at VJP correctness** (ℝ-headline): the chained backward at `x`
-    equals the `pdiv`-Jacobian of the composition at `x`. -/
-theorem vjp_chain_at_correct {n : Nat} (x : Vec n) (fs : List (Vec n → Vec n))
-    (hdata : ChainData x fs) (dy : Vec n) (i : Fin n) :
-    (vjp_chain_at x fs hdata).backward dy i = ∑ j : Fin n, pdiv (chainComp fs) x i j * dy j :=
-  (vjp_chain_at x fs hdata).correct dy i
-
-/-- **A full ResNet stage has a VJP at a point.** A stage is a downsample block
-    `down : Vec m → Vec n` (channel/spatial change — `rblkPStrided`, or for the
-    first stage the identity / stem-fed input) followed by a chain of `k` identity
-    residual blocks `chainComp ids : Vec n → Vec n`. VJPAt by one `vjp_comp_at`
-    gluing the downsample to the (deep-chained) identity blocks. The reusable
-    composition pattern for assembling ResNet-34's four stages. -/
-noncomputable def resStage_has_vjp_at {m n : Nat}
-    (down : Vec m → Vec n) (ids : List (Vec n → Vec n)) (x : Vec m)
-    (hdown_diff : DifferentiableAt ℝ down x) (hdown : HasVJPAt down x)
-    (hids : ChainData (down x) ids) :
-    HasVJPAt (chainComp ids ∘ down) x :=
-  vjp_comp_at down (chainComp ids) x hdown_diff
-    (chain_vjp_diff_at (down x) ids hids).snd hdown (vjp_chain_at (down x) ids hids)
-
-/-- **ResNet-stage VJP correctness** (ℝ-headline): the stage's backward equals the
-    `pdiv`-Jacobian of `(identity-block chain) ∘ downsample` at `x`. -/
-theorem resStage_has_vjp_at_correct {m n : Nat}
-    (down : Vec m → Vec n) (ids : List (Vec n → Vec n)) (x : Vec m)
-    (hdown_diff : DifferentiableAt ℝ down x) (hdown : HasVJPAt down x)
-    (hids : ChainData (down x) ids) (dy : Vec n) (i : Fin m) :
-    (resStage_has_vjp_at down ids x hdown_diff hdown hids).backward dy i
-      = ∑ j : Fin n, pdiv (chainComp ids ∘ down) x i j * dy j :=
-  (resStage_has_vjp_at down ids x hdown_diff hdown hids).correct dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § The whole ResNet-34 network VJP
 -- ════════════════════════════════════════════════════════════════
@@ -163,11 +90,11 @@ noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec 
     `maxPoolFlat`). Parametric over the component functions and their per-component
     VJP+differentiability witnesses at the running activations — so depth is a
     `List.length`, not 100 explicit weight arguments. Folded from the verified
-    `vjp_comp_at` / `vjp_chain_at` (`ChainData` threads each block's smooth point).
+    `vjp_comp_at` / `chain_vjp_diff_at` (`ChainData` threads each block's smooth point).
 
-    This is the structural analogue of `cnn_has_vjp_at` scaled to 34 layers; the
-    discharge of the smoothness/no-tie hypotheses for a concrete instance (à la
-    `CnnConcrete`) plus per-channel BN and the GPU render remain. -/
+    This is the structural analogue of `cnn_has_vjp_at` scaled to 34 layers. The live
+    witnesses (`ResNet34LivePC`, `ResNet34LiveFull`, `ResNet34LiveRealistic`) discharge its
+    smoothness/no-tie hypotheses at concrete dims. -/
 noncomputable def resnet34_has_vjp_at
     {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
     (stem : Vec s0 → Vec s1) (mp : Vec s1 → Vec s2)
@@ -253,18 +180,6 @@ noncomputable def convBnReluStrided_has_vjp_at {ic oc h w kH kW : Nat}
     (bnForward_differentiable (oc * h * w) ε γ β hε) (bn_has_vjp (oc * h * w) ε γ β hε)
     (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
     (relu_has_vjp_at (oc * h * w) _ h_smooth)
-
-/-- **Strided block VJP correctness** (ℝ-headline): the strided downsampling
-    block's backward equals the `pdiv`-Jacobian of `relu ∘ bn ∘ conv_stride2`. -/
-theorem convBnReluStrided_has_vjp_at_correct {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
-    (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 0)
-    (dy : Vec (oc * h * w)) (i : Fin (ic * (2 * h) * (2 * w))) :
-    (convBnReluStrided_has_vjp_at W b ε γ β hε v h_smooth).backward dy i
-      = ∑ j : Fin (oc * h * w),
-          pdiv (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v i j * dy j :=
-  (convBnReluStrided_has_vjp_at W b ε γ β hε v h_smooth).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Strided residual-projection block (the stage-start downsampling block)
@@ -363,55 +278,19 @@ noncomputable def rblkPStrided_has_vjp_at
     hres
     (relu_has_vjp_at (oc * h * w) _ h_smooth_res)
 
-/-- **Strided residual-projection block VJP correctness** (ℝ-headline): the
-    downsampling block's backward equals the `pdiv`-Jacobian of
-    `relu ∘ residualProj (strided proj) (strided body)`. -/
-theorem rblkPStrided_has_vjp_at_correct
-    {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
-    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
-    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
-    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
-    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp : ℝ)
-    (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
-    (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth₁ : ∀ k, bnForward (oc * h * w) ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0)
-    (h_smooth_out : ∀ k,
-      ((bnForward (oc * h * w) εp γp βp ∘ flatConvStride2 Wp bp) v k)
-      + ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
-          (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v k
-        ≠ 0)
-    (dy : Vec (oc * h * w)) (i : Fin (ic * (2 * h) * (2 * w))) :
-    (rblkPStrided_has_vjp_at W₁ b₁ W₂ b₂ Wp bp ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp
-        hε₁ hε₂ hεp v h_smooth₁ h_smooth_out).backward dy i
-      = ∑ j : Fin (oc * h * w),
-          pdiv (relu (oc * h * w) ∘
-            residualProj
-              (bnForward (oc * h * w) εp γp βp ∘ flatConvStride2 Wp bp)
-              ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
-                (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)))
-            v i j * dy j :=
-  (rblkPStrided_has_vjp_at W₁ b₁ W₂ b₂ Wp bp ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp
-      hε₁ hε₂ hεp v h_smooth₁ h_smooth_out).correct dy i
-
 -- ════════════════════════════════════════════════════════════════
--- § Milestone B7 — concrete-instance discharge (non-vacuity)
+-- § Non-vacuity helpers — what the live witnesses discharge `resnet34_has_vjp_at` with
 --
 -- `resnet34_has_vjp_at` is *conditional*: parametric over abstract
--- `stem`/`down`/`ids`/`gap`/`dense` with smoothness/no-tie hypotheses. This
--- section instantiates all of it at concrete 1-channel, 32×32 dims with the
--- verified components (`convBnReluStrided` stem, `rblkPStrided` downsamplers,
--- `resblock` identity blocks ×(3+4+6+3), `maxPoolFlat`, `globalAvgPoolFlat`,
--- `dense`) and discharges every hypothesis — the unconditional headline
--- `resnet34Concrete_has_vjp_correct`, the ResNet-34 peer of
--- `CnnConcrete.cnnConcrete_has_vjp_correct`.
---
--- TWO dimension-robust tricks make the 256/1024-element discharge tractable
+-- `stem`/`down`/`ids`/`gap`/`dense` with smoothness/no-tie hypotheses. The live
+-- witnesses (`ResNet34LivePC`, `ResNet34LiveFull`, `ResNet34LiveRealistic`) instantiate
+-- it at concrete dims. TWO dimension-robust tricks keep that discharge tractable
 -- (no `norm_num` over thousand-element BN sums):
 --   1. `bnForward_lb` — `bn ≥ β − |γ|·√n` from `(vₖ−μ)² ≤ Σ(vⱼ−μ)² = n·σ²`, so
---      a large stem `β` (here 20 > √256) forces `bn > 0` (ReLU = id ⇒ injective).
---   2. zero-weight blocks: every non-stem conv has a zero kernel, so its BN input
---      is the constant `0` and `bnForward_const` collapses it to `β` — the body of
---      every residual block is the *constant* `β₂`, and `relu(β₂ + activation) > 0`.
+--      a large stem `β` forces `bn > 0` (ReLU = id ⇒ injective).
+--   2. zero-weight blocks: a conv with a zero kernel feeds its BN the
+--      constant `0`, and `bnForward_const` collapses it to `β` — a residual body
+--      is then the *constant* `β₂`, and `relu(β₂ + activation) > 0`.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **BN of an injective vector is injective** when `γ ≠ 0`: `bn` is the strictly
@@ -453,14 +332,7 @@ theorem decimateFlat_injective (oc h w : Nat) {x : Vec (oc * (2 * h) * (2 * w))}
   intro a b hab
   exact decimateIdx_injective oc h w (hx hab)
 
--- ── Generic zero-weight building blocks (single channel) ──────────
--- Every non-stem conv in the concrete net has a zero kernel/bias, so its BN
--- input is constant `0` and `bnForward_const` collapses it to `β`. The residual
--- body is therefore the constant `β₂`, and `relu(β₂ + activation) ≥ 0`.
-
-/-- The single-channel zero 1×1 kernel and zero bias. -/
-noncomputable def Zk : Kernel4 1 1 1 1 := fun _ _ _ _ => 0
-noncomputable def Zb : Vec 1 := fun _ => 0
+-- ── Generic zero-weight building blocks ──────────
 
 /-- ReLU output is always nonnegative. -/
 theorem relu_nonneg (n : Nat) (v : Vec n) (k : Fin n) : 0 ≤ relu n v k := by
@@ -481,281 +353,5 @@ theorem flatConvStride2_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW
   simp only [Function.comp_apply]
   rw [flatConv_eq_zero W b hW hb]
   funext k; simp [decimateFlat]
-
--- ── The identity residual block (zero weights, BN (1,0,1)) ────────
-
-/-- A single-channel identity residual block with zero weights and BN `(ε,γ,β)=(1,0,1)`:
-    `relu( x + bn₂(conv₂(relu(bn₁(conv₁ x)))) )`. The body collapses to the constant
-    `β₂ = 1`, so the block is `relu(1 + x)`. -/
-noncomputable def idBlk (h w : Nat) : Vec (1 * h * w) → Vec (1 * h * w) :=
-  relu (1 * h * w) ∘ residual
-    ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-      (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb))
-
-/-- The identity block's body is the constant `1` (every conv is zero ⇒ every BN is its
-    shift; the outer zero conv ignores its input). -/
-theorem idBlk_body_const (h w : Nat) (hhw : 0 < 1 * h * w) (a : Vec (1 * h * w)) :
-    ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-      (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb)) a = (fun _ => (1:ℝ)) := by
-  simp only [Function.comp_apply]
-  rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
-
-/-- The identity block output is nonnegative (it is a ReLU). -/
-theorem idBlk_nonneg (h w : Nat) (a : Vec (1 * h * w)) (k : Fin (1 * h * w)) :
-    0 ≤ idBlk h w a k := relu_nonneg (1 * h * w) _ k
-
-/-- The identity block has a VJP at any nonnegative activation: `bn₁`-input is constant
-    (`β₁=1≠0`) and the post-add ReLU input is `1 + aₖ > 0` since `aₖ ≥ 0`. -/
-noncomputable def idBlk_hasVJPAt (h w : Nat) (hhw : 0 < 1 * h * w)
-    (a : Vec (1 * h * w)) (ha : ∀ k, 0 ≤ a k) : HasVJPAt (idBlk h w) a :=
-  resblock_has_vjp_at (h := h) (w := w) Zk Zb Zk Zb 1 0 1 1 0 1 (by norm_num) (by norm_num) a
-    (fun k => by
-      rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
-      change (1:ℝ) ≠ 0; norm_num)
-    (fun k => by
-      rw [idBlk_body_const h w hhw a]; change (1:ℝ) + a k ≠ 0
-      exact ne_of_gt (by linarith [ha k]))
-
-/-- The identity block is differentiable at any nonnegative activation. -/
-theorem idBlk_diffAt (h w : Nat) (hhw : 0 < 1 * h * w)
-    (a : Vec (1 * h * w)) (ha : ∀ k, 0 ≤ a k) : DifferentiableAt ℝ (idBlk h w) a := by
-  exact resblock_differentiableAt (h := h) (w := w) Zk Zb Zk Zb 1 0 1 1 0 1 (by norm_num)
-    (by norm_num) a
-    (fun k => by
-      rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
-      change (1:ℝ) ≠ 0; norm_num)
-    (fun k => by
-      rw [idBlk_body_const h w hhw a]; change (1:ℝ) + a k ≠ 0
-      exact ne_of_gt (by linarith [ha k]))
-
-/-- A chain of identity blocks fed a nonnegative base stays nonnegative (each block is a
-    ReLU; the base only matters for the empty chain). -/
-theorem chainComp_replicate_idBlk_nonneg (h w : Nat) (base : Vec (1 * h * w))
-    (hbase : ∀ k, 0 ≤ base k) :
-    ∀ (j : Nat) (k : Fin (1 * h * w)), 0 ≤ chainComp (List.replicate j (idBlk h w)) base k
-  | 0, k => hbase k
-  | j + 1, k => by
-      rw [List.replicate_succ, chainComp_cons]
-      exact idBlk_nonneg h w _ k
-
-/-- `ChainData` for `j` stacked identity blocks at a nonnegative base — every running
-    activation is a ReLU output (or the base), so each block's smooth-point hypotheses hold. -/
-noncomputable def idChainData (h w : Nat) (hhw : 0 < 1 * h * w) (base : Vec (1 * h * w))
-    (hbase : ∀ k, 0 ≤ base k) :
-    ∀ (j : Nat), ChainData base (List.replicate j (idBlk h w))
-  | 0 => PUnit.unit
-  | j + 1 => by
-      rw [List.replicate_succ]
-      refine ⟨idBlk_diffAt h w hhw _ ?_, idBlk_hasVJPAt h w hhw _ ?_, idChainData h w hhw base hbase j⟩
-      · exact chainComp_replicate_idBlk_nonneg h w base hbase j
-      · exact chainComp_replicate_idBlk_nonneg h w base hbase j
-
--- ── The strided downsampling/projection block (zero weights) ──────
-
-/-- A single-channel strided projection block with zero weights and BN `(1,0,1)`:
-    `relu( proj(x) + bn₂(conv₂(relu(bn₁(conv₁ x)))) )`, both `conv₁` and `proj` stride-2.
-    Body and projection both collapse to the constant `1`, so the post-add ReLU input is
-    `1 + 1 = 2` everywhere — unconditional (no activation-sign assumption). -/
-noncomputable def downBlk (h w : Nat) : Vec (1 * (2 * h) * (2 * w)) → Vec (1 * h * w) :=
-  relu (1 * h * w) ∘ residualProj
-    (bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)
-    ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-      (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb))
-
-/-- The strided block's projection path collapses to the constant `1`. -/
-theorem downBlk_proj_const (h w : Nat) (hhw : 0 < 1 * h * w) (a : Vec (1 * (2 * h) * (2 * w))) :
-    (bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb) a = (fun _ => (1:ℝ)) := by
-  simp only [Function.comp_apply]
-  rw [flatConvStride2_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const hhw]
-
-/-- The strided block's residual body collapses to the constant `1`. -/
-theorem downBlk_body_const (h w : Nat) (hhw : 0 < 1 * h * w) (a : Vec (1 * (2 * h) * (2 * w))) :
-    ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
-      (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)) a = (fun _ => (1:ℝ)) := by
-  simp only [Function.comp_apply]
-  rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
-
-/-- The strided block output is nonnegative (a ReLU). -/
-theorem downBlk_nonneg (h w : Nat) (a : Vec (1 * (2 * h) * (2 * w))) (k : Fin (1 * h * w)) :
-    0 ≤ downBlk h w a k := relu_nonneg (1 * h * w) _ k
-
-/-- The strided block has a VJP at every point (smoothness is unconditional: both paths are
-    constant `1`, so the post-add ReLU input is `2 ≠ 0`). -/
-noncomputable def downBlk_hasVJPAt (h w : Nat) (hhw : 0 < 1 * h * w)
-    (a : Vec (1 * (2 * h) * (2 * w))) : HasVJPAt (downBlk h w) a :=
-  rblkPStrided_has_vjp_at (h := h) (w := w) Zk Zb Zk Zb Zk Zb 1 0 1 1 0 1 1 0 1
-    (by norm_num) (by norm_num) (by norm_num) a
-    (fun k => by
-      rw [flatConvStride2_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const hhw]
-      change (1:ℝ) ≠ 0; norm_num)
-    (fun k => by
-      rw [downBlk_proj_const h w hhw a, downBlk_body_const h w hhw a]
-      change (1:ℝ) + 1 ≠ 0; norm_num)
-
-/-- The strided block is differentiable at every point. -/
-theorem downBlk_diffAt (h w : Nat) (hhw : 0 < 1 * h * w)
-    (a : Vec (1 * (2 * h) * (2 * w))) : DifferentiableAt ℝ (downBlk h w) a := by
-  -- both paths are the constant `1`, so the block is the constant `relu 2 = 2`
-  suffices hc : downBlk h w = fun _ _ => 2 by rw [hc]; exact differentiableAt_const _
-  funext a' k
-  have hp := congrFun (downBlk_proj_const h w hhw a') k
-  have hb := congrFun (downBlk_body_const h w hhw a') k
-  simp only [Function.comp_apply] at hp hb
-  simp only [downBlk, residualProj, biPath, Function.comp_apply, relu, hp, hb]
-  norm_num
-
--- ════════════════════════════════════════════════════════════════
--- § The concrete ResNet-34 instance (1 channel, 32×32 input)
--- ════════════════════════════════════════════════════════════════
-
-namespace ResNet34Concrete
-
-/-- Stem: a 1×1 **identity** conv (so `flatConvStride2` collapses to decimation),
-    BN `(ε,γ,β) = (1,1,20)`, ReLU. `β = 20 > √256` forces `bn > 0` (`bnForward_lb`),
-    so ReLU is the identity and the stem output stays injective — the maxpool no-tie. -/
-noncomputable def Ws : Kernel4 1 1 1 1 := fun _ _ _ _ => 1
-noncomputable def bs : Vec 1 := fun _ => 0
-/-- Positional (hence injective) input: `X i = i`. -/
-noncomputable def X : Vec (1 * (2 * 16) * (2 * 16)) := fun i => (i.val : ℝ)
-noncomputable def Wd : Mat 1 2 := fun _ _ => 0
-noncomputable def bd : Vec 2 := fun _ => 0
-
-/-- The stem `relu ∘ bn ∘ conv_stride2` at 1ch, 16×16 output. -/
-noncomputable def stem : Vec (1 * (2 * 16) * (2 * 16)) → Vec (1 * 16 * 16) :=
-  relu (1 * 16 * 16) ∘ bnForward (1 * 16 * 16) 1 1 20 ∘ flatConvStride2 Ws bs
-
-theorem X_inj : Function.Injective X := by
-  intro a b hab
-  simp only [X] at hab
-  exact Fin.ext (by exact_mod_cast hab)
-
-/-- The 1×1 identity stem conv is the identity on the flattened input. -/
-theorem flatConv_id_X : flatConv (h := 2 * 16) (w := 2 * 16) Ws bs X = X := by
-  have hc : conv2d Ws bs (Tensor3.unflatten X) = Tensor3.unflatten X := by
-    funext o hi wi
-    rw [conv2d_1x1]
-    simp only [bs, Ws, Fin.sum_univ_one, one_mul, zero_add]
-    congr 1
-    exact (Fin.fin_one_eq_zero o).symm ▸ rfl
-  simp only [flatConv, hc, Tensor3.flatten_unflatten]
-
-/-- Stride-2 identity conv = decimation. -/
-theorem stem_conv_eq : flatConvStride2 Ws bs X = decimateFlat 1 16 16 X := by
-  unfold flatConvStride2
-  simp only [Function.comp_apply]
-  rw [flatConv_id_X]
-
-/-- The stem's BN output is strictly positive: `bn ≥ 20 − √256 = 4 > 0`. -/
-theorem stem_bn_pos : ∀ k, 0 < bnForward (1 * 16 * 16) 1 1 20 (flatConvStride2 Ws bs X) k := by
-  intro k
-  have hlb := bnForward_lb (n := 1 * 16 * 16) 1 1 20 (by norm_num) (flatConvStride2 Ws bs X) k
-  have hsqrt : Real.sqrt ((1 * 16 * 16 : ℕ) : ℝ) = 16 := by
-    rw [show ((1 * 16 * 16 : ℕ) : ℝ) = 256 by norm_num, show (256:ℝ) = 16 ^ 2 by norm_num,
-        Real.sqrt_sq (by norm_num : (0:ℝ) ≤ 16)]
-  rw [abs_one, hsqrt] at hlb
-  linarith
-
-/-- Hence the whole stem output is strictly positive (ReLU = identity). -/
-theorem stem_pos : ∀ k, 0 < stem X k := by
-  intro k
-  have hbn := stem_bn_pos k
-  show 0 < (relu (1 * 16 * 16) ∘ bnForward (1 * 16 * 16) 1 1 20 ∘ flatConvStride2 Ws bs) X k
-  simp only [Function.comp_apply, relu]
-  rw [ite_eq_left hbn]; exact hbn
-
-/-- The stem output is injective: `bn` of the injective decimated input is injective
-    (`bnForward_injective`, `γ = 1 ≠ 0`) and the ReLU is the identity (`stem_pos`). -/
-theorem stem_inj : Function.Injective (stem X) := by
-  have hstemeq : stem X = bnForward (1 * 16 * 16) 1 1 20 (flatConvStride2 Ws bs X) := by
-    show (relu (1 * 16 * 16) ∘ bnForward (1 * 16 * 16) 1 1 20 ∘ flatConvStride2 Ws bs) X = _
-    simp only [Function.comp_apply]
-    exact relu_id_of_pos stem_bn_pos
-  rw [hstemeq, stem_conv_eq]
-  exact bnForward_injective 1 1 20 (by norm_num) (by norm_num)
-    (decimateFlat_injective 1 16 16 X_inj)
-
-/-- The maxpool input (`= stem X`) is positionally injective ⇒ `MaxPool2Smooth`. -/
-theorem stem_maxpool_smooth :
-    MaxPool2Smooth (Tensor3.unflatten (stem X) : Tensor3 1 (2 * 8) (2 * 8)) := by
-  apply maxPool2Smooth_of_injective
-  intro ci r r' s s' heq
-  simp only [Tensor3.unflatten] at heq
-  have h2 := finProdFinEquiv.injective (stem_inj heq)
-  have h5 := finProdFinEquiv.injective (congrArg Prod.fst h2)
-  exact ⟨congrArg Prod.snd h5, congrArg Prod.snd h2⟩
-
-/-- The maxpool output is strictly positive (max of positive stem outputs). -/
-theorem mp_stem_pos : ∀ k, 0 < maxPoolFlat 1 8 8 (stem X) k := by
-  intro k
-  rw [maxPoolFlat]
-  apply flatten_pos_of_pos
-  intro ci hi wi
-  apply maxPool2_pos
-  intro c r s
-  simp only [Tensor3.unflatten]
-  exact stem_pos _
-
-/-- The maxpool point bridge: `flatten ∘ unflatten = id` at the stem output. -/
-theorem mp_point_eq :
-    Tensor3.flatten (Tensor3.unflatten (stem X) : Tensor3 1 (2 * 8) (2 * 8)) = stem X :=
-  Tensor3.flatten_unflatten (stem X)
-
-/-- Maxpool VJP at the stem output (no ties via `stem_maxpool_smooth`). -/
-noncomputable def hmp_vjp : HasVJPAt (maxPoolFlat 1 8 8) (stem X) := by
-  have h := maxPoolFlat_has_vjp_at (Tensor3.unflatten (stem X) : Tensor3 1 (2 * 8) (2 * 8))
-    stem_maxpool_smooth
-  rwa [mp_point_eq] at h
-
-/-- Maxpool differentiability at the stem output. -/
-theorem hmp_diff : DifferentiableAt ℝ (maxPoolFlat 1 8 8) (stem X) := by
-  have h := maxPoolFlat_differentiableAt (Tensor3.unflatten (stem X) : Tensor3 1 (2 * 8) (2 * 8))
-    stem_maxpool_smooth (by norm_num) (by norm_num) (by norm_num)
-  rwa [mp_point_eq] at h
-
-/-- ResNet-34's four stages: `3 + 4 + 6 + 3 = 16` identity blocks. -/
-noncomputable def ids1 : List (Vec (1 * 8 * 8) → Vec (1 * 8 * 8)) := List.replicate 3 (idBlk 8 8)
-noncomputable def ids2 : List (Vec (1 * 4 * 4) → Vec (1 * 4 * 4)) := List.replicate 4 (idBlk 4 4)
-noncomputable def ids3 : List (Vec (1 * 2 * 2) → Vec (1 * 2 * 2)) := List.replicate 6 (idBlk 2 2)
-noncomputable def ids4 : List (Vec (1 * 1 * 1) → Vec (1 * 1 * 1)) := List.replicate 3 (idBlk 1 1)
-
-/-- The concrete whole-network forward map: `dense ∘ gap ∘ (stage₄…₁) ∘ maxpool ∘ stem`,
-    a real 34-layer ResNet (strided stem + 3 strided downsamplers + 16 identity blocks +
-    GAP + dense) at 1 channel / 32×32. -/
-noncomputable def fwd : Vec (1 * (2 * 16) * (2 * 16)) → Vec 2 :=
-  dense Wd bd ∘ globalAvgPoolFlat 1 1 1 ∘ chainComp ids4 ∘ downBlk 1 1 ∘ chainComp ids3 ∘
-    downBlk 2 2 ∘ chainComp ids2 ∘ downBlk 4 4 ∘ chainComp ids1 ∘ maxPoolFlat 1 8 8 ∘ stem
-
-/-- **Whole-network VJP for a concrete ResNet-34** — every smoothness/no-tie hypothesis of
-    `resnet34_has_vjp_at` discharged. The strided identity stem yields distinct positive BN
-    outputs (so the maxpool has no ties via `stem_maxpool_smooth`); every residual block uses
-    zero weights, so its body is the constant `1` (`bnForward_const`) and the post-add ReLU
-    input is `1 + activation > 0` (identity blocks, `activation ≥ 0`) or `2` (downsamplers). -/
-noncomputable def resnet34Concrete_has_vjp_at : HasVJPAt fwd X :=
-  resnet34_has_vjp_at stem (maxPoolFlat 1 8 8) ids1 (downBlk 4 4) ids2 (downBlk 2 2) ids3
-    (downBlk 1 1) ids4 (globalAvgPoolFlat 1 1 1) (dense Wd bd) X
-    ⟨convBnReluStrided_has_vjp_at Ws bs 1 1 20 (by norm_num) X (fun k => ne_of_gt (stem_bn_pos k)),
-     DifferentiableAt.comp X
-       (relu_differentiableAt_of_smooth (1 * 16 * 16) _ (fun k => ne_of_gt (stem_bn_pos k)))
-       ((convBnStrided_differentiable Ws bs 1 1 20 (by norm_num)) X)⟩
-    ⟨hmp_vjp, hmp_diff⟩
-    (idChainData 8 8 (by norm_num) (maxPoolFlat 1 8 8 (stem X))
-      (fun k => le_of_lt (mp_stem_pos k)) 3)
-    ⟨downBlk_hasVJPAt 4 4 (by norm_num) _, downBlk_diffAt 4 4 (by norm_num) _⟩
-    (idChainData 4 4 (by norm_num) _ (fun k => downBlk_nonneg 4 4 _ k) 4)
-    ⟨downBlk_hasVJPAt 2 2 (by norm_num) _, downBlk_diffAt 2 2 (by norm_num) _⟩
-    (idChainData 2 2 (by norm_num) _ (fun k => downBlk_nonneg 2 2 _ k) 6)
-    ⟨downBlk_hasVJPAt 1 1 (by norm_num) _, downBlk_diffAt 1 1 (by norm_num) _⟩
-    (idChainData 1 1 (by norm_num) _ (fun k => downBlk_nonneg 1 1 _ k) 3)
-    ⟨(globalAvgPoolFlat_has_vjp 1 1 1).toHasVJPAt _, (globalAvgPoolFlat_differentiable 1 1 1) _⟩
-    ⟨(dense_has_vjp Wd bd).toHasVJPAt _, (dense_differentiable Wd bd) _⟩
-
-/-- **Public unconditional correctness theorem** — the concrete ResNet-34's backward equals
-    the `pdiv`-Jacobian VJP, no hypotheses. The ResNet-34 peer of
-    `CnnConcrete.cnnConcrete_has_vjp_correct`. -/
-theorem resnet34Concrete_has_vjp_correct (dy : Vec 2) (i : Fin (1 * (2 * 16) * (2 * 16))) :
-    resnet34Concrete_has_vjp_at.backward dy i = ∑ j : Fin 2, pdiv fwd X i j * dy j :=
-  resnet34Concrete_has_vjp_at.correct dy i
-
-end ResNet34Concrete
 
 end Proofs

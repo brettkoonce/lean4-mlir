@@ -135,7 +135,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTie
 import LeanMlir.Proofs.Nets.ViT.ViTBackB0
 import LeanMlir.Proofs.Nets.ViT.ViTBackNet
-import LeanMlir.Proofs.Nets.ResNet.ResNet50BackNet
+import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 import LeanMlir.Proofs.Foundation.BackNetFolds
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
@@ -595,26 +595,16 @@ open Proofs
 -- ...and its weight-VJP (the kernel grad for training a strided block)
 #print axioms flatConvStride2_weight_grad_has_vjp_correct
 -- Deep-block chain
-#print axioms vjp_chain_correct
 -- Strided downsampling block (conv stride-2 → BN → relu)
-#print axioms convBnReluStrided_has_vjp_at_correct
 -- Strided residual-PROJECTION block (relu(proj(x)+F(x)), the stage-start downsampling block)
-#print axioms rblkPStrided_has_vjp_at_correct
 -- Stage assembly: the conditional (_at)
-#print axioms vjp_chain_at_correct
-#print axioms resStage_has_vjp_at_correct
 -- THE WHOLE-NETWORK ResNet-34 VJP
 #print axioms resnet34_has_vjp_at
 -- B7: the UNCONDITIONAL concrete instance
-#print axioms ResNet34Concrete.resnet34Concrete_has_vjp_correct
 -- The first NON-DEGENERATE ResNet-34 whole-net backward witness (Item A, level 2)
-#print axioms ResNet34LivePC.liveFwd2_has_vjp_correct
 #print axioms ResNet34LivePC.liveFwd2_nonconstant
 -- Item A level 3: the nonzero-Jacobian SEAL for the live ResNet-34 (ResNet34LiveSeal.lean)
-#print axioms ResNet34LiveSeal.liveFwd2_jacobian_nonzero
-#print axioms ResNet34LiveSeal.liveFwd2_backward_nontrivial
 -- Item A FULL DEPTH (ResNet34LiveFull.lean)
-#print axioms ResNet34LiveFull.liveFwd2Full_has_vjp_correct
 #print axioms ResNet34LiveFull.liveFwd2Full_nonconstant
 #print axioms ResNet34LiveFull.liveFwd2Full_jacobian_nonzero
 #print axioms ResNet34LiveFull.liveFwd2Full_backward_nontrivial
@@ -624,7 +614,6 @@ open Proofs
 #print axioms Mnv2Live.fwdFull_jacobian_nonzero
 #print axioms Mnv2Live.fwdFull_backward_nontrivial
 -- Item D (ResNet34LiveRealistic.lean)
-#print axioms ResNet34LiveRealistic.liveFwd224_has_vjp_correct
 #print axioms ResNet34LiveRealistic.liveFwd224_nonconstant
 -- Item D WEIGHT-GENERICITY (ResNet34LiveGeneric.lean)
 #print axioms liveFwdW_has_vjp_correct
@@ -871,9 +860,6 @@ open Proofs
 #print axioms FloatModel.bnForward_close
 -- ResNet-34 structural float ops (ResNet34FloatBridge.lean)
 #print axioms FloatModel.add_close
-#print axioms FloatModel.reluAdd_close
-#print axioms FloatModel.flatConvStride2F_close
-#print axioms FloatModel.bnPerChannelFlat_close_of
 #print axioms FloatModel.gapFlat_close
 -- Real-BN input-sensitivity (BnInputBridge.lean)
 #print axioms bnMean_input_close
@@ -881,7 +867,6 @@ open Proofs
 #print axioms bnIstd_input_close
 #print axioms bnForward_input_close
 -- First assembled ResNet block step (ResNet34BlockBridge.lean)
-#print axioms FloatModel.bnRelu_close
 -- Whole-net certificate backbone (FloatComposeBridge.lean)
 #print axioms FloatClose.comp
 #print axioms floatClose_relu
@@ -1026,9 +1011,7 @@ open Proofs
 #print axioms Proofs.efficientnetInputGradB_full_correct
 -- AND AT BATCH BATCH-NORM (ResNet34BackCertifiedTieB.lean, MobileNetV2WholeBackCertifiedTieB.lean)
 #print axioms Proofs.HasVJPAt.backward_unique
-#print axioms Proofs.maxPool3s2FlatBackB_eq_vjp_backward
 #print axioms Proofs.cbReluStridedBBack_eq_vjp_backward
-#print axioms Proofs.r34StemBBack_eq_vjp_backward
 #print axioms Proofs.r34HeadBBack_eq_vjp_backward
 #print axioms Proofs.r34B_full_has_vjp_at
 #print axioms Proofs.r34InputGradB_eq_r34B_full_vjp
@@ -1433,7 +1416,6 @@ open Proofs
 -- ResNet-34 backward-graph faithfulness (den-level)
 #print axioms StableHLO.cbReluBackBatchedGraph_faithful
 -- The basic-block body backward graph (projB ∘ cbReluB).
-#print axioms StableHLO.r34BodyBackBatchedGraph_faithful
 -- Capstone: the whole batched ResNet-34 identity basic block backward graph
 #print axioms StableHLO.r34BasicBlockBackBatchedGraph_faithful
 
@@ -1485,10 +1467,6 @@ open Proofs
 #print axioms StableHLO.r50BottleneckLayer
 #print axioms StableHLO.r50ProjBlockLayer
 #print axioms StableHLO.r50DownBlockLayer
-#print axioms StableHLO.r50Stage_faithful
-#print axioms StableHLO.r50Trunk_faithful
-#print axioms StableHLO.r50Trunk_3463
-#print axioms StableHLO.r50DownBlockOfRow
 
 -- r34 / mnv2 / enet / convnext
 #print axioms StableHLO.enetMBConvLayer
@@ -1497,8 +1475,6 @@ open Proofs
 #print axioms StableHLO.r34DownBlockLayer
 #print axioms StableHLO.mnv2ResidBlockLayer
 #print axioms StableHLO.enetChain_faithful
-#print axioms StableHLO.r34Trunk_3463
-#print axioms StableHLO.r34DownBlockOfRow
 
 -- MNv4 — the four UIB families COLLAPSED into one body
 #print axioms StableHLO.dwbReluBackBatchedGraph_faithful

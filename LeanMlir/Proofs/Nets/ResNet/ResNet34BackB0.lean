@@ -36,9 +36,8 @@ one at the outer relu's pre-activation `residual(F)(x)`.
   + `bnBatchLABack_faithful` + `convBackBatched_faithful`.
 * `cbB` (= `projB`, conv → bn, no activation) backward is reused VERBATIM from
   EfficientNetBackB0 (`projBackBatchedGraph` / `projBackBatchedGraph_faithful`).
-* `r34BodyB_has_vjp_at` — the body `cbB ∘ cbReluB`, composed via `vjp_comp_at`
-  over the mid-relu smoothness family, with its backward graph
-  `r34BodyBackBatchedGraph` + `…_faithful`.
+* the body `cbB ∘ cbReluB` — its backward graph `r34BodyBackBatchedGraph`, the two stage
+  graphs chained at their cumulative activations, certified through the block layer.
 * `r34BasicBlockBackBatchedGraph_faithful` — the **CAPSTONE**: the whole batched
   ResNet-34 identity basic block backward graph (outer-relu `selectPos` ∘
   residual-fan-in(body-back) + identity skip) denotes the proven
@@ -173,20 +172,6 @@ theorem cbReluLayer_fwd_apply (N : Nat) {ic oc h w kH kW : Nat}
 -- § The body: `cbB ∘ cbReluB`  (= projB ∘ cbReluB)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The batched ResNet-34 basic-block body's VJP at a smooth point —
-    `projB ∘ cbReluB` (conv-bn after conv-bn-relu), the VJP of
-    `cbReluLayer.comp projLayer`. `projB` has no activation, so the only smoothness
-    hypothesis is `h_s1`, the stage-1 relu's (at the cbReluB pre-relu activation). -/
-noncomputable def r34BodyB_has_vjp_at (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
-    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
-    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c)
-    (x : Vec (N * (c * h * w)))
-    (h_s1 : ∀ k, bnBatchLA N c h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) :
-    HasVJPAt (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-              cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x :=
-  ((cbReluLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁).comp
-    (projLayer N W₂ b₂ ε₂ hε₂ γ₂ β₂)).vjp x ⟨h_s1, trivial⟩
-
 /-- The batched ResNet-34 body backward graph: the two stage graphs chained at
     their cumulative forward activations (`cbReluB⁻¹ ∘ projB⁻¹`). -/
 noncomputable def r34BodyBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
@@ -196,16 +181,6 @@ noncomputable def r34BodyBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂ : Nat
   let x1 := cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁ x
   cbReluBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ x
     (projBackBatchedGraph W₂ b₂ ε₂ γ₂ β₂ x1 e)
-
-theorem r34BodyBackBatchedGraph_faithful {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
-    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
-    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c)
-    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w)))
-    (h_s1 : ∀ k, bnBatchLA N c h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0) :
-    den (r34BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x e)
-      = (r34BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward (den e) :=
-  ((cbReluLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁).comp
-    (projLayer N W₂ b₂ ε₂ hε₂ γ₂ β₂)).faithful x ⟨h_s1, trivial⟩ e
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-block VJP: `relu ∘ residual(F)` (outer relu after the add)

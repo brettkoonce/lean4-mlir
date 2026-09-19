@@ -26,7 +26,7 @@ smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
    three are `funext` to one example, one rewrite of the per-example tie at that
    example's row (`vitTowerBackK_eq_vjp`, `vitFinalLNBack_eq_vjp`,
    `vitHeadBack_eq_classifier_vjp`), then `rfl` — `batchMapAux`'s slice and the lift's
-   `.backward` row are the same term, as `maxPool3s2FlatBackB_eq_vjp_backward` found for r34.
+   `.backward` row are the same term, as r34's pool endpoint found.
 3. `vitKVB_has_vjp_at` — the four-stage apex, three `vjp_comp_diff_at`s over the batched stage
    witnesses — and `vitInputGradKB_eq_vitKVB_vjp`, the tie: three leaf rewrites, then `rfl`.
 4. `vitForwardKVB_eq_chain` — the shape check: the four batched stages compose to

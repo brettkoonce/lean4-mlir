@@ -209,7 +209,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0,
              `LeanMlir.Proofs.Foundation.CertifiedChain,
-             `LeanMlir.Proofs.Nets.ResNet.ResNet50BackNet,
              `LeanMlir.Proofs.Foundation.BackNetFolds,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet,

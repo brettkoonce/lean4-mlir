@@ -21,9 +21,9 @@ whose `PProd` projections do not share.
 
 ## The four pieces
 
-1. `cbReluStridedBBack_eq_vjp_backward` / `r34StemBBack_eq_vjp_backward` /
-   `r34HeadBBack_eq_vjp_backward` / `maxPool3s2FlatBackB_eq_vjp_backward` — the concrete endpoints.
-   ⭐ The pool one is **`rfl`**, and that is the payoff of two earlier decisions: 4.1c built
+1. `cbReluStridedBBack_eq_vjp_backward` / `r34HeadBBack_eq_vjp_backward` — the concrete
+   endpoints; the stem is the first and the pool needs no lemma.
+   ⭐ The pool endpoint is **`rfl`**, and that is the payoff of two earlier decisions: 4.1c built
    `batchMap_has_vjp_at` field by field rather than transporting it with `▸`, and
    `maxPool3s2Flat_has_vjp_at_vec` did the same one tier down, so `batchMapAux` of the leaf and
    the lift's `.backward` are the same term. It also closes the one seam §4.2a left open — that
@@ -67,28 +67,8 @@ namespace Proofs
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
--- § The three concrete endpoint ties
+-- § The concrete endpoint ties
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The batched pool tie, and it is `rfl`.** `maxPool3s2FlatBackB` — the per-example
-    accumulating scatter, each example on its OWN saved stem activation — IS
-    `batchMap_has_vjp_at`'s backward for the 3×3/s2 pool.
-
-    ⭐ This closes the one seam §4.2a left open. That file threaded the pool backward as the
-    EMITTED `den` and could not identify it with the certified pool VJP, for want of a
-    den-level faithfulness lemma for the batched pool backward; here the identification is with
-    the certified backward directly,
-    and it is definitional because 4.1c and `maxPool3s2Flat_has_vjp_at_vec` both refused the
-    `▸` transport that would have blocked `.backward` from reducing. -/
-theorem maxPool3s2FlatBackB_eq_vjp_backward {N c h w : Nat}
-    (v : Vec (N * (c * (2*h) * (2*w))))
-    (hpool : ∀ r : Fin N,
-      MaxPool3s2Smooth (Tensor3.unflatten (Mat.unflatten v r) : Tensor3 c (2*h) (2*w)))
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
-    maxPool3s2FlatBackB N c h w v
-      = (batchMap_has_vjp_at (maxPool3s2Flat c h w) v
-          (fun r => maxPool3s2Flat_has_vjp_at_vec _ (hpool r))
-          (fun r => maxPool3s2Flat_differentiableAt_vec _ (hpool r) hc hh hw)).backward := rfl
 
 /-- **The conv-BN-relu STAGE tie.** The hand-written
     `batchMap (flatConvStride2Back) ∘ bnBack ∘ reluMaskBack` IS `cbReluStridedB`'s certified
@@ -133,27 +113,6 @@ theorem cbReluBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
             (StableHLO.batchMap N (flatConv W b) v) i > 0))
       = (StableHLO.cbReluB_has_vjp_at N W b ε hε γ β v hs).backward := by
   rw [convFlatBack_eq_vjp_backward hkH hkW W b (fun _ => 0)]
-  rfl
-
-/-- **The whole STEM tie** — the stage above, then the batched 3×3/s2 pool backward, IS
-    `r34StemB`'s certified backward. `r34StemB_has_vjp_at` is one `vjp_comp_at` of the two, so
-    this is the two ties composed and nothing else. -/
-theorem r34StemBBack_eq_vjp_backward {N ic oc h w : Nat}
-    (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
-    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
-    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
-    (hrelu : R34StemSmoothAt N h w Ws bs ε γ β x)
-    (hpool : R34PoolSmoothAt N h w
-      (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs ε γ β x)) :
-    ((StableHLO.batchMap N (flatConvStride2Back (h := 2 * h) (w := 2 * w) Ws)
-        ∘ (bnBatchLA_has_vjp N oc (2 * h) (2 * w) ε hε γ β).backward
-            (StableHLO.batchMap N (flatConvStride2 Ws bs) x)
-        ∘ reluMaskBack (fun i => StableHLO.bnBatchLA N oc (2 * h) (2 * w) ε γ β
-            (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0))
-      ∘ maxPool3s2FlatBackB N oc h w
-          (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs ε γ β x))
-      = (r34StemB_has_vjp_at N h w Ws bs ε hε γ β hc hh hw x hrelu hpool).backward := by
-  rw [cbReluStridedBBack_eq_vjp_backward (by decide) (by decide) Ws bs ε hε γ β x hrelu]
   rfl
 
 /-- **The HEAD tie.** `batchMap (gapBack) ∘ batchMap (dense Wᵀ 0)` IS `r34HeadB`'s certified

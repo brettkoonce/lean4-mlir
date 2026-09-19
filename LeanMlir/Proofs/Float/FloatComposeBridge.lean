@@ -15,12 +15,11 @@ magnitude precondition is met). `FloatClose.comp` proves this **composes** — t
 moduli compose as `Lg ∘ Lf`, magnitudes thread `A → B → C` — so a whole net is
 `FloatClose` with the composed modulus, no per-net re-proof.
 
-Instances proved here: `relu` (exact in float, modulus `id`) and `flatConv`
-(modulus = the conv-fan-in `layerBudget`). The remaining r34 ops are already
-`*_close` lemmas and slot in the same way: BN→relu via `bnRelu_close` (use the
-operating-point `bnIstd_close_at` for the `eistd`, else the budget is vacuous),
-maxpool via `maxPoolFlat_close`, the skip via `reluAdd_close`. The whole-net
-certificate is then `.comp` folded over the layer list.
+Instances proved here: `relu` (exact in float, modulus `id`), `flatConv`
+(modulus = the conv-fan-in `layerBudget`), and the rest of the r34 op set below —
+BN (use the operating-point `bnIstd_close_at` for the `eistd`, else the budget is
+vacuous), the pools, and the residual block. A whole-net certificate is then `.comp`
+folded over the layer list.
 -/
 
 namespace Proofs
@@ -235,7 +234,7 @@ theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
 /-- **Residual block `relu(F(x) + x)` is `FloatClose`** — the branching combinator
     (the skip reuses the input, so it's not a plain `.comp`). Given the body `F`
     `FloatClose A B`, the block's float (rounded skip-add) is within
-    `reluAdd_close`'s budget of the real `relu(F(x)+x)`; output magnitude
+    `B + A + u·(B + A)` of the real `relu(F(x)+x)`; output magnitude
     `(1+u)(B+A)`. The defining ResNet op: `floatClose_addResidual` then `floatClose_relu`. -/
 theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
     {F FF : Vec m → Vec m} {LF : ℝ → ℝ} (hF : FloatClose A B F FF LF) :

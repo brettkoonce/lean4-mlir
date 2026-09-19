@@ -8,20 +8,17 @@ import LeanMlir.Proofs.Foundation.PerChannelBN
 
 Extending the float bridge from CIFAR/BN toward ResNet-34. After the `rsqrt`
 keystone (`BnFloatBridge.lean`), no new *numerical* primitives remain — the r34
-ops are reuses or thin wrappers:
+ops are reuses or thin wrappers. This file holds the two that are not one line
+elsewhere:
 
-* **residual skip** `relu(F(x) + skip(x))` — needs a two-operand `add_close`
-  (the additive peer of `mul_close`); `reluAdd_close` is the post-skip output.
-* **strided conv** — `flatConvStride2 = decimateFlat ∘ flatConv`, so the float
-  closeness is `flatConvF_close` at the decimated coordinate.
-* **per-channel BN** — `bnPerChannelMat` is `bnForward` applied per channel-row,
-  so `bnPerChannelFlat_close_of` maps `bnForward_close_of` over channels.
+* **residual skip** `relu(F(x) + skip(x))` — a two-operand `add_close` (the additive
+  peer of `mul_close`);
 * **global-avg-pool** — a per-channel mean, so `gapFlat_close` reduces to
   `bnMean_close` on the channel slice (`sum_s2` flattens the spatial double sum).
 
-The remaining work for a whole-net `r34_float_close` is the (large, mechanical)
-per-block + whole-net composition threading the inherited error through the 16
-residual blocks — no new numerical content.
+The strided conv is `flatConvF_close` at the decimated coordinate and per-channel BN
+is `bnForward_close_of` per channel row; the `FloatClose` instances
+(`FloatComposeBridge`) compose them.
 -/
 
 namespace Proofs
@@ -43,100 +40,6 @@ theorem add_close {xt x yt y ex ey : ℝ} (hx : |xt - x| ≤ ex) (hy : |yt - y| 
   refine M.rnd_close (by rw [add_sub_add_comm]; exact (abs_add_le _ _).trans (add_le_add hx hy))
     ((abs_add_le _ _).trans ?_)
   linarith [abs_sub_abs_le_abs_sub xt x, abs_sub_abs_le_abs_sub yt y]
-
-/-- **Residual block output (post-skip ReLU).** With the two branches `bt`/`st`
-    within `eb`/`es` of the real `b`/`s` (magnitudes `≤ A`/`B`), the rounded
-    `relu(fl(bt ⊕ st))` is within the `add_close` budget of `relu(b + s)` per
-    coordinate (ReLU is exact in float and 1-Lipschitz). The float closeness of
-    `relu(F(x) + skip(x))`. -/
-theorem reluAdd_close {n : Nat} {bt b st s : Vec n} {eb es A B : ℝ}
-    (hb : ∀ i, |bt i - b i| ≤ eb) (hs : ∀ i, |st i - s i| ≤ es)
-    (hB : ∀ i, |b i| ≤ A) (hS : ∀ i, |s i| ≤ B) (i : Fin n) :
-    |relu n (fun j => M.add (bt j) (st j)) i - relu n (fun j => b j + s j) i| ≤
-      M.u * (A + eb + B + es) + (eb + es) := by
-  have hadd : ∀ j, |M.add (bt j) (st j) - (b j + s j)| ≤ M.u * (A + eb + B + es) + (eb + es) :=
-    fun j => by
-      refine (M.add_close (hb j) (hs j)).trans ?_
-      have hu := M.u_nonneg
-      gcongr <;> [exact hB j; exact hS j]
-  exact relu_close (fun j => M.add (bt j) (st j)) (fun j => b j + s j)
-    (M.u * (A + eb + B + es) + (eb + es)) hadd i
-
--- ════════════════════════════════════════════════════════════════
--- § Strided convolution  (flatConvStride2 = decimate ∘ flatConv)
--- ════════════════════════════════════════════════════════════════
-
-/-- The float stride-2 conv: decimate the float stride-1 conv (the float peer of
-    `flatConvStride2 = decimateFlat ∘ flatConv`). -/
-noncomputable def flatConvStride2F {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
-    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
-  decimateFlat oc h w ∘ (M.flatConvF (h := 2 * h) (w := 2 * w) W b)
-
-/-- **Stride-2 conv forward budget.** Decimation only selects output coordinates,
-    so the strided-conv closeness is `flatConvF_close` evaluated at the decimated
-    coordinate — the same conv-fan-in `layerBudget`. -/
-theorem flatConvStride2F_close {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (vt va : Vec (ic * (2 * h) * (2 * w)))
-    {w' β a e : ℝ} (hw' : 0 ≤ w') (ha : 0 ≤ a) (he : 0 ≤ e)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β)
-    (hva : ∀ k, |va k| ≤ a) (hvte : ∀ k, |vt k - va k| ≤ e)
-    (k : Fin (oc * h * w)) :
-    |M.flatConvStride2F W b vt k - flatConvStride2 W b va k| ≤
-      FloatModel.layerBudget M.u (ic * kH * kW) w' β a e := by
-  simp only [FloatModel.flatConvStride2F, flatConvStride2, Function.comp, decimateFlat]
-  exact M.flatConvF_close (h := 2 * h) (w := 2 * w) W b vt va hw' ha he hW hb hva hvte
-    (decimateIdx oc h w k)
-
-/-- The float XLA-`SAME` stride-2 conv: the ODD decimation of the float stride-1 conv (the float
-    peer of `flatConvStride2Xla = decimateOddFlat ∘ flatConv`, `StridedConv.lean`). The TF-origin
-    stems (EfficientNet-B0, MobileNetV2). -/
-noncomputable def flatConvStride2XlaF {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
-    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
-  decimateOddFlat oc h w ∘ (M.flatConvF (h := 2 * h) (w := 2 * w) W b)
-
-/-- **XLA-`SAME` stride-2 conv forward budget** — `flatConvStride2F_close` at the odd coordinate:
-    the same conv-fan-in `layerBudget`, since either decimation only selects outputs. -/
-theorem flatConvStride2XlaF_close {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (vt va : Vec (ic * (2 * h) * (2 * w)))
-    {w' β a e : ℝ} (hw' : 0 ≤ w') (ha : 0 ≤ a) (he : 0 ≤ e)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β)
-    (hva : ∀ k, |va k| ≤ a) (hvte : ∀ k, |vt k - va k| ≤ e)
-    (k : Fin (oc * h * w)) :
-    |M.flatConvStride2XlaF W b vt k - flatConvStride2Xla W b va k| ≤
-      FloatModel.layerBudget M.u (ic * kH * kW) w' β a e := by
-  simp only [FloatModel.flatConvStride2XlaF, flatConvStride2Xla, Function.comp, decimateOddFlat]
-  exact M.flatConvF_close (h := 2 * h) (w := 2 * w) W b vt va hw' ha he hW hb hva hvte
-    (decimateOddIdx oc h w k)
-
--- ════════════════════════════════════════════════════════════════
--- § Per-channel BatchNorm  (bnForward applied per channel-row)
--- ════════════════════════════════════════════════════════════════
-
-/-- The float per-channel BN: `bnForwardF` per channel-row, with the per-channel
-    mean `fμ c` and inverse-stddev `fistdv c`. The float peer of
-    `bnPerChannelFlat` (= `bnForward` per row). -/
-noncomputable def bnPerChannelFlatF {oc m : Nat} (M : FloatModel)
-    (γ β fμ fistdv : Vec oc) (v : Vec (oc * m)) : Vec (oc * m) :=
-  Mat.flatten (fun c => M.bnForwardF (γ c) (β c) (fμ c) (fistdv c) (Mat.unflatten v c))
-
-/-- **Per-channel BN forward closeness.** Each channel-row runs `bnForward`, so
-    the float per-channel BN is within `bnNormBudget` of `bnPerChannelFlat` per
-    entry — `bnForward_close_of` mapped over channels (uniform per-channel mean/
-    istd errors and magnitude bounds). -/
-theorem bnPerChannelFlat_close_of {oc m : Nat} (M : FloatModel)
-    {ε emean eistd D S G Bbnd : ℝ} (γ β fμ fistdv : Vec oc) (v : Vec (oc * m))
-    (hmean : ∀ c, |fμ c - bnMean m (Mat.unflatten v c)| ≤ emean)
-    (histd : ∀ c, |fistdv c - bnIstd m (Mat.unflatten v c) ε| ≤ eistd)
-    (hD : ∀ c j, |Mat.unflatten v c j - bnMean m (Mat.unflatten v c)| ≤ D)
-    (hSabs : ∀ c, |bnIstd m (Mat.unflatten v c) ε| ≤ S)
-    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd) (k : Fin (oc * m)) :
-    |M.bnPerChannelFlatF γ β fμ fistdv v k - bnPerChannelFlat oc m ε γ β v k| ≤
-      bnNormBudget M.u D S G Bbnd emean eistd := by
-  simp only [FloatModel.bnPerChannelFlatF, bnPerChannelFlat, bnPerChannelMat, Mat.flatten]
-  exact M.bnForward_close_of (ε := ε) (Mat.unflatten v ((finProdFinEquiv.symm k).1))
-    ((finProdFinEquiv.symm k).2) (hmean _) (histd _) (hD _ _) (hSabs _) (hγ _) (hβ _)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Global average pool  (a per-channel mean)

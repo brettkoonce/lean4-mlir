@@ -11,11 +11,9 @@ the per-block composition becomes real — the BN closeness splits into
   rounding-at-fixed-input  (`bnForward_close_of`, the float BN's own roundoff)
   + input-shift            (`bnForward_input_close`, real BN moving with its input)
 
-and `relu_close` carries it through the (exact-in-float) ReLU. `bnRelu_close`
-proves exactly that. A full identity block `relu(F(x) + x)` is then this step
-twice (drop the inner ReLU on the second) chained through `flatConvF_close` for
-each conv and closed by `reluAdd_close` at the skip — the same parts, no new
-numerical content.
+and `relu_close` carries it through the (exact-in-float) ReLU. `bnStep_close`
+proves the BN half; the `FloatClose` instances (`FloatComposeBridge`) compose it with
+the ReLU, the convs and the skip — the same parts, no new numerical content.
 -/
 
 namespace Proofs
@@ -37,8 +35,8 @@ noncomputable def bnReluBudget (u D S G Bbnd emean eistd A e1 ε : ℝ) : ℝ :=
     and the usual BN magnitude bounds, the rounded `bnForwardF vt` is within
     `bnReluBudget` of `bnForward va`. The composition split: rounding
     (`bnForward_close_of`) + input-shift (`bnForward_input_close`). This is the
-    pre-activation bound; `bnRelu_close` is `relu_close` on top, and the BN-before-
-    swish path in EfficientNet's MBConv uses this one directly. -/
+    pre-activation bound (compose `relu_close` for the activation); the BN-before-swish
+    path in EfficientNet's MBConv uses it directly. -/
 theorem bnStep_close {n : Nat} {ε γ β emean eistd D S G Bbnd A e1 fμ fistdv : ℝ}
     (vt va : Vec n) (i : Fin n) (hn : 0 < n) (hε : 0 < ε)
     (he1 : ∀ k, |vt k - va k| ≤ e1)
@@ -76,23 +74,6 @@ theorem bnStep_close {n : Nat} {ε γ β emean eistd D S G Bbnd A e1 fμ fistdv 
         + G * ((e1 + e1) * (1 / Real.sqrt ε)
                + 2 * A * ((8 * A * e1) / (2 * ε * Real.sqrt ε))) := add_le_add hround hshift
     _ = bnReluBudget M.u D S G Bbnd emean eistd A e1 ε := rfl
-
-/-- **BN → relu block step closeness.** `relu_close` on top of `bnForward_close`:
-    the rounded `relu(bnForwardF vt)` is within `bnReluBudget` of `relu(bnForward va)`
-    (ReLU is exact in float and 1-Lipschitz, so it carries the pre-activation bound
-    through unchanged). -/
-theorem bnRelu_close {n : Nat} {ε γ β emean eistd D S G Bbnd A e1 fμ fistdv : ℝ}
-    (vt va : Vec n) (i : Fin n) (hn : 0 < n) (hε : 0 < ε)
-    (he1 : ∀ k, |vt k - va k| ≤ e1)
-    (hAvt : ∀ k, |vt k| ≤ A) (hAva : ∀ k, |va k| ≤ A)
-    (hmean : |fμ - bnMean n vt| ≤ emean) (histd : |fistdv - bnIstd n vt ε| ≤ eistd)
-    (hD : ∀ j, |vt j - bnMean n vt| ≤ D) (hSabs : |bnIstd n vt ε| ≤ S)
-    (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd) :
-    |relu n (M.bnForwardF γ β fμ fistdv vt) i - relu n (bnForward n ε γ β va) i| ≤
-      bnReluBudget M.u D S G Bbnd emean eistd A e1 ε :=
-  relu_close (M.bnForwardF γ β fμ fistdv vt) (bnForward n ε γ β va)
-    (bnReluBudget M.u D S G Bbnd emean eistd A e1 ε)
-    (fun j => M.bnStep_close vt va j hn hε he1 hAvt hAva hmean histd hD hSabs hγ hβ) i
 
 end FloatModel
 

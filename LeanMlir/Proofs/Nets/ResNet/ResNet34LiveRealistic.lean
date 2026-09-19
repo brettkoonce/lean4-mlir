@@ -96,36 +96,6 @@ noncomputable def liveFwd224 : Vec (2 * (2 * 112) * (2 * 112)) → Vec 2 :=
   dense Wd2 bd2 ∘ globalAvgPoolFlat 2 7 7 ∘
     liveDownβ 7 7 64 ∘ liveDownβ 14 14 64 ∘ liveDownβ 28 28 64 ∘ maxPoolFlat 2 56 56 ∘ stem224
 
-/-- **Whole-network VJP for the 224×224 live ResNet-34** — every smoothness/no-tie
-    hypothesis discharged at realistic spatial dims (the BN positivity bounds `β > √n`
-    hold by `sqrt_lt_param`). -/
-noncomputable def liveFwd224_has_vjp_at : HasVJPAt liveFwd224 X224 :=
-  resnet34_has_vjp_at stem224 (maxPoolFlat 2 56 56)
-    ([] : List (Vec (2 * 56 * 56) → Vec (2 * 56 * 56))) (liveDownβ 28 28 64)
-    ([] : List (Vec (2 * 28 * 28) → Vec (2 * 28 * 28))) (liveDownβ 14 14 64)
-    ([] : List (Vec (2 * 14 * 14) → Vec (2 * 14 * 14))) (liveDownβ 7 7 64)
-    ([] : List (Vec (2 * 7 * 7) → Vec (2 * 7 * 7)))
-    (globalAvgPoolFlat 2 7 7) (dense Wd2 bd2) X224
-    ⟨stem224_vjp, stem224_diff⟩
-    ⟨hmp_vjp224, hmp_diff224⟩
-    PUnit.unit
-    ⟨liveDownβ_vjp 28 28 64 (by norm_num) (sqrt_lt_param (2 * 28 * 28) 64 (by norm_num) (by norm_num)) _,
-     liveDownβ_diff 28 28 64 (by norm_num) (sqrt_lt_param (2 * 28 * 28) 64 (by norm_num) (by norm_num)) _⟩
-    PUnit.unit
-    ⟨liveDownβ_vjp 14 14 64 (by norm_num) (sqrt_lt_param (2 * 14 * 14) 64 (by norm_num) (by norm_num)) _,
-     liveDownβ_diff 14 14 64 (by norm_num) (sqrt_lt_param (2 * 14 * 14) 64 (by norm_num) (by norm_num)) _⟩
-    PUnit.unit
-    ⟨liveDownβ_vjp 7 7 64 (by norm_num) (sqrt_lt_param (2 * 7 * 7) 64 (by norm_num) (by norm_num)) _,
-     liveDownβ_diff 7 7 64 (by norm_num) (sqrt_lt_param (2 * 7 * 7) 64 (by norm_num) (by norm_num)) _⟩
-    PUnit.unit
-    ⟨(globalAvgPoolFlat_has_vjp 2 7 7).toHasVJPAt _, (globalAvgPoolFlat_differentiable 2 7 7) _⟩
-    ⟨(dense_has_vjp Wd2 bd2).toHasVJPAt _, (dense_differentiable Wd2 bd2) _⟩
-
-/-- **Public correctness** — the 224×224 live ResNet-34 backward equals the `pdiv`-Jacobian. -/
-theorem liveFwd224_has_vjp_correct (dy : Vec 2) (i : Fin (2 * (2 * 112) * (2 * 112))) :
-    liveFwd224_has_vjp_at.backward dy i = ∑ j : Fin 2, pdiv liveFwd224 X224 i j * dy j :=
-  liveFwd224_has_vjp_at.correct dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § Non-vacuity (level 2): the realistic forward is non-constant
 -- ════════════════════════════════════════════════════════════════

@@ -9,16 +9,15 @@ different backward vocabulary … a separate sitting"*). This file is that sitti
 ## ⚠⚠ FIRST, A CORRECTION TO THE LEDGER — ViT was never the LEAST folded net, it was the MOST
 
 `CertifiedChain.lean`'s header says *"Measured before writing this file: **nothing** in
-`LeanMlir/Proofs/` folds those blocks into a stage or a net"*, and `ResNet50BackNet.lean` calls
-itself *"the FIRST one in the repo"*. Both are **wrong**, and ViT is the counterexample:
+`LeanMlir/Proofs/` folds those blocks into a stage or a net"*. That is **wrong**, and ViT is the
+counterexample:
 `ViTBackB0.lean` has carried the depth-`k` tower backward graph `vitBodyBackGraphKMHV` and the
 whole-net graph `vitNetBackGraph` (patchEmbed → tower → final vec-LN → classifier, at **every**
 depth) since before either file existed; this file's `vitNetBackGraph_faithful`, which ties the
 whole-net graph to the whole-net VJP, is in
 [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean).
 
-So the accurate statement of what the other six nets have is *block capstones plus an
-abstract-layer trunk*; ViT alone had a concrete whole-net backward graph tied to the whole-net VJP,
+So the accurate statement of what the other six nets have is *block capstones*; ViT alone had a concrete whole-net backward graph tied to the whole-net VJP,
 stem and head included. What ViT lacked was not the fold — it was the **generic** fold: its tower
 was a bespoke induction that no other net could reuse and that reused nothing.
 
@@ -47,8 +46,7 @@ generalize if the graphs are ever to be emitted rather than only denoted.
 
 ## ⭐⭐ AND THE FOLD RUNS IMAGE → LOGITS — the first one in the repo that does
 
-`r50Trunk_3463` / `r34Trunk_3463` cover the four bottleneck stages and stop. §8b records why: the
-R50 stem is blocked on a **proof** gap (no den-level faithfulness for the batched `maxPool3s2BackB`
+No conv net's fold runs that far. §8b records why for R50: the stem is blocked on a **proof** gap (no den-level faithfulness for the batched `maxPool3s2BackB`
 graph — a pool is kinked wherever a window ties), and the head is simply unbuilt. ViT has neither
 obstacle, because its stem is an affine patchify conv and its head is a CLS slice plus a dense —
 both linear, so both backward graphs are activation-independent.
@@ -181,8 +179,7 @@ theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
 -- § ⭐⭐ THE STEM AND THE HEAD — so the fold runs IMAGE → LOGITS
 -- ════════════════════════════════════════════════════════════════
 
-/-! No other net has this. `r50Trunk_3463` / `r34Trunk_3463` cover the four bottleneck stages
-and stop: §8b records the stem as blocked on a **proof** gap (no den-level faithfulness for the
+/-! No other net has this: §8b records R50's stem as blocked on a **proof** gap (no den-level faithfulness for the
 batched `maxPool3s2BackB` graph — a pool is kinked wherever a window ties), and the head is
 simply unbuilt. ViT has neither obstacle: its stem is an affine patchify conv and its head is
 GAP-free (a CLS slice + dense), so both are linear and their backward graphs are
@@ -362,7 +359,7 @@ theorem vitNetBackGraph_faithful
 -- § ViT-Tiny's depth, as a check rather than prose
 -- ════════════════════════════════════════════════════════════════
 
-/-! The peer of `r50Trunk_3463` / `r34Trunk_3463` / `mnv4Blocks`: the shipped config's shape
+/-! The peer of `R34BWeights` / `R50BWeights` / `mnv4Blocks`: the shipped config's shape
 pinned in the types instead of stated in a docstring. ViT-Tiny is 12 identical-shaped blocks at
 `heads = 3`, `d_head = 64` (`D = 192`), `mlpDim = 768`, `N + 1 = 197` tokens — so unlike the conv
 nets there is no ladder to pin, only the depth and the widths, and every block has the same type

@@ -792,12 +792,12 @@ theorem mnv4PreStridedBodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams 
 /-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
 
     The spatial ladder is 56 → 28 → 14 → 7 with the reductions at blocks 1, 3 and 11, and the
-    channel ladder is 48 → 80 → 160 → 256. Written with nested doublings (`2*(2*(2*h))`) for the
-    reason `r50Trunk` documents: Nat multiplication is not definitionally associative in a
-    variable, so `8*h` would not line the stage types up.
+    channel ladder is 48 → 80 → 160 → 256. Written with nested doublings (`2*(2*(2*h))`) because
+    Nat multiplication is not definitionally associative in a variable, so `8*h` would not line
+    the stage types up.
 
     If any block's stride, resolution or channel count were transcribed wrongly this would not
-    elaborate — the same role `r50Trunk_3463` and `r34Trunk_3463` play for their nets. -/
+    elaborate — the same role `R34BWeights` and `R50BWeights` play for their nets. -/
 noncomputable def mnv4BlockLadder (N : Nat) {c₀ c₁ c₂ c₃ h w : Nat}
     (blk1  : CertLayer (N * (c₀ * (2*(2*(2*h))) * (2*(2*(2*w)))))
                        (N * (c₁ * (2*(2*h)) * (2*(2*w)))))

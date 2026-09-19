@@ -18,8 +18,7 @@ left-assoc index). `formalization.yaml` 4e records the decision and
 
 ⭐⭐ **Nothing about the blocks is new.** `ResNet34BackB0.lean` already carries the batched stages
 (`cbReluB`, `cbReluStridedB`, `projStridedB`, and `projB` from `EfficientNetRenderPC.lean`), their
-`_at` VJPs and their backward-graph faithfulness, all at `bnBatchLA`; `BackNetFolds.lean` folds
-them to the paper depth as `r34Trunk_3463`. What was missing is the level above: a net-level ℝ
+`_at` VJPs and their backward-graph faithfulness, all at `bnBatchLA`. What was missing is the level above: a net-level ℝ
 forward, a net-level forward graph, and the faithfulness tying them. This file is that enumeration.
 
 ⚠ **Padding is symmetric at every stride-2 site**, as ResNet-34's render emits and as the
