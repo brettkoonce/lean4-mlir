@@ -6249,12 +6249,13 @@ the \emph{whole} network, at the batch statistics this artifact runs, is
 \texttt{Proofs/Nets/MobileNet/MobileNetV2FullBVJP.lean}, and it covers the
 stem, all seventeen bottlenecks and the head. The typed graph the artifact
 is printed from denotes that forward by
-\texttt{mobilenetv2FwdGraphB\_full\_faithful}. The tie from the
-\texttt{mobilenetv2Verified} layer list to the paper's architecture,
-\texttt{mobilenetv2Verified\_denote\_eq} with
-\texttt{mobilenetv2Verified\_fwd\_faithful} above it, is still stated at
-per-example BatchNorm, the forward of the retired SGD artifact rather than
-of this one.
+\texttt{mobilenetv2FwdGraphB\_full\_faithful}, and the tie from the
+\texttt{mobilenetv2Verified} layer list to that forward is
+\texttt{mobilenetv2VerifiedB\_denote\_eq}, a \texttt{rfl} that stops
+reducing if any \texttt{[t,c,n,s]} entry of the spec drifts, with
+\texttt{mobilenetv2VerifiedB\_fwd\_faithful} above it. The same list at
+per-example BatchNorm, \texttt{mobilenetv2Verified\_denote\_eq}, is the
+forward of the retired SGD artifact.
 
 The full-depth fold is \emph{pointwise}. It holds at a given input, and
 it carries one side condition per activation site, at every example of
