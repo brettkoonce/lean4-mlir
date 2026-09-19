@@ -95,8 +95,8 @@ status:
     # --- Whole nets: forward + VJP at the net the artifact runs (T1), the typed graph (T2) ---
     # a kinked net at batch BN: ResNet-50's [3,4,6,3] bottlenecks, 48 relu clauses, q a binder (224 and 160 px)
     - {declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50FullBVJP.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
-    # a smooth net: ViT-Tiny's full body at depth 12, 3 heads, vector LayerNorm -- HasVJP everywhere
-    - {declaration: "Proofs.vit_full_has_vjp_correct", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # a smooth net: ViT-Tiny at its real dimensions -- depth 12 with distinct per-block parameters, 3 heads, vector LayerNorm; HasVJP at every input (0 < eps)
+    - {declaration: "Proofs.vitTiny_has_vjp_correct", file: "LeanMlir/Proofs/Nets/ViT/ViTDepthK.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # a typed SHlo graph at the render's own tokens denotes the whole-net forward (MobileNetV4, 26 stages; every net has one)
     - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
@@ -194,16 +194,24 @@ fidelity:
 
     4. FULL-NET RESULTS are "the network composes and has a VJP at a witness point". Separate
        non-degeneracy proofs rule out a vacuous witness: a non-constant forward and a nonzero
-       whole-net Jacobian for MobileNetV2 (`Mnv2Live`) and the 2-channel live ResNet-34 at the
-       real [3,4,6,3] depth (`ResNet34LiveSeal`, `ResNet34LiveFull`), both sealed at 224x224, plus
-       trained-weight witnesses and a provable strict CE-descent step for the MLP/CNN/linear
-       rungs (`TrainedMlpWitness`, `TrainedCnnSeal`, `TrainedLinearDescent`).
+       whole-net Jacobian for the 2-channel live MobileNetV2 (`Mnv2Live`) and ResNet-34, each
+       sealed twice -- at the real depth on a toy input (`ResNet34LiveFull` at [3,4,6,3] on
+       32x32, `MobileNetV2JacobianSealFull` at 17 blocks on 2x2) and at 224x224 with the short
+       chain (`ResNet34LiveRealisticSeal`, `MobileNetV2SealRealistic`); no seal has both depth
+       and resolution -- plus trained-weight witnesses and a provable strict CE-descent step for
+       the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`, `TrainedLinearDescent`).
 
     4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement): the smoothing
-       radius theorems require class probabilities in the OPEN interval (0,1) and speak about TRUE
-       smoothed probabilities where the driver uses Clopper-Pearson ESTIMATES -- that gap is not
-       formalized. The LipSDP scorecards certify a FIXED 100-image subset
-       at a FIXED epsilon -- an honest lower bound, not a dataset-wide claim.
+       radius theorem `smoothing_certified_radius_classifier` speaks about TRUE smoothed class
+       probabilities in the OPEN interval (0,1). The driver's Clopper-Pearson ESTIMATE is tied to
+       it by `smoothing_cp_certified` (with probability >= 1 - alpha over the N samples, the
+       reported radius is certified; the tail polynomial is the one the driver evaluates), and
+       the (0,1) hypothesis is discharged for a net's argmax by `smoothing_cp_certified_net`,
+       instantiated at the trained pooled `mlpT` (`smoothing_cp_certified_mlpT`). Still informal:
+       the 784-dim driver checkpoints are not themselves tied (the witness file runs at the
+       49-dim net), and the driver's float forward against the real-semantics net is the float
+       tier's story. The LipSDP scorecards certify a FIXED 100-image subset at a FIXED epsilon --
+       an honest lower bound, not a dataset-wide claim.
 
     4c. NO ADJOINT-CHAIN TIER: no theorem bounds a whole-net float error against a logit margin
        (4d states no whole-net budget).
@@ -224,10 +232,11 @@ fidelity:
 
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
        VJP, with a shape check that the opaque-block chain IS the committed forward: the
-       per-example `r34InputGrad_eq_resnet34_vjp`,
-       `convnextInputGrad_eq_convNextForwardTCh_vjp`, `efficientnetInputGradB_full_correct` (16
-       blocks, through `HasVJP.backward_unique`) and `vitInputGradK_eq_vitForwardKV_vjp` (depth
-       12, 3 heads, vector LN), and the batched `*InputGradB_eq_*_vjp` family of 4g — ViT's and
+       per-example `convnextInputGrad_eq_convNextForwardTCh_vjp`,
+       `efficientnetInputGradB_full_correct` (16 blocks, through `HasVJP.backward_unique`) and
+       `vitInputGradK_eq_vitForwardKV_vjp` (depth 12, 3 heads, vector LN), and the batched
+       `*InputGradB_eq_*_vjp` family of 4g (`r34InputGradB_eq_r34B_full_vjp` at batch BN and the
+       full [3,4,6,3] depth, and its MobileNetV2/V4 and ResNet-50 peers) — ViT's and
        ConvNeXt's at a variable batch `B` as the stage-wise `batchMap` lift of the per-example chain
        (`vitInputGradKB_eq_batchMap_vitForwardKV_vjp`,
        `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp`, the latter at any class count and
@@ -341,8 +350,8 @@ alignment:
       status: "proved"
       note: ""
     - source: "Multi-head self-attention backward (Q/K/V) + full ViT body"
-      lean: "mhsa_has_vjp_mat_correct / vit_full_has_vjp_correct"
-      module: "LeanMlir/Proofs/Architectures/Attention.lean"
+      lean: "mhsa_has_vjp_mat_correct / vit_full_has_vjp_correct (the weight-shared scalar-LN tower) / vitTiny_has_vjp_correct (depth 12, distinct blocks, vector LN)"
+      module: "LeanMlir/Proofs/Architectures/Attention.lean, LeanMlir/Proofs/Nets/ViT/ViTDepthK.lean"
       status: "proved"
       note: ""
     - source: "ReLU / max-pool backward at non-smooth points"
@@ -367,14 +376,14 @@ alignment:
       note: "rounding model CONSTRUCTED (former hardware axioms discharged); no whole-net numeric budget and no adjoint-chain tier are stated (fidelity 4c, 4d)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
-      module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"
+      module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/Certificates/LipschitzCertScorecard*.lean"
       status: "proved"
       note: "fixed 100-image subset at fixed epsilon -- honest lower bound (69/100 vs 72/100 PGD bracket)"
     - source: "Cohen 2019 randomized-smoothing certified radius (incl. the Gaussian Neyman-Pearson core)"
-      lean: "smoothing_certified_radius_classifier via smoothing_probit_lipschitz / stdGaussian_np_shift"
-      module: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean"
+      lean: "smoothing_certified_radius_classifier via smoothing_probit_lipschitz / stdGaussian_np_shift; smoothing_cp_certified; smoothing_cp_certified_net"
+      module: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean, LeanMlir/Proofs/Certificates/SmoothingCP.lean, LeanMlir/Proofs/Certificates/SmoothingNetSemantics.lean"
       status: "proved"
-      note: "end-to-end: quantile inversion, Cameron-Martin shift, rotation-invariance dimension reduction all proved; requires class probabilities in (0,1); the driver's Monte-Carlo estimation gap is not formalized"
+      note: "end-to-end: quantile inversion, Cameron-Martin shift, rotation-invariance dimension reduction all proved; the Monte-Carlo gap is closed (Hoeffding, then exact Clopper-Pearson at the driver's tail polynomial) and the (0,1) hypothesis is discharged for a net's argmax; the 784-dim driver checkpoints are not themselves tied (fidelity 4b)"
     - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton-Schulz)"
       lean: "muon_polar_steepest, shampoo_eq_muon, muon_polar_nearest_orthogonal + spectral-step lemma"
       module: "LeanMlir/Proofs/Foundation/MuonGeometry.lean, LeanMlir/Proofs/Foundation/MuonNewtonSchulz.lean"
