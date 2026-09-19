@@ -2583,9 +2583,13 @@ v \text{ else } 0)$, and the bridge theorem
 says the denotation of that graph is the proven derivative. The forward,
 the loss cotangent, and the parameter gradients are covered the same way.
 
-Here is exactly what the printer emits for that graph, with nothing
-hand-written, one \texttt{stablehlo} op per IR node (default
-\texttt{precision} attributes elided for the page):
+Here is what \texttt{IRPrint.lean} prints for that graph, one
+\texttt{stablehlo} op per node (default \texttt{precision} attributes
+elided for the page). \texttt{Back} carries real-valued operands and cannot
+be printed directly, so the printer walks a mirror of it, \texttt{Hlo},
+built node for node from \texttt{emitMlpBack}'s shape with SSA names in
+place of values; that the mirror matches is checked by reading the two
+definitions side by side, not by a theorem:
 
 \begin{verbatim}
 func.func @mlp_back(%dy: tensor<2x2xf32>, %W0: tensor<4x3xf32>,
