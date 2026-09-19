@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 
 /-! # PoC: the full-16 EfficientNet-B0 train step §1a TIE (whole-net thread) — DONE (capstone `efficientnet_net_tied`, all 262 params, 3-axiom clean; only the optional dense-head fold below remains)
 
@@ -76,6 +77,53 @@ noncomputable def reassocB (N oc h w : Nat) (v : Vec (N * (oc * h * w))) : Vec (
 noncomputable def bnBackB (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
   (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x dy
+
+/-- ⭐ **The tie's BN node and the emitted BN node denote one map.** Every batched render emits
+    `.bnBatchBack`, typed at `N·(oc·(h·w))`; the ties state the BN input cotangent at
+    `.bnBatchLABack`, its network-layout `N·(oc·h·w)` twin (`ResNet34TieB.bnInB`). The two print
+    the same text, and their `den`s differ only by the associativity relabelling `reassocB`: the
+    two scatters inside `bnBatchLABack`'s `den` collapse because `Fin.cast` is a bijection. -/
+theorem den_bnBatchLABack_eq_bnBatchBack {N oc h w : Nat} (gN xN es : String) (ε : ℝ) (γ : Vec oc)
+    (x : Vec (N * (oc * h * w))) (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.bnBatchLABack gN xN es ε γ x e)
+      = fun i => den (SHlo.bnBatchBack gN xN es ε γ (reassocB N oc h w x)
+          (.operand "" (reassocB N oc h w (den e))))
+          (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) i) := by
+  funext i
+  have h1 : ∀ k : Fin (N * (oc * (h * w))),
+      (i = Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm k)
+        ↔ (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) i = k) := fun k => by
+    simp only [Fin.ext_iff, Fin.val_cast]
+  have hin : (fun i' : Fin (N * (oc * (h * w))) => ∑ k' : Fin (N * (oc * h * w)),
+        if i' = Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) k' then den e k' else 0)
+      = reassocB N oc h w (den e) := by
+    funext i'
+    have h2 : ∀ k' : Fin (N * (oc * h * w)),
+        (i' = Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) k')
+          ↔ (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm i' = k') := fun k' => by
+      simp only [Fin.ext_iff, Fin.val_cast]
+    simp_rw [h2]
+    simp only [Finset.sum_ite_eq, Finset.mem_univ, ite_true, reassocB]
+  simp only [den]
+  simp_rw [h1]
+  simp only [Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+  rw [hin]
+  rfl
+
+/-- **The certified BN input cotangent every batched T3 tie threads IS the emitted `bnBatchBack`
+    node's `den`**, read back through `reassocB`. This is the missing half of
+    `bnBatchLABack_faithful`: that lemma certifies the tie's node, this one says the render's node
+    computes the same numbers. -/
+theorem bnBackB_eq_den_bnBatchBack (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (N * (oc * h * w))) :
+    bnBackB N oc h w ε hε γ β x dy
+      = fun i => den (SHlo.bnBatchBack "" "" "" ε γ (reassocB N oc h w x)
+          (.operand "" (reassocB N oc h w dy)))
+          (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) i) := by
+  show (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x (den (.operand "" dy)) = _
+  rw [← bnBatchLABack_faithful "" "" "" ε γ β hε x (.operand "" dy),
+      den_bnBatchLABack_eq_bnBatchBack]
+  rfl
 
 /-- Batched **swish** mask-back (smooth, no kink). -/
 noncomputable def swBackB (n : Nat) (x dy : Vec n) : Vec n := (swish_has_vjp n).backward x dy

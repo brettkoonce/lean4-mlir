@@ -92,7 +92,9 @@ noncomputable def cStridedInB (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc 
 /-- **Batched true-BN input-cotangent, as the EMITTED backward computes it.** Written as the `den`
     of the backward op rather than as the certified VJP's `.backward`, because that is the form the
     render's chain is in and `den` ignores the name strings — so every cotangent below is literally
-    what the artifact's bytes compute. ⭐ It takes no `β`: the BatchNorm input-gradient does not
+    what the artifact's bytes compute. ⚠ The render's node is `.bnBatchBack`, typed at
+    `N·(oc·(h·w))`; this is its network-layout twin, and `bnInB_eq_den_bnBatchBack` below says
+    the two denote one map up to `reassocB`. ⭐ It takes no `β`: the BatchNorm input-gradient does not
     depend on the shift, which `bnInB_eq_bnBackB` records by holding for every `β`. -/
 noncomputable def bnInB (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
     (x dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
@@ -106,6 +108,16 @@ theorem bnInB_eq_bnBackB (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec
     (x dy : Vec (N * (oc * h * w))) :
     bnInB N oc h w ε γ x dy = bnBackB N oc h w ε hε γ β x dy :=
   bnBatchLABack_faithful "" "" "" ε γ β hε x (.operand "" dy)
+
+/-- **…and it IS the `den` of the node the render emits**, `.bnBatchBack` at the `N·(oc·(h·w))`
+    index, read back through `reassocB` (`EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack`). -/
+theorem bnInB_eq_den_bnBatchBack (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
+    (x dy : Vec (N * (oc * h * w))) :
+    bnInB N oc h w ε γ x dy
+      = fun i => den (SHlo.bnBatchBack "" "" "" ε γ (reassocB N oc h w x)
+          (.operand "" (reassocB N oc h w dy)))
+          (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) i) :=
+  EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack "" "" "" ε γ x (.operand "" dy)
 
 /-- **Batched 3×3/s2 max-pool backward** (= `den maxPool3s2BackB`): the `select_and_scatter`
     denotation, per example on that example's own saved activation — which is why it is

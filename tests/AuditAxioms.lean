@@ -1256,6 +1256,9 @@ open Proofs
 #print axioms StableHLO.depthwiseBackBatched_faithful
 #print axioms StableHLO.bnBatchLA_back_conj
 #print axioms StableHLO.bnBatchLABack_faithful
+-- the render's `.bnBatchBack` node and the ties' `.bnBatchLABack` node denote one map (up to reassocB)
+#print axioms EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack
+#print axioms EnetTiePoC.bnBackB_eq_den_bnBatchBack
 #print axioms StableHLO.seBackBatched_faithful
 -- Batched MBConv stage backward graphs (the bn wrapper lets these compose).
 #print axioms StableHLO.cbsBackBatchedGraph_faithful
@@ -1898,6 +1901,7 @@ open Proofs
 
 -- 4.2a: RESNET-34'S T3 §1a TIE AT BATCH BN, UN-FUSED (ResNet34StepTieB.lean, 2026-09-06)
 #print axioms Proofs.ResNet34TieB.bnInB_eq_bnBackB
+#print axioms Proofs.ResNet34TieB.bnInB_eq_den_bnBatchBack
 #print axioms Proofs.ResNet34TieB.r34IdCotIn_eq_vjp
 #print axioms Proofs.ResNet34TieB.r34DownCotIn_eq_vjp
 #print axioms Proofs.ResNet34TieB.r34_idblock_tiedB
