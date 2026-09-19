@@ -17,9 +17,9 @@ The §B certified-VJP ties for the three CNNs (convnext / mnv2 / efficientnet) a
   (= `depthwiseFlat (dwReverse W) 0`) IS the certified depthwise input-VJP
   `(depthwiseFlat_has_vjp W b).backward x` (depthwise conv is linear ⇒ the saved activation `x` is
   ignored). The depthwise peer of `convFlatBack_eq_vjp_backward`.
-* `depthwiseStride2FlatBack_eq_vjp_backward` — the strided leaf tie: `depthwiseStride2FlatBack W`
-  (= `depthwiseFlatBack ∘ decimateBack`) IS `(depthwiseStride2Flat_has_vjp W b).backward x`. The
-  depthwise peer of `flatConvStride2Back_eq_vjp_backward` (conv leaf + the `decimateBack` `rfl`).
+* `depthwiseStride2FlatXlaBack_eq_vjp_backward` — the XLA-`SAME` strided leaf tie:
+  `depthwiseStride2FlatXlaBack W` (= `depthwiseFlatBack ∘ decimateOddBack`) IS
+  `(depthwiseStride2FlatXla_has_vjp W b).backward x`, for odd kernels.
 -/
 
 namespace Proofs
@@ -56,27 +56,10 @@ theorem depthwiseFlatBack_eq_vjp_backward {c h w kH kW : Nat}
   rw [depthwiseConv2d_dwReverse_eq_input_grad_formula hkH hkW W (Tensor3.unflatten dy)]
   rfl
 
-/-- **Strided depthwise conv input-VJP leaf tie.** `depthwiseStride2FlatBack W` (= `depthwiseFlatBack
-    ∘ decimateBack`) IS the certified strided depthwise input-VJP `(depthwiseStride2Flat_has_vjp W
-    b).backward x`, for odd kernels. Decomposes into the stride-1 depthwise leaf tie
-    (`depthwiseFlatBack_eq_vjp_backward`) and the decimate leaf (`decimateBack_eq_vjp`, `rfl`),
-    matching `depthwiseStride2Flat = decimateFlat ∘ depthwiseFlat`. The depthwise peer of
-    `flatConvStride2Back_eq_vjp_backward`; unlocks the mnv2 stride-2 inverted-residual downsample. -/
-theorem depthwiseStride2FlatBack_eq_vjp_backward {c h w kH kW : Nat}
-    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (x : Vec (c * (2 * h) * (2 * w))) :
-    depthwiseStride2FlatBack (h := h) (w := w) W
-      = (depthwiseStride2Flat_has_vjp W b).backward x := by
-  funext dy
-  show depthwiseFlatBack (h := 2 * h) (w := 2 * w) W (decimateBack c h w dy) = _
-  rw [depthwiseFlatBack_eq_vjp_backward hkH hkW W b x]
-  rfl
-
 /-- **XLA-`SAME` strided depthwise input-VJP leaf tie.** `depthwiseStride2FlatXlaBack W`
     (= `depthwiseFlatBack ∘ decimateOddBack`) IS the certified
-    `(depthwiseStride2FlatXla_has_vjp W b).backward x`, for odd kernels. The odd-phase peer of
-    `depthwiseStride2FlatBack_eq_vjp_backward`; MobileNetV2's four strided depthwises and B0's
-    downsample depthwise, at the TF-origin convention. -/
+    `(depthwiseStride2FlatXla_has_vjp W b).backward x`, for odd kernels. MobileNetV2's four
+    strided depthwises and B0's downsample depthwise, at the TF-origin convention. -/
 theorem depthwiseStride2FlatXlaBack_eq_vjp_backward {c h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (x : Vec (c * (2 * h) * (2 * w))) :

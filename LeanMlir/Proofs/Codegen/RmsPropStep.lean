@@ -113,9 +113,8 @@ theorem rms_denom_pos {ρ ε : ℝ} (hε : 0 < ε) (hρ0 : 0 ≤ ρ) (hρ1 : ρ 
   have := rmsSqNext_nonneg (g := g) hρ0 hρ1 hsq i
   linarith
 
-/-- **Coordinate closed form** — the spec the emitted RMSProp graph must denote, the `rmsBufNext`
-    analogue of `adamWParam_apply`. Holds definitionally; stated so the faithfulness proof has an
-    explicit per-coordinate target. -/
+/-- **Coordinate closed form** — the spec the emitted RMSProp graph must denote. Holds
+    definitionally; stated so the faithfulness proof has an explicit per-coordinate target. -/
 theorem rmsBufNext_apply (ρ μ ε : ℝ) (sq buf g : Vec n) (i : Fin n) :
     rmsBufNext ρ μ ε sq buf g i =
       μ * buf i + g i / Real.sqrt (ρ * sq i + (1 - ρ) * (g i) ^ 2 + ε) := rfl
@@ -165,7 +164,7 @@ theorem rmsBufNext_buf_zero (ρ μ ε : ℝ) (sq g : Vec n) :
   funext i; simp [rmsBufNext]
 
 /-- **Scalar RMSProp buffer update** — one coordinate of `rmsBufNext`, the form a per-entry render
-    close applies to a single weight/bias entry's certified gradient (the `adamWScalar` analogue). -/
+    close applies to a single weight/bias entry's certified gradient. -/
 noncomputable def rmsBufScalar (ρ μ ε sq buf g : ℝ) : ℝ :=
   μ * buf + g / Real.sqrt (ρ * sq + (1 - ρ) * g ^ 2 + ε)
 

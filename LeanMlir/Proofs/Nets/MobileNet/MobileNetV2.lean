@@ -32,13 +32,9 @@ the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
 
 ## Padding convention
 
-The strided sites — the 6-block `mobilenetv2Forward_full`'s stem and its four downsample
-depthwises — read `flatConvStride2Xla` / `depthwiseStride2FlatXla`, the XLA-`SAME` (odd)
-phase every MobileNetV2 artifact emits, re-spelled 2026-09-05 with the rest of the Proofs
-tier. This net is a scalar-BN stepping stone: no
-artifact and no float number rests on it, and it moved so the whole MobileNetV2 cone reads
-one phase. The 2-block generic `mobilenetv2Forward` below has a stride-1 stem and is not
-affected either way.
+The strided inverted-residual pieces below read `flatConvStride2Xla` /
+`depthwiseStride2FlatXla`, the XLA-`SAME` (odd) phase every MobileNetV2 artifact emits. The
+2-block generic `mobilenetv2Forward` has a stride-1 stem.
 
 All new defs/theorems certify to exactly `[propext, Classical.choice,
 Quot.sound]`.
@@ -663,82 +659,6 @@ theorem invresBodyStrided_differentiableAt
       (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v) :=
     dwBnRelu6Strided_differentiableAt Wd bd εd γd βd hεd _ h_sd
   exact ((convBn_differentiable Wp bp εp γp βp hεp) _).comp v (hdw_diff.comp v hexp_diff)
-
--- ════════════════════════════════════════════════════════════════
--- § The full MobileNetV2 render — `mobilenetv2Forward_full`
---
---   The faithful 6-inverted-residual-block net the trainer actually runs
---   (`mobilenetv2Verified`, ch7), at the real Imagenette-224² channel flow
---   and spatial schedule:
---
---     stem  3→16   3×3 s2            224→112
---     b1   16→64→24  s2 (no skip)    112→56
---     b2   24→96→24  s1 (skip)       @56
---     b3   24→96→32  s2 (no skip)    56→28
---     b4   32→128→32 s1 (skip)       @28
---     b5   32→128→64 s2 (no skip)    28→14
---     b6   64→256→64 s2 (no skip)    14→7
---     head 64→128   1×1 s1           @7   (conv-bn-relu6)
---     gap → dense 128→10
---
---   Stated gap (intrinsic, shared with every BN net in this repo): the
---   `bnForward` here is SCALAR-global (one γ/β over c·h·w per example); the
---   render uses per-channel `[c]` BN. The block topology, channel flow,
---   stride schedule, relu6 sites and residual placement are all faithful.
--- ════════════════════════════════════════════════════════════════
-
-/-- The full MobileNetV2 forward (ch7 render): stem-s2 → 6 inverted-residual
-    blocks (`b1/b3/b5/b6` stride-2 downsample, `b2/b4` stride-1 skip) → 1×1
-    conv-bn-relu6 head → global-avg-pool → dense. Scalar BN; faithful topology. -/
-noncomputable def mobilenetv2Forward_full
-    -- stem (3→16, 3×3 s2): 224→112
-    (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
-    -- b1 (16→64→24, s2): 112→56
-    (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
-    (Wd1 : DepthwiseKernel 64 3 3) (bd1 : Vec 64) (εd1 γd1 βd1 : ℝ)
-    (Wp1 : Kernel4 24 64 1 1) (bp1 : Vec 24) (εp1 γp1 βp1 : ℝ)
-    -- b2 (24→96→24, s1 skip): @56
-    (We2 : Kernel4 96 24 1 1) (be2 : Vec 96) (εe2 γe2 βe2 : ℝ)
-    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 γd2 βd2 : ℝ)
-    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 γp2 βp2 : ℝ)
-    -- b3 (24→96→32, s2): 56→28
-    (We3 : Kernel4 96 24 1 1) (be3 : Vec 96) (εe3 γe3 βe3 : ℝ)
-    (Wd3 : DepthwiseKernel 96 3 3) (bd3 : Vec 96) (εd3 γd3 βd3 : ℝ)
-    (Wp3 : Kernel4 32 96 1 1) (bp3 : Vec 32) (εp3 γp3 βp3 : ℝ)
-    -- b4 (32→128→32, s1 skip): @28
-    (We4 : Kernel4 128 32 1 1) (be4 : Vec 128) (εe4 γe4 βe4 : ℝ)
-    (Wd4 : DepthwiseKernel 128 3 3) (bd4 : Vec 128) (εd4 γd4 βd4 : ℝ)
-    (Wp4 : Kernel4 32 128 1 1) (bp4 : Vec 32) (εp4 γp4 βp4 : ℝ)
-    -- b5 (32→128→64, s2): 28→14
-    (We5 : Kernel4 128 32 1 1) (be5 : Vec 128) (εe5 γe5 βe5 : ℝ)
-    (Wd5 : DepthwiseKernel 128 3 3) (bd5 : Vec 128) (εd5 γd5 βd5 : ℝ)
-    (Wp5 : Kernel4 64 128 1 1) (bp5 : Vec 64) (εp5 γp5 βp5 : ℝ)
-    -- b6 (64→256→64, s2): 14→7
-    (We6 : Kernel4 256 64 1 1) (be6 : Vec 256) (εe6 γe6 βe6 : ℝ)
-    (Wd6 : DepthwiseKernel 256 3 3) (bd6 : Vec 256) (εd6 γd6 βd6 : ℝ)
-    (Wp6 : Kernel4 64 256 1 1) (bp6 : Vec 64) (εp6 γp6 βp6 : ℝ)
-    -- head (64→128, 1×1 s1): @7  conv-bn-relu6
-    (Wh : Kernel4 128 64 1 1) (bh : Vec 128) (εh γh βh : ℝ)
-    -- dense head (128→10)
-    (Wfc : Mat 128 10) (bfc : Vec 10) :
-    Vec (3 * 224 * 224) → Vec 10 :=
-  dense Wfc bfc ∘
-  globalAvgPoolFlat 128 7 7 ∘
-  (relu6 (128 * 7 * 7) ∘ bnForward (128 * 7 * 7) εh γh βh ∘ flatConv (h := 7) (w := 7) Wh bh) ∘
-  invresBodyStrided (h := 7) (w := 7)
-    We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 ∘
-  invresBodyStrided (h := 14) (w := 14)
-    We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 ∘
-  residual (invresBody (h := 28) (w := 28)
-    We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4) ∘
-  invresBodyStrided (h := 28) (w := 28)
-    We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 ∘
-  residual (invresBody (h := 56) (w := 56)
-    We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2) ∘
-  invresBodyStrided (h := 56) (w := 56)
-    We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 ∘
-  (relu6 (16 * 112 * 112) ∘ bnForward (16 * 112 * 112) εs γs βs ∘
-    flatConvStride2Xla (h := 112) (w := 112) Ws bs)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The *live* MobileNetV2 witness

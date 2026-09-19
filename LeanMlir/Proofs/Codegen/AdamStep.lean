@@ -60,36 +60,4 @@ theorem adam_denom_pos {β₂ ε bc₂ : ℝ} (hε : 0 < ε) {v g : Vec n} (i : 
     0 < Real.sqrt (adamVNext β₂ v g i / bc₂) + ε :=
   add_pos_of_nonneg_of_pos (Real.sqrt_nonneg _) hε
 
-/-- **Coordinate closed form** — the spec the emitted Adam graph must denote
-    (the `adamWParam` analogue of the SGD `θ − lr·certified-grad` render close).
-    Holds definitionally; stated so the future `den (adamGraph) = …` faithfulness
-    proof has an explicit per-coordinate target. -/
-theorem adamWParam_apply (β₁ β₂ ε lr wd bc₁ bc₂ : ℝ) (θ m v g : Vec n) (i : Fin n) :
-    adamWParam β₁ β₂ ε lr wd bc₁ bc₂ θ m v g i =
-      θ i - lr * (((β₁ * m i + (1 - β₁) * g i) / bc₁) /
-        (Real.sqrt ((β₂ * v i + (1 - β₂) * (g i) ^ 2) / bc₂) + ε)) - (wd * lr) * θ i :=
-  rfl
-
-/-- **Plain-Adam specialization** (`wd = 0`): the decoupled weight-decay term
-    vanishes, recovering textbook Adam. The bridge to the no-weight-decay nets. -/
-theorem adamWParam_wd_zero (β₁ β₂ ε lr bc₁ bc₂ : ℝ) (θ m v g : Vec n) (i : Fin n) :
-    adamWParam β₁ β₂ ε lr 0 bc₁ bc₂ θ m v g i =
-      θ i - lr * (((β₁ * m i + (1 - β₁) * g i) / bc₁) /
-        (Real.sqrt ((β₂ * v i + (1 - β₂) * (g i) ^ 2) / bc₂) + ε)) := by
-  rw [adamWParam_apply]; ring
-
-/-- **Scalar AdamW update** — one coordinate of `adamWParam`, the form the
-    per-entry render-close (`AdamRender.adamW`/`adamB`) applies to a single
-    weight/bias entry's certified gradient (the `θ i - lr·…` analogue used by
-    `StableHLO.sgdW`). -/
-noncomputable def adamWScalar (β₁ β₂ ε lr wd bc₁ bc₂ θ m v g : ℝ) : ℝ :=
-  θ - lr * (((β₁ * m + (1 - β₁) * g) / bc₁) /
-    (Real.sqrt ((β₂ * v + (1 - β₂) * g ^ 2) / bc₂) + ε)) - (wd * lr) * θ
-
-/-- The `Vec` spec is the scalar update applied coordinatewise — so a render that
-    drives `adamWScalar` per entry computes exactly `adamWParam`. -/
-theorem adamWParam_eq_scalar (β₁ β₂ ε lr wd bc₁ bc₂ : ℝ) (θ m v g : Vec n) (i : Fin n) :
-    adamWParam β₁ β₂ ε lr wd bc₁ bc₂ θ m v g i
-      = adamWScalar β₁ β₂ ε lr wd bc₁ bc₂ (θ i) (m i) (v i) (g i) := rfl
-
 end Proofs

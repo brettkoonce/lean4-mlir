@@ -7,7 +7,7 @@ The ConvNeXt peer of `tests/TestMobilenetV2TrainPC.lean` / `TestResnet34TrainPC.
 **representative** `convNextForward` config (the proven graph: 1×1 patchify stem → scalar-LN →
 2 residual ConvNeXt blocks → GAP → head-LN → dense), CIFAR-shaped: 3×32² in, c=32, cExp=128,
 dw 7×7, 10 classes. Forward AND the whole backward cotangent chain are proof-rendered through
-`pretty` over the very tokens of `convNextFwdGraph` (Item A) — forward (`flatConvF`/`bnF`/
+`pretty` over proven `SHlo` tokens — forward (`flatConvF`/`bnF`/
 `depthwiseF`/`geluF`/`layerScaleF`/`addV`/`gapF`/`denseF`) and backward (`dotOut`, `bnBack`
 (scalar-LN input-VJP), `geluBack`, `convBack`, `depthwiseBack`, `addV` residual fan-in). The
 layer-scale backward IS the forward token applied to the cotangent (`layerScale`'s input-VJP is
@@ -119,8 +119,7 @@ private structure FNames where  -- all flat SSA names from `pretty`
   ls : String    -- layer-scale out
   bout : String  -- block out (addV)
 
-/-- One ConvNeXt block forward via `pretty` — exactly the `convNextFwdGraph` block tokens
-    (`b{i}Body` + `addV` skip), with the graph's own param names. -/
+/-- One ConvNeXt block forward via `pretty` — the block's tokens (`b{i}Body` + `addV` skip). -/
 private def fwdBlock (i : Nat) (xin : String) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty BS (.depthwiseF (h := H) (w := H) s!"%Wdw{i}" s!"%bdw{i}" (zD : DepthwiseKernel C 7 7) zV (.operand xin zV))
   let (k2, n) ← pretty BS (.bnF s!"%gn{i}" s!"%btn{i}" EPS 0 0 0 (.operand d (zV : Vec (C*H*H))))
@@ -160,7 +159,7 @@ private def blockParamGrads (i : Nat) (b : FNames) (cot_p cot_e cot_n cot_d dy :
   -- depthwise 7×7: W/b
   dwWGrad s!"%dWdw{i}" b.xin cot_d C H H 7 ++ biasGrad s!"%dbdw{i}" cot_d C H H
 
-/-- per-block param (name, type) list, forward order (matches `convNextFwdGraph` arg order). -/
+/-- per-block param (name, type) list, forward order. -/
 private def blkParams (i : Nat) : List (String × String) :=
   [(s!"Wdw{i}", ty [C,1,7,7]), (s!"bdw{i}", ty [C]), (s!"gn{i}", "tensor<f32>"), (s!"btn{i}", "tensor<f32>"),
    (s!"Wex{i}", ty [CE,C,1,1]), (s!"bex{i}", ty [CE]), (s!"Wpr{i}", ty [C,CE,1,1]), (s!"bpr{i}", ty [C]),
@@ -168,7 +167,7 @@ private def blkParams (i : Nat) : List (String × String) :=
 
 private def trainStep : String := Id.run do
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ═══ forward (proof-rendered; the convNextFwdGraph tokens in graph order) ═══
+    -- ═══ forward (proof-rendered tokens, in graph order) ═══
     let (cP, patch) ← pretty BS (.flatConvF (h := H) (w := H) "%Wst" "%bst" (zK : Kernel4 C IC 1 1) zV (.operand "%x" zV))
     let (cL, stemLn) ← pretty BS (.bnF "%gst" "%btst" EPS 0 0 0 (.operand patch (zV : Vec (C*H*H))))
     let (cB1, b1) ← fwdBlock 1 stemLn

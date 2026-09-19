@@ -75,18 +75,6 @@ noncomputable def padOdd {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW) :
     (o : Fin oc) (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
     padOdd W o c kh.succ kw.succ = W o c kh kw := rfl
 
-/-- `padOdd` never exceeds the original's magnitude bound — the new entries are `0`. This is why
-    the fix costs no new lemma: every `|W| ≤ w'` hypothesis transfers verbatim. -/
-theorem padOdd_abs_le {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w')
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') :
-    ∀ o c kh kw, |padOdd W o c kh kw| ≤ w' := by
-  intro o c kh kw
-  refine Fin.cases ?_ (fun kh' => ?_) kh
-  · simpa using hw'
-  · refine Fin.cases ?_ (fun kw' => ?_) kw
-    · simpa using hw'
-    · rw [padOdd_succ]; exact hW _ _ _ _
-
 /-- **An even-kernel conv IS an odd-kernel conv on the zero-extended kernel.**
     `conv2d (padOdd W) b = conv2d W b` whenever `kH`, `kW` are EVEN.
 

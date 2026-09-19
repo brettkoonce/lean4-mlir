@@ -15,11 +15,12 @@ just `∘` — so the engine here is:
 * `BoxSound f Flo Fhi` — `(Flo, Fhi)` is a sound interval transformer for `f`;
 * `BoxSound.comp` — **depth**: sound transformers compose exactly as the layers
   do, so an `n`-layer net's transformer is `n` compositions and no new proof;
-* per-layer instances — `dense` (sign-split), `relu` (endpoint `max`), **`conv2d`
-  / `flatConv`** (sign-split over the padded taps), **`maxPool2` / `maxPoolFlat`**
-  (`max` is monotone, so pool the endpoints), plus `id`;
-* `ibp_certified_of_boxSound` — the capstone: any sound transformer whose output
-  boxes separate on `x ∓ ε` certifies `x` at `L∞` radius `ε`, at any depth.
+* per-layer instances in tensor space (`BoxSound3`) — `relu` (endpoint `max`),
+  **`conv2d`** (sign-split over the padded taps), **`maxPool2`** (`max` is
+  monotone, so pool the endpoints), and the dense head `denseT` (sign-split);
+* `ibp3_certified_of_boxSound` — the capstone: a sound tensor body and dense head
+  whose output boxes separate on `x ∓ ε` certify `x` at `L∞` radius `ε`, at any
+  depth.
 
 The conv transformer is stated against the repo's own `conv2d`
 (`CNN.lean`, SAME padding, the definition the VJP suite and the codegen use) —
@@ -111,24 +112,6 @@ noncomputable def denseLoV {m n : Nat} (W : Mat m n) (b : Vec n) (lo hi : Vec m)
 noncomputable def denseHiV {m n : Nat} (W : Mat m n) (b : Vec n) (lo hi : Vec m) : Vec n :=
   fun j => (∑ i, if 0 ≤ W i j then hi i * W i j else lo i * W i j) + b j
 
-theorem denseV_boxSound {m n : Nat} (W : Mat m n) (b : Vec n) :
-    BoxSound (dense W b) (denseLoV W b) (denseHiV W b) := by
-  intro lo hi u hu j
-  have hlo : (∑ i, if 0 ≤ W i j then lo i * W i j else hi i * W i j)
-      ≤ ∑ i, u i * W i j := by
-    refine Finset.sum_le_sum fun i _ => ?_
-    by_cases hW : 0 ≤ W i j
-    · rw [ite_eq_left hW]; exact mul_le_mul_of_nonneg_right (hu i).1 hW
-    · rw [ite_eq_right hW]; exact mul_le_mul_of_nonpos_right (hu i).2 (le_of_not_ge hW)
-  have hhi : (∑ i, u i * W i j)
-      ≤ ∑ i, if 0 ≤ W i j then hi i * W i j else lo i * W i j := by
-    refine Finset.sum_le_sum fun i _ => ?_
-    by_cases hW : 0 ≤ W i j
-    · rw [ite_eq_left hW]; exact mul_le_mul_of_nonneg_right (hu i).2 hW
-    · rw [ite_eq_right hW]; exact mul_le_mul_of_nonpos_right (hu i).1 (le_of_not_ge hW)
-  simp only [denseLoV, denseHiV, dense]
-  exact ⟨by linarith [hlo], by linarith [hhi]⟩
-
 /-- **Uniform-box collapse for dense** — the `Vec`-space peer of
     `denseLo_uniform`: on `x ∓ ε` the sign split evaluates to
     `⟨x, W⟩ + b ∓ ε·‖W_{·j}‖₁`, so an instance needs one dot and one `ℓ1` fact
@@ -170,18 +153,6 @@ theorem relu_apply_eq_max {n : Nat} (x : Vec n) (i : Fin n) : relu n x i = max (
   by_cases h : x i > 0
   · rw [ite_eq_left h, max_eq_left h.le]
   · rw [ite_eq_right h, max_eq_right (le_of_not_gt h)]
-
-noncomputable def reluLoV {n : Nat} (lo : Vec n) : Vec n := fun i => max (lo i) 0
-noncomputable def reluHiV {n : Nat} (hi : Vec n) : Vec n := fun i => max (hi i) 0
-
-/-- ReLU is monotone, so the box endpoints are just the ReLU'd endpoints —
-    and a *sign-crossing* (unstable) neuron is handled here, not excluded: its
-    box becomes `[0, relu hi]`, which contains both branches. -/
-theorem reluV_boxSound {n : Nat} :
-    BoxSound (relu n) (fun lo _ => reluLoV lo) (fun _ hi => reluHiV hi) := by
-  intro lo hi u hu i
-  rw [relu_apply_eq_max]
-  exact ⟨max_le_max_right 0 (hu i).1, max_le_max_right 0 (hu i).2⟩
 
 /-- Coordinatewise ReLU on tensors — the form a conv body uses between conv and
     pool, so the body never leaves tensor space. -/
@@ -331,58 +302,7 @@ theorem maxPool2_boxSound3 {c h w : Nat} :
       (max_le_max (hu _ _ _).2 (hu _ _ _).2)
 
 -- ════════════════════════════════════════════════════════════════
--- § Flat ↔ tensor transfer (so conv/pool join the `Vec` composition chain)
--- ════════════════════════════════════════════════════════════════
-
-theorem inBox3_unflatten {c h w : Nat} {lo hi u : Vec (c * h * w)} (hu : InBox lo hi u) :
-    InBox3 (Tensor3.unflatten lo : Tensor3 c h w) (Tensor3.unflatten hi) (Tensor3.unflatten u) :=
-  fun _ _ _ => hu _
-
-theorem inBox_flatten {c h w : Nat} {lo hi u : Tensor3 c h w} (hu : InBox3 lo hi u) :
-    InBox (Tensor3.flatten lo) (Tensor3.flatten hi) (Tensor3.flatten u) :=
-  fun _ => hu _ _ _
-
-/-- Lift a rank-3 sound transformer through `flatten ∘ · ∘ unflatten`. Both maps
-    are index bijections, so soundness transfers verbatim. -/
-theorem BoxSound3.flat {c h w c' h' w' : Nat} {f : Tensor3 c h w → Tensor3 c' h' w'}
-    {Flo Fhi : Tensor3 c h w → Tensor3 c h w → Tensor3 c' h' w'} (hf : BoxSound3 f Flo Fhi) :
-    BoxSound (fun v : Vec (c * h * w) => Tensor3.flatten (f (Tensor3.unflatten v)))
-      (fun lo hi => Tensor3.flatten (Flo (Tensor3.unflatten lo) (Tensor3.unflatten hi)))
-      (fun lo hi => Tensor3.flatten (Fhi (Tensor3.unflatten lo) (Tensor3.unflatten hi))) :=
-  fun _ _ _ hu => inBox_flatten (hf _ _ _ (inBox3_unflatten hu))
-
-/-- Flat conv box endpoints. -/
-noncomputable def flatConvLo {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (lo hi : Vec (ic * h * w)) : Vec (oc * h * w) :=
-  Tensor3.flatten (convLo W b (Tensor3.unflatten lo) (Tensor3.unflatten hi))
-
-noncomputable def flatConvHi {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (lo hi : Vec (ic * h * w)) : Vec (oc * h * w) :=
-  Tensor3.flatten (convHi W b (Tensor3.unflatten lo) (Tensor3.unflatten hi))
-
-/-- **`flatConv` propagates boxes soundly** — conv joins the `Vec`-space
-    composition chain, so it can sit anywhere in a `BoxSound.comp` stack. -/
-theorem flatConv_boxSound {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
-    BoxSound (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w))
-      (flatConvLo W b) (flatConvHi W b) :=
-  (conv2d_boxSound3 W b).flat
-
-/-- Flat max-pool box endpoints. -/
-noncomputable def maxPoolFlatLo (c h w : Nat) (lo _hi : Vec (c * (2*h) * (2*w))) :
-    Vec (c * h * w) := maxPoolFlat c h w lo
-
-noncomputable def maxPoolFlatHi (c h w : Nat) (_lo hi : Vec (c * (2*h) * (2*w))) :
-    Vec (c * h * w) := maxPoolFlat c h w hi
-
-theorem maxPoolFlat_boxSound (c h w : Nat) :
-    BoxSound (maxPoolFlat c h w) (maxPoolFlatLo c h w) (maxPoolFlatHi c h w) :=
-  (maxPool2_boxSound3 (c := c) (h := h) (w := w)).flat
-
--- ════════════════════════════════════════════════════════════════
--- § The capstone, at any depth
+-- § `L∞` certification, flat
 -- ════════════════════════════════════════════════════════════════
 
 /-- `f` is *certified at `L∞` radius ε* on input `x` with class `y`: every
@@ -390,30 +310,6 @@ theorem maxPoolFlat_boxSound (c h w : Nat) :
     `Vec`-space peer of `LipschitzCertDemo.CertifiedAtLinf`. -/
 def CertifiedAtLinfV {n k : Nat} (f : Vec n → Vec k) (ε : ℝ) (x : Vec n) (y : Fin k) : Prop :=
   ∀ δ : Vec n, (∀ i, |δ i| ≤ ε) → ∀ j, j ≠ y → f (x + δ) j < f (x + δ) y
-
-/-- **IBP `L∞` certificate at arbitrary depth and layer mix.** Given *any*
-    sound interval transformer for the network — built by `BoxSound.comp` from
-    conv / max-pool / dense / ReLU pieces — separation of the propagated output
-    boxes on `x ∓ ε` certifies `x`: every perturbation with `|δ i| ≤ ε`
-    coordinatewise leaves `y` the strict argmax.
-
-    This is `ibp2_certified_at_eps` with the two-layer dense shape replaced by a
-    hypothesis, which is what lets the same theorem serve a conv net. -/
-theorem ibp_certified_of_boxSound {n k : Nat} {f : Vec n → Vec k}
-    {Flo Fhi : Vec n → Vec n → Vec k} (hs : BoxSound f Flo Fhi)
-    {x : Vec n} {ε : ℝ} {y : Fin k}
-    (hsep : ∀ j, j ≠ y →
-      Fhi (fun i => x i - ε) (fun i => x i + ε) j
-        < Flo (fun i => x i - ε) (fun i => x i + ε) y) :
-    CertifiedAtLinfV f ε x y := by
-  intro δ hδ j hj
-  have hbox : InBox (fun i => x i - ε) (fun i => x i + ε) (x + δ) := by
-    intro i
-    have h1 := abs_le.mp (hδ i)
-    have hxi : (x + δ) i = x i + δ i := rfl
-    exact ⟨by rw [hxi]; linarith [h1.1], by rw [hxi]; linarith [h1.2]⟩
-  have hout := hs _ _ _ hbox
-  exact lt_of_le_of_lt (hout j).2 (lt_of_lt_of_le (hsep j hj) (hout y).1)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The tensor-space capstone (what a conv net actually instantiates)
@@ -503,9 +399,8 @@ theorem CertifiedAtLinfV.mono {n k : Nat} {f : Vec n → Vec k} {ε ε' : ℝ}
     CertifiedAtLinfV f ε' x y :=
   fun δ hδ => hc δ fun i => (hδ i).trans hle
 
-/-- **IBP `L∞` certificate for a conv net.** Same statement as
-    `ibp_certified_of_boxSound`, in the shape a convolutional classifier has:
-    an arbitrary-depth tensor body (`conv`/`relu`/`pool`, composed by
+/-- **IBP `L∞` certificate for a conv net**, in the shape a convolutional
+    classifier has: an arbitrary-depth tensor body (`conv`/`relu`/`pool`, composed by
     `BoxSound3.comp`) followed by a dense head. Separation of the propagated
     output boxes on the pixel box `x ∓ ε` certifies `x`. -/
 theorem ibp3_certified_of_boxSound {c h w k : Nat} {f : Tensor3 c h w → Vec k}

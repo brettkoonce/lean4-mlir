@@ -34,10 +34,20 @@ also re-pointed prose and deleted what the fixed point orphaned.
    `CnnConcrete` built without the shared `_proof_1`. `MnistCNN`'s header and Proofs/README.md
    now name `TrainedCnn` as the MNIST-CNN witness. `JacobianSeal` keeps only the `HasVJPAt`
    seal, and LinearFold cites `fwdGraph_faithful`.
-3. **2e, generic:** A.1, A.3, A.4, A.6, A.7, B.4, B.5, B.7, B.8, and X.1. X.1 also takes
-   `mobilenetv2FwdGraphFull(_faithful)`; retire it together with the "scalar-BN stepping stone"
-   prose in `StableHLO.lean` and `MobileNetV2.lean`. A.1's `retire.py` hits (`Back.subst`,
-   yaml "adamW tail") are name collisions: use `--force-cited`.
+3. ✅ **2e, generic:** A.1 (5 of 20 pins), A.3, A.4, A.6, A.7, B.4, B.5, B.7, B.8 and X.1.
+   `ConvLossFold.lean` and `AdamRender.lean` are deleted. X.1 also took the dead
+   `*Rep_has_vjp` defs, `mobilenetv2FwdGraphFull(_faithful)`, `denoteMobilenet` and
+   `mobilenetv2Forward_full`. `denoteMobilenet` shares its matcher with the other `denote*`
+   functions, so the fixed point never reached it. B.4's wording changed in
+   `scripts/lipschitz_cert_pair_sdp_full.py` and both generated SDPFull files together.
+   **A.1b, held (15 pins):** `IRPrint.lean` and `check_ir_codegen.py`, the execution oracle the
+   book describes, name these as the proofs behind what they print. No StableHLO twin can stand
+   in for them. They are `dense_at_bridge`, `relu_at_bridge`, `mlp_fwd_bridge`,
+   `mlp_fwd_preact1`, `se_back_bridge`, `softmax_back_bridge`, `gelu_back_bridge`,
+   `swish_back_bridge`, `sigmoid_back_bridge`, `denote_subst3`, `maxpool3_node_bridge`,
+   `conv3_node_bridge_1to2`, `conv_compose3` (only user of `denote_subst3`),
+   `maxpool_flatten_bridge` and `conv_flatten_bridge_1to2`. They go with finding 5: decide the
+   IR tier's future, then cut or keep them as one group.
 4. **Item 3, the gate change** (Pass 2 below). Re-run `AllRefs.lean` first: the cuts removed or
    re-pointed several rows of the stale-citation table (the `ConvNeXtClose` and removed-bridge
    mentions). One new stale citation surfaced: `mobilenetv2ForwardPaper_eq_chain` is cited in

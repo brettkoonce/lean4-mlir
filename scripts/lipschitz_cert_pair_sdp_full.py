@@ -10,8 +10,8 @@ hidden layer)
 witnessed by an exact rational LDL^T factorization of
 S = 2 diag(T) - vv^T - (1/rho) T G1 T, discharged in Lean by the pooled
 files' recipe -- expand the quadratic form once, then linarith with the
-LDL^T column squares as hints. (MEASURED faster than the "deterministic"
-lipsdp_slack_of_cert entrywise route at BOTH widths; the exact-LDL
+LDL^T column squares as hints. (MEASURED faster than a "deterministic"
+entrywise norm_num check at BOTH widths; the exact-LDL
 fractions hurt 512 separate norm_num goals far more than one linarith
 goal.) Everything pair-level is 16x16 (Schur:
 the input dimension never appears); the 784-dim ingredients (G1*_eq Gram
@@ -207,7 +207,7 @@ def emit_net(tag, W1q, W2q, out_path):
     A("Everything pair-level is hidden-width-sized (16×16, Schur — the 784-dim")
     A("input never appears); the PSD witness is an exact rational LDLᵀ, checked")
     A("as one `linarith` goal per pair from the column squares (`hS*` — measured")
-    A("faster than the entrywise `lipsdp_slack_of_cert` route at both widths).")
+    A("faster than an entrywise `norm_num` check at both widths).")
     A("The 784-term work — Gram wrappers `G1*_eq`, the per-image `hpre*_eval` —")
     A("is reused from the kernel-dotZ scorecard files.")
     A("")
@@ -254,7 +254,7 @@ def emit_net(tag, W1q, W2q, out_path):
         A("")
         # the PSD slack: expand the sums once, then linarith with the 16 LDLᵀ
         # column squares as hints (the pooled files' recipe). MEASURED faster
-        # than the lipsdp_slack_of_cert route at BOTH widths (h=8: 26 vs 62
+        # than an entrywise norm_num check at BOTH widths (h=8: 26 vs 62
         # CPU-min file-level; h=16: ~14 s vs ~40-60 s per pair) — the exact-LDL
         # fractions (denominators to ~230 digits at h=16) hurt 512 separate
         # entrywise norm_num goals far more than one linarith goal.

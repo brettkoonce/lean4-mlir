@@ -72,7 +72,7 @@ the MAIN audit. -/
 -- sandwich CLOSED — and 72→91/100 @ ε=0.3 (PGD 92); unconstrained: 76→91 @0.1
 -- (PGD 94), 2→77 @0.3 (PGD 86). PSD witnesses: exact rational LDLᵀ column
 -- squares, one linarith goal per pair (the pooled files' recipe — MEASURED
--- faster than the entrywise lipsdp_slack_of_cert route at both widths; the
+-- faster than an entrywise norm_num check at both widths; the
 -- exact-LDL fractions hurt 512 separate norm_num goals far more than one
 -- linarith call). Those counts are exact-rational MEASUREMENTS; the first 8
 -- certifying images per radius carry the `CertifiedAt` theorems, and the

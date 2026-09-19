@@ -123,17 +123,6 @@ theorem decimateBack_eq_vjp (oc h w : Nat) (v : Vec (oc * (2 * h) * (2 * w)))
     (dy : Vec (oc * h * w)) :
     decimateBack oc h w dy = (decimateFlat_has_vjp oc h w).backward v dy := rfl
 
-/-- **`decimateOddIdx` is injective** — distinct output cells land at distinct ODD spatial
-    positions. Same proof as `decimateIdx_injective` (`ResNet34`): the `2·v+1` doublings are
-    injective (`omega`), then peel the `finProdFinEquiv`s. -/
-theorem decimateOddIdx_injective (oc h w : Nat) :
-    Function.Injective (decimateOddIdx oc h w) := by
-  intro k₁ k₂ heq
-  simp only [decimateOddIdx, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq, Fin.mk.injEq] at heq
-  apply finProdFinEquiv.symm.injective
-  exact Prod.ext (finProdFinEquiv.symm.injective (Prod.ext heq.1.1 (Fin.ext (by omega))))
-    (Fin.ext (by omega))
-
 /-- **Odd-decimation backward (zero-upsampling scatter at the odd positions)** — the certified
     `decimateOddFlat` VJP: route `dy k` to the odd position `decimateOddIdx k`, 0 elsewhere.
     `Vec (oc·h·w) → Vec (oc·2h·2w)`. The odd-position sibling of `decimateBack`; the map the
@@ -199,19 +188,11 @@ noncomputable def depthwiseFlatBack {c h w kH kW : Nat} (W : DepthwiseKernel c k
     Vec (c * h * w) → Vec (c * h * w) :=
   depthwiseFlat (h := h) (w := w) (dwReverse W) (fun _ => 0)
 
-/-- **Stride-2 depthwise conv backward in flat `Vec` space** — the input-VJP of
-    `depthwiseStride2Flat W b = decimateFlat ∘ depthwiseFlat`: zero-upsample the cotangent
-    (`decimateBack`, channels preserved), then the reversed-kernel depthwise conv.
-    `Vec (c·h·w) → Vec (c·2h·2w)`. The depthwise twin of `flatConvStride2Back`. -/
-noncomputable def depthwiseStride2FlatBack {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) :
-    Vec (c * h * w) → Vec (c * (2 * h) * (2 * w)) :=
-  depthwiseFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateBack c h w
-
 /-- **XLA-`SAME` stride-2 depthwise conv backward in flat `Vec` space** — the input-VJP of
     `depthwiseStride2FlatXla W b = decimateOddFlat ∘ depthwiseFlat` (`Depthwise.lean`): scatter
-    the cotangent onto the ODD positions, then the reversed-kernel depthwise conv. The odd-phase
-    peer of `depthwiseStride2FlatBack` (MobileNetV2's four strided depthwises, B0's strided
-    MBConvs); tied by `depthwiseStride2FlatXlaBack_eq_vjp_backward`. -/
+    the cotangent onto the ODD positions, then the reversed-kernel depthwise conv
+    (MobileNetV2's four strided depthwises, B0's strided MBConvs); tied by
+    `depthwiseStride2FlatXlaBack_eq_vjp_backward`. -/
 noncomputable def depthwiseStride2FlatXlaBack {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) :
     Vec (c * h * w) → Vec (c * (2 * h) * (2 * w)) :=
   depthwiseFlatBack (h := 2 * h) (w := 2 * w) W ∘ decimateOddBack c h w

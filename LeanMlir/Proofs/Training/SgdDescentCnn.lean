@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Training.SgdDescentMlp
-import LeanMlir.Proofs.Foundation.ConvLossFold
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 /-! # Lipschitz constants for the CNN softmax-CE loss — descent through the pool
@@ -1354,8 +1354,8 @@ theorem gradAt_comp_t3 {P c h w : Nat} (Z : Vec P → Vec (c * h * w))
   exact (pdiv_comp Z (fun y => fun _ : Fin 1 => G y) v hZ hG idx 0).trans (sum_t3 _)
 
 /-- **Closed form of the conv2 loss gradient** at any four-margin point —
-    the chain rule through the conv weight map (`gradAt_comp_t3`,
-    the contraction of `conv_total_loss_grad_fold`) with the pool-collapsed head gradient
+    the chain rule through the conv weight map (`gradAt_comp_t3`)
+    with the pool-collapsed head gradient
     (`pool_relu_input_grad`) and the point-free conv weight Jacobian
     (`conv2d_weight_pdiv`). The conv-layer peer of
     `mlp_input_loss_gradAt`; the spatial triple sum (vs the MLP's

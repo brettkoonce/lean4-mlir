@@ -406,26 +406,6 @@ noncomputable def bnNormalizeBackOf {n : Nat} (xh : Vec n) (s invN : ℝ)
       (.sub (.scaleConst (n : ℝ) input) (.sumBroadcast input))
       (.scale xh (.sumBroadcast (.scale xh input))))
 
-/-- **BN affine backward bridge** — the `γ·dy` half is one `scaleConst`. -/
-theorem bn_affine_back_bridge {n : Nat} (γ β : ℝ) (v dy : Vec n) :
-    (Back.scaleConst γ Back.cotangent).denote dy
-      = (bnAffine_has_vjp n γ β).backward v dy := rfl
-
-/-- **BN normalize backward bridge — the 3-term rank-1 wringer.** The
-    emitted reduce+broadcast+elementwise graph denotes the proven
-    consolidated BN-normalize backward `bnNormalize_has_vjp.backward`
-    (the cross-coordinate `Σ dx̂` and `Σ x̂·dx̂` reductions and the
-    rank-1 `x̂ᵢ·Σx̂·dx̂` correction, matched termwise). -/
-theorem bn_normalize_back_bridge {n : Nat} (ε : ℝ) (hε : 0 < ε) (x dxhat : Vec n) :
-    (bnNormalizeBackOf (bnXhat n ε x) (bnIstd n x ε) (1 / (n : ℝ))
-        Back.cotangent).denote dxhat
-      = (bnNormalize_has_vjp n ε hε).backward x dxhat := by
-  funext i
-  simp only [bnNormalizeBackOf, Back.denote, bnNormalize_has_vjp]
-  rw [show (∑ j, dxhat j * bnXhat n ε x j) = ∑ j, bnXhat n ε x j * dxhat j from
-        Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
-  ring
-
 /-- **Full BatchNorm backward bridge.** `bn_has_vjp = vjp_comp normalize
     affine`, so the emitted graph is the 3-term normalize graph fed
     `γ ⊙ dy` (the affine backward). Denotes `(bn_has_vjp …).backward`.
@@ -477,31 +457,6 @@ theorem softmax_back_bridge (c : Nat) (z dy : Vec c) :
   rw [show (∑ j, dy j * softmax c z j) = ∑ j, softmax c z j * dy j from
         Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
   ring
-
--- ════════════════════════════════════════════════════════════════
--- § Phase 3 — whole-network bridge (demonstrator)
---
--- Assemble per-op bridges into a composite via `denote_subst`. Two dense
--- layers `dense W₂ ∘ dense W₁`: the IR `subst` of their per-layer backward
--- graphs denotes the proven composite backward `(vjp_comp …).backward`.
--- This is the assembly pattern a full whole-network bridge uses;
--- `denote_subst` chains it to arbitrary depth. (Reaching the full
--- `mnistCnnNoBn` additionally needs a Tensor3 IR for conv/maxpool and the
--- `HasVJPAt` smooth-point variants; SE needs an `add` fan-in node.)
--- ════════════════════════════════════════════════════════════════
-
-/-- **End-to-end composition bridge.** The IR `subst` of two dense layers'
-    backward graphs denotes the proven composite VJP `(vjp_comp …).backward`
-    — `denote_subst` (IR chain rule) ∘ the per-op `dense` bridge. -/
-theorem twoDense_back_bridge {d₀ d₁ d₂ : Nat}
-    (W₁ : Mat d₀ d₁) (b₁ : Vec d₁) (W₂ : Mat d₁ d₂) (b₂ : Vec d₂)
-    (x : Vec d₀) (dz : Vec d₂) :
-    ((emitDenseBack W₁).subst (emitDenseBack W₂)).denote dz
-      = (vjp_comp (dense W₁ b₁) (dense W₂ b₂)
-          (dense_differentiable W₁ b₁) (dense_differentiable W₂ b₂)
-          (dense_has_vjp W₁ b₁) (dense_has_vjp W₂ b₂)).backward x dz := by
-  rw [denote_subst]
-  simp only [vjp_comp, emitDenseBack, Back.denote, dense_has_vjp]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Squeeze-and-Excitation (the fan-in case)
@@ -602,8 +557,7 @@ theorem conv3_node_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
 
 /-- **Tensor3 composition demonstrator.** The `Back3` `subst` of two conv
     layers' backward graphs denotes the composition of their Tensor3
-    backwards, via the Tensor3 chain rule `denote_subst3` — the conv/maxpool
-    analogue of `twoDense_back_bridge`. -/
+    backwards, via the Tensor3 chain rule `denote_subst3`. -/
 theorem conv_compose3 {ic mc oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 mc ic kH₁ kW₁) (W₂ : Kernel4 oc mc kH₂ kW₂) (dz : Tensor3 oc h w) :
     ((Back3.conv (h := h) (w := w) W₁ Back3.cot).subst
@@ -672,22 +626,6 @@ theorem relu_at_bridge (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) (dy :
     instance, so the dense graph still denotes it (rfl). -/
 theorem dense_at_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (v : Vec m) (dy : Vec n) :
     (emitDenseBack W).denote dy = ((dense_has_vjp W b).toHasVJPAt v).backward dy := rfl
-
-/-- **Dense→ReLU block `_at` bridge.** The IR `subst` of the dense and relu
-    backward graphs denotes the proven `vjp_comp_at` block backward — a real
-    `mnistCnnNoBn` building block, assembled from the per-op `_at` bridges via
-    `denote_subst`. -/
-theorem denseRelu_at_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (v : Vec m)
-    (h_smooth : ∀ k, dense W b v k ≠ 0) (dy : Vec n) :
-    ((emitDenseBack W).subst (emitReluBack (dense W b v))).denote dy
-      = (vjp_comp_at (dense W b) (relu n) v
-          ((dense_differentiable W b) v)
-          (relu_differentiableAt_of_smooth n _ h_smooth)
-          ((dense_has_vjp W b).toHasVJPAt v)
-          (relu_has_vjp_at n _ h_smooth)).backward dy := by
-  rw [denote_subst]
-  simp only [vjp_comp_at, emitDenseBack, emitReluBack, Back.denote,
-             HasVJP.toHasVJPAt, dense_has_vjp, relu_has_vjp_at]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Final assembly — a whole-network bridge
@@ -820,8 +758,6 @@ theorem mlp_layer1_weight_grad_bridge {d₁ d₂ d₃ : Nat}
 -- map `mlpForward` (`mlp_fwd_bridge`). The whole MLP module — forward AND
 -- backward AND parameter gradients — is then the rendering of proof-backed
 -- IR (only the SGD arithmetic and the printer/IREE/float stay trusted).
--- `Fwd.subst` / `denote_subst_fwd` give the forward chain rule, mirroring
--- `Back.subst` / `denote_subst`.
 -- ════════════════════════════════════════════════════════════════
 
 /-- A forward graph: input `x : Vec inp`, producing a `Vec out`. Each
@@ -842,23 +778,6 @@ noncomputable def Fwd.denote {inp out : Nat} (e : Fwd inp out) (x : Vec inp) : V
   | .input        => x
   | .dense W b e' => _root_.Proofs.dense W b (e'.denote x)
   | .relu e'      => _root_.Proofs.relu _ (e'.denote x)
-
-/-- Plug `g` into the input leaf of `e` (forward composition). The forward
-    analogue of `Back.subst`. -/
-def Fwd.subst {inp mid out : Nat} (e : Fwd mid out) (g : Fwd inp mid) : Fwd inp out :=
-  match e with
-  | .input        => g
-  | .dense W b e' => .dense W b (e'.subst g)
-  | .relu e'      => .relu (e'.subst g)
-
-/-- **Forward IR chain rule** — `subst` denotes composition. Mirror of
-    `denote_subst`; lets forward graphs compose to arbitrary depth. -/
-theorem denote_subst_fwd {inp mid out : Nat} (e : Fwd mid out) (g : Fwd inp mid)
-    (x : Vec inp) : (e.subst g).denote x = e.denote (g.denote x) := by
-  induction e with
-  | input => rfl
-  | dense W b e' ih => simp only [Fwd.subst, Fwd.denote, ih]
-  | relu e' ih => simp only [Fwd.subst, Fwd.denote, ih]
 
 /-- The emitted forward graph for the whole MLP:
     `dense W₂ ∘ relu ∘ dense W₁ ∘ relu ∘ dense W₀` as a `Fwd` tree. -/

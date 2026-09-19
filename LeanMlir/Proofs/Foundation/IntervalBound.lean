@@ -170,8 +170,8 @@ theorem denseHi2_eval {n h k : ℕ} (W1 : Fin h → Fin n → ℝ) (W2 : Fin k �
 
 /-! The certificate below never inspects *how* the output box was computed — only
 that it brackets the net on `x ∓ ε`. Factoring that out as a hypothesis (the
-`Vec`-space `IntervalBoundConv.lean` engine's own shape, `BoxSound` /
-`ibp_certified_of_boxSound`) is what lets a *second*, tighter bracket — a CROWN
+`IntervalBoundConv.lean` engine's own shape, `BoxSound3` /
+`ibp3_certified_of_boxSound`) is what lets a *second*, tighter bracket — a CROWN
 backward pass, say — reuse this tier instead of forking a parallel stack:
 anything that discharges `BoxSoundE` certifies. `ibp2_certified_at_eps` is then
 the interval bracket's corollary, not the entry point. -/

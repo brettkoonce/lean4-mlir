@@ -14,7 +14,7 @@ retraining, no new data, a less lossy constant per pairwise logit gap.
 Everything pair-level is hidden-width-sized (16×16, Schur — the 784-dim
 input never appears); the PSD witness is an exact rational LDLᵀ, checked
 as one `linarith` goal per pair from the column squares (`hS*` — measured
-faster than the entrywise `lipsdp_slack_of_cert` route at both widths).
+faster than an entrywise `norm_num` check at both widths).
 The 784-term work — Gram wrappers `G1*_eq`, the per-image `hpre*_eval` —
 is reused from the kernel-dotZ scorecard files.
 

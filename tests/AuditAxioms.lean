@@ -36,7 +36,6 @@ import LeanMlir.Proofs.Nets.Small.CifarBnClose
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
-import LeanMlir.Proofs.Foundation.ConvLossFold
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
@@ -125,7 +124,6 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
 import LeanMlir.Proofs.Training.SgdDescentMlp
 import LeanMlir.Proofs.Codegen.AdamStep
-import LeanMlir.Proofs.Codegen.AdamRender
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0
@@ -329,14 +327,11 @@ open Proofs
 #print axioms IR.swish_back_bridge
 #print axioms IR.sigmoid_back_bridge
 -- BatchNorm: the emitted reduce+broadcast+elementwise graph denotes the proven 3-term backward
-#print axioms IR.bn_affine_back_bridge
-#print axioms IR.bn_normalize_back_bridge
 #print axioms IR.bn_back_bridge
 #print axioms IR.layernorm_back_bridge
 #print axioms IR.softmax_back_bridge
 -- Phase 3: IR-level chain rule + an end-to-end composite bridge.
 #print axioms IR.denote_subst
-#print axioms IR.twoDense_back_bridge
 #print axioms IR.se_back_bridge
 -- Tensor3 IR: conv/maxpool lifted into a composable backward graph + chain rule.
 #print axioms IR.denote_subst3
@@ -349,7 +344,6 @@ open Proofs
 -- HasVJPAt smooth-point variants + a real dense→relu block via vjp_comp_at.
 #print axioms IR.relu_at_bridge
 #print axioms IR.dense_at_bridge
-#print axioms IR.denseRelu_at_bridge
 -- Final assembly: the emitted whole-MLP backward graph denotes the proven whole-network VJP
 #print axioms IR.mlp_whole_bridge
 -- Parameter gradients (train-step pieces)
@@ -357,7 +351,6 @@ open Proofs
 #print axioms IR.bias_grad_bridge
 #print axioms IR.mlp_layer1_weight_grad_bridge
 -- Forward IR (Phase 2)
-#print axioms IR.denote_subst_fwd
 #print axioms IR.mlp_fwd_bridge
 #print axioms IR.mlp_fwd_preact0
 #print axioms IR.mlp_fwd_preact1
@@ -493,11 +486,6 @@ open Proofs
 -- R4 Stage A, Chapter 3 (MLP)
 #print axioms StableHLO.reluF_faithful
 #print axioms StableHLO.selectPos_faithful
--- The batched-index move for ViT/ConvNeXt (§0.2 2)
-#print axioms StableHLO.den_batchOp_lnRow_eq_lnRowF
-#print axioms StableHLO.den_batchOp_gelu_eq_geluF
--- ViT increment 1 (§0.2 3)
-#print axioms StableHLO.den_batchOp_denseRow_eq_denseRowF
 -- The saved-activation backwards, which CANNOT be descriptors
 #print axioms StableHLO.den_lnRowBackB_per_example
 -- The two statements the EMIT tie structurally cannot make (both forms render identical)
@@ -625,11 +613,6 @@ open Proofs
 #print axioms mnv2_render_depthwiseb_certified
 #print axioms mnv2_render_stem_convW_certified
 #print axioms mnv2_render_stem_convb_certified
--- THE COTANGENT PASS / = ∂loss/∂θ FOLD
-#print axioms conv_total_loss_grad_fold
-#print axioms conv_bias_total_loss_grad_fold
-#print axioms depthwise_total_loss_grad_fold
-#print axioms depthwise_bias_total_loss_grad_fold
 -- ResNet-34 RENDER (Item A)
 #print axioms StableHLO.idBlockGraphPC_faithful
 #print axioms StableHLO.downBlockGraphPC_faithful
@@ -658,8 +641,6 @@ open Proofs
 -- The nested↔∘-chain bridge + correctness on the nested forward itself
 #print axioms efficientnetForwardB_full_eq_chain
 #print axioms efficientnetForwardB_full_has_vjp_correct
--- ConvNeXt RENDER (planning/archive/convnext_close.md Item A)
-#print axioms StableHLO.convNextFwdGraph_faithful
 -- ConvNeXt §1 fold START
 #print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
 #print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
@@ -855,11 +836,8 @@ open Proofs
 #print axioms floatClose_residual
 -- Strided-conv backward (r34 down-blocks + stem)
 #print axioms Proofs.decimateBack_eq_vjp
--- stride-4 (ConvNeXt 4×4/s4 patchify)
-#print axioms Proofs.decimateOddIdx_injective
 -- The CIFAR-8 chain tie
 #print axioms Proofs.FloatModel.bnMean_close_of
-#print axioms Proofs.FloatModel.bnMean_num_le
 -- The mnv2 block bridges are generic in the NORMALISATION too (`*Gen`)
 #print axioms Proofs.mobilenetv2ForwardPaperEval
 #print axioms Proofs.StableHLO.ivNoExpGraphEvalW_faithful
@@ -895,7 +873,6 @@ open Proofs
 -- §B DEPTHWISE adjoint gate (shared prereq for convnext/mnv2/enet)
 #print axioms Proofs.depthwiseConv2d_dwReverse_eq_input_grad_formula
 #print axioms Proofs.depthwiseFlatBack_eq_vjp_backward
-#print axioms Proofs.depthwiseStride2FlatBack_eq_vjp_backward
 -- Its XLA-SAME peer (MobileNetV2's four strided depthwises, B0's downsample depthwise).
 #print axioms Proofs.depthwiseStride2FlatXlaBack_eq_vjp_backward
 -- §2n §B at ConvNeXt's REAL channel LayerNorm
@@ -965,7 +942,6 @@ open Proofs
 #print axioms Proofs.resnet50ForwardB_full_eq_slots
 -- THE EVEN-KERNEL CONV BACKWARD (EvenKernelConvBack.lean)
 #print axioms Proofs.padOdd
-#print axioms Proofs.padOdd_abs_le
 #print axioms Proofs.conv2d_padOdd_eq
 #print axioms Proofs.flatConv_padOdd_eq
 #print axioms Proofs.HasVJP.backward_unique_of_eq
@@ -1253,12 +1229,6 @@ open Proofs
 -- Adam/AdamW optimizer step over ℝ (Phase 3a, vit_train_to_vit_verified.md)
 #print axioms adamVNext_nonneg
 #print axioms adam_denom_pos
-#print axioms adamWParam_apply
-#print axioms adamWParam_wd_zero
--- Phase 3b: AdamW render-close (den-level faithfulness)
-#print axioms Proofs.adamWParam_eq_scalar
-#print axioms StableHLO.adamW_certified_grad
-#print axioms StableHLO.adamB_certified_grad
 
 -- EfficientNet backward-graph faithfulness (den-level)
 #print axioms StableHLO.residualBackGraph_faithful
@@ -1337,7 +1307,6 @@ open Proofs
 #print axioms StableHLO.classifierBackGraph_faithful
 #print axioms StableHLO.finalLNBackGraph_faithful
 #print axioms StableHLO.transformerBlockVBackGraphMHP_faithful
-#print axioms StableHLO.patchEmbedBack_faithful
 #print axioms StableHLO.patchEmbedBackGraph_faithful
 #print axioms StableHLO.vitNetBackGraph_faithful
 
@@ -1606,8 +1575,6 @@ open Proofs
 
 -- Per-pair LipSDP tightening (LipschitzCertPairSDP.lean + the generated instances)
 #print axioms Proofs.LipschitzCertDemo.relu_slope_restricted
-#print axioms Proofs.LipschitzCertDemo.quad_form_nonneg_of_ldl
-#print axioms Proofs.LipschitzCertDemo.lipsdp_slack_of_cert
 #print axioms Proofs.LipschitzCertDemo.pair_sq_bound
 #print axioms Proofs.LipschitzCertDemo.mlp_gap_eq
 #print axioms Proofs.LipschitzCertDemo.certified_at_eps_pair
@@ -1672,22 +1639,17 @@ open Proofs
 #print axioms Proofs.IBP.BoxSound.comp
 #print axioms Proofs.IBP.BoxSound3.comp
 #print axioms Proofs.IBP.BoxSound3V.comp3
-#print axioms Proofs.IBP.denseV_boxSound
 #print axioms Proofs.IBP.denseT_boxSound3V
-#print axioms Proofs.IBP.reluV_boxSound
 #print axioms Proofs.IBP.reluT_boxSound3
 #print axioms Proofs.IBP.flatten_reluT
 #print axioms Proofs.IBP.conv2d_boxSound3
-#print axioms Proofs.IBP.flatConv_boxSound
 #print axioms Proofs.IBP.maxPool2_boxSound3
-#print axioms Proofs.IBP.maxPoolFlat_boxSound
 -- the conv peer of denseLo_uniform
 #print axioms Proofs.IBP.convLo_uniform
 #print axioms Proofs.IBP.convHi_uniform
 -- DEPTH, concretely
 #print axioms Proofs.IBP.deepNet_boxSound
 -- capstones (flat and tensor shape) + radius monotonicity
-#print axioms Proofs.IBP.ibp_certified_of_boxSound
 #print axioms Proofs.IBP.ibp3_certified_of_boxSound
 #print axioms Proofs.IBP.CertifiedAtLinf3.mono
 #print axioms Proofs.IBP.CertifiedAtLinfV.mono
@@ -1786,16 +1748,9 @@ open Proofs
 #print axioms cnnVerified_fwd_faithful
 #print axioms cifarVerified_denote_eq
 #print axioms cifarVerified_fwd_faithful
-#print axioms mobilenetv2Rep_denote_eq
-#print axioms mobilenetv2Rep_fwd_faithful
 -- mnv2 FULL-paper tie (the committed 21-entry spec ↔ mobilenetv2ForwardPaper)
 #print axioms mobilenetv2Verified_denote_eq
 #print axioms mobilenetv2Verified_fwd_faithful
-#print axioms efficientnetRep_denote_eq
-#print axioms convnextRep_denote_eq
-#print axioms convnextRep_fwd_faithful
-#print axioms vitRep_denote_eq
-#print axioms r34Rep_denote_eq
 -- FULL committed-spec ties (unified weight bundles, 2026-07-07)
 #print axioms resnet34Verified_denote_eq
 #print axioms resnet34Verified_fwd_faithful
