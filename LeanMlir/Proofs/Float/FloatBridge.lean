@@ -121,15 +121,6 @@ private theorem one_add_u_le_pow {k : ℕ} (hk : 1 ≤ k) :
   have h := pow_le_pow_right₀ M.one_le_one_add_u hk
   simpa using h
 
-/-- `(1+u)^k − 1 ≤ k·u·(1+u)^k` — the reading key from the compounded form
-    back to the familiar first-order "≈ k·u" bound. -/
-theorem pow_one_add_sub_one_le (u : ℝ) (hu : 0 ≤ u) (k : ℕ) :
-    (1 + u) ^ k - 1 ≤ k * u * (1 + u) ^ k := by
-  -- `(1+u)^k − 1 = u·Σ_{i<k} (1+u)^i`, each term `≤ (1+u)^k`
-  rw [← geom_sum_mul, add_sub_cancel_left, mul_comm _ u, mul_comm (k : ℝ), mul_assoc]
-  refine mul_le_mul_of_nonneg_left ((Finset.sum_le_card_nsmul _ _ _ fun i hi =>
-    pow_le_pow_right₀ (by linarith) (Finset.mem_range.mp hi).le).trans_eq (by simp)) hu
-
 -- ════════════════════════════════════════════════════════════════
 -- § The two scalar assembly steps (pure-ℝ bookkeeping)
 -- ════════════════════════════════════════════════════════════════
@@ -243,16 +234,6 @@ theorem dot_close : ∀ {n : ℕ} (x y : Vec n),
       (M.one_add_u_le_pow (by omega))
       (ih (fun i => x i.castSucc) (fun i => y i.castSucc))
       (M.err _) (M.err _)
-
-/-- `dot_close` in the first-order shape: `≤ (n+1)·u·(1+u)^(n+1)·Σ|xᵢyᵢ|`. -/
-theorem dot_close_linear {n : ℕ} (x y : Vec n) :
-    |M.dot x y - ∑ i, x i * y i| ≤
-      (n + 1 : ℝ) * M.u * (1 + M.u) ^ (n + 1) * ∑ i, |x i * y i| := by
-  refine (M.dot_close x y).trans ?_
-  have h := pow_one_add_sub_one_le M.u M.u_nonneg (n + 1)
-  push_cast at h
-  exact mul_le_mul_of_nonneg_right h
-    (Finset.sum_nonneg fun i _ => abs_nonneg _)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Mixed-precision dot: a leaf roundoff `u_leaf` + an accumulate `u_acc`
@@ -469,15 +450,6 @@ theorem relu_close {n : Nat} (xt xa : Vec n) (e : ℝ)
 -- ════════════════════════════════════════════════════════════════
 -- § Capstones: the Tier-1 nets
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Linear-net forward extraction (Chapter 1).** The rounded `mnistLinear`
-    is within the explicit `denseErr` budget of the real one, per logit. With
-    `u = 2⁻²⁴` this is the binary32 forward-error bound for the certified
-    linear classifier. -/
-theorem linear_float_close {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
-    (j : Fin n) :
-    |M.dense W b x j - mnistLinear W b x j| ≤ M.denseErr W b x 0 j :=
-  M.dense_close_fresh W b x j
 
 /-- **MLP forward extraction (Chapter 2).** The rounded 3-layer MLP is within
     the layer-2 `denseErr` budget (at inherited error `e₁`) of the real MLP —
@@ -1663,44 +1635,6 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
   have hsFy : |M.softmaxF fexp zt k - oneHot n label k| ≤ 1 + smErr M.u eexp δ n := by
     linarith [abs_sub_le (M.softmaxF fexp zt k) (softmax n z k) (oneHot n label k)]
   exact M.rnd_close (e := smErr M.u eexp δ n) (by rwa [sub_sub_sub_cancel_right]) hsFy
-
-/-- **`|softmax z k| ≤ 1`** — the real softmax is a probability (public face of the
-    `softmax_nonneg`/`softmax_le_one` pair, the magnitude attention's output matmul needs). -/
-theorem softmax_abs_le_one {n : ℕ} (z : Vec n) (k : Fin n) :
-    |softmax n z k| ≤ 1 := by
-  rw [abs_of_nonneg (softmax_nonneg z k)]; exact softmax_le_one z k
-
-/-- **`smErr` is nonnegative** under `eexp ≥ 0`, `δ ≥ 0`, and `smRho < 1` — the absolute
-    softmax-vs-softmax budget bounds an absolute value, so it is itself `≥ 0`. (Extracted
-    from `softmax_ce_cot_close`'s internal `hsm0`; needed as the `0 ≤ eweight` precondition
-    of any downstream dot at perturbed softmax weights, e.g. attention's output matmul.) -/
-theorem smErr_nonneg {eexp δ : ℝ} {n : ℕ} (heexp0 : 0 ≤ eexp) (hδ0 : 0 ≤ δ)
-    (hρ1 : smRho M.u eexp n < 1) : 0 ≤ smErr M.u eexp δ n := by
-  have hu := M.u_nonneg
-  have hκ0 : 0 ≤ smKappa M.u eexp n :=
-    div_nonneg (by linarith [M.smRho_nonneg (eexp := eexp) (n := n) heexp0]) (by linarith)
-  have hexp0 : 0 ≤ Real.exp (2 * δ) - 1 := by have := Real.add_one_le_exp (2 * δ); linarith
-  simp only [smErr]
-  nlinarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp n)]
-
-/-- **Float softmax at float logits vs real softmax at real logits — within `smErr`.**
-    The rounding half (`softmaxF_close`, float-vs-real at the *same* logits) plus the
-    logit-perturbation half (`softmax_perturb`, real-vs-real under a coordinatewise
-    logit error `δ`), assembled by the triangle inequality. This is the per-row engine
-    for attention's softmax (each row's logits are the float scores, off the real scores
-    by `δ`); extracted from `softmax_ce_cot_close`'s internal `hsm` (here without the
-    onehot subtraction, so it applies to any softmax position, not just the loss head). -/
-theorem softmaxF_close_at (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
-    (zt z : Vec n) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
-    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
-    (hρ1 : smRho M.u eexp n < 1)
-    (hδ : ∀ k', |zt k' - z k'| ≤ δ) (k : Fin n) :
-    |M.softmaxF fexp zt k - softmax n z k| ≤ smErr M.u eexp δ n := by
-  have hA := M.softmaxF_close fexp zt heexp0 heexp1 hfexp hρ1 k
-  have hB := softmax_perturb zt z hδ k
-  have htri := abs_sub_le (M.softmaxF fexp zt k) (softmax n zt k) (softmax n z k)
-  simp only [smErr]
-  linarith
 
 /-- **Numeric head budget at the committed MNIST output** (`n = 10`): for
     any model at binary32 accuracy, `exp` accurate to `eexp ≤ 10⁻⁶`

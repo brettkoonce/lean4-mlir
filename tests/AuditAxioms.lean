@@ -215,12 +215,9 @@ open Proofs
 #print axioms mlp_has_vjp_correct
 
 -- Nonzero-Jacobian seal (JacobianSeal.lean, planning/archive/whole_network_backward.md Item B)
-#print axioms HasVJP.backward_ne_zero_of_pdiv_ne
 #print axioms sum_smul_basisVec
 #print axioms fderiv_eq_zero_of_pdiv_all_zero
 #print axioms exists_pdiv_ne_of_fderiv_ne
-#print axioms HasVJP.backward_nontrivial_of_fderiv_ne
-#print axioms mnistLinear_backward_nontrivial
 -- The pointwise (HasVJPAt) seal variants — the kinked witnesses are HasVJPAt, not HasVJP.
 #print axioms HasVJPAt.backward_ne_zero_of_pdiv_ne
 #print axioms HasVJPAt.backward_nontrivial_of_fderiv_ne
@@ -310,13 +307,8 @@ open Proofs
 
 -- Chapter-4 MNIST 2D CNN (no BN)
 #print axioms mnistCnnNoBn_has_vjp_at_correct
-#print axioms Micro.mnistMicroCnn_has_vjp_correct
--- Tier-1 discharged instance
+-- the reusable MaxPool2Smooth discharge
 #print axioms maxPool2Smooth_of_injective
-#print axioms Mini.miniCnn_has_vjp_correct
--- Tier-2: same CNN with genuine 3×3 SAME-padding convolutions
-#print axioms conv2d_center3x3
-#print axioms Spatial.spatialCnn_has_vjp_correct
 -- Chapter-3 MLP: concrete whole-network instance, every ReLU smoothness hypothesis discharged
 #print axioms MlpConcrete.mlpConcrete_has_vjp_correct
 -- ResNet-style CNN *with* BN
@@ -396,9 +388,7 @@ open Proofs
 #print axioms StableHLO.linWeightDen_is_loss_descent
 #print axioms StableHLO.linBiasDen_is_certified
 -- PoC capstones (LinearFold.lean)
-#print axioms LinPoC.poc_fwd_faithful
 #print axioms LinPoC.poc_fwd_is_render
-#print axioms LinPoC.poc_train_step_certified
 -- Tail fold closed
 #print axioms LinPoC.poc_weightSgd_den_eq
 #print axioms LinPoC.poc_biasSgd_den_eq
@@ -575,9 +565,6 @@ open Proofs
 #print axioms StableHLO.cifar8FwdGraph_faithful
 #print axioms StableHLO.cifar8BnFwdGraph_faithful
 
--- Chapter-6 ResNet-style net
-#print axioms StableHLO.resnetFwdGraph_faithful
-
 -- Chapter-6 ResNet **Milestone B** (toward real ResNet-34)
 #print axioms flatConvStride2_has_vjp_correct
 -- ...and its weight-VJP (the kernel grad for training a strided block)
@@ -627,7 +614,6 @@ open Proofs
 #print axioms cifar_bn_render_gamma_certified
 #print axioms cifar_bn_render_beta_certified
 -- CNN conv-close UPGRADE
-#print axioms cnnDenseHeadCot_denote
 #print axioms cnn_render_convW2_chain_certified
 #print axioms cnn_render_convb2_chain_certified
 #print axioms cnn_render_convW1_chain_certified
@@ -781,7 +767,6 @@ open Proofs
 
 -- ℝ→Float32 bridge, Tier 1 (FloatBridge.lean)
 #print axioms FloatModel.dot_close
-#print axioms FloatModel.dot_close_linear
 -- P2 (TreeReduceBridge.lean, planning/archive/adjoint_chain.md)
 #print axioms FloatModel.dotMixed
 #print axioms FloatModel.dot_close_mixed
@@ -1044,10 +1029,6 @@ open Proofs
 #print axioms Proofs.vitInputGradKB_eq_batchMap_vitForwardKV_vjp
 #print axioms Proofs.vitInputGradKB_correct
 #print axioms Proofs.vitTinyInputGradB_eq_vitTiny_vjp
--- ViT WHOLE-NET FORWARD (forward peer of vit_grad_floatBridges)
-#print axioms FloatModel.softmaxF_close_at
-#print axioms FloatModel.smErr_nonneg
-#print axioms FloatModel.softmax_abs_le_one
 -- ViT TRANSFORMER-BLOCK FOLD (planning/archive/floatbridge_enet_vit.md §2)
 #print axioms FloatModel.dotSgd_step_close
 #print axioms FloatModel.sumSgd_step_close
@@ -1063,8 +1044,6 @@ open Proofs
 -- CIFAR-8 last-conv SGD descent (SgdDescentCifar.lean)
 #print axioms Proofs.cifarCnn8Forward_factor
 #print axioms Proofs.cifar8_lastConv_sgd_descends
-#print axioms FloatModel.pow_one_add_sub_one_le
-#print axioms FloatModel.linear_float_close
 #print axioms FloatModel.mlp_float_close
 -- The numeric rung
 #print axioms FloatModel.pow_gamma_bound
@@ -1135,7 +1114,6 @@ open Proofs
 #print axioms mlp_hidden_logit_drift
 #print axioms mlp_hidden_loss_grad_lipschitz
 #print axioms mlp_hidden_sgd_descends
-#print axioms mlp_output_sgd_descends
 -- Output-layer η-composition (planning §1a/§4, G1 for the MLP)
 #print axioms mlp_output_float_sgd_descends
 -- Hidden-layer float-backward grad-close (planning §1a/§4, the joint-step engine)
@@ -1148,7 +1126,6 @@ open Proofs
 #print axioms mlp_hidden_float_sgd_descends
 #print axioms mlp_input_loss_differentiableAt
 #print axioms mlp_input_loss_gradAt
-#print axioms mlp_input_logit_drift
 #print axioms mlp_input_loss_grad_lipschitz
 #print axioms mlp_input_sgd_descends
 -- Input-layer η-composition (planning §3 descent, Step 2)
@@ -1165,19 +1142,16 @@ open Proofs
 #print axioms sum_t3
 #print axioms sum_window_cells
 #print axioms maxPoolFlat_apply
-#print axioms maxPoolFlat_entry_lipschitz
 #print axioms maxPoolFlat_l1_contract
 #print axioms ne_of_gap_of_close
 #print axioms lt_of_lt_gap_of_close
 #print axioms MaxPool2MarginQ.smooth_of_close
 #print axioms MaxPool2MarginQ.smooth
 #print axioms MaxPool2MarginQ.isArgmax_iff
-#print axioms MaxPool2MarginQ.pdiv3_eq
 -- Float-bridge §3 (CNN descent, Increment 1 keystone): the pool selector is an indicator pass-through in float
 #print axioms MaxPool2MarginQ.poolBack_close
 #print axioms conv2d_eq_convPad
 #print axioms abs_convPad_le
-#print axioms k4Idx_inj
 #print axioms sum_abs_kernel_slab_le
 #print axioms sum_abs_k4
 #print axioms conv2d_kernel_sub
@@ -1188,7 +1162,6 @@ open Proofs
 #print axioms ce_head3_input_grad
 #print axioms pool_relu_input_grad
 #print axioms conv2d_weight_pdiv
-#print axioms conv2d_weight_pdiv_row_l1
 #print axioms cnn_conv2_loss_differentiableAt
 #print axioms cnn_conv2_loss_gradAt
 -- Float-bridge §3 (CNN descent, Increment 1 keystone): the certified conv-2 gradient in dense/reluMask form
@@ -1203,8 +1176,6 @@ open Proofs
 #print axioms FloatModel.cnnConv2FloatGrad_apply
 #print axioms FloatModel.cnnConv2GradBudget
 #print axioms cnn_conv2_grad_close
-#print axioms cnn_pool_l1_drift
-#print axioms cnn_conv2_logit_drift
 #print axioms cnn_margin2_keeps_offkink
 #print axioms cnn_margin3_keeps_offkink
 #print axioms cnn_margin4_keeps_offkink
@@ -1216,17 +1187,12 @@ open Proofs
 #print axioms k4Idx_surj
 #print axioms cnn_conv2_float_sgd_descends
 -- The conv1 rung (SgdDescentCnn.lean)
-#print axioms sum_pinned_le
 #print axioms abs_convTap_expand
 #print axioms convTap_out_l1
-#print axioms convTap_in_l1
 #print axioms conv2d_input_pdiv3
 #print axioms conv2d_flat_input_pdiv
 #print axioms conv2d_input_entry_drift
 #print axioms conv2d_input_l1_drift
-#print axioms cnn1_z2_entry_drift
-#print axioms cnn1_pool_l1_drift
-#print axioms cnn1_logit_drift
 #print axioms cnn1_margin1_keeps_offkink
 #print axioms cnn1_margin2_keeps_offkink
 #print axioms cnn1_margin3_keeps_offkink
@@ -1257,8 +1223,6 @@ open Proofs
 #print axioms conv2d_flat_bias_drift_total
 #print axioms conv2d_flat_bias_drift_sum
 #print axioms conv2d_bias_pdiv
-#print axioms cnnb2_pool_l1_drift
-#print axioms cnnb2_logit_drift
 #print axioms cnnb2_margin2_keeps_offkink
 #print axioms cnnb2_margin3_keeps_offkink
 #print axioms cnnb2_margin4_keeps_offkink
@@ -1266,9 +1230,6 @@ open Proofs
 #print axioms cnn_conv2_bias_loss_gradAt
 #print axioms cnn_conv2_bias_loss_grad_lipschitz
 #print axioms cnn_conv2_bias_sgd_descends
-#print axioms cnnb1_z2_entry_drift
-#print axioms cnnb1_pool_l1_drift
-#print axioms cnnb1_logit_drift
 #print axioms cnnb1_margin1_keeps_offkink
 #print axioms cnnb1_margin2_keeps_offkink
 #print axioms cnnb1_margin3_keeps_offkink

@@ -2,8 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # r34 Item A — the PER-CHANNEL-BN ResNet-34 forward graph (matches the render)
 
-The ResNet-34 peer of `MobileNetV2RenderPC.lean`. `StableHLO.lean`'s `resnetFwdGraph` is a
-*representative* (stem + 1 identity + 1 projection block + GAP + dense) using **scalar** `bnF`; the
+The ResNet-34 peer of `MobileNetV2RenderPC.lean`. The
 operational render ([`tests/TestResnet34Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestResnet34Train.lean)) emits **per-channel** BN, the full 16-block
 `[3,4,6,3]` net, a 7×7 strided stem and a maxpool. This file is the per-channel twin matching the
 render:
@@ -15,7 +14,7 @@ render:
 * per-block typed `SHlo` graphs `idBlockGraphPC`/`downBlockGraphPC` + their `_faithful` lemmas
   (`den (block graph) = block forward (den input)`), via `bnPerChannelF_faithful`/`reluF_faithful`/
   `flatConv(Strided)F_faithful`/`den_addV`. The residual skip reuses the block-input subtree in both
-  `addV` operands (tree-safe), as in `resnetFwdGraph`.
+  `addV` operands (tree-safe).
 
 Part 2 (below) chains these into the full `resnet34FwdGraphFullPC` + `resnet34Forward_full_pc` +
 faithfulness at the render dims (3×224² → 7×7×512). Prerequisite for the structured render (Item B).
@@ -190,7 +189,7 @@ theorem downBlockGraphPC_faithful (p epsStr : String) {ic oc h w kHp kWp : Nat}
 /-- Whole **per-channel-BN ResNet-34 forward** graph at the render dims (3×224² → 7×7×512): 7×7
     strided stem (`flatConvStridedF`) → bn → relu → `maxPoolF` → `[3,4,6,3]` basic blocks (each via
     `idBlockGraphPC`/`downBlockGraphPC`) → GAP → dense. **Per-channel** BN throughout, matching the
-    render. The per-channel twin of `resnetFwdGraph`, at full depth. -/
+    render. -/
 def resnet34FwdGraphFullPC (epsStr : String) (ε : ℝ)
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (γs βs : Vec 64)
     (a0W1 : Kernel4 64 64 3 3) (a0b1 : Vec 64) (a0g1 a0t1 : Vec 64) (a0W2 : Kernel4 64 64 3 3) (a0b2 : Vec 64) (a0g2 a0t2 : Vec 64)

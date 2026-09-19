@@ -229,7 +229,7 @@ theorem cifarCnn_has_vjp_at_correct
 -- tensor is injective and the second pool is smooth. All eight smoothness
 -- hypotheses then discharge, yielding an **unconditional** whole-network VJP —
 -- the non-vacuity witness for the conditional capstone, inside the three-axiom
--- closure (no `native_decide`). The Chapter-4 peer of `Mini`/`Spatial`.
+-- closure (no `native_decide`).
 -- ════════════════════════════════════════════════════════════════
 
 namespace Tiny

@@ -1421,8 +1421,7 @@ inductive SHlo : Nat → Type where
   --    the norm. It costs nothing in the emit because the renderer hands it an `.operand` leaf at
   --    the norm tree's SSA name — `pretty` prints nothing for a leaf. ⚠ Handing it the norm
   --    SUBTREE instead would emit ~80,000 lines: `pretty` has no CSE (§4 of the handoff), so the
-  --    tree would be duplicated at all 200 sites. Emit once, thread the name — `resnetFwdGraph`'s
-  --    "tree-safe via operand leaves" trick used for its other purpose.
+  --    tree would be duplicated at all 200 sites. Emit once, thread the name.
   --
   --    ⚠⚠ TWO ops, and the earlier four-op split (a separate `addScalarF : SHlo 1 → SHlo 1 →
   --    SHlo 1` and `gradClipFacF : SHlo 1 → SHlo 1`) was RETRACTED for a reason worth knowing
@@ -3808,81 +3807,7 @@ theorem cifar8BnFwdGraph_faithful {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat} (
              denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful,
              bnPerChannelF_faithful, den_operand]
 
-/-- Whole **ResNet-style forward** graph (Chapter 5): the structure the proven
-    whole-net VJP `cnn_has_vjp_at` already covers —
-    `dense ∘ GAP ∘ rblkP ∘ rblk ∘ maxPool ∘ cbr(stem)`. The stem is `convBnRelu`
-    (SAME conv on the `2h×2w` input), one maxpool to `h×w`, an identity basic
-    block (`rblk`: `relu(F(y)+y)`), a projection basic block (`rblkP`:
-    `relu(proj(y)+F(y))`, `c→oc`), global-average-pool, then dense. Each block's
-    skip reuses the block-input **subtree** in BOTH `addV` operands, so the graph
-    stays a tree (the §7 "tree-safe via operand leaves" trick, generalized to a
-    computed input). `epsStr` is the shared ε literal; each BN carries scalar γ/β
-    SSA inputs (`%g*`/`%bt*`). -/
-def resnetFwdGraph
-    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
-    (epsStr : String)
-    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
-    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
-    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ)
-    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
-    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
-    (f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip : ℝ)
-    (Wd : Mat oc nClasses) (bd : Vec nClasses)
-    (x : Vec (ic*(2*h)*(2*w))) : SHlo nClasses :=
-  -- stem (convBnRelu on the 2h×2w input) → maxpool to h×w
-  let pooled : SHlo (c*h*w) :=
-    .maxPoolF (c := c) (h := h) (w := w)
-      (.reluF (.bnF "%gs" "%bts" epsStr εs γs βs
-        (.flatConvF (h := 2*h) (w := 2*w) "%Ws" "%bs" Ws bs (.operand "%x" x))))
-  -- identity basic block: relu(F(pooled) + pooled),  F = bn∘conv ∘ relu∘bn∘conv
-  let rblkOut : SHlo (c*h*w) :=
-    .reluF (.addV
-      (.bnF "%g2" "%bt2" epsStr f₂ h₂ i₂
-        (.flatConvF (h := h) (w := w) "%W2" "%b2" W₂ b₂
-          (.reluF (.bnF "%g1" "%bt1" epsStr f₁ h₁ i₁
-            (.flatConvF (h := h) (w := w) "%W1" "%b1" W₁ b₁ pooled)))))
-      pooled)
-  -- projection basic block: relu(proj(rblkOut) + F'(rblkOut)),  c→oc
-  let rblkPOut : SHlo (oc*h*w) :=
-    .reluF (.addV
-      (.bnF "%gp" "%btp" epsStr fp hp ip
-        (.flatConvF (h := h) (w := w) "%Wp" "%bp" Wp bp rblkOut))
-      (.bnF "%g2p" "%bt2p" epsStr e₂ g₂ bb₂
-        (.flatConvF (h := h) (w := w) "%W2p" "%b2p" W₂' b₂'
-          (.reluF (.bnF "%g1p" "%bt1p" epsStr e₁ g₁ bb₁
-            (.flatConvF (h := h) (w := w) "%W1p" "%b1p" W₁' b₁' rblkOut))))))
-  denseF "%Wd" "%bd" Wd bd (.gapF (c := oc) (h := h) (w := w) rblkPOut)
-
-/-- **ResNet-style forward faithfulness.** The forward graph denotes the proven
-    `cnnForward` — the net whose whole-network VJP is `cnn_has_vjp_at` (discharged
-    unconditionally by `CnnConcrete.cnnConcrete_has_vjp_correct`). The residual
-    `addV`s denote the `+` of `residual`/`residualProj` (`biPath`); each skip's
-    duplicated subtree denotes the same block-input value, so `den` reads it
-    twice and the fan-in is exact. -/
-theorem resnetFwdGraph_faithful
-    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
-    (epsStr : String)
-    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
-    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
-    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ)
-    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
-    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
-    (f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip : ℝ)
-    (Wd : Mat oc nClasses) (bd : Vec nClasses)
-    (x : Vec (ic*(2*h)*(2*w))) :
-    den (resnetFwdGraph epsStr Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
-          W₁' b₁' W₂' b₂' Wp bp f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip Wd bd x)
-      = cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
-          W₁' b₁' W₂' b₂' Wp bp f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip Wd bd x := by
-  -- LHS: collapse the graph denotation to its explicit nested form.
-  simp only [resnetFwdGraph, denseF_faithful, gapF_faithful, reluF_faithful,
-             bnF_faithful, flatConvF_faithful, maxPoolF_faithful, den_addV, den_operand]
-  -- RHS: unfold the abbreviations (incl. `biPath`, which `simp` can't unfold below
-  -- its arity), then peel the `∘`s. Both sides land on the same `+`-nested form.
-  unfold cnnForward cbr rblk rblkP residual residualProj biPath
-  simp only [Function.comp_apply]
-
-/-- Whole **MobileNetV2 forward** graph (representative, ch7 peer of `resnetFwdGraph`):
+/-- Whole **MobileNetV2 forward** graph (representative, ch7):
     stem (conv→bn→relu6) → skip inverted-residual `addV(invresBody, stem)` → no-skip
     inverted-residual → global-average-pool → dense. Each inverted-residual body is
     `bn∘conv(project) ∘ relu6∘bn∘depthwise ∘ relu6∘bn∘conv(expand)`; the skip's `addV`
@@ -3932,7 +3857,7 @@ def mobilenetv2FwdGraph
     proven `mobilenetv2Forward` (whose end-to-end VJP at a smooth point is
     `mobilenetv2_has_vjp_at`). The skip `addV` denotes the `+` of `residual`/`biPath`;
     the inverted-residual body's `bn/conv/depthwise/relu6` ops denote
-    `invresBody = ivProject ∘ ivDepthwise ∘ ivExpand`. ch7 peer of `resnetFwdGraph_faithful`. -/
+    `invresBody = ivProject ∘ ivDepthwise ∘ ivExpand`. -/
 theorem mobilenetv2FwdGraph_faithful
     {ic c mid₁ oc mid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
      kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ nClasses : Nat}
@@ -4077,7 +4002,7 @@ theorem mobilenetv2FwdGraphFull_faithful
   simp only [Function.comp_apply]
 
 
-/-- Whole **ConvNeXt forward** graph (representative, ch9 peer of `resnetFwdGraph`): 1×1
+/-- Whole **ConvNeXt forward** graph (representative, ch9): 1×1
     patchify conv → stem-LN → 2 residual ConvNeXt blocks (depthwise → LN → 1×1 expand →
     GELU → 1×1 project → layerScale, then `addV` skip) → GAP → head-LN → dense. Scalar LN
     (`= bnForward`, via `bnF`); uses `geluF` + the new `layerScaleF`. Denotes the proven

@@ -85,17 +85,6 @@ theorem cnnChainCotW2_eq {c h w d1 nClasses : Nat}
           else 0 := by
   rfl
 
-/-- **Dense-head cotangent, explicit.** `cnnDenseHeadCot.denote dy` is the explicit dense
-    backprop `W₃·(relu'(h3)⊙(W₄·(relu'(h4)⊙(W₅·dy))))` — the `mlpCotOut`-style chain spelled out,
-    via the `IR.Back` chain rule `denote_subst`. -/
-theorem cnnDenseHeadCot_denote {c h w d1 nClasses : Nat}
-    (W₃ : Mat (c * h * w) d1) (W₄ : Mat d1 d1) (W₅ : Mat d1 nClasses) (h3 h4 : Vec d1)
-    (dy : Vec nClasses) :
-    (cnnDenseHeadCot W₃ W₄ W₅ h3 h4).denote dy
-      = Mat.mulVec W₃ (fun i => if h3 i > 0
-          then Mat.mulVec W₄ (fun k => if h4 k > 0 then Mat.mulVec W₅ dy k else 0) i else 0) := by
-  simp only [cnnDenseHeadCot, denote_subst, emitDenseBack, emitReluBack, Back.denote]
-
 -- ════════════════════════════════════════════════════════════════
 -- § The chain-pinned conv closes — the generic bridges at the actual cotangents
 -- ════════════════════════════════════════════════════════════════

@@ -22,8 +22,7 @@ dense`). What's genuinely new versus the MLP:
   entry then cannot reorder any window, so the argmax — hence the
   pool's routing pattern — FREEZES along the step segment
   (`MaxPool2MarginQ.isArgmax_iff`), exactly as the ReLU margins freeze the
-  masks. The pool is also 1-Lipschitz per entry
-  (`maxPoolFlat_entry_lipschitz`) and `ℓ1`-contractive across entries
+  masks. The pool is also `ℓ1`-contractive across entries
   (`maxPoolFlat_l1_contract` — the 2×2 stride-2 windows partition the
   input), so drift passes through it unamplified.
 
@@ -211,16 +210,6 @@ theorem maxPoolFlat_apply {c h w : Nat} (u : Vec (c * (2*h) * (2*w)))
   rw [flatten_t3Idx, winRowInv_zero, winRowInv_one, winColInv_zero,
     winColInv_one]
   rfl
-
-/-- Per-entry pool Lipschitz bound: if every input entry moves by at most
-    `δ`, every pooled entry moves by at most `δ`. -/
-theorem maxPoolFlat_entry_lipschitz {c h w : Nat}
-    (u v : Vec (c * (2*h) * (2*w))) {δ : ℝ}
-    (hδ : ∀ k, |u k - v k| ≤ δ) (q : Fin (c * h * w)) :
-    |maxPoolFlat c h w u q - maxPoolFlat c h w v q| ≤ δ := by
-  obtain ⟨ci, ho, wo, rfl⟩ := t3Idx_surj q
-  rw [maxPoolFlat_apply, maxPoolFlat_apply]
-  exact max4_sub_abs_le (hδ _) (hδ _) (hδ _) (hδ _)
 
 /-- `ℓ1` contraction: the pooled drift, summed over all pooled entries, is
     at most the input drift summed over all input entries (windows are
@@ -427,12 +416,6 @@ theorem k4Idx_surj {oc ic kH kW : Nat} (idx : Fin (oc * ic * kH * kW)) :
     (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2,
     (finProdFinEquiv.symm idx).2, ?_⟩
   simp only [k4Idx, Prod.mk.eta, Equiv.apply_symm_apply]
-
-theorem k4Idx_inj {oc ic kH kW : Nat} {o : Fin oc} {c c' : Fin ic}
-    {kh kh' : Fin kH} {kw kw' : Fin kW}
-    (hEq : k4Idx o c kh kw = k4Idx o c' kh' kw') :
-    c = c' ∧ kh = kh' ∧ kw = kw' := by
-  simpa [k4Idx, and_assoc] using hEq
 
 /-- The output-channel slabs tile the kernel: summing the slab masses over
     the output channels recovers the total `ℓ1` mass. -/
@@ -862,21 +845,6 @@ theorem conv2d_kernel_drift_sum {ic oc h w kH kW : Nat} (b : Vec oc)
   rw [sum_abs_k4]
   simp [Finset.mul_sum, mul_assoc]
 
-/-- **The pool's routing pattern is frozen**: under the margin, the
-    `pdiv3` Jacobian of the pool is entry-for-entry IDENTICAL at the
-    margined point and at any `δ`-close point. This is what lets the pool
-    behave as a fixed linear selector along the whole step segment. -/
-theorem MaxPool2MarginQ.pdiv3_eq {c h w : Nat} {δ : ℝ} (hδ0 : 0 ≤ δ)
-    {x y : Tensor3 c (2*h) (2*w)} (hm : MaxPool2MarginQ δ x)
-    (hclose : ∀ ci hi wi, |y ci hi wi - x ci hi wi| ≤ δ)
-    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w))
-    (co : Fin c) (ho : Fin h) (wo : Fin w) :
-    pdiv3 maxPool2 y ci hi wi co ho wo =
-      pdiv3 maxPool2 x ci hi wi co ho wo := by
-  rw [pdiv3_maxPool2_smooth y (hm.smooth_of_close hclose) ci hi wi co ho wo,
-    pdiv3_maxPool2_smooth x (hm.smooth hδ0) ci hi wi co ho wo]
-  simp only [hm.isArgmax_iff hclose ci hi wi]
-
 /-- **Float pool-backward closeness** (Increment 1 keystone). Under the pool
     margin the float post-relu argmax matches the real one
     (`isArgmax_iff`), so the pool's backward selector
@@ -903,7 +871,7 @@ theorem MaxPool2MarginQ.poolBack_close {c h w : Nat} {δ : ℝ}
 theorem t3Idx_def {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
     finProdFinEquiv (finProdFinEquiv (ci, hi), wi) = t3Idx ci hi wi := rfl
 
-/-- `t3Idx` is injective componentwise — the spatial peer of `k4Idx_inj`. -/
+/-- `t3Idx` is injective componentwise. -/
 theorem t3Idx_inj {c h w : Nat} {ci ci' : Fin c} {hi hi' : Fin h}
     {wi wi' : Fin w} (hEq : t3Idx ci hi wi = t3Idx ci' hi' wi') :
     ci = ci' ∧ hi = hi' ∧ wi = wi' := by
@@ -1130,27 +1098,6 @@ theorem conv2d_weight_pdiv {ic oc h w kH kW : Nat} (b : Vec oc)
     basisVec_apply, convPad]
   simp only [t3Idx_def]
   simp [ite_and, @eq_comm _ o co]
-
-/-- The `ℓ1` mass of one Jacobian row of the conv weight map: kernel
-    entry `(o,cc,kh,kw)` touches the `(h·w)` outputs of its slab, each
-    with a padded read bounded by `a` — the quantitative form of "weight
-    sharing costs a spatial multiplicity". -/
-theorem conv2d_weight_pdiv_row_l1 {ic oc h w kH kW : Nat} (b : Vec oc)
-    (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
-    (hx : ∀ c i j, |x c i j| ≤ a) (v : Vec (oc * ic * kH * kW))
-    (o : Fin oc) (cc : Fin ic) (kh : Fin kH) (kw : Fin kW) :
-    ∑ k : Fin (oc * h * w),
-        |pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-            Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
-          (k4Idx o cc kh kw) k| ≤ ((h * w : ℕ) : ℝ) * a := by
-  rw [sum_t3 (fun k : Fin (oc * h * w) =>
-    |pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-        Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
-      (k4Idx o cc kh kw) k|)]
-  simp_rw [conv2d_weight_pdiv b x v o cc kh kw, apply_ite (fun t : ℝ => |t|), abs_zero,
-    Finset.sum_ite_irrel, Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ, ite_true]
-  exact (Finset.sum_le_sum fun hi _ => Finset.sum_le_sum fun wi _ =>
-    abs_convPad_le x ha hx cc kh kw hi wi).trans_eq (by simp [mul_assoc])
 
 -- ════════════════════════════════════════════════════════════════
 -- § Conv gradient-step rounding (planning §1b-B): the conv weight grad is
@@ -2346,7 +2293,7 @@ theorem logit_drift {P c h w d₃ d₄ nC : Nat}
 
 /-- The POST-relu tensor stays within the pool margin radius `ρ·D` along
     the whole step segment — what `MaxPool2MarginQ.{smooth_of_close,
-    isArgmax_iff, pdiv3_eq}` consume. -/
+    isArgmax_iff}` consume. -/
 theorem postrelu_close_seg {P c h w : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) {ρ D : ℝ} (hρ : 0 ≤ ρ)
     (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|) (v e : Vec P)
@@ -2426,41 +2373,6 @@ theorem margin4_keeps_offkink {P c h w d₃ d₄ : Nat}
 
 end Conv2Slot
 
-/-- **Pooled `ℓ1` drift**: kernel perturbation → conv (`ℓ1`, spatial
-    multiplicity) → relu (contraction) → pool (contraction). -/
-theorem cnn_pool_l1_drift {c h w kH kW : Nat} (b₂ : Vec c)
-    (x₁ : Tensor3 c (2*h) (2*w)) {a : ℝ} (ha : 0 ≤ a)
-    (hx : ∀ cc i j, |x₁ cc i j| ≤ a) (v e : Vec (c * c * kH * kW)) :
-    ∑ q, |maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b₂ x₁))) q -
-        maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) q| ≤
-      ((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |e idx|) :=
-  Conv2Slot.pool_l1_drift (fun v' => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) (conv2d_flat_kernel_drift_sum b₂ x₁ ha hx) v e
-
-/-- **Logit drift through the whole conv2 chain**: kernel perturbation →
-    conv → relu → pool → d₃ → relu → d₄ → relu → d₅. Each dense crossing
-    contributes its `ℓ1→ℓ1` operator factor `dᵢ·wᵢ`; the conv contributes
-    the weight-sharing multiplicity `(2h)·(2w)`. -/
-theorem cnn_conv2_logit_drift {c h w d₃ d₄ nC kH kW : Nat} (b₂ : Vec c)
-    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
-    (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    {a w₃ w₄ w₅ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
-    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
-    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
-    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
-    (v e : Vec (c * c * kH * kW)) (k : Fin nC) :
-    |dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d (Kernel4.unflatten (v + e)) b₂ x₁)))))))) k -
-      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d (Kernel4.unflatten v) b₂ x₁)))))))) k| ≤
-      w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |e idx|)))))) :=
-  Conv2Slot.logit_drift (fun v' => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) W₃ b₃ W₄ b₄ W₅ b₅ (conv2d_flat_kernel_drift_sum b₂ x₁ ha hx)
-    hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ v e k
-
 -- ════════════════════════════════════════════════════════════════
 -- § The margins freeze every routing decision along the segment
 -- ════════════════════════════════════════════════════════════════
@@ -2482,7 +2394,7 @@ theorem cnn_margin2_keeps_offkink {c h w kH kW : Nat} (b₂ : Vec c)
 
 /-- The POST-relu tensor stays within the pool margin radius `a·D` along
     the whole step segment — what `MaxPool2MarginQ.{smooth_of_close,
-    isArgmax_iff, pdiv3_eq}` consume. -/
+    isArgmax_iff}` consume. -/
 theorem cnn_postrelu_close_seg {c h w kH kW : Nat} (b₂ : Vec c)
     (x₁ : Tensor3 c (2*h) (2*w)) {a D : ℝ} (ha : 0 ≤ a)
     (hx : ∀ cc i j, |x₁ cc i j| ≤ a) (v e : Vec (c * c * kH * kW))
@@ -3392,22 +3304,11 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
 -- input-side peer of `convPad`), extracted from the certified input-VJP
 -- (`conv2d_has_vjp3`) by contracting `.correct` against a basis
 -- cotangent — point-free, exactly like `conv2d_weight_pdiv`. Each
--- input entry feeds at most `oc·kH·kW` outputs and each output reads at
--- most `ic·kH·kW` inputs (`convTap_out_l1` / `convTap_in_l1`): the
+-- input entry feeds at most `oc·kH·kW` outputs (`convTap_out_l1`): the
 -- `ℓ1` operator factor of a conv crossing is `(channels)·kH·kW·w₂ᶜ`,
 -- NOT a spatial count — locality is what keeps the conv1 constant
 -- usable at trained magnitudes.
 -- ════════════════════════════════════════════════════════════════
-
-/-- A 0/1-pinned sum is at most its pinned value: if `P` holds for at
-    most one index, `∑ i, (if P i then X else 0) ≤ X`. -/
-theorem sum_pinned_le {n : Nat} {X : ℝ} (hX : 0 ≤ X) (P : Fin n → Prop)
-    [DecidablePred P] (huniq : ∀ i j, P i → P j → i = j) :
-    ∑ i : Fin n, (if P i then X else 0) ≤ X := by
-  rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
-  refine mul_le_of_le_one_left hX (Nat.cast_le_one.mpr (Finset.card_le_one.mpr ?_))
-  simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-  exact fun i hi j hj => huniq i j hi hj
 
 /-- Rotate the innermost summation index of a triple sum to the front. -/
 theorem sum_swap_12_3 {α β γ : Type*} [Fintype α] [Fintype β] [Fintype γ]
@@ -3545,44 +3446,6 @@ theorem convTap_out_l1 {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
               Finset.sum_le_sum fun kh _ => Finset.sum_le_sum fun kw _ =>
                 hW co ci kh kw
     _ = ((oc * kH * kW : ℕ) : ℝ) * wK := by simp [mul_assoc]
-
-/-- Input-side tap mass: one output entry reads at most `ic·kH·kW`
-    inputs, each through a tap bounded by `wK`. -/
-theorem convTap_in_l1 {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
-    {wK : ℝ} (hW : ∀ o c kh kw, |W o c kh kw| ≤ wK)
-    (co : Fin oc) (ho : Fin h) (wo : Fin w) :
-    ∑ ci : Fin ic, ∑ hi : Fin h, ∑ wi : Fin w,
-        |convTap W ci hi wi co ho wo| ≤
-      ((ic * kH * kW : ℕ) : ℝ) * wK := by
-  calc ∑ ci : Fin ic, ∑ hi : Fin h, ∑ wi : Fin w,
-        |convTap W ci hi wi co ho wo|
-      ≤ ∑ _ci : Fin ic, ∑ _kh : Fin kH, ∑ _kw : Fin kW, wK := by
-        refine Finset.sum_le_sum fun ci _ => ?_
-        calc ∑ hi : Fin h, ∑ wi : Fin w, |convTap W ci hi wi co ho wo|
-            = ∑ hi : Fin h, ∑ wi : Fin w, ∑ kh : Fin kH, ∑ kw : Fin kW,
-                (if kh.val + ho.val = hi.val + (kH - 1) / 2 ∧
-                    kw.val + wo.val = wi.val + (kW - 1) / 2
-                  then |W co ci kh kw| else 0) := by
-              refine Finset.sum_congr rfl fun hi _ =>
-                Finset.sum_congr rfl fun wi _ => ?_
-              exact abs_convTap_expand W ci hi wi co ho wo
-          _ = ∑ kh : Fin kH, ∑ kw : Fin kW, ∑ hi : Fin h, ∑ wi : Fin w,
-                (if kh.val + ho.val = hi.val + (kH - 1) / 2 ∧
-                    kw.val + wo.val = wi.val + (kW - 1) / 2
-                  then |W co ci kh kw| else 0) := by
-              exact sum_swap_pair_pair _
-          _ ≤ ∑ kh : Fin kH, ∑ kw : Fin kW, |W co ci kh kw| := by
-              refine Finset.sum_le_sum fun kh _ =>
-                Finset.sum_le_sum fun kw _ => ?_
-              rw [← Fintype.sum_prod_type', ← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
-              refine mul_le_of_le_one_left (abs_nonneg _)
-                (Nat.cast_le_one.mpr (Finset.card_le_one.mpr ?_))
-              simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-              exact fun p hp q hq => Prod.ext (Fin.ext (by omega)) (Fin.ext (by omega))
-          _ ≤ ∑ _kh : Fin kH, ∑ _kw : Fin kW, wK :=
-              Finset.sum_le_sum fun kh _ => Finset.sum_le_sum fun kw _ =>
-                hW co ci kh kw
-    _ = ((ic * kH * kW : ℕ) : ℝ) * wK := by simp [mul_assoc]
 
 /-- **Closed form of the conv input-map `pdiv3`** — extracted from the
     certified input-VJP (`conv2d_has_vjp3`) by contracting its
@@ -3856,54 +3719,6 @@ theorem z2_l1_drift {P c h w kH kW : Nat}
   rw [← sum_t3 (fun k : Fin (c * (2*h) * (2*w)) =>
     |relu (c * (2*h) * (2*w)) (Z (v + e)) k - relu (c * (2*h) * (2*w)) (Z v) k|)]
   exact le_trans (Finset.sum_le_sum fun k _ => relu_entry_lipschitz _ _ _ k) (hZ1 v e)
-
-/-- Pooled `ℓ1` drift, conv1 slot: conv1 (`ℓ1`, `hZ1`) → relu → conv2-as-input (`ℓ1`,
-    locality multiplicity `c·kH·kW`) → relu → pool. -/
-theorem pool_l1_drift {P c h w kH kW : Nat}
-    (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    {ρ w₂ : ℝ} (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
-      ((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |e idx|))
-    (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂) (v e : Vec P) :
-    ∑ q, |maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Z (v + e))))))) q -
-        maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Z v)))))) q| ≤
-      ((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) *
-        (ρ * ∑ idx, |e idx|))) :=
-  le_trans (maxPoolFlat_l1_contract _ _)
-    (le_trans (Finset.sum_le_sum fun k _ => relu_entry_lipschitz _ _ _ k)
-      (z2_l1_drift Z W₂ b₂ hZ1 hw₂ hW₂ v e))
-
-/-- Logit drift through the whole conv1 chain: `Conv2Slot.logit_drift` at the conv2
-    pre-activation, radius `c·kH·kW·w₂·ρ`. -/
-theorem logit_drift {P c h w d₃ d₄ nC kH kW : Nat}
-    (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
-    (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    {ρ w₂ w₃ w₄ w₅ : ℝ} (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
-      ((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |e idx|))
-    (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
-    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
-    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
-    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
-    (v e : Vec P) (k : Fin nC) :
-    |dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Z (v + e)))))))))))) k -
-      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Z v))))))))))) k| ≤
-      w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) *
-        (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |e idx|)))))))) :=
-  (Conv2Slot.logit_drift (ρ := ((c * kH * kW : ℕ) : ℝ) * (w₂ * ρ))
-    (fun v' => Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-      (relu (c * (2*h) * (2*w)) (Z v'))))) W₃ b₃ W₄ b₄ W₅ b₅
-    (fun v e => (z2_l1_drift Z W₂ b₂ hZ1 hw₂ hW₂ v e).trans_eq (by ring))
-    hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ v e k).trans_eq (by ring)
 
 /-- The relu₂ margin (at the conv1 radius) keeps the conv2 pre-activation off the kink. -/
 theorem margin2_keeps_offkink {P c h w kH kW : Nat}
@@ -4187,72 +4002,6 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC kH kW : Nat}
   simp only [mul_assoc]
 
 end Conv1Slot
-
-/-- Per-entry conv2-preactivation drift under a conv1 kernel
-    perturbation: the perturbation crosses conv2 as a function of its
-    INPUT, picking up the locality factor `c·kH·kW·w₂`. -/
-theorem cnn1_z2_entry_drift {ic c h w kH kW : Nat} (b₁ : Vec c)
-    (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    {a w₂ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₀ cc i j| ≤ a)
-    (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
-    (u e : Vec (c * ic * kH * kW)) (k : Fin (c * (2*h) * (2*w))) :
-    |Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d (Kernel4.unflatten (u + e)) b₁ x₀))))) k -
-      Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d (Kernel4.unflatten u) b₁ x₀))))) k| ≤
-      ((c * kH * kW : ℕ) : ℝ) * (w₂ * (a * ∑ idx, |e idx|)) :=
-  Conv1Slot.z2_entry_drift (fun u' => Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)) W₂ b₂
-    ha (conv2d_flat_kernel_drift_total b₁ x₀ ha hx) hw₂ hW₂ u e k
-
-/-- Pooled `ℓ1` drift under a conv1 kernel perturbation: conv1 (`ℓ1`,
-    spatial multiplicity) → relu → conv2-as-input (`ℓ1`, LOCALITY
-    multiplicity `c·kH·kW`) → relu → pool. -/
-theorem cnn1_pool_l1_drift {ic c h w kH kW : Nat} (b₁ : Vec c)
-    (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    {a w₂ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₀ cc i j| ≤ a)
-    (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
-    (u e : Vec (c * ic * kH * kW)) :
-    ∑ q, |maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-              (conv2d (Kernel4.unflatten (u + e)) b₁ x₀))))))) q -
-        maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-              (conv2d (Kernel4.unflatten u) b₁ x₀))))))) q| ≤
-      ((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) *
-        (a * ∑ idx, |e idx|))) :=
-  Conv1Slot.pool_l1_drift (fun u' => Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)) W₂ b₂
-    (conv2d_flat_kernel_drift_sum b₁ x₀ ha hx) hw₂ hW₂ u e
-
-/-- Logit drift through the whole conv1 chain. -/
-theorem cnn1_logit_drift {ic c h w d₃ d₄ nC kH kW : Nat} (b₁ : Vec c)
-    (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
-    (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    {a w₂ w₃ w₄ w₅ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₀ cc i j| ≤ a)
-    (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
-    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
-    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
-    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
-    (u e : Vec (c * ic * kH * kW)) (k : Fin nC) :
-    |dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
-            (Tensor3.flatten (conv2d (Kernel4.unflatten (u + e))
-              b₁ x₀)))))))))))) k -
-      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
-            (Tensor3.flatten (conv2d (Kernel4.unflatten u)
-              b₁ x₀)))))))))))) k| ≤
-      w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) *
-        (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |e idx|)))))))) :=
-  Conv1Slot.logit_drift (fun u' => Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀))
-    W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ (conv2d_flat_kernel_drift_sum b₁ x₀ ha hx)
-    hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ u e k
 
 -- ════════════════════════════════════════════════════════════════
 -- § conv1 margins freeze every routing decision along the segment
@@ -5810,43 +5559,6 @@ theorem conv2d_bias_pdiv {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
   simp [ite_and, @eq_comm _ o co]
 
 -- ════════════════════════════════════════════════════════════════
--- § The conv2-BIAS drift chain: the `Conv2Slot` chain at `ρ = 1` — the conv stage
---   moves by the bare `‖e‖₁`, no input bound
--- ════════════════════════════════════════════════════════════════
-
-/-- Pooled `ℓ1` drift under a conv2 bias perturbation: conv (`ℓ1`,
-    spatial multiplicity, no `a`) → relu (contraction) → pool
-    (contraction). -/
-theorem cnnb2_pool_l1_drift {c h w kH kW : Nat} (W₂ : Kernel4 c c kH kW)
-    (x₁ : Tensor3 c (2*h) (2*w)) (b e : Vec c) :
-    ∑ q, |maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ (b + e) x₁))) q -
-        maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b x₁))) q| ≤
-      ((2*h * (2*w) : ℕ) : ℝ) * ∑ idx, |e idx| := by
-  simpa only [one_mul] using Conv2Slot.pool_l1_drift (ρ := 1) (fun b' => Tensor3.flatten (conv2d W₂ b' x₁)) (fun v e => by simpa only [one_mul] using conv2d_flat_bias_drift_sum W₂ x₁ v e) b e
-
-/-- Logit drift through the whole conv2-bias chain. -/
-theorem cnnb2_logit_drift {c h w d₃ d₄ nC kH kW : Nat}
-    (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
-    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
-    (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    {w₃ w₄ w₅ : ℝ} (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
-    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
-    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
-    (b e : Vec c) (k : Fin nC) :
-    |dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ (b + e) x₁)))))))) k -
-      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ b x₁)))))))) k| ≤
-      w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * ∑ idx, |e idx|))))) := by
-  simpa only [one_mul] using Conv2Slot.logit_drift (ρ := 1) (fun b' => Tensor3.flatten (conv2d W₂ b' x₁)) W₃ b₃ W₄ b₄ W₅ b₅
-    (fun v e => by simpa only [one_mul] using conv2d_flat_bias_drift_sum W₂ x₁ v e) hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b e k
-
--- ════════════════════════════════════════════════════════════════
 -- § conv2-bias margins freeze every routing decision along the segment
 -- ════════════════════════════════════════════════════════════════
 
@@ -6216,81 +5928,6 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
       simpa [hf] using h)
     h1 h2
   simpa [hf] using hmain
-
--- ════════════════════════════════════════════════════════════════
--- § The conv1-BIAS drift chain: the `Conv1Slot` chain at `ρ = 1` — the conv1 stage
---   moves by the bare `‖e‖₁`, no input bound
--- ════════════════════════════════════════════════════════════════
-
-/-- Per-entry conv2-preactivation drift under a conv1 bias
-    perturbation: the perturbation crosses conv2 as a function of its
-    INPUT, picking up the locality factor `c·kH·kW·w₂`. -/
-theorem cnnb1_z2_entry_drift {ic c h w kH kW : Nat}
-    (W₁ : Kernel4 c ic kH kW) (x₀ : Tensor3 ic (2*h) (2*w))
-    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    {w₂ : ℝ} (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
-    (b e : Vec c) (k : Fin (c * (2*h) * (2*w))) :
-    |Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₁ (b + e) x₀))))) k -
-      Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₁ b x₀))))) k| ≤
-      ((c * kH * kW : ℕ) : ℝ) * (w₂ * ∑ idx, |e idx|) := by
-  simpa only [one_mul] using Conv1Slot.z2_entry_drift (ρ := 1)
-    (fun b' => Tensor3.flatten (conv2d W₁ b' x₀)) W₂ b₂ zero_le_one
-    (fun v e k => by simpa only [one_mul] using conv2d_flat_bias_drift_total W₁ x₀ v e k)
-    hw₂ hW₂ b e k
-
-/-- Pooled `ℓ1` drift under a conv1 bias perturbation: conv1 (`ℓ1`,
-    spatial multiplicity, no `a`) → relu → conv2-as-input (`ℓ1`,
-    LOCALITY multiplicity `c·kH·kW`) → relu → pool. -/
-theorem cnnb1_pool_l1_drift {ic c h w kH kW : Nat}
-    (W₁ : Kernel4 c ic kH kW) (x₀ : Tensor3 ic (2*h) (2*w))
-    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    {w₂ : ℝ} (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
-    (b e : Vec c) :
-    ∑ q, |maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-              (conv2d W₁ (b + e) x₀))))))) q -
-        maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-              (conv2d W₁ b x₀))))))) q| ≤
-      ((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) *
-        ∑ idx, |e idx|)) := by
-  simpa only [one_mul] using Conv1Slot.pool_l1_drift (ρ := 1)
-    (fun b' => Tensor3.flatten (conv2d W₁ b' x₀)) W₂ b₂
-    (fun v e => by simpa only [one_mul] using conv2d_flat_bias_drift_sum W₁ x₀ v e) hw₂ hW₂ b e
-
-/-- Logit drift through the whole conv1-bias chain. -/
-theorem cnnb1_logit_drift {ic c h w d₃ d₄ nC kH kW : Nat}
-    (W₁ : Kernel4 c ic kH kW) (x₀ : Tensor3 ic (2*h) (2*w))
-    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
-    (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    {w₂ w₃ w₄ w₅ : ℝ} (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
-    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
-    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
-    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
-    (b e : Vec c) (k : Fin nC) :
-    |dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
-            (Tensor3.flatten (conv2d W₁ (b + e)
-              x₀)))))))))))) k -
-      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
-            (Tensor3.flatten (conv2d W₁ b
-              x₀)))))))))))) k| ≤
-      w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) *
-        (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * ∑ idx, |e idx|))))))) := by
-  simpa only [one_mul] using Conv1Slot.logit_drift (ρ := 1)
-    (fun b' => Tensor3.flatten (conv2d W₁ b' x₀)) W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-    (fun v e => by simpa only [one_mul] using conv2d_flat_bias_drift_sum W₁ x₀ v e)
-    hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b e k
 
 -- ════════════════════════════════════════════════════════════════
 -- § conv1-bias margins freeze every routing decision along the segment

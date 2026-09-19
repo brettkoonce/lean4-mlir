@@ -29,10 +29,11 @@ also re-pointed prose and deleted what the fixed point orphaned.
    `flatConvStride2Xla_weight_grad_has_vjp_correct`, generic API that the fixed point would take.
    Still a candidate: `mnv2_render_depthwiseW_certified`, audit-only since 2a and the only user of
    the pinned `mnv2_depthwise_weight_grad_bridge`.
-2. **2d, small nets:** S.1, S.2, S.4, S.5, S.7, S.9. For S.1, seed the whole `Micro` / `TwoChan` /
-   `Mini` / `Spatial` namespaces (`MnistCNN.lean` 198–696). `TwoChan` exists only to share code
-   between `Mini` and `Spatial`, and a shared `_proof_1` makes `CnnConcrete` look like a user of
-   `Micro`. That is about 400 lines; the census could see 78.
+2. ✅ **2d, small nets:** S.1, S.2, S.4, S.5, S.7 and S.9, together 35 pins and 92 declarations.
+   S.1 took the whole `Micro` / `TwoChan` / `Mini` / `Spatial` namespaces (306 lines), and
+   `CnnConcrete` built without the shared `_proof_1`. `MnistCNN`'s header and Proofs/README.md
+   now name `TrainedCnn` as the MNIST-CNN witness. `JacobianSeal` keeps only the `HasVJPAt`
+   seal, and LinearFold cites `fwdGraph_faithful`.
 3. **2e, generic:** A.1, A.3, A.4, A.6, A.7, B.4, B.5, B.7, B.8, and X.1. X.1 also takes
    `mobilenetv2FwdGraphFull(_faithful)`; retire it together with the "scalar-BN stepping stone"
    prose in `StableHLO.lean` and `MobileNetV2.lean`. A.1's `retire.py` hits (`Back.subst`,

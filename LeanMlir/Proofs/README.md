@@ -158,7 +158,7 @@ Two forms, set by the architecture's activations:
   MobileNetV2) — ReLU/ReLU6/max-pool have genuine kinks, so the generic
   whole-network VJP is pointwise (`*_has_vjp_at`, under per-site
   off-the-kink hypotheses). Each is instantiated on a concrete small net
-  with every hypothesis discharged (`MlpConcrete`, `Spatial`/`Mini`,
+  with every hypothesis discharged (`MlpConcrete`, `TrainedCnn`,
   `CnnConcrete`, `Mnv2Live`), proving the bundle is jointly
   satisfiable — not vacuous.
 

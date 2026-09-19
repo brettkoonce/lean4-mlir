@@ -15,11 +15,9 @@ and false-fail the check. Keep future per-chapter capstone names short.)
 
 ## What is closed here (kernel, `[propext, Classical.choice, Quot.sound]`)
 
-* `poc_fwd_faithful` + `poc_fwd_is_render` — the forward-eval module *is*
+* `fwdGraph_faithful` + `poc_fwd_is_render` — the forward-eval module *is*
   `renderModule` of a graph whose `den` is `mnistLinear` (text = `render(graph)`
   ∧ `den(graph) = math`). **Forward: end-to-end tied.**
-* `poc_train_step_certified` — the three emitted outputs (`%dy`, `%W0n`, `%b0n`)
-  each denote the certified step.
 * `poc_train_step_tail_certified` — **fully tied.** The two emitted SGD ops consume
   the proven `lossCotGraph` node *directly* (no SSA-name pin), so each output's `den`
   is proven = the certified `fderiv`-derived step end-to-end, with the forward = the
@@ -52,43 +50,14 @@ variable {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
 
 /-! ## Forward eval — end-to-end tied -/
 
-/-- The emitted `@linear_fwd` graph denotes exactly `mnistLinear W b`. -/
-theorem poc_fwd_faithful : den (fwdGraph W b x) = mnistLinear W b x :=
-  fwdGraph_faithful W b x
-
 /-- The committed `linear_fwd.mlir` generator `linearFwdModuleV` *is* `renderModule`
     applied to the proven `fwdGraph` — the emitted bytes are literally the print of
-    the graph `poc_fwd_faithful` is about. -/
+    the graph `fwdGraph_faithful` is about. -/
 theorem poc_fwd_is_render (B : Nat) :
     ∃ argSig : String,
       linearFwdModuleV B m n W b x
         = renderModule "linear_fwd" argSig B n (fwdGraph W b x) :=
   ⟨_, rfl⟩
-
-/-! ## Train step — outputs are the certified loss-descent step -/
-
-/-- The three emitted outputs each denote the certified softmax-CE loss-descent
-    SGD step: `%dy = ∂CE/∂logits`, `%W0n = W − lr·∂CE/∂W`, `%b0n = certified bias step`. -/
-theorem poc_train_step_certified (lr : ℝ) (label : Fin n) :
-    (∀ j : Fin n,
-        den (lossCotGraph W b x (oneHot n label)) j
-          = pdiv (fun (z : Vec n) (_ : Fin 1) => crossEntropy n z label)
-                 (mnistLinear W b x) j 0)
-  ∧ (∀ (i : Fin m) (j : Fin n),
-        linWeightDen W b x lr label (finProdFinEquiv (i, j))
-          = W i j - lr * pdiv
-              (fun (v : Vec (m * n)) (_ : Fin 1) =>
-                  crossEntropy n (dense (Mat.unflatten v) b x) label)
-              (Mat.flatten W) (finProdFinEquiv (i, j)) 0)
-  ∧ (∀ j : Fin n,
-        linBiasDen W b x lr label j
-          = b j - lr * ∑ i : Fin n,
-              pdiv (fun b' : Vec n => dense W b' x) b j i
-                * (softmax n (mnistLinear W b x) i - oneHot n label i)) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro j;   exact lossCotGraph_isCEgrad W b x label j
-  · intro i j; exact linWeightDen_is_loss_descent W b x lr label i j
-  · intro j;   exact linBiasDen_is_certified W b x lr label j
 
 /-! ## The tail fold (closed) — the emitted tail ops are `pretty(provenNode)`
 

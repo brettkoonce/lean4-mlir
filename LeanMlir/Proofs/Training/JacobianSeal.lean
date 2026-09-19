@@ -16,9 +16,9 @@ backward, and the equivalence with `fderiv ℝ f x ≠ 0`. A witness then upgrad
 "forward ≠ const" to "the rendered backward at this point is not the zero map" by exhibiting
 **one** `pdiv f x i j ≠ 0` — which is what a genuine (non-degenerate) gradient requires.
 
-The bridge itself is generic; discharging `pdiv ≠ 0` at a specific deep kinked witness
-(`Mnv2Live`, a future `ResNet34Live`) is the per-net follow-up (Item B2). Demonstrated here
-end-to-end on the linear classifier (`mnistLinear`), whose Jacobian is exactly `W`.
+The bridge is stated for the pointwise `HasVJPAt` the kinked witnesses are built as. The
+per-net seals (Item B2) discharge its `pdiv ≠ 0` premise at `Mnv2Live` and the ResNet-34 Live
+witnesses.
 -/
 
 namespace Proofs
@@ -27,18 +27,8 @@ open scoped BigOperators
 open Finset
 
 -- ════════════════════════════════════════════════════════════════
--- § The generic seal
+-- § Jacobian entries and `fderiv`
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The nonzero-Jacobian seal.** If the Jacobian of `f` at `x` has a nonzero entry
-    `pdiv f x i₀ j₀ ≠ 0`, then the proven backward map is not the zero map there: probing
-    it with the basis cotangent `e_{j₀}` returns the nonzero `pdiv f x i₀ j₀` at row `i₀`.
-    The cotangent collapses `HasVJP.correct`'s sum to its single diagonal term. -/
-theorem HasVJP.backward_ne_zero_of_pdiv_ne {m n : Nat} {f : Vec m → Vec n}
-    (h : HasVJP f) (x : Vec m) {i₀ : Fin m} {j₀ : Fin n}
-    (hpd : pdiv f x i₀ j₀ ≠ 0) :
-    h.backward x (basisVec j₀) i₀ ≠ 0 := by
-  simpa [h.correct] using hpd
 
 /-- The standard basis decomposition `∑ᵢ vᵢ · eᵢ = v` on `Vec m`. -/
 theorem sum_smul_basisVec {m : Nat} (v : Vec m) :
@@ -59,41 +49,30 @@ theorem fderiv_eq_zero_of_pdiv_all_zero {m n : Nat} (f : Vec m → Vec n) (x : V
 
 /-- **The seal in `fderiv` form.** A nonzero Fréchet derivative at the witness yields a
     nonzero Jacobian entry — the clean analytic hypothesis behind
-    `HasVJP.backward_ne_zero_of_pdiv_ne`. (Contrapositive of the all-zero lemma.) -/
+    `HasVJPAt.backward_ne_zero_of_pdiv_ne`. (Contrapositive of the all-zero lemma.) -/
 theorem exists_pdiv_ne_of_fderiv_ne {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
     (hfd : fderiv ℝ f x ≠ 0) :
     ∃ (i : Fin m) (j : Fin n), pdiv f x i j ≠ 0 := by
   simpa [not_forall] using mt (fderiv_eq_zero_of_pdiv_all_zero f x) hfd
 
-/-- Packaging: a nonzero Fréchet derivative ⇒ the proven backward is non-trivial at `x`
-    (some basis-cotangent probe returns a nonzero row). The form a whole-net witness uses:
-    establish `fderiv ℝ forward x ≠ 0` once, get a non-trivial backward for free. -/
-theorem HasVJP.backward_nontrivial_of_fderiv_ne {m n : Nat} {f : Vec m → Vec n}
-    (h : HasVJP f) (x : Vec m) (hfd : fderiv ℝ f x ≠ 0) :
-    ∃ (j₀ : Fin n) (i₀ : Fin m), h.backward x (basisVec j₀) i₀ ≠ 0 := by
-  obtain ⟨i₀, j₀, hpd⟩ := exists_pdiv_ne_of_fderiv_ne f x hfd
-  exact ⟨j₀, i₀, h.backward_ne_zero_of_pdiv_ne x hpd⟩
-
 -- ════════════════════════════════════════════════════════════════
--- § The seal, pointwise (`HasVJPAt`)
---   The deep kinked witnesses (`Mnv2Live`, a future `ResNet34Live`) are
---   built as *pointwise* `HasVJPAt f x`, not the global `HasVJP f`. Their
---   `.correct` field has the same `backward = pdiv`-contraction shape, so
---   the seal transfers verbatim — this is the form Item B2 actually consumes.
+-- § The seal (`HasVJPAt`)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The nonzero-Jacobian seal, pointwise.** `HasVJPAt` analogue of
-    `HasVJP.backward_ne_zero_of_pdiv_ne`: one nonzero Jacobian entry at the
-    witness point `x` makes the proven backward there not the zero map. -/
+/-- **The nonzero-Jacobian seal.** If the Jacobian of `f` at the witness `x` has a nonzero
+    entry `pdiv f x i₀ j₀ ≠ 0`, then the proven backward there is not the zero map: probing
+    it with the basis cotangent `e_{j₀}` returns the nonzero `pdiv f x i₀ j₀` at row `i₀`.
+    The cotangent collapses `HasVJPAt.correct`'s sum to its single diagonal term. -/
 theorem HasVJPAt.backward_ne_zero_of_pdiv_ne {m n : Nat} {f : Vec m → Vec n}
     {x : Vec m} (h : HasVJPAt f x) {i₀ : Fin m} {j₀ : Fin n}
     (hpd : pdiv f x i₀ j₀ ≠ 0) :
     h.backward (basisVec j₀) i₀ ≠ 0 := by
   simpa [h.correct] using hpd
 
-/-- **The seal in `fderiv` form, pointwise.** `HasVJPAt` analogue of
-    `HasVJP.backward_nontrivial_of_fderiv_ne`: a nonzero Fréchet derivative
-    at the witness `x` ⇒ the proven backward there is non-trivial. -/
+/-- **The seal in `fderiv` form.** A nonzero Fréchet derivative at the witness `x` ⇒ the
+    proven backward there is non-trivial (some basis-cotangent probe returns a nonzero row).
+    The form a whole-net witness uses: establish `fderiv ℝ forward x ≠ 0` once, get a
+    non-trivial backward for free. -/
 theorem HasVJPAt.backward_nontrivial_of_fderiv_ne {m n : Nat} {f : Vec m → Vec n}
     {x : Vec m} (h : HasVJPAt f x) (hfd : fderiv ℝ f x ≠ 0) :
     ∃ (j₀ : Fin n) (i₀ : Fin m), h.backward (basisVec j₀) i₀ ≠ 0 := by
@@ -132,18 +111,5 @@ theorem hasDerivAt_mul_self_zero {Q : ℝ → ℝ} (hQ : ContinuousAt Q 0) :
   refine Filter.Tendsto.congr' ?_ (hQ.tendsto.mono_left nhdsWithin_le_nhds)
   filter_upwards [self_mem_nhdsWithin] with y hy
   rw [slope_def_field, sub_zero, zero_mul, sub_zero, mul_div_cancel_left₀ _ hy]
-
--- ════════════════════════════════════════════════════════════════
--- § Demonstration — the linear classifier (Jacobian = W)
--- ════════════════════════════════════════════════════════════════
-
-/-- **Non-trivial backward for the linear classifier.** `pdiv (mnistLinear W b) = W`, so any
-    nonzero weight `W i₀ j₀ ≠ 0` seals the backward as non-trivial at every input. The
-    simplest end-to-end instance of the seal; the deep kinked witnesses (`Mnv2Live`,
-    `ResNet34Live`) discharge the same `pdiv ≠ 0` premise through their BN-deviation chains. -/
-theorem mnistLinear_backward_nontrivial {m n : Nat} (W : Mat m n) (b : Vec n)
-    (x : Vec m) {i₀ : Fin m} {j₀ : Fin n} (hW : W i₀ j₀ ≠ 0) :
-    (dense_has_vjp W b).backward x (basisVec j₀) i₀ ≠ 0 :=
-  (dense_has_vjp W b).backward_ne_zero_of_pdiv_ne x (by rw [pdiv_dense]; exact hW)
 
 end Proofs

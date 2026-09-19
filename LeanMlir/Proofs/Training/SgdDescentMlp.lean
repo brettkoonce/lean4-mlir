@@ -9,8 +9,7 @@ MLP (`dense → relu → dense → relu → dense`), layer by layer:
 
 * **Output layer `W₂` — free.** The top dense layer sees the loss with no
   ReLU in between, so its descent statement IS the linear one at the hidden
-  activation `a₁` (`mlp_output_sgd_descends` = `linear_sgd_descends` at
-  `x := a₁`).
+  activation `a₁` (`linear_sgd_descends` at `x := a₁`).
 
 * **Hidden layer `W₁` — the genuinely new piece.** The chain to the loss
   crosses one ReLU kink, so the loss-of-`W₁` map is only *piecewise* smooth.
@@ -486,64 +485,6 @@ theorem mlp_hidden_sgd_descends {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
   simpa [hf] using hmain
 
 -- ════════════════════════════════════════════════════════════════
--- § Output layer W₂: the linear descent theorem at the hidden activation
--- ════════════════════════════════════════════════════════════════
-
-/-- **One inexact SGD step on the MLP's output weights provably decreases
-    the cross-entropy loss — for free.** The top dense layer sits directly
-    below the softmax-CE loss with no ReLU in between, so the loss-of-`W₂`
-    map IS the linear net's loss at the hidden activation
-    `a₁ = relu(dense W₁ b₁ (relu(dense W₀ b₀ x)))`: this is
-    `linear_sgd_descends` instantiated there. No margin needed — the output
-    layer never crosses a kink. -/
-theorem mlp_output_sgd_descends {d₀ d₁ d₂ d₃ : Nat}
-    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
-    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃)
-    (gh : Vec (d₂ * d₃)) {lr η a : ℝ}
-    (ha : 0 ≤ a)
-    (hx : ∀ i, |relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) i| ≤ a)
-    (hlr : 0 ≤ lr) (hη : 0 ≤ η)
-    (hgh : ∀ idx, |gh idx -
-      gradAt (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-        (Mat.flatten W₂) idx| ≤ η)
-    (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-        (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) * η))) < 1)
-    (h1 : lr * η * (∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-        (Mat.flatten W₂) idx|) ≤
-      lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-        (Mat.flatten W₂) idx ^ 2) / 4)
-    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-          (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) * η))))) *
-        (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-          (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) * η)) ^ 2 ≤
-      lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-        (Mat.flatten W₂) idx ^ 2) / 4) :
-    crossEntropy d₃ (dense (Mat.unflatten (Mat.flatten W₂ - lr • gh)) b₂
-        (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label ≤
-      crossEntropy d₃ (dense (Mat.unflatten (Mat.flatten W₂)) b₂
-        (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label -
-        lr * (∑ idx, gradAt
-          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
-          (Mat.flatten W₂) idx ^ 2) / 2 :=
-  linear_sgd_descends W₂ b₂
-    (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label gh
-    ha hx hlr hη hgh hsmall h1 h2
-
--- ════════════════════════════════════════════════════════════════
 -- § Input layer W₀: two frozen masks
 -- ════════════════════════════════════════════════════════════════
 
@@ -680,30 +621,6 @@ theorem mlp_input_loss_gradAt {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
                   (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k -
                   oneHot d₃ label k))) := by
         rw [ce_head2_input_grad W₁ b₁ W₂ b₂ label _ hz0 hz1 j]
-
-/-- The input-layer logit drift: through two dense layers and two
-    1-Lipschitz ReLUs, a weight perturbation of `ℓ1` mass `‖e‖₁` moves every
-    logit by at most `w₂·d₂·w₁·a·‖e‖₁`. The middle layer contributes its
-    `ℓ1→ℓ1` operator factor `d₂·w₁` — unlike the first hop, the perturbation
-    arriving at layer 1 is no longer column-structured. -/
-theorem mlp_input_logit_drift {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
-    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
-    (x : Vec d₀) {a w₁ w₂ : ℝ} (_ha : 0 ≤ a)
-    (hx : ∀ i, |x i| ≤ a) (hw₁ : 0 ≤ w₁) (hW₁ : ∀ j l, |W₁ j l| ≤ w₁)
-    (hW₂ : ∀ l k, |W₂ l k| ≤ w₂)
-    (v e : Vec (d₀ * d₁)) (k : Fin d₃) :
-    |dense W₂ b₂ (relu d₂ (dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten (v + e)) b₀ x)))) k -
-      dense W₂ b₂ (relu d₂ (dense W₁ b₁
-        (relu d₁ (dense (Mat.unflatten v) b₀ x)))) k| ≤
-      w₂ * ((d₂ : ℝ) * (w₁ * (a * ∑ idx, |e idx|))) := by
-  rcases Nat.eq_zero_or_pos d₂ with h0 | hpos
-  · subst h0; simp [dense]
-  have hw₂ : 0 ≤ w₂ := (abs_nonneg _).trans (hW₂ ⟨0, hpos⟩ k)
-  refine (dense_relu_drift W₂ b₂ hw₂ hW₂ _ _ k).trans (mul_le_mul_of_nonneg_left
-    ((Finset.sum_le_sum fun l _ => mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l).trans_eq
-      ?_) hw₂)
-  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
 
 /-- The layer-1 margin keeps the *middle* pre-activation off the kink along
     the segment: the perturbation arrives through one dense + ReLU, so the
