@@ -548,7 +548,7 @@ theorem convBnRelu6Strided_differentiableAt {ic oc h w kH kW : Nat}
                        bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
       (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v := by
-  unfold flatConvStride2Xla at *; fun_prop (disch := assumption)
+  fun_prop (disch := assumption)
 
 /-- The strided depthwise stage as a flat map (`Vec (mid*(2h)*(2w)) → Vec (mid*h*w)`). -/
 @[reducible] noncomputable def ivDepthwiseStrided {mid h w kHd kWd : Nat}
@@ -578,7 +578,7 @@ theorem dwBnRelu6Strided_differentiableAt {c h w kH kW : Nat}
                        bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
       (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v := by
-  unfold depthwiseStride2FlatXla at *; fun_prop (disch := assumption)
+  fun_prop (disch := assumption)
 
 /-- **Strided inverted-residual body** = `project ∘ depthwiseStrided ∘ expand`.
     Expand is SAME at the input resolution (`2h×2w`); the stride-2 depthwise
@@ -755,25 +755,6 @@ noncomputable def mobilenetv2Forward_full
 -- needs genuine per-coordinate (0,6) bounds and is left as follow-up.
 -- ════════════════════════════════════════════════════════════════
 
-/-- BN of a constant vector is the (constant) shift `β` — centering zeroes
-    the normalized term, killing the `√`. Keystone for discharging ReLU6
-    smoothness on a constant-activation net. -/
-theorem bnForward_const {n : Nat} (hn : 0 < n) (ε γ β c : ℝ) :
-    bnForward n ε γ β (fun _ => c) = (fun _ => β) := by
-  have hmean : bnMean n (fun _ : Fin n => c) = c := by
-    unfold bnMean
-    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
-        mul_comm, mul_div_assoc, div_self (Nat.cast_ne_zero.mpr hn.ne'), mul_one]
-  funext i
-  simp only [bnForward, bnXhat]
-  rw [hmean]; ring
-
-/-- A conv with everywhere-zero kernel and bias maps anything to `0`. -/
-theorem flatConv_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (hW : ∀ o c kh kw, W o c kh kw = 0) (hb : ∀ o, b o = 0) (v : Vec (ic * h * w)) :
-    flatConv (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
-  funext k; simp [flatConv, conv2d, Tensor3.flatten, hW, hb]
-
 /-- A depthwise conv with everywhere-zero kernel and bias maps anything to `0`. -/
 theorem depthwiseFlat_eq_zero {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (hW : ∀ ch kh kw, W ch kh kw = 0) (hb : ∀ ch, b ch = 0) (v : Vec (c * h * w)) :
@@ -863,48 +844,14 @@ open Proofs
 /-- **With `γ=1, β=3` and length `n ≤ 8`, every BN output is in `(0,6)`** — for
     an *arbitrary* input `z` and *arbitrary* `ε>0`. No constant-collapse, no
     sqrt computed: the bound reduces to `(zₖ−μ)² < 9(σ²+ε)`. -/
-theorem bn13_window (n : Nat) (hn : 0 < n) (hn8 : n ≤ 8)
+theorem bn13_window (n : Nat) (_hn : 0 < n) (hn8 : n ≤ 8)
     (ε : ℝ) (hε : 0 < ε) (z : Vec n) (k : Fin n) :
     0 < bnForward n ε 1 3 z k ∧ bnForward n ε 1 3 z k < 6 := by
-  set μ := bnMean n z with hμ
-  set v := bnVar n z with hvdef
-  have hv0 : 0 ≤ v := by
-    rw [hvdef, bnVar]
-    apply div_nonneg
-    · exact Finset.sum_nonneg (fun i _ => mul_self_nonneg _)
-    · positivity
-  set s := v + ε with hsdef
-  have hs0 : 0 < s := by rw [hsdef]; linarith
-  have hsqrt : 0 < Real.sqrt s := Real.sqrt_pos.mpr hs0
-  set d := z k - μ with hddef
-  have hnv : (n : ℝ) * v = ∑ i, (z i - μ) * (z i - μ) := by
-    rw [hvdef, bnVar]
-    rw [mul_div_cancel₀]
-    exact_mod_cast hn.ne'
-  have hsingle : d * d ≤ ∑ i, (z i - μ) * (z i - μ) := by
-    rw [hddef]
-    exact Finset.single_le_sum (f := fun i => (z i - μ) * (z i - μ))
-      (fun i _ => mul_self_nonneg _) (Finset.mem_univ k)
-  have hd_le_nv : d * d ≤ (n : ℝ) * v := by rw [hnv]; exact hsingle
+  -- `x̂ₖ² ≤ n ≤ 8 < 3²` (`bnXhat_sq_le`), so `|x̂ₖ| < 3` and `x̂ₖ + 3 ∈ (0,6)`.
   have hn8' : (n : ℝ) ≤ 8 := by exact_mod_cast hn8
-  have hnv_le : (n : ℝ) * v ≤ 8 * v := mul_le_mul_of_nonneg_right hn8' hv0
-  have hkey : d * d < 9 * s := by rw [hsdef]; nlinarith [hd_le_nv, hnv_le, hv0, hε]
-  have hd2 : d ^ 2 < 9 * s := by rw [sq]; exact hkey
-  have habs : |d| < 3 * Real.sqrt s := by
-    have h1 : Real.sqrt (d ^ 2) < Real.sqrt (9 * s) :=
-      Real.sqrt_lt_sqrt (sq_nonneg d) hd2
-    rw [Real.sqrt_sq_eq_abs] at h1
-    rwa [Real.sqrt_mul (by norm_num) s, show Real.sqrt 9 = 3 by
-      rw [show (9 : ℝ) = 3 ^ 2 by norm_num, Real.sqrt_sq (by norm_num)]] at h1
-  have hval : bnForward n ε 1 3 z k = d / Real.sqrt s + 3 := by
-    simp only [bnForward, bnXhat, bnIstd, hddef, one_mul]
-    rw [mul_one_div]
-  have hquot : |d / Real.sqrt s| < 3 := by
-    rw [abs_div, abs_of_pos hsqrt, div_lt_iff₀ hsqrt]
-    linarith [habs]
-  rw [abs_lt] at hquot
-  rw [hval]
-  constructor <;> linarith [hquot.1, hquot.2]
+  have h := abs_lt_of_sq_lt_sq' (by linarith [bnXhat_sq_le ε hε z k] : bnXhat n ε z k ^ 2 < 3 ^ 2)
+    (by norm_num)
+  simp only [bnForward, one_mul]; constructor <;> linarith [h.1, h.2]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Reusable, layout-free core of the liveness seal
@@ -948,17 +895,10 @@ theorem bn1_devSum_scale (n : Nat) (hn : 0 < n) (ε β : ℝ) (z : Vec n)
   simp only [bnForward, bnXhat, one_mul]
   ring
 
-/-- `bnIstd` is strictly positive (so the rescaling above never kills the sign). -/
+/-- `bnIstd` is strictly positive (so the rescaling above never kills the sign) —
+    `Proofs.bnIstd_pos` with the length first and the input last. -/
 theorem bnIstd_pos (n : Nat) (ε : ℝ) (hε : 0 < ε) (z : Vec n) :
-    0 < bnIstd n z ε := by
-  rw [bnIstd]
-  apply div_pos one_pos
-  apply Real.sqrt_pos.mpr
-  have hv0 : 0 ≤ bnVar n z := by
-    rw [bnVar]; apply div_nonneg
-    · exact Finset.sum_nonneg (fun i _ => mul_self_nonneg _)
-    · positivity
-  linarith
+    0 < bnIstd n z ε := Proofs.bnIstd_pos z ε hε
 
 -- ════════════════════════════════════════════════════════════════
 -- § A concrete net with NONZERO, NON-COLLAPSED weights
@@ -999,7 +939,7 @@ noncomputable def X : Vec (1 * 2 * 2) := fun i => (i.val : ℝ)
 
 /-- The five ReLU6 sites all discharge through the one window lemma (length 8,
     γ=1, β=3, ε=1), regardless of the weights feeding them. -/
-private theorem win (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
+theorem win (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
     bnForward (2 * 2 * 2) 1 1 3 z k ≠ 0 ∧ bnForward (2 * 2 * 2) 1 1 3 z k ≠ 6 := by
   obtain ⟨h0, h6⟩ := bn13_window (2 * 2 * 2) (by norm_num) (by norm_num) 1 one_pos z k
   exact ⟨h0.ne', h6.ne⟩
@@ -1254,12 +1194,8 @@ theorem sumX0 : (∑ p : Fin 2 × Fin 2, (Tensor3.unflatten X) 0 p.1 p.2) = 6 :=
 /-- Sum over a flattened tensor equals the tensor's triple sum (index reindex). -/
 theorem sum_flatten8 (T : Tensor3 2 2 2) :
     (∑ k, Tensor3.flatten T k) = ∑ c : Fin 2, ∑ hi : Fin 2, ∑ wi : Fin 2, T c hi wi := by
-  rw [← Equiv.sum_comp finProdFinEquiv (Tensor3.flatten T), Fintype.sum_prod_type]
-  simp only [Tensor3.flatten, Equiv.symm_apply_apply]
-  rw [← Equiv.sum_comp finProdFinEquiv
-        (fun q => ∑ w : Fin 2, T (finProdFinEquiv.symm q).1 (finProdFinEquiv.symm q).2 w),
-      Fintype.sum_prod_type]
-  simp only [Equiv.symm_apply_apply]
+  simp only [Tensor3.flatten, ← Equiv.sum_comp finProdFinEquiv, Fintype.sum_prod_type,
+    Equiv.symm_apply_apply]
 
 /-- The total of `convX` over all eight cells is `18` (= 6 + 12). -/
 theorem sumConvX : (∑ k, flatConv (h := 2) (w := 2) Ws bs X k) = 18 := by

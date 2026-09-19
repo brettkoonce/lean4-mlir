@@ -85,24 +85,7 @@ theorem unflatten_flatten {oc ic kH kW : Nat}
 
 theorem flatten_unflatten {oc ic kH kW : Nat}
     (v : Vec (oc * ic * kH * kW)) : flatten (unflatten v) = v := by
-  funext k
-  -- After `change`, Lean's Prod struct-eta already collapses the innermost
-  -- pair `(c.1, c.2)` to `c = fPF.symm (..).1`, so we start by collapsing
-  -- that innermost `fPF (fPF.symm ...)` directly. Two more round-trips follow,
-  -- each needing an explicit Prod-eta `show` + another `Equiv.apply_symm_apply`.
-  change v (finProdFinEquiv
-    (finProdFinEquiv
-      (finProdFinEquiv (finProdFinEquiv.symm (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1),
-       (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).2),
-     (finProdFinEquiv.symm k).2)) = v k
-  rw [Equiv.apply_symm_apply]
-  rw [show ((finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1,
-            (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).2) =
-           finProdFinEquiv.symm (finProdFinEquiv.symm k).1 from rfl,
-      Equiv.apply_symm_apply]
-  rw [show ((finProdFinEquiv.symm k).1, (finProdFinEquiv.symm k).2) =
-           finProdFinEquiv.symm k from rfl,
-      Equiv.apply_symm_apply]
+  funext k; simp only [flatten, unflatten, Prod.mk.eta, Equiv.apply_symm_apply]
 
 end Kernel4
 
@@ -467,6 +450,12 @@ theorem flatConv_differentiable {ic oc h w kH kW : Nat}
     Differentiable ℝ (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w)) :=
   Tensor3.flatten_differentiable.comp
     ((conv2d_differentiable W b).comp Tensor3.unflatten_differentiable)
+
+/-- A conv with everywhere-zero kernel and bias maps anything to `0`. -/
+theorem flatConv_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (hW : ∀ o c kh kw, W o c kh kw = 0) (hb : ∀ o, b o = 0) (v : Vec (ic * h * w)) :
+    flatConv (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
+  funext k; simp [flatConv, conv2d, Tensor3.flatten, hW, hb]
 
 /-- **An `act ∘ norm ∘ lin` stage's VJP at a point** — a conv (or depthwise, or batched) op, a
     normalisation, then an activation. `lin` and `norm` are differentiable everywhere, so their
@@ -1283,32 +1272,7 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
   show ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
         pdiv3 maxPool2 x ci hi_in wi_in co ho wo * dy co ho wo = _
   simp_rw [pdiv3_maxPool2_smooth x h_smooth ci hi_in wi_in]
-  rw [Finset.sum_eq_single ci
-      (fun co _ hne_co => by
-        rw [Finset.sum_eq_zero]
-        intro ho _
-        rw [Finset.sum_eq_zero]
-        intro wo _
-        rw [ite_eq_right (fun ⟨h1, _, _, _⟩ => hne_co h1)]
-        ring)
-      (fun h => absurd (Finset.mem_univ ci) h)]
-  rw [Finset.sum_eq_single (winRow hi_in)
-      (fun ho _ hne_ho => by
-        rw [Finset.sum_eq_zero]
-        intro wo _
-        rw [ite_eq_right (fun ⟨_, h2, _, _⟩ => hne_ho h2)]
-        ring)
-      (fun h => absurd (Finset.mem_univ _) h)]
-  rw [Finset.sum_eq_single (winCol wi_in)
-      (fun wo _ hne_wo => by
-        rw [ite_eq_right (fun ⟨_, _, h3, _⟩ => hne_wo h3)]
-        ring)
-      (fun h => absurd (Finset.mem_univ _) h)]
-  by_cases h_arg : MaxPool2IsArgmax x ci hi_in wi_in
-  · rw [ite_eq_left ⟨rfl, rfl, rfl, h_arg⟩, ite_eq_left h_arg]
-    ring
-  · rw [ite_eq_right (fun ⟨_, _, _, h⟩ => h_arg h), ite_eq_right h_arg]
-    ring
+  simp [ite_and, Finset.sum_ite_eq']
 
 /-- **MaxPool2 pointwise VJP — no canonical-witness escape.**
 
@@ -1608,23 +1572,8 @@ noncomputable def maxPoolFlat_has_vjp_at {c h w : Nat}
     and no amplification. The one genuinely-new fact the MNIST-CNN forward
     rounding budget (planning §1b-A) needs beyond the dense/relu machinery. -/
 theorem max_close {a b c d e : ℝ} (h1 : |a - c| ≤ e) (h2 : |b - d| ≤ e) :
-    |max a b - max c d| ≤ e := by
-  rw [abs_le] at h1 h2 ⊢
-  refine ⟨?_, ?_⟩
-  · have h : max c d - e ≤ max a b := by
-      rcases le_total c d with hcd | hcd
-      · rw [max_eq_right hcd]
-        exact le_trans (by linarith [h2.1]) (le_max_right a b)
-      · rw [max_eq_left hcd]
-        exact le_trans (by linarith [h1.1]) (le_max_left a b)
-    linarith
-  · have h : max a b - e ≤ max c d := by
-      rcases le_total a b with hab | hab
-      · rw [max_eq_right hab]
-        exact le_trans (by linarith [h2.2]) (le_max_right c d)
-      · rw [max_eq_left hab]
-        exact le_trans (by linarith [h1.2]) (le_max_left c d)
-    linarith
+    |max a b - max c d| ≤ e :=
+  (abs_max_sub_max_le_max a b c d).trans (max_le h1 h2)
 
 /-- **MaxPool2 is exact in floating point + 1-Lipschitz.** Four window cells
     through three `max`-selections, no arithmetic — inherited input error `e`
@@ -1651,10 +1600,8 @@ theorem maxPoolFlat_close {c h w : Nat} (vt va : Vec (c * (2*h) * (2*w)))
   exact maxPool2_close (Tensor3.unflatten vt) (Tensor3.unflatten va) huf _ _ _
 
 /-- `|max a b| ≤ A` when both operands are. -/
-theorem abs_max_le {a b A : ℝ} (ha : |a| ≤ A) (hb : |b| ≤ A) : |max a b| ≤ A := by
-  rcases le_total a b with h | h
-  · rwa [max_eq_right h]
-  · rwa [max_eq_left h]
+theorem abs_max_le {a b A : ℝ} (ha : |a| ≤ A) (hb : |b| ≤ A) : |max a b| ≤ A :=
+  abs_max_le_max_abs_abs.trans (max_le ha hb)
 
 /-- **MaxPool2 never grows magnitudes** (it selects an existing cell). -/
 theorem maxPool2_abs_le {c h w : Nat} {x : Tensor3 c (2*h) (2*w)} {A : ℝ}

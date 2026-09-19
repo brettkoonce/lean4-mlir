@@ -72,7 +72,7 @@ theorem convBnRelu6StridedPC_differentiableAt {ic oc h w kH kW : Nat}
                        bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
       (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β ∘ flatConvStride2Xla W b) v := by
-  unfold flatConvStride2Xla at *; fun_prop (disch := assumption)
+  fun_prop (disch := assumption)
 
 /-- Differentiability peer of `invresBodyPC_has_vjp_at` (which `MobileNetV2BackCertifiedTie`
     did not need, having no `residual` wrapper to feed). -/

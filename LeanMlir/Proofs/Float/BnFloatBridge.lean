@@ -66,11 +66,6 @@ theorem rsqrt_lipschitz {a b ε : ℝ} (hε : 0 < ε) (ha : ε ≤ a) (hb : ε �
           mul_le_mul hsum hprod (le_of_lt hε) (by positivity)
   gcongr
 
-/-- The population variance is nonnegative (a mean of squares). -/
-theorem bnVar_nonneg (n : ℕ) (x : Vec n) : 0 ≤ bnVar n x := by
-  unfold bnVar
-  exact div_nonneg (Finset.sum_nonneg fun i _ => mul_self_nonneg _) (Nat.cast_nonneg n)
-
 /-- **BN inverse-stddev budget at the OPERATING POINT (a-posteriori).** The general
     form of `bnIstd_close` (below): the `1/√` Lipschitz floor is a *variance lower bound*
     `V ≤ σ²+ε` (both float and real), not the `ε`-floor. `rsqrt_lipschitz` is

@@ -59,6 +59,16 @@ noncomputable def bnVar (n : Nat) (x : Vec n) : ℝ :=
 noncomputable def bnIstd (n : Nat) (x : Vec n) (ε : ℝ) : ℝ :=
   1 / Real.sqrt (bnVar n x + ε)
 
+/-- The population variance is nonnegative (a mean of squares). -/
+theorem bnVar_nonneg (n : ℕ) (x : Vec n) : 0 ≤ bnVar n x := by
+  unfold bnVar
+  exact div_nonneg (Finset.sum_nonneg fun i _ => mul_self_nonneg _) (Nat.cast_nonneg n)
+
+/-- `istd = 1/√(σ²+ε) > 0` (variance ≥ 0, `ε > 0`). -/
+theorem bnIstd_pos {n : Nat} (v : Vec n) (ε : ℝ) (hε : 0 < ε) : 0 < bnIstd n v ε := by
+  unfold bnIstd
+  exact one_div_pos.mpr (Real.sqrt_pos.mpr (by linarith [bnVar_nonneg n v]))
+
 /-- Normalized output: `x̂ᵢ = (xᵢ − μ) · istd`
 
     `x̂` has mean 0 and variance 1 (up to ε-correction). It's the
@@ -81,6 +91,27 @@ noncomputable def bnXhat (n : Nat) (ε : ℝ) (x : Vec n) : Vec n :=
 -/
 noncomputable def bnForward (n : Nat) (ε γ β : ℝ) (x : Vec n) : Vec n :=
   fun i => γ * bnXhat n ε x i + β
+
+/-- Each normalized coordinate is bounded: `x̂ₖ² ≤ n`. Proof: `istd² = 1/(σ²+ε)` and
+    `(vₖ−μ)² ≤ Σⱼ(vⱼ−μ)² = n·σ² ≤ n·(σ²+ε)`. -/
+theorem bnXhat_sq_le {n : Nat} (ε : ℝ) (hε : 0 < ε) (v : Vec n) (k : Fin n) :
+    (bnXhat n ε v k) ^ 2 ≤ (n : ℝ) := by
+  have hpos : 0 < bnVar n v + ε := by linarith [bnVar_nonneg n v]
+  have hsum : (n : ℝ) * bnVar n v = ∑ j, (v j - bnMean n v) * (v j - bnMean n v) := by
+    rw [bnVar, mul_div_cancel₀ _ (Nat.cast_ne_zero.mpr k.pos.ne')]
+  have hterm := Finset.single_le_sum (f := fun j => (v j - bnMean n v) * (v j - bnMean n v))
+    (fun j _ => mul_self_nonneg _) (Finset.mem_univ k)
+  simp only [bnXhat, bnIstd, mul_one_div, div_pow, Real.sq_sqrt hpos.le]
+  rw [div_le_iff₀ hpos]
+  nlinarith [Nat.cast_nonneg (α := ℝ) n]
+
+/-- BN of a constant vector is the (constant) shift `β` — centering zeroes
+    the normalized term, killing the `√`. The zero-weight blocks of the concrete
+    ResNet-34 and MobileNetV2 witnesses collapse through it. -/
+theorem bnForward_const {n : Nat} (hn : 0 < n) (ε γ β c : ℝ) :
+    bnForward n ε γ β (fun _ => c) = (fun _ => β) := by
+  have : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn.ne'
+  funext i; simp [bnForward, bnXhat, bnMean, this]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Parameter gradients (the easy part)
@@ -336,10 +367,7 @@ theorem pdiv_bnCentered (n : Nat) (x : Vec n) (i j : Fin n) :
 @[fun_prop]
 theorem bnIstdBroadcast_diff (n : Nat) (ε : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (bnIstdBroadcast n ε) := by
-  have hpos : ∀ x : Vec n, 0 < bnVar n x + ε := fun x => by
-    have : 0 ≤ bnVar n x :=
-      div_nonneg (Finset.sum_nonneg fun _ _ => mul_self_nonneg _) (Nat.cast_nonneg _)
-    linarith
+  have hpos : ∀ x : Vec n, 0 < bnVar n x + ε := fun x => by linarith [bnVar_nonneg n x]
   have hsqrt : Differentiable ℝ fun x : Vec n => Real.sqrt (bnVar n x + ε) :=
     (by unfold bnVar bnMean; fun_prop : Differentiable ℝ fun x : Vec n => bnVar n x + ε).sqrt
       fun x => (hpos x).ne'
@@ -372,12 +400,7 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
   | zero => exact i.elim0
   | succ n' =>
   -- Positivity setup.
-  have h_var_nonneg : 0 ≤ bnVar (n' + 1) x := by
-    unfold bnVar
-    apply div_nonneg
-    · exact Finset.sum_nonneg (fun _ _ => mul_self_nonneg _)
-    · exact Nat.cast_nonneg _
-  have h_arg_pos : 0 < bnVar (n' + 1) x + ε := by linarith
+  have h_arg_pos : 0 < bnVar (n' + 1) x + ε := by linarith [bnVar_nonneg (n' + 1) x]
   have h_arg_ne : bnVar (n' + 1) x + ε ≠ 0 := h_arg_pos.ne'
   have h_sqrt_pos : 0 < Real.sqrt (bnVar (n' + 1) x + ε) := Real.sqrt_pos.mpr h_arg_pos
   have h_sqrt_ne : Real.sqrt (bnVar (n' + 1) x + ε) ≠ 0 := h_sqrt_pos.ne'

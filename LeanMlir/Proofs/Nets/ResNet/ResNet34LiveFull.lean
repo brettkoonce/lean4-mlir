@@ -41,7 +41,7 @@ theorem idBlk2_body_const (h w : Nat) (hhw : 0 < 2 * h * w) (a : Vec (2 * h * w)
     ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
       (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2)) a = (fun _ => (1 : ℝ)) := by
   simp only [Function.comp_apply]
-  rw [flatConv_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+  rw [flatConv_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
 
 theorem idBlk2_nonneg (h w : Nat) (a : Vec (2 * h * w)) (k : Fin (2 * h * w)) :
     0 ≤ idBlk2 h w a k := relu_nonneg (2 * h * w) _ k
@@ -50,7 +50,7 @@ noncomputable def idBlk2_hasVJPAt (h w : Nat) (hhw : 0 < 2 * h * w)
     (a : Vec (2 * h * w)) (ha : ∀ k, 0 ≤ a k) : HasVJPAt (idBlk2 h w) a :=
   resblock_has_vjp_at (h := h) (w := w) Zk2 Zb2 Zk2 Zb2 1 0 1 1 0 1 (by norm_num) (by norm_num) a
     (fun k => by
-      rw [flatConv_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+      rw [flatConv_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
       change (1 : ℝ) ≠ 0; norm_num)
     (fun k => by
       rw [idBlk2_body_const h w hhw a]; change (1 : ℝ) + a k ≠ 0
@@ -61,7 +61,7 @@ theorem idBlk2_diffAt (h w : Nat) (hhw : 0 < 2 * h * w)
   exact resblock_differentiableAt (h := h) (w := w) Zk2 Zb2 Zk2 Zb2 1 0 1 1 0 1 (by norm_num)
     (by norm_num) a
     (fun k => by
-      rw [flatConv_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+      rw [flatConv_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
       change (1 : ℝ) ≠ 0; norm_num)
     (fun k => by
       rw [idBlk2_body_const h w hhw a]; change (1 : ℝ) + a k ≠ 0

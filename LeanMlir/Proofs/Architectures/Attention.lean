@@ -107,10 +107,9 @@ theorem gelu_per_token_flat_diff (N D : Nat) :
                    (Mat.unflatten v))) := by
   unfold Mat.unflatten Mat.flatten gelu geluScalar; fun_prop
 
-/-- Differentiability of `dense W b` as a function of the input. -/
+/-- Differentiability of `dense W b` as a function of the input (`dense_differentiable`). -/
 lemma dense_diff {m n : Nat} (W : Mat m n) (b : Vec n) :
-    Differentiable ℝ (dense W b) := by
-  unfold dense; fun_prop
+    Differentiable ℝ (dense W b) := dense_differentiable W b
 
 /-- Differentiability of `softmax c`: each coordinate is `exp(z k) · (Σ_j exp(z j))⁻¹`, and the
     denominator is positive. -/
@@ -141,10 +140,15 @@ theorem layerNorm_per_token_flat_diff (N D : Nat) (ε γ β : ℝ) (hε : 0 < ε
 lemma identity_mat_flat_diff (a b : Nat) :
     Differentiable ℝ (fun v : Vec (a * b) =>
       Mat.flatten ((fun X : Mat a b => X) (Mat.unflatten v))) := by
-  show Differentiable ℝ (fun v : Vec (a * b) => Mat.flatten (Mat.unflatten v))
-  have h_eq : (fun v : Vec (a * b) => Mat.flatten (Mat.unflatten v)) = id := by
-    funext v; exact Mat.flatten_unflatten v
-  rw [h_eq]; exact differentiable_id
+  simp only [Mat.flatten_unflatten]; exact differentiable_id
+
+/-- Differentiability of a flattened composition `G ∘ F` from those of `F` and `G`: the
+    `Mat.unflatten (Mat.flatten _)` round trip in the middle is the identity. -/
+lemma flat_diff_comp {a b c d e f : Nat} {F : Mat a b → Mat c d} {G : Mat c d → Mat e f}
+    (hF : Differentiable ℝ (fun v : Vec (a * b) => Mat.flatten (F (Mat.unflatten v))))
+    (hG : Differentiable ℝ (fun u : Vec (c * d) => Mat.flatten (G (Mat.unflatten u)))) :
+    Differentiable ℝ (fun v : Vec (a * b) => Mat.flatten ((G ∘ F) (Mat.unflatten v))) := by
+  simpa [Function.comp_def, Mat.unflatten_flatten] using hG.comp hF
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. Standalone Softmax VJP
@@ -276,24 +280,10 @@ noncomputable def softmax_has_vjp (c : Nat) : HasVJP (softmax c) where
     fun i => p i * (dy i - s)
   correct := by
     intro z dy i
-    -- Goal: p_i * (dy_i - <p, dy>) = sum_j pdiv(softmax) z i j * dy_j
-    -- RHS by pdiv_softmax: sum_j (p_j * (delta_{ij} - p_i)) * dy_j
-    --                    = p_i * dy_i - p_i * sum_j p_j * dy_j
-    --                    = p_i * (dy_i - <p, dy>)
-    simp only [pdiv_softmax]
-    set p := softmax c z
-    -- Reduce to: ∑ j, p j * (δ_ij - p i) * dy j = p i * dy i - p i * ∑ j, p j * dy j
-    suffices h : ∑ j : Fin c, p j * ((if i = j then (1:ℝ) else 0) - p i) * dy j
-        = p i * dy i - p i * ∑ j : Fin c, p j * dy j by
-      rw [h]; ring
-    -- Distribute and split the sum
-    simp_rw [mul_sub, sub_mul]
-    rw [Finset.sum_sub_distrib]
-    congr 1
-    -- First sum: Kronecker delta collapses to p i * dy i
-    · simp [mul_ite, ite_mul, mul_one, mul_zero, zero_mul]
-    -- Second sum: factor p i out
-    · rw [Finset.mul_sum]; congr 1; ext j; ring
+    -- `Σ_j p_j (δ_ij - p_i) dy_j`: the Kronecker term collapses to `p_i dy_i`.
+    simp only [pdiv_softmax, mul_sub, sub_mul, Finset.sum_sub_distrib, mul_ite, ite_mul, mul_one,
+      mul_zero, zero_mul, Finset.sum_ite_eq, Finset.mem_univ, ite_true, Finset.mul_sum]
+    exact congrArg _ (Finset.sum_congr rfl fun j _ => by ring)
 
 /-- **Softmax cross-entropy scalar gradient** — proved (was an axiom in
     MLP.lean; relocated here to use `pdiv_softmax`).
@@ -399,94 +389,23 @@ parallel.
 noncomputable def rowSoftmax {m n : Nat} (A : Mat m n) : Mat m n :=
   fun i => softmax n (A i)
 
-/-- **Smoothness of `rowSoftmax`** — proved from Mathlib calculus
-    (planning/archive/VJP.md follow-up B).
-
-    `rowSoftmax M r c = exp(M r c) / Σⱼ exp(M r j)`. The denominator is
-    everywhere positive (sum of `Real.exp_pos` terms over a nonempty
-    index set when `n ≥ 1`), so the function is C^∞ via `Real.exp`,
-    `Finset.sum`, and `div` with positivity. The `n = 0` case is
-    trivial because `Vec (m * 0) = Vec 0` is 0-dimensional. -/
+/-- **Smoothness of `rowSoftmax`**: each output coordinate of the flattened map is a
+    coordinate of `softmax n` (`softmax_diff`) applied to one row of the input. -/
 theorem rowSoftmax_flat_diff (m n : Nat) :
     Differentiable ℝ (fun v : Vec (m * n) =>
       Mat.flatten (rowSoftmax (Mat.unflatten v) : Mat m n)) := by
-  match n with
-  | 0 =>
-    -- m * 0 = 0; codomain Vec 0 — trivially differentiable.
-    intro v
-    -- Reduce the goal via funext to the pointwise version, then handle Fin 0 = ∅.
-    have : (fun v : Vec (m * 0) => Mat.flatten (rowSoftmax (Mat.unflatten v) : Mat m 0)) =
-           (fun _ : Vec (m * 0) => fun (k : Fin (m * 0)) => (0 : ℝ)) := by
-      funext v k
-      exact (k.elim0 : False).elim
-    rw [this]
-    exact (differentiable_const _).differentiableAt
-  | n + 1 =>
-    rw [differentiable_pi]
-    intro k
-    set p := finProdFinEquiv.symm k
-    -- Rewrite the k-th coordinate as `Real.exp (linear) * (Σ Real.exp (linear))⁻¹`
-    -- so that we can chain `Differentiable.mul` with `Differentiable.inv`
-    -- (the multivariate `Differentiable.div` requires a scalar domain).
-    have h_fn :
-        (fun v : Vec ((m * (n + 1))) =>
-          Mat.flatten (rowSoftmax (Mat.unflatten v) : Mat m (n + 1)) k) =
-        (fun v : Vec ((m * (n + 1))) =>
-          Real.exp (v (finProdFinEquiv (p.1, p.2))) *
-          (∑ j : Fin (n + 1), Real.exp (v (finProdFinEquiv (p.1, j))))⁻¹) := by
-      funext v
-      show rowSoftmax (Mat.unflatten v) p.1 p.2 = _
-      unfold rowSoftmax softmax Mat.unflatten
-      rw [div_eq_mul_inv]
-    rw [h_fn]
-    have h_num : Differentiable ℝ
-        (fun v : Vec (m * (n + 1)) => Real.exp (v (finProdFinEquiv (p.1, p.2)))) := by
-      fun_prop
-    have h_denom : Differentiable ℝ
-        (fun v : Vec (m * (n + 1)) =>
-          ∑ j : Fin (n + 1), Real.exp (v (finProdFinEquiv (p.1, j)))) := by
-      fun_prop
-    have h_ne : ∀ v : Vec (m * (n + 1)),
-        (∑ j : Fin (n + 1), Real.exp (v (finProdFinEquiv (p.1, j)))) ≠ 0 := by
-      intro v
-      exact (Finset.sum_pos (fun j _ => Real.exp_pos _) Finset.univ_nonempty).ne'
-    -- inv of the denominator is differentiable everywhere (denom ≠ 0).
-    have h_inv : Differentiable ℝ
-        (fun v : Vec (m * (n + 1)) =>
-          (∑ j : Fin (n + 1), Real.exp (v (finProdFinEquiv (p.1, j))))⁻¹) :=
-      fun v => (h_denom v).inv (h_ne v)
-    exact h_num.mul h_inv
+  have := softmax_diff n
+  unfold rowSoftmax Mat.flatten Mat.unflatten; fun_prop
 
 /-- **Row-wise softmax VJP** — proved, no sorry.
 
     Rows are independent, so the Jacobian is block-diagonal with the
     standalone softmax Jacobian in each block. The backward just
-    applies `softmax_has_vjp` per row. -/
+    applies `softmax_has_vjp` per row; correctness is `rowwise_has_vjp_mat`'s. -/
 noncomputable def rowSoftmax_has_vjp_mat {m n : Nat} :
     HasVJPMat (fun A : Mat m n => fun r => softmax n (A r)) where
   backward := fun A dY => fun r c => (softmax_has_vjp n).backward (A r) (dY r) c
-  correct := by
-    intro A dY i j
-    -- Replace pdivMat of the row-independent fn with its row/vector form.
-    simp_rw [pdivMat_rowIndep _ (softmax_diff n)]
-    -- Goal: (softmax_has_vjp n).backward (A i) (dY i) j =
-    --       Σ k, Σ l, (if i = k then pdiv (softmax n) (A i) j l else 0) * dY k l
-    -- Push the *dY through the if-else, then pull the if-else out of the inner sum.
-    have h : ∀ k : Fin m,
-        (∑ l : Fin n, (if i = k then pdiv (softmax n) (A i) j l else 0) * dY k l) =
-        if i = k then ∑ l : Fin n, pdiv (softmax n) (A i) j l * dY k l else 0 := by
-      intro k
-      by_cases hik : i = k
-      · simp [hik]
-      · simp [hik]
-    simp_rw [h]
-    -- Now: Σ k, if i = k then Σ l, ... * dY k l else 0.  Collapse at k = i.
-    rw [Finset.sum_ite_eq Finset.univ i
-        (fun k => ∑ l : Fin n, pdiv (softmax n) (A i) j l * dY k l)]
-    simp only [Finset.mem_univ, ite_true]
-    -- Goal: (softmax_has_vjp n).backward (A i) (dY i) j =
-    --       Σ l, pdiv (softmax n) (A i) j l * dY i l
-    exact (softmax_has_vjp n).correct (A i) (dY i) j
+  correct := (rowwise_has_vjp_mat (softmax_has_vjp n) (softmax_diff n)).correct
 
 /-- Alias so `rowSoftmax_has_vjp_mat` types against the actual `rowSoftmax`
     definition (definitionally equal, but lets Lean unify on the name). -/
@@ -676,17 +595,8 @@ noncomputable def sdpa_Q_chain_has_vjp (n d : Nat) (K V : Mat n d) :
   have middle_diff : Differentiable ℝ
       (fun v : Vec (n * d) =>
         Mat.flatten ((@rowSoftmax n n) (((fun s : Mat n n => fun r c => sdpa_scale d * s r c) ∘
-          (fun Q' : Mat n d => Mat.mul Q' (Mat.transpose K))) (Mat.unflatten v)))) := by
-    have h_eq : (fun v : Vec (n * d) =>
-        Mat.flatten ((@rowSoftmax n n) (((fun s : Mat n n => fun r c => sdpa_scale d * s r c) ∘
-          (fun Q' : Mat n d => Mat.mul Q' (Mat.transpose K))) (Mat.unflatten v)))) =
-        (fun u : Vec (n * n) => Mat.flatten ((@rowSoftmax n n) (Mat.unflatten u))) ∘
-        (fun v : Vec (n * d) =>
-          Mat.flatten (((fun s : Mat n n => fun r c => sdpa_scale d * s r c) ∘
-            (fun Q' : Mat n d => Mat.mul Q' (Mat.transpose K))) (Mat.unflatten v))) := by
-      funext v; simp [Mat.unflatten_flatten]
-    rw [h_eq]
-    exact (rowSoftmax_flat_diff n n).comp inner_diff
+          (fun Q' : Mat n d => Mat.mul Q' (Mat.transpose K))) (Mat.unflatten v)))) :=
+    flat_diff_comp inner_diff (rowSoftmax_flat_diff n n)
   -- Outermost (… → matmul w V):
   vjpMat_comp _ (fun w : Mat n n => Mat.mul w V)
     middle_diff (matmul_right_const_flat_diff V)
@@ -768,17 +678,7 @@ noncomputable def sdpa_K_chain_has_vjp (n d : Nat) (Q V : Mat n d) :
         Mat.flatten ((@rowSoftmax n n) ((fun s : Mat n n => fun r c => sdpa_scale d * s r c)
           ((fun Kt' : Mat d n => Mat.mul Q Kt')
             (Mat.transpose (Mat.unflatten v : Mat n d) : Mat d n))))) := by
-    have h_eq : (fun v : Vec (n * d) =>
-        Mat.flatten ((@rowSoftmax n n) ((fun s : Mat n n => fun r c => sdpa_scale d * s r c)
-          ((fun Kt' : Mat d n => Mat.mul Q Kt')
-            (Mat.transpose (Mat.unflatten v : Mat n d) : Mat d n))))) =
-        (fun u : Vec (n * n) => Mat.flatten ((@rowSoftmax n n) (Mat.unflatten u))) ∘
-        (fun v : Vec (n * d) =>
-          Mat.flatten ((fun s : Mat n n => fun r c => sdpa_scale d * s r c)
-            ((fun Kt' : Mat d n => Mat.mul Q Kt')
-              (Mat.transpose (Mat.unflatten v : Mat n d) : Mat d n)))) := by
-      funext v; simp [Mat.unflatten_flatten]
-    rw [h_eq]; exact (rowSoftmax_flat_diff n n).comp l2_diff
+    simpa [Function.comp_def, Mat.unflatten_flatten] using (rowSoftmax_flat_diff n n).comp l2_diff
   -- Outermost (… → matmul w V):
   vjpMat_comp _ (fun w : Mat n n => Mat.mul w V)
     l3_diff (matmul_right_const_flat_diff V)
@@ -977,10 +877,8 @@ noncomputable def mhsa_weights (n d : Nat) (slab : Mat n (3 * d)) : Mat n n :=
 
 theorem mhsa_weights_flat_diff (n d : Nat) :
     Differentiable ℝ (fun v : Vec (n * (3 * d)) =>
-      Mat.flatten ((mhsa_weights n d) (Mat.unflatten v))) := by
-  have h := (rowSoftmax_flat_diff n n).comp (mhsa_pre_weights_flat_diff n d)
-  simp only [Function.comp_def, Mat.unflatten_flatten] at h
-  exact h
+      Mat.flatten ((mhsa_weights n d) (Mat.unflatten v))) :=
+  flat_diff_comp (mhsa_pre_weights_flat_diff n d) (rowSoftmax_flat_diff n n)
 
 /-- **Joint flat-diff of column-stacked SDPA.**
 
@@ -1031,13 +929,7 @@ noncomputable def mhsa_proj_c_CLM (n d : Nat) (c : Fin 3) :
                      finProdFinEquiv (c, (finProdFinEquiv.symm idx).2)))
 
 theorem mhsa_proj_c_eq_CLM (n d : Nat) (c : Fin 3) (v : Vec (n * (3 * d))) :
-    Mat.flatten ((mhsa_proj_c c) (Mat.unflatten v) : Mat n d) = mhsa_proj_c_CLM n d c v := by
-  funext idx
-  show Mat.flatten (fun r j => Mat.unflatten v r (finProdFinEquiv (c, j))) idx =
-       v (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                           finProdFinEquiv (c, (finProdFinEquiv.symm idx).2)))
-  unfold Mat.flatten Mat.unflatten
-  rfl
+    Mat.flatten ((mhsa_proj_c c) (Mat.unflatten v) : Mat n d) = mhsa_proj_c_CLM n d c v := rfl
 
 /-- "Lift to slab third c": embeds `Vec (n * d)` into `Vec (n * (3 * d))` by
     placing `u` in the c-th column third and zero elsewhere. Linear, hence
@@ -1060,13 +952,8 @@ theorem mhsa_lift_c_CLM_apply (n d : Nat) (c : Fin 3) (u : Vec (n * d))
        then u (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
                                 (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2))
        else 0) := by
-  show (ContinuousLinearMap.pi _) u idx = _
-  rw [ContinuousLinearMap.pi_apply]
-  by_cases hc : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-  · rw [ite_eq_left hc, ite_eq_left hc]
-    rfl
-  · rw [ite_eq_right hc, ite_eq_right hc]
-    rfl
+  simp only [mhsa_lift_c_CLM, ContinuousLinearMap.pi_apply]
+  split_ifs <;> rfl
 
 /-- "Embed Q' into slab at the c-th third, keep other thirds at slab's values."
     Affine function: `mhsa_lift_c_CLM c · u + (slab with c-th third zeroed)`. -/
@@ -1084,28 +971,16 @@ theorem mhsa_embed_c_eq (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
         if (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
         then 0 else Mat.flatten slab idx) := by
   funext idx
-  show (if (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-        then u (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                                  (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2))
-        else Mat.flatten slab idx) =
-       mhsa_lift_c_CLM n d c u idx +
-       (if (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-        then 0 else Mat.flatten slab idx)
-  rw [mhsa_lift_c_CLM_apply]
-  by_cases hcond : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-  · rw [ite_eq_left hcond, ite_eq_left hcond, ite_eq_left hcond, add_zero]
-  · rw [ite_eq_right hcond, ite_eq_right hcond, ite_eq_right hcond, zero_add]
+  obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
+  obtain ⟨⟨c', j⟩, rfl⟩ := finProdFinEquiv.surjective q
+  by_cases hc : c' = c <;>
+    simp only [mhsa_embed_c, mhsa_lift_c_CLM_apply, Pi.add_apply, Equiv.symm_apply_apply, hc,
+      ite_true, ite_false, add_zero, zero_add]
 
 theorem mhsa_embed_c_hasFDerivAt (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     (u₀ : Vec (n * d)) :
     HasFDerivAt (mhsa_embed_c n d c slab) (mhsa_lift_c_CLM n d c) u₀ := by
-  rw [show (mhsa_embed_c n d c slab : Vec (n * d) → Vec (n * (3 * d))) =
-        (fun u => mhsa_lift_c_CLM n d c u +
-          (fun idx =>
-            let p := finProdFinEquiv.symm idx
-            let q := finProdFinEquiv.symm p.2
-            if q.1 = c then 0 else Mat.flatten slab idx))
-      from funext (mhsa_embed_c_eq n d c slab)]
+  rw [funext (mhsa_embed_c_eq n d c slab)]
   exact (mhsa_lift_c_CLM n d c).hasFDerivAt.add_const _
 
 /-- The composition `mhsa_g ∘ mhsa_embed_c c slab` equals "SDPA with the c-th
@@ -1123,105 +998,23 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
        else
          Mat.flatten (sdpa n d (mhsa_proj_c (0 : Fin 3) slab)
                         (mhsa_proj_c (1 : Fin 3) slab) (Mat.unflatten u))) := by
-  -- Three cases on c. For each, show that the c-th projection of
-  -- (mhsa_embed_c c slab u) is `Mat.unflatten u` and the other two are `mhsa_proj_c · slab`.
+  -- The `c'`-th third of the embedded slab is `u` if `c' = c`, else `slab`'s.
   have h_proj_match : ∀ (c' : Fin 3),
       mhsa_proj_c c' (Mat.unflatten (mhsa_embed_c n d c slab u) : Mat n (3 * d)) =
       (if c' = c then (Mat.unflatten u : Mat n d) else mhsa_proj_c c' slab) := by
-    intro c'
-    funext r j
-    show Mat.unflatten (mhsa_embed_c n d c slab u) r (finProdFinEquiv (c', j)) = _
-    unfold Mat.unflatten mhsa_embed_c
-    -- Unfold and decode the index.
-    show (if (finProdFinEquiv.symm (finProdFinEquiv.symm (finProdFinEquiv (r, finProdFinEquiv (c', j)))).2).1 = c
-          then u (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv (r, finProdFinEquiv (c', j)))).1,
-                                   (finProdFinEquiv.symm (finProdFinEquiv.symm (finProdFinEquiv (r, finProdFinEquiv (c', j)))).2).2))
-          else Mat.flatten slab (finProdFinEquiv (r, finProdFinEquiv (c', j)))) = _
-    simp only [Equiv.symm_apply_apply]
-    by_cases hc' : c' = c
-    · subst hc'
-      rw [ite_eq_left rfl]
-      simp
-    · rw [ite_eq_right hc']
-      rw [ite_eq_right hc']
-      unfold Mat.flatten mhsa_proj_c
-      simp only [Equiv.symm_apply_apply]
-  unfold mhsa_g
-  by_cases hc0 : c = (0 : Fin 3)
-  · subst hc0
-    rw [ite_eq_left rfl]
-    have h0 := h_proj_match (0 : Fin 3)
-    have h1 := h_proj_match (1 : Fin 3)
-    have h2 := h_proj_match (2 : Fin 3)
-    simp at h0
-    simp [show (1 : Fin 3) ≠ (0 : Fin 3) from by decide] at h1
-    simp [show (2 : Fin 3) ≠ (0 : Fin 3) from by decide] at h2
-    show Mat.flatten (sdpa n d
-      (fun r j => (Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u) : Mat n (3 * d)) r (finProdFinEquiv ((0 : Fin 3), j)))
-      (fun r j => Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u) r (finProdFinEquiv ((1 : Fin 3), j)))
-      (fun r j => Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u) r (finProdFinEquiv ((2 : Fin 3), j)))) = _
-    show Mat.flatten (sdpa n d (mhsa_proj_c (0 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u)))
-      (mhsa_proj_c (1 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u)))
-      (mhsa_proj_c (2 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (0 : Fin 3) slab u)))) = _
-    rw [h0, h1, h2]
-  · rw [ite_eq_right hc0]
-    by_cases hc1 : c = (1 : Fin 3)
-    · subst hc1
-      rw [ite_eq_left rfl]
-      have h0 := h_proj_match (0 : Fin 3)
-      have h1 := h_proj_match (1 : Fin 3)
-      have h2 := h_proj_match (2 : Fin 3)
-      simp [show (0 : Fin 3) ≠ (1 : Fin 3) from by decide] at h0
-      simp at h1
-      simp [show (2 : Fin 3) ≠ (1 : Fin 3) from by decide] at h2
-      show Mat.flatten (sdpa n d (mhsa_proj_c (0 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (1 : Fin 3) slab u)))
-        (mhsa_proj_c (1 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (1 : Fin 3) slab u)))
-        (mhsa_proj_c (2 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (1 : Fin 3) slab u)))) = _
-      rw [h0, h1, h2]
-    · rw [ite_eq_right hc1]
-      have hc2 : c = (2 : Fin 3) := by
-        fin_cases c
-        · exact absurd rfl hc0
-        · exact absurd rfl hc1
-        · rfl
-      subst hc2
-      have h0 := h_proj_match (0 : Fin 3)
-      have h1 := h_proj_match (1 : Fin 3)
-      have h2 := h_proj_match (2 : Fin 3)
-      simp [show (0 : Fin 3) ≠ (2 : Fin 3) from by decide] at h0
-      simp [show (1 : Fin 3) ≠ (2 : Fin 3) from by decide] at h1
-      simp at h2
-      show Mat.flatten (sdpa n d (mhsa_proj_c (0 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (2 : Fin 3) slab u)))
-        (mhsa_proj_c (1 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (2 : Fin 3) slab u)))
-        (mhsa_proj_c (2 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (2 : Fin 3) slab u)))) = _
-      rw [h0, h1, h2]
+    intro c'; funext r j
+    by_cases hc' : c' = c <;> simp [hc', mhsa_proj_c, mhsa_embed_c, Mat.unflatten, Mat.flatten]
+  have hg : ∀ M, mhsa_g n d M = sdpa n d (mhsa_proj_c 0 M) (mhsa_proj_c 1 M) (mhsa_proj_c 2 M) :=
+    fun _ => rfl
+  rw [hg, h_proj_match, h_proj_match, h_proj_match]
+  fin_cases c <;> simp
 
 theorem mhsa_embed_c_at_proj (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d)) :
     mhsa_embed_c n d c slab (Mat.flatten (mhsa_proj_c c slab)) = Mat.flatten slab := by
   funext idx
-  show (if (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-        then Mat.flatten (mhsa_proj_c c slab)
-              (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                                (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2))
-        else Mat.flatten slab idx) = _
-  by_cases hcond : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-  · rw [ite_eq_left hcond]
-    show Mat.flatten (mhsa_proj_c c slab)
-          (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                            (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2)) =
-         Mat.flatten slab idx
-    unfold Mat.flatten mhsa_proj_c
-    simp only [Equiv.symm_apply_apply]
-    -- slab[(decode idx).1, fPF(c, (decode (decode idx).2).2)] = slab[(decode idx).1, (decode idx).2]
-    -- Need: fPF(c, (decode (decode idx).2).2) = (decode idx).2
-    -- (decode idx).2 : Fin (3 * d) decodes as (q.1, q.2). hcond: q.1 = c. Hence fPF(c, q.2) = fPF(q.1, q.2) = (decode idx).2.
-    show slab (finProdFinEquiv.symm idx).1
-              (finProdFinEquiv (c, (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2)) =
-         slab (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
-    congr 1
-    rw [show c = (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 from hcond.symm]
-    exact (Equiv.apply_symm_apply _ _)
-  · rw [ite_eq_right hcond]
+  obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
+  obtain ⟨⟨c', j⟩, rfl⟩ := finProdFinEquiv.surjective q
+  by_cases hc : c' = c <;> simp [mhsa_embed_c, mhsa_proj_c, Mat.flatten, hc]
 
 /-- **Helper for `pdivMat_mhsa_g_split` (per-c chain rule).**
     For each `c : Fin 3`, the chain rule gives:
@@ -1236,30 +1029,11 @@ theorem pdivMat_mhsa_g_split_chain (n d : Nat) (slab : Mat n (3 * d)) (c : Fin 3
               (Mat.flatten slab)).comp (mhsa_lift_c_CLM n d c) =
     fderiv ℝ (fun u : Vec (n * d) => Mat.flatten (freeze_fn (Mat.unflatten u)))
               (Mat.flatten (mhsa_proj_c c slab)) := by
-  set flat_g : Vec (n * (3 * d)) → Vec (n * d) := fun v =>
-    Mat.flatten ((mhsa_g n d) (Mat.unflatten v))
-  set flat_freeze : Vec (n * d) → Vec (n * d) := fun u =>
-    Mat.flatten (freeze_fn (Mat.unflatten u))
-  set u₀ : Vec (n * d) := Mat.flatten (mhsa_proj_c c slab)
-  -- flat_g ∘ embed = flat_freeze (pointwise, by hypothesis).
-  have h_comp : flat_g ∘ (mhsa_embed_c n d c slab) = flat_freeze := by
-    funext u
-    exact h_g_freeze_eq u
-  -- HasFDerivAt for embed at u₀.
-  have h_embed_at : mhsa_embed_c n d c slab u₀ = Mat.flatten slab := mhsa_embed_c_at_proj n d c slab
-  have h_embed_diff : HasFDerivAt (mhsa_embed_c n d c slab) (mhsa_lift_c_CLM n d c) u₀ :=
-    mhsa_embed_c_hasFDerivAt n d c slab u₀
-  -- HasFDerivAt for flat_g at (embed u₀) = Mat.flatten slab.
-  have h_g_at : HasFDerivAt flat_g (fderiv ℝ flat_g (Mat.flatten slab)) (mhsa_embed_c n d c slab u₀) := by
-    rw [h_embed_at]
-    exact ((mhsa_g_flat_diff n d) (Mat.flatten slab)).hasFDerivAt
-  -- Composition gives HasFDerivAt for flat_g ∘ embed = flat_freeze.
-  have h_chain : HasFDerivAt (flat_g ∘ mhsa_embed_c n d c slab)
-      ((fderiv ℝ flat_g (Mat.flatten slab)).comp (mhsa_lift_c_CLM n d c)) u₀ :=
-    h_g_at.comp u₀ h_embed_diff
-  rw [h_comp] at h_chain
-  -- Conclude: fderiv freeze u₀ = the comp.
-  exact h_chain.fderiv.symm
+  -- Chain rule for `flat_g ∘ embed_c` at the point `embed_c (proj_c slab) = slab`.
+  have h := ((mhsa_g_flat_diff n d) (Mat.flatten slab)).hasFDerivAt
+  rw [← mhsa_embed_c_at_proj n d c slab] at h ⊢
+  rw [← (h.comp _ (mhsa_embed_c_hasFDerivAt n d c slab _)).fderiv]
+  exact congrArg (fderiv ℝ · _) (funext h_g_freeze_eq)
 
 /-- **`pdivMat` of `mhsa_g` splits per-c into the corresponding `pdivMat` of
     SDPA against its c-th argument.** The freezing lemma: changes in the
@@ -1284,88 +1058,27 @@ theorem pdivMat_mhsa_g_split (n d : Nat) (slab : Mat n (3 * d))
   have h_lift_basis : mhsa_lift_c_CLM n d c (basisVec (finProdFinEquiv (i, j))) =
       basisVec (finProdFinEquiv (i, finProdFinEquiv (c, j))) := by
     funext idx
-    rw [mhsa_lift_c_CLM_apply, basisVec_apply, basisVec_apply]
-    -- Both basis vectors collapse to 1 at exactly one index.
-    -- LHS = 1 ↔ (decode (decode idx).2).1 = c ∧ fPF((decode idx).1, (decode (decode idx).2).2) = fPF(i, j)
-    -- RHS = 1 ↔ idx = fPF(i, fPF(c, j))
-    -- These are equivalent by injectivity of fPF.
-    by_cases hidx : idx = finProdFinEquiv (i, finProdFinEquiv (c, j))
-    · subst hidx
-      simp [Equiv.symm_apply_apply]
-    · rw [ite_eq_right hidx]
-      -- Show LHS = 0.
-      by_cases hcond : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
-      · rw [ite_eq_left hcond, ite_eq_right]
-        intro heq
-        apply hidx
-        have h_inj := finProdFinEquiv.injective heq
-        have h_p1 : (finProdFinEquiv.symm idx).1 = i := (Prod.mk.inj h_inj).1
-        have h_p2 : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2 = j := (Prod.mk.inj h_inj).2
-        -- Reconstruct idx = fPF(i, fPF(c, j)) from h_p1, hcond, h_p2.
-        have h_inner_eq : (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2) = (c, j) := by
-          apply Prod.ext
-          · exact hcond
-          · exact h_p2
-        have h_p2_full : (finProdFinEquiv.symm idx).2 = finProdFinEquiv (c, j) := by
-          rw [show (finProdFinEquiv.symm idx).2 =
-                finProdFinEquiv (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2)
-              from (Equiv.apply_symm_apply _ _).symm]
-          rw [h_inner_eq]
-        have h_full : (finProdFinEquiv.symm idx) = (i, finProdFinEquiv (c, j)) :=
-          Prod.ext h_p1 h_p2_full
-        have key : finProdFinEquiv (finProdFinEquiv.symm idx) = idx :=
-          Equiv.apply_symm_apply _ _
-        rw [← key, h_full]
-      · rw [ite_eq_right hcond]
-  -- The pdiv on the LHS of the goal:
+    obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    obtain ⟨⟨c', j'⟩, rfl⟩ := finProdFinEquiv.surjective q
+    by_cases hc : c' = c <;> simp [mhsa_lift_c_CLM_apply, hc]
+  -- So the LHS is `(fderiv flat_g ∘L lift_c)` at a basis vector: per `c`, the chain rule
+  -- (`pdivMat_mhsa_g_split_chain`) with the freezing identity `mhsa_g_comp_embed`.
   unfold pdivMat pdiv
-  -- Key step: rewrite basisVec (fPF(i, fPF(c, j))) = mhsa_lift_c_CLM (basisVec (fPF(i, j))).
-  rw [show basisVec (finProdFinEquiv (i, finProdFinEquiv (c, j))) =
-          mhsa_lift_c_CLM n d c (basisVec (finProdFinEquiv (i, j)))
-      from h_lift_basis.symm]
-  -- Now: fderiv flat_g flat_slab (mhsa_lift_c_CLM (basis_e_(i,j))) (fPF(k, l))
-  --    = ((fderiv flat_g flat_slab).comp (mhsa_lift_c_CLM)) (basis_e_(i,j)) (fPF(k, l))
-  rw [show fderiv ℝ (fun v : Vec (n * (3 * d)) =>
-              Mat.flatten ((mhsa_g n d) (Mat.unflatten v))) (Mat.flatten slab)
-            (mhsa_lift_c_CLM n d c (basisVec (finProdFinEquiv (i, j))))
-          = ((fderiv ℝ (fun v : Vec (n * (3 * d)) =>
-                        Mat.flatten ((mhsa_g n d) (Mat.unflatten v))) (Mat.flatten slab)).comp
-              (mhsa_lift_c_CLM n d c)) (basisVec (finProdFinEquiv (i, j)))
-      from rfl]
-  -- Case on c.
-  by_cases hc0 : c = (0 : Fin 3)
+  rw [← h_lift_basis, ← ContinuousLinearMap.comp_apply]
+  by_cases hc0 : c = 0
   · subst hc0
-    rw [ite_eq_left rfl]
-    rw [pdivMat_mhsa_g_split_chain n d slab (0 : Fin 3)
-          (fun Q' => sdpa n d Q' (mhsa_proj_c (1 : Fin 3) slab) (mhsa_proj_c (2 : Fin 3) slab))
-          (fun u => by
-            have h := mhsa_g_comp_embed n d (0 : Fin 3) slab u
-            rw [ite_eq_left rfl] at h
-            exact h)]
-  · rw [ite_eq_right hc0]
-    by_cases hc1 : c = (1 : Fin 3)
-    · subst hc1
-      rw [ite_eq_left rfl]
-      rw [pdivMat_mhsa_g_split_chain n d slab (1 : Fin 3)
-            (fun K' => sdpa n d (mhsa_proj_c (0 : Fin 3) slab) K' (mhsa_proj_c (2 : Fin 3) slab))
-            (fun u => by
-              have h := mhsa_g_comp_embed n d (1 : Fin 3) slab u
-              rw [ite_eq_right (by decide : (1 : Fin 3) ≠ (0 : Fin 3)), ite_eq_left rfl] at h
-              exact h)]
-    · rw [ite_eq_right hc1]
-      have hc2 : c = (2 : Fin 3) := by
-        fin_cases c
-        · exact absurd rfl hc0
-        · exact absurd rfl hc1
-        · rfl
-      subst hc2
-      rw [pdivMat_mhsa_g_split_chain n d slab (2 : Fin 3)
-            (fun V' => sdpa n d (mhsa_proj_c (0 : Fin 3) slab) (mhsa_proj_c (1 : Fin 3) slab) V')
-            (fun u => by
-              have h := mhsa_g_comp_embed n d (2 : Fin 3) slab u
-              rw [ite_eq_right (by decide : (2 : Fin 3) ≠ (0 : Fin 3)),
-                  ite_eq_right (by decide : (2 : Fin 3) ≠ (1 : Fin 3))] at h
-              exact h)]
+    rw [ite_eq_left rfl, pdivMat_mhsa_g_split_chain n d slab 0
+      (fun Q' => sdpa n d Q' (mhsa_proj_c 1 slab) (mhsa_proj_c 2 slab))
+      (fun u => by simpa using mhsa_g_comp_embed n d 0 slab u)]
+  by_cases hc1 : c = 1
+  · subst hc1
+    rw [ite_eq_right (by decide), ite_eq_left rfl, pdivMat_mhsa_g_split_chain n d slab 1
+      (fun K' => sdpa n d (mhsa_proj_c 0 slab) K' (mhsa_proj_c 2 slab))
+      (fun u => by simpa using mhsa_g_comp_embed n d 1 slab u)]
+  obtain rfl : c = 2 := by fin_cases c <;> simp_all
+  rw [ite_eq_right (by decide), ite_eq_right (by decide), pdivMat_mhsa_g_split_chain n d slab 2
+    (fun V' => sdpa n d (mhsa_proj_c 0 slab) (mhsa_proj_c 1 slab) V')
+    (fun u => by simpa using mhsa_g_comp_embed n d 2 slab u)]
 
 /-- **HasVJPMat for column-stacked SDPA.** Backward column-stacks the three
     `sdpa_back_*` outputs by their `c : Fin 3` slot. Correctness comes from
@@ -1386,104 +1099,30 @@ noncomputable def mhsa_g_has_vjp_mat (n d : Nat) :
                       (mhsa_proj_c (2 : Fin 3) slab) dY r p.2
   correct := by
     intro slab dY i kj
-    -- Decompose kj as (c, j) via finProdFinEquiv.symm.
-    set p := finProdFinEquiv.symm kj with hp_def
-    have hkj : kj = finProdFinEquiv (p.1, p.2) := (Equiv.apply_symm_apply _ _).symm
-    -- Rewrite RHS pdivMat with the (c, j) form.
-    show (if p.1 = (0 : Fin 3) then
-            sdpa_back_Q n d (mhsa_proj_c (0 : Fin 3) slab) (mhsa_proj_c (1 : Fin 3) slab)
-                            (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
-          else if p.1 = (1 : Fin 3) then
-            sdpa_back_K n d (mhsa_proj_c (0 : Fin 3) slab) (mhsa_proj_c (1 : Fin 3) slab)
-                            (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
-          else
-            sdpa_back_V n d (mhsa_proj_c (0 : Fin 3) slab) (mhsa_proj_c (1 : Fin 3) slab)
-                            (mhsa_proj_c (2 : Fin 3) slab) dY i p.2)
-       = ∑ k' : Fin n, ∑ l' : Fin d, pdivMat (mhsa_g n d) slab i kj k' l' * dY k' l'
-    rw [hkj]
-    simp_rw [pdivMat_mhsa_g_split]
-    -- Now goal: ... = ∑ k' l', (if p.1 = 0 then ... else if p.1 = 1 then ... else ...) * dY[k', l']
-    -- Pull the if outside the sum, then apply sdpa_back_*_correct.
-    by_cases hc0 : p.1 = (0 : Fin 3)
-    · rw [ite_eq_left hc0]
-      simp_rw [ite_eq_left hc0]
-      exact sdpa_back_Q_correct n d (mhsa_proj_c (0 : Fin 3) slab)
-                                 (mhsa_proj_c (1 : Fin 3) slab)
-                                 (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
-    · rw [ite_eq_right hc0]
-      simp_rw [ite_eq_right hc0]
-      by_cases hc1 : p.1 = (1 : Fin 3)
-      · rw [ite_eq_left hc1]
-        simp_rw [ite_eq_left hc1]
-        exact sdpa_back_K_correct n d (mhsa_proj_c (0 : Fin 3) slab)
-                                   (mhsa_proj_c (1 : Fin 3) slab)
-                                   (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
-      · rw [ite_eq_right hc1]
-        simp_rw [ite_eq_right hc1]
-        exact sdpa_back_V_correct n d (mhsa_proj_c (0 : Fin 3) slab)
-                                   (mhsa_proj_c (1 : Fin 3) slab)
-                                   (mhsa_proj_c (2 : Fin 3) slab) dY i p.2
+    obtain ⟨⟨c, j⟩, rfl⟩ := finProdFinEquiv.surjective kj
+    simp only [pdivMat_mhsa_g_split, Equiv.symm_apply_apply]
+    by_cases hc0 : c = 0
+    · subst hc0; simp only [ite_true]; exact sdpa_back_Q_correct n d _ _ _ dY i j
+    by_cases hc1 : c = 1
+    · subst hc1; simp only [hc0, ite_true, ite_false]; exact sdpa_back_K_correct n d _ _ _ dY i j
+    simp only [hc0, hc1, ite_false]; exact sdpa_back_V_correct n d _ _ _ dY i j
 
 /-- Flat-diff for `colSlabApply g`: each output coord is `(g (slab h ·)) [n, j_out]`,
-    factoring through the slab-projection CLM (linear) and `g` (flat-diff). -/
+    factoring through the linear slab projection and `g` (flat-diff) by `flat_diff_comp`. -/
 theorem colSlabApply_flat_diff {n heads d_in d_out : Nat}
     (g : Mat n d_in → Mat n d_out)
     (hg_diff : Differentiable ℝ
                  (fun v : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten v)))) :
     Differentiable ℝ (fun v : Vec (n * (heads * d_in)) =>
       Mat.flatten (colSlabApply g (Mat.unflatten v) : Mat n (heads * d_out))) := by
-  rw [differentiable_pi]
-  intro idx
-  set p := finProdFinEquiv.symm idx with hp_def
-  set q := finProdFinEquiv.symm p.2 with hq_def
-  -- Output coord (idx) decomposes via (n', (h, j_out)).
-  -- Output: (colSlabApply g (unflatten v))[n', fPF(h, j_out)]
-  --       = g (slab h (unflatten v))[n', j_out]
-  -- Slab h is a CLM in v.
-  set slabProj : Vec (n * (heads * d_in)) →L[ℝ] Vec (n * d_in) :=
-    reindexCLM (fun idx' : Fin (n * d_in) =>
-      finProdFinEquiv ((finProdFinEquiv.symm idx').1,
-                       finProdFinEquiv (q.1, (finProdFinEquiv.symm idx').2)))
-  have h_eq : (fun v : Vec (n * (heads * d_in)) =>
-      Mat.flatten (colSlabApply g (Mat.unflatten v) : Mat n (heads * d_out)) idx) =
-      (fun w : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten w)) (finProdFinEquiv (p.1, q.2))) ∘
-      (fun v : Vec (n * (heads * d_in)) => slabProj v) := by
-    funext v
-    show (colSlabApply g (Mat.unflatten v) : Mat n (heads * d_out))
-            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 = _
-    show (colSlabApply g (Mat.unflatten v) : Mat n (heads * d_out)) p.1 p.2 = _
-    -- Unfold colSlabApply: (n', kj) → g(slab kj.1 (unflatten v))[n', kj.2]
-    show g (fun r' j_in => (Mat.unflatten v : Mat n (heads * d_in)) r'
-                            (finProdFinEquiv ((finProdFinEquiv.symm p.2).1, j_in))) p.1 (finProdFinEquiv.symm p.2).2 = _
-    -- The RHS unfolds (Function.comp etc.):
-    show _ = Mat.flatten (g (Mat.unflatten (slabProj v))) (finProdFinEquiv (p.1, q.2))
-    -- Need the slab projection to match: slab q.1 (unflatten v) = unflatten (slabProj v).
-    have h_slab_eq :
-        (fun r' j_in => (Mat.unflatten v : Mat n (heads * d_in)) r'
-            (finProdFinEquiv ((finProdFinEquiv.symm p.2).1, j_in))) =
-        (Mat.unflatten (slabProj v) : Mat n d_in) := by
-      funext r' j_in
-      show (Mat.unflatten v : Mat n (heads * d_in)) r'
-              (finProdFinEquiv (q.1, j_in)) = _
-      show v (finProdFinEquiv (r', finProdFinEquiv (q.1, j_in))) = slabProj v (finProdFinEquiv (r', j_in))
-      show _ = v (finProdFinEquiv ((finProdFinEquiv.symm
-                  (finProdFinEquiv (r', j_in))).1,
-                  finProdFinEquiv (q.1, (finProdFinEquiv.symm
-                    (finProdFinEquiv (r', j_in))).2)))
-      rw [Equiv.symm_apply_apply]
-    rw [h_slab_eq]
-    show g (Mat.unflatten (slabProj v) : Mat n d_in) p.1 q.2 = _
-    unfold Mat.flatten
-    show _ = g (Mat.unflatten (slabProj v) : Mat n d_in)
-              (finProdFinEquiv.symm (finProdFinEquiv (p.1, q.2))).1
-              (finProdFinEquiv.symm (finProdFinEquiv (p.1, q.2))).2
-    rw [Equiv.symm_apply_apply]
-  rw [h_eq]
-  -- The composition: (per-coord projection of g) ∘ slabProj.
-  have h_outer : Differentiable ℝ (fun w : Vec (n * d_in) =>
-      Mat.flatten (g (Mat.unflatten w)) (finProdFinEquiv (p.1, q.2))) :=
-    fun w => differentiableAt_pi.mp (hg_diff w) _
-  exact h_outer.comp slabProj.differentiable
+  rw [differentiable_pi]; intro idx
+  obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
+  obtain ⟨⟨h, j⟩, rfl⟩ := finProdFinEquiv.surjective q
+  -- Coordinate `(r, (h, j))` is coordinate `(r, j)` of `g` on the `h`-th column slab.
+  have hh := flat_diff_comp (G := g) (F := fun M : Mat n (heads * d_in) =>
+    fun r' j' => M r' (finProdFinEquiv (h, j'))) (by unfold Mat.flatten Mat.unflatten; fun_prop)
+    hg_diff
+  simpa [Mat.flatten, colSlabApply] using differentiable_pi.mp hh (finProdFinEquiv (r, j))
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3.5 Multi-head composition: replace the two axioms with theorems.
@@ -1583,90 +1222,11 @@ theorem mhsa_layer_eq_compose (N heads d_head : Nat)
            dense (mhsa_qkv_W heads d_head Wq Wk Wv) (mhsa_qkv_b heads d_head bq bk bv) (X' n))
          X)) := by
   funext n j
-  -- Both sides compute the same value at (n, j).
-  -- LHS = mhsa_layer ... at (n, j) = Σ k, concat[n, k] * Wo[k, j] + bo[j]
-  -- RHS = output_dense ... at (n, j) = Σ k, (colSlabApply mhsa_g (qkv_stack X)) [n, k] * Wo[k, j] + bo[j]
-  -- Reduce to: concat[n, k] = (colSlabApply mhsa_g (qkv_stack X))[n, k] for all k.
-  show (∑ k : Fin (heads * d_head),
-          (let perHead : Fin heads → Mat N d_head := fun h n' j' =>
-             sdpa N d_head
-               (fun n'' j'' => (fun n''' j''' => (∑ k' : Fin (heads * d_head),
-                                                  X n''' k' * Wq k' j''') + bq j''')
-                              n'' (finProdFinEquiv (h, j'')))
-               (fun n'' j'' => (fun n''' j''' => (∑ k' : Fin (heads * d_head),
-                                                  X n''' k' * Wk k' j''') + bk j''')
-                              n'' (finProdFinEquiv (h, j'')))
-               (fun n'' j'' => (fun n''' j''' => (∑ k' : Fin (heads * d_head),
-                                                  X n''' k' * Wv k' j''') + bv j''')
-                              n'' (finProdFinEquiv (h, j'')))
-               n' j'
-           (fun n' hj => perHead (finProdFinEquiv.symm hj).1 n' (finProdFinEquiv.symm hj).2) n k) *
-            Wo k j) + bo j = _
-  show _ =
-    (∑ k : Fin (heads * d_head),
-       (colSlabApply (mhsa_g N d_head) (heads := heads)
-          (fun n' => fun idx =>
-            (∑ k' : Fin (heads * d_head),
-              X n' k' * (mhsa_qkv_W heads d_head Wq Wk Wv) k' idx) +
-            (mhsa_qkv_b heads d_head bq bk bv) idx)) n k * Wo k j) + bo j
+  simp only [mhsa_layer, dense]
   congr 1
-  apply Finset.sum_congr rfl
-  intro k _
-  -- For each k = fPF(h, j_out): concat[n, k] = perHead h n j_out
-  -- and (colSlabApply mhsa_g qkv_stack X)[n, k] = mhsa_g (slab h qkv_stack X)[n, j_out]
-  -- = sdpa(slab_0_3, slab_1_3, slab_2_3)[n, j_out]
-  -- where each slab equals the corresponding Q, K, V slab of X by construction.
-  congr 1
-  set p_k := finProdFinEquiv.symm k with hp_k_def
-  show (sdpa N d_head
-          (fun n'' j'' => (∑ k' : Fin (heads * d_head),
-                            X n'' k' * Wq k' (finProdFinEquiv (p_k.1, j''))) +
-                          bq (finProdFinEquiv (p_k.1, j'')))
-          (fun n'' j'' => (∑ k' : Fin (heads * d_head),
-                            X n'' k' * Wk k' (finProdFinEquiv (p_k.1, j''))) +
-                          bk (finProdFinEquiv (p_k.1, j'')))
-          (fun n'' j'' => (∑ k' : Fin (heads * d_head),
-                            X n'' k' * Wv k' (finProdFinEquiv (p_k.1, j''))) +
-                          bv (finProdFinEquiv (p_k.1, j''))))
-        n p_k.2
-      = (colSlabApply (mhsa_g N d_head) (heads := heads)
-          (fun n' idx =>
-            (∑ k' : Fin (heads * d_head),
-              X n' k' * (mhsa_qkv_W heads d_head Wq Wk Wv) k' idx) +
-            (mhsa_qkv_b heads d_head bq bk bv) idx)) n k
-  show _ = mhsa_g N d_head
-    (fun r' j_in => (fun n' idx =>
-      (∑ k' : Fin (heads * d_head),
-        X n' k' * (mhsa_qkv_W heads d_head Wq Wk Wv) k' idx) +
-      (mhsa_qkv_b heads d_head bq bk bv) idx) r' (finProdFinEquiv (p_k.1, j_in)))
-    n p_k.2
-  unfold mhsa_g
-  -- Three goals: Q, K, V arg equality.
-  congr 1
-  · -- Q part
-    funext n'' j''
-    show _ = (∑ k' : Fin (heads * d_head),
-               X n'' k' * (mhsa_qkv_W heads d_head Wq Wk Wv) k'
-                 (finProdFinEquiv (p_k.1, finProdFinEquiv ((0 : Fin 3), j'')))) +
-             (mhsa_qkv_b heads d_head bq bk bv)
-                 (finProdFinEquiv (p_k.1, finProdFinEquiv ((0 : Fin 3), j'')))
-    simp only [mhsa_qkv_W_eq0, mhsa_qkv_b_eq0]
-  · -- K part (note: congr 1 gave 3 goals; remaining ones are K and V flat)
-    funext n'' j''
-    show _ = (∑ k' : Fin (heads * d_head),
-               X n'' k' * (mhsa_qkv_W heads d_head Wq Wk Wv) k'
-                 (finProdFinEquiv (p_k.1, finProdFinEquiv ((1 : Fin 3), j'')))) +
-             (mhsa_qkv_b heads d_head bq bk bv)
-                 (finProdFinEquiv (p_k.1, finProdFinEquiv ((1 : Fin 3), j'')))
-    simp only [mhsa_qkv_W_eq1, mhsa_qkv_b_eq1]
-  · -- V part
-    funext n'' j''
-    show _ = (∑ k' : Fin (heads * d_head),
-               X n'' k' * (mhsa_qkv_W heads d_head Wq Wk Wv) k'
-                 (finProdFinEquiv (p_k.1, finProdFinEquiv ((2 : Fin 3), j'')))) +
-             (mhsa_qkv_b heads d_head bq bk bv)
-                 (finProdFinEquiv (p_k.1, finProdFinEquiv ((2 : Fin 3), j'')))
-    simp only [mhsa_qkv_W_eq2, mhsa_qkv_b_eq2]
+  refine Finset.sum_congr rfl fun k _ => congrArg (· * Wo k j) ?_
+  obtain ⟨⟨h, jo⟩, rfl⟩ := finProdFinEquiv.surjective k
+  simp [colSlabApply, mhsa_g, dense]
 
 /-- **The composed MHSA VJP** — `Wo-dense ∘ colSlabApply mhsa_g ∘ qkv-dense`,
     stated on the explicit composition (no `mhsa_layer_eq_compose` transport).
@@ -1721,23 +1281,8 @@ noncomputable def mhsa_composed_has_vjp_mat (N heads d_head : Nat)
         Mat.flatten ((colSlabApply (mhsa_g N d_head) (heads := heads) ∘
           (fun X' : Mat N (heads * d_head) => fun n =>
             dense (mhsa_qkv_W heads d_head Wq Wk Wv) (mhsa_qkv_b heads d_head bq bk bv) (X' n)))
-          (Mat.unflatten v) : Mat N (heads * d_head))) := by
-    have h_eq : (fun v : Vec (N * (heads * d_head)) =>
-        Mat.flatten ((colSlabApply (mhsa_g N d_head) (heads := heads) ∘
-          (fun X' : Mat N (heads * d_head) => fun n =>
-            dense (mhsa_qkv_W heads d_head Wq Wk Wv) (mhsa_qkv_b heads d_head bq bk bv) (X' n)))
-          (Mat.unflatten v) : Mat N (heads * d_head))) =
-        (fun u : Vec (N * (heads * (3 * d_head))) =>
-          Mat.flatten ((colSlabApply (mhsa_g N d_head) (heads := heads)) (Mat.unflatten u)
-                       : Mat N (heads * d_head))) ∘
-        (fun v : Vec (N * (heads * d_head)) =>
-          Mat.flatten ((fun X' : Mat N (heads * d_head) => fun n =>
-            dense (mhsa_qkv_W heads d_head Wq Wk Wv) (mhsa_qkv_b heads d_head bq bk bv) (X' n))
-            (Mat.unflatten v))) := by
-      funext v
-      simp [Function.comp, Mat.unflatten_flatten]
-    rw [h_eq]
-    exact h_body_diff.comp h_qkv_diff
+          (Mat.unflatten v) : Mat N (heads * d_head))) :=
+    flat_diff_comp h_qkv_diff h_body_diff
   -- Final compose with output.
   exact vjpMat_comp _ _ h_body_qkv_diff h_output_diff h_body_qkv_vjp h_output_vjp
 
@@ -1873,18 +1418,8 @@ noncomputable def transformerMlp_has_vjp_mat (N D mlpDim : Nat)
       (fun v : Vec (N * D) =>
         Mat.flatten (((fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)) ∘
                       (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n)))
-                     (Mat.unflatten v))) := by
-    have h_eq : (fun v : Vec (N * D) =>
-          Mat.flatten (((fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)) ∘
-                        (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n)))
-                       (Mat.unflatten v))) =
-        (fun u : Vec (N * mlpDim) => Mat.flatten
-            ((fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)) (Mat.unflatten u))) ∘
-        (fun v : Vec (N * D) => Mat.flatten
-            ((fun X : Mat N D => fun n => dense Wfc1 bfc1 (X n)) (Mat.unflatten v))) := by
-      funext v; simp [Function.comp, Mat.unflatten_flatten]
-    rw [h_eq]
-    exact (gelu_per_token_flat_diff N mlpDim).comp (dense_per_token_flat_diff Wfc1 bfc1)
+                     (Mat.unflatten v))) :=
+    flat_diff_comp (dense_per_token_flat_diff Wfc1 bfc1) (gelu_per_token_flat_diff N mlpDim)
   -- Outer composition: dense₂ ∘ (gelu ∘ dense₁)
   vjpMat_comp _ (fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n))
     inner_diff
@@ -1902,7 +1437,7 @@ noncomputable def preLNRes_has_vjp_mat {N D : Nat} (L F : Mat N D → Mat N D)
     (vL : HasVJPMat L) (vF : HasVJPMat F) :
     HasVJPMat (biPathMat (fun X => X) (F ∘ L)) :=
   biPathMat_has_vjp _ _ (identity_mat_flat_diff N D)
-    (by simpa [Function.comp_def, Mat.unflatten_flatten] using hF.comp hL)
+    (flat_diff_comp hL hF)
     (identityMat_has_vjp N D) (vjpMat_comp L F hL hF vL vF)
 
 /-- Attention sublayer: `X ↦ X + MHSA(LN1(X))`. Top-level composition;
@@ -1952,10 +1487,9 @@ lemma transformerAttnSublayer_inner_flat_diff
         (((mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
           (fun X : Mat N (heads * d_head) => fun n =>
             layerNormForward (heads * d_head) ε γ1 β1 (X n)))
-         (Mat.unflatten v))) := by
-  simpa [Function.comp_def, Mat.unflatten_flatten] using
-    (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo).comp
-      (layerNorm_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
+         (Mat.unflatten v))) :=
+  flat_diff_comp (layerNorm_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
+    (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 /-- Differentiability of the flattened attention sublayer.
     `biPathMat (id) (mhsa ∘ LN1)` flattens to a sum, both arms Differentiable. -/
@@ -1993,10 +1527,9 @@ lemma transformerMlpSublayer_inner_flat_diff
         (((transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
           (fun X : Mat N (heads * d_head) => fun n =>
             layerNormForward (heads * d_head) ε γ2 β2 (X n)))
-         (Mat.unflatten v))) := by
-  simpa [Function.comp_def, Mat.unflatten_flatten] using
-    (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2).comp
-      (layerNorm_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
+         (Mat.unflatten v))) :=
+  flat_diff_comp (layerNorm_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
 
 /-- Differentiability of the flattened MLP sublayer.
     `biPathMat (id) (transformerMlp ∘ LN2)` flattens to a sum, both arms Differentiable. -/
@@ -2034,10 +1567,10 @@ lemma transformerBlock_flat_diff (N heads d_head mlpDim : Nat)
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerBlock N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2
-                   (Mat.unflatten v))) := by
-  simpa [transformerBlock, Function.comp_def, Mat.unflatten_flatten] using
-    (transformerMlpSublayer_flat_diff N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).comp
-      (transformerAttnSublayer_flat_diff N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+                   (Mat.unflatten v))) :=
+  flat_diff_comp
+    (transformerAttnSublayer_flat_diff N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+    (transformerMlpSublayer_flat_diff N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
 
 /-- **Transformer block VJP** — composition of attn + mlp sublayers.
     Theorem, no longer axiom: a single `vjpMat_comp` of the two sublayer
@@ -2116,10 +1649,8 @@ lemma transformerTower_flat_diff (k N heads d_head mlpDim : Nat)
   | zero => exact identity_mat_flat_diff N (heads * d_head)
   | succ k' ih =>
     -- `transformerTower (k'+1) = block ∘ transformerTower k'` by `Nat.rec`.
-    have h := (transformerBlock_flat_diff N heads d_head mlpDim ε γ1 β1 hε
-      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).comp ih
-    simp only [Function.comp_def, Mat.unflatten_flatten] at h
-    exact h
+    exact flat_diff_comp ih (transformerBlock_flat_diff N heads d_head mlpDim ε γ1 β1 hε
+      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
 
 /-- **Transformer tower VJP** — k-fold composition. Theorem, no longer axiom:
     induction on `k` via `vjpMat_comp` and `transformerBlock_has_vjp_mat`. -/
@@ -2204,11 +1735,10 @@ lemma vit_body_flat_diff (k N heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < �
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (vit_body k N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF
-                   (Mat.unflatten v))) := by
-  simpa [vit_body, Function.comp_def, Mat.unflatten_flatten] using
-    (layerNorm_per_token_flat_diff N (heads * d_head) ε γF βF hε).comp
-      (transformerTower_flat_diff k N heads d_head mlpDim ε γ1 β1 hε
-        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+                   (Mat.unflatten v))) :=
+  flat_diff_comp (transformerTower_flat_diff k N heads d_head mlpDim ε γ1 β1 hε
+      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+    (layerNorm_per_token_flat_diff N (heads * d_head) ε γF βF hε)
 
 /-- **The ViT body VJP** — `finalLN ∘ transformerTower`. Theorem, no longer
     axiom: a single `vjpMat_comp` of the tower + final LN with their
@@ -2361,11 +1891,6 @@ lemma cls_slice_flat_diff (N D : Nat) :
     Differentiable ℝ (cls_slice_flat N D) := by
   unfold cls_slice_flat; fun_prop
 
-/-- Differentiability of `dense W b` as a function of the input vector — linear. -/
-lemma dense_input_diff {m n : Nat} (W : Mat m n) (b : Vec n) :
-    Differentiable ℝ (dense W b) := by
-  unfold dense; fun_prop
-
 /-- **Classifier head VJP** — composition via `vjp_comp`. Theorem, no
     longer axiom: `cls_slice_flat` and `dense` are both linear, so their
     Diff hypotheses discharge by `fun_prop`. -/
@@ -2374,7 +1899,7 @@ noncomputable def classifier_flat_has_vjp (N D nClasses : Nat)
     HasVJP (classifier_flat N D nClasses Wcls bcls) :=
   vjp_comp (cls_slice_flat N D) (dense Wcls bcls)
     (cls_slice_flat_diff N D)
-    (dense_input_diff Wcls bcls)
+    (dense_differentiable Wcls bcls)
     (cls_slice_flat_has_vjp N D)
     (dense_has_vjp Wcls bcls)
 
@@ -2662,7 +2187,7 @@ lemma classifier_flat_diff (N D nClasses : Nat)
     (Wcls : Mat D nClasses) (bcls : Vec nClasses) :
     Differentiable ℝ (classifier_flat N D nClasses Wcls bcls) := by
   unfold classifier_flat
-  exact (dense_input_diff Wcls bcls).comp (cls_slice_flat_diff N D)
+  exact (dense_differentiable Wcls bcls).comp (cls_slice_flat_diff N D)
 
 /-- **vit_full VJP — the grand finale.** Theorem, no longer axiom: three
     `vjp_comp` steps glueing `patchEmbed_flat_has_vjp`,

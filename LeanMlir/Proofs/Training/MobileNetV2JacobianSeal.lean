@@ -251,21 +251,14 @@ theorem mnv2Live_jacobian_nonzero : fderiv ℝ fwd 0 ≠ 0 := by
 
 -- ── the pointwise VJP at an arbitrary input (window holds everywhere) ──
 
-/-- The five ReLU6 sites discharge through the one window lemma (length 8, γ=1,
-    β=3, ε=1), regardless of the activation feeding them. -/
-theorem winF (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
-    bnForward (2 * 2 * 2) 1 1 3 z k ≠ 0 ∧ bnForward (2 * 2 * 2) 1 1 3 z k ≠ 6 := by
-  obtain ⟨h0, h6⟩ := bn13_window (2 * 2 * 2) (by norm_num) (by norm_num) 1 one_pos z k
-  exact ⟨h0.ne', h6.ne⟩
-
 /-- The whole-net VJP holds at *every* input (the window discharges all five
     ReLU6 sites regardless of the activation), so we may seal at `0`. -/
 noncomputable def mnv2Live_has_vjp_at_input (v : Vec (1 * 2 * 2)) : HasVJPAt fwd v :=
   mobilenetv2_has_vjp_at Ws bs 1 1 3 one_pos
     We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
     We₂ be₂ 1 1 3 one_pos Wd₂ bd₂ 1 1 3 one_pos Wp₂ bp₂ 1 1 3 one_pos Wh bh v
-    (fun k => winF _ k) (fun k => winF _ k) (fun k => winF _ k)
-    (fun k => winF _ k) (fun k => winF _ k)
+    (fun k => win _ k) (fun k => win _ k) (fun k => win _ k)
+    (fun k => win _ k) (fun k => win _ k)
 
 /-- **The level-3 seal for `Mnv2Live`** (Item B2): the proven whole-network
     backward of the nonzero-weight live MobileNetV2 is **not the zero map** at the

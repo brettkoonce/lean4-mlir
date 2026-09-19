@@ -414,13 +414,6 @@ theorem rblkPStrided_has_vjp_at_correct
 --      every residual block is the *constant* `β₂`, and `relu(β₂ + activation) > 0`.
 -- ════════════════════════════════════════════════════════════════
 
-/-- `istd = 1/√(σ²+ε) > 0` (variance ≥ 0, `ε > 0`). -/
-theorem bnIstd_pos {n : Nat} (v : Vec n) (ε : ℝ) (hε : 0 < ε) : 0 < bnIstd n v ε := by
-  unfold bnIstd
-  have hvar : 0 ≤ bnVar n v := by
-    unfold bnVar; exact div_nonneg (Finset.sum_nonneg (fun _ _ => mul_self_nonneg _)) (by positivity)
-  exact one_div_pos.mpr (Real.sqrt_pos.mpr (by linarith))
-
 /-- **BN of an injective vector is injective** when `γ ≠ 0`: `bn` is the strictly
     monotone affine map `γ·istd·(· − μ) + β` (`istd > 0`), so it preserves the
     distinctness needed for the stem's maxpool to have no ties. -/
@@ -435,42 +428,13 @@ theorem bnForward_injective {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (hγ : γ 
   have h2 := mul_right_cancel₀ hist (mul_left_cancel₀ hγ h1)
   exact hv (by linarith)
 
-/-- Each normalized coordinate is bounded: `x̂ₖ² ≤ n`. Proof: `istd² = 1/(σ²+ε)` and
-    `(vₖ−μ)² ≤ Σⱼ(vⱼ−μ)² = n·σ² ≤ n·(σ²+ε)`. -/
-theorem bnXhat_sq_le {n : Nat} (ε : ℝ) (hε : 0 < ε) (v : Vec n) (k : Fin n) :
-    (bnXhat n ε v k) ^ 2 ≤ (n : ℝ) := by
-  have hn : 0 < n := Nat.lt_of_le_of_lt (Nat.zero_le _) k.isLt
-  have hn' : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn.ne'
-  set μ := bnMean n v with hμ
-  have hvar_nonneg : 0 ≤ bnVar n v :=
-    div_nonneg (Finset.sum_nonneg (fun _ _ => mul_self_nonneg _)) (by positivity)
-  have hpos : 0 < bnVar n v + ε := by linarith
-  have histd_sq : bnIstd n v ε * bnIstd n v ε = 1 / (bnVar n v + ε) := by
-    unfold bnIstd; rw [div_mul_div_comm, one_mul, Real.mul_self_sqrt (le_of_lt hpos)]
-  have hterm : (v k - μ) * (v k - μ) ≤ ∑ j : Fin n, (v j - μ) * (v j - μ) :=
-    Finset.single_le_sum (f := fun j => (v j - μ) * (v j - μ))
-      (fun j _ => mul_self_nonneg _) (Finset.mem_univ k)
-  have hsum : (n : ℝ) * bnVar n v = ∑ j : Fin n, (v j - μ) * (v j - μ) := by
-    unfold bnVar; rw [← hμ]; field_simp
-  have hbound : (v k - μ) * (v k - μ) ≤ (n : ℝ) * (bnVar n v + ε) := by
-    have : (v k - μ) * (v k - μ) ≤ (n : ℝ) * bnVar n v := by rw [hsum]; exact hterm
-    nlinarith [Nat.cast_nonneg (α := ℝ) n, le_of_lt hε]
-  have hxsq : (bnXhat n ε v k) ^ 2 = ((v k - μ) * (v k - μ)) * (1 / (bnVar n v + ε)) := by
-    simp only [bnXhat, ← hμ]; rw [← histd_sq]; ring
-  rw [hxsq, mul_one_div, div_le_iff₀ hpos]; exact hbound
-
 /-- **Dimension-robust BN lower bound** `β − |γ|·√n ≤ bn`, with no mean/variance
     computation. Lets a large stem `β` force `bn > 0` over a 256-element BN. -/
 theorem bnForward_lb {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (v : Vec n) (k : Fin n) :
     β - |γ| * Real.sqrt (n : ℝ) ≤ bnForward n ε γ β v k := by
-  have hsq := bnXhat_sq_le ε hε v k
-  have habs : |bnXhat n ε v k| ≤ Real.sqrt (n : ℝ) := by
-    rw [← Real.sqrt_sq_eq_abs]; exact Real.sqrt_le_sqrt hsq
   have hmul : |γ * bnXhat n ε v k| ≤ |γ| * Real.sqrt (n : ℝ) := by
-    rw [abs_mul]; exact mul_le_mul_of_nonneg_left habs (abs_nonneg γ)
-  have hge : -(|γ| * Real.sqrt (n : ℝ)) ≤ γ * bnXhat n ε v k :=
-    le_trans (neg_le_neg hmul) (neg_abs_le _)
-  simp only [bnForward]; linarith
+    rw [abs_mul]; gcongr; exact Real.abs_le_sqrt (bnXhat_sq_le ε hε v k)
+  simp only [bnForward]; linarith [neg_abs_le (γ * bnXhat n ε v k)]
 
 /-- **The strided decimation index is injective** (distinct output cells map to
     distinct even input cells) — so `decimateFlat` of an injective vector is
@@ -478,27 +442,10 @@ theorem bnForward_lb {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (v : Vec n) (k : 
 theorem decimateIdx_injective (oc h w : Nat) :
     Function.Injective (decimateIdx oc h w) := by
   intro k₁ k₂ heq
-  simp only [decimateIdx] at heq
-  obtain ⟨hA, hB⟩ := Prod.mk.inj (finProdFinEquiv.injective heq)
-  -- hB : the doubled `w`-coordinates agree ⇒ the `w`-coordinates agree
-  have hp2 : (finProdFinEquiv.symm k₁).2 = (finProdFinEquiv.symm k₂).2 := by
-    have : 2 * (finProdFinEquiv.symm k₁).2.val = 2 * (finProdFinEquiv.symm k₂).2.val :=
-      Fin.mk.inj_iff.mp hB
-    exact Fin.ext (by omega)
-  -- hA : finProdFinEquiv (q₁.1, double q₁.2) = finProdFinEquiv (q₂.1, double q₂.2)
-  obtain ⟨hA1, hA2⟩ := Prod.mk.inj (finProdFinEquiv.injective hA)
-  have hq2 : (finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1).2
-           = (finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1).2 := by
-    have : 2 * (finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1).2.val
-         = 2 * (finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1).2.val :=
-      Fin.mk.inj_iff.mp hA2
-    exact Fin.ext (by omega)
-  -- q₁ = q₂ (both components), so p₁.1 = p₂.1
-  have hq : finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1
-          = finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1 := Prod.ext hA1 hq2
-  have hp1 : (finProdFinEquiv.symm k₁).1 = (finProdFinEquiv.symm k₂).1 :=
-    finProdFinEquiv.symm.injective hq
-  exact finProdFinEquiv.symm.injective (Prod.ext hp1 hp2)
+  simp only [decimateIdx, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq, Fin.mk.injEq] at heq
+  obtain ⟨⟨h1, h2⟩, h3⟩ := heq
+  exact finProdFinEquiv.symm.injective (Prod.ext
+    (finProdFinEquiv.symm.injective (Prod.ext h1 (Fin.ext (by omega)))) (Fin.ext (by omega)))
 
 /-- `decimateFlat` of an injective vector is injective. -/
 theorem decimateFlat_injective (oc h w : Nat) {x : Vec (oc * (2 * h) * (2 * w))}
@@ -514,23 +461,6 @@ theorem decimateFlat_injective (oc h w : Nat) {x : Vec (oc * (2 * h) * (2 * w))}
 /-- The single-channel zero 1×1 kernel and zero bias. -/
 noncomputable def Zk : Kernel4 1 1 1 1 := fun _ _ _ _ => 0
 noncomputable def Zb : Vec 1 := fun _ => 0
-
-/-- BN of a constant vector is its shift `β` (local copy of `MobileNetV2`'s
-    `bnForward_const`, re-proved here to avoid an inter-architecture import). -/
-theorem bnForward_const_eq {n : Nat} (hn : 0 < n) (ε γ β c : ℝ) :
-    bnForward n ε γ β (fun _ => c) = (fun _ => β) := by
-  have hmean : bnMean n (fun _ : Fin n => c) = c := by
-    unfold bnMean
-    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, mul_comm,
-        mul_div_assoc, div_self (Nat.cast_ne_zero.mpr hn.ne'), mul_one]
-  funext i; simp only [bnForward, bnXhat]; rw [hmean]; ring
-
-/-- A conv with everywhere-zero kernel/bias maps anything to `0` (local copy of
-    `MobileNetV2`'s `flatConv_eq_zero`). -/
-theorem flatConv_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (hW : ∀ o c kh kw, W o c kh kw = 0) (hb : ∀ o, b o = 0) (v : Vec (ic * h * w)) :
-    flatConv (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
-  funext k; simp [flatConv, conv2d, Tensor3.flatten, hW, hb]
 
 /-- ReLU output is always nonnegative. -/
 theorem relu_nonneg (n : Nat) (v : Vec n) (k : Fin n) : 0 ≤ relu n v k := by
@@ -549,7 +479,7 @@ theorem flatConvStride2_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW
     flatConvStride2 W b a = (fun _ => (0:ℝ)) := by
   unfold flatConvStride2
   simp only [Function.comp_apply]
-  rw [flatConv_zero W b hW hb]
+  rw [flatConv_eq_zero W b hW hb]
   funext k; simp [decimateFlat]
 
 -- ── The identity residual block (zero weights, BN (1,0,1)) ────────
@@ -568,7 +498,7 @@ theorem idBlk_body_const (h w : Nat) (hhw : 0 < 1 * h * w) (a : Vec (1 * h * w))
     ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
       (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb)) a = (fun _ => (1:ℝ)) := by
   simp only [Function.comp_apply]
-  rw [flatConv_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+  rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
 
 /-- The identity block output is nonnegative (it is a ReLU). -/
 theorem idBlk_nonneg (h w : Nat) (a : Vec (1 * h * w)) (k : Fin (1 * h * w)) :
@@ -580,7 +510,7 @@ noncomputable def idBlk_hasVJPAt (h w : Nat) (hhw : 0 < 1 * h * w)
     (a : Vec (1 * h * w)) (ha : ∀ k, 0 ≤ a k) : HasVJPAt (idBlk h w) a :=
   resblock_has_vjp_at (h := h) (w := w) Zk Zb Zk Zb 1 0 1 1 0 1 (by norm_num) (by norm_num) a
     (fun k => by
-      rw [flatConv_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+      rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
       change (1:ℝ) ≠ 0; norm_num)
     (fun k => by
       rw [idBlk_body_const h w hhw a]; change (1:ℝ) + a k ≠ 0
@@ -592,7 +522,7 @@ theorem idBlk_diffAt (h w : Nat) (hhw : 0 < 1 * h * w)
   exact resblock_differentiableAt (h := h) (w := w) Zk Zb Zk Zb 1 0 1 1 0 1 (by norm_num)
     (by norm_num) a
     (fun k => by
-      rw [flatConv_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+      rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
       change (1:ℝ) ≠ 0; norm_num)
     (fun k => by
       rw [idBlk_body_const h w hhw a]; change (1:ℝ) + a k ≠ 0
@@ -636,14 +566,14 @@ noncomputable def downBlk (h w : Nat) : Vec (1 * (2 * h) * (2 * w)) → Vec (1 *
 theorem downBlk_proj_const (h w : Nat) (hhw : 0 < 1 * h * w) (a : Vec (1 * (2 * h) * (2 * w))) :
     (bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb) a = (fun _ => (1:ℝ)) := by
   simp only [Function.comp_apply]
-  rw [flatConvStride2_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
+  rw [flatConvStride2_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const hhw]
 
 /-- The strided block's residual body collapses to the constant `1`. -/
 theorem downBlk_body_const (h w : Nat) (hhw : 0 < 1 * h * w) (a : Vec (1 * (2 * h) * (2 * w))) :
     ((bnForward (1 * h * w) 1 0 1 ∘ flatConv Zk Zb) ∘
       (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb)) a = (fun _ => (1:ℝ)) := by
   simp only [Function.comp_apply]
-  rw [flatConv_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+  rw [flatConv_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
 
 /-- The strided block output is nonnegative (a ReLU). -/
 theorem downBlk_nonneg (h w : Nat) (a : Vec (1 * (2 * h) * (2 * w))) (k : Fin (1 * h * w)) :
@@ -656,7 +586,7 @@ noncomputable def downBlk_hasVJPAt (h w : Nat) (hhw : 0 < 1 * h * w)
   rblkPStrided_has_vjp_at (h := h) (w := w) Zk Zb Zk Zb Zk Zb 1 0 1 1 0 1 1 0 1
     (by norm_num) (by norm_num) (by norm_num) a
     (fun k => by
-      rw [flatConvStride2_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
+      rw [flatConvStride2_eq_zero Zk Zb (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const hhw]
       change (1:ℝ) ≠ 0; norm_num)
     (fun k => by
       rw [downBlk_proj_const h w hhw a, downBlk_body_const h w hhw a]
@@ -798,7 +728,7 @@ noncomputable def fwd : Vec (1 * (2 * 16) * (2 * 16)) → Vec 2 :=
 /-- **Whole-network VJP for a concrete ResNet-34** — every smoothness/no-tie hypothesis of
     `resnet34_has_vjp_at` discharged. The strided identity stem yields distinct positive BN
     outputs (so the maxpool has no ties via `stem_maxpool_smooth`); every residual block uses
-    zero weights, so its body is the constant `1` (`bnForward_const_eq`) and the post-add ReLU
+    zero weights, so its body is the constant `1` (`bnForward_const`) and the post-add ReLU
     input is `1 + activation > 0` (identity blocks, `activation ≥ 0`) or `2` (downsamplers). -/
 noncomputable def resnet34Concrete_has_vjp_at : HasVJPAt fwd X :=
   resnet34_has_vjp_at stem (maxPoolFlat 1 8 8) ids1 (downBlk 4 4) ids2 (downBlk 2 2) ids3

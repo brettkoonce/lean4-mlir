@@ -810,14 +810,12 @@ noncomputable def depthwiseStride2FlatXla {c h w kH kW : Nat}
     Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w) :=
   decimateOddFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)
 
+@[fun_prop]
 theorem depthwiseStride2FlatXla_differentiable {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) :
     Differentiable ℝ (depthwiseStride2FlatXla W b
       : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := by
-  unfold depthwiseStride2FlatXla
-  have hf : Differentiable ℝ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
-    depthwiseFlat_differentiable W b
-  exact (decimateOddFlat_differentiable c h w).comp hf
+  unfold depthwiseStride2FlatXla; fun_prop
 
 /-- **Stride-2 XLA-`SAME` depthwise input-VJP.** `vjp_comp` on `decimateOddFlat ∘ depthwiseFlat`.
     The backward zero-upsamples the cotangent onto the **odd** positions, then runs the

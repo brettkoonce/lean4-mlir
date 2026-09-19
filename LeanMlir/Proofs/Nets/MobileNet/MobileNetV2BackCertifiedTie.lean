@@ -210,7 +210,7 @@ theorem dwStridedBnRelu6PC_differentiableAt {c h w kH kW : Nat}
                        bnPerChannelTensor3 c h w ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
     DifferentiableAt ℝ
       (relu6 (c * h * w) ∘ bnPerChannelTensor3 c h w ε γ β ∘ depthwiseStride2FlatXla W b) v := by
-  unfold depthwiseStride2FlatXla at *; fun_prop (disch := assumption)
+  fun_prop (disch := assumption)
 
 /-- **Certified VJP of the per-channel-BN strided inverted-residual body `invresBodyStridedPC`**
     (downsample, non-batched). `project ∘ depthwiseStrided ∘ expand(2h×2w)` — the strided twin of

@@ -94,7 +94,7 @@ theorem liveDownPC_body_const (h w : Nat) (hhw : 0 < 2 * h * w)
       (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a
       = (fun _ => (1 : ℝ)) := by
   simp only [Function.comp_apply]
-  rw [flatConv_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
+  rw [flatConv_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const hhw]
 
 /-- The post-add ReLU input is strictly positive (`proj > 0`, body `= 1`), for any `W`. -/
 theorem liveDownW_sum_pos (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 2 * h * w)
@@ -114,7 +114,7 @@ noncomputable def liveDownW_vjp (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (h
   rblkPStrided_has_vjp_at Zk2 Zb2 Zk2 Zb2 W Zb2 1 0 1 1 0 1 1 1 βp
     (by norm_num) (by norm_num) (by norm_num) a
     (fun k => by
-      rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
+      rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const hhw]
       change (1 : ℝ) ≠ 0; norm_num)
     (fun k => ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k))
 
@@ -123,7 +123,7 @@ theorem liveDownW_diff (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 
     (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
     DifferentiableAt ℝ (liveDownW h w βp W) a := by
   have hsm₁ : ∀ k, bnForward (2 * h * w) 1 0 1 (flatConvStride2 Zk2 Zb2 a) k ≠ 0 := fun k => by
-    rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
+    rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const hhw]
     change (1 : ℝ) ≠ 0; norm_num
   have hsm := fun k => ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k)
   unfold liveDownW residualProj flatConvStride2 at *
@@ -479,7 +479,7 @@ theorem stemβ_zero (s : Nat) (β : ℝ) (hs : 0 < 2 * s * s) (hβ : 0 < β) :
     (fun _ => 0) = _
   simp only [Function.comp_apply]
   rw [flatConvStride2_diag WsId2 (fun o i => rfl) (fun _ => 0), decimateFlat_const,
-      bnForward_const_eq hs, relu_const_pos _ β hβ]
+      bnForward_const hs, relu_const_pos _ β hβ]
 
 theorem stem2_zero : stem2 (fun _ => (0 : ℝ)) = fun _ => (30 : ℝ) :=
   stemβ_zero 16 30 (by norm_num) (by norm_num)
@@ -491,7 +491,7 @@ theorem liveDownβ_const (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w) (hβ1 : 0
       = fun _ => βp := by
     simp only [Function.comp_apply]
     rw [flatConvStride2_diag WsP2 (fun o i => rfl) (fun _ => c), decimateFlat_const,
-        bnForward_const_eq hhw]
+        bnForward_const hhw]
   show relu (2 * h * w) (residualProj
     (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
     ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘

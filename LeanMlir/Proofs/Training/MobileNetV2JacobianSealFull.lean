@@ -61,11 +61,11 @@ theorem ivId_chain_eq (k : Nat) (a : Vec (2 * 2 * 2)) :
 /-- The whole-block VJP of an identity block at *any* point (window everywhere). -/
 noncomputable def ivId_hasVJPAt (a : Vec (2 * 2 * 2)) : HasVJPAt ivId a :=
   invresSkip_has_vjp_at We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
-    a (fun k => winF _ k) (fun k => winF _ k)
+    a (fun k => win _ k) (fun k => win _ k)
 
 theorem ivId_diffAt (a : Vec (2 * 2 * 2)) : DifferentiableAt ℝ ivId a :=
   invresSkip_differentiableAt We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
-    a (fun k => winF _ k) (fun k => winF _ k)
+    a (fun k => win _ k) (fun k => win _ k)
 
 /-- Per-block VJP + differentiability data for a chain of `k` identity blocks. The
     window holds at every running activation, so no point threading is needed. -/
@@ -135,33 +135,33 @@ theorem fwdFull_differentiable : Differentiable ℝ fwdFull := by
 
 /-- **The full-depth whole-network VJP at any input.** Composes the per-block VJPs:
     stem → skip block-1 → no-skip block-2 → the 15-block identity chain
-    (`chain_vjp_diff_at`) → GAP → head, every ReLU6 site discharged by `winF`. The
+    (`chain_vjp_diff_at`) → GAP → head, every ReLU6 site discharged by `win`. The
     backward genuinely runs all 17 block backward maps in reverse. -/
 noncomputable def fwdFull_has_vjp_at (x : Vec (1 * 2 * 2)) : HasVJPAt fwdFull x := by
   unfold fwdFull
   -- stem
   set S0 := (relu6 (2 * 2 * 2) ∘ bnForward (2 * 2 * 2) 1 1 3 ∘ flatConv Ws bs) with hS0
-  have s0_vjp : HasVJPAt S0 x := convBnRelu6_has_vjp_at Ws bs 1 1 3 one_pos x (fun k => winF _ k)
+  have s0_vjp : HasVJPAt S0 x := convBnRelu6_has_vjp_at Ws bs 1 1 3 one_pos x (fun k => win _ k)
   have s0_diff : DifferentiableAt ℝ S0 x :=
-    convBnRelu6_differentiableAt Ws bs 1 1 3 one_pos x (fun k => winF _ k)
+    convBnRelu6_differentiableAt Ws bs 1 1 3 one_pos x (fun k => win _ k)
   -- block1 (skip IR)
   set B1 := residual (invresBody (h := 2) (w := 2) We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3) with hB1
   have b1_vjp : HasVJPAt B1 (S0 x) :=
     invresSkip_has_vjp_at We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
-      (S0 x) (fun k => winF _ k) (fun k => winF _ k)
+      (S0 x) (fun k => win _ k) (fun k => win _ k)
   have b1_diff : DifferentiableAt ℝ B1 (S0 x) :=
     invresSkip_differentiableAt We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
-      (S0 x) (fun k => winF _ k) (fun k => winF _ k)
+      (S0 x) (fun k => win _ k) (fun k => win _ k)
   have s1_vjp : HasVJPAt (B1 ∘ S0) x := vjp_comp_at S0 B1 x s0_diff b1_diff s0_vjp b1_vjp
   have s1_diff : DifferentiableAt ℝ (B1 ∘ S0) x := b1_diff.comp x s0_diff
   -- block2 (no-skip IR)
   set B2 := invresBody (h := 2) (w := 2) We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 with hB2
   have b2_vjp : HasVJPAt B2 (B1 (S0 x)) :=
     invresBody_has_vjp_at We₂ be₂ 1 1 3 one_pos Wd₂ bd₂ 1 1 3 one_pos Wp₂ bp₂ 1 1 3 one_pos
-      (B1 (S0 x)) (fun k => winF _ k) (fun k => winF _ k)
+      (B1 (S0 x)) (fun k => win _ k) (fun k => win _ k)
   have b2_diff : DifferentiableAt ℝ B2 (B1 (S0 x)) :=
     invresBody_differentiableAt We₂ be₂ 1 1 3 one_pos Wd₂ bd₂ 1 1 3 one_pos Wp₂ bp₂ 1 1 3 one_pos
-      (B1 (S0 x)) (fun k => winF _ k) (fun k => winF _ k)
+      (B1 (S0 x)) (fun k => win _ k) (fun k => win _ k)
   have s2_vjp : HasVJPAt (B2 ∘ (B1 ∘ S0)) x := vjp_comp_at (B1 ∘ S0) B2 x s1_diff b2_diff s1_vjp b2_vjp
   have s2_diff : DifferentiableAt ℝ (B2 ∘ (B1 ∘ S0)) x := b2_diff.comp x s1_diff
   -- the 15-block identity chain
