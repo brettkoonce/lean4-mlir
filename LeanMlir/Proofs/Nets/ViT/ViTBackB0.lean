@@ -998,7 +998,8 @@ block-back faithfulness statement is stated through `Mat.flatten`/`Mat.unflatten
     the vec-LN fragment `lnRowBack(γ=1) ∘ rowScaleF γF`, chained onto Stage 1.
   * **Stage 3** — `vitBodyBackGraphKMHV`, a depth-`k` reverse fold of
     `transformerBlockVBackGraphMH` (last forward block = first backward block),
-    threading each block's saved forward activation; `_den` by induction on `k`.
+    threading each block's saved forward activation (its faithfulness is `ViTBackNet`'s fold,
+    `vitTrunkV_graph`).
   * **Stage 4** — `patchEmbedBackGraph` ↔ `patchEmbed_flat_has_vjp.backward`:
     the strided-patchify conv input-VJP (the `patchEmbedBack` token).
 -/
@@ -1102,29 +1103,6 @@ theorem transformerBlockVBackGraphMHP_faithful {Np1 hm1 d mlpDim : Nat} (ε : �
   transformerBlockVBackGraphMH_faithful ε p.γ1 p.β1 p.γ2 p.β2 hε
     p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 A dY ecot hecot
 
-/-- **Bundled per-block flat-VJP unfold.** The depth-`(k+1)` tower flat-VJP backward
-    factors (by `vjp_comp`'s rule) as block `0`'s `hasVJPMat`-bridged backward of the
-    depth-`k` tail backward, at the post-block-`0` flat activation. Spells the
-    16-tuple ONCE; the induction only chains this. Proven by the SHALLOW projection
-    equations of `vjp_comp` and `hasVJPMat_to_hasVJP` (NOT a deep `rfl`, which the
-    kernel times out on — the tail VJP term is enormous). -/
-theorem vitBodyKVFlat_has_vjp_succ_backward {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
-    (k : Nat) (ps : Fin (k+1) → BlockParamsV ((hm1+1) * d) mlpDim)
-    (vA vc : Vec (Np1 * ((hm1+1) * d))) :
-    (vitBodyKVFlat_has_vjp Np1 (hm1+1) d mlpDim ε hε (k+1) ps).backward vA vc
-      = Mat.flatten ((transformerBlockV_has_vjp_matP ε hε (ps 0)).backward (Mat.unflatten vA)
-          (Mat.unflatten
-            ((vitBodyKVFlat_has_vjp Np1 (hm1+1) d mlpDim ε hε k (fun i => ps i.succ)).backward
-              (blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) vA) vc))) := by
-  -- Unfold ONLY the outer recursion equation + the two SHALLOW projection rules
-  -- (`vjp_comp.backward`, `hasVJPMat_to_hasVJP.backward`), then collapse the
-  -- `Mat.flatten`/`Mat.unflatten` bridge. The tail VJP stays opaque — no deep `rfl`.
-  rw [vitBodyKVFlat_has_vjp]
-  show (hasVJPMat_to_hasVJP (transformerBlockV_has_vjp_matP ε hε (ps 0))).backward vA
-        ((vitBodyKVFlat_has_vjp Np1 (hm1+1) d mlpDim ε hε k (fun i => ps i.succ)).backward
-          (blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) vA) vc) = _
-  rfl
-
 /-- **Depth-`k` tower backward graph** — the REVERSE fold of
     `transformerBlockVBackGraphMHP`. The forward body runs block `0` first
     (`vitBodyKV (k+1) ps = vitBodyKV k (ps∘succ) ∘ blockV (ps 0)`), so the
@@ -1140,52 +1118,6 @@ noncomputable def vitBodyBackGraphKMHV {Np1 hm1 d mlpDim : Nat} (ε : ℝ) :
       transformerBlockVBackGraphMHP ε (ps 0) A
         (vitBodyBackGraphKMHV ε k (fun i => ps i.succ)
           (blockV Np1 (hm1+1) d mlpDim ε (ps 0) A) e)
-
-/-- **Depth-`k` tower backward den** — by induction on `k`, chaining the bundled
-    `transformerBlockVBackGraphMHP_faithful` per block: the reverse fold denotes
-    the flatten of the inductive tower VJP backward
-    (`vitBodyKVFlat_has_vjp.backward`) at the saved block input `A`, fed any
-    incoming cotangent whose den is the flatten of `dInner`. The backward
-    analogue of `vitBodyGraphKMHV_den`. -/
-theorem vitBodyBackGraphKMHV_den {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
-    ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
-      (A : Mat Np1 ((hm1+1) * d)) (e : SHlo (Np1 * ((hm1+1) * d)))
-      (dInner : Mat Np1 ((hm1+1) * d)),
-      den e = Mat.flatten dInner →
-      den (vitBodyBackGraphKMHV ε k ps A e)
-        = (vitBodyKVFlat_has_vjp Np1 (hm1+1) d mlpDim ε hε k ps).backward
-              (Mat.flatten A) (Mat.flatten dInner)
-  | 0, _, _, e, dInner, he => by
-      -- depth-0 VJP backward = identity.
-      show den e = Mat.flatten dInner
-      exact he
-  | k + 1, ps, A, e, dInner, he => by
-      -- blockVFlat (ps 0) (flatten A) = flatten (blockV (ps 0) A).
-      have hblock : blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) (Mat.flatten A)
-          = Mat.flatten (blockV Np1 (hm1+1) d mlpDim ε (ps 0) A) := by
-        unfold blockVFlat; rw [Mat.unflatten_flatten]
-      -- IH at the post-block-0 activation `B := blockV (ps 0) A`.
-      set B : Mat Np1 ((hm1+1) * d) := blockV Np1 (hm1+1) d mlpDim ε (ps 0) A with hB
-      have ih := vitBodyBackGraphKMHV_den ε hε k (fun i => ps i.succ) B e dInner he
-      -- LHS: den (block-back graph at A, fed the tail-back SUBGRAPH — no `den` seam).
-      show den (transformerBlockVBackGraphMHP ε (ps 0) A
-            (vitBodyBackGraphKMHV ε k (fun i => ps i.succ) B e)) = _
-      -- The tail-back graph den IS the tail VJP backward at flatten B (by IH).
-      set tc : Vec (Np1 * ((hm1+1) * d)) :=
-        (vitBodyKVFlat_has_vjp Np1 (hm1+1) d mlpDim ε hε k (fun i => ps i.succ)).backward
-          (Mat.flatten B) (Mat.flatten dInner) with htc
-      -- Present the tail cotangent as `flatten (unflatten ·)` and apply the block faithful
-      -- to the tail SUBGRAPH, discharging its den-hypothesis with the IH.
-      have hsub : den (vitBodyBackGraphKMHV ε k (fun i => ps i.succ) B e)
-          = Mat.flatten (Mat.unflatten tc) := by
-        rw [ih, Mat.flatten_unflatten]
-      rw [transformerBlockVBackGraphMHP_faithful ε hε (ps 0) A (Mat.unflatten tc)
-            (vitBodyBackGraphKMHV ε k (fun i => ps i.succ) B e) hsub]
-      -- RHS: reduce the depth-(k+1) tower VJP backward one block (bundled unfold),
-      -- then match flatten/unflatten round-trips: unflatten (flatten A) → A, then
-      -- fold the tail cotangent (blockVFlat → flatten B via hblock) back into `tc`.
-      rw [vitBodyKVFlat_has_vjp_succ_backward ε hε k ps (Mat.flatten A) (Mat.flatten dInner)]
-      rw [Mat.unflatten_flatten, hblock, ← htc]
 
 -- ── Stage 4: patchEmbed input-backward graph ──
 
@@ -1204,7 +1136,7 @@ theorem patchEmbedBackGraph_faithful (ic H W P N D : Nat)
     den (patchEmbedBackGraph ic H W P N D Wc e)
       = (patchEmbed_flat_has_vjp ic H W P N D Wc bc cls pos).backward img (den e) := rfl
 
--- ── Stage 5: Whole-net backward graph + faithfulness ──
+-- ── Stage 5: Whole-net backward graph (its faithfulness: `ViTBackNet.lean`) ──
 
 /-- **Whole-net depth-`k` multi-head vector-LN ViT backward graph.** Mirrors the
     forward `vitFwdGraphKMHV` in REVERSE: classifier-back → final-vec-LN-back →
@@ -1225,107 +1157,5 @@ noncomputable def vitNetBackGraph
     (vitBodyBackGraphKMHV ε k ps embOut
       (finalLNBackGraph N ((hm1+1) * d) ε γF (Mat.flatten bodyOut)
         (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot)))
-
-set_option maxHeartbeats 1000000 in
-/-- **Whole-net backward-graph faithfulness (capstone).** The reverse-composed
-    backward graph denotes the proven whole-net VJP `vitForwardKV_has_vjp.backward`
-    at every input image `x` and output cotangent `dy`, at EVERY depth `k`, for the
-    production config (depth-`k`, multi-head `heads = hm1+1`, vector-LN). The
-    backward analogue of `vitFwdGraphKMHV_faithful`: it composes the four stages by
-    unfolding the three `vjp_comp` backward rules and bridging Vec↔Mat via
-    `Mat.flatten`/`Mat.unflatten`, mirroring how the forward faithfulness composes
-    the forward stages. The saved activations (`embOut`, `bodyOut`) are pinned to
-    the forward intermediates `patchEmbed_flat x` and `vitBodyKVFlat (patchEmbed_flat x)`. -/
-theorem vitNetBackGraph_faithful
-    (ic H W patchSize N mlpDim hm1 d nClasses k : Nat) (ε : ℝ) (hε : 0 < ε)
-    (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize)
-    (bc cls : Vec ((hm1+1) * d)) (pos : Mat (N + 1) ((hm1+1) * d))
-    (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
-    (γF βF : Vec ((hm1+1) * d))
-    (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
-    (x : Vec (ic * H * W)) (ecot : SHlo nClasses) :
-    den (vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
-          (Mat.unflatten
-            (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
-          (Mat.unflatten
-            (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
-              (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
-          ecot)
-      = (vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
-          Wc bc cls pos ε hε ps γF βF Wcls bcls).backward x (den ecot) := by
-  set dy : Vec nClasses := den ecot with hdy
-  -- Abbreviate the forward stages exactly as `vitForwardKV_has_vjp`'s proof does.
-  set PE := patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos with hPE
-  set BODY := vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps with hBODY
-  set LNF := (fun v : Vec ((N + 1) * ((hm1+1) * d)) =>
-    Mat.flatten (fun n => layerNormVec ((hm1+1) * d) ε γF βF ((Mat.unflatten v) n))) with hLNF
-  -- The whole-net VJP's backward unfolds (vjp_comp backward rule, rfl-transparent) to:
-  --   PE.back x (BODY.back (PE x) (LNF.back (BODY (PE x)) (classifier.back (LNF (BODY (PE x))) dy)))
-  have hunfold :
-      (vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
-          Wc bc cls pos ε hε ps γF βF Wcls bcls).backward x dy
-        = (patchEmbed_flat_has_vjp ic H W patchSize N ((hm1+1) * d) Wc bc cls pos).backward x
-            ((vitBodyKVFlat_has_vjp (N + 1) (hm1+1) d mlpDim ε hε k ps).backward (PE x)
-              ((hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat (N + 1) ((hm1+1) * d)
-                  ε γF βF hε)).backward (BODY (PE x))
-                ((classifier_flat_has_vjp N ((hm1+1) * d) nClasses Wcls bcls).backward
-                  (LNF (BODY (PE x))) dy))) := rfl
-  rw [hunfold]
-  -- Now build the graph side: patchEmbedBack (tower (finalLN (classifier))).
-  simp only [vitNetBackGraph]
-  -- Stage 4: patchEmbedBack at saved image x.
-  rw [patchEmbedBackGraph_faithful ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x]
-  congr 1
-  -- Inner: den (tower-back graph at embOut = PE x, fed the finalLN back graph).
-  -- The tower-back den (Stage 3) needs `den (finalLN graph) = flatten dInner`.
-  set cClsf : Vec ((N + 1) * ((hm1+1) * d)) :=
-    (hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat (N + 1) ((hm1+1) * d)
-        ε γF βF hε)).backward (BODY (PE x))
-      ((classifier_flat_has_vjp N ((hm1+1) * d) nClasses Wcls bcls).backward
-        (LNF (BODY (PE x))) dy) with hcClsf
-  -- finalLN graph's den = flatten of the vec-LN per-token back of the classifier back,
-  -- at the saved body output bodyOut = unflatten (BODY (PE x)).
-  have hLNgraph :
-      den (finalLNBackGraph N ((hm1+1) * d) ε γF
-            (Mat.flatten (Mat.unflatten (BODY (PE x))))
-            (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot))
-        = Mat.flatten (Mat.unflatten cClsf) := by
-    rw [finalLNBackGraph_faithful N ((hm1+1) * d) ε γF βF hε
-          (Mat.unflatten (BODY (PE x)))
-          (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot),
-      classifierBackGraph_faithful N ((hm1+1) * d) nClasses Wcls bcls
-          (LNF (BODY (PE x))) ecot]
-    -- `unflatten cClsf = (lnVec).backward (unflatten (BODY (PE x))) (unflatten (classifier.back …))`:
-    -- `cClsf = hasVJPMat_to_hasVJP.backward (BODY (PE x)) cc = flatten ((lnVec).backward (unflatten (BODY (PE x))) (unflatten cc))`
-    -- (definitional), so `unflatten cClsf` cancels via `Mat.unflatten_flatten` (a LEMMA, not rfl).
-    -- The classifier back is activation-INDEPENDENT, so the two `cc` legs are then defeq.
-    have hcc : Mat.unflatten cClsf
-        = (layerNormVec_per_token_has_vjp_mat (N + 1) ((hm1+1) * d) ε γF βF hε).backward
-            (Mat.unflatten (BODY (PE x)))
-            (Mat.unflatten ((classifier_flat_has_vjp N ((hm1+1) * d) nClasses Wcls bcls).backward
-              (LNF (BODY (PE x))) dy)) := by
-      rw [hcClsf]
-      show Mat.unflatten (Mat.flatten
-            ((layerNormVec_per_token_has_vjp_mat (N + 1) ((hm1+1) * d) ε γF βF hε).backward
-              (Mat.unflatten (BODY (PE x)))
-              (Mat.unflatten ((classifier_flat_has_vjp N ((hm1+1) * d) nClasses Wcls bcls).backward
-                (LNF (BODY (PE x))) dy)))) = _
-      rw [Mat.unflatten_flatten]
-    rw [hcc]
-    -- ⭐ An `hclsf_indep` step used to live here — the classifier VJP ignores its saved
-    -- activation, so the two legs (`flatten (unflatten (BODY (PE x)))` vs `LNF (BODY (PE x))`)
-    -- had to be reconciled. It existed ONLY because `finalLNBackGraph` bundled the classifier
-    -- and therefore hard-coded which activation the head was differentiated at. Splitting the
-    -- two stages lets `classifierBackGraph_faithful` be instantiated at the right activation
-    -- directly, and the step disappears. **Un-bundling made the proof shorter, not longer.**
-  -- Feed hLNgraph to the tower den (Stage 3), at embOut = unflatten (PE x).
-  rw [vitBodyBackGraphKMHV_den ε hε k ps (Mat.unflatten (PE x))
-        (finalLNBackGraph N ((hm1+1) * d) ε γF
-          (Mat.flatten (Mat.unflatten (BODY (PE x))))
-          (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot))
-        (Mat.unflatten cClsf) hLNgraph]
-  -- tower den RHS = tail.backward (flatten (unflatten (PE x))) (flatten (unflatten cClsf));
-  -- round-trips cancel to BODY.backward (PE x) cClsf.
-  rw [Mat.flatten_unflatten, Mat.flatten_unflatten]
 
 end Proofs.StableHLO

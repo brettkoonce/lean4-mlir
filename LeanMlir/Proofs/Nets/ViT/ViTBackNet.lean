@@ -11,9 +11,10 @@ different backward vocabulary … a separate sitting"*). This file is that sitti
 `CertifiedChain.lean`'s header says *"Measured before writing this file: **nothing** in
 `LeanMlir/Proofs/` folds those blocks into a stage or a net"*, and `ResNet50BackNet.lean` calls
 itself *"the FIRST one in the repo"*. Both are **wrong**, and ViT is the counterexample:
-`ViTBackB0.lean` has carried `vitBodyBackGraphKMHV_den` (a depth-`k` reverse fold of the block
-backward graph, by induction on `k`) and `vitNetBackGraph_faithful` (patchEmbed → tower → final
-vec-LN → classifier, at **every** depth) since before either file existed. Both are in
+`ViTBackB0.lean` has carried the depth-`k` tower backward graph `vitBodyBackGraphKMHV` and the
+whole-net graph `vitNetBackGraph` (patchEmbed → tower → final vec-LN → classifier, at **every**
+depth) since before either file existed; this file's `vitNetBackGraph_faithful`, which ties the
+whole-net graph to the whole-net VJP, is in
 [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean).
 
 So the accurate statement of what the other six nets have is *block capstones plus an
@@ -53,7 +54,7 @@ obstacle, because its stem is an affine patchify conv and its head is a CLS slic
 both linear, so both backward graphs are activation-independent.
 
 So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head` is one `CertLayer`, assembled by `comp` alone,
-and `vitNetBackGraph_faithful_via_fold` re-derives `ViTBackB0`'s whole-net capstone from it —
+and `vitNetBackGraph_faithful` (the whole-net capstone) follows from it —
 including that the fold's VJP **is** the shipped `vitForwardKV_has_vjp`, not merely another VJP of
 the same map. That last step is `HasVJPAt.backward_unique_of_eq` along the forward equation
 `vitNetLayer_fwd`: the two witnesses are VJPs of propositionally equal maps, so both backwards are
@@ -344,15 +345,13 @@ theorem vitNetLayer_ok (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
       Wc bc cls pos ps γF βF Wcls bcls).ok x :=
   ⟨trivial, vitTrunkV_ok ε hε k ps _, trivial, trivial⟩
 
-/-- ⭐⭐⭐ **`vitNetBackGraph_faithful`, DERIVED.** ViTBackB0 proves that statement directly, by
-    unfolding three `vjp_comp` backward rules and bridging Vec↔Mat by hand at each seam. Here it
-    falls out of `CertLayer.faithful` at `vitNetLayer` plus `vitNetLayer_graph` — the composition
-    argument is `comp`'s, proven once for all seven nets, and the only ViT-specific input is the
-    forward equality.
-
-    So the whole-net capstone is now available two ways, and the generic one carries no ViT
-    reasoning at all. -/
-theorem vitNetBackGraph_faithful_via_fold
+/-- ⭐⭐⭐ **Whole-net backward-graph faithfulness.** The reverse-composed backward graph
+    `vitNetBackGraph` denotes the proven whole-net VJP `vitForwardKV_has_vjp.backward` at every
+    input image and output cotangent, at every depth `k` (multi-head, vector-LN). It falls out of
+    `CertLayer.faithful` at `vitNetLayer` plus `vitNetLayer_graph` — the composition argument is
+    `comp`'s, proven once for all seven nets, and the only ViT-specific input is the forward
+    equality. -/
+theorem vitNetBackGraph_faithful
     (ic H W patchSize N mlpDim hm1 d nClasses k : Nat) (ε : ℝ) (hε : 0 < ε)
     (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
     (pos : Mat (N + 1) ((hm1+1) * d))

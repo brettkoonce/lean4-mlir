@@ -1482,7 +1482,6 @@ open Proofs
 #print axioms StableHLO.classifierBackGraph_faithful
 #print axioms StableHLO.finalLNBackGraph_faithful
 #print axioms StableHLO.transformerBlockVBackGraphMHP_faithful
-#print axioms StableHLO.vitBodyBackGraphKMHV_den
 #print axioms StableHLO.patchEmbedBack_faithful
 #print axioms StableHLO.patchEmbedBackGraph_faithful
 #print axioms StableHLO.vitNetBackGraph_faithful
@@ -1502,7 +1501,6 @@ open Proofs
 #print axioms StableHLO.vitNetLayer_fwd
 #print axioms StableHLO.vitNetLayer_graph
 #print axioms StableHLO.vitNetLayer_ok
-#print axioms StableHLO.vitNetBackGraph_faithful_via_fold
 
 -- THE MACHINERY FIRST — `CertLayer.comp`, the single composition proof every fold routes through
 #print axioms StableHLO.CertLayer.id'

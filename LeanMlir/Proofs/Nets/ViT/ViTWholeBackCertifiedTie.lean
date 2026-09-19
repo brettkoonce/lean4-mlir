@@ -22,8 +22,7 @@ Four things assemble it, and only the second is a proof rather than an enumerati
    is block `0`'s forward OUTPUT. `cnxStageChKBack_eq_vjp`'s induction verbatim: one rewrite of
    the block tie and one of the inductive hypothesis.
 3. **The apex witness.** `vitApexVJP` names the committed `vitForwardKV_has_vjp`; its
-   `.backward` reduces through the four `vjp_comp` factors by `rfl` (ViTBackB0's
-   `vitNetBackGraph_faithful` unfolds it the same way).
+   `.backward` reduces through the four `vjp_comp` factors by `rfl`.
 4. **A shape check.** `vitForwardKV_eq_chain` says the four-factor composition the apex is stated
    at IS the committed `vitForwardKV`, by `rfl`.
 
