@@ -52,26 +52,38 @@ noncomputable def Zk2 : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
 noncomputable def Zb2 : Vec 2 := fun _ => 0
 
 -- ════════════════════════════════════════════════════════════════
--- § The 2-channel live downsample
+-- § The 2-channel live downsample (any BN shift `βp`, any projection kernel `W`)
 -- ════════════════════════════════════════════════════════════════
 
-/-- A live 2-channel downsample: `relu(bn₂₀(decimate x) + 1)` — projection carries the
-    per-channel signal (channel-diagonal identity kernel `WsP2`), body zeroed to constant 1,
-    `βp = 20 > √(2·h·w)` keeps the projection positive (`bnForward_lb`). The `c = 2` peer of
+/-- A live 2-channel downsample: `relu(bn_βp(conv_W(decimate x)) + 1)` — the projection
+    carries the signal, the body is zeroed to the constant 1, and `βp > √(2·h·w)` keeps the
+    projection positive (`bnForward_lb`) whatever the kernel `W`. The `c = 2` peer of
     `ResNet34Live.liveDown`. -/
-noncomputable def liveDownPC (h w : Nat) : Vec (2 * (2 * h) * (2 * w)) → Vec (2 * h * w) :=
+noncomputable def liveDownW (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) :
+    Vec (2 * (2 * h) * (2 * w)) → Vec (2 * h * w) :=
   relu (2 * h * w) ∘ residualProj
-    (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+    (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2)
     ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
       (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2))
 
-/-- The projection is strictly positive: `bn₂₀ ≥ 20 − √(2·h·w) > 0`. -/
-theorem liveDownPC_proj_pos (h w : Nat)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w)))
+/-- The signal-carrying downsample: the channel-diagonal identity projection `WsP2`
+    decimates each channel independently. -/
+noncomputable def liveDownβ (h w : Nat) (βp : ℝ) : Vec (2 * (2 * h) * (2 * w)) → Vec (2 * h * w) :=
+  liveDownW h w βp WsP2
+
+/-- The 32×32 witness's downsample: `βp = 20 > √(2·h·w)` at every stage. -/
+noncomputable def liveDownPC (h w : Nat) : Vec (2 * (2 * h) * (2 * w)) → Vec (2 * h * w) :=
+  liveDownβ h w 20
+
+/-- **Weight-independent projection positivity.** For any kernel `W`, the normalized
+    projection `bn_{γ=1,βp}(conv_W(·))` is `> 0` once `√n < βp` — `bnForward_lb` bounds it
+    below by `βp − √n`, with no reference to `W`. -/
+theorem liveDownW_proj_pos (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w)))
     (k : Fin (2 * h * w)) :
-    0 < (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2) a k := by
+    0 < (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2) a k := by
   simp only [Function.comp_apply]
-  have hlb := bnForward_lb (n := 2 * h * w) 1 1 20 (by norm_num) (flatConvStride2 WsP2 Zb2 a) k
+  have hlb := bnForward_lb (n := 2 * h * w) 1 1 βp (by norm_num) (flatConvStride2 W Zb2 a) k
   rw [abs_one, one_mul] at hlb
   linarith
 
@@ -84,40 +96,54 @@ theorem liveDownPC_body_const (h w : Nat) (hhw : 0 < 2 * h * w)
   simp only [Function.comp_apply]
   rw [flatConv_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const_eq hhw]
 
-/-- The post-add ReLU input is strictly positive (`proj > 0`, body `= 1`). -/
-theorem liveDownPC_sum_pos (h w : Nat) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w)))
+/-- The post-add ReLU input is strictly positive (`proj > 0`, body `= 1`), for any `W`. -/
+theorem liveDownW_sum_pos (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w)))
     (k : Fin (2 * h * w)) :
-    0 < ((bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2) a k)
+    0 < ((bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2) a k)
       + ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
           (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a k := by
-  have hp := liveDownPC_proj_pos h w hn a k
-  have hb : ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a k = 1 := by
-    rw [liveDownPC_body_const h w hhw a]
-  rw [hb]; linarith
+  rw [liveDownPC_body_const h w hhw a]
+  linarith [liveDownW_proj_pos h w βp W hn a k]
 
-/-- VJP of the live 2-channel downsample (via `rblkPStrided_has_vjp_at` at `oc = ic = 2`). -/
-noncomputable def liveDownPC_vjp (h w : Nat) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) :
-    HasVJPAt (liveDownPC h w) a :=
-  rblkPStrided_has_vjp_at Zk2 Zb2 Zk2 Zb2 WsP2 Zb2 1 0 1 1 0 1 1 1 20
+/-- VJP of the live downsample at every point, for any `W` (via `rblkPStrided_has_vjp_at`
+    at `oc = ic = 2`). -/
+noncomputable def liveDownW_vjp (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
+    HasVJPAt (liveDownW h w βp W) a :=
+  rblkPStrided_has_vjp_at Zk2 Zb2 Zk2 Zb2 W Zb2 1 0 1 1 0 1 1 1 βp
     (by norm_num) (by norm_num) (by norm_num) a
     (fun k => by
       rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
       change (1 : ℝ) ≠ 0; norm_num)
-    (fun k => ne_of_gt (liveDownPC_sum_pos h w hhw hn a k))
+    (fun k => ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k))
 
-/-- The live 2-channel downsample is differentiable at every point. -/
-theorem liveDownPC_diff (h w : Nat) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) :
-    DifferentiableAt ℝ (liveDownPC h w) a := by
+/-- The live downsample is differentiable at every point, for any `W`. -/
+theorem liveDownW_diff (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
+    DifferentiableAt ℝ (liveDownW h w βp W) a := by
   have hsm₁ : ∀ k, bnForward (2 * h * w) 1 0 1 (flatConvStride2 Zk2 Zb2 a) k ≠ 0 := fun k => by
     rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
     change (1 : ℝ) ≠ 0; norm_num
-  have hsm := fun k => ne_of_gt (liveDownPC_sum_pos h w hhw hn a k)
-  unfold liveDownPC residualProj flatConvStride2 at *
+  have hsm := fun k => ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k)
+  unfold liveDownW residualProj flatConvStride2 at *
   fun_prop (disch := first | assumption | norm_num)
+
+noncomputable def liveDownβ_vjp (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
+    HasVJPAt (liveDownβ h w βp) a := liveDownW_vjp h w βp WsP2 hhw hn a
+
+theorem liveDownβ_diff (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
+    DifferentiableAt ℝ (liveDownβ h w βp) a := liveDownW_diff h w βp WsP2 hhw hn a
+
+noncomputable def liveDownPC_vjp (h w : Nat) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) :
+    HasVJPAt (liveDownPC h w) a := liveDownβ_vjp h w 20 hhw hn a
+
+theorem liveDownPC_diff (h w : Nat) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) :
+    DifferentiableAt ℝ (liveDownPC h w) a := liveDownβ_diff h w 20 hhw hn a
 
 /-- The live 2-channel downsample output is nonnegative (it is a ReLU). -/
 theorem liveDownPC_nonneg (h w : Nat) (a : Vec (2 * (2 * h) * (2 * w))) (k : Fin (2 * h * w)) :
@@ -354,25 +380,29 @@ theorem flatConvStride2_diag {h w : Nat} (W : Kernel4 2 2 1 1)
 
 /-- The live downsample preserves the channel-order invariant: the projection is
     `bn ∘ decimate` (order-preserving) and the body is a channel-symmetric constant. -/
-theorem Dom2_liveDownPC (h w : Nat) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) (ha : Dom2 a) :
-    Dom2 (liveDownPC h w a) := by
+theorem Dom2_liveDownβ (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) (ha : Dom2 a) :
+    Dom2 (liveDownβ h w βp a) := by
   show Dom2 (relu (2 * h * w) (residualProj
-    (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+    (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
     ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
       (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a))
-  apply Dom2_relu _ (fun k => liveDownPC_sum_pos h w hhw hn a k)
+  apply Dom2_relu _ (fun k => liveDownW_sum_pos h w βp WsP2 hhw hn a k)
   apply Dom2_add_const _ _ ?_ ?_
-  · -- Dom2 of the projection  bn₂₀(decimate a)
-    show Dom2 (bnForward (2 * h * w) 1 1 20 (flatConvStride2 WsP2 Zb2 a))
+  · -- Dom2 of the projection  bn_βp(decimate a)
+    show Dom2 (bnForward (2 * h * w) 1 1 βp (flatConvStride2 WsP2 Zb2 a))
     rw [flatConvStride2_diag WsP2 (fun o i => rfl) a]
-    exact Dom2_bn 20 _ (Dom2_decimate a ha)
+    exact Dom2_bn βp _ (Dom2_decimate a ha)
   · -- the body is the channel-symmetric constant 1
     intro hi wi
     rw [show ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
       (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a
         = (fun _ => (1 : ℝ)) from liveDownPC_body_const h w hhw a]
     rfl
+
+theorem Dom2_liveDownPC (h w : Nat) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) (ha : Dom2 a) :
+    Dom2 (liveDownPC h w a) := Dom2_liveDownβ h w 20 hhw hn a ha
 
 /-- The stem preserves the invariant: `relu ∘ bn ∘ decimate` of a dominating input. -/
 theorem Dom2_stem2 (a : Vec (2 * (2 * 16) * (2 * 16))) (ha : Dom2 a)
@@ -444,26 +474,31 @@ theorem stem2_zero : stem2 (fun _ => (0 : ℝ)) = fun _ => (30 : ℝ) := by
   rw [flatConvStride2_diag WsId2 (fun o i => rfl) (fun _ => 0), decimateFlat_const,
       bnForward_const_eq (by norm_num), relu_const_pos 30 (by norm_num)]
 
-theorem liveDownPC_const {h w : Nat} (hhw : 0 < 2 * h * w) (c : ℝ) :
-    liveDownPC h w (fun _ => c) = fun _ => (21 : ℝ) := by
-  have hproj : (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2) (fun _ => c)
-      = fun _ => (20 : ℝ) := by
+/-- The downsample collapses a constant input to the constant `βp + 1`. -/
+theorem liveDownβ_const (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w) (hβ1 : 0 < βp + 1) (c : ℝ) :
+    liveDownβ h w βp (fun _ => c) = fun _ => βp + 1 := by
+  have hproj : (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2) (fun _ => c)
+      = fun _ => βp := by
     simp only [Function.comp_apply]
     rw [flatConvStride2_diag WsP2 (fun o i => rfl) (fun _ => c), decimateFlat_const,
         bnForward_const_eq hhw]
   show relu (2 * h * w) (residualProj
-    (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+    (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
     ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
       (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) (fun _ => c)) = _
   rw [show residualProj
-      (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+      (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
       ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
         (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) (fun _ => c)
-        = fun _ => (21 : ℝ) from ?_]
-  · exact relu_const_pos 21 (by norm_num)
+        = fun _ => βp + 1 from ?_]
+  · exact relu_const_pos (βp + 1) hβ1
   · funext k
-    simp only [residualProj, biPath]
-    rw [hproj, liveDownPC_body_const h w hhw (fun _ => c)]; norm_num
+    simp only [residualProj, biPath, hproj, liveDownPC_body_const h w hhw]
+
+theorem liveDownPC_const {h w : Nat} (hhw : 0 < 2 * h * w) (c : ℝ) :
+    liveDownPC h w (fun _ => c) = fun _ => (21 : ℝ) := by
+  show liveDownβ h w 20 (fun _ => c) = _
+  rw [liveDownβ_const h w 20 hhw (by norm_num) c]; norm_num
 
 theorem gap_1x1_const (c : ℝ) : globalAvgPoolFlat 2 1 1 (fun _ => c) = fun _ => c := by
   funext j; rw [gap_1x1]; rfl

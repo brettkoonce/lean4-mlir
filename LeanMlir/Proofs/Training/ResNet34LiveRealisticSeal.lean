@@ -188,38 +188,6 @@ theorem stem224_eq_stemS224 (v : Vec (2 * (2 * 112) * (2 * 112))) : stem224 v = 
   rw [relu_id_of_pos (fun k => stemS224_bn_pos v k), flatConvStride2_diag WsId2 (fun o i => rfl) v]
   rfl
 
-/-- The live downsample with the (globally-off) ReLU removed: `bn_βp ∘ decimate + 1`. -/
-noncomputable def ldSβ (h w : Nat) (βp : ℝ) (a : Vec (2 * (2 * h) * (2 * w))) : Vec (2 * h * w) :=
-  fun k => bnForward (2 * h * w) 1 1 βp (decimateFlat 2 h w a) k + 1
-
-theorem ldSβ_pos (h w : Nat) (βp : ℝ) (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp)
-    (a : Vec (2 * (2 * h) * (2 * w))) (k : Fin (2 * h * w)) : 0 < ldSβ h w βp a k := by
-  simp only [ldSβ]
-  have hlb := bnForward_lb (n := 2 * h * w) 1 1 βp (by norm_num) (decimateFlat 2 h w a) k
-  rw [abs_one, one_mul] at hlb
-  linarith [hn]
-
-theorem liveDownβ_eq_ldSβ (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
-    liveDownβ h w βp a = ldSβ h w βp a := by
-  have hres : residualProj
-      (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
-      ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a
-      = ldSβ h w βp a := by
-    funext k
-    have hbody : ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a k = 1 :=
-      congrFun (liveDownβ_body_const h w hhw a) k
-    simp only [residualProj, biPath, Function.comp_apply, ldSβ] at hbody ⊢
-    rw [hbody, flatConvStride2_diag WsP2 (fun o i => rfl) a]
-  show relu (2 * h * w) (residualProj
-    (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
-    ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a) = ldSβ h w βp a
-  rw [hres]
-  exact relu_id_of_pos (fun k => ldSβ_pos h w βp hn a k)
-
 /-- The ReLU-free twin of `liveFwd224`. -/
 noncomputable def liveFwd224S : Vec (2 * (2 * 112) * (2 * 112)) → Vec 2 :=
   dense Wd2 bd2 ∘ globalAvgPoolFlat 2 7 7 ∘
@@ -263,13 +231,6 @@ theorem ray224_continuous : Continuous (fun t : ℝ => Y224 + t • V224u) :=
 theorem stemS224_continuous : Continuous stemS224 :=
   (bnForward_differentiable (2 * 112 * 112) 1 1 160 one_pos).continuous.comp
     (decimateFlat_differentiable 2 112 112).continuous
-
-theorem ldSβ_continuous (h w : Nat) (βp : ℝ) : Continuous (ldSβ h w βp) := by
-  have h1 : Continuous (fun a : Vec (2 * (2 * h) * (2 * w)) =>
-      bnForward (2 * h * w) 1 1 βp (decimateFlat 2 h w a)) :=
-    (bnForward_differentiable (2 * h * w) 1 1 βp one_pos).continuous.comp
-      (decimateFlat_differentiable 2 h w).continuous
-  exact continuous_pi (fun k => ((continuous_apply k).comp h1).add continuous_const)
 
 theorem Pr224_continuous : Continuous Pr224 :=
   (maxPoolFlat_continuous 2 56 56).comp (stemS224_continuous.comp ray224_continuous)

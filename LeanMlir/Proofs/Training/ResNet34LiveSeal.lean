@@ -87,9 +87,12 @@ theorem bnForward_chan_diff {n : Nat} (ε β : ℝ) (z : Vec n) (k₀ k₁ : Fin
 noncomputable def stemS (v : Vec (2 * (2 * 16) * (2 * 16))) : Vec (2 * 16 * 16) :=
   bnForward (2 * 16 * 16) 1 1 30 (decimateFlat 2 16 16 v)
 
-/-- The live downsample with the (globally-off) ReLU removed: `bn₂₀ ∘ decimate + 1`. -/
-noncomputable def ldS (h w : Nat) (a : Vec (2 * (2 * h) * (2 * w))) : Vec (2 * h * w) :=
-  fun k => bnForward (2 * h * w) 1 1 20 (decimateFlat 2 h w a) k + 1
+/-- The live downsample with the (globally-off) ReLU removed: `bn_βp ∘ decimate + 1`. -/
+noncomputable def ldSβ (h w : Nat) (βp : ℝ) (a : Vec (2 * (2 * h) * (2 * w))) : Vec (2 * h * w) :=
+  fun k => bnForward (2 * h * w) 1 1 βp (decimateFlat 2 h w a) k + 1
+
+/-- `ldSβ` at the 32×32 witness's `βp = 20`. -/
+noncomputable abbrev ldS (h w : Nat) : Vec (2 * (2 * h) * (2 * w)) → Vec (2 * h * w) := ldSβ h w 20
 
 /-- The ReLU-free twin of `liveFwd2`. -/
 noncomputable def liveFwd2S : Vec (2 * (2 * 16) * (2 * 16)) → Vec 2 :=
@@ -109,33 +112,37 @@ theorem stem2_eq_stemS (v : Vec (2 * (2 * 16) * (2 * 16))) : stem2 v = stemS v :
   rw [relu_id_of_pos (fun k => stemS_bn_pos v k), flatConvStride2_diag WsId2 (fun o i => rfl) v]
   rfl
 
-theorem ldS_pos (h w : Nat) (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20)
-    (a : Vec (2 * (2 * h) * (2 * w))) (k : Fin (2 * h * w)) : 0 < ldS h w a k := by
-  simp only [ldS]
-  have hlb := bnForward_lb (n := 2 * h * w) 1 1 20 (by norm_num) (decimateFlat 2 h w a) k
+theorem ldSβ_pos (h w : Nat) (βp : ℝ) (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp)
+    (a : Vec (2 * (2 * h) * (2 * w))) (k : Fin (2 * h * w)) : 0 < ldSβ h w βp a k := by
+  simp only [ldSβ]
+  have hlb := bnForward_lb (n := 2 * h * w) 1 1 βp (by norm_num) (decimateFlat 2 h w a) k
   rw [abs_one, one_mul] at hlb
   linarith [hn]
 
-theorem liveDownPC_eq_ldS (h w : Nat) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) :
-    liveDownPC h w a = ldS h w a := by
+theorem liveDownβ_eq_ldSβ (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
+    liveDownβ h w βp a = ldSβ h w βp a := by
   have hres : residualProj
-      (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+      (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
       ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
         (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a
-      = ldS h w a := by
+      = ldSβ h w βp a := by
     funext k
     have hbody : ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
         (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a k = 1 :=
       congrFun (liveDownPC_body_const h w hhw a) k
-    simp only [residualProj, biPath, Function.comp_apply, ldS] at hbody ⊢
+    simp only [residualProj, biPath, Function.comp_apply, ldSβ] at hbody ⊢
     rw [hbody, flatConvStride2_diag WsP2 (fun o i => rfl) a]
   show relu (2 * h * w) (residualProj
-    (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+    (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 WsP2 Zb2)
     ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a) = ldS h w a
+      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a) = ldSβ h w βp a
   rw [hres]
-  exact relu_id_of_pos (fun k => ldS_pos h w hn a k)
+  exact relu_id_of_pos (fun k => ldSβ_pos h w βp hn a k)
+
+theorem liveDownPC_eq_ldS (h w : Nat) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) :
+    liveDownPC h w a = ldS h w a := liveDownβ_eq_ldSβ h w 20 hhw hn a
 
 theorem stem2_eq_stemS' : stem2 = stemS := funext stem2_eq_stemS
 
@@ -240,10 +247,10 @@ theorem stemS_continuous : Continuous stemS :=
   (bnForward_differentiable (2 * 16 * 16) 1 1 30 one_pos).continuous.comp
     (decimateFlat_differentiable 2 16 16).continuous
 
-theorem ldS_continuous (h w : Nat) : Continuous (ldS h w) := by
+theorem ldSβ_continuous (h w : Nat) (βp : ℝ) : Continuous (ldSβ h w βp) := by
   have h1 : Continuous (fun a : Vec (2 * (2 * h) * (2 * w)) =>
-      bnForward (2 * h * w) 1 1 20 (decimateFlat 2 h w a)) :=
-    (bnForward_differentiable (2 * h * w) 1 1 20 one_pos).continuous.comp
+      bnForward (2 * h * w) 1 1 βp (decimateFlat 2 h w a)) :=
+    (bnForward_differentiable (2 * h * w) 1 1 βp one_pos).continuous.comp
       (decimateFlat_differentiable 2 h w).continuous
   exact continuous_pi (fun k => ((continuous_apply k).comp h1).add continuous_const)
 
@@ -264,8 +271,8 @@ noncomputable def Rr (t : ℝ) : ℝ :=
 theorem Pr_continuous : Continuous Pr :=
   (maxPoolFlat_continuous 2 8 8).comp (stemS_continuous.comp ray_continuous)
 
-theorem W4r_continuous : Continuous W4r := (ldS_continuous 4 4).comp Pr_continuous
-theorem W2r_continuous : Continuous W2r := (ldS_continuous 2 2).comp W4r_continuous
+theorem W4r_continuous : Continuous W4r := (ldSβ_continuous 4 4 20).comp Pr_continuous
+theorem W2r_continuous : Continuous W2r := (ldSβ_continuous 2 2 20).comp W4r_continuous
 
 theorem Rr_continuous : Continuous Rr := by
   have c1 : Continuous (fun t : ℝ => bnIstd (2 * 16 * 16) (decimateFlat 2 16 16 (Y + t • V)) 1) :=

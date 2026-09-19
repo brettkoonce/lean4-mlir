@@ -258,7 +258,7 @@ theorem ld_absorb (h w : Nat) (hhw : 0 < 2 * h * w)
     liveDownPC h w (fun i => a i + c) = liveDownPC h w a := by
   rw [liveDownPC_eq_ldS h w hhw hn, liveDownPC_eq_ldS h w hhw hn]
   funext k
-  simp only [ldS]
+  simp only [ldS, ldSβ]
   rw [decimate_shift, bnForward_shift (2 * h * w) hhw]
 
 /-- GAP commutes with a constant shift. -/

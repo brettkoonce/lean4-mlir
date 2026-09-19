@@ -33,73 +33,12 @@ namespace Proofs
 open Proofs ResNet34LivePC ResNet34LiveRealistic
 
 -- ════════════════════════════════════════════════════════════════
--- § The strided downsample with an arbitrary projection kernel `W`
--- ════════════════════════════════════════════════════════════════
-
-/-- `liveDownβ` with the identity projection kernel `WsP2` replaced by an arbitrary `W`.
-    The body path is still the `γ=0` collapse (constant `1`); the projection is
-    `relu(bn_{γ=1,β}(conv_W(decimate ·)) + 1)`, where `W` genuinely transforms the
-    decimated input before normalization. -/
-noncomputable def liveDownW (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) :
-    Vec (2 * (2 * h) * (2 * w)) → Vec (2 * h * w) :=
-  relu (2 * h * w) ∘ residualProj
-    (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2)
-    ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2))
-
-/-- **Weight-independent projection positivity.** For *any* kernel `W`, the normalized
-    projection `bn_{γ=1,β}(conv_W(·))` is `> 0` once `√n < β` — `bnForward_lb` bounds the
-    normalized value by `±1·√…`, dominated by `β`, with no reference to `W`. -/
-theorem liveDownW_proj_pos (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w)))
-    (k : Fin (2 * h * w)) :
-    0 < (bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2) a k := by
-  simp only [Function.comp_apply]
-  have hlb := bnForward_lb (n := 2 * h * w) 1 1 βp (by norm_num) (flatConvStride2 W Zb2 a) k
-  rw [abs_one, one_mul] at hlb
-  linarith
-
-/-- The projection + the constant-`1` body is strictly positive (for any `W`). -/
-theorem liveDownW_sum_pos (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w)))
-    (k : Fin (2 * h * w)) :
-    0 < ((bnForward (2 * h * w) 1 1 βp ∘ flatConvStride2 W Zb2) a k)
-      + ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-          (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a k := by
-  have hp := liveDownW_proj_pos h w βp W hn a k
-  have hb : ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
-      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a k = 1 := by
-    rw [liveDownβ_body_const h w hhw a]
-  rw [hb]; linarith
-
-/-- **The strided downsample has a VJP at every point — for an arbitrary kernel `W`.** -/
-noncomputable def liveDownW_vjp (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
-    HasVJPAt (liveDownW h w βp W) a :=
-  rblkPStrided_has_vjp_at Zk2 Zb2 Zk2 Zb2 W Zb2 1 0 1 1 0 1 1 1 βp
-    (by norm_num) (by norm_num) (by norm_num) a
-    (fun k => by
-      rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
-      change (1 : ℝ) ≠ 0; norm_num)
-    (fun k => ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k))
-
-/-- **The strided downsample is differentiable at every point — for an arbitrary kernel `W`.** -/
-theorem liveDownW_diff (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) (hhw : 0 < 2 * h * w)
-    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp) (a : Vec (2 * (2 * h) * (2 * w))) :
-    DifferentiableAt ℝ (liveDownW h w βp W) a := by
-  have hsm₁ : ∀ k, bnForward (2 * h * w) 1 0 1 (flatConvStride2 Zk2 Zb2 a) k ≠ 0 := fun k => by
-    rw [flatConvStride2_eq_zero Zk2 Zb2 (fun _ _ _ _ => rfl) (fun _ => rfl) a, bnForward_const_eq hhw]
-    change (1 : ℝ) ≠ 0; norm_num
-  have hsm := fun k => ne_of_gt (liveDownW_sum_pos h w βp W hhw hn a k)
-  unfold liveDownW residualProj flatConvStride2 at *
-  fun_prop (disch := first | assumption | norm_num)
-
--- ════════════════════════════════════════════════════════════════
 -- § The whole-net ResNet-34 VJP, ∀ downsample kernels
 -- ════════════════════════════════════════════════════════════════
 
 /-- **224×224 live ResNet-34 with arbitrary downsample projection convs.** Identity stem +
-    maxpool + three `liveDownW` downsamples carrying free kernels `W₂ W₃ W₄` + GAP + identity
+    maxpool + three `liveDownW` downsamples (`ResNet34LivePC`: the projection-positivity bound
+    `liveDownW_proj_pos` never reads `W`) carrying free kernels `W₂ W₃ W₄` + GAP + identity
     head (the 224² spatial pyramid of `liveFwd224`, but with genuine — not identity —
     strided convolutions). -/
 noncomputable def liveFwdW (W₂ W₃ W₄ : Kernel4 2 2 1 1) :
