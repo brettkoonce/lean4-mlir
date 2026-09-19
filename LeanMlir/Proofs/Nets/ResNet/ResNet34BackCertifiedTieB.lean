@@ -44,15 +44,13 @@ minutes to `(deterministic) timeout at isDefEq` at four million heartbeats. That
 elaboration trap and the reason the generic apex exists.
 
 ⛔ **And so does instantiating the generic tie at the sixteen concrete blocks** — a *kernel*
-deterministic timeout at six minutes, with `HasVJP.backward_unique`'s pointwise peer or without
-it. So this file stops where MobileNetV2's per-example T6 stops (opaque blocks plus a shape
-check) rather than where B0's goes (concrete blocks, then `backward_unique`). ⭐ **The difference
-is not depth and not the net: it is the KINK.** B0's generic tie takes GLOBAL `HasVJP` witnesses,
-which carry no point, so instantiating them is free. r34's are `HasVJPAt` at
-`opaqueA{k-1} … x`, and the witnesses a caller has are at `r34Pre{k-1} N w x` — sixteen defeq
-checks between two sixteen-deep nested applications spelled through different definition chains.
-`HasVJPAt.backward_unique` is stated below anyway: it is the pointwise peer no `HasVJPAt` net in
-the repo had, and a reader instantiating one block at a time needs it.
+deterministic timeout at six minutes, with `HasVJPAt.backward_unique` or without it. So this
+file stops where MobileNetV2's per-example T6 stops (opaque blocks plus a shape check) rather
+than where B0's goes (concrete blocks, then `backward_unique`). ⭐ **The difference is not depth
+and not the net: it is the KINK.** B0's generic tie takes GLOBAL `HasVJP` witnesses, which carry
+no point, so instantiating them is free. r34's are `HasVJPAt` at `opaqueA{k-1} … x`, and the
+witnesses a caller has are at `r34Pre{k-1} N w x` — sixteen defeq checks between two
+sixteen-deep nested applications spelled through different definition chains.
 
 ⚠ It stays a SMOOTH-POINT statement, and r34 carries the heaviest hypothesis budget of the five
 nets: two relu clauses per block (the body's mid-relu and the post-residual OUTER relu), the
@@ -67,19 +65,6 @@ about the INPUT gradient; the parameter gradients are `ResNet34StepTieB.lean`'s 
 namespace Proofs
 
 open scoped BigOperators
-
--- ════════════════════════════════════════════════════════════════
--- § Any two pointwise VJP witnesses have one backward
--- ════════════════════════════════════════════════════════════════
-
-/-- **Any two `HasVJPAt` witnesses for the same map at the same point have the same backward.**
-    Both `.correct` to `∑ pdiv f x i j * dy j`, so the backward is a property of `f` and `x`, not
-    of how the witness was assembled. `HasVJP.backward_unique`'s pointwise peer — it lets a
-    hand-written chain be tied to a tactic-built witness without unfolding it, which is the
-    escape B0's and ConvNeXt's ties take and which no `HasVJPAt` net had. -/
-theorem HasVJPAt.backward_unique {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
-    (h₁ h₂ : HasVJPAt f x) (dy : Vec n) : h₁.backward dy = h₂.backward dy := by
-  funext i; rw [h₁.correct, h₂.correct]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The three concrete endpoint ties

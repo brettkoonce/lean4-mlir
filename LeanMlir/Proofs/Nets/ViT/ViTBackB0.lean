@@ -240,19 +240,6 @@ to `mhsa_has_vjp_mat` by VJP determinism, and collapse it at heads = 1 to the
 plain three-way dense fan-in over `sdpa_back_{Q,K,V}` (the form ViTChainClose's
 `vitCotD{Q,K,V}_eq_sdpa_back_*` ties target). -/
 
-/-- **`HasVJPMat` backward determinism** — two matrix VJPs of the same function
-    agree (both equal the shared `pdivMat`-contraction). -/
-theorem hasVJPMat_backward_det {a b c d : Nat} {f : Mat a b → Mat c d}
-    (v v' : HasVJPMat f) (A : Mat a b) (dY : Mat c d) :
-    v.backward A dY = v'.backward A dY := by
-  funext i j; rw [v.correct, v'.correct]
-
-/-- Determinism across *propositionally-equal* functions. -/
-theorem hasVJPMat_backward_det' {a b c d : Nat} {f g : Mat a b → Mat c d}
-    (hfg : f = g) (v : HasVJPMat f) (v' : HasVJPMat g) (A : Mat a b) (dY : Mat c d) :
-    v.backward A dY = v'.backward A dY := by
-  subst hfg; exact hasVJPMat_backward_det v v' A dY
-
 /-- A *clean* `HasVJPMat` witness for the factored MHSA — the same `vjpMat_comp`
     chain `mhsa_has_vjp_mat`'s body uses, but stated for the explicit composition
     `Wo-dense ∘ colSlabApply mhsa_g ∘ qkv-dense` so its `.backward` reduces by
@@ -309,7 +296,7 @@ theorem mhsaClean_backward_eq (N heads d_head : Nat)
           dense (mhsa_qkv_W heads d_head Wq Wk Wv) (mhsa_qkv_b heads d_head bq bk bv) (X' n)))
       = mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo := by
     funext X'; exact (mhsa_layer_eq_compose N heads d_head Wq Wk Wv Wo bq bk bv bo X').symm
-  exact hasVJPMat_backward_det' hfun (mhsaClean N heads d_head Wq Wk Wv Wo bq bk bv bo)
+  exact HasVJPMat.backward_unique_of_eq hfun (mhsaClean N heads d_head Wq Wk Wv Wo bq bk bv bo)
     (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo) X dY
 
 /-- The collapsed heads = 1 MHSA backward: the three-way dense fan-in

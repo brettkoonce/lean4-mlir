@@ -137,24 +137,10 @@ theorem decimateBack_eq_vjp (oc h w : Nat) (v : Vec (oc * (2 * h) * (2 * w)))
 theorem decimateOddIdx_injective (oc h w : Nat) :
     Function.Injective (decimateOddIdx oc h w) := by
   intro k₁ k₂ heq
-  simp only [decimateOddIdx] at heq
-  obtain ⟨hA, hB⟩ := Prod.mk.inj (finProdFinEquiv.injective heq)
-  have hp2 : (finProdFinEquiv.symm k₁).2 = (finProdFinEquiv.symm k₂).2 := by
-    have : 2 * (finProdFinEquiv.symm k₁).2.val + 1 = 2 * (finProdFinEquiv.symm k₂).2.val + 1 :=
-      Fin.mk.inj_iff.mp hB
-    exact Fin.ext (by omega)
-  obtain ⟨hA1, hA2⟩ := Prod.mk.inj (finProdFinEquiv.injective hA)
-  have hq2 : (finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1).2
-           = (finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1).2 := by
-    have : 2 * (finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1).2.val + 1
-         = 2 * (finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1).2.val + 1 :=
-      Fin.mk.inj_iff.mp hA2
-    exact Fin.ext (by omega)
-  have hq : finProdFinEquiv.symm (finProdFinEquiv.symm k₁).1
-          = finProdFinEquiv.symm (finProdFinEquiv.symm k₂).1 := Prod.ext hA1 hq2
-  have hp1 : (finProdFinEquiv.symm k₁).1 = (finProdFinEquiv.symm k₂).1 :=
-    finProdFinEquiv.symm.injective hq
-  exact finProdFinEquiv.symm.injective (Prod.ext hp1 hp2)
+  simp only [decimateOddIdx, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq, Fin.mk.injEq] at heq
+  apply finProdFinEquiv.symm.injective
+  exact Prod.ext (finProdFinEquiv.symm.injective (Prod.ext heq.1.1 (Fin.ext (by omega))))
+    (Fin.ext (by omega))
 
 /-- **Odd-decimation backward (zero-upsampling scatter at the odd positions)** — the certified
     `decimateOddFlat` VJP: route `dy k` to the odd position `decimateOddIdx k`, 0 elsewhere.
@@ -259,11 +245,7 @@ theorem sum_flat3 {c h w : Nat} (g : Fin (c*h*w) → ℝ) :
     ∑ k : Fin (c*h*w), g k
       = ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
           g (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) := by
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin (c*h) × Fin w ≃ Fin (c*h*w)) g,
-      Fintype.sum_prod_type,
-      ← Equiv.sum_comp (finProdFinEquiv : Fin c × Fin h ≃ Fin (c*h))
-        (fun a => ∑ b : Fin w, g (finProdFinEquiv (a, b))),
-      Fintype.sum_prod_type]
+  rw [sum_finProdFinEquiv, sum_finProdFinEquiv]
 
 /-- **3×3/s2 max-pool backward in flat `Vec` space** — the accumulating scatter: each input cell
     collects `dy` from every output whose 3×3 window selects it. ⛔ `maxPool2`'s windows TILE, so

@@ -43,14 +43,6 @@ namespace Proofs
 
 open scoped BigOperators
 
-/-- Sum over a flat product index = double sum over the factors (row-major). -/
-lemma sum_fin_prod {M : Type*} [AddCommMonoid M] (m n : Nat)
-    (f : Fin (m * n) → M) :
-    (∑ idx : Fin (m * n), f idx)
-      = ∑ r : Fin m, ∑ k : Fin n, f (finProdFinEquiv (r, k)) := by
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin m × Fin n ≃ Fin (m * n)) f,
-      Fintype.sum_prod_type]
-
 -- ════════════════════════════════════════════════════════════════
 -- § A. Per-token dense W/b — the row-lifted M2 family (genuinely new)
 --
@@ -102,7 +94,7 @@ theorem vit_rowDenseW_grad_bridge {N a c : Nat} (bb : Vec c) (X : Mat N a)
                   Mat.flatten (fun r => dense (Mat.unflatten v) bb (X r)))
                (Mat.flatten W) (finProdFinEquiv (i, j)) o * dy o := by
   simp_rw [pdiv_rowDense_W]
-  rw [sum_fin_prod N c]
+  rw [sum_finProdFinEquiv (m := N) (n := c)]
   simp [rowDense_weight_grad, Mat.unflatten]
 
 /-- **Per-token dense b-gradient bridge.** The rendered token-axis reduce equals
@@ -126,7 +118,7 @@ theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
       pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
     simp only [basisVec_apply, @eq_comm _ _ i]
   simp_rw [hpdiv]
-  rw [sum_fin_prod N c]
+  rw [sum_finProdFinEquiv (m := N) (n := c)]
   simp [rowDense_bias_grad, Mat.unflatten]
 
 /-- **Per-token dense W output, certified.** `Wⁿ = W − lr·(Σ_tokens xᵣ ⊗ dyᵣ)` denotes
@@ -245,7 +237,7 @@ theorem vit_rowlnGamma_grad_bridge (N D : Nat) (ε β : ℝ) (γ : Vec 1) (X : M
                   Mat.flatten (fun r => layerNormForward D ε (γ' 0) β (X r)))
             γ 0 idx * dy idx := by
   simp_rw [pdiv_rowLN_gamma]
-  rw [sum_fin_prod N D]
+  rw [sum_finProdFinEquiv (m := N) (n := D)]
   unfold rowLN_grad_gamma bn_grad_gamma Mat.unflatten
   apply Finset.sum_congr rfl
   intro r _
@@ -265,7 +257,7 @@ theorem vit_rowlnBeta_grad_bridge (N D : Nat) (ε γ : ℝ) (β : Vec 1) (X : Ma
                   Mat.flatten (fun r => layerNormForward D ε γ (β' 0) (X r)))
             β 0 idx * dy idx := by
   simp_rw [pdiv_rowLN_beta, one_mul]
-  rw [sum_fin_prod N D]
+  rw [sum_finProdFinEquiv (m := N) (n := D)]
   unfold rowLN_grad_beta bn_grad_beta Mat.unflatten
   rfl
 
@@ -389,7 +381,7 @@ theorem vit_render_cls_certified {ic H W P N D : Nat}
           pdiv (fun cl : Vec D =>
                   patchEmbed_flat ic H W P N D Wc bc cl pos img) cls i j * dy j := by
   simp_rw [pdiv_patchEmbed_cls]
-  rw [sum_fin_prod (N + 1) D]
+  rw [sum_finProdFinEquiv (m := N + 1) (n := D)]
   simp [cls_token_grad]
 
 -- ════════════════════════════════════════════════════════════════
@@ -485,7 +477,7 @@ theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
             * dy o := by
   simp_rw [pdiv_patchEmbed_W]
-  rw [sum_fin_prod (N + 1) D]
+  rw [sum_finProdFinEquiv (m := N + 1) (n := D)]
   simp [patchEmbed_weight_grad, Fin.sum_univ_succ]
 
 /-- **Patch-kernel output, certified.** `Wpⁿ = Wp − lr·(patch-grid reduce)`
@@ -537,7 +529,7 @@ theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
           pdiv (fun b' : Vec D =>
                   patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
   simp_rw [pdiv_patchEmbed_b]
-  rw [sum_fin_prod (N + 1) D]
+  rw [sum_finProdFinEquiv (m := N + 1) (n := D)]
   simp [patchEmbed_bias_grad, Fin.sum_univ_succ]
 
 /-- **Patch bias output, certified.** -/

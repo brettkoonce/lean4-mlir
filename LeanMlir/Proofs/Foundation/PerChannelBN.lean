@@ -25,95 +25,6 @@ namespace Proofs
 -- § Per-row independence (a per-row family generalizing `rowwise`)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Block-diagonal Jacobian of a per-row family.** Applying a *different* map `g r`
-    to each row `r` of a matrix keeps the matrix Jacobian block-diagonal across the
-    row axis: output row `k` depends only on input row `k` (via `g k`). The per-row
-    generalization of `pdivMat_rowIndep` (which fixes one `g` for all rows). -/
-theorem pdivMat_rowIndep_perRow {m n p : Nat} (g : Fin m → (Vec n → Vec p))
-    (h_g_diff : ∀ r, Differentiable ℝ (g r))
-    (A : Mat m n) (i : Fin m) (j : Fin n) (k : Fin m) (l : Fin p) :
-    pdivMat (fun M : Mat m n => fun r => g r (M r)) A i j k l =
-    if i = k then pdiv (g k) (A k) j l else 0 := by
-  unfold pdivMat pdiv
-  set F : Vec (m * n) → Vec (m * p) :=
-    fun v => Mat.flatten ((fun M : Mat m n => fun r => g r (M r)) (Mat.unflatten v))
-    with hF
-  set rowProj : Fin m → (Vec (m * n) →L[ℝ] Vec n) := fun k' =>
-    reindexCLM (fun j' : Fin n => finProdFinEquiv (k', j'))
-  have h_coord : ∀ (k' : Fin m) (l' : Fin p),
-      (fun v : Vec (m * n) => F v (finProdFinEquiv (k', l'))) =
-      (fun w : Vec n => g k' w l') ∘ (rowProj k') := by
-    intro k' l'
-    funext v
-    show Mat.flatten ((fun M : Mat m n => fun r => g r (M r)) (Mat.unflatten v))
-        (finProdFinEquiv (k', l')) = g k' ((rowProj k') v) l'
-    unfold Mat.flatten
-    simp only [Equiv.symm_apply_apply]
-    show g k' (Mat.unflatten v k') l' = g k' ((rowProj k') v) l'
-    rfl
-  have h_g_l : ∀ (r : Fin m) (l' : Fin p) (w : Vec n),
-      DifferentiableAt ℝ (fun w => g r w l') w :=
-    fun r l' w => differentiableAt_pi.mp (h_g_diff r w) l'
-  have h_coord_diff : ∀ (k' : Fin m) (l' : Fin p) (v : Vec (m * n)),
-      DifferentiableAt ℝ (fun v' : Vec (m * n) => F v' (finProdFinEquiv (k', l'))) v := by
-    intro k' l' v
-    rw [h_coord k' l']
-    exact (h_g_l k' l' _).comp v (rowProj k').differentiableAt
-  have h_F_diff : DifferentiableAt ℝ F (Mat.flatten A) := by
-    rw [(differentiableAt_pi : DifferentiableAt ℝ F (Mat.flatten A) ↔ _)]
-    intro idx
-    have h_idx : finProdFinEquiv (finProdFinEquiv.symm idx) = idx :=
-      Equiv.apply_symm_apply _ _
-    have h_idx' : idx = finProdFinEquiv
-        ((finProdFinEquiv.symm idx).1, (finProdFinEquiv.symm idx).2) := by
-      conv_lhs => rw [← h_idx]
-    rw [h_idx']
-    exact h_coord_diff _ _ (Mat.flatten A)
-  have h_swap :
-      fderiv ℝ F (Mat.flatten A) (basisVec (finProdFinEquiv (i, j))) (finProdFinEquiv (k, l)) =
-      fderiv ℝ (fun v : Vec (m * n) => F v (finProdFinEquiv (k, l))) (Mat.flatten A)
-        (basisVec (finProdFinEquiv (i, j))) := by
-    rw [fderiv_apply h_F_diff (finProdFinEquiv (k, l))]
-    rfl
-  rw [h_swap]
-  rw [h_coord k l]
-  rw [fderiv_comp _ (h_g_l k l _) (rowProj k).differentiableAt]
-  rw [(rowProj k).fderiv]
-  have h_row_A : (rowProj k) (Mat.flatten A) = A k := by
-    funext j'
-    show Mat.flatten A (finProdFinEquiv (k, j')) = A k j'
-    show A (finProdFinEquiv.symm (finProdFinEquiv (k, j'))).1
-            (finProdFinEquiv.symm (finProdFinEquiv (k, j'))).2 = A k j'
-    simp
-  rw [h_row_A]
-  rw [fderiv_apply (h_g_diff k _) l]
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  by_cases hik : i = k
-  · subst hik
-    rw [ite_eq_left rfl]
-    have h_basis : (rowProj i) (basisVec (finProdFinEquiv (i, j))) = basisVec j := by
-      funext j'
-      show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (i, j')) = basisVec j j'
-      simp only [basisVec_apply]
-      by_cases hjj : j' = j
-      · subst hjj; simp
-      · rw [ite_eq_right hjj, ite_eq_right ?_]
-        intro heq
-        apply hjj
-        exact (Prod.mk.inj (finProdFinEquiv.injective heq.symm)).2.symm
-    rw [h_basis]
-  · rw [ite_eq_right hik]
-    have h_basis : (rowProj k) (basisVec (finProdFinEquiv (i, j))) = (0 : Vec n) := by
-      funext j'
-      show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (k, j')) = (0 : ℝ)
-      simp only [basisVec_apply]
-      rw [ite_eq_right]
-      intro heq
-      apply hik
-      exact (Prod.mk.inj (finProdFinEquiv.injective heq)).1.symm
-    rw [h_basis]
-    simp
-
 /-- **Row-wise lifting of a per-row `HasVJP` family.** Each row `r` gets its own map
     `g r` (with its own VJP); the matrix backward runs `(g r).backward` on row `r`'s
     cotangent. The per-row peer of `rowwise_has_vjp_mat`. -/
@@ -123,18 +34,8 @@ noncomputable def rowwisePerRow_has_vjp_mat {m n p : Nat} (g : Fin m → (Vec n 
   backward := fun A dY => fun r c => (hg r).backward (A r) (dY r) c
   correct := by
     intro A dY i j
-    simp_rw [pdivMat_rowIndep_perRow g hg_diff]
-    have h : ∀ k : Fin m,
-        (∑ l : Fin p, (if i = k then pdiv (g k) (A k) j l else 0) * dY k l) =
-        if i = k then ∑ l : Fin p, pdiv (g k) (A k) j l * dY k l else 0 := by
-      intro k
-      by_cases hik : i = k
-      · simp [hik]
-      · simp [hik]
-    simp_rw [h]
-    rw [Finset.sum_ite_eq Finset.univ i
-        (fun k => ∑ l : Fin p, pdiv (g k) (A k) j l * dY k l)]
-    simp only [Finset.mem_univ, ite_true]
+    simp_rw [pdivMat_rowIndep_perRow_at g A (fun r => hg_diff r (A r)), ite_mul, zero_mul,
+      Finset.sum_ite_irrel, Finset.sum_const_zero, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
     exact (hg i).correct (A i) (dY i) j
 
 /-- **A per-row family flattens to a differentiable `Vec → Vec` map.** The
@@ -158,7 +59,7 @@ noncomputable def bnPerChannelMat (oc m : Nat) (ε : ℝ) (γ β : Vec oc) :
   fun A => fun c => bnForward m ε (γ c) (β c) (A c)
 
 /-- **Per-channel BN VJP (block-diagonal).** Each channel runs its own `bn_has_vjp`;
-    the cross-channel Jacobian blocks vanish (`pdivMat_rowIndep_perRow`). -/
+    the cross-channel Jacobian blocks vanish (`pdivMat_rowIndep_perRow_at`). -/
 noncomputable def bnPerChannelMat_has_vjp (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     HasVJPMat (bnPerChannelMat oc m ε γ β) :=
   rowwisePerRow_has_vjp_mat (fun c => bnForward m ε (γ c) (β c))
@@ -224,6 +125,30 @@ theorem bnPerChannel_grad_input_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (
           (finProdFinEquiv.symm i).2
   rw [(bn_has_vjp m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).correct,
       ← bn_input_grad_correct m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The VJP of a coordinate reindex (every layout bridge and decimation below)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The VJP of a coordinate reindex** `y ↦ y ∘ σ` (a gather, `reindexCLM σ`): the backward
+    scatters each output cotangent back to the input cell it was read from — `pdiv_reindex`'s
+    indicator, contracted. The one witness behind the layout bridges here (`reassocFwd/Back`,
+    `bnchwFwd/Back`) and the decimations of `StridedConv.lean`. -/
+noncomputable def reindexVJP {a b : Nat} (σ : Fin b → Fin a) :
+    HasVJP (fun y : Vec a => fun k : Fin b => y (σ k)) where
+  backward := fun _v dy => fun idx => ∑ k : Fin b, (if idx = σ k then (1 : ℝ) else 0) * dy k
+  correct _ _ _ := Finset.sum_congr rfl fun _ _ => by rw [pdiv_reindex]
+
+/-- **Along a bijection the scatter is the inverse gather**: when `τ` inverts `σ`, exactly one
+    delta survives, so `reindexVJP σ`'s backward is the reindex along `τ`. -/
+theorem reindexVJP_backward_of_inv {a b : Nat} (σ : Fin b → Fin a) (τ : Fin a → Fin b)
+    (hστ : ∀ i, σ (τ i) = i) (hτσ : ∀ k, τ (σ k) = k) (v : Vec a) (dy : Vec b) :
+    (reindexVJP σ).backward v dy = fun i => dy (τ i) := by
+  funext i
+  show ∑ k, (if i = σ k then (1 : ℝ) else 0) * dy k = dy (τ i)
+  have h : ∀ k, i = σ k ↔ τ i = k := fun k =>
+    ⟨fun h => by rw [h, hτσ], fun h => by rw [← h, hστ]⟩
+  simp only [h, ite_mul, one_mul, zero_mul, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Layout bridge: Tensor3 `(oc*h)*w`  ↔  Mat-split `oc*(h*w)`  (B9 entry)
@@ -344,59 +269,27 @@ theorem reassocBack_differentiable (oc h w : Nat) :
 /-- VJP of the forward reindex — the scatter `pdiv_reindex` gives. Mirrors
     `decimateFlat_has_vjp`. -/
 noncomputable def reassocFwd_has_vjp (oc h w : Nat) :
-    HasVJP (reassocFwd oc h w) where
-  backward := fun _v dy => fun idx =>
-    ∑ k : Fin (oc * (h * w)), (if idx = reassocFwdIdx oc h w k then (1 : ℝ) else 0) * dy k
-  correct := by
-    intro v dy idx
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [show reassocFwd oc h w = (fun y : Vec (oc * h * w) =>
-            fun k : Fin (oc * (h * w)) => y (reassocFwdIdx oc h w k)) from rfl,
-        pdiv_reindex]
+    HasVJP (reassocFwd oc h w) :=
+  reindexVJP (reassocFwdIdx oc h w)
 
 noncomputable def reassocBack_has_vjp (oc h w : Nat) :
-    HasVJP (reassocBack oc h w) where
-  backward := fun _v dy => fun idx =>
-    ∑ k : Fin (oc * h * w), (if idx = reassocBackIdx oc h w k then (1 : ℝ) else 0) * dy k
-  correct := by
-    intro v dy idx
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [show reassocBack oc h w = (fun y : Vec (oc * (h * w)) =>
-            fun k : Fin (oc * h * w) => y (reassocBackIdx oc h w k)) from rfl,
-        pdiv_reindex]
+    HasVJP (reassocBack oc h w) :=
+  reindexVJP (reassocBackIdx oc h w)
 
 /-- The bridge is a permutation, so each reindex's VJP backward is just the *inverse*
     reindex (the single matching delta survives the scatter). These two collapse the
     `vjp_comp` backwards into a clean closed form for `bnPerChannelTensor3`. -/
 theorem reassocBack_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * (h * w)))
     (dy : Vec (oc * h * w)) :
-    (reassocBack_has_vjp oc h w).backward v dy = reassocFwd oc h w dy := by
-  funext idx
-  show (∑ k : Fin (oc * h * w), (if idx = reassocBackIdx oc h w k then (1 : ℝ) else 0) * dy k)
-      = dy (reassocFwdIdx oc h w idx)
-  rw [Finset.sum_eq_single (reassocFwdIdx oc h w idx)]
-  · rw [ite_eq_left (reassocBackIdx_reassocFwdIdx oc h w idx).symm, one_mul]
-  · intro k _ hk
-    rw [ite_eq_right, zero_mul]
-    intro hcond
-    exact hk (by rw [hcond, reassocFwdIdx_reassocBackIdx])
-  · intro h; exact absurd (Finset.mem_univ _) h
+    (reassocBack_has_vjp oc h w).backward v dy = reassocFwd oc h w dy :=
+  reindexVJP_backward_of_inv _ _ (reassocBackIdx_reassocFwdIdx oc h w)
+    (reassocFwdIdx_reassocBackIdx oc h w) v dy
 
 theorem reassocFwd_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * h * w))
     (dy : Vec (oc * (h * w))) :
-    (reassocFwd_has_vjp oc h w).backward v dy = reassocBack oc h w dy := by
-  funext idx
-  show (∑ k : Fin (oc * (h * w)), (if idx = reassocFwdIdx oc h w k then (1 : ℝ) else 0) * dy k)
-      = dy (reassocBackIdx oc h w idx)
-  rw [Finset.sum_eq_single (reassocBackIdx oc h w idx)]
-  · rw [ite_eq_left (reassocFwdIdx_reassocBackIdx oc h w idx).symm, one_mul]
-  · intro k _ hk
-    rw [ite_eq_right, zero_mul]
-    intro hcond
-    exact hk (by rw [hcond, reassocBackIdx_reassocFwdIdx])
-  · intro h; exact absurd (Finset.mem_univ _) h
+    (reassocFwd_has_vjp oc h w).backward v dy = reassocBack oc h w dy :=
+  reindexVJP_backward_of_inv _ _ (reassocFwdIdx_reassocBackIdx oc h w)
+    (reassocBackIdx_reassocFwdIdx oc h w) v dy
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-channel BN on the network's Tensor3 layout (the plug-in op)
@@ -549,56 +442,24 @@ theorem bnchwBack_differentiable (N oc h w : Nat) :
   (reindexCLM (bnchwBackIdx N oc h w)).differentiable
 
 noncomputable def bnchwFwd_has_vjp (N oc h w : Nat) :
-    HasVJP (bnchwFwd N oc h w) where
-  backward := fun _v dy => fun idx =>
-    ∑ k : Fin (oc * (N * (h * w))), (if idx = bnchwFwdIdx N oc h w k then (1 : ℝ) else 0) * dy k
-  correct := by
-    intro v dy idx
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [show bnchwFwd N oc h w = (fun y : Vec (N * (oc * (h * w))) =>
-            fun k : Fin (oc * (N * (h * w))) => y (bnchwFwdIdx N oc h w k)) from rfl,
-        pdiv_reindex]
+    HasVJP (bnchwFwd N oc h w) :=
+  reindexVJP (bnchwFwdIdx N oc h w)
 
 noncomputable def bnchwBack_has_vjp (N oc h w : Nat) :
-    HasVJP (bnchwBack N oc h w) where
-  backward := fun _v dy => fun idx =>
-    ∑ k : Fin (N * (oc * (h * w))), (if idx = bnchwBackIdx N oc h w k then (1 : ℝ) else 0) * dy k
-  correct := by
-    intro v dy idx
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [show bnchwBack N oc h w = (fun y : Vec (oc * (N * (h * w))) =>
-            fun k : Fin (N * (oc * (h * w))) => y (bnchwBackIdx N oc h w k)) from rfl,
-        pdiv_reindex]
+    HasVJP (bnchwBack N oc h w) :=
+  reindexVJP (bnchwBackIdx N oc h w)
 
 theorem bnchwBack_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (oc * (N * (h * w))))
     (dy : Vec (N * (oc * (h * w)))) :
-    (bnchwBack_has_vjp N oc h w).backward v dy = bnchwFwd N oc h w dy := by
-  funext idx
-  show (∑ k : Fin (N * (oc * (h * w))), (if idx = bnchwBackIdx N oc h w k then (1 : ℝ) else 0) * dy k)
-      = dy (bnchwFwdIdx N oc h w idx)
-  rw [Finset.sum_eq_single (bnchwFwdIdx N oc h w idx)]
-  · rw [ite_eq_left (bnchwBackIdx_bnchwFwdIdx N oc h w idx).symm, one_mul]
-  · intro k _ hk
-    rw [ite_eq_right, zero_mul]
-    intro hcond
-    exact hk (by rw [hcond, bnchwFwdIdx_bnchwBackIdx])
-  · intro h; exact absurd (Finset.mem_univ _) h
+    (bnchwBack_has_vjp N oc h w).backward v dy = bnchwFwd N oc h w dy :=
+  reindexVJP_backward_of_inv _ _ (bnchwBackIdx_bnchwFwdIdx N oc h w)
+    (bnchwFwdIdx_bnchwBackIdx N oc h w) v dy
 
 theorem bnchwFwd_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (N * (oc * (h * w))))
     (dy : Vec (oc * (N * (h * w)))) :
-    (bnchwFwd_has_vjp N oc h w).backward v dy = bnchwBack N oc h w dy := by
-  funext idx
-  show (∑ k : Fin (oc * (N * (h * w))), (if idx = bnchwFwdIdx N oc h w k then (1 : ℝ) else 0) * dy k)
-      = dy (bnchwBackIdx N oc h w idx)
-  rw [Finset.sum_eq_single (bnchwBackIdx N oc h w idx)]
-  · rw [ite_eq_left (bnchwFwdIdx_bnchwBackIdx N oc h w idx).symm, one_mul]
-  · intro k _ hk
-    rw [ite_eq_right, zero_mul]
-    intro hcond
-    exact hk (by rw [hcond, bnchwBackIdx_bnchwFwdIdx])
-  · intro h; exact absurd (Finset.mem_univ _) h
+    (bnchwFwd_has_vjp N oc h w).backward v dy = bnchwBack N oc h w dy :=
+  reindexVJP_backward_of_inv _ _ (bnchwFwdIdx_bnchwBackIdx N oc h w)
+    (bnchwBackIdx_bnchwFwdIdx N oc h w) v dy
 
 /-- **Batch-norm per channel on the network's `[N,C,H,W]` layout.** Conjugate the
     Mat-split `bnPerChannelFlat` (with `m = N·h·w`, the whole batch's cells per channel)

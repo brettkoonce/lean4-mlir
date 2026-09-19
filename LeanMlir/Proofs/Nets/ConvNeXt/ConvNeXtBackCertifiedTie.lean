@@ -120,13 +120,6 @@ The proof is piecewise, and every piece is already in the repo:
 the chain — the `+β` translation's VJP is the identity, which is why `chanLNTensor3Back` never
 took a `β` in the first place. -/
 
-/-- **Any two VJP witnesses for the same map have the same backward.** Both `.correct` to the same
-    `∑ pdiv f x i j * dy j`, so the backward is a property of `f`, not of how the witness was
-    assembled. Lets a hand-written chain be tied to a tactic-built witness without unfolding it. -/
-theorem HasVJP.backward_unique {m n : Nat} {f : Vec m → Vec n} (h₁ h₂ : HasVJP f)
-    (x : Vec m) (dy : Vec n) : h₁.backward x dy = h₂.backward x dy := by
-  funext i; rw [h₁.correct, h₂.correct]
-
 /-- **The concrete three-term BN/LN input gradient IS the certified VJP backward.** `bn_grad_input`
     is not `rfl`-equal to `(bn_has_vjp …).backward` — the witness is built through a
     `rw [bnForward_eq_compose]` cast — but both reduce to the canonical `∑ pdiv` form

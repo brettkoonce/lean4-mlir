@@ -4232,14 +4232,6 @@ theorem convNextFwdGraph_faithful {ic c cExp h w kH kW nClasses : Nat}
 --   conditional whole-network VJP `mnistCnnNoBn_has_vjp_at.backward`.
 -- ════════════════════════════════════════════════════════════════
 
-/-- Pointwise-VJP backwards are unique: `.correct` pins `backward` to the
-    `pdiv`-contracted Jacobian, so any two `HasVJPAt f x` agree on `backward`.
-    Lets us swap the maxpool's `flatten∘unflatten` transport (built into
-    `mnistCnnNoBn_has_vjp_at`) for the cast-free witness below. -/
-theorem hasVJPAt_backward_det {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
-    (v v' : HasVJPAt f x) (dy : Vec n) : v.backward dy = v'.backward dy := by
-  funext i; rw [v.correct, v'.correct]
-
 /-- Max-pool VJP at a *raw* flattened point (no `flatten ∘ unflatten` index), so
     it composes without a transport cast; `backward` is `maxPoolBackFlat`. The
     `correct` field reuses `maxPoolFlat_has_vjp_at.correct`, aligning the point
@@ -4292,7 +4284,7 @@ noncomputable def cnnBackGraph
 -- `mnistCnnNoBn_has_vjp_at.backward` (the Chapter-3 peer of
 -- `mlpBackGraph_faithful`). The per-op `convBack`/`selectPos`/`dotOut` ops
 -- assemble through `vjp_comp_at`; the one `maxPoolBack` matches via VJP
--- uniqueness (`hasVJPAt_backward_det`) — sidestepping the `flatten∘unflatten`
+-- uniqueness (`HasVJPAt.backward_unique`) — sidestepping the `flatten∘unflatten`
 -- transport in `mnistCnnNoBn_has_vjp_at`'s maxpool step.
 set_option maxHeartbeats 2000000 in
 theorem cnnBackGraph_faithful
@@ -4324,7 +4316,7 @@ theorem cnnBackGraph_faithful
   simp only [cnnBackGraph, den, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at,
     denseRelu_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
     hasVJP3_to_hasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]
-  rw [hasVJPAt_backward_det _ (maxPoolFlat_has_vjp_at'
+  rw [HasVJPAt.backward_unique _ (maxPoolFlat_has_vjp_at'
         ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
           ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁) x)) h_mp)]
   rfl

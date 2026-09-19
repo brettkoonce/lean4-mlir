@@ -55,9 +55,9 @@ both linear, so both backward graphs are activation-independent.
 So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head` is one `CertLayer`, assembled by `comp` alone,
 and `vitNetBackGraph_faithful_via_fold` re-derives `ViTBackB0`'s whole-net capstone from it —
 including that the fold's VJP **is** the shipped `vitForwardKV_has_vjp`, not merely another VJP of
-the same map. ⚠ That last step does not go through `hasVJPAt_backward_det` (the two witnesses live
-at syntactically different `f`s and transport lands in the wrong type); it goes through the
-`correct` fields, since both backwards are the same `pdiv` contraction.
+the same map. That last step is `HasVJPAt.backward_unique_of_eq` along the forward equation
+`vitNetLayer_fwd`: the two witnesses are VJPs of propositionally equal maps, so both backwards are
+the same `pdiv` contraction.
 
 ## The tier: `ok = True`, and that is the STRONGER certificate
 
@@ -374,25 +374,13 @@ theorem vitNetBackGraph_faithful_via_fold
         Wc bc cls pos ps γF βF Wcls bcls).faithful x
       (vitNetLayer_ok ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls x) e]
-  -- ⚠ The fold's VJP is a `vjp_comp_at` chain; the shipped one is a `vjp_comp` chain. Different
-  -- TERMS for the same map, so `hasVJPAt_backward_det` cannot be applied directly (its two
-  -- witnesses must be at a syntactically shared `f`), and transporting one along `hfe` lands in
-  -- the wrong type. Go through what makes both of them VJPs instead: each `correct` field says
-  -- the backward IS the `pdiv` contraction, and the two `pdiv`s agree because the forwards do.
-  have hfe : (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
-        Wc bc cls pos ps γF βF Wcls bcls).fwd
-      = vitForwardKV ic H W patchSize N mlpDim (hm1+1) d nClasses k
-          Wc bc cls pos ε ps γF βF Wcls bcls :=
-    funext (vitNetLayer_fwd ic H W patchSize N mlpDim hm1 d nClasses k ε hε
-      Wc bc cls pos ps γF βF Wcls bcls)
-  funext i
-  rw [((vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
-        Wc bc cls pos ps γF βF Wcls bcls).vjp x
-      (vitNetLayer_ok ic H W patchSize N mlpDim hm1 d nClasses k ε hε
-        Wc bc cls pos ps γF βF Wcls bcls x)).correct (den e) i,
-    (vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
-      Wc bc cls pos ε hε ps γF βF Wcls bcls).correct x (den e) i,
-    hfe]
+  -- The fold's VJP is a `vjp_comp_at` chain and the shipped one a `vjp_comp` chain: different
+  -- terms for maps that are equal only propositionally (`vitNetLayer_fwd`).
+  exact HasVJPAt.backward_unique_of_eq
+    (funext (vitNetLayer_fwd ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+      Wc bc cls pos ps γF βF Wcls bcls)) _
+    ((vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
+      Wc bc cls pos ε hε ps γF βF Wcls bcls).toHasVJPAt x) (den e)
 
 -- ════════════════════════════════════════════════════════════════
 -- § ViT-Tiny's depth, as a check rather than prose

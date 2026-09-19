@@ -94,15 +94,9 @@ noncomputable def meanLoss {M P : Nat} (L : Fin M → Vec P → ℝ) : Vec P →
 /-- A mean of losses is differentiable where its summands are. -/
 theorem meanLoss_differentiableAt {M P : Nat} (L : Fin M → Vec P → ℝ) (θ : Vec P)
     (hdiff : ∀ m, LossDifferentiableAt (L m) θ) :
-    LossDifferentiableAt (meanLoss L) θ := by
-  have hsum : DifferentiableAt ℝ (fun y : Vec P => fun _ : Fin 1 => ∑ m : Fin M, L m y) θ := by
-    have heq : (fun y : Vec P => fun _ : Fin 1 => ∑ m : Fin M, L m y)
-             = (fun y : Vec P => ∑ m : Fin M, (fun _ : Fin 1 => L m y)) := by
-      funext y k; rw [Finset.sum_apply]
-    rw [heq]
-    exact DifferentiableAt.fun_sum (fun m _ => hdiff m)
-  show DifferentiableAt ℝ (fun y : Vec P => fun _ : Fin 1 => (1 / (M : ℝ)) * ∑ m, L m y) θ
-  exact (hsum.const_smul (1 / (M : ℝ)) : _)
+    LossDifferentiableAt (meanLoss L) θ :=
+  differentiableAt_pi.2 fun _ =>
+    (DifferentiableAt.fun_sum fun m _ => differentiableAt_pi.1 (hdiff m) 0).const_mul _
 
 /-- ⭐ **The gradient of a mean is the mean of the gradients.** Linearity of `pdiv`, and the
     only analysis in this file: `pdiv_const_smul` pulls the `1/M` out and `pdiv_finset_sum`
@@ -111,12 +105,8 @@ theorem lossGrad_meanLoss {M P : Nat} (L : Fin M → Vec P → ℝ) (θ : Vec P)
     (hdiff : ∀ m, LossDifferentiableAt (L m) θ) :
     lossGrad (meanLoss L) θ = dpMean (fun m => lossGrad (L m) θ) := by
   funext i
-  have hsum : DifferentiableAt ℝ (fun y : Vec P => fun _ : Fin 1 => ∑ m : Fin M, L m y) θ := by
-    have heq : (fun y : Vec P => fun _ : Fin 1 => ∑ m : Fin M, L m y)
-             = (fun y : Vec P => ∑ m : Fin M, (fun _ : Fin 1 => L m y)) := by
-      funext y k; rw [Finset.sum_apply]
-    rw [heq]
-    exact DifferentiableAt.fun_sum (fun m _ => hdiff m)
+  have hsum : DifferentiableAt ℝ (fun y : Vec P => fun _ : Fin 1 => ∑ m : Fin M, L m y) θ :=
+    differentiableAt_pi.2 fun _ => .fun_sum fun m _ => differentiableAt_pi.1 (hdiff m) 0
   show pdiv (fun θ' : Vec P => fun _ : Fin 1 => (1 / (M : ℝ)) * ∑ m, L m θ') θ i 0
        = (1 / (M : ℝ)) * ∑ m, pdiv (fun θ' : Vec P => fun _ : Fin 1 => L m θ') θ i 0
   rw [pdiv_const_smul (1 / (M : ℝ)) (fun θ' : Vec P => fun _ : Fin 1 => ∑ m, L m θ') θ hsum i 0]

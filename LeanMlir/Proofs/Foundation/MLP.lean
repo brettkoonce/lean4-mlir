@@ -159,13 +159,7 @@ noncomputable def reluLinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n :
 
 @[simp] theorem reluLinearPart_apply (n : Nat) (x y : Vec n) (k : Fin n) :
     reluLinearPart n x y k = if x k > 0 then y k else 0 := by
-  show (ContinuousLinearMap.pi (fun k' =>
-          if x k' > 0 then ContinuousLinearMap.proj k'
-                      else (0 : Vec n →L[ℝ] ℝ))) y k = _
-  rw [ContinuousLinearMap.pi_apply]
-  by_cases hxk : x k > 0
-  · rw [ite_eq_left hxk, ite_eq_left hxk]; rfl
-  · rw [ite_eq_right hxk, ite_eq_right hxk]; rfl
+  rw [reluLinearPart, ContinuousLinearMap.pi_apply]; split_ifs <;> rfl
 
 /-- **ReLU is differentiable at smooth points.** Near `x` every coordinate keeps its sign
     (finitely many strict inequalities persist, `Filter.eventually_all`), so `relu n` agrees
@@ -215,7 +209,7 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
     at smooth points it is the diagonal indicator (per `pdiv_relu`); at
     points where some coordinate is zero, `pdiv (relu n) x` agrees with
     `fderiv`'s junk default of `0`, so the canonical backward is `0`
-    there too — and `correct` holds by `rfl`.
+    there too — the witness is `HasVJP.canonical`, whose `correct` holds by `rfl`.
 
     The codegen (`MlirCodegen.lean`) emits the standard subgradient
     formula `if x > 0 then dy else 0` instead, which agrees with the
@@ -225,9 +219,7 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
     `relu_codegen_matches_canonical` below. The Lean-vs-codegen gap at
     the kinks is the codegen trust boundary — see
     `LeanMlir/Proofs/README.md`. -/
-noncomputable def relu_has_vjp (n : Nat) : HasVJP (relu n) where
-  backward x dy i := ∑ j : Fin n, pdiv (relu n) x i j * dy j
-  correct _ _ _  := rfl
+noncomputable def relu_has_vjp (n : Nat) : HasVJP (relu n) := HasVJP.canonical _
 
 /-- **Bridge: `relu_has_vjp`'s canonical backward matches the codegen
     formula at smooth points.**
@@ -242,14 +234,7 @@ theorem relu_codegen_matches_canonical (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
     (relu_has_vjp n).backward x dy i = if x i > 0 then dy i else 0 := by
   show ∑ j : Fin n, pdiv (relu n) x i j * dy j = _
-  simp_rw [pdiv_relu n x h_smooth i]
-  rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
-      (fun h => absurd (Finset.mem_univ i) h)]
-  rw [ite_eq_left rfl]
-  by_cases hx : x i > 0
-  · rw [ite_eq_left hx, ite_eq_left hx]; ring
-  · rw [ite_eq_right hx, ite_eq_right hx]; ring
+  simp_rw [pdiv_relu n x h_smooth i]; simp
 
 /-- **Diagonal-indicator restatement of the smooth-point bridge.**
     `relu_has_vjp.backward x dy i = 1_{x i > 0} · dy i` at smooth
@@ -259,10 +244,7 @@ theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
     (relu_has_vjp n).backward x dy i =
     (if x i > 0 then (1 : ℝ) else 0) * dy i := by
-  rw [relu_codegen_matches_canonical n x h_smooth dy i]
-  by_cases hx : x i > 0
-  · rw [ite_eq_left hx, ite_eq_left hx]; ring
-  · rw [ite_eq_right hx, ite_eq_right hx]; ring
+  rw [relu_codegen_matches_canonical n x h_smooth dy i, ite_mul, one_mul, zero_mul]
 
 /-- **ReLU pointwise VJP — no canonical-witness escape.**
 
@@ -273,16 +255,7 @@ theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
 noncomputable def relu_has_vjp_at (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) : HasVJPAt (relu n) x where
   backward dy i := if x i > 0 then dy i else 0
-  correct := by
-    intro dy i
-    simp_rw [pdiv_relu n x h_smooth]
-    rw [Finset.sum_eq_single i
-        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
-        (fun h => absurd (Finset.mem_univ i) h)]
-    rw [ite_eq_left rfl]
-    by_cases hxi : x i > 0
-    · rw [ite_eq_left hxi, ite_eq_left hxi]; ring
-    · rw [ite_eq_right hxi, ite_eq_right hxi]; ring
+  correct dy i := by simp_rw [pdiv_relu n x h_smooth]; simp
 
 -- ════════════════════════════════════════════════════════════════
 -- § Softmax Cross-Entropy Loss
@@ -327,10 +300,7 @@ noncomputable def mlp_has_vjp {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) :
-    HasVJP (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) where
-  backward x dy i :=
-    ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j
-  correct _ _ _  := rfl
+    HasVJP (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) := HasVJP.canonical _
 
 /-- **MLP pointwise VJP — no canonical-witness escape.**
 

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Architectures.CNN
+import LeanMlir.Proofs.Foundation.PerChannelBN
 
 /-! # Strided convolution (stride-2 SAME) — Chapter 5 Milestone B, the hard new op
 
@@ -58,18 +59,10 @@ theorem decimateFlat_differentiable (oc h w : Nat) :
 /-- **Decimation VJP.** `decimateFlat` is a reindex, so its Jacobian is the sparse
     `δ(idx = decimateIdx j)` (`pdiv_reindex`); the backward scatters `dy` back to
     the even positions (zero elsewhere) — the "zero-upsampling" that StableHLO
-    renders as `lhs_dilation = [2,2]`. Stated in the universal `∑ pdiv · dy` form. -/
+    renders as `lhs_dilation = [2,2]`. `reindexVJP` at the decimation index. -/
 noncomputable def decimateFlat_has_vjp (oc h w : Nat) :
-    HasVJP (decimateFlat oc h w) where
-  backward := fun _v dy => fun idx =>
-    ∑ k : Fin (oc * h * w), (if idx = decimateIdx oc h w k then (1 : ℝ) else 0) * dy k
-  correct := by
-    intro v dy idx
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [show decimateFlat oc h w = (fun y : Vec (oc * (2*h) * (2*w)) =>
-            fun k : Fin (oc * h * w) => y (decimateIdx oc h w k)) from rfl,
-        pdiv_reindex]
+    HasVJP (decimateFlat oc h w) :=
+  reindexVJP (decimateIdx oc h w)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 SAME convolution = decimate ∘ (stride-1 SAME conv)
@@ -220,16 +213,8 @@ theorem decimateOddFlat_differentiable (oc h w : Nat) :
 /-- **Odd-decimation VJP** — the same sparse-δ reindex Jacobian as
     `decimateFlat_has_vjp`, at the odd positions. -/
 noncomputable def decimateOddFlat_has_vjp (oc h w : Nat) :
-    HasVJP (decimateOddFlat oc h w) where
-  backward := fun _v dy => fun idx =>
-    ∑ k : Fin (oc * h * w), (if idx = decimateOddIdx oc h w k then (1 : ℝ) else 0) * dy k
-  correct := by
-    intro v dy idx
-    apply Finset.sum_congr rfl
-    intro j _
-    rw [show decimateOddFlat oc h w = (fun y : Vec (oc * (2*h) * (2*w)) =>
-            fun k : Fin (oc * h * w) => y (decimateOddIdx oc h w k)) from rfl,
-        pdiv_reindex]
+    HasVJP (decimateOddFlat oc h w) :=
+  reindexVJP (decimateOddIdx oc h w)
 
 /-- **Stride-4 patchify convolution**, flattened: `Vec (ic·4h·4w) → Vec (oc·h·w)`.
     `decimateFlat ∘ decimateOddFlat ∘ (stride-1 SAME conv)` — reads the SAME conv
@@ -357,14 +342,12 @@ noncomputable def flatConvStride2Xla {ic oc h w kH kW : Nat}
     Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
   decimateOddFlat oc h w ∘ (flatConv (h := 2 * h) (w := 2 * w) W b)
 
+@[fun_prop]
 theorem flatConvStride2Xla_differentiable {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     Differentiable ℝ (flatConvStride2Xla W b
       : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) := by
-  unfold flatConvStride2Xla
-  have hf : Differentiable ℝ (flatConv (h := 2 * h) (w := 2 * w) W b) :=
-    flatConv_differentiable W b
-  exact (decimateOddFlat_differentiable oc h w).comp hf
+  unfold flatConvStride2Xla; fun_prop
 
 /-- **Stride-2 XLA-`SAME` input-VJP.** `vjp_comp` on `decimateOddFlat ∘ flatConv`, reusing the
     proven stride-1 conv input-VJP and the odd-decimation VJP. The backward zero-upsamples the

@@ -56,15 +56,9 @@ open Proofs.StableHLO (transposeFlat)
     transport its index with `▸` while the denotation stays on `reassocFwd`. -/
 theorem reassocFwdIdx_val (oc h w : Nat) (k : Fin (oc * (h * w))) :
     (reassocFwdIdx oc h w k).val = k.val := by
-  unfold reassocFwdIdx
-  simp [finProdFinEquiv]
-  generalize (k : Nat) = K
-  rw [Nat.mul_add, ← Nat.mul_assoc, Nat.mul_comm w h]
-  have hdvd : w ∣ h * w := Dvd.intro_left h rfl
-  have h1 := Nat.div_add_mod K (h * w)
-  have h2 := Nat.div_add_mod (K % (h * w)) w
-  have h3 : K % (h * w) % w = K % w := Nat.mod_mod_of_dvd _ hdvd
-  omega
+  obtain ⟨⟨c, s⟩, rfl⟩ := finProdFinEquiv.surjective k
+  obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective s
+  simp only [reassocFwdIdx, Equiv.symm_apply_apply, finProdFinEquiv_apply_val]; ring
 
 /-- The inverse direction, from `reassocFwdIdx_val` through the round-trip. -/
 theorem reassocBackIdx_val (oc h w : Nat) (k : Fin (oc * h * w)) :

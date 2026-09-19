@@ -153,10 +153,7 @@ theorem cnnVerified_denote_eq (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
 noncomputable def cnnVerified_has_vjp (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
     (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (W₃ : Mat 6272 512) (b₃ : Vec 512)
     (W₄ : Mat 512 512) (b₄ : Vec 512) (W₅ : Mat 512 10) (b₅ : Vec 10) :
-    HasVJP (denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) where
-  backward x dy i :=
-    ∑ j : Fin 10, pdiv (denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) x i j * dy j
-  correct _ _ _ := rfl
+    HasVJP (denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) := HasVJP.canonical _
 
 /-! ## Rung E (linear): the spec ↔ the *generated MLIR*
 
@@ -274,11 +271,8 @@ noncomputable def cifarVerified_has_vjp
     (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64)
     (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
     (W₇ : Mat 512 10) (b₇ : Vec 10) :
-    HasVJP (denoteCifar cifarVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇) where
-  backward x dy i :=
-    ∑ j : Fin 10,
-      pdiv (denoteCifar cifarVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇) x i j * dy j
-  correct _ _ _ := rfl
+    HasVJP (denoteCifar cifarVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇) :=
+  HasVJP.canonical _
 
 open Proofs.StableHLO in
 /-- **Generated (no-BN) CIFAR forward MLIR ↔ spec.** -/
@@ -328,11 +322,7 @@ noncomputable def cifarBnVerified_has_vjp
     (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
     (W₇ : Mat 512 10) (b₇ : Vec 10) :
     HasVJP (denoteCifarBn cifarBnVerified.layers W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-              W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇) where
-  backward x dy i :=
-    ∑ j : Fin 10, pdiv (denoteCifarBn cifarBnVerified.layers W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-              W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇) x i j * dy j
-  correct _ _ _ := rfl
+              W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇) := HasVJP.canonical _
 
 open Proofs.StableHLO in
 /-- **Generated (per-channel-BN) CIFAR forward MLIR ↔ spec.** (`epsStr` = the rendered ε text;
@@ -517,17 +507,7 @@ noncomputable def mobilenetv2Rep_has_vjp
         We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4
         We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
         We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
-        Wh bh εh γh βh Wfc bfc) where
-  backward x dy i :=
-    ∑ j : Fin 10, pdiv (denoteMobilenet mobilenetv2RepLayers Ws bs εs γs βs
-        We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
-        We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
-        We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
-        We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4
-        We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
-        We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
-        Wh bh εh γh βh Wfc bfc) x i j * dy j
-  correct _ _ _ := rfl
+        Wh bh εh γh βh Wfc bfc) := HasVJP.canonical _
 
 
 /-! ## Rung B/C/E (ch7 MobileNetV2, FULL): the committed spec ↔ the paper-spec net
@@ -576,10 +556,7 @@ theorem mobilenetv2Verified_denote_eq (w : MNV2PaperWeights) :
     dim-polymorphic `MobileNetV2Close`/`ChainClose` param-grad bridges apply at the paper
     shapes verbatim, per `MobileNetV2FullPaper.lean`'s header). -/
 noncomputable def mobilenetv2Verified_has_vjp (w : MNV2PaperWeights) :
-    HasVJP (denoteMobilenetPaper mobilenetv2Verified.layers w) where
-  backward x dy i :=
-    ∑ j : Fin 10, pdiv (denoteMobilenetPaper mobilenetv2Verified.layers w) x i j * dy j
-  correct _ _ _ := rfl
+    HasVJP (denoteMobilenetPaper mobilenetv2Verified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
 /-- **Rung E at the committed spec.** The generated full-paper StableHLO graph denotes the
@@ -707,10 +684,7 @@ theorem resnet34Verified_denote_eq (w : R34Weights) :
     so the honest whole-net input-VJP stays pointwise; the live/seal theorems
     (`ResNet34Live*`) discharge nontriviality at full depth and realistic dims). -/
 noncomputable def resnet34Verified_has_vjp (w : R34Weights) :
-    HasVJP (denoteR34Full resnet34Verified.layers w) where
-  backward x dy i :=
-    ∑ j : Fin 10, pdiv (denoteR34Full resnet34Verified.layers w) x i j * dy j
-  correct _ _ _ := rfl
+    HasVJP (denoteR34Full resnet34Verified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
 /-- **Rung E at the committed spec.** The full per-channel [3,4,6,3] graph denotes the
@@ -787,11 +761,7 @@ theorem efficientnetVerified_denote_eq (N : Nat) (w : B0Weights) :
     smooth but relu6 clamps; the per-block differentiability lemmas live in
     `EfficientNetFullB0.lean`). -/
 noncomputable def efficientnetVerified_has_vjp (N : Nat) (w : B0Weights) :
-    HasVJP (denoteEfficientnetB0 N efficientnetVerified.layers w) where
-  backward x dy i :=
-    ∑ j : Fin (N * 10),
-      pdiv (denoteEfficientnetB0 N efficientnetVerified.layers w) x i j * dy j
-  correct _ _ _ := rfl
+    HasVJP (denoteEfficientnetB0 N efficientnetVerified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
 /-- **Rung E at the committed spec (batched).** The full 16-MBConv batched graph denotes
@@ -847,10 +817,7 @@ theorem convnextVerified_denote_eq (w : CnxTWeightsCh 10) :
     whole-net VJP exists at full depth (`convNextForwardTCh_has_vjp_correct`,
     all-smooth, the 22 LN positivities only) on the ∘-chain form. -/
 noncomputable def convnextVerified_has_vjp (w : CnxTWeightsCh 10) :
-    HasVJP (denoteConvnextT convnextVerified.layers w) where
-  backward x dy i :=
-    ∑ j : Fin 10, pdiv (denoteConvnextT convnextVerified.layers w) x i j * dy j
-  correct _ _ _ := rfl
+    HasVJP (denoteConvnextT convnextVerified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
 /-- **Rung E at the committed spec.** The committed-config [3,3,9,3] channel-LN graph denotes
@@ -994,12 +961,8 @@ noncomputable def efficientnetRep_has_vjp {ic c cmid₁ cout cmid₂ h w kHs kWs
     (Wh : Mat cout nClasses) (bh : Vec nClasses) :
     HasVJP (denoteEfficientnetRep (h := h) (w := w)
       [.convBn ic c kHs 1, .mbConvSE c cmid₁ c r₁ kHd₁, .mbConvSE c cmid₂ cout r₂ kHd₂, .globalAvgPool, .dense cout nClasses]
-      Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh) where
-  backward x dy i :=
-    ∑ j : Fin nClasses, pdiv (denoteEfficientnetRep (h := h) (w := w)
-      [.convBn ic c kHs 1, .mbConvSE c cmid₁ c r₁ kHd₁, .mbConvSE c cmid₂ cout r₂ kHd₂, .globalAvgPool, .dense cout nClasses]
-      Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh) x i j * dy j
-  correct _ _ _ := rfl
+      Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh) :=
+  HasVJP.canonical _
 
 -- ── ConvNeXt (representative: patchify → LN → block → block → GAP → head-LN → dense; scalar LN = `.bn`) ──
 /-- Math denotation of the representative ConvNeXt layer list → `convNextForward`. -/
@@ -1050,12 +1013,8 @@ noncomputable def convnextRep_has_vjp {ic c cExp h w kH kW nClasses : Nat}
     (Wd : Mat c nClasses) (bd : Vec nClasses) :
     HasVJP (denoteConvnextRep (h := h) (w := w)
       [.conv ic c 1 1, .bn, .convNextBlock c, .convNextBlock c, .globalAvgPool, .bn, .dense c nClasses]
-      Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd) where
-  backward x dy i :=
-    ∑ j : Fin nClasses, pdiv (denoteConvnextRep (h := h) (w := w)
-      [.conv ic c 1 1, .bn, .convNextBlock c, .convNextBlock c, .globalAvgPool, .bn, .dense c nClasses]
-      Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd) x i j * dy j
-  correct _ _ _ := rfl
+      Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd) :=
+  HasVJP.canonical _
 
 -- ── ViT (representative: patch-embed → CLS/pos → transformer body (kBlocks, weight-shared) → LN → dense) ──
 /-- Math denotation of the representative ViT layer list → `vit_full`. The single
@@ -1112,12 +1071,8 @@ noncomputable def vitRep_has_vjp (ic H W patchSize N mlpDim heads d_head kBlocks
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
     HasVJP (denoteVitRep
       [.conv ic (heads * d_head) patchSize patchSize, .param #[1, heads * d_head] 2, .param #[N + 1, heads * d_head] 2, .transformerBlock (heads * d_head) mlpDim, .layerNorm (heads * d_head), .dense (heads * d_head) nClasses]
-      ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls) where
-  backward x dy i :=
-    ∑ j : Fin nClasses, pdiv (denoteVitRep
-      [.conv ic (heads * d_head) patchSize patchSize, .param #[1, heads * d_head] 2, .param #[N + 1, heads * d_head] 2, .transformerBlock (heads * d_head) mlpDim, .layerNorm (heads * d_head), .dense (heads * d_head) nClasses]
-      ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls) x i j * dy j
-  correct _ _ _ := rfl
+      ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls) :=
+  HasVJP.canonical _
 
 -- ── ResNet-34 (representative: the audited parametric skeleton `resnet34_has_vjp_at`) ──
 /-- Math denotation of the representative ResNet-34 layer list → the skeleton composition
@@ -1168,13 +1123,7 @@ noncomputable def r34Rep_has_vjp {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
     HasVJP (denoteR34Rep
       [.convBn 3 64 7 2, .maxPool 2 2, .residualStage 64 64 3 1, .residualStage 64 128 4 2,
        .residualStage 128 256 6 2, .residualStage 256 512 3 2, .globalAvgPool, .dense 512 10]
-      stem mp ids1 down2 ids2 down3 ids3 down4 ids4 gap dense) where
-  backward x dy i :=
-    ∑ j : Fin s7, pdiv (denoteR34Rep
-      [.convBn 3 64 7 2, .maxPool 2 2, .residualStage 64 64 3 1, .residualStage 64 128 4 2,
-       .residualStage 128 256 6 2, .residualStage 256 512 3 2, .globalAvgPool, .dense 512 10]
-      stem mp ids1 down2 ids2 down3 ids3 down4 ids4 gap dense) x i j * dy j
-  correct _ _ _ := rfl
+      stem mp ids1 down2 ids2 down3 ids3 down4 ids4 gap dense) := HasVJP.canonical _
 
 /-! ## Rung E (ch7 mnv2, representative): the spec's math ↔ the **generated** MLIR
 

@@ -187,31 +187,30 @@ noncomputable def convBackDenote {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) : Tensor3 oc h w → Tensor3 ic h w :=
   conv2d (reverseSwap W) (fun _ => 0)
 
-/-- **The general conv-adjoint identity (odd kernels), all dims.** The emitted
-    reversed-kernel forward conv `conv2d (reverseSwap W) 0` equals the certified
-    conv input-gradient `conv2d_input_grad_formula W`, for ARBITRARY
-    `ic oc h w kH kW` with odd `kH`, `kW` (`2·⌊(kH-1)/2⌋+1 = kH`). This is the
-    reversed-kernel ⇒ correlation-adjoint reindex that `conv_back_bridge_{1to2,2to2}`
-    previously asserted only at two toy 4×4 shapes by exhaustive `fin_cases`.
-
-    Proof: per output coordinate, both sides sum over the input channel `co`; the
-    inner `(kh,kw)` sum (LHS, over the kernel window) and the `(ho,wo)` sum (RHS,
-    over output positions) range over the SAME set of valid alignments via the
-    partial bijection `(kh,kw) ↦ (kh+hi-pH, kw+wi-pW)` on the pad supports. Under
-    oddness `2·pH = kH-1`, the reversed-kernel index `kH-1-kh` matches the formula's
-    `hi+pH-ho`, and the data indices coincide — so the matched summands are equal.
-    `Finset.sum_bij'` over the pad-filtered supports; all index arithmetic by `omega`.
-
-    The single load-bearing leaf for the §B certified-VJP tie: every conv-heavy
-    net's backward (`convFlatBack`) routes its conv input-grad through this. -/
-theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
+/-- **One channel slab of the reversed-kernel identity (odd kernels).** For a kernel slab `K` and
+    a cotangent slab `D`, correlating `D` with the spatially reversed `K` gives the input-gradient
+    sum over output positions. Both sides range over the SAME valid alignments via the partial
+    bijection `(kh,kw) ↦ (kh+hi-pH, kw+wi-pW)` on the pad supports; under oddness `2·pH = kH-1`
+    the reversed-kernel index `kH-1-kh` matches the formula's `hi+pH-ho`, and the data indices
+    coincide — so the matched summands are equal. `Finset.sum_bij'` over the pad-filtered
+    supports; all index arithmetic by `omega`. The conv gate below is this at each channel pair,
+    the depthwise one (`depthwiseConv2d_dwReverse_eq_input_grad_formula`) at each channel. -/
+theorem reverseSlab_eq_gradSlab {h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
-    (W : Kernel4 oc ic kH kW) (dy : Tensor3 oc h w) :
-    conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy := by
-  funext ci hi wi
-  simp only [conv2d, reverseSwap, kRev, zero_add, conv2d_input_grad_formula]
-  apply Finset.sum_congr rfl
-  intro co _
+    (K : Fin kH → Fin kW → ℝ) (D : Fin h → Fin w → ℝ) (hi : Fin h) (wi : Fin w) :
+    (∑ kh : Fin kH, ∑ kw : Fin kW, K (kRev kh) (kRev kw) *
+        if hpad : (kH - 1) / 2 ≤ kh.val + hi.val ∧ kh.val + hi.val - (kH - 1) / 2 < h ∧
+            (kW - 1) / 2 ≤ kw.val + wi.val ∧ kw.val + wi.val - (kW - 1) / 2 < w then
+          D ⟨kh.val + hi.val - (kH - 1) / 2, hpad.2.1⟩
+            ⟨kw.val + wi.val - (kW - 1) / 2, hpad.2.2.2⟩
+        else 0) =
+      ∑ ho : Fin h, ∑ wo : Fin w,
+        if hpad : ho.val ≤ hi.val + (kH - 1) / 2 ∧ hi.val + (kH - 1) / 2 - ho.val < kH ∧
+            wo.val ≤ wi.val + (kW - 1) / 2 ∧ wi.val + (kW - 1) / 2 - wo.val < kW then
+          K ⟨hi.val + (kH - 1) / 2 - ho.val, hpad.2.1⟩
+            ⟨wi.val + (kW - 1) / 2 - wo.val, hpad.2.2.2⟩ * D ho wo
+        else 0 := by
+  simp only [kRev]
   rw [← Finset.sum_product', ← Finset.sum_product', Finset.univ_product_univ,
       Finset.univ_product_univ]
   rw [← Finset.sum_subset (Finset.filter_subset
@@ -268,6 +267,26 @@ theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
     have ea : kH - 1 - p.1.val = hi.val + (kH - 1) / 2 - (p.1.val + hi.val - (kH - 1) / 2) := by omega
     have eb : kW - 1 - p.2.val = wi.val + (kW - 1) / 2 - (p.2.val + wi.val - (kW - 1) / 2) := by omega
     simp only [ea, eb]
+
+/-- **The general conv-adjoint identity (odd kernels), all dims.** The emitted
+    reversed-kernel forward conv `conv2d (reverseSwap W) 0` equals the certified
+    conv input-gradient `conv2d_input_grad_formula W`, for ARBITRARY
+    `ic oc h w kH kW` with odd `kH`, `kW` (`2·⌊(kH-1)/2⌋+1 = kH`). This is the
+    reversed-kernel ⇒ correlation-adjoint reindex that `conv_back_bridge_{1to2,2to2}`
+    previously asserted only at two toy 4×4 shapes by exhaustive `fin_cases`.
+
+    Proof: per output coordinate, both sides sum over the input channel `co`, and each
+    channel's summand is `reverseSlab_eq_gradSlab` at the slabs `W co ci`, `dy co`.
+
+    The single load-bearing leaf for the §B certified-VJP tie: every conv-heavy
+    net's backward (`convFlatBack`) routes its conv input-grad through this. -/
+theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (dy : Tensor3 oc h w) :
+    conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy := by
+  funext ci hi wi
+  simp only [conv2d, reverseSwap, zero_add, conv2d_input_grad_formula]
+  exact Finset.sum_congr rfl fun co _ => reverseSlab_eq_gradSlab hkH hkW (W co ci) (dy co) hi wi
 
 /-- **Conv backward bridge, 1→2 channels (the Spatial instance's first
     conv: `Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution

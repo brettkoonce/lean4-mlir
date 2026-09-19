@@ -29,72 +29,17 @@ open Classical
 /-- **The depthwise conv-adjoint identity (odd kernels), all dims.** The emitted reversed-kernel
     forward depthwise conv `depthwiseConv2d (dwReverse W) 0` equals the certified depthwise
     input-gradient `depthwiseConv2d_input_grad_formula W`, for arbitrary `c h w kH kW` with odd
-    kernels. The depthwise twin of `IR.convBackDenote_eq_input_grad_formula`: per output coordinate
-    both sides sum over the SAME valid alignments via `(kh,kw) ↦ (kh+hi-pH, kw+wi-pW)`; under oddness
-    `2·pH = kH-1` the reversed-kernel index `kH-1-kh` matches the formula's `hi+pH-ho`. No `Σ co`
-    (depthwise channel `ch` is fixed). `Finset.sum_bij'` over the pad-filtered supports; all index
-    arithmetic by `omega`. The load-bearing leaf for the depthwise §B ties (convnext/mnv2/enet). -/
+    kernels. The depthwise twin of `IR.convBackDenote_eq_input_grad_formula`: no `Σ co` (depthwise
+    channel `ch` is fixed), so per output coordinate it is `IR.reverseSlab_eq_gradSlab` at the
+    channel's own slabs `W ch`, `dy ch`. The leaf the depthwise §B ties (convnext/mnv2/enet) stand
+    on. -/
 theorem depthwiseConv2d_dwReverse_eq_input_grad_formula {c h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : DepthwiseKernel c kH kW) (dy : Tensor3 c h w) :
     depthwiseConv2d (dwReverse W) (fun _ => 0) dy = depthwiseConv2d_input_grad_formula W dy := by
   funext ch hi wi
-  simp only [depthwiseConv2d, dwReverse, Proofs.IR.kRev, zero_add, depthwiseConv2d_input_grad_formula]
-  rw [← Finset.sum_product', ← Finset.sum_product', Finset.univ_product_univ,
-      Finset.univ_product_univ]
-  rw [← Finset.sum_subset (Finset.filter_subset
-        (fun p : Fin kH × Fin kW => (kH-1)/2 ≤ p.1.val + hi.val ∧ p.1.val + hi.val - (kH-1)/2 < h ∧
-             (kW-1)/2 ≤ p.2.val + wi.val ∧ p.2.val + wi.val - (kW-1)/2 < w) Finset.univ) ?lv,
-      ← Finset.sum_subset (Finset.filter_subset
-        (fun q : Fin h × Fin w => q.1.val ≤ hi.val + (kH-1)/2 ∧ hi.val + (kH-1)/2 - q.1.val < kH ∧
-             q.2.val ≤ wi.val + (kW-1)/2 ∧ wi.val + (kW-1)/2 - q.2.val < kW) Finset.univ) ?rv]
-  case lv =>
-    intro p _ hp
-    rw [Finset.mem_filter] at hp
-    rw [dite_eq_right (fun hpr => hp ⟨Finset.mem_univ p, hpr⟩), mul_zero]
-  case rv =>
-    intro q _ hq
-    rw [Finset.mem_filter] at hq
-    rw [dite_eq_right (fun hpr => hq ⟨Finset.mem_univ q, hpr⟩)]
-  refine Finset.sum_bij'
-    (fun p hp => ((⟨p.1.val + hi.val - (kH-1)/2, by
-        have := (Finset.mem_filter.mp hp).2; omega⟩ : Fin h),
-       (⟨p.2.val + wi.val - (kW-1)/2, by
-        have := (Finset.mem_filter.mp hp).2; omega⟩ : Fin w)))
-    (fun q _ => ((⟨kH - 1 - (hi.val + (kH-1)/2 - q.1.val), by omega⟩ : Fin kH),
-       (⟨kW - 1 - (wi.val + (kW-1)/2 - q.2.val), by omega⟩ : Fin kW)))
-    ?hi ?hj ?linv ?rinv ?heq
-  case hi =>
-    intro p hp
-    have hb := (Finset.mem_filter.mp hp).2
-    have := p.1.isLt; have := p.2.isLt
-    rw [Finset.mem_filter]
-    refine ⟨Finset.mem_univ _, ?_, ?_, ?_, ?_⟩ <;> simp only <;> omega
-  case hj =>
-    intro q hq
-    have hb := (Finset.mem_filter.mp hq).2
-    have := q.1.isLt; have := q.2.isLt
-    rw [Finset.mem_filter]
-    refine ⟨Finset.mem_univ _, ?_, ?_, ?_, ?_⟩ <;> simp only <;> omega
-  case linv =>
-    intro p hp
-    have hb := (Finset.mem_filter.mp hp).2
-    have := p.1.isLt; have := p.2.isLt
-    apply Prod.ext <;> apply Fin.ext <;> simp only <;> omega
-  case rinv =>
-    intro q hq
-    have hb := (Finset.mem_filter.mp hq).2
-    have := q.1.isLt; have := q.2.isLt
-    apply Prod.ext <;> apply Fin.ext <;> simp only <;> omega
-  case heq =>
-    intro p hp
-    have hb := (Finset.mem_filter.mp hp).2
-    have h1 := p.1.isLt; have h2 := p.2.isLt
-    rw [dite_eq_left hb, dite_eq_left (by refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only <;> omega)]
-    dsimp only
-    have ea : kH - 1 - p.1.val = hi.val + (kH - 1) / 2 - (p.1.val + hi.val - (kH - 1) / 2) := by omega
-    have eb : kW - 1 - p.2.val = wi.val + (kW - 1) / 2 - (p.2.val + wi.val - (kW - 1) / 2) := by omega
-    simp only [ea, eb]
+  simp only [depthwiseConv2d, dwReverse, zero_add, depthwiseConv2d_input_grad_formula]
+  exact IR.reverseSlab_eq_gradSlab hkH hkW (W ch) (dy ch) hi wi
 
 /-- **Depthwise conv input-VJP leaf tie.** The backward map `depthwiseFlatBack W` (= reversed-kernel
     forward depthwise conv) IS the certified depthwise input-VJP `(depthwiseFlat_has_vjp W b).backward

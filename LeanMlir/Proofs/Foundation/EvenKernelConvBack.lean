@@ -165,22 +165,6 @@ theorem flatConv_padOdd_eq {ic oc h w kH kW : Nat}
   simp only [flatConv, conv2d_padOdd_eq hH hW W b]
 
 -- ════════════════════════════════════════════════════════════════
--- § Uniqueness without transport
--- ════════════════════════════════════════════════════════════════
-
-/-- **Two VJP witnesses for EQUAL maps have the same backward.** The generalisation of
-    `HasVJP.backward_unique` that a respelling needs: the witnesses have different TYPES
-    (`HasVJP f` and `HasVJP g`), so the existing form does not apply and `hfg ▸ ·` would give an
-    `Eq.mpr`-blocked `backward` — the transport trap `planning/archive/float_budget_numbers_log.md`
-    §3.5.2 item 5 records. Going through `.correct` avoids transport
-    entirely. -/
-theorem HasVJP.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} (hfg : f = g)
-    (h₁ : HasVJP f) (h₂ : HasVJP g) (x : Vec m) (dy : Vec n) :
-    h₁.backward x dy = h₂.backward x dy := by
-  funext i
-  rw [h₁.correct, h₂.correct, hfg]
-
--- ════════════════════════════════════════════════════════════════
 -- § The four even-kernel leaf ties
 -- ════════════════════════════════════════════════════════════════
 

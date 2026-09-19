@@ -110,21 +110,13 @@ noncomputable def pdiv {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
 /-- **Identity Jacobian** — `δᵢⱼ`. -/
 theorem pdiv_id {n : Nat} (x : Vec n) (i j : Fin n) :
     pdiv (fun y : Vec n => y) x i j = if i = j then 1 else 0 := by
-  unfold pdiv
-  rw [show (fun y : Vec n => y) = id from rfl, fderiv_id]
-  show basisVec i j = _
-  rw [basisVec_apply]
-  rcases eq_or_ne j i with h | h
-  · subst h; simp
-  · rw [ite_eq_right h, ite_eq_right (fun h' => h h'.symm)]
+  simp [pdiv, @eq_comm _ j i]
 
 /-- **Constant function Jacobian** — zero. -/
 theorem pdiv_const {m n : Nat} (c : Vec n) (x : Vec m)
     (i : Fin m) (j : Fin n) :
     pdiv (fun _ : Vec m => c) x i j = 0 := by
-  unfold pdiv
-  rw [(hasFDerivAt_const c x).fderiv]
-  rfl
+  simp [pdiv]
 
 /-- **Reindex Jacobian** — sparse, hits 1 only at i = σ(j). Subsumes
     `pdiv_id` (set a = b, σ = id). Covers transpose, flatten,
@@ -133,15 +125,9 @@ theorem pdiv_reindex {a b : Nat} (σ : Fin b → Fin a) (x : Vec a)
     (i : Fin a) (j : Fin b) :
     pdiv (fun y : Vec a => fun k : Fin b => y (σ k)) x i j =
     if i = σ j then 1 else 0 := by
-  unfold pdiv
-  rw [show (fun y : Vec a => fun k : Fin b => y (σ k)) =
-        (reindexCLM σ : Vec a → Vec b) from rfl]
-  rw [ContinuousLinearMap.fderiv]
-  show basisVec i (σ j) = _
-  rw [basisVec_apply]
-  rcases eq_or_ne (σ j) i with h | h
-  · subst h; simp
-  · rw [ite_eq_right h, ite_eq_right (fun h' => h h'.symm)]
+  rw [pdiv, show (fun y : Vec a => fun k : Fin b => y (σ k)) =
+      (reindexCLM σ : Vec a → Vec b) from rfl, ContinuousLinearMap.fderiv]
+  simp [@eq_comm _ (σ j) i]
 
 /-- **Product rule** for `pdiv`. `Vec n` is a normed algebra over ℝ
     via `Pi.normedAlgebra`, so `fderiv_mul` applies directly to the
@@ -179,24 +165,11 @@ theorem pdiv_comp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (i : Fin m) (k : Fin p) :
     pdiv (g ∘ f) x i k =
     ∑ j : Fin n, pdiv f x i j * pdiv g (f x) j k := by
-  unfold pdiv
-  rw [fderiv_comp x hg hf]
-  show fderiv ℝ g (f x) (fderiv ℝ f x (basisVec i)) k = _
-  set v : Vec n := fderiv ℝ f x (basisVec i) with hv
-  have hv_decomp : v = ∑ j : Fin n, v j • (basisVec j : Vec n) := by
-    funext j'
-    rw [Finset.sum_apply]
-    simp_rw [Pi.smul_apply, basisVec_apply, smul_eq_mul, mul_ite, mul_one, mul_zero]
-    rw [Finset.sum_ite_eq Finset.univ j' (fun j => v j)]
-    simp
-  conv_lhs => rw [hv_decomp]
-  rw [map_sum]
-  rw [Finset.sum_apply]
-  congr 1
-  funext j
-  rw [(fderiv ℝ g (f x)).map_smul]
-  show v j * fderiv ℝ g (f x) (basisVec j) k = _
-  rfl
+  rw [pdiv, fderiv_comp x hg hf, ContinuousLinearMap.comp_apply, ← ContinuousLinearMap.coe_coe,
+    LinearMap.pi_apply_eq_sum_univ, Finset.sum_apply]
+  exact Finset.sum_congr rfl fun j _ =>
+    congrArg (fderiv ℝ f x (basisVec i) j * fderiv ℝ g (f x) · k)
+      (funext fun _ => if_congr eq_comm rfl rfl)
 
 /-- **Scalar multiple rule** for `pdiv` — `pdiv_mul` at a constant factor. -/
 theorem pdiv_const_smul {m n : Nat} (c : ℝ) (f : Vec m → Vec n) (x : Vec m)
@@ -243,39 +216,18 @@ theorem pdiv_coordFun {K : Nat} (f : ℝ → ℝ) (f' : ℝ) (k : Fin K) (z : Ve
   rw [pdiv, h.fderiv]
   simp [@eq_comm _ k j]
 
-/-- **Finset-sum rule** — derived from `pdiv_add` and `pdiv_const` by
-    induction on the Finset. Linearity of the derivative extended to
-    arbitrary finite sums. Requires each `f s` to be differentiable
-    at `x`. -/
+/-- **Finset-sum rule** — linearity of the derivative extended to
+    arbitrary finite sums (`fderiv_fun_sum`). Requires each `f s` to be
+    differentiable at `x`. -/
 theorem pdiv_finset_sum {m n : Nat} {α : Type*} [DecidableEq α]
     (S : Finset α) (f : α → Vec m → Vec n) (x : Vec m)
     (hdiff : ∀ s ∈ S, DifferentiableAt ℝ (f s) x)
     (i : Fin m) (j : Fin n) :
     pdiv (fun y k => ∑ s ∈ S, f s y k) x i j =
     ∑ s ∈ S, pdiv (f s) x i j := by
-  induction S using Finset.induction_on with
-  | empty =>
-    simp only [Finset.sum_empty]
-    exact pdiv_const (fun _ : Fin n => (0 : ℝ)) x i j
-  | @insert a T ha ih =>
-    have hdiff_a : DifferentiableAt ℝ (f a) x :=
-      hdiff a (Finset.mem_insert_self a T)
-    have hdiff_T : ∀ s ∈ T, DifferentiableAt ℝ (f s) x := fun s hs =>
-      hdiff s (Finset.mem_insert_of_mem hs)
-    have hdiff_sumT :
-        DifferentiableAt ℝ (fun y : Vec m => fun k : Fin n => ∑ s ∈ T, f s y k) x := by
-      have heq_curry : (fun y : Vec m => fun k : Fin n => ∑ s ∈ T, f s y k)
-                     = (fun y : Vec m => ∑ s ∈ T, f s y) := by
-        funext y k; rw [Finset.sum_apply]
-      rw [heq_curry]
-      exact DifferentiableAt.fun_sum (fun s hs => hdiff_T s hs)
-    have heq :
-        (fun (y : Vec m) (k : Fin n) => ∑ s ∈ insert a T, f s y k) =
-        (fun y k => f a y k + (fun y' k' => ∑ s ∈ T, f s y' k') y k) := by
-      funext y k
-      rw [Finset.sum_insert ha]
-    rw [heq, pdiv_add _ _ _ hdiff_a hdiff_sumT, ih hdiff_T,
-        Finset.sum_insert ha]
+  rw [pdiv, show (fun y k => ∑ s ∈ S, f s y k) = fun y => ∑ s ∈ S, f s y from by
+    funext y k; simp [Finset.sum_apply], fderiv_fun_sum hdiff]
+  simp [pdiv, Finset.sum_apply]
 
 /-- **Linear rule** — the Jacobian of a continuous linear map is the map itself read on the
     basis vector: `fderiv ℝ L x = L` at every `x` (`ContinuousLinearMap.fderiv`). -/
@@ -313,23 +265,26 @@ structure HasVJP {m n : Nat} (f : Vec m → Vec n) where
   correct : ∀ (x : Vec m) (dy : Vec n) (i : Fin m),
     backward x dy i = ∑ j : Fin n, pdiv f x i j * dy j
 
-/-- **Chain rule for VJPs** — proved, no sorry. Requires `f` and `g`
-    to be differentiable everywhere. -/
-noncomputable def vjp_comp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
-    (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
-    (hf : HasVJP f) (hg : HasVJP g) :
-    HasVJP (g ∘ f) where
-  backward := fun x dy => hf.backward x (hg.backward (f x) dy)
-  correct := by
-    intro x dy i
-    rw [hf.correct]
-    simp_rw [hg.correct]
-    simp_rw [Finset.mul_sum]
-    rw [Finset.sum_comm]
-    congr 1; ext k
-    rw [pdiv_comp _ _ _ (hf_diff x) (hg_diff (f x))]
-    simp_rw [← mul_assoc]
-    rw [← Finset.sum_mul]
+/-- **The canonical witness** — the backward IS the `pdiv` contraction, so `correct` is `rfl`.
+    Exists for every `f`; a hand-written backward is tied to it by `HasVJP.backward_unique`. -/
+noncomputable def HasVJP.canonical {m n : Nat} (f : Vec m → Vec n) : HasVJP f where
+  backward x dy i := ∑ j : Fin n, pdiv f x i j * dy j
+  correct _ _ _ := rfl
+
+/-- **Two VJP witnesses for EQUAL maps have the same backward.** Both `.correct` to the same
+    `∑ pdiv f x i j * dy j`. Going through `.correct` rather than `hfg ▸ ·` avoids an
+    `Eq.mpr`-blocked `backward` when the witnesses have different types (a respelling of `f`). -/
+theorem HasVJP.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} (hfg : f = g)
+    (h₁ : HasVJP f) (h₂ : HasVJP g) (x : Vec m) (dy : Vec n) :
+    h₁.backward x dy = h₂.backward x dy := by
+  subst hfg; funext i; rw [h₁.correct, h₂.correct]
+
+/-- **Any two VJP witnesses for the same map have the same backward** — the backward is a
+    property of `f`, not of how the witness was assembled. Lets a hand-written chain be tied to a
+    tactic-built witness without unfolding it. -/
+theorem HasVJP.backward_unique {m n : Nat} {f : Vec m → Vec n} (h₁ h₂ : HasVJP f)
+    (x : Vec m) (dy : Vec n) : h₁.backward x dy = h₂.backward x dy :=
+  HasVJP.backward_unique_of_eq rfl h₁ h₂ x dy
 
 /-- **Additive fan-in** — proved, no sorry. Requires `f` and `g` to be
     differentiable everywhere. -/
@@ -398,6 +353,19 @@ structure HasVJPAt {m n : Nat} (f : Vec m → Vec n) (x : Vec m) where
   correct : ∀ (dy : Vec n) (i : Fin m),
     backward dy i = ∑ j : Fin n, pdiv f x i j * dy j
 
+/-- Two `HasVJPAt` witnesses for EQUAL maps at one point have the same backward — the pointwise
+    peer of `HasVJP.backward_unique_of_eq`, through `.correct` rather than a transport. -/
+theorem HasVJPAt.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} {x : Vec m}
+    (hfg : f = g) (h₁ : HasVJPAt f x) (h₂ : HasVJPAt g x) (dy : Vec n) :
+    h₁.backward dy = h₂.backward dy := by
+  subst hfg; funext i; rw [h₁.correct, h₂.correct]
+
+/-- **Any two `HasVJPAt` witnesses for the same map at the same point have the same backward** —
+    `HasVJP.backward_unique`'s pointwise peer. -/
+theorem HasVJPAt.backward_unique {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
+    (h₁ h₂ : HasVJPAt f x) (dy : Vec n) : h₁.backward dy = h₂.backward dy :=
+  HasVJPAt.backward_unique_of_eq rfl h₁ h₂ dy
+
 /-- Trivial lift: a global `HasVJP` gives a `HasVJPAt` at any point. -/
 def HasVJP.toHasVJPAt {m n : Nat} {f : Vec m → Vec n}
     (hf : HasVJP f) (x : Vec m) : HasVJPAt f x where
@@ -431,6 +399,16 @@ noncomputable def vjp_comp_at {m n p : Nat}
     simp_rw [← mul_assoc]
     rw [← Finset.sum_mul]
 
+/-- **Chain rule for VJPs** — `vjp_comp_at` at every point. Requires `f` and `g`
+    to be differentiable everywhere. -/
+noncomputable def vjp_comp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+    (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
+    (hf : HasVJP f) (hg : HasVJP g) :
+    HasVJP (g ∘ f) where
+  backward := fun x dy => hf.backward x (hg.backward (f x) dy)
+  correct x :=
+    (vjp_comp_at f g x (hf_diff x) (hg_diff (f x)) (hf.toHasVJPAt x) (hg.toHasVJPAt (f x))).correct
+
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix ↔ Vector flattening (row-major)
 -- ════════════════════════════════════════════════════════════════
@@ -442,6 +420,15 @@ sum, and identity rules as theorems. The 5 local Jacobian theorems
 (matmul, scalarScale, transpose, rowIndep) are likewise derived from
 foundation rules — they state genuine calculus facts about specific
 operations, not structural framework. -/
+
+/-- **Row-major reindexing of a flat sum** — a sum over `Fin (m * n)` is the double sum over
+    `(i, j)` read through `finProdFinEquiv`. Mathlib has the `Fin m × Fin n` form
+    (`Fintype.sum_prod_type`) but no `Fin (m * n)` one; every flatten/unflatten sum in the suite
+    reduces to this split. -/
+theorem sum_finProdFinEquiv {M : Type*} [AddCommMonoid M] {m n : Nat}
+    (f : Fin (m * n) → M) :
+    ∑ k, f k = ∑ i : Fin m, ∑ j : Fin n, f (finProdFinEquiv (i, j)) := by
+  rw [← Equiv.sum_comp finProdFinEquiv f, Fintype.sum_prod_type]
 
 namespace Mat
 
@@ -457,16 +444,12 @@ noncomputable def unflatten {m n : Nat} (v : Vec (m * n)) : Mat m n :=
 /-- Unflatten is a left inverse of flatten. -/
 theorem unflatten_flatten {m n : Nat} (A : Mat m n) :
     unflatten (flatten A) = A := by
-  funext i j
-  unfold unflatten flatten
-  simp [Equiv.symm_apply_apply]
+  funext i j; simp [unflatten, flatten]
 
 /-- Flatten is a left inverse of unflatten. -/
 theorem flatten_unflatten {m n : Nat} (v : Vec (m * n)) :
     flatten (unflatten v) = v := by
-  funext k
-  change v (finProdFinEquiv (finProdFinEquiv.symm k)) = v k
-  rw [Equiv.apply_symm_apply]
+  funext k; exact congrArg v (finProdFinEquiv.apply_symm_apply k)
 
 end Mat
 
@@ -512,22 +495,7 @@ theorem pdivMat_comp {a b c d e f : Nat}
     rw [h_mid]; exact hG_diff
   rw [h_compose, pdiv_comp _ _ _ hF_diff hG_diff']
   simp_rw [h_mid]
-  -- Step 3: convert the single sum over Fin (c*d) to a double sum over Fin c × Fin d.
-  rw [Fintype.sum_equiv finProdFinEquiv.symm
-      (fun r =>
-        pdiv (fun v => Mat.flatten (F (Mat.unflatten v))) (Mat.flatten A)
-          (finProdFinEquiv (i, j)) r *
-        pdiv (fun u => Mat.flatten (G (Mat.unflatten u))) (Mat.flatten (F A))
-          r (finProdFinEquiv (k, l)))
-      (fun pq =>
-        pdiv (fun v => Mat.flatten (F (Mat.unflatten v))) (Mat.flatten A)
-          (finProdFinEquiv (i, j)) (finProdFinEquiv pq) *
-        pdiv (fun u => Mat.flatten (G (Mat.unflatten u))) (Mat.flatten (F A))
-          (finProdFinEquiv pq) (finProdFinEquiv (k, l)))
-      (fun r => by
-        show _ = _ * _
-        rw [Equiv.apply_symm_apply])]
-  rw [Fintype.sum_prod_type]
+  rw [sum_finProdFinEquiv]
 
 /-- **Sum rule for `pdivMat`** — theorem, via `pdiv_add`. Requires both
     flattened summands to be differentiable at `flatten A`. -/
@@ -555,23 +523,7 @@ theorem pdivMat_id {a b : Nat} (A : Mat a b)
     (i : Fin a) (j : Fin b) (k : Fin a) (l : Fin b) :
     pdivMat (fun M : Mat a b => M) A i j k l =
     if i = k ∧ j = l then 1 else 0 := by
-  unfold pdivMat
-  -- flatten ∘ id ∘ unflatten = id (on Vec (a*b))
-  have h_id : (fun v : Vec (a * b) => Mat.flatten (Mat.unflatten v)) =
-              (fun v : Vec (a * b) => v) := by
-    funext v; exact Mat.flatten_unflatten v
-  rw [h_id, pdiv_id]
-  -- Now: (if finProdFinEquiv (i,j) = finProdFinEquiv (k,l) then 1 else 0)
-  --    = if i = k ∧ j = l then 1 else 0
-  by_cases h : i = k ∧ j = l
-  · obtain ⟨hik, hjl⟩ := h
-    subst hik; subst hjl
-    simp
-  · rw [ite_eq_right h, ite_eq_right]
-    intro heq
-    apply h
-    have := finProdFinEquiv.injective heq
-    exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
+  simp [pdivMat, Mat.flatten_unflatten, pdiv_id]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix VJP Framework
@@ -585,6 +537,20 @@ structure HasVJPMat {a b c d : Nat} (f : Mat a b → Mat c d) where
   correct : ∀ (A : Mat a b) (dY : Mat c d) (i : Fin a) (j : Fin b),
     backward A dY i j = ∑ k : Fin c, ∑ l : Fin d,
       pdivMat f A i j k l * dY k l
+
+/-- Two `HasVJPMat` witnesses for EQUAL maps have the same backward — the matrix peer of
+    `HasVJP.backward_unique_of_eq`, through `.correct` rather than a transport. -/
+theorem HasVJPMat.backward_unique_of_eq {a b c d : Nat} {f g : Mat a b → Mat c d}
+    (hfg : f = g) (v : HasVJPMat f) (v' : HasVJPMat g) (A : Mat a b) (dY : Mat c d) :
+    v.backward A dY = v'.backward A dY := by
+  subst hfg; funext i j; rw [v.correct, v'.correct]
+
+/-- **Any two `HasVJPMat` witnesses for the same map have the same backward** —
+    `HasVJP.backward_unique`'s matrix peer. -/
+theorem HasVJPMat.backward_unique {a b c d : Nat} {f : Mat a b → Mat c d}
+    (v v' : HasVJPMat f) (A : Mat a b) (dY : Mat c d) :
+    v.backward A dY = v'.backward A dY :=
+  HasVJPMat.backward_unique_of_eq rfl v v' A dY
 
 /-- **Chain rule for matrix VJPs** — proved, no sorry.
     Direct transcription of `vjp_comp` to rank-2 indices. -/
@@ -657,19 +623,8 @@ noncomputable def identityMat_has_vjp (a b : Nat) :
   backward := fun _A dY => dY
   correct := by
     intro A dY i j
-    -- ∑ k ∑ l, (if i=k ∧ j=l then 1 else 0) * dY k l = dY i j
     simp_rw [pdivMat_id]
-    -- Collapse the two-dimensional Kronecker sum to dY i j.
-    have : ∀ (k : Fin a) (l : Fin b),
-        (if i = k ∧ j = l then (1 : ℝ) else 0) * dY k l =
-        (if i = k then (if j = l then dY k l else 0) else 0) := by
-      intro k l
-      by_cases hik : i = k <;> by_cases hjl : j = l <;> simp [hik, hjl]
-    simp_rw [this]
-    rw [Finset.sum_eq_single i (by intro k _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [ite_true]
-    rw [Finset.sum_eq_single j (by intro l _ hne; simp [Ne.symm hne]) (by simp)]
-    simp
+    simp [ite_and]
 
 /-- **Bridge: `HasVJPMat` → `HasVJP` via the `Mat.flatten` bijection.**
 
@@ -691,38 +646,10 @@ noncomputable def hasVJPMat_to_hasVJP {a b c d : Nat} {f : Mat a b → Mat c d}
     hf.backward (Mat.unflatten v) (Mat.unflatten dy) ij.1 ij.2
   correct := by
     intro v dy idx
-    set ij := finProdFinEquiv.symm idx with hij
-    show hf.backward (Mat.unflatten v) (Mat.unflatten dy) ij.1 ij.2 = _
-    rw [hf.correct]
-    unfold pdivMat
-    simp only [Mat.flatten_unflatten]
-    have hidx : finProdFinEquiv (ij.1, ij.2) = idx := by
-      show finProdFinEquiv ij = idx
-      rw [hij]; exact Equiv.apply_symm_apply _ _
-    simp_rw [hidx]
-    -- Goal: ∑ k ∑ l, pdiv F v idx (fPF (k,l)) * Mat.unflatten dy k l = ∑ j', pdiv F v idx j' * dy j'
-    -- Step-by-step conversion using `calc`:
-    -- Σ k Σ l, ... = Σ p : Fin c × Fin d, ... = Σ j' : Fin (c*d), ...
-    set F : Vec (a * b) → Vec (c * d) :=
-      fun w => Mat.flatten (f (Mat.unflatten w)) with hF
-    calc (∑ k : Fin c, ∑ l : Fin d,
-              pdiv F v idx (finProdFinEquiv (k, l)) *
-              Mat.unflatten dy k l)
-        = ∑ p : Fin c × Fin d,
-              pdiv F v idx (finProdFinEquiv p) *
-              Mat.unflatten dy p.1 p.2 := by
-          rw [Fintype.sum_prod_type]
-      _ = ∑ p : Fin c × Fin d,
-              pdiv F v idx (finProdFinEquiv p) *
-              dy (finProdFinEquiv p) := by
-          apply Finset.sum_congr rfl
-          intro p _; rfl
-      _ = ∑ j' : Fin (c * d), pdiv F v idx j' * dy j' := by
-          exact Fintype.sum_equiv finProdFinEquiv
-            (fun p : Fin c × Fin d =>
-              pdiv F v idx (finProdFinEquiv p) * dy (finProdFinEquiv p))
-            (fun j' : Fin (c * d) => pdiv F v idx j' * dy j')
-            (fun _ => rfl)
+    obtain ⟨⟨r, s⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    simp only [Equiv.symm_apply_apply, hf.correct, pdivMat, Mat.flatten_unflatten,
+      sum_finProdFinEquiv]
+    rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix VJP Building Blocks (matmul, row-independent functions)
@@ -767,10 +694,42 @@ theorem pdivMat_matmul_right_const {m p q : Nat} (A : Mat m p) (D : Mat p q)
     (fun _ _ => by funext; simp [Mat.flatten, Mat.mul, Mat.unflatten, Finset.mul_sum, mul_assoc])]
   by_cases h : i = k <;> simp [Mat.flatten, Mat.mul, Mat.unflatten, h, Prod.ext_iff, eq_comm]
 
+/-- **Block-diagonal Jacobian of a per-row family, at a point.** Applying `g r` to each row `r`
+    keeps the matrix Jacobian block-diagonal across rows: the `(i, j, k, l)` entry is
+    `pdiv (g k) (A k) j l` when `i = k` and `0` otherwise. Each `g r` need only be differentiable
+    at its own row `A r`: the flat map's coordinate `(r, l)` is `g r`'s coordinate `l` after the
+    row projection, and `hasFDerivAt_pi` assembles the rows' derivatives. -/
+theorem pdivMat_rowIndep_perRow_at {m n p : Nat} (g : Fin m → (Vec n → Vec p)) (A : Mat m n)
+    (h_g_diff : ∀ r, DifferentiableAt ℝ (g r) (A r))
+    (i : Fin m) (j : Fin n) (k : Fin m) (l : Fin p) :
+    pdivMat (fun M : Mat m n => fun r => g r (M r)) A i j k l =
+    if i = k then pdiv (g k) (A k) j l else 0 := by
+  let row : Fin m → (Vec (m * n) →L[ℝ] Vec n) := fun r =>
+    reindexCLM fun j' => finProdFinEquiv (r, j')
+  have hrow : ∀ r, row r (Mat.flatten A) = A r := fun r => by funext; simp [row, Mat.flatten]
+  have h : HasFDerivAt (fun v : Vec (m * n) => Mat.flatten (fun r => g r (Mat.unflatten v r)))
+      (ContinuousLinearMap.pi fun idx => (ContinuousLinearMap.proj (finProdFinEquiv.symm idx).2 :
+        Vec p →L[ℝ] ℝ).comp ((fderiv ℝ (g (finProdFinEquiv.symm idx).1)
+          (A (finProdFinEquiv.symm idx).1)).comp (row (finProdFinEquiv.symm idx).1)))
+      (Mat.flatten A) :=
+    hasFDerivAt_pi.2 fun idx => by
+      have := (h_g_diff (finProdFinEquiv.symm idx).1).hasFDerivAt
+      rw [← hrow] at this ⊢
+      exact hasFDerivAt_pi'.1 (this.comp _ (row _).hasFDerivAt) _
+  have hb : row k (basisVec (finProdFinEquiv (i, j))) = if i = k then basisVec j else 0 := by
+    funext j'; rcases eq_or_ne i k with rfl | hik
+    · simp [row, @eq_comm _ j' j]
+    · simp [row, hik, hik.symm]
+  rw [pdivMat, pdiv, h.fderiv]
+  simp only [ContinuousLinearMap.pi_apply, ContinuousLinearMap.comp_apply,
+    ContinuousLinearMap.proj_apply, Equiv.symm_apply_apply, hb]
+  split_ifs <;> simp [pdiv]
+
 /-- **Row-wise Jacobian decomposition** — proved (planning/archive/VJP.md follow-up D).
 
     For a row-independent function `M ↦ (r ↦ g (M r))`, the (i,j,k,l)
-    Jacobian entry is `pdiv g (A i) j l` when `i = k` and `0` otherwise.
+    Jacobian entry is `pdiv g (A i) j l` when `i = k` and `0` otherwise:
+    `pdivMat_rowIndep_perRow_at` with one `g` for every row.
 
     Requires `Differentiable ℝ g`: without it, the flattened Pi-valued
     function may be non-differentiable at `Mat.flatten A` (per
@@ -781,88 +740,8 @@ theorem pdivMat_rowIndep {m n p : Nat} (g : Vec n → Vec p)
     (A : Mat m n) (i : Fin m) (j : Fin n) (k : Fin m) (l : Fin p) :
     pdivMat (fun M : Mat m n => fun r => g (M r)) A i j k l =
     if i = k then pdiv g (A i) j l else 0 := by
-  unfold pdivMat pdiv
-  set F : Vec (m * n) → Vec (m * p) :=
-    fun v => Mat.flatten ((fun M : Mat m n => fun r => g (M r)) (Mat.unflatten v))
-    with hF
-  set rowProj : Fin m → (Vec (m * n) →L[ℝ] Vec n) := fun k' =>
-    reindexCLM (fun j' : Fin n => finProdFinEquiv (k', j'))
-  -- Coord decomposition: F's (k', l') coord equals (g · l') ∘ rowProj k'.
-  have h_coord : ∀ (k' : Fin m) (l' : Fin p),
-      (fun v : Vec (m * n) => F v (finProdFinEquiv (k', l'))) =
-      (fun w : Vec n => g w l') ∘ (rowProj k') := by
-    intro k' l'
-    funext v
-    show Mat.flatten ((fun M : Mat m n => fun r => g (M r)) (Mat.unflatten v))
-        (finProdFinEquiv (k', l')) = g ((rowProj k') v) l'
-    unfold Mat.flatten
-    simp only [Equiv.symm_apply_apply]
-    show g (Mat.unflatten v k') l' = g ((rowProj k') v) l'
-    rfl
-  have h_g_l : ∀ (l' : Fin p) (w : Vec n),
-      DifferentiableAt ℝ (fun w => g w l') w :=
-    fun l' w => differentiableAt_pi.mp (h_g_diff w) l'
-  have h_coord_diff : ∀ (k' : Fin m) (l' : Fin p) (v : Vec (m * n)),
-      DifferentiableAt ℝ (fun v' : Vec (m * n) => F v' (finProdFinEquiv (k', l'))) v := by
-    intro k' l' v
-    rw [h_coord k' l']
-    exact (h_g_l l' _).comp v (rowProj k').differentiableAt
-  have h_F_diff : DifferentiableAt ℝ F (Mat.flatten A) := by
-    rw [(differentiableAt_pi : DifferentiableAt ℝ F (Mat.flatten A) ↔ _)]
-    intro idx
-    have h_idx : finProdFinEquiv (finProdFinEquiv.symm idx) = idx :=
-      Equiv.apply_symm_apply _ _
-    have h_idx' : idx = finProdFinEquiv
-        ((finProdFinEquiv.symm idx).1, (finProdFinEquiv.symm idx).2) := by
-      conv_lhs => rw [← h_idx]
-    rw [h_idx']
-    exact h_coord_diff _ _ (Mat.flatten A)
-  -- Convert coord (fPF (k,l)) of fderiv F to fderiv of the (k,l)-coord function.
-  have h_swap :
-      fderiv ℝ F (Mat.flatten A) (basisVec (finProdFinEquiv (i, j))) (finProdFinEquiv (k, l)) =
-      fderiv ℝ (fun v : Vec (m * n) => F v (finProdFinEquiv (k, l))) (Mat.flatten A)
-        (basisVec (finProdFinEquiv (i, j))) := by
-    rw [fderiv_apply h_F_diff (finProdFinEquiv (k, l))]
-    rfl
-  rw [h_swap]
-  rw [h_coord k l]
-  rw [fderiv_comp _ (h_g_l l _) (rowProj k).differentiableAt]
-  rw [(rowProj k).fderiv]
-  have h_row_A : (rowProj k) (Mat.flatten A) = A k := by
-    funext j'
-    show Mat.flatten A (finProdFinEquiv (k, j')) = A k j'
-    show A (finProdFinEquiv.symm (finProdFinEquiv (k, j'))).1
-            (finProdFinEquiv.symm (finProdFinEquiv (k, j'))).2 = A k j'
-    simp
-  rw [h_row_A]
-  rw [fderiv_apply (h_g_diff _) l]
-  -- Evaluate the comp chain so the inner rowProj is exposed.
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  by_cases hik : i = k
-  · subst hik
-    rw [ite_eq_left rfl]
-    have h_basis : (rowProj i) (basisVec (finProdFinEquiv (i, j))) = basisVec j := by
-      funext j'
-      show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (i, j')) = basisVec j j'
-      simp only [basisVec_apply]
-      by_cases hjj : j' = j
-      · subst hjj; simp
-      · rw [ite_eq_right hjj, ite_eq_right ?_]
-        intro heq
-        apply hjj
-        exact (Prod.mk.inj (finProdFinEquiv.injective heq.symm)).2.symm
-    rw [h_basis]
-  · rw [ite_eq_right hik]
-    have h_basis : (rowProj k) (basisVec (finProdFinEquiv (i, j))) = (0 : Vec n) := by
-      funext j'
-      show basisVec (finProdFinEquiv (i, j)) (finProdFinEquiv (k, j')) = (0 : ℝ)
-      simp only [basisVec_apply]
-      rw [ite_eq_right]
-      intro heq
-      apply hik
-      exact (Prod.mk.inj (finProdFinEquiv.injective heq)).1.symm
-    rw [h_basis]
-    simp
+  rw [pdivMat_rowIndep_perRow_at (fun _ => g) A (fun _ => h_g_diff.differentiableAt)]
+  split_ifs with h <;> simp [h]
 
 /-- **Row-wise lifting of a `HasVJP`** (Phase 8, Tensor-level).
 
@@ -878,21 +757,8 @@ noncomputable def rowwise_has_vjp_mat {m n p : Nat} {g : Vec n → Vec p}
   backward := fun A dY => fun r c => hg.backward (A r) (dY r) c
   correct := by
     intro A dY i j
-    -- Replace pdivMat of the row-independent fn with its row/vector form.
     simp_rw [pdivMat_rowIndep g hg_diff]
-    -- Push the *dY through the if-else, then pull the if-else out of the inner sum.
-    have h : ∀ k : Fin m,
-        (∑ l : Fin p, (if i = k then pdiv g (A i) j l else 0) * dY k l) =
-        if i = k then ∑ l : Fin p, pdiv g (A i) j l * dY k l else 0 := by
-      intro k
-      by_cases hik : i = k
-      · simp [hik]
-      · simp [hik]
-    simp_rw [h]
-    rw [Finset.sum_ite_eq Finset.univ i
-        (fun k => ∑ l : Fin p, pdiv g (A i) j l * dY k l)]
-    simp only [Finset.mem_univ, ite_true]
-    exact hg.correct (A i) (dY i) j
+    simp [hg.correct]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Column-slab independence (vmap over a column-axis partition)
@@ -938,140 +804,44 @@ theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_
     (if h_j = h_l then
       pdivMat g (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) i j' k j''
      else 0) := by
-  unfold pdivMat pdiv
-  -- Slab-projection CLM: extracts head h's d_in columns as a flattened Vec.
-  set slabProj : Fin heads → (Vec (n * (heads * d_in)) →L[ℝ] Vec (n * d_in)) := fun h' =>
-    reindexCLM (fun idx : Fin (n * d_in) =>
-      finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                       finProdFinEquiv (h', (finProdFinEquiv.symm idx).2)))
-    with hSlabProj_def
-  -- Coord `(k', encode(h_l', j_out))` of the flat function factors as
-  -- `(g-coord-fn) ∘ slabProj h_l'`.
-  have h_coord : ∀ (k' : Fin n) (h_l' : Fin heads) (j_out : Fin d_out),
-      (fun v : Vec (n * (heads * d_in)) =>
-         Mat.flatten (colSlabApply g (Mat.unflatten v))
-           (finProdFinEquiv (k', finProdFinEquiv (h_l', j_out)))) =
-      (fun w : Vec (n * d_in) =>
-         Mat.flatten (g (Mat.unflatten w)) (finProdFinEquiv (k', j_out))) ∘ (slabProj h_l') := by
-    intro k' h_l' j_out
-    funext v
-    show Mat.flatten (colSlabApply g (Mat.unflatten v))
-            (finProdFinEquiv (k', finProdFinEquiv (h_l', j_out))) =
-         Mat.flatten (g (Mat.unflatten ((slabProj h_l') v))) (finProdFinEquiv (k', j_out))
-    unfold Mat.flatten colSlabApply
-    simp only [Equiv.symm_apply_apply]
-    show g (fun r' j_in => Mat.unflatten v r' (finProdFinEquiv (h_l', j_in))) k' j_out =
-         g (Mat.unflatten ((slabProj h_l') v)) k' j_out
-    congr 1
-    funext r' j_in
-    show Mat.unflatten v r' (finProdFinEquiv (h_l', j_in)) =
-         Mat.unflatten ((slabProj h_l') v) r' j_in
-    unfold Mat.unflatten
-    show v (finProdFinEquiv (r', finProdFinEquiv (h_l', j_in))) =
-         (slabProj h_l') v (finProdFinEquiv (r', j_in))
-    show _ = v (finProdFinEquiv
-              ((finProdFinEquiv.symm (finProdFinEquiv (r', j_in))).1,
-               finProdFinEquiv (h_l', (finProdFinEquiv.symm (finProdFinEquiv (r', j_in))).2)))
-    rw [Equiv.symm_apply_apply]
-  -- Differentiability of each scalar coord function.
-  have h_g_coord_diff : ∀ (k' : Fin n) (j_out : Fin d_out) (w : Vec (n * d_in)),
-      DifferentiableAt ℝ
-        (fun w : Vec (n * d_in) =>
-          Mat.flatten (g (Mat.unflatten w)) (finProdFinEquiv (k', j_out))) w :=
-    fun k' j_out w => differentiableAt_pi.mp (h_g_diff w) _
-  have h_F_coord_diff : ∀ (k' : Fin n) (h_l' : Fin heads) (j_out : Fin d_out)
-      (v : Vec (n * (heads * d_in))),
-      DifferentiableAt ℝ
-        (fun v' : Vec (n * (heads * d_in)) =>
-          Mat.flatten (colSlabApply g (Mat.unflatten v'))
-            (finProdFinEquiv (k', finProdFinEquiv (h_l', j_out)))) v := by
-    intro k' h_l' j_out v
-    rw [h_coord k' h_l' j_out]
-    exact (h_g_coord_diff k' j_out _).comp v (slabProj h_l').differentiableAt
-  -- Full flat function is differentiable: every Pi-coord is.
-  have h_F_diff : DifferentiableAt ℝ
-      (fun v : Vec (n * (heads * d_in)) =>
-        Mat.flatten (colSlabApply g (Mat.unflatten v))) (Mat.flatten A) := by
-    rw [(differentiableAt_pi : DifferentiableAt ℝ _ _ ↔ _)]
-    intro idx
-    have h_eq1 : idx = finProdFinEquiv (finProdFinEquiv.symm idx) :=
-      (Equiv.apply_symm_apply _ _).symm
-    set p := finProdFinEquiv.symm idx with hp
-    have h_eq2 : p.2 = finProdFinEquiv (finProdFinEquiv.symm p.2) :=
-      (Equiv.apply_symm_apply _ _).symm
-    rw [h_eq1]
-    show DifferentiableAt ℝ
-      (fun v' => Mat.flatten (colSlabApply g (Mat.unflatten v'))
-        (finProdFinEquiv (p.1, p.2))) (Mat.flatten A)
-    rw [h_eq2]
-    exact h_F_coord_diff _ _ _ _
-  -- fderiv of the (k, encode(h_l, j'')) coord = fderiv of g-coord ∘ slabProj h_l.
-  rw [show fderiv ℝ (fun v : Vec (n * (heads * d_in)) =>
-              Mat.flatten (colSlabApply g (Mat.unflatten v))) (Mat.flatten A)
-            (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j'))))
-            (finProdFinEquiv (k, finProdFinEquiv (h_l, j''))) =
-          fderiv ℝ (fun v : Vec (n * (heads * d_in)) =>
-              Mat.flatten (colSlabApply g (Mat.unflatten v))
-                (finProdFinEquiv (k, finProdFinEquiv (h_l, j'')))) (Mat.flatten A)
-            (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) from by
-    rw [fderiv_apply h_F_diff (finProdFinEquiv (k, finProdFinEquiv (h_l, j'')))]
-    rfl]
-  rw [h_coord k h_l j'']
-  rw [fderiv_comp _ (h_g_coord_diff k j'' _) (slabProj h_l).differentiableAt]
-  rw [(slabProj h_l).fderiv]
-  -- slabProj h_l (Mat.flatten A) = Mat.flatten (slab-fn at h_l of A).
-  have h_slab_A : (slabProj h_l) (Mat.flatten A) =
+  -- `slab h` reads head `h`'s columns out of the flat input; output coordinate `(r, (h, c))` is
+  -- `g`'s flat coordinate `(r, c)` read after `slab h`, whose derivative is `D r h c`.
+  let slab : Fin heads → (Vec (n * (heads * d_in)) →L[ℝ] Vec (n * d_in)) := fun h =>
+    reindexCLM fun idx => finProdFinEquiv ((finProdFinEquiv.symm idx).1,
+      finProdFinEquiv (h, (finProdFinEquiv.symm idx).2))
+  let G := fun w : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten w))
+  let D : Fin n → Fin heads → Fin d_out → (Vec (n * (heads * d_in)) →L[ℝ] ℝ) := fun r h c =>
+    (ContinuousLinearMap.proj (finProdFinEquiv (r, c)) : Vec (n * d_out) →L[ℝ] ℝ).comp
+      ((fderiv ℝ G (slab h (Mat.flatten A))).comp (slab h))
+  have hF : HasFDerivAt (fun v => Mat.flatten (colSlabApply g (Mat.unflatten v)))
+      (ContinuousLinearMap.pi fun idx => D (finProdFinEquiv.symm idx).1
+        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1
+        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2) (Mat.flatten A) :=
+    hasFDerivAt_pi.2 fun idx => by
+      obtain ⟨⟨r, hc⟩, rfl⟩ := finProdFinEquiv.surjective idx
+      obtain ⟨⟨h, c⟩, rfl⟩ := finProdFinEquiv.surjective hc
+      rw [show (fun v : Vec (n * (heads * d_in)) => Mat.flatten (colSlabApply g (Mat.unflatten v))
+          (finProdFinEquiv (r, finProdFinEquiv (h, c)))) = fun v => G (slab h v)
+          (finProdFinEquiv (r, c)) by
+        funext v; simp only [G, slab, reindexCLM_apply]
+        unfold Mat.flatten Mat.unflatten colSlabApply; simp only [Equiv.symm_apply_apply]]
+      simp only [Equiv.symm_apply_apply]
+      exact hasFDerivAt_pi'.1 ((h_g_diff _).hasFDerivAt.comp _ (slab h).hasFDerivAt) _
+  have hslab : slab h_l (Mat.flatten A) =
       Mat.flatten (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) := by
-    funext idx
-    show Mat.flatten A
-          (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                           finProdFinEquiv (h_l, (finProdFinEquiv.symm idx).2))) = _
-    unfold Mat.flatten
-    simp only [Equiv.symm_apply_apply]
-  rw [h_slab_A]
-  rw [fderiv_apply (h_g_diff _) (finProdFinEquiv (k, j''))]
-  simp only [ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply]
-  -- Compute (slabProj h_l) (basisVec (encode(i, encode(h_j, j')))) — one of two cases.
-  by_cases hhh : h_j = h_l
-  · subst hhh
-    rw [ite_eq_left rfl]
-    have h_basis : (slabProj h_j) (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) =
-                   (basisVec (finProdFinEquiv (i, j')) : Vec (n * d_in)) := by
-      funext idx
-      show basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))
-            (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                             finProdFinEquiv (h_j, (finProdFinEquiv.symm idx).2))) =
-           basisVec (finProdFinEquiv (i, j')) idx
-      simp only [basisVec_apply]
-      by_cases hii : idx = finProdFinEquiv (i, j')
-      · subst hii
-        simp [Equiv.symm_apply_apply]
-      · rw [ite_eq_right hii, ite_eq_right]
-        intro heq
-        apply hii
-        have step1 := finProdFinEquiv.injective heq
-        have h_inner := finProdFinEquiv.injective (Prod.mk.inj step1).2
-        rw [show idx = finProdFinEquiv (finProdFinEquiv.symm idx) from
-              (Equiv.apply_symm_apply _ _).symm]
-        exact congrArg finProdFinEquiv (Prod.ext (Prod.mk.inj step1).1 (Prod.mk.inj h_inner).2)
-    rw [h_basis]
-  · rw [ite_eq_right hhh]
-    have h_basis : (slabProj h_l) (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) =
-                   (0 : Vec (n * d_in)) := by
-      funext idx
-      show basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))
-            (finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                             finProdFinEquiv (h_l, (finProdFinEquiv.symm idx).2))) =
-           (0 : ℝ)
-      simp only [basisVec_apply]
-      rw [ite_eq_right]
-      intro heq
-      apply hhh
-      have step1 := finProdFinEquiv.injective heq
-      have h_inner := finProdFinEquiv.injective (Prod.mk.inj step1).2
-      exact ((Prod.mk.inj h_inner).1).symm
-    rw [h_basis]
-    simp
+    funext; simp only [slab, Mat.flatten, reindexCLM_apply, Equiv.symm_apply_apply]
+  have hb : slab h_l (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) =
+      if h_j = h_l then basisVec (finProdFinEquiv (i, j')) else 0 := by
+    funext idx; obtain ⟨⟨r, c⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    simp only [slab, reindexCLM_apply, Equiv.symm_apply_apply, basisVec_apply,
+      EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq]
+    rcases eq_or_ne h_j h_l with rfl | hne
+    · simp
+    · simp [hne, hne.symm]
+  rw [pdivMat, pdiv, hF.fderiv]
+  simp only [ContinuousLinearMap.pi_apply, Equiv.symm_apply_apply, D,
+    ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply, hslab, hb]
+  split_ifs <;> simp [G, pdivMat, pdiv]
 
 /-- **Lift `HasVJPMat g` to column-slab vmap** — column-axis analog of
     `rowwise_has_vjp_mat`. Given `g : Mat n d_in → Mat n d_out` with a
@@ -1090,74 +860,10 @@ noncomputable def colSlabwise_has_vjp_mat {n heads d_in d_out : Nat}
                 r (finProdFinEquiv.symm hj).2
   correct := by
     intro M dY i jj
-    -- jj : Fin (heads * d_in). Decompose into (h_j, j').
-    set p_jj := finProdFinEquiv.symm jj with hp_jj_def
-    have hjj_eq : jj = finProdFinEquiv (p_jj.1, p_jj.2) := (Equiv.apply_symm_apply _ _).symm
-    -- Reshape the LHS structure field via direct computation: p_jj.1, p_jj.2.
-    show hg.backward
-            (fun r' j_in => M r' (finProdFinEquiv (p_jj.1, j_in)))
-            (fun r' j_out => dY r' (finProdFinEquiv (p_jj.1, j_out)))
-            i p_jj.2 =
-         ∑ k : Fin n, ∑ l : Fin (heads * d_out),
-            pdivMat (colSlabApply g) M i jj k l * dY k l
-    -- Replace jj on the RHS with finProdFinEquiv (p_jj.1, p_jj.2).
-    rw [hjj_eq]
-    -- Reindex the sum over l = encode(h_l, j'') via Fintype.sum_equiv + sum_prod_type.
-    have h_reindex : ∀ k : Fin n,
-        (∑ l : Fin (heads * d_out),
-            pdivMat (colSlabApply g) M i (finProdFinEquiv (p_jj.1, p_jj.2)) k l * dY k l) =
-        ∑ h_l : Fin heads, ∑ j'' : Fin d_out,
-            pdivMat (colSlabApply g) M i (finProdFinEquiv (p_jj.1, p_jj.2))
-              k (finProdFinEquiv (h_l, j'')) *
-            dY k (finProdFinEquiv (h_l, j'')) := by
-      intro k
-      rw [Fintype.sum_equiv finProdFinEquiv.symm
-            (fun l : Fin (heads * d_out) =>
-              pdivMat (colSlabApply g) M i (finProdFinEquiv (p_jj.1, p_jj.2)) k l * dY k l)
-            (fun p : Fin heads × Fin d_out =>
-              pdivMat (colSlabApply g) M i (finProdFinEquiv (p_jj.1, p_jj.2))
-                k (finProdFinEquiv p) *
-              dY k (finProdFinEquiv p))
-            (fun l => by simp only [Equiv.apply_symm_apply])]
-      rw [Fintype.sum_prod_type]
-    simp_rw [h_reindex]
-    -- Apply pdivMat_colIndep per term: contributes 0 unless h_l = p_jj.1.
-    simp_rw [pdivMat_colIndep g hg_diff]
-    -- Collapse the outer sum over h_l using the Kronecker if.
-    have h_collapse : ∀ k : Fin n,
-        (∑ h_l : Fin heads, ∑ j'' : Fin d_out,
-          (if p_jj.1 = h_l then
-            pdivMat g (fun r' j_in => M r' (finProdFinEquiv (h_l, j_in))) i p_jj.2 k j''
-           else 0) * dY k (finProdFinEquiv (h_l, j''))) =
-        ∑ j'' : Fin d_out,
-          pdivMat g (fun r' j_in => M r' (finProdFinEquiv (p_jj.1, j_in))) i p_jj.2 k j'' *
-          dY k (finProdFinEquiv (p_jj.1, j'')) := by
-      intro k
-      have h_inner : ∀ h_l : Fin heads,
-          (∑ j'' : Fin d_out,
-            (if p_jj.1 = h_l then
-              pdivMat g (fun r' j_in => M r' (finProdFinEquiv (h_l, j_in))) i p_jj.2 k j''
-             else 0) * dY k (finProdFinEquiv (h_l, j''))) =
-          (if p_jj.1 = h_l then
-            ∑ j'' : Fin d_out,
-              pdivMat g (fun r' j_in => M r' (finProdFinEquiv (h_l, j_in))) i p_jj.2 k j'' *
-              dY k (finProdFinEquiv (h_l, j''))
-           else 0) := by
-        intro h_l
-        by_cases hh : p_jj.1 = h_l
-        · simp [hh]
-        · simp [hh]
-      simp_rw [h_inner]
-      rw [Finset.sum_ite_eq Finset.univ p_jj.1
-          (fun h_l => ∑ j'' : Fin d_out,
-            pdivMat g (fun r' j_in => M r' (finProdFinEquiv (h_l, j_in))) i p_jj.2 k j'' *
-            dY k (finProdFinEquiv (h_l, j'')))]
-      simp only [Finset.mem_univ, ite_true]
-    simp_rw [h_collapse]
-    -- Now the goal is exactly hg.correct on the slab.
-    exact hg.correct (fun r' j_in => M r' (finProdFinEquiv (p_jj.1, j_in)))
-                     (fun r' j_out => dY r' (finProdFinEquiv (p_jj.1, j_out)))
-                     i p_jj.2
+    obtain ⟨⟨h, j'⟩, rfl⟩ := finProdFinEquiv.surjective jj
+    simp only [Equiv.symm_apply_apply, sum_finProdFinEquiv (m := heads),
+      pdivMat_colIndep g hg_diff]
+    simp [hg.correct]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Ternary VJP for matrix functions (HasVJPMat3)
@@ -1192,63 +898,18 @@ structure HasVJPMat3 {n d_in d_out : Nat}
     ∑ k : Fin n, ∑ l : Fin d_out,
       pdivMat (fun C' => F A B C') C i j k l * dY k l
 
-/-- **Scalar-scale Jacobian** — theorem, derived from `pdiv_mul` +
-    `pdiv_const` + `pdiv_id` via the flatten bijection.
+/-- **Scalar-scale Jacobian** — theorem, derived from `pdiv_const_smul` +
+    `pdiv_id` via the flatten bijection.
     `∂(s · A')_{kl} / ∂A'_{ij} = s · δ_{ik,jl}`. -/
 theorem pdivMat_scalarScale {m n : Nat} (s : ℝ) (A : Mat m n)
     (i : Fin m) (j : Fin n) (k : Fin m) (l : Fin n) :
     pdivMat (fun M : Mat m n => fun r c => s * M r c) A i j k l =
     if i = k ∧ j = l then s else 0 := by
-  unfold pdivMat
-  -- Step 1: the flattened scalar-scale function simplifies to `fun v k' => s * v k'`.
-  -- This uses Mat.unflatten_flatten roundtrip pointwise.
-  have h_reduces :
-      (fun v : Vec (m * n) =>
-        Mat.flatten ((fun M : Mat m n => fun r c => s * M r c) (Mat.unflatten v))) =
-      (fun v : Vec (m * n) => fun k' : Fin (m * n) => s * v k') := by
-    funext v k'
-    show s * Mat.unflatten v (finProdFinEquiv.symm k').1 (finProdFinEquiv.symm k').2 = s * v k'
-    unfold Mat.unflatten
-    -- Goal: s * v (fPF ((fPF.symm k').1, (fPF.symm k').2)) = s * v k'
-    rw [show ((finProdFinEquiv.symm k').1, (finProdFinEquiv.symm k').2) = finProdFinEquiv.symm k'
-        from rfl]
-    rw [Equiv.apply_symm_apply]
-  rw [h_reduces]
-  -- Step 2: rewrite as a product of (constant s) and (identity).
-  have h_product :
-      (fun v : Vec (m * n) => fun k' : Fin (m * n) => s * v k') =
-      (fun v k' =>
-        (fun (_ : Vec (m * n)) (_ : Fin (m * n)) => s) v k' *
-        (fun (w : Vec (m * n)) => w) v k') := rfl
-  rw [h_product]
-  -- Step 3: apply pdiv_mul. Both factors are Differentiable everywhere.
-  have h_const_diff : DifferentiableAt ℝ
-      (fun (_ : Vec (m * n)) (_ : Fin (m * n)) => s) (Mat.flatten A) :=
-    differentiableAt_const _
-  have h_id_diff : DifferentiableAt ℝ
-      (fun (w : Vec (m * n)) => w) (Mat.flatten A) :=
-    differentiableAt_id
-  rw [pdiv_mul (fun _ _ => s) (fun w => w) _ h_const_diff h_id_diff]
-  -- Step 4: pdiv_const for the constant factor, pdiv_id for identity.
-  -- The constant function `fun _ _ => s` has Vec m = Vec (m*n) → Vec n = Vec (m*n) shape;
-  -- we need to treat the inner constant as `fun _ => (fun _ => s)` for pdiv_const.
-  have h_const :
-      pdiv (fun _ : Vec (m * n) => fun _ : Fin (m * n) => s) (Mat.flatten A)
-        (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l)) = 0 :=
-    pdiv_const (fun _ : Fin (m * n) => s) (Mat.flatten A)
-      (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l))
-  rw [h_const, pdiv_id]
-  -- Goal after simp: collapses both sides via the bijection injectivity.
-  simp only [zero_mul, zero_add, mul_ite, mul_one, mul_zero]
-  -- Now: (if fPF(i,j) = fPF(k,l) then s else 0) = if i = k ∧ j = l then s else 0
-  by_cases hij : i = k ∧ j = l
-  · obtain ⟨hi, hj⟩ := hij; subst hi; subst hj; simp
-  · have hne : finProdFinEquiv (i, j) ≠ finProdFinEquiv (k, l) := by
-      intro heq
-      apply hij
-      have := finProdFinEquiv.injective heq
-      exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
-    rw [ite_eq_right hij, ite_eq_right hne]
+  rw [pdivMat, show (fun v : Vec (m * n) => Mat.flatten (fun r c => s * Mat.unflatten v r c)) =
+      fun v k => s * Mat.flatten (Mat.unflatten v) k from rfl]
+  simp only [Mat.flatten_unflatten]
+  rw [pdiv_const_smul s (fun w => w) _ differentiableAt_id, pdiv_id]
+  simp
 
 /-- **Transpose Jacobian** — theorem, derived from `pdiv_reindex` via
     the flatten bijection.  `∂A^T_{kl} / ∂A_{ij} = δ_{l=i, k=j}`. -/
@@ -1256,37 +917,9 @@ theorem pdivMat_transpose {m n : Nat} (A : Mat m n)
     (i : Fin m) (j : Fin n) (k : Fin n) (l : Fin m) :
     pdivMat (fun M : Mat m n => Mat.transpose M) A i j k l =
     if j = k ∧ i = l then 1 else 0 := by
-  unfold pdivMat
-  -- Step 1: flatten(transpose(unflatten v)) is a gather:
-  --   at output idx, returns v at the index obtained by swapping components.
-  have h_reduces :
-      (fun v : Vec (m * n) =>
-        Mat.flatten ((fun M : Mat m n => Mat.transpose M) (Mat.unflatten v))) =
-      (fun v : Vec (m * n) => fun idx : Fin (n * m) =>
-        v (finProdFinEquiv
-              ((finProdFinEquiv.symm idx).2, (finProdFinEquiv.symm idx).1))) := by
-    funext v idx
-    show Mat.transpose (Mat.unflatten v)
-           (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 = _
-    unfold Mat.transpose Mat.unflatten
-    rfl
-  rw [h_reduces, pdiv_reindex]
-  -- Step 2: collapse the index condition.
-  -- Goal: (if fPF(i,j) = σ(fPF(k,l)) then 1 else 0) = (if j = k ∧ i = l then 1 else 0)
-  -- where σ(idx) = fPF((fPF.symm idx).2, (fPF.symm idx).1).
-  -- At fPF(k,l): σ(fPF(k,l)) = fPF(l, k).
-  -- So condition: fPF(i,j) = fPF(l, k) ⟺ (i, j) = (l, k) ⟺ i = l ∧ j = k.
-  simp only [Equiv.symm_apply_apply]
-  by_cases h : j = k ∧ i = l
-  · obtain ⟨hjk, hil⟩ := h
-    subst hjk; subst hil
-    simp
-  · have hne : finProdFinEquiv (i, j) ≠ finProdFinEquiv (l, k) := by
-      intro heq
-      apply h
-      have := finProdFinEquiv.injective heq
-      exact ⟨(Prod.mk.inj this).2, (Prod.mk.inj this).1⟩
-    rw [ite_eq_right hne, ite_eq_right h]
+  -- `flatten ∘ transpose ∘ unflatten` is the gather at the swapped index.
+  exact (pdiv_reindex (fun idx => finProdFinEquiv
+    ((finProdFinEquiv.symm idx).2, (finProdFinEquiv.symm idx).1)) _ _ _).trans (by simp [and_comm])
 
 /-- **Matmul with right factor varying, left factor fixed** — proved.
 
@@ -1298,17 +931,6 @@ noncomputable def matmul_left_const_has_vjp {m p q : Nat} (C : Mat m p) :
   correct := by
     intro B dY i j
     simp_rw [pdivMat_matmul_left_const]
-    -- Σ k Σ l, (if l = j then C k i else 0) * dY k l = Σ k, C k i * dY k j
-    congr 1; ext k
-    -- Inner sum over l: collapse if-else via sum_ite_eq
-    have h : ∀ l : Fin q,
-        (if l = j then C k i else 0) * dY k l =
-        if l = j then C k i * dY k j else 0 := by
-      intro l; by_cases hlj : l = j
-      · simp [hlj]
-      · simp [hlj]
-    simp_rw [h]
-    rw [Finset.sum_ite_eq' Finset.univ j (fun _ => C k i * dY k j)]
     simp
 
 /-- **Matmul with left factor varying, right factor fixed** — proved.
@@ -1321,22 +943,7 @@ noncomputable def matmul_right_const_has_vjp {m p q : Nat} (D : Mat p q) :
   correct := by
     intro A dY i j
     simp_rw [pdivMat_matmul_right_const]
-    -- Σ k Σ l, (if i = k then D j l else 0) * dY k l = Σ l, dY i l * D j l
-    have h : ∀ k : Fin m, ∀ l : Fin q,
-        (if i = k then D j l else 0) * dY k l =
-        if i = k then D j l * dY i l else 0 := by
-      intro k l; by_cases hik : i = k
-      · simp [hik]
-      · simp [hik]
-    simp_rw [h]
-    rw [Finset.sum_comm]
-    have hinner : ∀ l : Fin q,
-        ∑ k : Fin m, (if i = k then D j l * dY i l else 0) = D j l * dY i l := by
-      intro l
-      rw [Finset.sum_ite_eq Finset.univ i (fun _ => D j l * dY i l)]
-      simp
-    simp_rw [hinner]
-    congr 1; ext l; ring
+    simp [mul_comm]
 
 /-- **Scalar-scale VJP** — proved.  Backward: `dA = s · dY`. -/
 noncomputable def scalarScale_has_vjp {m n : Nat} (s : ℝ) :
@@ -1345,17 +952,7 @@ noncomputable def scalarScale_has_vjp {m n : Nat} (s : ℝ) :
   correct := by
     intro A dY i j
     simp_rw [pdivMat_scalarScale]
-    -- Σ k Σ l, (if i=k ∧ j=l then s else 0) * dY k l = s * dY i j
-    have h : ∀ k : Fin m, ∀ l : Fin n,
-        (if i = k ∧ j = l then s else 0) * dY k l =
-        (if i = k then (if j = l then s * dY k l else 0) else 0) := by
-      intro k l
-      by_cases hik : i = k <;> by_cases hjl : j = l <;> simp [hik, hjl]
-    simp_rw [h]
-    rw [Finset.sum_eq_single i (by intro k _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [ite_true]
-    rw [Finset.sum_eq_single j (by intro l _ hne; simp [Ne.symm hne]) (by simp)]
-    simp
+    simp [ite_and]
 
 /-- **Transpose VJP** — proved.  Backward: `dA = (dY)^T`. -/
 noncomputable def transpose_has_vjp {m n : Nat} :
@@ -1364,17 +961,7 @@ noncomputable def transpose_has_vjp {m n : Nat} :
   correct := by
     intro A dY i j
     simp_rw [pdivMat_transpose]
-    -- Σ k : Fin n, Σ l : Fin m, (if j=k ∧ i=l then 1 else 0) * dY k l = dY j i
-    have h : ∀ k : Fin n, ∀ l : Fin m,
-        (if j = k ∧ i = l then (1 : ℝ) else 0) * dY k l =
-        (if j = k then (if i = l then dY k l else 0) else 0) := by
-      intro k l
-      by_cases hjk : j = k <;> by_cases hil : i = l <;> simp [hjk, hil]
-    simp_rw [h]
-    rw [Finset.sum_eq_single j (by intro k _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [ite_true]
-    rw [Finset.sum_eq_single i (by intro l _ hne; simp [Ne.symm hne]) (by simp)]
-    simp
+    simp [ite_and]
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3D Tensor VJP Framework (for CNN / Depthwise)
@@ -1400,21 +987,11 @@ noncomputable def unflatten {c h w : Nat} (v : Vec (c * h * w)) : Tensor3 c h w 
 
 theorem unflatten_flatten {c h w : Nat} (T : Tensor3 c h w) :
     unflatten (flatten T) = T := by
-  funext ci hi wi
-  unfold unflatten flatten
-  simp [Equiv.symm_apply_apply]
+  funext ci hi wi; simp [unflatten, flatten]
 
 theorem flatten_unflatten {c h w : Nat} (v : Vec (c * h * w)) :
     flatten (unflatten v) = v := by
-  funext k
-  change v (finProdFinEquiv
-    (finProdFinEquiv (finProdFinEquiv.symm (finProdFinEquiv.symm k).1),
-     (finProdFinEquiv.symm k).2)) = v k
-  rw [Equiv.apply_symm_apply]
-  -- Now: v (finProdFinEquiv ((finProdFinEquiv.symm k).1, (finProdFinEquiv.symm k).2)) = v k
-  rw [show ((finProdFinEquiv.symm k).1, (finProdFinEquiv.symm k).2) = finProdFinEquiv.symm k
-        from rfl]
-  rw [Equiv.apply_symm_apply]
+  funext k; simp only [flatten, unflatten, Prod.mk.eta, Equiv.apply_symm_apply]
 
 /-- **`Tensor3.flatten` is differentiable.** It is a coordinate
     reindexing: each output coordinate `flatten x k` is the single input
@@ -1452,7 +1029,7 @@ noncomputable def pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
 
 /-- **Chain rule for 3D partial derivatives** — theorem, via `pdiv_comp`
-    and two applications of `Fintype.sum_equiv + sum_prod_type`. Requires
+    and two applications of `sum_finProdFinEquiv`. Requires
     the flattened forms of `f` and `g` to be differentiable at the
     relevant points. -/
 theorem pdiv3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
@@ -1490,31 +1067,7 @@ theorem pdiv3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
     rw [h_mid]; exact hg_diff
   rw [h_compose, pdiv_comp _ _ _ hf_diff hg_diff']
   simp_rw [h_mid]
-  -- Two-stage collapse of the Fin ((c₂*h₂)*w₂) sum into ∑ cj ∑ hj ∑ wj.
-  -- Abbreviate the double-indexed summand as `F r`:
-  set F : Fin (c₂ * h₂ * w₂) → ℝ := fun r =>
-    pdiv (fun v => Tensor3.flatten (f (Tensor3.unflatten v))) (Tensor3.flatten x)
-      (finProdFinEquiv (finProdFinEquiv (ci, hi), wi)) r *
-    pdiv (fun u => Tensor3.flatten (g (Tensor3.unflatten u))) (Tensor3.flatten (f x))
-      r (finProdFinEquiv (finProdFinEquiv (ck, hk), wk)) with hF
-  -- Stage 1: split Fin((c₂*h₂)*w₂) → Fin(c₂*h₂) × Fin w₂ via finProdFinEquiv.
-  rw [Fintype.sum_equiv finProdFinEquiv.symm F
-      (fun pw : Fin (c₂ * h₂) × Fin w₂ => F (finProdFinEquiv pw))
-      (fun r => by
-        show F r = F (finProdFinEquiv (finProdFinEquiv.symm r))
-        rw [Equiv.apply_symm_apply])]
-  rw [Fintype.sum_prod_type]
-  -- Goal now: ∑ p : Fin(c₂*h₂), ∑ wj : Fin w₂, F (fPF (p, wj)) = ∑ cj, ∑ hj, ∑ wj, F (...)
-  -- Stage 2: split outer Fin(c₂*h₂) → Fin c₂ × Fin h₂ via finProdFinEquiv.
-  rw [Fintype.sum_equiv finProdFinEquiv.symm
-      (fun p : Fin (c₂ * h₂) => ∑ wj : Fin w₂, F (finProdFinEquiv (p, wj)))
-      (fun ch : Fin c₂ × Fin h₂ =>
-        ∑ wj : Fin w₂, F (finProdFinEquiv (finProdFinEquiv ch, wj)))
-      (fun p => by
-        show (∑ wj : Fin w₂, F (finProdFinEquiv (p, wj))) =
-             (∑ wj : Fin w₂, F (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv.symm p), wj)))
-        rw [Equiv.apply_symm_apply])]
-  rw [Fintype.sum_prod_type]
+  rw [sum_finProdFinEquiv, sum_finProdFinEquiv]
 
 /-- VJP for 3D→3D functions. -/
 structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
@@ -1525,46 +1078,6 @@ structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     backward x dy ci hi wi =
     ∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
       pdiv3 f x ci hi wi co ho wo * dy co ho wo
-
-/-- **Chain rule for 3D VJPs** — proved, no sorry. Requires the
-    flattened forms of `f` and `g` to be differentiable everywhere. -/
-noncomputable def vjp3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
-    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
-    (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
-    (hf_diff : Differentiable ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v))))
-    (hg_diff : Differentiable ℝ
-      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u))))
-    (hf : HasVJP3 f) (hg : HasVJP3 g) :
-    HasVJP3 (g ∘ f) where
-  backward := fun x dy => hf.backward x (hg.backward (f x) dy)
-  correct := by
-    intro x dy ci hi wi
-    rw [hf.correct]; simp_rw [hg.correct]
-    -- Goal: ∑∑∑ pdiv3_f * (∑∑∑ pdiv3_g * dy) = ∑∑∑ pdiv3_(g∘f) * dy
-    -- Expand RHS: pdiv3_comp → triple sum, then distribute
-    have hf_diff_at : DifferentiableAt ℝ
-        (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
-        (Tensor3.flatten x) := hf_diff (Tensor3.flatten x)
-    have hg_diff_at : DifferentiableAt ℝ
-        (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u)))
-        (Tensor3.flatten (f x)) := hg_diff (Tensor3.flatten (f x))
-    conv_rhs =>
-      arg 2; ext ck; arg 2; ext hk; arg 2; ext wk
-      rw [show pdiv3 (g ∘ f) x ci hi wi ck hk wk * dy ck hk wk =
-          (∑ cj : Fin c₂, ∑ hj : Fin h₂, ∑ wj : Fin w₂,
-            pdiv3 f x ci hi wi cj hj wj * pdiv3 g (f x) cj hj wj ck hk wk) * dy ck hk wk
-        from by rw [← pdiv3_comp _ _ _ hf_diff_at hg_diff_at]]
-    -- Distribute, pack triples → swap → unpack. (Credit: Lean Zulip)
-    simp_rw [Finset.sum_mul, mul_assoc, Finset.mul_sum]
-    show ∑ cj, ∑ hj, ∑ wj, ∑ ck, ∑ hk, ∑ wk, _ = ∑ ck, ∑ hk, ∑ wk, ∑ cj, ∑ hj, ∑ wj, _
-    calc _ = ∑ jj ∈ Finset.univ ×ˢ Finset.univ ×ˢ Finset.univ,
-             ∑ kk ∈ Finset.univ ×ˢ Finset.univ ×ˢ Finset.univ,
-             pdiv3 f x ci hi wi jj.1 jj.2.1 jj.2.2 *
-               (pdiv3 g (f x) jj.1 jj.2.1 jj.2.2 kk.1 kk.2.1 kk.2.2 *
-               dy kk.1 kk.2.1 kk.2.2) := by simp_rw [Finset.sum_product]
-         _ = _ := Finset.sum_comm
-         _ = _ := by simp_rw [Finset.sum_product]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Pointwise VJP3 — Tensor3 analogue of HasVJPAt
@@ -1627,6 +1140,21 @@ noncomputable def vjp3_comp_at {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : N
          _ = _ := Finset.sum_comm
          _ = _ := by simp_rw [Finset.sum_product]
 
+/-- **Chain rule for 3D VJPs** — `vjp3_comp_at` at every point. Requires the
+    flattened forms of `f` and `g` to be differentiable everywhere. -/
+noncomputable def vjp3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
+    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
+    (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
+    (hf_diff : Differentiable ℝ
+      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v))))
+    (hg_diff : Differentiable ℝ
+      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u))))
+    (hf : HasVJP3 f) (hg : HasVJP3 g) :
+    HasVJP3 (g ∘ f) where
+  backward := fun x dy => hf.backward x (hg.backward (f x) dy)
+  correct x := (vjp3_comp_at f g x (hf_diff _) (hg_diff _) (hf.toHasVJPAt3 x)
+    (hg.toHasVJPAt3 (f x))).correct
+
 /-- **Bridge: `HasVJP3` → `HasVJP` via the `Tensor3.flatten` bijection.**
 
     Rank-3 analogue of `hasVJPMat_to_hasVJP`. Given a Tensor3-level VJP
@@ -1635,8 +1163,7 @@ noncomputable def vjp3_comp_at {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : N
     The backward decodes the flat index in two `finProdFinEquiv.symm`
     levels (matching `pdiv3`'s row-major encode), applies the Tensor3
     backward, and the closing collapse folds the triple `co/ho/wo` sum
-    back to the single flat sum via two `Fintype.sum_prod_type` +
-    `Fintype.sum_equiv finProdFinEquiv` reindexes. -/
+    back to the single flat sum via `sum_finProdFinEquiv` twice. -/
 noncomputable def hasVJP3_to_hasVJP {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
     (hf : HasVJP3 f) :
@@ -1648,49 +1175,11 @@ noncomputable def hasVJP3_to_hasVJP {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     hf.backward (Tensor3.unflatten v) (Tensor3.unflatten dy) q.1 q.2 p.2
   correct := by
     intro v dy idx
-    set p := finProdFinEquiv.symm idx with hp
-    set q := finProdFinEquiv.symm p.1 with hq
-    show hf.backward (Tensor3.unflatten v) (Tensor3.unflatten dy) q.1 q.2 p.2 = _
-    rw [hf.correct]
-    simp only [pdiv3, Tensor3.flatten_unflatten]
-    have hidx : finProdFinEquiv (finProdFinEquiv (q.1, q.2), p.2) = idx := by
-      have h1 : (q.1, q.2) = q := rfl
-      rw [h1, hq, Equiv.apply_symm_apply]
-      have h2 : (p.1, p.2) = p := rfl
-      rw [h2, hp, Equiv.apply_symm_apply]
-    simp_rw [hidx]
-    set F : Vec (c₁ * h₁ * w₁) → Vec (c₂ * h₂ * w₂) :=
-      fun w => Tensor3.flatten (f (Tensor3.unflatten w)) with hF
-    -- Goal: ∑ co ∑ ho ∑ wo, pdiv F v idx (enc co ho wo) * Tensor3.unflatten dy co ho wo
-    --        = ∑ j', pdiv F v idx j' * dy j'
-    -- `Tensor3.unflatten dy co ho wo` is defeq `dy (enc co ho wo)`, so this is a
-    -- pure triple→flat reindexing of `G j := pdiv F v idx j * dy j`.
-    have key : ∀ (G : Fin (c₂ * h₂ * w₂) → ℝ),
-        (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
-          G (finProdFinEquiv (finProdFinEquiv (co, ho), wo))) =
-        ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
-      intro G
-      calc (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
-              G (finProdFinEquiv (finProdFinEquiv (co, ho), wo)))
-          = ∑ ch : Fin c₂ × Fin h₂, ∑ wo : Fin w₂,
-              G (finProdFinEquiv (finProdFinEquiv ch, wo)) := by
-            rw [Fintype.sum_prod_type]
-        _ = ∑ p2 : Fin (c₂ * h₂), ∑ wo : Fin w₂,
-              G (finProdFinEquiv (p2, wo)) := by
-            exact (Fintype.sum_equiv finProdFinEquiv
-              (fun ch : Fin c₂ × Fin h₂ =>
-                ∑ wo : Fin w₂, G (finProdFinEquiv (finProdFinEquiv ch, wo)))
-              (fun p2 : Fin (c₂ * h₂) =>
-                ∑ wo : Fin w₂, G (finProdFinEquiv (p2, wo)))
-              (fun _ => rfl))
-        _ = ∑ pw : Fin (c₂ * h₂) × Fin w₂, G (finProdFinEquiv pw) := by
-            rw [Fintype.sum_prod_type]
-        _ = ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
-            exact Fintype.sum_equiv finProdFinEquiv
-              (fun pw : Fin (c₂ * h₂) × Fin w₂ => G (finProdFinEquiv pw))
-              (fun j' => G j')
-              (fun _ => rfl)
-    exact key (fun j => pdiv F v idx j * dy j)
+    obtain ⟨⟨ch, w⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    obtain ⟨⟨c, h⟩, rfl⟩ := finProdFinEquiv.surjective ch
+    simp only [Equiv.symm_apply_apply, hf.correct, pdiv3, Tensor3.flatten_unflatten,
+      sum_finProdFinEquiv (m := c₂ * h₂), sum_finProdFinEquiv (m := c₂)]
+    rfl
 
 /-- **Bridge: `HasVJPAt3` → `HasVJPAt` via the `Tensor3.flatten` bijection.**
 
@@ -1710,45 +1199,11 @@ noncomputable def hasVJPAt3_to_hasVJPAt {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     hf.backward (Tensor3.unflatten dy) q.1 q.2 p.2
   correct := by
     intro dy idx
-    set p := finProdFinEquiv.symm idx with hp
-    set q := finProdFinEquiv.symm p.1 with hq
-    show hf.backward (Tensor3.unflatten dy) q.1 q.2 p.2 = _
-    rw [hf.correct]
-    simp only [pdiv3]
-    have hidx : finProdFinEquiv (finProdFinEquiv (q.1, q.2), p.2) = idx := by
-      have h1 : (q.1, q.2) = q := rfl
-      rw [h1, hq, Equiv.apply_symm_apply]
-      have h2 : (p.1, p.2) = p := rfl
-      rw [h2, hp, Equiv.apply_symm_apply]
-    simp_rw [hidx]
-    set F : Vec (c₁ * h₁ * w₁) → Vec (c₂ * h₂ * w₂) :=
-      fun w => Tensor3.flatten (f (Tensor3.unflatten w)) with hF
-    have key : ∀ (G : Fin (c₂ * h₂ * w₂) → ℝ),
-        (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
-          G (finProdFinEquiv (finProdFinEquiv (co, ho), wo))) =
-        ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
-      intro G
-      calc (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
-              G (finProdFinEquiv (finProdFinEquiv (co, ho), wo)))
-          = ∑ ch : Fin c₂ × Fin h₂, ∑ wo : Fin w₂,
-              G (finProdFinEquiv (finProdFinEquiv ch, wo)) := by
-            rw [Fintype.sum_prod_type]
-        _ = ∑ p2 : Fin (c₂ * h₂), ∑ wo : Fin w₂,
-              G (finProdFinEquiv (p2, wo)) := by
-            exact (Fintype.sum_equiv finProdFinEquiv
-              (fun ch : Fin c₂ × Fin h₂ =>
-                ∑ wo : Fin w₂, G (finProdFinEquiv (finProdFinEquiv ch, wo)))
-              (fun p2 : Fin (c₂ * h₂) =>
-                ∑ wo : Fin w₂, G (finProdFinEquiv (p2, wo)))
-              (fun _ => rfl))
-        _ = ∑ pw : Fin (c₂ * h₂) × Fin w₂, G (finProdFinEquiv pw) := by
-            rw [Fintype.sum_prod_type]
-        _ = ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
-            exact Fintype.sum_equiv finProdFinEquiv
-              (fun pw : Fin (c₂ * h₂) × Fin w₂ => G (finProdFinEquiv pw))
-              (fun j' => G j')
-              (fun _ => rfl)
-    exact key (fun j => pdiv F (Tensor3.flatten x) idx j * dy j)
+    obtain ⟨⟨ch, w⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    obtain ⟨⟨c, h⟩, rfl⟩ := finProdFinEquiv.surjective ch
+    simp only [Equiv.symm_apply_apply, hf.correct, pdiv3,
+      sum_finProdFinEquiv (m := c₂ * h₂), sum_finProdFinEquiv (m := c₂)]
+    rfl
 
 /-- **Identity Jacobian for Tensor3** — theorem, via `pdiv_id` and
     injectivity of the nested `finProdFinEquiv`. -/
@@ -1757,48 +1212,14 @@ theorem pdiv3_id {c h w : Nat} (x : Tensor3 c h w)
     (co : Fin c) (ho : Fin h) (wo : Fin w) :
     pdiv3 (fun (t : Tensor3 c h w) => t) x ci hi wi co ho wo =
       if ci = co ∧ hi = ho ∧ wi = wo then 1 else 0 := by
-  unfold pdiv3
-  -- flatten ∘ id ∘ unflatten = id on Vec (c*h*w)
-  have h_id : (fun v : Vec (c * h * w) =>
-                Tensor3.flatten (Tensor3.unflatten v)) =
-              (fun v : Vec (c * h * w) => v) := by
-    funext v; exact Tensor3.flatten_unflatten v
-  rw [h_id, pdiv_id]
-  -- Goal: (if A = B then 1 else 0) = if C then 1 else 0
-  -- where A, B are doubly-nested finProdFinEquiv outputs.
-  by_cases h : ci = co ∧ hi = ho ∧ wi = wo
-  · obtain ⟨hc, hh, hw⟩ := h
-    subst hc; subst hh; subst hw; simp
-  · rw [ite_eq_right h, ite_eq_right]
-    intro heq
-    apply h
-    -- heq : finProdFinEquiv (fPF (ci, hi), wi) = finProdFinEquiv (fPF (co, ho), wo)
-    have step1 := finProdFinEquiv.injective heq
-    have hw_eq : wi = wo := (Prod.mk.inj step1).2
-    have step2 := finProdFinEquiv.injective (Prod.mk.inj step1).1
-    exact ⟨(Prod.mk.inj step2).1, (Prod.mk.inj step2).2, hw_eq⟩
+  simp [pdiv3, Tensor3.flatten_unflatten, pdiv_id, and_assoc]
 
 def identity3_has_vjp (c h w : Nat) : HasVJP3 (fun (x : Tensor3 c h w) => x) where
   backward := fun _x dy => dy
   correct := by
     intro x dy ci hi wi
-    -- Don't unfold pdiv3_id yet — work directly with the sum
-    -- Rewrite each term under the sum
-    show dy ci hi wi = _
-    have : ∀ (co : Fin c) (ho : Fin h) (wo : Fin w),
-        pdiv3 (fun (t : Tensor3 c h w) => t) x ci hi wi co ho wo * dy co ho wo =
-        if ci = co then (if hi = ho then (if wi = wo then dy co ho wo else 0) else 0) else 0 := by
-      intro co ho wo; rw [pdiv3_id]
-      by_cases hc : ci = co <;> by_cases hh : hi = ho <;> by_cases hw : wi = wo <;> simp [*]
-    simp_rw [this]
-    -- Each sum is: ∑ x, if a = x then f x else 0
-    -- Use Finset.sum_eq_single to collapse
-    rw [Finset.sum_eq_single ci (by intro co _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [ite_true]
-    rw [Finset.sum_eq_single hi (by intro ho _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [ite_true]
-    rw [Finset.sum_eq_single wi (by intro wo _ hne; simp [Ne.symm hne]) (by simp)]
-    simp
+    simp_rw [pdiv3_id]
+    simp [ite_and]
 
 /-- **Sum rule for Tensor3 partial derivatives** — theorem, via `pdiv_add`. -/
 theorem pdiv3_add {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}

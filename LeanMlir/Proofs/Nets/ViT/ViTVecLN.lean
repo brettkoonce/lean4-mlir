@@ -655,7 +655,7 @@ theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Ve
                   Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
             * dy o := by
   simp_rw [pdiv_vecLN_gamma]
-  rw [sum_fin_prod N D]
+  rw [sum_finProdFinEquiv (m := N) (n := D)]
   simp [vecLN_grad_gamma, Mat.unflatten, mul_comm]
 
 /-- **Vector-LN β-gradient bridge.** -/
@@ -667,7 +667,7 @@ theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec
                   Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
             * dy o := by
   simp_rw [pdiv_vecLN_beta]
-  rw [sum_fin_prod N D]
+  rw [sum_finProdFinEquiv (m := N) (n := D)]
   simp [vecLN_grad_beta, Mat.unflatten]
 
 /-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes

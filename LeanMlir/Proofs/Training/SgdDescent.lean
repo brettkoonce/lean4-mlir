@@ -36,15 +36,6 @@ noncomputable def gradAt {m : Nat} (f : Vec m → ℝ) (x : Vec m) (i : Fin m) :
     ℝ :=
   fderiv ℝ f x (basisVec i)
 
-/-- A sum over a flat `Fin (m·n)` index is the row-major double sum — the one
-    `finProdFinEquiv` split every flattened-parameter sum in the descent files
-    reduces to. Same statement as `sum_fin_prod` in the ViT close-bounds file;
-    both belong in Tensor.lean and move there with the root-file batch. -/
-theorem sum_finProdFinEquiv {M : Type*} [AddCommMonoid M] {m n : Nat}
-    (f : Fin (m * n) → M) :
-    ∑ k, f k = ∑ i : Fin m, ∑ j : Fin n, f (finProdFinEquiv (i, j)) := by
-  rw [← Equiv.sum_comp finProdFinEquiv f, Fintype.sum_prod_type]
-
 /-- Directional derivative = gradient contraction, coordinatewise. -/
 theorem fderiv_apply_eq_sum_grad {m : Nat} (f : Vec m → ℝ) (x : Vec m)
     (d : Vec m) :
