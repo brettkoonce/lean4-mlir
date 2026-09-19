@@ -24,8 +24,9 @@ import numpy as np, os, struct
 from fractions import Fraction
 from math import ceil
 
-D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+D = os.path.join(ROOT, "data") + os.sep
+OUT = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")
 N_IMG = 100
 # How many of the certified images carry per-image THEOREMS (hpre/margin/
 # certified blocks). The counts stay MEASURED over all N_IMG in exact rationals
@@ -203,7 +204,7 @@ A("")
 A("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
 A("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
 A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
-A("arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.")
+A("arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
 A("")
 A("The one-input certificate of `LipschitzCertInstance.lean`, scaled to a")
 A(f"dataset-level claim over a FIXED subset — the first {N_IMG} MNIST test images")

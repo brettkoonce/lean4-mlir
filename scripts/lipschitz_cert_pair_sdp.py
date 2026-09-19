@@ -253,12 +253,11 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A("")
     # Scope disclaimer. This was hand-added to the committed files and was NOT in
     # this generator, so regenerating silently deleted it — emit it here so it
-    # survives. The sibling pooled generators (lipschitz_cert_scorecard.py,
-    # lipschitz_cert_float.py) still have the same gap; fix on regeneration.
+    # survives.
     A("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
     A("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
     A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
-    A("arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.")
+    A("arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
     A("")
     A(f"The tighter-Lipschitz-constant pass over the SAME first-{N_IMG} MNIST test")
     A(f"subset and SAME ε = {EPS} as `LipschitzCertScorecard.lean`: replacing the")

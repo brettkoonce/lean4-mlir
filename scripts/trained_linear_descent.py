@@ -21,11 +21,12 @@ inside cotErr is bounded by the repo's γ-form exp_sub_one_le. Window margins
 are asserted here with exact Fractions in EXACTLY the bound-forms the Lean
 proof discharges.
 """
-import numpy as np, struct
+import numpy as np, os, struct
 from fractions import Fraction
 
-D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Training/TrainedLinearDescent.lean"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+D = os.path.join(ROOT, "data") + os.sep
+OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedLinearDescent.lean")
 K, DIM = 10, 49
 LR = Fraction(1, 8192)
 
@@ -119,6 +120,11 @@ A_ = L.append
 A_("import LeanMlir.Proofs.Float.Binary32Instance")
 A_("")
 A_("/-! # Descent at TRAINED weights (post_audit_roadmap §3)")
+A_("")
+A_("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
+A_("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
+A_("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
+A_("arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
 A_("")
 A_("`binary32_linear_sgd_descends_concrete` (the suite's only concrete descent")
 A_("instance) holds at the degenerate `W = 0` net — a satisfiability witness.")
@@ -234,11 +240,11 @@ A_("  have herase : (∑ j ∈ Finset.univ.erase lblD,")
 A_("      |softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j|) =")
 A_("      ∑ j ∈ Finset.univ.erase lblD, softmax 10 (dense Wd bd xd) j := by")
 A_("    refine Finset.sum_congr rfl fun j hj => ?_")
-A_("    rw [show oneHot 10 lblD j = 0 from if_neg (Finset.mem_erase.mp hj).1,")
+A_("    rw [show oneHot 10 lblD j = 0 from ite_eq_right (Finset.mem_erase.mp hj).1,")
 A_("        sub_zero, abs_of_pos (sm_pos j)]")
 A_("  have hlbl : |softmax 10 (dense Wd bd xd) lblD - oneHot 10 lblD lblD| =")
 A_("      1 - softmax 10 (dense Wd bd xd) lblD := by")
-A_("    rw [show oneHot 10 lblD lblD = 1 from if_pos rfl,")
+A_("    rw [show oneHot 10 lblD lblD = 1 from ite_eq_left rfl,")
 A_("        abs_of_nonpos (by linarith [sm_le_one lblD]), neg_sub]")
 A_("  have hs := sm_pos lblD")
 A_("  linarith [hsplit, hsplit1, herase, hlbl]")
@@ -249,7 +255,7 @@ A_("theorem sm_cot_sq :")
 A_("    (1 : ℝ) / 4 ≤ ∑ j, (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j) ^ 2 := by")
 A_("  have hterm : (1 : ℝ) / 4 ≤")
 A_("      (softmax 10 (dense Wd bd xd) lblD - oneHot 10 lblD lblD) ^ 2 := by")
-A_("    rw [show oneHot 10 lblD lblD = 1 from if_pos rfl]")
+A_("    rw [show oneHot 10 lblD lblD = 1 from ite_eq_left rfl]")
 A_("    nlinarith [sm_lbl_le_half, (sm_pos lblD).le]")
 A_("  exact hterm.trans (Finset.single_le_sum")
 A_("    (f := fun j => (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j) ^ 2)")

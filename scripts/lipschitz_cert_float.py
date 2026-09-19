@@ -27,8 +27,9 @@ from fractions import Fraction
 # planning/archive/scorecard_trim.md. SCORECARD_N_EMIT=100 regenerates uncapped.
 N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 
-SRC = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertFloat.lean"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")
+OUT = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertFloat.lean")
 src = open(SRC).read()
 
 FRAC_RE = re.compile(r"\(\((-?\d+) : ℝ\)/(\d+)\)|\((-?\d+) : ℝ\)")
@@ -145,7 +146,7 @@ import LeanMlir.Proofs.Float.FloatBridge
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
-arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
 The 2026-07-02 audit's gap #1, closed: the scorecard's per-image Lipschitz-
 margin certificates (`LipschitzCertScorecard.lean`, exact-ℝ net) composed with
@@ -362,8 +363,8 @@ theorem real_tie (y : EuclideanSpace ℝ (Fin 49)) (k : Fin 10) :
         = max (denseE W1s y m) 0
     rw [hinner m]
     by_cases h : denseE W1s y m > 0
-    · rw [if_pos h, max_eq_left h.le]
-    · rw [if_neg h, max_eq_right (not_lt.mp h)]
+    · rw [ite_eq_left h, max_eq_left h.le]
+    · rw [ite_eq_right h, max_eq_right (not_lt.mp h)]
   rw [hr]
   exact mul_comm _ _
 
