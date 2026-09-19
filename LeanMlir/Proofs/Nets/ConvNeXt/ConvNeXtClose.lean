@@ -12,9 +12,9 @@ per-example separable, so no batched apparatus (the EfficientNet contrast).
 | family (render SSA)                       | forward fn            | certified by                                   |
 |-------------------------------------------|-----------------------|------------------------------------------------|
 | stem/expand/project 1×1 conv W/b          | `conv2d` (stride 1)   | `cnn_render_conv{W,b}_certified` (M3, **reuse**) |
-| depthwise **7×7** W/b                     | `depthwiseConv2d`     | `cnx_render_dw7{W,b}_certified` (kernel-general — **pinned below**) |
+| depthwise **7×7** W/b                     | `depthwiseConv2d`     | `mnv2_render_depthwise{W,b}_certified` (kernel-general, **reuse**) |
 | dense head `Wd`/`bd`                      | matmul / +bias        | M2 `weight/bias_grad_bridge` (**reuse**)       |
-| **layer-scale `γ`** (`layerScaleF`)       | `γ ⊙ x`               | `cnx_render_lsgamma_certified` (**new**): `∂(γⱼxⱼ)/∂γᵢ = xᵢδᵢⱼ` ⇒ `dγ = x ⊙ dy` |
+| **layer-scale `γ`** (`layerScaleF`)       | `γ ⊙ x`               | `layerScale_gamma_grad_bridge` (**new**): `∂(γⱼxⱼ)/∂γᵢ = xᵢδᵢⱼ` ⇒ `dγ = x ⊙ dy` |
 | **scalar-LN `γ/β`** (the `bnF` sites)     | `layerNormForward`    | `cnx_render_ln{gamma,beta}_certified` (**new**): the `Vec 1` embedding |
 | gelu                                      | —                     | no parameters                                  |
 
@@ -32,9 +32,8 @@ Two genuinely-new bridge families:
   reduces `dγ = Σ dy·x̂`, `dβ = Σ dy` (`bn_grad_gamma`/`bn_grad_beta` — now bridged, not just defined).
   Affine in the params, so no `0 < ε` needed (ε only enters the constant x̂).
 
-The 7×7 depthwise is the only kernel size to pin (prior nets used 3×3/5×5; the generic
-`mnv2_render_depthwise{W,b}_certified` is kernel-general — stride-1 only, ConvNeXt blocks don't
-downsample). The 1×1 convs (stem/expand/project) and the dense head are verbatim M3/M2 reuse at the
+The 7×7 depthwise needs no pin: the generic `mnv2_render_depthwise{W,b}_certified` is
+kernel-general (stride-1 only; ConvNeXt blocks don't downsample). The 1×1 convs (stem/expand/project) and the dense head are verbatim M3/M2 reuse at the
 ConvNeXt shapes. 3-axiom clean by inheritance.
 -/
 
@@ -43,31 +42,7 @@ namespace Proofs
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
--- § A. 7×7 depthwise pins (the kernel size no prior net exercised; stride-1)
--- ════════════════════════════════════════════════════════════════
-
-/-- **7×7 depthwise weight output, certified.** The generic depthwise weight bridge at `kH=kW=7`;
-    covers every ConvNeXt block's depthwise (stride-1 — ConvNeXt blocks keep resolution). -/
-theorem cnx_render_dw7W_certified {c h w : Nat}
-    (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c 7 7) (dy : Tensor3 c h w) (lr : ℝ)
-    (ci : Fin c) (hi : Fin 7) (wi : Fin 7) :
-    W ci hi wi - lr * (depthwise_weight_grad_has_vjp3 b x).backward W dy ci hi wi
-      = W ci hi wi - lr * ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
-          pdiv3 (fun W' : DepthwiseKernel c 7 7 => depthwiseConv2d W' b x) W ci hi wi co ho wo
-            * dy co ho wo :=
-  mnv2_render_depthwiseW_certified b x W dy lr ci hi wi
-
-/-- **7×7 depthwise bias output, certified.** -/
-theorem cnx_render_dw7b_certified {c h w : Nat}
-    (W : DepthwiseKernel c 7 7) (x : Tensor3 c h w) (b : Vec c) (dy : Vec (c * h * w)) (lr : ℝ)
-    (cc : Fin c) :
-    b cc - lr * (depthwise_bias_grad_has_vjp W x).backward b dy cc
-      = b cc - lr * ∑ j : Fin (c * h * w),
-          pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc j * dy j :=
-  mnv2_render_depthwiseb_certified W x b dy lr cc
-
--- ════════════════════════════════════════════════════════════════
--- § B. Layer-scale γ — the multiplicative-bias bridge (genuinely new)
+-- § A. Layer-scale γ — the multiplicative-bias bridge (genuinely new)
 --
 -- `layerScale γ x = γ ⊙ x` is symmetric in (γ, x): viewed as a function of γ (x fixed), it is
 -- the same diagonal linear map with the roles swapped. `pdiv_layerScale` (ConvNeXt.lean) gives
@@ -95,17 +70,8 @@ theorem layerScale_gamma_grad_bridge {n : Nat} (x : Vec n) (γ : Vec n) (dy : Ve
       = ∑ j : Fin n, pdiv (fun γ' : Vec n => layerScale γ' x) γ i j * dy j := by
   simp [pdiv_layerScale_gamma, layerScale_grad_gamma]
 
-/-- **Layer-scale γ output, certified.** `γⁿ = γ − lr·(x ⊙ dy)` denotes
-    `γ − lr·(certified ∂(layerScale)/∂γ · cotangent)`. The multiplicative-bias peer of
-    `cnn_render_convb_certified`. -/
-theorem cnx_render_lsgamma_certified {n : Nat} (x : Vec n) (γ : Vec n) (dy : Vec n) (lr : ℝ)
-    (i : Fin n) :
-    γ i - lr * layerScale_grad_gamma x dy i
-      = γ i - lr * ∑ j : Fin n, pdiv (fun γ' : Vec n => layerScale γ' x) γ i j * dy j := by
-  rw [layerScale_gamma_grad_bridge]
-
 -- ════════════════════════════════════════════════════════════════
--- § C. Scalar-LN γ/β — the Vec-1 embedding of the scalar parameters (genuinely new)
+-- § B. Scalar-LN γ/β — the Vec-1 embedding of the scalar parameters (genuinely new)
 --
 -- `layerNormForward n ε γ β` has scalar `γ β : ℝ`; `bn_grad_gamma`/`bn_grad_beta`
 -- (BatchNorm.lean) are the rendered whole-`n` reduces `Σ dy·x̂` / `Σ dy`, stated there as

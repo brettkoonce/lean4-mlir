@@ -945,7 +945,7 @@ theorem mlp_l1_close {d₀ d₁ d₂ : Nat} {W₀ : Mat d₀ d₁} {b₀ : Vec d
     float forward activation*, as the rendered trainer computes it — is
     within an explicit budget of the real step `W₂ᵢⱼ − lr·(a₂ᵢ·gⱼ)`. The real
     target is `Mat.outer a₂ g i j = emitWeightGrad`'s entry, the quantity
-    `mlp_render_W2_certified` proves equal to the pdiv-Jacobian contraction —
+    `mlp_layer2_weight_grad_bridge` proves equal to the pdiv-Jacobian contraction —
     so this chains the float step to the certified gradient. Takes the output
     cotangent `gt ≈ g` as a hypothesis (the softmax−onehot head needs an `exp`
     accuracy axiom — future rung). -/
@@ -1009,7 +1009,7 @@ theorem mlp_b2_step_float_close {d₃ : Nat} (b₂ : Vec d₃) {gt g : Vec d₃}
     quantitative margin** `E₁ < |p₁ᵢ|` at every layer-1 pre-activation: the
     forward rounding error must not flip a ReLU. Then the update is within
     `sgdErr` of the real `W₁ᵢⱼ − lr·(a₁ᵢ·c₁ⱼ)`, the quantity
-    `mlp_render_W1_certified` certifies. `W₀`/`b₁`/`b₀` are the same
+    `mlp_layer1_weight_grad_bridge` certifies. `W₀`/`b₁`/`b₀` are the same
     instantiation one mask deeper. -/
 theorem mlp_w1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} (W₁ : Mat d₁ d₂) {b₁ : Vec d₂}
@@ -1106,8 +1106,8 @@ theorem mlp_b1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
 /-- **Rounded input-layer weight update (W₀)** — the cotangent crosses BOTH
     masks, so both quantitative margins are required; the activation operand
     is the raw input `x`, identical in both nets (zero inherited error). The
-    real target `W₀ᵢⱼ − lr·(xᵢ·c₀ⱼ)` is the `mlp_render_W0_certified`
-    quantity. -/
+    real target `W₀ᵢⱼ − lr·(xᵢ·c₀ⱼ)` is the certified layer-0 step
+    (`mlp_layer0_weight_grad_bridge`). -/
 theorem mlp_w0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
     {W₂ : Mat d₂ d₃} {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}

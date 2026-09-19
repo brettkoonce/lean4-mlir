@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 
 The committed ConvNeXt SGD net trains **per-channel** layer-scale `γ : Vec c` (the `layerScaleChF`
 forward, which broadcasts `γ` over the `c·h·w` activation via `chanIdx`), NOT the per-element `Vec n`
-layer-scale that `ConvNeXtClose.cnx_render_lsgamma_certified` certifies. So the §1 fold needs the
+layer-scale that `layerScale_gamma_grad_bridge` (ConvNeXtClose) certifies. So the §1 fold needs the
 **per-channel** version: the γ-gradient w.r.t. the `Vec c` parameter is the per-channel reduce
 `dγ_c = Σ_{k : chanIdx k = c} x_k · dy_k` (the `lsGradCh` emit: `multiply x dy` → `reduce[0,2,3]`),
 and this is exactly the certified Jacobian of `layerScaleChF`'s forward (as a function of `γ : Vec c`)
@@ -42,7 +42,7 @@ theorem pdiv_layerScaleCh_gamma {c h w : Nat} (x : Vec (c * h * w)) (γ : Vec c)
 /-- **Per-channel layer-scale γ output, certified.** The rendered per-channel reduce
     `dγ_c = Σ_{k : chanIdx k = c} x_k·dy_k` (the `lsGradCh` emit) equals the certified Jacobian of
     `layerScaleChF`'s forward (as a function of `γ : Vec c`) contracted with the cotangent. The
-    `Vec c` peer of `ConvNeXtClose.cnx_render_lsgamma_certified`; the `den` target of the (pending)
+    `Vec c` peer of `layerScale_gamma_grad_bridge` (ConvNeXtClose); the `den` target of the (pending)
     `layerScaleChGammaSgd` core op. -/
 theorem cnx_render_lsgammaCh_certified {c h w : Nat} (x : Vec (c * h * w)) (γ : Vec c)
     (dy : Vec (c * h * w)) (lr : ℝ) (cc : Fin c) :

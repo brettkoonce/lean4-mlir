@@ -513,13 +513,6 @@ open Proofs
 #print axioms IR.mlp_input_total_loss_grad
 -- Whole-net capstone: every weight layer's total-loss gradient at once (one statement).
 #print axioms IR.mlp_whole_net_weight_grads
--- Render close: the rendered MLP train step's six param outputs (W₂',W₁',W₀',b₂',b₁',b₀')
-#print axioms IR.mlp_render_W2_certified
-#print axioms IR.mlp_render_W1_certified
-#print axioms IR.mlp_render_W0_certified
-#print axioms IR.mlp_render_b2_certified
-#print axioms IR.mlp_render_b1_certified
-#print axioms IR.mlp_render_b0_certified
 -- R4 Stage A, Chapter 3 (MLP)
 #print axioms StableHLO.reluF_faithful
 #print axioms StableHLO.selectPos_faithful
@@ -677,8 +670,6 @@ open Proofs
 #print axioms mnv2_render_depthwiseb_certified
 #print axioms mnv2_render_stem_convW_certified
 #print axioms mnv2_render_stem_convb_certified
-#print axioms mnv2_render_depthwiseW_strided_certified
-#print axioms mnv2_render_depthwiseb_strided_certified
 -- Their XLA-SAME twins (2026-09-05)
 #print axioms mnv2_render_stem_convW_xla_certified
 #print axioms mnv2_render_stem_convb_xla_certified
@@ -724,11 +715,8 @@ open Proofs
 -- ConvNeXt RENDER (planning/archive/convnext_close.md Item A)
 #print axioms StableHLO.convNextFwdGraph_faithful
 -- ConvNeXt CLOSE (planning/archive/convnext_close.md Item C)
-#print axioms cnx_render_dw7W_certified
-#print axioms cnx_render_dw7b_certified
 #print axioms pdiv_layerScale_gamma
 #print axioms layerScale_gamma_grad_bridge
-#print axioms cnx_render_lsgamma_certified
 #print axioms cnx_lnGamma_grad_bridge
 #print axioms cnx_lnBeta_grad_bridge
 #print axioms cnx_render_lngamma_certified
@@ -772,8 +760,6 @@ open Proofs
 #print axioms pdiv_rowLN_beta
 #print axioms vit_rowlnGamma_grad_bridge
 #print axioms vit_rowlnBeta_grad_bridge
-#print axioms vit_render_rowlngamma_certified
-#print axioms vit_render_rowlnbeta_certified
 #print axioms pdiv_patchEmbed_pos
 #print axioms vit_render_pos_certified
 #print axioms pdiv_patchEmbed_cls

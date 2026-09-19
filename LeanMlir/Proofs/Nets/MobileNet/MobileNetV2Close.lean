@@ -23,8 +23,8 @@ and each is now certified by the bridge in the right column:
 | stem 3×3 conv b (`sb`, stride 2)            | `flatConvStride2`   | `mnv2_render_stem_convb_certified` (**new**)  |
 | depthwise W stride 1 (`dW`, blocks b2,b4)   | `depthwiseConv2d`   | `mnv2_render_depthwiseW_certified` (**new**)  |
 | depthwise b stride 1 (`db`, blocks b2,b4)   | `depthwiseConv2d`   | `mnv2_render_depthwiseb_certified` (**new**)  |
-| depthwise W stride 2 (`dW`, blocks b1,b3,b5,b6) | `depthwiseStride2Flat` | `mnv2_render_depthwiseW_strided_certified` (**new**) |
-| depthwise b stride 2 (`db`, blocks b1,b3,b5,b6) | `depthwiseStride2Flat` | `mnv2_render_depthwiseb_strided_certified` (**new**) |
+| depthwise W stride 2 (`dW`, blocks b1,b3,b5,b6) | `depthwiseStride2FlatXla` | `mnv2_render_depthwiseW_strided_xla_certified` (**new**) |
+| depthwise b stride 2 (`db`, blocks b1,b3,b5,b6) | `depthwiseStride2FlatXla` | `mnv2_render_depthwiseb_strided_xla_certified` (**new**) |
 
 The reuse families need no new theorem — the generic M2/M3/CIFAR-BN bridges apply verbatim at
 the MobileNetV2 shapes. This file supplies the genuinely-new pieces:
@@ -181,20 +181,9 @@ theorem mnv2_render_stem_convb_xla_certified {ic oc h w kH kW : Nat}
 -- ── C.2 Strided depthwise weight (`dW`, blocks b1,b3,b5,b6) ──
 -- (`depthwiseStride2_weight_grad_has_vjp` RELOCATED to `Depthwise.lean` — see § C header.)
 
-/-- **Strided depthwise weight output, certified.** `Wⁿ = W − lr·(upsample-then-stride-1 grad)`
-    denotes `W − lr·(certified ∂(depthwiseStride2Flat)/∂W · cotangent)`. -/
-theorem mnv2_render_depthwiseW_strided_certified {c h w kH kW : Nat}
-    (b : Vec c) (x : Vec (c * (2 * h) * (2 * w)))
-    (v : Vec (c * kH * kW)) (dy : Vec (c * h * w)) (lr : ℝ) (i : Fin (c * kH * kW)) :
-    v i - lr * (depthwiseStride2_weight_grad_has_vjp b x).backward v dy i
-      = v i - lr * ∑ j : Fin (c * h * w),
-          pdiv (fun v' : Vec (c * kH * kW) =>
-            depthwiseStride2Flat (Tensor3.unflatten v' : DepthwiseKernel c kH kW) b x) v i j * dy j := by
-  rw [(depthwiseStride2_weight_grad_has_vjp b x).correct]
-
 /-- **Strided depthwise weight output, certified — XLA-`SAME` phase.** MobileNetV2's four strided
-    depthwises. ⚠ The symmetric lemma above stays: EfficientNet-B0's strided depthwises are
-    symmetric in render and reference alike. -/
+    depthwises: `Wⁿ = W − lr·(upsample-then-stride-1 grad)` denotes `W − lr·(certified
+    ∂(depthwiseStride2FlatXla)/∂W · cotangent)`. -/
 theorem mnv2_render_depthwiseW_strided_xla_certified {c h w kH kW : Nat}
     (b : Vec c) (x : Vec (c * (2 * h) * (2 * w)))
     (v : Vec (c * kH * kW)) (dy : Vec (c * h * w)) (lr : ℝ) (i : Fin (c * kH * kW)) :
@@ -207,17 +196,7 @@ theorem mnv2_render_depthwiseW_strided_xla_certified {c h w kH kW : Nat}
 -- ── C.3 Strided depthwise bias (`db`, blocks b1,b3,b5,b6) ──
 -- (`depthwiseStride2_bias_grad_has_vjp` RELOCATED to `Depthwise.lean` — see § C header.)
 
-/-- **Strided depthwise bias output, certified.** `bⁿ = b − lr·(spatial reduce)` denotes
-    `b − lr·(certified ∂(depthwiseStride2Flat)/∂b · cotangent)`. -/
-theorem mnv2_render_depthwiseb_strided_certified {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (x : Vec (c * (2 * h) * (2 * w)))
-    (b : Vec c) (dy : Vec (c * h * w)) (lr : ℝ) (o : Fin c) :
-    b o - lr * (depthwiseStride2_bias_grad_has_vjp W x).backward b dy o
-      = b o - lr * ∑ j : Fin (c * h * w),
-          pdiv (fun b' : Vec c => depthwiseStride2Flat W b' x) b o j * dy j := by
-  rw [(depthwiseStride2_bias_grad_has_vjp W x).correct]
-
-/-- **Strided depthwise bias output, certified — XLA-`SAME` phase.** -/
+/-- **Strided depthwise bias output, certified — XLA-`SAME` phase.** `bⁿ = b − lr·(spatial reduce)`. -/
 theorem mnv2_render_depthwiseb_strided_xla_certified {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (x : Vec (c * (2 * h) * (2 * w)))
     (b : Vec c) (dy : Vec (c * h * w)) (lr : ℝ) (o : Fin c) :

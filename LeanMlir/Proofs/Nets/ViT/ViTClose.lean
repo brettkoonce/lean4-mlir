@@ -12,7 +12,7 @@ everything in a ViT is per-example separable (the EfficientNet contrast).
 |--------------------------------------|----------------------------|--------------|
 | Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the M2 outer-product bridge row-lifted |
 | classifier `Wcls`/`bcls`             | dense on the CLS row       | M2 `weight/bias_grad_bridge` (**reuse** — single-vector dense) |
-| LN γ/β ×5 sites (scalar, per-token)  | rowwise `layerNormForward` | `vit_render_rowln{gamma,beta}_certified` (**new**): the ConvNeXtClose `Vec 1` embedding row-lifted — `dγ = Σ_{tokens} Σ_D dy·x̂`, `dβ = Σ Σ dy` (affine in the params ⇒ no `0 < ε`) |
+| LN γ/β ×5 sites (scalar, per-token)  | rowwise `layerNormForward` | `vit_rowln{Gamma,Beta}_grad_bridge` (**new**): the ConvNeXtClose `Vec 1` embedding row-lifted — `dγ = Σ_{tokens} Σ_D dy·x̂`, `dβ = Σ Σ dy` (affine in the params ⇒ no `0 < ε`) |
 | `pos_embed`                          | additive (`patchEmbed_flat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
 | `cls_token`                          | row-0 scatter (`patchEmbed_flat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
 | patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbed_flat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
@@ -260,28 +260,6 @@ theorem vit_rowlnBeta_grad_bridge (N D : Nat) (ε γ : ℝ) (β : Vec 1) (X : Ma
   rw [sum_finProdFinEquiv (m := N) (n := D)]
   unfold rowLN_grad_beta bn_grad_beta Mat.unflatten
   rfl
-
-/-- **Rowwise scalar-LN γ output, certified.** `γⁿ = γ − lr·(Σ_tokens Σ_D dy·x̂)`
-    denotes the certified rowwise-LN ∂/∂γ contraction. Covers all five LN sites
-    of the representative ViT (LN1/LN2 per block + the final LN). -/
-theorem vit_render_rowlngamma_certified (N D : Nat) (ε β : ℝ) (γ : Vec 1)
-    (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) :
-    γ 0 - lr * rowLN_grad_gamma N D ε X (Mat.unflatten dy)
-      = γ 0 - lr * ∑ idx : Fin (N * D),
-          pdiv (fun γ' : Vec 1 =>
-                  Mat.flatten (fun r => layerNormForward D ε (γ' 0) β (X r)))
-            γ 0 idx * dy idx := by
-  rw [vit_rowlnGamma_grad_bridge N D ε β γ X dy]
-
-/-- **Rowwise scalar-LN β output, certified.** -/
-theorem vit_render_rowlnbeta_certified (N D : Nat) (ε γ : ℝ) (β : Vec 1)
-    (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) :
-    β 0 - lr * rowLN_grad_beta N D (Mat.unflatten dy)
-      = β 0 - lr * ∑ idx : Fin (N * D),
-          pdiv (fun β' : Vec 1 =>
-                  Mat.flatten (fun r => layerNormForward D ε γ (β' 0) (X r)))
-            β 0 idx * dy idx := by
-  rw [vit_rowlnBeta_grad_bridge N D ε γ β X dy]
 
 -- ════════════════════════════════════════════════════════════════
 -- § C. pos_embed + cls_token — the two embed-parameter reindex closes
