@@ -9235,6 +9235,33 @@ def prettyAllReduceMean (grad : String) (ds : List Nat) (t : String) (replicas :
   else pretty 1 (.allReduceMeanF (n := ds.foldl (· * ·) 1) replicas (by omega) t ds
         (fun _ => .operand grad (fun _ => 0)))
 
+/-- **One parameter's AdamW update, as `pretty` of the proven triple** — `adamMNextF`, `adamVNextF`
+    and the decoupled-decay `adamWParamF` on the gradient `grad`, reading the graph constants
+    `adamWConsts` binds, the step's `%bc1`/`%bc2`/`%lr`, and the decay operand `wdName` (`"%wdz"` for
+    a timm no-decay parameter). Returns `(code, θ', m', v')`; every batched renderer's AdamW tail is
+    this. ⚠ `wdName` and `den`'s `wd` must move together: both are 0 here only because every ℝ slot
+    is a placeholder the emit ignores; if that changes, a no-decay site must pass `wd := 0` as well
+    as `%wdz`, or the artifact and the denotation describe different optimizers. -/
+def prettyAdamW (B : Nat) (nm : String) (ds : List Nat) (grad : String) (wdName : String := "%wd") :
+    StateM EmitS (String × String × String × String) := do
+  let z : Vec (ds.foldl (· * ·) 1) := fun _ => 0
+  let gr : SHlo (ds.foldl (· * ·) 1) := .operand grad z
+  let (cM, nM) ← pretty B (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
+  let (cV, nV) ← pretty B (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
+  let (cT, nT) ← pretty B (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
+                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName ds 0 0 0 0 0 0 0 z z z gr)
+  pure (cM ++ cV ++ cT, nT, nM, nV)
+
+/-- **The AdamW graph constants** — β₁ = 0.9, β₂ = 0.999, ε = 1e-8 and the baked decay `wdStr`
+    (1e-4 is the Imagenette recipe every batched net shares; the ImageNet configs pass their own). -/
+def adamWConsts (wdStr : String := "0.0001") : String :=
+  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+  s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n"
+
 /-- Wrap a rendered single-result graph as a `func.func` module. -/
 def renderModule (name argSig : String) (B retLen : Nat) (g : SHlo retLen) : String :=
   let (body, res) := (pretty B g).run' (0, [])

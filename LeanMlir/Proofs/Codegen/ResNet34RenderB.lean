@@ -668,12 +668,9 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     else pure ("", none)
   match opt with
   | .adamw =>
-    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
-    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
-    let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName g.ds 0 0 0 0 0 0 0 z z z gr)
+    let (cA, nT, nM, nV) ← prettyAdamW B g.nm g.ds gAvg wdName
     let (cE, nE) ← emaTail nT
-    pure (arS ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, none, nE)
+    pure (arS ++ cA ++ cE, nT, nM, nV, none, nE)
   | .lamb =>
     -- ⭐⭐ LAMB, in four ops per parameter, TWO of which are new (`planning/archive/rsb_a3_r50_verified.md`
     -- §2.3 estimated "2–3"; measured at 2, because `gradSumSqAccF` was already here for the clip
@@ -728,10 +725,10 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- and `gr` is already the CLIPPED total — so the tail reads `gr` while the fourth region still
     -- reports the raw `Gt`. See `accIn`'s note: those two must not collapse into one name.
     let (cG, nG, gt) ← match accIn with
-      | some a => pure ("", a, gr)
+      | some a => pure ("", a, gAvg)
       | none   => do
           let (c, nm') ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
-          pure (c, nm', (.operand nm' z : SHlo n))
+          pure (c, nm', nm')
     -- ② the moments and the parameter, **byte-identical to `.adamw`'s** except that they consume
     -- `Gt` rather than `g`. The `1/k` that turns a SUM into a MEAN is not applied here: it is folded
     -- into `%ob1 = (1−β₁)/k` and `%ob2 = (1−β₂)/k²` by `optConstsB`, because `v` is QUADRATIC in the
@@ -741,12 +738,9 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- On an ACCUMULATE micro-batch `optConstsB` sets `%b1 = %b2 = 1` and `%ob1 = %ob2 = 0`, so both
     -- moments are exact passthroughs; `%lr = 0` freezes θ, and AdamW's decay is DECOUPLED (`−lr·wd·θ`)
     -- so lr = 0 freezes it COMPLETELY rather than leaving a decay term running k times per step.
-    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gt)
-    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gt)
-    let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName g.ds 0 0 0 0 0 0 0 z z z gt)
+    let (cA, nT, nM, nV) ← prettyAdamW B g.nm g.ds gt wdName
     let (cE, nE) ← emaTail nT
-    pure (arS ++ cG ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, some nG, nE)
+    pure (arS ++ cG ++ cA ++ cE, nT, nM, nV, some nG, nE)
   | .lambAccum _ =>
     -- ⭐⭐ **RSB-A3's optimizer.** Structurally: `.adamwAccum`'s ① accumulator, then `.lamb`'s tail
     -- reading `Gt` where it read `g`. Nothing else changes, and nothing new is introduced — no new
@@ -1097,13 +1091,7 @@ def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
   -- honour the override — `optWdStr` owns "the caller's value or this optimizer's default".
   let wd := optWdStr opt wdStr
   match opt with
-  | .adamw =>
-    "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-    "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-    "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-    "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-    "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
+  | .adamw => adamWConsts wd
   | .heavyBall =>
     "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
     s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"

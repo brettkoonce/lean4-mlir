@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-19, main `f48d9726`, 13 ahead of origin, + the staged row)
+## Status (2026-09-19, main `cb52f18b`, 3 ahead of origin, + the staged row)
 
-**Landed** — about 12.8k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 13.2k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -66,7 +66,11 @@ suspected, no drop-in located.
 | `b8124630` | **§6 live witnesses — one generic stem** (−107): `Xs s` and `stemβ s β` in `ResNet34LivePC` with `_bn_pos`, `_inj`, `_maxpool_smooth`, `_vjp`, `_diff`, `Dom2_stemβ`, `Dom2_Xs`, `stemβ_zero`, plus `maxPoolFlat_vjp_of_smooth` / `_diff_of_smooth` for the flatten/unflatten point step written four times. The 16×16 and 112×112 families (`X2`, `stem2`, `stem2_vjp` / `_diff`, `hmp_vjp2`, … and their 224 peers) are one-line instances; their `_bn_pos` / `_inj` / `_maxpool_smooth` / `_conv_eq` / `mp_point_eq*` copies and `X2_inj` / `X224_inj` go. Seal side: generic `Yt` / `Ys`, `stemSβ`, `stemβ_eq_stemSβ` in `ResNet34LiveSeal`; `Y`, `Y224`, `stemS`, `stemS224` are instances. Left: ResNet34Concrete's 1-channel stem (ResNet34.lean has 99 downstream) |
 | `2c565fb9` | **§6 live misc** (−16): `ResNet34LivePC.flatConv_diag_id` takes a bias (`b`, `hb`) and absorbs `MobileNetV2SealRealistic`'s `flatConv_diag_id_b`; LivePC's `relu_const_pos` goes for the identical `Proofs.relu_const_pos` in ResNet34.lean |
 | `f48d9726` | **§6/§7 exact duplicates** (−39): `r50StemGraphB` is `r34StemGraphB` and its pinned `_faithful` `r34StemGraphB_faithful` (the docstring's "differs by one bias string" was stale — both use `biasName false "" oc`); `r34Trunk_3463` is `r50Trunk_3463` (unpinned `r34Stage` goes); MobileNetV2's `convBn'_has_vjp` / `_differentiable` go for CNN.lean's identical `convBn_*` (6 call sites); the pinned WholeBack stem `convStridedBnRelu6PC_has_vjp_at` / `_differentiableAt` delegate to FullVJP's `convBnRelu6StridedPC_*` (the file imports FullVJP; 3 downstream). Left: `r50StageFirst` / `r50StageDown` (pinned `r50Stage_faithful` names the first), `reluMaskB` → `reluMaskBack` (0 lines saved), and the root-file ones — `conv2d_1x1'`, `sum_flatten8`, `bnForward_const_eq` / `flatConv_zero` vs MobileNetV2's copies (siblings in the import graph) |
-| *(staged)* | **§6 `MnistCNN` `Mini` ≡ `Spatial`** (−71): new namespace `TwoChan` holds the shared `T0`, `X`, `b1`, `b2`, `W3`…`b5`, `κ` and two clause Props `Conv1Mix W1` / `Conv2Mix W2`; the chain (`conv1_pos` … `dense3_pos`, `cnn_has_vjp_at`) is stated once over any kernels satisfying them. Each tier keeps its kernels, `conv1_eq` (now `: Conv1Mix W1`), a `conv2_mix`, a one-line `*Cnn_has_vjp_at` and its pinned `*_has_vjp_correct`, whose text is unchanged but whose constants now resolve to the identical `TwoChan.*` (nothing else named the 24 per-namespace copies) |
+| `1da2619f` | **§6 `MnistCNN` `Mini` ≡ `Spatial`** (−71): new namespace `TwoChan` holds the shared `T0`, `X`, `b1`, `b2`, `W3`…`b5`, `κ` and two clause Props `Conv1Mix W1` / `Conv2Mix W2`; the chain (`conv1_pos` … `dense3_pos`, `cnn_has_vjp_at`) is stated once over any kernels satisfying them. Each tier keeps its kernels, `conv1_eq` (now `: Conv1Mix W1`), a `conv2_mix`, a one-line `*Cnn_has_vjp_at` and its pinned `*_has_vjp_correct`, whose text is unchanged but whose constants now resolve to the identical `TwoChan.*` (nothing else named the 24 per-namespace copies) |
+| `611b8469` | **§9 `den_batchOp`** (−131): one `@[simp] den_batchOp : den (.batchOp op e) = batchMap N (denOp op) (den e)` + `attribute [simp] denOp` replace the 32 per-op `den_batchOp_<op>` `rfl` lemmas. Their warnings (the XLA-`SAME` conv/depthwise ≠ the symmetric ones, inference BN's batch independence, maxPool3s2 ≠ maxPool) are comments on `denOp`'s arms. The ~15 consumer `simp only` lists in the R34/R50/MNv2/MNv4/ENet `FullB` and render files read `den_batchOp, denOp`; the `_eq_reluF`/`_eq_relu6F`/`_eq_swishF` lemmas they combine with are pre-rewrites (`↓`), and `mnv4StemGraphB_faithful` unfolds its graph first. The pinned `_eq_*` and `_per_example` lemmas stay |
+| `c7b534af` | **§9 one-liners** (−90): `patchEmbedFlat` / `patchEmbedBackFlat` are `abbrev`s of Attention's `patchEmbed_flat` / `patchEmbed_input_grad_formula` (−47; `ViTBackB0.patchEmbedBackFlat_eq_backward` goes, `patchEmbedBackGraph_faithful` is `rfl`); the stale "so `StableHLO` needn't import `Attention`" docstrings and a docstring naming a nonexistent `maxPool3s2_ne_maxPool_descr` fixed (§11 defect 5). `batchSlice_batchMap` / `batchMap_pointwise` are `Mat.unflatten_flatten` / `Mat.flatten_unflatten` terms, `lookupEntry` is `List.lookup`. `adamVNext_nonneg`, `adam_denom_pos`, `clipDenom_pos`, `lambDenom_pos` (= `clipDenom_pos`), `rmsSqNext_nonneg` (= `adamVNext_nonneg`) one term each; `lambScale_not_shared` is `norm_num [lambTrust, gradSumSq]` (12 → 2); `keepProb_last` via `Nat.cast_sub` |
+| `cb52f18b` | **§9 one `zrnd`** (−151): the renderers' identity rounding for the bf16/fp8 ops is one documented `StableHLO.zrnd`; the 48 `let zrnd := fun r => r` in CnnRender, EfficientNetRender, the MNv2/MNv4/R34/R50 `RenderB`s, their repeated "placeholder rounding" comment blocks and the private `zrndB` / `vzrnd` go (use sites unchanged but the two renames). All 249 `verified_mlir/` artifacts re-render byte-identically |
+| *(staged)* | **§9 one AdamW tail** (−59): `StableHLO.prettyAdamW` (the `adamMNextF`/`adamVNextF`/`adamWParamF` triple on a gradient name, with the `wdName`/`wd` note that sat in ViTRender) and `adamWConsts wdStr` (β₁/β₂/ε/wd). The seven triples (MNv2 `adamOneM`, MNv4 `adamOne4`, `enetAdamOne`, `convnextAdamOne`, `vitAdamOne`, R34 `optOne`'s `.adamw` and `.adamwAccum`) call it, and the six AdamW constant blocks are `adamWConsts` (`adamConstsM`, `adamConsts4`, `enetAdamConsts` deleted; `vitAdamConsts`, `convnextAdamConsts`, `optConstsB .adamw` delegate). Byte-identical |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -103,10 +107,16 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    at c = 2, and the EfficientNet / ConvNeXt / ViT fold restatements are pinned one-line delegations — a §0.7
    question). For the root-file batch: `conv2d_1x1'`, `sum_flatten8`, `bnForward_const_eq` / `flatConv_zero`
    (ResNet34 and MobileNetV2 can't see each other) and ResNet34Concrete's 1-channel stem.
-4. **§9 Codegen** (~400 in Lean) — **next**: one `den_batchOp` (~110); the five local re-spellings in `StableHLO.lean`
-   (~100); `batchSlice` as an abbrev of `Mat.unflatten` (~37); `DropPath` = `dropout ∘ dropScale` (~25);
-   the zero placeholders. ⚠ `StableHLO.lean` has ~190 downstream — batch these. The renderer near-clones
-   (~600, likely) must stay byte-identical (the `#guard`s and the CI diff).
+4. **§9 Codegen** — done 2026-09-19 (−431 over four commits, against ~400 in Lean). Left, with the
+   reason: `batchSlice` / the eight `row*Flat` as `Mat.unflatten` / `batchMap` instances (496 use lines,
+   and the `simp only [batchSlice, Mat.unflatten]` sites expect the current unfolding); `clsSliceFlat` /
+   `clsPadFlat` / `rowSoftmaxFlat` as aliases (downstream `simp` unfolds their bodies; 0 lines saved);
+   `DropPath`'s lemmas (already one-liners, stated before `dropout` is); the zero placeholders (the ~700
+   local `let z… : Vec (…) := fun _ => 0` pin the SHlo shape indices at each `.operand`; the 15 generic
+   private `zV`/`zK`/… would save 15 lines for ~380 touched). Renderer near-clones still open (likely):
+   the RMSProp tail ×2, the bf16/fp8 constructor switch (~250 sites → smart constructors), the
+   BN-parametrised forward twins (~400), `R34Bn` ≡ `BnMode` and friends. The op-template `let`s (`dg`,
+   `convFwd`, …) live in the hand-written `*Text` predecessors — see the end list.
 5. **§5 generator lemmas** (~1,600 emitted): G2 `pair_sq_bound_mlp` (148×), G1 `mlp_out_eq` (72×), G3/G4.
    Edit the generator, regenerate, diff the output, check `regen_verified_mlir.sh` / the render guard lists.
 6. **Root-file batches, together** (each is a full ~7.5-min `Certs` rebuild): §1 `Tensor.lean` (~600:
@@ -131,6 +141,10 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
   since `StepTieG` imports `StepTie`).
 - The 2-block vector-LN ViT (`vitForward2V_has_vjp`, `vitFwdGraphMHV{,_faithful}`) as the depth-k one at
   k = 2: both sit upstream of `ViTDepthK`, so deriving them means moving pinned theorems into it (~100).
+- The hand-written `*TrainStepText` / `*FwdText*` emitters in `StableHLO.lean` (~1,110 lines: mlp, cnn,
+  cifar, cifarBn, cifar8, cifar8Bn), "kept for reference" since the `*FaithfulV` renders replaced them
+  (CnnRender's comments). Callers: `tests/TestCifar8AdamTrain`, `IreeRuntime` (`mlpTrainStepText`),
+  `CnnTrainStep` (`cnnTrainStepText`). Retire, or keep and hoist their op-template `let`s (~300).
 
 **How the batches were run** (worked; keep doing it):
 - *Keep every statement verbatim.* Replace only a proof body — for a `have h_pdiv` inside a long VJP
@@ -218,6 +232,14 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
 - `simp [sum_fin_prod …]` turns `finProdFinEquiv.symm` into `divNat`/`modNat` and stalls — `rw` it first,
   then `simp`. A bare `eq_comm` in `simp` can time out in `acLt` (pass `@eq_comm _ j i`), and
   `rw [@eq_comm _ j i]` under an `ite` fails on the `Decidable` motive — use `simp only`.
+- A generic simp lemma next to a specific one on the same head (`den_batchOp` vs
+  `den_batchOp_relu_eq_reluF`): in one `simp only` the generic fires first. Mark the specific one `↓`
+  (pre); if the same call also unfolds the graph def, the node only appears after the pre pass — `unfold`
+  the def first.
+- `StableHLO.lean` alone compiles in ~5.5 min; a gate for a `StableHLO` batch is ~13 min. The renderers
+  rewrite all 249 `verified_mlir/` artifacts on rebuild, so `git status verified_mlir/` after the gate is
+  the byte-identity check.
+- `pkill -f <pattern>` inside a Bash call whose own command line contains the pattern kills that call.
 - `CertLayer` capstones: make the named `_has_vjp_at` def the composite layer's `.vjp` at the same
   point and the capstone its `.faithful`; the hand-written graph defs stay and are `rfl`-equal to the
   composite's `.graph`. Consumers that `rw [← capstone]` never unfold the VJP def, so they don't move.

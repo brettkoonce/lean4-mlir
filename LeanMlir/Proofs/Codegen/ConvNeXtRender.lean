@@ -876,11 +876,7 @@ private def convnextAdamOne (cBS : Nat) (replicas : Nat) (nm : String) (ds : Lis
   -- parameter — so at `clip := true` the caller hoists both. `planning/archive/grad_clip.md` §4.
   let replicas := if preAvg then 1 else replicas
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
-  let gr : SHlo n := .operand gAvg z
-  let (cM, nM) ← pretty cBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
-  let (cV, nV) ← pretty cBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
-  let (cT, nT) ← pretty cBS (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName ds 0 0 0 0 0 0 0 z z z gr)
+  let (cA, nT, nM, nV) ← prettyAdamW cBS nm ds gAvg wdName
   -- ▶ THE EMA SHADOW, and it needs NO new op: `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the
   -- reference's `ema_update` (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so
   -- `adamMNextF` renders it and `adamMNextF_faithful` closes the denotation side by `rfl`. Third
@@ -898,7 +894,7 @@ private def convnextAdamOne (cBS : Nat) (replicas : Nat) (nm : String) (ds : Lis
   let (cE, nE) ← if ema then
       pretty cBS (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
     else pure ("", "")
-  pure (arS ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, nE)
+  pure (arS ++ cA ++ cE, nT, nM, nV, nE)
 
 /-- The driver's **variant slug** for a given replica count: the artifact is
     `verified_mlir/convnext_<variant>_train_step.mlir`, the entry point is
@@ -966,12 +962,7 @@ private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0
     "    // ── timm no_weight_decay (wdExcludeNormBias): 121 of 180 params take %wdz, not %wd ──\n" ++
     "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
    else "") ++
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n"
+  adamWConsts wdStr
 
 set_option maxRecDepth 8000 in
 /-- **ConvNeXt-T AdamW train step rendered from the verified AST.** The certified peer of the

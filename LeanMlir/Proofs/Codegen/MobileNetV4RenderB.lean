@@ -971,25 +971,9 @@ private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
     `replicas ≤ 1` it emits nothing and the single-device render stays byte-identical. -/
 private def adamOne4 (B : Nat) (replicas : Nat) (g : PGradV4) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let n := g.ds.foldl (· * ·) 1
-  let z : Vec n := fun _ => 0
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
-  let gr : SHlo n := .operand gAvg z
-  let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
-  let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
-  let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
-  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
-
-/-- β₁/β₂/ε/wd as graph constants — the Imagenette AdamW recipe, identical to MobileNetV2's and
-    ResNet-34's, because MNv4 sits in the same tier and runs the same schedule. -/
-private def adamConsts4 : String :=
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+  let (c, nT, nM, nV) ← prettyAdamW B g.nm g.ds gAvg
+  pure (arS ++ c, nT, nM, nV)
 
 /-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
     `verified_mlir/mnv4_<variant>_train_step.mlir`, the entry point is
@@ -1229,7 +1213,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes (4d piece 2). NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design.\n") ++
-      zeroBiasPrelude false mnv4ZbWidths ++ body ++ adamConsts4 ++ adamCode ++ lossCode ++
+      zeroBiasPrelude false mnv4ZbWidths ++ body ++ adamWConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv4SigList nClasses
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))

@@ -523,15 +523,9 @@ def mnv2StatSigList : List (String × String) :=
     stays byte-identical — the cheap self-check that the insertion is inert. -/
 private def adamOneM (B : Nat) (replicas : Nat) (g : PGradM) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let n := g.ds.foldl (· * ·) 1
-  let z : Vec n := fun _ => 0
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
-  let gr : SHlo n := .operand gAvg z
-  let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
-  let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
-  let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
-  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+  let (c, nT, nM, nV) ← prettyAdamW B g.nm g.ds gAvg
+  pure (arS ++ c, nT, nM, nV)
 
 /-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `adamOneM` peer.
 
@@ -566,16 +560,6 @@ private def rmsOneM (B : Nat) (replicas : Nat) (g : PGradM) :
   -- CSE (§4), so re-nesting would emit the whole 13-op buffer block a second time.
   let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nB z))
   pure (arS ++ cW ++ cS ++ cB ++ cT, nT, nB, nS)
-
-/-- β₁/β₂/ε/wd as graph constants — the committed MobileNetV2 AdamW recipe, identical to
-    ResNet-34's and read off `verified_mlir/mobilenetv2_adam_train_step.mlir`. -/
-private def adamConstsM : String :=
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
 
 /-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
     `verified_mlir/mobilenetv2_<variant>_train_step.mlir`, the entry point is
@@ -981,7 +965,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
       zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ body ++
-      (match opt with | .adamw => adamConstsM | .rmsprop => rmsConstsBlock mnv2RmsHyper) ++
+      (match opt with | .adamw => adamWConsts | .rmsprop => rmsConstsBlock mnv2RmsHyper) ++
       adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv2SigList nClasses convBias

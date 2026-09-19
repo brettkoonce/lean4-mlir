@@ -1065,15 +1065,9 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     Mirrors `ResNet34RenderB.adamOne` and `ViTRender.vitAdamOne`. -/
 private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
     (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let n := ds.foldl (· * ·) 1
-  let z : Vec n := fun _ => 0
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
-  let gr : SHlo n := .operand gAvg z
-  let (cM, nM) ← pretty B (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
-  let (cV, nV) ← pretty B (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
-  let (cT, nT) ← pretty B (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
-  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+  let (c, nT, nM, nV) ← prettyAdamW B nm ds gAvg
+  pure (arS ++ c, nT, nM, nV)
 
 /-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `enetAdamOne` peer, and
     the same four-op composition `MobileNetV2RenderB.rmsOneM` uses:
@@ -1108,20 +1102,6 @@ private def enetRmsOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String
   -- θ' threads b' by SSA NAME, not by re-nesting: `pretty` has no CSE (§4).
   let (cT, nT) ← pretty B (.sgdParamF s!"%{nm}" "%lr" ds 0 z (.operand nB z))
   pure (arS ++ cW ++ cS ++ cB ++ cT, nT, nB, nS)
-
-/-- β₁/β₂/ε/wd as graph constants — the committed EfficientNet-B0 AdamW recipe
-    (`efficientNetB0Config`: lr 1e-3, wd 1e-4, cosine + 3-epoch warmup).
-
-    `%b1`/`%b2` do NOT collide with the MBConv blocks also called `b1`/`b2`: every block parameter
-    carries a suffix (`%b1dW`, `%b2eW`, …), so the bare names are free. The hand-written render
-    relies on the same thing. -/
-private def enetAdamConsts : String :=
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
 
 /-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
     `verified_mlir/efficientnet_<variant>_train_step.mlir`, the entry point is
@@ -1357,7 +1337,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
          "    //    Adam bias corrections, unread here and passed through unchanged.\n" ++
          "    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.\n") ++
       zeroBiasPrelude convBias enetBiasWidths ++ code ++ statCode ++
-      (match opt with | .adamw => enetAdamConsts | .rmsprop => rmsConstsBlock enetRmsHyper) ++
+      (match opt with | .adamw => adamWConsts | .rmsprop => rmsConstsBlock enetRmsHyper) ++
       adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
       bnList.map (fun t => t.2.2.1))

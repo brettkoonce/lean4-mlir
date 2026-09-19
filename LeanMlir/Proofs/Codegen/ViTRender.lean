@@ -617,15 +617,7 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
   -- `all_reduce`, as every op's lowering is. At `replicas ≤ 1` this emits NOTHING, which is the cheap self-check that the
   -- insertion is inert (the single-device render re-renders byte-identical).
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
-  let gr : SHlo n := .operand gAvg z
-  let (cM, nM) ← pretty bs (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
-  let (cV, nV) ← pretty bs (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
-  -- ⚠ `wdName` and `den`'s `wd` must move TOGETHER. They are both 0 here only because every
-  -- literal in this constructor is already 0 (the ℝ slots are placeholders the emit ignores); if
-  -- that ever changes, an excluded site must pass `wd := 0` as well as `%wdz`, or the artifact and
-  -- the denotation describe different optimizers — §2a's two-writers disease inside one op.
-  let (cT, nT) ← pretty bs (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName ds 0 0 0 0 0 0 0 z z z gr)
+  let (cA, nT, nM, nV) ← prettyAdamW bs nm ds gAvg wdName
   -- ▶ THE EMA SHADOW, and as on ConvNeXt/EfficientNet it needs NO new op:
   -- `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the reference's `ema_update`
   -- (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so `adamMNextF` renders it and
@@ -644,7 +636,7 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
   let (cE, nE) ← if ema then
       pretty bs (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
     else pure ("", "")
-  pure (arS ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, nE)
+  pure (arS ++ cA ++ cE, nT, nM, nV, nE)
 
 /-- The driver's **variant slug** for a (per-device batch, replica count, EMA) triple: the artifact
     is `verified_mlir/vit_<variant>_train_step.mlir`, the entry point is `@vit_<variant>_train_step`
@@ -721,12 +713,7 @@ private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001
     "    // ── timm no_weight_decay (wdExcludeNormBias): 126 of 200 params take %wdz, not %wd ──\n" ++
     "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
    else "") ++
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n"
+  adamWConsts wdStr
 
 /-- **ViT-Tiny depth-12 AdamW train step, rendered from the verified AST.** The certified peer of
     the hand-written `ViTRender.vitTrainStepModuleAdamSched` that `vit-verified-adam` has been
