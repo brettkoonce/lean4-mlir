@@ -899,6 +899,9 @@ open Proofs
 -- He et al.'s 3×3/s2 stem pool's BACKWARD
 #print axioms Proofs.maxPool3s2FlatBack_eq_vjp_backward
 #print axioms Proofs.maxPool3s2Flat_has_vjp_at_vec
+-- the two spellings of that scatter are one map: the render's `.maxPool3s2BackB` node = the chain's
+#print axioms Proofs.maxPool3s2BackFlat_eq_flatBack
+#print axioms Proofs.den_maxPool3s2BackB_eq_flatBackB
 -- THE WHOLE-NET CERTIFIED TIE (ResNet-34, r34InputGrad_eq_resnet34_vjp)
 #print axioms Proofs.cbrStridedPC_has_vjp_at
 #print axioms Proofs.cbrStridedPC_differentiableAt

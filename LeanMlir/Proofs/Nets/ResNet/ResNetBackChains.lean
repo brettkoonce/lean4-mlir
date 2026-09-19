@@ -108,13 +108,52 @@ noncomputable def r34InputGrad (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
 /-- **The batched 3×3/s2 max-pool backward** — `maxPool3s2FlatBack` per example, on that example's
     OWN saved stem activation. ⛔ It is `batchMapAux` and not `batchMap`: a `batchMap` would hand
     example 0's argmax pattern to every example (`StableHLO.batchMapAux`'s own header records the
-    same trap on the emitter side). This is `den (.maxPool3s2BackB …)` up to the two spellings of
-    the scatter (`ResNet34StepTieB.mpInB` is the `maxPool3s2BackFlat` one). -/
+    same trap on the emitter side). This IS `den (.maxPool3s2BackB …)`:
+    `den_maxPool3s2BackB_eq_flatBackB` below equates the two spellings of the scatter
+    (`ResNet34StepTieB.mpInB` is the `maxPool3s2BackFlat` one). -/
 noncomputable def maxPool3s2FlatBackB (N c h w : Nat) (v : Vec (N * (c * (2*h) * (2*w)))) :
     Vec (N * (c * h * w)) → Vec (N * (c * (2*h) * (2*w))) :=
   StableHLO.batchMapAux N
     (fun xv : Vec (c * (2*h) * (2*w)) =>
       maxPool3s2FlatBack (c := c) (h := h) (w := w) (Tensor3.unflatten xv)) v
+
+/-- **The two spellings of the 3×3/s2 scatter are one map, at every input.** The render's
+    `den (.maxPool3s2Back …)` is `StableHLO.maxPool3s2BackFlat`, a triple sum against a `0/1`
+    indicator; the chain's `maxPool3s2FlatBack` is the same sum over the flat index with the
+    indicator folded into the `if`. `sum_flat3` re-indexes one into the other. No smoothness
+    hypothesis: this is about the scatter itself, not about the VJP it equals at a smooth point
+    (`maxPool3s2FlatBack_eq_vjp_backward`). -/
+theorem maxPool3s2BackFlat_eq_flatBack (c h w : Nat) (xv : Vec (c * (2*h) * (2*w)))
+    (dyv : Vec (c * h * w)) :
+    StableHLO.maxPool3s2BackFlat c h w xv dyv
+      = maxPool3s2FlatBack (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w)) dyv := by
+  funext idx
+  have hidx : finProdFinEquiv
+      (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1,
+        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
+        (finProdFinEquiv.symm idx).2) = idx := by
+    rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
+  simp only [StableHLO.maxPool3s2BackFlat, maxPool3s2FlatBack]
+  rw [sum_flat3 (fun k => if maxPool3s2LocalReindex
+        (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w)) k = idx then dyv k else 0)]
+  refine Finset.sum_congr rfl fun co _ => Finset.sum_congr rfl fun ho _ =>
+    Finset.sum_congr rfl fun wo _ => ?_
+  rw [hidx]
+  simp only [Tensor3.unflatten]
+  split <;> simp
+
+/-- **The batched stem-pool node the ResNet renders emit denotes the chain's batched scatter**
+    — the `.maxPool3s2BackB` bridge at the map `r34InputGradB` / `r50InputGradB` use, with no
+    hypothesis. Until this lemma the only bridge was `maxPool3s2Back_faithful`, at the per-example
+    constructor no shipped render emits. -/
+theorem den_maxPool3s2BackB_eq_flatBackB {N c h w : Nat} (xN : String)
+    (x : Vec (N * (c * (2*h) * (2*w)))) (e : StableHLO.SHlo (N * (c * h * w))) :
+    StableHLO.den (.maxPool3s2BackB xN x e) = maxPool3s2FlatBackB N c h w x (StableHLO.den e) := by
+  have hf : StableHLO.maxPool3s2BackFlat c h w
+      = fun xv : Vec (c * (2*h) * (2*w)) =>
+          maxPool3s2FlatBack (c := c) (h := h) (w := w) (Tensor3.unflatten xv) :=
+    funext fun xv => funext fun dyv => maxPool3s2BackFlat_eq_flatBack c h w xv dyv
+  rw [StableHLO.den_maxPool3s2BackB, maxPool3s2FlatBackB, hf]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The batched whole-net chains (true batch-norm, variable N; R50 at variable q)
