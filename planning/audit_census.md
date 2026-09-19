@@ -66,7 +66,7 @@ Checked against `281b6beb`. The full text of each finding is in Pass 1 below.
 
 | # | Finding | State at `281b6beb` | Fix |
 |---|---|---|---|
-| 2 | The r34 and MNv2 spec rungs (`resnet34Verified_fwd_faithful`, `mobilenetv2Verified_fwd_faithful`) are stated at per-example forwards no artifact renders | open | port batched rungs; template `efficientnetVerified_fwd_faithful`. Unblocks R.A and M.2 |
+| 2 | The r34 and MNv2 spec rungs (`resnet34Verified_fwd_faithful`, `mobilenetv2Verified_fwd_faithful`) are stated at per-example forwards no artifact renders | fixed: `denoteR34FullB` / `denoteMobilenetB` map the SAME committed layer lists to `resnet34ForwardB_full` / `mobilenetv2ForwardB_full` at every `N`; `resnet34VerifiedB_denote_eq` and `mobilenetv2VerifiedB_denote_eq` are `rfl`, `*VerifiedB_fwd_faithful` compose the batched T2 apexes; all in SpecVJP, pinned. The per-example rungs stay until R.A / M.2 are ruled on | R.A and M.2 are now ordinary cuts |
 | 3 | BN node seam: the RenderB files emit `.bnBatchBack` (44 sites) and never `.bnBatchLABack`, but the T3 ties state the BN cotangent at `.bnBatchLABack`'s `den` | fixed: `EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack` (the two `den`s are one map up to the associativity relabelling `reassocB`; the scatters collapse because `Fin.cast` is a bijection), `bnBackB_eq_den_bnBatchBack` (the certified cotangent every batched tie threads is the emitted node's `den`), `ResNet34TieB.bnInB_eq_den_bnBatchBack`; all pinned | — |
 | 4 | Stem-pool seam: `maxPool3s2BackFlat` (`ResNet34StepTieB`) vs `maxPool3s2FlatBack` (whole-back tie) | fixed: `maxPool3s2BackFlat_eq_flatBack` (the two scatters are one map, no smoothness needed — `sum_flat3` re-indexes one into the other) and `den_maxPool3s2BackB_eq_flatBackB` (the emitted batched node denotes `maxPool3s2FlatBackB`), both in `ResNetBackChains.lean`, pinned | — |
 | 5 | The book cites the wrong theorem in five places (4295; 6242–6249 and 6748; 391; 16279; 16306), and the IRPrint passages overclaim "by construction" | fixed, five commits `2b88d7bb`..`f6da580d` (front matter, ch 3, ch 4, ch 6, appendix C). Two of the survey's readings were wrong: `cifarCnn8_has_vjp_at` exists (a def, CifarCNN.lean:441) — the issue was the no-BN VJP cited in the BN section; and an fp8 graph IS emitted (`cifar8b_fp8_adam_train_step.mlir`, `.convF8`), it is `E4M3Fold`'s linear graph that is not. Also fixed: a `finSum` that never existed (l.259) and `matmul_left_const` in `fig:spines`. Ch 6's spec-rung sentence changes again with finding 2 | — |
@@ -82,8 +82,8 @@ ruled on any of them yet.
 
 | Group | Size | The decision | Recommendation |
 |---|---:|---|---|
-| R.A per-example r34 tier | 393 / 6 | holds the only r34 spec→math tie | cut after finding 2 |
-| M.2 per-example MNv2 paper tier | 276 / 4 | same as R.A, and the book cites `mobilenetv2_full_has_vjp_at` | cut after finding 2, together with finding 5's ch 6/7 fix |
+| R.A per-example r34 tier | 393 / 6 | held the only r34 spec→math tie until finding 2 landed; `resnet34VerifiedB_*` now carries it at batch BN | cut (unblocked) |
+| M.2 per-example MNv2 paper tier | 276 / 4 | same as R.A; the book's ch 6 now cites the batched theorems (`85f96828`) | cut (unblocked) |
 | S.3 dense-head restatements | now 10 pins | the MLP pair left the group once `ca9ea890` used it; certs.yml's per-op column cites `CnnPoC.db5_den` and `CifarPoC.db7_den` | cut; re-point the two certs.yml cells |
 | S.6 MLP layer-bridge restatements | 106 / 6 | reverses `18c31142`; part of the IR tier | keep; decide with A.1b |
 | S.8 `MlpCanonical` aliases | 31 / 8 | an audit surface by design (fixed point 1,510 / 35) | keep; fix its header (finding 10) |

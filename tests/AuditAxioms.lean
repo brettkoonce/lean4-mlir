@@ -1757,9 +1757,15 @@ open Proofs
 -- mnv2 FULL-paper tie (the committed 21-entry spec ↔ mobilenetv2ForwardPaper)
 #print axioms mobilenetv2Verified_denote_eq
 #print axioms mobilenetv2Verified_fwd_faithful
+-- the same spec at batch BN, the net every shipped MobileNetV2 artifact runs (finding 2, 2026-09-19)
+#print axioms mobilenetv2VerifiedB_denote_eq
+#print axioms mobilenetv2VerifiedB_fwd_faithful
 -- FULL committed-spec ties (unified weight bundles, 2026-07-07)
 #print axioms resnet34Verified_denote_eq
 #print axioms resnet34Verified_fwd_faithful
+-- the same spec at batch BN, the net every shipped ResNet-34 artifact runs (finding 2, 2026-09-19)
+#print axioms resnet34VerifiedB_denote_eq
+#print axioms resnet34VerifiedB_fwd_faithful
 #print axioms efficientnetVerified_denote_eq
 #print axioms efficientnetVerified_fwd_faithful
 #print axioms convnextVerified_denote_eq

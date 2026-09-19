@@ -4,6 +4,7 @@ import LeanMlir.Proofs.Nets.Small.MnistCNN
 import LeanMlir.Proofs.Nets.Small.CifarCNN
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
@@ -11,6 +12,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ResNet.ResNet34
+import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Codegen.StableHLO
 
@@ -342,6 +344,50 @@ theorem mobilenetv2Verified_fwd_faithful (epsStr : String) (w : MNV2PaperWeights
   (mobilenetv2FwdGraphPaper_faithful epsStr w x).trans
     (congrFun (mobilenetv2Verified_denote_eq w).symm x)
 
+-- ── MobileNetV2 (FULL, BATCHED): the same 21-entry spec ↔ mobilenetv2ForwardB_full ──
+
+/-- Math denotation of the committed MobileNetV2 spec **at batch BN**: the same 21-entry
+    layer list, denoting to `mobilenetv2ForwardB_full` — the batch-statistics net every
+    shipped MobileNetV2 artifact runs (`MobileNetV2FullB.lean`), at every batch size `N`.
+    `denoteMobilenetPaper` above is this spec at per-example BN, the forward of the retired
+    SGD artifact. Same list, same drift-sensitivity: any `[t,c,n,s]` edit drops to `0`. -/
+noncomputable def denoteMobilenetB (N : Nat) (layers : List VLayer) (w : MNV2BWeights 10) :
+    Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
+  match layers with
+  | [.convBnNB 3 32 3 2,
+     .invertedResidualNB 32 32 16 1,
+     .invertedResidualNB 16 96 24 2, .invertedResidualNB 24 144 24 1,
+     .invertedResidualNB 24 144 32 2, .invertedResidualNB 32 192 32 1, .invertedResidualNB 32 192 32 1,
+     .invertedResidualNB 32 192 64 2, .invertedResidualNB 64 384 64 1, .invertedResidualNB 64 384 64 1,
+     .invertedResidualNB 64 384 64 1,
+     .invertedResidualNB 64 384 96 1, .invertedResidualNB 96 576 96 1, .invertedResidualNB 96 576 96 1,
+     .invertedResidualNB 96 576 160 2, .invertedResidualNB 160 960 160 1, .invertedResidualNB 160 960 160 1,
+     .invertedResidualNB 160 960 320 1,
+     .convBnNB 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
+      mobilenetv2ForwardB_full N w
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full batch-BN net.** `mobilenetv2Verified`'s denotation at batch `N` is
+    exactly `mobilenetv2ForwardB_full N` — by `rfl`, drift-sensitive. -/
+theorem mobilenetv2VerifiedB_denote_eq (N : Nat) (w : MNV2BWeights 10) :
+    denoteMobilenetB N mobilenetv2Verified.layers w = mobilenetv2ForwardB_full N w := rfl
+
+/-- **The committed spec carries the math at batch BN** — canonical `pdiv` witness (relu6 is
+    kinked; the pointwise whole-net VJP is `mobilenetv2ForwardB_full_has_vjp_at_correct`). -/
+noncomputable def mobilenetv2VerifiedB_has_vjp (N : Nat) (w : MNV2BWeights 10) :
+    HasVJP (denoteMobilenetB N mobilenetv2Verified.layers w) := HasVJP.canonical _
+
+open Proofs.StableHLO in
+/-- **Rung E at the committed spec, batched.** The typed graph the shipped MobileNetV2
+    artifacts are printed from denotes the committed spec's function at batch BN:
+    `mobilenetv2FwdGraphB_full_faithful` composed with the tie. -/
+theorem mobilenetv2VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : MNV2BWeights 10)
+    (e : SHlo (N * (3 * 224 * 224))) :
+    den (mobilenetv2FwdGraphB_full N epsStr w e)
+      = denoteMobilenetB N mobilenetv2Verified.layers w (den e) :=
+  (mobilenetv2FwdGraphB_full_faithful N epsStr w e).trans
+    (congrFun (mobilenetv2VerifiedB_denote_eq N w).symm (den e))
+
 
 /-! ## Rung B/C/E (FULL, unified weight bundles): r34 / enet / convnext / vit
 
@@ -503,6 +549,43 @@ theorem resnet34Verified_fwd_faithful (epsStr : String) (w : R34Weights)
       w.e1.W1 w.e1.b1 w.e1.g1 w.e1.t1 w.e1.W2 w.e1.b2 w.e1.g2 w.e1.t2
       w.Wd w.bd x).trans
     (congrFun (resnet34Verified_denote_eq w).symm x)
+
+-- ── ResNet-34 (FULL, BATCHED): the same 8-entry spec ↔ resnet34ForwardB_full ──
+
+/-- Math denotation of the committed ResNet-34 spec **at batch BN**: the same 8-entry
+    stage-level list, denoting to `resnet34ForwardB_full` — the batch-statistics net every
+    shipped ResNet-34 artifact runs (`ResNet34FullB.lean`), at every batch size `N`.
+    `denoteR34Full` above is this spec at per-example BN, the forward of the retired SGD
+    artifact. Same list, same drift-sensitivity. -/
+noncomputable def denoteR34FullB (N : Nat) (layers : List VLayer) (w : R34BWeights 10) :
+    Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
+  match layers with
+  | [.convBnNB 3 64 7 2, .maxPool 3 2,
+     .residualStage 64 64 3 1, .residualStage 64 128 4 2,
+     .residualStage 128 256 6 2, .residualStage 256 512 3 2,
+     .globalAvgPool, .dense 512 10] => resnet34ForwardB_full N w
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full batch-BN net.** `resnet34Verified`'s denotation at batch `N` is exactly
+    `resnet34ForwardB_full N` — by `rfl`, drift-sensitive. -/
+theorem resnet34VerifiedB_denote_eq (N : Nat) (w : R34BWeights 10) :
+    denoteR34FullB N resnet34Verified.layers w = resnet34ForwardB_full N w := rfl
+
+/-- **The committed spec carries the math at batch BN** — canonical `pdiv` witness (relu is
+    kinked; the pointwise whole-net VJP is `resnet34ForwardB_full_has_vjp_at`). -/
+noncomputable def resnet34VerifiedB_has_vjp (N : Nat) (w : R34BWeights 10) :
+    HasVJP (denoteR34FullB N resnet34Verified.layers w) := HasVJP.canonical _
+
+open Proofs.StableHLO in
+/-- **Rung E at the committed spec, batched.** The typed graph the shipped ResNet-34 artifacts
+    are printed from denotes the committed spec's function at batch BN:
+    `resnet34FwdGraphB_full_faithful` composed with the tie. -/
+theorem resnet34VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : R34BWeights 10)
+    (e : SHlo (N * (3 * 224 * 224))) :
+    den (resnet34FwdGraphB_full N epsStr w e)
+      = denoteR34FullB N resnet34Verified.layers w (den e) :=
+  (resnet34FwdGraphB_full_faithful N epsStr w e).trans
+    (congrFun (resnet34VerifiedB_denote_eq N w).symm (den e))
 
 -- ── EfficientNet-B0 (FULL, batched): the committed 21-entry spec ↔ efficientnetForwardB_full ──
 
