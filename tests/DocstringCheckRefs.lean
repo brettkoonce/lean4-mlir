@@ -27,9 +27,21 @@ needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
 
 1. the name is in the environment outright;
 2. it resolves under a project namespace (`Proofs`, `LeanMlir`, `Layer`);
-3. its PREFIX resolves — `foo_has_vjp.backward` is a field access on a real declaration,
+3. it is a dotted suffix of a declaration's name, with a `private` declaration read by its
+   user name (`lnFwdSite`);
+4. it is `File.decl`, where `decl` is declared in the module whose name ends in `File`
+   (`ResNet34FoldB.denseWGradB_den`);
+5. it names a module (`ViTRenderB`) or a namespace (`Mnv2Live`) by a suffix of its
+   components, or a scanned file outside the environment by its basename
+   (`TestMnv4FwdSmoke` for `tests/TestMnv4FwdSmoke.lean`);
+6. its PREFIX resolves — `foo_has_vjp.backward` is a field access on a real declaration,
    not a declaration, and the prefix is the thing a rename would break;
-4. it is baselined in `scripts/docstring_ref_baseline.txt`.
+7. it is baselined in `scripts/docstring_ref_baseline.txt`.
+
+Rules 3–5 are exact lookups, not heuristics: each of the four forms is a correct citation that
+the first version of this gate could never resolve (a 2026-09-19 survey counted 131 `private`,
+59 `File.decl`, 115 module and 23 namespace citations), which is what kept the marker list
+narrow.
 
 **What is skipped before resolution is attempted** (never Lean names, and cheap to rule
 out): anything with a file extension, anything ALL-CAPS (environment variables), and
@@ -151,7 +163,12 @@ def projectMarkers : List String :=
    "_descends", "_adjointClose", "_argmaxSafe", "_fwd_faithful", "_eq_chain", "_rowIndep",
    -- the float tier's names (2026-09-08): nine `floatBridges_*` citations of theorems deleted
    -- in the float second pass sat under a green gate because none carried a marker above.
-   "floatBridges_", "floatClose_", "FloatBridges", "FloatClose"]
+   "floatBridges_", "floatClose_", "FloatBridges", "FloatClose",
+   -- 2026-09-19, once the resolver learned private, `File.decl`, module and namespace citations:
+   -- renderer and witness names (`ResNet34RenderB.adamOne`, `ResNet34Live.liveDown` were stale
+   -- under a green gate), then backward/forward graph names. Case-sensitive on purpose:
+   -- `Back` does not admit `backward` prose.
+   "Render", "Live", "Tied", "Back", "Fwd"]
 
 /-- Substring test written by hand rather than via `splitOn`, because this toolchain is
     mid-migration from `String` to `String.Slice` and the return type of the string helpers
@@ -193,24 +210,43 @@ def lastComponent : Name → String
     writes `` `vjp_comp` `` for `Proofs.vjp_comp`, and under `open Lean` writes
     `` `Environment.find?` `` for `Lean.Environment.find?`. Resolving absolutely would call
     both dangling, which is how the first run produced 2,447 false positives. -/
-def endsWithComponents (full : Name) (parts : List String) : Bool :=
+def endsWithComponents (full0 : Name) (parts : List String) : Bool :=
+  let full := (privateToUserName? full0).getD full0
   let fc := full.components.map lastComponent
   parts.length ≤ fc.length && (fc.drop (fc.length - parts.length) == parts)
 
+/-- Does module `m`'s name end with the components `parts`? -/
+def moduleEndsWith (m : Name) (parts : List String) : Bool :=
+  let mc := m.components.map lastComponent
+  parts.length ≤ mc.length && mc.drop (mc.length - parts.length) == parts
+
 /-- The ways a citation counts as live: exact, under a project namespace, as a dotted SUFFIX
-    of a real declaration, by its PREFIX resolving (a field access such as
-    `foo_has_vjp.backward` is not itself a declaration, but a rename of `foo_has_vjp` breaks
-    it and that is what we are catching), or baselined. -/
+    of a real declaration (a `private` one by its user name), as `File.decl` with `decl`
+    declared in `File`, as a module or namespace name, by its PREFIX resolving (a field
+    access such as `foo_has_vjp.backward` is not itself a declaration, but a rename of
+    `foo_has_vjp` breaks it and that is what we are catching), or baselined. -/
 def resolves (env : Environment) (idx : Std.HashMap String (Array Name))
-    (baseline : Array String) (s : String) : Bool :=
+    (nsSet : Std.HashSet Name) (fileStems : Std.HashSet String) (baseline : Array String)
+    (s : String) : Bool :=
   let n := s.toName
   if env.contains n then true
   else if baseline.contains s then true
+  else if fileStems.contains s then true
   else if projectNamespaces.any (fun ns => env.contains (ns ++ n)) then true
   else
     let parts := s.splitOn "."
-    let hit := (idx.getD (parts.getLast!) #[]).any (endsWithComponents · parts)
-    if hit then true
+    let cands := idx.getD (parts.getLast!) #[]
+    let hit := cands.any (endsWithComponents · parts)
+    -- `File.decl`: the declaration's own module ends in the qualifier
+    let modHit := parts.length ≥ 2 && cands.any fun d =>
+      match env.getModuleIdxFor? d with
+      | some i => moduleEndsWith env.header.moduleNames[i.toNat]! parts.dropLast
+      | none => false
+    let isMod := env.header.moduleNames.any (moduleEndsWith · parts)
+    -- `env.isNamespace` does not see imported namespaces here, so namespaces are indexed
+    -- from the declaration names themselves
+    let isNs := nsSet.contains n || projectNamespaces.any (fun ns => nsSet.contains (ns ++ n))
+    if hit || modHit || isMod || isNs then true
     else match parts.dropLast with
       | [] => false
       | pre =>
@@ -323,10 +359,17 @@ unsafe def main (args : List String) : IO UInt32 := do
   -- Suffix index: last component -> the declarations carrying it. Built once; without it a
   -- relative citation under an `open` reads as dangling (see `endsWithComponents`).
   let mut idx : Std.HashMap String (Array Name) := {}
-  for (n, _) in env.constants.toList do
+  let mut nsSet : Std.HashSet Name := {}
+  for (n0, _) in env.constants.toList do
+    -- a private declaration is cited by its user name
+    let n := (privateToUserName? n0).getD n0
     if n.isInternal then continue
     let k := lastComponent n
-    idx := idx.insert k ((idx.getD k #[]).push n)
+    idx := idx.insert k ((idx.getD k #[]).push n0)
+    let mut p := n.getPrefix
+    while !p.isAnonymous do
+      nsSet := nsSet.insert p
+      p := p.getPrefix
 
   let mut files : Array System.FilePath := #["lakefile.lean"]
   for r in scanRoots do
@@ -337,6 +380,11 @@ unsafe def main (args : List String) : IO UInt32 := do
   -- `foo_has_vjp` placeholder. Those are deliberately dangling — a gate whose own
   -- documentation trips it teaches the reader to add exceptions.
   files := files.filter fun f => f.toString != "tests/DocstringCheckRefs.lean"
+  -- tests, apps and `IRPrint` are outside the environment, so a citation of one of those files
+  -- by its module name is checked against the file itself
+  let fileStems : Std.HashSet String := files.foldl (fun s f => match f.fileStem with
+    | some st => s.insert st
+    | none => s) {}
 
   let mut checked := 0
   let mut misses : Array (System.FilePath × String) := #[]
@@ -351,7 +399,7 @@ unsafe def main (args : List String) : IO UInt32 := do
       for ref in backtickRefs body do
         if skipRef ref || !checkWorthy ref then continue
         checked := checked + 1
-        unless resolves env idx baseline ref do
+        unless resolves env idx nsSet fileStems baseline ref do
           misses := misses.push (f, ref)
           distinct := distinct.insert ref
       if rendered then

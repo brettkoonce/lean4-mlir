@@ -363,7 +363,7 @@ inference (the r34/mnv2 heartbeat lesson). -/
   let cotGap : Vec 768 := rowLNVecFlatBack 1 768 ε hng gap cotHn
   (globalAvgPoolFlat_has_vjp 768 h w).backward xhead cotGap
 
-/-! ## Input-only `TiedAt` wrappers (`@[irreducible]`) — compute internals from a block's input -/
+/-! ## Input-only `*TiedAt` wrappers (`@[irreducible]`) — compute internals from a block's input -/
 
 @[irreducible] def cnxBlockChTiedAt {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)

@@ -15,7 +15,7 @@ whose accuracy the book quotes — all of which reduce `[0,2,3]`: one mu/var per
 batch, the one op that couples examples.
 
 ⛔ **MobileNetV2's two renderers did not overlap**, so this was not a flag away.
-`MobileNetV2Render` was SGD-inline and per-example only; `MobileNetV2RenderB` is AdamW/RMSProp-only,
+`MobileNetV2Render.lean` was SGD-inline and per-example only; `MobileNetV2RenderB` is AdamW/RMSProp-only,
 at the batched index and at batch BatchNorm. This file re-states the ladder at `bnBatchLA` (= the
 proven `bnBatchTensor4` at the network's left-assoc index), which is that renderer's world. ⭐ Since
 4c leg 2 (2026-09-06) it is the ONLY renderer: the per-example one and its train step are retired

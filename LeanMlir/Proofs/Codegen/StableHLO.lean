@@ -1785,7 +1785,7 @@ noncomputable def bnBatchLA (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
       (bnBatchTensor4 N oc h w ε γ β
         (v ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm))
 
-/-- Which BatchNorm a forward chain emits — the batched-index peer of `ResNet34Render.R34Bn`,
+/-- Which BatchNorm a forward chain emits — the batched-index peer of `ResNet34RenderB.R34Bn`,
     shared by the EfficientNet and MobileNetV2 renders so one traversal can produce both the
     training forward and its frozen-stats eval partner.
 
@@ -4921,7 +4921,7 @@ def toToks : Raw → List Tok
     For an **even** kernel `p = (k−1)/2` floors to `k/2 − 1`, so a symmetric pad emits a result one
     short of `k`. Measured at `k = 2`, input 8×8 → output 4×4: it declared `2x3x2x2` against a
     convolution yielding `1x1` — **type-invalid MLIR**, which is why ConvNeXt's 2×2/s2 downsample
-    weight grad was hand-written (`ConvNeXtRender.downWGrad`) rather than using this op. The fix is
+    weight grad was hand-written in `ConvNeXtRender.lean` rather than using this op. The fix is
     the same asymmetry `convStridedBack` already applies on the input-VJP: drop the trailing zero
     row (extent `2s−1`) and pad `[p, k−2−p]`.
 

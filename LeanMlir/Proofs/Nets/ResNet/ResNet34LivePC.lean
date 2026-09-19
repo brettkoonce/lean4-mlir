@@ -5,15 +5,15 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34Live2
 
 Stage 2 (`ResNet34Live2.lean`) banked the channel-order invariant kit (the A2
 non-vacuity crux). This file does the **mechanical 2-channel re-instantiation**
-(`planning/archive/whole_network_backward.md` Item A1): the layers `liveDown`/`stem`/…
-that Stage 1 hardcoded at `1 * h * w` rebuilt at `c = 2`, reusing the
+(`planning/archive/whole_network_backward.md` Item A1): the Stage-1 layers (downsample, stem, …)
+that were hardcoded at `1 * h * w`, rebuilt at `c = 2`, reusing the
 channel-generic VJP/differentiability machinery (`rblkPStrided_has_vjp_at`,
 `convBnStrided_differentiable`, …) at `oc = ic = 2`.
 
 **This file (Stage 3):**
 - `liveDownPC` — the 2-channel signal-carrying strided downsample (channel-diagonal
   identity-decimate projection `WsP2`, zeroed body), with its whole VJP / `DifferentiableAt`
-  / nonnegativity, mirroring Stage 1's `liveDown` at `oc = ic = 2`.
+  / nonnegativity, mirroring the Stage-1 downsample at `oc = ic = 2`.
 - `stem2` — the 2-channel stem (channel-diagonal identity stem conv ⇒ `flatConvStride2 = decimate`,
   so the maxpool no-tie reuses Stage-1's global `bnForward_injective` pattern; `β = 30 > √512`).
 - The whole 2-channel backward over these layers, with *every* smoothness/no-tie hypothesis of
@@ -55,8 +55,7 @@ noncomputable def Zb2 : Vec 2 := fun _ => 0
 
 /-- A live 2-channel downsample: `relu(bn_βp(conv_W(decimate x)) + 1)` — the projection
     carries the signal, the body is zeroed to the constant 1, and `βp > √(2·h·w)` keeps the
-    projection positive (`bnForward_lb`) whatever the kernel `W`. The `c = 2` peer of
-    `ResNet34Live.liveDown`. -/
+    projection positive (`bnForward_lb`) whatever the kernel `W`. -/
 noncomputable def liveDownW (h w : Nat) (βp : ℝ) (W : Kernel4 2 2 1 1) :
     Vec (2 * (2 * h) * (2 * w)) → Vec (2 * h * w) :=
   relu (2 * h * w) ∘ residualProj

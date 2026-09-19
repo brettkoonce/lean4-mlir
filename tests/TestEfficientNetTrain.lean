@@ -28,7 +28,7 @@ the finding, not a problem with the deletion:
 
 `sgd-render-tie efficientnet <Proofs> 0.05 <tests> 0.1` reported all 262 parameters disagreeing at
 norm-relative **0.96875 = 31/32** — the exact signature of `g_tests = g_Proofs / 32` — against a
-bit-exact A-vs-A determinism floor. So this file was a live instance of the `RenderCifar8Sgd02`
+bit-exact A-vs-A determinism floor. So this file was a live instance of the RenderCifar8Sgd02
 hazard (§2a-quater): a `tests/` writer that, on elaboration, silently replaced a committed certified
 artifact with **different hyperparameters**, here a 16× smaller effective step.
 

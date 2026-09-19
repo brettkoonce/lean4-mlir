@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 /-! # ⭐⭐ `r34InputGradB` IS the certified whole-net ResNet-34 gradient AT BATCH BATCH-NORM
 
 `ResNet34BackCertifiedTie.lean` closed this for the PER-EXAMPLE net — the reverse of
-`resnet34Forward_full_pc`, the forward the retired `ResNet34Render` emitted. This file closes it
+`resnet34Forward_full_pc`, the forward the retired `ResNet34Render.lean` emitted. This file closes it
 for the net the shipped trainers run: `resnet34ForwardB_full`, the [3,4,6,3] ladder at
 **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
 `planning/archive/proofs_tier_to_paper_nets.md` §4.2, the last real statement in that section's port

@@ -432,7 +432,7 @@ def convBackModule (B ic oc H Wd kH kW : Nat) : String :=
 -- `IR.maxPoolBackDenote` and matches the proven maxpool VJP at smooth points
 -- (unique argmax — `maxpool_back_bridge`/`maxpool3_node_bridge`; GE tie-break).
 
-/-- Max-pool forward `IR.maxPool2` as `@maxpool_fwd`: `reduce_window` max,
+/-- Max-pool forward `Proofs.maxPool2` as `@maxpool_fwd`: `reduce_window` max,
     window/stride `[1,1,2,2]` over NCHW. -/
 def maxpoolFwdModule (B c h w : Nat) : String :=
   "module @m {\n" ++

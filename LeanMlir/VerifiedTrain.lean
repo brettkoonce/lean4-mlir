@@ -2696,7 +2696,7 @@ gate's control, not a configuration.")
     fallback, and the only one of the two that can reach A3's finished checkpoint).
 
     ⭐ `region` is what one checkpoint cannot otherwise yield: the driver picks live-or-shadow at
-    TRAIN time (`emaLiveBn`), so an EMA run reports one of the two numbers and discards the other.
+    TRAIN time (`LEAN_MLIR_EMA_BN`), so an EMA run reports one of the two numbers and discards the other.
     timm reports the shadow and RSB-A2 sets `emaDecay := 0.9999`, so without this an A2 result is
     not quotable the way its reference is. `"auto"` = the shadow when the variant has one, matching
     what the training run would have scored; `"live"` and `"ema"` name it explicitly. -/

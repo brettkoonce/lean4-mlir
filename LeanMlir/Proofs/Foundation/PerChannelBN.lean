@@ -512,8 +512,8 @@ theorem bnBatchTensor4_has_vjp_backward_eq (N oc h w : Nat) (ε : ℝ) (hε : 0 
 
 /-- **Renderable batch-norm backward on the `[N,C,H,W]` layout** — relabel to the
     per-channel Mat, run the consolidated three-term `bnPerChannel_grad_input` over the
-    whole batch (`m = N·h·w`), relabel back. Exactly what the batched `bnBatch` StableHLO
-    fragment emits (reduce over `[0,2,3]` per channel). -/
+    whole batch (`m = N·h·w`), relabel back. Exactly what the batched batch-norm backward
+    StableHLO fragment emits (reduce over `[0,2,3]` per channel). -/
 noncomputable def bnBatchTensor4_grad_input (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
     (x dy : Vec (N * (oc * (h * w)))) : Vec (N * (oc * (h * w))) :=
   bnchwBack N oc h w

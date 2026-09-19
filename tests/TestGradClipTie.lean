@@ -46,7 +46,7 @@ genuinely has no exact host reading. **① reads the factor off the device and n
 all**, which is why it, not ②, is the one with a tight bound.
 
 ⚠ **④ is BIT-EXACT BY ARGUMENT, not by luck**: above the threshold `min(1, c/(gn+ε))` is exactly
-`1.0` and `x * 1.0` is exact in IEEE-754 binary32 (`Proofs.clipScaleF_id_below`). But it is also
+`1.0` and `x * 1.0` is exact in IEEE-754 binary32 (`Proofs.StableHLO.clipScaleF_id_below`). But it is also
 **blind on its own** — at factor 1 a global clip and a per-parameter clip are the SAME FUNCTION, so
 ④ passes on `perparam`. That is the stochastic-depth ones-mask finding one feature over: an identity
 gate cannot see where, or from what, the intervention was computed. ① and ④ are evidence together.
@@ -359,7 +359,7 @@ algorithm per process. That is handoff §2d.3 Finding 1 (ROCm-specific) and the 
 *measure the A-vs-A floor before reading ANY cross-graph number*, in a third place.\n\
 \n\
 If the floor is still non-zero UNDER the det shim, then it is the render: above the threshold the \
-factor is EXACTLY 1.0 and `x * 1.0` is exact in binary32 (`Proofs.clipScaleF_id_below`), so this \
+factor is EXACTLY 1.0 and `x * 1.0` is exact in binary32 (`Proofs.StableHLO.clipScaleF_id_below`), so this \
 is a bit-exactness claim with no tolerance to tune. Check the `min` against 1.0 — it is what stops \
 a SMALL gradient being AMPLIFIED by c/‖g‖.")
 

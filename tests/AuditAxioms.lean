@@ -808,7 +808,7 @@ open Proofs
 #print axioms floatClose_relu
 #print axioms floatClose_flatConv
 #print axioms floatClose_reluConv
--- The residual combinator (AdjointChainResidual.lean)
+-- FloatClose max-pool and CIFAR stage (FloatComposeBridge.lean)
 #print axioms floatClose_maxPool
 #print axioms floatClose_cifarStage
 -- The r34 wraps that let the fold RUN on a real block
@@ -836,7 +836,7 @@ open Proofs
 #print axioms floatClose_residual
 -- Strided-conv backward (r34 down-blocks + stem)
 #print axioms Proofs.decimateBack_eq_vjp
--- The CIFAR-8 chain tie
+-- BN mean at any reduction order (BnFloatBridge.lean)
 #print axioms Proofs.FloatModel.bnMean_close_of
 -- The mnv2 block bridges are generic in the NORMALISATION too (`*Gen`)
 #print axioms Proofs.mobilenetv2ForwardPaperEval

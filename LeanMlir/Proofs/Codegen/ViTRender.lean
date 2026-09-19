@@ -3,7 +3,7 @@ import LeanMlir.ViTRender
 
 /-! # ViT-Tiny train step rendered from the verified AST (the §1 render) — FORWARD portion
 
-The ViT peer of `MobileNetV2Render`/`ConvNeXtRender`: the full depth-12 ViT-Tiny forward rendered as
+The ViT peer of `ConvNeXtRender`: the full depth-12 ViT-Tiny forward rendered as
 `pretty` of the verified multi-head vector-LN graph (`vitBlockGraphMHV` × 12 + patch embed + final
 vector-LN + CLS-slice dense head). The committed [`LeanMlir/ViTRender.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/ViTRender.lean) is a hand-written String
 emitter (faithful per-op, NOT `pretty(provenGraph)`); this renders the SAME forward as `pretty` of the
@@ -594,7 +594,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
     into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
     runtime `tensor<f32>` args, so one render serves the whole cosine+warmup schedule. Mirrors
-    `ResNet34RenderB.adamOne`, minus the replica collective (ViT has no DP render yet). -/
+    `ResNet34RenderB.optOne`, minus the replica collective (ViT has no DP render yet). -/
 private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat)
     (ema : Bool := false) (wdName : String := "%wd") (preAvg : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String) := do
@@ -698,7 +698,7 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
     found while gating `wdExcludeNormBias` rather than by reading the configs: `vitTinyConfig`
     (Imagenette) sets `weightDecay := 1e-4`, which is the literal this file baked for every ViT
     render — but **`vitTinyImagenetConfig` sets 0.05**, the DeiT value. So an ImageNet render at
-    the baked default trains at 1/500th of its reference's decay. It is the `RenderCifar8Sgd02` /
+    the baked default trains at 1/500th of its reference's decay. It is the RenderCifar8Sgd02 /
     EfficientNet-16× shape (§2a-quater): a silently wrong hyperparameter in a committed artifact,
     which compiles, runs and descends. The default is unchanged, so every existing artifact keeps
     its bytes; only the ImageNet `wx` render passes 0.05.

@@ -515,7 +515,7 @@ theorem enet_head_tied {N c oc h w nC : Nat}
   · intro i j; exact EnetPoC.denseWB_den dN wN lrStr cotN a_gap Wfc bfc g lr i j
   · intro j;   exact EnetPoC.denseBB_den dN lrStr cotN (0 : Mat nC nC) (0 : Vec nC) bfc g lr j
 
-/-! ## `@[irreducible]` bundle-taking `TiedAt` wrappers — one per block type, for the whole-net thread
+/-! ## `@[irreducible]` bundle-taking `*TiedAt` wrappers — one per block type, for the whole-net thread
 
 Each takes the `B0Weights` block bundle (`MBW`/`MBWNoExp`) + its ε-positivity + the block input + the
 downstream cotangent `dyOut`, and delegates to the per-block-type tie. `@[irreducible]` keeps the

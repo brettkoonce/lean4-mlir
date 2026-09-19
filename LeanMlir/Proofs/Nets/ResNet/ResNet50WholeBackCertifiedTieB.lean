@@ -15,7 +15,7 @@ its 161-parameter train-step tie and now its whole-net input gradient.
 literally ResNet-34's functions at R50's widths (§3.5b) — so §4.2d's file supplies:
 
 * `cbReluStridedBBack_eq_vjp_backward` and `r34HeadBBack_eq_vjp_backward`, the two endpoint ties;
-* `maxPool3s2FlatBackB` and its `rfl` tie, plus the `FloatClose.batchMapAux` lift the batched
+* `maxPool3s2FlatBackB` and its `rfl` tie, plus the `StableHLO.batchMapAux` lift the batched
   3×3/s2 pool needed;
 * `opaqueA0 … A16` and **`r34B_full_has_vjp_at` itself** — the generic eighteen-stage apex.
   [3,4,6,3] is sixteen blocks for both nets, so the chain is the same construction and a second

@@ -4,8 +4,8 @@ import LeanMlir.Proofs.Training.JacobianSeal
 /-!
 # Toward a live ResNet-34 witness — Stage 2: the channel-order invariant kit
 
-`ResNet34Live.lean` (Stage 1) banked `liveDown` — a signal-carrying strided
-downsample — but found `liveFwd` is still **constant-output**: a 1-channel net
+Stage 1 (the removed `ResNet34Live.lean`) banked a signal-carrying strided
+downsample but found its 1-channel forward still **constant-output**: a 1-channel net
 with BN-before-GAP is necessarily constant (`planning/archive/whole_network_backward.md`
 Item A). The escape requires ≥2 channels.
 

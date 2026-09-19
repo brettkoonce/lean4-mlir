@@ -205,7 +205,7 @@ def r34StatSigList : List (String × String) :=
 -- § The shared forward chain (all three renders emit this, so they cannot disagree)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Every SSA name the ResNet-34 forward produces. `resnet34FwdFaithfulV` returns just `logits`;
+/-- Every SSA name the ResNet-34 forward produces. A forward-only render returns just `logits`;
     the train step additionally consumes the stem and per-block names on the way back. -/
 structure R34Fwd where
   code   : String        -- stem → 16 blocks → GAP → dense, in emission order
@@ -1283,7 +1283,7 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     reads.
 
     ⭐⭐ **This exists so `@resnet34_fwd` and the batch-BN train steps cannot be different nets.**
-    They were: `resnet34FwdFaithfulV` (`ResNet34Render.lean`) builds its forward from the
+    They were: the retired `ResNet34Render.lean` built its forward from the
     PER-EXAMPLE chain — `bnPerChannelF`, reduce `[2,3]`, divisor `H·W` — while every train step in
     this file is batch BN, reduce `[0,2,3]`, divisor `B·H·W`. `scripts/regen_verified_mlir.sh`'s
     `check_adam_prefix` carried the divergence as a `KNOWN_SPLIT` entry reading "two renderers
@@ -1358,7 +1358,7 @@ def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
 set_option maxRecDepth 4000000 in
 /-- **`@resnet34_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN train
     step in this file differentiates, so the net that scores and the net that trains are one graph
-    by construction. Replaces `ResNet34Render.resnet34FwdFaithfulV` as the writer of
+    by construction. Replaces the retired `ResNet34Render.lean` as the writer of
     `verified_mlir/resnet34_fwd.mlir` (2026-09-06, `planning/archive/renderer_convergence.md` leg 1).
     Takes `%x` plus the parameters in `r34SigList` order — 111 inputs at the shipped
     `convBias := false` — and returns logits `[B, nClasses]`. -/

@@ -909,7 +909,7 @@ set_option maxRecDepth 8000 in
     ⭐⭐ **Why it exists: bf16, and rehearsal.** The 27 bf16 ops were built for ImageNet, which is
     entirely on the batched family — so bf16 twins exist for `convBackBatched`/`denseRowBack` and
     do NOT exist for the per-example `convBack`/`dotOut` that `…V` uses. Rather than write two
-    CIFAR-only ops (`convBackBf16`, `dotOutBf16`) that ImageNet would never run, this moves CIFAR
+    CIFAR-only bf16 ops (twins of `convBack` and `dotOut`) that ImageNet would never run, this moves CIFAR
     onto the ops ImageNet already uses. bf16 then drops in for the whole step, forward AND
     backward, with **zero new verified ops** — and CIFAR becomes a real rehearsal for ImageNet
     instead of a parallel dialect. See planning/archive/cifar_lowprec_stability.md §4.1.

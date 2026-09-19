@@ -463,7 +463,7 @@ private def mnv2NoExpSig (i : String) (ic oc : Nat) (convBias : Bool) : List (St
 
 /-- **The 210 parameters of the 17-block paper-spec net, in func-arg order.** stem (4) + b1
     no-expand (8) + b2..b17 (16 × 12 = 192) + head (4) + dense (2) = 210 — the same decomposition
-    `MobileNetV2Render.paperSig` uses, at the names the committed AdamW artifact presents. -/
+    `paperSig` uses, at the names the committed AdamW artifact presents. -/
 def mnv2SigList (nClasses : Nat) (convBias : Bool) : List (String × String) :=
   [("%sW", ty [32,3,3,3])] ++ (if convBias then [("%sb", ty [32])] else []) ++
   [("%sg", ty [32]), ("%sbt", ty [32])] ++
@@ -602,7 +602,7 @@ set_option maxRecDepth 4000000 in
     `@mobilenetv2_fwd` and every train step that differentiates it.
 
     ⭐⭐ **This exists so `@mobilenetv2_fwd` and the batch-BN train steps cannot be different nets.**
-    They were: `MobileNetV2Render.mnv2FwdFaithfulV` builds its forward from the PER-EXAMPLE chain —
+    They were: the retired `MobileNetV2Render.lean` built its forward from the PER-EXAMPLE chain —
     `bnPerChannelF`, reduce `[2,3]`, divisor `H·W` — while every train step in this file is batch
     BN, reduce `[0,2,3]`, divisor `B·H·W`. `scripts/regen_verified_mlir.sh`'s `check_adam_prefix`
     carried the divergence as the LAST `KNOWN_SPLIT` entry for as long as both existed. This is
@@ -677,7 +677,7 @@ def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false
 set_option maxRecDepth 4000000 in
 /-- **`@mobilenetv2_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN
     train step in this file differentiates, so the net that scores and the net that trains are one
-    graph by construction. Replaces `MobileNetV2Render.mnv2FwdFaithfulV` as the writer of
+    graph by construction. Replaces the retired `MobileNetV2Render.lean` as the writer of
     `verified_mlir/mobilenetv2_fwd.mlir` (2026-09-06, `planning/archive/renderer_convergence.md` leg 2).
     Takes `%x` plus the parameters in `mnv2SigList` order — 159 inputs at the shipped
     `convBias := false` — and returns logits `[B, nClasses]`.
@@ -1024,7 +1024,7 @@ structure MBFwd where
 --   inverted residual: expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6 → project(1×1)→BN
 -- ════════════════════════════════════════════════════════════════
 
-/-- One BN site at the PER-EXAMPLE index — the `ResNet34Render.bnSite` peer. `statP` is the
+/-- One BN site at the PER-EXAMPLE index — the `ResNet34RenderB.bnSite` peer. `statP` is the
     running-stat input prefix (`%{statP}mu` / `%{statP}var`), used only in `.eval` mode; in
     `.train` mode the statistics are reduced out of `xin` and `statP` only names the slot.
 
@@ -1152,9 +1152,6 @@ private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName :
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
          bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
-
-/-- **EXPAND-NO-SKIP stride-1 backward + 12 param SGD.** == `irBack` but NO skip fan-in: the dx to
-    the previous block is the expand-conv-back directly (no `addV` with dyOut). -/
 
 -- ════════════════════════════════════════════════════════════════
 -- § Param signature lists (func-arg order — names + types, shared by sig + return types)

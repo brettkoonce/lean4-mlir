@@ -171,8 +171,7 @@ theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
     (cnxBlockBodyChBackGraph_faithful p.Wdw p.bdw p.εn hε p.γn p.βn p.Wex p.bex p.Wpr p.bpr
       (cnxGlsCh p) x ecot)
 
-/-- The channel-LN stage-boundary downsample backward graph — the port of the `cnxDownBackGraph`
-    §2n dropped. Forward is `flatConvStride2(2×2) ∘ chanLNTensor3`, so the VJP in reverse order is
+/-- The channel-LN stage-boundary downsample backward graph. Forward is `flatConvStride2(2×2) ∘ chanLNTensor3`, so the VJP in reverse order is
     `chanLNBackGraph ∘ convStridedBack`, each at its forward input: LN is the outer backward at
     `x`, and the strided conv's input is `chanLNTensor3 … x`. -/
 noncomputable def cnxDownChBackGraph (h w : Nat) {cin cout : Nat}

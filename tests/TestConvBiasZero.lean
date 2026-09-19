@@ -322,7 +322,7 @@ BN running stats {eS}/{nS'} bit-exact (max {dS * sc}e-9)"
 /-- `--fwd <candidate> [--eval]`: **THE GATE THE FIRST SWAP ATTEMPT DID NOT HAVE.**
 
     `--tie` above gates the AdamW *train step*, and that is the only thing it gates. The `_fwd` and
-    `_fwd_eval` artifacts come out of a DIFFERENT renderer (`MobileNetV2Render`, not `RenderB`), and
+    `_fwd_eval` artifacts came out of a DIFFERENT renderer then (`MobileNetV2Render.lean`, since retired), and
     on 2026-07-31 that renderer dropped **50** of the 52 conv biases where the train step and the
     layout dropped 52 — the stem and head were hardcoded outside the gate. The train-step tie came
     back bit-exact, the audit was green, and the trainer then died at `f32 forward failed` because

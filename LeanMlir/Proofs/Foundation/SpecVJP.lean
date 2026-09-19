@@ -325,7 +325,7 @@ theorem mobilenetv2Verified_denote_eq (w : MNV2PaperWeights) :
 /-- **The committed spec carries the math.** The full-paper spec's denotation has a VJP —
     the canonical `pdiv`-derived witness (relu6 is kinked, so the honest whole-net
     input-VJP stays pointwise-only, the repo standard for relu-family nets; the
-    dim-polymorphic `MobileNetV2Close`/`ChainClose` param-grad bridges apply at the paper
+    dim-polymorphic `MobileNetV2Close` param-grad bridges apply at the paper
     shapes verbatim, per `MobileNetV2FullPaper.lean`'s header). -/
 noncomputable def mobilenetv2Verified_has_vjp (w : MNV2PaperWeights) :
     HasVJP (denoteMobilenetPaper mobilenetv2Verified.layers w) := HasVJP.canonical _

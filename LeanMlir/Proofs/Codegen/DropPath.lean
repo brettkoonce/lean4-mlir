@@ -68,7 +68,7 @@ holds at `dropRate = 0`, and the emitted text is identical in the forward and th
 ⚠ **That moves the ramp from the graph to the driver, and that is the repo's own strongest
 precedent rather than a concession.** `%lr` is a runtime operand for exactly this reason — one graph
 serves a whole schedule — and a learning rate baked into a graph constant is the documented
-`RenderCifar8Sgd02` / enet-16× silent-hyperparameter failure. The keep ramp is a per-site
+RenderCifar8Sgd02 / enet-16× silent-hyperparameter failure. The keep ramp is a per-site
 hyperparameter schedule; it belongs in the same place. What it costs is that no *render-level* check
 can see a wrong ramp, which is what `keepProb` below and the known-answer gate exist for. -/
 

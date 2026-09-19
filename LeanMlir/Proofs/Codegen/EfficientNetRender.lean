@@ -1062,7 +1062,7 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
     render stays byte-identical — the cheap self-check that the insertion is inert.
 
-    Mirrors `ResNet34RenderB.adamOne` and `ViTRender.vitAdamOne`. -/
+    Mirrors `ResNet34RenderB.optOne` and `ViTRender.vitAdamOne`. -/
 private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
     (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas

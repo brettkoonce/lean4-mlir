@@ -425,7 +425,7 @@ theorem bnBatchLA_back_conj {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (hε : 
 /-- **`bnBatchLABack` (network-layout true batch-norm backward) faithfulness.**
     The `den` (inline scatter-conjugated `bnBatchTensor4_grad_input`) equals the
     proven `bnBatchLA_has_vjp` backward — the bn backward at the network's
-    `N·(oc·h·w)` index, which is what renderBody's `bnBatch` emits. This is the
+    `N·(oc·h·w)` index. This is the
     layout wrapper that lets `bnBatchBack` compose with `convBackBatched` /
     `depthwiseBackBatched` (all on the left-assoc index) into batched stages. -/
 theorem bnBatchLABack_faithful {N oc h w : Nat} (gN xN es : String)

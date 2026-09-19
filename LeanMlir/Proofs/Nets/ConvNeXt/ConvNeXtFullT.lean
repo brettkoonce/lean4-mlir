@@ -132,7 +132,7 @@ structure CnxBlockParamsCh (c cExp h w kH kW : Nat) where
   bpr : Vec c
   γls : Vec c
 
-/-- The per-channel layer-scale expanded to the flat map (`cnxGls`'s peer). -/
+/-- The per-channel layer-scale expanded to the flat map. -/
 noncomputable def cnxGlsCh {c cExp h w kH kW : Nat} (p : CnxBlockParamsCh c cExp h w kH kW) :
     Vec (c * h * w) :=
   fun k => p.γls (StableHLO.chanIdx c h w k)

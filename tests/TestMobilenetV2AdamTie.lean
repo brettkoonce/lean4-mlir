@@ -38,9 +38,8 @@ cotangent, caught only by the numeric tie.
     lake build mobilenetv2-adam-tie
     IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-adam-tie [refRender.mlir] [candRender.mlir]
 
-Linked against **IREE**, not XLA/PJRT: `mobilenetv2-verified-adam` is an `ireeLink` binary (like
-`efficientnet-verified-adam` and `vit-verified-adam`), and a tie should run on the backend the
-trainer actually uses.
+Links `lowererLink`: the backend is chosen at run time, not by the link line, and a tie should run
+on the backend the trainer actually uses.
 
 Exits non-zero if the renders disagree or the comparison is degenerate.
 -/

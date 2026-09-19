@@ -48,11 +48,21 @@ also re-pointed prose and deleted what the fixed point orphaned.
    `conv3_node_bridge_1to2`, `conv_compose3` (only user of `denote_subst3`),
    `maxpool_flatten_bridge` and `conv_flatten_bridge_1to2`. They go with finding 5: decide the
    IR tier's future, then cut or keep them as one group.
-4. **Item 3, the gate change** (Pass 2 below). Re-run `AllRefs.lean` first: the cuts removed or
-   re-pointed several rows of the stale-citation table (the `ConvNeXtClose` and removed-bridge
-   mentions). One new stale citation surfaced: `mobilenetv2ForwardPaper_eq_chain` is cited in
-   `MobileNetV2FullVJP.lean` (×2) and `MobileNetV2FullBVJP.lean` but declared nowhere; the
-   existing shape check is `mobilenetv2ForwardPaper_eq_slots`.
+4. ✅ **Item 3, the gate change** (Pass 2 below). `tests/DocstringCheckRefs.lean` now resolves
+   `private` declarations, `File.decl`, module and namespace names, and a scanned file's basename.
+   It also carries the markers `Render`, `Live`, `Tied`, `Back` and `Fwd`: 2,303 citations are
+   checked, up from 1,314. Every stale row below is fixed except two that were not stale:
+   `convDownWGrad`/`patchifyWGrad` are private defs of `tests/TestConvNeXtStrided.lean`.
+   History mentions of deleted modules now cite the file (`MobileNetV2Render.lean`), which the
+   gate skips. The label of a deleted test is plain text (RenderCifar8Sgd02). The baseline lost
+   its two now-uncited entries (`convWGrad_faithful`, `kernel_faithfulness_probe`) and gained 9:
+   - out-of-environment declarations: four in `IRPrint.lean`, one in `tests/TestSDPA.lean`;
+   - `GemmFwdRest`, a MIOpen solver;
+   - `fBack`/`gateBack`, binders;
+   - `convStridedXlaBackBatched`, cited as absent.
+
+   The "new stale citation" `mobilenetv2ForwardPaper_eq_chain` was wrong: it is declared at
+   `MobileNetV2FullVJP.lean:542`.
 5. The decision groups and the correctness findings 2–11.
 
 **The per-family recipe that worked** (all in `scripts/audit_census/`):

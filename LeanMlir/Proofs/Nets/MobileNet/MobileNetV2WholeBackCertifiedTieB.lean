@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 /-! # ⭐⭐ `mnv2InputGradB` IS the certified whole-net MobileNetV2 gradient AT BATCH BATCH-NORM
 
 `MobileNetV2PaperWholeBackCertifiedTie.lean` closed this for the PER-EXAMPLE seventeen-bottleneck
-net — the reverse of `mobilenetv2ForwardPaper`, the forward the retired `MobileNetV2Render`
+net — the reverse of `mobilenetv2ForwardPaper`, the forward the retired `MobileNetV2Render.lean`
 emitted. This file closes it for the net the shipped trainers run: `mobilenetv2ForwardB_full`, the
 same `[t,c,n,s]` ladder at **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
 `planning/archive/proofs_tier_to_paper_nets.md` §4.2, alongside `ResNet34BackCertifiedTieB.lean`.

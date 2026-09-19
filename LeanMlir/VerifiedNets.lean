@@ -17,7 +17,7 @@ Specs with no proof importing them yet (e.g. `resnet34Verified`) stay in their o
     bake into each graph via `rmsConstsBlock`. These three do NOT belong there: `%lr` is a runtime
     `tensor<f32>` argument exactly so one render serves a whole schedule, and a learning rate that
     became a graph constant would be a silent, uncheckable hyperparameter — the
-    `RenderCifar8Sgd02` / EfficientNet-16× failure this repo has already paid for twice
+    RenderCifar8Sgd02 / EfficientNet-16× failure this repo has already paid for twice
     (handoff §2a-quater, §2a-quinquies). Keeping the two halves in two modules makes that
     impossible rather than merely discouraged.
 

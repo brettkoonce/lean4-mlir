@@ -14,7 +14,7 @@ margin is `m = f(x)_{top} − f(x)_{runner-up}`. The theorem: **every perturbati
 between two one-hot class directions: a pairwise logit gap is `(√2·L)`-Lipschitz.
 
 The `L` is supplied numerically by `specNormW` / `specNormConvTapSum`
-([`LeanMlir/VerifiedTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/VerifiedTrain.lean)); `lipschitzL2_comp` + `clm_lipschitzL2` show *why* the naive
+([`LeanMlir/VerifiedTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/VerifiedTrain.lean)); `LipschitzL2.comp` + `clm_lipschitzL2` show *why* the naive
 per-layer **product** `L = ∏ᵢ ‖Wᵢ‖₂` is a sound (if loose) global constant — the looseness
 the demos make visual (linear tight → MLP/CNN vacuous).
 

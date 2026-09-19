@@ -311,8 +311,8 @@ the headline accuracy numbers use. The `*-verified` trainers instead consume the
 StableHLO-subset render (the `SHlo` AST + its `den : SHlo n → Vec n` denotation),
 and there the proof↔emitted link is a **theorem**, not just a numerical check:
 for all 12 chapter nets the §1a whole-net ties (`LinearFold`'s
-`poc_train_step_tail_certified` up through `r34_net_tied_certified`,
-`mnv2_net_tied_certified`, `cnx_net_tied_certified`, `efficientnet_net_tied`,
+`poc_train_step_tail_certified` up through `r34_net_tiedB`,
+`mnv2_net_tiedB`, `cnx_net_tied_certified`, `efficientnet_net_tied`,
 `vit_net_tied_certified`) prove every emitted parameter-SGD node's `den` equals
 the certified `fderiv`-derived loss-descent step, with the cotangent threaded
 through the **real** forward and the proven per-block VJP backward (residual

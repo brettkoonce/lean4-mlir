@@ -10,8 +10,8 @@ distinct per-block parameters, `D = 192 = 3 × 64`, 197 tokens, vector-`[D]` Lay
 
 Four things assemble it, and only the second is a proof rather than an enumeration:
 
-1. **The three endpoint leaf ties.** The classifier head's backward is the free `linBack` then the
-   CLS scatter (`vitHeadBack_eq_classifier_vjp`); the final LayerNorm's is `rowLNVecFlatBack` at
+1. **The three endpoint leaf ties.** The classifier head's backward is the transposed dense
+   (`dense Wclsᵀ 0`) then the CLS scatter (`vitHeadBack_eq_classifier_vjp`); the final LayerNorm's is `rowLNVecFlatBack` at
    the tower's output (`rowLNVecFlat_has_vjp_backward_eq`, ConvNeXt's, since `vitForwardKV`'s
    final-LN witness IS `hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat …)`); and the
    patch embed's is `patchEmbed_input_grad_formula`, which `patchEmbed_flat_has_vjp` gives as its

@@ -12,7 +12,7 @@ its artifact on 2026-09-06.
 
 ⛔ **MobileNetV2's two renders did not overlap the way the other four nets' do.** ConvNeXt, ViT and
 EfficientNet each render one traversal with two endings under an `adam : Bool`. MobileNetV2 did
-not: `MobileNetV2Render` was SGD-inline only (no `adam` flag anywhere in it) and
+not: `MobileNetV2Render.lean` was SGD-inline only (no `adam` flag anywhere in it) and
 `MobileNetV2RenderB` is AdamW/RMSProp-only, at the batched index and at batch BatchNorm. So
 `mobilenetv2_adam_train_step`, `mobilenetv2_rms_train_step`, `mobilenetv2_adamdp_train_step` and
 every ImageNet artifact — including `mobilenetv2in_rmsdp64`, whose accuracy the book quotes — are on

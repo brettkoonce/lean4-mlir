@@ -13,7 +13,7 @@ This chain stays for two reasons: the batched traversal has no fused-SGD arm, an
 [`tests/TestConvNeXtFwdBTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtFwdBTie.lean) pins the two chains against each other — identical forwards,
 backwards differing on the conv-VJP `transpose`/`reverse` pair (78 lines) and nothing else.
 
-The ConvNeXt peer of `MobileNetV2Render`/`EfficientNetRender`: the FULL [3,3,9,3] ConvNeXt-T train
+The ConvNeXt peer of `EfficientNetRender`: the FULL [3,3,9,3] ConvNeXt-T train
 step (BS=32, 3×224²→10) rendered as `pretty` of verified `SHlo` nodes — forward, backward-cotangent
 chain, AND the param-SGD tail (the new `ConvNeXtFold` ops + the existing conv/depthwise/dense
 ops). Adapted from the committed emitter [`tests/TestConvNeXtTTrainPC.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtTTrainPC.lean): its forward + backward
@@ -848,7 +848,7 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
     into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
     runtime `tensor<f32>` args, so one render serves the whole schedule. Mirrors
-    `ResNet34RenderB.adamOne` / `MobileNetV2RenderB.adamOneM`.
+    `ResNet34RenderB.optOne` / `MobileNetV2RenderB.adamOneM`.
 
     At `replicas > 1` the gradient is first averaged by `prettyAllReduceMean` — `pretty` of the
     `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean of the

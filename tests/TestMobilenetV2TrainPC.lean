@@ -101,7 +101,7 @@ private def biasGrad (o dyFlat : String) (oc Hh Ww : Nat) : String :=
     `%{o}xh`/`%{o}istd`/`%{o}nf`/`%{o}gb` for the backward + `[oc]` batch sums `%{o}smr`/`%{o}vsr`
     (the running-stats passthrough). HAND-EMITTED, not a proof token: `.bnBatchF` has no `pretty`
     case, so giving mnv2 true batch-norm trades away the proof-rendered-BN property (the convs,
-    depthwise, relu6, residual, gap and dense all stay `pretty`-rendered). Same op as r34's `bnPC`. -/
+    depthwise, relu6, residual, gap and dense all stay `pretty`-rendered). -/
 private def bnB (o x g bt : String) (oc Hh Ww : Nat) : String :=
   rs4 s!"%{o}xi" x oc Hh Ww ++
   s!"    %{o}nf = stablehlo.constant dense<{BS*Hh*Ww}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
@@ -125,7 +125,7 @@ private def bnB (o x g bt : String) (oc Hh Ww : Nat) : String :=
 
 /-- Batch-norm backward, FLAT in/out. `bn` = forward BN save-prefix; `dy` = flat upstream cotangent
     `[BS, oc·Hh·Ww]`. Result flat dx `%{o}` + param grads `%{o}dg` (dγ) / `%{o}db` (dβ), both `[oc]`.
-    Reuses the NCHW forward saves `%{bn}gb`/`%{bn}xh`/`%{bn}nf`/`%{bn}istd`. Same op as r34's `bnBackPC`. -/
+    Reuses the NCHW forward saves `%{bn}gb`/`%{bn}xh`/`%{bn}nf`/`%{bn}istd`. -/
 private def bnBackB (o bn dy : String) (oc Hh Ww : Nat) : String :=
   rs4 s!"%{o}dyi" dy oc Hh Ww ++
   s!"    %{o}dxh = stablehlo.multiply %{bn}gb, %{o}dyi : {ty [BS,oc,Hh,Ww]}\n" ++
