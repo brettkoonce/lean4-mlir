@@ -136,9 +136,9 @@ noncomputable def mnv2NoExpCotIn (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc
     Vec (N * (ic * h * w)) :=
   dInB N p.dW p.db (mnv2NoExpCotDc N h w p xin dyOut)
 
-/-- The `t = 1` block's backward graph: the two stage graphs chained at their forward activations.
-    ⚠ It lives here rather than in `MobileNetV2BackB0.lean` because `mnv2NoExpB` is a wrapper of
-    `MobileNetV2FullB.lean`'s, one tier above that file's vocabulary. -/
+/-- The `t = 1` block's backward graph: the two stage graphs chained at their forward activations,
+    `dwbrLayer ; projLayer`'s graph. ⚠ It lives here rather than in `MobileNetV2BackB0.lean` because
+    `mnv2NoExpB` is a wrapper of `MobileNetV2FullB.lean`'s, one tier above that file's vocabulary. -/
 noncomputable def mnv2NoExpBackGraph {N ic oc h w : Nat} (p : IVWNoExp ic oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
   dwbrBackBatchedGraph p.dW p.db p.dε p.dγ p.dβ x
@@ -148,10 +148,9 @@ noncomputable def mnv2NoExpBackGraph {N ic oc h w : Nat} (p : IVWNoExp ic oc)
 theorem mnv2NoExpBackGraph_faithful {N ic oc h w : Nat} (p : IVWNoExp ic oc) (hq : IVNoExpPos p)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w)))
     (hs : IVNoExpSmoothAtB N h w p x) :
-    den (mnv2NoExpBackGraph p x e) = (mnv2NoExpB_has_vjp_at N h w p hq x hs).backward (den e) := by
-  rw [mnv2NoExpBackGraph, dwbrBackBatchedGraph_faithful (hε := hq.hd) (h_smooth := hs.hd),
-      projBackBatchedGraph_faithful (hε := hq.hp)]
-  simp only [mnv2NoExpB_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt, Function.comp_apply]
+    den (mnv2NoExpBackGraph p x e) = (mnv2NoExpB_has_vjp_at N h w p hq x hs).backward (den e) :=
+  ((dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
+    (projLayer N p.pW p.pb p.pε hq.hp p.pγ p.pβ)).faithful x ⟨hs.hd, trivial⟩ e
 
 /-- ⭐⭐ **The emitted `t = 1` chain IS the certified block VJP's backward.** -/
 theorem mnv2NoExpCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)

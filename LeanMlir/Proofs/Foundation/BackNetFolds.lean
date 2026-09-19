@@ -11,8 +11,9 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 `ResNet50BackNet.lean` folded R50 and `CertifiedChain.lean` made the machinery net-agnostic. This
 file pays that off: every other conv net's block capstone becomes a `CertLayer`, so
 `CertLayer.comp` / `CertLayer.chain` compose them into stages and trunks with **no new proof per
-net and no new proof per depth**. (R34's two block layers are defined in `ResNet34BackB0`, composed
-from its stage layers; the R34 stage and trunk folds are here.)
+net and no new proof per depth**. (R34's two block layers are defined in `ResNet34BackB0` and mnv2's
+body in `MobileNetV2BackB0`, each composed from its stage layers; the R34 stage and trunk folds are
+here.)
 
 ⭐ **The per-net work was making the blocks pluggable, not proving anything.** Each capstone took
 its cotangent as `dy : Vec n` and wrapped it internally as `.operand "%dy" dy`, so a block could
@@ -127,37 +128,15 @@ noncomputable def cnxBlockChLayer {c cExp h w kH kW : Nat}
     ⚠ Its `ok` clauses are **two-sided** (`≠ 0 ∧ ≠ 6`) because relu6 has a kink at each end — the
     difference `MobileNetV2BackB0` records against R34's one-sided relu. ⚠ And unlike R34/R50 there
     is **no outer relu**: mnv2's block output IS the residual add, so `ok` has two clauses covering
-    the expand and depthwise stages and none for an output activation. -/
+    the expand and depthwise stages and none for an output activation — `mnv2BodyLayer`'s, since an
+    identity skip adds no condition. -/
 noncomputable def mnv2ResidBlockLayer (N : Nat) {c mid h w kHd kWd : Nat}
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) where
-  fwd := residual (projB N (h := h) (w := w) Wp bp εp γp βp ∘
-                   dwbrB N (h := h) (w := w) Wd bd εd γd βd ∘
-                   cbrB N (h := h) (w := w) We be εe γe βe)
-  ok := fun x =>
-    (∀ k, bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
-          bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 6) ∧
-    (∀ k, bnBatchLA N mid h w εd γd βd
-            (batchMap N (depthwiseFlat Wd bd) (cbrB N (h := h) (w := w) We be εe γe βe x)) k ≠ 0 ∧
-          bnBatchLA N mid h w εd γd βd
-            (batchMap N (depthwiseFlat Wd bd) (cbrB N (h := h) (w := w) We be εe γe βe x)) k ≠ 6)
-  diff := by
-    intro x hx
-    exact (mnv2BodyB_differentiableAt N We be εe hεe γe βe Wd bd εd hεd γd βd
-      Wp bp εp hεp γp βp x hx.1 hx.2).add differentiable_id.differentiableAt
-  vjp := fun x hx =>
-    residual_has_vjp_at _ x
-      (mnv2BodyB_differentiableAt N We be εe hεe γe βe Wd bd εd hεd γd βd
-        Wp bp εp hεp γp βp x hx.1 hx.2)
-      (mnv2BodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd
-        Wp bp εp hεp γp βp x hx.1 hx.2)
-  graph := fun x e => mnv2ResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd
-    Wp bp εp γp βp x e
-  faithful := fun x hx e =>
-    mnv2ResidBlockBackBatchedGraph_faithful We be εe hεe γe βe Wd bd εd hεd γd βd
-      Wp bp εp hεp γp βp x e hx.1 hx.2
+    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
+  CertLayer.residual (mnv2BodyLayer N (h := h) (w := w) We be εe hεe γe βe Wd bd εd hεd γd βd
+    Wp bp εp hεp γp βp)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The payoff — every net folds with the SAME two combinators

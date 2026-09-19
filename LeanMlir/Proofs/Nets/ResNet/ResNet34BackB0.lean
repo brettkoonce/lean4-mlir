@@ -44,8 +44,8 @@ one at the outer relu's pre-activation `residual(F)(x)`.
   residual-fan-in(body-back) + identity skip) denotes the proven
   `relu ∘ residual(F)` VJP (`vjp_comp_at(residual_has_vjp_at(body), relu)`),
   threaded through both relu smoothness hypotheses.
-* `cbReluLayer` / `projLayer` / `cbReluStridedLayer` / `projStridedLayer` — the four
-  stages as `CertLayer`s. `r34BasicBlockLayer` / `r34DownBlockLayer` compose them with
+* `cbReluLayer` / `projLayer` (from `MobileNetV2BackB0`) / `cbReluStridedLayer` /
+  `projStridedLayer` — the four stages as `CertLayer`s. `r34BasicBlockLayer` / `r34DownBlockLayer` compose them with
   `CertLayer.comp`, `residual` / `residualProj` and `reluOut`, and each body/block VJP
   and capstone here is that composite's `.vjp` / `.faithful`.
 
@@ -168,18 +168,6 @@ theorem cbReluLayer_fwd_apply (N : Nat) {ic oc h w kH kW : Nat}
     (v : Vec (N * (ic * h * w))) :
     (cbReluLayer (h := h) (w := w) N W b ε hε γ β).fwd v
       = cbReluB N (h := h) (w := w) W b ε γ β v := rfl
-
-/-- The conv → bn stage (`projB`, no activation) as a `CertLayer`. Globally certified
-    (`ok = True`): with no activation there is no kink. -/
-noncomputable def projLayer (N : Nat) {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    CertLayer (N * (ic * h * w)) (N * (oc * h * w)) where
-  fwd := projB N (h := h) (w := w) W b ε γ β
-  ok := fun _ => True
-  diff := fun x _ => (projB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (projB_has_vjp N W b ε hε γ β).toHasVJPAt x
-  graph := fun x e => projBackBatchedGraph W b ε γ β x e
-  faithful := fun x _ e => projBackBatchedGraph_faithful W b ε hε γ β x e
 
 -- ════════════════════════════════════════════════════════════════
 -- § The body: `cbB ∘ cbReluB`  (= projB ∘ cbReluB)

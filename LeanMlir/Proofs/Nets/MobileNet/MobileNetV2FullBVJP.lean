@@ -22,8 +22,8 @@ every `batchMap` in the net.
 
 ⭐ Three shapes are `bnRelu6Stage_has_vjp_at` at a different inner op, and that lemma is already
 generic in it: the stem is that stage at `flatConvStride2Xla`, the head's first stage is `cbrB`,
-and the expand/depthwise stages are `cbrB` / `dwbrB` / `dwbrBstrided`. The only composition written
-here from scratch is the `t = 1` block `projB ∘ dwbrB` (b1), which has no `mnv2*BodyB` peer.
+and the expand/depthwise stages are `cbrB` / `dwbrB` / `dwbrBstrided`. The `t = 1` block
+`projB ∘ dwbrB` (b1) has no `mnv2*BodyB` peer; it is `dwbrLayer ; projLayer`.
 
 ## The hypothesis budget
 
@@ -143,22 +143,19 @@ theorem mnv2StemB_differentiableAt (N h w : Nat) {ic oc kH kW : Nat}
   StableHLO.bnRelu6Stage_differentiableAt N (flatConvStride2Xla Ws bs)
     (flatConvStride2Xla_differentiable Ws bs) εs hεs γs βs x hs
 
-/-- `t = 1` bottleneck VJP (b1): `projB ∘ dwbrB`. The one block shape with no `mnv2*BodyB` lemma
-    to delegate to, so it composes its two stages here. -/
+/-- `t = 1` bottleneck VJP (b1): `projB ∘ dwbrB`, the VJP of `dwbrLayer ; projLayer`. The one
+    block shape with no `mnv2*BodyB` lemma to delegate to. -/
 noncomputable def mnv2NoExpB_has_vjp_at (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (v : Vec (N * (ic * h * w))) (hs : IVNoExpSmoothAtB N h w p v) :
     HasVJPAt (mnv2NoExpB N h w p) v :=
-  vjp_comp_at _ (projB N (h := h) (w := w) p.pW p.pb p.pε p.pγ p.pβ) v
-    (StableHLO.dwbrB_differentiableAt N p.dW p.db p.dε hq.hd p.dγ p.dβ v hs.hd)
-    ((projB_differentiable N (h := h) (w := w) p.pW p.pb p.pε hq.hp p.pγ p.pβ) _)
-    (StableHLO.dwbrB_has_vjp_at N p.dW p.db p.dε hq.hd p.dγ p.dβ v hs.hd)
-    ((projB_has_vjp N (h := h) (w := w) p.pW p.pb p.pε hq.hp p.pγ p.pβ).toHasVJPAt _)
+  ((StableHLO.dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
+    (StableHLO.projLayer N p.pW p.pb p.pε hq.hp p.pγ p.pβ)).vjp v ⟨hs.hd, trivial⟩
 
 theorem mnv2NoExpB_differentiableAt (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (v : Vec (N * (ic * h * w))) (hs : IVNoExpSmoothAtB N h w p v) :
     DifferentiableAt ℝ (mnv2NoExpB N h w p) v :=
-  ((projB_differentiable N (h := h) (w := w) p.pW p.pb p.pε hq.hp p.pγ p.pβ) _).comp v
-    (StableHLO.dwbrB_differentiableAt N p.dW p.db p.dε hq.hd p.dγ p.dβ v hs.hd)
+  ((StableHLO.dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
+    (StableHLO.projLayer N p.pW p.pb p.pε hq.hp p.pγ p.pβ)).diff v ⟨hs.hd, trivial⟩
 
 /-- Stride-1 no-skip bottleneck VJP (b11, b17) — `mnv2BodyB_has_vjp_at` at the bundle's fields. -/
 noncomputable def mnv2ExpOnlyB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
