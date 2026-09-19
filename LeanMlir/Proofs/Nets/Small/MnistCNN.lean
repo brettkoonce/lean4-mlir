@@ -455,7 +455,11 @@ theorem conv2d_center3x3 {ic oc h w : Nat}
 -- inside the three-axiom closure (no `native_decide`).
 -- ════════════════════════════════════════════════════════════════
 
-namespace Mini
+/-! The Tier-1 (`Mini`) and Tier-2 (`Spatial`) witnesses differ only in their two conv kernels —
+1×1, or 3×3 with only the center tap — and both conv stacks compute the same per-pixel channel mix.
+The input, biases, dense heads and the whole smoothness discharge live here once, for ANY kernels
+with that closed form (`Conv1Mix`, `Conv2Mix`). -/
+namespace TwoChan
 
 /-- Input tensor with 16 distinct strictly-positive integer values, so
     `(hi, wi) ↦ T0 0 hi wi` is injective in position. -/
@@ -463,14 +467,8 @@ noncomputable def T0 : Tensor3 1 (2*2) (2*2) :=
   fun _ hi wi => ((4 * hi.val + wi.val + 1 : ℕ) : ℝ)
 /-- Whole-network input, the flattened `T0`. -/
 noncomputable def X : Vec (1 * (2*2) * (2*2)) := Tensor3.flatten T0
-/-- conv1: 1→2 channels, 1×1, unit tap. -/
-noncomputable def W1 : Kernel4 2 1 1 1 := fun _ _ _ _ => 1
 /-- conv1 bias `(1, 2)` — gives the two output channels distinct values. -/
 noncomputable def b1 : Vec 2 := fun o => if o = 0 then 1 else 2
-/-- conv2: 2→2 channels, 1×1. Row depends on the output channel
-    (`1` for channel 0, `2` for channel 1), so the two output channels
-    differ and each has a strictly-positive input-pixel coefficient. -/
-noncomputable def W2 : Kernel4 2 2 1 1 := fun o _ _ _ => if o = 0 then 1 else 2
 /-- conv2 bias. -/
 noncomputable def b2 : Vec 2 := fun _ => 1
 /-- Dense heads: nonnegative weights + strictly-positive biases keep every
@@ -481,48 +479,50 @@ noncomputable def W4 : Mat 3 3 := fun _ _ => 1
 noncomputable def b4 : Vec 3 := fun _ => 1
 noncomputable def W5 : Mat 3 10 := fun _ _ => 1
 noncomputable def b5 : Vec 10 := fun _ => 0
+/-- conv2's weight on every input channel: `1` for output channel 0, `2` for channel 1, so the
+    two output channels differ and each has a strictly-positive input-pixel coefficient. -/
+noncomputable def κ (o : Fin 2) : ℝ := if o = 0 then 1 else 2
 
-/-- conv1 in closed form: bias plus the (unit-tap) input pixel. -/
-theorem conv1_eq (o : Fin 2) (hi wi : Fin (2*2)) :
-    conv2d W1 b1 T0 o hi wi = b1 o + T0 0 hi wi := by
-  rw [conv2d_1x1, Fin.sum_univ_one]; simp [W1]
+variable {kH kW : Nat}
+
+/-- conv1 in closed form: bias plus the (unit-weight) input pixel. -/
+def Conv1Mix (W1 : Kernel4 2 1 kH kW) : Prop :=
+  ∀ o hi wi, conv2d W1 b1 T0 o hi wi = b1 o + T0 0 hi wi
+
+/-- conv2 in closed form, on any input: bias plus the `κ`-weighted channel sum at that pixel. -/
+def Conv2Mix (W2 : Kernel4 2 2 kH kW) : Prop :=
+  ∀ (t : Tensor3 2 (2*2) (2*2)) o hi wi, conv2d W2 b2 t o hi wi = b2 o + ∑ c : Fin 2, κ o * t c hi wi
 
 /-- conv1 is everywhere positive (bias ≥ 1, pixel ≥ 0). -/
-theorem conv1_pos (o : Fin 2) (hi wi : Fin (2*2)) : 0 < conv2d W1 b1 T0 o hi wi := by
-  rw [conv1_eq]
+theorem conv1_pos {W1 : Kernel4 2 1 kH kW} (h1 : Conv1Mix W1) (o : Fin 2) (hi wi : Fin (2*2)) :
+    0 < conv2d W1 b1 T0 o hi wi := by
+  rw [h1]
   have hb : (0:ℝ) < b1 o := by simp only [b1]; split <;> norm_num
   have ht : (0:ℝ) ≤ T0 0 hi wi := by simp only [T0]; positivity
   linarith
 
-/-- conv2 ∘ conv1 in closed form. -/
-theorem conv2_eq (o : Fin 2) (hi wi : Fin (2*2)) :
-    conv2d W2 b2 (conv2d W1 b1 T0) o hi wi
-      = b2 o + (W2 o 0 0 0 * (b1 0 + T0 0 hi wi) + W2 o 1 0 0 * (b1 1 + T0 0 hi wi)) := by
-  rw [conv2d_1x1, Fin.sum_univ_two, conv1_eq, conv1_eq]
-
 /-- conv2 ∘ conv1 is everywhere positive. -/
-theorem conv2_pos (o : Fin 2) (hi wi : Fin (2*2)) :
+theorem conv2_pos {W1 : Kernel4 2 1 kH kW} {W2 : Kernel4 2 2 kH kW} (h1 : Conv1Mix W1)
+    (h2 : Conv2Mix W2) (o : Fin 2) (hi wi : Fin (2*2)) :
     0 < conv2d W2 b2 (conv2d W1 b1 T0) o hi wi := by
-  rw [conv2d_1x1]
+  rw [h2]
   have hb : (0:ℝ) < b2 o := by simp only [b2]; norm_num
-  have hs : (0:ℝ) ≤ ∑ i : Fin 2, W2 o i 0 0 * conv2d W1 b1 T0 i hi wi := by
-    apply Finset.sum_nonneg
-    intro i _
-    apply mul_nonneg
-    · simp only [W2]; split <;> norm_num
-    · exact le_of_lt (conv1_pos i hi wi)
+  have hs : (0:ℝ) ≤ ∑ c : Fin 2, κ o * conv2d W1 b1 T0 c hi wi :=
+    Finset.sum_nonneg fun c _ =>
+      mul_nonneg (by simp only [κ]; split <;> norm_num) (conv1_pos h1 c hi wi).le
   linarith
 
 /-- The max-pool input (`conv2 ∘ conv1`) is positionally injective on each
     channel: distinct positions give distinct values (the conv stack is
     affine with a strictly-positive coefficient on the injective input). -/
-theorem poolTensor_inj (ci : Fin 2) (r r' s s' : Fin (2*2))
+theorem poolTensor_inj {W1 : Kernel4 2 1 kH kW} {W2 : Kernel4 2 2 kH kW} (h1 : Conv1Mix W1)
+    (h2 : Conv2Mix W2) (ci : Fin 2) (r r' s s' : Fin (2*2))
     (heq : conv2d W2 b2 (conv2d W1 b1 T0) ci r s
          = conv2d W2 b2 (conv2d W1 b1 T0) ci r' s') :
     r = r' ∧ s = s' := by
-  rw [conv2_eq, conv2_eq] at heq
+  rw [h2, h2, Fin.sum_univ_two, Fin.sum_univ_two, h1, h1, h1, h1] at heq
   have key : T0 0 r s = T0 0 r' s' := by
-    fin_cases ci <;> (simp [W2, b1, b2] at heq; linarith)
+    fin_cases ci <;> (simp [κ, b1, b2] at heq; linarith)
   simp only [T0] at key
   rw [Nat.cast_inj] at key
   have hr := r.isLt; have hs := s.isLt; have hr' := r'.isLt; have hs' := s'.isLt
@@ -530,78 +530,105 @@ theorem poolTensor_inj (ci : Fin 2) (r r' s s' : Fin (2*2))
 
 /-- `flatConv W1 b1 X = flatten (conv2d W1 b1 T0)` (the input round-trips
     through `unflatten ∘ flatten`). -/
-theorem flatConv1_eq : flatConv W1 b1 X = Tensor3.flatten (conv2d W1 b1 T0) := by
+theorem flatConv1_eq (W1 : Kernel4 2 1 kH kW) :
+    flatConv W1 b1 X = Tensor3.flatten (conv2d W1 b1 T0) := by
   simp only [flatConv, X, Tensor3.unflatten_flatten]
 
 /-- Second conv layer, post unflatten/flatten round-trip. -/
-theorem convZ_eq :
+theorem convZ_eq (W1 : Kernel4 2 1 kH kW) (W2 : Kernel4 2 2 kH kW) :
     flatConv W2 b2 (Tensor3.flatten (conv2d W1 b1 T0))
       = Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)) := by
   simp only [flatConv, Tensor3.unflatten_flatten]
 
 /-- First conv→relu block: ReLU is the identity (conv1 is positive). -/
-theorem block1_eq :
+theorem block1_eq {W1 : Kernel4 2 1 kH kW} (h1 : Conv1Mix W1) :
     (relu (2 * (2*2) * (2*2)) ∘ flatConv W1 b1) X
       = Tensor3.flatten (conv2d W1 b1 T0) := by
   simp only [Function.comp_apply, flatConv1_eq]
-  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv1_pos o hi wi) k)
+  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv1_pos h1 o hi wi) k)
 
 /-- Both conv→relu blocks fold (ReLUs are identities) to the flattened
     `conv2 ∘ conv1` — the tensor handed to max-pool. -/
-theorem blockZ_eq :
+theorem blockZ_eq {W1 : Kernel4 2 1 kH kW} {W2 : Kernel4 2 2 kH kW} (h1 : Conv1Mix W1)
+    (h2 : Conv2Mix W2) :
     ((relu (2 * (2*2) * (2*2)) ∘ flatConv W2 b2) ∘
       (relu (2 * (2*2) * (2*2)) ∘ flatConv W1 b1)) X
       = Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)) := by
-  rw [Function.comp_apply, block1_eq, Function.comp_apply, convZ_eq]
-  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv2_pos o hi wi) k)
+  rw [Function.comp_apply, block1_eq h1, Function.comp_apply, convZ_eq]
+  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv2_pos h1 h2 o hi wi) k)
 
 /-- The pooled vector in closed form. -/
-theorem pooled_eq :
+theorem pooled_eq (W1 : Kernel4 2 1 kH kW) (W2 : Kernel4 2 2 kH kW) :
     maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)))
       = Tensor3.flatten (maxPool2 (conv2d W2 b2 (conv2d W1 b1 T0))) := by
   simp only [maxPoolFlat, Tensor3.unflatten_flatten]
 
 /-- The pooled vector is everywhere positive. -/
-theorem pooled_pos (i : Fin (2*2*2)) :
+theorem pooled_pos {W1 : Kernel4 2 1 kH kW} {W2 : Kernel4 2 2 kH kW} (h1 : Conv1Mix W1)
+    (h2 : Conv2Mix W2) (i : Fin (2*2*2)) :
     0 < maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0))) i := by
   rw [pooled_eq]
   exact flatten_pos_of_pos
-    (fun ci hi wi => maxPool2_pos (fun o r s => conv2_pos o r s) ci hi wi) i
+    (fun ci hi wi => maxPool2_pos (fun o r s => conv2_pos h1 h2 o r s) ci hi wi) i
 
 /-- The first dense layer's output is everywhere positive. -/
-theorem dense3_pos (j : Fin 3) :
+theorem dense3_pos {W1 : Kernel4 2 1 kH kW} {W2 : Kernel4 2 2 kH kW} (h1 : Conv1Mix W1)
+    (h2 : Conv2Mix W2) (j : Fin 3) :
     0 < dense W3 b3
       (maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)))) j :=
   dense_pos_of_nonneg (fun _ _ => by simp [W3]) (fun _ => by simp [b3])
-    (fun i => le_of_lt (pooled_pos i)) j
+    (fun i => le_of_lt (pooled_pos h1 h2 i)) j
 
-/-- **Unconditional whole-network VJP for a multi-channel, multi-window,
-    10-class CNN.** Every smoothness hypothesis of
-    `mnistCnnNoBn_has_vjp_at` is discharged — the no-tie condition via
-    `maxPool2Smooth_of_injective`, the ReLU conditions via positivity —
-    so the statement carries no side conditions and stays in the
-    three-axiom closure. -/
-noncomputable def miniCnn_has_vjp_at :
+/-- **Unconditional whole-network VJP for the multi-channel, multi-window,
+    10-class CNN, at any kernels with the channel-mix closed form.** Every
+    smoothness hypothesis of `mnistCnnNoBn_has_vjp_at` is discharged — the
+    no-tie condition via `maxPool2Smooth_of_injective`, the ReLU conditions via
+    positivity — inside the three-axiom closure. -/
+noncomputable def cnn_has_vjp_at {W1 : Kernel4 2 1 kH kW} {W2 : Kernel4 2 2 kH kW}
+    (h1 : Conv1Mix W1) (h2 : Conv2Mix W2) :
     HasVJPAt (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X :=
   mnistCnnNoBn_has_vjp_at W1 b1 W2 b2 W3 b3 W4 b4 W5 b5
     (by norm_num) (by norm_num) (by norm_num) X
     -- h1: conv1 preactivation nonzero
     (by intro k; rw [flatConv1_eq]
-        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv1_pos o hi wi) k))
+        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv1_pos h1 o hi wi) k))
     -- h2: conv2 preactivation nonzero
-    (by intro k; rw [block1_eq, convZ_eq]
-        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv2_pos o hi wi) k))
+    (by intro k; rw [block1_eq h1, convZ_eq]
+        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv2_pos h1 h2 o hi wi) k))
     -- h_mp: no MaxPool ties (positional injectivity on the pool input)
-    (by rw [blockZ_eq, Tensor3.unflatten_flatten]
+    (by rw [blockZ_eq h1 h2, Tensor3.unflatten_flatten]
         exact maxPool2Smooth_of_injective _
-          (fun ci r r' s s' h => poolTensor_inj ci r r' s s' h))
+          (fun ci r r' s s' h => poolTensor_inj h1 h2 ci r r' s s' h))
     -- h3: dense3 preactivation nonzero
-    (by intro k; rw [blockZ_eq]; exact ne_of_gt (dense3_pos k))
+    (by intro k; rw [blockZ_eq h1 h2]; exact ne_of_gt (dense3_pos h1 h2 k))
     -- h4: dense4 preactivation nonzero
     (by intro k
-        rw [blockZ_eq, Function.comp_apply, relu_id_of_pos (fun i => dense3_pos i)]
+        rw [blockZ_eq h1 h2, Function.comp_apply, relu_id_of_pos (fun i => dense3_pos h1 h2 i)]
         exact ne_of_gt (dense_pos_of_nonneg (fun _ _ => by simp [W4]) (fun _ => by simp [b4])
-          (fun i => le_of_lt (dense3_pos i)) k))
+          (fun i => le_of_lt (dense3_pos h1 h2 i)) k))
+
+end TwoChan
+
+namespace Mini
+open TwoChan
+
+/-- conv1: 1→2 channels, 1×1, unit tap. -/
+noncomputable def W1 : Kernel4 2 1 1 1 := fun _ _ _ _ => 1
+/-- conv2: 2→2 channels, 1×1, row `κ o` (`1` for channel 0, `2` for channel 1). -/
+noncomputable def W2 : Kernel4 2 2 1 1 := fun o _ _ _ => if o = 0 then 1 else 2
+
+/-- conv1 in closed form: bias plus the (unit-tap) input pixel. -/
+theorem conv1_eq : Conv1Mix W1 := fun o hi wi => by
+  rw [conv2d_1x1, Fin.sum_univ_one]; simp [W1]
+
+/-- conv2 is the per-pixel channel mix with weights `κ`. -/
+theorem conv2_mix : Conv2Mix W2 := fun t o hi wi => by rw [conv2d_1x1]; rfl
+
+/-- **Unconditional whole-network VJP for a multi-channel, multi-window,
+    10-class CNN** — `TwoChan.cnn_has_vjp_at` at the 1×1 kernels. -/
+noncomputable def miniCnn_has_vjp_at :
+    HasVJPAt (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X :=
+  TwoChan.cnn_has_vjp_at conv1_eq conv2_mix
 
 /-- **Public unconditional correctness theorem** — the Tier-1 CNN's
     backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
@@ -626,26 +653,14 @@ end Mini
 -- ════════════════════════════════════════════════════════════════
 
 namespace Spatial
+open TwoChan
 
-/-- Input tensor, 16 distinct strictly-positive values (positionally
-    injective). -/
-noncomputable def T0 : Tensor3 1 (2*2) (2*2) :=
-  fun _ hi wi => ((4 * hi.val + wi.val + 1 : ℕ) : ℝ)
-noncomputable def X : Vec (1 * (2*2) * (2*2)) := Tensor3.flatten T0
 /-- conv1: 1→2 channels, 3×3, center tap `1`, zero elsewhere. -/
 noncomputable def W1 : Kernel4 2 1 3 3 := fun _ _ kh kw => if kh = 1 ∧ kw = 1 then 1 else 0
-noncomputable def b1 : Vec 2 := fun o => if o = 0 then 1 else 2
 /-- conv2: 2→2 channels, 3×3, center tap depends on the output channel
     (`1` for channel 0, `2` for channel 1), zero elsewhere. -/
 noncomputable def W2 : Kernel4 2 2 3 3 :=
   fun o _ kh kw => if kh = 1 ∧ kw = 1 then (if o = 0 then 1 else 2) else 0
-noncomputable def b2 : Vec 2 := fun _ => 1
-noncomputable def W3 : Mat (2*2*2) 3 := fun _ _ => 1
-noncomputable def b3 : Vec 3 := fun _ => 1
-noncomputable def W4 : Mat 3 3 := fun _ _ => 1
-noncomputable def b4 : Vec 3 := fun _ => 1
-noncomputable def W5 : Mat 3 10 := fun _ _ => 1
-noncomputable def b5 : Vec 10 := fun _ => 0
 
 /-- conv1 vanishes off the center tap (the `conv2d_center3x3` hypothesis). -/
 theorem hW1 (o : Fin 2) (c : Fin 1) (kh kw : Fin 3) (hne : ¬(kh = 1 ∧ kw = 1)) :
@@ -656,106 +671,20 @@ theorem hW2 (o c : Fin 2) (kh kw : Fin 3) (hne : ¬(kh = 1 ∧ kw = 1)) :
 theorem W1_center (o : Fin 2) (c : Fin 1) : W1 o c 1 1 = 1 := by simp [W1]
 
 /-- conv1 in closed form. -/
-theorem conv1_eq (o : Fin 2) (hi wi : Fin (2*2)) :
-    conv2d W1 b1 T0 o hi wi = b1 o + T0 0 hi wi := by
+theorem conv1_eq : Conv1Mix W1 := fun o hi wi => by
   rw [conv2d_center3x3 W1 b1 hW1, Fin.sum_univ_one, W1_center, one_mul]
 
-theorem conv1_pos (o : Fin 2) (hi wi : Fin (2*2)) : 0 < conv2d W1 b1 T0 o hi wi := by
-  rw [conv1_eq]
-  have hb : (0:ℝ) < b1 o := by simp only [b1]; split <;> norm_num
-  have ht : (0:ℝ) ≤ T0 0 hi wi := by simp only [T0]; positivity
-  linarith
-
-/-- conv2 ∘ conv1 in closed form. -/
-theorem conv2_eq (o : Fin 2) (hi wi : Fin (2*2)) :
-    conv2d W2 b2 (conv2d W1 b1 T0) o hi wi
-      = b2 o + (W2 o 0 1 1 * (b1 0 + T0 0 hi wi) + W2 o 1 1 1 * (b1 1 + T0 0 hi wi)) := by
-  rw [conv2d_center3x3 W2 b2 hW2, Fin.sum_univ_two, conv1_eq, conv1_eq]
-
-theorem conv2_pos (o : Fin 2) (hi wi : Fin (2*2)) :
-    0 < conv2d W2 b2 (conv2d W1 b1 T0) o hi wi := by
-  rw [conv2d_center3x3 W2 b2 hW2]
-  have hb : (0:ℝ) < b2 o := by simp only [b2]; norm_num
-  have hs : (0:ℝ) ≤ ∑ i : Fin 2, W2 o i 1 1 * conv2d W1 b1 T0 i hi wi := by
-    apply Finset.sum_nonneg
-    intro i _
-    apply mul_nonneg
-    · rw [show W2 o i 1 1 = (if o = 0 then (1:ℝ) else 2) from by simp [W2]]
-      split <;> norm_num
-    · exact le_of_lt (conv1_pos i hi wi)
-  linarith
-
-/-- The max-pool input is positionally injective on each channel. -/
-theorem poolTensor_inj (ci : Fin 2) (r r' s s' : Fin (2*2))
-    (heq : conv2d W2 b2 (conv2d W1 b1 T0) ci r s
-         = conv2d W2 b2 (conv2d W1 b1 T0) ci r' s') :
-    r = r' ∧ s = s' := by
-  rw [conv2_eq, conv2_eq] at heq
-  have key : T0 0 r s = T0 0 r' s' := by
-    fin_cases ci <;> (simp [W2, b1, b2] at heq; linarith)
-  simp only [T0] at key
-  rw [Nat.cast_inj] at key
-  have hr := r.isLt; have hs := s.isLt; have hr' := r'.isLt; have hs' := s'.isLt
-  exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
-
-theorem flatConv1_eq : flatConv W1 b1 X = Tensor3.flatten (conv2d W1 b1 T0) := by
-  simp only [flatConv, X, Tensor3.unflatten_flatten]
-
-theorem convZ_eq :
-    flatConv W2 b2 (Tensor3.flatten (conv2d W1 b1 T0))
-      = Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)) := by
-  simp only [flatConv, Tensor3.unflatten_flatten]
-
-theorem block1_eq :
-    (relu (2 * (2*2) * (2*2)) ∘ flatConv W1 b1) X
-      = Tensor3.flatten (conv2d W1 b1 T0) := by
-  simp only [Function.comp_apply, flatConv1_eq]
-  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv1_pos o hi wi) k)
-
-theorem blockZ_eq :
-    ((relu (2 * (2*2) * (2*2)) ∘ flatConv W2 b2) ∘
-      (relu (2 * (2*2) * (2*2)) ∘ flatConv W1 b1)) X
-      = Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)) := by
-  rw [Function.comp_apply, block1_eq, Function.comp_apply, convZ_eq]
-  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv2_pos o hi wi) k)
-
-theorem pooled_eq :
-    maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)))
-      = Tensor3.flatten (maxPool2 (conv2d W2 b2 (conv2d W1 b1 T0))) := by
-  simp only [maxPoolFlat, Tensor3.unflatten_flatten]
-
-theorem pooled_pos (i : Fin (2*2*2)) :
-    0 < maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0))) i := by
-  rw [pooled_eq]
-  exact flatten_pos_of_pos
-    (fun ci hi wi => maxPool2_pos (fun o r s => conv2_pos o r s) ci hi wi) i
-
-theorem dense3_pos (j : Fin 3) :
-    0 < dense W3 b3
-      (maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)))) j :=
-  dense_pos_of_nonneg (fun _ _ => by simp [W3]) (fun _ => by simp [b3])
-    (fun i => le_of_lt (pooled_pos i)) j
+/-- conv2 is the per-pixel channel mix with weights `κ` (its center taps). -/
+theorem conv2_mix : Conv2Mix W2 := fun t o hi wi => by
+  rw [conv2d_center3x3 W2 b2 hW2]; simp [W2, κ]
 
 /-- **Unconditional whole-network VJP for a 3×3-convolution CNN.** Same
     shape as `Mini.miniCnn` (2 channels, eight pool windows, 10 classes)
-    but with genuine 3×3 SAME-padding convolutions, every smoothness
-    hypothesis discharged, inside the three-axiom closure. -/
+    but with genuine 3×3 SAME-padding convolutions — `TwoChan.cnn_has_vjp_at`
+    at the center-structured kernels. -/
 noncomputable def spatialCnn_has_vjp_at :
     HasVJPAt (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X :=
-  mnistCnnNoBn_has_vjp_at W1 b1 W2 b2 W3 b3 W4 b4 W5 b5
-    (by norm_num) (by norm_num) (by norm_num) X
-    (by intro k; rw [flatConv1_eq]
-        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv1_pos o hi wi) k))
-    (by intro k; rw [block1_eq, convZ_eq]
-        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv2_pos o hi wi) k))
-    (by rw [blockZ_eq, Tensor3.unflatten_flatten]
-        exact maxPool2Smooth_of_injective _
-          (fun ci r r' s s' h => poolTensor_inj ci r r' s s' h))
-    (by intro k; rw [blockZ_eq]; exact ne_of_gt (dense3_pos k))
-    (by intro k
-        rw [blockZ_eq, Function.comp_apply, relu_id_of_pos (fun i => dense3_pos i)]
-        exact ne_of_gt (dense_pos_of_nonneg (fun _ _ => by simp [W4]) (fun _ => by simp [b4])
-          (fun i => le_of_lt (dense3_pos i)) k))
+  TwoChan.cnn_has_vjp_at conv1_eq conv2_mix
 
 /-- **Public unconditional correctness theorem** — the 3×3-conv CNN's
     backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/

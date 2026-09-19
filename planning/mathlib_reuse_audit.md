@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-19, main `2c565fb9`, 12 ahead of origin, + the staged row)
+## Status (2026-09-19, main `f48d9726`, 13 ahead of origin, + the staged row)
 
-**Landed** — about 12.4k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 12.8k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -65,7 +65,8 @@ suspected, no drop-in located.
 | `49ba248e` | **§6 live witnesses — one generic downsample** (−163): `liveDownW` (+ `_proj_pos`, `_sum_pos`, `_vjp`, `_diff`) moves up from `ResNet34LiveGeneric` into `ResNet34LivePC`, with `liveDownβ := liveDownW · · · WsP2` (from LiveRealistic) and `liveDownPC := liveDownβ · · 20` — three copies of the positivity / VJP / differentiability lemmas become one; `Dom2_liveDownPC` / `liveDownPC_const` are the βp = 20 instances; instance names kept so call sites don't move. Seal side: `ldSβ` and its `_pos` / `_continuous` / `liveDownβ_eq_ldSβ` move up into `ResNet34LiveSeal`, `ldS` is `abbrev ldSβ · · 20`. Each changed definition a pinned statement mentions is `rfl`-equal to its HEAD text |
 | `b8124630` | **§6 live witnesses — one generic stem** (−107): `Xs s` and `stemβ s β` in `ResNet34LivePC` with `_bn_pos`, `_inj`, `_maxpool_smooth`, `_vjp`, `_diff`, `Dom2_stemβ`, `Dom2_Xs`, `stemβ_zero`, plus `maxPoolFlat_vjp_of_smooth` / `_diff_of_smooth` for the flatten/unflatten point step written four times. The 16×16 and 112×112 families (`X2`, `stem2`, `stem2_vjp` / `_diff`, `hmp_vjp2`, … and their 224 peers) are one-line instances; their `_bn_pos` / `_inj` / `_maxpool_smooth` / `_conv_eq` / `mp_point_eq*` copies and `X2_inj` / `X224_inj` go. Seal side: generic `Yt` / `Ys`, `stemSβ`, `stemβ_eq_stemSβ` in `ResNet34LiveSeal`; `Y`, `Y224`, `stemS`, `stemS224` are instances. Left: ResNet34Concrete's 1-channel stem (ResNet34.lean has 99 downstream) |
 | `2c565fb9` | **§6 live misc** (−16): `ResNet34LivePC.flatConv_diag_id` takes a bias (`b`, `hb`) and absorbs `MobileNetV2SealRealistic`'s `flatConv_diag_id_b`; LivePC's `relu_const_pos` goes for the identical `Proofs.relu_const_pos` in ResNet34.lean |
-| *(staged)* | **§6/§7 exact duplicates** (−39): `r50StemGraphB` is `r34StemGraphB` and its pinned `_faithful` `r34StemGraphB_faithful` (the docstring's "differs by one bias string" was stale — both use `biasName false "" oc`); `r34Trunk_3463` is `r50Trunk_3463` (unpinned `r34Stage` goes); MobileNetV2's `convBn'_has_vjp` / `_differentiable` go for CNN.lean's identical `convBn_*` (6 call sites); the pinned WholeBack stem `convStridedBnRelu6PC_has_vjp_at` / `_differentiableAt` delegate to FullVJP's `convBnRelu6StridedPC_*` (the file imports FullVJP; 3 downstream). Left: `r50StageFirst` / `r50StageDown` (pinned `r50Stage_faithful` names the first), `reluMaskB` → `reluMaskBack` (0 lines saved), and the root-file ones — `conv2d_1x1'`, `sum_flatten8`, `bnForward_const_eq` / `flatConv_zero` vs MobileNetV2's copies (siblings in the import graph) |
+| `f48d9726` | **§6/§7 exact duplicates** (−39): `r50StemGraphB` is `r34StemGraphB` and its pinned `_faithful` `r34StemGraphB_faithful` (the docstring's "differs by one bias string" was stale — both use `biasName false "" oc`); `r34Trunk_3463` is `r50Trunk_3463` (unpinned `r34Stage` goes); MobileNetV2's `convBn'_has_vjp` / `_differentiable` go for CNN.lean's identical `convBn_*` (6 call sites); the pinned WholeBack stem `convStridedBnRelu6PC_has_vjp_at` / `_differentiableAt` delegate to FullVJP's `convBnRelu6StridedPC_*` (the file imports FullVJP; 3 downstream). Left: `r50StageFirst` / `r50StageDown` (pinned `r50Stage_faithful` names the first), `reluMaskB` → `reluMaskBack` (0 lines saved), and the root-file ones — `conv2d_1x1'`, `sum_flatten8`, `bnForward_const_eq` / `flatConv_zero` vs MobileNetV2's copies (siblings in the import graph) |
+| *(staged)* | **§6 `MnistCNN` `Mini` ≡ `Spatial`** (−71): new namespace `TwoChan` holds the shared `T0`, `X`, `b1`, `b2`, `W3`…`b5`, `κ` and two clause Props `Conv1Mix W1` / `Conv2Mix W2`; the chain (`conv1_pos` … `dense3_pos`, `cnn_has_vjp_at`) is stated once over any kernels satisfying them. Each tier keeps its kernels, `conv1_eq` (now `: Conv1Mix W1`), a `conv2_mix`, a one-line `*Cnn_has_vjp_at` and its pinned `*_has_vjp_correct`, whose text is unchanged but whose constants now resolve to the identical `TwoChan.*` (nothing else named the 24 per-namespace copies) |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -96,10 +97,13 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    rebuild on every SgdDescentCnn edit — or a new shared `convPad` module); `bnVar_nonneg` / `bnIstd_pos`
    into BatchNorm.lean waits for the root-file batch (item 6). FloatBridge has 60 downstream modules; a
    FloatBridge batch gates in under 2 minutes.
-3. **§6/§7 remaining duplicates and witnesses** (~700, mostly verified) — **next**: the live witnesses as
-   `liveDownW` / `liveFwdW` / `stemβ` instances (~430); the exact duplicates (§6 ~110, §7 ~130); `MnistCNN`'s
-   `Mini` ≡ `Spatial` (~90); `reluAfter_has_vjp_at` for MnistCNN's two relu-after-map VJPs (small).
-4. **§9 Codegen** (~400 in Lean): one `den_batchOp` (~110); the five local re-spellings in `StableHLO.lean`
+3. **§6/§7 remaining duplicates and witnesses** — done 2026-09-19 (−396 over five commits, against ~700
+   estimated: the eight `*LossCot_den` are pinned one-liners, `reluMaskB` → `reluMaskBack` saves nothing,
+   §0.6(b) had already taken every relu-after-map site but MnistCNN's two 5-line ones, `idBlk2` is not `idBlk`
+   at c = 2, and the EfficientNet / ConvNeXt / ViT fold restatements are pinned one-line delegations — a §0.7
+   question). For the root-file batch: `conv2d_1x1'`, `sum_flatten8`, `bnForward_const_eq` / `flatConv_zero`
+   (ResNet34 and MobileNetV2 can't see each other) and ResNet34Concrete's 1-channel stem.
+4. **§9 Codegen** (~400 in Lean) — **next**: one `den_batchOp` (~110); the five local re-spellings in `StableHLO.lean`
    (~100); `batchSlice` as an abbrev of `Mat.unflatten` (~37); `DropPath` = `dropout ∘ dropScale` (~25);
    the zero placeholders. ⚠ `StableHLO.lean` has ~190 downstream — batch these. The renderer near-clones
    (~600, likely) must stay byte-identical (the `#guard`s and the CI diff).
