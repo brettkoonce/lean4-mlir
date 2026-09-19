@@ -6244,17 +6244,22 @@ width or depth, so they cover all seventeen blocks.
 
 One scope note, because this is the chapter where the distinction starts
 to bite. The theorem that folds those rules into a single statement about
-the \emph{whole} network is \texttt{mobilenetv2\_full\_has\_vjp\_at}, in
-\texttt{Proofs/Nets/MobileNet/MobileNetV2FullVJP.lean}, and it covers the
-stem, all seventeen
-bottlenecks and the head. What ties the full 17-block spec
-to the paper's architecture is a separate denotational result about the
-forward, \texttt{mobilenetv2Verified\_denote\_eq}, with
-\texttt{mobilenetv2Verified\_fwd\_faithful} above it.
+the \emph{whole} network, at the batch statistics this artifact runs, is
+\texttt{mobilenetv2ForwardB\_full\_has\_vjp\_at\_correct}, in
+\texttt{Proofs/Nets/MobileNet/MobileNetV2FullBVJP.lean}, and it covers the
+stem, all seventeen bottlenecks and the head. The typed graph the artifact
+is printed from denotes that forward by
+\texttt{mobilenetv2FwdGraphB\_full\_faithful}. The tie from the
+\texttt{mobilenetv2Verified} layer list to the paper's architecture,
+\texttt{mobilenetv2Verified\_denote\_eq} with
+\texttt{mobilenetv2Verified\_fwd\_faithful} above it, is still stated at
+per-example BatchNorm, the forward of the retired SGD artifact rather than
+of this one.
 
 The full-depth fold is \emph{pointwise}. It holds at a given input, and
-it carries one side condition per activation site saying that the value
-entering relu6 is neither $0$ nor $6$. There are thirty-five such sites,
+it carries one side condition per activation site, at every example of
+the batch, saying that the value entering relu6 is neither $0$ nor $6$.
+There are thirty-five such sites per example,
 and the reason for every one of them is that relu6 has two kinks. The
 network is differentiable away from them and is not differentiable at
 them, so a statement quantified over all inputs would be false.
@@ -6749,7 +6754,7 @@ the channel transpose the full-conv VJP of Chapter~\ref{chap:cnn} needs:
 with no $\sum_{c_\text{in}}$ to take the adjoint of, there is no in/out
 channel axis to swap. The inverted-residual block composes this with the
 pointwise convs, BatchNorm, and relu6, and
-\texttt{mobilenetv2\_full\_has\_vjp\_at} chains the whole network through
+\texttt{mobilenetv2ForwardB\_full\_has\_vjp\_at} chains the whole network through
 \texttt{vjp\_comp\_at}.
 
 \medskip\noindent\textbf{The gap and how we close it.} The emitted graph
