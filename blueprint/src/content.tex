@@ -15709,7 +15709,7 @@ in the book.
 \node[group] (matkit) at (8.0, 0) {
   \textbf{Ch~9: matrix kit} \\
   \texttt{pdivMat\_comp} \\
-  \texttt{matmul\_left\_const} \\
+  \texttt{matmul\_left\_const\_has\_vjp} \\
   \texttt{rowwise\_has\_vjp\_mat}
 };
 
@@ -15912,12 +15912,18 @@ built from three components:
     \texttt{conv\_back\_bridge\_1to2}, \texttt{bn\_back\_bridge}, and
     \texttt{relu\_back\_bridge}, and each closes under the same three axioms
     as the rest of the project.
-  \item \textbf{A computable printer.} A small printer walks that same IR and
-    emits one \texttt{stablehlo} operation per node, so
-    \texttt{dotGeneral}\,$W$ becomes \texttt{stablehlo.dot\_general}, a
-    \texttt{selectPos} node becomes \texttt{compare GT 0} plus
-    \texttt{select}, and so on. The emitted text \emph{is} the printout of
-    the IR, by construction.
+  \item \textbf{A computable printer.} \texttt{Back} carries real-valued
+    operands and cannot be printed as it is, so \texttt{IRPrint.lean} defines
+    a mirror of it, \texttt{Hlo}: the same node structure, with SSA names and
+    shapes in place of values, printed one \texttt{stablehlo} operation per
+    node: \texttt{dotGeneral}\,$W$ becomes
+    \texttt{stablehlo.dot\_general}, a \texttt{selectPos} node becomes
+    \texttt{compare GT 0} plus \texttt{select}, and so on. That the mirror
+    is built node for node from the bridged graph is a reading of two
+    definitions, not a theorem. The tier where the printed text is the
+    denoted graph's own printout, with the parse-back proved
+    (\texttt{StableHLO.roundtrip}), is the verified trainers' StableHLO
+    tier, below.
   \item \textbf{An execution oracle.} A Python harness
     (\texttt{LeanMlir/Proofs/check\_ir\_codegen.py}) regenerates the
     \texttt{.mlir} from the printer, compiles it with IREE, runs it, and
@@ -15932,8 +15938,8 @@ and bounded:
 \begin{itemize}
   \item \emph{Proven} (Lean, three axioms): the IR's denotation equals the
     proven derivative.
-  \item \emph{By construction}: the emitted StableHLO is the rendering of
-    exactly that IR.
+  \item \emph{Read, not proved}: that the printed mirror is, node for node,
+    the bridged IR.
   \item \emph{Trusted} (validated numerically, not proven): that the
     StableHLO \emph{text} faithfully denotes $[\![\cdot]\!]$. Its
     \emph{syntactic} half is now partly closed, because the emitted text lexes
@@ -16284,10 +16290,11 @@ Because \(u\) is a parameter, nothing in the chain is
 rounding operator as round-to-nearest on the \(p\)-bit-significand grid
 and instantiates it twice: \texttt{binary32} at \(p = 23\),
 \(u_{32} = 2^{-24}\), and \texttt{fp8E4M3} at \(p = 3\),
-\(u_{\mathrm{e4m3}} = 2^{-4}\). Every whole-network bridge quantifies over
-\texttt{(M : FloatModel)}, so ResNet-34's certificate is not a statement
-about binary32 that happens to be proved --- it is a statement about
-\emph{any} rounding model, of which binary32 is one instance.
+\(u_{\mathrm{e4m3}} = 2^{-4}\). Every bridge quantifies over
+\texttt{(M : FloatModel)} --- the per-operator lemmas, the block and stage
+chains, the MNIST descent chain --- so none of them is a statement about
+binary32 that happens to be proved; each is a statement about \emph{any}
+rounding model, of which binary32 is one instance.
 
 \medskip\noindent That generality is free. Usefulness is not, and the two
 should not be confused. The dot-product budget carries the classical
@@ -16312,9 +16319,13 @@ how coarse the leaf is. That is exactly why bf16-mixed is non-vacuous
 where pure bf16 is not, and it is carried to convolution and depthwise
 convolution in \texttt{ConvMixedFloatBridge.lean},
 \texttt{DepthwiseMixedFloatBridge.lean} and
-\texttt{ConvMixedComposeBridge.lean}, with the emitted low-precision
-graphs tied back to the intended algorithm in
-\texttt{Bf16Fold.lean} and \texttt{E4M3Fold.lean}.
+\texttt{ConvMixedComposeBridge.lean}. The emitted bf16 graphs are tied at
+their gradient nodes in \texttt{Bf16GradNodes.lean}; \texttt{Bf16Fold.lean}
+and \texttt{E4M3Fold.lean} prove, for the linear net, that the mixed-precision
+graph denotes the intended algorithm. The fp8 one is proved for a graph no
+backend here lowers, and the one committed fp8 artifact,
+\texttt{cifar8b\_fp8\_adam\_train\_step.mlir}, is a lowering probe with no
+fold of its own.
 
 \medskip\noindent So the honest summary is three sentences, not one. The
 theorems are over \(\mathbb{R}\). The budgets are over an arbitrary
