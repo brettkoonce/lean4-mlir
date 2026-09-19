@@ -583,7 +583,7 @@ theorem layerBudget_nonneg {u : ℝ} {m : ℕ} {w β A E : ℝ} (hu : 0 ≤ u)
 /-- Replacing the power term and the inherited error in `layerBudget` by
     upper bounds gives an upper bound — the monotonicity step the numeric
     instantiations chain through. -/
-private theorem layerBudget_le_of {u : ℝ} {m : ℕ} {w β A E g Ē : ℝ}
+theorem layerBudget_le_of {u : ℝ} {m : ℕ} {w β A E g Ē : ℝ}
     (hu : 0 ≤ u) (hw : 0 ≤ w) (hβ : 0 ≤ β) (hA : 0 ≤ A)
     (hG : (1 + u) ^ (m + 2) - 1 ≤ g) (hE0 : 0 ≤ E) (hE : E ≤ Ē) :
     layerBudget u m w β A E ≤ g * ((m : ℝ) * w * (A + Ē) + β) + (m : ℝ) * w * Ē := by

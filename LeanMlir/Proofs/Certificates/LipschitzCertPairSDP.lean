@@ -250,6 +250,40 @@ theorem mlp_gap_eq {n h k : ℕ} (W1 : Fin h → Fin n → ℝ)
   rw [reluE_apply]
   ring
 
+/-- **`pair_sq_bound` on the net's own logits.** The gap `f · i − f · j` of
+    `f = denseE W2 ∘ reluE ∘ denseE W1`, with `v` the row difference `W2 i − W2 j`, satisfies the
+    squared LipSDP bound whenever the slack certificate `hS` does; every emitted `pairSq*` theorem
+    is this at one class pair. -/
+theorem pair_sq_bound_mlp {n h k : ℕ} (W1 : Fin h → Fin n → ℝ) (W2 : Fin k → Fin h → ℝ)
+    (G : Fin h → Fin h → ℝ) (hG : ∀ a b, G a b = ∑ j, W1 a j * W1 b j) (i j : Fin k)
+    (v T : Fin h → ℝ) (hv : ∀ t, v t = W2 i t - W2 j t) (hT : ∀ t, 0 ≤ T t) {ρ : ℝ}
+    (hρ : 0 < ρ)
+    (hS : ∀ z : Fin h → ℝ,
+      (∑ t, v t * z t) ^ 2
+        + (1/ρ) * (∑ a, ∑ b, (T a * z a) * (G a b * (T b * z b)))
+        ≤ 2 * ∑ t, T t * z t ^ 2)
+    (x x' : EuclideanSpace ℝ (Fin n)) :
+    (((denseE W2 ∘ reluE ∘ denseE W1) x i - (denseE W2 ∘ reluE ∘ denseE W1) x j)
+      - ((denseE W2 ∘ reluE ∘ denseE W1) x' i - (denseE W2 ∘ reluE ∘ denseE W1) x' j)) ^ 2
+      ≤ ρ * ‖x - x'‖ ^ 2 := by
+  have e : ∀ w, (denseE W2 ∘ reluE ∘ denseE W1) w i - (denseE W2 ∘ reluE ∘ denseE W1) w j
+      = ∑ t, v t * max (denseE W1 w t) 0 := fun w => by
+    rw [mlp_gap_eq]; exact Finset.sum_congr rfl fun t _ => by rw [hv t]
+  rw [e x, e x']
+  exact pair_sq_bound W1 G hG v T hT hρ hS x x'
+
+/-- The squared pair bound is symmetric in the class pair: the gap for `(j, i)` is the negated gap
+    for `(i, j)`. The emitted reverse-order `pairSq*` theorems are this. -/
+theorem pair_sq_symm {n k : ℕ} {f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)}
+    {i j : Fin k} {ρ : ℝ}
+    (h : ∀ u u' : EuclideanSpace ℝ (Fin n),
+      ((f u i - f u j) - (f u' i - f u' j)) ^ 2 ≤ ρ * ‖u - u'‖ ^ 2) :
+    ∀ u u' : EuclideanSpace ℝ (Fin n),
+      ((f u j - f u i) - (f u' j - f u' i)) ^ 2 ≤ ρ * ‖u - u'‖ ^ 2 := fun u u' => by
+  rw [show (f u j - f u i) - (f u' j - f u' i) = -((f u i - f u j) - (f u' i - f u' j)) by ring,
+    neg_sq]
+  exact h u u'
+
 /-- **Fixed-ε certificate from a per-pair squared bound.** If the gap
     `f · i − f · j` satisfies the squared LipSDP bound with constant `ρ`,
     `Lp` is a rational majorant (`ρ ≤ Lp²`), and the margin at `x` clears

@@ -76,19 +76,9 @@ theorem hS01C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_1 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 1) - (mlpS u' 0 - mlpS u' 1)) ^ 2
-      ≤ ((81713231 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 1
-      = ∑ t, vP01C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 1
-        = ∑ t, (W2s 0 t - W2s 1 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 1 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP01C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP01C tP01C tP01C_nonneg (by norm_num)
-    hS01C u u'
+      ≤ ((81713231 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 1 vP01C tP01C vP01C_eq
+    tP01C_nonneg (by norm_num) hS01C
 
 /-- Pair (0,2): ρ = 130.795, Lp = 11.4366 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP02C : Fin 8 → ℝ := ![((51 : ℝ)/128), ((-187 : ℝ)/64), ((37 : ℝ)/32), ((17 : ℝ)/64), ((-11 : ℝ)/64), ((115 : ℝ)/256), ((-77 : ℝ)/128), ((121 : ℝ)/128)]
@@ -125,19 +115,9 @@ theorem hS02C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_2 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 2) - (mlpS u' 0 - mlpS u' 2)) ^ 2
-      ≤ ((26159033 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 2
-      = ∑ t, vP02C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 2
-        = ∑ t, (W2s 0 t - W2s 2 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 2 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP02C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP02C tP02C tP02C_nonneg (by norm_num)
-    hS02C u u'
+      ≤ ((26159033 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 2 vP02C tP02C vP02C_eq
+    tP02C_nonneg (by norm_num) hS02C
 
 /-- Pair (0,3): ρ = 124.221, Lp = 11.1455 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP03C : Fin 8 → ℝ := ![((-73 : ℝ)/256), ((-251 : ℝ)/128), ((179 : ℝ)/256), ((-3 : ℝ)/32), ((299 : ℝ)/128), ((-151 : ℝ)/256), ((-509 : ℝ)/256), ((-11 : ℝ)/64)]
@@ -174,19 +154,9 @@ theorem hS03C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_3 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 3) - (mlpS u' 0 - mlpS u' 3)) ^ 2
-      ≤ ((24844101 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 3
-      = ∑ t, vP03C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 3
-        = ∑ t, (W2s 0 t - W2s 3 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 3 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP03C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP03C tP03C tP03C_nonneg (by norm_num)
-    hS03C u u'
+      ≤ ((24844101 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 3 vP03C tP03C vP03C_eq
+    tP03C_nonneg (by norm_num) hS03C
 
 /-- Pair (0,4): ρ = 242.261, Lp = 15.5648 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP04C : Fin 8 → ℝ := ![((-27 : ℝ)/32), ((-27 : ℝ)/128), ((629 : ℝ)/256), ((-235 : ℝ)/128), ((-21 : ℝ)/256), ((39 : ℝ)/256), ((-9 : ℝ)/4), ((593 : ℝ)/256)]
@@ -223,19 +193,9 @@ theorem hS04C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_4 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 4) - (mlpS u' 0 - mlpS u' 4)) ^ 2
-      ≤ ((4845227 : ℝ)/20000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 4
-      = ∑ t, vP04C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 4
-        = ∑ t, (W2s 0 t - W2s 4 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP04C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP04C tP04C tP04C_nonneg (by norm_num)
-    hS04C u u'
+      ≤ ((4845227 : ℝ)/20000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 4 vP04C tP04C vP04C_eq
+    tP04C_nonneg (by norm_num) hS04C
 
 /-- Pair (0,5): ρ = 86.344, Lp = 9.2922 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP05C : Fin 8 → ℝ := ![((1 : ℝ)/16), ((-57 : ℝ)/128), ((3 : ℝ)/64), ((-301 : ℝ)/128), ((323 : ℝ)/256), ((-423 : ℝ)/256), ((-183 : ℝ)/256), ((143 : ℝ)/256)]
@@ -272,19 +232,9 @@ theorem hS05C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_5 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 5) - (mlpS u' 0 - mlpS u' 5)) ^ 2
-      ≤ ((43171817 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 5
-      = ∑ t, vP05C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 5
-        = ∑ t, (W2s 0 t - W2s 5 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 5 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP05C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP05C tP05C tP05C_nonneg (by norm_num)
-    hS05C u u'
+      ≤ ((43171817 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 5 vP05C tP05C vP05C_eq
+    tP05C_nonneg (by norm_num) hS05C
 
 /-- Pair (0,6): ρ = 210.525, Lp = 14.5095 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP06C : Fin 8 → ℝ := ![((3 : ℝ)/4), ((-5 : ℝ)/4), ((131 : ℝ)/64), ((-149 : ℝ)/128), ((-223 : ℝ)/256), ((-553 : ℝ)/256), ((-95 : ℝ)/128), ((93 : ℝ)/64)]
@@ -321,19 +271,9 @@ theorem hS06C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_6 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 6) - (mlpS u' 0 - mlpS u' 6)) ^ 2
-      ≤ ((210525077 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 6
-      = ∑ t, vP06C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 6
-        = ∑ t, (W2s 0 t - W2s 6 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 6 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP06C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP06C tP06C tP06C_nonneg (by norm_num)
-    hS06C u u'
+      ≤ ((210525077 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 6 vP06C tP06C vP06C_eq
+    tP06C_nonneg (by norm_num) hS06C
 
 /-- Pair (0,7): ρ = 172.652, Lp = 13.1398 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP07C : Fin 8 → ℝ := ![((-645 : ℝ)/256), ((-203 : ℝ)/128), ((117 : ℝ)/256), ((-37 : ℝ)/256), ((445 : ℝ)/256), ((-99 : ℝ)/256), ((-5 : ℝ)/128), ((543 : ℝ)/256)]
@@ -370,19 +310,9 @@ theorem hS07C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 7) - (mlpS u' 0 - mlpS u' 7)) ^ 2
-      ≤ ((86325969 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 7
-      = ∑ t, vP07C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 7
-        = ∑ t, (W2s 0 t - W2s 7 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP07C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP07C tP07C tP07C_nonneg (by norm_num)
-    hS07C u u'
+      ≤ ((86325969 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 7 vP07C tP07C vP07C_eq
+    tP07C_nonneg (by norm_num) hS07C
 
 /-- Pair (0,8): ρ = 122.119, Lp = 11.0508 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP08C : Fin 8 → ℝ := ![((-171 : ℝ)/256), ((-385 : ℝ)/256), ((251 : ℝ)/128), ((-263 : ℝ)/128), ((181 : ℝ)/256), ((63 : ℝ)/128), ((9 : ℝ)/64), ((-45 : ℝ)/128)]
@@ -419,19 +349,9 @@ theorem hS08C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_8 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 8) - (mlpS u' 0 - mlpS u' 8)) ^ 2
-      ≤ ((24423853 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 8
-      = ∑ t, vP08C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 8
-        = ∑ t, (W2s 0 t - W2s 8 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP08C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP08C tP08C tP08C_nonneg (by norm_num)
-    hS08C u u'
+      ≤ ((24423853 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 8 vP08C tP08C vP08C_eq
+    tP08C_nonneg (by norm_num) hS08C
 
 /-- Pair (0,9): ρ = 207.395, Lp = 14.4013 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP09C : Fin 8 → ℝ := ![((-625 : ℝ)/256), ((-143 : ℝ)/256), ((23 : ℝ)/8), ((-71 : ℝ)/64), ((157 : ℝ)/128), ((-51 : ℝ)/128), ((-5 : ℝ)/8), ((21 : ℝ)/32)]
@@ -468,19 +388,9 @@ theorem hS09C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_0_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 0 - mlpS u 9) - (mlpS u' 0 - mlpS u' 9)) ^ 2
-      ≤ ((207395497 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 0 - mlpS w 9
-      = ∑ t, vP09C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 0 - mlpS w 9
-        = ∑ t, (W2s 0 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 0 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP09C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP09C tP09C tP09C_nonneg (by norm_num)
-    hS09C u u'
+      ≤ ((207395497 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 0 9 vP09C tP09C vP09C_eq
+    tP09C_nonneg (by norm_num) hS09C
 
 /-- Pair (1,2): ρ = 140.445, Lp = 11.8510 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP12C : Fin 8 → ℝ := ![((-7 : ℝ)/64), ((5 : ℝ)/16), ((-289 : ℝ)/256), ((625 : ℝ)/256), ((-155 : ℝ)/64), ((47 : ℝ)/32), ((-35 : ℝ)/64), ((-181 : ℝ)/256)]
@@ -517,19 +427,9 @@ theorem hS12C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_2 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 2) - (mlpS u' 1 - mlpS u' 2)) ^ 2
-      ≤ ((140445379 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 2
-      = ∑ t, vP12C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 2
-        = ∑ t, (W2s 1 t - W2s 2 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 2 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP12C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP12C tP12C tP12C_nonneg (by norm_num)
-    hS12C u u'
+      ≤ ((140445379 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 2 vP12C tP12C vP12C_eq
+    tP12C_nonneg (by norm_num) hS12C
 
 /-- Pair (1,3): ρ = 168.366, Lp = 12.9757 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP13C : Fin 8 → ℝ := ![((-203 : ℝ)/256), ((163 : ℝ)/128), ((-203 : ℝ)/128), ((533 : ℝ)/256), ((11 : ℝ)/128), ((55 : ℝ)/128), ((-495 : ℝ)/256), ((-467 : ℝ)/256)]
@@ -566,19 +466,9 @@ theorem hS13C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_3 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 3) - (mlpS u' 1 - mlpS u' 3)) ^ 2
-      ≤ ((168366447 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 3
-      = ∑ t, vP13C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 3
-        = ∑ t, (W2s 1 t - W2s 3 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 3 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP13C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP13C tP13C tP13C_nonneg (by norm_num)
-    hS13C u u'
+      ≤ ((168366447 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 3 vP13C tP13C vP13C_eq
+    tP13C_nonneg (by norm_num) hS13C
 
 /-- Pair (1,4): ρ = 247.744, Lp = 15.7399 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP14C : Fin 8 → ℝ := ![((-173 : ℝ)/128), ((387 : ℝ)/128), ((11 : ℝ)/64), ((87 : ℝ)/256), ((-597 : ℝ)/256), ((75 : ℝ)/64), ((-281 : ℝ)/128), ((85 : ℝ)/128)]
@@ -615,19 +505,9 @@ theorem hS14C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_4 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 4) - (mlpS u' 1 - mlpS u' 4)) ^ 2
-      ≤ ((3096799 : ℝ)/12500) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 4
-      = ∑ t, vP14C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 4
-        = ∑ t, (W2s 1 t - W2s 4 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP14C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP14C tP14C tP14C_nonneg (by norm_num)
-    hS14C u u'
+      ≤ ((3096799 : ℝ)/12500) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 4 vP14C tP14C vP14C_eq
+    tP14C_nonneg (by norm_num) hS14C
 
 /-- Pair (1,5): ρ = 181.542, Lp = 13.4738 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP15C : Fin 8 → ℝ := ![((-57 : ℝ)/128), ((357 : ℝ)/128), ((-573 : ℝ)/256), ((-45 : ℝ)/256), ((-253 : ℝ)/256), ((-81 : ℝ)/128), ((-169 : ℝ)/256), ((-35 : ℝ)/32)]
@@ -664,19 +544,9 @@ theorem hS15C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_5 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 5) - (mlpS u' 1 - mlpS u' 5)) ^ 2
-      ≤ ((36308333 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 5
-      = ∑ t, vP15C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 5
-        = ∑ t, (W2s 1 t - W2s 5 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 5 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP15C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP15C tP15C tP15C_nonneg (by norm_num)
-    hS15C u u'
+      ≤ ((36308333 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 5 vP15C tP15C vP15C_eq
+    tP15C_nonneg (by norm_num) hS15C
 
 /-- Pair (1,6): ρ = 198.902, Lp = 14.1033 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP16C : Fin 8 → ℝ := ![((31 : ℝ)/128), ((127 : ℝ)/64), ((-61 : ℝ)/256), ((259 : ℝ)/256), ((-799 : ℝ)/256), ((-73 : ℝ)/64), ((-11 : ℝ)/16), ((-51 : ℝ)/256)]
@@ -713,19 +583,9 @@ theorem hS16C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_6 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 6) - (mlpS u' 1 - mlpS u' 6)) ^ 2
-      ≤ ((49725519 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 6
-      = ∑ t, vP16C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 6
-        = ∑ t, (W2s 1 t - W2s 6 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 6 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP16C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP16C tP16C tP16C_nonneg (by norm_num)
-    hS16C u u'
+      ≤ ((49725519 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 6 vP16C tP16C vP16C_eq
+    tP16C_nonneg (by norm_num) hS16C
 
 /-- Pair (1,7): ρ = 272.719, Lp = 16.5142 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP17C : Fin 8 → ℝ := ![((-775 : ℝ)/256), ((211 : ℝ)/128), ((-117 : ℝ)/64), ((65 : ℝ)/32), ((-131 : ℝ)/256), ((81 : ℝ)/128), ((1 : ℝ)/64), ((15 : ℝ)/32)]
@@ -762,19 +622,9 @@ theorem hS17C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 7) - (mlpS u' 1 - mlpS u' 7)) ^ 2
-      ≤ ((54543723 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 7
-      = ∑ t, vP17C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 7
-        = ∑ t, (W2s 1 t - W2s 7 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP17C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP17C tP17C tP17C_nonneg (by norm_num)
-    hS17C u u'
+      ≤ ((54543723 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 7 vP17C tP17C vP17C_eq
+    tP17C_nonneg (by norm_num) hS17C
 
 /-- Pair (1,8): ρ = 114.074, Lp = 10.6806 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP18C : Fin 8 → ℝ := ![((-301 : ℝ)/256), ((443 : ℝ)/256), ((-83 : ℝ)/256), ((31 : ℝ)/256), ((-395 : ℝ)/256), ((387 : ℝ)/256), ((25 : ℝ)/128), ((-513 : ℝ)/256)]
@@ -811,19 +661,9 @@ theorem hS18C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_8 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 8) - (mlpS u' 1 - mlpS u' 8)) ^ 2
-      ≤ ((114073579 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 8
-      = ∑ t, vP18C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 8
-        = ∑ t, (W2s 1 t - W2s 8 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP18C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP18C tP18C tP18C_nonneg (by norm_num)
-    hS18C u u'
+      ≤ ((114073579 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 8 vP18C tP18C vP18C_eq
+    tP18C_nonneg (by norm_num) hS18C
 
 /-- Pair (1,9): ρ = 248.003, Lp = 15.7482 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP19C : Fin 8 → ℝ := ![((-755 : ℝ)/256), ((685 : ℝ)/256), ((151 : ℝ)/256), ((273 : ℝ)/256), ((-131 : ℝ)/128), ((159 : ℝ)/256), ((-73 : ℝ)/128), ((-255 : ℝ)/256)]
@@ -860,19 +700,9 @@ theorem hS19C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_1_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 9) - (mlpS u' 1 - mlpS u' 9)) ^ 2
-      ≤ ((62000749 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 1 - mlpS w 9
-      = ∑ t, vP19C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 1 - mlpS w 9
-        = ∑ t, (W2s 1 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 1 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP19C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP19C tP19C tP19C_nonneg (by norm_num)
-    hS19C u u'
+      ≤ ((62000749 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 1 9 vP19C tP19C vP19C_eq
+    tP19C_nonneg (by norm_num) hS19C
 
 /-- Pair (2,4): ρ = 236.477, Lp = 15.3779 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP24C : Fin 8 → ℝ := ![((-159 : ℝ)/128), ((347 : ℝ)/128), ((333 : ℝ)/256), ((-269 : ℝ)/128), ((23 : ℝ)/256), ((-19 : ℝ)/64), ((-211 : ℝ)/128), ((351 : ℝ)/256)]
@@ -909,19 +739,9 @@ theorem hS24C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_2_4 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 2 - mlpS u 4) - (mlpS u' 2 - mlpS u' 4)) ^ 2
-      ≤ ((236476997 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 2 - mlpS w 4
-      = ∑ t, vP24C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 2 - mlpS w 4
-        = ∑ t, (W2s 2 t - W2s 4 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 2 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP24C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP24C tP24C tP24C_nonneg (by norm_num)
-    hS24C u u'
+      ≤ ((236476997 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 2 4 vP24C tP24C vP24C_eq
+    tP24C_nonneg (by norm_num) hS24C
 
 /-- Pair (2,7): ρ = 229.528, Lp = 15.1502 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP27C : Fin 8 → ℝ := ![((-747 : ℝ)/256), ((171 : ℝ)/128), ((-179 : ℝ)/256), ((-105 : ℝ)/256), ((489 : ℝ)/256), ((-107 : ℝ)/128), ((9 : ℝ)/16), ((301 : ℝ)/256)]
@@ -958,19 +778,9 @@ theorem hS27C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_2_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 2 - mlpS u 7) - (mlpS u' 2 - mlpS u' 7)) ^ 2
-      ≤ ((57382081 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 2 - mlpS w 7
-      = ∑ t, vP27C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 2 - mlpS w 7
-        = ∑ t, (W2s 2 t - W2s 7 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 2 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP27C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP27C tP27C tP27C_nonneg (by norm_num)
-    hS27C u u'
+      ≤ ((57382081 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 2 7 vP27C tP27C vP27C_eq
+    tP27C_nonneg (by norm_num) hS27C
 
 /-- Pair (2,9): ρ = 260.273, Lp = 16.1330 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP29C : Fin 8 → ℝ := ![((-727 : ℝ)/256), ((605 : ℝ)/256), ((55 : ℝ)/32), ((-11 : ℝ)/8), ((179 : ℝ)/128), ((-217 : ℝ)/256), ((-3 : ℝ)/128), ((-37 : ℝ)/128)]
@@ -1007,19 +817,9 @@ theorem hS29C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_2_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 2 - mlpS u 9) - (mlpS u' 2 - mlpS u' 9)) ^ 2
-      ≤ ((65068279 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 2 - mlpS w 9
-      = ∑ t, vP29C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 2 - mlpS w 9
-        = ∑ t, (W2s 2 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 2 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP29C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP29C tP29C tP29C_nonneg (by norm_num)
-    hS29C u u'
+      ≤ ((65068279 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 2 9 vP29C tP29C vP29C_eq
+    tP29C_nonneg (by norm_num) hS29C
 
 /-- Pair (3,4): ρ = 271.821, Lp = 16.4870 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP34C : Fin 8 → ℝ := ![((-143 : ℝ)/256), ((7 : ℝ)/4), ((225 : ℝ)/128), ((-223 : ℝ)/128), ((-619 : ℝ)/256), ((95 : ℝ)/128), ((-67 : ℝ)/256), ((637 : ℝ)/256)]
@@ -1056,19 +856,9 @@ theorem hS34C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_3_4 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 3 - mlpS u 4) - (mlpS u' 3 - mlpS u' 4)) ^ 2
-      ≤ ((271820749 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 3 - mlpS w 4
-      = ∑ t, vP34C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 3 - mlpS w 4
-        = ∑ t, (W2s 3 t - W2s 4 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 3 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP34C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP34C tP34C tP34C_nonneg (by norm_num)
-    hS34C u u'
+      ≤ ((271820749 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 3 4 vP34C tP34C vP34C_eq
+    tP34C_nonneg (by norm_num) hS34C
 
 /-- Pair (3,7): ρ = 128.578, Lp = 11.3393 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP37C : Fin 8 → ℝ := ![((-143 : ℝ)/64), ((3 : ℝ)/8), ((-31 : ℝ)/128), ((-13 : ℝ)/256), ((-153 : ℝ)/256), ((13 : ℝ)/64), ((499 : ℝ)/256), ((587 : ℝ)/256)]
@@ -1105,19 +895,9 @@ theorem hS37C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_3_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 3 - mlpS u 7) - (mlpS u' 3 - mlpS u' 7)) ^ 2
-      ≤ ((64289067 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 3 - mlpS w 7
-      = ∑ t, vP37C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 3 - mlpS w 7
-        = ∑ t, (W2s 3 t - W2s 7 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 3 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP37C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP37C tP37C tP37C_nonneg (by norm_num)
-    hS37C u u'
+      ≤ ((64289067 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 3 7 vP37C tP37C vP37C_eq
+    tP37C_nonneg (by norm_num) hS37C
 
 /-- Pair (3,9): ρ = 177.684, Lp = 13.3299 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP39C : Fin 8 → ℝ := ![((-69 : ℝ)/32), ((359 : ℝ)/256), ((557 : ℝ)/256), ((-65 : ℝ)/64), ((-71 : ℝ)/64), ((49 : ℝ)/256), ((349 : ℝ)/256), ((53 : ℝ)/64)]
@@ -1154,19 +934,9 @@ theorem hS39C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_3_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 3 - mlpS u 9) - (mlpS u' 3 - mlpS u' 9)) ^ 2
-      ≤ ((177683991 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 3 - mlpS w 9
-      = ∑ t, vP39C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 3 - mlpS w 9
-        = ∑ t, (W2s 3 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 3 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP39C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP39C tP39C tP39C_nonneg (by norm_num)
-    hS39C u u'
+      ≤ ((177683991 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 3 9 vP39C tP39C vP39C_eq
+    tP39C_nonneg (by norm_num) hS39C
 
 /-- Pair (4,5): ρ = 176.781, Lp = 13.2960 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP45C : Fin 8 → ℝ := ![((29 : ℝ)/32), ((-15 : ℝ)/64), ((-617 : ℝ)/256), ((-33 : ℝ)/64), ((43 : ℝ)/32), ((-231 : ℝ)/128), ((393 : ℝ)/256), ((-225 : ℝ)/128)]
@@ -1203,19 +973,9 @@ theorem hS45C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_4_5 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 5) - (mlpS u' 4 - mlpS u' 5)) ^ 2
-      ≤ ((176781459 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 4 - mlpS w 5
-      = ∑ t, vP45C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 4 - mlpS w 5
-        = ∑ t, (W2s 4 t - W2s 5 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 4 5 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP45C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP45C tP45C tP45C_nonneg (by norm_num)
-    hS45C u u'
+      ≤ ((176781459 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 4 5 vP45C tP45C vP45C_eq
+    tP45C_nonneg (by norm_num) hS45C
 
 /-- Pair (4,6): ρ = 139.150, Lp = 11.7962 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP46C : Fin 8 → ℝ := ![((51 : ℝ)/32), ((-133 : ℝ)/128), ((-105 : ℝ)/256), ((43 : ℝ)/64), ((-101 : ℝ)/128), ((-37 : ℝ)/16), ((193 : ℝ)/128), ((-221 : ℝ)/256)]
@@ -1252,19 +1012,9 @@ theorem hS46C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_4_6 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 6) - (mlpS u' 4 - mlpS u' 6)) ^ 2
-      ≤ ((139149989 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 4 - mlpS w 6
-      = ∑ t, vP46C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 4 - mlpS w 6
-        = ∑ t, (W2s 4 t - W2s 6 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 4 6 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP46C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP46C tP46C tP46C_nonneg (by norm_num)
-    hS46C u u'
+      ≤ ((139149989 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 4 6 vP46C tP46C vP46C_eq
+    tP46C_nonneg (by norm_num) hS46C
 
 /-- Pair (4,7): ρ = 236.731, Lp = 15.3861 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP47C : Fin 8 → ℝ := ![((-429 : ℝ)/256), ((-11 : ℝ)/8), (-2 : ℝ), ((433 : ℝ)/256), ((233 : ℝ)/128), ((-69 : ℝ)/128), ((283 : ℝ)/128), ((-25 : ℝ)/128)]
@@ -1301,19 +1051,9 @@ theorem hS47C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_4_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 7) - (mlpS u' 4 - mlpS u' 7)) ^ 2
-      ≤ ((236730533 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 4 - mlpS w 7
-      = ∑ t, vP47C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 4 - mlpS w 7
-        = ∑ t, (W2s 4 t - W2s 7 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 4 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP47C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP47C tP47C tP47C_nonneg (by norm_num)
-    hS47C u u'
+      ≤ ((236730533 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 4 7 vP47C tP47C vP47C_eq
+    tP47C_nonneg (by norm_num) hS47C
 
 /-- Pair (4,8): ρ = 152.955, Lp = 12.3676 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP48C : Fin 8 → ℝ := ![((45 : ℝ)/256), ((-331 : ℝ)/256), ((-127 : ℝ)/256), ((-7 : ℝ)/32), ((101 : ℝ)/128), ((87 : ℝ)/256), ((153 : ℝ)/64), ((-683 : ℝ)/256)]
@@ -1350,19 +1090,9 @@ theorem hS48C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_4_8 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 8) - (mlpS u' 4 - mlpS u' 8)) ^ 2
-      ≤ ((76477547 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 4 - mlpS w 8
-      = ∑ t, vP48C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 4 - mlpS w 8
-        = ∑ t, (W2s 4 t - W2s 8 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 4 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP48C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP48C tP48C tP48C_nonneg (by norm_num)
-    hS48C u u'
+      ≤ ((76477547 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 4 8 vP48C tP48C vP48C_eq
+    tP48C_nonneg (by norm_num) hS48C
 
 /-- Pair (4,9): ρ = 107.859, Lp = 10.3856 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP49C : Fin 8 → ℝ := ![((-409 : ℝ)/256), ((-89 : ℝ)/256), ((107 : ℝ)/256), ((93 : ℝ)/128), ((335 : ℝ)/256), ((-141 : ℝ)/256), ((13 : ℝ)/8), ((-425 : ℝ)/256)]
@@ -1399,19 +1129,9 @@ theorem hS49C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_4_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 9) - (mlpS u' 4 - mlpS u' 9)) ^ 2
-      ≤ ((53929533 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 4 - mlpS w 9
-      = ∑ t, vP49C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 4 - mlpS w 9
-        = ∑ t, (W2s 4 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 4 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP49C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP49C tP49C tP49C_nonneg (by norm_num)
-    hS49C u u'
+      ≤ ((53929533 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 4 9 vP49C tP49C vP49C_eq
+    tP49C_nonneg (by norm_num) hS49C
 
 /-- Pair (5,7): ρ = 187.028, Lp = 13.6759 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP57C : Fin 8 → ℝ := ![((-661 : ℝ)/256), ((-73 : ℝ)/64), ((105 : ℝ)/256), ((565 : ℝ)/256), ((61 : ℝ)/128), ((81 : ℝ)/64), ((173 : ℝ)/256), ((25 : ℝ)/16)]
@@ -1448,19 +1168,9 @@ theorem hS57C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_5_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 5 - mlpS u 7) - (mlpS u' 5 - mlpS u' 7)) ^ 2
-      ≤ ((23378523 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 5 - mlpS w 7
-      = ∑ t, vP57C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 5 - mlpS w 7
-        = ∑ t, (W2s 5 t - W2s 7 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 5 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP57C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP57C tP57C tP57C_nonneg (by norm_num)
-    hS57C u u'
+      ≤ ((23378523 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 5 7 vP57C tP57C vP57C_eq
+    tP57C_nonneg (by norm_num) hS57C
 
 /-- Pair (5,9): ρ = 165.891, Lp = 12.8799 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP59C : Fin 8 → ℝ := ![((-641 : ℝ)/256), ((-29 : ℝ)/256), ((181 : ℝ)/64), ((159 : ℝ)/128), ((-9 : ℝ)/256), ((321 : ℝ)/256), ((23 : ℝ)/256), ((25 : ℝ)/256)]
@@ -1497,19 +1207,9 @@ theorem hS59C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_5_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 5 - mlpS u 9) - (mlpS u' 5 - mlpS u' 9)) ^ 2
-      ≤ ((165891061 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 5 - mlpS w 9
-      = ∑ t, vP59C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 5 - mlpS w 9
-        = ∑ t, (W2s 5 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 5 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP59C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP59C tP59C tP59C_nonneg (by norm_num)
-    hS59C u u'
+      ≤ ((165891061 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 5 9 vP59C tP59C vP59C_eq
+    tP59C_nonneg (by norm_num) hS59C
 
 /-- Pair (6,7): ρ = 380.417, Lp = 19.5043 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP67C : Fin 8 → ℝ := ![((-837 : ℝ)/256), ((-43 : ℝ)/128), ((-407 : ℝ)/256), ((261 : ℝ)/256), ((167 : ℝ)/64), ((227 : ℝ)/128), ((45 : ℝ)/64), ((171 : ℝ)/256)]
@@ -1546,19 +1246,9 @@ theorem hS67C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_6_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 6 - mlpS u 7) - (mlpS u' 6 - mlpS u' 7)) ^ 2
-      ≤ ((3804171 : ℝ)/10000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 6 - mlpS w 7
-      = ∑ t, vP67C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 6 - mlpS w 7
-        = ∑ t, (W2s 6 t - W2s 7 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 6 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP67C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP67C tP67C tP67C_nonneg (by norm_num)
-    hS67C u u'
+      ≤ ((3804171 : ℝ)/10000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 6 7 vP67C tP67C vP67C_eq
+    tP67C_nonneg (by norm_num) hS67C
 
 /-- Pair (6,9): ρ = 273.484, Lp = 16.5374 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP69C : Fin 8 → ℝ := ![((-817 : ℝ)/256), ((177 : ℝ)/256), ((53 : ℝ)/64), ((7 : ℝ)/128), ((537 : ℝ)/256), ((451 : ℝ)/256), ((15 : ℝ)/128), ((-51 : ℝ)/64)]
@@ -1595,19 +1285,9 @@ theorem hS69C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_6_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 6 - mlpS u 9) - (mlpS u' 6 - mlpS u' 9)) ^ 2
-      ≤ ((136741937 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 6 - mlpS w 9
-      = ∑ t, vP69C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 6 - mlpS w 9
-        = ∑ t, (W2s 6 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 6 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP69C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP69C tP69C tP69C_nonneg (by norm_num)
-    hS69C u u'
+      ≤ ((136741937 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 6 9 vP69C tP69C vP69C_eq
+    tP69C_nonneg (by norm_num) hS69C
 
 /-- Pair (7,8): ρ = 159.433, Lp = 12.6267 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP78C : Fin 8 → ℝ := ![((237 : ℝ)/128), ((21 : ℝ)/256), ((385 : ℝ)/256), ((-489 : ℝ)/256), ((-33 : ℝ)/32), ((225 : ℝ)/256), ((23 : ℝ)/128), ((-633 : ℝ)/256)]
@@ -1644,19 +1324,9 @@ theorem hS78C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_7_8 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 8) - (mlpS u' 7 - mlpS u' 8)) ^ 2
-      ≤ ((6377309 : ℝ)/40000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 7 - mlpS w 8
-      = ∑ t, vP78C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 7 - mlpS w 8
-        = ∑ t, (W2s 7 t - W2s 8 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 7 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP78C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP78C tP78C tP78C_nonneg (by norm_num)
-    hS78C u u'
+      ≤ ((6377309 : ℝ)/40000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 7 8 vP78C tP78C vP78C_eq
+    tP78C_nonneg (by norm_num) hS78C
 
 /-- Pair (7,9): ρ = 94.597, Lp = 9.7261 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP79C : Fin 8 → ℝ := ![((5 : ℝ)/64), ((263 : ℝ)/256), ((619 : ℝ)/256), ((-247 : ℝ)/256), ((-131 : ℝ)/256), ((-3 : ℝ)/256), ((-75 : ℝ)/128), ((-375 : ℝ)/256)]
@@ -1693,19 +1363,9 @@ theorem hS79C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_7_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 9) - (mlpS u' 7 - mlpS u' 9)) ^ 2
-      ≤ ((94596901 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 7 - mlpS w 9
-      = ∑ t, vP79C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 7 - mlpS w 9
-        = ∑ t, (W2s 7 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 7 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP79C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP79C tP79C tP79C_nonneg (by norm_num)
-    hS79C u u'
+      ≤ ((94596901 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 7 9 vP79C tP79C vP79C_eq
+    tP79C_nonneg (by norm_num) hS79C
 
 /-- Pair (8,9): ρ = 97.979, Lp = 9.8985 (√2·L-product criterion would need 27.95). -/
 noncomputable def vP89C : Fin 8 → ℝ := ![((-227 : ℝ)/128), ((121 : ℝ)/128), ((117 : ℝ)/128), ((121 : ℝ)/128), ((133 : ℝ)/256), ((-57 : ℝ)/64), ((-49 : ℝ)/64), ((129 : ℝ)/128)]
@@ -1742,229 +1402,114 @@ theorem hS89C : ∀ z : Fin 8 → ℝ,
 
 theorem pairSqC_8_9 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 8 - mlpS u 9) - (mlpS u' 8 - mlpS u' 9)) ^ 2
-      ≤ ((1224737 : ℝ)/12500) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 49), mlpS w 8 - mlpS w 9
-      = ∑ t, vP89C t * max (denseE W1s w t) 0 := by
-    intro w
-    have h : mlpS w 8 - mlpS w 9
-        = ∑ t, (W2s 8 t - W2s 9 t) * max (denseE W1s w t) 0 :=
-      mlp_gap_eq W1s W2s 8 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP89C_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1s G1s G1s_eq vP89C tP89C tP89C_nonneg (by norm_num)
-    hS89C u u'
+      ≤ ((1224737 : ℝ)/12500) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1s W2s G1s G1s_eq 8 9 vP89C tP89C vP89C_eq
+    tP89C_nonneg (by norm_num) hS89C
 
 theorem pairSqC_1_0 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 1 - mlpS u 0) - (mlpS u' 1 - mlpS u' 0)) ^ 2
-      ≤ ((81713231 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 1 - mlpS u 0) - (mlpS u' 1 - mlpS u' 0)
-      = -((mlpS u 0 - mlpS u 1) - (mlpS u' 0 - mlpS u' 1)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_0_1 u u'
+      ≤ ((81713231 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_0_1
 
 theorem pairSqC_4_0 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 0) - (mlpS u' 4 - mlpS u' 0)) ^ 2
-      ≤ ((4845227 : ℝ)/20000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 4 - mlpS u 0) - (mlpS u' 4 - mlpS u' 0)
-      = -((mlpS u 0 - mlpS u 4) - (mlpS u' 0 - mlpS u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_0_4 u u'
+      ≤ ((4845227 : ℝ)/20000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_0_4
 
 theorem pairSqC_4_1 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 1) - (mlpS u' 4 - mlpS u' 1)) ^ 2
-      ≤ ((3096799 : ℝ)/12500) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 4 - mlpS u 1) - (mlpS u' 4 - mlpS u' 1)
-      = -((mlpS u 1 - mlpS u 4) - (mlpS u' 1 - mlpS u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_1_4 u u'
+      ≤ ((3096799 : ℝ)/12500) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_1_4
 
 theorem pairSqC_4_2 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 2) - (mlpS u' 4 - mlpS u' 2)) ^ 2
-      ≤ ((236476997 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 4 - mlpS u 2) - (mlpS u' 4 - mlpS u' 2)
-      = -((mlpS u 2 - mlpS u 4) - (mlpS u' 2 - mlpS u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_2_4 u u'
+      ≤ ((236476997 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_2_4
 
 theorem pairSqC_4_3 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 4 - mlpS u 3) - (mlpS u' 4 - mlpS u' 3)) ^ 2
-      ≤ ((271820749 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 4 - mlpS u 3) - (mlpS u' 4 - mlpS u' 3)
-      = -((mlpS u 3 - mlpS u 4) - (mlpS u' 3 - mlpS u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_3_4 u u'
+      ≤ ((271820749 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_3_4
 
 theorem pairSqC_7_0 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 0) - (mlpS u' 7 - mlpS u' 0)) ^ 2
-      ≤ ((86325969 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 7 - mlpS u 0) - (mlpS u' 7 - mlpS u' 0)
-      = -((mlpS u 0 - mlpS u 7) - (mlpS u' 0 - mlpS u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_0_7 u u'
+      ≤ ((86325969 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_0_7
 
 theorem pairSqC_7_1 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 1) - (mlpS u' 7 - mlpS u' 1)) ^ 2
-      ≤ ((54543723 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 7 - mlpS u 1) - (mlpS u' 7 - mlpS u' 1)
-      = -((mlpS u 1 - mlpS u 7) - (mlpS u' 1 - mlpS u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_1_7 u u'
+      ≤ ((54543723 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_1_7
 
 theorem pairSqC_7_2 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 2) - (mlpS u' 7 - mlpS u' 2)) ^ 2
-      ≤ ((57382081 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 7 - mlpS u 2) - (mlpS u' 7 - mlpS u' 2)
-      = -((mlpS u 2 - mlpS u 7) - (mlpS u' 2 - mlpS u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_2_7 u u'
+      ≤ ((57382081 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_2_7
 
 theorem pairSqC_7_3 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 3) - (mlpS u' 7 - mlpS u' 3)) ^ 2
-      ≤ ((64289067 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 7 - mlpS u 3) - (mlpS u' 7 - mlpS u' 3)
-      = -((mlpS u 3 - mlpS u 7) - (mlpS u' 3 - mlpS u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_3_7 u u'
+      ≤ ((64289067 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_3_7
 
 theorem pairSqC_7_4 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 4) - (mlpS u' 7 - mlpS u' 4)) ^ 2
-      ≤ ((236730533 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 7 - mlpS u 4) - (mlpS u' 7 - mlpS u' 4)
-      = -((mlpS u 4 - mlpS u 7) - (mlpS u' 4 - mlpS u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_4_7 u u'
+      ≤ ((236730533 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_4_7
 
 theorem pairSqC_7_5 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 5) - (mlpS u' 7 - mlpS u' 5)) ^ 2
-      ≤ ((23378523 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 7 - mlpS u 5) - (mlpS u' 7 - mlpS u' 5)
-      = -((mlpS u 5 - mlpS u 7) - (mlpS u' 5 - mlpS u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_5_7 u u'
+      ≤ ((23378523 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_5_7
 
 theorem pairSqC_7_6 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 7 - mlpS u 6) - (mlpS u' 7 - mlpS u' 6)) ^ 2
-      ≤ ((3804171 : ℝ)/10000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 7 - mlpS u 6) - (mlpS u' 7 - mlpS u' 6)
-      = -((mlpS u 6 - mlpS u 7) - (mlpS u' 6 - mlpS u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_6_7 u u'
+      ≤ ((3804171 : ℝ)/10000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_6_7
 
 theorem pairSqC_9_0 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 0) - (mlpS u' 9 - mlpS u' 0)) ^ 2
-      ≤ ((207395497 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 0) - (mlpS u' 9 - mlpS u' 0)
-      = -((mlpS u 0 - mlpS u 9) - (mlpS u' 0 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_0_9 u u'
+      ≤ ((207395497 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_0_9
 
 theorem pairSqC_9_1 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 1) - (mlpS u' 9 - mlpS u' 1)) ^ 2
-      ≤ ((62000749 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 1) - (mlpS u' 9 - mlpS u' 1)
-      = -((mlpS u 1 - mlpS u 9) - (mlpS u' 1 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_1_9 u u'
+      ≤ ((62000749 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_1_9
 
 theorem pairSqC_9_2 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 2) - (mlpS u' 9 - mlpS u' 2)) ^ 2
-      ≤ ((65068279 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 2) - (mlpS u' 9 - mlpS u' 2)
-      = -((mlpS u 2 - mlpS u 9) - (mlpS u' 2 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_2_9 u u'
+      ≤ ((65068279 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_2_9
 
 theorem pairSqC_9_3 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 3) - (mlpS u' 9 - mlpS u' 3)) ^ 2
-      ≤ ((177683991 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 3) - (mlpS u' 9 - mlpS u' 3)
-      = -((mlpS u 3 - mlpS u 9) - (mlpS u' 3 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_3_9 u u'
+      ≤ ((177683991 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_3_9
 
 theorem pairSqC_9_4 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 4) - (mlpS u' 9 - mlpS u' 4)) ^ 2
-      ≤ ((53929533 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 4) - (mlpS u' 9 - mlpS u' 4)
-      = -((mlpS u 4 - mlpS u 9) - (mlpS u' 4 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_4_9 u u'
+      ≤ ((53929533 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_4_9
 
 theorem pairSqC_9_5 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 5) - (mlpS u' 9 - mlpS u' 5)) ^ 2
-      ≤ ((165891061 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 5) - (mlpS u' 9 - mlpS u' 5)
-      = -((mlpS u 5 - mlpS u 9) - (mlpS u' 5 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_5_9 u u'
+      ≤ ((165891061 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_5_9
 
 theorem pairSqC_9_6 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 6) - (mlpS u' 9 - mlpS u' 6)) ^ 2
-      ≤ ((136741937 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 6) - (mlpS u' 9 - mlpS u' 6)
-      = -((mlpS u 6 - mlpS u 9) - (mlpS u' 6 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_6_9 u u'
+      ≤ ((136741937 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_6_9
 
 theorem pairSqC_9_7 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 7) - (mlpS u' 9 - mlpS u' 7)) ^ 2
-      ≤ ((94596901 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 7) - (mlpS u' 9 - mlpS u' 7)
-      = -((mlpS u 7 - mlpS u 9) - (mlpS u' 7 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_7_9 u u'
+      ≤ ((94596901 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_7_9
 
 theorem pairSqC_9_8 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
     ((mlpS u 9 - mlpS u 8) - (mlpS u' 9 - mlpS u' 8)) ^ 2
-      ≤ ((1224737 : ℝ)/12500) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpS u 9 - mlpS u 8) - (mlpS u' 9 - mlpS u' 8)
-      = -((mlpS u 8 - mlpS u 9) - (mlpS u' 8 - mlpS u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqC_8_9 u u'
+      ≤ ((1224737 : ℝ)/12500) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqC_8_9
 
 -- ════════════════════════════════════════════════════════════
 -- § Per-image certificates (8/100 at ε = 1/10)
@@ -1975,12 +1520,8 @@ noncomputable def logitC0 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC0_eval : ∀ jj : Fin 10, mlpS img0 jj = logitC0 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img0 jj = ∑ k, W2s jj k * max (hpreC0 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img0)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC0_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img0 jj = ∑ k, W2s jj k * max (hpreC0 k) 0 :=
+    mlp_out_eq W1s W2s hpreC0_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2059,12 +1600,8 @@ noncomputable def logitC2 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC2_eval : ∀ jj : Fin 10, mlpS img2 jj = logitC2 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img2 jj = ∑ k, W2s jj k * max (hpreSC2 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img2)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSC2_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img2 jj = ∑ k, W2s jj k * max (hpreSC2 k) 0 :=
+    mlp_out_eq W1s W2s hpreSC2_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2130,12 +1667,8 @@ noncomputable def logitC3 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC3_eval : ∀ jj : Fin 10, mlpS img3 jj = logitC3 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img3 jj = ∑ k, W2s jj k * max (hpreC3 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img3)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC3_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img3 jj = ∑ k, W2s jj k * max (hpreC3 k) 0 :=
+    mlp_out_eq W1s W2s hpreC3_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2214,12 +1747,8 @@ noncomputable def logitC4 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC4_eval : ∀ jj : Fin 10, mlpS img4 jj = logitC4 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img4 jj = ∑ k, W2s jj k * max (hpreSC4 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img4)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSC4_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img4 jj = ∑ k, W2s jj k * max (hpreSC4 k) 0 :=
+    mlp_out_eq W1s W2s hpreSC4_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2285,12 +1814,8 @@ noncomputable def logitC5 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC5_eval : ∀ jj : Fin 10, mlpS img5 jj = logitC5 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img5 jj = ∑ k, W2s jj k * max (hpreC5 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img5)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC5_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img5 jj = ∑ k, W2s jj k * max (hpreC5 k) 0 :=
+    mlp_out_eq W1s W2s hpreC5_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2369,12 +1894,8 @@ noncomputable def logitC6 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC6_eval : ∀ jj : Fin 10, mlpS img6 jj = logitC6 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img6 jj = ∑ k, W2s jj k * max (hpreSC6 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img6)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSC6_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img6 jj = ∑ k, W2s jj k * max (hpreSC6 k) 0 :=
+    mlp_out_eq W1s W2s hpreSC6_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2453,12 +1974,8 @@ noncomputable def logitC7 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC7_eval : ∀ jj : Fin 10, mlpS img7 jj = logitC7 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img7 jj = ∑ k, W2s jj k * max (hpreSC7 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img7)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSC7_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img7 jj = ∑ k, W2s jj k * max (hpreSC7 k) 0 :=
+    mlp_out_eq W1s W2s hpreSC7_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2537,12 +2054,8 @@ noncomputable def logitC9 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 1600000 in
 theorem logitC9_eval : ∀ jj : Fin 10, mlpS img9 jj = logitC9 jj := by
-  have hout : ∀ jj : Fin 10, mlpS img9 jj = ∑ k, W2s jj k * max (hpreSC9 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img9)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSC9_eval k]
+  have hout : ∀ jj : Fin 10, mlpS img9 jj = ∑ k, W2s jj k * max (hpreSC9 k) 0 :=
+    mlp_out_eq W1s W2s hpreSC9_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>

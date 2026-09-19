@@ -39,12 +39,8 @@ theorem netW0_pre : ∀ k : Fin 8, denseE W1t netW0 k = netWpre0 k := by
 
 /-- In-kernel STRICT argmax at the class-0 witness. -/
 theorem netW0_strict : ∀ j : Fin 10, j ≠ 0 → mlpT netW0 j < mlpT netW0 0 := by
-  have hout : ∀ jj : Fin 10, mlpT netW0 jj = ∑ k : Fin 8, W2t jj k * max (netWpre0 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW0)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW0_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW0 jj = ∑ k : Fin 8, W2t jj k * max (netWpre0 k) 0 :=
+    mlp_out_eq W1t W2t netW0_pre
   intro j hj
   fin_cases j <;>
     first
@@ -70,12 +66,8 @@ theorem netW1_pre : ∀ k : Fin 8, denseE W1t netW1 k = netWpre1 k := by
 
 /-- In-kernel STRICT argmax at the class-1 witness. -/
 theorem netW1_strict : ∀ j : Fin 10, j ≠ 1 → mlpT netW1 j < mlpT netW1 1 := by
-  have hout : ∀ jj : Fin 10, mlpT netW1 jj = ∑ k : Fin 8, W2t jj k * max (netWpre1 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW1)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW1_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW1 jj = ∑ k : Fin 8, W2t jj k * max (netWpre1 k) 0 :=
+    mlp_out_eq W1t W2t netW1_pre
   intro j hj
   fin_cases j <;>
     first
@@ -101,12 +93,8 @@ theorem netW2_pre : ∀ k : Fin 8, denseE W1t netW2 k = netWpre2 k := by
 
 /-- In-kernel STRICT argmax at the class-2 witness. -/
 theorem netW2_strict : ∀ j : Fin 10, j ≠ 2 → mlpT netW2 j < mlpT netW2 2 := by
-  have hout : ∀ jj : Fin 10, mlpT netW2 jj = ∑ k : Fin 8, W2t jj k * max (netWpre2 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW2)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW2_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW2 jj = ∑ k : Fin 8, W2t jj k * max (netWpre2 k) 0 :=
+    mlp_out_eq W1t W2t netW2_pre
   intro j hj
   fin_cases j <;>
     first
@@ -132,12 +120,8 @@ theorem netW3_pre : ∀ k : Fin 8, denseE W1t netW3 k = netWpre3 k := by
 
 /-- In-kernel STRICT argmax at the class-3 witness. -/
 theorem netW3_strict : ∀ j : Fin 10, j ≠ 3 → mlpT netW3 j < mlpT netW3 3 := by
-  have hout : ∀ jj : Fin 10, mlpT netW3 jj = ∑ k : Fin 8, W2t jj k * max (netWpre3 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW3)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW3_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW3 jj = ∑ k : Fin 8, W2t jj k * max (netWpre3 k) 0 :=
+    mlp_out_eq W1t W2t netW3_pre
   intro j hj
   fin_cases j <;>
     first
@@ -163,12 +147,8 @@ theorem netW4_pre : ∀ k : Fin 8, denseE W1t netW4 k = netWpre4 k := by
 
 /-- In-kernel STRICT argmax at the class-4 witness. -/
 theorem netW4_strict : ∀ j : Fin 10, j ≠ 4 → mlpT netW4 j < mlpT netW4 4 := by
-  have hout : ∀ jj : Fin 10, mlpT netW4 jj = ∑ k : Fin 8, W2t jj k * max (netWpre4 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW4)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW4_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW4 jj = ∑ k : Fin 8, W2t jj k * max (netWpre4 k) 0 :=
+    mlp_out_eq W1t W2t netW4_pre
   intro j hj
   fin_cases j <;>
     first
@@ -194,12 +174,8 @@ theorem netW5_pre : ∀ k : Fin 8, denseE W1t netW5 k = netWpre5 k := by
 
 /-- In-kernel STRICT argmax at the class-5 witness. -/
 theorem netW5_strict : ∀ j : Fin 10, j ≠ 5 → mlpT netW5 j < mlpT netW5 5 := by
-  have hout : ∀ jj : Fin 10, mlpT netW5 jj = ∑ k : Fin 8, W2t jj k * max (netWpre5 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW5)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW5_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW5 jj = ∑ k : Fin 8, W2t jj k * max (netWpre5 k) 0 :=
+    mlp_out_eq W1t W2t netW5_pre
   intro j hj
   fin_cases j <;>
     first
@@ -225,12 +201,8 @@ theorem netW6_pre : ∀ k : Fin 8, denseE W1t netW6 k = netWpre6 k := by
 
 /-- In-kernel STRICT argmax at the class-6 witness. -/
 theorem netW6_strict : ∀ j : Fin 10, j ≠ 6 → mlpT netW6 j < mlpT netW6 6 := by
-  have hout : ∀ jj : Fin 10, mlpT netW6 jj = ∑ k : Fin 8, W2t jj k * max (netWpre6 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW6)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW6_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW6 jj = ∑ k : Fin 8, W2t jj k * max (netWpre6 k) 0 :=
+    mlp_out_eq W1t W2t netW6_pre
   intro j hj
   fin_cases j <;>
     first
@@ -256,12 +228,8 @@ theorem netW7_pre : ∀ k : Fin 8, denseE W1t netW7 k = netWpre7 k := by
 
 /-- In-kernel STRICT argmax at the class-7 witness. -/
 theorem netW7_strict : ∀ j : Fin 10, j ≠ 7 → mlpT netW7 j < mlpT netW7 7 := by
-  have hout : ∀ jj : Fin 10, mlpT netW7 jj = ∑ k : Fin 8, W2t jj k * max (netWpre7 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW7)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW7_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW7 jj = ∑ k : Fin 8, W2t jj k * max (netWpre7 k) 0 :=
+    mlp_out_eq W1t W2t netW7_pre
   intro j hj
   fin_cases j <;>
     first
@@ -287,12 +255,8 @@ theorem netW8_pre : ∀ k : Fin 8, denseE W1t netW8 k = netWpre8 k := by
 
 /-- In-kernel STRICT argmax at the class-8 witness. -/
 theorem netW8_strict : ∀ j : Fin 10, j ≠ 8 → mlpT netW8 j < mlpT netW8 8 := by
-  have hout : ∀ jj : Fin 10, mlpT netW8 jj = ∑ k : Fin 8, W2t jj k * max (netWpre8 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW8)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW8_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW8 jj = ∑ k : Fin 8, W2t jj k * max (netWpre8 k) 0 :=
+    mlp_out_eq W1t W2t netW8_pre
   intro j hj
   fin_cases j <;>
     first
@@ -318,12 +282,8 @@ theorem netW9_pre : ∀ k : Fin 8, denseE W1t netW9 k = netWpre9 k := by
 
 /-- In-kernel STRICT argmax at the class-9 witness. -/
 theorem netW9_strict : ∀ j : Fin 10, j ≠ 9 → mlpT netW9 j < mlpT netW9 9 := by
-  have hout : ∀ jj : Fin 10, mlpT netW9 jj = ∑ k : Fin 8, W2t jj k * max (netWpre9 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t netW9)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, netW9_pre k]
+  have hout : ∀ jj : Fin 10, mlpT netW9 jj = ∑ k : Fin 8, W2t jj k * max (netWpre9 k) 0 :=
+    mlp_out_eq W1t W2t netW9_pre
   intro j hj
   fin_cases j <;>
     first

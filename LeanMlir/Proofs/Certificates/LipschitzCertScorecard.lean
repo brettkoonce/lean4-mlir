@@ -52,31 +52,6 @@ namespace LipschitzCertDemo
 
 open scoped BigOperators
 
-/-- `√2 ≤ 14143/10000` — the rational majorant the per-image radius checks use. -/
-theorem sqrt_two_le_rat : Real.sqrt 2 ≤ ((14143 : ℝ)/10000) := by
-  rw [show ((14143 : ℝ)/10000) = Real.sqrt (((14143 : ℝ)/10000) ^ 2) from
-    (Real.sqrt_sq (by norm_num)).symm]
-  exact Real.sqrt_le_sqrt (by norm_num)
-
-/-- Specialize the Tsuzuku certificate to a FIXED radius ε: if the margin
-    clears the rational check `(14143/10000)·L·ε ≤ m` (kernel-checkable —
-    no `√2`), every `‖δ‖ < ε` leaves class `i` the strict argmax. -/
-theorem certified_at_eps {n k : ℕ} {L m ε : ℝ}
-    {f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)}
-    (hf : LipschitzL2 L f) (hL : 0 < L) {x : EuclideanSpace ℝ (Fin n)}
-    {i : Fin k} (hmargin : ∀ j, j ≠ i → m ≤ f x i - f x j)
-    (hε : ((14143 : ℝ)/10000) * L * ε ≤ m) (hε0 : 0 ≤ ε)
-    (δ : EuclideanSpace ℝ (Fin n)) (hδ : ‖δ‖ < ε) :
-    ∀ j, j ≠ i → f (x + δ) j < f (x + δ) i := by
-  refine lipschitz_margin_certified_radius hf hL hmargin (lt_of_lt_of_le hδ ?_)
-  rw [le_div_iff₀ (mul_pos (Real.sqrt_pos.mpr (by norm_num)) hL)]
-  calc ε * (Real.sqrt 2 * L) ≤ ε * (((14143 : ℝ)/10000) * L) := by
-        have h2 : (0:ℝ) ≤ L := le_of_lt hL
-        have := mul_le_mul_of_nonneg_right sqrt_two_le_rat h2
-        exact mul_le_mul_of_nonneg_left this hε0
-    _ = ((14143 : ℝ)/10000) * L * ε := by ring
-    _ ≤ m := hε
-
 -- ════════════════════════════════════════════════════════════
 -- § The spectrally-capped net (σ ≤ 4 projected SGD, /256 rationals)
 -- ════════════════════════════════════════════════════════════
@@ -357,12 +332,8 @@ theorem hpreC0_eval : ∀ k : Fin 8, denseE W1s img0 k = hpreC0 k := by
 theorem marginC0 : ∀ j : Fin 10, j ≠ 7 →
     ((907357987 : ℝ)/267386880) ≤ mlpS img0 7 - mlpS img0 j := by
   have hout : ∀ jj : Fin 10, mlpS img0 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC0 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img0)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC0_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC0 k) 0 :=
+    mlp_out_eq W1s W2s hpreC0_eval
   intro j hj
   fin_cases j <;>
     first
@@ -389,12 +360,8 @@ theorem hpreC3_eval : ∀ k : Fin 8, denseE W1s img3 k = hpreC3 k := by
 theorem marginC3 : ∀ j : Fin 10, j ≠ 0 →
     ((53187503 : ℝ)/13369344) ≤ mlpS img3 0 - mlpS img3 j := by
   have hout : ∀ jj : Fin 10, mlpS img3 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC3 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img3)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC3_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC3 k) 0 :=
+    mlp_out_eq W1s W2s hpreC3_eval
   intro j hj
   fin_cases j <;>
     first
@@ -421,12 +388,8 @@ theorem hpreC5_eval : ∀ k : Fin 8, denseE W1s img5 k = hpreC5 k := by
 theorem marginC5 : ∀ j : Fin 10, j ≠ 1 →
     ((64216467 : ℝ)/22282240) ≤ mlpS img5 1 - mlpS img5 j := by
   have hout : ∀ jj : Fin 10, mlpS img5 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC5 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img5)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC5_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC5 k) 0 :=
+    mlp_out_eq W1s W2s hpreC5_eval
   intro j hj
   fin_cases j <;>
     first
@@ -453,12 +416,8 @@ theorem hpreC10_eval : ∀ k : Fin 8, denseE W1s img10 k = hpreC10 k := by
 theorem marginC10 : ∀ j : Fin 10, j ≠ 0 →
     ((287439677 : ℝ)/89128960) ≤ mlpS img10 0 - mlpS img10 j := by
   have hout : ∀ jj : Fin 10, mlpS img10 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC10 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img10)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC10_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC10 k) 0 :=
+    mlp_out_eq W1s W2s hpreC10_eval
   intro j hj
   fin_cases j <;>
     first
@@ -485,12 +444,8 @@ theorem hpreC13_eval : ∀ k : Fin 8, denseE W1s img13 k = hpreC13 k := by
 theorem marginC13 : ∀ j : Fin 10, j ≠ 0 →
     ((279315957 : ℝ)/89128960) ≤ mlpS img13 0 - mlpS img13 j := by
   have hout : ∀ jj : Fin 10, mlpS img13 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC13 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img13)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC13_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC13 k) 0 :=
+    mlp_out_eq W1s W2s hpreC13_eval
   intro j hj
   fin_cases j <;>
     first
@@ -517,12 +472,8 @@ theorem hpreC14_eval : ∀ k : Fin 8, denseE W1s img14 k = hpreC14 k := by
 theorem marginC14 : ∀ j : Fin 10, j ≠ 1 →
     ((34094067 : ℝ)/11141120) ≤ mlpS img14 1 - mlpS img14 j := by
   have hout : ∀ jj : Fin 10, mlpS img14 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC14 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img14)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC14_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC14 k) 0 :=
+    mlp_out_eq W1s W2s hpreC14_eval
   intro j hj
   fin_cases j <;>
     first
@@ -549,12 +500,8 @@ theorem hpreC17_eval : ∀ k : Fin 8, denseE W1s img17 k = hpreC17 k := by
 theorem marginC17 : ∀ j : Fin 10, j ≠ 7 →
     ((73973561 : ℝ)/17825792) ≤ mlpS img17 7 - mlpS img17 j := by
   have hout : ∀ jj : Fin 10, mlpS img17 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC17 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img17)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC17_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC17 k) 0 :=
+    mlp_out_eq W1s W2s hpreC17_eval
   intro j hj
   fin_cases j <;>
     first
@@ -581,12 +528,8 @@ theorem hpreC25_eval : ∀ k : Fin 8, denseE W1s img25 k = hpreC25 k := by
 theorem marginC25 : ∀ j : Fin 10, j ≠ 0 →
     ((1618574687 : ℝ)/267386880) ≤ mlpS img25 0 - mlpS img25 j := by
   have hout : ∀ jj : Fin 10, mlpS img25 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC25 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img25)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC25_eval k]
+      ∑ k : Fin 8, W2s jj k * max (hpreC25 k) 0 :=
+    mlp_out_eq W1s W2s hpreC25_eval
   intro j hj
   fin_cases j <;>
     first
@@ -617,12 +560,8 @@ theorem hpreU82_eval : ∀ k : Fin 8, denseE W1t img82 k = hpreU82 k := by
 theorem marginU82 : ∀ j : Fin 10, j ≠ 2 →
     ((726202319 : ℝ)/66846720) ≤ mlpT img82 2 - mlpT img82 j := by
   have hout : ∀ jj : Fin 10, mlpT img82 jj =
-      ∑ k : Fin 8, W2t jj k * max (hpreU82 k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t img82)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreU82_eval k]
+      ∑ k : Fin 8, W2t jj k * max (hpreU82 k) 0 :=
+    mlp_out_eq W1t W2t hpreU82_eval
   intro j hj
   fin_cases j <;>
     first

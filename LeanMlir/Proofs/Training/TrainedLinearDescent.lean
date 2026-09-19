@@ -131,14 +131,6 @@ theorem sm_sum : (∑ j, softmax 10 (dense Wd bd xd) j) = 1 := by
   exact mul_inv_cancel₀ (ne_of_gt (Finset.sum_pos
     (fun k _ => Real.exp_pos _) ⟨lblD, Finset.mem_univ _⟩))
 
-theorem sm_le_one : ∀ j, softmax 10 (dense Wd bd xd) j ≤ 1 := by
-  intro j
-  have h := Finset.single_le_sum
-    (f := fun k => softmax 10 (dense Wd bd xd) k)
-    (fun k _ => (sm_pos k).le) (Finset.mem_univ j)
-  rw [sm_sum] at h
-  exact h
-
 /-- **Softmax at the true label ≤ 1/2** — from misclassification alone:
     `exp z_lbl ≤ exp z_c` and both terms sit inside the positive sum. -/
 theorem sm_lbl_le_half : softmax 10 (dense Wd bd xd) lblD ≤ 1 / 2 := by
@@ -174,7 +166,7 @@ theorem sm_cot_l1 :
   have hlbl : |softmax 10 (dense Wd bd xd) lblD - oneHot 10 lblD lblD| =
       1 - softmax 10 (dense Wd bd xd) lblD := by
     rw [show oneHot 10 lblD lblD = 1 from ite_eq_left rfl,
-        abs_of_nonpos (by linarith [sm_le_one lblD]), neg_sub]
+        abs_of_nonpos (by linarith [FloatModel.softmax_le_one (dense Wd bd xd) lblD]), neg_sub]
   have hs := sm_pos lblD
   linarith [hsplit, hsplit1, herase, hlbl]
 

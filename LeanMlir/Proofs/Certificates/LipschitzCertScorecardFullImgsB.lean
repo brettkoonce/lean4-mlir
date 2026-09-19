@@ -166,12 +166,8 @@ theorem hpreSF71_eval : ∀ k : Fin 16, denseE W1SF imgF71 k = hpreSF71 k := by
 theorem marginSF71 : ∀ j : Fin 10, j ≠ 0 →
     ((83778961 : ℝ)/16711680) ≤ mlpSF imgF71 0 - mlpSF imgF71 j := by
   have hout : ∀ jj : Fin 10, mlpSF imgF71 jj =
-      ∑ k : Fin 16, W2SF jj k * max (hpreSF71 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF71)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF71_eval k]
+      ∑ k : Fin 16, W2SF jj k * max (hpreSF71 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF71_eval
   intro j hj
   fin_cases j <;>
     first
@@ -321,12 +317,8 @@ theorem hpreTF71_eval : ∀ k : Fin 16, denseE W1TF imgF71 k = hpreTF71 k := by
 theorem marginTF71 : ∀ j : Fin 10, j ≠ 0 →
     ((19739039 : ℝ)/1392640) ≤ mlpTF imgF71 0 - mlpTF imgF71 j := by
   have hout : ∀ jj : Fin 10, mlpTF imgF71 jj =
-      ∑ k : Fin 16, W2TF jj k * max (hpreTF71 k) 0 := by
-    intro jj
-    show denseE W2TF (reluE (denseE W1TF imgF71)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreTF71_eval k]
+      ∑ k : Fin 16, W2TF jj k * max (hpreTF71 k) 0 :=
+    mlp_out_eq W1TF W2TF hpreTF71_eval
   intro j hj
   fin_cases j <;>
     first

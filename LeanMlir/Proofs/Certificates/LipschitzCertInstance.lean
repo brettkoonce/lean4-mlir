@@ -79,6 +79,41 @@ noncomputable def reluE {n : ℕ} :
 @[simp] theorem reluE_apply {n : ℕ} (x : EuclideanSpace ℝ (Fin n)) (i : Fin n) :
     reluE x i = max (x i) 0 := rfl
 
+/-- **A one-hidden-layer net's logits from its hidden pre-activations.** Given the exact
+    pre-activations `pre` of `x`, each logit of `denseE W2 ∘ reluE ∘ denseE W1` is the finite sum
+    the per-image margin and argmax proofs expand; every generated scorecard reads its logits
+    through this. -/
+theorem mlp_out_eq {n h k : ℕ} (W1 : Fin h → Fin n → ℝ) (W2 : Fin k → Fin h → ℝ)
+    {x : EuclideanSpace ℝ (Fin n)} {pre : Fin h → ℝ} (hpre : ∀ t, denseE W1 x t = pre t)
+    (j : Fin k) :
+    (denseE W2 ∘ reluE ∘ denseE W1) x j = ∑ t, W2 j t * max (pre t) 0 := by
+  show denseE W2 (reluE (denseE W1 x)) j = _
+  rw [denseE_apply]
+  exact Finset.sum_congr rfl fun t _ => by rw [reluE_apply, hpre t]
+
+/-- `√2 ≤ 14143/10000` — the rational majorant the per-image radius checks use. -/
+theorem sqrt_two_le_rat : Real.sqrt 2 ≤ ((14143 : ℝ)/10000) :=
+  Real.sqrt_le_iff.2 ⟨by norm_num, by norm_num⟩
+
+/-- Specialize the Tsuzuku certificate to a FIXED radius ε: if the margin
+    clears the rational check `(14143/10000)·L·ε ≤ m` (kernel-checkable —
+    no `√2`), every `‖δ‖ < ε` leaves class `i` the strict argmax. -/
+theorem certified_at_eps {n k : ℕ} {L m ε : ℝ}
+    {f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)}
+    (hf : LipschitzL2 L f) (hL : 0 < L) {x : EuclideanSpace ℝ (Fin n)}
+    {i : Fin k} (hmargin : ∀ j, j ≠ i → m ≤ f x i - f x j)
+    (hε : ((14143 : ℝ)/10000) * L * ε ≤ m) (hε0 : 0 ≤ ε)
+    (δ : EuclideanSpace ℝ (Fin n)) (hδ : ‖δ‖ < ε) :
+    ∀ j, j ≠ i → f (x + δ) j < f (x + δ) i := by
+  refine lipschitz_margin_certified_radius hf hL hmargin (lt_of_lt_of_le hδ ?_)
+  rw [le_div_iff₀ (mul_pos (Real.sqrt_pos.mpr (by norm_num)) hL)]
+  calc ε * (Real.sqrt 2 * L) ≤ ε * (((14143 : ℝ)/10000) * L) := by
+        have h2 : (0:ℝ) ≤ L := le_of_lt hL
+        have := mul_le_mul_of_nonneg_right sqrt_two_le_rat h2
+        exact mul_le_mul_of_nonneg_left this hε0
+    _ = ((14143 : ℝ)/10000) * L * ε := by ring
+    _ ≤ m := hε
+
 /-- **ReLU is 1-Lipschitz in L2** — coordinatewise `|max(a,0) − max(b,0)| ≤ |a − b|`
     summed. The activation contributes factor 1 to the product certificate. -/
 theorem reluE_lipschitzL2 {n : ℕ} : LipschitzL2 1 (reluE (n := n)) := by
@@ -260,12 +295,8 @@ theorem mlpT_lip : LipschitzL2 ((2651921 : ℝ)/12500) mlpT := by
 /-- In-kernel margin: class 2 leads every other class at `xt` by ≥ 6953/500. -/
 theorem xt_margin : ∀ j : Fin 10, j ≠ 2 →
     ((6953 : ℝ)/500) ≤ mlpT xt 2 - mlpT xt j := by
-  have hout : ∀ jj : Fin 10, mlpT xt jj = ∑ k : Fin 8, W2t jj k * max (hpreVals k) 0 := by
-    intro jj
-    show denseE W2t (reluE (denseE W1t xt)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpre_eval k]
+  have hout : ∀ jj : Fin 10, mlpT xt jj = ∑ k : Fin 8, W2t jj k * max (hpreVals k) 0 :=
+    mlp_out_eq W1t W2t hpre_eval
   intro j hj
   fin_cases j <;>
     first

@@ -244,45 +244,8 @@ open scoped BigOperators
 open FloatModel
 
 -- ════════════════════════════════════════════════════════════════
--- § Generic pieces: coordinate bound, budget monotonicity, composition
+-- § Generic piece: the certificate composed with an evaluation budget
 -- ════════════════════════════════════════════════════════════════
-
-/-- A single coordinate is bounded by the L2 norm. -/
-theorem coord_abs_le_norm {{n : ℕ}} (v : EuclideanSpace ℝ (Fin n)) (c : Fin n) :
-    |v c| ≤ ‖v‖ := by
-  have h : (v c) ^ 2 ≤ ‖v‖ ^ 2 := by
-    rw [euclid_norm_sq]
-    exact Finset.single_le_sum (f := fun l => (v l) ^ 2)
-      (fun l _ => sq_nonneg _) (Finset.mem_univ c)
-  calc |v c| = Real.sqrt ((v c) ^ 2) := (Real.sqrt_sq_eq_abs _).symm
-    _ ≤ Real.sqrt (‖v‖ ^ 2) := Real.sqrt_le_sqrt h
-    _ = ‖v‖ := Real.sqrt_sq (norm_nonneg v)
-
-/-- Replacing the γ-factor and the inherited error by upper bounds bounds
-    `layerBudget` (public copy of the bridge-internal monotonicity step). -/
-theorem layerBudget_le_of' {{u : ℝ}} {{m : ℕ}} {{w β A E g Ē : ℝ}}
-    (hu : 0 ≤ u) (hw : 0 ≤ w) (hβ : 0 ≤ β) (hA : 0 ≤ A)
-    (hG : (1 + u) ^ (m + 2) - 1 ≤ g) (hE0 : 0 ≤ E) (hE : E ≤ Ē) :
-    layerBudget u m w β A E ≤
-      g * ((m : ℝ) * w * (A + Ē) + β) + (m : ℝ) * w * Ē := by
-  have hG0 : (0 : ℝ) ≤ (1 + u) ^ (m + 2) - 1 :=
-    sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hmw : (0 : ℝ) ≤ (m : ℝ) * w := mul_nonneg (Nat.cast_nonneg m) hw
-  have hb0 : (0 : ℝ) ≤ (m : ℝ) * w * (A + E) + β := by
-    have : (0:ℝ) ≤ (m : ℝ) * w * (A + E) :=
-      mul_nonneg hmw (add_nonneg hA hE0)
-    linarith
-  have h1 : ((1 + u) ^ (m + 2) - 1) * ((m : ℝ) * w * (A + E) + β)
-      ≤ g * ((m : ℝ) * w * (A + Ē) + β) := by
-    refine mul_le_mul hG ?_ hb0 (le_trans hG0 hG)
-    have : (m : ℝ) * w * (A + E) ≤ (m : ℝ) * w * (A + Ē) :=
-      mul_le_mul_of_nonneg_left (by linarith) hmw
-    linarith
-  have h2 : (m : ℝ) * w * E ≤ (m : ℝ) * w * Ē :=
-    mul_le_mul_of_nonneg_left hE hmw
-  show ((1 + u) ^ (m + 2) - 1) * ((m : ℝ) * w * (A + E) + β)
-      + (m : ℝ) * w * E ≤ _
-  linarith
 
 /-- **The certificate composed with a per-logit evaluation budget.** If the
     ℝ logit map is `L`-Lipschitz with margin `m` at `x`, and the margin
@@ -382,7 +345,7 @@ theorem capped_E0_nonneg (M : FloatModel) :
 theorem capped_E0_le (M : FloatModel) (hMu : M.u ≤ u32) :
     layerBudget M.u 49 {lit(w0)} 0 ((11:ℝ)/10) (u32 * ((11:ℝ)/10))
       ≤ {lit(E0)} := by
-  refine (layerBudget_le_of' M.u_nonneg (by norm_num) le_rfl (by norm_num)
+  refine (layerBudget_le_of M.u_nonneg (by norm_num) le_rfl (by norm_num)
     (M.gamma_num (q := {lit(q0)}) hMu (by norm_num [u32]) (by norm_num [u32]))
     (by norm_num [u32]) le_rfl).trans ?_
   norm_num [u32]
@@ -395,7 +358,7 @@ theorem capped_B_le (M : FloatModel) (hMu : M.u ≤ u32) :
   have hA : layerAct 49 {lit(w0)} 0 ((11:ℝ)/10) = {lit(A1)} := by
     norm_num [layerAct]
   rw [hA]
-  refine (layerBudget_le_of' M.u_nonneg (by norm_num) le_rfl (by norm_num)
+  refine (layerBudget_le_of M.u_nonneg (by norm_num) le_rfl (by norm_num)
     (M.gamma_num (q := {lit(q1)}) hMu (by norm_num [u32]) (by norm_num [u32]))
     (capped_E0_nonneg M) (capped_E0_le M hMu)).trans ?_
   norm_num
@@ -415,7 +378,7 @@ theorem certifiedFloat_of_margin (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y i := by
   have hmag : ∀ c, |(x + δ) c| ≤ (11:ℝ)/10 := by
     intro c
-    have h2 : |δ c| ≤ ‖δ‖ := coord_abs_le_norm δ c
+    have h2 : |δ c| ≤ ‖δ‖ := (Real.norm_eq_abs _).symm.trans_le (PiLp.norm_apply_le δ c)
     calc |(x + δ) c| = |x c + δ c| := rfl
       _ ≤ |x c| + |δ c| := abs_add_le _ _
       _ ≤ 1 + 1/10 := add_le_add (hx1 c) (by linarith)

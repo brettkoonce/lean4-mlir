@@ -23,9 +23,9 @@ suspected, no drop-in located.
 
 ---
 
-## Status (2026-09-19, main `cb52f18b`, 3 ahead of origin, + the staged row)
+## Status (2026-09-19, main `716ba7d3`, 5 ahead of origin, + the staged row)
 
-**Landed** — about 13.2k lines out, every pinned theorem name and statement unchanged:
+**Landed** — about 15.4k lines out, every pinned theorem name and statement unchanged:
 
 | commit | what |
 |---|---|
@@ -70,7 +70,9 @@ suspected, no drop-in located.
 | `611b8469` | **§9 `den_batchOp`** (−131): one `@[simp] den_batchOp : den (.batchOp op e) = batchMap N (denOp op) (den e)` + `attribute [simp] denOp` replace the 32 per-op `den_batchOp_<op>` `rfl` lemmas. Their warnings (the XLA-`SAME` conv/depthwise ≠ the symmetric ones, inference BN's batch independence, maxPool3s2 ≠ maxPool) are comments on `denOp`'s arms. The ~15 consumer `simp only` lists in the R34/R50/MNv2/MNv4/ENet `FullB` and render files read `den_batchOp, denOp`; the `_eq_reluF`/`_eq_relu6F`/`_eq_swishF` lemmas they combine with are pre-rewrites (`↓`), and `mnv4StemGraphB_faithful` unfolds its graph first. The pinned `_eq_*` and `_per_example` lemmas stay |
 | `c7b534af` | **§9 one-liners** (−90): `patchEmbedFlat` / `patchEmbedBackFlat` are `abbrev`s of Attention's `patchEmbed_flat` / `patchEmbed_input_grad_formula` (−47; `ViTBackB0.patchEmbedBackFlat_eq_backward` goes, `patchEmbedBackGraph_faithful` is `rfl`); the stale "so `StableHLO` needn't import `Attention`" docstrings and a docstring naming a nonexistent `maxPool3s2_ne_maxPool_descr` fixed (§11 defect 5). `batchSlice_batchMap` / `batchMap_pointwise` are `Mat.unflatten_flatten` / `Mat.flatten_unflatten` terms, `lookupEntry` is `List.lookup`. `adamVNext_nonneg`, `adam_denom_pos`, `clipDenom_pos`, `lambDenom_pos` (= `clipDenom_pos`), `rmsSqNext_nonneg` (= `adamVNext_nonneg`) one term each; `lambScale_not_shared` is `norm_num [lambTrust, gradSumSq]` (12 → 2); `keepProb_last` via `Nat.cast_sub` |
 | `cb52f18b` | **§9 one `zrnd`** (−151): the renderers' identity rounding for the bf16/fp8 ops is one documented `StableHLO.zrnd`; the 48 `let zrnd := fun r => r` in CnnRender, EfficientNetRender, the MNv2/MNv4/R34/R50 `RenderB`s, their repeated "placeholder rounding" comment blocks and the private `zrndB` / `vzrnd` go (use sites unchanged but the two renames). All 249 `verified_mlir/` artifacts re-render byte-identically |
-| *(staged)* | **§9 one AdamW tail** (−59): `StableHLO.prettyAdamW` (the `adamMNextF`/`adamVNextF`/`adamWParamF` triple on a gradient name, with the `wdName`/`wd` note that sat in ViTRender) and `adamWConsts wdStr` (β₁/β₂/ε/wd). The seven triples (MNv2 `adamOneM`, MNv4 `adamOne4`, `enetAdamOne`, `convnextAdamOne`, `vitAdamOne`, R34 `optOne`'s `.adamw` and `.adamwAccum`) call it, and the six AdamW constant blocks are `adamWConsts` (`adamConstsM`, `adamConsts4`, `enetAdamConsts` deleted; `vitAdamConsts`, `convnextAdamConsts`, `optConstsB .adamw` delegate). Byte-identical |
+| `f6dc58c9` | **§9 one AdamW tail** (−59): `StableHLO.prettyAdamW` (the `adamMNextF`/`adamVNextF`/`adamWParamF` triple on a gradient name, with the `wdName`/`wd` note that sat in ViTRender) and `adamWConsts wdStr` (β₁/β₂/ε/wd). The seven triples (MNv2 `adamOneM`, MNv4 `adamOne4`, `enetAdamOne`, `convnextAdamOne`, `vitAdamOne`, R34 `optOne`'s `.adamw` and `.adamwAccum`) call it, and the six AdamW constant blocks are `adamWConsts` (`adamConstsM`, `adamConsts4`, `enetAdamConsts` deleted; `vitAdamConsts`, `convnextAdamConsts`, `optConstsB .adamw` delegate). Byte-identical |
+| `716ba7d3` | **§5 generator sync** (scripts only): four generators had drifted from their committed output — hand edits made after generation (`732c7750`'s docstring link, the 4.34 `ite_eq_left`/`ite_eq_right` renames, `TrainedLinearDescent`'s scope paragraph) that the next regeneration would have reverted. Each now regenerates its committed file byte-identically, and `lipschitz_cert_scorecard.py`, `_float.py` and `trained_linear_descent.py` resolve paths from the repo root instead of an absolute path into the sibling `lean4-jax` checkout |
+| *(staged)* | **§5 generator lemmas** (−2,198 Lean, −122 scripts): G2 `pair_sq_bound_mlp` (`pair_sq_bound` on `denseE W2 ∘ reluE ∘ denseE W1`'s own gap) and `pair_sq_symm` (`LipschitzCertPairSDP`) make every emitted `pairSq*` theorem one term — the 12-line body and the 6-line reverse-order wrapper; G1 `mlp_out_eq` (`LipschitzCertInstance`) makes the 73 emitted `hout` blocks one line. G3: `lipschitz_cert_float.py` no longer emits `coord_abs_le_norm` (Mathlib `PiLp.norm_apply_le`) or `layerBudget_le_of'` (FloatBridge's `FloatModel.layerBudget_le_of`, now public); `trained_linear_descent.py` uses `FloatModel.softmax_le_one` for `sm_le_one`. G4: `sqrt_two_le_rat` (one line, `Real.sqrt_le_iff`) and `certified_at_eps` move from the generated scorecard into `LipschitzCertInstance` under the same full names. Regenerated: the pooled scorecard, its float tier, the four SDP files, `FullImgsA/B`, `SmoothingNetWitness`, `TrainedLinearDescent`; every declaration and statement unchanged. Checked: the gate, `lake build CertsHeavy` + `AuditAxiomsHeavy`, and the two CI-disabled `SDPFull` modules by `lake env lean` (160 s / 15.6 GB and 133 s / 13.4 GB; `Uncon` imports `SDPFull`, so the first needs `-o` to an olean the second can find) |
 
 **Deferred on purpose:** the conv1 `grad_close` pair (both already delegate to `cnn_conv2_cot_close`; what
 they share is ~70 lines of margin → off-kink and forward-closeness setup whose generic statement is as
@@ -117,8 +119,14 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
    the RMSProp tail ×2, the bf16/fp8 constructor switch (~250 sites → smart constructors), the
    BN-parametrised forward twins (~400), `R34Bn` ≡ `BnMode` and friends. The op-template `let`s (`dg`,
    `convFwd`, …) live in the hand-written `*Text` predecessors — see the end list.
-5. **§5 generator lemmas** (~1,600 emitted): G2 `pair_sq_bound_mlp` (148×), G1 `mlp_out_eq` (72×), G3/G4.
-   Edit the generator, regenerate, diff the output, check `regen_verified_mlir.sh` / the render guard lists.
+5. **§5 generator lemmas** — done 2026-09-19 (−2,198 Lean over two commits, against ~1,600 emitted
+   estimated; ~1,070 of it is in the CI-disabled `SDPFull` pair). Left: the float-side engine lemmas
+   (`certified_at_eps_close`, `mlp2_float_close_uniform`) stay in the generated `LipschitzCertFloat` —
+   moving them needs a hand-written module between FloatBridge and the scorecard, for 0 lines;
+   `sm_pos` / `sm_sum` have no upstream peer and are emitted once. Still hardcoding the sibling
+   `lean4-jax/` path: `lipschitz_cert_witness_s8.py`, `_power_iter.py`, `_rationalize.py` (writes a
+   snippet into an old scratchpad), `trained_cnn_{witness,seal}.py`, `mnv2_forward_tie.py`,
+   `xla_pad_op_check.py`.
 6. **Root-file batches, together** (each is a full ~7.5-min `Certs` rebuild): §1 `Tensor.lean` (~600:
    `pdivMat_rowIndep_perRow_at`, `pdivMat_colIndep`, the Kronecker `correct` fields, the `finProdFinEquiv`
    reindexes, `vjp_comp` from `vjp_comp_at`); the §0.5 Finset idiom sweep (~250 sites); the §0.2 leftovers —
@@ -240,6 +248,15 @@ at 35–70% of their estimates (signatures stay; some listed sites turn out not 
   rewrite all 249 `verified_mlir/` artifacts on rebuild, so `git status verified_mlir/` after the gate is
   the byte-identity check.
 - `pkill -f <pattern>` inside a Bash call whose own command line contains the pattern kills that call.
+- Regenerate into scratch BEFORE editing a generator: 4 of 9 had drifted from their committed text. A
+  copy with `D` / `OUT` / `SRC` / `ROOT` / `OUTDIR` rewritten by `sed` runs any of them into scratch;
+  `lipschitz_cert_pair_sdp.py` takes ~8 min, `_pair_sdp_full.py` ~11.5 min (it re-runs
+  `_scorecard_full.py` on import), the rest under a minute. Then edit, regenerate, and compare every
+  output's declaration names and statements with the committed file before copying it in.
+- The generated heavy tier is checked locally, never in CI: `lake build CertsHeavy`,
+  `lake env lean tests/AuditAxiomsHeavy.lean`, and `lake env lean` on each `SDPFull` module (in no lib).
+  `SDPFullUncon` imports `SDPFull`: write its olean with `-o` and put it where `lake env` looks (a
+  second root prepended to `LEAN_PATH` shadows the whole `LeanMlir` package); remove it afterwards.
 - `CertLayer` capstones: make the named `_has_vjp_at` def the composite layer's `.vjp` at the same
   point and the capstone its `.faithful`; the hand-written graph defs stay and are `rfl`-equal to the
   composite's `.graph`. Consumers that `rw [← capstone]` never unfold the VJP def, so they don't move.

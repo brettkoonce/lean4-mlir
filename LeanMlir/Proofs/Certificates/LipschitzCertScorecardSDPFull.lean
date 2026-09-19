@@ -86,19 +86,9 @@ theorem hS01SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_1 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 1) - (mlpSF u' 0 - mlpSF u' 1)) ^ 2
-      ≤ ((1517673 : ℝ)/100000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 1
-      = ∑ t, vP01SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 1
-        = ∑ t, (W2SF 0 t - W2SF 1 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 1 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP01SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP01SF tP01SF tP01SF_nonneg (by norm_num)
-    hS01SF u u'
+      ≤ ((1517673 : ℝ)/100000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 1 vP01SF tP01SF vP01SF_eq
+    tP01SF_nonneg (by norm_num) hS01SF
 
 /-- Pair (0,2): ρ = 8.906, Lp = 2.9844 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP02SF : Fin 16 → ℝ := ![((201 : ℝ)/256), ((-11 : ℝ)/16), ((31 : ℝ)/64), ((11 : ℝ)/128), ((3 : ℝ)/128), ((31 : ℝ)/256), ((-15 : ℝ)/256), ((11 : ℝ)/128), ((-289 : ℝ)/256), ((-23 : ℝ)/128), ((161 : ℝ)/256), ((-25 : ℝ)/256), ((-17 : ℝ)/128), ((-87 : ℝ)/128), ((-53 : ℝ)/64), ((-5 : ℝ)/256)]
@@ -143,19 +133,9 @@ theorem hS02SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_2 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 2) - (mlpSF u' 0 - mlpSF u' 2)) ^ 2
-      ≤ ((1781213 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 2
-      = ∑ t, vP02SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 2
-        = ∑ t, (W2SF 0 t - W2SF 2 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 2 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP02SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP02SF tP02SF tP02SF_nonneg (by norm_num)
-    hS02SF u u'
+      ≤ ((1781213 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 2 vP02SF tP02SF vP02SF_eq
+    tP02SF_nonneg (by norm_num) hS02SF
 
 /-- Pair (0,3): ρ = 8.740, Lp = 2.9565 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP03SF : Fin 16 → ℝ := ![((185 : ℝ)/256), ((-5 : ℝ)/64), ((41 : ℝ)/128), ((-75 : ℝ)/256), ((-85 : ℝ)/256), ((-37 : ℝ)/32), ((9 : ℝ)/128), ((37 : ℝ)/256), ((-163 : ℝ)/256), ((-7 : ℝ)/32), ((215 : ℝ)/256), ((95 : ℝ)/256), ((31 : ℝ)/128), ((-17 : ℝ)/128), ((-85 : ℝ)/256), ((11 : ℝ)/256)]
@@ -200,19 +180,9 @@ theorem hS03SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_3 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 3) - (mlpSF u' 0 - mlpSF u' 3)) ^ 2
-      ≤ ((4370231 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 3
-      = ∑ t, vP03SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 3
-        = ∑ t, (W2SF 0 t - W2SF 3 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 3 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP03SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP03SF tP03SF tP03SF_nonneg (by norm_num)
-    hS03SF u u'
+      ≤ ((4370231 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 3 vP03SF tP03SF vP03SF_eq
+    tP03SF_nonneg (by norm_num) hS03SF
 
 /-- Pair (0,4): ρ = 14.056, Lp = 3.7492 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP04SF : Fin 16 → ℝ := ![((157 : ℝ)/128), ((-1 : ℝ)/2), ((-69 : ℝ)/256), ((47 : ℝ)/256), ((9 : ℝ)/64), ((-25 : ℝ)/64), ((-253 : ℝ)/256), ((49 : ℝ)/128), ((-29 : ℝ)/256), ((-79 : ℝ)/128), ((185 : ℝ)/256), ((-165 : ℝ)/256), ((-7 : ℝ)/128), ((-5 : ℝ)/64), ((5 : ℝ)/16), ((27 : ℝ)/128)]
@@ -257,19 +227,9 @@ theorem hS04SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_4 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 4) - (mlpSF u' 0 - mlpSF u' 4)) ^ 2
-      ≤ ((3513993 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 4
-      = ∑ t, vP04SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 4
-        = ∑ t, (W2SF 0 t - W2SF 4 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP04SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP04SF tP04SF tP04SF_nonneg (by norm_num)
-    hS04SF u u'
+      ≤ ((3513993 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 4 vP04SF tP04SF vP04SF_eq
+    tP04SF_nonneg (by norm_num) hS04SF
 
 /-- Pair (0,5): ρ = 7.740, Lp = 2.7822 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP05SF : Fin 16 → ℝ := ![((213 : ℝ)/256), ((-23 : ℝ)/128), ((-123 : ℝ)/256), ((-19 : ℝ)/16), ((-143 : ℝ)/256), ((7 : ℝ)/256), ((-31 : ℝ)/256), ((-105 : ℝ)/128), ((-31 : ℝ)/128), ((-53 : ℝ)/256), ((173 : ℝ)/256), ((-13 : ℝ)/64), ((1 : ℝ)/64), ((-23 : ℝ)/64), ((39 : ℝ)/256), ((33 : ℝ)/256)]
@@ -314,19 +274,9 @@ theorem hS05SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_5 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 5) - (mlpSF u' 0 - mlpSF u' 5)) ^ 2
-      ≤ ((7740489 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 5
-      = ∑ t, vP05SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 5
-        = ∑ t, (W2SF 0 t - W2SF 5 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 5 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP05SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP05SF tP05SF tP05SF_nonneg (by norm_num)
-    hS05SF u u'
+      ≤ ((7740489 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 5 vP05SF tP05SF vP05SF_eq
+    tP05SF_nonneg (by norm_num) hS05SF
 
 /-- Pair (0,6): ρ = 10.675, Lp = 3.2674 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP06SF : Fin 16 → ℝ := ![((271 : ℝ)/256), ((-59 : ℝ)/256), ((-49 : ℝ)/256), ((-1 : ℝ)/8), ((25 : ℝ)/128), ((-11 : ℝ)/128), ((19 : ℝ)/256), ((39 : ℝ)/256), ((-137 : ℝ)/256), ((35 : ℝ)/256), ((85 : ℝ)/128), ((-25 : ℝ)/32), ((19 : ℝ)/256), ((-31 : ℝ)/256), ((113 : ℝ)/256), ((-227 : ℝ)/256)]
@@ -371,19 +321,9 @@ theorem hS06SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_6 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 6) - (mlpSF u' 0 - mlpSF u' 6)) ^ 2
-      ≤ ((10675357 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 6
-      = ∑ t, vP06SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 6
-        = ∑ t, (W2SF 0 t - W2SF 6 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 6 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP06SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP06SF tP06SF tP06SF_nonneg (by norm_num)
-    hS06SF u u'
+      ≤ ((10675357 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 6 vP06SF tP06SF vP06SF_eq
+    tP06SF_nonneg (by norm_num) hS06SF
 
 /-- Pair (0,7): ρ = 12.453, Lp = 3.5290 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP07SF : Fin 16 → ℝ := ![((299 : ℝ)/256), ((23 : ℝ)/256), ((3 : ℝ)/64), ((-3 : ℝ)/256), ((83 : ℝ)/128), ((-203 : ℝ)/256), ((-31 : ℝ)/128), ((-87 : ℝ)/256), ((-17 : ℝ)/32), ((-45 : ℝ)/64), ((11 : ℝ)/256), ((65 : ℝ)/256), ((-27 : ℝ)/128), ((-261 : ℝ)/256), ((-47 : ℝ)/256), ((37 : ℝ)/128)]
@@ -428,19 +368,9 @@ theorem hS07SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 7) - (mlpSF u' 0 - mlpSF u' 7)) ^ 2
-      ≤ ((3113289 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 7
-      = ∑ t, vP07SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 7
-        = ∑ t, (W2SF 0 t - W2SF 7 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP07SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP07SF tP07SF tP07SF_nonneg (by norm_num)
-    hS07SF u u'
+      ≤ ((3113289 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 7 vP07SF tP07SF vP07SF_eq
+    tP07SF_nonneg (by norm_num) hS07SF
 
 /-- Pair (0,8): ρ = 9.286, Lp = 3.0474 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP08SF : Fin 16 → ℝ := ![((229 : ℝ)/256), ((25 : ℝ)/64), ((-13 : ℝ)/256), ((99 : ℝ)/256), ((-77 : ℝ)/128), ((-13 : ℝ)/64), ((27 : ℝ)/128), ((17 : ℝ)/128), ((-7 : ℝ)/8), ((-127 : ℝ)/256), ((93 : ℝ)/256), ((-159 : ℝ)/256), ((117 : ℝ)/256), ((-51 : ℝ)/256), ((109 : ℝ)/256), ((17 : ℝ)/32)]
@@ -485,19 +415,9 @@ theorem hS08SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_8 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 8) - (mlpSF u' 0 - mlpSF u' 8)) ^ 2
-      ≤ ((9286091 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 8
-      = ∑ t, vP08SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 8
-        = ∑ t, (W2SF 0 t - W2SF 8 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP08SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP08SF tP08SF tP08SF_nonneg (by norm_num)
-    hS08SF u u'
+      ≤ ((9286091 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 8 vP08SF tP08SF vP08SF_eq
+    tP08SF_nonneg (by norm_num) hS08SF
 
 /-- Pair (0,9): ρ = 11.837, Lp = 3.4405 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP09SF : Fin 16 → ℝ := ![((301 : ℝ)/256), ((-125 : ℝ)/256), ((-119 : ℝ)/256), ((-13 : ℝ)/128), ((63 : ℝ)/256), ((-51 : ℝ)/64), ((79 : ℝ)/128), ((25 : ℝ)/256), ((1 : ℝ)/128), ((-243 : ℝ)/256), ((11 : ℝ)/128), ((-91 : ℝ)/256), ((1 : ℝ)/16), ((59 : ℝ)/256), ((69 : ℝ)/256), ((123 : ℝ)/256)]
@@ -542,19 +462,9 @@ theorem hS09SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_0_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 0 - mlpSF u 9) - (mlpSF u' 0 - mlpSF u' 9)) ^ 2
-      ≤ ((295923 : ℝ)/25000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 0 - mlpSF w 9
-      = ∑ t, vP09SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 0 - mlpSF w 9
-        = ∑ t, (W2SF 0 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 0 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP09SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP09SF tP09SF tP09SF_nonneg (by norm_num)
-    hS09SF u u'
+      ≤ ((295923 : ℝ)/25000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 0 9 vP09SF tP09SF vP09SF_eq
+    tP09SF_nonneg (by norm_num) hS09SF
 
 /-- Pair (1,2): ρ = 10.234, Lp = 3.1991 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP12SF : Fin 16 → ℝ := ![((-17 : ℝ)/32), ((-93 : ℝ)/128), ((5 : ℝ)/4), ((25 : ℝ)/64), ((-35 : ℝ)/256), ((163 : ℝ)/256), ((-29 : ℝ)/256), ((-29 : ℝ)/256), ((23 : ℝ)/256), ((-27 : ℝ)/128), ((-17 : ℝ)/64), ((-57 : ℝ)/256), ((111 : ℝ)/256), ((-63 : ℝ)/128), ((-69 : ℝ)/64), ((-43 : ℝ)/128)]
@@ -599,19 +509,9 @@ theorem hS12SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_2 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 2) - (mlpSF u' 1 - mlpSF u' 2)) ^ 2
-      ≤ ((5117113 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 2
-      = ∑ t, vP12SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 2
-        = ∑ t, (W2SF 1 t - W2SF 2 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 2 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP12SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP12SF tP12SF tP12SF_nonneg (by norm_num)
-    hS12SF u u'
+      ≤ ((5117113 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 2 vP12SF tP12SF vP12SF_eq
+    tP12SF_nonneg (by norm_num) hS12SF
 
 /-- Pair (1,3): ρ = 7.483, Lp = 2.7355 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP13SF : Fin 16 → ℝ := ![((-19 : ℝ)/32), ((-15 : ℝ)/128), ((139 : ℝ)/128), ((3 : ℝ)/256), ((-63 : ℝ)/128), ((-41 : ℝ)/64), ((1 : ℝ)/64), ((-7 : ℝ)/128), ((149 : ℝ)/256), ((-1 : ℝ)/4), ((-7 : ℝ)/128), ((63 : ℝ)/256), ((207 : ℝ)/256), ((7 : ℝ)/128), ((-149 : ℝ)/256), ((-35 : ℝ)/128)]
@@ -656,19 +556,9 @@ theorem hS13SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_3 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 3) - (mlpSF u' 1 - mlpSF u' 3)) ^ 2
-      ≤ ((299303 : ℝ)/40000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 3
-      = ∑ t, vP13SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 3
-        = ∑ t, (W2SF 1 t - W2SF 3 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 3 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP13SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP13SF tP13SF tP13SF_nonneg (by norm_num)
-    hS13SF u u'
+      ≤ ((299303 : ℝ)/40000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 3 vP13SF tP13SF vP13SF_eq
+    tP13SF_nonneg (by norm_num) hS13SF
 
 /-- Pair (1,4): ρ = 14.559, Lp = 3.8157 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP14SF : Fin 16 → ℝ := ![((-23 : ℝ)/256), ((-69 : ℝ)/128), ((127 : ℝ)/256), ((125 : ℝ)/256), ((-5 : ℝ)/256), ((1 : ℝ)/8), ((-267 : ℝ)/256), ((47 : ℝ)/256), ((283 : ℝ)/256), ((-83 : ℝ)/128), ((-11 : ℝ)/64), ((-197 : ℝ)/256), ((131 : ℝ)/256), ((7 : ℝ)/64), ((1 : ℝ)/16), ((-27 : ℝ)/256)]
@@ -713,19 +603,9 @@ theorem hS14SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_4 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 4) - (mlpSF u' 1 - mlpSF u' 4)) ^ 2
-      ≤ ((14559291 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 4
-      = ∑ t, vP14SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 4
-        = ∑ t, (W2SF 1 t - W2SF 4 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP14SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP14SF tP14SF tP14SF_nonneg (by norm_num)
-    hS14SF u u'
+      ≤ ((14559291 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 4 vP14SF tP14SF vP14SF_eq
+    tP14SF_nonneg (by norm_num) hS14SF
 
 /-- Pair (1,5): ρ = 13.198, Lp = 3.6329 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP15SF : Fin 16 → ℝ := ![((-31 : ℝ)/64), ((-7 : ℝ)/32), ((73 : ℝ)/256), ((-113 : ℝ)/128), ((-23 : ℝ)/32), ((139 : ℝ)/256), ((-45 : ℝ)/256), ((-261 : ℝ)/256), ((125 : ℝ)/128), ((-61 : ℝ)/256), ((-7 : ℝ)/32), ((-21 : ℝ)/64), ((149 : ℝ)/256), ((-11 : ℝ)/64), ((-25 : ℝ)/256), ((-3 : ℝ)/16)]
@@ -770,19 +650,9 @@ theorem hS15SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_5 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 5) - (mlpSF u' 1 - mlpSF u' 5)) ^ 2
-      ≤ ((1649697 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 5
-      = ∑ t, vP15SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 5
-        = ∑ t, (W2SF 1 t - W2SF 5 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 5 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP15SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP15SF tP15SF tP15SF_nonneg (by norm_num)
-    hS15SF u u'
+      ≤ ((1649697 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 5 vP15SF tP15SF vP15SF_eq
+    tP15SF_nonneg (by norm_num) hS15SF
 
 /-- Pair (1,6): ρ = 10.941, Lp = 3.3077 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP16SF : Fin 16 → ℝ := ![((-33 : ℝ)/128), ((-69 : ℝ)/256), ((147 : ℝ)/256), ((23 : ℝ)/128), ((9 : ℝ)/256), ((55 : ℝ)/128), ((5 : ℝ)/256), ((-3 : ℝ)/64), ((175 : ℝ)/256), ((27 : ℝ)/256), ((-59 : ℝ)/256), ((-29 : ℝ)/32), ((41 : ℝ)/64), ((17 : ℝ)/256), ((49 : ℝ)/256), ((-77 : ℝ)/64)]
@@ -827,19 +697,9 @@ theorem hS16SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_6 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 6) - (mlpSF u' 1 - mlpSF u' 6)) ^ 2
-      ≤ ((5470433 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 6
-      = ∑ t, vP16SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 6
-        = ∑ t, (W2SF 1 t - W2SF 6 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 6 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP16SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP16SF tP16SF tP16SF_nonneg (by norm_num)
-    hS16SF u u'
+      ≤ ((5470433 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 6 vP16SF tP16SF vP16SF_eq
+    tP16SF_nonneg (by norm_num) hS16SF
 
 /-- Pair (1,7): ρ = 15.289, Lp = 3.9102 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP17SF : Fin 16 → ℝ := ![((-19 : ℝ)/128), ((13 : ℝ)/256), ((13 : ℝ)/16), ((75 : ℝ)/256), ((125 : ℝ)/256), ((-71 : ℝ)/256), ((-19 : ℝ)/64), ((-69 : ℝ)/128), ((11 : ℝ)/16), ((-47 : ℝ)/64), ((-109 : ℝ)/128), ((33 : ℝ)/256), ((91 : ℝ)/256), ((-213 : ℝ)/256), ((-111 : ℝ)/256), ((-7 : ℝ)/256)]
@@ -884,19 +744,9 @@ theorem hS17SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 7) - (mlpSF u' 1 - mlpSF u' 7)) ^ 2
-      ≤ ((7644743 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 7
-      = ∑ t, vP17SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 7
-        = ∑ t, (W2SF 1 t - W2SF 7 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP17SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP17SF tP17SF tP17SF_nonneg (by norm_num)
-    hS17SF u u'
+      ≤ ((7644743 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 7 vP17SF tP17SF vP17SF_eq
+    tP17SF_nonneg (by norm_num) hS17SF
 
 /-- Pair (1,8): ρ = 11.081, Lp = 3.3289 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP18SF : Fin 16 → ℝ := ![((-27 : ℝ)/64), ((45 : ℝ)/128), ((183 : ℝ)/256), ((177 : ℝ)/256), ((-195 : ℝ)/256), ((5 : ℝ)/16), ((5 : ℝ)/32), ((-17 : ℝ)/256), ((11 : ℝ)/32), ((-135 : ℝ)/256), ((-17 : ℝ)/32), ((-191 : ℝ)/256), ((131 : ℝ)/128), ((-3 : ℝ)/256), ((45 : ℝ)/256), ((55 : ℝ)/256)]
@@ -941,19 +791,9 @@ theorem hS18SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_8 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 8) - (mlpSF u' 1 - mlpSF u' 8)) ^ 2
-      ≤ ((554057 : ℝ)/50000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 8
-      = ∑ t, vP18SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 8
-        = ∑ t, (W2SF 1 t - W2SF 8 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP18SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP18SF tP18SF tP18SF_nonneg (by norm_num)
-    hS18SF u u'
+      ≤ ((554057 : ℝ)/50000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 8 vP18SF tP18SF vP18SF_eq
+    tP18SF_nonneg (by norm_num) hS18SF
 
 /-- Pair (1,9): ρ = 13.110, Lp = 3.6208 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP19SF : Fin 16 → ℝ := ![((-9 : ℝ)/64), ((-135 : ℝ)/256), ((77 : ℝ)/256), ((13 : ℝ)/64), ((11 : ℝ)/128), ((-9 : ℝ)/32), ((9 : ℝ)/16), ((-13 : ℝ)/128), ((157 : ℝ)/128), ((-251 : ℝ)/256), ((-207 : ℝ)/256), ((-123 : ℝ)/256), ((161 : ℝ)/256), ((107 : ℝ)/256), ((5 : ℝ)/256), ((21 : ℝ)/128)]
@@ -998,19 +838,9 @@ theorem hS19SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_1_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 9) - (mlpSF u' 1 - mlpSF u' 9)) ^ 2
-      ≤ ((13109773 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 1 - mlpSF w 9
-      = ∑ t, vP19SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 1 - mlpSF w 9
-        = ∑ t, (W2SF 1 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 1 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP19SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP19SF tP19SF tP19SF_nonneg (by norm_num)
-    hS19SF u u'
+      ≤ ((13109773 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 1 9 vP19SF tP19SF vP19SF_eq
+    tP19SF_nonneg (by norm_num) hS19SF
 
 /-- Pair (2,3): ρ = 7.326, Lp = 2.7066 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP23SF : Fin 16 → ℝ := ![((-1 : ℝ)/16), ((39 : ℝ)/64), ((-21 : ℝ)/128), ((-97 : ℝ)/256), ((-91 : ℝ)/256), ((-327 : ℝ)/256), ((33 : ℝ)/256), ((15 : ℝ)/256), ((63 : ℝ)/128), ((-5 : ℝ)/128), ((27 : ℝ)/128), ((15 : ℝ)/32), ((3 : ℝ)/8), ((35 : ℝ)/64), ((127 : ℝ)/256), ((1 : ℝ)/16)]
@@ -1055,19 +885,9 @@ theorem hS23SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_2_3 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 3) - (mlpSF u' 2 - mlpSF u' 3)) ^ 2
-      ≤ ((3662839 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 2 - mlpSF w 3
-      = ∑ t, vP23SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 2 - mlpSF w 3
-        = ∑ t, (W2SF 2 t - W2SF 3 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 2 3 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP23SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP23SF tP23SF tP23SF_nonneg (by norm_num)
-    hS23SF u u'
+      ≤ ((3662839 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 2 3 vP23SF tP23SF vP23SF_eq
+    tP23SF_nonneg (by norm_num) hS23SF
 
 /-- Pair (2,4): ρ = 17.117, Lp = 4.1373 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP24SF : Fin 16 → ℝ := ![((113 : ℝ)/256), ((3 : ℝ)/16), ((-193 : ℝ)/256), ((25 : ℝ)/256), ((15 : ℝ)/128), ((-131 : ℝ)/256), ((-119 : ℝ)/128), ((19 : ℝ)/64), ((65 : ℝ)/64), ((-7 : ℝ)/16), ((3 : ℝ)/32), ((-35 : ℝ)/64), ((5 : ℝ)/64), ((77 : ℝ)/128), ((73 : ℝ)/64), ((59 : ℝ)/256)]
@@ -1112,19 +932,9 @@ theorem hS24SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_2_4 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 4) - (mlpSF u' 2 - mlpSF u' 4)) ^ 2
-      ≤ ((8558537 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 2 - mlpSF w 4
-      = ∑ t, vP24SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 2 - mlpSF w 4
-        = ∑ t, (W2SF 2 t - W2SF 4 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 2 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP24SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP24SF tP24SF tP24SF_nonneg (by norm_num)
-    hS24SF u u'
+      ≤ ((8558537 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 2 4 vP24SF tP24SF vP24SF_eq
+    tP24SF_nonneg (by norm_num) hS24SF
 
 /-- Pair (2,5): ρ = 13.838, Lp = 3.7200 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP25SF : Fin 16 → ℝ := ![((3 : ℝ)/64), ((65 : ℝ)/128), ((-247 : ℝ)/256), ((-163 : ℝ)/128), ((-149 : ℝ)/256), ((-3 : ℝ)/32), ((-1 : ℝ)/16), ((-29 : ℝ)/32), ((227 : ℝ)/256), ((-7 : ℝ)/256), ((3 : ℝ)/64), ((-27 : ℝ)/256), ((19 : ℝ)/128), ((41 : ℝ)/128), ((251 : ℝ)/256), ((19 : ℝ)/128)]
@@ -1169,19 +979,9 @@ theorem hS25SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_2_5 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 5) - (mlpSF u' 2 - mlpSF u' 5)) ^ 2
-      ≤ ((2767631 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 2 - mlpSF w 5
-      = ∑ t, vP25SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 2 - mlpSF w 5
-        = ∑ t, (W2SF 2 t - W2SF 5 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 2 5 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP25SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP25SF tP25SF tP25SF_nonneg (by norm_num)
-    hS25SF u u'
+      ≤ ((2767631 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 2 5 vP25SF tP25SF vP25SF_eq
+    tP25SF_nonneg (by norm_num) hS25SF
 
 /-- Pair (2,6): ρ = 11.863, Lp = 3.4444 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP26SF : Fin 16 → ℝ := ![((35 : ℝ)/128), ((117 : ℝ)/256), ((-173 : ℝ)/256), ((-27 : ℝ)/128), ((11 : ℝ)/64), ((-53 : ℝ)/256), ((17 : ℝ)/128), ((17 : ℝ)/256), ((19 : ℝ)/32), ((81 : ℝ)/256), ((9 : ℝ)/256), ((-175 : ℝ)/256), ((53 : ℝ)/256), ((143 : ℝ)/256), ((325 : ℝ)/256), ((-111 : ℝ)/128)]
@@ -1226,19 +1026,9 @@ theorem hS26SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_2_6 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 6) - (mlpSF u' 2 - mlpSF u' 6)) ^ 2
-      ≤ ((11863477 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 2 - mlpSF w 6
-      = ∑ t, vP26SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 2 - mlpSF w 6
-        = ∑ t, (W2SF 2 t - W2SF 6 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 2 6 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP26SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP26SF tP26SF tP26SF_nonneg (by norm_num)
-    hS26SF u u'
+      ≤ ((11863477 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 2 6 vP26SF tP26SF vP26SF_eq
+    tP26SF_nonneg (by norm_num) hS26SF
 
 /-- Pair (2,7): ρ = 15.313, Lp = 3.9132 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP27SF : Fin 16 → ℝ := ![((49 : ℝ)/128), ((199 : ℝ)/256), ((-7 : ℝ)/16), ((-25 : ℝ)/256), ((5 : ℝ)/8), ((-117 : ℝ)/128), ((-47 : ℝ)/256), ((-109 : ℝ)/256), ((153 : ℝ)/256), ((-67 : ℝ)/128), ((-75 : ℝ)/128), ((45 : ℝ)/128), ((-5 : ℝ)/64), ((-87 : ℝ)/256), ((165 : ℝ)/256), ((79 : ℝ)/256)]
@@ -1283,19 +1073,9 @@ theorem hS27SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_2_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 7) - (mlpSF u' 2 - mlpSF u' 7)) ^ 2
-      ≤ ((765641 : ℝ)/50000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 2 - mlpSF w 7
-      = ∑ t, vP27SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 2 - mlpSF w 7
-        = ∑ t, (W2SF 2 t - W2SF 7 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 2 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP27SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP27SF tP27SF tP27SF_nonneg (by norm_num)
-    hS27SF u u'
+      ≤ ((765641 : ℝ)/50000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 2 7 vP27SF tP27SF vP27SF_eq
+    tP27SF_nonneg (by norm_num) hS27SF
 
 /-- Pair (2,8): ρ = 10.071, Lp = 3.1736 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP28SF : Fin 16 → ℝ := ![((7 : ℝ)/64), ((69 : ℝ)/64), ((-137 : ℝ)/256), ((77 : ℝ)/256), ((-5 : ℝ)/8), ((-83 : ℝ)/256), ((69 : ℝ)/256), ((3 : ℝ)/64), ((65 : ℝ)/256), ((-81 : ℝ)/256), ((-17 : ℝ)/64), ((-67 : ℝ)/128), ((151 : ℝ)/256), ((123 : ℝ)/256), ((321 : ℝ)/256), ((141 : ℝ)/256)]
@@ -1340,19 +1120,9 @@ theorem hS28SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_2_8 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 8) - (mlpSF u' 2 - mlpSF u' 8)) ^ 2
-      ≤ ((50357 : ℝ)/5000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 2 - mlpSF w 8
-      = ∑ t, vP28SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 2 - mlpSF w 8
-        = ∑ t, (W2SF 2 t - W2SF 8 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 2 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP28SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP28SF tP28SF tP28SF_nonneg (by norm_num)
-    hS28SF u u'
+      ≤ ((50357 : ℝ)/5000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 2 8 vP28SF tP28SF vP28SF_eq
+    tP28SF_nonneg (by norm_num) hS28SF
 
 /-- Pair (2,9): ρ = 18.554, Lp = 4.3075 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP29SF : Fin 16 → ℝ := ![((25 : ℝ)/64), ((51 : ℝ)/256), ((-243 : ℝ)/256), ((-3 : ℝ)/16), ((57 : ℝ)/256), ((-235 : ℝ)/256), ((173 : ℝ)/256), ((3 : ℝ)/256), ((291 : ℝ)/256), ((-197 : ℝ)/256), ((-139 : ℝ)/256), ((-33 : ℝ)/128), ((25 : ℝ)/128), ((233 : ℝ)/256), ((281 : ℝ)/256), ((1 : ℝ)/2)]
@@ -1397,19 +1167,9 @@ theorem hS29SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_2_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 9) - (mlpSF u' 2 - mlpSF u' 9)) ^ 2
-      ≤ ((18553977 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 2 - mlpSF w 9
-      = ∑ t, vP29SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 2 - mlpSF w 9
-        = ∑ t, (W2SF 2 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 2 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP29SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP29SF tP29SF tP29SF_nonneg (by norm_num)
-    hS29SF u u'
+      ≤ ((18553977 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 2 9 vP29SF tP29SF vP29SF_eq
+    tP29SF_nonneg (by norm_num) hS29SF
 
 /-- Pair (3,4): ρ = 16.730, Lp = 4.0903 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP34SF : Fin 16 → ℝ := ![((129 : ℝ)/256), ((-27 : ℝ)/64), ((-151 : ℝ)/256), ((61 : ℝ)/128), ((121 : ℝ)/256), ((49 : ℝ)/64), ((-271 : ℝ)/256), ((61 : ℝ)/256), ((67 : ℝ)/128), ((-51 : ℝ)/128), ((-15 : ℝ)/128), ((-65 : ℝ)/64), ((-19 : ℝ)/64), ((7 : ℝ)/128), ((165 : ℝ)/256), ((43 : ℝ)/256)]
@@ -1454,19 +1214,9 @@ theorem hS34SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_3_4 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 3 - mlpSF u 4) - (mlpSF u' 3 - mlpSF u' 4)) ^ 2
-      ≤ ((8364997 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 3 - mlpSF w 4
-      = ∑ t, vP34SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 3 - mlpSF w 4
-        = ∑ t, (W2SF 3 t - W2SF 4 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 3 4 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP34SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP34SF tP34SF tP34SF_nonneg (by norm_num)
-    hS34SF u u'
+      ≤ ((8364997 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 3 4 vP34SF tP34SF vP34SF_eq
+    tP34SF_nonneg (by norm_num) hS34SF
 
 /-- Pair (3,7): ρ = 9.478, Lp = 3.0787 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP37SF : Fin 16 → ℝ := ![((57 : ℝ)/128), ((43 : ℝ)/256), ((-35 : ℝ)/128), ((9 : ℝ)/32), ((251 : ℝ)/256), ((93 : ℝ)/256), ((-5 : ℝ)/16), ((-31 : ℝ)/64), ((27 : ℝ)/256), ((-31 : ℝ)/64), ((-51 : ℝ)/64), ((-15 : ℝ)/128), ((-29 : ℝ)/64), ((-227 : ℝ)/256), ((19 : ℝ)/128), ((63 : ℝ)/256)]
@@ -1511,19 +1261,9 @@ theorem hS37SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_3_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 3 - mlpSF u 7) - (mlpSF u' 3 - mlpSF u' 7)) ^ 2
-      ≤ ((9478149 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 3 - mlpSF w 7
-      = ∑ t, vP37SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 3 - mlpSF w 7
-        = ∑ t, (W2SF 3 t - W2SF 7 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 3 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP37SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP37SF tP37SF tP37SF_nonneg (by norm_num)
-    hS37SF u u'
+      ≤ ((9478149 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 3 7 vP37SF tP37SF vP37SF_eq
+    tP37SF_nonneg (by norm_num) hS37SF
 
 /-- Pair (3,9): ρ = 14.975, Lp = 3.8698 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP39SF : Fin 16 → ℝ := ![((29 : ℝ)/64), ((-105 : ℝ)/256), ((-201 : ℝ)/256), ((49 : ℝ)/256), ((37 : ℝ)/64), ((23 : ℝ)/64), ((35 : ℝ)/64), ((-3 : ℝ)/64), ((165 : ℝ)/256), ((-187 : ℝ)/256), ((-193 : ℝ)/256), ((-93 : ℝ)/128), ((-23 : ℝ)/128), ((93 : ℝ)/256), ((77 : ℝ)/128), ((7 : ℝ)/16)]
@@ -1568,19 +1308,9 @@ theorem hS39SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_3_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 3 - mlpSF u 9) - (mlpSF u' 3 - mlpSF u' 9)) ^ 2
-      ≤ ((7487589 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 3 - mlpSF w 9
-      = ∑ t, vP39SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 3 - mlpSF w 9
-        = ∑ t, (W2SF 3 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 3 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP39SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP39SF tP39SF tP39SF_nonneg (by norm_num)
-    hS39SF u u'
+      ≤ ((7487589 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 3 9 vP39SF tP39SF vP39SF_eq
+    tP39SF_nonneg (by norm_num) hS39SF
 
 /-- Pair (4,5): ρ = 13.114, Lp = 3.6214 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP45SF : Fin 16 → ℝ := ![((-101 : ℝ)/256), ((41 : ℝ)/128), ((-27 : ℝ)/128), ((-351 : ℝ)/256), ((-179 : ℝ)/256), ((107 : ℝ)/256), ((111 : ℝ)/128), ((-77 : ℝ)/64), ((-33 : ℝ)/256), ((105 : ℝ)/256), ((-3 : ℝ)/64), ((113 : ℝ)/256), ((9 : ℝ)/128), ((-9 : ℝ)/32), ((-41 : ℝ)/256), ((-21 : ℝ)/256)]
@@ -1625,19 +1355,9 @@ theorem hS45SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_4_5 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 5) - (mlpSF u' 4 - mlpSF u' 5)) ^ 2
-      ≤ ((13113867 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 4 - mlpSF w 5
-      = ∑ t, vP45SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 4 - mlpSF w 5
-        = ∑ t, (W2SF 4 t - W2SF 5 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 4 5 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP45SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP45SF tP45SF tP45SF_nonneg (by norm_num)
-    hS45SF u u'
+      ≤ ((13113867 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 4 5 vP45SF tP45SF vP45SF_eq
+    tP45SF_nonneg (by norm_num) hS45SF
 
 /-- Pair (4,6): ρ = 8.726, Lp = 2.9540 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP46SF : Fin 16 → ℝ := ![((-43 : ℝ)/256), ((69 : ℝ)/256), ((5 : ℝ)/64), ((-79 : ℝ)/256), ((7 : ℝ)/128), ((39 : ℝ)/128), ((17 : ℝ)/16), ((-59 : ℝ)/256), ((-27 : ℝ)/64), ((193 : ℝ)/256), ((-15 : ℝ)/256), ((-35 : ℝ)/256), ((33 : ℝ)/256), ((-11 : ℝ)/256), ((33 : ℝ)/256), ((-281 : ℝ)/256)]
@@ -1682,19 +1402,9 @@ theorem hS46SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_4_6 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 6) - (mlpSF u' 4 - mlpSF u' 6)) ^ 2
-      ≤ ((8725847 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 4 - mlpSF w 6
-      = ∑ t, vP46SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 4 - mlpSF w 6
-        = ∑ t, (W2SF 4 t - W2SF 6 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 4 6 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP46SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP46SF tP46SF tP46SF_nonneg (by norm_num)
-    hS46SF u u'
+      ≤ ((8725847 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 4 6 vP46SF tP46SF vP46SF_eq
+    tP46SF_nonneg (by norm_num) hS46SF
 
 /-- Pair (4,7): ρ = 15.041, Lp = 3.8784 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP47SF : Fin 16 → ℝ := ![((-15 : ℝ)/256), ((151 : ℝ)/256), ((81 : ℝ)/256), ((-25 : ℝ)/128), ((65 : ℝ)/128), ((-103 : ℝ)/256), ((191 : ℝ)/256), ((-185 : ℝ)/256), ((-107 : ℝ)/256), ((-11 : ℝ)/128), ((-87 : ℝ)/128), ((115 : ℝ)/128), ((-5 : ℝ)/32), ((-241 : ℝ)/256), ((-127 : ℝ)/256), ((5 : ℝ)/64)]
@@ -1739,19 +1449,9 @@ theorem hS47SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_4_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 7) - (mlpSF u' 4 - mlpSF u' 7)) ^ 2
-      ≤ ((7520641 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 4 - mlpSF w 7
-      = ∑ t, vP47SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 4 - mlpSF w 7
-        = ∑ t, (W2SF 4 t - W2SF 7 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 4 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP47SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP47SF tP47SF tP47SF_nonneg (by norm_num)
-    hS47SF u u'
+      ≤ ((7520641 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 4 7 vP47SF tP47SF vP47SF_eq
+    tP47SF_nonneg (by norm_num) hS47SF
 
 /-- Pair (4,8): ρ = 10.767, Lp = 3.2814 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP48SF : Fin 16 → ℝ := ![((-85 : ℝ)/256), ((57 : ℝ)/64), ((7 : ℝ)/32), ((13 : ℝ)/64), ((-95 : ℝ)/128), ((3 : ℝ)/16), ((307 : ℝ)/256), ((-1 : ℝ)/4), ((-195 : ℝ)/256), ((31 : ℝ)/256), ((-23 : ℝ)/64), ((3 : ℝ)/128), ((131 : ℝ)/256), ((-31 : ℝ)/256), ((29 : ℝ)/256), ((41 : ℝ)/128)]
@@ -1796,19 +1496,9 @@ theorem hS48SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_4_8 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 8) - (mlpSF u' 4 - mlpSF u' 8)) ^ 2
-      ≤ ((1345913 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 4 - mlpSF w 8
-      = ∑ t, vP48SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 4 - mlpSF w 8
-        = ∑ t, (W2SF 4 t - W2SF 8 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 4 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP48SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP48SF tP48SF tP48SF_nonneg (by norm_num)
-    hS48SF u u'
+      ≤ ((1345913 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 4 8 vP48SF tP48SF vP48SF_eq
+    tP48SF_nonneg (by norm_num) hS48SF
 
 /-- Pair (4,9): ρ = 8.938, Lp = 2.9896 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP49SF : Fin 16 → ℝ := ![((-13 : ℝ)/256), ((3 : ℝ)/256), ((-25 : ℝ)/128), ((-73 : ℝ)/256), ((27 : ℝ)/256), ((-13 : ℝ)/32), ((411 : ℝ)/256), ((-73 : ℝ)/256), ((31 : ℝ)/256), ((-85 : ℝ)/256), ((-163 : ℝ)/256), ((37 : ℝ)/128), ((15 : ℝ)/128), ((79 : ℝ)/256), ((-11 : ℝ)/256), ((69 : ℝ)/256)]
@@ -1853,19 +1543,9 @@ theorem hS49SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_4_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 9) - (mlpSF u' 4 - mlpSF u' 9)) ^ 2
-      ≤ ((1117211 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 4 - mlpSF w 9
-      = ∑ t, vP49SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 4 - mlpSF w 9
-        = ∑ t, (W2SF 4 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 4 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP49SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP49SF tP49SF tP49SF_nonneg (by norm_num)
-    hS49SF u u'
+      ≤ ((1117211 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 4 9 vP49SF tP49SF vP49SF_eq
+    tP49SF_nonneg (by norm_num) hS49SF
 
 /-- Pair (5,7): ρ = 15.421, Lp = 3.9270 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP57SF : Fin 16 → ℝ := ![((43 : ℝ)/128), ((69 : ℝ)/256), ((135 : ℝ)/256), ((301 : ℝ)/256), ((309 : ℝ)/256), ((-105 : ℝ)/128), ((-31 : ℝ)/256), ((123 : ℝ)/256), ((-37 : ℝ)/128), ((-127 : ℝ)/256), ((-81 : ℝ)/128), ((117 : ℝ)/256), ((-29 : ℝ)/128), ((-169 : ℝ)/256), ((-43 : ℝ)/128), ((41 : ℝ)/256)]
@@ -1910,19 +1590,9 @@ theorem hS57SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_5_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 5 - mlpSF u 7) - (mlpSF u' 5 - mlpSF u' 7)) ^ 2
-      ≤ ((7710403 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 5 - mlpSF w 7
-      = ∑ t, vP57SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 5 - mlpSF w 7
-        = ∑ t, (W2SF 5 t - W2SF 7 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 5 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP57SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP57SF tP57SF tP57SF_nonneg (by norm_num)
-    hS57SF u u'
+      ≤ ((7710403 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 5 7 vP57SF tP57SF vP57SF_eq
+    tP57SF_nonneg (by norm_num) hS57SF
 
 /-- Pair (5,9): ρ = 12.549, Lp = 3.5425 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP59SF : Fin 16 → ℝ := ![((11 : ℝ)/32), ((-79 : ℝ)/256), ((1 : ℝ)/64), ((139 : ℝ)/128), ((103 : ℝ)/128), ((-211 : ℝ)/256), ((189 : ℝ)/256), ((235 : ℝ)/256), ((1 : ℝ)/4), ((-95 : ℝ)/128), ((-151 : ℝ)/256), ((-39 : ℝ)/256), ((3 : ℝ)/64), ((151 : ℝ)/256), ((15 : ℝ)/128), ((45 : ℝ)/128)]
@@ -1967,19 +1637,9 @@ theorem hS59SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_5_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 5 - mlpSF u 9) - (mlpSF u' 5 - mlpSF u' 9)) ^ 2
-      ≤ ((1568619 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 5 - mlpSF w 9
-      = ∑ t, vP59SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 5 - mlpSF w 9
-        = ∑ t, (W2SF 5 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 5 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP59SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP59SF tP59SF tP59SF_nonneg (by norm_num)
-    hS59SF u u'
+      ≤ ((1568619 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 5 9 vP59SF tP59SF vP59SF_eq
+    tP59SF_nonneg (by norm_num) hS59SF
 
 /-- Pair (6,7): ρ = 20.993, Lp = 4.5819 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP67SF : Fin 16 → ℝ := ![((7 : ℝ)/64), ((41 : ℝ)/128), ((61 : ℝ)/256), ((29 : ℝ)/256), ((29 : ℝ)/64), ((-181 : ℝ)/256), ((-81 : ℝ)/256), ((-63 : ℝ)/128), ((1 : ℝ)/256), ((-215 : ℝ)/256), ((-159 : ℝ)/256), ((265 : ℝ)/256), ((-73 : ℝ)/256), ((-115 : ℝ)/128), ((-5 : ℝ)/8), ((301 : ℝ)/256)]
@@ -2024,19 +1684,9 @@ theorem hS67SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_6_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 6 - mlpSF u 7) - (mlpSF u' 6 - mlpSF u' 7)) ^ 2
-      ≤ ((10496647 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 6 - mlpSF w 7
-      = ∑ t, vP67SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 6 - mlpSF w 7
-        = ∑ t, (W2SF 6 t - W2SF 7 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 6 7 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP67SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP67SF tP67SF tP67SF_nonneg (by norm_num)
-    hS67SF u u'
+      ≤ ((10496647 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 6 7 vP67SF tP67SF vP67SF_eq
+    tP67SF_nonneg (by norm_num) hS67SF
 
 /-- Pair (6,9): ρ = 15.317, Lp = 3.9138 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP69SF : Fin 16 → ℝ := ![((15 : ℝ)/128), ((-33 : ℝ)/128), ((-35 : ℝ)/128), ((3 : ℝ)/128), ((13 : ℝ)/256), ((-91 : ℝ)/128), ((139 : ℝ)/256), ((-7 : ℝ)/128), ((139 : ℝ)/256), ((-139 : ℝ)/128), ((-37 : ℝ)/64), ((109 : ℝ)/256), ((-3 : ℝ)/256), ((45 : ℝ)/128), ((-11 : ℝ)/64), ((175 : ℝ)/128)]
@@ -2081,19 +1731,9 @@ theorem hS69SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_6_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 6 - mlpSF u 9) - (mlpSF u' 6 - mlpSF u' 9)) ^ 2
-      ≤ ((15317271 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 6 - mlpSF w 9
-      = ∑ t, vP69SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 6 - mlpSF w 9
-        = ∑ t, (W2SF 6 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 6 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP69SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP69SF tP69SF tP69SF_nonneg (by norm_num)
-    hS69SF u u'
+      ≤ ((15317271 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 6 9 vP69SF tP69SF vP69SF_eq
+    tP69SF_nonneg (by norm_num) hS69SF
 
 /-- Pair (7,8): ρ = 12.837, Lp = 3.5830 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP78SF : Fin 16 → ℝ := ![((-35 : ℝ)/128), ((77 : ℝ)/256), ((-25 : ℝ)/256), ((51 : ℝ)/128), ((-5 : ℝ)/4), ((151 : ℝ)/256), ((29 : ℝ)/64), ((121 : ℝ)/256), ((-11 : ℝ)/32), ((53 : ℝ)/256), ((41 : ℝ)/128), ((-7 : ℝ)/8), ((171 : ℝ)/256), ((105 : ℝ)/128), ((39 : ℝ)/64), ((31 : ℝ)/128)]
@@ -2138,19 +1778,9 @@ theorem hS78SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_7_8 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 8) - (mlpSF u' 7 - mlpSF u' 8)) ^ 2
-      ≤ ((6418617 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 7 - mlpSF w 8
-      = ∑ t, vP78SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 7 - mlpSF w 8
-        = ∑ t, (W2SF 7 t - W2SF 8 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 7 8 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP78SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP78SF tP78SF tP78SF_nonneg (by norm_num)
-    hS78SF u u'
+      ≤ ((6418617 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 7 8 vP78SF tP78SF vP78SF_eq
+    tP78SF_nonneg (by norm_num) hS78SF
 
 /-- Pair (7,9): ρ = 8.753, Lp = 2.9587 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP79SF : Fin 16 → ℝ := ![((1 : ℝ)/128), ((-37 : ℝ)/64), ((-131 : ℝ)/256), ((-23 : ℝ)/256), ((-103 : ℝ)/256), ((-1 : ℝ)/256), ((55 : ℝ)/64), ((7 : ℝ)/16), ((69 : ℝ)/128), ((-63 : ℝ)/256), ((11 : ℝ)/256), ((-39 : ℝ)/64), ((35 : ℝ)/128), ((5 : ℝ)/4), ((29 : ℝ)/64), ((49 : ℝ)/256)]
@@ -2195,19 +1825,9 @@ theorem hS79SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_7_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 9) - (mlpSF u' 7 - mlpSF u' 9)) ^ 2
-      ≤ ((2188329 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 7 - mlpSF w 9
-      = ∑ t, vP79SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 7 - mlpSF w 9
-        = ∑ t, (W2SF 7 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 7 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP79SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP79SF tP79SF tP79SF_nonneg (by norm_num)
-    hS79SF u u'
+      ≤ ((2188329 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 7 9 vP79SF tP79SF vP79SF_eq
+    tP79SF_nonneg (by norm_num) hS79SF
 
 /-- Pair (8,9): ρ = 9.181, Lp = 3.0301 (the global √2·L criterion charges ≈ 7.00 to every pair). -/
 noncomputable def vP89SF : Fin 16 → ℝ := ![((9 : ℝ)/32), ((-225 : ℝ)/256), ((-53 : ℝ)/128), ((-125 : ℝ)/256), ((217 : ℝ)/256), ((-19 : ℝ)/32), ((13 : ℝ)/32), ((-9 : ℝ)/256), ((113 : ℝ)/128), ((-29 : ℝ)/64), ((-71 : ℝ)/256), ((17 : ℝ)/64), ((-101 : ℝ)/256), ((55 : ℝ)/128), ((-5 : ℝ)/32), ((-13 : ℝ)/256)]
@@ -2252,249 +1872,124 @@ theorem hS89SF : ∀ z : Fin 16 → ℝ,
 
 theorem pairSqSF_8_9 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 8 - mlpSF u 9) - (mlpSF u' 8 - mlpSF u' 9)) ^ 2
-      ≤ ((2295311 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : ∀ w : EuclideanSpace ℝ (Fin 784), mlpSF w 8 - mlpSF w 9
-      = ∑ t, vP89SF t * max (denseE W1SF w t) 0 := by
-    intro w
-    have h : mlpSF w 8 - mlpSF w 9
-        = ∑ t, (W2SF 8 t - W2SF 9 t) * max (denseE W1SF w t) 0 :=
-      mlp_gap_eq W1SF W2SF 8 9 w
-    rw [h]
-    exact Finset.sum_congr rfl fun t _ => by rw [vP89SF_eq t]
-  rw [e u, e u']
-  exact pair_sq_bound W1SF G1SF G1SF_eq vP89SF tP89SF tP89SF_nonneg (by norm_num)
-    hS89SF u u'
+      ≤ ((2295311 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_bound_mlp W1SF W2SF G1SF G1SF_eq 8 9 vP89SF tP89SF vP89SF_eq
+    tP89SF_nonneg (by norm_num) hS89SF
 
 theorem pairSqSF_1_0 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 1 - mlpSF u 0) - (mlpSF u' 1 - mlpSF u' 0)) ^ 2
-      ≤ ((1517673 : ℝ)/100000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 1 - mlpSF u 0) - (mlpSF u' 1 - mlpSF u' 0)
-      = -((mlpSF u 0 - mlpSF u 1) - (mlpSF u' 0 - mlpSF u' 1)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_0_1 u u'
+      ≤ ((1517673 : ℝ)/100000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_0_1
 
 theorem pairSqSF_2_0 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 0) - (mlpSF u' 2 - mlpSF u' 0)) ^ 2
-      ≤ ((1781213 : ℝ)/200000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 2 - mlpSF u 0) - (mlpSF u' 2 - mlpSF u' 0)
-      = -((mlpSF u 0 - mlpSF u 2) - (mlpSF u' 0 - mlpSF u' 2)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_0_2 u u'
+      ≤ ((1781213 : ℝ)/200000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_0_2
 
 theorem pairSqSF_2_1 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 2 - mlpSF u 1) - (mlpSF u' 2 - mlpSF u' 1)) ^ 2
-      ≤ ((5117113 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 2 - mlpSF u 1) - (mlpSF u' 2 - mlpSF u' 1)
-      = -((mlpSF u 1 - mlpSF u 2) - (mlpSF u' 1 - mlpSF u' 2)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_1_2 u u'
+      ≤ ((5117113 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_1_2
 
 theorem pairSqSF_4_0 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 0) - (mlpSF u' 4 - mlpSF u' 0)) ^ 2
-      ≤ ((3513993 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 4 - mlpSF u 0) - (mlpSF u' 4 - mlpSF u' 0)
-      = -((mlpSF u 0 - mlpSF u 4) - (mlpSF u' 0 - mlpSF u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_0_4 u u'
+      ≤ ((3513993 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_0_4
 
 theorem pairSqSF_4_1 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 1) - (mlpSF u' 4 - mlpSF u' 1)) ^ 2
-      ≤ ((14559291 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 4 - mlpSF u 1) - (mlpSF u' 4 - mlpSF u' 1)
-      = -((mlpSF u 1 - mlpSF u 4) - (mlpSF u' 1 - mlpSF u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_1_4 u u'
+      ≤ ((14559291 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_1_4
 
 theorem pairSqSF_4_2 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 2) - (mlpSF u' 4 - mlpSF u' 2)) ^ 2
-      ≤ ((8558537 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 4 - mlpSF u 2) - (mlpSF u' 4 - mlpSF u' 2)
-      = -((mlpSF u 2 - mlpSF u 4) - (mlpSF u' 2 - mlpSF u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_2_4 u u'
+      ≤ ((8558537 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_2_4
 
 theorem pairSqSF_4_3 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 4 - mlpSF u 3) - (mlpSF u' 4 - mlpSF u' 3)) ^ 2
-      ≤ ((8364997 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 4 - mlpSF u 3) - (mlpSF u' 4 - mlpSF u' 3)
-      = -((mlpSF u 3 - mlpSF u 4) - (mlpSF u' 3 - mlpSF u' 4)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_3_4 u u'
+      ≤ ((8364997 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_3_4
 
 theorem pairSqSF_7_0 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 0) - (mlpSF u' 7 - mlpSF u' 0)) ^ 2
-      ≤ ((3113289 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 7 - mlpSF u 0) - (mlpSF u' 7 - mlpSF u' 0)
-      = -((mlpSF u 0 - mlpSF u 7) - (mlpSF u' 0 - mlpSF u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_0_7 u u'
+      ≤ ((3113289 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_0_7
 
 theorem pairSqSF_7_1 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 1) - (mlpSF u' 7 - mlpSF u' 1)) ^ 2
-      ≤ ((7644743 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 7 - mlpSF u 1) - (mlpSF u' 7 - mlpSF u' 1)
-      = -((mlpSF u 1 - mlpSF u 7) - (mlpSF u' 1 - mlpSF u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_1_7 u u'
+      ≤ ((7644743 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_1_7
 
 theorem pairSqSF_7_2 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 2) - (mlpSF u' 7 - mlpSF u' 2)) ^ 2
-      ≤ ((765641 : ℝ)/50000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 7 - mlpSF u 2) - (mlpSF u' 7 - mlpSF u' 2)
-      = -((mlpSF u 2 - mlpSF u 7) - (mlpSF u' 2 - mlpSF u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_2_7 u u'
+      ≤ ((765641 : ℝ)/50000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_2_7
 
 theorem pairSqSF_7_3 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 3) - (mlpSF u' 7 - mlpSF u' 3)) ^ 2
-      ≤ ((9478149 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 7 - mlpSF u 3) - (mlpSF u' 7 - mlpSF u' 3)
-      = -((mlpSF u 3 - mlpSF u 7) - (mlpSF u' 3 - mlpSF u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_3_7 u u'
+      ≤ ((9478149 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_3_7
 
 theorem pairSqSF_7_4 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 4) - (mlpSF u' 7 - mlpSF u' 4)) ^ 2
-      ≤ ((7520641 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 7 - mlpSF u 4) - (mlpSF u' 7 - mlpSF u' 4)
-      = -((mlpSF u 4 - mlpSF u 7) - (mlpSF u' 4 - mlpSF u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_4_7 u u'
+      ≤ ((7520641 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_4_7
 
 theorem pairSqSF_7_5 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 5) - (mlpSF u' 7 - mlpSF u' 5)) ^ 2
-      ≤ ((7710403 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 7 - mlpSF u 5) - (mlpSF u' 7 - mlpSF u' 5)
-      = -((mlpSF u 5 - mlpSF u 7) - (mlpSF u' 5 - mlpSF u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_5_7 u u'
+      ≤ ((7710403 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_5_7
 
 theorem pairSqSF_7_6 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 7 - mlpSF u 6) - (mlpSF u' 7 - mlpSF u' 6)) ^ 2
-      ≤ ((10496647 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 7 - mlpSF u 6) - (mlpSF u' 7 - mlpSF u' 6)
-      = -((mlpSF u 6 - mlpSF u 7) - (mlpSF u' 6 - mlpSF u' 7)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_6_7 u u'
+      ≤ ((10496647 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_6_7
 
 theorem pairSqSF_9_0 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 0) - (mlpSF u' 9 - mlpSF u' 0)) ^ 2
-      ≤ ((295923 : ℝ)/25000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 0) - (mlpSF u' 9 - mlpSF u' 0)
-      = -((mlpSF u 0 - mlpSF u 9) - (mlpSF u' 0 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_0_9 u u'
+      ≤ ((295923 : ℝ)/25000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_0_9
 
 theorem pairSqSF_9_1 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 1) - (mlpSF u' 9 - mlpSF u' 1)) ^ 2
-      ≤ ((13109773 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 1) - (mlpSF u' 9 - mlpSF u' 1)
-      = -((mlpSF u 1 - mlpSF u 9) - (mlpSF u' 1 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_1_9 u u'
+      ≤ ((13109773 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_1_9
 
 theorem pairSqSF_9_2 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 2) - (mlpSF u' 9 - mlpSF u' 2)) ^ 2
-      ≤ ((18553977 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 2) - (mlpSF u' 9 - mlpSF u' 2)
-      = -((mlpSF u 2 - mlpSF u 9) - (mlpSF u' 2 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_2_9 u u'
+      ≤ ((18553977 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_2_9
 
 theorem pairSqSF_9_3 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 3) - (mlpSF u' 9 - mlpSF u' 3)) ^ 2
-      ≤ ((7487589 : ℝ)/500000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 3) - (mlpSF u' 9 - mlpSF u' 3)
-      = -((mlpSF u 3 - mlpSF u 9) - (mlpSF u' 3 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_3_9 u u'
+      ≤ ((7487589 : ℝ)/500000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_3_9
 
 theorem pairSqSF_9_4 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 4) - (mlpSF u' 9 - mlpSF u' 4)) ^ 2
-      ≤ ((1117211 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 4) - (mlpSF u' 9 - mlpSF u' 4)
-      = -((mlpSF u 4 - mlpSF u 9) - (mlpSF u' 4 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_4_9 u u'
+      ≤ ((1117211 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_4_9
 
 theorem pairSqSF_9_5 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 5) - (mlpSF u' 9 - mlpSF u' 5)) ^ 2
-      ≤ ((1568619 : ℝ)/125000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 5) - (mlpSF u' 9 - mlpSF u' 5)
-      = -((mlpSF u 5 - mlpSF u 9) - (mlpSF u' 5 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_5_9 u u'
+      ≤ ((1568619 : ℝ)/125000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_5_9
 
 theorem pairSqSF_9_6 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 6) - (mlpSF u' 9 - mlpSF u' 6)) ^ 2
-      ≤ ((15317271 : ℝ)/1000000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 6) - (mlpSF u' 9 - mlpSF u' 6)
-      = -((mlpSF u 6 - mlpSF u 9) - (mlpSF u' 6 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_6_9 u u'
+      ≤ ((15317271 : ℝ)/1000000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_6_9
 
 theorem pairSqSF_9_7 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 7) - (mlpSF u' 9 - mlpSF u' 7)) ^ 2
-      ≤ ((2188329 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 7) - (mlpSF u' 9 - mlpSF u' 7)
-      = -((mlpSF u 7 - mlpSF u 9) - (mlpSF u' 7 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_7_9 u u'
+      ≤ ((2188329 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_7_9
 
 theorem pairSqSF_9_8 : ∀ u u' : EuclideanSpace ℝ (Fin 784),
     ((mlpSF u 9 - mlpSF u 8) - (mlpSF u' 9 - mlpSF u' 8)) ^ 2
-      ≤ ((2295311 : ℝ)/250000) * ‖u - u'‖ ^ 2 := by
-  intro u u'
-  have e : (mlpSF u 9 - mlpSF u 8) - (mlpSF u' 9 - mlpSF u' 8)
-      = -((mlpSF u 8 - mlpSF u 9) - (mlpSF u' 8 - mlpSF u' 9)) := by
-    ring
-  rw [e, neg_sq]
-  exact pairSqSF_8_9 u u'
+      ≤ ((2295311 : ℝ)/250000) * ‖u - u'‖ ^ 2 :=
+  pair_sq_symm pairSqSF_8_9
 
 -- ════════════════════════════════════════════════════════════
 -- § Per-image certificates: the first 8 certifying images per radius
@@ -2506,12 +2001,8 @@ noncomputable def logitSF0 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF0_eval : ∀ jj : Fin 10, mlpSF imgF0 jj = logitSF0 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF0 jj = ∑ k, W2SF jj k * max (hpreSF0 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF0)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF0_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF0 jj = ∑ k, W2SF jj k * max (hpreSF0 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF0_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2631,12 +2122,8 @@ noncomputable def logitSF1 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF1_eval : ∀ jj : Fin 10, mlpSF imgF1 jj = logitSF1 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF1 jj = ∑ k, W2SF jj k * max (hpreSF1 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF1)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF1_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF1 jj = ∑ k, W2SF jj k * max (hpreSF1 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF1_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2756,12 +2243,8 @@ noncomputable def logitSF2 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF2_eval : ∀ jj : Fin 10, mlpSF imgF2 jj = logitSF2 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF2 jj = ∑ k, W2SF jj k * max (hpreSF2 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF2)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF2_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF2 jj = ∑ k, W2SF jj k * max (hpreSF2 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF2_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -2881,12 +2364,8 @@ noncomputable def logitSF3 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF3_eval : ∀ jj : Fin 10, mlpSF imgF3 jj = logitSF3 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF3 jj = ∑ k, W2SF jj k * max (hpreSF3 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF3)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF3_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF3 jj = ∑ k, W2SF jj k * max (hpreSF3 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF3_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -3006,12 +2485,8 @@ noncomputable def logitSF4 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF4_eval : ∀ jj : Fin 10, mlpSF imgF4 jj = logitSF4 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF4 jj = ∑ k, W2SF jj k * max (hpreSF4 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF4)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF4_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF4 jj = ∑ k, W2SF jj k * max (hpreSF4 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF4_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -3131,12 +2606,8 @@ noncomputable def logitSF5 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF5_eval : ∀ jj : Fin 10, mlpSF imgF5 jj = logitSF5 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF5 jj = ∑ k, W2SF jj k * max (hpreSF5 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF5)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF5_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF5 jj = ∑ k, W2SF jj k * max (hpreSF5 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF5_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -3256,12 +2727,8 @@ noncomputable def logitSF6 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF6_eval : ∀ jj : Fin 10, mlpSF imgF6 jj = logitSF6 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF6 jj = ∑ k, W2SF jj k * max (hpreSF6 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF6)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF6_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF6 jj = ∑ k, W2SF jj k * max (hpreSF6 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF6_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
@@ -3381,12 +2848,8 @@ noncomputable def logitSF7 : Fin 10 → ℝ :=
 
 set_option maxHeartbeats 3200000 in
 theorem logitSF7_eval : ∀ jj : Fin 10, mlpSF imgF7 jj = logitSF7 jj := by
-  have hout : ∀ jj : Fin 10, mlpSF imgF7 jj = ∑ k, W2SF jj k * max (hpreSF7 k) 0 := by
-    intro jj
-    show denseE W2SF (reluE (denseE W1SF imgF7)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreSF7_eval k]
+  have hout : ∀ jj : Fin 10, mlpSF imgF7 jj = ∑ k, W2SF jj k * max (hpreSF7 k) 0 :=
+    mlp_out_eq W1SF W2SF hpreSF7_eval
   intro jj
   rw [hout jj]
   fin_cases jj <;>
