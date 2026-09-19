@@ -295,25 +295,10 @@ theorem cnn_conv_tied_certified {ic c h w d1 nClasses kH kW : Nat}
     let g : Vec nClasses := fun k =>
       softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xv) k - oneHot nClasses label k
     let cotW2 := cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 g
-    (∀ idx : Fin (c*c*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₂ ac1 W₂ lr (.operand cotN cotW2)) idx
-          = Kernel4.flatten W₂ idx - lr * ∑ j : Fin (c*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c*c*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ ac1))
-                   (Kernel4.flatten W₂) idx j * cotW2 j)
-  ∧ (∀ o : Fin c,
-        den (SHlo.convBiasSgd bN lrStr W₂ ac1 b₂ lr (.operand cotN cotW2)) o
-          = b₂ o - lr * ∑ j : Fin (c*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₂ b' ac1)) b₂ o j * cotW2 j)
-  ∧ (∀ idx : Fin (c*ic*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₁ x W₁ lr (.operand cotN (cnnChainCotW1 W₂ hc1 cotW2))) idx
-          = Kernel4.flatten W₁ idx - lr * ∑ j : Fin (c*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₁ x))
-                   (Kernel4.flatten W₁) idx j * cnnChainCotW1 W₂ hc1 cotW2 j)
-  ∧ (∀ o : Fin c,
-        den (SHlo.convBiasSgd bN lrStr W₁ x b₁ lr (.operand cotN (cnnChainCotW1 W₂ hc1 cotW2))) o
-          = b₁ o - lr * ∑ j : Fin (c*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₁ b' x)) b₁ o j
-                * cnnChainCotW1 W₂ hc1 cotW2 j) := by
+    ConvWSgdTied xN wN lrStr cotN b₂ ac1 W₂ cotW2 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₂ ac1 b₂ cotW2 lr
+  ∧ ConvWSgdTied xN wN lrStr cotN b₁ x W₁ (cnnChainCotW1 W₂ hc1 cotW2) lr
+  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ (cnnChainCotW1 W₂ hc1 cotW2) lr := by
   intro xv hc1 ac1v ac1 hc2 ac2v ac2 pool h3 h4 g cotW2
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro idx; exact cW2_den xN wN lrStr cotN b₂ ac1 ac2 W₂ W₃ W₄ W₅ h3 h4 hc2 g lr idx

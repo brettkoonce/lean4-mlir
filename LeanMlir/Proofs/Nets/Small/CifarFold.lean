@@ -296,45 +296,17 @@ theorem cifar_conv_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
     let cotW2 : Vec (c1*(2*(2*h))*(2*(2*w))) := cifarChainCotW2 W₃ ac2 hc2 cotW3
     let cotW1 : Vec (c1*(2*(2*h))*(2*(2*w))) := cnnChainCotW1 W₂ hc1 cotW2
     -- conv₄ (last conv before pool₂)
-    (∀ idx : Fin (c2*c2*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₄ ac3 W₄ lr (.operand cotN cotW4)) idx
-          = Kernel4.flatten W₄ idx - lr * ∑ jj : Fin (c2*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c2*c2*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₄ ac3))
-                   (Kernel4.flatten W₄) idx jj * cotW4 jj)
-  ∧ (∀ o : Fin c2,
-        den (SHlo.convBiasSgd bN lrStr W₄ ac3 b₄ lr (.operand cotN cotW4)) o
-          = b₄ o - lr * ∑ jj : Fin (c2*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c2 => Tensor3.flatten (conv2d W₄ b' ac3)) b₄ o jj * cotW4 jj)
-    -- conv₃
-  ∧ (∀ idx : Fin (c2*c1*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₃ zp1t W₃ lr (.operand cotN cotW3)) idx
-          = Kernel4.flatten W₃ idx - lr * ∑ jj : Fin (c2*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c2*c1*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₃ zp1t))
-                   (Kernel4.flatten W₃) idx jj * cotW3 jj)
-  ∧ (∀ o : Fin c2,
-        den (SHlo.convBiasSgd bN lrStr W₃ zp1t b₃ lr (.operand cotN cotW3)) o
-          = b₃ o - lr * ∑ jj : Fin (c2*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c2 => Tensor3.flatten (conv2d W₃ b' zp1t)) b₃ o jj * cotW3 jj)
-    -- conv₂ (across pool₁ — the new `cifarChainCotW2` cotangent)
-  ∧ (∀ idx : Fin (c1*c1*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₂ ac1 W₂ lr (.operand cotN cotW2)) idx
-          = Kernel4.flatten W₂ idx - lr * ∑ jj : Fin (c1*(2*(2*h))*(2*(2*w))),
-              pdiv (fun v' : Vec (c1*c1*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ ac1))
-                   (Kernel4.flatten W₂) idx jj * cotW2 jj)
-  ∧ (∀ o : Fin c1,
-        den (SHlo.convBiasSgd bN lrStr W₂ ac1 b₂ lr (.operand cotN cotW2)) o
-          = b₂ o - lr * ∑ jj : Fin (c1*(2*(2*h))*(2*(2*w))),
-              pdiv (fun b' : Vec c1 => Tensor3.flatten (conv2d W₂ b' ac1)) b₂ o jj * cotW2 jj)
-    -- conv₁ (input layer)
-  ∧ (∀ idx : Fin (c1*ic*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₁ x W₁ lr (.operand cotN cotW1)) idx
-          = Kernel4.flatten W₁ idx - lr * ∑ jj : Fin (c1*(2*(2*h))*(2*(2*w))),
-              pdiv (fun v' : Vec (c1*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₁ x))
-                   (Kernel4.flatten W₁) idx jj * cotW1 jj)
-  ∧ (∀ o : Fin c1,
-        den (SHlo.convBiasSgd bN lrStr W₁ x b₁ lr (.operand cotN cotW1)) o
-          = b₁ o - lr * ∑ jj : Fin (c1*(2*(2*h))*(2*(2*w))),
-              pdiv (fun b' : Vec c1 => Tensor3.flatten (conv2d W₁ b' x)) b₁ o jj * cotW1 jj) := by
+    ConvWSgdTied xN wN lrStr cotN b₄ ac3 W₄ cotW4 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₄ ac3 b₄ cotW4 lr
+  -- conv₃
+  ∧ ConvWSgdTied xN wN lrStr cotN b₃ zp1t W₃ cotW3 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₃ zp1t b₃ cotW3 lr
+  -- conv₂ (across pool₁ — the new `cifarChainCotW2` cotangent)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₂ ac1 W₂ cotW2 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₂ ac1 b₂ cotW2 lr
+  -- conv₁ (input layer)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₁ x W₁ cotW1 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotW1 lr := by
   intro xv hc1 ac1v ac1 hc2 ac2v ac2 zp1 zp1t hc3 ac3v ac3 hc4 ac4v ac4 zp2 h5 h6 g cotW4 cotW3 cotW2 cotW1
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact convW_den xN wN lrStr cotN b₄ ac3 W₄ cotW4 lr idx

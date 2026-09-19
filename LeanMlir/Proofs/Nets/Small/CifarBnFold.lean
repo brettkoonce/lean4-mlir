@@ -52,4 +52,26 @@ theorem bnBeta_den {oc h w : Nat}
                β idx j * reassocFwd oc h w c j :=
   cifar_bn_render_beta_certified oc (h*w) ε γ β (reassocFwd oc h w v) (reassocFwd oc h w c) lr idx
 
+/-- The emitted `bnGammaSgd` and `bnBetaSgd` ops of one per-channel BN layer, fed its BN-output
+    cotangent `c` at the saved conv output `v`, are the certified SGD steps on `γ` and `β` — the
+    statements of `bnGamma_den` and `bnBeta_den` under `∀`. The per-example peer of
+    `EnetPoC.BnSgdPairTiedB`. -/
+def BnSgdPairTied {oc h w : Nat} (gN vN bN epsStr lrStr cotN : String) (ε : ℝ) (γ β : Vec oc)
+    (v c : Vec (oc*h*w)) (lr : ℝ) : Prop :=
+  (∀ idx : Fin oc,
+    den (SHlo.bnGammaSgd gN vN epsStr lrStr ε γ v lr (.operand cotN c)) idx
+      = γ idx - lr * ∑ j : Fin (oc*(h*w)),
+          pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (h*w) ε γ' β (reassocFwd oc h w v))
+               γ idx j * reassocFwd oc h w c j) ∧
+  (∀ idx : Fin oc,
+    den (SHlo.bnBetaSgd bN lrStr β lr (.operand cotN c)) idx
+      = β idx - lr * ∑ j : Fin (oc*(h*w)),
+          pdiv (fun β' : Vec oc => bnPerChannelFlat oc (h*w) ε γ β' (reassocFwd oc h w v))
+               β idx j * reassocFwd oc h w c j)
+
+theorem bnSgdPairTied_holds {oc h w : Nat} (gN vN bN epsStr lrStr cotN : String) (ε : ℝ)
+    (γ β : Vec oc) (v c : Vec (oc*h*w)) (lr : ℝ) :
+    BnSgdPairTied gN vN bN epsStr lrStr cotN ε γ β v c lr :=
+  ⟨bnGamma_den gN vN epsStr lrStr cotN ε γ β v c lr, bnBeta_den bN lrStr cotN ε γ β v c lr⟩
+
 end Proofs.CifarBnPoC

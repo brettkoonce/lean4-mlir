@@ -143,201 +143,65 @@ theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : N
       then (Back3.conv (c₁ := c1) (h₁ := 2*(2*(2*(2*h)))) (w₁ := 2*(2*(2*(2*w)))) W₂ Back3.cot).flatDenote cotC2 i else 0
     let cotC1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := bnPerChannelTensor3_grad_input c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ cc1 dyBn1
     -- conv₁ + bn₁
-    (∀ idx : Fin (c1*ic*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₁ x W₁ lr (.operand cotN cotC1)) idx
-          = Kernel4.flatten W₁ idx - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun v' : Vec (c1*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₁ x))
-                   (Kernel4.flatten W₁) idx jj * cotC1 jj)
-  ∧ (∀ o : Fin c1,
-        den (SHlo.convBiasSgd bN lrStr W₁ x b₁ lr (.operand cotN cotC1)) o
-          = b₁ o - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun b' : Vec c1 => Tensor3.flatten (conv2d W₁ b' x)) b₁ o jj * cotC1 jj)
-  ∧ (∀ idx : Fin c1,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₁ γ₁ cc1 lr (.operand cotN dyBn1)) idx
-          = γ₁ idx - lr * ∑ jj : Fin (c1*((2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))),
-              pdiv (fun γ' : Vec c1 => bnPerChannelFlat c1 ((2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) ε₁ γ' β₁ (reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) cc1))
-                   γ₁ idx jj * reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) dyBn1 jj)
-  ∧ (∀ idx : Fin c1,
-        den (SHlo.bnBetaSgd bN lrStr β₁ lr (.operand cotN dyBn1)) idx
-          = β₁ idx - lr * ∑ jj : Fin (c1*((2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))),
-              pdiv (fun β' : Vec c1 => bnPerChannelFlat c1 ((2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) ε₁ γ₁ β' (reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) cc1))
-                   β₁ idx jj * reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) dyBn1 jj)
+    ConvWSgdTied xN wN lrStr cotN b₁ x W₁ cotC1 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotC1 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr
   -- conv₂ + bn₂
-  ∧ (∀ idx : Fin (c1*c1*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₂ r1t W₂ lr (.operand cotN cotC2)) idx
-          = Kernel4.flatten W₂ idx - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun v' : Vec (c1*c1*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ r1t))
-                   (Kernel4.flatten W₂) idx jj * cotC2 jj)
-  ∧ (∀ o : Fin c1,
-        den (SHlo.convBiasSgd bN lrStr W₂ r1t b₂ lr (.operand cotN cotC2)) o
-          = b₂ o - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun b' : Vec c1 => Tensor3.flatten (conv2d W₂ b' r1t)) b₂ o jj * cotC2 jj)
-  ∧ (∀ idx : Fin c1,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₂ γ₂ cc2 lr (.operand cotN dyBn2)) idx
-          = γ₂ idx - lr * ∑ jj : Fin (c1*((2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))),
-              pdiv (fun γ' : Vec c1 => bnPerChannelFlat c1 ((2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) ε₂ γ' β₂ (reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) cc2))
-                   γ₂ idx jj * reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) dyBn2 jj)
-  ∧ (∀ idx : Fin c1,
-        den (SHlo.bnBetaSgd bN lrStr β₂ lr (.operand cotN dyBn2)) idx
-          = β₂ idx - lr * ∑ jj : Fin (c1*((2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))),
-              pdiv (fun β' : Vec c1 => bnPerChannelFlat c1 ((2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) ε₂ γ₂ β' (reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) cc2))
-                   β₂ idx jj * reassocFwd c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) dyBn2 jj)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₂ r1t W₂ cotC2 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₂ r1t b₂ cotC2 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr
   -- conv₃ + bn₃
-  ∧ (∀ idx : Fin (c2*c1*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₃ zp1t W₃ lr (.operand cotN cotC3)) idx
-          = Kernel4.flatten W₃ idx - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun v' : Vec (c2*c1*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₃ zp1t))
-                   (Kernel4.flatten W₃) idx jj * cotC3 jj)
-  ∧ (∀ o : Fin c2,
-        den (SHlo.convBiasSgd bN lrStr W₃ zp1t b₃ lr (.operand cotN cotC3)) o
-          = b₃ o - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun b' : Vec c2 => Tensor3.flatten (conv2d W₃ b' zp1t)) b₃ o jj * cotC3 jj)
-  ∧ (∀ idx : Fin c2,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₃ γ₃ cc3 lr (.operand cotN dyBn3)) idx
-          = γ₃ idx - lr * ∑ jj : Fin (c2*((2*(2*(2*h)))*(2*(2*(2*w))))),
-              pdiv (fun γ' : Vec c2 => bnPerChannelFlat c2 ((2*(2*(2*h)))*(2*(2*(2*w)))) ε₃ γ' β₃ (reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) cc3))
-                   γ₃ idx jj * reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) dyBn3 jj)
-  ∧ (∀ idx : Fin c2,
-        den (SHlo.bnBetaSgd bN lrStr β₃ lr (.operand cotN dyBn3)) idx
-          = β₃ idx - lr * ∑ jj : Fin (c2*((2*(2*(2*h)))*(2*(2*(2*w))))),
-              pdiv (fun β' : Vec c2 => bnPerChannelFlat c2 ((2*(2*(2*h)))*(2*(2*(2*w)))) ε₃ γ₃ β' (reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) cc3))
-                   β₃ idx jj * reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) dyBn3 jj)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₃ zp1t W₃ cotC3 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₃ zp1t b₃ cotC3 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr
   -- conv₄ + bn₄
-  ∧ (∀ idx : Fin (c2*c2*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₄ r3t W₄ lr (.operand cotN cotC4)) idx
-          = Kernel4.flatten W₄ idx - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun v' : Vec (c2*c2*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₄ r3t))
-                   (Kernel4.flatten W₄) idx jj * cotC4 jj)
-  ∧ (∀ o : Fin c2,
-        den (SHlo.convBiasSgd bN lrStr W₄ r3t b₄ lr (.operand cotN cotC4)) o
-          = b₄ o - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun b' : Vec c2 => Tensor3.flatten (conv2d W₄ b' r3t)) b₄ o jj * cotC4 jj)
-  ∧ (∀ idx : Fin c2,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₄ γ₄ cc4 lr (.operand cotN dyBn4)) idx
-          = γ₄ idx - lr * ∑ jj : Fin (c2*((2*(2*(2*h)))*(2*(2*(2*w))))),
-              pdiv (fun γ' : Vec c2 => bnPerChannelFlat c2 ((2*(2*(2*h)))*(2*(2*(2*w)))) ε₄ γ' β₄ (reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) cc4))
-                   γ₄ idx jj * reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) dyBn4 jj)
-  ∧ (∀ idx : Fin c2,
-        den (SHlo.bnBetaSgd bN lrStr β₄ lr (.operand cotN dyBn4)) idx
-          = β₄ idx - lr * ∑ jj : Fin (c2*((2*(2*(2*h)))*(2*(2*(2*w))))),
-              pdiv (fun β' : Vec c2 => bnPerChannelFlat c2 ((2*(2*(2*h)))*(2*(2*(2*w)))) ε₄ γ₄ β' (reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) cc4))
-                   β₄ idx jj * reassocFwd c2 (2*(2*(2*h))) (2*(2*(2*w))) dyBn4 jj)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₄ r3t W₄ cotC4 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₄ r3t b₄ cotC4 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr
   -- conv₅ + bn₅
-  ∧ (∀ idx : Fin (c3*c2*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₅ zp2t W₅ lr (.operand cotN cotC5)) idx
-          = Kernel4.flatten W₅ idx - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun v' : Vec (c3*c2*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₅ zp2t))
-                   (Kernel4.flatten W₅) idx jj * cotC5 jj)
-  ∧ (∀ o : Fin c3,
-        den (SHlo.convBiasSgd bN lrStr W₅ zp2t b₅ lr (.operand cotN cotC5)) o
-          = b₅ o - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun b' : Vec c3 => Tensor3.flatten (conv2d W₅ b' zp2t)) b₅ o jj * cotC5 jj)
-  ∧ (∀ idx : Fin c3,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₅ γ₅ cc5 lr (.operand cotN dyBn5)) idx
-          = γ₅ idx - lr * ∑ jj : Fin (c3*((2*(2*h))*(2*(2*w)))),
-              pdiv (fun γ' : Vec c3 => bnPerChannelFlat c3 ((2*(2*h))*(2*(2*w))) ε₅ γ' β₅ (reassocFwd c3 (2*(2*h)) (2*(2*w)) cc5))
-                   γ₅ idx jj * reassocFwd c3 (2*(2*h)) (2*(2*w)) dyBn5 jj)
-  ∧ (∀ idx : Fin c3,
-        den (SHlo.bnBetaSgd bN lrStr β₅ lr (.operand cotN dyBn5)) idx
-          = β₅ idx - lr * ∑ jj : Fin (c3*((2*(2*h))*(2*(2*w)))),
-              pdiv (fun β' : Vec c3 => bnPerChannelFlat c3 ((2*(2*h))*(2*(2*w))) ε₅ γ₅ β' (reassocFwd c3 (2*(2*h)) (2*(2*w)) cc5))
-                   β₅ idx jj * reassocFwd c3 (2*(2*h)) (2*(2*w)) dyBn5 jj)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₅ zp2t W₅ cotC5 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₅ zp2t b₅ cotC5 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr
   -- conv₆ + bn₆
-  ∧ (∀ idx : Fin (c3*c3*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₆ r5t W₆ lr (.operand cotN cotC6)) idx
-          = Kernel4.flatten W₆ idx - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun v' : Vec (c3*c3*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₆ r5t))
-                   (Kernel4.flatten W₆) idx jj * cotC6 jj)
-  ∧ (∀ o : Fin c3,
-        den (SHlo.convBiasSgd bN lrStr W₆ r5t b₆ lr (.operand cotN cotC6)) o
-          = b₆ o - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun b' : Vec c3 => Tensor3.flatten (conv2d W₆ b' r5t)) b₆ o jj * cotC6 jj)
-  ∧ (∀ idx : Fin c3,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₆ γ₆ cc6 lr (.operand cotN dyBn6)) idx
-          = γ₆ idx - lr * ∑ jj : Fin (c3*((2*(2*h))*(2*(2*w)))),
-              pdiv (fun γ' : Vec c3 => bnPerChannelFlat c3 ((2*(2*h))*(2*(2*w))) ε₆ γ' β₆ (reassocFwd c3 (2*(2*h)) (2*(2*w)) cc6))
-                   γ₆ idx jj * reassocFwd c3 (2*(2*h)) (2*(2*w)) dyBn6 jj)
-  ∧ (∀ idx : Fin c3,
-        den (SHlo.bnBetaSgd bN lrStr β₆ lr (.operand cotN dyBn6)) idx
-          = β₆ idx - lr * ∑ jj : Fin (c3*((2*(2*h))*(2*(2*w)))),
-              pdiv (fun β' : Vec c3 => bnPerChannelFlat c3 ((2*(2*h))*(2*(2*w))) ε₆ γ₆ β' (reassocFwd c3 (2*(2*h)) (2*(2*w)) cc6))
-                   β₆ idx jj * reassocFwd c3 (2*(2*h)) (2*(2*w)) dyBn6 jj)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₆ r5t W₆ cotC6 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₆ r5t b₆ cotC6 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr
   -- conv₇ + bn₇
-  ∧ (∀ idx : Fin (c4*c3*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₇ zp3t W₇ lr (.operand cotN cotC7)) idx
-          = Kernel4.flatten W₇ idx - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c4*c3*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₇ zp3t))
-                   (Kernel4.flatten W₇) idx jj * cotC7 jj)
-  ∧ (∀ o : Fin c4,
-        den (SHlo.convBiasSgd bN lrStr W₇ zp3t b₇ lr (.operand cotN cotC7)) o
-          = b₇ o - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c4 => Tensor3.flatten (conv2d W₇ b' zp3t)) b₇ o jj * cotC7 jj)
-  ∧ (∀ idx : Fin c4,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₇ γ₇ cc7 lr (.operand cotN dyBn7)) idx
-          = γ₇ idx - lr * ∑ jj : Fin (c4*((2*h)*(2*w))),
-              pdiv (fun γ' : Vec c4 => bnPerChannelFlat c4 ((2*h)*(2*w)) ε₇ γ' β₇ (reassocFwd c4 (2*h) (2*w) cc7))
-                   γ₇ idx jj * reassocFwd c4 (2*h) (2*w) dyBn7 jj)
-  ∧ (∀ idx : Fin c4,
-        den (SHlo.bnBetaSgd bN lrStr β₇ lr (.operand cotN dyBn7)) idx
-          = β₇ idx - lr * ∑ jj : Fin (c4*((2*h)*(2*w))),
-              pdiv (fun β' : Vec c4 => bnPerChannelFlat c4 ((2*h)*(2*w)) ε₇ γ₇ β' (reassocFwd c4 (2*h) (2*w) cc7))
-                   β₇ idx jj * reassocFwd c4 (2*h) (2*w) dyBn7 jj)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₇ zp3t W₇ cotC7 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₇ zp3t b₇ cotC7 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr
   -- conv₈ + bn₈
-  ∧ (∀ idx : Fin (c4*c4*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₈ r7t W₈ lr (.operand cotN cotC8)) idx
-          = Kernel4.flatten W₈ idx - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c4*c4*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ r7t))
-                   (Kernel4.flatten W₈) idx jj * cotC8 jj)
-  ∧ (∀ o : Fin c4,
-        den (SHlo.convBiasSgd bN lrStr W₈ r7t b₈ lr (.operand cotN cotC8)) o
-          = b₈ o - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c4 => Tensor3.flatten (conv2d W₈ b' r7t)) b₈ o jj * cotC8 jj)
-  ∧ (∀ idx : Fin c4,
-        den (SHlo.bnGammaSgd gN vN epsStr lrStr ε₈ γ₈ cc8 lr (.operand cotN dyBn8)) idx
-          = γ₈ idx - lr * ∑ jj : Fin (c4*((2*h)*(2*w))),
-              pdiv (fun γ' : Vec c4 => bnPerChannelFlat c4 ((2*h)*(2*w)) ε₈ γ' β₈ (reassocFwd c4 (2*h) (2*w) cc8))
-                   γ₈ idx jj * reassocFwd c4 (2*h) (2*w) dyBn8 jj)
-  ∧ (∀ idx : Fin c4,
-        den (SHlo.bnBetaSgd bN lrStr β₈ lr (.operand cotN dyBn8)) idx
-          = β₈ idx - lr * ∑ jj : Fin (c4*((2*h)*(2*w))),
-              pdiv (fun β' : Vec c4 => bnPerChannelFlat c4 ((2*h)*(2*w)) ε₈ γ₈ β' (reassocFwd c4 (2*h) (2*w) cc8))
-                   β₈ idx jj * reassocFwd c4 (2*h) (2*w) dyBn8 jj) := by
+  ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr
+  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr := by
   intro xv cc1 bn1o r1 r1t cc2 bn2o r2 r2t zp1 zp1t cc3 bn3o r3 r3t cc4 bn4o r4 r4t zp2 zp2t
         cc5 bn5o r5 r5t cc6 bn6o r6 r6t zp3 zp3t cc7 bn7o r7 r7t cc8 bn8o r8 r8t zp4 h9 ha g cpool4
         dyBn8 cotC8 dyBn7 cotC7 dyBn6 cotC6 dyBn5 cotC5 dyBn4 cotC4 dyBn3 cotC3 dyBn2 cotC2 dyBn1 cotC1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-          ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+          ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₁ x W₁ cotC1 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₁ x b₁ cotC1 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₂ r1t W₂ cotC2 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₂ r1t b₂ cotC2 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₃ zp1t W₃ cotC3 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₃ zp1t b₃ cotC3 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₄ r3t W₄ cotC4 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₄ r3t b₄ cotC4 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₅ zp2t W₅ cotC5 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₅ zp2t b₅ cotC5 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₆ r5t W₆ cotC6 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₆ r5t b₆ cotC6 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₇ zp3t W₇ cotC7 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₇ zp3t b₇ cotC7 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr
   · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₈ r7t W₈ cotC8 lr idx
   · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₈ r7t b₈ cotC8 lr o
-  · intro idx; exact CifarBnPoC.bnGamma_den gN vN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr idx
-  · intro idx; exact CifarBnPoC.bnBeta_den bN lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr idx
+  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr
 
 end Proofs.Cifar8BnPoC

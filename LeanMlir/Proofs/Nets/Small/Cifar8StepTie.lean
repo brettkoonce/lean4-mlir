@@ -136,85 +136,29 @@ theorem cifar8_convs_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     let cotC2 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := CifarPoC.cifarChainCotW2 W₃ r2t cc2 cotC3
     let cotC1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := cnnChainCotW1 W₂ cc1 cotC2
     -- conv₁
-    (∀ idx : Fin (c1*ic*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₁ x W₁ lr (.operand cotN cotC1)) idx
-          = Kernel4.flatten W₁ idx - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun v' : Vec (c1*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₁ x))
-                   (Kernel4.flatten W₁) idx jj * cotC1 jj)
-  ∧ (∀ o : Fin c1,
-        den (SHlo.convBiasSgd bN lrStr W₁ x b₁ lr (.operand cotN cotC1)) o
-          = b₁ o - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun b' : Vec c1 => Tensor3.flatten (conv2d W₁ b' x)) b₁ o jj * cotC1 jj)
-    -- conv₂
-  ∧ (∀ idx : Fin (c1*c1*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₂ r1t W₂ lr (.operand cotN cotC2)) idx
-          = Kernel4.flatten W₂ idx - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun v' : Vec (c1*c1*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ r1t))
-                   (Kernel4.flatten W₂) idx jj * cotC2 jj)
-  ∧ (∀ o : Fin c1,
-        den (SHlo.convBiasSgd bN lrStr W₂ r1t b₂ lr (.operand cotN cotC2)) o
-          = b₂ o - lr * ∑ jj : Fin (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))),
-              pdiv (fun b' : Vec c1 => Tensor3.flatten (conv2d W₂ b' r1t)) b₂ o jj * cotC2 jj)
-    -- conv₃
-  ∧ (∀ idx : Fin (c2*c1*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₃ zp1t W₃ lr (.operand cotN cotC3)) idx
-          = Kernel4.flatten W₃ idx - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun v' : Vec (c2*c1*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₃ zp1t))
-                   (Kernel4.flatten W₃) idx jj * cotC3 jj)
-  ∧ (∀ o : Fin c2,
-        den (SHlo.convBiasSgd bN lrStr W₃ zp1t b₃ lr (.operand cotN cotC3)) o
-          = b₃ o - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun b' : Vec c2 => Tensor3.flatten (conv2d W₃ b' zp1t)) b₃ o jj * cotC3 jj)
-    -- conv₄
-  ∧ (∀ idx : Fin (c2*c2*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₄ r3t W₄ lr (.operand cotN cotC4)) idx
-          = Kernel4.flatten W₄ idx - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun v' : Vec (c2*c2*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₄ r3t))
-                   (Kernel4.flatten W₄) idx jj * cotC4 jj)
-  ∧ (∀ o : Fin c2,
-        den (SHlo.convBiasSgd bN lrStr W₄ r3t b₄ lr (.operand cotN cotC4)) o
-          = b₄ o - lr * ∑ jj : Fin (c2*(2*(2*(2*h)))*(2*(2*(2*w)))),
-              pdiv (fun b' : Vec c2 => Tensor3.flatten (conv2d W₄ b' r3t)) b₄ o jj * cotC4 jj)
-    -- conv₅
-  ∧ (∀ idx : Fin (c3*c2*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₅ zp2t W₅ lr (.operand cotN cotC5)) idx
-          = Kernel4.flatten W₅ idx - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun v' : Vec (c3*c2*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₅ zp2t))
-                   (Kernel4.flatten W₅) idx jj * cotC5 jj)
-  ∧ (∀ o : Fin c3,
-        den (SHlo.convBiasSgd bN lrStr W₅ zp2t b₅ lr (.operand cotN cotC5)) o
-          = b₅ o - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun b' : Vec c3 => Tensor3.flatten (conv2d W₅ b' zp2t)) b₅ o jj * cotC5 jj)
-    -- conv₆
-  ∧ (∀ idx : Fin (c3*c3*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₆ r5t W₆ lr (.operand cotN cotC6)) idx
-          = Kernel4.flatten W₆ idx - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun v' : Vec (c3*c3*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₆ r5t))
-                   (Kernel4.flatten W₆) idx jj * cotC6 jj)
-  ∧ (∀ o : Fin c3,
-        den (SHlo.convBiasSgd bN lrStr W₆ r5t b₆ lr (.operand cotN cotC6)) o
-          = b₆ o - lr * ∑ jj : Fin (c3*(2*(2*h))*(2*(2*w))),
-              pdiv (fun b' : Vec c3 => Tensor3.flatten (conv2d W₆ b' r5t)) b₆ o jj * cotC6 jj)
-    -- conv₇
-  ∧ (∀ idx : Fin (c4*c3*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₇ zp3t W₇ lr (.operand cotN cotC7)) idx
-          = Kernel4.flatten W₇ idx - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c4*c3*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₇ zp3t))
-                   (Kernel4.flatten W₇) idx jj * cotC7 jj)
-  ∧ (∀ o : Fin c4,
-        den (SHlo.convBiasSgd bN lrStr W₇ zp3t b₇ lr (.operand cotN cotC7)) o
-          = b₇ o - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c4 => Tensor3.flatten (conv2d W₇ b' zp3t)) b₇ o jj * cotC7 jj)
-    -- conv₈
-  ∧ (∀ idx : Fin (c4*c4*kH*kW),
-        den (SHlo.convWeightSgd xN wN lrStr b₈ r7t W₈ lr (.operand cotN cotC8)) idx
-          = Kernel4.flatten W₈ idx - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun v' : Vec (c4*c4*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ r7t))
-                   (Kernel4.flatten W₈) idx jj * cotC8 jj)
-  ∧ (∀ o : Fin c4,
-        den (SHlo.convBiasSgd bN lrStr W₈ r7t b₈ lr (.operand cotN cotC8)) o
-          = b₈ o - lr * ∑ jj : Fin (c4*(2*h)*(2*w)),
-              pdiv (fun b' : Vec c4 => Tensor3.flatten (conv2d W₈ b' r7t)) b₈ o jj * cotC8 jj) := by
+    ConvWSgdTied xN wN lrStr cotN b₁ x W₁ cotC1 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotC1 lr
+  -- conv₂
+  ∧ ConvWSgdTied xN wN lrStr cotN b₂ r1t W₂ cotC2 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₂ r1t b₂ cotC2 lr
+  -- conv₃
+  ∧ ConvWSgdTied xN wN lrStr cotN b₃ zp1t W₃ cotC3 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₃ zp1t b₃ cotC3 lr
+  -- conv₄
+  ∧ ConvWSgdTied xN wN lrStr cotN b₄ r3t W₄ cotC4 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₄ r3t b₄ cotC4 lr
+  -- conv₅
+  ∧ ConvWSgdTied xN wN lrStr cotN b₅ zp2t W₅ cotC5 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₅ zp2t b₅ cotC5 lr
+  -- conv₆
+  ∧ ConvWSgdTied xN wN lrStr cotN b₆ r5t W₆ cotC6 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₆ r5t b₆ cotC6 lr
+  -- conv₇
+  ∧ ConvWSgdTied xN wN lrStr cotN b₇ zp3t W₇ cotC7 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₇ zp3t b₇ cotC7 lr
+  -- conv₈
+  ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
+  ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr := by
   intro xv cc1 r1 r1t cc2 r2 r2t zp1 zp1t cc3 r3 r3t cc4 r4 r4t zp2 zp2t cc5 r5 r5t cc6 r6 r6t zp3 zp3t
         cc7 r7 r7t cc8 r8 r8t zp4 h9 ha g cotC8 cotC7 cotC6 cotC5 cotC4 cotC3 cotC2 cotC1
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
