@@ -100,19 +100,6 @@ theorem fwdR_has_vjp_correct (v : Vec (1 * 112 * 112)) (dy : Vec 2) (i : Fin (1 
 -- § Generic (dim-free) block reductions at γ = 1/128
 -- ════════════════════════════════════════════════════════════════
 
-/-- A 1×1 channel-diagonal conv (`W o i = δ_oi`, `b = 0`) is the identity, any spatial dims
-    (the bias-carrying peer of `ResNet34LivePC.flatConv_diag_id`). -/
-theorem flatConv_diag_id_b {h w : Nat} (W : Kernel4 2 2 1 1) (b : Vec 2)
-    (hW : ∀ o i, W o i 0 0 = if o = i then 1 else 0) (hb : ∀ o, b o = 0) (v : Vec (2 * h * w)) :
-    flatConv (h := h) (w := w) W b v = v := by
-  have hc : conv2d W b (Tensor3.unflatten v) = Tensor3.unflatten v := by
-    funext o hi wi
-    rw [conv2d_1x1, hb]
-    simp only [hW, ite_mul, one_mul, zero_mul, zero_add]
-    rw [Finset.sum_ite_eq Finset.univ o (fun c => (Tensor3.unflatten v) c hi wi)]
-    simp [Finset.mem_univ]
-  simp only [flatConv, hc, Tensor3.flatten_unflatten]
-
 /-- The unit 1×1 depthwise conv (`W = 1`, `b = 0`) is the identity, any spatial dims. -/
 theorem depthwiseFlat_unit_id {h w : Nat} (W : DepthwiseKernel 2 1 1) (b : Vec 2)
     (hW : ∀ ch, W ch 0 0 = 1) (hb : ∀ ch, b ch = 0) (v : Vec (2 * h * w)) :
@@ -174,8 +161,8 @@ theorem fwdR_eq (v : Vec (1 * 112 * 112)) : fwdR v = fwdRS v := by
   show mobilenetv2Forward Ws bs 1 (1 / 128) 3 We₁ be₁ 1 (1 / 128) 3 Wd₁ bd₁ 1 (1 / 128) 3 Wp₁ bp₁ 1 (1 / 128) 3
       We₂ be₂ 1 (1 / 128) 3 Wd₂ bd₂ 1 (1 / 128) 3 Wp₂ bp₂ 1 (1 / 128) 3 Wh bh v = fwdRS v
   simp only [mobilenetv2Forward, Function.comp_apply, relu6_bnR,
-    flatConv_diag_id_b (h := 112) (w := 112) We₂ be₂ (fun o i => rfl) (fun _ => rfl),
-    flatConv_diag_id_b (h := 112) (w := 112) Wp₂ bp₂ (fun o i => rfl) (fun _ => rfl),
+    ResNet34LivePC.flatConv_diag_id (h := 112) (w := 112) We₂ be₂ (fun o i => rfl) (fun _ => rfl),
+    ResNet34LivePC.flatConv_diag_id (h := 112) (w := 112) Wp₂ bp₂ (fun o i => rfl) (fun _ => rfl),
     depthwiseFlat_unit_id Wd₂ bd₂ (fun _ => rfl) (fun _ => rfl),
     hb1, fwdRS]
 

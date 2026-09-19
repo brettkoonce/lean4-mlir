@@ -177,13 +177,13 @@ theorem bnForward_coord_inj {n : Nat} (ε β : ℝ) (hε : 0 < ε) (z : Vec n) (
 noncomputable def WsId2 : Kernel4 2 2 1 1 := fun o i _ _ => if o = i then 1 else 0
 
 /-- A channel-diagonal 1×1 conv (`δ_oi`, zero bias) is the identity (generic dims). -/
-theorem flatConv_diag_id {h w : Nat} (W : Kernel4 2 2 1 1)
-    (hW : ∀ o i, W o i 0 0 = if o = i then 1 else 0) (v : Vec (2 * h * w)) :
-    flatConv (h := h) (w := w) W Zb2 v = v := by
-  have hc : conv2d W Zb2 (Tensor3.unflatten v) = Tensor3.unflatten v := by
+theorem flatConv_diag_id {h w : Nat} (W : Kernel4 2 2 1 1) (b : Vec 2)
+    (hW : ∀ o i, W o i 0 0 = if o = i then 1 else 0) (hb : ∀ o, b o = 0) (v : Vec (2 * h * w)) :
+    flatConv (h := h) (w := w) W b v = v := by
+  have hc : conv2d W b (Tensor3.unflatten v) = Tensor3.unflatten v := by
     funext o hi wi
-    rw [conv2d_1x1]
-    simp only [Zb2, hW, ite_mul, one_mul, zero_mul, zero_add]
+    rw [conv2d_1x1, hb]
+    simp only [hW, ite_mul, one_mul, zero_mul, zero_add]
     rw [Finset.sum_ite_eq Finset.univ o (fun c => (Tensor3.unflatten v) c hi wi)]
     simp [Finset.mem_univ]
   simp only [flatConv, hc, Tensor3.flatten_unflatten]
@@ -194,7 +194,7 @@ theorem flatConvStride2_diag {h w : Nat} (W : Kernel4 2 2 1 1)
     flatConvStride2 W Zb2 v = decimateFlat 2 h w v := by
   unfold flatConvStride2
   simp only [Function.comp_apply]
-  rw [flatConv_diag_id (h := 2 * h) (w := 2 * w) W hW v]
+  rw [flatConv_diag_id (h := 2 * h) (w := 2 * w) W Zb2 hW (fun _ => rfl) v]
 
 /-- Positional (hence injective) 2-channel input `X i = i` at `2s × 2s`. -/
 noncomputable def Xs (s : Nat) : Vec (2 * (2 * s) * (2 * s)) := fun i => (i.val : ℝ)
@@ -465,9 +465,6 @@ theorem liveFwd2_X2_asym : liveFwd2 X2 0 < liveFwd2 X2 1 := by
 
 -- ── `liveFwd2 0` collapses to a constant (channel-symmetric) ──
 
-theorem relu_const_pos {n : Nat} (c : ℝ) (hc : 0 < c) : relu n (fun _ => c) = fun _ => c := by
-  funext k; simp only [relu]; rw [ite_eq_left hc]
-
 theorem decimateFlat_const {h w : Nat} (c : ℝ) :
     decimateFlat 2 h w (fun _ => c) = fun _ => c := by funext k; rfl
 
@@ -482,7 +479,7 @@ theorem stemβ_zero (s : Nat) (β : ℝ) (hs : 0 < 2 * s * s) (hβ : 0 < β) :
     (fun _ => 0) = _
   simp only [Function.comp_apply]
   rw [flatConvStride2_diag WsId2 (fun o i => rfl) (fun _ => 0), decimateFlat_const,
-      bnForward_const_eq hs, relu_const_pos β hβ]
+      bnForward_const_eq hs, relu_const_pos _ β hβ]
 
 theorem stem2_zero : stem2 (fun _ => (0 : ℝ)) = fun _ => (30 : ℝ) :=
   stemβ_zero 16 30 (by norm_num) (by norm_num)
@@ -504,7 +501,7 @@ theorem liveDownβ_const (h w : Nat) (βp : ℝ) (hhw : 0 < 2 * h * w) (hβ1 : 0
       ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
         (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) (fun _ => c)
         = fun _ => βp + 1 from ?_]
-  · exact relu_const_pos (βp + 1) hβ1
+  · exact relu_const_pos _ (βp + 1) hβ1
   · funext k
     simp only [residualProj, biPath, hproj, liveDownPC_body_const h w hhw]
 
