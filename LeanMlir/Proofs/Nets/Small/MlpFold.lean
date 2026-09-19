@@ -189,6 +189,15 @@ theorem mlp_train_step_tied_certified (lrStr aN dyN cN : String) (label : Fin d�
                 * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote
                     (fun k => softmax d₃ (mnistLinear W₂ b₂
                       (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) k)
+  ∧ (∀ i, den (SHlo.biasSgd "%b1" lrStr b₁ lr
+              (.operand cN ((mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote
+                  (fun k => softmax d₃ (mnistLinear W₂ b₂
+                    (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k)))) i
+          = b₁ i - lr * ∑ j : Fin d₂,
+              pdiv (fun b' : Vec d₂ => dense W₁ b' (relu d₁ (dense W₀ b₀ x))) b₁ i j
+                * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote
+                    (fun k => softmax d₃ (mnistLinear W₂ b₂
+                      (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) j)
   ∧ (∀ i j, den (SHlo.weightSgd "%x" "%W0" lrStr x W₀ lr
               (.operand cN ((mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote
                   (fun k => softmax d₃ (mnistLinear W₂ b₂
@@ -199,8 +208,17 @@ theorem mlp_train_step_tied_certified (lrStr aN dyN cN : String) (label : Fin d�
                    (Mat.flatten W₀) (finProdFinEquiv (i, j)) k
                 * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote
                     (fun k => softmax d₃ (mnistLinear W₂ b₂
-                      (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) k) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+                      (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) k)
+  ∧ (∀ i, den (SHlo.biasSgd "%b0" lrStr b₀ lr
+              (.operand cN ((mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote
+                  (fun k => softmax d₃ (mnistLinear W₂ b₂
+                    (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k)))) i
+          = b₀ i - lr * ∑ j : Fin d₁,
+              pdiv (fun b' : Vec d₁ => dense W₀ b' x) b₀ i j
+                * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote
+                    (fun k => softmax d₃ (mnistLinear W₂ b₂
+                      (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) j) := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro i j; exact mlp_W2_tied_totalloss W₀ b₀ W₁ b₁ W₂ b₂ x lr aN lrStr dyN label i j
   · intro i
     exact b2_den_certified W₀ b₀ W₁ b₁ W₂ b₂ x
@@ -210,9 +228,17 @@ theorem mlp_train_step_tied_certified (lrStr aN dyN cN : String) (label : Fin d�
     exact W1_den_certified W₀ b₀ W₁ b₁ W₂ x
       (fun k => softmax d₃ (mnistLinear W₂ b₂
         (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) lr aN lrStr cN i j
+  · intro i
+    exact b1_den_certified W₀ b₀ W₁ b₁ W₂ x
+      (fun k => softmax d₃ (mnistLinear W₂ b₂
+        (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) lr lrStr cN i
   · intro i j
     exact W0_den_certified W₀ b₀ W₁ b₁ W₂ x
       (fun k => softmax d₃ (mnistLinear W₂ b₂
         (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) lr lrStr cN i j
+  · intro i
+    exact b0_den_certified W₀ b₀ W₁ b₁ W₂ x
+      (fun k => softmax d₃ (mnistLinear W₂ b₂
+        (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) lr lrStr cN i
 
 end Proofs.MlpPoC
