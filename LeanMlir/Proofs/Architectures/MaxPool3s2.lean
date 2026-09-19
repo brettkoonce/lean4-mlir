@@ -181,8 +181,10 @@ def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
     x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ≠
       x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)
 
-/-- ⭐ **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the whole-net live
-    and seal witnesses, the peer of `MnistCNN`'s `maxPool2Smooth_of_injective`. One injectivity
+/-- ⭐ **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the 3×3/s2 stem
+    pool's smoothness hypothesis (`maxPool3s2Flat_has_vjp_at`, the R34 back ties), the peer of
+    `MnistCNN`'s `maxPool2Smooth_of_injective`. No whole-net witness discharges it yet: the R34
+    Live/Seal witnesses pool 2×2 and use the `MnistCNN` lemma. One injectivity
     argument in place of `36·c·h·w` per-window `decide`s (9 offsets pairwise, against 2×2's 6), which
     at ResNet-34's stem is why case-bashing is not an option.
 

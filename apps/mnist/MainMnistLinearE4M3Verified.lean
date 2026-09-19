@@ -4,7 +4,7 @@ import LeanMlir.VerifiedNets
 
 The low-precision sibling of `MainMnistLinearVerified`. Trains the Chapter-2 linear
 classifier on the *same* proof-rendered StableHLO (`verified_mlir/linear_train_step.mlir`
-= `Proofs.StableHLO.linearTrainStepModuleV`, audited 3-axiom-clean), but each step
+= `Proofs.StableHLO.linTrainStepFaithfulV`, audited 3-axiom-clean), but each step
 projects the weights (per-output-column) and activations (per-tensor) onto the **E4M3
 fp8 grid** before the matmul, accumulates in fp32 inside the verified kernel, and keeps
 **fp32 master weights** (the `u_leaf = E4M3`, `u_acc = fp32` mixed model).

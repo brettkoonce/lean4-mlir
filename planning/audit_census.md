@@ -3,67 +3,118 @@
 Passes 1 and 2 of the next-session block in `planning/mathlib_reuse_audit.md`. The survey sections
 below are as written on `de4db64b`; the Status section records what has landed since.
 
-## Status (2026-09-19, end of session): the MLP fix and census cuts 2a–2c landed
+## Status (2026-09-19, end of session 2): census cuts 2a–2e and the docstring gate landed, pushed
 
-The user approved: fix the MLP tie, cut some census groups, then the gate change, then keep this doc
-and the tooling. The session stopped after the third cut. Each commit passed the full gate
+Everything below is on `origin/main` at `281b6beb`. Each commit passed the full gate
 (`scripts/audit_census/gate.sh`: Certs, default build, the LeanMlir lib, AuditAxioms verdicts,
 docstring-checkrefs, both coverage scripts, `verified_mlir/` byte-identical):
 
 | commit | what | files | lines | pins |
 |---|---|---:|---:|---:|
 | `ca9ea890` | finding 1 fixed: `MlpPoC.mlp_train_step_tied_certified` states all six parameter ops (the b₁/b₀ conjuncts, from `MlpPoC.b{1,0}_den_certified`) | 1 | +28 −2 | 0 |
-| `3722300c` | ViT/ConvNeXt: VC.A, VC.B, VC.C, VC.E, VC.G, VC.F1. `ConvNeXtClose.lean` emptied and deleted | 25 | +116 −1,397 | 45 |
-| `7f9abb5e` | ResNet: R.B1, R.C, R.D, R.E, R.F, plus what they orphaned: the dead weight wiring (`Basic`/`BottleneckSpec`/`Params`, both stage-entry tables and their `#guard`s), the `ResNet34Concrete` defs, `flatConvStride2XlaF(_close)`. `ResNet50BackNet.lean` deleted. `formalization.yaml:354` re-pointed | 21 | +89 −1,152 | 24 |
-| `333add66` | MobileNet/EfficientNet: M.1, M.3–M.7, B.6, M.10. `MobileNetV4FoldB.lean` and `EfficientNetBackCertifiedTie.lean` deleted (MNv4's op-kind table moved into `MobileNetV4StepTieB`). `formalization.yaml:227` re-pointed | 41 | +169 −2,829 | 69 |
+| `3722300c` | 2a, ViT/ConvNeXt: VC.A, VC.B, VC.C, VC.E, VC.G, VC.F1. `ConvNeXtClose.lean` emptied and deleted | 25 | +116 −1,397 | 45 |
+| `7f9abb5e` | 2b, ResNet: R.B1, R.C, R.D, R.E, R.F, plus the dead weight wiring, the `ResNet34Concrete` defs, `flatConvStride2XlaF(_close)`. `ResNet50BackNet.lean` deleted | 21 | +89 −1,152 | 24 |
+| `333add66` | 2c, MobileNet/EfficientNet: M.1, M.3–M.7, B.6, M.10. `MobileNetV4FoldB.lean` and `EfficientNetBackCertifiedTie.lean` deleted | 41 | +169 −2,829 | 69 |
+| `458ba0f2` | 2c follow-up: the three `mnv2_render_*_xla_certified` pins, the `MobileNetV2Concrete` defs, 22 emptied AuditAxioms headers | 6 | +35 −147 | 3 |
+| `4220ac74` | 2d, small nets: S.1 (the `Micro`/`TwoChan`/`Mini`/`Spatial` namespaces), S.2, S.4, S.5, S.7, S.9 | 13 | +50 −1,176 | 35 |
+| `96e7d3b0` | 2e, generic: A.1 (5 of 20), A.3, A.4, A.6, A.7, B.4, B.5, B.7, B.8, X.1. `ConvLossFold.lean`, `AdamRender.lean` deleted | 25 | +55 −1,398 | 37 |
+| `281b6beb` | the docstring gate (Pass 2): resolver + markers `Render Live Tied Back Fwd`, stale citations fixed | 38 | +142 −81 | 0 |
 
-In total: 77 files, +396 −5,374; AuditAxioms 1,643 → 1,505 verdicts. Group sizes differ from the survey tables because the cuts
-also re-pointed prose and deleted what the fixed point orphaned.
+The cuts total +542 −8,101 lines. AuditAxioms went from 1,643 to 1,430 verdicts, 213 pins
+fewer. Group sizes differ from the survey tables because the cuts also re-pointed prose and
+deleted what the fixed point orphaned.
 
-**Next session, in order:**
-1. ✅ **2c follow-up.** Cut the three `mnv2_render_*_xla_certified` pins and the eleven
-   `MobileNetV2Concrete` defs. `MobileNetV2Close`'s header now points at the batched certificates.
-   The `MobileNetV2Concrete` mentions in `MobileNetV2.lean`, `JacobianSeal.lean` and
-   Proofs/README.md now point at `Mnv2Live`. `tests/AuditAxioms.lean` also lost the 22 section
-   comments that cuts 2a–2c had emptied. Kept:
-   `flatConvStride2Xla_weight_grad_has_vjp_correct`, generic API that the fixed point would take.
-   Still a candidate: `mnv2_render_depthwiseW_certified`, audit-only since 2a and the only user of
-   the pinned `mnv2_depthwise_weight_grad_bridge`.
-2. ✅ **2d, small nets:** S.1, S.2, S.4, S.5, S.7 and S.9, together 35 pins and 92 declarations.
-   S.1 took the whole `Micro` / `TwoChan` / `Mini` / `Spatial` namespaces (306 lines), and
-   `CnnConcrete` built without the shared `_proof_1`. `MnistCNN`'s header and Proofs/README.md
-   now name `TrainedCnn` as the MNIST-CNN witness. `JacobianSeal` keeps only the `HasVJPAt`
-   seal, and LinearFold cites `fwdGraph_faithful`.
-3. ✅ **2e, generic:** A.1 (5 of 20 pins), A.3, A.4, A.6, A.7, B.4, B.5, B.7, B.8 and X.1.
-   `ConvLossFold.lean` and `AdamRender.lean` are deleted. X.1 also took the dead
-   `*Rep_has_vjp` defs, `mobilenetv2FwdGraphFull(_faithful)`, `denoteMobilenet` and
-   `mobilenetv2Forward_full`. `denoteMobilenet` shares its matcher with the other `denote*`
-   functions, so the fixed point never reached it. B.4's wording changed in
-   `scripts/lipschitz_cert_pair_sdp_full.py` and both generated SDPFull files together.
-   **A.1b, held (15 pins):** `IRPrint.lean` and `check_ir_codegen.py`, the execution oracle the
-   book describes, name these as the proofs behind what they print. No StableHLO twin can stand
-   in for them. They are `dense_at_bridge`, `relu_at_bridge`, `mlp_fwd_bridge`,
-   `mlp_fwd_preact1`, `se_back_bridge`, `softmax_back_bridge`, `gelu_back_bridge`,
-   `swish_back_bridge`, `sigmoid_back_bridge`, `denote_subst3`, `maxpool3_node_bridge`,
-   `conv3_node_bridge_1to2`, `conv_compose3` (only user of `denote_subst3`),
-   `maxpool_flatten_bridge` and `conv_flatten_bridge_1to2`. They go with finding 5: decide the
-   IR tier's future, then cut or keep them as one group.
-4. ✅ **Item 3, the gate change** (Pass 2 below). `tests/DocstringCheckRefs.lean` now resolves
-   `private` declarations, `File.decl`, module and namespace names, and a scanned file's basename.
-   It also carries the markers `Render`, `Live`, `Tied`, `Back` and `Fwd`: 2,303 citations are
-   checked, up from 1,314. Every stale row below is fixed except two that were not stale:
-   `convDownWGrad`/`patchifyWGrad` are private defs of `tests/TestConvNeXtStrided.lean`.
-   History mentions of deleted modules now cite the file (`MobileNetV2Render.lean`), which the
-   gate skips. The label of a deleted test is plain text (RenderCifar8Sgd02). The baseline lost
-   its two now-uncited entries (`convWGrad_faithful`, `kernel_faithfulness_probe`) and gained 9:
-   - out-of-environment declarations: four in `IRPrint.lean`, one in `tests/TestSDPA.lean`;
-   - `GemmFwdRest`, a MIOpen solver;
-   - `fBack`/`gateBack`, binders;
-   - `convStridedXlaBackBatched`, cited as absent.
+**Notes on what landed:**
+- **2c follow-up.** Kept `flatConvStride2Xla_weight_grad_has_vjp_correct`, generic API the fixed
+  point would have taken. Still a candidate: `mnv2_render_depthwiseW_certified`. It has been
+  audit-only since 2a and is the only user of the pinned `mnv2_depthwise_weight_grad_bridge`.
+- **2d.** `CnnConcrete` built fine without the shared `_proof_1`. `MnistCNN`'s header and
+  Proofs/README.md now name `TrainedCnn` as the MNIST-CNN witness. `JacobianSeal` keeps only the
+  `HasVJPAt` seal.
+- **2e.** X.1 also took the dead `*Rep_has_vjp` defs, `mobilenetv2FwdGraphFull(_faithful)`,
+  `denoteMobilenet` and `mobilenetv2Forward_full`. `denoteMobilenet` shares its matcher with the
+  other `denote*` functions, so the fixed point never reached it. B.4's wording was changed in
+  `scripts/lipschitz_cert_pair_sdp_full.py` and in both generated SDPFull files, together.
+- **A.1b, held (15 pins).** `IRPrint.lean` and `check_ir_codegen.py`, the execution oracle the
+  book describes, name these as the proofs behind what they print. No StableHLO twin can stand
+  in for them. They are:
+  - `dense_at_bridge`, `relu_at_bridge`, `mlp_fwd_bridge`, `mlp_fwd_preact1`;
+  - `se_back_bridge`, `softmax_back_bridge`, `gelu_back_bridge`, `swish_back_bridge`,
+    `sigmoid_back_bridge`;
+  - `denote_subst3`, `maxpool3_node_bridge`, `conv3_node_bridge_1to2`, and `conv_compose3`
+    (the only user of `denote_subst3`);
+  - `maxpool_flatten_bridge`, `conv_flatten_bridge_1to2`.
+- **The docstring gate.** `tests/DocstringCheckRefs.lean` now resolves `private` declarations,
+  `File.decl`, module and namespace names, and a scanned file's basename. With the new markers it
+  checks 2,303 citations, up from 1,314.
+  - Every stale row of the Pass 2 table is fixed, except two that were not stale:
+    `convDownWGrad`/`patchifyWGrad` are private defs of `tests/TestConvNeXtStrided.lean`.
+  - History mentions of deleted modules now cite the file (`MobileNetV2Render.lean`). The label of
+    a deleted test is plain text (RenderCifar8Sgd02).
+  - The baseline lost two uncited entries and gained nine, each with a reason: five real
+    declarations outside the environment (`IRPrint.lean`, `tests/TestSDPA.lean`),
+    `GemmFwdRest` (a MIOpen solver), two binders, and `convStridedXlaBackBatched` (cited as
+    absent).
+- **One survey claim was wrong.** It said `mobilenetv2ForwardPaper_eq_chain` was stale. It is
+  declared, at `MobileNetV2FullVJP.lean:542`.
 
-   The "new stale citation" `mobilenetv2ForwardPaper_eq_chain` was wrong: it is declared at
-   `MobileNetV2FullVJP.lean:542`.
-5. The decision groups and the correctness findings 2–11.
+## Next session: correctness findings 2–11 and the decision groups
+
+Checked against `281b6beb`. The full text of each finding is in Pass 1 below.
+
+**Correctness findings.**
+
+| # | Finding | State at `281b6beb` | Fix |
+|---|---|---|---|
+| 2 | The r34 and MNv2 spec rungs (`resnet34Verified_fwd_faithful`, `mobilenetv2Verified_fwd_faithful`) are stated at per-example forwards no artifact renders | open | port batched rungs; template `efficientnetVerified_fwd_faithful`. Unblocks R.A and M.2 |
+| 3 | BN node seam: the RenderB files emit `.bnBatchBack` (44 sites) and never `.bnBatchLABack`, but the T3 ties state the BN cotangent at `.bnBatchLABack`'s `den` | open | prove the two `den`s agree at the index the renders use (one lemma), or restate the ties at the emitted node |
+| 4 | Stem-pool seam: `maxPool3s2BackFlat` (`ResNet34StepTieB`) vs `maxPool3s2FlatBack` (whole-back tie) | open | one equality lemma |
+| 5 | The book cites the wrong theorem in five places (4295; 6242–6249 and 6748; 391; 16279; 16306), and the IRPrint passages overclaim "by construction" | open | book edits, one chapter per commit; the IRPrint wording goes with the A.1b decision |
+| 6 | `vit_net_tiedGB` / `cnx_net_tiedGB` certify every shipped AdamW artifact but are cited nowhere outside Lean | open | decide where to cite: the ImageNet sections, the certs.yml table, the yaml |
+| 7 | certs.yml / READMEs / yaml | certs.yml and the READMEs fixed in the sweep: the r34 row cites `ResNet34PoCB.convStrided{W,B}GradB_den`, the two even-kernel clauses are gone, Certificates/README names its eight hand-written files | still open: yaml :227, :98–99, :196–199, :204/:377, :370 (+ certs-heavy.yml:27) |
+| 8 | Tests and roots on retired artifacts | `ConvLossFold` deleted in 2e; the regen-script line dropped in the sweep | still open: `tests/TestResnet34Train.lean` itself (its artifact is gone; nothing runs it now) and `TestResnet34TrainPC`, both with R.A; `ResNet50BlocksCertified` is an unimported lakefile root |
+| 9 | `mathlib_reuse_audit.md` calls `vit_net_tied_certified` the 2-block representative | fixed in the sweep | — |
+| 10 | Names and docstrings claiming more than they state | 2 of 7 resolved by cuts; the other 5 fixed in the sweep (`smooth_cp_mlpT_demo` through its generator; `linearTrainStepModuleV` → `linTrainStepFaithfulV` at six sites) | — |
+| 11 | `StableHLO.roundtrip` pinned twice | fixed in the sweep (1,429 pins) | — |
+
+**Decision groups.** The recommendation column is from the end of session 2; the user has not
+ruled on any of them yet.
+
+| Group | Size | The decision | Recommendation |
+|---|---:|---|---|
+| R.A per-example r34 tier | 393 / 6 | holds the only r34 spec→math tie | cut after finding 2 |
+| M.2 per-example MNv2 paper tier | 276 / 4 | same as R.A, and the book cites `mobilenetv2_full_has_vjp_at` | cut after finding 2, together with finding 5's ch 6/7 fix |
+| S.3 dense-head restatements | now 10 pins | the MLP pair left the group once `ca9ea890` used it; certs.yml's per-op column cites `CnnPoC.db5_den` and `CifarPoC.db7_den` | cut; re-point the two certs.yml cells |
+| S.6 MLP layer-bridge restatements | 106 / 6 | reverses `18c31142`; part of the IR tier | keep; decide with A.1b |
+| S.8 `MlpCanonical` aliases | 31 / 8 | an audit surface by design (fixed point 1,510 / 35) | keep; fix its header (finding 10) |
+| B.1 FloatClose demos | 158 / 7 | reverses the earlier float review's "every `floatClose_*` stays"; the whole-net consumers were deleted 2026-09-08 | cut (the float-budget work closed 2026-09-05) |
+| B.1b FloatClose op instances | 127 / 4 | yaml 4d cites them collectively | keep |
+| B.2 Lipschitz demo ladder (generated) | 75 / 9 | loses the Frobenius → Schatten-4 → Schatten-8 comparison; generator change | keep |
+| B.3 smoothing demos + Hoeffding tier | 116 / 8 | ~1,900 kernel panels of CI | cut, except keep `smoothing_mc_certified` |
+| B.9 scorecard bookkeeping (generated) | 22 / 4 | `scorecard_counts` calls itself legacy; generator change | cut |
+| X.3 `.correct` projections | 28 / 4 | a repo-wide convention, everywhere or nowhere | keep |
+| A.1b IR bridges | 15 pins | the book's IR tier and `check_ir_codegen.py` | keep the IR tier; fix IRPrint's "by construction" |
+
+**Suggested order.**
+1. One sweep commit: findings 7 (without the yaml), 8's regen-script line, 9, 10 and 11. Then
+   the yaml fixes as their own commit, following the yaml style rules.
+2. Finding 5 in the book, one chapter per commit.
+3. The proof work: 4, then 3, then 2. After that, R.A and M.2 are ordinary cuts.
+4. The decision-group cuts the user approves, one commit per family.
+
+**Also found, not in any group: unpinned dead code.** `size.py` never counts a declaration with
+no users at all. There are about 25 in MobileNet/EfficientNet, dead before the census started:
+- `sigmoidScalarDeriv_eq`, `sigmoid_has_vjp_correct`, `mbconvResidual_has_vjp_at`;
+- the four `enet*Layer` defs;
+- `mnv4Family*`, `mnv4Stage14`, `mnv4BlockLadder`, `mnv4*DWSlot_*`, `mnv4UibSkipBlockOfKs`;
+- MobileNetV2.lean's strided infrastructure: `invresBodyStrided` and its lemmas,
+  `convBnRelu6Strided_differentiableAt`, `dwBnRelu6Strided_*`. The last user of
+  `invresBodyStrided` went with `mobilenetv2Forward_full` in 2e.
+- `Mnv2Live.bn1_devSum_scale`, `Mnv2Live.invresBody₂_eq`, `Mnv2Live.fwdFull_differentiable`,
+  `Mnv2RealSeal.fwdR_has_vjp_correct`.
+
+A sweep needs a query for "unpinned, no env users, no token users", excluding auto-generated
+`recOn`/`casesOn`/`inst*`. The earlier item-1 query did this per directory.
 
 **The per-family recipe that worked** (all in `scripts/audit_census/`):
 1. **Census.** Full `lake build Certs` first (declaration ranges come from the oleans), then
@@ -92,6 +143,20 @@ also re-pointed prose and deleted what the fixed point orphaned.
 - `scripts/vjp_graph_sweep.py`'s ratchet was already failing at `HEAD` (18 batched holes against a
   ledger of `{efficientnetForwardB}`), and 2c removed `efficientnetForwardB` itself. The script is
   not in CI; the ledger needs re-deriving, not tuning.
+- `retire.py` strips a `set_option … in` above a cut, but not an `open … in`. A dangling one at
+  the end of SpecVJP broke the build ("unexpected end of input"). Grep for them after `--apply`.
+- Lean shares `match_N` / `_proof_N` auxiliaries across declarations, so the environment graph
+  shows false users: `CnnConcrete` → `Micro`, and every `denote*` → `denoteMobilenet`. Check the
+  real users by hand before believing a declaration is live.
+- `size.py` cuts seeds regardless of their users. Check a seed's users outside the cut set before
+  applying.
+- `gate.sh` does not build CertsHeavy. After touching IntervalBound(Conv) or `Certificates/`,
+  build the direct importers (`IbpConvScorecardNet`).
+- `emptysec.py` only scans `LeanMlir/`, and silently checks nothing when run outside the repo
+  root. Empty section comments in `tests/AuditAxioms.lean` need their own pass: a `-- ` line
+  that sat directly above a `#print` line before the cut and no longer does.
+- A census run's line ranges are stale after any edit. A second cut in the same session means a
+  rebuild and a fresh `run.sh` first; otherwise remove it by hand, as `denoteMobilenet` was.
 
 ## Pass 1: pinned declarations with no consumer but the audit
 

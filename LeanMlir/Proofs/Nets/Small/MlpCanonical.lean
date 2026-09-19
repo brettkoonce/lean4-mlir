@@ -12,8 +12,10 @@ This file makes the canonical claim a CHECKABLE LEAN SURFACE: the generic MLP pr
 chain (whole-net VJP, float-gradient closeness, float-SGD descent, the emitted-train-step
 tie) instantiated at the literal canonical dims.
 Each declaration below IS the corresponding generic theorem at `(784, 512, 512, 10)` —
-`#check` shows the specialized statement; the 3-axiom audit covers them all. The
-spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerified_has_vjp*`
+`#check` shows the specialized statement; the 3-axiom audit covers them all. Nothing else
+in Lean consumes them: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)
+is this file's only importer, by design.
+The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerified_has_vjp*`
 (stated over `mlpVerified.layers` itself; that file lives outside the Mathlib-only seam).
 
 The OTHER MNIST proof population — the trained-weight certificate instances

@@ -337,7 +337,10 @@ theorem smoothing_cp_certified_mlpT {σ : ℝ} (hσ : 0 < σ)
 /-- The deployed-protocol demo: at the scorecard's `N = 10112`, `α = 1/1000`,
     a count of `10084` certifies radius `σ·Φ⁻¹(0.9952)` for the smoothed
     `mlpT` — the per-image scorecard shape with NO abstract-classifier
-    hypotheses left (the tail check is one kernel evaluation). -/
+    hypotheses left (the tail check is one kernel evaluation). The count is
+    `SmoothingCPScorecard.lean`'s MNIST-MLP image-1 entry, from a 784-dim driver
+    run; no Monte-Carlo count has been taken on `mlpT` itself, so the
+    hypothesis is the protocol's, not a measurement of this net. -/
 theorem smooth_cp_mlpT_demo {σ : ℝ} (hσ : 0 < σ)
     (x : EuclideanSpace ℝ (Fin 49)) (y : Fin 10) :
     1 - 1/(1000:ℝ)

@@ -5,7 +5,7 @@
 # CI's ubuntu runner can't, so this is local, not in proofs.yml).
 #
 #   (a) drift: the committed verified_mlir/linear_*.mlir == the proven renderer
-#       (linearTrainStepModuleV / linearFwdModuleV in StableHLO.lean), and
+#       (linTrainStepFaithfulV / linearFwdModuleV in StableHLO.lean), and
 #   (b) validity: those bytes iree-compile cleanly for the target backend.
 #
 # (a)+(b) + the LinearFold `den = certified` capstones = the chain

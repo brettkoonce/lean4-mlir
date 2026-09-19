@@ -188,11 +188,13 @@ theorem linearVerified_lossCot_isCEgrad (W : Mat 784 10) (b : Vec 10) (x : Vec 7
 
 /-! ## Rung E (MLP): the spec ↔ the generated MLIR — both forward *and* backward
 
-The MLP has faithfulness for the whole forward graph (`mlpFwdGraph_faithful`) AND the whole
-backward input-VJP graph (`mlpBackGraph_faithful`). Composed with `denoteMLP = mlpForward`
-and `mlpVerified_has_vjp_at = mlp_has_vjp_at`, both halves of the generated train step are
-tied to the spec: the rendered forward computes the spec's forward, and the rendered
-backward computes the spec's VJP backward (at a smooth input). -/
+The MLP has faithfulness for the whole forward graph (`mlpFwdGraph_faithful`, the graph
+`mlp_fwd.mlir` prints) AND for a whole backward input-VJP graph (`mlpBackGraph_faithful`).
+Composed with `denoteMLP = mlpForward` and `mlpVerified_has_vjp_at = mlp_has_vjp_at`, both
+denote the spec: the rendered forward computes the spec's forward, and `mlpBackGraph`
+computes the spec's VJP backward (at a smooth input). `mlpBackGraph` is a spec-level graph
+no committed artifact prints: `mlp_train_step.mlir` is `MlpRender.lean`'s
+`mlpTrainStepFaithfulV`, whose parameter ops `MlpFold` ties to the certified step. -/
 
 open Proofs.StableHLO in
 /-- **Generated MLP forward MLIR ↔ spec.** The forward graph (→ `mlp_fwd.mlir`) denotes
@@ -204,9 +206,9 @@ theorem mlpVerified_fwd_faithful (W₀ : Mat 784 512) (b₀ : Vec 512)
   exact mlpFwdGraph_faithful W₀ b₀ W₁ b₁ W₂ b₂ x
 
 open Proofs.StableHLO in
-/-- **Generated MLP backward MLIR ↔ spec.** The backward input-VJP graph (in
-    `mlp_train_step.mlir`) denotes the spec's VJP backward (`mlpVerified_has_vjp_at`), at a
-    smooth input (the two ReLU pre-activations avoid zero). -/
+/-- **MLP backward graph ↔ spec.** `mlpBackGraph`, the input-VJP graph (spec-level; no
+    committed artifact prints it, see the section header), denotes the spec's VJP backward
+    (`mlpVerified_has_vjp_at`), at a smooth input (the two ReLU pre-activations avoid zero). -/
 theorem mlpVerified_back_faithful (W₀ : Mat 784 512) (b₀ : Vec 512)
     (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) (x : Vec 784)
     (h0 : ∀ k, dense W₀ b₀ x k ≠ 0)

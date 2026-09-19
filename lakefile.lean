@@ -403,7 +403,7 @@ private def lowererLink : Array String := #["-ldl"]
 -- ─── Tier 1 — `lake run mnist`: MNIST linear / MLP / CNN on the verified renders (Chapters 1–3) ───
 
 -- Trains MNIST-linear on the VERIFIED-rendered StableHLO
--- (`verified_mlir/`, = Proofs.StableHLO.linearTrainStepModuleV) through the
+-- (`verified_mlir/`, = Proofs.StableHLO.linTrainStepFaithfulV) through the
 -- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
 
 lean_exe «mnist-linear-verified» where

@@ -1,9 +1,14 @@
-# Certificates/ — machine-emitted, not hand-written
+# Certificates/ — machine-emitted scorecards over hand-written engines
 
-Every `.lean` file in this directory is **generated** by a script in
-`scripts/` (`lipschitz_cert_*.py`, `smooth_*scorecard*_gen.py`,
+The scorecard, instance and witness files in this directory are **generated**
+by a script in `scripts/` (`lipschitz_cert_*.py`, `crown_ibp_*.py`,
+`ibp_conv_scorecard.py`, `smooth_*scorecard*_gen.py`,
 `smoothing_net_witness_gen.py`) and then checked by Lean like any other
-proof: same kernel, zero `sorry`s, three-axiom audit.
+proof: same kernel, zero `sorry`s, three-axiom audit. Eight files are
+hand-written — the engines the generated files instantiate and the trained
+weight instance: `LipschitzCert.lean`, `LipschitzCertInstance.lean`,
+`LipschitzCertPairSDP.lean`, `SmoothingCP.lean`, `SmoothingGaussian.lean`,
+`SmoothingMC.lean`, `SmoothingNetSemantics.lean` and `SmoothingPhiBounds.lean`.
 
 That provenance explains their shape: thousands of short, structurally
 identical theorem statements (one per network / image / radius row of a
@@ -15,5 +20,5 @@ an emitted payload, and here is the emitter."
 
 To regenerate a scorecard, run its generator script from the repo root and
 rebuild `lake build CertsHeavy` (the heavy scorecards) or `Certs` (the
-rest). Don't hand-edit files here — edits will be clobbered by the next
+rest). Don't hand-edit a generated file — edits will be clobbered by the next
 generator run.

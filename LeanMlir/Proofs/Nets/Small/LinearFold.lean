@@ -4,8 +4,8 @@ import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 
 Companion to `planning/archive/verified_faithful_sweep.md`. `MainMnistLinearVerified`
 trains on `verified_mlir/linear_train_step.mlir`, which is written by
-`Proofs.StableHLO.linearTrainStepModuleV` (`StableHLO.lean:4167`). This file
-certifies *that* renderer: every value the emitted module produces is the
+`Proofs.StableHLO.linTrainStepFaithfulV` (the `#eval` writer at the end of
+`StableHLO.lean`). This file certifies *that* renderer: every value the emitted module produces is the
 certified (Mathlib-`fderiv`-derived) softmax-CE loss-descent SGD step.
 
 (Namespace/name lengths are kept short on purpose: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)'s
@@ -25,7 +25,7 @@ and false-fail the check. Keep future per-chapter capstone names short.)
   same forward graph — the connection §1a of the planning doc calls for.
 
 The committed-bytes tie (`verified_mlir/linear_train_step.mlir ==
-linearTrainStepModuleV(…)`) is enforced in CI (regenerate + `git diff`, the
+linTrainStepFaithfulV(…)`) is enforced in CI (regenerate + `git diff`, the
 "Verified-render drift guard" step in `proofs.yml`), not here.
 
 ## Honest residual (the boundary shared with the forward `SHlo` `den`)

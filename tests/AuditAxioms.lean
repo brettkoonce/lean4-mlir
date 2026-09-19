@@ -1982,7 +1982,6 @@ open Proofs
 
 -- 4d PIECE 2: THE COLLECTIVE AS AN AST NODE (StableHLO.allReduceMeanF, DataParallelNode.lean, 2026-09-07)
 #print axioms Proofs.StableHLO.den_allReduceMeanF
-#print axioms Proofs.StableHLO.roundtrip
 #print axioms Proofs.den_allReduceMeanF_eq_dpMean
 #print axioms Proofs.skel_allReduceMeanF_of_spmd
 #print axioms Proofs.den_allReduceMeanF_eq_lossGrad_meanLoss

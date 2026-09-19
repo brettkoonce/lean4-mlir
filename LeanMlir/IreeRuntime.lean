@@ -205,7 +205,7 @@ opaque forwardF32Dp
   (nResident : USize := 0) (gen : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@linear_train_step`
-    (`StableHLO.linearTrainStepModuleV`) through the generic IREE invoke.
+    (`StableHLO.linTrainStepFaithfulV`) through the generic IREE invoke.
     Inputs are raw f32 ByteArrays: `x` is `batch×d₀`, `W0` is `d₀×d₁`, `b0`
     is `d₁`; `y` is int32 `[batch]` (the one-hot is built in the C shim).
     Returns `W0n (d₀·d₁ f32) ++ b0n (d₁ f32)`.

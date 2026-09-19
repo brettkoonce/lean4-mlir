@@ -320,9 +320,11 @@ fan-in included — not a free `∀`-cotangent). All 3-axiom-clean in
 `tests/AuditAxioms.lean`. The residuals on *that* path are narrower: (a) `den` is
 the `ℝ` denotation, so the `den`→`Float32` rounding gap, the per-op `pretty`
 lexing, `iree-compile`, the runtime, and the FFI stay trusted; (b) the same
-ReLU/MaxPool/ReLU6 kink convention above; and (c) the CI drift guard byte-checks
-`linear` + `vit` against the regenerated renderer so far (extended per net), with
-convnext's 4 even-kernel weight-grad gaps the only per-op hole (vit has none).
+ReLU/MaxPool/ReLU6 kink convention above; and (c) the CI drift guard (`proofs.yml`,
+"Verified-render drift guard") re-elaborates the `Proofs/Codegen` renderers and
+byte-checks their committed `verified_mlir/` files against them;
+`scripts/check_render_coverage.py` holds the unguarded remainder (14 of 240 files)
+at its baseline.
 
 ## The three rules
 
