@@ -66,87 +66,23 @@ theorem gap_const_g {h w : Nat} (hh : 0 < h) (hw : 0 < w) (c : ℝ) :
 -- ════════════════════════════════════════════════════════════════
 
 /-- Positional 2-channel 224×224 input `X i = i`. -/
-noncomputable def X224 : Vec (2 * (2 * 112) * (2 * 112)) := fun i => (i.val : ℝ)
-
-theorem X224_inj : Function.Injective X224 := by
-  intro a b hab; simp only [X224] at hab; exact Fin.ext (by exact_mod_cast hab)
+noncomputable def X224 : Vec (2 * (2 * 112) * (2 * 112)) := Xs 112
 
 /-- The realistic stem: `relu ∘ bn(1,1,160) ∘ conv_stride2(diag-id)` at 112×112. -/
-noncomputable def stem224 : Vec (2 * (2 * 112) * (2 * 112)) → Vec (2 * 112 * 112) :=
-  relu (2 * 112 * 112) ∘ bnForward (2 * 112 * 112) 1 1 160 ∘ flatConvStride2 WsId2 Zb2
-
-theorem stem224_conv_eq : flatConvStride2 WsId2 Zb2 X224 = decimateFlat 2 112 112 X224 := by
-  rw [flatConvStride2_diag WsId2 (fun o i => rfl) X224]
+noncomputable def stem224 : Vec (2 * (2 * 112) * (2 * 112)) → Vec (2 * 112 * 112) := stemβ 112 160
 
 theorem sqrt25088_lt_160 : Real.sqrt ((2 * 112 * 112 : ℕ) : ℝ) < 160 :=
   sqrt_lt_param (2 * 112 * 112) 160 (by norm_num) (by norm_num)
 
-/-- The stem's BN output is strictly positive: `bn ≥ 160 − √25088 > 0`. -/
-theorem stem224_bn_pos : ∀ k, 0 < bnForward (2 * 112 * 112) 1 1 160 (flatConvStride2 WsId2 Zb2 X224) k := by
-  intro k
-  have hlb := bnForward_lb (n := 2 * 112 * 112) 1 1 160 (by norm_num) (flatConvStride2 WsId2 Zb2 X224) k
-  rw [abs_one, one_mul] at hlb
-  linarith [sqrt25088_lt_160]
+noncomputable def stem224_vjp : HasVJPAt stem224 X224 := stemβ_vjp 112 160 sqrt25088_lt_160 X224
+theorem stem224_diff : DifferentiableAt ℝ stem224 X224 := stemβ_diff 112 160 sqrt25088_lt_160 X224
 
-theorem stem224_inj : Function.Injective (stem224 X224) := by
-  have hstemeq : stem224 X224 = bnForward (2 * 112 * 112) 1 1 160 (flatConvStride2 WsId2 Zb2 X224) := by
-    show (relu (2 * 112 * 112) ∘ bnForward (2 * 112 * 112) 1 1 160 ∘ flatConvStride2 WsId2 Zb2) X224 = _
-    simp only [Function.comp_apply]
-    exact relu_id_of_pos stem224_bn_pos
-  rw [hstemeq, stem224_conv_eq]
-  exact bnForward_injective 1 1 160 (by norm_num) (by norm_num)
-    (decimateFlat_injective 2 112 112 X224_inj)
+noncomputable def hmp_vjp224 : HasVJPAt (maxPoolFlat 2 56 56) (stem224 X224) :=
+  maxPoolFlat_vjp_of_smooth _ (stemβ_maxpool_smooth 56 160 sqrt25088_lt_160)
 
-theorem stem224_maxpool_smooth :
-    MaxPool2Smooth (Tensor3.unflatten (stem224 X224) : Tensor3 2 (2 * 56) (2 * 56)) := by
-  apply maxPool2Smooth_of_injective
-  intro ci r r' s s' heq
-  simp only [Tensor3.unflatten] at heq
-  have h2 := finProdFinEquiv.injective (stem224_inj heq)
-  have h5 := finProdFinEquiv.injective (congrArg Prod.fst h2)
-  exact ⟨congrArg Prod.snd h5, congrArg Prod.snd h2⟩
-
-noncomputable def stem224_vjp : HasVJPAt stem224 X224 :=
-  convBnReluStrided_has_vjp_at WsId2 Zb2 1 1 160 (by norm_num) X224
-    (fun k => ne_of_gt (stem224_bn_pos k))
-
-theorem stem224_diff : DifferentiableAt ℝ stem224 X224 :=
-  DifferentiableAt.comp X224
-    (relu_differentiableAt_of_smooth (2 * 112 * 112) _ (fun k => ne_of_gt (stem224_bn_pos k)))
-    ((convBnStrided_differentiable WsId2 Zb2 1 1 160 (by norm_num)) X224)
-
-theorem mp_point_eq224 :
-    Tensor3.flatten (Tensor3.unflatten (stem224 X224) : Tensor3 2 (2 * 56) (2 * 56)) = stem224 X224 :=
-  Tensor3.flatten_unflatten (stem224 X224)
-
-noncomputable def hmp_vjp224 : HasVJPAt (maxPoolFlat 2 56 56) (stem224 X224) := by
-  have h := maxPoolFlat_has_vjp_at (Tensor3.unflatten (stem224 X224) : Tensor3 2 (2 * 56) (2 * 56))
-    stem224_maxpool_smooth
-  rwa [mp_point_eq224] at h
-
-theorem hmp_diff224 : DifferentiableAt ℝ (maxPoolFlat 2 56 56) (stem224 X224) := by
-  have h := maxPoolFlat_differentiableAt (Tensor3.unflatten (stem224 X224) : Tensor3 2 (2 * 56) (2 * 56))
-    stem224_maxpool_smooth (by norm_num) (by norm_num) (by norm_num)
-  rwa [mp_point_eq224] at h
-
-/-- The stem preserves `Dom2`. -/
-theorem Dom2_stem224 (a : Vec (2 * (2 * 112) * (2 * 112))) (ha : Dom2 a)
-    (hpos : ∀ k, 0 < bnForward (2 * 112 * 112) 1 1 160 (flatConvStride2 WsId2 Zb2 a) k) :
-    Dom2 (stem224 a) := by
-  show Dom2 (relu (2 * 112 * 112) (bnForward (2 * 112 * 112) 1 1 160 (flatConvStride2 WsId2 Zb2 a)))
-  apply Dom2_relu _ hpos
-  rw [flatConvStride2_diag WsId2 (fun o i => rfl) a]
-  exact Dom2_bn 160 _ (Dom2_decimate a ha)
-
-/-- The positional input `X224 i = i` has channel 1 dominating channel 0. -/
-theorem Dom2_X224 : Dom2 (h := 2 * 112) (w := 2 * 112) X224 := by
-  intro hi wi
-  show X224 (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), hi), wi))
-     < X224 (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), hi), wi))
-  simp only [X224, finProdFinEquiv_apply_val, Fin.val_zero, Fin.val_one, mul_zero, mul_one]
-  push_cast
-  have : (0 : ℝ) < (2 * 112 : ℕ) := by positivity
-  nlinarith [this]
+theorem hmp_diff224 : DifferentiableAt ℝ (maxPoolFlat 2 56 56) (stem224 X224) :=
+  maxPoolFlat_diff_of_smooth (by norm_num) (by norm_num) (by norm_num) _
+    (stemβ_maxpool_smooth 56 160 sqrt25088_lt_160)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole realistic-dimension live ResNet-34 + its VJP
@@ -197,7 +133,8 @@ theorem liveFwd224_has_vjp_correct (dy : Vec 2) (i : Fin (2 * (2 * 112) * (2 * 1
 /-- `liveFwd224 X224` is channel-asymmetric: thread `Dom2` from the input through
     stem → maxpool → the three downsamples to the per-channel head over the 7×7 GAP. -/
 theorem liveFwd224_X224_asym : liveFwd224 X224 0 < liveFwd224 X224 1 := by
-  have d0 : Dom2 (stem224 X224) := Dom2_stem224 X224 Dom2_X224 stem224_bn_pos
+  have d0 : Dom2 (stem224 X224) :=
+    Dom2_stemβ 112 160 X224 (Dom2_Xs 112) (stemβ_bn_pos 112 160 sqrt25088_lt_160 X224)
   have d1 := Dom2_maxpool (h := 56) (w := 56) (stem224 X224) d0
   have d2 := Dom2_liveDownβ 28 28 64 (by norm_num)
     (sqrt_lt_param (2 * 28 * 28) 64 (by norm_num) (by norm_num)) _ d1
@@ -208,12 +145,8 @@ theorem liveFwd224_X224_asym : liveFwd224 X224 0 < liveFwd224 X224 1 := by
   simp only [liveFwd224, Function.comp_apply, dense_Wd2_apply]
   exact gap_chan_lt (by norm_num) (by norm_num) _ d4
 
-theorem stem224_zero : stem224 (fun _ => (0 : ℝ)) = fun _ => (160 : ℝ) := by
-  show (relu (2 * 112 * 112) ∘ bnForward (2 * 112 * 112) 1 1 160 ∘ flatConvStride2 WsId2 Zb2)
-    (fun _ => 0) = _
-  simp only [Function.comp_apply]
-  rw [flatConvStride2_diag WsId2 (fun o i => rfl) (fun _ => 0), decimateFlat_const,
-      bnForward_const_eq (by norm_num), ResNet34LivePC.relu_const_pos 160 (by norm_num)]
+theorem stem224_zero : stem224 (fun _ => (0 : ℝ)) = fun _ => (160 : ℝ) :=
+  stemβ_zero 112 160 (by norm_num) (by norm_num)
 
 theorem liveFwd224_zero : liveFwd224 (fun _ => (0 : ℝ)) = fun _ => (65 : ℝ) := by
   simp only [liveFwd224, Function.comp_apply, stem224_zero, maxPoolFlat_const,

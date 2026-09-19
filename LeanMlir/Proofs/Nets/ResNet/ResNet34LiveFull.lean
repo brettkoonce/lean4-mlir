@@ -134,8 +134,7 @@ theorem cd_chain (h w : Nat) (hhw : 0 < 2 * h * w) [NeZero h] [NeZero w] (k : Na
 -- ════════════════════════════════════════════════════════════════
 
 theorem stem2_nonneg (x : Vec (2 * (2 * 16) * (2 * 16))) (k : Fin (2 * 16 * 16)) :
-    0 ≤ stem2 x k := by
-  simp only [stem2, Function.comp_apply]; exact relu_nonneg _ _ k
+    0 ≤ stem2 x k := relu_nonneg _ _ k
 
 theorem maxPool2_nonneg {c h w : Nat} {x : Tensor3 c (2 * h) (2 * w)}
     (hx : ∀ ci r s, 0 ≤ x ci r s) (ci : Fin c) (hi : Fin h) (wi : Fin w) :

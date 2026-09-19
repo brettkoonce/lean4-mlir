@@ -49,16 +49,21 @@ open Proofs ResNet34Live2 ResNet34LivePC
 -- ════════════════════════════════════════════════════════════════
 
 /-- The base tensor: channel-symmetric, strictly spatially **decreasing**
-    (`-(i·32 + j)`), so within every 2×2 window the top-left corner is the strict
+    (`-(i·2s + j)`), so within every 2×2 window the top-left corner is the strict
     max, and the two channels coincide (the carrier vanishes at base). -/
-noncomputable def Ytensor : Tensor3 2 (2 * 16) (2 * 16) :=
-  fun _c i j => -((i.val : ℝ) * 32 + (j.val : ℝ))
+noncomputable def Yt (s : Nat) : Tensor3 2 (2 * s) (2 * s) :=
+  fun _c i j => -((i.val : ℝ) * (2 * s : ℕ) + (j.val : ℝ))
 
 /-- The base point, flattened. -/
-noncomputable def Y : Vec (2 * (2 * 16) * (2 * 16)) := Tensor3.flatten Ytensor
+noncomputable def Ys (s : Nat) : Vec (2 * (2 * s) * (2 * s)) := Tensor3.flatten (Yt s)
 
-theorem unflatten_Y : (Tensor3.unflatten Y : Tensor3 2 (2 * 16) (2 * 16)) = Ytensor :=
-  Tensor3.unflatten_flatten Ytensor
+theorem unflatten_Ys (s : Nat) : (Tensor3.unflatten (Ys s) : Tensor3 2 (2 * s) (2 * s)) = Yt s :=
+  Tensor3.unflatten_flatten (Yt s)
+
+/-- The 32×32 witness's base point. -/
+noncomputable def Y : Vec (2 * (2 * 16) * (2 * 16)) := Ys 16
+
+theorem unflatten_Y : (Tensor3.unflatten Y : Tensor3 2 (2 * 16) (2 * 16)) = Yt 16 := unflatten_Ys 16
 
 /-- The perturbation: the single top-left input coordinate of channel 0. -/
 noncomputable def V : Vec (2 * (2 * 16) * (2 * 16)) :=
@@ -83,9 +88,12 @@ theorem bnForward_chan_diff {n : Nat} (ε β : ℝ) (z : Vec n) (k₀ k₁ : Fin
 --   equals a ReLU-free composition whose only non-smooth step is the maxpool.
 -- ════════════════════════════════════════════════════════════════
 
-/-- The stem with the (globally-off) ReLU removed: `bn₃₀ ∘ decimate`. -/
-noncomputable def stemS (v : Vec (2 * (2 * 16) * (2 * 16))) : Vec (2 * 16 * 16) :=
-  bnForward (2 * 16 * 16) 1 1 30 (decimateFlat 2 16 16 v)
+/-- The stem with the (globally-off) ReLU removed: `bn_β ∘ decimate`. -/
+noncomputable def stemSβ (s : Nat) (β : ℝ) (v : Vec (2 * (2 * s) * (2 * s))) : Vec (2 * s * s) :=
+  bnForward (2 * s * s) 1 1 β (decimateFlat 2 s s v)
+
+/-- `stemSβ` at the 32×32 witness's `β = 30`. -/
+noncomputable abbrev stemS : Vec (2 * (2 * 16) * (2 * 16)) → Vec (2 * 16 * 16) := stemSβ 16 30
 
 /-- The live downsample with the (globally-off) ReLU removed: `bn_βp ∘ decimate + 1`. -/
 noncomputable def ldSβ (h w : Nat) (βp : ℝ) (a : Vec (2 * (2 * h) * (2 * w))) : Vec (2 * h * w) :=
@@ -99,18 +107,16 @@ noncomputable def liveFwd2S : Vec (2 * (2 * 16) * (2 * 16)) → Vec 2 :=
   dense Wd2 bd2 ∘ globalAvgPoolFlat 2 1 1 ∘
     ldS 1 1 ∘ ldS 2 2 ∘ ldS 4 4 ∘ maxPoolFlat 2 8 8 ∘ stemS
 
--- the stem ReLU is globally off: `bn₃₀ ≥ 30 − √512 > 0` for *every* input
-theorem stemS_bn_pos (v : Vec (2 * (2 * 16) * (2 * 16))) (k : Fin (2 * 16 * 16)) :
-    0 < bnForward (2 * 16 * 16) 1 1 30 (flatConvStride2 WsId2 Zb2 v) k := by
-  have hlb := bnForward_lb (n := 2 * 16 * 16) 1 1 30 (by norm_num) (flatConvStride2 WsId2 Zb2 v) k
-  rw [abs_one, one_mul] at hlb
-  linarith [sqrt512_lt_30]
-
-theorem stem2_eq_stemS (v : Vec (2 * (2 * 16) * (2 * 16))) : stem2 v = stemS v := by
-  show (relu (2 * 16 * 16) ∘ bnForward (2 * 16 * 16) 1 1 30 ∘ flatConvStride2 WsId2 Zb2) v = stemS v
+-- the stem ReLU is globally off: `bn_β ≥ β − √(2·s·s) > 0` for *every* input
+theorem stemβ_eq_stemSβ (s : Nat) (β : ℝ) (hn : Real.sqrt ((2 * s * s : ℕ) : ℝ) < β)
+    (v : Vec (2 * (2 * s) * (2 * s))) : stemβ s β v = stemSβ s β v := by
+  show (relu (2 * s * s) ∘ bnForward (2 * s * s) 1 1 β ∘ flatConvStride2 WsId2 Zb2) v = stemSβ s β v
   simp only [Function.comp_apply]
-  rw [relu_id_of_pos (fun k => stemS_bn_pos v k), flatConvStride2_diag WsId2 (fun o i => rfl) v]
+  rw [relu_id_of_pos (fun k => stemβ_bn_pos s β hn v k), flatConvStride2_diag WsId2 (fun o i => rfl) v]
   rfl
+
+theorem stem2_eq_stemS (v : Vec (2 * (2 * 16) * (2 * 16))) : stem2 v = stemS v :=
+  stemβ_eq_stemSβ 16 30 sqrt512_lt_30 v
 
 theorem ldSβ_pos (h w : Nat) (βp : ℝ) (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < βp)
     (a : Vec (2 * (2 * h) * (2 * w))) (k : Fin (2 * h * w)) : 0 < ldSβ h w βp a k := by
@@ -215,7 +221,7 @@ theorem idx01_ne :
     perturbation hits only channel 0's top-left). -/
 theorem cd_ray (t : ℝ) : cd (Y + t • V) = t := by
   have hY : ∀ c : Fin 2, (Tensor3.unflatten Y : Tensor3 2 (2 * 16) (2 * 16)) c 0 0 = 0 := by
-    intro c; rw [unflatten_Y]; simp [Ytensor]
+    intro c; rw [unflatten_Y]; simp [Yt]
   have hV0 : (Tensor3.unflatten V : Tensor3 2 (2 * 16) (2 * 16)) 0 0 0 = 1 := by
     simp [Tensor3.unflatten, V]
   have hV1 : (Tensor3.unflatten V : Tensor3 2 (2 * 16) (2 * 16)) 1 0 0 = 0 := by
@@ -243,9 +249,9 @@ theorem maxPoolFlat_continuous (c h w : Nat) : Continuous (maxPoolFlat c h w) :=
 theorem ray_continuous : Continuous (fun t : ℝ => Y + t • V) :=
   continuous_const.add (continuous_id.smul continuous_const)
 
-theorem stemS_continuous : Continuous stemS :=
-  (bnForward_differentiable (2 * 16 * 16) 1 1 30 one_pos).continuous.comp
-    (decimateFlat_differentiable 2 16 16).continuous
+theorem stemSβ_continuous (s : Nat) (β : ℝ) : Continuous (stemSβ s β) :=
+  (bnForward_differentiable (2 * s * s) 1 1 β one_pos).continuous.comp
+    (decimateFlat_differentiable 2 s s).continuous
 
 theorem ldSβ_continuous (h w : Nat) (βp : ℝ) : Continuous (ldSβ h w βp) := by
   have h1 : Continuous (fun a : Vec (2 * (2 * h) * (2 * w)) =>
@@ -269,7 +275,7 @@ noncomputable def Rr (t : ℝ) : ℝ :=
         * bnIstd (2 * 1 * 1) (decimateFlat 2 1 1 (W2r t)) 1))
 
 theorem Pr_continuous : Continuous Pr :=
-  (maxPoolFlat_continuous 2 8 8).comp (stemS_continuous.comp ray_continuous)
+  (maxPoolFlat_continuous 2 8 8).comp ((stemSβ_continuous 16 30).comp ray_continuous)
 
 theorem W4r_continuous : Continuous W4r := (ldSβ_continuous 4 4 20).comp Pr_continuous
 theorem W2r_continuous : Continuous W2r := (ldSβ_continuous 2 2 20).comp W4r_continuous
@@ -309,7 +315,7 @@ theorem decimY_win (c a' b' : Fin 2) :
       = (Tensor3.unflatten (decimateFlat 2 16 16 Y) : Tensor3 2 16 16) c
           (winRowInv (0 : Fin 8) a') (winColInv (0 : Fin 8) b') := rfl
   rw [e, decimate_unflatten Y c (winRowInv (0 : Fin 8) a') (winColInv (0 : Fin 8) b'), unflatten_Y]
-  simp only [Ytensor, winRowInv, winColInv, show ((0 : Fin 8).val : ℕ) = 0 from rfl]
+  simp only [Yt, winRowInv, winColInv, show ((0 : Fin 8).val : ℕ) = 0 from rfl]
   push_cast
   ring
 
@@ -351,7 +357,7 @@ theorem sval_continuous (c a' b' : Fin 2) : Continuous (sval c a' b') := by
   unfold sval
   exact (continuous_apply
     (finProdFinEquiv (finProdFinEquiv (c, winRowInv (0 : Fin 8) a'), winColInv (0 : Fin 8) b'))).comp
-    (stemS_continuous.comp ray_continuous)
+    ((stemSβ_continuous 16 30).comp ray_continuous)
 
 theorem ray0 : Y + (0 : ℝ) • V = Y := by rw [zero_smul, add_zero]
 
@@ -433,56 +439,54 @@ theorem gd_hasDerivAt :
 -- § The whole-net VJP at the base `Y` (maxpool no-tie via per-channel injectivity)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The decimated base value at a general position `(ci, r, s)`. -/
-theorem decimY_val (ci : Fin 2) (r s : Fin 16) :
-    decimateFlat 2 16 16 Y (finProdFinEquiv (finProdFinEquiv (ci, r), s))
-      = -(64 * (r.val : ℝ) + 2 * (s.val : ℝ)) := by
-  have e : decimateFlat 2 16 16 Y (finProdFinEquiv (finProdFinEquiv (ci, r), s))
-      = (Tensor3.unflatten (decimateFlat 2 16 16 Y) : Tensor3 2 16 16) ci r s := rfl
-  rw [e, decimate_unflatten Y ci r s, unflatten_Y]
-  simp only [Ytensor]
+/-- The decimated base value at a general position `(ci, r, t)`: `-2·(2s·r + t)`. -/
+theorem decimYs_val (s : Nat) (ci : Fin 2) (r t : Fin s) :
+    decimateFlat 2 s s (Ys s) (finProdFinEquiv (finProdFinEquiv (ci, r), t))
+      = -(2 * ((2 * s * r.val + t.val : ℕ) : ℝ)) := by
+  have e : decimateFlat 2 s s (Ys s) (finProdFinEquiv (finProdFinEquiv (ci, r), t))
+      = (Tensor3.unflatten (decimateFlat 2 s s (Ys s)) : Tensor3 2 s s) ci r t := rfl
+  rw [e, decimate_unflatten (Ys s) ci r t, unflatten_Ys]
+  simp only [Yt]
   push_cast
   ring
 
+/-- `N·r + t` determines `r` and `t` when `t < N` (division with remainder). -/
+private theorem divmod_inj {N r t r' t' : ℕ} (ht : t < N) (ht' : t' < N)
+    (h : N * r + t = N * r' + t') : r = r' ∧ t = t' := by
+  have hN : 0 < N := by omega
+  obtain ⟨h1, h2⟩ := (Nat.div_mod_unique hN).2 ⟨add_comm t (N * r), ht⟩
+  obtain ⟨h3, h4⟩ := (Nat.div_mod_unique hN).2 ⟨add_comm t' (N * r'), ht'⟩
+  rw [h] at h1 h2
+  exact ⟨h1.symm.trans h3, h2.symm.trans h4⟩
+
 /-- **The base stem is per-channel positionally injective** ⇒ the maxpool has no ties. -/
-theorem stem2_Y_maxpool_smooth :
-    MaxPool2Smooth (Tensor3.unflatten (stem2 Y) : Tensor3 2 (2 * 8) (2 * 8)) := by
+theorem stemβ_Ys_maxpool_smooth (m : Nat) (β : ℝ)
+    (hn : Real.sqrt ((2 * (2 * m) * (2 * m) : ℕ) : ℝ) < β) :
+    MaxPool2Smooth (Tensor3.unflatten (stemβ (2 * m) β (Ys (2 * m))) : Tensor3 2 (2 * m) (2 * m)) := by
   apply maxPool2Smooth_of_injective
-  intro ci r r' s s' heq
-  rw [stem2_eq_stemS Y] at heq
-  have hdec := bnForward_coord_inj (n := 2 * 16 * 16) 1 30 one_pos (decimateFlat 2 16 16 Y)
-    (finProdFinEquiv (finProdFinEquiv (ci, r), s))
-    (finProdFinEquiv (finProdFinEquiv (ci, r'), s')) heq
-  rw [decimY_val, decimY_val] at hdec
-  have hnat : 64 * r.val + 2 * s.val = 64 * r'.val + 2 * s'.val := by
-    have h := neg_injective hdec
-    have := r.isLt; have := s.isLt; have := r'.isLt; have := s'.isLt
+  intro ci r r' t t' heq
+  rw [stemβ_eq_stemSβ (2 * m) β hn (Ys (2 * m))] at heq
+  have hdec := bnForward_coord_inj (n := 2 * (2 * m) * (2 * m)) 1 β one_pos
+    (decimateFlat 2 (2 * m) (2 * m) (Ys (2 * m)))
+    (finProdFinEquiv (finProdFinEquiv (ci, r), t))
+    (finProdFinEquiv (finProdFinEquiv (ci, r'), t')) heq
+  rw [decimYs_val, decimYs_val] at hdec
+  have hnat : 2 * (2 * m) * r.val + t.val = 2 * (2 * m) * r'.val + t'.val := by
+    have h : ((2 * (2 * m) * r.val + t.val : ℕ) : ℝ) = ((2 * (2 * m) * r'.val + t'.val : ℕ) : ℝ) := by
+      linarith
     exact_mod_cast h
-  have := r.isLt; have := s.isLt; have := r'.isLt; have := s'.isLt
-  exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
+  obtain ⟨hr, ht⟩ := divmod_inj (by have := t.isLt; omega) (by have := t'.isLt; omega) hnat
+  exact ⟨Fin.ext hr, Fin.ext ht⟩
 
-noncomputable def stem2_vjp_Y : HasVJPAt stem2 Y :=
-  convBnReluStrided_has_vjp_at WsId2 Zb2 1 1 30 (by norm_num) Y
-    (fun k => ne_of_gt (stemS_bn_pos Y k))
+noncomputable def stem2_vjp_Y : HasVJPAt stem2 Y := stemβ_vjp 16 30 sqrt512_lt_30 Y
+theorem stem2_diff_Y : DifferentiableAt ℝ stem2 Y := stemβ_diff 16 30 sqrt512_lt_30 Y
 
-theorem stem2_diff_Y : DifferentiableAt ℝ stem2 Y :=
-  DifferentiableAt.comp Y
-    (relu_differentiableAt_of_smooth (2 * 16 * 16) _ (fun k => ne_of_gt (stemS_bn_pos Y k)))
-    ((convBnStrided_differentiable WsId2 Zb2 1 1 30 (by norm_num)) Y)
+noncomputable def hmp_vjp_Y : HasVJPAt (maxPoolFlat 2 8 8) (stem2 Y) :=
+  maxPoolFlat_vjp_of_smooth _ (stemβ_Ys_maxpool_smooth 8 30 sqrt512_lt_30)
 
-theorem mp_point_eq_Y :
-    Tensor3.flatten (Tensor3.unflatten (stem2 Y) : Tensor3 2 (2 * 8) (2 * 8)) = stem2 Y :=
-  Tensor3.flatten_unflatten (stem2 Y)
-
-noncomputable def hmp_vjp_Y : HasVJPAt (maxPoolFlat 2 8 8) (stem2 Y) := by
-  have h := maxPoolFlat_has_vjp_at (Tensor3.unflatten (stem2 Y) : Tensor3 2 (2 * 8) (2 * 8))
-    stem2_Y_maxpool_smooth
-  rwa [mp_point_eq_Y] at h
-
-theorem hmp_diff_Y : DifferentiableAt ℝ (maxPoolFlat 2 8 8) (stem2 Y) := by
-  have h := maxPoolFlat_differentiableAt (Tensor3.unflatten (stem2 Y) : Tensor3 2 (2 * 8) (2 * 8))
-    stem2_Y_maxpool_smooth (by norm_num) (by norm_num) (by norm_num)
-  rwa [mp_point_eq_Y] at h
+theorem hmp_diff_Y : DifferentiableAt ℝ (maxPoolFlat 2 8 8) (stem2 Y) :=
+  maxPoolFlat_diff_of_smooth (by norm_num) (by norm_num) (by norm_num) _
+    (stemβ_Ys_maxpool_smooth 8 30 sqrt512_lt_30)
 
 /-- **The whole 2-channel live ResNet-34 VJP at the base `Y`** — the witness point of
     the level-3 seal (the maxpool no-tie holds because `Y` is per-channel injective). -/

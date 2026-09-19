@@ -139,13 +139,10 @@ theorem UDiff_gap {h w : Nat} (hh : 0 < h) (hw : 0 < w) (δ : ℝ) (u : Vec (2 *
 
 /-- Channel-symmetric, strictly spatially decreasing base (`-(i·224 + j)`) — per-channel
     positionally injective (the maxpool no-tie) and channel-symmetric (carrier vanishes). -/
-noncomputable def Y224tensor : Tensor3 2 (2 * 112) (2 * 112) :=
-  fun _c i j => -((i.val : ℝ) * 224 + (j.val : ℝ))
+noncomputable def Y224 : Vec (2 * (2 * 112) * (2 * 112)) := Ys 112
 
-noncomputable def Y224 : Vec (2 * (2 * 112) * (2 * 112)) := Tensor3.flatten Y224tensor
-
-theorem unflatten_Y224 : (Tensor3.unflatten Y224 : Tensor3 2 (2 * 112) (2 * 112)) = Y224tensor :=
-  Tensor3.unflatten_flatten Y224tensor
+theorem unflatten_Y224 : (Tensor3.unflatten Y224 : Tensor3 2 (2 * 112) (2 * 112)) = Yt 112 :=
+  unflatten_Ys 112
 
 /-- The uniform perturbation: all of channel 0. -/
 noncomputable def V224u : Vec (2 * (2 * 112) * (2 * 112)) :=
@@ -159,7 +156,8 @@ theorem unflatten_V224u (c : Fin 2) (i j : Fin (2 * 112)) :
 theorem UDiff_ray (t : ℝ) : UDiff t (Y224 + t • V224u) := by
   intro i j
   have hY : ∀ c : Fin 2, (Tensor3.unflatten Y224 : Tensor3 2 (2 * 112) (2 * 112)) c i j
-      = -((i.val : ℝ) * 224 + (j.val : ℝ)) := by intro c; rw [unflatten_Y224]; rfl
+      = -((i.val : ℝ) * 224 + (j.val : ℝ)) := by
+    intro c; rw [unflatten_Y224]; simp only [Yt]; push_cast; ring
   have e : ∀ c : Fin 2, (Tensor3.unflatten (Y224 + t • V224u) : Tensor3 2 (2 * 112) (2 * 112)) c i j
       = (Tensor3.unflatten Y224 : Tensor3 2 (2 * 112) (2 * 112)) c i j
         + t * (Tensor3.unflatten V224u : Tensor3 2 (2 * 112) (2 * 112)) c i j := by
@@ -171,22 +169,11 @@ theorem UDiff_ray (t : ℝ) : UDiff t (Y224 + t • V224u) := by
 -- § The globally-smooth ReLU-free twin `liveFwd224S`
 -- ════════════════════════════════════════════════════════════════
 
-/-- The stem ReLU is globally off (`bn₁₆₀ ≥ 160 − √25088 > 0`), for *every* input. -/
-theorem stemS224_bn_pos (v : Vec (2 * (2 * 112) * (2 * 112))) (k : Fin (2 * 112 * 112)) :
-    0 < bnForward (2 * 112 * 112) 1 1 160 (flatConvStride2 WsId2 Zb2 v) k := by
-  have hlb := bnForward_lb (n := 2 * 112 * 112) 1 1 160 (by norm_num) (flatConvStride2 WsId2 Zb2 v) k
-  rw [abs_one, one_mul] at hlb
-  linarith [sqrt25088_lt_160]
-
 /-- The stem with the (globally-off) ReLU removed: `bn₁₆₀ ∘ decimate`. -/
-noncomputable def stemS224 (v : Vec (2 * (2 * 112) * (2 * 112))) : Vec (2 * 112 * 112) :=
-  bnForward (2 * 112 * 112) 1 1 160 (decimateFlat 2 112 112 v)
+noncomputable abbrev stemS224 : Vec (2 * (2 * 112) * (2 * 112)) → Vec (2 * 112 * 112) := stemSβ 112 160
 
-theorem stem224_eq_stemS224 (v : Vec (2 * (2 * 112) * (2 * 112))) : stem224 v = stemS224 v := by
-  show (relu (2 * 112 * 112) ∘ bnForward (2 * 112 * 112) 1 1 160 ∘ flatConvStride2 WsId2 Zb2) v = stemS224 v
-  simp only [Function.comp_apply]
-  rw [relu_id_of_pos (fun k => stemS224_bn_pos v k), flatConvStride2_diag WsId2 (fun o i => rfl) v]
-  rfl
+theorem stem224_eq_stemS224 (v : Vec (2 * (2 * 112) * (2 * 112))) : stem224 v = stemS224 v :=
+  stemβ_eq_stemSβ 112 160 sqrt25088_lt_160 v
 
 /-- The ReLU-free twin of `liveFwd224`. -/
 noncomputable def liveFwd224S : Vec (2 * (2 * 112) * (2 * 112)) → Vec 2 :=
@@ -228,12 +215,8 @@ theorem Rr224_pos (t : ℝ) : 0 < Rr224 t := by
 theorem ray224_continuous : Continuous (fun t : ℝ => Y224 + t • V224u) :=
   continuous_const.add (continuous_id.smul continuous_const)
 
-theorem stemS224_continuous : Continuous stemS224 :=
-  (bnForward_differentiable (2 * 112 * 112) 1 1 160 one_pos).continuous.comp
-    (decimateFlat_differentiable 2 112 112).continuous
-
 theorem Pr224_continuous : Continuous Pr224 :=
-  (maxPoolFlat_continuous 2 56 56).comp (stemS224_continuous.comp ray224_continuous)
+  (maxPoolFlat_continuous 2 56 56).comp ((stemSβ_continuous 112 160).comp ray224_continuous)
 theorem W28r_continuous : Continuous W28r := (ldSβ_continuous 28 28 64).comp Pr224_continuous
 theorem W14r_continuous : Continuous W14r := (ldSβ_continuous 14 14 64).comp W28r_continuous
 
@@ -293,54 +276,15 @@ theorem gd_hasDerivAt224 :
 -- § The whole-net VJP at the base `Y224` (maxpool no-tie via injectivity)
 -- ════════════════════════════════════════════════════════════════
 
-theorem decimY224_val (ci : Fin 2) (r s : Fin 112) :
-    decimateFlat 2 112 112 Y224 (finProdFinEquiv (finProdFinEquiv (ci, r), s))
-      = -(448 * (r.val : ℝ) + 2 * (s.val : ℝ)) := by
-  have e : decimateFlat 2 112 112 Y224 (finProdFinEquiv (finProdFinEquiv (ci, r), s))
-      = (Tensor3.unflatten (decimateFlat 2 112 112 Y224) : Tensor3 2 112 112) ci r s := rfl
-  rw [e, decimate_unflatten Y224 ci r s, unflatten_Y224]
-  simp only [Y224tensor]
-  push_cast
-  ring
+noncomputable def stem224_vjp_Y : HasVJPAt stem224 Y224 := stemβ_vjp 112 160 sqrt25088_lt_160 Y224
+theorem stem224_diff_Y : DifferentiableAt ℝ stem224 Y224 := stemβ_diff 112 160 sqrt25088_lt_160 Y224
 
-theorem stem224_Y_maxpool_smooth :
-    MaxPool2Smooth (Tensor3.unflatten (stem224 Y224) : Tensor3 2 (2 * 56) (2 * 56)) := by
-  apply maxPool2Smooth_of_injective
-  intro ci r r' s s' heq
-  rw [stem224_eq_stemS224 Y224] at heq
-  have hdec := bnForward_coord_inj (n := 2 * 112 * 112) 1 160 one_pos (decimateFlat 2 112 112 Y224)
-    (finProdFinEquiv (finProdFinEquiv (ci, r), s))
-    (finProdFinEquiv (finProdFinEquiv (ci, r'), s')) heq
-  rw [decimY224_val, decimY224_val] at hdec
-  have hnat : 448 * r.val + 2 * s.val = 448 * r'.val + 2 * s'.val := by
-    have h := neg_injective hdec
-    have := r.isLt; have := s.isLt; have := r'.isLt; have := s'.isLt
-    exact_mod_cast h
-  have := r.isLt; have := s.isLt; have := r'.isLt; have := s'.isLt
-  exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
+noncomputable def hmp_vjp_Y224 : HasVJPAt (maxPoolFlat 2 56 56) (stem224 Y224) :=
+  maxPoolFlat_vjp_of_smooth _ (stemβ_Ys_maxpool_smooth 56 160 sqrt25088_lt_160)
 
-noncomputable def stem224_vjp_Y : HasVJPAt stem224 Y224 :=
-  convBnReluStrided_has_vjp_at WsId2 Zb2 1 1 160 (by norm_num) Y224
-    (fun k => ne_of_gt (stemS224_bn_pos Y224 k))
-
-theorem stem224_diff_Y : DifferentiableAt ℝ stem224 Y224 :=
-  DifferentiableAt.comp Y224
-    (relu_differentiableAt_of_smooth (2 * 112 * 112) _ (fun k => ne_of_gt (stemS224_bn_pos Y224 k)))
-    ((convBnStrided_differentiable WsId2 Zb2 1 1 160 (by norm_num)) Y224)
-
-theorem mp_point_eq_Y224 :
-    Tensor3.flatten (Tensor3.unflatten (stem224 Y224) : Tensor3 2 (2 * 56) (2 * 56)) = stem224 Y224 :=
-  Tensor3.flatten_unflatten (stem224 Y224)
-
-noncomputable def hmp_vjp_Y224 : HasVJPAt (maxPoolFlat 2 56 56) (stem224 Y224) := by
-  have h := maxPoolFlat_has_vjp_at (Tensor3.unflatten (stem224 Y224) : Tensor3 2 (2 * 56) (2 * 56))
-    stem224_Y_maxpool_smooth
-  rwa [mp_point_eq_Y224] at h
-
-theorem hmp_diff_Y224 : DifferentiableAt ℝ (maxPoolFlat 2 56 56) (stem224 Y224) := by
-  have h := maxPoolFlat_differentiableAt (Tensor3.unflatten (stem224 Y224) : Tensor3 2 (2 * 56) (2 * 56))
-    stem224_Y_maxpool_smooth (by norm_num) (by norm_num) (by norm_num)
-  rwa [mp_point_eq_Y224] at h
+theorem hmp_diff_Y224 : DifferentiableAt ℝ (maxPoolFlat 2 56 56) (stem224 Y224) :=
+  maxPoolFlat_diff_of_smooth (by norm_num) (by norm_num) (by norm_num) _
+    (stemβ_Ys_maxpool_smooth 56 160 sqrt25088_lt_160)
 
 /-- The whole 224×224 live ResNet-34 VJP at the seal witness base `Y224`. -/
 noncomputable def liveFwd224_has_vjp_at_Y : HasVJPAt liveFwd224 Y224 :=
