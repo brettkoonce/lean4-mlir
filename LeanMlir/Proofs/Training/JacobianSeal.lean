@@ -4,11 +4,11 @@ import LeanMlir.Proofs.Foundation.MLP
 # Nonzero-Jacobian seal — the generic "the backward is non-trivial here" bridge
 
 The whole-network capstones prove `HasVJP.backward = pdiv`-Jacobian-transpose. A
-*degenerate* witness (zero weights / constant output, e.g. `MobileNetV2Concrete`,
-`ResNet34Concrete`) satisfies that contract **vacuously**: its Jacobian is identically
-zero, so the backward map is the zero map and says nothing about a real gradient. The
-non-vacuity facts that exist today (`Mnv2Live.mnv2Live_forward_nonconstant`) only rule out
-a *constant forward* — strictly weaker than a non-trivial backward at the witness.
+*degenerate* witness (zero weights / constant output) satisfies that contract
+**vacuously**: its Jacobian is identically zero, so the backward map is the zero map and
+says nothing about a real gradient. The non-vacuity facts that exist today
+(`Mnv2Live.mnv2Live_forward_nonconstant`) only rule out a *constant forward* — strictly
+weaker than a non-trivial backward at the witness.
 
 This file supplies the missing **level-3 seal** (see `planning/archive/whole_network_backward.md`,
 Item B): the reusable bridge from a single nonzero Jacobian entry to a provably non-trivial

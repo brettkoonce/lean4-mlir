@@ -21,11 +21,14 @@ In total: 77 files, +396 −5,374; AuditAxioms 1,643 → 1,505 verdicts. Group s
 also re-pointed prose and deleted what the fixed point orphaned.
 
 **Next session, in order:**
-1. **2c follow-up (small).** Three pins lost their last user in the 2c cut and belong to B.6's
-   chain: `mnv2_render_{depthwiseW_strided,depthwiseb_strided,stem_convW}_xla_certified`
-   (`MobileNetV2Close`). Also cut the now-dead `MobileNetV2Concrete` defs (`Ws`, `bs`, `We₁`…,
-   `X`), then drop those rows from `MobileNetV2Close`'s header table. Newly audit-only after 2a,
-   left as a candidate: `mnv2_render_depthwiseW_certified`.
+1. ✅ **2c follow-up.** Cut the three `mnv2_render_*_xla_certified` pins and the eleven
+   `MobileNetV2Concrete` defs. `MobileNetV2Close`'s header now points at the batched certificates.
+   The `MobileNetV2Concrete` mentions in `MobileNetV2.lean`, `JacobianSeal.lean` and
+   Proofs/README.md now point at `Mnv2Live`. `tests/AuditAxioms.lean` also lost the 22 section
+   comments that cuts 2a–2c had emptied. Kept:
+   `flatConvStride2Xla_weight_grad_has_vjp_correct`, generic API that the fixed point would take.
+   Still a candidate: `mnv2_render_depthwiseW_certified`, audit-only since 2a and the only user of
+   the pinned `mnv2_depthwise_weight_grad_bridge`.
 2. **2d, small nets:** S.1, S.2, S.4, S.5, S.7, S.9. For S.1, seed the whole `Micro` / `TwoChan` /
    `Mini` / `Spatial` namespaces (`MnistCNN.lean` 198–696). `TwoChan` exists only to share code
    between `Mini` and `Spatial`, and a shared `_proof_1` makes `CnnConcrete` look like a user of

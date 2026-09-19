@@ -23,8 +23,6 @@ and each is now certified by the bridge in the right column:
 | stem 3×3 conv b (`sb`, stride 2)            | `flatConvStride2`   | `mnv2_render_stem_convb_certified` (**new**)  |
 | depthwise W stride 1 (`dW`, blocks b2,b4)   | `depthwiseConv2d`   | `mnv2_render_depthwiseW_certified` (**new**)  |
 | depthwise b stride 1 (`db`, blocks b2,b4)   | `depthwiseConv2d`   | `mnv2_render_depthwiseb_certified` (**new**)  |
-| depthwise W stride 2 (`dW`, blocks b1,b3,b5,b6) | `depthwiseStride2FlatXla` | `mnv2_render_depthwiseW_strided_xla_certified` (**new**) |
-| depthwise b stride 2 (`db`, blocks b1,b3,b5,b6) | `depthwiseStride2FlatXla` | `mnv2_render_depthwiseb_strided_xla_certified` (**new**) |
 
 The reuse families need no new theorem — the generic M2/M3/CIFAR-BN bridges apply verbatim at
 the MobileNetV2 shapes. This file supplies the genuinely-new pieces:
@@ -34,10 +32,11 @@ the MobileNetV2 shapes. This file supplies the genuinely-new pieces:
   family" of the plan — instantiation, the VJP itself is already proven 3-axiom-clean.
 * **Stem strided conv W/b** — wrappers of `flatConvStride2_weight_grad_has_vjp` (ch6) and a new
   strided-conv *bias* VJP.
-* **Strided depthwise W/b (4 of 6 blocks downsample)** — a new strided-depthwise weight/bias VJP,
-  the exact `decimate ∘ stride-1` recipe of `flatConvStride2_weight_grad_has_vjp` with the depthwise
-  kernel. (The plan's Item C list omitted these; the downsampling blocks need them for honest
-  coverage.) Each is `vjp_comp` of a proven stride-1 depthwise VJP with `decimateFlat`'s VJP.
+
+The shipped MobileNetV2 is batched, with XLA-`SAME` stride-2 layers. `mnv2_net_tiedB` certifies its
+stride-2 depthwise and stem parameters through `Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den` /
+`Mnv2PaperPoCG.depthwiseStridedXlaBGradB_den`, `EnetPoCG.convStridedXlaWGradB_den` and
+`Mnv2PaperPoCG.convStridedXlaBGradB_den`.
 
 All bridges are generic in the cotangent `c`/`dy` the backward chain delivers at the layer output
 (pinning that cotangent to the actual inverted-residual chain is the optional Item D). The SGD
@@ -111,7 +110,7 @@ theorem mnv2_render_depthwiseb_certified {c h w kH kW : Nat}
 --
 -- The stem (`conv3WGradStrided`) reuses `flatConvStride2_weight_grad_has_vjp` (StridedConv.lean)
 -- for the kernel; the SGD wrapper is the only new content. The stem bias needs a strided-conv
--- *bias* VJP (added in § C alongside the strided-depthwise bias).
+-- *bias* VJP (§ C).
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Stem conv weight output, certified.** `sWⁿ = sW − lr·(strided transpose-trick grad)` denotes
@@ -127,37 +126,13 @@ theorem mnv2_render_stem_convW_certified {ic oc h w kH kW : Nat}
             v i j * dy j := by
   rw [flatConvStride2_weight_grad_has_vjp_correct]
 
-/-- **Stem conv weight output, certified — XLA-`SAME` phase.** `mnv2_render_stem_convW_certified`
-    at `flatConvStride2Xla`, the stem MobileNetV2 ships (every artifact since 2026-09-05; the
-    Adam ones since 2026-08-08). ⚠ The symmetric lemma above stays: ResNet-34's PoC reuses it,
-    and ResNet's stem is PyTorch-origin symmetric. -/
-theorem mnv2_render_stem_convW_xla_certified {ic oc h w kH kW : Nat}
-    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
-    (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (lr : ℝ)
-    (i : Fin (oc * ic * kH * kW)) :
-    v i - lr * (flatConvStride2Xla_weight_grad_has_vjp b x).backward v dy i
-      = v i - lr * ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) => flatConvStride2Xla (Kernel4.unflatten v') b x)
-            v i j * dy j := by
-  rw [flatConvStride2Xla_weight_grad_has_vjp_correct]
-
 -- ════════════════════════════════════════════════════════════════
--- § C. Strided (stride-2) param VJPs — the 4 downsampling blocks + the stem bias
+-- § C. Stem strided-conv bias (`sb`)
 --
--- 4 of the 6 inverted-residual blocks (b1,b3,b5,b6) downsample via a stride-2 depthwise, so
--- their depthwise W/b feed `depthwiseStride2Flat`, not `depthwiseConv2d`; likewise the stem bias
--- feeds the strided `flatConvStride2`. The strided-depthwise VJPs themselves
--- (`depthwise_weight_differentiable`, `depthwise_bias_differentiable`,
--- `depthwiseStride2_weight_grad_has_vjp`, `depthwiseStride2_bias_grad_has_vjp`) were RELOCATED to
--- `Depthwise.lean` (next to their stride-1 peers) so the `depthwiseStrided{Weight,Bias}Sgd` ops'
--- `den` in `StableHLO` can reference them upstream; they are still in scope here by import. The
--- `mnv2_render_depthwise*_strided_certified` SGD-wrappers below stay here.
--- ════════════════════════════════════════════════════════════════
-
--- ── C.1 Stem strided-conv bias (`sb`) ──
 -- `conv2d_bias_differentiable` and `flatConvStride2_bias_grad_has_vjp` were RELOCATED to
 -- `StridedConv.lean` (next to their weight peers) so the `convStridedBiasSgd` op's `den` in
 -- `StableHLO` can reference the bias-VJP upstream; they are still in scope here by import.
+-- ════════════════════════════════════════════════════════════════
 
 /-- **Stem conv bias output, certified.** `sbⁿ = sb − lr·(spatial reduce)` denotes
     `sb − lr·(certified ∂(flatConvStride2)/∂sb · cotangent)`. -/
@@ -168,32 +143,5 @@ theorem mnv2_render_stem_convb_certified {ic oc h w kH kW : Nat}
       = b o - lr * ∑ j : Fin (oc * h * w),
           pdiv (fun b' : Vec oc => flatConvStride2 W b' x) b o j * dy j := by
   rw [(flatConvStride2_bias_grad_has_vjp W x).correct]
-
--- ── C.2 Strided depthwise weight (`dW`, blocks b1,b3,b5,b6) ──
--- (`depthwiseStride2_weight_grad_has_vjp` RELOCATED to `Depthwise.lean` — see § C header.)
-
-/-- **Strided depthwise weight output, certified — XLA-`SAME` phase.** MobileNetV2's four strided
-    depthwises: `Wⁿ = W − lr·(upsample-then-stride-1 grad)` denotes `W − lr·(certified
-    ∂(depthwiseStride2FlatXla)/∂W · cotangent)`. -/
-theorem mnv2_render_depthwiseW_strided_xla_certified {c h w kH kW : Nat}
-    (b : Vec c) (x : Vec (c * (2 * h) * (2 * w)))
-    (v : Vec (c * kH * kW)) (dy : Vec (c * h * w)) (lr : ℝ) (i : Fin (c * kH * kW)) :
-    v i - lr * (depthwiseStride2Xla_weight_grad_has_vjp b x).backward v dy i
-      = v i - lr * ∑ j : Fin (c * h * w),
-          pdiv (fun v' : Vec (c * kH * kW) =>
-            depthwiseStride2FlatXla (Tensor3.unflatten v' : DepthwiseKernel c kH kW) b x) v i j * dy j := by
-  rw [(depthwiseStride2Xla_weight_grad_has_vjp b x).correct]
-
--- ── C.3 Strided depthwise bias (`db`, blocks b1,b3,b5,b6) ──
--- (`depthwiseStride2_bias_grad_has_vjp` RELOCATED to `Depthwise.lean` — see § C header.)
-
-/-- **Strided depthwise bias output, certified — XLA-`SAME` phase.** `bⁿ = b − lr·(spatial reduce)`. -/
-theorem mnv2_render_depthwiseb_strided_xla_certified {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (x : Vec (c * (2 * h) * (2 * w)))
-    (b : Vec c) (dy : Vec (c * h * w)) (lr : ℝ) (o : Fin c) :
-    b o - lr * (depthwiseStride2Xla_bias_grad_has_vjp W x).backward b dy o
-      = b o - lr * ∑ j : Fin (c * h * w),
-          pdiv (fun b' : Vec c => depthwiseStride2FlatXla W b' x) b o j * dy j := by
-  rw [(depthwiseStride2Xla_bias_grad_has_vjp W x).correct]
 
 end Proofs

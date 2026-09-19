@@ -741,18 +741,14 @@ noncomputable def mobilenetv2Forward_full
     flatConvStride2Xla (h := 112) (w := 112) Ws bs)
 
 -- ════════════════════════════════════════════════════════════════
--- Concrete whole-network instance: every ReLU6 smoothness hypothesis
--- discharged (the `mobilenetv2_has_vjp_at` analogue of the MnistCNN
--- concrete instances). Closes the gap that the relu6 smoothness bundle is
--- never shown jointly satisfiable on the real `mobilenetv2Forward`.
+-- § The *live* MobileNetV2 witness
 --
--- NOTE: this is a *degenerate* witness. The discharge uses `bnForward_const`
--- (BN of a constant = its shift β), which requires every BN input to be
--- constant — forcing constant pre-GAP activations and hence a constant
--- network (zero Jacobian). That is intrinsic to ReLU6's two-sided kink: the
--- only cheap way to land every relu6 input strictly inside (0,6) is to pin
--- it to a single β. A *live* MobileNetV2 witness (non-trivial Jacobian)
--- needs genuine per-coordinate (0,6) bounds and is left as follow-up.
+--   `Mnv2Live` discharges the relu6 off-the-kink bundle of `mobilenetv2_has_vjp_at` on a
+--   NONZERO, non-collapsed net, defeating BN's `√(σ²+ε)` with the `γ=1,β=3, n≤8` window
+--   (`bn13_window`) instead of a constant collapse — AND proves the net is genuinely
+--   non-degenerate (`mnv2Live_forward_nonconstant : forward X ≠ forward 0`, below), so its
+--   Jacobian is not identically zero. `bnForward_mean` / `bn1_devSum_scale` /
+--   `bnIstd_pos` are the reusable, layout-free core of that seal.
 -- ════════════════════════════════════════════════════════════════
 
 /-- A depthwise conv with everywhere-zero kernel and bias maps anything to `0`. -/
@@ -760,37 +756,6 @@ theorem depthwiseFlat_eq_zero {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) 
     (hW : ∀ ch kh kw, W ch kh kw = 0) (hb : ∀ ch, b ch = 0) (v : Vec (c * h * w)) :
     depthwiseFlat (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
   funext k; simp [depthwiseFlat, depthwiseConv2d, Tensor3.flatten, hW, hb]
-
-namespace MobileNetV2Concrete
-
--- ic=1, c=mid₁=oc=mid₂=2, h=w=2, nClasses=2, 1×1 kernels, zero weights,
--- all BN (ε,γ,β) = (1,1,1) so every relu6 input lands at β = 1 ∈ (0,6).
-noncomputable def Ws  : Kernel4 2 1 1 1 := fun _ _ _ _ => 0
-noncomputable def bs  : Vec 2 := fun _ => 0
-noncomputable def We₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def Wd₁ : DepthwiseKernel 2 1 1 := fun _ _ _ => 0
-noncomputable def Wp₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def We₂ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def Wd₂ : DepthwiseKernel 2 1 1 := fun _ _ _ => 0
-noncomputable def Wp₂ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
-noncomputable def Wh  : Mat 2 2 := fun _ _ => 0
-noncomputable def bh  : Vec 2 := fun _ => 0
-noncomputable def X   : Vec (1 * 2 * 2) := fun _ => 0
-
-end MobileNetV2Concrete
-
--- ════════════════════════════════════════════════════════════════
--- § The *live* MobileNetV2 witness
---
---   `MobileNetV2Concrete` (above) discharges the off-the-kink bundle by
---   zeroing every kernel → constant output → zero Jacobian. `Mnv2Live`
---   discharges the SAME bundle on a NONZERO, non-collapsed net, defeating
---   BN's `√(σ²+ε)` with the `γ=1,β=3, n≤8` window (`bn13_window`) instead
---   of a constant collapse — AND proves the net is genuinely non-degenerate
---   (`mnv2Live_forward_nonconstant : forward X ≠ forward 0`, below), so its
---   Jacobian is not identically zero. `bnForward_mean` / `bn1_devSum_scale` /
---   `bnIstd_pos` are the reusable, layout-free core of that seal.
--- ════════════════════════════════════════════════════════════════
 
 namespace Mnv2Live
 
@@ -904,8 +869,7 @@ theorem win (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
   exact ⟨h0.ne', h6.ne⟩
 
 -- ── Non-vacuity seal: the live forward is genuinely non-constant ──
--- Everything below proves `mnv2Live_forward_nonconstant : forward X ≠ forward 0`,
--- closing the gap that `MobileNetV2Concrete` left open (constant output). The
+-- Everything below proves `mnv2Live_forward_nonconstant : forward X ≠ forward 0`. The
 -- ReLU6 sites are locally the identity at `X` (the window), block-2's identity
 -- convs leave four genuine BN layers, and the asymmetric stem plants a
 -- channel-0 deviation that BN rescales by a positive `istd` through all four —
@@ -1177,7 +1141,7 @@ theorem forward_X_eq :
 
 /-- **The live witness is non-degenerate**: its forward computes a non-trivial
     function of the input — `forward X ≠ forward 0`. So the Jacobian is not
-    identically zero, unlike `MobileNetV2Concrete`. -/
+    identically zero. -/
 theorem mnv2Live_forward_nonconstant :
     mobilenetv2Forward Ws bs 1 1 3 We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
         We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh X

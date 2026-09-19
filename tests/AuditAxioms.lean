@@ -292,7 +292,6 @@ open Proofs
 -- Whole-network VJPs for the depthwise/SE/LN-based architectures
 #print axioms relu6_has_vjp_at
 #print axioms mobilenetv2_has_vjp_at_correct
--- MobileNetV2: concrete whole-network instance, every ReLU6 smoothness hypothesis discharged
 -- MobileNetV2: the LIVE counterpart
 #print axioms Mnv2Live.bn13_window
 -- ...and the live witness is non-degenerate
@@ -465,7 +464,6 @@ open Proofs
 -- ch7-MobileNetV2 §1 fold (depthwise half)
 #print axioms Mnv2PoC.depthwiseW_den
 #print axioms Mnv2PoC.depthwiseB_den
--- The XLA-SAME per-example stem dens (2026-09-05)
 -- ch8-EfficientNet-B0 §1 fold (den)
 #print axioms EnetPoC.convWB_den
 #print axioms EnetPoC.convStridedWB_den
@@ -584,16 +582,10 @@ open Proofs
 #print axioms flatConvStride2_has_vjp_correct
 -- ...and its weight-VJP (the kernel grad for training a strided block)
 #print axioms flatConvStride2_weight_grad_has_vjp_correct
--- Deep-block chain
--- Strided downsampling block (conv stride-2 → BN → relu)
--- Strided residual-PROJECTION block (relu(proj(x)+F(x)), the stage-start downsampling block)
--- Stage assembly: the conditional (_at)
 -- THE WHOLE-NETWORK ResNet-34 VJP
 #print axioms resnet34_has_vjp_at
--- B7: the UNCONDITIONAL concrete instance
 -- The first NON-DEGENERATE ResNet-34 whole-net backward witness (Item A, level 2)
 #print axioms ResNet34LivePC.liveFwd2_nonconstant
--- Item A level 3: the nonzero-Jacobian SEAL for the live ResNet-34 (ResNet34LiveSeal.lean)
 -- Item A FULL DEPTH (ResNet34LiveFull.lean)
 #print axioms ResNet34LiveFull.liveFwd2Full_nonconstant
 #print axioms ResNet34LiveFull.liveFwd2Full_jacobian_nonzero
@@ -647,11 +639,6 @@ open Proofs
 #print axioms mnv2_render_depthwiseb_certified
 #print axioms mnv2_render_stem_convW_certified
 #print axioms mnv2_render_stem_convb_certified
--- Their XLA-SAME twins (2026-09-05)
-#print axioms mnv2_render_stem_convW_xla_certified
-#print axioms mnv2_render_depthwiseW_strided_xla_certified
-#print axioms mnv2_render_depthwiseb_strided_xla_certified
--- MobileNetV2 RENDER (planning/archive/mobilenetv2_close.md Item A)
 -- THE COTANGENT PASS / = ∂loss/∂θ FOLD
 #print axioms conv_total_loss_grad_fold
 #print axioms conv_bias_total_loss_grad_fold
@@ -687,7 +674,6 @@ open Proofs
 #print axioms efficientnetForwardB_full_has_vjp_correct
 -- ConvNeXt RENDER (planning/archive/convnext_close.md Item A)
 #print axioms StableHLO.convNextFwdGraph_faithful
--- ConvNeXt CLOSE (planning/archive/convnext_close.md Item C)
 -- ConvNeXt §1 fold START
 #print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
 #print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
@@ -851,7 +837,6 @@ open Proofs
 #print axioms bnVar_input_close
 #print axioms bnIstd_input_close
 #print axioms bnForward_input_close
--- First assembled ResNet block step (ResNet34BlockBridge.lean)
 -- Whole-net certificate backbone (FloatComposeBridge.lean)
 #print axioms FloatClose.comp
 #print axioms floatClose_relu
@@ -890,7 +875,6 @@ open Proofs
 -- The CIFAR-8 chain tie
 #print axioms Proofs.FloatModel.bnMean_close_of
 #print axioms Proofs.FloatModel.bnMean_num_le
--- The SECOND ImageNet-scale whole-net float number: the MobileNetV2 inference forward (mnv2EvalBridge)
 -- The mnv2 block bridges are generic in the NORMALISATION too (`*Gen`)
 #print axioms Proofs.mobilenetv2ForwardPaperEval
 #print axioms Proofs.StableHLO.ivNoExpGraphEvalW_faithful
@@ -913,7 +897,6 @@ open Proofs
 #print axioms Proofs.StableHLO.mbExpGraphEvalW_faithful
 #print axioms Proofs.efficientnetForwardB_fullEval
 #print axioms Proofs.StableHLO.efficientnetFwdGraphB_fullEval_faithful
--- The FOURTH ImageNet-scale whole-net float statement, ConvNeXt-T's forward (cnxBridge), a different kind of statement
 -- §B integrity tie (the r34 identity block)
 #print axioms Proofs.convFlatBack_eq_vjp_backward
 #print axioms Proofs.rblkPC_has_vjp_at
@@ -930,7 +913,6 @@ open Proofs
 #print axioms Proofs.depthwiseStride2FlatBack_eq_vjp_backward
 -- Its XLA-SAME peer (MobileNetV2's four strided depthwises, B0's downsample depthwise).
 #print axioms Proofs.depthwiseStride2FlatXlaBack_eq_vjp_backward
--- §B integrity tie (convnext)
 -- §2n §B at ConvNeXt's REAL channel LayerNorm
 #print axioms Proofs.HasVJP.backward_unique
 #print axioms Proofs.bn_grad_input_eq_vjp_backward
@@ -942,7 +924,6 @@ open Proofs
 -- §B integrity tie (mnv2)
 #print axioms Proofs.invresBodyPC_has_vjp_at
 #print axioms Proofs.invresBodyStridedPC_has_vjp_at
--- §B integrity tie (efficientnet)
 -- §B integrity tie (vit MHSA — the sdpa adjoint)
 #print axioms Proofs.projBack_core_coord
 #print axioms Proofs.woback_unflatten
@@ -1329,7 +1310,6 @@ open Proofs
 #print axioms StableHLO.seGateBackGraphE_faithful
 #print axioms StableHLO.seBlockFullBackGraphE_faithful
 #print axioms StableHLO.mbconvBodyBackGraph_faithful
--- ConvNeXt backward-graph faithfulness (den-level)
 -- §2o Part A (2026-07-31)
 #print axioms Proofs.rowLNBack_affine_eq
 #print axioms StableHLO.chanLNBackGraph_faithful
@@ -1355,7 +1335,6 @@ open Proofs
 #print axioms StableHLO.depthwiseStridedBackBatched_faithful
 -- Its XLA-SAME peer, the token MobileNetV2's Adam render emits at its four strided depthwises.
 #print axioms StableHLO.depthwiseStridedXlaBackBatched_faithful
--- The PER-EXAMPLE XLA-SAME backward tokens MobileNetV2's SGD train step emits (MobileNetV2Render.lean, 2026-09-05)
 -- Batched strided depthwise → bn → swish stage backward graph.
 #print axioms StableHLO.dwbsSBackBatchedGraph_faithful
 -- Capstone: the batched EfficientNet downsample MBConv body backward graph.
@@ -1375,7 +1354,6 @@ open Proofs
 
 -- ResNet-34 backward-graph faithfulness (den-level)
 #print axioms StableHLO.cbReluBackBatchedGraph_faithful
--- The basic-block body backward graph (projB ∘ cbReluB).
 -- Capstone: the whole batched ResNet-34 identity basic block backward graph
 #print axioms StableHLO.r34BasicBlockBackBatchedGraph_faithful
 
@@ -1447,8 +1425,6 @@ open Proofs
 #print axioms StableHLO.mnv4FfnBodyGraphB_faithful
 #print axioms StableHLO.mnv4PreStridedGraphB_faithful
 
--- MNv4's T3 §1 fold
-
 -- MNv4's T3 §1a tie
 #print axioms Mnv4TieB.mnv4_extradw_tiedB
 #print axioms Mnv4TieB.mnv4_convnext_tiedB
@@ -1481,8 +1457,6 @@ open Proofs
 #print axioms Proofs.ViTPoC.posEmbedSgd_den
 #print axioms Proofs.ViTPoC.headW_den
 #print axioms Proofs.ViTPoC.headB_den
--- ViT-Tiny §1a TIE — per-block (ViTStepTie)
--- ViT-Tiny §1a TIE — whole-net thread (2-block vector-LN representative)
 -- ViT-Tiny §1a TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTStepTie)
 #print axioms Proofs.vitCotDQmh_eq
 #print axioms Proofs.vitCotDKmh_eq

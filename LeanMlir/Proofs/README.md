@@ -159,16 +159,15 @@ Two forms, set by the architecture's activations:
   whole-network VJP is pointwise (`*_has_vjp_at`, under per-site
   off-the-kink hypotheses). Each is instantiated on a concrete small net
   with every hypothesis discharged (`MlpConcrete`, `Spatial`/`Mini`,
-  `CnnConcrete`, `MobileNetV2Concrete`), proving the bundle is jointly
+  `CnnConcrete`, `Mnv2Live`), proving the bundle is jointly
   satisfiable — not vacuous.
 
 Conditionality is intrinsic to the math, not a formalization gap: it enters
 exactly at the non-smooth operators and is *recovered* by the
-smooth-activation nets. Two honesty notes on the concrete witnesses:
-`MobileNetV2Concrete` is degenerate (constant output — ReLU6's two-sided
-kink admits no cheap live witness, since pinning every input into `(0,6)`
-forces constant activations), whereas `CnnConcrete` has a genuinely
-injective stem; and all concrete nets are deliberately tiny.
+smooth-activation nets. The concrete witnesses are deliberately tiny.
+`CnnConcrete` has an injective stem, and `Mnv2Live` keeps every ReLU6 input
+inside `(0,6)` with a BatchNorm window rather than a constant collapse, so
+its forward is non-constant (`mnv2Live_forward_nonconstant`).
 
 ## Axioms (0 project)
 
