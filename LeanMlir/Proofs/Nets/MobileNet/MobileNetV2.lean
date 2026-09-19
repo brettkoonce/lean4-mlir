@@ -180,25 +180,6 @@ theorem dwBnRelu6_differentiableAt {c h w kH kW : Nat}
     DifferentiableAt ℝ (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseFlat W b) v := by
   fun_prop (disch := assumption)
 
-/-- **conv → bn (no activation)** — the project (linear bottleneck) stage.
-    Everywhere differentiable, global `HasVJP`. -/
-noncomputable def convBn'_has_vjp {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε γ β : ℝ) (hε : 0 < ε) :
-    HasVJP (bnForward (oc * h * w) ε γ β ∘ flatConv W b
-      : Vec (ic * h * w) → Vec (oc * h * w)) :=
-  vjp_comp (flatConv W b) (bnForward (oc * h * w) ε γ β)
-    (flatConv_differentiable W b)
-    (bnForward_differentiable (oc * h * w) ε γ β hε)
-    (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b))
-    (bn_has_vjp (oc * h * w) ε γ β hε)
-
-theorem convBn'_differentiable {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε) :
-    Differentiable ℝ (bnForward (oc * h * w) ε γ β ∘ flatConv W b
-      : Vec (ic * h * w) → Vec (oc * h * w)) :=
-  (bnForward_differentiable (oc * h * w) ε γ β hε).comp (flatConv_differentiable W b)
-
 -- ════════════════════════════════════════════════════════════════
 -- § Inverted-residual body  (MobileNetV2 core)
 --   body = project(1×1 bn) ∘ depthwise(bn-relu6) ∘ expand(1×1 bn-relu6)
@@ -274,9 +255,9 @@ noncomputable def invresBody_has_vjp_at {ic mid oc h w kHe kWe kHd kWd kHp kWp :
   -- project (everywhere)
   exact vjp_comp_at _ (ivProject (h := h) (w := w) Wp bp εp γp βp) v
     hde_diff
-    ((convBn'_differentiable Wp bp εp γp βp hεp) _)
+    ((convBn_differentiable Wp bp εp γp βp hεp) _)
     hde_vjp
-    ((convBn'_has_vjp Wp bp εp γp βp hεp).toHasVJPAt _)
+    ((convBn_has_vjp Wp bp εp γp βp hεp).toHasVJPAt _)
 
 theorem invresBody_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
@@ -295,7 +276,7 @@ theorem invresBody_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat
   have hdw_diff : DifferentiableAt ℝ (ivDepthwise (h := h) (w := w) Wd bd εd γd βd)
       (ivExpand (h := h) (w := w) We be εe γe βe v) :=
     dwBnRelu6_differentiableAt Wd bd εd γd βd hεd _ h_sd
-  exact ((convBn'_differentiable Wp bp εp γp βp hεp) _).comp v (hdw_diff.comp v hexp_diff)
+  exact ((convBn_differentiable Wp bp εp γp βp hεp) _).comp v (hdw_diff.comp v hexp_diff)
 
 /-- **Inverted-residual block WITH skip** (stride 1, `ic = oc = c`):
     `residual (invresBody)` — `body(x) + x`. No final activation
@@ -656,9 +637,9 @@ noncomputable def invresBodyStrided_has_vjp_at
   -- project (everywhere)
   exact vjp_comp_at _ (ivProject (h := h) (w := w) Wp bp εp γp βp) v
     hde_diff
-    ((convBn'_differentiable Wp bp εp γp βp hεp) _)
+    ((convBn_differentiable Wp bp εp γp βp hεp) _)
     hde_vjp
-    ((convBn'_has_vjp Wp bp εp γp βp hεp).toHasVJPAt _)
+    ((convBn_has_vjp Wp bp εp γp βp hεp).toHasVJPAt _)
 
 theorem invresBodyStrided_differentiableAt
     {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
@@ -681,7 +662,7 @@ theorem invresBodyStrided_differentiableAt
   have hdw_diff : DifferentiableAt ℝ (ivDepthwiseStrided (h := h) (w := w) Wd bd εd γd βd)
       (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v) :=
     dwBnRelu6Strided_differentiableAt Wd bd εd γd βd hεd _ h_sd
-  exact ((convBn'_differentiable Wp bp εp γp βp hεp) _).comp v (hdw_diff.comp v hexp_diff)
+  exact ((convBn_differentiable Wp bp εp γp βp hεp) _).comp v (hdw_diff.comp v hexp_diff)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The full MobileNetV2 render — `mobilenetv2Forward_full`

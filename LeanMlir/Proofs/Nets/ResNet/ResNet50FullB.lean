@@ -397,28 +397,19 @@ theorem r50DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Na
   funext i
   ring
 
-/-- Stem graph: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 max-pool.
-
-    ⚠ NOT `r34StemGraphB`, and the difference is one string: that graph names the bias operand
-    `"%sb"`, the `convBias := true` name, and `ResNet50RenderB` emits `%zb64`. The ops, their order
-    and their `den` are identical. -/
+/-- Stem graph: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 max-pool — ResNet-34's
+    `r34StemGraphB`, token for token (both name the bias operand `biasName false "" oc`). -/
 def r50StemGraphB (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) : SHlo (N * (oc * h * w)) :=
-  .batchOp (N := N) (.maxPool3s2 (c := oc) (h := h) (w := w))
-    (.batchOp (N := N) (.relu (n := oc * (2 * h) * (2 * w)))
-      (.bnBatchF "%sg" "%sbt" epsStr εs γs βs
-        (.batchOp (N := N)
-          (.convStrided (h := 2 * h) (w := 2 * w) "%sW" (biasName false "" oc) Ws bs) e)))
+  r34StemGraphB epsStr N h w Ws bs εs γs βs e
 
 theorem r50StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
     den (r50StemGraphB epsStr N h w Ws bs εs γs βs e)
-      = r34StemB N h w Ws bs εs γs βs (den e) := by
-  unfold r50StemGraphB r34StemB cbReluStridedB
-  simp only [den_batchOp_maxPool3s2, den_batchOp_relu_eq_reluF, reluF_faithful,
-    den_batchOp_convStrided, den_bnBatchF, Function.comp_apply]
+      = r34StemB N h w Ws bs εs γs βs (den e) :=
+  r34StemGraphB_faithful epsStr N h w Ws bs εs γs βs e
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness

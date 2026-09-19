@@ -2,6 +2,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP
 
 /-! # ⭐⭐ `mnv2InputGrad` IS the certified whole-net MobileNetV2 gradient
 
@@ -55,7 +56,8 @@ post-BN clamp windows (`≠ 0 ∧ ≠ 6`) and the six blocks' own VJP witnesses 
 namespace Proofs
 
 
-/-- **conv(stride-2) → per-channel-BN → relu6 VJP at a smooth point** — MobileNetV2's STEM. -/
+/-- **conv(stride-2) → per-channel-BN → relu6 VJP at a smooth point** — MobileNetV2's STEM,
+    i.e. `MobileNetV2FullVJP`'s `convBnRelu6StridedPC_has_vjp_at`. -/
 noncomputable def convStridedBnRelu6PC_has_vjp_at {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))
@@ -63,13 +65,7 @@ noncomputable def convStridedBnRelu6PC_has_vjp_at {ic oc h w kH kW : Nat}
                        bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     HasVJPAt (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β
       ∘ flatConvStride2Xla (h := h) (w := w) W b) v :=
-  stage_has_vjp_at (flatConvStride2Xla (h := h) (w := w) W b) (bnPerChannelTensor3 oc h w ε γ β)
-    (relu6 (oc * h * w)) v
-    (flatConvStride2Xla_differentiable W b) (flatConvStride2Xla_has_vjp W b)
-    (bnPerChannelTensor3_differentiable oc h w ε hε γ β)
-    (bnPerChannelTensor3_has_vjp oc h w ε hε γ β)
-    (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    (relu6_has_vjp_at (oc * h * w) _ h_smooth)
+  convBnRelu6StridedPC_has_vjp_at W b ε γ β hε v h_smooth
 
 theorem convStridedBnRelu6PC_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
@@ -77,8 +73,8 @@ theorem convStridedBnRelu6PC_differentiableAt {ic oc h w kH kW : Nat}
     (h_smooth : ∀ k, (bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
                        bnPerChannelTensor3 oc h w ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
     DifferentiableAt ℝ (relu6 (oc * h * w) ∘ bnPerChannelTensor3 oc h w ε γ β
-      ∘ flatConvStride2Xla (h := h) (w := w) W b) v := by
-  unfold flatConvStride2Xla at *; fun_prop (disch := assumption)
+      ∘ flatConvStride2Xla (h := h) (w := w) W b) v :=
+  convBnRelu6StridedPC_differentiableAt W b ε γ β hε v h_smooth
 
 /-- **The STEM tie.** -/
 theorem convStridedBnRelu6PCBack_eq_vjp_backward {ic oc h w kH kW : Nat}

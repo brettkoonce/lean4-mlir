@@ -173,15 +173,10 @@ theorem enetChain_faithful {N c _mid h w _kHd _kWd _r : Nat}
     den ((CertLayer.chain Ls).graph x e) = ((CertLayer.chain Ls).vjp x hx).backward (den e) :=
   CertLayer.chain_faithful Ls x hx e
 
-/-- An R34 stage: the downsample block, then any number of identity blocks. The R34 peer of
-    `r50StageDown`, and the same two `comp`/`chain` calls. -/
-noncomputable def r34Stage {m n : Nat}
-    (P : CertLayer m n) (tail : List (CertLayer n n)) : CertLayer m n :=
-  P.comp (CertLayer.chain tail)
-
 /-- **R34's block table, as a type-level check**: stages are 3/4/6/3 = one entry block plus
     2/3/5/2 identity blocks — the same counts as R50, since the two nets differ in block *form*
-    (basic vs bottleneck), not in depth per stage. -/
+    (basic vs bottleneck), not in depth per stage. So it IS `r50Trunk_3463`: a stage is one
+    `comp`/`chain` pair whatever its blocks are. -/
 noncomputable def r34Trunk_3463 {N c₀ c₁ c₂ c₃ c₄ h w : Nat}
     (P1 : CertLayer (N * (c₀ * (2*(2*(2*h))) * (2*(2*(2*w)))))
                     (N * (c₁ * (2*(2*(2*h))) * (2*(2*(2*w))))))
@@ -195,9 +190,7 @@ noncomputable def r34Trunk_3463 {N c₀ c₁ c₂ c₃ c₄ h w : Nat}
     (P4 : CertLayer (N * (c₃ * (2*h) * (2*w))) (N * (c₄ * h * w)))
     (I4 : CertLayer (N * (c₄ * h * w)) (N * (c₄ * h * w))) :
     CertLayer (N * (c₀ * (2*(2*(2*h))) * (2*(2*(2*w))))) (N * (c₄ * h * w)) :=
-  (r34Stage P1 (List.replicate 2 I1)).comp
-    ((r34Stage P2 (List.replicate 3 I2)).comp
-      ((r34Stage P3 (List.replicate 5 I3)).comp (r34Stage P4 (List.replicate 2 I4))))
+  r50Trunk_3463 P1 I1 P2 I2 P3 I3 P4 I4
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ R34 WEIGHT WIRING — parameters TYPED BY THEIR BLOCK ROW
