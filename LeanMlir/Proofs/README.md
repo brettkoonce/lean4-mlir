@@ -312,9 +312,11 @@ StableHLO-subset render (the `SHlo` AST + its `den : SHlo n → Vec n` denotatio
 and there the proof↔emitted link is a **theorem**, not just a numerical check:
 for all 12 chapter nets the §1a whole-net ties (`LinearFold`'s
 `poc_train_step_tail_certified` up through `r34_net_tiedB`,
-`mnv2_net_tiedB`, `cnx_net_tied_certified`, `efficientnet_net_tied`,
-`vit_net_tied_certified`) prove every emitted parameter-SGD node's `den` equals
-the certified `fderiv`-derived loss-descent step, with the cotangent threaded
+`mnv2_net_tiedB`, `efficientnet_net_tied`, `cnx_net_tiedGB`, `vit_net_tiedGB` —
+the last two at the gradient nodes every shipped ConvNeXt / ViT artifact emits,
+with `cnx_net_tied_certified` / `vit_net_tied_certified` their SGD-inline forms)
+prove every emitted parameter-update node's `den` equals the certified
+`fderiv`-derived loss-descent step (or its gradient), with the cotangent threaded
 through the **real** forward and the proven per-block VJP backward (residual
 fan-in included — not a free `∀`-cotangent). All 3-axiom-clean in
 `tests/AuditAxioms.lean`. The residuals on *that* path are narrower: (a) `den` is

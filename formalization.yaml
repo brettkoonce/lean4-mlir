@@ -111,6 +111,8 @@ status:
     - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
     - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
+    # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact (ViT-Tiny's twin is Proofs.ViTTiePoCGB.vit_net_tiedGB)
+    - {declaration: "Proofs.CnxTiePoCGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "", literature_dependencies: []}
     #
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
