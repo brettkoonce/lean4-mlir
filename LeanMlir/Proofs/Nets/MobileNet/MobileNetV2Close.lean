@@ -9,7 +9,7 @@ import LeanMlir.Proofs.Nets.Small.CifarBnClose
 backward chain delivers at each layer's output, the CIFAR-non-BN-style close): every
 MobileNetV2 train-step parameter output denotes `θ − lr·(certified Jacobian · cotangent)`.
 
-The MobileNetV2 train step ([`tests/TestMobilenetV2Train.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestMobilenetV2Train.lean)) has these parameter families,
+The MobileNetV2 train step (`TestMobilenetV2Train.lean` (retired 2026-09-20)) has these parameter families,
 and each is now certified by the bridge in the right column:
 
 | family (render SSA)                         | forward fn          | certified by                                  |
@@ -21,14 +21,14 @@ and each is now certified by the bridge in the right column:
 | dense `Wd` / `bd`                           | matmul / +bias      | `weight_grad_bridge` / `bias_grad_bridge` (M2, **reuse**) |
 | stem 3×3 conv W (`sW`, stride 2)            | `flatConvStride2`   | `mnv2_render_stem_convW_certified` (**new wrapper**) |
 | stem 3×3 conv b (`sb`, stride 2)            | `flatConvStride2`   | `mnv2_render_stem_convb_certified` (**new**)  |
-| depthwise W stride 1 (`dW`, blocks b2,b4)   | `depthwiseConv2d`   | `mnv2_render_depthwiseW_certified` (**new**)  |
+| depthwise W stride 1 (`dW`, blocks b2,b4)   | `depthwiseConv2d`   | `Mnv2PoC.depthwiseW_den` (`MobileNetV2Fold.lean`; this file's own wrapper retired 2026-09-20) |
 | depthwise b stride 1 (`db`, blocks b2,b4)   | `depthwiseConv2d`   | `mnv2_render_depthwiseb_certified` (**new**)  |
 
 The reuse families need no new theorem — the generic M2/M3/CIFAR-BN bridges apply verbatim at
 the MobileNetV2 shapes. This file supplies the genuinely-new pieces:
 
-* **Depthwise (stride-1) W/b** — the `.correct` fields of the proven `depthwise_weight_grad_has_vjp3`
-  / `depthwise_bias_grad_has_vjp` (`Depthwise.lean`), SGD-wrapped. The "one genuinely-new bridge
+* **Depthwise (stride-1) b** — the `.correct` field of the proven `depthwise_bias_grad_has_vjp`
+  (`Depthwise.lean`), SGD-wrapped (the W twin, superseded by `Mnv2PoC.depthwiseW_den`, was retired). The "one genuinely-new bridge
   family" of the plan — instantiation, the VJP itself is already proven 3-axiom-clean.
 * **Stem strided conv W/b** — wrappers of `flatConvStride2_weight_grad_has_vjp` (ch6) and a new
   strided-conv *bias* VJP.
@@ -57,20 +57,6 @@ open scoped BigOperators
 -- cotangent. The depthwise analogue of `conv_weight_grad_bridge` / `conv_bias_grad_bridge`.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Depthwise weight-gradient bridge.** At any cotangent `dy` at the depthwise layer's output
-    and any kernel `W`, the emitted per-channel depthwise kernel gradient equals the certified
-    Jacobian of `depthwiseConv2d` viewed as a function of the kernel, contracted with `dy`. The
-    `.correct` field of `depthwise_weight_grad_has_vjp3`. -/
-theorem mnv2_depthwise_weight_grad_bridge {c h w kH kW : Nat}
-    (b : Vec c) (x : Tensor3 c h w)
-    (W : DepthwiseKernel c kH kW) (dy : Tensor3 c h w)
-    (ci : Fin c) (hi : Fin kH) (wi : Fin kW) :
-    (depthwise_weight_grad_has_vjp3 b x).backward W dy ci hi wi
-      = ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
-          pdiv3 (fun W' : DepthwiseKernel c kH kW => depthwiseConv2d W' b x) W ci hi wi co ho wo
-            * dy co ho wo :=
-  (depthwise_weight_grad_has_vjp3 b x).correct W dy ci hi wi
-
 /-- **Depthwise bias-gradient bridge.** Likewise the per-channel depthwise bias gradient
     (`db[c] = Σ_spatial dy`) is the certified Jacobian of `depthwiseConv2d` wrt the bias, contracted
     with `dy` — the `.correct` field of `depthwise_bias_grad_has_vjp`. -/
@@ -81,19 +67,6 @@ theorem mnv2_depthwise_bias_grad_bridge {c h w kH kW : Nat}
       = ∑ j : Fin (c * h * w),
           pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc j * dy j :=
   (depthwise_bias_grad_has_vjp W x).correct b dy cc
-
-/-- **Depthwise weight output, certified.** `Wⁿ = W − lr·(per-channel transpose-trick grad)`
-    denotes, at the kernel `W`, `W − lr·(certified ∂(depthwiseConv2d)/∂W · cotangent)`. The
-    depthwise peer of `cnn_render_convW_certified`. -/
-theorem mnv2_render_depthwiseW_certified {c h w kH kW : Nat}
-    (b : Vec c) (x : Tensor3 c h w)
-    (W : DepthwiseKernel c kH kW) (dy : Tensor3 c h w) (lr : ℝ)
-    (ci : Fin c) (hi : Fin kH) (wi : Fin kW) :
-    W ci hi wi - lr * (depthwise_weight_grad_has_vjp3 b x).backward W dy ci hi wi
-      = W ci hi wi - lr * ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
-          pdiv3 (fun W' : DepthwiseKernel c kH kW => depthwiseConv2d W' b x) W ci hi wi co ho wo
-            * dy co ho wo := by
-  rw [mnv2_depthwise_weight_grad_bridge]
 
 /-- **Depthwise bias output, certified.** Likewise `bⁿ = b − lr·(spatial reduce)` denotes
     `b − lr·(certified ∂(depthwiseConv2d)/∂b · cotangent)`. -/

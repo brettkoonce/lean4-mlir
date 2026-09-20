@@ -443,7 +443,7 @@ theorem r34Pre16_apply (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
   rw [r34Pre16, Function.comp_apply]
 
 /-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** —
-    the batched peer of `mobilenetv2ForwardPaper_eq_chain`, and what lets the VJP be about
+    the r34 peer of `mobilenetv2ForwardB_full_eq_chain`, and what lets the VJP be about
     `resnet34ForwardB_full` rather than about a re-spelling of it. -/
 theorem resnet34ForwardB_full_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :

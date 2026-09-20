@@ -170,7 +170,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2PaperWholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB,

@@ -581,7 +581,7 @@ inductive SHlo : Nat → Type where
   -- the depthwise analogues of `convWeightSgd`/`convBiasSgd`. `depthwiseWeightSgd` (stride-1,
   -- blocks b2/b4): `W − lr·(depthwise_weight_grad(b,x)·dy)` via the per-channel transpose-trick
   -- conv (`batch_group_count = c`, output [1,c,kH,kW]→[c,1,kH,kW]); `den` =
-  -- `mnv2_render_depthwiseW_certified`. `depthwiseStridedWeightSgd` (stride-2, blocks b1/b3/b5/b6):
+  -- `Mnv2PoC.depthwiseW_den`. `depthwiseStridedWeightSgd` (stride-2, blocks b1/b3/b5/b6):
   -- zero-upsample dy (interior=1 → 2h×2w) then the SAME per-channel weight-grad on the 2h×2w grid;
   -- `den` = `W − lr·` `depthwiseStride2_weight_grad_has_vjp`'s backward. The depthwise bias grad is stride-INDEPENDENT
   -- (`Σ_{batch,spatial} dy`), so both bias ops emit the SAME `reduce` text as `convBiasSgd` (their

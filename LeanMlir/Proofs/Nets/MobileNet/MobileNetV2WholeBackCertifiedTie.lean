@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP
 
 /-! # MobileNetV2's strided stem stage and its stem / head leaf ties
 
-Two pieces the per-example paper tie (`MobileNetV2PaperWholeBackCertifiedTie`) stands on:
+Two pieces MobileNetV2's whole-net ties stand on (the per-example paper tie first, retired 2026-09-19):
 
 1. `convStridedBnRelu6PC_has_vjp_at` — the STEM stage's certified VJP, `relu6 ∘ bnPC ∘
    flatConvStride2Xla`. The repo had the strided-conv-with-**relu** peer (the per-example r34 stem, since retired) and

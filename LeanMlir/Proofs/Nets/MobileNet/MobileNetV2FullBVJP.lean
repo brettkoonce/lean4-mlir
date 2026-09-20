@@ -301,7 +301,8 @@ noncomputable def mnv2PreB17 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
 /-- ⭐⭐ **MobileNetV2 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all
     seventeen bottlenecks.** Chains stem → the `[t,c,n,s]` ladder → head with `vjp_comp_at`, one
     positivity bundle and one smoothness bundle per block. T1's VJP half for
-    `formalization.yaml` 4e's port, and the batched peer of `mobilenetv2_full_has_vjp_at`.
+    `formalization.yaml` 4e's port (the per-example fold it was the batched peer of was retired
+    2026-09-19).
 
     ⚠ Pointwise, and necessarily: relu6 is kinked on both sides. ⛔ Each expand-bearing block
     contributes TWO clauses — the expand relu6 and the depthwise relu6, both INSIDE the body —
@@ -513,7 +514,7 @@ theorem mnv2PreB17_apply (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
   rw [mnv2PreB17, Function.comp_apply]
 
 /-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** —
-    the batched peer of `mobilenetv2ForwardPaper_eq_chain`, and what lets the VJP be about
+    the batched peer of the retired per-example shape check, and what lets the VJP be about
     `mobilenetv2ForwardB_full` rather than about a re-spelling of it. -/
 theorem mobilenetv2ForwardB_full_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :

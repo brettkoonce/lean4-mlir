@@ -1,23 +1,25 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2PaperWholeBackCertifiedTie
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie
+import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 
 /-! # ⭐⭐ `mnv2InputGradB` IS the certified whole-net MobileNetV2 gradient AT BATCH BATCH-NORM
 
-`MobileNetV2PaperWholeBackCertifiedTie.lean` closed this for the PER-EXAMPLE seventeen-bottleneck
-net — the reverse of `mobilenetv2ForwardPaper`, the forward the retired `MobileNetV2Render.lean`
-emitted. This file closes it for the net the shipped trainers run: `mobilenetv2ForwardB_full`, the
-same `[t,c,n,s]` ladder at **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
+The per-example seventeen-bottleneck tie (retired 2026-09-19 with `MobileNetV2PaperWholeBackCertifiedTie.lean`)
+closed this for the forward the retired `MobileNetV2Render.lean` emitted. This file closes it for
+the net the shipped trainers run: `mobilenetv2ForwardB_full`, the same `[t,c,n,s]` ladder at
+**`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
 `planning/archive/proofs_tier_to_paper_nets.md` §4.2, alongside `ResNet34BackCertifiedTieB.lean`.
 
-## ⭐⭐ The whole apex is reused, not rewritten
+## ⭐⭐ One apex, every stage opaque
 
-`mobilenetv2PaperPC_has_vjp_at` — the per-example file's twenty-one-stage chain — is generic in
-every dimension and in every stage, so the batched net instantiates it directly: `stem` at
-`mnv2StemB`, the seventeen bottlenecks at the batched block maps, and the head's three stages at
-`cbrB` / `batchMap gap` / `batchMap dense`. `opaqueA0 … A17` come with it. So this file
-defines **no apex and no prefix defs at all** — where ResNet-34's peer had to write both, because
-its committed apex bundles the stem's pool into `stem` and its head into one stage.
+`mobilenetv2PaperPC_has_vjp_at` (below; it moved here from the retired per-example tie, whose apex
+it was) is a twenty-one-stage chain generic in every dimension and in every stage, so the batched
+net instantiates it directly: `stem` at `mnv2StemB`, the seventeen bottlenecks at the batched
+block maps, and the head's three stages at `cbrB` / `batchMap gap` / `batchMap dense`.
+`opaqueA0 … A17` are `OpaquePrefix.lean`'s. So this file defines **no prefix defs** —
+where ResNet-34's peer had to, because its committed apex bundles the stem's pool into `stem` and
+its head into one stage.
 
 ## The three pieces
 
@@ -51,6 +53,100 @@ is about the INPUT gradient; the parameter gradients are `MobileNetV2StepTieB.le
 -/
 
 namespace Proofs
+
+-- ═══════════════════════════════════════════════════════════════
+-- § The apex — a straight 21-stage chain, every stage opaque (generic in every dimension)
+-- ═══════════════════════════════════════════════════════════════
+
+/-- **The whole-network MobileNetV2 VJP at opaque stages** (moved here 2026-09-19 from the retired per-example tie, whose apex it was). `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`. Twenty `vjp_comp_diff_at`s and nothing else:
+    MobileNetV2's skips live INSIDE the block maps and its strides inside the strided bodies, so
+    there is no `ChainData` list and no separate downsample slot at any depth. Dimension-generic
+    and parametric in every component. -/
+noncomputable def mobilenetv2PaperPC_has_vjp_at
+    {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 : Nat}
+    (stem : Vec s0 → Vec s1)
+    (b1 : Vec s1 → Vec s2)
+    (b2 : Vec s2 → Vec s3)
+    (b3 : Vec s3 → Vec s4)
+    (b4 : Vec s4 → Vec s5)
+    (b5 : Vec s5 → Vec s6)
+    (b6 : Vec s6 → Vec s7)
+    (b7 : Vec s7 → Vec s8)
+    (b8 : Vec s8 → Vec s9)
+    (b9 : Vec s9 → Vec s10)
+    (b10 : Vec s10 → Vec s11)
+    (b11 : Vec s11 → Vec s12)
+    (b12 : Vec s12 → Vec s13)
+    (b13 : Vec s13 → Vec s14)
+    (b14 : Vec s14 → Vec s15)
+    (b15 : Vec s15 → Vec s16)
+    (b16 : Vec s16 → Vec s17)
+    (b17 : Vec s17 → Vec s18)
+    (head : Vec s18 → Vec s19) (gap : Vec s19 → Vec s20) (dns : Vec s20 → Vec s21)
+    (x : Vec s0)
+    (hstem : PProd (HasVJPAt stem x) (DifferentiableAt ℝ stem x))
+    (hb1 : PProd (HasVJPAt b1 (opaqueA0 stem x))
+                 (DifferentiableAt ℝ b1 (opaqueA0 stem x)))
+    (hb2 : PProd (HasVJPAt b2 (opaqueA1 stem b1 x))
+                 (DifferentiableAt ℝ b2 (opaqueA1 stem b1 x)))
+    (hb3 : PProd (HasVJPAt b3 (opaqueA2 stem b1 b2 x))
+                 (DifferentiableAt ℝ b3 (opaqueA2 stem b1 b2 x)))
+    (hb4 : PProd (HasVJPAt b4 (opaqueA3 stem b1 b2 b3 x))
+                 (DifferentiableAt ℝ b4 (opaqueA3 stem b1 b2 b3 x)))
+    (hb5 : PProd (HasVJPAt b5 (opaqueA4 stem b1 b2 b3 b4 x))
+                 (DifferentiableAt ℝ b5 (opaqueA4 stem b1 b2 b3 b4 x)))
+    (hb6 : PProd (HasVJPAt b6 (opaqueA5 stem b1 b2 b3 b4 b5 x))
+                 (DifferentiableAt ℝ b6 (opaqueA5 stem b1 b2 b3 b4 b5 x)))
+    (hb7 : PProd (HasVJPAt b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x))
+                 (DifferentiableAt ℝ b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x)))
+    (hb8 : PProd (HasVJPAt b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
+                 (DifferentiableAt ℝ b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)))
+    (hb9 : PProd (HasVJPAt b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
+                 (DifferentiableAt ℝ b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)))
+    (hb10 : PProd (HasVJPAt b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+                 (DifferentiableAt ℝ b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
+    (hb11 : PProd (HasVJPAt b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+                 (DifferentiableAt ℝ b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
+    (hb12 : PProd (HasVJPAt b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+                 (DifferentiableAt ℝ b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
+    (hb13 : PProd (HasVJPAt b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+                 (DifferentiableAt ℝ b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
+    (hb14 : PProd (HasVJPAt b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+                 (DifferentiableAt ℝ b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
+    (hb15 : PProd (HasVJPAt b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+                 (DifferentiableAt ℝ b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
+    (hb16 : PProd (HasVJPAt b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+                 (DifferentiableAt ℝ b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
+    (hb17 : PProd (HasVJPAt b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
+                 (DifferentiableAt ℝ b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
+    (hhead : PProd (HasVJPAt head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
+                   (DifferentiableAt ℝ head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
+    (hgap : PProd (HasVJPAt gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
+                  (DifferentiableAt ℝ gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
+    (hdns : PProd (HasVJPAt dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
+                  (DifferentiableAt ℝ dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))))
+    : HasVJPAt (dns ∘ gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) x :=
+  let p1 := vjp_comp_diff_at stem b1 x hstem hb1
+  let p2 := vjp_comp_diff_at (b1 ∘ stem) b2 x p1 hb2
+  let p3 := vjp_comp_diff_at (b2 ∘ b1 ∘ stem) b3 x p2 hb3
+  let p4 := vjp_comp_diff_at (b3 ∘ b2 ∘ b1 ∘ stem) b4 x p3 hb4
+  let p5 := vjp_comp_diff_at (b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b5 x p4 hb5
+  let p6 := vjp_comp_diff_at (b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b6 x p5 hb6
+  let p7 := vjp_comp_diff_at (b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b7 x p6 hb7
+  let p8 := vjp_comp_diff_at (b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b8 x p7 hb8
+  let p9 := vjp_comp_diff_at (b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b9 x p8 hb9
+  let p10 := vjp_comp_diff_at (b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b10 x p9 hb10
+  let p11 := vjp_comp_diff_at (b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b11 x p10 hb11
+  let p12 := vjp_comp_diff_at (b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b12 x p11 hb12
+  let p13 := vjp_comp_diff_at (b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b13 x p12 hb13
+  let p14 := vjp_comp_diff_at (b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b14 x p13 hb14
+  let p15 := vjp_comp_diff_at (b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b15 x p14 hb15
+  let p16 := vjp_comp_diff_at (b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b16 x p15 hb16
+  let p17 := vjp_comp_diff_at (b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b17 x p16 hb17
+  let p18 := vjp_comp_diff_at (b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) head x p17 hhead
+  let p19 := vjp_comp_diff_at (head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) gap x p18 hgap
+  let p20 := vjp_comp_diff_at (gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) dns x p19 hdns
+  p20.fst
 
 open scoped BigOperators
 

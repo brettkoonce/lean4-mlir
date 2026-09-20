@@ -580,7 +580,6 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "tests" ]; then
   export PATH="$PWD/.venv/bin:$PATH"
   for f in \
     tests/TestMobilenetV2Fwd.lean \
-    tests/TestMobilenetV2Train.lean \
     tests/TestMobilenetV2TrainPC.lean \
     tests/TestEfficientNetFwd.lean \
     tests/TestEfficientNetTrain.lean \

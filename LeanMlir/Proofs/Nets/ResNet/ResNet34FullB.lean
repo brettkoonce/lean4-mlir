@@ -168,7 +168,7 @@ theorem r34HeadB_apply (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec 
 
 /-- **The full batch-BN ResNet-34 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of the
     retired per-example forward; nested-application form, as `efficientnetForwardB_full` and
-    `mobilenetv2ForwardPaper` both are, so the T6 tie can peel it one block at a time. -/
+    `mobilenetv2ForwardB_full` both are, so the T6 tie can peel it one block at a time. -/
 noncomputable def resnet34ForwardB_full (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Vec (N * nCls) :=
   r34HeadB N 7 7 w.Wd w.bd

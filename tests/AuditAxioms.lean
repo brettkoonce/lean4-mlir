@@ -106,7 +106,6 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackChains
 import LeanMlir.Proofs.Nets.ViT.ViTBackChains
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2PaperWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
@@ -606,9 +605,7 @@ open Proofs
 #print axioms cnn_render_convW1_chain_certified
 #print axioms cnn_render_convb1_chain_certified
 -- MobileNetV2 CLOSE (planning/archive/mobilenetv2_close.md Item C)
-#print axioms mnv2_depthwise_weight_grad_bridge
 #print axioms mnv2_depthwise_bias_grad_bridge
-#print axioms mnv2_render_depthwiseW_certified
 #print axioms mnv2_render_depthwiseb_certified
 #print axioms mnv2_render_stem_convW_certified
 #print axioms mnv2_render_stem_convb_certified
@@ -706,22 +703,8 @@ open Proofs
 #print axioms StableHLO.vitBodyGraphKMHV_den
 #print axioms StableHLO.vitFwdGraphKMHV_faithful
 
--- Paper-spec full MobileNetV2 (MobileNetV2FullPaper.lean)
-#print axioms StableHLO.ivNoExpGraphW_faithful
-#print axioms StableHLO.ivExpOnlyGraphW_faithful
-#print axioms StableHLO.ivResidGraphW_faithful
-#print axioms StableHLO.ivStridedGraphW_faithful
-#print axioms StableHLO.mobilenetv2FwdGraphPaper_faithful
-
--- ...and its whole-net VJP at all 17 (MobileNetV2FullVJP.lean)
-#print axioms ivNoExpW_has_vjp_at
-#print axioms ivExpOnlyW_has_vjp_at
-#print axioms ivResidW_has_vjp_at
-#print axioms ivStridedW_has_vjp_at
+-- MobileNetV2's per-channel strided stem stage (MobileNetV2FullVJP.lean; the per-example fold around it was retired 2026-09-20)
 #print axioms convBnRelu6StridedPC_has_vjp_at
-#print axioms mobilenetv2ForwardPaper_eq_chain
-#print axioms mobilenetv2_full_has_vjp_at
-#print axioms mobilenetv2_full_has_vjp_at_correct
 
 -- Full ConvNeXt-T [3,3,9,3] (ConvNeXtFullT.lean)
 #print axioms decimateOddFlat_has_vjp
@@ -897,10 +880,8 @@ open Proofs
 #print axioms Proofs.convStridedBnRelu6PC_differentiableAt
 #print axioms Proofs.convStridedBnRelu6PCBack_eq_vjp_backward
 #print axioms Proofs.convBnRelu6PCBack_eq_vjp_backward
--- AND THE SAME TIE AT THE PAPER DEPTH — all seventeen bottlenecks (MobileNetV2PaperWholeBackCertifiedTie.lean)
+-- the generic 21-stage apex the batched MobileNetV2 tie instantiates (MobileNetV2WholeBackCertifiedTieB.lean; its per-example tie was retired 2026-09-20)
 #print axioms Proofs.mobilenetv2PaperPC_has_vjp_at
-#print axioms Proofs.mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp
-#print axioms Proofs.mobilenetv2ForwardPaper_eq_slots
 -- AND FOR THE WHOLE EFFICIENTNET-B0 (EfficientNetWholeBackCertifiedTie.lean)
 #print axioms Proofs.stemBBack_eq_vjp_backward
 #print axioms Proofs.headFwdBBack_eq_vjp_backward
@@ -1737,10 +1718,7 @@ open Proofs
 #print axioms cnnVerified_fwd_faithful
 #print axioms cifarVerified_denote_eq
 #print axioms cifarVerified_fwd_faithful
--- mnv2 FULL-paper tie (the committed 21-entry spec ↔ mobilenetv2ForwardPaper)
-#print axioms mobilenetv2Verified_denote_eq
-#print axioms mobilenetv2Verified_fwd_faithful
--- the same spec at batch BN, the net every shipped MobileNetV2 artifact runs (finding 2, 2026-09-19)
+-- mnv2 committed-spec tie, at batch BN — the net every shipped MobileNetV2 artifact runs (2026-09-19)
 #print axioms mobilenetv2VerifiedB_denote_eq
 #print axioms mobilenetv2VerifiedB_fwd_faithful
 -- FULL committed-spec ties (unified weight bundles, 2026-07-07); r34's at batch BN, the net every shipped artifact runs (2026-09-19)

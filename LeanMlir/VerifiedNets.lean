@@ -756,12 +756,13 @@ def resnet50ImagenetA1Verified : VerifiedNetSpec :=
 /-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
     relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.
-    (Tied at the FULL paper spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean): `mobilenetv2Verified_denote_eq`
-    → `mobilenetv2ForwardPaper`, + rung E `mobilenetv2Verified_fwd_faithful`. The VJP fold
-    is at full depth too: `Proofs.mobilenetv2_full_has_vjp_at` covers stem + all 17 blocks +
-    head. ⚠ It is POINTWISE, and stays that way — relu6 is kinked, so each of the 35
-    activation sites carries a `≠ 0 ∧ ≠ 6` side condition. `Proofs.mobilenetv2_has_vjp_at`
-    is the older stem+2-block fold.) -/
+    (Tied at the FULL paper spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean): `mobilenetv2VerifiedB_denote_eq`
+    → `mobilenetv2ForwardB_full` at batch BN, every batch size, + rung E
+    `mobilenetv2VerifiedB_fwd_faithful`. The VJP fold is at full depth too:
+    `Proofs.mobilenetv2ForwardB_full_has_vjp_at` (`MobileNetV2FullBVJP.lean`) covers stem + all
+    17 blocks + head. ⚠ It is POINTWISE, and stays that way — relu6 is kinked, so each of the 35
+    activation sites carries a `≠ 0 ∧ ≠ 6` side condition at every example.
+    `Proofs.mobilenetv2_has_vjp_at` is the older stem+2-block fold.) -/
 def mobilenetv2Verified : VerifiedNetSpec where
   name     := "MobileNetV2"
   slug     := "mobilenetv2"

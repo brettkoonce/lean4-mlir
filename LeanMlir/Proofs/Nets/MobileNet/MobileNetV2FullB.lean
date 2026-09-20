@@ -33,8 +33,8 @@ is that enumeration.
 ⭐ **The weight bundles are reused, not re-declared.** `IVW` / `IVWNoExp`
 (`MobileNetV2FullPaper.lean`) hold kernels, epsilons, gammas and betas — nothing that knows which
 BatchNorm world reduces them — so the batched net binds the same records the per-example one does.
-Only the top-level bundle is new, because it is generic in the class count where
-`MNV2PaperWeights` is pinned at 10.
+Only the top-level bundle is new, because it is generic in the class count where the retired
+per-example record was pinned at 10.
 
 ⚠ **Padding is XLA-`SAME` at all five stride-2 sites** — the stem 3x3/s2 conv and the four stride-2
 depthwises (`b2`, `b4`, `b7`, `b14`). These are `flatConvStride2Xla` / `depthwiseStride2FlatXla`,
@@ -82,8 +82,8 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- Every paper-spec MobileNetV2 parameter: stem (3x3/s2, 3 to 32) + the 17 bottlenecks of the
-    `[t,c,n,s]` table + the 1x1 head (320 to 1280) + the dense classifier. The batch-BN peer of
-    `MNV2PaperWeights`, generic in `nCls` — the per-example record is pinned at 10, and the lesson
+    `[t,c,n,s]` table + the 1x1 head (320 to 1280) + the dense classifier. Generic in `nCls` —
+    the retired per-example record was pinned at 10, and the lesson
     `MobileNetV2FullPaperEval.lean` and B0's eval twin both paid for is that the head's envelope
     depends on the fan-in and never on the output count. -/
 structure MNV2BWeights (nCls : Nat) where
@@ -171,8 +171,8 @@ structure MNV2BWeights (nCls : Nat) where
 --   -> b7(28->14) -> b8..b13@14 -> b14(14->7) -> b15,b16,b17@7 -> head -> GAP -> dense
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The full batch-BN MobileNetV2 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of
-    `mobilenetv2ForwardPaper`; nested-application form, as `resnet34ForwardB_full` and
+/-- **The full batch-BN MobileNetV2 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of the
+    retired per-example forward; nested-application form, as `resnet34ForwardB_full` and
     `efficientnetForwardB_full` both are, so a T6 tie can peel it one block at a time. -/
 noncomputable def mobilenetv2ForwardB_full (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) : Vec (N * nCls) :=

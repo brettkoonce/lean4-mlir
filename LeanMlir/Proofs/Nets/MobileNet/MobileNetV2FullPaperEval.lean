@@ -148,7 +148,7 @@ noncomputable def ivStridedEvalW (h w : Nat) (ε : ℝ) {ic mid oc : Nat} (p : I
 -- § The full paper-spec inference ℝ-forward — all 17 bottlenecks, nested-application form
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The seventeen-block MobileNetV2 inference forward** — `mobilenetv2ForwardPaper`'s ladder with
+/-- **The seventeen-block MobileNetV2 inference forward** — the paper `[t,c,n,s]` ladder with
     frozen running statistics at all 52 BatchNorm sites, at one shared `ε`. Nested-application
     form (NOT `∘`), as the training twin, so the faithfulness proof closes by `simp` and `rfl`. -/
 noncomputable def mobilenetv2ForwardPaperEval (ε : ℝ) (w : MNV2PaperWeightsEval nCls)

@@ -285,71 +285,24 @@ theorem cifarVerified_fwd_faithful
       = denoteCifar cifarVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x := by
   exact cifarFwdGraph_faithful (h := 8) (w := 8) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x
 
-/-! ## Rung B/C/E (ch7 MobileNetV2, FULL): the committed spec ↔ the paper-spec net
+/-! ## Rung B/C/E (ch7 MobileNetV2, FULL, batched): the committed spec ↔ the batch-BN net
 
-The real thing: `denoteMobilenetPaper` maps `mobilenetv2Verified.layers` — the committed
-21-entry full-paper `[t,c,n,s]` list the trainer runs (stem-s2 3→32 → 17 bottlenecks →
-1×1 head 320→1280 → GAP → dense 1280→10) — to `mobilenetv2ForwardPaper`
-(`MobileNetV2FullPaper.lean`: per-channel BN throughout, the t=1 no-expand first block,
-4 stride-2 depthwise downsamples 224→7). Weights ride in the `MNV2PaperWeights` bundle,
-so the tie stays readable. The `rfl` is drift-sensitive: any `[t,c,n,s]` edit to the spec
-stops the match reducing — exactly the tripwire the 6→17-block promotion fired while this
-file was orphaned; certs.yml now re-elaborates it on every spec push.
-
-This restores (and upgrades) the full mnv2 B/C lost in the promotion: the old full tie was
-the scalar-BN 6-block net; this one is the committed per-channel-BN 17-block net, with
-rung E on top (`mobilenetv2FwdGraphPaper_faithful` composed with the tie). -/
-
-/-- Math denotation of the committed MobileNetV2 spec: the 21-entry full-paper layer list
-    denotes to `mobilenetv2ForwardPaper`. Any other list is not the net (`0`), making the
-    tie below drift-sensitive. -/
-noncomputable def denoteMobilenetPaper (layers : List VLayer) (w : MNV2PaperWeights) :
-    Vec (3 * 224 * 224) → Vec 10 :=
-  match layers with
-  | [.convBnNB 3 32 3 2,
-     .invertedResidualNB 32 32 16 1,
-     .invertedResidualNB 16 96 24 2, .invertedResidualNB 24 144 24 1,
-     .invertedResidualNB 24 144 32 2, .invertedResidualNB 32 192 32 1, .invertedResidualNB 32 192 32 1,
-     .invertedResidualNB 32 192 64 2, .invertedResidualNB 64 384 64 1, .invertedResidualNB 64 384 64 1,
-     .invertedResidualNB 64 384 64 1,
-     .invertedResidualNB 64 384 96 1, .invertedResidualNB 96 576 96 1, .invertedResidualNB 96 576 96 1,
-     .invertedResidualNB 96 576 160 2, .invertedResidualNB 160 960 160 1, .invertedResidualNB 160 960 160 1,
-     .invertedResidualNB 160 960 320 1,
-     .convBnNB 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
-      mobilenetv2ForwardPaper w
-  | _ => fun _ => 0
-
-/-- **Spec ≡ the full paper-spec net.** The committed `mobilenetv2Verified`'s denotation
-    is exactly `mobilenetv2ForwardPaper` (all 17 bottlenecks, per-channel BN) — by `rfl`,
-    drift-sensitive. -/
-theorem mobilenetv2Verified_denote_eq (w : MNV2PaperWeights) :
-    denoteMobilenetPaper mobilenetv2Verified.layers w = mobilenetv2ForwardPaper w := rfl
-
-/-- **The committed spec carries the math.** The full-paper spec's denotation has a VJP —
-    the canonical `pdiv`-derived witness (relu6 is kinked, so the honest whole-net
-    input-VJP stays pointwise-only, the repo standard for relu-family nets; the
-    dim-polymorphic `MobileNetV2Close` param-grad bridges apply at the paper
-    shapes verbatim, per `MobileNetV2FullPaper.lean`'s header). -/
-noncomputable def mobilenetv2Verified_has_vjp (w : MNV2PaperWeights) :
-    HasVJP (denoteMobilenetPaper mobilenetv2Verified.layers w) := HasVJP.canonical _
-
-open Proofs.StableHLO in
-/-- **Rung E at the committed spec.** The generated full-paper StableHLO graph denotes the
-    committed spec's function: `mobilenetv2FwdGraphPaper_faithful` composed with the tie. -/
-theorem mobilenetv2Verified_fwd_faithful (epsStr : String) (w : MNV2PaperWeights)
-    (x : Vec (3 * 224 * 224)) :
-    den (mobilenetv2FwdGraphPaper epsStr w x)
-      = denoteMobilenetPaper mobilenetv2Verified.layers w x :=
-  (mobilenetv2FwdGraphPaper_faithful epsStr w x).trans
-    (congrFun (mobilenetv2Verified_denote_eq w).symm x)
+`denoteMobilenetB` maps `mobilenetv2Verified.layers` — the committed 21-entry full-paper
+`[t,c,n,s]` list the trainer runs (stem-s2 3→32 → 17 bottlenecks → 1×1 head 320→1280 → GAP →
+dense 1280→10) — to `mobilenetv2ForwardB_full` (`MobileNetV2FullB.lean`: batch BN throughout,
+the t=1 no-expand first block, 4 stride-2 depthwise downsamples 224→7), at every batch size.
+Weights ride in the `MNV2BWeights` bundle, so the tie stays readable. The `rfl` is
+drift-sensitive: any `[t,c,n,s]` edit to the spec stops the match reducing — the tripwire the
+6→17-block promotion once fired while the per-example twin of this section was orphaned;
+certs.yml re-elaborates it on every spec push. (That per-example twin, at the forward of the
+retired SGD artifact, was retired on 2026-09-19.) -/
 
 -- ── MobileNetV2 (FULL, BATCHED): the same 21-entry spec ↔ mobilenetv2ForwardB_full ──
 
-/-- Math denotation of the committed MobileNetV2 spec **at batch BN**: the same 21-entry
-    layer list, denoting to `mobilenetv2ForwardB_full` — the batch-statistics net every
-    shipped MobileNetV2 artifact runs (`MobileNetV2FullB.lean`), at every batch size `N`.
-    `denoteMobilenetPaper` above is this spec at per-example BN, the forward of the retired
-    SGD artifact. Same list, same drift-sensitivity: any `[t,c,n,s]` edit drops to `0`. -/
+/-- Math denotation of the committed MobileNetV2 spec at batch BN: the 21-entry full-paper
+    layer list denotes to `mobilenetv2ForwardB_full` — the batch-statistics net every shipped
+    MobileNetV2 artifact runs (`MobileNetV2FullB.lean`), at every batch size `N`. Any other
+    list is not the net (`0`), so the tie below is drift-sensitive. -/
 noncomputable def denoteMobilenetB (N : Nat) (layers : List VLayer) (w : MNV2BWeights 10) :
     Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
   match layers with
