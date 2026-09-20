@@ -303,6 +303,28 @@ lean_lib «Codegen» where
              `LeanMlir.SpecHelpers, `LeanMlir.Types, `LeanMlir.IreeRuntime,
              `LeanMlir.Ddpm, `LeanMlir.Cam, `LeanMlir.F32Array]
 
+/-- **`lake build Apps`** — type-check every entry point, without linking any of them.
+
+    ⭐ The gate that did not exist. Nothing in CI built an `apps/` or `demos/` exe, and
+    `lake build` builds `Proofs` alone, so an entry point could keep a stale call for weeks
+    and be found only when someone ran it. Linking is what makes the exes expensive (~149 MB
+    each, and there are 227 of them); elaborating their modules is not, which is the whole
+    reason this is a `lean_lib` over the same sources rather than a `lake build <exe>` loop.
+
+    ⚠ Covers `apps/` and `demos/` — 111 modules — and NOT `tests/`, which holds
+    `tests/comparator/`, a nested Lake package with its own toolchain whose modules a
+    `.submodules` glob would try to elaborate here. The test exes CI already names
+    (`argmax-check`, `label-check`, `opt-step-fixtures`, `bestiary-*`) keep their own
+    explicit builds. The NAME-level companion is `scripts/check_target_names.sh`. -/
+lean_lib «Apps» where
+  srcDir := "."
+  -- ⚠ `roots := #[]` is not redundant. Lake defaults `roots` to `#[<lib name>]`, and there is
+  -- no `Apps.lean` — the lib IS its globs. Leaving the default made `docstring-checkrefs` and
+  -- `blueprint-checkdecls` die with `unknown module prefix 'Apps'`: both walk
+  -- `ws.root.leanLibs` and import every lib's `roots`.
+  roots := #[]
+  globs := #[.submodules `apps, .submodules `demos]
+
 -- IREE FFI shim: Lean ↔ C bridge for libiree_ffi.so (see ffi/).
 target ireeLeanFfiO pkg : System.FilePath := do
   let oFile := pkg.buildDir / "ffi" / "iree_lean_ffi.o"
@@ -819,14 +841,6 @@ lean_exe «mnist-mlp-train» where
   root := `apps.baselines.MainMnistMlpTrain
   moreLinkArgs := lowererLink
 
-lean_exe «mnist-mlp-shampoo-train» where
-  root := `apps.baselines.MainMnistMlpShampooTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-linear-train» where
-  root := `apps.baselines.MainMnistLinearTrain
-  moreLinkArgs := lowererLink
-
 lean_exe «cifar-cnn-train» where
   root := `apps.baselines.MainCifarCnnTrain
   moreLinkArgs := lowererLink
@@ -837,19 +851,17 @@ lean_exe «ablation» where
   root := `apps.ablation.MainAblation
   moreLinkArgs := lowererLink
 
--- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
--- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
--- fp32 master). Same verified train-step MLIR as their fp32 peers.
--- ── bf16 arm of the §5.2 optimizer sweep (planning/archive/cifar_lowprec_stability.md) ──
--- Same net, same init, same hyperparameters as the fp32 arms; `cifar8Bf16Verified`'s slug
--- points at the bf16-rendered artifacts. ⚠ FORWARD-only bf16, and NO speedup by design
--- (§5.3: 0.87× at cifar8's shapes) — these exist to show the optimizer ORDERING is invariant
--- under precision, which is the CIFAR chapter's whole claim.
--- The batched-render GATE: same net/hyperparameters/init as cifar8-verified-adam, on the
--- `…FaithfulB` artifact. The two renders denote the same function, so the curves must agree.
 -- ── §4.3 "Lever 3: precision": the wide-head (d1=512) 3×3 sweep ──
--- One net (the one Levers 1-2 measure), three optimizers, three precisions. f32 and bf16 come
--- from ONE renderer differing only in the emit; fp8 is host-side and rides the f32 graph.
+-- One net (the one Levers 1-2 measure), three optimizers, three precisions, three binaries.
+-- f32 and bf16 come from ONE renderer (`c8wbPacked`) differing only in the emit; fp8 is
+-- host-side E4M3 and rides the f32 graph, which is why it needs no artifact of its own.
+-- ⚠ FORWARD-only bf16, and NO speedup by design (§5.3: 0.87× at cifar8's shapes) — the arms
+-- exist to show the optimizer ORDERING is invariant under precision, which is the CIFAR
+-- chapter's claim, not to go faster. Each binary runs its three optimizers in sequence, so
+-- the nine cells of the lever are three invocations: `runs/2026-09-01-cifar8w-6arm-constlr/`.
+-- ⚠ The per-arm narrow-head singletons these replaced (`cifar8-{bf16,e4m3}-verified*`,
+-- `cifar8b-verified-adam`) were dropped 2026-09-20; their renders stay committed and gated in
+-- .github/workflows/proofs.yml, so the §4.1/§5.2 provenance is unaffected.
 lean_exe «cifar8wb-ablation» where
   root := `apps.ablation.MainCifar8WideBatchedAblation
   moreLinkArgs := lowererLink
@@ -947,14 +959,7 @@ lean_exe «mnist-mlp-e4m3-verified» where
   root := `apps.mnist.MainMnistMlpE4M3Verified
   moreLinkArgs := lowererLink
 
--- Chapter 4 (low precision): fp8 (E4M3) CNN training on the SAME verified StableHLO.
--- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
--- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainMnistCnnE4M3Verified.lean.
-lean_exe «mnist-cnn-e4m3-verified» where
-  root := `apps.mnist.MainMnistCnnE4M3Verified
-  moreLinkArgs := lowererLink
-
--- ─── apps/cifar/ — the CIFAR trainers behind Chapter 4: narrow and wide heads, BN, bf16 / fp8, schedules ───
+-- ─── apps/cifar/ — the CIFAR trainers behind Chapter 4: robustness, the head-width grid, the BN pair ───
 
 -- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/archive/robustness_ladder.md, the deeper
 -- conv rung): input gradient = the proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the
@@ -988,73 +993,19 @@ lean_exe «cifar-verified» where
   root := `apps.cifar.MainCifarVerified
   moreLinkArgs := lowererLink
 
--- Chapter 5 (low precision): fp8 (E4M3) CIFAR-10 training on the SAME verified StableHLO.
--- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
--- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainCifarE4M3Verified.lean.
-lean_exe «cifar-e4m3-verified» where
-  root := `apps.cifar.MainCifarE4M3Verified
-  moreLinkArgs := lowererLink
-
--- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
--- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepFaithfulV).
-lean_exe «cifar8-verified» where
-  root := `apps.cifar.MainCifar8Verified
-  moreLinkArgs := lowererLink
-
+-- The 8-conv CIFAR-10 CNN WITH per-channel BN (narrow 64-wide head), on the VERIFIED-rendered
+-- StableHLO — SGD via `.train` and AdamW via `trainAdamSched`. These two are the whole narrow-head
+-- family now: the six no-BN / momentum / sgdsched singletons were dropped 2026-09-20 (the wide
+-- ablation pair `cifar8w-{,bn-}ablation` runs all three optimizers per binary and is what Chapter 4
+-- reports). The book names `cifar8-bn-verified` as the 64-wide-head net the head-width proof is
+-- parametric over, and `scripts/residency_gate_all.sh` gates both. Their renders are
+-- verified_mlir/cifar8_bn{,_adam}_train_step.mlir.
 lean_exe «cifar8-bn-verified» where
   root := `apps.cifar.MainCifar8BnVerified
   moreLinkArgs := lowererLink
 
-lean_exe «cifar8-verified-adam» where
-  root := `apps.cifar.MainCifar8VerifiedAdam
-  moreLinkArgs := lowererLink
-
 lean_exe «cifar8-bn-verified-adam» where
   root := `apps.cifar.MainCifar8BnVerifiedAdam
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-verified-momentum» where
-  root := `apps.cifar.MainCifar8VerifiedMomentum
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8b-verified-adam» where
-  root := `apps.cifar.MainCifar8bVerifiedAdam
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bf16-verified» where
-  root := `apps.cifar.MainCifar8Bf16Verified
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bf16-verified-momentum» where
-  root := `apps.cifar.MainCifar8Bf16VerifiedMomentum
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bf16-verified-adam» where
-  root := `apps.cifar.MainCifar8Bf16VerifiedAdam
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-e4m3-verified» where
-  root := `apps.cifar.MainCifar8E4M3Verified
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-e4m3-verified-momentum» where
-  root := `apps.cifar.MainCifar8E4M3VerifiedMomentum
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-e4m3-verified-adam» where
-  root := `apps.cifar.MainCifar8E4M3VerifiedAdam
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bn-verified-momentum» where
-  root := `apps.cifar.MainCifar8BnVerifiedMomentum
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-verified-sgdsched» where
-  root := `apps.cifar.MainCifar8VerifiedSgdSched
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar8-bn-verified-sgdsched» where
-  root := `apps.cifar.MainCifar8BnVerifiedSgdSched
   moreLinkArgs := lowererLink
 
 -- ─── apps/imagenette/ extras and apps/tools/ — non-tier Imagenette drivers and the checkpoint scorer ───

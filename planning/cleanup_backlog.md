@@ -359,3 +359,78 @@ the `BatchMapVJPAt` section; 1773 prints), the yaml's T6 row and paragraph. Gate
 audit 1773/1773, docstring 1548 across 501, coverage 192/236, `verified_mlir/` untouched,
 `blueprint-checkdecls` clean. With this every one of the seven nets has a batched T6, and the
 backlog's proof items are closed; the `certs.yml` label counts (§10) are the one loose thread.
+
+## 12. The demo surface: seventeen CIFAR/MNIST trainers, and the two gates that were missing
+
+**DONE 2026-09-20.** Asked after the audit census closed: the tour is `lake run mnist` (3 binaries)
++ `lake run cifar` (2) + `lake run imagenette` (7), so what are the other CIFAR/MNIST exes and
+should they go? The test applied to each: cited in `blueprint/src/content.tex`, named by a script,
+named by a live (non-`archive/`) planning doc, or present in any tracked file other than its own
+`apps/` file and `lakefile.lean`. `runs/`, `historical/` and `planning/archive/` were excluded on
+purpose — they cite binaries by the name the number was produced under, and rewriting them would
+falsify the record.
+
+Seventeen went, `lean_exe` 244 → 227:
+
+* **Eleven with zero references anywhere.** `cifar8-bf16-verified{,-momentum,-adam}` and
+  `cifar8-e4m3-verified{,-momentum,-adam}` (superseded by `cifar8wb-bf16-ablation` /
+  `cifar8w-fp8-ablation`, which are what §4.3's Lever 3 actually trained),
+  `cifar-e4m3-verified`, `mnist-cnn-e4m3-verified`, `cifar8b-verified-adam` (superseded by
+  `cifar8wb-ablation`), `mnist-linear-train`, `mnist-mlp-shampoo-train`.
+* **Six narrow-head singletons** the wide ablation pair replaced on 2026-08-26:
+  `cifar8-verified{,-adam,-momentum,-sgdsched}`, `cifar8-bn-verified-{momentum,sgdsched}`. Their
+  only tracked trace is `runs/2026-08-11-cifar8-6arm-xla-cuda/`, the run the book superseded.
+* **Kept, and they looked droppable.** `cifar8-bn-verified` (content.tex:4301 names it as the
+  64-wide-head net the head-width proof is parametric over) and `cifar8-bn-verified-adam`
+  (`run.sh`, `residency_gate_all.sh`). Also kept: the ten `*-pgd` / `*-spectral` / `*-smooth`
+  robustness binaries — the book has no robustness chapter and every planning doc for them is
+  archived, but `scripts/run_smooth_scorecard.sh` drives three of them to GENERATE the committed
+  certificate corpus under `Proofs/Certificates/`, and they are the empirical face of the three
+  formalized papers in `formalization.yaml` (Tsuzuku, Cohen, LipSDP). Dropping them orphans a
+  regeneration path — the `regen_verified_mlir.sh` module-list trap one directory over.
+  `cifar8w-fp8-ablation` stays too: it looks like a dead fp8 arm and it wrote `fp8_s1..s5` in
+  `runs/2026-09-01-cifar8w-6arm-constlr/`, which content.tex:4529 names as deliberately excluded.
+
+⭐ **Nothing in the proof tier moved, and that is the point.** The apps are CONSUMERS of
+`verified_mlir/`, never producers: every `cifar8{,b,w,wb}_*` artifact is a pure-Lean `#eval` render
+from `Proofs/Codegen/CnnRender.lean`, diffed by `proofs.yml`, and the §1a ties over them are
+untouched. Dropping a trainer costs the ability to run that arm; it costs no theorem and no
+artifact. Two now-orphaned specs went with the binaries (`cifar8Bf16Verified`, `cifar8bVerified` —
+zero consumers after the drop); `VerifiedNets.lean` carries a note at their old site saying which
+artifacts they pointed at and that those stay.
+
+⛔ **The rot this surfaced, which is the more useful half.** `scripts/residency_gate_all.sh` had
+carried four pre-2026-08-10 binary names — `mnist-cnn-verified-xla`, `cifar8-bn-verified-xla`,
+`cifar8-bn-verified-adam-xla`, `resnet34-verified-adam-xla`, four of eleven rows — for six weeks.
+On a clean tree each reported `SKIP — not built` and the script still **exited 0**; on the box
+where it was written they passed, because the binaries built before the rename were still sitting
+in `.lake/build/bin`. Nothing contradicted it because **nothing in CI built an apps/ exe at all**:
+`lake build` builds `Proofs` alone. A gate that silently drops a third of its table is worse than
+no gate.
+
+Three things landed against that, at two different costs:
+
+| gate | what it asks | where | cost |
+|---|---|---|---|
+| `scripts/check_target_names.sh` | does every binary a driver NAMES still resolve? | `.github/workflows/targets.yml`, **unfiltered** | grep, <1 s, no toolchain |
+| `lake build Apps` | does the code behind it still ELABORATE? | `certs.yml`, beside the bestiary guard | 3393 jobs vs `Proofs`' 2403 |
+| the script's own guard | a name that is not a `lean_exe` now FAILS, where it used to SKIP | `residency_gate_all.sh` | free |
+
+`Apps` is a `lean_lib` over `apps/` + `demos/` (111 modules), so all 111 entry points type-check
+without linking 111 × ~149 MB of binary. ⚠ `roots := #[]` on it is not redundant: Lake defaults
+`roots` to `#[<lib name>]`, there is no `Apps.lean`, and the default made both
+`docstring-checkrefs` and `blueprint-checkdecls` die with `unknown module prefix 'Apps'` — they
+walk `ws.root.leanLibs` and import every lib's roots. ⚠ `tests/` is NOT in the lib: it holds
+`tests/comparator/`, a nested Lake package whose modules a `.submodules` glob would try to
+elaborate here. ⚠ Named gap: `certs.yml` does not trigger on `apps/**` or `demos/**` (an app-only
+edit is not worth the corpus tail), so an app-only break waits for the nightly cron — the
+unfiltered name lint is what covers the common case immediately. `LeanMlir/VerifiedTrain.lean`
+joined the `certs.yml` path filter for the same reason `VerifiedNets`/`VerifiedSpec` are on it.
+
+The lint was negative-tested against the real rot: restoring `cifar8-bn-verified-xla` to the
+table makes it fail with that name and line. Gates: `lake build Apps` clean (3393),
+`lake build Proofs` clean (2403), `SpecVJP` rebuilt, `cifar8-{dp-check,opt-tie,adam-tie}` +
+`fwd-tie` build, `docstring-checkrefs` 2182 citations / 475 files clean,
+`blueprint-checkdecls` clean, `check_audit_coverage` 179/220, `check_render_coverage` 240 files
+/ 226 diffed, `git diff verified_mlir/` empty. `lake build Certs` NOT run (hours); the only
+library module importing `VerifiedNets` is `SpecVJP`, which was rebuilt.

@@ -1,0 +1,55 @@
+name: Target names
+
+# Deliberately UNFILTERED, and deliberately toolchain-free. Every other workflow here
+# is path-filtered so a docs or demo push does not pay for Lean; this one has nothing
+# to pay — it is grep, it finishes in under a second, and any file in the tree can name
+# a binary. Filtering it would reintroduce exactly the hole it exists to close.
+#
+# WHAT IT CLOSES (measured 2026-09-20): `scripts/residency_gate_all.sh` carried four
+# pre-2026-08-10 `-xla` binary names for six weeks. On a clean tree each of those rows
+# reported "SKIP — not built" and the script still exited 0; on the box where it was
+# written they passed, because the binaries built before the rename were still in
+# .lake/build/bin. Nothing in CI built an apps/ exe, so nothing contradicted it.
+#
+# The build-level companion is `lake build Apps` in certs.yml: this job asks whether a
+# name still resolves, that one asks whether the code behind it still elaborates.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  target-names:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every binary a driver names is a live lake target
+        run: |
+          # GitHub runs steps under `bash -e`, so the failing pipeline must be
+          # caught with `|| rc=$?` or the summary below never gets written.
+          set -o pipefail
+          rc=0
+          scripts/check_target_names.sh 2>&1 | tee /tmp/targets.log || rc=$?
+          {
+            echo "## Target-name lint"
+            echo ""
+            if [ $rc -eq 0 ]; then
+              sed -n 's/^✓ /✅ /p' /tmp/targets.log
+            else
+              echo "❌ **Dead target names** — a script drives a binary that is not a"
+              echo "\`lean_exe\` in \`lakefile.lean\`. On a developer box this hides behind a"
+              echo "stale \`.lake/build/bin\`; in CI the gate it feeds simply never runs."
+              echo ""
+              echo '```'
+              grep '✗' /tmp/targets.log
+              echo '```'
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+          exit $rc

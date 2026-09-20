@@ -213,38 +213,13 @@ def cifar8Verified : VerifiedNetSpec where
                .dense 128 64, .relu, .dense 64 64, .relu, .dense 64 10]
   blurb    := "Deeper CIFAR-10 CNN (8 convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
-/-- **bf16 peer of `cifar8Verified`** — identical net, identical layers, identical parameter
-    layout; the ONLY difference is the slug, which points `mkSession` at the bf16-rendered
-    artifacts (`verified_mlir/cifar8_bf16{,_mom,_adam}_train_step.mlir`, emitted by the same
-    renderers with `bf16 := true`).
-
-    ⭐ Being a slug change and nothing else is the point: the fp32, fp8 and bf16 arms train the
-    SAME network with the SAME initialisation, so a difference between them is a difference in
-    PRECISION and not in the model. That is what makes the §5.2 optimizer-ordering comparison a
-    controlled one.
-
-    ⚠ The eval forward (`cifar8_bf16_fwd.mlir`) is the f32 `cifar8_fwd` renamed — you train in
-    bf16 and evaluate in f32. ⚠ The bf16 is FORWARD-ONLY (cifar8's backward is on the per-example
-    `convBack`/`dotOut`, which have no bf16 twin); see planning/archive/cifar_lowprec_stability.md §4.1. -/
-def cifar8Bf16Verified : VerifiedNetSpec :=
-  { cifar8Verified with
-    name  := "CIFAR-CNN8-bf16"
-    slug  := "cifar8_bf16"
-    blurb := "Deeper CIFAR-10 CNN (8 convs, bf16 FORWARD convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU" }
-
-/-- **`cifar8` on the BATCHED op family** (`cifar8AdamTrainStepFaithfulB`). Same net, same
-    layers, same parameter layout as `cifar8Verified`; only the slug differs, so this trains on
-    `verified_mlir/cifar8b_adam_train_step.mlir`.
-
-    ⭐ Its reason to exist is a GATE: the batched and per-example renders denote the same
-    function, so their f32 training runs must agree. Any divergence is a bug in the migration,
-    and it is much cheaper to catch here than inside a bf16 result. -/
-def cifar8bVerified : VerifiedNetSpec :=
-  { cifar8Verified with
-    name  := "CIFAR-CNN8-batched"
-    slug  := "cifar8b"
-    blurb := "Deeper CIFAR-10 CNN (8 convs, BATCHED op family, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU" }
-
+-- ⚠ `cifar8Bf16Verified` (slug `cifar8_bf16`) and `cifar8bVerified` (slug `cifar8b`) lived here
+-- until 2026-09-20 and were removed with the six narrow-head trainer binaries that were their only
+-- consumers. The artifacts they pointed at — `verified_mlir/cifar8_bf16{,_mom,_adam}_train_step.mlir`
+-- and `cifar8b{,_bf16,_fp8}_adam_train_step.mlir` — are NOT removed: they are pure-Lean `#eval`
+-- renders from `Proofs/Codegen/CnnRender.lean`, gated by .github/workflows/proofs.yml, and they
+-- carry the §4.1 batched-op-family and §5.2 precision provenance. The wide-head peers
+-- (`cifar8wVerified`, `cifar8wbVerified`, `cifar8w{,b}BnVerified`, below) are what Chapter 4 trains.
 
 #guard cifar8Verified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),

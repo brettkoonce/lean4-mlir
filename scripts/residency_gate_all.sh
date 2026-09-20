@@ -50,13 +50,20 @@ set -uo pipefail
 # That is unsurprising in hindsight — the update normalises by √(mean-square + ε)
 # and then damps through a momentum buffer — but "unsurprising in hindsight" is
 # what §2d.3's Finding 2 also was.
+# The binaries this table drives, declared for scripts/check_target_names.sh — the
+# `|`-separated rows below are invisible to any generic pattern, and it was exactly
+# these names that rotted for six weeks after the 2026-08-10 rename. Keep in sync
+# with the second field of every row; the lint fails on a name that is not a target.
+# lint-targets: mnist-linear-verified mnist-mlp-verified mnist-cnn-verified
+# lint-targets: cifar8-bn-verified cifar8-bn-verified-adam resnet34-verified-adam
+# lint-targets: efficientnet-verified-adam vit-verified-adam mobilenetv2-verified-adam
 NETS=(
   "mnist-linear|mnist-linear-verified|linear|10|2|"
   "mnist-mlp|mnist-mlp-verified|mlp|10|2|"
-  "mnist-cnn|mnist-cnn-verified-xla|cnn|10|2|"
-  "cifar8-bn-sgd|cifar8-bn-verified-xla|cifar8_bn|10|2|"
-  "cifar8-bn-adam|cifar8-bn-verified-adam-xla|cifar8_bn|10|1|"
-  "r34|resnet34-verified-adam-xla|resnet34|10|1|"
+  "mnist-cnn|mnist-cnn-verified|cnn|10|2|"
+  "cifar8-bn-sgd|cifar8-bn-verified|cifar8_bn|10|2|"
+  "cifar8-bn-adam|cifar8-bn-verified-adam|cifar8_bn|10|1|"
+  "r34|resnet34-verified-adam|resnet34|10|1|"
   "efficientnet|efficientnet-verified-adam|efficientnet|10|1|"
   "vit|vit-verified-adam|vit|10|2|"
   # ⚠ The EMA row gates a FOUR-region blob, `[θ|m|v|ema]`, where every other row here is three.
@@ -119,6 +126,16 @@ for row in "${NETS[@]}"; do
   if [ ${#WANT[@]} -gt 0 ]; then
     match=0; for w in "${WANT[@]}"; do [ "$w" = "$name" ] && match=1; done
     [ $match -eq 1 ] || continue
+  fi
+  # ⚠ NOT-A-TARGET is a FAILURE, not a skip. The four rows above carried the
+  # pre-2026-08-10 `-xla` binary names for six weeks: on a fresh clone they
+  # reported SKIP (and the run still exited 0), and on the box where they were
+  # written they reported PASS, because .lake/build/bin still held the binaries
+  # built before the rename. A gate that silently drops a third of its table is
+  # worse than no gate. `scripts/check_target_names.sh` now lints this file too.
+  if ! grep -q "^lean_exe «$bin» where\$" lakefile.lean; then
+    printf "  %-15s ✗ DEAD NAME — «%s» is not a lean_exe in lakefile.lean\n" "$name" "$bin"
+    NAMES+=("$name"); VERDICTS+=("FAIL  dead target name «$bin»"); FAILED=1; continue
   fi
   if [ ! -x ".lake/build/bin/$bin" ]; then
     printf "  %-15s ⚠ SKIP — not built (lake build %s)\n" "$name" "$bin"

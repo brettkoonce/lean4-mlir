@@ -24,6 +24,9 @@ on:
       # (mnv2 6→17-block promotion rotted the orphaned SpecVJP for weeks).
       - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedSpec.lean'
+      # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`
+      # below is the only thing that elaborates them. Added 2026-09-20 with that step.
+      - 'LeanMlir/VerifiedTrain.lean'
       # The gates this job runs and what they read: a change to any of these flips the verdict
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
@@ -43,6 +46,9 @@ on:
       - '.github/workflows/certs.yml'
       - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedSpec.lean'
+      # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`
+      # below is the only thing that elaborates them. Added 2026-09-20 with that step.
+      - 'LeanMlir/VerifiedTrain.lean'
       # The gates this job runs and what they read: a change to any of these flips the verdict
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
@@ -222,6 +228,29 @@ jobs:
             echo "| convnext (ch9)     | $(faithful CnxPoCGB.chanLnGammaGradB_den) | $(faithful CnxPoCGB.chanLnBetaGradB_den) | $(faithful CnxTiePoCGB.cnx_net_tiedGB) | \`cnx_net_tiedGB\` (full [3,3,9,3], 182 params, batched at the gradient nodes and the smoothed loss — every shipped ConvNeXt artifact, the ImageNet AdamW ones included; \`cnx_net_tied_certified\` is its SGD-inline per-example form) |"
             echo "| vit (ch10)         | $(faithful ViTPoCGB.rowDenseWeightGradB_den) | $(faithful ViTPoCGB.veclnGammaGradB_den) | $(faithful ViTTiePoCGB.vit_net_tiedGB) | \`vit_net_tiedGB\` (ViT-Tiny depth-12 multi-head, 200 params, batched at the gradient nodes and the smoothed loss — every shipped ViT artifact; \`vit_net_tied_certified\` is its SGD-inline per-example form) |"
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: Entry points elaborate (lake build Apps)
+        # ⭐ Until 2026-09-20 NOTHING in CI elaborated an apps/ or demos/ entry point.
+        # `lake build` builds `Proofs` alone and the exes are built on demand, so a
+        # trainer could keep calling a driver that had been renamed out from under it
+        # and only a human running that one binary would find out.
+        #
+        # `Apps` is a lean_lib over the same sources, so this type-checks all 111 entry
+        # points WITHOUT linking 111 × ~149 MB of binary. Measured: 3393 jobs against
+        # `Proofs`' 2403 — 59 extra LeanMlir modules (the Float bridges, the ViT and
+        # MobileNet full-net chains, LipschitzCert, SmoothingGaussian, the codegen half)
+        # plus the 111 modules themselves. That delta is why it lives HERE and not in the
+        # per-push proofs workflow, whose whole point is to skip the corpus tail.
+        #
+        # ⚠ KNOWN GAP, named rather than papered over: this workflow does not trigger on
+        # `apps/**` or `demos/**`, because an app-only edit is not worth the corpus tail.
+        # Such an edit is caught by the nightly cron (within 24 h) and, for the common
+        # case of a name that no longer resolves, immediately by the unfiltered
+        # `.github/workflows/targets.yml`.
+        run: |
+          set -e
+          lake build Apps
+          echo "✅ **All 111 apps/ + demos/ entry points elaborate** (\`lake build Apps\`)" >> $GITHUB_STEP_SUMMARY
 
       - name: Bestiary param-count drift guard
         # tests/test_bestiary_params.py pins NetSpec.totalParams for every

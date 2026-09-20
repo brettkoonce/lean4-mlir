@@ -101,7 +101,7 @@ for net in "${NETS[@]}"; do for s in $SEEDS; do JOBS+=("$net:$s"); done; done
 
 # --- precheck ------------------------------------------------------------------------------
 for net in "${!EXE[@]}"; do
-  [ -x ".lake/build/bin/${EXE[$net]}" ] || { echo "⛔ missing .lake/build/bin/${EXE[$net]} — lake build it"; exit 1; }
+  [ -x ".lake/build/bin/${EXE[$net]}" ] || { echo "⛔ missing .lake/build/bin/${EXE[$net]} — run: lake build ${EXE[$net]}"; exit 1; }
 done
 [ -d data ] || { echo "⛔ no data/"; exit 1; }
 command -v flock >/dev/null || { echo "⛔ no flock"; exit 1; }
