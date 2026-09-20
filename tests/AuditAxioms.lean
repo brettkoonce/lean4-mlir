@@ -22,6 +22,7 @@ import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
 import LeanMlir.Proofs.Training.MobileNetV2JacobianSealFull
 import LeanMlir.Proofs.Training.MobileNetV2SealRealistic
 import LeanMlir.Proofs.Foundation.PerChannelBN
@@ -564,6 +565,13 @@ open Proofs
 #print axioms R50FullBSeal.sealX_nonconstant
 #print axioms R50FullBSeal.sealX_jacobian_nonzero
 #print axioms R50FullBSeal.sealX_backward_nontrivial
+-- MobileNetV2's, on `mobilenetv2ForwardB_full` -- all seventeen bottlenecks, batch BN, 224x224,
+-- relu6. All 35 kink clauses are weight-only here (every relu6 sits on a BatchNorm output, and
+-- the linear bottleneck has no relu after the residual add), and the carrier threads 22
+-- BatchNorms because a channel-changing bottleneck has no skip to pass it on.
+#print axioms Mnv2FullBSeal.sealX_nonconstant
+#print axioms Mnv2FullBSeal.sealX_jacobian_nonzero
+#print axioms Mnv2FullBSeal.sealX_backward_nontrivial
 -- Item B2 FULL DEPTH (MobileNetV2JacobianSealFull.lean)
 #print axioms Mnv2Live.fwdFull_nonconstant
 #print axioms Mnv2Live.fwdFull_jacobian_nonzero

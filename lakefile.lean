@@ -134,6 +134,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal,
+             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldG,

@@ -528,6 +528,23 @@ theorem depthwiseFlat_eq_zero {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) 
     depthwiseFlat (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
   funext k; simp [depthwiseFlat, depthwiseConv2d, Tensor3.flatten, hW, hb]
 
+/-- **ReLU6 is the identity inside its window.** Wherever every coordinate is strictly inside
+    `(0,6)`, `min (max · 0) 6` does nothing — the step every structural witness takes to collapse a
+    relu6 stage to its BatchNorm. ⭐ Stated at the top level rather than inside a witness namespace:
+    it is a fact about the op, and `BatchSeal`'s consumers outlive any one witness. -/
+theorem relu6_id_window (n : Nat) (y : Vec n) (hy : ∀ k, 0 < y k ∧ y k < 6) :
+    relu6 n y = y := by
+  funext k
+  simp only [relu6]
+  obtain ⟨h0, h6⟩ := hy k
+  rw [max_eq_left (le_of_lt h0), min_eq_left (le_of_lt h6)]
+
+/-- **ReLU6 is continuous** — `min (max · 0) 6` coordinatewise. The peer of
+    `BatchSeal.relu_continuous`, for the ray argument of a relu6 net's seal. -/
+theorem relu6_continuous (n : Nat) : Continuous (relu6 n) := by
+  refine continuous_pi (fun k => ?_)
+  exact ((continuous_apply k).max continuous_const).min continuous_const
+
 namespace Mnv2Live
 
 open Proofs
@@ -650,14 +667,6 @@ theorem conv2d_1x1' {ic oc h w : Nat} (W : Kernel4 oc ic 1 1) (b : Vec oc)
     exact absurd (by
       have := hi.isLt; have := wi.isLt
       refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only [Fin.val_zero] <;> omega) hcond
-
-/-- ReLU6 is the identity wherever every coordinate is strictly inside `(0,6)`. -/
-theorem relu6_id_window (n : Nat) (y : Vec n) (hy : ∀ k, 0 < y k ∧ y k < 6) :
-    relu6 n y = y := by
-  funext k
-  simp only [relu6]
-  obtain ⟨h0, h6⟩ := hy k
-  rw [max_eq_left (le_of_lt h0), min_eq_left (le_of_lt h6)]
 
 /-- A 1×1 channel-identity conv (`W o i = δ_oi`, `b = 0`) is the identity. -/
 theorem flatConv_id2 (W : Kernel4 2 2 1 1) (b : Vec 2)

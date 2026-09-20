@@ -14,7 +14,70 @@ bound being the `β = 160` margin against the stem's `2·(16q)²`.
 Corrections this doc needed, all applied below: the centre tap must **broadcast** (§3.1), the
 carrier's BN count is **one per projection plus the stem** — five for ResNet-50, not four (§3.2),
 `MobileNetV2SealRealistic` imported the R34 proxy seal (§5), and every collapse lemma has to be
-proved at **variable** shapes (§3.5, new — it is the one thing that can sink 4.3–4.4).
+proved at **variable** shapes (§3.5, new — it is the one thing that can sink 4.3–4.4). The 4.3
+inventory (2026-09-20) added four more: MobileNetV2's carrier threads **22** BNs, not four, because
+its channel-changing blocks have no skip; the apex takes **19** clause bundles of **three** kinds,
+`IVStridedSmoothAtB` and the head's having been missed in §2; the kit needs **seven** new lemmas,
+not three, the depthwise family having been missed entirely; and `relu6_id_window` lives inside the
+namespace the retirement deletes.
+
+## Next session: start here
+
+Two commits are on `main`, **local and unpushed**: `77a411f8` (§4.1, ResNet-34 + the kit, proxies
+retired) and `7df9b272` (§4.2, ResNet-50 + the kit refactor). Audit at 1,377 declarations, every
+gate in §6 green on both.
+
+**§4.3 (MobileNetV2) is the next package**, and it is the only one with bookkeeping that can bite
+(§5's comparator row). **Step 1, the inventory, is DONE** — the block table, the carrier's 22 BN
+factors, the three clause-bundle kinds and the seven kit lemmas are all in §4.3. Read §3.5, then
+§4.3, before writing a line of Lean. What is left:
+
+1. ~~**The kit additions first**~~ — **DONE 2026-09-20**, uncommitted: `Training/BatchSealKit.lean`
+   +215 lines / sixteen declarations, and `relu6_id_window` + a new `relu6_continuous` moved to the
+   top level of `MobileNetV2.lean` (§4.3 says why there rather than the kit). Green:
+   `lake build LeanMlir.Proofs.Training.BatchSealKit`, the same for
+   `Training/MobileNetV2SealRealistic` (the migration's only external consumer),
+   `scripts/check_target_names.sh`, `check_audit_coverage.py`, `check_render_coverage.py`, and
+   `git diff verified_mlir/` empty. ⚠ `lake build Certs`, `tests/AuditAxioms.lean` and
+   `docstring-checkrefs` are **deliberately deferred** to the seal's commit — they need a full
+   downstream rebuild and there is no point paying for it twice.
+2. ~~**The collapses and the clause discharge**~~, ~~**the carrier and the ray**~~ —
+   **DONE 2026-09-20**, uncommitted: `Nets/MobileNet/MobileNetV2FullBSeal.lean`, 1,418 lines,
+   221 declarations. Green: `lake build LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal`, and
+   the three seal theorems print 3-axiom clean. Rooted in `lakefile.lean`, imported and printed in
+   `tests/AuditAxioms.lean`. §4.3 records what the inventory got right and the three shapes it did
+   not anticipate.
+3. **Then the retirement**, which is where the care goes — see §5's comparator bullet, and note
+   that the seal file's own header says `Mnv2Live` is retired *by this step*, so it needs a one-line
+   edit too. Do the `DECLS` edit, `gen_comparator_tier.py`, and `tests/comparator/run.sh` (~25 min,
+   all three configs) as their own step, *after* the seal is green, so a red comparator can never be
+   confused with a red proof. Audit lands at **1,371**: the three seal prints are already in
+   (1,377 → 1,380), and the nine proxy prints come out. ⚠ `lake build Certs`,
+   `lake env lean tests/AuditAxioms.lean` in full, and `docstring-checkrefs` are still deferred to
+   this commit.
+
+**§4.4 (MobileNetV4)** is last and unchanged in shape: the UIB relu-site inventory from
+`Nets/MobileNet/MobileNetV4BackB0.lean` is the whole uncertainty, and `Mnv4SmoothAt`'s per-group
+`.ok` fields are `CertLayer` conjunctions, so the discharge is per row rather than per block.
+
+**What 4.3 and 4.4 inherit, by name** (do not re-prove any of it):
+`BatchSeal.{kv, zk, margin160, rayRamp, rayBase, rayV, rayX, bcell_rayX, rayX_zero_add,
+rayX_continuous, EDiff, EDiff_rayX, EDiff_shift, EDiff_bn, EDiff_conv, EDiff_convS2, EDiff_pool,
+ctConv, ctConv_bn_pos, ctConv_inj, ctConv_pool_smooth, head_diff_ct, bnBatchLA_const,
+bnBatchLA_abs_sub_le, bnBatchLA_pos, bnBatchLA_exdiff, bnBatchLA_cell_inj, ctK, conv2d_ctK,
+flatConv_ctK, flatConvStride2_ctK, bcell_conv_ctK, bcell_convS2_ctK, batchMap_flatConv_zero,
+batchMap_flatConvStride2_zero, maxPool3s2_shift, globalAvgPool_shift, forall_flat_of_cell,
+relu_continuous, residual_continuous, residualProj_continuous, batchMap_continuous, divmod_inj}`
+and, for anything shaped like a ResNet block,
+`R34FullBSeal.{projB_zero_const, cbReluStridedB_eq, r34StemB_eq, r34StemB_nonneg, sealStemSmooth,
+sealProj, sealProj_pos, sealProj_apply, projB_continuous, cbReluB_continuous,
+projStridedB_continuous, cbReluStridedB_continuous, r34StemB_continuous}`.
+
+**The per-net file's own shape**, in the order that worked twice: weights → margins → collapses
+(`*Body`, `*_eq`) → nonnegativity → clause bundles → the witness input and the ray at this net's
+spelling → `nn*`/`pc*` (activation facts) → `sc_*` (clauses) → `sealVJP`/`sealDiffAt` → the `d*`
+carriers and the `ed*` chain → the head → `Rr` + continuity → the three seal theorems. Roughly a
+third of it is mechanical enough to generate; generate it and read it, do not hand-type 48 clauses.
 
 ## 0. The finding
 
@@ -64,7 +127,7 @@ numeric fact about millions of floats (archive Item F) and is what the training 
 |---|---|---|---|---|---|
 | ResNet-34 | relu, maxpool | `resnet34ForwardB_full_has_vjp_at` | 32 (`R34IdSmoothAt`/`R34DownSmoothAt`, two relus each) + `R34StemSmoothAt` + `R34PoolSmoothAt` | ✅ `ResNet34FullBSeal` | §4.1 done |
 | ResNet-50 | relu, maxpool | `resnet50ForwardB_full_has_vjp_at` (`q` binder: 224 and 160 px) | 48 (`R50IdSmoothAt`/`R50ProjSmoothAt`/`R50DownSmoothAt`, three relus each) + stem + pool | ✅ `ResNet50FullBSeal`, both resolutions | §4.2 done |
-| MobileNetV2 | relu6 | `mobilenetv2ForwardB_full_has_vjp_at` | stem + 17 block bundles (`IVSmoothAtB` / `IVNoExpSmoothAtB`), each a window `≠ 0 ∧ ≠ 6` per site | `Mnv2Live` proxy, per-example two-block net | §4.3 |
+| MobileNetV2 | relu6 | `mobilenetv2ForwardB_full_has_vjp_at` | 19 bundles: stem + `IVNoExpSmoothAtB` + `IVStridedSmoothAtB` ×4 + `IVSmoothAtB` ×12 + head, 35 relu6 sites, each a window `≠ 0 ∧ ≠ 6` | `Mnv2Live` proxy, per-example two-block net | §4.3 |
 | MobileNetV4-Conv-M | relu (UIB), swish (fused stage) | `mobilenetv4ForwardB_full_has_vjp_at` | one bundle `Mnv4SmoothAt` with per-group `.ok` fields; `fused` is vacuous (swish) | none | §4.4 |
 | EfficientNet-B0 | SiLU, sigmoid (SE) | `efficientnetForwardB_full_has_vjp` | none — `HasVJP`, only `0 < ε` | — | nothing |
 | ConvNeXt-T | GELU, LN | `convNextForwardTChB_has_vjp_at` | none — holds at every `x`, only `0 < ε` | — | nothing |
@@ -280,22 +343,169 @@ shapes. ResNet-50 reuses ResNet-34's block-level generics by name (`projB_zero_c
 
 ### 4.3 MobileNetV2 — relu6, no pool, XLA-padded stem
 
-Blocks in `mobilenetv2ForwardB_full`: stem, one `mnv2NoExpB`, two `mnv2ExpOnlyB`, four
-`mnv2StridedB`, ten `mnv2ResidB`, head. The carrier passes through the stem, the no-expansion
-block and the six channel-changing blocks (expand / depthwise / project BNs, all centre-tap
-diagonal on channel 0); the ten residual blocks pass it on the skip with a `+3` body the next BN
-removes. Differences from 4.1: the relu6 window in place of the positivity margin (§3.3); the
-stem is `flatConvStride2Xla` (odd positions); a depthwise centre-tap identity lemma; no pool, so
-no no-tie argument and no ramp — the base input can be the constant `0` on both examples as in
-every existing MobileNetV2 seal (`fwd_jacobian_nonzero` at `0`). Effort: ~1k lines, one session.
+**Inventory DONE 2026-09-20**, read off the nesting in `Nets/MobileNet/MobileNetV2FullB.lean` and
+the hypothesis list of `MobileNetV2FullBVJP.lean`'s apex — not from prose, which is how §3.2's
+ResNet-50 BN count went wrong.
+
+| # | block | kind | `ic→mid→oc` | grid | role | BN | relu6 | `m = 2·h·w` at each relu6 BN |
+|---|---|---|---|---|---|---|---|---|
+| — | stem | `mnv2StemB`, 3×3/s2 `flatConvStride2Xla` | 3→32 | 224→112 | **carrier** | 1 | 1 | 25 088 |
+| b1 | `IVWNoExp 32 16` | `mnv2NoExpB` (dw3×3, proj1×1) | 32→16 | 112 | **carrier** | 2 | 1 (dw) | 25 088 |
+| b2 | `IVW 16 96 24` | `mnv2StridedB` | 16→96→24 | 112→56 | **carrier** | 3 | 2 | 25 088 (e), 6 272 (d) |
+| b3 | `IVW 24 144 24` | `mnv2ResidB` | 24→144→24 | 56 | residual | 3 | 2 | 6 272, 6 272 |
+| b4 | `IVW 24 144 32` | `mnv2StridedB` | 24→144→32 | 56→28 | **carrier** | 3 | 2 | 6 272 (e), 1 568 (d) |
+| b5, b6 | `IVW 32 192 32` | `mnv2ResidB` ×2 | 32→192→32 | 28 | residual | 6 | 4 | 1 568 |
+| b7 | `IVW 32 192 64` | `mnv2StridedB` | 32→192→64 | 28→14 | **carrier** | 3 | 2 | 1 568 (e), 392 (d) |
+| b8, b9, b10 | `IVW 64 384 64` | `mnv2ResidB` ×3 | 64→384→64 | 14 | residual | 9 | 6 | 392 |
+| b11 | `IVW 64 384 96` | `mnv2ExpOnlyB` | 64→384→96 | 14 | **carrier** | 3 | 2 | 392 |
+| b12, b13 | `IVW 96 576 96` | `mnv2ResidB` ×2 | 96→576→96 | 14 | residual | 6 | 4 | 392 |
+| b14 | `IVW 96 576 160` | `mnv2StridedB` | 96→576→160 | 14→7 | **carrier** | 3 | 2 | 392 (e), 98 (d) |
+| b15, b16 | `IVW 160 960 160` | `mnv2ResidB` ×2 | 160→960→160 | 7 | residual | 6 | 4 | 98 |
+| b17 | `IVW 160 960 320` | `mnv2ExpOnlyB` | 160→960→320 | 7 | **carrier** | 3 | 2 | 98 |
+| — | head | `mnv2HeadB` (1×1 cbrB, GAP, dense) | 320→1280→`nCls` | 7 | **carrier** | 1 | 1 | 98 |
+
+**52 BN sites, 35 relu6 sites**, which is what `MobileNetV2FullB.lean`'s header claims. Seven
+non-residual blocks (b1, b2, b4, b7, b11, b14, b17) plus stem and head are the carrier; the ten
+`mnv2ResidB` blocks pass it on the skip.
+
+⭐ **The carrier has 22 BN factors**, not four: `1 (stem) + 2 (b1) + 3 × 6 (b2, b4, b7, b11, b14,
+b17) + 1 (head)`. MobileNetV2's channel-changing blocks have **no skip at all** — the body *is* the
+block — so the carrier threads every BN inside them, where ResNet's carrier saw only the projection.
+`Rr` is a 22-fold product of `γ·istd` and `Rr_continuous` is 22 `Continuous.mul`s.
+
+⚠ **Three clause-bundle kinds, not two**, and the head is not hypothesis-free. §2's census row said
+"stem + 17 block bundles (`IVSmoothAtB` / `IVNoExpSmoothAtB`)"; the apex actually takes
+`MNV2StemSmoothAtB` + `IVNoExpSmoothAtB` (b1) + `IVStridedSmoothAtB` ×4 (b2, b4, b7, b14) +
+`IVSmoothAtB` ×12 + `MNV2HeadSmoothAtB` = **19 bundles**. `IVStridedSmoothAtB` differs from
+`IVSmoothAtB` in both spatial arguments and in reading `depthwiseStride2FlatXla`, so it is a
+separate discharge shape. Positivity is `0 < sε`, `0 < hε`, `IVNoExpPos`, `IVPos` ×16.
+
+⭐⭐ **Every one of the 35 clauses is weight-only.** Better than ResNet-34, where the post-residual
+relu needed `0 ≤ activation`. Two reasons compose:
+
+* every relu6 in this net sits directly on a BN output (`cbrB`, `dwbrB`, `dwbrBstrided`, stem, head
+  are all `relu6 ∘ bnBatchLA ∘ …`), and `bnBatchLA_abs_sub_le` bounds a BN output within
+  `|γ|·√(N·h·w)` of `β` **at every input**. So `β = 3` with `|γ|·√m < 3` gives `≠ 0 ∧ ≠ 6` with no
+  reference to the activation;
+* the linear bottleneck has **no relu after the residual add** (`mnv2ResidB` returns `residual body`),
+  so there is no post-residual clause to discharge and nothing needs a nonnegativity argument.
+
+Consequence: no ramp is needed, no positional injectivity, no `0 ≤ ·` lemmas — the input is only
+ever the carrier. ⛔ Do not port ResNet-34's `nn*` nonnegativity layer; it has no analogue here.
+
+**The margin: one `γ = 1/64` for all 52 BN sites.** The widest relu6 BN is `m = 2·112² = 25 088`
+(stem, b1's depthwise, b2's expand, all at 112×112), `√25 088 < 158.4`, and `158.4/64 = 2.48 < 3`.
+The kit's `margin160` is `γ = 1, β = 160`; this net's peer is `margin192` — `|1/64|·√n < 3` whenever
+`(n : ℝ) < 36 864 = (3·64)²` — proved the same way through `sqrt_lt_param`. The eleven project BNs
+feed a conv, not a relu6, so they carry no margin at all; `γ = 1/64` there too only for uniformity
+(all they need is `γ ≠ 0` for the carrier).
+
+**Structural weights**, typed at `MNV2BWeights nCls`: `ε = 1` and `γ = kv _ (1/64)` everywhere;
+`β = kv _ 3` at every BN followed by a relu6, `β = kv _ 0` at the project BNs (unconstrained —
+a zeroed residual body then makes the block the exact identity, `EDiff_shift` at `s = 0`); stem,
+expand, depthwise and project kernels on the carrier are centre taps; every residual block's three
+kernels and biases are zero; `fcW 0 0 = 1`, rest zero, `fcb = 0`.
+
+**Kit lemmas — seven families, not three. LANDED 2026-09-20**, in `Training/BatchSealKit.lean`
+(+215 lines, sixteen declarations, `lake build LeanMlir.Proofs.Training.BatchSealKit` green). The
+original list missed the depthwise family entirely, and the stem is a *regular* conv at XLA padding,
+which is a third op again:
+
+1. `decimateOdd_unflatten` — the odd peer of `decimate_unflatten`, reading `(2i+1, 2j+1)`;
+2. `flatConvStride2Xla_ctK`, `bcell_convS2Xla_ctK`, `EDiff_convS2Xla` — the stem (new §3b).
+   ⭐ Cheap, as predicted: `flatConvStride2Xla = decimateOddFlat ∘ flatConv`, so these are
+   `flatConvStride2_ctK`'s proofs with `decimate_unflatten` swapped for (1), unchanged otherwise;
+3. `ctDW` (the centre-tap **depthwise** kernel), `depthwise2d_ctDW`, `depthwiseFlat_ctDW`,
+   `bcell_dw_ctDW`, `EDiff_dw` (new §3c) — `depthwiseConv2d`'s pad guard is `conv2d`'s, so
+   `depthwise2d_ctDW` is `conv2d_ctK`'s proof with the channel sum deleted. ⭐ The interesting
+   difference is semantic, not proof-theoretic: a depthwise **cannot broadcast**, so where
+   `EDiff_conv` collapses the carrier to `fun _ => s · δ c₀`, `EDiff_dw` scales `δ` channel by
+   channel and the whole function survives;
+4. `depthwiseStride2FlatXla_ctDW`, `bcell_dwS2Xla_ctDW`, `EDiff_dwS2Xla` — same, decimated odd;
+5. `batchMap_depthwiseFlat_zero` — the residual bodies' depthwise, from the existing
+   `depthwiseFlat_eq_zero`. ⛔ No strided zero lemma is needed: all four strided blocks are on the
+   carrier, so no zeroed kernel ever meets a stride;
+6. `bnBatchLA_window` (`0 < bn < 6`, what the collapses want) and `bnBatchLA_smooth6`
+   (`≠ 0 ∧ ≠ 6`, what the clause bundles want) — both from `bnBatchLA_abs_sub_le`, four lines each,
+   and between them they discharge all 35 clauses. Plus `margin192` beside `margin160`:
+   `|1/64|·√n < 3` whenever `n < 36 864 = (3·64)²`, which clears BOTH window hypotheses at once
+   because `β = 3` is the centre of `(0, 6)`;
+7. `relu6_continuous`, for `Rr_continuous`. `depthwiseFlat`, `depthwiseStride2FlatXla`,
+   `flatConvStride2Xla` and `decimateOddFlat` all carry `@[fun_prop]` differentiability already, so
+   `.continuous` covers them and no further continuity lemma is needed.
+
+⚠⚠ **`relu6_id_window` had to move before the retirement, and it did — but not to the kit.** It is
+generic in `n` and is exactly the "relu6 is the identity in the window" step the collapses need, yet
+it lived **inside** `namespace Mnv2Live`, which 4.3 deletes. ⭐ Resolution taken: move it (and put
+`relu6_continuous` beside it) to the **top level of `MobileNetV2.lean`**, next to `relu6` itself and
+next to `depthwiseFlat_eq_zero`, which already sits *before* the namespace opens and survives
+untouched. That is two lines up rather than into another file: it keeps the lemma beside the op it
+is about, keeps `MobileNetV2SealRealistic`'s unqualified uses resolving (it does
+`open Proofs Mnv2Live`, and `Proofs` is still an enclosing namespace), and makes the retirement diff
+smaller. Nothing anywhere refers to either by a `Mnv2Live.`-qualified name, so the move is
+self-contained. ⭐ `Mnv2Live.bnIstd_pos` is only a re-export of `Architectures/BatchNorm.lean`'s,
+which is what `BatchSealKit.lean` actually resolves to — no migration, and no hazard there.
+
+⭐ **No new imports were needed.** `Codegen/StableHLO.lean` already imports both
+`Architectures/Depthwise.lean` and `Nets/MobileNet/MobileNetV2.lean`, so the kit could already see
+`DepthwiseKernel`, `depthwiseFlat`, `depthwiseStride2FlatXla`, `decimateOddFlat`,
+`flatConvStride2Xla` and `relu6`. ⚠ The flip side: editing either of those files rebuilds
+`StableHLO.lean` (322 s) and everything downstream, so batch kit edits rather than iterating on
+them — develop against a scratch file that imports `BatchSealKit` and only then transcribe.
+
+**The seal file LANDED 2026-09-20**: `Nets/MobileNet/MobileNetV2FullBSeal.lean`, 1,418 lines,
+221 declarations, rooted in `lakefile.lean` and printed in `tests/AuditAxioms.lean`
+(`Mnv2FullBSeal.sealX_nonconstant` / `_jacobian_nonzero` / `_backward_nontrivial`).
+
+What the inventory predicted and the proof confirmed:
+
+* ⭐⭐ **all 35 clauses are weight-only.** `sealVJP` — the whole-net VJP with every one of the 19
+  bundles discharged — elaborated on the first attempt, and not one of the 19 `sc*` lemmas reads
+  the activation. `bnBatchLA_smooth6` at `β = 3`, `γ = 1/64` does the whole job;
+* ⭐ **the residual blocks are the exact identity**, not ResNet's `a ↦ a + 1`: with `pβ = 0` a
+  zeroed body is the constant `0`, so `sealResB_eq : mnv2ResidB … v = v` and the ten residual
+  `pc`/`ed` steps are two lines each;
+* **22 carrier BatchNorms**, as counted. `Rr` is a 22-fold product of `rf = 1/64 · istd`, and
+  `gd_ray` closes by `ring` over 23 atoms after unfolding the 22 `δ` definitions.
+
+Three things the plan did not anticipate, all small:
+
+1. ⚠ **`rw` does not see through a structure projection.** `sealExpB_eq`'s `show` had to spell the
+   witness's BN parameters as literals (`1`, `kv mid (1/64)`, `kv mid 3`); with `_` placeholders the
+   goal keeps `(sealIVW ic mid oc).eε` and `cbrB_eq`'s syntactic pattern misses. Same fix in all
+   three block collapses and in `headA`;
+2. ⛔ **`repeat' apply mul_pos` splits inside `rf`.** `rf` is itself `1/64 * bnIstd …`, so the
+   tactic keeps going and leaves `0 < 1/64` goals that `rf_pos` cannot close. `Rr_pos` is an
+   explicit 22-deep `mul_pos (rf_pos _ _) (…)` chain instead, with a comment saying why;
+3. each of the three block collapses ends in a bare `rfl` — `projB` is definitionally
+   `bnBatchLA ∘ batchMap (flatConv …)`, and the `rw`s leave exactly that.
+
+**Method note for §4.4.** The file was developed against a scratch file importing `BatchSealKit`
+and `MobileNetV2FullBVJP` (both already built), in five stages — weights/window/stage collapses,
+clause bundles + `sealVJP`, block collapses + continuity, the 22 activations + the collapsed trunk,
+the carrier + `Rr` + the seal — each elaborated before the next was written, and the repetitive
+two thirds generated from a 17-row site table rather than typed. Total: four errors across
+1,418 lines, all of them the shapes listed above. ⚠ Do NOT iterate by editing the kit or
+`MobileNetV2.lean`: either rebuilds `StableHLO.lean` (322 s) and everything downstream.
+
+**The base input.** Reuse `rayX (2*112) (2*112)`: the types line up (`Vec (2 * (3 * 224 * 224))`),
+`EDiff_rayX` is proved, and since every clause is weight-only the ramp is doing no work beyond
+keeping one witness shape across the four nets.
+
+Effort: ~1k lines plus ~150 of kit, one session.
 
 Retires: `Mnv2Live` (`Nets/MobileNet/MobileNetV2.lean:531-918`, 388 lines),
 `Training/MobileNetV2JacobianSeal` (255), `MobileNetV2JacobianSealFull` (209),
-`MobileNetV2SealRealistic` (309): ~1,161 lines. ⚠ `Proofs.Mnv2Live.mnv2Live_forward_nonconstant`
-is a `formalization.yaml` `main_results` row (line 104) **and** a comparator tier theorem
-(`scripts/gen_comparator_tier.py` `DECLS`, `tests/comparator/config-tier.json`): see §5. Whether
-the rest of `MobileNetV2.lean` (the per-example two-block net) still has consumers is a census
-question, not this package's.
+`MobileNetV2SealRealistic` (309): ~1,161 lines. **Nine** `tests/AuditAxioms.lean` prints go
+(`Mnv2Live.mnv2Live_jacobian_nonzero`, `.bn13_window`, `.chSum_convX`,
+`.mnv2Live_forward_nonconstant`, `.fwdFull_nonconstant`, `.fwdFull_jacobian_nonzero`,
+`.fwdFull_backward_nontrivial`, `Mnv2RealSeal.fwdR_jacobian_nonzero`, `.fwdR_backward_nontrivial`)
+and three seal prints arrive: **1,377 → 1,371**. ⚠ `Proofs.Mnv2Live.mnv2Live_forward_nonconstant`
+is `formalization.yaml:104` **and** `gen_comparator_tier.py:42` **and**
+`tests/comparator/config-tier.json:9` (`chk_mnv2Live_forward_nonconstant`): see §5.
+`LeanMlir/Proofs/README.md:162,170-172` names it in prose too. Whether the rest of
+`MobileNetV2.lean` (the per-example two-block net) still has consumers is a census question, not
+this package's.
 
 ### 4.4 MobileNetV4-Conv-M — UIB inventory first
 

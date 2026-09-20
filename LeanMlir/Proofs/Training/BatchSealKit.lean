@@ -34,15 +34,21 @@ and `bnBatchLA_bcell` is the bridge. Everything after it is the usual BN algebra
   workhorse: a channel-independent property of every cell of a `bnBatchLA` output reduces to the
   scalar `bnForward` on one row, with no index decomposition at the call site).
 * §2 the BN consequences the seals need: constant channel ↦ `β`, the `|bn − β| ≤ |γ|√n` margin
-  (hence positivity, hence relu off its kink **at every input**), the example-difference identity,
-  and within-example injectivity (the stem pool's no-tie).
+  (hence positivity, hence relu off its kink **at every input**; hence, two-sided, the relu6
+  window `bnBatchLA_window` / `bnBatchLA_smooth6`), the example-difference identity, and
+  within-example injectivity (the stem pool's no-tie).
 * §3 the centre-tap kernel `ctK` and its conv value: the one weight shape that carries a signal
   through a channel-changing conv while staying transparent to a uniform offset. ⚠ Only the
   **centre** tap is nonzero, which is what makes it padding-proof — a conv of a constant is not
   constant near a zero-padded border, but a centre tap is always in range.
+* §3b the XLA-`SAME` peers, which keep the **odd** spatial positions where the symmetric ops keep
+  the even ones (`decimateOdd_unflatten`, `flatConvStride2Xla_ctK`, `bcell_convS2Xla_ctK`).
+* §3c the centre-tap **depthwise** kernel `ctDW`. ⭐ A depthwise cannot broadcast, so where `ctK`
+  collapses the carrier to one value at every output channel, `ctDW` scales it channel by channel.
 * §4 the 3×3/s2 pool: it shifts with a uniform offset (`maxPool3s2_shift`, no argmax argument), and
   it preserves nonnegativity.
-* §5 continuity odds and ends for the ray argument (`relu`, `bnIstd`).
+* §5 continuity odds and ends for the ray argument (`relu`, `bnIstd`; `relu6_continuous` sits with
+  `relu6` itself).
 -/
 
 namespace Proofs
@@ -251,6 +257,32 @@ theorem bnBatchLA_pos {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc
   have h2 := abs_le.mp h
   linarith [h2.1]
 
+/-- **The relu6 window from the margin** — the two-sided twin of `bnBatchLA_pos`. With `β = b`
+    strictly inside `(|g|√(N·h·w), 6 − |g|√(N·h·w))` the whole BN output sits strictly inside
+    `(0, 6)`, **at every input**, so `relu6_id_window` collapses the stage that follows it.
+    ⭐ `b = 3` centres the window and makes both hypotheses the single check `|g|√(N·h·w) < 3`. -/
+theorem bnBatchLA_window {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (g b : ℝ)
+    (hγ : ∀ ci, γ ci = g) (hβ : ∀ ci, β ci = b)
+    (hlo : |g| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < b)
+    (hhi : b + |g| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 6) (v : Vec (N * (oc * h * w))) :
+    ∀ k, 0 < StableHLO.bnBatchLA N oc h w ε γ β v k ∧
+         StableHLO.bnBatchLA N oc h w ε γ β v k < 6 := by
+  intro k
+  have h := abs_le.mp (bnBatchLA_abs_sub_le ε hε γ β g b hγ hβ v k)
+  exact ⟨by linarith [h.1], by linarith [h.2]⟩
+
+/-- ⭐⭐ **Both relu6 clauses at once**, in the `≠ 0 ∧ ≠ 6` shape every MobileNet smoothness bundle
+    is stated in. Since the bound is input-independent, this discharges a relu6 clause **without
+    reading the activation** — which is why a relu6 net's whole clause bundle is weight-only. -/
+theorem bnBatchLA_smooth6 {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (g b : ℝ)
+    (hγ : ∀ ci, γ ci = g) (hβ : ∀ ci, β ci = b)
+    (hlo : |g| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < b)
+    (hhi : b + |g| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 6) (v : Vec (N * (oc * h * w))) :
+    ∀ k, StableHLO.bnBatchLA N oc h w ε γ β v k ≠ 0 ∧
+         StableHLO.bnBatchLA N oc h w ε γ β v k ≠ 6 := fun k =>
+  ⟨(bnBatchLA_window ε hε γ β g b hγ hβ hlo hhi v k).1.ne',
+   (bnBatchLA_window ε hε γ β g b hγ hβ hlo hhi v k).2.ne⟩
+
 /-- ⭐⭐ **The carrier step.** Two examples of one channel share the channel's mean and `istd`, so
     batch BN keeps their difference and multiplies it by `γ_c · istd_c`. This is what a
     channel-difference carrier cannot do under per-channel batch BN, and it is why the witness is
@@ -404,6 +436,138 @@ theorem batchMap_flatConvStride2_zero {N ic oc h w kH kW : Nat} (W : Kernel4 oc 
   rw [flatConv_eq_zero W b hW hb]
   rfl
 
+-- ═════════════════════════════════════════════════════════════
+-- § 3b. The XLA-`SAME` peers — odd decimation
+--   ⚠ At an even input a stride-2 XLA-`SAME` conv pads asymmetrically and so keeps the **odd**
+--   positions, where the symmetric `flatConvStride2` keeps the even ones. MobileNetV2's stem and
+--   all four of its strided depthwises are this family; ResNet's are not. A centre tap does not
+--   care which phase survives, so these are §3's proofs with one index changed.
+-- ═════════════════════════════════════════════════════════════
+
+/-- Odd decimation reads position `(2i+1, 2j+1)`, channel for channel — the peer of
+    `decimate_unflatten`. -/
+theorem decimateOdd_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) (c : Fin oc)
+    (hi : Fin h) (wi : Fin w) :
+    Tensor3.unflatten (decimateOddFlat oc h w z) c hi wi
+      = (Tensor3.unflatten z : Tensor3 oc (2 * h) (2 * w)) c
+          ⟨2 * hi.val + 1, by have := hi.isLt; omega⟩
+          ⟨2 * wi.val + 1, by have := wi.isLt; omega⟩ := by
+  simp only [Tensor3.unflatten, decimateOddFlat, decimateOddIdx, Equiv.symm_apply_apply]
+
+/-- The strided XLA-`SAME` centre-tap conv: `b o + s · (input channel 0 at the ODD position)`.
+    `flatConvStride2Xla` is `decimateOddFlat ∘ flatConv`, so this is `flatConvStride2_ctK` with
+    `decimateOdd_unflatten` in place of `decimate_unflatten`. -/
+theorem flatConvStride2Xla_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW)
+    (s : ℝ) (b : Vec oc) (v : Vec (ic * (2 * h) * (2 * w))) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
+    Tensor3.unflatten (flatConvStride2Xla (h := h) (w := w) (ctK oc ic kH kW s) b v) o hi wi
+      = b o + s * (Tensor3.unflatten v : Tensor3 ic (2 * h) (2 * w)) c₀
+          ⟨2 * hi.val + 1, by have := hi.isLt; omega⟩
+          ⟨2 * wi.val + 1, by have := wi.isLt; omega⟩ := by
+  simp only [flatConvStride2Xla, Function.comp_apply]
+  rw [decimateOdd_unflatten, flatConv_ctK c₀ hc₀ hkH hkW]
+
+/-- The batched strided XLA-`SAME` centre-tap conv, in cell coordinates — MobileNetV2's stem. -/
+theorem bcell_convS2Xla_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (n : Fin N) (o : Fin oc) (i : Fin h) (j : Fin w) :
+    bcell (StableHLO.batchMap N
+        (flatConvStride2Xla (h := h) (w := w) (ctK oc ic kH kW s) b) x) n o i j
+      = b o + s * bcell x n c₀
+          ⟨2 * i.val + 1, by have := i.isLt; omega⟩
+          ⟨2 * j.val + 1, by have := j.isLt; omega⟩ := by
+  rw [bcell_batchMap]
+  exact flatConvStride2Xla_ctK c₀ hc₀ hkH hkW s b _ o i j
+
+-- ═════════════════════════════════════════════════════════════
+-- § 3c. The centre-tap DEPTHWISE kernel
+--   ⭐ A depthwise conv cannot broadcast — it reads only its own channel — so its centre tap is
+--   the identity on every channel at once, and the carrier's per-channel `δ` survives unchanged
+--   rather than collapsing to `fun _ => s · δ 0`. `depthwiseConv2d`'s padding guard is `conv2d`'s,
+--   so the value proof is `conv2d_ctK`'s with the channel sum deleted.
+-- ═════════════════════════════════════════════════════════════
+
+/-- **The centre-tap depthwise kernel**: every channel reads itself through the kernel's centre
+    tap, scaled by `s`. At `s = 1`, `b = 0` it is the identity. The depthwise peer of `ctK`. -/
+noncomputable def ctDW (c kH kW : Nat) (s : ℝ) : DepthwiseKernel c kH kW :=
+  fun _ch kh kw => if kh.val = (kH - 1) / 2 ∧ kw.val = (kW - 1) / 2 then s else 0
+
+/-- **The centre-tap depthwise value**: `b ch + s · (the same channel at the same position)`. -/
+theorem depthwise2d_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+    (s : ℝ) (b : Vec c) (x : Tensor3 c h w) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
+    depthwiseConv2d (ctDW c kH kW s) b x ch hi wi = b ch + s * x ch hi wi := by
+  have hpH : (kH - 1) / 2 < kH := by omega
+  have hpW : (kW - 1) / 2 < kW := by omega
+  have hzero : ∀ (kh : Fin kH) (kw : Fin kW),
+      ¬(kh.val = (kH - 1) / 2 ∧ kw.val = (kW - 1) / 2) →
+      ctDW c kH kW s ch kh kw = 0 := fun kh kw hne => ite_eq_right hne
+  unfold depthwiseConv2d
+  congr 1
+  refine (Finset.sum_eq_single_of_mem (⟨(kH - 1) / 2, hpH⟩ : Fin kH) (Finset.mem_univ _) ?_).trans ?_
+  · intro kh _ hkh
+    refine Finset.sum_eq_zero (fun kw _ => ?_)
+    rw [hzero kh kw (fun hh => hkh (Fin.ext hh.1)), zero_mul]
+  refine (Finset.sum_eq_single_of_mem (⟨(kW - 1) / 2, hpW⟩ : Fin kW) (Finset.mem_univ _) ?_).trans ?_
+  · intro kw _ hkw
+    rw [hzero _ kw (fun hh => hkw (Fin.ext hh.2)), zero_mul]
+  rw [show ctDW c kH kW s ch (⟨(kH - 1) / 2, hpH⟩ : Fin kH) (⟨(kW - 1) / 2, hpW⟩ : Fin kW) = s from
+      ite_eq_left ⟨rfl, rfl⟩]
+  congr 1
+  dsimp only
+  split
+  · refine congrArg₂ (x ch) ?_ ?_ <;> (apply Fin.ext; simp only []; omega)
+  · rename_i hcond
+    exact absurd (by
+      have := hi.isLt; have := wi.isLt
+      refine ⟨?_, ?_, ?_, ?_⟩ <;> omega) hcond
+
+/-- The flat centre-tap depthwise, in cell coordinates. -/
+theorem depthwiseFlat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+    (s : ℝ) (b : Vec c) (v : Vec (c * h * w)) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
+    Tensor3.unflatten (depthwiseFlat (h := h) (w := w) (ctDW c kH kW s) b v) ch hi wi
+      = b ch + s * Tensor3.unflatten v ch hi wi := by
+  simp only [depthwiseFlat, Tensor3.unflatten_flatten]
+  exact depthwise2d_ctDW hkH hkW s b _ ch hi wi
+
+/-- The batched centre-tap depthwise — the carrier's depthwise step at stride 1. -/
+theorem bcell_dw_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+    (x : Vec (N * (c * h * w))) (n : Fin N) (ch : Fin c) (i : Fin h) (j : Fin w) :
+    bcell (StableHLO.batchMap N (depthwiseFlat (h := h) (w := w) (ctDW c kH kW s) b) x) n ch i j
+      = b ch + s * bcell x n ch i j := by
+  rw [bcell_batchMap]
+  exact depthwiseFlat_ctDW hkH hkW s b _ ch i j
+
+/-- The strided XLA-`SAME` centre-tap depthwise, at the odd position. -/
+theorem depthwiseStride2FlatXla_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+    (s : ℝ) (b : Vec c) (v : Vec (c * (2 * h) * (2 * w))) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
+    Tensor3.unflatten (depthwiseStride2FlatXla (h := h) (w := w) (ctDW c kH kW s) b v) ch hi wi
+      = b ch + s * (Tensor3.unflatten v : Tensor3 c (2 * h) (2 * w)) ch
+          ⟨2 * hi.val + 1, by have := hi.isLt; omega⟩
+          ⟨2 * wi.val + 1, by have := wi.isLt; omega⟩ := by
+  simp only [depthwiseStride2FlatXla, Function.comp_apply]
+  rw [decimateOdd_unflatten, depthwiseFlat_ctDW hkH hkW]
+
+/-- The batched strided XLA-`SAME` centre-tap depthwise — MobileNetV2's four downsampling blocks. -/
+theorem bcell_dwS2Xla_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (n : Fin N) (ch : Fin c) (i : Fin h) (j : Fin w) :
+    bcell (StableHLO.batchMap N
+        (depthwiseStride2FlatXla (h := h) (w := w) (ctDW c kH kW s) b) x) n ch i j
+      = b ch + s * bcell x n ch
+          ⟨2 * i.val + 1, by have := i.isLt; omega⟩
+          ⟨2 * j.val + 1, by have := j.isLt; omega⟩ := by
+  rw [bcell_batchMap]
+  exact depthwiseStride2FlatXla_ctDW hkH hkW s b _ ch i j
+
+/-- A zeroed depthwise (zero kernel, zero bias) sends everything to the constant `0` — the
+    residual bodies of an inverted-residual net. ⛔ No strided peer is needed: a net's strided
+    blocks change channels, so they are on the carrier and never carry a zeroed kernel. -/
+theorem batchMap_depthwiseFlat_zero {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (hW : ∀ ch kh kw, W ch kh kw = 0) (hb : ∀ ch, b ch = 0) (x : Vec (N * (c * h * w))) :
+    StableHLO.batchMap N (depthwiseFlat (h := h) (w := w) W b) x = fun _ => (0 : ℝ) := by
+  funext k
+  show depthwiseFlat (h := h) (w := w) W b (fun i => x _) _ = 0
+  rw [depthwiseFlat_eq_zero W b hW hb]
+
 /-- **Cellwise ⇒ flatwise.** A property of every cell `(n, c, i, j)` holds at every flat index —
     the bridge from the `bcell` view back to the `∀ k` shape every clause is stated in. -/
 theorem forall_flat_of_cell {N c h w : Nat} {v : Vec (N * (c * h * w))} {P : ℝ → Prop}
@@ -516,6 +680,12 @@ noncomputable def zk (oc ic kH kW : Nat) : Kernel4 oc ic kH kW := fun _ _ _ _ =>
 @[simp] theorem zk_apply (oc ic kH kW : Nat) (o : Fin oc) (c : Fin ic) (kh : Fin kH)
     (kw : Fin kW) : zk oc ic kH kW o c kh kw = 0 := rfl
 
+/-- The zero **depthwise** kernel — an inverted-residual net's zeroed bodies. -/
+noncomputable def dzk (c kH kW : Nat) : DepthwiseKernel c kH kW := fun _ _ _ => 0
+
+@[simp] theorem dzk_apply (c kH kW : Nat) (ch : Fin c) (kh : Fin kH) (kw : Fin kW) :
+    dzk c kH kW ch kh kw = 0 := rfl
+
 /-- `1 · √n < 160` whenever `n < 25600` — the margin `bnBatchLA_pos` consumes, at `γ = 1`,
     `β = 160`. Every BN width of a 224×224 ResNet witness clears it (the widest is the stem's
     `2·112² = 25088`). -/
@@ -523,6 +693,16 @@ theorem margin160 (n : ℕ) (h : (n : ℝ) < 25600) :
     |(1 : ℝ)| * Real.sqrt ((n : ℕ) : ℝ) < 160 := by
   rw [abs_one, one_mul]
   exact sqrt_lt_param n 160 (by norm_num) (by nlinarith)
+
+/-- `|1/64|·√n < 3` whenever `n < 36864 = (3·64)²` — the relu6 margin `bnBatchLA_smooth6` consumes,
+    at `γ = 1/64`, `β = 3`. It clears both of that lemma's hypotheses at once, `β = 3` being the
+    centre of `(0, 6)`. Every relu6 BN width of a 224×224 MobileNetV2 witness fits: the widest is
+    `2·112² = 25088`, shared by the stem, b1's depthwise and b2's expand. -/
+theorem margin192 (n : ℕ) (h : (n : ℝ) < 36864) :
+    |(1 / 64 : ℝ)| * Real.sqrt ((n : ℕ) : ℝ) < 3 := by
+  have hs : Real.sqrt ((n : ℕ) : ℝ) < 192 := sqrt_lt_param n 192 (by norm_num) (by nlinarith)
+  rw [abs_of_pos (by norm_num : (0 : ℝ) < 1 / 64)]
+  linarith
 
 -- ════════════════════════════════════════════════════════════════
 -- § 7. The ray: a ramp in channel 0, perturbed on example 0
@@ -622,6 +802,41 @@ theorem EDiff_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val =
   intro o i j
   rw [hδ o, bcell_convS2_ctK c₀ hc₀ hkH hkW s b v 0 o i j,
     bcell_convS2_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
+  ring
+
+/-- The XLA-`SAME` strided peer of `EDiff_conv` — MobileNetV2's stem. -/
+theorem EDiff_convS2Xla {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (δ : Fin ic → ℝ) (δ' : Fin oc → ℝ)
+    (v : Vec (2 * (ic * (2 * h) * (2 * w)))) (hv : EDiff δ v) (hδ : ∀ o, δ' o = s * δ c₀) :
+    EDiff δ'
+      (StableHLO.batchMap 2 (flatConvStride2Xla (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
+  intro o i j
+  rw [hδ o, bcell_convS2Xla_ctK c₀ hc₀ hkH hkW s b v 0 o i j,
+    bcell_convS2Xla_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
+  ring
+
+/-- ⭐ **A centre-tap depthwise scales the carrier channel by channel.** Unlike `EDiff_conv`, which
+    collapses δ to the single value `s * δ c₀` at every output channel, a depthwise reads only its
+    own channel, so the whole function δ survives, scaled. -/
+theorem EDiff_dw {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+    (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * h * w))) (hv : EDiff δ v)
+    (hδ : ∀ ch, δ' ch = s * δ ch) :
+    EDiff δ' (StableHLO.batchMap 2 (depthwiseFlat (h := h) (w := w) (ctDW c kH kW s) b) v) := by
+  intro ch i j
+  rw [hδ ch, bcell_dw_ctDW hkH hkW s b v 0 ch i j, bcell_dw_ctDW hkH hkW s b v 1 ch i j,
+    hv ch i j]
+  ring
+
+/-- The strided XLA-`SAME` peer of `EDiff_dw`. The carrier is spatially uniform, so decimation —
+    whichever phase it keeps — is transparent to it. -/
+theorem EDiff_dwS2Xla {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+    (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w)))) (hv : EDiff δ v)
+    (hδ : ∀ ch, δ' ch = s * δ ch) :
+    EDiff δ'
+      (StableHLO.batchMap 2 (depthwiseStride2FlatXla (h := h) (w := w) (ctDW c kH kW s) b) v) := by
+  intro ch i j
+  rw [hδ ch, bcell_dwS2Xla_ctDW hkH hkW s b v 0 ch i j, bcell_dwS2Xla_ctDW hkH hkW s b v 1 ch i j,
+    hv ch _ _]
   ring
 
 /-- The 3×3/s2 pool keeps the carrier, at every `t`. -/
