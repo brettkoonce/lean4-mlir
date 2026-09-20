@@ -30,14 +30,12 @@ actually deploys the EXACT binomial lower confidence limit (Clopper–Pearson,
   — gives `le_cpLower_of_tail_le`: ONE kernel tail check
   `binomTail N k₀ q₀ ≤ α` certifies the driver's reported `q₀`, and
   `smoothing_cp_certified_solved` turns it into "if the count comes out `k₀`,
-  the radius `σ·Φ⁻¹(q₀)` is certified" (w.p. `≥ 1 − α`). Demo checks at
-  99/100 and 999/1000 (`exponentiation.threshold` gotcha);
+  the radius `σ·Φ⁻¹(q₀)` is certified" (w.p. `≥ 1 − α`);
 * the KERNEL ENGINE (the ListDot recipe): `binomTailNum` — a kernel-
   computable ℕ tail numerator (`descFactorial/factorial` binomials on the
   small side) — with the once-proven bridge `binomTail_eq_kernel`, so each
   per-image hypothesis is ONE `decide +kernel` bignum inequality
-  (`binomTail_le_of_kernel_check`). Driver-scale tests at `N = 10112`
-  (213-term and 4613-term tails) check in ~0.1 s each.
+  (`binomTail_le_of_kernel_check`), as `SmoothingCPScorecard.lean` states them.
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
 
@@ -500,37 +498,10 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     _ ≤ _ := measureReal_mono hsub
 
 -- ════════════════════════════════════════════════════════════════
--- § Demo tail checks: the hypothesis is kernel rational arithmetic
--- ════════════════════════════════════════════════════════════════
-
-/-- Demo tail check, kernel-arithmetic only: 99 hits in 100 draws certify
-    `q₀ = 0.9` at `α = 1/1000` (radius `σ·Φ⁻¹(0.9) ≈ 1.28σ`). -/
-lemma binomTail_check_99of100 : binomTail 100 99 (9/10) ≤ 1/1000 := by
-  have hset : Finset.Icc 99 100 = {99, 100} := by decide
-  have h99 : Nat.choose 100 99 = 100 := by decide
-  rw [binomTail, hset, Finset.sum_insert (by decide), Finset.sum_singleton,
-    h99, Nat.choose_self]
-  norm_num
-
-set_option maxRecDepth 8000 in
-set_option exponentiation.threshold 4000 in
-/-- Mid-scale demo: 999 hits in 1000 draws certify `q₀ = 0.985` at
-    `α = 1/1000` (radius `σ·Φ⁻¹(0.985) ≈ 2.17σ`). Driver-scale `N = 10112`
-    instances go through the kernel engine below instead. -/
-lemma binomTail_check_999of1000 : binomTail 1000 999 (985/1000) ≤ 1/1000 := by
-  have hset : Finset.Icc 999 1000 = {999, 1000} := by decide
-  have h999 : Nat.choose 1000 999 = 1000 := by
-    rw [← Nat.choose_symm (by norm_num : 999 ≤ 1000)]
-    norm_num
-  rw [binomTail, hset, Finset.sum_insert (by decide), Finset.sum_singleton,
-    h999, Nat.choose_self]
-  norm_num
-
--- ════════════════════════════════════════════════════════════════
 -- § The kernel engine: driver-scale tail checks as ONE ℕ-inequality
 -- ════════════════════════════════════════════════════════════════
 
-/-! The `norm_num` route above prices out at driver scale (`N = 10112`,
+/-! Summing the tail term by term with `norm_num` prices out at driver scale (`N = 10112`,
 hundreds of terms, `Nat.choose` far from the diagonal). The ListDot recipe
 applies instead: a kernel-computable ℕ numerator + a once-proven bridge, so
 each per-image scorecard hypothesis is ONE `decide +kernel` bignum
@@ -596,20 +567,5 @@ lemma binomTail_le_of_kernel_check {N k a d A : ℕ} (hk : k ≤ N) (ha : a ≤ 
       = ((A * binomTailNum N k a d : ℕ) : ℝ) := by push_cast; ring
     _ ≤ ((d ^ N : ℕ) : ℝ) := by exact_mod_cast hcheck
     _ = 1 * (d:ℝ) ^ N := by push_cast; ring
-
-/-- DRIVER-SCALE kernel test: `N = 10112` (the deployed `SMOOTH_N`),
-    9900 hits, `α = 1/1000` certify `q₀ = 0.972` — one kernel bignum check
-    over the 213-term tail. -/
-lemma binomTail_check_9900of10112 :
-    binomTail 10112 9900 ((972:ℝ)/1000) ≤ 1/(1000:ℝ) :=
-  binomTail_le_of_kernel_check (by norm_num) (by norm_num) (by norm_num)
-    (by norm_num) (by decide +kernel)
-
-/-- Deep-tail kernel test (4613 terms — the barely-confident regime,
-    `k₀/N ≈ 0.544`): certifies `q₀ = 0.52`. Same one-line check. -/
-lemma binomTail_check_5500of10112 :
-    binomTail 10112 5500 ((52:ℝ)/100) ≤ 1/(1000:ℝ) :=
-  binomTail_le_of_kernel_check (by norm_num) (by norm_num) (by norm_num)
-    (by norm_num) (by decide +kernel)
 
 end Proofs

@@ -1392,7 +1392,6 @@ open Proofs
 #print axioms Proofs.smoothing_certified_radius_cohen
 #print axioms Proofs.smoothing_certified_radius_classifier
 -- ...and the MONTE-CARLO tie (SmoothingMC.lean)
-#print axioms Proofs.iIndepFun_eval_pi
 #print axioms Proofs.mc_mean_lower_bound
 #print axioms Proofs.stdNormalQuantile_of_nonpos
 #print axioms Proofs.smoothing_mc_certified
@@ -1408,15 +1407,11 @@ open Proofs
 #print axioms Proofs.binomTail_monotoneOn
 #print axioms Proofs.le_cpLower_of_tail_le
 #print axioms Proofs.smoothing_cp_certified_solved
-#print axioms Proofs.binomTail_check_99of100
-#print axioms Proofs.binomTail_check_999of1000
 
 -- ...and the KERNEL ENGINE for driver-scale tail checks (the ListDot recipe)
 #print axioms Proofs.binomTailNum_eq
 #print axioms Proofs.binomTail_eq_kernel
 #print axioms Proofs.binomTail_le_of_kernel_check
-#print axioms Proofs.binomTail_check_9900of10112
-#print axioms Proofs.binomTail_check_5500of10112
 
 -- ...and the SCORECARD (SmoothingCPScorecard.lean, generated)
 #print axioms Proofs.smoothCpMlp_certified
@@ -1427,9 +1422,6 @@ open Proofs
 #print axioms Proofs.stdNormalCDF_panel
 #print axioms Proofs.stdNormalCDF_le_phiGridUB
 #print axioms Proofs.le_stdNormalQuantile_of_grid
-#print axioms Proofs.stdNormalQuantile_ge_of_09
-#print axioms Proofs.stdNormalQuantile_ge_of_9952
-#print axioms Proofs.smooth_cp_mlp_i1_radius_dec
 
 -- ...and the DECIMAL-radius SCORECARD (the prefix-scan corpus pass)
 #print axioms Proofs.phiScanRev_getD

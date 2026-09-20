@@ -27,13 +27,6 @@ section MCBound
 
 variable {E : Type*} [MeasurableSpace E]
 
-/-- Coordinates of a finite product of probability measures are iid: the
-    `iIndepFun` fact the Hoeffding sum bound needs. -/
-lemma iIndepFun_eval_pi (ν : Measure E) [IsProbabilityMeasure ν] (N : ℕ) :
-    iIndepFun (fun (i : Fin N) (ω : Fin N → E) => ω i)
-      (Measure.pi fun _ : Fin N => ν) :=
-  iIndepFun_pi (X := fun _ => id) fun _ => aemeasurable_id
-
 /-- **One-sided Hoeffding for a `[0,1]`-valued Monte-Carlo mean.** With
     probability `≥ 1 − exp(−2Nt²)` over `N` iid samples from `ν`, the
     empirical mean minus `t` lower-bounds the true mean. -/

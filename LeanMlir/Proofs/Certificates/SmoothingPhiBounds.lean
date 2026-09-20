@@ -21,10 +21,6 @@ LOWER bounds on `Φ⁻¹`:
 * `le_stdNormalQuantile_of_grid` — the workhorse: ONE `decide +kernel`
   rational check `phiGridUB h m ≤ q₀` certifies `m·h ≤ Φ⁻¹(q₀)`.
 
-Demo instances: `Φ⁻¹(0.9) ≥ 1.27` (true 1.2816) and `Φ⁻¹(0.9952) ≥ 2.54`
-(true 2.590) at `h = 1/500` (~0.001 slack in Φ), plus the radius form for
-the scorecard's MNIST-MLP image 1.
-
 For the whole corpus, the §prefix-scan section makes per-image checks cheap:
 `phiScanRev` computes ALL grid values in one kernel pass (the head's two uses
 stay shared through the kernel's whnf cache), `phiScanRev_getD` indexes it,
@@ -215,40 +211,6 @@ lemma le_stdNormalQuantile_of_grid {h : ℚ} (hh : 0 ≤ h) (m : ℕ) {q : ℝ}
     (hq : q ∈ Set.Ioo (0:ℝ) 1) (hcheck : ((phiGridUB h m : ℚ) : ℝ) ≤ q) :
     (((m:ℚ) * h : ℚ) : ℝ) ≤ stdNormalQuantile q :=
   le_stdNormalQuantile_of_cdf_le hq ((stdNormalCDF_le_phiGridUB hh m).trans hcheck)
-
--- ════════ § demo decimal bounds (kernel panels; ~15-30 s each) ════════
-
-set_option maxHeartbeats 1000000 in
-/-- `Φ⁻¹(0.9) ≥ 1.27` (true value 1.2816...) — 635 kernel panels at `h=1/500`. -/
-lemma stdNormalQuantile_ge_of_09 : (1.27 : ℝ) ≤ stdNormalQuantile (9/10) := by
-  have hcheck : ((phiGridUB (1/500) 635 : ℚ) : ℝ) ≤ (9:ℝ)/10 := by
-    have h : phiGridUB (1/500) 635 ≤ (9:ℚ)/10 := by decide +kernel
-    have h' := (Rat.cast_le (K := ℝ)).mpr h
-    simpa using h'
-  have h := le_stdNormalQuantile_of_grid (h := 1/500) (by norm_num) 635
-    (q := (9:ℝ)/10) (by norm_num) hcheck
-  refine le_trans (le_of_eq ?_) h
-  norm_num
-
-set_option maxHeartbeats 2000000 in
-/-- `Φ⁻¹(0.9952) ≥ 2.54` (true value 2.5899...) — 1270 kernel panels. `0.9952`
-    is the scorecard's MNIST-MLP image-1 CP lower bound (count 10084/10112). -/
-lemma stdNormalQuantile_ge_of_9952 :
-    (2.54 : ℝ) ≤ stdNormalQuantile ((9952:ℝ)/10000) := by
-  have hcheck : ((phiGridUB (1/500) 1270 : ℚ) : ℝ) ≤ (9952:ℝ)/10000 := by
-    have h : phiGridUB (1/500) 1270 ≤ (9952:ℚ)/10000 := by decide +kernel
-    have h' := (Rat.cast_le (K := ℝ)).mpr h
-    simpa using h'
-  have h := le_stdNormalQuantile_of_grid (h := 1/500) (by norm_num) 1270
-    (q := (9952:ℝ)/10000) (by norm_num) hcheck
-  refine le_trans (le_of_eq ?_) h
-  norm_num
-
-/-- The scorecard radius in DECIMALS: MNIST-MLP image 1's certified radius
-    `σ·Φ⁻¹(q₀)` is at least `1.27` (driver float printout: 1.295; `σ = 1/2`). -/
-lemma smooth_cp_mlp_i1_radius_dec :
-    (1.27 : ℝ) ≤ (1/2 : ℝ) * stdNormalQuantile ((9952:ℝ)/10000) := by
-  linarith [stdNormalQuantile_ge_of_9952]
 
 -- ════════ § the prefix scan — one kernel pass prices the whole grid ════════
 
