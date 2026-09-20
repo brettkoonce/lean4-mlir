@@ -497,3 +497,46 @@ ways), `AuditAxioms` 1,379 verdicts / 0 non-core axioms, `check_audit_coverage` 
 `blueprint-checkdecls` clean, `check_target_names` 90/52, `lake build Proofs` 2403,
 `verified_mlir/` untouched, and the book builds under xelatex with no new overfull box.
 ⛔ The comparator run itself is unverified locally and cannot be: kernel 6.8.0 < 6.10.
+
+## 14. The comparator runs on THIS box now — and the kernel prerequisite was wrong
+
+**DONE 2026-09-20.** `landrun` / `lean4export` / `comparator` were not installed here (nor in the
+July `~/lean4-mlir` snapshot), so §13 landed with the comparator itself unverified. Installed at
+the refs `comparator.yml` pins — `landrun` v0.1.14, `lean4export` `076e8e57` rebuilt with the
+project's `lean-toolchain`, `comparator` `3afea238` on its own v4.31.0-rc1 — symlinked into
+`~/.local/bin`. **All three configs ran green: 13 + 39 + 21 = 73, `Your solution is okay!` ×3,
+zero errors or sorries in any Solution build.** The tier pair's 21 statements elaborate inside the
+nested package, not just in the parent where the generator checks them.
+
+⭐⭐ **The documented prerequisite "Linux kernel ≥ 6.10 for Landlock ABI v5" is NOT a requirement.**
+This box is Ubuntu 24.04.4 / kernel 6.8.0-138 / **Landlock ABI 4** and the whole suite runs:
+comparator passes `--best-effort` to landrun unconditionally (`Main.lean:83`), so landrun enforces
+whatever ABI the kernel offers rather than refusing. The kernel re-check and the axiom-closure
+check do not depend on the sandbox at all. ⚠ What an older kernel costs is sandbox STRENGTH, and
+it costs it SILENTLY — landrun prints nothing about the downgrade, so a green local run is not
+evidence that the v5 profile held. Both the README prerequisite and `comparator.yml`'s "Known
+risk" paragraph now say this. Check the ABI with
+`python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, None, 0, 1))'`;
+`linux-image-generic-hwe-24.04` is 7.0 as of 2026-09 if the v5 profile is wanted.
+
+Two smaller finds while setting it up. Comparator reads `COMPARATOR_LANDRUN`,
+`COMPARATOR_LEAN4EXPORT` and `COMPARATOR_NANODA` (`Main.lean:286-288`), so `run.sh`'s temp-dir +
+`PATH` shim could pass its landrun wrapper directly instead. And the v0.1.14 release binary
+self-reports `landrun version 0.1.13` — upstream metadata, not a bad download — and accepts the
+single-dash `-ldd` / `-add-exec`, so the shim's flag translation is a no-op against this version
+(kept for older ones; the `--rox /usr` half is still needed).
+
+⛔⛔ **A latent gate bug the run exposed.** `tests/DocstringCheckRefs.lean`'s `leanFiles` recursed
+into EVERY subdirectory, and `scanRoots` includes `tests`. The moment anyone follows the
+comparator README and runs `./run.sh`, `tests/comparator/.lake/packages/mathlib` exists and the
+gate scans all of Mathlib, failing on Mathlib's own docstrings (36 reported before it truncates).
+It never fired in CI because the workflow that materializes that tree (comparator.yml) is not the
+one that runs the gate (blueprint.yml) — so this was a trap set for the first person to run the
+documented local recipe. `certs.yml`'s LoC count already excluded the same tree for the same
+reason. Now any dot-directory is skipped, which covers `.git` too; the gate reports the same
+2,202 citations across 477 files as before the nested tree existed.
+
+⚠ Still open, and now unblocked: nanoda. `formalization.yaml` records the second-kernel pass as
+disabled "pending a lean4export rebuild after a toolchain bump" — that rebuild just happened at
+v4.34.0, and `cargo`/`rustc` are on this box, so `enable_nanoda: true` is one Rust build away.
+Not attempted here.

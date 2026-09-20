@@ -256,12 +256,22 @@ def resolves (env : Environment) (idx : Std.HashMap String (Array Name))
           || projectNamespaces.any (fun ns => env.contains (ns ++ pn.toName))
           || (idx.getD (pre.getLast!) #[]).any (endsWithComponents · pre)
 
-/-- Every `.lean` file under `dir`, recursively. -/
+/-- Every `.lean` file under `dir`, recursively, skipping build trees.
+
+    ⚠ The `.lake` skip is not cosmetic. `scanRoots` includes `tests`, and
+    `tests/comparator` is a NESTED Lake package: the moment anyone follows its README and
+    runs `./run.sh`, `tests/comparator/.lake/packages/mathlib` exists and this walk scans
+    all of Mathlib, reporting Mathlib's own docstrings as unresolved citations. Found
+    2026-09-20 the first time the comparator was run on a dev box; it never fired in CI
+    because the workflow that materializes that tree (comparator.yml) is not the one that
+    runs this gate (blueprint.yml). `certs.yml`'s LoC count already excludes the same
+    tree for the same reason. Any dot-directory is skipped, which also covers `.git`. -/
 partial def leanFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
   let mut out : Array System.FilePath := #[]
   for e in ← dir.readDir do
     let p := e.path
     if ← p.isDir then
+      if e.fileName.startsWith "." then continue
       out := out ++ (← leanFiles p)
     else if p.extension == some "lean" then
       out := out.push p

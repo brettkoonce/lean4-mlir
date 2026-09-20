@@ -16,10 +16,15 @@ name: Comparator (independent kernel re-check)
 # itself has never reported a kernel or axiom-closure failure here. It is fit to be a
 # required check; flip it in branch protection, which is a GitHub setting, not a file.
 #
-# Known risk: comparator sandboxes via Landlock ABI v5, which needs
-# Linux kernel >= 6.10. GitHub's `ubuntu-24.04` image currently ships a
-# new-enough kernel; `ubuntu-22.04` does NOT. The `uname -r` step below
-# makes the kernel legible if the sandbox ever fails.
+# Sandbox note, corrected 2026-09-20. This used to read "comparator sandboxes via
+# Landlock ABI v5, which needs Linux kernel >= 6.10 ... `ubuntu-22.04` does NOT",
+# as a risk of the run failing. It is not: comparator passes `--best-effort` to
+# landrun unconditionally, so landrun enforces whatever ABI the kernel offers.
+# Verified by running all three configs green on a 6.8.0 / ABI 4 box. What an
+# older kernel costs is sandbox STRENGTH, silently — landrun does not announce
+# the downgrade. So keep `ubuntu-24.04` for the v5 profile, and read the
+# `uname -r` step below as recording which profile a given run actually got,
+# not as a failure diagnostic.
 #
 # Tool pinning: lean4export reads the project's `.olean`s, so its build
 # must stay olean-compatible with the project's Lean (v4.34.0). LEAN4EXPORT_REF

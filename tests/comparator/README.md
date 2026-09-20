@@ -109,10 +109,23 @@ them. They are in both now.
 
 ## Prerequisites (one-time)
 
-- **Linux kernel ≥ 6.10** for Landlock ABI v5. Check with `uname -r`. On
-  Ubuntu 24.04, the HWE kernel works:
+- **A kernel with Landlock.** ⚠ This used to read "Linux kernel ≥ 6.10 for
+  Landlock ABI v5", as a hard requirement. It is not one: comparator passes
+  `--best-effort` to landrun unconditionally (`Main.lean:83`), so landrun
+  enforces whatever ABI the running kernel offers instead of refusing.
+  **Measured 2026-09-20 on Ubuntu 24.04.4 / kernel 6.8.0-138 / Landlock ABI 4:
+  all three configs run to `Your solution is okay!`** — the kernel re-check and
+  the axiom-closure check are unaffected, because neither depends on the
+  sandbox.
+
+  What the older kernel costs is sandbox STRENGTH, and it costs it silently:
+  landrun prints nothing about the downgrade, so a green run here is not
+  evidence that the ABI v5 profile held. If the sandbox is what you are
+  relying on — a judge you do not trust not to be tampered with — get v5:
   ```
-  sudo apt install linux-image-generic-hwe-24.04
+  uname -r                                        # what you have
+  python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, None, 0, 1))'   # ABI version
+  sudo apt install linux-image-generic-hwe-24.04  # 24.04: 7.0 as of 2026-09
   sudo reboot
   ```
 - **landrun** ≥ v0.1.13 — sandbox runner using Linux Landlock LSM:
@@ -136,6 +149,15 @@ them. They are in both now.
 
 `landrun`, `lean4export`, and `comparator` must be on `PATH` (they
 should be after the `ln -sf` lines above if `~/.local/bin` is on PATH).
+Alternatively comparator reads `COMPARATOR_LANDRUN`, `COMPARATOR_LEAN4EXPORT`
+and `COMPARATOR_NANODA` (`Main.lean:286-288`) — pointing those at absolute paths
+is tidier than the `PATH` juggling `run.sh` does, and would let the landrun shim
+below be passed directly rather than shadowed onto `PATH`.
+
+⚠ The v0.1.14 release binary self-reports `landrun version 0.1.13`; that is
+upstream's metadata, not a wrong download. It accepts comparator's single-dash
+`-ldd` / `-add-exec`, so the shim's flag translation is a no-op against this
+version — it is kept for older ones. The `--rox /usr` half is still needed.
 
 ## Running
 
