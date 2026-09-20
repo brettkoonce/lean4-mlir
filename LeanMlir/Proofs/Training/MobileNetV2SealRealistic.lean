@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Training.MobileNetV2JacobianSeal
-import LeanMlir.Proofs.Training.ResNet34LiveRealisticSeal
+import LeanMlir.Proofs.Training.BatchSealKit
 import Mathlib.Analysis.Calculus.Deriv.Prod
 
 /-!
@@ -19,9 +19,13 @@ output inside the *bounded* `(0,6)`: `β` large would clamp at 6. The toy keeps 
 The MobileNetV2 weights (`Ws`, `We₁`, …) are all 1×1 channel maps, hence **dimension-
 independent** and reused verbatim; only the spatial size and `γ` change.
 
-The seal itself reuses the `UDiff` channel-difference machinery of `R34RealSeal` (a uniform
-channel-0 perturbation makes `channel0 = channel1 + δ` everywhere), threaded through the
-ReLU6-free twin (the window makes every ReLU6 the identity). The stem's asymmetric channel
+The seal runs on a `UDiff` channel-difference carrier (a uniform channel-0 perturbation makes
+`channel0 = channel1 + δ` everywhere), threaded through the ReLU6-free twin (the window makes
+every ReLU6 the identity). ⚠ `UDiff` and the 1×1-diagonal conv lemma below were the ResNet-34
+proxy seal's, and moved here when `planning/full_width_seals.md` §4.1 retired that proxy for a
+seal on `resnet34ForwardB_full` itself ([`Nets/ResNet/ResNet34FullBSeal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ResNet/ResNet34FullBSeal.lean)). They are
+per-example, 2-channel facts — the batched peers live in [`Training/BatchSealKit.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/BatchSealKit.lean) — and they
+go when §4.3 gives MobileNetV2 the same treatment. The stem's asymmetric channel
 weights turn a uniform input perturbation `t` into the channel difference `−t`; each BN then
 multiplies it by `γ·istd`, so the output difference is `−t · Rr` with `Rr` a product of four
 positive `γ·istd`s, and `g'(0) = −Rr 0 ≠ 0`.
@@ -32,7 +36,62 @@ namespace Mnv2RealSeal
 
 open scoped BigOperators
 open Finset Filter Topology
-open Proofs Mnv2Live R34RealSeal
+open Proofs Mnv2Live
+
+-- ════════════════════════════════════════════════════════════════
+-- § Inherited from the retired ResNet-34 proxy seal (see the header)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A channel-diagonal 1×1 conv (`δ_oi`, zero bias) is the identity. -/
+theorem flatConv_diag_id {h w : Nat} (W : Kernel4 2 2 1 1) (b : Vec 2)
+    (hW : ∀ o i, W o i 0 0 = if o = i then 1 else 0) (hb : ∀ o, b o = 0) (v : Vec (2 * h * w)) :
+    flatConv (h := h) (w := w) W b v = v := by
+  have hc : conv2d W b (Tensor3.unflatten v) = Tensor3.unflatten v := by
+    funext o hi wi
+    rw [conv2d_1x1, hb]
+    simp only [hW, ite_mul, one_mul, zero_mul, zero_add]
+    rw [Finset.sum_ite_eq Finset.univ o (fun c => (Tensor3.unflatten v) c hi wi)]
+    simp [Finset.mem_univ]
+  simp only [flatConv, hc, Tensor3.flatten_unflatten]
+
+/-- `channel 0 = channel 1 + δ` at every spatial position — the per-example carrier. -/
+def UDiff {h w : Nat} (δ : ℝ) (u : Vec (2 * h * w)) : Prop :=
+  ∀ (i : Fin h) (j : Fin w),
+    (Tensor3.unflatten u : Tensor3 2 h w) 0 i j = (Tensor3.unflatten u : Tensor3 2 h w) 1 i j + δ
+
+/-- **BN (general γ) multiplies the uniform channel difference by `γ·istd`.** -/
+theorem UDiff_bn_γ {h w : Nat} (γ β δ : ℝ) (z : Vec (2 * h * w)) (hz : UDiff δ z) :
+    UDiff (γ * δ * bnIstd (2 * h * w) z 1) (bnForward (2 * h * w) 1 γ β z) := by
+  intro i j
+  show bnForward (2 * h * w) 1 γ β z (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
+     = bnForward (2 * h * w) 1 γ β z (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j))
+       + γ * δ * bnIstd (2 * h * w) z 1
+  have hd := BatchSeal.bnForward_chan_diff_γ (n := 2 * h * w) 1 γ β z
+    (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
+    (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j))
+  have hzδ : z (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), i), j))
+           - z (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), i), j)) = δ := by
+    have := hz i j; simp only [Tensor3.unflatten] at this; linarith
+  rw [hzδ] at hd; linarith
+
+/-- **GAP of a uniform channel difference is that difference.** -/
+theorem UDiff_gap {h w : Nat} (hh : 0 < h) (hw : 0 < w) (δ : ℝ) (u : Vec (2 * h * w))
+    (hu : UDiff δ u) :
+    globalAvgPoolFlat 2 h w u 0 = globalAvgPoolFlat 2 h w u 1 + δ := by
+  have hpos : (0 : ℝ) < (h : ℝ) * w := by exact_mod_cast Nat.mul_pos hh hw
+  simp only [globalAvgPoolFlat_as_sum]
+  have key : ∀ p : Fin h × Fin w,
+      (1 / (h * w : ℝ)) * u (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), p.1), p.2))
+      = (1 / (h * w : ℝ)) * u (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), p.1), p.2))
+        + (1 / (h * w : ℝ)) * δ := by
+    intro p
+    have := hu p.1 p.2; simp only [Tensor3.unflatten] at this
+    rw [this]; ring
+  rw [Finset.sum_congr rfl (fun p _ => key p), Finset.sum_add_distrib, Finset.sum_const]
+  simp only [Finset.card_univ, Fintype.card_prod, Fintype.card_fin, nsmul_eq_mul]
+  congr 1
+  push_cast
+  field_simp
 
 -- ════════════════════════════════════════════════════════════════
 -- § Foundation: BN upper bound + the γ-scaled ReLU6 window
@@ -50,7 +109,7 @@ theorem bnForward_ub {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (v : Vec n) (k : 
 
 /-- `√100352 < 384` (so `(1/128)·√100352 < 3`). -/
 theorem sqrtN_lt : Real.sqrt ((2 * 112 * 112 : ℕ) : ℝ) < 384 :=
-  ResNet34LiveRealistic.sqrt_lt_param (2 * 112 * 112) 384 (by norm_num) (by norm_num)
+  BatchSeal.sqrt_lt_param (2 * 112 * 112) 384 (by norm_num) (by norm_num)
 
 /-- `(1/128)·√100352 < 3`. -/
 theorem gsqrt_lt : (1 / 128 : ℝ) * Real.sqrt ((2 * 112 * 112 : ℕ) : ℝ) < 3 := by
@@ -156,8 +215,8 @@ theorem fwdR_eq (v : Vec (1 * 112 * 112)) : fwdR v = fwdRS v := by
   show mobilenetv2Forward Ws bs 1 (1 / 128) 3 We₁ be₁ 1 (1 / 128) 3 Wd₁ bd₁ 1 (1 / 128) 3 Wp₁ bp₁ 1 (1 / 128) 3
       We₂ be₂ 1 (1 / 128) 3 Wd₂ bd₂ 1 (1 / 128) 3 Wp₂ bp₂ 1 (1 / 128) 3 Wh bh v = fwdRS v
   simp only [mobilenetv2Forward, Function.comp_apply, relu6_bnR,
-    ResNet34LivePC.flatConv_diag_id (h := 112) (w := 112) We₂ be₂ (fun o i => rfl) (fun _ => rfl),
-    ResNet34LivePC.flatConv_diag_id (h := 112) (w := 112) Wp₂ bp₂ (fun o i => rfl) (fun _ => rfl),
+    flatConv_diag_id (h := 112) (w := 112) We₂ be₂ (fun o i => rfl) (fun _ => rfl),
+    flatConv_diag_id (h := 112) (w := 112) Wp₂ bp₂ (fun o i => rfl) (fun _ => rfl),
     depthwiseFlat_unit_id Wd₂ bd₂ (fun _ => rfl) (fun _ => rfl),
     hb1, fwdRS]
 
@@ -279,7 +338,7 @@ theorem A4_continuous : Continuous A4 :=
 theorem Rr_continuous : Continuous Rr := by
   have istdc : ∀ (g : ℝ → Vec (2 * 112 * 112)), Continuous g →
       Continuous (fun t => (1 / 128 : ℝ) * bnIstd (2 * 112 * 112) (g t) 1) := fun g hg =>
-    continuous_const.mul ((ResNet34LiveSeal.bnIstd_cont (n := 2 * 112 * 112) 1 one_pos ⟨0, by norm_num⟩).comp hg)
+    continuous_const.mul ((BatchSeal.bnIstd_cont (n := 2 * 112 * 112) 1 one_pos ⟨0, by norm_num⟩).comp hg)
   exact (istdc _ A0_continuous).mul
     ((istdc _ A2_continuous).mul ((istdc _ A3_continuous).mul (istdc _ A4_continuous)))
 

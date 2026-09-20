@@ -4,6 +4,13 @@
 because it builds the kit the other three reuse. Each package is its own session or two. Gates in
 §6; the bookkeeping that moves with every package in §5.
 
+**§4.1 is DONE (2026-09-20).** `Training/BatchSealKit.lean` (494) + `Nets/ResNet/ResNet34FullBSeal.lean`
+(1,194) landed and the 1,992 lines of proxy are deleted; audit 1,380 → 1,374 declarations, all
+3-axiom clean. Three corrections this doc needed, all applied below: the centre tap must
+**broadcast** (§3.1), `MobileNetV2SealRealistic` imported the R34 proxy seal (§5), and every
+collapse lemma has to be proved at **variable** shapes (§3.5, new — it is the one thing that can
+sink 4.2–4.4).
+
 ## 0. The finding
 
 ResNet-34 exists three times in the proof tree:
@@ -79,10 +86,13 @@ The live nets' recipe, typed at the real record (`R34BWeights nCls` etc.):
   body's last `β` to `1` (ResNet) or `3` (MobileNetV2, the relu6 centre): the block is the affine
   shift `a ↦ a + 1` on a nonnegative activation (`relu (a + 1) = a + 1`; `ResNet34LiveFull.idBlk2_eq`)
   or `a ↦ a + 3` for every input on a linear bottleneck (`MobileNetV2JacobianSealFull.ivId_eq`);
-* every stem / projection / channel-changing kernel a **centre-tap diagonal on channel 0**:
-  `W o i (kH/2) (kW/2) = if o = 0 ∧ i = 0 then 1 else 0`, bias zero. Channel 0 carries a decimated
-  copy of its input; every other channel is constant zero pre-BN, hence `β` post-BN, hence a
-  positive constant that carries nothing and is off every kink;
+* every stem / projection / channel-changing kernel a **centre-tap broadcast from channel 0**:
+  `W o i (kH/2) (kW/2) = if i = 0 then 1 else 0`, bias zero — EVERY output channel a decimated copy
+  of input channel 0 (`BatchSeal.ctK`). ⛔ Not the `o = 0 ∧ i = 0` diagonal this doc first wrote:
+  that leaves the stem's other 63 channels constant, and a constant channel ties every 3×3 window
+  of the pool. `R34PoolSmoothAt` quantifies over channels, so the tap has to reach all of them.
+  (For the three 1×1 projections either form works — no pool follows them — but one kernel for all
+  four sites is cheaper, and it keeps the carrier's step uniform: `δ' o = s · δ 0` at every `o`.)
 * every `β` positive with the margin `|γ| · √(N·h·w) < β` (relu) or `|γ| · √(N·h·w) < 3` with
   `β = 3` (relu6); `ε = 1` everywhere;
 * the head dense `Wd` with `Wd 0 0 = 1`, otherwise zero, `bd = 0`.
@@ -117,6 +127,12 @@ The carrier: `N = 2`, channel 0 of example 0 = channel 0 of example 1 plus `t`, 
 | identity block | `+1` on both examples, batch-uniform: `δ` preserved, and the next BN removes the `+1` | `idBlk_chain_eq` (`ResNet34LiveFull.idBlk2_chain_eq`, generic in `h w` already) |
 | GAP, dense | `δ`, then `Wd 0 0 · δ` | `UDiff_gap`-style (`ResNet34LiveRealisticSeal.UDiff_gap`, `gap_add_const`) |
 | `batchMap` | every per-example op above distributes over the batch | `StableHLO.batchMap` unfolding |
+
+⭐ As built, the invariant is `EDiff (δ : Fin c → ℝ)` — a **per-channel** offset, not one scalar.
+That is what makes it cheap: BN multiplies channel `c`'s offset by `γ_c · istd_c` with no need to
+prove the channels share an `istd`, the centre-tap conv collapses the whole function to
+`fun _ => s · δ 0`, and only `δ 0` is ever read (by the head, and at each projection conv). The
+identity blocks and the pool pass `δ` through untouched, so the trunk carries exactly FOUR values.
 
 So the class-0 output difference between the two examples along the ray is `g(t) = t · R(t)`,
 `R` a product of one `γ·istd(t)` per BN on the channel-0 path (ResNet-34: the stem and the three
@@ -165,9 +181,26 @@ instantiated at `7` (224 px). The kit (§3.2's lemma column) goes in one shared 
 the executor's call; what matters is that ResNet-50 and the MobileNets import it rather than
 re-prove it.
 
+### 3.5 ⚠⚠ Prove every collapse at VARIABLE shapes, instantiate afterwards
+
+The single thing that can sink a package. `relu_id_of_pos` applied directly to
+`cbReluStridedB 2 (h := 2*56) … x` leaves the **kernel** a defeq between two numeral-shaped
+compositions, and it dies: "deep recursion" at `oc = 64, h = 112`, a deterministic timeout already
+at `h = 16`, and 14 s of kernel time even at `h = 8`. The same statement with `N, ic, oc, h, w, kH,
+kW` all variables elaborates and kernel-checks instantly, and *instantiating a proved lemma is
+substitution* — no defeq at all. So: every block collapse, every nonnegativity, every clause
+bundle is a lemma at variables (`sealIdB_eq`, `sealDnB_eq`, `r34StemB_eq`, `sealIdSmooth`, …), and
+the witness's numerals appear only in one-line applications of them. The same rule is why
+`sealStem_eq` was dropped in favour of a generic `r34StemB_eq`.
+
+⚠ Second trap, same family: `2 * ?h =?= 56` is nonlinear, so unification cannot solve it. Any
+lemma whose spatial dims are implicit and only reachable through a `Vec (… (2*h) …)` argument needs
+`(h := 28) (w := 28)` passed explicitly, or the elaborator burns its budget in `whnf` (all three
+downsample steps of the carrier chain hit this).
+
 ## 4. Work packages
 
-### 4.1 ResNet-34 — first, builds the kit
+### 4.1 ResNet-34 — DONE 2026-09-20
 
 Ops on the path: `cbReluStridedB` (7×7/s2 stem), `maxPool3s2Flat` (via `batchMap`), `r34IdB`
 (3×3 `cbReluB` + `projB`, `residual`, relu), `r34DownB` (`cbReluStridedB` + `projB`,
@@ -184,13 +217,30 @@ symmetric-padding centre-tap lemma if `flatConvStride2` unfolds badly at kernel 
 `maxPool3s2` no-tie proof over the batched, left-assoc index (`R34PoolSmoothAt` is per row of
 `Mat.unflatten`).
 
-Retires: `Nets/ResNet/ResNet34Live2` (84), `ResNet34LivePC` (499), `ResNet34LiveFull` (328),
+Retired: `Nets/ResNet/ResNet34Live2` (84), `ResNet34LivePC` (499), `ResNet34LiveFull` (328),
 `ResNet34LiveRealistic` (140), `ResNet34LiveGeneric` (108), `Training/ResNet34LiveSeal` (491),
-`Training/ResNet34LiveRealisticSeal` (342): 1,992 lines. Only `tests/AuditAxioms.lean` imports any
-of them (checked 2026-09-20). Stays: `Nets/ResNet/ResNet34.lean` (the apex; consumed by
-`ResNet34BackCertifiedTie.lean` and `VerifiedNets.lean`) and `Training/JacobianSeal.lean` (the
-bridge). `ResNet34LiveGeneric`'s "∀ downsample kernels" generality is subsumed: the batched apex
-is already ∀ `w`.
+`Training/ResNet34LiveRealisticSeal` (342): 1,992 lines. Stays: `Nets/ResNet/ResNet34.lean` (the
+apex; consumed by `ResNet34BackCertifiedTie.lean` and `VerifiedNets.lean`) and
+`Training/JacobianSeal.lean` (the bridge). `ResNet34LiveGeneric`'s "∀ downsample kernels"
+generality is subsumed: the batched apex is already ∀ `w`.
+
+⚠ `resnet34_has_vjp_at`, the *parametric* per-example apex, now has no concrete instantiation —
+the proxies were it. It stays audited as the skeleton and as `ResNet34BackCertifiedTie`'s fold
+target, and its docstring says so; the clause bundle it shares with the batched apex is what
+`ResNet34FullBSeal` discharges.
+
+**What landed.** `Training/BatchSealKit.lean` (494 lines): the `bcell` cell view, the index bridge
+(`laIdx_cast` / `bnRowLA_apply` / `bnBatchLA_bcell`) and `bnBatchLA_pointwise`, then the BN
+consequences (`bnBatchLA_const`, `bnBatchLA_abs_sub_le`/`_pos`, `bnBatchLA_exdiff`,
+`bnBatchLA_cell_inj`), `ctK` and its conv values, `maxPool3s2_shift`, `globalAvgPool_shift`, and
+the continuity odds and ends. `Nets/ResNet/ResNet34FullBSeal.lean` (1,194): weights, the collapses,
+the 35 discharged clauses, `sealVJP`, `sealDiffAt`, the `EDiff` chain, and
+`sealX_nonconstant` / `sealX_jacobian_nonzero` / `sealX_backward_nontrivial`. ⭐ The clause
+discharge turned out nearly **input-independent**: the identity block's mid-relu sees the constant
+`β₁ = 1` and the downsample's two clauses are weight-only, so only the pool's no-tie and the
+identity blocks' post-residual clause touch the activation at all (the latter through
+`0 ≤ activation`, which is `relu_nonneg`). No `bnBatchLA_shift` lemma was needed: the carrier is
+transparent to a batch-uniform `+1` without the BN having to remove it.
 
 ### 4.2 ResNet-50 — same ops, bottleneck bodies
 
@@ -249,8 +299,17 @@ uncertainty, the rest is 4.3's shape. Retires nothing; closes an undisclosed gap
 * **`LeanMlir/Proofs/README.md`** lines 76 and 162-170 name `*Live` / `Mnv2Live`.
 * **The book** names none of these modules (checked 2026-09-20); its "sealed" language is in the
   yaml only. No book edit beyond the count above.
-* **Imports.** Deleting the live files breaks only `tests/AuditAxioms.lean`.
+* **Imports.** ⛔ The claim that only `tests/AuditAxioms.lean` imports the live files was WRONG:
+  `Training/MobileNetV2SealRealistic.lean` imported `ResNet34LiveRealisticSeal` for four
+  per-example decls (`UDiff`, `UDiff_bn_γ`, `UDiff_gap`, `flatConv_diag_id`). Resolution in 4.1:
+  those four moved INTO `MobileNetV2SealRealistic.lean` (they are per-example 2-channel facts and
+  die with it in 4.3), while `sqrt_lt_param`, `bnIstd_cont` and `bnForward_chan_diff_γ` — general
+  BN facts — moved into `BatchSealKit.lean`, which that file now imports. Also re-pointed: two
+  docstrings in `Nets/ResNet/ResNet34.lean` cited the deleted modules (caught by
+  `lake exe docstring-checkrefs`), and `scripts/lipschitz_cert_witness_s8.py`'s prose.
   `scripts/check_target_names.sh` and `python3 scripts/check_audit_coverage.py` after.
+* **The audit count** went 1,380 → 1,374 (nine proxy prints out, three seal prints in), in
+  `tests/comparator/README.md` and `blueprint/src/content.tex`.
 
 ## 6. Gates
 

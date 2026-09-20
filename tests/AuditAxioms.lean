@@ -20,13 +20,8 @@ import LeanMlir.Proofs.Codegen.StableHLOParse
 import LeanMlir.Proofs.Codegen.StableHLOLex
 import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Nets.ResNet.ResNet34
-import LeanMlir.Proofs.Nets.ResNet.ResNet34LivePC
-import LeanMlir.Proofs.Training.ResNet34LiveSeal
-import LeanMlir.Proofs.Nets.ResNet.ResNet34LiveFull
+import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Training.MobileNetV2JacobianSealFull
-import LeanMlir.Proofs.Nets.ResNet.ResNet34LiveRealistic
-import LeanMlir.Proofs.Training.ResNet34LiveRealisticSeal
-import LeanMlir.Proofs.Nets.ResNet.ResNet34LiveGeneric
 import LeanMlir.Proofs.Training.MobileNetV2SealRealistic
 import LeanMlir.Proofs.Foundation.PerChannelBN
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
@@ -556,24 +551,16 @@ open Proofs
 #print axioms flatConvStride2_weight_grad_has_vjp_correct
 -- THE WHOLE-NETWORK ResNet-34 VJP
 #print axioms resnet34_has_vjp_at
--- The first NON-DEGENERATE ResNet-34 whole-net backward witness (Item A, level 2)
-#print axioms ResNet34LivePC.liveFwd2_nonconstant
--- Item A FULL DEPTH (ResNet34LiveFull.lean)
-#print axioms ResNet34LiveFull.liveFwd2Full_nonconstant
-#print axioms ResNet34LiveFull.liveFwd2Full_jacobian_nonzero
-#print axioms ResNet34LiveFull.liveFwd2Full_backward_nontrivial
+-- ResNet-34's non-degeneracy, ON THE NET THE ARTIFACTS RUN (ResNet34FullBSeal.lean): the
+-- 2-channel per-example proxies that carried levels 2 and 3 until 2026-09-20 are retired, and
+-- both levels are now stated on `resnet34ForwardB_full` itself — full width, batch BN, 224x224.
+#print axioms R34FullBSeal.sealX_nonconstant
+#print axioms R34FullBSeal.sealX_jacobian_nonzero
+#print axioms R34FullBSeal.sealX_backward_nontrivial
 -- Item B2 FULL DEPTH (MobileNetV2JacobianSealFull.lean)
 #print axioms Mnv2Live.fwdFull_nonconstant
 #print axioms Mnv2Live.fwdFull_jacobian_nonzero
 #print axioms Mnv2Live.fwdFull_backward_nontrivial
--- Item D (ResNet34LiveRealistic.lean)
-#print axioms ResNet34LiveRealistic.liveFwd224_nonconstant
--- Item D WEIGHT-GENERICITY (ResNet34LiveGeneric.lean)
-#print axioms liveFwdW_has_vjp_correct
-#print axioms liveFwdW_mixing_has_vjp_correct
--- Item D LEVEL 3 (ResNet34LiveRealisticSeal.lean)
-#print axioms R34RealSeal.liveFwd224_jacobian_nonzero
-#print axioms R34RealSeal.liveFwd224_backward_nontrivial
 -- Item D LEVEL 3 for MobileNetV2 (MobileNetV2SealRealistic.lean)
 #print axioms Mnv2RealSeal.fwdR_jacobian_nonzero
 #print axioms Mnv2RealSeal.fwdR_backward_nontrivial

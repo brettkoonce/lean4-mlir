@@ -92,9 +92,12 @@ noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec 
     `List.length`, not 100 explicit weight arguments. Folded from the verified
     `vjp_comp_at` / `chain_vjp_diff_at` (`ChainData` threads each block's smooth point).
 
-    This is the structural analogue of `cnn_has_vjp_at` scaled to 34 layers. The live
-    witnesses (`ResNet34LivePC`, `ResNet34LiveFull`, `ResNet34LiveRealistic`) discharge its
-    smoothness/no-tie hypotheses at concrete dims. -/
+    This is the structural analogue of `cnn_has_vjp_at` scaled to 34 layers. ⚠ Its concrete
+    instantiation used to be the 2-channel per-example proxy family, retired 2026-09-20: the
+    non-degeneracy witness now discharges the clauses of the **batched, full-width**
+    `resnet34ForwardB_full_has_vjp_at` instead, which is the one the ImageNet artifacts' tier is
+    built on (`ResNet34FullBSeal`). This form survives as the audited parametric skeleton — depth
+    as a `List.length` — and as the fold target of `ResNet34BackCertifiedTie`. -/
 noncomputable def resnet34_has_vjp_at
     {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
     (stem : Vec s0 → Vec s1) (mp : Vec s1 → Vec s2)
@@ -279,12 +282,12 @@ noncomputable def rblkPStrided_has_vjp_at
     (relu_has_vjp_at (oc * h * w) _ h_smooth_res)
 
 -- ════════════════════════════════════════════════════════════════
--- § Non-vacuity helpers — what the live witnesses discharge `resnet34_has_vjp_at` with
+-- § Non-vacuity helpers — how a witness discharges a whole-net clause bundle
 --
 -- `resnet34_has_vjp_at` is *conditional*: parametric over abstract
--- `stem`/`down`/`ids`/`gap`/`dense` with smoothness/no-tie hypotheses. The live
--- witnesses (`ResNet34LivePC`, `ResNet34LiveFull`, `ResNet34LiveRealistic`) instantiate
--- it at concrete dims. TWO dimension-robust tricks keep that discharge tractable
+-- `stem`/`down`/`ids`/`gap`/`dense` with smoothness/no-tie hypotheses. Its clauses are
+-- discharged at a concrete point by `ResNet34FullBSeal` (on the batched apex, which carries the
+-- same clause shapes). TWO dimension-robust tricks keep that discharge tractable
 -- (no `norm_num` over thousand-element BN sums):
 --   1. `bnForward_lb` — `bn ≥ β − |γ|·√n` from `(vₖ−μ)² ≤ Σ(vⱼ−μ)² = n·σ²`, so
 --      a large stem `β` forces `bn > 0` (ReLU = id ⇒ injective).

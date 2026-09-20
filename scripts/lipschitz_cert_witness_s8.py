@@ -156,7 +156,7 @@ A("`LipschitzCertInstance.lean` (test acc 89.8%) instantiates the conditional VJ
 A("framework at a REAL input — test digit #1895 — with every ReLU smoothness")
 A("hypothesis discharged from the exact rational pre-activations (7 units strictly")
 A("on, 1 strictly off; nothing sits on a kink), rather than engineered by synthetic")
-A("β-shifts as in `ResNet34Live*`/`Mnv2Live`. Levels:")
+A("β-shifts as in `ResNet34FullBSeal`/`Mnv2Live`. Levels:")
 A("")
 A("* level 1 — `trainedMlp_has_vjp_at` (+ `.correct`): the whole-net backward exists")
 A("  and equals the `fderiv`-contracted Jacobian at the witness;")

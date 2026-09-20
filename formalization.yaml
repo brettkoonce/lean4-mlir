@@ -198,12 +198,16 @@ fidelity:
 
     4. FULL-NET RESULTS are "the network composes and has a VJP at a witness point". Separate
        non-degeneracy proofs rule out a vacuous witness: a non-constant forward and a nonzero
-       whole-net Jacobian for the 2-channel live MobileNetV2 (`Mnv2Live`) and ResNet-34, each
-       sealed twice -- at the real depth on a toy input (`ResNet34LiveFull` at [3,4,6,3] on
-       32x32, `MobileNetV2JacobianSealFull` at 17 blocks on 2x2) and at 224x224 with the short
-       chain (`ResNet34LiveRealisticSeal`, `MobileNetV2SealRealistic`); no seal has both depth
-       and resolution -- plus trained-weight witnesses and a provable strict CE-descent step for
-       the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`, `TrainedLinearDescent`).
+       whole-net Jacobian. ResNet-34's is on the net the artifacts run, `resnet34ForwardB_full`
+       itself (`ResNet34FullBSeal`): 64-512 channels, [3,4,6,3] blocks, 7x7/s2 stem, 3x3/s2 pool,
+       batch BatchNorm, 224x224, at structural weights and N = 2 -- the carrier is a difference
+       between the two EXAMPLES, which per-channel batch BN preserves and a channel difference is
+       not. MobileNetV2 is still sealed on a 2-channel per-example proxy, at 17 blocks on 2x2
+       (`MobileNetV2JacobianSealFull`) and at 224x224 with a short chain
+       (`MobileNetV2SealRealistic`); ResNet-50 and MobileNetV4 have no witness yet
+       (planning/full_width_seals.md 4.2-4.4). Plus trained-weight witnesses and a provable strict
+       CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,
+       `TrainedLinearDescent`).
 
     4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement): the smoothing
        radius theorem `smoothing_certified_radius_classifier` speaks about TRUE smoothed class
@@ -364,11 +368,11 @@ alignment:
       module: "LeanMlir/Proofs/Foundation/MLP.lean, LeanMlir/Proofs/Architectures/CNN.lean"
       status: "proved"
       note: "smooth-point bridge only; non-smooth points are a disclosed trust boundary"
-    - source: "Live-network non-degeneracy + nonzero-Jacobian seal (ResNet-34, incl. full [3,4,6,3] depth)"
-      lean: "liveFwd2_nonconstant (empty chains); liveFwd2Full_nonconstant / liveFwd2Full_jacobian_nonzero + liveFwd2Full_backward_nontrivial (full 16-block depth)"
-      module: "LeanMlir/Proofs/Nets/ResNet/ResNet34LivePC.lean, LeanMlir/Proofs/Training/ResNet34LiveSeal.lean, LeanMlir/Proofs/Nets/ResNet/ResNet34LiveFull.lean"
+    - source: "Whole-net non-degeneracy + nonzero-Jacobian seal (ResNet-34, full width, batch BN, 224x224)"
+      lean: "sealX_nonconstant / sealX_jacobian_nonzero + sealX_backward_nontrivial"
+      module: "LeanMlir/Proofs/Nets/ResNet/ResNet34FullBSeal.lean, LeanMlir/Proofs/Training/BatchSealKit.lean"
       status: "proved"
-      note: "2-channel live ResNet-34, real [3,4,6,3] depth; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes; identity blocks wash out through BN)"
+      note: "on resnet34ForwardB_full itself (64-512 channels, [3,4,6,3], batch BN, N=2, structural weights); the carrier is the difference between the two examples, the only kink left is the stem pool, and it shifts with the carrier; retired the 2-channel proxies 2026-09-20"
     - source: "Committed train step = real loss-driven backward (per-net ties: the seven ImageNet-scale nets at their batched steps, the ten SGD-inline steps)"
       lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied_certified family (SGD-inline)"
       module: "LeanMlir/Proofs/Nets/*/*StepTieB.lean, LeanMlir/Proofs/Nets/*/*StepTieG*.lean, LeanMlir/Proofs/Nets/*/*StepTie.lean"

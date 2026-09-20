@@ -15,7 +15,7 @@ the SAME trained, /128-rationalized 49→8→10 pooled-MNIST network certified i
 framework at a REAL input — test digit #1895 — with every ReLU smoothness
 hypothesis discharged from the exact rational pre-activations (7 units strictly
 on, 1 strictly off; nothing sits on a kink), rather than engineered by synthetic
-β-shifts as in `ResNet34Live*`/`Mnv2Live`. Levels:
+β-shifts as in `ResNet34FullBSeal`/`Mnv2Live`. Levels:
 
 * level 1 — `trainedMlp_has_vjp_at` (+ `.correct`): the whole-net backward exists
   and equals the `fderiv`-contracted Jacobian at the witness;
