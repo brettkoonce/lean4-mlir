@@ -21,6 +21,7 @@ import LeanMlir.Proofs.Codegen.StableHLOLex
 import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
+import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
 import LeanMlir.Proofs.Training.MobileNetV2JacobianSealFull
 import LeanMlir.Proofs.Training.MobileNetV2SealRealistic
 import LeanMlir.Proofs.Foundation.PerChannelBN
@@ -557,6 +558,12 @@ open Proofs
 #print axioms R34FullBSeal.sealX_nonconstant
 #print axioms R34FullBSeal.sealX_jacobian_nonzero
 #print axioms R34FullBSeal.sealX_backward_nontrivial
+-- ResNet-50's, likewise on `resnet50ForwardB_full` — 48 relu clauses, and `q` a binder, so ONE
+-- statement seals both shipped resolutions (224 px at q = 7, 160 px at q = 5). It had no witness
+-- of any kind before 2026-09-20.
+#print axioms R50FullBSeal.sealX_nonconstant
+#print axioms R50FullBSeal.sealX_jacobian_nonzero
+#print axioms R50FullBSeal.sealX_backward_nontrivial
 -- Item B2 FULL DEPTH (MobileNetV2JacobianSealFull.lean)
 #print axioms Mnv2Live.fwdFull_nonconstant
 #print axioms Mnv2Live.fwdFull_jacobian_nonzero

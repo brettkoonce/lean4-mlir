@@ -364,6 +364,16 @@ theorem flatConvStride2_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c�
   simp only [flatConvStride2, Function.comp_apply]
   rw [decimate_unflatten, flatConv_ctK c₀ hc₀ hkH hkW]
 
+/-- The batched centre-tap conv, in cell coordinates — the carrier's conv step at stride 1
+    (ResNet-50's stage-1 projection is the one site that needs it). -/
+theorem bcell_conv_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc)
+    (x : Vec (N * (ic * h * w))) (n : Fin N) (o : Fin oc) (i : Fin h) (j : Fin w) :
+    bcell (StableHLO.batchMap N (flatConv (h := h) (w := w) (ctK oc ic kH kW s) b) x) n o i j
+      = b o + s * bcell x n c₀ i j := by
+  rw [bcell_batchMap]
+  exact flatConv_ctK c₀ hc₀ hkH hkW s b _ o i j
+
 /-- The batched strided centre-tap conv, in cell coordinates — the carrier's conv step. -/
 theorem bcell_convS2_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc)
@@ -489,6 +499,250 @@ theorem batchMap_continuous {N a b : Nat} (f : Vec a → Vec b) (hf : Continuous
     Continuous (StableHLO.batchMap N f) := by
   refine continuous_pi (fun k => ?_)
   exact ((continuous_apply _).comp hf).comp (continuous_pi (fun _ => continuous_apply _))
+
+-- ════════════════════════════════════════════════════════════════
+-- § 6. Channel-constant parameters and zeroed kernels
+-- ════════════════════════════════════════════════════════════════
+
+/-- A channel-constant BN parameter. Every structural witness's `γ` and `β` are one of these,
+    which is what lets `bnBatchLA_pointwise`'s property be channel-independent. -/
+noncomputable def kv (c : Nat) (x : ℝ) : Vec c := fun _ => x
+
+@[simp] theorem kv_apply (c : Nat) (x : ℝ) (i : Fin c) : kv c x i = x := rfl
+
+/-- The zero kernel — every residual body. -/
+noncomputable def zk (oc ic kH kW : Nat) : Kernel4 oc ic kH kW := fun _ _ _ _ => 0
+
+@[simp] theorem zk_apply (oc ic kH kW : Nat) (o : Fin oc) (c : Fin ic) (kh : Fin kH)
+    (kw : Fin kW) : zk oc ic kH kW o c kh kw = 0 := rfl
+
+/-- `1 · √n < 160` whenever `n < 25600` — the margin `bnBatchLA_pos` consumes, at `γ = 1`,
+    `β = 160`. Every BN width of a 224×224 ResNet witness clears it (the widest is the stem's
+    `2·112² = 25088`). -/
+theorem margin160 (n : ℕ) (h : (n : ℝ) < 25600) :
+    |(1 : ℝ)| * Real.sqrt ((n : ℕ) : ℝ) < 160 := by
+  rw [abs_one, one_mul]
+  exact sqrt_lt_param n 160 (by norm_num) (by nlinarith)
+
+-- ════════════════════════════════════════════════════════════════
+-- § 7. The ray: a ramp in channel 0, perturbed on example 0
+-- ════════════════════════════════════════════════════════════════
+
+/-- The base slab: channel 0 carries the strictly decreasing ramp `−(i·W + j)` — positionally
+    injective, which is a stem pool's no-tie condition — and the other two channels are zero (a
+    centre-tap stem reads only channel 0). Both examples carry the same slab, so the carrier
+    vanishes at `t = 0`. -/
+noncomputable def rayRamp (H W : Nat) : Tensor3 3 H W :=
+  fun ci i j => if ci.val = 0 then -((i.val : ℝ) * (W : ℝ) + (j.val : ℝ)) else 0
+
+noncomputable def rayBase (H W : Nat) : Vec (2 * (3 * H * W)) := bfrom (fun _ => rayRamp H W)
+
+/-- The perturbation: **all** of example 0's channel 0. Uniform over the spatial grid, so it
+    survives a max-pool for every `t` (`maxPool3s2_shift`) with no argmax argument. -/
+noncomputable def rayV (H W : Nat) : Vec (2 * (3 * H * W)) :=
+  bfrom (fun n ci _ _ => if n.val = 0 ∧ ci.val = 0 then (1 : ℝ) else 0)
+
+/-- The witness input, as a ray through the base. -/
+noncomputable def rayX (H W : Nat) (t : ℝ) : Vec (2 * (3 * H * W)) :=
+  rayBase H W + t • rayV H W
+
+theorem bcell_rayX (H W : Nat) (t : ℝ) (n : Fin 2) (ci : Fin 3) (i : Fin H) (j : Fin W) :
+    bcell (rayX H W t) n ci i j
+      = (if ci.val = 0 then -((i.val : ℝ) * (W : ℝ) + (j.val : ℝ)) else 0)
+        + t * (if n.val = 0 ∧ ci.val = 0 then (1 : ℝ) else 0) := by
+  rw [rayX, bcell_add, bcell_smul, rayBase, rayV, bcell_bfrom, bcell_bfrom]
+  rfl
+
+theorem rayX_zero_add (H W : Nat) (t : ℝ) : rayX H W 0 + t • rayV H W = rayX H W t := by
+  rw [rayX, rayX, zero_smul, add_zero]
+
+/-- The ray is continuous in its parameter. -/
+theorem rayX_continuous (H W : Nat) : Continuous (rayX H W) :=
+  continuous_const.add (continuous_id.smul continuous_const)
+
+-- ════════════════════════════════════════════════════════════════
+-- § 8. `EDiff` — the batch carrier, and what each op does to it
+-- ════════════════════════════════════════════════════════════════
+
+/-- ⭐⭐ **The carrier**: example 0's slab is example 1's plus the per-channel constant `δ`. The
+    replacement for a channel difference, which per-channel batch BN annihilates.
+
+    ⭐ `δ` is a FUNCTION of the channel, not one scalar, and that is what makes it cheap: BN
+    multiplies channel `c`'s offset by `γ_c · istd_c` with no need to prove the channels share an
+    `istd`, a centre-tap conv collapses the whole function to `fun _ => s · δ 0`, and only `δ 0` is
+    ever read (by the head, and at each channel-changing conv). -/
+def EDiff {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w))) : Prop :=
+  ∀ (ci : Fin c) (i : Fin h) (j : Fin w),
+    bcell v 0 ci i j = bcell v 1 ci i j + δ ci
+
+/-- The ray's carrier: `t` in channel 0, nothing elsewhere. -/
+theorem EDiff_rayX (H W : Nat) (t : ℝ) :
+    EDiff (fun ci => if ci.val = 0 then t else 0) (rayX H W t) := by
+  intro ci i j
+  rw [bcell_rayX, bcell_rayX]
+  by_cases h : ci.val = 0 <;> simp [h]
+
+/-- A batch-uniform shift (a zeroed residual body) is transparent to the carrier. -/
+theorem EDiff_shift {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w))) (s : ℝ)
+    (hv : EDiff δ v) : EDiff δ (fun k => v k + s) := by
+  intro ci i j
+  rw [bcell_shift, bcell_shift, hv ci i j]
+  ring
+
+/-- ⭐⭐ **Batch BN scales the carrier by `γ_c · istd_c`** — the two examples share the channel's
+    mean and `istd`, so centring keeps their difference (`bnBatchLA_exdiff`). -/
+theorem EDiff_bn (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (δ δ' : Fin oc → ℝ)
+    (v : Vec (2 * (oc * h * w))) (hv : EDiff δ v)
+    (hδ : ∀ ci, δ' ci = γ ci * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 oc h w v ci) ε) :
+    EDiff δ' (StableHLO.bnBatchLA 2 oc h w ε γ β v) := by
+  intro ci i j
+  have hx := bnBatchLA_exdiff (N := 2) ε γ β v 0 1 ci i j
+  have hd : bcell v 0 ci i j - bcell v 1 ci i j = δ ci := by rw [hv ci i j]; ring
+  rw [hd] at hx
+  rw [hδ ci]
+  linarith
+
+/-- A centre-tap conv copies channel 0's offset to **every** output channel, and is transparent to
+    the zero padding because only the centre tap is nonzero. -/
+theorem EDiff_conv {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (δ : Fin ic → ℝ) (δ' : Fin oc → ℝ)
+    (v : Vec (2 * (ic * h * w))) (hv : EDiff δ v) (hδ : ∀ o, δ' o = s * δ c₀) :
+    EDiff δ' (StableHLO.batchMap 2 (flatConv (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
+  intro o i j
+  rw [hδ o, bcell_conv_ctK c₀ hc₀ hkH hkW s b v 0 o i j,
+    bcell_conv_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
+  ring
+
+/-- The strided peer of `EDiff_conv`. -/
+theorem EDiff_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (δ : Fin ic → ℝ) (δ' : Fin oc → ℝ)
+    (v : Vec (2 * (ic * (2 * h) * (2 * w)))) (hv : EDiff δ v) (hδ : ∀ o, δ' o = s * δ c₀) :
+    EDiff δ'
+      (StableHLO.batchMap 2 (flatConvStride2 (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
+  intro o i j
+  rw [hδ o, bcell_convS2_ctK c₀ hc₀ hkH hkW s b v 0 o i j,
+    bcell_convS2_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
+  ring
+
+/-- The 3×3/s2 pool keeps the carrier, at every `t`. -/
+theorem EDiff_pool (c h w : Nat) (δ : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w))))
+    (hv : EDiff δ v) : EDiff δ (StableHLO.batchMap 2 (maxPool3s2Flat c h w) v) := by
+  intro ci i j
+  rw [bcell_pool, bcell_pool]
+  exact maxPool3s2_shift (bcell v 0) (bcell v 1) (δ ci) ci (fun r s => hv ci r s) i j
+
+-- ════════════════════════════════════════════════════════════════
+-- § 9. The stem's centre-tap conv on the ray, and the pool's no-tie
+--   `oc`/`kH`/`kW` are binders: ResNet-34 and ResNet-50 share this stem (64 channels, 7×7/s2)
+--   at different spatial nests, and both instantiate these four facts.
+-- ════════════════════════════════════════════════════════════════
+
+/-- `W·a + b` determines `a` and `b` when `b < W` (division with remainder). -/
+theorem divmod_inj {W a b a' b' : ℕ} (hb : b < W) (hb' : b' < W)
+    (h : W * a + b = W * a' + b') : a = a' ∧ b = b' := by
+  have hW : 0 < W := by omega
+  obtain ⟨h1, h2⟩ := (Nat.div_mod_unique hW).2 ⟨add_comm b (W * a), hb⟩
+  obtain ⟨h3, h4⟩ := (Nat.div_mod_unique hW).2 ⟨add_comm b' (W * a'), hb'⟩
+  rw [h] at h1 h2
+  exact ⟨h1.symm.trans h3, h2.symm.trans h4⟩
+
+/-- The witness's strided centre-tap stem conv — the pre-BN activation on the carrier's path. -/
+noncomputable def ctConv (oc kH kW h w : Nat) (t : ℝ) : Vec (2 * (oc * (2 * h) * (2 * w))) :=
+  StableHLO.batchMap 2 (flatConvStride2 (h := 2 * h) (w := 2 * w) (ctK oc 3 kH kW 1) (kv oc 0))
+    (rayX (2 * (2 * h)) (2 * (2 * w)) t)
+
+/-- The stem BN is strictly positive at every point of the ray (the `β = 160` margin). -/
+theorem ctConv_bn_pos (oc kH kW h w : Nat)
+    (hm : |(1 : ℝ)| * Real.sqrt ((2 * ((2 * h) * (2 * w)) : ℕ) : ℝ) < 160) (t : ℝ)
+    (k : Fin (2 * (oc * (2 * h) * (2 * w)))) :
+    0 < StableHLO.bnBatchLA 2 oc (2 * h) (2 * w) 1 (kv oc 1) (kv oc 160) (ctConv oc kH kW h w t) k :=
+  bnBatchLA_pos 1 one_pos (kv oc 1) (kv oc 160) 1 160 (fun _ => rfl) (fun _ => rfl) hm _ k
+
+/-- ⭐ **The pre-BN stem activation is positionally injective** within each example and channel:
+    the centre tap decimates the ramp, and example 0's uniform `+t` shifts every position alike. -/
+theorem ctConv_inj (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t : ℝ) (n : Fin 2)
+    (o : Fin oc) (r r' : Fin (2 * h)) (s s' : Fin (2 * w))
+    (heq : bcell (ctConv oc kH kW h w t) n o r s = bcell (ctConv oc kH kW h w t) n o r' s') :
+    r = r' ∧ s = s' := by
+  rw [ctConv,
+    bcell_convS2_ctK (0 : Fin 3) rfl hkH hkW 1 (kv oc 0) (rayX (2 * (2 * h)) (2 * (2 * w)) t) n o r s,
+    bcell_convS2_ctK (0 : Fin 3) rfl hkH hkW 1 (kv oc 0) (rayX (2 * (2 * h)) (2 * (2 * w)) t) n o r' s',
+    bcell_rayX, bcell_rayX] at heq
+  simp only [kv_apply, Fin.val_zero, one_mul, zero_add, ite_true] at heq
+  -- the ramp value determines the position: `(2r)·W + 2s` with `2s < W = 2·(2w)`
+  have hR : ((2 * r.val * (2 * (2 * w)) + 2 * s.val : ℕ) : ℝ)
+      = ((2 * r'.val * (2 * (2 * w)) + 2 * s'.val : ℕ) : ℝ) := by
+    push_cast at heq ⊢
+    linarith
+  have hnat : 2 * r.val * (2 * (2 * w)) + 2 * s.val
+      = 2 * r'.val * (2 * (2 * w)) + 2 * s'.val := by exact_mod_cast hR
+  have hcomm : (2 * (2 * w)) * (2 * r.val) + 2 * s.val
+      = (2 * (2 * w)) * (2 * r'.val) + 2 * s'.val := by
+    rw [Nat.mul_comm (2 * (2 * w)) (2 * r.val), Nat.mul_comm (2 * (2 * w)) (2 * r'.val)]
+    exact hnat
+  have hs := s.isLt
+  have hs' := s'.isLt
+  obtain ⟨h1, h2⟩ := divmod_inj (W := 2 * (2 * w)) (by omega) (by omega) hcomm
+  exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
+
+/-- ⭐ **The stem pool has no tie** at the witness: BN is injective within a channel
+    (`bnBatchLA_cell_inj`) and the pre-BN activation is positionally injective. Stated in the
+    `∀ example, MaxPool3s2Smooth (slab)` shape the nets' `*PoolSmoothAt` unfolds to. -/
+theorem ctConv_pool_smooth (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t : ℝ) :
+    ∀ n : Fin 2, MaxPool3s2Smooth
+      (bcell (StableHLO.bnBatchLA 2 oc (2 * h) (2 * w) 1 (kv oc 1) (kv oc 160)
+        (ctConv oc kH kW h w t)) n) := by
+  intro n
+  refine maxPool3s2Smooth_of_injective _ (fun o r r' s s' heq => ?_)
+  exact ctConv_inj oc kH kW h w hkH hkW t n o r r' s s'
+    (bnBatchLA_cell_inj 1 one_pos (kv oc 1) (kv oc 160) (ctConv oc kH kW h w t) n o
+      (by simp only [kv_apply]; norm_num) r r' s s' heq)
+
+-- ════════════════════════════════════════════════════════════════
+-- § 10. The head reads the carrier off channel 0
+-- ════════════════════════════════════════════════════════════════
+
+/-- ⭐ **GAP and the dense head deliver the carrier to one class**: GAP of a uniformly shifted
+    channel is shifted by the same constant, and a `Wd` that reads channel `c₀` into class `j`
+    turns the per-channel carrier into `δ c₀`. Stated on the `batchMap`s a `*HeadB` unfolds to, so
+    every net's head instantiates it. -/
+theorem head_diff_ct {c h w nCls : Nat} (hh : 0 < h) (hw : 0 < w) (c₀ : Fin c) (hc₀ : c₀.val = 0)
+    (j : Fin nCls) (Wd : Mat c nCls) (bd : Vec nCls)
+    (hWd : ∀ ci, Wd ci j = if ci.val = 0 then (1 : ℝ) else 0) (hbd : bd j = 0)
+    (v : Vec (2 * (c * h * w))) (δ : Fin c → ℝ) (hv : EDiff δ v) :
+    StableHLO.batchMap 2 (dense Wd bd) (StableHLO.batchMap 2 (globalAvgPoolFlat c h w) v)
+        (finProdFinEquiv ((0 : Fin 2), j))
+      - StableHLO.batchMap 2 (dense Wd bd) (StableHLO.batchMap 2 (globalAvgPoolFlat c h w) v)
+        (finProdFinEquiv ((1 : Fin 2), j))
+      = δ c₀ := by
+  have hrow : ∀ n : Fin 2,
+      Mat.unflatten (StableHLO.batchMap 2 (dense Wd bd)
+        (StableHLO.batchMap 2 (globalAvgPoolFlat c h w) v)) n
+      = dense Wd bd (globalAvgPool (bcell v n)) := by
+    intro n
+    rw [row_batchMap, row_batchMap]
+    rfl
+  have e0 : StableHLO.batchMap 2 (dense Wd bd) (StableHLO.batchMap 2 (globalAvgPoolFlat c h w) v)
+      (finProdFinEquiv ((0 : Fin 2), j)) = dense Wd bd (globalAvgPool (bcell v 0)) j :=
+    congrFun (hrow 0) j
+  have e1 : StableHLO.batchMap 2 (dense Wd bd) (StableHLO.batchMap 2 (globalAvgPoolFlat c h w) v)
+      (finProdFinEquiv ((1 : Fin 2), j)) = dense Wd bd (globalAvgPool (bcell v 1)) j :=
+    congrFun (hrow 1) j
+  have hgap : ∀ ci : Fin c,
+      globalAvgPool (bcell v 0) ci = globalAvgPool (bcell v 1) ci + δ ci :=
+    fun ci => globalAvgPool_shift hh hw _ _ (δ ci) ci (fun i j => hv ci i j)
+  rw [e0, e1]
+  simp only [dense, hWd, hbd, add_zero]
+  rw [← Finset.sum_sub_distrib]
+  rw [Finset.sum_congr rfl (fun ci _ => show
+      globalAvgPool (bcell v 0) ci * (if ci.val = 0 then (1 : ℝ) else 0)
+        - globalAvgPool (bcell v 1) ci * (if ci.val = 0 then (1 : ℝ) else 0)
+      = δ ci * (if ci.val = 0 then (1 : ℝ) else 0) from by rw [hgap ci]; ring)]
+  refine (Finset.sum_eq_single_of_mem c₀ (Finset.mem_univ _) ?_).trans ?_
+  · intro ci _ hci
+    have hc : ci.val ≠ 0 := fun hz => hci (Fin.ext (hz.trans hc₀.symm))
+    simp [hc]
+  · simp [hc₀]
 
 end BatchSeal
 end Proofs

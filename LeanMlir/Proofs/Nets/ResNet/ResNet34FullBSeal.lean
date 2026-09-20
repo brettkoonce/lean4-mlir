@@ -64,17 +64,6 @@ open Proofs BatchSeal
 -- § 1. The structural weights
 -- ════════════════════════════════════════════════════════════════
 
-/-- A channel-constant BN parameter. -/
-noncomputable def kv (c : Nat) (x : ℝ) : Vec c := fun _ => x
-
-@[simp] theorem kv_apply (c : Nat) (x : ℝ) (i : Fin c) : kv c x i = x := rfl
-
-/-- The zero kernel (every residual body). -/
-noncomputable def zk (oc ic kH kW : Nat) : Kernel4 oc ic kH kW := fun _ _ _ _ => 0
-
-@[simp] theorem zk_apply (oc ic kH kW : Nat) (o : Fin oc) (c : Fin ic) (kh : Fin kH)
-    (kw : Fin kW) : zk oc ic kH kW o c kh kw = 0 := rfl
-
 /-- The structural identity-block weights: both convs zeroed, every BN `(ε, γ, β) = (1, 1, 1)`.
     The body is then the constant `1` and the block is `a ↦ a + 1` on a nonnegative activation. -/
 noncomputable def sealIdW (c : Nat) : R34IdW c where
@@ -135,19 +124,7 @@ noncomputable def sealW (nCls : Nat) : R34BWeights nCls where
   bd := kv nCls 0
 
 -- ════════════════════════════════════════════════════════════════
--- § 2. The margin: `|γ|·√(N·h·w) < β` at all four carrier BNs
--- ════════════════════════════════════════════════════════════════
-
-/-- `1 · √n < 160` whenever `n < 25600` — the margin check, in the shape
-    `BatchSeal.bnBatchLA_pos` consumes. All four carrier BN widths (`2·112²  = 25088`, `2·28²`,
-    `2·14²`, `2·7²`) clear it. -/
-theorem margin160 (n : ℕ) (h : (n : ℝ) < 25600) :
-    |(1 : ℝ)| * Real.sqrt ((n : ℕ) : ℝ) < 160 := by
-  rw [abs_one, one_mul]
-  exact sqrt_lt_param n 160 (by norm_num) (by nlinarith)
-
--- ════════════════════════════════════════════════════════════════
--- § 3. What the structural blocks are
+-- § 2. What the structural blocks are
 -- ════════════════════════════════════════════════════════════════
 -- ⚠⚠ **Every collapse lemma below is stated at VARIABLE `N, h, w, c` and instantiated at the
 -- witness's numerals afterwards, never proved at them.** `relu_id_of_pos` applied directly to, say,
@@ -262,7 +239,7 @@ theorem r34StemB_eq {N h w ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (
   rw [cbReluStridedB_eq Ws bs εs γs βs x hp]
 
 -- ════════════════════════════════════════════════════════════════
--- § 4. Every running activation is nonnegative
+-- § 3. Every running activation is nonnegative
 -- ════════════════════════════════════════════════════════════════
 
 /-- A block output is a relu, hence nonnegative — whatever the weights. -/
@@ -288,7 +265,7 @@ theorem r34StemB_nonneg (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs
   exact relu_nonneg _ _ _
 
 -- ════════════════════════════════════════════════════════════════
--- § 5. The clause bundles at the structural weights
+-- § 4. The clause bundles at the structural weights
 -- ════════════════════════════════════════════════════════════════
 
 /-- Both `ε`s of a structural identity block are positive. -/
@@ -344,100 +321,30 @@ theorem sealStemSmooth (N h w ic oc : Nat) (Ws : Kernel4 oc ic 7 7) (bs : Vec oc
     hm (StableHLO.batchMap N (flatConvStride2 Ws bs) x) k).ne'
 
 -- ════════════════════════════════════════════════════════════════
--- § 6. The witness input: a ramp in channel 0, perturbed on example 0
+-- § 5. The witness input and the carrier, at this net's spelling
+--   Everything here is `BatchSeal`'s, instantiated: the ray (`rayX`), the carrier (`EDiff` and its
+--   per-op steps) and the stem's centre-tap conv with the pool's no-tie (`ctConv*`) are shared with
+--   ResNet-50, which runs the same 7×7/s2 stem at a different spatial nest.
 -- ════════════════════════════════════════════════════════════════
 
-/-- The base slab: channel 0 carries the strictly decreasing ramp `−(i·224 + j)` — positionally
-    injective, which is the stem pool's no-tie condition — and the other two channels are zero
-    (the centre-tap stem reads only channel 0). Both examples carry the same slab, so the carrier
-    vanishes at `t = 0`. -/
-noncomputable def rampT : Tensor3 3 (2 * (2 * 56)) (2 * (2 * 56)) :=
-  fun ci i j => if ci.val = 0 then -((i.val : ℝ) * 224 + (j.val : ℝ)) else 0
-
-/-- The base point. -/
-noncomputable def sealBase : Vec (2 * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))) :=
-  bfrom (fun _ => rampT)
-
-/-- The perturbation: **all** of example 0's channel 0. Uniform over the spatial grid, so it
-    survives the pool for every `t` (`BatchSeal.maxPool3s2_shift`) with no argmax argument. -/
-noncomputable def sealV : Vec (2 * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))) :=
-  bfrom (fun n ci _ _ => if n.val = 0 ∧ ci.val = 0 then (1 : ℝ) else 0)
-
-/-- The ray. -/
+/-- The witness input: the shared ray at 224×224. -/
 noncomputable def sealX (t : ℝ) : Vec (2 * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))) :=
-  sealBase + t • sealV
+  rayX (2 * (2 * 56)) (2 * (2 * 56)) t
 
-theorem bcell_sealX (t : ℝ) (n : Fin 2) (ci : Fin 3) (i j : Fin (2 * (2 * 56))) :
-    bcell (sealX t) n ci i j
-      = (if ci.val = 0 then -((i.val : ℝ) * 224 + (j.val : ℝ)) else 0)
-        + t * (if n.val = 0 ∧ ci.val = 0 then (1 : ℝ) else 0) := by
-  rw [sealX, bcell_add, bcell_smul, sealBase, sealV, bcell_bfrom, bcell_bfrom]
-  rfl
+/-- Its direction — all of example 0's channel 0. -/
+noncomputable def sealV : Vec (2 * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))) :=
+  rayV (2 * (2 * 56)) (2 * (2 * 56))
 
 theorem sealX_zero_add (t : ℝ) : sealX 0 + t • sealV = sealX t := by
-  rw [sealX, sealX, zero_smul, add_zero]
+  rw [sealX, sealX, sealV]
+  exact rayX_zero_add _ _ t
 
--- ════════════════════════════════════════════════════════════════
--- § 7. `EDiff` — the batch carrier, and what each op does to it
--- ════════════════════════════════════════════════════════════════
-
-/-- **The carrier**: example 0's slab is example 1's plus the per-channel constant `δ`. ⭐⭐ The
-    replacement for the proxies' channel difference, which per-channel batch BN annihilates. -/
-def EDiff {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w))) : Prop :=
-  ∀ (ci : Fin c) (i : Fin h) (j : Fin w),
-    bcell v 0 ci i j = bcell v 1 ci i j + δ ci
-
-/-- The ray's carrier: `t` in channel 0, nothing elsewhere. -/
 theorem EDiff_sealX (t : ℝ) : EDiff (fun ci => if ci.val = 0 then t else 0) (sealX t) := by
-  intro ci i j
-  rw [bcell_sealX, bcell_sealX]
-  by_cases h : ci.val = 0 <;> simp [h]
-
-/-- A batch-uniform shift (a zeroed residual body) is transparent to the carrier. -/
-theorem EDiff_shift {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w))) (s : ℝ)
-    (hv : EDiff δ v) : EDiff δ (fun k => v k + s) := by
-  intro ci i j
-  rw [bcell_shift, bcell_shift, hv ci i j]
-  ring
-
-/-- ⭐⭐ **Batch BN scales the carrier by `γ_c · istd_c`** — the two examples share the channel's
-    mean and `istd`, so centring keeps their difference (`BatchSeal.bnBatchLA_exdiff`). -/
-theorem EDiff_bn (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (δ δ' : Fin oc → ℝ)
-    (v : Vec (2 * (oc * h * w))) (hv : EDiff δ v)
-    (hδ : ∀ ci, δ' ci = γ ci * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 oc h w v ci) ε) :
-    EDiff δ' (StableHLO.bnBatchLA 2 oc h w ε γ β v) := by
-  intro ci i j
-  have hx := bnBatchLA_exdiff (N := 2) ε γ β v 0 1 ci i j
-  have hd : bcell v 0 ci i j - bcell v 1 ci i j = δ ci := by rw [hv ci i j]; ring
-  rw [hd] at hx
-  rw [hδ ci]
-  linarith
-
-/-- A centre-tap strided conv copies channel 0's offset to **every** output channel (and is
-    transparent to the zero padding, because only the centre tap is nonzero). -/
-theorem EDiff_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
-    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (δ : Fin ic → ℝ) (δ' : Fin oc → ℝ)
-    (v : Vec (2 * (ic * (2 * h) * (2 * w)))) (hv : EDiff δ v) (hδ : ∀ o, δ' o = s * δ c₀) :
-    EDiff δ' (StableHLO.batchMap 2 (flatConvStride2 (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
-  intro o i j
-  rw [hδ o, bcell_convS2_ctK c₀ hc₀ hkH hkW s b v 0 o i j,
-    bcell_convS2_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
-  ring
-
-/-- The 3×3/s2 pool keeps the carrier, at every `t`. -/
-theorem EDiff_pool (c h w : Nat) (δ : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w))))
-    (hv : EDiff δ v) : EDiff δ (StableHLO.batchMap 2 (maxPool3s2Flat c h w) v) := by
-  intro ci i j
-  rw [bcell_pool, bcell_pool]
-  exact maxPool3s2_shift (bcell v 0) (bcell v 1) (δ ci) ci (fun r s => hv ci r s) i j
-
--- ════════════════════════════════════════════════════════════════
--- § 8. The stem's pre-BN activation, and the pool's no-tie
--- ════════════════════════════════════════════════════════════════
+  rw [sealX]
+  exact EDiff_rayX _ _ t
 
 /-- The stem's centre-tap conv output — the pre-BN activation on the carrier's path. -/
-noncomputable def Zs (t : ℝ) : Vec (2 * (64 * (2 * 56) * (2 * 56))) :=
-  StableHLO.batchMap 2 (flatConvStride2 (ctK 64 3 7 7 1) (kv 64 0)) (sealX t)
+noncomputable def Zs (t : ℝ) : Vec (2 * (64 * (2 * 56) * (2 * 56))) := ctConv 64 7 7 56 56 t
 
 theorem margin_stem : |(1 : ℝ)| * Real.sqrt ((2 * ((2 * 56) * (2 * 56)) : ℕ) : ℝ) < 160 :=
   margin160 _ (by norm_num)
@@ -453,47 +360,22 @@ theorem margin7 : |(1 : ℝ)| * Real.sqrt ((2 * (7 * 7) : ℕ) : ℝ) < 160 :=
 
 /-- The stem BN is strictly positive at every point of the ray. -/
 theorem Zs_bn_pos (t : ℝ) (k : Fin (2 * (64 * (2 * 56) * (2 * 56)))) :
-    0 < StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t) k :=
-  bnBatchLA_pos 1 one_pos (kv 64 1) (kv 64 160) 1 160 (fun _ => rfl) (fun _ => rfl)
-    margin_stem (Zs t) k
+    0 < StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t) k := by
+  rw [Zs]
+  exact ctConv_bn_pos 64 7 7 56 56 margin_stem t k
 
-/-- ⭐ **The pre-BN stem activation is positionally injective** within each example and channel:
-    the centre tap decimates the ramp, and example 0's uniform `+t` shifts every position alike. -/
-theorem Zs_inj (t : ℝ) (n : Fin 2) (o : Fin 64) (r r' s s' : Fin (2 * 56))
-    (heq : bcell (Zs t) n o r s = bcell (Zs t) n o r' s') : r = r' ∧ s = s' := by
-  rw [Zs, bcell_convS2_ctK (0 : Fin 3) rfl (by norm_num) (by norm_num) 1 (kv 64 0) (sealX t) n o r s,
-    bcell_convS2_ctK (0 : Fin 3) rfl (by norm_num) (by norm_num) 1 (kv 64 0) (sealX t) n o r' s',
-    bcell_sealX, bcell_sealX] at heq
-  simp only [kv_apply, Fin.val_zero, one_mul, zero_add, ite_true] at heq
-  have hnat : 2 * r.val * 224 + 2 * s.val = 2 * r'.val * 224 + 2 * s'.val := by
-    have hr : ((2 * r.val : ℕ) : ℝ) * 224 + ((2 * s.val : ℕ) : ℝ)
-        = ((2 * r'.val : ℕ) : ℝ) * 224 + ((2 * s'.val : ℕ) : ℝ) := by
-      push_cast at heq ⊢
-      linarith
-    have := hr
-    push_cast at this
-    have h2 : ((2 * r.val * 224 + 2 * s.val : ℕ) : ℝ) = ((2 * r'.val * 224 + 2 * s'.val : ℕ) : ℝ) := by
-      push_cast
-      linarith
-    exact_mod_cast h2
-  have hs := s.isLt
-  have hs' := s'.isLt
-  exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
-
-/-- ⭐ **The stem pool has no tie** at the witness: BN is injective within a channel
-    (`BatchSeal.bnBatchLA_cell_inj`) and the pre-BN activation is positionally injective. -/
+/-- ⭐ The stem pool has no tie at the witness — the ramp is positionally injective and BN is
+    injective within a channel. -/
 theorem sealPoolSmooth (t : ℝ) :
     R34PoolSmoothAt 2 56 56
       (StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t)) := by
-  intro n
-  refine maxPool3s2Smooth_of_injective _ (fun o r r' s s' heq => ?_)
-  exact Zs_inj t n o r r' s s'
-    (bnBatchLA_cell_inj 1 one_pos (kv 64 1) (kv 64 160) (Zs t) n o (by norm_num) r r' s s' heq)
+  rw [Zs]
+  exact ctConv_pool_smooth 64 7 7 56 56 (by norm_num) (by norm_num) t
 
 -- ════════════════════════════════════════════════════════════════
--- § 9. The running activations: nonnegative, and collapsed
+-- § 6. The running activations: nonnegative, and collapsed
 --   ⚠ Each `nn`/`pc` below INSTANTIATES a §3/§4 lemma proved at variable shapes. Proving any of
---   them at these numerals directly is what kills the kernel (see §3's banner).
+--   them at these numerals directly is what kills the kernel (see §2's banner).
 -- ════════════════════════════════════════════════════════════════
 
 /-- The stem's output is nonnegative (a pool of a relu). -/
@@ -654,7 +536,7 @@ theorem pc16 (nCls : Nat) (t : ℝ) :
   exact sealIdB_eq 2 7 7 512 (by norm_num) _ (nn15 nCls t)
 
 -- ════════════════════════════════════════════════════════════════
--- § 10. The whole-net VJP at the witness
+-- § 7. The whole-net VJP at the witness
 -- ════════════════════════════════════════════════════════════════
 
 /-- The stem's relu is off at the witness, so the pool's no-tie condition can be stated on the
@@ -805,7 +687,7 @@ theorem sealDiffAt (nCls : Nat) (t : ℝ) :
   exact (r34HeadB_differentiable 2 7 7 (sealW nCls).Wd (sealW nCls).bd _).comp (sealX t) f16
 
 -- ════════════════════════════════════════════════════════════════
--- § 11. The carrier along the ray
+-- § 8. The carrier along the ray
 --   Four BN sites lie on the carrier's path (the stem and the three projections); the thirteen
 --   identity blocks contribute a batch-uniform `+1` each, which the carrier does not see. So
 --   `EDiff` takes only four distinct values down the whole trunk.
@@ -951,60 +833,26 @@ theorem ed16 (nCls : Nat) (t : ℝ) : EDiff (dP4 nCls t) (r34Pre16 2 (sealW nCls
 
 
 -- ════════════════════════════════════════════════════════════════
--- § 12. The head reads the carrier off channel 0
+-- § 9. The head reads the carrier off channel 0
 -- ════════════════════════════════════════════════════════════════
 
 theorem sealW_Wd (nCls : Nat) :
     (sealW nCls).Wd = fun (i : Fin 512) (j : Fin nCls) =>
       if i.val = 0 ∧ j.val = 0 then (1 : ℝ) else 0 := rfl
 
-/-- ⭐ **GAP and the dense head deliver the carrier to class 0**: GAP of a uniformly shifted
-    channel is shifted by the same constant, and `Wd` reads channel 0 into class 0. -/
+/-- The head reads channel 0 into class 0 — `BatchSeal.head_diff_ct` at this net's widths. -/
 theorem head_diff (nCls : Nat) (hn : 0 < nCls) (v : Vec (2 * (512 * 7 * 7))) (δ : Fin 512 → ℝ)
     (hv : EDiff δ v) :
     r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd v
         (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
       - r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd v
         (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      = δ 0 := by
-  have hrow : ∀ n : Fin 2, Mat.unflatten (r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd v) n
-      = dense (sealW nCls).Wd (sealW nCls).bd (globalAvgPool (bcell v n)) := by
-    intro n
-    show Mat.unflatten (StableHLO.batchMap 2 (dense (sealW nCls).Wd (sealW nCls).bd)
-      (StableHLO.batchMap 2 (globalAvgPoolFlat 512 7 7) v)) n = _
-    rw [row_batchMap, row_batchMap]
-    rfl
-  have e0 : r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd v
-      (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      = dense (sealW nCls).Wd (sealW nCls).bd (globalAvgPool (bcell v 0)) ⟨0, hn⟩ :=
-    congrFun (hrow 0) ⟨0, hn⟩
-  have e1 : r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd v
-      (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      = dense (sealW nCls).Wd (sealW nCls).bd (globalAvgPool (bcell v 1)) ⟨0, hn⟩ :=
-    congrFun (hrow 1) ⟨0, hn⟩
-  have hgap : ∀ ci : Fin 512,
-      globalAvgPool (bcell v 0) ci = globalAvgPool (bcell v 1) ci + δ ci :=
-    fun ci => globalAvgPool_shift (by norm_num) (by norm_num) _ _ (δ ci) ci (fun i j => hv ci i j)
-  have hWd : ∀ ci : Fin 512, (sealW nCls).Wd ci ⟨0, hn⟩ = if ci.val = 0 then (1 : ℝ) else 0 := by
-    intro ci
-    rw [sealW_Wd]
-    simp
-  have hbd : (sealW nCls).bd (⟨0, hn⟩ : Fin nCls) = 0 := rfl
-  rw [e0, e1]
-  simp only [dense, hWd, hbd, add_zero]
-  rw [← Finset.sum_sub_distrib]
-  rw [Finset.sum_congr rfl (fun ci _ => show
-      globalAvgPool (bcell v 0) ci * (if ci.val = 0 then (1 : ℝ) else 0)
-        - globalAvgPool (bcell v 1) ci * (if ci.val = 0 then (1 : ℝ) else 0)
-      = δ ci * (if ci.val = 0 then (1 : ℝ) else 0) from by rw [hgap ci]; ring)]
-  refine (Finset.sum_eq_single_of_mem (0 : Fin 512) (Finset.mem_univ _) ?_).trans ?_
-  · intro ci _ hci
-    have hc : ci.val ≠ 0 := fun h => hci (Fin.ext h)
-    simp [hc]
-  · simp
+      = δ 0 :=
+  head_diff_ct (by norm_num) (by norm_num) (0 : Fin 512) rfl ⟨0, hn⟩ _ _
+    (fun ci => by rw [sealW_Wd]; simp) rfl v δ hv
 
 -- ════════════════════════════════════════════════════════════════
--- § 13. The output difference along the ray is `t · R t`
+-- § 10. The output difference along the ray is `t · R t`
 -- ════════════════════════════════════════════════════════════════
 
 /-- ⭐⭐ **The positive, continuous nonlinear factor**: one `istd` per BN on the carrier's path —
@@ -1037,7 +885,7 @@ theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
   ring
 
 -- ════════════════════════════════════════════════════════════════
--- § 14. `R` is continuous (every block is, `relu` and the pool included)
+-- § 11. `R` is continuous (every block is, `relu` and the pool included)
 -- ════════════════════════════════════════════════════════════════
 
 theorem sealX_continuous : Continuous sealX :=
@@ -1160,7 +1008,7 @@ theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
   exact c1.mul (c2.mul (c3.mul c4))
 
 -- ════════════════════════════════════════════════════════════════
--- § 15. The seal
+-- § 12. The seal
 -- ════════════════════════════════════════════════════════════════
 
 /-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN ResNet-34 at the

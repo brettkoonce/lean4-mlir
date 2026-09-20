@@ -4,12 +4,17 @@
 because it builds the kit the other three reuse. Each package is its own session or two. Gates in
 §6; the bookkeeping that moves with every package in §5.
 
-**§4.1 is DONE (2026-09-20).** `Training/BatchSealKit.lean` (494) + `Nets/ResNet/ResNet34FullBSeal.lean`
-(1,194) landed and the 1,992 lines of proxy are deleted; audit 1,380 → 1,374 declarations, all
-3-axiom clean. Three corrections this doc needed, all applied below: the centre tap must
-**broadcast** (§3.1), `MobileNetV2SealRealistic` imported the R34 proxy seal (§5), and every
-collapse lemma has to be proved at **variable** shapes (§3.5, new — it is the one thing that can
-sink 4.2–4.4).
+**§4.1 and §4.2 are DONE (2026-09-20).** `Training/BatchSealKit.lean` (the shared machinery),
+`Nets/ResNet/ResNet34FullBSeal.lean` and `Nets/ResNet/ResNet50FullBSeal.lean`; the 1,992 lines of
+ResNet-34 proxy are deleted; audit 1,380 → 1,377 declarations, all 3-axiom clean. ⭐ ResNet-50's
+seal leaves the spatial size a **binder**, so one statement covers both shipped resolutions (224 px
+and the 160 px net the 76.66% run trains) — `0 < q` and `q ≤ 7` are all the witness needs, the
+bound being the `β = 160` margin against the stem's `2·(16q)²`.
+
+Corrections this doc needed, all applied below: the centre tap must **broadcast** (§3.1), the
+carrier's BN count is **one per projection plus the stem** — five for ResNet-50, not four (§3.2),
+`MobileNetV2SealRealistic` imported the R34 proxy seal (§5), and every collapse lemma has to be
+proved at **variable** shapes (§3.5, new — it is the one thing that can sink 4.3–4.4).
 
 ## 0. The finding
 
@@ -57,8 +62,8 @@ numeric fact about millions of floats (archive Item F) and is what the training 
 
 | net | activations | whole-net VJP | pointwise clauses | witness today | action |
 |---|---|---|---|---|---|
-| ResNet-34 | relu, maxpool | `resnet34ForwardB_full_has_vjp_at` | 32 (`R34IdSmoothAt`/`R34DownSmoothAt`, two relus each) + `R34StemSmoothAt` + `R34PoolSmoothAt` | live 2-channel proxy, on the apex | §4.1 |
-| ResNet-50 | relu, maxpool | `resnet50ForwardB_full_has_vjp_at` (`q` binder: 224 and 160 px) | 48 (`R50IdSmoothAt`/`R50ProjSmoothAt`/`R50DownSmoothAt`, three relus each) + stem + pool | none | §4.2 |
+| ResNet-34 | relu, maxpool | `resnet34ForwardB_full_has_vjp_at` | 32 (`R34IdSmoothAt`/`R34DownSmoothAt`, two relus each) + `R34StemSmoothAt` + `R34PoolSmoothAt` | ✅ `ResNet34FullBSeal` | §4.1 done |
+| ResNet-50 | relu, maxpool | `resnet50ForwardB_full_has_vjp_at` (`q` binder: 224 and 160 px) | 48 (`R50IdSmoothAt`/`R50ProjSmoothAt`/`R50DownSmoothAt`, three relus each) + stem + pool | ✅ `ResNet50FullBSeal`, both resolutions | §4.2 done |
 | MobileNetV2 | relu6 | `mobilenetv2ForwardB_full_has_vjp_at` | stem + 17 block bundles (`IVSmoothAtB` / `IVNoExpSmoothAtB`), each a window `≠ 0 ∧ ≠ 6` per site | `Mnv2Live` proxy, per-example two-block net | §4.3 |
 | MobileNetV4-Conv-M | relu (UIB), swish (fused stage) | `mobilenetv4ForwardB_full_has_vjp_at` | one bundle `Mnv4SmoothAt` with per-group `.ok` fields; `fused` is vacuous (swish) | none | §4.4 |
 | EfficientNet-B0 | SiLU, sigmoid (SE) | `efficientnetForwardB_full_has_vjp` | none — `HasVJP`, only `0 < ε` | — | nothing |
@@ -127,6 +132,10 @@ The carrier: `N = 2`, channel 0 of example 0 = channel 0 of example 1 plus `t`, 
 | identity block | `+1` on both examples, batch-uniform: `δ` preserved, and the next BN removes the `+1` | `idBlk_chain_eq` (`ResNet34LiveFull.idBlk2_chain_eq`, generic in `h w` already) |
 | GAP, dense | `δ`, then `Wd 0 0 · δ` | `UDiff_gap`-style (`ResNet34LiveRealisticSeal.UDiff_gap`, `gap_add_const`) |
 | `batchMap` | every per-example op above distributes over the batch | `StableHLO.batchMap` unfolding |
+
+⭐ **The carrier has one BN per projection, plus the stem.** ResNet-34 has three projections and
+so four; ⛔ ResNet-50 has **four** — stage 1 block 0 projects too, at stride 1 (`64 → 256` at
+unchanged resolution) — and so five. Count projections in the net, not downsamples.
 
 ⭐ As built, the invariant is `EDiff (δ : Fin c → ℝ)` — a **per-channel** offset, not one scalar.
 That is what makes it cheap: BN multiplies channel `c`'s offset by `γ_c · istd_c` with no need to
@@ -242,14 +251,32 @@ identity blocks' post-residual clause touch the activation at all (the latter th
 `0 ≤ activation`, which is `relu_nonneg`). No `bnBatchLA_shift` lemma was needed: the carrier is
 transparent to a batch-uniform `+1` without the BN having to remove it.
 
-### 4.2 ResNet-50 — same ops, bottleneck bodies
+### 4.2 ResNet-50 — DONE 2026-09-20
 
-`r50IdB` / `r50ProjB` / `r50DownB` (1×1, 3×3, 1×1 with three relus; `projStridedB` on the
-downsample blocks), the same stem and pool as 4.1, `q = 7`. 48 clauses + stem + pool; carrier
-sites 4 (stem + three projections; a bottleneck's zeroed body contributes a constant the next BN
-removes, exactly as a basic block's does). Nothing new beyond bookkeeping at three convs per
-block. Effort: ~1k lines, one session, once 4.1's kit exists. Retires nothing (no proxy existed);
-closes the "ResNet-50 has no witness" gap, which the yaml does not currently even disclose.
+`Nets/ResNet/ResNet50FullBSeal.lean` (1,135 lines), on `resnet50ForwardB_full` itself. Retires
+nothing (no proxy existed); closes the "ResNet-50 has no witness" gap, which §4.1 had made the yaml
+disclose.
+
+**What was actually new**, beyond bookkeeping at three convs per block:
+
+* **`q` stays a binder.** The seal takes `0 < q` and `q ≤ 7` and covers 224 px *and* 160 px in one
+  theorem — better than this doc's "instantiated at `q = 7`", and the margin is the only thing that
+  wants a bound at all. ⚠ Every shape is written as the net's own `2 * (…)` nest, never a product
+  like `8 * q`, for the reason `ResNet50FullB.lean`'s header records;
+* **a stride-1 projection.** Stage 1 block 0's skip is `projB`, so the carrier needs the kit's
+  stride-1 `EDiff_conv` beside the strided one — and it is the fifth carrier BN (§3.2);
+* **three relu clauses per block, two of them weight-only.** The bottleneck's `hm2` sits after the
+  3×3, but with `W₂` zeroed it sees a constant channel, so it is `β₂ = 1 ≠ 0` and needs nothing of
+  the activation. As at ResNet-34, only the post-residual clause does, and only through `0 ≤ ·`.
+
+**The kit absorbed the shared half** on the way (this is what makes 4.3/4.4 cheap):
+`Training/BatchSealKit.lean` now holds `kv`/`zk`, the `margin160` check, the ray
+(`rayRamp`/`rayBase`/`rayV`/`rayX` and `EDiff_rayX`), the carrier `EDiff` with all five per-op
+steps, the stem's centre-tap conv with its positional injectivity and the pool's no-tie
+(`ctConv`/`ctConv_inj`/`ctConv_pool_smooth`), and the head (`head_diff_ct`) — all generic in the
+shapes. ResNet-50 reuses ResNet-34's block-level generics by name (`projB_zero_const`,
+`cbReluStridedB_eq`, `r34StemB_eq`, `sealProj`, the four `*_continuous`), which is the same reuse
+`ResNet50FullB.lean` already makes of `r34StemB` and `r34HeadB`.
 
 ### 4.3 MobileNetV2 — relu6, no pool, XLA-padded stem
 
@@ -308,8 +335,8 @@ uncertainty, the rest is 4.3's shape. Retires nothing; closes an undisclosed gap
   docstrings in `Nets/ResNet/ResNet34.lean` cited the deleted modules (caught by
   `lake exe docstring-checkrefs`), and `scripts/lipschitz_cert_witness_s8.py`'s prose.
   `scripts/check_target_names.sh` and `python3 scripts/check_audit_coverage.py` after.
-* **The audit count** went 1,380 → 1,374 (nine proxy prints out, three seal prints in), in
-  `tests/comparator/README.md` and `blueprint/src/content.tex`.
+* **The audit count** went 1,380 → 1,374 at 4.1 (nine proxy prints out, three seal prints in) and
+  1,374 → 1,377 at 4.2, in `tests/comparator/README.md` and `blueprint/src/content.tex`.
 
 ## 6. Gates
 

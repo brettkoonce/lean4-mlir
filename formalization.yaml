@@ -202,10 +202,12 @@ fidelity:
        itself (`ResNet34FullBSeal`): 64-512 channels, [3,4,6,3] blocks, 7x7/s2 stem, 3x3/s2 pool,
        batch BatchNorm, 224x224, at structural weights and N = 2 -- the carrier is a difference
        between the two EXAMPLES, which per-channel batch BN preserves and a channel difference is
-       not. MobileNetV2 is still sealed on a 2-channel per-example proxy, at 17 blocks on 2x2
-       (`MobileNetV2JacobianSealFull`) and at 224x224 with a short chain
-       (`MobileNetV2SealRealistic`); ResNet-50 and MobileNetV4 have no witness yet
-       (planning/full_width_seals.md 4.2-4.4). Plus trained-weight witnesses and a provable strict
+       not. ResNet-50's is the same construction on `resnet50ForwardB_full` (`ResNet50FullBSeal`), with
+       the spatial size left a BINDER, so one statement covers both shipped resolutions -- 224 px
+       and the 160 px net the 76.66% run trains. MobileNetV2 is still sealed on a 2-channel
+       per-example proxy, at 17 blocks on 2x2 (`MobileNetV2JacobianSealFull`) and at 224x224 with a
+       short chain (`MobileNetV2SealRealistic`); MobileNetV4 has no witness yet
+       (planning/full_width_seals.md 4.3-4.4). Plus trained-weight witnesses and a provable strict
        CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,
        `TrainedLinearDescent`).
 
@@ -373,6 +375,11 @@ alignment:
       module: "LeanMlir/Proofs/Nets/ResNet/ResNet34FullBSeal.lean, LeanMlir/Proofs/Training/BatchSealKit.lean"
       status: "proved"
       note: "on resnet34ForwardB_full itself (64-512 channels, [3,4,6,3], batch BN, N=2, structural weights); the carrier is the difference between the two examples, the only kink left is the stem pool, and it shifts with the carrier; retired the 2-channel proxies 2026-09-20"
+    - source: "Whole-net non-degeneracy + nonzero-Jacobian seal (ResNet-50, full width, batch BN, both shipped resolutions)"
+      lean: "sealX_nonconstant / sealX_jacobian_nonzero + sealX_backward_nontrivial"
+      module: "LeanMlir/Proofs/Nets/ResNet/ResNet50FullBSeal.lean, LeanMlir/Proofs/Training/BatchSealKit.lean"
+      status: "proved"
+      note: "on resnet50ForwardB_full itself (the [3,4,6,3] bottleneck ladder, batch BN, N=2, structural weights), q a binder with 0 < q and q <= 7 so 224 px and 160 px are instances; 48 relu clauses discharged, five carrier BNs (stem + one projection per stage). ResNet-50 had no witness of any kind before 2026-09-20"
     - source: "Committed train step = real loss-driven backward (per-net ties: the seven ImageNet-scale nets at their batched steps, the ten SGD-inline steps)"
       lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied_certified family (SGD-inline)"
       module: "LeanMlir/Proofs/Nets/*/*StepTieB.lean, LeanMlir/Proofs/Nets/*/*StepTieG*.lean, LeanMlir/Proofs/Nets/*/*StepTie.lean"
