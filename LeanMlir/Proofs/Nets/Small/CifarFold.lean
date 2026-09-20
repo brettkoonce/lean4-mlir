@@ -22,7 +22,8 @@ only new content is the per-net `den = certified` capstones below.
   four layers — conv2d's weight/bias VJP is dim-generic).
 * **Dense head (W₅/W₆/W₇):** the classifier head is a 3-layer MLP over the flattened
   pool output, so its cotangents are the IR `mlpCotOut0/1` and its `den`s close via the
-  M2 `weight_grad_bridge`/`bias_grad_bridge` — verbatim `CnnFold` (`dW3..5`).
+  M2 `weight_grad_bridge`/`bias_grad_bridge` — verbatim `CnnFold` (`dW7_den`, the op the
+  tie reads).
 
 ## Honest residual (same boundary as cnn/mlp/linear)
 * The conv cotangents here are free variables `c` (the `convW_den`/`convB_den` statement
@@ -63,7 +64,9 @@ theorem convB_den {ic oc h w kH kW : Nat}
 /-! ## Dense classifier head (W₅/W₆/W₇) — `weightSgd`/`biasSgd`, mirrors `CnnPoC`
 
 The head `pool2 → W₅→relu→W₆→relu→W₇` is a 3-layer MLP; per-layer cotangents are the
-IR `mlpCotOut0/1` (with `(W₇,W₆,W₅)` playing the MLP's `(W₂,W₁,W₀)`). -/
+IR `mlpCotOut0/1` (with `(W₇,W₆,W₅)` playing the MLP's `(W₂,W₁,W₀)`). Every head op's
+`den` = certified is `Cifar8PoC.denseW_den` / `Cifar8PoC.denseB_den` at that layer; only
+the output-layer weight op is stated here, as the tie reads it. -/
 
 /-- Output-layer weight op `W₇` = certified step (cotangent = the loss cotangent `dy`). -/
 theorem dW7_den {c2 h w d1 nClasses : Nat}
@@ -77,70 +80,6 @@ theorem dW7_den {c2 h w d1 nClasses : Nat}
                   dense (Mat.unflatten v) b₇ (relu d1 (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))))
                (Mat.flatten W₇) (finProdFinEquiv (i, j)) k * dy k :=
   Cifar8PoC.denseW_den aN "%W7" lrStr dyN _ W₇ b₇ _ lr i j
-
-/-- Hidden-layer weight op `W₆` = certified step (cotangent = `mlpCotOut1 W₇ h6`). -/
-theorem dW6_den {c2 h w d1 nClasses : Nat}
-    (aN lrStr cN : String) (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
-    (W₇ : Mat d1 nClasses) (pool : Vec (c2*h*w)) (dy : Vec nClasses) (lr : ℝ) (i j : Fin d1) :
-    den (SHlo.weightSgd aN "%W6" lrStr (relu d1 (dense W₅ b₅ pool)) W₆ lr
-          (.operand cN ((mlpCotOut1 W₇ (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy)))
-        (finProdFinEquiv (i, j))
-      = W₆ i j - lr * ∑ k : Fin d1,
-          pdiv (fun v : Vec (d1 * d1) => dense (Mat.unflatten v) b₆ (relu d1 (dense W₅ b₅ pool)))
-               (Mat.flatten W₆) (finProdFinEquiv (i, j)) k
-            * (mlpCotOut1 W₇ (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy k :=
-  Cifar8PoC.denseW_den aN "%W6" lrStr cN _ W₆ b₆ _ lr i j
-
-/-- Input-layer (pool) weight op `W₅` = certified step (cotangent = `mlpCotOut0 W₆ W₇ h5 h6`). -/
-theorem dW5_den {c2 h w d1 nClasses : Nat}
-    (lrStr cN : String) (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
-    (W₇ : Mat d1 nClasses) (pool : Vec (c2*h*w)) (dy : Vec nClasses)
-    (lr : ℝ) (i : Fin (c2*h*w)) (j : Fin d1) :
-    den (SHlo.weightSgd "%pool2" "%W5" lrStr pool W₅ lr
-          (.operand cN ((mlpCotOut0 W₆ W₇ (dense W₅ b₅ pool)
-                          (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy)))
-        (finProdFinEquiv (i, j))
-      = W₅ i j - lr * ∑ k : Fin d1,
-          pdiv (fun v : Vec ((c2*h*w) * d1) => dense (Mat.unflatten v) b₅ pool)
-               (Mat.flatten W₅) (finProdFinEquiv (i, j)) k
-            * (mlpCotOut0 W₆ W₇ (dense W₅ b₅ pool)
-                (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy k :=
-  Cifar8PoC.denseW_den "%pool2" "%W5" lrStr cN _ W₅ b₅ _ lr i j
-
-/-- Output-layer bias op `b₇` = certified step. -/
-theorem db7_den {c2 h w d1 nClasses : Nat}
-    (lrStr dyN : String) (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
-    (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses) (pool : Vec (c2*h*w)) (dy : Vec nClasses)
-    (lr : ℝ) (i : Fin nClasses) :
-    den (SHlo.biasSgd "%b7" lrStr b₇ lr (.operand dyN dy)) i
-      = b₇ i - lr * ∑ j : Fin nClasses,
-          pdiv (fun b' : Vec nClasses =>
-                  dense W₇ b' (relu d1 (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool))))) b₇ i j * dy j :=
-  Cifar8PoC.denseB_den "%b7" lrStr dyN W₇ _ b₇ _ lr i
-
-/-- Hidden-layer bias op `b₆` = certified step. -/
-theorem db6_den {c2 h w d1 nClasses : Nat}
-    (lrStr cN : String) (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
-    (W₇ : Mat d1 nClasses) (pool : Vec (c2*h*w)) (dy : Vec nClasses) (lr : ℝ) (i : Fin d1) :
-    den (SHlo.biasSgd "%b6" lrStr b₆ lr
-          (.operand cN ((mlpCotOut1 W₇ (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy))) i
-      = b₆ i - lr * ∑ j : Fin d1,
-          pdiv (fun b' : Vec d1 => dense W₆ b' (relu d1 (dense W₅ b₅ pool))) b₆ i j
-            * (mlpCotOut1 W₇ (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy j :=
-  Cifar8PoC.denseB_den "%b6" lrStr cN W₆ _ b₆ _ lr i
-
-/-- Input-layer (pool) bias op `b₅` = certified step. -/
-theorem db5_den {c2 h w d1 nClasses : Nat}
-    (lrStr cN : String) (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
-    (W₇ : Mat d1 nClasses) (pool : Vec (c2*h*w)) (dy : Vec nClasses) (lr : ℝ) (i : Fin d1) :
-    den (SHlo.biasSgd "%b5" lrStr b₅ lr
-          (.operand cN ((mlpCotOut0 W₆ W₇ (dense W₅ b₅ pool)
-                          (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy))) i
-      = b₅ i - lr * ∑ j : Fin d1,
-          pdiv (fun b' : Vec d1 => dense W₅ b' pool) b₅ i j
-            * (mlpCotOut0 W₆ W₇ (dense W₅ b₅ pool)
-                (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))).denote dy j :=
-  Cifar8PoC.denseB_den "%b5" lrStr cN W₅ _ b₅ _ lr i
 
 /-! ## The §1a tie — the conv layers/dense head, tied through the REAL cifar forward
 
@@ -254,7 +193,7 @@ set_option maxRecDepth 8000 in
     instantiated at the cotangent the backward chain delivers: `cnnChainCotW2` for conv₄ (relu mask on
     pool₂-back of the dense head), `cnnChainCotW1` for conv₃/conv₁ (relu mask on the next conv's
     input-VJP), and `cifarChainCotW2` for conv₂ (relu mask on pool₁-back of conv₃'s input-VJP). Together
-    with the dense head (`cifar_W7_tied_totalloss` + `dW5`/`dW6`/`db5`/`db6`/`db7` at `g`) the WHOLE
+    with the dense head (`cifar_W7_tied_totalloss` + `Cifar8PoC.denseW_den`/`denseB_den` at `g`) the WHOLE
     cifar train step is den-composed forward→loss→backward — no free activations, no symbolic cotangent.
     (Residual: the conv backward is rendered hand-written, so the cotangent SSA ↔ chain-cot
     correspondence is the per-op trust the whole suite carries — the cnn `cnn_conv_tied_certified`

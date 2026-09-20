@@ -402,12 +402,7 @@ open Proofs
 #print axioms CnnPoC.cb1_den
 #print axioms CnnPoC.cW2_den
 #print axioms CnnPoC.cb2_den
-#print axioms CnnPoC.dW3_den
-#print axioms CnnPoC.db3_den
-#print axioms CnnPoC.dW4_den
-#print axioms CnnPoC.db4_den
 #print axioms CnnPoC.dW5_den
-#print axioms CnnPoC.db5_den
 -- mnist-cnn dense-head TIE
 #print axioms CnnPoC.cnnLossCot_den
 #print axioms CnnPoC.cnn_W5_tied_totalloss
@@ -416,12 +411,7 @@ open Proofs
 -- ch5-CIFAR fully folded (no-BN, 2-scale)
 #print axioms CifarPoC.convW_den
 #print axioms CifarPoC.convB_den
-#print axioms CifarPoC.dW5_den
-#print axioms CifarPoC.db5_den
-#print axioms CifarPoC.dW6_den
-#print axioms CifarPoC.db6_den
 #print axioms CifarPoC.dW7_den
-#print axioms CifarPoC.db7_den
 -- ch5-CIFAR §1a TIE
 #print axioms CifarPoC.cifarLossCot_den
 #print axioms CifarPoC.cifar_W7_tied_totalloss
