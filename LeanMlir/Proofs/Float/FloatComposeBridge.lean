@@ -107,22 +107,6 @@ theorem floatClose_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n)
       have he : 0 ≤ e := (abs_nonneg _).trans (hd ⟨0, hm⟩)
       exact (M.dense_close W b vt va e he hd i).trans (M.denseErr_le_uniform hw' he hW hb hva i))
 
-/-- **Demo: a conv→relu unit is `FloatClose`** — `(conv).comp (relu)` folds the
-    conv `layerBudget` modulus and ReLU's `id`. A 2-conv chain
-    `relu∘conv∘relu∘conv` is two more `.comp`s; the whole r34 net is this fold
-    over its layer list (with the BN/maxpool/skip instances slotted in). -/
-theorem floatClose_reluConv {ic oc h w kH kW : Nat} (M : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
-    FloatClose A
-      (layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0)
-      (relu (oc * h * w) ∘ flatConv (h := h) (w := w) W b)
-      (relu (oc * h * w) ∘ M.flatConvF (h := h) (w := w) W b)
-      ((fun e => e) ∘ (fun e => layerBudget M.u (ic * kH * kW) w' β A e)) :=
-  (floatClose_flatConv M W b hw' hβ hA hn hW hb).comp
-    (floatClose_relu (layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0))
-
 /-- **MaxPool is `FloatClose` with modulus `id`** — exact in float, 1-Lipschitz,
     never grows magnitudes (`maxPoolFlat_close` / `maxPoolFlat_abs_le`). -/
 theorem floatClose_maxPool {c h w : Nat} (A : ℝ) :
@@ -173,37 +157,6 @@ theorem floatClose_gap {c h w : Nat} (M : FloatModel) {A : ℝ}
           + |globalAvgPoolFlat c h w vt ci - globalAvgPoolFlat c h w va ci| := abs_sub_le _ _ _
       _ ≤ gb + e := add_le_add hround hshift
 
-/-- **THE FOLD: a whole CIFAR stage is `FloatClose`.** `conv→relu→conv→relu→maxpool`
-    folded through `.comp` into a single certificate — there exist a propagated
-    magnitude `B` and an error modulus `L` (the composition of the two conv
-    `layerBudget`s through the three `id` moduli) with the whole float stage within
-    `L e` of the real stage at input error `e`. No bespoke proof: the five per-op
-    `FloatClose` facts chained. The whole r34 net is this same fold at scale (with
-    the BN/skip instances slotted in). ⚠ The `∃ B L` closes the modulus, so on its own
-    this statement says only that both maps are bounded on the box. -/
-theorem floatClose_cifarStage {ic c h w : Nat} (M : FloatModel)
-    (W₁ : Kernel4 c ic 3 3) (b₁ : Vec c) (W₂ : Kernel4 c c 3 3) (b₂ : Vec c)
-    {w' β A : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A)
-    (hn1 : 0 < ic * (2*h) * (2*w)) (hn2 : 0 < c * (2*h) * (2*w))
-    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β)
-    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β) :
-    ∃ B L, FloatClose A B
-      (maxPoolFlat c h w ∘ relu (c*(2*h)*(2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂
-        ∘ relu (c*(2*h)*(2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)
-      (maxPoolFlat c h w ∘ relu (c*(2*h)*(2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₂ b₂
-        ∘ relu (c*(2*h)*(2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₁ b₁)
-      L := by
-  set B1 := layerAct (ic*3*3) w' β A + layerBudget M.u (ic*3*3) w' β A 0 with hB1def
-  have hB1 : 0 ≤ B1 :=
-    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl)
-  have hc1 := floatClose_flatConv (h := 2*h) (w := 2*w) M W₁ b₁ hw' hβ hA hn1 hW₁ hb₁
-  have hr1 := floatClose_relu (n := c*(2*h)*(2*w)) B1
-  have hc2 := floatClose_flatConv (h := 2*h) (w := 2*w) M W₂ b₂ hw' hβ hB1 hn2 hW₂ hb₂
-  set B2 := layerAct (c*3*3) w' β B1 + layerBudget M.u (c*3*3) w' β B1 0 with hB2def
-  have hr2 := floatClose_relu (n := c*(2*h)*(2*w)) B2
-  have hmp := floatClose_maxPool (c := c) (h := h) (w := w) B2
-  exact ⟨_, _, (((hc1.comp hr1).comp hc2).comp hr2).comp hmp⟩
-
 -- ════════════════════════════════════════════════════════════════
 -- § The residual skip (a branching combinator, not a plain .comp)
 -- ════════════════════════════════════════════════════════════════
@@ -244,31 +197,6 @@ theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
       (fun e => M.u * (B + LF e + A + e) + (LF e + e)) :=
   (floatClose_addResidual M hF).comp (floatClose_relu _)
 
-/-- **THE RESIDUAL FOLD: a (no-BN) ResNet basic block is `FloatClose`.** Body
-    `conv₂ → relu → conv₁` folded via `.comp`, then wrapped by the residual
-    combinator into `relu(F(x) + x)` — one certificate for the whole block,
-    skip included. The r34 identity block is this with BN inserted (the BN→relu
-    `FloatClose` instance is the remaining wrap). ⚠ Same caveat as `floatClose_cifarStage`. -/
-theorem floatClose_resBlock {c h w : Nat} (M : FloatModel)
-    (W₁ W₂ : Kernel4 c c 3 3) (b₁ b₂ : Vec c) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < c * h * w)
-    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β)
-    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β) :
-    ∃ B L, FloatClose A B
-      (fun v => relu (c*h*w)
-        (fun j => (flatConv W₂ b₂ ∘ relu (c*h*w) ∘ flatConv W₁ b₁) v j + v j))
-      (fun v => relu (c*h*w)
-        (fun j => M.add ((M.flatConvF W₂ b₂ ∘ relu (c*h*w) ∘ M.flatConvF W₁ b₁) v j) (v j)))
-      L := by
-  have hB1 : 0 ≤ layerAct (c*3*3) w' β A + layerBudget M.u (c*3*3) w' β A 0 :=
-    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl)
-  have hbody :=
-    ((floatClose_flatConv (h := h) (w := w) M W₁ b₁ hw' hβ hA hn hW₁ hb₁).comp
-      (floatClose_relu (n := c*h*w)
-        (layerAct (c*3*3) w' β A + layerBudget M.u (c*3*3) w' β A 0))).comp
-      (floatClose_flatConv (h := h) (w := w) M W₂ b₂ hw' hβ hB1 hn hW₂ hb₂)
-  exact ⟨_, _, floatClose_residualBlock M hbody⟩
-
 -- ════════════════════════════════════════════════════════════════
 -- § BN → relu as a FloatClose instance (the other r34 wrap)
 -- ════════════════════════════════════════════════════════════════
@@ -303,23 +231,6 @@ theorem floatClose_bn {m : Nat} (M : FloatModel)
   unfold bnForward
   refine (abs_add_le _ _).trans (add_le_add ?_ hβ)
   rw [abs_mul]; exact mul_le_mul hγ hxhat (abs_nonneg _) ((abs_nonneg _).trans hγ)
-
-/-- **BN→relu is `FloatClose`** — `floatClose_bn` followed by `floatClose_relu` (ReLU is exact
-    and 1-Lipschitz, so the BN modulus and magnitude pass through unchanged). With this +
-    `floatClose_flatConv` + the residual combinator, the r34 identity block folds entirely
-    through `.comp`. -/
-theorem floatClose_bnRelu {m : Nat} (M : FloatModel)
-    {ε γ β emean eistd D S G Bbnd A : ℝ} (fμ fistdv : Vec m → ℝ)
-    (hn : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
-    (hmean : ∀ v, (∀ k, |v k| ≤ A) → |fμ v - bnMean m v| ≤ emean)
-    (histd : ∀ v, (∀ k, |v k| ≤ A) → |fistdv v - bnIstd m v ε| ≤ eistd)
-    (hD : ∀ v, (∀ k, |v k| ≤ A) → ∀ j, |v j - bnMean m v| ≤ D)
-    (hSabs : ∀ v, (∀ k, |v k| ≤ A) → |bnIstd m v ε| ≤ S) :
-    FloatClose A (G * (D * S) + Bbnd + bnNormBudget M.u D S G Bbnd emean eistd)
-      (fun v => relu m (bnForward m ε γ β v))
-      (fun v => relu m (M.bnForwardF γ β (fμ v) (fistdv v) v))
-      (fun e => bnReluBudget M.u D S G Bbnd emean eistd A e ε) :=
-  (floatClose_bn M fμ fistdv hn hε hγ hβ hmean histd hD hSabs).comp (floatClose_relu _)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The final fold: a block iterated to depth (r34's [3,4,6,3] stages)

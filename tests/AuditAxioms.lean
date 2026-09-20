@@ -775,14 +775,10 @@ open Proofs
 #print axioms FloatClose.comp
 #print axioms floatClose_relu
 #print axioms floatClose_flatConv
-#print axioms floatClose_reluConv
--- FloatClose max-pool and CIFAR stage (FloatComposeBridge.lean)
+-- FloatClose max-pool (FloatComposeBridge.lean)
 #print axioms floatClose_maxPool
-#print axioms floatClose_cifarStage
--- The r34 wraps that let the fold RUN on a real block
+-- The r34 wrap that lets the fold RUN on a real block
 #print axioms floatClose_residualBlock
-#print axioms floatClose_resBlock
-#print axioms floatClose_bnRelu
 -- THE FINAL FOLD: floatClose_id + floatClose_iterate
 #print axioms floatClose_id
 #print axioms floatClose_iterate
@@ -1734,9 +1730,6 @@ open Proofs
 #print axioms Proofs.FloatModel.convMixed_close_prop
 #print axioms Proofs.FloatModel.flatConvMixed_close
 #print axioms Proofs.floatClose_flatConvMixed
-#print axioms Proofs.floatClose_reluConvMixed
-#print axioms Proofs.floatClose_convMixed_twice
-#print axioms Proofs.floatClose_r50_stages_mixed
 #print axioms Proofs.convMixedBudget_affine
 #print axioms Proofs.layerBudget_affine
 

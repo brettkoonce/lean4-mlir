@@ -163,23 +163,6 @@ noncomputable def convMixedBudget (uacc uleaf : ℝ) (n : ℕ) (w β A E : ℝ) 
     + convBrR uacc uleaf n * ((n : ℝ) * w * (A + E))
     + (n : ℝ) * w * E
 
-theorem convMixedBudget_nonneg {uacc uleaf : ℝ} {n : ℕ} {w β A E : ℝ}
-    (hacc : 0 ≤ uacc) (hleaf : 0 ≤ uleaf) (hw : 0 ≤ w) (hβ : 0 ≤ β)
-    (hA : 0 ≤ A) (hE : 0 ≤ E) : 0 ≤ convMixedBudget uacc uleaf n w β A E := by
-  have hbr := convBrR_nonneg hacc hleaf n
-  have hnw : (0 : ℝ) ≤ (n : ℝ) * w := mul_nonneg (Nat.cast_nonneg n) hw
-  have hS : (0 : ℝ) ≤ (n : ℝ) * w * (A + E) := mul_nonneg hnw (by linarith)
-  have h1 : (0 : ℝ) ≤ (1 + uleaf) * (1 + convBrR uacc uleaf n) :=
-    mul_nonneg (by linarith) (by linarith)
-  simp only [convMixedBudget]
-  have t1 : (0 : ℝ) ≤ uacc * ((1 + uleaf) * (1 + convBrR uacc uleaf n) * ((n : ℝ) * w * (A + E)) + β) :=
-    mul_nonneg hacc (by nlinarith)
-  have t2 : (0 : ℝ) ≤ uleaf * (1 + convBrR uacc uleaf n) * ((n : ℝ) * w * (A + E)) :=
-    mul_nonneg (mul_nonneg hleaf (by linarith)) hS
-  have t3 : (0 : ℝ) ≤ convBrR uacc uleaf n * ((n : ℝ) * w * (A + E)) := mul_nonneg hbr hS
-  have t4 : (0 : ℝ) ≤ (n : ℝ) * w * E := mul_nonneg hnw hE
-  linarith
-
 -- ════════════════════════════════════════════════════════════════
 -- § The propagating bound
 -- ════════════════════════════════════════════════════════════════
@@ -338,69 +321,5 @@ theorem convMixedGain_factor (uacc uleaf : ℝ) (n : ℕ) (w : ℝ) :
       = (n : ℝ) * w * (1 + (convBrR uacc uleaf n + uleaf * (1 + convBrR uacc uleaf n)
           + uacc * ((1 + uleaf) * (1 + convBrR uacc uleaf n)))) := by
   simp only [convMixedGain]; ring
-
--- ════════════════════════════════════════════════════════════════
--- § Composition — the fold, in bf16
--- ════════════════════════════════════════════════════════════════
-
-/-- **conv→relu in bf16 is `FloatClose`** — the bf16 peer of `floatClose_reluConv`, and the
-    proof is the same one line, because `floatClose_relu` never asked what precision fed it. -/
-theorem floatClose_reluConvMixed {ic oc h w kH kW : Nat} (M L : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
-    FloatClose A
-      (layerAct (ic * kH * kW) w' β A + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0)
-      (relu (oc * h * w) ∘ flatConv (h := h) (w := w) W b)
-      (relu (oc * h * w) ∘ M.flatConvMixed L (h := h) (w := w) W b)
-      ((fun e => e) ∘ (fun E => convMixedBudget M.u L.u (ic * kH * kW) w' β A E)) :=
-  (floatClose_flatConvMixed M L W b hw' hβ hA hn hW hb).comp
-    (floatClose_relu (layerAct (ic * kH * kW) w' β A
-      + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0))
-
-/-- ⭐ **Two bf16 convs chained** — the `.comp` of two mixed-precision layers, moduli composing.
-    This is the inductive step of any depth; nothing about it is conv-specific or R50-specific. -/
-theorem floatClose_convMixed_twice {ic mc oc h w kH kW : Nat} (M L : FloatModel)
-    (W₁ : Kernel4 mc ic kH kW) (b₁ : Vec mc) (W₂ : Kernel4 oc mc kH kW) (b₂ : Vec oc)
-    {w' β A : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A)
-    (hn₁ : 0 < ic * h * w) (hn₂ : 0 < mc * h * w)
-    (hW₁ : ∀ o c kh kw, |W₁ o c kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β)
-    (hW₂ : ∀ o c kh kw, |W₂ o c kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β) :
-    FloatClose A
-      (layerAct (mc * kH * kW) w' β
-          (layerAct (ic * kH * kW) w' β A + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0)
-        + convMixedBudget M.u L.u (mc * kH * kW) w' β
-            (layerAct (ic * kH * kW) w' β A
-              + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0) 0)
-      (flatConv (h := h) (w := w) W₂ b₂ ∘ flatConv (h := h) (w := w) W₁ b₁)
-      (M.flatConvMixed L (h := h) (w := w) W₂ b₂ ∘ M.flatConvMixed L (h := h) (w := w) W₁ b₁)
-      ((fun E => convMixedBudget M.u L.u (mc * kH * kW) w' β
-          (layerAct (ic * kH * kW) w' β A
-            + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0) E)
-        ∘ (fun E => convMixedBudget M.u L.u (ic * kH * kW) w' β A E)) :=
-  (floatClose_flatConvMixed M L W₁ b₁ hw' hβ hA hn₁ hW₁ hb₁).comp
-    (floatClose_flatConvMixed M L W₂ b₂ hw' hβ
-      (by
-        have h1 : 0 ≤ layerAct (ic * kH * kW) w' β A := layerAct_nonneg hw' hβ hA
-        have h2 : 0 ≤ convMixedBudget M.u L.u (ic * kH * kW) w' β A 0 :=
-          convMixedBudget_nonneg M.u_nonneg L.u_nonneg hw' hβ hA le_rfl
-        linarith)
-      hn₂ hW₂ hb₂)
-
-/-- ⭐⭐ **R50's `[3,4,6,3]` stage fold, in bf16 — and it is `floatClose_r34_stages` verbatim.**
-    ResNet-50 has the SAME stage depths as ResNet-34; the two differ in what a block contains
-    (three convs with a 1×1 bottleneck vs two 3×3s), not in how many blocks a stage stacks. So
-    the depth fold needs no R50-specific theorem — only an R50 block instance, which is what
-    `floatClose_flatConvMixed` now makes constructible in bf16.
-
-    ▶ Stated here under the same magnitude-stability hypothesis the f32 fold uses: a block whose
-    activations stay within `A` (which is what BN buys, and what the a-posteriori probe checks). -/
-theorem floatClose_r50_stages_mixed {m : Nat} {A : ℝ}
-    {blk blkF : Vec m → Vec m} {Lm : ℝ → ℝ} (hblk : FloatClose A A blk blkF Lm) :
-    FloatClose A A (blk^[3]) (blkF^[3]) (Lm^[3]) ∧
-    FloatClose A A (blk^[4]) (blkF^[4]) (Lm^[4]) ∧
-    FloatClose A A (blk^[6]) (blkF^[6]) (Lm^[6]) ∧
-    FloatClose A A (blk^[3]) (blkF^[3]) (Lm^[3]) :=
-  floatClose_r34_stages hblk
 
 end Proofs
