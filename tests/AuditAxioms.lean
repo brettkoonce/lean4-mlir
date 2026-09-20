@@ -209,6 +209,13 @@ open Proofs
 #print axioms dense_bias_grad_correct
 #print axioms relu_has_vjp_correct
 #print axioms mlp_has_vjp_correct
+-- ⚠ The POINTWISE (HasVJPAt) variants, added 2026-09-20. They were in the comparator suite
+-- (tests/comparator/config-arch.json) from the start but not here, so their axiom closure was
+-- only ever checked by the slow path-filtered workflow and not by the per-push sweep — and
+-- they are the three the book singles out as the ones whose `.correct` field is a real proof
+-- rather than `rfl`, i.e. exactly where the kink escape is closed.
+#print axioms relu_has_vjp_at_correct
+#print axioms mlp_has_vjp_at_correct
 
 -- Nonzero-Jacobian seal (JacobianSeal.lean, planning/archive/whole_network_backward.md Item B)
 #print axioms sum_smul_basisVec
@@ -222,6 +229,7 @@ open Proofs
 
 -- CNN
 #print axioms maxPool2_has_vjp3_correct
+#print axioms maxPool2_has_vjp_at3_correct   -- pointwise variant; see the note above
 #print axioms conv2d_has_vjp3
 #print axioms conv2d_has_vjp3_correct
 

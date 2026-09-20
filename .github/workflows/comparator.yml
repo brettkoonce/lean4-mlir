@@ -6,9 +6,15 @@ name: Comparator (independent kernel re-check)
 # of every theorem against [propext, Quot.sound, Classical.choice].
 #
 # This is the deep, slow backstop for the zero-project-axioms claim.
-# The fast per-push gate stays `proofs.yml` (which runs
-# tests/AuditAxioms.lean). Keep this check NON-REQUIRED until it has gone
-# green a few times on the runner — see "Known risk" below.
+# The fast per-push gate stays `proofs.yml` (which runs tests/AuditAxioms.lean).
+#
+# ⭐ PROMOTION NOTE (2026-09-20). The header used to say "keep this NON-REQUIRED until it
+# has gone green a few times on the runner". It has: 100 runs from 2026-08-13 to
+# 2026-09-20 are 94 success / 2 cancelled / 4 failure, the last failure was 2026-08-30 and
+# it failed in `lake build Certs` rather than in comparator, and the current streak of 10
+# spans both the Lean 4.34 bump and the ~24.7k-line Mathlib-reuse refactor. Comparator
+# itself has never reported a kernel or axiom-closure failure here. It is fit to be a
+# required check; flip it in branch protection, which is a GitHub setting, not a file.
 #
 # Known risk: comparator sandboxes via Landlock ABI v5, which needs
 # Linux kernel >= 6.10. GitHub's `ubuntu-24.04` image currently ships a
@@ -38,6 +44,10 @@ on:
       - 'LeanMlir/Proofs/**'
       - 'tests/comparator/**'
       - '.github/workflows/comparator.yml'
+      # Both are inputs to the `--check` step: the generator writes the tier pair, and the
+      # yaml is the list that step requires every comparator config to cover.
+      - 'scripts/gen_comparator_tier.py'
+      - 'formalization.yaml'
       - 'lakefile.lean'
       - 'lean-toolchain'
       - 'lake-manifest.json'
@@ -46,6 +56,10 @@ on:
       - 'LeanMlir/Proofs/**'
       - 'tests/comparator/**'
       - '.github/workflows/comparator.yml'
+      # Both are inputs to the `--check` step: the generator writes the tier pair, and the
+      # yaml is the list that step requires every comparator config to cover.
+      - 'scripts/gen_comparator_tier.py'
+      - 'formalization.yaml'
       - 'lakefile.lean'
       - 'lean-toolchain'
       - 'lake-manifest.json'
@@ -59,12 +73,13 @@ concurrency:
 jobs:
   comparator:
     runs-on: ubuntu-24.04        # Landlock ABI v5 -> kernel >= 6.10
-    # 90, not 45: a COLD Certs build is ~42 min (`Build proof suite`) + ~11 min
-    # of run.sh — the old 45-min cap killed the one-time cold bootstrap before it
-    # could save the `lake-certs-` cache (run #219). Cold only happens on the
-    # first run of a new Mathlib/manifest hash; warm runs are ~6 min. certs.yml
-    # already uses 180 here, which is why it survived the same cold build.
-    timeout-minutes: 90
+    # 120, not 90: a COLD Certs build is ~42 min (`Build proof suite`) + ~11 min of
+    # run.sh, and 2026-09-20 added the 21-theorem tier pair — a third comparator pass,
+    # ~2,750 more lines of generated Lean to build, and the ~2-min generator drift check.
+    # The old 45-min cap killed the one-time cold bootstrap before it could save the
+    # `lake-certs-` cache (run #219). Cold only happens on the first run of a new
+    # Mathlib/manifest hash; warm runs were ~6 min before the tier. certs.yml uses 180.
+    timeout-minutes: 120
     env:
       LEAN4EXPORT_REF: 076e8e57707e813375e8f9da8bf989799ace9680  # tag v4.34.0
       COMPARATOR_REF:  3afea238d63125383110f8b59acaf11d7788c3e1
@@ -187,7 +202,16 @@ jobs:
           ln -sf ~/comparator/.lake/build/bin/comparator  "$HOME/.local/bin/comparator"
           command -v landrun lean4export comparator
 
-      - name: Run comparator (13 Mathlib-only + 39 architecture, kernel + axiom-closure re-check)
+      - name: Comparator tier files match their generator
+        # tests/comparator/{Challenge,Solution}Tier.lean are PRINTED from the project
+        # declarations' own types (scripts/gen_comparator_tier.py). A hand-edit, or a
+        # statement change upstream, makes them stale — comparator would catch the
+        # challenge/solution mismatch, but not a pair that drifted together away from the
+        # project. This asks the sharper question: do these files still say what the
+        # declarations say? It re-prints the 21 types and diffs, ~2 min, no sandbox.
+        run: python3 scripts/gen_comparator_tier.py --check
+
+      - name: Run comparator (13 Mathlib-only + 39 architecture + 21 tier, kernel + axiom-closure re-check)
         run: |
           cd tests/comparator
           ./run.sh

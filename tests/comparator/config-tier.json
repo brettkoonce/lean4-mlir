@@ -1,0 +1,33 @@
+{
+    "challenge_module": "ChallengeTier",
+    "solution_module": "SolutionTier",
+    "theorem_names": [
+        "chk_bn_input_grad_correct",
+        "chk_resnet50ForwardB_full_has_vjp_at_correct",
+        "chk_vitTiny_has_vjp_correct",
+        "chk_mnv4FwdGraphB_full_faithful",
+        "chk_mnv2Live_forward_nonconstant",
+        "chk_convStridedWGradB_den",
+        "chk_smoothedCE_grad",
+        "chk_r50_net_tiedB",
+        "chk_vit_net_tied_certified",
+        "chk_cnx_net_tiedGB",
+        "chk_dpMeanGrad_ne_globalBatchGrad",
+        "chk_adamW_at_allReduceMeanF",
+        "chk_r34InputGradB_eq_r34B_full_vjp",
+        "chk_efficientnetInputGradB_full_correct",
+        "chk_convnextImagenetInputGradB_eq_vjp",
+        "chk_linear_e4m3_argmax_preserved",
+        "chk_trained_linear_sgd_strictly_descends",
+        "chk_lipschitz_margin_certified_radius",
+        "chk_scorecard_sdp",
+        "chk_smoothing_certified_radius_classifier",
+        "chk_shampoo_eq_muon"
+    ],
+    "permitted_axioms": [
+        "propext",
+        "Quot.sound",
+        "Classical.choice"
+    ],
+    "enable_nanoda": false
+}

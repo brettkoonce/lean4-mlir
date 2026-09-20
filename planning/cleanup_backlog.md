@@ -434,3 +434,66 @@ table makes it fail with that name and line. Gates: `lake build Apps` clean (339
 `blueprint-checkdecls` clean, `check_audit_coverage` 179/220, `check_render_coverage` 240 files
 / 226 diffed, `git diff verified_mlir/` empty. `lake build Certs` NOT run (hours); the only
 library module importing `VerifiedNets` is `SpecVJP`, which was rebuilt.
+
+## 13. The comparator: audit, the cheap fixes, and the tier extension
+
+**DONE 2026-09-20.** Asked after §12: what is the comparator actually testing? Answer, before
+this session: 13 + 39 = 52 theorems in two challenge/solution pairs, every config name present
+in both its files and no theorem sitting in a file unchecked, all 52 delegation targets still
+live in `LeanMlir/` (nothing rotted through the Mathlib audit or the census cuts). ⭐ The
+mechanism is stronger than the README said: 51 of the 52 delegate BY TERM to the project lemma,
+and `Solution.lean` imports `Proofs.Foundation.Tensor`, so its inlined `pdiv`/`Vec`/`Mat` copies
+must be DEFINITIONALLY EQUAL to the project's or the delegation does not elaborate. The README
+justified the copy with "comparator compares the statements bit-identically"; true, but that is
+the weaker half of what is happening.
+
+**The coverage shape was the finding.** Of the 25 declarations `formalization.yaml` advertises
+as its audited set, **4** were comparator-checked. Zero entries for codegen faithfulness, step
+ties, batched/DP twins, float bridges or certificates — and zero for ResNet-34, ResNet-50 and
+MobileNetV4, three of the book's seven nets, while both the README and the book used "ResNet-34's
+rendered backward equals its Fréchet derivative" as the motivating example for `ChallengeArch`.
+Nothing was overclaimed (the book already said the coverage was "illustrative rather than
+exhaustive"), but the 52 were picked around 2026-08-03 and the repo's centre of gravity had moved
+to the tie / faithfulness tier since.
+
+**The extension: a third pair, 52 → 73.** `ChallengeTier.lean` / `SolutionTier.lean` +
+`config-tier.json` carry the other 21 yaml rows, so the three configs now cover the advertised
+set exactly. A third pair rather than an append: it keeps a green gate untouched, isolates the
+heavier import cone, and makes the coverage story legible.
+
+⭐⭐ **They are GENERATED (`scripts/gen_comparator_tier.py`), and that is not laziness.** These
+statements run to hundreds of lines each (`cnx_net_tiedGB` 186, ViT tie 158, B0 back-chain 136),
+and comparator needs the challenge and solution byte-identical. Both files are printed from one
+string per theorem, taken from `#check @<decl>`, so the statement IS the declaration's type and
+the proof is the bare constant. ⚠⚠ **Default `#check` output does not re-elaborate** — measured
+over these 21: bare pp fails on 10 (elided proof args, un-inferable implicits), `pp.analyze` → 9,
+`+pp.proofs` → 3, `+pp.maxSteps/pp.deepTerms` (the `⋯` elision) → 1. The survivor is the ViT step
+tie, whose `vitBlockCotInAtMHV` applications drop dimension implicits nothing downstream pins; it
+needs `pp.explicit`, 422 lines instead of 158. The generator verifies by elaborating the solution
+in the PARENT package (every olean already built, seconds) rather than the nested comparator
+package — the comparator run itself needs Landlock ≥ kernel 6.10 and only happens in CI, which is
+also why none of this could be run end-to-end on this box (6.8.0).
+
+**The cheap fixes, all of them findings in their own right:**
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | `relu_has_vjp_at_correct`, `mlp_has_vjp_at_correct`, `maxPool2_has_vjp_at3_correct` were in the comparator set but NOT in `tests/AuditAxioms.lean` — checked only by the slow, path-filtered, non-required workflow, and they are exactly the three the book singles out as the pointwise variants whose `.correct` is a real proof | added; 1,377 → 1,380 prints, all three 3-axiom clean |
+| 2 | `comparator_config:` was `""` on all 25 yaml rows — schema present, information zero, while four WERE checked | every row names its config, and `--check` now fails if a row stops resolving |
+| 3 | Three yaml `declaration:` strings do not resolve as written (`Mnv2Live.…`, `efficientnetInputGradB_full_correct`, `FloatModel.…` are relative to an implicit `open Proofs`) | fully qualified |
+| 4 | `tool_setup` claimed the nanoda kernel; `notes` correctly disclosed it is disabled, and both configs say `enable_nanoda: false` | `tool_setup` now matches the configs |
+| 5 | The README's bucket table listed 46 of the 52; "the last three `_at_correct`" was true when the list ended there and there are seven now; "the five whole-network VJPs" was six | table regenerated to exactly 73, checked name-for-name against all three configs |
+| 6 | The workflow header said "keep NON-REQUIRED until it has gone green a few times" | 100 runs 2026-08-13 → 2026-09-20: 94 success / 2 cancelled / 4 failure, last failure 2026-08-30 and it failed in `lake build Certs`, not in comparator; streak of 10 spans the 4.34 bump and the ~24.7k-line refactor. Header records the promotion; ⚠ flipping it is a GitHub branch-protection setting, not a file |
+
+Also: `comparator.yml` gained the `--check` step and `scripts/gen_comparator_tier.py` +
+`formalization.yaml` in its path filter (both are inputs to that step), and its timeout went
+90 → 120 for the third pass. ⚠ Accepted trade, unchanged and still disclosed: `run.sh` widens
+the Landlock sandbox with `--rox /usr` because comparator permits only `/usr/bin/git` and `lake`
+needs broader exec lookup.
+
+Gates: generator `--check` green (statements + the yaml↔config invariant, negative-tested both
+ways), `AuditAxioms` 1,379 verdicts / 0 non-core axioms, `check_audit_coverage` 179/220,
+`check_render_coverage` 240/226, `docstring-checkrefs` 2,202 citations / 477 files,
+`blueprint-checkdecls` clean, `check_target_names` 90/52, `lake build Proofs` 2403,
+`verified_mlir/` untouched, and the book builds under xelatex with no new overfull box.
+⛔ The comparator run itself is unverified locally and cannot be: kernel 6.8.0 < 6.10.

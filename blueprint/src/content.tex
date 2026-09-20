@@ -15349,7 +15349,7 @@ else, and Appendix~\ref{app:verification} is the accounting.
 \texttt{\#print axioms} and \texttt{lake build} both run through Lean's
 elaborator, so they share a trust path with whatever the elaborator did.
 \texttt{tests/comparator/} re-runs Lean's kernel typechecker independently over
-52 theorems, sandboxed, verifying each one's axiom closure statically:
+73 theorems, sandboxed, verifying each one's axiom closure statically:
 
 \begin{verbatim}
 tests/comparator/run.sh
@@ -15367,12 +15367,23 @@ architecture would not be: comparator compares the challenge and solution
 statements bit-identically, so a copy that drifted would fail the run rather
 than quietly prove something weaker.
 
-The other 39 live in \texttt{ChallengeArch.lean} and do import the project,
+Thirty-nine more live in \texttt{ChallengeArch.lean} and do import the project,
 because each is a statement about a specific network, and ``ResNet-34's
 rendered backward equals its Fréchet derivative'' cannot be phrased without
 ResNet-34 in scope. Once the \texttt{fderiv} pin and the structural rules are
 checked over Mathlib alone, the architecture theorems are applications of them,
 and what you must additionally trust is the forward functions and nothing else.
+
+The last 21 are \texttt{ChallengeTier.lean}, and they are the layer this book's
+second half rests on: the step ties, the codegen faithfulness results, the
+whole-net back-chains, the data-parallel results, the float bridge and the three
+certificate theorems. They are machine-generated from each declaration's own type
+(\texttt{scripts/gen\_comparator\_tier.py}) because the statements run to
+hundreds of lines apiece --- \texttt{cnx\_net\_tiedGB} alone is 186 --- and a
+pair of files that must stay bit-identical is not a thing to transcribe by hand.
+They are exactly the declarations \texttt{formalization.yaml} advertises,
+so the set is auditable by diffing two lists rather than by trusting this
+paragraph.
 
 \section*{Track 2: Native install (XLA/PJRT)}
 
@@ -15860,13 +15871,14 @@ and the empirical layer are for.
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
 the Lean community's trustworthy-judge tool for projects that claim
-zero project axioms. It runs 52 theorems (the foundation rules,
+zero project axioms. It runs 73 theorems (the foundation rules,
 every chapter's headline Jacobian, the public
-\texttt{*\_has\_vjp\_correct} wrappers, and three smooth-point
+\texttt{*\_has\_vjp\_correct} wrappers, three smooth-point
 pointwise variants (\texttt{relu\_has\_vjp\_at\_correct},
 \texttt{mlp\_has\_vjp\_at\_correct},
 \texttt{maxPool2\_has\_vjp\_at3\_correct}) whose underlying
-\texttt{.correct} field is a real proof rather than \texttt{rfl})
+\texttt{.correct} field is a real proof rather than \texttt{rfl},
+and the 21-theorem tie / faithfulness / certificate tier)
 through Lean's kernel typechecker independently of the elaborator,
 with an axiom-allowlist of exactly \(\{\texttt{propext},
 \texttt{Quot.sound}, \texttt{Classical.choice}\}\). Any project
@@ -15876,10 +15888,13 @@ the run.
 This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
-The 52-theorem coverage is illustrative rather than exhaustive, since
-the same recipe scales to any subset of the proof suite, and the
-same allowlist applies because every theorem in the project closes
-the same way.
+The 73 are not the whole proof suite --- \texttt{tests/AuditAxioms.lean}
+prints the axiom closure of 1{,}380 declarations on every proof-path
+push, and the same allowlist applies to all of them, because every
+theorem in the project closes the same way. What the 73 add is a
+second, non-elaborator opinion, and since 2026-09-20 they cover every
+declaration \texttt{formalization.yaml} puts forward as a result,
+together with the calculus floor those rest on.
 
 \section{By construction: the code is the math}
 

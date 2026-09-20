@@ -1,6 +1,6 @@
 # Comparator-based independent kernel re-check
 
-This directory holds an end-to-end verification of 52 theorems from the
+This directory holds an end-to-end verification of 73 theorems from the
 proof suite using
 [leanprover/comparator](https://github.com/leanprover/comparator) — the
 trustworthy-judge tool the Lean Zulip community recommended for projects
@@ -14,7 +14,7 @@ landlock, with the option to pile on the
 [nanoda](https://github.com/ammkrn/nanoda_lib) kernel as a second
 opinion.
 
-## Two challenge files, split on whether a network is named
+## Three challenge files
 
 `Challenge.lean` **imports Mathlib and nothing else.** It holds the 13
 architecture-free theorems — chapter 1's `pdiv` calculus rules and chapter 9's
@@ -29,12 +29,29 @@ not be: comparator compares the Challenge and Solution statements
 bit-identically, so a copy that drifted would fail the run rather than quietly
 prove something weaker.
 
-`ChallengeArch.lean` holds the other 39 and **does** import
+`ChallengeArch.lean` holds 39 more and **does** import
 `LeanMlir.Proofs.*`, because each of them is a statement *about a specific
 network* — "ResNet-34's rendered backward equals its Fréchet derivative"
 cannot be phrased without ResNet-34 in scope. Making those Mathlib-only would
 mean a second copy of every architecture, which must then never drift from the
 first; that is a weaker guarantee than an import, not a stronger one.
+
+`ChallengeTier.lean` holds the remaining 21 and is **machine-generated**
+(`scripts/gen_comparator_tier.py`). It is the layer above the Jacobians: the step
+ties, the codegen faithfulness results, the whole-net back-chains, the
+data-parallel results, the float bridge, the descent result and the three
+certificate theorems — and the three nets the other two files never mention
+(ResNet-34, ResNet-50, MobileNetV4). Its statements run to hundreds of lines
+apiece (`cnx_net_tiedGB` alone is 186), so they are printed from each
+declaration's own type rather than transcribed: the challenge and the solution
+carry the same text by construction, and the solution's proof is the bare
+constant.
+
+Its contents are exactly the declarations `formalization.yaml` advertises as the
+audited set, minus the four `config-arch.json` already covered. That is the
+point of it: **every declaration this project puts forward is independently
+kernel-rechecked**, and `scripts/gen_comparator_tier.py --check` fails if a yaml
+row stops naming a config that contains it.
 
 The division is the point: once the `fderiv` pin and the structural rules are
 checked over Mathlib alone, the architecture theorems are applications of
@@ -43,25 +60,31 @@ nothing else.
 
 ## What gets verified
 
-The 52 theorems span foundation rules (incl. `chk_pdiv_is_fderiv`, which pins
-`pdiv` to Mathlib's `fderiv`), every chapter's headline
-Jacobian, the public `*_has_vjp_correct` wrappers, and the five
-whole-network VJPs. The first two buckets are `Challenge.lean`; the rest are
-`ChallengeArch.lean`:
+The 73 theorems span foundation rules (incl. `chk_pdiv_is_fderiv`, which pins
+`pdiv` to Mathlib's `fderiv`), every chapter's headline Jacobian, the public
+`*_has_vjp_correct` wrappers, six whole-network VJPs, and the tie /
+faithfulness / certificate tier. The first two buckets are `Challenge.lean`,
+the next nine `ChallengeArch.lean`, the last `ChallengeTier.lean`:
 
 | Bucket | Theorems |
 |---|---|
-| Foundation calculus rules | `pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_id`, `pdiv_const`, `pdiv_reindex`, `pdiv_finset_sum`, `pdivMat_rowIndep` |
+| Foundation calculus rules | `pdiv_is_fderiv`, `pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_id`, `pdiv_const`, `pdiv_reindex`, `pdiv_finset_sum`, `pdivMat_rowIndep` |
 | Mat-level structural rules | `pdivMat_comp`, `pdivMat_matmul_left_const`, `pdivMat_scalarScale`, `pdivMat_transpose` |
 | Ch 3 MLP | `pdiv_dense`, `pdiv_dense_W`, `pdiv_dense_b`, `dense_weight_grad_correct`, `dense_bias_grad_correct`, `relu_has_vjp_correct`, `mlp_has_vjp_correct`, `relu_has_vjp_at_correct`, `mlp_has_vjp_at_correct` |
-| Ch 4 CNN | `maxPool2_has_vjp3_correct`, `maxPool2_has_vjp_at3_correct` |
+| Ch 4 CNN | `maxPool2_has_vjp3_correct`, `maxPool2_has_vjp_at3_correct`, `conv2d_has_vjp3_correct`, `globalAvgPoolFlat_has_vjp_correct` |
 | Ch 5 BN | `pdiv_bnAffine`, `pdiv_bnCentered`, `pdiv_bnIstdBroadcast`, `pdiv_bnNormalize` (the famous 3-term cancellation) |
 | Ch 6 Residual | `residual_has_vjp_correct`, `residualProj_has_vjp_correct` |
 | Ch 7 Depthwise | `depthwise_has_vjp3_correct` |
 | Ch 8 SE | `seBlock_has_vjp_correct` |
 | Ch 9 LN+GELU | `pdiv_gelu`, `gelu_has_vjp_correct`, `layerNorm_has_vjp_correct` |
 | Ch 10 Attention | `pdiv_softmax`, `softmaxCE_grad`, `sdpa_back_Q/K/V_correct`, `mhsa_has_vjp_mat_correct`, `transformerBlock_has_vjp_mat_correct` |
-| Whole-network VJPs | `vit_full_has_vjp_correct`, `cnn_has_vjp_at_correct`, `mobilenetv2_has_vjp_at_correct`, `convnext_has_vjp_at_correct`, `efficientnet_has_vjp_at_correct` |
+| Whole-network VJPs | `mnistLinear_has_vjp_correct`, `vit_full_has_vjp_correct`, `cnn_has_vjp_at_correct`, `mobilenetv2_has_vjp_at_correct`, `convnext_has_vjp{,_at}_correct`, `efficientnet_has_vjp{,_at}_correct` |
+| **Tier: step ties** | `r50_net_tiedB`, `vit_net_tied_certified`, `cnx_net_tiedGB` |
+| **Tier: codegen faithfulness** | `mnv4FwdGraphB_full_faithful`, `convStridedWGradB_den` |
+| **Tier: whole-net back-chains** | `resnet50ForwardB_full_has_vjp_at_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradB_full_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTiny_has_vjp_correct`, `bn_input_grad_correct`, `smoothedCE_grad`, `mnv2Live_forward_nonconstant` |
+| **Tier: data parallel** | `dpMeanGrad_ne_globalBatchGrad`, `adamW_at_allReduceMeanF` |
+| **Tier: float / descent** | `linear_e4m3_argmax_preserved`, `trained_linear_sgd_strictly_descends` |
+| **Tier: certificates** | `lipschitz_margin_certified_radius`, `scorecard_sdp`, `smoothing_certified_radius_classifier`, `shampoo_eq_muon` |
 
 For each, comparator confirms:
 
@@ -75,11 +98,14 @@ For each, comparator confirms:
 3. The Solution typechecks against Lean's kernel, re-run from the
    compiled `.olean` independently of the elaborator.
 
-The last three entries (`_at_correct`) are pointwise (smooth-input)
-variants whose underlying `.correct` field is a real proof rather than
-`rfl` — closing the kink-rfl-escape at smooth inputs for ReLU, the
-composed MLP, and MaxPool2. See `LeanMlir/Proofs/README.md`'s codegen
-trust boundary section for the math.
+`relu_has_vjp_at_correct`, `mlp_has_vjp_at_correct` and
+`maxPool2_has_vjp_at3_correct` are pointwise (smooth-input) variants whose
+underlying `.correct` field is a real proof rather than `rfl` — closing the
+kink-rfl-escape at smooth inputs for ReLU, the composed MLP, and MaxPool2. See
+`LeanMlir/Proofs/README.md`'s codegen trust boundary section for the math.
+⚠ Those three were checked HERE and nowhere else until 2026-09-20: they were
+missing from `tests/AuditAxioms.lean`, so the per-push axiom sweep never saw
+them. They are in both now.
 
 ## Prerequisites (one-time)
 
@@ -117,8 +143,9 @@ should be after the `ln -sf` lines above if `~/.local/bin` is on PATH).
 ./run.sh
 ```
 
-Expected output (full Mathlib decompress on the first run, ~5 minutes;
-seconds on subsequent runs):
+`run.sh` runs all three configs in order and stops at the first failure
+(`set -e`). Expected output (full Mathlib decompress on the first run,
+~5 minutes; seconds on subsequent runs):
 
 ```
 [1/3] lake update (resolving Mathlib)…
@@ -154,9 +181,13 @@ keeps the audit reproducible until they land.
 ## What's *not* covered
 
 - **The remaining theorems in the proof suite** (downstream compositions,
-  `_diff` smoothness lemmas, `_eq_compose` rewrites). They share the
-  same foundation as the theorems above, so methodologically there's nothing
-  new to discover — just a lot of mechanical signature-extraction.
+  `_diff` smoothness lemmas, `_eq_compose` rewrites, the per-leaf ties beneath
+  each whole-net chain). `tests/AuditAxioms.lean` prints the axiom closure of
+  all 1,380 of them on every proof-path push; this directory re-checks 73 of
+  them with an independent kernel. The gap between those two numbers is
+  deliberate: what the comparator adds is a second, non-elaborator opinion, and
+  a second opinion on the advertised set plus the calculus floor it rests on is
+  the claim being made. It is not a claim that 73 is all that is proved.
 - **`noncomputable def` *witnesses*** themselves like `vit_full_has_vjp`,
   `cnn_has_vjp_at`, `mhsa_layer_has_vjp_mat`, etc. comparator's
   `theorem_names` matches `Lean.ConstantInfo.thm`, not `defn`, so the
