@@ -1526,12 +1526,9 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.marginU82
 #print axioms Proofs.LipschitzCertDemo.certifiedU82
 -- the mechanized aggregate
-#print axioms Proofs.LipschitzCertDemo.cappedCerts_idx
-#print axioms Proofs.LipschitzCertDemo.unconCerts_idx
 #print axioms Proofs.LipschitzCertDemo.cappedCerts_certified
 #print axioms Proofs.LipschitzCertDemo.unconCerts_certified
 #print axioms Proofs.LipschitzCertDemo.scorecard
-#print axioms Proofs.LipschitzCertDemo.scorecard_counts
 
 -- Per-pair LipSDP tightening (LipschitzCertPairSDP.lean + the generated instances)
 #print axioms Proofs.LipschitzCertDemo.relu_slope_restricted
@@ -1560,7 +1557,6 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.real_tie
 #print axioms Proofs.LipschitzCertDemo.certifiedFloat_of_margin
 #print axioms Proofs.LipschitzCertDemo.certifiedC0_float
-#print axioms Proofs.LipschitzCertDemo.float_scorecard_count
 
 -- The kernel-dotZ list engine (ListDot.lean)
 #print axioms Proofs.dotZ_comm

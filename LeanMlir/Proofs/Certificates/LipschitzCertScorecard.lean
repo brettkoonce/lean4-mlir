@@ -622,15 +622,6 @@ theorem certifiedU82 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
 -- certMarginC 98 6 885545287/267386880
 -- certMarginU 82 2 726202319/66846720
 
-/-- Indices (into the fixed first-100 MNIST test subset) certified at
-    ε = 1/10 on the CAPPED net — one `certifiedC<i>` theorem each. -/
-def certifiedCappedIdx : List ℕ :=
-  [0, 3, 5, 10, 13, 14, 17, 25]
-
-/-- Indices certified on the UNCONSTRAINED net (`certifiedU<i>`). -/
-def certifiedUnconIdx : List ℕ :=
-  [82]
-
 /-- `f` is *certified at radius ε* on input `x` with class `i`: every
     perturbation of L2 norm `< ε` leaves `i` the strict argmax. This is the
     (undecidable — it quantifies over real `δ`) per-image certificate that
@@ -649,11 +640,6 @@ noncomputable def cappedCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 
 /-- The unconstrained-net certificate witnesses (`certifiedU<i>`). -/
 noncomputable def unconCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=
   [(82, img82, 2)]
-
-/-- The witness list carries exactly the advertised indices. -/
-theorem cappedCerts_idx : cappedCerts.map Prod.fst = certifiedCappedIdx := rfl
-
-theorem unconCerts_idx : unconCerts.map Prod.fst = certifiedUnconIdx := rfl
 
 /-- **Every capped-net witness is certified** — the aggregate is no longer
     bookkeeping over a bare index list: the proof term is literally the
@@ -682,11 +668,6 @@ theorem scorecard :
     (unconCerts.length = 1 ∧
       ∀ p ∈ unconCerts, CertifiedAt mlpT ((1 : ℝ)/10) p.2.1 p.2.2) :=
   ⟨⟨rfl, cappedCerts_certified⟩, ⟨rfl, unconCerts_certified⟩⟩
-
-/-- Legacy count-only form, kept for reference; superseded by `scorecard`. -/
-theorem scorecard_counts :
-    certifiedCappedIdx.length = 8 ∧ certifiedUnconIdx.length = 1 :=
-  ⟨rfl, rfl⟩
 
 end LipschitzCertDemo
 end Proofs

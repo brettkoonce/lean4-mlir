@@ -33,7 +33,7 @@ in the ENGINE below (`certified_at_eps_close` + `certifiedFloat_of_margin`,
 proved once) — kernel-checking the 57th image buys nothing the 56th didn't. The
 33/34 above is an exact-rational MEASUREMENT; the first 8 surviving images
 (test-set order — an unbiased, reproducible rule) each carry a
-`certifiedC<i>_float` THEOREM, and `float_scorecard_count` states only that.
+`certifiedC<i>_float` THEOREM.
 Each such block re-checks all 49 coordinates by `fin_cases`, which is what this
 file costs on every proof push.
 
@@ -388,16 +388,6 @@ theorem certifiedC25_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 0 :=
   certifiedFloat_of_margin M hMu img25 img25_abs_le marginC25
     (by norm_num) δ hδ y hy
-
-/-- Indices carrying a `certifiedC<i>_float` theorem — the first 8 of the
-    33 float-certified images, one theorem each. -/
-def certifiedFloatIdx : List ℕ := [0, 3, 5, 10, 13, 14, 17, 25]
-
-/-- **The float scorecard** — MEASURED 33 of the 34 ℝ-certified images survive
-    the `2·B` float widening (binary32 forward + input quantization); the 8
-    below are the emitted witnesses carrying theorems, not that measurement.
-    Lower bound only, as before. -/
-theorem float_scorecard_count : certifiedFloatIdx.length = 8 := rfl
 
 end LipschitzCertDemo
 end Proofs

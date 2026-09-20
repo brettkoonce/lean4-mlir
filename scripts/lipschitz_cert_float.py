@@ -136,8 +136,6 @@ theorem certifiedC{k}_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 """)
 
-agg_list = ", ".join(str(k) for k in emitted)
-
 body = f'''import LeanMlir.Proofs.Certificates.LipschitzCertScorecard
 import LeanMlir.Proofs.Float.FloatBridge
 
@@ -173,7 +171,7 @@ in the ENGINE below (`certified_at_eps_close` + `certifiedFloat_of_margin`,
 proved once) — kernel-checking the 57th image buys nothing the 56th didn't. The
 {measured}/34 above is an exact-rational MEASUREMENT; the first {len(emitted)} surviving images
 (test-set order — an unbiased, reproducible rule) each carry a
-`certifiedC<i>_float` THEOREM, and `float_scorecard_count` states only that.
+`certifiedC<i>_float` THEOREM.
 Each such block re-checks all 49 coordinates by `fin_cases`, which is what this
 file costs on every proof push.
 
@@ -401,16 +399,6 @@ theorem certifiedFloat_of_margin (M : FloatModel) (hMu : M.u ≤ u32)
 -- ════════════════════════════════════════════════════════════════
 
 {"".join(img_blocks)}
-/-- Indices carrying a `certifiedC<i>_float` theorem — the first {len(emitted)} of the
-    {measured} float-certified images, one theorem each. -/
-def certifiedFloatIdx : List ℕ := [{agg_list}]
-
-/-- **The float scorecard** — MEASURED {measured} of the 34 ℝ-certified images survive
-    the `2·B` float widening (binary32 forward + input quantization); the {len(emitted)}
-    below are the emitted witnesses carrying theorems, not that measurement.
-    Lower bound only, as before. -/
-theorem float_scorecard_count : certifiedFloatIdx.length = {len(emitted)} := rfl
-
 end LipschitzCertDemo
 end Proofs
 '''
