@@ -32,9 +32,10 @@ the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
 
 ## Padding convention
 
-The strided inverted-residual pieces below read `flatConvStride2Xla` /
-`depthwiseStride2FlatXla`, the XLA-`SAME` (odd) phase every MobileNetV2 artifact emits. The
-2-block generic `mobilenetv2Forward` has a stride-1 stem.
+The strided inverted-residual pieces (per-channel BN, in `MobileNetV2FullVJP.lean` and
+`MobileNetV2BackCertifiedTie.lean`) read `flatConvStride2Xla` / `depthwiseStride2FlatXla`, the
+XLA-`SAME` (odd) phase every MobileNetV2 artifact emits. The 2-block generic `mobilenetv2Forward`
+here has a stride-1 stem.
 
 All new defs/theorems certify to exactly `[propext, Classical.choice,
 Quot.sound]`.
@@ -511,164 +512,14 @@ theorem mobilenetv2_has_vjp_at_correct
       x h_stem h_b1e h_b1d h_b2e h_b2d).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
--- § Strided (downsampling) inverted-residual infrastructure
---
---   The representative `mobilenetv2Forward` above keeps spatial dims
---   constant (SAME convs). The *real* MobileNetV2 render downsamples with
---   a stride-2 depthwise inside the strided blocks (and a stride-2 stem).
---   These mirror the SAME op-level lemmas with `flatConvStride2Xla` /
---   `depthwiseStride2FlatXla` (input spatial `2h×2w`, output `h×w`); the
---   expand/project 1×1s stay SAME (at the input resp. output resolution).
--- ════════════════════════════════════════════════════════════════
-
-/-- **Stride-2 conv → bn → relu6** (the strided stem). Strided mirror of
-    `convBnRelu6_has_vjp_at` with `flatConvStride2Xla`; input spatial halves
-    (`2h×2w → h×w`). -/
-noncomputable def convBnRelu6Strided_has_vjp_at {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε γ β : ℝ) (hε : 0 < ε)
-    (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
-                       bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
-    HasVJPAt (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v :=
-  stage_has_vjp_at (flatConvStride2Xla W b) (bnForward (oc * h * w) ε γ β) (relu6 (oc * h * w)) v
-    (flatConvStride2Xla_differentiable W b) (flatConvStride2Xla_has_vjp W b)
-    (bnForward_differentiable (oc * h * w) ε γ β hε) (bn_has_vjp (oc * h * w) ε γ β hε)
-    (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    (relu6_has_vjp_at (oc * h * w) _ h_smooth)
-
-theorem convBnRelu6Strided_differentiableAt {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
-    (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 0 ∧
-                       bnForward (oc * h * w) ε γ β (flatConvStride2Xla W b v) k ≠ 6)) :
-    DifferentiableAt ℝ
-      (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2Xla W b) v := by
-  fun_prop (disch := assumption)
-
-/-- The strided depthwise stage as a flat map (`Vec (mid*(2h)*(2w)) → Vec (mid*h*w)`). -/
-@[reducible] noncomputable def ivDepthwiseStrided {mid h w kHd kWd : Nat}
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) :
-    Vec (mid * (2 * h) * (2 * w)) → Vec (mid * h * w) :=
-  relu6 (mid * h * w) ∘ bnForward (mid * h * w) εd γd βd ∘ depthwiseStride2FlatXla Wd bd
-
-/-- **Stride-2 depthwise → bn → relu6** (downsampling depthwise stage). Strided
-    mirror of `dwBnRelu6_has_vjp_at` with `depthwiseStride2FlatXla`. -/
-noncomputable def dwBnRelu6Strided_has_vjp_at {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (ε γ β : ℝ) (hε : 0 < ε)
-    (v : Vec (c * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 0 ∧
-                       bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
-    HasVJPAt (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v :=
-  stage_has_vjp_at (depthwiseStride2FlatXla W b) (bnForward (c * h * w) ε γ β) (relu6 (c * h * w)) v
-    (depthwiseStride2FlatXla_differentiable W b) (depthwiseStride2FlatXla_has_vjp W b)
-    (bnForward_differentiable (c * h * w) ε γ β hε) (bn_has_vjp (c * h * w) ε γ β hε)
-    (relu6_differentiableAt_of_smooth (c * h * w) _ h_smooth)
-    (relu6_has_vjp_at (c * h * w) _ h_smooth)
-
-theorem dwBnRelu6Strided_differentiableAt {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε γ β : ℝ) (hε : 0 < ε)
-    (v : Vec (c * (2 * h) * (2 * w)))
-    (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 0 ∧
-                       bnForward (c * h * w) ε γ β (depthwiseStride2FlatXla W b v) k ≠ 6)) :
-    DifferentiableAt ℝ
-      (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseStride2FlatXla W b) v := by
-  fun_prop (disch := assumption)
-
-/-- **Strided inverted-residual body** = `project ∘ depthwiseStrided ∘ expand`.
-    Expand is SAME at the input resolution (`2h×2w`); the stride-2 depthwise
-    halves spatial (`2h×2w → h×w`); project is SAME at the output resolution.
-    Flat `Vec (ic*(2h)*(2w)) → Vec (oc*h*w)`. (No skip: strided blocks change
-    spatial / channels, so MobileNetV2 never wraps them in a residual.) -/
-@[reducible] noncomputable def invresBodyStrided
-    {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ)
-    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp γp βp : ℝ) :
-    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
-  ivProject (h := h) (w := w) Wp bp εp γp βp ∘
-    (ivDepthwiseStrided (h := h) (w := w) Wd bd εd γd βd ∘
-      ivExpand (h := 2 * h) (w := 2 * w) We be εe γe βe)
-
-/-- **Strided inverted-residual body VJP at a smooth point.** Strided mirror of
-    `invresBody_has_vjp_at`: expand SAME (at `2h×2w`) → depthwise-strided → project. -/
-noncomputable def invresBodyStrided_has_vjp_at
-    {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
-    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp γp βp : ℝ) (hεp : 0 < εp)
-    (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_se : ∀ k, (bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 0 ∧
-                   bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 6))
-    (h_sd : ∀ k, (bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2FlatXla Wd bd
-                      (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 0 ∧
-                   bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2FlatXla Wd bd
-                      (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 6)) :
-    HasVJPAt (invresBodyStrided (h := h) (w := w)
-      We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v := by
-  -- expand (SAME at 2h×2w)
-  have hexp_vjp : HasVJPAt (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe) v :=
-    convBnRelu6_has_vjp_at (h := 2*h) (w := 2*w) We be εe γe βe hεe v h_se
-  have hexp_diff : DifferentiableAt ℝ (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe) v :=
-    convBnRelu6_differentiableAt (h := 2*h) (w := 2*w) We be εe γe βe hεe v h_se
-  -- depthwise strided (at the expand output)
-  have hdw_vjp : HasVJPAt (ivDepthwiseStrided (h := h) (w := w) Wd bd εd γd βd)
-      (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v) :=
-    dwBnRelu6Strided_has_vjp_at Wd bd εd γd βd hεd _ h_sd
-  have hdw_diff : DifferentiableAt ℝ (ivDepthwiseStrided (h := h) (w := w) Wd bd εd γd βd)
-      (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v) :=
-    dwBnRelu6Strided_differentiableAt Wd bd εd γd βd hεd _ h_sd
-  -- depthwise ∘ expand
-  have hde_vjp : HasVJPAt
-      (ivDepthwiseStrided (h := h) (w := w) Wd bd εd γd βd ∘
-        ivExpand (h := 2*h) (w := 2*w) We be εe γe βe) v :=
-    vjp_comp_at _ _ v hexp_diff hdw_diff hexp_vjp hdw_vjp
-  have hde_diff : DifferentiableAt ℝ
-      (ivDepthwiseStrided (h := h) (w := w) Wd bd εd γd βd ∘
-        ivExpand (h := 2*h) (w := 2*w) We be εe γe βe) v :=
-    hdw_diff.comp v hexp_diff
-  -- project (everywhere)
-  exact vjp_comp_at _ (ivProject (h := h) (w := w) Wp bp εp γp βp) v
-    hde_diff
-    ((convBn_differentiable Wp bp εp γp βp hεp) _)
-    hde_vjp
-    ((convBn_has_vjp Wp bp εp γp βp hεp).toHasVJPAt _)
-
-theorem invresBodyStrided_differentiableAt
-    {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
-    (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
-    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp γp βp : ℝ) (hεp : 0 < εp)
-    (v : Vec (ic * (2 * h) * (2 * w)))
-    (h_se : ∀ k, (bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 0 ∧
-                   bnForward (mid * (2*h) * (2*w)) εe γe βe (flatConv We be v) k ≠ 6))
-    (h_sd : ∀ k, (bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2FlatXla Wd bd
-                      (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 0 ∧
-                   bnForward (mid * h * w) εd γd βd
-                    (depthwiseStride2FlatXla Wd bd
-                      (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v)) k ≠ 6)) :
-    DifferentiableAt ℝ (invresBodyStrided (h := h) (w := w)
-      We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v := by
-  have hexp_diff : DifferentiableAt ℝ (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe) v :=
-    convBnRelu6_differentiableAt (h := 2*h) (w := 2*w) We be εe γe βe hεe v h_se
-  have hdw_diff : DifferentiableAt ℝ (ivDepthwiseStrided (h := h) (w := w) Wd bd εd γd βd)
-      (ivExpand (h := 2*h) (w := 2*w) We be εe γe βe v) :=
-    dwBnRelu6Strided_differentiableAt Wd bd εd γd βd hεd _ h_sd
-  exact ((convBn_differentiable Wp bp εp γp βp hεp) _).comp v (hdw_diff.comp v hexp_diff)
-
--- ════════════════════════════════════════════════════════════════
 -- § The *live* MobileNetV2 witness
 --
 --   `Mnv2Live` discharges the relu6 off-the-kink bundle of `mobilenetv2_has_vjp_at` on a
 --   NONZERO, non-collapsed net, defeating BN's `√(σ²+ε)` with the `γ=1,β=3, n≤8` window
 --   (`bn13_window`) instead of a constant collapse — AND proves the net is genuinely
 --   non-degenerate (`mnv2Live_forward_nonconstant : forward X ≠ forward 0`, below), so its
---   Jacobian is not identically zero. `bnForward_mean` / `bn1_devSum_scale` /
---   `bnIstd_pos` are the reusable, layout-free core of that seal.
+--   Jacobian is not identically zero. `bnForward_mean` / `bnIstd_pos` are the
+--   reusable, layout-free core of that seal.
 -- ════════════════════════════════════════════════════════════════
 
 /-- A depthwise conv with everywhere-zero kernel and bias maps anything to `0`. -/
@@ -724,20 +575,6 @@ theorem bnForward_mean (n : Nat) (hn : 0 < n) (ε γ β : ℝ) (z : Vec n) :
     rw [Finset.sum_add_distrib, ← Finset.mul_sum, hxhat, mul_zero, zero_add,
       Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
   rw [bnMean, hsum, mul_comm (n : ℝ) β, mul_div_assoc, div_self hn', mul_one]
-
-/-- **BN rescales every deviation by `istd`** (the `γ=1` case). Over *any*
-    index set `S`, the BN-output deviation-sum is the input deviation-sum
-    scaled by the positive `bnIstd`. This is what carries a stem-planted
-    cross-channel asymmetry through the four BN layers undamped. -/
-theorem bn1_devSum_scale (n : Nat) (hn : 0 < n) (ε β : ℝ) (z : Vec n)
-    (S : Finset (Fin n)) :
-    ∑ k ∈ S, (bnForward n ε 1 β z k - bnMean n (bnForward n ε 1 β z))
-      = bnIstd n z ε * ∑ k ∈ S, (z k - bnMean n z) := by
-  rw [bnForward_mean n hn ε 1 β z, Finset.mul_sum]
-  apply Finset.sum_congr rfl
-  intro k _
-  simp only [bnForward, bnXhat, one_mul]
-  ring
 
 /-- `bnIstd` is strictly positive (so the rescaling above never kills the sign) —
     `Proofs.bnIstd_pos` with the length first and the input last. -/
@@ -877,16 +714,6 @@ theorem invresBody₁_const (y : Vec (2 * 2 * 2)) :
     flatConv_eq_zero Wp₁ bp₁ (fun _ _ _ _ => rfl) (fun _ => rfl),
     depthwiseFlat_eq_zero Wd₁ bd₁ (fun _ _ _ => rfl) (fun _ => rfl),
     bn8_const, relu6_const3]
-
-/-- Block-2 (identity convs) reduces to three genuine BN layers. -/
-theorem invresBody₂_eq (y : Vec (2 * 2 * 2)) :
-    invresBody (h := 2) (w := 2) We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 y
-      = bnForward (2*2*2) 1 1 3 (bnForward (2*2*2) 1 1 3 (bnForward (2*2*2) 1 1 3 y)) := by
-  simp only [invresBody, ivProject, ivDepthwise, ivExpand, Function.comp_apply,
-    flatConv_id2 We₂ be₂ (fun _ _ => rfl) (fun _ => rfl),
-    flatConv_id2 Wp₂ bp₂ (fun _ _ => rfl) (fun _ => rfl),
-    depthwiseFlat_id1 Wd₂ bd₂ (fun _ => rfl) (fun _ => rfl),
-    relu6_bn8]
 
 /-- GAP of a constant vector is that constant. -/
 theorem gap_const (c : ℝ) : globalAvgPoolFlat 2 2 2 (fun _ => c) = (fun _ => c) := by

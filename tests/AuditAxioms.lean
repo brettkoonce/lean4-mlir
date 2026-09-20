@@ -296,6 +296,7 @@ open Proofs
 #print axioms convnext_has_vjp
 #print axioms convnext_has_vjp_correct
 #print axioms sigmoid_has_vjp
+#print axioms sigmoid_has_vjp_correct
 #print axioms efficientnet_has_vjp_at_correct
 -- EfficientNet promoted to an UNCONDITIONAL global VJP (all-smooth ops)
 #print axioms efficientnet_has_vjp

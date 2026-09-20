@@ -119,16 +119,6 @@ theorem fwdFull_eq_add (v : Vec (1 * 2 * 2)) : fwdFull v = (fun j => fwd v j + 4
   rw [ivId_chain_eq 15, gap_add_const, dense_Wh_apply, dense_Wh_apply]
   norm_num
 
-/-- **The full-depth net is differentiable everywhere** (`fwd = fwdCF` is, and a
-    constant shift preserves it). -/
-theorem fwdFull_differentiable : Differentiable ℝ fwdFull := by
-  have heq : fwdFull = (fun v => fwdCF v + (fun _ => (45 : ℝ))) := by
-    funext v j
-    rw [fwdFull_eq_add, fwd_eq_fwdCF]
-    simp only [Pi.add_apply]
-  rw [heq]
-  exact fwdCF_differentiable.add_const _
-
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net VJP, genuinely composed through all 17 blocks
 -- ════════════════════════════════════════════════════════════════

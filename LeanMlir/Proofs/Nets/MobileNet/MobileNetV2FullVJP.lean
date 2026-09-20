@@ -26,9 +26,8 @@ open scoped BigOperators
 -- § The per-channel strided stem stage
 -- ════════════════════════════════════════════════════════════════
 
-/-- Strided stem stage VJP, per-channel BN: `relu6 ∘ bnPC ∘ flatConvStride2Xla`. The per-channel
-    twin of `MobileNetV2.lean`'s `convBnRelu6Strided_has_vjp_at`, in the `bnPerChannelTensor3`
-    vocabulary the paper-spec net renders. -/
+/-- Strided stem stage VJP, per-channel BN: `relu6 ∘ bnPC ∘ flatConvStride2Xla`, in the
+    `bnPerChannelTensor3` vocabulary the paper-spec net renders. -/
 noncomputable def convBnRelu6StridedPC_has_vjp_at {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * (2 * h) * (2 * w)))

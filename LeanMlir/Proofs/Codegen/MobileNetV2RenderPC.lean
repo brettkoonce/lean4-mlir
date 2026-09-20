@@ -16,7 +16,7 @@ open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-channel inverted-residual stage abbreviations
---   (per-channel-BN mirrors of ivExpand / ivDepthwise / ivDepthwiseStrided / ivProject)
+--   (per-channel-BN mirrors of ivExpand / ivDepthwise / ivProject)
 -- ════════════════════════════════════════════════════════════════
 
 /-- Expand stage, per-channel BN: `relu6 ∘ bnPC ∘ conv(1×1)`. -/

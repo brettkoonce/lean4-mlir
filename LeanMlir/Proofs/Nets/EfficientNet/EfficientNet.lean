@@ -27,8 +27,6 @@ own composed VJP — plus its differentiability.
 * `mbconvBody` / `mbconvBody_has_vjp` — one MBConv block body
   `project(1×1 conv-bn) ∘ SE ∘ depthwise(bn-swish) ∘ expand(1×1 conv-bn-swish)`,
   smooth everywhere (global `HasVJP`).
-* `mbconvResidual_has_vjp_at` — the stride-1, `cin = cout` block wrapped in
-  the identity residual skip.
 * `efficientnet_has_vjp_at` / `_correct` — a representative end-to-end
   EfficientNet (stem → MBConv-with-SE-and-residual → MBConv-with-SE →
   globalAvgPool → dense head), built by `vjp_comp_at`, exposing the
@@ -58,12 +56,6 @@ noncomputable def sigmoidScalarDeriv (x : ℝ) : ℝ :=
 /-- `sigmoidScalar` is Mathlib's logistic function `Real.sigmoid`. -/
 theorem sigmoidScalar_eq_sigmoid : sigmoidScalar = Real.sigmoid := by
   funext x; simp [sigmoidScalar, Real.sigmoid]
-
-/-- **Closed form of `sigmoidScalarDeriv`**: `σ(x)·(1 − σ(x))` (`Real.deriv_sigmoid`) — the
-    formula the `sigmoidBack` StableHLO emitter renders. -/
-theorem sigmoidScalarDeriv_eq (x : ℝ) :
-    sigmoidScalarDeriv x = sigmoidScalar x * (1 - sigmoidScalar x) := by
-  simp [sigmoidScalarDeriv, sigmoidScalar_eq_sigmoid, Real.deriv_sigmoid]
 
 @[fun_prop]
 lemma sigmoidScalar_diff : Differentiable ℝ sigmoidScalar := by
@@ -340,19 +332,6 @@ noncomputable def mbconvResidual_has_vjp {c cmid h w kHe kWe kHd kWd kHp kWp r :
   residual_has_vjp _
     (mbconvBody_differentiable We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
     (mbconvBody_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
-
-/-- **Residual MBConv VJP at a point** — the global witness restricted to a
-    point. Kept for downstream `_at` consumers. -/
-noncomputable def mbconvResidual_has_vjp_at {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
-    (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
-    (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ) (hεd : 0 < εd)
-    (Ws₁ : Mat cmid r) (bs₁ : Vec r) (Ws₂ : Mat r cmid) (bs₂ : Vec cmid)
-    (Wp : Kernel4 c cmid kHp kWp) (bp : Vec c) (εp γp βp : ℝ) (hεp : 0 < εp)
-    (x : Vec (c * h * w)) :
-    HasVJPAt (residual (mbconvBody (h := h) (w := w)
-        We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp)) x :=
-  (mbconvResidual_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd
-    Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp).toHasVJPAt x
 
 theorem mbconvResidual_differentiable {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
     (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)

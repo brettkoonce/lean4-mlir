@@ -173,7 +173,7 @@ theorem Real.hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^
 
     This is exactly the closed form the verified `geluBack` StableHLO emitter
     renders — so the emitted backward text is certified equal to `deriv geluScalar`
-    (`swishScalarDeriv_eq` / `sigmoidScalarDeriv_eq` do the same for swish and sigmoid).
+    (`swishScalarDeriv_eq` does the same for swish).
     Proof: assemble `HasDerivAt` for the polynomial inner, `tanh` via
     `Real.hasDerivAt_tanh`, and the outer product, then `HasDerivAt.deriv`. -/
 theorem geluScalarDeriv_eq (x : ℝ) :

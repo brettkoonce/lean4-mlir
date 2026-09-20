@@ -91,10 +91,6 @@ noncomputable def fwdR_has_vjp_at (v : Vec (1 * 112 * 112)) : HasVJPAt fwdR v :=
     (fun k => winR_ne _ k) (fun k => winR_ne _ k) (fun k => winR_ne _ k)
     (fun k => winR_ne _ k) (fun k => winR_ne _ k)
 
-theorem fwdR_has_vjp_correct (v : Vec (1 * 112 * 112)) (dy : Vec 2) (i : Fin (1 * 112 * 112)) :
-    (fwdR_has_vjp_at v).backward dy i = ∑ j : Fin 2, pdiv fwdR v i j * dy j :=
-  (fwdR_has_vjp_at v).correct dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § Generic (dim-free) block reductions at γ = 1/128
 -- ════════════════════════════════════════════════════════════════

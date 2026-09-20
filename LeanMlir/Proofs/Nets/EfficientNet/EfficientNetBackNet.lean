@@ -5,8 +5,8 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
 `planning/archive/mnv4_verified.md` §8e swept the repo for **certified batched forwards with no
 BACKWARD graph**. Four were EfficientNet's; two turned out to be naming artifacts and two were
-genuine (the table below). This file states the four EfficientNet stages as `CertLayer`s and closes
-the two genuine holes against the named forwards: `mbNoExpBackBatchedGraph_faithful` (MBConv1,
+genuine (the table below). This file closes the two
+genuine holes against the named forwards: `mbNoExpBackBatchedGraph_faithful` (MBConv1,
 `projB ∘ seB ∘ dwbsB` — no expand stage, so nothing had composed it) and
 `headBackBatchedGraph_faithful` (`dense ∘ GAP ∘ cbsB`).
 
@@ -18,56 +18,6 @@ relu kinks force `_at`.
 -/
 
 namespace Proofs.StableHLO
-
--- ════════════════════════════════════════════════════════════════
--- § The EfficientNet stages, as CertLayers (all global)
--- ════════════════════════════════════════════════════════════════
-
-/-- Batched **conv → bn → swish** (`cbsB`) as a `CertLayer`. -/
-noncomputable def enetCbsLayer (N : Nat) {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    CertLayer (N * (ic * h * w)) (N * (oc * h * w)) where
-  fwd := cbsB N (h := h) (w := w) W b ε γ β
-  ok := fun _ => True
-  diff := fun x _ => (cbsB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (cbsB_has_vjp N W b ε hε γ β).toHasVJPAt x
-  graph := fun x e => cbsBackBatchedGraph W b ε γ β x e
-  faithful := fun x _ e => cbsBackBatchedGraph_faithful W b ε hε γ β x e
-
-/-- Batched **depthwise → bn → swish** (`dwbsB`) as a `CertLayer`. -/
-noncomputable def enetDwbsLayer (N : Nat) {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) where
-  fwd := dwbsB N (h := h) (w := w) W b ε γ β
-  ok := fun _ => True
-  diff := fun x _ => (dwbsB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (dwbsB_has_vjp N W b ε hε γ β).toHasVJPAt x
-  graph := fun x e => dwbsBackBatchedGraph W b ε γ β x e
-  faithful := fun x _ e => dwbsBackBatchedGraph_faithful W b ε hε γ β x e
-
-/-- Batched **STRIDE-2 depthwise → bn → swish** (`dwbsSB`) as a `CertLayer`. -/
-noncomputable def enetDwbsSLayer (N : Nat) {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    CertLayer (N * (c * (2 * h) * (2 * w))) (N * (c * h * w)) where
-  fwd := dwbsSB N (h := h) (w := w) W b ε γ β
-  ok := fun _ => True
-  diff := fun x _ => (dwbsSB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (dwbsSB_has_vjp N W b ε hε γ β).toHasVJPAt x
-  graph := fun x e => dwbsSBackBatchedGraph W b ε γ β x e
-  faithful := fun x _ e => dwbsSBackBatchedGraph_faithful W b ε hε γ β x e
-
-/-- The batched **squeeze-and-excitation** gate (`seB`) as a `CertLayer`. ⭐ Its backward token
-    `.seBackBatched` ties `seB_has_vjp` by `rfl` — the multiplicative fan-in is definitional. -/
-noncomputable def enetSeLayer (N : Nat) {c h w r : Nat}
-    (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) where
-  fwd := seB N (h := h) (w := w) W₁ b₁ W₂ b₂
-  ok := fun _ => True
-  diff := fun x _ => (seB_differentiable N (h := h) (w := w) W₁ b₁ W₂ b₂) x
-  vjp := fun x _ => (seB_has_vjp N (h := h) (w := w) W₁ b₁ W₂ b₂).toHasVJPAt x
-  graph := fun x e =>
-    .seBackBatched (N := N) "%seW1" "%seb1" "%seW2" "%seb2" "%seX" W₁ b₁ W₂ b₂ x e
-  faithful := fun _ _ _ => rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ CLOSING §8e's HOLES AGAINST THE *NAMED* FORWARDS

@@ -224,57 +224,9 @@ noncomputable def mnv4UibBody (N : Nat) {ic mid oc h w : Nat}
     CertLayer (N * (ic * h * w)) (N * (oc * h * w)) :=
   preDW.comp (expand.comp (postDW.comp project))
 
-/-- ⭐ **The UIB block with its identity skip** — the 18 of Conv-M's 21 blocks that have `ic = oc` at
-    stride 1. `CertLayer.residual` of the body; the remaining 3 are stride-2 and skipless. -/
-noncomputable def mnv4UibSkipBlock (N : Nat) {c mid h w : Nat}
-    (preDW : CertLayer (N * (c * h * w)) (N * (c * h * w)))
-    (expand : CertLayer (N * (c * h * w)) (N * (mid * h * w)))
-    (postDW : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (c * h * w))) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
-  CertLayer.residual (mnv4UibBody N preDW expand postDW project)
-
-/-- **The four families, as four applications.** Type-level check that each of MNv4's block forms
-    is this one body with `id'` in the empty depthwise slots — the collapse §8 asked about, made
-    concrete. `ExtraDW` is the general case and needs no wrapper. -/
-noncomputable def mnv4FamilyIB (N : Nat) {c mid h w : Nat}
-    (expand : CertLayer (N * (c * h * w)) (N * (mid * h * w)))
-    (postDW : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (c * h * w))) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
-  mnv4UibSkipBlock N (CertLayer.id' _) expand postDW project
-
-noncomputable def mnv4FamilyConvNeXt (N : Nat) {c mid h w : Nat}
-    (preDW : CertLayer (N * (c * h * w)) (N * (c * h * w)))
-    (expand : CertLayer (N * (c * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (c * h * w))) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
-  mnv4UibSkipBlock N preDW expand (CertLayer.id' _) project
-
-noncomputable def mnv4FamilyFFN (N : Nat) {c mid h w : Nat}
-    (expand : CertLayer (N * (c * h * w)) (N * (mid * h * w)))
-    (project : CertLayer (N * (mid * h * w)) (N * (c * h * w))) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
-  mnv4UibSkipBlock N (CertLayer.id' _) expand (CertLayer.id' _) project
-
-/-- **MNv4's stride-1 trunk section at 14×14, as a type-level check on the block table.** Conv-M's
-    blocks 4–10 all sit at `160 → 160`, `h = 14`; chaining them is one `CertLayer.chain` and its
-    faithfulness is `chain_faithful`. This fills `mnv4BlockLadder`'s `mid14` slot.
-
-    ⚠⚠ **REWRITTEN FOR CONV-M (2026-09-07).** This read `[extraDW, extraDW, convNeXt, ib,
-    convNeXt, ffn, extraDW]` — Conv-**S**'s order, and it named an `ib` block, of which Conv-M has
-    **none**. The `#guard`s below it were rewritten for Conv-M in 2026-08-14 and this docstring was
-    not, so the file asserted one table in prose and a different one in checks. A `#guard` in the
-    dispatch section below now derives this argument order from `mnv4Blocks`, so the two cannot
-    part again. Conv-M's order is ExtraDW ×4 (blocks 4–7), ConvNeXt (8), FFN (9), ConvNeXt (10). -/
-noncomputable def mnv4Stage14 (N : Nat) {c _mid : Nat}
-    (extraDW convNeXt ffn : CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14))) :
-    CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14)) :=
-  CertLayer.chain [extraDW, extraDW, extraDW, extraDW, convNeXt, ffn, convNeXt]
-
 -- ⭐ The prose above is CHECKED, but not here: `UibSpec.family` is defined further down (it needs
 -- the `UibFamily` inductive), so the guard sits with the other table guards in the dispatch
--- section — grep `mnv4Stage14`'s argument order there.
+-- section (the family order of the `h = 14` stride-1 rows).
 
 -- ════════════════════════════════════════════════════════════════
 -- § THE STRIDE-2 BLOCKS — and why `id'` CANNOT collapse these
@@ -499,40 +451,6 @@ noncomputable def mnv4PostDWSlot (N : Nat) {c h w kH kW : Nat} (postDWk : Nat)
     CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
   if postDWk = 0 then CertLayer.id' _ else mnv4DWReluLayer N W b ε hε γ β
 
-@[simp] theorem mnv4PreDWSlot_zero (N : Nat) {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PreDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := ite_eq_left rfl
-
-@[simp] theorem mnv4PreDWSlot_succ (N : Nat) {c h w kH kW : Nat} (k : Nat)
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PreDWSlot (h := h) (w := w) N (k + 1) W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
-  ite_eq_right (Nat.succ_ne_zero k)
-
-@[simp] theorem mnv4PostDWSlot_zero (N : Nat) {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PostDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := ite_eq_left rfl
-
-@[simp] theorem mnv4PostDWSlot_succ (N : Nat) {c h w kH kW : Nat} (k : Nat)
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PostDWSlot (h := h) (w := w) N (k + 1) W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
-  ite_eq_right (Nat.succ_ne_zero k)
-
-/-- ⭐ **A UIB skip block built from the table's two `k`s.** The family is now *computed* from
-    `preDWk`/`postDWk` rather than selected by the caller, so a family mis-dispatch has to be a
-    wrong number in `mnv4Blocks` — which the `#guard`s below catch — instead of a silent argument. -/
-noncomputable def mnv4UibSkipBlockOfKs (N : Nat) {c mid h w kHp kWp kHd kWd kHe kWe kHz kWz : Nat}
-    (preDWk postDWk : Nat)
-    (Wq : DepthwiseKernel c kHp kWp) (bq : Vec c) (εq : ℝ) (hεq : 0 < εq) (γq βq : Vec c)
-    (We : Kernel4 mid c kHe kWe) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wz : Kernel4 c mid kHz kWz) (bz : Vec c) (εz : ℝ) (hεz : 0 < εz) (γz βz : Vec c) :
-    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
-  mnv4UibSkipBlock N
-    (mnv4PreDWSlot (h := h) (w := w) N preDWk Wq bq εq hεq γq βq)
-    (cbReluLayer N We be εe hεe γe βe)
-    (mnv4PostDWSlot (h := h) (w := w) N postDWk Wd bd εd hεd γd βd)
-    (projLayer N Wz bz εz hεz γz βz)
-
 /-- The four families, named — read off the two kernel slots by **exactly** the rule the slots
     dispatch on and the render emits. -/
 inductive UibFamily where
@@ -572,9 +490,9 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 #guard (mnv4Blocks.filter (fun s => s.family == .convNeXtLike)).length = 4
 #guard (mnv4Blocks.filter (fun s => s.family == .ffn)).length = 4
 
--- ⭐ `mnv4Stage14`'s argument order, pinned. Its docstring named Conv-S's families for four weeks
--- (an `ib` block, of which Conv-M has none) while the guards above already said Conv-M; this makes
--- the prose a check. The seven stride-1 rows at `h = 14` are blocks 4–10, and this is their order.
+-- ⭐ The family order of the seven `h = 14` stride-1 rows (blocks 4–10), pinned. A docstring once
+-- named Conv-S's families here (an `ib` block, of which Conv-M has none) for four weeks while the
+-- guards above already said Conv-M; this makes the prose a check.
 #guard (mnv4Blocks.filter (fun s => s.h == 14 && !s.stride2)).map (·.family) =
   [.extraDW, .extraDW, .extraDW, .extraDW, .convNeXtLike, .ffn, .convNeXtLike]
 
@@ -605,9 +523,9 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 -- § ⭐⭐ WEIGHT WIRING — the parameters are TYPED BY THEIR TABLE ROW
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⛔ **The gap this closes.** `mnv4UibSkipBlockOfKs` reads the *dispatch* from the table, but its
-weights are separate arguments — so nothing stopped a caller pairing row 4's `k`s with row 7's
-widths. The dispatch was table-driven; the wiring was not.
+/-! ⛔ **The gap this closes.** A block builder that reads the *dispatch* from the table but takes
+its weights as separate arguments lets a caller pair row 4's `k`s with row 7's widths. The dispatch
+was table-driven; the wiring was not.
 
 ⭐ **Fix: index the parameter record by the row.** Every width in `UibParams s` is a *projection of
 `s`* — `s.ic`, `s.oc`, `s.ic * s.expand`, `s.preDWk`, `s.postDWk`. A record with widths that
@@ -689,25 +607,5 @@ noncomputable def mnv4PreStridedBodyOfRow (N : Nat) (s : UibSpec) (p : UibParams
     (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
     (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2)
     (projLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
-
-/-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
-
-    The spatial ladder is 56 → 28 → 14 → 7 with the reductions at blocks 1, 3 and 11, and the
-    channel ladder is 48 → 80 → 160 → 256. Written with nested doublings (`2*(2*(2*h))`) because
-    Nat multiplication is not definitionally associative in a variable, so `8*h` would not line
-    the stage types up.
-
-    If any block's stride, resolution or channel count were transcribed wrongly this would not
-    elaborate — the same role `R34BWeights` and `R50BWeights` play for their nets. -/
-noncomputable def mnv4BlockLadder (N : Nat) {c₀ c₁ c₂ c₃ h w : Nat}
-    (blk1  : CertLayer (N * (c₀ * (2*(2*(2*h))) * (2*(2*(2*w)))))
-                       (N * (c₁ * (2*(2*h)) * (2*(2*w)))))
-    (blk2  : CertLayer (N * (c₁ * (2*(2*h)) * (2*(2*w)))) (N * (c₁ * (2*(2*h)) * (2*(2*w)))))
-    (blk3  : CertLayer (N * (c₁ * (2*(2*h)) * (2*(2*w)))) (N * (c₂ * (2*h) * (2*w))))
-    (mid14 : CertLayer (N * (c₂ * (2*h) * (2*w))) (N * (c₂ * (2*h) * (2*w))))
-    (blk11 : CertLayer (N * (c₂ * (2*h) * (2*w))) (N * (c₃ * h * w)))
-    (tail  : CertLayer (N * (c₃ * h * w)) (N * (c₃ * h * w))) :
-    CertLayer (N * (c₀ * (2*(2*(2*h))) * (2*(2*(2*w))))) (N * (c₃ * h * w)) :=
-  blk1.comp (blk2.comp (blk3.comp (mid14.comp (blk11.comp tail))))
 
 end Proofs.StableHLO
