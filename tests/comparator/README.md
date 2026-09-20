@@ -81,7 +81,7 @@ the next nine `ChallengeArch.lean`, the last `ChallengeTier.lean`:
 | Whole-network VJPs | `mnistLinear_has_vjp_correct`, `vit_full_has_vjp_correct`, `cnn_has_vjp_at_correct`, `mobilenetv2_has_vjp_at_correct`, `convnext_has_vjp{,_at}_correct`, `efficientnet_has_vjp{,_at}_correct` |
 | **Tier: step ties** | `r50_net_tiedB`, `vit_net_tied_certified`, `cnx_net_tiedGB` |
 | **Tier: codegen faithfulness** | `mnv4FwdGraphB_full_faithful`, `convStridedWGradB_den` |
-| **Tier: whole-net back-chains** | `resnet50ForwardB_full_has_vjp_at_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradB_full_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTiny_has_vjp_correct`, `bn_input_grad_correct`, `smoothedCE_grad`, `mnv2Live_forward_nonconstant` |
+| **Tier: whole-net back-chains** | `resnet50ForwardB_full_has_vjp_at_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradB_full_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTiny_has_vjp_correct`, `bn_input_grad_correct`, `smoothedCE_grad`, `sealX_nonconstant` |
 | **Tier: data parallel** | `dpMeanGrad_ne_globalBatchGrad`, `adamW_at_allReduceMeanF` |
 | **Tier: float / descent** | `linear_e4m3_argmax_preserved`, `trained_linear_sgd_strictly_descends` |
 | **Tier: certificates** | `lipschitz_margin_certified_radius`, `scorecard_sdp`, `smoothing_certified_radius_classifier`, `shampoo_eq_muon` |
@@ -205,7 +205,7 @@ keeps the audit reproducible until they land.
 - **The remaining theorems in the proof suite** (downstream compositions,
   `_diff` smoothness lemmas, `_eq_compose` rewrites, the per-leaf ties beneath
   each whole-net chain). `tests/AuditAxioms.lean` prints the axiom closure of
-  all 1,380 of them on every proof-path push; this directory re-checks 73 of
+  all 1,371 of them on every proof-path push; this directory re-checks 73 of
   them with an independent kernel. The gap between those two numbers is
   deliberate: what the comparator adds is a second, non-elaborator opinion, and
   a second opinion on the advertised set plus the calculus floor it rests on is

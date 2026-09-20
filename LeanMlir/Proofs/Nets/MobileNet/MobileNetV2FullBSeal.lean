@@ -9,8 +9,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 bundles** — the stem's relu6, one per bottleneck, and the head's — covering 35 relu6 sites, each a
 two-sided window `≠ 0 ∧ ≠ 6`. A conditional theorem of that shape says nothing unless its
 hypotheses are jointly satisfiable at a point with a nonzero Jacobian, and until now that was
-exhibited only on `Mnv2Live`, a per-example two-block 2-channel proxy (which
-`planning/full_width_seals.md` §4.3 retires once this file is green).
+exhibited only on a per-example, two-block, 2-channel proxy, deleted when this file landed.
 This file exhibits it on `mobilenetv2ForwardB_full` itself: the seventeen bottlenecks of the
 `[t,c,n,s]` table, 32→1280 channels, XLA-`SAME` stride-2 padding, **batch** BatchNorm, at 224×224.
 

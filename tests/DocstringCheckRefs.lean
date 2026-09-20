@@ -31,7 +31,7 @@ needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
    user name (`lnFwdSite`);
 4. it is `File.decl`, where `decl` is declared in the module whose name ends in `File`
    (`ResNet34FoldB.denseWGradB_den`);
-5. it names a module (`ViTRenderB`) or a namespace (`Mnv2Live`) by a suffix of its
+5. it names a module (`ViTRenderB`) or a namespace (`Mnv2FullBSeal`) by a suffix of its
    components, or a scanned file outside the environment by its basename
    (`TestMnv4FwdSmoke` for `tests/TestMnv4FwdSmoke.lean`);
 6. its PREFIX resolves — `foo_has_vjp.backward` is a field access on a real declaration,

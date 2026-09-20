@@ -6,8 +6,8 @@ import LeanMlir.Proofs.Foundation.MLP
 The whole-network capstones prove `HasVJP.backward = pdiv`-Jacobian-transpose. A
 *degenerate* witness (zero weights / constant output) satisfies that contract
 **vacuously**: its Jacobian is identically zero, so the backward map is the zero map and
-says nothing about a real gradient. The non-vacuity facts that exist today
-(`Mnv2Live.mnv2Live_forward_nonconstant`) only rule out a *constant forward* — strictly
+says nothing about a real gradient. A non-vacuity fact of the weaker kind
+(`Mnv2FullBSeal.sealX_nonconstant`) only rules out a *constant forward* — strictly
 weaker than a non-trivial backward at the witness.
 
 This file supplies the missing **level-3 seal** (see `planning/archive/whole_network_backward.md`,
@@ -17,8 +17,8 @@ backward, and the equivalence with `fderiv ℝ f x ≠ 0`. A witness then upgrad
 **one** `pdiv f x i j ≠ 0` — which is what a genuine (non-degenerate) gradient requires.
 
 The bridge is stated for the pointwise `HasVJPAt` the kinked witnesses are built as. The
-per-net seals (Item B2) discharge its `pdiv ≠ 0` premise at `Mnv2Live` and the ResNet-34 Live
-witnesses.
+per-net seals discharge its `pdiv ≠ 0` premise on the full-width batched nets themselves
+(`ResNet34FullBSeal`, `ResNet50FullBSeal`, `MobileNetV2FullBSeal`).
 -/
 
 namespace Proofs

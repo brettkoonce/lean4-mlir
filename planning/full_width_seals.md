@@ -4,9 +4,11 @@
 because it builds the kit the other three reuse. Each package is its own session or two. Gates in
 §6; the bookkeeping that moves with every package in §5.
 
-**§4.1 and §4.2 are DONE (2026-09-20).** `Training/BatchSealKit.lean` (the shared machinery),
-`Nets/ResNet/ResNet34FullBSeal.lean` and `Nets/ResNet/ResNet50FullBSeal.lean`; the 1,992 lines of
-ResNet-34 proxy are deleted; audit 1,380 → 1,377 declarations, all 3-axiom clean. ⭐ ResNet-50's
+**§4.1, §4.2 and §4.3 are DONE (2026-09-20).** `Training/BatchSealKit.lean` (the shared
+machinery), `Nets/ResNet/ResNet34FullBSeal.lean`, `Nets/ResNet/ResNet50FullBSeal.lean` and
+`Nets/MobileNet/MobileNetV2FullBSeal.lean`; the 1,992 lines of ResNet-34 proxy and the 1,216 of
+MobileNetV2 proxy are deleted; audit 1,380 → 1,377 → 1,371 declarations, all 3-axiom clean.
+**Only §4.4 (MobileNetV4) is left.** ⭐ ResNet-50's
 seal leaves the spatial size a **binder**, so one statement covers both shipped resolutions (224 px
 and the 160 px net the 76.66% run trains) — `0 < q` and `q ≤ 7` are all the witness needs, the
 bound being the `β = 160` margin against the stem's `2·(16q)²`.
@@ -47,14 +49,8 @@ factors, the three clause-bundle kinds and the seven kit lemmas are all in §4.3
    the three seal theorems print 3-axiom clean. Rooted in `lakefile.lean`, imported and printed in
    `tests/AuditAxioms.lean`. §4.3 records what the inventory got right and the three shapes it did
    not anticipate.
-3. **Then the retirement**, which is where the care goes — see §5's comparator bullet, and note
-   that the seal file's own header says `Mnv2Live` is retired *by this step*, so it needs a one-line
-   edit too. Do the `DECLS` edit, `gen_comparator_tier.py`, and `tests/comparator/run.sh` (~25 min,
-   all three configs) as their own step, *after* the seal is green, so a red comparator can never be
-   confused with a red proof. Audit lands at **1,371**: the three seal prints are already in
-   (1,377 → 1,380), and the nine proxy prints come out. ⚠ `lake build Certs`,
-   `lake env lean tests/AuditAxioms.lean` in full, and `docstring-checkrefs` are still deferred to
-   this commit.
+3. ~~**Then the retirement**~~ — **DONE 2026-09-20**. See §4.3 for the table of every site that
+   moved. Audit landed at **1,371** as predicted.
 
 **§4.4 (MobileNetV4)** is last and unchanged in shape: the UIB relu-site inventory from
 `Nets/MobileNet/MobileNetV4BackB0.lean` is the whole uncertainty, and `Mnv4SmoothAt`'s per-group
@@ -127,7 +123,7 @@ numeric fact about millions of floats (archive Item F) and is what the training 
 |---|---|---|---|---|---|
 | ResNet-34 | relu, maxpool | `resnet34ForwardB_full_has_vjp_at` | 32 (`R34IdSmoothAt`/`R34DownSmoothAt`, two relus each) + `R34StemSmoothAt` + `R34PoolSmoothAt` | ✅ `ResNet34FullBSeal` | §4.1 done |
 | ResNet-50 | relu, maxpool | `resnet50ForwardB_full_has_vjp_at` (`q` binder: 224 and 160 px) | 48 (`R50IdSmoothAt`/`R50ProjSmoothAt`/`R50DownSmoothAt`, three relus each) + stem + pool | ✅ `ResNet50FullBSeal`, both resolutions | §4.2 done |
-| MobileNetV2 | relu6 | `mobilenetv2ForwardB_full_has_vjp_at` | 19 bundles: stem + `IVNoExpSmoothAtB` + `IVStridedSmoothAtB` ×4 + `IVSmoothAtB` ×12 + head, 35 relu6 sites, each a window `≠ 0 ∧ ≠ 6` | `Mnv2Live` proxy, per-example two-block net | §4.3 |
+| MobileNetV2 | relu6 | `mobilenetv2ForwardB_full_has_vjp_at` | 19 bundles: stem + `IVNoExpSmoothAtB` + `IVStridedSmoothAtB` ×4 + `IVSmoothAtB` ×12 + head, 35 relu6 sites, each a window `≠ 0 ∧ ≠ 6` — all weight-only | ✅ `MobileNetV2FullBSeal`; the `Mnv2Live` proxy is deleted | §4.3 done |
 | MobileNetV4-Conv-M | relu (UIB), swish (fused stage) | `mobilenetv4ForwardB_full_has_vjp_at` | one bundle `Mnv4SmoothAt` with per-group `.ok` fields; `fused` is vacuous (swish) | none | §4.4 |
 | EfficientNet-B0 | SiLU, sigmoid (SE) | `efficientnetForwardB_full_has_vjp` | none — `HasVJP`, only `0 < ε` | — | nothing |
 | ConvNeXt-T | GELU, LN | `convNextForwardTChB_has_vjp_at` | none — holds at every `x`, only `0 < ε` | — | nothing |
@@ -494,18 +490,29 @@ keeping one witness shape across the four nets.
 
 Effort: ~1k lines plus ~150 of kit, one session.
 
-Retires: `Mnv2Live` (`Nets/MobileNet/MobileNetV2.lean:531-918`, 388 lines),
-`Training/MobileNetV2JacobianSeal` (255), `MobileNetV2JacobianSealFull` (209),
-`MobileNetV2SealRealistic` (309): ~1,161 lines. **Nine** `tests/AuditAxioms.lean` prints go
-(`Mnv2Live.mnv2Live_jacobian_nonzero`, `.bn13_window`, `.chSum_convX`,
-`.mnv2Live_forward_nonconstant`, `.fwdFull_nonconstant`, `.fwdFull_jacobian_nonzero`,
-`.fwdFull_backward_nontrivial`, `Mnv2RealSeal.fwdR_jacobian_nonzero`, `.fwdR_backward_nontrivial`)
-and three seal prints arrive: **1,377 → 1,371**. ⚠ `Proofs.Mnv2Live.mnv2Live_forward_nonconstant`
-is `formalization.yaml:104` **and** `gen_comparator_tier.py:42` **and**
-`tests/comparator/config-tier.json:9` (`chk_mnv2Live_forward_nonconstant`): see §5.
-`LeanMlir/Proofs/README.md:162,170-172` names it in prose too. Whether the rest of
-`MobileNetV2.lean` (the per-example two-block net) still has consumers is a census question, not
-this package's.
+**Retirement DONE 2026-09-20.** Deleted: `Mnv2Live` (384 lines out of
+`Nets/MobileNet/MobileNetV2.lean`, which goes 930 → 546), `Training/MobileNetV2JacobianSeal` (255),
+`MobileNetV2JacobianSealFull` (209), `MobileNetV2SealRealistic` (368). ⭐ The per-example
+`mobilenetv2Forward`, its whole-net VJP, `relu6`, `relu6_id_window`, `relu6_continuous` and
+`depthwiseFlat_eq_zero` all stay — only the witness goes, and that file's banner now says what the
+survivors are for. Audit **1,380 → 1,371** (nine prints out).
+
+Every place the retired names lived, all edited:
+
+| what | where |
+|---|---|
+| `main_results` row + §4 prose | `formalization.yaml` |
+| `DECLS` + `MODULES`, then the regenerated pair | `scripts/gen_comparator_tier.py`, `tests/comparator/{Challenge,Solution}Tier.lean`, `config-tier.json` |
+| nine `#print axioms` + three imports | `tests/AuditAxioms.lean` |
+| three roots | `lakefile.lean` |
+| prose | `LeanMlir/Proofs/README.md`, `Training/JacobianSeal.lean`, `Training/TrainedMlpWitness.lean` |
+| the docstring generator, kept in sync with the file above | `scripts/lipschitz_cert_witness_s8.py` |
+| its own worked example of "a namespace named by a suffix" | `tests/DocstringCheckRefs.lean` |
+| the audit count | `tests/comparator/README.md`, `blueprint/src/content.tex` |
+
+⚠ **Not every mention went**, deliberately: `planning/archive/*` and `planning/audit_census.md`
+record what was true when they were written. ⛔ And whether the rest of `MobileNetV2.lean` (the
+per-example two-block net) still has consumers is a census question, not this package's.
 
 ### 4.4 MobileNetV4-Conv-M — UIB inventory first
 

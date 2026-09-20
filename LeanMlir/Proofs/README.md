@@ -159,17 +159,20 @@ Two forms, set by the architecture's activations:
   whole-network VJP is pointwise (`*_has_vjp_at`, under per-site
   off-the-kink hypotheses). Each is instantiated at a point with every
   hypothesis discharged (`MlpConcrete`, `TrainedCnn`, `CnnConcrete`,
-  `Mnv2Live`, and for ResNet-34 the full-width batched net itself in
-  `ResNet34FullBSeal`), proving the bundle is jointly satisfiable — not
+  and for ResNet-34/50 and MobileNetV2 the full-width batched nets
+  themselves in `ResNet34FullBSeal`, `ResNet50FullBSeal` and
+  `MobileNetV2FullBSeal`), proving the bundle is jointly satisfiable — not
   vacuous.
 
 Conditionality is intrinsic to the math, not a formalization gap: it enters
 exactly at the non-smooth operators and is *recovered* by the
-smooth-activation nets. Most concrete witnesses are deliberately tiny (the
-ResNet-34 one is not: it is the 224×224 batch-BN net at paper depth).
-`CnnConcrete` has an injective stem, and `Mnv2Live` keeps every ReLU6 input
-inside `(0,6)` with a BatchNorm window rather than a constant collapse, so
-its forward is non-constant (`mnv2Live_forward_nonconstant`).
+smooth-activation nets. Most concrete witnesses are deliberately tiny; the
+ResNet-34/50 and MobileNetV2 ones are not — each is the 224×224 batch-BN net
+at paper depth, on the forward its artifacts run.
+`CnnConcrete` has an injective stem, and `MobileNetV2FullBSeal` keeps every
+ReLU6 input inside `(0,6)` with a BatchNorm window that holds at *every*
+input, so all 35 of that net's kink clauses are weight-only and its forward
+is non-constant (`Mnv2FullBSeal.sealX_nonconstant`).
 
 ## Axioms (0 project)
 

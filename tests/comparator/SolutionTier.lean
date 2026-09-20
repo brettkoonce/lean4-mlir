@@ -10,7 +10,7 @@ import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
@@ -132,21 +132,13 @@ theorem chk_mnv4FwdGraphB_full_faithful :
         Proofs.StableHLO.mobilenetv4ForwardB_full N w (Proofs.StableHLO.den e) :=
   Proofs.StableHLO.mnv4FwdGraphB_full_faithful
 
-/-- `Proofs.Mnv2Live.mnv2Live_forward_nonconstant` -/
-theorem chk_mnv2Live_forward_nonconstant :
-    Proofs.mobilenetv2Forward Proofs.Mnv2Live.Ws Proofs.Mnv2Live.bs (1 : ℝ)
-        (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.We₁ Proofs.Mnv2Live.be₁ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wd₁
-        Proofs.Mnv2Live.bd₁ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wp₁ Proofs.Mnv2Live.bp₁ (1 : ℝ) (1 : ℝ) (3 : ℝ)
-        Proofs.Mnv2Live.We₂ Proofs.Mnv2Live.be₂ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wd₂ Proofs.Mnv2Live.bd₂ (1 : ℝ)
-        (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wp₂ Proofs.Mnv2Live.bp₂ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wh
-        Proofs.Mnv2Live.bh Proofs.Mnv2Live.X ≠
-      Proofs.mobilenetv2Forward (h := (2 : ℕ)) (w := (2 : ℕ)) Proofs.Mnv2Live.Ws Proofs.Mnv2Live.bs (1 : ℝ) (1 : ℝ) (3 : ℝ)
-        Proofs.Mnv2Live.We₁ Proofs.Mnv2Live.be₁ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wd₁ Proofs.Mnv2Live.bd₁ (1 : ℝ)
-        (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wp₁ Proofs.Mnv2Live.bp₁ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.We₂
-        Proofs.Mnv2Live.be₂ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wd₂ Proofs.Mnv2Live.bd₂ (1 : ℝ) (1 : ℝ) (3 : ℝ)
-        Proofs.Mnv2Live.Wp₂ Proofs.Mnv2Live.bp₂ (1 : ℝ) (1 : ℝ) (3 : ℝ) Proofs.Mnv2Live.Wh Proofs.Mnv2Live.bh
-        fun (x : Fin ((1 : ℕ) * (2 : ℕ) * (2 : ℕ))) => (0 : ℝ) :=
-  Proofs.Mnv2Live.mnv2Live_forward_nonconstant
+/-- `Proofs.Mnv2FullBSeal.sealX_nonconstant` -/
+theorem chk_sealX_nonconstant :
+    ∀ (nCls : ℕ),
+      (0 : ℕ) < nCls →
+        Proofs.mobilenetv2ForwardB_full (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (1 : ℝ)) ≠
+          Proofs.mobilenetv2ForwardB_full (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (0 : ℝ)) :=
+  Proofs.Mnv2FullBSeal.sealX_nonconstant
 
 /-- `Proofs.ResNet34PoCB.convStridedWGradB_den` -/
 theorem chk_convStridedWGradB_den :

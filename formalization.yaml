@@ -101,7 +101,7 @@ status:
     # a typed SHlo graph at the render's own tokens denotes the whole-net forward (MobileNetV4, 26 stages; every net has one)
     - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
-    - {declaration: "Proofs.Mnv2Live.mnv2Live_forward_nonconstant", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.Mnv2FullBSeal.sealX_nonconstant", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2FullBSeal.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Train-step ties (T3): the fold at every gradient node, then the cotangent pinned ---
     # the fold, stated per op kind at the un-fused *GradB node all optimizer tails consume (r34's file is the template)
@@ -204,11 +204,12 @@ fidelity:
        between the two EXAMPLES, which per-channel batch BN preserves and a channel difference is
        not. ResNet-50's is the same construction on `resnet50ForwardB_full` (`ResNet50FullBSeal`), with
        the spatial size left a BINDER, so one statement covers both shipped resolutions -- 224 px
-       and the 160 px net the 76.66% run trains. MobileNetV2 is still sealed on a 2-channel
-       per-example proxy, at 17 blocks on 2x2 (`MobileNetV2JacobianSealFull`) and at 224x224 with a
-       short chain (`MobileNetV2SealRealistic`); MobileNetV4 has no witness yet
-       (planning/full_width_seals.md 4.3-4.4). Plus trained-weight witnesses and a provable strict
-       CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,
+       and the 160 px net the 76.66% run trains. MobileNetV2's is on `mobilenetv2ForwardB_full`
+       (`MobileNetV2FullBSeal`), all seventeen bottlenecks at 224x224 -- and there every one of the
+       35 relu6 clauses is weight-only, because each relu6 sits on a BatchNorm output whose margin
+       holds at every input; the 2-channel per-example proxies it replaces are deleted. MobileNetV4
+       has no witness yet (planning/full_width_seals.md 4.4). Plus trained-weight witnesses and a
+       provable strict CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,
        `TrainedLinearDescent`).
 
     4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement): the smoothing

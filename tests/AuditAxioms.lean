@@ -9,7 +9,6 @@ import LeanMlir.Proofs.Architectures.SE
 import LeanMlir.Proofs.Architectures.LayerNorm
 import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
-import LeanMlir.Proofs.Training.MobileNetV2JacobianSeal
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Nets.Small.MnistCNN
@@ -23,8 +22,6 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
-import LeanMlir.Proofs.Training.MobileNetV2JacobianSealFull
-import LeanMlir.Proofs.Training.MobileNetV2SealRealistic
 import LeanMlir.Proofs.Foundation.PerChannelBN
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
@@ -221,8 +218,6 @@ open Proofs
 -- The pointwise (HasVJPAt) seal variants — the kinked witnesses are HasVJPAt, not HasVJP.
 #print axioms HasVJPAt.backward_ne_zero_of_pdiv_ne
 #print axioms HasVJPAt.backward_nontrivial_of_fderiv_ne
--- Item B2 discharged at the live MobileNetV2 witness (MobileNetV2JacobianSeal.lean)
-#print axioms Mnv2Live.mnv2Live_jacobian_nonzero
 
 -- CNN
 #print axioms maxPool2_has_vjp3_correct
@@ -290,11 +285,6 @@ open Proofs
 -- Whole-network VJPs for the depthwise/SE/LN-based architectures
 #print axioms relu6_has_vjp_at
 #print axioms mobilenetv2_has_vjp_at_correct
--- MobileNetV2: the LIVE counterpart
-#print axioms Mnv2Live.bn13_window
--- ...and the live witness is non-degenerate
-#print axioms Mnv2Live.chSum_convX
-#print axioms Mnv2Live.mnv2Live_forward_nonconstant
 #print axioms layerScale_has_vjp_correct
 #print axioms convnext_has_vjp_at_correct
 -- ConvNeXt promoted to an UNCONDITIONAL global VJP (all-smooth ops)
@@ -572,13 +562,6 @@ open Proofs
 #print axioms Mnv2FullBSeal.sealX_nonconstant
 #print axioms Mnv2FullBSeal.sealX_jacobian_nonzero
 #print axioms Mnv2FullBSeal.sealX_backward_nontrivial
--- Item B2 FULL DEPTH (MobileNetV2JacobianSealFull.lean)
-#print axioms Mnv2Live.fwdFull_nonconstant
-#print axioms Mnv2Live.fwdFull_jacobian_nonzero
-#print axioms Mnv2Live.fwdFull_backward_nontrivial
--- Item D LEVEL 3 for MobileNetV2 (MobileNetV2SealRealistic.lean)
-#print axioms Mnv2RealSeal.fwdR_jacobian_nonzero
-#print axioms Mnv2RealSeal.fwdR_backward_nontrivial
 -- B8: per-channel BatchNorm
 #print axioms bnPerChannelFlat_has_vjp_correct
 -- B8a': the RENDERABLE per-channel BN backward
