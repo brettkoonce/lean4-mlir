@@ -370,7 +370,7 @@ the contract's hypotheses can be met, and is kept in its own column rather
 than counted as a contract. A theorem that only restates a counted one at
 fixed dimensions or over the committed spec, and a smooth-point form that
 a later global theorem superseded, is not counted again. Across
-Chapters~1--9 there are \textbf{44 contracts} and \textbf{16 witnesses}.
+Chapters~1--9 there are \textbf{45 contracts} and \textbf{6 witnesses}.
 Even Chapter~1's toolkit is used straight away by a proven model, so no
 chapter is pure scaffolding.
 
@@ -382,15 +382,15 @@ Chapter & Contracts & Witnesses & New primitive / result \\
 \hline
 1 (MNIST: linear) & 1  & --- & dense, softmax-CE, \texttt{mnistLinear}: the whole classifier \\
 2 (MNIST: 1D)     & 2  & 2   & ReLU, MLP; witnesses hand-built and at trained weights \\
-3 (MNIST: 2D)     & 3  & 4   & conv2d, maxPool2, whole-net MNIST CNN; three hand-built witnesses and one at trained weights \\
-4 (CIFAR: BN)     & 6  & 1   & per-channel BN (flat $+$ NCHW), CIFAR whole-nets $\pm$BN at 2 and at 8 convs \\
-5 (ResNet-34)     & 11 & 6   & residual ($+$proj), GAP, stride-2 conv ($+$its weight grad), strided block, stage, whole-net \texttt{cnn}; \textbf{full-depth ResNet-34 and ResNet-50} at batch statistics; live-shaped witnesses up to $224 \times 224$ \\
-6 (MobileNetV2)   & 6  & 3   & depthwise (stride 1$+$2); \texttt{mobilenetv2} at representative depth and at \textbf{all 17 blocks}, per example and at batch statistics; \textbf{\mbox{MobileNetV4}} at full depth \\
-7 (EfficientNet)  & 4  & --- & swish, SE, whole-net at representative depth, \textbf{full B0} (16 \mbox{MBConv} blocks) \\
-8 (ConvNeXt)      & 5  & --- & GELU, LayerNorm, layer-scale, whole-net at representative depth, \textbf{full ConvNeXt-T} (18 blocks) \\
-9 (ViT)           & 6  & --- & MHSA, block, \textbf{every depth $k$} (ViT-Tiny is $k = 12$), \texttt{vit\_full} \\
+3 (MNIST: 2D)     & 3  & 1   & conv2d, maxPool2, whole-net MNIST CNN; witness at trained weights \\
+4 (CIFAR: BN)     & 6  & 1   & per-channel BN (flat $+$ NCHW) and BN at batch statistics; CIFAR whole-nets at 2 convs and at 8 convs $\pm$BN; a hand-built tiny witness \\
+5 (ResNet-34)     & 10 & 2   & residual ($+$proj), GAP, stride-2 conv ($+$its weight grad), the $3 \times 3$/s2 stem pool, whole-net \texttt{cnn}; ResNet-34 per example, \textbf{full-depth ResNet-34 and ResNet-50} at batch statistics; witnesses: a hand-built BN CNN and a $224 \times 224$ ResNet-34 with channel-mixing downsamples \\
+6 (MobileNetV2)   & 6  & --- & ReLU6, depthwise (stride 1$+$2); \texttt{mobilenetv2} at representative depth and at \textbf{all 17 blocks} at batch statistics; \textbf{\mbox{MobileNetV4}} at full depth \\
+7 (EfficientNet)  & 5  & --- & swish, sigmoid, SE, whole-net at representative depth, \textbf{full B0} (16 \mbox{MBConv} blocks) \\
+8 (ConvNeXt)      & 6  & --- & GELU, LayerNorm, layer-scale, the $4 \times 4$/s4 patchify conv, whole-net at representative depth, \textbf{full ConvNeXt-T} (18 blocks) \\
+9 (ViT)           & 6  & --- & MHSA, block, vector LayerNorm and its block, \textbf{every depth $k$} (ViT-Tiny is $k = 12$), \texttt{vit\_full} \\
 \hline
-                  & \textbf{44} & \textbf{16} & total \textbf{60} \\
+                  & \textbf{45} & \textbf{6} & total \textbf{51} \\
 \hline
 \end{tabular}
 \end{center}
