@@ -4,14 +4,14 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # The ResNet-34 / ResNet-50 backward chains — the ℝ maps the ResNet ties are about
 
 The hand-composed reverse of the committed ResNet forwards, as plain `def`s on the cotangent:
-the two basic-block backwards (`r34IdBlockBack`, `r34DownBlockBack`), the per-example whole-net
-chain `r34InputGrad` (the reverse of `resnet34Forward_full_pc`), and the batched chains
-`r34InputGradB` / `r50InputGradB` (the reverses of `resnet34ForwardB_full` /
+the batched chains `r34InputGradB` / `r50InputGradB` (the reverses of `resnet34ForwardB_full` /
 `resnet50ForwardB_full`, at a variable batch `N`, R50 also at a variable resolution `q`). Each
-chain keeps its sixteen block backwards and its BatchNorm backwards as *supplied* maps and spells
-only the endpoints — the stem's strided conv-back, the 3×3/s2 pool-back, the GAP-back and the
-dense-back — so that the certified tie (`ResNet34BackCertifiedTie`, `ResNet34BackCertifiedTieB`,
-`ResNet50WholeBackCertifiedTieB`) is a statement about a NAMED chain of the forward's shape.
+chain keeps its block backwards and its BatchNorm backwards as *supplied* maps and spells only
+the endpoints — the stem's strided conv-back, the 3×3/s2 pool-back, the GAP-back and the
+dense-back — so that the certified tie (`ResNet34BackCertifiedTieB`,
+`ResNet50WholeBackCertifiedTieB`, on the leaf ties of `ResNet34BackCertifiedTie`) is a statement
+about a NAMED chain of the forward's shape. (The per-example r34 chain and its two block
+backwards were retired with their renderer on 2026-09-19.)
 
 ⛔ `maxPool3s2FlatBackB`, the batched pool backward, is `StableHLO.batchMapAux` and not
 `batchMap`: the pool's backward is indexed by the saved forward activation and every example
@@ -28,78 +28,6 @@ Moved here from the float bridges that defined them beside their float twins on 
 (`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
 
 namespace Proofs
-
--- ════════════════════════════════════════════════════════════════
--- § The two basic-block backwards (per-channel BN, per-example)
--- ════════════════════════════════════════════════════════════════
-
-/-- The r34 identity basic-block input-gradient VJP at a smooth point — the **reverse of `rblkPC`**.
-    `relu(F(x)+x)` backward = the ReLU mask, then the residual split (cotangent to both the body and
-    the skip, added): `residual bF ∘ reluMaskBack`, with `bF` the reverse of `F = bn₂∘conv₂ ∘
-    relu∘bn₁∘conv₁`. The ReLU kinks read the fixed sign masks `m_out`/`m_mid`; the BN-backs `bnB₁`/
-    `bnB₂` are the per-channel BatchNorm backwards, supplied. The residual-skip backward is the
-    forward's own `Proofs.residual`: the skip routes the cotangent to both branches and adds. -/
-noncomputable def r34IdBlockBack {c h w : Nat}
-    (W₁ W₂ : Kernel4 c c 3 3)
-    (bnB1 bnB2 : Vec (c * h * w) → Vec (c * h * w))
-    (m_out m_mid : Fin (c * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid] :
-    Vec (c * h * w) → Vec (c * h * w) :=
-  Proofs.residual
-      (convFlatBack (h := h) (w := w) W₁ ∘ bnB1 ∘ reluMaskBack m_mid
-        ∘ convFlatBack (h := h) (w := w) W₂ ∘ bnB2)
-    ∘ reluMaskBack m_out
-
-/-- The r34 downsample basic-block input-gradient VJP at a smooth point — the **reverse of
-    `rblkPStridedPC`**. `relu(proj(x) + body(x))` backward = the ReLU mask, then the two-branch
-    fan-in `bProj(dy') + bBody(dy')` (both branches non-trivial, summed). The strided convs reverse
-    via `flatConvStride2Back`; the BN-backs `bnB₁`/`bnB₂`/`bnBp` are the per-channel BatchNorm
-    backwards (supplied). -/
-noncomputable def r34DownBlockBack {ic oc h w kHp kWp : Nat}
-    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic kHp kWp)
-    (bnB1 bnB2 bnBp : Vec (oc * h * w) → Vec (oc * h * w))
-    (m_out m_mid : Fin (oc * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid] :
-    Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
-  (fun dy j =>
-      (flatConvStride2Back (h := h) (w := w) Wp ∘ bnBp) dy j
-      + (flatConvStride2Back (h := h) (w := w) W₁ ∘ bnB1 ∘ reluMaskBack m_mid
-          ∘ convFlatBack (h := h) (w := w) W₂ ∘ bnB2) dy j)
-    ∘ reluMaskBack m_out
-
--- ════════════════════════════════════════════════════════════════
--- § The per-example whole-net chain (the [3,4,6,3] fold at 224 px, 10 classes)
--- ════════════════════════════════════════════════════════════════
-
-/-- The whole ResNet-34 input-gradient VJP at a smooth point — the **exact reverse of
-    `resnet34Forward_full_pc`**: `dense ∘ GAP ∘ [3,4,6,3] blocks ∘ maxpool ∘ stem` reversed. The
-    stem/GAP/maxpool/dense endpoints are concrete (`flatConvStride2Back`/`gapBack`/`maxPool3s2FlatBack`/
-    `dense (transposeᵀ) 0`); the 16 block backwards `a0B..e1B` are supplied (each an
-    `r34IdBlockBack` or `r34DownBlockBack` at the tie). The `[3,4,6,3]` stage structure is in the
-    block maps' dims (down-blocks change channels×spatial; identity blocks preserve). The pool is
-    the 3×3/s2 stem pool's backward — the 2×2 `maxPoolFlatBack` this chain once used is a different
-    function of the same type, which is what the tie found. -/
-noncomputable def r34InputGrad (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
-    (bnBs : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
-    (e1B e0B : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))
-    (d4B : Vec (512 * 7 * 7) → Vec (256 * 14 * 14))
-    (c4B c3B c2B c1B c0B : Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
-    (d3B : Vec (256 * 14 * 14) → Vec (128 * 28 * 28))
-    (b2B b1B b0B : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
-    (d2B : Vec (128 * 28 * 28) → Vec (64 * 56 * 56))
-    (a2B a1B a0B : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
-    (xmp : Tensor3 64 112 112)
-    (m_stem : Fin (64 * 112 * 112) → Prop) [DecidablePred m_stem] :
-    Vec 10 → Vec (3 * 224 * 224) :=
-  (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
-  ∘ maxPool3s2FlatBack xmp
-  ∘ a0B ∘ a1B ∘ a2B
-  ∘ d2B
-  ∘ b0B ∘ b1B ∘ b2B
-  ∘ d3B
-  ∘ c0B ∘ c1B ∘ c2B ∘ c3B ∘ c4B
-  ∘ d4B
-  ∘ e0B ∘ e1B
-  ∘ gapBack 512 7 7
-  ∘ dense (Mat.transpose Wd) (0 : Vec 512)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The batched 3×3/s2 pool backward

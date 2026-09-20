@@ -3,7 +3,7 @@ import LeanMlir.Types
 
 /-! # ConvNeXt Item B — structured representative train-step render (proof-rendered)
 
-The ConvNeXt peer of `tests/TestMobilenetV2TrainPC.lean` / `TestResnet34TrainPC.lean`, at the
+The ConvNeXt peer of `tests/TestMobilenetV2TrainPC.lean` / the retired `TestResnet34TrainPC.lean`, at the
 **representative** `convNextForward` config (the proven graph: 1×1 patchify stem → scalar-LN →
 2 residual ConvNeXt blocks → GAP → head-LN → dense), CIFAR-shaped: 3×32² in, c=32, cExp=128,
 dw 7×7, 10 classes. Forward AND the whole backward cotangent chain are proof-rendered through

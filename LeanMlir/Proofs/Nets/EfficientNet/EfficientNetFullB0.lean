@@ -351,7 +351,7 @@ def efficientnetFwdGraphB_full (N : Nat) (epsStr : String) (w : B0Weights)
 /-- **Full batched EfficientNet-B0 forward faithfulness.** The full 16-MBConv batched graph (true
     batch-norm + SE) denotes `efficientnetForwardB_full`. Chained from the per-block `*GraphW_faithful`
     lemmas (one `rw` per block, outermost→innermost), then a structural `rfl` (the forward is
-    nested-application form, blocks opaque) — the `ResNet34RenderPC` recipe at full depth. -/
+    nested-application form, blocks opaque) — the `ResNet34RenderPC.lean` recipe (since retired) at full depth. -/
 theorem efficientnetFwdGraphB_full_faithful (N : Nat) (epsStr : String) (w : B0Weights)
     (x : Vec (N * (3 * 224 * 224))) :
     den (efficientnetFwdGraphB_full N epsStr w x) = efficientnetForwardB_full N w x := by

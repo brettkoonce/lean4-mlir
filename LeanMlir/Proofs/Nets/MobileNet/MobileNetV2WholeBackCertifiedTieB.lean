@@ -345,7 +345,7 @@ theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
     They are definitionally equal — and ⛔ letting the kernel discover that on the CONCRETE
     twenty-one-stage net is a deterministic timeout, because whnf unfolds the `@[reducible]`
     block abbreviations to get there. Between variables it is `rfl` and costs nothing.
-    `ResNet34BackCertifiedTie.lean`'s `chainComp₂_comp` is the same trick: prove the reduction
+    The per-example r34 tie's `chainComp₂_comp` (retired) was the same trick: prove the reduction
     where the terms are variables, then REWRITE. -/
 private theorem comp3_assoc {m a b c n : Nat} (f : Vec c → Vec n) (g : Vec b → Vec c)
     (h : Vec a → Vec b) (k : Vec m → Vec a) : (f ∘ g ∘ h) ∘ k = f ∘ g ∘ h ∘ k := rfl

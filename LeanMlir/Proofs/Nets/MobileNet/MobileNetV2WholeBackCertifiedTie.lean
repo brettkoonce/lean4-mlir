@@ -9,7 +9,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP
 Two pieces the per-example paper tie (`MobileNetV2PaperWholeBackCertifiedTie`) stands on:
 
 1. `convStridedBnRelu6PC_has_vjp_at` — the STEM stage's certified VJP, `relu6 ∘ bnPC ∘
-   flatConvStride2Xla`. The repo had the strided-conv-with-**relu** peer (r34's `cbrStridedPC`) and
+   flatConvStride2Xla`. The repo had the strided-conv-with-**relu** peer (the per-example r34 stem, since retired) and
    the **non-strided** relu6 peer (`convBnRelu6PC_has_vjp_at`); this is the missing corner.
 2. `convStridedBnRelu6PCBack_eq_vjp_backward` / `convBnRelu6PCBack_eq_vjp_backward` — the stem and
    head leaf ties, both closing on one conv-leaf rewrite (`flatConvStride2XlaBack_eq_vjp_backward` /

@@ -402,9 +402,9 @@ def cifar8wbBnVerified : VerifiedNetSpec :=
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
     [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
     stages 2–4) → GAP → dense. **110 params** (§2l step B: no conv biases). Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SpecVJP.lean)
-    (`resnet34Verified_denote_eq` → `resnet34Forward_full_pc`, + rung E
-    `resnet34Verified_fwd_faithful`); the honest pointwise VJP is the audited parametric
-    skeleton `Proofs.resnet34_has_vjp_at`. -/
+    (`resnet34VerifiedB_denote_eq` → `resnet34ForwardB_full` at batch BN, every batch size, + rung E
+    `resnet34VerifiedB_fwd_faithful`); the honest pointwise VJP is `resnet34ForwardB_full_has_vjp_at`
+    (`ResNet34FullBVJP.lean`), the audited parametric skeleton `Proofs.resnet34_has_vjp_at` below it. -/
 def resnet34Verified : VerifiedNetSpec where
   name     := "ResNet-34"
   slug     := "resnet34"

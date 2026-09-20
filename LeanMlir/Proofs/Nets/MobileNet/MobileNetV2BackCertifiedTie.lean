@@ -6,8 +6,8 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
 /-! # The certified per-channel-BN MobileNetV2 inverted-residual body VJPs
 
 The repo's `invresBody_has_vjp_at` (`MobileNetV2.lean`) is for the *global*-`bnForward` body, NOT
-the per-channel one the per-example renders use — so, exactly as r34 built `rblkPC_has_vjp_at`
-fresh, this file builds the certified per-channel body VJPs `invresBodyPC_has_vjp_at` (stride-1)
+the per-channel one the per-example renders use — so, as the per-example r34 tier once built its
+own block VJPs, this file builds the certified per-channel body VJPs `invresBodyPC_has_vjp_at` (stride-1)
 and `invresBodyStridedPC_has_vjp_at` (downsample) from per-channel stage VJPs
 (`bnPerChannelTensor3`). The forward body is `project ∘ depthwise ∘ expand`, each stage
 `(relu6) ∘ bnPC ∘ conv`, so the VJP applies `projectBack → depthwiseBack → expandBack`.

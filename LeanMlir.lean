@@ -27,7 +27,6 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
-import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
 import LeanMlir.Proofs.Nets.ViT.ViTClose

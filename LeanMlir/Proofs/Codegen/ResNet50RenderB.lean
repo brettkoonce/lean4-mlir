@@ -10,7 +10,7 @@ definition across both nets.
 
 ## The three block forms, and why the third exists
 
-`ResNet50BlocksCertified.lean` carries the certified VJPs; this file renders them.
+`ResNet50FullBVJP.lean` carries the certified VJPs; this file renders them.
 
 | renderer | block | where |
 |---|---|---|

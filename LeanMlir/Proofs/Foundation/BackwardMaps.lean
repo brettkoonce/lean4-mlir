@@ -87,16 +87,6 @@ theorem perRowFlatPR_const {n d : Nat} (f : Vec d → Vec d) :
 -- § The 2×2 max-pool backward (a lookup) and the conv input-VJP
 -- ════════════════════════════════════════════════════════════════
 
-/-- **MaxPool backward in flat `Vec` space** — `maxPoolBackDenote x` crossing the flatten
-    boundary (`Vec (c·h·w) → Vec (c·(2h)·(2w))`): scatter the pooled cotangent back to each
-    window's arg-max input cell, 0 elsewhere. The saved input `x` fixes the arg-max map (the
-    smooth-point assumption). The backward of `maxPoolFlat c h w`; tied to the certified VJP by
-    `maxPoolFlatBack_eq_vjp_backward`. ⛔ The 3×3/s2 stem pool's backward is
-    `maxPool3s2FlatBack`, a different function of the same type. -/
-noncomputable def maxPoolFlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
-    Vec (c * h * w) → Vec (c * (2*h) * (2*w)) :=
-  fun dy => Tensor3.flatten (maxPoolBackDenote x (Tensor3.unflatten dy))
-
 /-- **Conv backward in flat `Vec` space** — `dx = convBackDenote W dy`. The emitted
     `convolution(dy, reverse(transpose(W)))` denotes a forward `conv2d (reverseSwap W) 0`, which
     in flat space is `flatConv (reverseSwap W) 0`. The backward of `flatConv W b`
@@ -203,7 +193,7 @@ noncomputable def depthwiseStride2FlatXlaBack {c h w kH kW : Nat} (W : Depthwise
 
 /-- **Global-average-pool backward** — the certified GAP VJP: route `dy(channel)` to every spatial
     cell of that channel, divided by `h·w`. `Vec c → Vec (c·h·w)`. The head endpoint of every conv
-    net's backward chain (`r34InputGrad`, `mnv2InputGradB`, `efficientnetInputGradB_full`, …); the
+    net's backward chain (`r34InputGradB`, `mnv2InputGradB`, `efficientnetInputGradB_full`, …); the
     emitted `SHlo.gapBack` denotes `globalAvgPoolFlat_has_vjp`'s backward, which is this map. -/
 noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
   fun idx => dy (flatChannel c h w idx) / ((h : ℝ) * (w : ℝ))
@@ -222,11 +212,12 @@ theorem sum_flat3 {c h w : Nat} (g : Fin (c*h*w) → ℝ) :
 
 /-- **3×3/s2 max-pool backward in flat `Vec` space** — the accumulating scatter: each input cell
     collects `dy` from every output whose 3×3 window selects it. ⛔ `maxPool2`'s windows TILE, so
-    `maxPoolFlatBack` is a lookup; 3×3/s2 windows OVERLAP, so an input cell can be the argmax of
-    up to four outputs and this is a reduction. Spelled as the masked sum the kernel performs,
-    which is `maxPool3s2_has_vjp_at3`'s backward reindexed (`maxPool3s2FlatBack_eq_vjp_backward`).
-    Found 2026-08 because `r34InputGrad` had been written as the reverse of the 2×2 pool while
-    its docstring claimed the committed forward. -/
+    the 2×2 pool's backward (`StableHLO.maxPoolBackFlat`) is a lookup; 3×3/s2 windows OVERLAP, so
+    an input cell can be the argmax of up to four outputs and this is a reduction. Spelled as the
+    masked sum the kernel performs, which is `maxPool3s2_has_vjp_at3`'s backward reindexed
+    (`maxPool3s2FlatBack_eq_vjp_backward`). Found 2026-08 because the per-example r34 chain
+    (retired 2026-09-19) had been written as the reverse of the 2×2 pool while its docstring
+    claimed the committed forward. -/
 noncomputable def maxPool3s2FlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
     Vec (c*h*w) → Vec (c*(2*h)*(2*w)) :=
   fun dy idx => ∑ k : Fin (c*h*w), (if maxPool3s2LocalReindex x k = idx then dy k else 0)
@@ -234,7 +225,7 @@ noncomputable def maxPool3s2FlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
 /-- **3×3/s2 pool input-VJP leaf tie (smooth point).** `maxPool3s2FlatBack x` IS the certified
     pool input-VJP `(maxPool3s2Flat_has_vjp_at x h_smooth).backward`: the certified backward is the
     triple sum `∑_{co,ho,wo} [σ(co,ho,wo) = idx]·dy(co,ho,wo)`, and this is that sum re-indexed
-    row-major (`sum_flat3`). The 3×3/s2 peer of `maxPoolFlatBack_eq_vjp_backward`. -/
+    row-major (`sum_flat3`). The 3×3/s2 peer of the 2×2 bridge `StableHLO.maxPoolBack_faithful`. -/
 theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool3s2Smooth x) :
     maxPool3s2FlatBack x = (maxPool3s2Flat_has_vjp_at x h_smooth).backward := by

@@ -40,7 +40,6 @@ import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
-import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
@@ -613,10 +612,6 @@ open Proofs
 #print axioms mnv2_render_depthwiseb_certified
 #print axioms mnv2_render_stem_convW_certified
 #print axioms mnv2_render_stem_convb_certified
--- ResNet-34 RENDER (Item A)
-#print axioms StableHLO.idBlockGraphPC_faithful
-#print axioms StableHLO.downBlockGraphPC_faithful
-#print axioms StableHLO.resnet34FwdGraphFullPC_faithful
 -- ResNet-34 cotangent-chain CLOSE (Item D)
 #print axioms StableHLO.stemGraphB_faithful
 #print axioms StableHLO.mbNoExpGraphB_faithful
@@ -862,14 +857,10 @@ open Proofs
 #print axioms Proofs.StableHLO.efficientnetFwdGraphB_fullEval_faithful
 -- §B integrity tie (the r34 identity block)
 #print axioms Proofs.convFlatBack_eq_vjp_backward
-#print axioms Proofs.rblkPC_has_vjp_at
-#print axioms Proofs.r34IdBlockBack_eq_rblkPC_vjp
 -- §B integrity tie (the r34 DOWNSAMPLE block)
 #print axioms Proofs.flatConvStride2Back_eq_vjp_backward
 -- Its XLA-SAME peer (the TF-origin B0 / MobileNetV2 stems): the same conv leaf + decimateOddBack rfl.
 #print axioms Proofs.flatConvStride2XlaBack_eq_vjp_backward
-#print axioms Proofs.rblkPStridedPC_has_vjp_at
-#print axioms Proofs.r34DownBlockBack_eq_rblkPStridedPC_vjp
 -- §B DEPTHWISE adjoint gate (shared prereq for convnext/mnv2/enet)
 #print axioms Proofs.depthwiseConv2d_dwReverse_eq_input_grad_formula
 #print axioms Proofs.depthwiseFlatBack_eq_vjp_backward
@@ -895,21 +886,13 @@ open Proofs
 -- §B endpoint leaf ties
 #print axioms Proofs.dense_transpose_eq_vjp_backward
 #print axioms Proofs.gapBack_eq_vjp_backward
-#print axioms Proofs.maxPoolFlatBack_eq_vjp_backward
 -- He et al.'s 3×3/s2 stem pool's BACKWARD
 #print axioms Proofs.maxPool3s2FlatBack_eq_vjp_backward
 #print axioms Proofs.maxPool3s2Flat_has_vjp_at_vec
 -- the two spellings of that scatter are one map: the render's `.maxPool3s2BackB` node = the chain's
 #print axioms Proofs.maxPool3s2BackFlat_eq_flatBack
 #print axioms Proofs.den_maxPool3s2BackB_eq_flatBackB
--- THE WHOLE-NET CERTIFIED TIE (ResNet-34, r34InputGrad_eq_resnet34_vjp)
-#print axioms Proofs.cbrStridedPC_has_vjp_at
-#print axioms Proofs.cbrStridedPC_differentiableAt
-#print axioms Proofs.cbrStridedPCBack_eq_vjp_backward
-#print axioms Proofs.r34InputGrad_eq_resnet34_vjp
--- AND THE SHAPE CHECK — the last net to get one (2026-09-04)
-#print axioms Proofs.resnet34Forward_full_pc_eq_chain
--- THE SAME TIE FOR THE WHOLE MOBILENETV2 (MobileNetV2WholeBackCertifiedTie.lean)
+-- THE WHOLE-NET CERTIFIED TIE FOR THE PER-EXAMPLE MOBILENETV2 (MobileNetV2WholeBackCertifiedTie.lean)
 #print axioms Proofs.convStridedBnRelu6PC_has_vjp_at
 #print axioms Proofs.convStridedBnRelu6PC_differentiableAt
 #print axioms Proofs.convStridedBnRelu6PCBack_eq_vjp_backward
@@ -1760,10 +1743,7 @@ open Proofs
 -- the same spec at batch BN, the net every shipped MobileNetV2 artifact runs (finding 2, 2026-09-19)
 #print axioms mobilenetv2VerifiedB_denote_eq
 #print axioms mobilenetv2VerifiedB_fwd_faithful
--- FULL committed-spec ties (unified weight bundles, 2026-07-07)
-#print axioms resnet34Verified_denote_eq
-#print axioms resnet34Verified_fwd_faithful
--- the same spec at batch BN, the net every shipped ResNet-34 artifact runs (finding 2, 2026-09-19)
+-- FULL committed-spec ties (unified weight bundles, 2026-07-07); r34's at batch BN, the net every shipped artifact runs (2026-09-19)
 #print axioms resnet34VerifiedB_denote_eq
 #print axioms resnet34VerifiedB_fwd_faithful
 #print axioms efficientnetVerified_denote_eq

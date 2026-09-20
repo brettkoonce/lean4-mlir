@@ -6,7 +6,7 @@ import LeanMlir.VerifiedNets
 `verified_mlir/resnet34_adam_train_step.mlir` **now** renders from
 `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` as `pretty(provenGraph)` at the batched index
 `N := B`, with the un-fused `*GradB` gradients feeding the proven AdamW ops. It used to come from
-the hand-written string emitter in `tests/TestResnet34Train.lean`; this harness is what licensed
+the hand-written string emitter in `TestResnet34Train.lean` (retired 2026-09-19); this harness is what licensed
 that swap, and the hand-written AdamW render is now retired (that emitter renders only the
 data-parallel variant, to `…_dp.mlir`).
 

@@ -23,7 +23,7 @@ Per-block (ic→oc, mid=t·ic, spatial, kind):
   b8  64→64   mid384 @14  resid          b17 160→320 mid960 @7   exp(no-resid, s=1)
   b9  64→64   mid384 @14  resid
 
-Like ResNet-34's full net (`ResNet34RenderPC`), the deliverable HERE is forward + graph +
+Like ResNet-34's per-example full net once was (`ResNet34RenderPC.lean`, retired 2026-09-19), the deliverable HERE is forward + graph +
 faithfulness; the param-grad close is already covered: every
 `MobileNetV2Close` bridge is dim-polymorphic and applies at the paper shapes verbatim.
 

@@ -3,7 +3,7 @@ import LeanMlir.VerifiedNets
 /-! # `resnet34-verified-adam` — train ResNet-34 with the VERIFIED-rendered **AdamW** step
 
 The ResNet-34 peer of the `vit`/`mnv2`/`enet` verified-adam trainers: the proof-rendered train step
-(`tests/TestResnet34Train.lean → verified_mlir/resnet34_adam_train_step.mlir`,
+(`Proofs/Codegen/ResNet34RenderB.lean → verified_mlir/resnet34_adam_train_step.mlir`,
 `@resnet34_adam_train_step`) — 7×7-s2 stem → maxpool → [3,4,6,3] basic blocks (per-channel BN +
 strided downsamples) → GAP → dense — with the SGD update swapped for AdamW via
 `ViTRender.emitAdamV`, driven by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (146 params)
@@ -45,7 +45,7 @@ def resnet34AdamConfig : VerifiedConfig where
       per parameter gradient before its AdamW triple, a **declared trusted carve-out** (§5) that the
       render announces in its own output banner. *(An earlier version of this docstring called this
       variant "not certified — the batched renderer cannot emit collectives yet" and pointed at a
-      hand-written emitter in `tests/TestResnet34Train.lean`. Both were true until §2b-quater, which
+      hand-written emitter in `TestResnet34Train.lean` (retired 2026-09-19). Both were true until §2b-quater, which
       moved it onto the certified renderer and DELETED that emitter. Corrected 2026-07-29.)*
     * **`adam256`** — bs256, single device (§2d.1), worth **1.78×** img/s over bs32.
     * **`adamdp128`** — bs128 × N replicas, i.e. global 256 data-parallel.

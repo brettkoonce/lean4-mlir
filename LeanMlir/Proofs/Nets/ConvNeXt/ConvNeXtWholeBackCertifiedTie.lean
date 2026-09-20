@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 /-! # ConvNeXt-T's whole-net backward tie — the stage fold, and ⛔ what the tie FOUND
 
 ⭐ **Read `EvenKernelConvBack.lean` first; the finding is the deliverable.** This file was started
-as the ConvNeXt peer of `r34InputGrad_eq_resnet34_vjp` —
+as the ConvNeXt peer of ResNet-34's whole-net tie (today `r34InputGradB_eq_r34B_full_vjp`) —
 `planning/archive/float_budget_numbers_log.md` §3.18, done BEFORE the number rather than after it, because
 §3.10's tie found r34 reversing the wrong pool and moved a committed number 4×. It paid out the
 same way at the first leaf it touched.
@@ -46,7 +46,7 @@ all the work and no new conv machinery is needed. On top of it:
 4. ⭐⭐ **`convnextInputGrad_eq_convNextForwardTCh_vjp` — THE APEX.** `convnextInputGrad`, with
    every slot pinned to the certified per-op backward at its own saved activation, IS
    `(convNextForwardTCh_has_vjp …).backward x`. The ConvNeXt peer of
-   `r34InputGrad_eq_resnet34_vjp`, and **stronger**: `convNextForwardTCh_has_vjp` is `HasVJP` —
+   `r34InputGradB_eq_r34B_full_vjp`, and **stronger**: `convNextForwardTCh_has_vjp` is `HasVJP` —
    everywhere — not the smooth-point `HasVJPAt` that one is, because GELU, LayerNorm, convolution and the layer scale are all smooth and
    ConvNeXt has no kink anywhere. Its only hypotheses are the 23 LayerNorm positivities, so unlike
    every other whole-net backward tie in this repo it carries no smoothness side-condition.
@@ -92,7 +92,7 @@ the committed one and is free, because no `x` is in sight to evaluate.
 instead, which costs nothing, and the term-mode peer must be top-level `def`s rather than a `let`
 chain — a `let` used twice per level zeta-expands to `2^11` copies of the prefix.
 
-⚠ ResNet-34's shape check is `resnet34Forward_full_pc_eq_chain` (`ResNet34BackCertifiedTie.lean`),
+⚠ ResNet-34's shape check is `resnet34ForwardB_full_eq_slots` (`ResNet34BackCertifiedTieB.lean`),
 and it is the net the hole first bit.
 -/
 

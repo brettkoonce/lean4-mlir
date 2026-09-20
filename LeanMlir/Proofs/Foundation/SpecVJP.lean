@@ -13,7 +13,6 @@ import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
-import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
@@ -395,168 +394,20 @@ The mnv2 full-paper pattern applied to the remaining imagenette nets: each commi
 spec's ENTIRE layer list (literal dims, drift-sensitive) denotes the full proven
 forward, with weights riding a structure bundle so the ties stay readable. Existing
 bundles are reused where the Full module already has one (`B0Weights`,
-`CnxTWeightsCh`); r34 and vit get bundles here (`R34Weights`, `ViTTinyWeights` —
-SpecVJP-local so no proof module's signature changes). Rung E composes each net's
+`CnxTWeightsCh`, `R34BWeights`); vit gets its bundle here (`ViTTinyWeights`, SpecVJP-local so
+no proof module's signature changes). Rung E composes each net's
 full graph-faithfulness apex with the tie (vit's is `vitFwdGraphKMHV_faithful`,
 ViTDepthK §3 — the depth-`k` multi-head vector-LN graph). Rung C is the canonical
 witness except vit: all-smooth, so vit's rung C is the REAL whole-net VJP
 `vitForwardKV_has_vjp` (only `0 < ε`) at the committed spec. -/
 
--- ── ResNet-34 (FULL): the committed 8-entry spec ↔ resnet34Forward_full_pc ──
+-- ── ResNet-34 (FULL, batched): the committed 8-entry spec ↔ resnet34ForwardB_full ──
 
-/-- Identity basic-block weights (conv-BN ×2), per-channel γ/β. -/
-structure R34BlockW (c : Nat) where
-  W1 : Kernel4 c c 3 3
-  b1 : Vec c
-  g1 : Vec c
-  t1 : Vec c
-  W2 : Kernel4 c c 3 3
-  b2 : Vec c
-  g2 : Vec c
-  t2 : Vec c
-
-/-- Downsample basic-block weights (strided conv-BN ×2 + projection conv-BN).
-
-    `kHp kWp` is the **projection** kernel: 3×3 as this repo renders it, 1×1 in He et al.'s
-    option-B shortcut (§2k/§2l). `R34Weights` below is the single place that picks it. -/
-structure R34DownW (ic oc kHp kWp : Nat) where
-  W1 : Kernel4 oc ic 3 3
-  b1 : Vec oc
-  g1 : Vec oc
-  t1 : Vec oc
-  W2 : Kernel4 oc oc 3 3
-  b2 : Vec oc
-  g2 : Vec oc
-  t2 : Vec oc
-  Wp : Kernel4 oc ic kHp kWp
-  bp : Vec oc
-  gp : Vec oc
-  tp : Vec oc
-
-/-- All ResNet-34 parameters (shared BN ε): stem + [3,4,6,3] basic blocks + dense. -/
-structure R34Weights where
-  ε : ℝ
-  sW : Kernel4 64 3 7 7
-  sb : Vec 64
-  sγ : Vec 64
-  sβ : Vec 64
-  a0 : R34BlockW 64
-  a1 : R34BlockW 64
-  a2 : R34BlockW 64
-  d2 : R34DownW 64 128 1 1
-  b0 : R34BlockW 128
-  b1 : R34BlockW 128
-  b2 : R34BlockW 128
-  d3 : R34DownW 128 256 1 1
-  c0 : R34BlockW 256
-  c1 : R34BlockW 256
-  c2 : R34BlockW 256
-  c3 : R34BlockW 256
-  c4 : R34BlockW 256
-  d4 : R34DownW 256 512 1 1
-  e0 : R34BlockW 512
-  e1 : R34BlockW 512
-  Wd : Mat 512 10
-  bd : Vec 10
-
-/-- `resnet34Forward_full_pc` at the bundle (the 145-arg field expansion, once). -/
-noncomputable def resnet34ForwardW (w : R34Weights) : Vec (3 * 224 * 224) → Vec 10 :=
-  resnet34Forward_full_pc w.ε w.sW w.sb w.sγ w.sβ
-    w.a0.W1 w.a0.b1 w.a0.g1 w.a0.t1 w.a0.W2 w.a0.b2 w.a0.g2 w.a0.t2
-    w.a1.W1 w.a1.b1 w.a1.g1 w.a1.t1 w.a1.W2 w.a1.b2 w.a1.g2 w.a1.t2
-    w.a2.W1 w.a2.b1 w.a2.g1 w.a2.t1 w.a2.W2 w.a2.b2 w.a2.g2 w.a2.t2
-    w.d2.W1 w.d2.b1 w.d2.g1 w.d2.t1 w.d2.W2 w.d2.b2 w.d2.g2 w.d2.t2 w.d2.Wp w.d2.bp w.d2.gp w.d2.tp
-    w.b0.W1 w.b0.b1 w.b0.g1 w.b0.t1 w.b0.W2 w.b0.b2 w.b0.g2 w.b0.t2
-    w.b1.W1 w.b1.b1 w.b1.g1 w.b1.t1 w.b1.W2 w.b1.b2 w.b1.g2 w.b1.t2
-    w.b2.W1 w.b2.b1 w.b2.g1 w.b2.t1 w.b2.W2 w.b2.b2 w.b2.g2 w.b2.t2
-    w.d3.W1 w.d3.b1 w.d3.g1 w.d3.t1 w.d3.W2 w.d3.b2 w.d3.g2 w.d3.t2 w.d3.Wp w.d3.bp w.d3.gp w.d3.tp
-    w.c0.W1 w.c0.b1 w.c0.g1 w.c0.t1 w.c0.W2 w.c0.b2 w.c0.g2 w.c0.t2
-    w.c1.W1 w.c1.b1 w.c1.g1 w.c1.t1 w.c1.W2 w.c1.b2 w.c1.g2 w.c1.t2
-    w.c2.W1 w.c2.b1 w.c2.g1 w.c2.t1 w.c2.W2 w.c2.b2 w.c2.g2 w.c2.t2
-    w.c3.W1 w.c3.b1 w.c3.g1 w.c3.t1 w.c3.W2 w.c3.b2 w.c3.g2 w.c3.t2
-    w.c4.W1 w.c4.b1 w.c4.g1 w.c4.t1 w.c4.W2 w.c4.b2 w.c4.g2 w.c4.t2
-    w.d4.W1 w.d4.b1 w.d4.g1 w.d4.t1 w.d4.W2 w.d4.b2 w.d4.g2 w.d4.t2 w.d4.Wp w.d4.bp w.d4.gp w.d4.tp
-    w.e0.W1 w.e0.b1 w.e0.g1 w.e0.t1 w.e0.W2 w.e0.b2 w.e0.g2 w.e0.t2
-    w.e1.W1 w.e1.b1 w.e1.g1 w.e1.t1 w.e1.W2 w.e1.b2 w.e1.g2 w.e1.t2
-    w.Wd w.bd
-
-/-- Math denotation of the committed ResNet-34 spec: the 8-entry stage-level layer list
-    denotes to the full per-channel [3,4,6,3] render. Any other list is not the net (`0`). -/
-noncomputable def denoteR34Full (layers : List VLayer) (w : R34Weights) :
-    Vec (3 * 224 * 224) → Vec 10 :=
-  match layers with
-  -- ⭐ `.maxPool 3 2` since 2026-08-04 — He et al.'s stem pool. ⚠ This pattern is the *point* of
-  -- the layer list: it is deliberately drift-sensitive, so moving the spec's pool without moving
-  -- `resnet34Forward_full_pc`'s (or the reverse) drops the whole net to `fun _ => 0` and
-  -- `resnet34Verified_denote_eq`'s `rfl` fails at `lake build`. Both moved together here.
-  | [.convBnNB 3 64 7 2, .maxPool 3 2,
-     .residualStage 64 64 3 1, .residualStage 64 128 4 2,
-     .residualStage 128 256 6 2, .residualStage 256 512 3 2,
-     .globalAvgPool, .dense 512 10] => resnet34ForwardW w
-  | _ => fun _ => 0
-
-/-- **Spec ≡ the full proven render.** `resnet34Verified`'s denotation is exactly
-    `resnet34Forward_full_pc` (per-channel BN, [3,4,6,3] at 224²) — by `rfl`. -/
-theorem resnet34Verified_denote_eq (w : R34Weights) :
-    denoteR34Full resnet34Verified.layers w = resnet34ForwardW w := rfl
-
-/-- **The committed spec carries the math** — canonical `pdiv` witness (relu is kinked,
-    so the honest whole-net input-VJP stays pointwise; the live/seal theorems
-    (`ResNet34Live*`) discharge nontriviality at full depth and realistic dims). -/
-noncomputable def resnet34Verified_has_vjp (w : R34Weights) :
-    HasVJP (denoteR34Full resnet34Verified.layers w) := HasVJP.canonical _
-
-open Proofs.StableHLO in
-/-- **Rung E at the committed spec.** The full per-channel [3,4,6,3] graph denotes the
-    committed spec's function: `resnet34FwdGraphFullPC_faithful` composed with the tie. -/
-theorem resnet34Verified_fwd_faithful (epsStr : String) (w : R34Weights)
-    (x : Vec (3 * 224 * 224)) :
-    den (resnet34FwdGraphFullPC epsStr w.ε w.sW w.sb w.sγ w.sβ
-      w.a0.W1 w.a0.b1 w.a0.g1 w.a0.t1 w.a0.W2 w.a0.b2 w.a0.g2 w.a0.t2
-      w.a1.W1 w.a1.b1 w.a1.g1 w.a1.t1 w.a1.W2 w.a1.b2 w.a1.g2 w.a1.t2
-      w.a2.W1 w.a2.b1 w.a2.g1 w.a2.t1 w.a2.W2 w.a2.b2 w.a2.g2 w.a2.t2
-      w.d2.W1 w.d2.b1 w.d2.g1 w.d2.t1 w.d2.W2 w.d2.b2 w.d2.g2 w.d2.t2 w.d2.Wp w.d2.bp w.d2.gp w.d2.tp
-      w.b0.W1 w.b0.b1 w.b0.g1 w.b0.t1 w.b0.W2 w.b0.b2 w.b0.g2 w.b0.t2
-      w.b1.W1 w.b1.b1 w.b1.g1 w.b1.t1 w.b1.W2 w.b1.b2 w.b1.g2 w.b1.t2
-      w.b2.W1 w.b2.b1 w.b2.g1 w.b2.t1 w.b2.W2 w.b2.b2 w.b2.g2 w.b2.t2
-      w.d3.W1 w.d3.b1 w.d3.g1 w.d3.t1 w.d3.W2 w.d3.b2 w.d3.g2 w.d3.t2 w.d3.Wp w.d3.bp w.d3.gp w.d3.tp
-      w.c0.W1 w.c0.b1 w.c0.g1 w.c0.t1 w.c0.W2 w.c0.b2 w.c0.g2 w.c0.t2
-      w.c1.W1 w.c1.b1 w.c1.g1 w.c1.t1 w.c1.W2 w.c1.b2 w.c1.g2 w.c1.t2
-      w.c2.W1 w.c2.b1 w.c2.g1 w.c2.t1 w.c2.W2 w.c2.b2 w.c2.g2 w.c2.t2
-      w.c3.W1 w.c3.b1 w.c3.g1 w.c3.t1 w.c3.W2 w.c3.b2 w.c3.g2 w.c3.t2
-      w.c4.W1 w.c4.b1 w.c4.g1 w.c4.t1 w.c4.W2 w.c4.b2 w.c4.g2 w.c4.t2
-      w.d4.W1 w.d4.b1 w.d4.g1 w.d4.t1 w.d4.W2 w.d4.b2 w.d4.g2 w.d4.t2 w.d4.Wp w.d4.bp w.d4.gp w.d4.tp
-      w.e0.W1 w.e0.b1 w.e0.g1 w.e0.t1 w.e0.W2 w.e0.b2 w.e0.g2 w.e0.t2
-      w.e1.W1 w.e1.b1 w.e1.g1 w.e1.t1 w.e1.W2 w.e1.b2 w.e1.g2 w.e1.t2
-      w.Wd w.bd x)
-      = denoteR34Full resnet34Verified.layers w x :=
-  (resnet34FwdGraphFullPC_faithful epsStr w.ε w.sW w.sb w.sγ w.sβ
-      w.a0.W1 w.a0.b1 w.a0.g1 w.a0.t1 w.a0.W2 w.a0.b2 w.a0.g2 w.a0.t2
-      w.a1.W1 w.a1.b1 w.a1.g1 w.a1.t1 w.a1.W2 w.a1.b2 w.a1.g2 w.a1.t2
-      w.a2.W1 w.a2.b1 w.a2.g1 w.a2.t1 w.a2.W2 w.a2.b2 w.a2.g2 w.a2.t2
-      w.d2.W1 w.d2.b1 w.d2.g1 w.d2.t1 w.d2.W2 w.d2.b2 w.d2.g2 w.d2.t2 w.d2.Wp w.d2.bp w.d2.gp w.d2.tp
-      w.b0.W1 w.b0.b1 w.b0.g1 w.b0.t1 w.b0.W2 w.b0.b2 w.b0.g2 w.b0.t2
-      w.b1.W1 w.b1.b1 w.b1.g1 w.b1.t1 w.b1.W2 w.b1.b2 w.b1.g2 w.b1.t2
-      w.b2.W1 w.b2.b1 w.b2.g1 w.b2.t1 w.b2.W2 w.b2.b2 w.b2.g2 w.b2.t2
-      w.d3.W1 w.d3.b1 w.d3.g1 w.d3.t1 w.d3.W2 w.d3.b2 w.d3.g2 w.d3.t2 w.d3.Wp w.d3.bp w.d3.gp w.d3.tp
-      w.c0.W1 w.c0.b1 w.c0.g1 w.c0.t1 w.c0.W2 w.c0.b2 w.c0.g2 w.c0.t2
-      w.c1.W1 w.c1.b1 w.c1.g1 w.c1.t1 w.c1.W2 w.c1.b2 w.c1.g2 w.c1.t2
-      w.c2.W1 w.c2.b1 w.c2.g1 w.c2.t1 w.c2.W2 w.c2.b2 w.c2.g2 w.c2.t2
-      w.c3.W1 w.c3.b1 w.c3.g1 w.c3.t1 w.c3.W2 w.c3.b2 w.c3.g2 w.c3.t2
-      w.c4.W1 w.c4.b1 w.c4.g1 w.c4.t1 w.c4.W2 w.c4.b2 w.c4.g2 w.c4.t2
-      w.d4.W1 w.d4.b1 w.d4.g1 w.d4.t1 w.d4.W2 w.d4.b2 w.d4.g2 w.d4.t2 w.d4.Wp w.d4.bp w.d4.gp w.d4.tp
-      w.e0.W1 w.e0.b1 w.e0.g1 w.e0.t1 w.e0.W2 w.e0.b2 w.e0.g2 w.e0.t2
-      w.e1.W1 w.e1.b1 w.e1.g1 w.e1.t1 w.e1.W2 w.e1.b2 w.e1.g2 w.e1.t2
-      w.Wd w.bd x).trans
-    (congrFun (resnet34Verified_denote_eq w).symm x)
-
--- ── ResNet-34 (FULL, BATCHED): the same 8-entry spec ↔ resnet34ForwardB_full ──
-
-/-- Math denotation of the committed ResNet-34 spec **at batch BN**: the same 8-entry
-    stage-level list, denoting to `resnet34ForwardB_full` — the batch-statistics net every
-    shipped ResNet-34 artifact runs (`ResNet34FullB.lean`), at every batch size `N`.
-    `denoteR34Full` above is this spec at per-example BN, the forward of the retired SGD
-    artifact. Same list, same drift-sensitivity. -/
+/-- Math denotation of the committed ResNet-34 spec at batch BN: the 8-entry stage-level list
+    denotes to `resnet34ForwardB_full` — the batch-statistics net every shipped ResNet-34
+    artifact runs (`ResNet34FullB.lean`), at every batch size `N`. Any other list is not the net
+    (`0`), so the tie below is drift-sensitive. (The per-example rung, at the forward of the
+    retired SGD artifact, was retired with it on 2026-09-19.) -/
 noncomputable def denoteR34FullB (N : Nat) (layers : List VLayer) (w : R34BWeights 10) :
     Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
   match layers with

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The BATCHED EfficientNet-B0 block forwards and graphs (true batch-norm, matches the render)
 
-The EfficientNet peer of `MobileNetV2RenderPC.lean` / `ResNet34RenderPC.lean` — but EfficientNet's
+The EfficientNet peer of `MobileNetV2RenderPC.lean` / the retired `ResNet34RenderPC.lean` — but EfficientNet's
 operational render ([`tests/TestEfficientNetFwd.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestEfficientNetFwd.lean)) emits **true batch-norm** (reduce μ/var over the
 batch+spatial axes `[0,2,3]` per channel — `bnBatchTensor4`), which **couples the batch**. MNV2/r34
 get away with a batch-1 `den` because their per-channel BN reduces `[2,3]` (per-example, separable);

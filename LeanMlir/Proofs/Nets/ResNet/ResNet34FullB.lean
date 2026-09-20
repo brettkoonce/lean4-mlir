@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # ResNet-34 at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
 
-`ResNet34RenderPC.lean` states ResNet-34's whole-net ℝ forward and typed graph at **per-example**
+`ResNet34RenderPC.lean` (retired 2026-09-19) stated ResNet-34's whole-net ℝ forward and typed graph at **per-example**
 BatchNorm (`bnPerChannelTensor3`, reduce `[2,3]`). That is the world of `resnet34_fwd.mlir` and the
 Imagenette SGD trainer, and every tier built on it is true and correctly paired with those bytes.
 It is NOT the world of `resnet34_sgd_train_step.mlir`, `resnet34in_mom256_train_step.mlir` or any
@@ -166,8 +166,8 @@ theorem r34HeadB_apply (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec 
 --   -> d3(28->14) -> c0..c4@14 -> d4(14->7) -> e0,e1@7 -> GAP -> dense
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The full batch-BN ResNet-34 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of
-    `resnet34Forward_full_pc`; nested-application form, as `efficientnetForwardB_full` and
+/-- **The full batch-BN ResNet-34 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of the
+    retired per-example forward; nested-application form, as `efficientnetForwardB_full` and
     `mobilenetv2ForwardPaper` both are, so the T6 tie can peel it one block at a time. -/
 noncomputable def resnet34ForwardB_full (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Vec (N * nCls) :=
