@@ -1,7 +1,8 @@
-# Audit-only census and stale-citation sweep — 2026-09-19 @ `de4db64b`
+# Audit-only census and stale-citation sweep — 2026-09-19 @ `de4db64b`, sessions 2–4 through `1f56d5cf`
 
 Passes 1 and 2 of the next-session block in `planning/mathlib_reuse_audit.md`. The survey sections
-below are as written on `de4db64b`; the Status section records what has landed since.
+below are as written on `de4db64b`; the three Status sections record what has landed since, and
+"Next session" is the current worklist.
 
 ## Status (2026-09-19, end of session 2): census cuts 2a–2e and the docstring gate landed, pushed
 
@@ -58,11 +59,140 @@ deleted what the fixed point orphaned.
 - **One survey claim was wrong.** It said `mobilenetv2ForwardPaper_eq_chain` was stale. It is
   declared, at `MobileNetV2FullVJP.lean:542`.
 
-## Next session: correctness findings 2–11 and the decision groups
+## Status (2026-09-20, end of session 3): findings 2–11 closed, R.A and M.2 cut — 14 commits LOCAL, unpushed
 
-Checked against `281b6beb`. The full text of each finding is in Pass 1 below.
+`main` is 14 commits ahead of `origin/main` (`281b6beb`). Nothing is pushed. Every commit passed
+`scripts/audit_census/gate.sh`; the book commits were each read in the rebuilt PDF (overfull count
+held at 58) before the word.
 
-**Correctness findings.**
+| commit | what | files | lines | pins |
+|---|---|---:|---:|---:|
+| `b18e1acd` | the sweep: findings 7 (certs.yml, READMEs), 8's regen line, 9, 10, 11 | 17 | +170 −88 | −1 |
+| `ff1fe2f2` | formalization.yaml: :99 → `vitTiny_has_vjp_correct`, the seals as they are, the smoothing gap as closed, :227, :370 | 2 | +30 −21 | 0 |
+| `2b88d7bb` `caf3c02f` `276c06f7` `85f96828` `f6da580d` | finding 5 in the book, one chapter each: front matter, ch 3, ch 4, ch 6, appendix C | 5 | +54 −34 | 0 |
+| `cbf9807d` | finding 4: `maxPool3s2BackFlat_eq_flatBack`, `den_maxPool3s2BackB_eq_flatBackB` — the two stem-pool scatters are one map, no smoothness needed | 3 | +46 −4 | +2 |
+| `ce758853` | finding 3: `den_bnBatchLABack_eq_bnBatchBack`, `bnBackB_eq_den_bnBatchBack`, `bnInB_eq_den_bnBatchBack` — the emitted BN node and the ties' node denote one map up to `reassocB` | 4 | +66 −2 | +3 |
+| `dfabd7b6` | finding 2: `resnet34VerifiedB_*` and `mobilenetv2VerifiedB_*`, the spec rungs at batch BN (`rfl`; the two 224 spellings are defeq) | 3 | +92 −3 | +4 |
+| `607ea30d` `11782de7` | ch 6, the spec-rung sentence, before and after M.2 | 1 | +8 −9 | 0 |
+| `838d5496` | R.A: the per-example ResNet-34 tier; `ResNet34RenderPC.lean`, `ResNet50BlocksCertified.lean`, `tests/TestResnet34Train{,PC}.lean` deleted; `ResNet34BackCertifiedTie` keeps five leaf ties | 29 | +83 −1,815 | −15 |
+| `736db882` | M.2: the per-example MobileNetV2 paper tier; the generic apex `mobilenetv2PaperPC_has_vjp_at` moved into `MobileNetV2WholeBackCertifiedTieB`; `MobileNetV2PaperWholeBackCertifiedTie.lean`, `tests/TestMobilenetV2Train.lean` deleted; `IVW`/`IVWNoExp`/`IVPos`/`IVNoExpPos` kept | 19 | +177 −1,381 | −18 |
+
+AuditAxioms: 1,430 → 1,405 verdicts. The book check that preceded the chapter commits: every `.lean`
+path and every project theorem `content.tex` cites resolves (checked against a `Dump.lean` decls.tsv);
+two of the survey's finding-5 readings were wrong (`cifarCnn8_has_vjp_at` exists — the issue was the
+no-BN VJP cited in the BN section; an fp8 graph IS emitted, `cifar8b_fp8_adam_train_step.mlir`, it is
+`E4M3Fold`'s linear graph that is not), and two misses it lacked were fixed (`finSum` at l.259,
+`matmul_left_const` in `fig:spines`).
+
+**Session-3 traps** (the earlier ones are under "Traps met" below): `docstring-checkrefs` reports ONE unresolved citation per
+run, so a cut that deletes files costs a gate per stale link unless every mention is found first; a
+markdown link to a deleted file fails the file-link check and a bare `Dir/File.lean` path does too —
+the basename form (`X.lean`) is the one the gate skips; `retire.py` leaves free-standing comment blocks
+and `open … in` lines behind a cut range; a Python edit script that asserts mid-way leaves its earlier
+in-memory edits UNWRITTEN — verify each file, not the script's exit; `size.py` reports the other
+`denote*` functions as users of a cut `denote*` (shared `match_N`) — false; and one "per-example" apex
+(`mobilenetv2PaperPC_has_vjp_at`) was the batched tie's generic chain, so a whole-file delete needs a
+grep of the batched files first.
+
+## Status (2026-09-20, end of session 4): every decision group ruled, findings closed, the dead code and the contracts table done
+
+The user ruled on the ten open groups: the four recommended cuts approved, the six recommended
+keeps accepted (S.6, S.8, B.1b, B.2, X.3, A.1b). One census run (`run.sh` on `736db882`, 1,405 pins,
+322 audit-only) served all four cuts — they touch disjoint files, and `retire.py` drops `#print`
+lines by name. Each Lean commit passed `scripts/audit_census/gate.sh`; the two book commits were read
+in the rebuilt PDF (overfull count held at 58) before the word. `main` is now 23 commits ahead of
+`origin/main` (this doc commit included); nothing is pushed.
+
+| commit | what | files | lines | pins |
+|---|---|---:|---:|---:|
+| `b242635c` | S.3: `CnnPoC.d{W,b}{3,4}_den`, `CnnPoC.db5_den`, `CifarPoC.d{W,b}{5,6}_den`, `CifarPoC.db7_den` — instances of `Cifar8PoC.dense{W,B}_den`; the two output-layer ops the ties read stay; certs.yml's cnn/cifar per-op cells now cite `CnnPoC.cb1_den` / `CifarPoC.convB_den` | 4 | +14 −148 | −10 |
+| `7ba0e56f` | B.9: `scorecard_counts`, `cappedCerts_idx`, `unconCerts_idx`, `float_scorecard_count` and the three index lists; both generators edited the same way (`lipschitz_cert_float.py` regenerates byte-identical) | 5 | +2 −66 | −4 |
+| `e8d06510` | B.1: `floatClose_{reluConv,cifarStage,resBlock,bnRelu}`, `floatClose_{reluConvMixed,convMixed_twice,r50_stages_mixed}`, `convMixedBudget_nonneg`; the emptied bf16 composition section removed | 3 | +2 −179 | −7 |
+| `142e7bed` | B.3: four `binomTail_check_*`, `iIndepFun_eval_pi`, `stdNormalQuantile_ge_of_09`, `stdNormalQuantile_ge_of_9952` (followed), `smooth_cp_mlp_i1_radius_dec`; `smoothing_mc_certified` kept; the two emptied demo sections and three demo sentences removed | 4 | +4 −100 | −8 |
+| `fb00989c` | the dead MobileNet/EfficientNet declarations (30, no pins; list below); `sigmoid_has_vjp_correct` pinned | 11 | +21 −381 | +1 |
+| `3d09c138` | the book's front matter: the contracts table re-derived, 44/16/60 → 45/6/51 | 1 | +9 −9 | 0 |
+| `a9baa271` | finding 6: certs.yml, formalization.yaml and the Proofs README cite `cnx_net_tiedGB` / `vit_net_tiedGB` | 3 | +10 −6 | 0 |
+| `1f56d5cf` | the book's appendix C.1.1: the trust-kernel sentence follows the table, no total quoted | 1 | +5 −5 | 0 |
+
+AuditAxioms: 1,405 → 1,377 verdicts.
+
+**Notes on what landed:**
+- **B.1 leaves six pins audit-only**, as the session-2 sizing predicted: `floatClose_bn`,
+  `floatClose_flatConv`, `floatClose_flatConvMixed`, `floatClose_maxPool`, `floatClose_r34_stages`,
+  `floatClose_residualBlock`. They are per-operator instances and combinators — B.1b's class, which
+  yaml 4d cites collectively and `ConvMixedComposeBridge`'s header names as the backbone — so they
+  stay with B.1b. `floatClose_id`, `floatClose_iterate`, `floatClose_addResidual` were held by `keep`.
+- **B.3.** `le_stdNormalQuantile_of_grid` keeps a user (`le_stdNormalQuantile_of_scan`);
+  `mc_mean_lower_bound` keeps `smoothing_mc_certified`. No pin was left without a user.
+- **B.9.** `lipschitz_cert_scorecard.py` retrains, so its edit is verified line for line against the
+  cut, not by regeneration. `emptysec.py` flags two headers in these files that were already so on
+  `HEAD` (a data-comment block and a `namespace` line read as empty) — not from the cut.
+- **S.3.** `size.py` cuts seeds regardless of users, so `MlpPoC.b{0,1}_den_certified` (used by the tie
+  since `ca9ea890`) were dropped from the session-2 seed list by hand before the run.
+
+**Finding 6 (same session).** `cnx_net_tiedGB` / `vit_net_tiedGB` are now cited where the other nets'
+whole-net ties are: certs.yml's convnext and vit rows (per-op cells at the `*GradB_den` folds, capstone
+cell at the GB tie; header reworded for gradient nodes), a formalization.yaml T3 row for
+`Proofs.CnxTiePoCGB.cnx_net_tiedGB`, and the Proofs README's tie list. The book cites no whole-net tie
+for any net (its ImageNet sections quote runs, not theorems), so it is unchanged.
+
+**The unpinned dead code (same session).** The no-users query (`dead.py` over the census graph:
+unpinned, no env users, no token users, auto-generated names excluded) finds 326 declarations
+repo-wide. The MobileNet/EfficientNet set the survey named was cut — 30 declarations, 319 lines,
+0 pins, 6 files: `sigmoidScalarDeriv_eq`, `mbconvResidual_has_vjp_at`, the four `enet*Layer`s,
+MobileNetV2.lean's strided infrastructure (`invresBodyStrided` and its four lemmas,
+`convBnRelu6Strided_*`, `dwBnRelu6Strided_*`, `ivDepthwiseStrided`), `Mnv2Live.bn1_devSum_scale`,
+`Mnv2Live.invresBody₂_eq`, `Mnv2Live.fwdFull_differentiable`, `Mnv2RealSeal.fwdR_has_vjp_correct`,
+and MobileNetV4BackB0's family table (`mnv4Family*`, `mnv4Stage14`, `mnv4*DWSlot_*`,
+`mnv4UibSkipBlock(OfKs)`, `mnv4BlockLadder`). `sigmoid_has_vjp_correct` was dead only because the
+audit never pinned it while pinning every other operator's `_correct`: pinned instead (X.3's
+convention). The other ~296 are outside the survey's scope and untouched; by directory they are
+Nets 11 files, Codegen 11, Certificates 11, Foundation 9, top-level LeanMlir 8, Architectures 6,
+Float 5, Training 3 (`dead.txt` in the session scratchpad; re-run the query, it is 20 lines).
+
+**The contracts table (same session).** Re-derived from the 117 `has_vjp*` pins on the rule the
+lead-in states. Counted as contracts (45): the `_correct` theorem where a def/`_correct` pair is
+pinned, else the pinned `HasVJP`/`HasVJPAt` def — ch 1 `mnistLinear`; ch 2 `relu`, `mlp`; ch 3
+`conv2d`, `maxPool2`, `mnistCnnNoBn`; ch 4 `bnPerChannelFlat`, `bnPerChannelTensor3`, `bnBatchLA`,
+`cifarCnn`, `cifarCnn8`, `cifarCnnBn8`; ch 5 `residual`, `residualProj`, `globalAvgPoolFlat`,
+`flatConvStride2`, `flatConvStride2_weight_grad`, `maxPool3s2` (`_at3`; the `Flat` form is its
+restatement), `cnn`, `resnet34_has_vjp_at`, `resnet34ForwardB_full`, `resnet50ForwardB_full`; ch 6
+`depthwise`, `depthwiseStride2Flat`, `relu6`, `mobilenetv2` (representative), `mobilenetv2ForwardB_full`,
+`mobilenetv4ForwardB_full`; ch 7 `swish`, `sigmoid`, `seBlock`, `efficientnet`, `efficientnetForwardB_full`;
+ch 8 `gelu`, `layerNorm`, `layerScale`, `flatConvStride4`, `convnext`, `convNextForwardTCh`; ch 9 `mhsa`,
+`transformerBlock`, `layerNormVec`, `transformerBlockV`, `vitForwardKV`, `vit_full`. Witnesses (6):
+`MlpConcrete`, `TrainedMlp` (ch 2), `TrainedCnn` (ch 3), `Tiny.cifarTinyCnn` (ch 4), `CnnConcrete`
+and `liveFwdW_mixing` (ch 5). Not counted: the spec/canonical rungs (`linearVerified`, `mlpVerified`,
+`vitVerified`, `MlpCanonical`), `vitTiny` (k = 12 at fixed dims), `liveFwdW` (the ∀-kernel form the
+witness instantiates), the two superseded smooth-point forms (`convnext_has_vjp_at`,
+`efficientnet_has_vjp_at`), and the pieces the whole-net theorems compose — batched block VJPs
+(`r34IdB`…, `r50IdB`…, `mnv2StemB`…, `mb*FwdB`, `headFwdB`), the opaque-stage chain apexes
+(`r34B_full`, `mobilenetv2PaperPC`, `mnv4B_full`, `efficientnetB_full`, `convNextForwardTChB`,
+`vitKVB`), plumbing (`batchMap`, `reindex`, `decimateOddFlat`), and the ViT composition pieces
+(`transformerTower`, `vit_body`, `vitBodyKVFlat`). Every `_correct` pin is accounted for: 38
+contracts + 6 witnesses + 5 restatements + 2 superseded = 51. Changes from the 2026-09-13 table
+(44/16/60): the census cuts took the strided block and stage (R.C), the per-example 17-block
+MobileNetV2 (M.2), three MNIST-CNN toys (S.1), three Live projections (R.D) and the MNv2 seals'
+`_correct`s (M.7, M.10); ReLU6, sigmoid and the stride-4 patchify conv are counted where the
+old table skipped operators with a def-only pin.
+
+## Next session: what is left
+
+1. **Push** the 23 commits (ask first).
+2. **The other dead code**, if wanted: the no-users query finds ~296 unpinned declarations with no
+   user outside MobileNet/EfficientNet (counts by directory in the session-4 notes). Each needs the
+   same read as the 30 that went: some are generic API kept on purpose, some are `#eval`-free
+   scaffolding. A decision per directory, not a sweep.
+3. **The six B.1b-class `floatClose_*` pins** left audit-only by B.1 (`bn`, `flatConv`,
+   `flatConvMixed`, `maxPool`, `r34_stages`, `residualBlock`): kept with B.1b on the user's ruling;
+   revisit only if B.1b is.
+
+Left as they are, on purpose: `tests/TestMobilenetV2TrainPC.lean` (a live `iree-compile` smoke of
+the committed AdamW bytes plus a `/tmp` SGD render); the pin `StableHLO.maxPool3s2F_faithful` (audit-only
+since R.A; the per-example constructor is still in the AST); `VerifiedNets.lean`'s two spec docstrings
+now cite the batched rungs (that file has 110 dependents — batch any further edit to it).
+
+**Correctness findings — the record.** All closed.
 
 | # | Finding | State at `281b6beb` | Fix |
 |---|---|---|---|
@@ -70,37 +200,34 @@ Checked against `281b6beb`. The full text of each finding is in Pass 1 below.
 | 3 | BN node seam: the RenderB files emit `.bnBatchBack` (44 sites) and never `.bnBatchLABack`, but the T3 ties state the BN cotangent at `.bnBatchLABack`'s `den` | fixed: `EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack` (the two `den`s are one map up to the associativity relabelling `reassocB`; the scatters collapse because `Fin.cast` is a bijection), `bnBackB_eq_den_bnBatchBack` (the certified cotangent every batched tie threads is the emitted node's `den`), `ResNet34TieB.bnInB_eq_den_bnBatchBack`; all pinned | — |
 | 4 | Stem-pool seam: `maxPool3s2BackFlat` (`ResNet34StepTieB`) vs `maxPool3s2FlatBack` (whole-back tie) | fixed: `maxPool3s2BackFlat_eq_flatBack` (the two scatters are one map, no smoothness needed — `sum_flat3` re-indexes one into the other) and `den_maxPool3s2BackB_eq_flatBackB` (the emitted batched node denotes `maxPool3s2FlatBackB`), both in `ResNetBackChains.lean`, pinned | — |
 | 5 | The book cites the wrong theorem in five places (4295; 6242–6249 and 6748; 391; 16279; 16306), and the IRPrint passages overclaim "by construction" | fixed, five commits `2b88d7bb`..`f6da580d` (front matter, ch 3, ch 4, ch 6, appendix C). Two of the survey's readings were wrong: `cifarCnn8_has_vjp_at` exists (a def, CifarCNN.lean:441) — the issue was the no-BN VJP cited in the BN section; and an fp8 graph IS emitted (`cifar8b_fp8_adam_train_step.mlir`, `.convF8`), it is `E4M3Fold`'s linear graph that is not. Also fixed: a `finSum` that never existed (l.259) and `matmul_left_const` in `fig:spines`. Ch 6's spec-rung sentence changes again with finding 2 | — |
-| 6 | `vit_net_tiedGB` / `cnx_net_tiedGB` certify every shipped AdamW artifact but are cited nowhere outside Lean | open | decide where to cite: the ImageNet sections, the certs.yml table, the yaml |
+| 6 | `vit_net_tiedGB` / `cnx_net_tiedGB` certify every shipped AdamW artifact but are cited nowhere outside Lean | fixed `a9baa271`: certs.yml's convnext/vit rows, a yaml T3 row, the README's tie list; the book cites no whole-net tie for any net | — |
 | 7 | certs.yml / READMEs / yaml | certs.yml and the READMEs fixed in the sweep: the r34 row cites `ResNet34PoCB.convStrided{W,B}GradB_den`, the two even-kernel clauses are gone, Certificates/README names its eight hand-written files | yaml fixed in the follow-up commit (:99 → `vitTiny_has_vjp_correct`, the seals paragraph, 4b + the smoothing row, :227, :370). certs-heavy.yml:27 stays: it is a history comment describing the pre-2026-07 filter that matched nothing |
 | 8 | Tests and roots on retired artifacts | `ConvLossFold` deleted in 2e; the regen-script line dropped in the sweep; `TestResnet34Train`, `TestResnet34TrainPC` and `ResNet50BlocksCertified` deleted with R.A | `TestMobilenetV2Train` deleted with M.2; `TestMobilenetV2TrainPC` kept (a live `iree-compile` smoke of the committed AdamW bytes) | — |
 | 9 | `mathlib_reuse_audit.md` calls `vit_net_tied_certified` the 2-block representative | fixed in the sweep | — |
 | 10 | Names and docstrings claiming more than they state | 2 of 7 resolved by cuts; the other 5 fixed in the sweep (`smooth_cp_mlpT_demo` through its generator; `linearTrainStepModuleV` → `linTrainStepFaithfulV` at six sites) | — |
 | 11 | `StableHLO.roundtrip` pinned twice | fixed in the sweep (1,429 pins) | — |
 
-**Decision groups.** The recommendation column is from the end of session 2; the user has not
-ruled on any of them yet.
+**Decision groups.** All ruled 2026-09-20: R.A, M.2 (session 3) and S.3, B.1, B.3, B.9 (session 4)
+cut; the other six kept on the user's word.
 
 | Group | Size | The decision | Recommendation |
 |---|---:|---|---|
-| R.A per-example r34 tier | 393 / 6 | CUT 2026-09-19 (the whole per-example chain: 37 declarations, 15 pins; `ResNet34RenderPC.lean`, `ResNet50BlocksCertified.lean`, `tests/TestResnet34Train{,PC}.lean` deleted; `ResNet34BackCertifiedTie` keeps its five leaf ties) | done |
+| R.A per-example r34 tier | 393 / 6 | CUT 2026-09-20 (the whole per-example chain: 37 declarations, 15 pins; `ResNet34RenderPC.lean`, `ResNet50BlocksCertified.lean`, `tests/TestResnet34Train{,PC}.lean` deleted; `ResNet34BackCertifiedTie` keeps its five leaf ties) | done |
 | M.2 per-example MNv2 paper tier | 276 / 4 | CUT 2026-09-20 (85 declarations, 18 pins incl. the 2c leftover `mnv2_render_depthwiseW_certified`; `MobileNetV2PaperWholeBackCertifiedTie.lean` deleted after its generic apex moved into the batched tie; `tests/TestMobilenetV2Train.lean` deleted; `IVW`/`IVWNoExp`/`IVPos`/`IVNoExpPos` stay for the batched tier) | done |
-| S.3 dense-head restatements | now 10 pins | the MLP pair left the group once `ca9ea890` used it; certs.yml's per-op column cites `CnnPoC.db5_den` and `CifarPoC.db7_den` | cut; re-point the two certs.yml cells |
-| S.6 MLP layer-bridge restatements | 106 / 6 | reverses `18c31142`; part of the IR tier | keep; decide with A.1b |
-| S.8 `MlpCanonical` aliases | 31 / 8 | an audit surface by design (fixed point 1,510 / 35) | keep; fix its header (finding 10) |
-| B.1 FloatClose demos | 158 / 7 | reverses the earlier float review's "every `floatClose_*` stays"; the whole-net consumers were deleted 2026-09-08 | cut (the float-budget work closed 2026-09-05) |
-| B.1b FloatClose op instances | 127 / 4 | yaml 4d cites them collectively | keep |
-| B.2 Lipschitz demo ladder (generated) | 75 / 9 | loses the Frobenius → Schatten-4 → Schatten-8 comparison; generator change | keep |
-| B.3 smoothing demos + Hoeffding tier | 116 / 8 | ~1,900 kernel panels of CI | cut, except keep `smoothing_mc_certified` |
-| B.9 scorecard bookkeeping (generated) | 22 / 4 | `scorecard_counts` calls itself legacy; generator change | cut |
-| X.3 `.correct` projections | 28 / 4 | a repo-wide convention, everywhere or nowhere | keep |
-| A.1b IR bridges | 15 pins | the book's IR tier and `check_ir_codegen.py` | keep the IR tier; fix IRPrint's "by construction" |
+| S.3 dense-head restatements | 119 / 10 | CUT 2026-09-20 (`b242635c`; the MLP pair had left the group once `ca9ea890` used it; the two certs.yml cells re-pointed first) | done |
+| S.6 MLP layer-bridge restatements | 106 / 6 | reverses `18c31142`; part of the IR tier | KEPT 2026-09-20, with A.1b |
+| S.8 `MlpCanonical` aliases | 31 / 8 | an audit surface by design (fixed point 1,510 / 35); header fixed in the sweep | KEPT 2026-09-20 |
+| B.1 FloatClose demos | 158 / 7 | CUT 2026-09-20 (`e8d06510`; six per-operator pins left audit-only, kept with B.1b) | done |
+| B.1b FloatClose op instances | 127 / 4 | yaml 4d cites them collectively | KEPT 2026-09-20 |
+| B.2 Lipschitz demo ladder (generated) | 75 / 9 | loses the Frobenius → Schatten-4 → Schatten-8 comparison; generator change | KEPT 2026-09-20 |
+| B.3 smoothing demos + Hoeffding tier | 65 / 8 | CUT 2026-09-20 (`142e7bed`; `smoothing_mc_certified` kept; `stdNormalQuantile_ge_of_9952` followed) | done |
+| B.9 scorecard bookkeeping (generated) | 22 / 4 | CUT 2026-09-20 (`7ba0e56f`; both generators edited) | done |
+| X.3 `.correct` projections | 28 / 4 | a repo-wide convention, everywhere or nowhere | KEPT 2026-09-20 |
+| A.1b IR bridges | 15 pins | the book's IR tier and `check_ir_codegen.py`; IRPrint's "by construction" fixed in the book | KEPT 2026-09-20 |
 
-**Suggested order.**
-1. One sweep commit: findings 7 (without the yaml), 8's regen-script line, 9, 10 and 11. Then
-   the yaml fixes as their own commit, following the yaml style rules.
-2. Finding 5 in the book, one chapter per commit.
-3. The proof work: 4, then 3, then 2. After that, R.A and M.2 are ordinary cuts.
-4. The decision-group cuts the user approves, one commit per family.
+**Suggested order (session 2), as executed in session 3:** the sweep + yaml (`b18e1acd`, `ff1fe2f2`);
+finding 5 one chapter per commit; the proof work 4 → 3 → 2; then R.A and M.2 as ordinary cuts.
+Done; the current order is the numbered list at the top of this section.
 
 **Also found, not in any group: unpinned dead code.** `size.py` never counts a declaration with
 no users at all. There are about 25 in MobileNet/EfficientNet, dead before the census started:
