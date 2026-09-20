@@ -1,79 +1,43 @@
 # Non-degeneracy seals on the full-width nets — retire the 2-channel proxies
 
-**Standing doc, opened 2026-09-20.** Four work packages (§4), one commit each, ResNet-34 first
-because it builds the kit the other three reuse. Each package is its own session or two. Gates in
-§6; the bookkeeping that moves with every package in §5.
+**Standing doc, opened 2026-09-20. ✅ ALL FOUR PACKAGES DONE 2026-09-20.** `Training/BatchSealKit.lean`
+(the shared machinery) plus `Nets/ResNet/ResNet34FullBSeal.lean`, `Nets/ResNet/ResNet50FullBSeal.lean`,
+`Nets/MobileNet/MobileNetV2FullBSeal.lean` and `Nets/MobileNet/MobileNetV4FullBSeal.lean`. The
+1,992 lines of ResNet-34 proxy and the 1,216 of MobileNetV2 proxy are deleted; audit
+1,380 → 1,377 → 1,371 → **1,374**, all 3-axiom clean. **Every kinked net in the book is now sealed
+on the forward its artifacts run**, and `formalization.yaml` §4 no longer discloses a gap.
 
-**§4.1, §4.2 and §4.3 are DONE (2026-09-20).** `Training/BatchSealKit.lean` (the shared
-machinery), `Nets/ResNet/ResNet34FullBSeal.lean`, `Nets/ResNet/ResNet50FullBSeal.lean` and
-`Nets/MobileNet/MobileNetV2FullBSeal.lean`; the 1,992 lines of ResNet-34 proxy and the 1,216 of
-MobileNetV2 proxy are deleted; audit 1,380 → 1,377 → 1,371 declarations, all 3-axiom clean.
-**Only §4.4 (MobileNetV4) is left.** ⭐ ResNet-50's
-seal leaves the spatial size a **binder**, so one statement covers both shipped resolutions (224 px
-and the 160 px net the 76.66% run trains) — `0 < q` and `q ≤ 7` are all the witness needs, the
-bound being the `β = 160` margin against the stem's `2·(16q)²`.
+⭐ ResNet-50's seal leaves the spatial size a **binder**, so one statement covers both shipped
+resolutions (224 px and the 160 px net the 76.66% run trains) — `0 < q` and `q ≤ 7` are all the
+witness needs, the bound being the `β = 160` margin against the stem's `2·(16q)²`.
+
+⭐⭐ **The one finding that was not in the plan, from §4.4: a carrier crosses a relu because relu
+is the IDENTITY inside the margin window, and swish is the identity on no window at all.** Every
+other net's kinks are relu or relu6, so `EDiff` — which tracks only the gap between the two
+examples — is enough. MobileNetV4's fused stage is swish, and a gap comes out of it as
+`swish(a) − swish(b)`, which is neither a multiple of `a − b` nor even constant over the grid
+unless `a` and `b` are. §4.4's fix, and the new kit §12–§14: make the witness's base
+**grid-constant** instead of a ramp, carry the two VALUES (`BUnif`) rather than their difference up
+to the fused BatchNorm, use the fact that batch BN on a grid-constant slab puts them symmetrically
+about `β` (`bnBatchLA_pair`), and hand `EDiff` back a gap `swishGap β u` that is a function of the
+half-gap alone. The readout is then `swishGap 160 (uF t 0) · Rr t`, not `t · Rr t`, and the seal
+closes with a new `hasDerivAt_mul_of_zero` beside `hasDerivAt_mul_self_zero`. MobileNetV4 has no
+pool, so nothing wanted the ramp. ⚠ The plan had called swish harmless because it contributes no
+*clause*; it contributes no clause and is still the hardest thing in the package.
 
 Corrections this doc needed, all applied below: the centre tap must **broadcast** (§3.1), the
 carrier's BN count is **one per projection plus the stem** — five for ResNet-50, not four (§3.2),
 `MobileNetV2SealRealistic` imported the R34 proxy seal (§5), and every collapse lemma has to be
-proved at **variable** shapes (§3.5, new — it is the one thing that can sink 4.3–4.4). The 4.3
-inventory (2026-09-20) added four more: MobileNetV2's carrier threads **22** BNs, not four, because
-its channel-changing blocks have no skip; the apex takes **19** clause bundles of **three** kinds,
-`IVStridedSmoothAtB` and the head's having been missed in §2; the kit needs **seven** new lemmas,
-not three, the depthwise family having been missed entirely; and `relu6_id_window` lives inside the
-namespace the retirement deletes.
-
-## Next session: start here
-
-Two commits are on `main`, **local and unpushed**: `77a411f8` (§4.1, ResNet-34 + the kit, proxies
-retired) and `7df9b272` (§4.2, ResNet-50 + the kit refactor). Audit at 1,377 declarations, every
-gate in §6 green on both.
-
-**§4.3 (MobileNetV2) is the next package**, and it is the only one with bookkeeping that can bite
-(§5's comparator row). **Step 1, the inventory, is DONE** — the block table, the carrier's 22 BN
-factors, the three clause-bundle kinds and the seven kit lemmas are all in §4.3. Read §3.5, then
-§4.3, before writing a line of Lean. What is left:
-
-1. ~~**The kit additions first**~~ — **DONE 2026-09-20**, uncommitted: `Training/BatchSealKit.lean`
-   +215 lines / sixteen declarations, and `relu6_id_window` + a new `relu6_continuous` moved to the
-   top level of `MobileNetV2.lean` (§4.3 says why there rather than the kit). Green:
-   `lake build LeanMlir.Proofs.Training.BatchSealKit`, the same for
-   `Training/MobileNetV2SealRealistic` (the migration's only external consumer),
-   `scripts/check_target_names.sh`, `check_audit_coverage.py`, `check_render_coverage.py`, and
-   `git diff verified_mlir/` empty. ⚠ `lake build Certs`, `tests/AuditAxioms.lean` and
-   `docstring-checkrefs` are **deliberately deferred** to the seal's commit — they need a full
-   downstream rebuild and there is no point paying for it twice.
-2. ~~**The collapses and the clause discharge**~~, ~~**the carrier and the ray**~~ —
-   **DONE 2026-09-20**, uncommitted: `Nets/MobileNet/MobileNetV2FullBSeal.lean`, 1,418 lines,
-   221 declarations. Green: `lake build LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal`, and
-   the three seal theorems print 3-axiom clean. Rooted in `lakefile.lean`, imported and printed in
-   `tests/AuditAxioms.lean`. §4.3 records what the inventory got right and the three shapes it did
-   not anticipate.
-3. ~~**Then the retirement**~~ — **DONE 2026-09-20**. See §4.3 for the table of every site that
-   moved. Audit landed at **1,371** as predicted.
-
-**§4.4 (MobileNetV4)** is last and unchanged in shape: the UIB relu-site inventory from
-`Nets/MobileNet/MobileNetV4BackB0.lean` is the whole uncertainty, and `Mnv4SmoothAt`'s per-group
-`.ok` fields are `CertLayer` conjunctions, so the discharge is per row rather than per block.
-
-**What 4.3 and 4.4 inherit, by name** (do not re-prove any of it):
-`BatchSeal.{kv, zk, margin160, rayRamp, rayBase, rayV, rayX, bcell_rayX, rayX_zero_add,
-rayX_continuous, EDiff, EDiff_rayX, EDiff_shift, EDiff_bn, EDiff_conv, EDiff_convS2, EDiff_pool,
-ctConv, ctConv_bn_pos, ctConv_inj, ctConv_pool_smooth, head_diff_ct, bnBatchLA_const,
-bnBatchLA_abs_sub_le, bnBatchLA_pos, bnBatchLA_exdiff, bnBatchLA_cell_inj, ctK, conv2d_ctK,
-flatConv_ctK, flatConvStride2_ctK, bcell_conv_ctK, bcell_convS2_ctK, batchMap_flatConv_zero,
-batchMap_flatConvStride2_zero, maxPool3s2_shift, globalAvgPool_shift, forall_flat_of_cell,
-relu_continuous, residual_continuous, residualProj_continuous, batchMap_continuous, divmod_inj}`
-and, for anything shaped like a ResNet block,
-`R34FullBSeal.{projB_zero_const, cbReluStridedB_eq, r34StemB_eq, r34StemB_nonneg, sealStemSmooth,
-sealProj, sealProj_pos, sealProj_apply, projB_continuous, cbReluB_continuous,
-projStridedB_continuous, cbReluStridedB_continuous, r34StemB_continuous}`.
-
-**The per-net file's own shape**, in the order that worked twice: weights → margins → collapses
-(`*Body`, `*_eq`) → nonnegativity → clause bundles → the witness input and the ray at this net's
-spelling → `nn*`/`pc*` (activation facts) → `sc_*` (clauses) → `sealVJP`/`sealDiffAt` → the `d*`
-carriers and the `ed*` chain → the head → `Rr` + continuity → the three seal theorems. Roughly a
-third of it is mechanical enough to generate; generate it and read it, do not hand-type 48 clauses.
+proved at **variable** shapes (§3.5 — it is the one thing that could have sunk 4.3–4.4). The 4.3
+inventory added four more: MobileNetV2's carrier threads **22** BNs, not four, because its
+channel-changing blocks have no skip; the apex takes **19** clause bundles of **three** kinds; the
+kit needs **seven** new lemmas, not three; and `relu6_id_window` lived inside the namespace the
+retirement deletes. §4.4 retired two more: "the UIB relu-site inventory is the whole uncertainty"
+was **wrong** (every MobileNetV4 clause is a relu on a BatchNorm output, so the bundle is
+weight-only), and "the `CertLayer` composition with no `_eq_chain` is this package's real
+uncertainty" was **also wrong** — `CertLayer.comp_fwd_apply` and `MobileNetV4FullB.lean`'s five
+group `*_fwd_apply` lemmas already peel at variables, so the collapse chain was the cheapest part
+of the file. The real work was the swish, which the plan never named.
 
 ## 0. The finding
 
@@ -124,7 +88,7 @@ numeric fact about millions of floats (archive Item F) and is what the training 
 | ResNet-34 | relu, maxpool | `resnet34ForwardB_full_has_vjp_at` | 32 (`R34IdSmoothAt`/`R34DownSmoothAt`, two relus each) + `R34StemSmoothAt` + `R34PoolSmoothAt` | ✅ `ResNet34FullBSeal` | §4.1 done |
 | ResNet-50 | relu, maxpool | `resnet50ForwardB_full_has_vjp_at` (`q` binder: 224 and 160 px) | 48 (`R50IdSmoothAt`/`R50ProjSmoothAt`/`R50DownSmoothAt`, three relus each) + stem + pool | ✅ `ResNet50FullBSeal`, both resolutions | §4.2 done |
 | MobileNetV2 | relu6 | `mobilenetv2ForwardB_full_has_vjp_at` | 19 bundles: stem + `IVNoExpSmoothAtB` + `IVStridedSmoothAtB` ×4 + `IVSmoothAtB` ×12 + head, 35 relu6 sites, each a window `≠ 0 ∧ ≠ 6` — all weight-only | ✅ `MobileNetV2FullBSeal`; the `Mnv2Live` proxy is deleted | §4.3 done |
-| MobileNetV4-Conv-M | relu (UIB), swish (fused stage) | `mobilenetv4ForwardB_full_has_vjp_at` | one bundle `Mnv4SmoothAt` with per-group `.ok` fields; `fused` is vacuous (swish) | none | §4.4 |
+| MobileNetV4-Conv-M | relu (UIB), swish (fused stage) | `mobilenetv4ForwardB_full_has_vjp_at` | one bundle `Mnv4SmoothAt`, 8 fields; per-group `.ok` unfolds per row; `fused` vacuous (swish); ⭐ every clause a relu on a BN output, so weight-only | ✅ `MobileNetV4FullBSeal` | §4.4 done |
 | EfficientNet-B0 | SiLU, sigmoid (SE) | `efficientnetForwardB_full_has_vjp` | none — `HasVJP`, only `0 < ε` | — | nothing |
 | ConvNeXt-T | GELU, LN | `convNextForwardTChB_has_vjp_at` | none — holds at every `x`, only `0 < ε` | — | nothing |
 | ViT-Tiny | GELU, softmax, LN | `vitTiny_has_vjp_correct` | none — only `0 < ε` | — | nothing |
@@ -514,15 +478,92 @@ Every place the retired names lived, all edited:
 record what was true when they were written. ⛔ And whether the rest of `MobileNetV2.lean` (the
 per-example two-block net) still has consumers is a census question, not this package's.
 
-### 4.4 MobileNetV4-Conv-M — UIB inventory first
+### 4.4 MobileNetV4-Conv-M — DONE 2026-09-20
 
-One bundle `Mnv4SmoothAt` with fields `stem`, `fused` (vacuous, swish), `g28`, `g14a`, `g14b`,
-`g7a`, `g7b`, `head`, each group's `.ok` a `CertLayer` conjunction over its rows. First step is
-an inventory of the relu sites per UIB row from `Nets/MobileNet/MobileNetV4BackB0.lean`
-(`dwbReluB` and the conv-BN-relu ops) and which rows are channel-changing (carrier path) versus
-residual (zeroed body, `+β` shift). No pool. The fused stage is swish and needs the centre-tap
-lemma only for the carrier, no kink argument. Effort: 1–1.5k lines; the inventory is the
-uncertainty, the rest is 4.3's shape. Retires nothing; closes an undisclosed gap, as 4.2 does.
+`Nets/MobileNet/MobileNetV4FullBSeal.lean` (1,238 lines), on `mobilenetv4ForwardB_full` itself, plus
+205 lines of kit and 19 in `JacobianSeal.lean`. Retires nothing (no proxy existed); closes the last disclosed gap, as §4.2 did.
+With it every kinked net in the book is sealed on the forward its artifacts run.
+
+**What the recon got right, and it made two thirds of the file cheap:**
+
+* ⭐⭐ **the clause bundle is weight-only.** Every kink is a relu on a `bnBatchLA` output, in four
+  spellings; `projLayer.ok`, `mnv4FusedConvLayer.ok` and `CertLayer.id'.ok` are `True`. One
+  `bnBatchLA_pos` at `γ = 1, β = 160, ε = 1` discharges all 54 (a `#guard` counts them off `mnv4Blocks`), and `sealVJP` — the whole-net VJP
+  with all eight bundles closed — elaborated on the first attempt;
+* ⭐ **and the discharge is generic in the table ROW.** `sealUib_ok` / `sealUibStrided_ok` take a
+  `UibSpec` and the four kernels: the `k = 0` slots give `True` by `by_cases`, the rest are the
+  same BatchNorm fact. 21 blocks, two lemmas. The same trick gives ONE weight record `sealP s Wq We
+  Wd Wz`, instantiated as `sealCT` (centre taps, the three carrier rows) and `sealZ` (zeros, the
+  eighteen skipped ones), so every block lemma is proved once;
+* **no pool, no ramp, no positional injectivity, no `0 ≤ ·` layer** — as at MobileNetV2.
+
+**⛔ What the recon got WRONG, in both directions.**
+
+1. "The `CertLayer` composition with no `_eq_chain` is this package's real uncertainty" — **no.**
+   `CertLayer.comp_fwd_apply` is already proved between variables, and `MobileNetV4FullB.lean`
+   already carries `mnv4Res28Layer_fwd_apply` … `mnv4Res7bLayer_fwd_apply` for exactly this reason
+   (its own T2 capstone needed them). The head's peel is three lines of `simp only` over
+   `comp_fwd_apply` + the four `*_fwd_apply` projections. `pc0`–`pc6` are the shortest collapse
+   chain of the four packages: with the project BatchNorm's `β = 0` a zeroed body is the constant
+   `0`, so the eighteen skipped rows are the EXACT identity and two of the seven groups collapse to
+   nothing at all.
+2. ⭐⭐ **"The fused stage: the carrier crosses its BatchNorms but no kink argument is needed
+   there" — true and beside the point, and this was the package.** A carrier crosses a relu
+   because relu is the *identity* inside the margin window. Swish is the identity on no window.
+   `EDiff` carries only the gap between the two examples, and `swish(a) − swish(b)` is neither a
+   multiple of `a − b` nor constant over the grid unless `a` and `b` are — so `EDiff` cannot cross
+   the fused stage at all, and a ramp base dies there.
+
+**The fix, and the new kit (§12–§14, 217 lines).** Track the VALUES, not the gap, for the five
+stages up to the fused BatchNorm:
+
+* the base is **grid-constant**: `sealX t = t • rayV`, example 0's channel 0 lifted by `t`
+  uniformly, everything else zero. ⛔ Not `rayX` — MobileNetV4 has no pool, so nothing wants the
+  ramp, and the ramp is what breaks;
+* `BUnif a v` says each example's slab is constant over the grid, one value per channel. Centre-tap
+  convs preserve it (`BUnif_convS2Xla`, `BUnif_convS2`), pointwise activations preserve it
+  (`BUnif_map`), and `EDiff_of_BUnif` hands the carrier back on the far side;
+* ⭐⭐ `bnBatchLA_pair` is the lemma that makes it work: on a `BUnif` slab the channel's mean is the
+  two values' midpoint, so batch BN outputs `β ± γ·(gap/2)·istd` — **symmetric about `β`**. The
+  swish's two outputs are then a function of the half-gap `u` alone, and their difference is
+  `swishGap β u := swish(β+u) − swish(β−u)`;
+* §14 is `swishGap`: `swishGap β 0 = 0`, `HasDerivAt (swishGap β) (2·swish' β) 0`, and
+  `0 < swish' β` for every `β ≥ 0` (all three factors of `σ(x)(1+x(1−σ(x)))` are positive there —
+  proved from `x/(1+e^{-x})` by the quotient rule, so no sigmoid lemmas are needed). Plus
+  `swishScalar_lt` (strictly increasing on the nonnegatives, two lines: numerator up, denominator
+  down) for level 2, and `bnIstd_le_one` at `ε = 1` to keep `u` inside the window that needs.
+
+**The readout is therefore `swishGap 160 (uF t 0) · Rr t`, not `t · Rr t`.** `uF t 0 = t · Q0 t`
+with `Q0` the two pre-swish BatchNorm factors, so `HasDerivAt` composes:
+`hasDerivAt_mul_self_zero` gives `u`, the chain rule gives `swishGap ∘ u`, and a new
+`hasDerivAt_mul_of_zero` (`Training/JacobianSeal.lean`, beside its peer — `S · Q` at a zero of `S`,
+`Q` merely continuous) closes it. ⚠ Still no BatchNorm variance derivative anywhere: the seventeen
+`istd`s enter only as continuous factors, and the swish's slope is the one honest derivative in the
+chain.
+
+**⭐ The carrier threads 17 BatchNorms**, counted from the net: `1 (stem) + 2 (fused conv + fused
+project) + 4 × 3 (rows 1, 3, 11 — the only channel-changing rows, hence the only ones without a
+skip: strided pre-DW, expand, post-DW, project) + 2 (head)`. Two are inside `uF`; `Rr` is the other
+fifteen. The eighteen `CertLayer.residual` rows pass the carrier on the skip.
+
+**Two transcription traps, both already in this doc, both bit again:**
+
+* ⚠ **`rw` does not see through a structure projection** (§4.3). `sealCTStrided_eq`'s `show` has to
+  spell `ctK s.oc (s.ic * s.expand) 1 1 1` rather than `_`, and every `resid_id` step has to be
+  restated at `(sealW nCls).b_k` before rewriting, because `sealZ mnv4Row_k` is only DEFEQ to it;
+* ⚠⚠ **the `2 * ?h` nonlinearity** (§3.5's second trap). `BUnif_convS2` without
+  `(h := 56) (w := 56)` is a `(deterministic) timeout at isDefEq` at 1,000,000 heartbeats — one
+  minute of wall clock for one `refine`. With them it is instant.
+
+⚠ One more, new: `positivity` on a goal mentioning `iS`/`iF` is a `maxRecDepth` failure — those
+unfold through the whole activation chain. Explicit `mul_pos`/`div_pos` chains instead.
+
+**Method.** Developed against a scratch file importing `MobileNetV4WholeBackCertifiedTieB` and
+`ResNet34FullBSeal`, in six stages, each elaborated before the next was written; the repetitive
+two thirds (15 activations, 15 carrier steps, 30 continuity lemmas, `Rr`) generated from a row
+table. Total elaboration 3.1 s. The shipped file imports only `MobileNetV4FullBVJP` and
+`ResNet34FullBSeal` — the head peel it wanted from the tie file is three lines, so it is local
+(`headStack_apply`) and the seal does not depend on the backward tier.
 
 ## 5. Bookkeeping that moves with each package
 
@@ -552,8 +593,14 @@ uncertainty, the rest is 4.3's shape. Retires nothing; closes an undisclosed gap
   docstrings in `Nets/ResNet/ResNet34.lean` cited the deleted modules (caught by
   `lake exe docstring-checkrefs`), and `scripts/lipschitz_cert_witness_s8.py`'s prose.
   `scripts/check_target_names.sh` and `python3 scripts/check_audit_coverage.py` after.
-* **The audit count** went 1,380 → 1,374 at 4.1 (nine proxy prints out, three seal prints in) and
-  1,374 → 1,377 at 4.2, in `tests/comparator/README.md` and `blueprint/src/content.tex`.
+* **The audit count** went 1,380 → 1,374 at 4.1 (nine proxy prints out, three seal prints in),
+  1,374 → 1,377 at 4.2, 1,377 → 1,371 at 4.3 (nine proxy prints out) and 1,371 → **1,374** at 4.4,
+  in `tests/comparator/README.md` and `blueprint/src/content.tex`.
+* **4.4's bookkeeping, all done**: the `main_results` row
+  (`Proofs.Mnv4FullBSeal.sealX_backward_nontrivial`), the §4 prose (the "MobileNetV4 has no witness
+  yet" sentence is gone), `DECLS` + `MODULES` and the regenerated comparator pair, three
+  `#print axioms` plus one import in `tests/AuditAxioms.lean`, one `lakefile.lean` root, and
+  `LeanMlir/Proofs/README.md`'s two seal paragraphs.
 
 ## 6. Gates
 

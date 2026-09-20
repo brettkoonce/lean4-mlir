@@ -102,6 +102,8 @@ status:
     - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
     - {declaration: "Proofs.Mnv2FullBSeal.sealX_nonconstant", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2FullBSeal.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # the same, on the one net whose fused stage is swish -- so the carrier crosses a non-affine activation
+    - {declaration: "Proofs.Mnv4FullBSeal.sealX_backward_nontrivial", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullBSeal.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Train-step ties (T3): the fold at every gradient node, then the cotangent pinned ---
     # the fold, stated per op kind at the un-fused *GradB node all optimizer tails consume (r34's file is the template)
@@ -192,7 +194,7 @@ fidelity:
     3. SMOOTH-INPUT CONDITIONING. The strongest backprop-correctness results are pointwise
        (`HasVJPAt`, `vjp_comp_at`) under an explicit smooth-input hypothesis -- no ReLU kink, no
        pooling tie -- so every kinked net's whole-net VJP carries those clauses in its statement
-       (32 for ResNet-34, 48 for ResNet-50, 35 relu6 for MobileNetV2, ~60 for MobileNetV4). The
+       (32 for ResNet-34, 48 for ResNet-50, 35 relu6 for MobileNetV2, 54 for MobileNetV4). The
        global instances (`relu_has_vjp`, `mlp_has_vjp`, `maxPool2_has_vjp3`) are codegen-shaped
        witnesses whose `correct` closes by `rfl`; the measure-zero non-smooth points are (2).
 
@@ -207,8 +209,13 @@ fidelity:
        and the 160 px net the 76.66% run trains. MobileNetV2's is on `mobilenetv2ForwardB_full`
        (`MobileNetV2FullBSeal`), all seventeen bottlenecks at 224x224 -- and there every one of the
        35 relu6 clauses is weight-only, because each relu6 sits on a BatchNorm output whose margin
-       holds at every input; the 2-channel per-example proxies it replaces are deleted. MobileNetV4
-       has no witness yet (planning/full_width_seals.md 4.4). Plus trained-weight witnesses and a
+       holds at every input; the 2-channel per-example proxies it replaces are deleted.
+       MobileNetV4-Conv-M's is on `mobilenetv4ForwardB_full` (`MobileNetV4FullBSeal`), all 21 UIB
+       blocks, the fused stage and the two-conv head -- its 54 relu clauses are weight-only for
+       the same reason, but its fused stage is SWISH, which is the identity on no window, so the
+       witness's base is grid-constant rather than a ramp: the two examples then straddle beta at
+       the fused BatchNorm and their swish outputs differ by a function of their gap alone. With it
+       every kinked net in the book is sealed on the forward its artifacts run. Plus trained-weight witnesses and a
        provable strict CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,
        `TrainedLinearDescent`).
 

@@ -11,6 +11,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
@@ -139,6 +140,14 @@ theorem chk_sealX_nonconstant :
         Proofs.mobilenetv2ForwardB_full (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (1 : ℝ)) ≠
           Proofs.mobilenetv2ForwardB_full (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (0 : ℝ)) :=
   Proofs.Mnv2FullBSeal.sealX_nonconstant
+
+/-- `Proofs.Mnv4FullBSeal.sealX_backward_nontrivial` -/
+theorem chk_sealX_backward_nontrivial :
+    ∀ (nCls : ℕ),
+      (0 : ℕ) < nCls →
+        ∃ (j₀ : Fin ((2 : ℕ) * nCls)) (i₀ : Fin ((2 : ℕ) * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
+          (Proofs.Mnv4FullBSeal.sealVJP nCls (0 : ℝ)).backward (Proofs.basisVec j₀) i₀ ≠ (0 : ℝ) :=
+  Proofs.Mnv4FullBSeal.sealX_backward_nontrivial
 
 /-- `Proofs.ResNet34PoCB.convStridedWGradB_den` -/
 theorem chk_convStridedWGradB_den :

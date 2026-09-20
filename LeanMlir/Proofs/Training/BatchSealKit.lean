@@ -49,6 +49,15 @@ and `bnBatchLA_bcell` is the bridge. Everything after it is the usual BN algebra
   it preserves nonnegativity.
 * §5 continuity odds and ends for the ray argument (`relu`, `bnIstd`; `relu6_continuous` sits with
   `relu6` itself).
+* §11 the SYMMETRIC strided depthwise (`EDiff_dwS2`), MobileNetV4's; §3c's is the XLA one.
+* §12–§14 what MobileNetV4's **swish** needs, and nothing else does. ⭐⭐ `EDiff` carries only the
+  gap between the two examples, which is all a relu-in-the-window or a centre-tap conv reads. A
+  stage that is smooth but NOT affine changes that gap by an amount depending on the values
+  themselves, so the carrier has to know them: `BUnif` says each example's slab is constant over
+  the grid, one value per channel. Every op in these nets preserves that, and `bnBatchLA` then
+  puts the two values symmetrically about `β` (`bnBatchLA_pair`) — so the swish's two outputs, and
+  hence their gap `swishGap`, are functions of the gap alone. `EDiff_of_BUnif` hands the carrier
+  back to §8 on the far side.
 -/
 
 namespace Proofs
@@ -958,6 +967,202 @@ theorem head_diff_ct {c h w nCls : Nat} (hh : 0 < h) (hw : 0 < w) (c₀ : Fin c)
     have hc : ci.val ≠ 0 := fun hz => hci (Fin.ext (hz.trans hc₀.symm))
     simp [hc]
   · simp [hc₀]
+
+-- ════════════════════════════════════════════════════════════════
+-- § 11. The SYMMETRIC strided depthwise — `EDiff_dwS2Xla`'s peer
+--   ⚠ MobileNetV2's strided depthwises are XLA-`SAME` (odd decimation); MobileNetV4's are
+--   symmetric (even). One lemma per padding token, as at the strided convs.
+-- ════════════════════════════════════════════════════════════════
+theorem depthwiseStride2Flat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+    (s : ℝ) (b : Vec c) (v : Vec (c * (2 * h) * (2 * w))) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
+    Tensor3.unflatten (depthwiseStride2Flat (h := h) (w := w) (ctDW c kH kW s) b v) ch hi wi
+      = b ch + s * (Tensor3.unflatten v : Tensor3 c (2 * h) (2 * w)) ch
+          ⟨2 * hi.val, by have := hi.isLt; omega⟩
+          ⟨2 * wi.val, by have := wi.isLt; omega⟩ := by
+  simp only [depthwiseStride2Flat, Function.comp_apply]
+  rw [decimate_unflatten, depthwiseFlat_ctDW hkH hkW]
+
+theorem bcell_dwS2_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (n : Fin N) (ch : Fin c) (i : Fin h) (j : Fin w) :
+    bcell (StableHLO.batchMap N
+        (depthwiseStride2Flat (h := h) (w := w) (ctDW c kH kW s) b) x) n ch i j
+      = b ch + s * bcell x n ch
+          ⟨2 * i.val, by have := i.isLt; omega⟩ ⟨2 * j.val, by have := j.isLt; omega⟩ := by
+  rw [bcell_batchMap]
+  exact depthwiseStride2Flat_ctDW hkH hkW s b _ ch i j
+
+theorem EDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+    (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w)))) (hv : EDiff δ v)
+    (hδ : ∀ ch, δ' ch = s * δ ch) :
+    EDiff δ'
+      (StableHLO.batchMap 2 (depthwiseStride2Flat (h := h) (w := w) (ctDW c kH kW s) b) v) := by
+  intro ch i j
+  rw [hδ ch, bcell_dwS2_ctDW hkH hkW s b v 0 ch i j, bcell_dwS2_ctDW hkH hkW s b v 1 ch i j,
+    hv ch _ _]
+  ring
+
+-- ════════════════════════════════════════════════════════════════
+-- § 12. `BUnif` — the carrier that also carries the VALUES
+--   ⭐⭐ `EDiff` tracks only the gap between the two examples, which is all a relu-in-the-window
+--   or a centre-tap conv needs. A stage that is smooth but NOT affine — MobileNetV4's swish —
+--   changes the gap by an amount that depends on the values themselves, so the carrier has to
+--   know them. `BUnif` does: each example's slab is CONSTANT over the grid, one value per
+--   channel, which every op in these nets preserves and `bnBatchLA` makes symmetric about `β`.
+-- ════════════════════════════════════════════════════════════════
+def BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (v : Vec (2 * (c * h * w))) : Prop :=
+  ∀ (n : Fin 2) (ci : Fin c) (i : Fin h) (j : Fin w), bcell v n ci i j = a n ci
+
+theorem EDiff_of_BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (δ : Fin c → ℝ)
+    (v : Vec (2 * (c * h * w))) (hv : BUnif (h := h) (w := w) a v)
+    (hδ : ∀ ci, δ ci = a 0 ci - a 1 ci) : EDiff δ v := by
+  intro ci i j
+  rw [hv 0 ci i j, hv 1 ci i j, hδ ci]
+  ring
+
+theorem BUnif_convS2Xla {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (a : Fin 2 → Fin ic → ℝ)
+    (a' : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (ic * (2 * h) * (2 * w))))
+    (hv : BUnif (h := 2 * h) (w := 2 * w) a v) (ha : ∀ n o, a' n o = b o + s * a n c₀) :
+    BUnif (h := h) (w := w) a'
+      (StableHLO.batchMap 2 (flatConvStride2Xla (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
+  intro n o i j
+  rw [bcell_convS2Xla_ctK c₀ hc₀ hkH hkW s b v n o i j, hv n c₀ _ _, ha n o]
+
+theorem BUnif_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (a : Fin 2 → Fin ic → ℝ)
+    (a' : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (ic * (2 * h) * (2 * w))))
+    (hv : BUnif (h := 2 * h) (w := 2 * w) a v) (ha : ∀ n o, a' n o = b o + s * a n c₀) :
+    BUnif (h := h) (w := w) a'
+      (StableHLO.batchMap 2 (flatConvStride2 (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
+  intro n o i j
+  rw [bcell_convS2_ctK c₀ hc₀ hkH hkW s b v n o i j, hv n c₀ _ _, ha n o]
+
+/-- a pointwise activation preserves `BUnif`, value by value. -/
+theorem BUnif_map {c h w : Nat} (f : ℝ → ℝ) (a a' : Fin 2 → Fin c → ℝ)
+    (v : Vec (2 * (c * h * w))) (hv : BUnif (h := h) (w := w) a v)
+    (ha : ∀ n ci, a' n ci = f (a n ci)) :
+    BUnif (h := h) (w := w) a' (fun k => f (v k)) := by
+  intro n ci i j
+  rw [ha n ci, ← hv n ci i j]
+  rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § 13. Batch BN on a `BUnif` slab: ⭐⭐ the two values straddle `β`
+--   With both slabs grid-constant the channel's mean is their midpoint, so the outputs are
+--   `β ± γ·(gap/2)·istd`. THAT is what lets a non-affine activation be crossed: its two outputs
+--   are a function of the gap alone.
+-- ════════════════════════════════════════════════════════════════
+theorem bnMean_pair (m : Nat) (hm : 0 < m) (a : Fin 2 → ℝ) (z : Vec (2 * m))
+    (hz : ∀ (n : Fin 2) (q : Fin m), z (finProdFinEquiv (n, q)) = a n) :
+    bnMean (2 * m) z = (a 0 + a 1) / 2 := by
+  have hsum : ∑ k : Fin (2 * m), z k = (m : ℝ) * (a 0 + a 1) := by
+    rw [← Equiv.sum_comp finProdFinEquiv z, Fintype.sum_prod_type]
+    rw [Finset.sum_congr rfl (fun n _ => Finset.sum_congr rfl (fun q _ => hz n q))]
+    simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+      Fin.sum_univ_two]
+    ring
+  have hmR : (m : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hm.ne'
+  rw [bnMean, hsum]
+  push_cast
+  field_simp
+
+theorem bnBatchLA_pair {oc h w : Nat} (hhw : 0 < h * w) (ε : ℝ) (γ β : Vec oc)
+    (a : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (oc * h * w)))
+    (hv : BUnif (h := h) (w := w) a v) (a' : Fin 2 → Fin oc → ℝ)
+    (ha : ∀ n ci, a' n ci = β ci + γ ci * ((a n ci - (a 0 ci + a 1 ci) / 2) *
+            bnIstd (2 * (h * w)) (bnRowLA 2 oc h w v ci) ε)) :
+    BUnif (h := h) (w := w) a' (StableHLO.bnBatchLA 2 oc h w ε γ β v) := by
+  intro n ci i j
+  have hz : ∀ (nn : Fin 2) (q : Fin (h * w)),
+      bnRowLA 2 oc h w v ci (finProdFinEquiv (nn, q)) = a nn ci := by
+    intro nn q
+    obtain ⟨⟨ii, jj⟩, rfl⟩ := finProdFinEquiv.surjective q
+    rw [bnRowLA_apply]
+    exact hv nn ci ii jj
+  rw [bnBatchLA_bcell, ha n ci]
+  simp only [bnForward, bnXhat, bnMean_pair (h * w) hhw (fun nn => a nn ci) _ hz, hz n]
+  ring
+
+-- ════════════════════════════════════════════════════════════════
+-- § 14. `swish` — the one activation no window makes the identity
+--   Used only by MobileNetV4, whose fused stage is swish where every other stage in every other
+--   net is relu or relu6.
+-- ════════════════════════════════════════════════════════════════
+noncomputable def swishD (x : ℝ) : ℝ :=
+  (1 + Real.exp (-x) + x * Real.exp (-x)) / (1 + Real.exp (-x)) ^ 2
+
+theorem one_add_exp_pos (x : ℝ) : 0 < 1 + Real.exp (-x) := by
+  have := Real.exp_pos (-x); linarith
+
+theorem hasDerivAt_swishScalar (x : ℝ) : HasDerivAt swishScalar (swishD x) x := by
+  have hd : HasDerivAt (fun y : ℝ => 1 + Real.exp (-y)) (-Real.exp (-x)) x := by
+    have := ((Real.hasDerivAt_exp (-x)).comp x ((hasDerivAt_id x).neg)).const_add (1 : ℝ)
+    simpa using this
+  have hne : (1 : ℝ) + Real.exp (-x) ≠ 0 := (one_add_exp_pos x).ne'
+  have hq : HasDerivAt (fun y : ℝ => y / (1 + Real.exp (-y)))
+      ((1 * (1 + Real.exp (-x)) - x * -Real.exp (-x)) / (1 + Real.exp (-x)) ^ 2) x :=
+    HasDerivAt.div (hasDerivAt_id x) hd hne
+  have hval : (1 * (1 + Real.exp (-x)) - x * -Real.exp (-x)) / (1 + Real.exp (-x)) ^ 2
+      = swishD x := by
+    simp only [swishD]
+    congr 1
+    ring
+  exact hval ▸ hq
+
+theorem swishD_pos {x : ℝ} (hx : 0 ≤ x) : 0 < swishD x := by
+  have h1 := Real.exp_pos (-x)
+  have h2 : 0 ≤ x * Real.exp (-x) := mul_nonneg hx h1.le
+  exact div_pos (by linarith) (pow_pos (one_add_exp_pos x) 2)
+
+theorem swishScalar_lt {a b : ℝ} (ha : 0 ≤ a) (hab : a < b) :
+    swishScalar a < swishScalar b := by
+  have hea : Real.exp (-b) ≤ Real.exp (-a) := Real.exp_le_exp.mpr (by linarith)
+  have hpb : (0 : ℝ) < 1 + Real.exp (-b) := one_add_exp_pos b
+  have hpa : (0 : ℝ) < 1 + Real.exp (-a) := one_add_exp_pos a
+  have step1 : a / (1 + Real.exp (-a)) ≤ a / (1 + Real.exp (-b)) :=
+    div_le_div_of_nonneg_left ha hpb (by linarith)
+  have step2 : a / (1 + Real.exp (-b)) < b / (1 + Real.exp (-b)) := by gcongr
+  simp only [swishScalar]
+  linarith
+
+/-- the two examples' swish outputs, as a function of half their gap. -/
+noncomputable def swishGap (β u : ℝ) : ℝ := swishScalar (β + u) - swishScalar (β - u)
+
+@[simp] theorem swishGap_zero (β : ℝ) : swishGap β 0 = 0 := by
+  simp only [swishGap, add_zero, sub_zero, sub_self]
+
+theorem hasDerivAt_swishGap (β : ℝ) : HasDerivAt (swishGap β) (2 * swishD β) 0 := by
+  have hp : HasDerivAt (fun u : ℝ => swishScalar (β + u)) (swishD β) 0 := by
+    have h1 : HasDerivAt (fun u : ℝ => β + u) 1 0 := (hasDerivAt_id (0:ℝ)).const_add β
+    have h2 := HasDerivAt.comp (0:ℝ) (hasDerivAt_swishScalar (β + 0)) h1
+    rw [add_zero, mul_one] at h2
+    exact h2
+  have hm : HasDerivAt (fun u : ℝ => swishScalar (β - u)) (-swishD β) 0 := by
+    have h1 : HasDerivAt (fun u : ℝ => β - u) (-1) 0 := (hasDerivAt_id (0:ℝ)).const_sub β
+    have h2 := HasDerivAt.comp (0:ℝ) (hasDerivAt_swishScalar (β - 0)) h1
+    rw [sub_zero, mul_neg, mul_one] at h2
+    exact h2
+  have h3 : HasDerivAt (fun u : ℝ => swishScalar (β + u) - swishScalar (β - u))
+      (swishD β - -swishD β) 0 := hp.sub hm
+  rw [sub_neg_eq_add, ← two_mul] at h3
+  exact h3
+
+theorem swishGap_pos {β u : ℝ} (hu : 0 < u) (hub : u ≤ β) : 0 < swishGap β u := by
+  have h1 : (0:ℝ) ≤ β - u := by linarith
+  have h2 : β - u < β + u := by linarith
+  have := swishScalar_lt h1 h2
+  simp only [swishGap]
+  linarith
+
+/-- with `ε = 1` a batch `istd` is at most `1`, which keeps the ray's gap inside the window
+    `swishGap_pos` needs. -/
+theorem bnIstd_le_one {n : Nat} (z : Vec n) : bnIstd n z 1 ≤ 1 := by
+  have hv := bnVar_nonneg n z
+  have h1 : (1:ℝ) ≤ Real.sqrt (bnVar n z + 1) := by
+    have hs : Real.sqrt 1 ≤ Real.sqrt (bnVar n z + 1) := Real.sqrt_le_sqrt (by linarith)
+    simpa using hs
+  rw [bnIstd, div_le_one (by linarith)]
+  exact h1
 
 end BatchSeal
 end Proofs

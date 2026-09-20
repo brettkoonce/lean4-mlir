@@ -22,6 +22,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBSeal
 import LeanMlir.Proofs.Foundation.PerChannelBN
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
@@ -562,6 +563,17 @@ open Proofs
 #print axioms Mnv2FullBSeal.sealX_nonconstant
 #print axioms Mnv2FullBSeal.sealX_jacobian_nonzero
 #print axioms Mnv2FullBSeal.sealX_backward_nontrivial
+-- MobileNetV4-Conv-M's, on `mobilenetv4ForwardB_full` -- all 21 UIB blocks, the fused stage and
+-- the two-conv head, batch BN, 224x224. The last kinked net in the book to get a witness, and it
+-- had none at any depth before 2026-09-20. Its 54 kink clauses (counted off the block table by a `#guard`) are weight-only like
+-- MobileNetV2's, but its fused stage is SWISH, which is the identity on no window: so this
+-- witness's base is grid-constant rather than a ramp, the two examples straddle beta at the
+-- fused BatchNorm, and the readout along the ray is `swishGap 160 (uF t 0) * Rr t` rather than
+-- `t * Rr t`. The carrier threads 17 BatchNorms -- the stem, the fused stage's two, four in each
+-- of the three channel-changing rows, and the head's two.
+#print axioms Mnv4FullBSeal.sealX_nonconstant
+#print axioms Mnv4FullBSeal.sealX_jacobian_nonzero
+#print axioms Mnv4FullBSeal.sealX_backward_nontrivial
 -- B8: per-channel BatchNorm
 #print axioms bnPerChannelFlat_has_vjp_correct
 -- B8a': the RENDERABLE per-channel BN backward
