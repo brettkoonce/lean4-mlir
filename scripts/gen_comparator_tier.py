@@ -20,10 +20,11 @@ EXPLICIT below.
 USAGE:  python3 scripts/gen_comparator_tier.py            # regenerate + verify
         python3 scripts/gen_comparator_tier.py --check    # fail if the files would change
 
-VERIFY. `--verify` elaborates the generated solution inside the PARENT package (where
+VERIFY. The default run elaborates the generated solution inside the PARENT package (where
 every olean already exists) rather than the nested comparator package, so the check costs
-seconds and needs no second Mathlib tree. It does not replace the comparator run, which
-needs Landlock >= kernel 6.10 and therefore only happens in CI.
+seconds and needs no second Mathlib tree. It does not replace the comparator run
+(`tests/comparator/run.sh`), which needs the landrun / lean4export / comparator toolchain and
+its own Mathlib tree.
 """
 import json, re, subprocess, sys, os, tempfile
 
@@ -125,6 +126,9 @@ open Proofs
 open scoped Real
 
 set_option maxHeartbeats 8000000
+-- The statements are pretty-printer output, and the printer names binders the declarations
+-- never use (`fun (x : Fin n) => (0 : ℝ)`, `[inst : ...]` under `pp.explicit`).
+set_option linter.unusedVariables false
 
 /-! # {title}
 

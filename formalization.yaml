@@ -77,10 +77,9 @@ status:
   main_results:
     # A REPRESENTATIVE set, one row per kind of claim. The full audit is tests/AuditAxioms.lean
     # (`#print axioms` on every declaration that says something, run in CI); 73 are
-    # independently kernel-rechecked by the comparator. As of 2026-09-20 that set COVERS
-    # every row below -- `comparator_config` names the file each one is checked in, and the
-    # 21-row tier config exists precisely so this list has no uncovered rows. Every row:
-    # 0 sorries, the three core axioms. The per-net numbers table is fidelity 4d.
+    # independently kernel-rechecked by the comparator, and that set covers every row below
+    # (`comparator_config` names the file each one is checked in). Every row: 0 sorries, the
+    # three core axioms. The per-net numbers table is fidelity 4d.
     #
     # --- VJP layer ---
     # the chain rule for pdiv: composition, additive and multiplicative fan-in, finset sums
@@ -329,8 +328,8 @@ review:
     declaration (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
     (3) leanprover/comparator re-running Lean's kernel typechecker on 73
-    theorems -- the layer-VJP floor plus, since 2026-09-20, every declaration
-    listed under main_results above -- with a permitted-axiom allowlist of exactly
+    theorems -- the layer-VJP floor plus every declaration listed under
+    main_results above -- with a permitted-axiom allowlist of exactly
     {propext, Quot.sound, Classical.choice} (the nanoda second-kernel pass is
     currently disabled in config pending a lean4export rebuild after a
     toolchain bump). External agent-driven review rounds (2026-07) drove the

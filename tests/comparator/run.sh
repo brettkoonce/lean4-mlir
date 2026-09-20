@@ -16,7 +16,8 @@
 #   3. The proof typechecks against Lean's kernel.
 #
 # Prerequisites (one-time setup):
-#   - Linux kernel ≥ 6.10 (for Landlock ABI v5 — `uname -r`)
+#   - a kernel with Landlock (ABI v5 = kernel ≥ 6.10 is the full sandbox profile;
+#     older ABIs run under landrun --best-effort, silently weaker — see README.md)
 #   - landrun: https://github.com/Zouuup/landrun (prebuilt binary)
 #   - lean4export: https://github.com/leanprover/lean4export (lake build)
 #   - comparator: https://github.com/leanprover/comparator (lake build)

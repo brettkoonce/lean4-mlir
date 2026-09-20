@@ -26,6 +26,9 @@ open Proofs
 open scoped Real
 
 set_option maxHeartbeats 8000000
+-- The statements are pretty-printer output, and the printer names binders the declarations
+-- never use (`fun (x : Fin n) => (0 : ℝ)`, `[inst : ...]` under `pp.explicit`).
+set_option linter.unusedVariables false
 
 /-! # Solution to the tier challenge
 

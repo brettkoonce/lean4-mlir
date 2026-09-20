@@ -15197,7 +15197,7 @@ clones both from their GitHub repositories, fetches the maintainers' split
 lists, and checks the census before anything runs: exactly $54{,}305$ colour
 files under exactly the 38 folder names, a segmented twin for each (matched
 on the suffix after the uuid, because one class's colour files carry no
-uuid), $2{,}578$ PlantDoc files, and a $10{,}709$-line test list. ⛔ The
+uuid), $2{,}578$ PlantDoc files, and a $10{,}709$-line test list. The
 Kaggle ``New Plant Diseases Dataset'' is PlantVillage with augmented copies on
 both sides of its own split and is not used.
 
@@ -15355,7 +15355,7 @@ elaborator, so they share a trust path with whatever the elaborator did.
 tests/comparator/run.sh
 \end{verbatim}
 
-It splits in two. \texttt{Challenge.lean}
+It splits in three. \texttt{Challenge.lean}
 \textbf{imports Mathlib and nothing else}. It carries the 13
 architecture-free theorems (Chapter~\ref{chap:tensor}'s \texttt{pdiv} calculus
 rules and Chapter~\ref{chap:attention}'s matrix-level ones), with the handful of
@@ -15374,16 +15374,16 @@ ResNet-34 in scope. Once the \texttt{fderiv} pin and the structural rules are
 checked over Mathlib alone, the architecture theorems are applications of them,
 and what you must additionally trust is the forward functions and nothing else.
 
-The last 21 are \texttt{ChallengeTier.lean}, and they are the layer this book's
-second half rests on: the step ties, the codegen faithfulness results, the
-whole-net back-chains, the data-parallel results, the float bridge and the three
-certificate theorems. They are machine-generated from each declaration's own type
-(\texttt{scripts/gen\_comparator\_tier.py}) because the statements run to
-hundreds of lines apiece --- \texttt{cnx\_net\_tiedGB} alone is 186 --- and a
-pair of files that must stay bit-identical is not a thing to transcribe by hand.
-They are exactly the declarations \texttt{formalization.yaml} advertises,
-so the set is auditable by diffing two lists rather than by trusting this
-paragraph.
+The last 21 are \texttt{ChallengeTier.lean}, the layer this book's second
+half rests on: the step ties, the codegen faithfulness results, the whole-net
+back-chains, the data-parallel results, the float bridge and the three
+certificate theorems. Their statements run to hundreds of lines apiece, so the
+file is printed from each declaration's own type
+(\texttt{scripts/gen\_comparator\_tier.py}) rather than transcribed, and the
+solution proves each one with the project theorem itself. With the four that
+\texttt{ChallengeArch.lean} already holds, these are exactly the declarations
+\texttt{formalization.yaml} puts forward, so the coverage is checkable by
+diffing two lists.
 
 \section*{Track 2: Native install (XLA/PJRT)}
 
@@ -15889,12 +15889,11 @@ This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
 The 73 are not the whole proof suite --- \texttt{tests/AuditAxioms.lean}
-prints the axiom closure of 1{,}380 declarations on every proof-path
-push, and the same allowlist applies to all of them, because every
-theorem in the project closes the same way. What the 73 add is a
-second, non-elaborator opinion, and since 2026-09-20 they cover every
-declaration \texttt{formalization.yaml} puts forward as a result,
-together with the calculus floor those rest on.
+prints the axiom closure of 1{,}380 declarations, and the same allowlist
+applies to all of them, because every theorem in the project closes the
+same way. What the 73 add is a second, non-elaborator opinion, and they
+include every declaration \texttt{formalization.yaml} puts forward as a
+result, together with the calculus floor those rest on.
 
 \section{By construction: the code is the math}
 
