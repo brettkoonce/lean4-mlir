@@ -1207,30 +1207,37 @@ inductive SHlo : Nat → Type where
   --    statistics the forward used, not a separately-derived approximation of them. ══
   | bnBatchMeanB {N oc h w : Nat}                         : SHlo (N * (oc * (h * w))) → SHlo oc
   | bnBatchVarB  {N oc h w : Nat}                         : SHlo (N * (oc * (h * w))) → SHlo oc
-  -- ══ ⭐⭐ The SYNC-BN statistic pair, `[μ ‖ E[x²]]` as ONE `[oc+oc]` value.
-  --    `bnBatchMeanB`/`bnBatchVarB` hand statistics to the HOST, one vector each. This one
-  --    hands them to the GRAPH, to be all-reduced: `allReduceMeanF` is generic in the index,
-  --    so one collective over this carries both. Packed rather than paired because `SHlo`'s
-  --    skeleton language stops at `.batched2` — see `planning/global_bn_verified.md` §2b.
-  --    ⚠ The SECOND MOMENT, never the variance: at equal shard sizes `E[x²]` of the union is
-  --    the mean of the shards' `E[x²]`, but the variance of the union is NOT the mean of the
-  --    shards' variances. `bnVar_eq_bnMeanSq_sub_sq` is how each replica gets `σ²` back.
+  -- ══ ⭐⭐ The SYNC-BN statistics, exchanged in TWO rounds — Chan's parallel variance.
+  --    Round 1: `bnBatchMeanB` (the replica's μ_r) → `allReduceMeanF` → the global μ.
+  --    Round 2: `bnBatchVarAtB x μ` = `σ²_r + (μ_r − μ)²` — the replica's TWO-PASS variance about
+  --    its own mean, plus its mean's squared offset from the global one → `allReduceMeanF` →
+  --    the global σ² EXACTLY (`bnVar_shard_chan`: Σ_{n∈r}(x−μ)² = Σ(x−μ_r)² + N(μ_r−μ)²).
+  --    `bnPackB μ σ²` then packs the two `[oc]` values as one `[oc+oc]`, because `SHlo`'s
+  --    skeleton language stops at `.batched2` and every consumer below has one operand slot
+  --    left — see `planning/global_bn_verified.md` §2b.
+  --    ⛔ The first cut (2026-09-21, morning) exchanged `[μ ‖ E[x²]]` in ONE round and formed
+  --    `σ² = E[x²] − μ²` on every consumer. In f32 that costs `ε·E[x²]/σ²` per layer — up to
+  --    ~30× rounding at R34's activation scales — compounding to 2e-4 over 36 layers, and the
+  --    gradient at random init amplifies forward drift ~1000× (`resnet34-syncbn-check`'s
+  --    sensitivity probe). One extra `[oc]` collective per BN layer buys a two-pass-quality σ².
   --    ⚠ Indexed `oc+oc`, NOT `2*oc`, so the packing is Mathlib's `Fin.append` and the two
   --    projections are `Fin.append_left`/`Fin.append_right` rather than hand-rolled. ══
-  | bnBatchStatsB {N oc h w : Nat}                        : SHlo (N * (oc * (h * w))) → SHlo (oc + oc)
+  | bnBatchVarAtB {N oc h w : Nat}                        : SHlo (N * (oc * (h * w))) → SHlo oc → SHlo oc
+  | bnPackB {oc : Nat}                                    : SHlo oc → SHlo oc → SHlo (oc + oc)
   -- ══ ⭐⭐ SYNCHRONISED BN FORWARD — normalise with the statistics HANDED IN.
   --    `bnBatchF` reduces its own input for μ/σ²; this one reads them off its second operand,
-  --    which under data parallelism is `allReduceMeanF` of the replicas' `bnBatchStatsB`. That
-  --    is how a replica normalises over a global batch it cannot see, and it is the whole of
-  --    the sync-BN forward — no replica-family BN node, just the collective composed.
+  --    the packed `[μ ‖ σ²]` above. That is how a replica normalises over a global batch it
+  --    cannot see, and it is the whole of the sync-BN forward — no replica-family BN node, just
+  --    the collective composed. `den` feeds the ℝ-level `bnSyncTensor4` (stated at μ and the
+  --    second moment) `m2 := σ² + μ²`, so its `m2 − μ²` is σ² in ℝ; the emit uses σ² directly.
   --    `den` = `bnSyncTensor4`, whose `R = 1` anchor (`bnSyncTensor4_at_own_stats`) says that
   --    handed the batch's OWN statistics it IS `bnBatchTensor4` — so the single-device render
   --    denotes the function the existing tiers are already tied to. ══
   | bnSyncF {N oc h w : Nat} (gName bName epsStr : String) (ε : ℝ) (γ β : Vec oc) :
       SHlo (N * (oc * (h * w))) → SHlo (oc + oc) → SHlo (N * (oc * (h * w)))
   -- ══ ⭐⭐ The sync BACKWARD's statistic pair, and the backward itself.
-  --    `bnSyncDyStatsB` returns `[μ ‖ m2 ‖ mdy ‖ mdyx]`: it PASSES ITS OPERAND THROUGH into the
-  --    low half and appends the two dy-reductions. Re-averaging μ/m2 over replicas is the
+  --    `bnSyncDyStatsB` returns `[μ ‖ σ² ‖ mdy ‖ mdyx]`: it PASSES ITS OPERAND THROUGH into the
+  --    low half and appends the two dy-reductions. Re-averaging μ/σ² over replicas is the
   --    identity (they are already global), so that pass-through is free — and it buys the
   --    second collective: ONE `allReduceMeanF` then carries everything `bnSyncBack` needs.
   --    ⚠ Both reductions are MEANS, not sums. `bn_grad_input` is
@@ -1247,7 +1254,7 @@ inductive SHlo : Nat → Type where
   -- ══ ⭐⭐ The sync γ GRADIENT — `bnGammaGradB` with `x̂` at the HANDED-IN statistics.
   --    `bnGammaGradB` recomputes μ/σ² from its own operand (`reduce … [0,2,3]` over `B·h·w`),
   --    so under sync-BN it would build `x̂` from the SHARD's statistics while the forward used
-  --    the global ones — a different function, and the wrong gradient. This one slices μ/m2 out
+  --    the global ones — a different function, and the wrong gradient. This one slices μ/σ² out
   --    of the same packed `[oc+oc]` operand the forward read, so its `x̂` is the forward's.
   --    ⚠ β's gradient is `Σ dy`, reads no statistic, and `bnBetaGradB` stays as it is.
   --    `den` is `bnSyncPerChannel_grad_gamma`; its `R = 1` anchor
@@ -1255,6 +1262,13 @@ inductive SHlo : Nat → Type where
   | bnSyncGammaGradB {N oc h w : Nat} (xName epsStr : String) (ε : ℝ)
       (x : Vec (N * (oc * (h * w)))) :
       SHlo (N * (oc * (h * w))) → SHlo (oc + oc) → SHlo oc
+  -- ══ The running statistics a SYNC render hands back: μ and σ² read off the packed `[μ ‖ σ²]`
+  --    vector, so that under DP the host EMAs the GLOBAL batch statistics rather than replica
+  --    0's shard's (`bnBatchMeanB`/`bnBatchVarB` reduce the replica's own input). At `R = 1`
+  --    both are the existing `bnBatchMeanB`/`bnBatchVarB` (`den_bnStatsMeanB_allReduce_R1`,
+  --    `…VarB…`). ══
+  | bnStatsMeanB {oc : Nat}                               : SHlo (oc + oc) → SHlo oc
+  | bnStatsVarB  {oc : Nat}                               : SHlo (oc + oc) → SHlo oc
   -- ══ Pointwise affine-by-a-LITERAL at the batched index — the pieces a label-smoothed
   --    softmax-CE cotangent is composed from. `scaleB` is `scaleF`'s batched peer; `shiftB`
   --    and `divConstB` had no per-example peer at all.
@@ -2006,39 +2020,46 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c)
   | _, .bnBatchVarB (N := N) (oc := oc) (h := h) (w := w) e =>
       fun c => bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c)
-  | _, .bnBatchStatsB (N := N) (oc := oc) (h := h) (w := w) e =>
-      Fin.append
-        (fun c => bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c))
-        (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c))
+  | _, .bnBatchVarAtB (N := N) (oc := oc) (h := h) (w := w) e mu =>
+      fun c => bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c)
+             + (bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) - den mu c)
+             * (bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) - den mu c)
+  | _, .bnPackB a b => Fin.append (den a) (den b)
   | _, .bnSyncDyStatsB (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x dy st =>
       Fin.append (den st)
         (Fin.append
           (fun c => bnMean (N*(h*w)) (fun k =>
               γ c * Mat.unflatten (bnchwFwd N oc h w (den dy)) c k))
           (fun c => bnMean (N*(h*w)) (fun k =>
-              bnSyncXhat (N*(h*w)) ε (den st (Fin.castAdd oc c)) (den st (Fin.natAdd oc c))
+              bnSyncXhat (N*(h*w)) ε (den st (Fin.castAdd oc c))
+                (den st (Fin.natAdd oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
                 (Mat.unflatten (bnchwFwd N oc h w x) c) k
               * (γ c * Mat.unflatten (bnchwFwd N oc h w (den dy)) c k))))
   | _, .bnSyncBack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x dy ds =>
       bnSyncTensor4_grad_input N oc h w ε γ
         (fun c => den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c)))
-        (fun c => den ds (Fin.castAdd (oc+oc) (Fin.natAdd  oc c)))
+        (fun c => den ds (Fin.castAdd (oc+oc) (Fin.natAdd  oc c))
+                  + den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c))
+                    * den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c)))
         (fun c => den ds (Fin.natAdd  (oc+oc) (Fin.castAdd oc c)))
         (fun c => den ds (Fin.natAdd  (oc+oc) (Fin.natAdd  oc c)))
         x (den dy)
   | _, .bnSyncF (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ β x st =>
       -- the packed operand's halves, by `Fin.castAdd`/`Fin.natAdd` — the index-level peers of
       -- `Fin.append_left`/`Fin.append_right`, which is what makes this readable back off a
-      -- `bnBatchStatsB` that an `allReduceMeanF` has averaged.
+      -- `bnPackB` of two `allReduceMeanF`s. The second half is σ²; `bnSyncTensor4` is stated at
+      -- the second moment, so it is handed `σ² + μ²` and its `m2 − μ²` is σ² in ℝ.
       bnSyncTensor4 N oc h w ε γ β
         (fun c => den st (Fin.castAdd oc c))
-        (fun c => den st (Fin.natAdd  oc c))
+        (fun c => den st (Fin.natAdd  oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
         (den x)
   | _, .bnSyncGammaGradB (N := N) (oc := oc) (h := h) (w := w) _ _ ε x dy st =>
       bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
         (fun c => den st (Fin.castAdd oc c))
-        (fun c => den st (Fin.natAdd  oc c))
+        (fun c => den st (Fin.natAdd  oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
         (bnchwFwd N oc h w x) (bnchwFwd N oc h w (den dy))
+  | _, .bnStatsMeanB (oc := oc) e => fun c => den e (Fin.castAdd oc c)
+  | _, .bnStatsVarB  (oc := oc) e => fun c => den e (Fin.natAdd oc c)
   | _, .scaleB _ s e    => fun i => den e i * s
   | _, .shiftB _ s e    => fun i => den e i + s
   | _, .divConstB _ s e => fun i => den e i / s
@@ -2506,17 +2527,20 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
 @[simp] theorem den_bnBatchVarB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w)))) :
     den (.bnBatchVarB e)
       = fun c => bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) := rfl
-@[simp] theorem den_bnBatchStatsB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w)))) :
-    den (.bnBatchStatsB e)
-      = Fin.append
-          (fun c => bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c))
-          (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c)) := rfl
+@[simp] theorem den_bnBatchVarAtB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w))))
+    (mu : SHlo oc) :
+    den (.bnBatchVarAtB e mu)
+      = fun c => bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c)
+             + (bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) - den mu c)
+             * (bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) - den mu c) := rfl
+@[simp] theorem den_bnPackB {oc : Nat} (a b : SHlo oc) :
+    den (.bnPackB a b) = Fin.append (den a) (den b) := rfl
 @[simp] theorem den_bnSyncF {N oc h w : Nat} (gName bName epsStr : String) (ε : ℝ)
     (γ β : Vec oc) (x : SHlo (N * (oc * (h * w)))) (st : SHlo (oc + oc)) :
     den (.bnSyncF gName bName epsStr ε γ β x st)
       = bnSyncTensor4 N oc h w ε γ β
           (fun c => den st (Fin.castAdd oc c))
-          (fun c => den st (Fin.natAdd  oc c))
+          (fun c => den st (Fin.natAdd  oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
           (den x) := rfl
 @[simp] theorem den_bnSyncDyStatsB {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ)
     (γ : Vec oc) (x : Vec (N * (oc * (h * w)))) (dy : SHlo (N * (oc * (h * w))))
@@ -2527,7 +2551,8 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
             (fun c => bnMean (N*(h*w)) (fun k =>
                 γ c * Mat.unflatten (bnchwFwd N oc h w (den dy)) c k))
             (fun c => bnMean (N*(h*w)) (fun k =>
-                bnSyncXhat (N*(h*w)) ε (den st (Fin.castAdd oc c)) (den st (Fin.natAdd oc c))
+                bnSyncXhat (N*(h*w)) ε (den st (Fin.castAdd oc c))
+                  (den st (Fin.natAdd oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
                   (Mat.unflatten (bnchwFwd N oc h w x) c) k
                 * (γ c * Mat.unflatten (bnchwFwd N oc h w (den dy)) c k)))) := rfl
 @[simp] theorem den_bnSyncBack {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ)
@@ -2536,84 +2561,155 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
     den (.bnSyncBack gName xName epsStr ε γ x dy ds)
       = bnSyncTensor4_grad_input N oc h w ε γ
           (fun c => den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c)))
-          (fun c => den ds (Fin.castAdd (oc+oc) (Fin.natAdd  oc c)))
+          (fun c => den ds (Fin.castAdd (oc+oc) (Fin.natAdd  oc c))
+                    + den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c))
+                      * den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c)))
           (fun c => den ds (Fin.natAdd  (oc+oc) (Fin.castAdd oc c)))
           (fun c => den ds (Fin.natAdd  (oc+oc) (Fin.natAdd  oc c)))
           x (den dy) := rfl
-/-- ⭐⭐ **THE DROP-IN, on actual graph nodes: at `R = 1` the sync-BN subgraph denotes
-    `bnBatchTensor4`.**
-
-    The Foundation anchors say the sync forward at its own statistics is the batch forward; this
-    says the GRAPH a sync render emits — `bnSyncF` fed by `allReduceMeanF` of `bnBatchStatsB` —
-    is that, once `R = 1` collapses the collective to its single operand.
-
-    So a single-device sync render computes exactly what today's `bnBatchF` render computes, and
-    the `R = 1` artifacts need not move. The `R > 1` case is then purely a question about how
-    shard statistics compose (`bnMean_shard` / `bnMeanSq_shard`), with BatchNorm itself already
-    accounted for here. `planning/global_bn_verified.md` §2b/§2c. -/
-theorem den_bnSyncF_allReduce_R1 {N oc h w : Nat} (gN bN es t : String) (ε : ℝ) (γ β : Vec oc)
-    (hm : N * (h * w) ≠ 0) (x : SHlo (N * (oc * (h * w)))) :
-    den (.bnSyncF gN bN es ε γ β x
-          (.allReduceMeanF 1 Nat.one_pos t [] (fun _ => .bnBatchStatsB x)))
-      = bnBatchTensor4 N oc h w ε γ β (den x) := by
-  rw [den_bnSyncF]
-  have hst : ∀ i : Fin (oc + oc),
-      den (SHlo.allReduceMeanF 1 Nat.one_pos t [] (fun _ => SHlo.bnBatchStatsB x)) i
-        = den (SHlo.bnBatchStatsB (N := N) (oc := oc) (h := h) (w := w) x) i := by
-    intro i; simp [den_allReduceMeanF]
-  simp only [hst, den_bnBatchStatsB, Fin.append_left, Fin.append_right]
-  exact bnSyncTensor4_at_own_stats N oc h w hm ε γ β (den x)
-
-/-- ⭐⭐ **THE DROP-IN, backward half: at `R = 1` the sync-BN backward subgraph denotes
-    `bnBatchTensor4_grad_input`.**
-
-    The peer of `den_bnSyncF_allReduce_R1`. The graph is the one a sync render emits — an outer
-    `allReduceMeanF` over `bnSyncDyStatsB`, itself fed by an inner one over `bnBatchStatsB` —
-    and at `R = 1` both collectives collapse to their single operand, leaving the committed
-    three-term backward. `hx` ties the saved host activation to the graph value it came from,
-    which is the renderer's own invariant. -/
-theorem den_bnSyncBack_allReduce_R1 {N oc h w : Nat} (gN xN es t t' : String) (ε : ℝ)
-    (γ : Vec oc) (hm : N * (h * w) ≠ 0)
-    (xg : SHlo (N * (oc * (h * w)))) (x : Vec (N * (oc * (h * w)))) (hx : den xg = x)
-    (dy : SHlo (N * (oc * (h * w)))) :
-    den (.bnSyncBack gN xN es ε γ x dy
-          (.allReduceMeanF 1 Nat.one_pos t []
-            (fun _ => .bnSyncDyStatsB gN xN es ε γ x dy
-              (.allReduceMeanF 1 Nat.one_pos t' [] (fun _ => .bnBatchStatsB xg)))))
-      = bnBatchTensor4_grad_input N oc h w ε γ x (den dy) := by
-  subst hx
-  rw [den_bnSyncBack]
-  have hone : ∀ {n : Nat} (t : String) (g : SHlo n) (i : Fin n),
-      den (SHlo.allReduceMeanF 1 Nat.one_pos t [] (fun _ => g)) i = den g i := by
-    intro n t g i; simp [den_allReduceMeanF]
-  simp only [hone, den_bnSyncDyStatsB, den_bnBatchStatsB,
-             Fin.append_left, Fin.append_right, bnSyncXhat_at_own_stats _ hm]
-  exact bnSyncTensor4_grad_input_at_own_stats N oc h w hm ε γ _ (den dy)
 @[simp] theorem den_bnSyncGammaGradB {N oc h w : Nat} (xName epsStr : String) (ε : ℝ)
     (x : Vec (N * (oc * (h * w)))) (dy : SHlo (N * (oc * (h * w)))) (st : SHlo (oc + oc)) :
     den (.bnSyncGammaGradB xName epsStr ε x dy st)
       = bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
           (fun c => den st (Fin.castAdd oc c))
-          (fun c => den st (Fin.natAdd  oc c))
+          (fun c => den st (Fin.natAdd  oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
           (bnchwFwd N oc h w x) (bnchwFwd N oc h w (den dy)) := rfl
+@[simp] theorem den_bnStatsMeanB {oc : Nat} (e : SHlo (oc + oc)) :
+    den (.bnStatsMeanB e) = fun c => den e (Fin.castAdd oc c) := rfl
+@[simp] theorem den_bnStatsVarB {oc : Nat} (e : SHlo (oc + oc)) :
+    den (.bnStatsVarB e) = fun c => den e (Fin.natAdd oc c) := rfl
+
+/-- The one-replica collective threads its operand. -/
+theorem den_allReduceMeanF_one {n : Nat} (t : String) (ds : List Nat) (g : SHlo n) (i : Fin n) :
+    den (SHlo.allReduceMeanF 1 Nat.one_pos t ds (fun _ => g)) i = den g i := by
+  simp [den_allReduceMeanF]
+
+/-- **At `R = 1` the two-round statistics subgraph is `[μ ‖ σ²]` of the batch itself**: the
+    replica's own mean, and its own two-pass variance with a zero offset. -/
+theorem den_syncStats_R1 {N oc h w : Nat} (t t' : String) (ds ds' : List Nat)
+    (x : SHlo (N * (oc * (h * w)))) (c : Fin oc) :
+    den (SHlo.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))
+          (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB x
+            (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))))) (Fin.castAdd oc c)
+        = bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den x)) c)
+    ∧ den (SHlo.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))
+          (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB x
+            (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))))) (Fin.natAdd oc c)
+        = bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den x)) c) := by
+  constructor
+  · simp only [den_bnPackB, Fin.append_left, den_allReduceMeanF_one, den_bnBatchMeanB]
+  · simp only [den_bnPackB, Fin.append_right, den_allReduceMeanF_one, den_bnBatchVarAtB,
+               den_bnBatchMeanB, sub_self, mul_zero, add_zero]
+
+/-- ⭐⭐ **THE DROP-IN, on actual graph nodes: at `R = 1` the sync-BN subgraph denotes
+    `bnBatchTensor4`.**
+
+    The Foundation anchors say the sync forward at its own statistics is the batch forward; this
+    says the GRAPH a sync render emits — `bnSyncF` fed by `bnPackB` of the two one-replica
+    collectives (μ, then σ² at μ) — is that, once `R = 1` collapses every collective to its
+    single operand.
+
+    So a single-device sync render computes exactly what today's `bnBatchF` render computes, and
+    the `R = 1` artifacts need not move. The `R > 1` case is then purely a question about how
+    shard statistics compose (`bnMean_shard` / `bnVar_shard_chan`), with BatchNorm itself already
+    accounted for here. `planning/global_bn_verified.md` §2b/§2c. -/
+theorem den_bnSyncF_allReduce_R1 {N oc h w : Nat} (gN bN es t t' : String) (ds ds' : List Nat)
+    (ε : ℝ) (γ β : Vec oc) (hm : N * (h * w) ≠ 0) (x : SHlo (N * (oc * (h * w)))) :
+    den (.bnSyncF gN bN es ε γ β x
+          (.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))
+            (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB x
+              (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))))))
+      = bnBatchTensor4 N oc h w ε γ β (den x) := by
+  rw [den_bnSyncF]
+  simp only [(den_syncStats_R1 t t' ds ds' x _).1, (den_syncStats_R1 t t' ds ds' x _).2]
+  have key : ∀ m2 : Vec oc,
+      m2 = (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den x)) c)) →
+      bnSyncTensor4 N oc h w ε γ β
+        (fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den x)) c)) m2 (den x)
+        = bnBatchTensor4 N oc h w ε γ β (den x) := by
+    intro m2 hm2; rw [hm2]; exact bnSyncTensor4_at_own_stats N oc h w hm ε γ β (den x)
+  exact key _ (by funext c; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring)
+
+/-- ⭐⭐ **THE DROP-IN, backward half: at `R = 1` the sync-BN backward subgraph denotes
+    `bnBatchTensor4_grad_input`.**
+
+    The peer of `den_bnSyncF_allReduce_R1`. The graph is the one a sync render emits — an outer
+    `allReduceMeanF` over `bnSyncDyStatsB`, itself fed by the packed forward statistics — and at
+    `R = 1` every collective collapses to its single operand, leaving the committed three-term
+    backward. `hx` ties the saved host activation to the graph value it came from, which is the
+    renderer's own invariant. -/
+theorem den_bnSyncBack_allReduce_R1 {N oc h w : Nat} (gN xN es t t' t'' : String)
+    (ds ds' ds'' : List Nat) (ε : ℝ) (γ : Vec oc) (hm : N * (h * w) ≠ 0)
+    (xg : SHlo (N * (oc * (h * w)))) (x : Vec (N * (oc * (h * w)))) (hx : den xg = x)
+    (dy : SHlo (N * (oc * (h * w)))) :
+    den (.bnSyncBack gN xN es ε γ x dy
+          (.allReduceMeanF 1 Nat.one_pos t'' ds''
+            (fun _ => .bnSyncDyStatsB gN xN es ε γ x dy
+              (.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB xg))
+                (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB xg
+                  (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB xg))))))))
+      = bnBatchTensor4_grad_input N oc h w ε γ x (den dy) := by
+  subst hx
+  rw [den_bnSyncBack]
+  have hm2c : ∀ c : Fin oc,
+      bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)
+        + bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)
+          * bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)
+      = bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c) := by
+    intro c; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring
+  simp only [den_allReduceMeanF_one, den_bnSyncDyStatsB, Fin.append_left, Fin.append_right,
+             (den_syncStats_R1 t t' ds ds' xg _).1, (den_syncStats_R1 t t' ds ds' xg _).2,
+             hm2c, bnSyncXhat_at_own_stats _ hm]
+  exact bnSyncTensor4_grad_input_at_own_stats N oc h w hm ε γ _ (den dy)
 
 /-- ⭐⭐ **THE DROP-IN, γ half: at `R = 1` the sync γ-gradient node denotes `bnGammaGradB`.**
     The third anchor beside `den_bnSyncF_allReduce_R1` / `den_bnSyncBack_allReduce_R1`: fed the
-    collapsed collective, the sync γ node reads the batch's own statistics and is the committed
+    collapsed collectives, the sync γ node reads the batch's own statistics and is the committed
     γ gradient. -/
-theorem den_bnSyncGammaGradB_allReduce_R1 {N oc h w : Nat} (xN es t : String) (ε : ℝ)
-    (hm : N * (h * w) ≠ 0) (xg : SHlo (N * (oc * (h * w)))) (x : Vec (N * (oc * (h * w))))
-    (hx : den xg = x) (dy : SHlo (N * (oc * (h * w)))) :
+theorem den_bnSyncGammaGradB_allReduce_R1 {N oc h w : Nat} (xN es t t' : String)
+    (ds ds' : List Nat) (ε : ℝ) (hm : N * (h * w) ≠ 0)
+    (xg : SHlo (N * (oc * (h * w)))) (x : Vec (N * (oc * (h * w)))) (hx : den xg = x)
+    (dy : SHlo (N * (oc * (h * w)))) :
     den (.bnSyncGammaGradB xN es ε x dy
-          (.allReduceMeanF 1 Nat.one_pos t [] (fun _ => .bnBatchStatsB xg)))
+          (.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB xg))
+            (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB xg
+              (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB xg))))))
       = den (.bnGammaGradB xN es ε x dy) := by
   subst hx
   rw [den_bnSyncGammaGradB]
-  have hone : ∀ {n : Nat} (t : String) (g : SHlo n) (i : Fin n),
-      den (SHlo.allReduceMeanF 1 Nat.one_pos t [] (fun _ => g)) i = den g i := by
-    intro n t g i; simp [den_allReduceMeanF]
-  simp only [hone, den_bnBatchStatsB, Fin.append_left, Fin.append_right]
-  exact bnSyncPerChannel_grad_gamma_at_own_stats oc (N*(h*w)) hm ε _ _
+  simp only [(den_syncStats_R1 t t' ds ds' xg _).1, (den_syncStats_R1 t t' ds ds' xg _).2]
+  have key : ∀ m2 : Vec oc,
+      m2 = (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)) →
+      bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
+        (fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)) m2
+        (bnchwFwd N oc h w (den xg)) (bnchwFwd N oc h w (den dy))
+        = den (.bnGammaGradB xN es ε (den xg) dy) := by
+    intro m2 hm2; rw [hm2]
+    exact bnSyncPerChannel_grad_gamma_at_own_stats oc (N*(h*w)) hm ε _ _
+  exact key _ (by funext c; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring)
+
+/-- **`R = 1`: the handed-back sync mean IS `bnBatchMeanB`.** -/
+theorem den_bnStatsMeanB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : List Nat)
+    (x : SHlo (N * (oc * (h * w)))) :
+    den (.bnStatsMeanB
+          (.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))
+            (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB x
+              (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))))))
+      = den (.bnBatchMeanB x) := by
+  funext c
+  simp only [den_bnStatsMeanB, (den_syncStats_R1 t t' ds ds' x c).1, den_bnBatchMeanB]
+
+/-- **`R = 1`: the handed-back sync variance IS `bnBatchVarB`** — the batch's own two-pass
+    variance, offset zero. -/
+theorem den_bnStatsVarB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : List Nat)
+    (x : SHlo (N * (oc * (h * w)))) :
+    den (.bnStatsVarB
+          (.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))
+            (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB x
+              (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))))))
+      = den (.bnBatchVarB x) := by
+  funext c
+  simp only [den_bnStatsVarB, (den_syncStats_R1 t t' ds ds' x c).2, den_bnBatchVarB]
 
 @[simp] theorem den_maxPoolBackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
     (e : SHlo (N*(c*h*w))) :
@@ -4810,8 +4906,9 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "bnBatchMean" [] [N, oc, h, w] (skel e)
   | _, .bnBatchVarB (N := N) (oc := oc) (h := h) (w := w) e =>
       .batched "bnBatchVar" [] [N, oc, h, w] (skel e)
-  | _, .bnBatchStatsB (N := N) (oc := oc) (h := h) (w := w) e =>
-      .batched "bnBatchStats" [] [N, oc, h, w] (skel e)
+  | _, .bnBatchVarAtB (N := N) (oc := oc) (h := h) (w := w) e mu =>
+      .batched2 "bnBatchVarAt" [] [N, oc, h, w] (skel e) (skel mu)
+  | _, .bnPackB (oc := oc) a b => .batched2 "bnPack" [] [oc] (skel a) (skel b)
   | _, .bnSyncF (N := N) (oc := oc) (h := h) (w := w) gN bN es _ _ _ x st =>
       .batched2 "bnSync" [gN, bN, es] [N, oc, h, w] (skel x) (skel st)
   | _, .bnSyncDyStatsB (N := N) (oc := oc) (h := h) (w := w) gN xN es _ _ _ dy st =>
@@ -4820,6 +4917,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched2 "bnSyncBack" [gN, xN, es] [N, oc, h, w] (skel dy) (skel ds)
   | _, .bnSyncGammaGradB (N := N) (oc := oc) (h := h) (w := w) xN es _ _ dy st =>
       .batched2 "bnSyncGammaGrad" [xN, es] [N, oc, h, w] (skel dy) (skel st)
+  | _, .bnStatsMeanB (oc := oc) e => .batched "bnStatsMean" [] [oc] (skel e)
+  | _, .bnStatsVarB  (oc := oc) e => .batched "bnStatsVar"  [] [oc] (skel e)
   | _, .scaleB (N := N) (n := n) sS _ e    => .batched "scale" [sS] [N, n] (skel e)
   | _, .shiftB (N := N) (n := n) sS _ e    => .batched "shift" [sS] [N, n] (skel e)
   | _, .divConstB (N := N) (n := n) sS _ e => .batched "divConst" [sS] [N, n] (skel e)
@@ -7929,6 +8028,14 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             pure (s!"    {c} = stablehlo.constant dense<{sS}> : {ty d}\n" ++
                   s!"    {o} = stablehlo.divide {r}, {c} : {ty d}\n", o)
           pure (txt4, res4 :: st)
+      | "bnStatsMean", [], [oc] => do
+          -- μ, sliced off the packed `[μ ‖ σ²]` — under DP the all-reduced statistics.
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.slice {r} [0:{oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n", o :: st)
+      | "bnStatsVar", [], [oc] => do
+          -- σ², sliced off the packed `[μ ‖ σ²]`.
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.slice {r} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n", o :: st)
       | "bnBatchMean", [], [_N, oc, h, w] => do
           -- μ_c = reduce[0,2,3](x) / (B·h·w). Numerically the `%{p}bnmu` the hand-written
           -- emitter divides out of its own BN fragment's `smr`.
@@ -7939,23 +8046,6 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [oc]}\n" ++
             s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
             s!"    {o} = stablehlo.divide {smr}, {nf} : {ty [oc]}\n", o :: st)
-      | "bnBatchStats", [], [_N, oc, h, w] => do
-          -- [μ ‖ E[x²]] as one `[oc+oc]` vector, both over the SAME B·h·w cells `bnBatchF`
-          -- normalises by. μ is `bnBatchMean`'s text verbatim; the second moment is the same
-          -- reduction over `x·x`; the concatenate is what makes one collective carry both.
-          let xr ← fresh; let z ← fresh; let nf ← fresh
-          let smr ← fresh; let mu ← fresh
-          let sq ← fresh; let m2r ← fresh; let m2 ← fresh; let o ← fresh
-          pure (
-            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-            s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [oc]}\n" ++
-            s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
-            s!"    {mu} = stablehlo.divide {smr}, {nf} : {ty [oc]}\n" ++
-            s!"    {sq} = stablehlo.multiply {xr}, {xr} : {ty [B,oc,h,w]}\n" ++
-            s!"    {m2r} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
-            s!"    {m2} = stablehlo.divide {m2r}, {nf} : {ty [oc]}\n" ++
-            s!"    {o} = stablehlo.concatenate {mu}, {m2}, dim = 0 : ({ty [oc]}, {ty [oc]}) -> {ty [oc+oc]}\n", o :: st)
       | "bnBatchVar", [], [_N, oc, h, w] => do
           -- var_c = reduce[0,2,3]((x−μ)²) / (B·h·w), μ recomputed inline — the biased (÷n)
           -- variance `bnVar` uses, matching `%{p}bnvar`.
@@ -8860,25 +8950,48 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- (no batch), since `B` is `pretty`'s exactly as it is for every other case here.
       -- ⚠ Both operand converts are on VALUES, not on a weight — nothing in the emit cares, and
       -- neither does `dot_close_mixed`, which rounds both sides.
+      | "bnBatchVarAt", [], [_N, oc, h, w] => do
+          -- σ²_r + (μ_r − μ)²: the replica's TWO-PASS variance about its own mean, plus its
+          -- mean's squared offset from the all-reduced global mean `b`. The replica mean of these
+          -- is the global σ² exactly (`bnVar_shard_chan`) — no `E[x²] − μ²` anywhere.
+          let xr ← fresh; let z ← fresh; let nf ← fresh; let smr ← fresh; let mu ← fresh
+          let mub ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vr ← fresh
+          let d ← fresh; let dd ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {a} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [oc]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {mu} = stablehlo.divide {smr}, {nf} : {ty [oc]}\n" ++
+            s!"    {mub} = stablehlo.broadcast_in_dim {mu}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xr}, {mub} : {ty [B,oc,h,w]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {vr} = stablehlo.divide {vsr}, {nf} : {ty [oc]}\n" ++
+            s!"    {d} = stablehlo.subtract {mu}, {b} : {ty [oc]}\n" ++
+            s!"    {dd} = stablehlo.multiply {d}, {d} : {ty [oc]}\n" ++
+            s!"    {o} = stablehlo.add {vr}, {dd} : {ty [oc]}\n", o :: st)
+      | "bnPack", [], [oc] => do
+          -- `[μ ‖ σ²]`: the two all-reduced `[oc]` statistics as the one operand the sync ops read.
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.concatenate {a}, {b}, dim = 0 : ({ty [oc]}, {ty [oc]}) -> {ty [oc+oc]}\n", o :: st)
       | "bnSync", [gN, bN, es], [_N, oc, h, w] => do
-          -- ⭐ Sync-BN forward: μ and E[x²] SLICED out of the packed `[oc+oc]` operand `b`
-          -- (an all-reduced `bnBatchStats` under DP), variance re-formed as `m2 − μ²`. The
+          -- ⭐ Sync-BN forward: μ and σ² SLICED out of the packed `[oc+oc]` operand `b` (the
+          -- two all-reduced statistics under DP), σ² used as it arrives. The
           -- tail from `istd` on is `bnBatch`'s text verbatim — only where the statistics come
           -- from differs, which is exactly the claim `bnSyncTensor4_at_own_stats` makes.
-          let xr ← fresh; let mus ← fresh; let m2s ← fresh; let mub ← fresh; let m2b ← fresh
-          let musq ← fresh; let vr ← fresh; let ep ← fresh; let ve ← fresh; let istd ← fresh
+          let xr ← fresh; let mus ← fresh; let vs ← fresh; let mub ← fresh; let vb ← fresh
+          let ep ← fresh; let ve ← fresh; let istd ← fresh
           let xc ← fresh; let xh ← fresh; let gb ← fresh; let btb ← fresh
           let gx ← fresh; let o4 ← fresh; let o ← fresh
           pure (
             s!"    {xr} = stablehlo.reshape {a} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {mus} = stablehlo.slice {b} [0:{oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
-            s!"    {m2s} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
+            s!"    {vs} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
             s!"    {mub} = stablehlo.broadcast_in_dim {mus}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {m2b} = stablehlo.broadcast_in_dim {m2s}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {musq} = stablehlo.multiply {mub}, {mub} : {ty [B,oc,h,w]}\n" ++
-            s!"    {vr} = stablehlo.subtract {m2b}, {musq} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vb} = stablehlo.broadcast_in_dim {vs}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
-            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vb}, {ep} : {ty [B,oc,h,w]}\n" ++
             s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
             s!"    {xc} = stablehlo.subtract {xr}, {mub} : {ty [B,oc,h,w]}\n" ++
             s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
@@ -8888,24 +9001,22 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {o4} = stablehlo.add {gx}, {btb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {o4} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
       | "bnSyncDyStats", [gN, xN, es], [_N, oc, h, w] => do
-          -- [μ ‖ m2 ‖ mdy ‖ mdyx]. The operand `b` IS `[μ ‖ m2]`, so the pass-through is a
+          -- [μ ‖ σ² ‖ mdy ‖ mdyx]. The operand `b` IS `[μ ‖ σ²]`, so the pass-through is a
           -- concatenate of `b` itself — no re-slice. Both new entries are MEANS (÷ B·h·w),
           -- which is what lets one mean-collective carry them.
-          let xr ← fresh; let mus ← fresh; let m2s ← fresh; let mub ← fresh; let m2b ← fresh
-          let musq ← fresh; let vr ← fresh; let ep ← fresh; let ve ← fresh; let istd ← fresh
+          let xr ← fresh; let mus ← fresh; let vs ← fresh; let mub ← fresh; let vb ← fresh
+          let ep ← fresh; let ve ← fresh; let istd ← fresh
           let xc ← fresh; let xh ← fresh; let gb ← fresh; let dyr ← fresh; let dxh ← fresh
           let z ← fresh; let nf ← fresh; let sdxr ← fresh; let mdy ← fresh
           let xd ← fresh; let sxdr ← fresh; let mdyx ← fresh; let c2 ← fresh; let o ← fresh
           pure (
             s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {mus} = stablehlo.slice {b} [0:{oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
-            s!"    {m2s} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
+            s!"    {vs} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
             s!"    {mub} = stablehlo.broadcast_in_dim {mus}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {m2b} = stablehlo.broadcast_in_dim {m2s}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {musq} = stablehlo.multiply {mub}, {mub} : {ty [B,oc,h,w]}\n" ++
-            s!"    {vr} = stablehlo.subtract {m2b}, {musq} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vb} = stablehlo.broadcast_in_dim {vs}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
-            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vb}, {ep} : {ty [B,oc,h,w]}\n" ++
             s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
             s!"    {xc} = stablehlo.subtract {xr}, {mub} : {ty [B,oc,h,w]}\n" ++
             s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
@@ -8925,25 +9036,23 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           -- dx = istd·(dx̂ − mdy − x̂·mdyx), all four statistics sliced out of the all-reduced
           -- `[4·oc]` operand. ⚠ The MEAN form: no `·B·h·w` then `÷B·h·w` round trip, because
           -- the reductions arrive already divided — see `bnSync_grad_input`.
-          let xr ← fresh; let mus ← fresh; let m2s ← fresh; let mdys ← fresh; let mdyxs ← fresh
-          let mub ← fresh; let m2b ← fresh; let mdyb ← fresh; let mdyxb ← fresh
-          let musq ← fresh; let vr ← fresh; let ep ← fresh; let ve ← fresh; let istd ← fresh
+          let xr ← fresh; let mus ← fresh; let vs ← fresh; let mdys ← fresh; let mdyxs ← fresh
+          let mub ← fresh; let vb ← fresh; let mdyb ← fresh; let mdyxb ← fresh
+          let ep ← fresh; let ve ← fresh; let istd ← fresh
           let xc ← fresh; let xh ← fresh; let gb ← fresh; let dyr ← fresh; let dxh ← fresh
           let i1 ← fresh; let xs ← fresh; let i2 ← fresh; let dx4 ← fresh; let o ← fresh
           pure (
             s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {mus} = stablehlo.slice {b} [0:{oc}] : ({ty [oc+oc+(oc+oc)]}) -> {ty [oc]}\n" ++
-            s!"    {m2s} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc+(oc+oc)]}) -> {ty [oc]}\n" ++
+            s!"    {vs} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc+(oc+oc)]}) -> {ty [oc]}\n" ++
             s!"    {mdys} = stablehlo.slice {b} [{oc+oc}:{oc+oc+oc}] : ({ty [oc+oc+(oc+oc)]}) -> {ty [oc]}\n" ++
             s!"    {mdyxs} = stablehlo.slice {b} [{oc+oc+oc}:{oc+oc+oc+oc}] : ({ty [oc+oc+(oc+oc)]}) -> {ty [oc]}\n" ++
             s!"    {mub} = stablehlo.broadcast_in_dim {mus}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {m2b} = stablehlo.broadcast_in_dim {m2s}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {vb} = stablehlo.broadcast_in_dim {vs}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {mdyb} = stablehlo.broadcast_in_dim {mdys}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {mdyxb} = stablehlo.broadcast_in_dim {mdyxs}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {musq} = stablehlo.multiply {mub}, {mub} : {ty [B,oc,h,w]}\n" ++
-            s!"    {vr} = stablehlo.subtract {m2b}, {musq} : {ty [B,oc,h,w]}\n" ++
             s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
-            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vb}, {ep} : {ty [B,oc,h,w]}\n" ++
             s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
             s!"    {xc} = stablehlo.subtract {xr}, {mub} : {ty [B,oc,h,w]}\n" ++
             s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
@@ -8970,20 +9079,18 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           -- `b` — `bnSync`'s prologue verbatim, then `bnGammaGrad`'s tail. A SUM, not a mean:
           -- this is a parameter gradient, and the parameter collective takes the mean over
           -- replicas of exactly these shard sums.
-          let xr ← fresh; let mus ← fresh; let m2s ← fresh; let mub ← fresh; let m2b ← fresh
-          let musq ← fresh; let vr ← fresh; let ep ← fresh; let ve ← fresh; let istd ← fresh
+          let xr ← fresh; let mus ← fresh; let vs ← fresh; let mub ← fresh; let vb ← fresh
+          let ep ← fresh; let ve ← fresh; let istd ← fresh
           let xc ← fresh; let xh ← fresh; let dyr ← fresh; let dgp ← fresh; let z ← fresh
           let o ← fresh
           pure (
             s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {mus} = stablehlo.slice {b} [0:{oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
-            s!"    {m2s} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
+            s!"    {vs} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
             s!"    {mub} = stablehlo.broadcast_in_dim {mus}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {m2b} = stablehlo.broadcast_in_dim {m2s}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
-            s!"    {musq} = stablehlo.multiply {mub}, {mub} : {ty [B,oc,h,w]}\n" ++
-            s!"    {vr} = stablehlo.subtract {m2b}, {musq} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vb} = stablehlo.broadcast_in_dim {vs}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
-            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vb}, {ep} : {ty [B,oc,h,w]}\n" ++
             s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
             s!"    {xc} = stablehlo.subtract {xr}, {mub} : {ty [B,oc,h,w]}\n" ++
             s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++

@@ -599,9 +599,14 @@ open Proofs
 #print axioms bnSync_grad_input_at_own_stats
 #print axioms bnSyncTensor4_grad_input_at_own_stats
 #print axioms bnSyncXhat_at_own_stats
+-- ⭐⭐ Chan's parallel variance — what the exchange carries instead of E[x²], so that no consumer
+-- forms E[x²] − μ² (measured 2026-09-21: that formulation drifts 2e-4 over R34's 36 layers in f32)
+#print axioms bnVar_shard_chan
+#print axioms bnVar_row_shard_chan
 -- ⭐⭐ THE DROP-IN, on actual graph nodes: at R = 1 the sync-BN subgraphs (bnSyncF / bnSyncBack
--- fed by allReduceMeanF of bnBatchStatsB / bnSyncDyStatsB) denote exactly what today's
+-- fed by the two-round statistics subgraph / bnSyncDyStatsB) denote exactly what today's
 -- bnBatchF / bnBatchBack renders denote — so the R = 1 artifacts need not move.
+#print axioms StableHLO.den_syncStats_R1
 -- ⭐⭐⭐ P1 / P2 — sync-BN on replica r IS the shard-r block of the GLOBAL-BATCH forward and
 -- input-VJP, handed the all-reduced statistics. The spec does not move: both right-hand sides
 -- are the EXISTING bnBatchTensor4 / bnBatchTensor4_grad_input at N := R·N.
@@ -624,6 +629,10 @@ open Proofs
 #print axioms bnSyncPerChannel_grad_gamma_row_shard
 #print axioms bnPerChannel_grad_beta_row_shard
 #print axioms StableHLO.den_bnSyncGammaGradB_allReduce_R1
+-- the handed-back running statistics, read off the packed vector: at R = 1 they ARE
+-- bnBatchMeanB / bnBatchVarB
+#print axioms StableHLO.den_bnStatsMeanB_allReduce_R1
+#print axioms StableHLO.den_bnStatsVarB_allReduce_R1
 -- B8b: the per-channel BN SHlo op pair backward-faithfulness
 #print axioms StableHLO.bnPerChannelBack_faithful
 -- R4 syntactic core
@@ -1986,10 +1995,16 @@ open Proofs
 #print axioms Proofs.batchSlice_batchShard
 #print axioms Proofs.batchShard_batchMap
 #print axioms Proofs.batchShard_batchMapAux
--- P1 / P2 / P2γ on the graph at ANY R -- the BN case of the per-net chain induction
+-- the statistics subgraph denotes the global [μ ‖ σ²]; P1 / P2 / P2γ on the graph at ANY R --
+-- the BN case of the per-net chain induction
+#print axioms Proofs.den_syncStats_left
+#print axioms Proofs.den_syncStats_right
 #print axioms Proofs.den_bnSyncF_allReduce
 #print axioms Proofs.den_bnSyncBack_allReduce
 #print axioms Proofs.den_allReduceMeanF_bnSyncGammaGradB
+-- the handed-back statistics under DP are the GLOBAL batch's own (bnBatchMeanB/VarB at N := R·N)
+#print axioms Proofs.den_bnStatsMeanB_allReduce
+#print axioms Proofs.den_bnStatsVarB_allReduce
 -- P4 at the node: the parameter collective is 1/R of the batch-R·N gradient node
 #print axioms Proofs.den_allReduceMeanF_convWeightGradB_shard
 #print axioms Proofs.den_allReduceMeanF_bnBetaGradB_shard

@@ -120,6 +120,10 @@ status:
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
     - {declaration: "Proofs.dpMeanGrad_ne_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # ...and with SYNCHRONISED statistics it IS: the positive twin (replica r sums ITS examples' terms of the global gradient)
+    - {declaration: "Proofs.dpSyncGrad_eq_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # the sync-BN backward subgraph a DP render emits denotes the shard-r block of the batch-R*N input-VJP, at any R
+    - {declaration: "Proofs.den_bnSyncBack_allReduce", file: "LeanMlir/Proofs/Foundation/DataParallelSync.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the collective as an AST node: den (adamW tail (allReduceMeanF R g)) = adamWStep at the replica mean
     - {declaration: "Proofs.adamW_at_allReduceMeanF", file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #

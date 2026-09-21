@@ -131,6 +131,43 @@ theorem bnVar_eq_bnMeanSq_sub_sq (n : Nat) (hn : n ≠ 0) (x : Vec n) :
   rw [bnVar, bnMeanSq, ← hμ, hexp]
   field_simp
 
+/-- ⭐⭐ **Chan's parallel variance: the variance of the whole is the mean over shards of each
+    shard's OWN variance plus its mean's squared offset from the global mean.**
+
+    What a synchronised BatchNorm exchanges instead of `E[x²]`: every term is a two-pass
+    quantity on its shard, so there is no `E[x²] − μ²` cancellation anywhere in f32. Proved by
+    expanding every variance as `E[x²] − μ²` (`bnVar_eq_bnMeanSq_sub_sq`) and collecting with
+    `bnMean_shard` / `bnMeanSq_shard`; stated at an arbitrary shard `e`, like them. -/
+theorem bnVar_shard_chan {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
+    (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
+    bnVar M x = (1 / (R : ℝ)) * ∑ r : Fin R,
+      (bnVar m (fun k => x (e (r, k)))
+        + (bnMean m (fun k => x (e (r, k))) - bnMean M x)
+          * (bnMean m (fun k => x (e (r, k))) - bnMean M x)) := by
+  have hcard : M = R * m := by
+    have h := Fintype.card_congr e; simpa using h.symm
+  subst hcard
+  have hM : R * m ≠ 0 := Nat.mul_ne_zero hR hm
+  have hRr : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hR
+  have hS1 : ∑ r : Fin R, bnMeanSq m (fun k => x (e (r, k))) = (R : ℝ) * bnMeanSq (R * m) x := by
+    rw [bnMeanSq_shard hR hm e x, ← mul_assoc, mul_one_div_cancel hRr, one_mul]
+  have hS2 : ∑ r : Fin R, bnMean m (fun k => x (e (r, k))) = (R : ℝ) * bnMean (R * m) x := by
+    rw [bnMean_shard hR hm e x, ← mul_assoc, mul_one_div_cancel hRr, one_mul]
+  have hpt : ∀ r : Fin R,
+      bnVar m (fun k => x (e (r, k)))
+        + (bnMean m (fun k => x (e (r, k))) - bnMean (R * m) x)
+          * (bnMean m (fun k => x (e (r, k))) - bnMean (R * m) x)
+      = bnMeanSq m (fun k => x (e (r, k)))
+        - 2 * bnMean (R * m) x * bnMean m (fun k => x (e (r, k)))
+        + bnMean (R * m) x * bnMean (R * m) x := by
+    intro r; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring
+  simp only [hpt]
+  rw [Finset.sum_add_distrib, Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ,
+      Fintype.card_fin, nsmul_eq_mul, ← Finset.mul_sum, hS1, hS2,
+      bnVar_eq_bnMeanSq_sub_sq _ hM]
+  field_simp
+  ring
+
 /-- `istd = 1/√(σ²+ε) > 0` (variance ≥ 0, `ε > 0`). -/
 theorem bnIstd_pos {n : Nat} (v : Vec n) (ε : ℝ) (hε : 0 < ε) : 0 < bnIstd n v ε := by
   unfold bnIstd

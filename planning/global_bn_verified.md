@@ -11,6 +11,70 @@ gating the work.
 
 ---
 
+## ▶ NEXT SESSION — start here (written 2026-09-21, end of day)
+
+**State.** Everything through §3.2's render and gate is on `main`: the sync-BN kit (eight `SHlo`
+ops, two-round Chan exchange), P1–P4 (`Foundation/DataParallelSync.lean`, `DataParallel.lean`),
+ResNet-34's DP render swapped to sync-BN under `replicas > 1` (five `*dp*` artifacts re-rendered,
+all single-device artifacts byte-identical), and `resnet34-syncbn-check` passing on two GPUs.
+Read §2b's ⛔⛔ and §3.2's table before touching numerics — the one-round `E[x²]` exchange was
+measured wrong and replaced; the gate's columns are how the kit is now read.
+
+**Run the gate** (2 GPUs, XLA; ~30 s):
+
+    lake build resnet34-syncbn-check
+    unset HIP_VISIBLE_DEVICES
+    CUDA_VISIBLE_DEVICES=0,1 PJRT_REPLICAS=2 \
+      PJRT_PLUGIN=$PWD/.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so \
+      .lake/build/bin/resnet34-syncbn-check          # SYNCBN_VERBOSE=1 for per-parameter rows
+
+**What is next, in order.**
+
+1. **§3.2's remaining half — the R34 DP twins of T2 and T3.** The per-net chain walk that says
+   the sync-DP render on replica `r` denotes `batchShard r` of `resnet34ForwardB_full (R*N) w X`
+   and its gradient nodes the shard-`r` blocks of the batch-`R·N` backward. Every piece is in
+   `DataParallelSync.lean`: `batchShard_batchMap` / `_batchMapAux` / `_map` / `_zipWith` for the
+   non-BN ops, `den_bnSyncF_allReduce` / `den_bnSyncBack_allReduce` /
+   `den_allReduceMeanF_bnSyncGammaGradB` for the BN cases (all take the induction hypothesis
+   `hx : ∀ r, den (x r) = batchShard R N _ X r` and its `xv`/`dy` twins), `syncStats` for the
+   statistics subgraph, and `HasVJP.backward_smul` for the divisor step (§3.1b's "the 1/R").
+   ⚠ **Decide the index seam first.** The typed T2 graph (`ResNet34FullB.resnet34FwdGraphB_full`)
+   feeds `bnBatchF` at the conv index `N·(c·h·w)`; `bnSyncF` sits at `N·(c·(h·w))` (matching
+   `bnBatchTensor4`), and the AST has no index-cast node. Two options: (a) state the twin per
+   block with `.operand` leaves, exactly T3's shape (`r34IdTiedB` — the tie composes at the ℝ
+   level through `reassocB`), which needs no new AST machinery; (b) a `castIdx (h : n = m) :
+   SHlo n → SHlo m := h ▸ ·` helper with `den_castIdx` by `subst`, so one typed sync graph can be
+   written. (a) is the safer first cut. The render's `bnFwdSite` is the shape to mirror; its
+   `tag` strings are `{p}g1` (→ `%arsum{p}g1mu`, `…var`) and `{p}g1dst` for the backward.
+   Then `formalization.yaml` gets the twin beside `dpSyncGrad_eq_globalBatchGrad`, and the
+   render header's claim ("this step IS the single-device step at the global batch") is tied
+   rather than asserted.
+2. **§3.3 MobileNetV2 and EfficientNet-B0, §3.4 ResNet-50 / MobileNetV4** — the same three
+   helpers per renderer (`bnFwdSite`/`bnBackSite`/`bnGammaSite` are `private` in
+   `ResNet34RenderB.lean`; lift them to `StableHLO.lean` or a shared codegen module first rather
+   than copying), plus a `<net>-syncbn-check` each (the R34 harness parameterised by net, as
+   `shard-check` is). ⚠ MNv2/B0 have `bnBatchLABack` sites too — check which BN backward each
+   renderer uses before assuming the R34 pattern.
+3. **§3.5 re-runs**, then the book rows (`content.tex:5671`, `:7059`, `:8266` — `BN statistic
+   group … 64 (per replica)`, and the two `[TODO: global BN.]`). ⚠ Until a re-run, the committed
+   pair numbers were produced by the OLD per-replica renders; the rows stay as they are.
+
+**Gotchas that cost time this session.**
+* Editing `StableHLO.lean` is a 6-minute rebuild plus the corpus; batch every op change.
+* `simp` cannot rewrite inside `conv2d_weight_grad_has_vjp b x` (dependent position) — `rw`.
+* `intro m2 h` inside a proof shadows the spatial `h`; name hypotheses `hm2`.
+* Plain `simp` turns `Fin.natAdd` into `Fin.addNat` before `Fin.append_right` can fire — `simp only`.
+* The REORDER probe (swap the two batch halves) is exactly commutative and measures nothing;
+  the SENSITIVITY probe (perturb `x` by 1e-4) is the yardstick for any gradient comparison at a
+  random-init operating point — there, no two f32 implementations agree on `m'` better than ~1e-2.
+* XLA rounds a 32-row and a 64-row reduction differently (~1e-6/layer); 36 layers compound that
+  to ~2e-4 in the statistics. That is the floor of the split identity, and it is not the render.
+* A new `lean_exe` needs nothing but the `lakefile.lean` entry (`check_target_names.sh` lints
+  references, `check_audit_coverage.py` the audit's imports); a new Foundation module needs the
+  `Certs` root and the `AuditAxioms` import.
+
+---
+
 ## 0. The finding, and why it is fleet-wide rather than per-net
 
 ⭐⭐ **`allReduceMeanF` is the ONLY constructor in `SHlo` that takes a replica family.**
@@ -186,6 +250,23 @@ operands. Packing is what keeps that from costing an arity.
 | `bnSyncDyStatsB xName ε x` | `SHlo n → SHlo (oc+oc) → SHlo (oc+oc+oc+oc)` | 2 | `.batched2` |
 | `bnSyncBack gName xName epsStr ε γ x` | `SHlo n → SHlo (oc+oc+oc+oc) → SHlo n` | 2 | `.batched2` |
 | `bnSyncGammaGradB xName epsStr ε x` | `SHlo n → SHlo (oc+oc) → SHlo oc` | 2 | `.batched2` |
+| `bnBatchVarAtB` | `SHlo n → SHlo oc → SHlo oc` | 2 | `.batched2` |
+| `bnPackB` | `SHlo oc → SHlo oc → SHlo (oc+oc)` | 2 | `.batched2` |
+| `bnStatsMeanB` / `bnStatsVarB` | `SHlo (oc+oc) → SHlo oc` | 1 | `.batched` |
+
+⛔⛔ **`bnBatchStatsB` (`[μ ‖ E[x²]]` in one round) is GONE — measured wrong in f32, 2026-09-21.**
+`resnet34-syncbn-check` (§3.2) put the one-round exchange 2e-4 off `adam64` in the handed-back
+statistics after 36 layers and 15 % off in `m' = 0.1·g`; and its SENSITIVITY probe — the two-pass
+graph on the same batch perturbed by 1e-4·N(0,1) per pixel — moved the two-pass graph's OWN `m'`
+by 0.22. So the seven ops were right and the arithmetic was not: `σ² = E[x²] − μ²` costs
+`ε·E[x²]/σ²` per layer (up to ~30× rounding at R34's activation scales), which compounds to 2e-4
+over the depth, and at random init the gradient amplifies forward drift ~1000×. The exchange is
+now **Chan's parallel variance, in two rounds**: `bnBatchMeanB` all-reduced → μ; then
+`bnBatchVarAtB x μ = σ²_r + (μ_r − μ)²` (two-pass on the replica) all-reduced → σ² EXACTLY
+(`bnVar_shard_chan`, `bnVar_row_shard_chan`); `bnPackB` packs `[μ ‖ σ²]` for the consumers, which
+read σ² directly. Three collectives per BN layer per step (§2e), each a `[oc]` or `[4·oc]` vector.
+The ℝ-level API stays at `(μ, m2)`: a consumer's `den` hands `bnSyncTensor4` `m2 := σ² + μ²`, and
+`global_var_add_sq` folds that back to the second moment in the graph lemmas.
 
 ⛔⛔ **A FIFTH op, found 2026-09-21 while stating P4.** `bnGammaGradB`'s emit recomputes μ/σ²
 from its own operand — `reduce … [0,2,3]` over `B·h·w`, i.e. the SHARD — and builds `x̂` from
@@ -233,8 +314,9 @@ and its backward, with `dy` the family of output cotangents, as
     dst  := allReduceMeanF R _ "{g}dst" [] (fun r => bnSyncDyStatsB … (dy r) st)  -- [μ‖m2‖mdy‖mdyx]
     dx_r := bnSyncBack … (dy r) dst
 
-⭐ **Two collectives per BN layer per step, not four** — §2e's table halves, and the payload is
-still one small vector (`[4·oc]` ≤ 8,192 floats, 32 KB).
+⭐ **Three collectives per BN layer per step** (μ, then Chan's σ², then the backward's packed
+four) — the first-pass costing was two, before the one-round `E[x²]` exchange was measured to
+drift; the payload is still one small vector each (`[4·oc]` ≤ 8,192 floats, 32 KB).
 
 This stays inside the SPMD convention `allReduceMeanF` already uses (one skeleton, `skel` reads
 replica 0; each replica's own activation is the `r`-th member). At `R = 1` every `allReduceMeanF`
@@ -311,17 +393,16 @@ needs its own numeric check"), and it is exactly the identity that per-replica B
 
 ### 2e. Cost
 
-**Halved by 2b's packing.** ONE collective per BN layer forward (`[μ ‖ m2]`, a `[2·oc]` vector)
-and ONE per layer backward (`[μ ‖ m2 ‖ mdy ‖ mdyx]`, `[4·oc]`, ≤ 8,192 floats / 32 KB) — two per
-layer per step, where the first pass costed four:
+**Three per BN layer per step** (revised 2026-09-21 — see §2b's ⛔⛔): μ (`[oc]`), Chan's σ²
+(`[oc]`), and the backward's `[μ ‖ σ² ‖ mdy ‖ mdyx]` (`[4·oc]`, ≤ 8,192 floats / 32 KB):
 
 | net | BN layers | collectives / step | verified ms/step today | at 30–60 µs each |
 |---|---|---|---|---|
-| ResNet-34 | 36 | 72 | ~175 (14.6 min / 5,004 steps) | +2–4 ms, 1–2 % |
-| MobileNetV2 | 52 | 104 | 97 | +3–6 ms, 3–6 % |
-| EfficientNet-B0 | 49 | 98 | 134 | +3–6 ms, 2–4 % |
-| ResNet-50 | 53 | 106 | — | +3–6 ms |
-| MobileNetV4 | 77 | 154 | — | +5–9 ms |
+| ResNet-34 | 36 | 108 | ~175 (14.6 min / 5,004 steps) | +3–6 ms, 2–4 % |
+| MobileNetV2 | 52 | 156 | 97 | +5–9 ms, 5–10 % |
+| EfficientNet-B0 | 49 | 147 | 134 | +4–9 ms, 3–7 % |
+| ResNet-50 | 53 | 159 | — | +5–10 ms |
+| MobileNetV4 | 77 | 231 | — | +7–14 ms |
 
 ⚠ These are latency-bound, not bandwidth-bound — `[4·oc]` at 32 KB is nothing on the wire, so
 doubling the payload to halve the count is the right trade at every net here.
@@ -508,9 +589,11 @@ op of the chain. ⭐ T3's ties already bind the divisor as a real `B` separate f
 (`r34_net_tiedB (N : Nat) … (α B : ℝ)`), so the DP twin can be stated at `B := N` against the
 global instance at `B := R·N` without touching the tie.
 
-Gates: `lake build Certs` 4,019 jobs exit 0, no warnings; `AuditAxioms` 0 `sorryAx`, 1,408
-verdicts for 1,408 directives, all sixteen new theorems on the standard three axioms;
-`StableHLO.roundtrip` still universally quantified, so the fifth op's parser case is free.
+Gates (after §3.2's Chan rework, 2026-09-21): `lake build Certs` 4,019 jobs exit 0, no
+warnings; `AuditAxioms` 0 `sorryAx`, 1,417 verdicts for 1,417 directives, every new theorem on
+the standard three axioms; `StableHLO.roundtrip` still universally quantified, so the parser
+cases of all eight ops are free; `regen_verified_mlir.sh check` 192/192; `resnet34-syncbn-check`
+passes.
 
 ▶ **Then §3.2.** ⚠ The emitted MLIR of all five ops is still unverified numerically — nothing
 renders them. That gate is §3.2's R34 swap plus `resnet34-syncbn-check`, the first thing that can
@@ -518,13 +601,49 @@ catch a wrong `stablehlo.slice` bound or a bad `concatenate`.
 
 ### 3.2 ResNet-34 — first, the template
 
-8 `bnBatchF` emit sites in `ResNet34RenderB.lean`, and the `bnGammaGradB` sites beside each
-`bnBatchBack` (`idBackGradB`/`downBackGradB`, 2 + 3 per block kind) that must become
-`bnSyncGammaGradB` reading the SAME packed operand; swap to the 2b pattern under `replicas > 1`.
-Re-render the R34 `*dp*` artifacts; `git diff verified_mlir/` shows the added `%arsum{g}mu` …
-blocks and nothing else. DP twins of `ResNet34FullB` (T2) and `ResNet34BackCertifiedTieB` (T3).
-`resnet34-syncbn-check`. The render header's "does NOT equal" paragraph and `formalization.yaml`
-4k (the DP disclosure) rewritten. One to two sessions.
+▶ **Render + gate LANDED 2026-09-21; the T2/T3 DP twins are what remains.**
+
+* **Render.** Three helpers in `ResNet34RenderB.lean` — `bnFwdSite` / `bnBackSite` /
+  `bnGammaSite` — replace all 36 BN sites (8 forward emit sites, 8 backward, 8 γ-gradient, the
+  stem's three, and `bnStat`); `replicas`/`sync` are threaded through the 32 block calls and the
+  chain. At `replicas ≤ 1` every helper emits the old node, so all 20 single-device R34 artifacts
+  are byte-identical (checked); the five `*dp*` artifacts re-rendered (`adamdp`, `adamdp128`,
+  `resnet34in_momdp64`, `momdp64bf16`, `momdp128`): 218 collectives in `adamdp` = 110 parameters
+  + 36 × 3. The header's "does NOT equal" paragraph is rewritten; `formalization.yaml` carries
+  `dpSyncGrad_eq_globalBatchGrad` and `den_bnSyncBack_allReduce` beside the negative twin.
+  ⚠ A `forceSync` knob renders the sync graph at ONE replica (every collective empty) for the
+  gate; never a committed artifact.
+* ⭐⭐ **`resnet34-syncbn-check` (2 GPUs, XLA), PASSING** — and it earned its keep first. The
+  one-round `E[x²]` exchange failed it (§2b ⛔⛔); the gate's columns are what diagnosed why, and
+  they are the reading of the kit now:
+
+  | column | what it compares | statistics | `m' = 0.1·g` |
+  |---|---|---|---|
+  | FORMULATION | one-replica sync graph vs two-pass `adam64`, same batch | **0.000000** | 7e-4 |
+  | DUPLICATED | `DP_sync([A\|A])` vs one-replica sync graph on `A` | **0.000000** | 5e-4 |
+  | TEST (split) | `DP_sync([A\|B])` at 2×32 vs `adam64` on `[A\|B]` | 1.7e-4 | 0.15 |
+  | CONTROL | `DP_sync([A\|B])` vs `mean(single_32(A), single_32(B))` (the old identity) | 3.4e-3 | 0.55 |
+  | SENSITIVITY | two-pass graph vs itself, `x` perturbed by 1e-4·N(0,1) | 3.5e-4 | **0.22** |
+  | REORDER | each graph vs itself on `[B\|A]` | 0 | 1.8e-5 |
+
+  So: the sync ops' arithmetic IS the two-pass arithmetic (FORMULATION bit-exact); the collective
+  composes them exactly (DUPLICATED bit-exact); the split identity holds to 1.7e-4 on the
+  statistics — the 32-row and 64-row programs round their reductions differently (~1e-6/layer,
+  compounded by 36 layers), 20× under the per-replica CONTROL; and `m'` cannot be bounded at
+  this operating point at all, by any two f32 implementations: a 1e-4 forward perturbation moves
+  the two-pass graph's OWN gradient by 0.22 (random init, random data, ~1000× amplification).
+  The verdict is therefore on FORMULATION ≤ 1e-5, DUPLICATED ≤ 1e-5 (statistics) / 5e-3 (`m'`),
+  TEST statistics ≤ 1e-3, CONTROL ≥ 2e-3; the gradient columns are printed against SENSITIVITY.
+  ⚠ REORDER (swapping the two halves) is exactly commutative and measures nothing about rounding;
+  the sensitivity probe is the yardstick.
+* ▶ **Still to do here:** the DP twins of `ResNet34FullB` (T2) and `ResNet34BackCertifiedTieB`
+  (T3) — the per-net chain walk with `DataParallelSync.lean`'s BN cases (`den_bnSyncF_allReduce`,
+  `den_bnSyncBack_allReduce`, `den_allReduceMeanF_bnSyncGammaGradB`) and `batchShard_batchMap`
+  for every other op. ⚠ The typed T2 graph feeds `bnBatchF` at the conv index `N·(c·h·w)`;
+  `bnSyncF` sits at `N·(c·(h·w))` and the AST has no index-cast node, so the twin is stated
+  per block with operand leaves (T3's shape) or with a `castIdx` helper on the AST value —
+  decide at the start of that session. A better-conditioned operating point for the gate's
+  gradient columns (trained weights) is optional and separate.
 
 ### 3.3 MobileNetV2, then EfficientNet-B0
 
@@ -557,8 +676,8 @@ plan, and it goes when the render lands.
 
 ## 4. What "done" looks like
 
-* ✅ The five ops in the AST with `den`, emit, parser round-trip; P1, P2, P3's kit, P4 proved
-  (2026-09-21).
+* ✅ The eight ops in the AST with `den`, emit, parser round-trip; P1, P2, P3's kit, P4 proved
+  (2026-09-21). ✅ R34's DP render is sync-BN and `resnet34-syncbn-check` passes (2026-09-21).
 * Every BN net's DP render normalises over the global batch; its DP twin ties it to the existing
   spec at `N := R·N`; its `syncbn-check` passes on a split batch.
 * The side-by-side tables' `BN statistic group` row reads `256 (global)` in both columns, the

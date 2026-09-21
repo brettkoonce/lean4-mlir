@@ -1674,6 +1674,17 @@ lean_exe «shard-check» where
   root := `tests.TestShardCheck
   moreLinkArgs := lowererLink
 
+/-- `resnet34-syncbn-check` — the SYNC-BN gate, the identity no batch-BN net could state before
+    2026-09-21: `DP_sync([xA|xB])` at 2×32 equals `single([xA|xB])` at 1×64 on EVERY output region
+    (θ', m', v', the 72 BN statistics), because the sync render's replicas compute their shards of
+    one global-batch function (`planning/global_bn_verified.md`, `Foundation/DataParallelSync.lean`).
+    CONTROL: the old per-replica identity `DP == mean(single_32(xA), single_32(xB))` must now FAIL
+    by a margin, or the statistics are not synchronised. The first numeric check any of the seven
+    sync ops' emitted MLIR has had. Needs two GPUs and the XLA backend. -/
+lean_exe «resnet34-syncbn-check» where
+  root := `tests.TestR34SyncBnCheck
+  moreLinkArgs := lowererLink
+
 /-- `argmax-check` — the class-count gate on `F32.argmaxN`, the eval scorer every trainer here
     reads its top-1 through. Needs no GPU and no backend: pure host arithmetic on a synthetic
     logit block, so it can run anywhere and costs nothing.

@@ -613,15 +613,35 @@ theorem bnMean_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠
   rw [bnMean_shard hR hm (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
-/-- ⭐⭐ **…and so is the global per-channel SECOND MOMENT** — the high half of the same
-    collective. ⛔ There is no such statement for the variance, which is the whole reason the
-    packed statistic is `[μ ‖ E[x²]]` and not `[μ ‖ σ²]`. -/
+/-- ⭐⭐ **…and so is the global per-channel SECOND MOMENT.** ⛔ There is no such statement for
+    the variance alone — the mean of the shards' variances is not the variance of the union —
+    which is why the exchange carries Chan's corrected variance (`bnVar_row_shard_chan`) rather
+    than a plain `σ²_r`. -/
 theorem bnMeanSq_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
     (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
     bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
       = (1 / (R : ℝ)) * ∑ r : Fin R, bnMeanSq (N*(h*w))
           (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c) := by
   rw [bnMeanSq_shard hR hm (bnShardEquiv R N (h*w))]
+  simp only [bnchwFwd_row_batchShard]
+
+/-- ⭐⭐ **Chan's parallel variance on the channel rows**: the global channel variance is the
+    replica mean of each replica's own two-pass variance plus its mean's squared offset from the
+    global mean. This is what the second collective of a sync-BN forward carries
+    (`StableHLO.bnBatchVarAtB`), and it is why no consumer ever forms `E[x²] − μ²`. -/
+theorem bnVar_row_shard_chan (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
+    (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
+    bnVar ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
+      = (1 / (R : ℝ)) * ∑ r : Fin R,
+          (bnVar (N*(h*w))
+              (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c)
+           + (bnMean (N*(h*w))
+                (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c)
+              - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))
+             * (bnMean (N*(h*w))
+                  (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c)
+                - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))) := by
+  rw [bnVar_shard_chan hR hm (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
 /-- ⭐⭐ **`R = 1`: the sync forward at the batch's own statistics IS `bnBatchTensor4`.**
