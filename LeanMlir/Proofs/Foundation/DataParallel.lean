@@ -244,6 +244,53 @@ theorem dpMeanGrad_ne_globalBatchGrad (θ : Vec 1) :
   norm_num at h0
 
 -- ════════════════════════════════════════════════════════════════
+-- § Synchronised statistics: and there it is TRUE again
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The replica mean of the shard sums is `1/R` of the global sum.** Pure re-indexing: the
+    `R` shard sums together run over every one of the `R·N` examples exactly once. -/
+theorem dpMean_shardSum {R N P : Nat} (e : Fin R × Fin N ≃ Fin (R * N))
+    (c : Fin (R * N) → Vec P) :
+    dpMean (fun r => ∑ n : Fin N, c (e (r, n)))
+      = fun i => (1 / (R : ℝ)) * ∑ m : Fin (R * N), c m i := by
+  funext i
+  show (1 / (R : ℝ)) * ∑ r : Fin R, (∑ n : Fin N, c (e (r, n))) i = _
+  simp only [Finset.sum_apply]
+  rw [← Equiv.sum_comp e (fun m => c m i), Fintype.sum_prod_type]
+
+/-- ⭐⭐ **The positive twin of `dpMeanGrad_ne_globalBatchGrad`: with SYNCHRONISED statistics
+    the data-parallel step IS the single-device step at the global batch `R·N`.**
+
+    Write the global-batch gradient as a mean of per-example terms, `(1/(R·N)) Σ_m c m` — the
+    shared-weight batch sum every `*GradB` node denotes, at the cotangent the global backward
+    delivers to example `m`. Under sync-BN each `c m` depends on the WHOLE batch through the
+    all-reduced statistics; that is allowed, and it is what separates this from
+    `dpMeanGrad_eq_globalBatchGrad_of_perExample`, whose `c m` had to be a per-example loss's
+    own gradient. What sync-BN buys (P1–P3, `PerChannelBN.lean` / `DataParallelSync.lean`) is
+    that replica `r`'s backward is the shard-`r` block of the global one, so replica `r`'s
+    gradient node is `(1/N) Σ_n c (e (r, n))` — ITS examples' terms of the global sum. Then the
+    collective's mean over `R` of those is the global mean: `meanLoss_shard`'s arithmetic, for
+    vectors.
+
+    ⛔ Per-replica BatchNorm fails exactly here: replica `r`'s cotangents are then NOT the
+    shard-`r` block of any global backward, and the witness above is the two-example case. -/
+theorem dpSyncGrad_eq_globalBatchGrad {R N P : Nat} (e : Fin R × Fin N ≃ Fin (R * N))
+    (c : Fin (R * N) → Vec P) :
+    dpMean (fun r => fun i => (1 / (N : ℝ)) * ∑ n : Fin N, c (e (r, n)) i)
+      = fun i => (1 / ((R * N : Nat) : ℝ)) * ∑ m : Fin (R * N), c m i := by
+  funext i
+  show (1 / (R : ℝ)) * ∑ r : Fin R, ((1 / (N : ℝ)) * ∑ n : Fin N, c (e (r, n)) i) = _
+  rw [← Finset.mul_sum, ← mul_assoc, div_mul_div_comm, one_mul, Nat.cast_mul,
+      ← Equiv.sum_comp e (fun m => c m i), Fintype.sum_prod_type]
+
+/-- The contiguous shard — replica `r` owns examples `[N·r, N·r + N)` — as an instance, the
+    split `VerifiedTrain.lean`'s DP path cuts. -/
+theorem dpSyncGrad_eq_globalBatchGrad_contiguous {R N P : Nat} (c : Fin (R * N) → Vec P) :
+    dpMean (fun r => fun i => (1 / (N : ℝ)) * ∑ n : Fin N, c (finProdFinEquiv (r, n)) i)
+      = fun i => (1 / ((R * N : Nat) : ℝ)) * ∑ m : Fin (R * N), c m i :=
+  dpSyncGrad_eq_globalBatchGrad finProdFinEquiv c
+
+-- ════════════════════════════════════════════════════════════════
 -- § The lockstep induction
 -- ════════════════════════════════════════════════════════════════
 

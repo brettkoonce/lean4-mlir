@@ -185,6 +185,19 @@ operands. Packing is what keeps that from costing an arity.
 | `bnSyncF gName bName epsStr ε γ β` | `SHlo n → SHlo (oc+oc) → SHlo n` | 2 | `.batched2` |
 | `bnSyncDyStatsB xName ε x` | `SHlo n → SHlo (oc+oc) → SHlo (oc+oc+oc+oc)` | 2 | `.batched2` |
 | `bnSyncBack gName xName epsStr ε γ x` | `SHlo n → SHlo (oc+oc+oc+oc) → SHlo n` | 2 | `.batched2` |
+| `bnSyncGammaGradB xName epsStr ε x` | `SHlo n → SHlo (oc+oc) → SHlo oc` | 2 | `.batched2` |
+
+⛔⛔ **A FIFTH op, found 2026-09-21 while stating P4.** `bnGammaGradB`'s emit recomputes μ/σ²
+from its own operand — `reduce … [0,2,3]` over `B·h·w`, i.e. the SHARD — and builds `x̂` from
+them; its `den` is `bnPerChannel_grad_gamma`, whose `x̂` is `bnXhat` of the shard's row. Under
+sync-BN the forward normalised with the GLOBAL `x̂`, and `∂L/∂γ_c = Σ dy·x̂` has to use the same
+one, so a sync render that kept `bnGammaGradB` would emit the wrong γ gradient with every other
+node right. `bnSyncGammaGradB` reads μ/m2 off the same packed operand the forward read
+(`bnSync`'s prologue verbatim, then `bnGammaGrad`'s tail); `den` is
+`bnSyncPerChannel_grad_gamma`, anchored at `R = 1` by
+`bnSyncPerChannel_grad_gamma_at_own_stats` and `den_bnSyncGammaGradB_allReduce_R1`. β's
+gradient is `Σ dy`, reads no statistic, and `bnBetaGradB` stays. §3.2's emit count per net is
+therefore the BN-forward sites PLUS the γ-gradient sites.
 
 ⭐⭐ **Index the packed results `oc+oc`, NOT `2*oc`** — then the packing function is Mathlib's
 `Fin.append` (`Mathlib/Data/Fin/Tuple/Basic.lean:309`, itself `Fin.addCases`) and the two
@@ -259,8 +272,9 @@ arbitrary one; the contiguous cut the shim makes is `finProdFinEquiv`), lifted t
   global-batch input-VJP — including the cross-shard terms, which is what makes the all-reduced
   parameter gradient below exact.
 ✅ **P1 and P2 are PROVED** (2026-09-21) — see §3.1. Both landed in the form stated here: the
-right-hand side is the existing definition at `N := R·N`, so the spec did not move. What is left
-below is P3 and P4.
+right-hand side is the existing definition at `N := R·N`, so the spec did not move.
+✅ **P3's kit and P4 landed the same day** — §3.1b. ⚠ P4 carries a `1/R` the paragraph below
+does not: see "the divisor" in §3.1b.
 
 * **P3, whole net.** Every other op in every BN net's chain is `batchMap N` of a per-example op
   (conv, relu, pool, GAP, dense, the CE cotangent), and `batchMap` commutes with `shard`/`concat`
@@ -449,32 +463,64 @@ its cross-shard terms. ⭐ Land `bnBatchStatsB` first — it is a pure sibling o
 `bnBatchMeanB`/`bnBatchVarB`, needs no new lemma, and proves out the 5-site path before the three
 ops that carry real proof obligations.
 
-### 3.1b ▶ NEXT — P3, then P4
+### 3.1b ✅ P3 kit + P4 — landed 2026-09-21
 
-**P1/P2 are done; the kit's remaining proof work is P3 and P4.** Both are now short, because the
-hard layout step (`bnchwFwd_row_batchShard`) and the statistic algebra (`bnMean_shard` and its
-transports) are behind us.
+**Where it lives.** `Foundation/DataParallelSync.lean` (new, piece 3 of the DP story, a leaf
+importing `DataParallelNode`; in the `Certs` roots and the axiom audit), plus the ℝ-level
+positive twin beside its negative one in `Foundation/DataParallel.lean`, plus the fifth op
+(§2b) and the γ/β row-split lemmas in `PerChannelBN.lean`.
 
-* **P3 — the whole net.** Every non-BN op in a BN net's chain is `batchMap N` of a per-example
-  op, and `batchMap` commutes with `batchShard` by definition, so this is an induction over the
-  chain with P1/P2 as the BN case. ⭐ Start from `batchSlice_batchMap` (`StableHLO.lean:117`),
-  which already peels a `batchMap` at one example; the shard version is its block analogue.
-  ⚠ `batchShard` lives in `Foundation/PerChannelBN.lean` but `batchMap`/`batchSlice` live in
-  `Codegen/StableHLO.lean` (which imports it) — so the P3 statement belongs in `StableHLO.lean`
-  or above, NOT beside `batchShard`.
-* **P4 — the step.** `dpSyncGrad_eq_globalBatchGrad`, the positive twin of
-  `dpMeanGrad_ne_globalBatchGrad` in `Foundation/DataParallel.lean`. P2 gives the piece that was
-  missing: each replica's weight gradient is its shard's true contribution to the global one,
-  cross-shard terms included, so the mean over `R` of the `(1/N)`-scaled shard sums is the
-  `(1/(R·N))`-scaled global sum. Compose with `dpIterate_lockstep` for the `n`-step statement.
+* **P3 — the kit, not the walk.** `batchShard_batchMap`, `batchShard_batchMapAux`,
+  `batchShard_map` / `batchShard_zipWith`, `batchSlice_batchShard`: sharding commutes with
+  every per-example lift, definitionally. The chain induction itself is per net and stays in
+  §3.2–3.4 — this file supplies its non-BN cases (those five) and its BN cases (next bullet).
+* ⭐⭐ **P1 / P2 / P2γ on the GRAPH at any `R`** — `den_bnSyncF_allReduce`,
+  `den_bnSyncBack_allReduce`, `den_allReduceMeanF_bnSyncGammaGradB`. The exact subgraphs a sync
+  render emits (`bnSyncF` fed by `allReduceMeanF` over the replicas' `bnBatchStatsB`; `bnSyncBack`
+  fed by the outer collective over their `bnSyncDyStatsB`, each fed by the inner one), under the
+  induction hypothesis `∀ r, den (x r) = batchShard r X` (and its `xv`/`dy` twins), denote
+  `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4_grad_input` at `N := R·N`, and the γ
+  collective denotes `1/R` of `bnPerChannel_grad_gamma` at `N := R·N`. The `*_allReduce_R1`
+  anchors are these at `R := 1`. ⭐ The pass-through in `bnSyncDyStatsB` costs one lemma,
+  `dpMean_const_mul` — re-averaging a replica-independent value is the identity — and nothing
+  else.
+* ⭐⭐ **P4.** ℝ level (`DataParallel.lean`, the positive twin of
+  `dpMeanGrad_ne_globalBatchGrad`): `dpSyncGrad_eq_globalBatchGrad` — when replica `r`'s
+  gradient is `(1/N) Σ_n c (e (r,n))`, ITS examples' terms of a global gradient
+  `(1/(R·N)) Σ_m c m`, the collective's mean is that global gradient. `meanLoss_shard`'s
+  arithmetic for vectors; the `c m` may depend on the whole batch (they do, through the
+  statistics), which is exactly what `dpMeanGrad_eq_globalBatchGrad_of_perExample` could not
+  allow. Node level (`DataParallelSync.lean`): `den_allReduceMeanF_convWeightGradB_shard`,
+  `den_allReduceMeanF_bnBetaGradB_shard` and the γ statement — the collective over the replicas'
+  gradient nodes, each on its shard at the shard-`r` block of the global cotangent, is `1/R` of
+  the batch-`R·N` gradient node at the same cotangents. Every other `*GradB` composes by the
+  same three lines (`simp only [den]`, the shard hypothesis, `sum_finProdFinEquiv`).
 
-Then §3.2. ⚠ **The emitted MLIR text is still unverified numerically** — nothing renders the four
-ops yet. That gate is §3.2's R34 swap plus `resnet34-syncbn-check`, and it is the first thing
-that can catch a wrong `stablehlo.slice` bound or a bad `concatenate`.
+⚠⚠ **The divisor, and where the `1/R` goes.** A DP render divides its loss cotangent by the
+PER-REPLICA batch (`divConstB N`, `ResNet34RenderB.lean:1448`); the batch-`R·N` step it is
+compared to divides by `R·N`. So at a common per-example cotangent the replica mean is `1/R` of
+the global sum, and the two divisors differ by exactly that `R`. §2c's P4 sentence ("the mean
+over `R` of the `(1/N)`-scaled shard sums is the `(1/(R·N))`-scaled global sum") is the ℝ-level
+theorem; at the node the `1/N` sits upstream in the cotangent graph, and the per-net twin
+reconciles them with ONE linearity step — `HasVJP.backward_smul` (in `DataParallelSync.lean`;
+the whole-net backward is a `HasVJP.backward`) — rather than by carrying a factor through every
+op of the chain. ⭐ T3's ties already bind the divisor as a real `B` separate from `N`
+(`r34_net_tiedB (N : Nat) … (α B : ℝ)`), so the DP twin can be stated at `B := N` against the
+global instance at `B := R·N` without touching the tie.
+
+Gates: `lake build Certs` 4,019 jobs exit 0, no warnings; `AuditAxioms` 0 `sorryAx`, 1,408
+verdicts for 1,408 directives, all sixteen new theorems on the standard three axioms;
+`StableHLO.roundtrip` still universally quantified, so the fifth op's parser case is free.
+
+▶ **Then §3.2.** ⚠ The emitted MLIR of all five ops is still unverified numerically — nothing
+renders them. That gate is §3.2's R34 swap plus `resnet34-syncbn-check`, the first thing that can
+catch a wrong `stablehlo.slice` bound or a bad `concatenate`.
 
 ### 3.2 ResNet-34 — first, the template
 
-8 `bnBatchF` emit sites in `ResNet34RenderB.lean`; swap to the 2b pattern under `replicas > 1`.
+8 `bnBatchF` emit sites in `ResNet34RenderB.lean`, and the `bnGammaGradB` sites beside each
+`bnBatchBack` (`idBackGradB`/`downBackGradB`, 2 + 3 per block kind) that must become
+`bnSyncGammaGradB` reading the SAME packed operand; swap to the 2b pattern under `replicas > 1`.
 Re-render the R34 `*dp*` artifacts; `git diff verified_mlir/` shows the added `%arsum{g}mu` …
 blocks and nothing else. DP twins of `ResNet34FullB` (T2) and `ResNet34BackCertifiedTieB` (T3).
 `resnet34-syncbn-check`. The render header's "does NOT equal" paragraph and `formalization.yaml`
@@ -511,7 +557,8 @@ plan, and it goes when the render lands.
 
 ## 4. What "done" looks like
 
-* The four ops in the AST with `den`, emit, parser round-trip; P1, P2, P4 proved.
+* ✅ The five ops in the AST with `den`, emit, parser round-trip; P1, P2, P3's kit, P4 proved
+  (2026-09-21).
 * Every BN net's DP render normalises over the global batch; its DP twin ties it to the existing
   spec at `N := R·N`; its `syncbn-check` passes on a split batch.
 * The side-by-side tables' `BN statistic group` row reads `256 (global)` in both columns, the

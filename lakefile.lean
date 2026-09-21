@@ -153,6 +153,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ViT.ViTStepTieGB,
              `LeanMlir.Proofs.Foundation.DataParallel,
              `LeanMlir.Proofs.Foundation.DataParallelNode,
+             `LeanMlir.Proofs.Foundation.DataParallelSync,
              `LeanMlir.Proofs.Codegen.LambTriple,
              `LeanMlir.Proofs.Foundation.BceLossCot,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullB,

@@ -1244,6 +1244,17 @@ inductive SHlo : Nat → Type where
   | bnSyncBack {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
       (x : Vec (N * (oc * (h * w)))) :
       SHlo (N * (oc * (h * w))) → SHlo (oc + oc + (oc + oc)) → SHlo (N * (oc * (h * w)))
+  -- ══ ⭐⭐ The sync γ GRADIENT — `bnGammaGradB` with `x̂` at the HANDED-IN statistics.
+  --    `bnGammaGradB` recomputes μ/σ² from its own operand (`reduce … [0,2,3]` over `B·h·w`),
+  --    so under sync-BN it would build `x̂` from the SHARD's statistics while the forward used
+  --    the global ones — a different function, and the wrong gradient. This one slices μ/m2 out
+  --    of the same packed `[oc+oc]` operand the forward read, so its `x̂` is the forward's.
+  --    ⚠ β's gradient is `Σ dy`, reads no statistic, and `bnBetaGradB` stays as it is.
+  --    `den` is `bnSyncPerChannel_grad_gamma`; its `R = 1` anchor
+  --    (`bnSyncPerChannel_grad_gamma_at_own_stats`) is `bnPerChannel_grad_gamma`. ══
+  | bnSyncGammaGradB {N oc h w : Nat} (xName epsStr : String) (ε : ℝ)
+      (x : Vec (N * (oc * (h * w)))) :
+      SHlo (N * (oc * (h * w))) → SHlo (oc + oc) → SHlo oc
   -- ══ Pointwise affine-by-a-LITERAL at the batched index — the pieces a label-smoothed
   --    softmax-CE cotangent is composed from. `scaleB` is `scaleF`'s batched peer; `shiftB`
   --    and `divConstB` had no per-example peer at all.
@@ -2023,6 +2034,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         (fun c => den st (Fin.castAdd oc c))
         (fun c => den st (Fin.natAdd  oc c))
         (den x)
+  | _, .bnSyncGammaGradB (N := N) (oc := oc) (h := h) (w := w) _ _ ε x dy st =>
+      bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
+        (fun c => den st (Fin.castAdd oc c))
+        (fun c => den st (Fin.natAdd  oc c))
+        (bnchwFwd N oc h w x) (bnchwFwd N oc h w (den dy))
   | _, .scaleB _ s e    => fun i => den e i * s
   | _, .shiftB _ s e    => fun i => den e i + s
   | _, .divConstB _ s e => fun i => den e i / s
@@ -2573,6 +2589,31 @@ theorem den_bnSyncBack_allReduce_R1 {N oc h w : Nat} (gN xN es t t' : String) (�
   simp only [hone, den_bnSyncDyStatsB, den_bnBatchStatsB,
              Fin.append_left, Fin.append_right, bnSyncXhat_at_own_stats _ hm]
   exact bnSyncTensor4_grad_input_at_own_stats N oc h w hm ε γ _ (den dy)
+@[simp] theorem den_bnSyncGammaGradB {N oc h w : Nat} (xName epsStr : String) (ε : ℝ)
+    (x : Vec (N * (oc * (h * w)))) (dy : SHlo (N * (oc * (h * w)))) (st : SHlo (oc + oc)) :
+    den (.bnSyncGammaGradB xName epsStr ε x dy st)
+      = bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
+          (fun c => den st (Fin.castAdd oc c))
+          (fun c => den st (Fin.natAdd  oc c))
+          (bnchwFwd N oc h w x) (bnchwFwd N oc h w (den dy)) := rfl
+
+/-- ⭐⭐ **THE DROP-IN, γ half: at `R = 1` the sync γ-gradient node denotes `bnGammaGradB`.**
+    The third anchor beside `den_bnSyncF_allReduce_R1` / `den_bnSyncBack_allReduce_R1`: fed the
+    collapsed collective, the sync γ node reads the batch's own statistics and is the committed
+    γ gradient. -/
+theorem den_bnSyncGammaGradB_allReduce_R1 {N oc h w : Nat} (xN es t : String) (ε : ℝ)
+    (hm : N * (h * w) ≠ 0) (xg : SHlo (N * (oc * (h * w)))) (x : Vec (N * (oc * (h * w))))
+    (hx : den xg = x) (dy : SHlo (N * (oc * (h * w)))) :
+    den (.bnSyncGammaGradB xN es ε x dy
+          (.allReduceMeanF 1 Nat.one_pos t [] (fun _ => .bnBatchStatsB xg)))
+      = den (.bnGammaGradB xN es ε x dy) := by
+  subst hx
+  rw [den_bnSyncGammaGradB]
+  have hone : ∀ {n : Nat} (t : String) (g : SHlo n) (i : Fin n),
+      den (SHlo.allReduceMeanF 1 Nat.one_pos t [] (fun _ => g)) i = den g i := by
+    intro n t g i; simp [den_allReduceMeanF]
+  simp only [hone, den_bnBatchStatsB, Fin.append_left, Fin.append_right]
+  exact bnSyncPerChannel_grad_gamma_at_own_stats oc (N*(h*w)) hm ε _ _
 
 @[simp] theorem den_maxPoolBackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
     (e : SHlo (N*(c*h*w))) :
@@ -4777,6 +4818,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched2 "bnSyncDyStats" [gN, xN, es] [N, oc, h, w] (skel dy) (skel st)
   | _, .bnSyncBack (N := N) (oc := oc) (h := h) (w := w) gN xN es _ _ _ dy ds =>
       .batched2 "bnSyncBack" [gN, xN, es] [N, oc, h, w] (skel dy) (skel ds)
+  | _, .bnSyncGammaGradB (N := N) (oc := oc) (h := h) (w := w) xN es _ _ dy st =>
+      .batched2 "bnSyncGammaGrad" [xN, es] [N, oc, h, w] (skel dy) (skel st)
   | _, .scaleB (N := N) (n := n) sS _ e    => .batched "scale" [sS] [N, n] (skel e)
   | _, .shiftB (N := N) (n := n) sS _ e    => .batched "shift" [sS] [N, n] (skel e)
   | _, .divConstB (N := N) (n := n) sS _ e => .batched "divConst" [sS] [N, n] (skel e)
@@ -8922,6 +8965,32 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {mm} = stablehlo.dot_general {ab}, {bb}, batching_dims = [0] x [0], contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,m,k]}, {tyBf16 [B,k,n]}) -> {tyBf16 [B,m,n]}\n" ++
             s!"    {mf} = stablehlo.convert {mm} : ({tyBf16 [B,m,n]}) -> {ty [B,m,n]}\n" ++
             s!"    {o} = stablehlo.reshape {mf} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      | "bnSyncGammaGrad", [xN, es], [_N, oc, h, w] => do
+          -- dγ_c = Σ_{[0,2,3]} dy·x̂ with x̂ at the statistics sliced out of the packed operand
+          -- `b` — `bnSync`'s prologue verbatim, then `bnGammaGrad`'s tail. A SUM, not a mean:
+          -- this is a parameter gradient, and the parameter collective takes the mean over
+          -- replicas of exactly these shard sums.
+          let xr ← fresh; let mus ← fresh; let m2s ← fresh; let mub ← fresh; let m2b ← fresh
+          let musq ← fresh; let vr ← fresh; let ep ← fresh; let ve ← fresh; let istd ← fresh
+          let xc ← fresh; let xh ← fresh; let dyr ← fresh; let dgp ← fresh; let z ← fresh
+          let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {mus} = stablehlo.slice {b} [0:{oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
+            s!"    {m2s} = stablehlo.slice {b} [{oc}:{oc+oc}] : ({ty [oc+oc]}) -> {ty [oc]}\n" ++
+            s!"    {mub} = stablehlo.broadcast_in_dim {mus}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {m2b} = stablehlo.broadcast_in_dim {m2s}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {musq} = stablehlo.multiply {mub}, {mub} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vr} = stablehlo.subtract {m2b}, {musq} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xr}, {mub} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+            s!"    {dyr} = stablehlo.reshape {a} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {dgp} = stablehlo.multiply {dyr}, {xh} : {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {o} = stablehlo.reduce({dgp} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n", o :: st)
       | _, _, _ => pure (s!"    // MALFORMED batched2 {tag} {info}\n", a :: st)
   | .allReduceMean R t ds, r :: st =>
       let (txt, o) := allReduceMeanText r ds t R

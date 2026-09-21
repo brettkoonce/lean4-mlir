@@ -756,6 +756,57 @@ noncomputable def bnSyncPerChannel_grad_input (oc m : Nat) (ε : ℝ) (γ μ m2 
       (Mat.unflatten dy (finProdFinEquiv.symm idx).1)
       (finProdFinEquiv.symm idx).2
 
+/-- ⭐⭐ **The per-channel γ gradient with `x̂` at HANDED-IN statistics** —
+    `bnPerChannel_grad_gamma`'s peer. Under sync-BN the forward normalised with the all-reduced
+    global `μ`/`E[x²]`, so `∂L/∂γ_c = Σ dy·x̂` must use the SAME `x̂`; `bnPerChannel_grad_gamma`
+    rebuilds it from the shard's own statistics (`bnXhat`), which is a different function once
+    `R > 1`. β's gradient reads no statistic and needs no peer. -/
+noncomputable def bnSyncPerChannel_grad_gamma (oc m : Nat) (ε : ℝ) (μ m2 : Vec oc)
+    (v dy : Vec (oc * m)) : Vec oc :=
+  fun c => ∑ s : Fin m, Mat.unflatten dy c s * bnSyncXhat m ε (μ c) (m2 c) (Mat.unflatten v c) s
+
+/-- **`R = 1`: the sync γ gradient at its own statistics IS `bnPerChannel_grad_gamma`.** The
+    γ-gradient anchor beside `bnSyncTensor4_at_own_stats`: a single-device sync render's γ node
+    denotes what today's `bnGammaGradB` denotes. -/
+theorem bnSyncPerChannel_grad_gamma_at_own_stats (oc m : Nat) (hm : m ≠ 0) (ε : ℝ)
+    (v dy : Vec (oc * m)) :
+    bnSyncPerChannel_grad_gamma oc m ε
+        (fun c => bnMean m (Mat.unflatten v c)) (fun c => bnMeanSq m (Mat.unflatten v c)) v dy
+      = bnPerChannel_grad_gamma oc m ε v dy := by
+  funext c
+  simp only [bnSyncPerChannel_grad_gamma, bnPerChannel_grad_gamma, bnSyncXhat_at_own_stats m hm,
+             Mat.unflatten]
+
+/-- ⭐⭐ **A channel's γ gradient over the global batch is the SUM of the replicas' γ gradients
+    at the same handed-in statistics** — a sum, not a mean, because this is a parameter
+    gradient: the parameter collective's `1/R` is what turns it into the global-batch mean. The
+    row split `bnchwFwd_row_batchShard`, under `Σ` instead of `bnMean`. -/
+theorem bnSyncPerChannel_grad_gamma_row_shard (R N oc h w : Nat) (ε : ℝ) (μ m2 : Vec oc)
+    (X DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
+    bnSyncPerChannel_grad_gamma oc ((R*N)*(h*w)) ε μ m2
+        (bnchwFwd (R*N) oc h w X) (bnchwFwd (R*N) oc h w DY) c
+      = ∑ r : Fin R, bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε μ m2
+          (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r))
+          (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c := by
+  unfold bnSyncPerChannel_grad_gamma
+  rw [← Equiv.sum_comp (bnShardEquiv R N (h*w)), Fintype.sum_prod_type]
+  apply Finset.sum_congr rfl; intro r _
+  apply Finset.sum_congr rfl; intro k _
+  simp only [bnSyncXhat_apply, bnchwFwd_row_batchShard]
+
+/-- **…and so is the β gradient**, which reads no statistic at all: `Σ dy` over the global
+    channel row is the sum of the shards' `Σ dy`. -/
+theorem bnPerChannel_grad_beta_row_shard (R N oc h w : Nat)
+    (DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
+    bnPerChannel_grad_beta oc ((R*N)*(h*w)) (bnchwFwd (R*N) oc h w DY) c
+      = ∑ r : Fin R, bnPerChannel_grad_beta oc (N*(h*w))
+          (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c := by
+  unfold bnPerChannel_grad_beta
+  rw [← Equiv.sum_comp (bnShardEquiv R N (h*w)), Fintype.sum_prod_type]
+  apply Finset.sum_congr rfl; intro r _
+  apply Finset.sum_congr rfl; intro k _
+  exact bnchwFwd_row_batchShard R N oc h w DY c r k
+
 /-- ⭐⭐ **The SYNC batch-norm input-VJP on `[N,C,H,W]`** — `bnBatchTensor4_grad_input`'s peer,
     through the same `bnchwFwd`/`bnchwBack` bridge. What a replica emits for its shard of the
     backward, given the four all-reduced per-channel statistic vectors. -/

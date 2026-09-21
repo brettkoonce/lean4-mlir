@@ -86,6 +86,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
 import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.DataParallelNode
+import LeanMlir.Proofs.Foundation.DataParallelSync
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
@@ -617,6 +618,12 @@ open Proofs
 #print axioms bnchwFwd_row_batchShard
 #print axioms StableHLO.den_bnSyncF_allReduce_R1
 #print axioms StableHLO.den_bnSyncBack_allReduce_R1
+-- the fifth op: the γ gradient at the handed-in statistics (bnGammaGradB rebuilds x̂ from the
+-- shard's own μ/σ², which under sync-BN is the wrong x̂), its R = 1 anchor, and the γ/β row splits
+#print axioms bnSyncPerChannel_grad_gamma_at_own_stats
+#print axioms bnSyncPerChannel_grad_gamma_row_shard
+#print axioms bnPerChannel_grad_beta_row_shard
+#print axioms StableHLO.den_bnSyncGammaGradB_allReduce_R1
 -- B8b: the per-channel BN SHlo op pair backward-faithfulness
 #print axioms StableHLO.bnPerChannelBack_faithful
 -- R4 syntactic core
@@ -1968,6 +1975,26 @@ open Proofs
 #print axioms Proofs.den_allReduceMeanF_eq_lossGrad_meanLoss
 #print axioms Proofs.den_allReduceMeanF_convWeightGradB
 #print axioms Proofs.adamW_at_allReduceMeanF
+
+-- 4d PIECE 3: SYNCHRONISED BATCHNORM -- THE DP STEP IS THE GLOBAL-BATCH STEP
+-- (DataParallel.lean §sync + DataParallelSync.lean, planning/global_bn_verified.md §3.1b, 2026-09-21)
+-- P4 at the ℝ level: the positive twin of dpMeanGrad_ne_globalBatchGrad
+#print axioms Proofs.dpMean_shardSum
+#print axioms Proofs.dpSyncGrad_eq_globalBatchGrad
+#print axioms Proofs.dpSyncGrad_eq_globalBatchGrad_contiguous
+-- P3: sharding commutes with every per-example lift (definitional)
+#print axioms Proofs.batchSlice_batchShard
+#print axioms Proofs.batchShard_batchMap
+#print axioms Proofs.batchShard_batchMapAux
+-- P1 / P2 / P2γ on the graph at ANY R -- the BN case of the per-net chain induction
+#print axioms Proofs.den_bnSyncF_allReduce
+#print axioms Proofs.den_bnSyncBack_allReduce
+#print axioms Proofs.den_allReduceMeanF_bnSyncGammaGradB
+-- P4 at the node: the parameter collective is 1/R of the batch-R·N gradient node
+#print axioms Proofs.den_allReduceMeanF_convWeightGradB_shard
+#print axioms Proofs.den_allReduceMeanF_bnBetaGradB_shard
+-- the divisor step (divConstB N on a replica vs divConstB (R·N) on one device)
+#print axioms Proofs.HasVJP.backward_smul
 
 -- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT (2026-09-06)
 #print axioms Proofs.lambStep
