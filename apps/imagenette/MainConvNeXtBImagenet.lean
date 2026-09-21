@@ -53,6 +53,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
 def convnextBImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 32
+  -- The reference samples validation every 5 epochs (`jax/MainConvNeXtBImagenet.lean`); so does this.
+  valEveryEpochs := 5
 
 /-- Entry point. Defaults to the single-device `adamwxclipdrop`, as the T and S drivers do: a DP
     default makes a plain invocation fail at the first step on a replica-count refusal, which reads

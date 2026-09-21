@@ -167,6 +167,14 @@ structure VerifiedConfig where
   epochs    : Nat
   /-- Minibatch size (a free runtime param — the MLIR's batch dim is dynamic). -/
   batchSize : Nat := 32
+  /-- Validate every N epochs, plus always the last epoch the process runs — the verified peer
+      of `TrainConfig.valEveryEpochs`, which the reference's S/B/ViT-S/B/MobileNetV4 ImageNet
+      configs set to 5. N ≤ 1 keeps every-epoch validation. ImageNet path (`trainAdamSched`)
+      only, and only the eval pass: the checkpoint is still written every epoch. Measured
+      2026-09-21 on ConvNeXt-T at four replicas, the sharded val pass is ~25 s per epoch, so
+      this buys ~2 h over 300 epochs — not the hours the reference's tfds pipeline rebuild cost.
+      `LEAN_MLIR_VAL_EVERY=<n>` overrides it at launch, like `LEAN_MLIR_MAX_EPOCHS`. -/
+  valEveryEpochs : Nat := 1
   /-- Learning rate. DISPLAY ONLY — baked into `<slug>_train_step.mlir`; changing it
       here does not change training (re-render the MLIR to change lr). -/
   lr        : Float := 0.1
@@ -1629,6 +1637,11 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- batch differed from the forward's baked one (bs256, bs128-DP); `evalBs` below removes that,
   -- so it is now just "don't spend the time".
   let skipEval := (← IO.getEnv "LEAN_MLIR_SKIP_EVAL").isSome
+  -- LEAN_MLIR_VAL_EVERY: validate every n epochs (+ the last one this process runs). Opt-in
+  -- override of `cfg.valEveryEpochs`; see the field. Unlike SKIP_EVAL this scores SOME epochs.
+  let valEvery := match (← IO.getEnv "LEAN_MLIR_VAL_EVERY").bind (·.toNat?) with
+    | some n => n
+    | none   => cfg.valEveryEpochs
   let gbs := bs * replicas
   let nbFull := nTrain / gbs
   let nb := match (← IO.getEnv "LEAN_MLIR_G2_STEPS").bind (·.toNat?) with
@@ -2568,7 +2581,10 @@ gate's control, not a configuration.")
     -- count is the tensor count of `evalShapes`, which for a BN net is the params PLUS the two
     -- running-stat slots per layer — all of them are inputs with no output counterpart, so all of
     -- them can be held. `gen := ep + 1` re-seeds them every epoch.
-    let (correct, correct5, correctBits) ← if skipEval then pure (0, 0, ByteArray.empty)
+    -- `valEvery`: this epoch is scored if it is on the cadence or the last one this process
+    -- runs (`nEpochs` is the MAX_EPOCHS-capped count, so a capped probe still gets its eval).
+    let evalThisEpoch := valEvery ≤ 1 || (ep + 1) % valEvery == 0 || ep + 1 == nEpochs
+    let (correct, correct5, correctBits) ← if skipEval || !evalThisEpoch then pure (0, 0, ByteArray.empty)
       else evalScore evalSess evalFn evalParams evalShapes evalImg evalLbl
              nEval evalBs evalD0 nc replicas evalResident (ep + 1).toUSize dumpCorrect.isSome
     let acc := correct.toFloat / nEval.toFloat * 100.0
@@ -2580,6 +2596,9 @@ gate's control, not a configuration.")
     -- tell (chance at 1000 classes is ~50 and ~250), but a reader should not have to notice that.
     if skipEval then
       IO.println s!"  epoch {ep + 1}: eval SKIPPED (LEAN_MLIR_SKIP_EVAL) — no accuracy was measured"
+    else if !evalThisEpoch then
+      -- Same shape as the SKIP_EVAL line so nobody reads a 0/50000 off a skipped epoch.
+      IO.println s!"  epoch {ep + 1}: eval skipped (valEveryEpochs = {valEvery}; next scored epoch {min nEpochs (((ep + 1) / valEvery + 1) * valEvery)})"
     else
       -- ⚠ The CI is APPENDED, never woven into the existing fields: `blueprint/src/content.tex`
       -- quotes these lines verbatim and every `runs/*/` log is read by eye against that format.
