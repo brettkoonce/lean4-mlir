@@ -1,0 +1,29 @@
+\begin{center}
+\begin{tikzpicture}[x=1pt,y=1pt, every node/.style={inner sep=1.31pt, font=\fontsize{6.14}{7.36}\selectfont\ttfamily}]
+  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=27.3pt, minimum height=11.2pt] at (111.7pt,87.1pt) {\hyperref[ax:conv2d]{conv2d}};
+  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=31.0pt, minimum height=11.2pt] at (222.1pt,87.1pt) {\hyperref[def:hasvjp3]{hasvjp3}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.5pt, align=center, minimum width=60.5pt, minimum height=11.2pt] at (176.5pt,50.2pt) {\hyperref[ax:conv2d_has_vjp3]{conv2d\_has\_vjp3}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.5pt, align=center, minimum width=56.8pt, minimum height=18.8pt] at (28.4pt,50.2pt) {\hyperref[ax:conv2d_weight_grad_has_vjp]{conv2d\_weight\_}\\\hyperref[ax:conv2d_weight_grad_has_vjp]{grad\_has\_vjp}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.5pt, align=center, minimum width=49.4pt, minimum height=18.8pt] at (91.5pt,50.2pt) {\hyperref[ax:conv2d_bias_grad_has_vjp]{conv2d\_bias\_}\\\hyperref[ax:conv2d_bias_grad_has_vjp]{grad\_has\_vjp}};
+  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=34.7pt, minimum height=11.2pt] at (295.7pt,87.1pt) {\hyperref[ax:maxPool2]{maxPool2}};
+  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=67.8pt, minimum height=11.2pt] at (271.2pt,50.2pt) {\hyperref[ax:maxPool2_has_vjp3]{maxPool2\_has\_vjp3}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.5pt, align=center, minimum width=53.1pt, minimum height=18.8pt] at (295.7pt,9.4pt) {\hyperref[thm:mnistCnnNoBn_has_vjp_at]{mnistCnnNoBn\_}\\\hyperref[thm:mnistCnnNoBn_has_vjp_at]{has\_vjp\_at}};
+  \node[draw=gray!70, dashed, rounded corners=2pt, minimum width=31.3pt, minimum height=15.6pt, text=gray!60!black, align=center, font=\fontsize{4.82}{5.78}\selectfont\ttfamily] at (350.9pt,50.2pt) {\hyperref[ax:pdiv_comp]{pdiv\_comp}\\(ch 1)};
+  \node[draw=gray!70, dashed, rounded corners=2pt, minimum width=31.3pt, minimum height=15.6pt, text=gray!60!black, align=center, font=\fontsize{4.82}{5.78}\selectfont\ttfamily] at (392.1pt,50.2pt) {\hyperref[ax:pdiv_relu]{pdiv\_relu}\\(ch 2)};
+  \node[draw=gray!70, dashed, rounded corners=2pt, minimum width=42.9pt, minimum height=15.6pt, text=gray!60!black, align=center, font=\fontsize{4.82}{5.78}\selectfont\ttfamily] at (438.6pt,50.2pt) {\hyperref[thm:dense_has_vjp]{dense\_has\_vjp}\\(ch 1)};
+  \draw[->, >=stealth, black!70, line width=0.35pt] (120.9pt,81.2pt) .. controls (130.7pt,75.9pt) and (146.2pt,67.5pt) .. (158.4pt,60.9pt) -- (167.2pt,56.1pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (99.7pt,81.2pt) .. controls (89.0pt,76.7pt) and (72.9pt,69.8pt) .. (58.6pt,63.8pt) -- (49.6pt,60.0pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (108.9pt,81.3pt) .. controls (106.9pt,78.0pt) and (104.2pt,73.3pt) .. (101.6pt,68.6pt) -- (96.6pt,60.0pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (113.4pt,81.3pt) .. controls (117.0pt,71.8pt) and (126.3pt,51.0pt) .. (141.5pt,40.8pt) .. controls (176.5pt,17.1pt) and (225.7pt,10.9pt) .. (259.0pt,9.7pt) -- (268.8pt,9.5pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (215.8pt,81.3pt) .. controls (209.4pt,76.4pt) and (199.3pt,68.6pt) .. (190.9pt,62.2pt) -- (183.1pt,56.1pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (228.9pt,81.3pt) .. controls (235.9pt,76.3pt) and (246.9pt,68.5pt) .. (255.9pt,62.0pt) -- (264.1pt,56.1pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (221.9pt,81.1pt) .. controls (221.9pt,72.0pt) and (223.0pt,52.8pt) .. (232.6pt,40.8pt) .. controls (239.6pt,32.0pt) and (249.7pt,25.6pt) .. (259.8pt,21.0pt) -- (268.9pt,17.3pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (192.1pt,44.2pt) .. controls (209.0pt,38.7pt) and (236.7pt,29.6pt) .. (259.1pt,22.3pt) -- (268.7pt,19.1pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (292.3pt,81.3pt) .. controls (289.2pt,76.9pt) and (284.4pt,70.1pt) .. (280.2pt,64.0pt) -- (274.7pt,56.1pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (299.3pt,81.2pt) .. controls (302.7pt,76.1pt) and (307.7pt,67.7pt) .. (309.7pt,59.6pt) .. controls (311.7pt,51.5pt) and (311.5pt,48.9pt) .. (309.7pt,40.8pt) .. controls (308.8pt,36.5pt) and (307.2pt,32.1pt) .. (305.4pt,28.0pt) -- (301.1pt,19.3pt);
+  \draw[->, >=stealth, black!70, line width=0.35pt] (274.4pt,44.2pt) .. controls (277.1pt,39.9pt) and (281.1pt,33.6pt) .. (284.9pt,27.5pt) -- (290.2pt,19.1pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.35pt] (340.5pt,42.0pt) .. controls (333.8pt,37.2pt) and (324.7pt,30.8pt) .. (316.5pt,25.0pt) -- (308.4pt,19.2pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.35pt] (376.0pt,42.8pt) .. controls (374.4pt,42.1pt) and (372.7pt,41.4pt) .. (371.1pt,40.8pt) .. controls (356.7pt,34.9pt) and (340.7pt,28.5pt) .. (327.2pt,23.0pt) -- (317.8pt,19.2pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.35pt] (416.8pt,42.1pt) .. controls (415.3pt,41.6pt) and (413.8pt,41.2pt) .. (412.3pt,40.8pt) .. controls (385.7pt,33.0pt) and (355.4pt,25.1pt) .. (332.4pt,19.3pt) -- (322.7pt,16.9pt);
+\end{tikzpicture}
+\end{center}

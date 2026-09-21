@@ -1,0 +1,14 @@
+\begin{center}
+\begin{tikzpicture}[x=1pt,y=1pt, every node/.style={inner sep=1.50pt, font=\fontsize{7.00}{8.40}\selectfont\ttfamily}]
+  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=69.0pt, minimum height=12.7pt] at (129.7pt,55.4pt) {\hyperref[ax:depthwiseConv2d]{depthwiseConv2d}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=81.6pt, minimum height=12.7pt] at (129.7pt,10.7pt) {\hyperref[ax:depthwise_has_vjp3]{depthwise\_has\_vjp3}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=77.4pt, minimum height=21.5pt] at (38.7pt,10.7pt) {\hyperref[ax:depthwise_weight_grad_has_vjp3]{depthwise\_weight\_}\\\hyperref[ax:depthwise_weight_grad_has_vjp3]{grad\_has\_vjp3}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=69.0pt, minimum height=21.5pt] at (215.7pt,10.7pt) {\hyperref[ax:depthwise_bias_grad_has_vjp]{depthwise\_bias\_}\\\hyperref[ax:depthwise_bias_grad_has_vjp]{grad\_has\_vjp}};
+  \node[draw=gray!70, dashed, rounded corners=2pt, minimum width=29.1pt, minimum height=17.8pt, text=gray!60!black, align=center, font=\fontsize{5.50}{6.60}\selectfont\ttfamily] at (54.7pt,55.4pt) {\hyperref[def:hasvjp3]{hasvjp3}\\(ch 3)};
+  \draw[->, >=stealth, black!70, line width=0.40pt] (129.7pt,48.8pt) .. controls (129.7pt,43.7pt) and (129.7pt,36.0pt) .. (129.7pt,28.8pt) -- (129.7pt,17.5pt);
+  \draw[->, >=stealth, black!70, line width=0.40pt] (117.4pt,48.6pt) .. controls (105.5pt,43.0pt) and (86.8pt,34.3pt) .. (70.7pt,26.7pt) -- (60.5pt,22.0pt);
+  \draw[->, >=stealth, black!70, line width=0.40pt] (141.3pt,48.6pt) .. controls (152.5pt,43.1pt) and (169.9pt,34.5pt) .. (185.0pt,26.9pt) -- (195.1pt,22.0pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.40pt] (69.2pt,46.2pt) .. controls (80.7pt,39.6pt) and (97.1pt,30.3pt) .. (109.9pt,23.0pt) -- (119.6pt,17.5pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.40pt] (51.6pt,46.2pt) .. controls (50.1pt,42.2pt) and (48.3pt,37.4pt) .. (46.5pt,32.5pt) -- (42.5pt,21.7pt);
+\end{tikzpicture}
+\end{center}

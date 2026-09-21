@@ -47,6 +47,20 @@ blueprint/
 └── README.md                  ← this file
 ```
 
+## The dependency graph, in print
+
+`src/figures/depgraph/*.tex` are the per-chapter dependency graphs at the head of
+every theorems section — TikZ, laid out by graphviz, every node a `\hyperref` to
+its statement. They are generated from the `\uses` lines:
+
+```bash
+python3 scripts/blueprint_depgraph_tikz.py     # needs pygraphviz; writes src/figures/depgraph/
+```
+
+Re-run after `scripts/blueprint_uses.py --fix` changes an edge or a statement
+moves between sections, and commit the result (CI has no graphviz for this step).
+The web build draws the same graph interactively (`src/templates/dep_graph.html`).
+
 ## Adding a new theorem to the blueprint
 
 ```latex
