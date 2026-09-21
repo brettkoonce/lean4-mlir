@@ -44,8 +44,21 @@ import subprocess
 import sys
 import time
 
+# ⚠⚠ WHICH PROBE — this decides what the measured gap MEANS (2026-09-20).
+# The two probes differ by exactly one line: the `_noaug` one drops `augment_batch`
+# (the pad-252/crop-224 random crop) and keeps only the horizontal flip. `conv_bn` is
+# byte-identical between them. `_noaug` is the throughput model `probe/benchmark.py`
+# uses, and R50's 23.5M params on 9,469 images without a crop OVERFIT: 38.7% top-1 at
+# 80 epochs, eval loss 5.18 against ln 10 = 2.30. In that regime BN noise is the only
+# regulariser in the room, so the BN-group gap it reports is inflated and does not
+# transfer — the reference recipes all run `augment := true`, where augmentation is
+# already doing that job. Default is therefore the AUGMENTED probe; PROBE_NOAUG=1
+# reproduces the original demo.
 PROBE = os.path.join(os.path.dirname(__file__), "..", "probe",
-                     "probe_resnet50_imagenette_noaug.py")
+                     "probe_resnet50_imagenette_noaug.py"
+                     if os.environ.get("PROBE_NOAUG")
+                     else "probe_resnet50_imagenette.py")
+AUGMENT = not os.environ.get("PROBE_NOAUG")
 RESULT_TAG = "BN_SHARDING_RESULT"   # parseable line the driver greps for
 
 
@@ -56,12 +69,23 @@ def load_module():
     return m
 
 
-def make_grouped_conv_bn(m, groups):
-    """conv_bn with the batch split into `groups` per-shard BN groups.
+def make_grouped_conv_bn(m, groups, train_batch):
+    """conv_bn with the TRAINING batch split into `groups` per-shard BN groups.
 
     groups=1 reproduces the model's stock global BN (mean/var over axis (0,2,3)).
     groups=k reshapes [N,C,H,W] -> [k, N/k, C,H,W] and reduces over (1,3,4), i.e.
     each shard normalizes over its own N/k images — Ghost-BN with k shards.
+
+    ⚠⚠ **EVAL IS HELD AT GLOBAL BN whatever the training grouping** (2026-09-20).
+    The probe has no `training` flag — `eval_batch` -> `forward` -> this same
+    `conv_bn`, at eval batch 512. Left alone, `groups=k` moved the EVAL group too
+    (512/k), so each config differed from its neighbour in two places at once and
+    the sweep measured train-group and eval-group together, which is not a number
+    anyone can read. Both ImageNet paths score from running statistics that
+    estimate the GLOBAL mean/var (the verified driver EMAs its shard's statistics
+    over hundreds of steps), so global is the faithful eval and the TRAINING group
+    is left as the one variable. `N` is a static shape at trace time, so this is a
+    Python branch resolved during tracing, not a traced select.
     """
     import jax
     import jax.numpy as jnp
@@ -71,9 +95,10 @@ def make_grouped_conv_bn(m, groups):
             m.convdt(x), m.convdt(w), stride, padding,
             dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)
         N, C, H, W = x.shape
-        if groups > 1:
-            assert N % groups == 0, f"batch {N} not divisible by groups {groups}"
-            xg = x.reshape(groups, N // groups, C, H, W)
+        g = groups if N == train_batch else 1
+        if g > 1:
+            assert N % g == 0, f"batch {N} not divisible by groups {g}"
+            xg = x.reshape(g, N // g, C, H, W)
             mean = jnp.mean(xg, axis=(1, 3, 4), keepdims=True)
             var = jnp.var(xg, axis=(1, 3, 4), keepdims=True)
             xg = (xg - mean) / jnp.sqrt(var + 1e-5)
@@ -90,8 +115,6 @@ def make_grouped_conv_bn(m, groups):
 def run_single(groups, epochs):
     """Train Imagenette R50 with `groups` BN shards; return final metrics."""
     m = load_module()
-    # Patch the single BN chokepoint BEFORE any jit trace fires.
-    m.conv_bn = make_grouped_conv_bn(m, groups)
 
     import numpy as np
     import jax
@@ -100,6 +123,16 @@ def run_single(groups, epochs):
 
     n_dev = m.n_devices
     print(f"[groups={groups}] devices={jax.devices()}  n_devices={n_dev}")
+    # ⛔⛔ ABORT ON A SILENT CPU FALLBACK (2026-09-20). Seen for real: with four of these
+    # starting at once, one lost the CUDA init ("a CUDA-enabled jaxlib is not installed.
+    # Falling back to cpu"), then sat at 1316% CPU and 56 GB of host RAM — starving the
+    # THREE GPU runs beside it down to 0% GPU, and heading for a "result" that was never
+    # going to finish. A run that scores on CPU is not a slower run, it is a fake one.
+    if jax.devices()[0].platform != "gpu" and not os.environ.get("ALLOW_CPU"):
+        raise SystemExit(
+            f"[groups={groups}] ⛔ backend is {jax.devices()[0].platform!r}, not 'gpu'. "
+            "Refusing to run: CPU fallback starves the co-running GPU jobs and its "
+            "number is not comparable. Re-run this config alone, or set ALLOW_CPU=1.")
     if n_dev != 1:
         print(f"[groups={groups}] WARNING: run on ONE device (CUDA_VISIBLE_DEVICES=0); "
               f"sharded reshape + P('batch') interact. Continuing anyway.")
@@ -110,15 +143,21 @@ def run_single(groups, epochs):
 
     BATCH = (192 // n_dev) * n_dev or n_dev
     assert BATCH % groups == 0, f"batch {BATCH} not divisible by groups {groups}"
+    # Patch the single BN chokepoint. Still BEFORE any jit trace fires — decorating
+    # `@jit` does not trace, and the first call is in the epoch loop below.
+    m.conv_bn = make_grouped_conv_bn(m, groups, BATCH)
     LR = 0.001
     WARMUP = 3
 
     # Fixed init + fixed data order => the ONLY difference between configs is BN.
-    params = m.init_params(random.PRNGKey(314159))
+    # SEED shifts BOTH together, so configs stay paired within a seed and the
+    # per-seed difference is the estimator; unset reproduces 314159/42 exactly.
+    seed = int(os.environ.get("SEED", "0"))
+    params = m.init_params(random.PRNGKey(314159 + seed))
     params = jax.device_put(params, m.replicated_sharding)
     opt_state = (jax.tree.map(jnp.zeros_like, params),
                  jax.tree.map(jnp.zeros_like, params), jnp.float32(0))
-    rng = np.random.RandomState(42)
+    rng = np.random.RandomState(42 + seed)
 
     t0 = time.time()
     acc1 = acc5 = 0.0
@@ -134,7 +173,11 @@ def run_single(groups, epochs):
         imgs[flip] = imgs[flip, :, :, ::-1]
         sx = imgs.reshape(len(sx), -1)
         for i in range(0, len(tr_x) - BATCH + 1, BATCH):
-            x = jax.device_put(sx[i:i + BATCH], m.data_sharding)
+            # `probe_resnet50_imagenette.py`'s own loop, verbatim: one crop offset per
+            # BATCH (not per image), drawn from the same rng, on a copy.
+            batch = (m.augment_batch(sx[i:i + BATCH].copy(), rng) if AUGMENT
+                     else sx[i:i + BATCH])
+            x = jax.device_put(batch, m.data_sharding)
             y = jax.device_put(sy[i:i + BATCH], m.data_sharding)
             params, opt_state, _ = m.train_step(params, opt_state, x, y, lr)
         c1, c5, total, tl = m.evaluate(params, te_x, te_y)
@@ -145,7 +188,8 @@ def run_single(groups, epochs):
     secs = time.time() - t0
     bn_group = BATCH // groups
     print(f"{RESULT_TAG} " + json.dumps(dict(
-        groups=groups, batch=BATCH, bn_group_size=bn_group,
+        groups=groups, batch=BATCH, bn_group_size=bn_group, seed=seed,
+        augment=AUGMENT,
         epochs=epochs, top1=round(acc1, 4), top5=round(acc5, 4),
         seconds=round(secs, 1))))
     return dict(groups=groups, batch=BATCH, bn_group_size=bn_group,
