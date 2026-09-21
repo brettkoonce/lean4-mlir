@@ -69,7 +69,13 @@ def writeDeps (env : Environment) (cited : Array Name) (out : System.FilePath) :
     while stack.size > 0 do
       let c := stack.back!
       stack := stack.pop
-      let some ci := env.find? c | continue
+      -- A project constant that is referenced but absent means the oleans in the
+      -- environment were built from different sources (a stale `.lake/build`): the
+      -- walk would silently stop here and the block would lose its edges. Say so —
+      -- CI's fresh build is the authority, and locally the fix is `lake build`.
+      let some ci := env.find? c
+        | IO.eprintln s!"warning: {c} is referenced by {n} but not in the environment \
+            (stale oleans?) — the dependency walk is truncated there"; continue
       for u in ci.getUsedConstantsAsSet.toArray do
         if visited.contains u then continue
         visited := visited.insert u

@@ -10671,6 +10671,12 @@ network itself. \Qed{}
   \label{thm:vitTiny_has_vjp_correct}
   \lean{Proofs.vitTiny_has_vjp_correct}
   \leanok
+  \uses{ax:bnIstdBroadcast_diff, ax:geluScalar, ax:mhsa_has_vjp_mat,
+      ax:mhsa_layer_flat_diff, ax:patchEmbed_flat_diff, ax:patchEmbed_flat_has_vjp,
+      ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjpmat, thm:biPathMat_has_vjp,
+      thm:dense_has_vjp, thm:identityMat_has_vjp, thm:identity_has_vjp,
+      thm:layerNorm_has_vjp, thm:rowwise_has_vjp_mat, thm:transformerMlp_has_vjp_mat,
+      thm:vjpMat_comp, thm:vjp_comp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
