@@ -18,6 +18,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="styles/theme-{{ config['html5']['theme-css'] }}.css" />
   <link rel="stylesheet" href="styles/dep_graph.css" />
+  <style>#graph_note { font-size: 0.85em; color: #666; margin: 0.3em 0 0.6em; }</style>
   {% if config.html5['use-mathjax'] %}
   <script type="text/x-mathjax-config">
   {% if config.html5['mathjax-dollars'] %}
@@ -28,10 +29,10 @@
   </script>
 {% if config['mathjax-macros']['macros'] %}
 <script>
-  MathJax = { 
+  MathJax = {
     tex: {
       macros: { {% for key, val in config['mathjax-macros']['macros'].items() %}
-        {{ key }}: {{ val }},
+        {{ key }}: {{ val }},
         {% endfor %}
       } } }
   </script>
@@ -56,13 +57,14 @@
        <div class="bar"></div>
        <div class="bar"></div>
        <div class="bar"></div>
-    </div></span> 
+    </div></span>
     <dl class="legend">
       {% for k, v in legend %}
       <dt>{{ k }}</dt><dd>{{ v }}</dd>
       {% endfor %}
     </dl>
   </div>
+    <div id="graph_note"></div>
     <div id="graph"></div>
 <div id="statements">
 {%- for thm in graph.nodes | sort(attribute='id') %}
@@ -105,12 +107,17 @@ const height = graphContainer.node().clientHeight;
 
 
 // Repo-local template (see \usepackage[...,tpl=...]{blueprint} in web.tex).
-// Changes vs the plastexdepgraph default: the dot source is restructured
-// before rendering — rankdir=LR (the default top-down layout of this graph
-// is an ~8:1 ribbon; left-right is ~1.5:1 and reads foundations ->
-// capstones), with nodes grouped into labeled per-chapter clusters. The
-// node -> chapter map is generated at build time from the plasTeX document
-// tree, so it never goes stale as theorems are added.
+// The dot source plastexdepgraph hands us is restructured before rendering so
+// the graph reads like the book: one cluster per chapter, stacked in chapter
+// order top to bottom (invisible anchor edges enforce the order), a chapter
+// whose statements span several sections split into them; a dependency on another
+// chapter's statement is drawn as a dashed "portal" node inside the chapter
+// that uses it (clicking it opens the original), so no edge crosses a
+// chapter boundary; and a statement used by AMBIENT_CHAPTERS or more other
+// chapters — the base definitions every proof is about — is drawn once, at
+// home, and named in the note above the graph. The node -> chapter/section
+// maps are generated at build time from the plasTeX document tree, so they
+// never go stale as theorems are added.
 const CHAPTER_OF = {
 {%- for ch in document.getElementsByTagName('chapter') %}
 {%- set chloop = loop %}
@@ -123,9 +130,28 @@ const CHAPTER_OF = {
 {%- endfor %}
 {%- endfor %}
 };
+// Insertion order is document order, which is how sections are laid out.
+const SECTION_OF = {
+{%- for ch in document.getElementsByTagName('chapter') %}
+{%- for sec in ch.getElementsByTagName('section') %}
+{%- for tt in document.userdata['dep_graph']['thm_types'] %}
+{%- for nd in sec.getElementsByTagName(tt) %}
+{%- if nd.id %}
+  "{{ nd.id }}": "{{ sec.title.textContent.replace('"', '') }}",
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+{%- endfor %}
+{%- endfor %}
+};
 const CHAPTER_TITLE = {
 {%- for ch in document.getElementsByTagName('chapter') %}
   {{ loop.index0 }}: "{{ ch.title.textContent.replace('"', '') }}",
+{%- endfor %}
+};
+const CHAPTER_NUM = {
+{%- for ch in document.getElementsByTagName('chapter') %}
+  {{ loop.index0 }}: "{% if ch.ref %}{{ ch.ref }}{% endif %}",
 {%- endfor %}
 };
 
@@ -134,6 +160,10 @@ const CHAPTER_TITLE = {
 // (The Bestiary's entries declare no \uses edges; if that ever changes,
 // remove it from this list and its cluster reappears.)
 const EXCLUDED_CHAPTERS = ["Bestiary of Architectures"];
+// A statement used by this many OTHER chapters is drawn once, at home.
+const AMBIENT_CHAPTERS = 4;
+
+let ambientNames = [];
 
 function clusterizeDot(dot) {
   const excludedIds = new Set(
@@ -141,34 +171,118 @@ function clusterizeDot(dot) {
       id => EXCLUDED_CHAPTERS.includes(CHAPTER_TITLE[CHAPTER_OF[id]])));
   const body = dot.slice(dot.indexOf('{') + 1, dot.lastIndexOf('}'));
   const stmts = body.split(';').map(s => s.trim()).filter(Boolean);
-  const header = [], clusters = {}, loose = [], edges = [];
+  const header = [], nodeStmt = {}, edges = [];
   for (const s of stmts) {
     if (s.includes('->')) {
       const ids = [...s.matchAll(/"([^"]+)"/g)].map(m => m[1]);
-      if (!ids.some(id => excludedIds.has(id))) edges.push(s);
+      if (ids.length < 2 || ids.some(id => excludedIds.has(id))) continue;
+      const br = s.indexOf('[');
+      edges.push({a: ids[0], b: ids[1], attrs: br >= 0 ? s.slice(br) : ''});
       continue;
     }
     if (s.startsWith('"')) {
       const id = s.slice(1, s.indexOf('"', 1));
-      if (excludedIds.has(id)) continue;
-      const ci = CHAPTER_OF[id];
-      if (ci !== undefined) (clusters[ci] = clusters[ci] || []).push(s);
-      else loose.push(s);
+      if (!excludedIds.has(id)) nodeStmt[id] = s;
       continue;
     }
     if (!s.startsWith('graph ')) header.push(s);
   }
-  let out = 'strict digraph "" { graph [bgcolor=transparent, rankdir=LR, ' +
-            'ranksep=0.5, nodesep=0.18, compound=true]; ' +
-            header.join('; ') + '; ';
-  for (const ci of Object.keys(clusters).sort((a, b) => a - b)) {
-    out += 'subgraph cluster_' + ci + ' { label="' + (CHAPTER_TITLE[ci] || '') +
-           '"; fontsize=20; color=gray65; style="rounded,filled"; ' +
-           'fillcolor="#eef2f8"; labeljust=l; margin=16; ' +
-           clusters[ci].join('; ') + '; } ';
+  const shortLabel = id => {
+    const m = (nodeStmt[id] || '').match(/label=("(?:[^"\\]|\\.)*"|[^,\]\s]+)/);
+    if (!m) return id;
+    return m[1].startsWith('"') ? m[1].slice(1, -1) : m[1];
+  };
+  const chapterOf = id => CHAPTER_OF[id];
+  // A chapter is split into its sections only when more than one section
+  // holds nodes.
+  const sectionsOf = {};
+  for (const id in nodeStmt) {
+    const ch = chapterOf(id);
+    if (ch === undefined) continue;
+    (sectionsOf[ch] = sectionsOf[ch] || new Set()).add(SECTION_OF[id] || '');
   }
-  if (loose.length) out += loose.join('; ') + '; ';
-  out += edges.join('; ') + ' }';
+  const keyOf = id => {
+    const ch = chapterOf(id);
+    if (ch === undefined) return null;
+    return ch + '|' + (sectionsOf[ch].size > 1 ? (SECTION_OF[id] || '') : '');
+  };
+  // Ambient statements: reach >= AMBIENT_CHAPTERS other chapters.
+  const reach = {};
+  for (const e of edges) {
+    const ca = chapterOf(e.a), cb = chapterOf(e.b);
+    if (ca !== undefined && cb !== undefined && ca !== cb)
+      (reach[e.a] = reach[e.a] || new Set()).add(cb);
+  }
+  const ambient = new Set(Object.keys(reach).filter(id => reach[id].size >= AMBIENT_CHAPTERS));
+  ambientNames = [...ambient].map(shortLabel).sort();
+  // Partition the edges: same chapter -> as is; from an ambient node ->
+  // dropped; otherwise -> a portal node in the consumer's cluster.
+  const kept = [], portals = {};   // portals[key][src] = [dst, ...]
+  for (const e of edges) {
+    const ca = chapterOf(e.a), cb = chapterOf(e.b);
+    if (ca === undefined || cb === undefined || ca === cb) { kept.push(e); continue; }
+    if (ambient.has(e.a)) continue;
+    const k = keyOf(e.b);
+    ((portals[k] = portals[k] || {})[e.a] = portals[k][e.a] || []).push(e.b);
+  }
+  const portalId = (k, src) => 'portal|' + k + '|' + src;
+  // Emit.
+  const members = {};   // leaf cluster key -> every node and portal id in it
+  const leafOrder = []; // leaf clusters in document order (for the anchors)
+  let out = 'strict digraph "" { graph [bgcolor=transparent, rankdir=TB, ' +
+            'ranksep=0.45, nodesep=0.18, compound=true, newrank=true]; ' +
+            header.join('; ') + '; ';
+  const chapters = [...new Set(Object.keys(nodeStmt).map(chapterOf).filter(c => c !== undefined))]
+                     .sort((a, b) => a - b);
+  for (const ch of chapters) {
+    const num = (CHAPTER_NUM[ch] || '').trim();
+    out += 'subgraph cluster_ch' + ch + ' { label="' + (num ? num + '. ' : '') +
+           (CHAPTER_TITLE[ch] || '') + '"; fontsize=22; color=gray55; ' +
+           'style="rounded,filled"; fillcolor="#eef2f8"; labeljust=l; margin=18; ';
+    const keys = [...new Set(Object.keys(nodeStmt).filter(id => chapterOf(id) === ch).map(keyOf))];
+    keys.forEach((k, i) => {
+      const sec = k.slice(k.indexOf('|') + 1);
+      leafOrder.push(k); members[k] = [];
+      if (sec) out += 'subgraph "cluster_ch' + ch + '_' + i + '" { label="' + sec +
+                      '"; fontsize=16; color=gray70; style="rounded,filled"; ' +
+                      'fillcolor="#e3e9f5"; labeljust=l; margin=12; ';
+      for (const id in nodeStmt) {
+        if (keyOf(id) !== k) continue;
+        let s = nodeStmt[id];
+        if (ambient.has(id)) s = s.replace(/\]\s*$/, ', peripheries=2]');
+        out += s + '; ';
+        members[k].push(id);
+      }
+      for (const src of Object.keys(portals[k] || {}).sort()) {
+        const pid = portalId(k, src);
+        out += '"' + pid + '" [label="' + shortLabel(src) + '\\n(ch ' +
+               ((CHAPTER_NUM[chapterOf(src)] || '').trim() || CHAPTER_TITLE[chapterOf(src)]) +
+               ')", shape=box, style="dashed,rounded", color=gray50, fontcolor=gray35, fontsize=10]; ';
+        members[k].push(pid);
+      }
+      if (sec) out += '} ';
+    });
+    out += '} ';
+  }
+  for (const id in nodeStmt) if (chapterOf(id) === undefined) out += nodeStmt[id] + '; ';
+  for (const e of kept) out += '"' + e.a + '" -> "' + e.b + '" ' + e.attrs + '; ';
+  for (const k in portals)
+    for (const src in portals[k])
+      for (const dst of portals[k][src])
+        out += '"' + portalId(k, src) + '" -> "' + dst + '" [style=dashed, color=gray55]; ';
+  // Anchors: every member of leaf cluster i -> anchor -> every member of
+  // leaf cluster i+1, so chapters (and the sections inside a split chapter)
+  // stack in document order instead of wherever the ranking lands them.
+  // weight=0: the anchors constrain ranks only; with the default weight they
+  // also pull each cluster to the right of the previous one (a staircase
+  // twice as wide as it is tall).
+  for (let i = 0; i + 1 < leafOrder.length; i++) {
+    const a = 'anchor' + i;
+    out += '"' + a + '" [shape=point, style=invis]; ';
+    for (const id of members[leafOrder[i]]) out += '"' + id + '" -> "' + a + '" [style=invis, weight=0]; ';
+    for (const id of members[leafOrder[i + 1]]) out += '"' + a + '" -> "' + id + '" [style=invis, weight=0]; ';
+  }
+  out += '}';
   return out;
 }
 
@@ -194,10 +308,20 @@ function interactive() {
            $(this).siblings('dl').toggle();
         })
 
+    $('#graph_note').text(
+      'Chapters read top to bottom. A dashed box is a statement from another ' +
+      'chapter, drawn where it is used; click it to open the original.' +
+      (ambientNames.length
+        ? ' Drawn once, in their own chapter, because every chapter uses them: ' +
+          ambientNames.join(', ') + '.'
+        : ''));
+
     d3.selectAll('.node')
         .attr('pointer-events', 'fill')
         .on('click', function () {
            var title = d3.select(this).selectAll('title').text().trim();
+           if (title.startsWith('anchor')) return;
+           if (title.startsWith('portal|')) title = title.slice(title.lastIndexOf('|') + 1);
            $('#statements > div').hide()
            $('.thm').hide();
            $('#'+latexLabelEscaper(title)+'_modal').show().children().show().children().show();
@@ -217,4 +341,3 @@ function interactive() {
 {% endfor %}
 </body>
 </html>
-

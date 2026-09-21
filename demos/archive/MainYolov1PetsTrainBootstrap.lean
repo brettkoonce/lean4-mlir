@@ -15,7 +15,7 @@ import LeanMlir
 
     See `planning/archive/yolo_final.md`. Usage:
       lake build yolov1-pets-train-bootstrap
-      ./download_pets.sh && python3 preprocess_pets_mosaic.py data/pets data/pets_mosaic_bal
+      ./historical/download_pets.sh && python3 preprocess_pets_mosaic.py data/pets data/pets_mosaic_bal
       IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
         .lake/build/bin/yolov1-pets-train-bootstrap data/pets_mosaic_bal
 

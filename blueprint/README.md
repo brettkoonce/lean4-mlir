@@ -9,8 +9,10 @@ to navigate the proof compositionally from primitives to the ViT finale.
 Pushing to `main` triggers `.github/workflows/blueprint.yml`:
 
 1. Builds the Lean project.
-2. Runs `leanblueprint checkdecls` — verifies every `\lean{…}` reference
-   points at a real Lean declaration.
+2. Runs `blueprint-checkdecls` — verifies every `\lean{…}` reference
+   points at a real Lean declaration, and writes the real dependency edges
+   among them; `scripts/blueprint_uses.py --check` holds every `\uses{…}`
+   line to those edges.
 3. Runs `leanblueprint web` — compiles `src/content.tex` into HTML with
    an interactive dependency DAG.
 4. Runs `doc-gen4` — generates Lean API docs.
@@ -60,3 +62,7 @@ blueprint/
 - `\lean{…}` — the exact Lean declaration name (tied to the source).
 - `\leanok` — mark as complete. Removed if the theorem is still in progress.
 - `\uses{…}` — other labels this theorem depends on; drives the DAG edges.
+  **Generated, not written:** after adding or re-proving a block, run
+  `lake exe blueprint-checkdecls blueprint/lean_decls blueprint/lean_deps &&
+  python3 scripts/blueprint_uses.py --fix`. CI fails on a `\uses` line that
+  disagrees with the Lean proof.

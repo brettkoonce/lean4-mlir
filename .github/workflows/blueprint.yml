@@ -29,6 +29,7 @@ on:
       # `apps` latent from 2026-07-27, `demos` from `dc5a7db`, both surfaced only when an
       # unrelated push happened to touch a trigger path).
       - 'tests/BlueprintCheckDecls.lean'
+      - 'scripts/blueprint_uses.py'
       # Fifth instance of the same bug: the docstring gate's SOURCE and its ratchet decide the
       # verdict at the `docstring-checkrefs` step below, and until 2026-09-09 a change to either
       # triggered nothing. The last two emit PUBLISHED content (sitemap, analytics tag).
@@ -285,7 +286,17 @@ jobs:
         # not build (the heavy corpus has its own workflow; see certs-heavy.yml).
         # The repo-owned variant imports every lib EXCEPT CertsHeavy.
         run: |
-          lake exe blueprint-checkdecls blueprint/lean_decls
+          lake exe blueprint-checkdecls blueprint/lean_decls blueprint/lean_deps
+
+      - name: Check blueprint \uses lines against the Lean dependencies
+        id: checkuses
+        # The dependency graph is drawn from the `\uses{}` line of every block. Those
+        # lines were hand-written for the original suite and drifted with every proof
+        # refactor (audited 2026-09-21: 155 of 242 edges matched). The step above wrote
+        # the real edges; this holds the lines to them. `scripts/blueprint_uses.py --fix`
+        # rewrites them locally.
+        run: |
+          python3 scripts/blueprint_uses.py --check
 
       - name: Check Lean declarations cited in DOCSTRINGS
         # The peer of the step above, and the reason it exists: the blueprint came
@@ -445,6 +456,7 @@ jobs:
           ok() { case "$1" in success) echo "✅ $2" ;; failure) echo "❌ $3" ;; *) echo "— did not run" ;; esac; }
           count_html() { [ -d "$1" ] && find -L "$1" -name '*.html' | wc -l || echo "—"; }
           decls="$( [ -f blueprint/lean_decls ] && grep -c . blueprint/lean_decls || echo "—")"
+          edges="$( [ -f blueprint/lean_deps ] && grep -c . blueprint/lean_deps || echo "—")"
           thms="$(grep -hoE '^\\begin\{(theorem|lemma|proposition|corollary)\}' blueprint/src/*.tex | wc -l)"
           defs="$(grep -hoE '^\\begin\{definition\}' blueprint/src/*.tex | wc -l)"
           docrefs="$(grep -oE 'docstring citations checked: [0-9]+ across [0-9]+ file\(s\); file citations checked: [0-9]+' \
@@ -463,6 +475,7 @@ jobs:
             echo "| | | |"
             echo "|---|---|---|"
             echo "| Lean declarations the blueprint cites | $decls | $(ok "${{ steps.checkdecls.outcome }}" "all present (\`blueprint-checkdecls\`)" "some missing — see \`blueprint-checkdecls\`") |"
+            echo "| Dependency edges (\`\\uses\`) | $edges | $(ok "${{ steps.checkuses.outcome }}" "match the Lean dependencies (\`blueprint_uses.py\`)" "drifted — run \`scripts/blueprint_uses.py --fix\`") |"
             echo "| Blueprint statements | $thms theorems · $defs definitions | |"
             echo "| Docstring citations | ${docrefs:-—} | $(ok "${{ steps.docrefs.outcome }}" "all resolve (\`docstring-checkrefs\`)" "some do not resolve — see \`docstring-checkrefs\`") |"
             echo "| Blueprint web pages | $(count_html public/blueprint) | |"

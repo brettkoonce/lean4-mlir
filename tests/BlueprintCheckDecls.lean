@@ -35,14 +35,56 @@ The blueprint text only cites core declarations — measurably so: every `\lean{
 in content.tex is a `Proofs.*` or `Layer.*` name, and zero are `apps` or `demos`
 — so the filtered import set is the honest one. If a blueprint chapter ever cites
 a heavy-corpus or trainer declaration, add that module here explicitly rather
-than re-importing the whole lib. -/
+than re-importing the whole lib.
+
+**Second argument: the dependency edges.** `lake exe blueprint-checkdecls
+blueprint/lean_decls blueprint/lean_deps` also writes the real dependency edges among
+the cited declarations (`dep name` per line), which `scripts/blueprint_uses.py --check`
+holds the blueprint's `\uses{}` lines to. Those lines were hand-written for the original
+suite and drifted with every proof refactor — audited 2026-09-21, 155 of 242 matched the
+Lean dependencies, so the dependency graph was drawing lemmas the proofs no longer used
+and missing ones they did. Same environment, one more walk; no second import. -/
 
 open Lake Lean
 
+/-- Real dependency edges among the cited declarations: for each cited `n`, walk the
+constants its type and value use, expanding through this project's own (`LeanMlir.*`)
+helpers and stopping at other cited declarations. Constructors (the Bestiary's
+`Layer.*` catalogue rows) are not proofs and get no edges. Sorted, so the file is
+stable across runs. -/
+def writeDeps (env : Environment) (cited : Array Name) (out : System.FilePath) : IO Nat := do
+  let citedSet := cited.foldl (·.insert ·) ({} : NameSet)
+  let isProject (u : Name) : Bool :=
+    match env.getModuleIdxFor? u with
+    | some idx => (env.header.moduleNames[idx.toNat]!).toString.startsWith "LeanMlir"
+    | none => false
+  let mut lines : Array String := #[]
+  for n in cited do
+    match env.find? n with
+    | none | some (.ctorInfo _) => continue
+    | some _ => pure ()
+    let mut visited : NameSet := {}
+    let mut stack : Array Name := #[n]
+    let mut deps : Array Name := #[]
+    while stack.size > 0 do
+      let c := stack.back!
+      stack := stack.pop
+      let some ci := env.find? c | continue
+      for u in ci.getUsedConstantsAsSet.toArray do
+        if visited.contains u then continue
+        visited := visited.insert u
+        if u != n && citedSet.contains u then deps := deps.push u
+        else if isProject u then stack := stack.push u
+    for d in deps.qsort (·.toString < ·.toString) do
+      lines := lines.push s!"{d} {n}"
+  IO.FS.writeFile out (String.intercalate "\n" lines.toList ++ "\n")
+  return lines.size
+
 unsafe def main (args : List String) : IO UInt32 := do
-  unless args.length == 1 do
-    println! "This command takes exactly one argument: the path to a file \
-      containing a list of declarations to check."
+  unless args.length == 1 || args.length == 2 do
+    println! "This command takes one or two arguments: the path to a file containing a \
+      list of declarations to check, and optionally a path to write their dependency \
+      edges to (read by scripts/blueprint_uses.py)."
     return 1
   let filename : System.FilePath := args[0]!
   unless ← filename.pathExists do
@@ -65,9 +107,15 @@ unsafe def main (args : List String) : IO UInt32 := do
   -- see comments in https://github.com/leanprover/lean4/pull/6325
   enableInitializersExecution
   let env ← Lean.importModules imports {}
+  let cited := (← IO.FS.lines filename).filterMap fun line =>
+    let line := line.trimAscii.toString
+    if line.isEmpty then none else some line.toName
   let mut ok := true
-  for line in ← IO.FS.lines filename do
-    unless env.contains line.toName do
-      println! "{line} is missing."
+  for n in cited do
+    unless env.contains n do
+      println! "{n} is missing."
       ok := false
+  if let some (out : String) := args[1]? then
+    let n ← writeDeps env cited out
+    println! "wrote {n} dependency edges among {cited.size} declarations to {out}"
   return if ok then 0 else 1

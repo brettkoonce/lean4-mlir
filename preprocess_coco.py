@@ -60,7 +60,7 @@ Two COCO evaluation subtleties are honored (or the numbers are silently wrong):
 
 Usage: python3 preprocess_coco.py <coco_dir> <out_dir> [flags]
   <coco_dir> must contain train2017/, val2017/ and
-  annotations/instances_{train2017,val2017}.json (as download_coco.sh leaves it).
+  annotations/instances_{train2017,val2017}.json (as historical/download_coco.sh leaves it).
 
 Flags: --size N --grid N --classes all|vdmap --anchors FILE --fpn DIR
        --fpn-thresh LO HI --train-only --val-only --limit N --check

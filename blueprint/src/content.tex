@@ -988,7 +988,7 @@ Mechanical; see \leandocref{Proofs.pdiv\_reindex}.
   \label{thm:pdiv_finset_sum}
   \lean{Proofs.pdiv_finset_sum}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_const}
+  \uses{ax:pdiv}
   \Assume{}
   \begin{enumerate}
     \item \(S\) is a finite index set with a function
@@ -1251,7 +1251,7 @@ operands. One transpose, three spellings.
   \label{ax:pdiv_dense}
   \lean{Proofs.pdiv_dense}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:pdiv}
   For the dense layer
   \(\mathrm{dense}(W, b)\, x = \lambda j.\; \bigl(\sum_i x_i\, W_{ij}\bigr) + b_j\):
   \[
@@ -1300,7 +1300,7 @@ Chapter~1 except the chain rule fires exactly once.}
   \label{ax:pdiv_dense_W}
   \lean{Proofs.pdiv_dense_W}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:pdiv}
   The symmetric counterpart of
   Theorem~\ref{ax:pdiv_dense}, differentiating in \(W\) instead of
   \(x\). Since \(\pdiv\) works on vectors, view the layer as a function
@@ -1356,7 +1356,7 @@ through the flatten bijection.}
   \label{thm:dense_has_vjp}
   \lean{Proofs.dense_has_vjp}
   \leanok
-  \uses{ax:pdiv_dense, def:hasvjp}
+  \uses{ax:pdiv, ax:pdiv_dense, def:hasvjp}
   \(\HasVJP\, \bigl(\mathrm{dense}(W, b)\bigr)\): the input-gradient
   backward of a dense layer is multiplication by \(W\).
 \end{theorem}
@@ -1383,7 +1383,7 @@ through the flatten bijection.}
   \label{thm:dense_weight_grad_correct}
   \lean{Proofs.dense_weight_grad_correct}
   \leanok
-  \uses{ax:pdiv_dense_W}
+  \uses{ax:pdiv, ax:pdiv_dense_W}
   \(dW = x \otimes dy\), with \(F\) and \(\varphi\) as in
   Theorem~\ref{ax:pdiv_dense_W},
   \Prove{} for all \(i, j\):
@@ -1411,7 +1411,7 @@ through the flatten bijection.}
   \label{thm:dense_bias_grad_correct}
   \lean{Proofs.dense_bias_grad_correct}
   \leanok
-  \uses{ax:pdiv_add, ax:pdiv_const, ax:pdiv_id}
+  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_const, ax:pdiv_id}
   \(db = dy\).
   \Prove{} for all \(i\):
   \[
@@ -2246,7 +2246,7 @@ that map's derivative and transport it.}
   \label{thm:relu_has_vjp}
   \lean{Proofs.relu_has_vjp}
   \leanok
-  \uses{ax:pdiv_relu}
+  \uses{ax:pdiv, def:hasvjp}
   \texttt{noncomputable def} over the canonical pdiv-derived
   witness; \texttt{HasVJP.correct} holds by \texttt{rfl} since
   \(\pdiv\) is a \texttt{def} over \(\fderiv\). At non-smooth
@@ -2259,7 +2259,7 @@ that map's derivative and transport it.}
   \label{ax:mlp_has_vjp}
   \lean{Proofs.mlp_has_vjp}
   \leanok
-  \uses{thm:dense_has_vjp, thm:relu_has_vjp}
+  \uses{ax:pdiv, def:hasvjp}
   \texttt{noncomputable def} over the canonical pdiv-derived
   witness; same shape as \texttt{relu\_has\_vjp}. Codegen
   routes the ReLU subgradient at the kink.
@@ -2269,7 +2269,7 @@ that map's derivative and transport it.}
   \label{thm:mlp_has_vjp_at}
   \lean{Proofs.mlp_has_vjp_at_correct}
   \leanok
-  \uses{thm:dense_has_vjp, thm:relu_has_vjp, thm:vjp_comp, ax:mlp_has_vjp}
+  \uses{ax:pdiv, ax:pdiv_comp, ax:pdiv_relu, def:hasvjp, thm:dense_has_vjp}
   \Assume{}
   \begin{enumerate}
     \item no coordinate of the first pre-activation
@@ -2903,7 +2903,7 @@ respects the image's 2-D structure.
   \label{def:hasvjp3}
   \lean{Proofs.HasVJP3}
   \leanok
-  \uses{ax:pdiv, def:hasvjp}
+  \uses{ax:pdiv}
   The rank-3 analogue of Definition~\ref{def:hasvjp}. For
   \(f : \mathrm{Tensor3} \to \mathrm{Tensor3}\), define
   \(\pdiv_3 f\, x\, (c_i, h_i, w_i)\, (c_o, h_o, w_o)\) as \(\pdiv\)
@@ -2925,7 +2925,7 @@ respects the image's 2-D structure.
   \label{ax:conv2d_has_vjp3}
   \lean{Proofs.conv2d_has_vjp3}
   \leanok
-  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
+  \uses{ax:conv2d, ax:pdiv, def:hasvjp3}
   \(\HasVJPthree\, \bigl(\mathrm{conv2d}(W, b)\bigr)\): the input
   backward of a convolution is the reversed-kernel convolution.
   No hypotheses: conv2d is affine in its input.
@@ -2995,7 +2995,7 @@ coordinate projection and the zero function.}
   \label{ax:conv2d_weight_grad_has_vjp}
   \lean{Proofs.conv2d_weight_grad_has_vjp}
   \leanok
-  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp}
+  \uses{ax:conv2d, ax:pdiv, def:hasvjp}
   The transpose-trick formula. As with the dense weight
   Jacobian (Theorem~\ref{ax:pdiv_dense_W}), differentiate in the
   \emph{flattened} kernel: let
@@ -3061,7 +3061,7 @@ reindex factor and the saved input \(x\) is the constant.}
   \label{ax:conv2d_bias_grad_has_vjp}
   \lean{Proofs.conv2d_bias_grad_has_vjp}
   \leanok
-  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp}
+  \uses{ax:conv2d, ax:pdiv, def:hasvjp}
   Sum the cotangent over spatial dims per channel.
   \Prove{} \(\HasVJP\, \bigl(b \mapsto \mathrm{flatten}
     (\mathrm{conv2d}(W, b)\, x)\bigr)\), with backward
@@ -3106,7 +3106,7 @@ reindex factor and the saved input \(x\) is the constant.}
   \label{ax:maxPool2_has_vjp3}
   \lean{Proofs.maxPool2_has_vjp3}
   \leanok
-  \uses{ax:maxPool2}
+  \uses{ax:maxPool2, ax:pdiv, def:hasvjp3}
   \texttt{noncomputable def} over the canonical pdiv-derived
   witness. \texttt{HasVJP.correct} holds by \texttt{rfl}; codegen
   substitutes the standard argmax routing convention at tiebreaks.
@@ -3116,7 +3116,8 @@ reindex factor and the saved input \(x\) is the constant.}
   \label{thm:mnistCnnNoBn_has_vjp_at}
   \lean{Proofs.mnistCnnNoBn_has_vjp_at_correct}
   \leanok
-  \uses{ax:conv2d_has_vjp3, ax:maxPool2_has_vjp3, thm:dense_has_vjp, thm:relu_has_vjp, thm:vjp_comp}
+  \uses{ax:conv2d, ax:conv2d_has_vjp3, ax:maxPool2, ax:maxPool2_has_vjp3, ax:pdiv,
+      ax:pdiv_comp, ax:pdiv_relu, def:hasvjp, def:hasvjp3, thm:dense_has_vjp}
   \Assume{}
   \begin{enumerate}
     \item no coordinate of either convolution's pre-activation, nor of
@@ -3799,7 +3800,7 @@ chain rule we already had.
   \label{ax:pdiv_bnAffine}
   \lean{Proofs.pdiv_bnAffine}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id}
+  \uses{ax:pdiv}
   For \(\mathrm{bnAffine}(\gamma, \beta)\, v = \lambda i.\;
   \gamma v_i + \beta\):
   \Prove{} \(\pdiv\bigl(\mathrm{bnAffine}(\gamma, \beta)\bigr)\, v\, i\, j
@@ -3830,7 +3831,7 @@ chain rule we already had.
   \label{ax:pdiv_bnCentered}
   \lean{Proofs.pdiv_bnCentered}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id, thm:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:pdiv}
   For \(\mathrm{bnCentered}\, x = \lambda j.\; x_j - \mu(x)\), where
   \(\mu(x) = \frac{1}{n}\sum_s x_s\):
   \Prove{} \(\pdiv(\mathrm{bnCentered})\, x\, i\, j
@@ -3958,7 +3959,8 @@ identity.}
   \label{thm:bnNormalize_has_vjp}
   \lean{Proofs.bnNormalize_has_vjp}
   \leanok
-  \uses{ax:pdiv_bnCentered, ax:pdiv_bnIstdBroadcast, ax:bnIstdBroadcast_diff, ax:pdiv_mul, def:hasvjp}
+  \uses{ax:bnIstdBroadcast_diff, ax:pdiv, ax:pdiv_bnCentered, ax:pdiv_bnIstdBroadcast,
+      ax:pdiv_mul, def:hasvjp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -4014,7 +4016,7 @@ the two elementary Jacobians into one formula; contracting with
   \label{thm:bnAffine_has_vjp}
   \lean{Proofs.bnAffine_has_vjp}
   \leanok
-  \uses{ax:pdiv_bnAffine, def:hasvjp}
+  \uses{ax:pdiv, ax:pdiv_bnAffine, def:hasvjp}
   \(\HasVJP\, \bigl(\mathrm{bnAffine}(\gamma, \beta)\bigr)\): each
   input feeds one output scaled by \(\gamma\), so the gradient comes
   back scaled by \(\gamma\).
@@ -4039,7 +4041,8 @@ the two elementary Jacobians into one formula; contracting with
   \label{thm:bn_has_vjp}
   \lean{Proofs.bn_has_vjp}
   \leanok
-  \uses{thm:bnNormalize_has_vjp, thm:bnAffine_has_vjp, thm:vjp_comp, ax:bnIstdBroadcast_diff}
+  \uses{ax:bnIstdBroadcast_diff, def:hasvjp, thm:bnAffine_has_vjp,
+      thm:bnNormalize_has_vjp, thm:vjp_comp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -4916,7 +4919,7 @@ fan-in pattern, persist.
   \label{thm:residual_has_vjp}
   \lean{Proofs.residual_has_vjp}
   \leanok
-  \uses{thm:biPath_has_vjp, thm:identity_has_vjp}
+  \uses{def:hasvjp, thm:biPath_has_vjp, thm:identity_has_vjp}
   \Assume{}
   \begin{enumerate}
     \item \(B_f\) is a correct backward function for \(f\)
@@ -6397,7 +6400,7 @@ trade is the whole reason MobileNet exists.
   \label{ax:depthwise_has_vjp3}
   \lean{Proofs.depthwise_has_vjp3}
   \leanok
-  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
+  \uses{ax:depthwiseConv2d, ax:pdiv, def:hasvjp3}
   \Prove{} \(\HasVJPthree\, \bigl(\mathrm{depthwiseConv2d}(W, b)\bigr)\),
   with the per-channel reversed-kernel backward
   \(dx_{c, h, w} = \sum_{k_h, k_w}
@@ -6446,7 +6449,7 @@ depthwise has no cross-channel mixing, so the channel of every
   \label{ax:depthwise_weight_grad_has_vjp3}
   \lean{Proofs.depthwise_weight_grad_has_vjp3}
   \leanok
-  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
+  \uses{ax:depthwiseConv2d, ax:pdiv, def:hasvjp3}
   \texttt{DepthwiseKernel} is definitionally
   \(\mathsf{Tensor3}\), so \(\HasVJPthree\) applies to the kernel
   directly --- no flatten bijection needed, unlike the conv2d weight
@@ -6486,7 +6489,7 @@ depthwise has no cross-channel mixing, so the channel of every
   \label{ax:depthwise_bias_grad_has_vjp}
   \lean{Proofs.depthwise_bias_grad_has_vjp}
   \leanok
-  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp}
+  \uses{ax:depthwiseConv2d, ax:pdiv, def:hasvjp}
   \Prove{} \(\HasVJP\, \bigl(b \mapsto \mathrm{flatten}
     (\mathrm{depthwiseConv2d}(W, b)\, x)\bigr)\), with backward
   \(db_c = \sum_{h_i, w_i} dy_{\mathrm{flat}(c, h_i, w_i)}\).
@@ -7634,7 +7637,7 @@ return-on-scaling to show up.
   \label{thm:seBlock_has_vjp}
   \lean{Proofs.seBlock_has_vjp}
   \leanok
-  \uses{thm:elemwiseProduct_has_vjp, thm:dense_has_vjp, thm:identity_has_vjp}
+  \uses{def:hasvjp, thm:elemwiseProduct_has_vjp, thm:identity_has_vjp}
   \Assume{}
   \begin{enumerate}
     \item \(B_g\) is a correct backward function for the gate
@@ -8734,7 +8737,7 @@ how convnets are trained, on one page.
   \label{ax:pdiv_gelu}
   \lean{Proofs.pdiv_gelu}
   \leanok
-  \uses{ax:pdiv, ax:geluScalarDeriv}
+  \uses{ax:geluScalar, ax:geluScalarDeriv, ax:pdiv}
   \Prove{} \(\pdiv(\mathrm{gelu})\, x\, i\, j
     = \delta_{ij} \cdot \mathrm{geluScalar}'(x_i)\) --- the diagonal
   activation Jacobian.
@@ -8776,7 +8779,7 @@ through a projection, convert back to the scalar derivative.}
   \label{thm:layerNorm_has_vjp}
   \lean{Proofs.layerNorm_has_vjp}
   \leanok
-  \uses{thm:bn_has_vjp}
+  \uses{def:hasvjp, thm:bn_has_vjp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -8802,7 +8805,7 @@ through a projection, convert back to the scalar derivative.}
   \label{thm:gelu_has_vjp}
   \lean{Proofs.gelu_has_vjp}
   \leanok
-  \uses{ax:pdiv_gelu, def:hasvjp}
+  \uses{ax:geluScalar, ax:geluScalarDeriv, ax:pdiv, ax:pdiv_gelu, def:hasvjp}
   \(\HasVJP\, (\mathrm{gelu})\), with backward
   \(B(x, dy)_i = dy_i \cdot \mathrm{geluScalar}'(x_i)\).
 \end{theorem}
@@ -9686,7 +9689,7 @@ is the first and only chapter to use them.
   \label{def:hasvjpmat}
   \lean{Proofs.HasVJPMat}
   \leanok
-  \uses{ax:pdiv, def:hasvjp}
+  \uses{ax:pdiv}
   The rank-2 analogue of Definition~\ref{def:hasvjp}. Define
   \(\pdivMat f\, A\, (i,j)\, (k,l)\) as \(\pdiv\) of the row-major
   flattened map
@@ -9705,7 +9708,7 @@ is the first and only chapter to use them.
   \label{ax:pdivMat_rowIndep}
   \lean{Proofs.pdivMat_rowIndep}
   \leanok
-  \uses{ax:pdiv, def:hasvjpmat}
+  \uses{ax:pdiv}
   \Assume{}
   \begin{enumerate}
     \item \(g : \Vect{n} \to \Vect{p}\) is differentiable everywhere
@@ -9746,7 +9749,7 @@ is the first and only chapter to use them.
   \label{thm:vjpMat_comp}
   \lean{Proofs.vjpMat_comp}
   \leanok
-  \uses{thm:vjp_comp, ax:pdiv_comp, def:hasvjpmat}
+  \uses{ax:pdiv, ax:pdiv_comp, def:hasvjpmat}
   \Assume{}
   \begin{enumerate}
     \item \(B_F\), \(B_G\) are correct backward functions
@@ -9788,7 +9791,7 @@ sums where the rank-1 proof had single sums.}
   \label{thm:biPathMat_has_vjp}
   \lean{Proofs.biPathMat_has_vjp}
   \leanok
-  \uses{thm:biPath_has_vjp, ax:pdiv_add, def:hasvjpmat}
+  \uses{ax:pdiv, ax:pdiv_add, def:hasvjpmat}
   Rank-2 transcription of Theorem~\ref{thm:biPath_has_vjp}: given
   \(\HasVJPMat\) for \(F\) and \(G\) (with flat differentiability),
   \(\HasVJPMat\, (F + G)\) with backward
@@ -9813,7 +9816,7 @@ sums where the rank-1 proof had single sums.}
   \label{thm:identityMat_has_vjp}
   \lean{Proofs.identityMat_has_vjp}
   \leanok
-  \uses{thm:identity_has_vjp, ax:pdiv_id, def:hasvjpmat}
+  \uses{ax:pdiv, ax:pdiv_id, def:hasvjpmat}
   \(\HasVJPMat\, (\mathrm{id})\), backward \(B(A, dY) = dY\).
 \end{theorem}
 
@@ -9837,7 +9840,7 @@ sums where the rank-1 proof had single sums.}
   \label{thm:pdivMat_scalarScale}
   \lean{Proofs.pdivMat_scalarScale}
   \leanok
-  \uses{ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id}
+  \uses{ax:pdiv, ax:pdiv_const, ax:pdiv_id, ax:pdiv_mul}
   \Prove{} \(\pdivMat(M \mapsto s \cdot M)\, A\, (i,j)\, (k,l)
     = [i = k \wedge j = l] \cdot s\).
 \end{theorem}
@@ -9864,7 +9867,7 @@ sums where the rank-1 proof had single sums.}
   \label{thm:pdivMat_transpose}
   \lean{Proofs.pdivMat_transpose}
   \leanok
-  \uses{ax:pdiv_reindex}
+  \uses{ax:pdiv, ax:pdiv_reindex}
   \Prove{} \(\pdivMat(\mathrm{transpose})\, A\, (i,j)\, (k,l)
     = [j = k \wedge i = l]\).
 \end{theorem}
@@ -9888,7 +9891,7 @@ sums where the rank-1 proof had single sums.}
   \label{thm:pdivMat_matmul_left_const}
   \lean{Proofs.pdivMat_matmul_left_const}
   \leanok
-  \uses{ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, thm:pdiv_finset_sum}
+  \uses{ax:pdiv}
   \Prove{} \(\pdivMat(B' \mapsto C \cdot B')\, B\, (i,j)\, (k,l)
     = [l = j] \cdot C_{ki}\).
 \end{theorem}
@@ -9917,7 +9920,7 @@ sums where the rank-1 proof had single sums.}
   \label{thm:pdivMat_matmul_right_const}
   \lean{Proofs.pdivMat_matmul_right_const}
   \leanok
-  \uses{ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, thm:pdiv_finset_sum}
+  \uses{ax:pdiv}
   \Prove{} \(\pdivMat(A' \mapsto A' \cdot D)\, A\, (i,j)\, (k,l)
     = [i = k] \cdot D_{jl}\).
 \end{theorem}
@@ -9937,7 +9940,7 @@ at \(s = j\), \(k = i\)) give \([i = k] \cdot D_{jl}\).
   \label{thm:matmul_left_const_has_vjp}
   \lean{Proofs.matmul_left_const_has_vjp}
   \leanok
-  \uses{thm:pdivMat_matmul_left_const, def:hasvjpmat}
+  \uses{ax:pdiv, def:hasvjpmat, thm:pdivMat_matmul_left_const}
   \(\HasVJPMat\, (B' \mapsto C \cdot B')\), backward
   \(dB = C^{T} \cdot dY\).
 \end{theorem}
@@ -9962,7 +9965,7 @@ at \(s = j\), \(k = i\)) give \([i = k] \cdot D_{jl}\).
   \label{thm:matmul_right_const_has_vjp}
   \lean{Proofs.matmul_right_const_has_vjp}
   \leanok
-  \uses{thm:pdivMat_matmul_right_const, def:hasvjpmat}
+  \uses{ax:pdiv, def:hasvjpmat, thm:pdivMat_matmul_right_const}
   \(\HasVJPMat\, (A' \mapsto A' \cdot D)\), backward
   \(dA = dY \cdot D^{T}\).
 \end{theorem}
@@ -9987,7 +9990,7 @@ at \(s = j\), \(k = i\)) give \([i = k] \cdot D_{jl}\).
   \label{thm:scalarScale_has_vjp}
   \lean{Proofs.scalarScale_has_vjp}
   \leanok
-  \uses{thm:pdivMat_scalarScale, def:hasvjpmat}
+  \uses{ax:pdiv, def:hasvjpmat, thm:pdivMat_scalarScale}
   \(\HasVJPMat\, (M \mapsto s \cdot M)\), backward
   \(dA = s \cdot dY\).
 \end{theorem}
@@ -10004,7 +10007,7 @@ Jacobian (Theorem~\ref{thm:pdivMat_scalarScale}) with \(dY\):
   \label{thm:transpose_has_vjp}
   \lean{Proofs.transpose_has_vjp}
   \leanok
-  \uses{thm:pdivMat_transpose, def:hasvjpmat}
+  \uses{ax:pdiv, def:hasvjpmat, thm:pdivMat_transpose}
   \(\HasVJPMat\, (\mathrm{transpose})\), backward
   \(dA = dY^{T}\).
 \end{theorem}
@@ -10021,7 +10024,7 @@ Jacobian (Theorem~\ref{thm:pdivMat_transpose}) with \(dY\):
   \label{thm:rowwise_has_vjp_mat}
   \lean{Proofs.rowwise_has_vjp_mat}
   \leanok
-  \uses{ax:pdivMat_rowIndep, def:hasvjp, def:hasvjpmat}
+  \uses{ax:pdiv, ax:pdivMat_rowIndep, def:hasvjp, def:hasvjpmat}
   \Assume{}
   \begin{enumerate}
     \item \(B_g\) is a correct backward for
@@ -10055,7 +10058,7 @@ Jacobian (Theorem~\ref{thm:pdivMat_transpose}) with \(dY\):
   \label{thm:pdiv3_comp}
   \lean{Proofs.pdiv3_comp}
   \leanok
-  \uses{ax:pdiv_comp, def:hasvjp3}
+  \uses{ax:pdiv, ax:pdiv_comp}
   \Prove{} for flattened-differentiable \(f\), \(g\):
   \(\pdiv_3(g \circ f)\) is the middle-index contraction
   \(\sum_{c_j, h_j, w_j} \pdiv_3 f \cdot \pdiv_3 g\).
@@ -10079,7 +10082,7 @@ Jacobian (Theorem~\ref{thm:pdivMat_transpose}) with \(dY\):
   \label{thm:vjp3_comp}
   \lean{Proofs.vjp3_comp}
   \leanok
-  \uses{thm:pdiv3_comp, thm:vjp_comp, def:hasvjp3}
+  \uses{ax:pdiv, def:hasvjp3, thm:pdiv3_comp}
   Rank-3 transcription of Theorem~\ref{thm:vjp_comp}: composite
   backward \(B(x, dy) = B_f\bigl(x,\, B_g(f\,x,\, dy)\bigr)\).
 \end{theorem}
@@ -10102,7 +10105,7 @@ Jacobian (Theorem~\ref{thm:pdivMat_transpose}) with \(dY\):
   \label{thm:biPath3_has_vjp}
   \lean{Proofs.biPath3_has_vjp}
   \leanok
-  \uses{ax:pdiv_add, thm:biPath_has_vjp, def:hasvjp3}
+  \uses{ax:pdiv, ax:pdiv_add, def:hasvjp3}
   Rank-3 transcription of Theorem~\ref{thm:biPath_has_vjp}: backward
   is the sum of the two backwards.
 \end{theorem}
@@ -10160,7 +10163,7 @@ bijection) to rewrite \(\pdiv_3 f + \pdiv_3 g = \pdiv_3(f + g)\).
   \label{thm:softmax_has_vjp}
   \lean{Proofs.softmax_has_vjp}
   \leanok
-  \uses{ax:pdiv_softmax, def:hasvjp}
+  \uses{ax:pdiv, ax:pdiv_softmax, def:hasvjp}
   \(\HasVJP\, (\mathrm{softmax})\), with the closed-form
   \(O(c)\) backward
   \[
@@ -10193,7 +10196,8 @@ bijection) to rewrite \(\pdiv_3 f + \pdiv_3 g = \pdiv_3(f + g)\).
   \label{thm:rowSoftmax_has_vjp_mat}
   \lean{Proofs.rowSoftmax_has_vjp_mat}
   \leanok
-  \uses{ax:pdivMat_rowIndep, thm:softmax_has_vjp, def:hasvjpmat}
+  \uses{ax:pdiv, def:hasvjp, def:hasvjpmat, thm:rowwise_has_vjp_mat,
+      thm:softmax_has_vjp}
   \(\HasVJPMat\, (\mathrm{rowSoftmax})\): rows are independent, so the
   backward applies the softmax backward per row.
 \end{theorem}
@@ -10218,7 +10222,8 @@ instantiated at \(g = \mathrm{softmax}\):
   \label{thm:sdpa_back_Q_correct}
   \lean{Proofs.sdpa_back_Q_correct}
   \leanok
-  \uses{thm:matmul_right_const_has_vjp, thm:scalarScale_has_vjp, thm:rowSoftmax_has_vjp_mat, thm:vjpMat_comp, ax:rowSoftmax_flat_diff}
+  \uses{ax:pdiv, ax:rowSoftmax_flat_diff, def:hasvjpmat, thm:matmul_right_const_has_vjp,
+      thm:rowSoftmax_has_vjp_mat, thm:scalarScale_has_vjp, thm:vjpMat_comp}
   \Prove{} for fixed \(K, V\): \(\mathrm{sdpa\_back\_Q}\) matches the
   \(\pdivMat\) contraction of \(Q' \mapsto \mathrm{sdpa}(Q', K, V)\).
 \end{theorem}
@@ -10252,7 +10257,12 @@ instantiated at \(g = \mathrm{softmax}\):
   \label{thm:sdpa_back_K_correct}
   \lean{Proofs.sdpa_back_K_correct}
   \leanok
-  \uses{thm:matmul_right_const_has_vjp, thm:matmul_left_const_has_vjp, thm:scalarScale_has_vjp, thm:rowSoftmax_has_vjp_mat, thm:transpose_has_vjp, thm:vjpMat_comp, ax:rowSoftmax_flat_diff}
+  \uses{ax:pdiv, ax:pdiv_comp, ax:pdiv_softmax, ax:rowSoftmax_flat_diff, def:hasvjp,
+      def:hasvjpmat, thm:matmul_left_const_has_vjp, thm:matmul_right_const_has_vjp,
+      thm:pdivMat_matmul_left_const, thm:pdivMat_matmul_right_const,
+      thm:pdivMat_scalarScale, thm:pdivMat_transpose, thm:rowSoftmax_has_vjp_mat,
+      thm:rowwise_has_vjp_mat, thm:scalarScale_has_vjp, thm:softmax_has_vjp,
+      thm:transpose_has_vjp, thm:vjpMat_comp}
   \Prove{} for fixed \(Q, V\): \(\mathrm{sdpa\_back\_K}\) matches the
   \(\pdivMat\) contraction of \(K' \mapsto \mathrm{sdpa}(Q, K', V)\).
 \end{theorem}
@@ -10284,7 +10294,7 @@ transpose link:
   \label{thm:sdpa_back_V_correct}
   \lean{Proofs.sdpa_back_V_correct}
   \leanok
-  \uses{thm:matmul_left_const_has_vjp}
+  \uses{ax:pdiv, def:hasvjpmat, thm:matmul_left_const_has_vjp}
   \Prove{} for fixed \(Q, K\): \(\mathrm{sdpa\_back\_V}\) matches the
   \(\pdivMat\) contraction of \(V' \mapsto \mathrm{sdpa}(Q, K, V')\).
 \end{theorem}
@@ -10307,7 +10317,9 @@ transpose link:
   \label{ax:mhsa_has_vjp_mat}
   \lean{Proofs.mhsa_has_vjp_mat}
   \leanok
-  \uses{thm:sdpa_back_Q_correct, thm:sdpa_back_K_correct, thm:sdpa_back_V_correct, thm:dense_per_token_has_vjp_mat, thm:vjpMat_comp, ax:pdivMat_rowIndep, def:hasvjpmat}
+  \uses{ax:pdiv, ax:rowSoftmax_flat_diff, def:hasvjpmat, thm:dense_has_vjp,
+      thm:rowwise_has_vjp_mat, thm:sdpa_back_K_correct, thm:sdpa_back_Q_correct,
+      thm:sdpa_back_V_correct, thm:vjpMat_comp}
   \Prove{} \(\HasVJPMat\, (\mathrm{mhsa\_layer})\).
 \end{theorem}
 
@@ -10343,6 +10355,7 @@ axis the same way row-independence lifts vector VJPs across rows.}
   \label{ax:mhsa_layer_flat_diff}
   \lean{Proofs.mhsa_layer_flat_diff}
   \leanok
+  \uses{ax:rowSoftmax_flat_diff}
   \(\Differentiable\) sibling of Theorem~\ref{ax:mhsa_has_vjp_mat}.
 \end{theorem}
 
@@ -10360,7 +10373,7 @@ differentiability. \Qed{}
   \label{ax:patchEmbed_flat_has_vjp}
   \lean{Proofs.patchEmbed_flat_has_vjp}
   \leanok
-  \uses{def:hasvjp, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:pdiv, def:hasvjp}
   The concrete \texttt{def} unfolds to conv-with-stride + CLS prepend +
   positional embed.
   \Prove{} \(\HasVJP\, (\mathrm{patchEmbed\_flat})\), with backward
@@ -10427,7 +10440,8 @@ are differentiable and the sum inherits it. \Qed{}
   \label{thm:layerNorm_per_token_has_vjp_mat}
   \lean{Proofs.layerNorm_per_token_has_vjp_mat}
   \leanok
-  \uses{thm:rowwise_has_vjp_mat, thm:layerNorm_has_vjp}
+  \uses{ax:bnIstdBroadcast_diff, def:hasvjpmat, thm:layerNorm_has_vjp,
+      thm:rowwise_has_vjp_mat}
 \end{theorem}
 
 \begin{proof}
@@ -10444,7 +10458,7 @@ computed independently by the 1D three-term formula. \Qed{}
   \label{thm:dense_per_token_has_vjp_mat}
   \lean{Proofs.dense_per_token_has_vjp_mat}
   \leanok
-  \uses{thm:rowwise_has_vjp_mat, thm:dense_has_vjp}
+  \uses{def:hasvjpmat, thm:dense_has_vjp, thm:rowwise_has_vjp_mat}
 \end{theorem}
 
 \begin{proof}
@@ -10460,7 +10474,7 @@ row-by-row with shared weights. \Qed{}
   \label{thm:gelu_per_token_has_vjp_mat}
   \lean{Proofs.gelu_per_token_has_vjp_mat}
   \leanok
-  \uses{thm:rowwise_has_vjp_mat, thm:gelu_has_vjp}
+  \uses{ax:geluScalar, def:hasvjpmat, thm:gelu_has_vjp, thm:rowwise_has_vjp_mat}
 \end{theorem}
 
 \begin{proof}
@@ -10502,7 +10516,8 @@ diagonal both across rows and within a row. \Qed{}
   \label{thm:transformerMlp_has_vjp_mat}
   \lean{Proofs.transformerMlp_has_vjp_mat}
   \leanok
-  \uses{thm:dense_per_token_has_vjp_mat, thm:gelu_per_token_has_vjp_mat, thm:vjpMat_comp}
+  \uses{ax:geluScalar, def:hasvjpmat, thm:dense_per_token_has_vjp_mat,
+      thm:gelu_per_token_has_vjp_mat, thm:vjpMat_comp}
   \(\HasVJPMat\) of
   \(\mathrm{dense}_2 \circ \mathrm{gelu} \circ \mathrm{dense}_1\),
   all per-token.
@@ -10527,7 +10542,9 @@ diagonal both across rows and within a row. \Qed{}
   \label{thm:transformerAttnSublayer_has_vjp_mat}
   \lean{Proofs.transformerAttnSublayer_has_vjp_mat}
   \leanok
-  \uses{thm:layerNorm_per_token_has_vjp_mat, ax:mhsa_has_vjp_mat, ax:mhsa_layer_flat_diff, thm:biPathMat_has_vjp, thm:identityMat_has_vjp, thm:vjpMat_comp}
+  \uses{ax:bnIstdBroadcast_diff, ax:mhsa_has_vjp_mat, ax:mhsa_layer_flat_diff,
+      def:hasvjpmat, thm:biPathMat_has_vjp, thm:identityMat_has_vjp,
+      thm:layerNorm_per_token_has_vjp_mat, thm:vjpMat_comp}
   \Assume{} \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]\\
   \Prove{} \(\HasVJPMat\) of
   \(X \mapsto X + \mathrm{MHSA}(\mathrm{LN}_1(X))\).
@@ -10555,7 +10572,9 @@ diagonal both across rows and within a row. \Qed{}
   \label{thm:transformerMlpSublayer_has_vjp_mat}
   \lean{Proofs.transformerMlpSublayer_has_vjp_mat}
   \leanok
-  \uses{thm:layerNorm_per_token_has_vjp_mat, thm:transformerMlp_has_vjp_mat, thm:biPathMat_has_vjp, thm:identityMat_has_vjp, thm:vjpMat_comp}
+  \uses{ax:bnIstdBroadcast_diff, ax:geluScalar, def:hasvjpmat, thm:biPathMat_has_vjp,
+      thm:identityMat_has_vjp, thm:layerNorm_per_token_has_vjp_mat,
+      thm:transformerMlp_has_vjp_mat, thm:vjpMat_comp}
   \Assume{} \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]\\
   \Prove{} \(\HasVJPMat\) of
   \(h \mapsto h + \mathrm{MLP}(\mathrm{LN}_2(h))\).
@@ -10577,7 +10596,9 @@ identity arm (Theorems~\ref{thm:biPathMat_has_vjp},
   \label{thm:transformerBlock_has_vjp_mat}
   \lean{Proofs.transformerBlock_has_vjp_mat}
   \leanok
-  \uses{thm:transformerAttnSublayer_has_vjp_mat, thm:transformerMlpSublayer_has_vjp_mat, thm:vjpMat_comp}
+  \uses{ax:bnIstdBroadcast_diff, ax:geluScalar, ax:mhsa_layer_flat_diff, def:hasvjpmat,
+      thm:transformerAttnSublayer_has_vjp_mat, thm:transformerMlpSublayer_has_vjp_mat,
+      thm:vjpMat_comp}
   \Prove{} \(\HasVJPMat\) of one pre-norm encoder block
   \(z = x + \mathrm{MHSA}(\mathrm{LN}_1 x)\),
   \(y = z + \mathrm{MLP}(\mathrm{LN}_2 z)\).
@@ -10597,7 +10618,8 @@ arms (both are \(\mathrm{id} + \text{smooth}\)). \Qed{}
   \label{thm:transformerTower_has_vjp_mat}
   \lean{Proofs.transformerTower_has_vjp_mat}
   \leanok
-  \uses{thm:transformerBlock_has_vjp_mat, thm:identityMat_has_vjp, thm:vjpMat_comp}
+  \uses{ax:bnIstdBroadcast_diff, ax:geluScalar, ax:mhsa_layer_flat_diff, def:hasvjpmat,
+      thm:identityMat_has_vjp, thm:transformerBlock_has_vjp_mat, thm:vjpMat_comp}
   \Prove{} \(\HasVJPMat\) of the \(k\)-block tower, for every
   \(k\) --- ViT-Tiny/Base (\(k = 12\)) and Large (\(k = 24\)) are
   instances.
@@ -10625,7 +10647,9 @@ Induction on \(k\):
   \label{thm:vit_body_has_vjp_mat}
   \lean{Proofs.vit_body_has_vjp_mat}
   \leanok
-  \uses{thm:transformerTower_has_vjp_mat, thm:layerNorm_per_token_has_vjp_mat, thm:vjpMat_comp}
+  \uses{ax:bnIstdBroadcast_diff, ax:geluScalar, ax:mhsa_layer_flat_diff, def:hasvjpmat,
+      thm:layerNorm_per_token_has_vjp_mat, thm:transformerTower_has_vjp_mat,
+      thm:vjpMat_comp}
   \Prove{} the full ViT transformer backbone
   \(\mathrm{finalLN} \circ \mathrm{transformerTower}\) is one
   \(\HasVJPMat\).
@@ -10647,7 +10671,6 @@ network itself. \Qed{}
   \label{thm:vitTiny_has_vjp_correct}
   \lean{Proofs.vitTiny_has_vjp_correct}
   \leanok
-  \uses{ax:patchEmbed_flat_has_vjp, thm:transformerBlock_has_vjp_mat, thm:layerNorm_per_token_has_vjp_mat, thm:dense_has_vjp, thm:vjp_comp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -13463,7 +13486,7 @@ def cycleganGenerator : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Reinforcement learning --- demo: DQN on blackjack}
+\subsection{Reinforcement learning --- demo: DQN on Blackjack}
 \label{sec:bestiary_rl}
 
 Networks that learn from the rewards of their own actions rather than from a
@@ -13736,7 +13759,7 @@ def muZeroGoPredictionValue : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Natural language processing --- demo: TinyGPT}
+\subsection{Natural language processing --- demo: TinyGPT on Shakespeare}
 
 The architectures here all consume a sequence of token IDs and emit
 either a sequence of next-token logits (decoder-only: GPT) or a single
@@ -13855,10 +13878,7 @@ throughout Part~1, and they capture what NLP training \emph{is}:
 \end{itemize}
 
 That's the entire delta. Same Adam optimizer, same VJP machinery, same
-StableHLO-through-XLA pipeline; the same trainer at $8.5$\,M parameters and
-a 4096-token BPE vocabulary runs on the 2\,GB TinyStories corpus
-(\texttt{tinystories}, Appendix~\ref{app:data}). The bestiary entries below
-all reduce to
+StableHLO-through-XLA pipeline. The bestiary entries below all reduce to
 either ``GPT shape'' (decoder-only, causal mask, autoregressive
 sampling) or ``BERT shape'' (encoder-only, bidirectional attention,
 classification head); the architectural differences between them are
@@ -15014,10 +15034,6 @@ physics, and each has a dataset of its own:
   \item \textbf{tiny Shakespeare}, a single 1\,MB character stream, is what
     the TinyGPT char-level transformer (\texttt{tinygpt-shakespeare})
     trains on.
-  \item \textbf{TinyStories}, Eldan \& Li's synthetic short-story corpus at
-    $\sim$2\,GB, is its scaled-up sibling, byte-level-BPE tokenized to a
-    deliberately small 4096-token vocabulary for the
-    $\sim$8.5\,M-parameter decoder-only GPT (\texttt{tinystories}).
   \item \textbf{The M\"uller--Brown density} is the physics dataset, and
     nothing is downloaded: the target is the Boltzmann density
     $\exp(-U/kT)$ on the M\"uller--Brown surface, so
@@ -15069,9 +15085,6 @@ MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
 tiny Shakespeare & TShk & Karpathy, 2015 &
   \href{https://github.com/karpathy/char-rnn}{\nolinkurl{github.com/karpathy/char-rnn}} &
   \texttt{download\_shakespeare.sh}\newline $\to$ \texttt{data/shakespeare/}  \\[2pt]
-TinyStories & TS & Eldan \& Li, 2023 &
-  \href{https://huggingface.co/datasets/roneneldan/TinyStories}{\nolinkurl{huggingface.co/datasets/roneneldan/TinyStories}} &
-  \texttt{download\_tinystories.sh}\newline $\to$ \texttt{data/tinystories/}  \\[2pt]
 M\"uller-Brown density & MB & M\"uller \& Brown, 1979 &
   \texttt{preprocess\_boltzmann.py}\newline (generated, no download) &
   \texttt{data/boltzmann/}  \\[2pt]
@@ -15086,13 +15099,7 @@ GWOSC O3a strain & GWOSC & Abbott et al., 2023 &
 also has a \texttt{preprocess\_*.py} step (e.g.\
 \texttt{preprocess\_shakespeare.py} builds
 \texttt{train.bin}/\texttt{val.bin}/\texttt{vocab.txt}) between download
-and training. For TinyStories,
-\texttt{preprocess\_tinystories.py} trains a byte-level BPE tokenizer on a
-slice of the corpus and emits it in HuggingFace format
-(\texttt{vocab.json}/\texttt{merges.txt}) alongside the flat int32-LE
-token streams (\texttt{train.bin}/\texttt{val.bin}), and the small
-vocabulary keeps the embedding gather and the head matmul cheap and
-the tokenizer auditable. \texttt{preprocess\_visdrone.py} writes three
+and training. \texttt{preprocess\_visdrone.py} writes three
 record formats (single-grid, single-scale anchor, and multi-scale FPN), so
 one set of Lean loaders and one codegen serve every detector head.
 VisDrone's official Google-Drive/Baidu links are large-file-flaky, so

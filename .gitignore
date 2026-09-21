@@ -13,6 +13,7 @@ blueprint/web/
 blueprint/print/
 blueprint/build/
 blueprint/lean_decls
+blueprint/lean_deps
 # The rendered PDF is a build product; CI produces it.
 blueprint/*.pdf
 blueprint/src/*.aux

@@ -40,7 +40,7 @@ TRAIN_CHARS = int(sys.argv[2]) if len(sys.argv) > 2 else 200_000_000
 
 for p in (TRAIN_TXT, VALID_TXT):
     if not os.path.exists(p):
-        sys.exit(f"missing {p} — run download_tinystories.sh first")
+        sys.exit(f"missing {p} — run historical/download_tinystories.sh first")
 
 
 def bpe_train_iter(path, char_budget, chunk=1 << 20):
