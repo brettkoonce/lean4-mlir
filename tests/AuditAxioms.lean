@@ -89,6 +89,7 @@ import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Foundation.DataParallelSync
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
+import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG
 import LeanMlir.Proofs.Codegen.LambTriple
@@ -2045,6 +2046,21 @@ open Proofs
 -- the capstone: every all-reduced parameter gradient IS the single-device node at R·N
 #print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB
 
+-- 4d PIECE 3, THE MBCONV PIECES MOBILENETV2 AND EFFICIENTNET-B0 SHARE
+-- (MBConvSyncTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
+#print axioms Proofs.MBConvSyncTieB.hasVJP3_backward_smul
+#print axioms Proofs.MBConvSyncTieB.depthwiseWeightGradB_smul
+#print axioms Proofs.MBConvSyncTieB.depthwiseStridedWeightGradB_smul
+#print axioms Proofs.MBConvSyncTieB.convStridedXlaWeightGradB_smul
+#print axioms Proofs.MBConvSyncTieB.rowDenseBackFlat_smul
+#print axioms Proofs.MBConvSyncTieB.rowDenseBackFlat_shard
+#print axioms Proofs.MBConvSyncTieB.den_allReduceMeanF_depthwiseWeightGradB_shard
+#print axioms Proofs.MBConvSyncTieB.den_allReduceMeanF_depthwiseStridedWeightGradB_shard
+#print axioms Proofs.MBConvSyncTieB.den_allReduceMeanF_convStridedXlaWeightGradB_shard
+#print axioms Proofs.MBConvSyncTieB.depthwiseWSync_of_scaled
+#print axioms Proofs.MBConvSyncTieB.depthwiseStridedWSync_of_scaled
+#print axioms Proofs.MBConvSyncTieB.convStridedXlaWSync_of_scaled
+
 -- 4d PIECE 3 AT MOBILENETV2: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
 -- (MobileNetV2SyncB.lean + MobileNetV2SyncStepTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
 #print axioms Proofs.StableHLO.den_relu6_shard
@@ -2056,23 +2072,17 @@ open Proofs
 #print axioms Proofs.StableHLO.mnv2HeadGraphSync_shard
 #print axioms Proofs.StableHLO.mobilenetv2FwdGraphSync_full_shard
 #print axioms Proofs.MobileNetV2SyncTieB.relu6MaskB_smul
-#print axioms Proofs.MobileNetV2SyncTieB.hasVJP3_backward_smul
-#print axioms Proofs.MobileNetV2SyncTieB.convStridedXlaWeightGradB_smul
-#print axioms Proofs.MobileNetV2SyncTieB.depthwiseWeightGradB_smul
 #print axioms Proofs.MobileNetV2SyncTieB.depthwiseStridedXlaWeightGradB_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2NoExpCotIn_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2ResidCotIn_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2StridedCotIn_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2HeadCotBlk_smul
-#print axioms Proofs.MobileNetV2SyncTieB.rowDenseBackFlat_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2NoExpSyncCotIn_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2SyncCotInBody_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2StridedSyncCotIn_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2StemSyncCotC_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2HeadSyncCotBlk_shard
-#print axioms Proofs.MobileNetV2SyncTieB.den_allReduceMeanF_convStridedXlaWeightGradB_shard
-#print axioms Proofs.MobileNetV2SyncTieB.den_allReduceMeanF_depthwiseWeightGradB_shard
 #print axioms Proofs.MobileNetV2SyncTieB.den_allReduceMeanF_depthwiseStridedXlaWeightGradB_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB
 
@@ -2096,8 +2106,6 @@ open Proofs
 #print axioms Proofs.EnetSyncTieG.hdCotIn_eq_vjp
 -- ...the single-device chain is homogeneous in its cotangent
 #print axioms Proofs.EnetSyncTieG.gateCotB_smul
-#print axioms Proofs.EnetSyncTieG.rowDenseBackFlat_smul
-#print axioms Proofs.EnetSyncTieG.hasVJP3_backward_smul
 #print axioms Proofs.EnetSyncTieG.tCotDc_smul
 -- ...each replica's sync-BN backward chain is the shard of the single-device one
 #print axioms Proofs.EnetSyncTieG.gateCotB_shard
@@ -2109,10 +2117,6 @@ open Proofs
 #print axioms Proofs.EnetSyncTieG.ssCotIn_scaled
 #print axioms Proofs.EnetSyncTieG.nsCotIn_scaled
 #print axioms Proofs.EnetSyncTieG.hdsCotIn_scaled
--- ...the depthwise, strided-depthwise and XLA-SAME stem collectives
-#print axioms Proofs.EnetSyncTieG.den_allReduceMeanF_depthwiseWeightGradB_shard
-#print axioms Proofs.EnetSyncTieG.den_allReduceMeanF_depthwiseStridedWeightGradB_shard
-#print axioms Proofs.EnetSyncTieG.den_allReduceMeanF_convStridedXlaWeightGradB_shard
 -- the per-block ties and the capstone: every all-reduced parameter gradient IS the node at R·N
 #print axioms Proofs.EnetSyncTieG.tail_syncTiedG
 #print axioms Proofs.EnetSyncTieG.exp_syncTiedG

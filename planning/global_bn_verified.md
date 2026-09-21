@@ -17,11 +17,12 @@ gating the work.
 sync-BN DP render, a passing `<net>-syncbn-check`, and both proof twins (forward:
 `*FwdGraphSync_full_shard`; whole step: `r34_net_syncTiedB`, `mnv2_net_syncTiedB`,
 `efficientnet_net_syncTiedG` — every all-reduced gradient IS the single-device node at batch
-`R·N`). All of it is committed on `main` but ⚠ **NOT PUSHED**: six commits, `2a39842f` (the §1
-BN-group probe) … `cad811ac` (§3.3). Push is the user's call; nothing was pushed this session.
+`R·N`). All of it is committed on `main` but ⚠ **NOT PUSHED**: eight commits, `2a39842f` (the §1
+BN-group probe) … `cad811ac` (§3.3), then the ImageNet-shape probe (`23db65a2`) and the shared
+MBConv module (the commit after it). Push is the user's call; nothing has been pushed.
 Read §2b's ⛔⛔, §3.2's gate table and §3.3's before touching numerics.
 
-**Then, uncommitted as of this write (2026-09-21, later):** the ImageNet-shape probe, §3.3b —
+**Then (2026-09-21, later), `23db65a2`:** the ImageNet-shape probe, §3.3b —
 `imagenet-syncbn-check` runs the artifacts the pairs train from (4×64, bf16) against a 1×256
 single-device step, and passes on all three nets in both precisions. The shared runner gained a
 replica count, shifted shards, a REPEAT column and per-precision bounds.
@@ -36,6 +37,7 @@ replica count, shifted shards, a REPEAT column and per-precision bounds.
 | gate runner (one `Cfg` per net) | `LeanMlir/SyncBnCheck.lean`; entries `tests/Test{Mnv2,Enet}SyncBnCheck.lean` (R34's own: `tests/TestR34SyncBnCheck.lean`) |
 | the ImageNet-shape gate (4×64, bf16 / f32) | `tests/TestImagenetSyncBnCheck.lean` (`imagenet-syncbn-check <net> [f32]`) |
 | twins | `Nets/ResNet/ResNet34Sync{B,StepTieB}.lean`, `Nets/MobileNet/MobileNetV2Sync{B,StepTieB}.lean`, `Nets/EfficientNet/EfficientNetSync{B,StepTieG}.lean` |
+| the MBConv pieces the MNv2 / B0 (and MNv4) step twins share | `Nets/EfficientNet/MBConvSyncTieB.lean` — depthwise / GAP / dense links, the depthwise, strided-depthwise and XLA-stem collectives |
 
 **Run the gates** (2 GPUs, XLA; ~30–45 s each; each prints its column table):
 
@@ -58,10 +60,11 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
 1. ✅ **The bf16 / 4-replica probe** — §3.3b. Passes on R34 `momdp64bf16`, MNv2 `rmsdp64bf16`,
    B0 `rmsdp64bf16` and their f32 peers. Not yet covered: B0's `emarmsdp64dropdobf16` (EMA +
    host-fed drop masks, which the runner cannot feed) and MNv2's `adamdp64bf16`.
-2. **Dedupe the generic lemmas** the MNv2 and B0 step twins each carry, in different namespaces
-   (`hasVJP3_backward_smul`, `depthwiseWeightGradB_smul`, `convStridedXlaWeightGradB_smul`, the
-   `dInB` / `gapInB` / `rowDenseBackFlat` `_smul` / `_shard`), into one shared module beside
-   `ResNet34SyncStepTieB` — before §3.4 adds a third copy.
+2. ✅ **The duplicated lemmas are one module** — `Nets/EfficientNet/MBConvSyncTieB.lean`
+   (`Proofs.MBConvSyncTieB`), imported and opened by both twins; `inv_mul_R` is public in
+   `ResNet34SyncStepTieB`. It also takes B0's symmetric strided-depthwise kit, because MNv4's
+   render emits `depthwiseStridedWeightGradB`; MNv2's XLA-`SAME` strided depthwise stays in its
+   twin. Net −362 lines across the twins (−373 / +11), +253 in the module.
 3. **§3.4 ResNet-50 / MobileNetV4** on §3.3's pattern: the renderer calls `SyncBnSites`; the gate
    is one `SyncBnCheck.Cfg`; the twins follow `MobileNetV2Sync*` (MNv4) / `ResNet34Sync*` (R50,
    bottleneck blocks). Two parallel subagents wrote §3.3's twins from the R34 template in 20–30
@@ -787,14 +790,12 @@ at the f32 nodes, so it covers `efficientnet_adamdp`, `adamdp128`, `efficientnet
 `rmsdp64`, `emarmsdp64` exactly (EMA and the optimizers run after the all-reduced gradient); the
 `*drop*` / `*do*` variants add per-example masks and the `*bf16` ones bf16 conv twins, both
 outside the statement — the same holds for MobileNetV2's and R34's bf16 DP artifacts.
-⚠ **Duplicate generic lemmas** between the two twins (`hasVJP3_backward_smul`,
-`depthwiseWeightGradB_smul`, `convStridedXlaWeightGradB_smul`, the `dInB`/`gapInB`/
-`rowDenseBackFlat` `_smul`/`_shard`), in different namespaces — lift them to one shared module
-before §3.4 adds a third copy.
+✅ The generic lemmas the two twins each carried are one module now,
+`Nets/EfficientNet/MBConvSyncTieB.lean` (NEXT SESSION item 2).
 
 ### 3.3b The ImageNet-shape probe — 4×64, bf16
 
-✅ **LANDED 2026-09-21 (uncommitted as of this write).** `imagenet-syncbn-check <net> [f32]`
+✅ **LANDED 2026-09-21, `23db65a2`.** `imagenet-syncbn-check <net> [f32]`
 (`tests/TestImagenetSyncBnCheck.lean`) runs the shared runner on the DP artifact each book pair
 trained from — R34 `resnet34in_momdp64bf16`, MNv2 `mobilenetv2in_rmsdp64bf16` — and B0's
 `efficientnetin_rmsdp64bf16` (the pair's `emarmsdp64dropdobf16` adds EMA and host-fed masks, the

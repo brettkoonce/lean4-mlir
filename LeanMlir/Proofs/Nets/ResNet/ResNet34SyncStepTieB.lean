@@ -687,7 +687,7 @@ def DenseSync (R : Nat) (hR : 0 < R) (N : Nat) {a c : Nat} (tW tb xN cotN : Stri
       = den (.denseBiasGradB (N := R * N) (.operand cotN COT)) j)
 
 /-- `(1/R)·(R·v) = v` — the collective's mean against the divisor's `R`. -/
-private theorem inv_mul_R (R : Nat) (hR : 0 < R) (v : ℝ) : 1 / (R : ℝ) * ((R : ℝ) * v) = v := by
+theorem inv_mul_R (R : Nat) (hR : 0 < R) (v : ℝ) : 1 / (R : ℝ) * ((R : ℝ) * v) = v := by
   have : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp hR)
   field_simp
 

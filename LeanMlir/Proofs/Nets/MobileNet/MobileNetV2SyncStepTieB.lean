@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
+import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB
 
 /-! # MobileNetV2's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
@@ -22,7 +23,9 @@ side is the existing single-device chain at `N := R·N`, so the spec has not mov
 `ResNet34SyncStepTieB.lean` is the template, and everything net-agnostic is imported from it
 rather than restated: the replica BN link `bnSyncInB` and its shard lemma, the `ConvWSync` /
 `BnSync` / `DenseSync` statements and their `*_of_scaled` closers, the divisor step
-`replicaLossCot_eq`, and the homogeneity of `bnInB` and `cInB`.
+`replicaLossCot_eq`, and the homogeneity of `bnInB` and `cInB`. The inverted-residual pieces it
+shares with EfficientNet-B0 — the depthwise, GAP and dense input-VJPs, the depthwise and
+XLA-`SAME` stem weight collectives — come from `MBConvSyncTieB.lean`.
 
 1. **Sharding** — each replica's backward chain, handed its shard of a global cotangent, computes
    the shard of the global chain. The relu6 mask is pointwise (`relu6MaskB_shard`, by `rfl`); the
@@ -62,6 +65,7 @@ open scoped BigOperators
 open Proofs.EnetTiePoC (reassocB cInB dInB gapInB)
 open Proofs.ResNet34TieB (bnInB unrowB rowB)
 open Proofs.ResNet34SyncTieB
+open Proofs.MBConvSyncTieB
 open Proofs.MobileNetV2TieB
 
 -- ════════════════════════════════════════════════════════════════
@@ -75,28 +79,11 @@ theorem relu6MaskB_smul (n : Nat) (pre dy : Vec n) (s : ℝ) :
   unfold relu6MaskB
   split_ifs <;> simp
 
-theorem dInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (dy : Vec (N * (c * h * w))) (s : ℝ) :
-    dInB N (h := h) (w := w) W b (fun i => s * dy i)
-      = fun i => s * dInB N (h := h) (w := w) W b dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
-
 theorem dStridedXlaInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
     (b : Vec c) (dy : Vec (N * (c * h * w))) (s : ℝ) :
     dStridedXlaInB N (h := h) (w := w) W b (fun i => s * dy i)
       = fun i => s * dStridedXlaInB N (h := h) (w := w) W b dy i :=
   batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
-
-theorem gapInB_smul (N c h w : Nat) (dy : Vec (N * c)) (s : ℝ) :
-    gapInB N c h w (fun i => s * dy i) = fun i => s * gapInB N c h w dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
-
-/-- The classifier's row-wise input-VJP `dX = W·dy` is linear in `dy`. -/
-theorem rowDenseBackFlat_smul (N a c : Nat) (W : Mat a c) (dy : Vec (N * c)) (s : ℝ) :
-    rowDenseBackFlat N a c W (fun i => s * dy i) = fun i => s * rowDenseBackFlat N a c W dy i := by
-  funext idx
-  simp only [rowDenseBackFlat, Mat.flatten, Mat.unflatten, Mat.mulVec, Finset.mul_sum]
-  exact Finset.sum_congr rfl (fun _ _ => by ring)
 
 /-! The block cotangents, each one line from the previous link's. -/
 
@@ -231,42 +218,6 @@ theorem mnv2HeadCotBlk_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic
 
 /-! The gradient nodes MobileNetV2 adds to the ResNet-34 kit. -/
 
-/-- A `HasVJP3` backward is linear in its cotangent — `HasVJP.backward_smul`'s three-axis peer,
-    read off `HasVJP3.correct`. The stride-1 depthwise weight gradient is stated through one. -/
-theorem hasVJP3_backward_smul {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
-    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂} (hf : HasVJP3 f) (x : Tensor3 c₁ h₁ w₁) (a : ℝ)
-    (dy : Tensor3 c₂ h₂ w₂) :
-    hf.backward x (fun co ho wo => a * dy co ho wo)
-      = fun ci hi wi => a * hf.backward x dy ci hi wi := by
-  funext ci hi wi
-  rw [hf.correct, hf.correct, Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun co _ => ?_)
-  rw [Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun ho _ => ?_)
-  rw [Finset.mul_sum]
-  exact Finset.sum_congr rfl (fun wo _ => by ring)
-
-theorem convStridedXlaWeightGradB_smul {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
-    (cot : Vec (N * (oc * h * w))) (s : ℝ) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
-      = s * den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [den, batchSlice_smul, Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun n _ => ?_)
-  rw [HasVJP.backward_smul]
-
-theorem depthwiseWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
-    (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w)))
-    (s : ℝ) (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
-      = s * den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [den, Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun n _ => ?_)
-  have ht : Tensor3.unflatten (batchSlice N (c * h * w) (fun i => s * cot i) n)
-      = fun ci hi wi => s * Tensor3.unflatten (batchSlice N (c * h * w) cot n) ci hi wi := rfl
-  rw [ht, hasVJP3_backward_smul]
-  rfl
-
 theorem depthwiseStridedXlaWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
     (cot : Vec (N * (c * h * w))) (s : ℝ) (idx : Fin (c * kH * kW)) :
@@ -284,29 +235,11 @@ theorem relu6MaskB_shard {R N n : Nat} (PRE DY : Vec ((R * N) * n)) (r : Fin R) 
     relu6MaskB (N * n) (batchShard R N n PRE r) (batchShard R N n DY r)
       = batchShard R N n (relu6MaskB ((R * N) * n) PRE DY) r := rfl
 
-theorem dInB_shard {R N : Nat} {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (DY : Vec ((R * N) * (c * h * w))) (r : Fin R) :
-    dInB N (h := h) (w := w) W b (batchShard R N (c * h * w) DY r)
-      = batchShard R N (c * h * w) (dInB (R * N) (h := h) (w := w) W b DY) r :=
-  (batchShard_batchMap _ DY r).symm
-
 theorem dStridedXlaInB_shard {R N : Nat} {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
     (b : Vec c) (DY : Vec ((R * N) * (c * h * w))) (r : Fin R) :
     dStridedXlaInB N (h := h) (w := w) W b (batchShard R N (c * h * w) DY r)
       = batchShard R N (c * (2 * h) * (2 * w)) (dStridedXlaInB (R * N) (h := h) (w := w) W b DY) r :=
   (batchShard_batchMap _ DY r).symm
-
-theorem gapInB_shard {R N : Nat} (c h w : Nat) (DY : Vec ((R * N) * c)) (r : Fin R) :
-    gapInB N c h w (batchShard R N c DY r) = batchShard R N (c * h * w) (gapInB (R * N) c h w DY) r :=
-  (batchShard_batchMap _ DY r).symm
-
-/-- The classifier's row-wise input-VJP is `batchMap` of `W·`, so it shards like every per-example
-    lift. -/
-theorem rowDenseBackFlat_shard {R N : Nat} (a c : Nat) (W : Mat a c) (G : Vec ((R * N) * c))
-    (r : Fin R) :
-    rowDenseBackFlat N a c W (batchShard R N c G r)
-      = batchShard R N a (rowDenseBackFlat (R * N) a c W G) r :=
-  (batchShard_batchMap (Mat.mulVec W) G r).symm
 
 theorem mnv2HeadCotHr_shard {R N : Nat} (h w : Nat) {oc nCls : Nat} (Wd : Mat oc nCls)
     (G : Vec ((R * N) * nCls)) (r : Fin R) :
@@ -698,43 +631,6 @@ end HeadShard
 -- § 4. The parameter collectives MobileNetV2 adds
 -- ════════════════════════════════════════════════════════════════
 
-/-- **P4 at the XLA-`SAME` STRIDED conv weight** (the stem) — `den_allReduceMeanF_convWeightGradB_shard`'s
-    peer. Only the certificate differs from the symmetric strided one; the batch split is the same. -/
-theorem den_allReduceMeanF_convStridedXlaWeightGradB_shard {N ic oc h w kH kW : Nat} (R : Nat)
-    (hR : 0 < R) (t xN cotN : String) (ds : List Nat) (b : Vec oc) (W : Kernel4 oc ic kH kW)
-    (X : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (DY : Vec ((R * N) * (oc * h * w)))
-    (dy : Fin R → SHlo (N * (oc * h * w)))
-    (hdy : ∀ r, den (dy r) = batchShard R N (oc * h * w) DY r) (idx : Fin (oc * ic * kH * kW)) :
-    den (.allReduceMeanF R hR t ds
-          (fun r => .convStridedXlaWeightGradB xN b (batchShard R N (ic * (2 * h) * (2 * w)) X r) W
-            (dy r))) idx
-      = (1 / (R : ℝ)) * den (.convStridedXlaWeightGradB xN b X W (.operand cotN DY)) idx := by
-  simp only [den_allReduceMeanF]
-  congr 1
-  simp only [den, hdy]
-  rw [sum_finProdFinEquiv]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro n _
-  rw [batchSlice_batchShard, batchSlice_batchShard]
-
-/-- **P4 at the depthwise weight** — each replica's `Σ_n` over its own examples, averaged, is `1/R`
-    of the global batch's `Σ_n`. -/
-theorem den_allReduceMeanF_depthwiseWeightGradB_shard {N c h w kH kW : Nat} (R : Nat)
-    (hR : 0 < R) (t xN cotN : String) (ds : List Nat) (b : Vec c) (W : DepthwiseKernel c kH kW)
-    (X : Vec ((R * N) * (c * h * w))) (DY : Vec ((R * N) * (c * h * w)))
-    (dy : Fin R → SHlo (N * (c * h * w)))
-    (hdy : ∀ r, den (dy r) = batchShard R N (c * h * w) DY r) (idx : Fin (c * kH * kW)) :
-    den (.allReduceMeanF R hR t ds
-          (fun r => .depthwiseWeightGradB xN b (batchShard R N (c * h * w) X r) W (dy r))) idx
-      = (1 / (R : ℝ)) * den (.depthwiseWeightGradB xN b X W (.operand cotN DY)) idx := by
-  simp only [den_allReduceMeanF]
-  congr 1
-  simp only [den, hdy]
-  rw [sum_finProdFinEquiv]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro n _
-  rw [batchSlice_batchShard, batchSlice_batchShard]
-
 /-- **P4 at the XLA-`SAME` strided depthwise weight** (`b2`, `b4`, `b7`, `b14`). -/
 theorem den_allReduceMeanF_depthwiseStridedXlaWeightGradB_shard {N c h w kH kW : Nat} (R : Nat)
     (hR : 0 < R) (t xN cotN : String) (ds : List Nat) (b : Vec c) (W : DepthwiseKernel c kH kW)
@@ -757,29 +653,6 @@ theorem den_allReduceMeanF_depthwiseStridedXlaWeightGradB_shard {N c h w kH kW :
 -- § 5. Per-parameter DP ties for the new kinds
 -- ════════════════════════════════════════════════════════════════
 
-/-- The XLA-`SAME` strided conv weight, DP-tied. Tags are the render's: the collective is named
-    for the parameter, over its `[oc, ic, kH, kW]` shape. -/
-def ConvStridedXlaWSync (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat}
-    (t xN cotN : String) (b : Vec oc) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (W : Kernel4 oc ic kH kW) (cots : Fin R → Vec (N * (oc * h * w)))
-    (COT : Vec ((R * N) * (oc * h * w))) : Prop :=
-  ∀ idx : Fin (oc * ic * kH * kW),
-    den (.allReduceMeanF R hR t [oc, ic, kH, kW] (fun r =>
-          .convStridedXlaWeightGradB xN b (batchShard R N (ic * (2 * h) * (2 * w)) X r) W
-            (.operand cotN (cots r)))) idx
-      = den (.convStridedXlaWeightGradB xN b X W (.operand cotN COT)) idx
-
-/-- **A depthwise weight, DP-tied** — the collective over the `[c, 1, kH, kW]` kernel the render
-    all-reduces, against the single-device node at the global batch. -/
-def DepthwiseWSync (R : Nat) (hR : 0 < R) (N h w : Nat) {c kH kW : Nat} (t xN cotN : String)
-    (b : Vec c) (X : Vec ((R * N) * (c * h * w))) (W : DepthwiseKernel c kH kW)
-    (cots : Fin R → Vec (N * (c * h * w))) (COT : Vec ((R * N) * (c * h * w))) : Prop :=
-  ∀ idx : Fin (c * kH * kW),
-    den (.allReduceMeanF R hR t [c, 1, kH, kW] (fun r =>
-          .depthwiseWeightGradB xN b (batchShard R N (c * h * w) X r) W
-            (.operand cotN (cots r)))) idx
-      = den (.depthwiseWeightGradB xN b X W (.operand cotN COT)) idx
-
 /-- The XLA-`SAME` strided depthwise weight, DP-tied. -/
 def DepthwiseStridedXlaWSync (R : Nat) (hR : 0 < R) (N h w : Nat) {c kH kW : Nat}
     (t xN cotN : String) (b : Vec c) (X : Vec ((R * N) * (c * (2 * h) * (2 * w))))
@@ -790,33 +663,6 @@ def DepthwiseStridedXlaWSync (R : Nat) (hR : 0 < R) (N h w : Nat) {c kH kW : Nat
           .depthwiseStridedXlaWeightGradB xN b (batchShard R N (c * (2 * h) * (2 * w)) X r) W
             (.operand cotN (cots r)))) idx
       = den (.depthwiseStridedXlaWeightGradB xN b X W (.operand cotN COT)) idx
-
-/-- `(1/R)·(R·v) = v` — the collective's mean against the divisor's `R`. -/
-private theorem inv_mul_R (R : Nat) (hR : 0 < R) (v : ℝ) : 1 / (R : ℝ) * ((R : ℝ) * v) = v := by
-  have : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp hR)
-  field_simp
-
-theorem convStridedXlaWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat}
-    (t xN cotN : String) (b : Vec oc) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (W : Kernel4 oc ic kH kW) (cots : Fin R → Vec (N * (oc * h * w)))
-    (COT : Vec ((R * N) * (oc * h * w)))
-    (hc : ∀ r, cots r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * COT i) r) :
-    ConvStridedXlaWSync R hR N h w t xN cotN b X W cots COT := by
-  intro idx
-  rw [den_allReduceMeanF_convStridedXlaWeightGradB_shard R hR t xN cotN _ b W X
-      (fun i => (R : ℝ) * COT i) (fun r => .operand cotN (cots r)) (fun r => hc r) idx,
-    convStridedXlaWeightGradB_smul, inv_mul_R R hR]
-
-theorem depthwiseWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c kH kW : Nat}
-    (t xN cotN : String) (b : Vec c) (X : Vec ((R * N) * (c * h * w)))
-    (W : DepthwiseKernel c kH kW) (cots : Fin R → Vec (N * (c * h * w)))
-    (COT : Vec ((R * N) * (c * h * w)))
-    (hc : ∀ r, cots r = batchShard R N (c * h * w) (fun i => (R : ℝ) * COT i) r) :
-    DepthwiseWSync R hR N h w t xN cotN b X W cots COT := by
-  intro idx
-  rw [den_allReduceMeanF_depthwiseWeightGradB_shard R hR t xN cotN _ b W X
-      (fun i => (R : ℝ) * COT i) (fun r => .operand cotN (cots r)) (fun r => hc r) idx,
-    depthwiseWeightGradB_smul, inv_mul_R R hR]
 
 theorem depthwiseStridedXlaWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c kH kW : Nat}
     (t xN cotN : String) (b : Vec c) (X : Vec ((R * N) * (c * (2 * h) * (2 * w))))

@@ -156,6 +156,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.DataParallelSync,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB,
+             `LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB,
