@@ -14,6 +14,8 @@ this scale its job is to validate the framework's logic end to end, and it is
 the reference the verified path is measured against. Phase-3 verified-IREE
 codegen led to phase 4 --- PJRT, which is the verified path itself. Where a
 section has both, it reports both.}
+% The one marker every BatchNorm pair carries until its sync-BN re-run lands.
+\newcommand{\globalbntodo}{\medskip\noindent\textbf{[TODO: run with global BN.]}}
 
 % ─── Re-run status of ImageNet result tables ──────────────────────────────────
 % Three changes landed 2026-08-04..08-14 that make older ImageNet numbers
@@ -5709,6 +5711,8 @@ and its BatchNorm normalizes over each replica's $64$ where the reference's
 bounds the two together. \S\ref{sec:mnv2_phase4} is the same comparison on
 one box, with the BatchNorm group left as the only asymmetry.
 
+\globalbntodo
+
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The middle of the schedule is noisy on both paths --- at peak
 learning rate SGD moves top-1 by several points between consecutive
@@ -5959,6 +5963,8 @@ The A3 column trains at $160$ and evaluates at $224$ while 2018 does both at
 $224$, so the recipe delta confounds resolution with recipe, by A3's own
 design. And the A3 pair's $-0.28$ sits on an eightfold BatchNorm-group
 difference that nothing here isolates.
+
+\globalbntodo
 
 \medskip\noindent\textbf{The A3 curves meet; they do not travel together.}
 The verified path runs ahead through most of the schedule, by as much as
@@ -7095,15 +7101,13 @@ globally, so it normalizes over $256$. The ResNet-34 pair of
 box difference besides, landed $0.10$ apart at convergence, inside the
 floor; the $+0.01$ here is smaller still. So the claim is that the two paths agree
 to within the BatchNorm-group effect --- not that the path has been shown
-neutral. Separating those would take a verified render that all-reduces
-the batch statistics, which no committed artifact does, and which is not a
-patch but a new AST node, a new specification and a re-proof of the tie
-chain: the only node in the graph language that sees across replicas is
-the gradient collective, and every BatchNorm node consumes a single
-expression. Every BatchNorm net in this book carries the same asymmetry
-for the same reason.
+neutral. Separating those takes a verified render that all-reduces the
+batch statistics, and when this pair trained none did: the only node in
+the graph language that saw across replicas was the gradient collective,
+and every BatchNorm node consumed a single expression. Every BatchNorm pair
+in this book was trained under that asymmetry.
 
-\medskip\noindent\textbf{[TODO: global BN.]}
+\globalbntodo
 
 \medskip\noindent\textbf{The curves converge; they do not merely end together.}
 The verified path runs ahead through warmup, is level by epoch~20, and from
@@ -7998,12 +8002,16 @@ composed in \texttt{seBlockFull\_has\_vjp}.
 \section{ImageNet recipe}
 \label{sec:enet_imagenet}
 
-\imagenetphasenote
-
 As with ResNet-34 (Chapter~\ref{chap:residual}) and MobileNet-V2,
 the B0 backbone scales to full 1000-class ImageNet unchanged. The
 MBConv stack stays put, the head widens to 1000, and the schedule grows.
-The spec mirrors \texttt{jax/MainEfficientNetImagenet.lean}:
+As there, the recipe runs on both paths --- the reference first, then the
+verified path, then the two side by side.
+
+\prosesection{The reference (JAX)}
+
+The reference trainer is \texttt{jax/MainEfficientNetImagenet.lean}, and
+its spec and recipe are:
 
 \begin{verbatim}
 -- Same MBConv (SE + Swish) backbone, 1000 classes instead of 10.
@@ -8083,7 +8091,7 @@ $0.1$ in the loss, and validation center-crops. On top of that the run
 turns on \textbf{AutoAugment}, the full ImageNet policy including its
 geometric operations, which is the learned augmentation B0's recipe calls
 for. The heavier pack (Mixup, CutMix, RandAugment, Random Erasing) is
-wired into the phase-2 Lean$\to$JAX trainer, emitted into the generated
+wired into the reference trainer, emitted into the generated
 \texttt{tf.data} pipeline with each knob gated on a config flag, and left
 off here because the 2019 recipe reaches for AutoAugment instead.
 
@@ -8188,14 +8196,13 @@ flattening past
 epoch $\sim$300 is the exponential schedule running out of learning rate
 ($0.016 \to 2.0\times10^{-4}$), not saturation of the architecture.
 
-\subsection*{Phase 4: the verified trainer}
+\prosesection{The verified path (PJRT)}
 \label{sec:enet_phase4}
 
-Everything above this point is the phase-2 Lean$\to$JAX trainer. The
-phase-4 peer, which trains the same network through the proof-rendered
-StableHLO that \S\ref{sec:enet_runit} ran at Imagenette scale, exists and
-builds. It is \texttt{apps/imagenette/MainEfficientNetImagenet.lean},
-built as \texttt{lake build efficientnet-imagenet-verified}:
+The verified trainer trains the same network through the proof-rendered
+StableHLO that \S\ref{sec:enet_runit} ran at Imagenette scale. It is
+\texttt{apps/imagenette/MainEfficientNetImagenet.lean}, built as
+\texttt{lake build efficientnet-imagenet-verified}:
 
 \begin{verbatim}
 -- Same MBConv + SE backbone, 1000 classes instead of 10.
@@ -8208,7 +8215,7 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
   layers     := [ ... the Imagenette stack, 1000-class head ... ]
 
 -- 350 epochs at 64 PER DEVICE; four replicas give the global 256.
--- 350 because that is the schedule the phase-2 number above was
+-- 350 because that is the schedule the reference number above was
 -- measured on.
 def efficientnetImagenetConfig : VerifiedConfig where
   epochs    := 350
@@ -8223,7 +8230,7 @@ def main (argv : List String) : IO Unit :=
 \texttt{verified\_mlir/efficientnetin\_<variant>\_train\_step.mlir}, the
 rendered graph, and \texttt{shimScript} names this net's own augmentation
 shim, which matters more here than it does for MobileNetV2 because
-EfficientNet's phase-2 config turns on the full AutoAugment policy and
+EfficientNet's reference config turns on the full AutoAugment policy and
 streaming another net's shim would drop it. The head is the only
 parameter shape that moves, from $1280 \times 10$ to $1280 \times 1000$,
 which takes the count from 4,020,358 to \textbf{5,288,548}. That second
@@ -8235,7 +8242,7 @@ RMSProp $\rho\,0.9$ / $\mu\,0.9$ / $\varepsilon\,10^{-3}$, lr $0.256$ at batch
 $4096$ (so $0.016$ at $256$), weight decay $10^{-5}$, exponential decay
 $\times 0.97$ every $2.4$ epochs after a five-epoch warmup, dropout $0.2$,
 drop-connect $0.2$, AutoAugment, label smoothing $0.1$, EMA $0.9999$, BN momentum
-$0.99$, 350 epochs. All of it is carried, in both phases, including the two
+$0.99$, 350 epochs. All of it is carried on both paths, including the two
 places the TensorFlow original differs from a naive port: $\varepsilon$ goes
 \emph{inside} the square root ($g/\sqrt{s+\varepsilon}$, not
 $g/(\sqrt{s}+\varepsilon)$), and the mean-square accumulator starts at $1.0$
@@ -8245,17 +8252,18 @@ weights.
 
 \medskip\noindent\textbf{One difference is known and open: batch-norm
 $\varepsilon$ is $10^{-5}$ here against the TF reference's $10^{-3}$.}
-\texttt{\_bn(..., eps=1e-5)} in the emitted phase-2 code, and $147$ splat
-constants of \texttt{1.0e-5} in the phase-4 render --- so the two phases agree
+\texttt{\_bn(..., eps=1e-5)} in the reference's emitted code, and $147$ splat
+constants of \texttt{1.0e-5} in the verified render --- so the two paths agree
 with each other and both differ from the paper. It is unquantified: nobody has
-run the $10^{-3}$ arm. Nor is there a deficit for it to explain: phase 2 scores
+run the $10^{-3}$ arm. Nor is there a deficit for it to explain: the reference scores
 $77.15\%$ / $93.30\%$ against the paper's $77.1$ / $93.3$. The difference stands
 and remains unquantified; what it does not have is a symptom.
 
-\medskip\noindent\textbf{The activation agrees on both sides.} Phase 4 is swish
-throughout --- $194$ \texttt{stablehlo.logistic} and not one
-\texttt{stablehlo.maximum} --- and phase 2 sets \texttt{convBnAct} to swish on
-the stem and the $1\times1$ head. The two phases describe the same network.
+\medskip\noindent\textbf{The activation agrees on both sides.} The verified
+render is swish throughout --- $194$ \texttt{stablehlo.logistic} and not one
+\texttt{stablehlo.maximum} --- and the reference sets \texttt{convBnAct} to
+swish on the stem and the $1\times1$ head. The two paths describe the same
+network.
 
 \prosesection{The two paths, side by side}
 
@@ -8311,9 +8319,9 @@ the trajectories differ, it can. This section does not claim to know why.
 \medskip\noindent\textbf{The suspect is the BatchNorm group, and it is
 unmeasured.} As in \S\ref{sec:mnv2_phase4}, precision is held equal, so the
 one numerical asymmetry above the rule is the BatchNorm group: each
-replica's $64$ against the reference's global $256$, for the structural
-reason given there --- no committed render can all-reduce the batch
-statistics. The two pairs that carry the same fourfold difference landed
+replica's $64$ against the reference's global $256$, for the reason given
+there --- the render this pair trained on normalizes each replica's shard
+on its own. The two pairs that carry the same fourfold difference landed
 $0.10$ and $0.01$ apart, and MobileNetV2 has as much BatchNorm as this net
 ($52$ layers to $49$), so the count of normalization layers does not by
 itself explain a $0.3$. What this recipe adds is that evaluation scores an
@@ -8325,7 +8333,7 @@ difference is variance rather than bias --- the stochastic-depth and
 dropout masks are host-drawn on one side and JAX-PRNG on the other --- and
 does not survive a fifty-epoch average.
 
-\medskip\noindent\textbf{[TODO: global BN.]}
+\globalbntodo
 
 \medskip\noindent\textbf{The curves track; the gap narrows and then holds.}
 The verified path leads through the first fifty epochs on average ($+0.17$),
@@ -9109,14 +9117,17 @@ $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 
 \label{sec:convnext_imagenet}
 
-\imagenetphasenote
-
 ConvNeXt's architecture reached this book through the Imagenette
-example earlier in this chapter. The phase-2 port wires the two
-ConvNeXt-specific layers (\texttt{.convNextStage},
-\texttt{.convNextDownsample}) into the JAX codegen. Because that path
-differentiates with \texttt{jax.value\_and\_grad}, only the forward
-had to be written, and the backward comes for free. The spec mirrors
+example earlier in this chapter, and the recipe runs on both paths ---
+the reference first, then the verified path, then the two side by side.
+
+\prosesection{The reference (JAX)}
+
+The reference port wires the two ConvNeXt-specific layers
+(\texttt{.convNextStage}, \texttt{.convNextDownsample}) into the JAX
+codegen. Because that path differentiates with
+\texttt{jax.value\_and\_grad}, only the forward had to be written, and
+the backward comes for free. The spec mirrors
 \texttt{jax/MainConvNeXtImagenet.lean}:
 
 \begin{verbatim}
@@ -9275,13 +9286,11 @@ scored over all $50{,}000$ validation images. Neither curve turns over:
 both rise through the schedule and flatten across the final $\sim$40
 epochs, where the cosine has annealed the learning rate to zero.
 
-\subsection*{Phase 4: the verified trainer}
+\prosesection{The verified path (PJRT)}
 \label{sec:convnext_phase4}
 
-Everything above this point is the phase-2 Lean$\to$JAX trainer. The
-phase-4 peer, which trains the same network through the proof-rendered
-StableHLO that \S\ref{sec:convnext_runit} ran at Imagenette scale,
-exists and builds. It is
+The verified trainer trains the same network through the proof-rendered
+StableHLO that \S\ref{sec:convnext_runit} ran at Imagenette scale. It is
 \texttt{apps/imagenette/MainConvNeXtImagenet.lean}, built as
 \texttt{lake build convnext-imagenet-verified}:
 
@@ -9295,11 +9304,12 @@ def convnextImagenetVerified : VerifiedNetSpec where
   shimScript := "generated_convnext_tiny_imagenet_shim.py"
   layers     := [ ... the Imagenette stack, 1000-class head ... ]
 
--- 300 epochs, because that is the schedule the phase-2 number
--- above was measured on. Batch is 32 PER DEVICE.
+-- 300 epochs, because that is the schedule the reference number
+-- above was measured on. Batch is 64 PER DEVICE, the reference's
+-- global 256 over four replicas.
 def convnextImagenetConfig : VerifiedConfig where
   epochs    := 300
-  batchSize := 32
+  batchSize := 64
 \end{verbatim}
 
 \noindent The head is the only parameter shape that moves, from
@@ -9331,9 +9341,9 @@ the other three, so there is no single graph carrying the whole
 regularizer stack. Mixup and CutMix never enter the graph at all,
 because they are data-side and ride the shim.
 
-\medskip\noindent\textbf{What it has not done is run.} No phase-4
-ImageNet result exists for this network, which is why every accuracy
-above comes from phase 2. What is measured is the throughput, and the
+\medskip\noindent\textbf{What it has not done is run.} No verified
+ImageNet result exists for this network yet, which is why every accuracy
+above comes from the reference. What is measured is the throughput, and the
 schedule follows from it:
 
 \begin{center}
