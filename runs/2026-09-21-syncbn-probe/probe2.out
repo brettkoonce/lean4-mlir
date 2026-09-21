@@ -1,0 +1,8 @@
+  ▶ r50a3x128/bf16/synth (variant lambaccdp4x128wxclipbcebf16, bs 128, workers 8) ...
+    → 232 ms/step (min 229, wait 3 ms, 2500 steps/ep, 184s)
+  ▶ r50a3x128/bf16/fed (variant lambaccdp4x128wxclipbcebf16, bs 128, workers 8) ...
+    → 285 ms/step (min 251, wait 34 ms, 2500 steps/ep, 350s)
+ALL DONE -> runs/2026-09-21-syncbn-probe/probe2.tsv
+net        variant                      prec  arm    bs   workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+r50a3x128  lambaccdp4x128wxclipbcebf16  bf16  synth  128  8        232     229     233     231      3        2500      184        
+r50a3x128  lambaccdp4x128wxclipbcebf16  bf16  fed    128  8        285     251     305     404      34       2500      350        

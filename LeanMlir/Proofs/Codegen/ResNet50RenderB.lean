@@ -1499,6 +1499,16 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true) (bf16 := true))
+-- ⭐ A3 at the reference's OWN shape: 4 micro-steps of 4 × 128, not 8 of 4 × 64. Under sync-BN the
+-- BN group is `R × micro` per micro-step, so the render above normalises over 256 where the JAX
+-- A3 reference (`4 × 512`, 128 per GPU under GSPMD) normalises over 512. This one matches both
+-- the group and the reference's k = 4; the effective batch stays 2048. Its driver cap is
+-- `LEAN_MLIR_G2_STEPS=2500` (2,502 micro-batches/epoch at 512, cut to a multiple of 4), which
+-- keeps the cosine at 100 × 2500 / 4 = 62,500 updates, the 8×64 run's own count.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp4x128wxclipbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in160" (bce := true) (q := 5)
+    (wdExclude := true) (gradClip := true) (bf16 := true))
 -- Its single-device peer, for the reason the `wx` pair has one: `r50-accum-tie` and
 -- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only clip would be
 -- ungateable — and the clip is exactly the axis worth gating, because the ONE thing that
@@ -1919,6 +1929,8 @@ end Proofs.StableHLO
          true true true "0.01" == "lambacc8x64wxclipbcewd001"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
          true true true "" true == "lambaccdp8x64wxclipbcebf16"
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "" true == "lambaccdp4x128wxclipbcebf16"
 #guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
          true true true "" true == "lambacc8x64wxclipbcebf16"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)

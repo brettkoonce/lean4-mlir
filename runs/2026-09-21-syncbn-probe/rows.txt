@@ -1,0 +1,4 @@
+r34|resnet34-imagenet-verified|momdp64|momdp64bf16|64|SHIM_WORKERS=4
+r50|resnet50-imagenet-verified|momdp64|momdp64bf16|64|SHIM_WORKERS=8 LEAN_MLIR_RECIPE=2018
+r50a3|resnet50-imagenet-verified|lambaccdp8x64wxclipbce|lambaccdp8x64wxclipbcebf16|64|SHIM_WORKERS=8 LEAN_MLIR_RES=160 LEAN_MLIR_G2_STEPS=5000
+r50a3x128|resnet50-imagenet-verified|none|lambaccdp4x128wxclipbcebf16|128|SHIM_WORKERS=8 LEAN_MLIR_RES=160 LEAN_MLIR_G2_STEPS=2500

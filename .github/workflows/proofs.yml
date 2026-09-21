@@ -436,6 +436,7 @@ jobs:
               verified_mlir/resnet50in160_lambaccdp8x64wxclipbce_train_step.mlir \
               verified_mlir/resnet50in160_lambacc8x64wxclipbce_train_step.mlir \
               verified_mlir/resnet50in160_lambaccdp8x64wxclipbcebf16_train_step.mlir \
+              verified_mlir/resnet50in160_lambaccdp4x128wxclipbcebf16_train_step.mlir \
               verified_mlir/resnet50in160_lambacc8x64wxclipbcebf16_train_step.mlir \
               verified_mlir/resnet50in_mom256_train_step.mlir \
               verified_mlir/resnet50in_momdp64_train_step.mlir \

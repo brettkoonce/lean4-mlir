@@ -219,6 +219,7 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- must not start "ema", must not contain "rms", and must not disturb the `k` parse, which
     -- finds "acc"/"accdp" and reads the digits up to the "x".
   , ("lambaccdp8x64wxclipbcebf16", false, false, false)
+  , ("lambaccdp4x128wxclipbcebf16", false, false, false)
   , ("lambacc8x64wxclipbcebf16", false, false, false)
   , ("lambaccdp8x64wxclipbcewd001bf16", false, false, false)
   , ("lambacc8x64wxclipbcewd001bf16", false, false, false)
@@ -326,7 +327,7 @@ private def accumSpellings : List String :=
    -- `bf16` is the outermost marker and must not reach the `k` parse. ⚠ `momdp64bf16` is
    -- deliberately NOT here — it is the other direction of the partition, a bf16 render with no
    -- accumulation, and listing it would make this check pass for the wrong reason.
-   "lambaccdp8x64wxclipbcebf16", "lambacc8x64wxclipbcebf16",
+   "lambaccdp8x64wxclipbcebf16", "lambacc8x64wxclipbcebf16", "lambaccdp4x128wxclipbcebf16",
    "lambaccdp8x64wxclipbcewd001bf16", "lambacc8x64wxclipbcewd001bf16",
    -- ⭐⭐ the FIVE-region peers (2026-08-27): accumulation composed with the EMA shadow, which is
    -- RSB-A2/A1's real recipe and was unspellable until the fifth region landed.
@@ -540,6 +541,9 @@ private def accumSpellings : List String :=
 #guard accK "lambaccdp8x64wxclipbcewd001bf16" == 8
 #guard accK "lambacc8x64wxclipbcewd001bf16" == 8
 #guard accK "lambaccdp8x64wxclipbcebf16" == 8
+-- A3 at the reference's k = 4 (2026-09-21): a three-digit batch after the `x` must not reach `k`.
+#guard accK "lambaccdp4x128wxclipbcebf16" == 4
+#guard nRegions "lambaccdp4x128wxclipbcebf16" == 4
 #guard nRegions "lambaccdp8x64wxclipbcewd001bf16" == 4
 -- ⚠ and the other direction: bf16 alone must not invent the fourth region.
 #guard nRegions "momdp64bf16" == 3

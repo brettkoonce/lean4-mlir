@@ -962,25 +962,37 @@ Gates at the end of the session: `lake build Certs` 4,031 jobs, `lake build`, `l
 ### 3.5 Re-running the pairs
 
 ▶ **The queue.** Each job trains the committed DP artifact, which is sync-BN since §3.2–3.4; the
-verified side only. Wall-clocks are the per-replica renders' measured ones. Sync-BN adds three
-small collectives per BN layer: +2–4 % (R34), +5–10 % (MNv2), +3–7 % (B0) by §2e's costing,
-unmeasured. The user's ceiling for a sanctioned run is ~40 h, and anything longer is their call
-explicitly (run it through `scripts/supervise.sh`).
+verified side only. ResNet goes first (user, 2026-09-21: R34 + R50, split across both boxes).
+Sync-BN's cost is MEASURED for the ResNet legs (`runs/2026-09-21-syncbn-probe/RESULTS.md`,
+bf16 medians on ares): none on R34 (139 ms/step against 142 / 154 per-replica), +3 % on R50 2018
+(228 / 222), +6–10 % on A3 8×64 (153 / 144 / 139); MNv2 / B0 are still §2e's costing. The
+user's ceiling for a sanctioned run is ~40 h, and anything longer is their call explicitly (run
+it through `scripts/supervise.sh`). ⚠ ares carries the box-wide stall
+(`runs/2026-09-14-invoke-stall/`); its medians are compute, its wall-clock is not.
 
 | order | net | job | variant | verified side | what it retires |
 |---|---|---|---|---|---|
 | 1 | ResNet-34 | `scripts/jobs/r34-default-bf16-4gpu.conf` | `momdp64bf16` | ~22 h | `content.tex:5671` `BN statistic group` row |
 | 2 | MobileNetV2 | `scripts/jobs/mnv2-default-4gpu.conf` | `rmsdp64bf16` | ~51 h | `:7059` row + §6's `[TODO: global BN.]` |
 | 3 | EfficientNet-B0 | `scripts/jobs/enet-default-4gpu.conf` | `emarmsdp64dropdobf16` | ~73 h | `:8266` row |
-| — | ResNet-50 | `r50-a3-wxclip-bf16-4gpu.conf` / `r50-2018-bf16-4gpu.conf` | `lambaccdp8x64wxclipbcebf16` / `momdp64bf16` | not costed here | `:5935`, `:6089` `BN group` rows (A3's group is now 256 against the reference's 512) |
+| 1 | ResNet-50 2018 | `r50-2018-bf16-4gpu.conf` | `momdp64bf16` | ~31 h (30.7 h on the 3060 box + 3 %) | `:5935` 2018 column's `BN group` |
+| 1 | ResNet-50 A3 | `r50-a3-wxclip4x128-bf16-4gpu.conf` | `lambaccdp4x128wxclipbcebf16` | ~22 h at ares' median, 30–40 h with its stall | `:5935` A3 column, `:6089`'s Ghost-BN row |
 | — | MobileNetV4 | `scripts/jobs/mnv4-default-4gpu.conf` | `adamdp64` | not costed here | none — its FIRST pair; no caveat row needed |
 
-⚠⚠ **R50 A3 is not BN-matched by re-running its conf.** Sync-BN normalises over `R × micro`
+⚠⚠ **R50 A3 trains the 4×128 render, not its old conf.** Sync-BN normalises over `R × micro`
 rows per micro-step, so `lambaccdp8x64…` gives 256 against the reference's 512 (its `4 × 512`,
-128 per GPU under GSPMD). A `lambaccdp4x128wxclipbcebf16` render at 160² matches both the BN
-group and the reference's `k = 4`; A2/A1 already run 128 per replica at 224². Unrendered and
-unprobed (memory and ms/step). Without it the `:5935` A3 column keeps a `BN group` caveat and
-`:6089`'s "only half of it is reachable here" stays true. R34 and R50 2018 are matched at 256.
+128 per GPU under GSPMD). `resnet50in160_lambaccdp4x128wxclipbcebf16` (2026-09-21) matches both
+the BN group and the reference's `k = 4`, at `LEAN_MLIR_G2_STEPS=2500` so the cosine keeps its
+62,500 updates. Probed: XLA peak 4.39 GiB per card (fits a 3060's 9 GiB arena), 282–285 ms per
+micro-step fed / 232 synth, i.e. 11.8 min of training per epoch against the 8×64 render's 12.8.
+Its conf is `scripts/jobs/r50-a3-wxclip4x128-bf16-4gpu.conf`. With it `:6089`'s "only half of
+it is reachable here" becomes false. R34 and R50 2018 are matched at 256 as they stand.
+
+⚠ **Before any ResNet leg:** move ares' R34 `momdp64bf16` epoch-3 checkpoint aside
+(`.lake/build/resnet34in_momdp64bf16_ckpt_xla.bin{,.bn,.epoch}` — per-replica BN, the supervisor
+would resume it); on the other box move the finished bf16 runs' `.epoch` files aside (the
+supervisor would call those jobs COMPLETE); rebuild `ffi/libpjrt_ffi.so` if it predates
+`be70ae32` (ares' did); and the other box needs this branch pulled.
 
 ⚠ B0's job trains `emarmsdp64dropdobf16`. Its twin and `imagenet-syncbn-check` cover
 `rmsdp64bf16`, the same net without EMA and the host-fed masks. The render is sync-BN either way.

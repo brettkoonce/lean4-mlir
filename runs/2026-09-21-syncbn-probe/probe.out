@@ -1,0 +1,14 @@
+  ▶ r34/bf16/fed (variant momdp64bf16, bs 64, workers 4) ...
+    → 139 ms/step (min 136, wait 3 ms, 5004 steps/ep, 173s)
+  ▶ r50/bf16/fed (variant momdp64bf16, bs 64, workers 8) ...
+    → 228 ms/step (min 224, wait 4 ms, 5004 steps/ep, 256s)
+  ▶ r50a3/bf16/fed (variant lambaccdp8x64wxclipbcebf16, bs 64, workers 8) ...
+    → 153 ms/step (min 141, wait 12 ms, 5000 steps/ep, 219s)
+  ▶ r50a3x128/bf16/fed (variant lambaccdp4x128wxclipbcebf16, bs 128, workers 8) ...
+    → 282 ms/step (min 245, wait 37 ms, 2500 steps/ep, 409s)
+ALL DONE -> runs/2026-09-21-syncbn-probe/probe.tsv
+net        variant                      prec  arm  bs   workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+r34        momdp64bf16                  bf16  fed  64   4        139     136     141     139      3        5004      173        
+r50        momdp64bf16                  bf16  fed  64   8        228     224     233     228      4        5004      256        
+r50a3      lambaccdp8x64wxclipbcebf16   bf16  fed  64   8        153     141     164     153      12       5000      219        
+r50a3x128  lambaccdp4x128wxclipbcebf16  bf16  fed  128  8        282     245     315     546      37       2500      409        
