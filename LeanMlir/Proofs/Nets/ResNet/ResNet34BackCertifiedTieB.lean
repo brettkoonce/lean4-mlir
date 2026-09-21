@@ -57,9 +57,9 @@ nets: two relu clauses per block (the body's mid-relu and the post-residual OUTE
 stem's relu, and the stem pool's per-example no-tie condition. That is 4.1d's bundle list,
 reused verbatim — this file adds no hypothesis of its own.
 
-⛔ **What this does NOT reach.** The all-reduce in `resnet34in_momdp64` is emitted text outside
-the AST, so like every other r34 statement this is at the per-replica gradient (§4d). And it is
-about the INPUT gradient; the parameter gradients are `ResNet34StepTieB.lean`'s tie (§4.2a).
+⛔ **What this does NOT reach.** One device: the data-parallel step, collectives included, is
+`ResNet34SyncStepTieB.lean`'s. And it is about the INPUT gradient; the parameter gradients are
+`ResNet34StepTieB.lean`'s tie (§4.2a).
 -/
 
 namespace Proofs

@@ -603,8 +603,8 @@ theorem bnSyncTensor4_batchShard (R N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Ve
   rw [bnSyncTensor4_apply, bnSyncTensor4_apply, bnchwChan_batchShard]
 
 /-- ⭐⭐ **P1b — the GLOBAL per-channel mean is the mean of the replicas' per-channel means.**
-    `bnMean_shard` transported along the row shard. This is precisely what
-    `allReduceMeanF R _ _ _ (fun r => bnBatchStatsB (x r))` computes in its low half. -/
+    `bnMean_shard` transported along the row shard. This is precisely what `syncStats`'s first
+    collective — `allReduceMeanF` over the replicas' `bnBatchMeanB` — computes. -/
 theorem bnMean_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
     (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
     bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
@@ -678,10 +678,10 @@ theorem bnMean_pair_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w
 
 /-- ⭐⭐⭐ **P1 — SYNC-BN ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH BN.**
 
-    Handed the ALL-REDUCED statistics — literally `(1/R)·Σ_r` of each replica's own `bnMean` and
-    `bnMeanSq`, which is what `allReduceMeanF` of `bnBatchStatsB` denotes — replica `r`'s sync
-    forward on its own shard equals `batchShard r` of `bnBatchTensor4` run on the whole `R·N`
-    batch.
+    Handed the GLOBAL statistics — `(1/R)·Σ_r` of each replica's own `bnMean` and `bnMeanSq`,
+    which is what `syncStats` denotes once its `σ²` is read back as `m2 = σ² + μ²` — replica
+    `r`'s sync forward on its own shard equals `batchShard r` of `bnBatchTensor4` run on the
+    whole `R·N` batch.
 
     ⭐ **The spec does not move**: the right-hand side is the EXISTING `bnBatchTensor4`, at
     `N := R·N`. Nothing new is being specified; the render is being shown to hit a target the
@@ -951,7 +951,7 @@ theorem bnSyncTensor4_grad_input_at_own_stats' (N oc h w : Nat) (hm : N * (h * w
     INPUT-VJP.**
 
     Handed the four all-reduced statistics — each literally `(1/R)·Σ_r'` of a per-replica
-    quantity, which is what `allReduceMeanF` of `bnBatchStatsB`, then of `bnSyncDyStatsB`,
+    quantity, which is what `syncStats`, then `allReduceMeanF` of `bnSyncDyStatsB`,
     denotes — replica `r`'s sync backward equals `batchShard r` of `bnBatchTensor4_grad_input`
     run on the whole `R·N` batch.
 

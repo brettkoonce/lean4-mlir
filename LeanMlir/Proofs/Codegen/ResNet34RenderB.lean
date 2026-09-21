@@ -316,7 +316,7 @@ structure BFwdB where
   r1 : String        -- relu1 output (= conv2 input)
   c2 : String        -- conv2 output (= BN2 input)
   cp : String        -- projection conv output (downsample only; "" for identity)
-  -- ⭐ SYNC-BN (`replicas > 1`): the all-reduced packed `[μ ‖ E[x²]]` of each BN site, which
+  -- ⭐ SYNC-BN (`replicas > 1`): the all-reduced packed `[μ ‖ σ²]` of each BN site, which
   -- the backward, the γ gradient and the handed-back running stats all read. `""` at one replica.
   st1 : String
   st2 : String
@@ -1676,7 +1676,9 @@ here first"
         "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
         "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
-        "    // global batch N x b (planning/global_bn_verified.md; Foundation/DataParallelSync.lean).\n") ++
+        "    // global batch N x b: proved as ResNet34SyncTieB.r34_net_syncTiedB (every all-reduced\n" ++
+        "    // gradient) and StableHLO.resnet34FwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).\n") ++
       zeroBiasPrelude convBias [64, 128, 256, 512] ++ body ++ optConstsB opt wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r34SigList nClasses convBias

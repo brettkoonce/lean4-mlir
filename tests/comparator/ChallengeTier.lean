@@ -5,6 +5,7 @@ import LeanMlir.Proofs.Certificates.SmoothingGaussian
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.DataParallelNode
+import LeanMlir.Proofs.Foundation.DataParallelSync
 import LeanMlir.Proofs.Foundation.MuonGeometry
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
@@ -17,6 +18,8 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Training.TrainedLinearDescent
@@ -950,6 +953,147 @@ theorem chk_dpMeanGrad_ne_globalBatchGrad :
     ∀ (θ : Proofs.Vec (1 : ℕ)),
       (Proofs.dpMean (R := (2 : ℕ)) fun (r : Fin (2 : ℕ)) => Proofs.lossGrad (Proofs.bnToyLoss (Proofs.dpToyShard r)) θ) ≠
         Proofs.lossGrad (Proofs.bnToyLoss Proofs.dpToyBatch) θ := by sorry
+
+/-- `Proofs.dpSyncGrad_eq_globalBatchGrad` -/
+theorem chk_dpSyncGrad_eq_globalBatchGrad :
+    ∀ {R N P : ℕ} (e : Fin R × Fin N ≃ Fin (R * N))
+      (c : Fin (R * N) → Proofs.Vec P),
+      Eq (α := Proofs.Vec P)
+        (Proofs.dpMean (R := R) fun (r : Fin R) (i : Fin P) => (1 : ℝ) / ↑N * ∑ n : Fin N, c (e (r, n)) i)
+        fun (i : Fin P) => (1 : ℝ) / ↑(R * N) * ∑ m : Fin (R * N), c m i := by sorry
+
+/-- `Proofs.den_bnSyncBack_allReduce` -/
+theorem chk_den_bnSyncBack_allReduce :
+    ∀ {N oc h w : ℕ} (R : ℕ) (hR : (0 : ℕ) < R),
+      N * (h * w) ≠ (0 : ℕ) →
+        R * N * (h * w) ≠ (0 : ℕ) →
+          ∀ (gN xN es t t' t'' : String) (ds ds' ds'' : List ℕ) (ε : ℝ) (γ : Proofs.Vec oc)
+            (x : Fin R → Proofs.StableHLO.SHlo (N * (oc * (h * w)))) (xv : Fin R → Proofs.Vec (N * (oc * (h * w))))
+            (dy : Fin R → Proofs.StableHLO.SHlo (N * (oc * (h * w)))) (X DY : Proofs.Vec (R * N * (oc * (h * w)))),
+            (∀ (r : Fin R), Proofs.StableHLO.den (x r) = Proofs.batchShard R N (oc * (h * w)) X r) →
+              (∀ (r : Fin R), xv r = Proofs.batchShard R N (oc * (h * w)) X r) →
+                (∀ (r : Fin R), Proofs.StableHLO.den (dy r) = Proofs.batchShard R N (oc * (h * w)) DY r) →
+                  ∀ (r : Fin R),
+                    Proofs.StableHLO.den
+                        (Proofs.StableHLO.SHlo.bnSyncBack gN xN es ε γ (xv r) (dy r)
+                          (Proofs.StableHLO.SHlo.allReduceMeanF R hR t'' ds'' fun (r' : Fin R) =>
+                            Proofs.StableHLO.SHlo.bnSyncDyStatsB gN xN es ε γ (xv r') (dy r')
+                              (Proofs.syncStats R hR t t' ds ds' x))) =
+                      Proofs.batchShard R N (oc * (h * w)) (Proofs.bnBatchTensor4_grad_input (R * N) oc h w ε γ X DY) r := by sorry
+
+/-- `Proofs.StableHLO.resnet34FwdGraphSync_full_shard` -/
+theorem chk_resnet34FwdGraphSync_full_shard :
+    ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
+      (0 : ℕ) < N →
+        ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.R34BWeights nCls)
+          (e :
+            Fin R →
+              Proofs.StableHLO.SHlo (N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))))))
+          (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ)))))),
+          (∀ (r : Fin R),
+              Proofs.StableHLO.den (e r) =
+                Proofs.batchShard R N ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ)))) X r) →
+            ∀ (r : Fin R),
+              Proofs.StableHLO.den (Proofs.StableHLO.resnet34FwdGraphSync_full R hR N epsStr w e r) =
+                Proofs.batchShard R N nCls (Proofs.resnet34ForwardB_full (R * N) w X) r := by sorry
+
+/-- `Proofs.ResNet34SyncTieB.r34_net_syncTiedB` -/
+theorem chk_r34_net_syncTiedB :
+    ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
+      (0 : ℕ) < N →
+        ∀ {nCls : ℕ} (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : Proofs.R34BWeights nCls)
+          (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))))))
+          (T : Proofs.Vec (R * N * ((1 : ℕ) * nCls))),
+          have G :=
+            Proofs.ResNet34TieB.unrowB (R * N) nCls
+              (Proofs.StableHLO.den
+                (Proofs.smoothedLossCotGraph (R * N) nCls α (↑R * B) aStr negAK bStr logN ohN
+                  (Proofs.ResNet34TieB.rowB (R * N) nCls (Proofs.resnet34ForwardB_full (R * N) w X)) T));
+          have dyE1 := Proofs.ResNet34TieB.r34HeadCotBlk (R * N) (7 : ℕ) (7 : ℕ) w.Wd w.bd (Proofs.r34Pre16 (R * N) w X) G;
+          have dyE0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (7 : ℕ) (7 : ℕ) w.e1 (Proofs.r34Pre15 (R * N) w X) dyE1;
+          have dyD4 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (7 : ℕ) (7 : ℕ) w.e0 (Proofs.r34Pre14 (R * N) w X) dyE0;
+          have dyC4 := Proofs.ResNet34TieB.r34DownCotIn (R * N) (7 : ℕ) (7 : ℕ) w.d4 (Proofs.r34Pre13 (R * N) w X) dyD4;
+          have dyC3 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c4 (Proofs.r34Pre12 (R * N) w X) dyC4;
+          have dyC2 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c3 (Proofs.r34Pre11 (R * N) w X) dyC3;
+          have dyC1 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c2 (Proofs.r34Pre10 (R * N) w X) dyC2;
+          have dyC0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c1 (Proofs.r34Pre9 (R * N) w X) dyC1;
+          have dyD3 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c0 (Proofs.r34Pre8 (R * N) w X) dyC0;
+          have dyB2 := Proofs.ResNet34TieB.r34DownCotIn (R * N) (14 : ℕ) (14 : ℕ) w.d3 (Proofs.r34Pre7 (R * N) w X) dyD3;
+          have dyB1 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b2 (Proofs.r34Pre6 (R * N) w X) dyB2;
+          have dyB0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b1 (Proofs.r34Pre5 (R * N) w X) dyB1;
+          have dyD2 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b0 (Proofs.r34Pre4 (R * N) w X) dyB0;
+          have dyA2 := Proofs.ResNet34TieB.r34DownCotIn (R * N) (28 : ℕ) (28 : ℕ) w.d2 (Proofs.r34Pre3 (R * N) w X) dyD2;
+          have dyA1 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (56 : ℕ) (56 : ℕ) w.a2 (Proofs.r34Pre2 (R * N) w X) dyA2;
+          have dyA0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (56 : ℕ) (56 : ℕ) w.a1 (Proofs.r34Pre1 (R * N) w X) dyA1;
+          have g : Fin R → Proofs.Vec (N * nCls) := fun (r : Fin R) =>
+            Proofs.ResNet34TieB.unrowB N nCls
+              (Proofs.StableHLO.den
+                (Proofs.smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
+                  (Proofs.ResNet34TieB.rowB N nCls
+                    (Proofs.batchShard R N nCls (Proofs.resnet34ForwardB_full (R * N) w X) r))
+                  (Proofs.batchShard R N ((1 : ℕ) * nCls) T r)));
+          have eE1 : Fin R → Proofs.Vec (N * ((512 : ℕ) * (7 : ℕ) * (7 : ℕ))) := fun (r : Fin R) =>
+            Proofs.ResNet34TieB.r34HeadCotBlk N (7 : ℕ) (7 : ℕ) w.Wd w.bd
+              (Proofs.batchShard R N ((512 : ℕ) * (7 : ℕ) * (7 : ℕ)) (Proofs.r34Pre16 (R * N) w X) r) (g r);
+          have eE0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.e1 (Proofs.r34Pre15 (R * N) w X) eE1;
+          have eD4 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.e0 (Proofs.r34Pre14 (R * N) w X) eE0;
+          have eC4 :=
+            Proofs.ResNet34SyncTieB.r34DownSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.d4 (Proofs.r34Pre13 (R * N) w X) eD4;
+          have eC3 :=
+            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c4 (Proofs.r34Pre12 (R * N) w X) eC4;
+          have eC2 :=
+            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c3 (Proofs.r34Pre11 (R * N) w X) eC3;
+          have eC1 :=
+            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c2 (Proofs.r34Pre10 (R * N) w X) eC2;
+          have eC0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c1 (Proofs.r34Pre9 (R * N) w X) eC1;
+          have eD3 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c0 (Proofs.r34Pre8 (R * N) w X) eC0;
+          have eB2 :=
+            Proofs.ResNet34SyncTieB.r34DownSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.d3 (Proofs.r34Pre7 (R * N) w X) eD3;
+          have eB1 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b2 (Proofs.r34Pre6 (R * N) w X) eB2;
+          have eB0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b1 (Proofs.r34Pre5 (R * N) w X) eB1;
+          have eD2 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b0 (Proofs.r34Pre4 (R * N) w X) eB0;
+          have eA2 :=
+            Proofs.ResNet34SyncTieB.r34DownSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.d2 (Proofs.r34Pre3 (R * N) w X) eD2;
+          have eA1 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.a2 (Proofs.r34Pre2 (R * N) w X) eA2;
+          have eA0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.a1 (Proofs.r34Pre1 (R * N) w X) eA1;
+          have ePool :=
+            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.a0 (Proofs.r34Pre0 (R * N) w X) eA0;
+          Proofs.ResNet34SyncTieB.r34StemSyncTiedB R hR N (56 : ℕ) (56 : ℕ) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X
+              ePool (Proofs.ResNet34TieB.r34IdCotIn (R * N) (56 : ℕ) (56 : ℕ) w.a0 (Proofs.r34Pre0 (R * N) w X) dyA0) ∧
+            Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (56 : ℕ) (56 : ℕ) "s1b0" xN cotN vN epsStr w.a0
+                (Proofs.r34Pre0 (R * N) w X) eA0 dyA0 ∧
+              Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (56 : ℕ) (56 : ℕ) "s1b1" xN cotN vN epsStr w.a1
+                  (Proofs.r34Pre1 (R * N) w X) eA1 dyA1 ∧
+                Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (56 : ℕ) (56 : ℕ) "s1b2" xN cotN vN epsStr w.a2
+                    (Proofs.r34Pre2 (R * N) w X) eA2 dyA2 ∧
+                  Proofs.ResNet34SyncTieB.r34DownSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "d2" xN cotN vN epsStr w.d2
+                      (Proofs.r34Pre3 (R * N) w X) eD2 dyD2 ∧
+                    Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "s2b0" xN cotN vN epsStr w.b0
+                        (Proofs.r34Pre4 (R * N) w X) eB0 dyB0 ∧
+                      Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "s2b1" xN cotN vN epsStr w.b1
+                          (Proofs.r34Pre5 (R * N) w X) eB1 dyB1 ∧
+                        Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "s2b2" xN cotN vN epsStr w.b2
+                            (Proofs.r34Pre6 (R * N) w X) eB2 dyB2 ∧
+                          Proofs.ResNet34SyncTieB.r34DownSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "d3" xN cotN vN epsStr w.d3
+                              (Proofs.r34Pre7 (R * N) w X) eD3 dyD3 ∧
+                            Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b0" xN cotN vN epsStr w.c0
+                                (Proofs.r34Pre8 (R * N) w X) eC0 dyC0 ∧
+                              Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b1" xN cotN vN epsStr w.c1
+                                  (Proofs.r34Pre9 (R * N) w X) eC1 dyC1 ∧
+                                Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b2" xN cotN vN epsStr
+                                    w.c2 (Proofs.r34Pre10 (R * N) w X) eC2 dyC2 ∧
+                                  Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b3" xN cotN vN epsStr
+                                      w.c3 (Proofs.r34Pre11 (R * N) w X) eC3 dyC3 ∧
+                                    Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b4" xN cotN vN epsStr
+                                        w.c4 (Proofs.r34Pre12 (R * N) w X) eC4 dyC4 ∧
+                                      Proofs.ResNet34SyncTieB.r34DownSyncTiedB R hR N (7 : ℕ) (7 : ℕ) "d4" xN cotN vN epsStr
+                                          w.d4 (Proofs.r34Pre13 (R * N) w X) eD4 dyD4 ∧
+                                        Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (7 : ℕ) (7 : ℕ) "s4b0" xN cotN vN
+                                            epsStr w.e0 (Proofs.r34Pre14 (R * N) w X) eE0 dyE0 ∧
+                                          Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (7 : ℕ) (7 : ℕ) "s4b1" xN cotN vN
+                                              epsStr w.e1 (Proofs.r34Pre15 (R * N) w X) eE1 dyE1 ∧
+                                            Proofs.ResNet34SyncTieB.r34HeadSyncTiedB R hR N (7 : ℕ) (7 : ℕ) xN cotN
+                                              (Proofs.r34Pre16 (R * N) w X) g G := by sorry
 
 /-- `Proofs.adamW_at_allReduceMeanF` -/
 theorem chk_adamW_at_allReduceMeanF :

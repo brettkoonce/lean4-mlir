@@ -154,6 +154,8 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.DataParallel,
              `LeanMlir.Proofs.Foundation.DataParallelNode,
              `LeanMlir.Proofs.Foundation.DataParallelSync,
+             `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB,
+             `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB,
              `LeanMlir.Proofs.Codegen.LambTriple,
              `LeanMlir.Proofs.Foundation.BceLossCot,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullB,

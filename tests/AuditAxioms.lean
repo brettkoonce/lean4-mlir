@@ -87,6 +87,8 @@ import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Foundation.DataParallelSync
+import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
+import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
@@ -2010,6 +2012,36 @@ open Proofs
 #print axioms Proofs.den_allReduceMeanF_bnBetaGradB_shard
 -- the divisor step (divConstB N on a replica vs divConstB (R·N) on one device)
 #print axioms Proofs.HasVJP.backward_smul
+
+-- 4d PIECE 3 AT RESNET-34: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (ResNet34SyncB.lean + ResNet34SyncStepTieB.lean, planning/global_bn_verified.md §3.2, 2026-09-21)
+-- T2 twin: replica r's sync-BN forward graph denotes shard r of resnet34ForwardB_full (R*N)
+#print axioms Proofs.StableHLO.den_castIdx
+#print axioms Proofs.StableHLO.batchShard_castIdx
+#print axioms Proofs.StableHLO.den_bnSyncSiteLA
+#print axioms Proofs.StableHLO.r34IdGraphSync_shard
+#print axioms Proofs.StableHLO.r34DownGraphSync_shard
+#print axioms Proofs.StableHLO.r34StemGraphSync_shard
+#print axioms Proofs.StableHLO.resnet34FwdGraphSync_full_shard
+-- T3 twin: the single-device chain is homogeneous in its cotangent
+#print axioms Proofs.ResNet34SyncTieB.bn_grad_input_smul
+#print axioms Proofs.ResNet34SyncTieB.bnInB_smul
+#print axioms Proofs.ResNet34SyncTieB.maxPool3s2BackFlat_smul
+#print axioms Proofs.ResNet34SyncTieB.r34IdCotIn_smul
+#print axioms Proofs.ResNet34SyncTieB.r34DownCotIn_smul
+-- ...each replica's sync-BN backward chain is the shard of the single-device one
+#print axioms Proofs.ResNet34SyncTieB.bnSyncInB_shard
+#print axioms Proofs.ResNet34SyncTieB.r34IdSyncCotIn_shard
+#print axioms Proofs.ResNet34SyncTieB.r34DownSyncCotIn_shard
+#print axioms Proofs.ResNet34SyncTieB.r34StemSyncCotC_shard
+#print axioms Proofs.ResNet34SyncTieB.r34HeadCotBlk_shard
+-- ...the strided-conv and dense collectives, and the divisor
+#print axioms Proofs.ResNet34SyncTieB.den_allReduceMeanF_convStridedWeightGradB_shard
+#print axioms Proofs.ResNet34SyncTieB.den_allReduceMeanF_denseWeightGradB_shard
+#print axioms Proofs.ResNet34SyncTieB.den_allReduceMeanF_denseBiasGradB_shard
+#print axioms Proofs.ResNet34SyncTieB.replicaLossCot_eq
+-- the capstone: every all-reduced parameter gradient IS the single-device node at R·N
+#print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB
 
 -- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT (2026-09-06)
 #print axioms Proofs.lambStep

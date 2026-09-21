@@ -37,7 +37,9 @@ T3 carries no numerals, so nothing here pins the batch.
 feeds `allReduceMeanF` — the collective as an AST node whose `den` is the replica MEAN of the
 per-replica gradient nodes; until then `emitGradAllReduce`, emitted text and a declared carve-out
 outside the `SHlo` AST. Every statement below is at the PER-REPLICA gradient node;
-`DataParallelNode.lean` composes it with the mean and the tail.
+`DataParallelNode.lean` composes it with the mean and the tail. For the sync-BN data-parallel
+render (2026-09-21) `ResNet34SyncStepTieB.lean` is the whole step: its `r34_net_syncTiedB` says
+each all-reduced gradient IS this file's node at `N := R·N`.
 
 ## ⛔ The parameter census is 110, not the 146 the per-example tie named
 
@@ -515,7 +517,8 @@ set_option maxHeartbeats 1600000 in
     `zeroBiasPrelude`'s zero constants).
 
     ⛔ One replica. In `resnet34in_momdp64` every gradient node feeds `allReduceMeanF`, an AST
-    node since 4d piece 2; `DataParallelNode.lean` composes the per-replica statement with it. -/
+    node since 4d piece 2; `ResNet34SyncTieB.r34_net_syncTiedB` is the data-parallel step, and
+    its right-hand sides are this theorem's nodes at `N := R·N`. -/
 theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (t : Vec (N * (1 * nCls))) :
