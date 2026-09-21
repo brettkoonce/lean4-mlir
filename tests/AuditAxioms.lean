@@ -87,6 +87,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Foundation.DataParallelSync
+import LeanMlir.Proofs.Foundation.DataParallelSyncBf16
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
@@ -2017,6 +2018,34 @@ open Proofs
 #print axioms Proofs.den_allReduceMeanF_bnBetaGradB_shard
 -- the divisor step (divConstB N on a replica vs divConstB (R·N) on one device)
 #print axioms Proofs.HasVJP.backward_smul
+
+-- 4d PIECE 3 AT bf16: EVERY NODE SHARDS EXACTLY BUT THE CONV WEIGHT GRADIENT
+-- (DataParallelSyncBf16.lean, planning/global_bn_verified.md §3.6, 2026-09-21)
+-- forward convs and input-VJPs: replica r's node is shard r of the same node at batch R·N
+#print axioms Proofs.den_batchOp_shard_node
+#print axioms Proofs.den_convBf16_shard
+#print axioms Proofs.den_convStridedBf16_shard
+#print axioms Proofs.den_convBackBatchedBf16_shard
+#print axioms Proofs.den_convStridedBackBatchedBf16_shard
+-- weight gradients: each replica rounds its own partial sum; the batch-R·N node rounds their sum once
+#print axioms Proofs.den_convWeightGradBBf16_eq_rnd
+#print axioms Proofs.den_convStridedWeightGradBBf16_eq_rnd
+#print axioms Proofs.den_allReduceMeanF_convWeightGradBBf16_shard
+#print axioms Proofs.den_convWeightGradBBf16_global_split
+#print axioms Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global
+#print axioms Proofs.den_allReduceMeanF_convWeightGradBBf16_shard_id
+#print axioms Proofs.den_allReduceMeanF_convStridedWeightGradBBf16_shard
+#print axioms Proofs.den_convStridedWeightGradBBf16_global_split
+#print axioms Proofs.den_allReduceMeanF_convStridedWeightGradBBf16_sub_global
+-- the divisor step through rnd: rndP commutes with powers of two (R = 4 on every ImageNet run)
+#print axioms Proofs.int_log_two_pow_mul
+#print axioms Proofs.int_log_abs_two_pow_mul
+#print axioms Proofs.rndP_two_pow_mul
+#print axioms Proofs.rndP_mul_four
+#print axioms Proofs.convBackBatchedBf16_smul
+#print axioms Proofs.convStridedBackBatchedBf16_smul
+#print axioms Proofs.convWeightGradBBf16_smul
+#print axioms Proofs.convStridedWeightGradBBf16_smul
 
 -- 4d PIECE 3 AT RESNET-34: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
 -- (ResNet34SyncB.lean + ResNet34SyncStepTieB.lean, planning/global_bn_verified.md §3.2, 2026-09-21)

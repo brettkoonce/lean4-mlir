@@ -14,8 +14,11 @@ module @m {
     // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).
     // Under accumulation that holds per MICRO-step: BN normalises over the replicas'
     // micro-batches together, and the accumulator runs after the all-reduced gradient.
-    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round
-    // their operands per element, are not in that statement.)
+    // (Both are stated at the f32 nodes. At bf16 the conv forward and input-VJP nodes
+    // still shard exactly; each conv weight gradient rounds its replica's partial sum
+    // before the all-reduce, where one device rounds the whole sum once. That is the
+    // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided
+    // peer, in LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean.)
     // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.

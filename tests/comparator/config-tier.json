@@ -16,6 +16,7 @@
         "chk_dpMeanGrad_ne_globalBatchGrad",
         "chk_dpSyncGrad_eq_globalBatchGrad",
         "chk_den_bnSyncBack_allReduce",
+        "chk_den_allReduceMeanF_convWeightGradBBf16_sub_global",
         "chk_resnet34FwdGraphSync_full_shard",
         "chk_r34_net_syncTiedB",
         "chk_mobilenetv2FwdGraphSync_full_shard",

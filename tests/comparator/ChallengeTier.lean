@@ -6,6 +6,7 @@ import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Foundation.DataParallelSync
+import LeanMlir.Proofs.Foundation.DataParallelSyncBf16
 import LeanMlir.Proofs.Foundation.MuonGeometry
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
@@ -984,6 +985,25 @@ theorem chk_den_bnSyncBack_allReduce :
                             Proofs.StableHLO.SHlo.bnSyncDyStatsB gN xN es ε γ (xv r') (dy r')
                               (Proofs.syncStats R hR t t' ds ds' x))) =
                       Proofs.batchShard R N (oc * (h * w)) (Proofs.bnBatchTensor4_grad_input (R * N) oc h w ε γ X DY) r := by sorry
+
+/-- `Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global` -/
+theorem chk_den_allReduceMeanF_convWeightGradBBf16_sub_global :
+    ∀ {N ic oc h w kH kW : ℕ} (R : ℕ) (hR : (0 : ℕ) < R)
+      (rnd : ℝ → ℝ) (t xN cotN : String) (ds : List ℕ) (b : Proofs.Vec oc) (W : Proofs.Kernel4 oc ic kH kW)
+      (X : Proofs.Vec (R * N * (ic * h * w))) (DY : Proofs.Vec (R * N * (oc * h * w)))
+      (dy : Fin R → Proofs.StableHLO.SHlo (N * (oc * h * w))),
+      (∀ (r : Fin R), Proofs.StableHLO.den (dy r) = Proofs.batchShard R N (oc * h * w) DY r) →
+        ∀ (idx : Fin (oc * ic * kH * kW)),
+          Proofs.StableHLO.den
+                (Proofs.StableHLO.SHlo.allReduceMeanF R hR t ds fun (r : Fin R) =>
+                  Proofs.StableHLO.SHlo.convWeightGradBBf16 rnd xN b (Proofs.batchShard R N (ic * h * w) X r) W (dy r))
+                idx -
+              (1 : ℝ) / ↑R *
+                Proofs.StableHLO.den
+                  (Proofs.StableHLO.SHlo.convWeightGradBBf16 rnd xN b X W (Proofs.StableHLO.SHlo.operand cotN DY)) idx =
+            (1 : ℝ) / ↑R *
+              (∑ r : Fin R, rnd (Proofs.convWGradShardSum rnd xN cotN b X W DY r idx) -
+                rnd (∑ r : Fin R, Proofs.convWGradShardSum rnd xN cotN b X W DY r idx)) := by sorry
 
 /-- `Proofs.StableHLO.resnet34FwdGraphSync_full_shard` -/
 theorem chk_resnet34FwdGraphSync_full_shard :

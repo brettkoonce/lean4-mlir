@@ -124,6 +124,8 @@ status:
     - {declaration: "Proofs.dpSyncGrad_eq_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the sync-BN backward subgraph a DP render emits denotes the shard-r block of the batch-R*N input-VJP, at any R
     - {declaration: "Proofs.den_bnSyncBack_allReduce", file: "LeanMlir/Proofs/Foundation/DataParallelSync.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # at bf16 the all-reduced conv weight gradient differs from the batch-R*N node only by rounding each replica's partial sum
+    - {declaration: "Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global", file: "LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ResNet-34's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
     - {declaration: "Proofs.StableHLO.resnet34FwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 110 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, loss divided by R*B

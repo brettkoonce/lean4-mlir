@@ -995,8 +995,11 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
           "    // that statement.)\n"
          else "") ++
         (if bf16 then
-          "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
-          "    // their operands per element, are not in that statement.)\n"
+          "    // (Both are stated at the f32 nodes. At bf16 the conv forward and input-VJP nodes\n" ++
+          "    // still shard exactly; each conv weight gradient rounds its replica's partial sum\n" ++
+          "    // before the all-reduce, where one device rounds the whole sum once. That is the\n" ++
+          "    // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided\n" ++
+          "    // peer, in LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean.)\n"
          else "")) ++
       zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt wdStr ++
       wdzConst wdExclude ++ clipZeroConst gradClip ++ adamCode ++

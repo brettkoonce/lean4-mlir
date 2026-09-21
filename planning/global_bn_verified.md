@@ -11,7 +11,7 @@ gating the work.
 
 ---
 
-## ▶ NEXT SESSION — start here (updated 2026-09-21, night: §3.4 DONE as `260df19d`; §3.5 is next)
+## ▶ NEXT SESSION — start here (updated 2026-09-21, night: §3.4 DONE as `260df19d`, §3.6 bf16 node kit; §3.5 is next)
 
 ▶▶ **Start at §3.5 — the pair re-runs.** Every BN net's DP render is sync-BN now, so every
 committed BN pair number was trained on a function the tree no longer renders. §3.5 has the
@@ -24,7 +24,7 @@ ResNet-50, MobileNetV4) have a sync-BN DP render, a passing split-batch gate, an
 (forward: `*FwdGraphSync_full_shard`; whole step: `r34_net_syncTiedB`, `mnv2_net_syncTiedB`,
 `efficientnet_net_syncTiedG`, `r50_net_syncTiedB`, `mnv4_net_syncTiedB` — every all-reduced
 gradient IS the single-device node at batch `R·N`). §3.1–§3.4 are commits on `main`,
-`2a39842f` … `99fc6a8d` then `260df19d` (§3.4), ⚠ **NOT PUSHED**. Push is the user's call.
+`2a39842f` … `99fc6a8d`, then `260df19d` (§3.4) and `55c130f7` (bounds table), ⚠ **NOT PUSHED**. Push is the user's call.
 Read §2b's ⛔⛔, §3.2's gate table and §3.3's before touching numerics.
 
 **Then (2026-09-21, later), `23db65a2`:** the ImageNet-shape probe, §3.3b —
@@ -77,11 +77,13 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
    book rows (`content.tex:5671`, `:7059`, `:8266` — `BN statistic group … 64 (per replica)`, the
    R50 `BN group` rows `:5935`, `:6089`, and the two `[TODO: global BN.]`). ⚠ Until a re-run, the
    committed pair numbers were produced by the OLD per-replica renders; the rows stay as they are.
-5. Optional: extend the twins to the bf16 conv nodes. Not a regression — the single-device ties
-   never covered bf16 either — and the argument carries (bf16 rounding is per element, so it
-   commutes with sharding). The bf16 DP headers say the theorems are stated at the f32 nodes.
-   Likewise the drop-path / dropout DP artifacts (B0's `*drop*` / `*do*`, R50's A2/A1 `…drop…`)
-   are outside their twins.
+5. ✅ **bf16, R34 and R50 — the node kit, §3.6.** ⛔ The sentence this item used to carry
+   ("bf16 rounding is per element, so it commutes with sharding") is FALSE for the conv weight
+   gradients: their `den` rounds the whole batch sum once, so on `R` replicas each rounds its own
+   partial sum before the all-reduce. Every other bf16 node the two nets emit shards exactly.
+   §3.6 states both, per node. Still outside every twin: the drop-path / dropout DP artifacts
+   (B0's `*drop*` / `*do*`, R50's A2/A1 `…drop…`), and the depthwise bf16 kinds MNv2 / B0 / MNv4
+   emit (same shape as §3.6's; their headers still carry the old one-line caveat).
 
 **Gate policy decided this session (2026-09-21, approved).**
 * MobileNetV2's split-batch bound is 3e-3, not R34's 1e-3 — XLA's GPU reductions are not
@@ -90,8 +92,8 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
   criterion (≤ 1e-5). A new net sets its own bound beside its `Cfg`, with its per-layer evidence.
 * `mobilenetv2-dp-check` / `efficientnet-dp-check` gradient bound 1e-4 → 1e-2: their DP backward
   is the sync-BN graph and the single-device artifact's is the two-pass graph (~1.1e-3 on `m`);
-  forward still bit-exact. `mnv4-dp-check` will need the same when §3.4 swaps MNv4; R50 has no
-  dp-check (nor had R34).
+  forward still bit-exact. `mnv4-dp-check` took the same in §3.4 (1e-2 f32 / 5e-2 bf16); R50 has
+  no dp-check (nor had R34).
 * The DUPLICATED criterion on the gradient is its slot's **norm-rel** (the `*-dp-check` metric),
   not the regions' max-abs: one squared entry of RMSProp's `v'` moved the max-abs 4× between runs
   (1.5e-2 → 5.7e-2) while the norm-rel held at 1.6–1.7e-2. f32 reads 6.8e-4 – 1.0e-3 on every gate,
@@ -188,9 +190,9 @@ per-device statistics — it is what global semantics look like under GSPMD.** H
 | net | render | JAX ref | confound | disclosed in the book |
 |---|---|---|---|---|
 | ResNet-34 | BN, per-replica 64 | global 256 | yes | ✅ `BN statistic group` row, §5 |
-| ResNet-50 | BN, per-replica 64 | global 512 | yes | ✅ `BN group` column; called "the largest known difference between the two paths, and *untested*" |
+| ResNet-50 | BN, per-replica 64 (**sync since §3.4**) | global 256 (2018) / 512 (A3) | yes, until §3.5 | ✅ `BN group` column; called "the largest known difference between the two paths, and *untested*" |
 | MobileNetV2 | BN, per-replica 64 | global 256 | yes | ✅ §6, 2026-09-12 |
-| MobileNetV4 | BN, **sync since §3.4** | global | **no** (once committed) | n/a — no verified pair run yet; its first one trains on the sync render |
+| MobileNetV4 | BN, **sync since §3.4** | global | **no** | n/a — no verified pair run yet; its first one trains on the sync render |
 | EfficientNet-B0 | BN, per-replica 64 | global 256 | yes | ✅ `BN statistic group` row, §7 (`content.tex:8266`) |
 | ConvNeXt-T | LayerNorm, no `bnBatchF` | no batch stats | **no** | n/a |
 | ViT-Ti | LayerNorm, no `bnBatchF` | no batch stats | **no** | n/a |
@@ -973,6 +975,13 @@ explicitly (run it through `scripts/supervise.sh`).
 | — | ResNet-50 | `r50-a3-wxclip-bf16-4gpu.conf` / `r50-2018-bf16-4gpu.conf` | `lambaccdp8x64wxclipbcebf16` / `momdp64bf16` | not costed here | `:5935`, `:6089` `BN group` rows (A3's group is now 256 against the reference's 512) |
 | — | MobileNetV4 | `scripts/jobs/mnv4-default-4gpu.conf` | `adamdp64` | not costed here | none — its FIRST pair; no caveat row needed |
 
+⚠⚠ **R50 A3 is not BN-matched by re-running its conf.** Sync-BN normalises over `R × micro`
+rows per micro-step, so `lambaccdp8x64…` gives 256 against the reference's 512 (its `4 × 512`,
+128 per GPU under GSPMD). A `lambaccdp4x128wxclipbcebf16` render at 160² matches both the BN
+group and the reference's `k = 4`; A2/A1 already run 128 per replica at 224². Unrendered and
+unprobed (memory and ms/step). Without it the `:5935` A3 column keeps a `BN group` caveat and
+`:6089`'s "only half of it is reachable here" stays true. R34 and R50 2018 are matched at 256.
+
 ⚠ B0's job trains `emarmsdp64dropdobf16`. Its twin and `imagenet-syncbn-check` cover
 `rmsdp64bf16`, the same net without EMA and the host-fed masks. The render is sync-BN either way.
 
@@ -987,6 +996,34 @@ overturn, and order the queue by cost.
 MobileNetV2 section (`content.tex`, after the "Separating those would take a verified render that
 all-reduces the batch statistics" paragraph) — that paragraph is a description of exactly this
 plan, and it goes when the render lands.
+
+### 3.6 bf16 — what sharding does to the bf16 nodes (R34, R50) — ✅ 2026-09-21
+
+`Foundation/DataParallelSyncBf16.lean`, a leaf on `DataParallelSync` + `Float/Binary32Instance`.
+The bf16 DP artifacts R34 and R50 train from swap six nodes for bf16 kinds; the kit states each
+under sharding. Node to node throughout: there is no single-device bf16 chain to tie a whole-net
+twin to, in this tier or the f32 one.
+
+| kind | under sharding | lemma |
+|---|---|---|
+| `convBf16`, `convStridedBf16` (forward) | exact | `den_convBf16_shard`, `den_convStridedBf16_shard` (via `den_batchOp_shard_node`) |
+| `convBackBatchedBf16`, `convStridedBackBatchedBf16` | exact | `den_convBackBatchedBf16_shard`, `den_convStridedBackBatchedBf16_shard` |
+| `convWeightGradBBf16`, `convStridedWeightGradBBf16`, all-reduced | **rounded per replica** | `den_allReduceMeanF_convWeightGradBBf16_sub_global` + strided peer |
+
+⭐⭐ **The weight gradient.** Its `den` is `rnd` of the f32 node at rounded operands
+(`den_convWeightGradBBf16_eq_rnd`, `rfl`). With `S_r` replica `r`'s partial sum
+(`convWGradShardSum`), the collective is `(1/R)·Σ_r rnd S_r` (`…_shard`) and the batch-`R·N`
+node is `rnd (Σ_r S_r)` (`…_global_split`); `…_sub_global` states the difference exactly, and at
+`rnd := id` it vanishes (`…_shard_id`), which is the f32 statement.
+
+**The divisor step through `rnd`.** The `*_smul` lemmas carry a scale through the four bf16
+backward kinds under `∀ x, rnd (s * x) = s * rnd x`, and `rndP_two_pow_mul` proves that for the
+repo's rounding model at every power of two (`rndP_mul_four` at `R = 4`) — the unbounded-exponent
+model, so bf16 overflow and subnormals are outside it.
+
+Bookkeeping: `Certs` root, 22 `AuditAxioms` directives (1,582/1,582, no `sorryAx`, all on the
+standard three), one `formalization.yaml` row + `gen_comparator_tier.py` (35 theorems). The five
+R34/R50 bf16 DP headers name the kit; comment lines only, no op changed.
 
 ---
 
