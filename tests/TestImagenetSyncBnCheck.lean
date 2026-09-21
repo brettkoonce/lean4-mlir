@@ -62,11 +62,33 @@ convert, which the random-init backward then amplifies. Per net, bf16 vs f32:
     R50bce 1.08–1.22e-2 / 2.2e-3    0 / 0               1.69–1.72e-2 / 1.0e-3
     MNv4   6.9e-3–1.16e-2 / 1.2–1.3e-3  0 / 0           1.83–1.85e-2 / 1.2e-3
 
-⚠ The two deeper nets (53 and 77 BN layers) split at the size of their own forward's
-conditioning: the statistics SENSITIVITY column (the two-pass graph against itself on `x`
-perturbed by 1e-4) reads 1.4–1.6e-2 bf16 and 1.3–1.7e-3 f32 on R50 and MNv4, and TEST sits at or
-under it in every run. Their bounds are ≈ 2× that; the exchange itself is carried by the sharp
-columns, which are 0 on both.
+**The bounds, and why the split one is per net (approved 2026-09-21).** Two kinds:
+
+* The SHARP criteria are the same for every net in every precision: the first BN layer's split
+  error ≤ 1e-5, the DUPLICATED statistics ≤ 1e-5, the FORMULATION statistics ≤ 1e-5 (B0 bf16
+  excepted, below), and CONTROL ≥ 2e-3. These are what a wrong exchange trips — Chan's
+  correction, the packing, a collective's divisor — and they read 0 on all five nets.
+* The split-batch TEST bound on the statistics is PER NET, because it bounds rounding, and
+  rounding compounds with depth and with the forward's conditioning at random init. Measured f32
+  it spans 1.3e-4 (R34, 36 BN layers) to 2.2e-3 (R50, 53), 17×. On the two deepest nets TEST
+  reaches the forward's own conditioning: the statistics SENSITIVITY column (the two-pass graph
+  against itself on `x` perturbed by 1e-4) reads 1.4–1.6e-2 bf16 and 1.3–1.7e-3 f32 on R50 and
+  MNv4, the same size as TEST. One shared bound loose enough for R50 (5e-3 f32) would sit 38×
+  above R34's own error and stop seeing anything below it there.
+
+Each per-net bound sits 2–8× above its net's largest measured TEST:
+
+    net      stats TEST bound (bf16 / f32)   other per-net bound
+    R34      3e-3 / 1e-3
+    MNv2     1e-2 / 3e-3
+    B0       6e-3 / 1e-3                     FORMULATION stats 5e-3 bf16 (its sync and two-pass
+                                             graphs round apart in bf16 at one shape)
+    R50      3e-2 / 5e-3                     same for resnet50bce
+    MNv4     3e-2 / 3e-3
+    every    DUPLICATED gradient norm-rel 5e-2 bf16 / 5e-3 f32
+
+The Imagenette gates (f32, 2×32) bound TEST at 1e-3 (R34, B0) and 3e-3 (MNv2). The duplicated-
+batch `*-dp-check` gradient bounds are 1e-2 f32 (MNv2, B0, MNv4) and 5e-2 bf16 (MNv4).
 
 A sum-not-mean collective makes every all-reduced gradient `4g`, a relative error of 3 — 60×
 over the bf16 bound.

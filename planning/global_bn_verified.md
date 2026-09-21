@@ -11,15 +11,20 @@ gating the work.
 
 ---
 
-## ▶ NEXT SESSION — start here (updated 2026-09-21, night: §3.4 DONE, uncommitted; §3.5 is next)
+## ▶ NEXT SESSION — start here (updated 2026-09-21, night: §3.4 DONE as `260df19d`; §3.5 is next)
+
+▶▶ **Start at §3.5 — the pair re-runs.** Every BN net's DP render is sync-BN now, so every
+committed BN pair number was trained on a function the tree no longer renders. §3.5 has the
+queue (job config, variant, cost). Each is a multi-day training run: propose it with its
+wall-clock and wait for the user's go, one at a time. Nothing below this line is open work
+except §3.5 and the optional twin extensions (item 5).
 
 **State.** §3.1–§3.4 are DONE — all five BatchNorm nets (ResNet-34, MobileNetV2, EfficientNet-B0,
 ResNet-50, MobileNetV4) have a sync-BN DP render, a passing split-batch gate, and both proof twins
 (forward: `*FwdGraphSync_full_shard`; whole step: `r34_net_syncTiedB`, `mnv2_net_syncTiedB`,
 `efficientnet_net_syncTiedG`, `r50_net_syncTiedB`, `mnv4_net_syncTiedB` — every all-reduced
-gradient IS the single-device node at batch `R·N`). §3.1–§3.3 are eight commits on `main`,
-`2a39842f` … `99fc6a8d`, ⚠ **NOT PUSHED**; §3.4 is in the working tree, ⚠ **NOT COMMITTED**
-(see §3.4 for the file list). Commit and push are the user's call.
+gradient IS the single-device node at batch `R·N`). §3.1–§3.4 are commits on `main`,
+`2a39842f` … `99fc6a8d` then `260df19d` (§3.4), ⚠ **NOT PUSHED**. Push is the user's call.
 Read §2b's ⛔⛔, §3.2's gate table and §3.3's before touching numerics.
 
 **Then (2026-09-21, later), `23db65a2`:** the ImageNet-shape probe, §3.3b —
@@ -68,7 +73,7 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
    twin. Net −362 lines across the twins (−373 / +11), +253 in the module.
 3. ✅ **§3.4 ResNet-50 / MobileNetV4** — renders, gates, twins, and FIVE per-replica-identity
    gates re-pointed or retired (three planned, two found red on the way). §3.4 has the account.
-4. ▶ **Commit §3.4** (user's call; the file list is in §3.4), then **§3.5 re-runs**, then the
+4. ▶ **§3.5 re-runs**, then the
    book rows (`content.tex:5671`, `:7059`, `:8266` — `BN statistic group … 64 (per replica)`, the
    R50 `BN group` rows `:5935`, `:6089`, and the two `[TODO: global BN.]`). ⚠ Until a re-run, the
    committed pair numbers were produced by the OLD per-replica renders; the rows stay as they are.
@@ -91,13 +96,16 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
   not the regions' max-abs: one squared entry of RMSProp's `v'` moved the max-abs 4× between runs
   (1.5e-2 → 5.7e-2) while the norm-rel held at 1.6–1.7e-2. f32 reads 6.8e-4 – 1.0e-3 on every gate,
   so the 5e-3 default stands; a sum-not-mean divisor reads `R − 1`.
-* bf16 bounds, PROPOSED 2026-09-21 — not yet approved (§3.3b's table): DUPLICATED gradient 5e-2; statistics TEST
-  3e-3 / 1e-2 / 6e-3 (R34 / MNv2 / B0); B0's FORMULATION 5e-3. The sharp criteria — first-layer
-  split and DUPLICATED statistics — stay at 1e-5 in every precision and read 0.
-* §3.4's bounds, PROPOSED 2026-09-21 — not yet approved (§3.4's gate table): statistics TEST
-  3e-2 bf16 on R50 and MNv4, 5e-3 / 3e-3 f32 (R50 / MNv4) — ≈ 2× each net's statistics
-  SENSITIVITY, because on these two deeper nets TEST sits at the forward's own conditioning;
-  `mnv4-dp-check` gradient 1e-2 f32 / 5e-2 bf16 (measured 1.45–1.65e-3 / 2.06–2.21e-2).
+* ✅ **Per-net split bounds, APPROVED 2026-09-21.** The sharp criteria (first-layer split,
+  DUPLICATED and FORMULATION statistics ≤ 1e-5, CONTROL ≥ 2e-3) are shared by every net and
+  precision. The split-batch TEST bound is per net, because it bounds rounding that compounds
+  with depth and conditioning — measured f32 spans 1.3e-4 (R34) to 2.2e-3 (R50), so one shared
+  bound would leave the shallow nets' gates blind below 38× their own error. The one table of
+  every value and its reason is `tests/TestImagenetSyncBnCheck.lean`'s module docstring
+  ("The bounds, and why the split one is per net"): bf16 3e-3 / 1e-2 / 6e-3 / 3e-2 / 3e-2 and
+  f32 1e-3 / 3e-3 / 1e-3 / 5e-3 / 3e-3 (R34 / MNv2 / B0 / R50 / MNv4); DUPLICATED gradient
+  5e-2 bf16; B0's bf16 FORMULATION 5e-3; `mnv4-dp-check` gradient 1e-2 f32 / 5e-2 bf16. A new
+  net sets its own, with evidence, in that table.
 
 **Gotchas that cost time.**
 * Editing `StableHLO.lean` is a 6-minute rebuild plus the corpus; `PerChannelBN.lean` rebuilds
@@ -856,7 +864,7 @@ splits at 1–4e-5, where f32 is exact through the first several.
 ▶ For §3.5 this says a bf16 re-run trains on the global-batch function to within bf16's own
 rounding — the same rounding every bf16 single-device run has.
 
-### 3.4 ResNet-50, MobileNetV4 — ✅ LANDED 2026-09-21 (uncommitted)
+### 3.4 ResNet-50, MobileNetV4 — ✅ LANDED 2026-09-21 (`260df19d`)
 
 §3.3's pattern, net by net: each renderer calls `SyncBnSites`, the gates are
 `imagenet-syncbn-check` configs, the twins follow `ResNet34Sync*` (R50) and `MobileNetV2Sync*` +
@@ -864,7 +872,7 @@ rounding — the same rounding every bf16 single-device run has.
 each one's only split check. MNv4 has no pair run yet, so its chapter never needs a caveat row.
 Logs: `runs/2026-09-21-syncbn-r50-mnv4/`.
 
-**Files** (all uncommitted): `Codegen/ResNet50RenderB.lean`, `Codegen/MobileNetV4RenderB.lean`,
+**Files** (`260df19d`): `Codegen/ResNet50RenderB.lean`, `Codegen/MobileNetV4RenderB.lean`,
 17 `verified_mlir/` DP artifacts (15 `resnet50in*dp*`, 2 `mnv4in_adamdp64*`), the four twins,
 `LeanMlir/SyncBnCheck.lean`, `tests/TestImagenetSyncBnCheck.lean`, `tests/TestShardCheck.lean`,
 `tests/TestMnv4DpCheck.lean`, `tests/TestR50AccumShardTie.lean`, `tests/TestR50GradCheck.lean`,
@@ -918,7 +926,7 @@ of the raised arena; `resnet50bce` is LAMB + BCE at 160²). Two runs each:
 the statistics SENSITIVITY column (the two-pass graph against itself on `x` + 1e-4 noise) is the
 same size, and in f32 R50's TEST slightly exceeds it. So the §3.3 placeholder bounds (1e-2 bf16 /
 3e-3 f32) were too tight — the BCE run read 1.08e-2 — and the bounds are ≈ 2× SENSITIVITY: 3e-2
-bf16 for both, 5e-3 / 3e-3 f32 (R50 / MNv4). PROPOSED, not yet approved (NEXT SESSION). The
+bf16 for both, 5e-3 / 3e-3 f32 (R50 / MNv4) — approved 2026-09-21 (NEXT SESSION's gate policy). The
 per-layer tables (`SYNCBN_VERBOSE=1`) show the variance error growing smoothly with depth from
 split-exact first layers — rounding, not a wrong exchange; the sharp columns carry the exchange.
 `mnv4-dp-check`: forward BIT-EXACT (67,904/67,904) in both arms; gradient 1.45–1.65e-3 f32,
@@ -951,8 +959,24 @@ Gates at the end of the session: `lake build Certs` 4,031 jobs, `lake build`, `l
 
 ### 3.5 Re-running the pairs
 
-Per net, after 3.2–3.4: R34 ~22 h, MNv2 ~51 h, B0 ~73 h on the verified side. These are now
-**scheduling** decisions, not whether-to: once a net's DP render normalises globally, its
+▶ **The queue.** Each job trains the committed DP artifact, which is sync-BN since §3.2–3.4; the
+verified side only. Wall-clocks are the per-replica renders' measured ones. Sync-BN adds three
+small collectives per BN layer: +2–4 % (R34), +5–10 % (MNv2), +3–7 % (B0) by §2e's costing,
+unmeasured. The user's ceiling for a sanctioned run is ~40 h, and anything longer is their call
+explicitly (run it through `scripts/supervise.sh`).
+
+| order | net | job | variant | verified side | what it retires |
+|---|---|---|---|---|---|
+| 1 | ResNet-34 | `scripts/jobs/r34-default-bf16-4gpu.conf` | `momdp64bf16` | ~22 h | `content.tex:5671` `BN statistic group` row |
+| 2 | MobileNetV2 | `scripts/jobs/mnv2-default-4gpu.conf` | `rmsdp64bf16` | ~51 h | `:7059` row + §6's `[TODO: global BN.]` |
+| 3 | EfficientNet-B0 | `scripts/jobs/enet-default-4gpu.conf` | `emarmsdp64dropdobf16` | ~73 h | `:8266` row |
+| — | ResNet-50 | `r50-a3-wxclip-bf16-4gpu.conf` / `r50-2018-bf16-4gpu.conf` | `lambaccdp8x64wxclipbcebf16` / `momdp64bf16` | not costed here | `:5935`, `:6089` `BN group` rows (A3's group is now 256 against the reference's 512) |
+| — | MobileNetV4 | `scripts/jobs/mnv4-default-4gpu.conf` | `adamdp64` | not costed here | none — its FIRST pair; no caveat row needed |
+
+⚠ B0's job trains `emarmsdp64dropdobf16`. Its twin and `imagenet-syncbn-check` cover
+`rmsdp64bf16`, the same net without EMA and the host-fed masks. The render is sync-BN either way.
+
+These are now **scheduling** decisions, not whether-to: once a net's DP render normalises globally, its
 committed pair number was produced by a function the tree no longer renders, and the chapter
 either re-runs it or says so. §1's Imagenette probe was meant to predict whether a re-run will
 MOVE the number and could not (closed 2026-09-21); what predicts it is the book's own epoch
@@ -973,7 +997,7 @@ plan, and it goes when the render lands.
   ✅ R34's DP twins: forward and whole step tied to the existing spec at `N := R·N` (2026-09-21).
   ✅ MobileNetV2 and EfficientNet-B0: sync-BN DP renders, `*-syncbn-check` gates, both twins (2026-09-21).
   ✅ ResNet-50 and MobileNetV4: the same, plus five per-replica-identity gates re-pointed or
-  retired (2026-09-21, uncommitted).
+  retired (2026-09-21, `260df19d`).
 * ✅ Every BN net's DP render normalises over the global batch; its DP twin ties it to the existing
   spec at `N := R·N`; its `syncbn-check` passes on a split batch.
 * The side-by-side tables' `BN statistic group` row reads `256 (global)` in both columns, the
