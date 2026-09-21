@@ -278,6 +278,7 @@ jobs:
           leanblueprint web
 
       - name: Check Lean declarations referenced in blueprint
+        id: checkdecls
         # NOT `leanblueprint checkdecls`: that shells to the upstream
         # `lake exe checkdecls`, which imports EVERY lib of the workspace —
         # including `CertsHeavy`, whose oleans this workflow deliberately does
@@ -296,8 +297,10 @@ jobs:
         # corpus these citations resolve against.
         # ⚠ scripts/docstring_ref_baseline.txt is DEBT, not an exception list, and may
         # shrink but never grow. A new entry means a citation just rotted with CI green.
+        id: docrefs
         run: |
-          lake exe docstring-checkrefs
+          set -o pipefail
+          lake exe docstring-checkrefs 2>&1 | tee "$RUNNER_TEMP/docstring-checkrefs.log"
 
       - name: Build blueprint PDF
         # Don't block the web deploy if PDF fails, but surface detailed
@@ -424,11 +427,51 @@ jobs:
             BASE="https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}"
           fi
           echo "base URL: $BASE"
+          echo "SITE_BASE=$BASE" >> "$GITHUB_ENV"   # the job summary names the site
           python3 scripts/gen_sitemap.py public "$BASE"
           echo '--- sitemap.xml (first 20 lines) ---'
           head -20 public/sitemap.xml
           echo '--- robots.txt ---'
           cat public/robots.txt
+
+      - name: Job summary
+        # The proof workflows end in a stats table; this one ended in a bare green tick. Every
+        # number is read off what THIS run produced (the declaration list leanblueprint wrote,
+        # the docstring gate's own count, the pages on disk, the PDF's LaTeX log), so a row that
+        # did not get produced says so instead of repeating a stale figure. `always()`: on a red
+        # run the table shows how far it got.
+        if: always()
+        run: |
+          ok() { case "$1" in success) echo "✅ $2" ;; failure) echo "❌ $3" ;; *) echo "— did not run" ;; esac; }
+          count_html() { [ -d "$1" ] && find -L "$1" -name '*.html' | wc -l || echo "—"; }
+          decls="$( [ -f blueprint/lean_decls ] && grep -c . blueprint/lean_decls || echo "—")"
+          thms="$(grep -hoE '^\\begin\{(theorem|lemma|proposition|corollary)\}' blueprint/src/*.tex | wc -l)"
+          defs="$(grep -hoE '^\\begin\{definition\}' blueprint/src/*.tex | wc -l)"
+          docrefs="$(grep -oE 'docstring citations checked: [0-9]+ across [0-9]+ file\(s\); file citations checked: [0-9]+' \
+                       "$RUNNER_TEMP/docstring-checkrefs.log" 2>/dev/null \
+                     | sed -E 's/docstring citations checked: ([0-9]+) across ([0-9]+) file\(s\); file citations checked: ([0-9]+)/\1 identifiers across \2 files, \3 file links/')"
+          if [ -f public/blueprint.pdf ]; then
+            pages="$(grep -ahoE 'Output written on [^ ]+ \([0-9]+ pages' blueprint/print/*.log 2>/dev/null | grep -oE '[0-9]+ pages' | tail -1)"
+            pdf="✅ ${pages:-built} ($(du -h public/blueprint.pdf | cut -f1))"
+          else
+            pdf="⚠️ not built — the web version still ships; see \`public/build-logs/\`"
+          fi
+          sitemap="$( [ -f public/sitemap.xml ] && grep -o '<loc>' public/sitemap.xml | wc -l || echo "—")"
+          {
+            echo "## Blueprint"
+            echo ""
+            echo "| | | |"
+            echo "|---|---|---|"
+            echo "| Lean declarations the blueprint cites | $decls | $(ok "${{ steps.checkdecls.outcome }}" "all present (\`blueprint-checkdecls\`)" "some missing — see \`blueprint-checkdecls\`") |"
+            echo "| Blueprint statements | $thms theorems · $defs definitions | |"
+            echo "| Docstring citations | ${docrefs:-—} | $(ok "${{ steps.docrefs.outcome }}" "all resolve (\`docstring-checkrefs\`)" "some do not resolve — see \`docstring-checkrefs\`") |"
+            echo "| Blueprint web pages | $(count_html public/blueprint) | |"
+            echo "| API doc pages (doc-gen4, \`LeanMlir\`) | $(count_html .lake/build/doc/LeanMlir) | |"
+            echo "| PDF | $pdf | |"
+            echo "| Sitemap URLs | $sitemap | |"
+            echo ""
+            echo "**Site:** ${SITE_BASE:-—} · deployed by the \`deploy_pages\` job below."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ⭐ `upload-pages-artifact` above is NOT a normal artifact: it produces the special
       # `github-pages` tarball that only `deploy-pages` consumes, which is why nothing on a
@@ -484,3 +527,7 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Job summary
+        run: |
+          echo "🚀 **Deployed** \`${GITHUB_SHA::8}\` to ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
