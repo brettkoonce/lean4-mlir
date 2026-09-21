@@ -1,8 +1,13 @@
 # global_bn_verified.md — all-reducing the BatchNorm statistics in the verified renders
 
 **Opened 2026-09-12**, out of §6's phase-4 half. Every verified ImageNet pair that has a
-BatchNorm net carries the same unmeasured confound, and this is the plan to remove it — or to
-bound it cheaply and decide it is not worth removing.
+BatchNorm net carries the same unmeasured confound, and this is the plan to remove it.
+
+⭐⭐ **Decided 2026-09-20: remove it, not bound it.** The verified path is to *be* the JAX side —
+BatchNorm over the global batch, the same function the reference computes — and the pair re-runs
+in §3.5 are accepted if they follow. The doc opened leaving "bound it cheaply and decide it is
+not worth removing" on the table; that option is closed. §1 now sizes the re-runs rather than
+gating the work.
 
 ---
 
@@ -52,27 +57,80 @@ ConvNeXt and ViT are the only two nets whose pair isolates the lowerer, and that
 
 ---
 
-## 1. ⭐ DO THIS FIRST — bound the effect without touching a single proof
+## 1. Bounding the effect on the JAX side — the tool already existed
 
-The question the confound raises is "how much of the verified-vs-reference delta is BN grouping?"
-That can be answered entirely on the JAX side, with **zero** proof work:
+**Re-scoped 2026-09-20.** This was "⭐ DO THIS FIRST", framed as the cheap thing that decides
+whether §2 is worth doing. ⛔ **It no longer decides that.** The call is that the verified path
+should *be* the JAX side — global statistics, not a bounded difference from them — and re-runs
+are accepted if they follow. So §2 is happening on its own case (`dpMeanGrad_ne_globalBatchGrad`:
+the DP step provably is not the batch-`R·N` step today), and this section now sizes the **re-runs**
+in §3.5 rather than gating the work.
 
-▶ Take the reference trainer, keep everything identical, and make BN normalize **per shard**
-  (group 64) instead of globally — `shard_map` over the batch axis, or an explicit reshape to
-  `[R, N/R, …]` with the mean taken over the inner axis only. Train. Compare against the same
-  reference at global BN.
+⭐⭐ **`jax/scripts/bn_sharding_demo.py` is this measurement, and it has existed since
+`8d488368`.** Imagenette R50, one device, fixed init and fixed data order, `conv_bn`
+monkeypatched so all 53 BN sites pick up the knob: `GHOST_BN_GROUPS=k` reshapes `[N,C,H,W]` to
+`[k, N/k, C,H,W]` and reduces over the inner axes, which is bit-identical to what `k` physical
+shards compute. Configs are **paired by construction** — within a seed the only difference
+between two runs is the BN grouping — so the per-seed difference is the estimator and init/
+data-order noise cancels.
 
-**reference@BN64 − reference@BN256 IS the confound, measured**, on the same lowerer, same seed
-discipline, same everything. Whatever is left over in the verified-vs-reference delta is not BN.
+⚠ It had **never been run**: no `BN_SHARDING_RESULT` line anywhere in `runs/` or the docs.
+`planning/archive/xla_pjrt_ladder.md:833` says it "already quantifies the synced-vs-sharded top-1
+gap", which reads as a result but is only the tool existing. Anything citing that sentence is
+citing nothing.
 
-⚠ This is what §5's `sec:r34_pjrt` effectively did for ResNet-34 to get its $0.02$ figure. It is
-cheap, it is a JAX-only diff, and it decides whether the **pair re-runs** (§3.5) are worth
-repeating — if the effect is hundredths on the BN-dense nets too, the existing numbers stand.
-The render work (§2) does not wait on it: its case is that the DP step provably is not the
-batch-`R·N` step today (`dpMeanGrad_ne_globalBatchGrad`), whatever the accuracy delta.
+Three things were wrong with it, fixed 2026-09-20 before the first run:
 
-⚠ Do it at short schedule first (Imagenette, or ~30 ImageNet epochs) to get the sign and the order
-before spending a 50-hour run on it.
+* ⛔⛔ **The eval BN group moved with the training one.** The probe has no `training` flag —
+  `evaluate` → `eval_batch` → `forward` → the same patched `conv_bn`, at eval batch 512. So
+  `groups=k` normalised eval over `512/k` as well, and each config differed from its neighbour in
+  two places at once. Eval is now pinned to global BN whatever the training grouping, which is
+  also the faithful match: both ImageNet paths score from running statistics that estimate the
+  GLOBAL mean/var. Checked numerically — across configs the eval path now differs by exactly 0,
+  `groups=1` is still bit-identical to the stock global BN, and training genuinely differs.
+* ⛔⛔ **A silent CPU fallback.** With four configs starting at once one lost its CUDA init
+  ("a CUDA-enabled jaxlib is not installed. Falling back to cpu"), then sat at 1316 % CPU and
+  56 GB of host RAM — starving the three GPU runs beside it from 100 % GPU down to 0 %, and
+  heading for a number that was never going to arrive. The demo now aborts unless the backend is
+  `gpu` (`ALLOW_CPU=1` to override). A run that scores on CPU is not a slower run, it is a fake one.
+* A `SEED` knob, shifting init and data order together so configs stay paired within a seed.
+
+▶ **The sweep is the whole curve, not one pair.** Batch 192 split `k` ways, one config per card,
+80 epochs, fully annealed: `k = 1` (group 192, what the reference does), 2 (96), 4 (**48** — the
+fourfold split the verified path actually has), 8 (24). `k = 4` is the point that matters; the
+others say whether the effect is monotone and how fast it bites.
+
+⚠⚠ **A short schedule does not give "the sign and the order" — it gives an upper bound.** The
+book's own epoch tables settle this: ResNet-34's pair runs $+1.69$ at epoch 30 and $+2.04$ at 45
+and ends at $-0.10$; MobileNetV2's runs $+4.67$ at epoch 10 and ends at $+0.01$. The BN-group
+effect is large mid-schedule and washes out by the end of a cosine. A fully-annealed short run is
+a legitimate experiment, but it anneals a schedule with less time to wash out, so read it as a
+**conservative upper bound** on the converged effect: hundredths at 80 epochs settles §3.5 without
+running anything at ImageNet scale; a point is inconclusive and the ImageNet probe is next.
+
+⛔⛔ **RAN IT. Imagenette cannot resolve this question — closed 2026-09-21.** Two rounds, eight
+80-epoch runs. The no-aug probe gave a clean monotone curve (192 → 38.70, 96 → 40.79, 48 → 43.30,
+24 → 47.32); the augmented probe, two seeds, gave 41.83 global vs 47.95 at group 48, **Δ +6.13**.
+Consistent, and unusable, for three reasons together:
+
+1. **Wrong regime.** Both arms sit at 41–48 % with eval loss ≈ 5.0 against `ln 10 = 2.30` — R50's
+   23.5 M parameters against 9,469 images, heavily overfitting. There the noise in a small BN
+   group is the main regulariser available, so the gap measures regularisation headroom.
+2. **Opposite sign to the real pairs.** Here the verified side's grouping looks +6.13 BETTER; on
+   the committed pairs the reference won slightly at convergence (R34 $-0.10$, MNv2 $+0.01$).
+3. **Augmentation barely moved it** (+4.60 → +6.13). Closing most of the regularisation gap
+   should have shrunk a real BN-group effect.
+
+⚠ The probe's crop is far weaker than the reference's and does not stop the overfitting:
+`np.pad(224→252)` then crop back, translation only, **one offset shared by all 192 images**,
+versus the reference's per-image `sample_distorted_bounding_box` with scale and aspect jitter.
+
+⭐ **The best evidence on the converged effect is already in the book** — R34's and MNv2's own
+epoch tables, real nets at real scale under real recipes, both converging to ≤ 0.10. No
+Imagenette proxy improves on that. If a direct number is ever wanted it is a ~30-epoch ImageNet
+R34 reference at BN64 vs BN256 (~4.5 h per arm on four cards), and nothing else.
+
+Write-ups: `runs/2026-09-20-bn-group-sweep/RESULTS.md`, `runs/2026-09-20-bn-group-aug/RESULTS.md`.
 
 ---
 
@@ -103,33 +161,71 @@ So the only thing missing is "normalise with statistics handed in", forward and 
 
 ### 2b. The four new ops
 
-Global statistics over `R` equal shards are means of per-shard means: `μ_g = (1/R) Σ_r μ_r`,
-`E[x²]_g = (1/R) Σ_r E[x²]_r`, `var_g = E[x²]_g − μ_g²`. (Not `(1/R) Σ_r var_r` — the variance of
-the union is not the mean of the variances; reduce the second moment, not the variance.)
+**Rewritten 2026-09-20 (second pass), after pricing the edit against the skeleton language.**
+The first pass gave each op its mathematical arity — `bnSyncF` three operands, the dy-statistic
+four, `bnSyncBack` five. ⛔ **`SHlo`'s skeleton language does not have those arities.** It has
+`.batched` (one operand) and `.batched2` (two), and nothing above two: `Raw` 4197/4202, `Tok`
+4798/4799. Anything wider is a new `Raw` **and** `Tok` constructor **and** `toToks` **and**
+`parseStack` **and** an emit arm — `batched2` itself is 15 sites across three files. Three new
+arities is most of a session before a line of mathematics is written.
 
-| op | type | `den` | role |
+⭐⭐ **The way out is the one §2e already suggests for a different reason: carry the statistics
+PACKED.** One `[2·oc]` vector instead of two `[oc]`s, one `[4·oc]` instead of four, and every
+sync op lands back on the arities that already exist.
+
+It works because of how this AST already separates its two kinds of input. A value the *graph*
+computes is an `SHlo` operand; everything else arrives as a **named host buffer** — which is
+exactly why `bnBatchBack` is single-operand today, taking `(xName : String) (x : Vec …)` beside
+its one `dy`. μ and m2 are all-reduced *in* the graph, so they cannot be host buffers and must be
+operands. Packing is what keeps that from costing an arity.
+
+| op | type | operands | skeleton |
 |---|---|---|---|
-| `bnBatchMeanSqB` | `SHlo (N*(oc*(h*w))) → SHlo oc` | per-channel mean of `x²` over `N·h·w` | the second moment; sibling of `bnBatchMeanB` |
-| `bnSyncF gName bName epsStr ε γ β` | `SHlo n → SHlo oc → SHlo oc → SHlo n` | `γ·(x − μ)·(m2 − μ² + ε)^{-1/2} + β` per channel, with `μ`, `m2` the two `SHlo oc` arguments | the forward, statistics handed in |
-| `bnSyncDyXhatMeanB` | `SHlo n → SHlo oc → SHlo oc → SHlo n → SHlo oc` | per-channel mean over `N·h·w` of `dy · xhat`, `xhat` from the handed-in `μ`, `m2` | the backward's second reduction (its first is `bnBatchMeanB dy`) |
-| `bnSyncBack gName xName epsStr ε γ x` | `SHlo oc → SHlo oc → SHlo oc → SHlo oc → SHlo n → SHlo n` | `γ·istd·(dy − mdy − xhat·mdyx)`, with `μ`, `m2`, `mdy`, `mdyx` handed in | the backward, both reductions handed in |
+| `bnBatchStatsB` | `SHlo (N*(oc*(h*w))) → SHlo (oc+oc)` | 1 | `.batched` |
+| `bnSyncF gName bName epsStr ε γ β` | `SHlo n → SHlo (oc+oc) → SHlo n` | 2 | `.batched2` |
+| `bnSyncDyStatsB xName ε x` | `SHlo n → SHlo (oc+oc) → SHlo (oc+oc+oc+oc)` | 2 | `.batched2` |
+| `bnSyncBack gName xName epsStr ε γ x` | `SHlo n → SHlo (oc+oc+oc+oc) → SHlo n` | 2 | `.batched2` |
 
-A BN layer on replica `r`, with `x : Fin R → SHlo n` the replica family of its input, then renders
-as
+⭐⭐ **Index the packed results `oc+oc`, NOT `2*oc`** — then the packing function is Mathlib's
+`Fin.append` (`Mathlib/Data/Fin/Tuple/Basic.lean:309`, itself `Fin.addCases`) and the two
+projections are `Fin.append_left` / `Fin.append_right`, already proved. At `2*oc` none of that
+applies without a `two_mul` rewrite, and the alternative is hand-rolling a `packPair` with a
+`Fin` subtraction and an `omega` side-goal at every use. `Vec n` is `Fin n → ℝ`, so
+`den (bnBatchStatsB e) = Fin.append (fun c => bnMean …) (fun c => bnMeanSq …)` is the whole
+definition and P1 reads its halves off the two `append` lemmas. ⚠ The 2026-09-18 Mathlib-reuse
+audit found every lemma this tree hand-rolled was already in Mathlib; this is that lesson applied
+before the fact rather than after.
 
-    μ   := allReduceMeanF R _ "{g}mu"  [] (fun r => bnBatchMeanB   (x r))
-    m2  := allReduceMeanF R _ "{g}m2"  [] (fun r => bnBatchMeanSqB (x r))
-    y_r := bnSyncF … (x r) μ m2
+* `bnBatchStatsB` replaces the first pass's `bnBatchMeanSqB` and subsumes `bnBatchMeanB`'s job at
+  the sync sites: `den` is `μ` in the low `oc` slots and `E[x²]` in the high ones, both the
+  `bnMean`/`bnMeanSq` of `bnchwFwd`, so it is the same statistic `bnBatchTensor4` normalises by.
+  Still the second moment, never the variance — `var_g = E[x²]_g − μ_g²`, and the variance of a
+  union is not the mean of the variances.
+* `bnSyncF`'s `x` is the graph operand (it is the activation flowing through); `γ β` are host
+  literals. `den` is `γ·(x − μ)·(m2 − μ² + ε)^{-1/2} + β` per channel, reading `μ`, `m2` out of
+  the packed operand.
+* ⭐ **`bnSyncDyStatsB` passes `μ`, `m2` THROUGH into its result**, so its output is
+  `[μ ‖ m2 ‖ mdy ‖ mdyx]` and ONE all-reduce carries all four into the backward. Re-averaging an
+  already-global quantity over the replicas is the identity, so the pass-through is free
+  mathematically and buys the collective. `x` is a host literal, as in `bnBatchBack`.
+* `bnSyncBack` then needs only `dy` and that one `[4·oc]` vector.
+
+A BN layer on replica `r`, with `x : Fin R → SHlo n` the replica family of its input, renders as
+
+    st  := allReduceMeanF R _ "{g}st"  [] (fun r => bnBatchStatsB (x r))        -- [μ ‖ m2]
+    y_r := bnSyncF … (x r) st
 
 and its backward, with `dy` the family of output cotangents, as
 
-    mdy  := allReduceMeanF R _ "{g}mdy"  [] (fun r => bnBatchMeanB (dy r))
-    mdyx := allReduceMeanF R _ "{g}mdyx" [] (fun r => bnSyncDyXhatMeanB (x r) μ m2 (dy r))
-    dx_r := bnSyncBack … μ m2 mdy mdyx (dy r)
+    dst  := allReduceMeanF R _ "{g}dst" [] (fun r => bnSyncDyStatsB … (dy r) st)  -- [μ‖m2‖mdy‖mdyx]
+    dx_r := bnSyncBack … (dy r) dst
+
+⭐ **Two collectives per BN layer per step, not four** — §2e's table halves, and the payload is
+still one small vector (`[4·oc]` ≤ 8,192 floats, 32 KB).
 
 This stays inside the SPMD convention `allReduceMeanF` already uses (one skeleton, `skel` reads
 replica 0; each replica's own activation is the `r`-th member). At `R = 1` every `allReduceMeanF`
-emits nothing and threads its operand, so the single-device render is `bnSyncF x (mean x) (meanSq x)`,
+emits nothing and threads its operand, so the single-device render is `bnSyncF x (bnBatchStatsB x)`,
 which denotes `bnBatchF x`: the `R = 1` artifacts need not move at all, and 2e says whether to
 let them.
 
@@ -138,10 +234,12 @@ The running statistics the step hands back (`bnBatchMeanB`/`bnBatchVarB` passthr
 EMAs. Today the driver reads replica 0's shard-of-64 statistics, so this also aligns the eval
 running stats, not only the training forward.
 
-⚠ Adding an `SHlo` op is ~10 sites across two files — inductive, `den`, `skel`/`toToks`, the
-parser round-trip (⛔ under `Certs`; a bare `lake build` misses it), `pretty`/`emitTok`, shape
-lemmas — and editing `StableHLO.lean` rebuilds the whole corpus (~6 min for the file, then every
-module below it). Four ops, one edit session, all four at once.
+⚠ Adding a `batched`/`batched2`-riding `SHlo` op is **5 sites, all in `StableHLO.lean`** —
+inductive, the `den` arm, the `den_*` simp theorem, the `skel` arm, the emit arm. `parseStack`
+dispatches on the tag generically (`StableHLOParse.lean:183`), so the round-trip needs nothing;
+the emit arms are a `match tag, info` case each (8624). ⛔ Still gate with `lake build Certs` — a
+bare `lake build` misses it. Editing `StableHLO.lean` rebuilds the corpus (~6 min for the file,
+then every module below it), so: four ops, one edit session, all four at once.
 
 ### 2c. The proofs, and why the spec does not move
 
@@ -160,6 +258,10 @@ arbitrary one; the contiguous cut the shim makes is `finProdFinEquiv`), lifted t
   global forward, so the sync backward on shard `r` is the shard-`r` block of the true
   global-batch input-VJP — including the cross-shard terms, which is what makes the all-reduced
   parameter gradient below exact.
+✅ **P1 and P2 are PROVED** (2026-09-21) — see §3.1. Both landed in the form stated here: the
+right-hand side is the existing definition at `N := R·N`, so the spec did not move. What is left
+below is P3 and P4.
+
 * **P3, whole net.** Every other op in every BN net's chain is `batchMap N` of a per-example op
   (conv, relu, pool, GAP, dense, the CE cotangent), and `batchMap` commutes with `shard`/`concat`
   by definition. So by induction on the chain, the sync-DP forward graph on replica `r` denotes
@@ -195,23 +297,25 @@ needs its own numeric check"), and it is exactly the identity that per-replica B
 
 ### 2e. Cost
 
-Collectives per step: two per BN layer forward (`μ`, `E[x²]`), two per layer backward
-(`mdy`, `mdyx`), each a `[oc]` vector (≤ 2,048 floats, 8 KB):
+**Halved by 2b's packing.** ONE collective per BN layer forward (`[μ ‖ m2]`, a `[2·oc]` vector)
+and ONE per layer backward (`[μ ‖ m2 ‖ mdy ‖ mdyx]`, `[4·oc]`, ≤ 8,192 floats / 32 KB) — two per
+layer per step, where the first pass costed four:
 
 | net | BN layers | collectives / step | verified ms/step today | at 30–60 µs each |
 |---|---|---|---|---|
-| ResNet-34 | 36 | 144 | ~175 (14.6 min / 5,004 steps) | +4–9 ms, 2–5 % |
-| MobileNetV2 | 52 | 208 | 97 | +6–12 ms, 6–13 % |
-| EfficientNet-B0 | 49 | 196 | 134 | +6–12 ms, 4–9 % |
-| ResNet-50 | 53 | 212 | — | +6–13 ms |
-| MobileNetV4 | 77 | 308 | — | +9–18 ms |
+| ResNet-34 | 36 | 72 | ~175 (14.6 min / 5,004 steps) | +2–4 ms, 1–2 % |
+| MobileNetV2 | 52 | 104 | 97 | +3–6 ms, 3–6 % |
+| EfficientNet-B0 | 49 | 98 | 134 | +3–6 ms, 2–4 % |
+| ResNet-50 | 53 | 106 | — | +3–6 ms |
+| MobileNetV4 | 77 | 154 | — | +5–9 ms |
+
+⚠ These are latency-bound, not bandwidth-bound — `[4·oc]` at 32 KB is nothing on the wire, so
+doubling the payload to halve the count is the right trade at every net here.
 
 XLA's all-reduce combiner cannot merge them: each layer's forward depends on the previous layer's
 normalised output, so the collectives are sequential by construction. The reference pays the same
 collectives — GSPMD inserts one per BN for `jnp.mean(axis=(0,2,3))` on a sharded array — so the
-pairs stay like-for-like, and the reference's 79 / ~92 ms/step already include them. If the
-overhead matters, one concat op would halve the count (reduce `[μ ‖ E[x²]]` as one `[2·oc]`
-vector); not in the first cut.
+pairs stay like-for-like, and the reference's 79 / ~92 ms/step already include them.
 
 The `R = 1` artifacts: leaving them on `bnBatchF` keeps 0 bytes moving in `verified_mlir/` for
 the single-device renders and keeps every existing tie untouched; the DP renders are where the
@@ -224,8 +328,149 @@ function changes. Decide per net at render time; the default is to touch only th
 ### 3.1 The kit (once)
 
 The four ops (2b), P1/P2 (2c) in `Foundation/PerChannelBN.lean` beside `bnBatchTensor4`, P4 in
-`Foundation/DataParallel.lean` beside its negative twin, the `allReduceMeanF`-at-`[oc]` emit
-checked against the parser. Gate: `lake build Certs`, parser round-trip, AuditAxioms. One session.
+`Foundation/DataParallel.lean` beside its negative twin, the `allReduceMeanF`-at-`[2·oc]`/`[4·oc]`
+emit checked against the parser. Gate: `lake build Certs`, parser round-trip, AuditAxioms.
+
+▶ **Landed 2026-09-21 — the Foundation `R = 1` story, complete both directions, green.**
+`Certs` 4,018 jobs exit 0; `AuditAxioms` 0 `sorryAx`, 1,381 verdicts for 1,381 directives, every
+new theorem on the standard 3 axioms.
+
+| in `Architectures/BatchNorm.lean` | |
+|---|---|
+| `bnMeanSq` | the second moment |
+| `bnVar_eq_bnMeanSq_sub_sq` | `σ² = E[x²] − μ²` |
+| `bnMean_shard` / `bnMeanSq_shard` | statistic of the whole = mean of the shards' statistics |
+| `bnSync_grad_input` | the three-term backward, every reduction handed in |
+| `bnSync_grad_input_at_own_stats` | …at its own statistics it IS `bn_grad_input` |
+
+| in `Foundation/PerChannelBN.lean` | |
+|---|---|
+| `bnEvalForward_at_own_stats` | frozen-stats BN at own stats IS `bnForward` |
+| `bnSyncTensor4` + `_at_own_stats` | sync forward at `[N,C,H,W]`, and the `R=1` anchor |
+| `bnSyncPerChannel_grad_input`, `bnSyncTensor4_grad_input` + `_at_own_stats` | ditto backward |
+
+⭐⭐ **The four `*_at_own_stats` anchors are the drop-in licence.** At `R = 1` every
+`allReduceMeanF` threads its operand, so the sync render hands in exactly the statistics the
+batch would have computed — and these say the result is the function the committed tiers are
+already tied to. So the `R = 1` artifacts need not move, and `R > 1` is a statement about
+SHARDS, not about BatchNorm.
+
+⭐ `bnMeanSq_shard` is a **one-line application** of `bnMean_shard`, no tactic proof. The
+variance has no such sibling and cannot: that is the asymmetry forcing the design, now visible
+in the code rather than asserted in prose.
+
+⚠ In `bnSync_grad_input_at_own_stats` the variance rewrite must fire BEFORE `bnMean` unfolds, or
+the two sides get different arguments under the square root. P2 will bite the same way.
+
+▶ **All four ops landed 2026-09-21**, each 5 sites, parser untouched:
+`bnBatchStatsB : SHlo (N*(oc*(h*w))) → SHlo (oc+oc)`,
+`bnSyncF : … → SHlo (oc+oc) → …`,
+`bnSyncDyStatsB : … → SHlo (oc+oc) → SHlo (oc+oc+(oc+oc))`,
+`bnSyncBack : … → SHlo (oc+oc+(oc+oc)) → …`.
+
+⭐⭐ **And the DROP-IN is now proved on actual graph nodes, both directions:**
+
+    StableHLO.den_bnSyncF_allReduce_R1     -- bnSyncF ∘ allReduceMeanF 1 ∘ bnBatchStatsB
+                                           --   = bnBatchTensor4
+    StableHLO.den_bnSyncBack_allReduce_R1  -- bnSyncBack ∘ allReduceMeanF 1 ∘ bnSyncDyStatsB
+                                           --   ∘ allReduceMeanF 1 ∘ bnBatchStatsB
+                                           --   = bnBatchTensor4_grad_input
+
+These are the graphs a sync render actually emits. At `R = 1` both collectives collapse to their
+single operand and what is left is exactly what today's `bnBatchF`/`bnBatchBack` renders denote.
+⇒ **the `R = 1` artifacts need not move, and `R > 1` is now purely a question about how shard
+statistics compose** (`bnMean_shard`/`bnMeanSq_shard`) — BatchNorm itself is already accounted for.
+
+✅ **`StableHLO.roundtrip` covers the new ops for free.** It is `∀ {k} (a : SHlo k), parse (toToks
+(skel a)) = some (skel a)` — universally quantified, and it still compiles, because all four ride
+`.batched`/`.batched2`.
+
+⚠ For 3.2: `bnSyncF` is indexed `N*(oc*(h*w))` (matching `bnBatchTensor4`/`bnBatchMeanB`), where
+`bnBatchF` is at `N*(oc*h*w)` — `bnBatchLA` is `bnBatchTensor4` conjugated by
+`Fin.cast (Nat.mul_assoc oc h w)`. Not a blocker: the renderers build a fresh `.operand` per node
+and `ResNet34RenderB` already carries BOTH zero-vectors (`zin` at `c*hh*ww`, `zbn` at
+`c*(hh*ww)`) for exactly this.
+
+▶ ⭐⭐⭐ **P1 AND P2 LANDED 2026-09-21.** `Certs` 4,018 exit 0; audit 1,392/1,392, no `sorryAx`.
+
+    bnSyncTensor4_shard_eq_global             -- P1
+    bnSyncTensor4_grad_input_shard_eq_global  -- P2
+
+Handed the all-reduced statistics — each literally `(1/R)·Σ_r'` of a per-replica quantity, i.e.
+what `allReduceMeanF` of `bnBatchStatsB` (then of `bnSyncDyStatsB`) denotes — replica `r`'s sync
+forward/backward equals `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4_grad_input` run on
+the whole `R·N` batch. ⭐ **The spec does not move: both right-hand sides are the EXISTING
+definitions at `N := R·N`**, exactly as §2c predicted.
+
+⭐⭐ **The decomposition that made it tractable.** Each splits in two, and only one half carries
+mathematics:
+
+* **(a) pointwise ⇒ sharding commutes** (`bnSyncTensor4_batchShard`,
+  `bnSyncTensor4_grad_input_batchShard`). Once the statistics are FIXED, sync-BN reads only
+  `x t` and `dy t` (`bnSyncTensor4_apply`, `bnSyncTensor4_grad_input_apply`) — cells mix only
+  when statistics are computed, and sync-BN has hoisted that into the collective. Sharding
+  preserves a cell's channel (`bnchwChan_batchShard`), so this half is pure index bookkeeping
+  and holds for ANY statistics, right or wrong. Three-line proofs.
+* **(b) the statistics really are the all-reduced ones** — `bnMean_row_shard`,
+  `bnMeanSq_row_shard`, `bnMean_pair_row_shard`, all `bnMean_shard` transported along
+  `bnchwFwd_row_batchShard`: **the global channel row restricted to replica `r`'s block IS that
+  replica's own channel row**. That layout step is the one the `[N,C,H,W] → [C, N·H·W]` relabel
+  was hiding, and it is the only place the two worlds have to be reconciled.
+
+⭐ **The cross-shard terms are in.** `mdyx` averages `x̂·dx̂` with `x̂` built from the GLOBAL `μ`,
+`m2` — not the shard's own — which is why `bnSyncDyStatsB` consumes the already-reduced vector
+instead of recomputing. That is what makes each replica's output the true shard-`r` block, and
+hence the all-reduced PARAMETER gradient exact rather than approximate. P4 now has what it needs.
+
+⚠ `bnMean_shard` was generalised to an arbitrary target index `Fin M` with `M = R*m` DERIVED from
+the equiv by cardinality, rather than assumed — without that it does not apply at `(R*N)*(h*w)`
+vs `R*(N*(h*w))`, and every use downstream needs it.
+
+▶ **Increment 1 of 4 — the ops.**
+* `bnMeanSq` + `bnVar_eq_bnMeanSq_sub_sq : bnVar n x = bnMeanSq n x - bnMean n x * bnMean n x`
+  (`Architectures/BatchNorm.lean`, beside `bnVar`). The identity the whole design rests on: it is
+  why replicas exchange the second moment and each recovers `σ²` locally.
+* `bnBatchStatsB {N oc h w} : SHlo (N*(oc*(h*w))) → SHlo (oc+oc)`, all 5 sites. `den` is
+  `Fin.append` of the two statistics; the emit is `bnBatchMean`'s text verbatim for μ, the same
+  reduction over `x·x` for the second moment, and a `stablehlo.concatenate` so one collective
+  carries both.
+* Gates: `lake build Certs` 4,018 jobs exit 0, no warnings. `tests/AuditAxioms.lean` clean — the
+  new theorem on the standard 3 axioms, 1,375 verdicts for 1,375 directives, no `sorryAx`.
+* ✅ **Both predictions held**: `StableHLO.lean` rebuilt in **374 s**, and the **parser needed zero
+  changes** — `.batched` is generic, so the remaining three ops are the same 5-site shape.
+* ⚠ NOT yet checked: the emitted MLIR is not numerically verified, because no renderer uses the
+  op. That arrives with 3.2's R34 swap and `resnet34-syncbn-check`.
+
+Priced 2026-09-20: **20 sites, all in `StableHLO.lean`** — 5 per op (inductive, `den` arm, `den_*`
+simp theorem, `skel` arm, emit arm), because 2b's packing keeps every op on the existing
+`.batched`/`.batched2` skeletons and `parseStack` dispatches on the tag generically. The
+mathematics, not the plumbing, is what makes this a session: P2 is the three-term backward with
+its cross-shard terms. ⭐ Land `bnBatchStatsB` first — it is a pure sibling of the existing
+`bnBatchMeanB`/`bnBatchVarB`, needs no new lemma, and proves out the 5-site path before the three
+ops that carry real proof obligations.
+
+### 3.1b ▶ NEXT — P3, then P4
+
+**P1/P2 are done; the kit's remaining proof work is P3 and P4.** Both are now short, because the
+hard layout step (`bnchwFwd_row_batchShard`) and the statistic algebra (`bnMean_shard` and its
+transports) are behind us.
+
+* **P3 — the whole net.** Every non-BN op in a BN net's chain is `batchMap N` of a per-example
+  op, and `batchMap` commutes with `batchShard` by definition, so this is an induction over the
+  chain with P1/P2 as the BN case. ⭐ Start from `batchSlice_batchMap` (`StableHLO.lean:117`),
+  which already peels a `batchMap` at one example; the shard version is its block analogue.
+  ⚠ `batchShard` lives in `Foundation/PerChannelBN.lean` but `batchMap`/`batchSlice` live in
+  `Codegen/StableHLO.lean` (which imports it) — so the P3 statement belongs in `StableHLO.lean`
+  or above, NOT beside `batchShard`.
+* **P4 — the step.** `dpSyncGrad_eq_globalBatchGrad`, the positive twin of
+  `dpMeanGrad_ne_globalBatchGrad` in `Foundation/DataParallel.lean`. P2 gives the piece that was
+  missing: each replica's weight gradient is its shard's true contribution to the global one,
+  cross-shard terms included, so the mean over `R` of the `(1/N)`-scaled shard sums is the
+  `(1/(R·N))`-scaled global sum. Compose with `dpIterate_lockstep` for the `n`-step statement.
+
+Then §3.2. ⚠ **The emitted MLIR text is still unverified numerically** — nothing renders the four
+ops yet. That gate is §3.2's R34 swap plus `resnet34-syncbn-check`, and it is the first thing
+that can catch a wrong `stablehlo.slice` bound or a bad `concatenate`.
 
 ### 3.2 ResNet-34 — first, the template
 
@@ -250,10 +495,17 @@ pair so the chapter never needs the caveat row.
 
 ### 3.5 Re-running the pairs
 
-Separate decisions, per net, after 3.2–3.4: R34 ~22 h, MNv2 ~51 h, B0 ~73 h on the verified
-side. §1's JAX-side measurement is the cheap predictor of whether a re-run will move the number;
-it does not gate the render work, because the render work is what lets a chapter say the two
-columns differ only in the lowerer.
+Per net, after 3.2–3.4: R34 ~22 h, MNv2 ~51 h, B0 ~73 h on the verified side. These are now
+**scheduling** decisions, not whether-to: once a net's DP render normalises globally, its
+committed pair number was produced by a function the tree no longer renders, and the chapter
+either re-runs it or says so. §1 is the cheap predictor of whether a re-run will MOVE the number
+— which orders the queue and sets expectations — and the book's own epoch tables predict the
+converged deltas are small, so expect re-runs that confirm rather than overturn.
+
+⚠ A re-run is also the only thing that retires the `[TODO: global BN.]` sitting in §6's
+MobileNetV2 section (`content.tex`, after the "Separating those would take a verified render that
+all-reduces the batch statistics" paragraph) — that paragraph is a description of exactly this
+plan, and it goes when the render lands.
 
 ---
 

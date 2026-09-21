@@ -584,6 +584,39 @@ open Proofs
 #print axioms bnPerChannelTensor3_grad_input_correct
 -- ch8 E5 (EfficientNet BATCH-norm)
 #print axioms bnBatchTensor4_grad_input_correct
+-- sync-BN kit (planning/global_bn_verified.md §2b/§2c)
+-- the identity that lets replicas exchange the SECOND MOMENT and each recover the variance
+#print axioms bnVar_eq_bnMeanSq_sub_sq
+-- a statistic of the whole = the mean of the shards' statistics, which is what makes a plain
+-- `allReduceMeanF` the right collective. ⛔ the variance has no such lemma, and cannot.
+#print axioms bnMean_shard
+#print axioms bnMeanSq_shard
+-- the R = 1 anchors: handed the batch's OWN statistics, the sync forward/backward ARE the
+-- existing batch forward/backward — so the single-device renders denote the tied function
+#print axioms bnEvalForward_at_own_stats
+#print axioms bnSyncTensor4_at_own_stats
+#print axioms bnSync_grad_input_at_own_stats
+#print axioms bnSyncTensor4_grad_input_at_own_stats
+#print axioms bnSyncXhat_at_own_stats
+-- ⭐⭐ THE DROP-IN, on actual graph nodes: at R = 1 the sync-BN subgraphs (bnSyncF / bnSyncBack
+-- fed by allReduceMeanF of bnBatchStatsB / bnSyncDyStatsB) denote exactly what today's
+-- bnBatchF / bnBatchBack renders denote — so the R = 1 artifacts need not move.
+-- ⭐⭐⭐ P1 / P2 — sync-BN on replica r IS the shard-r block of the GLOBAL-BATCH forward and
+-- input-VJP, handed the all-reduced statistics. The spec does not move: both right-hand sides
+-- are the EXISTING bnBatchTensor4 / bnBatchTensor4_grad_input at N := R·N.
+#print axioms bnSyncTensor4_shard_eq_global
+#print axioms bnSyncTensor4_grad_input_shard_eq_global
+-- their two halves: pointwise-so-sharding-commutes (no mathematics), and the statistics really
+-- being the all-reduced ones (all the mathematics)
+#print axioms bnSyncTensor4_batchShard
+#print axioms bnSyncTensor4_grad_input_batchShard
+#print axioms bnMean_row_shard
+#print axioms bnMeanSq_row_shard
+#print axioms bnMean_pair_row_shard
+-- the layout step the bnchwFwd relabel was hiding
+#print axioms bnchwFwd_row_batchShard
+#print axioms StableHLO.den_bnSyncF_allReduce_R1
+#print axioms StableHLO.den_bnSyncBack_allReduce_R1
 -- B8b: the per-channel BN SHlo op pair backward-faithfulness
 #print axioms StableHLO.bnPerChannelBack_faithful
 -- R4 syntactic core

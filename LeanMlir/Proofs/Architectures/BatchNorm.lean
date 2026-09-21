@@ -64,6 +64,73 @@ theorem bnVar_nonneg (n : ℕ) (x : Vec n) : 0 ≤ bnVar n x := by
   unfold bnVar
   exact div_nonneg (Finset.sum_nonneg fun i _ => mul_self_nonneg _) (Nat.cast_nonneg n)
 
+/-- Second moment: `E[x²] = (1/N) Σᵢ xᵢ²`.
+
+    ⭐ The quantity a SYNCHRONISED BatchNorm reduces across replicas — never the variance.
+    At equal shard sizes the second moment of the union IS the mean of the shards' second
+    moments, while the variance of the union is NOT the mean of the shards' variances (the
+    shard means differ, and that spread is missing from every shard's own variance). So `R`
+    replicas exchange `μ` and `E[x²]` and each recovers the global `σ²` through
+    `bnVar_eq_bnMeanSq_sub_sq`. See `planning/global_bn_verified.md` §2b. -/
+noncomputable def bnMeanSq (n : Nat) (x : Vec n) : ℝ :=
+  (∑ i : Fin n, x i * x i) / (n : ℝ)
+
+/-- ⭐⭐ **The mean of a sharded vector is the mean of the shards' means** — at EQUAL shard
+    sizes, which is what makes `allReduceMeanF` (a plain mean over replicas) the right
+    collective for BatchNorm statistics.
+
+    Stated at an arbitrary shard `e`, in the style `DataParallel.meanLoss_shard` sets: WHICH
+    cells land on which replica never enters, only that together they are the whole. The
+    contiguous cut the DP shim makes is the `finProdFinEquiv` instance. -/
+theorem bnMean_shard {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
+    (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
+    bnMean M x = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean m (fun k => x (e (r, k))) := by
+  -- ⭐ `M = R * m` is not a hypothesis — the equiv already forces it, by cardinality. That is
+  -- what lets this apply at ANY association of the target index (`(R*N)*(h*w)` as readily as
+  -- `R*(N*(h*w))`), which every use downstream needs.
+  have hcard : M = R * m := by
+    have h := Fintype.card_congr e; simpa using h.symm
+  subst hcard
+  have hRr : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hR
+  have hmr : (m : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hm
+  have hsum : ∑ i : Fin (R * m), x i = ∑ r : Fin R, ∑ k : Fin m, x (e (r, k)) := by
+    rw [← Equiv.sum_comp e x, Fintype.sum_prod_type]
+  unfold bnMean
+  rw [hsum]
+  simp only [div_eq_mul_inv, ← Finset.sum_mul]
+  push_cast
+  field_simp
+
+/-- ⭐⭐ **…and so is the SECOND MOMENT**, which is the whole reason sync-BN reduces `E[x²]`
+    rather than the variance. Free from `bnMean_shard`: `bnMeanSq n x` is definitionally
+    `bnMean n (x·x)`, and squaring commutes with the shard.
+
+    ⛔ The variance has NO such lemma, and cannot: `bnVar` of the union is not the mean of the
+    shards' `bnVar` unless every shard mean coincides. That spread is exactly what a
+    per-replica BatchNorm drops on the floor. -/
+theorem bnMeanSq_shard {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
+    (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
+    bnMeanSq M x = (1 / (R : ℝ)) * ∑ r : Fin R, bnMeanSq m (fun k => x (e (r, k))) :=
+  bnMean_shard hR hm e (fun i => x i * x i)
+
+/-- ⭐ The identity sync-BN is built on: `σ² = E[x²] − μ²`. -/
+theorem bnVar_eq_bnMeanSq_sub_sq (n : Nat) (hn : n ≠ 0) (x : Vec n) :
+    bnVar n x = bnMeanSq n x - bnMean n x * bnMean n x := by
+  have hnR : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn
+  set μ := bnMean n x with hμ
+  have hsum : ∑ i : Fin n, x i = (n : ℝ) * μ := by
+    rw [hμ, bnMean]; field_simp
+  have hexp : (∑ i : Fin n, (x i - μ) * (x i - μ))
+      = (∑ i : Fin n, x i * x i) - (n : ℝ) * (μ * μ) := by
+    have hpt : ∀ i : Fin n, (x i - μ) * (x i - μ)
+        = x i * x i - (2 * μ) * x i + μ * μ := by intro i; ring
+    rw [Finset.sum_congr rfl (fun i _ => hpt i)]
+    rw [Finset.sum_add_distrib, Finset.sum_sub_distrib, ← Finset.mul_sum, hsum]
+    simp [Finset.card_univ]
+    ring
+  rw [bnVar, bnMeanSq, ← hμ, hexp]
+  field_simp
+
 /-- `istd = 1/√(σ²+ε) > 0` (variance ≥ 0, `ε > 0`). -/
 theorem bnIstd_pos {n : Nat} (v : Vec n) (ε : ℝ) (hε : 0 < ε) : 0 < bnIstd n v ε := by
   unfold bnIstd
@@ -226,6 +293,66 @@ noncomputable def bn_grad_input
   let sumXhatDxhat : ℝ := ∑ i : Fin n, xh i * dxhat i
   fun i =>
     invN * s * ((n : ℝ) * dxhat i - sumDxhat - xh i * sumXhatDxhat)
+
+/-- The normalised activation under HANDED-IN statistics:
+    `x̂ᵢ = (xᵢ − μ)·(m2 − μ² + ε)^(−1/2)`. `bnXhat`'s peer — same function, but reading its
+    statistics rather than reducing `x` for them, so under DP they can be the all-reduced
+    global ones. Shared by the sync backward and by the dy-statistics it consumes, so the two
+    cannot drift apart. -/
+noncomputable def bnSyncXhat (n : Nat) (ε μ m2 : ℝ) (x : Vec n) : Vec n :=
+  fun i => (x i - μ) * (1 / Real.sqrt (m2 - μ * μ + ε))
+
+/-- `bnSyncXhat` is pointwise, and its size index never enters the value — which is what lets a
+    global row's `x̂` restrict to a shard's `x̂` at the SAME handed-in statistics. -/
+theorem bnSyncXhat_apply (n : Nat) (ε μ m2 : ℝ) (v : Vec n) (i : Fin n) :
+    bnSyncXhat n ε μ m2 v i = (v i - μ) * (1 / Real.sqrt (m2 - μ * μ + ε)) := rfl
+
+/-- **`bnSyncXhat` at its own statistics is `bnXhat`.** The normalised-activation peer of
+    `bnEvalForward_at_own_stats`; needed wherever a sync node's `x̂` has to be recognised as the
+    training `x̂` — in particular inside the dy-reductions the sync backward consumes. -/
+theorem bnSyncXhat_at_own_stats (n : Nat) (hn : n ≠ 0) (ε : ℝ) (x : Vec n) :
+    bnSyncXhat n ε (bnMean n x) (bnMeanSq n x) x = bnXhat n ε x := by
+  funext i
+  simp only [bnSyncXhat, bnXhat, bnIstd]
+  rw [← bnVar_eq_bnMeanSq_sub_sq n hn x]
+
+/-- ⭐⭐ **The SYNCHRONISED batch-norm input-VJP — every reduction HANDED IN.**
+
+    `bn_grad_input` computes all four of its scalars from `x` and `dy`: the mean, the inverse
+    standard deviation, and the two sums. This one takes `μ`, `E[x²]` and the two reduction
+    MEANS as arguments, so under data parallelism they can be the all-reduced global ones and
+    a replica can produce the shard-`r` block of the global-batch gradient.
+
+    ⭐ Why this is expressible at all: rewrite `bn_grad_input` as
+    `istd · (dx̂ᵢ − mean(dx̂) − x̂ᵢ · mean(x̂·dx̂))`. Both reductions are **means**, and a mean over
+    equal shards is the mean of the shards' means (`bnMean_shard`) — so both survive an
+    `allReduceMeanF`, exactly as `μ` and `E[x²]` do in the forward. Nothing here needs a sum,
+    which is the whole reason one collective per direction suffices. -/
+noncomputable def bnSync_grad_input (n : Nat) (ε γ μ m2 mdy mdyx : ℝ) (x dy : Vec n) : Vec n :=
+  fun i => (1 / Real.sqrt (m2 - μ * μ + ε))
+             * (γ * dy i - mdy - bnSyncXhat n ε μ m2 x i * mdyx)
+
+/-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bn_grad_input`.**
+
+    The backward peer of `bnEvalForward_at_own_stats`, and the `R = 1` anchor for P2: handed the
+    statistics and reductions the batch would itself have computed, the sync backward denotes
+    the existing three-term formula. So a single-device sync render computes the function the
+    committed tiers are already tied to. `planning/global_bn_verified.md` §2c. -/
+theorem bnSync_grad_input_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x dy : Vec n) :
+    bnSync_grad_input n ε γ (bnMean n x) (bnMeanSq n x)
+      (bnMean n (fun i => γ * dy i))
+      (bnMean n (fun i => bnXhat n ε x i * (γ * dy i))) x dy
+      = bn_grad_input n ε γ x dy := by
+  have hnR : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn
+  have hv : bnMeanSq n x - bnMean n x * bnMean n x = bnVar n x :=
+    (bnVar_eq_bnMeanSq_sub_sq n hn x).symm
+  funext i
+  -- ⚠ `hv` must fire BEFORE `bnMean` unfolds, or the `m2 − μ²` pattern is gone and the two
+  -- sides end up with different arguments under the square root.
+  simp only [bnSync_grad_input, bnSyncXhat]
+  rw [hv]
+  simp only [bn_grad_input, bnXhat, bnIstd, bnMean]
+  field_simp
 
 -- ════════════════════════════════════════════════════════════════
 -- § Correctness statements
