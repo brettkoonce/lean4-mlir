@@ -1,0 +1,65 @@
+I0921 14:54:40.823747  955519 service.cc:154] XLA service 0x7da674009e20 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 14:54:40.823803  955519 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:54:40.825283  955519 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 14:54:40.825321  955519 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 14:54:40.832073  955519 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0921 14:54:43.770087  955596 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 16 bytes spill stores, 16 bytes spill loads
+
+I0921 14:54:44.522904  955606 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 16 bytes spill stores, 16 bytes spill loads
+
+I0921 14:54:44.903329  955591 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 104 bytes spill stores, 72 bytes spill loads
+
+I0921 14:54:45.491879  955586 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 44 bytes spill stores, 44 bytes spill loads
+
+I0921 14:54:45.547790  955588 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 832 bytes spill stores, 832 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/r50sync/resnet50in_adam64_train_step.mlir (@resnet50in_adam64_train_step, 592 outputs, 1 replica) in 14121 ms
+§3.2's owed gate — ResNet-50's GRADIENT on the committed train step
+  artifact .lake/build/r50sync/resnet50in_adam64_train_step.mlir
+  161 params (25557032 floats), bs 64, 53 BN layers, backend xla
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.300000
+  xla/pjrt .lake/build/r50sync/resnet50in_adam64_train_step.mlir
+  base loss 7.819515   ‖g‖ 198.089051   (ln 1000 = 6.907755)
+
+  TIER 1  A  ⟨g_W,W⟩ = 0        53 conv kernels    worst |cos∠| 0.000020 at s1b0.W1
+          B  ⟨g_γ,γ⟩+⟨g_β,β⟩=0  33 BN affines      worst |cos∠| 0.000059 at s1b2.bn1
+             ⭐ the stem's B, which is the only path through maxPool3s2: 0.000036
+          ⟂  control: 21 sites where the invariance is FALSE (residual-add BNs + the head)
+             weakest violation 0.004740 at s1b0.proj.bnp (residual add);  10th pct 0.007028;  median 0.018560;  strongest 0.120989
+             populations strictly separate (min ⟂ > worst passing)? yes
+
+  TIER 2  group        form                          <g,δ>        (L₊−L₋)/2       rel
+          stem	conv7x7-s2 + BN + maxPool3s2	0.094367	0.078748	0.165509
+          s1b0	PROJ stride-1 ⭐	0.067484	0.058709	0.130040
+          s1b0.proj	shortcut branch	0.021237	0.018882	0.110919
+          s1b1	identity	0.054695	0.049702	0.091293
+          s1b2	identity	0.037437	0.035484	0.052148
+          s2b0	PROJ strided	0.051597	0.049286	0.044782
+          s2b0.proj	shortcut branch	0.017667	0.017313	0.020045
+          s2b1	identity	0.039195	0.037636	0.039782
+          s2b2	identity	0.026887	0.025849	0.038626
+          s2b3	identity	0.019405	0.019077	0.016923
+          s3b0	PROJ strided	0.029223	0.028794	0.014702
+          s3b0.proj	shortcut branch	0.010060	0.009959	0.010064
+          s3b1	identity	0.022562	0.022300	0.011625
+          s3b2	identity	0.015398	0.015335	0.004102
+          s3b3	identity	0.011119	0.011025	0.008414
+          s3b4	identity	0.008359	0.008343	0.001810
+          s3b5	identity	0.006539	0.006529	0.001443
+          s4b0	PROJ strided	0.011564	0.011547	0.001470
+          s4b0.proj	shortcut branch	0.003962	0.003933	0.007338
+          s4b1	identity	0.008989	0.008983	0.000598
+          s4b2	identity	0.006216	0.006189	0.004266
+          head	dense 2048→1000	0.012934	0.012949	0.001180
+  worst rel 0.165509 at stem;  stem's fp32 NOISE FLOOR at the same ‖δ‖ is 0.001094 — the residual is truncation, not arithmetic
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 0.998820 at head
+  49 invokes of @m.resnet50in_adam64_train_step
+
+  ✅ GRADCHECK PASSES.
+     TIER 1: 53 conv kernels and 33 BN affines satisfy their homogeneity identities to |cos∠| ≤ 0.000059 — including the stem's, the only gradient path through maxPool3s2 — against 21 non-homogeneous control sites that do not overlap them at all: weakest at the 10th percentile 0.007028 (118.670902× the worst passing site), median 0.018560 (313.398053×), with the tolerance 0.000300 sitting between the two populations. ⚠ The single weakest violation is 0.004740, reported but NOT the verdict's statistic — it is an unstable extremum (§3.1b).
+     TIER 2: all 22 groups agree in magnitude to rel ≤ 0.165509, against a doubled-gradient control that misses by 0.998820 (6.034842× the tie).
+     All three bottleneck forms are covered — the stride-1 projection (s1b0), the three strided projections, and the 12 identity blocks — plus each shortcut branch on its own.
+     §3.2's "the gradient is ungated" is discharged for .lake/build/r50sync/resnet50in_adam64_train_step.mlir.
+sync rc=0

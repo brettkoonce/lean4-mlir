@@ -4,12 +4,12 @@ import LeanMlir.VerifiedNets
 
     lake build shard-check
     unset HIP_VISIBLE_DEVICES
-    PJRT_REPLICAS=2 .lake/build/bin/shard-check <convnext|efficientnet|mobilenetv2> [<dpPath>]
+    PJRT_REPLICAS=2 .lake/build/bin/shard-check <convnext|vit> [<dpPath>]
 
-⚠ The 4-replica-only nets need all three knobs and four GPUs, e.g. MNv4:
+⚠ A 4-replica render needs `SHARD_REPLICAS=4` and four GPUs (plus both `SHARD_VARIANT` knobs when
+its variants are not the bare `adam`/`adamdp`), e.g. ConvNeXt's ImageNet pair:
 
-    PJRT_REPLICAS=4 SHARD_REPLICAS=4 SHARD_VARIANT=adam64 SHARD_VARIANT_DP=adamdp64 \
-      .lake/build/bin/shard-check mnv4in
+    PJRT_REPLICAS=4 SHARD_REPLICAS=4 .lake/build/bin/shard-check convnextin
 
 Generalised from `tests/TestConvNeXtShardCheck.lean` on 2026-07-30 (handoff §5's "still open"
 item). It exists because the `*-dp-check` gates have a hole: the duplicated-batch identity hands
@@ -31,13 +31,18 @@ blind to.
 hence exactly averagable. `v' = 0.001·g²` is quadratic, so it is not compared. Same conclusion as
 §3's "gate the gradient, never θ", reached from the other direction.
 
-**Why this works on the BATCH-BN nets too**, which is the whole reason it generalises: each replica
-normalises over its own `b` rows, and the single-device reference runs are at that same `b`, so
-`single(xA)` reproduces replica 0's arithmetic exactly. That is *not* true of the cifar8 split
-identity (`1×2b` vs `2×b`), which genuinely needs no BN — see §10.3b. The `bnstat` region is
-deliberately **not** compared here: under an asymmetric batch the DP render returns replica 0's
-statistics, which equal `single(xA)`'s and not the A/B mean, so it would need its own comparand and
-adds nothing — `*-dp-check` already pins the forward bit-exactly.
+⛔ **It no longer covers the BATCH-BN nets — retired 2026-09-21.** It used to, because each replica
+normalised over its own `b` rows and so `single(xA)` reproduced replica 0's arithmetic exactly.
+Since `planning/global_bn_verified.md` §3.2–3.4 every BatchNorm net's DP render is SYNCHRONISED:
+the replicas all-reduce their BN statistics, so `DP([xA|xB])` is `single_2b([xA|xB])`, and the
+identity above is exactly what `<net>-syncbn-check`'s CONTROL now requires to FAIL (measured on
+the committed renders: `efficientnet` 0.21, `mobilenetv2` 1.60, against this gate's 1e-4). The
+rows `efficientnet`, `mobilenetv2`, `efficientnetin`, `mobilenetv2in` and `mnv4in` are therefore
+retired, not loosened. Their replacement is the sync-BN gates' TEST column —
+`DP_sync([x₀|…]) = single_Rb([x₀|…])` on different data per replica, which a shard-offset bug
+breaks on the statistics — run by `mobilenetv2-syncbn-check`, `efficientnet-syncbn-check` and
+`imagenet-syncbn-check <net>`. LayerNorm reduces within an example, so ConvNeXt and ViT keep the
+per-replica identity and stay here.
 
 **One harness, three nets, because the only per-net facts are the spec and the batch.** Everything
 else derives from `net.slug`: `verified_mlir/<slug>_adam{,dp}_train_step.mlir` and the matching
@@ -62,18 +67,8 @@ private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "convnext"     => some (convnextVerified,     32)
   -- the 1000-class ImageNet twins (§2p)
   | "convnextin"        => some (convnextImagenetVerified, 32)
-  | "efficientnetin"       => some (efficientnetImagenetVerified, 64)
-  | "mobilenetv2in"       => some (mobilenetv2ImagenetVerified, 64)
-  -- MNv4, added 2026-08-27. ⚠⚠ ITS ONLY DP RENDERS ARE 4-REPLICA, so this row needs
-  -- `SHARD_REPLICAS=4` and four GPUs — `PJRT_REPLICAS=2` fails at the shim's replica-count guard
-  -- rather than running. The variants are `adam64`/`adamdp64` (`mnv4AdamVariant` appends the
-  -- per-device batch, as EfficientNet's do), so both `SHARD_VARIANT` knobs must be set too.
-  -- ⭐ This row is what makes `mnv4in_adamdp64` quotable. Until it existed the renderer's own
-  -- `#eval` block said the 4-replica pair was for COSTING only — "do not train off these" — on the
-  -- grounds that an untied collective looks exactly as trustworthy as a tied one.
-  | "mnv4in"              => some (mnv4ImagenetVerified, 64)
-  | "efficientnet" => some (efficientnetVerified, 32)
-  | "mobilenetv2"  => some (mobilenetv2Verified,  32)
+  -- ⛔ `efficientnet`, `mobilenetv2`, `efficientnetin`, `mobilenetv2in` and `mnv4in` were rows
+  -- here until 2026-09-21; see the module docstring and `retired` below.
   -- ViT, added 2026-08-12. It had `tests/TestViTDpCheck.lean` and nothing else, which is the gate
   -- that hands both replicas the SAME rows: `all_reduce(add)/N` is an identity on a duplicated
   -- batch, so that check is structurally blind to a shard-offset bug. This row is what closes it,
@@ -82,12 +77,25 @@ private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "vit"          => some (vitVerified,          32)
   | _              => none
 
+/-- The batch-BN rows, retired when their DP renders went sync-BN, and the gate that replaced each. -/
+private def retired : String → Option String
+  | "efficientnet"   => some "efficientnet-syncbn-check"
+  | "mobilenetv2"    => some "mobilenetv2-syncbn-check"
+  | "efficientnetin" => some "imagenet-syncbn-check efficientnet"
+  | "mobilenetv2in"  => some "imagenet-syncbn-check mobilenetv2"
+  | "mnv4in"         => some "imagenet-syncbn-check mnv4"
+  | _                => none
+
 def main (args : List String) : IO Unit := do
   let slug := args.head?.getD ""
+  if let some gate := retired slug then
+    IO.eprintln s!"shard-check {slug}: RETIRED 2026-09-21. This net's DP render is synchronised \
+BatchNorm, so DP([x0|x1]) = single_2b([x0|x1]), not mean(single(x0), single(x1)) — the identity \
+this gate asserts. Run `{gate}` instead."
+    IO.Process.exit 2
   let some (spec, bs) := netOf slug
-    | do IO.eprintln s!"usage: shard-check \
-<convnext|efficientnet|mobilenetv2|vit|convnextin|efficientnetin|mobilenetv2in|mnv4in> \
-[<dpPath>]\ngot: '{slug}'"; IO.Process.exit 1
+    | do IO.eprintln s!"usage: shard-check <convnext|vit|convnextin> [<dpPath>]\ngot: '{slug}'"
+         IO.Process.exit 1
   let net := spec.toNet
   -- $SHARD_REPLICAS generalises the construction: `ds.shard`-style, N shards each with genuinely
   -- different data, checked against the mean of N single-device steps. The identity

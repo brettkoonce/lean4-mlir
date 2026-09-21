@@ -23,7 +23,8 @@ two f32 implementations agree on `m'` better than the forward's conditioning all
 
 ⚠ Only the DP step (and, where one exists, the per-replica `b` single-device step) is a
 committed artifact here; the `Rb` single-device step and both one-replica sync graphs are rendered
-to `.lake/build/` at run time from the same functions. Needs `R` GPUs and the XLA backend.
+to `.lake/build/` at run time from the same functions — and so is the DP step when `dpPath := ""`
+(ResNet-50, gated below its committed batch). Needs `R` GPUs and the XLA backend.
 -/
 
 namespace SyncBnCheck
@@ -37,8 +38,12 @@ structure Cfg where
   bs        : Nat                          -- per-replica batch of the committed DP artifact
   replicas  : Nat := 2
   sgPath    : String                       -- committed single-device step at `bs`; "" renders it
-  dpPath    : String                       -- committed sync-BN DP step at `replicas × bs`
+  dpPath    : String                       -- committed sync-BN DP step at `replicas × bs`; "" renders it
   render    : (B : Nat) → (forceSync : Bool) → String   -- single-device train step at batch `B`
+  /-- The sync-BN DP step at per-replica batch `B` over `R` replicas, for `dpPath := ""` — a net
+      whose committed DP shape is too large to gate (ResNet-50's 1×256 reference peaks at 94–95 %
+      of the raised arena) is gated at a smaller `bs` by the same renderer. -/
+  renderDp  : (B R : Nat) → String := fun _ _ => ""
   entry     : (B replicas : Nat) → String  -- its entry name, `m.<slug>_<variant>_train_step`
   /-- The split identity's bound on the handed-back statistics. `resnet34-syncbn-check` set 1e-3
       at 36 layers (measured 1.7e-4); a deeper net compounds more reduction-order rounding, and a
@@ -90,10 +95,13 @@ def run (cfg : Cfg) : IO Unit := do
   let replicas := cfg.replicas
   let bigB := replicas * bs
   let fr := (1.0 : Float) / replicas.toFloat
+  let dpPath := if cfg.dpPath.isEmpty then
+      s!".lake/build/{cfg.slug}_syncgate_dp{replicas}x{bs}_train_step.mlir" else cfg.dpPath
+  if cfg.dpPath.isEmpty then IO.FS.writeFile dpPath (cfg.renderDp bs replicas)
   IO.println s!"{net.name} SYNC-BN gate — {replicas}×{bs} against 1×{bigB}"
   IO.println s!"  TEST     DP_sync([x₀|…|x{replicas-1}])  ==  single_{bigB}([x₀|…|x{replicas-1}])"
   IO.println s!"  CONTROL  DP_sync([x₀|…|x{replicas-1}])  !=  mean_k single_{bs}(x_k)   (the old, per-replica identity)"
-  IO.println s!"  single {bs}: {if cfg.sgPath.isEmpty then "(rendered at run time)" else cfg.sgPath}\n  DP render: {cfg.dpPath}"
+  IO.println s!"  single {bs}: {if cfg.sgPath.isEmpty then "(rendered at run time)" else cfg.sgPath}\n  DP render: {dpPath}{if cfg.dpPath.isEmpty then " (rendered at run time)" else ""}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers, \
 backend {← LowererSession.backendName}"
 
@@ -167,7 +175,7 @@ backend {← LowererSession.backendName}"
     xAllp pbuf shapes yAll bigB.toUSize net.d0.toUSize net.nClasses.toUSize
   -- the sync-BN data-parallel step on the split batch
   IO.println s!"  data-parallel {replicas}×{bs} on [x₀|…]…"; (← IO.getStdout).flush
-  let sD ← mkSession cfg.dpPath
+  let sD ← mkSession dpPath
   let eD := cfg.entry bs replicas
   let oD ← LowererSession.mlpTrainStepVDP sD eD xAll pbuf shapes yAll
              bigB.toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize

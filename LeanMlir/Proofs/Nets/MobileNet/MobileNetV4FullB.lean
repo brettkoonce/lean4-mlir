@@ -73,9 +73,11 @@ VJP composes the two with `vjp_comp_at`.
 | census | **233** parameter slots at `nCls = 10` (8,447,322 scalars; 9,715,512 at 1000), bias-free by construction |
 | artifacts | `mnv4_fwd`, `mnv4_fwd_eval`, `mnv4_adam_train_step`, and the five `mnv4in*` ImageNet twins |
 
-⚠ `N` stays a binder throughout, as at r34/R50: this tier carries no batch numeral, and the
-artifacts' `N` is the PER-REPLICA batch (`DataParallel.lean`, §4d). Unlike R50 there is no `q`
-binder — MNv4 ships one resolution.
+⚠ `N` stays a binder throughout, as at r34/R50: this tier carries no batch numeral. On the
+data-parallel artifacts the render's `N` is the PER-REPLICA batch; since 2026-09-21 their
+BatchNorm is synchronised, and `MobileNetV4SyncB.lean` is this file's twin for them: replica `r`'s
+forward graph denotes shard `r` of `mobilenetv4ForwardB_full (R * N)`, this file's forward at the
+global batch. Unlike R50 there is no `q` binder — MNv4 ships one resolution.
 
 ⚠ **Rows 4/5/10, 12/18 and 15/19/20 are shape-identical**, so their `UibParams` records have the
 same TYPE and swapping their weights typechecks. Typing pins shape, not identity; what pins

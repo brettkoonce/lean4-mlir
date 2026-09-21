@@ -1,0 +1,44 @@
+I0921 15:00:58.480651  983630 service.cc:154] XLA service 0x7c8f5879b960 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 15:00:58.480715  983630 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:58.480726  983630 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:58.480732  983630 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:58.480739  983630 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:58.483358  983630 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:00:58.483393  983630 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:00:58.483439  983630 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0921 15:00:58.483456  983630 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0921 15:00:58.483474  983630 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0921 15:00:58.493576  983630 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0921 15:00:59.850254  983678 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 4 bytes spill stores, 4 bytes spill loads
+
+I0921 15:00:59.975385  983685 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 8 bytes spill stores, 8 bytes spill loads
+
+I0921 15:01:00.170945  983696 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 44 bytes spill stores, 44 bytes spill loads
+
+I0921 15:01:00.249542  983700 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 800 bytes spill stores, 800 bytes spill loads
+
+I0921 15:01:00.572176  983697 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 132 bytes spill stores, 72 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34in_momdp64_train_step.mlir (@resnet34in_momdp64_train_step, 405 outputs, 4 replicas) in 6679 ms
+ResNet-34 (ImageNet-1k) — DP SHARD DISCRIMINATION (4 replicas x bs 64)
+  render : verified_mlir/resnet34in_momdp64_train_step.mlir
+  110 params (21797672 floats), 36 BN layers, backend xla
+  xla/pjrt verified_mlir/resnet34in_momdp64_train_step.mlir
+  invoking A…
+I0921 15:01:06.587145  983667 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 15:01:06.587166  983670 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 15:01:06.587221  983664 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  invoking B (replicas 1..3 differ)…
+  invoking C (only replica 0 differs)…
+
+  [diag] out size 261640172 bytes = 65410043 floats; nP = 21797672; d0 = 150528; expect >= 65410043
+  [diag] loss slot (65393016): A=7.321080 B=7.318948 C=7.412767
+  [diag] θ' region A vs C: 21794190/21797672 differ
+
+  TEST     A vs B (replicas 1..3 differ): 21795257/21797672 floats differ, rel 0.035693
+  CONTROL  A vs C (only replica 0 differs): 21794190/21797672 floats differ, rel 0.026766
+
+✅ SHARDING IS REAL — replicas 1..3 feed the update, and the control fires.
+   ⚠ This does not verify shard OFFSETS; a permutation would also pass.

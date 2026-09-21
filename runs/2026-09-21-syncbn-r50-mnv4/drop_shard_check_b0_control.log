@@ -1,0 +1,35 @@
+I0921 15:00:04.002315  980626 service.cc:154] XLA service 0x753ca479f820 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 15:00:04.002421  980626 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:04.002438  980626 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:04.004473  980626 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:00:04.004513  980626 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:00:04.004564  980626 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0921 15:00:04.012401  980626 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 2 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/efficientnet_adamdpdrop_train_step.mlir (@efficientnet_adamdpdrop_train_step, 749 outputs, 2 replicas) in 4971 ms
+[pjrt_ffi] ⚠ PJRT_DP_NO_MASK_SHARD=1 — 9 per-example tail input(s) REPLICATED instead of sharded (fault injection)
+E0921 15:00:09.457959  980643 common_pjrt_client.cc:2034] ExecutePrepareWithOomRetries failed: INVALID_ARGUMENT: E0102: RuntimeProgramInputMismatch:
+Executable(m) expected parameter 741 of size 128 (f32[32]{0}) but got buffer with incompatible size 256 (f32[64]{0})
+See https://openxla.org/xla/errors/error_0102 for more details.
+=== Source Location Trace: === 
+external/xla/xla/error/error_codes.h:257
+external/xla/xla/pjrt/common_pjrt_client.cc:1875
+
+E0921 15:00:09.458003  980646 common_pjrt_client.cc:2034] ExecutePrepareWithOomRetries failed: INVALID_ARGUMENT: E0102: RuntimeProgramInputMismatch:
+Executable(m) expected parameter 741 of size 128 (f32[32]{0}) but got buffer with incompatible size 256 (f32[64]{0})
+See https://openxla.org/xla/errors/error_0102 for more details.
+=== Source Location Trace: === 
+external/xla/xla/error/error_codes.h:257
+external/xla/xla/pjrt/common_pjrt_client.cc:1875
+
+[pjrt_ffi] Execute(dp): E0102: RuntimeProgramInputMismatch:
+Executable(m) expected parameter 741 of size 128 (f32[32]{0}) but got buffer with incompatible size 256 (f32[64]{0})
+See https://openxla.org/xla/errors/error_0102 for more details.: while running replica 0 and partition 0 of a replicated computation (other replicas may have failed as well).
+stochastic-depth SHARD gate — duplicated batch, ASYMMETRIC mask, halves swapped
+  DP     : verified_mlir/efficientnet_adamdpdrop_train_step.mlir (2 replicas × bs 32 = global 64)
+  213 params (4020358 floats), 9 drop sites, backend xla
+  ⚠ FAULT INJECTED: PJRT_DP_NO_MASK_SHARD=1 — the masks are REPLICATED
+  masks agree on 238/288 slots (both are Bernoulli, so overlap is expected)
+  xla/pjrt verified_mlir/efficientnet_adamdpdrop_train_step.mlir
+uncaught exception: data-parallel train step failed

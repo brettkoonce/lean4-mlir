@@ -1,4 +1,5 @@
 import LeanMlir.VerifiedNets
+import LeanMlir.Proofs.Codegen.ResNet50RenderB
 
 /-! # Accumulation over DIFFERENT micro-batches — the identity `r50-accum-tie` is blind to
 
@@ -14,14 +15,24 @@ design**: R50 normalises over whatever batch the forward sees, so k micro-batche
 BatchNorm groups where one big batch gives one. That is Ghost-BN, it is what the JAX reference
 takes, and asserting the naive identity would be wrong rather than strict.
 
-⭐⭐ **But R50 already has a render that computes exactly the same thing: the DATA-PARALLEL one.**
-`emitGradAllReduce` averages k replicas' gradients, and `shard-check`'s docstring records the fact
-that makes this work — *"each replica normalises over its own b rows"*. So:
+⭐⭐ **But R50's renderer draws a graph that computes exactly the same thing: the DATA-PARALLEL
+step with PER-REPLICA BatchNorm.** Its collectives average k replicas' gradients, and each replica
+normalises over its own b rows. So:
 
 | | groups | combination |
 |---|---|---|
 | `acc4x64` × 4 micro-batches | 4 BN groups of 64 | `Σgᵢ`, then `1/k` folded into `%ob1`/`%ob2` |
-| `adamdp64` × 1 step | 4 BN groups of 64 | `all_reduce(add)` then `/4` |
+| `adamdp64` at `noSync` × 1 step | 4 BN groups of 64 | `all_reduce(add)` then `/4` |
+
+⚠ **That DP graph is no longer the committed one, and is rendered at run time.** Until 2026-09-21
+the committed `adamdp64` / `lambdp64bce` WERE per-replica BN. Since `planning/global_bn_verified.md`
+§3.4 they are synchronised — one BN group of `k·b` per step — so against them this identity is
+false by design, exactly as the naive one above is. The peer is therefore
+`resnet50TrainStepFaithfulB … (noSync := true)`, the same renderer with the BN collectives left
+out, written to `.lake/build/` and never committed. What this gate certifies is unchanged: the
+accumulator combines different micro-batches the way a gradient collective does. That the
+committed DP step differs from the per-replica one only in its BatchNorm is
+`tests/r50_dp_render_tie.py`'s and `imagenet-syncbn-check resnet50`'s to show.
 
 **Same function.** Ghost-BN over k micro-batches on one device and per-replica BN over k replicas
 are the same grouping of the same data, so
@@ -69,7 +80,7 @@ private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
     y := y.push (UInt8.ofNat ((i + off) % (min nc 251))); y := y.push 0; y := y.push 0; y := y.push 0
   y
 
-private def cmp (a b : ByteArray) (off n : Nat) : Float × Float × Nat := Id.run do
+private def cmpRegion (a b : ByteArray) (off n : Nat) : Float × Float × Nat := Id.run do
   let mut d := 0.0; let mut m := 0.0; let mut ex := 0
   for i in [0:n] do
     let x := F32.read a (off + i).toUSize
@@ -112,8 +123,24 @@ artifact to itself and pass unconditionally"
 
   IO.println s!"§4's accumulation over DIFFERENT micro-batches — the identity r50-accum-tie is blind to"
   IO.println s!"  acc(x1..x{k})  ==  DP([x1|..|x{k}])   ({k} micro-batches of {bs} vs {k} replicas x {bs})"
+  -- ⚠ The per-replica-BN DP peer, rendered at run time (see the header): the committed `peer` is
+  -- sync-BN. Only the two peers the header names are rendered; anything else is refused rather than
+  -- guessed at, because a peer at the wrong optimizer or loss fails for reasons this gate is not
+  -- about.
+  let peerRender : Option String := match peer, net.slug with
+    | "adamdp64", "resnet50in" => some (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05"
+        k Proofs.StableHLO.R34Opt.adamw "resnet50in" (noSync := true))
+    | "lambdp64bce", "resnet50in160" => some (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000
+        "1.0e-05" k Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (q := 5)
+        (noSync := true))
+    | _, _ => none
+  let some peerText := peerRender
+    | throw <| IO.userError s!"no per-replica render for R50_ACC_PEER='{peer}' at '{net.slug}' — \
+want adamdp64 (224) or lambdp64bce (160)"
+  let peerPath := s!".lake/build/{net.slug}_{peer}_nosync_train_step.mlir"
+  IO.FS.writeFile peerPath peerText
   IO.println s!"  accumulation : verified_mlir/{net.slug}_{variant}_train_step.mlir"
-  IO.println s!"  data-parallel: verified_mlir/{net.slug}_{peer}_train_step.mlir"
+  IO.println s!"  data-parallel: {peerPath}  (per-replica BN, rendered at run time)"
   IO.println s!"  {net.specs.size} params ({nP} floats), lr {lr}, backend {← LowererSession.backendName}"
 
   -- ── one (θ, m, v) both sides see. m and v are non-zero: at m = v = 0 the β₁/β₂ passthrough
@@ -155,7 +182,7 @@ artifact to itself and pass unconditionally"
   let dpShapes  := packShapes (pShapes ++ pShapes ++ pShapes
                                ++ #[#[], #[], #[]] ++ bnStatShapes)
   let accSess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
-  let dpSess  ← mkSession s!"verified_mlir/{net.slug}_{peer}_train_step.mlir"
+  let dpSess  ← mkSession peerPath
 
   /- One accumulation cycle over `batches`, applying on the last micro-batch. -/
   let cycle (batches : Array (ByteArray × ByteArray)) : IO ByteArray := do
@@ -183,11 +210,11 @@ artifact to itself and pass unconditionally"
   IO.println s!"  ⟂ control: the same cycle on x1 repeated {k} times…"; (← IO.getStdout).flush
   let dupOut ← cycle (Array.replicate k (xs[0]!, ys[0]!))
 
-  let (dT, mT, eT) := cmp accOut dpOut 0        nP
-  let (dM, mM, eM) := cmp accOut dpOut nP       nP
-  let (dV, mV, eV) := cmp accOut dpOut (2 * nP) nP
-  let (dC, _,  _)  := cmp dupOut dpOut 0        nP
-  let (dMove, _, _) := cmp accOut θ 0 nP        -- θ' vs θ: did anything step at all?
+  let (dT, mT, eT) := cmpRegion accOut dpOut 0        nP
+  let (dM, mM, eM) := cmpRegion accOut dpOut nP       nP
+  let (dV, mV, eV) := cmpRegion accOut dpOut (2 * nP) nP
+  let (dC, _,  _)  := cmpRegion dupOut dpOut 0        nP
+  let (dMove, _, _) := cmpRegion accOut θ 0 nP        -- θ' vs θ: did anything step at all?
   let relT := dT / max mT 1e-30
   let relM := dM / max mM 1e-30
   let relV := dV / max mV 1e-30

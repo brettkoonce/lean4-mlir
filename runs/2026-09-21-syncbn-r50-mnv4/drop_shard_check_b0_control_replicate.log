@@ -1,0 +1,32 @@
+I0921 15:00:37.241290  981545 service.cc:154] XLA service 0x71cd2879fa70 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 15:00:37.241342  981545 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:37.241351  981545 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:00:37.243333  981545 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:00:37.243369  981545 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:00:37.243425  981545 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0921 15:00:37.251361  981545 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 2 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/efficientnet_adamdpdrop_train_step.mlir (@efficientnet_adamdpdrop_train_step, 749 outputs, 2 replicas) in 4946 ms
+I0921 15:00:42.979167  981569 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 15:00:43.511157  981545 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:00:43.511816  981545 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:00:43.511847  981545 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 2 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/efficientnet_adamdpdrop_train_step.mlir (@efficientnet_adamdpdrop_train_step, 749 outputs, 2 replicas) in 5071 ms
+stochastic-depth SHARD gate — duplicated batch, ASYMMETRIC mask, halves swapped
+  DP     : verified_mlir/efficientnet_adamdpdrop_train_step.mlir (2 replicas × bs 32 = global 64)
+  213 params (4020358 floats), 9 drop sites, backend xla
+  ⚠ FAULT INJECTED: DROP_FAULT=replicate — the PRE-FIX world (mask buffer at the per-device batch, shard flag off). ① must fire.
+  masks agree on 238/288 slots (both are Bernoulli, so overlap is expected)
+  xla/pjrt verified_mlir/efficientnet_adamdpdrop_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_adamdpdrop_train_step.mlir
+  ① all-reduced regions: 17198/12061074 BIT-IDENTICAL under the swap (max abs 2.000000, rel 0.691286, first at output 0)
+  ②a %loss (replica-0-local, report-only): 2.410745 vs 2.463799 — MOVED
+  ①b all-reduced BN stats (sync-BN): 3015/42016 BIT-IDENTICAL under the swap (max abs 2.497468)
+uncaught exception: ① FAILED — THE MASK IS NOT SHARDED. 12043876 of 12061074 all-reduced outputs move when the two mask halves are swapped, rel 0.691286.
+
+A correctly SHARDED mask makes the all-reduced regions swap-invariant to the BIT: replica 0 gets m₀ and replica 1 gets m₁ in one run and the other way round in the other, and the collective's (a+b)/2 is COMMUTATIVE in f32. A REPLICATED mask makes run 1 compute g(x,m₀) on both replicas and run 2 compute g(x,m₁) — a different function.
+
+Check that `nShardTail` reaches `pjrt_ffi_invoke_f32_dp2`, and that the mask buffer is sized at the GLOBAL batch (`dropShapes` must be `#[gbs]`, not `#[bs]`).

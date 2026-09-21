@@ -137,6 +137,12 @@ structure BNFwd where
   r2 : String        -- relu2 out (= conv3 in)
   c3 : String        -- conv3 out (= BN3 in)
   cp : String        -- projection conv out ("" for identity)
+  -- ⭐ SYNC-BN (`replicas > 1`): each BN site's all-reduced packed `[μ ‖ σ²]`, which its
+  -- backward, its γ gradient and the handed-back running stats all read. `""` at one replica.
+  st1 : String := ""
+  st2 : String := ""
+  st3 : String := ""
+  stp : String := ""
 deriving Inhabited
 
 /-- **R50's stochastic-depth site count** — one per bottleneck block, `[3,4,6,3] = 16`.
@@ -162,7 +168,8 @@ def dpAt (sd : Bool) (i : Nat) : Option Nat := if sd then some i else none
 /-- Identity bottleneck forward: `1×1 → BN → relu → 3×3 → BN → relu → 1×1 → BN → (+x) → relu`,
     all at `hh`, channels `oc → mid → mid → oc`. -/
 private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
@@ -172,13 +179,13 @@ private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
   let zOut : Vec (B*(oc*hh*ww)) := fun _ => 0
   let zMid : Vec (B*(mid*hh*ww)) := fun _ => 0
   let (cC1, nC1) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W1" (zb mid) zk1 zm else .conv (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm) (.operand xName zOut))
-  let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zm zm (.operand nC1 zMid))
+  let (cN1, nN1, st1) ← bnFwdSite B mid hh ww sync replicas epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}g1" nC1
   let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN1 zMid))
   let (cC2, nC2) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W2" (zb mid) zk2 zm else .conv (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm) (.operand nR1 zMid))
-  let (cN2, nN2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zm zm (.operand nC2 zMid))
+  let (cN2, nN2, st2) ← bnFwdSite B mid hh ww sync replicas epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}g2" nC2
   let (cR2, nR2) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN2 zMid))
   let (cC3, nC3) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W3" (zb oc) zk3 zo else .conv (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo) (.operand nR2 zMid))
-  let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
+  let (cN3, nN3, st3) ← bnFwdSite B oc hh ww sync replicas epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}g3" nC3
   -- ▶ STOCHASTIC DEPTH, on the residual branch and before the add. See this function's docstring
   -- for why the placement is the correctness question and why an all-ones gate cannot see it.
   let (cD, nD) ← match drop with
@@ -189,13 +196,15 @@ private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
   let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
   pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cD ++ cA ++ cO,
          xin := xName, o := nO, a := nA,
-         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := "" }
+         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := "",
+         st1 := st1, st2 := st2, st3 := st3 }
 
 /-- ⭐ **Stride-1 projection bottleneck forward** — R50 stage 1 block 0, and nowhere else.
     `cin → mid → mid → oc` with the resolution unchanged, so the projection is a plain `1×1`
     conv → BN, NOT the strided one `bnkStridedFwdB` uses. -/
 private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
@@ -207,16 +216,16 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
   let zOut : Vec (B*(oc*hh*ww)) := fun _ => 0
   let zMid : Vec (B*(mid*hh*ww)) := fun _ => 0
   let (cC1, nC1) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W1" (zb mid) zk1 zm else .conv (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm) (.operand xName zIn))
-  let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zm zm (.operand nC1 zMid))
+  let (cN1, nN1, st1) ← bnFwdSite B mid hh ww sync replicas epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}g1" nC1
   let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN1 zMid))
   let (cC2, nC2) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W2" (zb mid) zk2 zm else .conv (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm) (.operand nR1 zMid))
-  let (cN2, nN2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zm zm (.operand nC2 zMid))
+  let (cN2, nN2, st2) ← bnFwdSite B mid hh ww sync replicas epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}g2" nC2
   let (cR2, nR2) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN2 zMid))
   let (cC3, nC3) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W3" (zb oc) zk3 zo else .conv (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo) (.operand nR2 zMid))
-  let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
+  let (cN3, nN3, st3) ← bnFwdSite B oc hh ww sync replicas epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}g3" nC3
   -- the projection: a STRIDE-1 1×1 conv. `.conv`, not `.convStrided` — the whole point of this form.
   let (cCp, nCp) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}Wp" (zb oc) zkp zo else .conv (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo) (.operand xName zIn))
-  let (cNp, nNp) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zo zo (.operand nCp zOut))
+  let (cNp, nNp, stp) ← bnFwdSite B oc hh ww sync replicas epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}gp" nCp
   -- ▶ STOCHASTIC DEPTH on the residual branch. ⚠⚠ **The PROJECTION is not dropped** — the
   -- reference scales `out` and leaves `shortcut` alone (`bottleneck_block_down`), so a render that
   -- dropped the sum would scale the skip too. That is a different function, and it still trains.
@@ -228,7 +237,8 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
   let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
   pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cD ++ cA ++ cO,
          xin := xName, o := nO, a := nA,
-         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp }
+         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp,
+         st1 := st1, st2 := st2, st3 := st3, stp := stp }
 
 /-- **Strided projection bottleneck forward** — stages 2/3/4 block 0. `cin → mid → mid → oc`,
     `2hh → hh`.
@@ -236,7 +246,8 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     ⚠ `conv1`/`bn1`/`relu1` run at the **input** resolution `2hh`; only `conv2` (the 3×3) is
     strided. v1.5. -/
 private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
@@ -249,16 +260,16 @@ private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
   let zMid   : Vec (B*(mid*hh*ww)) := fun _ => 0
   let zOut   : Vec (B*(oc*hh*ww)) := fun _ => 0
   let (cC1, nC1) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := 2*hh) (w := 2*ww) zrnd s!"%{p}W1" (zb mid) zk1 zm else .conv (h := 2*hh) (w := 2*ww) s!"%{p}W1" (zb mid) zk1 zm) (.operand xName zIn))
-  let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zm zm (.operand nC1 zMidIn))
+  let (cN1, nN1, st1) ← bnFwdSite B mid (2*hh) (2*ww) sync replicas epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}g1" nC1
   let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := mid*(2*hh)*(2*ww))) (.operand nN1 zMidIn))
   -- ⚠⚠ THE STRIDE LIVES HERE, on the 3×3. Moving it to `W1` above is ResNet v1, a different net.
   let (cC2, nC2) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := hh) (w := ww) zrnd s!"%{p}W2" (zb mid) zk2 zm else .convStrided (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm) (.operand nR1 zMidIn))
-  let (cN2, nN2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zm zm (.operand nC2 zMid))
+  let (cN2, nN2, st2) ← bnFwdSite B mid hh ww sync replicas epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}g2" nC2
   let (cR2, nR2) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN2 zMid))
   let (cC3, nC3) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W3" (zb oc) zk3 zo else .conv (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo) (.operand nR2 zMid))
-  let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
+  let (cN3, nN3, st3) ← bnFwdSite B oc hh ww sync replicas epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}g3" nC3
   let (cCp, nCp) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := hh) (w := ww) zrnd s!"%{p}Wp" (zb oc) zkp zo else .convStrided (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo) (.operand xName zIn))
-  let (cNp, nNp) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zo zo (.operand nCp zOut))
+  let (cNp, nNp, stp) ← bnFwdSite B oc hh ww sync replicas epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}gp" nCp
   -- ▶ STOCHASTIC DEPTH on the residual branch. ⚠⚠ **The PROJECTION is not dropped** — the
   -- reference scales `out` and leaves `shortcut` alone (`bottleneck_block_down`), so a render that
   -- dropped the sum would scale the skip too. That is a different function, and it still trains.
@@ -270,7 +281,8 @@ private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
   let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
   pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cD ++ cA ++ cO,
          xin := xName, o := nO, a := nA,
-         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp }
+         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp,
+         st1 := st1, st2 := st2, st3 := st3, stp := stp }
 
 -- ════════════════════════════════════════════════════════════════
 -- § Bottleneck block backwards + UN-FUSED parameter gradients
@@ -283,7 +295,8 @@ private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     ⚠ Each BN's γ/β gradient reads the cotangent at that BN's OUTPUT: `da` for bn3, `dr2` for
     bn2, `dr1` for bn1 — off by one and the gradient is silently wrong. -/
 private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (dyName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (bf16 : Bool := false) (drop : Option Nat := none)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   let zm    : Vec mid := fun _ => 0
@@ -311,25 +324,25 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
     | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
                             (.operand nDa zOut))
     | none   => pure ("", nDa)
-  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDd zbnO))
+  let (cDn3, nDn3) ← bnBackSite B oc hh ww sync replicas epsStr s!"%{p}g3" f.c3 s!"{p}g3dst" nDd f.st3
   let (cDc3, nDc3) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}W3" zk3 zo (.operand nDn3 zOut) else .convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
   let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
-  let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
+  let (cDn2, nDn2) ← bnBackSite B mid hh ww sync replicas epsStr s!"%{p}g2" f.c2 s!"{p}g2dst" nDr2 f.st2
   let (cDc2, nDc2) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) zrnd s!"%{p}W2" zk2 zm (.operand nDn2 zMid) else .convBackBatched (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" zk2 zm (.operand nDn2 zMid))
   let (cDr1, nDr1) ← pretty B (.selectPosB f.n1 zMid (.operand nDc2 zMid))
-  let (cDn1, nDn1) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" f.c1 epsStr 0 zm zbnM (.operand nDr1 zbnM))
+  let (cDn1, nDn1) ← bnBackSite B mid hh ww sync replicas epsStr s!"%{p}g1" f.c1 s!"{p}g1dst" nDr1 f.st1
   let (cDc1, nDc1) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := oc) (oc := mid) (h := hh) (w := ww) zrnd s!"%{p}W1" zk1 zm (.operand nDn1 zMid) else .convBackBatched (N := B) (ic := oc) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" zk1 zm (.operand nDn1 zMid))
   let (cDx,  nDx)  ← pretty B (.addVB (.operand nDc1 zOut) (.operand nDa zOut))
   -- parameter gradients, func-arg order: W1 g1 bt1 W2 g2 bt2 W3 g3 bt3
   let (cW1, nW1) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := oc) (oc := mid) (h := hh) (w := ww) zrnd xName zm zOut zk1 (.operand nDn1 zMid) else .convWeightGradB (ic := oc) (oc := mid) (h := hh) (w := ww) xName zm zOut zk1 (.operand nDn1 zMid))
-  let (cg1, ng1) ← pretty B (.bnGammaGradB f.c1 epsStr 0 zbnM (.operand nDr1 zbnM))
+  let (cg1, ng1) ← bnGammaSite B mid hh ww sync epsStr f.c1 nDr1 f.st1
   let (ct1, nt1) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr1 zbnM))
   let (cW2, nW2) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := mid) (h := hh) (w := ww) zrnd f.r1 zm zMid zk2 (.operand nDn2 zMid) else .convWeightGradB (ic := mid) (oc := mid) (h := hh) (w := ww) f.r1 zm zMid zk2 (.operand nDn2 zMid))
-  let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
+  let (cg2, ng2) ← bnGammaSite B mid hh ww sync epsStr f.c2 nDr2 f.st2
   let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
   let (cW3, nW3) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd f.r2 zo zMid zk3 (.operand nDn3 zOut) else .convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
   -- ⚠ `nDd`, not `nDa` — bn3 is ON the dropped branch, so its own γ/β take the masked cotangent.
-  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDd zbnO))
+  let (cg3, ng3) ← bnGammaSite B oc hh ww sync epsStr f.c3 nDd f.st3
   let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDd zbnO))
   pure { code := cDa ++ cDd ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++ cDx ++
                  cW1 ++ cg1 ++ ct1 ++ cW2 ++ cg2 ++ ct2 ++ cW3 ++ cg3 ++ ct3,
@@ -342,7 +355,8 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
     Identical to the identity backward except the skip branch carries its own `bn→conv` backward
     (`dnp`/`dcp`) and `dx = dc1 + dcp`. -/
 private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
-    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   let zm    : Vec mid := fun _ => 0
@@ -372,29 +386,29 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
     | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
                             (.operand nDa zOut))
     | none   => pure ("", nDa)
-  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDd zbnO))
+  let (cDn3, nDn3) ← bnBackSite B oc hh ww sync replicas epsStr s!"%{p}g3" f.c3 s!"{p}g3dst" nDd f.st3
   let (cDc3, nDc3) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}W3" zk3 zo (.operand nDn3 zOut) else .convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
   let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
-  let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
+  let (cDn2, nDn2) ← bnBackSite B mid hh ww sync replicas epsStr s!"%{p}g2" f.c2 s!"{p}g2dst" nDr2 f.st2
   let (cDc2, nDc2) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) zrnd s!"%{p}W2" zk2 zm (.operand nDn2 zMid) else .convBackBatched (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" zk2 zm (.operand nDn2 zMid))
   let (cDr1, nDr1) ← pretty B (.selectPosB f.n1 zMid (.operand nDc2 zMid))
-  let (cDn1, nDn1) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" f.c1 epsStr 0 zm zbnM (.operand nDr1 zbnM))
+  let (cDn1, nDn1) ← bnBackSite B mid hh ww sync replicas epsStr s!"%{p}g1" f.c1 s!"{p}g1dst" nDr1 f.st1
   let (cDc1, nDc1) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := cin) (oc := mid) (h := hh) (w := ww) zrnd s!"%{p}W1" zk1 zm (.operand nDn1 zMid) else .convBackBatched (N := B) (ic := cin) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" zk1 zm (.operand nDn1 zMid))
-  let (cDnp, nDnp) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" f.cp epsStr 0 zo zbnO (.operand nDa zbnO))
+  let (cDnp, nDnp) ← bnBackSite B oc hh ww sync replicas epsStr s!"%{p}gp" f.cp s!"{p}gpdst" nDa f.stp
   let (cDcp, nDcp) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := cin) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}Wp" zkp zo (.operand nDnp zOut) else .convBackBatched (N := B) (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" zkp zo (.operand nDnp zOut))
   let (cDx,  nDx)  ← pretty B (.addVB (.operand nDc1 zIn) (.operand nDcp zIn))
   let (cW1, nW1) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := cin) (oc := mid) (h := hh) (w := ww) zrnd xName zm zIn zk1 (.operand nDn1 zMid) else .convWeightGradB (ic := cin) (oc := mid) (h := hh) (w := ww) xName zm zIn zk1 (.operand nDn1 zMid))
-  let (cg1, ng1) ← pretty B (.bnGammaGradB f.c1 epsStr 0 zbnM (.operand nDr1 zbnM))
+  let (cg1, ng1) ← bnGammaSite B mid hh ww sync epsStr f.c1 nDr1 f.st1
   let (ct1, nt1) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr1 zbnM))
   let (cW2, nW2) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := mid) (h := hh) (w := ww) zrnd f.r1 zm zMid zk2 (.operand nDn2 zMid) else .convWeightGradB (ic := mid) (oc := mid) (h := hh) (w := ww) f.r1 zm zMid zk2 (.operand nDn2 zMid))
-  let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
+  let (cg2, ng2) ← bnGammaSite B mid hh ww sync epsStr f.c2 nDr2 f.st2
   let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
   let (cW3, nW3) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd f.r2 zo zMid zk3 (.operand nDn3 zOut) else .convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
   -- ⚠ `nDd`, not `nDa` — bn3 is ON the dropped branch, so its own γ/β take the masked cotangent.
-  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDd zbnO))
+  let (cg3, ng3) ← bnGammaSite B oc hh ww sync epsStr f.c3 nDd f.st3
   let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDd zbnO))
   let (cWp, nWp) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := cin) (oc := oc) (h := hh) (w := ww) zrnd xName zo zIn zkp (.operand nDnp zOut) else .convWeightGradB (ic := cin) (oc := oc) (h := hh) (w := ww) xName zo zIn zkp (.operand nDnp zOut))
-  let (cgp, ngp) ← pretty B (.bnGammaGradB f.cp epsStr 0 zbnO (.operand nDa zbnO))
+  let (cgp, ngp) ← bnGammaSite B oc hh ww sync epsStr f.cp nDa f.stp
   let (ctp, ntp) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
   pure { code := cDa ++ cDd ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
                  cDnp ++ cDcp ++ cDx ++
@@ -410,7 +424,8 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
     ⚠ `dc2` is the STRIDED conv backward, so it takes the cotangent from `hh` back up to `2hh`;
     everything upstream of it (`dr1`, `dn1`, `dc1`, `W1`'s grad) lives at `2hh`. -/
 private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
-    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   let zm    : Vec mid := fun _ => 0
@@ -442,30 +457,30 @@ private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f :
     | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
                             (.operand nDa zOut))
     | none   => pure ("", nDa)
-  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDd zbnO))
+  let (cDn3, nDn3) ← bnBackSite B oc hh ww sync replicas epsStr s!"%{p}g3" f.c3 s!"{p}g3dst" nDd f.st3
   let (cDc3, nDc3) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}W3" zk3 zo (.operand nDn3 zOut) else .convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
   let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
-  let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
+  let (cDn2, nDn2) ← bnBackSite B mid hh ww sync replicas epsStr s!"%{p}g2" f.c2 s!"{p}g2dst" nDr2 f.st2
   -- the strided conv backward: hh → 2hh
   let (cDc2, nDc2) ← pretty B (if bf16 then .convStridedBackBatchedBf16 (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) zrnd s!"%{p}W2" zk2 zm (.operand nDn2 zMid) else .convStridedBackBatched (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" zk2 zm (.operand nDn2 zMid))
   let (cDr1, nDr1) ← pretty B (.selectPosB f.n1 zMidIn (.operand nDc2 zMidIn))
-  let (cDn1, nDn1) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}g1" f.c1 epsStr 0 zm zbnMIn (.operand nDr1 zbnMIn))
+  let (cDn1, nDn1) ← bnBackSite B mid (2*hh) (2*ww) sync replicas epsStr s!"%{p}g1" f.c1 s!"{p}g1dst" nDr1 f.st1
   let (cDc1, nDc1) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) zrnd s!"%{p}W1" zk1 zm (.operand nDn1 zMidIn) else .convBackBatched (N := B) (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}W1" zk1 zm (.operand nDn1 zMidIn))
-  let (cDnp, nDnp) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" f.cp epsStr 0 zo zbnO (.operand nDa zbnO))
+  let (cDnp, nDnp) ← bnBackSite B oc hh ww sync replicas epsStr s!"%{p}gp" f.cp s!"{p}gpdst" nDa f.stp
   let (cDcp, nDcp) ← pretty B (if bf16 then .convStridedBackBatchedBf16 (N := B) (ic := cin) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}Wp" zkp zo (.operand nDnp zOut) else .convStridedBackBatched (N := B) (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" zkp zo (.operand nDnp zOut))
   let (cDx,  nDx)  ← pretty B (.addVB (.operand nDc1 zIn) (.operand nDcp zIn))
   let (cW1, nW1) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) zrnd xName zm zIn zk1 (.operand nDn1 zMidIn) else .convWeightGradB (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) xName zm zIn zk1 (.operand nDn1 zMidIn))
-  let (cg1, ng1) ← pretty B (.bnGammaGradB f.c1 epsStr 0 zbnMIn (.operand nDr1 zbnMIn))
+  let (cg1, ng1) ← bnGammaSite B mid (2*hh) (2*ww) sync epsStr f.c1 nDr1 f.st1
   let (ct1, nt1) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) (.operand nDr1 zbnMIn))
   let (cW2, nW2) ← pretty B (if bf16 then .convStridedWeightGradBBf16 (ic := mid) (oc := mid) (h := hh) (w := ww) zrnd f.r1 zm zMidIn zk2 (.operand nDn2 zMid) else .convStridedWeightGradB (ic := mid) (oc := mid) (h := hh) (w := ww) f.r1 zm zMidIn zk2 (.operand nDn2 zMid))
-  let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
+  let (cg2, ng2) ← bnGammaSite B mid hh ww sync epsStr f.c2 nDr2 f.st2
   let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
   let (cW3, nW3) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd f.r2 zo zMid zk3 (.operand nDn3 zOut) else .convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
   -- ⚠ `nDd`, not `nDa` — bn3 is ON the dropped branch, so its own γ/β take the masked cotangent.
-  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDd zbnO))
+  let (cg3, ng3) ← bnGammaSite B oc hh ww sync epsStr f.c3 nDd f.st3
   let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDd zbnO))
   let (cWp, nWp) ← pretty B (if bf16 then .convStridedWeightGradBBf16 (ic := cin) (oc := oc) (h := hh) (w := ww) zrnd xName zo zIn zkp (.operand nDnp zOut) else .convStridedWeightGradB (ic := cin) (oc := oc) (h := hh) (w := ww) xName zo zIn zkp (.operand nDnp zOut))
-  let (cgp, ngp) ← pretty B (.bnGammaGradB f.cp epsStr 0 zbnO (.operand nDa zbnO))
+  let (cgp, ngp) ← bnGammaSite B oc hh ww sync epsStr f.cp nDa f.stp
   let (ctp, ntp) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
   pure { code := cDa ++ cDd ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
                  cDnp ++ cDcp ++ cDx ++
@@ -503,6 +518,7 @@ structure R50FwdRecB where
   stn : String            -- stem BN out   (= stem-relu pre-activation)
   str : String            -- stem relu out (= maxpool input)
   stp : String            -- maxpool out
+  sst : String := ""      -- the stem BN's all-reduced packed stats (sync-BN; "" at one replica)
   gap : String            -- GAP out (= dense input)
   b : Array BNFwd         -- the 16 bottleneck blocks, in forward order
 deriving Inhabited
@@ -516,7 +532,10 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
     (bf16 : Bool := false)
     -- ▶ `sd` = stochastic depth, RSB-A2/A1's `dropPath := 0.05`. TRAILING and defaulted, so the
     -- committed `@resnet50_fwd` and every drop-free train step re-render byte-identically.
-    (sd : Bool := false) :
+    (sd : Bool := false)
+    -- ▶ SYNC-BN (`planning/global_bn_verified.md` §3.4): at `sync` every BN site is `bnFwdSite`'s
+    -- all-reduced composition. TRAILING and defaulted off, so `@resnet50_fwd` is untouched.
+    (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS R50FwdRecB := do
   -- The ladder, bottom-up. At q = 7: 5→…  no — at q = 7 these are 7, 14, 28, 56, 112 and the
   -- input is 224; at q = 5 they are 5, 10, 20, 40, 80 and the input is 160.
@@ -535,26 +554,26 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   let _z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
   let _z56   : Vec (B*(64*q2*q2)) := fun _ => 0
   let (cStc, nStc) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := q1) (w := q1) zrnd "%sW" (zb 64) zSk z64 else .convStrided (h := q1) (w := q1) "%sW" (zb 64) zSk z64) (.operand "%x" zx))
-  let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := q1) (w := q1) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
+  let (cStn, nStn, sst) ← bnFwdSite B 64 q1 q1 sync replicas epsStr "%sg" "%sbt" "sg" nStc
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
   let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := q2) (w := q2)) (.operand nStr z112))
   -- ═══ 16 bottleneck blocks, [3,4,6,3] ═══
-  let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp bf16 (dpAt sd 0)   -- ⭐ the stride-1 projection
-  let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o bf16 (dpAt sd 1)
-  let f3  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b2" f2.o bf16 (dpAt sd 2)
-  let f4  ← bnkStridedFwdB B  256 128  512 q3 epsStr "s2b0" f3.o bf16 (dpAt sd 3)
-  let f5  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b1" f4.o bf16 (dpAt sd 4)
-  let f6  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b2" f5.o bf16 (dpAt sd 5)
-  let f7  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b3" f6.o bf16 (dpAt sd 6)
-  let f8  ← bnkStridedFwdB B  512 256 1024 q4 epsStr "s3b0" f7.o bf16 (dpAt sd 7)
-  let f9  ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b1" f8.o bf16 (dpAt sd 8)
-  let f10 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b2" f9.o bf16 (dpAt sd 9)
-  let f11 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b3" f10.o bf16 (dpAt sd 10)
-  let f12 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b4" f11.o bf16 (dpAt sd 11)
-  let f13 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b5" f12.o bf16 (dpAt sd 12)
-  let f14 ← bnkStridedFwdB B 1024 512 2048  q5 epsStr "s4b0" f13.o bf16 (dpAt sd 13)
-  let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o bf16 (dpAt sd 14)
-  let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o bf16 (dpAt sd 15)
+  let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp bf16 (dpAt sd 0) replicas sync   -- ⭐ the stride-1 projection
+  let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o bf16 (dpAt sd 1) replicas sync
+  let f3  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b2" f2.o bf16 (dpAt sd 2) replicas sync
+  let f4  ← bnkStridedFwdB B  256 128  512 q3 epsStr "s2b0" f3.o bf16 (dpAt sd 3) replicas sync
+  let f5  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b1" f4.o bf16 (dpAt sd 4) replicas sync
+  let f6  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b2" f5.o bf16 (dpAt sd 5) replicas sync
+  let f7  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b3" f6.o bf16 (dpAt sd 6) replicas sync
+  let f8  ← bnkStridedFwdB B  512 256 1024 q4 epsStr "s3b0" f7.o bf16 (dpAt sd 7) replicas sync
+  let f9  ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b1" f8.o bf16 (dpAt sd 8) replicas sync
+  let f10 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b2" f9.o bf16 (dpAt sd 9) replicas sync
+  let f11 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b3" f10.o bf16 (dpAt sd 10) replicas sync
+  let f12 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b4" f11.o bf16 (dpAt sd 11) replicas sync
+  let f13 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b5" f12.o bf16 (dpAt sd 12) replicas sync
+  let f14 ← bnkStridedFwdB B 1024 512 2048  q5 epsStr "s4b0" f13.o bf16 (dpAt sd 13) replicas sync
+  let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o bf16 (dpAt sd 14) replicas sync
+  let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o bf16 (dpAt sd 15) replicas sync
   -- ═══ head: GAP(7×7) → dense(2048→nClasses) ═══
   let zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
   let z2048 : Vec (B*2048) := fun _ => 0
@@ -568,7 +587,7 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
                  f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
                  f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
                  f15.code ++ f16.code ++ cGap ++ cLog,
-         logits := nLog, stc := nStc, stn := nStn, str := nStr, stp := nStp, gap := nGap,
+         logits := nLog, stc := nStc, stn := nStn, str := nStr, stp := nStp, sst := sst, gap := nGap,
          b := #[f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16] }
 
 /-- **ResNet-50 `[3,4,6,3]` bottleneck train step, batch-BN, rendered at `N := B`.**
@@ -696,7 +715,17 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- ⚠ It reaches `r34AdamVariant` — the `wx`/`clip`/`bf16` rule, and here the marker also tells
     -- the DRIVER to append 16 mask slots, so a flag that stopped at the emission would produce a
     -- graph the driver feeds none.
-    (sd : Bool := false) : String :=
+    (sd : Bool := false)
+    -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
+    -- gates only — `imagenet-syncbn-check`'s FORMULATION column, and `r50_dp_render_tie.py`'s
+    -- 1-replica side. Never a committed artifact.
+    (forceSync : Bool := false)
+    -- ▶ `noSync`: a DP render with PER-REPLICA BatchNorm — what every `*dp*` artifact here was
+    -- before 2026-09-21. Rendered at run time for `r50-accum-shard-tie` only, whose identity
+    -- (k accumulated micro-batches = the k-replica DP step) holds exactly when each replica
+    -- normalises over its own rows. Never a committed artifact.
+    (noSync : Bool := false) : String :=
+  let sync : Bool := (replicas > 1 || forceSync) && !noSync
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
@@ -713,7 +742,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward: THE SHARED CHAIN, not a second copy (see `r50FwdChainB`) ═══
-    let fw ← r50FwdChainB B nClasses epsStr q bf16 sd
+    let fw ← r50FwdChainB B nClasses epsStr q bf16 sd replicas sync
     let q5 := q
     let q4 := 2 * q5
     let q3 := 2 * q4
@@ -774,53 +803,62 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cbd,  nbd)  ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
     let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 2048) (h := q5) (w := q5) (.operand nDgi z2048))
     -- ═══ 16 block backwards, in reverse ═══
-    let b16 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b2" f16 nDgp bf16 (dpAt sd 15)
-    let b15 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b1" f15 b16.dx bf16 (dpAt sd 14)
-    let b14 ← bnkStridedBackGradB B 1024 512 2048  q5 epsStr "s4b0" f14 b15.dx bf16 (dpAt sd 13)
-    let b13 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b5" f13 b14.dx bf16 (dpAt sd 12)
-    let b12 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b4" f12 b13.dx bf16 (dpAt sd 11)
-    let b11 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b3" f11 b12.dx bf16 (dpAt sd 10)
-    let b10 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b2" f10 b11.dx bf16 (dpAt sd 9)
-    let b9  ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b1" f9  b10.dx bf16 (dpAt sd 8)
-    let b8  ← bnkStridedBackGradB B  512 256 1024 q4 epsStr "s3b0" f8  b9.dx bf16 (dpAt sd 7)
-    let b7  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b3" f7  b8.dx bf16 (dpAt sd 6)
-    let b6  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b2" f6  b7.dx bf16 (dpAt sd 5)
-    let b5  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b1" f5  b6.dx bf16 (dpAt sd 4)
-    let b4  ← bnkStridedBackGradB B  256 128  512 q3 epsStr "s2b0" f4  b5.dx bf16 (dpAt sd 3)
-    let b3  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b2" f3  b4.dx bf16 (dpAt sd 2)
-    let b2  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b1" f2  b3.dx bf16 (dpAt sd 1)
-    let b1  ← bnkProjBackGradB    B   64  64  256 q2 epsStr "s1b0" f1  b2.dx bf16 (dpAt sd 0)
+    let b16 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b2" f16 nDgp bf16 (dpAt sd 15) replicas sync
+    let b15 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b1" f15 b16.dx bf16 (dpAt sd 14) replicas sync
+    let b14 ← bnkStridedBackGradB B 1024 512 2048  q5 epsStr "s4b0" f14 b15.dx bf16 (dpAt sd 13) replicas sync
+    let b13 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b5" f13 b14.dx bf16 (dpAt sd 12) replicas sync
+    let b12 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b4" f12 b13.dx bf16 (dpAt sd 11) replicas sync
+    let b11 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b3" f11 b12.dx bf16 (dpAt sd 10) replicas sync
+    let b10 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b2" f10 b11.dx bf16 (dpAt sd 9) replicas sync
+    let b9  ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b1" f9  b10.dx bf16 (dpAt sd 8) replicas sync
+    let b8  ← bnkStridedBackGradB B  512 256 1024 q4 epsStr "s3b0" f8  b9.dx bf16 (dpAt sd 7) replicas sync
+    let b7  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b3" f7  b8.dx bf16 (dpAt sd 6) replicas sync
+    let b6  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b2" f6  b7.dx bf16 (dpAt sd 5) replicas sync
+    let b5  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b1" f5  b6.dx bf16 (dpAt sd 4) replicas sync
+    let b4  ← bnkStridedBackGradB B  256 128  512 q3 epsStr "s2b0" f4  b5.dx bf16 (dpAt sd 3) replicas sync
+    let b3  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b2" f3  b4.dx bf16 (dpAt sd 2) replicas sync
+    let b2  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b1" f2  b3.dx bf16 (dpAt sd 1) replicas sync
+    let b1  ← bnkProjBackGradB    B   64  64  256 q2 epsStr "s1b0" f1  b2.dx bf16 (dpAt sd 0) replicas sync
     -- ═══ stem backward ═══
     let (cDmp, nDmp) ← pretty B (.maxPool3s2BackB (N := B) (c := 64) (h := q2) (w := q2) nStr z112 (.operand b1.dx z56))
     let (cDsr, nDsr) ← pretty B (.selectPosB nStn z112 (.operand nDmp z112))
-    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 64) (h := q1) (w := q1) "%sg" nStc epsStr 0 z64 z112b (.operand nDsr z112b))
+    let (cDsn, nDsn) ← bnBackSite B 64 q1 q1 sync replicas epsStr "%sg" nStc "sgdst" nDsr fw.sst
     let (csW, nsW) ← pretty B (if bf16 then .convStridedWeightGradBBf16 zrnd "%x" z64 zx zSk (.operand nDsn z112) else .convStridedWeightGradB "%x" z64 zx zSk (.operand nDsn z112))
-    let (csg, nsg) ← pretty B (.bnGammaGradB nStc epsStr 0 z112b (.operand nDsr z112b))
+    let (csg, nsg) ← bnGammaSite B 64 q1 q1 sync epsStr nStc nDsr fw.sst
     let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 64) (h := q1) (w := q1) (.operand nDsr z112b))
     -- ═══ BN running statistics, from each BN layer's INPUT ═══
-    let bnStat (oc hh : Nat) (xn : String) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
+    -- ⭐ Under sync-BN these are read off the all-reduced packed vector (`bnStatsMeanB` /
+    -- `bnStatsVarB`), so the host EMAs the GLOBAL batch statistics — what the reference's `_bn`
+    -- buffers hold — rather than replica 0's shard's.
+    let bnStat (oc hh : Nat) (xn st : String) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
       let zbv : Vec (B*(oc*(hh*hh))) := fun _ => 0
-      let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
-      let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
-      pure (cM ++ cV, nM, nV)
+      let zst : Vec (oc+oc) := fun _ => 0
+      if !sync then
+        let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
+        let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
+        pure (cM ++ cV, nM, nV)
+      else
+        let (cM, nM) ← pretty B (.bnStatsMeanB (oc := oc) (.operand st zst))
+        let (cV, nV) ← pretty B (.bnStatsVarB (oc := oc) (.operand st zst))
+        pure (cM ++ cV, nM, nV)
     -- identity + stride-1-projection blocks keep every BN at `hh`.
     let idStats (mid oc hh : Nat) (f : BNFwd) : StateM Proofs.StableHLO.EmitS (String × List String) := do
-      let (c1, m1, v1) ← bnStat mid hh f.c1
-      let (c2, m2, v2) ← bnStat mid hh f.c2
-      let (c3, m3, v3) ← bnStat oc hh f.c3
+      let (c1, m1, v1) ← bnStat mid hh f.c1 f.st1
+      let (c2, m2, v2) ← bnStat mid hh f.c2 f.st2
+      let (c3, m3, v3) ← bnStat oc hh f.c3 f.st3
       pure (c1 ++ c2 ++ c3, [m1, v1, m2, v2, m3, v3])
     let projStats (mid oc hh : Nat) (f : BNFwd) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (cb, ns) ← idStats mid oc hh f
-      let (cp, mp, vp) ← bnStat oc hh f.cp
+      let (cp, mp, vp) ← bnStat oc hh f.cp f.stp
       pure (cb ++ cp, ns ++ [mp, vp])
     -- ⚠ the STRIDED block's bn1 lives at `2*hh`; only bn2/bn3/bnp are at `hh`.
     let strStats (mid oc hh : Nat) (f : BNFwd) : StateM Proofs.StableHLO.EmitS (String × List String) := do
-      let (c1, m1, v1) ← bnStat mid (2*hh) f.c1
-      let (c2, m2, v2) ← bnStat mid hh f.c2
-      let (c3, m3, v3) ← bnStat oc hh f.c3
-      let (cp, mp, vp) ← bnStat oc hh f.cp
+      let (c1, m1, v1) ← bnStat mid (2*hh) f.c1 f.st1
+      let (c2, m2, v2) ← bnStat mid hh f.c2 f.st2
+      let (c3, m3, v3) ← bnStat oc hh f.c3 f.st3
+      let (cp, mp, vp) ← bnStat oc hh f.cp f.stp
       pure (c1 ++ c2 ++ c3 ++ cp, [m1, v1, m2, v2, m3, v3, mp, vp])
-    let (cSt0, st0) ← bnStat 64 q1 nStc
+    let (cSt0, st0) ← bnStat 64 q1 nStc fw.sst
     let (cSt1,  st1)  ← projStats  64  256 q2 f1
     let (cSt2,  st2)  ← idStats    64  256 q2 f2
     let (cSt3,  st3)  ← idStats    64  256 q2 f3
@@ -930,11 +968,36 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     pure <|
       (if replicas ≤ 1 then
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
-       else
+       else if !sync then
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN\n" ++
-        "    // of the per-replica gradient nodes (4d piece 2).\n") ++
+        "    // of the per-replica gradient nodes (4d piece 2). BatchNorm is PER REPLICA here.\n"
+       else
+        s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
+        "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
+        "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
+        "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
+        "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
+        "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
+        "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
+        "    // global batch N x b: proved as ResNet50SyncTieB.r50_net_syncTiedB (every all-reduced\n" ++
+        "    // gradient) and StableHLO.resnet50FwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).\n" ++
+        (if accOn then
+          "    // Under accumulation that holds per MICRO-step: BN normalises over the replicas'\n" ++
+          "    // micro-batches together, and the accumulator runs after the all-reduced gradient.\n"
+         else "") ++
+        (if sd then
+          "    // (Both are stated without drop-path; this artifact's per-example masks are not in\n" ++
+          "    // that statement.)\n"
+         else "") ++
+        (if bf16 then
+          "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
+          "    // their operands per element, are not in that statement.)\n"
+         else "")) ++
       zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt wdStr ++
       wdzConst wdExclude ++ clipZeroConst gradClip ++ adamCode ++
       (if bce then lossCodeBce else lossCode) ++
@@ -1349,8 +1412,10 @@ end Proofs.StableHLO
 -- `resnet50in160_fwd_eval` at 224².
 --
 -- ⚠⚠ **WHAT THIS STILL IS NOT.** `wdExcludeNormBias` remains absent (§0), so BN γ/β and biases are
--- decayed where timm excludes them; and the BN regime is Ghost-BN over 64-image micro-batches, not
--- a genuine bs2048 forward. Quote it against §4.1's delta list, never as "RSB-A3 reproduced".
+-- decayed where timm excludes them; and the BN group is one micro-step across the replicas —
+-- 4×64 = 256 since the sync-BN swap (2026-09-21; 64 per replica before), against the reference's
+-- 512 — not a genuine bs2048 forward. Quote it against §4.1's delta list, never as "RSB-A3
+-- reproduced".
 --
 -- ⚠ The 1-replica peer below is NOT a second recipe — it is what the accumulation gates need. Both
 -- `r50-accum-tie` and `r50-accum-shard-tie` compare against a SINGLE-DEVICE peer, so a DP-only
@@ -1442,10 +1507,10 @@ end Proofs.StableHLO
     (wdExclude := true) (gradClip := true))
 
 -- The **2-GPU** peer of the 4-replica render above: `B := 128` per replica at the same `k = 8`, so
--- the global batch stays 128×2×8 = 2048 and the recipe is untouched. ⚠ Note what does NOT stay the
--- same: Ghost-BN normalises per micro-batch, so this run's BN regime is 128-image ghosts against
--- the 4×64 render's 64-image ones. For a wall-clock measurement that is immaterial; for any
--- accuracy claim it is a different regime and must be said out loud (§4.1's delta list).
+-- the global batch stays 128×2×8 = 2048 and the recipe is untouched. Since the sync-BN swap
+-- (2026-09-21) the BN group stays too: BN normalises over the replicas' micro-batches together,
+-- 2×128 = 256 here and 4×64 = 256 above. (Before it, this run's groups were 128 against the 4×64
+-- render's 64 — a different regime for any accuracy claim.)
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x128bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 2
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
@@ -1590,8 +1655,9 @@ end Proofs.StableHLO
 --      `ResNet50RenderB` imports it (0 hits in both), and `r34AdamVariant` has no `drop` marker to
 --      ask for it with. That is renderer work on the residual family, not a flag.
 --      ⚠ A3 sets `dropPath := 0.0`, which is again why A3 never needed it.
---   ⚠ **GHOST-BN GROUP.** These render 8×64, i.e. 64-image ghosts. The reference reaches 2048 as
---      4 accumulation steps × 512 global (128 per device on four cards), i.e. 128-image ghosts.
+--   ⚠ **BN GROUP.** These render 8×64: since the sync-BN swap (2026-09-21) that is a 4×64 = 256
+--      group per micro-step (64 per replica before). The reference reaches 2048 as 4 accumulation
+--      steps × 512 global, and its group is the 512 (see the ⚠⚠ "NOT 128 — 512" note below).
 --      Immaterial to a wall clock; a different regime for any accuracy claim.
 --   ✅ Repeated augmentation 3× IS present — it rides the shim (`repeat(3)`), which is shared with
 --      the `default` recipe. ⚠ The shim's own comment calls it a stream-level APPROXIMATION.
@@ -1659,8 +1725,9 @@ end Proofs.StableHLO
 -- ⚠ **ONE A2 DELTA REMAINS AND IT IS NOT THIS ONE**: stochastic depth `dropPath := 0.05` still has
 -- no importer on the residual family (neither `ResNet34RenderB` nor `ResNet50RenderB` imports
 -- `DropPath.lean`, and `r34AdamVariant` has no `drop` marker). So these are A2's graph minus ONE
--- regulariser rather than minus two. Ghost-BN group 64-vs-128 is unchanged. Quote them the way
--- A3's deltas are quoted.
+-- regulariser rather than minus two. The BN group (256 per micro-step since the sync-BN swap, 64
+-- before, against the reference's 512) is unchanged by it. Quote them the way A3's deltas are
+-- quoted.
 -- ⚠ The 1-replica peer, for `r50-accum-tie`/`r50-accum-shard-tie`'s reason: a DP-only render is
 -- ungateable, because both gates compare a DP render against a single-device one.
 
@@ -1692,17 +1759,22 @@ end Proofs.StableHLO
 -- See `runs/2026-08-27-r50-a2-a1-ema-fifth-region/droppath_shape.log` and
 -- `planning/archive/verified_side_quest_counterparts.md` §6b.
 --
--- ⚠ **WHAT IS STILL NOT A2**: ghost-BN group. These render 8×64, i.e. 64-image ghosts, against the
--- reference's 4 × 512-global (128 per device on four cards). Immaterial to a wall clock; a
--- different regime for any accuracy claim. That is now the ONLY delta, and it is the one §4a
--- listed as ⚠ rather than ⛔.
+-- ⚠ **WHAT IS STILL NOT A2**: the BN group. These render 8×64 — a 256-image group per micro-step
+-- since the sync-BN swap (2026-09-21; 64 before) — against the reference's 512. Immaterial to a
+-- wall clock; a different regime for any accuracy claim. That is now the ONLY delta, and it is the
+-- one §4a listed as ⚠ rather than ⛔. The `…4x128…` renders below close it.
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- § RSB-A2/A1 at the REFERENCE'S OWN FACTORISATION of 2048 — k = 4 × 128 per device, 2026-08-27.
 --
--- ⭐ **The ghost-BN group, and this is the axis `a3_paper_fidelity.md` §2.2 opened.** BN normalises
--- over whatever each replica holds, and nothing in this render all-reduces activation statistics —
--- all 162 collectives are on parameter-shaped tensors. So `…8x64…` normalises over **64 images**.
+-- ⭐⭐ **SYNC-BN SINCE 2026-09-21 (`planning/global_bn_verified.md` §3.4): these renders now
+-- normalise over 4 × 128 = 512 per micro-step — the reference's group exactly — and `…8x64…` over
+-- 256.** Every BN layer all-reduces its statistics (159 collectives beside the 161 gradient ones).
+-- The rest of this note is the state before, when the gap it describes was open.
+--
+-- ⭐ **The ghost-BN group, and this is the axis `a3_paper_fidelity.md` §2.2 opened.** BN normalised
+-- over whatever each replica held, and nothing in these renders all-reduced activation statistics —
+-- all 162 collectives were on parameter-shaped tensors. So `…8x64…` normalised over **64 images**.
 -- The reference reaches 2048 as `GRAD_ACCUM = 4` × `MICRO_BATCH = 512`, and its
 -- `bm = jnp.mean(x, axis=(0,2,3))` reduces over an axis that is MESH-SHARDED
 -- (`P(None,'batch')`), so XLA inserts the collective and its group is the full **512**.
@@ -1712,8 +1784,9 @@ end Proofs.StableHLO
 -- card holds; 512 is what the mean is taken over, because the reduction crosses the shard. An 8×
 -- gap recorded as 2×.
 --
--- ▶ These renders close HALF of it, in the ratio sense: `k = 4` and 128 per device is the
--- reference's own factorisation, so the group goes 64 → 128 and the remaining 4× needs SYNC-BN.
+-- ▶ These renders closed HALF of it, in the ratio sense: `k = 4` and 128 per device is the
+-- reference's own factorisation, so the group went 64 → 128, and the remaining 4× needed SYNC-BN —
+-- which is what they now carry.
 --
 -- ⚠⚠⚠ **THEY NEED MORE OF THE CARD THAN THE PLUGIN HANDS OUT BY DEFAULT, AND THAT DEFAULT WAS
 -- BEING READ AS A HARDWARE LIMIT.** `PJRT_Client_Create` with no create options takes the GPU
@@ -1907,3 +1980,36 @@ end Proofs.StableHLO
 
 #eval IO.FS.writeFile "verified_mlir/resnet50_fwd_eval.mlir"
   (Proofs.StableHLO.resnet50FwdEvalFaithfulV 32 10 "1.0e-05" "resnet50")
+
+-- ════════════════════════════════════════════════════════════════
+-- § Gate inputs, NOT artifacts — the one-replica SYNC-BN graphs (`forceSync`)
+-- ════════════════════════════════════════════════════════════════
+--
+-- Since 2026-09-21 every `*dp*` render above normalises with all-reduced BatchNorm statistics
+-- (`planning/global_bn_verified.md` §3.4), so a DP render is no longer "its single-device peer plus
+-- the gradient all-reduces": its BN sites are `bnSyncF` & co., not `bnBatchF`. It IS the same
+-- renderer's one-replica SYNC graph plus every all-reduce — gradient and BN alike — because at one
+-- replica each collective emits nothing and threads its operand. These are those graphs, for the
+-- single-device peers `tests/r50_dp_render_tie.py` pairs with the DP renders, and the first of
+-- them is what `r50-gradcheck` certifies under `R50_GC_PATH`. Written to `.lake/build/r50sync/`,
+-- never to `verified_mlir/`, and regenerated with this module, so they cannot be staler than it.
+#eval do
+  IO.FS.createDirAll ".lake/build/r50sync"
+  IO.FS.writeFile ".lake/build/r50sync/resnet50in_adam64_train_step.mlir"
+    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+      Proofs.StableHLO.R34Opt.adamw "resnet50in" (forceSync := true))
+  IO.FS.writeFile ".lake/build/r50sync/resnet50in_acc4x64_train_step.mlir"
+    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.R34Opt.adamwAccum 4) "resnet50in" (forceSync := true))
+  IO.FS.writeFile ".lake/build/r50sync/resnet50in160_lambacc8x64bce_train_step.mlir"
+    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+      (forceSync := true))
+  IO.FS.writeFile ".lake/build/r50sync/resnet50in160_lambacc8x64wxbce_train_step.mlir"
+    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+      (wdExclude := true) (forceSync := true))
+  IO.FS.writeFile ".lake/build/r50sync/resnet50in160_lambacc8x64wxclipbce_train_step.mlir"
+    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+      (wdExclude := true) (gradClip := true) (forceSync := true))

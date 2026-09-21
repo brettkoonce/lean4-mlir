@@ -1,0 +1,144 @@
+ResNet-50 (ImageNet-1k) SYNC-BN gate — 4×32 against 1×128
+  TEST     DP_sync([x₀|…|x3])  ==  single_128([x₀|…|x3])
+  CONTROL  DP_sync([x₀|…|x3])  !=  mean_k single_32(x_k)   (the old, per-replica identity)
+  single 32: (rendered at run time)
+  DP render: .lake/build/resnet50inbf16_syncgate_dp4x32_train_step.mlir (rendered at run time)
+  161 params (25557032 floats), 53 BN layers, backend xla
+  single-device 128 on [x₀|…]… (.lake/build/resnet50inbf16_syncgate_single128_train_step.mlir)
+I0921 15:11:48.647927  993838 service.cc:154] XLA service 0x7d4be879b3e0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 15:11:48.647972  993838 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:11:48.647987  993838 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:11:48.647993  993838 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:11:48.647998  993838 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:11:48.650519  993838 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:11:48.650560  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:11:48.650614  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0921 15:11:48.650632  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0921 15:11:48.650648  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0921 15:11:48.660578  993838 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0921 15:11:51.093016  993914 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 832 bytes spill stores, 832 bytes spill loads
+
+E0921 15:11:51.555966  993904 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 15:11:53.549886  993904 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 15:11:54.232654  993890 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0921 15:11:55.183953  993890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 56 bytes spill stores, 56 bytes spill loads
+
+I0921 15:11:55.313240  993890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 16 bytes spill stores, 16 bytes spill loads
+
+I0921 15:11:55.841426  993913 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 92 bytes spill stores, 60 bytes spill loads
+
+I0921 15:12:19.028023  993887 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_1', 4 bytes spill stores, 4 bytes spill loads
+
+I0921 15:12:19.062537  993907 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_9', 152 bytes spill stores, 88 bytes spill loads
+
+I0921 15:12:19.163961  993890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_convert_reduce_fusion_31', 156 bytes spill stores, 120 bytes spill loads
+
+I0921 15:12:19.212701  993904 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_5', 152 bytes spill stores, 88 bytes spill loads
+
+I0921 15:12:19.224621  993909 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_2', 152 bytes spill stores, 88 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet50inbf16_syncgate_single128_train_step.mlir (@resnet50in_mom128bf16_train_step, 592 outputs, 1 replica) in 30688 ms
+E0921 15:12:24.402289  993892 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 15:12:24.873623  993892 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0921 15:12:34.951226  993891 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_12', 120 bytes spill stores, 88 bytes spill loads
+
+I0921 15:12:35.079540  993895 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_11', 4 bytes spill stores, 4 bytes spill loads
+
+I0921 15:12:35.134009  993917 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_convert_reduce_fusion_25', 156 bytes spill stores, 120 bytes spill loads
+
+I0921 15:12:35.190707  993895 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_5', 28 bytes spill stores, 20 bytes spill loads
+
+I0921 15:12:35.198654  993887 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_6', 152 bytes spill stores, 88 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet50inbf16_syncgate_single32_train_step.mlir (@resnet50in_mombf16_train_step, 592 outputs, 1 replica) in 14696 ms
+  xla/pjrt .lake/build/resnet50inbf16_syncgate_single128_train_step.mlir
+  xla/pjrt .lake/build/resnet50inbf16_syncgate_single32_train_step.mlir
+  single-device 32 on each of the 4 shards…
+  single-device SYNC-graph 128 on [x₀|…]… (.lake/build/resnet50inbf16_syncgate_sync128_train_step.mlir)
+I0921 15:12:38.067380  993900 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_9', 152 bytes spill stores, 88 bytes spill loads
+
+I0921 15:12:38.074981  993911 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_1', 4 bytes spill stores, 4 bytes spill loads
+
+I0921 15:12:38.154430  993892 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_5', 152 bytes spill stores, 88 bytes spill loads
+
+I0921 15:12:38.175467  993909 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_2', 152 bytes spill stores, 88 bytes spill loads
+
+I0921 15:12:38.275879  993902 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_convert_reduce_fusion_32', 108 bytes spill stores, 68 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet50inbf16_syncgate_sync128_train_step.mlir (@resnet50in_mom128bf16_train_step, 592 outputs, 1 replica) in 2125 ms
+  xla/pjrt .lake/build/resnet50inbf16_syncgate_sync128_train_step.mlir
+  sensitivity probe (x + 1e-4·noise) on the two-pass 128 graph…
+  data-parallel 4×32 on [x₀|…]…
+I0921 15:12:39.919959  993838 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:12:39.920372  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:12:39.920403  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0921 15:12:39.920434  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0921 15:12:39.920457  993838 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0921 15:12:42.565809  997043 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_convert_reduce_fusion_29', 10 bytes spill stores, 8 bytes spill loads
+
+I0921 15:12:42.661485  997032 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_11', 4 bytes spill stores, 4 bytes spill loads
+
+I0921 15:12:42.687665  997018 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_convert_reduce_fusion_19', 24 bytes spill stores, 16 bytes spill loads
+
+I0921 15:12:42.692673  997027 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_5', 28 bytes spill stores, 20 bytes spill loads
+
+I0921 15:12:42.778623  997035 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_convert_reduce_fusion_25', 232 bytes spill stores, 248 bytes spill loads
+
+I0921 15:12:42.780514  997028 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_6', 152 bytes spill stores, 88 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet50inbf16_syncgate_dp4x32_train_step.mlir (@resnet50in_momdpbf16_train_step, 592 outputs, 4 replicas) in 3110 ms
+I0921 15:12:44.482836  997009 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 15:12:44.482897  997012 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 15:12:44.482920  997006 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  xla/pjrt .lake/build/resnet50inbf16_syncgate_dp4x32_train_step.mlir
+  duplicated probe: DP on [x₀|x₀|…] vs the one-replica sync graph on x₀ (.lake/build/resnet50inbf16_syncgate_sync32_train_step.mlir)…
+I0921 15:12:46.557714  997025 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_13', 120 bytes spill stores, 88 bytes spill loads
+
+I0921 15:12:46.664218  997032 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_12', 4 bytes spill stores, 4 bytes spill loads
+
+I0921 15:12:46.684133  997020 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_5', 28 bytes spill stores, 20 bytes spill loads
+
+I0921 15:12:46.735059  997041 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_convert_reduce_fusion_31', 108 bytes spill stores, 68 bytes spill loads
+
+I0921 15:12:46.809195  997040 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_6', 152 bytes spill stores, 88 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet50inbf16_syncgate_sync32_train_step.mlir (@resnet50in_mombf16_train_step, 592 outputs, 1 replica) in 2092 ms
+  xla/pjrt .lake/build/resnet50inbf16_syncgate_sync32_train_step.mlir
+  ── θ' [0, 25557032) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.005190
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.005221
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000090
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.008591
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.007621
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000281
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  ── m' [25557032, 51114064) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.000000
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.000000
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000000
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.000000
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.000000
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000000
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  ── v' = g + wd·θ [51114064, 76671096) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 1.115143
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 1.121854
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.019295
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 1.558428
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 1.637584
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.028662
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  ── bn stats (106 slots) [76671099, 76724219) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.006667
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.006667
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000000
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.378143
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.013887
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000000
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  DUPLICATED v' = g + wd·θ norm-rel (the *-dp-check metric, against the sync graph) = 0.020504
+✓ SYNC-BN CONFIRMED for resnet50inbf16: the sync graph IS the two-pass graph (statistics 0.000000), the collective composes it exactly (duplicated batch 0.000000), and DP_sync([x₀|…]) = single_Rb([x₀|…]) to 0.006667 on the statistics (first layer 0.000000) against a per-replica CONTROL of 0.378143 — 4×32 IS 1×128. Worst TEST region 1.115143; v' = g + wd·θ SENSITIVITY-to-1e-4 1.637584; statistics REPEAT 0.000000.

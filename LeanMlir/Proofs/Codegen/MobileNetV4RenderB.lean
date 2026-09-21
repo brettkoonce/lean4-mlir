@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.SyncBnSites
 import LeanMlir.ViTRender
 
 /-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/archive/mnv4_verified.md` phase 3)
@@ -215,17 +216,24 @@ def mnv4StatSigList : List (String × String) :=
     hypothetical: `planning/archive/mnv4_verified.md` §3d(b) measured `mobilenetv2_fwd` in a *different BN
     world* from the Adam train step that trains it, and `regen_verified_mlir.sh check` went green
     anyway because it only ever pairs a forward with the SGD step. One traversal, one switch, per
-    the `ResNet50RenderB` rule — the divergence has nowhere to live. -/
-private def mnv4Bn (B oc h : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
-    StateM Proofs.StableHLO.EmitS (String × String) := do
+    the `ResNet50RenderB` rule — the divergence has nowhere to live.
+
+    ⭐ SYNC-BN (`planning/global_bn_verified.md` §3.4): `.train` is `bnFwdSite`, which at `sync`
+    emits the all-reduced composition and returns the packed `[μ ‖ σ²]` as the third component
+    (`""` otherwise, and always at `.eval`). The collectives are tagged with the γ parameter's name
+    without `%`. -/
+private def mnv4Bn (B oc h : Nat) (mode : BnMode) (epsStr gName btName statP xin : String)
+    (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS (String × String × String) := do
   let zc  : Vec oc := fun _ => 0
   let zin : Vec (B * (oc*h*h)) := fun _ => 0
   match mode with
-  | .train => pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
-                          gName btName epsStr 0 zc zc (.operand xin zin))
-  | .eval  => pretty B (.batchOp (N := B) (.bnEval (oc := oc) (h := h) (w := h)
+  | .train => bnFwdSite B oc h h sync replicas epsStr gName btName (gName.drop 1).toString xin
+  | .eval  => do
+      let (c, n) ← pretty B (.batchOp (N := B) (.bnEval (oc := oc) (h := h) (w := h)
                           gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc)
                           (.operand xin zin))
+      pure (c, n, "")
 
 /-- Saved forward SSA names the UIB backward + gradient passes reference. The optional fields are
     `""` when their depthwise is absent (`k = 0`), which is how the backward reads off which family
@@ -243,6 +251,12 @@ structure UibFwdB where
   dn : String
   dr : String
   pc : String        -- project conv out (= project-BN input)
+  -- ⭐ SYNC-BN: each BN site's all-reduced packed `[μ ‖ σ²]` (`""` at one replica or when the
+  -- site is absent), read by its backward, its γ gradient and the handed-back running stats.
+  qst : String := ""
+  est : String := ""
+  dst : String := ""
+  pst : String := ""
 deriving Inhabited
 
 /-- **Stride-1 UIB with the identity skip** (`ic = oc = c`) — 18 of the table's 21 blocks, and
@@ -251,7 +265,8 @@ deriving Inhabited
     bottleneck is LINEAR, no activation after the add. -/
 private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := c * expand
   let zc   : Vec c := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -263,47 +278,49 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
 
   let mut code := ""
-  let mut qc := ""; let mut qn := ""; let mut qr := ""
+  let mut qc := ""; let mut qn := ""; let mut qr := ""; let mut qst := ""
   let mut cur := xName
   if preDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
       (if bf16 then .depthwiseBf16 (c := c) (h := h) (w := h) zrnd s!"%u{p}qW" s!"%zb{c}" zqk zc else .depthwise (c := c) (h := h) (w := h) s!"%u{p}qW" s!"%zb{c}" zqk zc) (.operand cur zcb))
-    let (c2, n2) ← mnv4Bn B c h mode epsStr s!"%u{p}qg" s!"%u{p}qbt" s!"u{p}qn" n1
+    let (c2, n2, s2) ← mnv4Bn B c h mode epsStr s!"%u{p}qg" s!"%u{p}qbt" s!"u{p}qn" n1 replicas sync
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := c*h*h)) (.operand n2 zcb))
     code := code ++ c1 ++ c2 ++ c3
-    qc := n1; qn := n2; qr := n3; cur := n3
+    qc := n1; qn := n2; qr := n3; qst := s2; cur := n3
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := c) (oc := mid) (h := h) (w := h) zrnd s!"%u{p}eW" s!"%zb{mid}" zke zm else .conv (ic := c) (oc := mid) (h := h) (w := h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand cur zcb))
-  let (cEn, nEn) ← mnv4Bn B mid h mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc
+  let (cEn, nEn, est) ← mnv4Bn B mid h mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc replicas sync
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
   code := code ++ cEc ++ cEn ++ cEr
   cur := nEr
 
-  let mut dc := ""; let mut dn := ""; let mut dr := ""
+  let mut dc := ""; let mut dn := ""; let mut dr := ""; let mut dst := ""
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
       (if bf16 then .depthwiseBf16 (c := mid) (h := h) (w := h) zrnd s!"%u{p}dW" s!"%zb{mid}" zdk zm else .depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand cur zmb))
-    let (c2, n2) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" n1
+    let (c2, n2, s2) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" n1 replicas sync
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
     code := code ++ c1 ++ c2 ++ c3
-    dc := n1; dn := n2; dr := n3; cur := n3
+    dc := n1; dn := n2; dr := n3; dst := s2; cur := n3
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := mid) (oc := c) (h := h) (w := h) zrnd s!"%u{p}pW" s!"%zb{c}" zkp zc else .conv (ic := mid) (oc := c) (h := h) (w := h) s!"%u{p}pW" s!"%zb{c}" zkp zc) (.operand cur zmb))
-  let (cPn, nPn) ← mnv4Bn B c h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc
+  let (cPn, nPn, pst) ← mnv4Bn B c h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc replicas sync
   let (cA, nA) ← pretty B (.addVB (.operand nPn zcb) (.operand xName zcb))
   code := code ++ cPc ++ cPn ++ cA
 
   pure { code := code, o := nA, qc := qc, qn := qn, qr := qr,
-         ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc }
+         ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc,
+         qst := qst, est := est, dst := dst, pst := pst }
 
 /-- **Stride-2 UIB where the PRE-DW carries the stride** (`preDWk > 0`). The pre-DW downsamples
     `2h×2h → h×h`, so the expand, the optional post-DW (now at stride 1) and the project all run at
     `h×h`. No skip — `ic ≠ oc`. -/
 private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := ic * expand
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -318,39 +335,41 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : Bn
 
   let (cQc, nQc) ← pretty B (.batchOp (N := B)
     (if bf16 then .depthwiseStridedBf16 (c := ic) (h := h) (w := h) zrnd s!"%u{p}qW" s!"%zb{ic}" zqk zic else .depthwiseStrided (c := ic) (h := h) (w := h) s!"%u{p}qW" s!"%zb{ic}" zqk zic) (.operand xName zin))
-  let (cQn, nQn) ← mnv4Bn B ic h mode epsStr s!"%u{p}qg" s!"%u{p}qbt" s!"u{p}qn" nQc
+  let (cQn, nQn, qst) ← mnv4Bn B ic h mode epsStr s!"%u{p}qg" s!"%u{p}qbt" s!"u{p}qn" nQc replicas sync
   let (cQr, nQr) ← pretty B (.batchOp (N := B) (.relu (n := ic*h*h)) (.operand nQn zqb))
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := ic) (oc := mid) (h := h) (w := h) zrnd s!"%u{p}eW" s!"%zb{mid}" zke zm else .conv (ic := ic) (oc := mid) (h := h) (w := h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand nQr zqb))
-  let (cEn, nEn) ← mnv4Bn B mid h mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc
+  let (cEn, nEn, est) ← mnv4Bn B mid h mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc replicas sync
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
 
   let mut code := cQc ++ cQn ++ cQr ++ cEc ++ cEn ++ cEr
   let mut cur := nEr
-  let mut dc := ""; let mut dn := ""; let mut dr := ""
+  let mut dc := ""; let mut dn := ""; let mut dr := ""; let mut dst := ""
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
       (if bf16 then .depthwiseBf16 (c := mid) (h := h) (w := h) zrnd s!"%u{p}dW" s!"%zb{mid}" zdk zm else .depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand cur zmb))
-    let (c2, n2) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" n1
+    let (c2, n2, s2) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" n1 replicas sync
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
     code := code ++ c1 ++ c2 ++ c3
-    dc := n1; dn := n2; dr := n3; cur := n3
+    dc := n1; dn := n2; dr := n3; dst := s2; cur := n3
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := mid) (oc := oc) (h := h) (w := h) zrnd s!"%u{p}pW" s!"%zb{oc}" zkp zoc else .conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" s!"%zb{oc}" zkp zoc) (.operand cur zmb))
-  let (cPn, nPn) ← mnv4Bn B oc h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc
+  let (cPn, nPn, pst) ← mnv4Bn B oc h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc replicas sync
   code := code ++ cPc ++ cPn
 
   pure { code := code, o := nPn, qc := nQc, qn := nQn, qr := nQr,
-         ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc }
+         ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc,
+         qst := qst, est := est, dst := dst, pst := pst }
 
 /-- **Stride-2 UIB where the POST-DW carries the stride** (`preDWk = 0`, `postDWk > 0`) — the IB /
     MBConv family at a downsample. The expand runs at the INPUT size `2h×2h`; the post-DW then
     downsamples to `h×h`. No skip — `ic ≠ oc`. -/
 private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := ic * expand
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -363,21 +382,22 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) zrnd s!"%u{p}eW" s!"%zb{mid}" zke zm else .conv (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand xName zin))
-  let (cEn, nEn) ← mnv4Bn B mid (2*h) mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc
+  let (cEn, nEn, est) ← mnv4Bn B mid (2*h) mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc replicas sync
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*(2*h)*(2*h))) (.operand nEn zeb))
 
   let (cDc, nDc) ← pretty B (.batchOp (N := B)
     (if bf16 then .depthwiseStridedBf16 (c := mid) (h := h) (w := h) zrnd s!"%u{p}dW" s!"%zb{mid}" zdk zm else .depthwiseStrided (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand nEr zeb))
-  let (cDn, nDn) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" nDc
+  let (cDn, nDn, dst) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" nDc replicas sync
   let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nDn zmb))
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := mid) (oc := oc) (h := h) (w := h) zrnd s!"%u{p}pW" s!"%zb{oc}" zkp zoc else .conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" s!"%zb{oc}" zkp zoc) (.operand nDr zmb))
-  let (cPn, nPn) ← mnv4Bn B oc h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc
+  let (cPn, nPn, pst) ← mnv4Bn B oc h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc replicas sync
 
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
          o := nPn, qc := "", qn := "", qr := "",
-         ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc }
+         ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         est := est, dst := dst, pst := pst }
 
 /-- **Fused inverted bottleneck, stride 2, no SE** — MobileNetV4's stage 0
     (`.fusedMbConv 32 48 4 3 2 1 false`) and EfficientNetV2's early stages.
@@ -398,7 +418,8 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
     the difference is real, not a copy-paste slip. -/
 private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := if expand == 1 then oc else ic * expand
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -411,30 +432,32 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     (if bf16 then .convStridedBf16 (ic := ic) (oc := mid) (h := h) (w := h) (kH := k) (kW := k) zrnd
       s!"%f{p}cW" s!"%zb{mid}" zkf zm else .convStrided (ic := ic) (oc := mid) (h := h) (w := h) (kH := k) (kW := k)
       s!"%f{p}cW" s!"%zb{mid}" zkf zm) (.operand xName zin))
-  let (cFn, nFn) ← mnv4Bn B mid h mode epsStr s!"%f{p}cg" s!"%f{p}cbt" s!"f{p}cn" nFc
+  let (cFn, nFn, est) ← mnv4Bn B mid h mode epsStr s!"%f{p}cg" s!"%f{p}cbt" s!"f{p}cn" nFc replicas sync
   let (cFs, nFs) ← pretty B (.batchOp (N := B) (.swish (n := mid*h*h)) (.operand nFn zmb))
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := mid) (oc := oc) (h := h) (w := h) zrnd s!"%f{p}pW" s!"%zb{oc}" zkp zoc else .conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%f{p}pW" s!"%zb{oc}" zkp zoc) (.operand nFs zmb))
-  let (cPn, nPn) ← mnv4Bn B oc h mode epsStr s!"%f{p}pg" s!"%f{p}pbt" s!"f{p}pn" nPc
+  let (cPn, nPn, pst) ← mnv4Bn B oc h mode epsStr s!"%f{p}pg" s!"%f{p}pbt" s!"f{p}pn" nPc replicas sync
 
   pure { code := cFc ++ cFn ++ cFs ++ cPc ++ cPn,
          o := nPn, qc := "", qn := "", qr := "",
-         ec := nFc, en := nFn, er := nFs, dc := "", dn := "", dr := "", pc := nPc }
+         ec := nFc, en := nFn, er := nFs, dc := "", dn := "", dr := "", pc := nPc,
+         est := est, pst := pst }
 
 /-- **Block-shape dispatch, in one place.** Which of the three forwards a row uses is forced by
     the row: stride 1 ⇒ the identity skip (`ic = oc`, pinned by `mnv4-fwd-smoke`); stride 2 splits
     on which depthwise carries the stride, because that decides the spatial size the expand runs at.
     The three cannot be one function — `.depthwise` and `.depthwiseStrided` differ in INPUT type. -/
 private def uibFwdDispatch (B : Nat) (b : UibSpec) (mode : BnMode) (epsStr xName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB :=
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibFwdB :=
   if b.stride2 then
     if b.preDWk > 0 then
-      uibFwdPreStridedB B b.ic b.oc b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16
+      uibFwdPreStridedB B b.ic b.oc b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16 replicas sync
     else
-      uibFwdPostStridedB B b.ic b.oc b.expand b.postDWk b.h mode epsStr b.p xName bf16
+      uibFwdPostStridedB B b.ic b.oc b.expand b.postDWk b.h mode epsStr b.p xName bf16 replicas sync
   else
-    uibFwdSkipB B b.ic b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16
+    uibFwdSkipB B b.ic b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16 replicas sync
 
 /-- Everything the whole-net render needs out of one forward traversal: the emitted code, the
     logits, and every saved activation the backward reads. `inputs` is each block's INPUT SSA name
@@ -456,6 +479,10 @@ structure Mnv4FwdRec where
   hr : String           -- head relu out
   gap : String          -- GAP out (= dense input)
   last : String         -- the last block's output (= head conv input)
+  -- ⭐ SYNC-BN: the stem's and the two head BNs' all-reduced packed stats (`""` at one replica).
+  sst : String := ""
+  h1st : String := ""
+  hst : String := ""
 deriving Inhabited
 
 /-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → 10 classes.
@@ -486,7 +513,9 @@ deriving Inhabited
     train step — is the two-readings defect this file exists to avoid. -/
 def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     -- ▶ TRAILING and defaulted, so `@mnv4_fwd` / `@mnv4_fwd_eval` re-render byte-identical.
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
+    (bf16 : Bool := false)
+    -- ▶ SYNC-BN (`planning/global_bn_verified.md` §3.4), trailing and defaulted off likewise.
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu ═══
   -- ⭐ `.convStridedXla`, NOT `.convStrided` — and this net is the reason that token exists.
   -- The reference stem is `conv_bn(…, stride=(2,2), padding='SAME')`, and XLA `'SAME'` on a 3×3/s2
@@ -503,11 +532,11 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   let (cStc, nStc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convStridedXlaBf16 (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) zrnd "%sW" "%zb32" zSk z32 else .convStridedXla (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) "%sW" "%zb32" zSk z32)
     (.operand "%x" zx))
-  let (cStn, nStn) ← mnv4Bn B 32 112 mode epsStr "%sg" "%sbt" "stn" nStc
+  let (cStn, nStn, sst) ← mnv4Bn B 32 112 mode epsStr "%sg" "%sbt" "stn" nStc replicas sync
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 32*112*112)) (.operand nStn z112))
 
   -- ═══ stage 0: the fused inverted bottleneck, 112→56 (swish) ═══
-  let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 mode epsStr "0" nStr bf16
+  let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 mode epsStr "0" nStr bf16 replicas sync
 
   -- ═══ the 21 UIB blocks — ONE fold over `mnv4Blocks`, dispatch by the row ═══
   let mut cur := f0.o
@@ -515,7 +544,7 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   let mut blocks : List UibFwdB := []
   let mut inputs : List String := []
   for b in mnv4Blocks do
-    let r ← uibFwdDispatch B b mode epsStr cur bf16
+    let r ← uibFwdDispatch B b mode epsStr cur bf16 replicas sync
     bcode := bcode ++ r.code
     blocks := blocks ++ [r]
     inputs := inputs ++ [cur]
@@ -535,11 +564,11 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   let zNC    : Vec nClasses := fun _ => 0
   let (cH1c, nH1c) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := 256) (oc := 960) (h := 7) (w := 7) zrnd "%h1W" "%zb960" zH1k z960 else .conv (ic := 256) (oc := 960) (h := 7) (w := 7) "%h1W" "%zb960" zH1k z960) (.operand cur z7))
-  let (cH1n, nH1n) ← mnv4Bn B 960 7 mode epsStr "%h1g" "%h1bt" "h1n" nH1c
+  let (cH1n, nH1n, h1st) ← mnv4Bn B 960 7 mode epsStr "%h1g" "%h1bt" "h1n" nH1c replicas sync
   let (cH1r, nH1r) ← pretty B (.batchOp (N := B) (.relu (n := 960*7*7)) (.operand nH1n zH17))
   let (cHc, nHc) ← pretty B (.batchOp (N := B)
     (if bf16 then .convBf16 (ic := 960) (oc := 1280) (h := 7) (w := 7) zrnd "%hW" "%zb1280" zHk z1280 else .conv (ic := 960) (oc := 1280) (h := 7) (w := 7) "%hW" "%zb1280" zHk z1280) (.operand nH1r zH17))
-  let (cHn, nHn) ← mnv4Bn B 1280 7 mode epsStr "%hg" "%hbt" "hn" nHc
+  let (cHn, nHn, hst) ← mnv4Bn B 1280 7 mode epsStr "%hg" "%hbt" "hn" nHc replicas sync
   let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*7*7)) (.operand nHn zH7))
   let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
     (.operand nHr zH7))
@@ -551,7 +580,8 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
          logits := nLog, stc := nStc, stn := nStn, str := nStr,
          f0 := f0, blocks := blocks, inputs := inputs,
          h1c := nH1c, h1n := nH1n, h1r := nH1r,
-         hc := nHc, hn := nHn, hr := nHr, gap := nGap, last := cur }
+         hc := nHc, hn := nHn, hr := nHr, gap := nGap, last := cur,
+         sst := sst, h1st := h1st, hst := hst }
 
 /-- Every distinct channel width a bias-free conv in this net binds `%zb{c}` at: the stem, the fused
     stage's two convs, each block's pre-DW (`ic`), expand and post-DW (`mid`) and project (`oc`), and
@@ -647,7 +677,8 @@ private def zipPs (sig : List (String × List Nat)) (grads : List String) : List
     positions exist (`f.qn`/`f.dn` are `""` when absent) rather than re-deriving it. -/
 private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := c * expand
   let zc   : Vec c := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -661,13 +692,11 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
   let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
   -- ── project 1×1 + BN ──
   let pIn := if postDWk > 0 then f.dr else f.er
-  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := h) (w := h)
-    s!"%u{p}pg" f.pc epsStr 0 zc zcp (.operand dyName zcp))
+  let (cPn, nPn) ← bnBackSite B c h h sync replicas epsStr s!"%u{p}pg" f.pc s!"u{p}pgdst" dyName f.pst
   let (cPW, nPW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := mid) (oc := c) (h := h) (w := h) zrnd
     pIn zc zmb zkp (.operand nPn zcb) else .convWeightGradB (N := B) (ic := mid) (oc := c) (h := h) (w := h)
     pIn zc zmb zkp (.operand nPn zcb))
-  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := c) (h := h) (w := h)
-    f.pc epsStr 0 zcp (.operand dyName zcp))
+  let (cPg, nPg) ← bnGammaSite B c h h sync epsStr f.pc dyName f.pst
   let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := c) (h := h) (w := h)
     (.operand dyName zcp))
   let (cPx, nPx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := c) (h := h) (w := h) zrnd
@@ -679,13 +708,11 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
   let mut dGrads : List String := []
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.selectPosB f.dn zmb (.operand cur zmb))
-    let (c2, n2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
-      s!"%u{p}dg" f.dc epsStr 0 zm zmp (.operand n1 zmp))
+    let (c2, n2) ← bnBackSite B mid h h sync replicas epsStr s!"%u{p}dg" f.dc s!"u{p}dgdst" n1 f.dst
     let (c3, n3) ← pretty B (if bf16 then .depthwiseWeightGradBBf16 (N := B) (c := mid) (h := h) (w := h) zrnd
       f.er zm zmb zdk (.operand n2 zmb) else .depthwiseWeightGradB (N := B) (c := mid) (h := h) (w := h)
       f.er zm zmb zdk (.operand n2 zmb))
-    let (c4, n4) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
-      f.dc epsStr 0 zmp (.operand n1 zmp))
+    let (c4, n4) ← bnGammaSite B mid h h sync epsStr f.dc n1 f.dst
     let (c5, n5) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
       (.operand n1 zmp))
     let (c6, n6) ← pretty B (if bf16 then .depthwiseBackBatchedBf16 (N := B) (c := mid) (h := h) (w := h) zrnd
@@ -697,13 +724,11 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
   -- ── expand 1×1 (c → mid) + BN ──
   let eIn := if preDWk > 0 then f.qr else xName
   let (cEm, nEm) ← pretty B (.selectPosB f.en zmb (.operand cur zmb))
-  let (cEn, nEn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
-    s!"%u{p}eg" f.ec epsStr 0 zm zmp (.operand nEm zmp))
+  let (cEn, nEn) ← bnBackSite B mid h h sync replicas epsStr s!"%u{p}eg" f.ec s!"u{p}egdst" nEm f.est
   let (cEW, nEW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := c) (oc := mid) (h := h) (w := h) zrnd
     eIn zm zcb zke (.operand nEn zmb) else .convWeightGradB (N := B) (ic := c) (oc := mid) (h := h) (w := h)
     eIn zm zcb zke (.operand nEn zmb))
-  let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
-    f.ec epsStr 0 zmp (.operand nEm zmp))
+  let (cEg, nEg) ← bnGammaSite B mid h h sync epsStr f.ec nEm f.est
   let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
     (.operand nEm zmp))
   let (cEx, nEx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := c) (oc := mid) (h := h) (w := h) zrnd
@@ -715,13 +740,11 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
   let mut qGrads : List String := []
   if preDWk > 0 then
     let (c1, n1) ← pretty B (.selectPosB f.qn zcb (.operand cur zcb))
-    let (c2, n2) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := h) (w := h)
-      s!"%u{p}qg" f.qc epsStr 0 zc zcp (.operand n1 zcp))
+    let (c2, n2) ← bnBackSite B c h h sync replicas epsStr s!"%u{p}qg" f.qc s!"u{p}qgdst" n1 f.qst
     let (c3, n3) ← pretty B (if bf16 then .depthwiseWeightGradBBf16 (N := B) (c := c) (h := h) (w := h) zrnd
       xName zc zcb zqk (.operand n2 zcb) else .depthwiseWeightGradB (N := B) (c := c) (h := h) (w := h)
       xName zc zcb zqk (.operand n2 zcb))
-    let (c4, n4) ← pretty B (.bnGammaGradB (N := B) (oc := c) (h := h) (w := h)
-      f.qc epsStr 0 zcp (.operand n1 zcp))
+    let (c4, n4) ← bnGammaSite B c h h sync epsStr f.qc n1 f.qst
     let (c5, n5) ← pretty B (.bnBetaGradB (N := B) (oc := c) (h := h) (w := h)
       (.operand n1 zcp))
     let (c6, n6) ← pretty B (if bf16 then .depthwiseBackBatchedBf16 (N := B) (c := c) (h := h) (w := h) zrnd
@@ -741,7 +764,8 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     lands at `2h×2h` and everything upstream of the expand runs at `h×h`. No skip (`ic ≠ oc`). -/
 private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := ic * expand
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -758,13 +782,11 @@ private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
   let zob  : Vec (B*(oc*h*h)) := fun _ => 0
   let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
   let pIn := if postDWk > 0 then f.dr else f.er
-  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := h) (w := h)
-    s!"%u{p}pg" f.pc epsStr 0 zoc zop (.operand dyName zop))
+  let (cPn, nPn) ← bnBackSite B oc h h sync replicas epsStr s!"%u{p}pg" f.pc s!"u{p}pgdst" dyName f.pst
   let (cPW, nPW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
     pIn zoc zmb zkp (.operand nPn zob) else .convWeightGradB (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
     pIn zoc zmb zkp (.operand nPn zob))
-  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := h) (w := h)
-    f.pc epsStr 0 zop (.operand dyName zop))
+  let (cPg, nPg) ← bnGammaSite B oc h h sync epsStr f.pc dyName f.pst
   let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
     (.operand dyName zop))
   let (cPx, nPx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
@@ -775,13 +797,11 @@ private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
   let mut dGrads : List String := []
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.selectPosB f.dn zmb (.operand cur zmb))
-    let (c2, n2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
-      s!"%u{p}dg" f.dc epsStr 0 zm zmp (.operand n1 zmp))
+    let (c2, n2) ← bnBackSite B mid h h sync replicas epsStr s!"%u{p}dg" f.dc s!"u{p}dgdst" n1 f.dst
     let (c3, n3) ← pretty B (if bf16 then .depthwiseWeightGradBBf16 (N := B) (c := mid) (h := h) (w := h) zrnd
       f.er zm zmb zdk (.operand n2 zmb) else .depthwiseWeightGradB (N := B) (c := mid) (h := h) (w := h)
       f.er zm zmb zdk (.operand n2 zmb))
-    let (c4, n4) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
-      f.dc epsStr 0 zmp (.operand n1 zmp))
+    let (c4, n4) ← bnGammaSite B mid h h sync epsStr f.dc n1 f.dst
     let (c5, n5) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
       (.operand n1 zmp))
     let (c6, n6) ← pretty B (if bf16 then .depthwiseBackBatchedBf16 (N := B) (c := mid) (h := h) (w := h) zrnd
@@ -792,13 +812,11 @@ private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     cur := n6
   -- expand 1×1 (ic → mid) at h; its input is the pre-DW's relu output
   let (cEm, nEm) ← pretty B (.selectPosB f.en zmb (.operand cur zmb))
-  let (cEn, nEn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
-    s!"%u{p}eg" f.ec epsStr 0 zm zmp (.operand nEm zmp))
+  let (cEn, nEn) ← bnBackSite B mid h h sync replicas epsStr s!"%u{p}eg" f.ec s!"u{p}egdst" nEm f.est
   let (cEW, nEW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := ic) (oc := mid) (h := h) (w := h) zrnd
     f.qr zm zqb zke (.operand nEn zmb) else .convWeightGradB (N := B) (ic := ic) (oc := mid) (h := h) (w := h)
     f.qr zm zqb zke (.operand nEn zmb))
-  let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
-    f.ec epsStr 0 zmp (.operand nEm zmp))
+  let (cEg, nEg) ← bnGammaSite B mid h h sync epsStr f.ec nEm f.est
   let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
     (.operand nEm zmp))
   let (cEx, nEx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := ic) (oc := mid) (h := h) (w := h) zrnd
@@ -806,13 +824,11 @@ private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     s!"%u{p}eW" zke zm (.operand nEn zmb))
   -- pre-DW: STRIDED, so its input-VJP is the one that upsamples h → 2h
   let (cQm, nQm) ← pretty B (.selectPosB f.qn zqb (.operand nEx zqb))
-  let (cQn, nQn) ← pretty B (.bnBatchBack (N := B) (oc := ic) (h := h) (w := h)
-    s!"%u{p}qg" f.qc epsStr 0 zic zqp (.operand nQm zqp))
+  let (cQn, nQn) ← bnBackSite B ic h h sync replicas epsStr s!"%u{p}qg" f.qc s!"u{p}qgdst" nQm f.qst
   let (cQW, nQW) ← pretty B (if bf16 then .depthwiseStridedWeightGradBBf16 (N := B) (c := ic) (h := h) (w := h) zrnd
     xName zic zin zqk (.operand nQn zqb) else .depthwiseStridedWeightGradB (N := B) (c := ic) (h := h) (w := h)
     xName zic zin zqk (.operand nQn zqb))
-  let (cQg, nQg) ← pretty B (.bnGammaGradB (N := B) (oc := ic) (h := h) (w := h)
-    f.qc epsStr 0 zqp (.operand nQm zqp))
+  let (cQg, nQg) ← bnGammaSite B ic h h sync epsStr f.qc nQm f.qst
   let (cQt, nQt) ← pretty B (.bnBetaGradB (N := B) (oc := ic) (h := h) (w := h)
     (.operand nQm zqp))
   let (cQx, nQx) ← pretty B (if bf16 then .depthwiseStridedBackBatchedBf16 (N := B) (c := ic) (h := h) (w := h) zrnd
@@ -829,7 +845,8 @@ private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     contracts against `%x` at `2h` while the project's runs at `h`. No skip (`ic ≠ oc`). -/
 private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := ic * expand
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -843,13 +860,11 @@ private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
   let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
   let zob  : Vec (B*(oc*h*h)) := fun _ => 0
   let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
-  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := h) (w := h)
-    s!"%u{p}pg" f.pc epsStr 0 zoc zop (.operand dyName zop))
+  let (cPn, nPn) ← bnBackSite B oc h h sync replicas epsStr s!"%u{p}pg" f.pc s!"u{p}pgdst" dyName f.pst
   let (cPW, nPW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
     f.dr zoc zmb zkp (.operand nPn zob) else .convWeightGradB (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
     f.dr zoc zmb zkp (.operand nPn zob))
-  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := h) (w := h)
-    f.pc epsStr 0 zop (.operand dyName zop))
+  let (cPg, nPg) ← bnGammaSite B oc h h sync epsStr f.pc dyName f.pst
   let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
     (.operand dyName zop))
   let (cPx, nPx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
@@ -857,13 +872,11 @@ private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
     s!"%u{p}pW" zkp zoc (.operand nPn zob))
   -- post-DW: STRIDED, so its input-VJP is the one that upsamples h → 2h
   let (cDm, nDm) ← pretty B (.selectPosB f.dn zmb (.operand nPx zmb))
-  let (cDn, nDn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
-    s!"%u{p}dg" f.dc epsStr 0 zm zmp (.operand nDm zmp))
+  let (cDn, nDn) ← bnBackSite B mid h h sync replicas epsStr s!"%u{p}dg" f.dc s!"u{p}dgdst" nDm f.dst
   let (cDW, nDW) ← pretty B (if bf16 then .depthwiseStridedWeightGradBBf16 (N := B) (c := mid) (h := h) (w := h) zrnd
     f.er zm zeb zdk (.operand nDn zmb) else .depthwiseStridedWeightGradB (N := B) (c := mid) (h := h) (w := h)
     f.er zm zeb zdk (.operand nDn zmb))
-  let (cDg, nDg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
-    f.dc epsStr 0 zmp (.operand nDm zmp))
+  let (cDg, nDg) ← bnGammaSite B mid h h sync epsStr f.dc nDm f.dst
   let (cDt, nDt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
     (.operand nDm zmp))
   let (cDx, nDx) ← pretty B (if bf16 then .depthwiseStridedBackBatchedBf16 (N := B) (c := mid) (h := h) (w := h) zrnd
@@ -871,13 +884,11 @@ private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
     s!"%u{p}dW" zdk zm (.operand nDn zmb))
   -- expand 1×1 (ic → mid) at the INPUT resolution 2h
   let (cEm, nEm) ← pretty B (.selectPosB f.en zeb (.operand nDx zeb))
-  let (cEn, nEn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := 2*h) (w := 2*h)
-    s!"%u{p}eg" f.ec epsStr 0 zm zep (.operand nEm zep))
+  let (cEn, nEn) ← bnBackSite B mid (2*h) (2*h) sync replicas epsStr s!"%u{p}eg" f.ec s!"u{p}egdst" nEm f.est
   let (cEW, nEW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) zrnd
     xName zm zin zke (.operand nEn zeb) else .convWeightGradB (N := B) (ic := ic) (oc := mid) (h := 2*h) (w := 2*h)
     xName zm zin zke (.operand nEn zeb))
-  let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := 2*h) (w := 2*h)
-    f.ec epsStr 0 zep (.operand nEm zep))
+  let (cEg, nEg) ← bnGammaSite B mid (2*h) (2*h) sync epsStr f.ec nEm f.est
   let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := 2*h) (w := 2*h)
     (.operand nEm zep))
   let (cEx, nEx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) zrnd
@@ -897,7 +908,8 @@ private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
     it is the same silent-wrong-gradient class as the pre/post-DW swap, in the activation. -/
 private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := if expand == 1 then oc else ic * expand
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -908,26 +920,22 @@ private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
   let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
   let zob  : Vec (B*(oc*h*h)) := fun _ => 0
   let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
-  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := h) (w := h)
-    s!"%f{p}pg" f.pc epsStr 0 zoc zop (.operand dyName zop))
+  let (cPn, nPn) ← bnBackSite B oc h h sync replicas epsStr s!"%f{p}pg" f.pc s!"f{p}pgdst" dyName f.pst
   let (cPW, nPW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
     f.er zoc zmb zkp (.operand nPn zob) else .convWeightGradB (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
     f.er zoc zmb zkp (.operand nPn zob))
-  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := h) (w := h)
-    f.pc epsStr 0 zop (.operand dyName zop))
+  let (cPg, nPg) ← bnGammaSite B oc h h sync epsStr f.pc dyName f.pst
   let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
     (.operand dyName zop))
   let (cPx, nPx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
     s!"%f{p}pW" zkp zoc (.operand nPn zob) else .convBackBatched (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
     s!"%f{p}pW" zkp zoc (.operand nPn zob))
   let (cSw, nSw) ← pretty B (.swishBackB f.en zmb (.operand nPx zmb))
-  let (cCn, nCn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
-    s!"%f{p}cg" f.ec epsStr 0 zm zmp (.operand nSw zmp))
+  let (cCn, nCn) ← bnBackSite B mid h h sync replicas epsStr s!"%f{p}cg" f.ec s!"f{p}cgdst" nSw f.est
   let (cCW, nCW) ← pretty B (if bf16 then .convStridedWeightGradBBf16 (N := B) (ic := ic) (oc := mid)
     (h := h) (w := h) zrnd xName zm zin zkf (.operand nCn zmb) else .convStridedWeightGradB (N := B) (ic := ic) (oc := mid)
     (h := h) (w := h) xName zm zin zkf (.operand nCn zmb))
-  let (cCg, nCg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
-    f.ec epsStr 0 zmp (.operand nSw zmp))
+  let (cCg, nCg) ← bnGammaSite B mid h h sync epsStr f.ec nSw f.est
   let (cCt, nCt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
     (.operand nSw zmp))
   let (cCx, nCx) ← pretty B (if bf16 then .convStridedBackBatchedBf16 (N := B) (ic := ic) (oc := mid)
@@ -945,14 +953,15 @@ private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     gradient of a net nobody built. With one table and one row per call there is no second place
     for the dispatch to be written down differently. -/
 private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
-    (f : UibFwdB) (dyName : String) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB :=
+    (f : UibFwdB) (dyName : String) (bf16 : Bool := false)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB :=
   if b.stride2 then
     if b.preDWk > 0 then
-      uibBackPreStridedGradB B b.ic b.oc b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16
+      uibBackPreStridedGradB B b.ic b.oc b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16 replicas sync
     else
-      uibBackPostStridedGradB B b.ic b.oc b.expand b.postDWk b.h epsStr b.p xName f dyName bf16
+      uibBackPostStridedGradB B b.ic b.oc b.expand b.postDWk b.h epsStr b.p xName f dyName bf16 replicas sync
   else
-    uibBackSkipGradB B b.ic b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16
+    uibBackSkipGradB B b.ic b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16 replicas sync
 
 -- ════════════════════════════════════════════════════════════════
 -- § The AdamW tail — one proven triple per parameter, folded in signature order
@@ -1015,7 +1024,11 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- MNv4's UIB blocks carry BOTH depthwise families: the stride-1 `depthwise` and the
     -- SYMMETRIC-pad `depthwiseStrided` — the latter is new here (MNv2 used the XLA-`SAME` one),
     -- and its three bf16 twins are the only ops this net needed that MobileNetV2 did not build.
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
+    -- gate only (`imagenet-syncbn-check`'s FORMULATION column). Never a committed artifact.
+    (forceSync : Bool := false) : String :=
+  let sync : Bool := replicas > 1 || forceSync
   let alphaStr := fmt6 0.1
   let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
   let go : StateM Proofs.StableHLO.EmitS String := do
@@ -1024,7 +1037,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- inline a second transcription of the block table into their train step and rely on eyes to
     -- keep the two in step; here there is only one, so the train/score divergence §3d(b) measured
     -- in MobileNetV2 — and that `regen_verified_mlir.sh check` reported green — cannot arise.
-    let fwd ← mnv4FwdChainB B nClasses epsStr .train bf16
+    let fwd ← mnv4FwdChainB B nClasses epsStr .train bf16 replicas sync
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32   : Vec 32 := fun _ => 0
@@ -1064,30 +1077,26 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 1280) (h := 7) (w := 7)
       (.operand nDgi z1280b))
     let (cDhm, nDhm) ← pretty B (.selectPosB nHn zH7 (.operand nDgp zH7))
-    let (cDhn, nDhn) ← pretty B (.bnBatchBack (N := B) (oc := 1280) (h := 7) (w := 7)
-      "%hg" nHc epsStr 0 z1280 zH7p (.operand nDhm zH7p))
+    let (cDhn, nDhn) ← bnBackSite B 1280 7 7 sync replicas epsStr "%hg" nHc "hgdst" nDhm fwd.hst
     let (cDhx, nDhx) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := 960) (oc := 1280) (h := 7) (w := 7) zrnd
       "%hW" zHk z1280 (.operand nDhn zH7) else .convBackBatched (N := B) (ic := 960) (oc := 1280) (h := 7) (w := 7)
       "%hW" zHk z1280 (.operand nDhn zH7))
     let (cHW, nHW) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := 960) (oc := 1280) (h := 7) (w := 7) zrnd
       fwd.h1r z1280 zH17 zHk (.operand nDhn zH7) else .convWeightGradB (N := B) (ic := 960) (oc := 1280) (h := 7) (w := 7)
       fwd.h1r z1280 zH17 zHk (.operand nDhn zH7))
-    let (cHg, nHg) ← pretty B (.bnGammaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
-      nHc epsStr 0 zH7p (.operand nDhm zH7p))
+    let (cHg, nHg) ← bnGammaSite B 1280 7 7 sync epsStr nHc nDhm fwd.hst
     let (cHt, nHt) ← pretty B (.bnBetaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
       (.operand nDhm zH7p))
     -- the first head conv's stage: relu mask at `h1n`, BN back, then input/weight grads at 256→960
     let (cDh1m, nDh1m) ← pretty B (.selectPosB nH1n zH17 (.operand nDhx zH17))
-    let (cDh1n, nDh1n) ← pretty B (.bnBatchBack (N := B) (oc := 960) (h := 7) (w := 7)
-      "%h1g" nH1c epsStr 0 z960 zH17p (.operand nDh1m zH17p))
+    let (cDh1n, nDh1n) ← bnBackSite B 960 7 7 sync replicas epsStr "%h1g" nH1c "h1gdst" nDh1m fwd.h1st
     let (cDh1x, nDh1x) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := 256) (oc := 960) (h := 7) (w := 7) zrnd
       "%h1W" zH1k z960 (.operand nDh1n zH17) else .convBackBatched (N := B) (ic := 256) (oc := 960) (h := 7) (w := 7)
       "%h1W" zH1k z960 (.operand nDh1n zH17))
     let (cH1W, nH1W) ← pretty B (if bf16 then .convWeightGradBBf16 (N := B) (ic := 256) (oc := 960) (h := 7) (w := 7) zrnd
       fwd.last z960 z7 zH1k (.operand nDh1n zH17) else .convWeightGradB (N := B) (ic := 256) (oc := 960) (h := 7) (w := 7)
       fwd.last z960 z7 zH1k (.operand nDh1n zH17))
-    let (cH1g, nH1g) ← pretty B (.bnGammaGradB (N := B) (oc := 960) (h := 7) (w := 7)
-      nH1c epsStr 0 zH17p (.operand nDh1m zH17p))
+    let (cH1g, nH1g) ← bnGammaSite B 960 7 7 sync epsStr nH1c nDh1m fwd.h1st
     let (cH1t, nH1t) ← pretty B (.bnBetaGradB (N := B) (oc := 960) (h := 7) (w := 7)
       (.operand nDh1m zH17p))
     -- ═══ backward: ONE fold over `mnv4Blocks` reversed, dispatched by the same row the
@@ -1097,30 +1106,36 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut blockPs : List (List PGradV4) := []
     for (b, f, xin) in (mnv4Blocks.zip (fwd.blocks.zip fwd.inputs)).reverse.map
         (fun (b, f, xin) => (b, f, xin)) do
-      let g ← uibBackDispatch B b epsStr xin f dy bf16
+      let g ← uibBackDispatch B b epsStr xin f dy bf16 replicas sync
       gcode := gcode ++ g.code
       blockPs := [g.ps] ++ blockPs
       dy := g.dx
-    let g0 ← fusedMbConvBackStridedGradB B 32 48 4 3 56 epsStr "0" fwd.str fwd.f0 dy bf16
+    let g0 ← fusedMbConvBackStridedGradB B 32 48 4 3 56 epsStr "0" fwd.str fwd.f0 dy bf16 replicas sync
     -- ═══ stem backward: relu mask → BN back, then the 3 stem gradients (NO conv-back past %x) ═══
     let (cDsm, nDsm) ← pretty B (.selectPosB nStn z112 (.operand g0.dx z112))
-    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 32) (h := 112) (w := 112)
-      "%sg" nStc epsStr 0 z32 z112p (.operand nDsm z112p))
+    let (cDsn, nDsn) ← bnBackSite B 32 112 112 sync replicas epsStr "%sg" nStc "sgdst" nDsm fwd.sst
     let (csW, nsW) ← pretty B (if bf16 then .convStridedXlaWeightGradBBf16 zrnd "%x" z32 zx zSk (.operand nDsn z112) else .convStridedXlaWeightGradB "%x" z32 zx zSk (.operand nDsn z112))
-    let (csg, nsg) ← pretty B (.bnGammaGradB (N := B) (oc := 32) (h := 112) (w := 112)
-      nStc epsStr 0 z112p (.operand nDsm z112p))
+    let (csg, nsg) ← bnGammaSite B 32 112 112 sync epsStr nStc nDsm fwd.sst
     let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 32) (h := 112) (w := 112)
       (.operand nDsm z112p))
     -- ═══ BN running statistics: batch μ/var per BN layer, from that layer's BN INPUT.
     --     Derived from the SAME forward record that computes them (`f.qc`/`f.ec`/`f.dc`/`f.pc`)
     --     rather than from an independent 52-entry table — a misaligned stat slot is SILENT, since
     --     the arities still match and the wrong layer's statistics flow into the wrong
-    --     `@mnv4_fwd_eval` slot. ═══
-    let bnStat (oc hh : Nat) (xn : String) : StateM Proofs.StableHLO.EmitS (String × List String) := do
+    --     `@mnv4_fwd_eval` slot.
+    --     ⭐ Under sync-BN they are read off the all-reduced packed vector (`bnStatsMeanB` /
+    --     `bnStatsVarB`), so the host EMAs the GLOBAL batch statistics rather than replica 0's. ═══
+    let bnStat (oc hh : Nat) (xn st : String) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let zb : Vec (B*(oc*(hh*hh))) := fun _ => 0
-      let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
-      let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
-      pure (cM ++ cV, [nM, nV])
+      let zst : Vec (oc+oc) := fun _ => 0
+      if !sync then
+        let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
+        let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
+        pure (cM ++ cV, [nM, nV])
+      else
+        let (cM, nM) ← pretty B (.bnStatsMeanB (oc := oc) (.operand st zst))
+        let (cV, nV) ← pretty B (.bnStatsVarB (oc := oc) (.operand st zst))
+        pure (cM ++ cV, [nM, nV])
     -- One UIB block's stats in `uibStatSig` order. ⚠ `eh` is the EXPAND BN's spatial size, which
     -- is `2h` for the post-strided family alone (its expand runs before the downsample) and `h`
     -- everywhere else — the one place the three block shapes are not interchangeable here.
@@ -1132,25 +1147,25 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       let mut code := ""
       let mut ns : List String := []
       if b.preDWk > 0 then
-        let (c, n) ← bnStat b.ic b.h f.qc
+        let (c, n) ← bnStat b.ic b.h f.qc f.qst
         code := code ++ c; ns := ns ++ n
-      let (ce, ne) ← bnStat mid eh f.ec
+      let (ce, ne) ← bnStat mid eh f.ec f.est
       code := code ++ ce; ns := ns ++ ne
       if b.postDWk > 0 then
-        let (c, n) ← bnStat mid b.h f.dc
+        let (c, n) ← bnStat mid b.h f.dc f.dst
         code := code ++ c; ns := ns ++ n
-      let (cp, np) ← bnStat b.oc b.h f.pc
+      let (cp, np) ← bnStat b.oc b.h f.pc f.pst
       pure (code ++ cp, ns ++ np)
-    let (cQs, qs) ← bnStat 32 112 nStc
-    let (cQ0c, q0c) ← bnStat 128 56 fwd.f0.ec
-    let (cQ0p, q0p) ← bnStat  48 56 fwd.f0.pc
+    let (cQs, qs) ← bnStat 32 112 nStc fwd.sst
+    let (cQ0c, q0c) ← bnStat 128 56 fwd.f0.ec fwd.f0.est
+    let (cQ0p, q0p) ← bnStat  48 56 fwd.f0.pc fwd.f0.pst
     let mut qcode := ""
     let mut qnames : List String := []
     for (b, f) in mnv4Blocks.zip fwd.blocks do
       let (c, n) ← uibStats b f
       qcode := qcode ++ c; qnames := qnames ++ n
-    let (cQh1, qh1) ← bnStat 960 7 nH1c
-    let (cQh, qh) ← bnStat 1280 7 nHc
+    let (cQh1, qh1) ← bnStat 960 7 nH1c fwd.h1st
+    let (cQh, qh) ← bnStat 1280 7 nHc fwd.hst
     -- ═══ the 233 parameter gradients in func-arg order ═══
     let stemPs : List PGradV4 :=
       [⟨"sW", nsW, [32,3,3,3]⟩, ⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
@@ -1211,8 +1226,19 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── MobileNetV4-Conv-M batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes (4d piece 2). NOTE this does NOT equal a single-device step at the\n" ++
-        "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design.\n") ++
+        "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
+        "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
+        "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
+        "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
+        "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
+        "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
+        "    // global batch N x b: proved as MobileNetV4SyncTieB.mnv4_net_syncTiedB (every all-reduced\n" ++
+        "    // gradient) and StableHLO.mnv4FwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // LeanMlir/Proofs/Nets/MobileNet/ (planning/global_bn_verified.md).\n" ++
+        (if bf16 then
+          "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
+          "    // their operands per element, are not in that statement.)\n"
+         else "")) ++
       zeroBiasPrelude false mnv4ZbWidths ++ body ++ adamWConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv4SigList nClasses
@@ -1302,8 +1328,9 @@ end Proofs.StableHLO
 --
 -- ✅ **THE DP PAIR IS RENDERED AND TIED**, as of 2026-08-27 — see the block below. This comment
 -- used to say no DP variant was rendered, on the grounds that nothing had tied MNv4's collectives
--- and an untied artifact looks as trustworthy as the rest. Both halves of that tie now exist: the
--- `mnv4in` row in `tests/TestShardCheck.lean` and `tests/TestMnv4DpCheck.lean`.
+-- and an untied artifact looks as trustworthy as the rest. Both halves of that tie now exist:
+-- `tests/TestMnv4DpCheck.lean` (duplicated batch) and `imagenet-syncbn-check mnv4` (split batch;
+-- until the sync-BN swap of 2026-09-21, the `mnv4in` row in `tests/TestShardCheck.lean`).
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd.mlir"
   (Proofs.StableHLO.mnv4FwdFaithfulV 64 1000 "1.0e-5" "mnv4in")
 
@@ -1347,6 +1374,14 @@ end Proofs.StableHLO
 -- ▶ `runs/2026-08-27-mnv4-dp-shard-gates/` holds the logs, the controls and a `run.sh`.
 -- ⚠ Four GPUs, forced: these are the only DP renders MNv4 has, and there is no 2-replica peer, so
 -- `PJRT_REPLICAS=2` hits the shim's replica-count guard rather than degrading to a 2-way run.
+--
+-- ⭐⭐ **SYNC-BN SINCE 2026-09-21** (`planning/global_bn_verified.md` §3.4): every BN layer
+-- all-reduces its statistics — 77 × 3 = 231 collectives beside the 233 gradient ones — so a DP step
+-- IS the single-device step at batch 256 (`MobileNetV4SyncTieB.mnv4_net_syncTiedB`, the forward
+-- `StableHLO.mnv4FwdGraphSync_full_shard`). That falsifies the asymmetric-batch identity above by
+-- design, so `shard-check mnv4in` is retired; `imagenet-syncbn-check mnv4` is the split-batch gate
+-- (4×64 against 1×256, both precisions), and `mnv4-dp-check`'s gradient bound is 1e-2 / 5e-2
+-- (sync-BN backward against the two-pass one). `runs/2026-09-21-syncbn-r50-mnv4/` has the logs.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in")
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64bf16_train_step.mlir"

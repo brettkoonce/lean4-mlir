@@ -116,7 +116,16 @@ its `all_reduce`, so everything that COMPUTES the gradient is literally the same
 
 Knobs (micro-units, so one `Nat` reaches 1e-6): `R50_GC_EPS_U` (step, default 60 = 6e-5),
 `R50_GC_TOL_U` (tier-2 tolerance, default 300000 = 0.30), `R50_GC_EXACT_U` (tier-1 tolerance,
-default 300 = 3e-4), `R50_GC_VARIANT` (default `adam64`, the single-device render).
+default 300 = 3e-4), `R50_GC_VARIANT` (default `adam64`, the single-device render), `R50_GC_PATH`
+(the artifact's directory, default `verified_mlir`).
+
+⭐⭐ **Since 2026-09-21 the DP renders are SYNC-BN** (`planning/global_bn_verified.md` §3.4), so the
+text tie's 1-replica side is the same renderer's one-replica SYNC graph, which
+`ResNet50RenderB.lean` writes to `.lake/build/r50sync/`, not the committed two-pass render. Its
+BatchNorm sites are different ops (`bnSyncF`, `bnSyncBack`, `bnSyncGammaGradB`, fed by
+`bnBatchMeanB`/`bnBatchVarAtB`/`bnPackB`), so this gate certifies that graph directly:
+
+    R50_GC_PATH=.lake/build/r50sync CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-gradcheck
 -/
 
 /-- The driver's own init (`VerifiedTrain.mkParam`, which is private): He **fan-out** for conv,
@@ -177,6 +186,7 @@ def main : IO Unit := do
   let nP   := net.nParams
   let nT   := net.specs.size
   let variant := (← IO.getEnv "R50_GC_VARIANT").getD "adam64"
+  let artifact := s!"{(← IO.getEnv "R50_GC_PATH").getD "verified_mlir"}/{net.slug}_{variant}_train_step.mlir"
   -- ⭐⭐ ACCUMULATION-AWARE. A `*acc<k>x*` render has FOUR parameter regions and FIVE scalars, so
   -- the blob, the loss offset and the gradient recovery all shift. Driving it with `%aup = 1`
   -- (apply) and `%akeep = 0` (discard the incoming accumulator) makes ONE invoke a complete cycle:
@@ -213,7 +223,7 @@ def main : IO Unit := do
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
 
   IO.println "§3.2's owed gate — ResNet-50's GRADIENT on the committed train step"
-  IO.println s!"  artifact verified_mlir/{net.slug}_{variant}_train_step.mlir"
+  IO.println s!"  artifact {artifact}"
   IO.println s!"  {nT} params ({nP} floats), bs {bs}, {net.bnChannels.size} BN layers, \
 backend {← LowererSession.backendName}"
   IO.println s!"  tier 1 |cos∠| ≤ {tolExact}   ·   tier 2 h = {h}, rel ≤ {tol}"
@@ -245,7 +255,7 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
   -- ── the session, opened once: same shapes every invoke ⇒ XLA autotunes ONCE and every probe
   --    runs the identical program, so `L(θ+δ)` and `L(θ−δ)` differ by the perturbation and not by
   --    a per-process algorithm choice (the effect `scripts/det_shim.sh` exists for) ──
-  let sess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
+  let sess ← mkSession artifact
   let fn := s!"m.{net.slug}_{variant}_train_step"
   -- lr, 1−β₁¹, 1−β₂¹ at t = 1; then `%aup = 1`, `%akeep = 0` on the accumulating render.
   let tl ← if accOn then do
@@ -517,5 +527,4 @@ statistic — it is an unstable extremum (§3.1b)."
 against a doubled-gradient control that misses by {scaleCtl} ({scaleCtl / max worst 1e-30}× the tie)."
   IO.println "     All three bottleneck forms are covered — the stride-1 projection (s1b0), the \
 three strided projections, and the 12 identity blocks — plus each shortcut branch on its own."
-  IO.println s!"     §3.2's \"the gradient is ungated\" is discharged for \
-verified_mlir/{net.slug}_{variant}_train_step.mlir."
+  IO.println s!"     §3.2's \"the gradient is ungated\" is discharged for {artifact}."

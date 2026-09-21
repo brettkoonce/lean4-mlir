@@ -1,0 +1,143 @@
+ResNet-50 (ImageNet-1k, 160² train) SYNC-BN gate — 4×32 against 1×128
+  TEST     DP_sync([x₀|…|x3])  ==  single_128([x₀|…|x3])
+  CONTROL  DP_sync([x₀|…|x3])  !=  mean_k single_32(x_k)   (the old, per-replica identity)
+  single 32: (rendered at run time)
+  DP render: .lake/build/resnet50in160bce_syncgate_dp4x32_train_step.mlir (rendered at run time)
+  161 params (25557032 floats), 53 BN layers, backend xla
+  single-device 128 on [x₀|…]… (.lake/build/resnet50in160bce_syncgate_single128_train_step.mlir)
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.970
+I0921 14:33:56.687798  884198 service.cc:154] XLA service 0x789c7079ba40 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 14:33:56.687839  884198 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:33:56.687848  884198 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:33:56.687854  884198 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:33:56.687858  884198 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:33:56.690483  884198 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 14:33:56.690519  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 0 for BFCAllocator.
+I0921 14:33:56.690560  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 1 for BFCAllocator.
+I0921 14:33:56.690578  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 2 for BFCAllocator.
+I0921 14:33:56.690604  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 3 for BFCAllocator.
+I0921 14:33:56.700480  884198 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0921 14:33:58.863396  884259 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 4 bytes spill stores, 4 bytes spill loads
+
+I0921 14:33:59.392989  884261 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 144 bytes spill stores, 92 bytes spill loads
+
+I0921 14:34:00.105195  884254 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 56 bytes spill stores, 56 bytes spill loads
+
+I0921 14:34:00.300546  884243 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 832 bytes spill stores, 832 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet50in160bce_syncgate_single128_train_step.mlir (@resnet50in160_lamb128bce_train_step, 592 outputs, 1 replica) in 16531 ms
+[pjrt_ffi] compiled .lake/build/resnet50in160bce_syncgate_single32_train_step.mlir (@resnet50in160_lambbce_train_step, 592 outputs, 1 replica) in 7799 ms
+  xla/pjrt .lake/build/resnet50in160bce_syncgate_single128_train_step.mlir
+  xla/pjrt .lake/build/resnet50in160bce_syncgate_single32_train_step.mlir
+  single-device 32 on each of the 4 shards…
+  single-device SYNC-graph 128 on [x₀|…]… (.lake/build/resnet50in160bce_syncgate_sync128_train_step.mlir)
+[pjrt_ffi] compiled .lake/build/resnet50in160bce_syncgate_sync128_train_step.mlir (@resnet50in160_lamb128bce_train_step, 592 outputs, 1 replica) in 3131 ms
+  xla/pjrt .lake/build/resnet50in160bce_syncgate_sync128_train_step.mlir
+  sensitivity probe (x + 1e-4·noise) on the two-pass 128 graph…
+  data-parallel 4×32 on [x₀|…]…
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.970
+I0921 14:34:27.801685  884198 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 14:34:27.802097  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 0 for BFCAllocator.
+I0921 14:34:27.802124  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 1 for BFCAllocator.
+I0921 14:34:27.802144  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 2 for BFCAllocator.
+I0921 14:34:27.802164  884198 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/resnet50in160bce_syncgate_dp4x32_train_step.mlir (@resnet50in160_lambdpbce_train_step, 592 outputs, 4 replicas) in 4197 ms
+I0921 14:34:33.682835  889231 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 14:34:33.683824  889225 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 14:34:33.683860  889228 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  xla/pjrt .lake/build/resnet50in160bce_syncgate_dp4x32_train_step.mlir
+  duplicated probe: DP on [x₀|x₀|…] vs the one-replica sync graph on x₀ (.lake/build/resnet50in160bce_syncgate_sync32_train_step.mlir)…
+[pjrt_ffi] compiled .lake/build/resnet50in160bce_syncgate_sync32_train_step.mlir (@resnet50in160_lambbce_train_step, 592 outputs, 1 replica) in 3194 ms
+  xla/pjrt .lake/build/resnet50in160bce_syncgate_sync32_train_step.mlir
+  ── θ' [0, 25557032) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.000061
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.000061
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000000
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.000122
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.000055
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000000
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  ── m' = 0.1·g [25557032, 51114064) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.551955
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.551885
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.001432
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 1.207779
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.504625
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.001161
+    REPEAT      single_Rb vs itself, same input         = 0.000001
+  ── v' [51114064, 76671096) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.000034
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.000034
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000000
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.000127
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.000036
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000000
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  ── bn stats (106 slots) [76671099, 76724219) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.002151
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.002151
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000000
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.371921
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.001716
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000000
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  DUPLICATED m' = 0.1·g norm-rel (the *-dp-check metric, against the sync graph) = 0.001026
+  ── per-layer BN statistics, TEST rel-err vs single_Rb (mean | var) ──
+    bn0 [64] : 0.000000 | 0.000000
+    bn1 [64] : 0.000238 | 0.000114
+    bn2 [64] : 0.000006 | 0.000157
+    bn3 [256] : 0.000002 | 0.000109
+    bn4 [256] : 0.000000 | 0.000000
+    bn5 [64] : 0.000017 | 0.000046
+    bn6 [64] : 0.000003 | 0.000033
+    bn7 [256] : 0.000002 | 0.000019
+    bn8 [64] : 0.000010 | 0.000034
+    bn9 [64] : 0.000002 | 0.000056
+    bn10 [256] : 0.000003 | 0.000025
+    bn11 [128] : 0.000221 | 0.000170
+    bn12 [128] : 0.000012 | 0.000054
+    bn13 [512] : 0.000008 | 0.000066
+    bn14 [512] : 0.000011 | 0.000050
+    bn15 [128] : 0.000007 | 0.000054
+    bn16 [128] : 0.000015 | 0.000083
+    bn17 [512] : 0.000010 | 0.000075
+    bn18 [128] : 0.000011 | 0.000077
+    bn19 [128] : 0.000013 | 0.000089
+    bn20 [512] : 0.000015 | 0.000095
+    bn21 [128] : 0.000013 | 0.000109
+    bn22 [128] : 0.000017 | 0.000098
+    bn23 [512] : 0.000020 | 0.000118
+    bn24 [256] : 0.000012 | 0.000103
+    bn25 [256] : 0.000068 | 0.000291
+    bn26 [1024] : 0.000050 | 0.000410
+    bn27 [1024] : 0.000044 | 0.000290
+    bn28 [256] : 0.000067 | 0.000399
+    bn29 [256] : 0.000063 | 0.000441
+    bn30 [1024] : 0.000061 | 0.000592
+    bn31 [256] : 0.000061 | 0.000439
+    bn32 [256] : 0.000115 | 0.000612
+    bn33 [1024] : 0.000099 | 0.000792
+    bn34 [256] : 0.000052 | 0.000551
+    bn35 [256] : 0.000122 | 0.000784
+    bn36 [1024] : 0.000121 | 0.000896
+    bn37 [256] : 0.000107 | 0.000459
+    bn38 [256] : 0.000134 | 0.000782
+    bn39 [1024] : 0.000157 | 0.001080
+    bn40 [256] : 0.000129 | 0.001043
+    bn41 [256] : 0.000231 | 0.001124
+    bn42 [1024] : 0.000234 | 0.001301
+    bn43 [512] : 0.000125 | 0.001160
+    bn44 [512] : 0.000627 | 0.002797
+    bn45 [2048] : 0.000483 | 0.002726
+    bn46 [2048] : 0.000386 | 0.002031
+    bn47 [512] : 0.000667 | 0.002924
+    bn48 [512] : 0.000592 | 0.003206
+    bn49 [2048] : 0.000811 | 0.004994
+    bn50 [512] : 0.000630 | 0.003635
+    bn51 [512] : 0.000806 | 0.003990
+    bn52 [2048] : 0.001096 | 0.006964
+✓ SYNC-BN CONFIRMED for resnet50in160bce: the sync graph IS the two-pass graph (statistics 0.000000), the collective composes it exactly (duplicated batch 0.000000), and DP_sync([x₀|…]) = single_Rb([x₀|…]) to 0.002151 on the statistics (first layer 0.000000) against a per-replica CONTROL of 0.371921 — 4×32 IS 1×128. Worst TEST region 0.551955; m' = 0.1·g SENSITIVITY-to-1e-4 0.504625; statistics REPEAT 0.000000.

@@ -1,0 +1,33 @@
+I0921 15:09:56.798041  990297 service.cc:154] XLA service 0x7471ec036be0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 15:09:56.798108  990297 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:09:56.798117  990297 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 15:09:56.800558  990297 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:09:56.800603  990297 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:09:56.800663  990297 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0921 15:09:56.812342  990297 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 2 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+E0921 15:09:59.317843  990348 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 15:10:02.490790  990339 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/convnext_adam_train_step.mlir (@convnext_adam_train_step, 549 outputs, 1 replica) in 6395 ms
+ConvNeXt-T SHARDING gate — asymmetric batch
+  DP( [x0|..|x1] )  ==  mean of 2 single-device steps   (2 replicas x bs 32)
+  single   : verified_mlir/convnext_adam_train_step.mlir
+  DP render: verified_mlir/convnext_adamdp_train_step.mlir
+  182 params (27827818 floats), 0 BN layers, backend xla
+  xla/pjrt verified_mlir/convnext_adam_train_step.mlir
+  single-device on shard 0…
+  single-device on shard 1…
+  data-parallel on the 2-way shard…
+I0921 15:10:04.316960  990297 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 15:10:04.317373  990297 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 15:10:04.317404  990297 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 2 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/convnext_adamdp_train_step.mlir (@convnext_adamdp_train_step, 549 outputs, 2 replicas) in 2627 ms
+I0921 15:10:07.746659  992438 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  xla/pjrt verified_mlir/convnext_adamdp_train_step.mlir
+  ── gradient proxy m' = 0.1·g, over 27827818 coords ──
+    TEST    |DP − mean of 2| / max|mean| = 0.000000 (59.237796 e-9)
+    CONTROL |DP − shard0|     / max|mean| = 1.815921  ← a broken shard would land HERE
+✓ sharding CONFIRMED for convnext: DP([A|B]) = mean(single(A), single(B)) to 0.000000, while DP vs A alone is 1.815921 — 30654766.333333x apart, so the replicas provably saw DIFFERENT data

@@ -10,19 +10,22 @@ for COSTING only, and said so in three places: *"nothing has tied MNv4's collect
 train off these"*, *"what would lift the caveat is a DP tie for MNv4's collectives, the way
 R34/R50/MNv2/ConvNeXt have one"*. An untied collective artifact looks exactly as trustworthy as a
 tied one — it is the same bytes, in the same directory, named the same way — so the render was
-deliberately unquotable rather than deliberately absent. This gate and the `mnv4in` row in
-`tests/TestShardCheck.lean` are that tie.
+deliberately unquotable rather than deliberately absent. This gate and, since the render went
+sync-BN, `imagenet-syncbn-check mnv4` are that tie (until 2026-09-21 the second half was the
+`mnv4in` row in `tests/TestShardCheck.lean`, retired then).
 
 **The exact identity, and why BatchNorm does not spoil it.** Give every replica the **same** 64
-examples. BN normalises per replica, so each replica's BN group is those same 64 examples and all
-four compute *identical* batch statistics; each therefore computes the same gradient `g`, and
+examples. Since 2026-09-21 the DP render's BatchNorm is synchronised
+(`planning/global_bn_verified.md` §3.4): each BN layer all-reduces its statistics, and the mean of
+four identical per-replica statistics is that statistic, so every replica normalises by exactly
+the single-device batch's statistics; each therefore computes the same gradient `g`, and
 `all_reduce(add)/4` returns `(4·g)/4 = g`. The mean is an identity on a duplicated batch, at any
-replica count. The data-parallel step must reproduce the **single-device** step, output for output.
+replica count. The data-parallel step must reproduce the **single-device** step, output for output
+— the forward bit-exact; the gradient to the gap between the sync-BN graph's arithmetic and the
+two-pass graph's (see the gradient bound below).
 
-The §10.3b caveat that stopped R34 from having this gate is about **splitting** a batch — 4×64 is
-genuinely not 1×256 under batch BN, because the shards get different statistics. Duplicating a
-batch is the other case: the statistics are the same by construction, so nothing couples the
-replicas and the identity is exact rather than approximate.
+The SPLIT batch — 4×64 against 1×256, the identity sync-BN exists for — is
+`imagenet-syncbn-check mnv4`'s gate.
 
 **This gate pins the forward.** MNv4-Conv-M returns batch statistics for every BN layer, so it has
 a forward-only `bnstat` region that must come back **bit-exact**. Every replica saw the same data,
@@ -40,8 +43,8 @@ DP render to gate more cheaply; `mnv4_adam_train_step.mlir` is single-device.
 Two failure modes it separates, both of which have actually happened in this repo:
 
 * **collective missing** → the shim's replica-count guard refuses the call before any numbers.
-* **collective present but wrong** (sum not mean) → every gradient is 4× and `m` moves by ~1, five
-  orders above the gate. Pass the broken render as `argv[1]` to run that control here.
+* **collective present but wrong** (sum not mean) → every gradient is 4× and `m` moves by ~3,
+  60× above even the bf16 bound. Pass the broken render as `argv[1]` to run that control here.
 
     lake build mnv4-dp-check
     unset HIP_VISIBLE_DEVICES
@@ -164,8 +167,8 @@ norm-rel = {nr} ({nr * 1e9} e-9), bit-exact {exact}/{hi-lo}"
     IO.eprintln s!"DEGENERATE: {nonFinite} non-finite outputs"; IO.Process.exit 1
   if moved * 10 < n then
     IO.eprintln "DEGENERATE: too few non-zero outputs — the check proves little"; IO.Process.exit 1
-  -- Every replica saw the SAME 64 examples, so their BN groups are identical and the batch
-  -- statistics cannot legitimately differ. Anything here is the DP path corrupting the forward.
+  -- Every replica saw the SAME 64 examples, so the all-reduced batch statistics are the single
+  -- device's and cannot legitimately differ. Anything here is the DP path corrupting the forward.
   if !fwdExact then
     IO.eprintln s!"DP CHECK FAILED: the forward differs — `bnstat` is not bit-exact \
 (norm-rel {fwdRel}). Every replica was given the same batch, so their BN statistics are identical \
@@ -174,10 +177,17 @@ by construction; a difference here is the data-parallel path corrupting the forw
   -- Gate the GRADIENT (`m`), never θ: Adam's update is scale-free, so a near-zero-gradient
   -- parameter flips sign on a 1-ULP difference and θ lands at ~1e-4 whether or not anything is
   -- wrong (§3).
-  if gradRel > 1e-4 then
-    IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-4. On a duplicated batch \
+  -- ⚠ 1e-2 (f32) / 5e-2 (bf16), not 1e-4, since 2026-09-21: the DP render's BatchNorm is
+  -- SYNCHRONISED (`planning/global_bn_verified.md` §3.4), so its backward is the sync-BN graph
+  -- while the single-device artifact is the two-pass graph — one function, two arithmetics. On
+  -- this duplicated batch `m` differs by 1.65e-3 norm-rel in f32 and 2.2e-2 in bf16 (measured;
+  -- `imagenet-syncbn-check`'s FORMULATION column is the same gap at one replica). The forward is
+  -- still pinned BIT-EXACT above, and a wrong collective (sum, not mean) still moves `m` by ~3.
+  let gradTol : Float := if vDp.endsWith "bf16" then 5e-2 else 1e-2
+  if gradRel > gradTol then
+    IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > {gradTol}. On a duplicated batch \
 all_reduce(add)/N is the identity, so the data-parallel step must reproduce the single-device one."
     IO.Process.exit 1
   IO.println s!"✓ DP step reproduces the single-device step on a duplicated batch: forward \
-BIT-EXACT (bnstat, {net.bnChannels.size} BN layers), gradient norm-rel {gradRel} ≤ 1e-4, \
+BIT-EXACT (bnstat, {net.bnChannels.size} BN layers), gradient norm-rel {gradRel} ≤ {gradTol}, \
 over all {n} returned floats"

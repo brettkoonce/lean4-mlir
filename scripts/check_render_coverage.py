@@ -85,7 +85,10 @@ def artifact_writers() -> dict[str, list[str]]:
                 for ev in re.finditer(r'#eval\b', flat)
                 for m in re.finditer(r'IO\.FS\.writeFile\s+"([^"]+)"',
                                      flat[ev.start(): ev.start() + WINDOW])]
-        committed = [h for h in hits if not h.startswith("/tmp")]
+        # `/tmp` and `.lake/` are scratch: `.lake/` is gitignored build output, so a write there
+        # (e.g. ResNet50RenderB's one-replica sync graphs in `.lake/build/r50sync/`, gate INPUTS
+        # rendered with the module) has no committed bytes for a `git diff` guard to pin.
+        committed = [h for h in hits if not h.startswith(("/tmp", ".lake/"))]
         if committed:
             out[path.stem] = sorted(set(committed))
     return out

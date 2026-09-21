@@ -1,0 +1,192 @@
+MobileNetV4-Conv-M (ImageNet-1k) SYNC-BN gate — 4×64 against 1×256
+  TEST     DP_sync([x₀|…|x3])  ==  single_256([x₀|…|x3])
+  CONTROL  DP_sync([x₀|…|x3])  !=  mean_k single_64(x_k)   (the old, per-replica identity)
+  single 64: (rendered at run time)
+  DP render: verified_mlir/mnv4in_adamdp64_train_step.mlir
+  233 params (9715512 floats), 77 BN layers, backend xla
+  single-device 256 on [x₀|…]… (.lake/build/mnv4in_syncgate_single256_train_step.mlir)
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.970
+I0921 14:29:06.218025  860779 service.cc:154] XLA service 0x7f12d079b3c0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 14:29:06.218072  860779 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:29:06.218081  860779 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:29:06.218087  860779 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:29:06.218092  860779 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:29:06.221348  860779 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 14:29:06.221382  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 0 for BFCAllocator.
+I0921 14:29:06.221425  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 1 for BFCAllocator.
+I0921 14:29:06.221442  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 2 for BFCAllocator.
+I0921 14:29:06.221458  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 3 for BFCAllocator.
+I0921 14:29:06.231208  860779 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+E0921 14:29:09.130939  860825 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0921 14:29:09.217519  860853 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 72 bytes spill stores, 72 bytes spill loads
+
+I0921 14:29:09.443733  860844 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 832 bytes spill stores, 832 bytes spill loads
+
+I0921 14:29:09.512505  860824 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 24 bytes spill stores, 24 bytes spill loads
+
+I0921 14:29:09.780597  860829 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 100 bytes spill stores, 68 bytes spill loads
+
+E0921 14:29:13.653979  860833 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:13.785840  860831 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:18.451662  860836 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:18.598444  860852 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:18.899834  860842 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:19.735010  860829 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:20.383046  860847 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:29.408809  860825 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled .lake/build/mnv4in_syncgate_single256_train_step.mlir (@mnv4in_adam256_train_step, 856 outputs, 1 replica) in 24310 ms
+I0921 14:29:34.411064  860838 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 12 bytes spill stores, 12 bytes spill loads
+
+I0921 14:29:34.562324  860829 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 64 bytes spill stores, 64 bytes spill loads
+
+E0921 14:29:34.672030  860833 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:34.807252  860826 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0921 14:29:34.889614  860828 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 128 bytes spill stores, 84 bytes spill loads
+
+I0921 14:29:35.057319  860847 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 128 bytes spill stores, 72 bytes spill loads
+
+E0921 14:29:36.285976  860850 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:36.396320  860826 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:36.527379  860831 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:36.913618  860837 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:37.462798  860854 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0921 14:29:37.607034  860847 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled .lake/build/mnv4in_syncgate_single64_train_step.mlir (@mnv4in_adam64_train_step, 856 outputs, 1 replica) in 10917 ms
+  xla/pjrt .lake/build/mnv4in_syncgate_single256_train_step.mlir
+  xla/pjrt .lake/build/mnv4in_syncgate_single64_train_step.mlir
+  single-device 64 on each of the 4 shards…
+  single-device SYNC-graph 256 on [x₀|…]… (.lake/build/mnv4in_syncgate_sync256_train_step.mlir)
+[pjrt_ffi] compiled .lake/build/mnv4in_syncgate_sync256_train_step.mlir (@mnv4in_adam256_train_step, 856 outputs, 1 replica) in 3411 ms
+  xla/pjrt .lake/build/mnv4in_syncgate_sync256_train_step.mlir
+  sensitivity probe (x + 1e-4·noise) on the two-pass 256 graph…
+  data-parallel 4×64 on [x₀|…]…
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.970
+I0921 14:29:49.194812  860779 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 14:29:49.195379  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 0 for BFCAllocator.
+I0921 14:29:49.195414  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 1 for BFCAllocator.
+I0921 14:29:49.195450  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 2 for BFCAllocator.
+I0921 14:29:49.195472  860779 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/mnv4in_adamdp64_train_step.mlir (@mnv4in_adamdp64_train_step, 856 outputs, 4 replicas) in 4901 ms
+I0921 14:29:55.637543  866604 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 14:29:55.637620  866598 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 14:29:55.637699  866601 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  xla/pjrt verified_mlir/mnv4in_adamdp64_train_step.mlir
+  duplicated probe: DP on [x₀|x₀|…] vs the one-replica sync graph on x₀ (.lake/build/mnv4in_syncgate_sync64_train_step.mlir)…
+[pjrt_ffi] compiled .lake/build/mnv4in_syncgate_sync64_train_step.mlir (@mnv4in_adam64_train_step, 856 outputs, 1 replica) in 3507 ms
+  xla/pjrt .lake/build/mnv4in_syncgate_sync64_train_step.mlir
+  ── θ' [0, 9715512) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.000061
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.000061
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000000
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.000207
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.000075
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000000
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  ── m' = 0.1·g [9715512, 19431024) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.336542
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.336377
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.001632
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 1.243151
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.387590
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.001139
+    REPEAT      single_Rb vs itself, same input         = 0.000002
+  ── v' [19431024, 29146536) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.013233
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.013239
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000044
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.051817
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.014119
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000148
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  ── bn stats (154 slots) [29146539, 29214443) ──
+    TEST        |DP − single_Rb|      / max|single_Rb| = 0.001181
+    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = 0.001181
+    FORMULATION |sync_Rb − single_Rb| / max|single_Rb| = 0.000000
+    CONTROL     |DP − mean_k single_b| / max|mean|     = 0.076970
+    SENSITIVITY two-pass graph, x perturbed by 1e-4     = 0.001316
+    DUPLICATED  |DP([x₀|x₀|…]) − sync_b(x₀)| / max|sync_b| = 0.000000
+    REPEAT      single_Rb vs itself, same input         = 0.000000
+  DUPLICATED m' = 0.1·g norm-rel (the *-dp-check metric, against the sync graph) = 0.001191
+  ── per-layer BN statistics, TEST rel-err vs single_Rb (mean | var) ──
+    bn0 [32] : 0.000000 | 0.000000
+    bn1 [128] : 0.000000 | 0.000000
+    bn2 [48] : 0.000000 | 0.000000
+    bn3 [48] : 0.000001 | 0.000000
+    bn4 [192] : 0.000237 | 0.000186
+    bn5 [192] : 0.000003 | 0.000053
+    bn6 [80] : 0.000002 | 0.000022
+    bn7 [80] : 0.000061 | 0.000019
+    bn8 [160] : 0.000002 | 0.000015
+    bn9 [160] : 0.000002 | 0.000010
+    bn10 [80] : 0.000004 | 0.000011
+    bn11 [80] : 0.000207 | 0.000018
+    bn12 [480] : 0.000003 | 0.000027
+    bn13 [480] : 0.000008 | 0.000046
+    bn14 [160] : 0.000009 | 0.000042
+    bn15 [160] : 0.000061 | 0.000022
+    bn16 [640] : 0.000009 | 0.000048
+    bn17 [640] : 0.000014 | 0.000046
+    bn18 [160] : 0.000012 | 0.000083
+    bn19 [160] : 0.000059 | 0.000035
+    bn20 [640] : 0.000010 | 0.000073
+    bn21 [640] : 0.000015 | 0.000081
+    bn22 [160] : 0.000015 | 0.000083
+    bn23 [160] : 0.000153 | 0.000083
+    bn24 [640] : 0.000013 | 0.000093
+    bn25 [640] : 0.000030 | 0.000119
+    bn26 [160] : 0.000023 | 0.000105
+    bn27 [160] : 0.000088 | 0.000174
+    bn28 [640] : 0.000013 | 0.000127
+    bn29 [640] : 0.000038 | 0.000092
+    bn30 [160] : 0.000026 | 0.000139
+    bn31 [160] : 0.000148 | 0.000081
+    bn32 [640] : 0.000016 | 0.000121
+    bn33 [160] : 0.000025 | 0.000132
+    bn34 [320] : 1.466447 | 0.000122
+    bn35 [160] : 0.000014 | 0.000137
+    bn36 [160] : 0.000110 | 0.000116
+    bn37 [640] : 0.000021 | 0.000140
+    bn38 [160] : 0.000026 | 0.000172
+    bn39 [160] : 0.000901 | 0.000255
+    bn40 [960] : 0.000033 | 0.000291
+    bn41 [960] : 0.000110 | 0.000295
+    bn42 [256] : 0.000059 | 0.000393
+    bn43 [256] : 0.000464 | 0.000435
+    bn44 [1024] : 0.000069 | 0.000561
+    bn45 [1024] : 0.000155 | 0.000443
+    bn46 [256] : 0.000108 | 0.000533
+    bn47 [256] : 0.000636 | 0.000421
+    bn48 [1024] : 0.000089 | 0.000862
+    bn49 [1024] : 0.000252 | 0.000745
+    bn50 [256] : 0.000117 | 0.000879
+    bn51 [256] : 0.000495 | 0.000760
+    bn52 [1024] : 0.000135 | 0.000905
+    bn53 [1024] : 0.000539 | 0.000759
+    bn54 [256] : 0.000127 | 0.001093
+    bn55 [1024] : 1.235740 | 0.000766
+    bn56 [256] : 0.000090 | 0.001221
+    bn57 [256] : 0.001359 | 0.000638
+    bn58 [1024] : 0.000162 | 0.001172
+    bn59 [256] : 0.000184 | 0.000995
+    bn60 [256] : 0.001387 | 0.000792
+    bn61 [512] : 0.000224 | 0.001161
+    bn62 [512] : 0.000286 | 0.001183
+    bn63 [256] : 0.000397 | 0.001620
+    bn64 [256] : 0.001224 | 0.000969
+    bn65 [1024] : 0.000191 | 0.001318
+    bn66 [1024] : 0.000452 | 0.001290
+    bn67 [256] : 0.000271 | 0.001167
+    bn68 [1024] : 1.475167 | 0.001204
+    bn69 [256] : 0.000228 | 0.001304
+    bn70 [1024] : 1.336500 | 0.001331
+    bn71 [256] : 0.000140 | 0.001347
+    bn72 [256] : 0.001452 | 0.001490
+    bn73 [512] : 0.000247 | 0.001370
+    bn74 [256] : 0.000351 | 0.001681
+    bn75 [960] : 1.748068 | 0.001181
+    bn76 [1280] : 0.000178 | 0.001505
+✓ SYNC-BN CONFIRMED for mnv4in: the sync graph IS the two-pass graph (statistics 0.000000), the collective composes it exactly (duplicated batch 0.000000), and DP_sync([x₀|…]) = single_Rb([x₀|…]) to 0.001181 on the statistics (first layer 0.000000) against a per-replica CONTROL of 0.076970 — 4×64 IS 1×256. Worst TEST region 0.336542; m' = 0.1·g SENSITIVITY-to-1e-4 0.387590; statistics REPEAT 0.000000.

@@ -67,9 +67,10 @@ equal Nats and NOT definitionally equal terms at a variable `q`, and the block s
 the operand at exactly the spelling they name. The render's own `q1 … q5` comment records the same
 trap on the emitter side.
 
-⚠ `N` stays a variable throughout, as at r34: T1 carries no numerals, and the artifacts' `N` is the
-PER-REPLICA batch (`DataParallel.lean`, §4d) because the collectives average gradients and no
-BatchNorm statistic is all-reduced.
+⚠ `N` stays a variable throughout, as at r34: T1 carries no numerals. On the data-parallel
+artifacts the render's `N` is the PER-REPLICA batch; since 2026-09-21 their BatchNorm is
+synchronised, and `ResNet50SyncB.lean` is this file's twin for them: replica `r`'s forward graph
+denotes shard `r` of `resnet50ForwardB_full (R * N) q`, this file's forward at the global batch.
 
 ⭐ **The census is 161 updated parameters**, which is `ResNet50RenderB`'s own docstring ("161 θ /
 161 m / 161 v"): stem 3 (`sW`, `sγ`, `sβ`) + 12 identity bottlenecks × 9 + 4 projection

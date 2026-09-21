@@ -92,6 +92,8 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG
+import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
@@ -2125,6 +2127,75 @@ open Proofs
 #print axioms Proofs.EnetSyncTieG.stem_syncTiedG
 #print axioms Proofs.EnetSyncTieG.head_syncTiedG
 #print axioms Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
+
+-- 4d PIECE 3 AT RESNET-50: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (ResNet50SyncB.lean + ResNet50SyncStepTieB.lean, planning/global_bn_verified.md §3.4, 2026-09-21)
+-- T2 twin: replica r's sync-BN forward graph denotes shard r of resnet50ForwardB_full (R*N) q
+#print axioms Proofs.StableHLO.den_addVB_shard_comm
+#print axioms Proofs.StableHLO.r50IdGraphSync_shard
+#print axioms Proofs.StableHLO.r50ProjGraphSync_shard
+#print axioms Proofs.StableHLO.r50DownGraphSync_shard
+#print axioms Proofs.StableHLO.resnet50FwdGraphSync_full_shard
+-- T3 twin: the single-device chain is homogeneous in its cotangent
+#print axioms Proofs.ResNet50SyncTieB.r50IdCotIn_smul
+#print axioms Proofs.ResNet50SyncTieB.r50ProjCotIn_smul
+#print axioms Proofs.ResNet50SyncTieB.r50DownCotIn_smul
+-- ...each replica's sync-BN backward chain is the shard of the single-device one
+#print axioms Proofs.ResNet50SyncTieB.r50IdSyncCotIn_shard
+#print axioms Proofs.ResNet50SyncTieB.r50ProjSyncCotIn_shard
+#print axioms Proofs.ResNet50SyncTieB.r50DownSyncCotIn_shard
+#print axioms Proofs.ResNet50SyncTieB.r50IdSyncCotIn_scaled
+#print axioms Proofs.ResNet50SyncTieB.r50ProjSyncCotIn_scaled
+#print axioms Proofs.ResNet50SyncTieB.r50DownSyncCotIn_scaled
+-- the per-block ties and the capstone (the cotangent a binder), then both losses discharged
+#print axioms Proofs.ResNet50SyncTieB.r50_idblock_syncTiedB
+#print axioms Proofs.ResNet50SyncTieB.r50_projblock_syncTiedB
+#print axioms Proofs.ResNet50SyncTieB.r50_downblock_syncTiedB
+#print axioms Proofs.ResNet50SyncTieB.r50_net_syncTiedB
+#print axioms Proofs.ResNet50SyncTieB.replicaBceLossCot_eq
+#print axioms Proofs.ResNet50SyncTieB.r50_net_syncTiedB_smoothedCE
+#print axioms Proofs.ResNet50SyncTieB.r50_net_syncTiedB_bce
+
+-- 4d PIECE 3 AT MOBILENETV4: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (MobileNetV4SyncB.lean + MobileNetV4SyncStepTieB.lean, planning/global_bn_verified.md §3.4, 2026-09-21)
+-- T2 twin: replica r's sync-BN forward graph denotes shard r of mobilenetv4ForwardB_full (R*N)
+#print axioms Proofs.StableHLO.den_swish_shard
+#print axioms Proofs.StableHLO.mnv4StemGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4FusedGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4ExtraDWBodyGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4ConvNeXtBodyGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4FfnBodyGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4PreStridedGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4SkipGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4HeadGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4FwdGraphSync_full_shard
+-- T3 twin: the single-device chain is homogeneous in its cotangent
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4BodyCotIn_smul
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4SBodyCotIn_smul
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4StemCotC_smul
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4FusedCotIn_smul
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4HeadCotIn_smul
+-- ...each replica's sync-BN backward chain is the shard of the single-device one
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4BodySyncCotIn_shard
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4SBodySyncCotIn_shard
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4StemSyncCotC_shard
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4FusedSyncCotIn_shard
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4HeadSyncCotIn_shard
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4BodySyncCotIn_scaled
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4SkipSyncCotIn_scaled
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4SBodySyncCotIn_scaled
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4FusedSyncCotIn_scaled
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4HeadSyncCotIn_scaled
+-- the per-block ties and the capstone (the cotangent a binder), then smoothed CE discharged
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_extradw_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_convnext_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_ffn_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_prestrided_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_stem_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_fused_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_head_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB_smoothedCE
 
 -- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT (2026-09-06)
 #print axioms Proofs.lambStep

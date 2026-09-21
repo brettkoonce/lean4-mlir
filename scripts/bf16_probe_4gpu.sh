@@ -52,6 +52,9 @@
 # ✅ mnv4's DP pair was TIED on 2026-08-27 (`mnv4-dp-check` + `shard-check mnv4in`, both green,
 #   both controls red — runs/2026-08-27-mnv4-dp-shard-gates/). §21.2's "cost it, don't train it"
 #   caveat is lifted; scripts/jobs/mnv4-default-4gpu.conf trains off exactly this artifact.
+#   ⚠ Since 2026-09-21 that artifact is sync-BN (three more collectives per BN layer), so its
+#   split-batch tie is `imagenet-syncbn-check mnv4` and `shard-check mnv4in` is retired; a ms/step
+#   probed before then measured the per-replica render.
 cd "$(dirname "$0")/.."
 OUT="${1:?usage: scripts/bf16_probe_4gpu.sh <out.tsv>}"
 : > "$OUT"

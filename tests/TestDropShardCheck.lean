@@ -74,9 +74,9 @@ private def entryOf (path : String) : IO String := do
 
 def main (argv : List String) : IO Unit := do
   -- ⚠ ONE harness for both nets, per `rms-tie`/`wdx-tie`/`shard-check` — a second copy is the
-  -- double-writer disease one level down, in code. `convnext` selects the LayerNorm net, and it is
-  -- NOT a cosmetic switch: see `nBnStats == 0` below, where the anti-vacuity half of the gate
-  -- changes shape because an LN net has no replica-0-local batch statistics.
+  -- double-writer disease one level down, in code. `convnext` selects the LayerNorm net; since the
+  -- BN renders went sync-BN no net has replica-0-local batch statistics, so the switch now changes
+  -- only whether ①b has anything to compare.
   let cnx  := argv.contains "convnext"
   let vit  := argv.contains "vit"
   let spec := if cnx then convnextVerified else if vit then vitVerified else efficientnetVerified
@@ -194,24 +194,22 @@ this gate cannot distinguish a sharded mask from a replicated one")
   let oBA ← run mBA "ba"
 
   -- ── the comparison, and it is TWO checks pulling in OPPOSITE directions ──
-  -- ⚠⚠ THE BN STATISTICS ARE NOT SWAP-INVARIANT, AND THAT IS THE SHARPER HALF OF THE GATE.
-  -- `θ'`/`m'`/`v'`/`%loss` are computed from the ALL-REDUCED gradient, so a sharded mask makes them
-  -- swap-invariant to the bit. The batch statistics are different in kind: they are replica-0-LOCAL
-  -- (never all-reduced, read back from replica 0 only) and every BN layer downstream of a drop site
-  -- sees masked activations — so replica 0's stats depend on REPLICA 0's MASK, which the swap
-  -- changes. They must MOVE.
+  -- `θ'`/`m'`/`v'` are computed from the ALL-REDUCED gradient, and since 2026-09-21 the batch
+  -- statistics are all-reduced too (sync-BN, see ①b below), so a sharded mask makes all of them
+  -- swap-invariant to the bit. `%loss` is different in kind: it is replica-0-LOCAL, computed on
+  -- replica 0 from REPLICA 0's MASK, which the swap changes. It must MOVE.
   --
   -- Neither check alone is evidence. Invariance alone is satisfied by a mask that reaches nothing
   -- (all-ones, or a site wired to a dead branch) — the ones-mask blindness of §7b, one level up.
-  -- The BN movement is what witnesses that replica 0 actually RECEIVED a different mask, and the
+  -- The movement is what witnesses that replica 0 actually RECEIVED a different mask, and the
   -- invariance is what witnesses that the collective nevertheless saw both. Together they say the
-  -- masks were split; either alone says much less.
+  -- masks were split; either alone says much less. (Until the renders went sync-BN, the batch
+  -- statistics were replica-0-local and were the movement witness, tens of thousands strong.)
   let P := net.nParams
   -- ⚠ `%loss` is NOT in the all-reduced group, and putting it there cost a run. It is the
   -- report-only forward scalar (§5's carve-out list: emitted text, on no gradient path, outside
   -- every faithfulness theorem) — computed on each replica from ITS OWN rows and mask, with only
-  -- replica 0's returned. So it is replica-0-LOCAL exactly as the batch statistics are, and it must
-  -- MOVE under the swap. The first version counted it as all-reduced and ① read
+  -- replica 0's returned. So it is replica-0-LOCAL, and it must MOVE under the swap. The first version counted it as all-reduced and ① read
   -- `12061076/12061077` — one output, which is the tell: a wiring defect moves thousands.
   -- ⚠ The invariant set is NOT a contiguous prefix. The return layout is
   -- `θ' ++ m' ++ v' ++ [%loss, %bc1, %bc2] ++ bnstats`, so `%loss` sits at 3P — INSIDE any range
@@ -249,8 +247,9 @@ this gate cannot distinguish a sharded mask from a replicated one")
 (max abs {worst}, rel {rel}{if diff == 0 then "" else s!", first at output {firstDiff}"})"
   IO.println s!"  ②a %loss (replica-0-local, report-only): {lossAB} vs {lossBA} — \
 {if lossAB == lossBA then "IDENTICAL ⚠" else "MOVED"}"
-  IO.println s!"  ② replica-0-local BN stats: {bnDiff}/{nBnStats} MOVED under the swap \
-(max abs {bnWorst}) — they must, and a 0 here means replica 0 saw the same mask twice"
+  if nBnStats > 0 then
+    IO.println s!"  ①b all-reduced BN stats (sync-BN): {nBnStats - bnDiff}/{nBnStats} BIT-IDENTICAL \
+under the swap (max abs {bnWorst})"
 
   if diff != 0 then
     throw (IO.userError s!"① FAILED — THE MASK IS NOT SHARDED. {diff} of {nRed} all-reduced \
@@ -263,6 +262,17 @@ compute g(x,m₁) — a different function.\n\
 \n\
 Check that `nShardTail` reaches `pjrt_ffi_invoke_f32_dp2`, and that the mask buffer is sized at the \
 GLOBAL batch (`dropShapes` must be `#[gbs]`, not `#[bs]`).")
+  -- ⭐ SINCE 2026-09-21 THE BATCH STATISTICS ARE ALL-REDUCED TOO. The DP renders' BatchNorm is
+  -- synchronised (`planning/global_bn_verified.md` §3.3): every BN layer all-reduces its mean and
+  -- Chan's variance, and the render hands back those GLOBAL statistics. At two replicas each is
+  -- `(a + b)/2` of per-replica values, so a sharded mask leaves them swap-invariant to the bit,
+  -- exactly as it does the gradients — they joined ①. Until then they were replica-0-LOCAL and
+  -- were ②, the anti-vacuity witness that had to MOVE; that half now rests on `%loss` alone (②a).
+  if bnDiff != 0 then
+    throw (IO.userError s!"①b FAILED — {bnDiff} of {nBnStats} batch statistics move when the two \
+mask halves are swapped (max abs {bnWorst}). Under synchronised BatchNorm they are the GLOBAL \
+statistics, (a+b)/2 over the replicas, and commutative at two: a sharded mask cannot move them. \
+Either the mask is not sharded or this render's BatchNorm is not synchronised.")
   if !bcSame then
     throw (IO.userError "the %bc1/%bc2 passthrough scalars moved under the swap — they are the \
 driver's own inputs echoed back and cannot depend on the mask at all. Something is misaligned in \
@@ -271,27 +281,24 @@ the output layout, not in the sharding.")
     throw (IO.userError s!"②a FAILED — VACUOUS. `%loss` did not move when the mask halves were \
 swapped. It is computed on replica 0 from replica 0's rows and replica 0's MASK, so a swap that \
 reaches the device must change it. Identical means replica 0 saw the same mask twice.")
-  -- ⚠⚠ ON A LAYERNORM NET THERE ARE NO BATCH STATISTICS, SO ②a CARRIES THE ANTI-VACUITY LOAD ALONE
-  -- — and that is a real weakening, stated rather than papered over. EfficientNet witnesses "replica
-  -- 0 received a different mask" with tens of thousands of replica-0-local floats; ConvNeXt has
-  -- exactly ONE, `%loss`. It is still a genuine witness (report-only, computed on replica 0 from
-  -- replica 0's rows and mask), and it is not the only thing standing between this gate and
-  -- vacuity: the harness already REFUSES above if the two mask halves are equal. But a one-scalar
-  -- anti-vacuity check would not survive a defect that happened to leave `%loss` fixed, and nothing
-  -- here rules that out.
-  if nBnStats == 0 then
-    IO.println s!"  ⚠ {spec.name} normalises with LayerNorm — there are NO replica-0-local batch \
-statistics, so ②a (`%loss`) is the WHOLE anti-vacuity half. Weaker than the BN nets' ②, and the \
-mask-halves-differ refusal above is the other thing keeping ① from being vacuous."
-  else if bnDiff == 0 then
-    throw (IO.userError s!"② FAILED — VACUOUS. Not one of the {nBnStats} batch statistics moved \
-when the mask halves were swapped. Those are replica-0-LOCAL, and every BN layer downstream of a \
-drop site sees masked activations, so replica 0 receiving a different mask MUST move them. Zero \
-movement means replica 0 saw the same mask both times — i.e. ① passed for the wrong reason (a mask \
-that reaches nothing is trivially swap-invariant, which is §7b's ones-mask blindness one level up).")
+  -- ⚠⚠ ②a CARRIES THE ANTI-VACUITY LOAD ALONE, on every net — and that is a real weakening, stated
+  -- rather than papered over. Until the BN renders went sync-BN, EfficientNet witnessed "replica 0
+  -- received a different mask" with tens of thousands of replica-0-local batch statistics; now the
+  -- only replica-0-local output any net returns is ONE scalar, `%loss`, as it always was on the
+  -- LayerNorm nets. It is still a genuine witness (report-only, computed on replica 0 from replica
+  -- 0's rows and mask), and it is not the only thing standing between this gate and vacuity: the
+  -- harness already REFUSES above if the two mask halves are equal. But a one-scalar anti-vacuity
+  -- check would not survive a defect that happened to leave `%loss` fixed, and nothing here rules
+  -- that out.
+  let why := if nBnStats == 0 then s!"{spec.name} normalises with LayerNorm"
+             else "the batch statistics are all-reduced"
+  IO.println s!"  ⚠ `%loss` is the only replica-0-local output ({why}), so ②a is the WHOLE \
+anti-vacuity half; the mask-halves-differ refusal above is the other thing keeping ① from being \
+vacuous."
 
-  IO.println s!"✓ the drop masks are SHARDED, not replicated: the {nRed} all-reduced outputs are \
-BIT-IDENTICAL under a swap of the two mask halves while {bnDiff}/{nBnStats} replica-0-local batch \
-statistics MOVE, on halves that differ in {nDrop * bs - same} of {nDrop * bs} slots. ⚠ This pins \
-split-vs-copied, NOT the shard offset — a reversed split is swap-invariant too, and the offset \
-rides on the same `n_replicas`-generic C that `shard-check` already gates through `x`."
+  IO.println s!"✓ the drop masks are SHARDED, not replicated: the {nRed + nBnStats} all-reduced \
+outputs ({nBnStats} of them batch statistics) are BIT-IDENTICAL under a swap of the two mask \
+halves while replica 0's `%loss` MOVES, on halves that differ in {nDrop * bs - same} of \
+{nDrop * bs} slots. ⚠ This pins split-vs-copied, NOT the shard offset — a reversed split is \
+swap-invariant too, and the offset rides on the same `n_replicas`-generic C that `shard-check` \
+already gates through `x`."

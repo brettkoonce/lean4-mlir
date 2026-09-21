@@ -14,9 +14,10 @@ parameters. ⚠ Target, not result: nothing has been run to convergence on this 
 ✅ **THE 4× RENDER EXISTS AND IS TIED, as of 2026-08-27.** This paragraph used to say there was
 none, and that it was what blocked a printable phase-4 row. `mnv4in_adamdp64` and its bf16 peer are
 4-replica renders, and both halves of the collective tie are green — `mnv4-dp-check` (duplicated
-batch: fp32 `bnstat` bit-exact, gradient 8.45e-7; bf16 bit-exact on all 9,715,512 floats) and
-`shard-check mnv4in` (asymmetric batch: TEST 1.10e-6 against a CONTROL of 2.00). Both go red on a
-sum-not-mean render. ▶ `scripts/jobs/mnv4-default-4gpu.conf` is the job;
+batch) and `imagenet-syncbn-check mnv4` (split batch: 4×64 IS 1×256). ⭐ Since 2026-09-21 their
+BatchNorm is synchronised, so a 4×64 step IS the single-device step at batch 256
+(`planning/global_bn_verified.md` §3.4); until then the split-batch half was `shard-check mnv4in`,
+retired with the swap. Both go red on a sum-not-mean render. ▶ `scripts/jobs/mnv4-default-4gpu.conf` is the job;
 `runs/2026-08-27-mnv4-dp-shard-gates/` is the evidence.
 
 ⚠ A single-card figure off this driver is still not comparable to the book's other ImageNet rows,

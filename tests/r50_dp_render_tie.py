@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
-"""r50_dp_render_tie.py — the 4-replica R50 render is the 1-replica render plus an all-reduce.
+"""r50_dp_render_tie.py — the 4-replica R50 render is the 1-replica SYNC-BN render plus its all-reduces.
 
+    lake build LeanMlir.Proofs.Codegen.ResNet50RenderB   # writes the 1-replica sides (.lake/build/r50sync/)
     python3 tests/r50_dp_render_tie.py
     python3 tests/r50_dp_render_tie.py <1-replica.mlir> <4-replica.mlir>   # negative control
+
+⭐⭐ RE-POINTED 2026-09-21 (`planning/global_bn_verified.md` §3.4). The DP renders are SYNC-BN now:
+every BatchNorm layer all-reduces its statistics, so a DP render's BN sites are `bnSyncF` & co. and
+it is no longer the committed single-device render (`bnBatchF`) plus the gradient all-reduces —
+that version of this tie failed on every pair, by design. It IS the same renderer's ONE-REPLICA
+sync graph (`forceSync := true`, where every collective emits nothing and threads its operand) plus
+every all-reduce, gradient and BN alike. So the 1-replica side of each pair is now that graph,
+written by `ResNet50RenderB.lean` to `.lake/build/r50sync/` (a gate input, never a committed
+artifact), and the substitution below routes the BN statistics through their collectives exactly
+as it routes the gradients. `r50-gradcheck` certifies the first of those graphs directly
+(`R50_GC_PATH`), which is what makes the verdict transfer again.
 
 WHAT IT GATES, AND WHY IT EXISTS. `lake build r50-gradcheck` certifies the GRADIENT of
 `verified_mlir/resnet50in_adam64_train_step.mlir` — the single-device render. The driver defaults
@@ -36,19 +48,20 @@ import sys
 # argument or not at all. ⚠ `accdp8x64` — the effective-batch-2048 artifact — has no matched-k
 # single-device peer and is therefore NOT covered here; it is the same renderer at a different
 # baked constant, which is an inheritance argument rather than a check, and it says so.
+SYNC1 = ".lake/build/r50sync"   # the one-replica sync-BN graphs; see the module docstring
 PAIRS = [
-    ("verified_mlir/resnet50in_adam64_train_step.mlir",
+    (f"{SYNC1}/resnet50in_adam64_train_step.mlir",
      "verified_mlir/resnet50in_adamdp64_train_step.mlir"),
-    ("verified_mlir/resnet50in_acc4x64_train_step.mlir",
+    (f"{SYNC1}/resnet50in_acc4x64_train_step.mlir",
      "verified_mlir/resnet50in_accdp4x64_train_step.mlir"),
     # ▶▶ `a3_paper_fidelity.md` §3.2, closed 2026-08-14. These three were the composed RSB-A3
     # renders, and the FIRST of them is the artifact the 77.43% run actually trained on — so until
     # now the gradcheck's verdict reached the graph that produced this repo's headline number by
     # nothing at all. ⚠ They are `resnet50in160`, a different NET SPEC (q = 5) and not a suffix,
     # which is why the name normaliser below had to learn the resolution.
-    ("verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir",
+    (f"{SYNC1}/resnet50in160_lambacc8x64bce_train_step.mlir",
      "verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir"),
-    ("verified_mlir/resnet50in160_lambacc8x64wxbce_train_step.mlir",
+    (f"{SYNC1}/resnet50in160_lambacc8x64wxbce_train_step.mlir",
      "verified_mlir/resnet50in160_lambaccdp8x64wxbce_train_step.mlir"),
     # ⭐⭐ D1's pair, and it is the one that made this check say something NEW rather than more of
     # the same. Every pair above all-reduces inside `optOne`, per parameter, interleaved with that
@@ -57,7 +70,7 @@ PAIRS = [
     # in WHERE the carve-out sits, not merely in whether it is present. That the substitution still
     # lands line for line is a real result: the clip changed the collective's PLACEMENT without
     # changing the program it is a carve-out from.
-    ("verified_mlir/resnet50in160_lambacc8x64wxclipbce_train_step.mlir",
+    (f"{SYNC1}/resnet50in160_lambacc8x64wxclipbce_train_step.mlir",
      "verified_mlir/resnet50in160_lambaccdp8x64wxclipbce_train_step.mlir"),
 ]
 # ⚠ NOT COVERED, and each for a stated reason rather than by omission:
@@ -98,6 +111,9 @@ def check(A: str, B: str) -> int:
         b = open(B).read().splitlines()
     except OSError as e:
         print(f"✗ {e}")
+        if A.startswith(SYNC1):
+            print("  the 1-replica sync graphs are written by the renderer: "
+                  "lake build LeanMlir.Proofs.Codegen.ResNet50RenderB")
         return 2
 
     # 1. Learn the gradient SSA each all-reduce consumes: %arsum<P> = all_reduce(%vN).
@@ -128,10 +144,10 @@ def check(A: str, B: str) -> int:
     # 3. The verdict.
     print(f"R50 DP render tie — {A}")
     print(f"                 vs {B}")
-    print(f"  {len(grads)} parameters all-reduced;  {len(a)} vs {len(b)} lines, "
-          f"{len(an)} vs {len(bn)} after removing the carve-out")
+    print(f"  {len(grads)} values all-reduced (gradients and BN statistics);  {len(a)} vs {len(b)} "
+          f"lines, {len(an)} vs {len(bn)} after removing the carve-out")
     if an == bn:
-        print(f"  ✓ IDENTICAL line for line once each gradient is routed through its all_reduce.")
+        print(f"  ✓ IDENTICAL line for line once each all-reduced value is routed through its collective.")
         print(f"    The forward and backward are the same text, so `r50-gradcheck`'s verdict on")
         print(f"    {A.split('/')[-1]} carries to {B.split('/')[-1]}.")
         return 0

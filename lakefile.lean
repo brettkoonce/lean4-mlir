@@ -161,6 +161,10 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG,
+             `LeanMlir.Proofs.Nets.ResNet.ResNet50SyncB,
+             `LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB,
+             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncB,
+             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB,
              `LeanMlir.Proofs.Codegen.LambTriple,
              `LeanMlir.Proofs.Foundation.BceLossCot,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullB,
@@ -1602,14 +1606,15 @@ lean_exe «mobilenetv2-dp-check» where
   moreLinkArgs := lowererLink
 
 /-- The MNv4 peer, and the gate that makes `mnv4in_adamdp64` quotable. Same EXACT duplicated-batch
-    identity: every replica gets the same 64 examples, so their BN groups are identical by
-    construction, `all_reduce(add)/4 = (4·g)/4 = g`, and the DP step must reproduce the
-    single-device one — `bnstat` bit-exact, gradient within 1e-4.
+    identity: every replica gets the same 64 examples, so the all-reduced BN statistics are the
+    single device's, `all_reduce(add)/4 = (4·g)/4 = g`, and the DP step must reproduce the
+    single-device one — `bnstat` bit-exact, gradient within 1e-2 (bf16 5e-2): since 2026-09-21 the
+    DP backward is the sync-BN graph and the single-device one the two-pass graph.
 
     ⛔ It exists because `MobileNetV4RenderB.lean` rendered MNv4's 4-replica pair for COSTING only
     and said "do not train off these": nothing had tied its collectives, and an untied collective
-    artifact looks exactly as trustworthy as a tied one. This gate plus the `mnv4in` row in
-    `shard-check` is that tie.
+    artifact looks exactly as trustworthy as a tied one. This gate plus `imagenet-syncbn-check
+    mnv4` (the split batch; until the sync-BN swap, the `mnv4in` row in `shard-check`) is that tie.
 
     ⚠⚠ FOUR GPUs, not two, and that is forced — MNv4 renders `adamdp64` at 4 replicas only, with no
     2-replica peer, so `PJRT_REPLICAS=2` hits the shim's replica-count guard rather than degrading.
@@ -1668,15 +1673,18 @@ lean_exe «convnext-shard-check» where
   root := `tests.TestConvNeXtShardCheck
   moreLinkArgs := lowererLink
 
-/-- `shard-check <convnext|efficientnet|mobilenetv2|vit|…in|mnv4in> [<dpPath>]` — the
-    asymmetric-batch SHARDING gate for every net with a DP render, generalised from
-    `convnext-shard-check` (handoff §5's "still open" item). The `*-dp-check` gates hand both
-    replicas the SAME rows, so they are structurally blind to a shard-offset bug; this one gives
-    them different data and checks `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two GPUs
-    and the XLA backend.
+/-- `shard-check <convnext|vit|convnextin> [<dpPath>]` — the asymmetric-batch SHARDING gate for
+    the LayerNorm nets' DP renders, generalised from `convnext-shard-check` (handoff §5's "still
+    open" item). The `*-dp-check` gates hand both replicas the SAME rows, so they are structurally
+    blind to a shard-offset bug; this one gives them different data and checks
+    `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two GPUs and the XLA backend.
 
-    ⚠ The 4-replica-only nets need `SHARD_REPLICAS=4`, four GPUs, and both `SHARD_VARIANT` knobs.
-    MNv4 (added 2026-08-27) is one: `SHARD_VARIANT=adam64 SHARD_VARIANT_DP=adamdp64`. -/
+    ⛔ Its BatchNorm rows (`efficientnet`, `mobilenetv2`, `…in`, `mnv4in`) were RETIRED 2026-09-21:
+    those DP renders are synchronised BatchNorm, so the identity above is exactly what their
+    `*-syncbn-check` CONTROL requires to FAIL. The sync-BN gates' TEST column replaces them; a
+    retired slug exits 2 and names its replacement.
+
+    ⚠ A 4-replica render needs `SHARD_REPLICAS=4` and four GPUs, e.g. `convnextin`. -/
 lean_exe «shard-check» where
   root := `tests.TestShardCheck
   moreLinkArgs := lowererLink
@@ -1704,9 +1712,11 @@ lean_exe «efficientnet-syncbn-check» where
   root := `tests.TestEnetSyncBnCheck
   moreLinkArgs := lowererLink
 
-/-- `imagenet-syncbn-check <resnet34|mobilenetv2|efficientnet> [f32]` — the same runner on the
-    artifacts the ImageNet pairs train from: the committed 4×64 bf16 sync-BN DP step against a
-    1×256 single-device step rendered at run time. Four GPUs, XLA. -/
+/-- `imagenet-syncbn-check <resnet34|mobilenetv2|efficientnet|resnet50|resnet50bce|mnv4> [f32]` —
+    the same runner on the artifacts the ImageNet pairs train from: the committed 4×64 bf16 sync-BN
+    DP step against a 1×256 single-device step rendered at run time. ResNet-50 runs 4×32 against
+    1×128 with its DP step rendered at run time too (the 1×256 reference peaks at 94–95 % of the
+    raised arena). Four GPUs, XLA. -/
 lean_exe «imagenet-syncbn-check» where
   root := `tests.TestImagenetSyncBnCheck
   moreLinkArgs := lowererLink
@@ -1763,7 +1773,9 @@ lean_exe «r34-dp-shard» where
 
     ⚠ This gates `adam64`; the driver defaults to `adamdp64`, whose `%loss` is replica-local while
     its gradient is all-reduced, so tier 2 cannot run there. `python3 tests/r50_dp_render_tie.py`
-    carries the verdict across by text. Needs one GPU and the XLA backend.
+    carries the verdict across by text — since the DP renders went sync-BN (2026-09-21), from the
+    ONE-REPLICA SYNC graph `ResNet50RenderB` writes to `.lake/build/r50sync/`, which this gate
+    certifies with `R50_GC_PATH=.lake/build/r50sync`. Needs one GPU and the XLA backend.
 
         lake build r50-gradcheck && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-gradcheck -/
 lean_exe «r50-gradcheck» where
@@ -1800,10 +1812,11 @@ lean_exe «r50-accum-tie» where
 
     ⭐ The naive complement — "k micro-batches of b == one step at batch k·b" — is FALSE by design:
     k micro-batches give k BatchNorm groups where one big batch gives one. That is Ghost-BN. But
-    R50 already has a render that computes exactly that: the DATA-PARALLEL one, whose replicas each
-    normalise over their own b rows. So `acc(x₁..x_k) == adamdp([x₁|..|x_k])` EXACTLY, and the two
-    sides reach it through a serial accumulator with a folded 1/k versus an `all_reduce` and a
-    divide — neither a re-derivation of the other.
+    R50's renderer draws a graph that computes exactly that: the DATA-PARALLEL step with PER-REPLICA
+    BatchNorm, each replica normalising over its own b rows. So `acc(x₁..x_k) == dp([x₁|..|x_k])`
+    EXACTLY, and the two sides reach it through a serial accumulator with a folded 1/k versus an
+    `all_reduce` and a divide — neither a re-derivation of the other. ⚠ Since 2026-09-21 the
+    committed DP renders are sync-BN, so that peer is rendered at run time (`noSync := true`).
 
     ⚠ It compares θ', m' AND v', unlike `shard-check` (which averages two separately-optimised
     steps and so can only compare the linear `m`). CONTROL: the duplicated batch — exactly what

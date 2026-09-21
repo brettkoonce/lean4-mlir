@@ -1,0 +1,47 @@
+I0921 14:56:57.134492  965010 service.cc:154] XLA service 0x733bd479c3c0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0921 14:56:57.134553  965010 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:56:57.134562  965010 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:56:57.134568  965010 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:56:57.134574  965010 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0921 14:56:57.137234  965010 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0921 14:56:57.137269  965010 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0921 14:56:57.137314  965010 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0921 14:56:57.137330  965010 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0921 14:56:57.137346  965010 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0921 14:56:57.147121  965010 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0921 14:56:59.857788  965058 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 16 bytes spill stores, 16 bytes spill loads
+
+I0921 14:57:00.161188  965071 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 16 bytes spill stores, 16 bytes spill loads
+
+I0921 14:57:00.488684  965084 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 44 bytes spill stores, 44 bytes spill loads
+
+I0921 14:57:00.579947  965053 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 104 bytes spill stores, 72 bytes spill loads
+
+I0921 14:57:00.661057  965070 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 832 bytes spill stores, 832 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet50in_acc4x64_train_step.mlir (@resnet50in_acc4x64_train_step, 755 outputs, 1 replica) in 14338 ms
+[pjrt_ffi] compiled .lake/build/resnet50in_adamdp64_nosync_train_step.mlir (@resnet50in_adamdp64_train_step, 592 outputs, 4 replicas) in 2463 ms
+§4's accumulation over DIFFERENT micro-batches — the identity r50-accum-tie is blind to
+  acc(x1..x4)  ==  DP([x1|..|x4])   (4 micro-batches of 64 vs 4 replicas x 64)
+  accumulation : verified_mlir/resnet50in_acc4x64_train_step.mlir
+  data-parallel: .lake/build/resnet50in_adamdp64_nosync_train_step.mlir  (per-replica BN, rendered at run time)
+  161 params (25557032 floats), lr 0.010000, backend xla
+  xla/pjrt verified_mlir/resnet50in_acc4x64_train_step.mlir
+  xla/pjrt .lake/build/resnet50in_adamdp64_nosync_train_step.mlir
+  accumulating 4 different micro-batches…
+  one 4-replica data-parallel step on their concatenation…
+I0921 14:57:17.646244  965044 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 14:57:17.646324  965047 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0921 14:57:17.646409  965050 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  ⟂ control: the same cycle on x1 repeated 4 times…
+
+  θ'  max abs Δ 0.000000  rel 0.000000   bit-exact 25549214/25557032
+  m'  max abs Δ 0.000000  rel 0.000001   bit-exact 25500961/25557032
+  v'  max abs Δ 0.000000  rel 0.000000   bit-exact 25553977/25557032
+  (θ' moved from θ by 0.007205 — the degeneracy guard)
+  ⟂ DUPLICATED-batch control  θ' rel 0.010236
+
+  ✅ CERTIFIED: 4 accumulated micro-batches ARE one 4-replica data-parallel step on their concatenation — θ' rel 0.000000, m' rel 0.000001, v' rel 0.000000 — reached by a serial accumulator with a folded 1/k on one side and a collective all_reduce on the other, against a duplicated-batch control that misses by 0.010236 (16699.735262x the tie).
+     Together with `r50-accum-tie` (the machinery) this closes both halves: the accumulate/apply switching AND the combination of genuinely different micro-batches.

@@ -22,6 +22,8 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG
+import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Training.TrainedLinearDescent
@@ -1403,6 +1405,76 @@ theorem chk_efficientnet_net_syncTiedG :
                                             Proofs.EnetSyncTieG.headSyncTiedG R hR N (7 : ℕ) (7 : ℕ) xN cotN vN epsStr dN
                                               w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW a16 gs g :=
   Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
+
+/-- `Proofs.StableHLO.resnet50FwdGraphSync_full_shard` -/
+theorem chk_resnet50FwdGraphSync_full_shard :
+    ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
+      (0 : ℕ) < N →
+        ∀ (q : ℕ),
+          (0 : ℕ) < q →
+            ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.R50BWeights nCls)
+              (e :
+                Fin R →
+                  Proofs.StableHLO.SHlo
+                    (N *
+                      ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
+                        ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))))
+              (X :
+                Proofs.Vec
+                  (R * N *
+                    ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
+                      ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))))))),
+              (∀ (r : Fin R),
+                  Proofs.StableHLO.den (e r) =
+                    Proofs.batchShard R N
+                      ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
+                        ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))
+                      X r) →
+                ∀ (r : Fin R),
+                  Proofs.StableHLO.den (Proofs.StableHLO.resnet50FwdGraphSync_full R hR N q epsStr w e r) =
+                    Proofs.batchShard R N nCls (Proofs.resnet50ForwardB_full (R * N) q w X) r :=
+  Proofs.StableHLO.resnet50FwdGraphSync_full_shard
+
+/-- `Proofs.ResNet50SyncTieB.r50_net_syncTiedB` -/
+theorem chk_r50_net_syncTiedB :
+    ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
+      (0 : ℕ) < N →
+        ∀ (q : ℕ),
+          (0 : ℕ) < q →
+            ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R50BWeights nCls)
+              (X :
+                Proofs.Vec
+                  (R * N *
+                    ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
+                      ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))))
+              (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
+              (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
+                Proofs.ResNet50SyncTieB.r50NetSyncTiedB R hR N q xN cotN vN epsStr w X G gs :=
+  Proofs.ResNet50SyncTieB.r50_net_syncTiedB
+
+/-- `Proofs.StableHLO.mnv4FwdGraphSync_full_shard` -/
+theorem chk_mnv4FwdGraphSync_full_shard :
+    ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
+      (0 : ℕ) < N →
+        ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.StableHLO.Mnv4BWeights nCls)
+          (e : Fin R → Proofs.StableHLO.SHlo (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+          (X : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
+          (∀ (r : Fin R), Proofs.StableHLO.den (e r) = Proofs.batchShard R N ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)) X r) →
+            ∀ (r : Fin R),
+              Proofs.StableHLO.den (Proofs.StableHLO.mnv4FwdGraphSync_full R hR N epsStr w e r) =
+                Proofs.batchShard R N nCls (Proofs.StableHLO.mobilenetv4ForwardB_full (R * N) w X) r :=
+  Proofs.StableHLO.mnv4FwdGraphSync_full_shard
+
+/-- `Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB` -/
+theorem chk_mnv4_net_syncTiedB :
+    ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
+      (0 : ℕ) < N →
+        ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.StableHLO.Mnv4BWeights nCls)
+          (X : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (G : Proofs.Vec (R * N * nCls))
+          (gs : Fin R → Proofs.Vec (N * nCls)),
+          (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
+            Proofs.MobileNetV4SyncTieB.mnv4NetSyncTiedB R hR N xN cotN vN epsStr w X G gs :=
+  Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB
 
 /-- `Proofs.adamW_at_allReduceMeanF` -/
 theorem chk_adamW_at_allReduceMeanF :

@@ -209,26 +209,32 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_adam_train_step.mlir"),
          # them. These are the artifacts the ImageNet accuracies come from, so this is where the
          # check is most load-bearing.
          #
-         # Each forward is paired with the DATA-PARALLEL variant wherever one matches, because
-         # that is the artifact the quoted number is trained by; `check_fwd_prefix` already pairs
-         # several of the same forwards with their single-device peers, and the two agreeing is
-         # the point rather than a duplication.
+         # ⛔ The BATCH-BN forwards pair with a SINGLE-DEVICE step, never a data-parallel one. Until
+         # 2026-09-21 they took the DP variant ("the artifact the quoted number is trained by"),
+         # which was right while DP BatchNorm was per-replica: the DP forward was the same text.
+         # Since `planning/global_bn_verified.md` §3.3–3.4 every BN net's DP render is SYNC-BN — its
+         # BN sites are `bnBatchMeanB → all_reduce → bnBatchVarAtB → … → bnSyncF`, not `bnBatchF` —
+         # so no DP train step has this forward as a text prefix, and MNv2's and B0's pairs sat red
+         # here from cad811ac until the R50/MNv4 swap found them. The DP forward is tied to this one
+         # by `*FwdGraphSync_full_shard` (each replica computes its shard of it at the global batch)
+         # and by `imagenet-syncbn-check`'s FORMULATION column, not by text. ConvNeXt's DP pairs
+         # below stay DP: LayerNorm, no collective in the forward.
          ("resnet34in_fwd.mlir",            "resnet34in_mom256_train_step.mlir"),
          ("resnet50in_fwd.mlir",            "resnet50in_mom256_train_step.mlir"),
-         ("resnet50in160_fwd.mlir",         "resnet50in160_lambaccdp8x64bce_train_step.mlir"),
-         ("mobilenetv2in_fwd.mlir",         "mobilenetv2in_rmsdp64_train_step.mlir"),
-         ("efficientnetin_fwd.mlir",        "efficientnetin_emarmsdp64_train_step.mlir"),
+         ("resnet50in160_fwd.mlir",         "resnet50in160_lambacc8x64bce_train_step.mlir"),
+         ("mobilenetv2in_fwd.mlir",         "mobilenetv2in_rms64_train_step.mlir"),
+         ("efficientnetin_fwd.mlir",        "efficientnetin_emarms64_train_step.mlir"),
          # ⚠ `efficientnetin_drop_fwd` has NO data-parallel peer to prefer — `emarms64drop` is the
          # only match — which is why the completeness check below caught it when this list was
          # first written from the DP artifacts alone.
          ("efficientnetin_drop_fwd.mlir",   "efficientnetin_emarms64drop_train_step.mlir"),
-         ("efficientnetin_dropdo_fwd.mlir", "efficientnetin_emarmsdp64dropdo_train_step.mlir"),
+         ("efficientnetin_dropdo_fwd.mlir", "efficientnetin_emarms64dropdo_train_step.mlir"),
          ("convnextin_fwd.mlir",            "convnextin_adamdp_train_step.mlir"),
          ("convnextin_drop_fwd.mlir",       "convnextin_adamdpwxclipdrop_train_step.mlir"),
          ("convnextsin_drop_fwd.mlir",      "convnextsin_adamdpwxclipdrop_train_step.mlir"),
          ("convnextbin_drop_fwd.mlir",      "convnextbin_adamdpwxclipdrop_train_step.mlir"),
          ("vitin_drop_fwd.mlir",            "vitin_adamwxclipdrop_train_step.mlir"),
-         ("mnv4in_fwd.mlir",                "mnv4in_adamdp64_train_step.mlir")]
+         ("mnv4in_fwd.mlir",                "mnv4in_adam64_train_step.mlir")]
 
 # ── the ImageNet forwards that are deliberately NOT paired, and why ──
 # ⭐ These are NOT splits. Each is a forward rendered at a (batch, drop) configuration for which no

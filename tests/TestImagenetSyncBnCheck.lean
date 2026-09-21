@@ -2,6 +2,8 @@ import LeanMlir.SyncBnCheck
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Proofs.Codegen.ResNet50RenderB
+import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
 /-! # `imagenet-syncbn-check` — synchronised BatchNorm at the ImageNet shape: 4×64 IS 1×256
 
@@ -10,7 +12,21 @@ import LeanMlir.Proofs.Codegen.EfficientNetRender
     PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check resnet34        # momdp64bf16
     PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check mobilenetv2     # rmsdp64bf16
     PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check efficientnet    # rmsdp64bf16
+    PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check resnet50        # momdp, 4×32 vs 1×128
+    PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check resnet50bce     # lambdp bce @160, 4×32
+    PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check mnv4            # adamdp64bf16
     LEAN_MLIR_MEM_FRACTION=0.97 PJRT_REPLICAS=4 … <net> f32               # the f32 peer
+
+⚠ The raised arena is for f32 only: in bf16 it crowded out the host-transfer staging on
+`resnet50bce` (`CUDA_ERROR_OUT_OF_MEMORY` on a d2h, not a compile) where the default runs clean.
+
+**ResNet-50 is gated at 4×32 against 1×128**, not at its committed 4×64: XLA's peak for the 1×256
+reference is 14.14 / 14.35 GiB (bf16 / f32), 94–95 % of even the raised arena. Its DP step is
+rendered at run time (`dpPath := ""`) by the same `resnet50TrainStepFaithfulB` that writes the
+committed `momdp64` / `lambdp64bce` bytes, and `regen_verified_mlir.sh check` pins those to it.
+`resnet50bce` is the LAMB + BCE-with-logits loss at 160² that the A3 renders take; the
+accumulating (`acc`) renders add an accumulator after the collective, which the runner cannot feed
+and the sync-BN identity does not involve.
 
 The Imagenette gates (`resnet34-syncbn-check`, `mobilenetv2-syncbn-check`,
 `efficientnet-syncbn-check`) run f32 at 2×32. The artifacts the ImageNet pairs train from are
@@ -42,6 +58,15 @@ convert, which the random-init backward then amplifies. Per net, bf16 vs f32:
     R34    0.70–1.0e-3 / 1.3e-4     0 / 0               1.27e-2      / 7.0–7.2e-4
     MNv2   4.3–5.2e-3  / 3.6–4.8e-4 0 / 0               1.62–1.70e-2 / 1.0e-3
     B0     2.5–3.1e-3  / 1.6–2.0e-4 1.4–2.0e-3 / 0      1.19–1.20e-2 / 6.8–7.0e-4
+    R50    6.7–8.6e-3  / 1.7–2.1e-3 0 / 0               2.05–2.07e-2 / 1.0e-3
+    R50bce 1.08–1.22e-2 / 2.2e-3    0 / 0               1.69–1.72e-2 / 1.0e-3
+    MNv4   6.9e-3–1.16e-2 / 1.2–1.3e-3  0 / 0           1.83–1.85e-2 / 1.2e-3
+
+⚠ The two deeper nets (53 and 77 BN layers) split at the size of their own forward's
+conditioning: the statistics SENSITIVITY column (the two-pass graph against itself on `x`
+perturbed by 1e-4) reads 1.4–1.6e-2 bf16 and 1.3–1.7e-3 f32 on R50 and MNv4, and TEST sits at or
+under it in every run. Their bounds are ≈ 2× that; the exchange itself is carried by the sharp
+columns, which are 0 on both.
 
 A sum-not-mean collective makes every all-reduced gradient `4g`, a relative error of 3 — 60×
 over the bf16 bound.
@@ -90,6 +115,45 @@ def imagenetCfg (net : String) (bf16 : Bool) : Option SyncBnCheck.Cfg :=
       gradLabel := "m' = g/√(s'+ε)", shardShift := 0.5
       -- B0 is the one net whose sync and two-pass graphs round apart in bf16 at the same batch
       statsTol := if bf16 then 6e-3 else 1e-3, formTol := if bf16 then 5e-3 else 1e-5, dupTol }
+  | "resnet50" => some
+    { slug := s!"resnet50in{p}", net := resnet50ImagenetVerified.toNet, bs := 32, replicas := 4
+      sgPath := "", dpPath := ""
+      render := fun B fs => resnet50TrainStepFaithfulB B 1000 "1.0e-05" 1 .heavyBall
+        "resnet50in" (bf16 := bf16) (forceSync := fs)
+      renderDp := fun B R => resnet50TrainStepFaithfulB B 1000 "1.0e-05" R .heavyBall
+        "resnet50in" (bf16 := bf16)
+      entry := fun B r =>
+        s!"m.resnet50in_{r34AdamVariant B r .heavyBall false false false "" bf16}_train_step"
+      gradSlot := 2, gradLabel := "v' = g + wd·θ", vZero := true, shardShift := 0.5
+      -- 53 layers: the split error is the forward's own conditioning at random init, not the
+      -- exchange — statistics TEST 6.7e-3 / 8.6e-3 bf16 and 1.7e-3 / 2.1e-3 f32 on two runs each,
+      -- against a SENSITIVITY-to-1e-4 of 1.4e-2 / 1.4e-3, variance error growing smoothly to
+      -- 1.6e-2 / 6.3e-3 by the last layer. Bounds ≈ 2× SENSITIVITY; CONTROL is 0.38.
+      statsTol := if bf16 then 3e-2 else 5e-3, dupTol }
+  | "resnet50bce" => some
+    { slug := s!"resnet50in160bce{p}", net := resnet50Imagenet160Verified.toNet, bs := 32
+      replicas := 4, sgPath := "", dpPath := ""
+      render := fun B fs => resnet50TrainStepFaithfulB B 1000 "1.0e-05" 1 .lamb
+        "resnet50in160" (bce := true) (q := 5) (bf16 := bf16) (forceSync := fs)
+      renderDp := fun B R => resnet50TrainStepFaithfulB B 1000 "1.0e-05" R .lamb
+        "resnet50in160" (bce := true) (q := 5) (bf16 := bf16)
+      entry := fun B r =>
+        s!"m.resnet50in160_{r34AdamVariant B r .lamb false false true "" bf16}_train_step"
+      shardShift := 0.5
+      -- resnet50's bounds: TEST 1.08 / 1.09 / 1.22e-2 bf16 and 2.2e-3 f32, SENSITIVITY 1.5e-2 / 1.7e-3
+      statsTol := if bf16 then 3e-2 else 5e-3, dupTol }
+  | "mnv4" => some
+    { slug := s!"mnv4in{p}", net := mnv4ImagenetVerified.toNet, bs := 64, replicas := 4
+      sgPath := ""
+      dpPath := s!"verified_mlir/mnv4in_adamdp64{p}_train_step.mlir"
+      render := fun B fs => mobilenetv4AdamTrainStepFaithfulB B 1000 "1.0e-5" 1 "mnv4in" bf16
+        (forceSync := fs)
+      entry := fun B r => s!"m.mnv4in_{mnv4AdamVariant B r bf16}_train_step"
+      shardShift := 0.5
+      -- 77 layers: statistics TEST 6.9e-3 / 1.16e-2 bf16 and 1.2e-3 / 1.3e-3 f32 on two runs
+      -- each, SENSITIVITY 1.6e-2 / 1.3e-3; per-layer variance error grows smoothly to 1.0e-2 /
+      -- 1.7e-3 and the first four layers are split-exact. Bounds ≈ 2× SENSITIVITY; CONTROL 0.076.
+      statsTol := if bf16 then 3e-2 else 3e-3, dupTol }
   | _ => none
 
 def main (args : List String) : IO Unit := do
@@ -98,5 +162,5 @@ def main (args : List String) : IO Unit := do
   match imagenetCfg net bf16 with
   | some cfg => SyncBnCheck.run cfg
   | none =>
-    IO.eprintln s!"unknown net '{net}': resnet34 | mobilenetv2 | efficientnet [f32]"
+    IO.eprintln s!"unknown net '{net}': resnet34 | mobilenetv2 | efficientnet | resnet50 | resnet50bce | mnv4 [f32]"
     IO.Process.exit 2

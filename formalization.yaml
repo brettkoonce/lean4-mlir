@@ -136,6 +136,14 @@ status:
     - {declaration: "Proofs.StableHLO.efficientnetFwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetSyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 213 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N (no drop-path or dropout)
     - {declaration: "Proofs.EnetSyncTieG.efficientnet_net_syncTiedG", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetSyncStepTieG.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # ResNet-50's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N, both resolutions
+    - {declaration: "Proofs.StableHLO.resnet50FwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # ...and its 161 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, for any cotangent sharded as R x the global one
+    - {declaration: "Proofs.ResNet50SyncTieB.r50_net_syncTiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # MobileNetV4's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
+    - {declaration: "Proofs.StableHLO.mnv4FwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # ...and its 233 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, for any cotangent sharded as R x the global one
+    - {declaration: "Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the collective as an AST node: den (adamW tail (allReduceMeanF R g)) = adamWStep at the replica mean
     - {declaration: "Proofs.adamW_at_allReduceMeanF", file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
