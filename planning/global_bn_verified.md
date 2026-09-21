@@ -11,55 +11,120 @@ gating the work.
 
 ---
 
-## ▶ NEXT SESSION — start here (updated 2026-09-21, late)
+## ▶ NEXT SESSION — start here (written 2026-09-21, end of day)
 
-**State.** §3.1, §3.2 (ResNet-34) and §3.3 (MobileNetV2, EfficientNet-B0) are DONE, proofs
-included — §3.3's work uncommitted as of this write. Before that: Committed on `main` (four
-commits, `2a39842f`…`95fc72d0`, not yet pushed as of 2026-09-21): the sync-BN kit (eight `SHlo`
-ops, two-round Chan exchange), P1–P4 (`Foundation/DataParallelSync.lean`, `DataParallel.lean`),
-ResNet-34's DP render swapped to sync-BN under `replicas > 1`, and `resnet34-syncbn-check`
-passing on two GPUs. Then, uncommitted as of this write: the R34 DP twins of T2 and T3
-(`Nets/ResNet/ResNet34SyncB.lean`, `ResNet34SyncStepTieB.lean` — §3.2's table), with the DP render
-header now naming them (five `*dp*` artifacts, header comment only). Read §2b's ⛔⛔ and §3.2's
-gate table before touching numerics — the one-round `E[x²]` exchange was measured wrong and
-replaced; the gate's columns are how the kit is now read.
+**State.** §3.1, §3.2 and §3.3 are DONE — ResNet-34, MobileNetV2 and EfficientNet-B0 each have a
+sync-BN DP render, a passing `<net>-syncbn-check`, and both proof twins (forward:
+`*FwdGraphSync_full_shard`; whole step: `r34_net_syncTiedB`, `mnv2_net_syncTiedB`,
+`efficientnet_net_syncTiedG` — every all-reduced gradient IS the single-device node at batch
+`R·N`). All of it is committed on `main` but ⚠ **NOT PUSHED**: six commits, `2a39842f` (the §1
+BN-group probe) … `cad811ac` (§3.3). Push is the user's call; nothing was pushed this session.
+Read §2b's ⛔⛔, §3.2's gate table and §3.3's before touching numerics.
 
-**Run the gate** (2 GPUs, XLA; ~30 s):
+**Then, uncommitted as of this write (2026-09-21, later):** the ImageNet-shape probe, §3.3b —
+`imagenet-syncbn-check` runs the artifacts the pairs train from (4×64, bf16) against a 1×256
+single-device step, and passes on all three nets in both precisions. The shared runner gained a
+replica count, shifted shards, a REPEAT column and per-precision bounds.
 
-    lake build resnet34-syncbn-check
+**Where things live.**
+
+| what | file |
+|---|---|
+| the eight sync-BN ops + `R = 1` anchors | `Codegen/StableHLO.lean` |
+| P1–P4 on the graph, `syncStats` | `Foundation/DataParallelSync.lean` |
+| the three emit sites every renderer shares | `Codegen/SyncBnSites.lean` |
+| gate runner (one `Cfg` per net) | `LeanMlir/SyncBnCheck.lean`; entries `tests/Test{Mnv2,Enet}SyncBnCheck.lean` (R34's own: `tests/TestR34SyncBnCheck.lean`) |
+| the ImageNet-shape gate (4×64, bf16 / f32) | `tests/TestImagenetSyncBnCheck.lean` (`imagenet-syncbn-check <net> [f32]`) |
+| twins | `Nets/ResNet/ResNet34Sync{B,StepTieB}.lean`, `Nets/MobileNet/MobileNetV2Sync{B,StepTieB}.lean`, `Nets/EfficientNet/EfficientNetSync{B,StepTieG}.lean` |
+
+**Run the gates** (2 GPUs, XLA; ~30–45 s each; each prints its column table):
+
+    lake build resnet34-syncbn-check mobilenetv2-syncbn-check efficientnet-syncbn-check \
+      mobilenetv2-dp-check efficientnet-dp-check
     unset HIP_VISIBLE_DEVICES
-    CUDA_VISIBLE_DEVICES=0,1 PJRT_REPLICAS=2 \
-      PJRT_PLUGIN=$PWD/.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so \
-      .lake/build/bin/resnet34-syncbn-check          # SYNCBN_VERBOSE=1 for per-parameter rows
+    export CUDA_VISIBLE_DEVICES=0,1 PJRT_REPLICAS=2 \
+      PJRT_PLUGIN=$PWD/.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so
+    .lake/build/bin/mobilenetv2-syncbn-check    # SYNCBN_VERBOSE=1: per-BN-layer split table
+
+The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA compiles):
+
+    lake build imagenet-syncbn-check
+    export CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4
+    .lake/build/bin/imagenet-syncbn-check resnet34            # mobilenetv2 | efficientnet
+    LEAN_MLIR_MEM_FRACTION=0.97 .lake/build/bin/imagenet-syncbn-check resnet34 f32
 
 **What is next, in order.**
 
-1. **§3.4 ResNet-50 / MobileNetV4** on §3.3's pattern: the renderer calls the shared sites in
-   `Codegen/SyncBnSites.lean`; a `<net>-syncbn-check` is one `SyncBnCheck.Cfg`
-   (`LeanMlir/SyncBnCheck.lean`); the twins follow `ResNet34Sync*` / `MobileNetV2Sync*`. First
-   dedupe the generic lemmas the MNv2 and B0 twins each carry (§3.3's ⚠). ⚠ Check each net's
-   split error per layer (`SYNCBN_VERBOSE=1`) before trusting a whole-net bound: MobileNetV2's
-   depth already needed 3e-3.
-2. **§3.5 re-runs**, then the book rows (`content.tex:5671`, `:7059`, `:8266` — `BN statistic
+1. ✅ **The bf16 / 4-replica probe** — §3.3b. Passes on R34 `momdp64bf16`, MNv2 `rmsdp64bf16`,
+   B0 `rmsdp64bf16` and their f32 peers. Not yet covered: B0's `emarmsdp64dropdobf16` (EMA +
+   host-fed drop masks, which the runner cannot feed) and MNv2's `adamdp64bf16`.
+2. **Dedupe the generic lemmas** the MNv2 and B0 step twins each carry, in different namespaces
+   (`hasVJP3_backward_smul`, `depthwiseWeightGradB_smul`, `convStridedXlaWeightGradB_smul`, the
+   `dInB` / `gapInB` / `rowDenseBackFlat` `_smul` / `_shard`), into one shared module beside
+   `ResNet34SyncStepTieB` — before §3.4 adds a third copy.
+3. **§3.4 ResNet-50 / MobileNetV4** on §3.3's pattern: the renderer calls `SyncBnSites`; the gate
+   is one `SyncBnCheck.Cfg`; the twins follow `MobileNetV2Sync*` (MNv4) / `ResNet34Sync*` (R50,
+   bottleneck blocks). Two parallel subagents wrote §3.3's twins from the R34 template in 20–30
+   min each; that worked — brief them with the template files, "create only new files, no
+   `lake build Certs`", and the hazards below.
+4. **§3.5 re-runs**, then the book rows (`content.tex:5671`, `:7059`, `:8266` — `BN statistic
    group … 64 (per replica)`, and the two `[TODO: global BN.]`). ⚠ Until a re-run, the committed
    pair numbers were produced by the OLD per-replica renders; the rows stay as they are.
+5. Optional: extend the twins to the bf16 conv nodes. Not a regression — the single-device ties
+   never covered bf16 either — and the argument carries (bf16 rounding is per element, so it
+   commutes with sharding). The bf16 DP headers say the theorems are stated at the f32 nodes.
+   Likewise B0's `*drop*` / `*do*` DP artifacts (drop-path / dropout masks) are outside B0's twin.
 
-**Gotchas that cost time this session.**
-* Editing `StableHLO.lean` is a 6-minute rebuild plus the corpus; batch every op change.
+**Gate policy decided this session (2026-09-21, approved).**
+* MobileNetV2's split-batch bound is 3e-3, not R34's 1e-3 — XLA's GPU reductions are not
+  bit-deterministic (0.97 / 1.05 / 1.14 / 1.49e-3 on the same seeds) and the per-layer table shows
+  depth-compounded rounding (first six layers split-exact). Every net also carries a first-BN-layer
+  criterion (≤ 1e-5). A new net sets its own bound beside its `Cfg`, with its per-layer evidence.
+* `mobilenetv2-dp-check` / `efficientnet-dp-check` gradient bound 1e-4 → 1e-2: their DP backward
+  is the sync-BN graph and the single-device artifact's is the two-pass graph (~1.1e-3 on `m`);
+  forward still bit-exact. `mnv4-dp-check` will need the same when §3.4 swaps MNv4; R50 has no
+  dp-check (nor had R34).
+* The DUPLICATED criterion on the gradient is its slot's **norm-rel** (the `*-dp-check` metric),
+  not the regions' max-abs: one squared entry of RMSProp's `v'` moved the max-abs 4× between runs
+  (1.5e-2 → 5.7e-2) while the norm-rel held at 1.6–1.7e-2. f32 reads 6.8e-4 – 1.0e-3 on every gate,
+  so the 5e-3 default stands; a sum-not-mean divisor reads `R − 1`.
+* bf16 bounds, PROPOSED 2026-09-21 — not yet approved (§3.3b's table): DUPLICATED gradient 5e-2; statistics TEST
+  3e-3 / 1e-2 / 6e-3 (R34 / MNv2 / B0); B0's FORMULATION 5e-3. The sharp criteria — first-layer
+  split and DUPLICATED statistics — stay at 1e-5 in every precision and read 0.
+
+**Gotchas that cost time.**
+* Editing `StableHLO.lean` is a 6-minute rebuild plus the corpus; `PerChannelBN.lean` rebuilds
+  ~290 modules — batch changes to either.
 * `simp` cannot rewrite inside `conv2d_weight_grad_has_vjp b x` (dependent position) — `rw`.
-* `intro m2 h` inside a proof shadows the spatial `h`; name hypotheses `hm2`.
 * Plain `simp` turns `Fin.natAdd` into `Fin.addNat` before `Fin.append_right` can fire — `simp only`.
-* The REORDER probe (swap the two batch halves) is exactly commutative and measures nothing;
-  the SENSITIVITY probe (perturb `x` by 1e-4) is the yardstick for any gradient comparison at a
-  random-init operating point — there, no two f32 implementations agree on `m'` better than ~1e-2.
-* XLA rounds a 32-row and a 64-row reduction differently (~1e-6/layer); 36 layers compound that
-  to ~2e-4 in the statistics. That is the floor of the split identity, and it is not the render.
-* ⭐ The twins compile in ~3 s each: every block lemma is at VARIABLE shapes and the whole-net
-  proofs are `have`-chains of block lemmas, so no numeral ever reaches the kernel as a defeq
-  problem. Keep MNv2/B0's twins on that shape.
-* A new `lean_exe` needs nothing but the `lakefile.lean` entry (`check_target_names.sh` lints
-  references, `check_audit_coverage.py` the audit's imports); a new Foundation module needs the
-  `Certs` root and the `AuditAxioms` import.
+* ⭐ Twins compile in 2–4 s: block lemmas at VARIABLE shapes, whole-net proofs as `have`-chains,
+  each block's input passed explicitly (unification cannot recover it). Keep that shape.
+* The index seam (conv chain `N·(c·h·w)` vs BN ops `N·(c·(h·w))`): typed graphs use `castIdx`
+  (`h ▸ e`, `den_castIdx` by `subst`), ℝ-level chains use `.operand` leaves at `reassocB`;
+  `batchShard_castIdx` commutes either with sharding.
+* The per-layer statistics MEAN column shows huge relative errors on every expand-BN input: a
+  bias-free 1×1 conv of a β = 0 BN output has batch mean exactly 0 at init — noise over noise.
+* A shared helper module cannot live under `tests/` (not a lean_lib — "object file … does not
+  exist"); put it under `LeanMlir/`.
+* B0's loss divisor is a STRING argument (`bStr`); a run-time render at batch `B` passes `"{B}.0"`.
+* The REORDER probe (swap batch halves) is exactly commutative and measures nothing; SENSITIVITY
+  (perturb `x` by 1e-4) is the yardstick for gradient columns at a random-init operating point.
+* A `formalization.yaml` row naming `config-tier.json` must also go in
+  `scripts/gen_comparator_tier.py`'s `DECLS` (+ `MODULES`), then regenerate — CI's `--check`
+  fails otherwise (it was red at `95fc72d0`; fixed in `d19009e5`). 30 theorems in the tier now.
+* The docstring gate rejects bare backticked `dir/File.lean` paths in `LeanMlir/` docstrings —
+  write a markdown link to the GitHub path.
+* f32 R34 at batch 256 OOMs the default 11.68 GiB arena (`d2h: Out of memory … 8.54GiB`);
+  `LEAN_MLIR_MEM_FRACTION=0.97` fits it. bf16 at 256 peaks 5.8–6.7 GiB on all three nets
+  (`scripts/bf16_peak_memory.py`), so bf16 stays at the default.
+* ⚠ `XLA_FLAGS=--xla_gpu_autotune_level=0` changed neither a number nor a compile time (51.6 s vs
+  51.7 s) — the PJRT plugin appears not to read `XLA_FLAGS`. Don't cite a run under it as
+  "autotuning off".
+* Full gate list for a commit here: `lake build Certs`, `lake build`, `lake build Apps`,
+  `lake env lean tests/AuditAxioms.lean` (verdicts = directives, no `sorryAx`),
+  `lake exe docstring-checkrefs`, `scripts/regen_verified_mlir.sh check`,
+  `scripts/check_audit_coverage.py`, `scripts/check_target_names.sh`,
+  `scripts/gen_comparator_tier.py --check`, `tests/comparator/run.sh` (~6 min), and the GPU gates.
 
 ---
 
@@ -99,10 +164,13 @@ per-device statistics — it is what global semantics look like under GSPMD.** H
 | ResNet-34 | BN, per-replica 64 | global 256 | yes | ✅ `BN statistic group` row, §5 |
 | ResNet-50 | BN, per-replica 64 | global 512 | yes | ✅ `BN group` column; called "the largest known difference between the two paths, and *untested*" |
 | MobileNetV2 | BN, per-replica 64 | global 256 | yes | ✅ §6, 2026-09-12 |
-| MobileNetV4 | BN, per-replica | global | yes | ▶ not run yet — will need the row |
-| EfficientNet-B0 | BN, per-replica | global | yes | ▶ not run yet — BN-dense, needs it most |
+| MobileNetV4 | BN, per-replica | global | yes | ▶ no verified pair run yet — §3.4 lands first |
+| EfficientNet-B0 | BN, per-replica 64 | global 256 | yes | ✅ `BN statistic group` row, §7 (`content.tex:8266`) |
 | ConvNeXt-T | LayerNorm, no `bnBatchF` | no batch stats | **no** | n/a |
 | ViT-Ti | LayerNorm, no `bnBatchF` | no batch stats | **no** | n/a |
+
+The render column is what produced the committed pair numbers. Since §3.2 / §3.3 the R34, MNv2
+and B0 DP renders normalise globally; their rows stand until §3.5 re-runs them.
 
 ⚠ LayerNorm normalizes per example over channels, so it is replica-invariant by construction.
 ConvNeXt and ViT are the only two nets whose pair isolates the lowerer, and that is *why*.
@@ -724,11 +792,69 @@ outside the statement — the same holds for MobileNetV2's and R34's bf16 DP art
 `rowDenseBackFlat` `_smul`/`_shard`), in different namespaces — lift them to one shared module
 before §3.4 adds a third copy.
 
+### 3.3b The ImageNet-shape probe — 4×64, bf16
+
+✅ **LANDED 2026-09-21 (uncommitted as of this write).** `imagenet-syncbn-check <net> [f32]`
+(`tests/TestImagenetSyncBnCheck.lean`) runs the shared runner on the DP artifact each book pair
+trained from — R34 `resnet34in_momdp64bf16`, MNv2 `mobilenetv2in_rmsdp64bf16` — and B0's
+`efficientnetin_rmsdp64bf16` (the pair's `emarmsdp64dropdobf16` adds EMA and host-fed masks, the
+scope the twin leaves out too), against a 1×256 single-device step rendered at run time.
+
+What the runner gained, all defaulted so the Imagenette gates' inputs and verdicts are unchanged
+(re-run twice: B0 2.6–3.4e-4, MNv2 9.8–9.9e-4 on the statistics — last session 3.4–3.7e-4 and
+0.97–1.49e-3):
+
+* `replicas` — `R` shards, seeds `555 + 444·k`, labels offset `5·k` (so `R = 2` is the old xA/xB).
+* `gradSlot` / `gradLabel` / `vZero` — heavy-ball keeps its velocity in `v` and passes `m`
+  through, so R34's gradient column is `v' = g + wd·θ` with `v = 0` in.
+* ⭐ `shardShift` — shard `k`'s pixels shifted by `0.5·k`. With iid shards the probe was weak at
+  224²: R34's CONTROL was 2.7e-3 against a TEST of 1.0e-3, and Chan's `(μ_r − μ)²` term was
+  ~1e-6, so a render that dropped it would have passed. Shifted, CONTROL is 0.72 / 0.074 / 0.40
+  and the first BN layer is split-exact.
+* REPEAT — the `Rb` graph run twice on the same input. 0 everywhere: one program is
+  deterministic run to run.
+* `formTol`, `dupTol` per config.
+
+| net | prec | stats TEST | FORMULATION stats | DUPLICATED stats | CONTROL | DUP gradient norm-rel | FORMULATION gradient |
+|---|---|---|---|---|---|---|---|
+| R34 | f32 | 1.3e-4 | 0 | 0 | 0.72 | 7.0–7.2e-4 | 2.2e-4 |
+| R34 | bf16 | 0.70–1.0e-3 | 0 | 0 | 0.72 | 1.27e-2 | 1.2–1.3e-2 |
+| MNv2 | f32 | 3.6–4.8e-4 | 0 | 0 | 0.074 | 1.0e-3 | 6.4e-4 |
+| MNv2 | bf16 | 4.3–5.2e-3 | 0 | 0 | 0.074 | 1.62–1.70e-2 | 1.4–1.9e-2 |
+| B0 | f32 | 1.6–2.0e-4 | 0 | 0 | 0.40 | 6.8–7.0e-4 | 1.4e-3 |
+| B0 | bf16 | 2.5–3.1e-3 | 1.4–2.0e-3 | 0 | 0.40 | 1.19–1.20e-2 | 7–9e-2 |
+
+**Reading it.** The exchange is right at four replicas in both precisions: DUPLICATED statistics
+are 0 (the collective composes exactly), the first BN layer is split-exact with O(1) Chan terms,
+and TEST sits 14× (MNv2 bf16, the tightest) to 5,500× (R34 f32) under CONTROL. f32 passes at the
+Imagenette bounds unchanged. **What bf16 moves is every comparison between two compiled
+programs**, and FORMULATION measures that floor with no collective in either graph — one
+function, one shape: gradient 1.2e-2 – 9e-2 in bf16 against 2.2e-4 – 1.4e-3 in f32. REPEAT = 0
+puts the floor between programs, not between runs. Consistent with an f32 last-bit difference
+becoming a bf16-ulp difference at the next f32→bf16 convert, then amplified by a random-init
+backward whose SENSITIVITY (1e-4 input noise) moves the gradient by 0.4–0.8. Not isolated
+further; the claim the gate needs is only that it is not the exchange, and the two sharp columns
+settle that. bf16 also starts compounding earlier: MNv2's and B0's second BN layer already
+splits at 1–4e-5, where f32 is exact through the first several.
+
+▶ For §3.5 this says a bf16 re-run trains on the global-batch function to within bf16's own
+rounding — the same rounding every bf16 single-device run has.
+
 ### 3.4 ResNet-50, MobileNetV4
 
 R50: 14 sites, DP twins, gate. MNv4: 1 emit site (its renderer threads BN through one
 function), the largest twins (924 + 658), and no pair run yet — land this **before** its first
 pair so the chapter never needs the caveat row.
+
+* **Gates.** Each net gets one `SyncBnCheck.Cfg`, with its own bound set from its
+  `SYNCBN_VERBOSE=1` per-layer table. `mnv4-dp-check` exists and will need the 1e-4 → 1e-2
+  gradient bound MNv2/B0's took; R50 has no dp-check.
+* ⚠ **R50's accumulation artifacts sync per micro-step.** Under accumulation the reference's own
+  group is its micro-batch, not the step: A3 accumulates 4 × 512 to 2048 and normalises per 512
+  (`content.tex:5826`). Sync-BN gives the `*accdp*` renders `R × micro`: 4 × 64 = 256 at A3's
+  `lambaccdp8x64…` (half the reference's group), 4 × 128 = 512 at the A2/A1 `…accdp4x128…`
+  renders (equal). The twin's statement is per micro-step; say so in those headers, and give the
+  book's `BN group` row (`:5935`, `:6089`) the `R × micro` number.
 
 ### 3.5 Re-running the pairs
 

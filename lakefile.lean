@@ -1703,6 +1703,13 @@ lean_exe «efficientnet-syncbn-check» where
   root := `tests.TestEnetSyncBnCheck
   moreLinkArgs := lowererLink
 
+/-- `imagenet-syncbn-check <resnet34|mobilenetv2|efficientnet> [f32]` — the same runner on the
+    artifacts the ImageNet pairs train from: the committed 4×64 bf16 sync-BN DP step against a
+    1×256 single-device step rendered at run time. Four GPUs, XLA. -/
+lean_exe «imagenet-syncbn-check» where
+  root := `tests.TestImagenetSyncBnCheck
+  moreLinkArgs := lowererLink
+
 /-- `argmax-check` — the class-count gate on `F32.argmaxN`, the eval scorer every trainer here
     reads its top-1 through. Needs no GPU and no backend: pure host arithmetic on a synthetic
     logit block, so it can run anywhere and costs nothing.
