@@ -41,7 +41,9 @@ hypothesis anywhere), and the SE gate's fan-in folded into the block VJPs. ⛔ O
 `efficientnetin_emarmsdp64dropdo` every gradient node feeds `allReduceMeanF` — the collective as an
 AST node since 4d piece 2 (2026-09-07), until then emitted text and a declared carve-out. Every
 statement here is at the per-replica node; `DataParallelNode.lean` composes it with the replica
-mean and the tail (`adamW_at_allReduceMeanF`).
+mean and the tail (`adamW_at_allReduceMeanF`). For the sync-BN data-parallel render (2026-09-21)
+`EfficientNetSyncStepTieG.lean` is the whole step: its `efficientnet_net_syncTiedG` says each
+all-reduced gradient IS this file's node at `N := R·N` (without drop-path and dropout).
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

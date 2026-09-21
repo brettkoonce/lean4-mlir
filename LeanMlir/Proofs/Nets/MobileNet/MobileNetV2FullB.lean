@@ -62,9 +62,11 @@ conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMap_has_vj
 1000-class `mobilenetv2in` ones.
 
 ⚠ `N` stays a variable throughout. T1 and T2 carry no numerals, so the batch size does not need
-pinning here; it is pinned only where a `Maps` envelope turns a width into a rational (T4/T5), and
-the artifacts' `N` is the PER-REPLICA batch (64 on the data-parallel runs) because the collectives
-average gradients and no BatchNorm statistic is all-reduced.
+pinning here; it is pinned only where a `Maps` envelope turns a width into a rational (T4/T5).
+On the data-parallel artifacts the render's `N` is the PER-REPLICA batch (64); since 2026-09-21
+their BatchNorm is synchronised, and `MobileNetV2SyncB.lean` is this file's twin for them: replica
+`r`'s forward graph denotes shard `r` of `mobilenetv2ForwardB_full (R * N)`, this file's forward at
+the global batch.
 
 ⚠ **The bias operand names are the render's DEFAULT `convBias := false` ones** — `%zb{c}`, the
 shared zero constant each conv, depthwise and project bias is bound to once its real bias has been

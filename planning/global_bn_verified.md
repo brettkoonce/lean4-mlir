@@ -13,7 +13,8 @@ gating the work.
 
 ## ▶ NEXT SESSION — start here (updated 2026-09-21, late)
 
-**State.** §3.1 and §3.2 are DONE for ResNet-34, proofs included. Committed on `main` (four
+**State.** §3.1, §3.2 (ResNet-34) and §3.3 (MobileNetV2, EfficientNet-B0) are DONE, proofs
+included — §3.3's work uncommitted as of this write. Before that: Committed on `main` (four
 commits, `2a39842f`…`95fc72d0`, not yet pushed as of 2026-09-21): the sync-BN kit (eight `SHlo`
 ops, two-round Chan exchange), P1–P4 (`Foundation/DataParallelSync.lean`, `DataParallel.lean`),
 ResNet-34's DP render swapped to sync-BN under `replicas > 1`, and `resnet34-syncbn-check`
@@ -33,15 +34,12 @@ replaced; the gate's columns are how the kit is now read.
 
 **What is next, in order.**
 
-1. **§3.3 MobileNetV2 and EfficientNet-B0, §3.4 ResNet-50 / MobileNetV4** — the same three
-   helpers per renderer (`bnFwdSite`/`bnBackSite`/`bnGammaSite` are `private` in
-   `ResNet34RenderB.lean`; lift them to `StableHLO.lean` or a shared codegen module first rather
-   than copying), plus a `<net>-syncbn-check` each (the R34 harness parameterised by net, as
-   `shard-check` is), plus the two twins per net on §3.2's template. ⚠ MNv2/B0 have
-   `bnBatchLABack` sites too — check which BN backward each renderer uses before assuming the
-   R34 pattern. ⚠ MNv2's activation is relu6, B0's swish: `den_relu_shard` has no peer yet
-   (pointwise, so `rfl` after the `reluF`-style rewrite), and the B0 SE block's `seReduceB` is
-   per-example (`batchMapAux`), so it shards like the pool.
+1. **§3.4 ResNet-50 / MobileNetV4** on §3.3's pattern: the renderer calls the shared sites in
+   `Codegen/SyncBnSites.lean`; a `<net>-syncbn-check` is one `SyncBnCheck.Cfg`
+   (`LeanMlir/SyncBnCheck.lean`); the twins follow `ResNet34Sync*` / `MobileNetV2Sync*`. First
+   dedupe the generic lemmas the MNv2 and B0 twins each carry (§3.3's ⚠). ⚠ Check each net's
+   split error per layer (`SYNCBN_VERBOSE=1`) before trusting a whole-net bound: MobileNetV2's
+   depth already needed 3e-3.
 2. **§3.5 re-runs**, then the book rows (`content.tex:5671`, `:7059`, `:8266` — `BN statistic
    group … 64 (per replica)`, and the two `[TODO: global BN.]`). ⚠ Until a re-run, the committed
    pair numbers were produced by the OLD per-replica renders; the rows stay as they are.
@@ -660,10 +658,71 @@ emitted MLIR.
 
 ### 3.3 MobileNetV2, then EfficientNet-B0
 
-The two BN-dense nets with a pair already in the book (§6, §7). 14 and 5 emit sites
-(`MobileNetV2RenderB.lean`, `EfficientNetRender.lean`); DP twins; gates as 3.2. B0's
-`efficientnet-dp-check` already checks 98 handed-back statistics bit-exact under a duplicated
-batch — its sync twin checks them under a split batch.
+The two BN-dense nets with a pair already in the book (§6, §7).
+
+✅ **LANDED 2026-09-21 — render, gates and proofs, both nets.**
+
+* **The three sites are shared now.** `bnFwdSite` / `bnBackSite` / `bnGammaSite` moved out of
+  `ResNet34RenderB.lean` into `Codegen/SyncBnSites.lean` (taking `hh` and `ww` separately); R34
+  re-renders byte-identical. MobileNetV2: 13 forward, 10 backward, 10 γ sites through them, the
+  packed statistics threaded on `MBFwdB` / `MNV2FwdRecB`. B0: its mode-switched `bnSiteB` calls
+  `bnFwdSite` at `.train` (`.eval` untouched), `bnG` calls `bnGammaSite` on the un-fused path, and
+  a `bnSt` list rides beside `bns` so the handed-back statistics read the right packed vector.
+  Tags are the γ parameter's name without `%` (`b{k}eg`, `sg`, `hg`, …). Only the `*dp*`
+  artifacts moved — 6 MobileNetV2, 10 B0 (all_reduces: MNv2 158 → 314 = 158 + 52 × 3; B0
+  213 → 360 = 213 + 49 × 3); every single-device and eval artifact is byte-identical. The DP
+  headers state the step identity and name the theorems; the bf16 DP artifacts (R34 `momdp64bf16`
+  included) add that the theorems are stated at the f32 nodes.
+* **Gates.** `mobilenetv2-syncbn-check` / `efficientnet-syncbn-check`, one shared runner
+  (`LeanMlir/SyncBnCheck.lean`, R34's columns; the `2b` single-device step and both one-replica
+  sync graphs rendered at run time — ⚠ B0's loss divisor is a string, passed as `"{B}.0"`):
+
+  | net | stats FORMULATION | stats DUPLICATED | stats TEST (split) | stats CONTROL | m' TEST / SENSITIVITY |
+  |---|---|---|---|---|---|
+  | ResNet-34 | 0 | 0 | 1.7e-4 | 3.4e-3 | 0.15 / 0.22 |
+  | MobileNetV2 | 0 | 0 | 1.0–1.5e-3 | 1.7e-2 | 0.24 / 0.27 |
+  | EfficientNet-B0 | 0 | 0 | 3.4–3.7e-4 | 8.8e-3 | 6.3e-3 / 1.1e-2 |
+
+  ⚠ **MobileNetV2's split error sits at R34's 1e-3 bound**, and XLA's GPU reductions are not
+  bit-deterministic (the same seeds gave 0.97e-3, 1.05e-3, 1.14e-3, 1.49e-3 on four runs). The
+  per-layer table (`SYNCBN_VERBOSE=1`) says it is rounding compounding with depth: the first six
+  BN layers are split-EXACT, and the variance error grows smoothly to 1.4e-3 at the 52nd layer.
+  (The per-layer MEAN column shows relative errors up to ~37 on every expand-BN input — noise over
+  noise: a bias-free 1×1 conv of a β = 0 BatchNorm output has batch mean exactly 0 at init.) So
+  MobileNetV2's bound is 3e-3, written beside its config with that evidence, and every net now also
+  has a FIRST-LAYER criterion (split error ≤ 1e-5 on the first BN layer's statistics, measured 0
+  on both) — the place a wrong exchange would show at full size before any depth compounds.
+* ⚠ **`mobilenetv2-dp-check` / `efficientnet-dp-check` needed their gradient bound moved 1e-4 →
+  1e-2.** They compare the DP step on a DUPLICATED batch with the committed single-device step.
+  The forward is still bit-exact (all 104 / 98 statistics), but the DP render's backward is now the
+  sync-BN graph and the single-device one the two-pass graph — one function, two f32
+  arithmetics — and `m` differs by ~1.1e-3 norm-rel even there (measured; against the one-replica
+  SYNC graph it is still ~1e-3, so re-pointing the reference would not have saved 1e-4). A wrong
+  collective (sum, not mean) still moves `m` by ~1. Both pass at 8.4–8.6e-4.
+
+▶ **Proofs.** MobileNetV2 LANDED: `Nets/MobileNet/MobileNetV2SyncB.lean`
+(`StableHLO.mobilenetv2FwdGraphSync_full_shard`) and `MobileNetV2SyncStepTieB.lean`
+(`MobileNetV2SyncTieB.mnv2_net_syncTiedB` — all 158 emitted gradients; the 52 conv / depthwise /
+project biases are not emitted at `convBias := false`). New pieces beyond R34's: relu6 shard +
+mask homogeneity, depthwise and XLA-strided-depthwise input-VJPs, the three XLA-strided / depthwise
+weight collectives, and `hasVJP3_backward_smul`. Both elaborate in ~3–4 s.
+
+EfficientNet-B0 LANDED: `Nets/EfficientNet/EfficientNetSyncB.lean`
+(`StableHLO.efficientnetFwdGraphSync_full_shard`) and `EfficientNetSyncStepTieG.lean`
+(`EnetSyncTieG.efficientnet_net_syncTiedG` — all 213 emitted gradients; the 49 conv-bias
+conjuncts of `efficientnet_net_tiedG` are not emitted at `convBias := false`). It carries that
+tie's 50 `0 < ε` hypotheses, because B0's single-device chain threads each block's cotangent as
+a certified VJP's `.backward`: the twin adds `xCotIn`/`rCotIn`/`sCotIn`/`nCotIn`/`hdCotIn_eq_vjp`
+(the explicit chain IS the block VJP, by `HasVJP.backward_unique`) and `bnSyncInB_shard_bnBackB`.
+⚠ **Scope, stated in each DP header:** the step twin is stated without drop-path and dropout and
+at the f32 nodes, so it covers `efficientnet_adamdp`, `adamdp128`, `efficientnetin_adamdp64`,
+`rmsdp64`, `emarmsdp64` exactly (EMA and the optimizers run after the all-reduced gradient); the
+`*drop*` / `*do*` variants add per-example masks and the `*bf16` ones bf16 conv twins, both
+outside the statement — the same holds for MobileNetV2's and R34's bf16 DP artifacts.
+⚠ **Duplicate generic lemmas** between the two twins (`hasVJP3_backward_smul`,
+`depthwiseWeightGradB_smul`, `convStridedXlaWeightGradB_smul`, the `dInB`/`gapInB`/
+`rowDenseBackFlat` `_smul`/`_shard`), in different namespaces — lift them to one shared module
+before §3.4 adds a third copy.
 
 ### 3.4 ResNet-50, MobileNetV4
 
@@ -693,6 +752,7 @@ plan, and it goes when the render lands.
 * ✅ The eight ops in the AST with `den`, emit, parser round-trip; P1, P2, P3's kit, P4 proved
   (2026-09-21). ✅ R34's DP render is sync-BN and `resnet34-syncbn-check` passes (2026-09-21).
   ✅ R34's DP twins: forward and whole step tied to the existing spec at `N := R·N` (2026-09-21).
+  ✅ MobileNetV2 and EfficientNet-B0: sync-BN DP renders, `*-syncbn-check` gates, both twins (2026-09-21).
 * Every BN net's DP render normalises over the global batch; its DP twin ties it to the existing
   spec at `N := R·N`; its `syncbn-check` passes on a split batch.
 * The side-by-side tables' `BN statistic group` row reads `256 (global)` in both columns, the

@@ -89,6 +89,8 @@ import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Foundation.DataParallelSync
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
@@ -2042,6 +2044,83 @@ open Proofs
 #print axioms Proofs.ResNet34SyncTieB.replicaLossCot_eq
 -- the capstone: every all-reduced parameter gradient IS the single-device node at R·N
 #print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB
+
+-- 4d PIECE 3 AT MOBILENETV2: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (MobileNetV2SyncB.lean + MobileNetV2SyncStepTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
+#print axioms Proofs.StableHLO.den_relu6_shard
+#print axioms Proofs.StableHLO.mnv2StemGraphSync_shard
+#print axioms Proofs.StableHLO.mnv2NoExpGraphSync_shard
+#print axioms Proofs.StableHLO.mnv2ExpOnlyGraphSync_shard
+#print axioms Proofs.StableHLO.mnv2ResidGraphSync_shard
+#print axioms Proofs.StableHLO.mnv2StridedGraphSync_shard
+#print axioms Proofs.StableHLO.mnv2HeadGraphSync_shard
+#print axioms Proofs.StableHLO.mobilenetv2FwdGraphSync_full_shard
+#print axioms Proofs.MobileNetV2SyncTieB.relu6MaskB_smul
+#print axioms Proofs.MobileNetV2SyncTieB.hasVJP3_backward_smul
+#print axioms Proofs.MobileNetV2SyncTieB.convStridedXlaWeightGradB_smul
+#print axioms Proofs.MobileNetV2SyncTieB.depthwiseWeightGradB_smul
+#print axioms Proofs.MobileNetV2SyncTieB.depthwiseStridedXlaWeightGradB_smul
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2NoExpCotIn_smul
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2ResidCotIn_smul
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2StridedCotIn_smul
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2HeadCotBlk_smul
+#print axioms Proofs.MobileNetV2SyncTieB.rowDenseBackFlat_shard
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2NoExpSyncCotIn_shard
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2SyncCotInBody_shard
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn_shard
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2StridedSyncCotIn_shard
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2StemSyncCotC_shard
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2HeadSyncCotBlk_shard
+#print axioms Proofs.MobileNetV2SyncTieB.den_allReduceMeanF_convStridedXlaWeightGradB_shard
+#print axioms Proofs.MobileNetV2SyncTieB.den_allReduceMeanF_depthwiseWeightGradB_shard
+#print axioms Proofs.MobileNetV2SyncTieB.den_allReduceMeanF_depthwiseStridedXlaWeightGradB_shard
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB
+
+-- 4d PIECE 3 AT EFFICIENTNET-B0: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (EfficientNetSyncB.lean + EfficientNetSyncStepTieG.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
+-- T2 twin: replica r's sync-BN forward graph denotes shard r of efficientnetForwardB_full (R*N)
+#print axioms Proofs.StableHLO.den_swishF_shard
+#print axioms Proofs.StableHLO.den_addV_shard
+#print axioms Proofs.StableHLO.mbNoExpGraphSync_shard
+#print axioms Proofs.StableHLO.mbBodyGraphSync_shard
+#print axioms Proofs.StableHLO.mbResidGraphSync_shard
+#print axioms Proofs.StableHLO.mbStridedGraphSync_shard
+#print axioms Proofs.StableHLO.stemGraphSync_shard
+#print axioms Proofs.StableHLO.headGraphSync_shard
+#print axioms Proofs.StableHLO.efficientnetFwdGraphSync_full_shard
+-- T3 twin: each block's input cotangent IS its certified VJP (T3 threads `.backward`)
+#print axioms Proofs.EnetSyncTieG.xCotIn_eq_vjp
+#print axioms Proofs.EnetSyncTieG.rCotIn_eq_vjp
+#print axioms Proofs.EnetSyncTieG.sCotIn_eq_vjp
+#print axioms Proofs.EnetSyncTieG.nCotIn_eq_vjp
+#print axioms Proofs.EnetSyncTieG.hdCotIn_eq_vjp
+-- ...the single-device chain is homogeneous in its cotangent
+#print axioms Proofs.EnetSyncTieG.gateCotB_smul
+#print axioms Proofs.EnetSyncTieG.rowDenseBackFlat_smul
+#print axioms Proofs.EnetSyncTieG.hasVJP3_backward_smul
+#print axioms Proofs.EnetSyncTieG.tCotDc_smul
+-- ...each replica's sync-BN backward chain is the shard of the single-device one
+#print axioms Proofs.EnetSyncTieG.gateCotB_shard
+#print axioms Proofs.EnetSyncTieG.seInB_shard
+#print axioms Proofs.EnetSyncTieG.bnSyncInB_shard_bnBackB
+#print axioms Proofs.EnetSyncTieG.tsCotDc_shard
+#print axioms Proofs.EnetSyncTieG.xsCotIn_scaled
+#print axioms Proofs.EnetSyncTieG.rsCotIn_scaled
+#print axioms Proofs.EnetSyncTieG.ssCotIn_scaled
+#print axioms Proofs.EnetSyncTieG.nsCotIn_scaled
+#print axioms Proofs.EnetSyncTieG.hdsCotIn_scaled
+-- ...the depthwise, strided-depthwise and XLA-SAME stem collectives
+#print axioms Proofs.EnetSyncTieG.den_allReduceMeanF_depthwiseWeightGradB_shard
+#print axioms Proofs.EnetSyncTieG.den_allReduceMeanF_depthwiseStridedWeightGradB_shard
+#print axioms Proofs.EnetSyncTieG.den_allReduceMeanF_convStridedXlaWeightGradB_shard
+-- the per-block ties and the capstone: every all-reduced parameter gradient IS the node at R·N
+#print axioms Proofs.EnetSyncTieG.tail_syncTiedG
+#print axioms Proofs.EnetSyncTieG.exp_syncTiedG
+#print axioms Proofs.EnetSyncTieG.strided_syncTiedG
+#print axioms Proofs.EnetSyncTieG.noExp_syncTiedG
+#print axioms Proofs.EnetSyncTieG.stem_syncTiedG
+#print axioms Proofs.EnetSyncTieG.head_syncTiedG
+#print axioms Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
 
 -- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT (2026-09-06)
 #print axioms Proofs.lambStep

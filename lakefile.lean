@@ -156,6 +156,10 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.DataParallelSync,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB,
+             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB,
+             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB,
+             `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB,
+             `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG,
              `LeanMlir.Proofs.Codegen.LambTriple,
              `LeanMlir.Proofs.Foundation.BceLossCot,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullB,
@@ -1685,6 +1689,18 @@ lean_exe «shard-check» where
     sync ops' emitted MLIR has had. Needs two GPUs and the XLA backend. -/
 lean_exe «resnet34-syncbn-check» where
   root := `tests.TestR34SyncBnCheck
+  moreLinkArgs := lowererLink
+
+/-- `mobilenetv2-syncbn-check` / `efficientnet-syncbn-check` — `resnet34-syncbn-check`'s gate on the
+    other two BN nets with a committed pair (`planning/global_bn_verified.md` §3.3), one shared
+    runner (`LeanMlir/SyncBnCheck.lean`): the committed 2×32 sync-BN DP step against the 1×64
+    two-pass step and the one-replica sync graphs, both rendered at run time. Two GPUs, XLA. -/
+lean_exe «mobilenetv2-syncbn-check» where
+  root := `tests.TestMnv2SyncBnCheck
+  moreLinkArgs := lowererLink
+
+lean_exe «efficientnet-syncbn-check» where
+  root := `tests.TestEnetSyncBnCheck
   moreLinkArgs := lowererLink
 
 /-- `argmax-check` — the class-count gate on `F32.argmaxN`, the eval scorer every trainer here

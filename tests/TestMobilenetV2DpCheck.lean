@@ -9,15 +9,16 @@ rather than a tolerance argument. `verified_mlir/mobilenetv2_adamdp_train_step.m
 every faithfulness theorem — so it needs its own numeric check.
 
 **The exact identity used here, and why BatchNorm does not spoil it.** Give both replicas the
-**same** 32 examples. BN normalises per replica, so each replica's BN group is those same 32
-examples and both compute *identical* batch statistics; each therefore computes the same gradient
-`g`, and `all_reduce(add)/2` returns `(g + g)/2 = g`. The mean is an identity on a duplicated batch.
-The data-parallel step must reproduce the **single-device** step on that batch, output for output.
+**same** 32 examples. Since 2026-09-21 the DP render's BatchNorm is synchronised
+(`planning/global_bn_verified.md` §3.3): each BN layer all-reduces its statistics, and the mean of
+two identical per-replica statistics is that statistic, so both replicas normalise by exactly the
+single-device batch's statistics; each therefore computes the same gradient `g`, and
+`all_reduce(add)/2` returns `(g + g)/2 = g`. The mean is an identity on a duplicated batch.
+The data-parallel step must reproduce the **single-device** step on that batch, output for output
+— the forward bit-exact; the gradient to the gap between the sync-BN graph's f32 arithmetic and the
+two-pass graph's (see the gradient bound below).
 
-The §10.3b caveat that stopped R34 from having this gate is about **splitting** a batch — 2×32 is
-genuinely not 1×64 under batch BN, because the two halves get different statistics. Duplicating a
-batch is the other case: the statistics are the same by construction, so nothing couples the
-replicas and the identity is exact rather than approximate.
+The SPLIT batch — 2×32 against 1×64, the identity sync-BN exists for — is `*-syncbn-check`'s gate.
 
 **Like EfficientNet's and unlike ViT's, this gate pins the forward.** mnv2 returns 104 BN batch
 statistics (52 layers), so it has a forward-only `bnstat` region. On a duplicated batch that region
@@ -160,8 +161,8 @@ norm-rel = {nr} ({nr * 1e9} e-9), bit-exact {exact}/{hi-lo}"
     IO.eprintln s!"DEGENERATE: {nonFinite} non-finite outputs"; IO.Process.exit 1
   if moved * 10 < n then
     IO.eprintln "DEGENERATE: too few non-zero outputs — the check proves little"; IO.Process.exit 1
-  -- Both replicas saw the SAME 32 examples, so their BN groups are identical and the batch
-  -- statistics cannot legitimately differ. Anything here is the DP path corrupting the forward.
+  -- Both replicas saw the SAME 32 examples, so the all-reduced batch statistics are the single
+  -- device's and cannot legitimately differ. Anything here is the DP path corrupting the forward.
   if !fwdExact then
     IO.eprintln s!"DP CHECK FAILED: the forward differs — `bnstat` is not bit-exact \
 (norm-rel {fwdRel}). Both replicas were given the same batch, so their BN statistics are identical \
@@ -171,10 +172,17 @@ by construction; a difference here is the data-parallel path corrupting the forw
   -- parameter flips sign on a 1-ULP difference and θ lands at ~1e-4 whether or not anything is
   -- wrong (§3). Measured on mnv2 itself in §2f: a perturbed cotangent moved θ by 1e-6 while `m`
   -- moved 1.17e-2.
-  if gradRel > 1e-4 then
-    IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-4. On a duplicated batch \
+  -- ⚠ 1e-2, not 1e-4, since 2026-09-21: the DP render's BatchNorm is SYNCHRONISED
+  -- (`planning/global_bn_verified.md` §3.3), so its backward is the sync-BN graph while the
+  -- single-device artifact is the two-pass graph — one function, two f32 arithmetics, and at this
+  -- random-init operating point their `m` differs by ~1.1e-3 norm-rel even on a duplicated batch
+  -- (measured, and `*-syncbn-check`'s FORMULATION column is the same gap at one replica). The
+  -- forward is still pinned BIT-EXACT above, and a wrong collective (sum, not mean) still moves
+  -- `m` by ~1 — two orders above this bound. The split-batch identity is `*-syncbn-check`'s.
+  if gradRel > 1e-2 then
+    IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-2. On a duplicated batch \
 all_reduce(add)/2 is the identity, so the data-parallel step must reproduce the single-device one."
     IO.Process.exit 1
   IO.println s!"✓ DP step reproduces the single-device step on a duplicated batch: forward \
-BIT-EXACT (bnstat, {net.bnChannels.size} BN layers), gradient norm-rel {gradRel} ≤ 1e-4, \
+BIT-EXACT (bnstat, {net.bnChannels.size} BN layers), gradient norm-rel {gradRel} ≤ 1e-2, \
 over all {n} returned floats"

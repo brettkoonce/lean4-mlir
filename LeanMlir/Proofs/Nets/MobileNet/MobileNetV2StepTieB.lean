@@ -689,7 +689,8 @@ set_option maxHeartbeats 1600000 in
     BatchNorm after it and bound to `zeroBiasPrelude`'s zero constant).
 
     ⛔ One replica. In `mobilenetv2in_rmsdp64` every gradient node feeds `allReduceMeanF`, an AST
-    node since 4d piece 2; `DataParallelNode.lean` composes the per-replica statement with it. -/
+    node since 4d piece 2; `MobileNetV2SyncTieB.mnv2_net_syncTiedB` is the data-parallel step, and
+    its right-hand sides are this theorem's nodes at `N := R·N`. -/
 theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (t : Vec (N * (1 * nCls))) :

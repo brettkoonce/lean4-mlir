@@ -12,6 +12,8 @@ module @m {
     // global batch N x b: proved as ResNet34SyncTieB.r34_net_syncTiedB (every all-reduced
     // gradient) and StableHLO.resnet34FwdGraphSync_full_shard (the forward), both in
     // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).
+    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round
+    // their operands per element, are not in that statement.)
     // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
