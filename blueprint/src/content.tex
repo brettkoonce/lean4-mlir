@@ -1221,8 +1221,8 @@ direction that reduces a loss. Two different motions, and this book
 keeps two words for them: you \emph{nudge} a parameter to move the loss,
 and you \emph{jiggle} an input to find out what would move it. Every
 theorem from here to the end of the book is the answer to the same
-question, asked about a different building block: \emph{if I jiggle
-this input by} \(\varepsilon\), \emph{how does the output jiggle?}
+question, asked about a different building block: if I jiggle
+this input by \(\varepsilon\), how does the output jiggle?
 
 For a scalar function \(f : \mathbb{R} \to \mathbb{R}\) the answer is
 one number, the derivative. A layer takes \(n\) numbers in and puts
@@ -1243,8 +1243,8 @@ y_j = \sum_{k=1}^{n} W_{jk}\, x_k + b_j.
 Now jiggle \(x_i\) by \(\varepsilon\). Of the \(n\) terms in the
 sum, only the \(k = i\) term notices, and it changes by
 \(W_{ji}\,\varepsilon\). So \(\partial y_j / \partial x_i = W_{ji}\).
-The Jacobian of \(y = Wx + b\) with respect to \(x\) \emph{is the
-weight matrix \(W\) itself}. No new structure and no surprise, because the
+The Jacobian of \(y = Wx + b\) with respect to \(x\) is the
+weight matrix \(W\) itself. No new structure and no surprise, because the
 Jacobian of a linear map is the linear map, written as a matrix.
 
 The same exercise for the partial with respect to \(W\) gives an
@@ -1328,7 +1328,7 @@ Chapter~1 except the chain rule fires exactly once.}
   The symmetric counterpart of
   Theorem~\ref{ax:pdiv_dense}, differentiating in \(W\) instead of
   \(x\). Since \(\pdiv\) works on vectors, view the layer as a function
-  of the \emph{flattened} weights: for \(v \in \Vect{m \cdot n}\), let
+  of the flattened weights: for \(v \in \Vect{m \cdot n}\), let
   \(F(v) := \mathrm{dense}(\mathrm{unflatten}\, v,\, b)\, x\), and write
   \(\varphi\) for the index bijection
   \((i, j) \leftrightarrow \varphi(i, j)\) (\texttt{finProdFinEquiv}).
@@ -1471,7 +1471,7 @@ L(z, y) = -\log \frac{e^{z_y}}{\sum_k e^{z_k}}.
 \]
 
 The loss is a scalar, so its Jacobian with respect to \(z\) is a
-\emph{vector}, not a matrix. Working through the algebra (chain
+vector, not a matrix. Working through the algebra (chain
 rule on \(-\log \circ \mathrm{softmax}\) at the label index)
 produces a remarkably clean answer:
 
@@ -2011,7 +2011,7 @@ are worth naming now because every later chapter inherits them. The
 eval loop reads the parameters back with \texttt{readParams} rather than
 using the \texttt{W0}/\texttt{b0} it already has, because under device
 residency those two are stale by design and \texttt{packed} is the
-authoritative copy. And \texttt{nbt} rounds \emph{up}: the last eval
+authoritative copy. And \texttt{nbt} rounds up: the last eval
 batch is zero-padded to \texttt{bs} and the inner loop scores only the
 real rows, so a test set whose size is not a multiple of the batch size
 is fully scored rather than silently truncated. Ten thousand images and
@@ -2103,7 +2103,7 @@ func.func @linear_train_step(
 
 \noindent One function, one straight line of dataflow, no control flow: the
 signature takes the parameters and a batch of data and returns the
-\emph{updated} parameters, $(\theta,\,\text{data}) \mapsto \theta'$. Read it in
+updated parameters, $(\theta,\,\text{data}) \mapsto \theta'$. Read it in
 four bands. The first (\texttt{\%v0}--\texttt{\%v8}) fuses the forward pass and the
 loss cotangent, so it holds \texttt{dot\_general} for the logits, the
 \texttt{exp}/\texttt{reduce}/\texttt{divide} softmax, and the
@@ -2178,8 +2178,8 @@ above, and it is the only place arithmetic happens.
 
 \medskip\noindent\textbf{Where this stands.} The scheme above is the one
 every architecture in Part~I trains under, and the book's official claim
-is exactly this, no more and no less: \emph{every architecture in Part~I
-trained end-to-end under one machine-checked scheme}. The one open gap
+is exactly this, no more and no less: every architecture in Part~I
+trained end-to-end under one machine-checked scheme. The one open gap
 is that the theorems are over \(\mathbb{R}\) and the GPU runs a finite
 precision; \S~\ref{sec:precision} is the budget that sits between them,
 and Appendix~\ref{app:verification} carries the rest of the accounting.
@@ -2194,8 +2194,8 @@ backward pass, and trained it. A single dense layer is a linear map, and
 a linear map can only cut pixel space with flat boundaries. This chapter
 adds the two things a hidden layer needs: a non-linearity between the
 dense layers, ReLU, and the chain rule applied more than once. Every
-theorem here is the same question as before --- \emph{if I jiggle this
-input by} \(\varepsilon\), \emph{how does the output jiggle?} --- asked
+theorem here is the same question as before --- if I jiggle this
+input by \(\varepsilon\), how does the output jiggle? --- asked
 about ReLU, and then about the whole stack.
 
 \section{Run it first}
@@ -2284,7 +2284,7 @@ pass is its layers' backward passes, composed.
 
 There is one catch, and it is ReLU's. Theorem~\ref{thm:vjp_comp} asks
 for both functions to be differentiable everywhere, and ReLU is not. So
-the whole-network result is stated \emph{at a point}: wherever no
+the whole-network result is stated at a point: wherever no
 pre-activation is exactly zero, the composed backward equals the
 \(\pdiv\)-contracted Jacobian (Theorem~\ref{thm:mlp_has_vjp_at}). The
 canonical witness \texttt{mlp\_has\_vjp}
@@ -2315,7 +2315,7 @@ theorem is what makes naming it a claim.
 
 \begin{proof}
 \leanok
-\emph{Sketch: near a smooth point, ReLU \emph{is} a fixed linear map
+\emph{Sketch: near a smooth point, ReLU is a fixed linear map
 (each coordinate is committed to its branch of the \(\max\)); compute
 that map's derivative and transport it.}
 \begin{enumerate}
@@ -2523,11 +2523,11 @@ step. \texttt{lossSlot} is the field behind the loss column in
 \S\ref{sec:mlp_runit}'s transcript, which Chapter~\ref{chap:tensor}'s does
 not have: it tells the driver this render returns a trailing scalar to
 print. That scalar is also the one line of
-\texttt{verified\_mlir/mlp\_train\_step.mlir} that is \emph{not}
+\texttt{verified\_mlir/mlp\_train\_step.mlir} that is not
 \texttt{pretty} of a proven graph node, and the render says so itself, in
 a comment of its own: \texttt{\%loss below is REPORT-ONLY (logging), NOT
 pretty(AST node)}. Nothing reads it but the printer and no theorem
-depends on it. The six \emph{parameter} outputs are the proved ones ---
+depends on it. The six parameter outputs are the proved ones ---
 \texttt{MlpFold} shows each denotes the certified gradient-descent
 step derived from the Mathlib \(\fderiv\) math.
 
@@ -2542,7 +2542,7 @@ empty array and the five-entry \texttt{layers} list above still yields
 six tensors --- three weight matrices and three biases, the
 \texttt{6 params, 669706 floats} the run reported. A layer with no state
 is still a layer: it holds a position in the list because the
-\emph{render} needs it in order, not because the optimizer does.
+render needs it in order, not because the optimizer does.
 
 The tie back to the proofs has the same shape as before. In
 \texttt{LeanMlir/Proofs/Foundation/SpecVJP.lean}:
@@ -2697,7 +2697,7 @@ per-layer chain rule \texttt{vjp\_comp\_at}
 (Theorem~\ref{thm:mlp_has_vjp_at}). The parameter gradients are
 pinned by \texttt{dense\_weight\_grad\_correct} and
 \texttt{dense\_bias\_grad\_correct}, and the loss gradient by
-\texttt{softmaxCE\_grad}. So \emph{what} the gradient is, is not in
+\texttt{softmaxCE\_grad}. So what the gradient is, is not in
 question.
 
 \medskip\noindent\textbf{The gap and how we close it.} The emitted
@@ -2922,7 +2922,7 @@ left tail and nothing answering it on the right.
 \item \textbf{Hierarchy.} Digits are made of strokes, and strokes of
   edges. Stacking convolutions lets each layer combine the previous
   one's features over a growing neighborhood, and pooling between them
-  discards \emph{where} within a window a feature fired. That is where
+  discards where within a window a feature fired. That is where
   the invariance the ``5'' in the corner wanted comes from: not from
   any one layer, but from the stack.
 \end{enumerate}
@@ -2980,8 +2980,8 @@ dy_{c_{\text{out}},\, i' - k_h,\, j' - k_w}.
 
 That is itself a convolution. Specifically, it is a convolution
 of the upstream gradient \(dy\) against the same kernel \(W\),
-but with the spatial axes \emph{reversed} and the input/output
-channel axes \emph{swapped}, which is a ``transposed convolution''.
+but with the spatial axes reversed and the input/output
+channel axes swapped, which is a ``transposed convolution''.
 The backward of a CNN block reuses the same kind of operation as the
 forward, and no new primitive is needed.
 
@@ -3077,7 +3077,7 @@ respects the image's 2-D structure.
 as the dense Jacobians (Theorems~\ref{ax:pdiv_dense},
 \ref{ax:pdiv_dense_W}), with two convolution-specific twists: the
 finite-sum rule fires three times (over \(c, k_h, k_w\)), and the
-product rule's variable factor is a \emph{pad-conditional} projection
+product rule's variable factor is a pad-conditional projection
 --- a case split on the SAME-padding condition decides between a
 coordinate projection and the zero function.}
 \begin{enumerate}
@@ -3138,7 +3138,7 @@ coordinate projection and the zero function.}
   \uses{ax:conv2d, ax:pdiv, def:hasvjp}
   The transpose-trick formula. As with the dense weight
   Jacobian (Theorem~\ref{ax:pdiv_dense_W}), differentiate in the
-  \emph{flattened} kernel: let
+  flattened kernel: let
   \(F(v) := \mathrm{flatten}\bigl(\mathrm{conv2d}
     (\mathrm{unflatten}\, v,\, b)\, x\bigr)\)
   for \(v \in \Vect{o_c \cdot i_c \cdot k_H \cdot k_W}\).
@@ -3439,7 +3439,7 @@ dense layers and the SGD update are proof-backed operations.
 
 \textbf{3. The training hyperparameters.} Twelve epochs at batch 128,
 SGD, no regularization and no augmentation. Note what a
-\texttt{VerifiedConfig} does \emph{not} carry: the learning rate. It is
+\texttt{VerifiedConfig} does not carry: the learning rate. It is
 baked into \texttt{verified\_mlir/cnn\_train\_step.mlir}, which is
 \S\ref{sec:mlp_inside_train}'s point in a second chapter --- the rate is
 inside the reach of the proofs, so it cannot be set to one thing and
@@ -3510,7 +3510,7 @@ interesting one. The CNN's training loss bumps at epoch~7 and then jumps
 almost eightfold at epoch~12, from $0.0044$ to $0.0334$ --- far enough to
 cross back above the MLP's $0.0291$. That is ordinary SGD at
 $\text{lr}=0.1$ rather than a measurement artifact. And the run's test
-accuracy is at its \emph{highest} on that same epoch, 98.77\%. Training
+accuracy is at its highest on that same epoch, 98.77\%. Training
 loss and held-out accuracy are different measurements, and a figure where
 the two disagree this loudly is the one to remember when a later chapter
 asks you to read a loss curve.
@@ -3520,9 +3520,9 @@ Both curves come off the binaries these chapters' theorems describe.
 \subsection*{Why this network is still 99\% dense-head}
 
 At 3{,}489{,}130 total parameters, the no-BN CNN is actually
-$\sim$5.2$\times$ \emph{bigger} than the MLP, not smaller. You
+$\sim$5.2$\times$ bigger than the MLP, not smaller. You
 might have expected the opposite, because convolutions are supposed
-to be parameter-efficient. They are, but the \emph{head} is what's
+to be parameter-efficient. They are, but the head is what's
 eating the budget: the flatten of a $14 \times 14 \times 32$ feature
 map produces a 6272-dim vector, and the first dense layer
 (\texttt{6272 $\to$ 512}) alone is 3{,}211{,}776 parameters. The
@@ -3635,12 +3635,12 @@ Definition~\ref{ax:maxPool2_has_vjp3}), and the convolution backward
 (\texttt{conv2d\_has\_vjp3}, Theorem~\ref{ax:conv2d_has_vjp3}), all through the
 IR-level chain rule \texttt{vjp\_comp\_at}. The convolution's reverse-mode
 derivative is the chapter's headline result: the input VJP of a
-\texttt{conv2d} is \emph{another} \texttt{conv2d}, against the kernel with
+\texttt{conv2d} is another \texttt{conv2d}, against the kernel with
 its in- and out-channels swapped and both spatial axes reversed. The
 parameter gradients are pinned by \texttt{conv2d\_weight\_grad\_has\_vjp}
 (the transpose trick) and the dense grads from Chapter~\ref{chap:tensor}, and
 the loss gradient by \texttt{softmaxCE\_grad} (Theorem~\ref{ax:softmaxCE_grad}).
-So \emph{what} the convolution's gradient is, is not in question.
+So what the convolution's gradient is, is not in question.
 
 \medskip\noindent\textbf{The gap and how we close it.} The emitted
 backward convolution is given a denotation $[\![\cdot]\!]$ valued in the
@@ -3658,7 +3658,7 @@ where $\bar k = K - 1 - k$ is the spatial flip, and the bridge theorem
   = (\texttt{conv2d\_has\_vjp3}\,W\,b).\mathrm{backward}(x, dy)
 \]
 says the denotation of that graph is the proven conv input-VJP, the
-reversed-kernel identity that \texttt{mnistCnnNoBn\_has\_vjp\_at} only \emph{asserts}.
+reversed-kernel identity that \texttt{mnistCnnNoBn\_has\_vjp\_at} only asserts.
 It is discharged here by expansion at the concrete shape (and again at the
 $2{\to}2$ shape, by \texttt{conv\_back\_bridge\_2to2}). The printer walks the
 graph and emits one \texttt{stablehlo} op per node: \texttt{transpose}
@@ -3718,7 +3718,7 @@ deep-network chapters that follow. Chapter~\ref{chap:cnn} did MNIST
 with a two-convolution net and a 2$\times$512 dense head.
 Chapter~\ref{chap:residual} (ResNet-34) goes thirty-four layers deep.
 The network here sits exactly in between. It keeps MNIST's
-\emph{same} 2$\times$512 head and the same conv/ReLU/max-pool
+same 2$\times$512 head and the same conv/ReLU/max-pool
 machinery, but stacks the convolutions four stages deep (eight in all)
 on a harder dataset (CIFAR-10). That is the first point in the book
 where depth is enough to make two things bite: \textbf{BatchNorm starts
@@ -3743,7 +3743,7 @@ them}. The takeaways are concrete:
   (Theorem~\ref{thm:bnNormalize_has_vjp}).
 \item The formula needs \(\varepsilon > 0\) to stay bounded
   (Theorem~\ref{ax:bnIstdBroadcast_diff}).
-\item BN's payoff is \emph{speed} and \emph{stability}: a deeper
+\item BN's payoff is speed and stability: a deeper
   network reaches the same accuracy in far fewer epochs with it than
   without, and five runs of the same command land two to three times
   closer together. The example in
@@ -3871,7 +3871,7 @@ jiggle a single input \(x_i\), you do not only jiggle \(x_i\). You
 also jiggle the batch mean \(\mu\), and \(\mu\) appears in every
 sample's centered value \(x_k - \mu\). So jiggling \(x_i\) by
 \(\varepsilon\) shifts every centered value by \(-\varepsilon/n\)
-\emph{plus} the direct \(\varepsilon\) on the \(i\)th sample.
+plus the direct \(\varepsilon\) on the \(i\)th sample.
 
 \[
 \frac{\partial (x_j - \mu)}{\partial x_i} \;=\; \delta_{ij} - \frac{1}{n}.
@@ -3889,7 +3889,7 @@ The normalize step divides by \(\sqrt{\sigma^2 + \varepsilon}\),
 where \(\sigma^2 = \frac{1}{n} \sum_k (x_k - \mu)^2\) is itself a
 function of every input. Jiggle \(x_i\) by \(\varepsilon\) and
 \(\sigma^2\) changes, which means the divisor changes, which means
-\emph{every} output \(\hat{x}_j\) changes, not just \(\hat{x}_i\).
+every output \(\hat{x}_j\) changes, not just \(\hat{x}_i\).
 
 Working through the chain rule (\(x \mapsto x^2 \mapsto \text{mean}
 \mapsto \sqrt{\cdot + \varepsilon} \mapsto 1/\cdot\)) gives
@@ -3901,7 +3901,7 @@ Working through the chain rule (\(x \mapsto x^2 \mapsto \text{mean}
 \]
 
 That \(\mathrm{istd}^3\) is what makes the BN backward expensive:
-the gradient of one sample depends on \emph{every} sample's
+the gradient of one sample depends on every sample's
 centered value, scaled by the cube of the inverse standard
 deviation. Theorem \ref{ax:pdiv_bnIstdBroadcast} states this.
 
@@ -3909,8 +3909,8 @@ Notice what happens to the formula as \(\sigma^2 \to 0\):
 \(\mathrm{istd} \to 1/\sqrt{\varepsilon}\), bounded. Without \(\varepsilon\)
 the gradient diverges. Theorem \ref{ax:bnIstdBroadcast_diff} is
 the formal statement that \(\varepsilon > 0\) is sufficient to
-make this term differentiable. This is the \emph{first place in
-the book} where the math requires real-analysis machinery beyond
+make this term differentiable. This is the first place in
+the book where the math requires real-analysis machinery beyond
 chain-sum-product (ConvNeXt's GELU and the transformer's softmax are
 the others); everything else in the framework reduces to those three
 rules.
@@ -3945,7 +3945,7 @@ indirect effect:
 Theorem \ref{thm:bnNormalize_has_vjp} formalizes this. Every
 production BN implementation (PyTorch, JAX, TensorFlow, custom
 CUDA kernels) computes this exact expression. The formula has been
-known since 2015. The \emph{value} of the formal proof is that the
+known since 2015. The value of the formal proof is that the
 Lean kernel mechanically verifies we are computing the right thing
 at every training step.
 
@@ -4347,7 +4347,7 @@ See \leandocref{Proofs.cifar8\_lastConv\_sgd\_descends}.
 \label{sec:bn_cifar_example}
 
 Chapter~\ref{chap:cnn} did MNIST with two convolutions and a
-2$\times$512 dense head. This chapter keeps that \emph{exact} head and
+2$\times$512 dense head. This chapter keeps that exact head and
 the same conv/ReLU/max-pool machinery, but stacks the convolutions four
 stages deep, eight $3 \times 3$ convolutions in all, because CIFAR-10 is
 a genuinely harder problem. \textbf{Same head, four times
@@ -4355,13 +4355,13 @@ the body.} That extra depth is the whole point of the chapter: it is
 where BatchNorm starts to pay, where the optimizer starts to matter,
 and the same depth ResNet-34 will scale to thirty-four layers. It also
 lets us ask a sharper question than ``does it train?'' We can ask
-\emph{what governs how it trains?}
+``what governs how it trains?''
 
 Two levers govern the answer, \textbf{normalization} and the
 \textbf{optimizer}; a third, the \textbf{arithmetic} the whole thing is
 computed in, turns out not to move it at all --- which is its own kind of
-finding --- and a knob, the width of the head, does not either. We move each against an \emph{identical, machine-checked
-gradient}, holding everything else fixed: same architecture, same 40
+finding --- and a knob, the width of the head, does not either. We move each against an identical, machine-checked
+gradient, holding everything else fixed: same architecture, same 40
 epochs, the same data pipeline (per-epoch shuffle, random horizontal
 flip) and one constant learning rate. The findings,
 stated up front so the graphs are no surprise:
@@ -4390,7 +4390,7 @@ stated up front so the graphs are no surprise:
 
 \item \textbf{The head barely matters.} This 2$\times$512 head carries
   about 25$\times$ the parameters of a narrow 64-wide one, yet trains to
-  within a point of it. The convolutional \emph{body}, not the head,
+  within a point of it. The convolutional body, not the head,
   is doing the work. That is also why we can borrow MNIST's head
   wholesale: it was never the bottleneck.
 \end{itemize}
@@ -4402,7 +4402,7 @@ from that verified training step running on a GPU.
 \medskip\noindent\textbf{On repeatability.} Convolutional networks do not
 reproduce run to run on CUDA, because XLA selects convolution algorithms
 per process, so two runs of the identical command differ. Every accuracy
-in this section is therefore the \emph{median} of five independent runs
+in this section is therefore the median of five independent runs
 of the same command at the same seed, and each
 table states the observed range alongside it. That spread is about a
 point, which is wide enough to swallow small differences, so the text
@@ -4414,7 +4414,7 @@ The same vertical column as the MNIST CNN in
 Chapter~\ref{chap:cnn}, just deeper: eight $3 \times 3$ convolutions
 in four stages (a max-pool after each) lift the $32 \times 32 \times 3$
 input to a $2 \times 2 \times 32$ feature grid, which flattens to 128
-and runs through the \emph{same} 2$\times$512 dense head as that net
+and runs through the same 2$\times$512 dense head as that net
 (only the first layer changes width, $6272$ vs.\ $128$, because the
 deeper stack pools the grid down further). Eight convolutions is four
 times the MNIST net's two, and that growth in depth, not width, is
@@ -4551,11 +4551,11 @@ Chapter~\ref{chap:cnn}'s, unchanged:
 \end{verbatim}
 
 \noindent This is where \texttt{initKind} stops being bookkeeping.
-BatchNorm's $\gamma$ initialises to \emph{ones} and $\beta$ to zeros, so
+BatchNorm's $\gamma$ initialises to ones and $\beta$ to zeros, so
 a freshly built net's BN is the identity and the surrounding
 convolutions see exactly what they would have seen without it. Zero-init
 $\gamma$ instead and the whole trunk outputs $\beta$ regardless of its
-input. Note also what is \emph{not} here: the running mean and variance.
+input. Note also what is not here: the running mean and variance.
 Those are statistics, not parameters --- no gradient reaches them --- which
 is why they are threaded separately through \texttt{bnChannels} rather
 than living in this list.
@@ -4571,7 +4571,7 @@ the files the run in \S\ref{sec:bn_runit} handed to XLA. The
 layout against the one the renderer emits, so a spec that drifts from
 its render fails the build rather than training something else. The
 gradient itself is \texttt{Proofs.cifarCnnBn8\_has\_vjp\_at}, proved once
-and \emph{parametrically in the head width}, which is why the
+and parametrically in the head width, which is why the
 $512$-wide head here and the $64$-wide one behind \texttt{cifar8-bn-verified}
 need no separate proof between them. \texttt{cifarCnnBn8\_has\_vjp\_at\_correct}
 (\texttt{Proofs/Nets/Small/CifarCNN.lean}) is the statement that its
@@ -4582,7 +4582,7 @@ XLA/PJRT path on the GPU.
 \subsection*{Lever 1: normalization}
 
 Fix the optimizer at plain SGD and toggle BN. Both nets train for 40
-epochs on the shared pipeline at a \emph{constant} learning rate --- no
+epochs on the shared pipeline at a constant learning rate --- no
 warmup, no decay --- because a schedule is a fourth thing changing and
 this section is about the third. Per-epoch test accuracy, the median of
 five runs each, from \texttt{runs/2026-09-01-cifar8w-6arm-constlr/}:
@@ -4683,7 +4683,7 @@ $0\cdot(-\infty)$. The gradient is $\mathrm{softmax}-\mathrm{onehot}$
 and never takes the log; the next epoch's loss came back finite and the
 accuracy never moved.
 
-The reason we can make this comparison \emph{and trust it} is that the
+The reason we can make this comparison and trust it is that the
 optimizer is one swappable rendered tail. The forward pass, the
 softmax--cross-entropy loss, the backward pass, and every parameter
 gradient are the same proof-rendered graph in each column. Only the
@@ -4697,7 +4697,7 @@ final per-parameter update op changes:
     rendered op-for-op as \texttt{Proofs.adamWParam}.
 \end{itemize}
 
-\noindent Each tail is emitted onto the \emph{same} certified gradient
+\noindent Each tail is emitted onto the same certified gradient
 (\texttt{emitSgd}, \texttt{emitMomentum}, \texttt{ViTRender.emitAdamV}),
 so the ablation is honest in the strong sense: identical, machine-checked
 gradients with different arithmetic stacked on top. And for plain
@@ -4748,7 +4748,7 @@ Moving it needed no new arithmetic: BatchNorm itself stays
 network in this book uses --- low precision through the convolutions and
 the dense layers, full precision through the normalization.
 
-\medskip\noindent So: the eight-convolution net \emph{with} BatchNorm,
+\medskip\noindent So: the eight-convolution net with BatchNorm,
 one renderer, one constant rate, forty epochs, five seeds, and precision
 the only thing that differs between a pair of rows. Every convolution
 op in the graph is bf16 in the low-precision arms --- twenty-three of
@@ -4774,7 +4774,7 @@ AdamW          & fp32 & 74.75 & 75.08 & 73.90 & 73.98 & 74.48 & 74.48 \\
 \end{center}
 
 \noindent Medians move by $+0.31$, $-0.02$ and $-0.33$. Each of those is
-smaller than the spread \emph{within} the corresponding fp32 row --- $1.89$,
+smaller than the spread within the corresponding fp32 row --- $1.89$,
 $0.75$ and $1.18$ --- so on this net, at this scale, the number format is
 not measurable against the noise of rerunning the same configuration.
 Thirty arm-runs, no \texttt{NaN}, nothing collapsed to chance. That is the
@@ -4819,10 +4819,10 @@ the $32 \times 32$ maps dominate the compute, and the head is cheap
 matmul at these widths --- the sweep's 4096-wide point is where it stops
 being cheap, nine times the wall clock of the 64-wide run for nothing.
 That is the lesson the
-bridge makes concrete: at this scale the \emph{depth} of the
+bridge makes concrete: at this scale the depth of the
 convolutional body is the lever, not the width of the classifier on top.
 It is why the head can stay MNIST's, and why the next chapter spends its
-budget on thirty-four layers of \emph{more convolution} rather than a
+budget on thirty-four layers of more convolution rather than a
 bigger head.
 
 That two-point comparison is worth drawing out in full,
@@ -4873,7 +4873,7 @@ $10{,}000$-image test set --- about $\pm 0.9$ here --- and not a spread
 over repeats. Read that way the curve makes a sharper claim than
 ``essentially flat'': every width from $d{=}32$ to $d{=}4096$ spans only
 $73.1$ to $74.1\%$, which is narrower than a single point's own interval,
-so the eight plateau intervals all overlap and \emph{none} of the
+so the eight plateau intervals all overlap and none of the
 differences between them is resolvable from this experiment. The
 $128\times$ wider head buys nothing measurable; its $17$M-parameter
 classifier fits the training set a little harder (final train loss $0.39$
@@ -4888,7 +4888,7 @@ squarely on the plateau: the head width genuinely does not matter here,
 which is the whole reason the net could borrow MNIST's classifier
 untouched. (The $d{=}512$ point is the board's own net, and lands within a
 quarter point of its 40-epoch AdamW cell on a shorter, scheduled run; the
-\emph{shape} is the point.)
+shape is the point.)
 
 \subsection*{Why the levers work}
 
@@ -4943,7 +4943,7 @@ every coordinate to every other. The emitted backward graph is given a
 denotation in the proofs' own vector type, and
 \texttt{bn\_back\_bridge} proves that denotation equal to
 \texttt{bn\_has\_vjp}'s backward. The emitted reduce/broadcast/elementwise
-graph \emph{is}, by machine check, the three-term formula. Here is what the
+graph is, by machine check, the three-term formula. Here is what the
 printer emits, with the forward-statistic recompute (mean, variance,
 \texttt{rsqrt}, normalize) elided to its one comment line, at $n=4$:
 
@@ -5014,7 +5014,7 @@ Before 2015, the dominant assumption in image classification was
 not metaphorical. If you took a 20-layer CNN that trained to 70\%
 val accuracy and added 12 more convolutional layers, you didn't
 get a 32-layer model with 72\% accuracy. You got a 32-layer model
-that, after the same training budget, fit the \emph{training set}
+that, after the same training budget, fit the training set
 worse than the 20-layer one did. The 32-layer model had strictly
 more capacity. It still trained worse. Something about deep stacks
 of convolutions made gradient flow degrade in a way that the
@@ -5023,8 +5023,8 @@ optimizer couldn't navigate around.
 He et al.\ 2015
 (\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}) had the
 right observation: if the
-12 extra layers in the deeper network were \emph{initialized to
-compute the identity}, the 32-layer network would have at least
+12 extra layers in the deeper network were initialized to
+compute the identity, the 32-layer network would have at least
 the 20-layer's performance, because it could replicate it
 exactly. So the question was not ``can a deep network represent
 what a shallow one represents?'' It provably could. The question
@@ -5106,8 +5106,8 @@ number every later chapter compares against.
 Their fix was a one-line architectural change. Instead of asking
 each block to learn a function \(y = f(x)\), ask it to learn a
 function \(y = f(x) + x\). The block's job is no longer to
-\emph{become} the new representation. Its job is to learn what to
-\emph{add} to the current representation. At initialization, with
+become the new representation. Its job is to learn what to
+add to the current representation. At initialization, with
 randomly-small \(f\), each block is approximately the identity,
 and a stack of 16 such blocks is approximately a stack of
 16 identities, which is to say, approximately the input. The
@@ -5136,7 +5136,7 @@ block's machinery gives us). Composition is just
 fan-in lemma, with \(\mathrm{id}\) plugged into one slot.
 
 That is Theorem~\ref{thm:residual_has_vjp} below, and its proof
-is one line. This chapter has \emph{exactly one theorem}, and
+is one line. This chapter has exactly one theorem, and
 that theorem is mechanical. The engineering revolution was not
 in the math. It was in the realization that this
 operation was the missing piece for training deep
@@ -5536,7 +5536,7 @@ def runResnet34Adam (argv : List String) : IO Unit := do
 \noindent The one thing in that listing to carry forward is that \textbf{the recipe
 is arguments, not architecture.} The learning rate, the momentum pair, the warmup
 length and the variant string are all passed to the driver; none of them is a
-property of the network. Swapping AdamW for momentum is a different \emph{argument}
+property of the network. Swapping AdamW for momentum is a different argument
 against the same proven gradient, which is what makes
 \S\ref{sec:r34_ablation}'s ablation a measurement of the recipe rather than of the
 model --- and what Chapter~\ref{chap:bn} used to put three optimizers on one net.
@@ -5619,8 +5619,8 @@ size. Rather than reprint the log, here is what is worth noticing in it.
 $\mathrm{residual}(x) = f(x) + x$, an additive fan-in, where $f$ is the
 conv\,$\to$\,BN\,$\to$\,relu\,$\to$\,conv\,$\to$\,BN inner block. As
 Theorem~\ref{thm:residual_has_vjp} states, its reverse-mode derivative is
-the additive-fan-in rule with the identity in one slot: \emph{send the
-upstream gradient through both branches and add}.
+the additive-fan-in rule with the identity in one slot: ``send the
+upstream gradient through both branches and add''.
 \texttt{residual\_has\_vjp\_at} proves exactly this at the evaluation point
 (a one-line proof: the fan-in lemma with the identity's VJP plugged into
 one slot), and the inner $f$'s VJP is the convolution and BatchNorm
@@ -5637,7 +5637,7 @@ saves $\texttt{add} = f(x) + x$ and the block output
 $\texttt{relu}(\texttt{add})$. The backward first pushes the incoming
 cotangent back through that relu (a \texttt{compare}/\texttt{select} at the
 post-add, giving \texttt{\%dadd}), and then, and this is the fan-in, sends
-\texttt{\%dadd} through \emph{both} branches and adds (the inner block's
+\texttt{\%dadd} through both branches and adds (the inner block's
 forward and $f$-backward elided, as they are the conv/BN nodes of
 Chapters~\ref{chap:cnn}--\ref{chap:bn}):
 
@@ -5655,11 +5655,11 @@ return %dx : tensor<1x2x4x4xf32>
 \end{verbatim}
 
 \noindent Read it against the theorem: \texttt{\%dadd} is the cotangent at
-the fan-in, and it appears \emph{twice} in the last two lines, once as
+the fan-in, and it appears twice in the last two lines, once as
 the input to $f$'s backward (\texttt{\%dF}, the gradient through the
 residual function) and once added directly (\texttt{\%dx = \%dF + \%dadd},
 the gradient straight down the identity skip). That single
-\texttt{stablehlo.add} \emph{is} ``send the gradient through both branches
+\texttt{stablehlo.add} is ``send the gradient through both branches
 and add'': the skip term is the same \texttt{\%dadd} the block term started
 from, which is why the gradient survives all sixteen blocks instead of
 attenuating away. The inner $f$ backward that computes \texttt{\%dF}, the
@@ -5750,7 +5750,7 @@ So how much does each ingredient actually earn? The full recipe and six
 leave-one-out variants, ResNet-34 on Imagenette, 80 epochs each. Every variant
 keeps the recipe intact except for the one component it names, so its
 difference from the full recipe measures that component's contribution
-\emph{given everything else is present} --- not the order-dependent story an
+given everything else is present --- not the order-dependent story an
 additive ladder tells.
 
 \begin{center}
@@ -5807,7 +5807,7 @@ additive ladder tells.
 \end{tikzpicture}
 \end{center}
 
-\noindent Each point is plotted as its \emph{difference} from the full recipe
+\noindent Each point is plotted as its difference from the full recipe
 rather than as an accuracy, so the line at zero is the baseline and distance
 from it is what the ingredient contributes. Each arm was trained five times from
 five seeds; the point is the mean difference and the bar its 95\% interval,
@@ -5817,8 +5817,8 @@ recipe lands at $89.99 \pm 0.32$ (fp32) and $89.98 \pm 0.15$ (bf16). Rows are
 sorted by fp32 effect.
 
 \medskip\noindent The two panels are the same seven arms in the two precisions,
-and the reason to draw them side by side is that \emph{a real effect should not
-move}. None does: every arm's fp32 mean falls inside the bf16 interval and every
+and the reason to draw them side by side is that a real effect should not
+move. None does: every arm's fp32 mean falls inside the bf16 interval and every
 bf16 mean inside the fp32 one. Four arms are resolved in both. Label smoothing is
 resolved in fp32 ($-0.69 \pm 0.42$) but not bf16 ($-0.50 \pm 0.62$), where the
 means agree and only the interval is wider. Weight decay is resolved in neither
@@ -5829,7 +5829,7 @@ reading is that here it earns nothing measurable.
 constant-rate arm finishes wherever its noisy trajectory happens to be at
 epoch~80: fp32 seeds spread $82.0$--$86.8$ (sd $1.93$), bf16 $82.6$--$87.9$
 (sd $2.18$). Its contribution is large and imprecise, and both precisions
-agreeing on \emph{how} imprecise says the width belongs to the arm, not to
+agreeing on how imprecise says the width belongs to the arm, not to
 either number format.
 
 \medskip\noindent \textbf{What the optimizer row is really measuring.} Reading
@@ -5913,7 +5913,7 @@ the remainder running the other way.
 \medskip\noindent That is this ablation's own limit: every non-adaptive row's
 difference is partly a claim about how well its learning rate suits it, and an
 adaptive optimizer's insensitivity to that rate hides the dependence. The figure
-measures the recipe \emph{as tuned}, not its ingredients in isolation.
+measures the recipe as tuned, not its ingredients in isolation.
 
 \medskip\noindent \textbf{Augmentation is the largest single contribution}
 ($-7.33 \pm 0.49$ fp32, $-7.11 \pm 0.38$ bf16; three times the next-largest
@@ -5929,7 +5929,7 @@ and 1000 classes, trained on the paper's 90-epoch schedule. The
 architecture is unchanged. Only the dataset, the output head width, and
 the training schedule differ.
 
-This section runs it \emph{twice}. The \emph{reference} is the
+This section runs it twice. The \emph{reference} is the
 Lean$\to$JAX trainer of \S\ref{sec:jax_pipeline}: JAX traces the generated
 program and hands XLA the graph. The \emph{verified path} hands XLA
 \texttt{pretty(provenGraph)} --- the rendered artifact the proofs reason
@@ -6113,7 +6113,7 @@ convolution as on the reference, scored over the same $50{,}000$ images.
 from the same initialization on the same box, the IREE and XLA lowerings of
 this artifact scored $17{,}312$ and $17{,}313$ correct at epoch~5 --- one
 image apart. The proof-carrying tier stops at Imagenette, so the claim is
-\emph{one architecture, two independent lowerings, agreeing}, not ``proven
+``one architecture, two independent lowerings, agreeing'', not ``proven
 at ImageNet scale''.
 
 \prosesection{The two paths, side by side}
@@ -6370,7 +6370,7 @@ right optimizer on the wrong data; the job configs refuse to start with it.
 \S\ref{sec:r50_a3_vs_2018} tabulates it, including the three places a bare
 transcription would miss: BN $\gamma/\beta$ and biases excluded from weight
 decay, LAMB's gradient clip at \texttt{timm}'s default (after the all-reduce
-\emph{and} the accumulation, at threshold $kC$,
+and the accumulation, at threshold $kC$,
 \texttt{Proofs.clipFactor\_accum}), and the \texttt{no\_weight\_decay} group
 left out of layer adaptation. The optimizer is tied to the reference at the
 update as well as the gradient, six variants to $\sim\!10^{-7}$. What it
@@ -6409,7 +6409,7 @@ recipes}, and within $0.04$ on top-5 --- inside the floor \S\ref{sec:r34_pjrt}
 set, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one seed per cell. \textbf{And the recipe delta
 replicates}: A3 beats 2018 by $+1.31$ on the reference and $+0.91$ on the
 verified path. Agreement at a single configuration can be a coincidence of
-that configuration; a \emph{difference} that reproduces across two
+that configuration; a difference that reproduces across two
 independent implementations is harder to arrange by accident, and it is
 what a one-row comparison cannot show. Two things the grid does not settle.
 The A3 column trains at $160$ and evaluates at $224$ while 2018 does both at
@@ -6474,7 +6474,7 @@ at every epoch.
 
 The 2018-recipe row above is the original paper's SGD-with-momentum plus the
 ``bag of tricks'' polish (cosine schedule, warmup, label smoothing,
-random-resized-crop). RSB-A3 is the \emph{2021} ``ResNet Strikes Back'' recipe
+random-resized-crop). RSB-A3 is the 2021 ``ResNet Strikes Back'' recipe
 (Wightman et al.). Both rows are ResNet-50, which is the point: every knob that
 A3 sets differently is one lever of the three-year jump in how these networks
 are trained, and holding the architecture fixed is what stops the comparison
@@ -6507,7 +6507,7 @@ BN statistics & global over batch      & Ghost-BN over 512             & side-ef
 \noindent What carries over unchanged: cosine LR decay, the 5-epoch
 warmup, the base augmentation in the row above, bf16 matmul and
 convolution, and running-BN evaluation. The through-line
-of the 2018$\to$2021 shift is \emph{regularize harder, train bigger}:
+of the 2018$\to$2021 shift is ``regularize harder, train bigger'':
 heavier augmentation (RandAugment + Mixup + CutMix), a loss that accepts
 soft targets (BCE), an order-of-magnitude more weight decay applied
 selectively, and a large-batch optimizer (LAMB) to make the longer,
@@ -6545,7 +6545,7 @@ is run:
 \begin{center}
 \begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
 \hline
-\emph{In} & \emph{Still out}, worst first \\
+In & Still out, worst first \\
 \hline
 \texttt{wdExcludeNormBias}; LAMB's clip at $kC$, after both the all-reduce and the accumulation
   & \textbf{Ghost-BN group} $64$ against the reference's $\mathbf{512}$ --- an $8\times$ gap, and only half of it is reachable here \\[2pt]
@@ -6553,7 +6553,7 @@ BCE-with-logits over Mixup/CutMix soft labels
   & Repeated augmentation is stream-level, not per-batch \\[2pt]
 Accumulation to LAMB's design batch of $2048$, at $k=8$ or at the reference's own $k=4$
   & Neither tier has been run yet \\[2pt]
-\textbf{Model EMA} at decay $0.9999$ --- a \emph{fifth} blob region, $[\theta|m|v|G|E]$
+\textbf{Model EMA} at decay $0.9999$ --- a fifth blob region, $[\theta|m|v|G|E]$
   & \\[2pt]
 \textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
   & \\[2pt]
@@ -6567,26 +6567,26 @@ Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \end{center}
 
 \noindent \textbf{Both were structural, and A3 met neither} --- its recipe
-switches both \emph{off}. The shadow and the accumulator used to be the
-\emph{same} fourth region of $[\theta|m|v|\cdot]$, and accumulation is not optional
+switches both off. The shadow and the accumulator used to be the
+same fourth region of $[\theta|m|v|\cdot]$, and accumulation is not optional
 at $224^2$: EMA was unreachable, not unrendered.
 
-\medskip\noindent Stochastic depth's site sits on the residual \emph{branch}, and
+\medskip\noindent Stochastic depth's site sits on the residual branch, and
 \textbf{no structural check can tell that from a site on the block output}: at an
 all-ones mask $1 \odot (b+x)$ and $1 \odot b + x$ agree bit-for-bit, so a
 misplaced render matches on names, operation count and arity and passes every
 endpoint gate. Moving all sixteen separates them by eight orders of magnitude at
 a real mask, and by exactly zero at an all-ones one. The reference had it wrong
 the other way round --- a scalar \texttt{bernoulli} for the whole batch where
-timm's is per \emph{sample}, same expectation, which is why it survived.
+timm's is per sample, same expectation, which is why it survived.
 
 \medskip\noindent \textbf{Which leaves the batch-norm group, larger than it
 looks.} Nothing here all-reduces activation statistics, so each replica
 normalises over its own $64$; the reference's \texttt{jnp.mean} reduces over a
-\emph{mesh-sharded} axis, so XLA inserts one and its group is the full $512$ ---
+mesh-sharded axis, so XLA inserts one and its group is the full $512$ ---
 its per-device tensor is $128$, and only the group is the statistic. \textbf{These renders
 take the first half of that gap}: $k=4$ at $128$ per device is the reference's own
-factorisation, and it is the \emph{faster} arrangement besides. The last $4\times$ needs synchronised batch-norm --- a new operator,
+factorisation, and it is the faster arrangement besides. The last $4\times$ needs synchronised batch-norm --- a new operator,
 a changed backward, a variance that does not average, and $53$ collectives a
 step.
 
@@ -6685,7 +6685,7 @@ up a fifth of a point of top-5, and does it in thirty-five minutes
 against forty-seven.
 
 Epoch 2 is worth a glance before moving on. Validation accuracy
-\emph{falls}, from $24.1\%$ to $17.3\%$, while the training loss drops
+falls, from $24.1\%$ to $17.3\%$, while the training loss drops
 normally from $2.12$ to $1.78$. That is the warmup: the learning rate is
 still climbing toward its peak at epoch 3, and the BatchNorm running
 statistics are two epochs old and averaging over a network whose weights
@@ -6706,7 +6706,7 @@ width or depth, so they cover all seventeen blocks.
 
 One scope note, because this is the chapter where the distinction starts
 to bite. The theorem that folds those rules into a single statement about
-the \emph{whole} network, at the batch statistics this artifact runs, is
+the whole network, at the batch statistics this artifact runs, is
 \texttt{mobilenetv2ForwardB\_full\_has\_vjp\_at\_correct}, in
 \texttt{Proofs/Nets/MobileNet/MobileNetV2FullBVJP.lean}, and it covers the
 stem, all seventeen bottlenecks and the head. The typed graph the artifact
@@ -6717,7 +6717,7 @@ is printed from denotes that forward by
 reducing if any \texttt{[t,c,n,s]} entry of the spec drifts, with
 \texttt{mobilenetv2VerifiedB\_fwd\_faithful} above it.
 
-The full-depth fold is \emph{pointwise}. It holds at a given input, and
+The full-depth fold is pointwise. It holds at a given input, and
 it carries one side condition per activation site, at every example of
 the batch, saying that the value entering relu6 is neither $0$ nor $6$.
 There are thirty-five such sites per example,
@@ -6800,10 +6800,10 @@ plus 4{,}096 (pointwise), for 4{,}672. Eight times fewer.
 MobileNetV2 wraps the separable block in one more idea. ResNet's
 bottleneck block is wide $\to$ narrow $\to$ wide (project down for
 the expensive spatial conv, project back up for the residual).
-MobileNetV2 flips it: \emph{narrow $\to$ wide $\to$ narrow}, with
+MobileNetV2 flips it: narrow $\to$ wide $\to$ narrow, with
 the depthwise spatial conv at the wide expansion. The intuition
 is that depthwise is so cheap that you can afford to make it
-\emph{wider}. The narrow bottleneck channels carry the actual
+wider. The narrow bottleneck channels carry the actual
 information across the residual.
 
 Concretely, an inverted-residual block with input channels \(C_\text{in}\),
@@ -7186,7 +7186,7 @@ The same vertical column as ResNet-34, now built from
 inverted-residual blocks: a $3 \times 3$ stride-2 stem, seven stages of
 \texttt{.invertedResidualNB} blocks (17 in all, widths $16$ to $320$,
 expansion $t{=}6$ except the first), a $1 \times 1$ lift to 1280
-channels, global average pool, and a dense head. There are \emph{no}
+channels, global average pool, and a dense head. There are no
 max-pools, since every downsample is folded into a strided block. The
 inset shows one inverted-residual block: the cheap depthwise spatial mix
 happens at the wide point.
@@ -7307,7 +7307,7 @@ def main (argv : List String) : IO Unit :=
 \noindent Lines marked \texttt{x2} or \texttt{x3} appear that many times
 in the source. The spec has no repeat count, because one constructor is
 one block: \texttt{.invertedResidualNB ic mid oc stride} takes the
-\emph{expanded} width \texttt{mid} rather than a ratio \(t\), so the
+expanded width \texttt{mid} rather than a ratio \(t\), so the
 widths read straight off the paper's table and the stage boundaries are
 visible as the places where \texttt{stride} is 2. Internally each block
 is a $1 \times 1$ conv to \texttt{mid} channels, a $3 \times 3$
@@ -7348,7 +7348,7 @@ subject written as a shape.
 AdamW at $10^{-3}$, cosine with a three-epoch warmup, label smoothing
 $0.1$, the same augmentation. That is on purpose. Holding the recipe fixed
 is what makes the accuracy in \S\ref{sec:mnv2_runit} a comparison between
-two \emph{architectures} rather than between two training setups, and it
+two architectures rather than between two training setups, and it
 is the same move Chapter~\ref{chap:bn} used to compare optimizers against
 one proven gradient. MobileNetV2's own optimizer is RMSProp, which
 \S\ref{sec:mnv2_imagenet} comes back to, and it is rendered at this shape
@@ -7371,7 +7371,7 @@ in it.
 \begin{itemize}
 \item \textbf{2.24M parameters, and 1.05\,MB of MLIR} (1\,047\,327 chars)
   for the AdamW training step. ResNet-34 emitted 729\,KB with $9.5\times$
-  the parameters, so the smaller network renders the \emph{larger}
+  the parameters, so the smaller network renders the larger
   program. Emission is per-op, and the separable block trades one
   convolution for three, each with its own BatchNorm. Parameter count
   went down and operation count went up, and the text follows the
@@ -7413,7 +7413,7 @@ in it.
 \noindent\textbf{What is already proven.} A depthwise convolution
 applies one $k\times k$ kernel per channel with no cross-channel sum, so its
 reverse-mode derivative (Theorem~\ref{ax:depthwise_has_vjp3},
-\texttt{depthwise\_has\_vjp3}) is a reversed-kernel convolution \emph{minus}
+\texttt{depthwise\_has\_vjp3}) is a reversed-kernel convolution minus
 the channel transpose the full-conv VJP of Chapter~\ref{chap:cnn} needs:
 with no $\sum_{c_\text{in}}$ to take the adjoint of, there is no in/out
 channel axis to swap. The inverted-residual block composes this with the
@@ -7445,12 +7445,12 @@ func.func @dw_back(%dy: tensor<1x2x4x4xf32>, %W: tensor<2x3x3xf32>)
 
 \noindent Read it against Chapter~\ref{chap:cnn}'s \texttt{conv\_back}. That
 one began with a \texttt{transpose \%W, dims = [1, 0, 2, 3]} to swap the in-
-and out-channel axes before reversing, and this one has \emph{no transpose}.
+and out-channel axes before reversing, and this one has no transpose.
 The \texttt{reshape} only adds the singleton input-channel axis the grouped
 form expects ($[c,k,k] \to [c,1,k,k]$), the \texttt{reverse} flips the two
 spatial axes, and \texttt{feature\_group\_count = 2}, equal to the channel
 count, tells the convolution to run each channel through its own filter with
-no mixing. That single attribute \emph{is} the depthwise structure, and the
+no mixing. That single attribute is the depthwise structure, and the
 bridge theorem is the claim that this graph computes
 \texttt{depthwise\_has\_vjp3}'s backward.
 
@@ -7617,9 +7617,9 @@ longer the current one. The ledger, worst first:
 \begin{center}
 \begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
 \hline
-\emph{In} & \emph{Still out}, worst first \\
+In & Still out, worst first \\
 \hline
-Antialiased resize on train \emph{and} eval, and \texttt{timm}'s $50{,}000$-image
+Antialiased resize on train and eval, and \texttt{timm}'s $50{,}000$-image
 denominator --- both halves of that protocol
   & \textbf{\texttt{convBnAct := .relu6}} --- the stem and the $1\times1$ head trained
     plain \texttt{relu} while every inverted-residual interior used ReLU6. Landed
@@ -7824,7 +7824,7 @@ reference's wall clock, so every hour of the gap is pipeline.
 \subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
 
 The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-\emph{2018-era} recipe of the SGD lineage: momentum, cosine polish,
+2018-era recipe of the SGD lineage: momentum, cosine polish,
 label smoothing. MobileNetV2 is a 2018 paper too, but from the other
 side of a fork. Google's TensorFlow and Inception training tradition
 runs RMSProp with a huge $\varepsilon$, an exponential LR staircase, a
@@ -7930,7 +7930,7 @@ template generalized enough to absorb its rivals.
 initialization and decaying it away leaves $d^{\,t}$ of that
 initialization behind. A random network and a trained one are not
 joined by a low-loss path, so even a few percent of it puts the
-average at \emph{chance} rather than merely behind. Conv-M trips this
+average at chance rather than merely behind. Conv-M trips this
 where longer runs do not, because gradient accumulation leaves it only
 $312$ steps per epoch, so $31{,}200$ total against a time constant of
 $10{,}000$. The fix is TensorFlow's, which this family's reference
@@ -7961,7 +7961,7 @@ $\mathbf{92.37\%}$ top-5 on the full 50{,}000-image validation split
 (EMA weights). Set against this chapter's other half that is the
 whole six-year argument in two rows: $\mathbf{+3.58}$ points over
 MobileNetV2's paper-faithful $71.90\%$, from $2.8\times$ the
-parameters and \emph{less than half} the epochs, $100$ against
+parameters and less than half the epochs, $100$ against
 $350$ and $16$ wall-clock hours against $38.4$.
 By 2024 the mobile line is not trading accuracy for size so
 much as reaching the same accuracy with a block that happens to be
@@ -7996,7 +7996,7 @@ reduced-regularization tier (bf16, 4$\times$ 4060 Ti, AdamW,
 effective batch $4096$ via $512\times8$ gradient accumulation).
 
 \textbf{[TODO, 500 epochs.]} \texttt{mobilenet-v4-imagenet full}.
-The tier above is \emph{detuned} by construction, at wd $0.05$ against
+The tier above is detuned by construction, at wd $0.05$ against
 the paper's $0.1$, dropout $0.1$ against $0.2$, and RandAugment $m9$
 against $m15$, so its $75.48\%$ is not a reproduction of
 $79.9\%$. Its in-loop curve is flat over the last ten epochs
@@ -8070,7 +8070,7 @@ Box & ms/step & min/epoch & 100 ep & 500 ep & Val top-1 \\
 reduced-regularization tier, $500$ the paper's.}
 
 \medskip\noindent\textbf{[TODO: run \texttt{mnv4-default-4gpu}.]} The job
-config exists and its prechecks pass. Note that it ships the \emph{fp32}
+config exists and its prechecks pass. Note that it ships the fp32
 arm by default --- the left-hand column above, $176$ ms/step and
 $\sim$$25.5$ hr; one line in the config switches it, and the choice was to move one
 axis at a time rather than pair a first run with a precision change. The
@@ -8183,7 +8183,7 @@ and~\ref{chap:residual}'s.
 
 \medskip\noindent\textbf{And this fold holds at every input.}
 \texttt{efficientnetForwardB\_full\_has\_vjp} chains the stem, all
-\emph{sixteen} MBConv blocks and the head through \texttt{vjp\_comp},
+sixteen MBConv blocks and the head through \texttt{vjp\_comp},
 batched over \(N\), assuming a positive \(\varepsilon\) at each BatchNorm
 and nothing else --- so every operation in the graph that just trained
 carries a proved backward, and their composition into the whole network
@@ -8230,7 +8230,7 @@ per block against millions for a standard conv at the same width.
 \prosesection{From the framework: it's an elementwise product}
 
 What is the SE block, as a function? Up to a learned scalar
-factor per channel, it's just an \emph{elementwise product} of
+factor per channel, it's just an elementwise product of
 the input with a side branch:
 
 \[
@@ -8281,7 +8281,7 @@ the architectural level, MobileNet-V2 with two changes:
   just chain rule through a sigmoid.
 \end{enumerate}
 
-The paper's \emph{actual} thesis is \textbf{compound scaling}:
+The paper's actual thesis is \textbf{compound scaling}:
 jointly scale depth, width, and input resolution by a single
 coefficient \(\phi\) and you get the EfficientNet family
 B0 through B7, with B7 reaching ImageNet state-of-the-art at the
@@ -8579,7 +8579,7 @@ choice is made once and visibly.
 Chapter~\ref{chap:depthwise}'s, with four tensors inserted in the middle:
 \texttt{[mid,r]} down to the squeeze width and \texttt{[r,mid]} back up,
 each with a bias. Those two are the only convs in the block that
-\emph{keep} their biases, because they are not BN-followed --- the gate
+keep their biases, because they are not BN-followed --- the gate
 ends in a sigmoid, not a normalizer. That asymmetry is visible in the
 arm and nowhere else in the spec.
 
@@ -8588,7 +8588,7 @@ downsampling pattern is fixed by the architecture rather than chosen per
 block, so it lives in the renderer, which emits \texttt{b1} as
 no-expand, \texttt{b2}, \texttt{b4}, \texttt{b6} and \texttt{b12} as
 strided, and the remaining nine as residual. The spec's job is the
-\emph{parameter layout}, and \texttt{efficientnetVerified.toSpecs} is
+parameter layout, and \texttt{efficientnetVerified.toSpecs} is
 kernel-\texttt{\#guard}ed against an independently audited hand-list.
 
 \textbf{Forty-nine BatchNorms, and the list is not three per block.}
@@ -8604,7 +8604,7 @@ evaluation time.
 every convolution a BatchNorm follows, because the BatchNorm's own shift
 absorbs it. SE's two $1 \times 1$s are followed by a sigmoid gate rather
 than a BatchNorm, so nothing absorbs theirs and they are kept. The rule
-is about what comes \emph{after} a convolution, not about the
+is about what comes after a convolution, not about the
 convolution.
 
 Every SE block multiplies the input by the sigmoid output of its
@@ -8670,7 +8670,7 @@ are one run each.
   depthwise sandwich, and depthwise is memory-bound.
 
 \item \textbf{The lift is not from SE alone.} EfficientNet's paper thesis
-  is \emph{compound scaling}, tuning depth, width and resolution together
+  is compound scaling, tuning depth, width and resolution together
   with one coefficient to reach the ImageNet state of the art. At the B0
   baseline shown here SE gives a modest bump, and the real wins arrive at
   B3--B7 where the scaling compounds. This example sits at B0 because the
@@ -8684,12 +8684,12 @@ are one run each.
 elementwise product $\mathrm{se}(x) = x \odot g(x)$, where the per-channel
 gate $g(x)$ is itself a small sub-network of the same input $x$:
 global-average-pool, dense, swish, dense, sigmoid, broadcast. Because the
-gate depends on $x$, the VJP is a \emph{product rule}, not a plain scaling:
+gate depends on $x$, the VJP is a product rule, not a plain scaling:
 \texttt{seBlock\_has\_vjp} proves
 \[
   dx = g(x)\odot dy \;+\; g.\mathrm{back}\bigl(x \odot dy\bigr),
 \]
-the gate-weighted cotangent \emph{plus} the gate's own backward applied to
+the gate-weighted cotangent plus the gate's own backward applied to
 the co-input $x\odot dy$. \texttt{seBlockFull\_has\_vjp} supplies the
 concrete gate (the GAP--dense--swish--dense--sigmoid chain) and
 \texttt{mbconvBody\_has\_vjp} composes the whole MBConv.
@@ -8727,7 +8727,7 @@ on the MBConv's four mid-channels):
   \item \texttt{\%gdds = \%gdleft + \%gdgate\_sp} adds the two.
 \end{itemize}
 
-\noindent That final \texttt{add} \emph{is} the product rule: the gradient
+\noindent That final \texttt{add} is the product rule: the gradient
 that passes straight through the channel, plus the gradient that re-tunes
 the gate, summed.
 
@@ -8823,7 +8823,7 @@ win, and its sigmoid gate is precision-sensitive. The payoff is the
 same $\sim2\times$ MBConv-block speedup MobileNet sees, from exactly
 the convolutions worth casting.
 
-Second, the SE bottleneck is sized off the block's \emph{input}
+Second, the SE bottleneck is sized off the block's input
 channels ($c/4$), not the $6\times$-larger expanded width the squeeze
 sits behind. That distinction is most of the difference between a
 $5.3$M-parameter B0 and an $8.4$M one, and it is what makes the spec in
@@ -8860,7 +8860,7 @@ one the obvious implementation is not the one B0 was trained with.
 \textbf{RMSProp in TensorFlow's form.} B0's optimizer is RMSProp
 ($\rho=0.9$, $\mu=0.9$, $\varepsilon=10^{-3}$) in TensorFlow's variant of
 it, \texttt{timm}'s \texttt{RMSpropTF}: the update divides by
-$\sqrt{\mathrm{sq}+\varepsilon}$, with $\varepsilon$ \emph{inside} the
+$\sqrt{\mathrm{sq}+\varepsilon}$, with $\varepsilon$ inside the
 square root, and the mean-square accumulator initializes to $1$. The
 textbook form puts $\varepsilon$ outside
 ($\sqrt{\mathrm{sq}}+\varepsilon$) and starts the accumulator at $0$;
@@ -8883,7 +8883,7 @@ ConvNeXt and ViT run the same EMA without needing this.
 
 \textbf{The EMA decay is warmup-corrected.} A flat $0.9999$ from step $0$
 moves the shadow one ten-thousandth of the way toward the live weights
-per step, so for the first several thousand steps the \emph{evaluated}
+per step, so for the first several thousand steps the evaluated
 weights are mostly the random initialization while the network trains
 normally underneath. The decay is therefore
 $\min(0.9999,\,(1+t)/(10+t))$: it tracks the live weights early and
@@ -8990,7 +8990,7 @@ $\times 0.97$ every $2.4$ epochs after a five-epoch warmup, dropout $0.2$,
 drop-connect $0.2$, AutoAugment, label smoothing $0.1$, EMA $0.9999$, BN momentum
 $0.99$, 350 epochs. All of it is carried on both paths, including the two
 places the TensorFlow original differs from a naive port: $\varepsilon$ goes
-\emph{inside} the square root ($g/\sqrt{s+\varepsilon}$, not
+inside the square root ($g/\sqrt{s+\varepsilon}$, not
 $g/(\sqrt{s}+\varepsilon)$), and the mean-square accumulator starts at $1.0$
 rather than $0$. Drop-connect is a linear ramp over blocks, as the official
 implementation does it, and the EMA shadows the BN buffers as well as the
@@ -9133,9 +9133,9 @@ level by epoch~10 and the difference never recurs.
 \subsection*{What the EfficientNet recipe changes from the 2018 recipe}
 
 The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-\emph{2018-era} recipe: SGD with momentum plus the ``bag of tricks''
+2018-era recipe: SGD with momentum plus the ``bag of tricks''
 polish (cosine schedule, warmup, label smoothing,
-random-resized-crop). The 350-epoch run above is the \emph{2019}
+random-resized-crop). The 350-epoch run above is the 2019
 EfficientNet recipe (Tan \& Le), reproduced end to end.
 Chapter~\ref{chap:residual}'s RSB-A3 side quest shows what 2021 does
 to the 2018 baseline, and Chapter~\ref{chap:layernorm} closes with
@@ -9154,10 +9154,10 @@ Optimizer     & SGD + momentum $0.9$   & RMSProp (TF form)             & $\rho{=
 Peak LR       & $0.1$                  & $0.016$                       & linearly scaled from the official $0.256$@4096 --- RMSProp's scale, not comparable to SGD's $0.1$ \\
 LR schedule   & cosine to zero         & exponential, $\times0.97$ every 2.4 epochs & the paper's staircase anneal, after the same 5-epoch warmup \\
 Epochs        & 90                     & 350                           & the long-schedule regime the regularizers need, and the row the exponential decay above makes non-negotiable \\
-Weight decay  & $10^{-4}$, all params  & $10^{-5}$                     & $10\times$ \emph{weaker} --- depthwise and SE parameters are decay-sensitive \\
+Weight decay  & $10^{-4}$, all params  & $10^{-5}$                     & $10\times$ weaker --- depthwise and SE parameters are decay-sensitive \\
 Augmentation  & RRC + hflip            & + AutoAugment                 & the learned ImageNet policy --- 2019's forerunner of ConvNeXt's DeiT pack \\
 Stochastic depth & none                & drop-path $0.2$               & randomly drops whole residual branches per step, at B0's drop-connect rate \\
-EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights \emph{and} the BN buffers (below) \\
+EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights and the BN buffers (below) \\
 \hline
 \end{tabular}
 \end{center}
@@ -9179,8 +9179,8 @@ weights (\texttt{ema\_bn}); averaged weights against live BN statistics
 is an eval blow-up, a failure mode specific to BatchNorm nets trained
 with weight averaging.
 
-The through-line of the 2018$\to$2019 shift is \emph{smaller,
-longer, more automated}: a quarter of the parameters trained for
+The through-line of the 2018$\to$2019 shift is ``smaller,
+longer, more automated'': a quarter of the parameters trained for
 $4\times$ the epochs, with a learned augmentation policy, stochastic
 depth, and averaged weights supplying the regularization. It is also a
 reminder that ``the paper recipe'' includes the optimizer's exact
@@ -9243,7 +9243,7 @@ deliberate stress test of that assumption. The authors started
 from a standard ResNet-50 and asked: which of the design
 differences between ResNet and Swin is actually doing the work?
 They proceeded by applying transformer-era choices to the
-\emph{ResNet} one at a time and measuring each contribution
+ResNet one at a time and measuring each contribution
 in isolation. The full list:
 
 \begin{enumerate}
@@ -9335,7 +9335,7 @@ done (trained ConvNeXt-T adam + cosine/warmup via packed threading).
 Eighty epochs at about 55 seconds each, one hour and fourteen minutes in
 total, and \textbf{82.27\%} top-1 with \textbf{96.51\%} top-5 on
 Imagenette's 3,925-image validation split. The best epoch reached
-$82.32\%$. That is the \emph{lowest} top-1 of the convnets in this book's
+$82.32\%$. That is the lowest top-1 of the convnets in this book's
 Imagenette column, from much the largest network among them, and
 \S\ref{sec:convnext_results} is about why that is the expected answer
 rather than a defect.
@@ -9370,7 +9370,7 @@ Chapter~\ref{chap:residual}'s additive fan-in.
 
 \medskip\noindent\textbf{And the fold holds at full depth.}
 \texttt{convNextForwardTCh\_has\_vjp} chains the patchify stem, all
-\emph{eighteen} ConvNeXt blocks, the three downsamples, the pool and the
+eighteen ConvNeXt blocks, the three downsamples, the pool and the
 head through \texttt{vjp\_comp}, with
 \texttt{convNextForwardTCh\_has\_vjp\_correct} carrying it back to the
 forward the spec denotes. It assumes 23 positive LayerNorm epsilons and
@@ -9453,7 +9453,7 @@ chapter is genuinely new beyond the LayerNorm-axis rotation and
 the GELU smoothness.
 
 With a modernized convnet backbone, the dominant axis of
-variation between runs becomes the \emph{training recipe}, not
+variation between runs becomes the training recipe, not
 the architecture. The example section below makes that
 concrete. The chapter
 closes by putting the full recipe side-by-side with the 2018
@@ -9525,7 +9525,7 @@ through a projection, convert back to the scalar derivative.}
     \(\delta_{ji} \cdot \mathrm{deriv}\,\mathrm{geluScalar}\,(x_j)\).
   \item \Qed{}
     \pf{Case split on \(i = j\); when they coincide,
-    \(\mathrm{deriv}\,\mathrm{geluScalar}\,(x_i)\) \emph{is}
+    \(\mathrm{deriv}\,\mathrm{geluScalar}\,(x_i)\) is
     \(\mathrm{geluScalar}'(x_i)\) by
     Definition~\ref{ax:geluScalarDeriv}.}
 \end{enumerate}
@@ -9547,7 +9547,7 @@ through a projection, convert back to the scalar derivative.}
 \leanok
 \begin{enumerate}
   \item \(\mathrm{layerNormForward} = \mathrm{bnForward}\),
-    definitionally: on a single feature vector, LayerNorm \emph{is}
+    definitionally: on a single feature vector, LayerNorm is
     the 1D normalization primitive --- the BN/LN distinction (which
     axis, running statistics) is an engineering concern that
     dissolves at the per-vector math level.
@@ -9805,7 +9805,7 @@ paper's initialisation.
 \texttt{.convNextDownsample 96 192} is two entries here, a
 \texttt{.layerNorm 96} and a \texttt{.conv 96 192 2 2}, and the patchify
 stem is likewise a \texttt{.conv} followed by a \texttt{.layerNorm}. The
-spec's job is the \emph{parameter layout}, not the block vocabulary, so
+spec's job is the parameter layout, not the block vocabulary, so
 it names weights rather than concepts.
 
 \textbf{182 parameter tensors, 27,827,818 scalars.}
@@ -9855,7 +9855,7 @@ the five-seed mean of \S\ref{sec:r34_ablation} with one seed's timing.
     carries 27.83M parameters against 9,469 training images, which is not
     the data scale that capacity wants. The recipe here is the shared one,
     AdamW at $10^{-3}$ with cosine and label smoothing, which is
-    deliberately \emph{not} the recipe ConvNeXt was designed around. And
+    deliberately not the recipe ConvNeXt was designed around. And
     its layer scale starts at the paper's $10^{-6}$, which on this short
     schedule is worth three points on its own (above).
   \item \textbf{That is the chapter's thesis arriving as a result rather
@@ -9887,7 +9887,7 @@ Layer scale is a per-channel learnable diagonal,
 $\mathrm{layerScale}(\gamma, x) = \gamma \odot x$, and it is the simplest
 operator in this series. Its Jacobian is diagonal, so it is its own adjoint:
 \texttt{layerScale\_has\_vjp} proves $\mathrm{back}(x, dy) = \gamma \odot dy$,
-the backward multiplying by the \emph{same} $\gamma$ the forward did. There is
+the backward multiplying by the same $\gamma$ the forward did. There is
 nothing to bridge past that identity, so the emitted graph is two
 \texttt{multiply}s against one tensor:
 
@@ -10002,7 +10002,7 @@ Every element of the paper recipe is now wired and on:
 
 \noindent The peak LR is $2.5\mathrm{e}{-}4$ (the
 $4\mathrm{e}{-}3$@4096 official value linearly scaled to batch 256)
-over a 20-epoch warmup. No \emph{architectural} deviation from the paper
+over a 20-epoch warmup. No architectural deviation from the paper
 remains, and the schedule is no longer short of it either. The run below is the full 300-epoch tier, trained and
 evaluated on timm's antialiased bicubic resampler and validation
 protocol.
@@ -10159,12 +10159,12 @@ Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
 \subsection*{What the ConvNeXt recipe changes from the 2018 recipe}
 
 The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-\emph{2018-era} recipe: the original paper's SGD-with-momentum plus
+2018-era recipe: the original paper's SGD-with-momentum plus
 the ``bag of tricks'' polish (cosine schedule, warmup, label
-smoothing, random-resized-crop). The config above is the \emph{2022}
+smoothing, random-resized-crop). The config above is the 2022
 ConvNeXt recipe, DeiT's transformer-training playbook applied to a
 convnet. Where Chapter~\ref{chap:residual}'s RSB-A3 side quest showed
-the 2018$\to$2021 jump on a \emph{fixed} ResNet, this table shows the
+the 2018$\to$2021 jump on a fixed ResNet, this table shows the
 2018$\to$2022 jump with the block modernized in step. Since
 ``the recipe is the thesis'' is this architecture's whole argument,
 the diff below is the chapter in table form. The
@@ -10210,7 +10210,7 @@ plumbing required. Mixup and CutMix route through a soft-label
 train-step variant since they produce fractional labels. Random
 Erasing and RandAugment leave labels alone.
 
-The through-line is the same \emph{regularize harder, train bigger}
+The through-line is the same ``regularize harder, train bigger''
 as RSB-A3, arrived at from the transformer side: keep cross-entropy
 and soften the targets instead of switching losses, AdamW instead of
 LAMB (the batch stays moderate), stochastic depth and EMA from the
@@ -10221,7 +10221,7 @@ regularization pay.
 \label{sec:convnext_sb}
 
 \textbf{The axis.} Scaling ConvNeXt-T is two moves. \textbf{S} deepens stage 3
-from 9 blocks to 27 and touches nothing else; \textbf{B} does that \emph{and}
+from 9 blocks to 27 and touches nothing else; \textbf{B} does that and
 widens every stage, $96/192/384/768 \to 128/256/512/1024$. On the JAX side both
 are parameter edits. On the verified side they are not the same job at all.
 
@@ -10268,7 +10268,7 @@ and proved its backward pass. Each one slotted into the
 theorem, and that includes convolution, BatchNorm, residual,
 depthwise, SE, LayerNorm and GELU.
 This chapter does the same for attention, but it also does
-something larger: it composes \emph{every} layer the framework has
+something larger: it composes every layer the framework has
 proved so far into one machine-checked backward pass over a
 complete state-of-the-art image classifier.
 
@@ -10351,7 +10351,7 @@ are the same function.
 
 \medskip\noindent\textbf{The top-5 column goes the wrong way, and that
 is the chapter's result in miniature.} Top-1 climbs the whole run, 35.2
-to 68.7. Top-5 climbs to $94.88\%$ at epoch 25 and then \emph{falls},
+to 68.7. Top-5 climbs to $94.88\%$ at epoch 25 and then falls,
 finishing 4.5 points down at $90.42\%$. On a ten-class problem top-5 is
 a weak question, so what that divergence measures is a network growing
 more confident about its top choice while its ranking of the remaining
@@ -10393,7 +10393,7 @@ each represented as a \(d\)-vector):
 
 \begin{enumerate}
 \item \textbf{Multi-head self-attention} (MHSA): each output row
-  is a weighted average of \emph{all} input rows, where the weights
+  is a weighted average of all input rows, where the weights
   are computed from the input itself.
 \item \textbf{Per-token MLP}: a small two-layer MLP applied
   independently to every row.
@@ -10432,7 +10432,7 @@ everywhere. The receptive field is global from the first layer.
 
 The math of attention is matrix algebra. Chapter~\ref{chap:tensor}'s
 foundation rules (chain, sum, product, identity) were stated and
-proved for \emph{vector} functions. Before we can prove backward
+proved for vector functions. Before we can prove backward
 passes through \(Q K^\top\) and the row-wise softmax, we need the
 matrix-level lifts of those rules: chain rule on matrices,
 additive fan-in on matrices, identity on matrices, plus matrix-specific
@@ -11089,7 +11089,7 @@ transpose link:
     \(K' \mapsto K'^T \mapsto Q \cdot {\prev} \mapsto
       \tfrac{1}{\sqrt{d}} \cdot {\prev} \mapsto
       \mathrm{rowSoftmax}\, {\prev} \mapsto {\prev} \cdot V\),
-    the second link now matmul-\emph{left}-const
+    the second link now matmul-left-const
     (Theorems~\ref{thm:transpose_has_vjp},
     \ref{thm:matmul_left_const_has_vjp}).
   \item Glue the five links with Theorem~\ref{thm:vjpMat_comp}
@@ -11535,7 +11535,7 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
   \Prove{} the backward of \texttt{vitForwardKV\_has\_vjp} at ViT-Tiny's
   shape --- a \(3 \times 224 \times 224\) image, \(16 \times 16\) patches
   (\(N = 196\) plus the CLS token), \(d = 192 = 3 \times 64\), MLP
-  \(768\), \emph{twelve} blocks with distinct parameters, ten classes ---
+  \(768\), twelve blocks with distinct parameters, ten classes ---
   equals the \(\pdiv\)-contracted Jacobian of the flat forward
   \texttt{vitForwardKV} at every input, cotangent and index. The
   statement is generic in the weights.
@@ -11728,14 +11728,14 @@ patch embed is spelled \texttt{.conv 3 192 16 16}, a $16 \times 16$
 kernel at stride 16, which chops the $224 \times 224 \times 3$ image
 into $14 \times 14 = 196$ non-overlapping patches and projects each to
 192 dimensions. That it is a convolution rather than a distinct
-primitive is the point: a patch embedding \emph{is} a strided
+primitive is the point: a patch embedding is a strided
 convolution whose kernel equals its stride, so it reuses
 Chapter~\ref{chap:cnn}'s proved backward and needs nothing new.
 
 \textbf{The CLS token and the positional embedding are
 \texttt{.param} entries.} They are learned weights that no layer
-computes from an input, and the spec's job is the \emph{parameter
-layout}, so it names them rather than folding them into a block. The
+computes from an input, and the spec's job is the parameter
+layout, so it names them rather than folding them into a block. The
 $197$ is $196$ patches plus the prepended CLS row.
 
 \textbf{\texttt{.transformerBlock 192 768} is one block per line, twelve
@@ -11760,7 +11760,7 @@ embedding get into the list at all. Everything else here is a dense
 layer wearing a different name --- the four attention projections are
 \texttt{[d,d]} matrices with biases, indistinguishable in the parameter
 list from Chapter~\ref{chap:tensor}'s \texttt{.dense}. What makes them
-attention is the \emph{graph}, not the shapes. Sixteen tensors a block,
+attention is the graph, not the shapes. Sixteen tensors a block,
 twelve blocks, plus the patch embed, the two \texttt{.param}s, the final
 LayerNorm and the head: 200.
 
@@ -11774,7 +11774,7 @@ everything but its head. At 1000 classes the count is 5,717,416.
 content.} ViT drops each block's attention branch and MLP branch
 independently, but at the same keep probability, so sites $2i$ and
 $2i+1$ share $\mathrm{keep}_i = 1 - 0.1i/11$. The driver needs one
-entry per \emph{site} because it draws one Bernoulli stream per mask
+entry per site because it draws one Bernoulli stream per mask
 input. Deriving twenty-four evenly spaced keeps from the site ordinal
 instead would silently unpair them, and no structural check would
 notice.
@@ -11821,18 +11821,18 @@ Imagenette scale the ConvNets' inductive bias, locality and translation
 equivariance, actively helps, and the ViT has to learn those properties
 from data it doesn't have. \S\ref{sec:vit_imagenet} is the control:
 the same architecture on 1.28M images reaches $72.31\%$ over a
-\emph{thousand} classes, which is the regime the design was for.
+thousand classes, which is the regime the design was for.
 
 \medskip\noindent\textbf{It reproduces exactly.} Chapter~\ref{chap:cnn}'s
 width sweep is where this book first had to take run-to-run spread
 seriously, so this number was measured three times before being printed,
-and all three passes came back \emph{bit-identical} on three different
+and all three passes came back bit-identical on three different
 cards: the same $68.738854\%$ and $90.420382\%$ at epoch 80, and the same
 160 epoch lines the whole way down. That makes ViT the first network since
 the dense-only graphs of Chapter~\ref{chap:mlp} to reproduce exactly, and
 for the same reason. XLA selects convolution algorithms per process, which
 is what moves the convnet chapters' numbers by a point or two between
-runs. This graph holds 435 \texttt{dot\_general}s and \emph{two}
+runs. This graph holds 435 \texttt{dot\_general}s and two
 convolutions, so there is almost nothing for that selection to vary.
 
 \section{MLIR: Attention}
@@ -11844,7 +11844,7 @@ each proven separately
 (Theorems~\ref{thm:sdpa_back_Q_correct}--\ref{thm:sdpa_back_V_correct},
 \texttt{sdpa\_back\_Q/K/V}), all built on the softmax backward, which
 couples every position to every other (Theorem~\ref{thm:softmax_has_vjp}). Because $Q$, $K$, and $V$ are three linear
-projections of the \emph{same} input $a$, the input gradient is a three-way
+projections of the same input $a$, the input gradient is a three-way
 fan-in, $da = dQ\,W_q^{\!\top} + dK\,W_k^{\!\top} + dV\,W_v^{\!\top}$.
 \texttt{sdpa\_has\_vjp\_mat3} bundles the three, and
 \texttt{transformerAttnSublayer\_has\_vjp\_mat} composes the whole sublayer
@@ -11880,11 +11880,11 @@ gradient returns thrice and adds. The softmax-weighted $dQ,dK,dV$ that feed the
 the surrounding LayerNorm and output projection chain through their bridges.
 
 \medskip\noindent One honesty note: the hard part of attention is in that
-first comment. This listing is the \emph{projection} fan-in (three linear
+first comment. This listing is the projection fan-in (three linear
 adjoints and two adds), while the softmax backward that couples every token
 to every other (\texttt{softmax\_has\_vjp}, \S~\ref{sec:attention_proofs}) is
 what \texttt{// SDPA.back} stands in for. We show the fan-in because it is the
-new \emph{structural} move. The coupled core is carried by the proofs of
+new structural move. The coupled core is carried by the proofs of
 \S~\ref{sec:attention_proofs}.
 
 \medskip\noindent With attention pinned, the verified-codegen thread covers
@@ -12061,9 +12061,9 @@ transformer \texttt{Linear} gets $\mathrm{trunc\_normal}(\sigma{=}0.02)$
 and the patch-embed convolution PyTorch's \texttt{Conv2d} default ---
 which is what \texttt{vitInit} in the listing above selects. It is worth
 saying why that one mattered: Xavier-uniform scales as $1/\sqrt{d}$
-against timm's \emph{fixed} $0.02$, so the generic path was
+against timm's fixed $0.02$, so the generic path was
 $1.8\times$ too wide at ViT-B, $2.6\times$ at ViT-S and $3.6\times$ at
-ViT-Ti, while the patch embed came out ${\sim}6\times$ too \emph{narrow}
+ViT-Ti, while the patch embed came out ${\sim}6\times$ too narrow
 (it divided by the output fan $d\cdot p^2$ rather than the input fan
 $c\cdot p^2$). The smallest model was the worst case.
 
@@ -12146,7 +12146,7 @@ that hold ConvNeXt's two specs together hold these: equal
 \medskip\noindent\textbf{The collectives are gated one way here, and it
 is worth saying which.} \texttt{tests/TestViTDpCheck.lean} pins the
 data-parallel step against its single-device peer by handing both
-replicas the \emph{same} rows, where the all-reduce mean is an
+replicas the same rows, where the all-reduce mean is an
 identity. ViT has no BatchNorm, so that identity is exact rather than
 approximate. But a gate built on duplicated rows is structurally blind
 to a shard-offset bug, and the check that closes that hole works by
@@ -12220,7 +12220,7 @@ normalize over a different group. This is the one-variable pair in the
 book.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end together.}
-The verified path runs half a point \emph{behind} through warmup, is level by
+The verified path runs half a point behind through warmup, is level by
 epoch~100, and stays within a fifth of a point for the remaining two hundred:
 
 \begin{center}
@@ -12278,7 +12278,7 @@ random draws and nothing else, and the reference has never paid it either.
 The same accounting holds for every verified ImageNet run in this book,
 and the convnets' gaps are read against it.
 
-\medskip\noindent A caution on reading the two side by side: the \emph{training}
+\medskip\noindent A caution on reading the two side by side: the training
 loss is not the metric to compare. It runs ${\sim}0.47$ apart at epoch 50 where
 top-1 agrees to a tenth of a point, because label-smoothed cross-entropy sums
 $\log p$ over all $1{,}000$ classes and is hypersensitive to the
@@ -12348,8 +12348,8 @@ of them with at most config-level changes. The MLIR each emits is
 between 7\,KB (MLP) and 1{,}316\,KB (EfficientNet-B0), and the
 lowerer compiles all of them the same way.
 
-The bestiary in Part 2 then shows that \emph{every other
-architecture you've seen in modern deep learning} composes from the
+The bestiary in Part 2 then shows that every other
+architecture you've seen in modern deep learning composes from the
 same small set of primitives plus a handful of
 architecture-specific bundled layers. That list runs UNet, YOLO, DETR,
 Mask R-CNN, DCGAN, CycleGAN, Pix2Pix, DDPM, Stable Diffusion, VAE,
@@ -12399,8 +12399,8 @@ is Part 2: a catalogue of famous architectures expressed as pure
 
 \paragraph*{What ``\(N\) new primitives'' means.}
 Every bestiary entry leads with how many new \texttt{Layer}
-constructors it asks the reader to absorb \emph{on top of the
-primary-sequence toolbox}.
+constructors it asks the reader to absorb on top of the
+primary-sequence toolbox.
 
 \begin{itemize}
   \item \emph{Zero new primitives} means the architecture composes
@@ -12425,7 +12425,7 @@ primary-sequence toolbox}.
     more, the architecture probably warranted its own chapter.
 \end{itemize}
 
-This count is calibrated to the \emph{reader} (what's new vs.\ what
+This count is calibrated to the reader (what's new vs.\ what
 they've seen), not to the codebase (where some bestiary primitives
 were drafted earlier and already sit in \texttt{Types.lean}).
 Formalizing every sub-op of every modern architecture would be an
@@ -12801,8 +12801,8 @@ is pedagogical shape and parameter accounting, not training runs.
 \section{Bestiary entries}
 \label{sec:bestiary_entries}
 
-The entries are grouped by task domain. The first block (\emph{vision
-classifiers}) is where Part 1's VJP'd primitives show up at real-world
+The entries are grouped by task domain. The first block (vision
+classifiers) is where Part 1's VJP'd primitives show up at real-world
 scale --- every layer is one you've already seen proved correct.
 Subsequent blocks step out to detection, segmentation, reinforcement
 learning, and the non-vision outliers (language, audio, 3D,
@@ -12886,7 +12886,7 @@ and ResNet. Its design philosophy reduced to one rule: ``always use
 $3\times 3$ kernels and add depth.'' Two stacked $3\times 3$s cover
 the receptive field of a $5\times 5$ with $\sim$30\% fewer params
 and an extra nonlinearity in the middle; three stacked $3\times 3$s
-match a $7\times 7$. The whole architecture is just \emph{that}
+match a $7\times 7$. The whole architecture is just that
 trick repeated.
 
 All four paper variants:
@@ -12992,7 +12992,7 @@ residual unit; the bottleneck variants (R50, R101, R152) use
 $1\times 1$ reduce $\to$ $3\times 3$ work $\to$ $1\times 1$ expand
 around a residual skip --- three convs per block instead of two,
 but the expensive $3\times 3$ now runs at $1/4$ the input channels,
-so per-block parameter count actually \emph{drops}.
+so per-block parameter count actually drops.
 
 \begin{center}
 \begin{tabular}{l l c r}
@@ -13041,7 +13041,7 @@ recipe (Wightman et al.\ 2021,
 BCE loss, repeated augmentation --- which trains this exact network
 to ${\sim}79.8\%$ top-1. The JAX reference trainer
 (\texttt{jax/MainResnet50Imagenet.lean}) wires that recipe: running
-the cheaper 100-epoch \emph{A3} tier end-to-end through the
+the cheaper 100-epoch A3 tier end-to-end through the
 Lean~$\to$~StableHLO~$\to$~JAX pipeline reaches \textbf{76.66\% top-1
 / 93.03\% top-5} on ImageNet-1k, within ${\sim}1.4$ points of the A3
 paper's $78.1\%$.
@@ -13460,14 +13460,14 @@ A ResNet-34 backbone, trained by this stack on ImageNet, feeding an FPN
 top-down neck into three anchor heads at strides $8/16/32$; DIoU box loss,
 focal objectness, focal class CE; $448$\,px input, 30 epochs, photometric
 and box-aware scale augmentation. VisDrone is the harder half of detection:
-drone-altitude imagery where a median image holds \emph{seventy} objects and
+drone-altitude imagery where a median image holds seventy objects and
 many are $2$--$5$\,px after the resize --- the regime where a single coarse
 grid structurally cannot emit the objects, and what makes the multi-scale head
 of Definition~\ref{layer:fpnModule} necessary rather than decorative. Scored
-against VisDrone's \emph{uncapped} validation ground truth --- all $38{,}759$
+against VisDrone's uncapped validation ground truth --- all $38{,}759$
 boxes, not the 56-box-truncated training record, which drops $34.9\%$ of them
 and is not the benchmark's protocol. The catalog entry below keeps the
-paper-exact YOLOv1 \emph{shape} for the historical record; this is the trained
+paper-exact YOLOv1 shape for the historical record; this is the trained
 detector beside it.
 
 \begin{center}
@@ -13503,9 +13503,9 @@ the per-class spread below predicts.}
 \noindent Figure~\ref{fig:visdrone_fpn} is the top row on four validation
 frames. \textbf{Augmentation and schedule length are one decision, not two,
 and the top five rows only mean something together.} Quadrupling the schedule
-with augmentation off \emph{costs} $19\%$ --- ordinary overfitting on $6{,}471$
+with augmentation off costs $19\%$ --- ordinary overfitting on $6{,}471$
 images. Photometric augmentation recovers it, but at that strength 12 epochs
-still beats 50. Augmentation that changes object \emph{scale} inverts the
+still beats 50. Augmentation that changes object scale inverts the
 ordering again: it makes 30 epochs worth $44\%$ more than 12. A stronger
 augmentation needs a longer schedule to absorb, so \textbf{the optimum epoch
 count is a property of the augmentation pack} --- there is no schedule that can
@@ -13521,10 +13521,10 @@ precision, and average precision charges for the trade; supplying the scales the
 rare classes are missing raises both at once, which is what the recall and
 class-agnostic AP columns move together to show. Detection on aerial imagery does
 not degrade uniformly --- it collapses on whatever is simultaneously small
-\emph{and} rare, and an averaged mAP is precisely the statistic that hides it.
+and rare, and an averaged mAP is precisely the statistic that hides it.
 
 \medskip\noindent The stack beats the hand-written PyTorch replica of
-\emph{this same architecture} by $54\%$, and runs at 65\,fps on one RTX 4060 Ti
+this same architecture by $54\%$, and runs at 65\,fps on one RTX 4060 Ti
 --- or $55.9$\,fps on a 25\,W Jetson Orin Nano under TensorRT, with a
 uint8 input path and the clocks pinned, which is the deployment this dataset
 implies. The replica, not YOLOv8, is the yardstick: it
@@ -13664,7 +13664,7 @@ rolled-in scale, scratches --- with Pascal-VOC boxes. It is VisDrone's opposite
 regime. A crop holds $2.3$ defects, half of which span more than half the frame;
 at the detector's $448$\,px input, $98\%$ of the training boxes route to the
 coarsest pyramid level and none to the finest. This is the dataset on which a
-single $14\times14$ grid should \emph{not} collapse, and running both heads on
+single $14\times14$ grid should not collapse, and running both heads on
 both datasets is what shows when multi-scale detection pays.
 
 Three constants change and nothing in the code generation does: the anchor
@@ -13726,7 +13726,7 @@ times behind, $0.039$ against $0.236$, with recall $0.18$ against $0.77$ ---
 same backbone, same bootstrap, same scorer, same lowerer in all four cells.
 The FPN pays for itself only where objects are small; on NEU-DET it runs three
 heads for one level's worth of work, and the head that collapses on VisDrone
-is not wrong, it is wrong \emph{for drones}. Recall is not the limit on steel:
+is not wrong, it is wrong for drones. Recall is not the limit on steel:
 the FPN finds $99\%$ of defects and the mean is held down by two classes,
 crazing at $0.29$ and rolled-in scale at $0.41$ against $0.66$--$0.84$ for the
 other four --- the diffuse textures whose ``box'' is most of the crop, the
@@ -13929,7 +13929,7 @@ the background only, leaf filled with that colour (chance 2.6) & \textbf{25} & 1
 a flat image of that colour and nothing else & 4.4 & 2.6 \\
 \hline
 Shapley value: share of the class evidence due to the leaf & 85\% & 96\% \\
-Shapley value: images where the background \emph{helps} & 88\% & 71\% \\
+Shapley value: images where the background helps & 88\% & 71\% \\
 class-activation map: share of the map inside the leaf (uniform map: 59\%) & 71\% & 79\% \\
 \hline
 \end{tabular}
@@ -13948,7 +13948,7 @@ the leaf, $85\%$ of it. The counterfactuals say otherwise. Put the same leaf
 on black and the net loses forty points; show it the background with the
 leaf painted out and it is right one time in four; show it a flat rectangle
 of the background's colour and it still beats chance. The background
-\emph{helps} in nine images out of ten, a little each time. A map of where
+helps in nine images out of ten, a little each time. A map of where
 the evidence is heaviest does not say what the net cannot do without.
 
 \begin{figure}[H]
@@ -13996,7 +13996,7 @@ working encoder--decoder segmentation network at 24.5M params on MSD Task01
 brain-tumour MRI: four co-registered modalities (FLAIR / T1w / T1gd / T2w) at
 $224 \times 224$ in, four per-pixel classes out (background, edema,
 non-enhancing/necrotic core, enhancing tumour), 14{,}415 training slices from
-411 patients with the 2{,}569 validation slices held out \emph{by patient}. The
+411 patients with the 2{,}569 validation slices held out by patient. The
 tumour sub-regions are defined by which modality lights up --- edema is bright
 on FLAIR, enhancing tumour on T1gd --- so the input is genuinely multi-modal
 rather than three correlated views of one scene, and the classes are brutally
@@ -14040,13 +14040,13 @@ codegen primitives this rests on --- bilinear upsample (forward + VJP) and
 channel concat --- are exposed at the \texttt{Layer} level as
 \texttt{.unetDown} and \texttt{.unetUp}, which the canonical bestiary UNet
 below also uses. Three things change relative to the image
-\emph{classifiers} of Part~1:
+classifiers of Part~1:
 
 \begin{itemize}
   \item \textbf{The label is a tensor, not a scalar.} Classifiers emit
     one logit vector per image (shape $B \times K$) and compare it to
     one ground-truth class. Segmentation networks emit one logit
-    vector per \emph{pixel} (shape $B \times K \times H \times W$, with
+    vector per pixel (shape $B \times K \times H \times W$, with
     $H \times W$ matching the input) and compare against a
     shape-identical ground-truth mask. Cross-entropy is computed per
     pixel, averaged spatially. This rides the same \texttt{useSeg} flag
@@ -14058,8 +14058,8 @@ below also uses. Three things change relative to the image
   \item \textbf{The network has to give spatial resolution back.}
     A classifier downsamples aggressively (input $224^2$, bottleneck
     $7^2$, GAP, $K$-way logits) and discards spatial structure on
-    purpose. A segmentation network downsamples \emph{and then
-    upsamples}, with \emph{skip connections} from each encoder stage
+    purpose. A segmentation network downsamples and then
+    upsamples, with skip connections from each encoder stage
     spliced into the matching decoder stage so the output recovers
     pixel-level detail the bottleneck threw away. That symmetry is
     exactly what \texttt{.unetUp}'s body bundles --- bilinear upsample
@@ -14430,7 +14430,7 @@ $6{,}210$ parameters. Three things change relative to everything trained so far:
     slot and a per-sample TD error on the taken one. Zero new codegen.
   \item \textbf{The instrument is a solved game.} Blackjack under these rules is
     a 200-state, two-action MDP with known odds, so value iteration gives the
-    optimal policy and the \emph{exact} mean reward of any policy, in
+    optimal policy and the exact mean reward of any policy, in
     milliseconds. Every thousand updates the greedy policy is read off the
     network over all 280 observations in one batched forward and scored
     exactly. The ceiling of the training curve is a theorem about the rules,
@@ -14669,7 +14669,7 @@ reduce to one of three shapes: a stack of \texttt{.transformerEncoder}
 (\texttt{.separableConv} plus \texttt{.transformerEncoder}, QANet).
 What's different from the vision side of the bestiary isn't the layer
 kit --- the kit is the same set of primitives Ch~\ref{chap:attention}
-introduced --- it's everything \emph{around} the layers: the data
+introduced --- it's everything around the layers: the data
 pipeline, the loss, and the inference loop.
 
 \begin{figure}[H]
@@ -14738,7 +14738,7 @@ and 6.02 for guessing uniformly over the 65 characters. Sampling after
 that produces recognizable Shakespeare cadence, real character names
 (NORTHUMBERLAND, QUEEN MARGARET, MERCUTIO, BRUTUS) and multi-line
 dialog. Three things change relative to the image trainers shown
-throughout Part~1, and they capture what NLP training \emph{is}:
+throughout Part~1, and they capture what NLP training is:
 
 \begin{itemize}
   \item \textbf{Input is a vocabulary index, not a pixel.} The first
@@ -14751,7 +14751,7 @@ throughout Part~1, and they capture what NLP training \emph{is}:
   \item \textbf{Loss is per-token, averaged over the sequence.} Image
     classifiers compute one cross-entropy at the end of the network:
     pool to a vector, dense to logits, compare to one ground-truth
-    class. Language models compute cross-entropy at \emph{every}
+    class. Language models compute cross-entropy at every
     position --- each of the $T$ tokens predicts the next one, and the
     per-token losses are averaged. Our trainer reuses the same
     cross-entropy path through a flag (\texttt{useSeg} in
@@ -14761,7 +14761,7 @@ throughout Part~1, and they capture what NLP training \emph{is}:
     Ch~\ref{chap:tensor} derived, applied $T$ times in parallel.
   \item \textbf{Inference is autoregressive.} The training loop is a
     single forward pass per batch, just like image classification, but
-    \emph{inference} is a $T$-step loop: the network predicts token
+    inference is a $T$-step loop: the network predicts token
     $t{+}1$ from tokens $[0..t]$, the sampled token is appended to the
     context, and the network runs again for $t{+}2$. Our
     \texttt{tinygpt-shakespeare sample} executable implements exactly
@@ -14907,10 +14907,10 @@ def qanetEncoderBlock : NetSpec where
 \href{https://arxiv.org/abs/2102.03902}{arXiv:2102.03902}) that
 replaces the $O(n^2)$ softmax attention
 with an $O(n)$ Nyström-approximation computed via $m$ landmark
-tokens, $m \ll n$. Crucially, this is a \emph{compute} change, not
+tokens, $m \ll n$. Crucially, this is a compute change, not
 a parameter change: the $W_Q / W_K / W_V / W_O$ projections and the
 FFN are identical to a standard transformer. Our
-\texttt{.transformerEncoder} spec is therefore \emph{identical} to
+\texttt{.transformerEncoder} spec is therefore identical to
 BERT's at each scale --- base lands at 108M (vs BERT-base 109M),
 large at 333M (vs BERT-large 335M). The entry's pedagogical value is
 prose-level: most of the 2020--2022 efficient-attention literature
@@ -14947,7 +14947,7 @@ the noise schedule and the sampling loop, not in layer design.
 (its CIFAR-10, sinusoidal-time and attention variants are archived beside it)
 is a timestep-conditioned UNet trained to predict the Gaussian noise added to an
 image; \texttt{mnist-ddpm-sample} runs the reverse loop and writes a grid. The
-backbone is \emph{literally} the segmentation UNet of
+backbone is literally the segmentation UNet of
 \S~\ref{sec:bestiary_segmentation}. Three things
 change relative to the classifiers, segmentation nets and detectors so far:
 
@@ -14963,7 +14963,7 @@ change relative to the classifiers, segmentation nets and detectors so far:
     concatenates it as an extra channel (hence \texttt{.unetDown 2 16} --- one
     image channel plus one time channel), and the CIFAR variant embeds it with
     the positional-encoding primitive NeRF introduced. Diffusion adds
-    \emph{only} the conditioning.
+    only the conditioning.
   \item \textbf{Inference is an iterative loop, not one forward pass.} What that
     loop costs is the second table below.
 \end{itemize}
@@ -14973,7 +14973,7 @@ generation is the only demo in this book whose success criterion is ``does that
 look like a digit to you.'' It does not have to be: Chapter~\ref{chap:cnn}'s
 verified CNN maps an image to ten numbers, and in that space the usual
 statistics work. What matters more than any row is that the scale is
-\emph{bracketed at both ends}, since a metric that only ever reports ``bad'' is
+bracketed at both ends, since a metric that only ever reports ``bad'' is
 indistinguishable from a broken one:
 
 \begin{center}
@@ -15005,7 +15005,7 @@ g(t)\,\mathrm{d}w$, whose reverse is driven by the score
 $\nabla_x \log p_t(x)$. \textbf{That view costs no retraining here}, which is
 the point worth taking away: under the variance-preserving SDE the score is
 $-\hat\varepsilon(x,t)/\sigma_t$, so the $\varepsilon$-predicting network the
-trainer above already produces \emph{is} a score model up to a scale factor.
+trainer above already produces is a score model up to a scale factor.
 Sampling is then whatever you choose to integrate, on frozen weights: the
 reverse SDE, its deterministic twin the probability-flow ODE, or the family
 between them that DDIM's $\eta$ (Song, Meng \& Ermon 2020,
@@ -15045,8 +15045,8 @@ evaluations.}
 \label{fig:ddpm_mnist}
 \end{figure}
 
-\medskip\noindent Which makes the third row the instructive one. \emph{The
-reverse SDE and ancestral sampling are the same idea} --- integrate the
+\medskip\noindent Which makes the third row the instructive one. The
+reverse SDE and ancestral sampling are the same idea --- integrate the
 stochastic reverse process --- and they land at opposite ends of this table,
 because one of them discretises it well and the other does not. The reverse
 process is stiff, $\beta(t)$ diverging as $t \to 1$, and the Euler--Maruyama arm
@@ -15360,7 +15360,7 @@ def pinnBurgers : NetSpec where
 \subsubsection*{Fourier neural operator (\texttt{Bestiary/FNO.lean})}
 \emph{One} new primitive, not shown. Li et al.\ (2021,
 \href{https://arxiv.org/abs/2010.08895}{arXiv:2010.08895}) learn the solution
-\emph{operator} of a PDE family rather than one solution: initial condition
+operator of a PDE family rather than one solution: initial condition
 in, solution out, at any resolution. Four blocks of $v \mapsto \sigma(Wv +
 \mathcal{F}^{-1}(R \cdot \mathcal{F} v))$: a pointwise $1 \times 1$ conv $W$
 beside a spectral convolution that FFTs the field, keeps the lowest $k$ modes
@@ -15404,7 +15404,7 @@ spectral convolution made data-dependent and block-sparse, $O(N \log N)$ in
 tokens where attention is $O(N^2)$, and at $16{,}200$ tokens that difference
 is the model. The spec keeps the patch embedding, dimension, depth and MLP
 and puts \texttt{.transformerEncoder} where the AFNO block goes, which
-\emph{overcounts}: attention at 768 spends $4 \times 768^2 \approx 2.36$\,M
+overcounts: attention at 768 spends $4 \times 768^2 \approx 2.36$\,M
 parameters a block where AFNO's block-diagonal complex MLP spends $0.30$\,M;
 the MLPs, three quarters of a block either way, are the same. Variants: the
 paper's model, a $2^\circ$ version at a size one card trains, tiny.
@@ -15609,7 +15609,7 @@ def whisperSmall : NetSpec where
 
 Architectures where the task domain is neither a 2D image nor a token
 sequence: 3D scene reconstruction, multimodal embedding, scientific. Several of these (NeRF, CLIP) have essentially
-\emph{no} architectural novelty --- the interesting work lives in the
+no architectural novelty --- the interesting work lives in the
 data, loss, or training procedure, and the bestiary entry exists to
 make that point.
 
@@ -15620,7 +15620,7 @@ make that point.
 \href{https://arxiv.org/abs/2003.08934}{arXiv:2003.08934}). Under 600K params at canonical
 config; the architectural novelty is nonexistent. What makes NeRF work
 is the positional encoding + the volumetric-rendering loss ---
-both \emph{outside} the network, not layers in it. Variants:
+both outside the network, not layers in it. Variants:
 canonical (593K), fast (167K hidden=128), tiny fixture.
 
 \begin{verbatim}
@@ -15724,7 +15724,7 @@ The two primitives are conceptually separate networks chained back to
 back; the linear \texttt{NetSpec} flattens that.
 
 \textbf{Evoformer} (48 blocks) is the perception/refinement stage. It
-maintains a \emph{dual} representation: a multiple-sequence-alignment
+maintains a dual representation: a multiple-sequence-alignment
 tensor $\mathrm{MSA}\!\in\!\mathbb{R}^{s \times r \times c_m}$ (where
 $s$ is the number of homologs found by the database search and $r$ is
 the number of residues) and a pair tensor
@@ -15818,7 +15818,7 @@ torrent} ($\sim$6.3\,GB), both Russakovsky et al.\ (2015). Each torrent is
 a single \texttt{.tar}: \texttt{ILSVRC2012\_img\_train.tar} is itself a
 tar of 1000 per-class tars (\texttt{n01440764.tar}, \ldots) and
 \texttt{ILSVRC2012\_img\_val.tar} holds the 50{,}000 validation JPEGs.
-\emph{You never unpack them}. TFDS reads the nested tars directly.
+You never unpack them. TFDS reads the nested tars directly.
 Drop both files, as-is, into TFDS's manual-download directory and let the
 standard builder do the rest:
 
@@ -15877,7 +15877,7 @@ reference:
     $\mathrm{img\_size}/\mathrm{crop\_pct}$ and only then centre-crops,
     which is \texttt{timm}'s order rather than the Google/TPU
     ``Inception'' crop-then-resize; and both that resize and the
-    training \texttt{RandomResizedCrop} run \emph{antialiased}, because
+    training \texttt{RandomResizedCrop} run antialiased, because
     PIL antialiases when downscaling and \texttt{tf.image.resize} does
     not by default. The two have to move together: a network partly
     fits the aliasing of the resampler it trained under, so matching
@@ -16131,15 +16131,15 @@ official split, and as five stratified folds, so a net fine-tuned on field
 images scores every field image once, held out.
 
 \medskip\noindent\textbf{Building the BraTS dataset.}
-\emph{BraTS~2021 proper} (1{,}251 cases) is
-gated behind a free Synapse account \emph{and} a signed research-use
+BraTS~2021 proper (1{,}251 cases) is
+gated behind a free Synapse account and a signed research-use
 agreement, so no script can fetch it. The \textbf{Medical
 Segmentation Decathlon}'s \textbf{Task01\_BrainTumour} is the same task
 from open storage: 484 labelled 4D volumes built from the BraTS
 2016/2017 cases, the same four co-registered MRI modalities
 (FLAIR / T1w / T1gd / T2w) and the same glioma sub-regions, as a single
 7.6\,GB tarball over S3. Thus we have fewer volumes and numbers that are
-\emph{not} comparable to a BraTS~2021 leaderboard, and we also have a
+not comparable to a BraTS~2021 leaderboard, and we also have a
 real segmentation result on real medical data that a reader can
 reproduce.
 
@@ -16147,10 +16147,10 @@ reproduce.
 \texttt{preprocess\_brats.py} ships a \textbf{dependency-free NIfTI-1
 reader} (numpy only) and two decisions that would silently ruin the
 numbers if done the obvious way. Intensities are z-scored over
-\emph{brain voxels only}, because BraTS volumes are skull-stripped, so
+brain voxels only, because BraTS volumes are skull-stripped, so
 $\sim$83\,\% of each is exact zero and whole-volume statistics would
-crush the tissue contrast. And the train/val split is \emph{by patient,
-not by slice}, because adjacent axial slices of one brain are
+crush the tissue contrast. And the train/val split is by patient,
+not by slice, because adjacent axial slices of one brain are
 near-duplicates, so a slice-level split leaks memorized neighbours across
 the boundary.
 Volumes are quantized to uint8 over a $\pm5\sigma$ window and the C
@@ -16162,7 +16162,7 @@ in-plane size, which suits a depth-4 UNet ($240 = 16 \cdot 15$). A stride-32
 backbone needs a size divisible by 32, so \texttt{unet-brats-r34} reads a
 second build made by \texttt{preprocess\_brats.py \dots{} --size 224 --seed 0}
 into \texttt{data/brats224/}. The same seed reproduces the same patient split
-and the same 14{,}415 / 2{,}569 slices. Note that \texttt{--size} \emph{crops}
+and the same 14{,}415 / 2{,}569 slices. Note that \texttt{--size} crops
 rather than resizes: interpolating a label mask would invent classes that were
 never annotated, whereas a centre crop leaves intensities exact and the mask
 values untouched. It is also lossless here, because the 8-pixel border it
@@ -16387,7 +16387,7 @@ bundle these targets, and any one builds on its own:
 
 The scale tier. Six networks train on full ImageNet-1k off the same certified
 renderer as their Imagenette counterparts, in the chapter order Track 3
-uses. A row is a \emph{(network, recipe)}
+uses. A row is a (network, recipe)
 pair rather than a network: ResNet-50 appears twice because
 Chapter~\ref{chap:residual} trains it on two recipes, and the recipe is the
 middle field of the job's own name.
@@ -16408,7 +16408,7 @@ middle field of the job's own name.
 
 \noindent Six of these jobs have run and are the ones behind their chapters'
 numbers; the ConvNeXt-T row is configured and has not finished, so
-Chapter~\ref{chap:layernorm} carries the reference only. \texttt{scripts/jobs/} also carries \emph{axis} siblings that
+Chapter~\ref{chap:layernorm} carries the reference only. \texttt{scripts/jobs/} also carries axis siblings that
 this table does not list --- an fp32 peer of each of the ResNet-34,
 ResNet-50 2018, RSB-A3 and ViT rows, and an earlier A3 artifact --- which differ from their
 row in precision or in one optimizer knob, never in the recipe, plus
@@ -16481,8 +16481,8 @@ XLA-only.
 Several chapters end in a variant that is rendered but is not a Track-4 runner,
 and the section heading says which of three kinds it is: a second recipe, a
 wider or deeper size, or an architecture the book reaches for once. They are
-collected here rather than in the table above because \emph{none of them has
-been trained} --- not because they cannot start. Five of the seven have job
+collected here rather than in the table above because none of them has
+been trained --- not because they cannot start. Five of the seven have job
 configs, launch like any Track-4 row and ride in \texttt{lake run imagenet}
 right after their chapter's row; only the two ResNet-50 recipes have none. The
 status column says what each one is missing.
@@ -16538,7 +16538,7 @@ $4.9\times$ on the CNN --- because it dispatches to the vendor's hand-tuned
 kernels, where IREE generates every kernel itself. That is also why IREE's
 runtime is $392\times$ smaller, $1.3$\,MB against the XLA plugin's $505$\,MB.
 \textbf{The size gap is not a trust gap}: most of the plugin is vendor kernel
-libraries it \emph{calls}, where IREE generates the equivalent, and both bodies
+libraries it calls, where IREE generates the equivalent, and both bodies
 of code are unverified. Choosing the small runtime relocates the trusted base
 rather than shrinking it.
 
@@ -16569,11 +16569,11 @@ and that covers dense layers, convolution, batch normalization, residual
 connections, depthwise convolution, squeeze-and-excitation, layer
 normalization, and self-attention. If it builds, it's correct.
 
-But ``it builds'' is only the first of \emph{three kinds of certainty},
+But ``it builds'' is only the first of three kinds of certainty,
 and they are not the same kind. \textbf{Proven} (deductive): in Lean,
 against three core axioms, each operator's gradient is its exact
 reverse-mode derivative. \textbf{By construction} (structural): the
-StableHLO the GPU runs is not written but \emph{printed} from the same
+StableHLO the GPU runs is not written but printed from the same
 datatype the proofs reason about, with a bridge theorem pinning it to the
 proven formula, so the code cannot drift from the math.
 \textbf{Cross-checked} (empirical): what cannot be proven is watched by
@@ -16739,7 +16739,7 @@ in the book.
 \section{Proven: the math is right}
 
 Two mechanisms make the deductive layer trustworthy: the proofs
-themselves, and an independent re-check that the \emph{kernel}, not
+themselves, and an independent re-check that the kernel, not
 just the elaborator, accepts them with no project axioms.
 
 \subsection{Trust kernel}
@@ -16755,7 +16755,7 @@ differentiability/forward/witness machinery they rest on, plus the
 bestiary's 45 architecture families --- and \textbf{zero project
 axioms} anywhere in it. That last figure is the one that matters, because
 it is the only one that cannot quietly grow. The axiom audit
-(\texttt{tests/AuditAxioms.lean}) re-checks \emph{every} theorem in the
+(\texttt{tests/AuditAxioms.lean}) re-checks every theorem in the
 suite (the VJP contracts plus the forward-graph faithfulness, render,
 cotangent-chain, backward-tie, and finite-precision results,
 \S~\ref{sec:precision}) --- that file is the live count, quoted here
@@ -16807,7 +16807,7 @@ result, together with the calculus floor those rest on.
 \subsection{Verified code generation}
 \label{sec:verified_codegen}
 
-The proofs above answer whether the \emph{mathematics} is right, meaning the
+The proofs above answer whether the mathematics is right, meaning the
 hand-derived VJPs, their proofs, and the elaborator that accepted them. They
 say nothing about a different gap. The GPU never runs the Lean functions. It
 runs a block of emitted \texttt{stablehlo} that the lowerer compiles once per
@@ -16861,11 +16861,11 @@ and bounded:
   \item \emph{Read, not proved}: that the printed mirror is, node for node,
     the bridged IR.
   \item \emph{Trusted} (validated numerically, not proven): that the
-    StableHLO \emph{text} faithfully denotes $[\![\cdot]\!]$. Its
-    \emph{syntactic} half is now partly closed, because the emitted text lexes
+    StableHLO text faithfully denotes $[\![\cdot]\!]$. Its
+    syntactic half is now partly closed, because the emitted text lexes
     and parses back to the proven op-graph (\texttt{StableHLOLex.lean},
     \texttt{StableHLOParse.lean}). That leaves three things trusted: a formal
-    StableHLO \emph{semantics}, which does not yet exist, that the lowerer
+    StableHLO semantics, which does not yet exist, that the lowerer
     compiles the text correctly, and that the hardware's rounding
     approximates $\mathbb{R}$ within the modelled unit roundoff. The last of those is now a conditional theorem validated on
     real silicon (\S~\ref{sec:precision}) rather than a bare assumption.
@@ -16879,10 +16879,10 @@ the unproven surface here is a single printer, tested end to end.
 \medskip\noindent\textbf{Why it is tractable.} The reason a deep ResNet or a
 transformer block comes under this scheme as a focused engineering build,
 rather than a research project, is the order things were proved in. The VJP
-library is \emph{per-operator and generic}, proved once over abstract
+library is per-operator and generic, proved once over abstract
 dimensions and before any code generation existed, and the whole-network VJPs
 compose those per-operator lemmas through the chain rule. Code generation
-therefore carries \emph{no new proof obligation}: every architecture's
+therefore carries no new proof obligation: every architecture's
 operators were proven once, and the emitter reuses them, adding only the
 printer and the numerical check. Build the mathematical foundation
 per-operator and generic, and the code generation becomes mechanical.
@@ -16896,7 +16896,7 @@ proves equal to the certified loss-descent step, output by output. A companion
 \emph{tie} theorem per network (\texttt{mlp\_train\_step\_tied\_certified},
 \texttt{r34\_net\_tiedB}, \texttt{vit\_net\_tied\_certified} and their peers) then
 closes the gap a per-output bridge leaves open: the cotangent each parameter
-update consumes is the one the network's \emph{own} backward pass delivers at
+update consumes is the one the network's own backward pass delivers at
 that site, threaded through the real forward activations, so each update is
 one composed equation rooted at the proven forward rather than a quantifier
 over a free cotangent. All twelve chapter networks are tied this way, from the MNIST
@@ -16941,12 +16941,12 @@ inductive Back (inp : Nat) : Nat -> Type where
 \noindent A \texttt{Back} value is a closed description of one backward graph.
 The dense backward, for instance, is just \texttt{dotGeneral W cotangent},
 which feeds the incoming cotangent into a single matrix multiply. Two functions are
-defined on this type, and \emph{everything} rests on the gap between them
+defined on this type, and everything rests on the gap between them
 being closed by a theorem.
 
 \medskip\noindent\textbf{The denotation.} The first function,
 \texttt{Back.denote}, interprets a graph into the proofs' own \texttt{Vec}
-type, saying what the graph \emph{means} mathematically:
+type, saying what the graph means mathematically:
 \[
   [\![\texttt{cotangent}]\!]\,dy = dy, \qquad
   [\![\texttt{dotGeneral}\,A\,e]\!]\,dy
@@ -16970,7 +16970,7 @@ that this denotation equals the proven derivative. For the dense layer:
   [\![\texttt{emitDenseBack}\,W]\!]\,dy
   = (\texttt{dense\_has\_vjp}\,W\,b).\mathrm{backward}\,x\,dy.
 \]
-Its proof is one word, \texttt{rfl}: both sides reduce to the \emph{same}
+Its proof is one word, \texttt{rfl}: both sides reduce to the same
 term, \texttt{Mat.mulVec}\,$W\,dy$, so the denotation of the emitted graph and
 the proven backward are definitionally identical. That base case pins the
 plumbing. The ReLU bridge is the first with real content:
@@ -16982,7 +16982,7 @@ plumbing. The ReLU bridge is the first with real content:
 \]
 The proof unfolds the denotation to $\text{if } x_i > 0 \text{ then } dy_i
 \text{ else } 0$ and shows it equals the canonical ReLU subgradient, but
-\emph{only} under the hypothesis $h_{\text{smooth}}$ that no coordinate sits
+only under the hypothesis $h_{\text{smooth}}$ that no coordinate sits
 on the kink. That hypothesis is not a technicality. It names exactly the
 measure-zero set where the emitted \texttt{compare GT 0} disagrees with the
 true derivative, and the theorem is written to permit failure precisely there
@@ -17014,7 +17014,7 @@ value is the pivot between two arrows. The printer walks it and emits one
 \texttt{compare GT 0} plus \texttt{select}), and that arrow is the trusted
 one, producing the text in each chapter's listing. The denotation interprets
 the same value into the proofs' \texttt{Vec} type, and the bridge proves
-\emph{that} equals the derivative, so that arrow is machine-checked. Because both arrows start from
+the result equals the derivative, so that arrow is machine-checked. Because both arrows start from
 one concrete datatype rather than from a string, ``the emitted code computes
 the proven gradient'' is a theorem about a value, not a hope about a comment.
 
@@ -17046,7 +17046,7 @@ asserts agreement within tolerance (typical max-error
 \(\sim 10^{-11}\) at \(\varepsilon = 10^{-5}\) in float64).
 
 Every FD check is a belt-and-suspenders pass over a
-\emph{proved} Jacobian theorem.
+proved Jacobian theorem.
 The proofs already establish that each formula equals
 \(\fderiv\) at the relevant points, and the FD checks confirm
 the formulas-as-written agree numerically with what the function
@@ -17073,7 +17073,7 @@ prose published and would diverge.
 
 FD is cheap, easy to reason about, and tight enough for
 spot-checking formulas, but it can't probe what the
-\emph{compiled} code actually computes on the GPU, only
+compiled code actually computes on the GPU, only
 what the formula says in Python, and it struggles at
 non-smooth points where the limit definition breaks down. For
 those gaps and for end-to-end pipeline verification, the next oracle takes over.
@@ -17166,20 +17166,20 @@ Every theorem in this book is over exact reals, and the GPU computes in
 finite precision. Until recently that gap lived entirely in the empirical
 layer, where the oracles agree to float32 precision. It is now a theorem layer, and
 it has two halves of different reach. Keeping them apart is the honest
-part --- as is keeping the layer's \emph{generality} apart from its
-\emph{usefulness}, which \S~\ref{par:precision_reach} below returns to.
+part --- as is keeping the layer's generality apart from its
+usefulness, which \S~\ref{par:precision_reach} below returns to.
 The \emph{closeness} half
 (\(|\,\text{float op} - \text{real op}\,| \le\) budget) is
 per-operator: \texttt{FloatBridge.lean} budgets every operator the
 networks are built from, and the certified backward ties say each net's
 hand-written gradient chain is the certified one. The
-\emph{descent} half (a rounded step provably \emph{decreases the loss})
+\emph{descent} half (a rounded step provably decreases the loss)
 closes only for the shallow nets
 (\texttt{SgdDescent\{Linear,Mlp,Cnn,Cifar\}.lean}). The way the chain avoids
 new axioms is the part worth explaining.
 
 \paragraph{The model is a hypothesis.}
-A \texttt{FloatModel} is \emph{any} rounding operator \(\mathrm{rnd}\)
+A \texttt{FloatModel} is any rounding operator \(\mathrm{rnd}\)
 with relative error \(u\): \(|\mathrm{rnd}(x) - x| \le u\,|x|\).
 Binary32 round-to-nearest satisfies this with \(u = 2^{-24}\) on the
 normal range (the subnormal range is characterized separately in
@@ -17192,7 +17192,7 @@ postulated, and the theorems are conditional on the standard model, the
 same way the ReLU theorems are conditional on being off the kink, and
 the axiom audit is untouched. Two further design choices are forced by
 the hardware: the dot-product budgets are stated in the classical
-compounded form valid for \emph{every} summation association, because
+compounded form valid for every summation association, because
 IREE tiles and reorders reductions freely (the price is a fan-in factor
 \(n\cdot u\), and the tree-reduction bound below recovers
 \(\log_2 n\cdot u\) under a named balance hypothesis). And \(\exp\) enters
@@ -17213,7 +17213,7 @@ and instantiates it twice: \texttt{binary32} at \(p = 23\),
 \(u_{\mathrm{e4m3}} = 2^{-4}\). Every bridge quantifies over
 \texttt{(M : FloatModel)} --- the per-operator lemmas, the block and stage
 chains, the MNIST descent chain --- so none of them is a statement about
-binary32 that happens to be proved; each is a statement about \emph{any}
+binary32 that happens to be proved; each is a statement about any
 rounding model, of which binary32 is one instance.
 
 \medskip\noindent That generality is free. Usefulness is not, and the two
@@ -17226,12 +17226,12 @@ bf16 (\(u = 2^{-8}\)) it sits at \(n \approx 256\), and ResNet-34's
 still true there. It is also worthless there.
 
 \medskip\noindent Which is why the low-precision result is stated
-\emph{mixed} rather than pure. \texttt{dotMixed} rounds the operands
+mixed rather than pure. \texttt{dotMixed} rounds the operands
 through a leaf model \(L\) (bf16 \(2^{-8}\), or fp8-E4M3 \(2^{-4}\)) and
 accumulates through \(M\) at \(u_{\mathrm{acc}}\), which is the shape the
 hardware actually runs: low-precision inputs, fp32 accumulator.
 \texttt{dot\_close\_mixed} then splits the error in two, and the split is
-the whole point --- the leaf precision contributes a \emph{flat}
+the whole point --- the leaf precision contributes a flat
 \((2u_{\mathrm{leaf}} + u_{\mathrm{leaf}}^2)\sum|x_i y_i|\) term that is
 \textbf{not} fan-in amplified, while the amplification rides entirely on
 \(u_{\mathrm{acc}}\). The wall stays at \(1/u_{\mathrm{acc}}\) no matter
@@ -17270,12 +17270,12 @@ proven gradient. \emph{The loss head}:
 softmax-minus-onehot cotangent against the certified
 \(\partial(\mathrm{crossEntropy})/\partial(\mathrm{logits})\).
 \emph{Descent}: \texttt{sgd\_descends} proves an \(\eta\)-accurate
-gradient step still \emph{decreases the loss}, and
+gradient step still decreases the loss, and
 \texttt{linear\_sgd\_descends} discharges its smoothness hypothesis with
 the explicit constant \(2a^2/(1-2aD)\), with no Hessian, because the softmax
 ratio sandwich that powers the float budgets turns out to be the Lipschitz
-engine too. With the float budget \emph{fused in}, so that the step's
-\(\eta\) is the \emph{proven} binary32 gradient accuracy rather than an
+engine too. With the float budget fused in, so that the step's
+\(\eta\) is the proven binary32 gradient accuracy rather than an
 assumed parameter, this closes end-to-end for the linear classifier
 (\texttt{linear\_float\_sgd\_descends}), the entire MLP
 (\texttt{mlp\_\{output,hidden,input\}\_float\_sgd\_descends}), and the
@@ -17283,7 +17283,7 @@ entire Chapter-3 CNN, both conv weights and biases
 (\texttt{cnn\_conv\{1,2\}\_float\_sgd\_descends}). The \(\mathbb{R}\)-side
 argument reaches one layer further:
 \texttt{cifar8\_lastConv\_sgd\_descends} is the first non-MNIST descent. It is
-CIFAR-8's last conv, proved as an \emph{instance} of the CNN lemma at its
+CIFAR-8's last conv, proved as an instance of the CNN lemma at its
 frozen earlier features, and that framing is exactly why it stops there.
 The admissible \(\mathrm{lr}\) is a product of per-layer operator-norm
 factors, so each added layer shrinks it geometrically. Full-depth CIFAR and
@@ -17292,16 +17292,16 @@ all five deep nets stay closeness-only, by design, not for want of effort.
 \paragraph{The kink.}
 Over \(\mathbb{R}\), ReLU forced the hypotheses \(x_k \ne 0\). In
 float the same op inverts its role twice. The forward mask is
-\emph{exact}, since compare-and-select rounds nothing, so the op that
+exact, since compare-and-select rounds nothing, so the op that
 causes all the \(\mathbb{R}\)-side conditions is the free op here.
-But the backward mask reads the \emph{rounded} pre-activation, so the
+But the backward mask reads the rounded pre-activation, so the
 hypotheses return with a number in them, \(\mathit{ez} < |z_i|\), meaning
 the accumulated rounding error must not flip a sign
 (\texttt{reluMask\_close}). A qualitative side condition became a
 checkable margin.
 
 \paragraph{Measured against proven.}
-The numeric capstones are instantiated at the \emph{trained} magnitudes
+The numeric capstones are instantiated at the trained magnitudes
 of a real 12-epoch, 97.8\% GPU run (\(|W| \le 3/5\), covering the
 measured \(0.52\), and He initialization already exceeds prettier bounds
 in its tails). An \texttt{f32}/\texttt{f64} twin of that run
