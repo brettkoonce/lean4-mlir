@@ -382,6 +382,19 @@ jobs:
           if [ -x scripts/inject_umami.sh ] && [ -d public/docs ]; then
             scripts/inject_umami.sh public/docs
           fi
+          # ⭐ Version the declaration index's URL (2026-09-22). doc-gen4's find/ page and every
+          # page's search box fetch declarations/declaration-data.bmp — a 36 MB JSON that changes
+          # on every deploy — and the site's CDN hands a .bmp to browsers with a THREE-DAY TTL
+          # (cache-control: max-age=259200, where the HTML gets Pages' 600 s). After the
+          # Certs:docs deploy above, a browser still holding the old index sent every new name
+          # to 404.html for days. A query string keyed on the commit makes each deploy's index a
+          # new resource to browser and CDN alike; Pages ignores the query and serves the file.
+          if [ -d public/docs ]; then
+            v=${GITHUB_SHA::8}
+            grep -rl --include='*.html' --include='*.js' 'declaration-data.bmp' public/docs \
+              | xargs -r sed -i "s|declaration-data\.bmp|declaration-data.bmp?v=$v|g"
+            echo "declaration index versioned as ?v=$v in $(grep -rl --include='*.html' --include='*.js' "declaration-data.bmp?v=$v" public/docs | wc -l) files"
+          fi
           # Blueprint PDF — try multiple known paths, log what we find.
           if [ -f blueprint/print/print.pdf ]; then
             cp blueprint/print/print.pdf public/blueprint.pdf
