@@ -12491,8 +12491,12 @@ that recur.
 
 % The bestiary is a catalogue, not a narrative: its subsection headings are
 % the entries a reader looks up by name, so this chapter alone shows them in
-% the TOC. Restored to depth 1 before the appendices below.
+% the TOC and in the PDF's bookmarks. The first switch is written into the
+% .toc file, which is what the printed contents read; hyperref reads the live
+% tocdepth counter instead, so the bookmark depth is raised separately.
+% Both restored to depth 1 before the appendices below.
 \addtocontents{toc}{\protect\setcounter{tocdepth}{2}}
+\hypersetup{bookmarksdepth=2}
 
 Part 1 introduced a small set of \texttt{NetSpec} primitives across
 chapters 1--9 and proved each one's backward pass:
@@ -16039,6 +16043,7 @@ representation and the cross-stage handoff. \S~\ref{layer:evoformerBlock}
 and \S~\ref{layer:structureModule} document the bundling explicitly.
 
 \addtocontents{toc}{\protect\setcounter{tocdepth}{1}}
+\hypersetup{bookmarksdepth=1}
 
 \chapter{Data availability}
 \label{app:data}
