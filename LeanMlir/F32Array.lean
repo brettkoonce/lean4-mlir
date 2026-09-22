@@ -333,7 +333,7 @@ opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArr
     the pre-Phase-3b target+mask size, long after the record grew the bbox
     tail; a stale stride in the docs is what this whole bug class feeds on.)
     The Lean dispatcher (`runTraining`) splits this into target + mask before
-    calling `trainStepAdamF32Yolov1`. See `preprocess_pets_mosaic.py` for the
+    calling `trainStepAdamF32Yolov1`. See `historical/preprocess_pets_mosaic.py` for the
     on-disk format. -/
 @[extern "lean_f32_load_voc"]
 opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)

@@ -1057,7 +1057,7 @@ inductive DatasetKind where
       2×2 mosaics). Images are 224×224×3 (resized at preprocess time,
       ImageNet-normalized on Lean read). Labels carry the YOLOv1 target tensor +
       per-cell mask concatenated as 6076 bytes/image. See
-      `planning/archive/yolo_final.md` and `preprocess_pets_mosaic.py` for the on-disk
+      `planning/archive/yolo_final.md` and `historical/preprocess_pets_mosaic.py` for the on-disk
       format. Only valid with `lossKind := .yolov1Masked` (or `useYolov1 := true`). -/
   | petsDet
   /-- Brain-tumour segmentation on the Medical Segmentation Decathlon

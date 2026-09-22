@@ -59,7 +59,7 @@ scrambled-data era) or is the Pets demo; read them as history only.
    says the softmax readout is wrong at the source; re-tune `--ml-k` after), **T5a IoU-aware
    objectness** (target is the constant mask channel at ~:5461; needs stop-gradient + an FD arm;
    `yolo_assignment.md` priced it on void data — re-measure), **T3 mosaic** (port
-   `preprocess_pets_mosaic.py:49`; depends on T1), **resolution > 448** (24/64 px thresholds and
+   `historical/preprocess_pets_mosaic.py:49`; depends on T1), **resolution > 448** (24/64 px thresholds and
    the 56/28/14 grids are hardcoded in THREE places: `preprocess_visdrone.py:158-159`,
    `Train.lean:914`, `ffi/f32_helpers.c` — collapse them regardless).
 8. **Decode + NMS out of Python** is a project (`scripts/yolo_map_visdrone.py:203-268`, duplicated

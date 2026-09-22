@@ -21,7 +21,7 @@ Usage:
                                   [--thresh LO HI] [--val-only]
 
 Without --save it reports; with --save DIR it writes
-anchors_fpn_{p3,p4,p5}.txt in the format preprocess_coco.py --fpn reads.
+anchors_fpn_{p3,p4,p5}.txt in the format historical/preprocess_coco.py --fpn reads.
 """
 import sys
 from pathlib import Path

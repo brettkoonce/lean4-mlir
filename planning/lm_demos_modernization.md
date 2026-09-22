@@ -26,7 +26,7 @@ TinyGPT book entry was rewritten the same day (`3c8c5dce`) on a fresh run; this 
    says "resume-by-rerun". A rerun restarts from random init and **overwrites** the checkpoint
    (today's run overwrote the 2026-08-26 one). TinyStories was stopped at ~3200/12000 steps, so
    there is no trained final model. ~6 lines: load-if-exists, keyed on the spec name.
-2. **TinyStories never stops on the EOT token.** `preprocess_tinystories.py:100` writes `eot_id`
+2. **TinyStories never stops on the EOT token.** `historical/preprocess_tinystories.py:100` writes `eot_id`
    to `meta.txt` "so the sampler can stop on it"; `MainTinyStories.lean:215-256` never reads it.
 3. **No `PJRT_FFI_RESIDENT=1` / `SHIM_WORKERS` on any LM run line** (docstrings :30-33 / :25-27,
    `run_tinystories_8k.sh`). Off by default (`ffi/pjrt_ffi.c:284`); TinyStories at 2.7 s/step is

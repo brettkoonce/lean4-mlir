@@ -145,13 +145,13 @@ if [ ! -f "$OUT/anchors_fpn_p3.txt" ]; then
   python3 "$REPO_ROOT/scripts/coco_anchors.py" "$OUT" --save "$OUT" $VAL_ONLY
 fi
 
-python3 "$REPO_ROOT/preprocess_coco.py" "$OUT" "$OUT" \
+python3 "$REPO_ROOT/historical/preprocess_coco.py" "$OUT" "$OUT" \
   --size 448 --grid 14 --classes all --fpn "$OUT" $VAL_ONLY
 
 echo
 echo "Done. For the VisDrone-transferable build instead (COCO emitted into"
 echo "VisDrone's own 10-class index space, so a pretrained head transfers):"
-echo "  python3 preprocess_coco.py data/coco data/coco_vd \\"
+echo "  python3 historical/preprocess_coco.py data/coco data/coco_vd \\"
 echo "      --size 448 --grid 14 --classes vdmap --fpn data/visdrone"
 echo
 echo "The zips and extracted image trees are no longer needed once the .bin"

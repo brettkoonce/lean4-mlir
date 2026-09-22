@@ -3,7 +3,7 @@ import LeanMlir
 /-! YOLOv1 cat/dog head detector on Oxford-IIIT Pets, R34-ImageNet backbone bootstrap.
 
     A ResNet-34 backbone + a deep convolutional detection head, trained on Pets
-    head boxes tiled into 2×2 mosaics (see `preprocess_pets_mosaic.py`). The
+    head boxes tiled into 2×2 mosaics (see `historical/preprocess_pets_mosaic.py`). The
     backbone weights load from the 1000-class ImageNet checkpoint at
     `.lake/build/jax_r34_imagenet.bin` (the `resnet34-imagenet` JAX trainer —
     69.26% top-1, 30 epochs) into the first 21,284,672 floats of the init; the
@@ -15,7 +15,7 @@ import LeanMlir
 
     See `planning/archive/yolo_final.md`. Usage:
       lake build yolov1-pets-train-bootstrap
-      ./historical/download_pets.sh && python3 preprocess_pets_mosaic.py data/pets data/pets_mosaic_bal
+      ./historical/download_pets.sh && python3 historical/preprocess_pets_mosaic.py data/pets data/pets_mosaic_bal
       IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
         .lake/build/bin/yolov1-pets-train-bootstrap data/pets_mosaic_bal
 

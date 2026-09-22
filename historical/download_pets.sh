@@ -18,7 +18,7 @@ if [ ! -f "train.bin" ]; then
     rm annotations.tar.gz
   fi
   echo "Preprocessing to binary format (requires: pip install Pillow)..."
-  python3 ../../preprocess_pets.py . .
+  python3 ../../historical/preprocess_pets.py . .
 fi
 echo "Done. Files in ./data/pets/"
 ls -lh *.bin

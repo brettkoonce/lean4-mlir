@@ -19,7 +19,7 @@ import LeanMlir
     Same per-token CE (`useSeg`) loss ride; vocab-agnostic.
 
     Reuses the Shakespeare data path verbatim: F32.loadTokenStream +
-    F32.sampleChunks read the int32 stream `preprocess_tinystories.py`
+    F32.sampleChunks read the int32 stream `historical/preprocess_tinystories.py`
     writes to data/tinystories/{train,val}.bin.
 
     Subcommands:

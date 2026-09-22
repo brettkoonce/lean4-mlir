@@ -10,7 +10,7 @@ Decode fix (v2 Workstream A item 4): rank detections by sigmoid(conf logit)
 class slots. The old obj×class product was dog-biased in ranking; dropped here.
 
 Record layout (157,728 bytes/record after a 4-byte <I count header), matching
-preprocess_pets_det.py / preprocess_pets_mosaic.py:
+historical/preprocess_pets_det.py / preprocess_pets_mosaic.py:
     [0        , 150528)  image      uint8  3x224x224
     [150528   , 156408)  target     f32    30x7x7   (unused here)
     [156408   , 156604)  mask       f32    7x7      (unused here)

@@ -14,7 +14,7 @@
 # Prereqs on the box (see jax/probe/bootstrap.sh for the general setup):
 #   * Lean toolchain + `lake build tinystories` (builds the FFI .so + exe).
 #   * iree-compile on PATH (or .venv/bin) — the CUDA target.
-#   * data/tinystories/{train,val}.bin  ← preprocess_tinystories.py
+#   * data/tinystories/{train,val}.bin  ← historical/preprocess_tinystories.py
 #     (byte-level BPE, 4096 vocab; ~50M train tokens — see planning/archive/tinygpt_demo_v2.md).
 #
 # Memory (fp32): ~params 0.35 GB + ~2.5 GB per batch item at T=8192.

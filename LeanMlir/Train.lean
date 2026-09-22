@@ -461,7 +461,7 @@ private def bratsIO : DatasetIO where
     buffer carries the 30×7×7 float32 target tensor concatenated with the
     7×7 float32 per-cell objectness mask (6076 bytes per record). The
     `runTraining` dispatch splits this into target + mask before calling
-    `trainStepAdamF32Yolov1`. See `preprocess_pets_mosaic.py` for the on-disk
+    `trainStepAdamF32Yolov1`. See `historical/preprocess_pets_mosaic.py` for the on-disk
     format and `planning/archive/yolo_final.md` for the recipe. -/
 private def petsDetIO : DatasetIO where
   trainPixels := 3 * 224 * 224
