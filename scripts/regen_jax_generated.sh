@@ -86,6 +86,13 @@ fi
 # ── modes `write` and `check`: re-emit from source in a scratch CWD ───────────────
 for e in $EXES; do
   [ -x "$BIN/$e" ] || { echo "⛔ missing $BIN/$e — (cd jax && lake build $e)"; exit 1; }
+  # ⛔ A binary OLDER than the source emits the old text, and `check` passes green against it.
+  # 2026-09-22: gen_shims.sh had rebuilt eight of these through `lake exe`, the other three still
+  # dated 09-18, and the 16 S/B shims they emit drifted only in CI, which builds everything fresh
+  # (the stale-lean_exe-gate trap, one directory over). Refuse rather than trust the mtimes.
+  # Its inputs: the code generator (jax/Jax/**) and the exe mains (jax/*.lean) — not jax/tests/.
+  stale="$( { find "$ROOT/jax/Jax" -name '*.lean' -newer "$BIN/$e"; find "$ROOT/jax" -maxdepth 1 -name '*.lean' -newer "$BIN/$e"; } 2>/dev/null | head -1)"
+  [ -z "$stale" ] || { echo "⛔ $BIN/$e is OLDER than ${stale#$ROOT/} — (cd jax && lake build); a stale emitter checks green against its own old output"; exit 1; }
 done
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/.lake/build"

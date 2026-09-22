@@ -396,6 +396,16 @@ def _main():
         shard = (int(_i), int(_n))
         if not (0 <= shard[0] < shard[1]):
             raise SystemExit('SHIM_SHARD=%s: need 0 <= i < N' % _sh)
+    if shard is not None and not training:
+        _k, _n = shard
+        _tfds_load = tfds.load
+        def _load_val_blocks(*a, **kw):
+            ds = _tfds_load(*a, **kw)
+            return (ds.enumerate()
+                      .filter(lambda j, _: (j // batch) % _n == _k)
+                      .map(lambda _, ex: ex))
+        tfds.load = _load_val_blocks
+        shard = None
     it = iter(build_imagenet_iter(split, batch, training, training, shard))
     flat = 3 * _IMG_SIZE * _IMG_SIZE
     nclasses = int(os.environ.get('SHIM_NCLASSES', '0'))
