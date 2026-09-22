@@ -84,15 +84,18 @@ if [ "$MODE" = "box" ]; then
 fi
 
 # ── modes `write` and `check`: re-emit from source in a scratch CWD ───────────────
+# ⛔ Build the emitters FIRST, through lake. A binary older than its source emits the old text,
+# and `check` passes green against it: on 2026-09-22 gen_shims.sh had rebuilt eight of these
+# through `lake exe`, the other three still dated 09-18, and the 16 S/B shims they emit drifted
+# only in CI (the stale-lean_exe-gate trap, one directory over). Lake is the authority on
+# freshness — it relinks on a content change and is a no-op otherwise. An mtime comparison is
+# not: in CI the exe comes back from the cache and the checkout stamps every source with the
+# current time, so `find -newer` called a fresh binary stale on the first jax/-touching commit
+# that changed no Lean (1f7dce7b, a Python script). This writes only under jax/.lake/build/{bin,
+# ir,lib}; the emitted artifacts a run in flight reads are untouched.
+( cd "$ROOT/jax" && lake build $EXES ) || { echo "⛔ (cd jax && lake build) failed — the emitters are not what the source says"; exit 1; }
 for e in $EXES; do
-  [ -x "$BIN/$e" ] || { echo "⛔ missing $BIN/$e — (cd jax && lake build $e)"; exit 1; }
-  # ⛔ A binary OLDER than the source emits the old text, and `check` passes green against it.
-  # 2026-09-22: gen_shims.sh had rebuilt eight of these through `lake exe`, the other three still
-  # dated 09-18, and the 16 S/B shims they emit drifted only in CI, which builds everything fresh
-  # (the stale-lean_exe-gate trap, one directory over). Refuse rather than trust the mtimes.
-  # Its inputs: the code generator (jax/Jax/**) and the exe mains (jax/*.lean) — not jax/tests/.
-  stale="$( { find "$ROOT/jax/Jax" -name '*.lean' -newer "$BIN/$e"; find "$ROOT/jax" -maxdepth 1 -name '*.lean' -newer "$BIN/$e"; } 2>/dev/null | head -1)"
-  [ -z "$stale" ] || { echo "⛔ $BIN/$e is OLDER than ${stale#$ROOT/} — (cd jax && lake build); a stale emitter checks green against its own old output"; exit 1; }
+  [ -x "$BIN/$e" ] || { echo "⛔ missing $BIN/$e after lake build"; exit 1; }
 done
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/.lake/build"
