@@ -47,11 +47,18 @@ and missing ones they did. Same environment, one more walk; no second import. -/
 
 open Lake Lean
 
+/-- The IR's denotations: one recursion over every StableHLO op, so each body names every
+layer's semantics and VJP. A fold states `den` of ONE graph; the layers it actually uses
+arrive through its proof. Walking into these bodies instead gave the MNIST-linear fold
+edges from conv2d, depthwise, GELU, maxPool and SE. Matched by prefix, so the equation
+lemmas and the `._f` auxiliary stop here too. -/
+def walkBoundary : List Name := [`Proofs.StableHLO.den, `Proofs.StableHLO.denOp]
+
 /-- Real dependency edges among the cited declarations: for each cited `n`, walk the
 constants its type and value use, expanding through this project's own (`LeanMlir.*`)
-helpers and stopping at other cited declarations. Constructors (the Bestiary's
-`Layer.*` catalogue rows) are not proofs and get no edges. Sorted, so the file is
-stable across runs. -/
+helpers (not `walkBoundary`) and stopping at other cited declarations. Constructors (the
+Bestiary's `Layer.*` catalogue rows) are not proofs and get no edges. Sorted, so the file
+is stable across runs. -/
 def writeDeps (env : Environment) (cited : Array Name) (out : System.FilePath) : IO Nat := do
   let citedSet := cited.foldl (·.insert ·) ({} : NameSet)
   let isProject (u : Name) : Bool :=
@@ -80,7 +87,7 @@ def writeDeps (env : Environment) (cited : Array Name) (out : System.FilePath) :
         if visited.contains u then continue
         visited := visited.insert u
         if u != n && citedSet.contains u then deps := deps.push u
-        else if isProject u then stack := stack.push u
+        else if isProject u && !walkBoundary.any (·.isPrefixOf u) then stack := stack.push u
     for d in deps.qsort (·.toString < ·.toString) do
       lines := lines.push s!"{d} {n}"
   IO.FS.writeFile out (String.intercalate "\n" lines.toList ++ "\n")

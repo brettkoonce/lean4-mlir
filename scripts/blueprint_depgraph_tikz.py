@@ -90,10 +90,11 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
     def where(a):
         if nodes[a]['ch'] != ch: return 'ch %s' % nums.get(nodes[a]['ch'], '?')
         return 'above' if order.index(unit_of[a]) < order.index(here) else 'below'
-    kept, uses, imports = [], defaultdict(set), defaultdict(set)
+    kept, uses, imports, hidden = [], defaultdict(set), defaultdict(set), defaultdict(set)
     for a, b in edges:
         if b in mineset and a in mineset: kept.append((a, b))
         elif b in mineset and a not in ambient: uses[a].add(b); imports[b].add(a)
+        elif b in mineset: hidden[b].add(a)
     # Listed under the figure instead of drawn: a source feeding AMBIENT or more nodes here
     # (it would be a hub), and the imports of a node that has AMBIENT or more of them (they
     # would be a cloud around one node). Everything else is a portal.
@@ -101,6 +102,18 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
     heavy = {b: sorted(a for a in imports[b] if a not in listed) for b in imports if len(imports[b]) >= AMBIENT}
     portal_edges = [(a, b) for a, b in edges if b in mineset and a in uses and a not in listed and b not in heavy]
     portals = {a for a, b in portal_edges}
+    # A statement whose every source is hidden by the rules above (ambient, listed or heavy)
+    # would float. It hangs from the figure's one shared box instead, which names the chapters
+    # its sources live in: the whole-net certificates of a chapter each stand on the same layer
+    # VJPs from earlier chapters, and that is the fact to draw, not nine islands.
+    for b in heavy: hidden[b] |= imports[b]
+    for a in listed:
+        for b in uses[a]: hidden[b].add(a)
+    drawn_in = {b for a, b in kept} | {b for a, b in portal_edges}
+    islands = [b for b in mine if b not in drawn_in and hidden[b] and not any(a == b for a, _ in kept)]
+    shared = sorted(set().union(*(hidden[b] for b in islands))) if islands else []
+    shared_where = sorted({where(a) for a in shared}, key=lambda w: (w[:2] != 'ch', w))
+    shared_label = ', '.join(w for w in shared_where).replace(', ch ', ', ')
     G = pgv.AGraph(directed=True, strict=True, rankdir=rankdir, ranksep=0.35, nodesep=0.15, splines='true')
     G.node_attr.update(fontsize=1)   # sizes are fixed below; dot's own label metrics are unused
     def box(label, fs, lines=1):   # what TikZ will draw (rectangles; a rounded one costs nothing extra)
@@ -110,6 +123,7 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
         G.add_node(l, shape='box', **box(max(ls, key=len), BASE, lines=len(ls)))
     for a in sorted(portals):
         G.add_node('portal|' + a, shape='box', **box(max(a.split(':', 1)[1], where(a), key=len), 5.5, lines=2))
+    if shared: G.add_node('shared', shape='box', **box(max('%d statements of' % len(shared), shared_label, key=len), 5.5, lines=2))
     outdeg = defaultdict(int)
     for a, b in kept: outdeg[a] += 1
     fan = defaultdict(int)
@@ -119,6 +133,7 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
             G.add_edge(a, b, minlen=1 + fan[a] % depth); fan[a] += 1
         else: G.add_edge(a, b)
     for a, b in portal_edges: G.add_edge('portal|' + a, b, style='dashed')
+    for b in islands: G.add_edge('shared', b, style='dashed')
     G.layout('dot')
     pts = []
     for n in G.nodes():
@@ -137,6 +152,10 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
     out = ['\\begin{tikzpicture}[x=1pt,y=1pt, every node/.style={inner sep=%.2fpt, font=%s\\ttfamily}]' % (1.5 * s, fs(BASE))]
     for n in G.nodes():
         name = n.get_name(); w, h = float(n.attr['width']) * 72 * s, float(n.attr['height']) * 72 * s
+        if name == 'shared':
+            out.append('  \\node[draw=gray!70, dashed, rounded corners=2pt, minimum width=%.1fpt, minimum height=%.1fpt, text=gray!60!black, align=center, font=%s\\ttfamily] at %s {%d statements of\\\\%s};'
+                       % (w, h, fs(5.5), P(n.attr['pos']), len(shared), esc(shared_label)))
+            continue
         if name.startswith('portal|'):
             src = name[7:]
             out.append('  \\node[draw=gray!70, dashed, rounded corners=2pt, minimum width=%.1fpt, minimum height=%.1fpt, text=gray!60!black, align=center, font=%s\\ttfamily] at %s {\\hyperref[%s]{%s}\\\\(%s)};'
@@ -156,7 +175,7 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
     body = '\n'.join(out)
     if rotate: body = '\\rotatebox{-90}{%\n' + body + '}'
     W, H = ((y1 - y0) * s, (x1 - x0) * s) if rotate else ((x1 - x0) * s, (y1 - y0) * s)
-    return body, W, H, (listed, heavy), BASE * s
+    return body, W, H, (listed, heavy, islands, shared), BASE * s
 
 if __name__ == '__main__':
     chapters, nums, nodes, edges = parse(open('blueprint/src/content.tex').read())
@@ -168,9 +187,9 @@ if __name__ == '__main__':
         # Top-down (sources upper left, the capstone lower right) whenever it reads at 5.5 pt or
         # better; left-right only for a figure that would otherwise be too small.
         cands = {rd: figure(chapters, nums, nodes, edges, u, alls, rankdir=rd) + (rd,) for rd in ('TB', 'LR')}
-        tikz, w, h, (listed, heavy), font, rd = cands['TB'] if cands['TB'][4] >= 5.5 else max(cands.values(), key=lambda r: r[4])
+        tikz, w, h, (listed, heavy, islands, shared), font, rd = cands['TB'] if cands['TB'][4] >= 5.5 else max(cands.values(), key=lambda r: r[4])
         k += 1
         fname = 'ch%s' % nums.get(u[0]) + ('_' + slug(u[1]) if u[1] else '') + ('_%d' % u[2] if u[2] else '')
         short = lambda x: '\\hyperref[%s]{\\texttt{%s}}' % (x, esc(x.split(':', 1)[1]))
         open('%s/%s.tex' % (outdir, fname), 'w').write('\\begin{center}\n' + tikz + '\n\\end{center}\n')
-        print('%-26s ch %2s %-24s %-18s part %d %s %5.0f x %5.0f pt  font %.1f%s  listed: %s  heavy: %s' % (fname, nums.get(u[0]), chapters[u[0]][:24], u[1][:18], u[2], rd, w, h, font, '  (rotated)' if tikz.startswith('\\rotatebox') else '', ', '.join(x.split(':', 1)[1] for x in listed) or '-', ', '.join('%s(%d)' % (b.split(':',1)[1], len(v)) for b, v in heavy.items()) or '-'))
+        print('%-26s ch %2s %-24s %-18s part %d %s %5.0f x %5.0f pt  font %.1f%s  listed: %s  heavy: %s  shared: %d -> %s' % (fname, nums.get(u[0]), chapters[u[0]][:24], u[1][:18], u[2], rd, w, h, font, '  (rotated)' if tikz.startswith('\\rotatebox') else '', ', '.join(x.split(':', 1)[1] for x in listed) or '-', ', '.join('%s(%d)' % (b.split(':',1)[1], len(v)) for b, v in heavy.items()) or '-', len(shared), ', '.join(b.split(':', 1)[1] for b in islands) or '-'))
