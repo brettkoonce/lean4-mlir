@@ -415,9 +415,9 @@ Chapter & Contracts & Witnesses & Steps & New primitive / result \\
 
 That's the ladder at a glance. Every chapter's theorems section opens
 with its dependency graph, every box a Lean theorem and a link, and
-Figure~\ref{fig:spines} in Appendix~\ref{app:verification} draws the
-three architecture spines end to end, each tracing back to the Chapter~1
-calculus. The per-chapter detail lives where the work does, because each
+Figure~\ref{fig:spines} in Chapter~\ref{chap:tensor} follows the six
+whole-network certificates back to the Chapter~1 calculus, chapter by
+chapter. The per-chapter detail lives where the work does, because each
 chapter names its contracts as it proves them. Appendix~\ref{app:verification}
 covers how those claims get checked, through the audits, the bridge
 theorems, and the hardware oracles. It reads most naturally once you've
@@ -773,40 +773,33 @@ the cleanest baseline in the book to start from.
 \section{How it works}
 
 The theorems of this chapter all reduce to a single definition
-(\(\pdiv\)) plus chain rule, sum rule, and product rule. Before
-we drop you into the deep end, here's the shape of what's coming:
+(\(\pdiv\)) plus chain rule, sum rule, and product rule, and every later
+chapter's theorems reduce to this chapter's. Before we drop you into the
+deep end, here is the shape of what's coming, at the scale of chapters:
 
-\begin{center}
-\begin{tikzpicture}[
-  node distance=1.2cm,
-  every node/.style={font=\small, align=center},
-  group/.style={rectangle, draw, fill=blue!5, rounded corners,
-                inner sep=4pt, minimum width=5cm, minimum height=1.5cm},
-  root/.style={rectangle, draw, fill=red!10, rounded corners,
-               inner sep=4pt, minimum width=4cm, minimum height=0.8cm},
-  payoff/.style={rectangle, draw, fill=green!10, rounded corners,
-                 inner sep=4pt, minimum width=6.5cm, minimum height=1cm},
-  arrow/.style={->, >=stealth, thick, gray}
-]
-\node[root] (pdiv) at (0, 5) {\(\pdiv\) \\ \footnotesize defined via Mathlib's \(\fderiv\)};
+\begin{figure}[H]
+\centering
+\input{figures/depgraph/spines}
+\caption{The six whole-network certificates and what each stands on. A
+column follows one certificate's proof up through every statement it
+cites, transitively; the circle at a chapter is how many of that chapter's
+statements it reaches, the double circle marks the chapter that proves it,
+and every box is a link. All six reach this chapter's calculus,
+Chapter~\ref{chap:bn}'s normalisation lemmas and
+\S\ref{sec:matrix_machinery}'s matrix-level machinery, because every
+certificate is stated in the batched form and proved row by row.
+EfficientNet-B0 and ConvNeXt-T reach Chapter~\ref{chap:residual}'s
+residual; ViT-Tiny alone reaches Chapter~\ref{chap:attention}'s attention
+proofs, and its chain is the longest in the book by a factor of two.}
+\label{fig:spines}
+\end{figure}
 
-\node[group] (foundation) at (0, 3) {\textbf{Foundation rules} \\ chain $\cdot$ sum $\cdot$ product \\ identity $\cdot$ const $\cdot$ reindex \\ finite-sum};
-
-\node[group] (vjp) at (0, 0.5) {\textbf{VJP transpose} \\ \texttt{vjp\_comp} $\cdot$ biPath \\ elemwiseProduct $\cdot$ identity};
-
-\node[payoff] (payoff) at (0, -2) {Used by the MNIST linear classifier here \\ (proven + trained); then reused by every \\ architecture in Chapters 2--9.};
-
-\draw[arrow] (pdiv) -- (foundation);
-\draw[arrow] (foundation) -- (vjp);
-\draw[arrow] (vjp) -- (payoff);
-\end{tikzpicture}
-\end{center}
-
-Read top-to-bottom, this is the order things get proved.
-Read bottom-to-top, this is what every theorem in Chapters
-3--9 unfolds to. (Ch~\ref{chap:attention} attention adds
-matrix-level machinery on top. See \S\ref{sec:matrix_machinery}.) The full clickable dependency
-graph is in the blueprint web view.
+Read down a column, this is what one network's certificate stands on;
+read across a row, this is what one chapter contributes, and this
+chapter's row is the only one every column crosses. Each chapter's
+theorems section opens with the same picture at the scale of its own
+statements, and the full clickable dependency graph is in the blueprint
+web view.
 
 \paragraph{How the proofs are written.}
 The proofs in this book follow Lamport's structured style
@@ -16899,153 +16892,26 @@ One property makes the whole edifice auditable: \textbf{every chapter is
 pure composition}. Every primitive either inherits from Mathlib's
 \(\fderiv\) or composes previously-proved theorems, so each
 architecture's whole-network VJP traces back to the Chapter~1 calculus.
-Figure~\ref{fig:spines} draws those spines for the three longest chains
-in the book.
+Figure~\ref{fig:spines} follows each of the six whole-network
+certificates back through everything it cites, chapter by chapter;
+Figure~\ref{fig:chapter_map} is the citation graph between the chapters
+themselves.
 
 \begin{figure}[ht]
 \centering
-\begin{tikzpicture}[scale=0.7293, transform shape,
-  >={Stealth[length=2.5mm]},
-  every node/.style={font=\sffamily\footnotesize},
-  group/.style={
-    draw, rounded corners=2pt, fill=blue!6,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=1cm
-  },
-  primitive/.style={
-    draw=orange!60!black, rounded corners=2pt, fill=orange!10,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.95cm
-  },
-  composed/.style={
-    draw=purple!60!black, rounded corners=2pt, fill=purple!8,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm
-  },
-  final/.style={
-    draw=green!50!black, rounded corners=2pt, fill=green!12,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm,
-    very thick
-  },
-  arr/.style={->, thick, gray!65, shorten >=1pt},
-  shared/.style={->, thick, gray!50, dashed, shorten >=1pt}
-]
-
-% Top row: Ch 1
-\node[group] (found) at (-1.5, 0) {
-  \textbf{Ch~1: foundation calculus}\\
-  \texttt{pdiv\_comp/add/mul/id} \\
-  \texttt{pdiv\_finset\_sum}
-};
-\node[group] (matkit) at (8.0, 0) {
-  \textbf{Ch~9: matrix kit} \\
-  \texttt{pdivMat\_comp} \\
-  \texttt{matmul\_left\_const\_has\_vjp} \\
-  \texttt{rowwise\_has\_vjp\_mat}
-};
-
-% Left pillar: ResNet-34
-\node[primitive] (mlp) at (-9.0, -2.3) {
-  \textbf{Ch~2: MLP} \\
-  \texttt{dense\_weight\_grad\_correct} \\
-  \texttt{relu\_has\_vjp\_correct}
-};
-\node[primitive] (cnn) at (-9.0, -3.7) {
-  \textbf{Ch~3: CNN} \\
-  \texttt{conv2d\_has\_vjp3} \\
-  \texttt{maxPool2\_has\_vjp3\_correct}
-};
-\node[primitive] (bn)  at (-9.0, -5.1) {
-  \textbf{Ch~4: BatchNorm} \\
-  \texttt{pdiv\_bnNormalize} \\
-  \texttt{pdiv\_bnAffine}
-};
-\node[primitive] (res) at (-9.0, -6.5) {
-  \textbf{Ch~5: residual skip} \\
-  \texttt{residual\_has\_vjp\_correct}
-};
-\node[final] (r34) at (-9.0, -8.0) {
-  \textbf{Full ResNet-34} \\
-  \texttt{resnet34ForwardB\_full\_} \\
-  \texttt{has\_vjp\_at\_correct}
-};
-
-% Middle pillar: EfficientNet (shifted south to clear shared-arrow lines)
-\node[primitive] (dw) at (-2.5, -4.8) {
-  \textbf{Ch~6: depthwise conv} \\
-  \texttt{depthwise\_has\_vjp3\_correct}
-};
-\node[primitive] (se) at (-2.5, -6.5) {
-  \textbf{Ch~7: SE block} \\
-  \texttt{seBlock\_has\_vjp\_correct}
-};
-\node[final] (enet) at (-2.5, -9.4) {
-  \textbf{Full EfficientNet-B0} \\
-  \texttt{efficientnetForwardB\_full\_has\_vjp\_correct}
-};
-
-% Right pillar: ViT
-\node[primitive] (lngelu) at (3.5, -2.3) {
-  \textbf{Ch~8: LayerNorm \& GELU} \\
-  \texttt{layerNorm\_has\_vjp\_correct} \\
-  \texttt{gelu\_has\_vjp\_correct}
-};
-\node[primitive] (attn) at (8.0, -2.3) {
-  \textbf{Ch~9: attention primitives} \\
-  \texttt{pdiv\_softmax} \\
-  \texttt{sdpa\_back\_\{Q,K,V\}\_correct}
-};
-\node[composed] (mhsa) at (8.0, -4.5) {
-  \textbf{Ch~9: multi-head attention} \\
-  \texttt{mhsa\_has\_vjp\_mat\_correct}
-};
-\node[composed] (block) at (5.75, -6.4) {
-  \textbf{Ch~9: transformer block} \\
-  \texttt{transformerBlock\_has\_vjp\_mat\_correct}
-};
-\node[final] (body) at (5.75, -8.0) {
-  \textbf{Ch~9: ViT body} \\
-  \texttt{vit\_body\_has\_vjp\_mat}
-};
-\node[final] (vit) at (5.75, -9.4) {
-  \textbf{Full ViT-Tiny (12 blocks)} \\
-  \texttt{vitTiny\_has\_vjp\_correct}
-};
-
-% Foundation -> R34 primitives. Arrow to Ch 3 routes via cnn.east so it
-% sweeps below Ch 2 instead of through it.
-\draw[arr] (found.south west) to[out=-170, in=85] (mlp.north east);
-\draw[arr] (found.south west) to[out=-150, in=20] (cnn.east);
-\draw[arr] (found.south west) to[out=-130, in=20] (bn.east);
-\draw[arr] (found.south west) to[out=-115, in=20] (res.east);
-% Foundation -> ENet primitives
-\draw[arr] (found.south) to[out=-100, in=70] (dw.north east);
-\draw[arr] (found.south) to[out=-80, in=60] (se.north east);
-% Foundation -> ViT primitives
-\draw[arr] (found.south east) to[out=-30, in=180] (lngelu.west);
-\draw[arr] (found.south east) to[out=-20, in=170] (attn.north west);
-% Matrix kit -> ViT side
-\draw[arr] (matkit.south) to[out=-100, in=40] (attn.north);
-\draw[arr] (matkit.south east) to[out=-60, in=20] (mhsa.east);
-
-% R34 down-flow
-\draw[arr] (mlp) -- (cnn);
-\draw[arr] (cnn) -- (bn);
-\draw[arr] (bn)  -- (res);
-\draw[arr] (res) -- (r34);
-
-% ENet path
-\draw[arr] (dw) -- (se);
-\draw[arr] (se) -- (enet);
-\draw[shared] (cnn.east) to[out=-10, in=130] (enet.north west);
-\draw[shared] (bn.east)  to[out=-10, in=140] (enet.west);
-
-% ViT down-flow
-\draw[arr] (attn) -- (mhsa);
-\draw[arr] (mhsa.south) to[out=-100, in=20] (block.north east);
-\draw[arr] (lngelu.south) to[out=-90, in=160] (block.north west);
-\draw[arr] (block) -- (body);
-\draw[arr] (body)  -- (vit);
-\end{tikzpicture}
-\caption{Three architecture spines, all the way down to Ch~1 foundation. ResNet-34 (left) needs only the foundation calculus and Chs~2--5 primitives. EfficientNet-B0 (middle) adds Ch~6's depthwise conv and Ch~7's SE block, and dashed arrows mark Chs~3 (CNN) and 4 (BN), shared with R34. ViT (right) is the only path that needs the matrix kit, and its longer chain runs through MHSA and the transformer block before bundling into the full ViT VJP. Every node is a Lean theorem.}
-\label{fig:spines}
+\input{figures/depgraph/book}
+\caption{The same fact at the scale of chapters. Each box is a chapter and
+the number of statements it proves; an arrow from one box to another means
+the second's proofs cite the first's, and its width grows with the count,
+622 citations in all. The two double-bordered boxes are cited by every
+chapter after them --- Chapter~\ref{chap:tensor} 308 times, for \(\pdiv\)
+and its rules; Chapter~\ref{chap:cnn} 109 times, for \texttt{conv2d} ---
+so their arrows are left out. The matrix-level machinery of
+\S\ref{sec:matrix_machinery} is proved in Chapter~\ref{chap:attention}
+and sits where it is first used, between Chapters~\ref{chap:bn}
+and~\ref{chap:residual}; the dashed arrow is the one statement proved
+later than it is used, softmax's derivative. Every box is a link.}
+\label{fig:chapter_map}
 \end{figure}
 
 \section{Proven: the math is right}
