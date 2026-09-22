@@ -10128,33 +10128,154 @@ so this is the one chapter where both gates are native rather than
 inherited.
 
 \medskip\noindent\textbf{Four of the paper's six extra knobs are
-rendered, and one combination is missing.} Weight-decay exclusion, grad
+rendered, and the run carries three of them.} Weight-decay exclusion, grad
 clipping and stochastic depth are render variants, spelled \texttt{wx},
 \texttt{clip} and \texttt{drop}, and
-\texttt{convnextin\_adamdpwxclipdrop} carries all three at once on top
-of AdamW and the four-way all-reduce. EMA is a render variant too
+\texttt{convnextin\_\allowbreak adamdpwxclipdropbf16} carries all three at
+once on top of AdamW, bf16 and the four-way all-reduce. It is the artifact
+the run below used. EMA is a render variant too
 (\texttt{convnextin\_emadp}), but no committed artifact combines it with
-the other three, so there is no single graph carrying the whole
-regularizer stack. Mixup and CutMix never enter the graph at all,
-because they are data-side and ride the shim.
+the other three, so the verified arm trains and scores its raw weights,
+and the pairing below is made against the reference's raw arm, which the
+reference section measured at $0.03$ points under its EMA. Mixup and
+CutMix never enter the graph at all, because they are data-side and ride
+the shim. It runs with:
 
-\medskip\noindent\textbf{What it has not done is run.} No verified
-ImageNet result exists for this network yet, which is why every accuracy
-above comes from the reference. What is measured is the throughput, and the
-schedule follows from it:
+\begin{verbatim}
+lake run cnx-default-4gpu
+\end{verbatim}
 
 \begin{center}
-\begin{tabular}{l r r r r}
+\begin{tabular}{l l r r r r r}
 \hline
-Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
+GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & $206 \to 131$ & $34.4 \to 21.9$ & $\sim$175 $\to$ $\sim$112 h \;($7.3 \to 4.7$ d) & TBD \\
-4$\times$ 3060 (CUDA)     & ---           & ---             & ---                                           & TBD \\
+4$\times$ 3060 (CUDA) & bf16 & 18.3 min & 300 & 91.3 hr & $\mathbf{81.30\%}$ & $\mathbf{95.61\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent\textbf{[TODO: run \texttt{convnext-imagenet-verified}.]}
+\noindent Global batch 256 as $4 \times 64$ replicas at the reference's
+$2.5\mathrm{e}{-4}$ and its 5{,}004 steps per epoch; the raw weights at
+epoch 300, scored over the same $50{,}000$ validation images. The best
+epoch was 291, at $81.39\%$.
+
+\prosesection{The two paths, side by side}
+
+\begin{center}
+\begin{tabular}{@{}l l l@{}}
+\hline
+ & reference (JAX) & verified path (PJRT) \\
+\hline
+lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
+Python in the step   & yes                      & none \\
+ms/step              & 179                      & 220 \\
+per epoch            & 15.3 min                 & 18.3 min \\
+total                & 76.5 hr                  & 91.3 hr \\
+EMA                  & trained, scored per epoch & none \\
+\hline
+precision            & bf16                     & bf16 \\
+global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
+steps/epoch          & 5{,}004                  & 5{,}004 \\
+peak LR              & $2.5\mathrm{e}{-4}$      & $2.5\mathrm{e}{-4}$ \\
+scored               & raw weights, epoch 300   & raw weights, epoch 300 \\
+\hline
+\textbf{val top-1}   & $\mathbf{81.51\%}$       & $\mathbf{81.30\%}$ \\
+\textbf{val top-5}   & $\mathbf{95.50\%}$       & $\mathbf{95.61\%}$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Both columns are ConvNeXt-T on the paper's recipe, 300 epochs,
+on the same four RTX 3060 cards, scored over the same $50{,}000$
+validation images. Rows above the first rule differ; rows between the
+rules are held equal by construction. The reference's headline earlier
+is its EMA; its row here is its raw weights, because that is the arm the
+verified path has.
+
+\medskip\noindent\textbf{The two paths agree to $0.21$ points on top-1
+and $0.11$ on top-5}, inside the floor \S\ref{sec:r34_pjrt} set
+($\pm0.34$ at $81\%$ on $50{,}000$ images), at one seed each. This is
+the chapter where the pair can say more than that, because both
+checkpoints were scored on the same images in the same order, so the
+comparison can be paired instead of read off two intervals. Of the
+$50{,}000$, both paths get $38{,}850$ right and $7{,}445$ wrong; $1{,}903$
+are right only on the reference and $1{,}802$ only on the verified
+path. McNemar's exact test asks whether those $3{,}705$ discordant images
+split unevenly, and answers $p = 0.10$ (\texttt{scripts/mcnemar.py}): a
+net of $101$ flips does not separate the two checkpoints. The alignment
+was checked rather than assumed --- the two agree on $92.6\%$ of images,
+where unrelated orderings would agree on $69.7\%$. What the pair does not
+isolate is variance. The drop-path and Mixup masks are host-drawn on one
+path and \texttt{jax.random}'s on the other, and the seeds differ, so
+$7.4\%$ of images decided differently is the run-to-run spread of two
+ConvNeXt-Ts, and ``not separable'' is the claim, not ``identical''. Like
+ViT, ConvNeXt has no BatchNorm to normalize over a different group;
+unlike ViT, its verified arm ran without EMA, so this is a two-variable
+pair with the second variable measured at $0.03$.
+
+\medskip\noindent\textbf{The curves are read with one caveat, and it is
+the EMA.} The reference's per-epoch evaluation scores its EMA shadow
+(decay $0.9999$, about a two-epoch time constant) and the verified path
+scores its raw weights, so mid-schedule the figure compares an averaged
+model to a live one. The figure shows it: the verified path leads from epoch 3 to
+17, by up to $2.8$ points, while the shadow lags a fast climb; it trails
+by up to $4.1$ points at epoch 33, at peak learning rate, where averaging
+is worth the most; and the gap closes as the cosine anneals, to a mean of
+$0.28$ points over the last fifty epochs. Only the final pairing above is
+raw against raw. A raw reference curve cannot be rebuilt after the fact
+--- the reference kept raw weights only for its last three epochs ---
+which is why the reference section measured the EMA's worth at the end,
+where it is $0.03$, and not along the way, where it is several points.
+
+\begin{center}
+\begin{tabular}{@{}l r r r r r r r@{}}
+\hline
+epoch & 5 & 50 & 100 & 150 & 200 & 250 & 300 \\
+\hline
+reference (JAX, EMA)        & 3.83 & 75.72 & 78.79 & 80.15 & 80.92 & 81.51 & 81.53 \\
+verified path (PJRT, raw)   & 4.24 & 72.22 & 75.85 & 77.88 & 79.57 & 81.00 & 81.30 \\
+$\Delta$                    & $+0.41$ & $-3.50$ & $-2.94$ & $-2.27$ & $-1.35$ & $-0.51$ & $-0.23$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation top-1 (\%)},
+    xmin=0, xmax=305, ymin=0, ymax=90,
+    xtick={0,50,100,150,200,250,300}, ytick={20,40,60,80},
+    legend pos=south east, legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small}, label style={font=\small},
+    every axis plot/.append style={line width=0.8pt, mark=none},
+]
+\addplot[blue] coordinates {
+(1,0.64) (2,0.68) (3,1.30) (4,2.34) (5,3.83) (6,6.48) (7,10.54) (8,15.02) (9,19.95) (10,25.63) (11,31.31) (12,36.78) (13,41.73) (14,45.82) (15,49.22) (16,52.20) (17,55.00) (18,57.53) (19,59.66) (20,61.51) (21,63.28) (22,64.69) (23,66.12) (24,67.16) (25,68.02) (26,68.73) (27,69.46) (28,70.07) (29,70.56) (30,71.15) (31,71.58) (32,71.97) (33,72.25) (34,72.66) (35,73.09) (36,73.24) (37,73.51) (38,73.76) (39,73.98) (40,74.17) (41,74.39) (42,74.56) (43,74.74) (44,74.90) (45,75.09) (46,75.16) (47,75.35) (48,75.47) (49,75.60) (50,75.72) (51,75.84) (52,76.01) (53,76.13) (54,76.26) (55,76.30) (56,76.40) (57,76.52) (58,76.66) (59,76.70) (60,76.80) (61,76.97) (62,76.93) (63,76.98) (64,77.09) (65,77.10) (66,77.16) (67,77.18) (68,77.28) (69,77.34) (70,77.49) (71,77.55) (72,77.66) (73,77.71) (74,77.81) (75,77.78) (76,77.73) (77,77.88) (78,77.96) (79,77.86) (80,77.98) (81,77.95) (82,78.09) (83,78.11) (84,78.12) (85,78.16) (86,78.27) (87,78.40) (88,78.33) (89,78.31) (90,78.36) (91,78.43) (92,78.43) (93,78.58) (94,78.57) (95,78.62) (96,78.55) (97,78.57) (98,78.67) (99,78.74) (100,78.79) (101,78.78) (102,78.78) (103,78.82) (104,78.88) (105,78.82) (106,78.92) (107,79.00) (108,79.14) (109,79.16) (110,79.10) (111,79.14) (112,79.23) (113,79.21) (114,79.21) (115,79.18) (116,79.24) (117,79.31) (118,79.24) (119,79.19) (120,79.25) (121,79.27) (122,79.36) (123,79.34) (124,79.45) (125,79.48) (126,79.48) (127,79.44) (128,79.55) (129,79.61) (130,79.59) (131,79.61) (132,79.66) (133,79.73) (134,79.70) (135,79.70) (136,79.65) (137,79.61) (138,79.68) (139,79.66) (140,79.73) (141,79.72) (142,79.77) (143,79.80) (144,79.88) (145,79.96) (146,79.93) (147,79.90) (148,79.98) (149,80.03) (150,80.15) (151,80.18) (152,80.20) (153,80.14) (154,80.13) (155,80.10) (156,80.14) (157,80.18) (158,80.21) (159,80.25) (160,80.30) (161,80.34) (162,80.44) (163,80.42) (164,80.32) (165,80.36) (166,80.37) (167,80.51) (168,80.57) (169,80.54) (170,80.50) (171,80.59) (172,80.61) (173,80.55) (174,80.54) (175,80.57) (176,80.65) (177,80.72) (178,80.75) (179,80.74) (180,80.81) (181,80.77) (182,80.73) (183,80.72) (184,80.71) (185,80.73) (186,80.76) (187,80.82) (188,80.79) (189,80.91) (190,80.94) (191,80.86) (192,80.84) (193,80.82) (194,80.95) (195,80.89) (196,81.03) (197,80.97) (198,80.95) (199,80.99) (200,80.92) (201,80.92) (202,80.91) (203,81.07) (204,81.08) (205,81.07) (206,81.01) (207,81.01) (208,81.13) (209,81.12) (210,81.12) (211,81.20) (212,81.17) (213,81.15) (214,81.14) (215,81.16) (216,81.19) (217,81.19) (218,81.19) (219,81.15) (220,81.13) (221,81.15) (222,81.17) (223,81.28) (224,81.22) (225,81.30) (226,81.33) (227,81.33) (228,81.28) (229,81.23) (230,81.23) (231,81.24) (232,81.29) (233,81.29) (234,81.31) (235,81.28) (236,81.26) (237,81.34) (238,81.39) (239,81.43) (240,81.41) (241,81.42) (242,81.49) (243,81.45) (244,81.41) (245,81.47) (246,81.46) (247,81.54) (248,81.54) (249,81.49) (250,81.51) (251,81.48) (252,81.51) (253,81.46) (254,81.47) (255,81.44) (256,81.44) (257,81.48) (258,81.44) (259,81.45) (260,81.47) (261,81.40) (262,81.47) (263,81.45) (264,81.45) (265,81.40) (266,81.41) (267,81.40) (268,81.40) (269,81.40) (270,81.37) (271,81.39) (272,81.46) (273,81.43) (274,81.46) (275,81.50) (276,81.53) (277,81.55) (278,81.53) (279,81.53) (280,81.53) (281,81.48) (282,81.49) (283,81.52) (284,81.49) (285,81.48) (286,81.51) (287,81.48) (288,81.51) (289,81.52) (290,81.52) (291,81.55) (292,81.54) (293,81.55) (294,81.49) (295,81.49) (296,81.52) (297,81.54) (298,81.52) (299,81.54) (300,81.53)
+};
+\addlegendentry{reference (JAX, EMA)}
+\addplot[red, dashed] coordinates {
+(1,0.51) (2,0.67) (3,1.52) (4,2.51) (5,4.24) (6,7.39) (7,12.11) (8,16.82) (9,22.38) (10,28.19) (11,34.14) (12,38.89) (13,43.82) (14,47.50) (15,50.50) (16,53.39) (17,55.48) (18,57.03) (19,58.25) (20,59.77) (21,60.59) (22,61.81) (23,62.94) (24,63.62) (25,64.57) (26,65.29) (27,65.76) (28,66.89) (29,67.17) (30,67.58) (31,67.88) (32,68.65) (33,68.19) (34,68.90) (35,69.14) (36,69.41) (37,69.71) (38,70.11) (39,70.54) (40,70.70) (41,70.78) (42,70.94) (43,71.06) (44,71.41) (45,71.68) (46,71.75) (47,71.89) (48,71.85) (49,72.17) (50,72.22) (51,72.44) (52,72.56) (53,72.85) (54,72.69) (55,72.94) (56,73.18) (57,73.20) (58,73.40) (59,73.48) (60,73.51) (61,73.29) (62,73.84) (63,73.60) (64,73.98) (65,73.77) (66,73.82) (67,73.86) (68,73.96) (69,73.69) (70,74.07) (71,74.08) (72,74.05) (73,74.12) (74,74.61) (75,74.27) (76,74.41) (77,74.67) (78,74.73) (79,74.72) (80,74.61) (81,74.94) (82,74.86) (83,74.68) (84,74.78) (85,75.08) (86,74.78) (87,74.95) (88,75.31) (89,75.28) (90,75.22) (91,75.37) (92,75.35) (93,75.22) (94,75.64) (95,75.48) (96,75.70) (97,75.34) (98,75.74) (99,75.63) (100,75.85) (101,75.61) (102,75.85) (103,75.79) (104,75.90) (105,76.05) (106,76.15) (107,76.03) (108,75.93) (109,75.84) (110,76.35) (111,75.97) (112,76.11) (113,76.12) (114,76.49) (115,76.55) (116,76.61) (117,76.60) (118,76.55) (119,76.58) (120,76.57) (121,76.64) (122,76.35) (123,76.76) (124,76.71) (125,76.58) (126,76.80) (127,76.71) (128,76.98) (129,76.93) (130,76.83) (131,77.02) (132,76.81) (133,76.85) (134,77.06) (135,77.17) (136,77.09) (137,77.25) (138,77.23) (139,77.19) (140,77.38) (141,77.42) (142,77.54) (143,77.47) (144,77.38) (145,77.59) (146,77.42) (147,77.55) (148,77.41) (149,77.65) (150,77.88) (151,77.60) (152,77.89) (153,77.69) (154,77.78) (155,77.96) (156,77.87) (157,77.98) (158,78.04) (159,77.89) (160,78.10) (161,77.93) (162,78.12) (163,78.15) (164,78.61) (165,78.21) (166,78.16) (167,78.43) (168,78.28) (169,78.39) (170,78.37) (171,78.21) (172,78.55) (173,78.40) (174,78.70) (175,78.44) (176,78.89) (177,78.81) (178,78.75) (179,78.84) (180,78.91) (181,78.77) (182,79.07) (183,78.88) (184,78.90) (185,78.75) (186,79.03) (187,78.96) (188,79.06) (189,78.93) (190,79.18) (191,79.06) (192,79.20) (193,79.09) (194,79.30) (195,79.34) (196,79.36) (197,79.19) (198,79.32) (199,79.66) (200,79.57) (201,79.57) (202,79.67) (203,79.58) (204,79.53) (205,79.68) (206,79.76) (207,79.72) (208,79.82) (209,79.76) (210,79.92) (211,79.74) (212,79.73) (213,79.75) (214,79.77) (215,79.74) (216,79.90) (217,79.98) (218,80.10) (219,80.17) (220,79.97) (221,80.10) (222,80.13) (223,80.21) (224,80.19) (225,80.18) (226,80.26) (227,80.31) (228,80.27) (229,80.15) (230,80.37) (231,80.27) (232,80.32) (233,80.31) (234,80.49) (235,80.42) (236,80.54) (237,80.45) (238,80.57) (239,80.69) (240,80.53) (241,80.65) (242,80.60) (243,80.56) (244,80.66) (245,80.63) (246,80.68) (247,80.74) (248,80.84) (249,80.84) (250,81.00) (251,80.83) (252,80.89) (253,80.91) (254,80.97) (255,80.85) (256,81.00) (257,80.97) (258,80.97) (259,81.12) (260,81.03) (261,81.14) (262,81.10) (263,81.10) (264,81.09) (265,81.22) (266,81.12) (267,81.20) (268,81.23) (269,81.17) (270,81.19) (271,81.18) (272,81.16) (273,81.20) (274,81.25) (275,81.21) (276,81.27) (277,81.19) (278,81.30) (279,81.30) (280,81.29) (281,81.24) (282,81.28) (283,81.25) (284,81.35) (285,81.31) (286,81.25) (287,81.36) (288,81.37) (289,81.35) (290,81.37) (291,81.39) (292,81.35) (293,81.32) (294,81.34) (295,81.32) (296,81.30) (297,81.32) (298,81.32) (299,81.30) (300,81.30)
+};
+\addlegendentry{verified path (PJRT, raw)}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent One recipe, two paths to XLA, every epoch, scored over all
+$50{,}000$ validation images.
+
+\medskip\noindent\textbf{The remaining $91.3$ against $76.5$ hours is
+$1.23\times$ per step}, $220$ against $179$\,ms at the same shape on the
+same cards. Of the $41$\,ms, $15$ is the feed --- the fed step against the
+step with the shim removed, measured on this box --- which is $6.8\%$ of
+the step on the heaviest shim in the book (AutoAugment, RandAugment and
+random erasing per image), because doubling the per-replica batch from
+$32$ to $64$ doubled the arithmetic each augmented image amortizes over.
+The other $26$ is the lowering, read against
+\S\ref{sec:vit_imagenet}'s accounting.
 
 \subsection*{What the ConvNeXt recipe changes from the 2018 recipe}
 
@@ -16406,9 +16527,8 @@ middle field of the job's own name.
 \end{tabular}
 \end{center}
 
-\noindent Six of these jobs have run and are the ones behind their chapters'
-numbers; the ConvNeXt-T row is configured and has not finished, so
-Chapter~\ref{chap:layernorm} carries the reference only. \texttt{scripts/jobs/} also carries axis siblings that
+\noindent Every row has run and is the one behind its chapter's numbers.
+\texttt{scripts/jobs/} also carries axis siblings that
 this table does not list --- an fp32 peer of each of the ResNet-34,
 ResNet-50 2018, RSB-A3 and ViT rows, and an earlier A3 artifact --- which differ from their
 row in precision or in one optimizer knob, never in the recipe, plus
