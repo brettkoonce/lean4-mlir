@@ -268,10 +268,19 @@ jobs:
         # "Replays" the target instead of "Builds" it (no-op). The
         # marker plus the HTML directory must both go for the build
         # message to flip from "Replayed" to "Built".
+        #
+        # ⭐ `Certs:docs` TOO (2026-09-22). `LeanMlir:docs` renders what `LeanMlir.lean` imports,
+        # and the blueprint's whole-net ladder — the folds, step ties, seals, sync-BN twins and
+        # whole-backward ties, 38 of its 127 nodes — lives in `Certs` roots that LeanMlir.lean
+        # never imports (ViTStepTieGB, LinearFold, ResNet34StepTieB, …). Their `\lean{}` links
+        # resolved through find/ to docs/404.html. The Certs oleans are built above; this only
+        # renders them, and the index step of the last facet built aggregates every module's
+        # doc-data, so find/ sees both libraries. (CertsHeavy stays out: its oleans are not built
+        # here, and the blueprint cites nothing in it — checkdecls would refuse otherwise.)
         run: |
           rm -rf .lake/build/doc/LeanMlir/
-          rm -f .lake/build/doc-data/LeanMlir--library.docs_built*
-          lake -R -Kenv=dev build LeanMlir:docs
+          rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
+          lake -R -Kenv=dev build LeanMlir:docs Certs:docs
 
       - name: Build blueprint web version
         run: |
