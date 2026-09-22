@@ -12923,15 +12923,16 @@ is pedagogical shape and parameter accounting, not training runs.
   \texttt{structureModule (singleChannels pairChannels nBlocks : Nat)}.
 \end{definition}
 
-\section{Bestiary entries}
+\section{Bestiary entries: the chapter nets at work}
 \label{sec:bestiary_entries}
 
-The entries are grouped by task domain. The first block (vision
-classifiers) is where Part 1's VJP'd primitives show up at real-world
-scale --- every layer is one you've already seen proved correct.
-Subsequent blocks step out to detection, segmentation, reinforcement
-learning, and the non-vision outliers (language, audio, 3D,
-multimodal, science).
+The entries are grouped by task domain, in two halves. This half is
+recognition: the chapter nets on pictures, at real-world scale and then on
+real problems --- classification backbones first, where every layer is one
+Part 1 proved, then detection, inspection, sign language, leaves and
+tumours, each with a dataset, the field's own baseline to beat, and beside
+the demo the architectures that field uses. The second half
+(\S~\ref{sec:bestiary_beyond_recognition}) leaves recognition behind.
 
 \subsection{Vision classifiers}
 
@@ -14374,141 +14375,16 @@ def samEncoderH : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Image generation}
+\section{Bestiary entries: beyond recognition}
+\label{sec:bestiary_beyond_recognition}
 
-Networks whose output is a novel image. Two families covered here:
-variational autoencoders and GANs. Backbones overlap heavily with
-segmentation (UNet again). Diffusion models, also generative, get
-their own subsection further down.
-
-\subsubsection*{VAE (\texttt{Bestiary/VAE.lean})}
-\emph{One} new primitive (\S~\ref{layer:unetUp}). The classical variational autoencoder
-(Kingma \& Welling 2013, \href{https://arxiv.org/abs/1312.6114}{arXiv:1312.6114}): encoder outputs
-$(\mu, \log \sigma^2)$ (represented as a single tensor with doubled
-final width), the reparameterization trick
-$z = \mu + \sigma \odot \epsilon$ samples $z$ in training code, the
-decoder reconstructs. KL divergence between the learned latent
-distribution and a standard normal is the regularizer. Variants:
-MNIST MLP VAE (20-dim latent, textbook example), CIFAR conv VAE
-($4 \times 4 \times 4$ spatial latent, SD-style), tiny fixture. All
-shown as encoder + decoder pairs. Training-code details (the actual
-sampling step, the KL loss) live outside the NetSpec. The same
-architectural template scales up to Stable Diffusion's VAE (see
-\texttt{StableDiffusion.lean}); 2013's 20-dim MNIST latent and
-2022's $64 \times 64 \times 4$ SD latent are the same idea at
-different scales. VQ-VAE (discrete-codebook variant) and $\beta$-VAE
-(scaled KL) are mentioned in the prose notes.
-
-\begin{verbatim}
-def mnistVAEEncoder : NetSpec where
-  name   := "MNIST VAE encoder (MLP, 20-dim latent)"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .flatten,
-    .dense 784 400 .relu,
-    -- Output is 2×20 = 40: first 20 are μ, last 20 are log σ².
-    .dense 400 40 .identity
-  ]
-\end{verbatim}
-
-\subsubsection*{DCGAN (\texttt{Bestiary/DCGAN.lean})}
-\emph{Zero} new primitives. Deep Convolutional GAN (Radford et
-al.\ 2015, \href{https://arxiv.org/abs/1511.06434}{arXiv:1511.06434}) --- the paper that made GAN training reliably work. Eight
-design guidelines (strided convs instead of pooling, BN everywhere
-except $G$'s output / $D$'s input, no hidden FC layers, ReLU in $G$
-/ LeakyReLU in $D$, Adam with specific hyperparams) that became the
-default for every GAN paper since. Three NetSpecs: noise projector
-(dense $100 \to 4 \times 4 \times 1024$, 1.65M), generator convs
-(11M, paper $\sim$12M), discriminator (11M, paper-exact). Transposed
-convs in $G$ are approximated by standard convs of matching kernel
-and channels (same params, spatial doubling is forward-pass-only);
-same hack appears in VAE and Stable Diffusion entries. GAN training
-dynamics (mode collapse, equilibrium stability) are all
-training-procedure concerns living outside the NetSpec.
-
-\begin{verbatim}
-def dcganGenerator : NetSpec where
-  name   := "DCGAN generator (64×64 RGB)"
-  imageH := 4                                     -- starting spatial (post-projection)
-  imageW := 4
-  layers := [
-    -- Each .convBn stands in for a 4×4 transposed conv doubling spatial;
-    -- same params (ic × oc × k²), upsampling is a forward-pass detail.
-    .convBn 1024 512 4 1 .same,                  --  4×4 →  8×8
-    .convBn 512  256 4 1 .same,                  --  8×8 → 16×16
-    .convBn 256  128 4 1 .same,                  -- 16×16 → 32×32
-    .convBn 128   64 4 1 .same,                  -- 32×32 → 64×64
-    .conv2d   64   3 4 .same .identity           -- RGB output (tanh in real)
-  ]
-\end{verbatim}
-
-\subsubsection*{Pix2Pix (\texttt{Bestiary/Pix2Pix.lean})}
-\emph{Two} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}). The paired-data ancestor of CycleGAN,
-from the same lab 9 months earlier (Isola et al.\ 2017,
-\href{https://arxiv.org/abs/1611.07004}{arXiv:1611.07004}). UNet
-generator (8 levels, $\sim$62M vs paper $\sim$54M --- our
-\texttt{.unetDown} / \texttt{.unetUp} use 2 convs per level where
-Pix2Pix uses 1 strided conv, so we overcount) + PatchGAN
-discriminator (identical to CycleGAN's, 2.8M). Trained with GAN
-loss + L1 reconstruction --- the L1 term is a direct supervision
-signal that exists only because pairs exist. When you don't have
-pairs you fall back to CycleGAN's cycle-consistency trick. Hardware
-context: 2016--2017, 54M UNet on $256 \times 256$ images meant
-batch size 1 on a GTX 1080 Ti, which is how InstanceNorm became the
-default normalizer in this lineage --- it was what fit.
-
-\begin{verbatim}
-def pix2pixGenerator : NetSpec where
-  name   := "Pix2Pix generator (8-level UNet, 256×256 RGB)"
-  imageH := 256
-  imageW := 256
-  layers := [
-    -- Encoder: 8 × unetDown, channels 64 → 128 → 256 → 512 → 512 ×4
-    .unetDown 3    64, .unetDown 64  128,
-    .unetDown 128 256, .unetDown 256 512,
-    .unetDown 512 512, .unetDown 512 512,
-    .unetDown 512 512, .unetDown 512 512,         -- bottleneck at 1×1×512
-    -- Decoder: 8 × unetUp mirroring the encoder
-    .unetUp 512 512, .unetUp 512 512,
-    .unetUp 512 512, .unetUp 512 512,
-    .unetUp 512 512, .unetUp 512 256,
-    .unetUp 256 128, .unetUp 128  64,
-    .conv2d 64 3 1 .same .identity                -- 1×1 to RGB (tanh in real)
-  ]
-\end{verbatim}
-
-\subsubsection*{CycleGAN (\texttt{Bestiary/CycleGAN.lean})}
-\emph{Zero} new primitives. Unpaired image translation (Zhu et
-al.\ 2017, \href{https://arxiv.org/abs/1703.10593}{arXiv:1703.10593}): two generators $G : X \to Y$ and $F : Y \to X$ plus two
-PatchGAN discriminators, trained with adversarial loss + cycle
-consistency loss $\|F(G(x)) - x\|_1$. The cycle constraint is what
-makes unpaired training work --- without it, $G$ could mode-collapse
-every $x$ to one target. Generator is a Johnson-style ResNet (Johnson et al.\ 2016,
-\href{https://arxiv.org/abs/1603.08155}{arXiv:1603.08155}):
-convs down + 9 \texttt{.residualBlock}s at 256 channels + convs up
-(11.4M, paper $\sim$11M). Discriminator is a PatchGAN: 5 strided
-convs with a $70 \times 70$ receptive field, outputs an $N \times N$
-grid of patch real/fake logits (2.8M, paper $\sim$2.8M). Four-network
-pattern shown as two specs ($G$ and $D$); the other $F$ and
-$D_X$ are architecturally identical copies. The ``one clever loss''
-does the work --- the architecture is quite ordinary.
-
-\begin{verbatim}
-def cycleganGenerator : NetSpec where
-  name   := "CycleGAN generator (9-block ResNet, 256×256 RGB)"
-  imageH := 256
-  imageW := 256
-  layers := [
-    .convBn 3 64 7 1 .same,                       -- 7×7 stem
-    .convBn 64  128 3 2 .same,                    -- 256 → 128
-    .convBn 128 256 3 2 .same,                    -- 128 →  64
-    .residualBlock 256 256 9 1,                   -- 9 res blocks (bottleneck)
-    .convBn 256 128 3 1 .same,                    -- upsample stand-in
-    .convBn 128  64 3 1 .same,
-    .conv2d 64 3 7 .same .identity                -- 7×7 to RGB
-  ]
-\end{verbatim}
+The training signal stops being a label. It is a reward, the next token,
+the noise added to an image, a density, a chirp buried in detector noise,
+an energy --- and where the field has an exact answer, value iteration,
+quadrature, the matched filter's closed form, a solved spin chain, the demo
+is scored against it rather than against a held-out set. The networks are
+the same kit; what changes is the outer loop, and the catalogue beside each
+demo is that domain's architectures.
 
 \subsection{Reinforcement learning --- demo: DQN on Blackjack}
 \label{sec:bestiary_rl}
@@ -15057,6 +14933,142 @@ def nystromformerBase : NetSpec where
     -- lives inside the attention kernel, not the NetSpec.
     .dense 30522 768 .identity,
     .transformerEncoder 768 12 3072 12
+  ]
+\end{verbatim}
+
+\subsection{Image generation}
+
+Networks whose output is a novel image. Two families covered here:
+variational autoencoders and GANs. Backbones overlap heavily with
+segmentation (UNet again). Diffusion models, also generative, are the
+subsection after this one.
+
+\subsubsection*{VAE (\texttt{Bestiary/VAE.lean})}
+\emph{One} new primitive (\S~\ref{layer:unetUp}). The classical variational autoencoder
+(Kingma \& Welling 2013, \href{https://arxiv.org/abs/1312.6114}{arXiv:1312.6114}): encoder outputs
+$(\mu, \log \sigma^2)$ (represented as a single tensor with doubled
+final width), the reparameterization trick
+$z = \mu + \sigma \odot \epsilon$ samples $z$ in training code, the
+decoder reconstructs. KL divergence between the learned latent
+distribution and a standard normal is the regularizer. Variants:
+MNIST MLP VAE (20-dim latent, textbook example), CIFAR conv VAE
+($4 \times 4 \times 4$ spatial latent, SD-style), tiny fixture. All
+shown as encoder + decoder pairs. Training-code details (the actual
+sampling step, the KL loss) live outside the NetSpec. The same
+architectural template scales up to Stable Diffusion's VAE (see
+\texttt{StableDiffusion.lean}); 2013's 20-dim MNIST latent and
+2022's $64 \times 64 \times 4$ SD latent are the same idea at
+different scales. VQ-VAE (discrete-codebook variant) and $\beta$-VAE
+(scaled KL) are mentioned in the prose notes.
+
+\begin{verbatim}
+def mnistVAEEncoder : NetSpec where
+  name   := "MNIST VAE encoder (MLP, 20-dim latent)"
+  imageH := 28
+  imageW := 28
+  layers := [
+    .flatten,
+    .dense 784 400 .relu,
+    -- Output is 2×20 = 40: first 20 are μ, last 20 are log σ².
+    .dense 400 40 .identity
+  ]
+\end{verbatim}
+
+\subsubsection*{DCGAN (\texttt{Bestiary/DCGAN.lean})}
+\emph{Zero} new primitives. Deep Convolutional GAN (Radford et
+al.\ 2015, \href{https://arxiv.org/abs/1511.06434}{arXiv:1511.06434}) --- the paper that made GAN training reliably work. Eight
+design guidelines (strided convs instead of pooling, BN everywhere
+except $G$'s output / $D$'s input, no hidden FC layers, ReLU in $G$
+/ LeakyReLU in $D$, Adam with specific hyperparams) that became the
+default for every GAN paper since. Three NetSpecs: noise projector
+(dense $100 \to 4 \times 4 \times 1024$, 1.65M), generator convs
+(11M, paper $\sim$12M), discriminator (11M, paper-exact). Transposed
+convs in $G$ are approximated by standard convs of matching kernel
+and channels (same params, spatial doubling is forward-pass-only);
+same hack appears in VAE and Stable Diffusion entries. GAN training
+dynamics (mode collapse, equilibrium stability) are all
+training-procedure concerns living outside the NetSpec.
+
+\begin{verbatim}
+def dcganGenerator : NetSpec where
+  name   := "DCGAN generator (64×64 RGB)"
+  imageH := 4                                     -- starting spatial (post-projection)
+  imageW := 4
+  layers := [
+    -- Each .convBn stands in for a 4×4 transposed conv doubling spatial;
+    -- same params (ic × oc × k²), upsampling is a forward-pass detail.
+    .convBn 1024 512 4 1 .same,                  --  4×4 →  8×8
+    .convBn 512  256 4 1 .same,                  --  8×8 → 16×16
+    .convBn 256  128 4 1 .same,                  -- 16×16 → 32×32
+    .convBn 128   64 4 1 .same,                  -- 32×32 → 64×64
+    .conv2d   64   3 4 .same .identity           -- RGB output (tanh in real)
+  ]
+\end{verbatim}
+
+\subsubsection*{Pix2Pix (\texttt{Bestiary/Pix2Pix.lean})}
+\emph{Two} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}). The paired-data ancestor of CycleGAN,
+from the same lab 9 months earlier (Isola et al.\ 2017,
+\href{https://arxiv.org/abs/1611.07004}{arXiv:1611.07004}). UNet
+generator (8 levels, $\sim$62M vs paper $\sim$54M --- our
+\texttt{.unetDown} / \texttt{.unetUp} use 2 convs per level where
+Pix2Pix uses 1 strided conv, so we overcount) + PatchGAN
+discriminator (identical to CycleGAN's, 2.8M). Trained with GAN
+loss + L1 reconstruction --- the L1 term is a direct supervision
+signal that exists only because pairs exist. When you don't have
+pairs you fall back to CycleGAN's cycle-consistency trick. Hardware
+context: 2016--2017, 54M UNet on $256 \times 256$ images meant
+batch size 1 on a GTX 1080 Ti, which is how InstanceNorm became the
+default normalizer in this lineage --- it was what fit.
+
+\begin{verbatim}
+def pix2pixGenerator : NetSpec where
+  name   := "Pix2Pix generator (8-level UNet, 256×256 RGB)"
+  imageH := 256
+  imageW := 256
+  layers := [
+    -- Encoder: 8 × unetDown, channels 64 → 128 → 256 → 512 → 512 ×4
+    .unetDown 3    64, .unetDown 64  128,
+    .unetDown 128 256, .unetDown 256 512,
+    .unetDown 512 512, .unetDown 512 512,
+    .unetDown 512 512, .unetDown 512 512,         -- bottleneck at 1×1×512
+    -- Decoder: 8 × unetUp mirroring the encoder
+    .unetUp 512 512, .unetUp 512 512,
+    .unetUp 512 512, .unetUp 512 512,
+    .unetUp 512 512, .unetUp 512 256,
+    .unetUp 256 128, .unetUp 128  64,
+    .conv2d 64 3 1 .same .identity                -- 1×1 to RGB (tanh in real)
+  ]
+\end{verbatim}
+
+\subsubsection*{CycleGAN (\texttt{Bestiary/CycleGAN.lean})}
+\emph{Zero} new primitives. Unpaired image translation (Zhu et
+al.\ 2017, \href{https://arxiv.org/abs/1703.10593}{arXiv:1703.10593}): two generators $G : X \to Y$ and $F : Y \to X$ plus two
+PatchGAN discriminators, trained with adversarial loss + cycle
+consistency loss $\|F(G(x)) - x\|_1$. The cycle constraint is what
+makes unpaired training work --- without it, $G$ could mode-collapse
+every $x$ to one target. Generator is a Johnson-style ResNet (Johnson et al.\ 2016,
+\href{https://arxiv.org/abs/1603.08155}{arXiv:1603.08155}):
+convs down + 9 \texttt{.residualBlock}s at 256 channels + convs up
+(11.4M, paper $\sim$11M). Discriminator is a PatchGAN: 5 strided
+convs with a $70 \times 70$ receptive field, outputs an $N \times N$
+grid of patch real/fake logits (2.8M, paper $\sim$2.8M). Four-network
+pattern shown as two specs ($G$ and $D$); the other $F$ and
+$D_X$ are architecturally identical copies. The ``one clever loss''
+does the work --- the architecture is quite ordinary.
+
+\begin{verbatim}
+def cycleganGenerator : NetSpec where
+  name   := "CycleGAN generator (9-block ResNet, 256×256 RGB)"
+  imageH := 256
+  imageW := 256
+  layers := [
+    .convBn 3 64 7 1 .same,                       -- 7×7 stem
+    .convBn 64  128 3 2 .same,                    -- 256 → 128
+    .convBn 128 256 3 2 .same,                    -- 128 →  64
+    .residualBlock 256 256 9 1,                   -- 9 res blocks (bottleneck)
+    .convBn 256 128 3 1 .same,                    -- upsample stand-in
+    .convBn 128  64 3 1 .same,
+    .conv2d 64 3 7 .same .identity                -- 7×7 to RGB
   ]
 \end{verbatim}
 
@@ -16233,12 +16245,6 @@ physics, and each has a dataset of its own:
     independent draw from the exact density by quadrature as the
     reference, and the grid the scorer integrates over. The flow-matching
     generator of \S\ref{sec:bestiary_boltzmann} trains on it.
-  \item \textbf{The transverse-field Ising chain} is the science demo's
-    target and needs no data at all: the neural quantum state of
-    \S\ref{sec:bestiary_beyond} (\texttt{nqs-ising}) trains on its own
-    local energies, and the closed forms it is scored against ---
-    enumeration at $N = 12$, Jordan--Wigner at $N = 64$, Lanczos for the
-    $J_1$--$J_2$ chain --- come from \texttt{scripts/nqs\_metrics.py}.
   \item \textbf{GWOSC O3a strain} is the signal-processing dataset: the
     Hanford and Livingston interferometers' strain from the first half of
     the third observing run, published by the Gravitational Wave Open
@@ -16247,6 +16253,12 @@ physics, and each has a dataset of its own:
     binary-black-hole chirp, and the CNN of \S\ref{sec:bestiary_signal}
     (\texttt{gw-detect}) trains on their spectrograms against the matched
     filter's closed form.
+  \item \textbf{The transverse-field Ising chain} is the science demo's
+    target and needs no data at all: the neural quantum state of
+    \S\ref{sec:bestiary_beyond} (\texttt{nqs-ising}) trains on its own
+    local energies, and the closed forms it is scored against ---
+    enumeration at $N = 12$, Jordan--Wigner at $N = 64$, Lanczos for the
+    $J_1$--$J_2$ chain --- come from \texttt{scripts/nqs\_metrics.py}.
 \end{itemize}
 
 \noindent Same fetch-and-unpack story as the table above, with one extra
@@ -16286,12 +16298,12 @@ tiny Shakespeare & TShk & Karpathy, 2015 &
 M\"uller-Brown density & MB & M\"uller \& Brown, 1979 &
   \texttt{preprocess\_boltzmann.py}\newline (generated, no download) &
   \texttt{data/boltzmann/}  \\[2pt]
-Ising chain & TFIM & Pfeuty, 1970 &
-  \texttt{scripts/nqs\_metrics.py}\newline (closed forms, no download) &
-  ---  \\[2pt]
 GWOSC O3a strain & GWOSC & Abbott et al., 2023 &
   \href{https://gwosc.org/}{\nolinkurl{gwosc.org}} &
-  \texttt{preprocess\_gw.py} $\to$ \texttt{data/gw/}  \\
+  \texttt{preprocess\_gw.py} $\to$ \texttt{data/gw/}  \\[2pt]
+Ising chain & TFIM & Pfeuty, 1970 &
+  \texttt{scripts/nqs\_metrics.py}\newline (closed forms, no download) &
+  ---  \\
 \hline
 \end{tabular}
 \end{center}
